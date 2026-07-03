@@ -39,12 +39,25 @@ type EventHandler func(Event)
 
 // Event is a platform-neutral view of a DOM event. domrt populates it from
 // a real browser event; this package has no browser/WASM dependency.
+//
+// Value carries whatever data the event has attached (a string for
+// input/change events, a float64 for a range slider, a custom type for
+// an application-defined event), erased to any so a single, non-generic
+// Event can be stored in a plain gox.Attr and mixed into a homogeneous
+// []gox.Attr. Use EventValue[T] for a type-safe read.
 type Event struct {
 	Type           string
-	Value          string // convenience accessor for input/change events' target.value
-	Checked        bool   // convenience accessor for checkbox target.checked
+	Value          any
+	Checked        bool // convenience accessor for checkbox target.checked
 	preventDefault func()
 	stopProp       func()
+}
+
+// EventValue reads e.Value as T, returning the zero value of T if the
+// event didn't carry a T (e.g. a click event has no string payload).
+func EventValue[T any](e Event) T {
+	v, _ := e.Value.(T)
+	return v
 }
 
 // PreventDefault calls the underlying event's preventDefault, if any.
@@ -63,7 +76,7 @@ func (e Event) StopPropagation() {
 
 // NewEvent constructs an Event; used by domrt (and tests) to populate the
 // callback hooks that PreventDefault/StopPropagation invoke.
-func NewEvent(typ, value string, checked bool, preventDefault, stopProp func()) Event {
+func NewEvent(typ string, value any, checked bool, preventDefault, stopProp func()) Event {
 	return Event{Type: typ, Value: value, Checked: checked, preventDefault: preventDefault, stopProp: stopProp}
 }
 
