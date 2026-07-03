@@ -67,6 +67,19 @@ expanded by the same recursive scan, with no extra grammar required.
   the Go closure swapped on later renders, and children reconciled by
   key when present — preserving DOM node identity (focus, scroll
   position, input state) wherever the shape didn't change.
+- **`domrt/browser`** (`GOOS=js GOARCH=wasm`) — `browser.Global(name)`
+  exposes any global browser API by name (e.g. `Global("WebAssembly")`)
+  for one-offs; typed wrappers cover the APIs most apps need: `Fetch`/
+  `Response.Text`/`Response.JSON`, `LocalStorage`/`SessionStorage`, and
+  `Connect` (WebSocket).
+- **`domrt/sw`** (`GOOS=js GOARCH=wasm`) — lets a Go/WASM binary run as
+  a browser service worker: `OnInstall`/`OnActivate`/`OnFetch` register
+  the lifecycle/fetch events, `ExtendableEvent.WaitUntil` and
+  `FetchEvent.RespondWith` bridge to `event.waitUntil`/`respondWith`,
+  and `CachesOpen`/`CacheAddAll`/`CachesMatch`/`ClaimClients` wrap the
+  Cache Storage API. `domrt.Await`/`domrt.ToPromise` (in the `domrt`
+  package itself) bridge JS Promises in both directions and are shared
+  by `browser` and `sw` rather than duplicated.
 
 ## Components
 
@@ -112,6 +125,31 @@ elements like `<my-widget>`) are real HTML elements and compile to
   cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-counter/
   cd examples/wasm-counter && python3 -m http.server 8080
   # open http://localhost:8080/
+  ```
+
+- `examples/wasm-browser-api-demo` — `domrt/browser`'s `Fetch` and
+  `LocalStorage` wrappers, reading a local `config.json` and round
+  -tripping a stored value:
+
+  ```
+  go generate ./...
+  GOOS=js GOARCH=wasm go build -o examples/wasm-browser-api-demo/main.wasm ./examples/wasm-browser-api-demo/
+  cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-browser-api-demo/
+  cd examples/wasm-browser-api-demo && python3 -m http.server 8080
+  # open http://localhost:8080/
+  ```
+
+- `examples/wasm-sw-demo` — a cache-first service worker compiled from
+  `.gox`, proving a Go/WASM binary can run as a real browser service
+  worker (not just page-context script):
+
+  ```
+  go generate ./...
+  GOOS=js GOARCH=wasm go build -o examples/wasm-sw-demo/sw.wasm ./examples/wasm-sw-demo/
+  cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-sw-demo/
+  cd examples/wasm-sw-demo && python3 -m http.server 8080
+  # open http://localhost:8080/ -- devtools > Application > Service Workers
+  # shows it installed, activated, and claimed the page.
   ```
 
 ## Known limitations (v1)
