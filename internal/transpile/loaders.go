@@ -42,6 +42,7 @@ var loaders = map[string]loaderFunc{
 	".json":  loadJSON,
 	".css":   loadCSS,
 	".scss":  loadSCSS,
+	".sql":   loadSQL,
 	".hcl":   loadHCL,
 	".proto": loadProto,
 	".capnp": loadCapnProto,
