@@ -11,14 +11,21 @@ strings; see below.
 
 ## `@highlight`-annotated embedded strings (any `.go` file)
 
-A raw string literal that opens with `// @highlight: <lang>` on the
-**same line** as the backtick gets that language's syntax highlighting
-for the rest of its content:
+A raw string literal that opens with `// @highlight: <lang>` — or
+`//language=<lang>` (case-insensitive), JetBrains' own **Language
+Injection** convention from GoLand/IntelliJ, recognized here too since
+it's better-established prior art than inventing a new spelling — on
+the **same line** as the backtick gets that language's syntax
+highlighting for the rest of its content:
 
 ```go
 return []byte(`// @highlight: html
 	<div class="greeting">hello</div>
 `)
+
+query := `//language=SQL
+	SELECT * FROM users WHERE id = 1
+`
 ```
 
 The same idea `es6-string-html`/`vscode-styled-components` use for JS
@@ -32,7 +39,10 @@ lookahead can never see content on the *next* line — there's no way to
 detect a marker placed on its own line below the backtick; that was
 the first design tried here, confirmed broken by tokenizing a sample
 file and finding no embedded-language scopes appeared at all before
-switching to the same-line requirement.
+switching to the same-line requirement. This means JetBrains' own
+placement (marker on the line *before* the string) doesn't work here —
+`//language=SQL` is recognized only as a same-line spelling, not a
+full reimplementation of JetBrains' convention.
 
 This works in plain `.go` files as much as `.gox` ones — it's
 registered as its own injection (`syntaxes/embedded-highlight.tmLanguage.json`,
