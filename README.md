@@ -223,14 +223,25 @@ code.
   go test ./examples/resource-imports-demo/...
   ```
 
+## Editor support
+
+`editors/vscode-gox` is a minimal VS Code extension: `.gox` file
+association plus syntax highlighting (real Go tokenization with
+`<Tag>`/`{expr}` highlighting layered on top via a TextMate injection
+grammar — see that directory's README for why a naive combined pattern
+list doesn't work here). No completions/hover/diagnostics yet; see
+Known limitations.
+
 ## Known limitations (v1)
 
 - Generated `.go` files don't yet carry `//line` directives, so a
   panic inside transpiled code reports a line number in the generated
   file, not the original `.gox` source.
-- No editor/LSP support yet (syntax highlighting, completion) — write
-  `.gox` as plain text and let `go generate` + `go build` catch
-  mistakes.
+- No LSP support yet (completion, hover, go-to-definition,
+  diagnostics) — that needs an LSP proxy translating `.gox` positions
+  to `gopls`'s view of the generated file, which in turn needs the
+  `//line` directives above. Syntax highlighting alone is covered by
+  `editors/vscode-gox`.
 - Children/attribute list diffing in `domrt` is a straightforward
   keyed-or-positional reconciliation, not a minimal-move (LIS-based)
   algorithm — correct, but not necessarily the fewest possible DOM
