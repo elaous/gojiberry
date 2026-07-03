@@ -1,0 +1,80 @@
+// Pages are gox SSR components shared by both entry points: the
+// Encore-annotated raw handlers (api.go) and the plain net/http dev
+// server (cmd/devserver). Both call these directly, so the markup
+// only exists in one place.
+package canvas
+
+import (
+	"style.css"
+
+	"github.com/elaous/gojiberry/gox"
+)
+
+// HomePageProps lists the documents to show on the home page.
+type HomePageProps struct {
+	Documents []DocumentSummary
+}
+
+// HomePage lists existing documents and offers a way to start a new one.
+func HomePage(props HomePageProps) gox.Node {
+	return <html>
+		<head>
+			<title>gox-canvas</title>
+			<style>{gox.Raw(style_css)}</style>
+		</head>
+		<body>
+			<h1>gox-canvas</h1>
+			<form method="POST" action="/documents">
+				<button type="submit">New document</button>
+			</form>
+			<ul class="documents">{func() []gox.Node {
+				var items []gox.Node
+				for _, d := range props.Documents {
+					preview := d.Preview
+					if preview == "" {
+						preview = "(empty document)"
+					}
+					items = append(items, <li><a href={"/documents/" + d.ID}>{preview}</a></li>)
+				}
+				return items
+			}()}</ul>
+		</body>
+	</html>
+}
+
+// CanvasPageProps is one document's id and current content.
+type CanvasPageProps struct {
+	ID      string
+	Content string
+}
+
+// bootstrapScript loads the WASM autosave client. It's plain,
+// unparameterized JS (no Go values interpolated into it), so there's
+// no injection concern in embedding it as a raw script body.
+const bootstrapScript = `
+const go = new Go();
+WebAssembly.instantiateStreaming(fetch("/static/main.wasm"), go.importObject).then((result) => {
+	go.run(result.instance);
+});
+`
+
+// CanvasPage is the typing canvas for one document: a textarea seeded
+// with its current content, a status indicator, and the WASM client
+// that debounces edits into PUT /api/documents/{id} autosave calls.
+func CanvasPage(props CanvasPageProps) gox.Node {
+	return <html>
+		<head>
+			<title>gox-canvas</title>
+			<style>{gox.Raw(style_css)}</style>
+		</head>
+		<body>
+			<p><a href="/">Back</a></p>
+			<div id="app" data-doc-id={props.ID}>
+				<textarea id="canvas">{props.Content}</textarea>
+				<div><span id="status">saved</span></div>
+			</div>
+			<script src="/static/wasm_exec.js"></script>
+			<script>{gox.Raw(bootstrapScript)}</script>
+		</body>
+	</html>
+}
