@@ -9,8 +9,9 @@ package browser
 
 import (
 	"encoding/json"
-	"errors"
 	"syscall/js"
+
+	"github.com/elaous/gojiberry/domrt"
 )
 
 // Global returns the named global browser API object (e.g.
@@ -18,43 +19,6 @@ import (
 // APIs this package doesn't have a typed wrapper for yet.
 func Global(name string) js.Value {
 	return js.Global().Get(name)
-}
-
-// awaitPromise blocks the calling goroutine until the JS Promise p
-// settles, without blocking the rest of the WASM runtime: Go's js/wasm
-// scheduler keeps servicing the JS event loop (and other goroutines)
-// while this one waits on the channel.
-func awaitPromise(p js.Value) (js.Value, error) {
-	result := make(chan js.Value, 1)
-	fail := make(chan error, 1)
-
-	var then, catch js.Func
-	then = js.FuncOf(func(this js.Value, args []js.Value) any {
-		var v js.Value
-		if len(args) > 0 {
-			v = args[0]
-		}
-		result <- v
-		return nil
-	})
-	catch = js.FuncOf(func(this js.Value, args []js.Value) any {
-		msg := "promise rejected"
-		if len(args) > 0 && !args[0].IsUndefined() && !args[0].IsNull() {
-			msg = args[0].Call("toString").String()
-		}
-		fail <- errors.New(msg)
-		return nil
-	})
-	defer then.Release()
-	defer catch.Release()
-
-	p.Call("then", then).Call("catch", catch)
-	select {
-	case v := <-result:
-		return v, nil
-	case err := <-fail:
-		return js.Value{}, err
-	}
 }
 
 // Response is the result of Fetch.
@@ -67,7 +31,7 @@ type Response struct {
 // Fetch wraps window.fetch(url), blocking until the response headers
 // arrive (not the body -- call Text or JSON to read it).
 func Fetch(url string) (*Response, error) {
-	v, err := awaitPromise(js.Global().Call("fetch", url))
+	v, err := domrt.Await(js.Global().Call("fetch", url))
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +40,7 @@ func Fetch(url string) (*Response, error) {
 
 // Text reads the full response body as a string.
 func (r *Response) Text() (string, error) {
-	v, err := awaitPromise(r.body.Call("text"))
+	v, err := domrt.Await(r.body.Call("text"))
 	if err != nil {
 		return "", err
 	}
