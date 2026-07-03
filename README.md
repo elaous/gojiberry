@@ -113,10 +113,11 @@ where needed, compiled) at transpile time instead of at runtime:
 
 ```go
 import (
-	config "config.json"  // -> config (decoded any) + configBytes ([]byte)
-	"App.css"              // -> App_css (string), identifier derived from the filename
-	schema "schema.hcl"    // -> a generated package: schema.Users{}, schema.Books{}
-	books  "books.proto"   // -> a generated package via protoc/protoc-gen-go
+	config "config.json"           // -> config (decoded any) + configBytes ([]byte)
+	cfg.(Config) "config.json"     // -> cfg (typed Config, inferred from the file) + a generated Config struct
+	"App.css"                      // -> App_css (string), identifier derived from the filename
+	schema "schema.hcl"            // -> a generated package: schema.Users{}, schema.Books{}
+	books  "books.proto"           // -> a generated package via protoc/protoc-gen-go
 )
 ```
 
@@ -125,8 +126,28 @@ convention `go:embed` uses — not fetched from a URL or module proxy.
 
 - **`.json`** binds the alias to the decoded value (as `any`) and
   `<alias>Bytes` to the raw content, so code needing a concrete type
-  can `json.Unmarshal(configBytes, &myStruct)` itself — gox doesn't
-  infer a struct shape from sample data.
+  can `json.Unmarshal(configBytes, &myStruct)` itself. With an
+  `alias.(TypeName) "file.json"` annotation — reusing Go's type
+  assertion syntax for a new meaning that's never valid in a real
+  import spec — gox instead infers a struct shape (and any nested
+  struct types it needs) from the file's own sample data, generates
+  `TypeName`, and binds `alias` as that type directly:
+  ```go
+  import ( cfg.(Config) "config.json" )
+  // cfg is now a Config, no manual struct + json.Unmarshal needed
+  ```
+  This is sample-based inference, not a schema: if a field could hold
+  a different shape of value elsewhere (this sample's `"count": 5`
+  infers `int`; production data sending `5.5` for that field would
+  then fail to unmarshal), hand-declare the type and use the untyped
+  path's `<alias>Bytes` instead.
+- **`.jsonc`** is `.json` with `//` and `/* */` comments allowed
+  (stripped by a small string-literal-aware preprocessor before
+  parsing — not a full JSONC library), otherwise identical, including
+  the optional type annotation.
+- **`.jsonl`** is one JSON value per line; `<alias>` binds to a slice
+  instead of a single value — `[]TypeName` (inferred from the first
+  line) with an annotation, `[]any` without one.
 - **`.css`** binds the alias to the file's content as a plain Go
   string.
 - **`.scss`** compiles first via the `sass` (dart-sass) CLI, then
@@ -225,7 +246,8 @@ code.
   ```
 
 - `examples/resource-imports-demo` — a JSON config decoded into a
-  typed struct and a CSS file injected into the page, both bound
+  struct gox infers from the file's own data (`config.(SiteConfig)
+  "config.json"`) and a CSS file injected into the page, both bound
   directly from the `.gox` import block:
 
   ```
