@@ -28,10 +28,51 @@ type Response struct {
 	body   js.Value
 }
 
-// Fetch wraps window.fetch(url), blocking until the response headers
-// arrive (not the body -- call Text or JSON to read it).
+// Fetch wraps window.fetch(url) with a plain GET, blocking until the
+// response headers arrive (not the body -- call Text or JSON to read
+// it). For anything else (POST/PUT with a body, custom headers), use
+// FetchOpts.
 func Fetch(url string) (*Response, error) {
-	v, err := domrt.Await(js.Global().Call("fetch", url))
+	return doFetch(js.Global().Call("fetch", url))
+}
+
+// FetchOptions configures a FetchOpts call. Method defaults to "GET"
+// if empty. Body, if non-empty, is sent as the request body.
+type FetchOptions struct {
+	Method  string
+	Body    string
+	Headers map[string]string
+}
+
+// FetchOpts wraps window.fetch(url, init) for requests Fetch's plain
+// GET can't express: POST/PUT/PATCH/DELETE with a body, or custom
+// headers. A common use is PUT-ing a JSON body:
+//
+//	resp, err := browser.FetchOpts(url, browser.FetchOptions{
+//		Method:  "PUT",
+//		Body:    string(jsonBytes),
+//		Headers: map[string]string{"Content-Type": "application/json"},
+//	})
+func FetchOpts(url string, opts FetchOptions) (*Response, error) {
+	init := map[string]any{}
+	if opts.Method != "" {
+		init["method"] = opts.Method
+	}
+	if opts.Body != "" {
+		init["body"] = opts.Body
+	}
+	if len(opts.Headers) > 0 {
+		headers := map[string]any{}
+		for k, v := range opts.Headers {
+			headers[k] = v
+		}
+		init["headers"] = headers
+	}
+	return doFetch(js.Global().Call("fetch", url, js.ValueOf(init)))
+}
+
+func doFetch(promise js.Value) (*Response, error) {
+	v, err := domrt.Await(promise)
 	if err != nil {
 		return nil, err
 	}
