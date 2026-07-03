@@ -166,15 +166,19 @@ func main() { _ = styles }
 	}
 }
 
-func TestTypedJSONImportInfersStructAndCompiles(t *testing.T) {
+// TestTypedJSONImportDecodesIntoUserDeclaredType covers the current
+// design: TypeName in `alias.(TypeName)` must already be declared by
+// the caller (gox does not generate it or infer its shape), so any
+// JSON shape works, not just a top-level object -- including this
+// case, where nested/array/scalar fields all just flow straight into
+// a struct the test itself writes.
+func TestTypedJSONImportDecodesIntoUserDeclaredType(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "config.json", `{
 		"title": "gojiberry",
 		"count": 3,
-		"ratio": 1.5,
-		"active": true,
 		"tags": ["a", "b"],
-		"address": {"city": "Springfield", "zip": "00000"}
+		"address": {"city": "Springfield"}
 	}`)
 	src := `package main
 
@@ -182,50 +186,50 @@ import (
 	config.(ConfigType) "config.json"
 )
 
+type Address struct {
+	City string ` + "`json:\"city\"`" + `
+}
+
+type ConfigType struct {
+	Title   string  ` + "`json:\"title\"`" + `
+	Count   int     ` + "`json:\"count\"`" + `
+	Tags    []string ` + "`json:\"tags\"`" + `
+	Address Address  ` + "`json:\"address\"`" + `
+}
+
 func main() {
 	var _ ConfigType = config
-	_ = config.Title
-	_ = config.Count
-	_ = config.Ratio
-	_ = config.Active
-	_ = config.Tags
-	_ = config.Address.City
+	if config.Title != "gojiberry" || config.Count != 3 || config.Address.City != "Springfield" {
+		panic("unexpected config contents")
+	}
 }
 `
-	out, err := TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), Options{Experimental: true})
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := string(out)
-	for _, want := range []string{
-		"type ConfigType struct",
-		"type ConfigTypeAddress struct",
-		`Title string ` + "`json:\"title\"`",
-		`Count int ` + "`json:\"count\"`",
-		`Ratio float64 ` + "`json:\"ratio\"`",
-		`Active bool ` + "`json:\"active\"`",
-		`Tags []string ` + "`json:\"tags\"`",
-		"Address ConfigTypeAddress",
-		"var config ConfigType",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("expected generated code to contain %q, got:\n%s", want, got)
-		}
+	if strings.Contains(got, "type ConfigType struct") == false {
+		t.Fatalf("expected the user's own ConfigType declaration to survive untouched, got:\n%s", got)
+	}
+	if strings.Count(got, "type ConfigType struct") != 1 {
+		t.Errorf("expected gox not to generate a second ConfigType, got:\n%s", got)
+	}
+	if !strings.Contains(got, "var config ConfigType") {
+		t.Errorf("expected config bound as ConfigType, got:\n%s", got)
 	}
 	mustCompileAndRun(t, dir, "main.go", got)
 }
 
-func TestTypedJSONImportRejectsNonObjectRoot(t *testing.T) {
+func TestTypedJSONImportAcceptsNonObjectRootNow(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "list.json", `[1, 2, 3]`)
-	src := "package main\n\nimport (\n\tv.(V) \"list.json\"\n)\n\nfunc main() { _ = v }\n"
-	_, err := TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), Options{Experimental: true})
-	if err == nil {
-		t.Fatal("expected an error for a non-object JSON root with a type annotation")
+	src := "package main\n\nimport (\n\tv.(Ints) \"list.json\"\n)\n\nfunc main() {\n\tvar _ Ints = v\n\tif len(v) != 3 {\n\t\tpanic(\"unexpected\")\n\t}\n}\n\ntype Ints []int\n"
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "top level") {
-		t.Errorf("expected a top-level-object error, got: %v", err)
-	}
+	mustCompileAndRun(t, dir, "main.go", string(out))
 }
 
 func TestTypeAnnotationRejectedForUnsupportedExtension(t *testing.T) {
@@ -241,24 +245,14 @@ func TestTypeAnnotationRejectedForUnsupportedExtension(t *testing.T) {
 	}
 }
 
-func TestJSONCImportStripsCommentsAndCompiles(t *testing.T) {
+func TestJSONCImportTypedDecodesIntoUserDeclaredType(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "config.jsonc", `{
 		// this is a comment
 		"title": "gojiberry", /* inline */ "count": 2
 	}`)
-	src := `package main
-
-import (
-	config.(ConfigType) "config.jsonc"
-)
-
-func main() {
-	_ = config.Title
-	_ = config.Count
-}
-`
-	out, err := TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), Options{Experimental: true})
+	src := "package main\n\nimport (\n\tconfig.(ConfigType) \"config.jsonc\"\n)\n\ntype ConfigType struct {\n\tTitle string `json:\"title\"`\n\tCount int `json:\"count\"`\n}\n\nfunc main() {\n\t_ = config.Title\n\t_ = config.Count\n}\n"
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +288,37 @@ func main() {
 	mustCompileAndRun(t, dir, "main.go", string(out))
 }
 
-func TestJSONLImportUntypedAndTyped(t *testing.T) {
+func TestJSONLImportUntyped(t *testing.T) {
+	dir := setupModule(t)
+	writeFile(t, dir, "events.jsonl", "{\"name\":\"a\"}\n{\"name\":\"b\"}\n\n{\"name\":\"c\"}\n")
+	src := `package main
+
+import (
+	events "events.jsonl"
+)
+
+func main() {
+	if len(events) != 3 {
+		panic("expected 3 events")
+	}
+	first, ok := events[0].(map[string]any)
+	if !ok || first["name"] != "a" {
+		panic("unexpected first event")
+	}
+}
+`
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(out)
+	if !strings.Contains(got, "var events []any") {
+		t.Errorf("expected events bound as []any, got:\n%s", got)
+	}
+	mustCompileAndRun(t, dir, "main.go", got)
+}
+
+func TestJSONLImportTypedDecodesIntoUserDeclaredType(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "events.jsonl", "{\"name\":\"a\"}\n{\"name\":\"b\"}\n\n{\"name\":\"c\"}\n")
 	src := `package main
@@ -302,6 +326,10 @@ func TestJSONLImportUntypedAndTyped(t *testing.T) {
 import (
 	events.(Event) "events.jsonl"
 )
+
+type Event struct {
+	Name string ` + "`json:\"name\"`" + `
+}
 
 func main() {
 	if len(events) != 3 {
@@ -312,14 +340,11 @@ func main() {
 	}
 }
 `
-	out, err := TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), Options{Experimental: true})
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := string(out)
-	if !strings.Contains(got, "type Event struct") {
-		t.Errorf("expected generated Event struct, got:\n%s", got)
-	}
 	if !strings.Contains(got, "var events []Event") {
 		t.Errorf("expected events bound as []Event, got:\n%s", got)
 	}
@@ -369,16 +394,47 @@ func TestExperimentalExtensionsRejectedWithoutOptIn(t *testing.T) {
 	}
 }
 
-func TestTypedJSONAnnotationRejectedWithoutOptIn(t *testing.T) {
+// TestTypedJSONAnnotationWorksByDefault confirms the .(TypeName)
+// annotation needs no experimental opt-in: it isn't gated, since it no
+// longer infers/generates anything (see TestTypedJSONImport
+// DecodesIntoUserDeclaredType) -- the only remaining risk is the
+// ordinary one of a hand-written type not matching the data, identical
+// to writing json.Unmarshal by hand.
+func TestTypedJSONAnnotationWorksByDefault(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "config.json", `{"title": "gojiberry"}`)
-	src := "package main\n\nimport (\n\tconfig.(ConfigType) \"config.json\"\n)\n\nfunc main() { _ = config }\n"
-	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
-	if err == nil {
-		t.Fatal("expected the .(TypeName) annotation to be rejected without Options.Experimental")
+	src := "package main\n\nimport (\n\tconfig.(ConfigType) \"config.json\"\n)\n\ntype ConfigType struct {\n\tTitle string `json:\"title\"`\n}\n\nfunc main() {\n\tif config.Title != \"gojiberry\" {\n\t\tpanic(\"unexpected\")\n\t}\n}\n"
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "experimental") {
-		t.Errorf("expected an actionable experimental-mode error, got: %v", err)
+	mustCompileAndRun(t, dir, "main.go", string(out))
+}
+
+// TestTypedJSONAnnotationWithUndeclaredTypeFailsAtGoCompile confirms
+// gox doesn't try to verify TypeName actually exists -- that's the Go
+// compiler's job, not a source-to-source transpiler's; using a type
+// gox never heard of should transpile fine and fail where any other
+// undefined-identifier mistake would.
+func TestTypedJSONAnnotationWithUndeclaredTypeFailsAtGoCompile(t *testing.T) {
+	dir := setupModule(t)
+	writeFile(t, dir, "config.json", `{"title": "gojiberry"}`)
+	src := "package main\n\nimport (\n\tconfig.(NeverDeclared) \"config.json\"\n)\n\nfunc main() { _ = config }\n"
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), out, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "build", ".")
+	cmd.Dir = dir
+	buildOut, buildErr := cmd.CombinedOutput()
+	if buildErr == nil {
+		t.Fatal("expected a Go compile error for an undeclared type name")
+	}
+	if !strings.Contains(string(buildOut), "NeverDeclared") {
+		t.Errorf("expected the compiler error to name the undeclared type, got:\n%s", buildOut)
 	}
 }
 
