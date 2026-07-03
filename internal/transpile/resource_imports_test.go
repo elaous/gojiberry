@@ -179,6 +179,55 @@ func TestSCSSImportErrorsWithoutSassInstalled(t *testing.T) {
 	}
 }
 
+func TestSQLImportGeneratesNamedQueries(t *testing.T) {
+	dir := setupModule(t)
+	moduleRoot := filepath.Dir(dir)
+	writeFile(t, dir, "bob.sql", `-- @var: SelectFromBlob
+SELECT * FROM blob;
+
+-- @var: CountBlobs
+SELECT COUNT(*) FROM blob;
+`)
+	src := "package main\n\nimport (\n\tqueries \"bob.sql\"\n)\n\nfunc main() { _ = queries.SelectFromBlob; _ = queries.CountBlobs }\n"
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantImport := `queries "example.com/testmod/internal/goxgen/sql/queries"`
+	if !strings.Contains(string(out), wantImport) {
+		t.Errorf("expected generated package import %q, got:\n%s", wantImport, out)
+	}
+
+	genPath := filepath.Join(moduleRoot, "internal", "goxgen", "sql", "queries", "queries.go")
+	genSrc, err := os.ReadFile(genPath)
+	if err != nil {
+		t.Fatalf("expected generated queries file at %s: %v", genPath, err)
+	}
+	normalized := strings.Join(strings.Fields(string(genSrc)), " ")
+	if !strings.Contains(normalized, "package queries") {
+		t.Errorf("expected package queries, got:\n%s", genSrc)
+	}
+	if !strings.Contains(normalized, "SelectFromBlob = `SELECT * FROM blob`") {
+		t.Errorf("expected SelectFromBlob var with semicolon trimmed, got:\n%s", genSrc)
+	}
+	if !strings.Contains(normalized, "CountBlobs = `SELECT COUNT(*) FROM blob`") {
+		t.Errorf("expected CountBlobs var, got:\n%s", genSrc)
+	}
+}
+
+func TestSQLImportErrorsWithNoAnnotations(t *testing.T) {
+	dir := setupModule(t)
+	writeFile(t, dir, "plain.sql", "SELECT 1;\n")
+	src := "package main\n\nimport (\n\tq \"plain.sql\"\n)\n\nfunc main() { _ = q }\n"
+	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err == nil {
+		t.Fatal("expected an error for a .sql file with no @var annotations")
+	}
+	if !strings.Contains(err.Error(), "@var") {
+		t.Errorf("expected error to mention @var, got: %v", err)
+	}
+}
+
 func TestHCLImportGeneratesModelsAndMigration(t *testing.T) {
 	dir := setupModule(t)
 	moduleRoot := filepath.Dir(dir)

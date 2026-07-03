@@ -132,6 +132,17 @@ convention `go:embed` uses — not fetched from a URL or module proxy.
 - **`.scss`** compiles first via the `sass` (dart-sass) CLI, then
   binds the same way as `.css`. Requires `sass` on `PATH`; gox doesn't
   bundle or reimplement a SCSS compiler.
+- **`.sql`** splits the file into named queries via `-- @var: Name`
+  annotations and generates a subpackage of string constants at
+  `internal/goxgen/sql/<alias>/` (one file commonly names several
+  queries, so — like HCL/proto/capnp below — it needs its own
+  namespace rather than collapsing to one bound value):
+  ```sql
+  -- @var: SelectFromBlob
+  SELECT * FROM blob;
+  ```
+  generates `queries.SelectFromBlob = "SELECT * FROM blob"` (trailing
+  `;` trimmed), used as `db.Query(queries.SelectFromBlob)`.
 - **`.hcl`** is gox's schema DSL (`table "x" { column "y" { type = ...
   } }`), parsed with `hashicorp/hcl/v2`. Generates a real Go
   subpackage at `internal/goxgen/hcl/<alias>/` with model structs
@@ -221,6 +232,19 @@ code.
   go generate ./...
   go run ./examples/resource-imports-demo
   go test ./examples/resource-imports-demo/...
+  ```
+
+- `examples/http-server-demo` — SSR the way it's actually meant to be
+  used: served over real HTTP (`gox.Render` takes any `io.Writer`, and
+  `http.ResponseWriter` satisfies that directly — no gox changes
+  needed). Verified against a real `httptest.Server` TCP listener, and
+  by curling a locally-run instance:
+
+  ```
+  go generate ./...
+  go test ./examples/http-server-demo/...
+  go run ./examples/http-server-demo &
+  curl 'http://localhost:8089/?name=World'
   ```
 
 ## Editor support
