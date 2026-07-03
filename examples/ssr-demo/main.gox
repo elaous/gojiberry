@@ -1,0 +1,57 @@
+// Package main is a small end-to-end demo of gojiberry's SSR path:
+// components with typed props, a conditional branch, and a rendered
+// list, all written as real Go with <tag> expressions.
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/elaous/gojiberry/gox"
+)
+
+type GreetingProps struct {
+	Name string
+}
+
+func Greeting(props GreetingProps) gox.Node {
+	if props.Name == "" {
+		return <p class="greeting">Hello, stranger!</p>
+	}
+	return <p class="greeting">Hello, {props.Name}!</p>
+}
+
+type ItemListProps struct {
+	Items []string
+}
+
+func ItemList(props ItemListProps) gox.Node {
+	return <ul class="items">{func() []gox.Node {
+		var lis []gox.Node
+		for _, item := range props.Items {
+			lis = append(lis, <li>{item}</li>)
+		}
+		return lis
+	}()}</ul>
+}
+
+type PageProps struct {
+	Name  string
+	Items []string
+}
+
+func Page(props PageProps) gox.Node {
+	return <div id="app">
+		<Greeting name={props.Name}/>
+		<ItemList items={props.Items}/>
+	</div>
+}
+
+func main() {
+	page := Page(PageProps{Name: "Gopher", Items: []string{"alpha", "beta", "gamma"}})
+	if err := gox.Render(os.Stdout, page); err != nil {
+		fmt.Fprintln(os.Stderr, "render error:", err)
+		os.Exit(1)
+	}
+	fmt.Println()
+}
