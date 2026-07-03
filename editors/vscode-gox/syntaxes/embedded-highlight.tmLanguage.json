@@ -1,0 +1,59 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "embedded-highlight",
+  "scopeName": "gox.embedded-highlight.injection",
+  "comment": "General Go feature, not gox-specific: a raw string literal that opens with `// @highlight: <lang>` on the SAME line as the backtick gets that language's syntax highlighting for the rest of its content, the same magic-comment idea as es6-string-html/vscode-styled-components for JS template literals or the `/* GraphQL */` convention. The marker must share a line with the opening backtick -- VS Code's tokenizer processes one line at a time, so a begin pattern's lookahead can never see content on the next line; there is no way to detect a marker placed on its own line below the backtick.",
+  "injectionSelector": "L:source.go, L:source.gox",
+  "patterns": [
+    { "include": "#highlightHTML" },
+    { "include": "#highlightCSS" },
+    { "include": "#highlightSQL" },
+    { "include": "#highlightJSON" }
+  ],
+  "repository": {
+    "highlightHTML": {
+      "begin": "(`)([ \\t]*//[ \\t]*@highlight:[ \\t]*html[ \\t]*)$",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.string.begin.go" },
+        "2": { "name": "comment.line.double-slash.go" }
+      },
+      "end": "`",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.go" } },
+      "name": "string.quoted.raw.go meta.embedded.block.html",
+      "patterns": [{ "include": "text.html.basic" }]
+    },
+    "highlightCSS": {
+      "begin": "(`)([ \\t]*//[ \\t]*@highlight:[ \\t]*css[ \\t]*)$",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.string.begin.go" },
+        "2": { "name": "comment.line.double-slash.go" }
+      },
+      "end": "`",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.go" } },
+      "name": "string.quoted.raw.go meta.embedded.block.css",
+      "patterns": [{ "include": "source.css" }]
+    },
+    "highlightSQL": {
+      "begin": "(`)([ \\t]*//[ \\t]*@highlight:[ \\t]*sql[ \\t]*)$",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.string.begin.go" },
+        "2": { "name": "comment.line.double-slash.go" }
+      },
+      "end": "`",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.go" } },
+      "name": "string.quoted.raw.go meta.embedded.block.sql",
+      "patterns": [{ "include": "source.sql" }]
+    },
+    "highlightJSON": {
+      "begin": "(`)([ \\t]*//[ \\t]*@highlight:[ \\t]*json[ \\t]*)$",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.string.begin.go" },
+        "2": { "name": "comment.line.double-slash.go" }
+      },
+      "end": "`",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.go" } },
+      "name": "string.quoted.raw.go meta.embedded.block.json",
+      "patterns": [{ "include": "source.json" }]
+    }
+  }
+}

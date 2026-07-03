@@ -4,7 +4,40 @@ Provides `.gox` file association and syntax highlighting: real Go
 tokenization (via VS Code's own bundled Go grammar or the
 [golang.go](https://marketplace.visualstudio.com/items?itemName=golang.go)
 extension, whichever provides `source.go`) plus `<Tag>`/`{expr}`
-highlighting layered on top via a TextMate **injection grammar**.
+highlighting layered on top via a TextMate **injection grammar**. Also
+includes a second, general-purpose injection — not gox-specific, works
+in any `.go` file — for `@highlight`-annotated embedded-language raw
+strings; see below.
+
+## `@highlight`-annotated embedded strings (any `.go` file)
+
+A raw string literal that opens with `// @highlight: <lang>` on the
+**same line** as the backtick gets that language's syntax highlighting
+for the rest of its content:
+
+```go
+return []byte(`// @highlight: html
+	<div class="greeting">hello</div>
+`)
+```
+
+The same idea `es6-string-html`/`vscode-styled-components` use for JS
+template literals, or the `/* GraphQL */` magic-comment convention —
+here for Go raw strings, since Go has no tagged-template syntax to
+hook into. Supported today: `html`, `css`, `sql`, `json`.
+
+**The marker must share a line with the opening backtick.** VS Code's
+tokenizer processes one line at a time, so a `begin` pattern's
+lookahead can never see content on the *next* line — there's no way to
+detect a marker placed on its own line below the backtick; that was
+the first design tried here, confirmed broken by tokenizing a sample
+file and finding no embedded-language scopes appeared at all before
+switching to the same-line requirement.
+
+This works in plain `.go` files as much as `.gox` ones — it's
+registered as its own injection (`syntaxes/embedded-highlight.tmLanguage.json`,
+`injectTo: ["source.go", "source.gox"]`), independent of the gox tag
+grammar.
 
 ## Why an injection grammar, not just a combined pattern list
 
@@ -40,16 +73,24 @@ against the repo's real example files.
   make ordinary comparison operators (`a < b`) infuriating to write,
   since a config file can't know intent at keystroke time the way the
   transpiler's real parser does.
+- `@highlight` only recognizes a marker on the same line as the
+  opening backtick, for the line-at-a-time tokenizer reason above —
+  not a stylistic choice.
 
 ## Verifying grammar changes
 
 ```
 cd test
 npm install
-npm run fetch-go-grammar   # downloads VS Code's bundled Go grammar (not redistributed here)
-npm test                   # tokenizes every examples/**/*.gox and checks
-                            # both Go keywords and (where present) tags
-                            # show up, including deep inside nested blocks
+npm run fetch-go-grammar         # downloads VS Code's bundled Go grammar (not redistributed here)
+npm run fetch-embedded-grammars  # downloads its HTML/CSS/SQL/JSON grammars too
+npm test                         # tokenize.js: every examples/**/*.gox has Go
+                                  # keywords and (where present) tags, including
+                                  # deep inside nested blocks
+                                  # highlight-test.js: fixtures/highlight-sample.go's
+                                  # four @highlight-annotated strings each embed
+                                  # their language's grammar, and a plain,
+                                  # unannotated raw string stays plain Go
 ```
 
 ## Installing locally
