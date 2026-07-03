@@ -1,18 +1,25 @@
 // Package main demos resource imports: a JSON config file decoded
-// into a struct gox infers from the file's own data, and a CSS file's
-// content injected into a page, both bound directly from the .gox
-// import block instead of a separate go:embed + read-file dance.
+// into a hand-declared struct, and a CSS file's content injected into
+// a page, both bound directly from the .gox import block instead of a
+// separate go:embed + read-file dance. Uses only the stable, on-by
+// -default loaders -- see examples/experimental for the .(TypeName)
+// annotation that infers this struct automatically.
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
-	config.(SiteConfig) "config.json"
+	config "config.json"
 	"style.css"
 
 	"github.com/elaous/gojiberry/gox"
 )
+
+type SiteConfig struct {
+	Title string `json:"title"`
+}
 
 func Page(cfg SiteConfig) gox.Node {
 	return <html>
@@ -22,7 +29,15 @@ func Page(cfg SiteConfig) gox.Node {
 }
 
 func main() {
-	if err := gox.Render(os.Stdout, Page(config)); err != nil {
+	_ = config // the decoded `any` binding; this demo prefers the typed path below
+
+	var cfg SiteConfig
+	if err := json.Unmarshal(configBytes, &cfg); err != nil {
+		fmt.Fprintln(os.Stderr, "invalid config.json:", err)
+		os.Exit(1)
+	}
+
+	if err := gox.Render(os.Stdout, Page(cfg)); err != nil {
 		fmt.Fprintln(os.Stderr, "render error:", err)
 		os.Exit(1)
 	}

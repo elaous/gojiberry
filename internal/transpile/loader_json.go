@@ -30,14 +30,14 @@ import (
 // small string-literal-aware preprocessor, not a jsonc library).
 // .jsonl is one JSON value per line; the bound type becomes a slice
 // (inferred/declared type, or []any untyped), decoded line by line.
-func loadJSON(in loaderInput) (loaderResult, error) {
-	abs, err := resolveResourcePath(in)
+func loadJSON(in LoaderInput) (LoaderResult, error) {
+	abs, err := ResolveResourcePath(in)
 	if err != nil {
-		return loaderResult{}, err
+		return LoaderResult{}, err
 	}
 	raw, err := os.ReadFile(abs)
 	if err != nil {
-		return loaderResult{}, fmt.Errorf("gox: JSON import %q: %w", in.Path, err)
+		return LoaderResult{}, fmt.Errorf("gox: JSON import %q: %w", in.Path, err)
 	}
 
 	ext := strings.ToLower(filepath.Ext(in.Path))
@@ -51,7 +51,7 @@ func loadJSON(in loaderInput) (loaderResult, error) {
 	}
 	var sample any
 	if err := json.Unmarshal(data, &sample); err != nil {
-		return loaderResult{}, fmt.Errorf("gox: JSON import %q: %w", in.Path, err)
+		return LoaderResult{}, fmt.Errorf("gox: JSON import %q: %w", in.Path, err)
 	}
 
 	// <alias>Bytes is always parseable JSON: for .jsonc that's the
@@ -64,12 +64,12 @@ func loadJSON(in loaderInput) (loaderResult, error) {
 	if in.TypeName == "" {
 		fmt.Fprintf(&decl, "var %s any = func() any {\n\tvar v any\n\tif err := json.Unmarshal(%sBytes, &v); err != nil {\n\t\tpanic(%s + err.Error())\n\t}\n\treturn v\n}()\n",
 			in.Alias, in.Alias, strconv.Quote("gox: invalid embedded JSON "+in.Path+": "))
-		return loaderResult{Decls: decl.String(), GoImports: []string{"encoding/json"}}, nil
+		return LoaderResult{Decls: decl.String(), GoImports: []string{"encoding/json"}}, nil
 	}
 
 	obj, ok := sample.(map[string]any)
 	if !ok {
-		return loaderResult{}, fmt.Errorf("gox: JSON import %q: %s.(%s) requires a JSON object at the top level, got %T", in.Path, in.Alias, in.TypeName, sample)
+		return LoaderResult{}, fmt.Errorf("gox: JSON import %q: %s.(%s) requires a JSON object at the top level, got %T", in.Path, in.Alias, in.TypeName, sample)
 	}
 	var structs []generatedStruct
 	inferJSONType(in.TypeName, obj, &structs)
@@ -78,13 +78,13 @@ func loadJSON(in loaderInput) (loaderResult, error) {
 	}
 	fmt.Fprintf(&decl, "var %s %s = func() %s {\n\tvar v %s\n\tif err := json.Unmarshal(%sBytes, &v); err != nil {\n\t\tpanic(%s + err.Error())\n\t}\n\treturn v\n}()\n",
 		in.Alias, in.TypeName, in.TypeName, in.TypeName, in.Alias, strconv.Quote("gox: invalid embedded JSON "+in.Path+": "))
-	return loaderResult{Decls: decl.String(), GoImports: []string{"encoding/json"}}, nil
+	return LoaderResult{Decls: decl.String(), GoImports: []string{"encoding/json"}}, nil
 }
 
 // loadJSONL handles one-JSON-value-per-line files, binding Alias to a
 // slice: []TypeName if annotated (inferring TypeName's shape from the
 // first line), []any otherwise.
-func loadJSONL(in loaderInput, raw []byte) (loaderResult, error) {
+func loadJSONL(in LoaderInput, raw []byte) (LoaderResult, error) {
 	var lines [][]byte
 	for _, l := range strings.Split(string(raw), "\n") {
 		if strings.TrimSpace(l) == "" {
@@ -93,7 +93,7 @@ func loadJSONL(in loaderInput, raw []byte) (loaderResult, error) {
 		lines = append(lines, []byte(l))
 	}
 	if len(lines) == 0 {
-		return loaderResult{}, fmt.Errorf("gox: JSONL import %q: no non-blank lines", in.Path)
+		return LoaderResult{}, fmt.Errorf("gox: JSONL import %q: no non-blank lines", in.Path)
 	}
 
 	var decl strings.Builder
@@ -103,11 +103,11 @@ func loadJSONL(in loaderInput, raw []byte) (loaderResult, error) {
 	if in.TypeName != "" {
 		var sample any
 		if err := json.Unmarshal(lines[0], &sample); err != nil {
-			return loaderResult{}, fmt.Errorf("gox: JSONL import %q: first line: %w", in.Path, err)
+			return LoaderResult{}, fmt.Errorf("gox: JSONL import %q: first line: %w", in.Path, err)
 		}
 		obj, ok := sample.(map[string]any)
 		if !ok {
-			return loaderResult{}, fmt.Errorf("gox: JSONL import %q: %s.(%s) requires JSON objects, first line was %T", in.Path, in.Alias, in.TypeName, sample)
+			return LoaderResult{}, fmt.Errorf("gox: JSONL import %q: %s.(%s) requires JSON objects, first line was %T", in.Path, in.Alias, in.TypeName, sample)
 		}
 		var structs []generatedStruct
 		inferJSONType(in.TypeName, obj, &structs)
@@ -123,7 +123,7 @@ func loadJSONL(in loaderInput, raw []byte) (loaderResult, error) {
 	fmt.Fprintf(&decl, "\t\tvar v %s\n\t\tif err := json.Unmarshal(line, &v); err != nil {\n\t\t\tpanic(%s + err.Error())\n\t\t}\n", elemType, strconv.Quote("gox: invalid embedded JSONL line in "+in.Path+": "))
 	decl.WriteString("\t\tout = append(out, v)\n\t}\n\treturn out\n}()\n")
 
-	return loaderResult{Decls: decl.String(), GoImports: []string{"encoding/json", "bytes"}}, nil
+	return LoaderResult{Decls: decl.String(), GoImports: []string{"encoding/json", "bytes"}}, nil
 }
 
 // stripJSONComments removes // line comments and /* */ block comments
@@ -199,7 +199,7 @@ func inferJSONType(name string, v any, out *[]generatedStruct) string {
 		sort.Strings(keys)
 		fields := make([]structField, 0, len(keys))
 		for _, k := range keys {
-			goName := capWords(k)
+			goName := CapWords(k)
 			fieldTypeName := name + goName
 			goType := inferJSONType(fieldTypeName, val[k], out)
 			fields = append(fields, structField{JSONName: k, GoName: goName, GoType: goType})

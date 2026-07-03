@@ -2,13 +2,21 @@
 //
 // Usage:
 //
-//	goxc [dirs...]
+//	goxc [-experimental] [dirs...]
 //
 // Every path/to/name.gox becomes path/to/name.gox.go in the same
 // directory and package. Defaults to "." if no directories are given.
+//
+// -experimental (or GOX_EXPERIMENTAL=1) enables resource-import
+// extensions/annotations that either shell out to a mature external
+// tool this project doesn't reimplement (.hcl/.proto/.capnp/.sql,
+// each generating a real Go subpackage) or carry real footgun risk
+// (JSON's .(TypeName) annotation, which infers a struct shape from
+// one sample rather than a schema). Off by default.
 package main
 
 import (
+	"flag"
 	"fmt"
 	"go/format"
 	"os"
@@ -16,10 +24,20 @@ import (
 	"strings"
 
 	"github.com/elaous/gojiberry/internal/transpile"
+	"github.com/elaous/gojiberry/internal/transpile/experimental"
 )
 
 func main() {
-	dirs := os.Args[1:]
+	experimentalFlag := flag.Bool("experimental", os.Getenv("GOX_EXPERIMENTAL") == "1", "enable experimental resource imports (.hcl/.proto/.capnp/.sql, JSON .(TypeName) inference); also read from GOX_EXPERIMENTAL=1")
+	flag.Parse()
+
+	opts := transpile.Options{}
+	if *experimentalFlag {
+		opts.Experimental = true
+		opts.ExperimentalLoaders = experimental.Loaders()
+	}
+
+	dirs := flag.Args()
 	if len(dirs) == 0 {
 		dirs = []string{"."}
 	}
@@ -30,10 +48,21 @@ func main() {
 			if err != nil {
 				return err
 			}
-			if d.IsDir() || !strings.HasSuffix(path, ".gox") {
+			if d.IsDir() {
+				// A directory literally named "experimental" holds .gox
+				// sources that need experimental mode; skip it entirely
+				// during an ordinary (non-experimental) walk so `go
+				// generate ./...` doesn't fail on examples it was never
+				// meant to touch without -experimental.
+				if d.Name() == "experimental" && !opts.Experimental {
+					return filepath.SkipDir
+				}
 				return nil
 			}
-			if genErr := generate(path); genErr != nil {
+			if !strings.HasSuffix(path, ".gox") {
+				return nil
+			}
+			if genErr := generate(path, opts); genErr != nil {
 				fmt.Fprintf(os.Stderr, "goxc: %v\n", genErr)
 				failed = true
 			}
@@ -49,13 +78,13 @@ func main() {
 	}
 }
 
-func generate(path string) error {
+func generate(path string, opts transpile.Options) error {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", path, err)
 	}
 
-	generated, err := transpile.Transpile(path, src)
+	generated, err := transpile.TranspileWithOptions(path, src, opts)
 	if err != nil {
 		return fmt.Errorf("transpiling %s: %w", path, err)
 	}

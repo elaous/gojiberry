@@ -1,4 +1,4 @@
-package transpile
+package experimental
 
 import (
 	"fmt"
@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/hashicorp/hcl/v2/hclsimple"
+
+	"github.com/elaous/gojiberry/internal/transpile"
 )
 
 // hclSchema is gox's schema DSL:
@@ -68,46 +70,46 @@ var hclTypeMap = map[string][2]string{
 // and (0001_init.sql) from the current schema, there's no diffing
 // against a previous schema version to produce an incremental
 // migration.
-func loadHCL(in loaderInput) (loaderResult, error) {
-	abs, err := resolveResourcePath(in)
+func LoadHCL(in transpile.LoaderInput) (transpile.LoaderResult, error) {
+	abs, err := transpile.ResolveResourcePath(in)
 	if err != nil {
-		return loaderResult{}, err
+		return transpile.LoaderResult{}, err
 	}
 	var schema hclSchema
 	if err := hclsimple.DecodeFile(abs, nil, &schema); err != nil {
-		return loaderResult{}, fmt.Errorf("gox: HCL import %q: %w", in.Path, err)
+		return transpile.LoaderResult{}, fmt.Errorf("gox: HCL import %q: %w", in.Path, err)
 	}
 
-	moduleRoot, modulePath, err := findModuleRoot(in.BaseDir)
+	moduleRoot, modulePath, err := transpile.FindModuleRoot(in.BaseDir)
 	if err != nil {
-		return loaderResult{}, fmt.Errorf("gox: HCL import %q: %w", in.Path, err)
+		return transpile.LoaderResult{}, fmt.Errorf("gox: HCL import %q: %w", in.Path, err)
 	}
 
 	pkgDir := filepath.Join(moduleRoot, "internal", "goxgen", "hcl", in.Alias)
 	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
-		return loaderResult{}, fmt.Errorf("gox: HCL import %q: %w", in.Path, err)
+		return transpile.LoaderResult{}, fmt.Errorf("gox: HCL import %q: %w", in.Path, err)
 	}
 
 	modelsSrc, _ := generateHCLModels(in.Alias, schema)
 	formatted, err := format.Source([]byte(modelsSrc))
 	if err != nil {
-		return loaderResult{}, fmt.Errorf("gox: generated models for %q are not valid Go: %w", in.Path, err)
+		return transpile.LoaderResult{}, fmt.Errorf("gox: generated models for %q are not valid Go: %w", in.Path, err)
 	}
 	if err := os.WriteFile(filepath.Join(pkgDir, "models.go"), formatted, 0o644); err != nil {
-		return loaderResult{}, fmt.Errorf("gox: writing generated models for %q: %w", in.Path, err)
+		return transpile.LoaderResult{}, fmt.Errorf("gox: writing generated models for %q: %w", in.Path, err)
 	}
 
 	migrationsDir := filepath.Join(pkgDir, "migrations")
 	if err := os.MkdirAll(migrationsDir, 0o755); err != nil {
-		return loaderResult{}, fmt.Errorf("gox: HCL import %q: %w", in.Path, err)
+		return transpile.LoaderResult{}, fmt.Errorf("gox: HCL import %q: %w", in.Path, err)
 	}
 	sql := generateHCLMigration(schema)
 	if err := os.WriteFile(filepath.Join(migrationsDir, "0001_init.sql"), []byte(sql), 0o644); err != nil {
-		return loaderResult{}, fmt.Errorf("gox: writing generated migration for %q: %w", in.Path, err)
+		return transpile.LoaderResult{}, fmt.Errorf("gox: writing generated migration for %q: %w", in.Path, err)
 	}
 
 	importPath := modulePath + "/internal/goxgen/hcl/" + in.Alias
-	return loaderResult{ImportPath: importPath}, nil
+	return transpile.LoaderResult{ImportPath: importPath}, nil
 }
 
 func goFieldType(colType string) string {
@@ -122,18 +124,6 @@ func sqlColType(colType string) string {
 		return m[1]
 	}
 	return "TEXT"
-}
-
-func capWords(s string) string {
-	parts := strings.FieldsFunc(s, func(r rune) bool { return r == '_' || r == '-' })
-	var b strings.Builder
-	for _, p := range parts {
-		if p == "" {
-			continue
-		}
-		b.WriteString(strings.ToUpper(p[:1]) + p[1:])
-	}
-	return b.String()
 }
 
 func generateHCLModels(pkgName string, schema hclSchema) (string, bool) {
@@ -152,11 +142,11 @@ func generateHCLModels(pkgName string, schema hclSchema) (string, bool) {
 		b.WriteString("import \"time\"\n\n")
 	}
 	for _, t := range schema.Tables {
-		fmt.Fprintf(&b, "type %s struct {\n", capWords(t.Name))
+		fmt.Fprintf(&b, "type %s struct {\n", transpile.CapWords(t.Name))
 		for _, c := range t.Columns {
 			ft := goFieldType(c.Type)
 			tag := fmt.Sprintf("`db:%s`", strconv.Quote(c.Name))
-			fmt.Fprintf(&b, "\t%s %s %s\n", capWords(c.Name), ft, tag)
+			fmt.Fprintf(&b, "\t%s %s %s\n", transpile.CapWords(c.Name), ft, tag)
 		}
 		b.WriteString("}\n\n")
 	}
