@@ -126,6 +126,27 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int) (block 
 			alias = string(runes[i:k])
 			i = k
 		}
+
+		// Optional resource-import-only type annotation, reusing Go's
+		// type-assertion syntax as a new meaning that's never valid in a
+		// real import spec: `alias.(TypeName) "path.json"` tells the
+		// loader what Go type to decode into (and, for JSON, to infer
+		// and generate that type's shape from the file's own data)
+		// instead of the untyped default.
+		var typeName string
+		if alias != "" && alias != "." && i+1 < n && runes[i] == '.' && runes[i+1] == '(' {
+			i += 2
+			tStart := i
+			for i < n && (isIdentPart(runes[i]) || runes[i] == '.') {
+				i++
+			}
+			typeName = string(runes[tStart:i])
+			if typeName == "" || i >= n || runes[i] != ')' {
+				return "", "", 0, fmt.Errorf("%s: expected a type name closed by ')' in %s.(...)", filename, alias)
+			}
+			i++ // consume ')'
+		}
+
 		for i < n && isSpace(runes[i]) {
 			i++
 		}
@@ -137,12 +158,16 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int) (block 
 		i = strEnd
 
 		if isResourceImport(path) {
+			ext := strings.ToLower(filepath.Ext(path))
+			if typeName != "" && !typeAnnotationAware[ext] {
+				return "", "", 0, fmt.Errorf("%s: %s.(%s) \"%s\": %s imports don't support a type annotation", filename, alias, typeName, path, ext)
+			}
 			ident := alias
 			if ident == "" {
 				ident = deriveIdent(path)
 			}
-			loader := loaders[strings.ToLower(filepath.Ext(path))]
-			res, lerr := loader(loaderInput{Alias: ident, Path: path, BaseDir: baseDir, SourceFile: filename})
+			loader := loaders[ext]
+			res, lerr := loader(loaderInput{Alias: ident, TypeName: typeName, Path: path, BaseDir: baseDir, SourceFile: filename})
 			if lerr != nil {
 				return "", "", 0, lerr
 			}

@@ -166,6 +166,166 @@ func main() { _ = styles }
 	}
 }
 
+func TestTypedJSONImportInfersStructAndCompiles(t *testing.T) {
+	dir := setupModule(t)
+	writeFile(t, dir, "config.json", `{
+		"title": "gojiberry",
+		"count": 3,
+		"ratio": 1.5,
+		"active": true,
+		"tags": ["a", "b"],
+		"address": {"city": "Springfield", "zip": "00000"}
+	}`)
+	src := `package main
+
+import (
+	config.(ConfigType) "config.json"
+)
+
+func main() {
+	var _ ConfigType = config
+	_ = config.Title
+	_ = config.Count
+	_ = config.Ratio
+	_ = config.Active
+	_ = config.Tags
+	_ = config.Address.City
+}
+`
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(out)
+	for _, want := range []string{
+		"type ConfigType struct",
+		"type ConfigTypeAddress struct",
+		`Title string ` + "`json:\"title\"`",
+		`Count int ` + "`json:\"count\"`",
+		`Ratio float64 ` + "`json:\"ratio\"`",
+		`Active bool ` + "`json:\"active\"`",
+		`Tags []string ` + "`json:\"tags\"`",
+		"Address ConfigTypeAddress",
+		"var config ConfigType",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected generated code to contain %q, got:\n%s", want, got)
+		}
+	}
+	mustCompileAndRun(t, dir, "main.go", got)
+}
+
+func TestTypedJSONImportRejectsNonObjectRoot(t *testing.T) {
+	dir := setupModule(t)
+	writeFile(t, dir, "list.json", `[1, 2, 3]`)
+	src := "package main\n\nimport (\n\tv.(V) \"list.json\"\n)\n\nfunc main() { _ = v }\n"
+	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err == nil {
+		t.Fatal("expected an error for a non-object JSON root with a type annotation")
+	}
+	if !strings.Contains(err.Error(), "top level") {
+		t.Errorf("expected a top-level-object error, got: %v", err)
+	}
+}
+
+func TestTypeAnnotationRejectedForUnsupportedExtension(t *testing.T) {
+	dir := setupModule(t)
+	writeFile(t, dir, "App.css", "body{}")
+	src := "package main\n\nimport (\n\tv.(V) \"App.css\"\n)\n\nfunc main() { _ = v }\n"
+	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err == nil {
+		t.Fatal("expected an error using a type annotation on a .css import")
+	}
+	if !strings.Contains(err.Error(), "don't support a type annotation") {
+		t.Errorf("expected a clear unsupported-annotation error, got: %v", err)
+	}
+}
+
+func TestJSONCImportStripsCommentsAndCompiles(t *testing.T) {
+	dir := setupModule(t)
+	writeFile(t, dir, "config.jsonc", `{
+		// this is a comment
+		"title": "gojiberry", /* inline */ "count": 2
+	}`)
+	src := `package main
+
+import (
+	config.(ConfigType) "config.jsonc"
+)
+
+func main() {
+	_ = config.Title
+	_ = config.Count
+}
+`
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustCompileAndRun(t, dir, "main.go", string(out))
+}
+
+func TestJSONCImportUntypedDecodesStrippedContent(t *testing.T) {
+	dir := setupModule(t)
+	writeFile(t, dir, "config.jsonc", "{\n  // a comment\n  \"title\": \"gojiberry\"\n}\n")
+	src := `package main
+
+import (
+	"encoding/json"
+
+	config "config.jsonc"
+)
+
+func main() {
+	var m map[string]any
+	if err := json.Unmarshal(configBytes, &m); err != nil {
+		panic(err)
+	}
+	if m["title"] != "gojiberry" {
+		panic("unexpected: " + m["title"].(string))
+	}
+	_ = config
+}
+`
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustCompileAndRun(t, dir, "main.go", string(out))
+}
+
+func TestJSONLImportUntypedAndTyped(t *testing.T) {
+	dir := setupModule(t)
+	writeFile(t, dir, "events.jsonl", "{\"name\":\"a\"}\n{\"name\":\"b\"}\n\n{\"name\":\"c\"}\n")
+	src := `package main
+
+import (
+	events.(Event) "events.jsonl"
+)
+
+func main() {
+	if len(events) != 3 {
+		panic("expected 3 events")
+	}
+	if events[0].Name != "a" || events[2].Name != "c" {
+		panic("unexpected event contents")
+	}
+}
+`
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(out)
+	if !strings.Contains(got, "type Event struct") {
+		t.Errorf("expected generated Event struct, got:\n%s", got)
+	}
+	if !strings.Contains(got, "var events []Event") {
+		t.Errorf("expected events bound as []Event, got:\n%s", got)
+	}
+	mustCompileAndRun(t, dir, "main.go", got)
+}
+
 func TestSCSSImportErrorsWithoutSassInstalled(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "App.scss", "$c: red; body { color: $c; }")

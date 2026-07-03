@@ -13,10 +13,17 @@ import (
 // loaderInput is what a resource-import loader needs to do its work.
 type loaderInput struct {
 	Alias      string // the bound identifier: the import's alias, or one derived from the filename
+	TypeName   string // set from an optional `alias.(TypeName) "path"` annotation; "" if not given
 	Path       string // the import path exactly as written in the .gox source
 	BaseDir    string // the .gox file's directory; resource paths resolve relative to it, like go:embed
 	SourceFile string // the .gox file's path, for error messages
 }
+
+// typeAnnotationAware lists the extensions whose loader understands
+// TypeName. isResourceImport/rewriteImportBlock let any resource import
+// carry the annotation syntax, but only these loaders know what to do
+// with it; anything else naming one is a mistake worth surfacing.
+var typeAnnotationAware = map[string]bool{".json": true, ".jsonc": true, ".jsonl": true}
 
 // loaderResult is what a loader hands back to be spliced into the
 // generated file in place of the resource import.
@@ -40,6 +47,8 @@ type loaderFunc func(loaderInput) (loaderResult, error)
 // importing it. Adding a new importable format is adding an entry here.
 var loaders = map[string]loaderFunc{
 	".json":  loadJSON,
+	".jsonc": loadJSON,
+	".jsonl": loadJSON,
 	".css":   loadCSS,
 	".scss":  loadSCSS,
 	".sql":   loadSQL,
@@ -87,25 +96,8 @@ func resolveResourcePath(in loaderInput) (string, error) {
 	return abs, nil
 }
 
-// loadJSON binds Alias to the decoded JSON value (as `any`) and
-// AliasBytes to the raw embedded content, so callers needing a
-// concrete type can json.Unmarshal(AliasBytes, &myStruct) themselves;
-// gox doesn't infer a struct shape from sample JSON data.
-func loadJSON(in loaderInput) (loaderResult, error) {
-	abs, err := resolveResourcePath(in)
-	if err != nil {
-		return loaderResult{}, err
-	}
-	data, err := os.ReadFile(abs)
-	if err != nil {
-		return loaderResult{}, fmt.Errorf("gox: JSON import %q: %w", in.Path, err)
-	}
-	var decl strings.Builder
-	fmt.Fprintf(&decl, "var %sBytes = []byte(%s)\n", in.Alias, strconv.Quote(string(data)))
-	fmt.Fprintf(&decl, "var %s any = func() any {\n\tvar v any\n\tif err := json.Unmarshal(%sBytes, &v); err != nil {\n\t\tpanic(%s + err.Error())\n\t}\n\treturn v\n}()\n",
-		in.Alias, in.Alias, strconv.Quote("gox: invalid embedded JSON "+in.Path+": "))
-	return loaderResult{Decls: decl.String(), GoImports: []string{"encoding/json"}}, nil
-}
+// loadJSON is implemented in loader_json.go, covering .json/.jsonc/.jsonl
+// and the optional TypeName annotation.
 
 // loadCSS binds Alias to the file's content as a plain Go string.
 func loadCSS(in loaderInput) (loaderResult, error) {
