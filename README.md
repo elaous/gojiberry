@@ -319,6 +319,14 @@ grammar — see that directory's README for why a naive combined pattern
 list doesn't work here). No completions/hover/diagnostics yet; see
 Known limitations.
 
+It also includes a second, general-purpose injection — not gox
+-specific, works in any `.go` file — for `@highlight`-annotated
+embedded-language raw strings, e.g. `` `// @highlight: sql\nSELECT...` ``
+gets SQL highlighting inside the string. Same idea as
+`es6-string-html`/`vscode-styled-components` for JS template literals.
+See that directory's README for the one real constraint (the marker
+must share a line with the opening backtick).
+
 ## Known limitations (v1)
 
 - Generated `.go` files don't yet carry `//line` directives, so a
