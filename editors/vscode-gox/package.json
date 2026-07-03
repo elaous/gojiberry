@@ -1,0 +1,32 @@
+{
+  "name": "gox-language",
+  "displayName": "gox",
+  "description": "Syntax highlighting for .gox files (Go with JSX-like tags)",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "gox",
+        "aliases": ["gox", "Gojiberry"],
+        "extensions": [".gox"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "gox",
+        "scopeName": "source.gox",
+        "path": "./syntaxes/gox.tmLanguage.json"
+      },
+      {
+        "scopeName": "gox.tags.injection",
+        "path": "./syntaxes/gox-tags.tmLanguage.json",
+        "injectTo": ["source.gox"]
+      }
+    ]
+  }
+}
