@@ -9,7 +9,7 @@
 // sqlc isn't installed in the environment this was built in, so using
 // it here would mean shipping an example that can't actually be
 // regenerated or verified. They're annotated with the gox VS Code
-// extension's `@highlight: sql` marker instead, for real editor value
+// extension's `//language=SQL` marker instead, for real editor value
 // without depending on a tool this session couldn't install.
 package canvas
 
@@ -32,12 +32,12 @@ func NewStore(db *sql.DB) *Store {
 	return &Store{db: db}
 }
 
-// sqlQuery strips a leading `@highlight: sql`/`language=SQL` Go
-// comment line if present. The marker is a real editor annotation
-// (see the gox VS Code extension), not SQL comment syntax -- Postgres
-// only recognizes `--`, not `//` -- so it has to come out of the
-// string before it's sent to the driver, or the "query" is actually
-// "a Go comment followed by SQL," which is a syntax error.
+// sqlQuery strips a leading `//language=SQL` Go comment line if
+// present. The marker is a real editor annotation (see the gox VS
+// Code extension), not SQL comment syntax -- Postgres only recognizes
+// `--`, not `//` -- so it has to come out of the string before it's
+// sent to the driver, or the "query" is actually "a Go comment
+// followed by SQL," which is a syntax error.
 func sqlQuery(q string) string {
 	if i := strings.IndexByte(q, '\n'); i >= 0 {
 		if first := strings.TrimSpace(q[:i]); strings.HasPrefix(first, "//") {
@@ -56,7 +56,7 @@ type DocumentSummary struct {
 // CreateDocument inserts a new, empty document and returns its ID.
 func (s *Store) CreateDocument(ctx context.Context) (string, error) {
 	id := uuid.NewString()
-	query := sqlQuery(`// @highlight: sql
+	query := sqlQuery(`//language=SQL
 		INSERT INTO documents (id, content) VALUES ($1, '')
 	`)
 	if _, err := s.db.ExecContext(ctx, query, id); err != nil {
@@ -68,7 +68,7 @@ func (s *Store) CreateDocument(ctx context.Context) (string, error) {
 // GetDocument returns a document's content, or an error wrapping
 // sql.ErrNoRows if it doesn't exist.
 func (s *Store) GetDocument(ctx context.Context, id string) (string, error) {
-	query := sqlQuery(`// @highlight: sql
+	query := sqlQuery(`//language=SQL
 		SELECT content FROM documents WHERE id = $1
 	`)
 	var content string
@@ -80,7 +80,7 @@ func (s *Store) GetDocument(ctx context.Context, id string) (string, error) {
 
 // SaveDocument overwrites a document's content.
 func (s *Store) SaveDocument(ctx context.Context, id, content string) error {
-	query := sqlQuery(`// @highlight: sql
+	query := sqlQuery(`//language=SQL
 		UPDATE documents SET content = $1, updated_at = now() WHERE id = $2
 	`)
 	res, err := s.db.ExecContext(ctx, query, content, id)
@@ -100,7 +100,7 @@ func (s *Store) SaveDocument(ctx context.Context, id, content string) error {
 // ListDocuments returns every document, most recently updated first,
 // truncating each one's content to a short preview.
 func (s *Store) ListDocuments(ctx context.Context) ([]DocumentSummary, error) {
-	query := sqlQuery(`// @highlight: sql
+	query := sqlQuery(`//language=SQL
 		SELECT id, left(content, 60) FROM documents ORDER BY updated_at DESC
 	`)
 	rows, err := s.db.QueryContext(ctx, query)

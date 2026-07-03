@@ -1,7 +1,7 @@
 {
   "name": "gox-language",
   "displayName": "gox",
-  "description": "Syntax highlighting for .gox files (Go with JSX-like tags), plus @highlight-annotated embedded-language strings in any .go file",
+  "description": "Syntax highlighting for .gox files (Go with JSX-like tags), plus //language=-annotated embedded-language strings in any .go file",
   "version": "0.1.0",
   "engines": {
     "vscode": "^1.80.0"

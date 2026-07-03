@@ -1,7 +1,7 @@
 // Tokenizes fixtures/highlight-sample.go with the real embedded
 // -highlight injection grammar layered on VS Code's own Go grammar
 // (plus the HTML/CSS/SQL/JSON grammars it embeds), and checks each
-// @highlight-annotated raw string gets that language's own scopes --
+// //language=-annotated raw string gets that language's own scopes --
 // and that a plain, unannotated raw string elsewhere in the same file
 // still gets ordinary Go string coloring, proving the injection only
 // fires when a marker opens the string, not on every backtick.
@@ -74,7 +74,7 @@ async function main() {
 
   let ok = true;
   for (const [lang, want] of Object.entries({ html: seen.html, css: seen.css, sql: seen.sql, json: seen.json })) {
-    console.log(`${want ? "PASS" : "FAIL"} @highlight: ${lang} embeds ${lang}'s grammar`);
+    console.log(`${want ? "PASS" : "FAIL"} //language=${lang} embeds ${lang}'s grammar`);
     if (!want) ok = false;
   }
   const plainOk = seen.plainRawStringLines > 0;
