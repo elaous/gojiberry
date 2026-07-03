@@ -55,7 +55,7 @@ expanded by the same recursive scan, with no extra grammar required.
 - **`internal/transpile`** — the `.gox` → `.go` source-to-source
   transpiler described above.
 - **`cmd/goxc`** — the CLI: `go run ./cmd/goxc <dir>` transpiles every
-  `*.gox` under `<dir>` into a gofmt-clean `*_gox.go` next to it (the
+  `*.gox` under `<dir>` into a gofmt-clean `*.gox.go` next to it (the
   generated file is committed, like `templ`'s `*_templ.go` convention,
   so `go build`/`go test` work without running goxc first). Wired up
   as `go generate` via the repo-root `generate.go`.

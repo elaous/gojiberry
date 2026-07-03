@@ -4,7 +4,7 @@
 //
 //	goxc [dirs...]
 //
-// Every path/to/name.gox becomes path/to/name_gox.go in the same
+// Every path/to/name.gox becomes path/to/name.gox.go in the same
 // directory and package. Defaults to "." if no directories are given.
 package main
 
@@ -68,7 +68,7 @@ func generate(path string) error {
 		return fmt.Errorf("%s: generated invalid Go source: %w\n---\n%s", path, err, full)
 	}
 
-	outPath := strings.TrimSuffix(path, ".gox") + "_gox.go"
+	outPath := strings.TrimSuffix(path, ".gox") + ".gox.go"
 	if err := os.WriteFile(outPath, formatted, 0o644); err != nil {
 		return fmt.Errorf("writing %s: %w", outPath, err)
 	}
