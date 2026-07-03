@@ -112,6 +112,29 @@ If the tag has children, they're collected into a `Children
 elements like `<my-widget>`) are real HTML elements and compile to
 `gox.El(...)` instead.
 
+### The `<html>` entrypoint
+
+`gox.Document{Title, Head, Body}.Render()` builds the
+`<html><head>...</head><body>...</body></html>` wrapper almost every
+top-level page needs, so pages don't each hand-roll it:
+
+```go
+func Page(props PageProps) gox.Node {
+	return gox.Document{
+		Title: "My App",
+		Head:  []gox.Node{gox.Style(style_css)},
+		Body:  <h1>Hello, {props.Name}!</h1>,
+	}.Render()
+}
+```
+
+`Head` is just `[]gox.Node` — append whatever `<meta>`/`<link>`/
+`<script>` nodes a page needs. `gox.Style(css string) gox.Node` wraps
+a `<style>` tag around raw CSS content (e.g. the string a CSS resource
+import binds), the same way `gox.Raw` does for any other trusted HTML.
+`Body` takes one node, so use `<>...</>` (`gox.Frag`) to group several
+top-level children there.
+
 ## Resource imports
 
 An import spec whose path ends in a recognized non-Go extension is a
@@ -334,13 +357,16 @@ list doesn't work here). No completions/hover/diagnostics yet; see
 Known limitations.
 
 It also includes a second, general-purpose injection — not gox
--specific, works in any `.go` file — for `@highlight`-annotated
-embedded-language raw strings, e.g. `` `// @highlight: sql\nSELECT...` ``
-gets SQL highlighting inside the string (also recognizes JetBrains'
-own `//language=SQL` Language Injection spelling). Same idea as
-`es6-string-html`/`vscode-styled-components` for JS template literals.
-See that directory's README for the one real constraint (the marker
-must share a line with the opening backtick).
+-specific, works in any `.go` file — for `//language=`-annotated
+embedded-language raw strings, e.g. `` `//language=SQL\nSELECT...` ``
+gets SQL highlighting inside the string. This is JetBrains' own
+Language Injection convention from GoLand/IntelliJ, reused as-is
+rather than inventing a new spelling (`@` isn't a Go token outside a
+string or comment, so there's no Go precedent for an `@`-prefixed
+marker to begin with). Same idea as `es6-string-html`/
+`vscode-styled-components` for JS template literals. See that
+directory's README for the one real constraint (the marker must share
+a line with the opening backtick).
 
 ## Known limitations (v1)
 

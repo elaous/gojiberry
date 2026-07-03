@@ -1,5 +1,5 @@
 // Downloads VS Code's own bundled HTML/CSS/SQL/JSON grammars so
-// highlight-test.js can verify the @highlight injection actually
+// highlight-test.js can verify the language= injection actually
 // embeds each one, without redistributing Microsoft's files in this
 // repo. Re-run this if any of them go missing.
 const fs = require("fs");

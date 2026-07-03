@@ -19,17 +19,21 @@ type HomePageProps struct {
 
 // HomePage lists existing documents and offers a way to start a new one.
 func HomePage(props HomePageProps) gox.Node {
-	return gox.El("html", nil, gox.El("head", nil, gox.El("title", nil, gox.Text("gox-canvas")), gox.El("style", nil, gox.Child(gox.Raw(style_css)))), gox.El("body", nil, gox.El("h1", nil, gox.Text("gox-canvas")), gox.El("form", []gox.Attr{gox.A("method", "POST"), gox.A("action", "/documents")}, gox.El("button", []gox.Attr{gox.A("type", "submit")}, gox.Text("New document"))), gox.El("ul", []gox.Attr{gox.A("class", "documents")}, gox.Child(func() []gox.Node {
-		var items []gox.Node
-		for _, d := range props.Documents {
-			preview := d.Preview
-			if preview == "" {
-				preview = "(empty document)"
+	return gox.Document{
+		Title: "gox-canvas",
+		Head:  []gox.Node{gox.Style(style_css)},
+		Body: gox.Frag(gox.El("h1", nil, gox.Text("gox-canvas")), gox.El("form", []gox.Attr{gox.A("method", "POST"), gox.A("action", "/documents")}, gox.El("button", []gox.Attr{gox.A("type", "submit")}, gox.Text("New document"))), gox.El("ul", []gox.Attr{gox.A("class", "documents")}, gox.Child(func() []gox.Node {
+			var items []gox.Node
+			for _, d := range props.Documents {
+				preview := d.Preview
+				if preview == "" {
+					preview = "(empty document)"
+				}
+				items = append(items, gox.El("li", nil, gox.El("a", []gox.Attr{gox.A("href", gox.AttrVal("/documents/"+d.ID))}, gox.Child(preview))))
 			}
-			items = append(items, gox.El("li", nil, gox.El("a", []gox.Attr{gox.A("href", gox.AttrVal("/documents/"+d.ID))}, gox.Child(preview))))
-		}
-		return items
-	}()))))
+			return items
+		}()))),
+	}.Render()
 }
 
 // CanvasPageProps is one document's id and current content.
@@ -52,5 +56,9 @@ WebAssembly.instantiateStreaming(fetch("/static/main.wasm"), go.importObject).th
 // with its current content, a status indicator, and the WASM client
 // that debounces edits into PUT /api/documents/{id} autosave calls.
 func CanvasPage(props CanvasPageProps) gox.Node {
-	return gox.El("html", nil, gox.El("head", nil, gox.El("title", nil, gox.Text("gox-canvas")), gox.El("style", nil, gox.Child(gox.Raw(style_css)))), gox.El("body", nil, gox.El("p", nil, gox.El("a", []gox.Attr{gox.A("href", "/")}, gox.Text("Back"))), gox.El("div", []gox.Attr{gox.A("id", "app"), gox.A("data-doc-id", gox.AttrVal(props.ID))}, gox.El("textarea", []gox.Attr{gox.A("id", "canvas")}, gox.Child(props.Content)), gox.El("div", nil, gox.El("span", []gox.Attr{gox.A("id", "status")}, gox.Text("saved")))), gox.El("script", []gox.Attr{gox.A("src", "/static/wasm_exec.js")}), gox.El("script", nil, gox.Child(gox.Raw(bootstrapScript)))))
+	return gox.Document{
+		Title: "gox-canvas",
+		Head:  []gox.Node{gox.Style(style_css)},
+		Body:  gox.Frag(gox.El("p", nil, gox.El("a", []gox.Attr{gox.A("href", "/")}, gox.Text("Back"))), gox.El("div", []gox.Attr{gox.A("id", "app"), gox.A("data-doc-id", gox.AttrVal(props.ID))}, gox.El("textarea", []gox.Attr{gox.A("id", "canvas")}, gox.Child(props.Content)), gox.El("div", nil, gox.El("span", []gox.Attr{gox.A("id", "status")}, gox.Text("saved")))), gox.El("script", []gox.Attr{gox.A("src", "/static/wasm_exec.js")}), gox.El("script", nil, gox.Child(gox.Raw(bootstrapScript)))),
+	}.Render()
 }

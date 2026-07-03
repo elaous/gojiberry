@@ -6,20 +6,19 @@ tokenization (via VS Code's own bundled Go grammar or the
 extension, whichever provides `source.go`) plus `<Tag>`/`{expr}`
 highlighting layered on top via a TextMate **injection grammar**. Also
 includes a second, general-purpose injection — not gox-specific, works
-in any `.go` file — for `@highlight`-annotated embedded-language raw
+in any `.go` file — for `//language=`-annotated embedded-language raw
 strings; see below.
 
-## `@highlight`-annotated embedded strings (any `.go` file)
+## `//language=`-annotated embedded strings (any `.go` file)
 
-A raw string literal that opens with `// @highlight: <lang>` — or
-`//language=<lang>` (case-insensitive), JetBrains' own **Language
-Injection** convention from GoLand/IntelliJ, recognized here too since
-it's better-established prior art than inventing a new spelling — on
-the **same line** as the backtick gets that language's syntax
-highlighting for the rest of its content:
+A raw string literal that opens with `//language=<lang>`
+(case-insensitive) — JetBrains' own **Language Injection** convention
+from GoLand/IntelliJ, reused as-is here rather than inventing a new
+spelling — on the **same line** as the backtick gets that language's
+syntax highlighting for the rest of its content:
 
 ```go
-return []byte(`// @highlight: html
+return []byte(`//language=HTML
 	<div class="greeting">hello</div>
 `)
 
@@ -28,10 +27,17 @@ query := `//language=SQL
 `
 ```
 
-The same idea `es6-string-html`/`vscode-styled-components` use for JS
-template literals, or the `/* GraphQL */` magic-comment convention —
-here for Go raw strings, since Go has no tagged-template syntax to
-hook into. Supported today: `html`, `css`, `sql`, `json`.
+There's no Go precedent for anything else here: `@` isn't a Go token
+at all outside a string or comment (`@foo` is a compile error,
+`invalid character U+0040 '@'`), so an `@`-prefixed marker would have
+been a made-up spelling with no prior art in this language or any
+other. `//language=` already means exactly this in a widely-used
+toolchain, so this extension just recognizes that convention instead
+of inventing its own. It's the same idea `es6-string-html`/
+`vscode-styled-components` use for JS template literals, or the
+`/* GraphQL */` magic-comment convention — here for Go raw strings,
+since Go has no tagged-template syntax to hook into. Supported today:
+`html`, `css`, `sql`, `json`.
 
 **The marker must share a line with the opening backtick.** VS Code's
 tokenizer processes one line at a time, so a `begin` pattern's
@@ -41,8 +47,8 @@ the first design tried here, confirmed broken by tokenizing a sample
 file and finding no embedded-language scopes appeared at all before
 switching to the same-line requirement. This means JetBrains' own
 placement (marker on the line *before* the string) doesn't work here —
-`//language=SQL` is recognized only as a same-line spelling, not a
-full reimplementation of JetBrains' convention.
+this extension recognizes only a same-line spelling, not a full
+reimplementation of JetBrains' convention.
 
 This works in plain `.go` files as much as `.gox` ones — it's
 registered as its own injection (`syntaxes/embedded-highlight.tmLanguage.json`,
@@ -83,7 +89,7 @@ against the repo's real example files.
   make ordinary comparison operators (`a < b`) infuriating to write,
   since a config file can't know intent at keystroke time the way the
   transpiler's real parser does.
-- `@highlight` only recognizes a marker on the same line as the
+- `//language=` only recognizes a marker on the same line as the
   opening backtick, for the line-at-a-time tokenizer reason above —
   not a stylistic choice.
 
@@ -98,7 +104,7 @@ npm test                         # tokenize.js: every examples/**/*.gox has Go
                                   # keywords and (where present) tags, including
                                   # deep inside nested blocks
                                   # highlight-test.js: fixtures/highlight-sample.go's
-                                  # four @highlight-annotated strings each embed
+                                  # four //language=-annotated strings each embed
                                   # their language's grammar, and a plain,
                                   # unannotated raw string stays plain Go
 ```

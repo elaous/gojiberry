@@ -17,12 +17,10 @@ type HomePageProps struct {
 
 // HomePage lists existing documents and offers a way to start a new one.
 func HomePage(props HomePageProps) gox.Node {
-	return <html>
-		<head>
-			<title>gox-canvas</title>
-			<style>{gox.Raw(style_css)}</style>
-		</head>
-		<body>
+	return gox.Document{
+		Title: "gox-canvas",
+		Head:  []gox.Node{gox.Style(style_css)},
+		Body: <>
 			<h1>gox-canvas</h1>
 			<form method="POST" action="/documents">
 				<button type="submit">New document</button>
@@ -38,8 +36,8 @@ func HomePage(props HomePageProps) gox.Node {
 				}
 				return items
 			}()}</ul>
-		</body>
-	</html>
+		</>,
+	}.Render()
 }
 
 // CanvasPageProps is one document's id and current content.
@@ -62,12 +60,10 @@ WebAssembly.instantiateStreaming(fetch("/static/main.wasm"), go.importObject).th
 // with its current content, a status indicator, and the WASM client
 // that debounces edits into PUT /api/documents/{id} autosave calls.
 func CanvasPage(props CanvasPageProps) gox.Node {
-	return <html>
-		<head>
-			<title>gox-canvas</title>
-			<style>{gox.Raw(style_css)}</style>
-		</head>
-		<body>
+	return gox.Document{
+		Title: "gox-canvas",
+		Head:  []gox.Node{gox.Style(style_css)},
+		Body: <>
 			<p><a href="/">Back</a></p>
 			<div id="app" data-doc-id={props.ID}>
 				<textarea id="canvas">{props.Content}</textarea>
@@ -75,6 +71,6 @@ func CanvasPage(props CanvasPageProps) gox.Node {
 			</div>
 			<script src="/static/wasm_exec.js"></script>
 			<script>{gox.Raw(bootstrapScript)}</script>
-		</body>
-	</html>
+		</>,
+	}.Render()
 }

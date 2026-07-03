@@ -7,19 +7,17 @@
 package main
 
 func htmlSnippet() []byte {
-	return []byte(`// @highlight: html
+	return []byte(`//language=HTML
 		<div class="greeting">hello</div>
 	`)
 }
 
 func cssSnippet() string {
-	return `// @highlight: css
+	return `//language=CSS
 		body { color: red; }
 	`
 }
 
-// sqlSnippet uses JetBrains' `//language=SQL` spelling instead of
-// `@highlight:`, to prove both are recognized.
 func sqlSnippet() string {
 	return `//language=SQL
 		SELECT * FROM users WHERE id = 1;
@@ -27,12 +25,12 @@ func sqlSnippet() string {
 }
 
 func jsonSnippet() string {
-	return `// @highlight: json
+	return `//language=JSON
 		{"title": "gojiberry"}
 	`
 }
 
-// plainRawString has no @highlight marker and must keep plain Go
+// plainRawString has no language= marker and must keep plain Go
 // raw-string coloring, proving the injection doesn't fire on every
 // backtick -- only ones that open with a marker on the same line.
 func plainRawString() string {

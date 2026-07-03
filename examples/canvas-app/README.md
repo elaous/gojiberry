@@ -14,15 +14,17 @@ the main module.
 
 - **`canvas/store.go`** -- plain `database/sql` business logic (create
   /get/save/list a document). No framework dependency. Queries are
-  annotated with the gox VS Code extension's `@highlight: sql` marker
+  annotated with the gox VS Code extension's `//language=SQL` marker
   for editor syntax highlighting; `sqlQuery` strips that marker before
   the string reaches the driver (Postgres comments are `--`, not `//`,
   so leaving it in would be a syntax error, not a no-op).
 - **`canvas/migrations/1_create_documents.up.sql`** -- the one table.
 - **`canvas/pages.gox`** -- `HomePage` (list + "new document" form) and
-  `CanvasPage` (the textarea) as gox SSR components. Both import
-  `canvas/style.css` via gox's CSS resource import and inline it with
-  `gox.Raw`.
+  `CanvasPage` (the textarea) as gox SSR components. Both build on
+  `gox.Document{Title, Head, Body}.Render()` (`gox/document.go`) rather
+  than hand-rolling `<html><head>...</head><body>...</body></html>`,
+  and inject `canvas/style.css` (bound via gox's CSS resource import)
+  into `Head` with `gox.Style(style_css)`.
 - **`canvas/api.go`** -- the same `Store` wired into real
   `//encore:api`-annotated handlers (`encore.dev/storage/sqldb`), for
   what a production deployment of this would look like.
