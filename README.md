@@ -53,13 +53,20 @@ expanded by the same recursive scan, with no extra grammar required.
   escaping (`gox.Raw` is the explicit escape hatch). `gox.Event.Value`
   is `any`, read back type-safely via `gox.EventValue[T]`.
 - **`internal/transpile`** — the `.gox` → `.go` source-to-source
-  transpiler described above, plus the resource-import loaders (JSON/
-  CSS/SCSS/HCL/proto/capnp) described below.
+  transpiler described above, plus the stable resource-import loaders
+  (JSON/JSONC/JSONL/CSS/SCSS) described below.
+- **`internal/transpile/experimental`** — the resource-import loaders
+  that shell out to a mature external tool this project doesn't
+  reimplement (HCL/proto/capnp/sqlc), wired in only via
+  `transpile.Options.ExperimentalLoaders` — see Resource imports below.
 - **`cmd/goxc`** — the CLI: `go run ./cmd/goxc <dir>` transpiles every
   `*.gox` under `<dir>` into a gofmt-clean `*.gox.go` next to it (the
   generated file is committed, like `templ`'s `*_templ.go` convention,
   so `go build`/`go test` work without running goxc first). Wired up
-  as `go generate` via the repo-root `generate.go`.
+  as `go generate` via the repo-root `generate.go`. `-experimental`
+  (or `GOX_EXPERIMENTAL=1`) enables the experimental resource imports
+  below; a directory literally named `experimental` is otherwise
+  skipped entirely.
 - **`domrt`** — the client runtime (`GOOS=js GOARCH=wasm` only).
   `domrt.Mount` creates real DOM nodes for a `gox.Node` tree;
   `Root.Update` diffs the next tree against what's live and patches
@@ -109,61 +116,74 @@ elements like `<my-widget>`) are real HTML elements and compile to
 
 An import spec whose path ends in a recognized non-Go extension is a
 resource import, not a Go package import — the file is loaded (and,
-where needed, compiled) at transpile time instead of at runtime:
+where needed, compiled) at transpile time instead of at runtime. Paths
+resolve relative to the `.gox` file's own directory, the same
+convention `go:embed` uses — not fetched from a URL or module proxy.
+
+Resource imports split into two tiers: **stable** (on by default) and
+**experimental** (opt-in via `goxc -experimental` or
+`GOX_EXPERIMENTAL=1`, or `transpile.Options{Experimental: true}`).
+Anything experimental either shells out to a mature external tool this
+project doesn't try to reimplement, or carries real footgun risk —
+gox still *recognizes* these extensions/annotations without opting in
+(so it can give an actionable "enable experimental mode" error instead
+of a confusing "not a valid Go import path" one), but none of that
+code runs, and a directory literally named `experimental` is skipped
+entirely by an ordinary `goxc`/`go generate` walk so checked-in
+experimental examples can't break the default build.
+
+### Stable
 
 ```go
 import (
-	config "config.json"           // -> config (decoded any) + configBytes ([]byte)
-	cfg.(Config) "config.json"     // -> cfg (typed Config, inferred from the file) + a generated Config struct
-	"App.css"                      // -> App_css (string), identifier derived from the filename
-	schema "schema.hcl"            // -> a generated package: schema.Users{}, schema.Books{}
-	books  "books.proto"           // -> a generated package via protoc/protoc-gen-go
+	config "config.json"   // -> config (decoded any) + configBytes ([]byte)
+	"App.css"              // -> App_css (string), identifier derived from the filename
 )
 ```
 
-Paths resolve relative to the `.gox` file's own directory, the same
-convention `go:embed` uses — not fetched from a URL or module proxy.
-
 - **`.json`** binds the alias to the decoded value (as `any`) and
   `<alias>Bytes` to the raw content, so code needing a concrete type
-  can `json.Unmarshal(configBytes, &myStruct)` itself. With an
-  `alias.(TypeName) "file.json"` annotation — reusing Go's type
-  assertion syntax for a new meaning that's never valid in a real
-  import spec — gox instead infers a struct shape (and any nested
-  struct types it needs) from the file's own sample data, generates
-  `TypeName`, and binds `alias` as that type directly:
-  ```go
-  import ( cfg.(Config) "config.json" )
-  // cfg is now a Config, no manual struct + json.Unmarshal needed
-  ```
-  This is sample-based inference, not a schema: if a field could hold
-  a different shape of value elsewhere (this sample's `"count": 5`
-  infers `int`; production data sending `5.5` for that field would
-  then fail to unmarshal), hand-declare the type and use the untyped
-  path's `<alias>Bytes` instead.
+  can `json.Unmarshal(configBytes, &myStruct)` itself — gox doesn't
+  infer a struct shape from sample data on this path (see the
+  experimental `.(TypeName)` annotation below for that).
 - **`.jsonc`** is `.json` with `//` and `/* */` comments allowed
   (stripped by a small string-literal-aware preprocessor before
-  parsing — not a full JSONC library), otherwise identical, including
-  the optional type annotation.
-- **`.jsonl`** is one JSON value per line; `<alias>` binds to a slice
-  instead of a single value — `[]TypeName` (inferred from the first
-  line) with an annotation, `[]any` without one.
+  parsing — not a full JSONC library).
+- **`.jsonl`** is one JSON value per line; `<alias>` binds to `[]any`
+  instead of a single value.
 - **`.css`** binds the alias to the file's content as a plain Go
   string.
 - **`.scss`** compiles first via the `sass` (dart-sass) CLI, then
   binds the same way as `.css`. Requires `sass` on `PATH`; gox doesn't
-  bundle or reimplement a SCSS compiler.
-- **`.sql`** splits the file into named queries via `-- @var: Name`
-  annotations and generates a subpackage of string constants at
-  `internal/goxgen/sql/<alias>/` (one file commonly names several
-  queries, so — like HCL/proto/capnp below — it needs its own
-  namespace rather than collapsing to one bound value):
-  ```sql
-  -- @var: SelectFromBlob
-  SELECT * FROM blob;
-  ```
-  generates `queries.SelectFromBlob = "SELECT * FROM blob"` (trailing
-  `;` trimmed), used as `db.Query(queries.SelectFromBlob)`.
+  bundle or reimplement a SCSS compiler. (Kept stable rather than
+  experimental since it's a straightforward compile-and-bind step with
+  no inference or generated-subpackage machinery.)
+
+### Experimental
+
+```go
+import (
+	cfg.(Config) "config.json"  // -> cfg (typed Config, inferred from the file) + a generated Config struct
+	schema "schema.hcl"          // -> a generated package: schema.Users{}, schema.Books{}
+	books  "books.proto"         // -> a generated package via protoc/protoc-gen-go
+	queries "queries.sql"        // -> a generated package via sqlc
+)
+```
+
+- **JSON's `alias.(TypeName) "file.json"` annotation** — reusing Go's
+  type assertion syntax for a new meaning that's never valid in a real
+  import spec — infers a Go struct shape (and any nested struct types
+  it needs) from the file's own sample data, generates `TypeName`, and
+  binds `alias` as that type directly instead of `any`. Works the same
+  way on `.jsonc` and (binding to `[]TypeName`, inferred from the
+  first line) `.jsonl`. This is sample-based inference, not a schema:
+  if a field could hold a different shape of value elsewhere (this
+  sample's `"count": 5` infers `int`; production data sending `5.5`
+  for that field would then fail to unmarshal), hand-declare the type
+  and use the stable path's `<alias>Bytes` instead. This is the
+  footgun-risk half of "experimental" — the loader itself lives in the
+  stable `internal/transpile` package (it's not shelling out to
+  anything), only the annotation is gated.
 - **`.hcl`** is gox's schema DSL (`table "x" { column "y" { type = ...
   } }`), parsed with `hashicorp/hcl/v2`. Generates a real Go
   subpackage at `internal/goxgen/hcl/<alias>/` with model structs
@@ -189,13 +209,37 @@ convention `go:embed` uses — not fetched from a URL or module proxy.
   itself must declare (the real go-capnp convention), and writes
   output next to the source file; gox parses that annotation back out
   to know what to import. Requires `capnp` + `capnpc-go` on `PATH`.
+- **`.sql`** shells out to the real `sqlc` toolchain (gox doesn't
+  reimplement sqlc's query analysis/codegen). sqlc's own config
+  (`sqlc.yaml`/`sqlc.json`, found by walking up from the `.sql` file)
+  already fully owns pairing queries with a schema and choosing output
+  location — gox doesn't generate or validate that config, only
+  locate it, run `sqlc generate -f <config>`, and derive the Go import
+  path from its `gen.go.package`/`out` fields. Requires `sqlc` on
+  `PATH` and a real sqlc project config; gox does not verify the
+  config actually lists this specific `.sql` file among its query
+  sources (that would mean reimplementing sqlc's own config
+  resolution), only that a config exists somewhere above it.
 
-Neither `protoc` nor `sass` nor `capnp` are installed in the sandbox
-this was built in, so those three loaders are verified here only
-against their "tool not found" error path — real, but unexercised on
-the happy path. JSON, CSS, and HCL are exercised fully, including
-`mustCompileAndRun`-style tests that actually `go run` the generated
-code.
+The experimental loaders live in `internal/transpile/experimental`
+(the JSON annotation excepted, per above), a separate package from
+`internal/transpile` — wired in only via
+`transpile.Options.ExperimentalLoaders`, so unless a caller explicitly
+imports and supplies that package, its code is never reached, not just
+flag-gated within the same files. `internal/transpile/experimental`'s
+own package doc has more on the design.
+
+Neither `protoc` nor `sass` nor `capnp` nor `sqlc` are installed in
+the sandbox this was built in. `.scss`'s and the sqlc loader's
+"tool not found" *and* "no config found" error paths are verified;
+the sqlc loader's actual invocation and import-path derivation are
+verified too, against a stubbed `sqlc` executable standing in for the
+real tool (gox's own discovery/invocation/derivation logic is what's
+under test, not sqlc's codegen correctness). `.proto`/`.capnp` are
+verified only against their "tool not found" error path. JSON
+(stable and the experimental annotation), CSS, and HCL are exercised
+fully, including `mustCompileAndRun`-style tests that actually `go
+run` the generated code.
 
 ## Examples
 
@@ -246,9 +290,8 @@ code.
   ```
 
 - `examples/resource-imports-demo` — a JSON config decoded into a
-  struct gox infers from the file's own data (`config.(SiteConfig)
-  "config.json"`) and a CSS file injected into the page, both bound
-  directly from the `.gox` import block:
+  hand-declared struct and a CSS file injected into the page, both
+  bound directly from the `.gox` import block (stable loaders only):
 
   ```
   go generate ./...
@@ -267,6 +310,19 @@ code.
   go test ./examples/http-server-demo/...
   go run ./examples/http-server-demo &
   curl 'http://localhost:8089/?name=World'
+  ```
+
+- `examples/experimental` — the same JSON config as
+  `resource-imports-demo`, but decoded via the experimental
+  `cfg.(SiteConfig) "config.json"` annotation instead of a
+  hand-declared struct. A directory named `experimental` is skipped by
+  an ordinary `goxc`/`go generate` walk, so it needs its own explicit
+  regeneration step:
+
+  ```
+  go run ./cmd/goxc -experimental examples/experimental
+  go run ./examples/experimental
+  go test ./examples/experimental/...
   ```
 
 ## Editor support

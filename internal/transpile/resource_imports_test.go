@@ -192,7 +192,7 @@ func main() {
 	_ = config.Address.City
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), Options{Experimental: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestTypedJSONImportRejectsNonObjectRoot(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "list.json", `[1, 2, 3]`)
 	src := "package main\n\nimport (\n\tv.(V) \"list.json\"\n)\n\nfunc main() { _ = v }\n"
-	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	_, err := TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), Options{Experimental: true})
 	if err == nil {
 		t.Fatal("expected an error for a non-object JSON root with a type annotation")
 	}
@@ -258,7 +258,7 @@ func main() {
 	_ = config.Count
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), Options{Experimental: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +312,7 @@ func main() {
 	}
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), Options{Experimental: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,178 +339,46 @@ func TestSCSSImportErrorsWithoutSassInstalled(t *testing.T) {
 	}
 }
 
-func TestSQLImportGeneratesNamedQueries(t *testing.T) {
-	dir := setupModule(t)
-	moduleRoot := filepath.Dir(dir)
-	writeFile(t, dir, "bob.sql", `-- @var: SelectFromBlob
-SELECT * FROM blob;
-
--- @var: CountBlobs
-SELECT COUNT(*) FROM blob;
-`)
-	src := "package main\n\nimport (\n\tqueries \"bob.sql\"\n)\n\nfunc main() { _ = queries.SelectFromBlob; _ = queries.CountBlobs }\n"
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantImport := `queries "example.com/testmod/internal/goxgen/sql/queries"`
-	if !strings.Contains(string(out), wantImport) {
-		t.Errorf("expected generated package import %q, got:\n%s", wantImport, out)
-	}
-
-	genPath := filepath.Join(moduleRoot, "internal", "goxgen", "sql", "queries", "queries.go")
-	genSrc, err := os.ReadFile(genPath)
-	if err != nil {
-		t.Fatalf("expected generated queries file at %s: %v", genPath, err)
-	}
-	normalized := strings.Join(strings.Fields(string(genSrc)), " ")
-	if !strings.Contains(normalized, "package queries") {
-		t.Errorf("expected package queries, got:\n%s", genSrc)
-	}
-	if !strings.Contains(normalized, "SelectFromBlob = `SELECT * FROM blob`") {
-		t.Errorf("expected SelectFromBlob var with semicolon trimmed, got:\n%s", genSrc)
-	}
-	if !strings.Contains(normalized, "CountBlobs = `SELECT COUNT(*) FROM blob`") {
-		t.Errorf("expected CountBlobs var, got:\n%s", genSrc)
+// TestExperimentalExtensionsRejectedWithoutOptIn covers the default
+// (non-experimental) gating boundary for .hcl/.proto/.capnp/.sql --
+// their actual loaders now live in internal/transpile/experimental
+// and are tested there (with Options{Experimental: true}); this only
+// confirms gox refuses to run them silently.
+func TestExperimentalExtensionsRejectedWithoutOptIn(t *testing.T) {
+	for _, tc := range []struct {
+		ext     string
+		content string
+	}{
+		{".hcl", `table "x" { column "id" { type = "string" } }`},
+		{".proto", `syntax = "proto3";`},
+		{".capnp", "@0xdbb9ad1f14bf0b36;\n"},
+		{".sql", "SELECT 1;\n"},
+	} {
+		t.Run(tc.ext, func(t *testing.T) {
+			dir := setupModule(t)
+			writeFile(t, dir, "resource"+tc.ext, tc.content)
+			src := "package main\n\nimport (\n\tr \"resource" + tc.ext + "\"\n)\n\nfunc main() { _ = r }\n"
+			_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+			if err == nil {
+				t.Fatalf("expected %s imports to be rejected without Options.Experimental", tc.ext)
+			}
+			if !strings.Contains(err.Error(), "experimental") {
+				t.Errorf("expected an actionable experimental-mode error, got: %v", err)
+			}
+		})
 	}
 }
 
-func TestSQLImportErrorsWithNoAnnotations(t *testing.T) {
+func TestTypedJSONAnnotationRejectedWithoutOptIn(t *testing.T) {
 	dir := setupModule(t)
-	writeFile(t, dir, "plain.sql", "SELECT 1;\n")
-	src := "package main\n\nimport (\n\tq \"plain.sql\"\n)\n\nfunc main() { _ = q }\n"
+	writeFile(t, dir, "config.json", `{"title": "gojiberry"}`)
+	src := "package main\n\nimport (\n\tconfig.(ConfigType) \"config.json\"\n)\n\nfunc main() { _ = config }\n"
 	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
 	if err == nil {
-		t.Fatal("expected an error for a .sql file with no @var annotations")
+		t.Fatal("expected the .(TypeName) annotation to be rejected without Options.Experimental")
 	}
-	if !strings.Contains(err.Error(), "@var") {
-		t.Errorf("expected error to mention @var, got: %v", err)
-	}
-}
-
-func TestHCLImportGeneratesModelsAndMigration(t *testing.T) {
-	dir := setupModule(t)
-	moduleRoot := filepath.Dir(dir)
-	writeFile(t, dir, "schema.hcl", `
-table "users" {
-  column "id" {
-    type = "uuid"
-    primary_key = true
-  }
-  column "email" {
-    type = "string"
-    unique = true
-  }
-  column "created_at" {
-    type = "timestamp"
-    not_null = true
-  }
-}
-`)
-	src := `package main
-
-import (
-	schema "schema.hcl"
-)
-
-func main() {
-	u := schema.Users{}
-	_ = u
-}
-`
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := string(out)
-	wantImport := `schema "example.com/testmod/internal/goxgen/hcl/schema"`
-	if !strings.Contains(got, wantImport) {
-		t.Errorf("expected generated package import %q, got:\n%s", wantImport, got)
-	}
-
-	modelsPath := filepath.Join(moduleRoot, "internal", "goxgen", "hcl", "schema", "models.go")
-	modelsSrc, err := os.ReadFile(modelsPath)
-	if err != nil {
-		t.Fatalf("expected generated models file at %s: %v", modelsPath, err)
-	}
-	// gofmt column-aligns struct fields, so collapse repeated whitespace
-	// before matching rather than asserting exact spacing.
-	normalized := strings.Join(strings.Fields(string(modelsSrc)), " ")
-	for _, want := range []string{"package schema", "type Users struct", "Id string", "Email string", "CreatedAt time.Time", `"time"`} {
-		if !strings.Contains(normalized, want) {
-			t.Errorf("expected generated models.go to contain %q, got:\n%s", want, modelsSrc)
-		}
-	}
-
-	migrationPath := filepath.Join(moduleRoot, "internal", "goxgen", "hcl", "schema", "migrations", "0001_init.sql")
-	migrationSQL, err := os.ReadFile(migrationPath)
-	if err != nil {
-		t.Fatalf("expected generated migration at %s: %v", migrationPath, err)
-	}
-	for _, want := range []string{"CREATE TABLE IF NOT EXISTS users", "id UUID PRIMARY KEY", "email TEXT UNIQUE", "created_at TIMESTAMP NOT NULL"} {
-		if !strings.Contains(string(migrationSQL), want) {
-			t.Errorf("expected generated migration to contain %q, got:\n%s", want, migrationSQL)
-		}
-	}
-}
-
-func TestHCLImportWithReferences(t *testing.T) {
-	dir := setupModule(t)
-	moduleRoot := filepath.Dir(dir)
-	writeFile(t, dir, "schema.hcl", `
-table "users" {
-  column "id" {
-    type = "uuid"
-    primary_key = true
-  }
-}
-table "books" {
-  column "id" {
-    type = "uuid"
-    primary_key = true
-  }
-  column "author_id" {
-    type = "uuid"
-    references = "users.id"
-  }
-}
-`)
-	src := "package main\n\nimport (\n\tschema \"schema.hcl\"\n)\n\nfunc main() { _ = schema.Books{} }\n"
-	if _, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src)); err != nil {
-		t.Fatal(err)
-	}
-	migrationSQL, err := os.ReadFile(filepath.Join(moduleRoot, "internal", "goxgen", "hcl", "schema", "migrations", "0001_init.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(migrationSQL), "author_id UUID REFERENCES users(id)") {
-		t.Errorf("expected a REFERENCES clause derived from the references attribute, got:\n%s", migrationSQL)
-	}
-}
-
-func TestProtoImportErrorsWithoutProtocInstalled(t *testing.T) {
-	dir := setupModule(t)
-	writeFile(t, dir, "books.proto", `syntax = "proto3";`)
-	src := "package main\n\nimport (\n\tbooks \"books.proto\"\n)\n\nfunc main() {}\n"
-	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
-	if err == nil {
-		t.Fatal("expected an error since `protoc` is not installed in this environment")
-	}
-	if !strings.Contains(err.Error(), "protoc") {
-		t.Errorf("expected an actionable install-protoc error, got: %v", err)
-	}
-}
-
-func TestCapnpImportErrorsWithoutCapnpInstalled(t *testing.T) {
-	dir := setupModule(t)
-	writeFile(t, dir, "books.capnp", "@0xdbb9ad1f14bf0b36;\n")
-	src := "package main\n\nimport (\n\tbooks \"books.capnp\"\n)\n\nfunc main() {}\n"
-	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
-	if err == nil {
-		t.Fatal("expected an error since `capnp` is not installed in this environment")
-	}
-	if !strings.Contains(err.Error(), "capnp") {
-		t.Errorf("expected an actionable install-capnp error, got: %v", err)
+	if !strings.Contains(err.Error(), "experimental") {
+		t.Errorf("expected an actionable experimental-mode error, got: %v", err)
 	}
 }
 

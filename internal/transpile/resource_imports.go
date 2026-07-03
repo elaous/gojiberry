@@ -8,16 +8,15 @@ import (
 
 // processImports runs before tag expansion: it finds every
 // `import ( ... )` block, and for each spec whose path ends in a
-// recognized resource extension (.json, .css, .scss, .hcl, .proto,
-// .capnp) invokes that extension's loader instead of treating it as a
-// Go package import. A loader either splices supporting Go
-// declarations in after the import block (JSON/CSS/SCSS) or generates
-// a real Go package and rewrites the spec into an ordinary import of
-// it (HCL/proto/capnp). Ordinary Go import specs pass through
-// unchanged. Only the parenthesized `import ( ... )` form is
-// recognized; a lone `import "path"` is always treated as a normal Go
-// import.
-func processImports(filename, baseDir string, src string) (string, error) {
+// recognized resource extension invokes that extension's loader
+// instead of treating it as a Go package import. A loader either
+// splices supporting Go declarations in after the import block (JSON/
+// CSS/SCSS) or generates a real Go package and rewrites the spec into
+// an ordinary import of it (the experimental loaders: HCL/proto/
+// capnp/sqlc). Ordinary Go import specs pass through unchanged. Only
+// the parenthesized `import ( ... )` form is recognized; a lone
+// `import "path"` is always treated as a normal Go import.
+func processImports(filename, baseDir string, src string, opts Options) (string, error) {
 	runes := []rune(src)
 	var out []rune
 	pos := 0
@@ -40,7 +39,7 @@ func processImports(filename, baseDir string, src string) (string, error) {
 				i++
 			}
 			if i < n && runes[i] == '(' {
-				block, decls, newPos, err := rewriteImportBlock(filename, baseDir, runes, i+1)
+				block, decls, newPos, err := rewriteImportBlock(filename, baseDir, runes, i+1, opts)
 				if err != nil {
 					return "", err
 				}
@@ -86,7 +85,7 @@ func atWord(src []rune, pos int, word string) bool {
 // body (without parens), any extra declarations resource-import
 // loaders produced (to be appended after the block), and the position
 // just past ')'.
-func rewriteImportBlock(filename, baseDir string, runes []rune, pos int) (block string, decls string, newPos int, err error) {
+func rewriteImportBlock(filename, baseDir string, runes []rune, pos int, opts Options) (block string, decls string, newPos int, err error) {
 	var blockOut, declsOut strings.Builder
 	extraGoImports := map[string]bool{}
 	existingPaths := map[string]bool{}
@@ -132,7 +131,7 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int) (block 
 		// real import spec: `alias.(TypeName) "path.json"` tells the
 		// loader what Go type to decode into (and, for JSON, to infer
 		// and generate that type's shape from the file's own data)
-		// instead of the untyped default.
+		// instead of the untyped default. Experimental (see below).
 		var typeName string
 		if alias != "" && alias != "." && i+1 < n && runes[i] == '.' && runes[i+1] == '(' {
 			i += 2
@@ -159,15 +158,36 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int) (block 
 
 		if isResourceImport(path) {
 			ext := strings.ToLower(filepath.Ext(path))
-			if typeName != "" && !typeAnnotationAware[ext] {
-				return "", "", 0, fmt.Errorf("%s: %s.(%s) \"%s\": %s imports don't support a type annotation", filename, alias, typeName, path, ext)
+
+			loader, ok := loaders[ext]
+			if !ok {
+				// Recognized only via experimentalExtensions: gox knows
+				// the extension but its loader lives in
+				// internal/transpile/experimental and isn't wired in
+				// unless the caller opted in.
+				if !opts.Experimental {
+					return "", "", 0, fmt.Errorf("%s: %s imports are experimental; enable with `goxc -experimental` (or transpile.Options{Experimental: true}) -- see internal/transpile/experimental", filename, ext)
+				}
+				loader, ok = opts.ExperimentalLoaders[ext]
+				if !ok {
+					return "", "", 0, fmt.Errorf("%s: experimental mode is enabled but no loader is registered for %s imports", filename, ext)
+				}
 			}
+
+			if typeName != "" {
+				if !typeAnnotationAware[ext] {
+					return "", "", 0, fmt.Errorf("%s: %s.(%s) %q: %s imports don't support a type annotation", filename, alias, typeName, path, ext)
+				}
+				if !opts.Experimental {
+					return "", "", 0, fmt.Errorf("%s: %s.(%s) %q: typed JSON imports are experimental (sample-based struct inference, not a schema) -- enable with `goxc -experimental` (or transpile.Options{Experimental: true})", filename, alias, typeName, path)
+				}
+			}
+
 			ident := alias
 			if ident == "" {
-				ident = deriveIdent(path)
+				ident = DeriveIdent(path)
 			}
-			loader := loaders[ext]
-			res, lerr := loader(loaderInput{Alias: ident, TypeName: typeName, Path: path, BaseDir: baseDir, SourceFile: filename})
+			res, lerr := loader(LoaderInput{Alias: ident, TypeName: typeName, Path: path, BaseDir: baseDir, SourceFile: filename})
 			if lerr != nil {
 				return "", "", 0, lerr
 			}

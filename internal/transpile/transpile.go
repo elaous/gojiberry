@@ -25,10 +25,35 @@ import (
 	"unicode"
 )
 
-// Transpile converts .gox source into Go source. filename is used only
-// for error messages.
+// Options controls opt-in behavior not on by default.
+type Options struct {
+	// Experimental enables resource-import extensions and annotations
+	// that either reimplement a slice of a mature external tool (HCL/
+	// proto/capnp/sqlc, which shell out to that tool and generate a
+	// real Go subpackage) or carry real footgun risk (the JSON
+	// .(TypeName) annotation's sample-based struct inference, which can
+	// silently panic at runtime against differently-shaped data). Off
+	// by default: gox recognizes these extensions/annotations either
+	// way, but without this set it errors with an actionable message
+	// instead of running them.
+	Experimental bool
+	// ExperimentalLoaders supplies the loader implementations for
+	// experimentalExtensions (see loaders.go) when Experimental is set.
+	// Callers get these from internal/transpile/experimental so that
+	// package's code isn't reachable at all unless explicitly wired in.
+	ExperimentalLoaders map[string]LoaderFunc
+}
+
+// Transpile converts .gox source into Go source using only the stable,
+// on-by-default loaders. filename is used only for error messages.
 func Transpile(filename string, src []byte) ([]byte, error) {
-	withResources, err := processImports(filename, filepath.Dir(filename), string(src))
+	return TranspileWithOptions(filename, src, Options{})
+}
+
+// TranspileWithOptions is Transpile with control over experimental
+// resource-import support (see Options).
+func TranspileWithOptions(filename string, src []byte, opts Options) ([]byte, error) {
+	withResources, err := processImports(filename, filepath.Dir(filename), string(src), opts)
 	if err != nil {
 		return nil, err
 	}
