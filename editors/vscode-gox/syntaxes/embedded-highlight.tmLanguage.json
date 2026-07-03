@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "embedded-highlight",
   "scopeName": "gox.embedded-highlight.injection",
-  "comment": "General Go feature, not gox-specific: a raw string literal that opens with `// @highlight: <lang>` on the SAME line as the backtick gets that language's syntax highlighting for the rest of its content, the same magic-comment idea as es6-string-html/vscode-styled-components for JS template literals or the `/* GraphQL */` convention. The marker must share a line with the opening backtick -- VS Code's tokenizer processes one line at a time, so a begin pattern's lookahead can never see content on the next line; there is no way to detect a marker placed on its own line below the backtick.",
+  "comment": "General Go feature, not gox-specific: a raw string literal that opens with `// @highlight: <lang>` (or `//language=<lang>`, JetBrains' own Language Injection convention -- reused here for familiarity, since it's better-established prior art than inventing a new spelling) on the SAME line as the backtick gets that language's syntax highlighting for the rest of its content; the same magic-comment idea as es6-string-html/vscode-styled-components for JS template literals or the `/* GraphQL */` convention. The marker must share a line with the opening backtick -- VS Code's tokenizer processes one line at a time, so a begin pattern's lookahead can never see content on the next line; there is no way to detect a marker placed on its own line below the backtick, which is how JetBrains' own tooling places it, so this is a same-line-only subset of that convention, not a full reimplementation of it.",
   "injectionSelector": "L:source.go, L:source.gox",
   "patterns": [
     { "include": "#highlightHTML" },
@@ -12,7 +12,7 @@
   ],
   "repository": {
     "highlightHTML": {
-      "begin": "(`)([ \\t]*//[ \\t]*@highlight:[ \\t]*html[ \\t]*)$",
+      "begin": "(`)([ \\t]*//[ \\t]*(?:@highlight:|language=)[ \\t]*(?i:html)[ \\t]*)$",
       "beginCaptures": {
         "1": { "name": "punctuation.definition.string.begin.go" },
         "2": { "name": "comment.line.double-slash.go" }
@@ -23,7 +23,7 @@
       "patterns": [{ "include": "text.html.basic" }]
     },
     "highlightCSS": {
-      "begin": "(`)([ \\t]*//[ \\t]*@highlight:[ \\t]*css[ \\t]*)$",
+      "begin": "(`)([ \\t]*//[ \\t]*(?:@highlight:|language=)[ \\t]*(?i:css)[ \\t]*)$",
       "beginCaptures": {
         "1": { "name": "punctuation.definition.string.begin.go" },
         "2": { "name": "comment.line.double-slash.go" }
@@ -34,7 +34,7 @@
       "patterns": [{ "include": "source.css" }]
     },
     "highlightSQL": {
-      "begin": "(`)([ \\t]*//[ \\t]*@highlight:[ \\t]*sql[ \\t]*)$",
+      "begin": "(`)([ \\t]*//[ \\t]*(?:@highlight:|language=)[ \\t]*(?i:sql)[ \\t]*)$",
       "beginCaptures": {
         "1": { "name": "punctuation.definition.string.begin.go" },
         "2": { "name": "comment.line.double-slash.go" }
@@ -45,7 +45,7 @@
       "patterns": [{ "include": "source.sql" }]
     },
     "highlightJSON": {
-      "begin": "(`)([ \\t]*//[ \\t]*@highlight:[ \\t]*json[ \\t]*)$",
+      "begin": "(`)([ \\t]*//[ \\t]*(?:@highlight:|language=)[ \\t]*(?i:json)[ \\t]*)$",
       "beginCaptures": {
         "1": { "name": "punctuation.definition.string.begin.go" },
         "2": { "name": "comment.line.double-slash.go" }

@@ -18,8 +18,10 @@ func cssSnippet() string {
 	`
 }
 
+// sqlSnippet uses JetBrains' `//language=SQL` spelling instead of
+// `@highlight:`, to prove both are recognized.
 func sqlSnippet() string {
-	return `// @highlight: sql
+	return `//language=SQL
 		SELECT * FROM users WHERE id = 1;
 	`
 }
