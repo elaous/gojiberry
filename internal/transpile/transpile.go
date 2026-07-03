@@ -19,6 +19,7 @@ package transpile
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode"
@@ -27,7 +28,11 @@ import (
 // Transpile converts .gox source into Go source. filename is used only
 // for error messages.
 func Transpile(filename string, src []byte) ([]byte, error) {
-	p := &parser{file: filename, src: []rune(string(src))}
+	withResources, err := processImports(filename, filepath.Dir(filename), string(src))
+	if err != nil {
+		return nil, err
+	}
+	p := &parser{file: filename, src: []rune(withResources)}
 	out, err := p.transpileChunk(p.src)
 	if err != nil {
 		return nil, err

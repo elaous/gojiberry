@@ -53,7 +53,8 @@ expanded by the same recursive scan, with no extra grammar required.
   escaping (`gox.Raw` is the explicit escape hatch). `gox.Event.Value`
   is `any`, read back type-safely via `gox.EventValue[T]`.
 - **`internal/transpile`** — the `.gox` → `.go` source-to-source
-  transpiler described above.
+  transpiler described above, plus the resource-import loaders (JSON/
+  CSS/SCSS/HCL/proto/capnp) described below.
 - **`cmd/goxc`** — the CLI: `go run ./cmd/goxc <dir>` transpiles every
   `*.gox` under `<dir>` into a gofmt-clean `*.gox.go` next to it (the
   generated file is committed, like `templ`'s `*_templ.go` convention,
@@ -104,6 +105,66 @@ If the tag has children, they're collected into a `Children
 elements like `<my-widget>`) are real HTML elements and compile to
 `gox.El(...)` instead.
 
+## Resource imports
+
+An import spec whose path ends in a recognized non-Go extension is a
+resource import, not a Go package import — the file is loaded (and,
+where needed, compiled) at transpile time instead of at runtime:
+
+```go
+import (
+	config "config.json"  // -> config (decoded any) + configBytes ([]byte)
+	"App.css"              // -> App_css (string), identifier derived from the filename
+	schema "schema.hcl"    // -> a generated package: schema.Users{}, schema.Books{}
+	books  "books.proto"   // -> a generated package via protoc/protoc-gen-go
+)
+```
+
+Paths resolve relative to the `.gox` file's own directory, the same
+convention `go:embed` uses — not fetched from a URL or module proxy.
+
+- **`.json`** binds the alias to the decoded value (as `any`) and
+  `<alias>Bytes` to the raw content, so code needing a concrete type
+  can `json.Unmarshal(configBytes, &myStruct)` itself — gox doesn't
+  infer a struct shape from sample data.
+- **`.css`** binds the alias to the file's content as a plain Go
+  string.
+- **`.scss`** compiles first via the `sass` (dart-sass) CLI, then
+  binds the same way as `.css`. Requires `sass` on `PATH`; gox doesn't
+  bundle or reimplement a SCSS compiler.
+- **`.hcl`** is gox's schema DSL (`table "x" { column "y" { type = ...
+  } }`), parsed with `hashicorp/hcl/v2`. Generates a real Go
+  subpackage at `internal/goxgen/hcl/<alias>/` with model structs
+  (`models.go`) and an initial `CREATE TABLE` migration
+  (`migrations/0001_init.sql`), and rewrites the import to point at
+  it — so `schema.Users{}` works like any normal imported type, which
+  splicing a value into the importing file (as JSON/CSS do) couldn't
+  give, since Go has no runtime notion of a type namespace. Scoped to
+  snapshot generation: each run regenerates the models/migration from
+  the current schema; there's no diffing against a previous version
+  for incremental migrations.
+- **`.proto`** shells out to the real `protoc`/`protoc-gen-go`
+  toolchain (gox doesn't reimplement a protobuf compiler), using
+  protoc-gen-go's `-M` file-mapping flag to place output at
+  `internal/goxgen/proto/<alias>/` under gox's control rather than
+  requiring the `.proto` to declare its own `go_package`. Also runs
+  `protoc-gen-go-grpc` if it's on `PATH`. Requires `protoc` +
+  `protoc-gen-go` on `PATH`.
+- **`.capnp`** shells out to `capnp`/`capnpc-go`. Unlike protoc-gen-go,
+  capnpc-go has no external flag for output location — it takes both
+  the package and Go import path solely from a
+  `$Go.import("...")`/`$Go.package("...")` annotation the schema
+  itself must declare (the real go-capnp convention), and writes
+  output next to the source file; gox parses that annotation back out
+  to know what to import. Requires `capnp` + `capnpc-go` on `PATH`.
+
+Neither `protoc` nor `sass` nor `capnp` are installed in the sandbox
+this was built in, so those three loaders are verified here only
+against their "tool not found" error path — real, but unexercised on
+the happy path. JSON, CSS, and HCL are exercised fully, including
+`mustCompileAndRun`-style tests that actually `go run` the generated
+code.
+
 ## Examples
 
 - `examples/ssr-demo` — components with props, a conditional branch,
@@ -150,6 +211,16 @@ elements like `<my-widget>`) are real HTML elements and compile to
   cd examples/wasm-sw-demo && python3 -m http.server 8080
   # open http://localhost:8080/ -- devtools > Application > Service Workers
   # shows it installed, activated, and claimed the page.
+  ```
+
+- `examples/resource-imports-demo` — a JSON config decoded into a
+  typed struct and a CSS file injected into the page, both bound
+  directly from the `.gox` import block:
+
+  ```
+  go generate ./...
+  go run ./examples/resource-imports-demo
+  go test ./examples/resource-imports-demo/...
   ```
 
 ## Known limitations (v1)
