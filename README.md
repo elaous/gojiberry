@@ -310,6 +310,20 @@ code.
   curl 'http://localhost:8089/?name=World'
   ```
 
+- `examples/canvas-app` — the big one: a bare-minimum Google-Docs-style
+  typing canvas tying together gox SSR pages, a CSS resource import, a
+  WASM autosave client (`domrt.Mount`/`Update` plus
+  `domrt/browser.FetchOpts` for the debounced `PUT`), real Postgres via
+  `database/sql`, and Encore-annotated handlers for the same business
+  logic. It's a separate Go module (`examples/canvas-app/go.mod`,
+  `replace`-ing this repo) so it depends on gojiberry the way an actual
+  consumer would. See `examples/canvas-app/README.md` for what's
+  genuinely verified here (the gox pages, the WASM client against a
+  real headless browser, the store against a real Postgres) versus
+  what's best-effort and unverified (the `//encore:api` handlers'
+  actual behavior under `encore run`, since this sandbox's network
+  policy blocked the Encore CLI installer).
+
 ## Editor support
 
 `editors/vscode-gox` is a minimal VS Code extension: `.gox` file
