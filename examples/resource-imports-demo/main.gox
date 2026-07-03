@@ -1,0 +1,43 @@
+// Package main demos resource imports: a JSON config file decoded
+// into a typed struct, and a CSS file's content injected into a page,
+// both bound directly from the .gox import block instead of a
+// separate go:embed + read-file dance.
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+
+	config "config.json"
+	"style.css"
+
+	"github.com/elaous/gojiberry/gox"
+)
+
+type siteConfig struct {
+	Title string `json:"title"`
+}
+
+func Page(cfg siteConfig) gox.Node {
+	return <html>
+		<head><style>{gox.Raw(style_css)}</style></head>
+		<body><h1>{cfg.Title}</h1></body>
+	</html>
+}
+
+func main() {
+	_ = config // the decoded `any` binding; this demo prefers the typed path below
+
+	var cfg siteConfig
+	if err := json.Unmarshal(configBytes, &cfg); err != nil {
+		fmt.Fprintln(os.Stderr, "invalid config.json:", err)
+		os.Exit(1)
+	}
+
+	if err := gox.Render(os.Stdout, Page(cfg)); err != nil {
+		fmt.Fprintln(os.Stderr, "render error:", err)
+		os.Exit(1)
+	}
+	fmt.Println()
+}
