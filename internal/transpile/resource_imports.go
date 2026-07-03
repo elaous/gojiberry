@@ -129,9 +129,10 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int, opts Op
 		// Optional resource-import-only type annotation, reusing Go's
 		// type-assertion syntax as a new meaning that's never valid in a
 		// real import spec: `alias.(TypeName) "path.json"` tells the
-		// loader what Go type to decode into (and, for JSON, to infer
-		// and generate that type's shape from the file's own data)
-		// instead of the untyped default. Experimental (see below).
+		// loader to decode into TypeName instead of the untyped
+		// default. TypeName must already be declared by the caller (in
+		// this package or an import) -- gox does not generate it or
+		// infer its shape from the file's data.
 		var typeName string
 		if alias != "" && alias != "." && i+1 < n && runes[i] == '.' && runes[i+1] == '(' {
 			i += 2
@@ -174,13 +175,8 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int, opts Op
 				}
 			}
 
-			if typeName != "" {
-				if !typeAnnotationAware[ext] {
-					return "", "", 0, fmt.Errorf("%s: %s.(%s) %q: %s imports don't support a type annotation", filename, alias, typeName, path, ext)
-				}
-				if !opts.Experimental {
-					return "", "", 0, fmt.Errorf("%s: %s.(%s) %q: typed JSON imports are experimental (sample-based struct inference, not a schema) -- enable with `goxc -experimental` (or transpile.Options{Experimental: true})", filename, alias, typeName, path)
-				}
+			if typeName != "" && !typeAnnotationAware[ext] {
+				return "", "", 0, fmt.Errorf("%s: %s.(%s) %q: %s imports don't support a type annotation", filename, alias, typeName, path, ext)
 			}
 
 			ident := alias

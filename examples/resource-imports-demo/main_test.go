@@ -1,18 +1,13 @@
 package main
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/elaous/gojiberry/gox"
 )
 
 func TestPageRendersConfigTitleAndCSS(t *testing.T) {
-	var cfg SiteConfig
-	if err := json.Unmarshal(configBytes, &cfg); err != nil {
-		t.Fatal(err)
-	}
-	got, err := gox.RenderString(Page(cfg))
+	got, err := gox.RenderString(Page(config))
 	if err != nil {
 		t.Fatal(err)
 	}
