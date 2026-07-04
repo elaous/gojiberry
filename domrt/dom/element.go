@@ -32,6 +32,7 @@ type DomNode interface {
 	AddEventListener(event string, callback js.Func)
 	RemoveEventListener(event string, callback js.Func)
 	Set(name string, value any)
+	Click()
 }
 
 // Element wraps a DOM Element/Node. Get/Call cover anything without a
@@ -142,6 +143,11 @@ func (e *Element) AddEventListener(event string, callback js.Func) {
 func (e *Element) RemoveEventListener(event string, callback js.Func) {
 	e.Element.Call("removeEventListener", event, callback)
 }
+
+// Click synthesizes a click on e, the same as a user click would (and,
+// for elements with default click behavior like <a>/<input>, triggers
+// that behavior too).
+func (e *Element) Click() { e.Element.Call("click") }
 
 // Get returns a named property not covered by a typed getter above
 // (e.g. Get("dataset"), Get("style"), Get("checked")).

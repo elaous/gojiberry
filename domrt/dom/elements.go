@@ -94,8 +94,6 @@ func (b *ButtonElement) Type() string { return b.Get("type").String() }
 // SetType sets the button's type.
 func (b *ButtonElement) SetType(t string) { b.Set("type", t) }
 
-// Click synthesizes a click on the button, the same as a user click would.
-func (b *ButtonElement) Click() { b.Call("click") }
 
 // SelectElement is an Element known to be a <select>.
 type SelectElement struct{ Element }
