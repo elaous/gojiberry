@@ -18,7 +18,7 @@ the main module.
   for editor syntax highlighting; `sqlQuery` strips that marker before
   the string reaches the driver (Postgres comments are `--`, not `//`,
   so leaving it in would be a syntax error, not a no-op).
-- **`canvas/schema.sql`** -- the desired-state schema (the `documents`
+- **`canvas/schema.pg.hcl`** -- the desired-state schema (the `documents`
   table) that [Atlas](https://atlasgo.io) diffs against to generate
   migrations.
 - **`canvas/migrations/`** -- versioned migrations, managed by Atlas
@@ -29,8 +29,8 @@ the main module.
   that exact naming convention as what it expects. The one migration
   here (`1_create_documents.up.sql`) predates Atlas; `atlas migrate
   hash` retrofitted the checksum file over it, and `atlas migrate diff`
-  confirms it's byte-for-byte in sync with `schema.sql` (see "What's
-  actually verified" below). Going forward, edit `schema.sql` and run
+  confirms it's byte-for-byte in sync with `schema.pg.hcl` (see "What's
+  actually verified" below). Going forward, edit `schema.pg.hcl` and run
   `make db-diff name=...` to generate the next migration instead of
   hand-writing SQL.
 - **`docker-compose.yml`** -- a Postgres 16 container for local dev
@@ -49,9 +49,9 @@ the main module.
   clean` cover the rest.
 - **`canvas/pages.gox`** -- `HomePage` (list + "new document" form) and
   `CanvasPage` (the textarea) as gox SSR components. Both are annotated
-  with `// @stylesheets style.css` (gojiberry's
-  `internal/transpile/page_metadata.go`), which reads `canvas/style.css`
-  and wraps each function's return in
+  with `// @stylesheets static/style.css` (gojiberry's
+  `internal/transpile/page_metadata.go`), which reads
+  `canvas/static/style.css` and wraps each function's return in
   `gox.Document{Title, Head, Body}.Render()` (`gox/document.go`)
   automatically -- neither page hand-rolls
   `<html><head>...</head><body>...</body></html>` or its own CSS
@@ -141,11 +141,11 @@ DATABASE_URL="postgres://canvas:canvas@127.0.0.1:5432/canvas?sslmode=disable" go
   exercised for real, not just config written and assumed correct:
   `atlas migrate hash` retrofitted `atlas.sum` over the pre-existing
   migration, `atlas migrate diff` confirmed it's in sync with
-  `schema.sql` (no phantom drift), `atlas migrate apply` against a
+  `schema.pg.hcl` (no phantom drift), `atlas migrate apply` against a
   freshly emptied container actually created the `documents` table and
   its own `atlas_schema_revisions` tracking table, `atlas migrate
   status` reported it up to date, and a scratch copy with a column
-  added to `schema.sql` produced a real, correct
+  added to `schema.pg.hcl` produced a real, correct
   `ALTER TABLE ... ADD COLUMN` up/down migration pair via `atlas
   migrate diff` -- the generate-a-migration loop this whole setup
   exists for.
