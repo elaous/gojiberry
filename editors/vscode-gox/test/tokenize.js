@@ -82,7 +82,11 @@ async function main() {
       }
       ruleStack = result.ruleStack;
     }
-    const expectTags = src.includes("<");
+    // A "<" immediately followed by a letter looks like a real tag-open
+    // (<div, <Foo); plain src.includes("<") also matches the "<="
+    // comparison operator and "<=" inside string literals/format
+    // strings, neither of which is a tag.
+    const expectTags = /<[A-Za-z]/.test(src);
     const ok = !error && keywordCount > 0 && (!expectTags || tagCount > 0);
     const rel = path.relative(REPO_ROOT, filePath);
     console.log(`${ok ? "PASS" : "FAIL"} ${rel} (tags=${tagCount} keywords=${keywordCount}${error ? " error=" + error : ""})`);

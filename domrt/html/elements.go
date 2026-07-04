@@ -94,7 +94,6 @@ func (b *ButtonElement) Type() string { return b.Get("type").String() }
 // SetType sets the button's type.
 func (b *ButtonElement) SetType(t string) { b.Set("type", t) }
 
-
 // SelectElement is an Element known to be a <select>.
 type SelectElement struct{ Element }
 

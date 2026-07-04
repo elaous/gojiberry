@@ -4,15 +4,17 @@
 
 // Package main exercises the newer parts of domrt/html, domrt/svg,
 // and domrt/browser: window/document/element dimensions, scrolling,
-// inline and computed style, SVG element creation, image loading, and
-// form submission via FormData -- each writing its result into its
-// own element so a real browser test can check every one actually
-// worked, not just that the code compiled.
+// inline and computed style, SVG element creation, image loading, form
+// submission via FormData, cookies, custom events, global JS error
+// capture, and geolocation -- each writing its result into its own
+// element so a real browser test can check every one actually worked,
+// not just that the code compiled.
 package main
 
 import (
 	"fmt"
 	"strings"
+	"syscall/js"
 
 	"github.com/elaous/gojiberry/domrt/browser"
 	"github.com/elaous/gojiberry/domrt/html"
@@ -96,5 +98,46 @@ func main() {
 			fmt.Sprintf("title=%s hasDoc=%v extra=%s", fd.Get("title"), fd.Has("doc"), fd.Get("extra")))
 	})
 
-	select {} // keep the wasm program alive for the image-load and form-submit listeners above
+	// Cookies: a value with characters that need percent-encoding, to
+	// prove the round trip isn't just an artifact of picking an
+	// already-safe string.
+	browser.Cookies.Set("demo", "hello world! a=b;c", browser.CookieOptions{Path: "/"})
+	cookieValue, cookieOK := browser.Cookies.Get("demo")
+	document.GetElementByID("cookie-result").SetTextContent(
+		fmt.Sprintf("value=%s ok=%v", cookieValue, cookieOK))
+
+	// CustomEvent: dispatched and received on the same element,
+	// dispatchEvent being synchronous makes this deterministic with no
+	// waiting.
+	ceTarget := document.GetElementByID("customevent-target")
+	ceTarget.OnCustomEvent("demo-event", func(detail js.Value) {
+		document.GetElementByID("customevent-result").SetTextContent("received: " + detail.String())
+	})
+	ceTarget.DispatchCustomEvent("demo-event", "hello from custom event", true)
+
+	// Global JS error capture: index.html's inline script element throws
+	// a real uncaught error and triggers a real unhandled rejection
+	// shortly after load, from code this Go program doesn't control,
+	// which is exactly what OnError/OnUnhandledRejection are for.
+	window.OnError(func(err *html.JSError) {
+		document.GetElementByID("jserror-result").SetTextContent("message=" + err.Message)
+	})
+	window.OnUnhandledRejection(func(err *html.JSError) {
+		document.GetElementByID("rejection-result").SetTextContent("message=" + err.Message)
+	})
+
+	// Geolocation: blocks on a callback-bridged browser API, so run it
+	// off the main goroutine the same way MediaDevices/Clipboard do
+	// elsewhere in this repo.
+	go func() {
+		pos, err := browser.CurrentPosition()
+		if err != nil {
+			document.GetElementByID("geo-result").SetTextContent("error: " + err.Error())
+			return
+		}
+		document.GetElementByID("geo-result").SetTextContent(
+			fmt.Sprintf("lat=%.4f lng=%.4f", pos.Latitude, pos.Longitude))
+	}()
+
+	select {} // keep the wasm program alive for every listener above
 }

@@ -5,6 +5,16 @@ escape hatch for any named global object, plus typed, idiomatic-Go wrappers for
 the APIs almost every app needs (fetch, localStorage/sessionStorage, WebSocket)
 so application code doesn't have to hand-roll syscall/js calls for them.
 
+CONSTANTS
+
+const (
+	GeolocationPermissionDenied    = 1
+	GeolocationPositionUnavailable = 2
+	GeolocationTimeout             = 3
+)
+    Geolocation error codes, matching the real PositionError.code values.
+
+
 VARIABLES
 
 var LocalStorage = storageArea{"localStorage"}
@@ -12,6 +22,11 @@ var LocalStorage = storageArea{"localStorage"}
 
 var SessionStorage = storageArea{"sessionStorage"}
     SessionStorage wraps window.sessionStorage.
+
+var Cookies cookieJar
+    Cookies wraps document.cookie. Values are percent-encoded on Set and decoded
+    on Get/All, so arbitrary strings (not just cookie-safe ones) round-trip
+    correctly.
 
 
 FUNCTIONS
@@ -49,6 +64,10 @@ func SetVideoSource(videoElement js.Value, stream js.Value)
 func StopStream(stream js.Value)
     StopStream stops every track in stream (camera/mic LED off, etc.).
 
+func WatchPosition(fn func(Position, error)) (stop func())
+    WatchPosition calls fn with every position update (or error) until the
+    returned stop function is called.
+
 func Window() *html.Window
     Window returns the global window object.
 
@@ -59,6 +78,17 @@ func WriteClipboardText(text string) error
 
 
 TYPES
+
+type CookieOptions struct {
+	Path     string    // "" defaults to the current path
+	Domain   string    // "" defaults to the current domain
+	MaxAge   int       // seconds; 0 means unset (a session cookie); negative deletes it immediately
+	Expires  time.Time // zero means unset; MaxAge takes precedence where browsers support both
+	Secure   bool
+	SameSite string // "Strict", "Lax", or "None"; "" leaves the browser's own default
+}
+    CookieOptions configures Cookies.Set. Every field is optional; the zero
+    value omits that attribute, matching the browser's own default for it.
 
 type Database struct {
 	Value js.Value
@@ -99,7 +129,7 @@ type File struct {
 	Value js.Value
 }
     File wraps a JS File (or Blob) object, e.g. one returned by
-    dom.InputElement.Files or dom.DataTransfer.Files.
+    html.InputElement.Files or html.DataTransfer.Files.
 
 func WrapFile(v js.Value) File
     WrapFile wraps a raw JS File/Blob object as a File.
@@ -161,6 +191,15 @@ func (f FormData) Has(key string) bool
 func (f FormData) Set(key, value string)
     Set adds a string value under key, replacing any existing value(s) there.
 
+type GeolocationError struct {
+	Code    int // one of the Geolocation* constants above
+	Message string
+}
+    GeolocationError is returned when a geolocation request fails.
+
+func (e *GeolocationError) Error() string
+    Error implements the standard error interface.
+
 type MediaDeviceInfo struct {
 	DeviceID string
 	Kind     string
@@ -199,6 +238,19 @@ func (s *ObjectStore) Get(key any) (js.Value, error)
 
 func (s *ObjectStore) Put(value any) error
     Put inserts or updates value, blocking until the request completes.
+
+type Position struct {
+	Latitude, Longitude, Accuracy float64
+	Altitude, AltitudeAccuracy    *float64
+	Heading, Speed                *float64
+}
+    Position is one geolocation reading. Altitude, AltitudeAccuracy, Heading,
+    and Speed are nil when the device doesn't report them.
+
+func CurrentPosition() (Position, error)
+    CurrentPosition wraps navigator.geolocation.getCurrentPosition, blocking
+    until the browser resolves it (prompting for permission first if needed) or
+    reports an error.
 
 type Response struct {
 	Status int
@@ -261,4 +313,35 @@ type Transaction struct {
 
 func (t *Transaction) ObjectStore(name string) *ObjectStore
     ObjectStore returns the named object store within this transaction's scope.
+
+type Worker struct {
+	// Has unexported fields.
+}
+    Worker wraps a browser dedicated Worker: a separate Go/WASM binary running
+    on a real background thread, isolated from the DOM and this program's
+    memory, reachable only through PostMessage/OnMessage (see domrt/worker
+    for the worker-side half). Unlike a service worker (domrt/sw), a dedicated
+    Worker needs no separate registration step -- NewWorker starts it directly.
+
+func NewWorker(url string) *Worker
+    NewWorker starts a new Worker running the script at url -- typically a
+    small JS bootstrap that does importScripts('wasm_exec.js') and instantiates
+    a separate .wasm binary built from a domrt/worker program (see the
+    wasm-worker-demo example).
+
+func (w *Worker) OnError(fn func(err *html.JSError))
+    OnError registers the handler called when the worker throws an uncaught
+    exception.
+
+func (w *Worker) OnMessage(fn func(data js.Value))
+    OnMessage registers the handler called for each message the worker posts
+    back. Calling it again replaces the previous handler.
+
+func (w *Worker) PostMessage(data any)
+    PostMessage sends data to the worker (structured-clone, not shared memory --
+    the same constraint domrt/worker.PostMessage has sending the other way).
+
+func (w *Worker) Terminate()
+    Terminate immediately stops the worker and releases its registered
+    callbacks.
 
