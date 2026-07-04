@@ -33,6 +33,14 @@ type DomNode interface {
 	RemoveEventListener(event string, callback js.Func)
 	Set(name string, value any)
 	Click()
+	Focus()
+	Blur()
+	Hidden() bool
+	SetHidden(hidden bool)
+	BoundingRect() Rect
+	ScrollIntoView(smooth bool)
+	StyleProperty(name string) string
+	SetStyleProperty(name, value string)
 }
 
 // Element wraps a DOM Element/Node. Get/Call cover anything without a
