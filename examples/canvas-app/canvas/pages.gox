@@ -20,7 +20,7 @@ type HomePageProps struct {
 // HomePage lists existing documents and offers a way to start a new
 // one.
 //
-// @stylesheets style.css
+// @stylesheets static/style.css
 func HomePage(props HomePageProps) gox.Node {
 	return <>
 		<h1>gox-canvas</h1>
@@ -61,7 +61,7 @@ WebAssembly.instantiateStreaming(fetch("/static/main.wasm"), go.importObject).th
 // with its current content, a status indicator, and the WASM client
 // that debounces edits into PUT /api/documents/{id} autosave calls.
 //
-// @stylesheets style.css
+// @stylesheets static/style.css
 func CanvasPage(props CanvasPageProps) gox.Node {
 	return <>
 		<p><a href="/">Back</a></p>

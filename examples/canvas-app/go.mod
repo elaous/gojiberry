@@ -1,4 +1,4 @@
-module github.com/elaous/gojiberry-canvas-app
+module github.com/elaous/gojiberry/examples/canvas-app
 
 go 1.25.0
 

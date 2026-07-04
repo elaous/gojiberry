@@ -12,7 +12,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/elaous/gojiberry-canvas-app/canvas"
+	"github.com/elaous/gojiberry/examples/canvas-app/canvas"
 )
 
 // TestDevserverEndToEnd exercises the whole create -> view -> save ->

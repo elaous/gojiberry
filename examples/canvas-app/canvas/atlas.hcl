@@ -1,5 +1,5 @@
 env "local" {
-  src = "file://schema.sql"
+  src = "file://schema.pg.hcl"
   dev = "docker://postgres/16/dev?search_path=public"
 
   migration {
