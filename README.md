@@ -234,6 +234,48 @@ mirroring swaggo/swag's `// @Summary`/`// @Router` handler annotations
 (real, widely-used Go prior art for exactly this kind of per-function
 informational comment).
 
+### A ready-made component library
+
+`components` is a small library of common UI components built on the
+pattern above: `Link`, `Button`, `Chip`, `RadioGroup`, `Tabs`,
+`Accordion`, `Dropdown` (single/multiple, with per-option icons and,
+in multi-select, checkboxes), `DatePicker`, `ColorPicker`, `Slider`,
+`Carousel`, `Wizard`, and `FileUploader` (click-to-browse and
+drag-and-drop, with an optional progress bar). None of them import
+`domrt` or `syscall/js` — every interactive one is a pure function of
+its props, taking the current state and `On*` callbacks the same way
+`wasm-counter`'s `Counter` does, so a single component works unchanged
+in an SSR-only page and in a WASM page driving it with
+`domrt.Mount`/`Update`:
+
+```go
+components.RadioGroup(components.RadioGroupProps{
+	Name:     "plan",
+	Options:  []components.RadioOption{{Value: "free", Label: "Free"}, {Value: "pro", Label: "Pro"}},
+	Selected: state.Plan,
+	OnChange: func(v string) { state.Plan = v; render() },
+})
+```
+
+`DatePicker`/`ColorPicker`/`Slider` are thin styled wrappers around
+`<input type="date"/"color"/"range">` — the browser does the actual
+picker UI and locale/keyboard handling. `Dropdown` is a fully custom
+widget instead, since no native `<select>` can render per-option icons;
+it implements the ARIA listbox pattern's roles/attributes but not its
+own keyboard navigation. `FileUploader` renders a `<label>` wrapping a
+visually-hidden `<input type="file">`, so click-to-browse works with
+zero JS (a label natively opens its associated control), but since
+`gox.Event` carries no file/`DataTransfer` payload, reading the actual
+selected or dropped files is done through `domrt/dom` directly by the
+consuming app (`InputElement.Files()`, or `Element.OnDrop` for
+drag-and-drop) — see `FileUploaderProps`'s doc comment and the
+`wasm-components-demo` example below.
+
+`components/style.css` is the one stylesheet all of them share; pull
+it into a page with `@stylesheets ../../components/style.css` (path
+relative to your `.gox` file) or a plain `<link rel="stylesheet">` for
+a bare WASM page with no SSR step.
+
 ## Resource imports
 
 An import spec whose path ends in a recognized non-Go extension is a
@@ -458,6 +500,25 @@ generated code.
   GOOS=js GOARCH=wasm go build -o examples/wasm-typed-elements-demo/main.wasm ./examples/wasm-typed-elements-demo/
   cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-typed-elements-demo/
   cd examples/wasm-typed-elements-demo && python3 -m http.server 8080
+  # open http://localhost:8080/
+  ```
+
+- `examples/wasm-components-demo` — a gallery of every component in
+  `components`, each wired to real local state and mounted with
+  `domrt.Mount`/`Update`. Verified against a real headless Chromium:
+  every one of the 13 components driven through its actual
+  interactivity (clicking a tab/accordion header/carousel arrow/wizard
+  step, opening the dropdown and picking a multi-select option,
+  removing a chip, dragging the slider, setting the date/color inputs,
+  and uploading a real file read back through `FileUploader` + the File
+  API), not just a compile check:
+
+  ```
+  go generate ./...
+  GOOS=js GOARCH=wasm go build -o examples/wasm-components-demo/main.wasm ./examples/wasm-components-demo/
+  cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-components-demo/
+  cp components/style.css examples/wasm-components-demo/
+  cd examples/wasm-components-demo && python3 -m http.server 8080
   # open http://localhost:8080/
   ```
 

@@ -1,0 +1,207 @@
+/* Shared stylesheet for github.com/elaous/gojiberry/components.
+   Pull it into a page with @stylesheets (see the root README), e.g.
+   @stylesheets ../../components/style.css */
+
+:root {
+  --gj-accent: #2563eb;
+  --gj-accent-contrast: #ffffff;
+  --gj-danger: #dc2626;
+  --gj-border: #d1d5db;
+  --gj-text: #111827;
+  --gj-muted: #6b7280;
+  --gj-bg: #ffffff;
+  --gj-bg-muted: #f3f4f6;
+  --gj-radius: 6px;
+}
+
+/* Link */
+.gj-link { color: var(--gj-accent); text-decoration: underline; }
+.gj-link-disabled { color: var(--gj-muted); text-decoration: none; cursor: not-allowed; }
+
+/* Button */
+.gj-button {
+  border: 1px solid transparent;
+  border-radius: var(--gj-radius);
+  padding: 0.5em 1em;
+  font: inherit;
+  cursor: pointer;
+}
+.gj-button:disabled { cursor: not-allowed; opacity: 0.6; }
+.gj-button-primary { background: var(--gj-accent); color: var(--gj-accent-contrast); }
+.gj-button-secondary { background: var(--gj-bg-muted); color: var(--gj-text); border-color: var(--gj-border); }
+.gj-button-danger { background: var(--gj-danger); color: var(--gj-accent-contrast); }
+
+/* Chip */
+.gj-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.2em 0.6em;
+  border-radius: 999px;
+  background: var(--gj-bg-muted);
+  color: var(--gj-text);
+  font-size: 0.9em;
+}
+.gj-chip-remove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--gj-muted);
+  font-size: 1em;
+  line-height: 1;
+  padding: 0;
+}
+.gj-chip-remove:hover { color: var(--gj-danger); }
+
+/* RadioGroup */
+.gj-radio-group { display: flex; flex-direction: column; gap: 0.4em; }
+.gj-radio-option { display: flex; align-items: center; gap: 0.5em; }
+
+/* Tabs */
+.gj-tabs-strip { display: flex; border-bottom: 1px solid var(--gj-border); }
+.gj-tab {
+  border: none;
+  background: none;
+  padding: 0.6em 1em;
+  cursor: pointer;
+  color: var(--gj-muted);
+  border-bottom: 2px solid transparent;
+}
+.gj-tab-active { color: var(--gj-accent); border-bottom-color: var(--gj-accent); }
+.gj-tabs-panel { padding: 1em 0; }
+
+/* Accordion */
+.gj-accordion-item { border-bottom: 1px solid var(--gj-border); }
+.gj-accordion-header {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 0.75em 0;
+  cursor: pointer;
+  font: inherit;
+}
+.gj-accordion-panel-collapsed { display: none; }
+
+/* Dropdown */
+.gj-dropdown { position: relative; display: inline-block; }
+.gj-dropdown-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  border: 1px solid var(--gj-border);
+  border-radius: var(--gj-radius);
+  padding: 0.4em 0.75em;
+  background: var(--gj-bg);
+  cursor: pointer;
+  min-width: 10em;
+  justify-content: space-between;
+}
+.gj-dropdown-list {
+  position: absolute;
+  z-index: 10;
+  top: 100%;
+  left: 0;
+  right: 0;
+  border: 1px solid var(--gj-border);
+  border-radius: var(--gj-radius);
+  background: var(--gj-bg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-height: 16em;
+  overflow-y: auto;
+}
+.gj-dropdown-option { display: flex; align-items: center; gap: 0.5em; padding: 0.5em 0.75em; cursor: pointer; }
+.gj-dropdown-option:hover { background: var(--gj-bg-muted); }
+.gj-dropdown-option-selected { background: var(--gj-bg-muted); font-weight: 600; }
+
+/* DatePicker / ColorPicker / Slider */
+.gj-datepicker, .gj-colorpicker { border: 1px solid var(--gj-border); border-radius: var(--gj-radius); padding: 0.4em; font: inherit; }
+.gj-slider { width: 100%; }
+
+/* Carousel */
+.gj-carousel { position: relative; overflow: hidden; }
+.gj-carousel-track { position: relative; }
+.gj-carousel-slide { display: none; }
+.gj-carousel-slide-active { display: block; }
+.gj-carousel-prev, .gj-carousel-next {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  width: 2em;
+  height: 2em;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.gj-carousel-prev { left: 0.5em; }
+.gj-carousel-next { right: 0.5em; }
+.gj-carousel-dots { display: flex; justify-content: center; gap: 0.4em; margin-top: 0.5em; }
+.gj-carousel-dot {
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 999px;
+  border: none;
+  background: var(--gj-border);
+  cursor: pointer;
+  padding: 0;
+}
+.gj-carousel-dot-active { background: var(--gj-accent); }
+
+/* Wizard */
+.gj-wizard-steps { display: flex; gap: 1em; margin-bottom: 1em; }
+.gj-wizard-step-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--gj-muted);
+}
+.gj-wizard-step-header-active { color: var(--gj-accent); font-weight: 600; }
+.gj-wizard-step-header-done { color: var(--gj-text); }
+.gj-wizard-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 999px;
+  background: var(--gj-bg-muted);
+  font-size: 0.85em;
+}
+.gj-wizard-actions { display: flex; justify-content: space-between; margin-top: 1em; }
+
+/* FileUploader */
+.gj-file-uploader-input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+.gj-file-uploader-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  border: 2px dashed var(--gj-border);
+  border-radius: var(--gj-radius);
+  padding: 2em;
+  cursor: pointer;
+  text-align: center;
+  color: var(--gj-muted);
+}
+.gj-file-uploader-progress {
+  width: 100%;
+  height: 0.5em;
+  border-radius: 999px;
+  background: var(--gj-bg-muted);
+  overflow: hidden;
+}
+.gj-file-uploader-progress-bar { height: 100%; background: var(--gj-accent); transition: width 0.2s ease; }
+.gj-file-uploader-progress-indeterminate .gj-file-uploader-progress-bar {
+  width: 40%;
+  animation: gj-progress-indeterminate 1.2s ease-in-out infinite;
+}
+@keyframes gj-progress-indeterminate {
+  0% { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}
