@@ -43,6 +43,11 @@ type state struct {
 	carouselActive int
 
 	wizardActive int
+
+	contextMenuOpen     bool
+	contextMenuX        float64
+	contextMenuY        float64
+	contextMenuSelected string
 }
 
 func containsString(list []string, v string) bool {
@@ -236,6 +241,26 @@ func App(st *state, render func()) gox.Node {
 			}),
 			gox.El("span", []gox.Attr{gox.A("id", "file-result")}, gox.Text("(pending)")),
 		),
+		gox.El("section", nil,
+			gox.El("h2", nil, gox.Text("ContextMenu")),
+			gox.El("div", []gox.Attr{gox.A("id", "contextmenu-target")}, gox.Text("right-click me")),
+			components.ContextMenu(components.ContextMenuProps{
+				Items: []components.ContextMenuItem{
+					{Label: "Copy", OnSelect: func() { st.contextMenuSelected = "Copy"; render() }},
+					{Label: "Paste", OnSelect: func() { st.contextMenuSelected = "Paste"; render() }},
+					{Label: "Delete", Disabled: true},
+				},
+				Open: st.contextMenuOpen,
+				X:    st.contextMenuX,
+				Y:    st.contextMenuY,
+				OnClose: func() {
+					st.contextMenuOpen = false
+					render()
+				},
+			}),
+			gox.El("span", []gox.Attr{gox.A("id", "contextmenu-result")},
+				gox.Text(fmt.Sprintf("open=%v selected=%s", st.contextMenuOpen, st.contextMenuSelected))),
+		),
 	)
 }
 
@@ -262,6 +287,19 @@ func wireFileUploader(document *html.Document) {
 		}()
 		return nil
 	}))
+}
+
+// wireContextMenu opens the ContextMenu at the real click position
+// reported by html.Element.OnContextMenu, since gox.Event carries no
+// clientX/clientY (see components.ContextMenuProps' doc comment).
+func wireContextMenu(document *html.Document, st *state, render func()) {
+	target := document.GetElementByID("contextmenu-target")
+	target.OnContextMenu(func(x, y float64) {
+		st.contextMenuOpen = true
+		st.contextMenuX = x
+		st.contextMenuY = y
+		render()
+	})
 }
 
 func main() {
@@ -291,6 +329,7 @@ func main() {
 	render()
 
 	wireFileUploader(document)
+	wireContextMenu(document, st, render)
 
 	select {} // keep the wasm program alive for every component's event callbacks
 }
