@@ -404,7 +404,10 @@ generated code.
   via `database/sql` (Docker Compose for local dev, schema managed with
   [Atlas](https://atlasgo.io)'s versioned migrations), and
   Encore-annotated handlers for the same business logic. `make run`
-  chains the whole thing together. It's a separate Go module
+  chains the whole thing together; `make watch` (`cmd/devwatch`)
+  rebuilds and restarts on every save and reloads the open tab
+  automatically, no true WASM hot-swapping but genuinely verified end
+  to end. It's a separate Go module
   (`examples/canvas-app/go.mod`, `replace`-ing this repo) so it depends
   on gojiberry the way an actual consumer would. See
   `examples/canvas-app/README.md` for what's
