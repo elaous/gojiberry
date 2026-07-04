@@ -3,9 +3,7 @@ package transpile
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"unicode"
 )
@@ -57,8 +55,6 @@ var loaders = map[string]LoaderFunc{
 	".json":  loadJSON,
 	".jsonc": loadJSON,
 	".jsonl": loadJSON,
-	".css":   loadCSS,
-	".scss":  loadSCSS,
 }
 
 // experimentalExtensions are resource-import extensions gox recognizes
@@ -125,35 +121,9 @@ func FindModuleRoot(startDir string) (dir string, modulePath string, err error) 
 
 // loadJSON is implemented in loader_json.go, covering .json/.jsonc/.jsonl
 // and the optional TypeName annotation.
-
-// loadCSS binds Alias to the file's content as a plain Go string.
-func loadCSS(in LoaderInput) (LoaderResult, error) {
-	abs, err := ResolveResourcePath(in)
-	if err != nil {
-		return LoaderResult{}, err
-	}
-	data, err := os.ReadFile(abs)
-	if err != nil {
-		return LoaderResult{}, fmt.Errorf("gox: CSS import %q: %w", in.Path, err)
-	}
-	return LoaderResult{Decls: fmt.Sprintf("var %s = %s\n", in.Alias, strconv.Quote(string(data)))}, nil
-}
-
-// loadSCSS compiles the file with the `sass` (dart-sass) CLI and binds
-// Alias to the compiled CSS as a plain Go string. Requires `sass` on
-// PATH; gox does not bundle or reimplement a SCSS compiler.
-func loadSCSS(in LoaderInput) (LoaderResult, error) {
-	abs, err := ResolveResourcePath(in)
-	if err != nil {
-		return LoaderResult{}, err
-	}
-	tool, lookErr := exec.LookPath("sass")
-	if lookErr != nil {
-		return LoaderResult{}, fmt.Errorf("gox: SCSS import %q requires the `sass` (dart-sass) compiler on PATH; install it from https://sass-lang.com/install", in.Path)
-	}
-	out, err := exec.Command(tool, abs).Output()
-	if err != nil {
-		return LoaderResult{}, fmt.Errorf("gox: compiling %q with sass: %w", in.Path, err)
-	}
-	return LoaderResult{Decls: fmt.Sprintf("var %s = %s\n", in.Alias, strconv.Quote(string(out)))}, nil
-}
+//
+// CSS used to have its own resource-import loader here (binding a
+// plain `"App.css"` import to its file content). It's gone in favor of
+// the @stylesheets page-metadata annotation (see page_metadata.go),
+// which reads a page component's stylesheet(s) the same way but ties
+// them to the function they style instead of a standalone import line.

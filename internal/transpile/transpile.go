@@ -62,7 +62,11 @@ func TranspileWithOptions(filename string, src []byte, opts Options) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	return []byte(out), nil
+	withPageMetadata, err := processPageMetadata(filename, filepath.Dir(filename), out)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(withPageMetadata), nil
 }
 
 type parser struct {
