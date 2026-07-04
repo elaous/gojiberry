@@ -292,3 +292,40 @@
   background: var(--gj-bg);
 }
 .gj-progress-circle-indeterminate { animation: gj-spin 1s linear infinite; }
+
+/* Modal / Dialog */
+.gj-modal-backdrop { position: fixed; inset: 0; z-index: 1099; background: rgba(0, 0, 0, 0.5); }
+.gj-modal {
+  position: fixed;
+  z-index: 1100;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 20em;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow: auto;
+  padding: 1.25em;
+  background: var(--gj-bg);
+  border-radius: var(--gj-radius);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+}
+.gj-dialog-title { margin: 0 0 0.5em; font-size: 1.15em; }
+.gj-dialog-body { margin-bottom: 1em; }
+.gj-dialog-actions { display: flex; justify-content: flex-end; gap: 0.5em; }
+
+/* Toast */
+.gj-toast {
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  padding: 0.6em 1em;
+  border-radius: var(--gj-radius);
+  background: var(--gj-text);
+  color: var(--gj-bg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.gj-toast-success { background: #16a34a; }
+.gj-toast-warning { background: #d97706; }
+.gj-toast-error { background: var(--gj-danger); }
+.gj-toast-close { border: none; background: none; color: inherit; cursor: pointer; font-size: 1em; line-height: 1; padding: 0; }

@@ -1,0 +1,48 @@
+package components
+
+import "github.com/elaous/gojiberry/gox"
+
+// ModalProps configures Modal.
+type ModalProps struct {
+	Open bool
+	Role string // "dialog" (default) or "alertdialog" for a Confirm/Alert-style prompt demanding an immediate response
+	// Label is used as the modal's aria-label (e.g. its title text).
+	Label   string
+	Content []gox.Node
+	// OnClose is called when the backdrop is clicked; nil disables
+	// backdrop-click-to-close.
+	OnClose func()
+}
+
+// Modal renders a full-viewport backdrop plus a centered content box.
+// Renders nothing when !Open. This is the base Dialog (and, through
+// it, Confirm and Alert) builds on; use it directly for fully custom
+// modal content.
+func Modal(props ModalProps) gox.Node {
+	if !props.Open {
+		return gox.Frag()
+	}
+	role := props.Role
+	if role == "" {
+		role = "dialog"
+	}
+
+	backdropAttrs := []gox.Attr{gox.A("class", "gj-modal-backdrop")}
+	if props.OnClose != nil {
+		backdropAttrs = append(backdropAttrs, gox.On("click", func(gox.Event) { props.OnClose() }))
+	}
+
+	boxAttrs := []gox.Attr{gox.A("class", "gj-modal"), gox.A("role", role), gox.A("aria-modal", "true")}
+	if props.Label != "" {
+		boxAttrs = append(boxAttrs, gox.A("aria-label", props.Label))
+	}
+
+	// Backdrop and box are siblings, not nested -- a click inside the
+	// box never reaches the backdrop's own click listener, so it can't
+	// accidentally close the modal (the same structure ContextMenu uses
+	// for its backdrop).
+	return gox.Frag(
+		gox.El("div", backdropAttrs),
+		gox.El("div", boxAttrs, props.Content...),
+	)
+}
