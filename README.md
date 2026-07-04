@@ -85,11 +85,14 @@ expanded by the same recursive scan, with no extra grammar required.
   each blocking call bridged from IndexedDB's event-based requests the
   same way `domrt.Await` bridges Promises), `GetUserMedia`/
   `EnumerateDevices`/`SetVideoSource` (camera/mic),
-  `WriteClipboardText`/`ReadClipboardText`, and the File API (`File`'s
+  `WriteClipboardText`/`ReadClipboardText`, the File API (`File`'s
   `ReadAsText`/`ReadAsArrayBuffer`/`ReadAsDataURL`, bridged from
   `FileReader`'s events the same way as IndexedDB, plus
   `CreateObjectURL`/`RevokeObjectURL`) for reading `dom.InputElement`'s
-  or `dom.DataTransfer`'s `File` objects.
+  or `dom.DataTransfer`'s `File` objects, and `FormData`
+  (`NewFormData`/`NewFormDataFromForm`, `Append`/`AppendFile`/`Get`/
+  `Has`/`Delete`) for multipart submissions — pass its `.Value` as
+  `FetchOptions.BodyValue` for a real file upload over `fetch`.
 - **`domrt/dom`** (`GOOS=js GOARCH=wasm`) — typed `Document`/`Element`/
   `Window` wrappers around raw `syscall/js` DOM calls (`GetElementByID`,
   `AppendChild`, `AddEventListener`, `SetTimeout`, ...), each with a
@@ -110,12 +113,24 @@ expanded by the same recursive scan, with no extra grammar required.
   actually defines), `AnchorElement` (`AsAnchor()`,
   `Href`/`Target`/`Rel`/`Download`), `ButtonElement` (`AsButton()`,
   `Disabled`/`Type`/`Click`), `SelectElement` (`AsSelect()`,
-  `SelectedIndex`/`Multiple`/`Options`), and `InputElement`
-  (`AsInput()`, `Checked`/`Type`/`Disabled`/`Files` — see the File API
-  above for reading what `Files` returns). Also:
-  `NewIntersectionObserver`/`NewResizeObserver`, and
-  `Element.OnDragStart`/`OnDragOver`/`OnDrop` plus a typed
-  `DataTransfer`.
+  `SelectedIndex`/`Multiple`/`Options`), `InputElement` (`AsInput()`,
+  `Checked`/`Type`/`Disabled`/`Files` — see the File API above for
+  reading what `Files` returns), `ImageElement` (`AsImage()`,
+  `NaturalWidth`/`NaturalHeight`/`Complete`/`OnLoad`/`OnError`), and
+  `FormElement` (`AsForm()`, `Submit`/`Reset`/`CheckValidity`/
+  `Elements`/`OnSubmit`). Also: `NewIntersectionObserver`/
+  `NewResizeObserver`, `Element.OnDragStart`/`OnDragOver`/`OnDrop` plus
+  a typed `DataTransfer`, `Document.CreateElementNS`/`CreateSVGElement`
+  for SVG (use `Element.ClassListAdd`/`ClassListContains` rather than
+  `GetClassName`/`SetClassName` there — SVG's `className` is an
+  `SVGAnimatedString` object, not a plain string), and `Element`'s
+  dimension/scroll/style surface: `ClientWidth`/`ClientHeight`,
+  `ScrollWidth`/`ScrollHeight`, `ScrollLeft`/`ScrollTop` (get and set),
+  `ScrollTo`/`ScrollBy`, `ClientRects`, and `Style()` (get/set/remove a
+  CSS property, or its whole `CSSText`) — paired with
+  `Window.ComputedStyle` for a resolved, read-only view including
+  inherited/stylesheet rules, and `Window.InnerWidth`/`InnerHeight`/
+  `ScrollX`/`ScrollY`/`DevicePixelRatio` for the viewport itself.
 - **`domrt/sw`** (`GOOS=js GOARCH=wasm`) — lets a Go/WASM binary run as
   a browser service worker: `OnInstall`/`OnActivate`/`OnFetch` register
   the lifecycle/fetch events, `ExtendableEvent.WaitUntil` and
@@ -500,6 +515,27 @@ generated code.
   GOOS=js GOARCH=wasm go build -o examples/wasm-typed-elements-demo/main.wasm ./examples/wasm-typed-elements-demo/
   cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-typed-elements-demo/
   cd examples/wasm-typed-elements-demo && python3 -m http.server 8080
+  # open http://localhost:8080/
+  ```
+
+- `examples/wasm-dom-extras-demo` — `domrt/dom`'s dimension/scroll/style
+  surface, SVG (`CreateSVGElement`, `ClassListAdd`/`ClassListContains`),
+  `ImageElement`, `FormElement`, and `domrt/browser`'s `FormData`.
+  Verified against a real headless Chromium: real viewport/document/
+  element dimensions (not just that the getters don't panic), scrolling
+  an overflowing div and reading its new `ScrollTop` back, an inline
+  style round trip plus a real `Window.ComputedStyle` resolution, an
+  SVG `<circle>` with a non-zero rendered bounding box, a real PNG
+  (generated with `image/png`, not hand-typed bytes) loading and
+  reporting its actual decoded `NaturalWidth`/`NaturalHeight`, and a
+  real form-submit event building a `FormData` from the form's actual
+  controls:
+
+  ```
+  go generate ./...
+  GOOS=js GOARCH=wasm go build -o examples/wasm-dom-extras-demo/main.wasm ./examples/wasm-dom-extras-demo/
+  cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-dom-extras-demo/
+  cd examples/wasm-dom-extras-demo && python3 -m http.server 8080
   # open http://localhost:8080/
   ```
 

@@ -38,11 +38,16 @@ func Fetch(url string) (*Response, error) {
 }
 
 // FetchOptions configures a FetchOpts call. Method defaults to "GET"
-// if empty. Body, if non-empty, is sent as the request body.
+// if empty. Body, if non-empty, is sent as the request body. BodyValue
+// takes precedence over Body when set -- pass a FormData.Value here
+// for a multipart upload (including files); the browser sets
+// Content-Type with the right boundary automatically, so don't set it
+// yourself in Headers.
 type FetchOptions struct {
-	Method  string
-	Body    string
-	Headers map[string]string
+	Method    string
+	Body      string
+	BodyValue js.Value
+	Headers   map[string]string
 }
 
 // FetchOpts wraps window.fetch(url, init) for requests Fetch's plain
@@ -59,7 +64,9 @@ func FetchOpts(url string, opts FetchOptions) (*Response, error) {
 	if opts.Method != "" {
 		init["method"] = opts.Method
 	}
-	if opts.Body != "" {
+	if !opts.BodyValue.IsUndefined() {
+		init["body"] = opts.BodyValue
+	} else if opts.Body != "" {
 		init["body"] = opts.Body
 	}
 	if len(opts.Headers) > 0 {

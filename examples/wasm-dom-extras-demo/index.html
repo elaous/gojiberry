@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gojiberry DOM extras demo</title>
+  <script src="wasm_exec.js"></script>
+</head>
+<body>
+  <div id="scrollbox" style="height:50px; overflow:auto;">
+    <div style="height:200px;">tall content</div>
+  </div>
+  <div id="styled">styled box</div>
+  <div id="svg-container"></div>
+  <div id="image-container"></div>
+  <form id="demo-form">
+    <input type="text" name="title" id="title-input" value="hello">
+    <input type="file" name="doc" id="file-input">
+    <button type="submit">Submit</button>
+  </form>
+
+  <p>Window: <span id="window-result">(pending)</span></p>
+  <p>Document: <span id="document-result">(pending)</span></p>
+  <p>Scroll: <span id="scroll-result">(pending)</span></p>
+  <p>Style: <span id="style-result">(pending)</span></p>
+  <p>SVG: <span id="svg-result">(pending)</span></p>
+  <p>Image: <span id="image-result">(pending)</span></p>
+  <p>Form: <span id="form-result">(pending)</span></p>
+
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+      go.run(result.instance);
+    });
+  </script>
+</body>
+</html>
