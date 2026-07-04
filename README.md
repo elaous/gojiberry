@@ -376,10 +376,13 @@ code.
   typing canvas tying together gox SSR pages (with `@stylesheets`
   -annotated stylesheets), a WASM autosave client (`domrt.Mount`/`Update`
   plus `domrt/browser.FetchOpts` for the debounced `PUT`), real Postgres
-  via `database/sql`, and Encore-annotated handlers for the same business
-  logic. It's a separate Go module (`examples/canvas-app/go.mod`,
-  `replace`-ing this repo) so it depends on gojiberry the way an actual
-  consumer would. See `examples/canvas-app/README.md` for what's
+  via `database/sql` (Docker Compose for local dev, schema managed with
+  [Atlas](https://atlasgo.io)'s versioned migrations), and
+  Encore-annotated handlers for the same business logic. `make run`
+  chains the whole thing together. It's a separate Go module
+  (`examples/canvas-app/go.mod`, `replace`-ing this repo) so it depends
+  on gojiberry the way an actual consumer would. See
+  `examples/canvas-app/README.md` for what's
   genuinely verified here (the gox pages, the WASM client against a
   real headless browser, the store against a real Postgres) versus
   what's best-effort and unverified (the `//encore:api` handlers'
