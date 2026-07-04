@@ -43,8 +43,10 @@ the main module.
 - **`Makefile`** -- wraps the whole workflow: `make run` chains
   `generate` (goxc) → `wasm` (build + stage the WASM client) → `db-up`
   (docker compose, waits for the healthcheck) → `db-migrate` (Atlas)
-  → the dev server itself. `make test`, `make db-status`, `make
-  db-diff name=...`, and `make clean` cover the rest.
+  → the dev server itself. `make watch` runs `cmd/devwatch` instead of
+  the plain dev server, for live reload while editing (see below).
+  `make test`, `make db-status`, `make db-diff name=...`, and `make
+  clean` cover the rest.
 - **`canvas/pages.gox`** -- `HomePage` (list + "new document" form) and
   `CanvasPage` (the textarea) as gox SSR components. Both are annotated
   with `// @stylesheets style.css` (gojiberry's
@@ -71,6 +73,18 @@ the main module.
   `domrt/browser.FetchOpts`, and drives a `#status` indicator through
   `domrt.Mount`/`Update` (so the diff/patch runtime is exercised here
   too, not just fetch).
+- **`cmd/devwatch`** -- `make watch`'s file watcher: on any source
+  change (excluding build output it writes itself, to avoid a feedback
+  loop) it runs `make generate` + `make wasm`, builds `cmd/devserver`
+  to a temp binary, and swaps it in for the running one via `SIGTERM`
+  + restart. `cmd/devserver`'s own `DEV=1` mode (which `cmd/devwatch`
+  sets) injects a small script into every page polling
+  `GET /__dev/version`; once a fresh process (a new value) answers,
+  the open tab reloads on its own. Not real hot module replacement --
+  a compiled `.wasm` binary is one opaque blob, not swappable modules
+  -- just a fast watch/rebuild/restart/reload loop, which is enough
+  here since the app is server-source-of-truth (a full reload always
+  reconstructs the right state from Postgres).
 
 Both entry points (`api.go`'s Encore handlers and `cmd/devserver`) call
 the same `Store` methods and render the same `pages.gox` components --
@@ -88,7 +102,10 @@ make run
 That's `generate` (goxc) + `wasm` (build the WASM client) + `db-up`
 (Postgres via Docker Compose) + `db-migrate` (Atlas applies
 `canvas/migrations/` to it) + the dev server itself, in order. `make
-test` runs the same way against the same database. If Docker isn't
+test` runs the same way against the same database. Use `make watch`
+instead of `make run` while actively editing: it rebuilds and restarts
+the dev server on every save and reloads the open tab automatically
+(see `cmd/devwatch` above). If Docker isn't
 available, the equivalent manual path against a natively-installed
 Postgres still works (this is what the original version of this
 example used, before Docker access was confirmed in the sandbox this
@@ -140,6 +157,13 @@ DATABASE_URL="postgres://canvas:canvas@127.0.0.1:5432/canvas?sslmode=disable" go
   ran in a browser, really called `fetch` with a `PUT`, and the
   content really round-tripped through Postgres. The home page listing
   was also confirmed to pick up the new preview text.
+- **`make watch`** (`cmd/devwatch`), end to end, with a real headless
+  Chromium tab already open: editing `canvas/pages.gox` was picked up
+  by the file watcher, triggered exactly one rebuild-and-restart (no
+  feedback loop from the watcher seeing its own build output), and the
+  open tab reloaded on its own once the new process was listening --
+  no manual refresh, confirmed twice in a row (edit, wait, assert new
+  content; revert, wait, assert original content again).
 
 ## What's *not* verified
 

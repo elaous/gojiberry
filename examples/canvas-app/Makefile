@@ -11,6 +11,13 @@ DATABASE_URL := postgres://canvas:canvas@127.0.0.1:5433/canvas?sslmode=disable
 run: generate wasm db-up db-migrate
 	DATABASE_URL="$(DATABASE_URL)" go run ./cmd/devserver
 
+# watch is `run`, but rebuilding and restarting the dev server on every
+# source change instead of running it once (see cmd/devwatch). The
+# browser tab auto-reloads once the new process is back up.
+.PHONY: watch
+watch: db-up db-migrate
+	DATABASE_URL="$(DATABASE_URL)" go run ./cmd/devwatch
+
 .PHONY: generate
 generate:
 	cd ../.. && go run ./cmd/goxc examples/canvas-app
