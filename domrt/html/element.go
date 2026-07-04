@@ -4,7 +4,7 @@
 // Element, Window, Context2D, Context3D, observers, drag-and-drop) as
 // typed Go structs, each with a Get/Call escape hatch onto the
 // underlying js.Value for anything not covered by a typed method.
-package dom
+package html
 
 import "syscall/js"
 

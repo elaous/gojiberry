@@ -13,7 +13,7 @@ import (
 	"fmt"
 
 	"github.com/elaous/gojiberry/domrt/browser"
-	"github.com/elaous/gojiberry/domrt/dom"
+	"github.com/elaous/gojiberry/domrt/html"
 )
 
 func main() {
@@ -46,7 +46,7 @@ func main() {
 	// element's current state as soon as they start observing it, no
 	// scroll/resize needed to get a first callback.
 	observed := document.GetElementByID("observed-el")
-	io := dom.NewIntersectionObserver(func(entries []dom.IntersectionEntry) {
+	io := html.NewIntersectionObserver(func(entries []html.IntersectionEntry) {
 		for _, e := range entries {
 			document.GetElementByID("intersection-result").SetTextContent(
 				fmt.Sprintf("isIntersecting=%v ratio=%.2f", e.IsIntersecting, e.IntersectionRatio))
@@ -54,7 +54,7 @@ func main() {
 	})
 	io.Observe(observed)
 
-	ro := dom.NewResizeObserver(func(entries []dom.ResizeEntry) {
+	ro := html.NewResizeObserver(func(entries []html.ResizeEntry) {
 		for _, e := range entries {
 			document.GetElementByID("resize-result").SetTextContent(
 				fmt.Sprintf("%.0fx%.0f", e.Width, e.Height))
@@ -66,15 +66,15 @@ func main() {
 	// DataTransfer; drop on the target reads it back.
 	source := document.GetElementByID("drag-source")
 	source.SetDraggable(true)
-	source.OnDragStart(func(evt dom.DragEvent) {
+	source.OnDragStart(func(evt html.DragEvent) {
 		evt.DataTransfer.SetData("text/plain", "dragged payload")
 		evt.DataTransfer.SetEffectAllowed("copy")
 	})
 	target := document.GetElementByID("drop-target")
-	target.OnDragOver(func(evt dom.DragEvent) {
+	target.OnDragOver(func(evt html.DragEvent) {
 		evt.PreventDefault() // required for drop to fire at all
 	})
-	target.OnDrop(func(evt dom.DragEvent) {
+	target.OnDrop(func(evt html.DragEvent) {
 		evt.PreventDefault()
 		document.GetElementByID("dnd-result").SetTextContent(evt.DataTransfer.GetData("text/plain"))
 	})

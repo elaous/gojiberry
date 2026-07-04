@@ -1,16 +1,9 @@
-package dom // import "github.com/elaous/gojiberry/domrt/dom"
+package html // import "github.com/elaous/gojiberry/domrt/html"
 
 Package dom wraps browser DOM/canvas/WebGL objects (Document, Element, Window,
 Context2D, Context3D, observers, drag-and-drop) as typed Go structs, each with a
 Get/Call escape hatch onto the underlying js.Value for anything not covered by a
 typed method.
-
-CONSTANTS
-
-const SVGNamespace = "http://www.w3.org/2000/svg"
-    SVGNamespace is the namespace URI for SVG elements, for use with
-    Document.CreateElementNS (or CreateSVGElement, which already passes it).
-
 
 TYPES
 
@@ -594,17 +587,9 @@ func (d *Document) CreateElement(tag string) *Element
 
 func (d *Document) CreateElementNS(namespace, tag string) *Element
     CreateElementNS creates a new, unattached element in the given namespace
-    (e.g. SVGNamespace) with the given tag name -- required for SVG/MathML
-    elements, which createElement alone cannot make.
-
-func (d *Document) CreateSVGElement(tag string) *Element
-    CreateSVGElement creates a new, unattached SVG element (e.g. "svg",
-    "path", "circle", "rect", "g") -- createElement alone produces an element
-    in the wrong namespace and SVG won't render it. Presentation attributes
-    (d, cx, cy, r, viewBox, fill, stroke, ...) are plain attributes,
-    so GetAttribute/SetAttribute already cover them; use ClassList rather than
-    GetClassName/SetClassName for SVG elements (see ClassList's doc comment for
-    why).
+    (e.g. svg.Namespace) with the given tag name -- required for SVG/MathML
+    elements, which createElement alone cannot make. See domrt/svg's
+    CreateElement for a convenience wrapper.
 
 func (d *Document) CreateTextNode(text string) *Element
     CreateTextNode creates a new, unattached text node with the given content.
@@ -743,10 +728,11 @@ func (e *Element) Call(method string, args ...any) js.Value
 func (e *Element) ClassListAdd(class ...string)
     ClassListAdd adds one or more classes to e. Prefer this (and
     ClassListRemove/ClassListToggle/ClassListContains) over
-    GetClassName/SetClassName on SVG elements: className there is an
-    SVGAnimatedString object, not a plain string, so e.Get("className").String()
-    and e.Set("className", ...) don't work as expected -- classList, unlike
-    className, behaves the same for both HTML and SVG elements.
+    GetClassName/SetClassName on SVG elements (see domrt/svg):
+    className there is an SVGAnimatedString object, not a plain string,
+    so e.Get("className").String() and e.Set("className", ...) don't work as
+    expected -- classList, unlike className, behaves the same for both HTML and
+    SVG elements.
 
 func (e *Element) ClassListContains(class string) bool
     ClassListContains reports whether e has the given class.

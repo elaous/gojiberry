@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-package dom
+package html
 
 import (
 	"syscall/js"
@@ -58,8 +58,9 @@ func (d *Document) CreateElement(tag string) *Element {
 }
 
 // CreateElementNS creates a new, unattached element in the given
-// namespace (e.g. SVGNamespace) with the given tag name -- required
-// for SVG/MathML elements, which createElement alone cannot make.
+// namespace (e.g. svg.Namespace) with the given tag name -- required
+// for SVG/MathML elements, which createElement alone cannot make. See
+// domrt/svg's CreateElement for a convenience wrapper.
 func (d *Document) CreateElementNS(namespace, tag string) *Element {
 	return &Element{Element: d.Document.Call("createElementNS", namespace, tag)}
 }

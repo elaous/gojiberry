@@ -2,7 +2,7 @@
 
 //go:build js && wasm
 
-// Package main demos domrt/dom's Canvas2D and WebGL (Context3D)
+// Package main demos domrt/html's Canvas2D and WebGL (Context3D)
 // wrappers: fills a 2D canvas with a solid color and draws a
 // full-viewport quad on a WebGL canvas with a solid-color fragment
 // shader, then reads a pixel back from each (via the same package's
