@@ -1,0 +1,251 @@
+package components // import "github.com/elaous/gojiberry/components"
+
+Package components is a small library of ready-made gox components:
+plain Go functions taking a typed props struct and returning a gox.Node,
+the same shape as any other component in this framework (see the root README's
+"Components" section). None of them import domrt or syscall/js directly --
+interactive ones take the current state and On* event handlers as props (the
+same controlled-component pattern the wasm-counter example uses), so a single
+component works unchanged for SSR-only pages and for a WASM page driving it with
+domrt.Mount/Update.
+
+FUNCTIONS
+
+func Accordion(props AccordionProps) gox.Node
+    Accordion renders a vertical stack of collapsible sections.
+
+func Button(props ButtonProps) gox.Node
+    Button renders a styled <button>.
+
+func Carousel(props CarouselProps) gox.Node
+    Carousel renders a single active slide, prev/next arrows, and a dot per
+    slide for direct navigation. All slides are rendered (the inactive ones
+    aria-hidden) so this works before any client-side hydration runs, with CSS
+    choosing which one shows.
+
+func Chip(props ChipProps) gox.Node
+    Chip renders a small labeled pill, optionally with a leading icon and a
+    remove button.
+
+func ColorPicker(props ColorPickerProps) gox.Node
+    ColorPicker renders a styled native color input, letting the browser handle
+    the actual color-picker UI.
+
+func DatePicker(props DatePickerProps) gox.Node
+    DatePicker renders a styled native date input, letting the browser handle
+    the actual calendar UI/locale formatting/keyboard input.
+
+func Dropdown(props DropdownProps) gox.Node
+    Dropdown renders a closed control button and, when Open, a listbox of
+    options below it. This is a basic implementation of the ARIA listbox pattern
+    (role/aria-* attributes only) -- it doesn't implement its own keyboard
+    navigation, so pair it with native <button>/focus behavior for accessible
+    keyboard use.
+
+func FileUploader(props FileUploaderProps) gox.Node
+    FileUploader renders a dropzone that's also a native file-input label
+    (clicking anywhere on it opens the file browser, no JS needed for that part)
+    plus an optional progress bar.
+
+func Link(props LinkProps) gox.Node
+    Link renders a styled <a>. A disabled link renders as a non-interactive
+    <span> instead of an <a> without an href, since an anchor's disabled-looking
+    states aren't real disabled controls to assistive tech the way a <button
+    disabled> is.
+
+func RadioGroup(props RadioGroupProps) gox.Node
+    RadioGroup renders a set of mutually exclusive radio buttons.
+
+func Slider(props SliderProps) gox.Node
+    Slider renders a styled native range input.
+
+func Tabs(props TabsProps) gox.Node
+    Tabs renders a tab strip plus the active tab's content. The caller owns
+    which tab is active (see OnSelect), the same controlled-component pattern
+    every interactive component in this package uses.
+
+func Wizard(props WizardProps) gox.Node
+    Wizard renders a multi-step form flow: a step header strip, the active
+    step's content, and Back/Next actions.
+
+
+TYPES
+
+type AccordionItem struct {
+	Title   string
+	Content gox.Node
+}
+    AccordionItem is one collapsible section in an Accordion.
+
+type AccordionProps struct {
+	Items []AccordionItem
+	// Open holds which item indices are currently expanded. To allow
+	// only one open at a time, clear the others in OnToggle before
+	// setting the clicked index -- Accordion itself just renders
+	// whatever Open says.
+	Open     map[int]bool
+	OnToggle func(index int) // called when an item's header is clicked
+}
+    AccordionProps configures Accordion.
+
+type ButtonProps struct {
+	Label    string
+	Variant  ButtonVariant // defaults to ButtonPrimary
+	Type     string        // "button" (default), "submit", or "reset"
+	Disabled bool
+	OnClick  gox.EventHandler
+}
+    ButtonProps configures Button.
+
+type ButtonVariant string
+    ButtonVariant selects Button's visual style.
+
+const (
+	ButtonPrimary   ButtonVariant = "primary"
+	ButtonSecondary ButtonVariant = "secondary"
+	ButtonDanger    ButtonVariant = "danger"
+)
+type CarouselProps struct {
+	Slides []gox.Node
+	Active int
+
+	OnPrev   func()          // called when the previous-slide arrow is clicked
+	OnNext   func()          // called when the next-slide arrow is clicked
+	OnSelect func(index int) // called when a dot is clicked
+}
+    CarouselProps configures Carousel.
+
+type ChipProps struct {
+	Label    string
+	Icon     *gox.Node        // optional, rendered before Label
+	OnRemove gox.EventHandler // nil renders a plain, non-removable chip
+}
+    ChipProps configures Chip.
+
+type ColorPickerProps struct {
+	Value    string // "#rrggbb"
+	Disabled bool
+	OnChange func(value string)
+}
+    ColorPickerProps configures ColorPicker.
+
+type DatePickerProps struct {
+	Value    string // "YYYY-MM-DD"
+	Min, Max string // optional bounds, same format; "" for no bound
+	Disabled bool
+	OnChange func(value string)
+}
+    DatePickerProps configures DatePicker.
+
+type DropdownOption struct {
+	Value string
+	Label string
+	Icon  *gox.Node // optional, rendered before Label
+}
+    DropdownOption is one choice in a Dropdown.
+
+type DropdownProps struct {
+	Options     []DropdownOption
+	Selected    []string // selected Values; single-select just uses at most one
+	Multiple    bool     // show a checkbox per option and allow more than one selected
+	Open        bool     // whether the option list is currently shown
+	Placeholder string   // shown on the closed control when nothing is selected
+
+	OnToggleOpen func(open bool) // called when the control is clicked
+
+	// OnSelect is called when an option is clicked. For single-select,
+	// it should replace Selected and close the dropdown; for
+	// multi-select, it should add/remove value from Selected and
+	// typically leave it open.
+	OnSelect func(value string)
+}
+    DropdownProps configures Dropdown. There's no native <select> equivalent
+    that supports per-option icons, so both single- and multi-select modes use
+    the same custom widget here (a native <select> is a better fit when icons
+    aren't needed).
+
+type FileUploaderProps struct {
+	DropzoneID string // id on the dropzone, for a caller to attach dom.Element.OnDrop
+	InputID    string // id on the hidden file input, for a caller to read .Files() after a change event
+
+	Accept   string // e.g. "image/*" or ".pdf,.docx"; "" allows any file
+	Multiple bool
+	Disabled bool
+
+	ShowProgress  bool    // render a progress bar at all -- the "without progress" variant just leaves this false
+	Progress      float64 // 0-100, ignored when Indeterminate
+	Indeterminate bool    // show a moving/indeterminate bar instead of a fixed percentage
+
+	OnFilesSelected gox.EventHandler // fired on the input's change event
+}
+    FileUploaderProps configures FileUploader.
+
+    gox.Event carries no file data (see gox.Event's doc comment: Value is
+    only ever a string/bool/similar simple payload), so reading the actual
+    selected/dropped files is the caller's job, done through domrt/dom directly
+    on the client: look the input up by InputID and call its AsInput().Files(),
+    or attach domrt/dom's own Element.OnDrop to the dropzone by DropzoneID
+    for real drag-and-drop file access (dom.DragEvent.DataTransfer.Files()).
+    FileUploader itself only renders the widget and prevents the browser's
+    default drag-over/drop navigation.
+
+type LinkProps struct {
+	Href     string
+	Target   string // e.g. "_blank"; "" stays in the same tab
+	Disabled bool
+	Children []gox.Node
+}
+    LinkProps configures Link.
+
+type RadioGroupProps struct {
+	Name     string // shared "name" so the browser only allows one checked at a time
+	Options  []RadioOption
+	Selected string // the currently selected option's Value
+	Disabled bool
+	OnChange func(value string) // called with the newly selected option's Value
+}
+    RadioGroupProps configures RadioGroup.
+
+type RadioOption struct {
+	Value string
+	Label string
+}
+    RadioOption is one choice in a RadioGroup.
+
+type SliderProps struct {
+	Min, Max, Value float64
+	Step            float64 // 0 leaves the browser's default step (1)
+	Disabled        bool
+	OnChange        func(value float64) // called continuously while dragging
+}
+    SliderProps configures Slider.
+
+type Tab struct {
+	Label   string
+	Content gox.Node
+}
+    Tab is one tab in a Tabs component.
+
+type TabsProps struct {
+	Tabs     []Tab
+	Active   int             // index into Tabs of the currently shown tab
+	OnSelect func(index int) // called when a tab button is clicked
+}
+    TabsProps configures Tabs.
+
+type WizardProps struct {
+	Steps  []WizardStep
+	Active int
+
+	OnBack func()          // called when Back is clicked (never called for step 0; Back renders disabled instead)
+	OnNext func()          // called when Next/Finish is clicked
+	OnStep func(index int) // optional: called when a step header is clicked, to jump directly to it
+}
+    WizardProps configures Wizard.
+
+type WizardStep struct {
+	Title   string
+	Content gox.Node
+}
+    WizardStep is one step in a Wizard.
+

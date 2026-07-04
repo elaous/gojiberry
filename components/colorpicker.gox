@@ -1,0 +1,27 @@
+package components
+
+import "github.com/elaous/gojiberry/gox"
+
+// ColorPickerProps configures ColorPicker.
+type ColorPickerProps struct {
+	Value    string // "#rrggbb"
+	Disabled bool
+	OnChange func(value string)
+}
+
+// ColorPicker renders a styled native color input, letting the browser
+// handle the actual color-picker UI.
+func ColorPicker(props ColorPickerProps) gox.Node {
+	attrs := []gox.Attr{
+		gox.A("type", "color"),
+		gox.A("class", "gj-colorpicker"),
+		gox.A("value", props.Value),
+	}
+	if props.Disabled {
+		attrs = append(attrs, gox.A("disabled", "disabled"))
+	}
+	if props.OnChange != nil {
+		attrs = append(attrs, gox.On("change", func(e gox.Event) { props.OnChange(gox.EventValue[string](e)) }))
+	}
+	return gox.El("input", attrs)
+}
