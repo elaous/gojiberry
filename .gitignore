@@ -9,6 +9,7 @@
 *.dylib
 *.wasm
 wasm_exec.js
+examples/wasm-components-demo/style.css
 
 # Test binary, built with `go test -c`
 *.test
