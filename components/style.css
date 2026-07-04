@@ -221,3 +221,74 @@
 .gj-contextmenu-item { display: flex; align-items: center; gap: 0.5em; padding: 0.4em 0.9em; cursor: pointer; }
 .gj-contextmenu-item:hover { background: var(--gj-bg-muted); }
 .gj-contextmenu-item-disabled { color: var(--gj-muted); cursor: not-allowed; }
+
+/* Tooltip */
+.gj-tooltip { position: relative; display: inline-block; }
+.gj-tooltip-bubble {
+  position: absolute;
+  z-index: 20;
+  padding: 0.35em 0.6em;
+  border-radius: var(--gj-radius);
+  background: var(--gj-text);
+  color: var(--gj-bg);
+  font-size: 0.85em;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.gj-tooltip:hover .gj-tooltip-bubble,
+.gj-tooltip:focus-within .gj-tooltip-bubble {
+  opacity: 1;
+  visibility: visible;
+}
+.gj-tooltip-top { bottom: 100%; left: 50%; transform: translateX(-50%) translateY(-0.4em); }
+.gj-tooltip-bottom { top: 100%; left: 50%; transform: translateX(-50%) translateY(0.4em); }
+.gj-tooltip-left { right: 100%; top: 50%; transform: translateY(-50%) translateX(-0.4em); }
+.gj-tooltip-right { left: 100%; top: 50%; transform: translateY(-50%) translateX(0.4em); }
+
+/* Loader */
+.gj-loader {
+  display: inline-block;
+  border: 2px solid var(--gj-bg-muted);
+  border-top-color: var(--gj-accent);
+  border-radius: 50%;
+  animation: gj-spin 0.7s linear infinite;
+}
+.gj-loader-sm { width: 1em; height: 1em; }
+.gj-loader-md { width: 1.5em; height: 1.5em; }
+.gj-loader-lg { width: 2.5em; height: 2.5em; border-width: 3px; }
+@keyframes gj-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Progress */
+.gj-progress-linear {
+  width: 100%;
+  height: 0.5em;
+  border-radius: 999px;
+  background: var(--gj-bg-muted);
+  overflow: hidden;
+}
+.gj-progress-linear-bar { height: 100%; background: var(--gj-accent); transition: width 0.2s ease; }
+.gj-progress-linear-indeterminate .gj-progress-linear-bar {
+  width: 40%;
+  animation: gj-progress-indeterminate 1.2s ease-in-out infinite;
+}
+.gj-progress-circle {
+  --gj-progress-value: 0%;
+  position: relative;
+  width: 3em;
+  height: 3em;
+  border-radius: 50%;
+  background: conic-gradient(var(--gj-accent) var(--gj-progress-value), var(--gj-bg-muted) 0);
+}
+.gj-progress-circle::before {
+  content: "";
+  position: absolute;
+  inset: 15%;
+  border-radius: 50%;
+  background: var(--gj-bg);
+}
+.gj-progress-circle-indeterminate { animation: gj-spin 1s linear infinite; }

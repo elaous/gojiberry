@@ -58,6 +58,20 @@ func Link(props LinkProps) gox.Node
     states aren't real disabled controls to assistive tech the way a <button
     disabled> is.
 
+func Loader(props LoaderProps) gox.Node
+    Loader renders a spinning indicator for an in-progress operation with no
+    known completion percentage -- see Progress for one that has one.
+
+func Progress(props ProgressProps) gox.Node
+    Progress renders a linear bar or a circular ring showing Value percent
+    complete, or an indeterminate animation when the actual completion isn't
+    known yet. The circle variant is drawn with a CSS conic-gradient rather
+    than an <svg>: domrt's client-side Mount/Update creates elements with plain
+    createElement, which produces the wrong (HTML, not SVG) element for an
+    <svg>/<circle> tag, so an SVG-based ring would silently fail to render once
+    mounted (server-rendered HTML wouldn't show the bug -- the browser's HTML
+    parser switches namespace for a parsed <svg> tag on its own).
+
 func RadioGroup(props RadioGroupProps) gox.Node
     RadioGroup renders a set of mutually exclusive radio buttons.
 
@@ -68,6 +82,11 @@ func Tabs(props TabsProps) gox.Node
     Tabs renders a tab strip plus the active tab's content. The caller owns
     which tab is active (see OnSelect), the same controlled-component pattern
     every interactive component in this package uses.
+
+func Tooltip(props TooltipProps) gox.Node
+    Tooltip wraps Children with a bubble that shows Content on hover or keyboard
+    focus. Pure CSS (:hover/:focus-within) -- no JS, no positioning logic to
+    keep in sync with anything.
 
 func Wizard(props WizardProps) gox.Node
     Wizard renders a multi-step form flow: a step header strip, the active
@@ -222,6 +241,35 @@ type LinkProps struct {
 }
     LinkProps configures Link.
 
+type LoaderProps struct {
+	Size  LoaderSize // defaults to LoaderMedium
+	Label string     // accessible label; defaults to "Loading"
+}
+    LoaderProps configures Loader.
+
+type LoaderSize string
+    LoaderSize selects Loader's size.
+
+const (
+	LoaderSmall  LoaderSize = "sm"
+	LoaderMedium LoaderSize = "md"
+	LoaderLarge  LoaderSize = "lg"
+)
+type ProgressProps struct {
+	Variant       ProgressVariant // defaults to ProgressLinear
+	Value         float64         // 0-100, ignored when Indeterminate
+	Indeterminate bool            // shows a moving/spinning indicator instead of a fixed percentage
+	Label         string          // optional accessible label
+}
+    ProgressProps configures Progress.
+
+type ProgressVariant string
+    ProgressVariant selects Progress's visual style.
+
+const (
+	ProgressLinear ProgressVariant = "linear"
+	ProgressCircle ProgressVariant = "circle"
+)
 type RadioGroupProps struct {
 	Name     string // shared "name" so the browser only allows one checked at a time
 	Options  []RadioOption
@@ -257,6 +305,23 @@ type TabsProps struct {
 	OnSelect func(index int) // called when a tab button is clicked
 }
     TabsProps configures Tabs.
+
+type TooltipPlacement string
+    TooltipPlacement selects which side of the trigger Tooltip's bubble appears
+    on.
+
+const (
+	TooltipTop    TooltipPlacement = "top"
+	TooltipBottom TooltipPlacement = "bottom"
+	TooltipLeft   TooltipPlacement = "left"
+	TooltipRight  TooltipPlacement = "right"
+)
+type TooltipProps struct {
+	Content   string
+	Placement TooltipPlacement // defaults to TooltipTop
+	Children  []gox.Node       // whatever should trigger the tooltip on hover/focus
+}
+    TooltipProps configures Tooltip.
 
 type WizardProps struct {
 	Steps  []WizardStep
