@@ -11,10 +11,10 @@ type Context2D struct {
 	Context js.Value
 }
 
-// GetContext2D returns e's 2D rendering context, or nil if e isn't a
-// <canvas> (or the browser has no 2D context to give).
-func (e *Element) GetContext2D() *Context2D {
-	ctx := e.Element.Call("getContext", "2d")
+// GetContext2D returns c's 2D rendering context, or nil if the browser
+// has no 2D context to give.
+func (c *CanvasElement) GetContext2D() *Context2D {
+	ctx := c.Call("getContext", "2d")
 	if ctx.IsUndefined() || ctx.IsNull() {
 		return nil
 	}

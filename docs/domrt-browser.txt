@@ -16,6 +16,11 @@ var SessionStorage = storageArea{"sessionStorage"}
 
 FUNCTIONS
 
+func CreateObjectURL(f File) string
+    CreateObjectURL creates a blob: URL referencing f's data, valid until
+    RevokeObjectURL is called or the document unloads. Useful for e.g. setting
+    an <img>/<video>'s src without reading the file into memory.
+
 func Document() *dom.Document
     Document returns the global document object.
 
@@ -32,6 +37,9 @@ func Global(name string) js.Value
 func ReadClipboardText() (string, error)
     ReadClipboardText reads the current system clipboard text, blocking until
     the browser responds.
+
+func RevokeObjectURL(url string)
+    RevokeObjectURL releases a URL created by CreateObjectURL.
 
 func SetVideoSource(videoElement js.Value, stream js.Value)
     SetVideoSource assigns stream (from GetUserMedia) as a <video> element's
@@ -82,6 +90,39 @@ type FetchOptions struct {
 }
     FetchOptions configures a FetchOpts call. Method defaults to "GET" if empty.
     Body, if non-empty, is sent as the request body.
+
+type File struct {
+	Value js.Value
+}
+    File wraps a JS File (or Blob) object, e.g. one returned by
+    dom.InputElement.Files or dom.DataTransfer.Files.
+
+func WrapFile(v js.Value) File
+    WrapFile wraps a raw JS File/Blob object as a File.
+
+func WrapFiles(v js.Value) []File
+    WrapFiles wraps a JS FileList (or any array-like of File objects).
+
+func (f File) Name() string
+    Name returns the file's name.
+
+func (f File) ReadAsArrayBuffer() ([]byte, error)
+    ReadAsArrayBuffer reads the file's raw contents as bytes, blocking until the
+    read completes.
+
+func (f File) ReadAsDataURL() (string, error)
+    ReadAsDataURL reads the file's contents encoded as a data: URL (base64,
+    with a MIME-type prefix), blocking until the read completes.
+
+func (f File) ReadAsText() (string, error)
+    ReadAsText reads the file's contents decoded as UTF-8 text, blocking until
+    the read completes.
+
+func (f File) Size() int64
+    Size returns the file's size in bytes.
+
+func (f File) Type() string
+    Type returns the file's MIME type, or "" if unknown.
 
 type MediaDeviceInfo struct {
 	DeviceID string

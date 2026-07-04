@@ -20,13 +20,12 @@ type Context3D struct {
 	Context js.Value
 }
 
-// GetContext3D returns e's WebGL rendering context (preferring WebGL2,
-// falling back to WebGL1), or nil if e isn't a <canvas> or the browser
-// supports neither.
-func (e *Element) GetContext3D() *Context3D {
-	ctx := e.Element.Call("getContext", "webgl2")
+// GetContext3D returns c's WebGL rendering context (preferring WebGL2,
+// falling back to WebGL1), or nil if the browser supports neither.
+func (c *CanvasElement) GetContext3D() *Context3D {
+	ctx := c.Call("getContext", "webgl2")
 	if ctx.IsUndefined() || ctx.IsNull() {
-		ctx = e.Element.Call("getContext", "webgl")
+		ctx = c.Call("getContext", "webgl")
 	}
 	if ctx.IsUndefined() || ctx.IsNull() {
 		return nil

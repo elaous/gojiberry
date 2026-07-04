@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gojiberry typed elements + File API demo</title>
+  <script src="wasm_exec.js"></script>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <a id="link" href="/report">report</a>
+  <button id="btn">click me</button>
+  <select id="sel">
+    <option value="a">A</option>
+    <option value="b">B</option>
+  </select>
+  <input id="chk" type="checkbox">
+  <input id="file" type="file">
+
+  <p>Canvas: <span id="canvas-result">(pending)</span></p>
+  <p>Anchor: <span id="anchor-result">(pending)</span></p>
+  <p>Button: <span id="button-result">(pending)</span></p>
+  <p>Select: <span id="select-result">(pending)</span></p>
+  <p>Checkbox: <span id="checkbox-result">(pending)</span></p>
+  <p>File: <span id="file-result">(pending)</span></p>
+
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+      go.run(result.instance);
+    });
+  </script>
+</body>
+</html>
