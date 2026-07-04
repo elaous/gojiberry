@@ -31,16 +31,16 @@ func StatusView(state string) gox.Node {
 }
 
 func main() {
-	document := js.Global().Get("document")
-	app := document.Call("getElementById", "app")
+	document := browser.Document()
+	app := document.GetElementByID("app")
 	docID := app.Get("dataset").Get("docId").String()
-	textarea := document.Call("getElementById", "canvas")
-	statusContainer := document.Call("getElementById", "status").Get("parentElement")
+	textarea := document.GetElementByID("canvas")
+	statusContainer := document.GetElementByID("status").ParentElement()
 
-	root := domrt.Mount(statusContainer, StatusView("saved"))
+	root := domrt.Mount(statusContainer.Element, StatusView("saved"))
 
 	save := func() {
-		content := textarea.Get("value").String()
+		content := textarea.GetValue()
 		root.Update(StatusView("saving..."))
 		go func() {
 			body, err := json.Marshal(saveRequest{Content: content})
@@ -70,7 +70,7 @@ func main() {
 		debounce = time.AfterFunc(600*time.Millisecond, save)
 		return nil
 	})
-	textarea.Call("addEventListener", "input", onInput)
+	textarea.AddEventListener("input", onInput)
 
 	select {} // keep the wasm program alive so the debounce timer and fetch callbacks keep firing
 }
