@@ -15,7 +15,7 @@ import (
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/domrt"
 	"github.com/elaous/gojiberry/domrt/browser"
-	"github.com/elaous/gojiberry/domrt/dom"
+	"github.com/elaous/gojiberry/domrt/html"
 	"github.com/elaous/gojiberry/gox"
 )
 
@@ -238,9 +238,9 @@ func App(st *state, render func()) gox.Node {
 }
 
 // wireFileUploader reads the file selected through FileUploader's
-// input directly via domrt/dom, since gox.Event carries no file data
+// input directly via domrt/html, since gox.Event carries no file data
 // (see FileUploaderProps' doc comment in components/fileuploader.gox).
-func wireFileUploader(document *dom.Document) {
+func wireFileUploader(document *html.Document) {
 	input := document.GetElementByID("uploader-input").AsInput()
 	input.AddEventListener("change", js.FuncOf(func(this js.Value, args []js.Value) any {
 		go func() {

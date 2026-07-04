@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-package dom
+package html
 
 import "syscall/js"
 

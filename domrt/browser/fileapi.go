@@ -45,7 +45,7 @@ func fileReaderError(reader js.Value) error {
 }
 
 // File wraps a JS File (or Blob) object, e.g. one returned by
-// dom.InputElement.Files or dom.DataTransfer.Files.
+// html.InputElement.Files or html.DataTransfer.Files.
 type File struct {
 	Value js.Value
 }

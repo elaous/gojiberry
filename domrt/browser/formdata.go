@@ -5,7 +5,7 @@ package browser
 import (
 	"syscall/js"
 
-	"github.com/elaous/gojiberry/domrt/dom"
+	"github.com/elaous/gojiberry/domrt/html"
 )
 
 // FormData wraps a JS FormData object: a set of key/value entries
@@ -23,7 +23,7 @@ func NewFormData() FormData {
 // NewFormDataFromForm creates a FormData pre-populated from form's
 // current controls, the same values a native (non-JS) submit of that
 // form would send.
-func NewFormDataFromForm(form *dom.FormElement) FormData {
+func NewFormDataFromForm(form *html.FormElement) FormData {
 	return FormData{Value: js.Global().Get("FormData").New(form.JSValue())}
 }
 
