@@ -1,0 +1,110 @@
+//go:build js && wasm
+
+// Package main exercises domrt's newer platform wrappers together --
+// IndexedDB, MediaDevices, IntersectionObserver/ResizeObserver,
+// drag-and-drop, and the Clipboard API -- each writing its result into
+// its own element so a real browser test can check every one actually
+// worked, not just that the code compiled.
+package main
+
+import (
+	"fmt"
+
+	"github.com/elaous/gojiberry/domrt/browser"
+	"github.com/elaous/gojiberry/domrt/dom"
+)
+
+func main() {
+	document := browser.Document()
+
+	// IndexedDB: open, create a store on upgrade, put a record, read
+	// it back.
+	db, err := browser.OpenDatabase("platform-demo", 1, func(db *browser.Database) {
+		db.CreateObjectStore("kv", "id")
+	})
+	if err != nil {
+		document.GetElementByID("idb-result").SetTextContent("error: " + err.Error())
+	} else {
+		tx := db.Transaction([]string{"kv"}, "readwrite")
+		store := tx.ObjectStore("kv")
+		if err := store.Put(map[string]any{"id": "a", "value": "hello from indexeddb"}); err != nil {
+			document.GetElementByID("idb-result").SetTextContent("error: " + err.Error())
+		} else {
+			readTx := db.Transaction([]string{"kv"}, "readonly")
+			got, err := readTx.ObjectStore("kv").Get("a")
+			if err != nil {
+				document.GetElementByID("idb-result").SetTextContent("error: " + err.Error())
+			} else {
+				document.GetElementByID("idb-result").SetTextContent(got.Get("value").String())
+			}
+		}
+	}
+
+	// IntersectionObserver + ResizeObserver: both fire once with the
+	// element's current state as soon as they start observing it, no
+	// scroll/resize needed to get a first callback.
+	observed := document.GetElementByID("observed-el")
+	io := dom.NewIntersectionObserver(func(entries []dom.IntersectionEntry) {
+		for _, e := range entries {
+			document.GetElementByID("intersection-result").SetTextContent(
+				fmt.Sprintf("isIntersecting=%v ratio=%.2f", e.IsIntersecting, e.IntersectionRatio))
+		}
+	})
+	io.Observe(observed)
+
+	ro := dom.NewResizeObserver(func(entries []dom.ResizeEntry) {
+		for _, e := range entries {
+			document.GetElementByID("resize-result").SetTextContent(
+				fmt.Sprintf("%.0fx%.0f", e.Width, e.Height))
+		}
+	})
+	ro.Observe(observed)
+
+	// Drag-and-drop: dragstart on the source stores its text on the
+	// DataTransfer; drop on the target reads it back.
+	source := document.GetElementByID("drag-source")
+	source.SetDraggable(true)
+	source.OnDragStart(func(evt dom.DragEvent) {
+		evt.DataTransfer.SetData("text/plain", "dragged payload")
+		evt.DataTransfer.SetEffectAllowed("copy")
+	})
+	target := document.GetElementByID("drop-target")
+	target.OnDragOver(func(evt dom.DragEvent) {
+		evt.PreventDefault() // required for drop to fire at all
+	})
+	target.OnDrop(func(evt dom.DragEvent) {
+		evt.PreventDefault()
+		document.GetElementByID("dnd-result").SetTextContent(evt.DataTransfer.GetData("text/plain"))
+	})
+
+	// MediaDevices + Clipboard both involve a real async round trip
+	// (permission + device/OS interaction), so run them without
+	// blocking the rest of main.
+	go func() {
+		stream, err := browser.GetUserMedia(browser.MediaStreamConstraints{Video: true})
+		if err != nil {
+			document.GetElementByID("media-result").SetTextContent("error: " + err.Error())
+			return
+		}
+		video := document.GetElementByID("video")
+		browser.SetVideoSource(video.Element, stream)
+		tracks := stream.Call("getVideoTracks")
+		document.GetElementByID("media-result").SetTextContent(fmt.Sprintf("video tracks: %d", tracks.Length()))
+	}()
+
+	go func() {
+		const want = "clipboard round trip"
+		if err := browser.WriteClipboardText(want); err != nil {
+			document.GetElementByID("clipboard-result").SetTextContent("write error: " + err.Error())
+			return
+		}
+		got, err := browser.ReadClipboardText()
+		if err != nil {
+			document.GetElementByID("clipboard-result").SetTextContent("read error: " + err.Error())
+			return
+		}
+		document.GetElementByID("clipboard-result").SetTextContent(got)
+	}()
+
+	select {} // keep the wasm program alive for the observers/goroutines above
+}
