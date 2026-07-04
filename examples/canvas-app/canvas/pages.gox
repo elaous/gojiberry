@@ -20,7 +20,7 @@ type HomePageProps struct {
 // HomePage lists existing documents and offers a way to start a new
 // one.
 //
-// @stylesheets style.css
+// @stylesheets static/style.css
 func HomePage(props HomePageProps) gox.Node {
 	return <>
 		<h1>gox-canvas</h1>
@@ -55,7 +55,7 @@ type CanvasPageProps struct {
 // (see internal/transpile/page_metadata.go) -- this page doesn't
 // write either <script> tag itself.
 //
-// @stylesheets style.css
+// @stylesheets static/style.css
 // @wasm /static/main.wasm
 func CanvasPage(props CanvasPageProps) gox.Node {
 	return <>
