@@ -301,9 +301,18 @@ drag-and-drop, with an optional progress bar), `ContextMenu`
 `Element.OnContextMenu`, with a full-viewport backdrop that closes it
 on an outside click), `Tooltip` (pure CSS `:hover`/`:focus-within` —
 no JS, nothing to keep positioned), `Loader` (an indeterminate spinner
-for when there's no known completion percentage), and `Progress`
+for when there's no known completion percentage), `Progress`
 (`Variant: ProgressLinear` or `ProgressCircle`, both determinate or
-`Indeterminate`). None of them import
+`Indeterminate`), `Modal` (a backdrop plus a centered content box —
+the base `Dialog`, and through it `Confirm`/`Alert`, build on; use it
+directly for fully custom modal content), `Dialog` (`Modal` with the
+common title/body/footer-actions shape), `Confirm` and `Alert`
+(`Dialog` presets for a yes/no decision and a single acknowledgment,
+each rendered with `role="alertdialog"` instead of `Dialog`'s default
+`role="dialog"`, per ARIA, since both demand an immediate response),
+and `Toast` (a non-modal, transient notification — no backdrop, no
+opinion on where it sits on screen; wrap one or more in your own
+`position:fixed` container to stack them). None of them import
 `domrt` or `syscall/js` — every interactive one is a pure function of
 its props, taking the current state and `On*` callbacks the same way
 `wasm-counter`'s `Counter` does, so a single component works unchanged
@@ -645,7 +654,7 @@ generated code.
 - `examples/wasm-components-demo` — a gallery of every component in
   `components`, each wired to real local state and mounted with
   `domrt.Mount`/`Update`. Verified against a real headless Chromium:
-  every one of the 17 components driven through its actual
+  every one of the 22 components driven through its actual
   interactivity (clicking a tab/accordion header/carousel arrow/wizard
   step, opening the dropdown and picking a multi-select option,
   removing a chip, dragging the slider, setting the date/color inputs,
@@ -654,10 +663,15 @@ generated code.
   position then closing it via an item selection and, separately, via
   an outside click on its backdrop, hovering to reveal a `Tooltip` --
   checked via its bubble's real computed opacity, not just DOM
-  presence, since it's always in the DOM -- and confirming `Loader`
+  presence, since it's always in the DOM -- confirming `Loader`
   and both `Progress` variants are actually animating via their
-  computed `animation-name`, in addition to their static attributes),
-  not just a compile check:
+  computed `animation-name`, opening a `Modal` and closing it with a
+  real click on its backdrop (not the box itself, proving a click
+  inside the content can't accidentally trigger it), a `Dialog`
+  closed three different ways (Cancel, Save, backdrop) each setting a
+  distinct result, `Confirm`/`Alert` each checked for
+  `role="alertdialog"` plus both of their outcomes, and a `Toast`
+  dismissed via its own close button), not just a compile check:
 
   ```
   go generate ./...

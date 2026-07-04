@@ -48,6 +48,19 @@ type state struct {
 	contextMenuX        float64
 	contextMenuY        float64
 	contextMenuSelected string
+
+	modalOpen bool
+
+	dialogOpen   bool
+	dialogResult string
+
+	confirmOpen   bool
+	confirmResult string
+
+	alertOpen   bool
+	alertResult string
+
+	toastOpen bool
 }
 
 func containsString(list []string, v string) bool {
@@ -282,6 +295,99 @@ func App(st *state, render func()) gox.Node {
 				components.Progress(components.ProgressProps{Variant: components.ProgressCircle, Value: 40})),
 			gox.El("div", []gox.Attr{gox.A("id", "progress-circle-indeterminate")},
 				components.Progress(components.ProgressProps{Variant: components.ProgressCircle, Indeterminate: true})),
+		),
+		gox.El("section", nil,
+			gox.El("h2", nil, gox.Text("Modal")),
+			components.Button(components.ButtonProps{
+				Label:   "Open modal",
+				OnClick: func(gox.Event) { st.modalOpen = true; render() },
+			}),
+			components.Modal(components.ModalProps{
+				Open:  st.modalOpen,
+				Label: "Plain modal",
+				Content: []gox.Node{
+					gox.El("p", []gox.Attr{gox.A("id", "modal-content")}, gox.Text("Fully custom modal content")),
+				},
+				OnClose: func() { st.modalOpen = false; render() },
+			}),
+			gox.El("span", []gox.Attr{gox.A("id", "modal-result")}, gox.Text(fmt.Sprintf("open=%v", st.modalOpen))),
+		),
+		gox.El("section", nil,
+			gox.El("h2", nil, gox.Text("Dialog")),
+			components.Button(components.ButtonProps{
+				Label:   "Open dialog",
+				OnClick: func(gox.Event) { st.dialogOpen = true; render() },
+			}),
+			components.Dialog(components.DialogProps{
+				Open:  st.dialogOpen,
+				Title: "Rename document",
+				Body:  []gox.Node{gox.Text("Choose a new name for this document.")},
+				Actions: []gox.Node{
+					components.Button(components.ButtonProps{
+						Label:   "Cancel",
+						Variant: components.ButtonSecondary,
+						OnClick: func(gox.Event) { st.dialogOpen = false; st.dialogResult = "cancelled"; render() },
+					}),
+					components.Button(components.ButtonProps{
+						Label:   "Save",
+						OnClick: func(gox.Event) { st.dialogOpen = false; st.dialogResult = "saved"; render() },
+					}),
+				},
+				OnClose: func() { st.dialogOpen = false; st.dialogResult = "backdrop"; render() },
+			}),
+			gox.El("span", []gox.Attr{gox.A("id", "dialog-result")}, gox.Text(fmt.Sprintf("open=%v result=%s", st.dialogOpen, st.dialogResult))),
+		),
+		gox.El("section", nil,
+			gox.El("h2", nil, gox.Text("Confirm")),
+			components.Button(components.ButtonProps{
+				Label:   "Delete item",
+				Variant: components.ButtonDanger,
+				OnClick: func(gox.Event) { st.confirmOpen = true; render() },
+			}),
+			components.Confirm(components.ConfirmProps{
+				Open:    st.confirmOpen,
+				Title:   "Delete item?",
+				Message: "This can't be undone.",
+				OnConfirm: func() {
+					st.confirmOpen = false
+					st.confirmResult = "confirmed"
+					render()
+				},
+				OnCancel: func() {
+					st.confirmOpen = false
+					st.confirmResult = "cancelled"
+					render()
+				},
+			}),
+			gox.El("span", []gox.Attr{gox.A("id", "confirm-result")}, gox.Text(fmt.Sprintf("open=%v result=%s", st.confirmOpen, st.confirmResult))),
+		),
+		gox.El("section", nil,
+			gox.El("h2", nil, gox.Text("Alert")),
+			components.Button(components.ButtonProps{
+				Label:   "Show alert",
+				OnClick: func(gox.Event) { st.alertOpen = true; render() },
+			}),
+			components.Alert(components.AlertProps{
+				Open:    st.alertOpen,
+				Title:   "Upload complete",
+				Message: "Your file has been uploaded.",
+				OnClose: func() { st.alertOpen = false; st.alertResult = "acknowledged"; render() },
+			}),
+			gox.El("span", []gox.Attr{gox.A("id", "alert-result")}, gox.Text(fmt.Sprintf("open=%v result=%s", st.alertOpen, st.alertResult))),
+		),
+		gox.El("section", nil,
+			gox.El("h2", nil, gox.Text("Toast")),
+			components.Button(components.ButtonProps{
+				Label:   "Show toast",
+				OnClick: func(gox.Event) { st.toastOpen = true; render() },
+			}),
+			components.Toast(components.ToastProps{
+				Open:    st.toastOpen,
+				Message: "Saved successfully",
+				Variant: components.ToastSuccess,
+				OnClose: func() { st.toastOpen = false; render() },
+			}),
+			gox.El("span", []gox.Attr{gox.A("id", "toast-result")}, gox.Text(fmt.Sprintf("open=%v", st.toastOpen))),
 		),
 	)
 }
