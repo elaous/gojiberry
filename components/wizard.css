@@ -1,0 +1,26 @@
+/* Wizard stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-wizard-steps { display: flex; gap: 1em; margin-bottom: 1em; }
+.gj-wizard-step-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--gj-muted);
+}
+.gj-wizard-step-header-active { color: var(--gj-accent); font-weight: 600; }
+.gj-wizard-step-header-done { color: var(--gj-text); }
+.gj-wizard-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 999px;
+  background: var(--gj-bg-muted);
+  font-size: 0.85em;
+}
+.gj-wizard-actions { display: flex; justify-content: space-between; margin-top: 1em; }

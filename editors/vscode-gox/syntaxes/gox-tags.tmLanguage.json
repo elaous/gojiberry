@@ -14,18 +14,20 @@
       ]
     },
     "tagNamed": {
-      "comment": "A <Tag ...>...</Tag> or self-closing <Tag ... />. The end pattern backreferences the opening name (group 2) so a nested tag with a different name can't prematurely close it -- a heuristic like every TextMate JSX grammar, not the real expression-start disambiguation goxc's transpiler does; a bare `a<B` with no surrounding spaces can still be miscolored as a tag-open, the same known class of limitation TSX's own grammar has.",
-      "begin": "(<)([A-Za-z][A-Za-z0-9_.\\-]*)",
+      "comment": "A <Tag ...>...</Tag>, self-closing <Tag ... />, or a struct-component <*Tag ...>...</*Tag> (goxc's NewTag(...).Render() convention). Group 2, the optional leading '*', and group 3, the name, are both backreferenced in the end pattern so a nested tag can't prematurely close it, and </Tag> can't close <*Tag> or vice versa -- a heuristic like every TextMate JSX grammar, not the real expression-start disambiguation goxc's transpiler does; a bare `a<B` with no surrounding spaces can still be miscolored as a tag-open, the same known class of limitation TSX's own grammar has.",
+      "begin": "(<)(\\*)?([A-Za-z][A-Za-z0-9_.\\-]*)",
       "beginCaptures": {
         "1": { "name": "punctuation.definition.tag.begin.gox" },
-        "2": { "name": "entity.name.tag.gox" }
+        "2": { "name": "keyword.operator.gox" },
+        "3": { "name": "entity.name.tag.gox" }
       },
-      "end": "(/>)|(</)(\\2)\\s*(>)",
+      "end": "(/>)|(</)(\\2)(\\3)\\s*(>)",
       "endCaptures": {
         "1": { "name": "punctuation.definition.tag.end.gox" },
         "2": { "name": "punctuation.definition.tag.begin.gox" },
-        "3": { "name": "entity.name.tag.gox" },
-        "4": { "name": "punctuation.definition.tag.end.gox" }
+        "3": { "name": "keyword.operator.gox" },
+        "4": { "name": "entity.name.tag.gox" },
+        "5": { "name": "punctuation.definition.tag.end.gox" }
       },
       "name": "meta.tag.gox",
       "patterns": [

@@ -1,0 +1,31 @@
+/* Base stylesheet for github.com/elaous/gojiberry/components: shared
+   design tokens and the two keyframe animations more than one
+   component's own stylesheet reuses (gj-spin: Loader and Progress's
+   circle-indeterminate variant; gj-progress-indeterminate: Progress's
+   linear-indeterminate variant and FileUploader's indeterminate
+   progress bar). Load this once alongside whichever per-component
+   .css files you actually use (see the root README), e.g.
+   @stylesheets ../../components/base.css
+   @stylesheets ../../components/button.css
+*/
+
+:root {
+  --gj-accent: #2563eb;
+  --gj-accent-contrast: #ffffff;
+  --gj-danger: #dc2626;
+  --gj-border: #d1d5db;
+  --gj-text: #111827;
+  --gj-muted: #6b7280;
+  --gj-bg: #ffffff;
+  --gj-bg-muted: #f3f4f6;
+  --gj-radius: 6px;
+}
+
+@keyframes gj-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes gj-progress-indeterminate {
+  0% { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}

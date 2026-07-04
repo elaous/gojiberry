@@ -1,0 +1,32 @@
+/* Progress stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*) and the gj-spin /
+   gj-progress-indeterminate keyframes. */
+
+.gj-progress-linear {
+  width: 100%;
+  height: 0.5em;
+  border-radius: 999px;
+  background: var(--gj-bg-muted);
+  overflow: hidden;
+}
+.gj-progress-linear-bar { height: 100%; background: var(--gj-accent); transition: width 0.2s ease; }
+.gj-progress-linear-indeterminate .gj-progress-linear-bar {
+  width: 40%;
+  animation: gj-progress-indeterminate 1.2s ease-in-out infinite;
+}
+.gj-progress-circle {
+  --gj-progress-value: 0%;
+  position: relative;
+  width: 3em;
+  height: 3em;
+  border-radius: 50%;
+  background: conic-gradient(var(--gj-accent) var(--gj-progress-value), var(--gj-bg-muted) 0);
+}
+.gj-progress-circle::before {
+  content: "";
+  position: absolute;
+  inset: 15%;
+  border-radius: 50%;
+  background: var(--gj-bg);
+}
+.gj-progress-circle-indeterminate { animation: gj-spin 1s linear infinite; }

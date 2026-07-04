@@ -1,0 +1,76 @@
+//go:build js && wasm
+
+// Package main mirrors wasm-counter, but Counter is written as a struct
+// ("class") component instead of a plain function, exercising the
+// <*Name attr>{children}</*Name> -> NewName(NameProps{...}).Render()
+// transpiler convention. Unlike a function component, Counter can carry
+// helper methods (see Label below) alongside Render without threading
+// extra parameters through Render's signature -- the same shape
+// gox.Document already uses for itself.
+package main
+
+import (
+	"strconv"
+	"syscall/js"
+
+	"github.com/elaous/gojiberry/domrt"
+	"github.com/elaous/gojiberry/gox"
+)
+
+type CounterProps struct {
+	Count int
+	OnInc gox.EventHandler
+	OnDec gox.EventHandler
+}
+
+// Counter is a struct component: NewCounter builds one from CounterProps,
+// and Render (not Counter itself) produces the gox.Node tree.
+type Counter struct {
+	Props CounterProps
+}
+
+func NewCounter(props CounterProps) *Counter {
+	return &Counter{Props: props}
+}
+
+// Label describes the current count in words, using state held on the
+// struct -- the kind of helper a plain function component would have to
+// take as an extra parameter or recompute inline in Render.
+func (c *Counter) Label() string {
+	parity := "even"
+	if c.Props.Count%2 != 0 {
+		parity = "odd"
+	}
+	return strconv.Itoa(c.Props.Count) + " (" + parity + ")"
+}
+
+func (c *Counter) Render() gox.Node {
+	return <div id="counter">
+		<button id="dec" onClick={c.Props.OnDec}>-</button>
+		<span id="count">{c.Label()}</span>
+		<button id="inc" onClick={c.Props.OnInc}>+</button>
+	</div>
+}
+
+func main() {
+	count := 0
+	container := js.Global().Get("document").Call("getElementById", "app")
+
+	var root *domrt.Root
+	var render func()
+	render = func() {
+		node := <*Counter
+			count={count}
+			onInc={func(gox.Event) { count++; render() }}
+			onDec={func(gox.Event) { count--; render() }}
+		/>
+		if root == nil {
+			root = domrt.Mount(container, node)
+		} else {
+			root.Update(node)
+		}
+	}
+	render()
+
+	select {} // keep the wasm program alive so event callbacks keep firing
+}

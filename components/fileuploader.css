@@ -1,0 +1,30 @@
+/* FileUploader stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*) and the
+   gj-progress-indeterminate keyframe. */
+
+.gj-file-uploader-input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+.gj-file-uploader-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  border: 2px dashed var(--gj-border);
+  border-radius: var(--gj-radius);
+  padding: 2em;
+  cursor: pointer;
+  text-align: center;
+  color: var(--gj-muted);
+}
+.gj-file-uploader-progress {
+  width: 100%;
+  height: 0.5em;
+  border-radius: 999px;
+  background: var(--gj-bg-muted);
+  overflow: hidden;
+}
+.gj-file-uploader-progress-bar { height: 100%; background: var(--gj-accent); transition: width 0.2s ease; }
+.gj-file-uploader-progress-indeterminate .gj-file-uploader-progress-bar {
+  width: 40%;
+  animation: gj-progress-indeterminate 1.2s ease-in-out infinite;
+}
