@@ -44,7 +44,7 @@ db-down:
 db-migrate:
 	cd canvas && atlas migrate apply --env local --url "$(DATABASE_URL)"
 
-# db-diff regenerates a migration from canvas/schema.sql after you've
+# db-diff regenerates a migration from canvas/schema.pg.hcl after you've
 # edited it, by diffing against an ephemeral Atlas-managed dev
 # database (not the one docker-compose runs) -- e.g.
 # `make db-diff name=add_title_column`.
