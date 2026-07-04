@@ -41,6 +41,13 @@ type DomNode interface {
 	ScrollIntoView(smooth bool)
 	StyleProperty(name string) string
 	SetStyleProperty(name, value string)
+	Style() Style
+	ClientWidth() int
+	ClientHeight() int
+	ScrollLeft() int
+	SetScrollLeft(x int)
+	ScrollTop() int
+	SetScrollTop(y int)
 }
 
 // Element wraps a DOM Element/Node. Get/Call cover anything without a
@@ -77,12 +84,15 @@ func (e *Element) SetID(id string) {
 	e.Element.Set("id", id)
 }
 
-// GetClassName returns e's class attribute.
+// GetClassName returns e's class attribute. On an SVG element this is
+// unreliable -- className there is an SVGAnimatedString object, not a
+// plain string -- use ClassListContains (see svg.go) instead.
 func (e *Element) GetClassName() string {
 	return e.Element.Get("className").String()
 }
 
-// SetClassName sets e's class attribute.
+// SetClassName sets e's class attribute. On an SVG element use
+// ClassListAdd/ClassListRemove instead (see GetClassName's doc comment).
 func (e *Element) SetClassName(className string) {
 	e.Element.Set("className", className)
 }

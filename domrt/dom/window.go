@@ -116,6 +116,54 @@ func (w *Window) ClearAnimationFrame(id int) {
 	w.Window.Call("cancelAnimationFrame", id)
 }
 
+// InnerWidth returns the viewport width in pixels, including any scrollbar.
+func (w *Window) InnerWidth() int { return w.Window.Get("innerWidth").Int() }
+
+// InnerHeight returns the viewport height in pixels, including any scrollbar.
+func (w *Window) InnerHeight() int { return w.Window.Get("innerHeight").Int() }
+
+// OuterWidth returns the browser window's width in pixels, chrome included.
+func (w *Window) OuterWidth() int { return w.Window.Get("outerWidth").Int() }
+
+// OuterHeight returns the browser window's height in pixels, chrome included.
+func (w *Window) OuterHeight() int { return w.Window.Get("outerHeight").Int() }
+
+// ScrollX returns how far the page is scrolled from the left, in pixels.
+func (w *Window) ScrollX() float64 { return w.Window.Get("scrollX").Float() }
+
+// ScrollY returns how far the page is scrolled from the top, in pixels.
+func (w *Window) ScrollY() float64 { return w.Window.Get("scrollY").Float() }
+
+// DevicePixelRatio returns the ratio between physical and CSS pixels
+// (>1 on a HiDPI/"Retina" display).
+func (w *Window) DevicePixelRatio() float64 { return w.Window.Get("devicePixelRatio").Float() }
+
+// ScrollTo scrolls the page to an absolute position, smoothly if
+// smooth is true (instantly otherwise).
+func (w *Window) ScrollTo(x, y int, smooth bool) {
+	behavior := "auto"
+	if smooth {
+		behavior = "smooth"
+	}
+	w.Window.Call("scrollTo", map[string]any{"left": x, "top": y, "behavior": behavior})
+}
+
+// ScrollBy scrolls the page by a relative offset, smoothly if smooth
+// is true (instantly otherwise).
+func (w *Window) ScrollBy(dx, dy int, smooth bool) {
+	behavior := "auto"
+	if smooth {
+		behavior = "smooth"
+	}
+	w.Window.Call("scrollBy", map[string]any{"left": dx, "top": dy, "behavior": behavior})
+}
+
+// ComputedStyle returns el's fully resolved, read-only style (CSS from
+// stylesheets and inheritance, not just its inline style attribute).
+func (w *Window) ComputedStyle(el DomNode) Style {
+	return Style{Value: w.Window.Call("getComputedStyle", el.JSValue())}
+}
+
 // Get returns a named property not covered by a typed getter above.
 func (w *Window) Get(name string) js.Value {
 	return w.Window.Get(name)

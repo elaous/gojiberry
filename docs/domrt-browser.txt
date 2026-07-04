@@ -84,12 +84,16 @@ func (d *Database) Transaction(storeNames []string, mode string) *Transaction
     ("readonly" or "readwrite").
 
 type FetchOptions struct {
-	Method  string
-	Body    string
-	Headers map[string]string
+	Method    string
+	Body      string
+	BodyValue js.Value
+	Headers   map[string]string
 }
     FetchOptions configures a FetchOpts call. Method defaults to "GET" if empty.
-    Body, if non-empty, is sent as the request body.
+    Body, if non-empty, is sent as the request body. BodyValue takes precedence
+    over Body when set -- pass a FormData.Value here for a multipart upload
+    (including files); the browser sets Content-Type with the right boundary
+    automatically, so don't set it yourself in Headers.
 
 type File struct {
 	Value js.Value
@@ -123,6 +127,39 @@ func (f File) Size() int64
 
 func (f File) Type() string
     Type returns the file's MIME type, or "" if unknown.
+
+type FormData struct {
+	Value js.Value
+}
+    FormData wraps a JS FormData object: a set of key/value entries (strings
+    and/or files) suitable for a multipart/form-data request body -- see
+    FetchOptions.BodyValue.
+
+func NewFormData() FormData
+    NewFormData creates an empty FormData.
+
+func NewFormDataFromForm(form *dom.FormElement) FormData
+    NewFormDataFromForm creates a FormData pre-populated from form's current
+    controls, the same values a native (non-JS) submit of that form would send.
+
+func (f FormData) Append(key, value string)
+    Append adds a string value under key (does not replace an existing value
+    under the same key -- see Set).
+
+func (f FormData) AppendFile(key string, file File, filename string)
+    AppendFile adds file under key with the given filename.
+
+func (f FormData) Delete(key string)
+    Delete removes every value stored under key.
+
+func (f FormData) Get(key string) string
+    Get returns the first value stored under key, or "" if there is none.
+
+func (f FormData) Has(key string) bool
+    Has reports whether any value is stored under key.
+
+func (f FormData) Set(key, value string)
+    Set adds a string value under key, replacing any existing value(s) there.
 
 type MediaDeviceInfo struct {
 	DeviceID string
