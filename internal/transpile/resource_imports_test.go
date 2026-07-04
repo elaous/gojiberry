@@ -122,50 +122,6 @@ func main() {
 	mustCompileAndRun(t, dir, "main.go", got)
 }
 
-func TestCSSImportBindsAliasToStringContent(t *testing.T) {
-	dir := setupModule(t)
-	writeFile(t, dir, "App.css", "body { color: red; }")
-	src := `package main
-
-import (
-	"App.css"
-)
-
-func main() {
-	_ = App_css
-}
-`
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := string(out)
-	if !strings.Contains(got, `var App_css = "body { color: red; }"`) {
-		t.Errorf("expected derived identifier App_css bound to file content, got:\n%s", got)
-	}
-	mustCompileAndRun(t, dir, "main.go", got)
-}
-
-func TestCSSImportWithExplicitAlias(t *testing.T) {
-	dir := setupModule(t)
-	writeFile(t, dir, "styles.css", "* { margin: 0; }")
-	src := `package main
-
-import (
-	styles "styles.css"
-)
-
-func main() { _ = styles }
-`
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(out), `var styles = "* { margin: 0; }"`) {
-		t.Errorf("expected explicit alias to be used over derived name, got:\n%s", out)
-	}
-}
-
 // TestTypedJSONImportDecodesIntoUserDeclaredType covers the current
 // design: TypeName in `alias.(TypeName)` must already be declared by
 // the caller (gox does not generate it or infer its shape), so any
@@ -230,19 +186,6 @@ func TestTypedJSONImportAcceptsNonObjectRootNow(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustCompileAndRun(t, dir, "main.go", string(out))
-}
-
-func TestTypeAnnotationRejectedForUnsupportedExtension(t *testing.T) {
-	dir := setupModule(t)
-	writeFile(t, dir, "App.css", "body{}")
-	src := "package main\n\nimport (\n\tv.(V) \"App.css\"\n)\n\nfunc main() { _ = v }\n"
-	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
-	if err == nil {
-		t.Fatal("expected an error using a type annotation on a .css import")
-	}
-	if !strings.Contains(err.Error(), "don't support a type annotation") {
-		t.Errorf("expected a clear unsupported-annotation error, got: %v", err)
-	}
 }
 
 func TestJSONCImportTypedDecodesIntoUserDeclaredType(t *testing.T) {
@@ -349,19 +292,6 @@ func main() {
 		t.Errorf("expected events bound as []Event, got:\n%s", got)
 	}
 	mustCompileAndRun(t, dir, "main.go", got)
-}
-
-func TestSCSSImportErrorsWithoutSassInstalled(t *testing.T) {
-	dir := setupModule(t)
-	writeFile(t, dir, "App.scss", "$c: red; body { color: $c; }")
-	src := "package main\n\nimport (\n\t\"App.scss\"\n)\n\nfunc main() {}\n"
-	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
-	if err == nil {
-		t.Fatal("expected an error since `sass` is not installed in this environment")
-	}
-	if !strings.Contains(err.Error(), "sass") || !strings.Contains(err.Error(), "sass-lang.com") {
-		t.Errorf("expected an actionable install-sass error, got: %v", err)
-	}
 }
 
 // TestExperimentalExtensionsRejectedWithoutOptIn covers the default

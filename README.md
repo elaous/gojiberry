@@ -54,7 +54,8 @@ expanded by the same recursive scan, with no extra grammar required.
   is `any`, read back type-safely via `gox.EventValue[T]`.
 - **`internal/transpile`** — the `.gox` → `.go` source-to-source
   transpiler described above, plus the stable resource-import loaders
-  (JSON/JSONC/JSONL/CSS/SCSS) described below.
+  (JSON/JSONC/JSONL) and the `@title`/`@stylesheets` page-metadata
+  annotation, both described below.
 - **`internal/transpile/experimental`** — the resource-import loaders
   that shell out to a mature external tool this project doesn't
   reimplement (HCL/proto/capnp/sqlc), wired in only via
@@ -122,7 +123,7 @@ top-level page needs, so pages don't each hand-roll it:
 func Page(props PageProps) gox.Node {
 	return gox.Document{
 		Title: "My App",
-		Head:  []gox.Node{gox.Style(style_css)},
+		Head:  []gox.Node{gox.Style(someCSSContent)},
 		Body:  <h1>Hello, {props.Name}!</h1>,
 	}.Render()
 }
@@ -130,10 +131,50 @@ func Page(props PageProps) gox.Node {
 
 `Head` is just `[]gox.Node` — append whatever `<meta>`/`<link>`/
 `<script>` nodes a page needs. `gox.Style(css string) gox.Node` wraps
-a `<style>` tag around raw CSS content (e.g. the string a CSS resource
-import binds), the same way `gox.Raw` does for any other trusted HTML.
-`Body` takes one node, so use `<>...</>` (`gox.Frag`) to group several
-top-level children there.
+a `<style>` tag around raw CSS content, the same way `gox.Raw` does for
+any other trusted HTML. `Body` takes one node, so use `<>...</>`
+(`gox.Frag`) to group several top-level children there.
+
+For the common case — a static title and one or more stylesheets, both
+known at transpile time — `@title`/`@stylesheets` doc-comment
+annotations do this for you, so `Page` only needs to return its actual
+content:
+
+```go
+// @title My App
+// @stylesheets App.css
+func Page(props PageProps) gox.Node {
+	return <h1>Hello, {props.Name}!</h1>
+}
+```
+
+goxc reads these directly above a `func ... gox.Node` declaration,
+reads each `@stylesheets` file the same way a resource import would,
+and rewrites every one of that function's own top-level `return`
+statements into the `gox.Document{...}.Render()` form above — so
+conditional early returns (`if props.Name == "" { return <p>...</p> }`)
+all get wrapped too, while a `return` inside a nested closure (e.g. the
+immediately-invoked `func() []gox.Node {...}()` idiom used for
+rendering a list) is left alone, since that's a different function's
+return value, not the page's. Omitting `@title` falls back to a
+package-level `DefaultTitle` identifier, which you declare once
+yourself (`gox` does not declare it for you — same "trust the Go
+compiler" stance as the JSON typed-import annotation: an undeclared
+`DefaultTitle` just fails with an ordinary undefined-identifier error).
+Use `gox.Document` directly instead when a page's title or stylesheets
+genuinely need to vary at runtime, not just per document/request
+content within an otherwise-static page.
+
+This is deliberately a third comment shape, not a reuse of either
+existing convention in this codebase: a tool directive (`//go:generate`,
+`//encore:api`) triggers an external command or build-time codegen,
+and `//language=SQL` (see `editors/vscode-gox`) is a pure editor hint
+with zero effect on the compiled program. `@title`/`@stylesheets` are
+neither — they're informational metadata that a real tool (goxc) turns
+into code — so they get the `@key value` shape instead, mirroring
+swaggo/swag's `// @Summary`/`// @Router` handler annotations (real,
+widely-used Go prior art for exactly this kind of per-function
+informational comment).
 
 ## Resource imports
 
@@ -161,7 +202,6 @@ build.
 import (
 	config "config.json"          // -> config (decoded any) + configBytes ([]byte)
 	cfg.(Config) "config.json"    // -> cfg (as Config, which you declare) + configBytes
-	"App.css"                     // -> App_css (string), identifier derived from the filename
 )
 ```
 
@@ -187,13 +227,12 @@ import (
 - **`.jsonl`** is one JSON value per line; `<alias>` binds to a slice
   instead of a single value — `[]TypeName` with an annotation, `[]any`
   without one.
-- **`.css`** binds the alias to the file's content as a plain Go
-  string.
-- **`.scss`** compiles first via the `sass` (dart-sass) CLI, then
-  binds the same way as `.css`. Requires `sass` on `PATH`; gox doesn't
-  bundle or reimplement a SCSS compiler. (Kept stable rather than
-  experimental since it's a straightforward compile-and-bind step, not
-  a generated subpackage.)
+
+CSS used to have its own `.css`/`.scss` resource-import loaders here.
+They're gone in favor of the `@stylesheets` page-metadata annotation
+(see "The `<html>` entrypoint" above), which reads a page's
+stylesheet(s) the same way but ties them to the page component they
+style instead of a standalone import line.
 
 ### Experimental
 
@@ -211,7 +250,7 @@ import (
   (`models.go`) and an initial `CREATE TABLE` migration
   (`migrations/0001_init.sql`), and rewrites the import to point at
   it — so `schema.Users{}` works like any normal imported type, which
-  splicing a value into the importing file (as JSON/CSS do) couldn't
+  splicing a value into the importing file (as JSON does) couldn't
   give, since Go has no runtime notion of a type namespace. Scoped to
   snapshot generation: each run regenerates the models/migration from
   the current schema; there's no diffing against a previous version
@@ -249,15 +288,14 @@ imports and supplies that package, its code is never reached, not just
 flag-gated within the same files. `internal/transpile/experimental`'s
 own package doc has more on the design.
 
-Neither `protoc` nor `sass` nor `capnp` nor `sqlc` are installed in
-the sandbox this was built in. `.scss`'s and the sqlc loader's
-"tool not found" *and* "no config found" error paths are verified;
-the sqlc loader's actual invocation and import-path derivation are
+Neither `protoc` nor `capnp` nor `sqlc` are installed in the sandbox
+this was built in. The sqlc loader's "no config found" error path is
+verified, and its actual invocation and import-path derivation are
 verified too, against a stubbed `sqlc` executable standing in for the
 real tool (gox's own discovery/invocation/derivation logic is what's
 under test, not sqlc's codegen correctness). `.proto`/`.capnp` are
 verified only against their "tool not found" error path. JSON (both
-paths), CSS, and HCL are exercised fully, including
+paths), `@title`/`@stylesheets`, and HCL are exercised fully, including
 `mustCompileAndRun`-style tests that actually `go run` the generated
 code.
 
@@ -311,8 +349,9 @@ code.
 
 - `examples/resource-imports-demo` — a JSON config decoded straight
   into a hand-declared `SiteConfig` (`config.(SiteConfig)
-  "config.json"`) and a CSS file injected into the page, both bound
-  directly from the `.gox` import block (stable loaders only):
+  "config.json"`, bound directly from the `.gox` import block) and a
+  page component whose `@title`/`@stylesheets` doc-comment annotations
+  wrap it in `gox.Document{}.Render()` automatically:
 
   ```
   go generate ./...
@@ -334,10 +373,10 @@ code.
   ```
 
 - `examples/canvas-app` — the big one: a bare-minimum Google-Docs-style
-  typing canvas tying together gox SSR pages, a CSS resource import, a
-  WASM autosave client (`domrt.Mount`/`Update` plus
-  `domrt/browser.FetchOpts` for the debounced `PUT`), real Postgres via
-  `database/sql`, and Encore-annotated handlers for the same business
+  typing canvas tying together gox SSR pages (with `@stylesheets`
+  -annotated stylesheets), a WASM autosave client (`domrt.Mount`/`Update`
+  plus `domrt/browser.FetchOpts` for the debounced `PUT`), real Postgres
+  via `database/sql`, and Encore-annotated handlers for the same business
   logic. It's a separate Go module (`examples/canvas-app/go.mod`,
   `replace`-ing this repo) so it depends on gojiberry the way an actual
   consumer would. See `examples/canvas-app/README.md` for what's
