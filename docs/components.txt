@@ -31,6 +31,11 @@ func ColorPicker(props ColorPickerProps) gox.Node
     ColorPicker renders a styled native color input, letting the browser handle
     the actual color-picker UI.
 
+func ContextMenu(props ContextMenuProps) gox.Node
+    ContextMenu renders a positioned menu (typically opened from a right-click
+    -- see html.Element.OnContextMenu) plus a full-viewport backdrop that closes
+    it on an outside click. Renders nothing when !Open.
+
 func DatePicker(props DatePickerProps) gox.Node
     DatePicker renders a styled native date input, letting the browser handle
     the actual calendar UI/locale formatting/keyboard input.
@@ -129,6 +134,26 @@ type ColorPickerProps struct {
 }
     ColorPickerProps configures ColorPicker.
 
+type ContextMenuItem struct {
+	Label    string
+	Icon     *gox.Node // optional, rendered before Label
+	Disabled bool
+	OnSelect func()
+}
+    ContextMenuItem is one entry in a ContextMenu.
+
+type ContextMenuProps struct {
+	Items []ContextMenuItem
+	Open  bool
+	X, Y  float64 // viewport position to render at -- see html.Element.OnContextMenu
+
+	// OnClose is called after an item is selected, and when the
+	// full-viewport backdrop behind the menu is clicked (a click
+	// anywhere outside it).
+	OnClose func()
+}
+    ContextMenuProps configures ContextMenu.
+
 type DatePickerProps struct {
 	Value    string // "YYYY-MM-DD"
 	Min, Max string // optional bounds, same format; "" for no bound
@@ -165,7 +190,7 @@ type DropdownProps struct {
     aren't needed).
 
 type FileUploaderProps struct {
-	DropzoneID string // id on the dropzone, for a caller to attach dom.Element.OnDrop
+	DropzoneID string // id on the dropzone, for a caller to attach html.Element.OnDrop
 	InputID    string // id on the hidden file input, for a caller to read .Files() after a change event
 
 	Accept   string // e.g. "image/*" or ".pdf,.docx"; "" allows any file
@@ -182,10 +207,10 @@ type FileUploaderProps struct {
 
     gox.Event carries no file data (see gox.Event's doc comment: Value is
     only ever a string/bool/similar simple payload), so reading the actual
-    selected/dropped files is the caller's job, done through domrt/dom directly
+    selected/dropped files is the caller's job, done through domrt/html directly
     on the client: look the input up by InputID and call its AsInput().Files(),
-    or attach domrt/dom's own Element.OnDrop to the dropzone by DropzoneID
-    for real drag-and-drop file access (dom.DragEvent.DataTransfer.Files()).
+    or attach domrt/html's own Element.OnDrop to the dropzone by DropzoneID
+    for real drag-and-drop file access (html.DragEvent.DataTransfer.Files()).
     FileUploader itself only renders the widget and prevents the browser's
     default drag-over/drop navigation.
 
