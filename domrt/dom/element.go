@@ -1,13 +1,20 @@
 //go:build js && wasm
 
+// Package dom wraps browser DOM/canvas/WebGL objects (Document,
+// Element, Window, Context2D, Context3D, observers, drag-and-drop) as
+// typed Go structs, each with a Get/Call escape hatch onto the
+// underlying js.Value for anything not covered by a typed method.
 package dom
 
 import "syscall/js"
 
+// Element wraps a DOM Element/Node. Get/Call cover anything without a
+// typed method below, the same escape hatch as the rest of this package.
 type Element struct {
 	Element js.Value
 }
 
+// ParentElement returns e's parent element, or nil if e has none.
 func (e *Element) ParentElement() *Element {
 	parent := e.Element.Get("parentElement")
 	if parent.IsUndefined() || parent.IsNull() {
@@ -16,70 +23,87 @@ func (e *Element) ParentElement() *Element {
 	return &Element{Element: parent}
 }
 
+// GetID returns e's id attribute.
 func (e *Element) GetID() string {
 	return e.Element.Get("id").String()
 }
 
+// SetID sets e's id attribute.
 func (e *Element) SetID(id string) {
 	e.Element.Set("id", id)
 }
 
+// GetClassName returns e's class attribute.
 func (e *Element) GetClassName() string {
 	return e.Element.Get("className").String()
 }
 
+// SetClassName sets e's class attribute.
 func (e *Element) SetClassName(className string) {
 	e.Element.Set("className", className)
 }
 
+// GetTagName returns e's tag name (e.g. "DIV"), uppercased per the DOM spec.
 func (e *Element) GetTagName() string {
 	return e.Element.Get("tagName").String()
 }
 
+// GetTextContent returns the concatenated text of e and its descendants.
 func (e *Element) GetTextContent() string {
 	return e.Element.Get("textContent").String()
 }
 
+// SetTextContent replaces e's children with a single text node containing text.
 func (e *Element) SetTextContent(text string) {
 	e.Element.Set("textContent", text)
 }
 
+// GetAttribute returns the named HTML attribute's value.
 func (e *Element) GetAttribute(name string) string {
 	return e.Element.Call("getAttribute", name).String()
 }
 
+// SetAttribute sets the named HTML attribute's value.
 func (e *Element) SetAttribute(name, value string) {
 	e.Element.Call("setAttribute", name, value)
 }
 
+// AppendChild appends child as e's last child.
 func (e *Element) AppendChild(child *Element) {
 	e.Element.Call("appendChild", child.Element)
 }
 
+// RemoveChild removes child from e's children.
 func (e *Element) RemoveChild(child *Element) {
 	e.Element.Call("removeChild", child.Element)
 }
 
+// GetInnerHTML returns e's serialized child markup.
 func (e *Element) GetInnerHTML() string {
 	return e.Element.Get("innerHTML").String()
 }
 
+// SetInnerHTML replaces e's children by parsing html.
 func (e *Element) SetInnerHTML(html string) {
 	e.Element.Set("innerHTML", html)
 }
 
+// GetValue returns a form element's current value (e.g. an <input>/<textarea>).
 func (e *Element) GetValue() string {
 	return e.Element.Get("value").String()
 }
 
+// SetValue sets a form element's current value.
 func (e *Element) SetValue(value string) {
 	e.Element.Set("value", value)
 }
 
+// AddEventListener registers callback for event on e.
 func (e *Element) AddEventListener(event string, callback js.Func) {
 	e.Element.Call("addEventListener", event, callback)
 }
 
+// RemoveEventListener removes a listener previously registered with the same callback value.
 func (e *Element) RemoveEventListener(event string, callback js.Func) {
 	e.Element.Call("removeEventListener", event, callback)
 }
