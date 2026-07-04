@@ -1,0 +1,50 @@
+//go:build js && wasm
+
+// Package main is a minimal two-page SPA proving browser.Router
+// actually unifies programmatic navigation and the browser's own
+// back/forward buttons under one callback: OnNavigate re-renders the
+// page for whatever the current path is, regardless of whether it got
+// there via Navigate, Replace, or the user clicking Back/Forward.
+package main
+
+import (
+	"net/url"
+	"syscall/js"
+
+	"github.com/elaous/gojiberry/domrt/browser"
+	"github.com/elaous/gojiberry/domrt/html"
+)
+
+func render(document *html.Document, u *url.URL) {
+	content := "Home page"
+	if u.Path == "/about" {
+		content = "About page"
+	}
+	document.GetElementByID("content").SetTextContent(content)
+	document.GetElementByID("path-result").SetTextContent(u.Path)
+}
+
+func onClick(fn func()) js.Func {
+	return js.FuncOf(func(this js.Value, args []js.Value) any {
+		fn()
+		return nil
+	})
+}
+
+func main() {
+	document := browser.Document()
+	router := browser.NewRouter()
+
+	router.OnNavigate(func(u *url.URL) { render(document, u) })
+
+	document.GetElementByID("go-about").AddEventListener("click", onClick(func() {
+		router.Navigate("/about")
+	}))
+	document.GetElementByID("replace-home").AddEventListener("click", onClick(func() {
+		router.Replace("/")
+	}))
+
+	render(document, router.URL())
+
+	select {} // keep the wasm program alive for the popstate/click listeners above
+}
