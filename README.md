@@ -95,14 +95,20 @@ expanded by the same recursive scan, with no extra grammar required.
   `FetchOptions.BodyValue` for a real file upload over `fetch` —,
   `Cookies` (`Get`/`All`/`Set`/`Delete`, values percent-encoded on the
   way in and out so arbitrary strings round-trip), `CurrentPosition`/
-  `WatchPosition` (Geolocation), and `NewWorker` (a dedicated Web
+  `WatchPosition` (Geolocation), `NewWorker` (a dedicated Web
   Worker running a separate Go/WASM binary on a real background thread
   — see `domrt/worker` for the worker-side half and
   `wasm-worker-demo` below; note that the worker's script does async
   work before it can register any listener, so a message posted right
   after `NewWorker` returns can arrive before the worker is listening
   and get silently dropped — have the worker signal readiness first,
-  as the demo does).
+  as the demo does), and `NewRouter` (wraps the History API's
+  `pushState`/`replaceState` plus the browser's own back/forward
+  buttons behind one `OnNavigate` callback — `pushState`/`replaceState`
+  fire no event themselves, only `popstate` does, so without this,
+  code driving routing from Go would otherwise have to duplicate its
+  "render this URL" logic in two places and remember to route both
+  through the same function; see `wasm-router-demo` below).
 - **`domrt/html`** (`GOOS=js GOARCH=wasm`) — typed `Document`/`Element`/
   `Window` wrappers around raw `syscall/js` DOM calls (`GetElementByID`,
   `AppendChild`, `AddEventListener`, `SetTimeout`, ...), each with a
@@ -605,6 +611,24 @@ generated code.
   (cd examples/wasm-worker-demo/worker && GOOS=js GOARCH=wasm go build -o ../worker.wasm .)
   cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-worker-demo/
   cd examples/wasm-worker-demo && python3 -m http.server 8080
+  # open http://localhost:8080/
+  ```
+
+- `examples/wasm-router-demo` — a minimal two-page SPA built on
+  `browser.Router`. Verified against a real headless Chromium:
+  `Navigate` updates the page and the URL and pushes exactly one new
+  history entry; a real click on the browser's own Back button (not a
+  simulated event) fires the same `OnNavigate` callback and reverts
+  both, Forward replays it; and `Replace` updates the page without
+  growing `history.length`, unlike `Navigate` — proving the "one
+  callback for any URL change" design actually holds across all three
+  paths, not just the programmatic one:
+
+  ```
+  go generate ./...
+  GOOS=js GOARCH=wasm go build -o examples/wasm-router-demo/main.wasm ./examples/wasm-router-demo/
+  cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-router-demo/
+  cd examples/wasm-router-demo && python3 -m http.server 8080
   # open http://localhost:8080/
   ```
 
