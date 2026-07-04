@@ -8,15 +8,26 @@
 // Usage:
 //
 //	DATABASE_URL=postgres://... go run ./cmd/devserver
+//
+// Set DEV=1 (cmd/devwatch does this) to inject a small live-reload
+// script into every rendered page: it polls GET /__dev/version and
+// reloads the tab once the value changes, i.e. once devwatch has
+// rebuilt and restarted this process. Off by default -- production
+// (or a plain `go run` without devwatch) renders exactly the same
+// bytes as before, no injected script, no /__dev/version route.
 package main
 
 import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
@@ -39,21 +50,46 @@ func main() {
 	}
 
 	store := canvas.NewStore(db)
-	mux := newMux(store)
+	devMode := os.Getenv("DEV") == "1"
+	mux := newMux(store, devMode)
 
 	addr := ":8090"
 	if v := os.Getenv("ADDR"); v != "" {
 		addr = v
 	}
 	fmt.Println("gox-canvas devserver listening on", addr)
+	if devMode {
+		fmt.Println("dev mode: live-reload script injected, GET /__dev/version enabled")
+	}
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
 
 // newMux wires the same canvas.Store logic that canvas/api.go's Encore
 // handlers use into a plain http.ServeMux (Go 1.22+ method+path-param
 // patterns, no third-party router needed).
-func newMux(store *canvas.Store) *http.ServeMux {
+func newMux(store *canvas.Store, devMode bool) *http.ServeMux {
 	mux := http.NewServeMux()
+
+	// devVersion identifies this process instance: cmd/devwatch kills
+	// and restarts the whole process on every rebuild, which is enough
+	// on its own to give each run a fresh value here -- no file or
+	// signal needed to bump it.
+	devVersion := strconv.FormatInt(time.Now().UnixNano(), 10)
+
+	renderPage := func(w http.ResponseWriter, page gox.Node) error {
+		if !devMode {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			return gox.Render(w, page)
+		}
+		html, err := gox.RenderString(page)
+		if err != nil {
+			return err
+		}
+		html = strings.Replace(html, "</body>", devReloadScript(devVersion)+"</body>", 1)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, err = io.WriteString(w, html)
+		return err
+	}
 
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		docs, err := store.ListDocuments(r.Context())
@@ -61,8 +97,7 @@ func newMux(store *canvas.Store) *http.ServeMux {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := gox.Render(w, canvas.HomePage(canvas.HomePageProps{Documents: docs})); err != nil {
+		if err := renderPage(w, canvas.HomePage(canvas.HomePageProps{Documents: docs})); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
@@ -83,8 +118,7 @@ func newMux(store *canvas.Store) *http.ServeMux {
 			http.Error(w, "document not found", http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := gox.Render(w, canvas.CanvasPage(canvas.CanvasPageProps{ID: id, Content: content})); err != nil {
+		if err := renderPage(w, canvas.CanvasPage(canvas.CanvasPageProps{ID: id, Content: content})); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
@@ -106,5 +140,32 @@ func newMux(store *canvas.Store) *http.ServeMux {
 
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
+	if devMode {
+		mux.HandleFunc("GET /__dev/version", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
+			io.WriteString(w, devVersion)
+		})
+	}
+
 	return mux
+}
+
+// devReloadScript polls /__dev/version and reloads the tab once it
+// differs from the value the page was rendered with -- i.e. once
+// devwatch has rebuilt and restarted the server. A failed fetch (the
+// old process already exited, the new one isn't listening yet) is
+// treated as "not ready yet", not "reload now".
+func devReloadScript(version string) string {
+	return `<script>` + fmt.Sprintf(`
+(function () {
+	var v = %q;
+	setInterval(function () {
+		fetch("/__dev/version", { cache: "no-store" }).then(function (r) {
+			return r.text();
+		}).then(function (t) {
+			if (t !== v) location.reload();
+		}).catch(function () {});
+	}, 500);
+})();
+`, version) + `</script>`
 }
