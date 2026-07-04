@@ -89,10 +89,20 @@ expanded by the same recursive scan, with no extra grammar required.
   `ReadAsText`/`ReadAsArrayBuffer`/`ReadAsDataURL`, bridged from
   `FileReader`'s events the same way as IndexedDB, plus
   `CreateObjectURL`/`RevokeObjectURL`) for reading `html.InputElement`'s
-  or `html.DataTransfer`'s `File` objects, and `FormData`
+  or `html.DataTransfer`'s `File` objects, `FormData`
   (`NewFormData`/`NewFormDataFromForm`, `Append`/`AppendFile`/`Get`/
   `Has`/`Delete`) for multipart submissions — pass its `.Value` as
-  `FetchOptions.BodyValue` for a real file upload over `fetch`.
+  `FetchOptions.BodyValue` for a real file upload over `fetch` —,
+  `Cookies` (`Get`/`All`/`Set`/`Delete`, values percent-encoded on the
+  way in and out so arbitrary strings round-trip), `CurrentPosition`/
+  `WatchPosition` (Geolocation), and `NewWorker` (a dedicated Web
+  Worker running a separate Go/WASM binary on a real background thread
+  — see `domrt/worker` for the worker-side half and
+  `wasm-worker-demo` below; note that the worker's script does async
+  work before it can register any listener, so a message posted right
+  after `NewWorker` returns can arrive before the worker is listening
+  and get silently dropped — have the worker signal readiness first,
+  as the demo does).
 - **`domrt/html`** (`GOOS=js GOARCH=wasm`) — typed `Document`/`Element`/
   `Window` wrappers around raw `syscall/js` DOM calls (`GetElementByID`,
   `AppendChild`, `AddEventListener`, `SetTimeout`, ...), each with a
@@ -133,6 +143,14 @@ expanded by the same recursive scan, with no extra grammar required.
   `Window.ComputedStyle` for a resolved, read-only view including
   inherited/stylesheet rules, and `Window.InnerWidth`/`InnerHeight`/
   `ScrollX`/`ScrollY`/`DevicePixelRatio` for the viewport itself.
+  `Element.DispatchCustomEvent`/`OnCustomEvent` dispatch and listen for
+  `CustomEvent`s, for decoupled component communication or interop with
+  non-Go script on the same page. `Window.OnError`/`OnUnhandledRejection`
+  catch a real uncaught exception or unhandled promise rejection from
+  *anywhere* on the page (not just this program), each as a `JSError` —
+  `AsGoError()` returns it as a plain `error` explicitly, `AsJSException()`
+  unwraps to the raw JS value for reading anything `JSError` doesn't
+  model (a custom error subclass's own fields, its stack trace).
 - **`domrt/svg`** (`GOOS=js GOARCH=wasm`) — `svg.CreateElement(document,
   tag)` creates an SVG element in the right namespace (`svg.Namespace`)
   — `createElement` alone produces an unrenderable element in the
@@ -149,6 +167,12 @@ expanded by the same recursive scan, with no extra grammar required.
   Cache Storage API. `domrt.Await`/`domrt.ToPromise` (in the `domrt`
   package itself) bridge JS Promises in both directions and are shared
   by `browser` and `sw` rather than duplicated.
+- **`domrt/worker`** (`GOOS=js GOARCH=wasm`) — the worker-side half of
+  `browser.Worker`: `OnMessage`/`PostMessage`/`Close`, for a Go/WASM
+  binary running inside a dedicated Web Worker's own global scope, the
+  same `importScripts('wasm_exec.js')` trick `domrt/sw` uses for
+  service workers, adapted to a worker's simpler message-passing-only
+  API (no fetch/cache lifecycle events).
 
 ## Components
 
@@ -538,22 +562,49 @@ generated code.
 - `examples/wasm-dom-extras-demo` — `domrt/html`'s dimension/scroll/style
   surface, `domrt/svg` (`CreateElement`, plus `html.Element`'s
   `ClassListAdd`/`ClassListContains`), `ImageElement`, `FormElement`,
-  and `domrt/browser`'s `FormData`.
+  `DispatchCustomEvent`/`OnCustomEvent`, `Window.OnError`/
+  `OnUnhandledRejection`, and `domrt/browser`'s `FormData`, `Cookies`,
+  and Geolocation.
   Verified against a real headless Chromium: real viewport/document/
   element dimensions (not just that the getters don't panic), scrolling
   an overflowing div and reading its new `ScrollTop` back, an inline
   style round trip plus a real `Window.ComputedStyle` resolution, an
   SVG `<circle>` with a non-zero rendered bounding box, a real PNG
   (generated with `image/png`, not hand-typed bytes) loading and
-  reporting its actual decoded `NaturalWidth`/`NaturalHeight`, and a
-  real form-submit event building a `FormData` from the form's actual
-  controls:
+  reporting its actual decoded `NaturalWidth`/`NaturalHeight`, a real
+  form-submit event building a `FormData` from the form's actual
+  controls, a cookie round trip confirmed encoded correctly on the wire
+  (via the browser's own cookie jar, not just decoded by the same code
+  that encoded it), a dispatched-and-received `CustomEvent`, a genuine
+  uncaught exception and unhandled promise rejection from an inline
+  `<script>` this Go program doesn't control (caught by `OnError`/
+  `OnUnhandledRejection`), and a geolocation reading via Playwright's
+  mocked coordinates:
 
   ```
   go generate ./...
   GOOS=js GOARCH=wasm go build -o examples/wasm-dom-extras-demo/main.wasm ./examples/wasm-dom-extras-demo/
   cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-dom-extras-demo/
   cd examples/wasm-dom-extras-demo && python3 -m http.server 8080
+  # open http://localhost:8080/
+  ```
+
+- `examples/wasm-worker-demo` — two separate Go/WASM binaries: the page
+  (`main.gox`) spawns a dedicated Web Worker running `worker/worker.go`
+  via `browser.NewWorker`, and exchanges messages with it via
+  `PostMessage`/`OnMessage`. The worker counts primes up to N by trial
+  division and posts the count back. Verified against a real headless
+  Chromium: two separate message round trips (proving the worker stays
+  alive rather than answering once and exiting) each returning the
+  correct, independently-known prime count (25 for N=100, 15 for N=50)
+  — computed by the *worker's* binary, not the page's:
+
+  ```
+  go generate ./...
+  GOOS=js GOARCH=wasm go build -o examples/wasm-worker-demo/main.wasm ./examples/wasm-worker-demo/
+  (cd examples/wasm-worker-demo/worker && GOOS=js GOARCH=wasm go build -o ../worker.wasm .)
+  cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-worker-demo/
+  cd examples/wasm-worker-demo && python3 -m http.server 8080
   # open http://localhost:8080/
   ```
 

@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gojiberry Web Worker demo</title>
+  <script src="wasm_exec.js"></script>
+</head>
+<body>
+  <button id="send-50">Send N=50</button>
+  <p>Worker: <span id="worker-result">(pending)</span></p>
+
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+      go.run(result.instance);
+    });
+  </script>
+</body>
+</html>
