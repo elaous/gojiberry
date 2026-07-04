@@ -296,15 +296,25 @@ pattern above: `Link`, `Button`, `Chip`, `RadioGroup`, `Tabs`,
 `Accordion`, `Dropdown` (single/multiple, with per-option icons and,
 in multi-select, checkboxes), `DatePicker`, `ColorPicker`, `Slider`,
 `Carousel`, `Wizard`, `FileUploader` (click-to-browse and
-drag-and-drop, with an optional progress bar), and `ContextMenu`
+drag-and-drop, with an optional progress bar), `ContextMenu`
 (typically opened from a real right-click via `domrt/html`'s
 `Element.OnContextMenu`, with a full-viewport backdrop that closes it
-on an outside click). None of them import
+on an outside click), `Tooltip` (pure CSS `:hover`/`:focus-within` —
+no JS, nothing to keep positioned), `Loader` (an indeterminate spinner
+for when there's no known completion percentage), and `Progress`
+(`Variant: ProgressLinear` or `ProgressCircle`, both determinate or
+`Indeterminate`). None of them import
 `domrt` or `syscall/js` — every interactive one is a pure function of
 its props, taking the current state and `On*` callbacks the same way
 `wasm-counter`'s `Counter` does, so a single component works unchanged
 in an SSR-only page and in a WASM page driving it with
-`domrt.Mount`/`Update`:
+`domrt.Mount`/`Update`. `Progress`'s circle variant is drawn with a CSS
+conic-gradient rather than `<svg>`/`<circle>`: `domrt.Mount`/`Update`
+create elements with plain `createElement`, which builds the wrong
+(HTML, not SVG) element for those tags, so an SVG-based ring would
+silently fail to render once mounted client-side even though it looks
+fine in server-rendered HTML (the browser's HTML parser switches
+namespace for a parsed `<svg>` tag on its own — `domrt` doesn't):
 
 ```go
 components.RadioGroup(components.RadioGroupProps{
@@ -635,14 +645,19 @@ generated code.
 - `examples/wasm-components-demo` — a gallery of every component in
   `components`, each wired to real local state and mounted with
   `domrt.Mount`/`Update`. Verified against a real headless Chromium:
-  every one of the 14 components driven through its actual
+  every one of the 17 components driven through its actual
   interactivity (clicking a tab/accordion header/carousel arrow/wizard
   step, opening the dropdown and picking a multi-select option,
   removing a chip, dragging the slider, setting the date/color inputs,
   uploading a real file read back through `FileUploader` + the File
-  API, and a real right-click opening `ContextMenu` at the actual click
-  position, then closing it via an item selection and, separately, via
-  an outside click on its backdrop), not just a compile check:
+  API, a real right-click opening `ContextMenu` at the actual click
+  position then closing it via an item selection and, separately, via
+  an outside click on its backdrop, hovering to reveal a `Tooltip` --
+  checked via its bubble's real computed opacity, not just DOM
+  presence, since it's always in the DOM -- and confirming `Loader`
+  and both `Progress` variants are actually animating via their
+  computed `animation-name`, in addition to their static attributes),
+  not just a compile check:
 
   ```
   go generate ./...

@@ -261,6 +261,28 @@ func App(st *state, render func()) gox.Node {
 			gox.El("span", []gox.Attr{gox.A("id", "contextmenu-result")},
 				gox.Text(fmt.Sprintf("open=%v selected=%s", st.contextMenuOpen, st.contextMenuSelected))),
 		),
+		gox.El("section", nil,
+			gox.El("h2", nil, gox.Text("Tooltip")),
+			components.Tooltip(components.TooltipProps{
+				Content: "Tooltip text",
+				Children: []gox.Node{
+					gox.El("button", []gox.Attr{gox.A("id", "tooltip-trigger"), gox.A("type", "button")}, gox.Text("Hover me")),
+				},
+			}),
+		),
+		gox.El("section", nil,
+			gox.El("h2", nil, gox.Text("Loader")),
+			components.Loader(components.LoaderProps{}),
+		),
+		gox.El("section", nil,
+			gox.El("h2", nil, gox.Text("Progress")),
+			gox.El("div", []gox.Attr{gox.A("id", "progress-linear")}, components.Progress(components.ProgressProps{Value: 65})),
+			gox.El("div", []gox.Attr{gox.A("id", "progress-linear-indeterminate")}, components.Progress(components.ProgressProps{Indeterminate: true})),
+			gox.El("div", []gox.Attr{gox.A("id", "progress-circle")},
+				components.Progress(components.ProgressProps{Variant: components.ProgressCircle, Value: 40})),
+			gox.El("div", []gox.Attr{gox.A("id", "progress-circle-indeterminate")},
+				components.Progress(components.ProgressProps{Variant: components.ProgressCircle, Indeterminate: true})),
+		),
 	)
 }
 
