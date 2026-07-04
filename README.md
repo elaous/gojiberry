@@ -54,8 +54,8 @@ expanded by the same recursive scan, with no extra grammar required.
   is `any`, read back type-safely via `gox.EventValue[T]`.
 - **`internal/transpile`** — the `.gox` → `.go` source-to-source
   transpiler described above, plus the stable resource-import loaders
-  (JSON/JSONC/JSONL) and the `@title`/`@stylesheets` page-metadata
-  annotation, both described below.
+  (JSON/JSONC/JSONL) and the `@title`/`@stylesheets`/`@wasm`
+  page-metadata annotations, both described below.
 - **`internal/transpile/experimental`** — the resource-import loaders
   that shell out to a mature external tool this project doesn't
   reimplement (HCL/proto/capnp/sqlc), wired in only via
@@ -165,15 +165,38 @@ Use `gox.Document` directly instead when a page's title or stylesheets
 genuinely need to vary at runtime, not just per document/request
 content within an otherwise-static page.
 
-This is deliberately a third comment shape, not a reuse of either
+A third annotation, `@wasm`, covers the other boilerplate every
+WASM-consuming SSR page in this repo otherwise hand-wrote — the
+`wasm_exec.js` loader plus a `WebAssembly.instantiateStreaming`
+bootstrap script:
+
+```go
+// @wasm /static/main.wasm
+func CanvasPage(props CanvasPageProps) gox.Node {
+	return <textarea id="canvas">{props.Content}</textarea>
+}
+```
+
+Unlike `@stylesheets`, `@wasm`'s value is a URL, not a file path — the
+compiled `.wasm` binary doesn't exist yet when its SSR page is
+transpiled (it's built separately, from a different package, usually
+afterward), so there's nothing to read at transpile time, only a
+location to generate `<script>` tags for. `wasm_exec.js`'s URL is
+derived from the `.wasm` URL's own directory (`/static/main.wasm` →
+`/static/wasm_exec.js`). Both `<script>` tags are appended *after* the
+function's own returned content, inside `<body>`, not into `Head` —
+scripts that call `document.getElementById` need the elements they
+target to already exist.
+
+These are deliberately a third comment shape, not a reuse of either
 existing convention in this codebase: a tool directive (`//go:generate`,
 `//encore:api`) triggers an external command or build-time codegen,
 and `//language=SQL` (see `editors/vscode-gox`) is a pure editor hint
-with zero effect on the compiled program. `@title`/`@stylesheets` are
-neither — they're informational metadata that a real tool (goxc) turns
-into code — so they get the `@key value` shape instead, mirroring
-swaggo/swag's `// @Summary`/`// @Router` handler annotations (real,
-widely-used Go prior art for exactly this kind of per-function
+with zero effect on the compiled program. `@title`/`@stylesheets`/
+`@wasm` are neither — they're informational metadata that a real tool
+(goxc) turns into code — so they get the `@key value` shape instead,
+mirroring swaggo/swag's `// @Summary`/`// @Router` handler annotations
+(real, widely-used Go prior art for exactly this kind of per-function
 informational comment).
 
 ## Resource imports
@@ -295,9 +318,9 @@ verified too, against a stubbed `sqlc` executable standing in for the
 real tool (gox's own discovery/invocation/derivation logic is what's
 under test, not sqlc's codegen correctness). `.proto`/`.capnp` are
 verified only against their "tool not found" error path. JSON (both
-paths), `@title`/`@stylesheets`, and HCL are exercised fully, including
-`mustCompileAndRun`-style tests that actually `go run` the generated
-code.
+paths), `@title`/`@stylesheets`/`@wasm`, and HCL are exercised fully,
+including `mustCompileAndRun`-style tests that actually `go run` the
+generated code.
 
 ## Examples
 
@@ -373,9 +396,11 @@ code.
   ```
 
 - `examples/canvas-app` — the big one: a bare-minimum Google-Docs-style
-  typing canvas tying together gox SSR pages (with `@stylesheets`
-  -annotated stylesheets), a WASM autosave client (`domrt.Mount`/`Update`
-  plus `domrt/browser.FetchOpts` for the debounced `PUT`), real Postgres
+  typing canvas tying together gox SSR pages (`@stylesheets` for the
+  page's CSS, `@wasm` for the autosave client's bootstrap `<script>`
+  tags — neither page hand-writes either), a WASM autosave client
+  (`domrt.Mount`/`Update` plus `domrt/browser.FetchOpts` for the
+  debounced `PUT`), real Postgres
   via `database/sql` (Docker Compose for local dev, schema managed with
   [Atlas](https://atlasgo.io)'s versioned migrations), and
   Encore-annotated handlers for the same business logic. `make run`
