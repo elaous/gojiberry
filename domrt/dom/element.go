@@ -83,3 +83,15 @@ func (e *Element) AddEventListener(event string, callback js.Func) {
 func (e *Element) RemoveEventListener(event string, callback js.Func) {
 	e.Element.Call("removeEventListener", event, callback)
 }
+
+// Get returns a named property not covered by a typed getter above
+// (e.g. Get("dataset"), Get("style"), Get("checked")).
+func (e *Element) Get(name string) js.Value {
+	return e.Element.Get(name)
+}
+
+// Call invokes a method not covered by a typed wrapper above (e.g.
+// Call("click"), Call("focus"), Call("querySelector", selector)).
+func (e *Element) Call(method string, args ...any) js.Value {
+	return e.Element.Call(method, args...)
+}

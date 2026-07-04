@@ -79,8 +79,17 @@ expanded by the same recursive scan, with no extra grammar required.
 - **`domrt/browser`** (`GOOS=js GOARCH=wasm`) — `browser.Global(name)`
   exposes any global browser API by name (e.g. `Global("WebAssembly")`)
   for one-offs; typed wrappers cover the APIs most apps need: `Fetch`/
-  `Response.Text`/`Response.JSON`, `LocalStorage`/`SessionStorage`, and
-  `Connect` (WebSocket).
+  `Response.Text`/`Response.JSON`, `LocalStorage`/`SessionStorage`,
+  `Connect` (WebSocket), and `Document()`/`Window()` (see `domrt/dom`).
+- **`domrt/dom`** (`GOOS=js GOARCH=wasm`) — typed `Document`/`Element`/
+  `Window` wrappers around raw `syscall/js` DOM calls (`GetElementByID`,
+  `AppendChild`, `AddEventListener`, `SetTimeout`, ...), each with a
+  `Get`/`Call` escape hatch for whatever a typed method doesn't cover
+  yet, the same principle as `browser.Global`. `Window.AddEventListener`
+  returns the `js.Func` it registered, since `RemoveEventListener` only
+  works when given that exact reference back; `SetTimeout`/
+  `SetInterval`/`RequestAnimationFrame` return the id their `Clear*`
+  counterpart needs for the same reason.
 - **`domrt/sw`** (`GOOS=js GOARCH=wasm`) — lets a Go/WASM binary run as
   a browser service worker: `OnInstall`/`OnActivate`/`OnFetch` register
   the lifecycle/fetch events, `ExtendableEvent.WaitUntil` and

@@ -10,32 +10,55 @@ type Window struct {
 	Window js.Value
 }
 
-func (w *Window) SetTimeout(fn func(), delay int) {
-	w.Window.Call("setTimeout", js.FuncOf(func(this js.Value, args []js.Value) any {
+// SetTimeout schedules fn to run once after delay milliseconds and
+// returns the id ClearTimeout needs to cancel it.
+func (w *Window) SetTimeout(fn func(), delay int) int {
+	id := w.Window.Call("setTimeout", js.FuncOf(func(this js.Value, args []js.Value) any {
 		fn()
 		return nil
 	}), delay)
+	return id.Int()
 }
 
-func (w *Window) RequestAnimationFrame(fn func()) {
-	w.Window.Call("requestAnimationFrame", js.FuncOf(func(this js.Value, args []js.Value) any {
+// SetInterval schedules fn to run every delay milliseconds and returns
+// the id ClearInterval needs to stop it.
+func (w *Window) SetInterval(fn func(), delay int) int {
+	id := w.Window.Call("setInterval", js.FuncOf(func(this js.Value, args []js.Value) any {
+		fn()
+		return nil
+	}), delay)
+	return id.Int()
+}
+
+// RequestAnimationFrame schedules fn before the next repaint and
+// returns the id ClearAnimationFrame needs to cancel it.
+func (w *Window) RequestAnimationFrame(fn func()) int {
+	id := w.Window.Call("requestAnimationFrame", js.FuncOf(func(this js.Value, args []js.Value) any {
 		fn()
 		return nil
 	}))
+	return id.Int()
 }
 
-func (w *Window) AddEventListener(event string, fn func()) {
-	w.Window.Call("addEventListener", event, js.FuncOf(func(this js.Value, args []js.Value) any {
+// AddEventListener registers fn for event and returns the js.Func
+// backing it. Pass that same value to RemoveEventListener to
+// unregister it later -- removeEventListener only works when given
+// the exact function reference addEventListener was called with, so
+// wrapping fn in a fresh js.Func on removal (as an earlier version of
+// this method did) can never actually remove anything.
+func (w *Window) AddEventListener(event string, fn func()) js.Func {
+	cb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		fn()
 		return nil
-	}))
+	})
+	w.Window.Call("addEventListener", event, cb)
+	return cb
 }
 
-func (w *Window) RemoveEventListener(event string, fn func()) {
-	w.Window.Call("removeEventListener", event, js.FuncOf(func(this js.Value, args []js.Value) any {
-		fn()
-		return nil
-	}))
+// RemoveEventListener unregisters the listener callback returned by
+// the matching AddEventListener call.
+func (w *Window) RemoveEventListener(event string, callback js.Func) {
+	w.Window.Call("removeEventListener", event, callback)
 }
 
 func (w *Window) Location() js.Value {
@@ -76,6 +99,16 @@ func (w *Window) ClearInterval(id int) {
 
 func (w *Window) ClearAnimationFrame(id int) {
 	w.Window.Call("cancelAnimationFrame", id)
+}
+
+// Get returns a named property not covered by a typed getter above.
+func (w *Window) Get(name string) js.Value {
+	return w.Window.Get(name)
+}
+
+// Call invokes a method not covered by a typed wrapper above.
+func (w *Window) Call(method string, args ...any) js.Value {
+	return w.Window.Call(method, args...)
 }
 
 func GetWindow() *Window {

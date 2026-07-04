@@ -61,7 +61,6 @@ func CanvasPage(props CanvasPageProps) gox.Node {
 	return <>
 		<p><a href="/">Back</a></p>
 		<div id="app" data-doc-id={props.ID}>
-			<div>hi</div>
 			<textarea id="canvas">{props.Content}</textarea>
 			<div><span id="status">saved</span></div>
 		</div>
