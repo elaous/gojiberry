@@ -47,21 +47,16 @@ type CanvasPageProps struct {
 	Content string
 }
 
-// bootstrapScript loads the WASM autosave client. It's plain,
-// unparameterized JS (no Go values interpolated into it), so there's
-// no injection concern in embedding it as a raw script body.
-const bootstrapScript = `
-const go = new Go();
-WebAssembly.instantiateStreaming(fetch("/static/main.wasm"), go.importObject).then((result) => {
-	go.run(result.instance);
-});
-`
-
 // CanvasPage is the typing canvas for one document: a textarea seeded
 // with its current content, a status indicator, and the WASM client
 // that debounces edits into PUT /api/documents/{id} autosave calls.
+// @wasm below pulls in the wasm_exec.js loader and the
+// WebAssembly.instantiateStreaming bootstrap script automatically
+// (see internal/transpile/page_metadata.go) -- this page doesn't
+// write either <script> tag itself.
 //
 // @stylesheets static/style.css
+// @wasm /static/main.wasm
 func CanvasPage(props CanvasPageProps) gox.Node {
 	return <>
 		<p><a href="/">Back</a></p>
@@ -69,7 +64,5 @@ func CanvasPage(props CanvasPageProps) gox.Node {
 			<textarea id="canvas">{props.Content}</textarea>
 			<div><span id="status">saved</span></div>
 		</div>
-		<script src="/static/wasm_exec.js"></script>
-		<script>{gox.Raw(bootstrapScript)}</script>
 	</>
 }
