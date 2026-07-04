@@ -50,6 +50,21 @@ func main() {
 	}))
 	button.Click()
 
+	// Element's HTMLElement surface (Focus/Blur, Hidden, TabIndex,
+	// BoundingRect, ScrollIntoView, inline style get/set), exercised on
+	// the same button.
+	button.SetTabIndex(0)
+	button.SetTitle("a real title")
+	button.SetStyleProperty("background-color", "rgb(1, 2, 3)")
+	rect := button.BoundingRect()
+	button.Focus()
+	active := document.Get("activeElement")
+	document.GetElementByID("htmlelement-result").SetTextContent(
+		fmt.Sprintf("tabindex=%d title=%s bg=%s hidden=%v rect=%v focused=%v",
+			button.TabIndex(), button.GetTitle(), button.StyleProperty("background-color"),
+			button.Hidden(), rect.Width > 0 && rect.Height > 0, active.Equal(button.JSValue())))
+	button.Blur()
+
 	// SelectElement: SetSelectedIndex, Multiple, and Options().
 	sel := document.GetElementByID("sel").AsSelect()
 	sel.SetSelectedIndex(1)
