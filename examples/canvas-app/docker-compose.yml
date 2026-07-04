@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: canvas
+      POSTGRES_PASSWORD: canvas
+      POSTGRES_DB: canvas
+    ports:
+      # Host port 5433, not 5432: this repo's own README also documents
+      # running Postgres natively on 5432 (for sandboxes where Docker
+      # Hub pulls are blocked by network policy), so this avoids a
+      # collision if both are ever running at once.
+      - "5433:5432"
+    volumes:
+      - canvas-db-data:/var/lib/postgresql/data
+      # No docker-entrypoint-initdb.d mount: Atlas (canvas/atlas.hcl)
+      # owns applying migrations now, via `make db-migrate`, and it
+      # tracks what's applied in its own atlas_schema_revisions table.
+      # Auto-applying the schema here too would leave that table out
+      # of sync with reality on a fresh container.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U canvas -d canvas"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  canvas-db-data:

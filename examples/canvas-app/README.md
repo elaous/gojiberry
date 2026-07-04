@@ -18,7 +18,33 @@ the main module.
   for editor syntax highlighting; `sqlQuery` strips that marker before
   the string reaches the driver (Postgres comments are `--`, not `//`,
   so leaving it in would be a syntax error, not a no-op).
-- **`canvas/migrations/1_create_documents.up.sql`** -- the one table.
+- **`canvas/schema.sql`** -- the desired-state schema (the `documents`
+  table) that [Atlas](https://atlasgo.io) diffs against to generate
+  migrations.
+- **`canvas/migrations/`** -- versioned migrations, managed by Atlas
+  (`canvas/atlas.hcl`) in the `golang-migrate` directory format
+  (`<number>_<description>.up.sql` + `.down.sql`, tracked by an
+  `atlas.sum` checksum file) rather than Atlas's own default format,
+  since `encore.dev/storage/sqldb.DatabaseConfig.Migrations` documents
+  that exact naming convention as what it expects. The one migration
+  here (`1_create_documents.up.sql`) predates Atlas; `atlas migrate
+  hash` retrofitted the checksum file over it, and `atlas migrate diff`
+  confirms it's byte-for-byte in sync with `schema.sql` (see "What's
+  actually verified" below). Going forward, edit `schema.sql` and run
+  `make db-diff name=...` to generate the next migration instead of
+  hand-writing SQL.
+- **`docker-compose.yml`** -- a Postgres 16 container for local dev
+  (mapped to host port 5433, not 5432, so it doesn't collide with a
+  natively-installed Postgres some sandboxes use instead -- see that
+  file's comment). It starts empty; Atlas owns applying migrations to
+  it (`make db-migrate`), so its own revision-tracking table
+  (`atlas_schema_revisions`) stays authoritative instead of racing a
+  container auto-init script.
+- **`Makefile`** -- wraps the whole workflow: `make run` chains
+  `generate` (goxc) → `wasm` (build + stage the WASM client) → `db-up`
+  (docker compose, waits for the healthcheck) → `db-migrate` (Atlas)
+  → the dev server itself. `make test`, `make db-status`, `make
+  db-diff name=...`, and `make clean` cover the rest.
 - **`canvas/pages.gox`** -- `HomePage` (list + "new document" form) and
   `CanvasPage` (the textarea) as gox SSR components. Both are annotated
   with `// @stylesheets style.css` (gojiberry's
@@ -48,17 +74,30 @@ the routing layer is the only thing that differs.
 
 ## What's actually verified, and how
 
-Run from this directory (`examples/canvas-app`):
+Run from this directory (`examples/canvas-app`), with Docker and
+[Atlas](https://atlasgo.io/docs#installation) installed:
+
+```
+make run
+```
+
+That's `generate` (goxc) + `wasm` (build the WASM client) + `db-up`
+(Postgres via Docker Compose) + `db-migrate` (Atlas applies
+`canvas/migrations/` to it) + the dev server itself, in order. `make
+test` runs the same way against the same database. If Docker isn't
+available, the equivalent manual path against a natively-installed
+Postgres still works (this is what the original version of this
+example used, before Docker access was confirmed in the sandbox this
+was built in):
 
 ```
 go generate ./...
 GOOS=js GOARCH=wasm go build -o static/main.wasm ./cmd/wasmclient/
 cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" static/
 
-# a real Postgres, migrated:
-createuser canvas --pwprompt   # or: docker run -e POSTGRES_PASSWORD=... postgres
+createuser canvas --pwprompt
 createdb -O canvas canvas
-psql "postgres://canvas:canvas@127.0.0.1:5432/canvas" -f canvas/migrations/1_create_documents.up.sql
+(cd canvas && atlas migrate apply --env local --url "postgres://canvas:canvas@127.0.0.1:5432/canvas?sslmode=disable")
 
 DATABASE_URL="postgres://canvas:canvas@127.0.0.1:5432/canvas?sslmode=disable" go run ./cmd/devserver
 ```
@@ -73,6 +112,22 @@ DATABASE_URL="postgres://canvas:canvas@127.0.0.1:5432/canvas?sslmode=disable" go
   full create -> view -> save -> reload -> list flow through
   `httptest.NewServer` against a real, locally running Postgres (no
   mocks, no in-memory fake).
+- **`docker compose up -d --wait`** genuinely pulls and starts a
+  Postgres 16 container and blocks until its healthcheck passes (not
+  just "the YAML parses").
+- **Atlas** genuinely installed (`curl -fsSL
+  https://release.ariga.io/atlas/atlas-linux-amd64-latest`) and
+  exercised for real, not just config written and assumed correct:
+  `atlas migrate hash` retrofitted `atlas.sum` over the pre-existing
+  migration, `atlas migrate diff` confirmed it's in sync with
+  `schema.sql` (no phantom drift), `atlas migrate apply` against a
+  freshly emptied container actually created the `documents` table and
+  its own `atlas_schema_revisions` tracking table, `atlas migrate
+  status` reported it up to date, and a scratch copy with a column
+  added to `schema.sql` produced a real, correct
+  `ALTER TABLE ... ADD COLUMN` up/down migration pair via `atlas
+  migrate diff` -- the generate-a-migration loop this whole setup
+  exists for.
 - **A real headless Chromium** (Playwright) drove the actual UI against
   a running `devserver`: clicked "New document", typed into the
   textarea, watched the status indicator go through
