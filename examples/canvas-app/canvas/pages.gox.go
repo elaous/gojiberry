@@ -55,8 +55,8 @@ var pageStyle_CanvasPage_style_css = "body {\n\tfont-family: system-ui, sans-ser
 // (see internal/transpile/page_metadata.go) -- this page doesn't
 // write either <script> tag itself.
 //
-// @stylesheets static/style.css
 // @wasm /static/main.wasm
+// @stylesheets static/style.css
 func CanvasPage(props CanvasPageProps) gox.Node {
-	return gox.Document{Title: DefaultTitle, Head: []gox.Node{gox.Style(pageStyle_CanvasPage_style_css)}, Body: gox.Frag(gox.Frag(gox.El("p", nil, gox.El("a", []gox.Attr{gox.A("href", "/")}, gox.Text("Back"))), gox.El("div", []gox.Attr{gox.A("id", "app"), gox.A("data-doc-id", gox.AttrVal(props.ID))}, gox.El("textarea", []gox.Attr{gox.A("id", "canvas")}, gox.Child(props.Content)), gox.El("div", nil, gox.El("span", []gox.Attr{gox.A("id", "status")}, gox.Text("saved"))))), gox.El("script", []gox.Attr{gox.A("src", "/static/wasm_exec.js")}), gox.El("script", nil, gox.Raw("\nconst go = new Go();\nWebAssembly.instantiateStreaming(fetch(\"/static/main.wasm\"), go.importObject).then((result) => {\n\tgo.run(result.instance);\n});\n")))}.Render()
+	return gox.Document{Title: DefaultTitle, Head: []gox.Node{gox.Style(pageStyle_CanvasPage_style_css)}, Body: gox.Frag(gox.Frag(gox.El("p", nil, gox.El("a", []gox.Attr{gox.A("href", "/")}, gox.Text("Back"))), gox.El("div", []gox.Attr{gox.A("id", "app"), gox.A("data-doc-id", gox.AttrVal(props.ID))}, gox.El("div", nil, gox.Text("hi")), gox.El("textarea", []gox.Attr{gox.A("id", "canvas")}, gox.Child(props.Content)), gox.El("div", nil, gox.El("span", []gox.Attr{gox.A("id", "status")}, gox.Text("saved"))))), gox.El("script", []gox.Attr{gox.A("src", "/static/wasm_exec.js")}), gox.El("script", nil, gox.Raw("\nconst go = new Go();\nWebAssembly.instantiateStreaming(fetch(\"/static/main.wasm\"), go.importObject).then((result) => {\n\tgo.run(result.instance);\n});\n")))}.Render()
 }

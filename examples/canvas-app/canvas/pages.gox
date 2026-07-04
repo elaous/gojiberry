@@ -55,12 +55,13 @@ type CanvasPageProps struct {
 // (see internal/transpile/page_metadata.go) -- this page doesn't
 // write either <script> tag itself.
 //
-// @stylesheets static/style.css
 // @wasm /static/main.wasm
+// @stylesheets static/style.css
 func CanvasPage(props CanvasPageProps) gox.Node {
 	return <>
 		<p><a href="/">Back</a></p>
 		<div id="app" data-doc-id={props.ID}>
+			<div>hi</div>
 			<textarea id="canvas">{props.Content}</textarea>
 			<div><span id="status">saved</span></div>
 		</div>
