@@ -120,7 +120,9 @@ expanded by the same recursive scan, with no extra grammar required.
   `FormElement` (`AsForm()`, `Submit`/`Reset`/`CheckValidity`/
   `Elements`/`OnSubmit`). Also: `NewIntersectionObserver`/
   `NewResizeObserver`, `Element.OnDragStart`/`OnDragOver`/`OnDrop` plus
-  a typed `DataTransfer`, `Document.CreateElementNS` (see `domrt/svg`
+  a typed `DataTransfer`, `Element.OnContextMenu` (suppresses the
+  browser's native menu and reports the click's viewport position, for
+  `components.ContextMenu` or your own), `Document.CreateElementNS` (see `domrt/svg`
   for SVG — use `Element.ClassListAdd`/`ClassListContains` rather than
   `GetClassName`/`SetClassName` on an SVG element, since its
   `className` is an `SVGAnimatedString` object, not a plain string),
@@ -263,8 +265,11 @@ informational comment).
 pattern above: `Link`, `Button`, `Chip`, `RadioGroup`, `Tabs`,
 `Accordion`, `Dropdown` (single/multiple, with per-option icons and,
 in multi-select, checkboxes), `DatePicker`, `ColorPicker`, `Slider`,
-`Carousel`, `Wizard`, and `FileUploader` (click-to-browse and
-drag-and-drop, with an optional progress bar). None of them import
+`Carousel`, `Wizard`, `FileUploader` (click-to-browse and
+drag-and-drop, with an optional progress bar), and `ContextMenu`
+(typically opened from a real right-click via `domrt/html`'s
+`Element.OnContextMenu`, with a full-viewport backdrop that closes it
+on an outside click). None of them import
 `domrt` or `syscall/js` — every interactive one is a pure function of
 its props, taking the current state and `On*` callbacks the same way
 `wasm-counter`'s `Counter` does, so a single component works unchanged
@@ -292,7 +297,11 @@ zero JS (a label natively opens its associated control), but since
 selected or dropped files is done through `domrt/html` directly by the
 consuming app (`InputElement.Files()`, or `Element.OnDrop` for
 drag-and-drop) — see `FileUploaderProps`'s doc comment and the
-`wasm-components-demo` example below.
+`wasm-components-demo` example below. `ContextMenu` has the same
+split for the same reason: `gox.Event` carries no `clientX`/`clientY`,
+so the consuming app wires `domrt/html`'s `Element.OnContextMenu` on
+whatever should be right-clickable and passes the position it reports
+straight through as `ContextMenuProps.X`/`Y`.
 
 `components/style.css` is the one stylesheet all of them share; pull
 it into a page with `@stylesheets ../../components/style.css` (path
@@ -551,12 +560,14 @@ generated code.
 - `examples/wasm-components-demo` — a gallery of every component in
   `components`, each wired to real local state and mounted with
   `domrt.Mount`/`Update`. Verified against a real headless Chromium:
-  every one of the 13 components driven through its actual
+  every one of the 14 components driven through its actual
   interactivity (clicking a tab/accordion header/carousel arrow/wizard
   step, opening the dropdown and picking a multi-select option,
   removing a chip, dragging the slider, setting the date/color inputs,
-  and uploading a real file read back through `FileUploader` + the File
-  API), not just a compile check:
+  uploading a real file read back through `FileUploader` + the File
+  API, and a real right-click opening `ContextMenu` at the actual click
+  position, then closing it via an item selection and, separately, via
+  an outside click on its backdrop), not just a compile check:
 
   ```
   go generate ./...
