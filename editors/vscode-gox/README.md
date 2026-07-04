@@ -69,6 +69,19 @@ grammar reapplies at *every* nesting depth instead, which is what
 `package.json`) does. `test/tokenize.js` exercises exactly this case
 against the repo's real example files.
 
+The selector is actually `"L:source.gox - comment"`, not just
+`"L:source.gox"` -- without the exclusion, a plain comment mentioning
+a bare `<Word>`-shaped sequence with no closing tag nearby (e.g. "this
+page doesn't write either `<script>` tag itself", a real doc comment
+that used to trigger exactly this) gets misread as an unterminated
+tag-open. Since `tagNamed`'s own pattern list doesn't include
+`source.go`, everything after that point -- not just tags, ordinary
+`func`/identifier/type highlighting too -- silently stops working for
+the rest of the file, because the tokenizer is stuck waiting for a
+`</script>` that never comes.  `test/tag-in-comment-test.js` is a
+regression test for exactly this against
+`test/fixtures/tag-mention-in-comment.gox`.
+
 ## Known limitations
 
 - Tag detection in the grammar is a heuristic (`<` immediately
