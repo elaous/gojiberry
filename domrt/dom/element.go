@@ -8,11 +8,46 @@ package dom
 
 import "syscall/js"
 
+// DomNode is implemented by Element and every element type in this
+// package that embeds it (CanvasElement, AnchorElement, ButtonElement,
+// SelectElement, InputElement, ...), so code that only needs the
+// common DOM operations can accept any of them interchangeably.
+type DomNode interface {
+	JSValue() js.Value
+	Get(name string) js.Value
+	Call(method string, args ...any) js.Value
+	GetID() string
+	SetID(id string)
+	GetClassName() string
+	SetClassName(className string)
+	GetTagName() string
+	GetTextContent() string
+	SetTextContent(text string)
+	GetAttribute(name string) string
+	SetAttribute(name, value string)
+	AppendChild(child DomNode)
+	RemoveChild(child DomNode)
+	GetInnerHTML() string
+	SetInnerHTML(html string)
+	AddEventListener(event string, callback js.Func)
+	RemoveEventListener(event string, callback js.Func)
+	Set(name string, value any)
+}
+
 // Element wraps a DOM Element/Node. Get/Call cover anything without a
 // typed method below, the same escape hatch as the rest of this package.
+//
+// Element is also the base every more specific element type
+// (CanvasElement, AnchorElement, ButtonElement, SelectElement,
+// InputElement, ...) embeds to pick up the common methods below; use
+// the As* cast helpers (AsCanvas, AsAnchor, ...) to obtain one of those
+// from a plain Element.
 type Element struct {
 	Element js.Value
 }
+
+// JSValue returns the underlying js.Value, satisfying DomNode.
+func (e *Element) JSValue() js.Value { return e.Element }
 
 // ParentElement returns e's parent element, or nil if e has none.
 func (e *Element) ParentElement() *Element {
@@ -69,13 +104,13 @@ func (e *Element) SetAttribute(name, value string) {
 }
 
 // AppendChild appends child as e's last child.
-func (e *Element) AppendChild(child *Element) {
-	e.Element.Call("appendChild", child.Element)
+func (e *Element) AppendChild(child DomNode) {
+	e.Element.Call("appendChild", child.JSValue())
 }
 
 // RemoveChild removes child from e's children.
-func (e *Element) RemoveChild(child *Element) {
-	e.Element.Call("removeChild", child.Element)
+func (e *Element) RemoveChild(child DomNode) {
+	e.Element.Call("removeChild", child.JSValue())
 }
 
 // GetInnerHTML returns e's serialized child markup.
@@ -118,4 +153,10 @@ func (e *Element) Get(name string) js.Value {
 // Call("click"), Call("focus"), Call("querySelector", selector)).
 func (e *Element) Call(method string, args ...any) js.Value {
 	return e.Element.Call(method, args...)
+}
+
+// Set assigns a named property not covered by a typed setter above
+// (e.g. Set("checked", true), Set("width", 100)).
+func (e *Element) Set(name string, value any) {
+	e.Element.Set(name, value)
 }
