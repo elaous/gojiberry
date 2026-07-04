@@ -629,6 +629,14 @@ type DomNode interface {
 	RemoveEventListener(event string, callback js.Func)
 	Set(name string, value any)
 	Click()
+	Focus()
+	Blur()
+	Hidden() bool
+	SetHidden(hidden bool)
+	BoundingRect() Rect
+	ScrollIntoView(smooth bool)
+	StyleProperty(name string) string
+	SetStyleProperty(name, value string)
 }
     DomNode is implemented by Element and every element type in this package
     that embeds it (CanvasElement, AnchorElement, ButtonElement, SelectElement,
@@ -681,6 +689,13 @@ func (e *Element) AsInput() *InputElement
 func (e *Element) AsSelect() *SelectElement
     AsSelect casts e to a SelectElement, or returns nil if e isn't a <select>.
 
+func (e *Element) Blur()
+    Blur removes keyboard focus from e.
+
+func (e *Element) BoundingRect() Rect
+    BoundingRect returns e's size and position relative to the viewport, e.g.
+    for positioning a dropdown/tooltip against it.
+
 func (e *Element) Call(method string, args ...any) js.Value
     Call invokes a method not covered by a typed wrapper above (e.g.
     Call("click"), Call("focus"), Call("querySelector", selector)).
@@ -689,6 +704,13 @@ func (e *Element) Click()
     Click synthesizes a click on e, the same as a user click would (and,
     for elements with default click behavior like <a>/<input>, triggers that
     behavior too).
+
+func (e *Element) ContentEditable() string
+    ContentEditable returns whether e's contents can be edited in place ("true",
+    "false", "plaintext-only", or "inherit").
+
+func (e *Element) Focus()
+    Focus moves keyboard focus to e.
 
 func (e *Element) Get(name string) js.Value
     Get returns a named property not covered by a typed getter above (e.g.
@@ -699,6 +721,9 @@ func (e *Element) GetAttribute(name string) string
 
 func (e *Element) GetClassName() string
     GetClassName returns e's class attribute.
+
+func (e *Element) GetDir() string
+    GetDir returns e's directionality ("ltr", "rtl", or "auto").
 
 func (e *Element) GetID() string
     GetID returns e's id attribute.
@@ -712,12 +737,32 @@ func (e *Element) GetTagName() string
 func (e *Element) GetTextContent() string
     GetTextContent returns the concatenated text of e and its descendants.
 
+func (e *Element) GetTitle() string
+    GetTitle returns e's title attribute (usually shown as a tooltip).
+
 func (e *Element) GetValue() string
     GetValue returns a form element's current value (e.g. an
     <input>/<textarea>).
 
+func (e *Element) Hidden() bool
+    Hidden returns whether e is hidden (the hidden attribute/property).
+
 func (e *Element) JSValue() js.Value
     JSValue returns the underlying js.Value, satisfying DomNode.
+
+func (e *Element) OffsetHeight() int
+    OffsetHeight returns e's layout height in pixels, including borders and
+    padding.
+
+func (e *Element) OffsetLeft() int
+    OffsetLeft returns e's distance in pixels from its offsetParent's left edge.
+
+func (e *Element) OffsetTop() int
+    OffsetTop returns e's distance in pixels from its offsetParent's top edge.
+
+func (e *Element) OffsetWidth() int
+    OffsetWidth returns e's layout width in pixels, including borders and
+    padding.
 
 func (e *Element) OnDragOver(fn func(evt DragEvent)) js.Func
     OnDragOver registers fn for the dragover event (fired repeatedly on the drop
@@ -744,6 +789,10 @@ func (e *Element) RemoveEventListener(event string, callback js.Func)
     RemoveEventListener removes a listener previously registered with the same
     callback value.
 
+func (e *Element) ScrollIntoView(smooth bool)
+    ScrollIntoView scrolls e's ancestors so it's visible, smoothly if smooth is
+    true (instantly otherwise).
+
 func (e *Element) Set(name string, value any)
     Set assigns a named property not covered by a typed setter above (e.g.
     Set("checked", true), Set("width", 100)).
@@ -754,8 +803,17 @@ func (e *Element) SetAttribute(name, value string)
 func (e *Element) SetClassName(className string)
     SetClassName sets e's class attribute.
 
+func (e *Element) SetContentEditable(value string)
+    SetContentEditable sets whether e's contents can be edited in place.
+
+func (e *Element) SetDir(dir string)
+    SetDir sets e's directionality.
+
 func (e *Element) SetDraggable(draggable bool)
     SetDraggable marks (or unmarks) e as a drag source.
+
+func (e *Element) SetHidden(hidden bool)
+    SetHidden hides or shows e.
 
 func (e *Element) SetID(id string)
     SetID sets e's id attribute.
@@ -763,12 +821,30 @@ func (e *Element) SetID(id string)
 func (e *Element) SetInnerHTML(html string)
     SetInnerHTML replaces e's children by parsing html.
 
+func (e *Element) SetStyleProperty(name, value string)
+    SetStyleProperty sets a CSS property on e's inline style.
+
+func (e *Element) SetTabIndex(index int)
+    SetTabIndex sets e's position in the tab order.
+
 func (e *Element) SetTextContent(text string)
     SetTextContent replaces e's children with a single text node containing
     text.
 
+func (e *Element) SetTitle(title string)
+    SetTitle sets e's title attribute.
+
 func (e *Element) SetValue(value string)
     SetValue sets a form element's current value.
+
+func (e *Element) StyleProperty(name string) string
+    StyleProperty returns the value of a CSS property from e's inline style (not
+    any value it picked up from a stylesheet -- use Window's Get/Call escape
+    hatch for getComputedStyle if that's what's needed).
+
+func (e *Element) TabIndex() int
+    TabIndex returns e's position in the tab order (-1 if it's programmatically
+    focusable but not reachable via Tab).
 
 type ImageData struct {
 	Width, Height int
@@ -833,6 +909,12 @@ func (o *IntersectionObserver) Observe(el *Element)
 
 func (o *IntersectionObserver) Unobserve(el *Element)
     Unobserve stops watching el.
+
+type Rect struct {
+	X, Y, Width, Height, Top, Right, Bottom, Left float64
+}
+    Rect is an element's size and position relative to the viewport, as returned
+    by Element.BoundingRect (getBoundingClientRect).
 
 type ResizeEntry struct {
 	Target        *Element
