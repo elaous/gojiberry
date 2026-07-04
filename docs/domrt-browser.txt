@@ -1,0 +1,186 @@
+package browser // import "github.com/elaous/gojiberry/domrt/browser"
+
+Package browser exposes browser/JS APIs to Go/WASM code: a generic Global()
+escape hatch for any named global object, plus typed, idiomatic-Go wrappers for
+the APIs almost every app needs (fetch, localStorage/sessionStorage, WebSocket)
+so application code doesn't have to hand-roll syscall/js calls for them.
+
+VARIABLES
+
+var LocalStorage = storageArea{"localStorage"}
+    LocalStorage wraps window.localStorage.
+
+var SessionStorage = storageArea{"sessionStorage"}
+    SessionStorage wraps window.sessionStorage.
+
+
+FUNCTIONS
+
+func Document() *dom.Document
+    Document returns the global document object.
+
+func GetUserMedia(constraints MediaStreamConstraints) (js.Value, error)
+    GetUserMedia prompts for (or silently grants, depending on prior permission)
+    camera/microphone access and returns the resulting MediaStream, blocking
+    until the browser responds.
+
+func Global(name string) js.Value
+    Global returns the named global browser API object (e.g.
+    Global("WebAssembly"), Global("Notification"), Global("crypto")) for APIs
+    this package doesn't have a typed wrapper for yet.
+
+func ReadClipboardText() (string, error)
+    ReadClipboardText reads the current system clipboard text, blocking until
+    the browser responds.
+
+func SetVideoSource(videoElement js.Value, stream js.Value)
+    SetVideoSource assigns stream (from GetUserMedia) as a <video> element's
+    source, the srcObject-based replacement for the old createObjectURL(stream)
+    pattern.
+
+func StopStream(stream js.Value)
+    StopStream stops every track in stream (camera/mic LED off, etc.).
+
+func Window() *dom.Window
+    Window returns the global window object.
+
+func WriteClipboardText(text string) error
+    WriteClipboardText writes text to the system clipboard, blocking until
+    the browser confirms it (or denies it, e.g. missing permission or an
+    insecure/non-focused document).
+
+
+TYPES
+
+type Database struct {
+	Value js.Value
+}
+    Database is an open IndexedDB connection.
+
+func OpenDatabase(name string, version int, upgrade func(db *Database)) (*Database, error)
+    OpenDatabase opens (creating if necessary) database name at the
+    given version, blocking until open completes. upgrade, if non-nil,
+    runs synchronously during the browser's "upgradeneeded" event -- the only
+    time object stores can be created or removed -- which fires on a brand new
+    database or after bumping version.
+
+func (d *Database) Close()
+    Close closes the database connection.
+
+func (d *Database) CreateObjectStore(name, keyPath string) js.Value
+    CreateObjectStore creates a new object store keyed by keyPath. Only valid
+    inside OpenDatabase's upgrade callback.
+
+func (d *Database) Transaction(storeNames []string, mode string) *Transaction
+    Transaction starts a transaction over storeNames in the given mode
+    ("readonly" or "readwrite").
+
+type FetchOptions struct {
+	Method  string
+	Body    string
+	Headers map[string]string
+}
+    FetchOptions configures a FetchOpts call. Method defaults to "GET" if empty.
+    Body, if non-empty, is sent as the request body.
+
+type MediaDeviceInfo struct {
+	DeviceID string
+	Kind     string
+	Label    string
+}
+    MediaDeviceInfo describes one camera/microphone/speaker as reported by
+    EnumerateDevices.
+
+func EnumerateDevices() ([]MediaDeviceInfo, error)
+    EnumerateDevices lists the available media input/output devices. Label is
+    only populated for devices the page already has permission to use (e.g.
+    after a successful GetUserMedia call).
+
+type MediaStreamConstraints struct {
+	Audio bool
+	Video bool
+}
+    MediaStreamConstraints selects which media getUserMedia should request.
+    Leave a field false to not request that kind of track.
+
+type ObjectStore struct {
+	Value js.Value
+}
+    ObjectStore is a key/value store within a Transaction.
+
+func (s *ObjectStore) Clear() error
+    Clear removes every record in the store.
+
+func (s *ObjectStore) Delete(key any) error
+    Delete removes the record stored under key.
+
+func (s *ObjectStore) Get(key any) (js.Value, error)
+    Get retrieves the value stored under key, blocking until the request
+    completes. The result is JS `undefined` if key doesn't exist -- check with
+    .IsUndefined().
+
+func (s *ObjectStore) Put(value any) error
+    Put inserts or updates value, blocking until the request completes.
+
+type Response struct {
+	Status int
+	OK     bool
+	// Has unexported fields.
+}
+    Response is the result of Fetch.
+
+func Fetch(url string) (*Response, error)
+    Fetch wraps window.fetch(url) with a plain GET, blocking until the response
+    headers arrive (not the body -- call Text or JSON to read it). For anything
+    else (POST/PUT with a body, custom headers), use FetchOpts.
+
+func FetchOpts(url string, opts FetchOptions) (*Response, error)
+    FetchOpts wraps window.fetch(url, init) for requests Fetch's plain GET can't
+    express: POST/PUT/PATCH/DELETE with a body, or custom headers. A common use
+    is PUT-ing a JSON body:
+
+        resp, err := browser.FetchOpts(url, browser.FetchOptions{
+        	Method:  "PUT",
+        	Body:    string(jsonBytes),
+        	Headers: map[string]string{"Content-Type": "application/json"},
+        })
+
+func (r *Response) JSON(v any) error
+    JSON reads the full response body and decodes it as JSON into v.
+
+func (r *Response) Text() (string, error)
+    Text reads the full response body as a string.
+
+type Socket struct {
+	// Has unexported fields.
+}
+    Socket wraps a browser WebSocket.
+
+func Connect(url string) *Socket
+    Connect opens a new WebSocket to url.
+
+func (s *Socket) Close()
+    Close closes the connection and releases its registered callbacks.
+
+func (s *Socket) OnClose(fn func())
+    OnClose registers the handler called when the connection closes.
+
+func (s *Socket) OnError(fn func())
+    OnError registers the handler called on a socket error.
+
+func (s *Socket) OnMessage(fn func(data string))
+    OnMessage registers the handler called for each incoming text frame. Calling
+    it again replaces the previous handler.
+
+func (s *Socket) Send(data string)
+    Send writes a text frame.
+
+type Transaction struct {
+	Value js.Value
+}
+    Transaction is an in-progress IndexedDB transaction over one or more object
+    stores.
+
+func (t *Transaction) ObjectStore(name string) *ObjectStore
+    ObjectStore returns the named object store within this transaction's scope.
+

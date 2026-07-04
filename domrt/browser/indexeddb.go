@@ -97,6 +97,7 @@ func (d *Database) CreateObjectStore(name, keyPath string) js.Value {
 	return d.Value.Call("createObjectStore", name, map[string]any{"keyPath": keyPath})
 }
 
+// Close closes the database connection.
 func (d *Database) Close() { d.Value.Call("close") }
 
 // Transaction starts a transaction over storeNames in the given mode
@@ -109,14 +110,17 @@ func (d *Database) Transaction(storeNames []string, mode string) *Transaction {
 	return &Transaction{Value: d.Value.Call("transaction", names, mode)}
 }
 
+// Transaction is an in-progress IndexedDB transaction over one or more object stores.
 type Transaction struct {
 	Value js.Value
 }
 
+// ObjectStore returns the named object store within this transaction's scope.
 func (t *Transaction) ObjectStore(name string) *ObjectStore {
 	return &ObjectStore{Value: t.Value.Call("objectStore", name)}
 }
 
+// ObjectStore is a key/value store within a Transaction.
 type ObjectStore struct {
 	Value js.Value
 }
