@@ -34,7 +34,7 @@ func TestDevserverEndToEnd(t *testing.T) {
 	t.Cleanup(func() { db.Exec(`DELETE FROM documents`) })
 
 	store := canvas.NewStore(db)
-	srv := httptest.NewServer(newMux(store))
+	srv := httptest.NewServer(newMux(store, false))
 	defer srv.Close()
 
 	// Create a document.
@@ -111,5 +111,70 @@ func TestDevserverEndToEnd(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("expected an error saving a nonexistent document, got status %d", resp.StatusCode)
+	}
+}
+
+// TestDevModeInjectsLiveReloadScript covers cmd/devwatch's live-reload
+// mechanism: with DEV=1 behavior on, every rendered page should carry
+// a script polling /__dev/version, and that route should exist; with
+// it off (the default), neither should be present.
+func TestDevModeInjectsLiveReloadScript(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://canvas:canvas@127.0.0.1:5432/canvas?sslmode=disable"
+	}
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("opening database: %v", err)
+	}
+	defer db.Close()
+	if err := db.Ping(); err != nil {
+		t.Skipf("no reachable postgres at %s: %v", dsn, err)
+	}
+	store := canvas.NewStore(db)
+
+	devSrv := httptest.NewServer(newMux(store, true))
+	defer devSrv.Close()
+
+	resp, err := http.Get(devSrv.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(body), `fetch("/__dev/version"`) || !strings.HasSuffix(strings.TrimSpace(string(body)), "</html>") {
+		t.Fatalf("expected the live-reload script injected before </body>, got: %s", body)
+	}
+
+	resp, err = http.Get(devSrv.URL + "/__dev/version")
+	if err != nil {
+		t.Fatalf("GET /__dev/version: %v", err)
+	}
+	verBody, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || len(verBody) == 0 {
+		t.Fatalf("expected a non-empty dev version, got status %d body %q", resp.StatusCode, verBody)
+	}
+
+	prodSrv := httptest.NewServer(newMux(store, false))
+	defer prodSrv.Close()
+
+	resp, err = http.Get(prodSrv.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if strings.Contains(string(body), "/__dev/version") {
+		t.Fatalf("expected no live-reload script without DEV mode, got: %s", body)
+	}
+
+	resp, err = http.Get(prodSrv.URL + "/__dev/version")
+	if err != nil {
+		t.Fatalf("GET /__dev/version: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected /__dev/version to not exist without DEV mode, got status %d", resp.StatusCode)
 	}
 }
