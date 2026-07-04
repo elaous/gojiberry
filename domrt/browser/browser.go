@@ -188,10 +188,12 @@ func (s *Socket) Close() {
 	}
 }
 
+// Document returns the global document object.
 func Document() *dom.Document {
 	return dom.GetDocument()
 }
 
+// Window returns the global window object.
 func Window() *dom.Window {
 	return dom.GetWindow()
 }

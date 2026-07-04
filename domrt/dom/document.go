@@ -6,6 +6,9 @@ import (
 	"syscall/js"
 )
 
+// Document wraps the browser's global document object. Get/Call cover
+// anything without a typed method below, the same escape hatch as the
+// rest of this package.
 type Document struct {
 	Document js.Value
 }
@@ -20,14 +23,17 @@ func wrapAll(v js.Value) []Element {
 	return result
 }
 
+// GetElementsByTagName returns every element with the given tag name.
 func (d *Document) GetElementsByTagName(tag string) []Element {
 	return wrapAll(d.Document.Call("getElementsByTagName", tag))
 }
 
+// GetElementsByClassName returns every element with the given class.
 func (d *Document) GetElementsByClassName(class string) []Element {
 	return wrapAll(d.Document.Call("getElementsByClassName", class))
 }
 
+// GetElementsByName returns every element with the given name attribute.
 func (d *Document) GetElementsByName(name string) []Element {
 	return wrapAll(d.Document.Call("getElementsByName", name))
 }
@@ -41,14 +47,17 @@ func (d *Document) GetElementsByTagNameNS(namespace, tag string) []Element {
 	return wrapAll(d.Document.Call("getElementsByTagNameNS", namespace, tag))
 }
 
+// GetElementByID returns the element with the given id.
 func (d *Document) GetElementByID(id string) *Element {
 	return &Element{Element: d.Document.Call("getElementById", id)}
 }
 
+// CreateElement creates a new, unattached element with the given tag name.
 func (d *Document) CreateElement(tag string) *Element {
 	return &Element{Element: d.Document.Call("createElement", tag)}
 }
 
+// CreateTextNode creates a new, unattached text node with the given content.
 func (d *Document) CreateTextNode(text string) *Element {
 	return &Element{Element: d.Document.Call("createTextNode", text)}
 }
@@ -64,6 +73,7 @@ func (d *Document) Call(method string, args ...any) js.Value {
 	return d.Document.Call(method, args...)
 }
 
+// GetDocument returns the global document object.
 func GetDocument() *Document {
 	return &Document{Document: js.Global().Get("document")}
 }

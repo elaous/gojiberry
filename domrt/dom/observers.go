@@ -42,7 +42,10 @@ func NewIntersectionObserver(fn func(entries []IntersectionEntry)) *Intersection
 	return &IntersectionObserver{Value: ctor, callback: cb}
 }
 
-func (o *IntersectionObserver) Observe(el *Element)   { o.Value.Call("observe", el.Element) }
+// Observe starts watching el for intersection changes.
+func (o *IntersectionObserver) Observe(el *Element) { o.Value.Call("observe", el.Element) }
+
+// Unobserve stops watching el.
 func (o *IntersectionObserver) Unobserve(el *Element) { o.Value.Call("unobserve", el.Element) }
 
 // Disconnect stops observing every element and releases the callback
@@ -88,7 +91,10 @@ func NewResizeObserver(fn func(entries []ResizeEntry)) *ResizeObserver {
 	return &ResizeObserver{Value: ctor, callback: cb}
 }
 
-func (o *ResizeObserver) Observe(el *Element)   { o.Value.Call("observe", el.Element) }
+// Observe starts watching el for size changes.
+func (o *ResizeObserver) Observe(el *Element) { o.Value.Call("observe", el.Element) }
+
+// Unobserve stops watching el.
 func (o *ResizeObserver) Unobserve(el *Element) { o.Value.Call("unobserve", el.Element) }
 
 // Disconnect stops observing every element and releases the callback
