@@ -1,0 +1,23 @@
+/* Chip stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.2em 0.6em;
+  border-radius: 999px;
+  background: var(--gj-bg-muted);
+  color: var(--gj-text);
+  font-size: 0.9em;
+}
+.gj-chip-remove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--gj-muted);
+  font-size: 1em;
+  line-height: 1;
+  padding: 0;
+}
+.gj-chip-remove:hover { color: var(--gj-danger); }

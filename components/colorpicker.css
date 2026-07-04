@@ -1,0 +1,4 @@
+/* ColorPicker stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-colorpicker { border: 1px solid var(--gj-border); border-radius: var(--gj-radius); padding: 0.4em; font: inherit; }

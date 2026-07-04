@@ -1,0 +1,32 @@
+/* Carousel stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-carousel { position: relative; overflow: hidden; }
+.gj-carousel-track { position: relative; }
+.gj-carousel-slide { display: none; }
+.gj-carousel-slide-active { display: block; }
+.gj-carousel-prev, .gj-carousel-next {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  width: 2em;
+  height: 2em;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.gj-carousel-prev { left: 0.5em; }
+.gj-carousel-next { right: 0.5em; }
+.gj-carousel-dots { display: flex; justify-content: center; gap: 0.4em; margin-top: 0.5em; }
+.gj-carousel-dot {
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 999px;
+  border: none;
+  background: var(--gj-border);
+  cursor: pointer;
+  padding: 0;
+}
+.gj-carousel-dot-active { background: var(--gj-accent); }

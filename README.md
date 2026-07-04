@@ -203,6 +203,55 @@ If the tag has children, they're collected into a `Children
 elements like `<my-widget>`) are real HTML elements and compile to
 `gox.El(...)` instead.
 
+### Struct components
+
+`<Name>` above is a plain function returning `gox.Node` — the
+convention every component in `components/` uses, and the right
+default. `<*Name attr>{children}</*Name>` (leading `*` on the tag)
+is a second, opt-in convention for when a component wants real
+instance state or extra methods beyond just rendering — a class
+component, in React terms:
+
+```go
+type CounterProps struct {
+	Count int
+	OnInc gox.EventHandler
+}
+
+type Counter struct {
+	Props CounterProps
+}
+
+func NewCounter(props CounterProps) *Counter {
+	return &Counter{Props: props}
+}
+
+// Label is a helper method a plain function component would have to
+// take as an extra parameter or recompute inline in Render instead.
+func (c *Counter) Label() string {
+	return strconv.Itoa(c.Props.Count)
+}
+
+func (c *Counter) Render() gox.Node {
+	return <button onClick={c.Props.OnInc}>{c.Label()}</button>
+}
+```
+
+`<*Counter count={5} onInc={handleInc}/>` compiles to
+`NewCounter(CounterProps{Count: 5, OnInc: handleInc}).Render()`: `Name`
+is expected to be a Go struct with a `NewName(NameProps) *Name`
+constructor and a `Render() gox.Node` method, the same shape
+`gox.Document` (below) already uses for itself. The closing tag repeats
+the `*` (`</*Counter>`) — a bare `</Counter>` can't close a `<*Counter>`
+and vice versa, so a typo'd convention fails to compile rather than
+silently doing the wrong thing. The leading `*` mirrors `NewName`'s
+`*Name` return type and can't be confused with the less-than operator:
+`x < *p` (a comparison against a dereferenced pointer) only parses as
+one because `<` there can't legally open a new expression in the first
+place (see "Why tags can just be Go expressions" above) — exactly where
+the ordinary `<Name>` disambiguation already draws the line. See
+`examples/wasm-struct-counter-demo` for a full working example.
+
 ### The `<html>` entrypoint
 
 `gox.Document{Title, Head, Body}.Render()` builds the
@@ -352,10 +401,17 @@ so the consuming app wires `domrt/html`'s `Element.OnContextMenu` on
 whatever should be right-clickable and passes the position it reports
 straight through as `ContextMenuProps.X`/`Y`.
 
-`components/style.css` is the one stylesheet all of them share; pull
-it into a page with `@stylesheets ../../components/style.css` (path
-relative to your `.gox` file) or a plain `<link rel="stylesheet">` for
-a bare WASM page with no SSR step.
+CSS is split one file per component (`components/button.css`,
+`components/modal.css`, ...) plus `components/base.css` for the shared
+`--gj-*` design tokens and the couple of `@keyframes` more than one
+component reuses (`gj-spin`, `gj-progress-indeterminate`) — pull in
+`base.css` plus only the per-component files a page actually uses, e.g.
+`@stylesheets ../../components/base.css` and
+`@stylesheets ../../components/button.css` (paths relative to your
+`.gox` file), or plain `<link rel="stylesheet">` tags for a bare WASM
+page with no SSR step. A component's doc comment says which stylesheet
+it needs; `Dialog` (and `Confirm`/`Alert`, built on it) also needs
+`modal.css`, since they render inside `Modal`'s box.
 
 ## Resource imports
 
@@ -500,6 +556,24 @@ generated code.
   GOOS=js GOARCH=wasm go build -o examples/wasm-counter/main.wasm ./examples/wasm-counter/
   cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-counter/
   cd examples/wasm-counter && python3 -m http.server 8080
+  # open http://localhost:8080/
+  ```
+
+- `examples/wasm-struct-counter-demo` — the same counter, but `Counter`
+  is written as a struct component (`<*Counter .../>` ->
+  `NewCounter(CounterProps{...}).Render()`) instead of a plain
+  function, with a `Label` helper method alongside `Render` to show
+  what the struct convention buys you. Verified against a real
+  browser: correct initial/updated label text through several clicks,
+  and DOM node identity preserved across updates (proving `Render()`'s
+  output really goes through `domrt`'s diff/patch, not a fresh mount
+  each time):
+
+  ```
+  go generate ./...
+  GOOS=js GOARCH=wasm go build -o examples/wasm-struct-counter-demo/main.wasm ./examples/wasm-struct-counter-demo/
+  cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-struct-counter-demo/
+  cd examples/wasm-struct-counter-demo && python3 -m http.server 8080
   # open http://localhost:8080/
   ```
 
@@ -677,7 +751,7 @@ generated code.
   go generate ./...
   GOOS=js GOARCH=wasm go build -o examples/wasm-components-demo/main.wasm ./examples/wasm-components-demo/
   cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-components-demo/
-  cp components/style.css examples/wasm-components-demo/
+  cp components/*.css examples/wasm-components-demo/
   cd examples/wasm-components-demo && python3 -m http.server 8080
   # open http://localhost:8080/
   ```

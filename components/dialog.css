@@ -1,0 +1,7 @@
+/* Dialog stylesheet for github.com/elaous/gojiberry/components.
+   Requires modal.css too: Dialog (and Confirm/Alert, built on it)
+   render inside Modal's box. */
+
+.gj-dialog-title { margin: 0 0 0.5em; font-size: 1.15em; }
+.gj-dialog-body { margin-bottom: 1em; }
+.gj-dialog-actions { display: flex; justify-content: flex-end; gap: 0.5em; }
