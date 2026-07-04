@@ -57,6 +57,23 @@ func (d *Document) CreateElement(tag string) *Element {
 	return &Element{Element: d.Document.Call("createElement", tag)}
 }
 
+// CreateElementNS creates a new, unattached element in the given
+// namespace (e.g. SVGNamespace) with the given tag name -- required
+// for SVG/MathML elements, which createElement alone cannot make.
+func (d *Document) CreateElementNS(namespace, tag string) *Element {
+	return &Element{Element: d.Document.Call("createElementNS", namespace, tag)}
+}
+
+// DocumentElement returns the root <html> element.
+func (d *Document) DocumentElement() *Element {
+	return &Element{Element: d.Document.Get("documentElement")}
+}
+
+// Body returns the <body> element.
+func (d *Document) Body() *Element {
+	return &Element{Element: d.Document.Get("body")}
+}
+
 // CreateTextNode creates a new, unattached text node with the given content.
 func (d *Document) CreateTextNode(text string) *Element {
 	return &Element{Element: d.Document.Call("createTextNode", text)}
