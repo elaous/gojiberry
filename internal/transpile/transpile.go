@@ -15,19 +15,6 @@
 // write an immediately-invoked closure (func() []gox.Node { ... }()),
 // which is itself an expression; any tags inside its body are expanded
 // by the same recursive scan.
-//
-// Components come in two conventions. <Name attr>{children}</Name>
-// (uppercase tag) expands to Name(NameProps{Field: value, ...,
-// Children: [...children]}), the default: Name is a plain function
-// returning gox.Node, the same shape every built-in component in
-// components/ uses. <*Name attr>{children}</*Name> instead expands to
-// NewName(NameProps{...}).Render(): Name is a Go struct with a
-// NewName(NameProps) *Name constructor and a Render() gox.Node method
-// (the same shape gox.Document already uses), for components that want
-// real instance state or extra methods beyond rendering -- a class
-// component, in React terms. The leading '*' mirrors NewName's *Name
-// return type and is unambiguous right after '<': "< *expr" isn't valid
-// Go, so there's nothing legitimate for it to collide with.
 package transpile
 
 import (
@@ -181,7 +168,7 @@ func (p *parser) transpileChunk(chunk []rune) (string, error) {
 			continue
 		}
 
-		if c == '<' && pos+1 < n && (isTagNameStart(chunk[pos+1]) || chunk[pos+1] == '>' || chunk[pos+1] == '*') && prevAllowsExprStart(chunk, pos) {
+		if c == '<' && pos+1 < n && (isTagNameStart(chunk[pos+1]) || chunk[pos+1] == '>') && prevAllowsExprStart(chunk, pos) {
 			expr, newPos, err := p.parseTag(chunk, pos)
 			if err != nil {
 				return "", err
@@ -323,19 +310,6 @@ func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 		return p.renderFragment(children), newPos, nil
 	}
 
-	// <*Name ...> marks a struct ("class") component: Name is a Go type
-	// with a NewName(NameProps) *Name constructor and a Render() gox.Node
-	// method, rather than a plain Name(NameProps) gox.Node function. The
-	// leading '*' mirrors Go's own pointer-type syntax (NewName returns
-	// *Name) and is unambiguous immediately after '<' at a tag-open
-	// position: "< *expr" is not valid Go, so there's nothing legitimate
-	// to confuse it with.
-	isStruct := false
-	if pos < n && chunk[pos] == '*' {
-		isStruct = true
-		pos++
-	}
-
 	nameStart := pos
 	for pos < n && (isIdentPart(chunk[pos]) || chunk[pos] == '.' || chunk[pos] == '-') {
 		pos++
@@ -344,13 +318,6 @@ func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 		return "", 0, p.errorf(chunk, pos, "expected tag name after '<'")
 	}
 	name := string(chunk[nameStart:pos])
-	if isStruct && !isComponentName(name) {
-		return "", 0, p.errorf(chunk, pos, "<*%s>: struct components must name an exported (capitalized) type, like a component", name)
-	}
-	closeLabel := name
-	if isStruct {
-		closeLabel = "*" + name
-	}
 
 	attrs, pos, err := p.parseAttrs(chunk, pos)
 	if err != nil {
@@ -363,19 +330,19 @@ func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 	}
 	if pos+1 < n && chunk[pos] == '/' && chunk[pos+1] == '>' {
 		pos += 2
-		return p.renderTag(name, isStruct, attrs, nil), pos, nil
+		return p.renderTag(name, attrs, nil), pos, nil
 	}
 	if pos >= n || chunk[pos] != '>' {
 		return "", 0, p.errorf(chunk, pos, "expected '>' or '/>' to close <%s> tag opened", name)
 	}
 	pos++ // consume '>'
 
-	children, pos, err := p.parseChildren(chunk, pos, closeLabel)
+	children, pos, err := p.parseChildren(chunk, pos, name)
 	if err != nil {
 		return "", 0, err
 	}
 	_ = startPos
-	return p.renderTag(name, isStruct, attrs, children), pos, nil
+	return p.renderTag(name, attrs, children), pos, nil
 }
 
 func isSpace(r rune) bool { return r == ' ' || r == '\t' || r == '\n' || r == '\r' }
@@ -513,31 +480,24 @@ func labelFor(tagName string) string {
 	return tagName
 }
 
-// parseCloseTag parses "</Name>", "</*Name>" (struct component), or "</>"
-// starting at chunk[pos]=='<', returning the position just past '>' and
-// the closed label ("" for a fragment close, "*Name" for a struct
-// component close -- matches the closeLabel parseTag computes so a
-// </Name> can't accidentally close a <*Name>, or vice versa).
+// parseCloseTag parses "</Name>" or "</>"" starting at chunk[pos]=='<',
+// returning the position just past '>' and the closed name ("" for a
+// fragment close).
 func parseCloseTag(chunk []rune, pos int) (int, string, error) {
 	n := len(chunk)
 	i := pos + 2 // skip "</"
-	label := ""
-	if i < n && chunk[i] == '*' {
-		label = "*"
-		i++
-	}
 	nameStart := i
 	for i < n && (isIdentPart(chunk[i]) || chunk[i] == '.' || chunk[i] == '-') {
 		i++
 	}
-	label += string(chunk[nameStart:i])
+	name := string(chunk[nameStart:i])
 	for i < n && isSpace(chunk[i]) {
 		i++
 	}
 	if i >= n || chunk[i] != '>' {
 		return 0, "", fmt.Errorf("malformed closing tag near position %d", pos)
 	}
-	return i + 1, label, nil
+	return i + 1, name, nil
 }
 
 // cleanText mirrors JSX whitespace handling: a text run that is only
@@ -607,10 +567,7 @@ func childExprSource(c childNode) string {
 	return c.expr
 }
 
-func (p *parser) renderTag(name string, isStruct bool, attrs []attr, children []childNode) string {
-	if isStruct {
-		return p.renderStructComponent(name, attrs, children)
-	}
+func (p *parser) renderTag(name string, attrs []attr, children []childNode) string {
 	if isComponentName(name) {
 		return p.renderComponent(name, attrs, children)
 	}
@@ -657,10 +614,15 @@ func attrExprSource(a attr) string {
 	}
 }
 
-// propsFieldsSource builds the comma-joined "Field: value" list that goes
-// inside a <Name>Props{...} literal, shared by both the plain-function
-// and struct component conventions.
-func propsFieldsSource(attrs []attr, children []childNode) string {
+// renderComponent renders <Name attr=... >children</Name> as
+// Name(NameProps{Field: value, ..., Children: []gox.Node{...}}).
+func (p *parser) renderComponent(name string, attrs []attr, children []childNode) string {
+	callName := name
+	propsType := name + "Props"
+	if idx := strings.LastIndexByte(name, '.'); idx >= 0 {
+		pkg, last := name[:idx+1], name[idx+1:]
+		propsType = pkg + last + "Props"
+	}
 	var fields []string
 	for _, a := range attrs {
 		field := capitalizeFirst(a.name)
@@ -680,35 +642,7 @@ func propsFieldsSource(attrs []attr, children []childNode) string {
 		}
 		fields = append(fields, fmt.Sprintf("Children: []gox.Node{%s}", strings.Join(childExprs, ", ")))
 	}
-	return strings.Join(fields, ", ")
-}
-
-// renderComponent renders <Name attr=... >children</Name> as
-// Name(NameProps{Field: value, ..., Children: []gox.Node{...}}).
-func (p *parser) renderComponent(name string, attrs []attr, children []childNode) string {
-	callName := name
-	propsType := name + "Props"
-	if idx := strings.LastIndexByte(name, '.'); idx >= 0 {
-		pkg, last := name[:idx+1], name[idx+1:]
-		propsType = pkg + last + "Props"
-	}
-	return fmt.Sprintf("%s(%s{%s})", callName, propsType, propsFieldsSource(attrs, children))
-}
-
-// renderStructComponent renders <*Name attr=...>children</*Name> as
-// NewName(NameProps{Field: value, ..., Children: []gox.Node{...}}).Render().
-// This is the struct ("class component") convention: Name is expected to
-// be a Go struct type with a NewName(NameProps) *Name constructor and a
-// Render() gox.Node method (the same shape gox.Document already uses),
-// as an alternative to the pure-function convention above for components
-// that want real instance state or extra methods beyond just rendering.
-func (p *parser) renderStructComponent(name string, attrs []attr, children []childNode) string {
-	callName := "New" + name
-	propsType := name + "Props"
-	if idx := strings.LastIndexByte(name, '.'); idx >= 0 {
-		pkg, last := name[:idx+1], name[idx+1:]
-		callName = pkg + "New" + last
-		propsType = pkg + last + "Props"
-	}
-	return fmt.Sprintf("%s(%s{%s}).Render()", callName, propsType, propsFieldsSource(attrs, children))
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("%s(%s{%s})", callName, propsType, strings.Join(fields, ", ")))
+	return b.String()
 }
