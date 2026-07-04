@@ -2,13 +2,14 @@
 
 //go:build js && wasm
 
-// Package main mirrors wasm-counter, but Counter is written as a struct
-// ("class") component instead of a plain function, exercising the
-// <*Name attr>{children}</*Name> -> NewName(NameProps{...}).Render()
-// transpiler convention. Unlike a function component, Counter can carry
-// helper methods (see Label below) alongside Render without threading
-// extra parameters through Render's signature -- the same shape
-// gox.Document already uses for itself.
+// Package main mirrors wasm-counter, but Counter delegates to an
+// unexported struct instead of rendering inline, showing that the
+// ordinary <Name attr>{children}</Name> -> Name(NameProps{...})
+// convention already supports a React-class-component-like shape with
+// zero transpiler changes: Go won't let a type and a func share a
+// name, so the exported, callable surface stays a plain function --
+// only its body is free to be "a struct with a Render method and
+// helpers alongside it" instead of one big literal expression.
 package main
 
 import (
@@ -25,20 +26,23 @@ type CounterProps struct {
 	OnDec gox.EventHandler
 }
 
-// Counter is a struct component: NewCounter builds one from CounterProps,
-// and Render (not Counter itself) produces the gox.Node tree.
-type Counter struct {
+// Counter is called exactly like any other component (see main below):
+// <Counter count={5} .../> -> Counter(CounterProps{Count: 5, ...}).
+func Counter(props CounterProps) gox.Node {
+	return counter{props}.Render()
+}
+
+// counter is unexported: callers never see it, only Counter's usual
+// Name(NameProps) gox.Node signature. Holding Props on a value lets it
+// carry helper methods -- Label below -- alongside Render, the kind of
+// thing a plain function component would otherwise have to take as an
+// extra parameter or recompute inline.
+type counter struct {
 	Props CounterProps
 }
 
-func NewCounter(props CounterProps) *Counter {
-	return &Counter{Props: props}
-}
-
-// Label describes the current count in words, using state held on the
-// struct -- the kind of helper a plain function component would have to
-// take as an extra parameter or recompute inline in Render.
-func (c *Counter) Label() string {
+// Label describes the current count in words.
+func (c counter) Label() string {
 	parity := "even"
 	if c.Props.Count%2 != 0 {
 		parity = "odd"
@@ -46,7 +50,7 @@ func (c *Counter) Label() string {
 	return strconv.Itoa(c.Props.Count) + " (" + parity + ")"
 }
 
-func (c *Counter) Render() gox.Node {
+func (c counter) Render() gox.Node {
 	return gox.El("div", []gox.Attr{gox.A("id", "counter")}, gox.El("button", []gox.Attr{gox.A("id", "dec"), gox.On("click", c.Props.OnDec)}, gox.Text("-")), gox.El("span", []gox.Attr{gox.A("id", "count")}, gox.Child(c.Label())), gox.El("button", []gox.Attr{gox.A("id", "inc"), gox.On("click", c.Props.OnInc)}, gox.Text("+")))
 }
 
@@ -57,7 +61,7 @@ func main() {
 	var root *domrt.Root
 	var render func()
 	render = func() {
-		node := NewCounter(CounterProps{Count: count, OnInc: func(gox.Event) { count++; render() }, OnDec: func(gox.Event) { count--; render() }}).Render()
+		node := Counter(CounterProps{Count: count, OnInc: func(gox.Event) { count++; render() }, OnDec: func(gox.Event) { count--; render() }})
 		if root == nil {
 			root = domrt.Mount(container, node)
 		} else {

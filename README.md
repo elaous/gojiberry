@@ -203,14 +203,16 @@ If the tag has children, they're collected into a `Children
 elements like `<my-widget>`) are real HTML elements and compile to
 `gox.El(...)` instead.
 
-### Struct components
+### Components with instance state or helper methods
 
-`<Name>` above is a plain function returning `gox.Node` — the
-convention every component in `components/` uses, and the right
-default. `<*Name attr>{children}</*Name>` (leading `*` on the tag)
-is a second, opt-in convention for when a component wants real
-instance state or extra methods beyond just rendering — a class
-component, in React terms:
+`<Name attr>{children}</Name>` always compiles to
+`Name(NameProps{...})` — there's no second tag form for a component
+that wants real instance state or extra methods beyond just rendering
+(a class component, in React terms). None is needed: Go doesn't allow a
+type and a func to share a name, so `Name`'s callable surface is always
+that one plain function — but nothing stops its body from delegating
+to an unexported struct instead of building the returned `gox.Node`
+inline:
 
 ```go
 type CounterProps struct {
@@ -218,39 +220,30 @@ type CounterProps struct {
 	OnInc gox.EventHandler
 }
 
-type Counter struct {
+// Counter is called exactly like any other component:
+// <Counter count={5} onInc={handleInc}/> -> Counter(CounterProps{...}).
+func Counter(props CounterProps) gox.Node {
+	return counter{props}.Render()
+}
+
+// counter is unexported -- callers never see it, only Counter's usual
+// Name(NameProps) gox.Node signature.
+type counter struct {
 	Props CounterProps
 }
 
-func NewCounter(props CounterProps) *Counter {
-	return &Counter{Props: props}
-}
-
-// Label is a helper method a plain function component would have to
-// take as an extra parameter or recompute inline in Render instead.
-func (c *Counter) Label() string {
+// Label is a helper method alongside Render, the kind of thing a
+// one-shot function body would otherwise have to recompute inline.
+func (c counter) Label() string {
 	return strconv.Itoa(c.Props.Count)
 }
 
-func (c *Counter) Render() gox.Node {
+func (c counter) Render() gox.Node {
 	return <button onClick={c.Props.OnInc}>{c.Label()}</button>
 }
 ```
 
-`<*Counter count={5} onInc={handleInc}/>` compiles to
-`NewCounter(CounterProps{Count: 5, OnInc: handleInc}).Render()`: `Name`
-is expected to be a Go struct with a `NewName(NameProps) *Name`
-constructor and a `Render() gox.Node` method, the same shape
-`gox.Document` (below) already uses for itself. The closing tag repeats
-the `*` (`</*Counter>`) — a bare `</Counter>` can't close a `<*Counter>`
-and vice versa, so a typo'd convention fails to compile rather than
-silently doing the wrong thing. The leading `*` mirrors `NewName`'s
-`*Name` return type and can't be confused with the less-than operator:
-`x < *p` (a comparison against a dereferenced pointer) only parses as
-one because `<` there can't legally open a new expression in the first
-place (see "Why tags can just be Go expressions" above) — exactly where
-the ordinary `<Name>` disambiguation already draws the line. See
-`examples/wasm-struct-counter-demo` for a full working example.
+See `examples/wasm-struct-counter-demo` for a full working example.
 
 ### The `<html>` entrypoint
 
@@ -560,14 +553,15 @@ generated code.
   ```
 
 - `examples/wasm-struct-counter-demo` — the same counter, but `Counter`
-  is written as a struct component (`<*Counter .../>` ->
-  `NewCounter(CounterProps{...}).Render()`) instead of a plain
-  function, with a `Label` helper method alongside `Render` to show
-  what the struct convention buys you. Verified against a real
-  browser: correct initial/updated label text through several clicks,
-  and DOM node identity preserved across updates (proving `Render()`'s
-  output really goes through `domrt`'s diff/patch, not a fresh mount
-  each time):
+  delegates to an unexported `counter` struct with a `Label` helper
+  method alongside `Render`, instead of building its `gox.Node` inline
+  -- called exactly the same way (`<Counter .../>` ->
+  `Counter(CounterProps{...})`) as any other component, since Go won't
+  let a type and a func share a name in the first place. Verified
+  against a real browser: correct initial/updated label text through
+  several clicks, and DOM node identity preserved across updates
+  (proving `Render()`'s output really goes through `domrt`'s
+  diff/patch, not a fresh mount each time):
 
   ```
   go generate ./...
