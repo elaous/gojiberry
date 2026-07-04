@@ -54,7 +54,11 @@ the main module.
   automatically -- neither page hand-rolls
   `<html><head>...</head><body>...</body></html>` or its own CSS
   binding. Both fall back to a shared `DefaultTitle` package var since
-  neither needs a title that varies per document.
+  neither needs a title that varies per document. `CanvasPage` is also
+  annotated `// @wasm /static/main.wasm`, which appends the
+  `wasm_exec.js` loader and the `WebAssembly.instantiateStreaming`
+  bootstrap script after its own content automatically -- it doesn't
+  write either `<script>` tag itself.
 - **`canvas/api.go`** -- the same `Store` wired into real
   `//encore:api`-annotated handlers (`encore.dev/storage/sqldb`), for
   what a production deployment of this would look like.
