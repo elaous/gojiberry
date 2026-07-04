@@ -80,7 +80,7 @@ expanded by the same recursive scan, with no extra grammar required.
   exposes any global browser API by name (e.g. `Global("WebAssembly")`)
   for one-offs; typed wrappers cover the APIs most apps need: `Fetch`/
   `Response.Text`/`Response.JSON`, `LocalStorage`/`SessionStorage`,
-  `Connect` (WebSocket), `Document()`/`Window()` (see `domrt/dom`),
+  `Connect` (WebSocket), `Document()`/`Window()` (see `domrt/html`),
   `OpenDatabase` (IndexedDB — open/upgrade/transaction/object-store,
   each blocking call bridged from IndexedDB's event-based requests the
   same way `domrt.Await` bridges Promises), `GetUserMedia`/
@@ -88,12 +88,12 @@ expanded by the same recursive scan, with no extra grammar required.
   `WriteClipboardText`/`ReadClipboardText`, the File API (`File`'s
   `ReadAsText`/`ReadAsArrayBuffer`/`ReadAsDataURL`, bridged from
   `FileReader`'s events the same way as IndexedDB, plus
-  `CreateObjectURL`/`RevokeObjectURL`) for reading `dom.InputElement`'s
-  or `dom.DataTransfer`'s `File` objects, and `FormData`
+  `CreateObjectURL`/`RevokeObjectURL`) for reading `html.InputElement`'s
+  or `html.DataTransfer`'s `File` objects, and `FormData`
   (`NewFormData`/`NewFormDataFromForm`, `Append`/`AppendFile`/`Get`/
   `Has`/`Delete`) for multipart submissions — pass its `.Value` as
   `FetchOptions.BodyValue` for a real file upload over `fetch`.
-- **`domrt/dom`** (`GOOS=js GOARCH=wasm`) — typed `Document`/`Element`/
+- **`domrt/html`** (`GOOS=js GOARCH=wasm`) — typed `Document`/`Element`/
   `Window` wrappers around raw `syscall/js` DOM calls (`GetElementByID`,
   `AppendChild`, `AddEventListener`, `SetTimeout`, ...), each with a
   `Get`/`Call`/`Set` escape hatch for whatever a typed method doesn't
@@ -120,17 +120,25 @@ expanded by the same recursive scan, with no extra grammar required.
   `FormElement` (`AsForm()`, `Submit`/`Reset`/`CheckValidity`/
   `Elements`/`OnSubmit`). Also: `NewIntersectionObserver`/
   `NewResizeObserver`, `Element.OnDragStart`/`OnDragOver`/`OnDrop` plus
-  a typed `DataTransfer`, `Document.CreateElementNS`/`CreateSVGElement`
-  for SVG (use `Element.ClassListAdd`/`ClassListContains` rather than
-  `GetClassName`/`SetClassName` there — SVG's `className` is an
-  `SVGAnimatedString` object, not a plain string), and `Element`'s
-  dimension/scroll/style surface: `ClientWidth`/`ClientHeight`,
-  `ScrollWidth`/`ScrollHeight`, `ScrollLeft`/`ScrollTop` (get and set),
-  `ScrollTo`/`ScrollBy`, `ClientRects`, and `Style()` (get/set/remove a
-  CSS property, or its whole `CSSText`) — paired with
+  a typed `DataTransfer`, `Document.CreateElementNS` (see `domrt/svg`
+  for SVG — use `Element.ClassListAdd`/`ClassListContains` rather than
+  `GetClassName`/`SetClassName` on an SVG element, since its
+  `className` is an `SVGAnimatedString` object, not a plain string),
+  and `Element`'s dimension/scroll/style surface: `ClientWidth`/
+  `ClientHeight`, `ScrollWidth`/`ScrollHeight`, `ScrollLeft`/`ScrollTop`
+  (get and set), `ScrollTo`/`ScrollBy`, `ClientRects`, and `Style()`
+  (get/set/remove a CSS property, or its whole `CSSText`) — paired with
   `Window.ComputedStyle` for a resolved, read-only view including
   inherited/stylesheet rules, and `Window.InnerWidth`/`InnerHeight`/
   `ScrollX`/`ScrollY`/`DevicePixelRatio` for the viewport itself.
+- **`domrt/svg`** (`GOOS=js GOARCH=wasm`) — `svg.CreateElement(document,
+  tag)` creates an SVG element in the right namespace (`svg.Namespace`)
+  — `createElement` alone produces an unrenderable element in the
+  wrong one. Once created, an SVG element is a plain `*html.Element`
+  like any other: presentation attributes (`d`, `cx`, `cy`, `r`,
+  `viewBox`, `fill`, `stroke`, ...) are ordinary attributes, already
+  covered by `GetAttribute`/`SetAttribute`, and `BoundingRect`/`Style`/
+  event-listener methods all work the same as on HTML elements.
 - **`domrt/sw`** (`GOOS=js GOARCH=wasm`) — lets a Go/WASM binary run as
   a browser service worker: `OnInstall`/`OnActivate`/`OnFetch` register
   the lifecycle/fetch events, `ExtendableEvent.WaitUntil` and
@@ -281,7 +289,7 @@ own keyboard navigation. `FileUploader` renders a `<label>` wrapping a
 visually-hidden `<input type="file">`, so click-to-browse works with
 zero JS (a label natively opens its associated control), but since
 `gox.Event` carries no file/`DataTransfer` payload, reading the actual
-selected or dropped files is done through `domrt/dom` directly by the
+selected or dropped files is done through `domrt/html` directly by the
 consuming app (`InputElement.Files()`, or `Element.OnDrop` for
 drag-and-drop) — see `FileUploaderProps`'s doc comment and the
 `wasm-components-demo` example below.
@@ -462,7 +470,7 @@ generated code.
   # shows it installed, activated, and claimed the page.
   ```
 
-- `examples/wasm-canvas-demo` — `domrt/dom`'s `Context2D`/`Context3D`:
+- `examples/wasm-canvas-demo` — `domrt/html`'s `Context2D`/`Context3D`:
   fills a 2D canvas with a solid color and draws a full-viewport quad
   on a WebGL canvas with a solid-color shader, then reads a pixel back
   from each (via the same package's `GetImageData`/`ReadPixels`) to
@@ -499,7 +507,7 @@ generated code.
   # localhost; a real deployment needs HTTPS for both).
   ```
 
-- `examples/wasm-typed-elements-demo` — `domrt/dom`'s typed element
+- `examples/wasm-typed-elements-demo` — `domrt/html`'s typed element
   subtypes and `domrt/browser`'s File API: `Element.AsCanvas`/
   `AsAnchor`/`AsButton`/`AsSelect`/`AsInput` cast a plain `Element` to
   `CanvasElement`/`AnchorElement`/`ButtonElement`/`SelectElement`/
@@ -518,9 +526,10 @@ generated code.
   # open http://localhost:8080/
   ```
 
-- `examples/wasm-dom-extras-demo` — `domrt/dom`'s dimension/scroll/style
-  surface, SVG (`CreateSVGElement`, `ClassListAdd`/`ClassListContains`),
-  `ImageElement`, `FormElement`, and `domrt/browser`'s `FormData`.
+- `examples/wasm-dom-extras-demo` — `domrt/html`'s dimension/scroll/style
+  surface, `domrt/svg` (`CreateElement`, plus `html.Element`'s
+  `ClassListAdd`/`ClassListContains`), `ImageElement`, `FormElement`,
+  and `domrt/browser`'s `FormData`.
   Verified against a real headless Chromium: real viewport/document/
   element dimensions (not just that the getters don't panic), scrolling
   an overflowing div and reading its new `ScrollTop` back, an inline

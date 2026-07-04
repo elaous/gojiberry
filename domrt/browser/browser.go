@@ -12,7 +12,7 @@ import (
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/domrt"
-	"github.com/elaous/gojiberry/domrt/dom"
+	"github.com/elaous/gojiberry/domrt/html"
 )
 
 // Global returns the named global browser API object (e.g.
@@ -196,11 +196,11 @@ func (s *Socket) Close() {
 }
 
 // Document returns the global document object.
-func Document() *dom.Document {
-	return dom.GetDocument()
+func Document() *html.Document {
+	return html.GetDocument()
 }
 
 // Window returns the global window object.
-func Window() *dom.Window {
-	return dom.GetWindow()
+func Window() *html.Window {
+	return html.GetWindow()
 }

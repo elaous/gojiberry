@@ -11,14 +11,14 @@ import (
 // gox.Event carries no file data (see gox.Event's doc comment: Value
 // is only ever a string/bool/similar simple payload), so reading the
 // actual selected/dropped files is the caller's job, done through
-// domrt/dom directly on the client: look the input up by InputID and
-// call its AsInput().Files(), or attach domrt/dom's own
+// domrt/html directly on the client: look the input up by InputID and
+// call its AsInput().Files(), or attach domrt/html's own
 // Element.OnDrop to the dropzone by DropzoneID for real drag-and-drop
-// file access (dom.DragEvent.DataTransfer.Files()). FileUploader
+// file access (html.DragEvent.DataTransfer.Files()). FileUploader
 // itself only renders the widget and prevents the browser's default
 // drag-over/drop navigation.
 type FileUploaderProps struct {
-	DropzoneID string // id on the dropzone, for a caller to attach dom.Element.OnDrop
+	DropzoneID string // id on the dropzone, for a caller to attach html.Element.OnDrop
 	InputID    string // id on the hidden file input, for a caller to read .Files() after a change event
 
 	Accept   string // e.g. "image/*" or ".pdf,.docx"; "" allows any file

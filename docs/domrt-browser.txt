@@ -21,7 +21,7 @@ func CreateObjectURL(f File) string
     RevokeObjectURL is called or the document unloads. Useful for e.g. setting
     an <img>/<video>'s src without reading the file into memory.
 
-func Document() *dom.Document
+func Document() *html.Document
     Document returns the global document object.
 
 func GetUserMedia(constraints MediaStreamConstraints) (js.Value, error)
@@ -49,7 +49,7 @@ func SetVideoSource(videoElement js.Value, stream js.Value)
 func StopStream(stream js.Value)
     StopStream stops every track in stream (camera/mic LED off, etc.).
 
-func Window() *dom.Window
+func Window() *html.Window
     Window returns the global window object.
 
 func WriteClipboardText(text string) error
@@ -138,7 +138,7 @@ type FormData struct {
 func NewFormData() FormData
     NewFormData creates an empty FormData.
 
-func NewFormDataFromForm(form *dom.FormElement) FormData
+func NewFormDataFromForm(form *html.FormElement) FormData
     NewFormDataFromForm creates a FormData pre-populated from form's current
     controls, the same values a native (non-JS) submit of that form would send.
 

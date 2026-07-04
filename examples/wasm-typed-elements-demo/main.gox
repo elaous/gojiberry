@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main exercises domrt/dom's typed element subtypes
+// Package main exercises domrt/html's typed element subtypes
 // (CanvasElement, AnchorElement, ButtonElement, SelectElement,
 // InputElement -- each obtained from a plain Element via its As* cast)
 // together with domrt/browser's File API, writing each result into its
