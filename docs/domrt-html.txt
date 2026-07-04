@@ -771,6 +771,12 @@ func (e *Element) ContentEditable() string
     ContentEditable returns whether e's contents can be edited in place ("true",
     "false", "plaintext-only", or "inherit").
 
+func (e *Element) DispatchCustomEvent(name string, detail any, bubbles bool)
+    DispatchCustomEvent dispatches a CustomEvent named name on e, carrying
+    detail as the event's detail property (any structured-clone- able value: a
+    string, number, bool, map, slice, or js.Value). Set bubbles to let ancestor
+    listeners (registered with AddEventListener or OnCustomEvent) see it too.
+
 func (e *Element) Focus()
     Focus moves keyboard focus to e.
 
@@ -833,6 +839,13 @@ func (e *Element) OnContextMenu(fn func(x, y float64)) js.Func
     or its platform equivalent), suppressing the browser's native menu and
     reporting the click's position relative to the viewport -- pair with
     components.ContextMenu (or your own) to render one there.
+
+func (e *Element) OnCustomEvent(name string, fn func(detail js.Value)) js.Func
+    OnCustomEvent registers fn for a custom event named name, e.g. one
+    dispatched by DispatchCustomEvent (by e or a descendant, if bubbling) or by
+    non-Go JS elsewhere on the page. fn receives the event's raw detail value;
+    use js.Value's own accessors (or gox.EventValue-style type assertions) to
+    read it, since detail's shape is whatever the dispatcher chose.
 
 func (e *Element) OnDragOver(fn func(evt DragEvent)) js.Func
     OnDragOver registers fn for the dragover event (fired repeatedly on the drop
@@ -1088,6 +1101,36 @@ func (o *IntersectionObserver) Observe(el *Element)
 func (o *IntersectionObserver) Unobserve(el *Element)
     Unobserve stops watching el.
 
+type JSError struct {
+	Message string
+	Source  string // the script's URL; "" for a rejection (there's no single throw site)
+	Line    int    // 1-based; 0 for a rejection
+	Column  int    // 1-based; 0 for a rejection
+	Value   js.Value
+}
+    JSError wraps an error surfaced from JS itself -- an uncaught
+    exception (Window.OnError) or an unhandled promise rejection
+    (Window.OnUnhandledRejection) -- rather than one returned by a typed wrapper
+    in this package.
+
+func NewJSErrorFromEvent(ev js.Value) *JSError
+    NewJSErrorFromEvent builds a JSError from a browser ErrorEvent (the
+    event OnError and browser.Worker's OnError both receive) -- exported for
+    domrt/browser's Worker to reuse the same construction.
+
+func (e *JSError) AsGoError() error
+    AsGoError returns e as a plain error, for call sites that want that
+    explicitly rather than relying on *JSError already satisfying it.
+
+func (e *JSError) AsJSException() js.Value
+    AsJSException returns the underlying JS value (the Error object for an
+    uncaught exception, or the rejection reason for an unhandled promise) -- for
+    reading anything JSError doesn't model, like a custom error subclass's own
+    fields or its stack trace.
+
+func (e *JSError) Error() string
+    Error implements the standard error interface.
+
 type Rect struct {
 	X, Y, Width, Height, Top, Right, Bottom, Left float64
 }
@@ -1233,6 +1276,17 @@ func (w *Window) InnerWidth() int
 
 func (w *Window) Location() js.Value
     Location returns the window's Location object (href, pathname, etc.).
+
+func (w *Window) OnError(fn func(err *JSError)) js.Func
+    OnError registers fn for the window's global "error" event: an uncaught
+    exception from anywhere on the page (this program or any other script
+    sharing it), not something a typed wrapper here already surfaces as a Go
+    error.
+
+func (w *Window) OnUnhandledRejection(fn func(err *JSError)) js.Func
+    OnUnhandledRejection registers fn for the window's global
+    "unhandledrejection" event: a rejected Promise nothing ever called .catch
+    (or the second argument of .then) on.
 
 func (w *Window) Open(url, name, features string) js.Value
     Open opens url in a new browsing context (or an existing one named name),

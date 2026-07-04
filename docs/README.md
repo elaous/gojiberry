@@ -10,8 +10,9 @@ GOOS=js GOARCH=wasm go doc -all ./domrt/browser > docs/domrt-browser.txt
 GOOS=js GOARCH=wasm go doc -all ./domrt/html > docs/domrt-html.txt
 GOOS=js GOARCH=wasm go doc -all ./domrt/svg > docs/domrt-svg.txt
 GOOS=js GOARCH=wasm go doc -all ./domrt/sw > docs/domrt-sw.txt
+GOOS=js GOARCH=wasm go doc -all ./domrt/worker > docs/domrt-worker.txt
 ```
 
-`domrt`, `domrt/browser`, `domrt/html`, `domrt/svg`, and `domrt/sw` are
-`js`/`wasm`-only packages, hence `GOOS=js GOARCH=wasm`; `gox` and
-`components` are plain Go.
+`domrt`, `domrt/browser`, `domrt/html`, `domrt/svg`, `domrt/sw`, and
+`domrt/worker` are `js`/`wasm`-only packages, hence `GOOS=js GOARCH=wasm`;
+`gox` and `components` are plain Go.
