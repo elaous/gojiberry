@@ -38,9 +38,6 @@ func (a *AnchorElement) Target() string
 type ButtonElement struct{ Element }
     ButtonElement is an Element known to be a <button>.
 
-func (b *ButtonElement) Click()
-    Click synthesizes a click on the button, the same as a user click would.
-
 func (b *ButtonElement) Disabled() bool
     Disabled returns whether the button is disabled.
 
@@ -631,6 +628,7 @@ type DomNode interface {
 	AddEventListener(event string, callback js.Func)
 	RemoveEventListener(event string, callback js.Func)
 	Set(name string, value any)
+	Click()
 }
     DomNode is implemented by Element and every element type in this package
     that embeds it (CanvasElement, AnchorElement, ButtonElement, SelectElement,
@@ -686,6 +684,11 @@ func (e *Element) AsSelect() *SelectElement
 func (e *Element) Call(method string, args ...any) js.Value
     Call invokes a method not covered by a typed wrapper above (e.g.
     Call("click"), Call("focus"), Call("querySelector", selector)).
+
+func (e *Element) Click()
+    Click synthesizes a click on e, the same as a user click would (and,
+    for elements with default click behavior like <a>/<input>, triggers that
+    behavior too).
 
 func (e *Element) Get(name string) js.Value
     Get returns a named property not covered by a typed getter above (e.g.
