@@ -31,7 +31,8 @@ func (d *DataTransfer) SetEffectAllowed(effect string) { d.Value.Set("effectAllo
 
 // Files returns the raw File objects dropped (e.g. from a desktop
 // file drag), if any -- empty for a drag that only carries setData
-// values.
+// values. Wrap each with browser.WrapFile to read its name/size/type or
+// its contents -- see domrt/browser's File API.
 func (d *DataTransfer) Files() []js.Value {
 	files := d.Value.Get("files")
 	out := make([]js.Value, files.Length())

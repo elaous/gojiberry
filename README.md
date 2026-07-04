@@ -84,21 +84,35 @@ expanded by the same recursive scan, with no extra grammar required.
   `OpenDatabase` (IndexedDB — open/upgrade/transaction/object-store,
   each blocking call bridged from IndexedDB's event-based requests the
   same way `domrt.Await` bridges Promises), `GetUserMedia`/
-  `EnumerateDevices`/`SetVideoSource` (camera/mic), and
-  `WriteClipboardText`/`ReadClipboardText`.
+  `EnumerateDevices`/`SetVideoSource` (camera/mic),
+  `WriteClipboardText`/`ReadClipboardText`, and the File API (`File`'s
+  `ReadAsText`/`ReadAsArrayBuffer`/`ReadAsDataURL`, bridged from
+  `FileReader`'s events the same way as IndexedDB, plus
+  `CreateObjectURL`/`RevokeObjectURL`) for reading `dom.InputElement`'s
+  or `dom.DataTransfer`'s `File` objects.
 - **`domrt/dom`** (`GOOS=js GOARCH=wasm`) — typed `Document`/`Element`/
   `Window` wrappers around raw `syscall/js` DOM calls (`GetElementByID`,
   `AppendChild`, `AddEventListener`, `SetTimeout`, ...), each with a
-  `Get`/`Call` escape hatch for whatever a typed method doesn't cover
-  yet, the same principle as `browser.Global`. `Window.AddEventListener`
-  returns the `js.Func` it registered, since `RemoveEventListener` only
-  works when given that exact reference back; `SetTimeout`/
-  `SetInterval`/`RequestAnimationFrame` return the id their `Clear*`
-  counterpart needs for the same reason. Also: `Element.GetContext2D`/
-  `GetContext3D` (Canvas 2D and WebGL — the constants a WebGL program
-  needs, like `TRIANGLES()`/`ARRAY_BUFFER()`, are methods that read the
-  real value off the live context rather than hardcoded Go integers,
-  so they can't drift from whatever the browser actually defines),
+  `Get`/`Call`/`Set` escape hatch for whatever a typed method doesn't
+  cover yet, the same principle as `browser.Global`.
+  `Window.AddEventListener` returns the `js.Func` it registered, since
+  `RemoveEventListener` only works when given that exact reference
+  back; `SetTimeout`/`SetInterval`/`RequestAnimationFrame` return the id
+  their `Clear*` counterpart needs for the same reason.
+  `DomNode` is the interface `Element` and every element type below
+  satisfy (via Go embedding, mirroring how `HTMLCanvasElement` etc.
+  extend `Element` in the real DOM), so `AppendChild`/`RemoveChild`
+  accept any of them: `CanvasElement` (`Element.AsCanvas()`,
+  `GetContext2D`/`GetContext3D` for Canvas 2D and WebGL — the constants
+  a WebGL program needs, like `TRIANGLES()`/`ARRAY_BUFFER()`, are
+  methods that read the real value off the live context rather than
+  hardcoded Go integers, so they can't drift from whatever the browser
+  actually defines), `AnchorElement` (`AsAnchor()`,
+  `Href`/`Target`/`Rel`/`Download`), `ButtonElement` (`AsButton()`,
+  `Disabled`/`Type`/`Click`), `SelectElement` (`AsSelect()`,
+  `SelectedIndex`/`Multiple`/`Options`), and `InputElement`
+  (`AsInput()`, `Checked`/`Type`/`Disabled`/`Files` — see the File API
+  above for reading what `Files` returns). Also:
   `NewIntersectionObserver`/`NewResizeObserver`, and
   `Element.OnDragStart`/`OnDragOver`/`OnDrop` plus a typed
   `DataTransfer`.
@@ -426,6 +440,25 @@ generated code.
   # open http://localhost:8080/ -- camera/clipboard permissions need
   # to be granted (browsers prompt automatically over plain HTTP on
   # localhost; a real deployment needs HTTPS for both).
+  ```
+
+- `examples/wasm-typed-elements-demo` — `domrt/dom`'s typed element
+  subtypes and `domrt/browser`'s File API: `Element.AsCanvas`/
+  `AsAnchor`/`AsButton`/`AsSelect`/`AsInput` cast a plain `Element` to
+  `CanvasElement`/`AnchorElement`/`ButtonElement`/`SelectElement`/
+  `InputElement`, each exercised through its actual type-specific
+  methods, plus reading a real uploaded file's contents back through
+  `browser.File.ReadAsText` and minting a `blob:` URL with
+  `CreateObjectURL`. Verified against a real headless Chromium: a real
+  mouse click (on top of a synthesized `Click()` call) and a real file
+  upload via Playwright's `setInputFiles`, not just a compile check:
+
+  ```
+  go generate ./...
+  GOOS=js GOARCH=wasm go build -o examples/wasm-typed-elements-demo/main.wasm ./examples/wasm-typed-elements-demo/
+  cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-typed-elements-demo/
+  cd examples/wasm-typed-elements-demo && python3 -m http.server 8080
+  # open http://localhost:8080/
   ```
 
 - `examples/resource-imports-demo` — a JSON config decoded straight

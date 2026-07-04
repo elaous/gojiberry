@@ -33,7 +33,7 @@ void main() {
 func main() {
 	document := browser.Document()
 
-	canvas2D := document.GetElementByID("c2d")
+	canvas2D := document.GetElementByID("c2d").AsCanvas()
 	ctx2D := canvas2D.GetContext2D()
 	ctx2D.SetFillStyle("rgb(200, 0, 50)")
 	ctx2D.FillRect(0, 0, 100, 100)
@@ -41,7 +41,7 @@ func main() {
 	document.GetElementByID("result2d").SetTextContent(
 		fmt.Sprintf("%d,%d,%d,%d", px2D.Pix[0], px2D.Pix[1], px2D.Pix[2], px2D.Pix[3]))
 
-	canvas3D := document.GetElementByID("c3d")
+	canvas3D := document.GetElementByID("c3d").AsCanvas()
 	gl := canvas3D.GetContext3D()
 	if gl == nil {
 		document.GetElementByID("result3d").SetTextContent("no webgl context")
