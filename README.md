@@ -80,7 +80,12 @@ expanded by the same recursive scan, with no extra grammar required.
   exposes any global browser API by name (e.g. `Global("WebAssembly")`)
   for one-offs; typed wrappers cover the APIs most apps need: `Fetch`/
   `Response.Text`/`Response.JSON`, `LocalStorage`/`SessionStorage`,
-  `Connect` (WebSocket), and `Document()`/`Window()` (see `domrt/dom`).
+  `Connect` (WebSocket), `Document()`/`Window()` (see `domrt/dom`),
+  `OpenDatabase` (IndexedDB — open/upgrade/transaction/object-store,
+  each blocking call bridged from IndexedDB's event-based requests the
+  same way `domrt.Await` bridges Promises), `GetUserMedia`/
+  `EnumerateDevices`/`SetVideoSource` (camera/mic), and
+  `WriteClipboardText`/`ReadClipboardText`.
 - **`domrt/dom`** (`GOOS=js GOARCH=wasm`) — typed `Document`/`Element`/
   `Window` wrappers around raw `syscall/js` DOM calls (`GetElementByID`,
   `AppendChild`, `AddEventListener`, `SetTimeout`, ...), each with a
@@ -89,7 +94,14 @@ expanded by the same recursive scan, with no extra grammar required.
   returns the `js.Func` it registered, since `RemoveEventListener` only
   works when given that exact reference back; `SetTimeout`/
   `SetInterval`/`RequestAnimationFrame` return the id their `Clear*`
-  counterpart needs for the same reason.
+  counterpart needs for the same reason. Also: `Element.GetContext2D`/
+  `GetContext3D` (Canvas 2D and WebGL — the constants a WebGL program
+  needs, like `TRIANGLES()`/`ARRAY_BUFFER()`, are methods that read the
+  real value off the live context rather than hardcoded Go integers,
+  so they can't drift from whatever the browser actually defines),
+  `NewIntersectionObserver`/`NewResizeObserver`, and
+  `Element.OnDragStart`/`OnDragOver`/`OnDrop` plus a typed
+  `DataTransfer`.
 - **`domrt/sw`** (`GOOS=js GOARCH=wasm`) — lets a Go/WASM binary run as
   a browser service worker: `OnInstall`/`OnActivate`/`OnFetch` register
   the lifecycle/fetch events, `ExtendableEvent.WaitUntil` and
@@ -377,6 +389,43 @@ generated code.
   cd examples/wasm-sw-demo && python3 -m http.server 8080
   # open http://localhost:8080/ -- devtools > Application > Service Workers
   # shows it installed, activated, and claimed the page.
+  ```
+
+- `examples/wasm-canvas-demo` — `domrt/dom`'s `Context2D`/`Context3D`:
+  fills a 2D canvas with a solid color and draws a full-viewport quad
+  on a WebGL canvas with a solid-color shader, then reads a pixel back
+  from each (via the same package's `GetImageData`/`ReadPixels`) to
+  prove the draw calls actually landed. Verified against a real
+  headless Chromium (falls back to software WebGL there, which is
+  expected and fine):
+
+  ```
+  go generate ./...
+  GOOS=js GOARCH=wasm go build -o examples/wasm-canvas-demo/main.wasm ./examples/wasm-canvas-demo/
+  cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-canvas-demo/
+  cd examples/wasm-canvas-demo && python3 -m http.server 8080
+  # open http://localhost:8080/
+  ```
+
+- `examples/wasm-platform-demo` — `domrt`'s newer platform wrappers
+  together: IndexedDB (open/upgrade/put/get), `IntersectionObserver`/
+  `ResizeObserver`, drag-and-drop (`Element.OnDragStart`/`OnDragOver`/
+  `OnDrop` + `DataTransfer`), `MediaDevices.GetUserMedia`, and the
+  Clipboard API, each writing its result into its own element. Verified
+  against a real headless Chromium: a fake camera device
+  (`--use-fake-device-for-media-stream`) producing a real video track,
+  a real IndexedDB round trip, and drag-and-drop driven by Playwright's
+  actual mouse-based drag (which the browser turns into genuine
+  `dragstart`/`dragover`/`drop` events), not just a compile check:
+
+  ```
+  go generate ./...
+  GOOS=js GOARCH=wasm go build -o examples/wasm-platform-demo/main.wasm ./examples/wasm-platform-demo/
+  cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-platform-demo/
+  cd examples/wasm-platform-demo && python3 -m http.server 8080
+  # open http://localhost:8080/ -- camera/clipboard permissions need
+  # to be granted (browsers prompt automatically over plain HTTP on
+  # localhost; a real deployment needs HTTPS for both).
   ```
 
 - `examples/resource-imports-demo` — a JSON config decoded straight
