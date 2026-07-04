@@ -45,23 +45,18 @@ type CanvasPageProps struct {
 	Content string
 }
 
-// bootstrapScript loads the WASM autosave client. It's plain,
-// unparameterized JS (no Go values interpolated into it), so there's
-// no injection concern in embedding it as a raw script body.
-const bootstrapScript = `
-const go = new Go();
-WebAssembly.instantiateStreaming(fetch("/static/main.wasm"), go.importObject).then((result) => {
-	go.run(result.instance);
-});
-`
-
 var pageStyle_CanvasPage_style_css = "body {\n\tfont-family: system-ui, sans-serif;\n\tmax-width: 720px;\n\tmargin: 2rem auto;\n\tpadding: 0 1rem;\n\tcolor: #1a1a1a;\n}\ntextarea#canvas {\n\twidth: 100%;\n\theight: 60vh;\n\tfont-size: 1rem;\n\tfont-family: inherit;\n\tpadding: 0.75rem;\n\tbox-sizing: border-box;\n\tborder: 1px solid #ccc;\n\tborder-radius: 4px;\n}\n#status {\n\tcolor: #666;\n\tfont-size: 0.85rem;\n}\nul.documents {\n\tlist-style: none;\n\tpadding: 0;\n}\nul.documents li {\n\tpadding: 0.5rem 0;\n\tborder-bottom: 1px solid #eee;\n}\n"
 
 // CanvasPage is the typing canvas for one document: a textarea seeded
 // with its current content, a status indicator, and the WASM client
 // that debounces edits into PUT /api/documents/{id} autosave calls.
+// @wasm below pulls in the wasm_exec.js loader and the
+// WebAssembly.instantiateStreaming bootstrap script automatically
+// (see internal/transpile/page_metadata.go) -- this page doesn't
+// write either <script> tag itself.
 //
 // @stylesheets static/style.css
+// @wasm /static/main.wasm
 func CanvasPage(props CanvasPageProps) gox.Node {
-	return gox.Document{Title: DefaultTitle, Head: []gox.Node{gox.Style(pageStyle_CanvasPage_style_css)}, Body: gox.Frag(gox.El("p", nil, gox.El("a", []gox.Attr{gox.A("href", "/")}, gox.Text("Back"))), gox.El("div", []gox.Attr{gox.A("id", "app"), gox.A("data-doc-id", gox.AttrVal(props.ID))}, gox.El("textarea", []gox.Attr{gox.A("id", "canvas")}, gox.Child(props.Content)), gox.El("div", nil, gox.El("span", []gox.Attr{gox.A("id", "status")}, gox.Text("saved")))), gox.El("script", []gox.Attr{gox.A("src", "/static/wasm_exec.js")}), gox.El("script", nil, gox.Child(gox.Raw(bootstrapScript))))}.Render()
+	return gox.Document{Title: DefaultTitle, Head: []gox.Node{gox.Style(pageStyle_CanvasPage_style_css)}, Body: gox.Frag(gox.Frag(gox.El("p", nil, gox.El("a", []gox.Attr{gox.A("href", "/")}, gox.Text("Back"))), gox.El("div", []gox.Attr{gox.A("id", "app"), gox.A("data-doc-id", gox.AttrVal(props.ID))}, gox.El("textarea", []gox.Attr{gox.A("id", "canvas")}, gox.Child(props.Content)), gox.El("div", nil, gox.El("span", []gox.Attr{gox.A("id", "status")}, gox.Text("saved"))))), gox.El("script", []gox.Attr{gox.A("src", "/static/wasm_exec.js")}), gox.El("script", nil, gox.Raw("\nconst go = new Go();\nWebAssembly.instantiateStreaming(fetch(\"/static/main.wasm\"), go.importObject).then((result) => {\n\tgo.run(result.instance);\n});\n")))}.Render()
 }

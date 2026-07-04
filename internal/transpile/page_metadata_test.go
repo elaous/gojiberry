@@ -189,6 +189,59 @@ func main() {
 	mustCompileAndRun(t, dir, "main.go", got)
 }
 
+// TestPageMetadataInjectsWasmBootstrapScripts covers @wasm: it should
+// append the wasm_exec.js loader and an instantiateStreaming bootstrap
+// script after the page's own content -- the exact boilerplate every
+// WASM-consuming example in this repo otherwise hand-writes -- with
+// wasm_exec.js's URL derived from the .wasm URL's own directory.
+func TestPageMetadataInjectsWasmBootstrapScripts(t *testing.T) {
+	dir := setupModuleWithGox(t)
+	src := `package main
+
+import (
+	"os"
+	"strings"
+
+	"github.com/elaous/gojiberry/gox"
+)
+
+// @title app
+// @wasm /static/main.wasm
+func Page() gox.Node {
+	return gox.El("div", []gox.Attr{gox.A("id", "app")})
+}
+
+func main() {
+	got, err := gox.RenderString(Page())
+	if err != nil {
+		panic(err)
+	}
+	if !strings.Contains(got, ` + "`" + `<div id="app"></div><script src="/static/wasm_exec.js"></script><script>` + "`" + `) {
+		panic("scripts not appended right after the page's own content: " + got)
+	}
+	if !strings.Contains(got, ` + "`" + `WebAssembly.instantiateStreaming(fetch("/static/main.wasm")` + "`" + `) {
+		panic("bootstrap script doesn't fetch the annotated wasm URL: " + got)
+	}
+	if !strings.HasSuffix(got, "</script></body></html>") {
+		panic("expected the bootstrap script to be the last thing in body: " + got)
+	}
+	os.Exit(0)
+}
+`
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(out)
+	if !strings.Contains(got, `gox.A("src", "/static/wasm_exec.js")`) {
+		t.Errorf("expected wasm_exec.js's URL derived from the .wasm URL's directory, got:\n%s", got)
+	}
+	if !strings.Contains(got, "gox.Frag(gox.El(\"div\"") {
+		t.Errorf("expected the original body wrapped in a Frag alongside the scripts, got:\n%s", got)
+	}
+	mustCompileAndRun(t, dir, "main.go", got)
+}
+
 // TestPageMetadataDoesNotWrapNestedClosureReturns covers the idiom
 // this codebase already uses for rendering a []gox.Node from a loop
 // (see examples/ssr-demo's ItemList): the immediately-invoked
