@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "gox-tags",
   "scopeName": "gox.tags.injection",
-  "injectionSelector": "L:source.gox",
+  "injectionSelector": "L:source.gox - comment",
   "patterns": [
     { "include": "#tag" }
   ],

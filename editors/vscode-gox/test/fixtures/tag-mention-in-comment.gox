@@ -1,0 +1,28 @@
+//go:build ignore
+
+// This file is a tokenization fixture (see ../tag-in-comment-test.js),
+// not a buildable Go source file (there's no func main here on
+// purpose) -- the ignore tag keeps `go build ./...` at the repo root
+// from tripping over the .gox.go goxc generates from it, the same
+// reason ../fixtures/highlight-sample.go has one.
+package main
+
+import "github.com/elaous/gojiberry/gox"
+
+// A is a normal component with no bare tag mentions in its comments.
+func A() gox.Node {
+	return <div>x</div>
+}
+
+// B doesn't write either <script> tag itself -- this line is the
+// regression case: a plain comment mentioning a bare <script>-shaped
+// sequence, with no closing </script> anywhere nearby, used to be
+// misread by the tag injection as an unterminated real tag-open. That
+// left the tokenizer "stuck" inside a fake meta.tag.gox scope for the
+// rest of the file, silently breaking ordinary Go keyword highlighting
+// (func, identifiers, types) for every function after it -- not just
+// tag highlighting. See injectionSelector: "L:source.gox - comment" in
+// ../../syntaxes/gox-tags.tmLanguage.json.
+func B() gox.Node {
+	return <div>y</div>
+}
