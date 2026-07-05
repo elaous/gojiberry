@@ -986,6 +986,34 @@ generated code.
   # open http://localhost:8096/?role=owner in one tab, ?role=editor or ?role=viewer in another
   ```
 
+- `examples/gio-counter-demo` — the same stateful counter
+  `examples/wasm-counter` mounts into a real browser DOM via `domrt`,
+  mounted instead into a real native window via
+  [Gio](https://gioui.org): proof `gox.Node` is renderer-agnostic in
+  the sense that actually matters, since a genuinely different target
+  platform (a native GPU window, not a browser) is a new consumer of
+  the tree rather than a rewrite of it. `shared/counter.gox` has no
+  `js`/`wasm` or Gio import at all -- only `gox.El`/`gox.Text`/
+  `gox.On`; `goxgio/render.go` is the new renderer, walking `div`/
+  `span`/`p`/`button` onto Gio's `layout`/`widget/material` packages
+  with no diffing (Gio repaints every frame anyway) and a
+  `map[string]*widget.Clickable` keyed by `Node.Key` or, failing that,
+  the element's `id` attribute, since a Clickable must persist across
+  frames the way a DOM element does but the `Node` tree doesn't.
+  Verified via Gio's own headless GPU backend (no display server
+  needed): a real (software-rasterized where no GPU device is present)
+  frame is rendered, read back pixel-for-pixel, a real
+  `widget.Clickable.Click()` drives the "+"/"-" buttons' handlers, and
+  both the counter's state *and* the rendered pixels genuinely change
+  -- see that example's README for a real, non-obvious one-frame glyph-
+  atlas latency this surfaced in Gio itself:
+
+  ```
+  cd examples/gio-counter-demo
+  go test ./...   # headless verification, no display required
+  go run .        # the real interactive window, needs a display
+  ```
+
 ## Editor support
 
 `editors/vscode-gox` is a minimal VS Code extension: `.gox` file
