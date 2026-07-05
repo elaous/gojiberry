@@ -1127,6 +1127,20 @@ marker to begin with). Same idea as `es6-string-html`/
 directory's README for the one real constraint (the marker must share
 a line with the opening backtick).
 
+## Development
+
+The root `Makefile` wraps the repo-wide checks used throughout this
+README: `make check` regenerates every `*.gox.go` and runs
+`gofmt`/`vet`/`test` for both native and `GOOS=js GOARCH=wasm`, plus
+the `editors/vscode-gox` grammar suite (`make grammar-test-setup` once
+first, to fetch the VS Code grammars it tokenizes against); `make docs`
+regenerates every `docs/*.txt` API dump. Every example under
+`examples/` has its own `Makefile` too (`make run`, `make test`, and
+where relevant `make wasm`/`make clean`), each just running the exact
+commands that example's own section above documents -- read the
+`Makefile` itself if you want to see precisely what a shortcut expands
+to, or run the commands by hand if you'd rather not use `make` at all.
+
 ## Known limitations (v1)
 
 - Generated `.go` files don't yet carry `//line` directives, so a

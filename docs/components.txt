@@ -68,6 +68,15 @@ func Collab(props CollabProps) gox.Node
     domrt/browser.Socket) to make Content/Comments actually collaborative;
     see examples/collab-editor-app for one way to wire that up.
 
+    Collab only gates the affordances *around* Content -- Actions/
+    Delete/Share/Comments -- since Content is an opaque []gox.Node it
+    can't reach into. The gj-collab-readonly class it adds when !CanEdit
+    is purely cosmetic (a slight opacity change); if Content includes a
+    real input/textarea, making it genuinely non-interactive for a viewer
+    (not just visually muted) is the caller's job, e.g. Textarea's own
+    Disabled field driven off the same CapabilitiesForRole(Role) call.
+    examples/collab-editor-app does exactly this.
+
 func ColorPicker(props ColorPickerProps) gox.Node
     ColorPicker renders a styled native color input, letting the browser handle
     the actual color-picker UI.
