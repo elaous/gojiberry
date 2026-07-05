@@ -83,6 +83,19 @@ func FileUploader(props FileUploaderProps) gox.Node
     (clicking anywhere on it opens the file browser, no JS needed for that part)
     plus an optional progress bar.
 
+func Icon(props IconProps) gox.Node
+    Icon renders a small inline glyph, sized and colored via CSS. It's
+    deliberately text (a Unicode character), not an inline <svg>: domrt's
+    client-side Mount/Update create elements with plain createElement, which
+    builds the wrong (HTML, not SVG) namespace element for <svg>/ <path>/etc.,
+    so any such tree silently fails to render once mounted client-side even
+    though it looks fine in server-rendered HTML (see Progress's circle variant,
+    and domrt/svg's own doc comment, for the same constraint solved the same
+    way elsewhere in this package). For a real vector icon that must render
+    client-side, build it yourself with domrt/svg.CreateElement and pass it
+    through one of this package's existing Icon *gox.Node slots (Chip, Dropdown,
+    ContextMenu) instead.
+
 func ImageZoom(props ImageZoomProps) gox.Node
     ImageZoom renders a thumbnail that, when Zoomed, also shows a full-viewport
     overlay with the same image enlarged -- a Modal-style backdrop (see Modal's
@@ -407,6 +420,36 @@ type FileUploaderProps struct {
     for real drag-and-drop file access (html.DragEvent.DataTransfer.Files()).
     FileUploader itself only renders the widget and prevents the browser's
     default drag-over/drop navigation.
+
+type IconName string
+    IconName selects one of Icon's built-in glyphs.
+
+const (
+	IconCheck        IconName = "check"
+	IconClose        IconName = "close"
+	IconChevronUp    IconName = "chevron-up"
+	IconChevronDown  IconName = "chevron-down"
+	IconChevronLeft  IconName = "chevron-left"
+	IconChevronRight IconName = "chevron-right"
+	IconPlus         IconName = "plus"
+	IconMinus        IconName = "minus"
+	IconMenu         IconName = "menu"
+	IconStar         IconName = "star"
+)
+type IconProps struct {
+	Name IconName // one of the built-in names above; ignored if Glyph is set
+	// Glyph overrides Name with any caller-supplied character (or short
+	// string) -- an easy escape hatch for a symbol not in the built-in
+	// set, styled the same way as a built-in one.
+	Glyph string
+	Size  int    // px, defaults to 20
+	Color string // defaults to inheriting the surrounding text color
+	// Label is the icon's accessible name. "" marks it as decorative
+	// (aria-hidden) -- the right default when it sits next to text
+	// that already says the same thing, e.g. a Button's label.
+	Label string
+}
+    IconProps configures Icon.
 
 type ImageZoomProps struct {
 	Src    string

@@ -391,6 +391,17 @@ and `Popover` (anchored, click-triggered content with the same
 outside-click-to-close backdrop trick as `ContextMenu`, for when
 `Tooltip`'s pure-hover/non-interactive content isn't enough).
 
+Last, `Icon`: a small set of built-in glyphs (`IconCheck`, `IconClose`,
+the four `IconChevron*`, `IconPlus`/`IconMinus`, `IconMenu`, `IconStar`)
+or any caller-supplied `Glyph`, sized and colored via CSS. It's
+deliberately a Unicode character in a `<span>`, not an inline `<svg>`:
+see the `Progress` circle-variant note below for why an `<svg>` tree
+silently fails to render once mounted client-side, a constraint this
+hits directly since an icon is exactly the kind of thing you'd reach
+for `<svg>` for. Reach for `domrt/svg.CreateElement` directly (paired
+with one of this package's existing `Icon *gox.Node` slots on `Chip`/
+`Dropdown`/`ContextMenu`) if you need a real vector icon client-side.
+
 None of them import
 `domrt` or `syscall/js` — every interactive one is a pure function of
 its props, taking the current state and `On*` callbacks the same way
@@ -759,7 +770,7 @@ generated code.
 - `examples/wasm-components-demo` — a gallery of every component in
   `components`, each wired to real local state and mounted with
   `domrt.Mount`/`Update`. Verified against a real headless Chromium:
-  every one of the 33 components driven through its actual
+  every one of the 34 components driven through its actual
   interactivity (clicking a tab/accordion header/carousel arrow/wizard
   step, opening the dropdown and picking a multi-select option,
   removing a chip, dragging the slider, setting the date/color inputs,
@@ -847,7 +858,7 @@ generated code.
   policy blocked the Encore CLI installer).
 
 - `examples/showcase-app` — every capability above, on one page: the
-  full 33-component gallery, `domrt/browser`'s core wrappers plus DOM
+  full 34-component gallery, `domrt/browser`'s core wrappers plus DOM
   extras (fetch/localStorage/window+document dimensions/scroll/style/
   SVG/image loading/form submission/cookies/custom events/global error
   capture/geolocation), the newer platform wrappers (IndexedDB/
