@@ -3,16 +3,17 @@
 //go:build js && wasm
 
 // Package main wires model.go's document and layout.go's word-wrap
-// engine to a real <canvas> and a hidden <input> that captures actual
-// keyboard input (including paste and IME composition, which the
-// browser handles for us): typed characters arrive as ordinary
-// "input" events, while navigation/deletion (arrows, Backspace,
-// Delete, Enter) are intercepted on "keydown" via domrt/html's new
-// Element.OnKeyDown, since a plain gox.EventHandler carries none of
-// that. Mouse position for click-to-position-cursor and drag-to-select
-// comes from the new Element.OnMouseDown/OnMouseMove/OnMouseUp, the
-// same kind of typed escape hatch OnContextMenu already used for
-// exactly this problem (gox.Event carries no coordinates at all).
+// engine to a real canvas element and a hidden input element that
+// captures actual keyboard input (including paste and IME
+// composition, which the browser handles for us): typed characters
+// arrive as ordinary "input" events, while navigation/deletion
+// (arrows, Backspace, Delete, Enter) are intercepted on "keydown" via
+// domrt/html's new Element.OnKeyDown, since a plain gox.EventHandler
+// carries none of that. Mouse position for click-to-position-cursor
+// and drag-to-select comes from the new
+// Element.OnMouseDown/OnMouseMove/OnMouseUp, the same kind of typed
+// escape hatch OnContextMenu already used for exactly this problem
+// (gox.Event carries no coordinates at all).
 package main
 
 import (

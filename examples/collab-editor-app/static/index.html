@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gojiberry live collab editor</title>
+  <link rel="stylesheet" href="base.css">
+  <link rel="stylesheet" href="button.css">
+  <link rel="stylesheet" href="textarea.css">
+  <link rel="stylesheet" href="collab.css">
+  <script src="wasm_exec.js"></script>
+</head>
+<body>
+  <h1>Live collab editor</h1>
+  <p>Open this page in two tabs with different roles to see live sync
+  and per-role permissions in action:
+  <a href="?role=owner">Owner</a> |
+  <a href="?role=editor">Editor</a> |
+  <a href="?role=viewer">Viewer</a></p>
+
+  <div id="app"></div>
+
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+      go.run(result.instance);
+    });
+  </script>
+</body>
+</html>
