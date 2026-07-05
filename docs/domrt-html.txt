@@ -862,6 +862,23 @@ func (e *Element) OnDrop(fn func(evt DragEvent)) js.Func
     OnDrop registers fn for the drop event (fired on the drop target on
     release).
 
+func (e *Element) OnKeyDown(fn func(KeyEvent)) js.Func
+    OnKeyDown registers fn for the keydown event -- the one that fires for
+    non-printable keys (arrows, Backspace, Enter, Ctrl/Cmd shortcuts), unlike
+    "input" which only fires once a character actually changes the value.
+
+func (e *Element) OnKeyUp(fn func(KeyEvent)) js.Func
+    OnKeyUp registers fn for the keyup event.
+
+func (e *Element) OnMouseDown(fn func(MouseEvent)) js.Func
+    OnMouseDown registers fn for the mousedown event.
+
+func (e *Element) OnMouseMove(fn func(MouseEvent)) js.Func
+    OnMouseMove registers fn for the mousemove event.
+
+func (e *Element) OnMouseUp(fn func(MouseEvent)) js.Func
+    OnMouseUp registers fn for the mouseup event.
+
 func (e *Element) ParentElement() *Element
     ParentElement returns e's parent element, or nil if e has none.
 
@@ -1130,6 +1147,50 @@ func (e *JSError) AsJSException() js.Value
 
 func (e *JSError) Error() string
     Error implements the standard error interface.
+
+type KeyEvent struct {
+	Value    js.Value
+	Key      string // e.g. "a", "Enter", "ArrowLeft", "Backspace"
+	Code     string // physical key, e.g. "KeyA", "Digit1", independent of layout/Shift
+	CtrlKey  bool
+	ShiftKey bool
+	AltKey   bool
+	MetaKey  bool
+}
+    KeyEvent wraps a keydown/keyup DOM event with the fields a text editor or
+    shortcut handler actually needs -- gox.Event carries none of these (see
+    its doc comment: Value is only ever a simple string/bool payload), so,
+    like DragEvent and SubmitEvent, this is a typed escape hatch for the parts a
+    plain gox.EventHandler can't express.
+
+func (e KeyEvent) PreventDefault()
+    PreventDefault suppresses the browser's default handling of the event (e.g.
+    stopping ArrowUp/ArrowDown from scrolling the page).
+
+func (e KeyEvent) StopPropagation()
+    StopPropagation stops the event from bubbling further.
+
+type MouseEvent struct {
+	Value js.Value
+	X, Y  float64
+}
+    MouseEvent wraps a mousedown/mousemove/mouseup DOM event with its position
+    relative to the viewport (clientX/clientY) -- gox.Event carries no
+    coordinates at all (see its doc comment), so, like DragEvent and KeyEvent,
+    this is a typed escape hatch for building anything that needs a real
+    click/drag position: canvas hit-testing, custom selection, image cropping,
+    and so on.
+
+func (e MouseEvent) PreventDefault()
+    PreventDefault suppresses the browser's default handling of the event. This
+    matters more here than it might seem: clicking a non-focusable element (a
+    plain <canvas>, say) makes the browser clear focus from whatever was focused
+    once every mousedown handler returns -- calling a different element's
+    Focus() from inside your own mousedown handler gets silently undone right
+    after unless you call PreventDefault first.
+
+func (e MouseEvent) StopPropagation()
+    StopPropagation stops the event from bubbling further.
 
 type Rect struct {
 	X, Y, Width, Height, Top, Right, Bottom, Left float64
