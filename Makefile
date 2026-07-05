@@ -35,6 +35,23 @@ wasm-vet:
 	GOOS=js GOARCH=wasm go build ./...
 	GOOS=js GOARCH=wasm go vet ./...
 
+# coverage runs the native (non-wasm) test suite with a coverage
+# profile and prints the per-function summary -- js/wasm-only packages
+# (domrt and friends) have no native test suite to profile here, so
+# they're not part of this number.
+.PHONY: coverage
+coverage:
+	go test -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out
+
+# coverage-html turns the same profile into a browsable, per-line
+# annotated HTML report -- open coverage.out.html to see exactly which
+# lines a package's tests do and don't exercise.
+.PHONY: coverage-html
+coverage-html: coverage
+	go tool cover -html=coverage.out -o coverage.out.html
+	@echo "wrote coverage.out.html"
+
 # grammar-test-setup only needs to run once (or after upgrading
 # editors/vscode-gox/test's dependencies) -- it downloads VS Code's own
 # Go/HTML/CSS/SQL/JSON grammars, which aren't redistributed here.
