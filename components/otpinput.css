@@ -1,0 +1,15 @@
+/* OTPInput stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-otp { display: flex; gap: 0.5em; }
+.gj-otp-input {
+  width: 2em;
+  height: 2.5em;
+  border: 1px solid var(--gj-border);
+  border-radius: var(--gj-radius);
+  font: inherit;
+  font-size: 1.25em;
+  text-align: center;
+}
+.gj-otp-input:focus { border-color: var(--gj-accent); outline: none; }
+.gj-otp-input:disabled { cursor: not-allowed; opacity: 0.6; }
