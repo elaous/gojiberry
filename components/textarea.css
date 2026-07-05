@@ -1,0 +1,13 @@
+/* Textarea stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-textarea {
+  width: 100%;
+  border: 1px solid var(--gj-border);
+  border-radius: var(--gj-radius);
+  padding: 0.5em;
+  font: inherit;
+  color: var(--gj-text);
+  resize: vertical;
+}
+.gj-textarea:disabled { cursor: not-allowed; opacity: 0.6; }

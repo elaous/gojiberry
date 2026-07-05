@@ -1,0 +1,14 @@
+/* Button stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-button {
+  border: 1px solid transparent;
+  border-radius: var(--gj-radius);
+  padding: 0.5em 1em;
+  font: inherit;
+  cursor: pointer;
+}
+.gj-button:disabled { cursor: not-allowed; opacity: 0.6; }
+.gj-button-primary { background: var(--gj-accent); color: var(--gj-accent-contrast); }
+.gj-button-secondary { background: var(--gj-bg-muted); color: var(--gj-text); border-color: var(--gj-border); }
+.gj-button-danger { background: var(--gj-danger); color: var(--gj-accent-contrast); }

@@ -1,0 +1,15 @@
+{
+  "name": "vscode-gox-grammar-test",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Tokenizes the repo's .gox example files with the actual grammar to catch regressions (unbalanced patterns, injection selector breakage) without needing to open VS Code.",
+  "scripts": {
+    "fetch-go-grammar": "node fetch-go-grammar.js",
+    "fetch-embedded-grammars": "node fetch-embedded-grammars.js",
+    "test": "node tokenize.js && node highlight-test.js && node tag-in-comment-test.js"
+  },
+  "devDependencies": {
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.2.0"
+  }
+}

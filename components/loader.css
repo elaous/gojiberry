@@ -1,0 +1,13 @@
+/* Loader stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*) and the gj-spin keyframe. */
+
+.gj-loader {
+  display: inline-block;
+  border: 2px solid var(--gj-bg-muted);
+  border-top-color: var(--gj-accent);
+  border-radius: 50%;
+  animation: gj-spin 0.7s linear infinite;
+}
+.gj-loader-sm { width: 1em; height: 1em; }
+.gj-loader-md { width: 1.5em; height: 1.5em; }
+.gj-loader-lg { width: 2.5em; height: 2.5em; border-width: 3px; }

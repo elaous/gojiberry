@@ -1,0 +1,42 @@
+// Package main demos SSR the way it's actually meant to be used: served
+// over real HTTP, not printed to stdout. gox.Render already takes any
+// io.Writer, and http.ResponseWriter satisfies that interface directly
+// -- no gox changes needed, just point Render at it per request.
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+
+	"github.com/elaous/gojiberry/gox"
+)
+
+type PageProps struct {
+	Name string
+}
+
+func Page(props PageProps) gox.Node {
+	name := props.Name
+	if name == "" {
+		name = "stranger"
+	}
+	return <html>
+		<head><title>gojiberry</title></head>
+		<body><h1>Hello, {name}!</h1></body>
+	</html>
+}
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := gox.Render(w, Page(PageProps{Name: r.URL.Query().Get("name")})); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func main() {
+	http.HandleFunc("/", handler)
+	addr := ":8089"
+	fmt.Println("listening on", addr)
+	log.Fatal(http.ListenAndServe(addr, nil))
+}

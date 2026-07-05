@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gojiberry service worker demo</title>
+</head>
+<body>
+  <p id="status">registering...</p>
+  <script>
+    navigator.serviceWorker.register("sw-bootstrap.js", { scope: "./" }).then(() => {
+      return navigator.serviceWorker.ready;
+    }).then(() => {
+      document.getElementById("status").textContent = "ready";
+    }).catch((err) => {
+      document.getElementById("status").textContent = "error: " + err;
+    });
+  </script>
+</body>
+</html>

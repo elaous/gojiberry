@@ -1,0 +1,59 @@
+//go:build js && wasm
+
+package html
+
+import "syscall/js"
+
+// MouseEvent wraps a mousedown/mousemove/mouseup DOM event with its
+// position relative to the viewport (clientX/clientY) -- gox.Event
+// carries no coordinates at all (see its doc comment), so, like
+// DragEvent and KeyEvent, this is a typed escape hatch for building
+// anything that needs a real click/drag position: canvas
+// hit-testing, custom selection, image cropping, and so on.
+type MouseEvent struct {
+	Value js.Value
+	X, Y  float64
+}
+
+func newMouseEvent(v js.Value) MouseEvent {
+	return MouseEvent{Value: v, X: v.Get("clientX").Float(), Y: v.Get("clientY").Float()}
+}
+
+// PreventDefault suppresses the browser's default handling of the
+// event. This matters more here than it might seem: clicking a
+// non-focusable element (a plain <canvas>, say) makes the browser
+// clear focus from whatever was focused once every mousedown handler
+// returns -- calling a different element's Focus() from inside your
+// own mousedown handler gets silently undone right after unless you
+// call PreventDefault first.
+func (e MouseEvent) PreventDefault() { e.Value.Call("preventDefault") }
+
+// StopPropagation stops the event from bubbling further.
+func (e MouseEvent) StopPropagation() { e.Value.Call("stopPropagation") }
+
+// OnMouseDown registers fn for the mousedown event.
+func (e *Element) OnMouseDown(fn func(MouseEvent)) js.Func {
+	return e.onMouseEvent("mousedown", fn)
+}
+
+// OnMouseMove registers fn for the mousemove event.
+func (e *Element) OnMouseMove(fn func(MouseEvent)) js.Func {
+	return e.onMouseEvent("mousemove", fn)
+}
+
+// OnMouseUp registers fn for the mouseup event.
+func (e *Element) OnMouseUp(fn func(MouseEvent)) js.Func {
+	return e.onMouseEvent("mouseup", fn)
+}
+
+func (e *Element) onMouseEvent(event string, fn func(MouseEvent)) js.Func {
+	cb := js.FuncOf(func(this js.Value, args []js.Value) any {
+		if len(args) == 0 {
+			return nil
+		}
+		fn(newMouseEvent(args[0]))
+		return nil
+	})
+	e.AddEventListener(event, cb)
+	return cb
+}

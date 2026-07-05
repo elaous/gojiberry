@@ -1,0 +1,17 @@
+/* ContextMenu stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-contextmenu-backdrop { position: fixed; inset: 0; z-index: 999; }
+.gj-contextmenu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 10em;
+  padding: 0.25em 0;
+  background: var(--gj-bg);
+  border: 1px solid var(--gj-border);
+  border-radius: var(--gj-radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.gj-contextmenu-item { display: flex; align-items: center; gap: 0.5em; padding: 0.4em 0.9em; cursor: pointer; }
+.gj-contextmenu-item:hover { background: var(--gj-bg-muted); }
+.gj-contextmenu-item-disabled { color: var(--gj-muted); cursor: not-allowed; }

@@ -1,0 +1,136 @@
+package gox // import "github.com/elaous/gojiberry/gox"
+
+Package gox is the runtime for gojiberry components: a renderer-agnostic Node
+tree that can be walked to produce HTML (server-side) or to drive real DOM nodes
+(client-side, see domrt). Generated code from .gox files targets this package's
+constructors.
+
+FUNCTIONS
+
+func AttrVal(v any) string
+    AttrVal adapts the value of an attribute {expr} hole into a string,
+    for plain (non-event) attributes such as class={someExpr}.
+
+func EventValue[T any](e Event) T
+    EventValue reads e.Value as T, returning the zero value of T if the event
+    didn't carry a T (e.g. a click event has no string payload).
+
+func Render(w io.Writer, n Node) error
+    Render writes n as HTML to w. Text content and attribute values are escaped
+    automatically; use Raw to inject pre-trusted HTML deliberately.
+
+func RenderString(n Node) (string, error)
+    RenderString is a convenience wrapper around Render for tests and callers
+    that don't have an io.Writer handy.
+
+
+TYPES
+
+type Attr struct {
+	Name    string
+	Value   string       // plain string-valued attribute
+	Handler EventHandler // set instead of Value for event bindings (onclick, oninput, ...)
+}
+    Attr is a single attribute or event binding on an element.
+
+func A(name, value string) Attr
+    A constructs a plain string-valued attribute.
+
+func On(name string, handler EventHandler) Attr
+    On constructs an event-binding attribute, e.g. On("click", handler).
+
+type Document struct {
+	Title string
+	Head  []Node
+	Body  Node
+}
+    Document is the <html><head>...</head><body>...</body></html> wrapper
+    almost every top-level page needs, so individual pages don't each hand-roll
+    that boilerplate. Head holds extra <head> children (e.g. a Style-injected
+    stylesheet, <meta>, <link>); Body is the single node rendered inside <body>
+    -- use Frag to group multiple top-level children there.
+
+func (d Document) Render() Node
+    Render assembles the document into a single <html> Node tree.
+
+type Event struct {
+	Type    string
+	Value   any
+	Checked bool // convenience accessor for checkbox target.checked
+
+	// Has unexported fields.
+}
+    Event is a platform-neutral view of a DOM event. domrt populates it from a
+    real browser event; this package has no browser/WASM dependency.
+
+    Value carries whatever data the event has attached (a string for
+    input/change events, a float64 for a range slider, a custom type for an
+    application-defined event), erased to any so a single, non-generic Event
+    can be stored in a plain gox.Attr and mixed into a homogeneous []gox.Attr.
+    Use EventValue[T] for a type-safe read.
+
+func NewEvent(typ string, value any, checked bool, preventDefault, stopProp func()) Event
+    NewEvent constructs an Event; used by domrt (and tests) to populate the
+    callback hooks that PreventDefault/StopPropagation invoke.
+
+func (e Event) PreventDefault()
+    PreventDefault calls the underlying event's preventDefault, if any.
+
+func (e Event) StopPropagation()
+    StopPropagation calls the underlying event's stopPropagation, if any.
+
+type EventHandler func(Event)
+    EventHandler is a callback bound to a DOM event via an Attr built with On.
+    It is inert during server-side rendering; domrt wires it to real DOM events
+    on the client.
+
+type Kind int
+    Kind discriminates the variants of Node.
+
+const (
+	KindElement Kind = iota
+	KindText
+	KindFragment
+	KindRaw
+)
+type Node struct {
+	Kind     Kind
+	Tag      string // element tag name, e.g. "div"; empty for Text/Fragment
+	Key      string // optional reconciliation key, used by domrt's differ
+	Attrs    []Attr
+	Children []Node
+	Text     string // content, when Kind == KindText
+}
+    Node is a single node in a UI tree: an element, a text run, or a fragment (a
+    childless-tag grouping with no wrapper element).
+
+func Child(v any) Node
+    Child adapts the value of a {expr} child hole into a Node, mirroring how
+    JSX treats expression children: a Node is used as-is, a []Node becomes a
+    Fragment, nil renders nothing, and everything else is stringified as text.
+
+func El(tag string, attrs []Attr, children ...Node) Node
+    El constructs an element node. attrs may be nil. Generated code from .gox
+    files targets this for every lowercase (HTML) tag.
+
+func Frag(children ...Node) Node
+    Frag groups children with no wrapper element, e.g. for a component that
+    returns multiple siblings.
+
+func Raw(html string) Node
+    Raw constructs a text node whose content is emitted verbatim, without
+    HTML-escaping. Callers are responsible for ensuring the content is safe;
+    this is the equivalent of dangerouslySetInnerHTML.
+
+func Style(css string) Node
+    Style returns a <style> element injecting css verbatim -- e.g. the string
+    a gox CSS resource import binds -- for use in a Document's Head. css is
+    trusted, unescaped content, same caveat as Raw.
+
+func Text(s string) Node
+    Text constructs a text node. Content is HTML-escaped at render time.
+
+func (n Node) WithKey(key string) Node
+    Key returns a copy of n with its reconciliation key set, for use in keyed
+    lists: gox.El("li", nil, gox.Text(item)).WithKey(item.ID).
+

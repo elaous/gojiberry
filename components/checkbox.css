@@ -1,0 +1,8 @@
+/* Checkbox stylesheet for github.com/elaous/gojiberry/components.
+   Also covers CheckboxGroup's individual checkboxes -- pair with
+   checkboxgroup.css for its layout wrapper. */
+
+.gj-checkbox { display: inline-flex; align-items: center; gap: 0.5em; cursor: pointer; }
+.gj-checkbox-input { width: 1.1em; height: 1.1em; accent-color: var(--gj-accent); cursor: pointer; }
+.gj-checkbox-input:disabled { cursor: not-allowed; }
+.gj-checkbox-label { color: var(--gj-text); }

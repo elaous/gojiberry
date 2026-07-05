@@ -1,0 +1,43 @@
+package components
+
+import "github.com/elaous/gojiberry/gox"
+
+// SwitchProps configures Switch.
+type SwitchProps struct {
+	Label    string
+	Checked  bool
+	Disabled bool
+	OnChange func(checked bool)
+}
+
+// Switch renders a toggle switch: a native checkbox (visually hidden
+// but still keyboard/screen-reader accessible) styled as a sliding
+// track and thumb via the CSS :checked sibling selector, the same
+// "real control, custom look" approach FileUploader's hidden file
+// input uses.
+func Switch(props SwitchProps) gox.Node {
+	attrs := []gox.Attr{
+		gox.A("type", "checkbox"),
+		gox.A("class", "gj-switch-input"),
+		gox.A("role", "switch"),
+		gox.A("aria-checked", boolAttr(props.Checked)),
+	}
+	if props.Checked {
+		attrs = append(attrs, gox.A("checked", "checked"))
+	}
+	if props.Disabled {
+		attrs = append(attrs, gox.A("disabled", "disabled"))
+	}
+	if props.OnChange != nil {
+		attrs = append(attrs, gox.On("change", func(e gox.Event) { props.OnChange(e.Checked) }))
+	}
+	children := []gox.Node{
+		gox.El("input", attrs),
+		gox.El("span", []gox.Attr{gox.A("class", "gj-switch-track")},
+			gox.El("span", []gox.Attr{gox.A("class", "gj-switch-thumb")})),
+	}
+	if props.Label != "" {
+		children = append(children, gox.El("span", []gox.Attr{gox.A("class", "gj-switch-label")}, gox.Text(props.Label)))
+	}
+	return gox.El("label", []gox.Attr{gox.A("class", "gj-switch")}, children...)
+}

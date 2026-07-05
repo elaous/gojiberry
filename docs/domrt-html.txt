@@ -1,0 +1,1398 @@
+package html // import "github.com/elaous/gojiberry/domrt/html"
+
+Package dom wraps browser DOM/canvas/WebGL objects (Document, Element, Window,
+Context2D, Context3D, observers, drag-and-drop) as typed Go structs, each with a
+Get/Call escape hatch onto the underlying js.Value for anything not covered by a
+typed method.
+
+TYPES
+
+type AnchorElement struct{ Element }
+    AnchorElement is an Element known to be an <a>.
+
+func (a *AnchorElement) Download() string
+    Download returns the anchor's download attribute (the suggested filename).
+
+func (a *AnchorElement) Href() string
+    Href returns the anchor's resolved target URL.
+
+func (a *AnchorElement) Rel() string
+    Rel returns the anchor's rel attribute (e.g. "noopener noreferrer").
+
+func (a *AnchorElement) SetDownload(name string)
+    SetDownload sets the anchor's download attribute, marking it as a download
+    link and suggesting name as the saved filename.
+
+func (a *AnchorElement) SetHref(href string)
+    SetHref sets the anchor's target URL.
+
+func (a *AnchorElement) SetRel(rel string)
+    SetRel sets the anchor's rel attribute.
+
+func (a *AnchorElement) SetTarget(target string)
+    SetTarget sets the anchor's target browsing context.
+
+func (a *AnchorElement) Target() string
+    Target returns the anchor's target browsing context (e.g. "_blank").
+
+type ButtonElement struct{ Element }
+    ButtonElement is an Element known to be a <button>.
+
+func (b *ButtonElement) Disabled() bool
+    Disabled returns whether the button is disabled.
+
+func (b *ButtonElement) SetDisabled(disabled bool)
+    SetDisabled enables or disables the button.
+
+func (b *ButtonElement) SetType(t string)
+    SetType sets the button's type.
+
+func (b *ButtonElement) Type() string
+    Type returns the button's type ("submit", "reset", or "button").
+
+type CanvasElement struct{ Element }
+    CanvasElement is an Element known to be a <canvas>. See
+    CanvasElement.GetContext2D/GetContext3D (in canvas2d.go/canvas3d.go) for its
+    rendering contexts.
+
+func (c *CanvasElement) GetContext2D() *Context2D
+    GetContext2D returns c's 2D rendering context, or nil if the browser has no
+    2D context to give.
+
+func (c *CanvasElement) GetContext3D() *Context3D
+    GetContext3D returns c's WebGL rendering context (preferring WebGL2, falling
+    back to WebGL1), or nil if the browser supports neither.
+
+func (c *CanvasElement) Height() int
+    Height returns the canvas's pixel height.
+
+func (c *CanvasElement) SetHeight(h int)
+    SetHeight sets the canvas's pixel height.
+
+func (c *CanvasElement) SetWidth(w int)
+    SetWidth sets the canvas's pixel width.
+
+func (c *CanvasElement) ToDataURL(mimeType string) string
+    ToDataURL returns the canvas's current bitmap encoded as mimeType (e.g.
+    "image/png", "image/jpeg").
+
+func (c *CanvasElement) Width() int
+    Width returns the canvas's pixel width.
+
+type Context2D struct {
+	Context js.Value
+}
+    Context2D wraps a <canvas> element's 2D rendering context
+    (canvas.getContext("2d")). Get/Call cover anything without a typed method
+    below, the same escape hatch as the rest of this package.
+
+func (c *Context2D) Arc(x, y, radius, startAngle, endAngle float64, counterclockwise bool)
+    Arc adds a circular arc centered at (x, y) with the given radius and angle
+    range.
+
+func (c *Context2D) ArcTo(x1, y1, x2, y2, radius float64)
+    ArcTo adds an arc defined by two tangent lines through (x1,y1) and (x2,y2)
+    with the given radius.
+
+func (c *Context2D) BeginPath()
+    BeginPath starts a new path, discarding any current subpaths.
+
+func (c *Context2D) BezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y float64)
+    BezierCurveTo adds a cubic Bezier curve from the current point to (x,
+    y) using the two control points.
+
+func (c *Context2D) Call(method string, args ...any) js.Value
+    Call invokes a method not covered by a typed wrapper below.
+
+func (c *Context2D) ClearRect(x, y, w, h float64)
+    ClearRect clears the given rectangle to transparent black.
+
+func (c *Context2D) Clip()
+    Clip restricts subsequent drawing to the interior of the current path.
+
+func (c *Context2D) ClosePath()
+    ClosePath closes the current subpath by drawing a line back to its start.
+
+func (c *Context2D) DrawImage(image js.Value, dx, dy float64)
+    DrawImage draws image (a <img>/<canvas>/<video> element or ImageBitmap) at
+    (dx, dy) in its natural size.
+
+func (c *Context2D) DrawImageScaled(image js.Value, dx, dy, dw, dh float64)
+    DrawImageScaled draws image at (dx, dy) scaled to (dw, dh).
+
+func (c *Context2D) Fill()
+    Fill fills the current path with the current fill style.
+
+func (c *Context2D) FillRect(x, y, w, h float64)
+    FillRect fills the given rectangle with the current fill style.
+
+func (c *Context2D) FillStyle() string
+    FillStyle returns the color/gradient/pattern used by Fill/FillRect/FillText.
+
+func (c *Context2D) FillText(text string, x, y float64)
+    FillText draws text filled with the current fill style, with its start point
+    at (x, y).
+
+func (c *Context2D) Font() string
+    Font returns the current CSS font shorthand used by
+    FillText/StrokeText/MeasureTextWidth.
+
+func (c *Context2D) Get(name string) js.Value
+    Get returns a named property not covered by a typed getter below.
+
+func (c *Context2D) GetImageData(x, y, w, h int) ImageData
+    GetImageData reads back the pixels in the given rectangle.
+
+func (c *Context2D) GlobalAlpha() float64
+    GlobalAlpha returns the alpha (0-1) applied to all subsequent drawing.
+
+func (c *Context2D) GlobalCompositeOperation() string
+    GlobalCompositeOperation returns how new drawing is composited over existing
+    content.
+
+func (c *Context2D) LineCap() string
+    LineCap returns the current line cap style ("butt", "round", or "square").
+
+func (c *Context2D) LineJoin() string
+    LineJoin returns the current line join style ("round", "bevel", or "miter").
+
+func (c *Context2D) LineTo(x, y float64)
+    LineTo adds a straight line from the current point to (x, y).
+
+func (c *Context2D) LineWidth() float64
+    LineWidth returns the current stroke width in canvas units.
+
+func (c *Context2D) MeasureTextWidth(text string) float64
+    MeasureTextWidth returns the rendered width of text in the current font,
+    in canvas units.
+
+func (c *Context2D) MoveTo(x, y float64)
+    MoveTo starts a new subpath at (x, y) without drawing.
+
+func (c *Context2D) QuadraticCurveTo(cpx, cpy, x, y float64)
+    QuadraticCurveTo adds a quadratic Bezier curve from the current point to (x,
+    y) using the control point.
+
+func (c *Context2D) Rect(x, y, w, h float64)
+    Rect adds a rectangular subpath at (x, y) with the given size.
+
+func (c *Context2D) ResetTransform()
+    ResetTransform resets the current transform to the identity matrix.
+
+func (c *Context2D) Restore()
+    Restore pops the most recently saved drawing state off the stack.
+
+func (c *Context2D) Rotate(angle float64)
+    Rotate rotates the canvas coordinate system by angle radians (clockwise).
+
+func (c *Context2D) Save()
+    Save pushes the current drawing state (styles, transform, clip) onto a
+    stack.
+
+func (c *Context2D) Scale(x, y float64)
+    Scale scales the canvas coordinate system by (x, y).
+
+func (c *Context2D) SetFillStyle(style string)
+    SetFillStyle sets the style used by Fill/FillRect/FillText.
+
+func (c *Context2D) SetFont(font string)
+    SetFont sets the CSS font shorthand (e.g. "16px sans-serif") used for text.
+
+func (c *Context2D) SetGlobalAlpha(alpha float64)
+    SetGlobalAlpha sets the alpha (0-1) applied to all subsequent drawing.
+
+func (c *Context2D) SetGlobalCompositeOperation(op string)
+    SetGlobalCompositeOperation sets how new drawing is composited over existing
+    content (e.g. "source-over", "multiply").
+
+func (c *Context2D) SetLineCap(cap string)
+    SetLineCap sets the line cap style ("butt", "round", or "square").
+
+func (c *Context2D) SetLineJoin(join string)
+    SetLineJoin sets the line join style ("round", "bevel", or "miter").
+
+func (c *Context2D) SetLineWidth(width float64)
+    SetLineWidth sets the stroke width in canvas units.
+
+func (c *Context2D) SetStrokeStyle(style string)
+    SetStrokeStyle sets the style used by Stroke/StrokeRect/StrokeText.
+
+func (c *Context2D) SetTextAlign(align string)
+    SetTextAlign sets the horizontal text alignment ("left", "right", "center",
+    "start", "end").
+
+func (c *Context2D) SetTextBaseline(baseline string)
+    SetTextBaseline sets the vertical text alignment (e.g. "top", "middle",
+    "alphabetic").
+
+func (c *Context2D) SetTransform(a, b, cc, d, e, f float64)
+    SetTransform replaces the current transform with the given matrix (a, b, cc,
+    d, e, f).
+
+func (c *Context2D) Stroke()
+    Stroke outlines the current path with the current stroke style.
+
+func (c *Context2D) StrokeRect(x, y, w, h float64)
+    StrokeRect outlines the given rectangle with the current stroke style.
+
+func (c *Context2D) StrokeStyle() string
+    StrokeStyle returns the color/gradient/pattern used by
+    Stroke/StrokeRect/StrokeText.
+
+func (c *Context2D) StrokeText(text string, x, y float64)
+    StrokeText draws text outlined with the current stroke style, with its start
+    point at (x, y).
+
+func (c *Context2D) TextAlign() string
+    TextAlign returns the current horizontal text alignment.
+
+func (c *Context2D) TextBaseline() string
+    TextBaseline returns the current vertical text alignment.
+
+func (c *Context2D) Transform(a, b, cc, d, e, f float64)
+    Transform multiplies the current transform by the given matrix (a, b, cc, d,
+    e, f).
+
+func (c *Context2D) Translate(x, y float64)
+    Translate moves the canvas origin by (x, y).
+
+type Context3D struct {
+	Context js.Value
+}
+    Context3D wraps a <canvas> element's WebGL rendering context
+    (canvas.getContext("webgl2"), falling back to "webgl"). Get/Call cover
+    anything without a typed method below -- WebGL's real surface is hundreds
+    of methods and constants; this wraps the core pipeline (shaders, programs,
+    buffers, textures, drawing) rather than reimplementing the whole spec
+    speculatively.
+
+    Constants (TRIANGLES, ARRAY_BUFFER, COLOR_BUFFER_BIT, ...) are exposed
+    as methods that read the real value off the live context object
+    (gl.Get("TRIANGLES")) instead of hardcoded Go integers, so they can't
+    silently drift from whatever the browser actually defines.
+
+func (c *Context3D) ARRAY_BUFFER() int
+    ARRAY_BUFFER is the buffer target for vertex attribute data.
+
+func (c *Context3D) ActiveTexture(unit int)
+    ActiveTexture selects which texture unit (TEXTURE0, TEXTURE0+1, ...)
+    subsequent BindTexture calls affect.
+
+func (c *Context3D) AttachShader(program, shader js.Value)
+    AttachShader attaches a compiled shader to program.
+
+func (c *Context3D) BLEND() int
+    BLEND is the Enable/Disable capability for blending.
+
+func (c *Context3D) BindBuffer(target int, buffer js.Value)
+    BindBuffer binds buffer to target (ARRAY_BUFFER/ELEMENT_ARRAY_BUFFER) for
+    subsequent buffer calls.
+
+func (c *Context3D) BindTexture(target int, texture js.Value)
+    BindTexture binds texture to target (e.g. TEXTURE_2D) for subsequent texture
+    calls.
+
+func (c *Context3D) BufferDataFloat32(target int, data []float32, usage int)
+    BufferDataFloat32 uploads data to the buffer currently bound to target
+    (ARRAY_BUFFER/ELEMENT_ARRAY_BUFFER).
+
+func (c *Context3D) BufferDataUint16(target int, data []uint16, usage int)
+    BufferDataUint16 uploads data (typically element/index data) to the buffer
+    currently bound to target.
+
+func (c *Context3D) CLAMP_TO_EDGE() int
+    CLAMP_TO_EDGE is the wrap mode that clamps texture coordinates to the edge
+    texel.
+
+func (c *Context3D) COLOR_BUFFER_BIT() int
+    COLOR_BUFFER_BIT selects the color buffer for Clear.
+
+func (c *Context3D) COMPILE_STATUS() int
+    COMPILE_STATUS is the GetShaderParameter pname reporting shader compile
+    success.
+
+func (c *Context3D) CULL_FACE() int
+    CULL_FACE is the Enable/Disable capability for face culling.
+
+func (c *Context3D) Call(method string, args ...any) js.Value
+    Call invokes a method not covered by a typed wrapper below.
+
+func (c *Context3D) Clear(mask int)
+    Clear clears the buffers selected by mask (an OR of *_BUFFER_BIT constants).
+
+func (c *Context3D) ClearColor(r, g, b, a float64)
+    ClearColor sets the RGBA color Clear uses when clearing the color buffer.
+
+func (c *Context3D) CompileProgram(vertexSrc, fragmentSrc string) (js.Value, error)
+    CompileProgram is a convenience wrapping the usual
+    create-shader/compile/attach/link sequence for a vertex+fragment shader
+    pair, returning the linked program or an error naming whichever shader (or
+    the link step) failed and its info log.
+
+func (c *Context3D) CompileShader(shader js.Value)
+    CompileShader compiles shader's currently set source.
+
+func (c *Context3D) CreateBuffer() js.Value
+    CreateBuffer allocates a new buffer object.
+
+func (c *Context3D) CreateProgram() js.Value
+    CreateProgram allocates a new, empty program object.
+
+func (c *Context3D) CreateShader(shaderType int) js.Value
+    CreateShader allocates a new shader object of the given type
+    (VERTEX_SHADER/FRAGMENT_SHADER).
+
+func (c *Context3D) CreateTexture() js.Value
+    CreateTexture allocates a new texture object.
+
+func (c *Context3D) DEPTH_BUFFER_BIT() int
+    DEPTH_BUFFER_BIT selects the depth buffer for Clear.
+
+func (c *Context3D) DEPTH_TEST() int
+    DEPTH_TEST is the Enable/Disable capability for depth testing.
+
+func (c *Context3D) DYNAMIC_DRAW() int
+    DYNAMIC_DRAW hints that a buffer's contents are changed often and used many
+    times.
+
+func (c *Context3D) Disable(cap int)
+    Disable turns off a WebGL capability.
+
+func (c *Context3D) DrawArrays(mode, first, count int)
+    DrawArrays draws primitives using the currently bound buffers/program,
+    starting at vertex first for count vertices.
+
+func (c *Context3D) DrawElements(mode, count, valueType, offset int)
+    DrawElements draws primitives using the index buffer bound to
+    ELEMENT_ARRAY_BUFFER.
+
+func (c *Context3D) ELEMENT_ARRAY_BUFFER() int
+    ELEMENT_ARRAY_BUFFER is the buffer target for element/index data.
+
+func (c *Context3D) Enable(cap int)
+    Enable turns on a WebGL capability (e.g. DEPTH_TEST, BLEND, CULL_FACE).
+
+func (c *Context3D) EnableVertexAttribArray(index int)
+    EnableVertexAttribArray enables the vertex attribute at index for use by
+    DrawArrays/DrawElements.
+
+func (c *Context3D) FLOAT() int
+    FLOAT is the 32-bit floating point component type.
+
+func (c *Context3D) FRAGMENT_SHADER() int
+    FRAGMENT_SHADER identifies a shader as a fragment shader for CreateShader.
+
+func (c *Context3D) Get(name string) js.Value
+    Get returns a named property not covered by a typed method below.
+
+func (c *Context3D) GetAttribLocation(program js.Value, name string) int
+    GetAttribLocation returns the location of an attribute variable in program,
+    or -1 if not found.
+
+func (c *Context3D) GetProgramInfoLog(program js.Value) string
+    GetProgramInfoLog returns the link log for program, useful when LINK_STATUS
+    is false.
+
+func (c *Context3D) GetProgramParameter(program js.Value, pname int) js.Value
+    GetProgramParameter returns a program parameter (e.g. pass LINK_STATUS to
+    check link success).
+
+func (c *Context3D) GetShaderInfoLog(shader js.Value) string
+    GetShaderInfoLog returns the compile log for shader, useful when
+    COMPILE_STATUS is false.
+
+func (c *Context3D) GetShaderParameter(shader js.Value, pname int) js.Value
+    GetShaderParameter returns a shader parameter (e.g. pass COMPILE_STATUS to
+    check compile success).
+
+func (c *Context3D) GetUniformLocation(program js.Value, name string) js.Value
+    GetUniformLocation returns the location of a uniform variable in program,
+    or a null value if not found.
+
+func (c *Context3D) LINEAR() int
+    LINEAR is the filter mode that linearly interpolates between texels.
+
+func (c *Context3D) LINES() int
+    LINES is the draw mode where every 2 vertices form a line segment.
+
+func (c *Context3D) LINE_STRIP() int
+    LINE_STRIP is the draw mode where each vertex connects to the previous one.
+
+func (c *Context3D) LINK_STATUS() int
+    LINK_STATUS is the GetProgramParameter pname reporting program link success.
+
+func (c *Context3D) LinkProgram(program js.Value)
+    LinkProgram links program's attached shaders into a usable program.
+
+func (c *Context3D) NEAREST() int
+    NEAREST is the filter mode that samples the closest texel with no
+    interpolation.
+
+func (c *Context3D) POINTS() int
+    POINTS is the draw mode where each vertex is drawn as a single point.
+
+func (c *Context3D) RGB() int
+    RGB is the pixel format without an alpha channel.
+
+func (c *Context3D) RGBA() int
+    RGBA is the pixel format with an alpha channel.
+
+func (c *Context3D) ReadPixels(x, y, width, height, format, pixelType int) []byte
+    ReadPixels reads back a rectangle of the current framebuffer as RGBA8,
+    the one format+type combination every WebGL implementation is guaranteed
+    to support for the default framebuffer -- pass RGBA()/UNSIGNED_BYTE() for
+    format/pixelType.
+
+func (c *Context3D) STATIC_DRAW() int
+    STATIC_DRAW hints that a buffer's contents are set once and used many times.
+
+func (c *Context3D) STREAM_DRAW() int
+    STREAM_DRAW hints that a buffer's contents are set once and used at most a
+    few times.
+
+func (c *Context3D) ShaderSource(shader js.Value, source string)
+    ShaderSource sets shader's GLSL source code.
+
+func (c *Context3D) TEXTURE0() int
+    TEXTURE0 is the first texture unit; add 1, 2, ... to address the others.
+
+func (c *Context3D) TEXTURE_2D() int
+    TEXTURE_2D is the bind/image target for 2D textures.
+
+func (c *Context3D) TEXTURE_MAG_FILTER() int
+    TEXTURE_MAG_FILTER is the TexParameteri pname for the magnification filter.
+
+func (c *Context3D) TEXTURE_MIN_FILTER() int
+    TEXTURE_MIN_FILTER is the TexParameteri pname for the minification filter.
+
+func (c *Context3D) TEXTURE_WRAP_S() int
+    TEXTURE_WRAP_S is the TexParameteri pname for the horizontal (S) wrap mode.
+
+func (c *Context3D) TEXTURE_WRAP_T() int
+    TEXTURE_WRAP_T is the TexParameteri pname for the vertical (T) wrap mode.
+
+func (c *Context3D) TRIANGLES() int
+    TRIANGLES is the draw mode where every 3 vertices form a triangle.
+
+func (c *Context3D) TRIANGLE_FAN() int
+    TRIANGLE_FAN is the draw mode where each vertex after the first two forms a
+    triangle with the previous vertex and the first vertex.
+
+func (c *Context3D) TRIANGLE_STRIP() int
+    TRIANGLE_STRIP is the draw mode where each vertex after the first two forms
+    a triangle with the previous two.
+
+func (c *Context3D) TexImage2DElement(target, level, internalFormat int, format, texType int, source js.Value)
+    TexImage2DElement uploads an <img>/<canvas>/<video> source (already loaded)
+    as a texture's image data.
+
+func (c *Context3D) TexParameteri(target, pname, param int)
+    TexParameteri sets an integer texture parameter (e.g. TEXTURE_MIN_FILTER) on
+    the texture bound to target.
+
+func (c *Context3D) UNSIGNED_BYTE() int
+    UNSIGNED_BYTE is the 8-bit unsigned integer component type.
+
+func (c *Context3D) UNSIGNED_INT() int
+    UNSIGNED_INT is the 32-bit unsigned integer component type.
+
+func (c *Context3D) UNSIGNED_SHORT() int
+    UNSIGNED_SHORT is the 16-bit unsigned integer component type, commonly used
+    for element indices.
+
+func (c *Context3D) Uniform1f(loc js.Value, x float64)
+    Uniform1f sets a float uniform.
+
+func (c *Context3D) Uniform1i(loc js.Value, x int)
+    Uniform1i sets an int (or sampler) uniform.
+
+func (c *Context3D) Uniform2f(loc js.Value, x, y float64)
+    Uniform2f sets a vec2 uniform.
+
+func (c *Context3D) Uniform3f(loc js.Value, x, y, z float64)
+    Uniform3f sets a vec3 uniform.
+
+func (c *Context3D) Uniform4f(loc js.Value, x, y, z, w float64)
+    Uniform4f sets a vec4 uniform.
+
+func (c *Context3D) UniformMatrix4fv(loc js.Value, transpose bool, m [16]float32)
+    UniformMatrix4fv sets a mat4 uniform from a column-major 4x4 matrix.
+
+func (c *Context3D) UseProgram(program js.Value)
+    UseProgram makes program the current program for subsequent draw calls.
+
+func (c *Context3D) VERTEX_SHADER() int
+    VERTEX_SHADER identifies a shader as a vertex shader for CreateShader.
+
+func (c *Context3D) VertexAttribPointer(index, size, valueType int, normalized bool, stride, offset int)
+    VertexAttribPointer describes the layout of the vertex attribute at index
+    within the buffer currently bound to ARRAY_BUFFER.
+
+func (c *Context3D) Viewport(x, y, width, height int)
+    Viewport sets the affine transform from clip space to the given pixel
+    rectangle.
+
+type DataTransfer struct {
+	Value js.Value
+}
+    DataTransfer wraps a drag event's dataTransfer object, carrying whatever
+    data a drag operation is moving and the drop/drag-effect negotiation between
+    source and target.
+
+func (d *DataTransfer) DropEffect() string
+    DropEffect returns the drop effect the target will use (e.g. "copy", "move",
+    "link", "none").
+
+func (d *DataTransfer) EffectAllowed() string
+    EffectAllowed returns the set of drop effects the drag source permits.
+
+func (d *DataTransfer) Files() []js.Value
+    Files returns the raw File objects dropped (e.g. from a desktop file drag),
+    if any -- empty for a drag that only carries setData values. Wrap each
+    with browser.WrapFile to read its name/size/type or its contents -- see
+    domrt/browser's File API.
+
+func (d *DataTransfer) GetData(format string) string
+    GetData retrieves the data stored under format by the drag source.
+
+func (d *DataTransfer) SetData(format, data string)
+    SetData stores data under format (e.g. "text/plain") for the drop target to
+    read.
+
+func (d *DataTransfer) SetDropEffect(effect string)
+    SetDropEffect sets the drop effect the target will use.
+
+func (d *DataTransfer) SetEffectAllowed(effect string)
+    SetEffectAllowed sets the drop effects the drag source permits (e.g. "copy",
+    "copyMove", "all").
+
+type Document struct {
+	Document js.Value
+}
+    Document wraps the browser's global document object. Get/Call cover anything
+    without a typed method below, the same escape hatch as the rest of this
+    package.
+
+func GetDocument() *Document
+    GetDocument returns the global document object.
+
+func (d *Document) Body() *Element
+    Body returns the <body> element.
+
+func (d *Document) Call(method string, args ...any) js.Value
+    Call invokes a document method not covered by a typed wrapper above.
+
+func (d *Document) CreateElement(tag string) *Element
+    CreateElement creates a new, unattached element with the given tag name.
+
+func (d *Document) CreateElementNS(namespace, tag string) *Element
+    CreateElementNS creates a new, unattached element in the given namespace
+    (e.g. svg.Namespace) with the given tag name -- required for SVG/MathML
+    elements, which createElement alone cannot make. See domrt/svg's
+    CreateElement for a convenience wrapper.
+
+func (d *Document) CreateTextNode(text string) *Element
+    CreateTextNode creates a new, unattached text node with the given content.
+
+func (d *Document) DocumentElement() *Element
+    DocumentElement returns the root <html> element.
+
+func (d *Document) Get(name string) js.Value
+    Get returns a named property of document not covered by a typed getter above
+    (e.g. Get("title"), Get("readyState")).
+
+func (d *Document) GetElementByID(id string) *Element
+    GetElementByID returns the element with the given id.
+
+func (d *Document) GetElementsByClassName(class string) []Element
+    GetElementsByClassName returns every element with the given class.
+
+func (d *Document) GetElementsByName(name string) []Element
+    GetElementsByName returns every element with the given name attribute.
+
+func (d *Document) GetElementsByTagName(tag string) []Element
+    GetElementsByTagName returns every element with the given tag name.
+
+func (d *Document) GetElementsByTagNameNS(namespace, tag string) []Element
+    GetElementsByTagNameNS looks up elements by namespace and tag (e.g.
+    SVG's "http://www.w3.org/2000/svg"). Unlike GetElementsBy{Tag,Class}Name,
+    there is no non-namespaced getElementsByClassNameNS/getElementsByNameNS in
+    the DOM -- those aren't real browser APIs, so this package doesn't pretend
+    to wrap them.
+
+type DomNode interface {
+	JSValue() js.Value
+	Get(name string) js.Value
+	Call(method string, args ...any) js.Value
+	GetID() string
+	SetID(id string)
+	GetClassName() string
+	SetClassName(className string)
+	GetTagName() string
+	GetTextContent() string
+	SetTextContent(text string)
+	GetAttribute(name string) string
+	SetAttribute(name, value string)
+	AppendChild(child DomNode)
+	RemoveChild(child DomNode)
+	GetInnerHTML() string
+	SetInnerHTML(html string)
+	AddEventListener(event string, callback js.Func)
+	RemoveEventListener(event string, callback js.Func)
+	Set(name string, value any)
+	Click()
+	Focus()
+	Blur()
+	Hidden() bool
+	SetHidden(hidden bool)
+	BoundingRect() Rect
+	ScrollIntoView(smooth bool)
+	StyleProperty(name string) string
+	SetStyleProperty(name, value string)
+	Style() Style
+	ClientWidth() int
+	ClientHeight() int
+	ScrollLeft() int
+	SetScrollLeft(x int)
+	ScrollTop() int
+	SetScrollTop(y int)
+}
+    DomNode is implemented by Element and every element type in this package
+    that embeds it (CanvasElement, AnchorElement, ButtonElement, SelectElement,
+    InputElement, ...), so code that only needs the common DOM operations can
+    accept any of them interchangeably.
+
+type DragEvent struct {
+	Value        js.Value
+	DataTransfer *DataTransfer
+}
+    DragEvent wraps a drag/dragover/drop DOM event with its DataTransfer already
+    unwrapped.
+
+func (e DragEvent) PreventDefault()
+    PreventDefault suppresses the browser's default handling of the event
+    (required on dragover for drop to fire at all).
+
+func (e DragEvent) StopPropagation()
+    StopPropagation stops the event from bubbling further.
+
+type Element struct {
+	Element js.Value
+}
+    Element wraps a DOM Element/Node. Get/Call cover anything without a typed
+    method below, the same escape hatch as the rest of this package.
+
+    Element is also the base every more specific element type (CanvasElement,
+    AnchorElement, ButtonElement, SelectElement, InputElement, ...) embeds
+    to pick up the common methods below; use the As* cast helpers (AsCanvas,
+    AsAnchor, ...) to obtain one of those from a plain Element.
+
+func (e *Element) AddEventListener(event string, callback js.Func)
+    AddEventListener registers callback for event on e.
+
+func (e *Element) AppendChild(child DomNode)
+    AppendChild appends child as e's last child.
+
+func (e *Element) AsAnchor() *AnchorElement
+    AsAnchor casts e to an AnchorElement, or returns nil if e isn't an <a>.
+
+func (e *Element) AsButton() *ButtonElement
+    AsButton casts e to a ButtonElement, or returns nil if e isn't a <button>.
+
+func (e *Element) AsCanvas() *CanvasElement
+    AsCanvas casts e to a CanvasElement, or returns nil if e isn't a <canvas>.
+
+func (e *Element) AsForm() *FormElement
+    AsForm casts e to a FormElement, or returns nil if e isn't a <form>.
+
+func (e *Element) AsImage() *ImageElement
+    AsImage casts e to an ImageElement, or returns nil if e isn't an <img>.
+
+func (e *Element) AsInput() *InputElement
+    AsInput casts e to an InputElement, or returns nil if e isn't an <input>.
+
+func (e *Element) AsSelect() *SelectElement
+    AsSelect casts e to a SelectElement, or returns nil if e isn't a <select>.
+
+func (e *Element) Blur()
+    Blur removes keyboard focus from e.
+
+func (e *Element) BoundingRect() Rect
+    BoundingRect returns e's size and position relative to the viewport, e.g.
+    for positioning a dropdown/tooltip against it.
+
+func (e *Element) Call(method string, args ...any) js.Value
+    Call invokes a method not covered by a typed wrapper above (e.g.
+    Call("click"), Call("focus"), Call("querySelector", selector)).
+
+func (e *Element) ClassListAdd(class ...string)
+    ClassListAdd adds one or more classes to e. Prefer this (and
+    ClassListRemove/ClassListToggle/ClassListContains) over
+    GetClassName/SetClassName on SVG elements (see domrt/svg):
+    className there is an SVGAnimatedString object, not a plain string,
+    so e.Get("className").String() and e.Set("className", ...) don't work as
+    expected -- classList, unlike className, behaves the same for both HTML and
+    SVG elements.
+
+func (e *Element) ClassListContains(class string) bool
+    ClassListContains reports whether e has the given class.
+
+func (e *Element) ClassListRemove(class ...string)
+    ClassListRemove removes one or more classes from e.
+
+func (e *Element) ClassListToggle(class string) bool
+    ClassListToggle adds class if e doesn't have it, or removes it if e does,
+    returning whether it's present afterward.
+
+func (e *Element) Click()
+    Click synthesizes a click on e, the same as a user click would (and,
+    for elements with default click behavior like <a>/<input>, triggers that
+    behavior too).
+
+func (e *Element) ClientHeight() int
+    ClientHeight returns e's inner height in pixels: content plus padding,
+    excluding border, margin, and any scrollbar.
+
+func (e *Element) ClientLeft() int
+    ClientLeft returns the width of e's left border in pixels.
+
+func (e *Element) ClientRects() []Rect
+    ClientRects returns one rect per CSS box e renders as (more than one for an
+    inline element that wraps across lines).
+
+func (e *Element) ClientTop() int
+    ClientTop returns the width of e's top border in pixels.
+
+func (e *Element) ClientWidth() int
+    ClientWidth returns e's inner width in pixels: content plus padding,
+    excluding border, margin, and any scrollbar.
+
+func (e *Element) ContentEditable() string
+    ContentEditable returns whether e's contents can be edited in place ("true",
+    "false", "plaintext-only", or "inherit").
+
+func (e *Element) DispatchCustomEvent(name string, detail any, bubbles bool)
+    DispatchCustomEvent dispatches a CustomEvent named name on e, carrying
+    detail as the event's detail property (any structured-clone- able value: a
+    string, number, bool, map, slice, or js.Value). Set bubbles to let ancestor
+    listeners (registered with AddEventListener or OnCustomEvent) see it too.
+
+func (e *Element) Focus()
+    Focus moves keyboard focus to e.
+
+func (e *Element) Get(name string) js.Value
+    Get returns a named property not covered by a typed getter above (e.g.
+    Get("dataset"), Get("style"), Get("checked")).
+
+func (e *Element) GetAttribute(name string) string
+    GetAttribute returns the named HTML attribute's value.
+
+func (e *Element) GetClassName() string
+    GetClassName returns e's class attribute. On an SVG element this is
+    unreliable -- className there is an SVGAnimatedString object, not a plain
+    string -- use ClassListContains (see svg.go) instead.
+
+func (e *Element) GetDir() string
+    GetDir returns e's directionality ("ltr", "rtl", or "auto").
+
+func (e *Element) GetID() string
+    GetID returns e's id attribute.
+
+func (e *Element) GetInnerHTML() string
+    GetInnerHTML returns e's serialized child markup.
+
+func (e *Element) GetTagName() string
+    GetTagName returns e's tag name (e.g. "DIV"), uppercased per the DOM spec.
+
+func (e *Element) GetTextContent() string
+    GetTextContent returns the concatenated text of e and its descendants.
+
+func (e *Element) GetTitle() string
+    GetTitle returns e's title attribute (usually shown as a tooltip).
+
+func (e *Element) GetValue() string
+    GetValue returns a form element's current value (e.g. an
+    <input>/<textarea>).
+
+func (e *Element) Hidden() bool
+    Hidden returns whether e is hidden (the hidden attribute/property).
+
+func (e *Element) JSValue() js.Value
+    JSValue returns the underlying js.Value, satisfying DomNode.
+
+func (e *Element) OffsetHeight() int
+    OffsetHeight returns e's layout height in pixels, including borders and
+    padding.
+
+func (e *Element) OffsetLeft() int
+    OffsetLeft returns e's distance in pixels from its offsetParent's left edge.
+
+func (e *Element) OffsetTop() int
+    OffsetTop returns e's distance in pixels from its offsetParent's top edge.
+
+func (e *Element) OffsetWidth() int
+    OffsetWidth returns e's layout width in pixels, including borders and
+    padding.
+
+func (e *Element) OnContextMenu(fn func(x, y float64)) js.Func
+    OnContextMenu registers fn for the contextmenu event (a right-click
+    or its platform equivalent), suppressing the browser's native menu and
+    reporting the click's position relative to the viewport -- pair with
+    components.ContextMenu (or your own) to render one there.
+
+func (e *Element) OnCustomEvent(name string, fn func(detail js.Value)) js.Func
+    OnCustomEvent registers fn for a custom event named name, e.g. one
+    dispatched by DispatchCustomEvent (by e or a descendant, if bubbling) or by
+    non-Go JS elsewhere on the page. fn receives the event's raw detail value;
+    use js.Value's own accessors (or gox.EventValue-style type assertions) to
+    read it, since detail's shape is whatever the dispatcher chose.
+
+func (e *Element) OnDragOver(fn func(evt DragEvent)) js.Func
+    OnDragOver registers fn for the dragover event (fired repeatedly on the drop
+    target while hovering).
+
+func (e *Element) OnDragStart(fn func(evt DragEvent)) js.Func
+    OnDragStart, OnDragOver, and OnDrop register the three listeners a
+    drag-and-drop interaction needs, unwrapping each event's DataTransfer for
+    fn. All return the underlying js.Func, to pass to RemoveEventListener later
+    if needed. OnDragStart registers fn for the dragstart event (fired on the
+    drag source).
+
+func (e *Element) OnDrop(fn func(evt DragEvent)) js.Func
+    OnDrop registers fn for the drop event (fired on the drop target on
+    release).
+
+func (e *Element) OnKeyDown(fn func(KeyEvent)) js.Func
+    OnKeyDown registers fn for the keydown event -- the one that fires for
+    non-printable keys (arrows, Backspace, Enter, Ctrl/Cmd shortcuts), unlike
+    "input" which only fires once a character actually changes the value.
+
+func (e *Element) OnKeyUp(fn func(KeyEvent)) js.Func
+    OnKeyUp registers fn for the keyup event.
+
+func (e *Element) OnMouseDown(fn func(MouseEvent)) js.Func
+    OnMouseDown registers fn for the mousedown event.
+
+func (e *Element) OnMouseMove(fn func(MouseEvent)) js.Func
+    OnMouseMove registers fn for the mousemove event.
+
+func (e *Element) OnMouseUp(fn func(MouseEvent)) js.Func
+    OnMouseUp registers fn for the mouseup event.
+
+func (e *Element) ParentElement() *Element
+    ParentElement returns e's parent element, or nil if e has none.
+
+func (e *Element) RemoveChild(child DomNode)
+    RemoveChild removes child from e's children.
+
+func (e *Element) RemoveEventListener(event string, callback js.Func)
+    RemoveEventListener removes a listener previously registered with the same
+    callback value.
+
+func (e *Element) ScrollBy(dx, dy int, smooth bool)
+    ScrollBy scrolls e's own content by a relative offset, smoothly if smooth is
+    true (instantly otherwise).
+
+func (e *Element) ScrollHeight() int
+    ScrollHeight returns e's full content height in pixels, including the part
+    hidden by overflow (>= ClientHeight).
+
+func (e *Element) ScrollIntoView(smooth bool)
+    ScrollIntoView scrolls e's ancestors so it's visible, smoothly if smooth is
+    true (instantly otherwise).
+
+func (e *Element) ScrollLeft() int
+    ScrollLeft returns how far e's content is scrolled from its left edge.
+
+func (e *Element) ScrollTo(x, y int, smooth bool)
+    ScrollTo scrolls e's own content to an absolute position, smoothly if smooth
+    is true (instantly otherwise).
+
+func (e *Element) ScrollTop() int
+    ScrollTop returns how far e's content is scrolled from its top edge.
+
+func (e *Element) ScrollWidth() int
+    ScrollWidth returns e's full content width in pixels, including the part
+    hidden by overflow (>= ClientWidth).
+
+func (e *Element) Set(name string, value any)
+    Set assigns a named property not covered by a typed setter above (e.g.
+    Set("checked", true), Set("width", 100)).
+
+func (e *Element) SetAttribute(name, value string)
+    SetAttribute sets the named HTML attribute's value.
+
+func (e *Element) SetClassName(className string)
+    SetClassName sets e's class attribute. On an SVG element use
+    ClassListAdd/ClassListRemove instead (see GetClassName's doc comment).
+
+func (e *Element) SetContentEditable(value string)
+    SetContentEditable sets whether e's contents can be edited in place.
+
+func (e *Element) SetDir(dir string)
+    SetDir sets e's directionality.
+
+func (e *Element) SetDraggable(draggable bool)
+    SetDraggable marks (or unmarks) e as a drag source.
+
+func (e *Element) SetHidden(hidden bool)
+    SetHidden hides or shows e.
+
+func (e *Element) SetID(id string)
+    SetID sets e's id attribute.
+
+func (e *Element) SetInnerHTML(html string)
+    SetInnerHTML replaces e's children by parsing html.
+
+func (e *Element) SetScrollLeft(x int)
+    SetScrollLeft scrolls e's content to x pixels from its left edge.
+
+func (e *Element) SetScrollTop(y int)
+    SetScrollTop scrolls e's content to y pixels from its top edge.
+
+func (e *Element) SetStyleProperty(name, value string)
+    SetStyleProperty sets a CSS property on e's inline style.
+
+func (e *Element) SetTabIndex(index int)
+    SetTabIndex sets e's position in the tab order.
+
+func (e *Element) SetTextContent(text string)
+    SetTextContent replaces e's children with a single text node containing
+    text.
+
+func (e *Element) SetTitle(title string)
+    SetTitle sets e's title attribute.
+
+func (e *Element) SetValue(value string)
+    SetValue sets a form element's current value.
+
+func (e *Element) Style() Style
+    Style returns e's inline style (element.style), for reading/writing multiple
+    properties at once or via CSSText -- SetStyleProperty/ StyleProperty remain
+    for a single property at a time.
+
+func (e *Element) StyleProperty(name string) string
+    StyleProperty returns the value of a CSS property from e's inline style (not
+    any value it picked up from a stylesheet -- use Window.ComputedStyle for
+    that). See also Style, for reading/writing several properties at once.
+
+func (e *Element) TabIndex() int
+    TabIndex returns e's position in the tab order (-1 if it's programmatically
+    focusable but not reachable via Tab).
+
+type FormElement struct{ Element }
+    FormElement is an Element known to be a <form>.
+
+func (f *FormElement) Action() string
+    Action returns the URL the form submits to.
+
+func (f *FormElement) CheckValidity() bool
+    CheckValidity reports whether every control in the form currently satisfies
+    its validation constraints, without showing any UI.
+
+func (f *FormElement) Elements() []Element
+    Elements returns the form's controls (input/select/textarea/button/
+    fieldset/...) in document order.
+
+func (f *FormElement) Method() string
+    Method returns the form's HTTP method ("get" or "post").
+
+func (f *FormElement) OnSubmit(fn func(evt SubmitEvent)) js.Func
+    OnSubmit registers fn for the submit event.
+
+func (f *FormElement) ReportValidity() bool
+    ReportValidity is like CheckValidity but also shows the browser's native
+    validation UI for the first invalid control.
+
+func (f *FormElement) Reset()
+    Reset resets every control in the form to its default value.
+
+func (f *FormElement) SetAction(action string)
+    SetAction sets the URL the form submits to.
+
+func (f *FormElement) SetMethod(method string)
+    SetMethod sets the form's HTTP method.
+
+func (f *FormElement) Submit()
+    Submit submits the form, bypassing any submit event listener (the same
+    as calling the native HTMLFormElement.submit() -- use Click() on a submit
+    button, or dispatch the submit event yourself, to go through OnSubmit
+    instead).
+
+type ImageData struct {
+	Width, Height int
+	Pix           []byte
+}
+    ImageData holds pixel data read back from the canvas: Pix is
+    RGBA8-per-pixel, row-major, len(Pix) == Width*Height*4.
+
+type ImageElement struct{ Element }
+    ImageElement is an Element known to be an <img>.
+
+func (i *ImageElement) Alt() string
+    Alt returns the image's alternative text.
+
+func (i *ImageElement) Complete() bool
+    Complete returns whether the image has finished loading (successfully or
+    not) or has no src set at all.
+
+func (i *ImageElement) NaturalHeight() int
+    NaturalHeight returns the image's intrinsic height in pixels (0 until it
+    loads).
+
+func (i *ImageElement) NaturalWidth() int
+    NaturalWidth returns the image's intrinsic width in pixels (0 until it
+    loads).
+
+func (i *ImageElement) OnError(fn func()) js.Func
+    OnError registers fn for the error event, which fires if the image fails to
+    load.
+
+func (i *ImageElement) OnLoad(fn func()) js.Func
+    OnLoad registers fn for the load event, which fires once the image finishes
+    loading successfully.
+
+func (i *ImageElement) SetAlt(alt string)
+    SetAlt sets the image's alternative text.
+
+func (i *ImageElement) SetSrc(src string)
+    SetSrc sets the image's source URL, starting a new load.
+
+func (i *ImageElement) Src() string
+    Src returns the image's resolved (absolute) source URL.
+
+type InputElement struct{ Element }
+    InputElement is an Element known to be an <input>.
+
+func (i *InputElement) Checked() bool
+    Checked returns whether a checkbox/radio input is checked.
+
+func (i *InputElement) Disabled() bool
+    Disabled returns whether the input is disabled.
+
+func (i *InputElement) Files() []js.Value
+    Files returns the selected files for a type="file" input as raw JS File
+    objects (empty for other input types or when nothing is selected). Wrap
+    each with browser.WrapFile to read its name/size/type or its contents -- see
+    domrt/browser's File API.
+
+func (i *InputElement) SetChecked(checked bool)
+    SetChecked checks or unchecks a checkbox/radio input.
+
+func (i *InputElement) SetDisabled(disabled bool)
+    SetDisabled enables or disables the input.
+
+func (i *InputElement) SetType(t string)
+    SetType sets the input's type.
+
+func (i *InputElement) Type() string
+    Type returns the input's type (e.g. "text", "checkbox", "file").
+
+type IntersectionEntry struct {
+	Target            *Element
+	IsIntersecting    bool
+	IntersectionRatio float64
+}
+    IntersectionEntry reports one observed element's visibility change.
+
+type IntersectionObserver struct {
+	Value js.Value
+	// Has unexported fields.
+}
+    IntersectionObserver wraps the browser's IntersectionObserver: fires fn
+    whenever an observed element's visibility relative to its viewport/root
+    crosses a threshold.
+
+func NewIntersectionObserver(fn func(entries []IntersectionEntry)) *IntersectionObserver
+    NewIntersectionObserver constructs an observer that calls fn with every
+    batch of visibility changes. Call Observe to start watching elements,
+    and Disconnect (which also releases fn's callback) when done with it.
+
+func (o *IntersectionObserver) Disconnect()
+    Disconnect stops observing every element and releases the callback
+    registered at construction.
+
+func (o *IntersectionObserver) Observe(el *Element)
+    Observe starts watching el for intersection changes.
+
+func (o *IntersectionObserver) Unobserve(el *Element)
+    Unobserve stops watching el.
+
+type JSError struct {
+	Message string
+	Source  string // the script's URL; "" for a rejection (there's no single throw site)
+	Line    int    // 1-based; 0 for a rejection
+	Column  int    // 1-based; 0 for a rejection
+	Value   js.Value
+}
+    JSError wraps an error surfaced from JS itself -- an uncaught
+    exception (Window.OnError) or an unhandled promise rejection
+    (Window.OnUnhandledRejection) -- rather than one returned by a typed wrapper
+    in this package.
+
+func NewJSErrorFromEvent(ev js.Value) *JSError
+    NewJSErrorFromEvent builds a JSError from a browser ErrorEvent (the
+    event OnError and browser.Worker's OnError both receive) -- exported for
+    domrt/browser's Worker to reuse the same construction.
+
+func (e *JSError) AsGoError() error
+    AsGoError returns e as a plain error, for call sites that want that
+    explicitly rather than relying on *JSError already satisfying it.
+
+func (e *JSError) AsJSException() js.Value
+    AsJSException returns the underlying JS value (the Error object for an
+    uncaught exception, or the rejection reason for an unhandled promise) -- for
+    reading anything JSError doesn't model, like a custom error subclass's own
+    fields or its stack trace.
+
+func (e *JSError) Error() string
+    Error implements the standard error interface.
+
+type KeyEvent struct {
+	Value    js.Value
+	Key      string // e.g. "a", "Enter", "ArrowLeft", "Backspace"
+	Code     string // physical key, e.g. "KeyA", "Digit1", independent of layout/Shift
+	CtrlKey  bool
+	ShiftKey bool
+	AltKey   bool
+	MetaKey  bool
+}
+    KeyEvent wraps a keydown/keyup DOM event with the fields a text editor or
+    shortcut handler actually needs -- gox.Event carries none of these (see
+    its doc comment: Value is only ever a simple string/bool payload), so,
+    like DragEvent and SubmitEvent, this is a typed escape hatch for the parts a
+    plain gox.EventHandler can't express.
+
+func (e KeyEvent) PreventDefault()
+    PreventDefault suppresses the browser's default handling of the event (e.g.
+    stopping ArrowUp/ArrowDown from scrolling the page).
+
+func (e KeyEvent) StopPropagation()
+    StopPropagation stops the event from bubbling further.
+
+type MouseEvent struct {
+	Value js.Value
+	X, Y  float64
+}
+    MouseEvent wraps a mousedown/mousemove/mouseup DOM event with its position
+    relative to the viewport (clientX/clientY) -- gox.Event carries no
+    coordinates at all (see its doc comment), so, like DragEvent and KeyEvent,
+    this is a typed escape hatch for building anything that needs a real
+    click/drag position: canvas hit-testing, custom selection, image cropping,
+    and so on.
+
+func (e MouseEvent) PreventDefault()
+    PreventDefault suppresses the browser's default handling of the event. This
+    matters more here than it might seem: clicking a non-focusable element (a
+    plain <canvas>, say) makes the browser clear focus from whatever was focused
+    once every mousedown handler returns -- calling a different element's
+    Focus() from inside your own mousedown handler gets silently undone right
+    after unless you call PreventDefault first.
+
+func (e MouseEvent) StopPropagation()
+    StopPropagation stops the event from bubbling further.
+
+type Rect struct {
+	X, Y, Width, Height, Top, Right, Bottom, Left float64
+}
+    Rect is an element's size and position relative to the viewport, as returned
+    by Element.BoundingRect (getBoundingClientRect).
+
+type ResizeEntry struct {
+	Target        *Element
+	Width, Height float64
+}
+    ResizeEntry reports one observed element's new content-box size.
+
+type ResizeObserver struct {
+	Value js.Value
+	// Has unexported fields.
+}
+    ResizeObserver wraps the browser's ResizeObserver: fires fn whenever an
+    observed element's size changes.
+
+func NewResizeObserver(fn func(entries []ResizeEntry)) *ResizeObserver
+    NewResizeObserver constructs an observer that calls fn with every batch of
+    size changes. Call Observe to start watching elements, and Disconnect (which
+    also releases fn's callback) when done with it.
+
+func (o *ResizeObserver) Disconnect()
+    Disconnect stops observing every element and releases the callback
+    registered at construction.
+
+func (o *ResizeObserver) Observe(el *Element)
+    Observe starts watching el for size changes.
+
+func (o *ResizeObserver) Unobserve(el *Element)
+    Unobserve stops watching el.
+
+type SelectElement struct{ Element }
+    SelectElement is an Element known to be a <select>.
+
+func (s *SelectElement) Multiple() bool
+    Multiple returns whether multiple options can be selected at once.
+
+func (s *SelectElement) Options() []Element
+    Options returns the select's <option> elements in document order.
+
+func (s *SelectElement) SelectedIndex() int
+    SelectedIndex returns the index of the currently selected option, or -1 if
+    none.
+
+func (s *SelectElement) SetMultiple(multiple bool)
+    SetMultiple sets whether multiple options can be selected at once.
+
+func (s *SelectElement) SetSelectedIndex(index int)
+    SetSelectedIndex selects the option at index.
+
+type Style struct {
+	Value js.Value
+}
+    Style wraps a CSSStyleDeclaration -- either an element's own inline style
+    (Element.Style) or a read-only computed style (Window.ComputedStyle).
+
+func (s Style) CSSText() string
+    CSSText returns the style as a single "prop: value; prop2: value2" string.
+
+func (s Style) Get(property string) string
+    Get returns the value of a CSS property.
+
+func (s Style) Remove(property string)
+    Remove clears a CSS property from an inline style.
+
+func (s Style) Set(property, value string)
+    Set sets a CSS property. Only meaningful on an inline style (see
+    Element.Style) -- a computed style is read-only and silently ignores it.
+
+func (s Style) SetCSSText(text string)
+    SetCSSText replaces an inline style's entire text in one call.
+
+type SubmitEvent struct {
+	Value js.Value
+}
+    SubmitEvent wraps a form's "submit" DOM event.
+
+func (e SubmitEvent) PreventDefault()
+    PreventDefault stops the form's default full-page-navigation submit, e.g.
+    to handle it with FormData/fetch instead.
+
+func (e SubmitEvent) StopPropagation()
+    StopPropagation stops the event from bubbling further.
+
+type Window struct {
+	Window js.Value
+}
+    Window wraps the browser's global window object. Get/Call cover anything
+    without a typed method below, the same escape hatch as the rest of this
+    package.
+
+func GetWindow() *Window
+    GetWindow returns the global window object.
+
+func (w *Window) AddEventListener(event string, fn func()) js.Func
+    AddEventListener registers fn for event and returns the js.Func backing it.
+    Pass that same value to RemoveEventListener to unregister it later --
+    removeEventListener only works when given the exact function reference
+    addEventListener was called with, so wrapping fn in a fresh js.Func on
+    removal (as an earlier version of this method did) can never actually remove
+    anything.
+
+func (w *Window) Alert(message string)
+    Alert shows a native alert dialog with message, blocking until dismissed.
+
+func (w *Window) Call(method string, args ...any) js.Value
+    Call invokes a method not covered by a typed wrapper above.
+
+func (w *Window) ClearAnimationFrame(id int)
+    ClearAnimationFrame cancels a pending callback from RequestAnimationFrame.
+
+func (w *Window) ClearInterval(id int)
+    ClearInterval cancels a repeating timer from SetInterval.
+
+func (w *Window) ClearTimeout(id int)
+    ClearTimeout cancels a pending timer from SetTimeout.
+
+func (w *Window) Close()
+    Close closes the window (only effective for windows opened via Open).
+
+func (w *Window) ComputedStyle(el DomNode) Style
+    ComputedStyle returns el's fully resolved, read-only style (CSS from
+    stylesheets and inheritance, not just its inline style attribute).
+
+func (w *Window) Confirm(message string) bool
+    Confirm shows a native OK/Cancel dialog and reports whether OK was chosen.
+
+func (w *Window) DevicePixelRatio() float64
+    DevicePixelRatio returns the ratio between physical and CSS pixels (>1 on a
+    HiDPI/"Retina" display).
+
+func (w *Window) Get(name string) js.Value
+    Get returns a named property not covered by a typed getter above.
+
+func (w *Window) InnerHeight() int
+    InnerHeight returns the viewport height in pixels, including any scrollbar.
+
+func (w *Window) InnerWidth() int
+    InnerWidth returns the viewport width in pixels, including any scrollbar.
+
+func (w *Window) Location() js.Value
+    Location returns the window's Location object (href, pathname, etc.).
+
+func (w *Window) OnError(fn func(err *JSError)) js.Func
+    OnError registers fn for the window's global "error" event: an uncaught
+    exception from anywhere on the page (this program or any other script
+    sharing it), not something a typed wrapper here already surfaces as a Go
+    error.
+
+func (w *Window) OnUnhandledRejection(fn func(err *JSError)) js.Func
+    OnUnhandledRejection registers fn for the window's global
+    "unhandledrejection" event: a rejected Promise nothing ever called .catch
+    (or the second argument of .then) on.
+
+func (w *Window) Open(url, name, features string) js.Value
+    Open opens url in a new browsing context (or an existing one named name),
+    configured by features (a comma-separated window-features string).
+
+func (w *Window) OuterHeight() int
+    OuterHeight returns the browser window's height in pixels, chrome included.
+
+func (w *Window) OuterWidth() int
+    OuterWidth returns the browser window's width in pixels, chrome included.
+
+func (w *Window) Prompt(message, defaultValue string) string
+    Prompt shows a native text-input dialog pre-filled with defaultValue,
+    returning the entered text (or "" if cancelled).
+
+func (w *Window) RemoveEventListener(event string, callback js.Func)
+    RemoveEventListener unregisters the listener callback returned by the
+    matching AddEventListener call.
+
+func (w *Window) RequestAnimationFrame(fn func()) int
+    RequestAnimationFrame schedules fn before the next repaint and returns the
+    id ClearAnimationFrame needs to cancel it.
+
+func (w *Window) ScrollBy(dx, dy int, smooth bool)
+    ScrollBy scrolls the page by a relative offset, smoothly if smooth is true
+    (instantly otherwise).
+
+func (w *Window) ScrollTo(x, y int, smooth bool)
+    ScrollTo scrolls the page to an absolute position, smoothly if smooth is
+    true (instantly otherwise).
+
+func (w *Window) ScrollX() float64
+    ScrollX returns how far the page is scrolled from the left, in pixels.
+
+func (w *Window) ScrollY() float64
+    ScrollY returns how far the page is scrolled from the top, in pixels.
+
+func (w *Window) SetInterval(fn func(), delay int) int
+    SetInterval schedules fn to run every delay milliseconds and returns the id
+    ClearInterval needs to stop it.
+
+func (w *Window) SetLocation(url string)
+    SetLocation navigates the window to url.
+
+func (w *Window) SetTimeout(fn func(), delay int) int
+    SetTimeout schedules fn to run once after delay milliseconds and returns the
+    id ClearTimeout needs to cancel it.
+

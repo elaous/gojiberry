@@ -1,0 +1,383 @@
+package browser // import "github.com/elaous/gojiberry/domrt/browser"
+
+Package browser exposes browser/JS APIs to Go/WASM code: a generic Global()
+escape hatch for any named global object, plus typed, idiomatic-Go wrappers for
+the APIs almost every app needs (fetch, localStorage/sessionStorage, WebSocket)
+so application code doesn't have to hand-roll syscall/js calls for them.
+
+CONSTANTS
+
+const (
+	GeolocationPermissionDenied    = 1
+	GeolocationPositionUnavailable = 2
+	GeolocationTimeout             = 3
+)
+    Geolocation error codes, matching the real PositionError.code values.
+
+
+VARIABLES
+
+var LocalStorage = storageArea{"localStorage"}
+    LocalStorage wraps window.localStorage.
+
+var SessionStorage = storageArea{"sessionStorage"}
+    SessionStorage wraps window.sessionStorage.
+
+var Cookies cookieJar
+    Cookies wraps document.cookie. Values are percent-encoded on Set and decoded
+    on Get/All, so arbitrary strings (not just cookie-safe ones) round-trip
+    correctly.
+
+
+FUNCTIONS
+
+func CreateObjectURL(f File) string
+    CreateObjectURL creates a blob: URL referencing f's data, valid until
+    RevokeObjectURL is called or the document unloads. Useful for e.g. setting
+    an <img>/<video>'s src without reading the file into memory.
+
+func Document() *html.Document
+    Document returns the global document object.
+
+func GetUserMedia(constraints MediaStreamConstraints) (js.Value, error)
+    GetUserMedia prompts for (or silently grants, depending on prior permission)
+    camera/microphone access and returns the resulting MediaStream, blocking
+    until the browser responds.
+
+func Global(name string) js.Value
+    Global returns the named global browser API object (e.g.
+    Global("WebAssembly"), Global("Notification"), Global("crypto")) for APIs
+    this package doesn't have a typed wrapper for yet.
+
+func ReadClipboardText() (string, error)
+    ReadClipboardText reads the current system clipboard text, blocking until
+    the browser responds.
+
+func RevokeObjectURL(url string)
+    RevokeObjectURL releases a URL created by CreateObjectURL.
+
+func SetVideoSource(videoElement js.Value, stream js.Value)
+    SetVideoSource assigns stream (from GetUserMedia) as a <video> element's
+    source, the srcObject-based replacement for the old createObjectURL(stream)
+    pattern.
+
+func StopStream(stream js.Value)
+    StopStream stops every track in stream (camera/mic LED off, etc.).
+
+func WatchPosition(fn func(Position, error)) (stop func())
+    WatchPosition calls fn with every position update (or error) until the
+    returned stop function is called.
+
+func Window() *html.Window
+    Window returns the global window object.
+
+func WriteClipboardText(text string) error
+    WriteClipboardText writes text to the system clipboard, blocking until
+    the browser confirms it (or denies it, e.g. missing permission or an
+    insecure/non-focused document).
+
+
+TYPES
+
+type CookieOptions struct {
+	Path     string    // "" defaults to the current path
+	Domain   string    // "" defaults to the current domain
+	MaxAge   int       // seconds; 0 means unset (a session cookie); negative deletes it immediately
+	Expires  time.Time // zero means unset; MaxAge takes precedence where browsers support both
+	Secure   bool
+	SameSite string // "Strict", "Lax", or "None"; "" leaves the browser's own default
+}
+    CookieOptions configures Cookies.Set. Every field is optional; the zero
+    value omits that attribute, matching the browser's own default for it.
+
+type Database struct {
+	Value js.Value
+}
+    Database is an open IndexedDB connection.
+
+func OpenDatabase(name string, version int, upgrade func(db *Database)) (*Database, error)
+    OpenDatabase opens (creating if necessary) database name at the
+    given version, blocking until open completes. upgrade, if non-nil,
+    runs synchronously during the browser's "upgradeneeded" event -- the only
+    time object stores can be created or removed -- which fires on a brand new
+    database or after bumping version.
+
+func (d *Database) Close()
+    Close closes the database connection.
+
+func (d *Database) CreateObjectStore(name, keyPath string) js.Value
+    CreateObjectStore creates a new object store keyed by keyPath. Only valid
+    inside OpenDatabase's upgrade callback.
+
+func (d *Database) Transaction(storeNames []string, mode string) *Transaction
+    Transaction starts a transaction over storeNames in the given mode
+    ("readonly" or "readwrite").
+
+type FetchOptions struct {
+	Method    string
+	Body      string
+	BodyValue js.Value
+	Headers   map[string]string
+}
+    FetchOptions configures a FetchOpts call. Method defaults to "GET" if empty.
+    Body, if non-empty, is sent as the request body. BodyValue takes precedence
+    over Body when set -- pass a FormData.Value here for a multipart upload
+    (including files); the browser sets Content-Type with the right boundary
+    automatically, so don't set it yourself in Headers.
+
+type File struct {
+	Value js.Value
+}
+    File wraps a JS File (or Blob) object, e.g. one returned by
+    html.InputElement.Files or html.DataTransfer.Files.
+
+func WrapFile(v js.Value) File
+    WrapFile wraps a raw JS File/Blob object as a File.
+
+func WrapFiles(v js.Value) []File
+    WrapFiles wraps a JS FileList (or any array-like of File objects).
+
+func (f File) Name() string
+    Name returns the file's name.
+
+func (f File) ReadAsArrayBuffer() ([]byte, error)
+    ReadAsArrayBuffer reads the file's raw contents as bytes, blocking until the
+    read completes.
+
+func (f File) ReadAsDataURL() (string, error)
+    ReadAsDataURL reads the file's contents encoded as a data: URL (base64,
+    with a MIME-type prefix), blocking until the read completes.
+
+func (f File) ReadAsText() (string, error)
+    ReadAsText reads the file's contents decoded as UTF-8 text, blocking until
+    the read completes.
+
+func (f File) Size() int64
+    Size returns the file's size in bytes.
+
+func (f File) Type() string
+    Type returns the file's MIME type, or "" if unknown.
+
+type FormData struct {
+	Value js.Value
+}
+    FormData wraps a JS FormData object: a set of key/value entries (strings
+    and/or files) suitable for a multipart/form-data request body -- see
+    FetchOptions.BodyValue.
+
+func NewFormData() FormData
+    NewFormData creates an empty FormData.
+
+func NewFormDataFromForm(form *html.FormElement) FormData
+    NewFormDataFromForm creates a FormData pre-populated from form's current
+    controls, the same values a native (non-JS) submit of that form would send.
+
+func (f FormData) Append(key, value string)
+    Append adds a string value under key (does not replace an existing value
+    under the same key -- see Set).
+
+func (f FormData) AppendFile(key string, file File, filename string)
+    AppendFile adds file under key with the given filename.
+
+func (f FormData) Delete(key string)
+    Delete removes every value stored under key.
+
+func (f FormData) Get(key string) string
+    Get returns the first value stored under key, or "" if there is none.
+
+func (f FormData) Has(key string) bool
+    Has reports whether any value is stored under key.
+
+func (f FormData) Set(key, value string)
+    Set adds a string value under key, replacing any existing value(s) there.
+
+type GeolocationError struct {
+	Code    int // one of the Geolocation* constants above
+	Message string
+}
+    GeolocationError is returned when a geolocation request fails.
+
+func (e *GeolocationError) Error() string
+    Error implements the standard error interface.
+
+type MediaDeviceInfo struct {
+	DeviceID string
+	Kind     string
+	Label    string
+}
+    MediaDeviceInfo describes one camera/microphone/speaker as reported by
+    EnumerateDevices.
+
+func EnumerateDevices() ([]MediaDeviceInfo, error)
+    EnumerateDevices lists the available media input/output devices. Label is
+    only populated for devices the page already has permission to use (e.g.
+    after a successful GetUserMedia call).
+
+type MediaStreamConstraints struct {
+	Audio bool
+	Video bool
+}
+    MediaStreamConstraints selects which media getUserMedia should request.
+    Leave a field false to not request that kind of track.
+
+type ObjectStore struct {
+	Value js.Value
+}
+    ObjectStore is a key/value store within a Transaction.
+
+func (s *ObjectStore) Clear() error
+    Clear removes every record in the store.
+
+func (s *ObjectStore) Delete(key any) error
+    Delete removes the record stored under key.
+
+func (s *ObjectStore) Get(key any) (js.Value, error)
+    Get retrieves the value stored under key, blocking until the request
+    completes. The result is JS `undefined` if key doesn't exist -- check with
+    .IsUndefined().
+
+func (s *ObjectStore) Put(value any) error
+    Put inserts or updates value, blocking until the request completes.
+
+type Position struct {
+	Latitude, Longitude, Accuracy float64
+	Altitude, AltitudeAccuracy    *float64
+	Heading, Speed                *float64
+}
+    Position is one geolocation reading. Altitude, AltitudeAccuracy, Heading,
+    and Speed are nil when the device doesn't report them.
+
+func CurrentPosition() (Position, error)
+    CurrentPosition wraps navigator.geolocation.getCurrentPosition, blocking
+    until the browser resolves it (prompting for permission first if needed) or
+    reports an error.
+
+type Response struct {
+	Status int
+	OK     bool
+	// Has unexported fields.
+}
+    Response is the result of Fetch.
+
+func Fetch(url string) (*Response, error)
+    Fetch wraps window.fetch(url) with a plain GET, blocking until the response
+    headers arrive (not the body -- call Text or JSON to read it). For anything
+    else (POST/PUT with a body, custom headers), use FetchOpts.
+
+func FetchOpts(url string, opts FetchOptions) (*Response, error)
+    FetchOpts wraps window.fetch(url, init) for requests Fetch's plain GET can't
+    express: POST/PUT/PATCH/DELETE with a body, or custom headers. A common use
+    is PUT-ing a JSON body:
+
+        resp, err := browser.FetchOpts(url, browser.FetchOptions{
+        	Method:  "PUT",
+        	Body:    string(jsonBytes),
+        	Headers: map[string]string{"Content-Type": "application/json"},
+        })
+
+func (r *Response) JSON(v any) error
+    JSON reads the full response body and decodes it as JSON into v.
+
+func (r *Response) Text() (string, error)
+    Text reads the full response body as a string.
+
+type Router struct {
+	// Has unexported fields.
+}
+    Router wraps the History API (pushState/replaceState) and the
+    browser's back/forward buttons (popstate) behind a single callback.
+    pushState/replaceState fire no event of their own -- only popstate does --
+    so without this, code driving a page from Go has to duplicate its "update
+    the page for this URL" logic in two places: right after calling pushState,
+    and separately in a popstate listener, taking care to route both through the
+    same function. OnNavigate fires for either case.
+
+func NewRouter() *Router
+    NewRouter creates a Router and starts listening for the browser's
+    back/forward buttons. Call OnNavigate to register what runs on any URL
+    change.
+
+func (r *Router) Navigate(path string)
+    Navigate pushes path onto the history stack (a new Back stop) and calls the
+    OnNavigate handler immediately, since pushState itself fires no event.
+
+func (r *Router) OnNavigate(fn func(u *url.URL))
+    OnNavigate registers fn to run on any URL change: Navigate, Replace, or the
+    user's own back/forward navigation. Calling it again replaces the previous
+    handler.
+
+func (r *Router) Replace(path string)
+    Replace swaps the current history entry for path -- e.g. for a redirect
+    that shouldn't itself become a Back stop -- and calls the OnNavigate handler
+    immediately.
+
+func (r *Router) Stop()
+    Stop removes the popstate listener.
+
+func (r *Router) URL() *url.URL
+    URL returns the current URL.
+
+type Socket struct {
+	// Has unexported fields.
+}
+    Socket wraps a browser WebSocket.
+
+func Connect(url string) *Socket
+    Connect opens a new WebSocket to url.
+
+func (s *Socket) Close()
+    Close closes the connection and releases its registered callbacks.
+
+func (s *Socket) OnClose(fn func())
+    OnClose registers the handler called when the connection closes.
+
+func (s *Socket) OnError(fn func())
+    OnError registers the handler called on a socket error.
+
+func (s *Socket) OnMessage(fn func(data string))
+    OnMessage registers the handler called for each incoming text frame. Calling
+    it again replaces the previous handler.
+
+func (s *Socket) Send(data string)
+    Send writes a text frame.
+
+type Transaction struct {
+	Value js.Value
+}
+    Transaction is an in-progress IndexedDB transaction over one or more object
+    stores.
+
+func (t *Transaction) ObjectStore(name string) *ObjectStore
+    ObjectStore returns the named object store within this transaction's scope.
+
+type Worker struct {
+	// Has unexported fields.
+}
+    Worker wraps a browser dedicated Worker: a separate Go/WASM binary running
+    on a real background thread, isolated from the DOM and this program's
+    memory, reachable only through PostMessage/OnMessage (see domrt/worker
+    for the worker-side half). Unlike a service worker (domrt/sw), a dedicated
+    Worker needs no separate registration step -- NewWorker starts it directly.
+
+func NewWorker(url string) *Worker
+    NewWorker starts a new Worker running the script at url -- typically a
+    small JS bootstrap that does importScripts('wasm_exec.js') and instantiates
+    a separate .wasm binary built from a domrt/worker program (see the
+    wasm-worker-demo example).
+
+func (w *Worker) OnError(fn func(err *html.JSError))
+    OnError registers the handler called when the worker throws an uncaught
+    exception.
+
+func (w *Worker) OnMessage(fn func(data js.Value))
+    OnMessage registers the handler called for each message the worker posts
+    back. Calling it again replaces the previous handler.
+
+func (w *Worker) PostMessage(data any)
+    PostMessage sends data to the worker (structured-clone, not shared memory --
+    the same constraint domrt/worker.PostMessage has sending the other way).
+
+func (w *Worker) Terminate()
+    Terminate immediately stops the worker and releases its registered
+    callbacks.
+
