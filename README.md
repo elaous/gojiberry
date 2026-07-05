@@ -210,6 +210,29 @@ expanded by the same recursive scan, with no extra grammar required.
   `GOJIBERRY_SYNC_REGION` (see `syncserver.ConfigFromEnv`), so the same
   binary (`cmd/syncserver`) can be pointed at any operator's own
   infrastructure without a rebuild.
+- **`devreload`** / **`devwatch`** — the two halves of gox's dev-mode
+  hot-reload loop, generalized out of `examples/canvas-app`'s own
+  hand-rolled version so any gox server can opt in with a few lines
+  instead of re-deriving it. `devreload` is the browser-side half:
+  `Reloader.Wrap(html)` injects a small script that polls
+  `Reloader.Handler()`'s endpoint and reloads the tab once the served
+  version differs from the one the page was rendered with; a nil
+  `*Reloader` makes both calls no-ops, so production code needs no
+  separate devMode branch. `devwatch` is the process-supervision half:
+  `devwatch.Run(Config{...})` watches a source tree, and on a relevant
+  change (debounced, with `.gox.go`/VCS metadata always skipped via
+  `DefaultIgnore`) reruns the project's own `Rebuild` and restarts a
+  managed server subprocess — not real hot module replacement (a
+  compiled binary is one opaque unit), just a fast watch/rebuild/
+  restart/reload cycle, the same tradeoff `examples/canvas-app`'s own
+  version already made. `cmd/goxdev` is a generic CLI front end for
+  projects with no Go code of their own to wire `devwatch.Run` into:
+  `go run github.com/elaous/gojiberry/cmd/goxdev -build "..." -- ./myserver`.
+  `examples/canvas-app`'s `cmd/devwatch`/`cmd/devserver` now use both
+  packages directly, verified via a real watch/rebuild/restart cycle
+  against the running app (a file change triggers a real rebuild, a
+  real process restart, and the served `/__dev/version` genuinely
+  changes) as well as a real headless-Chromium/Postgres run.
 
 ## Components
 
