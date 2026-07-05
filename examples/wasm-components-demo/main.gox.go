@@ -119,6 +119,10 @@ type state struct {
 	searchOpen            bool
 	imageZoomZoomed       bool
 	popoverOpen           bool
+
+	collabRole    components.CollabRole
+	collabResult  string
+	floatingCount int
 }
 
 func containsString(list []string, v string) bool {
@@ -598,6 +602,55 @@ func App(st *state, render func()) gox.Node {
 				components.Icon(components.IconProps{Name: components.IconStar, Color: "rgb(217, 119, 6)", Label: "star"}),
 			),
 		),
+		gox.El("section", nil,
+			gox.El("h2", nil, gox.Text("Collab")),
+			components.RadioGroup(components.RadioGroupProps{
+				Name: "collab-role",
+				Options: []components.RadioOption{
+					{Value: "owner", Label: "Owner"},
+					{Value: "editor", Label: "Editor"},
+					{Value: "viewer", Label: "Viewer"},
+				},
+				Selected: string(st.collabRole),
+				OnChange: func(v string) { st.collabRole = components.CollabRole(v); render() },
+			}),
+			components.Collab(components.CollabProps{
+				Role:    st.collabRole,
+				Content: []gox.Node{gox.El("p", []gox.Attr{gox.A("id", "collab-content")}, gox.Text("Shared document content"))},
+				Actions: []gox.Node{
+					components.Button(components.ButtonProps{Label: "Save", OnClick: func(gox.Event) { st.collabResult = "saved"; render() }}),
+				},
+				OnDelete: func() { st.collabResult = "deleted"; render() },
+				OnShare:  func() { st.collabResult = "shared"; render() },
+				Comments: []gox.Node{gox.El("p", nil, gox.Text("1 comment"))},
+			}),
+			gox.El("span", []gox.Attr{gox.A("id", "collab-result")}, gox.Text(fmt.Sprintf("role=%s result=%s", st.collabRole, st.collabResult))),
+		),
+		gox.El("section", []gox.Attr{gox.A("style", "position:relative; height:120px; border:1px dashed #d1d5db;")},
+			gox.El("h2", nil, gox.Text("Floating")),
+			components.Floating(components.FloatingProps{
+				Position: components.FloatingBottomRight,
+				Absolute: true,
+				Children: []gox.Node{
+					components.Button(components.ButtonProps{
+						Label:   fmt.Sprintf("Floating %d", st.floatingCount),
+						OnClick: func(gox.Event) { st.floatingCount++; render() },
+					}),
+				},
+			}),
+		),
+		gox.El("section", nil,
+			gox.El("h2", nil, gox.Text("Box")),
+			gox.El("div", []gox.Attr{gox.A("id", "box-wrapper"), gox.A("style", "height:300px;")},
+				components.Box(components.BoxProps{
+					Divisions: []components.BoxDivision{
+						{Height: "48px", Content: []gox.Node{gox.El("div", []gox.Attr{gox.A("id", "box-header")}, gox.Text("Header (48px)"))}},
+						{Content: []gox.Node{gox.El("div", []gox.Attr{gox.A("id", "box-body")}, gox.Text("Body (flexible)"))}},
+						{Height: "20%", Content: []gox.Node{gox.El("div", []gox.Attr{gox.A("id", "box-footer")}, gox.Text("Footer (20%)"))}},
+					},
+				}),
+			),
+		),
 	)
 }
 
@@ -652,6 +705,7 @@ func main() {
 		chipLabels:       []string{"go", "wasm", "gox"},
 		dropdownSelected: []string{"go"},
 		paginationPage:   5,
+		collabRole:       components.CollabEditor,
 	}
 
 	var root *domrt.Root
