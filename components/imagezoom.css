@@ -1,0 +1,14 @@
+/* ImageZoom stylesheet for github.com/elaous/gojiberry/components. */
+
+.gj-imagezoom-thumb { cursor: zoom-in; max-width: 100%; }
+.gj-imagezoom-backdrop { position: fixed; inset: 0; z-index: 1099; background: rgba(0, 0, 0, 0.8); }
+.gj-imagezoom-full {
+  position: fixed;
+  z-index: 1100;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 90vw;
+  max-height: 90vh;
+  cursor: zoom-out;
+}

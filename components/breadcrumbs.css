@@ -1,0 +1,8 @@
+/* Breadcrumbs stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-breadcrumbs-list { display: flex; flex-wrap: wrap; list-style: none; padding: 0; margin: 0; }
+.gj-breadcrumb-item { display: flex; align-items: center; }
+.gj-breadcrumb-item:not(:last-child)::after { content: "/"; margin: 0 0.5em; color: var(--gj-muted); }
+.gj-breadcrumb-link { color: var(--gj-accent); text-decoration: underline; }
+.gj-breadcrumb-current { color: var(--gj-muted); }

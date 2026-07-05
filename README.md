@@ -354,7 +354,30 @@ each rendered with `role="alertdialog"` instead of `Dialog`'s default
 `role="dialog"`, per ARIA, since both demand an immediate response),
 and `Toast` (a non-modal, transient notification — no backdrop, no
 opinion on where it sits on screen; wrap one or more in your own
-`position:fixed` container to stack them). None of them import
+`position:fixed` container to stack them).
+
+Also `Checkbox` and `CheckboxGroup` (RadioGroup's independent-selection
+counterpart — any number, including none, may be checked), `Switch` (a
+real checkbox, visually hidden but still keyboard/screen-reader
+accessible, styled as a sliding track via the CSS `:checked` sibling
+selector — the same "real control, custom look" idea `FileUploader`'s
+hidden file input already uses), `Textarea`, `OTPInput` (N
+single-character boxes for a verification code; like `FileUploader`
+and `ContextMenu`, advancing focus to the next/previous box on
+input/backspace needs a real DOM reference `gox.Event` doesn't carry,
+so it's the caller's job via `domrt/html`, keyed off each box's
+`fmt.Sprintf("%s-%d", ID, i)` id), `Breadcrumbs`, `Pagination` (with
+ellipsis windowing so its width stays constant regardless of page
+count), `Avatar` (an image, or a colored initials fallback when there's
+no `Src`), `Search` (a basic ARIA combobox — ranking/filtering/
+debouncing `Suggestions` is the caller's job, the same split
+`FileUploader` uses for reading files), `ImageZoom` (click a thumbnail
+for a full-viewport enlarged overlay, `Modal`-style backdrop and all),
+and `Popover` (anchored, click-triggered content with the same
+outside-click-to-close backdrop trick as `ContextMenu`, for when
+`Tooltip`'s pure-hover/non-interactive content isn't enough).
+
+None of them import
 `domrt` or `syscall/js` — every interactive one is a pure function of
 its props, taking the current state and `On*` callbacks the same way
 `wasm-counter`'s `Counter` does, so a single component works unchanged
@@ -722,7 +745,7 @@ generated code.
 - `examples/wasm-components-demo` — a gallery of every component in
   `components`, each wired to real local state and mounted with
   `domrt.Mount`/`Update`. Verified against a real headless Chromium:
-  every one of the 22 components driven through its actual
+  every one of the 33 components driven through its actual
   interactivity (clicking a tab/accordion header/carousel arrow/wizard
   step, opening the dropdown and picking a multi-select option,
   removing a chip, dragging the slider, setting the date/color inputs,
@@ -738,8 +761,20 @@ generated code.
   inside the content can't accidentally trigger it), a `Dialog`
   closed three different ways (Cancel, Save, backdrop) each setting a
   distinct result, `Confirm`/`Alert` each checked for
-  `role="alertdialog"` plus both of their outcomes, and a `Toast`
-  dismissed via its own close button), not just a compile check:
+  `role="alertdialog"` plus both of their outcomes, a `Toast`
+  dismissed via its own close button, toggling `Checkbox`/`Switch` and
+  a multi-select `CheckboxGroup`, typing into an `OTPInput` and
+  confirming focus genuinely advances/retreats across its boxes via
+  `document.activeElement` (not just that the value changed), a
+  `Breadcrumbs` click checked to both fire its handler and, via
+  `PreventDefault`, not actually navigate the page, `Pagination`
+  checked for its ellipsis windowing at a large page count plus
+  jumping to a specific page, an `Avatar` checked in both its image and
+  initials-fallback form, typing into `Search` and picking a real
+  suggestion from the resulting list, and opening/closing both
+  `ImageZoom` (via its own backdrop) and `Popover` (via its own
+  backdrop, with the panel's content checked for real visibility), not
+  just a compile check:
 
   ```
   go generate ./...
