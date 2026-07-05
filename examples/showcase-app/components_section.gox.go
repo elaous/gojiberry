@@ -587,6 +587,15 @@ func ComponentsApp(st *componentsState, render func()) gox.Node {
 			}),
 			gox.El("span", []gox.Attr{gox.A("id", "popover-result")}, gox.Text(fmt.Sprintf("open=%v", st.popoverOpen))),
 		),
+		gox.El("section", nil,
+			gox.El("h3", nil, gox.Text("Icon")),
+			gox.El("div", []gox.Attr{gox.A("id", "icons"), gox.A("style", "display:flex; gap:0.5em; font-size:24px;")},
+				components.Icon(components.IconProps{Name: components.IconCheck, Label: "check"}),
+				components.Icon(components.IconProps{Name: components.IconClose, Label: "close"}),
+				components.Icon(components.IconProps{Name: components.IconChevronDown, Label: "chevron down"}),
+				components.Icon(components.IconProps{Name: components.IconStar, Color: "rgb(217, 119, 6)", Label: "star"}),
+			),
+		),
 	)
 }
 
