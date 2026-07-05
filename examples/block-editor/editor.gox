@@ -1,0 +1,50 @@
+package main
+
+import (
+	"github.com/elaous/gojiberry/crdt"
+	"github.com/elaous/gojiberry/gox"
+)
+
+// EditorProps is the raw, editable view: one thumb-sized input per
+// block, stacked vertically. This is the ingestion side of the
+// decoupling pitch — it never knows what the final document looks
+// like, only how to let a finger edit one block at a time.
+type EditorProps struct {
+	Blocks []crdt.Block
+}
+
+func Editor(props EditorProps) gox.Node {
+	return <div class="editor">{func() []gox.Node {
+		var rows []gox.Node
+		for _, b := range props.Blocks {
+			rows = append(rows, BlockRow(BlockRowProps{Block: b}).WithKey(b.ID))
+		}
+		return rows
+	}()}</div>
+}
+
+type BlockRowProps struct {
+	Block crdt.Block
+}
+
+func BlockRow(props BlockRowProps) gox.Node {
+	b := props.Block
+	switch b.Kind {
+	case KindHeading:
+		return <div class="block block-heading">
+			<input class="block-input block-input-heading" value={b.Content}/>
+		</div>
+	case KindLineItem:
+		desc, amount := ParseLineItem(b)
+		return <div class="block block-line-item">
+			<input class="block-input block-input-desc" value={desc}/>
+			<input class="block-input block-input-amount" value={amount}/>
+		</div>
+	case KindNote:
+		return <div class="block block-note">
+			<textarea class="block-input block-input-note">{b.Content}</textarea>
+		</div>
+	default:
+		return <div class="block">{b.Content}</div>
+	}
+}

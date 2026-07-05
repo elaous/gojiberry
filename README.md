@@ -67,6 +67,23 @@ expanded by the same recursive scan, with no extra grammar required.
   the Go closure swapped on later renders, and children reconciled by
   key when present — preserving DOM node identity (focus, scroll
   position, input state) wherever the shape didn't change.
+- **`crdt`** — the offline-first sync engine: a last-writer-wins
+  register per document block, keyed by ID. Each replica (a phone, a
+  laptop, a sync server) mutates its own copy freely while offline via
+  `Doc.Put`/`Doc.Delete`; `Doc.Drain()` returns only the Ops written
+  since the last sync (the delta a metered connection actually sends),
+  and `Doc.Apply(ops...)` merges received Ops in, converging to the
+  same state on every replica regardless of delivery order or
+  duplication. `Doc.Snapshot()` returns the full current state instead,
+  for onboarding a brand-new replica with nothing to diff against yet.
+- **`syncserver`** — the decoupled backend half: a thin HTTP relay
+  (`POST /ops` to push a delta, `GET /ops` for a full snapshot) that is
+  itself just another CRDT replica, so it never needs bespoke
+  conflict-resolution logic clients must trust. Every deployment detail
+  — listen address, region label — comes from `GOJIBERRY_SYNC_ADDR` /
+  `GOJIBERRY_SYNC_REGION` (see `syncserver.ConfigFromEnv`), so the same
+  binary (`cmd/syncserver`) can be pointed at any operator's own
+  infrastructure without a rebuild.
 
 ## Components
 
@@ -112,6 +129,27 @@ elements like `<my-widget>`) are real HTML elements and compile to
   cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/wasm-counter/
   cd examples/wasm-counter && python3 -m http.server 8080
   # open http://localhost:8080/
+  ```
+
+- `examples/block-editor` — the mobile-first, offline-first pitch end
+  to end: two replicas (a phone and a desktop) edit the same
+  block-based invoice fully offline, sync only their delta Ops through
+  `crdt.Doc`, and converge to identical state regardless of order —
+  then render it two ways from the same blocks: `Editor` (thumb-sized
+  editable inputs) and `Output` (the clean final document), proving
+  data capture and rendered output are decoupled components:
+
+  ```
+  go generate ./...
+  go run ./examples/block-editor
+  go test ./examples/block-editor/...
+  ```
+
+  Pair it with the sync relay to see the same Ops cross a real HTTP
+  boundary instead of an in-process `Drain`/`Apply` call:
+
+  ```
+  GOJIBERRY_SYNC_ADDR=:8080 GOJIBERRY_SYNC_REGION=br-datacenter-1 go run ./cmd/syncserver
   ```
 
 ## Known limitations (v1)
