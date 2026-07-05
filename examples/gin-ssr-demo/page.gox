@@ -1,0 +1,32 @@
+// Package main demos gox SSR under Gin (github.com/gin-gonic/gin):
+// gox.Render only needs an io.Writer, and *gin.Context's own Writer
+// field satisfies that directly, the same way http.ResponseWriter did
+// in the plain net/http version of this demo (examples/http-server-demo)
+// and Encore's raw endpoints did in examples/canvas-app -- Gin's
+// routing, binding, and middleware stack are untouched, gox just
+// replaces html/template as the thing producing the response body. See
+// router.go for how the three security middlewares (secure headers,
+// CORS, per-client rate limiting) are wired in ahead of it.
+package main
+
+import (
+	"github.com/elaous/gojiberry/gox"
+)
+
+type PageProps struct {
+	Name string
+}
+
+func Page(props PageProps) gox.Node {
+	name := props.Name
+	if name == "" {
+		name = "stranger"
+	}
+	return <html>
+		<head><title>gojiberry + gin</title></head>
+		<body>
+			<h1>Hello, {name}!</h1>
+			<p>Served by Gin, rendered by gox, protected by secure headers, CORS, and a per-client rate limit -- see the README for details.</p>
+		</body>
+	</html>
+}

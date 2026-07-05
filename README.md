@@ -1052,6 +1052,37 @@ generated code.
   GOJIBERRY_SYNC_ADDR=:8080 GOJIBERRY_SYNC_REGION=br-datacenter-1 go run ./cmd/syncserver
   ```
 
+- `examples/gin-ssr-demo` and `examples/echo-ssr-demo` — the same "gox
+  over plain net/http" SSR demo (`examples/http-server-demo`), served
+  by [Gin](https://github.com/gin-gonic/gin) and
+  [Echo](https://github.com/labstack/echo) instead: `gox.Render` only
+  needs an `io.Writer`, and both frameworks' own response writer
+  (`*gin.Context.Writer`, `c.Response().Writer`) satisfy that directly
+  -- routing, binding, and the rest of each framework's middleware
+  stack are completely untouched. Both wire the same three real
+  security middlewares ahead of the page route: secure headers (the
+  `X-Frame-Options`/CSP/HSTS/etc. coverage gofiber/fiber's own helmet
+  middleware provides), a non-wildcard CORS policy, and a per-client
+  rate limit. Echo has all three built in; Gin needs `gin-contrib/secure`
+  and `gin-contrib/cors` plus one small hand-rolled
+  `golang.org/x/time/rate` limiter, since Gin ships no rate limiter of
+  its own. Verified end-to-end against a real `httptest.Server` with a
+  real `net/http` client for both: every security header's exact value,
+  a trusted origin's preflight getting `Access-Control-Allow-Origin`
+  echoed back while an untrusted origin gets nothing, and a burst of
+  requests from one client genuinely getting a real `429` past the
+  configured limit. Comparing the two also surfaced a real behavioral
+  difference worth knowing: Echo's `Secure` middleware only emits
+  `Strict-Transport-Security` over a connection it considers actually
+  secure, while `gin-contrib/secure` emits it unconditionally -- see
+  `examples/echo-ssr-demo`'s README:
+
+  ```
+  cd examples/gin-ssr-demo   # or examples/echo-ssr-demo
+  go test ./...
+  go run .
+  ```
+
 ## Editor support
 
 `editors/vscode-gox` is a minimal VS Code extension: `.gox` file
