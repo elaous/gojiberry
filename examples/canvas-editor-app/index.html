@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gojiberry canvas document editor</title>
+  <script src="wasm_exec.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 1em; }
+    #toolbar { margin-bottom: 0.5em; display: flex; gap: 0.5em; }
+    #toolbar button { padding: 0.4em 0.9em; cursor: pointer; }
+    #editor-canvas { border: 1px solid #d1d5db; display: block; }
+    .hidden-input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+    #doc-state { display: block; margin-top: 0.5em; font-family: monospace; font-size: 0.85em; color: #6b7280; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h1>Canvas-rendered document editor</h1>
+  <p>Click into the canvas to place the cursor, type to insert text,
+  drag to select, then Bold/Italic the selection. Everything below the
+  toolbar is drawn with Context2D -- there is no contenteditable or
+  &lt;textarea&gt; anywhere.</p>
+
+  <div id="toolbar">
+    <button id="toolbar-bold"><b>Bold</b></button>
+    <button id="toolbar-italic"><i>Italic</i></button>
+  </div>
+
+  <canvas id="editor-canvas" width="700" height="500"></canvas>
+  <input id="editor-hidden-input" class="hidden-input" type="text" autocomplete="off">
+
+  <span id="doc-state">(pending)</span>
+
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+      go.run(result.instance);
+    });
+  </script>
+</body>
+</html>

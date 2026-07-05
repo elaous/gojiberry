@@ -157,6 +157,20 @@ expanded by the same recursive scan, with no extra grammar required.
   `AsGoError()` returns it as a plain `error` explicitly, `AsJSException()`
   unwraps to the raw JS value for reading anything `JSError` doesn't
   model (a custom error subclass's own fields, its stack trace).
+  `Element.OnKeyDown`/`OnKeyUp` report a typed `KeyEvent` (`Key`/`Code`/
+  `CtrlKey`/`ShiftKey`/`AltKey`/`MetaKey`), for the keys "input" never
+  fires for (arrows, Backspace, Enter, shortcuts); `Element.OnMouseDown`/
+  `OnMouseMove`/`OnMouseUp` report a typed `MouseEvent` (`X`/`Y`,
+  viewport-relative) for anything that needs a real click/drag
+  position gox.Event can't carry — canvas hit-testing, custom
+  selection, and so on. Both mirror `DragEvent`'s shape (a
+  `PreventDefault`/`StopPropagation` pair alongside the typed fields);
+  see `examples/canvas-editor-app` for `MouseEvent.PreventDefault`
+  actually mattering, not just being there for symmetry — clicking a
+  non-focusable element like a bare `<canvas>` makes the browser clear
+  focus right after every mousedown handler returns, silently undoing
+  a same-handler call to focus something else, unless you prevent that
+  default first.
 - **`domrt/svg`** (`GOOS=js GOARCH=wasm`) — `svg.CreateElement(document,
   tag)` creates an SVG element in the right namespace (`svg.Namespace`)
   — `createElement` alone produces an unrenderable element in the
@@ -831,6 +845,71 @@ generated code.
   what's best-effort and unverified (the `//encore:api` handlers'
   actual behavior under `encore run`, since this sandbox's network
   policy blocked the Encore CLI installer).
+
+- `examples/showcase-app` — every capability above, on one page: the
+  full 33-component gallery, `domrt/browser`'s core wrappers plus DOM
+  extras (fetch/localStorage/window+document dimensions/scroll/style/
+  SVG/image loading/form submission/cookies/custom events/global error
+  capture/geolocation), the newer platform wrappers (IndexedDB/
+  MediaDevices/IntersectionObserver/ResizeObserver/drag-and-drop/
+  Clipboard), Canvas2D/WebGL, typed elements + the File API,
+  client-side routing, and a Web Worker round trip — each section
+  wired up exactly the way its original standalone demo did (the
+  sections are literally that code, consolidated), so nothing here is
+  a simplified restatement. Verified against a real headless Chromium,
+  section by section, the same real checks each standalone demo uses
+  (a genuine `IntersectionObserver` flip from off-screen to
+  intersecting once its element is actually scrolled into view in this
+  longer, merged page, unlike the standalone demo where it starts
+  already visible):
+
+  ```
+  go generate ./...
+  GOOS=js GOARCH=wasm go build -o examples/showcase-app/main.wasm ./examples/showcase-app/
+  (cd examples/showcase-app/worker && GOOS=js GOARCH=wasm go build -o ../worker.wasm .)
+  cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/showcase-app/
+  cp components/*.css examples/showcase-app/
+  cd examples/showcase-app && python3 -m http.server 8080
+  # open http://localhost:8080/
+  ```
+
+- `examples/canvas-editor-app` — a document editor whose content is
+  drawn directly onto an HTML5 `<canvas>` via `domrt/html`'s
+  `Context2D`, the way Google Docs' own editor renders (not
+  `contenteditable`, not a `<textarea>` — see `examples/canvas-app`
+  above for the latter). `model.go` holds a flat per-character buffer
+  plus per-character `Bold`/`Italic` (insert/delete/selection/format
+  toggling as plain slice operations); `layout.go` word-wraps it
+  against the canvas's own `MeasureTextWidth` so layout always matches
+  what's actually drawn, and hit-tests a click/drag position back to a
+  character index. Real keyboard input (including paste and IME
+  composition) comes from a visually-hidden `<input>` kept focused
+  behind the canvas: character insertion rides its native "input"
+  event (read the value, insert it, clear the field so the next
+  keystroke starts clean), while arrows/Backspace/Delete/Enter are
+  intercepted on "keydown" via two small additions this example
+  motivated — `Element.OnKeyDown`/`OnKeyUp` (a typed `KeyEvent`) and
+  `Element.OnMouseDown`/`OnMouseMove`/`OnMouseUp` (a typed
+  `MouseEvent`) — since gox.Event carries neither key nor position
+  information. A real, non-obvious gotcha surfaced building this:
+  clicking a non-focusable element like a bare canvas makes the
+  browser clear focus right after every mousedown handler returns,
+  silently undoing a same-handler call to focus the hidden input,
+  unless `MouseEvent.PreventDefault` is called first. Content
+  autosaves to `localStorage` as a run-length-encoded JSON array.
+  Verified against a real headless Chromium: typing, Backspace,
+  Enter/line breaks, click-to-position, Shift+Arrow and real
+  mouse-drag selection, Bold/Italic actually flipping the model's
+  per-character format (not just the button registering a click), and
+  content surviving a reload via the same autosave path:
+
+  ```
+  go generate ./...
+  GOOS=js GOARCH=wasm go build -o examples/canvas-editor-app/main.wasm ./examples/canvas-editor-app/
+  cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/canvas-editor-app/
+  cd examples/canvas-editor-app && python3 -m http.server 8080
+  # open http://localhost:8080/
+  ```
 
 ## Editor support
 

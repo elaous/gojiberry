@@ -1,0 +1,32 @@
+//go:build js && wasm
+
+// Package main is a single, unified showcase of every capability
+// gojiberry has: the components gallery (components_section.gox),
+// core browser APIs and DOM extras (browserapi_section.gox), the
+// newer platform wrappers -- IndexedDB/MediaDevices/Observers/
+// drag-and-drop/Clipboard (platform_section.gox), Canvas2D/WebGL
+// (canvas_section.gox), typed elements + the File API
+// (typedelements_section.gox), client-side routing
+// (router_section.gox), and a Web Worker round trip
+// (worker_section.gox) -- all on one page, each section wired up
+// exactly the way its original standalone example demo did, so a real
+// browser test can drive every one of them, not just check that the
+// combined binary compiles.
+package main
+
+import "github.com/elaous/gojiberry/domrt/browser"
+
+func main() {
+	document := browser.Document()
+	window := browser.Window()
+
+	mountComponentsSection(document)
+	wireBrowserAPISection(document, window)
+	wirePlatformSection(document)
+	wireCanvasSection(document)
+	wireTypedElementsSection(document)
+	wireRouterSection(document)
+	wireWorkerSection(document)
+
+	select {} // keep the wasm program alive for every section's listeners/goroutines above
+}
