@@ -1,5 +1,5 @@
 // Package gojiberry has no importable code of its own; this file only
-// hosts the go:generate directive that regenerates every *_gox.go from
+// hosts the go:generate directive that regenerates every *.gox.go from
 // its *.gox source via the goxc transpiler.
 package gojiberry
 

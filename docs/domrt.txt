@@ -1,0 +1,42 @@
+package domrt // import "github.com/elaous/gojiberry/domrt"
+
+Package domrt is the client-side runtime: it mounts a gox.Node tree into a real
+DOM element and, on each Update, diffs the new tree against what's currently
+mounted, patching only what changed (text content, attributes, event listeners,
+children) instead of tearing down and rebuilding the DOM. Only builds under
+GOOS=js GOARCH=wasm; gox itself has no browser dependency so the same components
+render both here and via gox.Render on the server.
+
+FUNCTIONS
+
+func Await(p js.Value) (js.Value, error)
+    Await blocks the calling goroutine until the JS Promise p settles,
+    without blocking the rest of the WASM runtime: Go's js/wasm scheduler keeps
+    servicing the JS event loop (and other goroutines) while this one waits on
+    the channel. Shared by domrt/browser and domrt/sw so both bridge JS Promises
+    the same way.
+
+func ToPromise(work func() (js.Value, error)) js.Value
+    ToPromise returns a JS Promise that settles once work returns, running work
+    on its own goroutine so the calling event handler can return the Promise
+    immediately (as event.waitUntil/respondWith require) while the real work
+    happens asynchronously.
+
+
+TYPES
+
+type Root struct {
+	// Has unexported fields.
+}
+    Root is a live mount point: the result of Mount, and the handle Update is
+    called on for every subsequent render.
+
+func Mount(container js.Value, initial gox.Node) *Root
+    Mount creates DOM nodes for initial and appends them to container, returning
+    a Root whose Update re-renders in place on future calls.
+
+func (r *Root) Update(next gox.Node)
+    Update diffs next against the currently mounted tree and patches the
+    real DOM to match, preserving node identity (and therefore focus, scroll
+    position, input state, etc.) wherever the shape is unchanged.
+

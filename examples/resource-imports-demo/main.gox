@@ -1,0 +1,44 @@
+// Package main demos two ways gox pulls a file into a program at
+// transpile time instead of a separate go:embed + read-file dance: a
+// JSON config decoded directly into a struct you declare yourself
+// (config.(SiteConfig) tells gox to decode into SiteConfig -- gox
+// doesn't generate or infer it, so any shape you can declare in Go
+// works), and a page's stylesheet pulled in via the @stylesheets
+// doc-comment annotation on Page below, which also wraps Page's
+// return in the <html><head>...</head><body>...</body></html>
+// boilerplate (gox.Document) automatically.
+package main
+
+import (
+	"fmt"
+	"os"
+
+	config.(SiteConfig) "config.json"
+
+	"github.com/elaous/gojiberry/gox"
+)
+
+type SiteConfig struct {
+	Title string `json:"title"`
+}
+
+// Page renders the configured title as a heading. @title/@stylesheets
+// are metadata, not a tool directive or an editor hint (see
+// internal/transpile/page_metadata.go) -- goxc reads them and wraps
+// Page's return value in gox.Document{Title: ..., Head: [gox.Style(...
+// the file's content)]}.Render(), so Page itself only needs to return
+// the page's actual content.
+//
+// @title resource-imports-demo
+// @stylesheets style.css
+func Page(cfg SiteConfig) gox.Node {
+	return <h1>{cfg.Title}</h1>
+}
+
+func main() {
+	if err := gox.Render(os.Stdout, Page(config)); err != nil {
+		fmt.Fprintln(os.Stderr, "render error:", err)
+		os.Exit(1)
+	}
+	fmt.Println()
+}

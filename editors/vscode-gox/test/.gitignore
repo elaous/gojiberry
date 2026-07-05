@@ -1,0 +1,6 @@
+node_modules/
+go.tmLanguage.json
+html.tmLanguage.json
+css.tmLanguage.json
+sql.tmLanguage.json
+json.tmLanguage.json

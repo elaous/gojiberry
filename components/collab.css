@@ -1,0 +1,17 @@
+/* Collab stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-collab-denied { padding: 1em; color: var(--gj-danger); }
+.gj-collab-readonly .gj-collab-content { opacity: 0.85; }
+.gj-collab-badge {
+  display: inline-block;
+  margin-bottom: 0.5em;
+  padding: 0.15em 0.6em;
+  border-radius: 999px;
+  background: var(--gj-bg-muted);
+  color: var(--gj-muted);
+  font-size: 0.85em;
+}
+.gj-collab-actions { margin-top: 0.5em; display: flex; gap: 0.5em; }
+.gj-collab-footer { margin-top: 0.75em; display: flex; justify-content: flex-end; gap: 0.5em; }
+.gj-collab-comments { margin-top: 0.75em; border-top: 1px solid var(--gj-border); padding-top: 0.75em; }

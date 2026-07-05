@@ -1,0 +1,27 @@
+/* Tooltip stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-tooltip { position: relative; display: inline-block; }
+.gj-tooltip-bubble {
+  position: absolute;
+  z-index: 20;
+  padding: 0.35em 0.6em;
+  border-radius: var(--gj-radius);
+  background: var(--gj-text);
+  color: var(--gj-bg);
+  font-size: 0.85em;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.gj-tooltip:hover .gj-tooltip-bubble,
+.gj-tooltip:focus-within .gj-tooltip-bubble {
+  opacity: 1;
+  visibility: visible;
+}
+.gj-tooltip-top { bottom: 100%; left: 50%; transform: translateX(-50%) translateY(-0.4em); }
+.gj-tooltip-bottom { top: 100%; left: 50%; transform: translateX(-50%) translateY(0.4em); }
+.gj-tooltip-left { right: 100%; top: 50%; transform: translateY(-50%) translateX(-0.4em); }
+.gj-tooltip-right { left: 100%; top: 50%; transform: translateY(-50%) translateX(0.4em); }

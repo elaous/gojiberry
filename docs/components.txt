@@ -1,0 +1,796 @@
+package components // import "github.com/elaous/gojiberry/components"
+
+Package components is a small library of ready-made gox components:
+plain Go functions taking a typed props struct and returning a gox.Node,
+the same shape as any other component in this framework (see the root README's
+"Components" section). None of them import domrt or syscall/js directly --
+interactive ones take the current state and On* event handlers as props (the
+same controlled-component pattern the wasm-counter example uses), so a single
+component works unchanged for SSR-only pages and for a WASM page driving it with
+domrt.Mount/Update.
+
+FUNCTIONS
+
+func Accordion(props AccordionProps) gox.Node
+    Accordion renders a vertical stack of collapsible sections.
+
+func Alert(props AlertProps) gox.Node
+    Alert is a Dialog preset for a single acknowledgment, rendered with
+    role="alertdialog" (per ARIA, for a dialog demanding an immediate response)
+    instead of Dialog's default role="dialog".
+
+func Avatar(props AvatarProps) gox.Node
+    Avatar renders a profile picture, or a colored circle of Initials when Src
+    is empty (e.g. the user hasn't uploaded one).
+
+func Box(props BoxProps) gox.Node
+    Box is a layout container, normally full height, split into however many
+    sub-boxes Divisions describes -- each independently sized by percentage,
+    a fixed unit value, or left flexible to fill whatever height its siblings
+    don't claim. Built on CSS Grid's grid-template-rows, which already handles
+    exactly this mix of units in one declaration.
+
+func Breadcrumbs(props BreadcrumbsProps) gox.Node
+    Breadcrumbs renders a trail of links with the last item marked as the
+    current page (aria-current, and rendered as plain text even if it has an
+    Href -- you're already there).
+
+func Button(props ButtonProps) gox.Node
+    Button renders a styled <button>.
+
+func Carousel(props CarouselProps) gox.Node
+    Carousel renders a single active slide, prev/next arrows, and a dot per
+    slide for direct navigation. All slides are rendered (the inactive ones
+    aria-hidden) so this works before any client-side hydration runs, with CSS
+    choosing which one shows.
+
+func Checkbox(props CheckboxProps) gox.Node
+    Checkbox renders a single labeled checkbox, the label wrapping the input so
+    clicking the text toggles it too (same zero-JS trick FileUploader's dropzone
+    label uses).
+
+func CheckboxGroup(props CheckboxGroupProps) gox.Node
+    CheckboxGroup renders a set of independent checkboxes -- unlike RadioGroup,
+    any number (including all or none) may be checked at once.
+
+func Chip(props ChipProps) gox.Node
+    Chip renders a small labeled pill, optionally with a leading icon and a
+    remove button.
+
+func Collab(props CollabProps) gox.Node
+    Collab wraps a shared document's content and, based on Role's capabilities,
+    gates what the current collaborator can see and do with it: viewers get
+    read-only Content plus a "View only" badge and nothing else; editors
+    also get Actions and Comments; owners also get Delete/Share. Collab has
+    no networking or persistence of its own -- it's a pure permission gate,
+    the same "current state + On* callbacks" pattern every interactive component
+    in this package already uses. Pair it with your own real-time sync (e.g.
+    domrt/browser.Socket) to make Content/Comments actually collaborative;
+    see examples/collab-editor-app for one way to wire that up.
+
+func ColorPicker(props ColorPickerProps) gox.Node
+    ColorPicker renders a styled native color input, letting the browser handle
+    the actual color-picker UI.
+
+func Confirm(props ConfirmProps) gox.Node
+    Confirm is a Dialog preset for a yes/no decision, rendered with
+    role="alertdialog" (per ARIA, for a dialog demanding an immediate response)
+    instead of Dialog's default role="dialog".
+
+func ContextMenu(props ContextMenuProps) gox.Node
+    ContextMenu renders a positioned menu (typically opened from a right-click
+    -- see html.Element.OnContextMenu) plus a full-viewport backdrop that closes
+    it on an outside click. Renders nothing when !Open.
+
+func DatePicker(props DatePickerProps) gox.Node
+    DatePicker renders a styled native date input, letting the browser handle
+    the actual calendar UI/locale formatting/keyboard input.
+
+func Dialog(props DialogProps) gox.Node
+    Dialog is Modal with the common title/body/footer-actions shape.
+
+func Dropdown(props DropdownProps) gox.Node
+    Dropdown renders a closed control button and, when Open, a listbox of
+    options below it. This is a basic implementation of the ARIA listbox pattern
+    (role/aria-* attributes only) -- it doesn't implement its own keyboard
+    navigation, so pair it with native <button>/focus behavior for accessible
+    keyboard use.
+
+func FileUploader(props FileUploaderProps) gox.Node
+    FileUploader renders a dropzone that's also a native file-input label
+    (clicking anywhere on it opens the file browser, no JS needed for that part)
+    plus an optional progress bar.
+
+func Floating(props FloatingProps) gox.Node
+    Floating makes Children float above the surrounding content at a fixed
+    corner/edge position -- a formalized version of the "wrap one or more Toasts
+    in your own position:fixed container" idiom Toast's own doc comment already
+    describes, generalized to any content: a floating action button, a badge,
+    a persistent status widget, or a Toast stack.
+
+func Icon(props IconProps) gox.Node
+    Icon renders a small inline glyph, sized and colored via CSS. It's
+    deliberately text (a Unicode character), not an inline <svg>: domrt's
+    client-side Mount/Update create elements with plain createElement, which
+    builds the wrong (HTML, not SVG) namespace element for <svg>/ <path>/etc.,
+    so any such tree silently fails to render once mounted client-side even
+    though it looks fine in server-rendered HTML (see Progress's circle variant,
+    and domrt/svg's own doc comment, for the same constraint solved the same
+    way elsewhere in this package). For a real vector icon that must render
+    client-side, build it yourself with domrt/svg.CreateElement and pass it
+    through one of this package's existing Icon *gox.Node slots (Chip, Dropdown,
+    ContextMenu) instead.
+
+func ImageZoom(props ImageZoomProps) gox.Node
+    ImageZoom renders a thumbnail that, when Zoomed, also shows a full-viewport
+    overlay with the same image enlarged -- a Modal-style backdrop (see Modal's
+    doc comment for why backdrop and content are DOM siblings, not nested:
+    so a click on the enlarged image itself can't be mistaken for a click on the
+    backdrop behind it).
+
+func Link(props LinkProps) gox.Node
+    Link renders a styled <a>. A disabled link renders as a non-interactive
+    <span> instead of an <a> without an href, since an anchor's disabled-looking
+    states aren't real disabled controls to assistive tech the way a <button
+    disabled> is.
+
+func Loader(props LoaderProps) gox.Node
+    Loader renders a spinning indicator for an in-progress operation with no
+    known completion percentage -- see Progress for one that has one.
+
+func Modal(props ModalProps) gox.Node
+    Modal renders a full-viewport backdrop plus a centered content box. Renders
+    nothing when !Open. This is the base Dialog (and, through it, Confirm and
+    Alert) builds on; use it directly for fully custom modal content.
+
+func OTPInput(props OTPInputProps) gox.Node
+    OTPInput renders Length single-character text boxes for entering a
+    one-time-passcode/verification code.
+
+func Pagination(props PaginationProps) gox.Node
+    Pagination renders Prev/Next buttons plus page-number buttons, with an
+    ellipsis collapsing the middle of a long run so it stays a constant width
+    regardless of TotalPages. Renders nothing when TotalPages < 1.
+
+func Popover(props PopoverProps) gox.Node
+    Popover renders Trigger, and, when Open, a panel of Content anchored
+    to it plus a full-viewport backdrop that closes it on an outside click.
+    Unlike Tooltip (pure CSS hover), Popover is click-triggered and can hold
+    interactive content of its own.
+
+func Progress(props ProgressProps) gox.Node
+    Progress renders a linear bar or a circular ring showing Value percent
+    complete, or an indeterminate animation when the actual completion isn't
+    known yet. The circle variant is drawn with a CSS conic-gradient rather
+    than an <svg>: domrt's client-side Mount/Update creates elements with plain
+    createElement, which produces the wrong (HTML, not SVG) element for an
+    <svg>/<circle> tag, so an SVG-based ring would silently fail to render once
+    mounted (server-rendered HTML wouldn't show the bug -- the browser's HTML
+    parser switches namespace for a parsed <svg> tag on its own).
+
+func RadioGroup(props RadioGroupProps) gox.Node
+    RadioGroup renders a set of mutually exclusive radio buttons.
+
+func Search(props SearchProps) gox.Node
+    Search renders a text input plus, when Open, a listbox of Suggestions below
+    it -- a basic implementation of the ARIA combobox pattern (role/aria-*
+    attributes only, no keyboard navigation of its own, the same scope
+    RadioGroup/Dropdown/etc. keep to elsewhere in this package).
+
+func Slider(props SliderProps) gox.Node
+    Slider renders a styled native range input.
+
+func Switch(props SwitchProps) gox.Node
+    Switch renders a toggle switch: a native checkbox (visually hidden but still
+    keyboard/screen-reader accessible) styled as a sliding track and thumb via
+    the CSS :checked sibling selector, the same "real control, custom look"
+    approach FileUploader's hidden file input uses.
+
+func Tabs(props TabsProps) gox.Node
+    Tabs renders a tab strip plus the active tab's content. The caller owns
+    which tab is active (see OnSelect), the same controlled-component pattern
+    every interactive component in this package uses.
+
+func Textarea(props TextareaProps) gox.Node
+    Textarea renders a styled native <textarea>. Value is set via a "value"
+    attribute rather than child text content, the same controlled-input
+    convention Slider/DatePicker/ColorPicker already use: domrt patches "value"
+    as a real DOM property (see its propAttrs), which is what keeps a <textarea>
+    genuinely controlled on the client. A "value" attribute has no meaning in
+    the HTML spec for <textarea> though (initial content there only ever comes
+    from child text) -- harmless for domrt-mounted pages, but if you render this
+    with gox.Render for pure static HTML with no client hydration, the initial
+    content won't show up; use gox.El("textarea", ..., gox.Text(props.Value))
+    directly for that case instead.
+
+func Toast(props ToastProps) gox.Node
+    Toast renders a single transient notification -- unlike Modal/Dialog,
+    it has no backdrop and doesn't block interaction with the rest of the page.
+    It has no opinion on where it sits on screen (no fixed positioning of its
+    own); wrap one or more in your own position:fixed container to stack them.
+    Auto-dismissal, if wanted, is the caller's job too (e.g. Window.SetTimeout),
+    the same way FileUploader leaves progress tracking to the caller.
+
+func Tooltip(props TooltipProps) gox.Node
+    Tooltip wraps Children with a bubble that shows Content on hover or keyboard
+    focus. Pure CSS (:hover/:focus-within) -- no JS, no positioning logic to
+    keep in sync with anything.
+
+func Wizard(props WizardProps) gox.Node
+    Wizard renders a multi-step form flow: a step header strip, the active
+    step's content, and Back/Next actions.
+
+
+TYPES
+
+type AccordionItem struct {
+	Title   string
+	Content gox.Node
+}
+    AccordionItem is one collapsible section in an Accordion.
+
+type AccordionProps struct {
+	Items []AccordionItem
+	// Open holds which item indices are currently expanded. To allow
+	// only one open at a time, clear the others in OnToggle before
+	// setting the clicked index -- Accordion itself just renders
+	// whatever Open says.
+	Open     map[int]bool
+	OnToggle func(index int) // called when an item's header is clicked
+}
+    AccordionProps configures Accordion.
+
+type AlertProps struct {
+	Open    bool
+	Title   string
+	Message string
+	OKLabel string // defaults to "OK"
+	OnClose func()
+}
+    AlertProps configures Alert.
+
+type AvatarProps struct {
+	Src      string // image URL; "" falls back to rendering Initials instead
+	Alt      string
+	Initials string
+	Size     AvatarSize // defaults to AvatarMd
+}
+    AvatarProps configures Avatar.
+
+type AvatarSize string
+    AvatarSize selects Avatar's rendered size.
+
+const (
+	AvatarSm AvatarSize = "sm"
+	AvatarMd AvatarSize = "md"
+	AvatarLg AvatarSize = "lg"
+)
+type BoxDivision struct {
+	// Height sizes this division: a percentage ("30%"), a fixed unit
+	// value ("200px", "10rem", ...), or "" to make it flexible --
+	// stretching to fill whatever height the other divisions don't
+	// claim (like CSS Grid's fr unit, which is exactly what it
+	// compiles to). Divisions can mix all three: e.g. a "48px" header,
+	// a "" flexible body, and a "30%" footer.
+	Height  string
+	Content []gox.Node
+}
+    BoxDivision is one of Box's sub-boxes.
+
+type BoxProps struct {
+	// Height sizes the box itself; "" defaults to "100%" (fill the
+	// parent), per Box's purpose as a full-height layout container.
+	Height string
+	// Divisions splits Box into len(Divisions) stacked sub-boxes, top
+	// to bottom, each sized by its own Height.
+	Divisions []BoxDivision
+}
+    BoxProps configures Box.
+
+type BreadcrumbItem struct {
+	Label string
+	Href  string // "" renders a plain (non-link) span instead of an <a>
+
+	// OnClick fires alongside a real navigation to Href -- e.g. to
+	// drive client-side routing (see domrt/browser.Router) instead of
+	// a full page load. Call e.PreventDefault() in it to suppress the
+	// browser's own navigation.
+	OnClick gox.EventHandler
+}
+    BreadcrumbItem is one entry in a Breadcrumbs trail.
+
+type BreadcrumbsProps struct {
+	Items []BreadcrumbItem
+}
+    BreadcrumbsProps configures Breadcrumbs.
+
+type ButtonProps struct {
+	Label    string
+	Variant  ButtonVariant // defaults to ButtonPrimary
+	Type     string        // "button" (default), "submit", or "reset"
+	Disabled bool
+	OnClick  gox.EventHandler
+}
+    ButtonProps configures Button.
+
+type ButtonVariant string
+    ButtonVariant selects Button's visual style.
+
+const (
+	ButtonPrimary   ButtonVariant = "primary"
+	ButtonSecondary ButtonVariant = "secondary"
+	ButtonDanger    ButtonVariant = "danger"
+)
+type CarouselProps struct {
+	Slides []gox.Node
+	Active int
+
+	OnPrev   func()          // called when the previous-slide arrow is clicked
+	OnNext   func()          // called when the next-slide arrow is clicked
+	OnSelect func(index int) // called when a dot is clicked
+}
+    CarouselProps configures Carousel.
+
+type CheckboxGroupProps struct {
+	Options  []CheckboxOption
+	Selected []string // the currently checked options' Values, in any order
+	Disabled bool
+	OnChange func(value string, checked bool) // called with the toggled option's Value and its new state
+}
+    CheckboxGroupProps configures CheckboxGroup.
+
+type CheckboxOption struct {
+	Value string
+	Label string
+}
+    CheckboxOption is one choice in a CheckboxGroup.
+
+type CheckboxProps struct {
+	Label    string
+	Checked  bool
+	Disabled bool
+	OnChange func(checked bool)
+}
+    CheckboxProps configures Checkbox.
+
+type ChipProps struct {
+	Label    string
+	Icon     *gox.Node        // optional, rendered before Label
+	OnRemove gox.EventHandler // nil renders a plain, non-removable chip
+}
+    ChipProps configures Chip.
+
+type CollabCapabilities struct {
+	CanEdit    bool
+	CanView    bool
+	CanDelete  bool
+	CanShare   bool
+	CanComment bool
+}
+    CollabCapabilities is the set of things a collaborator may do.
+    CapabilitiesForRole gives each CollabRole's default set; pass a custom
+    CollabCapabilities via CollabProps.Capabilities for anything finer-grained.
+
+func CapabilitiesForRole(role CollabRole) CollabCapabilities
+    CapabilitiesForRole returns the default capabilities for role: owner can
+    edit/view/delete/share/comment; editor can edit/view/ comment; viewer can
+    only view/comment. An unrecognized role gets no capabilities at all (fails
+    closed, not open).
+
+type CollabProps struct {
+	Role CollabRole
+	// Capabilities overrides CapabilitiesForRole(Role) when set, for a
+	// custom permission set beyond the three built-in roles.
+	Capabilities *CollabCapabilities
+
+	Content []gox.Node // the document itself; shown whenever CanView
+
+	Actions []gox.Node // edit controls (a toolbar, a save button, ...); shown only when CanEdit
+
+	// OnDelete/OnShare, if set, each render as a button gated on
+	// CanDelete/CanShare respectively.
+	OnDelete func()
+	OnShare  func()
+
+	Comments []gox.Node // a comment thread/composer; shown only when CanComment
+}
+    CollabProps configures Collab.
+
+type CollabRole string
+    CollabRole is a collaborator's role on a shared document.
+
+const (
+	CollabOwner  CollabRole = "owner"
+	CollabEditor CollabRole = "editor"
+	CollabViewer CollabRole = "viewer"
+)
+type ColorPickerProps struct {
+	Value    string // "#rrggbb"
+	Disabled bool
+	OnChange func(value string)
+}
+    ColorPickerProps configures ColorPicker.
+
+type ConfirmProps struct {
+	Open         bool
+	Title        string
+	Message      string
+	ConfirmLabel string // defaults to "OK"
+	CancelLabel  string // defaults to "Cancel"
+	OnConfirm    func()
+	OnCancel     func() // also called on a backdrop click, the same as clicking Cancel
+}
+    ConfirmProps configures Confirm.
+
+type ContextMenuItem struct {
+	Label    string
+	Icon     *gox.Node // optional, rendered before Label
+	Disabled bool
+	OnSelect func()
+}
+    ContextMenuItem is one entry in a ContextMenu.
+
+type ContextMenuProps struct {
+	Items []ContextMenuItem
+	Open  bool
+	X, Y  float64 // viewport position to render at -- see html.Element.OnContextMenu
+
+	// OnClose is called after an item is selected, and when the
+	// full-viewport backdrop behind the menu is clicked (a click
+	// anywhere outside it).
+	OnClose func()
+}
+    ContextMenuProps configures ContextMenu.
+
+type DatePickerProps struct {
+	Value    string // "YYYY-MM-DD"
+	Min, Max string // optional bounds, same format; "" for no bound
+	Disabled bool
+	OnChange func(value string)
+}
+    DatePickerProps configures DatePicker.
+
+type DialogProps struct {
+	Open    bool
+	Role    string // "dialog" (default) or "alertdialog"; see Modal.Role
+	Title   string
+	Body    []gox.Node
+	Actions []gox.Node // typically Button components; rendered right-aligned in a footer
+	OnClose func()     // backdrop-click to close; nil disables it
+}
+    DialogProps configures Dialog.
+
+type DropdownOption struct {
+	Value string
+	Label string
+	Icon  *gox.Node // optional, rendered before Label
+}
+    DropdownOption is one choice in a Dropdown.
+
+type DropdownProps struct {
+	Options     []DropdownOption
+	Selected    []string // selected Values; single-select just uses at most one
+	Multiple    bool     // show a checkbox per option and allow more than one selected
+	Open        bool     // whether the option list is currently shown
+	Placeholder string   // shown on the closed control when nothing is selected
+
+	OnToggleOpen func(open bool) // called when the control is clicked
+
+	// OnSelect is called when an option is clicked. For single-select,
+	// it should replace Selected and close the dropdown; for
+	// multi-select, it should add/remove value from Selected and
+	// typically leave it open.
+	OnSelect func(value string)
+}
+    DropdownProps configures Dropdown. There's no native <select> equivalent
+    that supports per-option icons, so both single- and multi-select modes use
+    the same custom widget here (a native <select> is a better fit when icons
+    aren't needed).
+
+type FileUploaderProps struct {
+	DropzoneID string // id on the dropzone, for a caller to attach html.Element.OnDrop
+	InputID    string // id on the hidden file input, for a caller to read .Files() after a change event
+
+	Accept   string // e.g. "image/*" or ".pdf,.docx"; "" allows any file
+	Multiple bool
+	Disabled bool
+
+	ShowProgress  bool    // render a progress bar at all -- the "without progress" variant just leaves this false
+	Progress      float64 // 0-100, ignored when Indeterminate
+	Indeterminate bool    // show a moving/indeterminate bar instead of a fixed percentage
+
+	OnFilesSelected gox.EventHandler // fired on the input's change event
+}
+    FileUploaderProps configures FileUploader.
+
+    gox.Event carries no file data (see gox.Event's doc comment: Value is
+    only ever a string/bool/similar simple payload), so reading the actual
+    selected/dropped files is the caller's job, done through domrt/html directly
+    on the client: look the input up by InputID and call its AsInput().Files(),
+    or attach domrt/html's own Element.OnDrop to the dropzone by DropzoneID
+    for real drag-and-drop file access (html.DragEvent.DataTransfer.Files()).
+    FileUploader itself only renders the widget and prevents the browser's
+    default drag-over/drop navigation.
+
+type FloatingPosition string
+    FloatingPosition selects which corner/edge of the viewport (or nearest
+    positioned ancestor, see FloatingProps.Fixed) Floating's children stick to.
+
+const (
+	FloatingTopLeft      FloatingPosition = "top-left"
+	FloatingTopRight     FloatingPosition = "top-right"
+	FloatingTopCenter    FloatingPosition = "top-center"
+	FloatingBottomLeft   FloatingPosition = "bottom-left"
+	FloatingBottomRight  FloatingPosition = "bottom-right"
+	FloatingBottomCenter FloatingPosition = "bottom-center"
+)
+type FloatingProps struct {
+	Position FloatingPosition // defaults to FloatingBottomRight
+	Offset   int              // px gap from the chosen edge(s); 0 uses the CSS default (1em)
+	// Absolute positions relative to the nearest positioned ancestor
+	// (position:absolute) instead of the viewport, for floating within
+	// a scrolling container rather than over the whole page. Defaults
+	// to false (position:fixed, relative to the viewport), the more
+	// common "float over the whole page" case.
+	Absolute bool
+	Children []gox.Node
+}
+    FloatingProps configures Floating.
+
+type IconName string
+    IconName selects one of Icon's built-in glyphs.
+
+const (
+	IconCheck        IconName = "check"
+	IconClose        IconName = "close"
+	IconChevronUp    IconName = "chevron-up"
+	IconChevronDown  IconName = "chevron-down"
+	IconChevronLeft  IconName = "chevron-left"
+	IconChevronRight IconName = "chevron-right"
+	IconPlus         IconName = "plus"
+	IconMinus        IconName = "minus"
+	IconMenu         IconName = "menu"
+	IconStar         IconName = "star"
+)
+type IconProps struct {
+	Name IconName // one of the built-in names above; ignored if Glyph is set
+	// Glyph overrides Name with any caller-supplied character (or short
+	// string) -- an easy escape hatch for a symbol not in the built-in
+	// set, styled the same way as a built-in one.
+	Glyph string
+	Size  int    // px, defaults to 20
+	Color string // defaults to inheriting the surrounding text color
+	// Label is the icon's accessible name. "" marks it as decorative
+	// (aria-hidden) -- the right default when it sits next to text
+	// that already says the same thing, e.g. a Button's label.
+	Label string
+}
+    IconProps configures Icon.
+
+type ImageZoomProps struct {
+	Src    string
+	Alt    string
+	Zoomed bool
+	// OnToggle is called with true when the thumbnail is clicked, and
+	// with false when the zoomed overlay (or its backdrop) is
+	// clicked, closing it.
+	OnToggle func(zoomed bool)
+}
+    ImageZoomProps configures ImageZoom.
+
+type LinkProps struct {
+	Href     string
+	Target   string // e.g. "_blank"; "" stays in the same tab
+	Disabled bool
+	Children []gox.Node
+}
+    LinkProps configures Link.
+
+type LoaderProps struct {
+	Size  LoaderSize // defaults to LoaderMedium
+	Label string     // accessible label; defaults to "Loading"
+}
+    LoaderProps configures Loader.
+
+type LoaderSize string
+    LoaderSize selects Loader's size.
+
+const (
+	LoaderSmall  LoaderSize = "sm"
+	LoaderMedium LoaderSize = "md"
+	LoaderLarge  LoaderSize = "lg"
+)
+type ModalProps struct {
+	Open bool
+	Role string // "dialog" (default) or "alertdialog" for a Confirm/Alert-style prompt demanding an immediate response
+	// Label is used as the modal's aria-label (e.g. its title text).
+	Label   string
+	Content []gox.Node
+	// OnClose is called when the backdrop is clicked; nil disables
+	// backdrop-click-to-close.
+	OnClose func()
+}
+    ModalProps configures Modal.
+
+type OTPInputProps struct {
+	// ID is a base id; each box gets fmt.Sprintf("%s-%d", ID, i). Like
+	// FileUploaderProps.InputID, this exists so a caller can reach a
+	// specific box through domrt/html: gox.Event carries no reference
+	// to the input element itself, so advancing focus to the next box
+	// after a digit is typed (or back after a backspace on an empty
+	// one) is done by the consuming app, calling html.Element.Focus()
+	// on the box with the next/previous id from inside OnChange.
+	ID       string
+	Length   int
+	Values   []string // one-character strings, indexed by box; short/missing entries are treated as empty
+	Disabled bool
+	OnChange func(index int, value string) // called with the changed box's index and its new value (possibly "", e.g. after a backspace)
+}
+    OTPInputProps configures OTPInput.
+
+type PaginationProps struct {
+	Page       int // current page, 1-indexed
+	TotalPages int
+	OnChange   func(page int)
+}
+    PaginationProps configures Pagination.
+
+type PopoverPlacement string
+    PopoverPlacement selects which side of the trigger Popover's panel appears
+    on.
+
+const (
+	PopoverBottom PopoverPlacement = "bottom"
+	PopoverTop    PopoverPlacement = "top"
+)
+type PopoverProps struct {
+	Trigger   []gox.Node
+	Content   []gox.Node
+	Open      bool
+	Placement PopoverPlacement // defaults to PopoverBottom
+
+	OnToggleOpen func(open bool) // called when Trigger is clicked
+	// OnClose is called when the full-viewport backdrop behind the
+	// panel is clicked -- a click anywhere outside it, the same
+	// backdrop trick ContextMenu uses.
+	OnClose func()
+}
+    PopoverProps configures Popover.
+
+type ProgressProps struct {
+	Variant       ProgressVariant // defaults to ProgressLinear
+	Value         float64         // 0-100, ignored when Indeterminate
+	Indeterminate bool            // shows a moving/spinning indicator instead of a fixed percentage
+	Label         string          // optional accessible label
+}
+    ProgressProps configures Progress.
+
+type ProgressVariant string
+    ProgressVariant selects Progress's visual style.
+
+const (
+	ProgressLinear ProgressVariant = "linear"
+	ProgressCircle ProgressVariant = "circle"
+)
+type RadioGroupProps struct {
+	Name     string // shared "name" so the browser only allows one checked at a time
+	Options  []RadioOption
+	Selected string // the currently selected option's Value
+	Disabled bool
+	OnChange func(value string) // called with the newly selected option's Value
+}
+    RadioGroupProps configures RadioGroup.
+
+type RadioOption struct {
+	Value string
+	Label string
+}
+    RadioOption is one choice in a RadioGroup.
+
+type SearchProps struct {
+	Value       string
+	Placeholder string
+	Suggestions []string
+	Open        bool // whether the suggestion list is shown
+	Disabled    bool
+
+	// OnChange fires on every keystroke. Filtering Suggestions (and
+	// any debouncing of a remote lookup) is the caller's job -- Search
+	// itself has no fetch/timer logic of its own, the same
+	// "consumer drives the async part" split FileUploader uses for
+	// reading files.
+	OnChange func(value string)
+	// OnSelect fires when a suggestion is clicked; the caller typically
+	// sets Value to it and closes the list (Open: false).
+	OnSelect func(suggestion string)
+}
+    SearchProps configures Search.
+
+type SliderProps struct {
+	Min, Max, Value float64
+	Step            float64 // 0 leaves the browser's default step (1)
+	Disabled        bool
+	OnChange        func(value float64) // called continuously while dragging
+}
+    SliderProps configures Slider.
+
+type SwitchProps struct {
+	Label    string
+	Checked  bool
+	Disabled bool
+	OnChange func(checked bool)
+}
+    SwitchProps configures Switch.
+
+type Tab struct {
+	Label   string
+	Content gox.Node
+}
+    Tab is one tab in a Tabs component.
+
+type TabsProps struct {
+	Tabs     []Tab
+	Active   int             // index into Tabs of the currently shown tab
+	OnSelect func(index int) // called when a tab button is clicked
+}
+    TabsProps configures Tabs.
+
+type TextareaProps struct {
+	Value       string
+	Placeholder string
+	Rows        int // 0 leaves the browser's default (usually 2)
+	Disabled    bool
+	OnChange    func(value string)
+}
+    TextareaProps configures Textarea.
+
+type ToastProps struct {
+	Open    bool
+	Message string
+	Variant ToastVariant // defaults to ToastInfo
+	OnClose func()       // nil hides the close button
+}
+    ToastProps configures Toast.
+
+type ToastVariant string
+    ToastVariant selects Toast's color/severity.
+
+const (
+	ToastInfo    ToastVariant = "info"
+	ToastSuccess ToastVariant = "success"
+	ToastWarning ToastVariant = "warning"
+	ToastError   ToastVariant = "error"
+)
+type TooltipPlacement string
+    TooltipPlacement selects which side of the trigger Tooltip's bubble appears
+    on.
+
+const (
+	TooltipTop    TooltipPlacement = "top"
+	TooltipBottom TooltipPlacement = "bottom"
+	TooltipLeft   TooltipPlacement = "left"
+	TooltipRight  TooltipPlacement = "right"
+)
+type TooltipProps struct {
+	Content   string
+	Placement TooltipPlacement // defaults to TooltipTop
+	Children  []gox.Node       // whatever should trigger the tooltip on hover/focus
+}
+    TooltipProps configures Tooltip.
+
+type WizardProps struct {
+	Steps  []WizardStep
+	Active int
+
+	OnBack func()          // called when Back is clicked (never called for step 0; Back renders disabled instead)
+	OnNext func()          // called when Next/Finish is clicked
+	OnStep func(index int) // optional: called when a step header is clicked, to jump directly to it
+}
+    WizardProps configures Wizard.
+
+type WizardStep struct {
+	Title   string
+	Content gox.Node
+}
+    WizardStep is one step in a Wizard.
+

@@ -1,0 +1,68 @@
+// Pages are gox SSR components shared by both entry points: the
+// Encore-annotated raw handlers (api.go) and the plain net/http dev
+// server (cmd/devserver). Both call these directly, so the markup
+// only exists in one place.
+package canvas
+
+import "github.com/elaous/gojiberry/gox"
+
+// DefaultTitle is what an annotated page falls back to when it
+// doesn't set its own @title (see internal/transpile/page_metadata.go
+// in the gojiberry module). Both pages below just use this, since
+// neither needs a title that varies per document.
+var DefaultTitle = "gox-canvas"
+
+// HomePageProps lists the documents to show on the home page.
+type HomePageProps struct {
+	Documents []DocumentSummary
+}
+
+// HomePage lists existing documents and offers a way to start a new
+// one.
+//
+// @stylesheets static/style.css
+func HomePage(props HomePageProps) gox.Node {
+	return <>
+		<h1>gox-canvas</h1>
+		<form method="POST" action="/documents">
+			<button type="submit">New document</button>
+		</form>
+		<ul class="documents">{func() []gox.Node {
+			var items []gox.Node
+			for _, d := range props.Documents {
+				preview := d.Preview
+				if preview == "" {
+					preview = "(empty document)"
+				}
+				items = append(items, <li><a href={"/documents/" + d.ID}>{preview}</a></li>)
+			}
+			return items
+		}()}</ul>
+	</>
+}
+
+// CanvasPageProps is one document's id and current content.
+type CanvasPageProps struct {
+	ID      string
+	Content string
+}
+
+// CanvasPage is the typing canvas for one document: a textarea seeded
+// with its current content, a status indicator, and the WASM client
+// that debounces edits into PUT /api/documents/{id} autosave calls.
+// @wasm below pulls in the wasm_exec.js loader and the
+// WebAssembly.instantiateStreaming bootstrap script automatically
+// (see internal/transpile/page_metadata.go) -- this page doesn't
+// write either <script> tag itself.
+//
+// @wasm /static/main.wasm
+// @stylesheets static/style.css
+func CanvasPage(props CanvasPageProps) gox.Node {
+	return <>
+		<p><a href="/">Back</a></p>
+		<div id="app" data-doc-id={props.ID}>
+			<textarea id="canvas">{props.Content}</textarea>
+			<div><span id="status">saved</span></div>
+		</div>
+	</>
+}

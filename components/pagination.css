@@ -1,0 +1,17 @@
+/* Pagination stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-pagination { display: flex; align-items: center; gap: 0.3em; }
+.gj-pagination-item {
+  min-width: 2em;
+  height: 2em;
+  padding: 0 0.5em;
+  border: 1px solid var(--gj-border);
+  border-radius: var(--gj-radius);
+  background: var(--gj-bg);
+  color: var(--gj-text);
+  cursor: pointer;
+}
+.gj-pagination-item:disabled { cursor: not-allowed; opacity: 0.5; }
+.gj-pagination-item-active { background: var(--gj-accent); border-color: var(--gj-accent); color: var(--gj-accent-contrast); }
+.gj-pagination-ellipsis { padding: 0 0.3em; color: var(--gj-muted); }

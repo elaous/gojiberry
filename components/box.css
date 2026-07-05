@@ -1,0 +1,4 @@
+/* Box stylesheet for github.com/elaous/gojiberry/components. */
+
+.gj-box { display: grid; width: 100%; }
+.gj-box-division { overflow: auto; min-height: 0; }

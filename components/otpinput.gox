@@ -1,0 +1,56 @@
+package components
+
+import (
+	"fmt"
+
+	"github.com/elaous/gojiberry/gox"
+)
+
+// OTPInputProps configures OTPInput.
+type OTPInputProps struct {
+	// ID is a base id; each box gets fmt.Sprintf("%s-%d", ID, i). Like
+	// FileUploaderProps.InputID, this exists so a caller can reach a
+	// specific box through domrt/html: gox.Event carries no reference
+	// to the input element itself, so advancing focus to the next box
+	// after a digit is typed (or back after a backspace on an empty
+	// one) is done by the consuming app, calling html.Element.Focus()
+	// on the box with the next/previous id from inside OnChange.
+	ID       string
+	Length   int
+	Values   []string // one-character strings, indexed by box; short/missing entries are treated as empty
+	Disabled bool
+	OnChange func(index int, value string) // called with the changed box's index and its new value (possibly "", e.g. after a backspace)
+}
+
+// OTPInput renders Length single-character text boxes for entering a
+// one-time-passcode/verification code.
+func OTPInput(props OTPInputProps) gox.Node {
+	var boxes []gox.Node
+	for i := 0; i < props.Length; i++ {
+		val := ""
+		if i < len(props.Values) {
+			val = props.Values[i]
+		}
+		attrs := []gox.Attr{
+			gox.A("type", "text"),
+			gox.A("class", "gj-otp-input"),
+			gox.A("inputmode", "numeric"),
+			gox.A("autocomplete", "one-time-code"),
+			gox.A("maxlength", "1"),
+			gox.A("value", val),
+			gox.A("aria-label", fmt.Sprintf("Digit %d", i+1)),
+		}
+		if props.ID != "" {
+			attrs = append(attrs, gox.A("id", fmt.Sprintf("%s-%d", props.ID, i)))
+		}
+		if props.Disabled {
+			attrs = append(attrs, gox.A("disabled", "disabled"))
+		}
+		if props.OnChange != nil {
+			index := i
+			attrs = append(attrs, gox.On("input", func(e gox.Event) { props.OnChange(index, gox.EventValue[string](e)) }))
+		}
+		boxes = append(boxes, gox.El("input", attrs))
+	}
+	return gox.El("div", []gox.Attr{gox.A("class", "gj-otp"), gox.A("role", "group"), gox.A("aria-label", "Verification code")}, boxes...)
+}
