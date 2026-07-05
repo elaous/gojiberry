@@ -23,6 +23,13 @@ func Avatar(props AvatarProps) gox.Node
     Avatar renders a profile picture, or a colored circle of Initials when Src
     is empty (e.g. the user hasn't uploaded one).
 
+func Box(props BoxProps) gox.Node
+    Box is a layout container, normally full height, split into however many
+    sub-boxes Divisions describes -- each independently sized by percentage,
+    a fixed unit value, or left flexible to fill whatever height its siblings
+    don't claim. Built on CSS Grid's grid-template-rows, which already handles
+    exactly this mix of units in one declaration.
+
 func Breadcrumbs(props BreadcrumbsProps) gox.Node
     Breadcrumbs renders a trail of links with the last item marked as the
     current page (aria-current, and rendered as plain text even if it has an
@@ -49,6 +56,17 @@ func CheckboxGroup(props CheckboxGroupProps) gox.Node
 func Chip(props ChipProps) gox.Node
     Chip renders a small labeled pill, optionally with a leading icon and a
     remove button.
+
+func Collab(props CollabProps) gox.Node
+    Collab wraps a shared document's content and, based on Role's capabilities,
+    gates what the current collaborator can see and do with it: viewers get
+    read-only Content plus a "View only" badge and nothing else; editors
+    also get Actions and Comments; owners also get Delete/Share. Collab has
+    no networking or persistence of its own -- it's a pure permission gate,
+    the same "current state + On* callbacks" pattern every interactive component
+    in this package already uses. Pair it with your own real-time sync (e.g.
+    domrt/browser.Socket) to make Content/Comments actually collaborative;
+    see examples/collab-editor-app for one way to wire that up.
 
 func ColorPicker(props ColorPickerProps) gox.Node
     ColorPicker renders a styled native color input, letting the browser handle
@@ -82,6 +100,13 @@ func FileUploader(props FileUploaderProps) gox.Node
     FileUploader renders a dropzone that's also a native file-input label
     (clicking anywhere on it opens the file browser, no JS needed for that part)
     plus an optional progress bar.
+
+func Floating(props FloatingProps) gox.Node
+    Floating makes Children float above the surrounding content at a fixed
+    corner/edge position -- a formalized version of the "wrap one or more Toasts
+    in your own position:fixed container" idiom Toast's own doc comment already
+    describes, generalized to any content: a floating action button, a badge,
+    a persistent status widget, or a Toast stack.
 
 func Icon(props IconProps) gox.Node
     Icon renders a small inline glyph, sized and colored via CSS. It's
@@ -240,6 +265,28 @@ const (
 	AvatarMd AvatarSize = "md"
 	AvatarLg AvatarSize = "lg"
 )
+type BoxDivision struct {
+	// Height sizes this division: a percentage ("30%"), a fixed unit
+	// value ("200px", "10rem", ...), or "" to make it flexible --
+	// stretching to fill whatever height the other divisions don't
+	// claim (like CSS Grid's fr unit, which is exactly what it
+	// compiles to). Divisions can mix all three: e.g. a "48px" header,
+	// a "" flexible body, and a "30%" footer.
+	Height  string
+	Content []gox.Node
+}
+    BoxDivision is one of Box's sub-boxes.
+
+type BoxProps struct {
+	// Height sizes the box itself; "" defaults to "100%" (fill the
+	// parent), per Box's purpose as a full-height layout container.
+	Height string
+	// Divisions splits Box into len(Divisions) stacked sub-boxes, top
+	// to bottom, each sized by its own Height.
+	Divisions []BoxDivision
+}
+    BoxProps configures Box.
+
 type BreadcrumbItem struct {
 	Label string
 	Href  string // "" renders a plain (non-link) span instead of an <a>
@@ -313,6 +360,50 @@ type ChipProps struct {
 }
     ChipProps configures Chip.
 
+type CollabCapabilities struct {
+	CanEdit    bool
+	CanView    bool
+	CanDelete  bool
+	CanShare   bool
+	CanComment bool
+}
+    CollabCapabilities is the set of things a collaborator may do.
+    CapabilitiesForRole gives each CollabRole's default set; pass a custom
+    CollabCapabilities via CollabProps.Capabilities for anything finer-grained.
+
+func CapabilitiesForRole(role CollabRole) CollabCapabilities
+    CapabilitiesForRole returns the default capabilities for role: owner can
+    edit/view/delete/share/comment; editor can edit/view/ comment; viewer can
+    only view/comment. An unrecognized role gets no capabilities at all (fails
+    closed, not open).
+
+type CollabProps struct {
+	Role CollabRole
+	// Capabilities overrides CapabilitiesForRole(Role) when set, for a
+	// custom permission set beyond the three built-in roles.
+	Capabilities *CollabCapabilities
+
+	Content []gox.Node // the document itself; shown whenever CanView
+
+	Actions []gox.Node // edit controls (a toolbar, a save button, ...); shown only when CanEdit
+
+	// OnDelete/OnShare, if set, each render as a button gated on
+	// CanDelete/CanShare respectively.
+	OnDelete func()
+	OnShare  func()
+
+	Comments []gox.Node // a comment thread/composer; shown only when CanComment
+}
+    CollabProps configures Collab.
+
+type CollabRole string
+    CollabRole is a collaborator's role on a shared document.
+
+const (
+	CollabOwner  CollabRole = "owner"
+	CollabEditor CollabRole = "editor"
+	CollabViewer CollabRole = "viewer"
+)
 type ColorPickerProps struct {
 	Value    string // "#rrggbb"
 	Disabled bool
@@ -420,6 +511,31 @@ type FileUploaderProps struct {
     for real drag-and-drop file access (html.DragEvent.DataTransfer.Files()).
     FileUploader itself only renders the widget and prevents the browser's
     default drag-over/drop navigation.
+
+type FloatingPosition string
+    FloatingPosition selects which corner/edge of the viewport (or nearest
+    positioned ancestor, see FloatingProps.Fixed) Floating's children stick to.
+
+const (
+	FloatingTopLeft      FloatingPosition = "top-left"
+	FloatingTopRight     FloatingPosition = "top-right"
+	FloatingTopCenter    FloatingPosition = "top-center"
+	FloatingBottomLeft   FloatingPosition = "bottom-left"
+	FloatingBottomRight  FloatingPosition = "bottom-right"
+	FloatingBottomCenter FloatingPosition = "bottom-center"
+)
+type FloatingProps struct {
+	Position FloatingPosition // defaults to FloatingBottomRight
+	Offset   int              // px gap from the chosen edge(s); 0 uses the CSS default (1em)
+	// Absolute positions relative to the nearest positioned ancestor
+	// (position:absolute) instead of the viewport, for floating within
+	// a scrolling container rather than over the whole page. Defaults
+	// to false (position:fixed, relative to the viewport), the more
+	// common "float over the whole page" case.
+	Absolute bool
+	Children []gox.Node
+}
+    FloatingProps configures Floating.
 
 type IconName string
     IconName selects one of Icon's built-in glyphs.

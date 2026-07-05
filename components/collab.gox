@@ -1,0 +1,113 @@
+package components
+
+import "github.com/elaous/gojiberry/gox"
+
+// CollabRole is a collaborator's role on a shared document.
+type CollabRole string
+
+const (
+	CollabOwner  CollabRole = "owner"
+	CollabEditor CollabRole = "editor"
+	CollabViewer CollabRole = "viewer"
+)
+
+// CollabCapabilities is the set of things a collaborator may do.
+// CapabilitiesForRole gives each CollabRole's default set; pass a
+// custom CollabCapabilities via CollabProps.Capabilities for anything
+// finer-grained.
+type CollabCapabilities struct {
+	CanEdit    bool
+	CanView    bool
+	CanDelete  bool
+	CanShare   bool
+	CanComment bool
+}
+
+// CapabilitiesForRole returns the default capabilities for role:
+// owner can edit/view/delete/share/comment; editor can edit/view/
+// comment; viewer can only view/comment. An unrecognized role gets no
+// capabilities at all (fails closed, not open).
+func CapabilitiesForRole(role CollabRole) CollabCapabilities {
+	switch role {
+	case CollabOwner:
+		return CollabCapabilities{CanEdit: true, CanView: true, CanDelete: true, CanShare: true, CanComment: true}
+	case CollabEditor:
+		return CollabCapabilities{CanEdit: true, CanView: true, CanComment: true}
+	case CollabViewer:
+		return CollabCapabilities{CanView: true, CanComment: true}
+	default:
+		return CollabCapabilities{}
+	}
+}
+
+// CollabProps configures Collab.
+type CollabProps struct {
+	Role CollabRole
+	// Capabilities overrides CapabilitiesForRole(Role) when set, for a
+	// custom permission set beyond the three built-in roles.
+	Capabilities *CollabCapabilities
+
+	Content []gox.Node // the document itself; shown whenever CanView
+
+	Actions []gox.Node // edit controls (a toolbar, a save button, ...); shown only when CanEdit
+
+	// OnDelete/OnShare, if set, each render as a button gated on
+	// CanDelete/CanShare respectively.
+	OnDelete func()
+	OnShare  func()
+
+	Comments []gox.Node // a comment thread/composer; shown only when CanComment
+}
+
+// Collab wraps a shared document's content and, based on Role's
+// capabilities, gates what the current collaborator can see and do
+// with it: viewers get read-only Content plus a "View only" badge and
+// nothing else; editors also get Actions and Comments; owners also get
+// Delete/Share. Collab has no networking or persistence of its own --
+// it's a pure permission gate, the same "current state + On*
+// callbacks" pattern every interactive component in this package
+// already uses. Pair it with your own real-time sync (e.g.
+// domrt/browser.Socket) to make Content/Comments actually collaborative;
+// see examples/collab-editor-app for one way to wire that up.
+func Collab(props CollabProps) gox.Node {
+	caps := CapabilitiesForRole(props.Role)
+	if props.Capabilities != nil {
+		caps = *props.Capabilities
+	}
+	if !caps.CanView {
+		return gox.El("div", []gox.Attr{gox.A("class", "gj-collab gj-collab-denied"), gox.A("role", "alert")},
+			gox.Text("You don't have permission to view this content."))
+	}
+
+	class := "gj-collab"
+	if !caps.CanEdit {
+		class += " gj-collab-readonly"
+	}
+
+	var children []gox.Node
+	if !caps.CanEdit {
+		children = append(children, gox.El("span", []gox.Attr{gox.A("class", "gj-collab-badge")}, gox.Text("View only")))
+	}
+	children = append(children, gox.El("div", []gox.Attr{gox.A("class", "gj-collab-content")}, props.Content...))
+
+	if caps.CanEdit && len(props.Actions) > 0 {
+		children = append(children, gox.El("div", []gox.Attr{gox.A("class", "gj-collab-actions")}, props.Actions...))
+	}
+
+	var footer []gox.Node
+	if caps.CanShare && props.OnShare != nil {
+		footer = append(footer, Button(ButtonProps{Label: "Share", Variant: ButtonSecondary, OnClick: func(gox.Event) { props.OnShare() }}))
+	}
+	if caps.CanDelete && props.OnDelete != nil {
+		footer = append(footer, Button(ButtonProps{Label: "Delete", Variant: ButtonDanger, OnClick: func(gox.Event) { props.OnDelete() }}))
+	}
+	if len(footer) > 0 {
+		children = append(children, gox.El("div", []gox.Attr{gox.A("class", "gj-collab-footer")}, footer...))
+	}
+
+	if caps.CanComment && len(props.Comments) > 0 {
+		children = append(children, gox.El("div", []gox.Attr{gox.A("class", "gj-collab-comments")}, props.Comments...))
+	}
+
+	return gox.El("div", []gox.Attr{gox.A("class", class)}, children...)
+}

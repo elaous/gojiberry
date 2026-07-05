@@ -1,0 +1,15 @@
+/* Floating stylesheet for github.com/elaous/gojiberry/components. */
+
+.gj-floating {
+  --gj-floating-offset: 1em;
+  position: fixed;
+  z-index: 1500;
+}
+.gj-floating-absolute { position: absolute; }
+
+.gj-floating-top-left { top: var(--gj-floating-offset); left: var(--gj-floating-offset); }
+.gj-floating-top-right { top: var(--gj-floating-offset); right: var(--gj-floating-offset); }
+.gj-floating-top-center { top: var(--gj-floating-offset); left: 50%; transform: translateX(-50%); }
+.gj-floating-bottom-left { bottom: var(--gj-floating-offset); left: var(--gj-floating-offset); }
+.gj-floating-bottom-right { bottom: var(--gj-floating-offset); right: var(--gj-floating-offset); }
+.gj-floating-bottom-center { bottom: var(--gj-floating-offset); left: 50%; transform: translateX(-50%); }

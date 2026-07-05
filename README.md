@@ -402,6 +402,26 @@ for `<svg>` for. Reach for `domrt/svg.CreateElement` directly (paired
 with one of this package's existing `Icon *gox.Node` slots on `Chip`/
 `Dropdown`/`ContextMenu`) if you need a real vector icon client-side.
 
+Three more round out the set. `Collab` wraps shared content and gates
+what a collaborator can see and do with it by role — `CollabOwner`
+(edit/view/delete/share/comment), `CollabEditor` (edit/view/comment),
+or `CollabViewer` (view/comment only, plus a "View only" badge) —
+`CapabilitiesForRole` gives each role's defaults, or pass a custom
+`CollabCapabilities` to override them. It has no networking or
+persistence of its own, the same pure-function-of-props shape as
+everything else here; see `examples/collab-editor-app` for pairing it
+with real multi-user sync over `domrt/browser.Socket`. `Floating`
+formalizes the "wrap one or more Toasts in your own `position:fixed`
+container" idiom Toast's own doc comment already describes, generalized
+to any content pinned to a corner/edge of the viewport (or the nearest
+positioned ancestor, via `Absolute`) — a floating action button, a
+badge, a persistent status widget. `Box` is a full-height (or
+explicitly sized) layout container split into `len(Divisions)` stacked
+sub-boxes, each independently sized by percentage, a fixed unit value,
+or left flexible to fill whatever height its siblings don't claim —
+built on CSS Grid's `grid-template-rows`, which already handles
+exactly that mix of units in one declaration.
+
 None of them import
 `domrt` or `syscall/js` — every interactive one is a pure function of
 its props, taking the current state and `On*` callbacks the same way
@@ -770,7 +790,7 @@ generated code.
 - `examples/wasm-components-demo` — a gallery of every component in
   `components`, each wired to real local state and mounted with
   `domrt.Mount`/`Update`. Verified against a real headless Chromium:
-  every one of the 34 components driven through its actual
+  every one of the 37 components driven through its actual
   interactivity (clicking a tab/accordion header/carousel arrow/wizard
   step, opening the dropdown and picking a multi-select option,
   removing a chip, dragging the slider, setting the date/color inputs,
@@ -858,7 +878,7 @@ generated code.
   policy blocked the Encore CLI installer).
 
 - `examples/showcase-app` — every capability above, on one page: the
-  full 34-component gallery, `domrt/browser`'s core wrappers plus DOM
+  full 37-component gallery, `domrt/browser`'s core wrappers plus DOM
   extras (fetch/localStorage/window+document dimensions/scroll/style/
   SVG/image loading/form submission/cookies/custom events/global error
   capture/geolocation), the newer platform wrappers (IndexedDB/
