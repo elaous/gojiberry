@@ -942,6 +942,50 @@ generated code.
   # open http://localhost:8080/
   ```
 
+- `examples/collab-editor-app` — a live, multi-user document editor
+  demonstrating `components.Collab` paired with real real-time sync:
+  two or more browser tabs open on the same URL genuinely see each
+  other's edits, over a real WebSocket, with each tab's permissions
+  (edit/view/delete/share/comment) determined by its own role. It's a
+  separate Go module (like `examples/canvas-app`), `replace`-ing
+  `github.com/elaous/gojiberry` with the local checkout so it can
+  depend on [`nhooyr.io/websocket`](https://nhooyr.io/websocket)
+  without pulling that into the root module. `cmd/server` is a plain
+  `net/http` server: it serves `static/` and handles `/ws` — a small
+  in-memory hub that relays every edit to every *other* connected
+  client and remembers the document's current content so a client
+  joining later starts in sync instead of from a blank page.
+  `client/main.gox` opens `/ws` via `domrt/browser.Connect`, reads its
+  role from the page's own URL (`?role=owner`/`editor`/`viewer`), and
+  renders the shared document inside `components.Collab`. Every edit
+  sends the document's entire current text over the socket rather than
+  a diff or an operational transform — last edit wins on a genuine
+  simultaneous edit, a deliberate simplification well short of a real
+  product's OT/CRDT merging. Collab only gates the surrounding
+  affordances (Delete/Share only render for `CollabOwner`, both need
+  `CanEdit` for the document itself to accept input) — the client makes
+  a non-editor's `Textarea` genuinely `Disabled` itself, since Collab's
+  own read-only styling is cosmetic and can't reach into
+  caller-supplied `Content` to disable it (see `Collab`'s doc comment).
+  Verified against two (and three) simultaneous real headless-Chromium
+  browser contexts: role-based UI gating (owner sees Delete/Share,
+  viewer doesn't, viewer's textarea is genuinely `disabled` not just
+  visually muted), a live edit from one tab appearing in another purely
+  from the WebSocket broadcast, a late-joining third client receiving
+  the document's current state immediately instead of a blank page, an
+  edit from that third (editor) client propagating to both others, and
+  Delete clearing the document live everywhere:
+
+  ```
+  cd examples/collab-editor-app
+  (cd ../.. && go run ./cmd/goxc examples/collab-editor-app)
+  GOOS=js GOARCH=wasm go build -o static/main.wasm ./client/
+  cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" static/
+  cp ../../components/base.css ../../components/button.css ../../components/textarea.css ../../components/collab.css static/
+  go run ./cmd/server
+  # open http://localhost:8096/?role=owner in one tab, ?role=editor or ?role=viewer in another
+  ```
+
 ## Editor support
 
 `editors/vscode-gox` is a minimal VS Code extension: `.gox` file
