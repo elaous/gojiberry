@@ -1,0 +1,57 @@
+package components
+
+import "github.com/elaous/gojiberry/gox"
+
+// PopoverPlacement selects which side of the trigger Popover's panel appears on.
+type PopoverPlacement string
+
+const (
+	PopoverBottom PopoverPlacement = "bottom"
+	PopoverTop    PopoverPlacement = "top"
+)
+
+// PopoverProps configures Popover.
+type PopoverProps struct {
+	Trigger   []gox.Node
+	Content   []gox.Node
+	Open      bool
+	Placement PopoverPlacement // defaults to PopoverBottom
+
+	OnToggleOpen func(open bool) // called when Trigger is clicked
+	// OnClose is called when the full-viewport backdrop behind the
+	// panel is clicked -- a click anywhere outside it, the same
+	// backdrop trick ContextMenu uses.
+	OnClose func()
+}
+
+// Popover renders Trigger, and, when Open, a panel of Content
+// anchored to it plus a full-viewport backdrop that closes it on an
+// outside click. Unlike Tooltip (pure CSS hover), Popover is
+// click-triggered and can hold interactive content of its own.
+func Popover(props PopoverProps) gox.Node {
+	placement := props.Placement
+	if placement == "" {
+		placement = PopoverBottom
+	}
+
+	triggerAttrs := []gox.Attr{gox.A("class", "gj-popover-trigger")}
+	if props.OnToggleOpen != nil {
+		open := props.Open
+		triggerAttrs = append(triggerAttrs, gox.On("click", func(gox.Event) { props.OnToggleOpen(!open) }))
+	}
+	trigger := gox.El("span", triggerAttrs, props.Trigger...)
+
+	if !props.Open {
+		return gox.El("span", []gox.Attr{gox.A("class", "gj-popover")}, trigger)
+	}
+
+	backdropAttrs := []gox.Attr{gox.A("class", "gj-popover-backdrop")}
+	if props.OnClose != nil {
+		backdropAttrs = append(backdropAttrs, gox.On("click", func(gox.Event) { props.OnClose() }))
+	}
+	panel := gox.El("div",
+		[]gox.Attr{gox.A("class", "gj-popover-panel gj-popover-"+string(placement)), gox.A("role", "dialog")},
+		props.Content...)
+
+	return gox.El("span", []gox.Attr{gox.A("class", "gj-popover")}, trigger, gox.El("div", backdropAttrs), panel)
+}

@@ -1,0 +1,44 @@
+package components
+
+import (
+	"strconv"
+
+	"github.com/elaous/gojiberry/gox"
+)
+
+// TextareaProps configures Textarea.
+type TextareaProps struct {
+	Value       string
+	Placeholder string
+	Rows        int // 0 leaves the browser's default (usually 2)
+	Disabled    bool
+	OnChange    func(value string)
+}
+
+// Textarea renders a styled native <textarea>. Value is set via a
+// "value" attribute rather than child text content, the same
+// controlled-input convention Slider/DatePicker/ColorPicker already
+// use: domrt patches "value" as a real DOM property (see its
+// propAttrs), which is what keeps a <textarea> genuinely controlled
+// on the client. A "value" attribute has no meaning in the HTML spec
+// for <textarea> though (initial content there only ever comes from
+// child text) -- harmless for domrt-mounted pages, but if you render
+// this with gox.Render for pure static HTML with no client hydration,
+// the initial content won't show up; use gox.El("textarea", ...,
+// gox.Text(props.Value)) directly for that case instead.
+func Textarea(props TextareaProps) gox.Node {
+	attrs := []gox.Attr{gox.A("class", "gj-textarea"), gox.A("value", props.Value)}
+	if props.Placeholder != "" {
+		attrs = append(attrs, gox.A("placeholder", props.Placeholder))
+	}
+	if props.Rows > 0 {
+		attrs = append(attrs, gox.A("rows", strconv.Itoa(props.Rows)))
+	}
+	if props.Disabled {
+		attrs = append(attrs, gox.A("disabled", "disabled"))
+	}
+	if props.OnChange != nil {
+		attrs = append(attrs, gox.On("input", func(e gox.Event) { props.OnChange(gox.EventValue[string](e)) }))
+	}
+	return gox.El("textarea", attrs)
+}

@@ -1,0 +1,57 @@
+package components
+
+import (
+	"strings"
+
+	"github.com/elaous/gojiberry/gox"
+)
+
+// BoxDivision is one of Box's sub-boxes.
+type BoxDivision struct {
+	// Height sizes this division: a percentage ("30%"), a fixed unit
+	// value ("200px", "10rem", ...), or "" to make it flexible --
+	// stretching to fill whatever height the other divisions don't
+	// claim (like CSS Grid's fr unit, which is exactly what it
+	// compiles to). Divisions can mix all three: e.g. a "48px" header,
+	// a "" flexible body, and a "30%" footer.
+	Height  string
+	Content []gox.Node
+}
+
+// BoxProps configures Box.
+type BoxProps struct {
+	// Height sizes the box itself; "" defaults to "100%" (fill the
+	// parent), per Box's purpose as a full-height layout container.
+	Height string
+	// Divisions splits Box into len(Divisions) stacked sub-boxes, top
+	// to bottom, each sized by its own Height.
+	Divisions []BoxDivision
+}
+
+// Box is a layout container, normally full height, split into however
+// many sub-boxes Divisions describes -- each independently sized by
+// percentage, a fixed unit value, or left flexible to fill whatever
+// height its siblings don't claim. Built on CSS Grid's
+// grid-template-rows, which already handles exactly this mix of
+// units in one declaration.
+func Box(props BoxProps) gox.Node {
+	height := props.Height
+	if height == "" {
+		height = "100%"
+	}
+	rows := make([]string, len(props.Divisions))
+	for i, d := range props.Divisions {
+		if d.Height == "" {
+			rows[i] = "1fr"
+		} else {
+			rows[i] = d.Height
+		}
+	}
+	style := "height:" + height + ";grid-template-rows:" + strings.Join(rows, " ") + ";"
+
+	children := make([]gox.Node, len(props.Divisions))
+	for i, d := range props.Divisions {
+		children[i] = gox.El("div", []gox.Attr{gox.A("class", "gj-box-division")}, d.Content...)
+	}
+	return gox.El("div", []gox.Attr{gox.A("class", "gj-box"), gox.A("style", style)}, children...)
+}

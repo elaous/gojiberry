@@ -1,0 +1,353 @@
+//go:build js && wasm
+
+// Package main wires model.go's document and layout.go's word-wrap
+// engine to a real canvas element and a hidden input element that
+// captures actual keyboard input (including paste and IME
+// composition, which the browser handles for us): typed characters
+// arrive as ordinary "input" events, while navigation/deletion
+// (arrows, Backspace, Delete, Enter) are intercepted on "keydown" via
+// domrt/html's new Element.OnKeyDown, since a plain gox.EventHandler
+// carries none of that. Mouse position for click-to-position-cursor
+// and drag-to-select comes from the new
+// Element.OnMouseDown/OnMouseMove/OnMouseUp, the same kind of typed
+// escape hatch OnContextMenu already used for exactly this problem
+// (gox.Event carries no coordinates at all).
+package main
+
+import (
+	"syscall/js"
+
+	"github.com/elaous/gojiberry/domrt/browser"
+	"github.com/elaous/gojiberry/domrt/html"
+)
+
+// jsFuncOf adapts a plain, argument-less Go closure to the
+// js.FuncOf(func(js.Value, []js.Value) any) shape AddEventListener
+// expects, for the handlers here that don't need the raw event.
+func jsFuncOf(fn func()) js.Func {
+	return js.FuncOf(func(this js.Value, args []js.Value) any {
+		fn()
+		return nil
+	})
+}
+
+const storageKey = "canvas-editor-doc"
+
+type editor struct {
+	document   *html.Document
+	canvas     *html.CanvasElement
+	canvasElem *html.Element
+	ctx        *html.Context2D
+	hidden     *html.Element
+
+	doc         *document
+	lastLayout  *layout
+	dragging    bool
+	caretOn     bool
+}
+
+func newEditor(doc *html.Document) *editor {
+	canvas := doc.GetElementByID("editor-canvas").AsCanvas()
+	ed := &editor{
+		document:   doc,
+		canvas:     canvas,
+		canvasElem: doc.GetElementByID("editor-canvas"),
+		ctx:        canvas.GetContext2D(),
+		hidden:     doc.GetElementByID("editor-hidden-input"),
+		doc:        loadDocument(),
+	}
+	return ed
+}
+
+// loadDocument restores autosaved content, or a short welcome message
+// (with a couple of formatted words, so the very first render already
+// shows Bold/Italic actually doing something) if there's nothing saved yet.
+func loadDocument() *document {
+	if saved, ok := browser.LocalStorage.Get(storageKey); ok && saved != "" {
+		if d, err := unmarshalDocument(saved); err == nil {
+			d.Cursor = len(d.Chars)
+			d.Anchor = d.Cursor
+			return d
+		}
+	}
+	d := &document{}
+	d.insert("Welcome to the ")
+	start := len(d.Chars)
+	d.insert("canvas-rendered")
+	for i := start; i < len(d.Chars); i++ {
+		d.Fmt[i].Bold = true
+	}
+	d.insert(" document editor. Select some text and click ")
+	start = len(d.Chars)
+	d.insert("Bold")
+	for i := start; i < len(d.Chars); i++ {
+		d.Fmt[i].Bold = true
+	}
+	d.insert(" or ")
+	start = len(d.Chars)
+	d.insert("Italic")
+	for i := start; i < len(d.Chars); i++ {
+		d.Fmt[i].Italic = true
+	}
+	d.insert(".")
+	return d
+}
+
+func (ed *editor) save() {
+	if s, err := marshalDocument(ed.doc); err == nil {
+		browser.LocalStorage.Set(storageKey, s)
+	}
+}
+
+// redraw recomputes layout against the canvas's real font metrics,
+// then draws the selection highlight (if any), the text itself, and a
+// blinking caret (when there's no selection) -- in that order, so the
+// caret/selection never draw underneath a character.
+func (ed *editor) redraw() {
+	w, h := float64(ed.canvas.Width()), float64(ed.canvas.Height())
+	ed.ctx.ClearRect(0, 0, w, h)
+
+	lay := layoutDocument(ed.ctx, ed.doc, w-leftMargin)
+	ed.lastLayout = lay
+
+	if ed.doc.hasSelection() {
+		lo, hi := ed.doc.selection()
+		ed.ctx.SetFillStyle("rgba(37, 99, 235, 0.25)")
+		for i := lo; i < hi; i++ {
+			cl, next := lay.Chars[i], lay.Chars[i+1]
+			width := next.X - cl.X
+			if next.Line != cl.Line || width <= 0 {
+				width = 8
+			}
+			ed.ctx.FillRect(cl.X, cl.Y-fontSize, width, lineHeight)
+		}
+	}
+
+	ed.ctx.SetFillStyle("rgb(17, 24, 39)")
+	for i, ch := range ed.doc.Chars {
+		if ch == '\n' {
+			continue
+		}
+		ed.ctx.SetFont(fontFor(ed.doc.Fmt[i]))
+		ed.ctx.FillText(string(ch), lay.Chars[i].X, lay.Chars[i].Y)
+	}
+
+	if !ed.doc.hasSelection() && ed.caretOn {
+		cl := lay.Chars[ed.doc.Cursor]
+		ed.ctx.SetStrokeStyle("rgb(17, 24, 39)")
+		ed.ctx.SetLineWidth(1)
+		ed.ctx.BeginPath()
+		ed.ctx.MoveTo(cl.X, cl.Y-fontSize)
+		ed.ctx.LineTo(cl.X, cl.Y+4)
+		ed.ctx.Stroke()
+	}
+
+	ed.updateDebugState()
+}
+
+// updateDebugState writes a small machine-readable summary of the
+// document into #doc-state. There's no DOM text to read back from a
+// canvas-rendered document, so this is the hook a real browser test
+// (and a curious human) uses to check what actually got typed/
+// selected/formatted, the same role FileUploader/ContextMenu's own
+// #*-result spans play elsewhere in this repo.
+func (ed *editor) updateDebugState() {
+	lo, hi := ed.doc.selection()
+	bold, italic := false, false
+	if ed.doc.hasSelection() {
+		bold, italic = ed.doc.Fmt[lo].Bold, ed.doc.Fmt[lo].Italic
+	}
+	text := string(ed.doc.Chars)
+	ed.document.GetElementByID("doc-state").SetTextContent(
+		"text=" + text +
+			" cursor=" + itoa(ed.doc.Cursor) +
+			" sel=" + itoa(lo) + "-" + itoa(hi) +
+			" selBold=" + boolstr(bold) +
+			" selItalic=" + boolstr(italic))
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}
+
+func boolstr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+// canvasLocal converts viewport-relative (x, y) -- what
+// OnMouseDown/OnMouseMove report -- into coordinates relative to the
+// canvas's own top-left corner, which is what layoutDocument/hitTest
+// work in.
+func (ed *editor) canvasLocal(x, y float64) (float64, float64) {
+	rect := ed.canvasElem.BoundingRect()
+	return x - rect.Left, y - rect.Top
+}
+
+func (ed *editor) moveVertical(dir int, extend bool) {
+	if ed.lastLayout == nil {
+		return
+	}
+	cur := ed.lastLayout.Chars[ed.doc.Cursor]
+	targetLine := cur.Line + dir
+	if targetLine < 0 || targetLine >= ed.lastLayout.Lines {
+		return
+	}
+	targetY := topMargin + float64(targetLine)*lineHeight
+	idx := hitTest(ed.lastLayout, cur.X, targetY)
+	ed.doc.moveCursor(idx, extend)
+}
+
+func (ed *editor) wire() {
+	ed.canvasElem.OnMouseDown(func(evt html.MouseEvent) {
+		// Canvas isn't focusable on its own, so without PreventDefault
+		// the browser clears focus right after this handler returns --
+		// undoing the ed.hidden.Focus() call below. See MouseEvent's
+		// doc comment.
+		evt.PreventDefault()
+		lx, ly := ed.canvasLocal(evt.X, evt.Y)
+		idx := hitTest(ed.lastLayout, lx, ly)
+		ed.doc.moveCursor(idx, false)
+		ed.dragging = true
+		ed.hidden.Focus()
+		ed.caretOn = true
+		ed.redraw()
+	})
+	ed.canvasElem.OnMouseMove(func(evt html.MouseEvent) {
+		if !ed.dragging {
+			return
+		}
+		lx, ly := ed.canvasLocal(evt.X, evt.Y)
+		idx := hitTest(ed.lastLayout, lx, ly)
+		ed.doc.moveCursor(idx, true)
+		ed.redraw()
+	})
+	ed.canvasElem.OnMouseUp(func(evt html.MouseEvent) {
+		ed.dragging = false
+	})
+
+	ed.hidden.AddEventListener("input", jsFuncOf(func() {
+		v := ed.hidden.GetValue()
+		if v != "" {
+			ed.doc.insert(v)
+			ed.hidden.SetValue("")
+			ed.caretOn = true
+			ed.redraw()
+			ed.save()
+		}
+	}))
+
+	ed.hidden.OnKeyDown(func(e html.KeyEvent) {
+		switch e.Key {
+		case "Backspace":
+			e.PreventDefault()
+			ed.doc.backspace()
+		case "Delete":
+			e.PreventDefault()
+			ed.doc.delete()
+		case "Enter":
+			e.PreventDefault()
+			ed.doc.insert("\n")
+		case "ArrowLeft":
+			e.PreventDefault()
+			ed.doc.moveCursor(ed.doc.Cursor-1, e.ShiftKey)
+		case "ArrowRight":
+			e.PreventDefault()
+			ed.doc.moveCursor(ed.doc.Cursor+1, e.ShiftKey)
+		case "ArrowUp":
+			e.PreventDefault()
+			ed.moveVertical(-1, e.ShiftKey)
+		case "ArrowDown":
+			e.PreventDefault()
+			ed.moveVertical(1, e.ShiftKey)
+		case "Home":
+			e.PreventDefault()
+			ed.doc.moveCursor(lineStart(ed.lastLayout, ed.doc.Cursor), e.ShiftKey)
+		case "End":
+			e.PreventDefault()
+			ed.doc.moveCursor(lineEnd(ed.lastLayout, ed.doc.Cursor), e.ShiftKey)
+		case "a":
+			if e.CtrlKey || e.MetaKey {
+				e.PreventDefault()
+				ed.doc.Anchor = 0
+				ed.doc.Cursor = len(ed.doc.Chars)
+			}
+		default:
+			return
+		}
+		ed.caretOn = true
+		ed.redraw()
+		ed.save()
+	})
+
+	ed.document.GetElementByID("toolbar-bold").AddEventListener("click", jsFuncOf(func() {
+		lo, hi := ed.doc.selection()
+		ed.doc.toggleSelectionFormat(lo, hi, formatBold)
+		ed.redraw()
+		ed.save()
+	}))
+	ed.document.GetElementByID("toolbar-italic").AddEventListener("click", jsFuncOf(func() {
+		lo, hi := ed.doc.selection()
+		ed.doc.toggleSelectionFormat(lo, hi, formatItalic)
+		ed.redraw()
+		ed.save()
+	}))
+
+	window := browser.Window()
+	window.SetInterval(func() {
+		ed.caretOn = !ed.caretOn
+		ed.redraw()
+	}, 500)
+}
+
+// lineStart/lineEnd find the first/last character index sharing idx's
+// line, for Home/End.
+func lineStart(lay *layout, idx int) int {
+	line := lay.Chars[idx].Line
+	for i := idx; i > 0; i-- {
+		if lay.Chars[i-1].Line != line {
+			return i
+		}
+	}
+	return 0
+}
+
+func lineEnd(lay *layout, idx int) int {
+	line := lay.Chars[idx].Line
+	for i := idx; i < len(lay.Chars)-1; i++ {
+		if lay.Chars[i+1].Line != line {
+			return i
+		}
+	}
+	return len(lay.Chars) - 1
+}
+
+func main() {
+	doc := browser.Document()
+	ed := newEditor(doc)
+	ed.caretOn = true
+	ed.wire()
+	ed.redraw()
+
+	select {} // keep the wasm program alive for every listener above
+}

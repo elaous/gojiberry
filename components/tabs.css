@@ -1,0 +1,14 @@
+/* Tabs stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-tabs-strip { display: flex; border-bottom: 1px solid var(--gj-border); }
+.gj-tab {
+  border: none;
+  background: none;
+  padding: 0.6em 1em;
+  cursor: pointer;
+  color: var(--gj-muted);
+  border-bottom: 2px solid transparent;
+}
+.gj-tab-active { color: var(--gj-accent); border-bottom-color: var(--gj-accent); }
+.gj-tabs-panel { padding: 1em 0; }

@@ -1,0 +1,14 @@
+/* Accordion stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-accordion-item { border-bottom: 1px solid var(--gj-border); }
+.gj-accordion-header {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 0.75em 0;
+  cursor: pointer;
+  font: inherit;
+}
+.gj-accordion-panel-collapsed { display: none; }

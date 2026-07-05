@@ -1,0 +1,4 @@
+/* CheckboxGroup stylesheet for github.com/elaous/gojiberry/components.
+   Requires checkbox.css too: each option renders as a Checkbox. */
+
+.gj-checkbox-group { display: flex; flex-direction: column; gap: 0.4em; }

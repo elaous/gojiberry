@@ -1,0 +1,89 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "gox-tags",
+  "scopeName": "gox.tags.injection",
+  "injectionSelector": "L:source.gox - comment",
+  "patterns": [
+    { "include": "#tag" }
+  ],
+  "repository": {
+    "tag": {
+      "patterns": [
+        { "include": "#tagNamed" },
+        { "include": "#tagFragment" }
+      ]
+    },
+    "tagNamed": {
+      "comment": "A <Tag ...>...</Tag> or self-closing <Tag ... />. The end pattern backreferences the opening name (group 2) so a nested tag with a different name can't prematurely close it -- a heuristic like every TextMate JSX grammar, not the real expression-start disambiguation goxc's transpiler does; a bare `a<B` with no surrounding spaces can still be miscolored as a tag-open, the same known class of limitation TSX's own grammar has.",
+      "begin": "(<)([A-Za-z][A-Za-z0-9_.\\-]*)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.gox" },
+        "2": { "name": "entity.name.tag.gox" }
+      },
+      "end": "(/>)|(</)(\\2)\\s*(>)",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.tag.end.gox" },
+        "2": { "name": "punctuation.definition.tag.begin.gox" },
+        "3": { "name": "entity.name.tag.gox" },
+        "4": { "name": "punctuation.definition.tag.end.gox" }
+      },
+      "name": "meta.tag.gox",
+      "patterns": [
+        { "match": ">", "name": "punctuation.definition.tag.end.gox" },
+        { "include": "#tagAttributes" },
+        { "include": "#interpolation" },
+        { "include": "#tag" }
+      ]
+    },
+    "tagFragment": {
+      "comment": "A fragment <>...</>.",
+      "begin": "(<)(>)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.gox" },
+        "2": { "name": "punctuation.definition.tag.end.gox" }
+      },
+      "end": "(</)(>)",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.gox" },
+        "2": { "name": "punctuation.definition.tag.end.gox" }
+      },
+      "name": "meta.tag.fragment.gox",
+      "patterns": [
+        { "include": "#interpolation" },
+        { "include": "#tag" }
+      ]
+    },
+    "tagAttributes": {
+      "patterns": [
+        {
+          "match": "([A-Za-z_][A-Za-z0-9_\\-:]*)\\s*(=)",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.gox" },
+            "2": { "name": "punctuation.separator.key-value.gox" }
+          }
+        },
+        { "include": "#doubleQuotedString" }
+      ]
+    },
+    "interpolation": {
+      "comment": "A {expr} hole in an attribute value or child position; always a single Go expression, so its contents are ordinary Go (and may themselves contain nested tags).",
+      "begin": "\\{",
+      "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.gox" } },
+      "end": "\\}",
+      "endCaptures": { "0": { "name": "punctuation.section.embedded.end.gox" } },
+      "name": "meta.embedded.expression.gox",
+      "patterns": [
+        { "include": "#tag" },
+        { "include": "source.go" }
+      ]
+    },
+    "doubleQuotedString": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.gox",
+      "patterns": [
+        { "match": "\\\\.", "name": "constant.character.escape.gox" }
+      ]
+    }
+  }
+}
