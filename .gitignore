@@ -9,6 +9,9 @@
 *.dylib
 *.wasm
 wasm_exec.js
+examples/wasm-components-demo/*.css
+examples/showcase-app/*.css
+examples/collab-editor-app/static/*.css
 
 # Test binary, built with `go test -c`
 *.test

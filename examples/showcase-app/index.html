@@ -1,0 +1,177 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gojiberry capability showcase</title>
+  <link rel="stylesheet" href="base.css">
+  <link rel="stylesheet" href="link.css">
+  <link rel="stylesheet" href="button.css">
+  <link rel="stylesheet" href="chip.css">
+  <link rel="stylesheet" href="radiogroup.css">
+  <link rel="stylesheet" href="tabs.css">
+  <link rel="stylesheet" href="accordion.css">
+  <link rel="stylesheet" href="dropdown.css">
+  <link rel="stylesheet" href="datepicker.css">
+  <link rel="stylesheet" href="colorpicker.css">
+  <link rel="stylesheet" href="slider.css">
+  <link rel="stylesheet" href="carousel.css">
+  <link rel="stylesheet" href="wizard.css">
+  <link rel="stylesheet" href="fileuploader.css">
+  <link rel="stylesheet" href="contextmenu.css">
+  <link rel="stylesheet" href="tooltip.css">
+  <link rel="stylesheet" href="loader.css">
+  <link rel="stylesheet" href="progress.css">
+  <link rel="stylesheet" href="modal.css">
+  <link rel="stylesheet" href="dialog.css">
+  <link rel="stylesheet" href="toast.css">
+  <link rel="stylesheet" href="checkbox.css">
+  <link rel="stylesheet" href="checkboxgroup.css">
+  <link rel="stylesheet" href="switch.css">
+  <link rel="stylesheet" href="textarea.css">
+  <link rel="stylesheet" href="otpinput.css">
+  <link rel="stylesheet" href="breadcrumbs.css">
+  <link rel="stylesheet" href="pagination.css">
+  <link rel="stylesheet" href="avatar.css">
+  <link rel="stylesheet" href="search.css">
+  <link rel="stylesheet" href="imagezoom.css">
+  <link rel="stylesheet" href="popover.css">
+  <link rel="stylesheet" href="icon.css">
+  <link rel="stylesheet" href="collab.css">
+  <link rel="stylesheet" href="floating.css">
+  <link rel="stylesheet" href="box.css">
+  <script src="wasm_exec.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    nav#showcase-nav { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #d1d5db; padding: 0.5em 1em; display: flex; gap: 1em; flex-wrap: wrap; z-index: 2000; }
+    main { padding: 0 1em 4em; }
+    h1#showcase-title { padding: 0.5em 1em 0; }
+  </style>
+</head>
+<body>
+  <h1 id="showcase-title">gojiberry capability showcase</h1>
+  <nav id="showcase-nav">
+    <a href="#section-components">Components</a>
+    <a href="#section-browserapi">Browser APIs</a>
+    <a href="#section-platform">Platform</a>
+    <a href="#section-canvas">Canvas</a>
+    <a href="#section-typedelements">Typed elements</a>
+    <a href="#section-router">Router</a>
+    <a href="#section-worker">Worker</a>
+  </nav>
+
+  <main>
+    <section id="section-components">
+      <h2>Components (37)</h2>
+      <div id="components-app"></div>
+    </section>
+
+    <section id="section-browserapi">
+      <h2>Browser APIs &amp; DOM extras</h2>
+
+      <div id="scrollbox" style="height:50px; overflow:auto;">
+        <div style="height:200px;">tall content</div>
+      </div>
+      <div id="styled">styled box</div>
+      <div id="svg-container"></div>
+      <div id="image-container"></div>
+      <form id="demo-form">
+        <input type="text" name="title" id="title-input" value="hello">
+        <input type="file" name="doc" id="file-input-form">
+        <button type="submit">Submit</button>
+      </form>
+      <div id="customevent-target">custom event target</div>
+
+      <p>LocalStorage: <span id="storage-value">(pending)</span></p>
+      <p>Fetch: <span id="fetch-value">(pending)</span></p>
+      <p>Window: <span id="window-result">(pending)</span></p>
+      <p>Document: <span id="document-result">(pending)</span></p>
+      <p>Scroll: <span id="scroll-result">(pending)</span></p>
+      <p>Style: <span id="style-result">(pending)</span></p>
+      <p>SVG: <span id="svg-result">(pending)</span></p>
+      <p>Image: <span id="image-result">(pending)</span></p>
+      <p>Form: <span id="form-result">(pending)</span></p>
+      <p>Cookie: <span id="cookie-result">(pending)</span></p>
+      <p>CustomEvent: <span id="customevent-result">(pending)</span></p>
+      <p>JS error: <span id="jserror-result">(pending)</span></p>
+      <p>Unhandled rejection: <span id="rejection-result">(pending)</span></p>
+      <p>Geolocation: <span id="geo-result">(pending)</span></p>
+    </section>
+
+    <section id="section-platform">
+      <h2>Platform APIs</h2>
+
+      <div id="observed-el" style="width:100px;height:100px;background:lightblue;">observed</div>
+      <div id="drag-source" draggable="true">drag me</div>
+      <div id="drop-target">drop here</div>
+      <video id="video" autoplay muted playsinline width="64" height="48"></video>
+
+      <p>IndexedDB: <span id="idb-result">(pending)</span></p>
+      <p>IntersectionObserver: <span id="intersection-result">(pending)</span></p>
+      <p>ResizeObserver: <span id="resize-result">(pending)</span></p>
+      <p>Drag-and-drop: <span id="dnd-result">(pending)</span></p>
+      <p>MediaDevices: <span id="media-result">(pending)</span></p>
+      <p>Clipboard: <span id="clipboard-result">(pending)</span></p>
+    </section>
+
+    <section id="section-canvas">
+      <h2>Canvas2D / WebGL</h2>
+
+      <canvas id="c2d" width="100" height="100"></canvas>
+      <canvas id="c3d" width="100" height="100"></canvas>
+      <p>2D pixel (50,50): <span id="result2d">(pending)</span></p>
+      <p>3D pixel (50,50): <span id="result3d">(pending)</span></p>
+    </section>
+
+    <section id="section-typedelements">
+      <h2>Typed elements &amp; File API</h2>
+
+      <canvas id="typed-canvas"></canvas>
+      <a id="typed-link" href="/report">report</a>
+      <button id="typed-btn">click me</button>
+      <select id="typed-sel">
+        <option value="a">A</option>
+        <option value="b">B</option>
+      </select>
+      <input id="typed-chk" type="checkbox">
+      <input id="typed-file" type="file">
+
+      <p>Canvas: <span id="typed-canvas-result">(pending)</span></p>
+      <p>Anchor: <span id="typed-anchor-result">(pending)</span></p>
+      <p>Button: <span id="typed-button-result">(pending)</span></p>
+      <p>HTMLElement: <span id="typed-htmlelement-result">(pending)</span></p>
+      <p>Select: <span id="typed-select-result">(pending)</span></p>
+      <p>Checkbox: <span id="typed-checkbox-result">(pending)</span></p>
+      <p>File: <span id="typed-file-result">(pending)</span></p>
+    </section>
+
+    <section id="section-router">
+      <h2>Client-side routing</h2>
+
+      <button id="router-go-about">Go to /about</button>
+      <button id="router-replace-home">Replace with /</button>
+
+      <p id="router-content">(pending)</p>
+      <p>Path: <span id="router-path-result">(pending)</span></p>
+    </section>
+
+    <section id="section-worker">
+      <h2>Web Worker</h2>
+
+      <button id="worker-send-50">Send N=50</button>
+      <p>Worker: <span id="worker-result">(pending)</span></p>
+    </section>
+  </main>
+
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+      go.run(result.instance);
+    });
+
+    // Real errors from code this Go program doesn't control, exactly
+    // what Window.OnError/OnUnhandledRejection are meant to catch.
+    setTimeout(() => { throw new Error("boom from inline script"); }, 50);
+    setTimeout(() => { Promise.reject(new Error("rejected boom")); }, 100);
+  </script>
+</body>
+</html>

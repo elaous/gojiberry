@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gojiberry wasm platform demo</title>
+  <script src="wasm_exec.js"></script>
+</head>
+<body>
+  <div id="observed-el" style="width:100px;height:100px;background:lightblue;">observed</div>
+  <div id="drag-source" draggable="true">drag me</div>
+  <div id="drop-target">drop here</div>
+  <video id="video" autoplay muted playsinline width="64" height="48"></video>
+
+  <p>IndexedDB: <span id="idb-result">(pending)</span></p>
+  <p>IntersectionObserver: <span id="intersection-result">(pending)</span></p>
+  <p>ResizeObserver: <span id="resize-result">(pending)</span></p>
+  <p>Drag-and-drop: <span id="dnd-result">(pending)</span></p>
+  <p>MediaDevices: <span id="media-result">(pending)</span></p>
+  <p>Clipboard: <span id="clipboard-result">(pending)</span></p>
+
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+      go.run(result.instance);
+    });
+  </script>
+</body>
+</html>

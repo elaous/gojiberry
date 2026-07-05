@@ -1,0 +1,4 @@
+/* RadioGroup stylesheet for github.com/elaous/gojiberry/components. */
+
+.gj-radio-group { display: flex; flex-direction: column; gap: 0.4em; }
+.gj-radio-option { display: flex; align-items: center; gap: 0.5em; }

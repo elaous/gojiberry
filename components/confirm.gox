@@ -1,0 +1,55 @@
+package components
+
+import "github.com/elaous/gojiberry/gox"
+
+// ConfirmProps configures Confirm.
+type ConfirmProps struct {
+	Open         bool
+	Title        string
+	Message      string
+	ConfirmLabel string // defaults to "OK"
+	CancelLabel  string // defaults to "Cancel"
+	OnConfirm    func()
+	OnCancel     func() // also called on a backdrop click, the same as clicking Cancel
+}
+
+// Confirm is a Dialog preset for a yes/no decision, rendered with
+// role="alertdialog" (per ARIA, for a dialog demanding an immediate
+// response) instead of Dialog's default role="dialog".
+func Confirm(props ConfirmProps) gox.Node {
+	confirmLabel := props.ConfirmLabel
+	if confirmLabel == "" {
+		confirmLabel = "OK"
+	}
+	cancelLabel := props.CancelLabel
+	if cancelLabel == "" {
+		cancelLabel = "Cancel"
+	}
+	return Dialog(DialogProps{
+		Open:  props.Open,
+		Role:  "alertdialog",
+		Title: props.Title,
+		Body:  []gox.Node{gox.Text(props.Message)},
+		Actions: []gox.Node{
+			Button(ButtonProps{
+				Label:   cancelLabel,
+				Variant: ButtonSecondary,
+				OnClick: func(gox.Event) {
+					if props.OnCancel != nil {
+						props.OnCancel()
+					}
+				},
+			}),
+			Button(ButtonProps{
+				Label:   confirmLabel,
+				Variant: ButtonPrimary,
+				OnClick: func(gox.Event) {
+					if props.OnConfirm != nil {
+						props.OnConfirm()
+					}
+				},
+			}),
+		},
+		OnClose: props.OnCancel,
+	})
+}

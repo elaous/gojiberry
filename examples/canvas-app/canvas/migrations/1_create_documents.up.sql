@@ -1,0 +1,6 @@
+CREATE TABLE documents (
+	id UUID PRIMARY KEY,
+	content TEXT NOT NULL DEFAULT '',
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

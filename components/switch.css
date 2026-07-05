@@ -1,0 +1,28 @@
+/* Switch stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-switch { display: inline-flex; align-items: center; gap: 0.5em; cursor: pointer; }
+.gj-switch-input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+.gj-switch-track {
+  position: relative;
+  display: inline-block;
+  width: 2.25em;
+  height: 1.25em;
+  border-radius: 999px;
+  background: var(--gj-border);
+  transition: background 0.15s ease;
+}
+.gj-switch-thumb {
+  position: absolute;
+  top: 0.15em;
+  left: 0.15em;
+  width: 0.95em;
+  height: 0.95em;
+  border-radius: 50%;
+  background: var(--gj-bg);
+  transition: transform 0.15s ease;
+}
+.gj-switch-input:checked + .gj-switch-track { background: var(--gj-accent); }
+.gj-switch-input:checked + .gj-switch-track .gj-switch-thumb { transform: translateX(1em); }
+.gj-switch-input:disabled + .gj-switch-track { opacity: 0.6; cursor: not-allowed; }
+.gj-switch-label { color: var(--gj-text); }

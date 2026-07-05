@@ -1,0 +1,5 @@
+/* Link stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-link { color: var(--gj-accent); text-decoration: underline; }
+.gj-link-disabled { color: var(--gj-muted); text-decoration: none; cursor: not-allowed; }

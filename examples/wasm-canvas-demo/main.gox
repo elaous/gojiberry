@@ -1,0 +1,78 @@
+//go:build js && wasm
+
+// Package main demos domrt/html's Canvas2D and WebGL (Context3D)
+// wrappers: fills a 2D canvas with a solid color and draws a
+// full-viewport quad on a WebGL canvas with a solid-color fragment
+// shader, then reads a pixel back from each (via the same package's
+// GetImageData/ReadPixels) to prove the draw calls actually landed --
+// not just that the code compiles.
+package main
+
+import (
+	"fmt"
+
+	"github.com/elaous/gojiberry/domrt/browser"
+)
+
+const vertexShaderSrc = `
+attribute vec2 position;
+void main() {
+	gl_Position = vec4(position, 0.0, 1.0);
+}
+`
+
+const fragmentShaderSrc = `
+precision mediump float;
+void main() {
+	gl_FragColor = vec4(0.0, 0.784313725, 0.196078431, 1.0);
+}
+`
+
+func main() {
+	document := browser.Document()
+
+	canvas2D := document.GetElementByID("c2d").AsCanvas()
+	ctx2D := canvas2D.GetContext2D()
+	ctx2D.SetFillStyle("rgb(200, 0, 50)")
+	ctx2D.FillRect(0, 0, 100, 100)
+	px2D := ctx2D.GetImageData(50, 50, 1, 1)
+	document.GetElementByID("result2d").SetTextContent(
+		fmt.Sprintf("%d,%d,%d,%d", px2D.Pix[0], px2D.Pix[1], px2D.Pix[2], px2D.Pix[3]))
+
+	canvas3D := document.GetElementByID("c3d").AsCanvas()
+	gl := canvas3D.GetContext3D()
+	if gl == nil {
+		document.GetElementByID("result3d").SetTextContent("no webgl context")
+		return
+	}
+	gl.Viewport(0, 0, 100, 100)
+	gl.ClearColor(0, 0, 0, 1)
+	gl.Clear(gl.COLOR_BUFFER_BIT())
+
+	program, err := gl.CompileProgram(vertexShaderSrc, fragmentShaderSrc)
+	if err != nil {
+		document.GetElementByID("result3d").SetTextContent("error: " + err.Error())
+		return
+	}
+	gl.UseProgram(program)
+
+	posLoc := gl.GetAttribLocation(program, "position")
+	buf := gl.CreateBuffer()
+	gl.BindBuffer(gl.ARRAY_BUFFER(), buf)
+	gl.BufferDataFloat32(gl.ARRAY_BUFFER(), []float32{
+		-1, -1,
+		1, -1,
+		-1, 1,
+		1, -1,
+		1, 1,
+		-1, 1,
+	}, gl.STATIC_DRAW())
+	gl.EnableVertexAttribArray(posLoc)
+	gl.VertexAttribPointer(posLoc, 2, gl.FLOAT(), false, 0, 0)
+
+	gl.DrawArrays(gl.TRIANGLES(), 0, 6)
+
+	px3D := gl.ReadPixels(50, 50, 1, 1, gl.RGBA(), gl.UNSIGNED_BYTE())
+	document.GetElementByID("result3d").SetTextContent(
+		fmt.Sprintf("%d,%d,%d,%d", px3D[0], px3D[1], px3D[2], px3D[3]))
+}

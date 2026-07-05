@@ -1,0 +1,27 @@
+/* Search stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-search { position: relative; display: inline-block; }
+.gj-search-input {
+  width: 100%;
+  border: 1px solid var(--gj-border);
+  border-radius: var(--gj-radius);
+  padding: 0.5em 0.75em;
+  font: inherit;
+  color: var(--gj-text);
+}
+.gj-search-list {
+  position: absolute;
+  z-index: 10;
+  top: 100%;
+  left: 0;
+  right: 0;
+  border: 1px solid var(--gj-border);
+  border-radius: var(--gj-radius);
+  background: var(--gj-bg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-height: 16em;
+  overflow-y: auto;
+}
+.gj-search-option { padding: 0.5em 0.75em; cursor: pointer; }
+.gj-search-option:hover { background: var(--gj-bg-muted); }
