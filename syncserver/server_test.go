@@ -14,16 +14,24 @@ import (
 func TestConfigFromEnvDefaultsAndOverrides(t *testing.T) {
 	os.Unsetenv("GOJIBERRY_SYNC_ADDR")
 	os.Unsetenv("GOJIBERRY_SYNC_REGION")
+	os.Unsetenv("GOJIBERRY_SYNC_STRATEGY")
 	cfg := ConfigFromEnv()
 	if cfg.Addr == "" || cfg.Region == "" {
 		t.Fatalf("expected non-empty defaults, got %+v", cfg)
 	}
+	if cfg.Strategy != crdt.MergeLWW {
+		t.Fatalf("expected Strategy to default to MergeLWW, got %v", cfg.Strategy)
+	}
 
 	t.Setenv("GOJIBERRY_SYNC_ADDR", ":9090")
 	t.Setenv("GOJIBERRY_SYNC_REGION", "br-datacenter-1")
+	t.Setenv("GOJIBERRY_SYNC_STRATEGY", "char-crdt")
 	cfg = ConfigFromEnv()
 	if cfg.Addr != ":9090" || cfg.Region != "br-datacenter-1" {
 		t.Fatalf("expected env overrides to apply, got %+v", cfg)
+	}
+	if cfg.Strategy != crdt.MergeCharCRDT {
+		t.Fatalf("expected GOJIBERRY_SYNC_STRATEGY=char-crdt to select MergeCharCRDT, got %v", cfg.Strategy)
 	}
 }
 

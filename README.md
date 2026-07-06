@@ -344,21 +344,22 @@ expanded by the same recursive scan, with no extra grammar required.
   (`POST /ops` to push a delta, `GET /ops` for a full snapshot) that is
   itself just another CRDT replica, so it never needs bespoke
   conflict-resolution logic clients must trust. Every deployment detail
-  — listen address, region label — comes from `GOJIBERRY_SYNC_ADDR` /
-  `GOJIBERRY_SYNC_REGION` (see `syncserver.ConfigFromEnv`), so the same
-  binary (`cmd/syncserver`) can be pointed at any operator's own
-  infrastructure without a rebuild. `Config.Strategy` selects which
-  `crdt.MergeStrategy` this relay's own `Doc` merges with (default
-  `crdt.MergeLWW`) — it must match whatever strategy every client uses,
-  since a `MergeCharCRDT` client relayed through a `MergeLWW` server
-  doesn't just lose the fine-grained merge, it silently empties the
-  block's `Content` outright (`TestMergeCharCRDTServerConvergesConcurrentEdits`
-  is the regression test for exactly that). Every response also carries
-  permissive CORS headers, with OPTIONS preflight requests
-  short-circuited before reaching the routes at all — a client's own
-  static assets are almost never served from this relay's own origin,
-  so without this a browser's `fetch()` would refuse every request
-  before `handleOps` ever saw it.
+  — listen address, region label, merge strategy — comes from
+  `GOJIBERRY_SYNC_ADDR` / `GOJIBERRY_SYNC_REGION` /
+  `GOJIBERRY_SYNC_STRATEGY` (`"lww"`, the default, or `"char-crdt"` —
+  see `syncserver.ConfigFromEnv`), so the same binary (`cmd/syncserver`)
+  can be pointed at any operator's own infrastructure, running either
+  merge strategy, without a rebuild. `Config.Strategy` must match
+  whatever strategy every client uses: a `MergeCharCRDT` client relayed
+  through a `MergeLWW` server doesn't just lose the fine-grained merge,
+  it silently empties the block's `Content` outright
+  (`TestMergeCharCRDTServerConvergesConcurrentEdits` is the regression
+  test for exactly that). Every response also carries permissive CORS
+  headers, with OPTIONS preflight requests short-circuited before
+  reaching the routes at all — a client's own static assets are almost
+  never served from this relay's own origin, so without this a
+  browser's `fetch()` would refuse every request before `handleOps`
+  ever saw it.
 - **`devreload`** / **`devwatch`** — the two halves of gox's dev-mode
   hot-reload loop, generalized out of `examples/canvas-app`'s own
   hand-rolled version so any gox server can opt in with a few lines
@@ -1278,6 +1279,7 @@ generated code.
 
   ```
   GOJIBERRY_SYNC_ADDR=:8080 GOJIBERRY_SYNC_REGION=br-datacenter-1 go run ./cmd/syncserver
+  # add GOJIBERRY_SYNC_STRATEGY=char-crdt too if the client uses MergeCharCRDT
   ```
 
 - `examples/gin-ssr-demo` and `examples/echo-ssr-demo` — the same "gox
