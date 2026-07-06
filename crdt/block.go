@@ -1,12 +1,15 @@
 // Package crdt is the offline-first sync engine behind gojiberry's
-// block editor: a last-writer-wins (LWW) register per block, keyed by
-// block ID. Two replicas that never see the same network at the same
-// time can each mutate their own copy freely; exchanging the small set
-// of Ops produced since the last sync (a "delta", not the whole
-// document) merges into an identical result on both sides regardless
-// of delivery order, duplication, or which side went first — the
-// three properties (commutative, associative, idempotent) that make a
-// CRDT safe to sync over an unreliable, metered mobile connection.
+// block editor: one register per block, keyed by block ID, resolved
+// by either of two interchangeable MergeStrategy algorithms --
+// MergeLWW (last-writer-wins, the default) or MergeCharCRDT
+// (per-character merging via an RGA; see Text). Two replicas that
+// never see the same network at the same time can each mutate their
+// own copy freely; exchanging the small set of Ops produced since the
+// last sync (a "delta", not the whole document) merges into an
+// identical result on both sides regardless of delivery order,
+// duplication, or which side went first — the three properties
+// (commutative, associative, idempotent) that make a CRDT safe to
+// sync over an unreliable, metered mobile connection.
 package crdt
 
 import "sort"
@@ -50,6 +53,12 @@ type Block struct {
 type Op struct {
 	Block Block
 	TS    Timestamp
+	// CharOps carries the per-character CRDT edits that produced
+	// Block.Content, present only when the originating Doc's
+	// MergeStrategy is MergeCharCRDT. Applying CharOps (rather than
+	// replacing Content wholesale) is what lets two concurrent edits
+	// to different parts of the same block's text both survive.
+	CharOps []CharOp
 }
 
 // OrderBetween returns a fractional position strictly between before
