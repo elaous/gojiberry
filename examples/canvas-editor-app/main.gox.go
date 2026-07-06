@@ -2,18 +2,28 @@
 
 //go:build js && wasm
 
-// Package main wires model.go's document and layout.go's word-wrap
-// engine to a real canvas element and a hidden input element that
-// captures actual keyboard input (including paste and IME
-// composition, which the browser handles for us): typed characters
-// arrive as ordinary "input" events, while navigation/deletion
-// (arrows, Backspace, Delete, Enter) are intercepted on "keydown" via
-// domrt/html's new Element.OnKeyDown, since a plain gox.EventHandler
-// carries none of that. Mouse position for click-to-position-cursor
-// and drag-to-select comes from the new
+// Package main wires model.go's document, linewise.go's line/word
+// commands, and layout.go's word-wrap engine to a real canvas element
+// and a hidden input element that captures actual keyboard input
+// (including paste and IME composition, which the browser handles for
+// us): typed characters arrive as ordinary "input" events, while
+// navigation/deletion (arrows, Backspace, Delete, Enter) are
+// intercepted on "keydown" via domrt/html's Element.OnKeyDown, since a
+// plain gox.EventHandler carries none of that. Mouse position for
+// click-to-position-cursor and drag-to-select comes from
 // Element.OnMouseDown/OnMouseMove/OnMouseUp, the same kind of typed
 // escape hatch OnContextMenu already used for exactly this problem
-// (gox.Event carries no coordinates at all).
+// (gox.Event carries no coordinates at all); Element.OnWheel drives
+// scrolling the same way, since a canvas has no native scroll
+// position of its own.
+//
+// VSCode-style shortcuts beyond the base editing above: Ctrl/Cmd+Left
+// /Right jumps by word (Shift extends the selection the same way
+// plain arrows do); Alt+Up/Down moves the current logical line;
+// Shift+Alt+Down duplicates it; Ctrl/Cmd+Shift+U/L upper/lowercases
+// the current selection. "Logical line" means a run delimited by
+// '\n', not a word-*wrapped* visual row -- see linewise.go's doc
+// comment for why that distinction matters here.
 package main
 
 import (
@@ -46,6 +56,7 @@ type editor struct {
 	lastLayout *layout
 	dragging   bool
 	caretOn    bool
+	scrollY    float64 // pixels of document content scrolled above the viewport's top edge
 }
 
 func newEditor(doc *html.Document) *editor {
@@ -101,16 +112,34 @@ func (ed *editor) save() {
 	}
 }
 
-// redraw recomputes layout against the canvas's real font metrics,
-// then draws the selection highlight (if any), the text itself, and a
-// blinking caret (when there's no selection) -- in that order, so the
-// caret/selection never draw underneath a character.
+// redraw recomputes layout, scrolls just enough to keep the cursor
+// in view (since the cursor -- or the document around it -- just
+// changed), then paints. Call redrawPreservingScroll instead from
+// anywhere the cursor didn't move but a repaint is still needed (the
+// blink timer, a manual scroll): otherwise this would immediately snap
+// the viewport back to the cursor on every single repaint, making
+// wheel-scrolling to look at another part of the document impossible.
 func (ed *editor) redraw() {
+	ed.redrawImpl(true)
+}
+
+// redrawPreservingScroll repaints without re-following the cursor --
+// see redraw's doc comment for why this distinction exists.
+func (ed *editor) redrawPreservingScroll() {
+	ed.redrawImpl(false)
+}
+
+func (ed *editor) redrawImpl(followCursor bool) {
 	w, h := float64(ed.canvas.Width()), float64(ed.canvas.Height())
-	ed.ctx.ClearRect(0, 0, w, h)
 
 	lay := layoutDocument(ed.ctx, ed.doc, w-leftMargin)
 	ed.lastLayout = lay
+	if followCursor {
+		ed.scrollToCursor(h)
+	}
+	ed.clampScroll(lay, h)
+
+	ed.ctx.ClearRect(0, 0, w, h)
 
 	if ed.doc.hasSelection() {
 		lo, hi := ed.doc.selection()
@@ -121,7 +150,7 @@ func (ed *editor) redraw() {
 			if next.Line != cl.Line || width <= 0 {
 				width = 8
 			}
-			ed.ctx.FillRect(cl.X, cl.Y-fontSize, width, lineHeight)
+			ed.ctx.FillRect(cl.X, cl.Y-fontSize-ed.scrollY, width, lineHeight)
 		}
 	}
 
@@ -130,8 +159,12 @@ func (ed *editor) redraw() {
 		if ch == '\n' {
 			continue
 		}
+		y := lay.Chars[i].Y - ed.scrollY
+		if y < topMargin-lineHeight || y > h+lineHeight {
+			continue // outside the viewport -- skip the paint, not just clip it
+		}
 		ed.ctx.SetFont(fontFor(ed.doc.Fmt[i]))
-		ed.ctx.FillText(string(ch), lay.Chars[i].X, lay.Chars[i].Y)
+		ed.ctx.FillText(string(ch), lay.Chars[i].X, y)
 	}
 
 	if !ed.doc.hasSelection() && ed.caretOn {
@@ -139,12 +172,43 @@ func (ed *editor) redraw() {
 		ed.ctx.SetStrokeStyle("rgb(17, 24, 39)")
 		ed.ctx.SetLineWidth(1)
 		ed.ctx.BeginPath()
-		ed.ctx.MoveTo(cl.X, cl.Y-fontSize)
-		ed.ctx.LineTo(cl.X, cl.Y+4)
+		ed.ctx.MoveTo(cl.X, cl.Y-fontSize-ed.scrollY)
+		ed.ctx.LineTo(cl.X, cl.Y+4-ed.scrollY)
 		ed.ctx.Stroke()
 	}
 
 	ed.updateDebugState()
+}
+
+// scrollToCursor adjusts scrollY (if needed) so the cursor's current
+// line is within [0, viewportH) -- called on every redraw so any
+// cursor-moving operation (typing at the bottom, arrow keys, Home/End,
+// a click) automatically scrolls into view without every call site
+// needing to remember to ask for it.
+func (ed *editor) scrollToCursor(viewportH float64) {
+	cl := ed.lastLayout.Chars[ed.doc.Cursor]
+	top, bottom := cl.Y-fontSize, cl.Y+4
+	if top < ed.scrollY {
+		ed.scrollY = top
+	} else if bottom > ed.scrollY+viewportH {
+		ed.scrollY = bottom - viewportH
+	}
+}
+
+// clampScroll keeps scrollY within [0, maxScroll] -- maxScroll is 0
+// (no scrolling at all) once the whole document already fits in the
+// viewport.
+func (ed *editor) clampScroll(lay *layout, viewportH float64) {
+	contentHeight := topMargin + float64(lay.Lines)*lineHeight
+	maxScroll := contentHeight - viewportH
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if ed.scrollY < 0 {
+		ed.scrollY = 0
+	} else if ed.scrollY > maxScroll {
+		ed.scrollY = maxScroll
+	}
 }
 
 // updateDebugState writes a small machine-readable summary of the
@@ -165,7 +229,8 @@ func (ed *editor) updateDebugState() {
 			" cursor=" + itoa(ed.doc.Cursor) +
 			" sel=" + itoa(lo) + "-" + itoa(hi) +
 			" selBold=" + boolstr(bold) +
-			" selItalic=" + boolstr(italic))
+			" selItalic=" + boolstr(italic) +
+			" scrollY=" + itoa(int(ed.scrollY)))
 }
 
 func itoa(n int) string {
@@ -228,7 +293,7 @@ func (ed *editor) wire() {
 		// doc comment.
 		evt.PreventDefault()
 		lx, ly := ed.canvasLocal(evt.X, evt.Y)
-		idx := hitTest(ed.lastLayout, lx, ly)
+		idx := hitTest(ed.lastLayout, lx, ly+ed.scrollY)
 		ed.doc.moveCursor(idx, false)
 		ed.dragging = true
 		ed.hidden.Focus()
@@ -240,12 +305,17 @@ func (ed *editor) wire() {
 			return
 		}
 		lx, ly := ed.canvasLocal(evt.X, evt.Y)
-		idx := hitTest(ed.lastLayout, lx, ly)
+		idx := hitTest(ed.lastLayout, lx, ly+ed.scrollY)
 		ed.doc.moveCursor(idx, true)
 		ed.redraw()
 	})
 	ed.canvasElem.OnMouseUp(func(evt html.MouseEvent) {
 		ed.dragging = false
+	})
+	ed.canvasElem.OnWheel(func(evt html.WheelEvent) {
+		evt.PreventDefault()
+		ed.scrollY += evt.DeltaY
+		ed.redrawPreservingScroll()
 	})
 
 	ed.hidden.AddEventListener("input", jsFuncOf(func() {
@@ -272,27 +342,62 @@ func (ed *editor) wire() {
 			ed.doc.insert("\n")
 		case "ArrowLeft":
 			e.PreventDefault()
-			ed.doc.moveCursor(ed.doc.Cursor-1, e.ShiftKey)
+			if e.CtrlKey || e.MetaKey {
+				ed.doc.moveCursor(wordBoundaryBackward(ed.doc.Chars, ed.doc.Cursor), e.ShiftKey)
+			} else {
+				ed.doc.moveCursor(ed.doc.Cursor-1, e.ShiftKey)
+			}
 		case "ArrowRight":
 			e.PreventDefault()
-			ed.doc.moveCursor(ed.doc.Cursor+1, e.ShiftKey)
+			if e.CtrlKey || e.MetaKey {
+				ed.doc.moveCursor(wordBoundaryForward(ed.doc.Chars, ed.doc.Cursor), e.ShiftKey)
+			} else {
+				ed.doc.moveCursor(ed.doc.Cursor+1, e.ShiftKey)
+			}
 		case "ArrowUp":
 			e.PreventDefault()
-			ed.moveVertical(-1, e.ShiftKey)
+			if e.AltKey {
+				ed.doc.moveLineUp()
+			} else {
+				ed.moveVertical(-1, e.ShiftKey)
+			}
 		case "ArrowDown":
 			e.PreventDefault()
-			ed.moveVertical(1, e.ShiftKey)
+			switch {
+			case e.AltKey && e.ShiftKey:
+				ed.doc.duplicateLine()
+			case e.AltKey:
+				ed.doc.moveLineDown()
+			default:
+				ed.moveVertical(1, e.ShiftKey)
+			}
 		case "Home":
 			e.PreventDefault()
 			ed.doc.moveCursor(lineStart(ed.lastLayout, ed.doc.Cursor), e.ShiftKey)
 		case "End":
 			e.PreventDefault()
 			ed.doc.moveCursor(lineEnd(ed.lastLayout, ed.doc.Cursor), e.ShiftKey)
-		case "a":
+		case "a", "A":
 			if e.CtrlKey || e.MetaKey {
 				e.PreventDefault()
 				ed.doc.Anchor = 0
 				ed.doc.Cursor = len(ed.doc.Chars)
+			} else {
+				return
+			}
+		case "u", "U":
+			if (e.CtrlKey || e.MetaKey) && e.ShiftKey {
+				e.PreventDefault()
+				ed.doc.transformSelectionCase(true)
+			} else {
+				return
+			}
+		case "l", "L":
+			if (e.CtrlKey || e.MetaKey) && e.ShiftKey {
+				e.PreventDefault()
+				ed.doc.transformSelectionCase(false)
+			} else {
+				return
 			}
 		default:
 			return
@@ -318,7 +423,7 @@ func (ed *editor) wire() {
 	window := browser.Window()
 	window.SetInterval(func() {
 		ed.caretOn = !ed.caretOn
-		ed.redraw()
+		ed.redrawPreservingScroll()
 	}, 500)
 }
 
