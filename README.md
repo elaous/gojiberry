@@ -347,7 +347,18 @@ expanded by the same recursive scan, with no extra grammar required.
   — listen address, region label — comes from `GOJIBERRY_SYNC_ADDR` /
   `GOJIBERRY_SYNC_REGION` (see `syncserver.ConfigFromEnv`), so the same
   binary (`cmd/syncserver`) can be pointed at any operator's own
-  infrastructure without a rebuild.
+  infrastructure without a rebuild. `Config.Strategy` selects which
+  `crdt.MergeStrategy` this relay's own `Doc` merges with (default
+  `crdt.MergeLWW`) — it must match whatever strategy every client uses,
+  since a `MergeCharCRDT` client relayed through a `MergeLWW` server
+  doesn't just lose the fine-grained merge, it silently empties the
+  block's `Content` outright (`TestMergeCharCRDTServerConvergesConcurrentEdits`
+  is the regression test for exactly that). Every response also carries
+  permissive CORS headers, with OPTIONS preflight requests
+  short-circuited before reaching the routes at all — a client's own
+  static assets are almost never served from this relay's own origin,
+  so without this a browser's `fetch()` would refuse every request
+  before `handleOps` ever saw it.
 - **`devreload`** / **`devwatch`** — the two halves of gox's dev-mode
   hot-reload loop, generalized out of `examples/canvas-app`'s own
   hand-rolled version so any gox server can opt in with a few lines
