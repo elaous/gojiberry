@@ -10,7 +10,12 @@
 // hidden input for real keyboard capture, and a formatting toolbar.
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"unicode/utf8"
+
+	"github.com/elaous/gojiberry/buffer"
+)
 
 // charFormat is the formatting applied to a single character.
 type charFormat struct {
@@ -18,18 +23,56 @@ type charFormat struct {
 	Italic bool
 }
 
-// document is the whole editor buffer: a flat sequence of characters,
-// each with its own format, plus a cursor and an optional selection.
-// Keeping format per-character (rather than per-run) makes insertion,
-// deletion, and toggling bold/italic on an arbitrary range simple slice
-// operations, at the cost of some redundant memory for long runs of
-// identically-formatted text -- a fine trade for a demo-sized document.
-type document struct {
-	Chars []rune
-	Fmt   []charFormat
+// char pairs a rune with its own format in a single buffer.GapBuffer
+// element -- deliberately one buffer, not two parallel ones (a rune
+// buffer plus a format buffer kept in lockstep), since two structures
+// that must always agree on length and index is a real, avoidable bug
+// class; one struct per position can't drift out of sync with itself.
+type char struct {
+	Rune rune
+	Fmt  charFormat
+}
 
-	Cursor int // index into Chars/Fmt where the next typed character is inserted
+// document is the whole editor buffer: a buffer.GapBuffer of char
+// (rune + per-character format together), plus a cursor and an
+// optional selection. A GapBuffer here (rather than the plain []rune/
+// []charFormat pair this document used before) is what makes typing
+// in a large document cheap: see buffer.GapBuffer's own doc comment
+// for why a flat slice's O(n)-shift-per-keystroke doesn't scale to
+// "500+ pages without dropping below 60fps". document's zero value
+// (buf's own zero value is an empty, ready-to-use GapBuffer) is
+// itself ready to use -- no constructor required.
+type document struct {
+	buf buffer.GapBuffer[char]
+
+	Cursor int // index where the next typed character is inserted
 	Anchor int // selection anchor; selection is empty when Anchor == Cursor
+}
+
+// Len returns the number of characters in the document.
+func (d *document) Len() int { return d.buf.Len() }
+
+// runeAt returns the rune at index i (0 <= i < Len()).
+func (d *document) runeAt(i int) rune { return d.buf.At(i).Rune }
+
+// fmtAt returns the format at index i (0 <= i < Len()).
+func (d *document) fmtAt(i int) charFormat { return d.buf.At(i).Fmt }
+
+// setFmtAt overwrites the format at index i (0 <= i < Len()).
+func (d *document) setFmtAt(i int, f charFormat) {
+	c := d.buf.At(i)
+	c.Fmt = f
+	d.buf.Set(i, c)
+}
+
+// String returns the document's full text.
+func (d *document) String() string {
+	n := d.buf.Len()
+	runes := make([]rune, n)
+	for i := 0; i < n; i++ {
+		runes[i] = d.runeAt(i)
+	}
+	return string(runes)
 }
 
 // selection returns the current selection as an ordered [lo, hi) range
@@ -54,24 +97,16 @@ func (d *document) insert(text string) {
 	if d.hasSelection() {
 		d.deleteSelection()
 	}
-	fmt := charFormat{}
+	format := charFormat{}
 	if d.Cursor > 0 {
-		fmt = d.Fmt[d.Cursor-1]
+		format = d.fmtAt(d.Cursor - 1)
 	}
-	runes := []rune(text)
-	newChars := make([]rune, 0, len(d.Chars)+len(runes))
-	newFmt := make([]charFormat, 0, len(d.Fmt)+len(runes))
-	newChars = append(newChars, d.Chars[:d.Cursor]...)
-	newFmt = append(newFmt, d.Fmt[:d.Cursor]...)
-	for range runes {
-		newFmt = append(newFmt, fmt)
+	items := make([]char, 0, utf8.RuneCountInString(text))
+	for _, r := range text {
+		items = append(items, char{Rune: r, Fmt: format})
 	}
-	newChars = append(newChars, runes...)
-	newChars = append(newChars, d.Chars[d.Cursor:]...)
-	newFmt = append(newFmt, d.Fmt[d.Cursor:]...)
-	d.Chars = newChars
-	d.Fmt = newFmt
-	d.Cursor += len(runes)
+	d.buf.InsertAt(d.Cursor, items...)
+	d.Cursor += len(items)
 	d.Anchor = d.Cursor
 }
 
@@ -82,8 +117,7 @@ func (d *document) deleteSelection() bool {
 	if hi <= lo {
 		return false
 	}
-	d.Chars = append(d.Chars[:lo], d.Chars[hi:]...)
-	d.Fmt = append(d.Fmt[:lo], d.Fmt[hi:]...)
+	d.buf.DeleteAt(lo, hi-lo)
 	d.Cursor = lo
 	d.Anchor = lo
 	return true
@@ -98,8 +132,7 @@ func (d *document) backspace() {
 	if d.Cursor == 0 {
 		return
 	}
-	d.Chars = append(d.Chars[:d.Cursor-1], d.Chars[d.Cursor:]...)
-	d.Fmt = append(d.Fmt[:d.Cursor-1], d.Fmt[d.Cursor:]...)
+	d.buf.DeleteAt(d.Cursor-1, 1)
 	d.Cursor--
 	d.Anchor = d.Cursor
 }
@@ -110,11 +143,10 @@ func (d *document) delete() {
 	if d.deleteSelection() {
 		return
 	}
-	if d.Cursor >= len(d.Chars) {
+	if d.Cursor >= d.Len() {
 		return
 	}
-	d.Chars = append(d.Chars[:d.Cursor], d.Chars[d.Cursor+1:]...)
-	d.Fmt = append(d.Fmt[:d.Cursor], d.Fmt[d.Cursor+1:]...)
+	d.buf.DeleteAt(d.Cursor, 1)
 }
 
 // moveCursor sets the cursor to idx (clamped in range), extending the
@@ -124,8 +156,8 @@ func (d *document) moveCursor(idx int, extend bool) {
 	if idx < 0 {
 		idx = 0
 	}
-	if idx > len(d.Chars) {
-		idx = len(d.Chars)
+	if idx > d.Len() {
+		idx = d.Len()
 	}
 	d.Cursor = idx
 	if !extend {
@@ -147,21 +179,24 @@ const (
 // makes the whole selection bold (rather than an inconsistent
 // per-char toggle).
 func (d *document) toggleSelectionFormat(lo, hi int, kind formatKind) {
-	if hi <= lo || lo < 0 || hi > len(d.Fmt) {
+	if hi <= lo || lo < 0 || hi > d.Len() {
 		return
 	}
+	first := d.fmtAt(lo)
 	var target bool
 	if kind == formatBold {
-		target = !d.Fmt[lo].Bold
+		target = !first.Bold
 	} else {
-		target = !d.Fmt[lo].Italic
+		target = !first.Italic
 	}
 	for i := lo; i < hi; i++ {
+		f := d.fmtAt(i)
 		if kind == formatBold {
-			d.Fmt[i].Bold = target
+			f.Bold = target
 		} else {
-			d.Fmt[i].Italic = target
+			f.Italic = target
 		}
+		d.setFmtAt(i, f)
 	}
 }
 
@@ -179,19 +214,22 @@ type run struct {
 // reproduce it exactly.
 func (d *document) runs() []run {
 	var out []run
-	for i, ch := range d.Chars {
-		f := d.Fmt[i]
-		if n := len(out); n > 0 && out[n-1].Bold == f.Bold && out[n-1].Italic == f.Italic {
-			out[n-1].Text += string(ch)
+	n := d.Len()
+	for i := 0; i < n; i++ {
+		c := d.buf.At(i)
+		if m := len(out); m > 0 && out[m-1].Bold == c.Fmt.Bold && out[m-1].Italic == c.Fmt.Italic {
+			out[m-1].Text += string(c.Rune)
 			continue
 		}
-		out = append(out, run{Text: string(ch), Bold: f.Bold, Italic: f.Italic})
+		out = append(out, run{Text: string(c.Rune), Bold: c.Fmt.Bold, Italic: c.Fmt.Italic})
 	}
 	return out
 }
 
 // marshalDocument serializes d to JSON via its run-length encoding
-// (compact, and a natural fit for a future real rich-text format).
+// (compact, and a natural fit for a future real rich-text format;
+// unchanged by the move to a GapBuffer, so a document saved before
+// that change still loads correctly).
 func marshalDocument(d *document) (string, error) {
 	b, err := json.Marshal(d.runs())
 	if err != nil {
@@ -206,12 +244,13 @@ func unmarshalDocument(data string) (*document, error) {
 	if err := json.Unmarshal([]byte(data), &runs); err != nil {
 		return nil, err
 	}
-	d := &document{}
+	var items []char
 	for _, r := range runs {
 		for _, ch := range r.Text {
-			d.Chars = append(d.Chars, ch)
-			d.Fmt = append(d.Fmt, charFormat{Bold: r.Bold, Italic: r.Italic})
+			items = append(items, char{Rune: ch, Fmt: charFormat{Bold: r.Bold, Italic: r.Italic}})
 		}
 	}
+	d := &document{}
+	d.buf.InsertAt(0, items...)
 	return d, nil
 }

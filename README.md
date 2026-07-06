@@ -315,6 +315,22 @@ expanded by the same recursive scan, with no extra grammar required.
   same `importScripts('wasm_exec.js')` trick `domrt/sw` uses for
   service workers, adapted to a worker's simpler message-passing-only
   API (no fetch/cache lifecycle events).
+- **`buffer`** — `GapBuffer[T]`, the text-editing data structure
+  classic Emacs (among others) uses: O(1) amortized `InsertAt`/
+  `DeleteAt` at a moving edit point, paying an O(distance) memmove only
+  when that point jumps somewhere new (a click, Ctrl+Home) rather than
+  on every single keystroke the way a plain slice's
+  `append(a[:i], append(new, a[i:]...)...)` does regardless of where
+  `i` is. Generic specifically so a real document can pair each
+  character with its own formatting in one buffer instead of two
+  parallel slices that could drift out of sync (see
+  `examples/canvas-editor-app/model.go`'s `char` type, which does
+  exactly this). Verified against a plain-slice reference
+  implementation through 5,000 random insert/delete/read operations
+  (`TestAgainstNaiveReference`) and benchmarked against that same naive
+  approach for the realistic case -- typing 1,000 characters in the
+  middle of an already-100,000-character document -- at roughly 200x
+  faster (`go test ./buffer/... -bench=.`).
 - **`crdt`** — the offline-first sync engine: a last-writer-wins
   register per document block, keyed by ID. Each replica (a phone, a
   laptop, a sync server) mutates its own copy freely while offline via
@@ -1070,9 +1086,12 @@ generated code.
   drawn directly onto an HTML5 `<canvas>` via `domrt/html`'s
   `Context2D`, the way Google Docs' own editor renders (not
   `contenteditable`, not a `<textarea>` — see `examples/canvas-app`
-  above for the latter). `model.go` holds a flat per-character buffer
-  plus per-character `Bold`/`Italic` (insert/delete/selection/format
-  toggling as plain slice operations); `layout.go` word-wraps it
+  above for the latter). `model.go` holds the document as a
+  `buffer.GapBuffer` of `char` (a rune paired with its own `Bold`/
+  `Italic` in one buffer, not two parallel slices — see `buffer`
+  above), so insert/delete/selection/format toggling stay O(1)
+  amortized even in a large document instead of an O(n) slice shift on
+  every keystroke; `layout.go` word-wraps it
   against the canvas's own `MeasureTextWidth` so layout always matches
   what's actually drawn, and hit-tests a click/drag position back to a
   character index. Real keyboard input (including paste and IME
