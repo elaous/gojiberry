@@ -318,8 +318,11 @@ func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 		return "", 0, p.errorf(chunk, pos, "expected tag name after '<'")
 	}
 	name := string(chunk[nameStart:pos])
+	if !isComponentName(name) && !isKnownTag(name) {
+		return "", 0, p.errorf(chunk, nameStart, "unknown HTML tag <%s>: not a recognized HTML element, not a custom element (needs a hyphen, e.g. <my-widget>), and not a Component (needs a capital first letter); if this is a real tag gox doesn't know about yet, add it to validHTMLTags in internal/transpile/htmlvalidate.go", name)
+	}
 
-	attrs, pos, err := p.parseAttrs(chunk, pos)
+	attrs, pos, err := p.parseAttrs(chunk, pos, name)
 	if err != nil {
 		return "", 0, err
 	}
@@ -347,8 +350,16 @@ func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 
 func isSpace(r rune) bool { return r == ' ' || r == '\t' || r == '\n' || r == '\r' }
 
-func (p *parser) parseAttrs(chunk []rune, pos int) ([]attr, int, error) {
+func (p *parser) parseAttrs(chunk []rune, pos int, tagName string) ([]attr, int, error) {
 	n := len(chunk)
+	// Attribute-name validation only applies to a standard HTML element
+	// (tagName is empty for a fragment, which has no attrs anyway): a
+	// Component's attrs are its Props struct's own field names, which
+	// can be anything the component declares, and a custom element
+	// (a hyphenated tag name, e.g. <my-widget>) conventionally takes
+	// arbitrary custom attributes for the same reason a Component's
+	// props do -- that's the point of a custom element.
+	validateAttrs := tagName != "" && !isComponentName(tagName) && !strings.ContainsRune(tagName, '-')
 	var attrs []attr
 	for {
 		for pos < n && isSpace(chunk[pos]) {
@@ -368,6 +379,9 @@ func (p *parser) parseAttrs(chunk []rune, pos int) ([]attr, int, error) {
 			return nil, 0, p.errorf(chunk, pos, "expected attribute name")
 		}
 		name := string(chunk[nameStart:pos])
+		if validateAttrs && !isEventAttr(name) && !isKnownAttr(name) {
+			return nil, 0, p.errorf(chunk, nameStart, "unknown HTML attribute %q on <%s>: not a recognized HTML attribute and not data-*/aria-*; if this is real, add it to validHTMLAttrs in internal/transpile/htmlvalidate.go", name, tagName)
+		}
 
 		save := pos
 		for pos < n && isSpace(chunk[pos]) {
@@ -542,9 +556,16 @@ func isEventAttr(name string) bool {
 	return unicode.IsUpper(rune(name[2]))
 }
 
+// eventNameFor derives the real DOM event name from an onX attribute,
+// e.g. onClick -> "click", onKeyDown -> "keydown". Real DOM event
+// names are always fully lowercase, including multi-word ones
+// (addEventListener("keyDown", ...) never fires -- only the exact
+// string "keydown" does) -- lowercasing only the first letter (an
+// earlier version of this function's bug) happened to work for
+// single-word names like onClick/onInput purely by coincidence, since
+// there's no second capital to get wrong.
 func eventNameFor(attrName string) string {
-	rest := attrName[2:]
-	return strings.ToLower(rest[:1]) + rest[1:]
+	return strings.ToLower(attrName[2:])
 }
 
 func (p *parser) renderFragment(children []childNode) string {
