@@ -78,29 +78,35 @@ func newEditor(doc *html.Document) *editor {
 func loadDocument() *document {
 	if saved, ok := browser.LocalStorage.Get(storageKey); ok && saved != "" {
 		if d, err := unmarshalDocument(saved); err == nil {
-			d.Cursor = len(d.Chars)
+			d.Cursor = d.Len()
 			d.Anchor = d.Cursor
 			return d
 		}
 	}
 	d := &document{}
 	d.insert("Welcome to the ")
-	start := len(d.Chars)
+	start := d.Len()
 	d.insert("canvas-rendered")
-	for i := start; i < len(d.Chars); i++ {
-		d.Fmt[i].Bold = true
+	for i := start; i < d.Len(); i++ {
+		f := d.fmtAt(i)
+		f.Bold = true
+		d.setFmtAt(i, f)
 	}
 	d.insert(" document editor. Select some text and click ")
-	start = len(d.Chars)
+	start = d.Len()
 	d.insert("Bold")
-	for i := start; i < len(d.Chars); i++ {
-		d.Fmt[i].Bold = true
+	for i := start; i < d.Len(); i++ {
+		f := d.fmtAt(i)
+		f.Bold = true
+		d.setFmtAt(i, f)
 	}
 	d.insert(" or ")
-	start = len(d.Chars)
+	start = d.Len()
 	d.insert("Italic")
-	for i := start; i < len(d.Chars); i++ {
-		d.Fmt[i].Italic = true
+	for i := start; i < d.Len(); i++ {
+		f := d.fmtAt(i)
+		f.Italic = true
+		d.setFmtAt(i, f)
 	}
 	d.insert(".")
 	return d
@@ -155,7 +161,8 @@ func (ed *editor) redrawImpl(followCursor bool) {
 	}
 
 	ed.ctx.SetFillStyle("rgb(17, 24, 39)")
-	for i, ch := range ed.doc.Chars {
+	for i := 0; i < ed.doc.Len(); i++ {
+		ch := ed.doc.runeAt(i)
 		if ch == '\n' {
 			continue
 		}
@@ -163,7 +170,7 @@ func (ed *editor) redrawImpl(followCursor bool) {
 		if y < topMargin-lineHeight || y > h+lineHeight {
 			continue // outside the viewport -- skip the paint, not just clip it
 		}
-		ed.ctx.SetFont(fontFor(ed.doc.Fmt[i]))
+		ed.ctx.SetFont(fontFor(ed.doc.fmtAt(i)))
 		ed.ctx.FillText(string(ch), lay.Chars[i].X, y)
 	}
 
@@ -221,9 +228,10 @@ func (ed *editor) updateDebugState() {
 	lo, hi := ed.doc.selection()
 	bold, italic := false, false
 	if ed.doc.hasSelection() {
-		bold, italic = ed.doc.Fmt[lo].Bold, ed.doc.Fmt[lo].Italic
+		f := ed.doc.fmtAt(lo)
+		bold, italic = f.Bold, f.Italic
 	}
-	text := string(ed.doc.Chars)
+	text := ed.doc.String()
 	ed.document.GetElementByID("doc-state").SetTextContent(
 		"text=" + text +
 			" cursor=" + itoa(ed.doc.Cursor) +
@@ -343,14 +351,14 @@ func (ed *editor) wire() {
 		case "ArrowLeft":
 			e.PreventDefault()
 			if e.CtrlKey || e.MetaKey {
-				ed.doc.moveCursor(wordBoundaryBackward(ed.doc.Chars, ed.doc.Cursor), e.ShiftKey)
+				ed.doc.moveCursor(wordBoundaryBackward(ed.doc, ed.doc.Cursor), e.ShiftKey)
 			} else {
 				ed.doc.moveCursor(ed.doc.Cursor-1, e.ShiftKey)
 			}
 		case "ArrowRight":
 			e.PreventDefault()
 			if e.CtrlKey || e.MetaKey {
-				ed.doc.moveCursor(wordBoundaryForward(ed.doc.Chars, ed.doc.Cursor), e.ShiftKey)
+				ed.doc.moveCursor(wordBoundaryForward(ed.doc, ed.doc.Cursor), e.ShiftKey)
 			} else {
 				ed.doc.moveCursor(ed.doc.Cursor+1, e.ShiftKey)
 			}
@@ -381,7 +389,7 @@ func (ed *editor) wire() {
 			if e.CtrlKey || e.MetaKey {
 				e.PreventDefault()
 				ed.doc.Anchor = 0
-				ed.doc.Cursor = len(ed.doc.Chars)
+				ed.doc.Cursor = ed.doc.Len()
 			} else {
 				return
 			}
