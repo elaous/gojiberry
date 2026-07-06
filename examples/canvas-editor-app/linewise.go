@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// linewise.go adds VSCode-style commands on top of model.go's flat
+// linewise.go adds VSCode-style commands on top of model.go's
 // character buffer: move/duplicate the *logical* line containing the
 // cursor, transform a selection's case, and jump/select by word
 // boundary. "Logical line" here means a run of characters delimited
@@ -13,24 +13,25 @@ package main
 
 import "unicode"
 
-// lineRange is one logical line's character span in
-// document.Chars/Fmt: [Start, End), not including its own trailing
-// '\n' (there is none for the last line).
+// lineRange is one logical line's character span in document: [Start,
+// End), not including its own trailing '\n' (there is none for the
+// last line).
 type lineRange struct {
 	Start, End int
 }
 
-// logicalLines splits d.Chars on '\n' into lineRanges.
+// logicalLines splits d's characters on '\n' into lineRanges.
 func (d *document) logicalLines() []lineRange {
 	lines := make([]lineRange, 0, 1)
 	start := 0
-	for i, ch := range d.Chars {
-		if ch == '\n' {
+	n := d.Len()
+	for i := 0; i < n; i++ {
+		if d.runeAt(i) == '\n' {
 			lines = append(lines, lineRange{Start: start, End: i})
 			start = i + 1
 		}
 	}
-	return append(lines, lineRange{Start: start, End: len(d.Chars)})
+	return append(lines, lineRange{Start: start, End: n})
 }
 
 // lineContaining returns the index into lines of the line containing
@@ -78,30 +79,20 @@ func (d *document) swapLines(a, b lineRange) {
 		col = d.Cursor - b.Start
 	}
 
-	aText := append([]rune{}, d.Chars[a.Start:a.End]...)
-	bText := append([]rune{}, d.Chars[b.Start:b.End]...)
-	aFmt := append([]charFormat{}, d.Fmt[a.Start:a.End]...)
-	bFmt := append([]charFormat{}, d.Fmt[b.Start:b.End]...)
+	aChars := d.buf.Slice(a.Start, a.End)
+	bChars := d.buf.Slice(b.Start, b.End)
 
-	newChars := make([]rune, 0, len(d.Chars))
-	newFmt := make([]charFormat, 0, len(d.Fmt))
-	newChars = append(newChars, d.Chars[:a.Start]...)
-	newFmt = append(newFmt, d.Fmt[:a.Start]...)
-	newChars = append(newChars, bText...)
-	newFmt = append(newFmt, bFmt...)
-	newChars = append(newChars, '\n')
-	newFmt = append(newFmt, charFormat{})
-	newChars = append(newChars, aText...)
-	newFmt = append(newFmt, aFmt...)
-	newChars = append(newChars, d.Chars[b.End:]...)
-	newFmt = append(newFmt, d.Fmt[b.End:]...)
-	d.Chars = newChars
-	d.Fmt = newFmt
+	d.buf.DeleteAt(a.Start, b.End-a.Start)
+	replacement := make([]char, 0, len(aChars)+len(bChars)+1)
+	replacement = append(replacement, bChars...)
+	replacement = append(replacement, char{Rune: '\n'})
+	replacement = append(replacement, aChars...)
+	d.buf.InsertAt(a.Start, replacement...)
 
 	// b's content now sits first (at a.Start), a's content second, right
 	// after b's (possibly different) length plus the separator.
 	if onA {
-		d.Cursor = a.Start + len(bText) + 1 + col
+		d.Cursor = a.Start + len(bChars) + 1 + col
 	} else {
 		d.Cursor = a.Start + col
 	}
@@ -113,24 +104,15 @@ func (d *document) swapLines(a, b lineRange) {
 // cursor at the same column in the new copy.
 func (d *document) duplicateLine() {
 	lines := d.logicalLines()
-	l := lines[lineContaining(lines, d.Cursor)]
+	li := lineContaining(lines, d.Cursor)
+	l := lines[li]
 	col := d.Cursor - l.Start
 
-	lineChars := append([]rune{}, d.Chars[l.Start:l.End]...)
-	lineFmt := append([]charFormat{}, d.Fmt[l.Start:l.End]...)
-
-	newChars := make([]rune, 0, len(d.Chars)+len(lineChars)+1)
-	newFmt := make([]charFormat, 0, len(d.Fmt)+len(lineFmt)+1)
-	newChars = append(newChars, d.Chars[:l.End]...)
-	newFmt = append(newFmt, d.Fmt[:l.End]...)
-	newChars = append(newChars, '\n')
-	newFmt = append(newFmt, charFormat{})
-	newChars = append(newChars, lineChars...)
-	newFmt = append(newFmt, lineFmt...)
-	newChars = append(newChars, d.Chars[l.End:]...)
-	newFmt = append(newFmt, d.Fmt[l.End:]...)
-	d.Chars = newChars
-	d.Fmt = newFmt
+	lineChars := d.buf.Slice(l.Start, l.End)
+	insert := make([]char, 0, len(lineChars)+1)
+	insert = append(insert, char{Rune: '\n'})
+	insert = append(insert, lineChars...)
+	d.buf.InsertAt(l.End, insert...)
 
 	d.Cursor = l.End + 1 + col
 	d.Anchor = d.Cursor
@@ -143,11 +125,13 @@ func (d *document) duplicateLine() {
 func (d *document) transformSelectionCase(upper bool) {
 	lo, hi := d.selection()
 	for i := lo; i < hi; i++ {
+		c := d.buf.At(i)
 		if upper {
-			d.Chars[i] = unicode.ToUpper(d.Chars[i])
+			c.Rune = unicode.ToUpper(c.Rune)
 		} else {
-			d.Chars[i] = unicode.ToLower(d.Chars[i])
+			c.Rune = unicode.ToLower(c.Rune)
 		}
+		d.buf.Set(i, c)
 	}
 }
 
@@ -159,27 +143,27 @@ func isWordChar(r rune) bool {
 }
 
 // wordBoundaryForward returns the index just past the end of the next
-// word after idx (skipping any non-word run first) -- Ctrl+Right's
-// target.
-func wordBoundaryForward(chars []rune, idx int) int {
-	n := len(chars)
+// word in d after idx (skipping any non-word run first) -- Ctrl+
+// Right's target.
+func wordBoundaryForward(d *document, idx int) int {
+	n := d.Len()
 	i := idx
-	for i < n && !isWordChar(chars[i]) {
+	for i < n && !isWordChar(d.runeAt(i)) {
 		i++
 	}
-	for i < n && isWordChar(chars[i]) {
+	for i < n && isWordChar(d.runeAt(i)) {
 		i++
 	}
 	return i
 }
 
 // wordBoundaryBackward is wordBoundaryForward's mirror for Ctrl+Left.
-func wordBoundaryBackward(chars []rune, idx int) int {
+func wordBoundaryBackward(d *document, idx int) int {
 	i := idx
-	for i > 0 && !isWordChar(chars[i-1]) {
+	for i > 0 && !isWordChar(d.runeAt(i-1)) {
 		i--
 	}
-	for i > 0 && isWordChar(chars[i-1]) {
+	for i > 0 && isWordChar(d.runeAt(i-1)) {
 		i--
 	}
 	return i
