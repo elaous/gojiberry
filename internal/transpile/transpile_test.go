@@ -172,3 +172,67 @@ func TestMismatchedCloseTagErrors(t *testing.T) {
 		t.Fatal("expected an error for mismatched closing tag")
 	}
 }
+
+// TestMultiWordEventAttrUsesRealDOMEventName guards against a real bug
+// eventNameFor once had: lowercasing only the first letter of a
+// multi-word event attribute (onKeyDown -> "keyDown") produces a name
+// no real DOM event ever fires under -- addEventListener("keyDown",
+// ...) silently never calls the handler, since the real event name is
+// "keydown", fully lowercase. onClick/onInput never caught this since
+// their event names have no second capital letter to get wrong.
+func TestMultiWordEventAttrUsesRealDOMEventName(t *testing.T) {
+	got := transpileExpr(t, `return <div onKeyDown={handleKey}>x</div>`)
+	want := `return gox.El("div", []gox.Attr{gox.On("keydown", handleKey)}, gox.Text("x"))`
+	if strings.TrimSpace(got) != want {
+		t.Errorf("got:  %s\nwant: %s", got, want)
+	}
+}
+
+func TestUnknownTagErrors(t *testing.T) {
+	_, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <dvi>hi</dvi>`))
+	if err == nil {
+		t.Fatal("expected an error for a typo'd tag name (<dvi> for <div>)")
+	}
+	if !strings.Contains(err.Error(), "dvi") {
+		t.Errorf("expected error to mention the bad tag name, got: %v", err)
+	}
+}
+
+func TestCustomElementWithHyphenIsAlwaysAllowed(t *testing.T) {
+	got := transpileExpr(t, `return <my-widget foo="bar"></my-widget>`)
+	want := `return gox.El("my-widget", []gox.Attr{gox.A("foo", "bar")})`
+	if strings.TrimSpace(got) != want {
+		t.Errorf("got:  %s\nwant: %s", got, want)
+	}
+}
+
+func TestUnknownAttrErrors(t *testing.T) {
+	_, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <div calss="x">hi</div>`))
+	if err == nil {
+		t.Fatal("expected an error for a typo'd attribute name (calss for class)")
+	}
+	if !strings.Contains(err.Error(), "calss") {
+		t.Errorf("expected error to mention the bad attribute name, got: %v", err)
+	}
+}
+
+func TestDataAndAriaAttrsAreAlwaysAllowed(t *testing.T) {
+	got := transpileExpr(t, `return <div data-testid="x" aria-label="y"></div>`)
+	want := `return gox.El("div", []gox.Attr{gox.A("data-testid", "x"), gox.A("aria-label", "y")})`
+	if strings.TrimSpace(got) != want {
+		t.Errorf("got:  %s\nwant: %s", got, want)
+	}
+}
+
+// TestComponentAttrsAreNotValidatedAsHTML guards against validating a
+// Component's attributes (its Props struct's own field names, which
+// can be anything the component declares) as if they were HTML
+// attributes -- "label" isn't a real HTML attribute, but <Button
+// label="Save"/> is completely ordinary, valid gox.
+func TestComponentAttrsAreNotValidatedAsHTML(t *testing.T) {
+	got := transpileExpr(t, `return <Button label="Save" onClick={handleSave}/>`)
+	want := `return Button(ButtonProps{Label: "Save", OnClick: handleSave})`
+	if strings.TrimSpace(got) != want {
+		t.Errorf("got:  %s\nwant: %s", got, want)
+	}
+}
