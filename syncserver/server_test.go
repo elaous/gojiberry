@@ -146,3 +146,43 @@ func TestHealthReportsConfiguredRegion(t *testing.T) {
 		t.Fatalf("expected region %q, got %+v", "br-datacenter-1", body)
 	}
 }
+
+// TestCORSHeadersAllowCrossOriginClients is this relay's whole reason
+// for existing: a client's own static assets are almost never served
+// from the same origin as the sync relay (a different host, port, or
+// both), and a browser's fetch() enforces CORS before a request ever
+// reaches handleOps at all. Confirms both a preflight OPTIONS request
+// (what the browser sends ahead of the client's actual POST, since a
+// JSON body with an explicit Content-Type isn't a CORS "simple
+// request") and the real POST/GET calls carry the header a
+// cross-origin fetch() requires.
+func TestCORSHeadersAllowCrossOriginClients(t *testing.T) {
+	s := NewServer(Config{Region: "br-datacenter-1"})
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodOptions, srv.URL+"/ops", nil)
+	if err != nil {
+		t.Fatalf("building OPTIONS request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("OPTIONS /ops: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("OPTIONS /ops: expected 204, got %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("OPTIONS /ops: expected Access-Control-Allow-Origin: *, got %q", got)
+	}
+
+	getResp, err := http.Get(srv.URL + "/ops")
+	if err != nil {
+		t.Fatalf("GET /ops: %v", err)
+	}
+	defer getResp.Body.Close()
+	if got := getResp.Header.Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("GET /ops: expected Access-Control-Allow-Origin: *, got %q", got)
+	}
+}
