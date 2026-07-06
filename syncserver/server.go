@@ -77,12 +77,31 @@ func NewServer(cfg Config) *Server {
 // Handler returns the HTTP routes: POST /ops to push a client's
 // pending delta, GET /ops for a full snapshot (fresh-device
 // onboarding), GET /health to confirm which region this instance is
-// configured for.
+// configured for. Every response carries permissive CORS headers and
+// OPTIONS preflight requests short-circuit with no further routing --
+// this relay's entire reason to exist is being reachable from a
+// client on a different origin (a different host, port, or both from
+// wherever the client's own static assets are served), so without
+// this a browser's own fetch() would refuse every request outright
+// before it ever reached handleOps.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/ops", s.handleOps)
-	return mux
+	return corsMiddleware(mux)
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
