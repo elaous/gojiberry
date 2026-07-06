@@ -21,6 +21,14 @@ serve:
 	@echo "open http://localhost:8080/"
 	python3 -m http.server 8080
 
+.PHONY: screenshot
+screenshot: generate wasm
+	@python3 -m http.server 8080 >/tmp/wasm-components-demo-server.log 2>&1 & echo $$! > /tmp/wasm-components-demo-server.pid
+	@timeout 10 bash -c 'until curl -sf http://localhost:8080/index.html >/dev/null; do sleep 0.5; done'
+	NODE_PATH="$$(npm root -g)" node screenshot.js
+	@kill "$$(cat /tmp/wasm-components-demo-server.pid)" 2>/dev/null || true
+	@echo "wrote screenshot.png"
+
 .PHONY: clean
 clean:
-	rm -f main.wasm wasm_exec.js *.css
+	rm -f main.wasm wasm_exec.js *.css screenshot.png

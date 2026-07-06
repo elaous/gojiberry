@@ -10,6 +10,7 @@
 *.wasm
 wasm_exec.js
 examples/wasm-components-demo/*.css
+examples/wasm-components-demo/screenshot.png
 examples/showcase-app/*.css
 examples/collab-editor-app/static/*.css
 
