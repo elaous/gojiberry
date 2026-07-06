@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/elaous/gojiberry/devreload"
 	"github.com/elaous/gojiberry/examples/canvas-app/canvas"
 )
 
@@ -34,7 +35,7 @@ func TestDevserverEndToEnd(t *testing.T) {
 	t.Cleanup(func() { db.Exec(`DELETE FROM documents`) })
 
 	store := canvas.NewStore(db)
-	srv := httptest.NewServer(newMux(store, false))
+	srv := httptest.NewServer(newMux(store, nil))
 	defer srv.Close()
 
 	// Create a document.
@@ -133,7 +134,7 @@ func TestDevModeInjectsLiveReloadScript(t *testing.T) {
 	}
 	store := canvas.NewStore(db)
 
-	devSrv := httptest.NewServer(newMux(store, true))
+	devSrv := httptest.NewServer(newMux(store, devreload.New()))
 	defer devSrv.Close()
 
 	resp, err := http.Get(devSrv.URL + "/")
@@ -156,7 +157,7 @@ func TestDevModeInjectsLiveReloadScript(t *testing.T) {
 		t.Fatalf("expected a non-empty dev version, got status %d body %q", resp.StatusCode, verBody)
 	}
 
-	prodSrv := httptest.NewServer(newMux(store, false))
+	prodSrv := httptest.NewServer(newMux(store, nil))
 	defer prodSrv.Close()
 
 	resp, err = http.Get(prodSrv.URL + "/")
