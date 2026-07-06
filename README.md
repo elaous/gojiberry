@@ -277,7 +277,10 @@ expanded by the same recursive scan, with no extra grammar required.
   non-focusable element like a bare `<canvas>` makes the browser clear
   focus right after every mousedown handler returns, silently undoing
   a same-handler call to focus something else, unless you prevent that
-  default first.
+  default first. `Element.OnWheel` reports a typed `WheelEvent`
+  (`DeltaX`/`DeltaY`) the same way, for anything that needs to drive
+  its own scroll position — a canvas has none of its own to read back,
+  unlike a normal scrollable DOM element.
 - **`domrt/svg`** (`GOOS=js GOARCH=wasm`) — `svg.CreateElement(document,
   tag)` creates an SVG element in the right namespace (`svg.Namespace`)
   — `createElement` alone produces an unrenderable element in the
@@ -1075,14 +1078,44 @@ generated code.
   silently undoing a same-handler call to focus the hidden input,
   unless `MouseEvent.PreventDefault` is called first. Content
   autosaves to `localStorage` as a run-length-encoded JSON array.
-  Verified against a real headless Chromium: typing, Backspace,
-  Enter/line breaks, click-to-position, Shift+Arrow and real
-  mouse-drag selection, Bold/Italic actually flipping the model's
-  per-character format (not just the button registering a click), and
-  content surviving a reload via the same autosave path:
+
+  `linewise.go` adds VSCode-style commands on top of the same buffer:
+  Ctrl/Cmd+Left/Right jumps (and, with Shift, selects) by word boundary;
+  Alt+Up/Down moves the *logical* line under the cursor (a run
+  delimited by `'\n'`, deliberately distinct from `layout.go`'s
+  word-*wrapped* visual row — one logical line soft-wrapped across
+  three rows is still one line to this command); Shift+Alt+Down
+  duplicates it; Ctrl/Cmd+Shift+U/L upper/lowercases the current
+  selection. The canvas also now scrolls: `Element.OnWheel` (another
+  small addition this example motivated, alongside `domrt/html`'s new
+  `Selection`/`GetSelection` wrapper) drives a `scrollY` offset that
+  every draw call and hit-test subtracts/adds, clamped to the
+  document's actual content height, with the viewport auto-following
+  the cursor on every edit *except* a manual wheel-scroll or the caret
+  blink timer -- both call `redrawPreservingScroll` instead of
+  `redraw`, or the editor would snap back to the cursor on every single
+  repaint and manual scrolling would be impossible.
+
+  Verified against a real headless Chromium, via a committed test
+  (`canvas_editor_test.go` + `e2e/verify.js`, driven by Playwright) —
+  not just ad hoc manual checking: typing, Backspace, Enter/line
+  breaks, click-to-position, Shift+Arrow and real mouse-drag selection,
+  Bold/Italic actually flipping the model's per-character format (not
+  just the button registering a click), move/duplicate-line actually
+  reordering the buffer's logical lines (not just the visual rows),
+  word-boundary selection landing on exact character offsets,
+  upper/lowercasing an actual selection, and wheel-scrolling both
+  auto-following the cursor while typing past the viewport and clamping
+  correctly at both ends:
 
   ```
   go generate ./...
+  go test ./examples/canvas-editor-app/...
+  ```
+
+  Or run it directly in a browser:
+
+  ```
   GOOS=js GOARCH=wasm go build -o examples/canvas-editor-app/main.wasm ./examples/canvas-editor-app/
   cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/canvas-editor-app/
   cd examples/canvas-editor-app && python3 -m http.server 8080
