@@ -162,7 +162,19 @@ expanded by the same recursive scan, with no extra grammar required.
 - **`internal/transpile`** — the `.gox` → `.go` source-to-source
   transpiler described above, plus the stable resource-import loaders
   (JSON/JSONC/JSONL) and the `@title`/`@stylesheets`/`@wasm`
-  page-metadata annotations, both described below.
+  page-metadata annotations, both described below. Beyond tag/brace
+  structure (mismatched/unterminated tags, malformed attributes — all
+  caught with a real line/col error), a lowercase tag's name and its
+  non-event attribute names are validated against a real HTML tag/
+  attribute list (`htmlvalidate.go`) — `<dvi>` (a typo for `<div>`) or
+  `calss="x"` (for `class`) now error at transpile time instead of
+  silently rendering broken markup with no warning anywhere. A tag
+  name containing a hyphen (a custom element, e.g. `<my-widget>`) and
+  its attributes are always accepted, the same as a Component's own
+  props — neither is a fixed HTML vocabulary. `data-*`/`aria-*`
+  attributes are always accepted too, per their own specs. If gox
+  rejects a real tag/attribute this list is simply missing, add it to
+  `validHTMLTags`/`validHTMLAttrs`.
 - **`internal/transpile/experimental`** — the resource-import loaders
   that shell out to a mature external tool this project doesn't
   reimplement (HCL/proto/capnp/sqlc), wired in only via
