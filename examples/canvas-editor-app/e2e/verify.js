@@ -143,6 +143,42 @@ function field(state, name) {
   const scrollAtBottom = parseInt(field(state, 'scrollY'), 10);
   assert(scrollAtBottom > scrollAfterTyping - 50, 'wheel-scrolling far down clamps near the bottom, got scrollY=' + scrollAtBottom);
 
+  // --- Multi-cursor: Alt+Click adds a cursor, typing fans out to all
+  // of them, Escape collapses back to one ---
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.type('aaaaaaaaaa');
+
+  await page.mouse.click(box.x + 10, box.y + 10);
+  state = await docState(page);
+  assert(field(state, 'cursors').split(',').length === 1, 'plain click leaves a single cursor, got cursors=' + field(state, 'cursors'));
+
+  await page.keyboard.down('Alt');
+  await page.mouse.click(box.x + 60, box.y + 10);
+  await page.keyboard.up('Alt');
+  state = await docState(page);
+  const cursorsAfterAltClick = field(state, 'cursors').split(',');
+  assert(cursorsAfterAltClick.length === 2, 'Alt+Click added a second cursor, got cursors=' + field(state, 'cursors'));
+
+  const lenBeforeMultiType = field(state, 'text').length;
+  await page.keyboard.type('X');
+  state = await docState(page);
+  text = field(state, 'text');
+  assert(text.length === lenBeforeMultiType + 2, 'typing "X" inserted at both cursors, got: ' + JSON.stringify(text));
+  assert((text.match(/X/g) || []).length === 2, 'exactly two X characters were inserted, got: ' + JSON.stringify(text));
+  assert(field(state, 'cursors').split(',').length === 2, 'both cursors are still live after typing, got cursors=' + field(state, 'cursors'));
+
+  await page.keyboard.press('Escape');
+  state = await docState(page);
+  assert(field(state, 'cursors').split(',').length === 1, 'Escape collapsed back to a single cursor, got cursors=' + field(state, 'cursors'));
+
+  const lenBeforeSingleType = field(state, 'text').length;
+  await page.keyboard.type('Y');
+  state = await docState(page);
+  text = field(state, 'text');
+  assert(text.length === lenBeforeSingleType + 1, 'typing "Y" after Escape inserted only once, got: ' + JSON.stringify(text));
+  assert((text.match(/Y/g) || []).length === 1, 'exactly one Y character was inserted, got: ' + JSON.stringify(text));
+
   // Chromium's automatic favicon.ico request 404s (this demo serves
   // none) and gets logged as a generic console error with no URL in
   // its text -- filtered out by that exact generic message rather than

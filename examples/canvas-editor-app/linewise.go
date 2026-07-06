@@ -1,5 +1,3 @@
-//go:build js && wasm
-
 // linewise.go adds VSCode-style commands on top of model.go's
 // character buffer: move/duplicate the *logical* line containing the
 // cursor, transform a selection's case, and jump/select by word
@@ -47,10 +45,23 @@ func lineContaining(lines []lineRange, idx int) int {
 	return len(lines) - 1
 }
 
-// moveLineUp swaps the logical line containing the cursor with the
-// one immediately above it (VSCode's Alt+Up), keeping the cursor at
-// the same column within its line's content. No-op on the first line.
+// moveLineUp swaps the logical line containing the primary cursor with
+// the one immediately above it (VSCode's Alt+Up), keeping the cursor
+// at the same column within its line's content. No-op on the first
+// line.
+//
+// Multi-cursor support isn't implemented for this (or moveLineDown/
+// duplicateLine below): swapping lines while other cursors sit
+// somewhere in the affected span would leave their Pos/Anchor
+// silently pointing at the wrong place, since -- unlike insert/
+// backspace/delete, which fan out across every cursor deliberately --
+// this mutates the buffer via a single, primary-cursor-specific path.
+// Rather than leave that corruption possible, these three collapse to
+// just the primary first: using one of them while multiple cursors
+// are active drops back to single-cursor mode, a clearly-visible
+// effect instead of a silent bug.
 func (d *document) moveLineUp() {
+	d.collapseCursors()
 	lines := d.logicalLines()
 	li := lineContaining(lines, d.Cursor)
 	if li == 0 {
@@ -60,8 +71,10 @@ func (d *document) moveLineUp() {
 }
 
 // moveLineDown is moveLineUp's mirror (VSCode's Alt+Down). No-op on
-// the last line.
+// the last line. See moveLineUp's doc comment for why this collapses
+// to the primary cursor first.
 func (d *document) moveLineDown() {
+	d.collapseCursors()
 	lines := d.logicalLines()
 	li := lineContaining(lines, d.Cursor)
 	if li >= len(lines)-1 {
@@ -100,9 +113,12 @@ func (d *document) swapLines(a, b lineRange) {
 }
 
 // duplicateLine inserts a copy of the logical line containing the
-// cursor directly below itself (VSCode's Shift+Alt+Down), leaving the
-// cursor at the same column in the new copy.
+// primary cursor directly below itself (VSCode's Shift+Alt+Down),
+// leaving the cursor at the same column in the new copy. See
+// moveLineUp's doc comment for why this collapses to the primary
+// cursor first.
 func (d *document) duplicateLine() {
+	d.collapseCursors()
 	lines := d.logicalLines()
 	li := lineContaining(lines, d.Cursor)
 	l := lines[li]
@@ -116,23 +132,6 @@ func (d *document) duplicateLine() {
 
 	d.Cursor = l.End + 1 + col
 	d.Anchor = d.Cursor
-}
-
-// transformSelectionCase upper/lowercases the current selection in
-// place. No-op with no selection -- unlike VSCode (which falls back to
-// the word under the cursor), this demo requires an explicit
-// selection, kept simple on purpose.
-func (d *document) transformSelectionCase(upper bool) {
-	lo, hi := d.selection()
-	for i := lo; i < hi; i++ {
-		c := d.buf.At(i)
-		if upper {
-			c.Rune = unicode.ToUpper(c.Rune)
-		} else {
-			c.Rune = unicode.ToLower(c.Rune)
-		}
-		d.buf.Set(i, c)
-	}
 }
 
 // isWordChar reports whether r counts as part of a "word" for

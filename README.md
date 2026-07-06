@@ -1127,6 +1127,27 @@ generated code.
   `redraw`, or the editor would snap back to the cursor on every single
   repaint and manual scrolling would be impossible.
 
+  The document also supports full multi-cursor editing (VSCode's
+  Alt+Click to add a caret, Escape to collapse back to one): `model.go`
+  keeps a primary `Cursor`/`Anchor` plus `ExtraCursors []cursor`, and
+  every buffer-mutating command (`insert`, `backspace`, `delete`,
+  format/case toggling) fans out across all of them through
+  `forEachCursorDescending`, which processes cursors from highest
+  position to lowest so an edit never invalidates a not-yet-processed
+  cursor, then rebases every *already*-processed (higher) cursor by
+  each subsequent edit's length delta — miss that second half and
+  cursors above an edit silently drift by the wrong amount whenever two
+  cursors' selections differ in size (covered by
+  `TestMultiCursorReplaceDifferentLengthSelections`). Line/word commands
+  in `linewise.go` (move/duplicate line) aren't multi-cursor aware —
+  rather than risk silently corrupting other cursors' positions, they
+  collapse to just the primary first, a visible effect instead of a
+  latent bug. `model_test.go` covers the cursor model natively (no
+  browser needed) via a `//go:build !(js && wasm)` split: `model.go`/
+  `linewise.go` carry no build tag so `go test` can exercise them
+  directly, and `native_stub.go` supplies the `func main` other
+  platforms need since the real one (in `main.gox`) is wasm-only.
+
   Verified against a real headless Chromium, via a committed test
   (`canvas_editor_test.go` + `e2e/verify.js`, driven by Playwright) —
   not just ad hoc manual checking: typing, Backspace, Enter/line
@@ -1135,9 +1156,11 @@ generated code.
   just the button registering a click), move/duplicate-line actually
   reordering the buffer's logical lines (not just the visual rows),
   word-boundary selection landing on exact character offsets,
-  upper/lowercasing an actual selection, and wheel-scrolling both
+  upper/lowercasing an actual selection, wheel-scrolling both
   auto-following the cursor while typing past the viewport and clamping
-  correctly at both ends:
+  correctly at both ends, and multi-cursor editing end to end
+  (Alt+Click adding a second caret, a single keystroke inserting at
+  both, Escape collapsing back to one):
 
   ```
   go generate ./...

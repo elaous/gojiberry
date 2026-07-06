@@ -147,9 +147,14 @@ func (ed *editor) redrawImpl(followCursor bool) {
 
 	ed.ctx.ClearRect(0, 0, w, h)
 
-	if ed.doc.hasSelection() {
-		lo, hi := ed.doc.selection()
-		ed.ctx.SetFillStyle("rgba(37, 99, 235, 0.25)")
+	cursors := ed.doc.cursors()
+
+	ed.ctx.SetFillStyle("rgba(37, 99, 235, 0.25)")
+	for _, c := range cursors {
+		lo, hi := c.Anchor, c.Pos
+		if lo > hi {
+			lo, hi = hi, lo
+		}
 		for i := lo; i < hi; i++ {
 			cl, next := lay.Chars[i], lay.Chars[i+1]
 			width := next.X - cl.X
@@ -174,14 +179,19 @@ func (ed *editor) redrawImpl(followCursor bool) {
 		ed.ctx.FillText(string(ch), lay.Chars[i].X, y)
 	}
 
-	if !ed.doc.hasSelection() && ed.caretOn {
-		cl := lay.Chars[ed.doc.Cursor]
+	if ed.caretOn {
 		ed.ctx.SetStrokeStyle("rgb(17, 24, 39)")
 		ed.ctx.SetLineWidth(1)
-		ed.ctx.BeginPath()
-		ed.ctx.MoveTo(cl.X, cl.Y-fontSize-ed.scrollY)
-		ed.ctx.LineTo(cl.X, cl.Y+4-ed.scrollY)
-		ed.ctx.Stroke()
+		for _, c := range cursors {
+			if c.Pos != c.Anchor {
+				continue // has a selection -- the highlight above stands in for a caret
+			}
+			cl := lay.Chars[c.Pos]
+			ed.ctx.BeginPath()
+			ed.ctx.MoveTo(cl.X, cl.Y-fontSize-ed.scrollY)
+			ed.ctx.LineTo(cl.X, cl.Y+4-ed.scrollY)
+			ed.ctx.Stroke()
+		}
 	}
 
 	ed.updateDebugState()
@@ -232,13 +242,27 @@ func (ed *editor) updateDebugState() {
 		bold, italic = f.Bold, f.Italic
 	}
 	text := ed.doc.String()
+
+	cursorsStr := ""
+	for i, c := range ed.doc.cursors() {
+		if i > 0 {
+			cursorsStr += ","
+		}
+		clo, chi := c.Anchor, c.Pos
+		if clo > chi {
+			clo, chi = chi, clo
+		}
+		cursorsStr += itoa(clo) + "-" + itoa(chi)
+	}
+
 	ed.document.GetElementByID("doc-state").SetTextContent(
 		"text=" + text +
 			" cursor=" + itoa(ed.doc.Cursor) +
 			" sel=" + itoa(lo) + "-" + itoa(hi) +
 			" selBold=" + boolstr(bold) +
 			" selItalic=" + boolstr(italic) +
-			" scrollY=" + itoa(int(ed.scrollY)))
+			" scrollY=" + itoa(int(ed.scrollY)) +
+			" cursors=" + cursorsStr)
 }
 
 func itoa(n int) string {
@@ -279,18 +303,25 @@ func (ed *editor) canvasLocal(x, y float64) (float64, float64) {
 	return x - rect.Left, y - rect.Top
 }
 
+// moveVertical moves every live cursor up/down one visual row, each
+// keeping its own column (X position) -- unlike horizontal/word moves,
+// the target index for each cursor depends on that cursor's own current
+// layout position, so the newPos closure passed to moveCursors captures
+// ed.lastLayout instead of being a fixed offset.
 func (ed *editor) moveVertical(dir int, extend bool) {
 	if ed.lastLayout == nil {
 		return
 	}
-	cur := ed.lastLayout.Chars[ed.doc.Cursor]
-	targetLine := cur.Line + dir
-	if targetLine < 0 || targetLine >= ed.lastLayout.Lines {
-		return
-	}
-	targetY := topMargin + float64(targetLine)*lineHeight
-	idx := hitTest(ed.lastLayout, cur.X, targetY)
-	ed.doc.moveCursor(idx, extend)
+	lay := ed.lastLayout
+	ed.doc.moveCursors(func(pos int) int {
+		cur := lay.Chars[pos]
+		targetLine := cur.Line + dir
+		if targetLine < 0 || targetLine >= lay.Lines {
+			return pos
+		}
+		targetY := topMargin + float64(targetLine)*lineHeight
+		return hitTest(lay, cur.X, targetY)
+	}, extend)
 }
 
 func (ed *editor) wire() {
@@ -302,7 +333,11 @@ func (ed *editor) wire() {
 		evt.PreventDefault()
 		lx, ly := ed.canvasLocal(evt.X, evt.Y)
 		idx := hitTest(ed.lastLayout, lx, ly+ed.scrollY)
-		ed.doc.moveCursor(idx, false)
+		if evt.AltKey {
+			ed.doc.addCursorAt(idx)
+		} else {
+			ed.doc.resetCursorTo(idx)
+		}
 		ed.dragging = true
 		ed.hidden.Focus()
 		ed.caretOn = true
@@ -351,16 +386,16 @@ func (ed *editor) wire() {
 		case "ArrowLeft":
 			e.PreventDefault()
 			if e.CtrlKey || e.MetaKey {
-				ed.doc.moveCursor(wordBoundaryBackward(ed.doc, ed.doc.Cursor), e.ShiftKey)
+				ed.doc.moveCursors(func(pos int) int { return wordBoundaryBackward(ed.doc, pos) }, e.ShiftKey)
 			} else {
-				ed.doc.moveCursor(ed.doc.Cursor-1, e.ShiftKey)
+				ed.doc.moveCursors(func(pos int) int { return pos - 1 }, e.ShiftKey)
 			}
 		case "ArrowRight":
 			e.PreventDefault()
 			if e.CtrlKey || e.MetaKey {
-				ed.doc.moveCursor(wordBoundaryForward(ed.doc, ed.doc.Cursor), e.ShiftKey)
+				ed.doc.moveCursors(func(pos int) int { return wordBoundaryForward(ed.doc, pos) }, e.ShiftKey)
 			} else {
-				ed.doc.moveCursor(ed.doc.Cursor+1, e.ShiftKey)
+				ed.doc.moveCursors(func(pos int) int { return pos + 1 }, e.ShiftKey)
 			}
 		case "ArrowUp":
 			e.PreventDefault()
@@ -381,29 +416,31 @@ func (ed *editor) wire() {
 			}
 		case "Home":
 			e.PreventDefault()
-			ed.doc.moveCursor(lineStart(ed.lastLayout, ed.doc.Cursor), e.ShiftKey)
+			ed.doc.moveCursors(func(pos int) int { return lineStart(ed.lastLayout, pos) }, e.ShiftKey)
 		case "End":
 			e.PreventDefault()
-			ed.doc.moveCursor(lineEnd(ed.lastLayout, ed.doc.Cursor), e.ShiftKey)
+			ed.doc.moveCursors(func(pos int) int { return lineEnd(ed.lastLayout, pos) }, e.ShiftKey)
+		case "Escape":
+			e.PreventDefault()
+			ed.doc.collapseCursors()
 		case "a", "A":
 			if e.CtrlKey || e.MetaKey {
 				e.PreventDefault()
-				ed.doc.Anchor = 0
-				ed.doc.Cursor = ed.doc.Len()
+				ed.doc.selectAll()
 			} else {
 				return
 			}
 		case "u", "U":
 			if (e.CtrlKey || e.MetaKey) && e.ShiftKey {
 				e.PreventDefault()
-				ed.doc.transformSelectionCase(true)
+				ed.doc.transformSelectionCaseAllCursors(true)
 			} else {
 				return
 			}
 		case "l", "L":
 			if (e.CtrlKey || e.MetaKey) && e.ShiftKey {
 				e.PreventDefault()
-				ed.doc.transformSelectionCase(false)
+				ed.doc.transformSelectionCaseAllCursors(false)
 			} else {
 				return
 			}
@@ -416,14 +453,12 @@ func (ed *editor) wire() {
 	})
 
 	ed.document.GetElementByID("toolbar-bold").AddEventListener("click", jsFuncOf(func() {
-		lo, hi := ed.doc.selection()
-		ed.doc.toggleSelectionFormat(lo, hi, formatBold)
+		ed.doc.toggleSelectionFormatAllCursors(formatBold)
 		ed.redraw()
 		ed.save()
 	}))
 	ed.document.GetElementByID("toolbar-italic").AddEventListener("click", jsFuncOf(func() {
-		lo, hi := ed.doc.selection()
-		ed.doc.toggleSelectionFormat(lo, hi, formatItalic)
+		ed.doc.toggleSelectionFormatAllCursors(formatItalic)
 		ed.redraw()
 		ed.save()
 	}))
