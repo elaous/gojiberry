@@ -38,15 +38,18 @@ type Config struct {
 	Strategy crdt.MergeStrategy
 }
 
-// ConfigFromEnv reads GOJIBERRY_SYNC_ADDR and GOJIBERRY_SYNC_REGION,
-// falling back to sane local defaults when unset. Strategy defaults to
-// crdt.MergeLWW; set it explicitly on the returned Config for a
-// MergeCharCRDT deployment, since there's no established environment
-// variable convention for it yet.
+// ConfigFromEnv reads GOJIBERRY_SYNC_ADDR, GOJIBERRY_SYNC_REGION, and
+// GOJIBERRY_SYNC_STRATEGY ("lww", the default, or "char-crdt"),
+// falling back to sane local defaults when unset.
 func ConfigFromEnv() Config {
+	strategy := crdt.MergeLWW
+	if envOr("GOJIBERRY_SYNC_STRATEGY", "lww") == "char-crdt" {
+		strategy = crdt.MergeCharCRDT
+	}
 	return Config{
-		Addr:   envOr("GOJIBERRY_SYNC_ADDR", ":8080"),
-		Region: envOr("GOJIBERRY_SYNC_REGION", "unspecified"),
+		Addr:     envOr("GOJIBERRY_SYNC_ADDR", ":8080"),
+		Region:   envOr("GOJIBERRY_SYNC_REGION", "unspecified"),
+		Strategy: strategy,
 	}
 }
 
