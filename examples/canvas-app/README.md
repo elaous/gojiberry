@@ -73,18 +73,21 @@ the main module.
   `domrt/browser.FetchOpts`, and drives a `#status` indicator through
   `domrt.Mount`/`Update` (so the diff/patch runtime is exercised here
   too, not just fetch).
-- **`cmd/devwatch`** -- `make watch`'s file watcher: on any source
-  change (excluding build output it writes itself, to avoid a feedback
-  loop) it runs `make generate` + `make wasm`, builds `cmd/devserver`
-  to a temp binary, and swaps it in for the running one via `SIGTERM`
-  + restart. `cmd/devserver`'s own `DEV=1` mode (which `cmd/devwatch`
-  sets) injects a small script into every page polling
-  `GET /__dev/version`; once a fresh process (a new value) answers,
-  the open tab reloads on its own. Not real hot module replacement --
-  a compiled `.wasm` binary is one opaque blob, not swappable modules
-  -- just a fast watch/rebuild/restart/reload loop, which is enough
-  here since the app is server-source-of-truth (a full reload always
-  reconstructs the right state from Postgres).
+- **`cmd/devwatch`** -- `make watch`'s file watcher, built on the
+  shared `github.com/elaous/gojiberry/devwatch` package (see the root
+  README): on any source change (excluding build output it writes
+  itself, to avoid a feedback loop, via `devwatch.Config.Ignore`) it
+  runs `make generate` + `make wasm`, builds `cmd/devserver` to a temp
+  binary, and swaps it in for the running one via `SIGTERM` + restart.
+  `cmd/devserver`'s own `DEV=1` mode wires the shared
+  `github.com/elaous/gojiberry/devreload` package instead of hand-rolling
+  its own version/script pair: it injects a small script into every
+  page polling `GET /__dev/version`; once a fresh process (a new
+  version) answers, the open tab reloads on its own. Not real hot
+  module replacement -- a compiled `.wasm` binary is one opaque blob,
+  not swappable modules -- just a fast watch/rebuild/restart/reload
+  loop, which is enough here since the app is server-source-of-truth
+  (a full reload always reconstructs the right state from Postgres).
 
 Both entry points (`api.go`'s Encore handlers and `cmd/devserver`) call
 the same `Store` methods and render the same `pages.gox` components --

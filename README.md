@@ -14,6 +14,113 @@ func Greeting(props GreetingProps) gox.Node {
 }
 ```
 
+## How it works
+
+Two separate steps, run at two separate times:
+
+1. **Transpile time** (`go run ./cmd/goxc <dir>`, or `go generate ./...`
+   via the repo-root `go:generate` directive): every `*.gox` file's
+   `<Tag>` expressions are rewritten into plain `gox.El`/`gox.Text`
+   calls, emitted as an ordinary `*.gox.go` file next to it. This file
+   is committed like `templ`'s own `*_templ.go` convention, so
+   `go build`/`go test` never need `goxc` on the critical path.
+2. **Run time**: your component function runs as plain compiled Go —
+   there's no interpreter, template engine, or reflection involved —
+   and returns a `gox.Node`, a plain tree (element / text / fragment /
+   raw) that carries no opinion about how it gets displayed. The same
+   tree feeds whichever renderer(s) your program calls:
+
+```mermaid
+flowchart LR
+    A[".gox source<br/>&lt;Tag&gt; as Go expressions"] -- "go run ./cmd/goxc<br/>(transpile time)" --> B[".gox.go source<br/>gox.El / gox.Text calls"]
+    B -- "go build" --> C["your compiled program"]
+    C -- "Component(props)" --> D(("gox.Node tree<br/>(renderer-agnostic)"))
+    D -- "gox.Render / RenderString" --> E["HTML string<br/>net/http, Gin, Echo, Encore, ..."]
+    D -- "domrt.Mount / Update<br/>GOOS=js GOARCH=wasm" --> F["real DOM<br/>diff/patch on every re-render"]
+    D -- "goxgio.Renderer.Layout" --> G["native Gio window<br/>desktop/mobile"]
+```
+
+The `gox.Node` tree itself never knows which of these it's headed for
+— `gox.Render`/`domrt.Mount`/a `goxgio.Renderer` are just three
+different functions that each walk the exact same tree shape and do
+something different with it (see `gox/render.go`, `domrt/domrt.go`, and
+`examples/gio-counter-demo/goxgio/render.go`, in that order, if you
+want to read the actual walk each one does). Nothing about writing a
+component needs to know or care which renderer(s) will eventually
+consume it.
+
+## Getting Started
+
+Requires Go 1.24+. This module (`github.com/elaous/gojiberry`) is
+private, so it isn't `go get`-able from outside this checkout the way a
+public package would be — every consumer in this repo (including every
+separate-module example under `examples/`) uses it via a local
+`replace` directive pointing at this checkout instead. From your own
+project elsewhere on disk:
+
+```
+# your-project/go.mod
+require github.com/elaous/gojiberry v0.0.0
+replace github.com/elaous/gojiberry => /path/to/gojiberry
+```
+
+Write a component (`hello.gox`):
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/elaous/gojiberry/gox"
+)
+
+func Greeting(name string) gox.Node {
+	if name == "" {
+		return <p class="greeting">Hello, stranger!</p>
+	}
+	return <p class="greeting">Hello, {name}!</p>
+}
+
+func main() {
+	html, err := gox.RenderString(Greeting("gojiberry"))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(html)
+}
+```
+
+Transpile it by running `goxc` from *this* checkout, pointed at your
+project's directory (this avoids needing `goxc`'s own dependencies —
+HCL, sqlc, etc. — in your project's `go.mod`; see the `-experimental`
+flag below for when those matter to you):
+
+```
+cd /path/to/gojiberry
+go run ./cmd/goxc /path/to/your-project
+```
+
+Then, from your own project:
+
+```
+go mod tidy
+go run .
+# <p class="greeting">Hello, gojiberry!</p>
+```
+
+From here:
+
+- `examples/ssr-demo` is the smallest complete example in this repo —
+  read it alongside this walkthrough.
+- `examples/wasm-counter` shows the same component shape mounted into
+  a real browser DOM instead, via `domrt` and `GOOS=js GOARCH=wasm`.
+- Every directory under `examples/` has its own `Makefile` (`make run`,
+  `make test`) wrapping the exact commands its own section below
+  documents — see [Development](#development).
+- `## Packages` and `## Components` below are the reference material
+  for everything you can import once the basic loop above is familiar.
+
 ## Why tags can just be Go expressions
 
 Go's generics use `Foo[T]`, not `Foo<T>`, so unlike TSX there's no
@@ -210,6 +317,29 @@ expanded by the same recursive scan, with no extra grammar required.
   `GOJIBERRY_SYNC_REGION` (see `syncserver.ConfigFromEnv`), so the same
   binary (`cmd/syncserver`) can be pointed at any operator's own
   infrastructure without a rebuild.
+- **`devreload`** / **`devwatch`** — the two halves of gox's dev-mode
+  hot-reload loop, generalized out of `examples/canvas-app`'s own
+  hand-rolled version so any gox server can opt in with a few lines
+  instead of re-deriving it. `devreload` is the browser-side half:
+  `Reloader.Wrap(html)` injects a small script that polls
+  `Reloader.Handler()`'s endpoint and reloads the tab once the served
+  version differs from the one the page was rendered with; a nil
+  `*Reloader` makes both calls no-ops, so production code needs no
+  separate devMode branch. `devwatch` is the process-supervision half:
+  `devwatch.Run(Config{...})` watches a source tree, and on a relevant
+  change (debounced, with `.gox.go`/VCS metadata always skipped via
+  `DefaultIgnore`) reruns the project's own `Rebuild` and restarts a
+  managed server subprocess — not real hot module replacement (a
+  compiled binary is one opaque unit), just a fast watch/rebuild/
+  restart/reload cycle, the same tradeoff `examples/canvas-app`'s own
+  version already made. `cmd/goxdev` is a generic CLI front end for
+  projects with no Go code of their own to wire `devwatch.Run` into:
+  `go run github.com/elaous/gojiberry/cmd/goxdev -build "..." -- ./myserver`.
+  `examples/canvas-app`'s `cmd/devwatch`/`cmd/devserver` now use both
+  packages directly, verified via a real watch/rebuild/restart cycle
+  against the running app (a file change triggers a real rebuild, a
+  real process restart, and the served `/__dev/version` genuinely
+  changes) as well as a real headless-Chromium/Postgres run.
 
 ## Components
 
@@ -1103,6 +1233,30 @@ marker to begin with). Same idea as `es6-string-html`/
 `vscode-styled-components` for JS template literals. See that
 directory's README for the one real constraint (the marker must share
 a line with the opening backtick).
+
+## Development
+
+The root `Makefile` wraps the repo-wide checks used throughout this
+README: `make check` regenerates every `*.gox.go` and runs
+`gofmt`/`vet`/`test` for both native and `GOOS=js GOARCH=wasm`, plus
+the `editors/vscode-gox` grammar suite (`make grammar-test-setup` once
+first, to fetch the VS Code grammars it tokenizes against); `make docs`
+regenerates every `docs/*.txt` API dump. Every example under
+`examples/` has its own `Makefile` too (`make run`, `make test`, and
+where relevant `make wasm`/`make clean`), each just running the exact
+commands that example's own section above documents -- read the
+`Makefile` itself if you want to see precisely what a shortcut expands
+to, or run the commands by hand if you'd rather not use `make` at all.
+
+`make coverage` runs the native (non-`js`/`wasm`) test suite with a
+coverage profile and prints the per-function summary; `make
+coverage-html` turns the same profile into `coverage.out.html`, a
+browsable, per-line annotated report (both `coverage.out` and
+`coverage.out.html` are gitignored -- regenerate rather than commit
+them). `js`/`wasm`-only packages (`domrt` and friends) have no native
+test suite to profile this way; their own coverage is whatever their
+example's headless-browser verification exercises, which this doesn't
+measure.
 
 ## Known limitations (v1)
 

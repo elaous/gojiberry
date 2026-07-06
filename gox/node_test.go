@@ -1,0 +1,79 @@
+package gox
+
+import (
+	"reflect"
+	"testing"
+)
+
+func TestEventValue(t *testing.T) {
+	e := NewEvent("input", "hello", false, nil, nil)
+	if got := EventValue[string](e); got != "hello" {
+		t.Errorf("EventValue[string] = %q, want %q", got, "hello")
+	}
+
+	// Reading as the wrong type returns the zero value rather than
+	// panicking -- e.g. a click event has no string payload.
+	click := NewEvent("click", nil, false, nil, nil)
+	if got := EventValue[string](click); got != "" {
+		t.Errorf("EventValue[string] on a payload-less event = %q, want \"\"", got)
+	}
+	if got := EventValue[float64](click); got != 0 {
+		t.Errorf("EventValue[float64] on a payload-less event = %v, want 0", got)
+	}
+}
+
+func TestNewEventFields(t *testing.T) {
+	e := NewEvent("change", 42, true, nil, nil)
+	if e.Type != "change" {
+		t.Errorf("Type = %q, want %q", e.Type, "change")
+	}
+	if !e.Checked {
+		t.Error("Checked = false, want true")
+	}
+	if got := EventValue[int](e); got != 42 {
+		t.Errorf("EventValue[int] = %v, want 42", got)
+	}
+}
+
+func TestPreventDefault(t *testing.T) {
+	called := false
+	e := NewEvent("click", nil, false, func() { called = true }, nil)
+	e.PreventDefault()
+	if !called {
+		t.Error("PreventDefault did not invoke the underlying callback")
+	}
+
+	// An Event built without a preventDefault callback (e.g. from SSR,
+	// where events are always inert) must not panic when called.
+	noop := NewEvent("click", nil, false, nil, nil)
+	noop.PreventDefault()
+}
+
+func TestStopPropagation(t *testing.T) {
+	called := false
+	e := NewEvent("click", nil, false, nil, func() { called = true })
+	e.StopPropagation()
+	if !called {
+		t.Error("StopPropagation did not invoke the underlying callback")
+	}
+
+	noop := NewEvent("click", nil, false, nil, nil)
+	noop.StopPropagation()
+}
+
+func TestWithKey(t *testing.T) {
+	original := El("li", nil, Text("item"))
+	keyed := original.WithKey("item-1")
+
+	if original.Key != "" {
+		t.Errorf("WithKey mutated the receiver's Key, got %q", original.Key)
+	}
+	if keyed.Key != "item-1" {
+		t.Errorf("keyed.Key = %q, want %q", keyed.Key, "item-1")
+	}
+	// Everything else about the node should be unchanged.
+	keyed.Key = ""
+	if !reflect.DeepEqual(keyed, original) {
+		t.Errorf("WithKey changed more than Key: got %+v, want %+v", keyed, original)
+	}
+}
