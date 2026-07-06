@@ -24,10 +24,25 @@ import (
 type Config struct {
 	Addr   string // listen address, e.g. ":8080"
 	Region string // operator-chosen label for where this instance is hosted
+	// Strategy selects the crdt.MergeStrategy this relay's own Doc
+	// merges with. The zero value, crdt.MergeLWW, is this package's
+	// original behavior. Every client syncing through this server must
+	// use the *same* strategy the server does -- a MergeCharCRDT client
+	// relayed through a MergeLWW server doesn't just merge coarsely,
+	// it loses data outright: the server's own Snapshot only carries
+	// CharOps when its Doc is MergeCharCRDT, so a MergeCharCRDT client
+	// receiving a CharOps-less op ends up reconstructing an *empty*
+	// Text for that block (see Doc.applyCharCRDT) instead of merely
+	// missing the fine-grained merge. Set Strategy: crdt.MergeCharCRDT
+	// here whenever any client does.
+	Strategy crdt.MergeStrategy
 }
 
 // ConfigFromEnv reads GOJIBERRY_SYNC_ADDR and GOJIBERRY_SYNC_REGION,
-// falling back to sane local defaults when unset.
+// falling back to sane local defaults when unset. Strategy defaults to
+// crdt.MergeLWW; set it explicitly on the returned Config for a
+// MergeCharCRDT deployment, since there's no established environment
+// variable convention for it yet.
 func ConfigFromEnv() Config {
 	return Config{
 		Addr:   envOr("GOJIBERRY_SYNC_ADDR", ":8080"),
@@ -56,7 +71,7 @@ type Server struct {
 // document; a real deployment would shard by document/tenant ID, but
 // the sync protocol below is unaffected by that.
 func NewServer(cfg Config) *Server {
-	return &Server{cfg: cfg, doc: crdt.NewDoc("server:" + cfg.Region)}
+	return &Server{cfg: cfg, doc: crdt.NewDocWithStrategy("server:"+cfg.Region, cfg.Strategy)}
 }
 
 // Handler returns the HTTP routes: POST /ops to push a client's

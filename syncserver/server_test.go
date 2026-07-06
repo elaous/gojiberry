@@ -85,6 +85,49 @@ func TestServerRelaysDeltaBetweenTwoClients(t *testing.T) {
 	}
 }
 
+// TestMergeCharCRDTServerConvergesConcurrentEdits is the regression
+// case for the bug Config.Strategy fixes: relaying MergeCharCRDT
+// clients through a MergeLWW server (the old, only option) doesn't
+// merely lose the fine-grained merge, it silently empties the block's
+// Content for any client applying an op the LWW-strategy server
+// stripped CharOps from (see Config.Strategy's doc comment). A server
+// configured with the matching strategy must both onboard a fresh
+// client with real content and converge two concurrent edits to
+// different parts of the same block, same as two directly-connected
+// peers would (crdt.TestConcurrentEditSameBlockConvergesRegardlessOfOrder).
+func TestMergeCharCRDTServerConvergesConcurrentEdits(t *testing.T) {
+	s := NewServer(Config{Region: "br-datacenter-1", Strategy: crdt.MergeCharCRDT})
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	a := crdt.NewDocWithStrategy("a", crdt.MergeCharCRDT)
+	a.Put(crdt.Block{ID: "x", Kind: "paragraph", Content: "hello", Order: 0})
+	postOps(t, srv, a.Drain())
+
+	b := crdt.NewDocWithStrategy("b", crdt.MergeCharCRDT)
+	b.Apply(getSnapshot(t, srv)...)
+	if blk, ok := b.Get("x"); !ok || blk.Content != "hello" {
+		t.Fatalf("expected b to onboard Content %q, got %+v (ok=%v)", "hello", blk, ok)
+	}
+
+	// Concurrent edits to different parts of the same block, each
+	// pushed through the relay without ever syncing directly.
+	a.Put(crdt.Block{ID: "x", Kind: "paragraph", Content: "hello there", Order: 0})
+	b.Put(crdt.Block{ID: "x", Kind: "paragraph", Content: "well hello", Order: 0})
+	postOps(t, srv, a.Drain())
+	postOps(t, srv, b.Drain())
+
+	c := crdt.NewDocWithStrategy("c", crdt.MergeCharCRDT)
+	c.Apply(getSnapshot(t, srv)...)
+	blk, ok := c.Get("x")
+	if !ok {
+		t.Fatal("expected block x to exist after merge")
+	}
+	if blk.Content != "well hello there" {
+		t.Fatalf("expected both concurrent edits to survive the merge, got %q", blk.Content)
+	}
+}
+
 func TestHealthReportsConfiguredRegion(t *testing.T) {
 	s := NewServer(Config{Region: "br-datacenter-1"})
 	srv := httptest.NewServer(s.Handler())
