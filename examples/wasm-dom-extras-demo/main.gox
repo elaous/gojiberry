@@ -124,6 +124,28 @@ func main() {
 		document.GetElementByID("rejection-result").SetTextContent("message=" + err.Message)
 	})
 
+	// QuerySelector/QuerySelectorAll: document-wide vs element-scoped.
+	// index.html's #query-fixture holds three li.item (one also
+	// .chosen), plus one p.item OUTSIDE the fixture -- so the
+	// document-wide count (4) differing from the fixture-scoped count
+	// (3) proves element-level queries really are subtree-scoped, not
+	// document-wide with a different receiver. A no-match selector must
+	// return nil (not a wrapper around JS null), and a void element
+	// (#title-input, an <input>) has no descendants to match at all.
+	fixture := document.GetElementByID("query-fixture")
+	chosen := fixture.QuerySelector(".item.chosen")
+	chosenText := "(nil)"
+	if chosen != nil {
+		chosenText = chosen.GetTextContent()
+	}
+	docWide := len(document.QuerySelectorAll(".item"))
+	scoped := len(fixture.QuerySelectorAll(".item"))
+	noMatch := fixture.QuerySelector(".does-not-exist") == nil
+	voidScoped := document.GetElementByID("title-input").QuerySelector("*") == nil
+	document.GetElementByID("query-result").SetTextContent(
+		fmt.Sprintf("chosen=%s docWide=%d scoped=%d noMatchIsNil=%v voidHasNoDescendants=%v",
+			chosenText, docWide, scoped, noMatch, voidScoped))
+
 	// Geolocation: blocks on a callback-bridged browser API, so run it
 	// off the main goroutine the same way MediaDevices/Clipboard do
 	// elsewhere in this repo.

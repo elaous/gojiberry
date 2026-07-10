@@ -52,6 +52,23 @@ func (d *Document) GetElementByID(id string) *Element {
 	return &Element{Element: d.Document.Call("getElementById", id)}
 }
 
+// QuerySelector returns the first element in the document matching the
+// CSS selector, in document order, or nil when nothing matches. See
+// Element.QuerySelector for the subtree-scoped variant.
+func (d *Document) QuerySelector(selector string) *Element {
+	v := d.Document.Call("querySelector", selector)
+	if v.IsNull() || v.IsUndefined() {
+		return nil
+	}
+	return &Element{Element: v}
+}
+
+// QuerySelectorAll returns every element in the document matching the
+// CSS selector, in document order -- empty when nothing matches.
+func (d *Document) QuerySelectorAll(selector string) []Element {
+	return wrapAll(d.Document.Call("querySelectorAll", selector))
+}
+
 // CreateElement creates a new, unattached element with the given tag name.
 func (d *Document) CreateElement(tag string) *Element {
 	return &Element{Element: d.Document.Call("createElement", tag)}

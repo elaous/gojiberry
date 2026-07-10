@@ -911,7 +911,11 @@ generated code.
   ```
 
 - `examples/wasm-dom-extras-demo` — `domrt/html`'s dimension/scroll/style
-  surface, `domrt/svg` (`CreateElement`, plus `html.Element`'s
+  surface, `QuerySelector`/`QuerySelectorAll` (on `Document` for
+  document-wide CSS-selector lookup, and on `Element` scoped to that
+  element's own subtree — nil/empty on no match, and a void element
+  like `<input>` simply has no descendants to find, exactly as in the
+  browser), `domrt/svg` (`CreateElement`, plus `html.Element`'s
   `ClassListAdd`/`ClassListContains`), `ImageElement`, `FormElement`,
   `DispatchCustomEvent`/`OnCustomEvent`, `Window.OnError`/
   `OnUnhandledRejection`, and `domrt/browser`'s `FormData`, `Cookies`,
@@ -929,8 +933,10 @@ generated code.
   that encoded it), a dispatched-and-received `CustomEvent`, a genuine
   uncaught exception and unhandled promise rejection from an inline
   `<script>` this Go program doesn't control (caught by `OnError`/
-  `OnUnhandledRejection`), and a geolocation reading via Playwright's
-  mocked coordinates:
+  `OnUnhandledRejection`), a geolocation reading via Playwright's
+  mocked coordinates, and CSS-selector queries where a document-wide
+  `.item` count (4) genuinely differs from a fixture-scoped one (3),
+  proving element-level queries search only their own subtree:
 
   ```
   go generate ./...

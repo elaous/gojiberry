@@ -25,6 +25,8 @@ type DomNode interface {
 	SetTextContent(text string)
 	GetAttribute(name string) string
 	SetAttribute(name, value string)
+	QuerySelector(selector string) *Element
+	QuerySelectorAll(selector string) []Element
 	AppendChild(child DomNode)
 	RemoveChild(child DomNode)
 	GetInnerHTML() string
@@ -122,6 +124,28 @@ func (e *Element) SetAttribute(name, value string) {
 	e.Element.Call("setAttribute", name, value)
 }
 
+// QuerySelector returns the first descendant of e matching the CSS
+// selector, in document order, or nil when nothing matches -- the
+// same subtree-scoped semantics as the DOM's own element-level
+// querySelector. Meaningful on any element that can have children;
+// on a void (self-closing) element like <input> or <br> there are no
+// descendants to match, so it always returns nil, exactly as in the
+// browser. For a document-wide search use Document.QuerySelector.
+func (e *Element) QuerySelector(selector string) *Element {
+	v := e.Element.Call("querySelector", selector)
+	if v.IsNull() || v.IsUndefined() {
+		return nil
+	}
+	return &Element{Element: v}
+}
+
+// QuerySelectorAll returns every descendant of e matching the CSS
+// selector, in document order -- empty when nothing matches. See
+// QuerySelector for the subtree scoping.
+func (e *Element) QuerySelectorAll(selector string) []Element {
+	return wrapAll(e.Element.Call("querySelectorAll", selector))
+}
+
 // AppendChild appends child as e's last child.
 func (e *Element) AppendChild(child DomNode) {
 	e.Element.Call("appendChild", child.JSValue())
@@ -174,7 +198,7 @@ func (e *Element) Get(name string) js.Value {
 }
 
 // Call invokes a method not covered by a typed wrapper above (e.g.
-// Call("click"), Call("focus"), Call("querySelector", selector)).
+// Call("closest", selector), Call("insertAdjacentHTML", pos, html)).
 func (e *Element) Call(method string, args ...any) js.Value {
 	return e.Element.Call(method, args...)
 }

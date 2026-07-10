@@ -18,6 +18,14 @@
     <button type="submit">Submit</button>
   </form>
   <div id="customevent-target">custom event target</div>
+  <div id="query-fixture">
+    <ul>
+      <li class="item">alpha</li>
+      <li class="item chosen">beta</li>
+      <li class="item">gamma</li>
+    </ul>
+  </div>
+  <p class="item">outside the fixture</p>
 
   <p>Window: <span id="window-result">(pending)</span></p>
   <p>Document: <span id="document-result">(pending)</span></p>
@@ -31,6 +39,7 @@
   <p>JS error: <span id="jserror-result">(pending)</span></p>
   <p>Unhandled rejection: <span id="rejection-result">(pending)</span></p>
   <p>Geolocation: <span id="geo-result">(pending)</span></p>
+  <p>QuerySelector: <span id="query-result">(pending)</span></p>
 
   <script>
     const go = new Go();
