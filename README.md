@@ -360,6 +360,31 @@ expanded by the same recursive scan, with no extra grammar required.
   never served from this relay's own origin, so without this a
   browser's `fetch()` would refuse every request before `handleOps`
   ever saw it.
+- **`fontserver`** — a small standalone "font CDN," the same
+  environment-configured, CORS-open, single-binary shape as
+  `syncserver` (`cmd/fontserver`). It serves two font sources behind
+  one HTTP API: a local directory of `.ttf`/`.otf` files (`Repo.Scan`
+  walks `GOJIBERRY_FONTSERVER_DIR`, reads each file's sfnt `name`
+  table for its family/subfamily, and derives a CSS-style numeric
+  weight and italic flag from the subfamily string, e.g. `"Bold
+  Italic"` → `700, true` — `GET /local/fonts` for the resulting
+  manifest, `GET /local/files/{path}` for the bytes, `POST
+  /local/rescan` to pick up files added after startup without a
+  restart), and a cached, proxied view of the Google Fonts Developer
+  API (`GET /google/fonts`) — proxied so the API key
+  (`GOJIBERRY_FONTSERVER_GOOGLE_KEY`) never reaches the browser, and
+  cached (`GOJIBERRY_FONTSERVER_GOOGLE_CACHE_TTL`, default 24h) so a
+  picker re-querying it doesn't hit Google on every keystroke. With no
+  key configured, or on a fetch failure, `/google/fonts` still returns
+  `200` with an empty family list rather than an error — the same
+  graceful-degradation posture the editor's own Lora `<link>` already
+  takes when a web font fails to load, so a font picker built against
+  this endpoint works identically whether or not a deployment has
+  opted into the online catalog. `Repo.Open` only ever serves a path
+  its last `Scan` actually produced, rather than trusting a
+  traversal-cleaned path alone, so a request like
+  `/local/files/../../etc/passwd` is rejected outright rather than
+  merely normalized.
 - **`devreload`** / **`devwatch`** — the two halves of gox's dev-mode
   hot-reload loop, generalized out of `examples/canvas-app`'s own
   hand-rolled version so any gox server can opt in with a few lines
