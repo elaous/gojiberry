@@ -385,6 +385,38 @@ expanded by the same recursive scan, with no extra grammar required.
   traversal-cleaned path alone, so a request like
   `/local/files/../../etc/passwd` is rejected outright rather than
   merely normalized.
+- **`docstore`** — a storage-agnostic document persistence server. The
+  `Adapter` interface (`Save`/`Load`/`List`/`Delete`, keyed by document
+  ID) is implemented five ways: `MemoryAdapter` (in-process, the
+  zero-dependency default), `LocalFSAdapter` (one file per document,
+  base64url-encoded ID as the filename), `PostgresAdapter` (one
+  `documents` table, created on first connect if missing),
+  `MongoAdapter` (one `documents` collection, `_id` set directly to
+  the document ID), and `S3Adapter` (one object per document, built
+  against a narrow `s3API` interface so its key-prefixing and
+  pagination logic has native tests against an in-memory fake with no
+  live bucket required). `Server` exposes whichever `Adapter` an
+  operator picks over plain HTTP (`PUT`/`GET`/`DELETE /docs/{id}`,
+  `GET /docs` for a metadata listing, `GET /health`), with the same
+  environment-configured, CORS-open, single-binary shape as
+  `syncserver`/`fontserver` — `GOJIBERRY_DOCSTORE_BACKEND` selects
+  `memory`/`localfs`/`postgres`/`mongo`/`s3`, and that backend's own
+  env vars (`GOJIBERRY_DOCSTORE_POSTGRES_DSN`,
+  `GOJIBERRY_DOCSTORE_MONGO_URI`, `GOJIBERRY_DOCSTORE_S3_BUCKET`, etc.
+  — see `docstore.ConfigFromEnv`) fill in the rest, so `cmd/docstore`
+  is one binary that switches its real storage technology without a
+  rebuild. This is the piece a browser client talks to for any backend
+  it cannot itself speak (a browser has no Postgres/MongoDB/S3 wire
+  protocol, and no filesystem beyond its own sandboxed storage) — a
+  client's own choice of storage adapter only ever needs to know
+  whether it's talking to `LocalStorage`, `IndexedDB`, or this one HTTP
+  API, never which concrete backend the server operator picked behind
+  it. Postgres is tested with `sqlmock` and MongoDB's conformance suite
+  is gated behind `TEST_MONGO_URI` (both skip cleanly in an environment
+  with no live service, e.g. this repo's own CI sandbox, which has no
+  Docker daemon available to start either one) — every other adapter,
+  and the HTTP server itself, is exercised with real, no-live-service-
+  required native tests.
 - **`devreload`** / **`devwatch`** — the two halves of gox's dev-mode
   hot-reload loop, generalized out of `examples/canvas-app`'s own
   hand-rolled version so any gox server can opt in with a few lines
