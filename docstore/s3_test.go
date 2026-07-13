@@ -1,0 +1,90 @@
+package docstore
+
+import (
+	"bytes"
+	"context"
+	"io"
+	"testing"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+)
+
+// fakeS3 is a minimal in-memory stand-in for *s3.Client, implementing
+// just the s3API operations S3Adapter calls. It lets S3Adapter's
+// logic (key prefixing, pagination, not-found translation) be tested
+// natively, with no live AWS/MinIO endpoint required.
+type fakeS3 struct {
+	objects map[string][]byte
+}
+
+func newFakeS3() *fakeS3 { return &fakeS3{objects: make(map[string][]byte)} }
+
+func (f *fakeS3) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+	data, err := io.ReadAll(in.Body)
+	if err != nil {
+		return nil, err
+	}
+	f.objects[*in.Key] = data
+	return &s3.PutObjectOutput{}, nil
+}
+
+func (f *fakeS3) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	data, ok := f.objects[*in.Key]
+	if !ok {
+		return nil, &types.NoSuchKey{}
+	}
+	now := time.Now()
+	return &s3.GetObjectOutput{
+		Body:         io.NopCloser(bytes.NewReader(data)),
+		LastModified: &now,
+	}, nil
+}
+
+func (f *fakeS3) DeleteObject(_ context.Context, in *s3.DeleteObjectInput, _ ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
+	delete(f.objects, *in.Key)
+	return &s3.DeleteObjectOutput{}, nil
+}
+
+func (f *fakeS3) ListObjectsV2(_ context.Context, in *s3.ListObjectsV2Input, _ ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
+	prefix := aws.ToString(in.Prefix)
+	var contents []types.Object
+	for key, data := range f.objects {
+		if len(key) < len(prefix) || key[:len(prefix)] != prefix {
+			continue
+		}
+		size := int64(len(data))
+		now := time.Now()
+		k := key
+		contents = append(contents, types.Object{Key: &k, Size: &size, LastModified: &now})
+	}
+	falseVal := false
+	return &s3.ListObjectsV2Output{Contents: contents, IsTruncated: &falseVal}, nil
+}
+
+func TestS3AdapterConformance(t *testing.T) {
+	testAdapterConformance(t, func() Adapter {
+		return newS3Adapter(newFakeS3(), "test-bucket", "docs/")
+	})
+}
+
+func TestS3AdapterUsesPrefixInKeyButNotInID(t *testing.T) {
+	fake := newFakeS3()
+	a := newS3Adapter(fake, "test-bucket", "docs/")
+	ctx := context.Background()
+	if err := a.Save(ctx, "myid", []byte("x")); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, ok := fake.objects["docs/myid"]; !ok {
+		t.Fatalf("object stored under key %v, want docs/myid present", fake.objects)
+	}
+	metas, err := a.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(metas) != 1 || metas[0].ID != "myid" {
+		t.Fatalf("List = %v, want ID myid (prefix stripped)", metas)
+	}
+}
