@@ -13,40 +13,35 @@ import (
 // syncserver/fontserver's convention: cloning this repo for a
 // different operator or backend never requires a code change.
 //
-// Backend selects which Adapter NewServerFromConfig builds:
+// Backend selects which registered AdapterFactory BuildAdapter calls
+// ("memory" the zero-dependency default, or "localfs"/"postgres"/
+// "mongo"/"s3" -- see each backend's own Config type, e.g.
+// PostgresConfig, for what BackendConfig needs to hold). This package
+// never hardcodes that list itself -- each backend registers its own
+// name via RegisterAdapter, so BuildAdapter/Config never need a code
+// change to support a new one.
 //
-//	"memory"   (default) -- MemoryAdapter, no persistence, dev/test only
-//	"localfs"  -- LocalFSAdapter, rooted at LocalFSDir
-//	"postgres" -- PostgresAdapter, connecting to PostgresDSN
-//	"mongo"    -- MongoAdapter, connecting to MongoURI/MongoDB
-//	"s3"       -- S3Adapter, backed by S3Bucket (region/credentials
-//	              come from the AWS SDK's own standard env vars)
+// BackendConfig is the chosen backend's own config, JSON-encoded --
+// e.g. `{"dsn":"postgres://..."}` for "postgres", `{"bucket":"docs"}`
+// for "s3". Passed through unparsed; only the backend itself
+// understands its own shape.
 type Config struct {
-	Addr    string
-	Backend string
-
-	LocalFSDir string
-
-	PostgresDSN string
-
-	MongoURI string
-	MongoDB  string
-
-	S3Bucket string
-	S3Prefix string
+	Addr          string
+	Backend       string
+	BackendConfig json.RawMessage
 }
 
-// ConfigFromEnv reads GOJIBERRY_DOCSTORE_*.
+// ConfigFromEnv reads GOJIBERRY_DOCSTORE_ADDR, GOJIBERRY_DOCSTORE_BACKEND,
+// and GOJIBERRY_DOCSTORE_BACKEND_CONFIG (that backend's own config, as a
+// raw JSON object -- e.g. GOJIBERRY_DOCSTORE_BACKEND_CONFIG='{"dsn":"..."}'
+// for the postgres backend). Leaving BACKEND_CONFIG unset is fine for
+// backends with no required fields (memory needs none; localfs
+// defaults its dir).
 func ConfigFromEnv() Config {
 	return Config{
-		Addr:        envOr("GOJIBERRY_DOCSTORE_ADDR", ":8090"),
-		Backend:     envOr("GOJIBERRY_DOCSTORE_BACKEND", "memory"),
-		LocalFSDir:  envOr("GOJIBERRY_DOCSTORE_LOCALFS_DIR", "./docstore-data"),
-		PostgresDSN: os.Getenv("GOJIBERRY_DOCSTORE_POSTGRES_DSN"),
-		MongoURI:    os.Getenv("GOJIBERRY_DOCSTORE_MONGO_URI"),
-		MongoDB:     envOr("GOJIBERRY_DOCSTORE_MONGO_DB", "docstore"),
-		S3Bucket:    os.Getenv("GOJIBERRY_DOCSTORE_S3_BUCKET"),
-		S3Prefix:    os.Getenv("GOJIBERRY_DOCSTORE_S3_PREFIX"),
+		Addr:          envOr("GOJIBERRY_DOCSTORE_ADDR", ":8090"),
+		Backend:       envOr("GOJIBERRY_DOCSTORE_BACKEND", "memory"),
+		BackendConfig: json.RawMessage(os.Getenv("GOJIBERRY_DOCSTORE_BACKEND_CONFIG")),
 	}
 }
 

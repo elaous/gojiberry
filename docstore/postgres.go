@@ -3,11 +3,35 @@ package docstore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
+
+// PostgresConfig is the postgres backend's own config, decoded from
+// Config.BackendConfig when Config.Backend == "postgres".
+type PostgresConfig struct {
+	// DSN is a standard Postgres connection string, e.g.
+	// "postgres://user:pass@host:5432/dbname".
+	DSN string `json:"dsn"`
+}
+
+func init() {
+	RegisterAdapter("postgres", func(ctx context.Context, raw json.RawMessage) (Adapter, error) {
+		var cfg PostgresConfig
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &cfg); err != nil {
+				return nil, err
+			}
+		}
+		if cfg.DSN == "" {
+			return nil, errors.New(`docstore: postgres backend requires a "dsn"`)
+		}
+		return NewPostgresAdapter(ctx, cfg.DSN)
+	})
+}
 
 // PostgresAdapter stores documents in a single table:
 //

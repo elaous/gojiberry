@@ -395,17 +395,29 @@ expanded by the same recursive scan, with no extra grammar required.
   the document ID), and `S3Adapter` (one object per document, built
   against a narrow `s3API` interface so its key-prefixing and
   pagination logic has native tests against an in-memory fake with no
-  live bucket required). `Server` exposes whichever `Adapter` an
-  operator picks over plain HTTP (`PUT`/`GET`/`DELETE /docs/{id}`,
-  `GET /docs` for a metadata listing, `GET /health`), with the same
-  environment-configured, CORS-open, single-binary shape as
-  `syncserver`/`fontserver` — `GOJIBERRY_DOCSTORE_BACKEND` selects
-  `memory`/`localfs`/`postgres`/`mongo`/`s3`, and that backend's own
-  env vars (`GOJIBERRY_DOCSTORE_POSTGRES_DSN`,
-  `GOJIBERRY_DOCSTORE_MONGO_URI`, `GOJIBERRY_DOCSTORE_S3_BUCKET`, etc.
-  — see `docstore.ConfigFromEnv`) fill in the rest, so `cmd/docstore`
-  is one binary that switches its real storage technology without a
-  rebuild. This is the piece a browser client talks to for any backend
+  live bucket required). Each backend is a self-contained plugin, not
+  a case in some central switch: it defines its own JSON-tagged config
+  type (`PostgresConfig{DSN}`, `MongoConfig{URI, DB}`,
+  `S3Config{Bucket, Prefix}`, `LocalFSConfig{Dir}`) and registers
+  itself under a name via `RegisterAdapter` (the same self-registration
+  convention `database/sql.Register`/`image.RegisterFormat` use) from
+  its own `init()`. `Config` (the server's own config) and
+  `BuildAdapter` never reference any backend-specific field at all --
+  just `Backend` (the registered name) and `BackendConfig`
+  (`json.RawMessage`, that backend's own config blob, opaque to
+  everyone but the backend itself) -- so adding a sixth backend is
+  purely additive: a new file registering a new name, zero changes to
+  `docstore.go`, `server.go`, or any existing backend. `Server` exposes
+  whichever `Adapter` `BuildAdapter` constructs over plain HTTP
+  (`PUT`/`GET`/`DELETE /docs/{id}`, `GET /docs` for a metadata listing,
+  `GET /health`), with the same environment-configured, CORS-open,
+  single-binary shape as `syncserver`/`fontserver` --
+  `GOJIBERRY_DOCSTORE_BACKEND` names the backend,
+  `GOJIBERRY_DOCSTORE_BACKEND_CONFIG` carries its JSON config directly
+  (e.g. `GOJIBERRY_DOCSTORE_BACKEND=postgres
+  GOJIBERRY_DOCSTORE_BACKEND_CONFIG='{"dsn":"postgres://..."}'`), so
+  `cmd/docstore` is one binary that switches its real storage
+  technology without a rebuild. This is the piece a browser client talks to for any backend
   it cannot itself speak (a browser has no Postgres/MongoDB/S3 wire
   protocol, and no filesystem beyond its own sandboxed storage) — a
   client's own choice of storage adapter only ever needs to know

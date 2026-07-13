@@ -2,12 +2,38 @@ package docstore
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
+
+// MongoConfig is the mongo backend's own config, decoded from
+// Config.BackendConfig when Config.Backend == "mongo".
+type MongoConfig struct {
+	URI string `json:"uri"`
+	// DB is the database name backing the documents collection.
+	// Defaults to "docstore" if empty.
+	DB string `json:"db"`
+}
+
+func init() {
+	RegisterAdapter("mongo", func(ctx context.Context, raw json.RawMessage) (Adapter, error) {
+		cfg := MongoConfig{DB: "docstore"}
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &cfg); err != nil {
+				return nil, err
+			}
+		}
+		if cfg.URI == "" {
+			return nil, errors.New(`docstore: mongo backend requires a "uri"`)
+		}
+		return NewMongoAdapter(ctx, cfg.URI, cfg.DB)
+	})
+}
 
 // mongoDoc is documents collection's on-disk shape. _id holds the
 // document ID directly (never an ObjectID) so lookups are a plain

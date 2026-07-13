@@ -13,7 +13,9 @@ package docstore
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -51,4 +53,43 @@ type Adapter interface {
 	List(ctx context.Context) ([]Meta, error)
 	// Delete returns ErrNotFound if id does not exist.
 	Delete(ctx context.Context, id string) error
+}
+
+// AdapterFactory builds an Adapter from that backend's own
+// JSON-encoded config (raw is nil/empty when nothing was configured).
+// Each backend defines its own config shape and unmarshals raw into
+// it itself -- this package never needs to know Postgres takes a
+// "dsn" or Mongo takes a "uri"/"db", so adding a new backend never
+// requires touching Config, BuildAdapter, or any other backend's
+// code.
+type AdapterFactory func(ctx context.Context, raw json.RawMessage) (Adapter, error)
+
+var adapterFactories = map[string]AdapterFactory{}
+
+// RegisterAdapter makes a backend available under name for
+// BuildAdapter/Config.Backend to select. Backends call this from
+// their own init(), the same self-registration convention
+// database/sql.Register or image.RegisterFormat use. Panics on a
+// duplicate name -- a programming error (two backends claiming the
+// same name), not a runtime condition to recover from.
+func RegisterAdapter(name string, factory AdapterFactory) {
+	if _, exists := adapterFactories[name]; exists {
+		panic("docstore: adapter already registered: " + name)
+	}
+	adapterFactories[name] = factory
+}
+
+// BuildAdapter constructs the Adapter registered under cfg.Backend,
+// passing it cfg.BackendConfig to decode itself. "" is an alias for
+// "memory", the zero-dependency default.
+func BuildAdapter(ctx context.Context, cfg Config) (Adapter, error) {
+	name := cfg.Backend
+	if name == "" {
+		name = "memory"
+	}
+	factory, ok := adapterFactories[name]
+	if !ok {
+		return nil, fmt.Errorf("docstore: unknown backend %q", name)
+	}
+	return factory(ctx, cfg.BackendConfig)
 }

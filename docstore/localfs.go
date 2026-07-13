@@ -3,11 +3,33 @@ package docstore
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"sync"
 )
+
+// LocalFSConfig is the localfs backend's own config, decoded from
+// Config.BackendConfig when Config.Backend == "localfs".
+type LocalFSConfig struct {
+	// Dir is where documents are stored, created (with any missing
+	// parents) on first use if it doesn't already exist. Defaults to
+	// "./docstore-data" if empty.
+	Dir string `json:"dir"`
+}
+
+func init() {
+	RegisterAdapter("localfs", func(_ context.Context, raw json.RawMessage) (Adapter, error) {
+		cfg := LocalFSConfig{Dir: "./docstore-data"}
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &cfg); err != nil {
+				return nil, err
+			}
+		}
+		return NewLocalFSAdapter(cfg.Dir)
+	})
+}
 
 // LocalFSAdapter stores each document as one file (base64url-encoded
 // ID as the filename, to keep arbitrary document IDs safe on disk) in

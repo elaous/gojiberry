@@ -2,9 +2,16 @@ package docstore
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 )
+
+func init() {
+	RegisterAdapter("memory", func(_ context.Context, _ json.RawMessage) (Adapter, error) {
+		return NewMemoryAdapter(), nil
+	})
+}
 
 // MemoryAdapter is an in-process, non-persistent Adapter. It exists
 // as the reference implementation the other adapters' behavior is

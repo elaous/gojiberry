@@ -3,14 +3,46 @@ package docstore
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
+
+// S3Config is the s3 backend's own config, decoded from
+// Config.BackendConfig when Config.Backend == "s3". Region and
+// credentials come from the AWS SDK's own standard environment
+// variables/config files (AWS_REGION, AWS_ACCESS_KEY_ID, etc.), not
+// from here -- this only ever holds what's specific to *this*
+// deployment's choice of bucket.
+type S3Config struct {
+	Bucket string `json:"bucket"`
+	Prefix string `json:"prefix"`
+}
+
+func init() {
+	RegisterAdapter("s3", func(ctx context.Context, raw json.RawMessage) (Adapter, error) {
+		var cfg S3Config
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &cfg); err != nil {
+				return nil, err
+			}
+		}
+		if cfg.Bucket == "" {
+			return nil, errors.New(`docstore: s3 backend requires a "bucket"`)
+		}
+		awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return NewS3Adapter(s3.NewFromConfig(awsCfg), cfg.Bucket, cfg.Prefix), nil
+	})
+}
 
 // s3API is the slice of the AWS SDK's S3 client this package actually
 // calls. Depending on this narrow interface instead of *s3.Client
