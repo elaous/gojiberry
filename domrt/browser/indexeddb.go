@@ -149,3 +149,11 @@ func (s *ObjectStore) Clear() error {
 	_, err := awaitIDBRequest(s.Value.Call("clear"))
 	return err
 }
+
+// GetAll returns every record currently in the store, as a JS array
+// of whatever values Put stored (each still carrying its own keyPath
+// field) -- for a caller that needs to list a whole store's contents
+// rather than look up one key at a time.
+func (s *ObjectStore) GetAll() (js.Value, error) {
+	return awaitIDBRequest(s.Value.Call("getAll"))
+}

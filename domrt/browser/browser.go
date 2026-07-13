@@ -138,6 +138,20 @@ func (s storageArea) Clear() {
 	js.Global().Get(s.name).Call("clear")
 }
 
+// Keys returns every key currently in this storage area, in
+// storage-defined order -- for a caller that needs to enumerate a
+// whole storage area rather than look up one key at a time (e.g. a
+// storage adapter listing every document under its own key prefix).
+func (s storageArea) Keys() []string {
+	area := js.Global().Get(s.name)
+	n := area.Get("length").Int()
+	keys := make([]string, n)
+	for i := 0; i < n; i++ {
+		keys[i] = area.Call("key", i).String()
+	}
+	return keys
+}
+
 // Socket wraps a browser WebSocket.
 type Socket struct {
 	v         js.Value
