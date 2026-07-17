@@ -384,7 +384,49 @@ expanded by the same recursive scan, with no extra grammar required.
   its last `Scan` actually produced, rather than trusting a
   traversal-cleaned path alone, so a request like
   `/local/files/../../etc/passwd` is rejected outright rather than
-  merely normalized.
+  merely normalized. `GET /local/symbols?family={name}` (`cmap.go`)
+  answers a different question than `/local/fonts`: not "what families
+  exist" but "what characters does this specific one actually have a
+  glyph for" -- it reads that family's own representative variant
+  (`Repo.VariantPath`, the lightest non-italic-preferred one) and
+  parses its `cmap` table (`sfntCmapRanges`, alongside `sfntNames`'
+  `name`-table parser, both sharing `findSfntTable`'s table-directory
+  walk), returning a sorted, merged list of inclusive rune ranges
+  rather than a flat list of individual codepoints -- the `cmap`
+  table itself is already range-encoded (format 4/12's own segments),
+  so this is both the natural parse output and a compact wire format,
+  even for a CJK font with tens of thousands of glyphs. Understands
+  subtable formats 4 (segment mapping, BMP-only, what most Windows/
+  Unicode subtables use -- including walking an *indirect* segment's
+  own `glyphIdArray` to correctly split out individual "holes" rather
+  than assuming a whole declared segment is populated), 12 (segmented
+  coverage, full Unicode range), and 0 (a legacy 256-glyph Mac table);
+  `cmapPreferredSubtable` scores every subtable by platform/encoding
+  (full-Unicode Windows/Unicode subtables first, then BMP-only, then
+  Symbol-encoded dingbat fonts like Wingdings/Webdings -- whose own
+  codepoints already sit in the `cmap` at their real Private Use Area
+  positions, no extra offsetting needed -- then the legacy Mac table
+  last) and picks the best-scoring one that's *also* in a format we
+  can actually decode, rather than failing outright on an
+  undecodable-but-otherwise-preferred subtable. This is what powers
+  OnDesign's special-character picker browsing a font's own real
+  symbol repertoire (as opposed to the fixed curated table it ships
+  with) -- see that repo's own README for the client-side half.
+  `/local/symbols` only ever reads a file `Repo.Scan` already found on
+  disk -- Google Fonts (or any other *remote* font registry) has no
+  file to read locally, so symbol-browsing a family from one of those
+  isn't supported yet: that would need fontserver to itself fetch and
+  decompress the actual font binary (WOFF2, not the raw sfnt this
+  parser reads) just to reach its `cmap`, real additional work tracked
+  as known future scope rather than built here. Similarly, "Google
+  Fonts" is really just the one remote web-font registry this server
+  happens to speak today, not the only one that could exist --
+  `fetchGoogleFontsAPI`'s own `func(apiKey string) ([]googleFont,
+  error)` shape is already a plugin point in spirit; making that
+  literal (a small registry interface a deployment could register
+  additional remote catalogs against, the same way `docstore`'s
+  `RegisterAdapter` lets a deployment add a storage backend without
+  touching this package) is also future work, not done here.
 - **`docstore`** — a storage-agnostic document persistence server. The
   `Adapter` interface (`Save`/`Load`/`List`/`Delete`, keyed by document
   ID) is implemented five ways: `MemoryAdapter` (in-process, the
