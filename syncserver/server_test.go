@@ -12,9 +12,9 @@ import (
 )
 
 func TestConfigFromEnvDefaultsAndOverrides(t *testing.T) {
-	os.Unsetenv("GOJIBERRY_SYNC_ADDR")
-	os.Unsetenv("GOJIBERRY_SYNC_REGION")
-	os.Unsetenv("GOJIBERRY_SYNC_STRATEGY")
+	_ = os.Unsetenv("GOJIBERRY_SYNC_ADDR")
+	_ = os.Unsetenv("GOJIBERRY_SYNC_REGION")
+	_ = os.Unsetenv("GOJIBERRY_SYNC_STRATEGY")
 	cfg := ConfigFromEnv()
 	if cfg.Addr == "" || cfg.Region == "" {
 		t.Fatalf("expected non-empty defaults, got %+v", cfg)

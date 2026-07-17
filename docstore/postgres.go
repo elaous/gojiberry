@@ -59,7 +59,7 @@ func NewPostgresAdapter(ctx context.Context, dsn string) (*PostgresAdapter, erro
 	}
 	a := &PostgresAdapter{db: db, table: "documents"}
 	if err := a.ensureTable(ctx); err != nil {
-		db.Close()
+		_ = db.Close() // best-effort cleanup on the ensureTable failure path
 		return nil, err
 	}
 	return a, nil
@@ -108,7 +108,7 @@ func (a *PostgresAdapter) List(ctx context.Context) ([]Meta, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var metas []Meta
 	for rows.Next() {
 		var m Meta
