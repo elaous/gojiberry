@@ -78,7 +78,7 @@ func (a *MongoAdapter) Load(ctx context.Context, id string) (Document, error) {
 	if err != nil {
 		return Document{}, err
 	}
-	return Document{ID: doc.ID, Data: doc.Data, UpdatedAt: doc.UpdatedAt}, nil
+	return Document(doc), nil
 }
 
 func (a *MongoAdapter) List(ctx context.Context) ([]Meta, error) {
@@ -86,7 +86,7 @@ func (a *MongoAdapter) List(ctx context.Context) ([]Meta, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer cur.Close(ctx)
+	defer func() { _ = cur.Close(ctx) }()
 	var metas []Meta
 	for cur.Next(ctx) {
 		var doc mongoDoc

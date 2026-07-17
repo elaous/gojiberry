@@ -28,8 +28,12 @@ func TestRepoScanGroupsByFamily(t *testing.T) {
 	writeTestFont(t, dir, "serif/Regular.otf", "Test Serif", "Regular")
 	// Not a font at all, and not a recognized extension -- both must be
 	// skipped without failing the whole scan.
-	os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("hello"), 0o644)
-	os.WriteFile(filepath.Join(dir, "corrupt.ttf"), []byte("not a font"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "corrupt.ttf"), []byte("not a font"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	repo := NewRepo(dir)
 	if err := repo.Scan(); err != nil {

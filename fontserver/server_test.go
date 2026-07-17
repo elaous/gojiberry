@@ -91,7 +91,9 @@ func TestLocalRescanPicksUpNewFiles(t *testing.T) {
 	var before struct {
 		Families []Family `json:"families"`
 	}
-	json.Unmarshal(rec.Body.Bytes(), &before)
+	if err := json.Unmarshal(rec.Body.Bytes(), &before); err != nil {
+		t.Fatal(err)
+	}
 	if len(before.Families) != 0 {
 		t.Fatalf("expected no families before any font exists, got %+v", before.Families)
 	}
@@ -106,7 +108,9 @@ func TestLocalRescanPicksUpNewFiles(t *testing.T) {
 	var after struct {
 		Families []Family `json:"families"`
 	}
-	json.Unmarshal(rec.Body.Bytes(), &after)
+	if err := json.Unmarshal(rec.Body.Bytes(), &after); err != nil {
+		t.Fatal(err)
+	}
 	if len(after.Families) != 1 {
 		t.Fatalf("expected 1 family after rescan, got %+v", after.Families)
 	}
@@ -123,7 +127,9 @@ func TestGoogleFontsDisabledWithoutKey(t *testing.T) {
 		Enabled  bool         `json:"enabled"`
 		Families []googleFont `json:"families"`
 	}
-	json.Unmarshal(rec.Body.Bytes(), &body)
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
 	if body.Enabled {
 		t.Fatal("enabled = true with no API key configured, want false")
 	}
@@ -153,7 +159,9 @@ func TestGoogleFontsFetchesAndCaches(t *testing.T) {
 			Enabled  bool         `json:"enabled"`
 			Families []googleFont `json:"families"`
 		}
-		json.Unmarshal(rec.Body.Bytes(), &body)
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
 		if !body.Enabled || len(body.Families) != 1 || body.Families[0].Family != "Roboto" {
 			t.Fatalf("iteration %d: families = %+v, want [Roboto]", i, body.Families)
 		}
@@ -252,7 +260,9 @@ func TestGoogleFontsFetchFailureDegradesGracefully(t *testing.T) {
 		Enabled  bool         `json:"enabled"`
 		Families []googleFont `json:"families"`
 	}
-	json.Unmarshal(rec.Body.Bytes(), &body)
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
 	if len(body.Families) != 0 {
 		t.Fatalf("families = %+v, want empty on fetch failure with no prior cache", body.Families)
 	}
