@@ -22,7 +22,7 @@ func TestPostgresAdapterSaveInsertsWithUpsert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	a := newPostgresAdapterFromDB(db)
 
 	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO documents (id, data, updated_at)`)).
@@ -42,7 +42,7 @@ func TestPostgresAdapterLoadReturnsErrNotFoundOnNoRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	a := newPostgresAdapterFromDB(db)
 
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT data, updated_at FROM documents WHERE id = $1`)).
@@ -60,7 +60,7 @@ func TestPostgresAdapterLoadScansRow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	a := newPostgresAdapterFromDB(db)
 
 	now := time.Now().Truncate(time.Second)
@@ -83,7 +83,7 @@ func TestPostgresAdapterDeleteReturnsErrNotFoundWhenNoRowsAffected(t *testing.T)
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	a := newPostgresAdapterFromDB(db)
 
 	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM documents WHERE id = $1`)).
@@ -101,7 +101,7 @@ func TestPostgresAdapterDeleteSucceedsWhenRowAffected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	a := newPostgresAdapterFromDB(db)
 
 	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM documents WHERE id = $1`)).
@@ -118,7 +118,7 @@ func TestPostgresAdapterListScansAllRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	a := newPostgresAdapterFromDB(db)
 
 	now := time.Now().Truncate(time.Second)

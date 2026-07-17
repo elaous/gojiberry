@@ -236,7 +236,7 @@ func skipComment(chunk []rune, pos int) (int, bool) {
 	}
 	if chunk[pos+1] == '*' {
 		i := pos + 2
-		for i+1 < n && !(chunk[i] == '*' && chunk[i+1] == '/') {
+		for i+1 < n && (chunk[i] != '*' || chunk[i+1] != '/') {
 			i++
 		}
 		if i+1 < n {

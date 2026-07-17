@@ -5,7 +5,7 @@
 # GOARCH=wasm (domrt and friends are js/wasm-only), and run the
 # vscode-gox grammar suite against every *.gox file in the repo.
 .PHONY: check
-check: generate fmt-check vet test wasm-vet grammar-test
+check: generate fmt-check vet test wasm-vet lint wasm-lint grammar-test
 
 .PHONY: generate
 generate:
@@ -34,6 +34,26 @@ test:
 wasm-vet:
 	GOOS=js GOARCH=wasm go build ./...
 	GOOS=js GOARCH=wasm go vet ./...
+
+# lint/wasm-lint run golangci-lint (tracked as a go.mod tool
+# dependency -- see go.mod's own `tool` line, added via `go get
+# -tool`) the same "native, then GOOS=js GOARCH=wasm" way vet/wasm-vet
+# already do -- see .golangci.yml's own doc comment for why one pass
+# alone can't see both (domrt and friends are js/wasm-only, invisible
+# to a plain native-build type-check). The wasm pass needs a host-
+# native golangci-lint binary with GOOS/GOARCH set in its own
+# environment, not `go tool` directly -- `go tool` would try to
+# cross-compile the linter itself into wasm and then fail to execute
+# it (wasm isn't directly runnable on the host OS).
+.PHONY: lint
+lint:
+	go tool golangci-lint run ./...
+
+.PHONY: wasm-lint
+wasm-lint:
+	go build -o /tmp/gojiberry-golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+	GOOS=js GOARCH=wasm /tmp/gojiberry-golangci-lint run ./...
+	rm -f /tmp/gojiberry-golangci-lint
 
 # coverage runs the native (non-wasm) test suite with a coverage
 # profile and prints the per-function summary -- js/wasm-only packages

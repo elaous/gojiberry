@@ -94,7 +94,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "backend": s.backend})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "backend": s.backend}) // a write failure here means the client disconnected -- nothing actionable to do about it
 }
 
 func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +108,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(metas)
+	_ = json.NewEncoder(w).Encode(metas) // a write failure here means the client disconnected -- nothing actionable to do about it
 }
 
 func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +140,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Write(doc.Data)
+		_, _ = w.Write(doc.Data) // a write failure here means the client disconnected -- nothing actionable to do about it
 	case http.MethodDelete:
 		err := s.adapter.Delete(r.Context(), id)
 		if errors.Is(err, ErrNotFound) {

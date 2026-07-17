@@ -19,17 +19,17 @@ func buildTestSFNT(t *testing.T, records []nameRecordSpec) []byte {
 
 	var buf bytes.Buffer
 	// Offset table: sfntVersion, numTables=1, searchRange/entrySelector/rangeShift (unused by our parser).
-	binary.Write(&buf, binary.BigEndian, uint32(0x00010000))
-	binary.Write(&buf, binary.BigEndian, uint16(1))
-	binary.Write(&buf, binary.BigEndian, uint16(0))
-	binary.Write(&buf, binary.BigEndian, uint16(0))
-	binary.Write(&buf, binary.BigEndian, uint16(0))
+	_ = binary.Write(&buf, binary.BigEndian, uint32(0x00010000))
+	_ = binary.Write(&buf, binary.BigEndian, uint16(1))
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0))
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0))
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0))
 
 	nameOffset := uint32(12 + 16) // offset table + one directory entry
 	buf.WriteString("name")
-	binary.Write(&buf, binary.BigEndian, uint32(0)) // checksum, unchecked
-	binary.Write(&buf, binary.BigEndian, nameOffset)
-	binary.Write(&buf, binary.BigEndian, uint32(len(nameTable)))
+	_ = binary.Write(&buf, binary.BigEndian, uint32(0)) // checksum, unchecked
+	_ = binary.Write(&buf, binary.BigEndian, nameOffset)
+	_ = binary.Write(&buf, binary.BigEndian, uint32(len(nameTable)))
 
 	buf.Write(nameTable)
 	return buf.Bytes()
@@ -63,16 +63,16 @@ func buildNameTable(records []nameRecordSpec) []byte {
 
 	headerLen := 6 + len(records)*12
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, uint16(0)) // format
-	binary.Write(&buf, binary.BigEndian, uint16(len(records)))
-	binary.Write(&buf, binary.BigEndian, uint16(headerLen)) // stringOffset
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0)) // format
+	_ = binary.Write(&buf, binary.BigEndian, uint16(len(records)))
+	_ = binary.Write(&buf, binary.BigEndian, uint16(headerLen)) // stringOffset
 	for _, r := range resolvedRecs {
-		binary.Write(&buf, binary.BigEndian, r.platformID)
-		binary.Write(&buf, binary.BigEndian, r.encodingID)
-		binary.Write(&buf, binary.BigEndian, r.languageID)
-		binary.Write(&buf, binary.BigEndian, r.nameID)
-		binary.Write(&buf, binary.BigEndian, r.length)
-		binary.Write(&buf, binary.BigEndian, r.offset)
+		_ = binary.Write(&buf, binary.BigEndian, r.platformID)
+		_ = binary.Write(&buf, binary.BigEndian, r.encodingID)
+		_ = binary.Write(&buf, binary.BigEndian, r.languageID)
+		_ = binary.Write(&buf, binary.BigEndian, r.nameID)
+		_ = binary.Write(&buf, binary.BigEndian, r.length)
+		_ = binary.Write(&buf, binary.BigEndian, r.offset)
 	}
 	buf.Write(storage.Bytes())
 	return buf.Bytes()

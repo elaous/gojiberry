@@ -50,8 +50,7 @@ func Await(p js.Value) (js.Value, error) {
 // return the Promise immediately (as event.waitUntil/respondWith
 // require) while the real work happens asynchronously.
 func ToPromise(work func() (js.Value, error)) js.Value {
-	var executor js.Func
-	executor = js.FuncOf(func(this js.Value, args []js.Value) any {
+	executor := js.FuncOf(func(this js.Value, args []js.Value) any {
 		resolve, reject := args[0], args[1]
 		go func() {
 			v, err := work()
