@@ -90,7 +90,7 @@ func (r *Reloader) Handler() http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
-		io.WriteString(w, r.version)
+		_, _ = io.WriteString(w, r.version) // a write failure here means the client disconnected -- nothing actionable to do about it
 	})
 }
 

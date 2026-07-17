@@ -1,0 +1,31 @@
+version: "2"
+
+# domrt (and examples/) carry substantial js/wasm-only code -- linting
+# this repo properly means running golangci-lint twice, once natively
+# and once with GOOS=js GOARCH=wasm set, the same "two build configs,
+# two passes" split Makefile's wasm-vet target already established for
+# go vet. See `make lint`/`make wasm-lint`.
+linters:
+  default: standard
+  settings:
+    errcheck:
+      # A deferred Close() (a response body, a *sql.DB/*sql.Rows, an
+      # fsnotify watcher, ...) is the single most common
+      # "intentionally unchecked" error return in Go -- a close
+      # failure on something already fully read/used is essentially
+      # never actionable, and rewriting every `defer x.Close()` this
+      # repo already uses into `defer func() { _ = x.Close() }()`
+      # would be a strictly worse trade for no real benefit. Matched
+      # by the io.Closer interface method, so it covers every
+      # concrete Close() this repo calls, not just one type.
+      exclude-functions:
+        - (io.Closer).Close
+  exclusions:
+    paths:
+      # examples/ is tutorial code, not the library -- its own lint
+      # baseline (mostly wasm-only "unused" false positives in older
+      # demo apps, the same shape editor/'s own dual-build split
+      # already explains) is tracked separately rather than gating the
+      # library's own clean baseline on sweeping every example up
+      # front.
+      - examples

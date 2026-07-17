@@ -21,9 +21,9 @@ func buildCmapFormat0Subtable(present []int) []byte {
 		glyphIDs[cp] = 1 // any nonzero glyph ID marks "has a glyph"
 	}
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, uint16(0))     // format
-	binary.Write(&buf, binary.BigEndian, uint16(6+256)) // length
-	binary.Write(&buf, binary.BigEndian, uint16(0))     // language
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0))     // format
+	_ = binary.Write(&buf, binary.BigEndian, uint16(6+256)) // length
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0))     // language
 	buf.Write(glyphIDs)
 	return buf.Bytes()
 }
@@ -65,44 +65,44 @@ func buildCmapFormat4Subtable(segs []cmapFmt4Seg) []byte {
 	}
 
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, uint16(4)) // format
+	_ = binary.Write(&buf, binary.BigEndian, uint16(4)) // format
 	totalLen := 14 + segCount*2*4 + len(glyphArray)*2
-	binary.Write(&buf, binary.BigEndian, uint16(totalLen))
-	binary.Write(&buf, binary.BigEndian, uint16(0)) // language
-	binary.Write(&buf, binary.BigEndian, uint16(segCount*2))
-	binary.Write(&buf, binary.BigEndian, uint16(0)) // searchRange
-	binary.Write(&buf, binary.BigEndian, uint16(0)) // entrySelector
-	binary.Write(&buf, binary.BigEndian, uint16(0)) // rangeShift
+	_ = binary.Write(&buf, binary.BigEndian, uint16(totalLen))
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0)) // language
+	_ = binary.Write(&buf, binary.BigEndian, uint16(segCount*2))
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0)) // searchRange
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0)) // entrySelector
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0)) // rangeShift
 	for _, v := range endCodes {
-		binary.Write(&buf, binary.BigEndian, v)
+		_ = binary.Write(&buf, binary.BigEndian, v)
 	}
-	binary.Write(&buf, binary.BigEndian, uint16(0)) // reservedPad
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0)) // reservedPad
 	for _, v := range startCodes {
-		binary.Write(&buf, binary.BigEndian, v)
+		_ = binary.Write(&buf, binary.BigEndian, v)
 	}
 	for range segs {
-		binary.Write(&buf, binary.BigEndian, uint16(0)) // idDelta, unused for coverage
+		_ = binary.Write(&buf, binary.BigEndian, uint16(0)) // idDelta, unused for coverage
 	}
 	for _, v := range idRangeOffsets {
-		binary.Write(&buf, binary.BigEndian, v)
+		_ = binary.Write(&buf, binary.BigEndian, v)
 	}
 	for _, v := range glyphArray {
-		binary.Write(&buf, binary.BigEndian, v)
+		_ = binary.Write(&buf, binary.BigEndian, v)
 	}
 	return buf.Bytes()
 }
 
 func buildCmapFormat12Subtable(groups []runeRange) []byte {
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, uint16(12)) // format
-	binary.Write(&buf, binary.BigEndian, uint16(0))  // reserved
-	binary.Write(&buf, binary.BigEndian, uint32(16+len(groups)*12))
-	binary.Write(&buf, binary.BigEndian, uint32(0)) // language
-	binary.Write(&buf, binary.BigEndian, uint32(len(groups)))
+	_ = binary.Write(&buf, binary.BigEndian, uint16(12)) // format
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0))  // reserved
+	_ = binary.Write(&buf, binary.BigEndian, uint32(16+len(groups)*12))
+	_ = binary.Write(&buf, binary.BigEndian, uint32(0)) // language
+	_ = binary.Write(&buf, binary.BigEndian, uint32(len(groups)))
 	for _, g := range groups {
-		binary.Write(&buf, binary.BigEndian, uint32(g.Lo))
-		binary.Write(&buf, binary.BigEndian, uint32(g.Hi))
-		binary.Write(&buf, binary.BigEndian, uint32(1)) // startGlyphID, unused by the parser
+		_ = binary.Write(&buf, binary.BigEndian, uint32(g.Lo))
+		_ = binary.Write(&buf, binary.BigEndian, uint32(g.Hi))
+		_ = binary.Write(&buf, binary.BigEndian, uint32(1)) // startGlyphID, unused by the parser
 	}
 	return buf.Bytes()
 }
@@ -121,12 +121,12 @@ func buildCmapTable(specs []cmapSubtableSpec) []byte {
 		off += uint32(len(s.subtable))
 	}
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, uint16(0)) // version
-	binary.Write(&buf, binary.BigEndian, uint16(len(specs)))
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0)) // version
+	_ = binary.Write(&buf, binary.BigEndian, uint16(len(specs)))
 	for i, s := range specs {
-		binary.Write(&buf, binary.BigEndian, s.platformID)
-		binary.Write(&buf, binary.BigEndian, s.encodingID)
-		binary.Write(&buf, binary.BigEndian, offsets[i])
+		_ = binary.Write(&buf, binary.BigEndian, s.platformID)
+		_ = binary.Write(&buf, binary.BigEndian, s.encodingID)
+		_ = binary.Write(&buf, binary.BigEndian, offsets[i])
 	}
 	for _, s := range specs {
 		buf.Write(s.subtable)
@@ -148,11 +148,11 @@ func buildTestSFNTWithCmap(nameRecords []nameRecordSpec, cmapTable []byte) []byt
 	tables := []entry{{"name", nameTable}, {"cmap", cmapTable}}
 
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, uint32(0x00010000))
-	binary.Write(&buf, binary.BigEndian, uint16(len(tables)))
-	binary.Write(&buf, binary.BigEndian, uint16(0))
-	binary.Write(&buf, binary.BigEndian, uint16(0))
-	binary.Write(&buf, binary.BigEndian, uint16(0))
+	_ = binary.Write(&buf, binary.BigEndian, uint32(0x00010000))
+	_ = binary.Write(&buf, binary.BigEndian, uint16(len(tables)))
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0))
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0))
+	_ = binary.Write(&buf, binary.BigEndian, uint16(0))
 
 	off := uint32(12 + len(tables)*16)
 	offsets := make([]uint32, len(tables))
@@ -162,9 +162,9 @@ func buildTestSFNTWithCmap(nameRecords []nameRecordSpec, cmapTable []byte) []byt
 	}
 	for i, tb := range tables {
 		buf.WriteString(tb.tag)
-		binary.Write(&buf, binary.BigEndian, uint32(0)) // checksum, unchecked
-		binary.Write(&buf, binary.BigEndian, offsets[i])
-		binary.Write(&buf, binary.BigEndian, uint32(len(tb.data)))
+		_ = binary.Write(&buf, binary.BigEndian, uint32(0)) // checksum, unchecked
+		_ = binary.Write(&buf, binary.BigEndian, offsets[i])
+		_ = binary.Write(&buf, binary.BigEndian, uint32(len(tb.data)))
 	}
 	for _, tb := range tables {
 		buf.Write(tb.data)

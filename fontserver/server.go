@@ -180,7 +180,7 @@ func (s *Server) handleLocalFile(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", fontContentType(rel))
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	w.Write(data)
+	_, _ = w.Write(data) // a write error here means the client disconnected -- nothing actionable to do about it
 }
 
 // handleLocalSymbols resolves ?family= to its representative variant

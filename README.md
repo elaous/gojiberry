@@ -1465,6 +1465,22 @@ commands that example's own section above documents -- read the
 `Makefile` itself if you want to see precisely what a shortcut expands
 to, or run the commands by hand if you'd rather not use `make` at all.
 
+`make lint`/`make wasm-lint` run `golangci-lint` (tracked as a
+`go.mod` tool dependency -- `tool
+github.com/golangci/golangci-lint/v2/cmd/golangci-lint`, added via `go
+get -tool` rather than a separate global install every contributor has
+to remember) the same native-then-`GOOS=js GOARCH=wasm` way
+`vet`/`wasm-vet` already do, both wired into `make check`. `domrt` and
+friends are `js`/`wasm`-only, invisible to a native-only pass, so
+`wasm-lint` covers what `lint` alone can't see; see `.golangci.yml`'s
+own doc comment for why that needs a host-native `golangci-lint`
+binary with `GOOS`/`GOARCH` set in its own environment rather than
+`go tool` directly (which would try to cross-compile the linter itself
+into wasm and then fail to execute it). `examples/` is excluded from
+both -- tutorial code, not the library, with its own separate lint
+backlog (mostly the same wasm-only-visibility false positives) tracked
+as a follow-up rather than gating the library's own clean baseline.
+
 `make coverage` runs the native (non-`js`/`wasm`) test suite with a
 coverage profile and prints the per-function summary; `make
 coverage-html` turns the same profile into `coverage.out.html`, a
@@ -1489,3 +1505,10 @@ measure.
   keyed-or-positional reconciliation, not a minimal-move (LIS-based)
   algorithm — correct, but not necessarily the fewest possible DOM
   moves for a heavily-reordered keyed list.
+- `examples/`' own `golangci-lint` baseline (deliberately excluded
+  from `make lint`/`wasm-lint`, see "Development" above) still has a
+  handful of real findings, mostly the same wasm-only-visibility
+  "unused" false positive `//nolint:unused` already resolves
+  elsewhere in this repo, concentrated in the older demo apps —
+  tracked separately rather than fixed alongside the library's own
+  clean baseline.

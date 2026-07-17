@@ -143,16 +143,16 @@ func (p *managedProcess) stop() {
 	if cmd == nil || cmd.Process == nil {
 		return
 	}
-	cmd.Process.Signal(syscall.SIGTERM)
+	_ = cmd.Process.Signal(syscall.SIGTERM) // best-effort -- the process may already be gone
 	done := make(chan struct{})
 	go func() {
-		cmd.Wait()
+		_ = cmd.Wait()
 		close(done)
 	}()
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		cmd.Process.Kill()
+		_ = cmd.Process.Kill() // last resort -- nothing left to do if this itself fails
 		<-done
 	}
 }
@@ -185,7 +185,7 @@ func Run(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 	if err := addRecursive(watcher, cfg.Root); err != nil {
 		return err
 	}
@@ -213,7 +213,7 @@ func Run(cfg Config) error {
 				// files written inside it would go unnoticed.
 				if ev.Op&fsnotify.Create != 0 {
 					if info, statErr := os.Stat(ev.Name); statErr == nil && info.IsDir() {
-						addRecursive(watcher, ev.Name)
+						_ = addRecursive(watcher, ev.Name) // a failure here just means that one subdirectory goes unwatched
 					}
 				}
 				if debounce != nil {
