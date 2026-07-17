@@ -132,6 +132,24 @@ func (r *Repo) Families() []Family {
 	return out
 }
 
+// VariantPath returns the file path (relative to r's own root, ready
+// for Open) of family's own "representative" variant -- the lightest-
+// weight, non-italic-preferred one Scan's own sort already puts first
+// (Variants[0]). For a symbol/dingbat font (which typically ships as
+// a single variant anyway) or a real text font (whose character
+// repertoire is normally identical across weights), that's a fine
+// single file to read a 'cmap' table from without needing every
+// variant's own copy.
+func (r *Repo) VariantPath(family string) (string, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	f, ok := r.families[family]
+	if !ok || len(f.Variants) == 0 {
+		return "", false
+	}
+	return f.Variants[0].Path, true
+}
+
 // Open returns the raw bytes of the font file at rel, which must be
 // exactly one of the Paths Scan last produced -- not merely a path
 // that resolves inside r.dir. This is what stops a request like
