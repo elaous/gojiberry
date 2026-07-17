@@ -32,6 +32,39 @@ const (
 	langWindowsEnUS    = 0x0409
 )
 
+// findSfntTable walks data's sfnt table directory looking for tag
+// (a four-character table name like "name" or "cmap"), returning that
+// table's own offset/length within data -- shared by sfntNames and
+// sfntCmapRanges, both of which otherwise duplicated this exact walk.
+// Bounds-checks the directory itself and the returned table's own
+// extent against data's length, but (like sfntNames always has) never
+// validates table checksums -- those matter for rendering
+// correctness, not for reading a table's own bytes.
+func findSfntTable(data []byte, tag string) (offset, length uint32, err error) {
+	if len(data) < 12 {
+		return 0, 0, fmt.Errorf("fontserver: file too short to be an sfnt font")
+	}
+	numTables := binary.BigEndian.Uint16(data[4:6])
+	const dirEntrySize = 16
+	dirEnd := 12 + int(numTables)*dirEntrySize
+	if dirEnd > len(data) {
+		return 0, 0, fmt.Errorf("fontserver: truncated table directory")
+	}
+	for i := 0; i < int(numTables); i++ {
+		rec := data[12+i*dirEntrySize : 12+(i+1)*dirEntrySize]
+		if string(rec[0:4]) != tag {
+			continue
+		}
+		offset = binary.BigEndian.Uint32(rec[8:12])
+		length = binary.BigEndian.Uint32(rec[12:16])
+		if uint64(offset)+uint64(length) > uint64(len(data)) {
+			return 0, 0, fmt.Errorf("fontserver: '%s' table out of bounds", tag)
+		}
+		return offset, length, nil
+	}
+	return 0, 0, fmt.Errorf("fontserver: no '%s' table", tag)
+}
+
 // sfntNames extracts the sfnt 'name' table's family/subfamily strings
 // from a raw TrueType/OpenType font file (.ttf/.otf; not woff/woff2,
 // which wrap this same table format in a compressed container we
@@ -41,31 +74,11 @@ const (
 // 'OTTO'), and does not validate table checksums, which matter for
 // rendering correctness but not for reading a handful of strings.
 func sfntNames(data []byte) (family, subfamily string, err error) {
-	if len(data) < 12 {
-		return "", "", fmt.Errorf("fontserver: file too short to be an sfnt font")
+	nameOff, nameLen, err := findSfntTable(data, "name")
+	if err != nil {
+		return "", "", err
 	}
-	numTables := binary.BigEndian.Uint16(data[4:6])
-	const dirEntrySize = 16
-	dirEnd := 12 + int(numTables)*dirEntrySize
-	if dirEnd > len(data) {
-		return "", "", fmt.Errorf("fontserver: truncated table directory")
-	}
-	var nameOff, nameLen uint32
-	found := false
-	for i := 0; i < int(numTables); i++ {
-		rec := data[12+i*dirEntrySize : 12+(i+1)*dirEntrySize]
-		tag := string(rec[0:4])
-		if tag == "name" {
-			nameOff = binary.BigEndian.Uint32(rec[8:12])
-			nameLen = binary.BigEndian.Uint32(rec[12:16])
-			found = true
-			break
-		}
-	}
-	if !found {
-		return "", "", fmt.Errorf("fontserver: no 'name' table")
-	}
-	if uint64(nameOff)+uint64(nameLen) > uint64(len(data)) || nameLen < 6 {
+	if nameLen < 6 {
 		return "", "", fmt.Errorf("fontserver: 'name' table out of bounds")
 	}
 	table := data[nameOff : nameOff+nameLen]
