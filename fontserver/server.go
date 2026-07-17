@@ -106,11 +106,12 @@ func NewServer(cfg Config) *Server {
 
 // Handler returns the HTTP routes:
 //
-//	GET  /health              -- confirms the server is up
-//	GET  /local/fonts         -- the local Repo's cached family list
-//	POST /local/rescan        -- re-scans the local font directory
-//	GET  /local/files/{path}  -- the raw bytes of one scanned font file
-//	GET  /google/fonts        -- the cached Google Fonts catalog (empty, no error, if no API key is configured)
+//	GET  /health                    -- confirms the server is up
+//	GET  /local/fonts                -- the local Repo's cached family list
+//	POST /local/rescan               -- re-scans the local font directory
+//	GET  /local/files/{path}         -- the raw bytes of one scanned font file
+//	GET  /local/symbols?family={name} -- a locally scanned family's own character repertoire (cmap.go's sfntCmapRanges), as JSON rune ranges
+//	GET  /google/fonts               -- the cached Google Fonts catalog (empty, no error, if no API key is configured)
 //
 // Every response carries permissive CORS headers, the same reasoning
 // as syncserver.Handler: this server's whole point is being reachable
@@ -121,6 +122,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/local/fonts", s.handleLocalFonts)
 	mux.HandleFunc("/local/rescan", s.handleLocalRescan)
 	mux.HandleFunc("/local/files/", s.handleLocalFile)
+	mux.HandleFunc("/local/symbols", s.handleLocalSymbols)
 	mux.HandleFunc("/google/fonts", s.handleGoogleFonts)
 	return corsMiddleware(mux)
 }
@@ -179,6 +181,46 @@ func (s *Server) handleLocalFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", fontContentType(rel))
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Write(data)
+}
+
+// handleLocalSymbols resolves ?family= to its representative variant
+// (Repo.VariantPath), reads that file, and parses its own character
+// repertoire (sfntCmapRanges, cmap.go) -- the special-character
+// picker's own "browse this font's actual symbols" feature
+// (OnDesign's specialchar.go), distinct from /local/fonts' plain
+// family/variant listing. A family the Repo hasn't scanned, or whose
+// representative file fails to parse as a well-formed sfnt font (a
+// truncated/corrupt file on disk, say), is reported as 404/422
+// respectively rather than an empty symbol list, so the caller can
+// tell "no such font" and "no such symbols" apart from a real parse
+// failure.
+func (s *Server) handleLocalSymbols(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	family := r.URL.Query().Get("family")
+	if family == "" {
+		http.Error(w, "missing family parameter", http.StatusBadRequest)
+		return
+	}
+	path, ok := s.repo.VariantPath(family)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	data, ok := s.repo.Open(path)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	ranges, err := sfntCmapRanges(data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	writeJSON(w, http.StatusOK, map[string]any{"ranges": ranges})
 }
 
 func fontContentType(path string) string {
