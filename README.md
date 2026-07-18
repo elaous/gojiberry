@@ -1504,7 +1504,23 @@ measure.
 - Children/attribute list diffing in `domrt` is a straightforward
   keyed-or-positional reconciliation, not a minimal-move (LIS-based)
   algorithm — correct, but not necessarily the fewest possible DOM
-  moves for a heavily-reordered keyed list.
+  moves for a heavily-reordered keyed list. No benchmark backs that
+  claim with real numbers yet, unlike `buffer`'s own measured ~200x
+  (`go test ./buffer/... -bench=.`, see that entry above) — `domrt`'s
+  `patch`/`patchChildren`/`patchAttrs` (`domrt.go`) are `js`/`wasm`-only
+  (real `syscall/js` DOM calls), so a plain native `go test -bench`
+  can't exercise them the way `buffer`'s own pure-Go benchmark does;
+  measuring them for real needs either a headless-browser benchmark
+  harness (timing via JS `performance.now()`, launched the same way
+  the example apps' own Playwright e2e suites already drive a real
+  browser) driving a realistic reorder/insert against a large keyed
+  list, or splitting `patchChildren`'s own diff/plan computation
+  (which keys move where) out from applying that plan to real DOM
+  nodes, so the pure planning half alone could get a native benchmark
+  the `buffer` package's own way. Either approach would give the
+  "not minimal-move" limitation above real before/after numbers, and
+  a concrete regression guard if a minimal-move algorithm is ever
+  actually implemented.
 - `examples/`' own `golangci-lint` baseline (deliberately excluded
   from `make lint`/`wasm-lint`, see "Development" above) still has a
   handful of real findings, mostly the same wasm-only-visibility
