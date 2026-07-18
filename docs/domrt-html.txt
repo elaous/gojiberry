@@ -620,6 +620,15 @@ func (d *Document) GetElementsByTagNameNS(namespace, tag string) []Element
     the DOM -- those aren't real browser APIs, so this package doesn't pretend
     to wrap them.
 
+func (d *Document) QuerySelector(selector string) *Element
+    QuerySelector returns the first element in the document matching the
+    CSS selector, in document order, or nil when nothing matches. See
+    Element.QuerySelector for the subtree-scoped variant.
+
+func (d *Document) QuerySelectorAll(selector string) []Element
+    QuerySelectorAll returns every element in the document matching the CSS
+    selector, in document order -- empty when nothing matches.
+
 type DomNode interface {
 	JSValue() js.Value
 	Get(name string) js.Value
@@ -633,6 +642,8 @@ type DomNode interface {
 	SetTextContent(text string)
 	GetAttribute(name string) string
 	SetAttribute(name, value string)
+	QuerySelector(selector string) *Element
+	QuerySelectorAll(selector string) []Element
 	AppendChild(child DomNode)
 	RemoveChild(child DomNode)
 	GetInnerHTML() string
@@ -723,7 +734,7 @@ func (e *Element) BoundingRect() Rect
 
 func (e *Element) Call(method string, args ...any) js.Value
     Call invokes a method not covered by a typed wrapper above (e.g.
-    Call("click"), Call("focus"), Call("querySelector", selector)).
+    Call("closest", selector), Call("insertAdjacentHTML", pos, html)).
 
 func (e *Element) ClassListAdd(class ...string)
     ClassListAdd adds one or more classes to e. Prefer this (and
@@ -879,8 +890,25 @@ func (e *Element) OnMouseMove(fn func(MouseEvent)) js.Func
 func (e *Element) OnMouseUp(fn func(MouseEvent)) js.Func
     OnMouseUp registers fn for the mouseup event.
 
+func (e *Element) OnWheel(fn func(WheelEvent)) js.Func
+    OnWheel registers fn for the wheel event.
+
 func (e *Element) ParentElement() *Element
     ParentElement returns e's parent element, or nil if e has none.
+
+func (e *Element) QuerySelector(selector string) *Element
+    QuerySelector returns the first descendant of e matching the CSS selector,
+    in document order, or nil when nothing matches -- the same subtree-scoped
+    semantics as the DOM's own element-level querySelector. Meaningful on
+    any element that can have children; on a void (self-closing) element
+    like <input> or <br> there are no descendants to match, so it always
+    returns nil, exactly as in the browser. For a document-wide search use
+    Document.QuerySelector.
+
+func (e *Element) QuerySelectorAll(selector string) []Element
+    QuerySelectorAll returns every descendant of e matching the CSS selector,
+    in document order -- empty when nothing matches. See QuerySelector for the
+    subtree scoping.
 
 func (e *Element) RemoveChild(child DomNode)
     RemoveChild removes child from e's children.
@@ -1171,14 +1199,20 @@ func (e KeyEvent) StopPropagation()
     StopPropagation stops the event from bubbling further.
 
 type MouseEvent struct {
-	Value js.Value
-	X, Y  float64
+	Value                              js.Value
+	X, Y                               float64
+	Button                             int
+	CtrlKey, ShiftKey, AltKey, MetaKey bool
 }
     MouseEvent wraps a mousedown/mousemove/mouseup DOM event with its position
-    relative to the viewport (clientX/clientY) -- gox.Event carries no
-    coordinates at all (see its doc comment), so, like DragEvent and KeyEvent,
-    this is a typed escape hatch for building anything that needs a real
-    click/drag position: canvas hit-testing, custom selection, image cropping,
+    relative to the viewport (clientX/clientY), which button (0 = left/primary,
+    1 = middle, 2 = right, matching the DOM's own MouseEvent.button --
+    mousedown/mouseup fire for every button, not just the primary one, so check
+    this before treating one as a plain click) and modifier keys -- gox.Event
+    carries neither at all (see its doc comment), so, like DragEvent and
+    KeyEvent, this is a typed escape hatch for building anything that needs a
+    real click/drag position or a modifier-qualified click: canvas hit-testing,
+    custom selection, image cropping, Alt+Click to add a multi-cursor caret,
     and so on.
 
 func (e MouseEvent) PreventDefault()
@@ -1277,6 +1311,25 @@ func (e SubmitEvent) PreventDefault()
     to handle it with FormData/fetch instead.
 
 func (e SubmitEvent) StopPropagation()
+    StopPropagation stops the event from bubbling further.
+
+type WheelEvent struct {
+	Value          js.Value
+	DeltaX, DeltaY float64
+}
+    WheelEvent wraps a wheel DOM event -- gox.Event carries no delta
+    information at all (see its doc comment), so, like MouseEvent and KeyEvent,
+    this is a typed escape hatch for anything that needs real scroll input:
+    a canvas-rendered document's own scroll offset (which has no native
+    scrollbar to drive it, unlike a normal DOM element), a custom slider,
+    a zoomable canvas.
+
+func (e WheelEvent) PreventDefault()
+    PreventDefault suppresses the browser's default handling of the event --
+    e.g. stopping the page itself from scrolling while a canvas-rendered surface
+    handles the wheel input instead.
+
+func (e WheelEvent) StopPropagation()
     StopPropagation stops the event from bubbling further.
 
 type Window struct {
