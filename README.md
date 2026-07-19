@@ -471,6 +471,24 @@ expanded by the same recursive scan, with no extra grammar required.
   Docker daemon available to start either one) — every other adapter,
   and the HTTP server itself, is exercised with real, no-live-service-
   required native tests.
+- **`translateserver`** — a small translation proxy, the same
+  environment-configured, CORS-open, single-binary shape as
+  `syncserver`/`fontserver`/`docstore` (`cmd/translateserver`). One
+  route, `POST /translate` (`{"text","targetLang","sourceLang"}` →
+  `{"translatedText","detectedSourceLanguage"}`), forwards to DeepL via
+  [`cluttrdev/deepl-go`](https://github.com/cluttrdev/deepl-go) — the
+  API key (`GOJIBERRY_TRANSLATESERVER_DEEPL_KEY`) lives only in this
+  server-to-DeepL request, never reaching the browser, the same reason
+  `fontserver` proxies the Google Fonts API instead of handing its own
+  key out. With no key configured, `/translate` reports `503` rather
+  than refusing to start at all — the same graceful-degradation
+  posture `fontserver`'s own `handleGoogleFonts` takes with no Google
+  key. The real DeepL client is reached through a narrow `translator`
+  interface (`TranslateText`), so tests inject a fake instead of
+  hitting the network, the same "swappable network call" shape
+  `fontserver`'s own `fetchGoogleFonts` field already established.
+  DeepL only for now; a second provider would slot in behind that same
+  interface without touching the HTTP layer at all.
 - **`devreload`** / **`devwatch`** — the two halves of gox's dev-mode
   hot-reload loop, generalized out of `examples/canvas-app`'s own
   hand-rolled version so any gox server can opt in with a few lines
