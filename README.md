@@ -470,7 +470,43 @@ expanded by the same recursive scan, with no extra grammar required.
   with no live service, e.g. this repo's own CI sandbox, which has no
   Docker daemon available to start either one) — every other adapter,
   and the HTTP server itself, is exercised with real, no-live-service-
-  required native tests.
+  required native tests. Optionally mounts `auth`'s own `/auth/*`
+  Sign-in-with-OIDC routes alongside `/docs/*` — see `auth` below;
+  off by default.
+- **`auth`** — a minimal OpenID Connect login flow ("Sign in with
+  Google/Microsoft/any OIDC-compliant provider") for servers in this
+  repo that need to know who a request is from. One generic
+  `Manager`/`Config`/`Provider` implementation driven entirely by an
+  issuer URL plus a client ID/secret — Google, Microsoft/Azure AD,
+  Okta, Auth0, or any other OIDC-compliant provider all work through
+  the same code, no per-provider branching. `User` carries only `ID`
+  (`"{provider}:{sub}"`, so two providers' subject claims can never
+  collide), `Email`, and `Name` — no picture/locale/etc. Sessions are
+  bearer tokens (`Authorization: Bearer <token>`), not cookies: this
+  repo's HTTP servers already answer CORS with a wildcard
+  `Access-Control-Allow-Origin`, which a credentialed cookie-based
+  session can't safely ride along with, and a bearer token sidesteps
+  that entirely while matching how a browser client already keeps
+  everything else (documents, local config) in its own storage rather
+  than a server-set cookie. `Manager.Routes()` mounts `GET
+  /auth/providers` (list configured providers), `GET
+  /auth/{provider}/login` (redirect to that provider's own consent
+  screen, with a server-generated, single-use, 10-minute CSRF `state`
+  value), `GET /auth/{provider}/callback` (exchanges the code, verifies
+  the ID token via `go-oidc`, mints a 30-day-default session, and
+  redirects back to the caller-supplied `ReturnTo` with the session
+  token in the URL fragment — `#auth_token=...`, never a query
+  parameter, so it never lands in server access logs), `GET /auth/me`
+  (resolve the current bearer token to a `User`, or 401), and `POST
+  /auth/logout`. `docstore` is the first consumer — set
+  `GOJIBERRY_DOCSTORE_AUTH_PROVIDERS` (a JSON array of providers) and
+  `GOJIBERRY_DOCSTORE_AUTH_BASE_URL` and its `/auth/*` routes mount
+  automatically alongside `/docs/*`; leave `AUTH_PROVIDERS` unset (the
+  default) and docstore behaves exactly as it did before this package
+  existed. Identity only — resolving a bearer token to a `User` is as
+  far as this package goes; document ownership/sharing/permissions on
+  top of that identity is a separate, still-unbuilt layer (see
+  OnDesign's own `docs/ROADMAP.md`).
 - **`translateserver`** — a small translation proxy, the same
   environment-configured, CORS-open, single-binary shape as
   `syncserver`/`fontserver`/`docstore` (`cmd/translateserver`). One
