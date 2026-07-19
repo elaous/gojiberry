@@ -5,8 +5,12 @@ package html
 import "syscall/js"
 
 // MouseEvent wraps a mousedown/mousemove/mouseup DOM event with its
-// position relative to the viewport (clientX/clientY) and modifier
-// keys -- gox.Event carries neither at all (see its doc comment), so,
+// position relative to the viewport (clientX/clientY), which button
+// (0 = left/primary, 1 = middle, 2 = right, matching the DOM's own
+// MouseEvent.button -- mousedown/mouseup fire for every button, not
+// just the primary one, so check this before treating one as a plain
+// click) and modifier keys -- gox.Event carries neither at all (see
+// its doc comment), so,
 // like DragEvent and KeyEvent, this is a typed escape hatch for
 // building anything that needs a real click/drag position or a
 // modifier-qualified click: canvas hit-testing, custom selection,
@@ -14,6 +18,7 @@ import "syscall/js"
 type MouseEvent struct {
 	Value                              js.Value
 	X, Y                               float64
+	Button                             int
 	CtrlKey, ShiftKey, AltKey, MetaKey bool
 }
 
@@ -22,6 +27,7 @@ func newMouseEvent(v js.Value) MouseEvent {
 		Value:    v,
 		X:        v.Get("clientX").Float(),
 		Y:        v.Get("clientY").Float(),
+		Button:   v.Get("button").Int(),
 		CtrlKey:  v.Get("ctrlKey").Bool(),
 		ShiftKey: v.Get("shiftKey").Bool(),
 		AltKey:   v.Get("altKey").Bool(),

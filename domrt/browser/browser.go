@@ -105,6 +105,25 @@ func (r *Response) JSON(v any) error {
 	return json.Unmarshal([]byte(text), v)
 }
 
+// Bytes reads the full response body as raw bytes -- the binary
+// counterpart to Text/JSON, for a body that isn't valid UTF-8 text
+// (a gzip-compressed file, an image, ...): decoding it as text first,
+// the way Text() does, would corrupt it (invalid byte sequences get
+// replaced with U+FFFD on the JS side before Go ever sees them). Same
+// arrayBuffer()-then-Uint8Array-then-CopyBytesToGo shape
+// File.ReadAsArrayBuffer (fileapi.go) already uses for the same
+// binary-safety reason.
+func (r *Response) Bytes() ([]byte, error) {
+	v, err := domrt.Await(r.body.Call("arrayBuffer"))
+	if err != nil {
+		return nil, err
+	}
+	arr := js.Global().Get("Uint8Array").New(v)
+	out := make([]byte, arr.Length())
+	js.CopyBytesToGo(out, arr)
+	return out, nil
+}
+
 // storageArea wraps window.localStorage / window.sessionStorage.
 type storageArea struct{ name string }
 
