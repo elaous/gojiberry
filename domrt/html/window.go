@@ -85,9 +85,21 @@ func (w *Window) Confirm(message string) bool {
 }
 
 // Prompt shows a native text-input dialog pre-filled with defaultValue,
-// returning the entered text (or "" if cancelled).
+// returning the entered text (or "" if cancelled). The browser's own
+// window.prompt returns JS null on cancel, not "" -- and
+// syscall/js's Value.String() renders a non-string value (including
+// null) as a placeholder like "<null>" rather than panicking or
+// coercing it, so calling .String() directly on the raw result would
+// silently turn "cancelled" into the literal 6-character string
+// "<null>" instead of "". Checked explicitly here so every caller can
+// rely on this func's own doc comment ("" means cancelled) without
+// each one re-deriving this.
 func (w *Window) Prompt(message, defaultValue string) string {
-	return w.Window.Call("prompt", message, defaultValue).String()
+	v := w.Window.Call("prompt", message, defaultValue)
+	if v.Type() != js.TypeString {
+		return ""
+	}
+	return v.String()
 }
 
 // Open opens url in a new browsing context (or an existing one named
