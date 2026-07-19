@@ -74,6 +74,15 @@ func (w *Window) SetLocation(url string) {
 	w.Window.Set("location", url)
 }
 
+// ReplaceState swaps the current history entry's URL for url, without
+// a navigation/reload and without creating a new Back stop -- e.g. to
+// strip a one-time token out of the address bar right after reading
+// it, so a bookmark, refresh, or copy-pasted link never resurfaces it.
+// Fires no popstate event, matching the browser's own replaceState.
+func (w *Window) ReplaceState(url string) {
+	w.Window.Get("history").Call("replaceState", js.Null(), "", url)
+}
+
 // Alert shows a native alert dialog with message, blocking until dismissed.
 func (w *Window) Alert(message string) {
 	w.Window.Call("alert", message)
