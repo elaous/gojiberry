@@ -1,12 +1,18 @@
 package docstore
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/elaous/gojiberry/auth"
 )
 
 // Config is loaded entirely from the environment, mirroring
@@ -29,20 +35,63 @@ type Config struct {
 	Addr          string
 	Backend       string
 	BackendConfig json.RawMessage
+	Auth          AuthConfig
+}
+
+// AuthConfig configures the optional Sign-in-with-OIDC endpoints
+// docstore mounts under /auth/* -- see the gojiberry/auth package
+// itself for what those endpoints do and why a bearer token, not a
+// cookie, carries the session. Entirely optional: leaving Providers
+// empty (the default) mounts no /auth/* routes at all and docstore
+// behaves exactly as it did before this package existed. This is
+// identity only -- resolving a request's own bearer token to a User --
+// not document ownership/permissions, which is a separate, still-
+// unbuilt layer on top (see docs/ROADMAP.md's Share/sharing entries in
+// the OnDesign repo).
+type AuthConfig struct {
+	BaseURL    string
+	Providers  []auth.Provider
+	SessionTTL time.Duration
 }
 
 // ConfigFromEnv reads GOJIBERRY_DOCSTORE_ADDR, GOJIBERRY_DOCSTORE_BACKEND,
-// and GOJIBERRY_DOCSTORE_BACKEND_CONFIG (that backend's own config, as a
+// GOJIBERRY_DOCSTORE_BACKEND_CONFIG (that backend's own config, as a
 // raw JSON object -- e.g. GOJIBERRY_DOCSTORE_BACKEND_CONFIG='{"dsn":"..."}'
-// for the postgres backend). Leaving BACKEND_CONFIG unset is fine for
-// backends with no required fields (memory needs none; localfs
-// defaults its dir).
+// for the postgres backend), and the optional GOJIBERRY_DOCSTORE_AUTH_*
+// vars below. Leaving BACKEND_CONFIG unset is fine for backends with no
+// required fields (memory needs none; localfs defaults its dir).
+//
+// GOJIBERRY_DOCSTORE_AUTH_PROVIDERS, if set, is a JSON array of
+// auth.Provider (e.g. '[{"name":"google","issuerURL":"https://accounts.google.com","clientID":"...","clientSecret":"..."}]')
+// and turns on the /auth/* endpoints -- see AuthConfig. Leaving it
+// unset (the default) leaves auth off entirely.
+// GOJIBERRY_DOCSTORE_AUTH_BASE_URL is this server's own externally-
+// reachable base URL (see auth.Config.BaseURL); required when
+// AUTH_PROVIDERS is set. GOJIBERRY_DOCSTORE_AUTH_SESSION_TTL is a
+// Go duration string (e.g. "720h"); defaults to auth's own 30-day
+// default when unset.
 func ConfigFromEnv() Config {
-	return Config{
+	cfg := Config{
 		Addr:          envOr("GOJIBERRY_DOCSTORE_ADDR", ":8090"),
 		Backend:       envOr("GOJIBERRY_DOCSTORE_BACKEND", "memory"),
 		BackendConfig: json.RawMessage(os.Getenv("GOJIBERRY_DOCSTORE_BACKEND_CONFIG")),
+		Auth: AuthConfig{
+			BaseURL: os.Getenv("GOJIBERRY_DOCSTORE_AUTH_BASE_URL"),
+		},
 	}
+	if raw := os.Getenv("GOJIBERRY_DOCSTORE_AUTH_PROVIDERS"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &cfg.Auth.Providers); err != nil {
+			log.Fatalf("docstore: parsing GOJIBERRY_DOCSTORE_AUTH_PROVIDERS: %v", err)
+		}
+	}
+	if raw := os.Getenv("GOJIBERRY_DOCSTORE_AUTH_SESSION_TTL"); raw != "" {
+		ttl, err := time.ParseDuration(raw)
+		if err != nil {
+			log.Fatalf("docstore: parsing GOJIBERRY_DOCSTORE_AUTH_SESSION_TTL: %v", err)
+		}
+		cfg.Auth.SessionTTL = ttl
+	}
+	return cfg
 }
 
 func envOr(key, fallback string) string {
@@ -59,9 +108,18 @@ func envOr(key, fallback string) string {
 //	DELETE /docs/{id}  -- delete
 //	GET    /docs       -- list metadata, as a JSON array of Meta
 //	GET    /health     -- liveness + configured backend name
+//
+// Plus, when auth is configured (see AuthConfig/WithAuth), every
+// /auth/* route auth.Manager.Routes documents -- /auth/providers,
+// /auth/{provider}/login, /auth/{provider}/callback, /auth/me,
+// /auth/logout. Identity only: this Server doesn't itself check a
+// request's signed-in User against anything before serving /docs/* --
+// that's document ownership/permissions, a separate layer not built
+// yet (see docs/ROADMAP.md's Share entry in the OnDesign repo).
 type Server struct {
 	adapter Adapter
 	backend string
+	auth    *auth.Manager
 }
 
 // NewServer wraps an already-constructed Adapter. Use this directly
@@ -71,11 +129,41 @@ func NewServer(adapter Adapter, backendName string) *Server {
 	return &Server{adapter: adapter, backend: backendName}
 }
 
+// WithAuth attaches an already-built auth.Manager, mounting its
+// /auth/* routes alongside /docs/* the next time Handler is called.
+// Returns s so it can chain off NewServer at the call site.
+func (s *Server) WithAuth(m *auth.Manager) *Server {
+	s.auth = m
+	return s
+}
+
+// NewAuthManager builds an auth.Manager from cfg, or returns (nil,
+// nil) when cfg has no providers configured -- the "auth is entirely
+// optional" case ConfigFromEnv's own doc comment describes. Exists
+// mainly so cmd/docstore's main can build a Manager without importing
+// the auth package itself.
+func NewAuthManager(ctx context.Context, cfg AuthConfig) (*auth.Manager, error) {
+	if len(cfg.Providers) == 0 {
+		return nil, nil
+	}
+	if cfg.BaseURL == "" {
+		return nil, fmt.Errorf("docstore: AuthConfig.BaseURL is required when Providers is set")
+	}
+	return auth.NewManager(ctx, auth.Config{
+		BaseURL:    cfg.BaseURL,
+		Providers:  cfg.Providers,
+		SessionTTL: cfg.SessionTTL,
+	})
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/docs", s.handleList)
 	mux.HandleFunc("/docs/", s.handleDoc)
+	if s.auth != nil {
+		mux.Handle("/auth/", s.auth.Routes())
+	}
 	return corsMiddleware(mux)
 }
 
@@ -83,7 +171,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
