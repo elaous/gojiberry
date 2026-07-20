@@ -22,7 +22,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
-	srv := docstore.NewServer(adapter, cfg.Backend)
+	authManager, err := docstore.NewAuthManager(context.Background(), cfg.Auth)
+	if err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
+	srv := docstore.NewServer(adapter, cfg.Backend).WithAuth(authManager)
+	if authManager != nil {
+		log.Printf("docstore: sign-in enabled (%d provider(s))", len(cfg.Auth.Providers))
+	}
 	log.Printf("docstore: listening on %s (backend=%s)", cfg.Addr, cfg.Backend)
 	log.Fatal(http.ListenAndServe(cfg.Addr, srv.Handler()))
 }
