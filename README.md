@@ -472,7 +472,22 @@ expanded by the same recursive scan, with no extra grammar required.
   and the HTTP server itself, is exercised with real, no-live-service-
   required native tests. Optionally mounts `auth`'s own `/auth/*`
   Sign-in-with-OIDC routes alongside `/docs/*` — see `auth` below;
-  off by default.
+  off by default. Also optionally enforces a per-document ACL
+  (`acl.go`) once one's been set via `PUT /docs/{id}/acl` — an
+  `Owner` email plus a `Grants` map (email → `editor`/`viewer`),
+  stored as an ordinary document of its own under a reserved `acl:`
+  key through the exact same `Adapter` every real document already
+  goes through, so no backend needs its own code to support it.
+  `GET /docs/{id}/acl` (Owner-only) and `PUT` (bootstraps ownership on
+  first use — whatever `Owner` the request body claims is always
+  overwritten with the caller's own identity, never trusted from the
+  client) sit alongside the enforcement itself: every `GET`/`PUT`/
+  `DELETE /docs/{id}` checks that document's own ACL, if any, against
+  the caller's bearer token. A document nobody has ever shared this
+  way is completely unaffected — enforcement, and `/docs/{id}/acl`
+  itself, are no-ops without an `auth.Manager` configured at all,
+  since without one no request can ever resolve to a real identity to
+  check an ACL against in the first place.
 - **`auth`** — a minimal OpenID Connect login flow ("Sign in with
   Google/Microsoft/any OIDC-compliant provider") for servers in this
   repo that need to know who a request is from. One generic
