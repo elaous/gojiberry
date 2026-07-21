@@ -103,19 +103,27 @@ func envOr(key, fallback string) string {
 
 // Server exposes an Adapter over HTTP:
 //
-//	PUT    /docs/{id}  -- save (request body is the raw document bytes)
-//	GET    /docs/{id}  -- load (response body is the raw document bytes)
-//	DELETE /docs/{id}  -- delete
-//	GET    /docs       -- list metadata, as a JSON array of Meta
-//	GET    /health     -- liveness + configured backend name
+//	PUT    /docs/{id}      -- save (request body is the raw document bytes)
+//	GET    /docs/{id}      -- load (response body is the raw document bytes)
+//	DELETE /docs/{id}      -- delete
+//	GET    /docs           -- list metadata, as a JSON array of Meta
+//	GET    /docs/{id}/acl  -- this document's own ACL (see acl.go), Owner-only
+//	PUT    /docs/{id}/acl  -- replace it (bootstraps ownership on first use)
+//	GET    /health         -- liveness + configured backend name
 //
 // Plus, when auth is configured (see AuthConfig/WithAuth), every
 // /auth/* route auth.Manager.Routes documents -- /auth/providers,
 // /auth/{provider}/login, /auth/{provider}/callback, /auth/me,
-// /auth/logout. Identity only: this Server doesn't itself check a
-// request's signed-in User against anything before serving /docs/* --
-// that's document ownership/permissions, a separate layer not built
-// yet (see docs/ROADMAP.md's Share entry in the OnDesign repo).
+// /auth/logout.
+//
+// GET/PUT/DELETE on /docs/{id} enforce that document's own ACL, if any
+// (checkPermission, acl.go) -- a document nobody has ever shared via
+// PUT /docs/{id}/acl is unaffected, exactly as before this file
+// existed, so this is entirely opt-in. Without an auth.Manager
+// configured at all, no request can ever resolve to a real identity,
+// so ACL enforcement (and /docs/{id}/acl itself) is a no-op/501 --
+// this Server behaves exactly as it did before either feature
+// existed.
 type Server struct {
 	adapter Adapter
 	backend string
@@ -195,18 +203,40 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Filter out the reserved ACL keyspace (acl.go) -- each one is
+	// this package's own bookkeeping, not a real document, and should
+	// never appear in a document listing.
+	visible := make([]Meta, 0, len(metas))
+	for _, m := range metas {
+		if !isReservedDocID(m.ID) {
+			visible = append(visible, m)
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(metas) // a write failure here means the client disconnected -- nothing actionable to do about it
+	_ = json.NewEncoder(w).Encode(visible) // a write failure here means the client disconnected -- nothing actionable to do about it
 }
 
 func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/docs/")
-	if id == "" {
-		http.Error(w, "missing document id", http.StatusBadRequest)
+	path := strings.TrimPrefix(r.URL.Path, "/docs/")
+	if id, ok := strings.CutSuffix(path, "/acl"); ok {
+		if id == "" || isReservedDocID(id) {
+			http.Error(w, "missing or invalid document id", http.StatusBadRequest)
+			return
+		}
+		s.handleACL(w, r, id)
+		return
+	}
+	id := path
+	if id == "" || isReservedDocID(id) {
+		http.Error(w, "missing or invalid document id", http.StatusBadRequest)
 		return
 	}
 	switch r.Method {
 	case http.MethodPut:
+		if allowed, status := s.checkPermission(r, id, http.MethodPut); !allowed {
+			writePermissionError(w, status)
+			return
+		}
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -218,6 +248,10 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodGet:
+		if allowed, status := s.checkPermission(r, id, http.MethodGet); !allowed {
+			writePermissionError(w, status)
+			return
+		}
 		doc, err := s.adapter.Load(r.Context(), id)
 		if errors.Is(err, ErrNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -230,6 +264,10 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		_, _ = w.Write(doc.Data) // a write failure here means the client disconnected -- nothing actionable to do about it
 	case http.MethodDelete:
+		if allowed, status := s.checkPermission(r, id, http.MethodDelete); !allowed {
+			writePermissionError(w, status)
+			return
+		}
 		err := s.adapter.Delete(r.Context(), id)
 		if errors.Is(err, ErrNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
