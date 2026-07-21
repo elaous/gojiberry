@@ -520,8 +520,9 @@ expanded by the same recursive scan, with no extra grammar required.
   default) and docstore behaves exactly as it did before this package
   existed. Identity only — resolving a bearer token to a `User` is as
   far as this package goes; document ownership/sharing/permissions on
-  top of that identity is a separate, still-unbuilt layer (see
-  OnDesign's own `docs/ROADMAP.md`).
+  top of that identity is a separate layer, `docstore`'s own `acl.go`
+  (OnDesign's task #140 — see that repo's `docs/CHANGELOG.md` for the
+  full writeup).
 - **`translateserver`** — a small translation proxy, the same
   environment-configured, CORS-open, single-binary shape as
   `syncserver`/`fontserver`/`docstore` (`cmd/translateserver`). One
