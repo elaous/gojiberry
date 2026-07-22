@@ -179,6 +179,15 @@ func (c *Context2D) DrawImageScaled(image js.Value, dx, dy, dw, dh float64) {
 	c.Context.Call("drawImage", image, dx, dy, dw, dh)
 }
 
+// DrawImageClipped draws the (sx, sy, sw, sh) source rectangle of
+// image, scaled to fill the (dx, dy, dw, dh) destination rectangle --
+// the 9-argument form of the underlying drawImage, letting a caller
+// crop as part of the draw rather than needing a separate offscreen
+// canvas pass.
+func (c *Context2D) DrawImageClipped(image js.Value, sx, sy, sw, sh, dx, dy, dw, dh float64) {
+	c.Context.Call("drawImage", image, sx, sy, sw, sh, dx, dy, dw, dh)
+}
+
 // ImageData holds pixel data read back from the canvas: Pix is
 // RGBA8-per-pixel, row-major, len(Pix) == Width*Height*4.
 type ImageData struct {
