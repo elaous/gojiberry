@@ -1,0 +1,8 @@
+# Keeps each cmd/*/Dockerfile's own build context lean -- .git alone
+# is several MB, and none of the dev-tooling directories below are
+# needed to build any of the four service binaries.
+.git
+editors/vscode-gox/test/node_modules
+examples/*/node_modules
+coverage.out
+coverage.out.html
