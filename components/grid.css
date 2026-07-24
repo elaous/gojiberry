@@ -1,0 +1,23 @@
+/* Grid stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*), checkbox.css for
+   Selectable's checkboxes, and pagination.css if Pagination is set. */
+
+.gj-grid-wrap { display: flex; flex-direction: column; gap: 0.6em; }
+.gj-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.8em;
+}
+.gj-grid-item {
+  position: relative;
+  border: 1px solid var(--gj-border);
+  border-radius: var(--gj-radius);
+  background: var(--gj-bg);
+  overflow: hidden;
+}
+.gj-grid-item-selected { border-color: var(--gj-accent); box-shadow: 0 0 0 1px var(--gj-accent); }
+.gj-grid-item-select { position: absolute; top: 0.5em; left: 0.5em; z-index: 1; }
+.gj-grid-item-content { padding: 0.8em; }
+.gj-grid-item-actions { display: flex; gap: 0.4em; padding: 0.5em 0.8em; border-top: 1px solid var(--gj-border); }
+.gj-grid-selectall { align-self: flex-start; }
+.gj-grid-empty { color: var(--gj-muted); text-align: center; padding: 2em; }
