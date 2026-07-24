@@ -343,7 +343,17 @@ expanded by the same recursive scan, with no extra grammar required.
 - **`syncserver`** — the decoupled backend half: a thin HTTP relay
   (`POST /ops` to push a delta, `GET /ops` for a full snapshot) that is
   itself just another CRDT replica, so it never needs bespoke
-  conflict-resolution logic clients must trust. Every deployment detail
+  conflict-resolution logic clients must trust. Alongside the real
+  document Ops, `POST /presence` lets a replica broadcast its own
+  ephemeral cursor position/display identity (`Presence` — replica,
+  name, color, plus a client-defined block ID/offset this package
+  never interprets), and `GET /presence?replica=X` returns every
+  *other* live replica's own last-broadcast one, excluding the
+  caller's own; entries older than `presenceTTL` (10s, several sync
+  ticks' worth of grace) are pruned lazily on read rather than by a
+  background sweep. Unlike an Op, a Presence is never merged into
+  `doc` or persisted — a peer's cursor a few seconds ago is noise, not
+  state worth keeping. Every deployment detail
   — listen address, region label, merge strategy — comes from
   `GOJIBERRY_SYNC_ADDR` / `GOJIBERRY_SYNC_REGION` /
   `GOJIBERRY_SYNC_STRATEGY` (`"lww"`, the default, or `"char-crdt"` —
