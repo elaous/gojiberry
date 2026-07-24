@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/elaous/gojiberry/crdt"
 )
@@ -60,37 +61,82 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+// Presence is one replica's last-broadcast cursor position and
+// display identity -- ephemeral, never merged into doc and never
+// persisted, unlike an Op. The client-side shape this mirrors is
+// OnDesign's own model.PresencePeer; kept as this package's own
+// independent type (not imported from any one client's package) for
+// the same reason crdt.Op is -- a generic relay has no business
+// depending on any one client's own package. BlockID/Col name a
+// position the same way OnDesign's document does (a stable block ID
+// plus an offset within it), but this package has no idea what either
+// actually means -- it only ever stores and relays them verbatim.
+type Presence struct {
+	Replica string `json:"replica"`
+	Name    string `json:"name"`
+	Color   string `json:"color"`
+	BlockID string `json:"blockId"`
+	Col     int    `json:"col"`
+}
+
+type presenceEntry struct {
+	Presence
+	lastSeen time.Time
+}
+
+// presenceTTL is how long a replica's last-broadcast position stays
+// visible to peers after its own client stops POSTing updates (tab
+// closed, network dropped) -- several sync ticks' worth of grace
+// (OnDesign's own wireSync posts every 1.2s) so one slow round trip
+// doesn't flicker a peer's cursor away, but short enough that a
+// genuinely gone collaborator disappears within a few seconds rather
+// than lingering indefinitely.
+const presenceTTL = 10 * time.Second
+
 // Server relays Ops between clients. It is itself just another CRDT
 // replica — conflicts are resolved by the same last-writer-wins rule
 // every client uses, so the server never needs bespoke merge logic
 // clients must trust.
 type Server struct {
-	cfg Config
-	mu  sync.Mutex
-	doc *crdt.Doc
+	cfg      Config
+	mu       sync.Mutex
+	doc      *crdt.Doc
+	presence map[string]presenceEntry // by Replica
+	// now is a seam for TestPresenceExpiresAfterTTL to fast-forward
+	// time deterministically instead of a real sleep -- time.Now in
+	// every other caller.
+	now func() time.Time
 }
 
 // NewServer creates a relay for the given config. Each Server owns one
 // document; a real deployment would shard by document/tenant ID, but
 // the sync protocol below is unaffected by that.
 func NewServer(cfg Config) *Server {
-	return &Server{cfg: cfg, doc: crdt.NewDocWithStrategy("server:"+cfg.Region, cfg.Strategy)}
+	return &Server{
+		cfg:      cfg,
+		doc:      crdt.NewDocWithStrategy("server:"+cfg.Region, cfg.Strategy),
+		presence: make(map[string]presenceEntry),
+		now:      time.Now,
+	}
 }
 
 // Handler returns the HTTP routes: POST /ops to push a client's
 // pending delta, GET /ops for a full snapshot (fresh-device
-// onboarding), GET /health to confirm which region this instance is
-// configured for. Every response carries permissive CORS headers and
-// OPTIONS preflight requests short-circuit with no further routing --
-// this relay's entire reason to exist is being reachable from a
-// client on a different origin (a different host, port, or both from
-// wherever the client's own static assets are served), so without
-// this a browser's own fetch() would refuse every request outright
-// before it ever reached handleOps.
+// onboarding), POST /presence to broadcast this replica's own cursor
+// position, GET /presence?replica=X for every *other* replica's own
+// last-broadcast position, GET /health to confirm which region this
+// instance is configured for. Every response carries permissive CORS
+// headers and OPTIONS preflight requests short-circuit with no
+// further routing -- this relay's entire reason to exist is being
+// reachable from a client on a different origin (a different host,
+// port, or both from wherever the client's own static assets are
+// served), so without this a browser's own fetch() would refuse every
+// request outright before it ever reached handleOps.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/ops", s.handleOps)
+	mux.HandleFunc("/presence", s.handlePresence)
 	return corsMiddleware(mux)
 }
 
@@ -128,6 +174,53 @@ func (s *Server) handleOps(w http.ResponseWriter, r *http.Request) {
 		snapshot := s.doc.Snapshot()
 		s.mu.Unlock()
 		writeJSON(w, http.StatusOK, snapshot)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handlePresence: POST records/refreshes the caller's own Presence
+// (their own Replica is the entry's key, so a repeat POST from the
+// same replica overwrites rather than accumulating). GET returns
+// every *other* replica's own still-live Presence -- ?replica= names
+// the caller's own so it never sees its own cursor echoed back --
+// pruning any entry whose lastSeen has fallen outside presenceTTL as a
+// side effect of every GET, rather than running a separate janitor
+// goroutine: a relay this small doesn't need a background sweep to
+// keep memory bounded when every read already walks the whole map.
+func (s *Server) handlePresence(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		var p Presence
+		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if p.Replica == "" {
+			http.Error(w, "replica is required", http.StatusBadRequest)
+			return
+		}
+		s.mu.Lock()
+		s.presence[p.Replica] = presenceEntry{Presence: p, lastSeen: s.now()}
+		s.mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	case http.MethodGet:
+		self := r.URL.Query().Get("replica")
+		cutoff := s.now().Add(-presenceTTL)
+		s.mu.Lock()
+		peers := make([]Presence, 0, len(s.presence))
+		for id, entry := range s.presence {
+			if entry.lastSeen.Before(cutoff) {
+				delete(s.presence, id)
+				continue
+			}
+			if id == self {
+				continue
+			}
+			peers = append(peers, entry.Presence)
+		}
+		s.mu.Unlock()
+		writeJSON(w, http.StatusOK, peers)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}

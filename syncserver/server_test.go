@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/elaous/gojiberry/crdt"
 )
@@ -192,5 +193,89 @@ func TestCORSHeadersAllowCrossOriginClients(t *testing.T) {
 	defer getResp.Body.Close()
 	if got := getResp.Header.Get("Access-Control-Allow-Origin"); got != "*" {
 		t.Fatalf("GET /ops: expected Access-Control-Allow-Origin: *, got %q", got)
+	}
+}
+
+func postPresence(t *testing.T, srv *httptest.Server, p Presence) {
+	t.Helper()
+	body, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("marshal presence: %v", err)
+	}
+	resp, err := http.Post(srv.URL+"/presence", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /presence: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("POST /presence: expected 204, got %d", resp.StatusCode)
+	}
+}
+
+func getPresence(t *testing.T, srv *httptest.Server, self string) []Presence {
+	t.Helper()
+	resp, err := http.Get(srv.URL + "/presence?replica=" + self)
+	if err != nil {
+		t.Fatalf("GET /presence: %v", err)
+	}
+	defer resp.Body.Close()
+	var peers []Presence
+	if err := json.NewDecoder(resp.Body).Decode(&peers); err != nil {
+		t.Fatalf("decode presence: %v", err)
+	}
+	return peers
+}
+
+// TestPresenceRoundTripsAndExcludesSelf mirrors
+// TestServerRelaysDeltaBetweenTwoClients's own two-client shape, but
+// for the ephemeral presence channel instead of real document Ops:
+// each replica's own last-broadcast position should be visible to
+// every *other* replica, but never echoed back to itself.
+func TestPresenceRoundTripsAndExcludesSelf(t *testing.T) {
+	s := NewServer(Config{Region: "br-datacenter-1"})
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	postPresence(t, srv, Presence{Replica: "phone", Name: "Alice", Color: "#e11d48", BlockID: "b1", Col: 3})
+	postPresence(t, srv, Presence{Replica: "laptop", Name: "Bob", Color: "#2563eb", BlockID: "b2", Col: 7})
+
+	fromPhone := getPresence(t, srv, "phone")
+	if len(fromPhone) != 1 || fromPhone[0].Replica != "laptop" || fromPhone[0].Name != "Bob" {
+		t.Fatalf("GET /presence?replica=phone = %+v, want exactly laptop/Bob, not phone's own entry", fromPhone)
+	}
+
+	fromLaptop := getPresence(t, srv, "laptop")
+	if len(fromLaptop) != 1 || fromLaptop[0].Replica != "phone" || fromLaptop[0].Col != 3 {
+		t.Fatalf("GET /presence?replica=laptop = %+v, want exactly phone's entry", fromLaptop)
+	}
+
+	// A repeat POST from the same replica overwrites, not accumulates.
+	postPresence(t, srv, Presence{Replica: "phone", Name: "Alice", Color: "#e11d48", BlockID: "b1", Col: 9})
+	fromLaptop = getPresence(t, srv, "laptop")
+	if len(fromLaptop) != 1 || fromLaptop[0].Col != 9 {
+		t.Fatalf("expected the repeat POST to overwrite phone's own entry (Col=9), got %+v", fromLaptop)
+	}
+}
+
+// TestPresenceExpiresAfterTTL confirms a replica that stops POSTing
+// (tab closed, network dropped) eventually disappears from its peers'
+// own GET /presence rather than lingering forever -- using Server's
+// own injectable now func to fast-forward past presenceTTL
+// deterministically instead of a real sleep.
+func TestPresenceExpiresAfterTTL(t *testing.T) {
+	s := NewServer(Config{Region: "br-datacenter-1"})
+	current := time.Now()
+	s.now = func() time.Time { return current }
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	postPresence(t, srv, Presence{Replica: "phone", Name: "Alice", BlockID: "b1"})
+	if peers := getPresence(t, srv, "laptop"); len(peers) != 1 {
+		t.Fatalf("expected phone's presence to be visible immediately after posting, got %+v", peers)
+	}
+
+	current = current.Add(presenceTTL + time.Second)
+	if peers := getPresence(t, srv, "laptop"); len(peers) != 0 {
+		t.Fatalf("expected phone's presence to have expired after presenceTTL, got %+v", peers)
 	}
 }
