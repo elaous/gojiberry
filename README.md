@@ -844,6 +844,21 @@ between cells). Reach for `DataTable` when what you're actually
 browsing is tabular data, `Grid` when the job is just arranging an
 arbitrary set of already-built children into a responsive layout.
 
+**Known gap: `DataTable`/`Grid` render every `Rows`/`Children` entry
+unconditionally** — there's no windowing/virtualization of any kind, so
+a dataset large enough that converting it all to `[]DataTableRow` (or
+building that many already-rendered `Children`) every render becomes
+the actual bottleneck has no better option today than paginating it
+smaller via `DataView` (which already avoids fetching more than one
+page's worth at a time, just not rendering-side windowing within a
+page). A `DataSource`-style interface swapped in for `Rows` wouldn't
+fix this on its own — `DataTable` isn't generic (no way to write a type
+parameter into the `.gox` tag syntax it's invoked through), so such an
+interface could only ever hand back `[]DataTableRow` too, no different
+from passing the slice directly — the part that would actually help is
+rendering only the currently-visible rows and re-querying the source as
+the viewport scrolls, a real, separate feature not attempted here.
+
 `Theme` scopes which `--gj-*` design-token palette (`components/
 base.css`, which now carries both a `.gj-theme-light` and a
 `.gj-theme-dark` palette alongside `:root`'s own light defaults)
