@@ -318,6 +318,21 @@ func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 		return "", 0, p.errorf(chunk, pos, "expected tag name after '<'")
 	}
 	name := string(chunk[nameStart:pos])
+	if name == "Fragment" {
+		// <Fragment key="...">...</Fragment> (or key={expr}): the only
+		// way to give a fragment its own reconciliation Key from .gox
+		// syntax -- the bare <>...</> shorthand just above has no room
+		// for an attribute at all. Mirrors JSX's own split between
+		// <>...</> and the long-form <React.Fragment key={id}>...
+		// </React.Fragment> for exactly the same reason. "Fragment" is
+		// therefore a reserved pseudo-tag name, not an ordinary
+		// Component -- intercepted here, before the isComponentName/
+		// isKnownTag validation below, so a real Component named
+		// Fragment (unlikely, but possible) can never be written as a
+		// <Fragment> tag; it would need to be called as a plain Go
+		// expression instead.
+		return p.parseKeyedFragment(chunk, pos)
+	}
 	if !isComponentName(name) && !isKnownTag(name) {
 		return "", 0, p.errorf(chunk, nameStart, "unknown HTML tag <%s>: not a recognized HTML element, not a custom element (needs a hyphen, e.g. <my-widget>), and not a Component (needs a capital first letter); if this is a real tag gox doesn't know about yet, add it to validHTMLTags in internal/transpile/htmlvalidate.go", name)
 	}
@@ -566,6 +581,58 @@ func isEventAttr(name string) bool {
 // there's no second capital to get wrong.
 func eventNameFor(attrName string) string {
 	return strings.ToLower(attrName[2:])
+}
+
+// parseKeyedFragment parses <Fragment key="..."> ... </Fragment> (or
+// key={expr}) starting just past the already-consumed "<Fragment"
+// name -- see parseTag's own call site for why "Fragment" is
+// intercepted before the ordinary Component/tag path. Reuses
+// parseAttrs/parseChildren exactly as an ordinary element would
+// (validateAttrs is already false for any component-cased name, so
+// parseAttrs accepts "key" unvalidated); only the render step at the
+// end differs, emitting gox.Frag(children...).WithKey(...) instead of
+// a gox.El or component call.
+func (p *parser) parseKeyedFragment(chunk []rune, pos int) (string, int, error) {
+	n := len(chunk)
+	attrs, pos, err := p.parseAttrs(chunk, pos, "Fragment")
+	if err != nil {
+		return "", 0, err
+	}
+	if len(attrs) != 1 || attrs[0].name != "key" || attrs[0].bare {
+		return "", 0, p.errorf(chunk, pos, `<Fragment> only accepts a single key="..." or key={expr} attribute, e.g. <Fragment key={item.ID}>...</Fragment>`)
+	}
+	keyExpr := keyAttrExprSource(attrs[0])
+
+	for pos < n && isSpace(chunk[pos]) {
+		pos++
+	}
+	if pos+1 < n && chunk[pos] == '/' && chunk[pos+1] == '>' {
+		pos += 2
+		return fmt.Sprintf("gox.Frag().WithKey(%s)", keyExpr), pos, nil
+	}
+	if pos >= n || chunk[pos] != '>' {
+		return "", 0, p.errorf(chunk, pos, "expected '>' or '/>' to close <Fragment> tag opened")
+	}
+	pos++ // consume '>'
+
+	children, pos, err := p.parseChildren(chunk, pos, "Fragment")
+	if err != nil {
+		return "", 0, err
+	}
+	return fmt.Sprintf("%s.WithKey(%s)", p.renderFragment(children), keyExpr), pos, nil
+}
+
+// keyAttrExprSource renders a Fragment's own key attribute's value --
+// a literal is quoted directly (WithKey takes a plain string, no
+// AttrVal adaptation needed), an {expr} hole goes through gox.AttrVal
+// the same way any other plain attribute's {expr} value does
+// (attrExprSource's own a.isExpr case), so a non-string key (an int
+// ID, a fmt.Stringer, ...) still compiles.
+func keyAttrExprSource(a attr) string {
+	if a.isExpr {
+		return fmt.Sprintf("gox.AttrVal(%s)", a.expr)
+	}
+	return strconv.Quote(a.literal)
 }
 
 func (p *parser) renderFragment(children []childNode) string {

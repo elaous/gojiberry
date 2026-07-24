@@ -1,0 +1,7 @@
+/* Grid stylesheet for github.com/elaous/gojiberry/components. Width/
+   grid-template-columns/gap are all set per-instance via Grid's own
+   inline style (see grid.gox) -- this stylesheet only needs the one
+   rule that never varies between instances, the same split box.css
+   draws for Box. */
+
+.gj-grid { display: grid; }

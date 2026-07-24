@@ -68,6 +68,50 @@ func TestFragment(t *testing.T) {
 	}
 }
 
+func TestKeyedFragmentWithLiteralKey(t *testing.T) {
+	got := transpileExpr(t, `return <Fragment key="row-1"><td>a</td><td>b</td></Fragment>`)
+	want := `return gox.Frag(gox.El("td", nil, gox.Text("a")), gox.El("td", nil, gox.Text("b"))).WithKey("row-1")`
+	if strings.TrimSpace(got) != want {
+		t.Errorf("got:  %s\nwant: %s", got, want)
+	}
+	mustFormat(t, got)
+}
+
+func TestKeyedFragmentWithExprKey(t *testing.T) {
+	got := transpileExpr(t, `return <Fragment key={item.ID}><td>a</td></Fragment>`)
+	want := `return gox.Frag(gox.El("td", nil, gox.Text("a"))).WithKey(gox.AttrVal(item.ID))`
+	if strings.TrimSpace(got) != want {
+		t.Errorf("got:  %s\nwant: %s", got, want)
+	}
+}
+
+func TestKeyedFragmentSelfClosing(t *testing.T) {
+	got := transpileExpr(t, `return <Fragment key="empty"/>`)
+	want := `return gox.Frag().WithKey("empty")`
+	if strings.TrimSpace(got) != want {
+		t.Errorf("got:  %s\nwant: %s", got, want)
+	}
+}
+
+func TestKeyedFragmentRequiresExactlyOneKeyAttr(t *testing.T) {
+	if _, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <Fragment>hi</Fragment>`)); err == nil {
+		t.Fatal("expected an error for <Fragment> with no key attribute at all")
+	}
+	if _, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <Fragment key="a" other="b">hi</Fragment>`)); err == nil {
+		t.Fatal("expected an error for <Fragment> with an extra attribute besides key")
+	}
+	if _, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <Fragment key>hi</Fragment>`)); err == nil {
+		t.Fatal("expected an error for a bare key attribute with no value")
+	}
+}
+
+func TestKeyedFragmentMismatchedCloseTagErrors(t *testing.T) {
+	_, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <Fragment key="a">hi</>`))
+	if err == nil {
+		t.Fatal("expected an error: <Fragment key=...> must close with </Fragment>, not the bare </> shorthand")
+	}
+}
+
 func TestEventAttr(t *testing.T) {
 	got := transpileExpr(t, `return <button onClick={handleClick}>Go</button>`)
 	want := `return gox.El("button", []gox.Attr{gox.On("click", handleClick)}, gox.Text("Go"))`
