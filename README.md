@@ -803,36 +803,46 @@ or left flexible to fill whatever height its siblings don't claim —
 built on CSS Grid's `grid-template-rows`, which already handles
 exactly that mix of units in one declaration.
 
-`DataTable` and `Grid` round out data display: a sortable, optionally
-selectable/searchable/paginated table, and the same feature set for a
-card/tile layout instead. Neither is generic over your own row/item
-type — there's no way to write a type parameter into the `.gox` tag
-syntax every other component here is invoked through (`<DataTable
+`DataTable` rounds out data display: a sortable, optionally
+selectable/searchable/paginated table. It isn't generic over your own
+row type — there's no way to write a type parameter into the `.gox`
+tag syntax every other component here is invoked through (`<DataTable
 columns=... />`) — so, the same way `Tabs`' own `Tab.Content` or
-`DropdownOption`'s own `Icon` already work, you turn each real row/item
-into a `DataTableRow`/`GridItem` first: a stable `ID` (selection
-tracking, and the keyed `<tr>`/card reconciliation each one gets for
-free) plus its own already-rendered `Cells`/`Content`. Both reuse
-`Checkbox`'s own plain markup for `Selectable` rather than a new
-selection primitive, `Search` directly for their own `Search` field,
-and `Pagination` directly for their own `Pagination` field; sorting/
-filtering the underlying data is the caller's job, the same
-controlled-component split every other component here takes — each
-only reflects `SortKey`/`SortDesc`/`Selected`/`Search.Value` back and
-fires `OnSort`/`OnSelectChange`/`OnSearchChange` when they change.
-`DataView[T]` is the data-*source* half: a small generic type (no
-`.gox` tag needed, since nothing renders it directly) that owns the
-paginated/filtered/sorted query state for a dataset fetched from some
-backend and hands `DataTable`/`Grid` already-loaded data as plain
-props, the same "component is a pure function of props, networking is
-the caller's job" split `Collab` already takes. `Fetch` is the one
-required field: a `func(DataViewQuery) (DataViewResult[T], error)`
-adapter translating `DataView`'s own generic page/search/sort request
-into whatever real pagination/filter/sort protocol your backend
-actually speaks (JSON:API, OData, GraphQL, a bespoke REST endpoint —
-deliberately left open rather than DataView committing to one);
-`PaginationProps()`/`SearchProps()` hand back ready-to-wire
+`DropdownOption`'s own `Icon` already work, you turn each real row into
+a `DataTableRow` first: a stable `ID` (selection tracking, and the
+keyed `<tr>` reconciliation it gets for free) plus its own
+already-rendered `Cells`. It reuses `Checkbox`'s own plain markup for
+`Selectable` rather than a new selection primitive, `Search` directly
+for its own `Search` field, and `Pagination` directly for its own
+`Pagination` field; sorting/filtering the underlying data is the
+caller's job, the same controlled-component split every other
+component here takes — it only reflects `SortKey`/`SortDesc`/
+`Selected`/`Search.Value` back and fires `OnSort`/`OnSelectChange`/
+`OnSearchChange` when they change. `DataView[T]` is the data-*source*
+half: a small generic type (no `.gox` tag needed, since nothing renders
+it directly) that owns the paginated/filtered/sorted query state for a
+dataset fetched from some backend and hands `DataTable` already-loaded
+data as plain props, the same "component is a pure function of props,
+networking is the caller's job" split `Collab` already takes. `Fetch`
+is the one required field: a `func(DataViewQuery) (DataViewResult[T],
+error)` adapter translating `DataView`'s own generic page/search/sort
+request into whatever real pagination/filter/sort protocol your
+backend actually speaks (JSON:API, OData, GraphQL, a bespoke REST
+endpoint — deliberately left open rather than DataView committing to
+one); `PaginationProps()`/`SearchProps()` hand back ready-to-wire
 `Pagination`/`Search` configs bound to its own current state.
+
+`Grid`, despite the name's overlap with `DataTable`, is a different
+kind of thing entirely: a plain CSS Grid layout container, `Box`'s own
+sibling for a two-dimensional layout instead of `Box`'s single-axis
+stacked divisions. It has no notion of rows, selection, sorting, or
+pagination at all — just `Children` arranged into a grid, `Width`
+(`""` fills the parent, the same default `Box`'s own `Height` takes),
+`Columns` (a `grid-template-columns` value; `""` defaults to a
+responsive auto-fill of 200px-minimum tracks), and `Gap` (the space
+between cells). Reach for `DataTable` when what you're actually
+browsing is tabular data, `Grid` when the job is just arranging an
+arbitrary set of already-built children into a responsive layout.
 
 `Theme` scopes which `--gj-*` design-token palette (`components/
 base.css`, which now carries both a `.gj-theme-light` and a
@@ -883,10 +893,10 @@ between the bare `<>...</>` shorthand and the long-form `<React.
 Fragment key={id}>...</React.Fragment>` for exactly the same reason.
 `Fragment` is a reserved pseudo-tag name for this, not an ordinary
 Component, so it's only ever useful for a fragment that's itself one
-entry in a keyed list (e.g. a `DataTable`/`Grid` row rendered as
-multiple sibling cells with no wrapper element) — most keyed lists,
-including `DataTable`'s and `Grid`'s own row/card reconciliation above,
-still just call `.WithKey` on an ordinary keyed element instead.
+entry in a keyed list (e.g. a `DataTable` row rendered as multiple
+sibling cells with no wrapper element) — most keyed lists, including
+`DataTable`'s own row reconciliation above, still just call `.WithKey`
+on an ordinary keyed element instead.
 
 None of them import
 `domrt` or `syscall/js` — every interactive one is a pure function of

@@ -2,110 +2,46 @@ package components
 
 import "github.com/elaous/gojiberry/gox"
 
-// GridItem is one already-rendered card/tile -- DataTableRow's own
-// "caller pre-renders it" split, for the same reason (see that type's
-// own doc comment): Grid has no notion of the caller's real item type.
-type GridItem struct {
-	ID      string
-	Content gox.Node
-}
-
-// GridProps configures Grid -- the same feature set DataTable offers
-// (pagination, search, checkbox selection, item actions), for a
-// card/tile layout instead of rows/columns: files, images, products,
-// anything better browsed as items than read as a table.
+// GridProps configures Grid.
 type GridProps struct {
-	Items []GridItem
-
-	// Selectable shows a checkbox on every item plus a "Select all"
-	// checkbox above the grid, the same reused-not-reinvented
-	// selection markup DataTable's own Selectable takes.
-	Selectable     bool
-	Selected       []string // currently-checked Items' own IDs
-	OnSelectChange func(id string, checked bool)
-	OnSelectAll    func(checked bool)
-
-	// Search, if non-nil, renders a Search bar above the grid --
-	// filtering Items against its own Value is the caller's job.
-	Search *SearchProps
-
-	// ItemActions, given an item's own ID, returns its own action
-	// buttons, rendered as a row inside that item's own card --
-	// DataTable's own RowActions, for a tile instead of a row.
-	ItemActions func(id string) []gox.Node
-
-	// Pagination, if non-nil, renders Pagination (already exists)
-	// below the grid -- DataTable's own Pagination field, and the
-	// same "infinite scroll is the caller's job" split it takes.
-	Pagination *PaginationProps
-
-	// Empty replaces the grid with a single message when Items is
-	// empty -- "No data" is used if nil.
-	Empty *gox.Node
+	// Width sizes the grid itself; "" defaults to "100%" (fill the
+	// parent), the same default Box's own Height takes, for the same
+	// reason -- a layout container should fill its parent unless told
+	// otherwise.
+	Width string
+	// Columns is a CSS grid-template-columns value (e.g. "1fr 1fr 1fr",
+	// "repeat(3, 1fr)", "200px 1fr auto"); "" defaults to a responsive
+	// auto-fill of 200px-minimum tracks, so a Grid with no explicit
+	// Columns still lays out sensibly regardless of how many Children
+	// it gets.
+	Columns string
+	// Gap is the space between grid cells (e.g. "1rem", "16px"); ""
+	// means no gap at all, CSS's own default.
+	Gap      string
+	Children []gox.Node
 }
 
-// Grid renders Items as a responsive card/tile layout -- see
-// components/grid.css.
+// Grid is a plain CSS Grid layout container: arranges Children into a
+// grid, normally filling its parent's own width, with Columns/Gap
+// controlling track sizing and the spacing between cells -- Box's own
+// sibling for a two-dimensional layout instead of Box's single-axis
+// stacked divisions. This is a layout primitive, not a data-display
+// component: it has no notion of rows, selection, sorting, or
+// pagination at all -- reach for DataTable when what's actually being
+// browsed is tabular data, Grid when the job is just arranging an
+// arbitrary set of already-built children into a responsive grid.
 func Grid(props GridProps) gox.Node {
-	selected := make(map[string]bool, len(props.Selected))
-	for _, id := range props.Selected {
-		selected[id] = true
+	width := props.Width
+	if width == "" {
+		width = "100%"
 	}
-
-	var cards []gox.Node
-	for _, item := range props.Items {
-		checked := selected[item.ID]
-		var body []gox.Node
-		if props.Selectable {
-			attrs := []gox.Attr{gox.A("type", "checkbox"), gox.A("class", "gj-checkbox-input"), gox.A("aria-label", "Select item")}
-			if checked {
-				attrs = append(attrs, gox.A("checked", "checked"))
-			}
-			if props.OnSelectChange != nil {
-				id := item.ID
-				attrs = append(attrs, gox.On("change", func(e gox.Event) { props.OnSelectChange(id, e.Checked) }))
-			}
-			body = append(body, gox.El("label", []gox.Attr{gox.A("class", "gj-grid-item-select gj-checkbox")}, gox.El("input", attrs)))
-		}
-		body = append(body, gox.El("div", []gox.Attr{gox.A("class", "gj-grid-item-content")}, item.Content))
-		if props.ItemActions != nil {
-			body = append(body, gox.El("div", []gox.Attr{gox.A("class", "gj-grid-item-actions")}, props.ItemActions(item.ID)...))
-		}
-		class := "gj-grid-item"
-		if checked {
-			class += " gj-grid-item-selected"
-		}
-		cards = append(cards, gox.El("div", []gox.Attr{gox.A("class", class)}, body...).WithKey(item.ID))
+	columns := props.Columns
+	if columns == "" {
+		columns = "repeat(auto-fill, minmax(200px, 1fr))"
 	}
-	if len(props.Items) == 0 {
-		empty := gox.Text("No data")
-		if props.Empty != nil {
-			empty = *props.Empty
-		}
-		cards = []gox.Node{gox.El("div", []gox.Attr{gox.A("class", "gj-grid-empty")}, empty)}
+	style := "width:" + width + ";grid-template-columns:" + columns + ";"
+	if props.Gap != "" {
+		style += "gap:" + props.Gap + ";"
 	}
-
-	var children []gox.Node
-	if props.Search != nil {
-		children = append(children, Search(*props.Search))
-	}
-	if props.Selectable && len(props.Items) > 0 {
-		allSelected := len(props.Selected) == len(props.Items)
-		attrs := []gox.Attr{gox.A("type", "checkbox"), gox.A("class", "gj-checkbox-input")}
-		if allSelected {
-			attrs = append(attrs, gox.A("checked", "checked"))
-		}
-		if props.OnSelectAll != nil {
-			attrs = append(attrs, gox.On("change", func(e gox.Event) { props.OnSelectAll(e.Checked) }))
-		}
-		children = append(children, gox.El("label", []gox.Attr{gox.A("class", "gj-grid-selectall gj-checkbox")},
-			gox.El("input", attrs),
-			gox.El("span", []gox.Attr{gox.A("class", "gj-checkbox-label")}, gox.Text("Select all")),
-		))
-	}
-	children = append(children, gox.El("div", []gox.Attr{gox.A("class", "gj-grid")}, cards...))
-	if props.Pagination != nil {
-		children = append(children, Pagination(*props.Pagination))
-	}
-	return gox.El("div", []gox.Attr{gox.A("class", "gj-grid-wrap")}, children...)
+	return gox.El("div", []gox.Attr{gox.A("class", "gj-grid"), gox.A("style", style)}, props.Children...)
 }
