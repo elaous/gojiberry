@@ -9,7 +9,7 @@
    @stylesheets ../../components/button.css
 */
 
-:root {
+:root, .gj-theme-light {
   --gj-accent: #2563eb;
   --gj-accent-contrast: #ffffff;
   --gj-danger: #dc2626;
@@ -18,6 +18,28 @@
   --gj-muted: #6b7280;
   --gj-bg: #ffffff;
   --gj-bg-muted: #f3f4f6;
+  --gj-radius: 6px;
+}
+
+/* .gj-theme-dark/.gj-theme-light are Theme's own palette-switch
+   classes (components/theme.gox): CSS custom properties already
+   cascade to every descendant regardless of DOM depth, so scoping is
+   just picking which of these two classes wraps a subtree -- no
+   Go-level plumbing needed the way ContextProvider's own open design
+   question required elsewhere. .gj-theme-light restates :root's own
+   values (rather than just relying on inheriting them) so a
+   .gj-theme-light nested inside a .gj-theme-dark still re-lights
+   correctly, the same composable nesting a plain body.dark toggle
+   can't offer since there's only ever one body. */
+.gj-theme-dark {
+  --gj-accent: #3b82f6;
+  --gj-accent-contrast: #0b1220;
+  --gj-danger: #f87171;
+  --gj-border: #3f4654;
+  --gj-text: #e5e7eb;
+  --gj-muted: #9ca3af;
+  --gj-bg: #1a1d24;
+  --gj-bg-muted: #262b36;
   --gj-radius: 6px;
 }
 

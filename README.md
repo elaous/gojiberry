@@ -803,6 +803,101 @@ or left flexible to fill whatever height its siblings don't claim —
 built on CSS Grid's `grid-template-rows`, which already handles
 exactly that mix of units in one declaration.
 
+`DataTable` rounds out data display: a sortable, optionally
+selectable/searchable/paginated table. It isn't generic over your own
+row type — there's no way to write a type parameter into the `.gox`
+tag syntax every other component here is invoked through (`<DataTable
+columns=... />`) — so, the same way `Tabs`' own `Tab.Content` or
+`DropdownOption`'s own `Icon` already work, you turn each real row into
+a `DataTableRow` first: a stable `ID` (selection tracking, and the
+keyed `<tr>` reconciliation it gets for free) plus its own
+already-rendered `Cells`. It reuses `Checkbox`'s own plain markup for
+`Selectable` rather than a new selection primitive, `Search` directly
+for its own `Search` field, and `Pagination` directly for its own
+`Pagination` field; sorting/filtering the underlying data is the
+caller's job, the same controlled-component split every other
+component here takes — it only reflects `SortKey`/`SortDesc`/
+`Selected`/`Search.Value` back and fires `OnSort`/`OnSelectChange`/
+`OnSearchChange` when they change. `DataView[T]` is the data-*source*
+half: a small generic type (no `.gox` tag needed, since nothing renders
+it directly) that owns the paginated/filtered/sorted query state for a
+dataset fetched from some backend and hands `DataTable` already-loaded
+data as plain props, the same "component is a pure function of props,
+networking is the caller's job" split `Collab` already takes. `Fetch`
+is the one required field: a `func(DataViewQuery) (DataViewResult[T],
+error)` adapter translating `DataView`'s own generic page/search/sort
+request into whatever real pagination/filter/sort protocol your
+backend actually speaks (JSON:API, OData, GraphQL, a bespoke REST
+endpoint — deliberately left open rather than DataView committing to
+one); `PaginationProps()`/`SearchProps()` hand back ready-to-wire
+`Pagination`/`Search` configs bound to its own current state.
+
+`Grid`, despite the name's overlap with `DataTable`, is a different
+kind of thing entirely: a plain CSS Grid layout container, `Box`'s own
+sibling for a two-dimensional layout instead of `Box`'s single-axis
+stacked divisions. It has no notion of rows, selection, sorting, or
+pagination at all — just `Children` arranged into a grid, `Width`
+(`""` fills the parent, the same default `Box`'s own `Height` takes),
+`Columns` (a `grid-template-columns` value; `""` defaults to a
+responsive auto-fill of 200px-minimum tracks), and `Gap` (the space
+between cells). Reach for `DataTable` when what you're actually
+browsing is tabular data, `Grid` when the job is just arranging an
+arbitrary set of already-built children into a responsive layout.
+
+`Theme` scopes which `--gj-*` design-token palette (`components/
+base.css`, which now carries both a `.gj-theme-light` and a
+`.gj-theme-dark` palette alongside `:root`'s own light defaults)
+applies to its own `Children` — a plain wrapping `<div>` carrying a
+class (or an inline style for one-off `Custom` token overrides), since
+CSS custom properties already cascade to every descendant regardless
+of DOM depth. Nestable: a `Theme` inside another `Theme` re-scopes from
+that point down, composing in a way a single page-wide `body.dark`
+class toggle (the pattern `OnDesign`'s own `applyConfig` uses) can't.
+
+`ContextProvider`/`ContextValue` are gojiberry's answer to the "how
+would a Context API even work here" question a stateless-component
+library like this one has to answer differently than React: a
+`gox.Node` tree is built *eagerly*, one plain Go function call at a
+time, entirely before `gox.Render`/`domrt.Mount` ever walks it, so
+there's no implicit, ambient scope left for either renderer to inject a
+value into by the time it sees the tree — whatever a descendant needs
+has to already be resolved during that eager build. `ContextProvider`
+resolves this the same way stdlib's own `context.Context` is meant to
+be used: `ContextProvider(ctx, key, value, func(ctx context.Context)
+gox.Node { ... })` calls your `render` closure with a *new* context
+carrying `value` attached, and whatever it returns is built from that
+— typically reading the value back out with `ContextValue[T](ctx,
+key)` and handing it down as an ordinary prop, or nesting a further
+`ContextProvider` of its own. `NewContextKey` mints an unforgeable key
+(identity is the pointer, not the debug name you pass it), the same
+collision-proofing convention `context.Context`'s own doc comment
+recommends for a plain interface{}/any key. This is deliberately not
+fully transparent the way React's Context is — an intermediate
+component between the `ContextProvider` and the real consumer still
+has to accept and forward `ctx` (or the value) itself to reach a
+descendant several layers down — but it does mean those intermediate
+layers only ever thread one generic `context.Context` parameter,
+rather than growing a bespoke prop of their own for every distinct
+value some deeper descendant happens to need, and it works identically
+in SSR and client rendering since resolution always happens before
+either renderer runs.
+
+Last, a `.gox` syntax note: `<>...</>` has no room for an attribute at
+all, so there was previously no way to give a fragment its own
+reconciliation `Key` (`gox.Node.Key`, which `domrt`'s differ already
+reads) without dropping out of `.gox` syntax entirely and calling
+`gox.Frag(...).WithKey(id)` by hand. `<Fragment key="...">...
+</Fragment>` (or `key={expr}` for a non-literal key) now covers that
+case directly in `.gox` syntax — the same split JSX itself draws
+between the bare `<>...</>` shorthand and the long-form `<React.
+Fragment key={id}>...</React.Fragment>` for exactly the same reason.
+`Fragment` is a reserved pseudo-tag name for this, not an ordinary
+Component, so it's only ever useful for a fragment that's itself one
+entry in a keyed list (e.g. a `DataTable` row rendered as multiple
+sibling cells with no wrapper element) — most keyed lists, including
+`DataTable`'s own row reconciliation above, still just call `.WithKey`
+on an ordinary keyed element instead.
+
 None of them import
 `domrt` or `syscall/js` — every interactive one is a pure function of
 its props, taking the current state and `On*` callbacks the same way
@@ -1608,67 +1703,3 @@ measure.
   elsewhere in this repo, concentrated in the older demo apps —
   tracked separately rather than fixed alongside the library's own
   clean baseline.
-- **Data display components**: `components` (see "A ready-made
-  component library" above) has nothing yet for showing a real
-  dataset -- no table, no card/tile grid, no pagination-aware list.
-  Three related, not-yet-built pieces:
-  - **`DataTable`**, for tabulated rows/columns -- sortable column
-    headers, per-row/bulk `Checkbox` selection (reusing the existing
-    `Checkbox`/`CheckboxGroup` components rather than a new selection
-    primitive), a `Search`-driven filter, and per-row action buttons
-    (edit/delete/...), plus either `Pagination` (already exists) or
-    infinite scroll as the caller picks.
-  - **`Grid`**, the same feature set (pagination/infinite scroll,
-    filter, search, checkbox selection, item actions) but for a
-    card/tile layout instead of rows/columns -- files, images,
-    products, anything better browsed as items than read as a table.
-  - **`DataView`**, a data-*source* layer rather than a third visual
-    variant: given an API URL following some standard pagination/
-    filter/sort contract (which standard -- JSON:API, OData, a
-    gojiberry-defined convention, GraphQL -- is still an open
-    question), it would own the actual fetch/cursor/query-param logic
-    and hand `DataTable`/`Grid` already-paginated/-filtered/-sorted
-    data as plain props, the same "component is a pure function of
-    props, networking is the caller's job" split `Collab`'s own doc
-    comment already describes for that component. Whether `DataView`
-    ends up a real third component, or just a documented pattern for
-    wiring `DataTable`/`Grid` to a real backend, is itself part of the
-    design work -- "and/or" in the sense that building the two visual
-    components first, then seeing what a `DataView` actually needs to
-    own once real usage exists, may be the more grounded order.
-- **`Theme`**: a Go-level component for switching/scoping which set of
-  `components/base.css`'s own `--gj-*` design-token values apply to a
-  subtree (light/dark, or a fully custom palette) -- today that's a
-  plain CSS custom-property mechanism with no accompanying component,
-  so a consuming app rolls its own toggle (the same
-  `body.dark`-class-toggle idea `OnDesign`'s own `applyConfig` uses,
-  see that repo's `editor/index.html`) rather than a reusable, shared
-  one.
-- **`ContextProvider`**: unlike a component library with a stateful
-  class-component tree (React et al.), every `components` entry here
-  is a plain, stateless function of its own props (see "A ready-made
-  component library"'s own closing paragraph) -- there's no existing
-  notion of a value threaded implicitly down through nested renders
-  the way React's Context API (or Go's own `context.Context` through a
-  call chain) provides, only explicit props passed by whatever calls
-  a component directly. Adding one is a real design question, not
-  just a new component: `domrt.Mount`/`Update` walk a plain
-  `gox.Node` tree with no context slot of their own, and SSR's
-  `.Render()` path has no request-scoped call chain to thread a value
-  through either, so "how does a context value actually reach a
-  deeply-nested pure-function component in both rendering modes"
-  needs an answer before `ContextProvider` is just an ordinary new
-  entry in the component list.
-- **Keyed fragments**: `<>...</>` (`gox.Frag`, see "The `<html>`
-  entrypoint" above) already works and is tested
-  (`TestFragment`), but only bare -- the `.gox` parser's own fragment
-  case (`parseTag`, `internal/transpile/transpile.go`) requires `<`
-  immediately followed by `>`, with no room for an attribute, so
-  there's no `.gox` syntax for giving a fragment its own reconciliation
-  `Key` (`gox.Node.Key`, already a real field `domrt`'s differ already
-  reads) the way a keyed element gets one. Only relevant for a fragment
-  that's itself one entry in a keyed list (e.g. a `DataTable` row
-  rendered as multiple sibling cells via a `<>` instead of a single
-  wrapping element) -- reachable today by dropping out of `.gox` syntax
-  for that one node and calling `gox.Frag(...).WithKey(id)` directly,
-  so this is a convenience gap, not a hard blocker.
