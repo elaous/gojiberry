@@ -13,34 +13,87 @@ type Window struct {
 	Window js.Value
 }
 
+// pendingTimers tracks every outstanding SetTimeout/SetInterval/
+// RequestAnimationFrame call's own underlying js.Func, keyed by the id
+// the browser returned for it -- package-level state, not a *Window
+// field: GetWindow() returns a fresh *Window wrapper on every call (see
+// its own doc comment), and there's only one real global `window`
+// underneath all of them, so a SetTimeout call and the ClearTimeout
+// call that later cancels it almost never share the same *Window Go
+// value -- a per-instance map would never see both ends of the same
+// pending timer. No mutex guards it: GOOS=js/GOARCH=wasm without the
+// (still-unstable) threads build tag runs every goroutine cooperatively
+// on a single OS thread, so there's never genuine concurrent access to
+// race over, the same assumption every other piece of shared state in
+// this package already makes. Browsers draw setTimeout/setInterval/
+// requestAnimationFrame ids from the same counter (part of the spec,
+// not an implementation detail), so one shared map keyed by plain int
+// is safe across all three without id collisions.
+//
+// Without this, every SetTimeout/SetInterval/RequestAnimationFrame
+// call leaked its own js.Func forever: syscall/js never garbage
+// collects a Func on either side (JS closure or Go-side dispatch
+// entry) until Release is called explicitly, and nothing here ever
+// did. See docs/ROADMAP.md's own "Performance testing and memory-leak
+// detection" entry (OnDesign) for how this was found -- auditing every
+// js.FuncOf call site after a similar, already-fixed leak turned up in
+// OnDesign's own documentmanager.go.
+var pendingTimers = map[int]js.Func{}
+
 // SetTimeout schedules fn to run once after delay milliseconds and
-// returns the id ClearTimeout needs to cancel it.
+// returns the id ClearTimeout needs to cancel it. The underlying
+// js.Func releases itself right after fn runs -- a one-shot timer's
+// own closure is never needed again once it's fired, so callers that
+// let it fire normally need do nothing further; ClearTimeout releases
+// it instead for a timer that's cancelled before it ever fires.
 func (w *Window) SetTimeout(fn func(), delay int) int {
-	id := w.Window.Call("setTimeout", js.FuncOf(func(this js.Value, args []js.Value) any {
+	var cb js.Func
+	var id int
+	cb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		delete(pendingTimers, id)
+		cb.Release()
 		fn()
 		return nil
-	}), delay)
-	return id.Int()
+	})
+	id = w.Window.Call("setTimeout", cb, delay).Int()
+	pendingTimers[id] = cb
+	return id
 }
 
 // SetInterval schedules fn to run every delay milliseconds and returns
-// the id ClearInterval needs to stop it.
+// the id ClearInterval needs to stop it. Unlike SetTimeout, its own
+// js.Func can't release itself on fire (it's meant to fire again) --
+// ClearInterval releases it once the caller actually stops the
+// repeating timer.
 func (w *Window) SetInterval(fn func(), delay int) int {
-	id := w.Window.Call("setInterval", js.FuncOf(func(this js.Value, args []js.Value) any {
+	cb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		fn()
 		return nil
-	}), delay)
-	return id.Int()
+	})
+	id := w.Window.Call("setInterval", cb, delay).Int()
+	pendingTimers[id] = cb
+	return id
 }
 
 // RequestAnimationFrame schedules fn before the next repaint and
-// returns the id ClearAnimationFrame needs to cancel it.
+// returns the id ClearAnimationFrame needs to cancel it. Its own
+// js.Func releases itself right after fn runs, the same one-shot
+// reasoning SetTimeout's own doc comment gives -- rescheduling another
+// frame (as an animation loop's own fn typically does, by calling
+// RequestAnimationFrame again from inside itself) is a fresh call with
+// a fresh Func, not a reuse of this one.
 func (w *Window) RequestAnimationFrame(fn func()) int {
-	id := w.Window.Call("requestAnimationFrame", js.FuncOf(func(this js.Value, args []js.Value) any {
+	var cb js.Func
+	var id int
+	cb = js.FuncOf(func(this js.Value, args []js.Value) any {
+		delete(pendingTimers, id)
+		cb.Release()
 		fn()
 		return nil
-	}))
-	return id.Int()
+	})
+	id = w.Window.Call("requestAnimationFrame", cb).Int()
+	pendingTimers[id] = cb
+	return id
 }
 
 // AddEventListener registers fn for event and returns the js.Func
@@ -122,19 +175,40 @@ func (w *Window) Close() {
 	w.Window.Call("close")
 }
 
-// ClearTimeout cancels a pending timer from SetTimeout.
+// ClearTimeout cancels a pending timer from SetTimeout and releases
+// its own underlying js.Func -- a timer that's allowed to fire
+// normally instead releases itself (see SetTimeout's own doc comment);
+// this is the other half, for one cancelled before it ever fires.
 func (w *Window) ClearTimeout(id int) {
 	w.Window.Call("clearTimeout", id)
+	releasePendingTimer(id)
 }
 
-// ClearInterval cancels a repeating timer from SetInterval.
+// ClearInterval cancels a repeating timer from SetInterval and
+// releases its own underlying js.Func.
 func (w *Window) ClearInterval(id int) {
 	w.Window.Call("clearInterval", id)
+	releasePendingTimer(id)
 }
 
-// ClearAnimationFrame cancels a pending callback from RequestAnimationFrame.
+// ClearAnimationFrame cancels a pending callback from
+// RequestAnimationFrame and releases its own underlying js.Func -- the
+// same "cancelled before it fired" half ClearTimeout's own doc comment
+// describes.
 func (w *Window) ClearAnimationFrame(id int) {
 	w.Window.Call("cancelAnimationFrame", id)
+	releasePendingTimer(id)
+}
+
+// releasePendingTimer releases and forgets id's own entry in
+// pendingTimers, if it's still there -- a no-op if id already fired
+// (SetTimeout/RequestAnimationFrame's own self-release already removed
+// it) or was never a real pending timer to begin with.
+func releasePendingTimer(id int) {
+	if cb, ok := pendingTimers[id]; ok {
+		delete(pendingTimers, id)
+		cb.Release()
+	}
 }
 
 // InnerWidth returns the viewport width in pixels, including any scrollbar.
