@@ -170,6 +170,7 @@ func NewAuthManager(ctx context.Context, cfg AuthConfig) (*auth.Manager, error) 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/quota", s.handleQuota)
 	mux.HandleFunc("/docs", s.handleList)
 	mux.HandleFunc("/docs/", s.handleDoc)
 	if s.auth != nil {
@@ -194,6 +195,41 @@ func corsMiddleware(next http.Handler) http.Handler {
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "backend": s.backend}) // a write failure here means the client disconnected -- nothing actionable to do about it
+}
+
+// quotaResponse is handleQuota's own JSON shape -- Available false
+// means exactly what QuotaReporter's own doc comment describes: this
+// backend has no real answer to "how much space is left" (it doesn't
+// implement QuotaReporter at all, or its own Usage call failed), not
+// that the answer is zero.
+type quotaResponse struct {
+	Available bool  `json:"available"`
+	Used      int64 `json:"used,omitempty"`
+	Total     int64 `json:"total,omitempty"`
+}
+
+// handleQuota reports s's own configured Adapter's storage quota, if
+// it has one -- see QuotaReporter's own doc comment (docstore.go) for
+// which backends do. Always 200, never an error status: "this backend
+// can't answer that" is a normal, expected response shape here, not a
+// server failure.
+func (s *Server) handleQuota(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	reporter, ok := s.adapter.(QuotaReporter)
+	if !ok {
+		_ = json.NewEncoder(w).Encode(quotaResponse{Available: false})
+		return
+	}
+	q, err := reporter.Usage(r.Context())
+	if err != nil {
+		_ = json.NewEncoder(w).Encode(quotaResponse{Available: false})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(quotaResponse{Available: true, Used: q.Used, Total: q.Total})
 }
 
 func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {

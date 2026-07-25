@@ -1,6 +1,7 @@
 package docstore
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -112,5 +113,52 @@ func TestServerMissingIDReturns400(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestServerQuotaNotAvailableWhenAdapterDoesNotImplementIt(t *testing.T) {
+	srv := newTestServer() // MemoryAdapter -- no QuotaReporter
+	req := httptest.NewRequest(http.MethodGet, "/quota", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 even when unavailable", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `"available":false`) {
+		t.Fatalf("body = %q, want available:false", rec.Body.String())
+	}
+}
+
+// fakeQuotaAdapter wraps MemoryAdapter, adding a QuotaReporter with a
+// fixed answer -- the smallest way to exercise handleQuota's own
+// "available" branch without needing a real LocalFSAdapter/disk.
+type fakeQuotaAdapter struct {
+	*MemoryAdapter
+	quota Quota
+}
+
+func (f fakeQuotaAdapter) Usage(_ context.Context) (Quota, error) { return f.quota, nil }
+
+func TestServerQuotaReportsUsageWhenAvailable(t *testing.T) {
+	srv := NewServer(fakeQuotaAdapter{MemoryAdapter: NewMemoryAdapter(), quota: Quota{Used: 42, Total: 100}}, "fake")
+	req := httptest.NewRequest(http.MethodGet, "/quota", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"available":true`) || !strings.Contains(body, `"used":42`) || !strings.Contains(body, `"total":100`) {
+		t.Fatalf("body = %q, want available:true, used:42, total:100", body)
+	}
+}
+
+func TestServerQuotaMethodNotAllowed(t *testing.T) {
+	srv := newTestServer()
+	req := httptest.NewRequest(http.MethodPost, "/quota", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", rec.Code)
 	}
 }

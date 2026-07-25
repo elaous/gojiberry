@@ -221,7 +221,13 @@ expanded by the same recursive scan, with no extra grammar required.
   work before it can register any listener, so a message posted right
   after `NewWorker` returns can arrive before the worker is listening
   and get silently dropped — have the worker signal readiness first,
-  as the demo does), and `NewRouter` (wraps the History API's
+  as the demo does), `EstimateStorage` (`navigator.storage.estimate()`
+  — a browser's own best-guess `{Usage, Quota}` in bytes for this
+  origin's combined LocalStorage/IndexedDB/Cache Storage usage; errors
+  out rather than panicking on an older browser with no
+  `StorageManager` API at all, checked directly since real gaps here
+  are common enough in the wild to be worth a graceful message rather
+  than a bare `syscall/js` panic), and `NewRouter` (wraps the History API's
   `pushState`/`replaceState` plus the browser's own back/forward
   buttons behind one `OnNavigate` callback — `pushState`/`replaceState`
   fire no event themselves, only `popstate` does, so without this,
@@ -469,7 +475,17 @@ expanded by the same recursive scan, with no extra grammar required.
   `docstore.go`, `server.go`, or any existing backend. `Server` exposes
   whichever `Adapter` `BuildAdapter` constructs over plain HTTP
   (`PUT`/`GET`/`DELETE /docs/{id}`, `GET /docs` for a metadata listing,
-  `GET /health`), with the same environment-configured, CORS-open,
+  `GET /health`, `GET /quota` for how much storage is left -- an
+  optional `QuotaReporter` interface (`Usage(ctx) (Quota, error)`)
+  an `Adapter` implements if and only if it has a real, checkable
+  answer, `handleQuota` reporting `{"available":false}` rather than a
+  wrong or made-up number for one that doesn't; today only
+  `LocalFSAdapter` does, via the underlying disk's own free space
+  (`syscall.Statfs`, Linux-only -- `diskusage_linux.go`/
+  `diskusage_other.go`), with `Postgres`/`MongoDB`/`S3`/`Memory` left
+  unimplemented since none has a generic, queryable notion of "quota"
+  this package could answer for them), with the same environment-
+  configured, CORS-open,
   single-binary shape as `syncserver`/`fontserver` --
   `GOJIBERRY_DOCSTORE_BACKEND` names the backend,
   `GOJIBERRY_DOCSTORE_BACKEND_CONFIG` carries its JSON config directly
