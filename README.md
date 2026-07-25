@@ -445,32 +445,41 @@ expanded by the same recursive scan, with no extra grammar required.
   touching this package) is also future work, not done here.
 - **`docstore`** — a storage-agnostic document persistence server. The
   `Adapter` interface (`Save`/`Load`/`List`/`Delete`, keyed by document
-  ID) is implemented five ways: `MemoryAdapter` (in-process, the
+  ID) is implemented six ways: `MemoryAdapter` (in-process, the
   zero-dependency default), `LocalFSAdapter` (one file per document,
   base64url-encoded ID as the filename), `PostgresAdapter` (one
   `documents` table, created on first connect if missing),
   `MongoAdapter` (one `documents` collection, `_id` set directly to
-  the document ID), and `S3Adapter` (one object per document, built
+  the document ID), `S3Adapter` (one object per document, built
   against a narrow `s3API` interface so its key-prefixing and
   pagination logic has native tests against an in-memory fake with no
-  live bucket required). Each backend is a self-contained plugin, not
+  live bucket required), and `BlobAdapter` (task #174's own concrete
+  deliverable: one blob per document, built directly on
+  [go-cloud](https://gocloud.dev)'s `*blob.Bucket` -- a *portable
+  client library*, not an infra-provisioning tool, opened by URL
+  scheme (`"file:///..."`, `"s3://..."`, `"gs://..."`, `"mem://"` for
+  tests, whichever driver package a given binary blank-imports) rather
+  than one hand-written adapter per cloud, the way `S3Adapter` itself
+  is; registered as `"blob"`, alongside `"s3"`/`"minio"`, not in place
+  of them, so an existing deployment configured for either keeps
+  working unchanged). Each backend is a self-contained plugin, not
   a case in some central switch: it defines its own JSON-tagged config
   type (`PostgresConfig{DSN}`, `MongoConfig{URI, DB}`,
   `S3Config{Bucket, Prefix, Endpoint, ForcePathStyle}`,
-  `LocalFSConfig{Dir}`) and registers itself under a name via
-  `RegisterAdapter` (the same self-registration convention
-  `database/sql.Register`/`image.RegisterFormat` use) from its own
-  `init()`. `S3Adapter` is registered under two names, `"s3"` and
-  `"minio"` -- the identical adapter and config either way, `"minio"`
-  only differing in which way `ForcePathStyle` defaults (on, since
-  MinIO doesn't support AWS's own virtual-hosted-style addressing by
-  default) so a deployer pointing at a self-hosted MinIO instance
+  `LocalFSConfig{Dir}`, `BlobConfig{URL, Prefix}`) and registers itself
+  under a name via `RegisterAdapter` (the same self-registration
+  convention `database/sql.Register`/`image.RegisterFormat` use) from
+  its own `init()`. `S3Adapter` is registered under two names, `"s3"`
+  and `"minio"` -- the identical adapter and config either way,
+  `"minio"` only differing in which way `ForcePathStyle` defaults (on,
+  since MinIO doesn't support AWS's own virtual-hosted-style addressing
+  by default) so a deployer pointing at a self-hosted MinIO instance
   doesn't need to know that AWS-vs-MinIO distinction exists at all to
   configure it correctly. `Config` (the server's own config) and
   `BuildAdapter` never reference any backend-specific field at all --
   just `Backend` (the registered name) and `BackendConfig`
   (`json.RawMessage`, that backend's own config blob, opaque to
-  everyone but the backend itself) -- so adding a sixth backend is
+  everyone but the backend itself) -- so adding a new backend is
   purely additive: a new file registering a new name, zero changes to
   `docstore.go`, `server.go`, or any existing backend. `Server` exposes
   whichever `Adapter` `BuildAdapter` constructs over plain HTTP
@@ -482,9 +491,12 @@ expanded by the same recursive scan, with no extra grammar required.
   wrong or made-up number for one that doesn't; today only
   `LocalFSAdapter` does, via the underlying disk's own free space
   (`syscall.Statfs`, Linux-only -- `diskusage_linux.go`/
-  `diskusage_other.go`), with `Postgres`/`MongoDB`/`S3`/`Memory` left
-  unimplemented since none has a generic, queryable notion of "quota"
-  this package could answer for them), with the same environment-
+  `diskusage_other.go`), with `Postgres`/`MongoDB`/`S3`/`Memory`/`Blob`
+  left unimplemented since none has a generic, queryable notion of
+  "quota" this package could answer for them -- go-cloud's own
+  `*blob.Bucket` has no such concept either, being a portable client
+  library over whichever backend it's opened against, not a
+  provisioning/billing API), with the same environment-
   configured, CORS-open,
   single-binary shape as `syncserver`/`fontserver` --
   `GOJIBERRY_DOCSTORE_BACKEND` names the backend,
