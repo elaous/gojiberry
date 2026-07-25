@@ -594,6 +594,26 @@ expanded by the same recursive scan, with no extra grammar required.
   unset reports `503` on its own route rather than refusing to start
   at all, the same graceful-degradation posture every server here
   takes with something unconfigured.
+- **`brailleserver`** — the same environment-configured, CORS-open,
+  single-binary shape as `voiceserver` (`cmd/brailleserver`), and for
+  the same underlying reason: [liblouis](https://liblouis.io), the
+  standard open-source engine for real contracted (Grade 2) or
+  uncontracted (Grade 1) braille transcription, is a C library that
+  speaks no HTTP of its own, so this package execs its `lou_translate`
+  CLI as a subprocess per request (`POST /translate` pipes text into
+  `lou_translate`'s own stdin and reads the ASCII-braille text it
+  writes to stdout — liblouis's own default output encoding, and
+  already BRF's own on-the-wire representation, so no further
+  re-encoding is needed downstream). `Server.translate` is a
+  swappable func field, the same shape `voiceserver`'s own
+  `speak`/`transcribe` fields establish, so tests cover the full HTTP
+  surface without needing a real liblouis install.
+  `GOJIBERRY_BRAILLESERVER_LOU_TRANSLATE_BINARY` left unset reports
+  `503` on `/translate` rather than refusing to start at all;
+  `GOJIBERRY_BRAILLESERVER_TABLE` picks the default liblouis
+  translation table (`en-us-g2.ctb`, contracted Grade 2 US English,
+  out of the box), overridable per request via the JSON body's own
+  `table` field.
 - **`devreload`** / **`devwatch`** — the two halves of gox's dev-mode
   hot-reload loop, generalized out of `examples/canvas-app`'s own
   hand-rolled version so any gox server can opt in with a few lines
