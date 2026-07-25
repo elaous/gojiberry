@@ -21,15 +21,18 @@ import (
 //
 // Backend selects which registered AdapterFactory BuildAdapter calls
 // ("memory" the zero-dependency default, or "localfs"/"postgres"/
-// "mongo"/"s3" -- see each backend's own Config type, e.g.
-// PostgresConfig, for what BackendConfig needs to hold). This package
-// never hardcodes that list itself -- each backend registers its own
-// name via RegisterAdapter, so BuildAdapter/Config never need a code
-// change to support a new one.
+// "mongo"/"s3"/"minio" -- see each backend's own Config type, e.g.
+// PostgresConfig, for what BackendConfig needs to hold; "minio" is
+// S3Config too, just defaulted for a MinIO endpoint instead of real
+// AWS, see s3.go's own doc comment). This package never hardcodes
+// that list itself -- each backend registers its own name via
+// RegisterAdapter, so BuildAdapter/Config never need a code change to
+// support a new one.
 //
 // BackendConfig is the chosen backend's own config, JSON-encoded --
 // e.g. `{"dsn":"postgres://..."}` for "postgres", `{"bucket":"docs"}`
-// for "s3". Passed through unparsed; only the backend itself
+// for "s3", `{"bucket":"docs","endpoint":"http://localhost:9000"}`
+// for "minio". Passed through unparsed; only the backend itself
 // understands its own shape.
 type Config struct {
 	Addr          string

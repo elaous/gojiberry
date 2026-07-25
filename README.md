@@ -450,10 +450,17 @@ expanded by the same recursive scan, with no extra grammar required.
   live bucket required). Each backend is a self-contained plugin, not
   a case in some central switch: it defines its own JSON-tagged config
   type (`PostgresConfig{DSN}`, `MongoConfig{URI, DB}`,
-  `S3Config{Bucket, Prefix}`, `LocalFSConfig{Dir}`) and registers
-  itself under a name via `RegisterAdapter` (the same self-registration
-  convention `database/sql.Register`/`image.RegisterFormat` use) from
-  its own `init()`. `Config` (the server's own config) and
+  `S3Config{Bucket, Prefix, Endpoint, ForcePathStyle}`,
+  `LocalFSConfig{Dir}`) and registers itself under a name via
+  `RegisterAdapter` (the same self-registration convention
+  `database/sql.Register`/`image.RegisterFormat` use) from its own
+  `init()`. `S3Adapter` is registered under two names, `"s3"` and
+  `"minio"` -- the identical adapter and config either way, `"minio"`
+  only differing in which way `ForcePathStyle` defaults (on, since
+  MinIO doesn't support AWS's own virtual-hosted-style addressing by
+  default) so a deployer pointing at a self-hosted MinIO instance
+  doesn't need to know that AWS-vs-MinIO distinction exists at all to
+  configure it correctly. `Config` (the server's own config) and
   `BuildAdapter` never reference any backend-specific field at all --
   just `Backend` (the registered name) and `BackendConfig`
   (`json.RawMessage`, that backend's own config blob, opaque to

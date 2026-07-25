@@ -1,7 +1,10 @@
 // Package docstore defines a small, storage-agnostic document
 // persistence contract (Adapter) plus a handful of concrete
-// implementations (Memory, LocalFS, Postgres, MongoDB, S3) and an
-// HTTP server that exposes whichever one an operator configures.
+// implementations (Memory, LocalFS, Postgres, MongoDB, S3 -- the
+// "minio" backend is the same S3Adapter, registered a second time
+// under a name that defaults its own config for MinIO instead of
+// real AWS, see s3.go's own doc comment) and an HTTP server that
+// exposes whichever one an operator configures.
 //
 // A client (e.g. OnDesign's wasm editor, running in a browser that
 // cannot itself speak Postgres/MongoDB/S3 wire protocols) never picks
