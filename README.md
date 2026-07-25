@@ -1640,6 +1640,34 @@ generated code.
   go run .
   ```
 
+- `examples/domrt-bench` — task #128's own rendering benchmarks for
+  `domrt`'s `patch`/`patchChildren`: a wasm harness exposes
+  `window.runBench(scenario, n)`, running n update cycles of one of
+  four scenarios against a real mounted `domrt.Root` (a 100-item keyed
+  `<ul>`) and timing them with Go's own `time.Now`/`time.Since` inside
+  the wasm program itself, so browser-launch/subprocess overhead never
+  pollutes the measurement. `attrs-only` (same keys/order, only text
+  changes) and `keyed-reorder` (same keys, shuffled order every cycle)
+  both stay cheap -- neither creates or destroys a single DOM node, the
+  cheapest paths `patch`/`patchChildren` have. `append` (one new keyed
+  child added per cycle, so the list itself grows from 100 to 600 over
+  the run) and `full-replace` (a completely different 100-key set every
+  cycle, so nothing ever matches) both cost several times more, and
+  land close to each other in this run's own numbers -- `append`'s
+  cost is `patchChildren`'s cheap per-item positional-match path
+  applied to a steadily growing list (so its total cost across the run
+  is quadratic in iteration count), while `full-replace` pays a more
+  expensive per-item create/destroy cost against a constant, smaller
+  list every time; the two land in the same rough neighborhood by
+  coincidence of this benchmark's own parameters, not because the two
+  code paths cost the same per item.
+
+  ```
+  cd examples/domrt-bench
+  make bench   # builds the wasm harness, then runs all four benchmarks
+  # or directly: go test -bench=. -benchtime=1x .
+  ```
+
 ## Editor support
 
 `editors/vscode-gox` is a minimal VS Code extension: `.gox` file
