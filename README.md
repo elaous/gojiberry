@@ -551,6 +551,26 @@ expanded by the same recursive scan, with no extra grammar required.
   `fontserver`'s own `fetchGoogleFonts` field already established.
   DeepL only for now; a second provider would slot in behind that same
   interface without touching the HTTP layer at all.
+- **`voiceserver`** — a small standalone speech proxy, the same
+  environment-configured, CORS-open, single-binary shape as
+  `syncserver`/`fontserver`/`translateserver` (`cmd/voiceserver`), but
+  for a different reason than `translateserver`'s DeepL key: Piper
+  (text-to-speech) and a whisper.cpp-compatible CLI (speech-to-text)
+  are both genuinely local, offline tools with no API key or network
+  call involved at all — this package exists purely because neither
+  one speaks HTTP on its own, execing each as a subprocess per request
+  instead (`POST /speak` pipes text into Piper's own stdin and reads
+  the WAV it writes to a temp `--output_file`; `POST /transcribe`
+  writes an uploaded WAV to a temp file and reads back whatever a
+  whisper.cpp-compatible `-otxt` run writes). `Server.speak`/
+  `Server.transcribe` are swappable func fields, the same shape
+  `translateserver`'s own `translator` interface and `fontserver`'s
+  own `fetchGoogleFonts` field already established, so tests cover the
+  full HTTP surface without needing real Piper/whisper installs.
+  Either `GOJIBERRY_VOICESERVER_PIPER_BINARY`/`_WHISPER_BINARY` left
+  unset reports `503` on its own route rather than refusing to start
+  at all, the same graceful-degradation posture every server here
+  takes with something unconfigured.
 - **`devreload`** / **`devwatch`** — the two halves of gox's dev-mode
   hot-reload loop, generalized out of `examples/canvas-app`'s own
   hand-rolled version so any gox server can opt in with a few lines
