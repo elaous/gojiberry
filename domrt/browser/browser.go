@@ -9,7 +9,9 @@ package browser
 
 import (
 	"encoding/json"
+	"fmt"
 	"syscall/js"
+	"time"
 
 	"github.com/elaous/gojiberry/domrt"
 	"github.com/elaous/gojiberry/domrt/html"
@@ -31,10 +33,11 @@ type Response struct {
 
 // Fetch wraps window.fetch(url) with a plain GET, blocking until the
 // response headers arrive (not the body -- call Text or JSON to read
-// it). For anything else (POST/PUT with a body, custom headers), use
-// FetchOpts.
+// it), with no timeout of its own -- the same unbounded wait this
+// function has always done. For anything else (POST/PUT with a body,
+// custom headers, or a bounded wait), use FetchOpts.
 func Fetch(url string) (*Response, error) {
-	return doFetch(js.Global().Call("fetch", url))
+	return doFetch(url, map[string]any{}, 0)
 }
 
 // FetchOptions configures a FetchOpts call. Method defaults to "GET"
@@ -43,16 +46,31 @@ func Fetch(url string) (*Response, error) {
 // for a multipart upload (including files); the browser sets
 // Content-Type with the right boundary automatically, so don't set it
 // yourself in Headers.
+//
+// Timeout, if non-zero, aborts the request (via a real
+// window.AbortController, not just abandoning the wait on this end)
+// once it elapses, returning an error instead of blocking forever --
+// zero (the default) preserves this package's original behavior, an
+// unbounded wait, so every caller written before Timeout existed is
+// unaffected. Worth setting on any call to a backend this app doesn't
+// control and isn't prepared to wait on indefinitely: without it, a
+// backend that hangs rather than erroring (no response, connection
+// never drops) leaves the calling goroutine blocked in domrt.Await
+// forever, and with it any application-level "request in flight"
+// guard (e.g. this repo's own tryBeginAsync/endAsync convention) that
+// goroutine was supposed to eventually clear.
 type FetchOptions struct {
 	Method    string
 	Body      string
 	BodyValue js.Value
 	Headers   map[string]string
+	Timeout   time.Duration
 }
 
 // FetchOpts wraps window.fetch(url, init) for requests Fetch's plain
-// GET can't express: POST/PUT/PATCH/DELETE with a body, or custom
-// headers. A common use is PUT-ing a JSON body:
+// GET can't express: POST/PUT/PATCH/DELETE with a body, custom
+// headers, or a bounded wait (FetchOptions.Timeout). A common use is
+// PUT-ing a JSON body:
 //
 //	resp, err := browser.FetchOpts(url, browser.FetchOptions{
 //		Method:  "PUT",
@@ -76,10 +94,51 @@ func FetchOpts(url string, opts FetchOptions) (*Response, error) {
 		}
 		init["headers"] = headers
 	}
-	return doFetch(js.Global().Call("fetch", url, js.ValueOf(init)))
+	return doFetch(url, init, opts.Timeout)
 }
 
-func doFetch(promise js.Value) (*Response, error) {
+// FetchTimeout is Fetch's own bounded-wait counterpart: a plain GET
+// that aborts once timeout elapses, for a caller that wants Fetch's
+// simplicity but not its unbounded wait -- equivalent to
+// FetchOpts(url, FetchOptions{Timeout: timeout}).
+func FetchTimeout(url string, timeout time.Duration) (*Response, error) {
+	return doFetch(url, map[string]any{}, timeout)
+}
+
+// doFetch issues window.fetch(url, init), optionally bounded by
+// timeout (<= 0 means unbounded, init is used exactly as given). A
+// bounded call wires init["signal"] to a real AbortController so the
+// browser itself cancels the in-flight request when the deadline
+// passes, rather than this side merely giving up on waiting for a
+// response that keeps consuming real network/server resources
+// unaware anyone stopped caring about it.
+func doFetch(url string, init map[string]any, timeout time.Duration) (*Response, error) {
+	if timeout <= 0 {
+		return awaitFetch(js.Global().Call("fetch", url, js.ValueOf(init)))
+	}
+
+	controller := js.Global().Get("AbortController").New()
+	init["signal"] = controller.Get("signal")
+
+	timedOut := false
+	var onTimeout js.Func
+	onTimeout = js.FuncOf(func(this js.Value, args []js.Value) any {
+		timedOut = true
+		controller.Call("abort")
+		return nil
+	})
+	defer onTimeout.Release()
+	timerID := js.Global().Call("setTimeout", onTimeout, timeout.Milliseconds())
+	defer js.Global().Call("clearTimeout", timerID)
+
+	resp, err := awaitFetch(js.Global().Call("fetch", url, js.ValueOf(init)))
+	if err != nil && timedOut {
+		return nil, fmt.Errorf("fetch %s: timed out after %s", url, timeout)
+	}
+	return resp, err
+}
+
+func awaitFetch(promise js.Value) (*Response, error) {
 	v, err := domrt.Await(promise)
 	if err != nil {
 		return nil, err

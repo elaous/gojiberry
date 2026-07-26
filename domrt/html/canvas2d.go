@@ -21,6 +21,68 @@ func (c *CanvasElement) GetContext2D() *Context2D {
 	return &Context2D{Context: ctx}
 }
 
+// Canvas2D is the subset of *Context2D's own method set a real
+// consumer (OnDesign's own layout.go/main.gox rendering, audited
+// directly rather than guessed at) actually calls -- task #107's own
+// mobile-backend groundwork (see OnDesign's docs/ROADMAP.md, "genuine
+// native mobile backend"): the seam a second, non-browser
+// implementation (a Gio-backed one, spiked separately and found to
+// work for exactly this method shape) needs to exist at all before any
+// backend-swapping is possible, since *Context2D wrapping js.Value
+// directly has none today. Deliberately the narrower, need-driven set
+// this task's own roadmap entry called for, not every method
+// *Context2D happens to have (ArcTo/BezierCurveTo/QuadraticCurveTo/
+// StrokeText/the property *getters*/GlobalAlpha/
+// GlobalCompositeOperation/LineCap/LineJoin/Scale/ResetTransform are
+// real, but unused by the one real consumer this was audited against)
+// -- a narrower interface is both easier for a second implementation
+// to satisfy honestly and easier to keep both implementations
+// consistent against. Add a method here only once something real
+// needs it, the same way this list was built by grep, not by copying
+// *Context2D's own full surface speculatively.
+//
+// *Context2D already satisfies this (var _ Canvas2D = (*Context2D)(nil)
+// below) -- this commit changes no behavior at all, it only names a
+// seam that was previously implicit.
+type Canvas2D interface {
+	SetFillStyle(style string)
+	SetStrokeStyle(style string)
+	SetLineWidth(width float64)
+	SetFont(font string)
+	SetTextAlign(align string)
+	SetTextBaseline(baseline string)
+
+	ClearRect(x, y, w, h float64)
+	FillRect(x, y, w, h float64)
+	StrokeRect(x, y, w, h float64)
+
+	BeginPath()
+	MoveTo(x, y float64)
+	LineTo(x, y float64)
+	Arc(x, y, radius, startAngle, endAngle float64, counterclockwise bool)
+	Rect(x, y, w, h float64)
+	Fill()
+	Stroke()
+	Clip()
+
+	FillText(text string, x, y float64)
+	MeasureTextWidth(text string) float64
+
+	DrawImage(image js.Value, dx, dy float64)
+	DrawImageScaled(image js.Value, dx, dy, dw, dh float64)
+	DrawImageClipped(image js.Value, sx, sy, sw, sh, dx, dy, dw, dh float64)
+	GetImageData(x, y, w, h int) ImageData
+
+	Save()
+	Restore()
+	Translate(x, y float64)
+	Rotate(angle float64)
+	Transform(a, b, cc, d, e, f float64)
+	SetTransform(a, b, cc, d, e, f float64)
+}
+
+var _ Canvas2D = (*Context2D)(nil)
+
 // Get returns a named property not covered by a typed getter below.
 func (c *Context2D) Get(name string) js.Value { return c.Context.Get(name) }
 
