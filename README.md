@@ -221,7 +221,13 @@ expanded by the same recursive scan, with no extra grammar required.
   work before it can register any listener, so a message posted right
   after `NewWorker` returns can arrive before the worker is listening
   and get silently dropped — have the worker signal readiness first,
-  as the demo does), and `NewRouter` (wraps the History API's
+  as the demo does), `EstimateStorage` (`navigator.storage.estimate()`
+  — a browser's own best-guess `{Usage, Quota}` in bytes for this
+  origin's combined LocalStorage/IndexedDB/Cache Storage usage; errors
+  out rather than panicking on an older browser with no
+  `StorageManager` API at all, checked directly since real gaps here
+  are common enough in the wild to be worth a graceful message rather
+  than a bare `syscall/js` panic), and `NewRouter` (wraps the History API's
   `pushState`/`replaceState` plus the browser's own back/forward
   buttons behind one `OnNavigate` callback — `pushState`/`replaceState`
   fire no event themselves, only `popstate` does, so without this,
@@ -439,30 +445,59 @@ expanded by the same recursive scan, with no extra grammar required.
   touching this package) is also future work, not done here.
 - **`docstore`** — a storage-agnostic document persistence server. The
   `Adapter` interface (`Save`/`Load`/`List`/`Delete`, keyed by document
-  ID) is implemented five ways: `MemoryAdapter` (in-process, the
+  ID) is implemented six ways: `MemoryAdapter` (in-process, the
   zero-dependency default), `LocalFSAdapter` (one file per document,
   base64url-encoded ID as the filename), `PostgresAdapter` (one
   `documents` table, created on first connect if missing),
   `MongoAdapter` (one `documents` collection, `_id` set directly to
-  the document ID), and `S3Adapter` (one object per document, built
+  the document ID), `S3Adapter` (one object per document, built
   against a narrow `s3API` interface so its key-prefixing and
   pagination logic has native tests against an in-memory fake with no
-  live bucket required). Each backend is a self-contained plugin, not
+  live bucket required), and `BlobAdapter` (task #174's own concrete
+  deliverable: one blob per document, built directly on
+  [go-cloud](https://gocloud.dev)'s `*blob.Bucket` -- a *portable
+  client library*, not an infra-provisioning tool, opened by URL
+  scheme (`"file:///..."`, `"s3://..."`, `"gs://..."`, `"mem://"` for
+  tests, whichever driver package a given binary blank-imports) rather
+  than one hand-written adapter per cloud, the way `S3Adapter` itself
+  is; registered as `"blob"`, alongside `"s3"`/`"minio"`, not in place
+  of them, so an existing deployment configured for either keeps
+  working unchanged). Each backend is a self-contained plugin, not
   a case in some central switch: it defines its own JSON-tagged config
   type (`PostgresConfig{DSN}`, `MongoConfig{URI, DB}`,
-  `S3Config{Bucket, Prefix}`, `LocalFSConfig{Dir}`) and registers
-  itself under a name via `RegisterAdapter` (the same self-registration
+  `S3Config{Bucket, Prefix, Endpoint, ForcePathStyle}`,
+  `LocalFSConfig{Dir}`, `BlobConfig{URL, Prefix}`) and registers itself
+  under a name via `RegisterAdapter` (the same self-registration
   convention `database/sql.Register`/`image.RegisterFormat` use) from
-  its own `init()`. `Config` (the server's own config) and
+  its own `init()`. `S3Adapter` is registered under two names, `"s3"`
+  and `"minio"` -- the identical adapter and config either way,
+  `"minio"` only differing in which way `ForcePathStyle` defaults (on,
+  since MinIO doesn't support AWS's own virtual-hosted-style addressing
+  by default) so a deployer pointing at a self-hosted MinIO instance
+  doesn't need to know that AWS-vs-MinIO distinction exists at all to
+  configure it correctly. `Config` (the server's own config) and
   `BuildAdapter` never reference any backend-specific field at all --
   just `Backend` (the registered name) and `BackendConfig`
   (`json.RawMessage`, that backend's own config blob, opaque to
-  everyone but the backend itself) -- so adding a sixth backend is
+  everyone but the backend itself) -- so adding a new backend is
   purely additive: a new file registering a new name, zero changes to
   `docstore.go`, `server.go`, or any existing backend. `Server` exposes
   whichever `Adapter` `BuildAdapter` constructs over plain HTTP
   (`PUT`/`GET`/`DELETE /docs/{id}`, `GET /docs` for a metadata listing,
-  `GET /health`), with the same environment-configured, CORS-open,
+  `GET /health`, `GET /quota` for how much storage is left -- an
+  optional `QuotaReporter` interface (`Usage(ctx) (Quota, error)`)
+  an `Adapter` implements if and only if it has a real, checkable
+  answer, `handleQuota` reporting `{"available":false}` rather than a
+  wrong or made-up number for one that doesn't; today only
+  `LocalFSAdapter` does, via the underlying disk's own free space
+  (`syscall.Statfs`, Linux-only -- `diskusage_linux.go`/
+  `diskusage_other.go`), with `Postgres`/`MongoDB`/`S3`/`Memory`/`Blob`
+  left unimplemented since none has a generic, queryable notion of
+  "quota" this package could answer for them -- go-cloud's own
+  `*blob.Bucket` has no such concept either, being a portable client
+  library over whichever backend it's opened against, not a
+  provisioning/billing API), with the same environment-
+  configured, CORS-open,
   single-binary shape as `syncserver`/`fontserver` --
   `GOJIBERRY_DOCSTORE_BACKEND` names the backend,
   `GOJIBERRY_DOCSTORE_BACKEND_CONFIG` carries its JSON config directly
@@ -551,6 +586,46 @@ expanded by the same recursive scan, with no extra grammar required.
   `fontserver`'s own `fetchGoogleFonts` field already established.
   DeepL only for now; a second provider would slot in behind that same
   interface without touching the HTTP layer at all.
+- **`voiceserver`** — a small standalone speech proxy, the same
+  environment-configured, CORS-open, single-binary shape as
+  `syncserver`/`fontserver`/`translateserver` (`cmd/voiceserver`), but
+  for a different reason than `translateserver`'s DeepL key: Piper
+  (text-to-speech) and a whisper.cpp-compatible CLI (speech-to-text)
+  are both genuinely local, offline tools with no API key or network
+  call involved at all — this package exists purely because neither
+  one speaks HTTP on its own, execing each as a subprocess per request
+  instead (`POST /speak` pipes text into Piper's own stdin and reads
+  the WAV it writes to a temp `--output_file`; `POST /transcribe`
+  writes an uploaded WAV to a temp file and reads back whatever a
+  whisper.cpp-compatible `-otxt` run writes). `Server.speak`/
+  `Server.transcribe` are swappable func fields, the same shape
+  `translateserver`'s own `translator` interface and `fontserver`'s
+  own `fetchGoogleFonts` field already established, so tests cover the
+  full HTTP surface without needing real Piper/whisper installs.
+  Either `GOJIBERRY_VOICESERVER_PIPER_BINARY`/`_WHISPER_BINARY` left
+  unset reports `503` on its own route rather than refusing to start
+  at all, the same graceful-degradation posture every server here
+  takes with something unconfigured.
+- **`brailleserver`** — the same environment-configured, CORS-open,
+  single-binary shape as `voiceserver` (`cmd/brailleserver`), and for
+  the same underlying reason: [liblouis](https://liblouis.io), the
+  standard open-source engine for real contracted (Grade 2) or
+  uncontracted (Grade 1) braille transcription, is a C library that
+  speaks no HTTP of its own, so this package execs its `lou_translate`
+  CLI as a subprocess per request (`POST /translate` pipes text into
+  `lou_translate`'s own stdin and reads the ASCII-braille text it
+  writes to stdout — liblouis's own default output encoding, and
+  already BRF's own on-the-wire representation, so no further
+  re-encoding is needed downstream). `Server.translate` is a
+  swappable func field, the same shape `voiceserver`'s own
+  `speak`/`transcribe` fields establish, so tests cover the full HTTP
+  surface without needing a real liblouis install.
+  `GOJIBERRY_BRAILLESERVER_LOU_TRANSLATE_BINARY` left unset reports
+  `503` on `/translate` rather than refusing to start at all;
+  `GOJIBERRY_BRAILLESERVER_TABLE` picks the default liblouis
+  translation table (`en-us-g2.ctb`, contracted Grade 2 US English,
+  out of the box), overridable per request via the JSON body's own
+  `table` field.
 - **`devreload`** / **`devwatch`** — the two halves of gox's dev-mode
   hot-reload loop, generalized out of `examples/canvas-app`'s own
   hand-rolled version so any gox server can opt in with a few lines
@@ -1618,6 +1693,34 @@ generated code.
   cd examples/gin-ssr-demo   # or examples/echo-ssr-demo
   go test ./...
   go run .
+  ```
+
+- `examples/domrt-bench` — task #128's own rendering benchmarks for
+  `domrt`'s `patch`/`patchChildren`: a wasm harness exposes
+  `window.runBench(scenario, n)`, running n update cycles of one of
+  four scenarios against a real mounted `domrt.Root` (a 100-item keyed
+  `<ul>`) and timing them with Go's own `time.Now`/`time.Since` inside
+  the wasm program itself, so browser-launch/subprocess overhead never
+  pollutes the measurement. `attrs-only` (same keys/order, only text
+  changes) and `keyed-reorder` (same keys, shuffled order every cycle)
+  both stay cheap -- neither creates or destroys a single DOM node, the
+  cheapest paths `patch`/`patchChildren` have. `append` (one new keyed
+  child added per cycle, so the list itself grows from 100 to 600 over
+  the run) and `full-replace` (a completely different 100-key set every
+  cycle, so nothing ever matches) both cost several times more, and
+  land close to each other in this run's own numbers -- `append`'s
+  cost is `patchChildren`'s cheap per-item positional-match path
+  applied to a steadily growing list (so its total cost across the run
+  is quadratic in iteration count), while `full-replace` pays a more
+  expensive per-item create/destroy cost against a constant, smaller
+  list every time; the two land in the same rough neighborhood by
+  coincidence of this benchmark's own parameters, not because the two
+  code paths cost the same per item.
+
+  ```
+  cd examples/domrt-bench
+  make bench   # builds the wasm harness, then runs all four benchmarks
+  # or directly: go test -bench=. -benchtime=1x .
   ```
 
 ## Editor support

@@ -66,6 +66,24 @@ func TestBuildAdapterS3RequiresBucket(t *testing.T) {
 	}
 }
 
+func TestBuildAdapterMinioRequiresBucket(t *testing.T) {
+	_, err := BuildAdapter(context.Background(), Config{Backend: "minio"})
+	if err == nil {
+		t.Fatalf("BuildAdapter(minio, no config) = nil error, want one requiring bucket")
+	}
+}
+
+func TestBuildAdapterMinioBuildsAnS3Adapter(t *testing.T) {
+	cfg := Config{Backend: "minio", BackendConfig: []byte(`{"bucket":"docs","endpoint":"http://localhost:9000"}`)}
+	a, err := BuildAdapter(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("BuildAdapter: %v", err)
+	}
+	if _, ok := a.(*S3Adapter); !ok {
+		t.Fatalf("BuildAdapter(minio) = %T, want *S3Adapter -- \"minio\" is the same adapter as \"s3\", just defaulted differently", a)
+	}
+}
+
 func TestBuildAdapterInvalidJSONConfig(t *testing.T) {
 	_, err := BuildAdapter(context.Background(), Config{Backend: "localfs", BackendConfig: []byte(`{not json`)})
 	if err == nil {
