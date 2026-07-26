@@ -46,10 +46,11 @@ The `gox.Node` tree itself never knows which of these it's headed for
 — `gox.Render`/`domrt.Mount`/a `goxgio.Renderer` are just three
 different functions that each walk the exact same tree shape and do
 something different with it (see `gox/render.go`, `domrt/domrt.go`, and
-`examples/gio-counter-demo/goxgio/render.go`, in that order, if you
-want to read the actual walk each one does). Nothing about writing a
-component needs to know or care which renderer(s) will eventually
-consume it.
+`goxgio/render.go`, in that order, if you want to read the actual walk
+each one does — `goxgio` is its own separate Go module, like `domrt`'s
+sibling examples are, so it can depend on `gioui.org` without adding it
+to this one; see `goxgio/README.md`). Nothing about writing a component
+needs to know or care which renderer(s) will eventually consume it.
 
 ## Getting Started
 
@@ -1619,24 +1620,21 @@ generated code.
 - `examples/gio-counter-demo` — the same stateful counter
   `examples/wasm-counter` mounts into a real browser DOM via `domrt`,
   mounted instead into a real native window via
-  [Gio](https://gioui.org): proof `gox.Node` is renderer-agnostic in
-  the sense that actually matters, since a genuinely different target
-  platform (a native GPU window, not a browser) is a new consumer of
-  the tree rather than a rewrite of it. `shared/counter.gox` has no
-  `js`/`wasm` or Gio import at all -- only `gox.El`/`gox.Text`/
-  `gox.On`; `goxgio/render.go` is the new renderer, walking `div`/
-  `span`/`p`/`button` onto Gio's `layout`/`widget/material` packages
-  with no diffing (Gio repaints every frame anyway) and a
-  `map[string]*widget.Clickable` keyed by `Node.Key` or, failing that,
-  the element's `id` attribute, since a Clickable must persist across
-  frames the way a DOM element does but the `Node` tree doesn't.
-  Verified via Gio's own headless GPU backend (no display server
-  needed): a real (software-rasterized where no GPU device is present)
-  frame is rendered, read back pixel-for-pixel, a real
-  `widget.Clickable.Click()` drives the "+"/"-" buttons' handlers, and
-  both the counter's state *and* the rendered pixels genuinely change
-  -- see that example's README for a real, non-obvious one-frame glyph-
-  atlas latency this surfaced in Gio itself:
+  [Gio](https://gioui.org) through `goxgio` (`../../goxgio`, its own
+  separate Go module -- see that module's own README for how the
+  renderer works and what it covers): proof `gox.Node` is
+  renderer-agnostic in the sense that actually matters, since a
+  genuinely different target platform (a native GPU window, not a
+  browser) is a new consumer of the tree rather than a rewrite of it.
+  `shared/counter.gox` has no `js`/`wasm` or Gio import at all -- only
+  `gox.El`/`gox.Text`/`gox.On`. Verified via Gio's own headless GPU
+  backend (no display server needed): a real (software-rasterized
+  where no GPU device is present) frame is rendered, read back
+  pixel-for-pixel, a real `widget.Clickable.Click()` drives the "+"/"-"
+  buttons' handlers, and both the counter's state *and* the rendered
+  pixels genuinely change -- see that example's README for a real,
+  non-obvious one-frame glyph-atlas latency this surfaced in Gio
+  itself:
 
   ```
   cd examples/gio-counter-demo
