@@ -14,6 +14,13 @@ examples/wasm-components-demo/screenshot.png
 examples/showcase-app/*.css
 examples/collab-editor-app/static/*.css
 
+# gio-counter-demo build output (make build-*, see its own Makefile) --
+# dist/ holds every -target's packaged output; the .syso is a stray
+# Windows icon-resource object gogio -target windows drops in the
+# package directory itself, not under -o's own output path.
+examples/gio-counter-demo/dist/
+examples/gio-counter-demo/*.syso
+
 # Test binary, built with `go test -c`
 *.test
 

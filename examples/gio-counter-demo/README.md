@@ -49,6 +49,26 @@ that to the root module.
   go run .
   ```
 
+## Packaging for a real target
+
+`make build-web`/`build-linux`/`build-windows`/`build-macos`/
+`build-android`/`build-ios` package this demo via `gogio`
+(`gioui.org/cmd/gogio`, a `go.mod` tool dependency) for a real target
+platform -- `build-desktop`/`build-mobile`/`build-all` group them.
+Linux is the one target that doesn't need `gogio` at all (no `-target
+linux` -- a Gio program is already a plain, unpackaged Go binary
+there), so `build-linux` is just `go build`. Verified by hand in this
+sandbox: `build-web`, `build-linux`, and `build-windows` all succeed
+with no extra SDK install. **Not verified here**, and not expected to
+work without the real platform tooling: `build-android` (needs
+`$ANDROID_HOME`, the real Android SDK/NDK) and `build-macos`/
+`build-ios` (both need a real macOS host with Xcode -- the same gap
+already tracked in OnDesign's own mobile-backend ROADMAP entry,
+deferred to a real Mac). See the `Makefile`'s own doc comment for the
+exact error each one fails with here. The per-architecture build
+matrix (arm64 vs amd64 vs...) is left at `gogio`'s own defaults for
+now, tracked as separate follow-up work.
+
 ## Verified
 
 `gio_test.go` drives the exact same `Counter`/`Renderer` pair through
