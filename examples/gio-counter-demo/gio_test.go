@@ -330,3 +330,121 @@ func TestClassStyleAppliesBackgroundAndPadding(t *testing.T) {
 		t.Fatalf("pixel at (3,3) = %v, want background color %v", got, want)
 	}
 }
+
+// TestSelectOpensAndFiresOnChangeOnRealClicks drives goxgio's new
+// select/option support -- the one tag Gio's own widget/material has
+// no native equivalent for, so goxgio has to build its own dropdown
+// rather than wrap an existing widget -- through real clicks via
+// Renderer.Click, the same "simple programmatic click" mechanism
+// (Gio's own widget.Clickable.Click()) the original button test
+// already established, not a bypass reaching into Renderer's own
+// unexported state. The trigger and each option row share that exact
+// mechanism because layoutSelect stores both in the same clickables
+// map layoutButton already uses (an option row's own key is
+// "<select id>\x00<option value>", documented on layoutSelect itself).
+func TestSelectOpensAndFiresOnChangeOnRealClicks(t *testing.T) {
+	w, err := headless.NewWindow(200, 160)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := goxgio.New()
+	var fired bool
+	var lastValue string
+	selected := "b"
+	node := func() gox.Node {
+		opt := func(value, label string) gox.Node {
+			attrs := []gox.Attr{gox.A("value", value)}
+			if value == selected {
+				attrs = append(attrs, gox.A("selected", "selected"))
+			}
+			return gox.El("option", attrs, gox.Text(label))
+		}
+		return gox.El("select", []gox.Attr{
+			gox.A("id", "color"),
+			gox.On("change", func(e gox.Event) {
+				fired = true
+				lastValue = gox.EventValue[string](e)
+			}),
+		},
+			opt("a", "A"), opt("b", "B"), opt("c", "C"),
+		)
+	}
+
+	var router input.Router
+	var ops op.Ops
+	gtx := layout.Context{
+		Ops:    &ops,
+		Source: router.Source(),
+		// Loose (Min zero, Max the window size), not layout.Exact --
+		// this test compares the closed vs. open dropdown's own
+		// Dimensions to confirm it actually grew, which an Exact
+		// constraint would mask by force-filling the full window
+		// height regardless of real content size.
+		Constraints: layout.Constraints{Max: image.Pt(200, 160)},
+	}
+
+	closedDims := renderer.Layout(gtx, th, node())
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+	closed := image.NewRGBA(image.Rect(0, 0, 200, 160))
+	if err := w.Screenshot(closed); err != nil {
+		t.Fatalf("Screenshot: %v", err)
+	}
+
+	if !renderer.Click("color") {
+		t.Fatal("no clickable registered for the select's own trigger id -- Renderer never laid out a select identified \"color\"")
+	}
+	gtx.Reset()
+	openDims := renderer.Layout(gtx, th, node())
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+	open := image.NewRGBA(image.Rect(0, 0, 200, 160))
+	if err := w.Screenshot(open); err != nil {
+		t.Fatalf("Screenshot: %v", err)
+	}
+	if bytes.Equal(closed.Pix, open.Pix) {
+		t.Fatal("frame pixels identical closed vs open: clicking the trigger never expanded the dropdown")
+	}
+	if openDims.Size.Y <= closedDims.Size.Y {
+		t.Fatalf("open dropdown height = %d, want taller than the closed trigger's own %d (three option rows plus the toggle button)", openDims.Size.Y, closedDims.Size.Y)
+	}
+
+	if fired {
+		t.Fatal("onChange fired just from opening the dropdown, before any option was clicked")
+	}
+	if !renderer.Click("color\x00c") {
+		t.Fatal("no clickable registered for option \"c\" -- Renderer never laid out an open dropdown row for it")
+	}
+	gtx.Reset()
+	renderer.Layout(gtx, th, node())
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+
+	if !fired {
+		t.Fatal("onChange never fired from a real click on the \"C\" option row")
+	}
+	if lastValue != "c" {
+		t.Fatalf("onChange value = %q, want \"c\"", lastValue)
+	}
+
+	// selected is still "b" in the tree (this test's own node() closure
+	// doesn't update it -- that's the caller's job in response to
+	// onChange, per layoutSelect's own controlled-component doc
+	// comment), so the dropdown should now report itself closed again
+	// (selecting a row closes it) with the same "B ▾" trigger it
+	// started with, back to the closed frame's own dimensions.
+	gtx.Reset()
+	afterDims := renderer.Layout(gtx, th, node())
+	if afterDims != closedDims {
+		t.Fatalf("dimensions after selecting an option = %+v, want %+v (dropdown should have closed again)", afterDims, closedDims)
+	}
+}

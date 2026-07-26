@@ -26,21 +26,29 @@ that to the root module.
   packages. It understands a minimal tag set (`div` as a `layout.Flex`,
   `span`/`p` as a `material.Label`, `button` as a `material.Button`,
   `input` type=text/type=checkbox as a `material.Editor`/
-  `material.CheckBox`) since CSS classes/inline styles -- how every
-  other tag's look would normally be customized -- have no Gio
-  equivalent. Because Gio is immediate-mode (it repaints everything
-  every frame; there's nothing to diff), `Layout` is a plain recursive
-  walk, closer in shape to `gox.Render` than to `domrt`'s patch
-  algorithm. The one real wrinkle: a Gio `widget.Clickable`/
-  `widget.Bool`/`widget.Editor` must persist across frames (Gio reads
-  accumulated interaction state off the struct itself), but the `Node`
-  tree is rebuilt from scratch on every render call, so `Renderer` keeps
-  a `map[string]*T` per widget kind, keyed by `Node.Key` if set, else the
-  element's `id` attribute -- see the package doc comment for the full
-  reasoning, including what happens if an interactive element has
-  neither. `select`/`option` (a native dropdown) is a known gap:
-  `widget/material` has no equivalent widget, so supporting it means
-  building a real custom widget, not just another tag-switch case.
+  `material.CheckBox`, `select`/`option` as a custom dropdown) since CSS
+  classes/inline styles -- how every other tag's look would normally be
+  customized -- have no Gio equivalent. Because Gio is immediate-mode
+  (it repaints everything every frame; there's nothing to diff),
+  `Layout` is a plain recursive walk, closer in shape to `gox.Render`
+  than to `domrt`'s patch algorithm. The one real wrinkle: a Gio
+  `widget.Clickable`/`widget.Bool`/`widget.Editor` must persist across
+  frames (Gio reads accumulated interaction state off the struct
+  itself), but the `Node` tree is rebuilt from scratch on every render
+  call, so `Renderer` keeps a `map[string]*T` per widget kind, keyed by
+  `Node.Key` if set, else the element's `id` attribute -- see the
+  package doc comment for the full reasoning, including what happens if
+  an interactive element has neither. `select`/`option` needed real
+  custom-widget work rather than another tag-switch case, since
+  `widget/material` has no native dropdown equivalent at all: a closed
+  select is a `material.Button` showing the selected `<option>`'s own
+  label, an open one is that same button stacked above one more button
+  per option (reusing `Renderer`'s own `clickables` map, keyed
+  `"<select id>\x00<option value>"`, rather than adding a second
+  per-option map); which option is *selected* is read fresh from the
+  tree's own `selected` attribute every frame, not persisted by
+  `Renderer` itself, the same controlled-component contract `domrt`
+  already holds every caller to.
   `Renderer.Styles` (`map[string]ClassStyle`) is the narrow, opt-in
   slice of CSS that does have a real Gio equivalent -- padding, a
   background fill, a border, a corner radius, and flex cross-axis
@@ -135,6 +143,15 @@ the same way: rendering the identical tree with `Styles` nil versus a
 class mapped to a background color/padding, confirming not just that
 some pixel changed but that the exact requested color is what actually
 got painted at a sample point inside the div's own padding.
+
+`TestSelectOpensAndFiresOnChangeOnRealClicks` covers the new
+`select`/`option` dropdown: `Renderer.Click` (Gio's own
+`widget.Clickable.Click()`, the same mechanism the original button
+test established, not a bypass) opens it, confirming the rendered
+`Dimensions` actually grew (not just that some pixel changed) and that
+opening alone doesn't fire `onChange`; a second `Renderer.Click` on an
+option row confirms `onChange` fires with that option's own value and
+the dropdown collapses back to its original closed `Dimensions`.
 
 `goxgio/cssgen`'s own tests (`go test ./goxgio/cssgen/...`) verify the
 generator against CSS copied verbatim from OnDesign's `index.html`:
