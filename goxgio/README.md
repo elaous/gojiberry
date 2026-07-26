@@ -64,6 +64,17 @@ itself is built on. `On` lets a caller replicate that wiring against an
 unmodified component's tree; a node's own `Attr` handler always wins
 when both are registered for the same id, so it's purely additive.
 
+`Renderer.Focus(id)` requests real Gio input focus for a text input on
+the next `Layout` call, via `key.FocusCmd` -- the programmatic-focus
+analogue of `Click`. Gio only ever focuses a text field from a real
+`pointer.Event` hitting its own laid-out bounds otherwise, which means
+knowing exactly where those bounds fall inside a caller's own layout;
+trivial for a single isolated input, much harder for one buried inside
+a real multi-child panel. A pending `id -> bool` map (the same
+deferred-then-consumed shape `Click`'s own accumulated click state and
+`selectOpen` already take) is checked at the top of `layoutInput`'s
+text-field branch and cleared once acted on.
+
 `Renderer.Styles` (`map[string]ClassStyle`) is the narrow, opt-in slice
 of CSS that has a real Gio equivalent -- padding, a background fill, a
 border, a corner radius, and flex cross-axis alignment -- keyed by
@@ -108,6 +119,10 @@ state:
   real `.gox` component takes) fires its registered handler on a real
   click, and a node that does carry its own `Attr` handler keeps using
   it unaffected by an `On` registration for the same id.
+- `TestFocusFiresOnChangeWithoutAnyPointerClick` covers `Renderer.Focus`:
+  the same real `key.EditEvent` dispatch
+  `TestTextInputHandlesRealClickFocusAndTyping` uses, but with no
+  `pointer.Event` at all -- `Focus` alone is enough to receive it.
 
 The `Counter`/click-driven integration test (proving the *whole
 pipeline* -- a real component, a real window, a real click firing a
@@ -148,9 +163,10 @@ replace github.com/elaous/gojiberry/goxgio => /path/to/gojiberry/goxgio
 ## Not yet done
 
 `goxgio` covers every tag `ui/*.gox` structurally needs, and (as of
-`Renderer.On`) has a way to wire real interactivity into an unmodified
-component too. `OnDesign/native` is now consuming both against real
+`Renderer.On`/`Renderer.Focus`) has a way to wire real interactivity
+-- including into a text field -- against an unmodified component too.
+`OnDesign/native` is now consuming all of it against real
 `editor/ui/*.gox` panels (see its own README) -- but only two panels
-and one wired control, not a real app. Wiring `cssgen`'s output into
-that consumer is separate, not-yet-started work -- see OnDesign's own
-`docs/ROADMAP.md`, task #107, for the fuller picture.
+and a handful of wired controls, not a real app. Wiring `cssgen`'s
+output into that consumer is separate, not-yet-started work -- see
+OnDesign's own `docs/ROADMAP.md`, task #107, for the fuller picture.

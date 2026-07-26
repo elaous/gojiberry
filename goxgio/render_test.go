@@ -459,3 +459,69 @@ func TestOnLosesToANodesOwnAttrHandler(t *testing.T) {
 		t.Fatal("the On-registered handler fired even though the node has its own Attr handler, which should always win")
 	}
 }
+
+// TestFocusFiresOnChangeWithoutAnyPointerClick proves Renderer.Focus's
+// programmatic focus actually works: typing into a text input right
+// after Focus, with no pointer.Event dispatched at all -- unlike
+// TestTextInputHandlesRealClickFocusAndTyping, which drives a real
+// click at the widget's own on-screen position first. Focus exists
+// precisely for callers that can't easily compute that position (an
+// input buried inside a larger tree, not laid out in isolation), so
+// this test's whole point is that a real key.EditEvent still lands
+// correctly without one.
+func TestFocusFiresOnChangeWithoutAnyPointerClick(t *testing.T) {
+	w, err := headless.NewWindow(200, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	var fired bool
+	var lastValue string
+	node := gox.El("input", []gox.Attr{
+		gox.A("type", "text"),
+		gox.A("id", "name"),
+		gox.On("change", func(e gox.Event) {
+			fired = true
+			lastValue = gox.EventValue[string](e)
+		}),
+	})
+
+	var router input.Router
+	var ops op.Ops
+	gtx := layout.Context{
+		Ops:         &ops,
+		Source:      router.Source(),
+		Constraints: layout.Exact(image.Pt(200, 60)),
+	}
+
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+
+	if !renderer.Focus("name") {
+		t.Fatal(`Focus("name"): no editor registered for that id after the first Layout`)
+	}
+	gtx.Reset()
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+
+	router.Queue(key.EditEvent{Text: "hi"})
+	gtx.Reset()
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+
+	if !fired {
+		t.Fatal("onChange never fired from a typed key.EditEvent after Focus, with no pointer click at all")
+	}
+	if lastValue != "hi" {
+		t.Fatalf("onChange value = %q, want \"hi\"", lastValue)
+	}
+}

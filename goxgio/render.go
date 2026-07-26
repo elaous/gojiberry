@@ -60,6 +60,7 @@ import (
 	"image/color"
 	"strings"
 
+	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -119,6 +120,14 @@ type Renderer struct {
 	// map[string]bool is the right shape here.
 	selectOpen map[string]bool
 
+	// focusRequests tracks ids whose editor should receive real Gio
+	// input focus the next time Layout renders them -- see Focus's own
+	// doc comment for why this exists (a pending flag consumed and
+	// cleared by layoutInput, the same deferred-then-consumed shape
+	// selectOpen and a Clickable's own accumulated click state already
+	// take).
+	focusRequests map[string]bool
+
 	// handlers holds ID-based event handlers registered via On, keyed
 	// by "<id>\x00<event>" (the same flat key shape layoutSelect
 	// already uses for "<select id>\x00<option value>"). See On's own
@@ -143,12 +152,34 @@ type Renderer struct {
 // styling.
 func New() *Renderer {
 	return &Renderer{
-		clickables: make(map[string]*widget.Clickable),
-		checkboxes: make(map[string]*widget.Bool),
-		editors:    make(map[string]*widget.Editor),
-		selectOpen: make(map[string]bool),
-		handlers:   make(map[string]gox.EventHandler),
+		clickables:    make(map[string]*widget.Clickable),
+		checkboxes:    make(map[string]*widget.Bool),
+		editors:       make(map[string]*widget.Editor),
+		selectOpen:    make(map[string]bool),
+		focusRequests: make(map[string]bool),
+		handlers:      make(map[string]gox.EventHandler),
 	}
+}
+
+// Focus requests that the text input identified by id (Node.Key if
+// set, else its own "id" attribute) receive real Gio input focus the
+// next time Layout renders it -- the programmatic-focus analogue of
+// Click, for a caller that wants to simulate focusing a text field
+// without knowing its exact on-screen position first. Gio's own focus
+// mechanism (key.FocusCmd) otherwise only ever fires from a real
+// pointer.Event hitting the widget's own laid-out bounds, which means
+// knowing exactly where those bounds fall inside a caller's own
+// layout -- trivial for a single isolated input, much less so for one
+// buried inside a larger tree like a real editor/ui/*.gox panel.
+// Reports whether an editor with that identity has been laid out at
+// least once (and so has something to focus); if not, id is not
+// remembered, matching Click's own "nothing registered yet" contract.
+func (r *Renderer) Focus(id string) bool {
+	if _, ok := r.editors[id]; !ok {
+		return false
+	}
+	r.focusRequests[id] = true
+	return true
 }
 
 // On registers fn to fire when event ("click" or "change") occurs on
@@ -515,6 +546,10 @@ func (r *Renderer) layoutInput(gtx layout.Context, th *material.Theme, n gox.Nod
 		ed = &widget.Editor{SingleLine: true}
 		ed.SetText(valueOf(n))
 		r.editors[id] = ed
+	}
+	if r.focusRequests[id] {
+		delete(r.focusRequests, id)
+		gtx.Execute(key.FocusCmd{Tag: ed})
 	}
 	changed := false
 	for {
