@@ -3,6 +3,7 @@ package docstore
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"testing"
 	"time"
@@ -86,5 +87,39 @@ func TestS3AdapterUsesPrefixInKeyButNotInID(t *testing.T) {
 	}
 	if len(metas) != 1 || metas[0].ID != "myid" {
 		t.Fatalf("List = %v, want ID myid (prefix stripped)", metas)
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+func TestResolvePathStyleDefaultsApplyWhenUnset(t *testing.T) {
+	if got := resolvePathStyle(S3Config{}, false); got != false {
+		t.Errorf("resolvePathStyle({}, false) = %v, want false (the \"s3\" backend's own default)", got)
+	}
+	if got := resolvePathStyle(S3Config{}, true); got != true {
+		t.Errorf("resolvePathStyle({}, true) = %v, want true (the \"minio\" backend's own default)", got)
+	}
+}
+
+func TestResolvePathStyleExplicitConfigWins(t *testing.T) {
+	if got := resolvePathStyle(S3Config{ForcePathStyle: boolPtr(false)}, true); got != false {
+		t.Errorf("resolvePathStyle({forcePathStyle: false}, true) = %v, want false -- an explicit false must override the \"minio\" backend's own true default", got)
+	}
+	if got := resolvePathStyle(S3Config{ForcePathStyle: boolPtr(true)}, false); got != true {
+		t.Errorf("resolvePathStyle({forcePathStyle: true}, false) = %v, want true -- an explicit true must override the \"s3\" backend's own false default", got)
+	}
+}
+
+func TestS3ConfigDecodesEndpointAndForcePathStyle(t *testing.T) {
+	var cfg S3Config
+	raw := []byte(`{"bucket":"docs","endpoint":"http://localhost:9000","forcePathStyle":true}`)
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if cfg.Endpoint != "http://localhost:9000" {
+		t.Errorf("Endpoint = %q, want http://localhost:9000", cfg.Endpoint)
+	}
+	if cfg.ForcePathStyle == nil || !*cfg.ForcePathStyle {
+		t.Errorf("ForcePathStyle = %v, want a pointer to true", cfg.ForcePathStyle)
 	}
 }

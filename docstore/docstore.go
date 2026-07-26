@@ -1,7 +1,10 @@
 // Package docstore defines a small, storage-agnostic document
 // persistence contract (Adapter) plus a handful of concrete
-// implementations (Memory, LocalFS, Postgres, MongoDB, S3) and an
-// HTTP server that exposes whichever one an operator configures.
+// implementations (Memory, LocalFS, Postgres, MongoDB, S3 -- the
+// "minio" backend is the same S3Adapter, registered a second time
+// under a name that defaults its own config for MinIO instead of
+// real AWS, see s3.go's own doc comment) and an HTTP server that
+// exposes whichever one an operator configures.
 //
 // A client (e.g. OnDesign's wasm editor, running in a browser that
 // cannot itself speak Postgres/MongoDB/S3 wire protocols) never picks
@@ -53,6 +56,31 @@ type Adapter interface {
 	List(ctx context.Context) ([]Meta, error)
 	// Delete returns ErrNotFound if id does not exist.
 	Delete(ctx context.Context, id string) error
+}
+
+// Quota is one backend's own answer to "how much space is left" --
+// Used/Total in bytes. Not every backend can answer this the same
+// way (a local disk has a real, checkable free-space number; an S3
+// bucket's own "quota" is usually a billing-tier concept this package
+// has no way to query at all), so QuotaReporter below is optional,
+// not part of Adapter itself -- see its own doc comment.
+type Quota struct {
+	Used  int64
+	Total int64
+}
+
+// QuotaReporter is an optional capability an Adapter can implement if
+// (and only if) it has a real, checkable notion of "how much space is
+// left" -- LocalFSAdapter does (the underlying disk's own free
+// space), Postgres/MongoDB/S3/Memory don't have anything this package
+// can query generically, so they simply don't implement it. Server
+// checks `adapter.(QuotaReporter)` (server.go's own handleQuota) and
+// reports "not available" rather than a wrong or made-up number when
+// an adapter doesn't. Mirrors this package's own "narrow, optional-
+// feature interface" shape rather than forcing every Adapter to
+// answer a question some of them structurally can't.
+type QuotaReporter interface {
+	Usage(ctx context.Context) (Quota, error)
 }
 
 // AdapterFactory builds an Adapter from that backend's own
