@@ -66,20 +66,27 @@ import (
 // margin collapsing, ...) has no such equivalent at all, so this is
 // deliberately not a general CSS-in-Go model: it's exactly the shape a
 // build-time generator (or a small, hand-authored table, for a bounded
-// class vocabulary like OnDesign's own ~40 real classes) can produce
-// from real `.class { ... }` CSS rules -- see gojiberry's own
-// mobile-backend ROADMAP entry for the fuller design. The zero value
-// (all-zero Padding, transparent Background/BorderColor, zero
-// BorderWidth/CornerRadius, Alignment == layout.Start) paints and lays
-// out exactly as an unstyled node already did before this type existed,
-// so an empty or missing Renderer.Styles entry is a no-op, not an
-// error.
+// class vocabulary like OnDesign's own real classes) can produce from
+// real `.class { ... }` CSS rules -- see gojiberry's own mobile-backend
+// ROADMAP entry for the fuller design, and cssgen for the generator
+// itself. The zero value (all-zero Padding*, transparent Background/
+// BorderColor, zero BorderWidth/CornerRadius, Alignment ==
+// layout.Start) paints and lays out exactly as an unstyled node already
+// did before this type existed, so an empty or missing Renderer.Styles
+// entry is a no-op, not an error.
 type ClassStyle struct {
-	Padding      unit.Dp
-	Background   color.NRGBA
-	BorderColor  color.NRGBA
-	BorderWidth  unit.Dp
-	CornerRadius unit.Dp
+	// PaddingY/PaddingX are top+bottom / left+right padding -- CSS's
+	// own most common shorthand shape (`padding: Y X`, or `padding: N`
+	// for PaddingY == PaddingX == N), not full independent 4-side
+	// padding: real CSS asymmetric (top != bottom, or left != right)
+	// padding is rare enough in practice that cssgen flags it as an
+	// approximation rather than this type growing two more fields for
+	// it.
+	PaddingY, PaddingX unit.Dp
+	Background         color.NRGBA
+	BorderColor        color.NRGBA
+	BorderWidth        unit.Dp
+	CornerRadius       unit.Dp
 	// Alignment is the cross-axis alignment for a div's own
 	// layout.Flex -- ignored for every other tag, which has no flex
 	// children of its own to align.
@@ -183,8 +190,11 @@ func (r *Renderer) styleOf(n gox.Node) ClassStyle {
 		if !ok {
 			continue
 		}
-		if s.Padding != 0 {
-			merged.Padding = s.Padding
+		if s.PaddingY != 0 {
+			merged.PaddingY = s.PaddingY
+		}
+		if s.PaddingX != 0 {
+			merged.PaddingX = s.PaddingX
 		}
 		if s.Background != (color.NRGBA{}) {
 			merged.Background = s.Background
@@ -217,7 +227,8 @@ func (r *Renderer) styled(gtx layout.Context, style ClassStyle, content layout.W
 		return content(gtx)
 	}
 	macro := op.Record(gtx.Ops)
-	dims := layout.UniformInset(style.Padding).Layout(gtx, content)
+	inset := layout.Inset{Top: style.PaddingY, Bottom: style.PaddingY, Left: style.PaddingX, Right: style.PaddingX}
+	dims := inset.Layout(gtx, content)
 	call := macro.Stop()
 
 	if style.Background != (color.NRGBA{}) || style.BorderWidth > 0 {

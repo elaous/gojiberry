@@ -314,7 +314,7 @@ func TestClassStyleAppliesBackgroundAndPadding(t *testing.T) {
 
 	want := color.NRGBA{R: 220, G: 20, B: 20, A: 255}
 	styled := frame(map[string]goxgio.ClassStyle{
-		"panel": {Padding: 8, Background: want},
+		"panel": {PaddingY: 8, PaddingX: 8, Background: want},
 	})
 
 	if bytes.Equal(unstyled.Pix, styled.Pix) {

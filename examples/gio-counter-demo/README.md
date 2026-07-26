@@ -53,7 +53,14 @@ that to the root module.
   `.class { ... }` rules, resolving `var(--x)` custom properties) is
   separate, not-yet-built work -- see gojiberry's own mobile-backend
   ROADMAP entry for the fuller two-part design and why a general CSS
-  parser isn't needed for it.
+  parser isn't needed for it. `goxgio/cssgen` is that generator: given
+  real CSS text and a list of class names, it parses `:root`/
+  `body.dark` custom-property tokens and flat `.class { ... }` rules
+  (padding, background, border, border-radius only -- everything else
+  a matched rule sets is reported as a `Warning`, not silently
+  dropped) into a real `map[string]ClassStyle`, verified against real
+  rules copied verbatim from OnDesign's own `index.html`, not
+  synthetic CSS.
 - `main.go` is the real, interactive entry point: a standard
   `app.Window` event loop that calls `Renderer.Layout` on every
   `FrameEvent`. Run it on a machine with a display:
@@ -128,6 +135,20 @@ the same way: rendering the identical tree with `Styles` nil versus a
 class mapped to a background color/padding, confirming not just that
 some pixel changed but that the exact requested color is what actually
 got painted at a sample point inside the div's own padding.
+
+`goxgio/cssgen`'s own tests (`go test ./goxgio/cssgen/...`) verify the
+generator against CSS copied verbatim from OnDesign's `index.html`:
+`:root`/`body.dark` token resolution, `var()`/hex/`rgb()`/`rgba()`
+color parsing (including real alpha), 1- and 2-value padding shorthand
+exactly and 3-4 value shorthand flagged as an approximation, `border:
+none`/`background: none` recognized as a real zero value rather than a
+failure, and -- the one real bug this test suite caught while being
+written -- a `:hover`/`.active`/`:disabled` variant of a wanted class
+correctly reported as a `Warning` and *not* silently merged into the
+base style (the first version matched only an exact class name, so
+`.find-toggle:disabled` was silently ignored rather than
+warned-about; fixed by extracting the selector's own leading class
+name before the wanted-class lookup, not after).
 
 ```
 go test ./...
