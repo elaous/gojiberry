@@ -52,6 +52,18 @@ fresh from the tree's own `selected` attribute every frame, not
 persisted by `Renderer` itself -- the same controlled-component
 contract `domrt` already holds every caller to.
 
+`Renderer.On(id, event, fn)` registers an ID-based event handler,
+checked as a fallback in `layoutButton`/`layoutInput`/`layoutSelect`
+whenever a node has no `Attr` handler of its own (`gox.On`, what
+`gio-counter-demo`'s `Counter` uses). This exists because real
+OnDesign `editor/ui/*.gox` components use neither `gox.On` nor any prop
+for interactivity -- their web build wires every handler externally, by
+element ID (`ed.on(id, event, fn)` in `main.gox`'s own `wire()`, calling
+a real DOM `addEventListener`), the same delegation pattern `domrt`
+itself is built on. `On` lets a caller replicate that wiring against an
+unmodified component's tree; a node's own `Attr` handler always wins
+when both are registered for the same id, so it's purely additive.
+
 `Renderer.Styles` (`map[string]ClassStyle`) is the narrow, opt-in slice
 of CSS that has a real Gio equivalent -- padding, a background fill, a
 border, a corner radius, and flex cross-axis alignment -- keyed by
@@ -91,6 +103,11 @@ state:
   opens the dropdown, confirming the rendered `Dimensions` actually
   grew, then selects an option, confirming `onChange` fires with the
   right value and the dropdown collapses back to its original size.
+- `TestOnFiresForANodeWithNoAttrHandler` / `TestOnLosesToANodesOwnAttrHandler`
+  cover `Renderer.On`: a plain node with no `Attr` handler (the shape a
+  real `.gox` component takes) fires its registered handler on a real
+  click, and a node that does carry its own `Attr` handler keeps using
+  it unaffected by an `On` registration for the same id.
 
 The `Counter`/click-driven integration test (proving the *whole
 pipeline* -- a real component, a real window, a real click firing a
@@ -130,10 +147,10 @@ replace github.com/elaous/gojiberry/goxgio => /path/to/gojiberry/goxgio
 
 ## Not yet done
 
-`goxgio` covers every tag `ui/*.gox` structurally needs, but nothing
-outside this repo actually renders OnDesign's real UI through it yet --
-`examples/gio-counter-demo` is still the only consumer, and it only
-renders its own `Counter` demo component. Wiring `cssgen`'s output into
-a real OnDesign-targeting Gio entry point is separate, not-yet-started
-work -- see OnDesign's own `docs/ROADMAP.md`, task #107, for the fuller
-picture.
+`goxgio` covers every tag `ui/*.gox` structurally needs, and (as of
+`Renderer.On`) has a way to wire real interactivity into an unmodified
+component too. `OnDesign/native` is now consuming both against real
+`editor/ui/*.gox` panels (see its own README) -- but only two panels
+and one wired control, not a real app. Wiring `cssgen`'s output into
+that consumer is separate, not-yet-started work -- see OnDesign's own
+`docs/ROADMAP.md`, task #107, for the fuller picture.
