@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -88,14 +89,14 @@ func TestUserFromClaims(t *testing.T) {
 }
 
 func TestNewManagerRequiresBaseURL(t *testing.T) {
-	_, err := NewManager(nil, Config{Providers: []Provider{{Name: "google", IssuerURL: "https://accounts.google.com", ClientID: "id"}}})
+	_, err := NewManager(context.TODO(), Config{Providers: []Provider{{Name: "google", IssuerURL: "https://accounts.google.com", ClientID: "id"}}})
 	if err == nil {
 		t.Fatal("NewManager with an empty BaseURL should error")
 	}
 }
 
 func TestNewManagerRequiresProviders(t *testing.T) {
-	_, err := NewManager(nil, Config{BaseURL: "https://example.com"})
+	_, err := NewManager(context.TODO(), Config{BaseURL: "https://example.com"})
 	if err == nil {
 		t.Fatal("NewManager with no providers should error")
 	}

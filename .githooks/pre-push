@@ -1,0 +1,18 @@
+#!/bin/sh
+# Local complement to CI's own "fast-checks" job, not a replacement:
+# catching a lint failure before it ever reaches CI saves the round
+# trip and the minutes that CI run would have cost. Runs on push, not
+# every commit -- `make lint`/`make wasm-lint` together run two full
+# golangci-lint passes and take real time, the wrong frequency for a
+# pre-commit hook.
+#
+# .git/hooks/ is never version-controlled, so this script lives here
+# instead and needs a one-time opt-in per clone:
+#   git config core.hooksPath .githooks
+# see README.md's own "Git hooks" section.
+
+set -e
+
+cd "$(git rev-parse --show-toplevel)"
+echo "pre-push: running make lint..."
+make lint
