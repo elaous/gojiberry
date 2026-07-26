@@ -75,6 +75,13 @@ deferred-then-consumed shape `Click`'s own accumulated click state and
 `selectOpen` already take) is checked at the top of `layoutInput`'s
 text-field branch and cleared once acted on.
 
+`Renderer.Toggle(id)` flips a checkbox's `Value` on the next `Layout`
+call, the same programmatic-interaction shortcut `Click` gives a
+`widget.Clickable` -- needed because `widget.Bool` has no public
+click-equivalent method of its own (its click detection is internal,
+via an unexported `widget.Clickable` it doesn't expose). Same pending
+`id -> bool` map shape as `Focus`.
+
 `Renderer.Styles` (`map[string]ClassStyle`) is the narrow, opt-in slice
 of CSS that has a real Gio equivalent -- padding, a background fill, a
 border, a corner radius, and flex cross-axis alignment -- keyed by
@@ -123,6 +130,9 @@ state:
   the same real `key.EditEvent` dispatch
   `TestTextInputHandlesRealClickFocusAndTyping` uses, but with no
   `pointer.Event` at all -- `Focus` alone is enough to receive it.
+- `TestToggleFiresOnChangeWithoutAnyPointerClick` covers
+  `Renderer.Toggle`: a checkbox flips and fires `onChange` from
+  `Toggle` alone, with no `pointer.Event` dispatched at all.
 
 The `Counter`/click-driven integration test (proving the *whole
 pipeline* -- a real component, a real window, a real click firing a

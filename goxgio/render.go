@@ -128,6 +128,12 @@ type Renderer struct {
 	// take).
 	focusRequests map[string]bool
 
+	// toggleRequests tracks ids whose checkbox should flip its Value
+	// the next time Layout renders it -- see Toggle's own doc comment
+	// for why this exists (widget.Bool, unlike widget.Clickable, has
+	// no public Click-equivalent shortcut of its own).
+	toggleRequests map[string]bool
+
 	// handlers holds ID-based event handlers registered via On, keyed
 	// by "<id>\x00<event>" (the same flat key shape layoutSelect
 	// already uses for "<select id>\x00<option value>"). See On's own
@@ -152,13 +158,32 @@ type Renderer struct {
 // styling.
 func New() *Renderer {
 	return &Renderer{
-		clickables:    make(map[string]*widget.Clickable),
-		checkboxes:    make(map[string]*widget.Bool),
-		editors:       make(map[string]*widget.Editor),
-		selectOpen:    make(map[string]bool),
-		focusRequests: make(map[string]bool),
-		handlers:      make(map[string]gox.EventHandler),
+		clickables:     make(map[string]*widget.Clickable),
+		checkboxes:     make(map[string]*widget.Bool),
+		editors:        make(map[string]*widget.Editor),
+		selectOpen:     make(map[string]bool),
+		focusRequests:  make(map[string]bool),
+		toggleRequests: make(map[string]bool),
+		handlers:       make(map[string]gox.EventHandler),
 	}
+}
+
+// Toggle requests that the checkbox identified by id (Node.Key if set,
+// else its own "id" attribute) flip its Value the next time Layout
+// renders it, firing its onChange the same way a real click would --
+// the programmatic-click analogue Click already gives a
+// widget.Clickable, needed here because widget.Bool exposes no public
+// Click-equivalent shortcut of its own (its click detection is
+// internal, via an unexported widget.Clickable it doesn't expose).
+// Reports whether a checkbox with that identity has been laid out at
+// least once; if not, id is not remembered, matching Click's own
+// "nothing registered yet" contract.
+func (r *Renderer) Toggle(id string) bool {
+	if _, ok := r.checkboxes[id]; !ok {
+		return false
+	}
+	r.toggleRequests[id] = true
+	return true
 }
 
 // Focus requests that the text input identified by id (Node.Key if
@@ -529,7 +554,13 @@ func (r *Renderer) layoutInput(gtx layout.Context, th *material.Theme, n gox.Nod
 			cb = &widget.Bool{Value: checkedOf(n)}
 			r.checkboxes[id] = cb
 		}
-		if cb.Update(gtx) {
+		changed := cb.Update(gtx)
+		if r.toggleRequests[id] {
+			delete(r.toggleRequests, id)
+			cb.Value = !cb.Value
+			changed = true
+		}
+		if changed {
 			handler := changeHandler(n)
 			if handler == nil {
 				handler = r.handlerFor(id, "change")

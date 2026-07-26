@@ -525,3 +525,62 @@ func TestFocusFiresOnChangeWithoutAnyPointerClick(t *testing.T) {
 		t.Fatalf("onChange value = %q, want \"hi\"", lastValue)
 	}
 }
+
+// TestToggleFiresOnChangeWithoutAnyPointerClick proves Renderer.Toggle
+// actually flips a checkbox and fires its onChange, with no
+// pointer.Event dispatched at all -- widget.Bool, unlike
+// widget.Clickable, exposes no public Click-equivalent shortcut of its
+// own, so Toggle exists specifically to give a checkbox the same
+// coordinate-free interaction Click already gives a button/select.
+func TestToggleFiresOnChangeWithoutAnyPointerClick(t *testing.T) {
+	w, err := headless.NewWindow(60, 30)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	var fired bool
+	var lastChecked bool
+	node := gox.El("input", []gox.Attr{
+		gox.A("type", "checkbox"),
+		gox.A("id", "agree"),
+		gox.On("change", func(e gox.Event) {
+			fired = true
+			lastChecked = e.Checked
+		}),
+	})
+
+	frame := func() {
+		var ops op.Ops
+		var router input.Router
+		gtx := layout.Context{
+			Ops:         &ops,
+			Source:      router.Source(),
+			Constraints: layout.Exact(image.Pt(60, 30)),
+		}
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+		if err := w.Frame(&ops); err != nil {
+			t.Fatalf("Frame: %v", err)
+		}
+	}
+
+	frame()
+	if fired {
+		t.Fatal("onChange fired before any interaction")
+	}
+
+	if !renderer.Toggle("agree") {
+		t.Fatal(`Toggle("agree"): no checkbox registered for that id after the first Layout`)
+	}
+	frame()
+
+	if !fired {
+		t.Fatal("onChange never fired from Toggle, with no pointer click at all")
+	}
+	if !lastChecked {
+		t.Fatalf("onChange checked = %v, want true (checkbox starts unchecked, one Toggle should check it)", lastChecked)
+	}
+}
