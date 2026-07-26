@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"image"
+	"image/color"
 	"testing"
 
 	"gioui.org/f32"
@@ -263,5 +264,69 @@ func TestTextInputHandlesRealClickFocusAndTyping(t *testing.T) {
 	}
 	if bytes.Equal(before.Pix, after.Pix) {
 		t.Fatal("frame pixels identical before/after typing: the typed text never actually got painted")
+	}
+}
+
+// TestClassStyleAppliesBackgroundAndPadding drives goxgio's new
+// Renderer.Styles support (the runtime half of mapping a bounded CSS
+// class vocabulary onto real Gio painting -- see the mobile-backend
+// ROADMAP entry for the fuller two-part design) through a real
+// headless-GPU render: a div tagged with a class mapped to a
+// background color renders visibly different pixels than the exact
+// same tree with Renderer.Styles left nil, and the specific color
+// actually painted matches what ClassStyle asked for -- not just "some
+// pixel changed."
+func TestClassStyleAppliesBackgroundAndPadding(t *testing.T) {
+	w, err := headless.NewWindow(120, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	node := gox.El("div", []gox.Attr{gox.A("class", "panel")},
+		gox.El("span", nil, gox.Text("hi")),
+	)
+
+	frame := func(styles map[string]goxgio.ClassStyle) *image.RGBA {
+		renderer := goxgio.New()
+		renderer.Styles = styles
+		var ops op.Ops
+		var router input.Router
+		gtx := layout.Context{
+			Ops:         &ops,
+			Source:      router.Source(),
+			Constraints: layout.Exact(image.Pt(120, 60)),
+		}
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+		if err := w.Frame(&ops); err != nil {
+			t.Fatalf("Frame: %v", err)
+		}
+		img := image.NewRGBA(image.Rect(0, 0, 120, 60))
+		if err := w.Screenshot(img); err != nil {
+			t.Fatalf("Screenshot: %v", err)
+		}
+		return img
+	}
+
+	unstyled := frame(nil)
+
+	want := color.NRGBA{R: 220, G: 20, B: 20, A: 255}
+	styled := frame(map[string]goxgio.ClassStyle{
+		"panel": {Padding: 8, Background: want},
+	})
+
+	if bytes.Equal(unstyled.Pix, styled.Pix) {
+		t.Fatal("frame pixels identical styled vs unstyled: ClassStyle had no visible effect")
+	}
+
+	// The div starts at the frame's own (0,0); a point a few px in on
+	// both axes is well inside the 8dp padding, clear of the "hi"
+	// label's own text glyphs, so it should be pure painted background.
+	got := styled.At(3, 3)
+	r, g, b, a := got.RGBA()
+	if uint8(r>>8) != want.R || uint8(g>>8) != want.G || uint8(b>>8) != want.B || uint8(a>>8) != want.A {
+		t.Fatalf("pixel at (3,3) = %v, want background color %v", got, want)
 	}
 }

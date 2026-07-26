@@ -41,6 +41,19 @@ that to the root module.
   neither. `select`/`option` (a native dropdown) is a known gap:
   `widget/material` has no equivalent widget, so supporting it means
   building a real custom widget, not just another tag-switch case.
+  `Renderer.Styles` (`map[string]ClassStyle`) is the narrow, opt-in
+  slice of CSS that does have a real Gio equivalent -- padding, a
+  background fill, a border, a corner radius, and flex cross-axis
+  alignment -- keyed by class name, merged in a node's own attribute
+  order (last one wins per field, CSS's own equal-specificity rule) and
+  applied to every tag. Left nil (the default), every node paints
+  exactly as it did before `Styles` existed. This is deliberately just
+  the *runtime* half: turning a table of `ClassStyle` values into real
+  painted output. Building that table *from* real CSS (parsing
+  `.class { ... }` rules, resolving `var(--x)` custom properties) is
+  separate, not-yet-built work -- see gojiberry's own mobile-backend
+  ROADMAP entry for the fuller two-part design and why a general CSS
+  parser isn't needed for it.
 - `main.go` is the real, interactive entry point: a standard
   `app.Window` event loop that calls `Renderer.Layout` on every
   `FrameEvent`. Run it on a machine with a display:
@@ -109,6 +122,12 @@ clicking into a field would) and then a real `key.EditEvent`, the same
 event Gio's own `widget` package tests use to simulate typed input --
 never `Editor.SetText` directly, which would skip both the click-to-
 focus path and the change-detection `onChange` fires through.
+
+`TestClassStyleAppliesBackgroundAndPadding` covers `Renderer.Styles`
+the same way: rendering the identical tree with `Styles` nil versus a
+class mapped to a background color/padding, confirming not just that
+some pixel changed but that the exact requested color is what actually
+got painted at a sample point inside the div's own padding.
 
 ```
 go test ./...
