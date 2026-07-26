@@ -72,6 +72,47 @@ coverage-html: coverage
 	go tool cover -html=coverage.out -o coverage.out.html
 	@echo "wrote coverage.out.html"
 
+# bench runs every Go benchmark in the module: buffer's own
+# GapBuffer-vs-naive-slice benchmarks (fast, native, no extra setup)
+# and examples/domrt-bench's own patch/patchChildren benchmarks (drives
+# a real, wasm-built page through a real headless Chromium via
+# Playwright, skipping itself with b.Skip -- not failing -- if node/
+# Playwright/Chromium aren't available; see that example's own
+# bench_test.go and Makefile for the fuller picture). -benchtime=1x
+# matches examples/domrt-bench's own Makefile: each "iteration" already
+# represents a full weighted operation count measured browser-side, not
+# something to run for a full second of wall-clock repeats.
+.PHONY: bench
+bench:
+	go test -bench=. -benchmem -benchtime=1x -run=^$$ ./...
+
+# perf is bench's profiling counterpart: same benchmarks, but with a
+# CPU and memory profile captured per package (Go's own -cpuprofile/
+# -memprofile), for tracking *where* time/allocations actually go
+# rather than just how long a benchmark took. -cpuprofile/-memprofile
+# only work against a single package per go test invocation (multiple
+# packages: "cannot use -cpuprofile flag with multiple packages"), so
+# this discovers every package with at least one Benchmark (via `go
+# test -list`) and profiles each into its own pair of files under
+# $(PERF_DIR), rather than hardcoding the package list by hand.
+PERF_DIR := perf
+.PHONY: perf
+perf:
+	@mkdir -p $(PERF_DIR)
+	@for pkg in $$(go list ./... | xargs -I{} sh -c 'go test -list "Benchmark" {} 2>/dev/null | grep -q Benchmark && echo {}'); do \
+		name=$$(echo $$pkg | tr '/' '_'); \
+		echo "profiling $$pkg -> $(PERF_DIR)/$$name.{cpu,mem}.out"; \
+		go test -bench=. -benchmem -benchtime=1x -run=^$$ \
+			-cpuprofile=$(PERF_DIR)/$$name.cpu.out \
+			-memprofile=$(PERF_DIR)/$$name.mem.out \
+			$$pkg || exit 1; \
+	done
+	@echo "profiles written to $(PERF_DIR)/ -- inspect with e.g. go tool pprof -top $(PERF_DIR)/<name>.cpu.out"
+
+.PHONY: perf-clean
+perf-clean:
+	rm -rf $(PERF_DIR)
+
 # grammar-test-setup only needs to run once (or after upgrading
 # editors/vscode-gox/test's dependencies) -- it downloads VS Code's own
 # Go/HTML/CSS/SQL/JSON grammars, which aren't redistributed here.

@@ -121,8 +121,7 @@ func doFetch(url string, init map[string]any, timeout time.Duration) (*Response,
 	init["signal"] = controller.Get("signal")
 
 	timedOut := false
-	var onTimeout js.Func
-	onTimeout = js.FuncOf(func(this js.Value, args []js.Value) any {
+	onTimeout := js.FuncOf(func(this js.Value, args []js.Value) any {
 		timedOut = true
 		controller.Call("abort")
 		return nil

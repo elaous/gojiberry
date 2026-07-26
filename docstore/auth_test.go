@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/elaous/gojiberry/auth"
@@ -63,11 +62,6 @@ func TestConfigFromEnvParsesAuthProviders(t *testing.T) {
 	t.Setenv("GOJIBERRY_DOCSTORE_AUTH_BASE_URL", "https://app.example.com")
 	t.Setenv("GOJIBERRY_DOCSTORE_AUTH_PROVIDERS", `[{"name":"google","displayName":"Google","issuerURL":"https://accounts.google.com","clientID":"id","clientSecret":"secret"}]`)
 	t.Setenv("GOJIBERRY_DOCSTORE_AUTH_SESSION_TTL", "1h")
-	defer func() {
-		os.Unsetenv("GOJIBERRY_DOCSTORE_AUTH_BASE_URL")
-		os.Unsetenv("GOJIBERRY_DOCSTORE_AUTH_PROVIDERS")
-		os.Unsetenv("GOJIBERRY_DOCSTORE_AUTH_SESSION_TTL")
-	}()
 
 	cfg := ConfigFromEnv()
 	if cfg.Auth.BaseURL != "https://app.example.com" {

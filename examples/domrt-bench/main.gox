@@ -22,7 +22,7 @@ import (
 	"github.com/elaous/gojiberry/gox"
 )
 
-// benchListSize is how many <li> children each scenario's list starts
+// benchListSize is how many list-item children each scenario's list starts
 // (and, for every scenario but "append", stays) at -- large enough
 // that patchChildren's own bookkeeping (the oldByKey map, the used
 // set, the final DOM-order-fixup pass) isn't dwarfed by per-call
