@@ -29,18 +29,17 @@
 //     other.
 //
 // Only a minimal tag set is understood -- div, span, p, button, input
-// (type=text and type=checkbox), and text/fragment nodes -- since CSS
-// classes and inline styles (which is how every other tag's look is
-// customized) have no Gio equivalent of their own. div reads one plain
-// layout hint, the data-axis attribute ("horizontal" or the default
-// "vertical"), since Gio's layout.Flex needs an axis and there's no CSS
-// to carry it on a native target; any other attribute is ignored except
-// class, which Renderer.Styles (see ClassStyle) can map to real Gio
-// painting/layout. Growing beyond this tag set (Textarea, Modal, select
-// -- Gio's widget/material has no native dropdown, so that one needs
-// real custom-widget work, not just another case here) means adding to
-// typeset below, the same way domrt or gox.Render would grow to support
-// a new HTML element.
+// (type=text and type=checkbox), select/option, and text/fragment
+// nodes -- since CSS classes and inline styles (which is how every
+// other tag's look is customized) have no Gio equivalent of their own.
+// div reads one plain layout hint, the data-axis attribute
+// ("horizontal" or the default "vertical"), since Gio's layout.Flex
+// needs an axis and there's no CSS to carry it on a native target; any
+// other attribute is ignored except class, which Renderer.Styles (see
+// ClassStyle) can map to real Gio painting/layout. Growing beyond this
+// tag set (Textarea, Modal, ...) means adding to typeset below, the
+// same way domrt or gox.Render would grow to support a new HTML
+// element.
 package goxgio
 
 import (
@@ -100,6 +99,12 @@ type Renderer struct {
 	clickables map[string]*widget.Clickable
 	checkboxes map[string]*widget.Bool
 	editors    map[string]*widget.Editor
+	// selectOpen tracks whether a <select>'s own dropdown is currently
+	// expanded, keyed the same identity way as clickables/checkboxes/
+	// editors. Unlike those, it isn't backed by a Gio widget type at
+	// all -- see layoutSelect's own doc comment for why a plain
+	// map[string]bool is the right shape here.
+	selectOpen map[string]bool
 
 	// Styles maps a class name (as it appears in a node's "class"
 	// attribute, one word) to the styling to apply wherever that class
@@ -121,6 +126,7 @@ func New() *Renderer {
 		clickables: make(map[string]*widget.Clickable),
 		checkboxes: make(map[string]*widget.Bool),
 		editors:    make(map[string]*widget.Editor),
+		selectOpen: make(map[string]bool),
 	}
 }
 
@@ -156,6 +162,10 @@ func (r *Renderer) Layout(gtx layout.Context, th *material.Theme, n gox.Node) la
 	case "input":
 		content = func(gtx layout.Context) layout.Dimensions {
 			return r.layoutInput(gtx, th, n)
+		}
+	case "select":
+		content = func(gtx layout.Context) layout.Dimensions {
+			return r.layoutSelect(gtx, th, n)
 		}
 	default:
 		// Unrecognized tag: still lay out children so an unsupported
@@ -466,4 +476,112 @@ func (r *Renderer) layoutInput(gtx layout.Context, th *material.Theme, n gox.Nod
 		}
 	}
 	return material.Editor(th, ed, placeholderOf(n)).Layout(gtx)
+}
+
+// selectedAttr reports whether n's "selected" attribute is present,
+// the same boolean-attribute convention checkedOf already uses for
+// "checked".
+func selectedAttr(n gox.Node) bool {
+	for _, a := range n.Attrs {
+		if a.Name == "selected" {
+			return true
+		}
+	}
+	return false
+}
+
+// selectedOption returns the value/label of n's currently-selected
+// <option> child (the one with a "selected" attribute -- matching
+// OnDesign's own optSelected convention for the web renderer), or
+// ok=false if none is marked selected.
+func selectedOption(n gox.Node) (value, label string, ok bool) {
+	for _, c := range n.Children {
+		if c.Tag != "option" {
+			continue
+		}
+		if selectedAttr(c) {
+			return valueOf(c), textOf(c), true
+		}
+	}
+	return "", "", false
+}
+
+// layoutSelect lays out a `<select id=...>{<option value=...
+// [selected]>label</option>...}</select>` as a custom dropdown --
+// gioui.org/widget/material has no native equivalent, so unlike every
+// other tag goxgio handles, this isn't a thin wrapper around an
+// existing material widget: a closed select is a material.Button
+// showing the selected option's own label; an open one is that same
+// button (now showing a "close" affordance) stacked above one more
+// button per <option>, clicking a row both fires onChange with that
+// option's value and closes the dropdown again.
+//
+// Two things persist across frames here, both keyed by identity
+// (Node.Key if set, else the "id" attribute, matching every other
+// interactive tag goxgio handles): whether the dropdown is currently
+// open (r.selectOpen -- purely goxgio's own transient UI state, not
+// caller-controlled, since a real <select> doesn't expose "is the
+// dropdown open" as part of its own value either, so a plain
+// map[string]bool is the right shape, not a Gio widget type), and each
+// row's own click detection, which reuses r.clickables (the same map
+// layoutButton already uses) keyed by "<select id>\x00<option value>"
+// so a row's identity survives across frames the same way a button's
+// does, without adding a second per-option map.
+//
+// Which option is *selected* is deliberately NOT persisted here at
+// all: like a real controlled <select>, that's read fresh from the
+// tree's own "selected" attribute (selectedOption, above) on whichever
+// <option> child has one. The caller is expected to re-render with a
+// different option marked selected once its own onChange handler
+// updates whatever state the selection represents -- the same
+// controlled-component contract domrt already holds every caller to,
+// not a new one goxgio invents.
+func (r *Renderer) layoutSelect(gtx layout.Context, th *material.Theme, n gox.Node) layout.Dimensions {
+	id := n.Key
+	if id == "" {
+		id = idOf(n)
+	}
+
+	trigger, ok := r.clickables[id]
+	if !ok {
+		trigger = new(widget.Clickable)
+		r.clickables[id] = trigger
+	}
+	for trigger.Clicked(gtx) {
+		r.selectOpen[id] = !r.selectOpen[id]
+	}
+
+	_, label, hasSelection := selectedOption(n)
+	if !hasSelection {
+		label = "(select)"
+	}
+
+	if !r.selectOpen[id] {
+		return material.Button(th, trigger, label+" ▾").Layout(gtx)
+	}
+
+	handler := changeHandler(n)
+	rows := make([]layout.FlexChild, 0, len(n.Children)+1)
+	rows = append(rows, layout.Rigid(material.Button(th, trigger, label+" ▴").Layout))
+	for _, c := range n.Children {
+		if c.Tag != "option" {
+			continue
+		}
+		value := valueOf(c)
+		optLabel := textOf(c)
+		rowID := id + "\x00" + value
+		clk, ok := r.clickables[rowID]
+		if !ok {
+			clk = new(widget.Clickable)
+			r.clickables[rowID] = clk
+		}
+		for clk.Clicked(gtx) {
+			r.selectOpen[id] = false
+			if handler != nil {
+				handler(gox.NewEvent("change", value, false, nil, nil))
+			}
+		}
+		rows = append(rows, layout.Rigid(material.Button(th, clk, optLabel).Layout))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
 }

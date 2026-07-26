@@ -4,9 +4,12 @@ go 1.26.0
 
 replace github.com/elaous/gojiberry => ../..
 
+replace github.com/elaous/gojiberry/goxgio => ../../goxgio
+
 require (
 	gioui.org v0.10.1
 	github.com/elaous/gojiberry v0.0.0-00010101000000-000000000000
+	github.com/elaous/gojiberry/goxgio v0.0.0-00010101000000-000000000000
 )
 
 require (

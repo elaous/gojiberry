@@ -2,16 +2,20 @@
 
 The same stateful counter `examples/wasm-counter` mounts into a real
 browser DOM via `domrt`, mounted instead into a real native window via
-[Gio](https://gioui.org) (`gioui.org`) -- proving `gox.Node` is
-renderer-agnostic in the sense that actually matters: a completely
-different target platform (a desktop/mobile GPU window, not a browser)
-is a new consumer of the same tree, not a rewrite of it.
+[Gio](https://gioui.org) (`gioui.org`) through `goxgio`
+(`../../goxgio`) -- proving `gox.Node` is renderer-agnostic in the
+sense that actually matters: a completely different target platform (a
+desktop/mobile GPU window, not a browser) is a new consumer of the
+same tree, not a rewrite of it.
 
 It's a separate Go module (like `examples/canvas-app` and
 `examples/collab-editor-app`), `replace`-ing `github.com/elaous/gojiberry`
-with the local checkout, so it can depend on `gioui.org` (and the cgo/
-EGL/Vulkan/X11/Wayland bindings that pulls in) without adding any of
-that to the root module.
+with the local checkout (so it can depend on `gioui.org`, and the cgo/
+EGL/Vulkan/X11/Wayland bindings that pulls in, without adding any of
+that to the root module) and `github.com/elaous/gojiberry/goxgio` with
+the sibling `../../goxgio` checkout (the actual renderer -- see that
+module's own README for how it works and what it's verified against;
+this demo doesn't define it locally).
 
 ## How it works
 
@@ -21,48 +25,8 @@ that to the root module.
   outer `div` is the one layout hint `goxgio` understands (there's no
   CSS to carry a flex direction on a native target); `domrt` and
   `gox.Render` both ignore it as an inert attribute.
-- `goxgio/render.go` is the renderer itself: `Renderer.Layout` walks a
-  `gox.Node` tree and lays it out via Gio's `layout`/`widget/material`
-  packages. It understands a minimal tag set (`div` as a `layout.Flex`,
-  `span`/`p` as a `material.Label`, `button` as a `material.Button`,
-  `input` type=text/type=checkbox as a `material.Editor`/
-  `material.CheckBox`) since CSS classes/inline styles -- how every
-  other tag's look would normally be customized -- have no Gio
-  equivalent. Because Gio is immediate-mode (it repaints everything
-  every frame; there's nothing to diff), `Layout` is a plain recursive
-  walk, closer in shape to `gox.Render` than to `domrt`'s patch
-  algorithm. The one real wrinkle: a Gio `widget.Clickable`/
-  `widget.Bool`/`widget.Editor` must persist across frames (Gio reads
-  accumulated interaction state off the struct itself), but the `Node`
-  tree is rebuilt from scratch on every render call, so `Renderer` keeps
-  a `map[string]*T` per widget kind, keyed by `Node.Key` if set, else the
-  element's `id` attribute -- see the package doc comment for the full
-  reasoning, including what happens if an interactive element has
-  neither. `select`/`option` (a native dropdown) is a known gap:
-  `widget/material` has no equivalent widget, so supporting it means
-  building a real custom widget, not just another tag-switch case.
-  `Renderer.Styles` (`map[string]ClassStyle`) is the narrow, opt-in
-  slice of CSS that does have a real Gio equivalent -- padding, a
-  background fill, a border, a corner radius, and flex cross-axis
-  alignment -- keyed by class name, merged in a node's own attribute
-  order (last one wins per field, CSS's own equal-specificity rule) and
-  applied to every tag. Left nil (the default), every node paints
-  exactly as it did before `Styles` existed. This is deliberately just
-  the *runtime* half: turning a table of `ClassStyle` values into real
-  painted output. Building that table *from* real CSS (parsing
-  `.class { ... }` rules, resolving `var(--x)` custom properties) is
-  separate, not-yet-built work -- see gojiberry's own mobile-backend
-  ROADMAP entry for the fuller two-part design and why a general CSS
-  parser isn't needed for it. `goxgio/cssgen` is that generator: given
-  real CSS text and a list of class names, it parses `:root`/
-  `body.dark` custom-property tokens and flat `.class { ... }` rules
-  (padding, background, border, border-radius only -- everything else
-  a matched rule sets is reported as a `Warning`, not silently
-  dropped) into a real `map[string]ClassStyle`, verified against real
-  rules copied verbatim from OnDesign's own `index.html`, not
-  synthetic CSS.
 - `main.go` is the real, interactive entry point: a standard
-  `app.Window` event loop that calls `Renderer.Layout` on every
+  `app.Window` event loop that calls `goxgio.Renderer.Layout` on every
   `FrameEvent`. Run it on a machine with a display:
 
   ```
@@ -91,9 +55,11 @@ now, tracked as separate follow-up work.
 
 ## Verified
 
-`gio_test.go` drives the exact same `Counter`/`Renderer` pair through
-Gio's own headless GPU backend (`gioui.org/gpu/headless`) instead of
-`app.Window`, so it runs without a display server or compositor:
+`gio_test.go`'s `TestCounterRendersAndClicksThroughRealGio` drives the
+exact same `Counter`/`goxgio.Renderer` pair `main.go`'s `run` mounts
+into a real desktop window, but through Gio's own headless GPU backend
+(`gioui.org/gpu/headless`) instead of `app.Window`, so it runs without
+a display server or compositor:
 
 - A real (software-rasterized, where no GPU device is present) GPU
   frame is rendered and read back pixel-for-pixel via `Screenshot`.
@@ -116,39 +82,13 @@ screenshots; three same-state frames in a row are confirmed
 pixel-identical, so this is a real, bounded one-frame latency in Gio's
 own glyph-atlas upload, not test flakiness.
 
-`TestCheckboxHandlesARealPointerClick` and
-`TestTextInputHandlesRealClickFocusAndTyping` cover the `input`
-support the same way: `widget.Bool` (unlike `widget.Clickable`) has no
-exported `Click()` shortcut, so the checkbox test dispatches a real
-`pointer.Event` press/release pair through a real `input.Router` at the
-exact center of the `Dimensions` `Layout` itself returned -- the same
-convention Gio's own `widget` package tests use for `Bool`. The text
-input test drives a real pointer click first (which focuses the
-`widget.Editor` through its own click handling, exactly as a real user
-clicking into a field would) and then a real `key.EditEvent`, the same
-event Gio's own `widget` package tests use to simulate typed input --
-never `Editor.SetText` directly, which would skip both the click-to-
-focus path and the change-detection `onChange` fires through.
-
-`TestClassStyleAppliesBackgroundAndPadding` covers `Renderer.Styles`
-the same way: rendering the identical tree with `Styles` nil versus a
-class mapped to a background color/padding, confirming not just that
-some pixel changed but that the exact requested color is what actually
-got painted at a sample point inside the div's own padding.
-
-`goxgio/cssgen`'s own tests (`go test ./goxgio/cssgen/...`) verify the
-generator against CSS copied verbatim from OnDesign's `index.html`:
-`:root`/`body.dark` token resolution, `var()`/hex/`rgb()`/`rgba()`
-color parsing (including real alpha), 1- and 2-value padding shorthand
-exactly and 3-4 value shorthand flagged as an approximation, `border:
-none`/`background: none` recognized as a real zero value rather than a
-failure, and -- the one real bug this test suite caught while being
-written -- a `:hover`/`.active`/`:disabled` variant of a wanted class
-correctly reported as a `Warning` and *not* silently merged into the
-base style (the first version matched only an exact class name, so
-`.find-toggle:disabled` was silently ignored rather than
-warned-about; fixed by extracting the selector's own leading class
-name before the wanted-class lookup, not after).
+`goxgio.Renderer`'s own tag-by-tag coverage (`input` type=checkbox/
+type=text, `select`/`option`, `Renderer.Styles`) is verified in that
+module's own `render_test.go` instead, alongside `goxgio/cssgen`'s own
+tests -- see `../../goxgio/README.md`'s own "Verified" section. This
+demo's own test is specifically the end-to-end integration proof: a
+real component, a real window, a real click firing a real handler,
+through the actual `main.go` entry point's own renderer setup.
 
 ```
 go test ./...

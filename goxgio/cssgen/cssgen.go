@@ -40,7 +40,7 @@ import (
 
 	"gioui.org/unit"
 
-	"github.com/elaous/gojiberry/examples/gio-counter-demo/goxgio"
+	"github.com/elaous/gojiberry/goxgio"
 )
 
 // Tokens is a resolved --custom-property table for one theme, keyed by
