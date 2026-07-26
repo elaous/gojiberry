@@ -1,0 +1,79 @@
+# Free-tier CI: plain ubuntu-latest GitHub-hosted runners only -- no
+# macOS/Windows runners, no larger paid runners, no self-hosted fleet.
+# Mirrors OnDesign's own .github/workflows/ci.yml in spirit (see that
+# file's own doc comment for the fuller reasoning), but single-repo:
+# gojiberry has no dependency on OnDesign -- the relationship only runs
+# the other way (OnDesign's go.mod replaces this module with a sibling
+# checkout), so there's no second private repo to check out here.
+#
+# Every step below just runs the Makefile target of the same name --
+# see the root Makefile and README.md's own "Development" section for
+# what each one actually does. Kept as separate named steps (rather
+# than one `make check` step) so a failure's log is scoped to exactly
+# the check that failed, not buried in a longer combined run.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  fast-checks:
+    name: Build, vet, gofmt, test, lint (native + wasm)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: make generate
+        run: make generate
+
+      - name: make fmt-check
+        run: make fmt-check
+
+      - name: make vet
+        run: make vet
+
+      - name: make test
+        run: make test
+
+      - name: make wasm-vet
+        run: make wasm-vet
+
+      - name: make lint
+        run: make lint
+
+      - name: make wasm-lint
+        run: make wasm-lint
+
+  grammar-test:
+    name: vscode-gox grammar suite
+    runs-on: ubuntu-latest
+    # grammar-test-setup downloads VS Code's own Go/HTML/CSS/SQL/JSON
+    # grammars on every run (not redistributed here, no cache key
+    # established yet) -- gated to the events that actually need it,
+    # the same way OnDesign's own e2e job is, to keep this off every
+    # incremental branch push and save free-tier minutes.
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: make generate
+        run: make generate
+
+      - name: make grammar-test-setup
+        run: make grammar-test-setup
+
+      - name: make grammar-test
+        run: make grammar-test

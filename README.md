@@ -1,5 +1,7 @@
 # gojiberry / gox
 
+[![CI](https://github.com/elaous/gojiberry/actions/workflows/ci.yml/badge.svg)](https://github.com/elaous/gojiberry/actions/workflows/ci.yml)
+
 A JSX-for-Go: write `<div>...</div>` tags directly in Go source as an
 expression, anywhere a Go expression is legal, compiling down to plain
 Go that renders identically on the server (HTML strings) and in the
@@ -1783,6 +1785,32 @@ them). `js`/`wasm`-only packages (`domrt` and friends) have no native
 test suite to profile this way; their own coverage is whatever their
 example's headless-browser verification exercises, which this doesn't
 measure.
+
+`make bench` runs every Go benchmark in the module: `buffer`'s own
+`GapBuffer`-vs-naive-slice benchmarks (fast, native) and
+`examples/domrt-bench`'s own patch/patchChildren benchmarks (drives a
+real, wasm-built page through a real headless Chromium via Playwright,
+skipping itself rather than failing if Playwright/Chromium isn't set
+up -- see that example's own README/Makefile). `make perf` is `bench`'s
+profiling counterpart: the same benchmarks, but with a CPU and memory
+profile captured per package under `perf/` (Go's own `-cpuprofile`/
+`-memprofile`, which only work against a single package per `go test`
+invocation, so this discovers every benchmark-bearing package first
+rather than hardcoding the list) -- inspect a profile with `go tool
+pprof -top perf/<name>.cpu.out`. `make perf-clean` removes `perf/`.
+
+### Git hooks (lint before you push)
+
+CI runs `make lint`/`make wasm-lint` on every push and PR, but catching
+a lint failure locally saves the round trip. Opt in once per clone:
+
+```
+git config core.hooksPath .githooks
+```
+
+This points git at `.githooks/pre-push` (checked into this repo, since
+`.git/hooks/` itself never is), which runs `make lint` before any `git
+push` leaves your machine.
 
 ## Known limitations (v1)
 

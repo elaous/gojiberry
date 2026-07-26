@@ -210,8 +210,8 @@ func execPiper(binary, model, text string) ([]byte, error) {
 		return nil, err
 	}
 	outPath := out.Name()
-	out.Close()
-	defer os.Remove(outPath)
+	_ = out.Close()
+	defer func() { _ = os.Remove(outPath) }()
 
 	args := []string{"--output_file", outPath}
 	if model != "" {
@@ -238,16 +238,16 @@ func execWhisper(binary, model string, wav []byte) (string, error) {
 		return "", err
 	}
 	inPath := in.Name()
-	defer os.Remove(inPath)
+	defer func() { _ = os.Remove(inPath) }()
 	if _, err := in.Write(wav); err != nil {
-		in.Close()
+		_ = in.Close()
 		return "", err
 	}
-	in.Close()
+	_ = in.Close()
 
 	outBase := inPath[:len(inPath)-len(filepath.Ext(inPath))]
 	outPath := outBase + ".txt"
-	defer os.Remove(outPath)
+	defer func() { _ = os.Remove(outPath) }()
 
 	args := []string{"-f", inPath, "-otxt", "-of", outBase, "-nt"}
 	if model != "" {

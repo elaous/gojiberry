@@ -131,7 +131,7 @@ func main() {
 	// (3) proves element-level queries really are subtree-scoped, not
 	// document-wide with a different receiver. A no-match selector must
 	// return nil (not a wrapper around JS null), and a void element
-	// (#title-input, an <input>) has no descendants to match at all.
+	// (#title-input, an input field) has no descendants to match at all.
 	fixture := document.GetElementByID("query-fixture")
 	chosen := fixture.QuerySelector(".item.chosen")
 	chosenText := "(nil)"
