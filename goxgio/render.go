@@ -40,6 +40,19 @@
 // tag set (Textarea, Modal, ...) means adding to typeset below, the
 // same way domrt or gox.Render would grow to support a new HTML
 // element.
+//
+// Two ways to wire interactivity are supported, because real gox
+// producers use both: a node's own Attr handler (gox.On("click", h),
+// read by clickHandler/changeHandler -- what gio-counter-demo's own
+// Counter uses), and Renderer.On(id, event, fn), an ID-based registry
+// checked as a fallback when a node has no Attr handler of its own.
+// The latter exists because OnDesign's real editor/ui/*.gox components
+// use neither gox.On nor any prop for interactivity: main.gox's own
+// wire() attaches every handler externally, by element ID
+// (ed.on(id, event, fn) -> a real DOM addEventListener), the same
+// delegation pattern domrt itself is built on. On lets a caller
+// replicate that same wiring against a gox.Node tree it doesn't
+// control the construction of, with zero changes to the component.
 package goxgio
 
 import (
@@ -106,6 +119,13 @@ type Renderer struct {
 	// map[string]bool is the right shape here.
 	selectOpen map[string]bool
 
+	// handlers holds ID-based event handlers registered via On, keyed
+	// by "<id>\x00<event>" (the same flat key shape layoutSelect
+	// already uses for "<select id>\x00<option value>"). See On's own
+	// doc comment for why this exists alongside gox.On/Attr.Handler
+	// rather than replacing it.
+	handlers map[string]gox.EventHandler
+
 	// Styles maps a class name (as it appears in a node's "class"
 	// attribute, one word) to the styling to apply wherever that class
 	// appears. A node with multiple space-separated classes merges
@@ -127,7 +147,35 @@ func New() *Renderer {
 		checkboxes: make(map[string]*widget.Bool),
 		editors:    make(map[string]*widget.Editor),
 		selectOpen: make(map[string]bool),
+		handlers:   make(map[string]gox.EventHandler),
 	}
+}
+
+// On registers fn to fire when event ("click" or "change") occurs on
+// the element identified by id (Node.Key if set, else its own "id"
+// attribute -- the same identity every other interactive tag here
+// uses). Registering the same id+event again replaces the previous
+// handler.
+//
+// This exists alongside gox.On/Attr.Handler (the per-node handler
+// clickHandler/changeHandler already read, and the only mechanism
+// gio-counter-demo's own Counter uses) rather than replacing it,
+// because real OnDesign editor/ui/*.gox components use neither: their
+// interactivity is wired entirely externally, by ID, in main.gox's own
+// wire() (ed.on(id, event, fn) -> element(id).AddEventListener(...)),
+// the same DOM-delegation pattern domrt itself is built on. A node's
+// own Attr handler (if any) always takes precedence over a handler
+// registered here, so gio-counter-demo's existing per-node wiring is
+// unaffected; On is purely additive, for callers whose tree has
+// nothing attached at the node itself.
+func (r *Renderer) On(id, event string, fn gox.EventHandler) {
+	r.handlers[id+"\x00"+event] = fn
+}
+
+// handlerFor returns the handler registered via On for id+event, or
+// nil if none was.
+func (r *Renderer) handlerFor(id, event string) gox.EventHandler {
+	return r.handlers[id+"\x00"+event]
 }
 
 // Layout walks n and lays it out via th, returning its dimensions. Call
@@ -353,7 +401,11 @@ func (r *Renderer) layoutButton(gtx layout.Context, th *material.Theme, n gox.No
 		clk = new(widget.Clickable)
 		r.clickables[id] = clk
 	}
-	if handler := clickHandler(n); handler != nil {
+	handler := clickHandler(n)
+	if handler == nil {
+		handler = r.handlerFor(id, "click")
+	}
+	if handler != nil {
 		for clk.Clicked(gtx) {
 			handler(gox.NewEvent("click", nil, false, nil, nil))
 		}
@@ -447,7 +499,11 @@ func (r *Renderer) layoutInput(gtx layout.Context, th *material.Theme, n gox.Nod
 			r.checkboxes[id] = cb
 		}
 		if cb.Update(gtx) {
-			if handler := changeHandler(n); handler != nil {
+			handler := changeHandler(n)
+			if handler == nil {
+				handler = r.handlerFor(id, "change")
+			}
+			if handler != nil {
 				handler(gox.NewEvent("change", cb.Value, cb.Value, nil, nil))
 			}
 		}
@@ -471,7 +527,11 @@ func (r *Renderer) layoutInput(gtx layout.Context, th *material.Theme, n gox.Nod
 		}
 	}
 	if changed {
-		if handler := changeHandler(n); handler != nil {
+		handler := changeHandler(n)
+		if handler == nil {
+			handler = r.handlerFor(id, "change")
+		}
+		if handler != nil {
 			handler(gox.NewEvent("change", ed.Text(), false, nil, nil))
 		}
 	}
@@ -561,6 +621,9 @@ func (r *Renderer) layoutSelect(gtx layout.Context, th *material.Theme, n gox.No
 	}
 
 	handler := changeHandler(n)
+	if handler == nil {
+		handler = r.handlerFor(id, "change")
+	}
 	rows := make([]layout.FlexChild, 0, len(n.Children)+1)
 	rows = append(rows, layout.Rigid(material.Button(th, trigger, label+" ▴").Layout))
 	for _, c := range n.Children {

@@ -356,3 +356,106 @@ func TestSelectOpensAndFiresOnChangeOnRealClicks(t *testing.T) {
 		t.Fatalf("dimensions after selecting an option = %+v, want %+v (dropdown should have closed again)", afterDims, closedDims)
 	}
 }
+
+// TestOnFiresForANodeWithNoAttrHandler proves Renderer.On's ID-based
+// fallback actually fires against a node carrying no Attr handler of
+// its own -- the exact shape every real OnDesign editor/ui/*.gox
+// component takes, since none of them use gox.On (interactivity is
+// wired externally by ID instead, matching main.gox's own
+// ed.on(id, event, fn)); gio-counter-demo's Counter, by contrast,
+// always sets an Attr handler and so never exercises this path. Uses
+// the same real-click mechanism (Renderer.Click, Gio's own
+// widget.Clickable.Click()) every other button-click test in this file
+// already relies on.
+func TestOnFiresForANodeWithNoAttrHandler(t *testing.T) {
+	w, err := headless.NewWindow(60, 30)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	node := gox.El("button", []gox.Attr{gox.A("id", "close")}, gox.Text("×"))
+
+	var fired bool
+	renderer.On("close", "click", func(gox.Event) { fired = true })
+
+	frame := func() {
+		var ops op.Ops
+		var router input.Router
+		gtx := layout.Context{
+			Ops:         &ops,
+			Source:      router.Source(),
+			Constraints: layout.Exact(image.Pt(60, 30)),
+		}
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+		if err := w.Frame(&ops); err != nil {
+			t.Fatalf("Frame: %v", err)
+		}
+	}
+
+	frame()
+	if fired {
+		t.Fatal("handler fired before any click")
+	}
+
+	if !renderer.Click("close") {
+		t.Fatal(`Click("close"): no clickable registered for that id after the first Layout`)
+	}
+	frame()
+	if !fired {
+		t.Fatal("Renderer.On's registered handler never fired after a real click on an id-only node with no Attr handler of its own")
+	}
+}
+
+// TestOnLosesToANodesOwnAttrHandler confirms On is purely additive: a
+// node that DOES carry its own Attr handler (gox.On, the mechanism
+// gio-counter-demo's Counter uses) keeps using it, unaffected by an
+// On registration for the same id -- so adding ID-based delegation
+// couldn't have changed gio-counter-demo's own existing behavior.
+func TestOnLosesToANodesOwnAttrHandler(t *testing.T) {
+	w, err := headless.NewWindow(60, 30)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	var attrFired, registeredFired bool
+	node := gox.El("button", []gox.Attr{
+		gox.A("id", "dec"),
+		gox.On("click", func(gox.Event) { attrFired = true }),
+	}, gox.Text("-"))
+	renderer.On("dec", "click", func(gox.Event) { registeredFired = true })
+
+	frame := func() {
+		var ops op.Ops
+		var router input.Router
+		gtx := layout.Context{
+			Ops:         &ops,
+			Source:      router.Source(),
+			Constraints: layout.Exact(image.Pt(60, 30)),
+		}
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+		if err := w.Frame(&ops); err != nil {
+			t.Fatalf("Frame: %v", err)
+		}
+	}
+
+	frame()
+	if !renderer.Click("dec") {
+		t.Fatal(`Click("dec"): no clickable registered for that id after the first Layout`)
+	}
+	frame()
+
+	if !attrFired {
+		t.Fatal("the node's own Attr handler never fired")
+	}
+	if registeredFired {
+		t.Fatal("the On-registered handler fired even though the node has its own Attr handler, which should always win")
+	}
+}
