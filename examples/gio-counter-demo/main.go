@@ -19,9 +19,9 @@ import (
 	"gioui.org/op"
 	"gioui.org/widget/material"
 
-	"github.com/elaous/gojiberry/examples/gio-counter-demo/goxgio"
 	"github.com/elaous/gojiberry/examples/gio-counter-demo/shared"
 	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/goxgio"
 )
 
 func main() {
