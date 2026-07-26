@@ -258,7 +258,23 @@ func (r *Renderer) Layout(gtx layout.Context, th *material.Theme, n gox.Node) la
 			return r.layoutChildren(gtx, th, n.Children, axisOf(n), style.Alignment)
 		}
 	case "span", "p":
-		content = material.Label(th, th.TextSize, textOf(n)).Layout
+		if hasElementChild(n) {
+			// A span/p wrapping real element children (e.g. toolbar.gox's
+			// own "font-picker-wrap" span, a button plus a hidden div),
+			// not just text -- textOf/material.Label would silently
+			// discard those children entirely (textOf only concatenates
+			// KindText children), so anything interactive inside them
+			// would never get laid out, and so never register a
+			// Clickable/etc. of its own. Falls back to the same
+			// layoutChildren div itself uses, so those children render
+			// (and stay interactive) same as if they were one level up
+			// in a div instead.
+			content = func(gtx layout.Context) layout.Dimensions {
+				return r.layoutChildren(gtx, th, n.Children, axisOf(n), style.Alignment)
+			}
+		} else {
+			content = material.Label(th, th.TextSize, textOf(n)).Layout
+		}
 	case "button":
 		content = func(gtx layout.Context) layout.Dimensions {
 			return r.layoutButton(gtx, th, n)
@@ -389,6 +405,21 @@ func axisOf(n gox.Node) layout.Axis {
 		}
 	}
 	return layout.Vertical
+}
+
+// hasElementChild reports whether n has any direct child that isn't a
+// text node -- see the "span", "p" case in Layout for why this matters:
+// textOf silently drops non-text children, so a span/p that has any
+// needs the layoutChildren path instead, or they'd never be laid out
+// (and, if interactive, never register a Clickable/etc. of their own)
+// at all.
+func hasElementChild(n gox.Node) bool {
+	for _, c := range n.Children {
+		if c.Kind != gox.KindText {
+			return true
+		}
+	}
+	return false
 }
 
 // textOf concatenates n's direct KindText children, since a gox.El

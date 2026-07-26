@@ -38,8 +38,12 @@ immediate-mode toolkit rather than a retained DOM:
 
 Only a minimal tag set is understood: `div` (`layout.Flex`, reading one
 layout hint, the `data-axis` attribute, since there's no CSS to carry a
-flex direction on a native target), `span`/`p` (`material.Label`),
-`button` (`material.Button`), `input` type=text/type=checkbox
+flex direction on a native target), `span`/`p` (`material.Label` if
+every child is text, the same `layoutChildren` a `div` uses if any
+child isn't -- a `<span>` wrapping real elements, e.g. a button plus a
+hidden div, needs its children actually laid out, not silently dropped
+the way concatenating only the text children would), `button`
+(`material.Button`), `input` type=text/type=checkbox
 (`material.Editor`/`material.CheckBox`), and `select`/`option`. The
 last one needed real custom-widget work rather than another
 tag-switch case, since `widget/material` has no native dropdown
@@ -133,6 +137,9 @@ state:
 - `TestToggleFiresOnChangeWithoutAnyPointerClick` covers
   `Renderer.Toggle`: a checkbox flips and fires `onChange` from
   `Toggle` alone, with no `pointer.Event` dispatched at all.
+- `TestSpanWithElementChildrenLaysOutThoseChildren` covers the `span`/`p`
+  fix above: a button nested inside a `<span>` (not just text) actually
+  gets laid out and registers a real clickable.
 
 The `Counter`/click-driven integration test (proving the *whole
 pipeline* -- a real component, a real window, a real click firing a

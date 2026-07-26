@@ -584,3 +584,49 @@ func TestToggleFiresOnChangeWithoutAnyPointerClick(t *testing.T) {
 		t.Fatalf("onChange checked = %v, want true (checkbox starts unchecked, one Toggle should check it)", lastChecked)
 	}
 }
+
+// TestSpanWithElementChildrenLaysOutThoseChildren covers a real bug
+// found while wiring OnDesign's own toolbar.gox on native: a <span>
+// (or <p>) whose children include a real element, not just text --
+// toolbar.gox's own "font-picker-wrap" span wraps a button plus a
+// hidden div, exactly this shape -- used to render as an empty
+// material.Label (textOf only concatenates KindText children, silently
+// dropping element children), so nothing inside such a span/p was ever
+// laid out at all: a button entirely inside one would never register a
+// Clickable, and Renderer.Click would report it as never having
+// existed. A span/p with only text children (the overwhelmingly common
+// case -- every other span in this codebase) still renders as a plain
+// Label, unaffected.
+func TestSpanWithElementChildrenLaysOutThoseChildren(t *testing.T) {
+	w, err := headless.NewWindow(120, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	node := gox.El("span", []gox.Attr{gox.A("class", "wrap")},
+		gox.El("button", []gox.Attr{gox.A("id", "inner")}, gox.Text("Click me")),
+	)
+
+	var ops op.Ops
+	var router input.Router
+	gtx := layout.Context{
+		Ops:         &ops,
+		Source:      router.Source(),
+		Constraints: layout.Constraints{Max: image.Pt(120, 60)},
+	}
+	dims := renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+
+	if dims.Size.X == 0 || dims.Size.Y == 0 {
+		t.Fatalf("Dimensions = %+v, want non-zero: the button inside the span should have laid out to some real size", dims)
+	}
+	if !renderer.Click("inner") {
+		t.Fatal(`Click("inner"): no clickable registered for the button nested inside the span -- it was never laid out`)
+	}
+}
