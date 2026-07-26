@@ -5,8 +5,11 @@ import (
 	"image"
 	"testing"
 
+	"gioui.org/f32"
 	"gioui.org/gpu/headless"
 	"gioui.org/io/input"
+	"gioui.org/io/key"
+	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/widget/material"
@@ -101,5 +104,164 @@ func TestCounterRendersAndClicksThroughRealGio(t *testing.T) {
 	}
 	if bytes.Equal(after.Pix, settled.Pix) {
 		t.Fatal("frame pixels identical before/after the dec click: the re-rendered \"0\" label never actually got painted")
+	}
+}
+
+// TestCheckboxHandlesARealPointerClick drives goxgio's new
+// type=checkbox support through a real pointer.Event press/release pair
+// dispatched via a real input.Router -- widget.Bool, unlike
+// widget.Clickable, has no exported Click() method for a shortcut
+// programmatic click (see layoutInput's own doc comment), so this is
+// Gio's own widget package test convention for Bool (see
+// gioui.org/widget's TestBool) rather than a Renderer-level Click/Toggle
+// helper. The click position is the exact center of the Dimensions
+// Layout itself returned for the checkbox, not a guessed coordinate, so
+// this can't pass by accident of a lucky click radius.
+func TestCheckboxHandlesARealPointerClick(t *testing.T) {
+	w, err := headless.NewWindow(60, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := goxgio.New()
+	var fired bool
+	var lastChecked bool
+	node := gox.El("input", []gox.Attr{
+		gox.A("type", "checkbox"),
+		gox.A("id", "agree"),
+		gox.On("change", func(e gox.Event) {
+			fired = true
+			lastChecked = e.Checked
+		}),
+	})
+
+	var router input.Router
+	var ops op.Ops
+	gtx := layout.Context{
+		Ops:         &ops,
+		Source:      router.Source(),
+		Constraints: layout.Exact(image.Pt(60, 60)),
+	}
+
+	dims := renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+	before := image.NewRGBA(image.Rect(0, 0, 60, 60))
+	if err := w.Screenshot(before); err != nil {
+		t.Fatalf("Screenshot: %v", err)
+	}
+	if fired {
+		t.Fatal("onChange fired before any click")
+	}
+
+	center := f32.Pt(float32(dims.Size.X)/2, float32(dims.Size.Y)/2)
+	router.Queue(
+		pointer.Event{Source: pointer.Touch, Kind: pointer.Press, Position: center},
+		pointer.Event{Source: pointer.Touch, Kind: pointer.Release, Position: center},
+	)
+
+	gtx.Reset()
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+	after := image.NewRGBA(image.Rect(0, 0, 60, 60))
+	if err := w.Screenshot(after); err != nil {
+		t.Fatalf("Screenshot: %v", err)
+	}
+
+	if !fired {
+		t.Fatal("onChange never fired from a real pointer click on the checkbox")
+	}
+	if !lastChecked {
+		t.Fatal("onChange fired with Checked=false, want true after checking a previously-unchecked box")
+	}
+	if bytes.Equal(before.Pix, after.Pix) {
+		t.Fatal("frame pixels identical before/after the click: the checked state never actually got painted")
+	}
+}
+
+// TestTextInputHandlesRealClickFocusAndTyping drives goxgio's new
+// type=text support through a real pointer click (to focus the
+// widget.Editor, exactly as a real user clicking into a text field
+// would -- Editor.processPointerEvent does the focusing itself, this
+// test does nothing to force it) followed by a real key.EditEvent (the
+// same event Gio's own widget package tests, e.g.
+// TestEditorDimensions, use to simulate real typed input), rather than
+// calling widget.Editor.SetText directly, which would bypass both the
+// click-to-focus path and the Update-driven onChange firing in
+// layoutInput entirely.
+func TestTextInputHandlesRealClickFocusAndTyping(t *testing.T) {
+	w, err := headless.NewWindow(200, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := goxgio.New()
+	var fired bool
+	var lastValue string
+	node := gox.El("input", []gox.Attr{
+		gox.A("type", "text"),
+		gox.A("id", "name"),
+		gox.On("change", func(e gox.Event) {
+			fired = true
+			lastValue = gox.EventValue[string](e)
+		}),
+	})
+
+	var router input.Router
+	var ops op.Ops
+	gtx := layout.Context{
+		Ops:         &ops,
+		Source:      router.Source(),
+		Constraints: layout.Exact(image.Pt(200, 60)),
+	}
+
+	dims := renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+	before := image.NewRGBA(image.Rect(0, 0, 200, 60))
+	if err := w.Screenshot(before); err != nil {
+		t.Fatalf("Screenshot: %v", err)
+	}
+
+	center := f32.Pt(float32(dims.Size.X)/2, float32(dims.Size.Y)/2)
+	router.Queue(
+		pointer.Event{Source: pointer.Mouse, Kind: pointer.Press, Position: center, Buttons: pointer.ButtonPrimary},
+		pointer.Event{Source: pointer.Mouse, Kind: pointer.Release, Position: center, Buttons: pointer.ButtonPrimary},
+	)
+	gtx.Reset()
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+
+	router.Queue(key.EditEvent{Text: "hi"})
+	gtx.Reset()
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+	after := image.NewRGBA(image.Rect(0, 0, 200, 60))
+	if err := w.Screenshot(after); err != nil {
+		t.Fatalf("Screenshot: %v", err)
+	}
+
+	if !fired {
+		t.Fatal("onChange never fired from a real typed key.EditEvent on the text input")
+	}
+	if lastValue != "hi" {
+		t.Fatalf("onChange value = %q, want \"hi\"", lastValue)
+	}
+	if bytes.Equal(before.Pix, after.Pix) {
+		t.Fatal("frame pixels identical before/after typing: the typed text never actually got painted")
 	}
 }

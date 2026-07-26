@@ -1,6 +1,6 @@
 module github.com/elaous/gojiberry/examples/gio-counter-demo
 
-go 1.24.7
+go 1.26.0
 
 replace github.com/elaous/gojiberry => ../..
 
@@ -14,7 +14,7 @@ require (
 	github.com/go-text/typesetting v0.3.4 // indirect
 	golang.org/x/exp/shiny v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/image v0.26.0 // indirect
-	golang.org/x/net v0.48.0 // indirect
-	golang.org/x/sys v0.39.0 // indirect
-	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 )
