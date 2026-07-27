@@ -38,8 +38,12 @@ immediate-mode toolkit rather than a retained DOM:
 
 Only a minimal tag set is understood: `div` (`layout.Flex`, reading one
 layout hint, the `data-axis` attribute, since there's no CSS to carry a
-flex direction on a native target), `span`/`p` (`material.Label`),
-`button` (`material.Button`), `input` type=text/type=checkbox
+flex direction on a native target), `span`/`p` (`material.Label` if
+every child is text, the same `layoutChildren` a `div` uses if any
+child isn't -- a `<span>` wrapping real elements, e.g. a button plus a
+hidden div, needs its children actually laid out, not silently dropped
+the way concatenating only the text children would), `button`
+(`material.Button`), `input` type=text/type=checkbox
 (`material.Editor`/`material.CheckBox`), and `select`/`option`. The
 last one needed real custom-widget work rather than another
 tag-switch case, since `widget/material` has no native dropdown
@@ -51,6 +55,36 @@ adding a second per-option map). Which option is *selected* is read
 fresh from the tree's own `selected` attribute every frame, not
 persisted by `Renderer` itself -- the same controlled-component
 contract `domrt` already holds every caller to.
+
+`Renderer.On(id, event, fn)` registers an ID-based event handler,
+checked as a fallback in `layoutButton`/`layoutInput`/`layoutSelect`
+whenever a node has no `Attr` handler of its own (`gox.On`, what
+`gio-counter-demo`'s `Counter` uses). This exists because real
+OnDesign `editor/ui/*.gox` components use neither `gox.On` nor any prop
+for interactivity -- their web build wires every handler externally, by
+element ID (`ed.on(id, event, fn)` in `main.gox`'s own `wire()`, calling
+a real DOM `addEventListener`), the same delegation pattern `domrt`
+itself is built on. `On` lets a caller replicate that wiring against an
+unmodified component's tree; a node's own `Attr` handler always wins
+when both are registered for the same id, so it's purely additive.
+
+`Renderer.Focus(id)` requests real Gio input focus for a text input on
+the next `Layout` call, via `key.FocusCmd` -- the programmatic-focus
+analogue of `Click`. Gio only ever focuses a text field from a real
+`pointer.Event` hitting its own laid-out bounds otherwise, which means
+knowing exactly where those bounds fall inside a caller's own layout;
+trivial for a single isolated input, much harder for one buried inside
+a real multi-child panel. A pending `id -> bool` map (the same
+deferred-then-consumed shape `Click`'s own accumulated click state and
+`selectOpen` already take) is checked at the top of `layoutInput`'s
+text-field branch and cleared once acted on.
+
+`Renderer.Toggle(id)` flips a checkbox's `Value` on the next `Layout`
+call, the same programmatic-interaction shortcut `Click` gives a
+`widget.Clickable` -- needed because `widget.Bool` has no public
+click-equivalent method of its own (its click detection is internal,
+via an unexported `widget.Clickable` it doesn't expose). Same pending
+`id -> bool` map shape as `Focus`.
 
 `Renderer.Styles` (`map[string]ClassStyle`) is the narrow, opt-in slice
 of CSS that has a real Gio equivalent -- padding, a background fill, a
@@ -91,6 +125,21 @@ state:
   opens the dropdown, confirming the rendered `Dimensions` actually
   grew, then selects an option, confirming `onChange` fires with the
   right value and the dropdown collapses back to its original size.
+- `TestOnFiresForANodeWithNoAttrHandler` / `TestOnLosesToANodesOwnAttrHandler`
+  cover `Renderer.On`: a plain node with no `Attr` handler (the shape a
+  real `.gox` component takes) fires its registered handler on a real
+  click, and a node that does carry its own `Attr` handler keeps using
+  it unaffected by an `On` registration for the same id.
+- `TestFocusFiresOnChangeWithoutAnyPointerClick` covers `Renderer.Focus`:
+  the same real `key.EditEvent` dispatch
+  `TestTextInputHandlesRealClickFocusAndTyping` uses, but with no
+  `pointer.Event` at all -- `Focus` alone is enough to receive it.
+- `TestToggleFiresOnChangeWithoutAnyPointerClick` covers
+  `Renderer.Toggle`: a checkbox flips and fires `onChange` from
+  `Toggle` alone, with no `pointer.Event` dispatched at all.
+- `TestSpanWithElementChildrenLaysOutThoseChildren` covers the `span`/`p`
+  fix above: a button nested inside a `<span>` (not just text) actually
+  gets laid out and registers a real clickable.
 
 The `Counter`/click-driven integration test (proving the *whole
 pipeline* -- a real component, a real window, a real click firing a
@@ -130,10 +179,11 @@ replace github.com/elaous/gojiberry/goxgio => /path/to/gojiberry/goxgio
 
 ## Not yet done
 
-`goxgio` covers every tag `ui/*.gox` structurally needs, but nothing
-outside this repo actually renders OnDesign's real UI through it yet --
-`examples/gio-counter-demo` is still the only consumer, and it only
-renders its own `Counter` demo component. Wiring `cssgen`'s output into
-a real OnDesign-targeting Gio entry point is separate, not-yet-started
-work -- see OnDesign's own `docs/ROADMAP.md`, task #107, for the fuller
-picture.
+`goxgio` covers every tag `ui/*.gox` structurally needs, and (as of
+`Renderer.On`/`Renderer.Focus`) has a way to wire real interactivity
+-- including into a text field -- against an unmodified component too.
+`OnDesign/native` is now consuming all of it against real
+`editor/ui/*.gox` panels (see its own README) -- but only two panels
+and a handful of wired controls, not a real app. Wiring `cssgen`'s
+output into that consumer is separate, not-yet-started work -- see
+OnDesign's own `docs/ROADMAP.md`, task #107, for the fuller picture.

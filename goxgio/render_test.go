@@ -356,3 +356,277 @@ func TestSelectOpensAndFiresOnChangeOnRealClicks(t *testing.T) {
 		t.Fatalf("dimensions after selecting an option = %+v, want %+v (dropdown should have closed again)", afterDims, closedDims)
 	}
 }
+
+// TestOnFiresForANodeWithNoAttrHandler proves Renderer.On's ID-based
+// fallback actually fires against a node carrying no Attr handler of
+// its own -- the exact shape every real OnDesign editor/ui/*.gox
+// component takes, since none of them use gox.On (interactivity is
+// wired externally by ID instead, matching main.gox's own
+// ed.on(id, event, fn)); gio-counter-demo's Counter, by contrast,
+// always sets an Attr handler and so never exercises this path. Uses
+// the same real-click mechanism (Renderer.Click, Gio's own
+// widget.Clickable.Click()) every other button-click test in this file
+// already relies on.
+func TestOnFiresForANodeWithNoAttrHandler(t *testing.T) {
+	w, err := headless.NewWindow(60, 30)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	node := gox.El("button", []gox.Attr{gox.A("id", "close")}, gox.Text("×"))
+
+	var fired bool
+	renderer.On("close", "click", func(gox.Event) { fired = true })
+
+	frame := func() {
+		var ops op.Ops
+		var router input.Router
+		gtx := layout.Context{
+			Ops:         &ops,
+			Source:      router.Source(),
+			Constraints: layout.Exact(image.Pt(60, 30)),
+		}
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+		if err := w.Frame(&ops); err != nil {
+			t.Fatalf("Frame: %v", err)
+		}
+	}
+
+	frame()
+	if fired {
+		t.Fatal("handler fired before any click")
+	}
+
+	if !renderer.Click("close") {
+		t.Fatal(`Click("close"): no clickable registered for that id after the first Layout`)
+	}
+	frame()
+	if !fired {
+		t.Fatal("Renderer.On's registered handler never fired after a real click on an id-only node with no Attr handler of its own")
+	}
+}
+
+// TestOnLosesToANodesOwnAttrHandler confirms On is purely additive: a
+// node that DOES carry its own Attr handler (gox.On, the mechanism
+// gio-counter-demo's Counter uses) keeps using it, unaffected by an
+// On registration for the same id -- so adding ID-based delegation
+// couldn't have changed gio-counter-demo's own existing behavior.
+func TestOnLosesToANodesOwnAttrHandler(t *testing.T) {
+	w, err := headless.NewWindow(60, 30)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	var attrFired, registeredFired bool
+	node := gox.El("button", []gox.Attr{
+		gox.A("id", "dec"),
+		gox.On("click", func(gox.Event) { attrFired = true }),
+	}, gox.Text("-"))
+	renderer.On("dec", "click", func(gox.Event) { registeredFired = true })
+
+	frame := func() {
+		var ops op.Ops
+		var router input.Router
+		gtx := layout.Context{
+			Ops:         &ops,
+			Source:      router.Source(),
+			Constraints: layout.Exact(image.Pt(60, 30)),
+		}
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+		if err := w.Frame(&ops); err != nil {
+			t.Fatalf("Frame: %v", err)
+		}
+	}
+
+	frame()
+	if !renderer.Click("dec") {
+		t.Fatal(`Click("dec"): no clickable registered for that id after the first Layout`)
+	}
+	frame()
+
+	if !attrFired {
+		t.Fatal("the node's own Attr handler never fired")
+	}
+	if registeredFired {
+		t.Fatal("the On-registered handler fired even though the node has its own Attr handler, which should always win")
+	}
+}
+
+// TestFocusFiresOnChangeWithoutAnyPointerClick proves Renderer.Focus's
+// programmatic focus actually works: typing into a text input right
+// after Focus, with no pointer.Event dispatched at all -- unlike
+// TestTextInputHandlesRealClickFocusAndTyping, which drives a real
+// click at the widget's own on-screen position first. Focus exists
+// precisely for callers that can't easily compute that position (an
+// input buried inside a larger tree, not laid out in isolation), so
+// this test's whole point is that a real key.EditEvent still lands
+// correctly without one.
+func TestFocusFiresOnChangeWithoutAnyPointerClick(t *testing.T) {
+	w, err := headless.NewWindow(200, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	var fired bool
+	var lastValue string
+	node := gox.El("input", []gox.Attr{
+		gox.A("type", "text"),
+		gox.A("id", "name"),
+		gox.On("change", func(e gox.Event) {
+			fired = true
+			lastValue = gox.EventValue[string](e)
+		}),
+	})
+
+	var router input.Router
+	var ops op.Ops
+	gtx := layout.Context{
+		Ops:         &ops,
+		Source:      router.Source(),
+		Constraints: layout.Exact(image.Pt(200, 60)),
+	}
+
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+
+	if !renderer.Focus("name") {
+		t.Fatal(`Focus("name"): no editor registered for that id after the first Layout`)
+	}
+	gtx.Reset()
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+
+	router.Queue(key.EditEvent{Text: "hi"})
+	gtx.Reset()
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+
+	if !fired {
+		t.Fatal("onChange never fired from a typed key.EditEvent after Focus, with no pointer click at all")
+	}
+	if lastValue != "hi" {
+		t.Fatalf("onChange value = %q, want \"hi\"", lastValue)
+	}
+}
+
+// TestToggleFiresOnChangeWithoutAnyPointerClick proves Renderer.Toggle
+// actually flips a checkbox and fires its onChange, with no
+// pointer.Event dispatched at all -- widget.Bool, unlike
+// widget.Clickable, exposes no public Click-equivalent shortcut of its
+// own, so Toggle exists specifically to give a checkbox the same
+// coordinate-free interaction Click already gives a button/select.
+func TestToggleFiresOnChangeWithoutAnyPointerClick(t *testing.T) {
+	w, err := headless.NewWindow(60, 30)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	var fired bool
+	var lastChecked bool
+	node := gox.El("input", []gox.Attr{
+		gox.A("type", "checkbox"),
+		gox.A("id", "agree"),
+		gox.On("change", func(e gox.Event) {
+			fired = true
+			lastChecked = e.Checked
+		}),
+	})
+
+	frame := func() {
+		var ops op.Ops
+		var router input.Router
+		gtx := layout.Context{
+			Ops:         &ops,
+			Source:      router.Source(),
+			Constraints: layout.Exact(image.Pt(60, 30)),
+		}
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+		if err := w.Frame(&ops); err != nil {
+			t.Fatalf("Frame: %v", err)
+		}
+	}
+
+	frame()
+	if fired {
+		t.Fatal("onChange fired before any interaction")
+	}
+
+	if !renderer.Toggle("agree") {
+		t.Fatal(`Toggle("agree"): no checkbox registered for that id after the first Layout`)
+	}
+	frame()
+
+	if !fired {
+		t.Fatal("onChange never fired from Toggle, with no pointer click at all")
+	}
+	if !lastChecked {
+		t.Fatalf("onChange checked = %v, want true (checkbox starts unchecked, one Toggle should check it)", lastChecked)
+	}
+}
+
+// TestSpanWithElementChildrenLaysOutThoseChildren covers a real bug
+// found while wiring OnDesign's own toolbar.gox on native: a <span>
+// (or <p>) whose children include a real element, not just text --
+// toolbar.gox's own "font-picker-wrap" span wraps a button plus a
+// hidden div, exactly this shape -- used to render as an empty
+// material.Label (textOf only concatenates KindText children, silently
+// dropping element children), so nothing inside such a span/p was ever
+// laid out at all: a button entirely inside one would never register a
+// Clickable, and Renderer.Click would report it as never having
+// existed. A span/p with only text children (the overwhelmingly common
+// case -- every other span in this codebase) still renders as a plain
+// Label, unaffected.
+func TestSpanWithElementChildrenLaysOutThoseChildren(t *testing.T) {
+	w, err := headless.NewWindow(120, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	node := gox.El("span", []gox.Attr{gox.A("class", "wrap")},
+		gox.El("button", []gox.Attr{gox.A("id", "inner")}, gox.Text("Click me")),
+	)
+
+	var ops op.Ops
+	var router input.Router
+	gtx := layout.Context{
+		Ops:         &ops,
+		Source:      router.Source(),
+		Constraints: layout.Constraints{Max: image.Pt(120, 60)},
+	}
+	dims := renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+
+	if dims.Size.X == 0 || dims.Size.Y == 0 {
+		t.Fatalf("Dimensions = %+v, want non-zero: the button inside the span should have laid out to some real size", dims)
+	}
+	if !renderer.Click("inner") {
+		t.Fatal(`Click("inner"): no clickable registered for the button nested inside the span -- it was never laid out`)
+	}
+}
