@@ -40,6 +40,19 @@
 // tag set (Textarea, Modal, ...) means adding to typeset below, the
 // same way domrt or gox.Render would grow to support a new HTML
 // element.
+//
+// Two ways to wire interactivity are supported, because real gox
+// producers use both: a node's own Attr handler (gox.On("click", h),
+// read by clickHandler/changeHandler -- what gio-counter-demo's own
+// Counter uses), and Renderer.On(id, event, fn), an ID-based registry
+// checked as a fallback when a node has no Attr handler of its own.
+// The latter exists because OnDesign's real editor/ui/*.gox components
+// use neither gox.On nor any prop for interactivity: main.gox's own
+// wire() attaches every handler externally, by element ID
+// (ed.on(id, event, fn) -> a real DOM addEventListener), the same
+// delegation pattern domrt itself is built on. On lets a caller
+// replicate that same wiring against a gox.Node tree it doesn't
+// control the construction of, with zero changes to the component.
 package goxgio
 
 import (
@@ -47,6 +60,7 @@ import (
 	"image/color"
 	"strings"
 
+	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -106,6 +120,27 @@ type Renderer struct {
 	// map[string]bool is the right shape here.
 	selectOpen map[string]bool
 
+	// focusRequests tracks ids whose editor should receive real Gio
+	// input focus the next time Layout renders them -- see Focus's own
+	// doc comment for why this exists (a pending flag consumed and
+	// cleared by layoutInput, the same deferred-then-consumed shape
+	// selectOpen and a Clickable's own accumulated click state already
+	// take).
+	focusRequests map[string]bool
+
+	// toggleRequests tracks ids whose checkbox should flip its Value
+	// the next time Layout renders it -- see Toggle's own doc comment
+	// for why this exists (widget.Bool, unlike widget.Clickable, has
+	// no public Click-equivalent shortcut of its own).
+	toggleRequests map[string]bool
+
+	// handlers holds ID-based event handlers registered via On, keyed
+	// by "<id>\x00<event>" (the same flat key shape layoutSelect
+	// already uses for "<select id>\x00<option value>"). See On's own
+	// doc comment for why this exists alongside gox.On/Attr.Handler
+	// rather than replacing it.
+	handlers map[string]gox.EventHandler
+
 	// Styles maps a class name (as it appears in a node's "class"
 	// attribute, one word) to the styling to apply wherever that class
 	// appears. A node with multiple space-separated classes merges
@@ -123,11 +158,80 @@ type Renderer struct {
 // styling.
 func New() *Renderer {
 	return &Renderer{
-		clickables: make(map[string]*widget.Clickable),
-		checkboxes: make(map[string]*widget.Bool),
-		editors:    make(map[string]*widget.Editor),
-		selectOpen: make(map[string]bool),
+		clickables:     make(map[string]*widget.Clickable),
+		checkboxes:     make(map[string]*widget.Bool),
+		editors:        make(map[string]*widget.Editor),
+		selectOpen:     make(map[string]bool),
+		focusRequests:  make(map[string]bool),
+		toggleRequests: make(map[string]bool),
+		handlers:       make(map[string]gox.EventHandler),
 	}
+}
+
+// Toggle requests that the checkbox identified by id (Node.Key if set,
+// else its own "id" attribute) flip its Value the next time Layout
+// renders it, firing its onChange the same way a real click would --
+// the programmatic-click analogue Click already gives a
+// widget.Clickable, needed here because widget.Bool exposes no public
+// Click-equivalent shortcut of its own (its click detection is
+// internal, via an unexported widget.Clickable it doesn't expose).
+// Reports whether a checkbox with that identity has been laid out at
+// least once; if not, id is not remembered, matching Click's own
+// "nothing registered yet" contract.
+func (r *Renderer) Toggle(id string) bool {
+	if _, ok := r.checkboxes[id]; !ok {
+		return false
+	}
+	r.toggleRequests[id] = true
+	return true
+}
+
+// Focus requests that the text input identified by id (Node.Key if
+// set, else its own "id" attribute) receive real Gio input focus the
+// next time Layout renders it -- the programmatic-focus analogue of
+// Click, for a caller that wants to simulate focusing a text field
+// without knowing its exact on-screen position first. Gio's own focus
+// mechanism (key.FocusCmd) otherwise only ever fires from a real
+// pointer.Event hitting the widget's own laid-out bounds, which means
+// knowing exactly where those bounds fall inside a caller's own
+// layout -- trivial for a single isolated input, much less so for one
+// buried inside a larger tree like a real editor/ui/*.gox panel.
+// Reports whether an editor with that identity has been laid out at
+// least once (and so has something to focus); if not, id is not
+// remembered, matching Click's own "nothing registered yet" contract.
+func (r *Renderer) Focus(id string) bool {
+	if _, ok := r.editors[id]; !ok {
+		return false
+	}
+	r.focusRequests[id] = true
+	return true
+}
+
+// On registers fn to fire when event ("click" or "change") occurs on
+// the element identified by id (Node.Key if set, else its own "id"
+// attribute -- the same identity every other interactive tag here
+// uses). Registering the same id+event again replaces the previous
+// handler.
+//
+// This exists alongside gox.On/Attr.Handler (the per-node handler
+// clickHandler/changeHandler already read, and the only mechanism
+// gio-counter-demo's own Counter uses) rather than replacing it,
+// because real OnDesign editor/ui/*.gox components use neither: their
+// interactivity is wired entirely externally, by ID, in main.gox's own
+// wire() (ed.on(id, event, fn) -> element(id).AddEventListener(...)),
+// the same DOM-delegation pattern domrt itself is built on. A node's
+// own Attr handler (if any) always takes precedence over a handler
+// registered here, so gio-counter-demo's existing per-node wiring is
+// unaffected; On is purely additive, for callers whose tree has
+// nothing attached at the node itself.
+func (r *Renderer) On(id, event string, fn gox.EventHandler) {
+	r.handlers[id+"\x00"+event] = fn
+}
+
+// handlerFor returns the handler registered via On for id+event, or
+// nil if none was.
+func (r *Renderer) handlerFor(id, event string) gox.EventHandler {
+	return r.handlers[id+"\x00"+event]
 }
 
 // Layout walks n and lays it out via th, returning its dimensions. Call
@@ -154,7 +258,23 @@ func (r *Renderer) Layout(gtx layout.Context, th *material.Theme, n gox.Node) la
 			return r.layoutChildren(gtx, th, n.Children, axisOf(n), style.Alignment)
 		}
 	case "span", "p":
-		content = material.Label(th, th.TextSize, textOf(n)).Layout
+		if hasElementChild(n) {
+			// A span/p wrapping real element children (e.g. toolbar.gox's
+			// own "font-picker-wrap" span, a button plus a hidden div),
+			// not just text -- textOf/material.Label would silently
+			// discard those children entirely (textOf only concatenates
+			// KindText children), so anything interactive inside them
+			// would never get laid out, and so never register a
+			// Clickable/etc. of its own. Falls back to the same
+			// layoutChildren div itself uses, so those children render
+			// (and stay interactive) same as if they were one level up
+			// in a div instead.
+			content = func(gtx layout.Context) layout.Dimensions {
+				return r.layoutChildren(gtx, th, n.Children, axisOf(n), style.Alignment)
+			}
+		} else {
+			content = material.Label(th, th.TextSize, textOf(n)).Layout
+		}
 	case "button":
 		content = func(gtx layout.Context) layout.Dimensions {
 			return r.layoutButton(gtx, th, n)
@@ -287,6 +407,21 @@ func axisOf(n gox.Node) layout.Axis {
 	return layout.Vertical
 }
 
+// hasElementChild reports whether n has any direct child that isn't a
+// text node -- see the "span", "p" case in Layout for why this matters:
+// textOf silently drops non-text children, so a span/p that has any
+// needs the layoutChildren path instead, or they'd never be laid out
+// (and, if interactive, never register a Clickable/etc. of their own)
+// at all.
+func hasElementChild(n gox.Node) bool {
+	for _, c := range n.Children {
+		if c.Kind != gox.KindText {
+			return true
+		}
+	}
+	return false
+}
+
 // textOf concatenates n's direct KindText children, since a gox.El
 // call like <span>{strconv.Itoa(props.Count)}</span> produces a single
 // text child, not a Text field on the span itself.
@@ -353,7 +488,11 @@ func (r *Renderer) layoutButton(gtx layout.Context, th *material.Theme, n gox.No
 		clk = new(widget.Clickable)
 		r.clickables[id] = clk
 	}
-	if handler := clickHandler(n); handler != nil {
+	handler := clickHandler(n)
+	if handler == nil {
+		handler = r.handlerFor(id, "click")
+	}
+	if handler != nil {
 		for clk.Clicked(gtx) {
 			handler(gox.NewEvent("click", nil, false, nil, nil))
 		}
@@ -446,8 +585,18 @@ func (r *Renderer) layoutInput(gtx layout.Context, th *material.Theme, n gox.Nod
 			cb = &widget.Bool{Value: checkedOf(n)}
 			r.checkboxes[id] = cb
 		}
-		if cb.Update(gtx) {
-			if handler := changeHandler(n); handler != nil {
+		changed := cb.Update(gtx)
+		if r.toggleRequests[id] {
+			delete(r.toggleRequests, id)
+			cb.Value = !cb.Value
+			changed = true
+		}
+		if changed {
+			handler := changeHandler(n)
+			if handler == nil {
+				handler = r.handlerFor(id, "change")
+			}
+			if handler != nil {
 				handler(gox.NewEvent("change", cb.Value, cb.Value, nil, nil))
 			}
 		}
@@ -460,6 +609,10 @@ func (r *Renderer) layoutInput(gtx layout.Context, th *material.Theme, n gox.Nod
 		ed.SetText(valueOf(n))
 		r.editors[id] = ed
 	}
+	if r.focusRequests[id] {
+		delete(r.focusRequests, id)
+		gtx.Execute(key.FocusCmd{Tag: ed})
+	}
 	changed := false
 	for {
 		ev, ok := ed.Update(gtx)
@@ -471,7 +624,11 @@ func (r *Renderer) layoutInput(gtx layout.Context, th *material.Theme, n gox.Nod
 		}
 	}
 	if changed {
-		if handler := changeHandler(n); handler != nil {
+		handler := changeHandler(n)
+		if handler == nil {
+			handler = r.handlerFor(id, "change")
+		}
+		if handler != nil {
 			handler(gox.NewEvent("change", ed.Text(), false, nil, nil))
 		}
 	}
@@ -561,6 +718,9 @@ func (r *Renderer) layoutSelect(gtx layout.Context, th *material.Theme, n gox.No
 	}
 
 	handler := changeHandler(n)
+	if handler == nil {
+		handler = r.handlerFor(id, "change")
+	}
 	rows := make([]layout.FlexChild, 0, len(n.Children)+1)
 	rows = append(rows, layout.Rigid(material.Button(th, trigger, label+" ▴").Layout))
 	for _, c := range n.Children {
