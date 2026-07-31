@@ -41,6 +41,38 @@ func (r *Root) Update(next gox.Node) {
 	r.tree = patch(r.container, r.tree, next)
 }
 
+// FirstNode returns the first real DOM node this Root's mounted tree
+// owns -- the element itself for a simple single-element component
+// (e.g. Button). Useful for a caller that mounts a small, static
+// component once, reparents the resulting node into its own DOM
+// structure, and never calls Update again -- driving all further
+// state changes (a pressed/disabled toggle, a label swap) directly on
+// the returned node the same way it already would for any other
+// element it built by hand.
+func (r *Root) FirstNode() js.Value {
+	if r.tree == nil {
+		return js.Undefined()
+	}
+	return r.tree.firstNode()
+}
+
+// Listener returns the js.Func trampoline domrt created for the given
+// event name on this Root's own top-level node, or the zero js.Func
+// if none is bound. For a caller that -- like FirstNode's own use
+// case -- never calls Update, Update's own patch/replace machinery
+// never runs to release this js.Func on the caller's behalf; Listener
+// lets that caller track and release it through whatever mechanism it
+// already uses for js.Funcs it creates directly.
+func (r *Root) Listener(event string) js.Func {
+	if r.tree == nil {
+		return js.Func{}
+	}
+	if b, ok := r.tree.listeners[event]; ok {
+		return b.jsFunc
+	}
+	return js.Func{}
+}
+
 // renderedNode pairs a previously-rendered gox.Node with the live DOM
 // node(s) it produced, so the next patch can diff against it.
 type renderedNode struct {
