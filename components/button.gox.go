@@ -15,9 +15,15 @@ const (
 
 // ButtonProps configures Button.
 type ButtonProps struct {
-	Label    string
+	Label string
+	// Content overrides Label with arbitrary child nodes (e.g. an icon
+	// beside the text) when set -- the same "override the plain-text
+	// default with real markup" shape DialogProps' own Body/Actions
+	// already take.
+	Content  []gox.Node
 	Variant  ButtonVariant // defaults to ButtonPrimary
 	Type     string        // "button" (default), "submit", or "reset"
+	Title    string        // optional tooltip / accessible-name text
 	Disabled bool
 	OnClick  gox.EventHandler
 }
@@ -36,11 +42,18 @@ func Button(props ButtonProps) gox.Node {
 		gox.A("class", "gj-button gj-button-"+string(variant)),
 		gox.A("type", typ),
 	}
+	if props.Title != "" {
+		attrs = append(attrs, gox.A("title", props.Title))
+	}
 	if props.Disabled {
 		attrs = append(attrs, gox.A("disabled", "disabled"))
 	}
 	if props.OnClick != nil {
 		attrs = append(attrs, gox.On("click", props.OnClick))
 	}
-	return gox.El("button", attrs, gox.Text(props.Label))
+	content := props.Content
+	if content == nil {
+		content = []gox.Node{gox.Text(props.Label)}
+	}
+	return gox.El("button", attrs, content...)
 }
