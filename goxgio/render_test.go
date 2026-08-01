@@ -12,6 +12,7 @@ import (
 	"gioui.org/io/input"
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
+	"gioui.org/io/semantic"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/widget/material"
@@ -1076,5 +1077,114 @@ func TestSpanWithElementChildrenLaysOutThoseChildren(t *testing.T) {
 	}
 	if !renderer.Click("inner") {
 		t.Fatal(`Click("inner"): no clickable registered for the button nested inside the span -- it was never laid out`)
+	}
+}
+
+// TestIconButtonRendersRealIconContentAndClicks proves layoutButton's
+// own icon-content path (task #107, Phase 41): a button shaped like
+// editor/ui/toolbar.gox's own iconBtn -- a real <span> icon child plus
+// an empty text label, the exact shape textOf(n) alone would silently
+// reduce to "" -- actually paints something (a real frame diff against
+// a blank button of the same size, the same rigor
+// TestSpanWithElementChildRendersNestedButton's own sibling tests in
+// this file already apply) and still fires its own click handler, the
+// same real click-handling material.Button already gave a plain text
+// button.
+func TestIconButtonRendersRealIconContentAndClicks(t *testing.T) {
+	w, err := headless.NewWindow(120, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+
+	frame := func(node gox.Node) (*image.RGBA, *Renderer) {
+		renderer := New()
+		var ops op.Ops
+		var router input.Router
+		gtx := layout.Context{
+			Ops:         &ops,
+			Source:      router.Source(),
+			Constraints: layout.Constraints{Max: image.Pt(120, 60)},
+		}
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+		if err := w.Frame(&ops); err != nil {
+			t.Fatalf("Frame: %v", err)
+		}
+		img := image.NewRGBA(image.Rect(0, 0, 120, 60))
+		if err := w.Screenshot(img); err != nil {
+			t.Fatalf("Screenshot: %v", err)
+		}
+		return img, renderer
+	}
+
+	blankBtn := gox.El("button", []gox.Attr{gox.A("id", "icon-btn")}, gox.Text(""))
+	blank, _ := frame(blankBtn)
+
+	iconSpan := gox.El("span", []gox.Attr{gox.A("class", "material-symbols-outlined")}, gox.Text("bold"))
+	iconBtn := gox.El("button", []gox.Attr{gox.A("id", "icon-btn")}, iconSpan, gox.Text(""))
+	got, renderer := frame(iconBtn)
+
+	if bytes.Equal(blank.Pix, got.Pix) {
+		t.Fatal("icon button frame identical to a blank same-id text button: the icon span's own content never actually painted")
+	}
+	if !renderer.Click("icon-btn") {
+		t.Fatal(`Click("icon-btn"): no clickable registered for an icon button -- the icon-content path lost real click handling`)
+	}
+}
+
+// TestIconButtonExposesAccessibleNameViaSemanticDescription proves
+// accessibleNameOf actually reaches a real Gio semantic tree (task
+// #107, Phase 41): a button with a "title" attribute and an icon span
+// child (the shape iconBtn(id, iconName, title, "") produces whenever
+// its own label argument is "", the overwhelming majority of toolbar
+// buttons) gets a real semantic.Button-class node whose Description
+// equals the title -- input.Router.AppendSemantics, the same public
+// API gioui.org/io/input's own semantic_test.go exercises, not a
+// synthetic ops.Ops read by hand.
+func TestIconButtonExposesAccessibleNameViaSemanticDescription(t *testing.T) {
+	w, err := headless.NewWindow(120, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	iconSpan := gox.El("span", []gox.Attr{gox.A("class", "material-symbols-outlined")}, gox.Text("format_bold"))
+	node := gox.El("button", []gox.Attr{
+		gox.A("id", "bold-btn"),
+		gox.A("title", "Bold"),
+	}, iconSpan, gox.Text(""))
+
+	var ops op.Ops
+	var router input.Router
+	gtx := layout.Context{
+		Ops:         &ops,
+		Source:      router.Source(),
+		Constraints: layout.Constraints{Max: image.Pt(120, 60)},
+	}
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+
+	tree := router.AppendSemantics(nil)
+	var found bool
+	var walk func(nodes []input.SemanticNode)
+	walk = func(nodes []input.SemanticNode) {
+		for _, n := range nodes {
+			if n.Desc.Class == semantic.Button && n.Desc.Description == "Bold" {
+				found = true
+			}
+			walk(n.Children)
+		}
+	}
+	walk(tree)
+	if !found {
+		t.Fatal(`no semantic.Button node with Description "Bold" found -- accessibleNameOf's own title fallback never reached the real semantic tree`)
 	}
 }

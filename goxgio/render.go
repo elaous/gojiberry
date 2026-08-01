@@ -76,6 +76,7 @@ import (
 	"strings"
 
 	"gioui.org/io/key"
+	"gioui.org/io/semantic"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -593,6 +594,58 @@ func (r *Renderer) layoutDivContent(gtx layout.Context, th *material.Theme, n go
 	return clk.Layout(gtx, children)
 }
 
+// buttonInset mirrors material.Button's own hardcoded ButtonStyle.Inset
+// (gioui.org/widget/material's own button.go) -- layoutButton's own
+// icon-content path (below) builds on material.ButtonLayoutStyle
+// instead of material.Button (ButtonLayoutStyle has no padding of its
+// own, just chrome+click), so it re-applies the identical padding by
+// hand to keep an icon button's own visual size/spacing matching a
+// plain text button's.
+var buttonInset = layout.Inset{Top: 10, Bottom: 10, Left: 12, Right: 12}
+
+// accessibleNameOf returns n's "aria-label" attribute, falling back to
+// "title" -- the same accessible-name precedence order
+// editor/ui/toolbar.gox's own iconBtn/iconBtnNode doc comments already
+// establish for the web build ("title alone is an inconsistently-
+// honored accessible-name source across screen readers"): a real
+// screen reader's own accessible name for an icon-only button, whose
+// real visible content carries no useful text of its own for
+// textOf/material.Label to expose.
+func accessibleNameOf(n gox.Node) string {
+	var title string
+	for _, a := range n.Attrs {
+		switch a.Name {
+		case "aria-label":
+			return a.Value
+		case "title":
+			title = a.Value
+		}
+	}
+	return title
+}
+
+// layoutButton renders n as a real material.Button -- textOf(n)'s own
+// direct-text-children concatenation is enough for a plain text button
+// (btn(), editor/ui/toolbar.gox), but silently drops any real element
+// child the same way the "span"/"p" cases' own hasElementChild check
+// already guards against elsewhere in this file: an icon button
+// (iconBtn(id, iconName, title, label), toolbar.gox) is
+// <button><span class="material-symbols-outlined">iconName</span>
+// label</button> -- an icon span child plus (usually empty) label
+// text, so textOf(n) alone silently painted nothing for the icon at
+// all, and exposed no real accessible name either (an icon-only
+// button's own label text is "", so material.Button's Text is "" too,
+// and Gio's own semantic.LabelOp((""))  carries nothing a screen
+// reader would announce). Fixed the same way this file already fixes
+// the analogous span/p gap: when n has a real element child, render it
+// for real via layoutChildren (so the icon actually paints) inside
+// material.ButtonLayoutStyle's own chrome/click (not material.Button,
+// which only ever paints its own Text field) -- plus a real
+// semantic.DescriptionOp from n's own title/aria-label (accessibleNameOf),
+// mirroring material.IconButtonStyle's own Description field
+// (gioui.org/widget/material's own button.go), since Description, not
+// Label, is the real Gio convention for a control whose accessible name
+// comes from something other than its own painted text.
 func (r *Renderer) layoutButton(gtx layout.Context, th *material.Theme, n gox.Node) layout.Dimensions {
 	id := n.Key
 	if id == "" {
@@ -612,7 +665,21 @@ func (r *Renderer) layoutButton(gtx layout.Context, th *material.Theme, n gox.No
 			handler(gox.NewEvent("click", nil, false, nil, nil))
 		}
 	}
-	return material.Button(th, clk, textOf(n)).Layout(gtx)
+	if !hasElementChild(n) {
+		return material.Button(th, clk, textOf(n)).Layout(gtx)
+	}
+	return material.ButtonLayoutStyle{
+		Background:   th.Palette.ContrastBg,
+		CornerRadius: 4,
+		Button:       clk,
+	}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return buttonInset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			if name := accessibleNameOf(n); name != "" {
+				semantic.DescriptionOp(name).Add(gtx.Ops)
+			}
+			return r.layoutChildren(gtx, th, n.Children, layout.Horizontal, layout.Middle)
+		})
+	})
 }
 
 // inputType returns n's "type" attribute, defaulting to "text" the same
