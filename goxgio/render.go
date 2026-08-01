@@ -29,17 +29,32 @@
 //     other.
 //
 // Only a minimal tag set is understood -- div, span, p, button, input
-// (type=text and type=checkbox), select/option, and text/fragment
-// nodes -- since CSS classes and inline styles (which is how every
-// other tag's look is customized) have no Gio equivalent of their own.
-// div reads one plain layout hint, the data-axis attribute
+// (type=text and type=checkbox), textarea, select/option, and
+// text/fragment nodes -- since CSS classes and inline styles (which is
+// how every other tag's look is customized) have no Gio equivalent of
+// their own. div reads one plain layout hint, the data-axis attribute
 // ("horizontal" or the default "vertical"), since Gio's layout.Flex
 // needs an axis and there's no CSS to carry it on a native target; any
 // other attribute is ignored except class, which Renderer.Styles (see
-// ClassStyle) can map to real Gio painting/layout. Growing beyond this
-// tag set (Textarea, Modal, ...) means adding to typeset below, the
-// same way domrt or gox.Render would grow to support a new HTML
-// element.
+// ClassStyle) can map to real Gio painting/layout, and a real click
+// handler (its own Attr, or one registered via Renderer.On), which
+// wraps its content in a persisted widget.Clickable the same way
+// button already does -- the closest native equivalent to a real DOM
+// div with its own addEventListener("click", ...) (e.g. comment.go's
+// own #comment-item-<id> text div, task #139's sidebar->canvas
+// click-to-jump), rather than forcing every clickable region on a
+// native target to be a real <button>. A div with no click handler at
+// all takes the identical zero-cost path it always did (no Clickable
+// ever created for it), so this adds no overhead to the overwhelming
+// majority of divs in any real tree. textarea shares
+// input's own layoutInput plumbing (persisted widget.Editor, Focus/
+// SetValue/change-event support) with SingleLine forced false instead
+// of true -- the only real difference a plain multi-line comment body
+// needs; a real HTML textarea's *rows*/*cols* sizing hint has no Gio
+// equivalent and is ignored, same as every other unmapped attribute
+// here. Growing beyond this tag set (Modal, ...) means adding to
+// typeset below, the same way domrt or gox.Render would grow to
+// support a new HTML element.
 //
 // Two ways to wire interactivity are supported, because real gox
 // producers use both: a node's own Attr handler (gox.On("click", h),
@@ -318,7 +333,7 @@ func (r *Renderer) Layout(gtx layout.Context, th *material.Theme, n gox.Node) la
 	switch n.Tag {
 	case "div":
 		content = func(gtx layout.Context) layout.Dimensions {
-			return r.layoutChildren(gtx, th, n.Children, axisOf(n), style.Alignment)
+			return r.layoutDivContent(gtx, th, n, style.Alignment)
 		}
 	case "span", "p":
 		if hasElementChild(n) {
@@ -342,7 +357,7 @@ func (r *Renderer) Layout(gtx layout.Context, th *material.Theme, n gox.Node) la
 		content = func(gtx layout.Context) layout.Dimensions {
 			return r.layoutButton(gtx, th, n)
 		}
-	case "input":
+	case "input", "textarea":
 		content = func(gtx layout.Context) layout.Dimensions {
 			return r.layoutInput(gtx, th, n)
 		}
@@ -541,6 +556,43 @@ func (r *Renderer) Click(id string) bool {
 	return true
 }
 
+// layoutDivContent lays out a div's own children (the plain
+// layoutChildren path every div always took), wrapped in a persisted
+// widget.Clickable -- consumed the same drain-then-paint way
+// layoutButton's own Clickable already is -- when the div carries a
+// real click handler, so a structural div can be a genuine click
+// target too, not just button (see this file's own package doc
+// comment for why: a real DOM div with its own addEventListener is a
+// common shape real editor/ui/*.gox components use, e.g. comment.go's
+// own #comment-item-<id> text div). A div with no click handler at all
+// returns exactly what layoutChildren always did, with no Clickable
+// ever created for it.
+func (r *Renderer) layoutDivContent(gtx layout.Context, th *material.Theme, n gox.Node, alignment layout.Alignment) layout.Dimensions {
+	children := func(gtx layout.Context) layout.Dimensions {
+		return r.layoutChildren(gtx, th, n.Children, axisOf(n), alignment)
+	}
+	id := n.Key
+	if id == "" {
+		id = idOf(n)
+	}
+	handler := clickHandler(n)
+	if handler == nil {
+		handler = r.handlerFor(id, "click")
+	}
+	if handler == nil {
+		return children(gtx)
+	}
+	clk, ok := r.clickables[id]
+	if !ok {
+		clk = new(widget.Clickable)
+		r.clickables[id] = clk
+	}
+	for clk.Clicked(gtx) {
+		handler(gox.NewEvent("click", nil, false, nil, nil))
+	}
+	return clk.Layout(gtx, children)
+}
+
 func (r *Renderer) layoutButton(gtx layout.Context, th *material.Theme, n gox.Node) layout.Dimensions {
 	id := n.Key
 	if id == "" {
@@ -626,8 +678,12 @@ func changeHandler(n gox.Node) gox.EventHandler {
 // layoutInput lays out type=checkbox as a material.CheckBox (backed by a
 // persisted widget.Bool, the same persist-across-frames need and
 // map[string]*T-keyed-by-identity solution layoutButton already uses for
-// widget.Clickable) and every other type as a single-line
-// material.Editor (backed by a persisted widget.Editor). Both widgets'
+// widget.Clickable) and every other tag/type (n.Tag == "textarea", or
+// n.Tag == "input" with any type other than checkbox) as a
+// material.Editor (backed by a persisted widget.Editor) -- single-line
+// for input, multi-line for textarea, the one real behavioral
+// difference a plain multi-line comment body needs (see this file's
+// own package doc comment). Both widgets'
 // own Update method is called directly first, to detect a change and
 // fire onChange, before the material.*Style.Layout call that paints
 // it -- that call drains the same widget's Update internally too, but
@@ -672,7 +728,7 @@ func (r *Renderer) layoutInput(gtx layout.Context, th *material.Theme, n gox.Nod
 
 	ed, ok := r.editors[id]
 	if !ok {
-		ed = &widget.Editor{SingleLine: true}
+		ed = &widget.Editor{SingleLine: n.Tag != "textarea"}
 		ed.SetText(valueOf(n))
 		r.editors[id] = ed
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"image"
 	"image/color"
+	"strings"
 	"testing"
 
 	"gioui.org/f32"
@@ -173,6 +174,150 @@ func TestTextInputHandlesRealClickFocusAndTyping(t *testing.T) {
 	}
 	if bytes.Equal(before.Pix, after.Pix) {
 		t.Fatal("frame pixels identical before/after typing: the typed text never actually got painted")
+	}
+}
+
+// TestTextareaHandlesRealClickFocusAndTyping mirrors
+// TestTextInputHandlesRealClickFocusAndTyping exactly, but for a
+// "textarea" node instead of "input" -- proving the new
+// case "input", "textarea" dispatch in Layout (and layoutInput's own
+// tag-aware widget.Editor{SingleLine: n.Tag != "textarea"} branch)
+// actually reaches the same real click/focus/typed-input/onChange path
+// input already had, not just that it no longer falls through to the
+// unrecognized-tag default (which would render but never wire up).
+func TestTextareaHandlesRealClickFocusAndTyping(t *testing.T) {
+	w, err := headless.NewWindow(200, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	var fired bool
+	var lastValue string
+	node := gox.El("textarea", []gox.Attr{
+		gox.A("id", "comment-text"),
+		gox.On("change", func(e gox.Event) {
+			fired = true
+			lastValue = gox.EventValue[string](e)
+		}),
+	})
+
+	var router input.Router
+	var ops op.Ops
+	gtx := layout.Context{
+		Ops:         &ops,
+		Source:      router.Source(),
+		Constraints: layout.Exact(image.Pt(200, 60)),
+	}
+
+	dims := renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+	before := image.NewRGBA(image.Rect(0, 0, 200, 60))
+	if err := w.Screenshot(before); err != nil {
+		t.Fatalf("Screenshot: %v", err)
+	}
+
+	center := f32.Pt(float32(dims.Size.X)/2, float32(dims.Size.Y)/2)
+	router.Queue(
+		pointer.Event{Source: pointer.Mouse, Kind: pointer.Press, Position: center, Buttons: pointer.ButtonPrimary},
+		pointer.Event{Source: pointer.Mouse, Kind: pointer.Release, Position: center, Buttons: pointer.ButtonPrimary},
+	)
+	gtx.Reset()
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+
+	router.Queue(key.EditEvent{Text: "a comment"})
+	gtx.Reset()
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+	after := image.NewRGBA(image.Rect(0, 0, 200, 60))
+	if err := w.Screenshot(after); err != nil {
+		t.Fatalf("Screenshot: %v", err)
+	}
+
+	if !fired {
+		t.Fatal("onChange never fired from a real typed key.EditEvent on the textarea")
+	}
+	if lastValue != "a comment" {
+		t.Fatalf("onChange value = %q, want \"a comment\"", lastValue)
+	}
+	if bytes.Equal(before.Pix, after.Pix) {
+		t.Fatal("frame pixels identical before/after typing: the typed text never actually got painted")
+	}
+}
+
+// TestTextareaPreservesNewlinesUnlikeSingleLineInput proves the one
+// real behavioral difference layoutInput's own SingleLine:
+// n.Tag != "textarea" branch exists for: a newline typed into a
+// textarea survives in the widget's own Text(), where the identical
+// newline typed into a plain single-line input does not -- not just
+// that both tags reach the same generic wiring path (already proven by
+// TestTextareaHandlesRealClickFocusAndTyping/
+// TestTextInputHandlesRealClickFocusAndTyping), but that the multi-line
+// case is genuinely distinct, not a no-op flag.
+func TestTextareaPreservesNewlinesUnlikeSingleLineInput(t *testing.T) {
+	w, err := headless.NewWindow(200, 80)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+
+	typeAndCapture := func(tag string) string {
+		renderer := New()
+		var last string
+		node := gox.El(tag, []gox.Attr{
+			gox.A("id", "field"),
+			gox.On("change", func(e gox.Event) { last = gox.EventValue[string](e) }),
+		})
+
+		var router input.Router
+		var ops op.Ops
+		gtx := layout.Context{
+			Ops:         &ops,
+			Source:      router.Source(),
+			Constraints: layout.Exact(image.Pt(200, 80)),
+		}
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+		if err := w.Frame(&ops); err != nil {
+			t.Fatalf("Frame: %v", err)
+		}
+
+		if !renderer.Focus("field") {
+			t.Fatalf("Focus(%q): no editor registered for tag %q after the first Layout", "field", tag)
+		}
+		gtx.Reset()
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+
+		router.Queue(key.EditEvent{Text: "line one\nline two"})
+		gtx.Reset()
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+		if err := w.Frame(&ops); err != nil {
+			t.Fatalf("Frame: %v", err)
+		}
+		return last
+	}
+
+	inputResult := typeAndCapture("input")
+	if strings.Contains(inputResult, "\n") {
+		t.Fatalf("single-line input.Text() = %q, want the newline stripped (SingleLine forces a single line)", inputResult)
+	}
+
+	textarea := typeAndCapture("textarea")
+	if !strings.Contains(textarea, "\n") {
+		t.Fatalf("textarea.Text() = %q, want the newline preserved (multi-line)", textarea)
 	}
 }
 
@@ -457,6 +602,98 @@ func TestOnLosesToANodesOwnAttrHandler(t *testing.T) {
 	}
 	if registeredFired {
 		t.Fatal("the On-registered handler fired even though the node has its own Attr handler, which should always win")
+	}
+}
+
+// TestDivWithClickHandlerFiresThroughRealClick proves a plain "div"
+// node carrying a click handler (registered via Renderer.On, the same
+// ID-based delegation TestOnFiresForANodeWithNoAttrHandler already
+// exercises for button) is itself a real click target -- layoutButton
+// isn't the only tag that can be one, see this file's own package doc
+// comment and layoutDivContent's own doc comment for why (comment.go's
+// own #comment-item-<id> text div is exactly this shape: a real click
+// listener attached directly to a div, not a nested button). The div's
+// own text children (e.g. a mention span nested inside it) still
+// render, unlike wrapping the same content in a "button" node instead,
+// which would have discarded anything but the button's own direct
+// KindText children via textOf.
+func TestDivWithClickHandlerFiresThroughRealClick(t *testing.T) {
+	w, err := headless.NewWindow(200, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	node := gox.El("div", []gox.Attr{gox.A("id", "comment-text-c1")},
+		gox.Text("hi "),
+		gox.El("span", []gox.Attr{gox.A("class", "comment-mention")}, gox.Text("@sam")),
+	)
+
+	var fired bool
+	renderer.On("comment-text-c1", "click", func(gox.Event) { fired = true })
+
+	frame := func() {
+		var ops op.Ops
+		var router input.Router
+		gtx := layout.Context{
+			Ops:         &ops,
+			Source:      router.Source(),
+			Constraints: layout.Exact(image.Pt(200, 60)),
+		}
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+		if err := w.Frame(&ops); err != nil {
+			t.Fatalf("Frame: %v", err)
+		}
+	}
+
+	frame()
+	if fired {
+		t.Fatal("handler fired before any click")
+	}
+
+	if !renderer.Click("comment-text-c1") {
+		t.Fatal(`Click("comment-text-c1"): no clickable registered for that id after the first Layout -- div click support missing`)
+	}
+	frame()
+	if !fired {
+		t.Fatal("On's registered handler never fired after a real click on a div with no Attr handler of its own")
+	}
+}
+
+// TestDivWithNoClickHandlerStaysPlain proves a div with no click
+// handler registered at all is never given a Clickable -- Click
+// reports false, matching every other interactive tag's own "nothing
+// registered yet" contract, so the overwhelming majority of plain,
+// non-interactive divs in any real tree pay no cost for this.
+func TestDivWithNoClickHandlerStaysPlain(t *testing.T) {
+	w, err := headless.NewWindow(200, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	node := gox.El("div", []gox.Attr{gox.A("id", "plain")}, gox.Text("just text"))
+
+	var ops op.Ops
+	var router input.Router
+	gtx := layout.Context{
+		Ops:         &ops,
+		Source:      router.Source(),
+		Constraints: layout.Exact(image.Pt(200, 60)),
+	}
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+
+	if renderer.Click("plain") {
+		t.Fatal(`Click("plain") reported true for a div with no click handler, want false`)
 	}
 }
 
