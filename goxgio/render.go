@@ -134,6 +134,15 @@ type Renderer struct {
 	// no public Click-equivalent shortcut of its own).
 	toggleRequests map[string]bool
 
+	// valueRequests tracks ids whose editor should have its text
+	// overwritten the next time Layout renders it -- see SetValue's own
+	// doc comment for why this exists (layoutInput only ever seeds a
+	// widget.Editor's text once, from the node's own "value" attribute,
+	// at first creation; there is no other path for a caller to re-seed
+	// it later, e.g. when a panel with a text input showing a document's
+	// current state is closed and reopened after that state changed).
+	valueRequests map[string]string
+
 	// handlers holds ID-based event handlers registered via On, keyed
 	// by "<id>\x00<event>" (the same flat key shape layoutSelect
 	// already uses for "<select id>\x00<option value>"). See On's own
@@ -164,6 +173,7 @@ func New() *Renderer {
 		selectOpen:     make(map[string]bool),
 		focusRequests:  make(map[string]bool),
 		toggleRequests: make(map[string]bool),
+		valueRequests:  make(map[string]string),
 		handlers:       make(map[string]gox.EventHandler),
 	}
 }
@@ -184,6 +194,33 @@ func (r *Renderer) Toggle(id string) bool {
 	}
 	r.toggleRequests[id] = true
 	return true
+}
+
+// SetValue requests that the text input identified by id (Node.Key if
+// set, else its own "id" attribute) have its displayed text overwritten
+// with value the next time Layout renders it -- the missing re-seed
+// capability layoutInput's own doc comment describes: a widget.Editor
+// is only ever seeded once, from the node's own "value" attribute, at
+// first creation, since Gio's own immediate-mode model has no notion of
+// "this attribute changed since last frame" the way a retained-DOM
+// renderer's own diff would. A caller whose text input shows a live
+// snapshot of some other state (e.g. a document's current margins,
+// re-read fresh each time a panel showing them is reopened) needs an
+// explicit way to push a new value in, since simply rendering a tree
+// with a different "value" attribute a second time has no effect once
+// the underlying widget.Editor already exists.
+//
+// Unlike Focus/Toggle, SetValue does not require the target to already
+// have been laid out at least once: the request is queued regardless,
+// and applied by layoutInput whether it is seeding a brand new editor
+// or re-seeding an existing one, so a caller can call this from the
+// very same handler that first makes a panel visible without hitting
+// Focus's own same-frame limitation (see that method's own doc
+// comment). Because of that, SetValue has no boolean "was already
+// registered" return value the way Focus/Toggle do -- there is nothing
+// to report that a caller couldn't already know.
+func (r *Renderer) SetValue(id, value string) {
+	r.valueRequests[id] = value
 }
 
 // Focus requests that the text input identified by id (Node.Key if
@@ -608,6 +645,10 @@ func (r *Renderer) layoutInput(gtx layout.Context, th *material.Theme, n gox.Nod
 		ed = &widget.Editor{SingleLine: true}
 		ed.SetText(valueOf(n))
 		r.editors[id] = ed
+	}
+	if v, pending := r.valueRequests[id]; pending {
+		delete(r.valueRequests, id)
+		ed.SetText(v)
 	}
 	if r.focusRequests[id] {
 		delete(r.focusRequests, id)

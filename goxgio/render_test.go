@@ -526,6 +526,113 @@ func TestFocusFiresOnChangeWithoutAnyPointerClick(t *testing.T) {
 	}
 }
 
+// TestSetValueSeedsBeforeFirstLayout proves Renderer.SetValue's own
+// central claim over Focus/Toggle: it works even when called before the
+// target has ever been laid out, since a caller wanting to seed a panel's
+// input the moment it becomes visible can't wait for a first Layout call
+// the way Focus/Toggle's own "must already be registered" contract
+// requires.
+func TestSetValueSeedsBeforeFirstLayout(t *testing.T) {
+	w, err := headless.NewWindow(200, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	node := gox.El("input", []gox.Attr{
+		gox.A("type", "text"),
+		gox.A("id", "margin-top"),
+		gox.A("value", "1.0"),
+	})
+
+	renderer.SetValue("margin-top", "1.25")
+
+	var router input.Router
+	var ops op.Ops
+	gtx := layout.Context{
+		Ops:         &ops,
+		Source:      router.Source(),
+		Constraints: layout.Exact(image.Pt(200, 60)),
+	}
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+
+	ed, ok := renderer.editors["margin-top"]
+	if !ok {
+		t.Fatal(`no editor registered for "margin-top" after Layout`)
+	}
+	if got, want := ed.Text(), "1.25"; got != want {
+		t.Fatalf("editor text = %q, want %q (SetValue's own pending request, not the node's own \"value\" attribute)", got, want)
+	}
+}
+
+// TestSetValueReseedsAnExistingEditor proves the other half of
+// SetValue's own contract: re-seeding an editor that already exists
+// (and may already hold different text, real user typing or an earlier
+// seed) overwrites it -- the actual motivating case, a panel with a
+// text input showing a document's own current state that's since
+// changed, closed, and reopened.
+func TestSetValueReseedsAnExistingEditor(t *testing.T) {
+	w, err := headless.NewWindow(200, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	node := gox.El("input", []gox.Attr{
+		gox.A("type", "text"),
+		gox.A("id", "margin-top"),
+		gox.A("value", "1.0"),
+	})
+
+	var router input.Router
+	var ops op.Ops
+	gtx := layout.Context{
+		Ops:         &ops,
+		Source:      router.Source(),
+		Constraints: layout.Exact(image.Pt(200, 60)),
+	}
+	frame := func() {
+		gtx.Reset()
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+		if err := w.Frame(&ops); err != nil {
+			t.Fatalf("Frame: %v", err)
+		}
+	}
+	frame()
+
+	ed := renderer.editors["margin-top"]
+	if got, want := ed.Text(), "1.0"; got != want {
+		t.Fatalf("editor text after first Layout = %q, want %q (seeded from the node's own \"value\" attribute)", got, want)
+	}
+
+	renderer.SetValue("margin-top", "2.5")
+	frame()
+
+	if got, want := ed.Text(), "2.5"; got != want {
+		t.Fatalf("editor text after SetValue = %q, want %q", got, want)
+	}
+
+	// A second Layout with no further SetValue call must not keep
+	// re-applying the same request -- confirms it's consumed once, the
+	// same "deferred and cleared" shape focusRequests/toggleRequests
+	// already take, not a value that would silently fight real typing on
+	// every later frame.
+	ed.SetText("something the user typed")
+	frame()
+	if got, want := ed.Text(), "something the user typed"; got != want {
+		t.Fatalf("editor text after a frame with no new SetValue = %q, want %q (the earlier request should not still be pending)", got, want)
+	}
+}
+
 // TestToggleFiresOnChangeWithoutAnyPointerClick proves Renderer.Toggle
 // actually flips a checkbox and fires its onChange, with no
 // pointer.Event dispatched at all -- widget.Bool, unlike
