@@ -143,6 +143,15 @@ type Renderer struct {
 	// current state is closed and reopened after that state changed).
 	valueRequests map[string]string
 
+	// checkedRequests is valueRequests' own checkbox counterpart -- see
+	// SetChecked's own doc comment. A separate map, not a shared one
+	// keyed the same way valueRequests is, since a checkbox and a text
+	// input can't collide on identity in practice (each tag has its own
+	// widget map already) but keeping the two concerns in two maps
+	// avoids ever needing to encode "this pending request is a bool, not
+	// a string" in a single value's own type.
+	checkedRequests map[string]bool
+
 	// handlers holds ID-based event handlers registered via On, keyed
 	// by "<id>\x00<event>" (the same flat key shape layoutSelect
 	// already uses for "<select id>\x00<option value>"). See On's own
@@ -167,14 +176,15 @@ type Renderer struct {
 // styling.
 func New() *Renderer {
 	return &Renderer{
-		clickables:     make(map[string]*widget.Clickable),
-		checkboxes:     make(map[string]*widget.Bool),
-		editors:        make(map[string]*widget.Editor),
-		selectOpen:     make(map[string]bool),
-		focusRequests:  make(map[string]bool),
-		toggleRequests: make(map[string]bool),
-		valueRequests:  make(map[string]string),
-		handlers:       make(map[string]gox.EventHandler),
+		clickables:      make(map[string]*widget.Clickable),
+		checkboxes:      make(map[string]*widget.Bool),
+		editors:         make(map[string]*widget.Editor),
+		selectOpen:      make(map[string]bool),
+		focusRequests:   make(map[string]bool),
+		toggleRequests:  make(map[string]bool),
+		valueRequests:   make(map[string]string),
+		checkedRequests: make(map[string]bool),
+		handlers:        make(map[string]gox.EventHandler),
 	}
 }
 
@@ -221,6 +231,22 @@ func (r *Renderer) Toggle(id string) bool {
 // to report that a caller couldn't already know.
 func (r *Renderer) SetValue(id, value string) {
 	r.valueRequests[id] = value
+}
+
+// SetChecked is SetValue's own checkbox counterpart: requests that the
+// checkbox identified by id (Node.Key if set, else its own "id"
+// attribute) have its Value overwritten with checked the next time
+// Layout renders it -- layoutInput's checkbox branch has the identical
+// seed-once-at-creation limitation SetValue's own doc comment describes
+// for a text input's widget.Editor, just for widget.Bool.Value instead
+// of Editor text, and Toggle (unlike this) only ever flips whatever the
+// current value already is, which is no help when a caller needs to
+// set a *specific* value read from elsewhere (e.g. a settings panel
+// reopened after its underlying config changed). Same "works even
+// before the target has ever been laid out" contract as SetValue, for
+// the identical reason.
+func (r *Renderer) SetChecked(id string, checked bool) {
+	r.checkedRequests[id] = checked
 }
 
 // Focus requests that the text input identified by id (Node.Key if
@@ -621,6 +647,10 @@ func (r *Renderer) layoutInput(gtx layout.Context, th *material.Theme, n gox.Nod
 		if !ok {
 			cb = &widget.Bool{Value: checkedOf(n)}
 			r.checkboxes[id] = cb
+		}
+		if checked, pending := r.checkedRequests[id]; pending {
+			delete(r.checkedRequests, id)
+			cb.Value = checked
 		}
 		changed := cb.Update(gtx)
 		if r.toggleRequests[id] {

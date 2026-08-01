@@ -692,6 +692,110 @@ func TestToggleFiresOnChangeWithoutAnyPointerClick(t *testing.T) {
 	}
 }
 
+// TestSetCheckedSeedsBeforeFirstLayoutAndDoesNotFireOnChange proves
+// Renderer.SetChecked's own central claim, the same one
+// TestSetValueSeedsBeforeFirstLayout establishes for SetValue: it
+// works even when called before the target has ever been laid out,
+// and it does not fire onChange (setting a value programmatically from
+// outside isn't a user interaction, the same posture SetValue already
+// takes for a text input).
+func TestSetCheckedSeedsBeforeFirstLayoutAndDoesNotFireOnChange(t *testing.T) {
+	w, err := headless.NewWindow(200, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	var fired bool
+	node := gox.El("input", []gox.Attr{
+		gox.A("type", "checkbox"),
+		gox.A("id", "dark-theme"),
+		gox.On("change", func(gox.Event) { fired = true }),
+	})
+
+	renderer.SetChecked("dark-theme", true)
+
+	var router input.Router
+	var ops op.Ops
+	gtx := layout.Context{
+		Ops:         &ops,
+		Source:      router.Source(),
+		Constraints: layout.Exact(image.Pt(200, 60)),
+	}
+	renderer.Layout(gtx, th, node)
+	router.Frame(gtx.Ops)
+	if err := w.Frame(&ops); err != nil {
+		t.Fatalf("Frame: %v", err)
+	}
+
+	cb, ok := renderer.checkboxes["dark-theme"]
+	if !ok {
+		t.Fatal(`no checkbox registered for "dark-theme" after Layout`)
+	}
+	if !cb.Value {
+		t.Fatal("checkbox Value = false, want true (SetChecked's own pending request, not the node's own default unchecked state)")
+	}
+	if fired {
+		t.Fatal("onChange fired from SetChecked -- setting a value programmatically isn't a user interaction")
+	}
+}
+
+// TestSetCheckedReseedsAnExistingCheckbox proves the other half of
+// SetChecked's own contract, mirroring TestSetValueReseedsAnExistingEditor:
+// re-seeding a checkbox that already exists overwrites its real current
+// Value, and a later frame with no new SetChecked call leaves it alone
+// (the request is consumed once, not re-applied every frame).
+func TestSetCheckedReseedsAnExistingCheckbox(t *testing.T) {
+	w, err := headless.NewWindow(200, 60)
+	if err != nil {
+		t.Fatalf("headless.NewWindow: %v", err)
+	}
+	defer w.Release()
+
+	th := material.NewTheme()
+	renderer := New()
+	node := gox.El("input", []gox.Attr{
+		gox.A("type", "checkbox"),
+		gox.A("id", "dark-theme"),
+	})
+
+	var router input.Router
+	var ops op.Ops
+	gtx := layout.Context{
+		Ops:         &ops,
+		Source:      router.Source(),
+		Constraints: layout.Exact(image.Pt(200, 60)),
+	}
+	frame := func() {
+		gtx.Reset()
+		renderer.Layout(gtx, th, node)
+		router.Frame(gtx.Ops)
+		if err := w.Frame(&ops); err != nil {
+			t.Fatalf("Frame: %v", err)
+		}
+	}
+	frame()
+
+	cb := renderer.checkboxes["dark-theme"]
+	if cb.Value {
+		t.Fatal("checkbox Value = true after first Layout, want false (no \"checked\" attribute on the node)")
+	}
+
+	renderer.SetChecked("dark-theme", true)
+	frame()
+	if !cb.Value {
+		t.Fatal("checkbox Value = false after SetChecked(true), want true")
+	}
+
+	cb.Value = false // simulate a real click unchecking it
+	frame()
+	if cb.Value {
+		t.Fatal("checkbox Value = true after a frame with no new SetChecked call, want false (the earlier request should not still be pending)")
+	}
+}
+
 // TestSpanWithElementChildrenLaysOutThoseChildren covers a real bug
 // found while wiring OnDesign's own toolbar.gox on native: a <span>
 // (or <p>) whose children include a real element, not just text --
