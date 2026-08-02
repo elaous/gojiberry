@@ -185,6 +185,15 @@ type Renderer struct {
 	// (the default) applies no styling at all, exactly matching this
 	// type's behavior before Styles existed.
 	Styles map[string]ClassStyle
+
+	// IconFont, if set, lets a text-only "span"/"p" carrying its own
+	// Class translate its literal text (an icon name, e.g.
+	// iconSpan's own "format_bold") into a single glyph painted with
+	// Typeface instead of painting that name as literal prose -- see
+	// IconFont's own doc comment for why this exists and how it
+	// degrades. Nil (the default) applies no translation at all,
+	// exactly matching this type's behavior before IconFont existed.
+	IconFont *IconFont
 }
 
 // New constructs a Renderer with no widget state and no class styling;
@@ -374,7 +383,15 @@ func (r *Renderer) Layout(gtx layout.Context, th *material.Theme, n gox.Node) la
 				return r.layoutChildren(gtx, th, n.Children, axisOf(n), style.Alignment)
 			}
 		} else {
-			content = material.Label(th, th.TextSize, textOf(n)).Layout
+			text := textOf(n)
+			lbl := material.Label(th, th.TextSize, text)
+			if r.IconFont != nil && hasClass(n, r.IconFont.Class) {
+				if glyph, ok := r.IconFont.Translate(text); ok {
+					lbl = material.Label(th, th.TextSize, string(glyph))
+					lbl.Font.Typeface = r.IconFont.Typeface
+				}
+			}
+			content = lbl.Layout
 		}
 	case "button":
 		content = func(gtx layout.Context) layout.Dimensions {
@@ -407,6 +424,17 @@ func classesOf(n gox.Node) []string {
 		}
 	}
 	return nil
+}
+
+// hasClass reports whether n's own "class" attribute contains class as
+// one of its space-separated words.
+func hasClass(n gox.Node, class string) bool {
+	for _, c := range classesOf(n) {
+		if c == class {
+			return true
+		}
+	}
+	return false
 }
 
 // styleOf merges every class in n's own "class" attribute against
