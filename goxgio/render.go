@@ -29,17 +29,32 @@
 //     other.
 //
 // Only a minimal tag set is understood -- div, span, p, button, input
-// (type=text and type=checkbox), select/option, and text/fragment
-// nodes -- since CSS classes and inline styles (which is how every
-// other tag's look is customized) have no Gio equivalent of their own.
-// div reads one plain layout hint, the data-axis attribute
+// (type=text and type=checkbox), textarea, select/option, and
+// text/fragment nodes -- since CSS classes and inline styles (which is
+// how every other tag's look is customized) have no Gio equivalent of
+// their own. div reads one plain layout hint, the data-axis attribute
 // ("horizontal" or the default "vertical"), since Gio's layout.Flex
 // needs an axis and there's no CSS to carry it on a native target; any
 // other attribute is ignored except class, which Renderer.Styles (see
-// ClassStyle) can map to real Gio painting/layout. Growing beyond this
-// tag set (Textarea, Modal, ...) means adding to typeset below, the
-// same way domrt or gox.Render would grow to support a new HTML
-// element.
+// ClassStyle) can map to real Gio painting/layout, and a real click
+// handler (its own Attr, or one registered via Renderer.On), which
+// wraps its content in a persisted widget.Clickable the same way
+// button already does -- the closest native equivalent to a real DOM
+// div with its own addEventListener("click", ...) (e.g. comment.go's
+// own #comment-item-<id> text div, task #139's sidebar->canvas
+// click-to-jump), rather than forcing every clickable region on a
+// native target to be a real <button>. A div with no click handler at
+// all takes the identical zero-cost path it always did (no Clickable
+// ever created for it), so this adds no overhead to the overwhelming
+// majority of divs in any real tree. textarea shares
+// input's own layoutInput plumbing (persisted widget.Editor, Focus/
+// SetValue/change-event support) with SingleLine forced false instead
+// of true -- the only real difference a plain multi-line comment body
+// needs; a real HTML textarea's *rows*/*cols* sizing hint has no Gio
+// equivalent and is ignored, same as every other unmapped attribute
+// here. Growing beyond this tag set (Modal, ...) means adding to
+// typeset below, the same way domrt or gox.Render would grow to
+// support a new HTML element.
 //
 // Two ways to wire interactivity are supported, because real gox
 // producers use both: a node's own Attr handler (gox.On("click", h),
@@ -60,7 +75,9 @@ import (
 	"image/color"
 	"strings"
 
+	"gioui.org/io/event"
 	"gioui.org/io/key"
+	"gioui.org/io/semantic"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -134,6 +151,24 @@ type Renderer struct {
 	// no public Click-equivalent shortcut of its own).
 	toggleRequests map[string]bool
 
+	// valueRequests tracks ids whose editor should have its text
+	// overwritten the next time Layout renders it -- see SetValue's own
+	// doc comment for why this exists (layoutInput only ever seeds a
+	// widget.Editor's text once, from the node's own "value" attribute,
+	// at first creation; there is no other path for a caller to re-seed
+	// it later, e.g. when a panel with a text input showing a document's
+	// current state is closed and reopened after that state changed).
+	valueRequests map[string]string
+
+	// checkedRequests is valueRequests' own checkbox counterpart -- see
+	// SetChecked's own doc comment. A separate map, not a shared one
+	// keyed the same way valueRequests is, since a checkbox and a text
+	// input can't collide on identity in practice (each tag has its own
+	// widget map already) but keeping the two concerns in two maps
+	// avoids ever needing to encode "this pending request is a bool, not
+	// a string" in a single value's own type.
+	checkedRequests map[string]bool
+
 	// handlers holds ID-based event handlers registered via On, keyed
 	// by "<id>\x00<event>" (the same flat key shape layoutSelect
 	// already uses for "<select id>\x00<option value>"). See On's own
@@ -150,6 +185,15 @@ type Renderer struct {
 	// (the default) applies no styling at all, exactly matching this
 	// type's behavior before Styles existed.
 	Styles map[string]ClassStyle
+
+	// IconFont, if set, lets a text-only "span"/"p" carrying its own
+	// Class translate its literal text (an icon name, e.g.
+	// iconSpan's own "format_bold") into a single glyph painted with
+	// Typeface instead of painting that name as literal prose -- see
+	// IconFont's own doc comment for why this exists and how it
+	// degrades. Nil (the default) applies no translation at all,
+	// exactly matching this type's behavior before IconFont existed.
+	IconFont *IconFont
 }
 
 // New constructs a Renderer with no widget state and no class styling;
@@ -158,13 +202,15 @@ type Renderer struct {
 // styling.
 func New() *Renderer {
 	return &Renderer{
-		clickables:     make(map[string]*widget.Clickable),
-		checkboxes:     make(map[string]*widget.Bool),
-		editors:        make(map[string]*widget.Editor),
-		selectOpen:     make(map[string]bool),
-		focusRequests:  make(map[string]bool),
-		toggleRequests: make(map[string]bool),
-		handlers:       make(map[string]gox.EventHandler),
+		clickables:      make(map[string]*widget.Clickable),
+		checkboxes:      make(map[string]*widget.Bool),
+		editors:         make(map[string]*widget.Editor),
+		selectOpen:      make(map[string]bool),
+		focusRequests:   make(map[string]bool),
+		toggleRequests:  make(map[string]bool),
+		valueRequests:   make(map[string]string),
+		checkedRequests: make(map[string]bool),
+		handlers:        make(map[string]gox.EventHandler),
 	}
 }
 
@@ -186,6 +232,49 @@ func (r *Renderer) Toggle(id string) bool {
 	return true
 }
 
+// SetValue requests that the text input identified by id (Node.Key if
+// set, else its own "id" attribute) have its displayed text overwritten
+// with value the next time Layout renders it -- the missing re-seed
+// capability layoutInput's own doc comment describes: a widget.Editor
+// is only ever seeded once, from the node's own "value" attribute, at
+// first creation, since Gio's own immediate-mode model has no notion of
+// "this attribute changed since last frame" the way a retained-DOM
+// renderer's own diff would. A caller whose text input shows a live
+// snapshot of some other state (e.g. a document's current margins,
+// re-read fresh each time a panel showing them is reopened) needs an
+// explicit way to push a new value in, since simply rendering a tree
+// with a different "value" attribute a second time has no effect once
+// the underlying widget.Editor already exists.
+//
+// Unlike Focus/Toggle, SetValue does not require the target to already
+// have been laid out at least once: the request is queued regardless,
+// and applied by layoutInput whether it is seeding a brand new editor
+// or re-seeding an existing one, so a caller can call this from the
+// very same handler that first makes a panel visible without hitting
+// Focus's own same-frame limitation (see that method's own doc
+// comment). Because of that, SetValue has no boolean "was already
+// registered" return value the way Focus/Toggle do -- there is nothing
+// to report that a caller couldn't already know.
+func (r *Renderer) SetValue(id, value string) {
+	r.valueRequests[id] = value
+}
+
+// SetChecked is SetValue's own checkbox counterpart: requests that the
+// checkbox identified by id (Node.Key if set, else its own "id"
+// attribute) have its Value overwritten with checked the next time
+// Layout renders it -- layoutInput's checkbox branch has the identical
+// seed-once-at-creation limitation SetValue's own doc comment describes
+// for a text input's widget.Editor, just for widget.Bool.Value instead
+// of Editor text, and Toggle (unlike this) only ever flips whatever the
+// current value already is, which is no help when a caller needs to
+// set a *specific* value read from elsewhere (e.g. a settings panel
+// reopened after its underlying config changed). Same "works even
+// before the target has ever been laid out" contract as SetValue, for
+// the identical reason.
+func (r *Renderer) SetChecked(id string, checked bool) {
+	r.checkedRequests[id] = checked
+}
+
 // Focus requests that the text input identified by id (Node.Key if
 // set, else its own "id" attribute) receive real Gio input focus the
 // next time Layout renders it -- the programmatic-focus analogue of
@@ -205,6 +294,27 @@ func (r *Renderer) Focus(id string) bool {
 	}
 	r.focusRequests[id] = true
 	return true
+}
+
+// EditorTag returns the event.Tag identifying the input/textarea
+// element with the given id -- the same *widget.Editor Layout already
+// uses internally to register that element's own focus/key handling
+// with Gio -- so a caller can register its own key.Filter{Focus: tag,
+// ...} to observe named key.Event while that element holds focus
+// (Escape to close a panel, Enter to submit, Alt+letter shortcuts,
+// ...), the identical capability Focus above gives a caller over
+// *sending* focus, just for *observing* keys once it's there. Reports
+// whether an editor with that identity has been laid out at least
+// once, the same "nothing registered yet" contract Focus/Click already
+// establish -- a caller must therefore tolerate ok=false on the very
+// frame the element's own container first becomes visible, trying
+// again on a later frame once Layout has actually run for it once.
+func (r *Renderer) EditorTag(id string) (event.Tag, bool) {
+	ed, ok := r.editors[id]
+	if !ok {
+		return nil, false
+	}
+	return ed, true
 }
 
 // On registers fn to fire when event ("click" or "change") occurs on
@@ -255,7 +365,7 @@ func (r *Renderer) Layout(gtx layout.Context, th *material.Theme, n gox.Node) la
 	switch n.Tag {
 	case "div":
 		content = func(gtx layout.Context) layout.Dimensions {
-			return r.layoutChildren(gtx, th, n.Children, axisOf(n), style.Alignment)
+			return r.layoutDivContent(gtx, th, n, style.Alignment)
 		}
 	case "span", "p":
 		if hasElementChild(n) {
@@ -273,13 +383,21 @@ func (r *Renderer) Layout(gtx layout.Context, th *material.Theme, n gox.Node) la
 				return r.layoutChildren(gtx, th, n.Children, axisOf(n), style.Alignment)
 			}
 		} else {
-			content = material.Label(th, th.TextSize, textOf(n)).Layout
+			text := textOf(n)
+			lbl := material.Label(th, th.TextSize, text)
+			if r.IconFont != nil && hasClass(n, r.IconFont.Class) {
+				if glyph, ok := r.IconFont.Translate(text); ok {
+					lbl = material.Label(th, th.TextSize, string(glyph))
+					lbl.Font.Typeface = r.IconFont.Typeface
+				}
+			}
+			content = lbl.Layout
 		}
 	case "button":
 		content = func(gtx layout.Context) layout.Dimensions {
 			return r.layoutButton(gtx, th, n)
 		}
-	case "input":
+	case "input", "textarea":
 		content = func(gtx layout.Context) layout.Dimensions {
 			return r.layoutInput(gtx, th, n)
 		}
@@ -306,6 +424,17 @@ func classesOf(n gox.Node) []string {
 		}
 	}
 	return nil
+}
+
+// hasClass reports whether n's own "class" attribute contains class as
+// one of its space-separated words.
+func hasClass(n gox.Node, class string) bool {
+	for _, c := range classesOf(n) {
+		if c == class {
+			return true
+		}
+	}
+	return false
 }
 
 // styleOf merges every class in n's own "class" attribute against
@@ -478,6 +607,95 @@ func (r *Renderer) Click(id string) bool {
 	return true
 }
 
+// layoutDivContent lays out a div's own children (the plain
+// layoutChildren path every div always took), wrapped in a persisted
+// widget.Clickable -- consumed the same drain-then-paint way
+// layoutButton's own Clickable already is -- when the div carries a
+// real click handler, so a structural div can be a genuine click
+// target too, not just button (see this file's own package doc
+// comment for why: a real DOM div with its own addEventListener is a
+// common shape real editor/ui/*.gox components use, e.g. comment.go's
+// own #comment-item-<id> text div). A div with no click handler at all
+// returns exactly what layoutChildren always did, with no Clickable
+// ever created for it.
+func (r *Renderer) layoutDivContent(gtx layout.Context, th *material.Theme, n gox.Node, alignment layout.Alignment) layout.Dimensions {
+	children := func(gtx layout.Context) layout.Dimensions {
+		return r.layoutChildren(gtx, th, n.Children, axisOf(n), alignment)
+	}
+	id := n.Key
+	if id == "" {
+		id = idOf(n)
+	}
+	handler := clickHandler(n)
+	if handler == nil {
+		handler = r.handlerFor(id, "click")
+	}
+	if handler == nil {
+		return children(gtx)
+	}
+	clk, ok := r.clickables[id]
+	if !ok {
+		clk = new(widget.Clickable)
+		r.clickables[id] = clk
+	}
+	for clk.Clicked(gtx) {
+		handler(gox.NewEvent("click", nil, false, nil, nil))
+	}
+	return clk.Layout(gtx, children)
+}
+
+// buttonInset mirrors material.Button's own hardcoded ButtonStyle.Inset
+// (gioui.org/widget/material's own button.go) -- layoutButton's own
+// icon-content path (below) builds on material.ButtonLayoutStyle
+// instead of material.Button (ButtonLayoutStyle has no padding of its
+// own, just chrome+click), so it re-applies the identical padding by
+// hand to keep an icon button's own visual size/spacing matching a
+// plain text button's.
+var buttonInset = layout.Inset{Top: 10, Bottom: 10, Left: 12, Right: 12}
+
+// accessibleNameOf returns n's "aria-label" attribute, falling back to
+// "title" -- the same accessible-name precedence order
+// editor/ui/toolbar.gox's own iconBtn/iconBtnNode doc comments already
+// establish for the web build ("title alone is an inconsistently-
+// honored accessible-name source across screen readers"): a real
+// screen reader's own accessible name for an icon-only button, whose
+// real visible content carries no useful text of its own for
+// textOf/material.Label to expose.
+func accessibleNameOf(n gox.Node) string {
+	var title string
+	for _, a := range n.Attrs {
+		switch a.Name {
+		case "aria-label":
+			return a.Value
+		case "title":
+			title = a.Value
+		}
+	}
+	return title
+}
+
+// layoutButton renders n as a real material.Button -- textOf(n)'s own
+// direct-text-children concatenation is enough for a plain text button
+// (btn(), editor/ui/toolbar.gox), but silently drops any real element
+// child the same way the "span"/"p" cases' own hasElementChild check
+// already guards against elsewhere in this file: an icon button
+// (iconBtn(id, iconName, title, label), toolbar.gox) is
+// <button><span class="material-symbols-outlined">iconName</span>
+// label</button> -- an icon span child plus (usually empty) label
+// text, so textOf(n) alone silently painted nothing for the icon at
+// all, and exposed no real accessible name either (an icon-only
+// button's own label text is "", so material.Button's Text is "" too,
+// and Gio's own semantic.LabelOp((""))  carries nothing a screen
+// reader would announce). Fixed the same way this file already fixes
+// the analogous span/p gap: when n has a real element child, render it
+// for real via layoutChildren (so the icon actually paints) inside
+// material.ButtonLayoutStyle's own chrome/click (not material.Button,
+// which only ever paints its own Text field) -- plus a real
+// semantic.DescriptionOp from n's own title/aria-label (accessibleNameOf),
+// mirroring material.IconButtonStyle's own Description field
+// (gioui.org/widget/material's own button.go), since Description, not
+// Label, is the real Gio convention for a control whose accessible name
+// comes from something other than its own painted text.
 func (r *Renderer) layoutButton(gtx layout.Context, th *material.Theme, n gox.Node) layout.Dimensions {
 	id := n.Key
 	if id == "" {
@@ -497,7 +715,21 @@ func (r *Renderer) layoutButton(gtx layout.Context, th *material.Theme, n gox.No
 			handler(gox.NewEvent("click", nil, false, nil, nil))
 		}
 	}
-	return material.Button(th, clk, textOf(n)).Layout(gtx)
+	if !hasElementChild(n) {
+		return material.Button(th, clk, textOf(n)).Layout(gtx)
+	}
+	return material.ButtonLayoutStyle{
+		Background:   th.Palette.ContrastBg,
+		CornerRadius: 4,
+		Button:       clk,
+	}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return buttonInset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			if name := accessibleNameOf(n); name != "" {
+				semantic.DescriptionOp(name).Add(gtx.Ops)
+			}
+			return r.layoutChildren(gtx, th, n.Children, layout.Horizontal, layout.Middle)
+		})
+	})
 }
 
 // inputType returns n's "type" attribute, defaulting to "text" the same
@@ -563,8 +795,12 @@ func changeHandler(n gox.Node) gox.EventHandler {
 // layoutInput lays out type=checkbox as a material.CheckBox (backed by a
 // persisted widget.Bool, the same persist-across-frames need and
 // map[string]*T-keyed-by-identity solution layoutButton already uses for
-// widget.Clickable) and every other type as a single-line
-// material.Editor (backed by a persisted widget.Editor). Both widgets'
+// widget.Clickable) and every other tag/type (n.Tag == "textarea", or
+// n.Tag == "input" with any type other than checkbox) as a
+// material.Editor (backed by a persisted widget.Editor) -- single-line
+// for input, multi-line for textarea, the one real behavioral
+// difference a plain multi-line comment body needs (see this file's
+// own package doc comment). Both widgets'
 // own Update method is called directly first, to detect a change and
 // fire onChange, before the material.*Style.Layout call that paints
 // it -- that call drains the same widget's Update internally too, but
@@ -584,6 +820,10 @@ func (r *Renderer) layoutInput(gtx layout.Context, th *material.Theme, n gox.Nod
 		if !ok {
 			cb = &widget.Bool{Value: checkedOf(n)}
 			r.checkboxes[id] = cb
+		}
+		if checked, pending := r.checkedRequests[id]; pending {
+			delete(r.checkedRequests, id)
+			cb.Value = checked
 		}
 		changed := cb.Update(gtx)
 		if r.toggleRequests[id] {
@@ -605,9 +845,13 @@ func (r *Renderer) layoutInput(gtx layout.Context, th *material.Theme, n gox.Nod
 
 	ed, ok := r.editors[id]
 	if !ok {
-		ed = &widget.Editor{SingleLine: true}
+		ed = &widget.Editor{SingleLine: n.Tag != "textarea"}
 		ed.SetText(valueOf(n))
 		r.editors[id] = ed
+	}
+	if v, pending := r.valueRequests[id]; pending {
+		delete(r.valueRequests, id)
+		ed.SetText(v)
 	}
 	if r.focusRequests[id] {
 		delete(r.focusRequests, id)
