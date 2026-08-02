@@ -1,7 +1,7 @@
 # gojiberry / gox
 
 [![CI](https://github.com/elaous/gojiberry/actions/workflows/ci.yml/badge.svg)](https://github.com/elaous/gojiberry/actions/workflows/ci.yml)
-![coverage](https://raw.githubusercontent.com/elaous/gojiberry/main/.github/badges/coverage.svg)
+![coverage](https://img.shields.io/badge/coverage-82.4%25-97CA00)
 
 A JSX-for-Go: write `<div>...</div>` tags directly in Go source as an
 expression, anywhere a Go expression is legal, compiling down to plain
@@ -1785,20 +1785,28 @@ test suite to profile this way; their own coverage is whatever their
 example's headless-browser verification exercises, which this doesn't
 measure.
 
-`make coverage-badge` renders this README's own coverage badge
-(top of this file) from that same profile via
+`make coverage-badge` rewrites this README's own coverage badge (top
+of this file) from that same profile via
 `.github/scripts/gen-coverage-badge.sh` -- a small, dependency-free
 shell script that reads `go tool cover -func`'s own real "total:" line
-and draws a shields.io-"flat"-style SVG by hand (two colored `<rect>`s
-plus centered `<text>`, color thresholds matching shields.io's own
-convention for a percentage badge), rather than routing through a
-third-party badge/coverage service: self-hosted the same way the CI
-badge just above it already is, no API token or external account
-needed. CI (`ci.yml`) regenerates and commits `.github/badges/
-coverage.svg` on every push to `main` -- not on pull-request builds or
-feature-branch pushes, since only `main`'s own badge is the one this
-README's raw-file link actually points at -- so the number shown here
-can't silently drift from what `make coverage` itself would print.
+and rewrites the badge line to a static `img.shields.io/badge/...` URL
+(color thresholds matching shields.io's own convention for a
+percentage badge), no API token or external account needed. This repo
+is private, so a self-hosted SVG served via `raw.githubusercontent.com`
+(what this used to be, and what the CI badge just above it might look
+like it implies) doesn't work: that domain only renders a private
+repo's file for a live, signed-in github.com session, 404ing for
+anyone without one -- a stale tab, a different markdown viewer, or
+just enough time for GitHub's own short-lived signing token to expire.
+`img.shields.io` renders unauthenticated regardless of repo
+visibility (as does the CI badge, which is a first-party `github.com`
+endpoint GitHub explicitly designed to be embeddable either way), so
+this only needed the *text* CI computes, not a file it serves. CI
+(`ci.yml`) rewrites and commits this line on every push to `main` --
+not on pull-request builds or feature-branch pushes, since only
+`main`'s own README is what anyone actually sees -- so the number
+shown here can't silently drift from what `make coverage` itself would
+print.
 
 `make bench` runs every Go benchmark in the module: `buffer`'s own
 `GapBuffer`-vs-naive-slice benchmarks (fast, native) and
