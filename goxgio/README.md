@@ -79,6 +79,17 @@ deferred-then-consumed shape `Click`'s own accumulated click state and
 `selectOpen` already take) is checked at the top of `layoutInput`'s
 text-field branch and cleared once acted on.
 
+`Renderer.EditorTag(id)` returns the `event.Tag` identifying an
+input/textarea's own `*widget.Editor` -- the same one `Layout` already
+uses internally -- so a caller can register its own
+`key.Filter{Focus: tag, ...}` to observe named `key.Event`s (Escape,
+Alt+letter shortcuts, ...) while that element holds focus, the
+observing counterpart to `Focus`'s own sending. Added for OnDesign
+native's own Find panel keyboard shortcuts (task #107, Phase 57): its
+own `HandleFindPanelKeys` needs to know when Escape/Enter/Alt+C/W/R
+land on a specific input, something no existing `Renderer` method
+exposed.
+
 `Renderer.Toggle(id)` flips a checkbox's `Value` on the next `Layout`
 call, the same programmatic-interaction shortcut `Click` gives a
 `widget.Clickable` -- needed because `widget.Bool` has no public
