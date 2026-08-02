@@ -29,6 +29,11 @@ examples/gio-counter-demo/*.syso
 coverage.*
 *.coverprofile
 profile.cov
+# ...except the real, committed coverage badge Makefile's own
+# coverage-badge target renders -- coverage.* above (no leading slash,
+# so it matches at any depth) would otherwise silently exclude this
+# exact file too.
+!.github/badges/coverage.svg
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
