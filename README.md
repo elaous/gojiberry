@@ -1,6 +1,7 @@
 # gojiberry / gox
 
 [![CI](https://github.com/elaous/gojiberry/actions/workflows/ci.yml/badge.svg)](https://github.com/elaous/gojiberry/actions/workflows/ci.yml)
+![coverage](https://raw.githubusercontent.com/elaous/gojiberry/main/.github/badges/coverage.svg)
 
 A JSX-for-Go: write `<div>...</div>` tags directly in Go source as an
 expression, anywhere a Go expression is legal, compiling down to plain
@@ -1783,6 +1784,21 @@ them). `js`/`wasm`-only packages (`domrt` and friends) have no native
 test suite to profile this way; their own coverage is whatever their
 example's headless-browser verification exercises, which this doesn't
 measure.
+
+`make coverage-badge` renders this README's own coverage badge
+(top of this file) from that same profile via
+`.github/scripts/gen-coverage-badge.sh` -- a small, dependency-free
+shell script that reads `go tool cover -func`'s own real "total:" line
+and draws a shields.io-"flat"-style SVG by hand (two colored `<rect>`s
+plus centered `<text>`, color thresholds matching shields.io's own
+convention for a percentage badge), rather than routing through a
+third-party badge/coverage service: self-hosted the same way the CI
+badge just above it already is, no API token or external account
+needed. CI (`ci.yml`) regenerates and commits `.github/badges/
+coverage.svg` on every push to `main` -- not on pull-request builds or
+feature-branch pushes, since only `main`'s own badge is the one this
+README's raw-file link actually points at -- so the number shown here
+can't silently drift from what `make coverage` itself would print.
 
 `make bench` runs every Go benchmark in the module: `buffer`'s own
 `GapBuffer`-vs-naive-slice benchmarks (fast, native) and
