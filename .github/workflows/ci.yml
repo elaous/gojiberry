@@ -21,6 +21,12 @@ jobs:
   fast-checks:
     name: Build, vet, gofmt, test, lint (native + wasm)
     runs-on: ubuntu-latest
+    # contents: write only matters for the "Update coverage badge" step
+    # below (git commit + push to main) -- every other step here only
+    # ever reads the checkout, the same read-only default this job used
+    # before that step existed.
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,6 +56,29 @@ jobs:
 
       - name: make wasm-lint
         run: make wasm-lint
+
+      # Regenerates README.md's own coverage badge from this exact
+      # run's own `make test` coverage profile and commits it back --
+      # gated to pushes on main specifically (not PRs, not feature
+      # branches) since main's own committed badge.svg is the only copy
+      # the README's raw-file link actually serves; a PR/branch build
+      # still proves the generator itself works (make coverage-badge
+      # runs, just isn't committed) via the exit code of this step.
+      - name: make coverage-badge
+        run: make coverage-badge
+
+      - name: Commit updated coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          if git diff --quiet -- .github/badges/coverage.svg; then
+            echo "coverage badge unchanged, nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/badges/coverage.svg
+          git commit -m "ci: update coverage badge [skip ci]"
+          git push
 
   grammar-test:
     name: vscode-gox grammar suite
