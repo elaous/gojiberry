@@ -75,6 +75,7 @@ import (
 	"image/color"
 	"strings"
 
+	"gioui.org/io/event"
 	"gioui.org/io/key"
 	"gioui.org/io/semantic"
 	"gioui.org/layout"
@@ -284,6 +285,27 @@ func (r *Renderer) Focus(id string) bool {
 	}
 	r.focusRequests[id] = true
 	return true
+}
+
+// EditorTag returns the event.Tag identifying the input/textarea
+// element with the given id -- the same *widget.Editor Layout already
+// uses internally to register that element's own focus/key handling
+// with Gio -- so a caller can register its own key.Filter{Focus: tag,
+// ...} to observe named key.Event while that element holds focus
+// (Escape to close a panel, Enter to submit, Alt+letter shortcuts,
+// ...), the identical capability Focus above gives a caller over
+// *sending* focus, just for *observing* keys once it's there. Reports
+// whether an editor with that identity has been laid out at least
+// once, the same "nothing registered yet" contract Focus/Click already
+// establish -- a caller must therefore tolerate ok=false on the very
+// frame the element's own container first becomes visible, trying
+// again on a later frame once Layout has actually run for it once.
+func (r *Renderer) EditorTag(id string) (event.Tag, bool) {
+	ed, ok := r.editors[id]
+	if !ok {
+		return nil, false
+	}
+	return ed, true
 }
 
 // On registers fn to fire when event ("click" or "change") occurs on
