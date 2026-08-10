@@ -84,6 +84,11 @@ type Server struct {
 	// call; production always uses fetchGoogleFontsAPI (set by
 	// NewServer).
 	fetchGoogleFonts func(apiKey string) ([]googleFont, error)
+	// fetchGoogleFontFiles is handleLocalDownload's own swappable
+	// network call (download.go), the same testing shape
+	// fetchGoogleFonts above already establishes; production always
+	// uses fetchGoogleFontFilesAPI (set by NewServer).
+	fetchGoogleFontFiles func(family string) ([]googleFontFile, error)
 
 	mu            sync.Mutex
 	googleCache   []googleFont
@@ -101,7 +106,7 @@ func NewServer(cfg Config) *Server {
 	if err := repo.Scan(); err != nil {
 		fmt.Fprintf(os.Stderr, "fontserver: initial scan of %s: %v\n", cfg.FontsDir, err)
 	}
-	return &Server{cfg: cfg, repo: repo, fetchGoogleFonts: fetchGoogleFontsAPI}
+	return &Server{cfg: cfg, repo: repo, fetchGoogleFonts: fetchGoogleFontsAPI, fetchGoogleFontFiles: fetchGoogleFontFilesAPI}
 }
 
 // Handler returns the HTTP routes:
@@ -112,6 +117,7 @@ func NewServer(cfg Config) *Server {
 //	GET  /local/files/{path}         -- the raw bytes of one scanned font file
 //	GET  /local/symbols?family={name} -- a locally scanned family's own character repertoire (cmap.go's sfntCmapRanges), as JSON rune ranges
 //	GET  /google/fonts               -- the cached Google Fonts catalog (empty, no error, if no API key is configured)
+//	POST /local/download?family={name} -- fetches a Google Fonts family's own TTF files (download.go) into the local directory and re-scans, so it's servable from /local/* like any other locally-hosted font from then on. Needs no GoogleAPIKey (unlike /google/fonts, this doesn't use the webfonts API at all).
 //
 // Every response carries permissive CORS headers, the same reasoning
 // as syncserver.Handler: this server's whole point is being reachable
@@ -124,6 +130,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/local/files/", s.handleLocalFile)
 	mux.HandleFunc("/local/symbols", s.handleLocalSymbols)
 	mux.HandleFunc("/google/fonts", s.handleGoogleFonts)
+	mux.HandleFunc("/local/download", s.handleLocalDownload)
 	return corsMiddleware(mux)
 }
 
