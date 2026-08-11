@@ -1747,6 +1747,10 @@ a line with the opening backtick).
 
 ## Development
 
+See [FOFOCA.md](FOFOCA.md) for informal running notes -- quirks and
+near-misses that don't fit in this README or the generated `docs/*.txt`
+API reference.
+
 The root `Makefile` wraps the repo-wide checks used throughout this
 README: `make check` regenerates every `*.gox.go` and runs
 `gofmt`/`vet`/`test` for both native and `GOOS=js GOARCH=wasm`, plus
