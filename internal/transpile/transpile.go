@@ -454,10 +454,6 @@ func (p *parser) parseChildren(chunk []rune, pos int, tagName string) ([]childNo
 		}
 	}
 	for pos < n {
-		if end, ok := skipStringLiteral(chunk, pos); ok {
-			pos = end
-			continue
-		}
 		c := chunk[pos]
 		if c == '<' {
 			if pos+1 < n && chunk[pos+1] == '/' {
