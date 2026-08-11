@@ -19,15 +19,23 @@ type MouseEvent struct {
 	Value                              js.Value
 	X, Y                               float64
 	Button                             int
+	Detail                             int
 	CtrlKey, ShiftKey, AltKey, MetaKey bool
 }
 
+// Detail is the DOM's own UIEvent.detail: for mousedown/mouseup/click
+// it's the browser's own click count (1 = single, 2 = double, 3 =
+// triple, ...), already computed using the OS/browser's own multi-
+// click timing and movement thresholds -- consumers that care about
+// double/triple-click (word/sentence selection, say) should read this
+// rather than hand-rolling their own click-timer state machine.
 func newMouseEvent(v js.Value) MouseEvent {
 	return MouseEvent{
 		Value:    v,
 		X:        v.Get("clientX").Float(),
 		Y:        v.Get("clientY").Float(),
 		Button:   v.Get("button").Int(),
+		Detail:   v.Get("detail").Int(),
 		CtrlKey:  v.Get("ctrlKey").Bool(),
 		ShiftKey: v.Get("shiftKey").Bool(),
 		AltKey:   v.Get("altKey").Bool(),
