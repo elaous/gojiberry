@@ -5,7 +5,7 @@
 # GOARCH=wasm (domrt and friends are js/wasm-only), and run the
 # vscode-gox grammar suite against every *.gox file in the repo.
 .PHONY: check
-check: generate fmt-check vet test wasm-vet lint wasm-lint grammar-test
+check: generate fmt-check vet test wasm-vet lint wasm-lint grammar-test-setup grammar-test
 
 .PHONY: generate
 generate:
