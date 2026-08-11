@@ -66,7 +66,7 @@ var validHTMLAttrs = map[string]bool{
 	"ismap": true, "crossorigin": true, "media": true, "disabled": true,
 	"form": true, "formaction": true, "formenctype": true, "formmethod": true,
 	"formnovalidate": true, "formtarget": true, "name": true, "value": true,
-	"checked": true, "required": true, "readonly": true, "placeholder": true,
+	"checked": true, "selected": true, "required": true, "readonly": true, "placeholder": true,
 	"autocomplete": true, "maxlength": true, "minlength": true, "min": true,
 	"max": true, "step": true, "pattern": true, "multiple": true, "size": true,
 	"accept": true, "capture": true, "list": true, "cols": true, "rows": true,
