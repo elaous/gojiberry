@@ -210,6 +210,23 @@ func TestWhitespaceOnlyChildTextIsDropped(t *testing.T) {
 	}
 }
 
+// TestApostropheInChildTextDoesNotSwallowFollowingTag guards against a
+// real bug parseChildren once had: it called skipStringLiteral (meant
+// for scanning actual Go expressions) on plain JSX text content, so an
+// apostrophe in ordinary prose ("document's") was treated as opening a
+// string/rune literal and the scanner skipped everything -- including
+// real tags -- up to the next quote character (e.g. the apostrophe in a
+// following paragraph's "Couldn't"), silently merging both paragraphs
+// and the tag between them into one gox.Text call.
+func TestApostropheInChildTextDoesNotSwallowFollowingTag(t *testing.T) {
+	src := `return <div><p>Only this document's own.</p><p>Couldn't load.</p></div>`
+	got := transpileExpr(t, src)
+	want := `return gox.El("div", nil, gox.El("p", nil, gox.Text("Only this document's own.")), gox.El("p", nil, gox.Text("Couldn't load.")))`
+	if strings.TrimSpace(got) != want {
+		t.Errorf("got:  %s\nwant: %s", got, want)
+	}
+}
+
 func TestMismatchedCloseTagErrors(t *testing.T) {
 	_, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <div>hi</span>`))
 	if err == nil {
