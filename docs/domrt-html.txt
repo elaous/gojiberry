@@ -1208,18 +1208,23 @@ type MouseEvent struct {
 	Value                              js.Value
 	X, Y                               float64
 	Button                             int
+	Detail                             int
 	CtrlKey, ShiftKey, AltKey, MetaKey bool
 }
     MouseEvent wraps a mousedown/mousemove/mouseup DOM event with its position
     relative to the viewport (clientX/clientY), which button (0 = left/primary,
     1 = middle, 2 = right, matching the DOM's own MouseEvent.button --
     mousedown/mouseup fire for every button, not just the primary one, so check
-    this before treating one as a plain click) and modifier keys -- gox.Event
-    carries neither at all (see its doc comment), so, like DragEvent and
-    KeyEvent, this is a typed escape hatch for building anything that needs a
-    real click/drag position or a modifier-qualified click: canvas hit-testing,
-    custom selection, image cropping, Alt+Click to add a multi-cursor caret,
-    and so on.
+    this before treating one as a plain click), the browser's own click count
+    (Detail, the DOM's UIEvent.detail: 1 = single, 2 = double, 3 = triple,
+    ... -- already computed using the OS/browser's own multi-click timing and
+    movement thresholds, so consumers that care about double/triple-click
+    should read this rather than hand-rolling their own click-timer state
+    machine) and modifier keys -- gox.Event carries neither at all (see its
+    doc comment), so, like DragEvent and KeyEvent, this is a typed escape
+    hatch for building anything that needs a real click/drag position or a
+    modifier-qualified click: canvas hit-testing, custom selection, image
+    cropping, Alt+Click to add a multi-cursor caret, and so on.
 
 func (e MouseEvent) PreventDefault()
     PreventDefault suppresses the browser's default handling of the event. This
