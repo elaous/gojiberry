@@ -33,6 +33,10 @@ profile.cov
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+# editors/vscode-gox's own packaged output (make vscode-package,
+# root Makefile) -- a build artifact, not source.
+*.vsix
+
 # Go workspace file
 go.work
 go.work.sum
