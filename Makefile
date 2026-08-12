@@ -150,6 +150,26 @@ grammar-test-setup:
 grammar-test:
 	cd editors/vscode-gox/test && npm test
 
+# vscode-package builds editors/vscode-gox's own installable .vsix
+# (Extensions view -> "..." -> Install from VSIX...) via @vscode/vsce,
+# fetched ad hoc through npx rather than tracked as a package.json
+# devDependency -- vscode-gox's own package.json is a plain extension
+# manifest, not an npm project with its own install step, the same
+# reasoning grammar-test's own separate test/package.json already
+# keeps the grammar suite's dependencies out of it.
+# --allow-missing-repository: vsce's own default warns/fails without a
+# package.json "repository" field, meant for a marketplace listing
+# this extension has never had (it ships from this monorepo, not its
+# own standalone repo) -- suppresses that warning rather than adding a
+# repository field that would point nowhere real.
+# .vscodeignore (editors/vscode-gox's own) keeps test/ -- its own
+# node_modules/fetched grammars included, ~260KB of real weight --
+# out of the packaged .vsix; without it vsce bundles the entire
+# directory, tests and all, into what a user installs.
+.PHONY: vscode-package
+vscode-package:
+	cd editors/vscode-gox && npx --yes @vscode/vsce package --allow-missing-repository
+
 # docs regenerates the plain-text `go doc -all` dump for every public
 # package under docs/ -- see docs/README.md for the exact commands.
 .PHONY: docs
