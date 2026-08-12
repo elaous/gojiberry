@@ -1,0 +1,14 @@
+# vsce's own ignore file (a separate mechanism from git's own
+# .gitignore, and not read from it): everything here needs excluding
+# explicitly, or `vsce package` bundles it into the shipped .vsix.
+#
+# test/ is the grammar-highlighting test suite (its own package.json/
+# node_modules, fetched-at-setup-time Go/HTML/CSS/SQL/JSON grammars --
+# see the root Makefile's own grammar-test-setup/grammar-test targets)
+# -- real weight (~260KB, mostly vscode-oniguruma/vscode-textmate under
+# test/node_modules) with nothing a user installing this extension
+# needs at runtime.
+test/
+.gitignore
+.vscodeignore
+*.vsix
