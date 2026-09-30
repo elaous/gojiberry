@@ -18,7 +18,7 @@ type Hit struct {
 	Row, Col int // valid for HitCell
 }
 
-// TableView draws a Table on a canvas and handles editing it, the way
+// TableView draws a Table on a canvas and, in ModeEdit, handles editing it, the way
 // Obsidian's tables work: click a cell to edit it in place; Tab /
 // Shift+Tab, Enter and the arrow keys move between cells; Tab or Enter
 // past the last cell adds a row; and hovering the table reveals a "+"
@@ -40,6 +40,8 @@ type TableView struct {
 	// contents or shape (typing, adding a row or column).
 	OnChange func(*Table)
 
+	mode     Mode
+	refresh  func() // set by Bind
 	editing  bool
 	row, col int
 	cursor   int // rune index into the active cell's text
@@ -48,9 +50,36 @@ type TableView struct {
 	caretOn  bool
 }
 
-// NewTableView returns a view of t drawn with DefaultTableStyle.
+// NewTableView returns a view of t drawn with DefaultTableStyle, in
+// ModeView; call SetMode(ModeEdit) to make it editable.
 func NewTableView(t *Table, p Painter) *TableView {
 	return &TableView{Table: t, Style: DefaultTableStyle(), Painter: p, X: 10, Y: 10, caretOn: true}
+}
+
+// Mode returns the current mode.
+func (v *TableView) Mode() Mode { return v.mode }
+
+// SetMode switches between ModeView and ModeEdit. Leaving edit mode
+// stops any in-progress cell edit and clears hover state. Returns true
+// if a redraw is needed.
+func (v *TableView) SetMode(m Mode) bool {
+	if m == v.mode {
+		return false
+	}
+	v.mode = m
+	if m == ModeView {
+		v.editing = false
+		v.hover, v.inRegion = Hit{}, false
+	}
+	return true
+}
+
+// Refresh redraws the canvas if the view has been Bind-ed (no-op
+// otherwise); call it after SetMode or after changing Table/Style.
+func (v *TableView) Refresh() {
+	if v.refresh != nil {
+		v.refresh()
+	}
 }
 
 // Active returns the cell being edited, and whether there is one.
@@ -154,6 +183,9 @@ func (v *TableView) HitTest(x, y float64) Hit {
 
 // MouseMove updates hover state; it returns true if a redraw is needed.
 func (v *TableView) MouseMove(x, y float64) bool {
+	if v.mode != ModeEdit {
+		return false
+	}
 	g := v.layout()
 	s := v.Style
 	h := v.HitTest(x, y)
@@ -177,6 +209,9 @@ func (v *TableView) MouseLeave() bool {
 // the new row's first cell. A press outside the table stops editing.
 // Returns true if a redraw is needed.
 func (v *TableView) MouseDown(x, y float64) bool {
+	if v.mode != ModeEdit {
+		return false
+	}
 	h := v.HitTest(x, y)
 	v.hover = h
 	switch h.Kind {
@@ -230,7 +265,7 @@ func (v *TableView) changed() {
 // dropped (cells are single-line). No-op if no cell is being edited.
 func (v *TableView) InsertText(s string) bool {
 	s = strings.NewReplacer("\r", "", "\n", "").Replace(s)
-	if !v.editing || s == "" {
+	if v.mode != ModeEdit || !v.editing || s == "" {
 		return false
 	}
 	runes := []rune(v.Table.Cell(v.row, v.col))
@@ -256,7 +291,7 @@ func (v *TableView) InsertText(s string) bool {
 //	Backspace/Delete  delete before / after the caret
 //	Escape            stop editing
 func (v *TableView) HandleKey(key string, shift bool) bool {
-	if !v.editing {
+	if v.mode != ModeEdit || !v.editing {
 		return false
 	}
 	t := v.Table
@@ -358,7 +393,8 @@ func (v *TableView) stepNoGrow(delta int) {
 	v.cursor = 0
 }
 
-// Draw paints the table (and, while hovered or editing, the "+" bars)
+// Draw paints the table (and, in ModeEdit while hovered or editing, the
+// "+" bars)
 // onto the Painter. It does not clear the canvas first.
 func (v *TableView) Draw() {
 	p, s, t := v.Painter, v.Style, v.Table
@@ -384,7 +420,7 @@ func (v *TableView) Draw() {
 		}
 	}
 
-	if v.editing {
+	if v.mode == ModeEdit && v.editing {
 		x, y := g.colX[v.col], g.rowY[v.row]
 		w, h := g.colX[v.col+1]-x, g.rowY[v.row+1]-y
 		p.SetStrokeStyle(s.ActiveColor)
@@ -402,7 +438,7 @@ func (v *TableView) Draw() {
 		}
 	}
 
-	if v.inRegion || v.editing {
+	if v.mode == ModeEdit && (v.inRegion || v.editing) {
 		colBar, rowBar := v.barRects(g)
 		v.drawBar(colBar, v.hover.Kind == HitAddColumn)
 		v.drawBar(rowBar, v.hover.Kind == HitAddRow)

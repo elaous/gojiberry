@@ -12,6 +12,7 @@ import (
 func newView() (*TableView, *fakePainter) {
 	p := &fakePainter{}
 	v := NewTableView(NewTableFrom([][]string{{"A", "B"}, {"c", "d"}}), p)
+	v.SetMode(ModeEdit)
 	return v, p
 }
 
@@ -273,5 +274,48 @@ func assertActive(t *testing.T, v *TableView, row, col int) {
 	t.Helper()
 	if r, c, ok := v.Active(); !ok || r != row || c != col {
 		t.Fatalf("active = (%d,%d,%v), want (%d,%d)", r, c, ok, row, col)
+	}
+}
+
+func TestDefaultsToViewMode(t *testing.T) {
+	v := NewTableView(NewTable(1, 1), &fakePainter{})
+	if v.Mode() != ModeView || ModeView.String() != "view" || ModeEdit.String() != "edit" {
+		t.Fatalf("mode = %v", v.Mode())
+	}
+}
+
+func TestViewModeIsReadOnly(t *testing.T) {
+	v, p := newView()
+	v.MouseDown(70, 20)
+	if !v.SetMode(ModeView) {
+		t.Fatal("switching mode needs a redraw")
+	}
+	if v.SetMode(ModeView) {
+		t.Fatal("same mode is a no-op")
+	}
+	if _, _, ok := v.Active(); ok {
+		t.Fatal("leaving edit mode must stop editing")
+	}
+	if v.MouseMove(20, 20) || v.MouseDown(20, 20) || v.MouseDown(180, 40) {
+		t.Fatal("pointer input must be ignored in view mode")
+	}
+	if v.InsertText("x") || v.HandleKey("Tab", false) {
+		t.Fatal("keyboard input must be ignored in view mode")
+	}
+	if v.Table.Cols() != 2 || v.Table.Cell(0, 0) != "A" {
+		t.Fatalf("table changed in view mode: %v", v.Table.Cells)
+	}
+	p.calls = nil
+	v.Draw()
+	if p.has(`fillText "+"`) || p.has("moveTo") || p.has("strokeStyle #7c5cff") {
+		t.Fatalf("view mode drew edit affordances: %v", p.calls)
+	}
+	if !p.has(`fillText "A"`) {
+		t.Fatal("view mode must still draw content")
+	}
+	v.SetMode(ModeEdit)
+	v.MouseDown(20, 20)
+	if _, _, ok := v.Active(); !ok {
+		t.Fatal("edit mode works again after switching back")
 	}
 }

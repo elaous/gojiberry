@@ -37,11 +37,16 @@ func (v *TableView) Bind(canvasEl, input *html.Element) error {
 		ctx.ClearRect(0, 0, canvasEl.Get("width").Float(), canvasEl.Get("height").Float())
 		v.Draw()
 		cursor := "default"
-		switch v.hover.Kind {
-		case HitAddColumn, HitAddRow:
-			cursor = "pointer"
-		case HitCell:
-			cursor = "text"
+		if v.mode == ModeEdit {
+			switch v.hover.Kind {
+			case HitAddColumn, HitAddRow:
+				cursor = "pointer"
+			case HitCell:
+				cursor = "text"
+			}
+		}
+		if _, _, ok := v.Active(); !ok {
+			input.Call("blur")
 		}
 		canvasEl.SetStyleProperty("cursor", cursor)
 	}
@@ -50,8 +55,10 @@ func (v *TableView) Bind(canvasEl, input *html.Element) error {
 		return e.X - r.Left, e.Y - r.Top
 	}
 
+	v.refresh = redraw
+
 	canvasEl.OnMouseDown(func(e html.MouseEvent) {
-		if e.Button != 0 {
+		if v.mode != ModeEdit || e.Button != 0 {
 			return
 		}
 		// The canvas isn't focusable; without this the browser
@@ -61,8 +68,6 @@ func (v *TableView) Bind(canvasEl, input *html.Element) error {
 		v.MouseDown(x, y)
 		if _, _, ok := v.Active(); ok {
 			input.Focus()
-		} else {
-			input.Call("blur")
 		}
 		redraw()
 	})

@@ -11,6 +11,9 @@
 //     but translate DOM mouse/keyboard events into calls on the
 //     native-testable half.
 //
+// Every component has a view mode (read-only, the zero value) and an edit
+// mode; see Mode and Component.
+//
 // The first component is Table / TableView, an Obsidian-style editable
 // table: click a cell to edit it, Tab/Enter/arrow keys move between
 // cells, and a "+" bar on the right edge and bottom edge adds a column
