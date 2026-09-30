@@ -7,6 +7,7 @@ package main
 
 import (
 	"strconv"
+	"syscall/js"
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/domrt/browser"
@@ -26,5 +27,16 @@ func main() {
 	if err := view.Bind(doc.GetElementByID("table"), doc.GetElementByID("input")); err != nil {
 		doc.GetElementByID("state").SetTextContent("error: " + err.Error())
 	}
+	btn := doc.GetElementByID("mode")
+	btn.AddEventListener("click", js.FuncOf(func(js.Value, []js.Value) any {
+		if view.Mode() == canvas.ModeView {
+			view.SetMode(canvas.ModeEdit)
+		} else {
+			view.SetMode(canvas.ModeView)
+		}
+		btn.SetTextContent("Mode: " + view.Mode().String() + " (click to switch)")
+		view.Refresh()
+		return nil
+	}))
 	select {}
 }
