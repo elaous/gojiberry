@@ -12,6 +12,7 @@ import (
 func newView() (*TableView, *fakePainter) {
 	p := &fakePainter{}
 	v := NewTableView(NewTableFrom([][]string{{"A", "B"}, {"c", "d"}}), p)
+	v.X, v.Y = 10, 10
 	v.SetMode(ModeEdit)
 	return v, p
 }
@@ -28,7 +29,12 @@ func TestHitTest(t *testing.T) {
 		{180, 40, Hit{Kind: HitAddColumn}},
 		{50, 90, Hit{Kind: HitAddRow}},
 		{172, 40, Hit{}}, // gap between table and bar
-		{5, 20, Hit{}},
+		{8, 20, Hit{}},   // gap between table and row handles
+		{3, 20, Hit{Kind: HitRowHandle}},
+		{20, 3, Hit{Kind: HitColumnHandle}},
+		{100, 3, Hit{Kind: HitColumnHandle, Col: 1}},
+		{3, 60, Hit{Kind: HitRowHandle, Row: 1}},
+		{3, 3, Hit{Kind: HitTableHandle}},
 		{50, 200, Hit{}},
 	}
 	for _, tt := range tests {
@@ -265,7 +271,7 @@ func TestDrawPaintsCellsHeaderAndCaret(t *testing.T) {
 func TestSize(t *testing.T) {
 	v, _ := newView()
 	w, h := v.Size()
-	if w != 160+4+22 || h != 64+4+22 {
+	if w != 10+160+4+22 || h != 10+64+4+22 {
 		t.Fatalf("Size = %g x %g", w, h)
 	}
 }
@@ -317,5 +323,245 @@ func TestViewModeIsReadOnly(t *testing.T) {
 	v.MouseDown(20, 20)
 	if _, _, ok := v.Active(); !ok {
 		t.Fatal("edit mode works again after switching back")
+	}
+}
+
+func TestNewTableViewReservesHandleGutter(t *testing.T) {
+	v := NewTableView(NewTable(1, 1), &fakePainter{})
+	if v.X < v.Style.HandleSize+v.Style.BarGap || v.Y < v.Style.HandleSize+v.Style.BarGap {
+		t.Fatalf("origin (%g,%g) leaves no room for handles", v.X, v.Y)
+	}
+}
+
+// clickMenuItem opens whatever menu is showing and clicks the item with label.
+func clickMenuItem(t *testing.T, v *TableView, label string) {
+	t.Helper()
+	m := v.Menu()
+	if !m.IsOpen() {
+		t.Fatal("menu is not open")
+	}
+	top := m.y
+	for i, it := range m.items {
+		if !it.Separator && it.Label == label {
+			if it.Disabled {
+				t.Fatalf("%q is disabled", label)
+			}
+			v.MouseDown(m.x+5, top+m.itemHeight(m.items[i])/2)
+			return
+		}
+		top += m.itemHeight(it)
+	}
+	t.Fatalf("no menu item %q", label)
+}
+
+func TestColumnHandleSelectsAndOpensMenu(t *testing.T) {
+	v, p := newView()
+	v.MouseDown(100, 3) // column 1's handle
+	if v.Selection() != (Selection{SelColumn, 1}) || !v.Menu().IsOpen() {
+		t.Fatalf("sel=%+v open=%v", v.Selection(), v.Menu().IsOpen())
+	}
+	p.calls = nil
+	v.Draw()
+	if !p.has("fillRect 90 10 80 64") || !p.has(`fillText "Delete column"`) {
+		t.Fatalf("selection tint or menu not drawn: %v", p.calls)
+	}
+}
+
+func TestColumnMenuActions(t *testing.T) {
+	v, _ := newView()
+	changes := 0
+	v.OnChange = func(*Table) { changes++ }
+
+	v.MouseDown(100, 3)
+	clickMenuItem(t, v, "Insert column left")
+	if v.Table.Cols() != 3 || v.Table.Cell(0, 2) != "B" || v.Menu().IsOpen() {
+		t.Fatalf("got %v", v.Table.Cells)
+	}
+
+	v.MouseDown(20, 3) // column 0 ("A")
+	clickMenuItem(t, v, "Move column right")
+	if v.Table.Cell(0, 1) != "A" || v.Selection() != (Selection{SelColumn, 1}) {
+		t.Fatalf("got %v sel=%+v", v.Table.Cells, v.Selection())
+	}
+
+	v.MouseDown(100, 3) // column 1 again
+	clickMenuItem(t, v, "Delete column")
+	if v.Table.Cols() != 2 || v.Selection().Kind != SelNone {
+		t.Fatalf("got %v sel=%+v", v.Table.Cells, v.Selection())
+	}
+	if changes != 3 {
+		t.Fatalf("OnChange fired %d times, want 3", changes)
+	}
+}
+
+func TestColumnSortMenu(t *testing.T) {
+	v, _ := newView()
+	v.Table.SetCell(1, 0, "b")
+	v.Table.AddRow()
+	v.Table.SetCell(2, 0, "a")
+	v.MouseDown(20, 3)
+	clickMenuItem(t, v, "Sort A to Z")
+	if v.Table.Cell(1, 0) != "a" || v.Table.Cell(2, 0) != "b" {
+		t.Fatalf("got %v", v.Table.Cells)
+	}
+	v.MouseDown(20, 3)
+	clickMenuItem(t, v, "Sort Z to A")
+	if v.Table.Cell(1, 0) != "b" {
+		t.Fatalf("got %v", v.Table.Cells)
+	}
+}
+
+func TestRowMenuHeaderRestrictions(t *testing.T) {
+	v, _ := newView()
+	v.MouseDown(3, 20) // header row handle
+	disabled := map[string]bool{}
+	for _, it := range v.Menu().items {
+		disabled[it.Label] = it.Disabled
+	}
+	for _, l := range []string{"Insert row above", "Move row up", "Move row down", "Duplicate row", "Delete row"} {
+		if !disabled[l] {
+			t.Errorf("%q should be disabled for the header", l)
+		}
+	}
+	if disabled["Insert row below"] {
+		t.Error("Insert row below should work on the header")
+	}
+	v.Menu().Close()
+
+	v.MouseDown(3, 60) // body row 1 (the last row)
+	clickMenuItem(t, v, "Duplicate row")
+	if v.Table.Rows() != 3 || v.Table.Cell(2, 0) != "c" {
+		t.Fatalf("got %v", v.Table.Cells)
+	}
+	v.MouseDown(3, 60)
+	clickMenuItem(t, v, "Insert row above")
+	if v.Table.Rows() != 4 || v.Table.Cell(1, 0) != "" || v.Table.Cell(2, 0) != "c" {
+		t.Fatalf("got %v", v.Table.Cells)
+	}
+}
+
+func TestRowMoveAndDelete(t *testing.T) {
+	v, _ := newView()
+	v.Table.AddRow()
+	v.Table.SetCell(2, 0, "e")
+	v.MouseDown(3, 90) // row 2
+	clickMenuItem(t, v, "Move row up")
+	if v.Table.Cell(1, 0) != "e" || v.Selection() != (Selection{SelRow, 1}) {
+		t.Fatalf("got %v sel=%+v", v.Table.Cells, v.Selection())
+	}
+	v.MouseDown(3, 60)
+	clickMenuItem(t, v, "Delete row")
+	if v.Table.Rows() != 2 || v.Table.Cell(1, 0) != "c" {
+		t.Fatalf("got %v", v.Table.Cells)
+	}
+}
+
+func TestTableHandleMenu(t *testing.T) {
+	v, p := newView()
+	v.MouseDown(3, 3)
+	if v.Selection().Kind != SelTable {
+		t.Fatalf("sel=%+v", v.Selection())
+	}
+	for _, it := range v.Menu().items {
+		if it.Label == "Delete table" {
+			t.Fatal("Delete table needs OnDeleteTable")
+		}
+	}
+	clickMenuItem(t, v, "Clear contents")
+	if v.Table.Cell(0, 0) != "" || v.Table.Cell(1, 1) != "" {
+		t.Fatalf("got %v", v.Table.Cells)
+	}
+	v.MouseDown(3, 3)
+	clickMenuItem(t, v, "Add column")
+	v.MouseDown(3, 3)
+	clickMenuItem(t, v, "Add row")
+	if v.Table.Cols() != 3 || v.Table.Rows() != 3 {
+		t.Fatalf("got %v", v.Table.Cells)
+	}
+
+	deleted := false
+	v.OnDeleteTable = func() { deleted = true }
+	v.MouseDown(3, 3)
+	p.calls = nil
+	v.Draw()
+	if !p.has(`fillText "Delete table"`) {
+		t.Fatal("menu should offer Delete table")
+	}
+	clickMenuItem(t, v, "Delete table")
+	if !deleted {
+		t.Fatal("OnDeleteTable not called")
+	}
+}
+
+func TestClickOutsideMenuClosesAndPassesThrough(t *testing.T) {
+	v, _ := newView()
+	v.MouseDown(100, 3)
+	v.MouseDown(20, 20) // column 1's menu starts at x=90, so this is outside it
+	if v.Menu().IsOpen() {
+		t.Fatal("menu should close")
+	}
+	if _, _, ok := v.Active(); !ok {
+		t.Fatal("the click should pass through and edit the cell")
+	}
+}
+
+func TestMenuKeyboardAndSelectionEscape(t *testing.T) {
+	v, _ := newView()
+	v.MouseDown(20, 3)
+	if !v.HandleKey("ArrowDown", false) || !v.HandleKey("Enter", false) { // Insert column left
+		t.Fatal("menu should consume keys")
+	}
+	if v.Table.Cols() != 3 {
+		t.Fatalf("got %v", v.Table.Cells)
+	}
+	v.MouseDown(20, 3)
+	v.HandleKey("Escape", false)
+	if v.Menu().IsOpen() || v.Selection().Kind != SelColumn {
+		t.Fatal("Escape closes the menu but keeps the selection")
+	}
+	if !v.HandleKey("Escape", false) || v.Selection().Kind != SelNone {
+		t.Fatal("second Escape clears the selection")
+	}
+	if v.HandleKey("Escape", false) {
+		t.Fatal("nothing left to escape from")
+	}
+}
+
+func TestCellClickClearsSelection(t *testing.T) {
+	v, _ := newView()
+	v.MouseDown(20, 3)
+	v.Menu().Close()
+	v.MouseDown(100, 60)
+	if v.Selection().Kind != SelNone {
+		t.Fatal("clicking a cell clears the selection")
+	}
+}
+
+func TestViewModeClearsSelectionAndMenu(t *testing.T) {
+	v, p := newView()
+	v.MouseDown(20, 3)
+	v.SetMode(ModeView)
+	if v.Selection().Kind != SelNone || v.Menu().IsOpen() {
+		t.Fatal("view mode must clear selection and menu")
+	}
+	p.calls = nil
+	v.Draw()
+	if p.has("fillRect 70 19") || p.has("rgba") {
+		t.Fatal("view mode must not draw handles or selection")
+	}
+}
+
+func TestHandlesVisibleOnHover(t *testing.T) {
+	v, p := newView()
+	v.Draw()
+	if p.has("fillRect 44 -7") {
+		t.Fatal("handles must be hidden when not hovered")
+	}
+	v.MouseMove(3, 3) // over the table handle counts as hovering the table
+	p.calls = nil
+	v.Draw()
+	// Column 0's grip: three 12x2 lines centered in the 80px-wide strip at x=10.
+	if !p.has("fillRect 44 -7 12 2") {
+		t.Fatalf("column grip not drawn: %v", p.calls)
 	}
 }
