@@ -13,8 +13,9 @@
 </head>
 <body>
   <h1>Canvas table</h1>
-  <p>Click a cell to edit. Tab / Shift+Tab / Enter / arrows move around; hover the table and click the
+  <p>Starts in view mode (read-only); switch to edit mode, then click a cell to edit. Tab / Shift+Tab / Enter / arrows move around; hover the table and click the
   <b>+</b> on the right edge or bottom to add a column or row.</p>
+  <p><button id="mode">Mode: view (click to switch)</button></p>
   <canvas id="table" width="700" height="300"></canvas>
   <input id="input" class="hidden-input" type="text" autocomplete="off">
   <p id="state"></p>

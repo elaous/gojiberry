@@ -1241,7 +1241,8 @@ generated code.
   reveals a `+` bar on the right edge (add column) and bottom edge (add
   row). Model, layout, hit-testing, editing and drawing are plain Go
   behind a small `Painter` interface (so they're unit-tested natively);
-  only `TableView.Bind` is js/wasm. Demo: `examples/canvas-table-demo`
+  only `TableView.Bind` is js/wasm. Every canvas component has a view
+  mode (read-only, the default) and an edit mode (`SetMode`). Demo: `examples/canvas-table-demo`
   (`make -C examples/canvas-table-demo run`).
 
 - `examples/wasm-canvas-demo` — `domrt/html`'s `Context2D`/`Context3D`:
