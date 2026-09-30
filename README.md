@@ -1234,6 +1234,16 @@ generated code.
   # shows it installed, activated, and claimed the page.
   ```
 
+- `canvas` (package) — components drawn on an HTML `<canvas>` rather
+  than built from DOM. First one: `canvas.TableView`, an Obsidian-style
+  editable table — click a cell to edit, Tab/Shift+Tab/Enter/arrows
+  move between cells (Tab/Enter past the end adds a row), and hovering
+  reveals a `+` bar on the right edge (add column) and bottom edge (add
+  row). Model, layout, hit-testing, editing and drawing are plain Go
+  behind a small `Painter` interface (so they're unit-tested natively);
+  only `TableView.Bind` is js/wasm. Demo: `examples/canvas-table-demo`
+  (`make -C examples/canvas-table-demo run`).
+
 - `examples/wasm-canvas-demo` — `domrt/html`'s `Context2D`/`Context3D`:
   fills a 2D canvas with a solid color and draws a full-viewport quad
   on a WebGL canvas with a solid-color shader, then reads a pixel back
