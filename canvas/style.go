@@ -19,6 +19,10 @@ type TableStyle struct {
 	BarHoverColor string
 	BarTextColor  string
 	BarFont       string
+
+	HandleSize      float64 // thickness of the column/row/table handles
+	SelectColor     string  // translucent fill over a selected column/row/table
+	HandleIconColor string
 }
 
 // DefaultTableStyle is a light, Obsidian-like look.
@@ -41,5 +45,9 @@ func DefaultTableStyle() TableStyle {
 		BarHoverColor: "#d9dce2",
 		BarTextColor:  "#5b616b",
 		BarFont:       "bold 16px sans-serif",
+
+		HandleSize:      16,
+		SelectColor:     "rgba(124, 92, 255, 0.14)",
+		HandleIconColor: "#7b818b",
 	}
 }
