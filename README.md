@@ -1235,15 +1235,31 @@ generated code.
   ```
 
 - `canvas` (package) — components drawn on an HTML `<canvas>` rather
-  than built from DOM. First one: `canvas.TableView`, an Obsidian-style
-  editable table — click a cell to edit, Tab/Shift+Tab/Enter/arrows
-  move between cells (Tab/Enter past the end adds a row), and hovering
-  reveals a `+` bar on the right edge (add column) and bottom edge (add
-  row). Model, layout, hit-testing, editing and drawing are plain Go
-  behind a small `Painter` interface (so they're unit-tested natively);
-  only `TableView.Bind` is js/wasm. Every canvas component has a view
-  mode (read-only, the default) and an edit mode (`SetMode`). Demo: `examples/canvas-table-demo`
-  (`make -C examples/canvas-table-demo run`).
+  than built from DOM. Every component has a view mode (read-only, the
+  default) and an edit mode (`SetMode`); layout, hit-testing, editing
+  state and drawing are plain Go behind a small `Painter` interface so
+  they're unit-tested natively, and only the browser glue
+  (`Stage.Bind`, `LoadImage`) is js/wasm. A `Stage` draws several
+  components on one canvas and routes mouse/keyboard events to them.
+  - `TableView` — Obsidian-style table: click-to-edit cells, Tab/Enter/
+    arrow navigation, `+` bars to add a column/row, grips above columns
+    and left of rows (and a 2x2 icon for the table) that select and open
+    a context menu (insert, move, sort, duplicate, delete, clear).
+  - `Menu` — a canvas context menu (no view/edit modes).
+  - `TextFlow` — flows text into a page of a given width/height using
+    font family/size/weight/style and line height, in one or more
+    columns (a width per column plus a gap); in edit mode, drag the grip
+    above a gap to resize the neighbouring columns. Can flow around
+    `Obstacle`s.
+  - `Image` — a bitmap with a crop (clip), opacity (alpha) and a
+    text-wrap-around mode; in edit mode a toolbar picks Move (left/right
+    drag, snapping to 5), Clip, Alpha or Wrap, and the `TextFlow` it is
+    attached to re-wraps live.
+
+  Demos, each with a Playwright e2e test run by `go test` (skipped when
+  node/playwright/chromium are missing): `examples/canvas-table-demo`,
+  `examples/canvas-flow-demo`, `examples/canvas-image-demo` (run one with
+  `make -C examples/<name> run`).
 
 - `examples/wasm-canvas-demo` — `domrt/html`'s `Context2D`/`Context3D`:
   fills a 2D canvas with a solid color and draws a full-viewport quad

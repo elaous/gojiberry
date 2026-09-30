@@ -39,3 +39,15 @@ func (f *fakePainter) has(prefix string) bool {
 	}
 	return false
 }
+
+func (f *fakePainter) SetGlobalAlpha(a float64) { f.rec("alpha %g", a) }
+func (f *fakePainter) DrawImage(_ ImageSource, sx, sy, sw, sh, dx, dy, dw, dh float64) {
+	f.rec("drawImage %g %g %g %g -> %g %g %g %g", sx, sy, sw, sh, dx, dy, dw, dh)
+}
+
+var _ ImagePainter = (*fakePainter)(nil)
+
+// fakeImage is an ImageSource of a fixed size.
+type fakeImage struct{ w, h float64 }
+
+func (i fakeImage) Size() (float64, float64) { return i.w, i.h }
