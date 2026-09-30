@@ -1,5 +1,12 @@
 package canvas
 
+import (
+	"cmp"
+	"sort"
+	"strconv"
+	"strings"
+)
+
 // Table is the data behind a TableView: a rectangular grid of strings
 // whose first row is the header. It always has at least one row and one
 // column, and every row always has the same number of cells.
@@ -111,5 +118,76 @@ func (t *Table) DeleteColumn(at int) {
 	}
 	for r, row := range t.Cells {
 		t.Cells[r] = append(row[:at], row[at+1:]...)
+	}
+}
+
+// MoveRow moves row from so it ends up at index to (both must be in
+// range; otherwise it's a no-op).
+func (t *Table) MoveRow(from, to int) {
+	if from < 0 || from >= t.Rows() || to < 0 || to >= t.Rows() || from == to {
+		return
+	}
+	row := t.Cells[from]
+	t.Cells = append(t.Cells[:from], t.Cells[from+1:]...)
+	t.Cells = append(t.Cells, nil)
+	copy(t.Cells[to+1:], t.Cells[to:])
+	t.Cells[to] = row
+}
+
+// MoveColumn moves column from so it ends up at index to (both must be
+// in range; otherwise it's a no-op).
+func (t *Table) MoveColumn(from, to int) {
+	if from < 0 || from >= t.Cols() || to < 0 || to >= t.Cols() || from == to {
+		return
+	}
+	for r, row := range t.Cells {
+		v := row[from]
+		row = append(row[:from], row[from+1:]...)
+		row = append(row, "")
+		copy(row[to+1:], row[to:])
+		row[to] = v
+		t.Cells[r] = row
+	}
+}
+
+// DuplicateRow inserts a copy of row at directly below it.
+func (t *Table) DuplicateRow(at int) {
+	if at < 0 || at >= t.Rows() {
+		return
+	}
+	t.InsertRow(at + 1)
+	copy(t.Cells[at+1], t.Cells[at])
+}
+
+// SortByColumn stably sorts the body rows (every row but the header)
+// by column col. Cells that both parse as numbers compare numerically;
+// anything else compares case-insensitively as text.
+func (t *Table) SortByColumn(col int, desc bool) {
+	if col < 0 || col >= t.Cols() {
+		return
+	}
+	body := t.Cells[1:]
+	sort.SliceStable(body, func(i, j int) bool {
+		c := compareCells(body[i][col], body[j][col])
+		if desc {
+			return c > 0
+		}
+		return c < 0
+	})
+}
+
+func compareCells(a, b string) int {
+	fa, errA := strconv.ParseFloat(strings.TrimSpace(a), 64)
+	fb, errB := strconv.ParseFloat(strings.TrimSpace(b), 64)
+	if errA == nil && errB == nil {
+		return cmp.Compare(fa, fb)
+	}
+	return cmp.Compare(strings.ToLower(a), strings.ToLower(b))
+}
+
+// Clear empties every cell, keeping the table's shape.
+func (t *Table) Clear() {
+	for _, row := range t.Cells {
+		clear(row)
 	}
 }

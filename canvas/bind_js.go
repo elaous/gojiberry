@@ -32,6 +32,8 @@ func (v *TableView) Bind(canvasEl, input *html.Element) error {
 		return errNoContext
 	}
 	v.Painter = ctx
+	v.menu.Painter = ctx
+	v.CanvasW, v.CanvasH = canvasEl.Get("width").Float(), canvasEl.Get("height").Float()
 
 	redraw := func() {
 		ctx.ClearRect(0, 0, canvasEl.Get("width").Float(), canvasEl.Get("height").Float())
@@ -39,13 +41,13 @@ func (v *TableView) Bind(canvasEl, input *html.Element) error {
 		cursor := "default"
 		if v.mode == ModeEdit {
 			switch v.hover.Kind {
-			case HitAddColumn, HitAddRow:
+			case HitAddColumn, HitAddRow, HitColumnHandle, HitRowHandle, HitTableHandle:
 				cursor = "pointer"
 			case HitCell:
 				cursor = "text"
 			}
 		}
-		if _, _, ok := v.Active(); !ok {
+		if _, _, ok := v.Active(); !ok && !v.menu.IsOpen() {
 			input.Call("blur")
 		}
 		canvasEl.SetStyleProperty("cursor", cursor)
@@ -66,7 +68,9 @@ func (v *TableView) Bind(canvasEl, input *html.Element) error {
 		e.PreventDefault()
 		x, y := local(e)
 		v.MouseDown(x, y)
-		if _, _, ok := v.Active(); ok {
+		// The input needs focus to receive keys: for typing into a
+		// cell, and for arrow/Enter/Escape navigation of an open menu.
+		if _, _, ok := v.Active(); ok || v.menu.IsOpen() {
 			input.Focus()
 		}
 		redraw()

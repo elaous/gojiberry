@@ -6,11 +6,31 @@ import "strings"
 type HitKind int
 
 const (
-	HitNone      HitKind = iota
-	HitCell              // a table cell; Hit.Row/Col say which
-	HitAddColumn         // the "+" bar on the right edge
-	HitAddRow            // the "+" bar along the bottom edge
+	HitNone         HitKind = iota
+	HitCell                 // a table cell; Hit.Row/Col say which
+	HitAddColumn            // the "+" bar on the right edge
+	HitAddRow               // the "+" bar along the bottom edge
+	HitColumnHandle         // the grip above a column; Hit.Col says which
+	HitRowHandle            // the grip left of a row; Hit.Row says which
+	HitTableHandle          // the 2x2-boxes icon at the top-left corner
 )
+
+// SelKind is what a Selection covers.
+type SelKind int
+
+const (
+	SelNone SelKind = iota
+	SelColumn
+	SelRow
+	SelTable
+)
+
+// Selection is the selected column, row or whole table (Index is the
+// column/row number and is unused for SelTable).
+type Selection struct {
+	Kind  SelKind
+	Index int
+}
 
 // Hit is the result of TableView.HitTest.
 type Hit struct {
@@ -40,6 +60,17 @@ type TableView struct {
 	// contents or shape (typing, adding a row or column).
 	OnChange func(*Table)
 
+	// OnDeleteTable, if set, adds a "Delete table" item to the table
+	// handle's menu and is called when it's chosen. The view can't
+	// delete itself, so removing it from the page is up to the caller.
+	OnDeleteTable func()
+
+	// CanvasW/CanvasH, if non-zero, keep context menus inside the
+	// canvas (Bind sets them from the canvas element).
+	CanvasW, CanvasH float64
+
+	menu     *Menu
+	sel      Selection
 	mode     Mode
 	refresh  func() // set by Bind
 	editing  bool
@@ -53,7 +84,7 @@ type TableView struct {
 // NewTableView returns a view of t drawn with DefaultTableStyle, in
 // ModeView; call SetMode(ModeEdit) to make it editable.
 func NewTableView(t *Table, p Painter) *TableView {
-	return &TableView{Table: t, Style: DefaultTableStyle(), Painter: p, X: 10, Y: 10, caretOn: true}
+	return &TableView{Table: t, Style: DefaultTableStyle(), Painter: p, X: 36, Y: 36, caretOn: true, menu: NewMenu(p)}
 }
 
 // Mode returns the current mode.
@@ -69,6 +100,8 @@ func (v *TableView) SetMode(m Mode) bool {
 	v.mode = m
 	if m == ModeView {
 		v.editing = false
+		v.sel = Selection{}
+		v.menu.Close()
 		v.hover, v.inRegion = Hit{}, false
 	}
 	return true
@@ -138,13 +171,21 @@ func (v *TableView) layout() geometry {
 	return g
 }
 
-// Size returns the width and height needed to draw the table and its
-// "+" bars, relative to (X, Y) -- handy for sizing the canvas.
+// Size returns the width and height of canvas needed to draw the table
+// with its handles (above and left of X, Y) and "+" bars -- handy for
+// sizing the canvas. It does not account for an open menu.
 func (v *TableView) Size() (w, h float64) {
 	g := v.layout()
 	s := v.Style
-	return g.right() - v.X + s.BarGap + s.BarSize, g.bottom() - v.Y + s.BarGap + s.BarSize
+	return g.right() + s.BarGap + s.BarSize, g.bottom() + s.BarGap + s.BarSize
 }
+
+// Selection returns what is currently selected.
+func (v *TableView) Selection() Selection { return v.sel }
+
+// Menu returns the view's context menu (open while a handle's menu is
+// showing).
+func (v *TableView) Menu() *Menu { return v.menu }
 
 // barRects returns the add-column bar (right edge, full table height)
 // and add-row bar (bottom edge, full table width) as x, y, w, h.
@@ -163,22 +204,31 @@ func inRect(x, y float64, r [4]float64) bool {
 func (v *TableView) HitTest(x, y float64) Hit {
 	g := v.layout()
 	colBar, rowBar := v.barRects(g)
+	hs, gap := v.Style.HandleSize, v.Style.BarGap
 	switch {
 	case inRect(x, y, colBar):
 		return Hit{Kind: HitAddColumn}
 	case inRect(x, y, rowBar):
 		return Hit{Kind: HitAddRow}
+	case inRect(x, y, [4]float64{v.X - gap - hs, v.Y - gap - hs, hs, hs}):
+		return Hit{Kind: HitTableHandle}
+	case inRect(x, y, [4]float64{v.X, v.Y - gap - hs, g.right() - v.X, hs}):
+		return Hit{Kind: HitColumnHandle, Col: indexAt(g.colX, x)}
+	case inRect(x, y, [4]float64{v.X - gap - hs, v.Y, hs, g.bottom() - v.Y}):
+		return Hit{Kind: HitRowHandle, Row: indexAt(g.rowY, y)}
 	case x < v.X || x >= g.right() || y < v.Y || y >= g.bottom():
 		return Hit{}
 	}
-	h := Hit{Kind: HitCell}
-	for h.Col+1 < v.Table.Cols() && x >= g.colX[h.Col+1] {
-		h.Col++
+	return Hit{Kind: HitCell, Row: indexAt(g.rowY, y), Col: indexAt(g.colX, x)}
+}
+
+// indexAt returns which of the cumulative edges' spans contains pos.
+func indexAt(edges []float64, pos float64) int {
+	i := 0
+	for i+2 < len(edges) && pos >= edges[i+1] {
+		i++
 	}
-	for h.Row+1 < v.Table.Rows() && y >= g.rowY[h.Row+1] {
-		h.Row++
-	}
-	return h
+	return i
 }
 
 // MouseMove updates hover state; it returns true if a redraw is needed.
@@ -186,11 +236,12 @@ func (v *TableView) MouseMove(x, y float64) bool {
 	if v.mode != ModeEdit {
 		return false
 	}
+	menuChanged := v.menu.MouseMove(x, y)
 	g := v.layout()
 	s := v.Style
 	h := v.HitTest(x, y)
-	region := x >= v.X && x < g.right()+s.BarGap+s.BarSize && y >= v.Y && y < g.bottom()+s.BarGap+s.BarSize
-	changed := h != v.hover || region != v.inRegion
+	region := x >= v.X-s.BarGap-s.HandleSize && y >= v.Y-s.BarGap-s.HandleSize && x < g.right()+s.BarGap+s.BarSize && y < g.bottom()+s.BarGap+s.BarSize
+	changed := h != v.hover || region != v.inRegion || menuChanged
 	v.hover, v.inRegion = h, region
 	return changed
 }
@@ -212,8 +263,17 @@ func (v *TableView) MouseDown(x, y float64) bool {
 	if v.mode != ModeEdit {
 		return false
 	}
+	if v.menu.MouseDown(x, y) {
+		return true
+	}
 	h := v.HitTest(x, y)
 	v.hover = h
+	switch h.Kind {
+	case HitColumnHandle, HitRowHandle, HitTableHandle:
+		v.selectHandle(h)
+		return true
+	}
+	v.sel = Selection{}
 	switch h.Kind {
 	case HitCell:
 		v.edit(h.Row, h.Col)
@@ -289,9 +349,22 @@ func (v *TableView) InsertText(s string) bool {
 //	ArrowLeft/Right   move the caret, crossing into the adjacent cell at the edge
 //	Home / End        caret to start / end of the cell
 //	Backspace/Delete  delete before / after the caret
-//	Escape            stop editing
+//	Escape            stop editing (or clear the selection)
+//
+// While a context menu is open it gets every key instead: ArrowUp/Down,
+// Enter and Escape.
 func (v *TableView) HandleKey(key string, shift bool) bool {
-	if v.mode != ModeEdit || !v.editing {
+	if v.mode != ModeEdit {
+		return false
+	}
+	if v.menu.IsOpen() {
+		return v.menu.HandleKey(key)
+	}
+	if !v.editing {
+		if key == "Escape" && v.sel.Kind != SelNone {
+			v.sel = Selection{}
+			return true
+		}
 		return false
 	}
 	t := v.Table
@@ -420,6 +493,10 @@ func (v *TableView) Draw() {
 		}
 	}
 
+	if v.mode == ModeEdit {
+		v.drawSelection(g)
+	}
+
 	if v.mode == ModeEdit && v.editing {
 		x, y := g.colX[v.col], g.rowY[v.row]
 		w, h := g.colX[v.col+1]-x, g.rowY[v.row+1]-y
@@ -438,11 +515,13 @@ func (v *TableView) Draw() {
 		}
 	}
 
-	if v.mode == ModeEdit && (v.inRegion || v.editing) {
+	if v.mode == ModeEdit && (v.inRegion || v.editing || v.sel.Kind != SelNone) {
 		colBar, rowBar := v.barRects(g)
 		v.drawBar(colBar, v.hover.Kind == HitAddColumn)
 		v.drawBar(rowBar, v.hover.Kind == HitAddRow)
+		v.drawHandles(g)
 	}
+	v.menu.Draw()
 }
 
 func (v *TableView) drawBar(r [4]float64, hovered bool) {
