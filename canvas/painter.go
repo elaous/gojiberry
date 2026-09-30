@@ -24,3 +24,20 @@ type Painter interface {
 	FillText(text string, x, y float64)
 	MeasureTextWidth(text string) float64
 }
+
+// ImageSource is a decoded bitmap a component can draw. In a browser
+// it is an HTMLImageElement (see LoadImage); tests use a fake.
+type ImageSource interface {
+	// Size is the bitmap's natural size in pixels.
+	Size() (w, h float64)
+}
+
+// ImagePainter is a Painter that can also draw bitmaps and change the
+// global alpha. NewPainter adapts an *html.Context2D to it.
+type ImagePainter interface {
+	Painter
+	SetGlobalAlpha(alpha float64)
+	// DrawImage draws the (sx, sy, sw, sh) region of src into the
+	// (dx, dy, dw, dh) rectangle.
+	DrawImage(src ImageSource, sx, sy, sw, sh, dx, dy, dw, dh float64)
+}

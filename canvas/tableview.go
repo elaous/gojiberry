@@ -87,6 +87,29 @@ func NewTableView(t *Table, p Painter) *TableView {
 	return &TableView{Table: t, Style: DefaultTableStyle(), Painter: p, X: 36, Y: 36, caretOn: true, menu: NewMenu(p)}
 }
 
+// SetPainter implements PainterSetter.
+func (v *TableView) SetPainter(p ImagePainter) {
+	v.Painter = p
+	v.menu.Painter = p
+}
+
+// WantsFocus implements Focuser: a cell is being edited or a menu is open.
+func (v *TableView) WantsFocus() bool { return v.editing || v.menu.IsOpen() }
+
+// CSSCursor implements CursorProvider.
+func (v *TableView) CSSCursor() string {
+	if v.mode != ModeEdit {
+		return ""
+	}
+	switch v.hover.Kind {
+	case HitAddColumn, HitAddRow, HitColumnHandle, HitRowHandle, HitTableHandle:
+		return "pointer"
+	case HitCell:
+		return "text"
+	}
+	return ""
+}
+
 // Mode returns the current mode.
 func (v *TableView) Mode() Mode { return v.mode }
 
@@ -179,6 +202,14 @@ func (v *TableView) Size() (w, h float64) {
 	s := v.Style
 	return g.right() + s.BarGap + s.BarSize, g.bottom() + s.BarGap + s.BarSize
 }
+
+// ColumnEdges returns Cols()+1 x-positions: each column's left edge and,
+// last, the table's right edge.
+func (v *TableView) ColumnEdges() []float64 { return v.layout().colX }
+
+// RowEdges returns Rows()+1 y-positions: each row's top edge and, last,
+// the table's bottom edge.
+func (v *TableView) RowEdges() []float64 { return v.layout().rowY }
 
 // Selection returns what is currently selected.
 func (v *TableView) Selection() Selection { return v.sel }
