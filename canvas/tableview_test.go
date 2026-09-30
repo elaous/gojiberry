@@ -565,3 +565,13 @@ func TestHandlesVisibleOnHover(t *testing.T) {
 		t.Fatalf("column grip not drawn: %v", p.calls)
 	}
 }
+
+func TestEdges(t *testing.T) {
+	v, _ := newView()
+	if got := v.ColumnEdges(); len(got) != 3 || got[0] != 10 || got[2] != 170 {
+		t.Fatalf("ColumnEdges = %v", got)
+	}
+	if got := v.RowEdges(); len(got) != 3 || got[0] != 10 || got[2] != 74 {
+		t.Fatalf("RowEdges = %v", got)
+	}
+}

@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gojiberry canvas text flow</title>
+  <script src="wasm_exec.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 1em; }
+    #controls { display: flex; flex-wrap: wrap; gap: 0.8em; align-items: center; margin-bottom: 0.6em; }
+    #controls input[type=number] { width: 4em; }
+    #stage { display: block; background: #f6f7f8; }
+    .hidden-input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    #state { font-family: monospace; font-size: 12px; color: #6b7280; word-break: break-all; max-height: 6em; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>Canvas text flow</h1>
+  <p>Text flowed into a page on a canvas. Change the metrics or column count; in edit mode drag the grip above a column gap to resize the neighbouring columns.</p>
+  <div id="controls">
+    <button id="mode">Mode: view (click to switch)</button>
+    <label>Columns <select id="cols"><option>1</option><option>2</option><option>3</option></select></label>
+    <label>Family <select id="family">
+      <option>sans-serif</option><option>serif</option><option>monospace</option>
+    </select></label>
+    <label>Size <input id="size" type="number" value="16" min="8" max="48"></label>
+    <label>Line height <input id="leading" type="number" value="22" min="8" max="80"></label>
+    <label>Weight <select id="weight"><option>300</option><option selected>400</option><option>700</option><option>900</option></select></label>
+    <label>Style <select id="style"><option>normal</option><option>italic</option><option>oblique</option></select></label>
+  </div>
+  <canvas id="stage" width="900" height="500"></canvas>
+  <input id="input" class="hidden-input" type="text" autocomplete="off">
+  <p id="state">(pending)</p>
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((r) => go.run(r.instance));
+  </script>
+</body>
+</html>
