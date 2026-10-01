@@ -456,3 +456,33 @@ func TestRandomEditingConverges(t *testing.T) {
 }
 
 func time0(n int64) time.Time { return time.Unix(0, n) }
+
+func TestSlideEditFollowsTheCaret(t *testing.T) {
+	old, cur := []rune("hello"), []rune("helo")
+	// Deleting one of the two l's: the diff picks the second; the caret says the first.
+	e := diffRunes(old, cur)[0]
+	if e.at != 3 {
+		t.Fatalf("the diff alone deletes the second l: %+v", e)
+	}
+	if got := slideEdit(old, cur, e, 2); got.at != 2 || got.del != 1 {
+		t.Fatalf("%+v", got)
+	}
+	if got := slideEdit(old, cur, e, 0); got.at != e.at {
+		t.Fatalf("a caret outside the run changes nothing: %+v", got)
+	}
+	// Typing the second of two equal letters.
+	old2, cur2 := []rune("helo"), []rune("hello")
+	e2 := diffRunes(old2, cur2)[0]
+	got := slideEdit(old2, cur2, e2, 4) // caret after the typed l (offset 4 in "hell|o")
+	if got.at != 3 || string(got.ins) != "l" {
+		t.Fatalf("%+v", got)
+	}
+	if got := slideEdit(old2, cur2, e2, 99); got.at != e2.at {
+		t.Fatalf("%+v", got)
+	}
+	// A replacement is left alone.
+	rep := edit{at: 1, del: 1, ins: []rune("x")}
+	if got := slideEdit(old, cur, rep, 1); got.at != 1 || string(got.ins) != "x" {
+		t.Fatalf("%+v", got)
+	}
+}

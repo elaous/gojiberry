@@ -197,6 +197,12 @@ type TextFlow struct {
 	// Comments holds the comments Format.Comment refers to; the text they
 	// are on is highlighted and, hovered, shows a tip with the summary.
 	Comments *CommentSet
+	// RemoteCursors are other people's cursors, drawn with a name flag.
+	RemoteCursors []RemoteCursor
+	// UndoHook, if set, handles Undo and Redo (redo says which) instead of
+	// the flow's own snapshot history: the collab bridge uses it to undo only
+	// your own changes while others edit too.
+	UndoHook func(redo bool) bool
 	// Footnotes holds the notes FootnoteRef marks in the text refer to;
 	// FootnoteBand is the height kept at the bottom of every page for them
 	// (DefaultFootnoteBand if zero) while there are any.
@@ -1334,7 +1340,9 @@ func (f *TextFlow) Draw() {
 	lay := f.Layout()
 	f.lastLay = lay
 	f.drawSelection(lay)
+	f.drawPeerSelections(lay)
 	defer f.drawCarets()
+	defer f.drawPeerCarets()
 	defer f.drawFootnotes(lay)
 	p.SetTextAlign("left")
 	p.SetTextBaseline("alphabetic")
