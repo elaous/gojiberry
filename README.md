@@ -1255,10 +1255,25 @@ generated code.
     text-wrap-around mode; in edit mode a toolbar picks Move (left/right
     drag, snapping to 5), Clip, Alpha or Wrap, and the `TextFlow` it is
     attached to re-wraps live.
+  - `FloatingText` — a text box anchored at x, y with a width and height
+    that text wraps around like an `Image`, but whose own text is
+    editable (caret, selection, typing, per-character bold/italic/size).
+  - `ScrollView` — a scroll container (no edit mode): a width x height
+    viewport onto larger canvas objects, clipped like CSS `overflow`,
+    scrolled by wheel or scrollbar, with the vertical and horizontal
+    scroll lockable. Components inside it work unchanged.
+  - `PageSet` — pages as sheets (margins, border, shadow, like Google
+    Docs) with per-page headers, footers and page numbers; each page's
+    header/footer/number config is "same as the previous page" or new.
+  - `TextFlow` also flows continuously across a `PageSet`: its content is
+    a stream of `Chars` (text + `Format`), `ColumnConfig` (column widths
+    and gap, kept until the next one) and `Break` (user page or column
+    break); the layout adds natural page breaks when text overflows.
 
   Demos, each with a Playwright e2e test run by `go test` (skipped when
   node/playwright/chromium are missing): `examples/canvas-table-demo`,
-  `examples/canvas-flow-demo`, `examples/canvas-image-demo` (run one with
+  `examples/canvas-flow-demo`, `examples/canvas-image-demo`,
+  `examples/canvas-scroll-demo`, `examples/canvas-document-demo` (run one with
   `make -C examples/<name> run`).
 
 - `examples/wasm-canvas-demo` — `domrt/html`'s `Context2D`/`Context3D`:

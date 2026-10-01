@@ -37,6 +37,15 @@ type ImageSource interface {
 type ImagePainter interface {
 	Painter
 	SetGlobalAlpha(alpha float64)
+
+	// Save/Restore push and pop the painter's state (transform and
+	// clip); Translate moves the origin; ClipRect restricts all later
+	// drawing to a rectangle until the matching Restore.
+	Save()
+	Restore()
+	Translate(x, y float64)
+	ClipRect(x, y, w, h float64)
+
 	// DrawImage draws the (sx, sy, sw, sh) region of src into the
 	// (dx, dy, dw, dh) rectangle.
 	DrawImage(src ImageSource, sx, sy, sw, sh, dx, dy, dw, dh float64)
