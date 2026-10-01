@@ -37,6 +37,11 @@ type Bridge struct {
 	applying bool
 	err      error
 	side     sideSync
+
+	// Per-user undo (see undo.go): the inverse of each of your own changes.
+	undo, redo []entry
+	recordTo   *[]entry // where the change being made is recorded; nil: the undo stack
+	prevChange func(*canvas.TextFlow)
 }
 
 func attach(replica string, f *canvas.TextFlow) (*Bridge, error) {
@@ -44,13 +49,14 @@ func attach(replica string, f *canvas.TextFlow) (*Bridge, error) {
 		return nil, err
 	}
 	b := &Bridge{Doc: crdt.NewDocWithStrategy(replica, crdt.MergeCharCRDT), Flow: f}
-	prev := f.OnChange
+	b.prevChange = f.OnChange
 	f.OnChange = func(tf *canvas.TextFlow) {
 		b.pushLocal()
-		if prev != nil {
-			prev(tf)
+		if b.prevChange != nil {
+			b.prevChange(tf)
 		}
 	}
+	f.UndoHook = b.UndoStep
 	return b, nil
 }
 
@@ -64,6 +70,7 @@ func New(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	}
 	b.ready = true
 	b.pushLocal()
+	b.undo, b.redo = nil, nil // the starting content is not an edit to undo
 	return b, nil
 }
 
@@ -79,6 +86,7 @@ func Join(replica string, f *canvas.TextFlow) (*Bridge, error) {
 func (b *Bridge) Seed() {
 	b.ready = true
 	b.pushLocal()
+	b.undo, b.redo = nil, nil
 }
 
 // Ready reports whether the bridge is sharing yet: always after New, after
@@ -200,6 +208,40 @@ func diffRunes(old, cur []rune) []edit {
 	return out
 }
 
+// slideEdit moves a single insertion or deletion within a run of equal
+// characters to where the caret says it happened. Deleting one of two
+// equal letters in "ll" looks the same whichever is meant, and the diff
+// alone would always pick the same one; the caret, left at the place of the
+// change, knows which was.
+func slideEdit(old, cur []rune, e edit, caret int) edit {
+	switch {
+	case e.del > 0 && len(e.ins) == 0:
+		lo, hi := e.at, e.at
+		for lo > 0 && old[lo-1] == old[lo-1+e.del] {
+			lo--
+		}
+		for hi+e.del < len(old) && old[hi] == old[hi+e.del] {
+			hi++
+		}
+		if caret >= lo && caret <= hi {
+			e.at = caret
+		}
+	case e.del == 0 && len(e.ins) > 0:
+		m := len(e.ins)
+		lo, hi := e.at, e.at
+		for lo > 0 && cur[lo-1] == cur[lo-1+m] {
+			lo--
+		}
+		for hi+m < len(cur) && cur[hi] == cur[hi+m] {
+			hi++
+		}
+		if start := caret - m; start >= lo && start <= hi {
+			e.at, e.ins = start, slices.Clone(cur[start:start+m])
+		}
+	}
+	return e
+}
+
 // pushLocal shares what changed in the flow since the replica last agreed
 // with it.
 func (b *Bridge) pushLocal() {
@@ -220,12 +262,36 @@ func (b *Bridge) pushLocal() {
 		}
 		return rs
 	}
-	edits := diffRunes(runesOf(old), runesOf(cur))
-	for i := len(edits) - 1; i >= 0; i-- { // last first: earlier indexes stay valid
-		b.Doc.Splice(block, edits[i].at, edits[i].del, edits[i].ins)
+	oldIDs := b.Doc.VisibleIDs(block)
+	var rec entry
+	oldRunes, curRunes := runesOf(old), runesOf(cur)
+	edits := diffRunes(oldRunes, curRunes)
+	if len(edits) == 1 {
+		edits[0] = slideEdit(oldRunes, curRunes, edits[0], atomPos(cur, b.Flow.Cursors()[0].Caret))
 	}
-	b.pushFormats(b.read(), cur)
+	for i := len(edits) - 1; i >= 0; i-- { // last first: earlier indexes stay valid
+		ed := edits[i]
+		if ed.del > 0 {
+			run := deletedRun{atoms: slices.Clone(old[ed.at : ed.at+ed.del]), ids: slices.Clone(oldIDs[ed.at : ed.at+ed.del])}
+			if ed.at > 0 {
+				run.after = oldIDs[ed.at-1]
+			}
+			rec.deleted = append(rec.deleted, run)
+		}
+		if op, ok := b.Doc.Splice(block, ed.at, ed.del, ed.ins); ok {
+			for _, c := range op.CharOps {
+				if c.Kind == crdt.CharInsert {
+					if len(rec.inserted) == 0 {
+						rec.origin = c.Origin
+					}
+					rec.inserted = append(rec.inserted, c.ID)
+				}
+			}
+		}
+	}
+	b.pushFormats(b.read(), cur, &rec)
 	b.pushSide()
+	b.record(rec)
 	if b.Outgoing != nil {
 		if ops := b.Doc.Drain(); len(ops) > 0 {
 			b.Outgoing(ops)
@@ -235,10 +301,15 @@ func (b *Bridge) pushLocal() {
 
 // pushFormats turns the differences between the replica's attributes (have)
 // and the flow's (want) into marks, one per changed run and key.
-func (b *Bridge) pushFormats(have, want []atom) {
+func (b *Bridge) pushFormats(have, want []atom, rec *entry) {
 	if len(have) != len(want) {
 		b.err = errors.New("collab: internal error: the replica and the flow disagree about the text")
 		return
+	}
+	ids := b.Doc.VisibleIDs(block)
+	inserted := map[crdt.Timestamp]bool{}
+	for _, id := range rec.inserted {
+		inserted[id] = true
 	}
 	keys := map[string]bool{}
 	for _, a := range have {
@@ -263,6 +334,16 @@ func (b *Bridge) pushFormats(have, want []atom) {
 				j++
 			}
 			b.Doc.Format(block, i, j, key, w, growsAtEnd(key))
+			fc := formatChange{key: key}
+			for k := i; k < j && k < len(ids); k++ {
+				if !inserted[ids[k]] { // text I just typed is undone by deleting it
+					fc.ids = append(fc.ids, ids[k])
+					fc.old = append(fc.old, have[k].attrs[key])
+				}
+			}
+			if len(fc.ids) > 0 {
+				rec.formats = append(rec.formats, fc)
+			}
 			i = j
 		}
 	}
