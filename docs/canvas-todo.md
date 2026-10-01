@@ -30,6 +30,8 @@ the selection); a style expands to a format at layout time, so editing it
 restyles every use; Ctrl/Cmd+Alt+0-3, Ctrl/Cmd+\\ clears formatting;
 `components.StylePicker`.
 
+**Scrolling** -- a `ScrollView` keeps the caret in view while you type, move or paste (`RevealCaret`).
+
 **Editing features** (registered with `Stage.Features`) -- multi-cursor,
 move/duplicate/delete line, Markdown copy and paste, page/column breaks and
 horizontal rules, paragraphs, text case, links, page furniture.
@@ -57,7 +59,6 @@ submenus), `CommandMenu` (a menu from the registered commands),
 ## To do
 
 - **Formula** editor and formula text element.
-- Scrolling the caret into view.
 - Auto-closing brackets and completion in the `TextFlow` (a `FloatingText`
   has them), and at several cursors.
 - `TextFlow` multi-cursor keeps one `Cursor.After` per cursor; typing at a
