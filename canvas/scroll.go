@@ -79,6 +79,16 @@ func (sv *ScrollView) Add(obj Drawer, w, h float64) {
 	}
 }
 
+// SetContent replaces the content components, with the content size w x h
+// (a Size() method on a component, if you have no better idea).
+func (sv *ScrollView) SetContent(ds []Drawer, w, h float64) {
+	sv.content.Components = nil
+	for _, d := range ds {
+		sv.Add(d, 0, 0)
+	}
+	sv.SetContentSize(w, h)
+}
+
 // SetContentSize overrides the content size (to grow or shrink it
 // after objects changed size) and re-clamps the scroll position.
 func (sv *ScrollView) SetContentSize(w, h float64) {

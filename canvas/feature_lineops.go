@@ -80,7 +80,7 @@ func join(parts ...[]Item) []Item {
 func mapCursors(cs []Cursor, fn func(o int) int) []Cursor {
 	out := make([]Cursor, len(cs))
 	for i, c := range cs {
-		out[i] = Cursor{fn(c.Anchor), fn(c.Caret)}
+		out[i] = Cursor{Anchor: fn(c.Anchor), Caret: fn(c.Caret)}
 	}
 	return out
 }
@@ -100,14 +100,14 @@ func moveLines(t EditTarget, dir int) bool {
 				continue
 			}
 			ps := lineStart(rs, b.a-1)
-			edits = append(edits, Edit{ps, b.b, join(t.Slice(b.a, b.b), newline, t.Slice(ps, b.a-1))})
+			edits = append(edits, Edit{From: ps, To: b.b, Items: join(t.Slice(b.a, b.b), newline, t.Slice(ps, b.a-1))})
 			moves = append(moves, move{b, -(b.a - ps)})
 		} else {
 			if b.b >= len(rs) {
 				continue
 			}
 			ne := lineEnd(rs, b.b+1)
-			edits = append(edits, Edit{b.a, ne, join(t.Slice(b.b+1, ne), newline, t.Slice(b.a, b.b))})
+			edits = append(edits, Edit{From: b.a, To: ne, Items: join(t.Slice(b.b+1, ne), newline, t.Slice(b.a, b.b))})
 			moves = append(moves, move{b, ne - b.b})
 		}
 	}
@@ -134,9 +134,9 @@ func duplicateLines(t EditTarget, down bool) bool {
 	for _, b := range bs {
 		blk := t.Slice(b.a, b.b)
 		if down {
-			edits = append(edits, Edit{b.b, b.b, join(newline, blk)})
+			edits = append(edits, Edit{From: b.b, To: b.b, Items: join(newline, blk)})
 		} else {
-			edits = append(edits, Edit{b.a, b.a, join(blk, newline)})
+			edits = append(edits, Edit{From: b.a, To: b.a, Items: join(blk, newline)})
 		}
 	}
 	t.Replace(edits)

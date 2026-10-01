@@ -2,7 +2,8 @@ package gox
 
 import (
 	"fmt"
-	"reflect"
+	"sort"
+	"sync"
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/gox"
@@ -15,40 +16,51 @@ import (
 // Props describe the document -- text, pages, columns -- and are applied
 // only when they differ from what the last render applied, so the
 // document edits the canvas makes itself (a header edited on a page, a
-// column dragged) are not undone by a re-render that passes the same
-// props; change a prop to push a new value down. Interaction state
-// (caret, selection, drag, popups) is never a prop.
+// column dragged, a drag of an image) are not undone by a re-render that
+// passes the same props; change a prop to push a new value down.
+// Interaction state (caret, selection, drag, popups) is never a prop.
 type Root struct {
 	Stage *canvas.Stage
 	// Redraw, if set, is called at the end of every Render that changed
 	// something (wire it to the redraw function Stage.Bind returns).
 	Redraw func()
 
-	root *canvasInst
+	root *canvasElem
 }
 
 // NewRoot returns a Root drawing into stage.
 func NewRoot(stage *canvas.Stage) *Root { return &Root{Stage: stage} }
 
-// Find returns the live component created for the n-th (from 0) element
-// with tag, for reading its state or wiring callbacks: a *canvas.TextFlow
-// for TagTextFlow, a *canvas.PageSet for TagPage.
+// Find returns the live component created for the n-th (from 0, in
+// document order, containers included) element with tag, for reading its
+// state or wiring callbacks: a *canvas.TextFlow for TagTextFlow, a
+// *canvas.PageSet for TagPage, a *canvas.Image, *canvas.FloatingText,
+// *canvas.TableView or *canvas.ScrollView for theirs.
 func (r *Root) Find(tag string, n int) any {
 	if r.root == nil {
 		return nil
 	}
-	for _, k := range r.root.kids {
-		if ki, ok := k.(*flowInst); ok && (tag == TagTextFlow || tag == TagPage) {
-			if n == 0 {
-				if tag == TagPage {
-					return ki.ps
+	var found any
+	var walk func(es []Element) bool
+	walk = func(es []Element) bool {
+		for _, e := range es {
+			if c, ok := e.(Finder); ok {
+				if v := c.Find(tag); v != nil {
+					if n == 0 {
+						found = v
+						return true
+					}
+					n--
 				}
-				return ki.flow
 			}
-			n--
+			if h, ok := e.(Holder); ok && walk(h.Elements()) {
+				return true
+			}
 		}
+		return false
 	}
-	return nil
+	walk(r.root.kids.elems())
+	return found
 }
 
 // Render reconciles the stage with n, which must be a Canvas node.
@@ -58,7 +70,7 @@ func (r *Root) Render(n gox.Node) error {
 		return fmt.Errorf("canvas/gox: root node must be a Canvas element, got %q", n.Tag)
 	}
 	if r.root == nil {
-		r.root = &canvasInst{}
+		r.root = &canvasElem{}
 	}
 	changed, err := r.root.update(r, props, n.Children)
 	if err != nil {
@@ -70,21 +82,188 @@ func (r *Root) Render(n gox.Node) error {
 	return nil
 }
 
-type inst interface {
-	tag() string
-	key() string
-	drawers() []canvas.Drawer
-	// update applies props and reports whether anything changed.
-	update(r *Root, props any) bool
+// --- the element registry ---------------------------------------------
+
+// An Element is the live canvas component(s) behind one element of the
+// tree. Register adds new element types; the built-in ones (Canvas
+// children: TextFlow, Image, FloatingText, Table, ScrollView) are
+// registered the same way.
+type Element interface {
+	// Drawers returns what goes on the stage (or in the container).
+	Drawers() []canvas.Drawer
+	// Update applies the node's props -- only those that changed since
+	// the last call -- and reports whether anything did.
+	Update(c *Context, props any, children []gox.Node) (changed bool, err error)
 }
 
-type canvasInst struct {
+// Finder is implemented by elements Root.Find can look inside: it
+// returns the component for tag, or nil.
+type Finder interface{ Find(tag string) any }
+
+// Closer is implemented by elements that must undo something when they
+// leave the tree (stop obstructing a flow's text, say).
+type Closer interface{ Close() }
+
+// Holder is implemented by container elements, so Root.Find can look at
+// their children.
+type Holder interface{ Elements() []Element }
+
+// Context is what an element sees while it updates.
+type Context struct {
+	Stage *canvas.Stage
+	// Mode is the Canvas's mode, for elements that create children.
+	Mode canvas.Mode
+	// Flow and Pages are the nearest TextFlow before this element in the
+	// same container, and its sheets (nil if there is none): floating
+	// objects wrap around it and anchor to its pages.
+	Flow  *canvas.TextFlow
+	Pages *canvas.PageSet
+}
+
+var (
+	regMu     sync.RWMutex
+	factories = map[string]func() Element{}
+)
+
+// Register makes tag a known element: factory is called the first time a
+// node with that tag appears at some place in the tree. It panics on a
+// duplicate tag.
+func Register(tag string, factory func() Element) {
+	regMu.Lock()
+	defer regMu.Unlock()
+	if _, dup := factories[tag]; dup {
+		panic(fmt.Sprintf("canvas/gox: element %q registered twice", tag))
+	}
+	factories[tag] = factory
+}
+
+// Elements lists the registered tags.
+func Elements() []string {
+	regMu.RLock()
+	defer regMu.RUnlock()
+	var tags []string
+	for t := range factories {
+		tags = append(tags, t)
+	}
+	sort.Strings(tags)
+	return tags
+}
+
+func newElement(tag string) (Element, error) {
+	regMu.RLock()
+	f := factories[tag]
+	regMu.RUnlock()
+	if f == nil {
+		return nil, fmt.Errorf("canvas/gox: unsupported element %q (registered: %v)", tag, Elements())
+	}
+	return f(), nil
+}
+
+func init() {
+	Register(TagTextFlow, func() Element { return &flowElem{ps: canvas.NewPageSet(), flow: canvas.NewTextFlow("", 0, 0, 0, 0)} })
+	Register(TagImage, func() Element { return &imageElem{} })
+	Register(TagFloatingText, func() Element { return &floatElem{} })
+	Register(TagTable, func() Element { return &tableElem{} })
+	Register(TagScrollView, func() Element { return &scrollElem{sv: canvas.NewScrollView(0, 0, 0, 0)} })
+}
+
+// --- children -------------------------------------------------------------
+
+type slot struct {
+	tag, key string
+	elem     Element
+}
+
+// childList reconciles a list of child nodes against the elements made
+// for them last time.
+type childList struct{ slots []slot }
+
+func (l *childList) elems() []Element {
+	var out []Element
+	for _, s := range l.slots {
+		out = append(out, s.elem)
+	}
+	return out
+}
+
+// flattenHosts expands fragments (what a {expr} child or <>...</> makes)
+// into the host nodes inside them.
+func flattenHosts(nodes []gox.Node) []gox.Node {
+	var out []gox.Node
+	for _, n := range nodes {
+		if n.Kind == gox.KindFragment {
+			out = append(out, flattenHosts(n.Children)...)
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// update matches nodes to existing elements -- the first unused one with
+// the same tag and key, so inserting or removing an element in the middle
+// leaves the others (and their state) alone -- creates what is new, and
+// updates all. It returns the drawers (in order), whether anything
+// changed, and whether an element was created.
+func (l *childList) update(parent *Context, nodes []gox.Node) (ds []canvas.Drawer, changed, created bool, err error) {
+	nodes = flattenHosts(nodes)
+	var next []slot
+	used := make([]bool, len(l.slots))
+	ctx := &Context{Stage: parent.Stage, Mode: parent.Mode}
+	for _, n := range nodes {
+		if n.Kind != gox.KindHost {
+			return nil, false, false, fmt.Errorf("canvas/gox: only canvas elements can be children of Canvas or ScrollView, got a %v node", n.Kind)
+		}
+		var s slot
+		found := false
+		for i, old := range l.slots {
+			if !used[i] && old.tag == n.Tag && old.key == n.Key {
+				s, used[i], found = old, true, true
+				if i != len(next) {
+					changed = true // the order changed
+				}
+				break
+			}
+		}
+		if !found {
+			e, err := newElement(n.Tag)
+			if err != nil {
+				return nil, false, false, err
+			}
+			s, created, changed = slot{n.Tag, n.Key, e}, true, true
+		}
+		ch, err := s.elem.Update(ctx, n.Props, n.Children)
+		if err != nil {
+			return nil, false, false, err
+		}
+		changed = changed || ch
+		if fe, ok := s.elem.(*flowElem); ok {
+			ctx.Flow, ctx.Pages = fe.flow, fe.ps
+		}
+		next = append(next, s)
+		ds = append(ds, s.elem.Drawers()...)
+	}
+	if len(next) != len(l.slots) {
+		changed = true
+	}
+	for i, old := range l.slots {
+		if c, ok := old.elem.(Closer); ok && !used[i] {
+			c.Close()
+		}
+	}
+	l.slots = next
+	return ds, changed, created, nil
+}
+
+// --- Canvas ---------------------------------------------------------------
+
+type canvasElem struct {
 	props CanvasProps
 	has   bool
-	kids  []inst
+	kids  childList
 }
 
-func (c *canvasInst) update(r *Root, p CanvasProps, children []gox.Node) (bool, error) {
+func (c *canvasElem) update(r *Root, p CanvasProps, children []gox.Node) (bool, error) {
 	changed := false
 	st := r.Stage
 	if !c.has || p.Width != c.props.Width || p.Height != c.props.Height {
@@ -97,131 +276,20 @@ func (c *canvasInst) update(r *Root, p CanvasProps, children []gox.Node) (bool, 
 	}
 	c.props, c.has = p, true
 
-	var kids []inst
-	created := false
-	for i, ch := range children {
-		if ch.Kind == gox.KindFragment {
-			return false, fmt.Errorf("canvas/gox: fragments are not supported inside Canvas yet")
-		}
-		var old inst
-		if i < len(c.kids) && c.kids[i].tag() == ch.Tag && c.kids[i].key() == ch.Key {
-			old = c.kids[i]
-		}
-		if old == nil {
-			ni, err := newInst(ch)
-			if err != nil {
-				return false, err
-			}
-			old, created, changed = ni, true, true
-		}
-		if old.update(r, ch.Props) {
-			changed = true
-		}
-		kids = append(kids, old)
+	ds, ch, created, err := c.kids.update(&Context{Stage: st, Mode: p.Mode}, children)
+	if err != nil {
+		return false, err
 	}
-	if len(kids) != len(c.kids) {
-		changed = true
-	}
-	c.kids = kids
-
+	changed = changed || ch
 	if changed {
 		st.Components = nil
-		for _, k := range kids {
-			st.Add(k.drawers()...)
-		}
+		st.Add(ds...)
 	}
 	if modeChanged || created {
 		st.SetMode(p.Mode)
 		changed = true
 	}
 	return changed, nil
-}
-
-func newInst(n gox.Node) (inst, error) {
-	switch n.Tag {
-	case TagTextFlow:
-		return &flowInst{k: n.Key, ps: canvas.NewPageSet(), flow: canvas.NewTextFlow("", 0, 0, 0, 0)}, nil
-	}
-	return nil, fmt.Errorf("canvas/gox: unsupported element %q inside Canvas (supported: %s)", n.Tag, TagTextFlow)
-}
-
-// flowInst is a TextFlow element: a PageSet drawn under a TextFlow.
-type flowInst struct {
-	k     string
-	ps    *canvas.PageSet
-	flow  *canvas.TextFlow
-	last  TextFlowProps
-	pages []canvas.Page // as last computed from the template
-	has   bool
-}
-
-func (f *flowInst) tag() string              { return TagTextFlow }
-func (f *flowInst) key() string              { return f.k }
-func (f *flowInst) drawers() []canvas.Drawer { return []canvas.Drawer{f.ps, f.flow} }
-
-func (f *flowInst) update(_ *Root, props any) bool {
-	p := props.(TextFlowProps)
-	first := !f.has
-	changed := first
-	old := f.last
-	f.last, f.has = p, true
-
-	if f.ps.X != p.X || f.ps.Y != p.Y || f.ps.Width != p.Width {
-		f.ps.X, f.ps.Y, f.ps.Width = p.X, p.Y, p.Width
-		changed = true
-	}
-
-	pages := buildPages(p)
-	if !reflect.DeepEqual(pages, f.pages) {
-		f.pages = pages
-		f.ps.Pages = clonePages(pages)
-		changed = true
-	}
-
-	fl := f.flow
-	fl.Pages = f.ps
-	fl.OnChange = p.OnChange
-	if p.Style != nil && (old.Style == nil || *old.Style != *p.Style) {
-		fl.Style = *p.Style
-		changed = true
-	}
-	if p.Source != old.Source || p.Text != old.Text || first {
-		fl.Source, fl.Text = p.Source, p.Text
-		fl.InvalidateTransform()
-		changed = true
-	}
-	fl.Transform = p.Transform
-	if !reflect.DeepEqual(p.Items, old.Items) {
-		fl.Items = p.Items
-		changed = true
-	}
-	if !reflect.DeepEqual(p.Columns, old.Columns) || p.Gap != old.Gap {
-		fl.Columns, fl.Gap = append([]float64(nil), p.Columns...), p.Gap
-		changed = true
-	}
-	return changed
-}
-
-// clonePages copies pages so editing a header on the canvas does not
-// write through to the comparison copy.
-func clonePages(in []canvas.Page) []canvas.Page {
-	out := make([]canvas.Page, len(in))
-	for i, p := range in {
-		if p.Header != nil {
-			h := *p.Header
-			p.Header = &h
-		}
-		if p.Footer != nil {
-			h := *p.Footer
-			p.Footer = &h
-		}
-		if p.PageNumber != nil {
-			n := *p.PageNumber
-			p.PageNumber = &n
-		}
-		out[i] = p
-	}
-	return out
 }
 
 func sameFeatures(a, b []canvas.Feature) bool {
@@ -234,4 +302,19 @@ func sameFeatures(a, b []canvas.Feature) bool {
 		}
 	}
 	return true
+}
+
+func sameAnchor(a, b *canvas.Anchor) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func cloneAnchor(a *canvas.Anchor) *canvas.Anchor {
+	if a == nil {
+		return nil
+	}
+	c := *a
+	return &c
 }

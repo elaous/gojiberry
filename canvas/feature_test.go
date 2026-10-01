@@ -21,7 +21,7 @@ func TestRegistry(t *testing.T) {
 	for _, f := range st.Features.Features() {
 		names = append(names, f.Name())
 	}
-	if !reflect.DeepEqual(names, []string{"multi-cursor", "line-ops", "markdown-clipboard"}) {
+	if !reflect.DeepEqual(names, []string{"multi-cursor", "line-ops", "markdown-clipboard", "breaks"}) {
 		t.Fatalf("default features = %v", names)
 	}
 	if !st.Features.Has(CmdMoveLineUp) || st.Features.Keymap()["Mod+D"] != CmdAddNextMatch {
@@ -108,7 +108,7 @@ func TestAddNextMatchWrapsAround(t *testing.T) {
 		t.Fatal("not handled")
 	}
 	cs := ft.Cursors()
-	if len(cs) != 2 || cs[1] != (Cursor{0, 2}) {
+	if len(cs) != 2 || cs[1] != (Cursor{Anchor: 0, Caret: 2}) {
 		t.Fatalf("wrap-around cursor = %v", cs)
 	}
 	ft.caret, ft.anchor = 0, 0
@@ -126,7 +126,7 @@ func TestSelectAllMatches(t *testing.T) {
 	if !st.HandleChord("Mod+Shift+L") {
 		t.Fatal("not handled")
 	}
-	if got := ft.Cursors(); len(got) != 3 || got[2] != (Cursor{12, 15}) {
+	if got := ft.Cursors(); len(got) != 3 || got[2] != (Cursor{Anchor: 12, Caret: 15}) {
 		t.Fatalf("cursors = %v", got)
 	}
 	st.InsertText("Z")
@@ -150,7 +150,7 @@ func TestCursorsAtLineEnds(t *testing.T) {
 		t.Errorf("text = %q", ft.Text())
 	}
 	// A selection ending at the start of a line leaves that line out.
-	ft.SetCursors([]Cursor{{0, 4}})
+	ft.SetCursors([]Cursor{{Anchor: 0, Caret: 4}})
 	st.HandleChord("Alt+Shift+I")
 	if got := ft.Cursors(); len(got) != 1 || got[0] != At(3) {
 		t.Errorf("cursors = %v", got)
@@ -209,7 +209,7 @@ func TestCtrlClickAddsCursor(t *testing.T) {
 
 func TestMultiCursorCopyCutPaste(t *testing.T) {
 	st, ft := stageWith(t, "one two three")
-	ft.SetCursors([]Cursor{{0, 3}, {4, 7}, {8, 13}})
+	ft.SetCursors([]Cursor{{Anchor: 0, Caret: 3}, {Anchor: 4, Caret: 7}, {Anchor: 8, Caret: 13}})
 	if text, ok := st.Copy(); !ok || text != "one\ntwo\nthree" {
 		t.Fatalf("copy = %q, %v", text, ok)
 	}
@@ -221,7 +221,7 @@ func TestMultiCursorCopyCutPaste(t *testing.T) {
 	if ft.Text() != "A- B- C-" {
 		t.Fatalf("same text at each cursor: %q", ft.Text())
 	}
-	ft.SetCursors([]Cursor{{0, 2}, {3, 5}})
+	ft.SetCursors([]Cursor{{Anchor: 0, Caret: 2}, {Anchor: 3, Caret: 5}})
 	if text, ok := st.Cut(); !ok || text != "A-\nB-" || ft.Text() != "  C-" {
 		t.Fatalf("cut = %q, text = %q", text, ft.Text())
 	}
@@ -233,7 +233,7 @@ func TestMultiCursorCopyCutPaste(t *testing.T) {
 
 func TestMultiCursorDrawsAllCursors(t *testing.T) {
 	st, ft := stageWith(t, "ab ab")
-	ft.SetCursors([]Cursor{{0, 2}, {3, 5}})
+	ft.SetCursors([]Cursor{{Anchor: 0, Caret: 2}, {Anchor: 3, Caret: 5}})
 	p := st.Painter.(*fakePainter)
 	st.Draw()
 	n := 0
@@ -261,7 +261,7 @@ func TestMultiCursorArrowsHomeEnd(t *testing.T) {
 	}
 	ft.SetCursors([]Cursor{At(1), At(5)})
 	st.HandleKey("ArrowRight", true) // extend
-	if got := ft.Cursors(); got[0] != (Cursor{1, 2}) || got[1] != (Cursor{5, 6}) {
+	if got := ft.Cursors(); got[0] != (Cursor{Anchor: 1, Caret: 2}) || got[1] != (Cursor{Anchor: 5, Caret: 6}) {
 		t.Fatalf("shift+right extends every selection: %v", got)
 	}
 	st.HandleKey("ArrowLeft", false) // collapse to the start
@@ -313,12 +313,12 @@ func TestMoveLines(t *testing.T) {
 
 func TestMoveSelectedBlockAndSeveralBlocks(t *testing.T) {
 	st, ft := stageWith(t, "1\n2\n3\n4\n5")
-	ft.SetCursors([]Cursor{{2, 5}}) // lines 2 and 3
+	ft.SetCursors([]Cursor{{Anchor: 2, Caret: 5}}) // lines 2 and 3
 	st.HandleChord("Alt+ArrowUp")
 	if ft.Text() != "2\n3\n1\n4\n5" {
 		t.Fatalf("block up: %q", ft.Text())
 	}
-	if got := ft.Cursors()[0]; got != (Cursor{0, 3}) {
+	if got := ft.Cursors()[0]; got != (Cursor{Anchor: 0, Caret: 3}) {
 		t.Errorf("selection moves too: %v", got)
 	}
 	ft.SetText("1\n2\n3\n4\n5")
@@ -335,7 +335,7 @@ func TestMoveSelectedBlockAndSeveralBlocks(t *testing.T) {
 	}
 	// A selection ending at the start of a line excludes that line.
 	ft.SetText("a\nb\nc")
-	ft.SetCursors([]Cursor{{0, 2}})
+	ft.SetCursors([]Cursor{{Anchor: 0, Caret: 2}})
 	st.HandleChord("Alt+ArrowDown")
 	if ft.Text() != "b\na\nc" {
 		t.Errorf("selection ending at line start: %q", ft.Text())
@@ -502,13 +502,13 @@ func TestCopyAndPasteMarkdownCommands(t *testing.T) {
 	if st.HandleChord("Mod+Shift+C") {
 		t.Error("nothing selected: nothing to copy")
 	}
-	ft.SetCursors([]Cursor{{0, 11}})
+	ft.SetCursors([]Cursor{{Anchor: 0, Caret: 11}})
 	if !st.HandleChord("Mod+Shift+C") || fc.written != "**hello** world" {
 		t.Fatalf("copied %q", fc.written)
 	}
 
 	fc.content = "some **bold** and ~~gone~~ text\n"
-	ft.SetCursors([]Cursor{{0, 11}})
+	ft.SetCursors([]Cursor{{Anchor: 0, Caret: 11}})
 	if !st.HandleChord("Mod+Shift+V") {
 		t.Fatal("paste not handled")
 	}
@@ -524,7 +524,7 @@ func TestCopyAndPasteMarkdownCommands(t *testing.T) {
 
 	// No clipboard: the commands decline.
 	st.Clipboard = Clipboard{}
-	ft.SetCursors([]Cursor{{0, 4}})
+	ft.SetCursors([]Cursor{{Anchor: 0, Caret: 4}})
 	if st.HandleChord("Mod+Shift+C") || st.HandleChord("Mod+Shift+V") {
 		t.Error("without a clipboard the commands decline")
 	}
@@ -547,7 +547,7 @@ func TestPasteMarkdownPerCursorAndMultiCopy(t *testing.T) {
 	if got := ft.Cursors(); got[0] != At(1) || got[1] != At(4) {
 		t.Errorf("cursors = %v", got)
 	}
-	ft.SetCursors([]Cursor{{0, 2}, {3, 5}})
+	ft.SetCursors([]Cursor{{Anchor: 0, Caret: 2}, {Anchor: 3, Caret: 5}})
 	st.HandleChord("Mod+Shift+C")
 	if fc.written != "**x**a\nyb" {
 		t.Errorf("copied %q", fc.written)
@@ -560,7 +560,7 @@ func TestCustomFeature(t *testing.T) {
 		r.AddCommand("text.upper", "Upper case", "Mod+Shift+U", func(c *CommandContext) bool {
 			ran = true
 			txt := c.Target.EditText()
-			c.Target.Replace([]Edit{{0, len([]rune(txt)), plainItems(strings.ToUpper(txt))}})
+			c.Target.Replace([]Edit{{From: 0, To: len([]rune(txt)), Items: plainItems(strings.ToUpper(txt))}})
 			return true
 		})
 	}})
@@ -602,5 +602,85 @@ func TestDefaultChordsMatchChord(t *testing.T) {
 		if got := Chord(key, ctrl, shift, alt, false); got != chord {
 			t.Errorf("chord %q is spelled %q by Chord", chord, got)
 		}
+	}
+}
+
+func TestBreaksFeature(t *testing.T) {
+	p := &fakePainter{}
+	ps := NewPageSet(
+		Page{Width: 200, Height: 240, Margin: Insets{Left: 10, Top: 10, Right: 10, Bottom: 10}},
+		Page{Width: 200, Height: 240, Margin: Insets{Left: 10, Top: 10, Right: 10, Bottom: 10}},
+	)
+	ps.Style.Pad = 0
+	f := NewTextFlow("", 0, 0, 0, 0)
+	f.Pages = ps
+	f.Items = []Item{Chars{Text: "abcd"}}
+	f.SetPainter(p)
+	f.SetMode(ModeEdit)
+	st := NewStage(p, 500, 600, f)
+	x0, y0, _, _ := ps.ContentRect(0)
+	f.MouseDown(x0+16, y0+5)
+	f.MouseUp(0, 0)
+	if !st.HandleChord("Mod+Enter") {
+		t.Fatal("page break not handled")
+	}
+	if f.Layout().Pages != 2 {
+		t.Fatalf("pages = %d, want 2", f.Layout().Pages)
+	}
+	if c := f.Cursors()[0]; c.Caret != 2 || !c.After {
+		t.Fatalf("the caret goes after the break: %+v", c)
+	}
+	st.InsertText("X")
+	if flowText(f) != "abXcd" {
+		t.Fatalf("typed text: %q", flowText(f))
+	}
+	items := f.ContentItems()
+	if len(items) != 3 || items[0].(Chars).Text != "ab" || items[2].(Chars).Text != "Xcd" {
+		t.Fatalf("typing after the break goes behind it: %+v", items)
+	}
+	for _, ln := range f.Layout().Lines {
+		if ln.Page == 1 && ln.Start != 2 {
+			t.Errorf("page 2 starts with the text after the break: %+v", ln)
+		}
+	}
+	// Clicking at the start of the second page's line puts the caret after the break.
+	x1, y1, _, _ := ps.ContentRect(1)
+	f.MouseDown(x1, y1+5)
+	f.MouseUp(0, 0)
+	if c := f.Cursors()[0]; c.Caret != 2 || !c.After {
+		t.Fatalf("click after the break: %+v", c)
+	}
+	st.Draw() // the caret is drawn on page 2
+	// Backspace there removes the break.
+	st.HandleKey("Backspace", false)
+	if len(f.ContentItems()) != 1 || f.Layout().Pages != 1 {
+		t.Fatalf("backspace after a break removes it: %+v", f.ContentItems())
+	}
+	// A column break, then Delete in front of it.
+	f.SetCursors([]Cursor{At(1)})
+	st.HandleChord("Mod+Shift+Enter")
+	var kinds []BreakKind
+	for _, it := range f.ContentItems() {
+		if b, ok := it.(Break); ok {
+			kinds = append(kinds, b.Kind)
+		}
+	}
+	if len(kinds) != 1 || kinds[0] != BreakColumn {
+		t.Fatalf("column break: %+v", f.ContentItems())
+	}
+	f.SetCursors([]Cursor{At(1)})
+	st.HandleKey("Delete", false)
+	if len(f.ContentItems()) != 1 {
+		t.Fatalf("delete in front of a break removes it: %+v", f.ContentItems())
+	}
+	// A selection is replaced by the break; a FloatingText declines.
+	f.SetCursors([]Cursor{{Anchor: 1, Caret: 3}})
+	st.HandleChord("Mod+Enter")
+	if flowText(f) != "acd" || len(f.ContentItems()) != 3 {
+		t.Fatalf("selection replaced: %q %+v", flowText(f), f.ContentItems())
+	}
+	fst, _ := stageWith(t, "text")
+	if fst.HandleChord("Mod+Enter") {
+		t.Error("a floating text cannot hold a break")
 	}
 }

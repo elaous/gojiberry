@@ -872,9 +872,16 @@ func (f *TextFlow) CaretRect(offset int) (x, y, h float64, ok bool) {
 // caret from a click. With columns it picks the line whose column the
 // point is in, so a click in the second column doesn't land in the first.
 func (f *TextFlow) OffsetAt(x, y float64) int {
+	o, _ := f.offsetAt(x, y)
+	return o
+}
+
+// offsetAt is OffsetAt that also says whether the point is on a line that
+// starts at the offset right after a break (see Cursor.After).
+func (f *TextFlow) offsetAt(x, y float64) (offset int, afterBreak bool) {
 	lay := f.Layout()
 	if len(lay.Lines) == 0 {
-		return 0
+		return 0, false
 	}
 	best, bestScore := 0, 1e18
 	for i, c := range lay.Lines {
@@ -902,17 +909,17 @@ func (f *TextFlow) OffsetAt(x, y float64) int {
 	}
 	ln := lay.Lines[best]
 	if x <= ln.X {
-		return ln.Start
+		return ln.Start, ln.Start > 0 && f.data.hasOpAt(ln.Start)
 	}
 	prev := 0.0
 	for o := ln.Start + 1; o <= ln.End; o++ {
 		w := f.data.measure(ln.Start, o)
 		if x < ln.X+(prev+w)/2 {
-			return o - 1
+			return o - 1, o-1 == ln.Start && ln.Start > 0 && f.data.hasOpAt(ln.Start)
 		}
 		prev = w
 	}
-	return ln.End
+	return ln.End, false
 }
 
 // --- column grips ----------------------------------------------------
@@ -970,7 +977,7 @@ func (f *TextFlow) MouseMove(x, y float64) bool {
 	if f.sel.dragging {
 		o := f.OffsetAt(x, y)
 		changed := o != f.sel.caret
-		f.sel.caret = o
+		f.sel.caret, f.sel.after = o, false
 		return changed
 	}
 	if f.mode != ModeEdit {

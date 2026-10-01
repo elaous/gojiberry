@@ -24,7 +24,7 @@ func (ft *FloatingText) EditText() string { return ft.Text() }
 
 // Cursors implements EditTarget: the primary cursor first.
 func (ft *FloatingText) Cursors() []Cursor {
-	return append([]Cursor{{ft.anchor, ft.caret}}, ft.extra...)
+	return append([]Cursor{{Anchor: ft.anchor, Caret: ft.caret}}, ft.extra...)
 }
 
 // SetCursors implements EditTarget.
@@ -36,7 +36,7 @@ func (ft *FloatingText) SetCursors(cs []Cursor) {
 	ft.anchor, ft.caret = clamp(cs[0].Anchor), clamp(cs[0].Caret)
 	ft.extra = nil
 	for _, c := range cs[1:] {
-		ft.extra = append(ft.extra, Cursor{clamp(c.Anchor), clamp(c.Caret)})
+		ft.extra = append(ft.extra, Cursor{Anchor: clamp(c.Anchor), Caret: clamp(c.Caret)})
 	}
 	ft.pending = Format{}
 	ft.caretOn = true
@@ -82,7 +82,7 @@ func (ft *FloatingText) Replace(edits []Edit) {
 	n := len(ft.runes)
 	ft.anchor, ft.caret = min(ft.anchor, n), min(ft.caret, n)
 	for i := range ft.extra {
-		ft.extra[i] = Cursor{min(ft.extra[i].Anchor, n), min(ft.extra[i].Caret, n)}
+		ft.extra[i] = Cursor{Anchor: min(ft.extra[i].Anchor, n), Caret: min(ft.extra[i].Caret, n)}
 	}
 	ft.changed()
 }
