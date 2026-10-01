@@ -28,6 +28,7 @@ func Doc(state State, cb Callbacks) gox.Node {
 				transform={cv.Markdown{}}
 				pageCount={state.Pages}
 				pageWidth={560} pageHeight={420}
+				spread={state.Spread}
 				margins={[]float64{60, 50, 60, 50}}
 				onChange={cb.OnFlow}
 				onHoverLink={cb.OnHoverLink}
@@ -35,6 +36,7 @@ func Doc(state State, cb Callbacks) gox.Node {
 					return <>
 						<canvas.Header text="Gojiberry editor" />
 						{page}
+						{watermark(n)}
 						<canvas.Footer>
 							<canvas.PageNumber format="Page {n} of {total}" align={cv.AlignRight} />
 						</canvas.Footer>
@@ -44,6 +46,7 @@ func Doc(state State, cb Callbacks) gox.Node {
 			{picture(state)}
 			<canvas.FloatingText
 				text={state.Note}
+				opacity={0.95}
 				anchor={&cv.Anchor{Page: 0, X: 330, Y: 250}}
 				wrap
 				vocabulary={[]string{"Gojiberry", "canvas", "feature"}}
@@ -57,6 +60,15 @@ func Doc(state State, cb Callbacks) gox.Node {
 			/>
 		</canvas.ScrollView>
 	</canvas.Canvas>
+}
+
+// watermark puts DRAFT across every sheet but the first: the later sheets
+// inherit the first one that sets it.
+func watermark(n int) gox.Node {
+	if n == 0 {
+		return <></>
+	}
+	return <canvas.Watermark text="DRAFT" opacity={0.12} />
 }
 
 // picture is the image, once it has loaded.

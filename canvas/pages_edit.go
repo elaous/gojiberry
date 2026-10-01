@@ -383,6 +383,10 @@ func (ps *PageSet) badge() (label string, labelRect [4]float64, buttons []badgeB
 		buttons = append(buttons, badgeButton{text, [4]float64{x, y, w, badgeH}, do})
 		x += w + 4
 	}
+	addMenu := func(text string, items func() []MenuItem) {
+		bx, by := x, y+badgeH+2
+		add(text, func() { ps.Menu().OpenWithin(items(), bx, by, ps.viewport) })
+	}
 	page, footer := e.page, e.footer
 	if own && page > 0 {
 		add("Use previous", func() {
@@ -395,6 +399,24 @@ func (ps *PageSet) badge() (label string, labelRect [4]float64, buttons []badgeB
 			ps.changed()
 		})
 	}
+	addMenu("Remove ▾", func() []MenuItem {
+		rm := func(scope RemoveScope) func() {
+			return func() {
+				if footer {
+					ps.RemoveFooter(page, scope)
+				} else {
+					ps.RemoveHeader(page, scope)
+				}
+				ps.edit = nil
+			}
+		}
+		name := map[bool]string{false: "header", true: "footer"}[footer]
+		return []MenuItem{
+			{Label: "Remove " + name + " from this page only", Action: rm(RemoveThisPage)},
+			{Label: "Remove " + name + " from this page on", Action: rm(RemoveForward)},
+			{Label: "Remove " + name + " from all pages", Action: rm(RemoveAll)},
+		}
+	})
 	for _, a := range []struct {
 		l string
 		a Align
@@ -481,6 +503,8 @@ func (ps *PageSet) numberMenu(i int) []MenuItem {
 	}
 	items := []MenuItem{
 		{Label: "Hide page number", Action: set(func(c *PageNumberConfig) { c.Show = false })},
+		{Label: "Hide on this page only", Action: func() { ps.RemovePageNumber(i, RemoveThisPage) }},
+		{Label: "Remove from all pages", Action: func() { ps.RemovePageNumber(i, RemoveAll) }},
 		{Separator: true},
 	}
 	for _, a := range []struct {

@@ -36,6 +36,8 @@ const (
 	TagHeader       = "canvas.Header"
 	TagFooter       = "canvas.Footer"
 	TagPageNumber   = "canvas.PageNumber"
+	TagWatermark    = "canvas.Watermark"
+	TagBackground   = "canvas.Background"
 	TagImage        = "canvas.Image"
 	TagFloatingText = "canvas.FloatingText"
 	TagTable        = "canvas.Table"
@@ -76,6 +78,12 @@ type TextFlowProps struct {
 
 	Columns []float64
 	Gap     float64
+
+	// Spread lays the sheets out two to a row as facing pages; SpreadBook
+	// leaves the first one alone on the right; Gutter is the space
+	// between facing sheets.
+	Spread, SpreadBook bool
+	Gutter             float64
 
 	// PageCount is how many sheets there are (default 1); PageWidth and
 	// PageHeight their size (default 595 x 842, A4 in points).
@@ -196,6 +204,8 @@ type FloatingTextProps struct {
 	Anchor        *canvas.Anchor
 	Wrap          bool
 	Background    string
+	// Opacity is 0..1 for the whole box; zero means opaque.
+	Opacity float64
 	// Vocabulary adds words the completion may suggest.
 	Vocabulary []string
 	OnChange   func(*canvas.FloatingText)
@@ -234,3 +244,34 @@ type ScrollViewProps struct {
 func ScrollView(p ScrollViewProps) gox.Node {
 	return gox.Host(TagScrollView, p, p.Children...).WithKey(p.Key)
 }
+
+// WatermarkProps is text or a picture drawn faintly across a sheet's
+// middle, behind the text. Returned from a Pages template it is inherited
+// by later sheets like a Header; None removes it from this sheet on.
+type WatermarkProps struct {
+	Text    string
+	Style   *canvas.TextStyle
+	Color   string
+	Image   canvas.ImageSource
+	Scale   float64
+	Opacity float64
+	// Angle is in degrees clockwise (text defaults to -45); Straight
+	// makes text level.
+	Angle    float64
+	Straight bool
+	None     bool
+}
+
+// Watermark is a page watermark.
+func Watermark(p WatermarkProps) gox.Node { return gox.Host(TagWatermark, p) }
+
+// BackgroundProps is a picture filling a sheet. Inherited like a Header.
+type BackgroundProps struct {
+	Image   canvas.ImageSource
+	Opacity float64
+	Fit     canvas.BackgroundFit
+	None    bool
+}
+
+// Background is a page background picture.
+func Background(p BackgroundProps) gox.Node { return gox.Host(TagBackground, p) }

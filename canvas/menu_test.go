@@ -177,6 +177,7 @@ func TestMenusInsideAScrollViewStayInTheVisiblePart(t *testing.T) {
 	ps.Pages[0].PageNumber = &PageNumberConfig{Show: true, Start: 1}
 	w, h := ps.Size()
 	sv.Add(ps, w, h)
+	sv.SetContentSize(w, h+1000) // tall enough to scroll to 50
 	sv.SetContentMode(ModeEdit)
 	sv.ScrollTo(0, 50)
 	sv.Draw() // tells the content its visible part

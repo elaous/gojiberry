@@ -131,7 +131,7 @@ func NewRegistry(features ...Feature) *Registry {
 
 // DefaultFeatures are the features a new Stage has.
 func DefaultFeatures() []Feature {
-	return []Feature{MultiCursor{}, LineOps{}, MarkdownClipboard{}, Breaks{}, Paragraphs{}, TextCase{}, Links{}}
+	return []Feature{MultiCursor{}, LineOps{}, MarkdownClipboard{}, Breaks{}, Paragraphs{}, TextCase{}, Links{}, PageFurniture{}}
 }
 
 // Register installs f. It panics on a duplicate feature or command

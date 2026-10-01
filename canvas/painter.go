@@ -44,6 +44,8 @@ type ImagePainter interface {
 	Save()
 	Restore()
 	Translate(x, y float64)
+	// Rotate turns the origin's axes by angle radians (clockwise).
+	Rotate(angle float64)
 	ClipRect(x, y, w, h float64)
 
 	// DrawImage draws the (sx, sy, sw, sh) region of src into the
