@@ -8,6 +8,16 @@ type (
 	// view/edit modes) are Drawers; so are modeless ones like Menu and
 	// ScrollView.
 	Drawer interface{ Draw() }
+	// ViewportSetter is told, before each draw, which part of its
+	// coordinate space is visible (a ScrollView's viewport, in content
+	// coordinates) so popups can stay inside it.
+	ViewportSetter interface{ SetViewport(x, y, w, h float64) }
+	// Overlayer draws on top of everything else in the Stage (a menu,
+	// editing chrome), after every component's Draw.
+	Overlayer interface{ DrawOverlay() }
+	// DoubleClicker handles a double click (the second mousedown of a
+	// pair), after MouseDown has seen it.
+	DoubleClicker interface{ DoubleClick(x, y float64) bool }
 	// MouseWheeler handles a wheel turn at (x, y) with the given deltas
 	// (pixels, positive = down/right). It reports whether it handled
 	// the wheel, in which case the page itself should not scroll and
@@ -99,6 +109,11 @@ func (s *Stage) Paint() {
 	for _, c := range s.Components {
 		c.Draw()
 	}
+	for _, c := range s.Components {
+		if o, ok := c.(Overlayer); ok {
+			o.DrawOverlay()
+		}
+	}
 }
 
 // Draw clears the canvas and draws every component, back to front.
@@ -136,6 +151,14 @@ func (s *Stage) MouseMove(x, y float64) bool {
 	return s.each(func(c Drawer) bool {
 		h, ok := c.(MouseMover)
 		return ok && h.MouseMove(x, y)
+	})
+}
+
+// DoubleClick dispatches a double click; true means redraw.
+func (s *Stage) DoubleClick(x, y float64) bool {
+	return s.each(func(c Drawer) bool {
+		h, ok := c.(DoubleClicker)
+		return ok && h.DoubleClick(x, y)
 	})
 }
 

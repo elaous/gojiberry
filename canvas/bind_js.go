@@ -112,6 +112,9 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		e.PreventDefault()
 		x, y := local(e)
 		s.MouseDown(x, y)
+		if e.Detail == 2 { // the second press of a double click
+			s.DoubleClick(x, y)
+		}
 		// The input needs focus to receive keys: for typing into a
 		// cell, and for arrow/Enter/Escape navigation of a menu.
 		if s.WantsFocus() {

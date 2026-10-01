@@ -235,6 +235,15 @@ func (sv *ScrollView) MouseDown(x, y float64) bool {
 	return sv.content.MouseDown(cx, cy)
 }
 
+// DoubleClick hands a double click to the content (inside the viewport).
+func (sv *ScrollView) DoubleClick(x, y float64) bool {
+	if !sv.inside(x, y) || sv.barAt(x, y) != 0 {
+		return false
+	}
+	cx, cy := sv.toContent(x, y)
+	return sv.content.DoubleClick(cx, cy)
+}
+
 // MouseMove drags a thumb, tracks the hovered bar, and passes movement
 // to the content while the pointer is over the viewport or a press that
 // began in it is still held.
@@ -336,6 +345,11 @@ func (sv *ScrollView) CSSCursor() string {
 // scrollbars.
 func (sv *ScrollView) Draw() {
 	p := sv.painter
+	for _, c := range sv.content.Components {
+		if vs, ok := c.(ViewportSetter); ok {
+			vs.SetViewport(sv.ScrollX, sv.ScrollY, sv.Width, sv.Height)
+		}
+	}
 	p.Save()
 	p.ClipRect(sv.X, sv.Y, sv.Width, sv.Height)
 	p.Translate(sv.X-sv.ScrollX, sv.Y-sv.ScrollY)

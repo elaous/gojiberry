@@ -76,6 +76,39 @@ run(async () => {
   assert(near(after1.widths[0], after0.widths[0]), 'the next page keeps the new column widths');
   assert(!s.overflow && s.pagesUsed === 4, 'the document still fits');
 
+  // Headers, footers and page numbers: double click to edit; per page =
+  // previous page or new; the page number is selectable and has settings.
+  assert(s.headers[1] === 'Gojiberry Quarterly' && s.headers[2] === 'Gojiberry Quarterly' && s.headers[3] === '', 'headers inherit down the pages (page 3 removed it)');
+  await scrollTo(s.pageRects[1][1] - 40);
+  const [h1x, h1y] = view(s.pageRects[1][0] + 100, s.pageRects[1][1] + 30);
+  await page.mouse.move(...d.at(h1x, h1y));
+  await page.mouse.dblclick(...d.at(h1x, h1y));
+  await refresh();
+  assert(s.hfEdit.editing && s.hfEdit.page === 1 && !s.hfEdit.footer, 'double click on a header starts editing it');
+  assert(s.headers[1] === 'Gojiberry Quarterly', 'looking at an inherited header does not change anything');
+  await page.keyboard.type(' (draft)');
+  await refresh();
+  assert(s.headers[0] === 'Gojiberry Quarterly' && s.headers[1] === 'Gojiberry Quarterly (draft)' && s.headers[2] === 'Gojiberry Quarterly (draft)', 'typing makes page 1 its own header, which page 2 inherits: ' + s.headers);
+  await page.keyboard.press('Escape');
+
+  // Select page number 2 (the third page) and change its format.
+  await scrollTo(s.pageRects[2][1] + s.pageRects[2][3] - 400);
+  const nr = s.numberRects[2];
+  const [nx, ny] = view(nr[0] + nr[2] / 2, nr[1] + nr[3] / 2);
+  await d.click(nx, ny);
+  await refresh();
+  assert(s.numberSelected.ok && s.numberSelected.page === 2 && s.menu.open, 'clicking a page number selects it and opens its settings menu');
+  const labelIdx = s.menu.labels.findIndex((l) => l.trim().endsWith('Page {n} of {total}'));
+  assert(labelIdx >= 0, 'the menu offers formats: ' + s.menu.labels.join(' | '));
+  // Menu rows: 28px items, 9px separators (labelled "").
+  let rowTop = s.menu.rect[1];
+  for (let i = 0; i < labelIdx; i++) rowTop += s.menu.labels[i] === '' ? 9 : 28;
+  const [pmx, pmy] = view(s.menu.rect[0] + 20, rowTop + 14);
+  await d.click(pmx, pmy);
+  await refresh();
+  assert(s.pageNumbers[2] === 'Page 2 of 4' && s.pageNumbers[1] === 'Page 1' && s.pageNumbers[3] === '— i —', 'the format applies from that page on, earlier pages keep theirs: ' + s.pageNumbers);
+  assert(!s.menu.open, 'the menu closes');
+
   // Image: move (snaps to 5) and the text wraps around it.
   await scrollTo(s.image.visible[1] - 200);
   let im = s.image;
