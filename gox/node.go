@@ -12,6 +12,8 @@ const (
 	KindText
 	KindFragment
 	KindRaw
+	// KindHost is a node for a renderer-specific component (see Host).
+	KindHost
 )
 
 // Node is a single node in a UI tree: an element, a text run, or a
@@ -23,6 +25,7 @@ type Node struct {
 	Attrs    []Attr
 	Children []Node
 	Text     string // content, when Kind == KindText
+	Props    any    // typed props, when Kind == KindHost
 }
 
 // Attr is a single attribute or event binding on an element.
@@ -112,4 +115,14 @@ func On(name string, handler EventHandler) Attr {
 func (n Node) WithKey(key string) Node {
 	n.Key = key
 	return n
+}
+
+// Host constructs a node for a renderer-specific component: tag names it
+// (for example "canvas.TextFlow"), props is its typed props value (any
+// Go type -- slices, structs, functions), and children are its child
+// nodes. Only a renderer that knows the tag can draw it (goxcanvas draws
+// the canvas components); the HTML renderer reports an error, and domrt
+// and goxgio draw nothing.
+func Host(tag string, props any, children ...Node) Node {
+	return Node{Kind: KindHost, Tag: tag, Props: props, Children: children}
 }

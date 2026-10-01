@@ -1303,13 +1303,19 @@ generated code.
 
   `.gox` components can be generic and take function props with markup:
   `<components.List[Person] items={people} item={func(p Person) gox.Node { return <b>{p.Name}</b> }} />`
-  (see `examples/generic-list-demo`, and `docs/gox-canvas.md` for how gox
-  could drive the canvas components).
+  (see `examples/generic-list-demo`).
+
+  `canvas/goxcanvas` draws a gox tree on a canvas (`<canvas.Canvas>`,
+  `<canvas.TextFlow pages={func(page gox.Node, n int) gox.Node {...}}>`,
+  `<canvas.Header>`, `<canvas.Footer>`, `<canvas.PageNumber>`), updating the
+  live components in place on each render: see `docs/gox-canvas.md` and
+  `examples/goxcanvas-demo`. What is still to do is in `docs/canvas-todo.md`.
 
   Demos, each with a Playwright e2e test run by `go test` (skipped when
   node/playwright/chromium are missing): `examples/canvas-table-demo`,
   `examples/canvas-flow-demo`, `examples/canvas-image-demo`,
-  `examples/canvas-scroll-demo`, `examples/canvas-document-demo` (run one with
+  `examples/canvas-scroll-demo`, `examples/canvas-document-demo`,
+  `examples/goxcanvas-demo` (run one with
   `make -C examples/<name> run`).
 
 - `examples/wasm-canvas-demo` — `domrt/html`'s `Context2D`/`Context3D`:

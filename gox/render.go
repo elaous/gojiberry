@@ -59,6 +59,8 @@ func (rw *renderWriter) render(n Node) {
 		}
 	case KindElement:
 		rw.renderElement(n)
+	case KindHost:
+		rw.err = fmt.Errorf("gox: host node %q has no HTML form; render it with its own renderer", n.Tag)
 	default:
 		rw.err = fmt.Errorf("gox: unknown node kind %d", n.Kind)
 	}
