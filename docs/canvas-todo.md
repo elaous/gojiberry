@@ -49,6 +49,13 @@ submenus), `CommandMenu` (a menu from the registered commands),
 `Stage.Rebind`), `DocumentView` (the window around the canvas),
 `FontSelector`, `StylePicker`.
 
+**Saving** ([saving.md](saving.md)) -- `docfile` (JSON, protobuf text and
+binary), `saver` with Postgres, SQLite, S3, local, memory, HTTP and browser
+targets, `components.Saver`; `transfer` importers/exporters (the seam, with
+Markdown and text) and `components.Transfer`; **lazy fonts**: a font picked
+in the selector is downloaded into the store the first time the text uses it
+(`fonts.Library`, `Stage.OnFontUse`).
+
 **gox** -- `gox.Host`, the `canvas/gox` renderer and its element registry
 (`Canvas`, `TextFlow` with the `Pages` template, `Header`, `Footer`,
 `PageNumber`, `Watermark`, `Background`, `Image`, `FloatingText`, `Table`,
@@ -65,6 +72,7 @@ submenus), `CommandMenu` (a menu from the registered commands),
   break offset goes in front of the break unless the caret is "after".
 - Markdown: links round-trip, but tables and images are not written back;
   case and small caps have no Markdown form.
+- Importers/exporters beyond Markdown and text (Word, PDF, HTML); saving pages, floating objects and images.
 - Table cell render prop for the gox `Table`, `PageSet` as its own gox
   element, `CanvasView` (a DOM component that mounts a `canvas/gox` tree).
 - Spread view: images can run across the gutter by anchor, but there is

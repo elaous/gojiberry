@@ -447,6 +447,20 @@ expanded by the same recursive scan, with no extra grammar required.
   additional remote catalogs against, the same way `docstore`'s
   `RegisterAdapter` lets a deployment add a storage backend without
   touching this package) is also future work, not done here.
+- **`docfile`, `saver`, `transfer`** — saving canvas documents. `docfile.Document`
+  mirrors the editor's content (text runs, paragraph formats, columns, breaks,
+  named styles, fonts) and writes as JSON, protobuf text or protobuf binary
+  (`docfile.Schema()` prints the `.proto`). `saver.Saver` pairs a format with
+  named targets, each a `docstore.Adapter`: Postgres, **SQLite** (new,
+  pure Go), S3/MinIO, local files, memory, `docstore.NewHTTPAdapter` (a
+  docstore server in front of any of those, for a WASM client) or
+  `docstore.NewBrowserAdapter` (localStorage). `components.Saver` is the form
+  and `saver.Session` its state. `transfer.Registry` is the seam for
+  importers and exporters (Markdown and plain text built in), with
+  `components.Transfer` for the buttons. See [docs/saving.md](docs/saving.md).
+- **`fonts.Library`** — fonts added from the `FontSelector` are downloaded into
+  a store (any docstore backend) the first time the document uses them, then
+  loaded from there. See [docs/saving.md](docs/saving.md#lazy-fonts).
 - **`docstore`** — a storage-agnostic document persistence server. The
   `Adapter` interface (`Save`/`Load`/`List`/`Delete`, keyed by document
   ID) is implemented six ways: `MemoryAdapter` (in-process, the

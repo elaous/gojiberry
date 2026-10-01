@@ -28,6 +28,9 @@ type Variant struct {
 	// serve files; empty for fonts already installed on the machine,
 	// which CSS can use by name alone.
 	URL string `json:"url,omitempty"`
+	// Key is where a Library keeps its downloaded copy of the file in its
+	// store; empty until the font has been used.
+	Key string `json:"key,omitempty"`
 }
 
 // Font is a family and the cuts a repository has of it.
