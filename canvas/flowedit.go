@@ -100,7 +100,15 @@ func (f *TextFlow) Slice(from, to int) []Item {
 	d := f.flatten()
 	from, to = min(max(from, 0), len(d.runes)), min(max(to, 0), len(d.runes))
 	var items []Item
+	paraAt := func(i int) {
+		for _, r := range d.paras {
+			if r.at == i {
+				items = append(items, r.pf)
+			}
+		}
+	}
 	for i := from; i < to; {
+		paraAt(i)
 		if o, ok := d.objs[i]; ok {
 			items = append(items, o)
 			i++
@@ -108,7 +116,7 @@ func (f *TextFlow) Slice(from, to int) []Item {
 		}
 		j := i
 		var b strings.Builder
-		for j < to && d.rs[j] == d.rs[i] && !d.isObj(j) {
+		for j < to && d.rs[j] == d.rs[i] && !d.isObj(j) && (j == i || !d.hasParaAt(j)) {
 			b.WriteRune(d.runes[j])
 			j++
 		}
@@ -188,6 +196,10 @@ func (f *TextFlow) replaceRange(from, to int, ins []Item, after bool) {
 				out = append(out, v)
 			}
 			off++
+		case ParaFormat: // goes with the paragraph it starts, if that is deleted
+			if off < from || off >= to {
+				out = append(out, it)
+			}
 		default: // break or column config at offset off
 			if off <= from || off >= to {
 				out = append(out, it)
@@ -228,6 +240,7 @@ func (f *TextFlow) opAt(o int) int {
 			off += len([]rune(v.Text))
 		case Inline:
 			off++
+		case ParaFormat:
 		default:
 			if off == o {
 				return i
@@ -437,7 +450,11 @@ func (f *TextFlow) editKey(key string, shift bool) bool {
 			return from, to, nil
 		})
 	case "Enter":
-		return f.InsertText("\n")
+		return f.enter()
+	case "Tab":
+		if !f.indentList(map[bool]int{false: 1, true: -1}[shift]) {
+			return false
+		}
 	case "Escape":
 		switch {
 		case len(f.extra) > 0:
@@ -716,6 +733,15 @@ func (f *TextFlow) caretRect(c Cursor) (x, y, h float64, ok bool) {
 func (d *flowData) hasOpAt(o int) bool {
 	for _, op := range d.ops {
 		if op.at == o {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *flowData) hasParaAt(o int) bool {
+	for _, r := range d.paras {
+		if r.at == o {
 			return true
 		}
 	}
