@@ -55,7 +55,7 @@ needs to know or care which renderer(s) will eventually consume it.
 
 ## Getting Started
 
-Requires Go 1.24+. This module (`github.com/elaous/gojiberry`) is
+Requires Go 1.26+. This module (`github.com/elaous/gojiberry`) is
 private, so it isn't `go get`-able from outside this checkout the way a
 public package would be — every consumer in this repo (including every
 separate-module example under `examples/`) uses it via a local

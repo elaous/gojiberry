@@ -4,7 +4,7 @@
 # these four service Dockerfiles shares, and
 # ../../docker-compose.yml/docs/README.md for how this fits into the
 # full stack.
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
 # ca-certificates: fontserver's own Google Fonts proxy
 # (GOJIBERRY_FONTSERVER_GOOGLE_KEY) reaches googleapis.com over TLS --
 # without this the request fails cert verification.
