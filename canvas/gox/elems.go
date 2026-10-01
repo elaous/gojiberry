@@ -71,6 +71,7 @@ func (f *flowElem) Update(_ *Context, props any, _ []gox.Node) (bool, error) {
 		changed = true
 	}
 	fl.AutoClose, fl.Complete, fl.Completer = p.AutoClose, p.Complete, p.Completer
+	fl.Comments, fl.Author, fl.OnHoverComment = p.Comments, p.Author, p.OnHoverComment
 	if first || !reflect.DeepEqual(p.Vocabulary, old.Vocabulary) {
 		fl.Vocabulary = append([]string(nil), p.Vocabulary...)
 		changed = true

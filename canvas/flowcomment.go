@@ -140,3 +140,50 @@ func (f *TextFlow) drawCommentTip() {
 		p.FillText(foot, x+pad, ty)
 	}
 }
+
+// CommentRange returns the stream range [from, to) of the text the
+// comment is on (from its first character to its last).
+func (f *TextFlow) CommentRange(id string) (from, to int, ok bool) {
+	ids := charComments(f.ContentItems())
+	from, to = -1, 0
+	for i, c := range ids {
+		if c == id {
+			if from < 0 {
+				from = i
+			}
+			to = i + 1
+		}
+	}
+	return max(from, 0), to, from >= 0
+}
+
+// CommentExcerpts returns, for every comment that is on some text, that
+// text (the characters carrying its ID, in order).
+func (f *TextFlow) CommentExcerpts() map[string]string {
+	out := map[string]string{}
+	for _, it := range f.ContentItems() {
+		if ch, ok := it.(Chars); ok && ch.Format.Comment != "" {
+			out[ch.Format.Comment] += ch.Text
+		}
+	}
+	return out
+}
+
+// DeleteComment removes the comment and un-marks its text.
+func (f *TextFlow) DeleteComment(id string) bool {
+	if !f.Comments.Delete(id) {
+		return false
+	}
+	untagComment(f, id)
+	return true
+}
+
+// SelectComment selects the text the comment is on.
+func (f *TextFlow) SelectComment(id string) bool {
+	from, to, ok := f.CommentRange(id)
+	if !ok {
+		return false
+	}
+	f.SetCursors([]Cursor{{Anchor: from, Caret: to}})
+	return true
+}

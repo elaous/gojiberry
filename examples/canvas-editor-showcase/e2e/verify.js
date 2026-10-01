@@ -10,7 +10,7 @@ run(async () => {
   let s = await d.state();
   assert(!s.error, 'renders without error: ' + s.error);
   assert(s.mode === 'view' && s.pages === 3, 'starts in view mode with three pages');
-  assert(JSON.stringify(s.features) === JSON.stringify(['history', 'multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'styles', 'page-furniture']), 'features registered: ' + s.features);
+  assert(JSON.stringify(s.features) === JSON.stringify(['history', 'multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'styles', 'comments', 'page-furniture']), 'features registered: ' + s.features);
   for (const tag of ['canvas.TextFlow', 'canvas.Image', 'canvas.FloatingText', 'canvas.Table', 'canvas.ScrollView'])
     assert(s.elements.includes(tag), tag + ' is a registered element');
   assert(s.commands >= 30, 'commands registered: ' + s.commands);
@@ -20,7 +20,7 @@ run(async () => {
   // The menu bar is built from the registered commands: one submenu per feature.
   await page.click('button.gj-menubar-button:has-text("Edit")');
   const subs = await page.locator('.gj-menubar-panel > .gj-menu > .gj-menu-item-sub').count();
-  assert(subs === 10, 'Edit has a submenu per feature: ' + subs);
+  assert(subs === 11, 'Edit has a submenu per feature: ' + subs);
   const shortcut = await page.locator('.gj-menubar-panel li:has-text("Move line up") .gj-menu-shortcut').first().textContent();
   assert(shortcut === 'Alt+↑', 'a command shows its shortcut: ' + shortcut);
   await page.hover('.gj-menubar-panel li.gj-menu-item-sub:has-text("Paragraphs")');
@@ -140,6 +140,8 @@ run(async () => {
   await page.waitForTimeout(50);
   assert(await page.locator('.gj-keybindings-message:has-text("Copy line down is now Ctrl+J")').count() === 1, 'the editor reports the new binding');
   assert(await page.locator('.gj-keybindings-row-modified:has-text("Copy line down")').count() === 1, 'and marks it modified');
+  // Playwright scrolled the long key list into view, which moved the whole page (overflow:hidden still scrolls).
+  await page.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('*').forEach((e) => { if (e.scrollTop) e.scrollTop = 0; }); });
   await page.mouse.move(...d.at(450, 300));
   await page.mouse.wheel(0, -5000);
   await page.waitForTimeout(50);
@@ -225,6 +227,36 @@ run(async () => {
   s = await d.state();
   assert(s.text.includes('(note) feature') && s.suggestions.length === 0, 'Tab accepts the completion');
 
+  // Comments: comment the selection, see it listed with its text and mentions, hover it, reply, resolve, delete.
+  await page.focus('#input');
+  for (let i = 0; i < 7; i++) await page.keyboard.press('Shift+ArrowLeft');
+  page.once('dialog', (dlg) => dlg.accept('Check **this** wording, @bob or ana@example.com'));
+  await page.keyboard.press('Control+Alt+n');
+  await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).comments === 1, null, { timeout: 5000 });
+  await page.click('button[data-tab="comments"]');
+  assert(await page.locator('.gj-comment-excerpt').textContent() === 'feature', 'the comment card shows the commented text');
+  assert(await page.locator('.gj-comment .gj-markdown strong').textContent() === 'this', 'the body is rendered as Markdown');
+  assert(await page.locator('.gj-comment .gj-mention[data-mention="bob"]').count() === 1, 'an @username is highlighted');
+  assert(await page.locator('.gj-comment a.gj-mention-email[href="mailto:ana@example.com"]').count() === 1, 'an e-mail address is a mailto mention');
+  assert((await page.locator('.gj-comment-author').textContent()) === 'you@example.com', 'the author is the current user');
+  s = await d.state();
+  await page.mouse.move(...d.at(s.comment.x, s.comment.y), { steps: 3 });
+  await page.waitForTimeout(100);
+  s = await d.state();
+  assert(s.hoverComment === s.comment.id, 'hovering commented text finds its comment: ' + s.hoverComment);
+  const tip = await d.pixel(Math.round(s.comment.x), Math.round(s.comment.y) + 28);
+  assert(tip[0] === 0xff && tip[1] === 0xfb && tip[2] === 0xe6, 'the summary tip is drawn under the text: ' + tip);
+  await page.fill('.gj-comment-input', 'Agreed');
+  await page.click('.gj-comment-send');
+  assert(await page.locator('.gj-comment-reply').textContent() === 'you@example.com Agreed', 'a reply is added');
+  await page.click('.gj-comment-resolve');
+  assert(await page.locator('.gj-comment').count() === 0, 'a resolved comment leaves the open list');
+  await page.click('.gj-comment-toggle');
+  assert(await page.locator('.gj-comment-resolved').count() === 1, 'and shows when asked');
+  await page.click('.gj-comment-delete');
+  s = await d.state();
+  assert(s.comments === 0 && s.comment === null, 'Delete removes the comment and un-marks its text');
+
   // Lazy fonts: picking a font only adds it; the file is downloaded into
   // the store the first time the text uses it.
   const fs = require('fs');
@@ -234,6 +266,7 @@ run(async () => {
     fontHits++;
     route.fulfill({ status: 200, contentType: 'font/ttf', headers: { 'access-control-allow-origin': '*' }, body: realFont ? fs.readFileSync(realFont) : Buffer.from('not a font') });
   });
+  await page.focus('#input');
   await page.keyboard.press('ArrowRight'); // a caret, nothing selected
   await page.click('button[data-tab="format"]');
   await page.click('.gj-fontselector-control');
@@ -306,6 +339,34 @@ run(async () => {
   await chooser.setFiles({ name: 'hello.md', mimeType: 'text/markdown', buffer: Buffer.from('# Imported\n\nfresh **words**') });
   await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).text.includes('fresh words'));
   assert((await page.locator('#transfer-message').textContent()) === 'Imported hello.md', 'Import reads the file into the editor');
+
+  // Roles: a viewer is held in view mode and cannot comment; an editor can edit but not manage.
+  await d.click(100, 164); // into the imported text's second line
+  await page.focus('#input');
+  await page.keyboard.press('End');
+  page.once('dialog', (dlg) => dlg.accept('One more'));
+  for (let i = 0; i < 3; i++) { await page.focus('#input'); await page.keyboard.press('Shift+ArrowLeft'); } // the format panel re-renders on a heading selection
+  await page.focus('#input');
+  await page.keyboard.press('Control+Alt+n');
+  await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).comments === 1);
+  await page.click('button[data-role="viewer"]');
+  s = await d.state();
+  assert(s.role === 'viewer' && s.mode === 'view' && !s.editing, 'a viewer is put back in view mode');
+  await d.toggleMode();
+  s = await d.state();
+  assert(s.mode === 'view', 'and cannot switch to edit mode');
+  const typed = s.text;
+  await d.click(180 + 60, 24 + 60 + 80);
+  await page.keyboard.type('nope');
+  assert((await d.state()).text === typed, 'typing changes nothing for a viewer');
+  await page.click('button[data-tab="comments"]');
+  assert(await page.locator('.gj-comment').count() === 1 && await page.locator('.gj-comment-actions').count() === 0, 'a viewer reads comments but has no controls');
+  await page.click('button[data-role="editor"]');
+  await d.toggleMode();
+  s = await d.state();
+  assert(s.role === 'editor' && s.mode === 'edit', 'an editor can edit again');
+  assert(await page.locator('.gj-comment-actions').count() === 1, 'and gets the comment controls back');
+  await page.click('button[data-role="owner"]');
   await page.keyboard.press('Escape');
   assert(d.errors.length === 0, 'no page errors: ' + d.errors.join('; '));
   await d.close();
