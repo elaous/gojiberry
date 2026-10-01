@@ -17,6 +17,11 @@ type State struct {
 	Image  canvas.ImageSource
 	Note   string
 	Styles []canvas.StyleDef
+	// Role is what the user may do; a viewer is held in view mode.
+	Role canvas.Role
+	// Comments are the document's comments; Author is who adds new ones.
+	Comments *canvas.CommentSet
+	Author   string
 }
 
 const sample = "# Gojiberry editor\n\n" +

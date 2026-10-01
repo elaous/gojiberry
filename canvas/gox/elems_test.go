@@ -401,3 +401,24 @@ func TestCanvasRoleHoldsViewersInViewMode(t *testing.T) {
 func TextFlow2() TextFlowProps {
 	return TextFlowProps{Text: "x", PageCount: 1, PageWidth: 200, PageHeight: 200}
 }
+
+func TestTextFlowCommentProps(t *testing.T) {
+	r, _ := newRoot()
+	set := canvas.NewCommentSet(canvas.Comment{ID: "k", Text: "hi"})
+	heard := ""
+	err := r.Render(Canvas(CanvasProps{Width: 300, Height: 300, Children: []gox.Node{
+		TextFlow(TextFlowProps{Text: "x", PageCount: 1, PageWidth: 200, PageHeight: 200,
+			Comments: set, Author: "ana", OnHoverComment: func(id string) { heard = id }}),
+	}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fl := r.Find(TagTextFlow, 0).(*canvas.TextFlow)
+	if fl.Comments != set || fl.Author != "ana" || fl.OnHoverComment == nil {
+		t.Fatal("props reach the flow")
+	}
+	fl.OnHoverComment("k")
+	if heard != "k" {
+		t.Fatal(heard)
+	}
+}

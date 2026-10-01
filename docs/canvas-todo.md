@@ -53,6 +53,17 @@ submenus), `CommandMenu` (a menu from the registered commands),
 `Stage.Rebind`), `DocumentView` (the window around the canvas),
 `FontSelector`, `StylePicker`.
 
+**Roles and comments** -- `canvas.Role` (owner, editor, viewer; the zero value is
+owner): a viewer's components are held in view mode (`Stage.SetRole`, the gox
+`Canvas` `role` prop), only owners and editors comment. `docstore.ACL.RoleOf`
+gives the role name. **Comments** are notes on text: `Format.Comment` anchors a
+`canvas.CommentSet` entry (author, Markdown body, `@username` and e-mail
+mentions, replies, resolved) so it follows the text through edits; hovering the
+text shows a tip with the author and plain summary; Ctrl/Cmd+Alt+N adds one
+(Ctrl/Cmd+Alt+Shift+N edits, `comment.resolve`/`comment.delete`); `docfile`
+saves them; `components.CommentList`/`CommentCard`/`MarkdownText` show them
+(Markdown with highlighted mentions).
+
 **Saving** ([saving.md](saving.md)) -- `docfile` (JSON, protobuf text and
 binary), `saver` with Postgres, SQLite, S3, local, memory, HTTP and browser
 targets, `components.Saver`; `transfer` importers/exporters (the seam, with
@@ -68,6 +79,17 @@ in the selector is downloaded into the store the first time the text uses it
 `examples/canvas-editor-showcase` puts all of it in one window.
 
 ## To do
+
+Asked for, not started:
+
+- **Index** (table of contents and an alphabetical index with entries marked in
+  the text), **footnotes**, **outline** (the headings as a navigable tree),
+  **bookmarks** (named positions and links to them).
+- **Map object** (OpenStreetMap tiles) and **flowcharts** as canvas objects.
+- **Multi-user editing**: the `crdt` and `syncserver` packages exist; the
+  `TextFlow` is not wired to them yet. Roles are the permission half.
+- Comments: a viewer cannot comment (comments need edit mode); an author list for
+  `@username` completion; notifications for mentions.
 
 - **Formula** editor and formula text element.
 - `TextFlow` multi-cursor keeps one `Cursor.After` per cursor; typing at a

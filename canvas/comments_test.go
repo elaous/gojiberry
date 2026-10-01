@@ -222,3 +222,61 @@ func TestCommentHoverTipAndHighlight(t *testing.T) {
 		t.Fatal("no comment, no hover")
 	}
 }
+
+func TestCommentRangeExcerptDeleteSelect(t *testing.T) {
+	f, _ := commentFlow(t)
+	f.Comments = NewCommentSet(Comment{ID: "k", Text: "t"}, Comment{ID: "z", Text: "u"})
+	f.ResetContent()
+	f.Items = []Item{Chars{Text: "ab "}, Chars{Text: "cd", Format: Format{Comment: "k"}}, Chars{Text: " ef "}, Chars{Text: "gh", Format: Format{Comment: "k", FontWeight: 700}}}
+	if from, to, ok := f.CommentRange("k"); !ok || from != 3 || to != 11 {
+		t.Fatalf("range %d..%d %v", from, to, ok)
+	}
+	if _, _, ok := f.CommentRange("z"); ok {
+		t.Fatal("a comment on no text has no range")
+	}
+	if got := f.CommentExcerpts(); !reflect.DeepEqual(got, map[string]string{"k": "cdgh"}) {
+		t.Fatalf("%v", got)
+	}
+	if !f.SelectComment("k") || f.Cursors()[0] != (Cursor{Anchor: 3, Caret: 11}) {
+		t.Fatalf("%v", f.Cursors())
+	}
+	if f.SelectComment("z") {
+		t.Fatal("nothing to select")
+	}
+	if !f.DeleteComment("k") || f.Comments.Len() != 1 || f.DeleteComment("k") {
+		t.Fatal("delete")
+	}
+	for _, id := range charComments(f.ContentItems()) {
+		if id != "" {
+			t.Fatal("text un-marked")
+		}
+	}
+	if flowText(f) != "ab cd ef gh" {
+		t.Fatalf("%q", flowText(f))
+	}
+}
+
+func TestCommentOnWholeMarkdownDocument(t *testing.T) {
+	f, st := commentFlow(t)
+	f.ResetContent()
+	f.Items = Markdown{}.Transform("# Imported\n\nfresh **words**")
+	f.SetMode(ModeEdit)
+	f.MouseDown(10+8, 40)
+	f.MouseUp(0, 0)
+	f.SelectAll()
+	if !runCmd(f, st, CmdCommentAdd, "whole") || f.Comments.Len() != 1 {
+		t.Fatalf("comment on a selection with paragraph formats: %v", f.Cursors())
+	}
+}
+
+func TestCommentChordRunsThroughStage(t *testing.T) {
+	f, st := commentFlow(t)
+	f.SetCursors([]Cursor{{Anchor: 0, Caret: 5}})
+	st.Prompt = func(string, string) (string, bool) { return "hi", true }
+	if !st.HandleChord("Mod+Alt+N") || f.Comments.Len() != 1 {
+		t.Fatal("Ctrl+Alt+N adds a comment")
+	}
+	if st.Features.Keymap()["Mod+Alt+N"] != CmdCommentAdd {
+		t.Fatal("bound")
+	}
+}

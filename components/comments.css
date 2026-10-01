@@ -1,0 +1,30 @@
+/* Comments stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-markdown p { margin: 0 0 0.4em; }
+.gj-markdown ul, .gj-markdown ol { margin: 0 0 0.4em; padding-left: 1.4em; }
+.gj-markdown blockquote { margin: 0 0 0.4em; padding-left: 0.6em; border-left: 3px solid var(--gj-border); color: var(--gj-muted); }
+.gj-markdown code { padding: 0 0.25em; border-radius: 3px; background: var(--gj-bg-muted); font-size: 0.92em; }
+.gj-md-heading { font-weight: 600; }
+.gj-mention { padding: 0 0.2em; border-radius: 3px; background: rgba(124, 92, 255, 0.14); color: var(--gj-accent); text-decoration: none; font-weight: 500; }
+
+.gj-comments { display: flex; flex-direction: column; gap: 0.6em; }
+.gj-comments-head { display: flex; justify-content: space-between; align-items: center; }
+.gj-comments-title { margin: 0; font-size: 0.75em; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gj-muted); }
+.gj-comments-list { display: flex; flex-direction: column; gap: 0.5em; }
+.gj-comment-empty { margin: 0; font-size: 0.85em; color: var(--gj-muted); }
+.gj-comment { padding: 0.6em 0.7em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); font-size: 0.9em; }
+.gj-comment-selected { border-color: var(--gj-accent); box-shadow: 0 0 0 1px var(--gj-accent); }
+.gj-comment-resolved { opacity: 0.7; }
+.gj-comment-head { display: flex; justify-content: space-between; gap: 0.5em; margin-bottom: 0.3em; }
+.gj-comment-time { font-size: 0.8em; color: var(--gj-muted); }
+.gj-comment-excerpt { margin: 0 0 0.4em; padding-left: 0.6em; border-left: 3px solid #ffd400; color: var(--gj-muted); font-style: italic; }
+.gj-comment-badge { display: inline-block; font-size: 0.75em; padding: 0 0.5em; border-radius: 999px; background: var(--gj-bg-muted); color: var(--gj-muted); }
+.gj-comment-replies { list-style: none; margin: 0.4em 0 0; padding: 0 0 0 0.7em; border-left: 2px solid var(--gj-border); display: flex; flex-direction: column; gap: 0.3em; }
+.gj-comment-reply-row { display: flex; gap: 0.4em; margin-top: 0.5em; }
+.gj-comment-input { flex: 1; min-width: 0; padding: 0.3em 0.5em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); font: inherit; }
+.gj-comment-actions { display: flex; gap: 0.4em; margin-top: 0.4em; }
+.gj-comments button, .gj-comment button { padding: 0.25em 0.7em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); cursor: pointer; font: inherit; font-size: 0.85em; }
+.gj-comments button:hover:not(:disabled), .gj-comment button:hover:not(:disabled) { background: var(--gj-bg-muted); }
+.gj-comment button:disabled { opacity: 0.5; cursor: default; }
+.gj-comment-toggle[aria-pressed="true"] { border-color: var(--gj-accent); }

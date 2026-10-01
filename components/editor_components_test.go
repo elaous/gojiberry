@@ -438,3 +438,51 @@ func TestTransferButtons(t *testing.T) {
 		t.Fatal("no callback, no handler")
 	}
 }
+
+func TestMarkdownTextRendersAndEscapes(t *testing.T) {
+	html := render(t, MarkdownText("## Title\n\n**bold** and *it* and _under_ ~~old~~ `code` [site](https://x.test/a?b=1)\nsecond line\n\n- one\n- two\n\n1. first\n\n> quoted <b>raw</b>\n\n[bad](javascript:alert(1)) hi @ana, ask ana@example.com <script>x</script>"))
+	mustContain(t, html, `class="gj-md-heading"`, "<strong>bold</strong>", "<em>it</em>", "<em>under</em>", "<s>old</s>", "<code>code</code>",
+		`href="https://x.test/a?b=1"`, "<br>", "<ul><li>one</li><li>two</li></ul>", "<ol><li>first</li></ol>", "<blockquote>quoted &lt;b&gt;raw&lt;/b&gt;</blockquote>",
+		`class="gj-mention" data-mention="ana"`, `href="mailto:ana@example.com"`, "gj-mention-email", "&lt;script&gt;")
+	mustNotContain(t, html, "javascript:", "<script>", "<b>raw")
+	mustContain(t, html, "<p>bad") // an unsafe link keeps its text only
+}
+
+func TestCommentCardAndList(t *testing.T) {
+	var log []string
+	c := canvas.Comment{ID: "c1", Author: "ana", Text: "Please check **this**, @bob", Created: time.Date(2026, 3, 4, 5, 6, 0, 0, time.UTC),
+		Replies: []canvas.Reply{{Author: "bob", Text: "on it"}, {Text: "x"}}}
+	card := CommentCard(CommentCardProps{Comment: c, Excerpt: "the text", Selected: true, CanEdit: true, ReplyDraft: "ok",
+		OnSelect: func(id string) { log = append(log, "select:"+id) }, OnResolve: func(id string) { log = append(log, "resolve:"+id) },
+		OnDelete: func(id string) { log = append(log, "delete:"+id) }, OnReplyDraft: func(id, s string) { log = append(log, "draft:"+id+":"+s) },
+		OnReply: func(id, s string) { log = append(log, "reply:"+id+":"+s) }})
+	mustContain(t, render(t, card), "gj-comment-selected", `data-comment="c1"`, "ana", "2026-03-04 05:06", "the text", "<strong>this</strong>", `data-mention="bob"`,
+		"gj-comment-replies", "Someone", ">Resolve<", `value="ok"`)
+	findHandlers(card, "input")[0](gox.Event{Value: "typed"})
+	for _, h := range findHandlers(card, "click") {
+		h(gox.Event{})
+	}
+	if got := strings.Join(log, " "); got != "draft:c1:typed select:c1 reply:c1:ok resolve:c1 delete:c1" {
+		t.Fatal(got)
+	}
+	// A viewer sees the comment but has no controls; resolved shows a badge and Reopen.
+	view := render(t, CommentCard(CommentCardProps{Comment: canvas.Comment{ID: "c2", Resolved: true, Text: "t"}}))
+	mustContain(t, view, "gj-comment-resolved", "Resolved", "Someone")
+	mustNotContain(t, view, "Reply", "Delete")
+	mustContain(t, render(t, CommentCard(CommentCardProps{Comment: canvas.Comment{ID: "c3", Resolved: true}, CanEdit: true})), ">Reopen<", "disabled")
+
+	var shown []bool
+	list := CommentList(CommentListProps{
+		Comments: []canvas.Comment{c, {ID: "c2", Resolved: true, Text: "done"}}, Excerpts: map[string]string{"c1": "quoted"},
+		Selected: "c1", CanEdit: true, Drafts: map[string]string{"c1": "d"}, OnToggleShowResolved: func(b bool) { shown = append(shown, b) }})
+	html := render(t, list)
+	mustContain(t, html, "Show resolved (1)", `aria-pressed="false"`, "quoted")
+	mustNotContain(t, html, `data-comment="c2"`)
+	findHandlers(list, "click")[0](gox.Event{})
+	if len(shown) != 1 || !shown[0] {
+		t.Fatal(shown)
+	}
+	all := render(t, CommentList(CommentListProps{Comments: []canvas.Comment{c, {ID: "c2", Resolved: true}}, ShowResolved: true}))
+	mustContain(t, all, `data-comment="c2"`, `aria-pressed="true"`)
+	mustContain(t, render(t, CommentList(CommentListProps{})), "No comments.", "Show resolved<")
+}

@@ -10,10 +10,11 @@ import (
 
 // Callbacks are how the canvas reports what happened in it.
 type Callbacks struct {
-	OnFlow      func(*cv.TextFlow)
-	OnHoverLink func(url string)
-	OnNote      func(*cv.FloatingText)
-	OnTable     func(*cv.Table)
+	OnFlow         func(*cv.TextFlow)
+	OnHoverLink    func(url string)
+	OnHoverComment func(id string)
+	OnNote         func(*cv.FloatingText)
+	OnTable        func(*cv.Table)
 }
 
 // Doc is the whole editor canvas as one tree: a scrolling viewport over
@@ -22,7 +23,7 @@ type Callbacks struct {
 // editing features are registered explicitly, to show where to add or
 // remove one.
 func Doc(state State, cb Callbacks) gox.Node {
-	return canvas.Canvas(canvas.CanvasProps{Width: 920, Height: 640, Mode: state.Mode, Features: cv.DefaultFeatures(), Children: []gox.Node{canvas.ScrollView(canvas.ScrollViewProps{X: 10, Y: 10, Width: 900, Height: 620, LockH: !state.Spread, Children: []gox.Node{canvas.TextFlow(canvas.TextFlowProps{X: 0, Y: 0, Width: 880, Source: state.Source, Items: state.Items, Transform: state.Transform(), PageCount: state.Pages, PageWidth: 560, PageHeight: 420, Spread: state.Spread, Styles: state.Styles, AutoClose: cv.DefaultAutoClose(), Vocabulary: []string{"Gojiberry", "canvas", "feature", "paragraph"}, Margins: []float64{60, 50, 60, 50}, OnChange: cb.OnFlow, OnHoverLink: cb.OnHoverLink, Pages: func(page gox.Node, n int) gox.Node {
+	return canvas.Canvas(canvas.CanvasProps{Width: 920, Height: 640, Mode: state.Mode, Role: state.Role, Features: cv.DefaultFeatures(), Children: []gox.Node{canvas.ScrollView(canvas.ScrollViewProps{X: 10, Y: 10, Width: 900, Height: 620, LockH: !state.Spread, Children: []gox.Node{canvas.TextFlow(canvas.TextFlowProps{X: 0, Y: 0, Width: 880, Source: state.Source, Items: state.Items, Transform: state.Transform(), PageCount: state.Pages, PageWidth: 560, PageHeight: 420, Spread: state.Spread, Styles: state.Styles, AutoClose: cv.DefaultAutoClose(), Vocabulary: []string{"Gojiberry", "canvas", "feature", "paragraph"}, Margins: []float64{60, 50, 60, 50}, OnChange: cb.OnFlow, OnHoverLink: cb.OnHoverLink, Comments: state.Comments, Author: state.Author, OnHoverComment: cb.OnHoverComment, Pages: func(page gox.Node, n int) gox.Node {
 		return gox.Frag(canvas.Header(canvas.HeaderProps{Text: "Gojiberry editor"}), gox.Child(page), gox.Child(watermark(n)), canvas.Footer(canvas.FooterProps{Children: []gox.Node{canvas.PageNumber(canvas.PageNumberProps{Format: "Page {n} of {total}", Align: cv.AlignRight})}}))
 	}}), gox.Child(picture(state)), canvas.FloatingText(canvas.FloatingTextProps{Text: state.Note, Opacity: 0.95, Anchor: &cv.Anchor{Page: 0, X: 330, Y: 250}, Wrap: true, Vocabulary: []string{"Gojiberry", "canvas", "feature"}, OnChange: cb.OnNote}), canvas.Table(canvas.TableProps{Cells: [][]string{{"Feature", "Keys"}, {"Multi-cursor", "Ctrl+D"}, {"Move line", "Alt+Up/Down"}}, Anchor: &cv.Anchor{Page: 1, X: 60, Y: 200}, Wrap: true, OnChange: cb.OnTable})}})}})
 }
