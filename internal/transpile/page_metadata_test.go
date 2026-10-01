@@ -336,3 +336,63 @@ func Setup() {
 		t.Errorf("expected the error to name the annotated function, got: %v", err)
 	}
 }
+
+func TestStylesAnnotationChoosesStylesPerPage(t *testing.T) {
+	dir := setupModuleWithGox(t)
+	writeFile(t, dir, "a.css", "A{}")
+	writeFile(t, dir, "b.css", "B{}")
+	src := `package main
+
+import (
+	"fmt"
+	"strings"
+
+	_ "example.com/testmod/pkg/a.css"
+	_ "example.com/testmod/pkg/b.css"
+	"github.com/elaous/gojiberry/gox"
+)
+
+// @title all
+func All() gox.Node { return gox.Text("x") }
+
+// @title only a
+// @styles a.css
+func OnlyA() gox.Node { return gox.Text("x") }
+
+// @title none
+// @styles none
+func None() gox.Node { return gox.Text("x") }
+
+// @title both, by full path
+// @styles example.com/testmod/pkg/a.css b.css
+func Both() gox.Node { return gox.Text("x") }
+
+func main() {
+	render := func(n gox.Node) string { s, _ := gox.RenderString(n); return s }
+	has := func(s, sheet string) bool { return strings.Contains(s, sheet) }
+	all, a, none, both := render(All()), render(OnlyA()), render(None()), render(Both())
+	if !has(all, "A{}") || !has(all, "B{}") {
+		panic("all: " + all)
+	}
+	if !has(a, "A{}") || has(a, "B{}") {
+		panic("only a: " + a)
+	}
+	if has(none, "A{}") || has(none, "B{}") {
+		panic("none: " + none)
+	}
+	if !has(both, "A{}") || !has(both, "B{}") {
+		panic("both: " + both)
+	}
+	fmt.Println("ok")
+}
+`
+	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(out)
+	if !strings.Contains(got, `Styles: []string{"a.css"}`) || !strings.Contains(got, `Styles: []string{}`) {
+		t.Errorf("expected Styles fields in the generated Document, got:\n%s", got)
+	}
+	mustCompileAndRun(t, dir, "main.go", got)
+}

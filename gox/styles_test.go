@@ -52,3 +52,34 @@ func TestDocumentIncludesRegisteredStyles(t *testing.T) {
 		t.Errorf("NoStyles: %s", html)
 	}
 }
+
+func TestDocumentStylesPerPage(t *testing.T) {
+	resetStyles()
+	defer resetStyles()
+	RegisterStyle("m/components/base.css", "BASE{}")
+	RegisterStyle("m/components/button.css", "BUTTON{}")
+	RegisterStyle("m/other/chip.css", "CHIP{}")
+	render := func(only []string) string {
+		html, err := RenderString(Document{Styles: only, Body: Text("x")}.Render())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return html
+	}
+	if h := render(nil); !strings.Contains(h, "BASE{}") || !strings.Contains(h, "CHIP{}") {
+		t.Errorf("nil means all: %s", h)
+	}
+	if h := render([]string{}); strings.Contains(h, "{}") {
+		t.Errorf("an empty list means none: %s", h)
+	}
+	h := render([]string{"components/base.css", "chip.css"})
+	if !strings.Contains(h, "BASE{}") || !strings.Contains(h, "CHIP{}") || strings.Contains(h, "BUTTON{}") {
+		t.Errorf("by the end of the ID: %s", h)
+	}
+	if h := render([]string{"m/components/button.css"}); !strings.Contains(h, "BUTTON{}") || strings.Contains(h, "BASE{}") {
+		t.Errorf("by full ID: %s", h)
+	}
+	if h := render([]string{"tton.css"}); strings.Contains(h, "BUTTON{}") {
+		t.Error("only whole path segments match")
+	}
+}
