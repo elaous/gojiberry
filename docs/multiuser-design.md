@@ -1,6 +1,6 @@
 # Multi-user editing: design
 
-Status: **phases 1 (`crdt` marks) and 2 (the `collab` bridge) are done**; phases 3-4 are not started. Roles
+Status: **phases 1 (`crdt` marks), 2 (the `collab` bridge) and 3 (server and transport) are done**; phase 4 (UI) is not started. Roles
 (`canvas.Role`) and comments, which this design builds on, exist.
 
 ## What exists
@@ -111,7 +111,7 @@ authority**: a bearer token (the existing `auth` package) names the user,
 | op | owner | editor | viewer |
 |---|---|---|---|
 | text, attributes, side data, styles | yes | yes | no |
-| `comment:`/`reply:` blocks | yes | yes | **decision needed** |
+| comments and replies (new records, comment marks) | yes | yes | yes |
 | ACL changes | yes | no | no |
 
 Rejected ops are dropped with an error the client shows ("you can only view
@@ -133,7 +133,7 @@ connected.
 2. **`collab` bridge. Done.** Items to model and back (round-trip tests against
    `docfile`), diff to ops, remote apply with cursor mapping, side data. A test
    that connects two flows through a lossy, reordering fake network.
-3. **Server and transport.** SSE + POST, persistence, role checks,
+3. **Server and transport. Done.** SSE + POST, persistence, role checks,
    presence. Tests with real `httptest` servers and two clients.
 4. **UI.** Remote carets and selections, `components.Presence`, a comment-only
    mode for viewers (if wanted), per-user undo, a reconnect indicator; a
@@ -145,14 +145,15 @@ images and floating objects are replaced whole (last writer wins) rather than
 merged inside; page furniture (headers, footers, watermarks, margins) is LWW
 blocks.
 
-## Decisions needed
+## Decisions
 
-1. **Can viewers comment?** The component library says yes; `canvas.Role` says
-   no. If yes, add a comment-only mode (selection works in view mode already)
-   and let the server accept comment blocks from viewers.
-2. **Transport**: SSE + POST (no new dependency, recommended) or WebSocket.
-3. **Undo while connected**: per-user undo (right, more work) or clear on
-   remote change (simple, a visible limit).
+1. **Viewers can comment** (as `components.Collab` already says). The server
+   accepts a viewer's comment marks and new comment and reply records; the
+   canvas's `Role.CanComment` still treats viewers as read-only until the
+   comment-only mode of phase 4.
+2. **Transport**: server-sent events plus POST.
+3. **Undo while connected**: per-user undo, in phase 4; until then remote
+   edits clear the undo stack.
 
 ## Phase 1 as built
 
@@ -221,3 +222,54 @@ Limits: images and other inline objects with no `docfile` form are refused
 (`ErrUnsupported`) rather than silently dropped; the whole document is re-read
 on each local change (O(n), fine for tens of thousands of characters); undo is
 cleared by remote edits until per-user undo (phase 4).
+
+## Phase 3 as built
+
+Three small packages and a command:
+
+- **`collab/wire`**: the types both ends share (`Role`, `Presence`), so a WASM
+  client does not import the server's dependencies.
+- **`collab/hub`**: the server. `hub.New(Config{Store, Roles, User})`, `Handler()`.
+  Each document is a `crdt` replica kept in memory, loaded from and saved to a
+  `docstore.Adapter` under `collab:<id>` (saves are debounced; `Flush` and
+  `Close` save now). Routes: `GET /docs/{id}/events` (server-sent events:
+  `hello` with the role, `snapshot`, then `ops` and `presence` from others,
+  with keep-alive pings), `POST /docs/{id}/ops`, `POST /docs/{id}/presence`,
+  `GET /docs/{id}/snapshot`, `GET /docs/{id}/role`. A subscriber that cannot keep
+  up is dropped and resyncs when it reconnects.
+  - **Roles are enforced here.** Owners and editors may change anything. Anyone
+    else who can read may comment: a `comment` mark on the text (and nothing else
+    about the text: no inserts, deletes, other marks, or changes to the block's
+    kind, order or deleted flag) and *new* `comment:`/`reply:` records, not
+    changes or deletions of existing ones. A batch with any refused op is refused
+    whole with a 403 and a message.
+  - `hub.ACLRoles(store, who)` takes roles from docstore's access lists (owner,
+    editors, viewers; no list means open, as in docstore); `hub.AuthUser(manager)`
+    names the caller from a bearer token.
+- **`collab/client`**: `client.Dial(Options)` returns a `Conn`. Events arrive on a
+  channel in order and without loss (an unbounded queue). It reconnects with
+  backoff, and every reconnection starts with a fresh snapshot. `Send` keeps ops
+  until the server accepts them, so work done offline is delivered later (the
+  crdt makes a resend harmless). A refusal comes back as a `Rejected` event.
+  It needs only `net/http`, so it works from WASM.
+- **`collab.Session`**: `collab.Connect(replica, flow, options)` ties a `Bridge`
+  to a `Conn`. Local edits are sent as they happen (`Bridge.Outgoing`); call
+  `Poll()` from the goroutine that owns the flow to apply what has arrived (it
+  returns whether to redraw). If the server has no content yet and you may edit,
+  the flow's content becomes the document. `PublishCursor()` shares your cursor
+  (as character ids) and `PeerCursors()` places everyone else's in your text.
+- **`cmd/collabhub`**: the server as a program, backed by the same docstore
+  settings (`GOJIBERRY_DOCSTORE_BACKEND`, sign-in) and `GOJIBERRY_COLLAB_ADDR`
+  (default `:8081`), with a Dockerfile.
+
+Tests: the role table (every kind of op for every role, including a comment mark
+smuggling a block delete), ACL roles, every endpoint and its errors, the event
+stream, dropping a slow subscriber, persistence and reload, and -- over real HTTP
+with two or three sessions -- shared typing and formatting, concurrent edits,
+presence following the text, a viewer's edit refused while its comment gets
+through, a connection cut mid-session (both sides converge, nothing left
+waiting), and a refused connection reported.
+
+Not yet: a rejected replica cannot repair itself (rebuild the session);
+presence is sent on demand, not throttled; two clients that both start an empty
+document at the same moment each seed their own copy of the content.
