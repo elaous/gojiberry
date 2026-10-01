@@ -59,7 +59,16 @@ func (f *TextFlow) changed() {
 	if f.OnChange != nil {
 		f.OnChange(f)
 	}
+	for _, fn := range f.listeners {
+		fn(f)
+	}
 }
+
+// Subscribe registers fn to be called after every edit, alongside OnChange.
+// Unlike OnChange it is not replaced when a gox tree sets the flow's props,
+// so code that watches a flow for its whole life (the collab bridge) uses
+// it.
+func (f *TextFlow) Subscribe(fn func(*TextFlow)) { f.listeners = append(f.listeners, fn) }
 
 // --- EditTarget ---------------------------------------------------------
 

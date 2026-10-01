@@ -239,6 +239,7 @@ type TextFlow struct {
 	stageLink      func(url string)
 	hoverLink      string
 	hoverComment   string
+	listeners      []func(*TextFlow)
 	revealAt       int
 	revealPending  bool
 	lastLay        Layout // the layout of the latest Draw, for objects that show the document's own structure

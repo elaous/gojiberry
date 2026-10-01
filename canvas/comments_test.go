@@ -331,3 +331,16 @@ func TestSetRemoteContentAndSetReplaceAll(t *testing.T) {
 		t.Fatalf("resolve and edit notify listeners: %d", n)
 	}
 }
+
+func TestSubscribeSurvivesOnChangeBeingReplaced(t *testing.T) {
+	f, _ := editFlow(t, 0, Chars{Text: "ab"})
+	heard, own := 0, 0
+	f.Subscribe(func(*TextFlow) { heard++ })
+	f.OnChange = func(*TextFlow) { own++ }
+	f.InsertText("x")
+	f.OnChange = nil // a gox tree setting its props does this
+	f.InsertText("y")
+	if heard != 2 || own != 1 {
+		t.Fatalf("subscribers keep hearing: %d, OnChange %d", heard, own)
+	}
+}

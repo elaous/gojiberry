@@ -109,8 +109,9 @@ Asked for, not started:
 - **Map object** (OpenStreetMap tiles) and **flowcharts** as canvas objects.
 - **Multi-user editing**: designed in [multiuser-design.md](multiuser-design.md)
   (one attributed character sequence, a bridge to the `TextFlow`, SSE + POST,
-  server-side roles); not started. Roles are the permission half.
-- Comments: a viewer cannot comment (comments need edit mode); an author list for
+  server-side roles); built, with per-user undo, remote carets, presence and
+  comment-only viewers. Left: see "Not yet" in the design doc.
+- Comments: an author list for
   `@username` completion; notifications for mentions.
 
 - **Formula** editor and formula text element.

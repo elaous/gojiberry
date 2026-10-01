@@ -435,6 +435,12 @@ func patchChildren(parent js.Value, endAnchor js.Value, old []*renderedNode, nex
 			ref = endAnchor
 		}
 		for _, dn := range reverse(result[i].ownedNodes()) {
+			// A node already in place is left alone: re-inserting it would
+			// drop the focus (and the selection) from anything inside it.
+			if inPlace(parent, dn, ref) {
+				ref = dn
+				continue
+			}
 			if ref.IsUndefined() {
 				parent.Call("appendChild", dn)
 			} else {
@@ -457,3 +463,16 @@ func reverse(vs []js.Value) []js.Value {
 // key exists only because renderedNode doesn't otherwise retain the
 // gox.Node.Key it was created from; store it alongside text/attrs.
 func (rn *renderedNode) key() string { return rn.k }
+
+// inPlace reports whether dn is already a child of parent directly before
+// ref (the last child when ref is undefined).
+func inPlace(parent, dn, ref js.Value) bool {
+	if !dn.Get("parentNode").Equal(parent) {
+		return false
+	}
+	next := dn.Get("nextSibling")
+	if ref.IsUndefined() {
+		return next.IsNull()
+	}
+	return next.Equal(ref)
+}

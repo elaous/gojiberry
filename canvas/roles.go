@@ -34,7 +34,9 @@ func (r Role) CanEdit() bool { return r == "" || r == RoleOwner || r == RoleEdit
 // CanComment reports whether the role may add comments and replies: every
 // role, a viewer included (a viewer comments on selected text without
 // editing it; see Stage.RunCommand).
-func (r Role) CanComment() bool { return r == "" || r == RoleOwner || r == RoleEditor || r == RoleViewer }
+func (r Role) CanComment() bool {
+	return r == "" || r == RoleOwner || r == RoleEditor || r == RoleViewer
+}
 
 // CanManage reports whether the role may change who has access.
 func (r Role) CanManage() bool { return r == "" || r == RoleOwner }

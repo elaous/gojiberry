@@ -156,9 +156,11 @@ type CommentCardProps struct {
 	// Excerpt is the commented text, shown as a quote.
 	Excerpt  string
 	Selected bool
-	// CanEdit lets the viewer reply, resolve and delete (a viewer role
-	// sees the comment only).
+	// CanEdit lets the viewer resolve and delete the comment; CanReply lets
+	// them reply (a viewer role may reply but not resolve or delete).
 	CanEdit bool
+	// CanReply shows the reply box; it is also shown when CanEdit is set.
+	CanReply bool
 	// ReplyDraft is the text in the reply box.
 	ReplyDraft string
 
@@ -222,27 +224,17 @@ func CommentCard(props CommentCardProps) gox.Node {
 		}
 		kids = append(kids, gox.El("ul", []gox.Attr{gox.A("class", "gj-comment-replies")}, rs...))
 	}
-	if props.CanEdit {
-		btn := func(class, label string, on func()) gox.Node {
-			a := []gox.Attr{gox.A("type", "button"), gox.A("class", class)}
-			if on != nil {
-				a = append(a, gox.On("click", func(gox.Event) { on() }))
-			} else {
-				a = append(a, gox.A("disabled", "disabled"))
-			}
-			return gox.El("button", a, gox.Text(label))
+	btn := func(class, label string, on func()) gox.Node {
+		a := []gox.Attr{gox.A("type", "button"), gox.A("class", class)}
+		if on != nil {
+			a = append(a, gox.On("click", func(gox.Event) { on() }))
+		} else {
+			a = append(a, gox.A("disabled", "disabled"))
 		}
-		resolve := "Resolve"
-		if c.Resolved {
-			resolve = "Reopen"
-		}
-		var onResolve, onDelete, onReply func()
-		if props.OnResolve != nil {
-			onResolve = func() { props.OnResolve(c.ID) }
-		}
-		if props.OnDelete != nil {
-			onDelete = func() { props.OnDelete(c.ID) }
-		}
+		return gox.El("button", a, gox.Text(label))
+	}
+	if props.CanEdit || props.CanReply {
+		var onReply func()
 		if props.OnReply != nil && strings.TrimSpace(props.ReplyDraft) != "" {
 			onReply = func() { props.OnReply(c.ID, props.ReplyDraft) }
 		}
@@ -251,9 +243,21 @@ func CommentCard(props CommentCardProps) gox.Node {
 		if props.OnReplyDraft != nil {
 			in = append(in, gox.On("input", func(e gox.Event) { props.OnReplyDraft(c.ID, gox.EventValue[string](e)) }))
 		}
-		kids = append(kids,
-			gox.El("div", []gox.Attr{gox.A("class", "gj-comment-reply-row")}, gox.El("input", in), btn("gj-comment-send", "Reply", onReply)),
-			gox.El("div", []gox.Attr{gox.A("class", "gj-comment-actions")}, btn("gj-comment-resolve", resolve, onResolve), btn("gj-comment-delete", "Delete", onDelete)))
+		kids = append(kids, gox.El("div", []gox.Attr{gox.A("class", "gj-comment-reply-row")}, gox.El("input", in), btn("gj-comment-send", "Reply", onReply)))
+	}
+	if props.CanEdit {
+		resolve := "Resolve"
+		if c.Resolved {
+			resolve = "Reopen"
+		}
+		var onResolve, onDelete func()
+		if props.OnResolve != nil {
+			onResolve = func() { props.OnResolve(c.ID) }
+		}
+		if props.OnDelete != nil {
+			onDelete = func() { props.OnDelete(c.ID) }
+		}
+		kids = append(kids, gox.El("div", []gox.Attr{gox.A("class", "gj-comment-actions")}, btn("gj-comment-resolve", resolve, onResolve), btn("gj-comment-delete", "Delete", onDelete)))
 	}
 	return gox.El("div", attrs, kids...)
 }
@@ -267,6 +271,7 @@ type CommentListProps struct {
 	ShowResolved bool
 	Selected     string
 	CanEdit      bool
+	CanReply     bool
 	Drafts       map[string]string
 
 	OnSelect             func(id string)
@@ -295,7 +300,7 @@ func CommentList(props CommentListProps) gox.Node {
 	var cards []gox.Node
 	for _, c := range list {
 		cards = append(cards, CommentCard(CommentCardProps{
-			Comment: c, Excerpt: props.Excerpts[c.ID], Selected: c.ID == props.Selected, CanEdit: props.CanEdit,
+			Comment: c, Excerpt: props.Excerpts[c.ID], Selected: c.ID == props.Selected, CanEdit: props.CanEdit, CanReply: props.CanReply,
 			ReplyDraft: props.Drafts[c.ID],
 			OnSelect:   props.OnSelect, OnResolve: props.OnResolve, OnDelete: props.OnDelete,
 			OnReplyDraft: props.OnReplyDraft, OnReply: props.OnReply,

@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"syscall/js"
@@ -24,6 +25,8 @@ import (
 
 	"github.com/elaous/gojiberry/canvas"
 	cgox "github.com/elaous/gojiberry/canvas/gox"
+	"github.com/elaous/gojiberry/collab"
+	"github.com/elaous/gojiberry/collab/client"
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docstore"
@@ -61,6 +64,8 @@ type ui struct {
 	drafts       map[string]string
 
 	saver    *saver.Session
+	live     *collab.Session // when the page was opened on a shared document (?doc=...)
+	liveErr  string
 	transfer *transfer.Registry
 	fontLog  []string // what the font library did, newest last
 	navSig   string   // outline/bookmarks the Outline tab last showed
@@ -256,7 +261,7 @@ func main() {
 		case "outline":
 			panel = outlinePanel(&state, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cgox.TagScrollView, 0).(*canvas.ScrollView) }, run, redraw, refocus, renderUI)
 		case "comments":
-			panel = commentsPanel(u, &state, func() *canvas.TextFlow { return flow }, redraw, refocus, renderUI)
+			panel = commentsPanel(u, &state, func() *canvas.TextFlow { return flow }, run, redraw, refocus, renderUI)
 		case "styles":
 			current := ""
 			if flow != nil {
@@ -398,7 +403,11 @@ func main() {
 			}
 			panel = gox.Frag(panel, gox.El("ul", []gox.Attr{gox.A("id", "font-log"), gox.A("style", "font-size:12px;color:#6b7280")}, rows...))
 		}
-		side := gox.Frag(roleRow, panel,
+		topRow := roleRow
+		if u.live != nil {
+			topRow = livePresence(u)
+		}
+		side := gox.Frag(topRow, panel,
 			gox.El("div", []gox.Attr{gox.A("id", "link-preview"), gox.A("style", "margin-top:1em")},
 				components.LinkPreview(components.LinkPreviewProps{
 					URL: u.hoverLink, Title: "Gojiberry", Description: "Go components that render to HTML, the DOM, Gio and a canvas.",
@@ -520,7 +529,7 @@ func main() {
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cgox.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
-			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
+			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "live": liveState(u), "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))
@@ -534,7 +543,83 @@ func main() {
 			state.Image = src
 			renderCanvas()
 		}, nil)
+	if q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search")); q.Call("has", "doc").Bool() {
+		startLive := func() {
+			get := func(k, def string) string {
+				if q.Call("has", k).Bool() {
+					return q.Call("get", k).String()
+				}
+				return def
+			}
+			name := get("name", "guest")
+			replica := fmt.Sprintf("%s-%d", name, int(js.Global().Get("Math").Call("random").Float()*1e9))
+			hdr := http.Header{}
+			if tok := get("token", ""); tok != "" {
+				hdr.Set("Authorization", "Bearer "+tok)
+			}
+			hubURL := get("hub", origin+"/collab")
+			s, err := collab.Connect(replica, flow, client.Options{BaseURL: hubURL, Doc: get("doc", ""), Header: hdr, Retry: 300 * time.Millisecond, MaxRetry: 2 * time.Second})
+			if err != nil {
+				u.liveErr = err.Error()
+				renderUI()
+				return
+			}
+			s.Name, s.Color = name, get("color", "#7c5cff")
+			u.live = s
+			go liveLoop(u, &state, stage, renderCanvas, redraw, renderUI, flow)
+		}
+		startLive()
+	}
 	select {}
+}
+
+// liveLoop applies what other people did, shows their cursors and shares
+// ours, from this goroutine only (the canvas is not safe to touch from
+// several).
+func liveLoop(u *ui, state *State, stage *canvas.Stage, renderCanvas, redraw, renderUI func(), flow *canvas.TextFlow) {
+	var lastCursor string
+	var lastSig string
+	for range time.Tick(40 * time.Millisecond) {
+		s := u.live
+		changed := s.Poll()
+		if role := canvas.ParseRole(string(s.Role)); s.Role != "" && role != state.Role {
+			state.Role = role
+			stage.SetRole(role)
+			if !role.CanEdit() {
+				state.Mode = canvas.ModeView
+			}
+			renderCanvas()
+			changed = true
+		}
+		s.RefreshPeers()
+		if c := flow.Cursors()[0]; fmt.Sprint(c) != lastCursor {
+			lastCursor = fmt.Sprint(c)
+			s.PublishCursor()
+		}
+		sig := fmt.Sprint(len(s.Peers), s.Status, s.Pending(), len(flow.RemoteCursors), s.Role)
+		if changed || sig != lastSig {
+			lastSig = sig
+			redraw()
+			renderUI()
+		} else if len(flow.RemoteCursors) > 0 {
+			redraw()
+		}
+	}
+}
+
+// liveState summarises a shared session for the e2e test.
+func liveState(u *ui) any {
+	s := u.live
+	if s == nil {
+		return map[string]any{"error": u.liveErr}
+	}
+	names := []string{}
+	for _, p := range s.Peers {
+		names = append(names, p.Name)
+	}
+	slices.Sort(names)
+	return map[string]any{"role": string(s.Role), "status": s.Status.String(), "peers": names, "remote": len(s.Bridge.Flow.RemoteCursors),
+		"pending": s.Pending(), "canUndo": s.Bridge.CanUndo(), "bridgeError": fmt.Sprint(s.Bridge.Err()), "ready": s.Bridge.Ready(), "error": u.liveErr, "rejected": fmt.Sprint(s.Err)}
 }
 
 // builtinCommands are the commands that are not registered by a feature.
@@ -598,16 +683,23 @@ func fontKeys(lib *fonts.Library) []string {
 
 // commentsPanel lists the comments with their text; an owner or editor can
 // reply, resolve and delete, a viewer only reads.
-func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, refocus, renderUI func()) gox.Node {
+func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(canvas.Command), redraw, refocus, renderUI func()) gox.Node {
 	fl := flow()
 	excerpts := map[string]string{}
 	if fl != nil {
 		excerpts = fl.CommentExcerpts()
 	}
 	set := state.Comments
-	return components.CommentList(components.CommentListProps{
+	add := gox.El("button", []gox.Attr{gox.A("type", "button"), gox.A("class", "gj-keybindings-button"), gox.A("data-action", "add-comment"),
+		gox.On("click", func(gox.Event) { run(canvas.CmdCommentAdd); redraw(); renderUI() })}, gox.Text("Comment on the selection"))
+	touch := func() {
+		if fl != nil {
+			fl.Touch() // tell a shared document about it
+		}
+	}
+	return gox.Frag(add, gox.El("div", []gox.Attr{gox.A("style", "margin-top:0.8em")}, components.CommentList(components.CommentListProps{
 		Comments: set.List(), Excerpts: excerpts, ShowResolved: u.showResolved, Selected: u.selComment,
-		CanEdit: state.Role.CanComment(), Drafts: u.drafts,
+		CanEdit: state.Role.CanEdit(), CanReply: state.Role.CanComment(), Drafts: u.drafts,
 		OnSelect: func(id string) {
 			u.selComment = id
 			if fl != nil {
@@ -618,6 +710,7 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, re
 		},
 		OnResolve: func(id string) {
 			set.Update(id, func(c *canvas.Comment) { c.Resolved = !c.Resolved })
+			touch()
 			redraw()
 			renderUI()
 		},
@@ -636,10 +729,25 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, re
 				c.Replies = append(c.Replies, canvas.Reply{Author: state.Author, Text: text, Created: time.Now()})
 			})
 			delete(u.drafts, id)
+			touch()
 			renderUI()
 		},
 		OnToggleShowResolved: func(show bool) { u.showResolved = show; renderUI() },
-	})
+	})))
+}
+
+// livePresence shows who is at a shared document and the connection.
+func livePresence(u *ui) gox.Node {
+	s := u.live
+	var peers []components.PresencePeer
+	for _, p := range s.Peers {
+		peers = append(peers, components.PresencePeer{Name: p.Name, Color: p.Color, User: p.User, Role: string(p.Role)})
+	}
+	slices.SortFunc(peers, func(a, b components.PresencePeer) int { return strings.Compare(a.Name, b.Name) })
+	return gox.El("div", []gox.Attr{gox.A("id", "presence"), gox.A("style", "margin-bottom:0.8em")}, components.Presence(components.PresenceProps{
+		Self: components.PresencePeer{Name: s.Name, Color: s.Color, Role: string(s.Role)}, Peers: peers,
+		Status: s.Status.String(), Pending: s.Pending(), Role: string(s.Role),
+	}))
 }
 
 // outlinePanel shows the headings (click to go there) and the bookmarks.
