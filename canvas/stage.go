@@ -4,6 +4,17 @@ package canvas
 // component implements only the ones it needs. For the pointer methods
 // the result means "state changed, redraw".
 type (
+	// Drawer is anything a Stage can draw. Components (which also have
+	// view/edit modes) are Drawers; so are modeless ones like Menu and
+	// ScrollView.
+	Drawer interface{ Draw() }
+	// MouseWheeler handles a wheel turn at (x, y) with the given deltas
+	// (pixels, positive = down/right). It reports whether it handled
+	// the wheel, in which case the page itself should not scroll and
+	// the stage is redrawn.
+	MouseWheeler interface {
+		MouseWheel(x, y, dx, dy float64) bool
+	}
 	// PainterSetter receives the Stage's painter when it is bound.
 	PainterSetter interface{ SetPainter(ImagePainter) }
 	// MouseDowner handles a primary-button press (canvas-local x, y).
@@ -38,21 +49,21 @@ type (
 type Stage struct {
 	Painter       ImagePainter
 	Width, Height float64 // canvas size, cleared on every Draw
-	Components    []Component
+	Components    []Drawer
 	// OnDraw, if set, is called after every Draw (demos use it to
 	// publish state).
 	OnDraw func()
 }
 
 // NewStage returns a stage for a width x height canvas.
-func NewStage(p ImagePainter, width, height float64, components ...Component) *Stage {
+func NewStage(p ImagePainter, width, height float64, components ...Drawer) *Stage {
 	s := &Stage{Painter: p, Width: width, Height: height}
 	s.Add(components...)
 	return s
 }
 
 // Add appends components (drawn above the existing ones).
-func (s *Stage) Add(cs ...Component) {
+func (s *Stage) Add(cs ...Drawer) {
 	for _, c := range cs {
 		s.Components = append(s.Components, c)
 		if ps, ok := c.(PainterSetter); ok && s.Painter != nil {
@@ -74,16 +85,26 @@ func (s *Stage) SetPainter(p ImagePainter) {
 // SetMode puts every component in mode m.
 func (s *Stage) SetMode(m Mode) {
 	for _, c := range s.Components {
-		c.SetMode(m)
+		if comp, ok := c.(Component); ok {
+			comp.SetMode(m)
+		} else if cm, ok := c.(interface{ SetContentMode(Mode) }); ok {
+			cm.SetContentMode(m)
+		}
+	}
+}
+
+// Paint draws every component, back to front, without clearing first
+// (ScrollView uses it to draw its content).
+func (s *Stage) Paint() {
+	for _, c := range s.Components {
+		c.Draw()
 	}
 }
 
 // Draw clears the canvas and draws every component, back to front.
 func (s *Stage) Draw() {
 	s.Painter.ClearRect(0, 0, s.Width, s.Height)
-	for _, c := range s.Components {
-		c.Draw()
-	}
+	s.Paint()
 	if s.OnDraw != nil {
 		s.OnDraw()
 	}
@@ -92,7 +113,7 @@ func (s *Stage) Draw() {
 // each calls fn on every component, topmost first, and reports whether
 // any call returned true. It does not stop early: every component sees
 // every pointer event.
-func (s *Stage) each(fn func(Component) bool) bool {
+func (s *Stage) each(fn func(Drawer) bool) bool {
 	changed := false
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		if fn(s.Components[i]) {
@@ -104,7 +125,7 @@ func (s *Stage) each(fn func(Component) bool) bool {
 
 // MouseDown dispatches a press; true means redraw.
 func (s *Stage) MouseDown(x, y float64) bool {
-	return s.each(func(c Component) bool {
+	return s.each(func(c Drawer) bool {
 		h, ok := c.(MouseDowner)
 		return ok && h.MouseDown(x, y)
 	})
@@ -112,7 +133,7 @@ func (s *Stage) MouseDown(x, y float64) bool {
 
 // MouseMove dispatches pointer movement; true means redraw.
 func (s *Stage) MouseMove(x, y float64) bool {
-	return s.each(func(c Component) bool {
+	return s.each(func(c Drawer) bool {
 		h, ok := c.(MouseMover)
 		return ok && h.MouseMove(x, y)
 	})
@@ -120,15 +141,26 @@ func (s *Stage) MouseMove(x, y float64) bool {
 
 // MouseUp dispatches a release; true means redraw.
 func (s *Stage) MouseUp(x, y float64) bool {
-	return s.each(func(c Component) bool {
+	return s.each(func(c Drawer) bool {
 		h, ok := c.(MouseUpper)
 		return ok && h.MouseUp(x, y)
 	})
 }
 
+// MouseWheel offers a wheel turn to components, topmost first, until
+// one handles it.
+func (s *Stage) MouseWheel(x, y, dx, dy float64) bool {
+	for i := len(s.Components) - 1; i >= 0; i-- {
+		if h, ok := s.Components[i].(MouseWheeler); ok && h.MouseWheel(x, y, dx, dy) {
+			return true
+		}
+	}
+	return false
+}
+
 // MouseLeave dispatches the pointer leaving the canvas.
 func (s *Stage) MouseLeave() bool {
-	return s.each(func(c Component) bool {
+	return s.each(func(c Drawer) bool {
 		h, ok := c.(MouseLeaver)
 		return ok && h.MouseLeave()
 	})
@@ -181,7 +213,7 @@ func (s *Stage) Cursor() string {
 
 // SetCaretVisible forwards a blink phase; true means redraw.
 func (s *Stage) SetCaretVisible(on bool) bool {
-	return s.each(func(c Component) bool {
+	return s.each(func(c Drawer) bool {
 		b, ok := c.(Blinker)
 		return ok && b.SetCaretVisible(on)
 	})

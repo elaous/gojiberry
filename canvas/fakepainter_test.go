@@ -51,3 +51,8 @@ var _ ImagePainter = (*fakePainter)(nil)
 type fakeImage struct{ w, h float64 }
 
 func (i fakeImage) Size() (float64, float64) { return i.w, i.h }
+
+func (f *fakePainter) Save()                       { f.rec("save") }
+func (f *fakePainter) Restore()                    { f.rec("restore") }
+func (f *fakePainter) Translate(x, y float64)      { f.rec("translate %g %g", x, y) }
+func (f *fakePainter) ClipRect(x, y, w, h float64) { f.rec("clipRect %g %g %g %g", x, y, w, h) }

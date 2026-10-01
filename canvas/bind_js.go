@@ -20,10 +20,17 @@ type jsPainter struct{ *html.Context2D }
 // NewPainter adapts a canvas 2D context to ImagePainter.
 func NewPainter(ctx *html.Context2D) ImagePainter { return jsPainter{ctx} }
 
+// ClipRect implements ImagePainter.
+func (p jsPainter) ClipRect(x, y, w, h float64) {
+	p.BeginPath()
+	p.Rect(x, y, w, h)
+	p.Clip()
+}
+
 // DrawImage implements ImagePainter; src must come from LoadImage.
 func (p jsPainter) DrawImage(src ImageSource, sx, sy, sw, sh, dx, dy, dw, dh float64) {
 	if img, ok := src.(*HTMLImage); ok {
-		p.Context2D.DrawImageClipped(img.v, sx, sy, sw, sh, dx, dy, dw, dh)
+		p.DrawImageClipped(img.v, sx, sy, sw, sh, dx, dy, dw, dh)
 	}
 }
 
@@ -66,7 +73,8 @@ func LoadImage(url string, onLoad func(*HTMLImage), onError func()) {
 // cursor, and draws once. Width/Height default to the canvas's size.
 //
 // input must be focusable but can be visually hidden (e.g. opacity 0,
-// 1px, absolutely positioned). Bind returns an error if canvasEl is
+// 1px, position: fixed at the top-left so the browser never scrolls to
+// it while you type). Bind returns an error if canvasEl is
 // not a <canvas> or has no 2D context.
 //
 // The returned function redraws the stage; call it after changing a
@@ -107,7 +115,9 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		// The input needs focus to receive keys: for typing into a
 		// cell, and for arrow/Enter/Escape navigation of a menu.
 		if s.WantsFocus() {
-			input.Focus()
+			// preventScroll: focusing the (offscreen) input must not make the
+			// page jump.
+			input.Call("focus", map[string]any{"preventScroll": true})
 		}
 		redraw()
 	})
@@ -128,6 +138,13 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		}
 		return nil
 	}))
+	canvasEl.OnWheel(func(e html.WheelEvent) {
+		x, y := local(html.MouseEvent{X: mouseX(e.Value), Y: mouseY(e.Value)})
+		if s.MouseWheel(x, y, e.DeltaX, e.DeltaY) {
+			e.PreventDefault()
+			redraw()
+		}
+	})
 	canvasEl.AddEventListener("mouseleave", js.FuncOf(func(js.Value, []js.Value) any {
 		if s.MouseLeave() {
 			redraw()
@@ -180,3 +197,6 @@ func (v *TableView) Bind(canvasEl, input *html.Element) error {
 	v.refresh = redraw
 	return nil
 }
+
+func mouseX(ev js.Value) float64 { return ev.Get("clientX").Float() }
+func mouseY(ev js.Value) float64 { return ev.Get("clientY").Float() }
