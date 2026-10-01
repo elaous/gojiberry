@@ -23,6 +23,9 @@ type Format struct {
 // IsZero reports whether f changes nothing.
 func (f Format) IsZero() bool { return f == Format{} }
 
+// Resolve applies f over base: the style text with this format is drawn in.
+func (f Format) Resolve(base TextStyle) TextStyle { return f.resolve(base) }
+
 // resolve applies f over base. If the size changes and the base has an
 // explicit line height, the line height scales with it.
 func (f Format) resolve(base TextStyle) TextStyle {

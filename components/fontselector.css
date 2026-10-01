@@ -1,0 +1,33 @@
+/* FontSelector -- see components/fontselector.go. */
+.gj-fontselector { position: relative; display: inline-block; min-width: 220px; }
+.gj-fontselector-control {
+  display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 10px; border: 1px solid var(--gj-border); border-radius: var(--gj-radius);
+  background: var(--gj-bg); color: var(--gj-text); font-size: 15px; cursor: pointer; text-align: left;
+}
+.gj-fontselector-control:disabled { opacity: .5; cursor: not-allowed; }
+.gj-fontselector-caret { color: var(--gj-muted); }
+.gj-fontselector-panel {
+  position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; width: 360px; max-width: 90vw;
+  padding: 8px; border: 1px solid var(--gj-border); border-radius: var(--gj-radius);
+  background: var(--gj-bg); box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+}
+.gj-fontselector-search {
+  box-sizing: border-box; width: 100%; padding: 6px 8px; margin-bottom: 6px;
+  border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text);
+}
+.gj-fontselector-sources { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.gj-fontselector-chip {
+  padding: 2px 10px; border: 1px solid var(--gj-border); border-radius: 999px;
+  background: var(--gj-bg-muted); color: var(--gj-text); font-size: 12px; cursor: pointer;
+}
+.gj-fontselector-chip[aria-pressed="true"] { background: var(--gj-accent); border-color: var(--gj-accent); color: var(--gj-accent-contrast); }
+.gj-fontselector-list { max-height: 320px; overflow-y: auto; }
+.gj-fontselector-group { padding: 6px 8px 2px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--gj-muted); }
+.gj-fontselector-option { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
+.gj-fontselector-option:hover { background: var(--gj-bg-muted); }
+.gj-fontselector-option-selected { background: var(--gj-bg-muted); outline: 1px solid var(--gj-accent); }
+.gj-fontselector-name { font-size: 12px; color: var(--gj-muted); }
+.gj-fontselector-source { grid-row: 1; grid-column: 2; font-size: 11px; color: var(--gj-muted); }
+.gj-fontselector-preview { grid-column: 1 / -1; font-size: 20px; line-height: 1.3; color: var(--gj-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gj-fontselector-more, .gj-fontselector-empty { padding: 8px; font-size: 12px; color: var(--gj-muted); }

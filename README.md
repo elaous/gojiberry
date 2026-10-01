@@ -1234,6 +1234,18 @@ generated code.
   # shows it installed, activated, and claimed the page.
   ```
 
+- `fonts` (package) — finding fonts: a `Repository` lists the families
+  one source offers (`WebSafe`, `Static`, `Local` -- a directory of
+  .ttf/.otf files, `Server` -- a gojiberry `fontserver` (its local
+  fonts or Google Fonts catalog), `BrowserLocal` -- the fonts installed
+  on the user's machine via the Local Font Access API), `Multi` merges
+  them, `Cached` remembers the answer, and `Search`/`CSSFamily`/
+  `FontFaceCSS` help a UI use the result. Used by the new `components`
+  `FontSelector` (searchable, previews each font in itself, filters by
+  source, remembers recents) and `StyleEditor` (edits a `canvas.Format`:
+  font, size, weight, bold/italic/underline/strike/super/subscript,
+  colors, with a live preview). Demo: `examples/wasm-style-editor-demo`.
+
 - `canvas` (package) — components drawn on an HTML `<canvas>` rather
   than built from DOM. Every component has a view mode (read-only, the
   default) and an edit mode (`SetMode`); layout, hit-testing, editing
@@ -1269,6 +1281,16 @@ generated code.
     a stream of `Chars` (text + `Format`), `ColumnConfig` (column widths
     and gap, kept until the next one) and `Break` (user page or column
     break); the layout adds natural page breaks when text overflows.
+
+  Also: `TextFlow.Transform` turns a `Source` string into the content
+  stream (`canvas.Markdown` is the first: headings, bold/italic, strike,
+  underline, highlight, `^super^`/`~sub~`, code, links, lists, tables,
+  rules, images and `\pagebreak`/`\columnbreak`/`\columns N`
+  directives); inline objects (tables, rules, inline `Image`s) sit in
+  the text and are fitted to the column and page; floating `Image`s and
+  `FloatingText` take a page `Anchor`; headers and footers are editable
+  by double-click (per page: same as previous, or new) and page numbers
+  are selectable, with a settings menu.
 
   Demos, each with a Playwright e2e test run by `go test` (skipped when
   node/playwright/chromium are missing): `examples/canvas-table-demo`,

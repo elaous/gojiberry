@@ -1,6 +1,9 @@
 package canvas
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 // Font styles for TextStyle.FontStyle.
 const (
@@ -91,4 +94,47 @@ func (s TextStyle) Leading() float64 {
 		size = 16
 	}
 	return 1.4 * size
+}
+
+// CSS returns s as an inline CSS declaration list, for previewing the
+// style in ordinary HTML (a style editor's sample text, say).
+func (s TextStyle) CSS() string {
+	var b strings.Builder
+	decl := func(k, v string) { b.WriteString(k + ":" + v + ";") }
+	if s.FontFamily != "" {
+		decl("font-family", s.FontFamily)
+	}
+	decl("font-size", strconv.FormatFloat(s.drawSize(), 'f', -1, 64)+"px")
+	if s.FontWeight != 0 {
+		decl("font-weight", strconv.Itoa(s.FontWeight))
+	}
+	if s.FontStyle != "" {
+		decl("font-style", s.FontStyle)
+	}
+	if s.LineHeight > 0 {
+		decl("line-height", strconv.FormatFloat(s.LineHeight, 'f', -1, 64)+"px")
+	}
+	if s.Color != "" {
+		decl("color", s.Color)
+	}
+	if s.Background != "" {
+		decl("background-color", s.Background)
+	}
+	var lines []string
+	if s.Underline {
+		lines = append(lines, "underline")
+	}
+	if s.Strike {
+		lines = append(lines, "line-through")
+	}
+	if len(lines) > 0 {
+		decl("text-decoration", strings.Join(lines, " "))
+	}
+	switch {
+	case s.Superscript:
+		decl("vertical-align", "super")
+	case s.Subscript:
+		decl("vertical-align", "sub")
+	}
+	return b.String()
 }
