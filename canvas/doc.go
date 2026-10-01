@@ -18,4 +18,11 @@
 // table: click a cell to edit it, Tab/Enter/arrow keys move between
 // cells, and a "+" bar on the right edge and bottom edge adds a column
 // or row.
+//
+// Editing capabilities that are not part of one component -- multiple
+// cursors, line operations, Markdown copy and paste -- are Features
+// registered with a Stage's Registry: each adds Commands (with default
+// key chords) that act on an EditTarget, which an editable component such
+// as FloatingText provides. See Feature, Registry, MultiCursor, LineOps
+// and MarkdownClipboard.
 package canvas

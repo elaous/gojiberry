@@ -29,6 +29,11 @@ type (
 	PainterSetter interface{ SetPainter(ImagePainter) }
 	// MouseDowner handles a primary-button press (canvas-local x, y).
 	MouseDowner interface{ MouseDown(x, y float64) bool }
+	// ModMouseDowner is MouseDowner that also wants the modifier keys
+	// held (Ctrl/Cmd+click adds a cursor).
+	ModMouseDowner interface {
+		MouseDownMods(x, y float64, m Mods) bool
+	}
 	// MouseMover handles pointer movement.
 	MouseMover interface{ MouseMove(x, y float64) bool }
 	// MouseUpper handles a button release.
@@ -53,6 +58,9 @@ type (
 	Blinker interface{ SetCaretVisible(on bool) bool }
 )
 
+// Mods are the modifier keys held during a pointer event.
+type Mods struct{ Ctrl, Shift, Alt, Meta bool }
+
 // Stage draws several components onto one canvas, back to front, and
 // routes pointer and keyboard events to them (topmost first). Only
 // the browser glue -- Bind -- is js/wasm-only.
@@ -64,6 +72,17 @@ type Stage struct {
 	Keymap Keymap
 	// Formats is the format clipboard shared by the components.
 	Formats *FormatClipboard
+	// Features are the registered editing features (multi-cursor, line
+	// operations, Markdown clipboard...); NewStage installs
+	// DefaultFeatures. Their chords are added to the keymap wherever the
+	// Keymap itself has no binding for the chord.
+	Features *Registry
+	// Clipboard is the system clipboard for feature commands; Bind
+	// fills it in.
+	Clipboard Clipboard
+	// Redraw, if set, redraws the stage (Bind sets it); feature
+	// commands that finish later call it.
+	Redraw func()
 	// OnDraw, if set, is called after every Draw (demos use it to
 	// publish state).
 	OnDraw func()
@@ -71,7 +90,7 @@ type Stage struct {
 
 // NewStage returns a stage for a width x height canvas.
 func NewStage(p ImagePainter, width, height float64, components ...Drawer) *Stage {
-	s := &Stage{Painter: p, Width: width, Height: height, Formats: &FormatClipboard{}}
+	s := &Stage{Painter: p, Width: width, Height: height, Formats: &FormatClipboard{}, Features: NewRegistry(DefaultFeatures()...)}
 	s.Add(components...)
 	return s
 }
@@ -146,8 +165,14 @@ func (s *Stage) each(fn func(Drawer) bool) bool {
 }
 
 // MouseDown dispatches a press; true means redraw.
-func (s *Stage) MouseDown(x, y float64) bool {
+func (s *Stage) MouseDown(x, y float64) bool { return s.MouseDownMods(x, y, Mods{}) }
+
+// MouseDownMods is MouseDown with the modifier keys held.
+func (s *Stage) MouseDownMods(x, y float64, m Mods) bool {
 	return s.each(func(c Drawer) bool {
+		if h, ok := c.(ModMouseDowner); ok {
+			return h.MouseDownMods(x, y, m)
+		}
 		h, ok := c.(MouseDowner)
 		return ok && h.MouseDown(x, y)
 	})
@@ -226,6 +251,9 @@ func (s *Stage) HandleChord(chord string) bool {
 		km = DefaultKeymap()
 	}
 	cmd, ok := km[chord]
+	if !ok && s.Features != nil {
+		cmd, ok = s.Features.keys[chord]
+	}
 	if !ok {
 		return false
 	}
@@ -234,6 +262,14 @@ func (s *Stage) HandleChord(chord string) bool {
 
 // RunCommand offers cmd to components, topmost first, until one applies it.
 func (s *Stage) RunCommand(cmd Command) bool {
+	if s.Features != nil && s.Features.Has(cmd) {
+		if t := s.EditTarget(); t != nil {
+			ctx := &CommandContext{Target: t, Clipboard: &s.Clipboard, Formats: s.Formats, Redraw: s.Redraw}
+			if s.Features.Run(cmd, ctx) {
+				return true
+			}
+		}
+	}
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		if h, ok := s.Components[i].(Commander); ok && h.HandleCommand(cmd) {
 			return true
@@ -324,4 +360,17 @@ func (s *Stage) SetCaretVisible(on bool) bool {
 		b, ok := c.(Blinker)
 		return ok && b.SetCaretVisible(on)
 	})
+}
+
+// EditTarget returns the EditTarget of the topmost component being
+// edited, or nil.
+func (s *Stage) EditTarget() EditTarget {
+	for i := len(s.Components) - 1; i >= 0; i-- {
+		if e, ok := s.Components[i].(Editable); ok {
+			if t := e.EditTarget(); t != nil {
+				return t
+			}
+		}
+	}
+	return nil
 }

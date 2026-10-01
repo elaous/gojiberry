@@ -1311,6 +1311,14 @@ generated code.
   live components in place on each render: see `docs/gox-canvas.md` and
   `examples/goxcanvas-demo`. What is still to do is in `docs/canvas-todo.md`.
 
+  Editing capabilities are *features* registered with the Stage
+  (`canvas.Registry`, `canvas.Feature`): multi-cursor (Ctrl/Cmd+click,
+  Ctrl/Cmd+D, Ctrl/Cmd+Shift+L, Alt+Shift+I), line operations (Alt+Up/Down
+  move, Alt+Shift+Up/Down copy, Ctrl/Cmd+Shift+K delete) and Markdown copy
+  and paste (Ctrl/Cmd+Shift+C / V). Each registers commands and default key
+  chords; leave one out of `Stage.Features` (or `<canvas.Canvas features=...>`)
+  to switch it off, or add your own.
+
   Demos, each with a Playwright e2e test run by `go test` (skipped when
   node/playwright/chromium are missing): `examples/canvas-table-demo`,
   `examples/canvas-flow-demo`, `examples/canvas-image-demo`,
