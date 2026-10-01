@@ -132,6 +132,9 @@ func createInner(n gox.Node) *renderedNode {
 		return &renderedNode{kind: gox.KindText, dom: d, text: n.Text}
 	case gox.KindRaw:
 		return &renderedNode{kind: gox.KindRaw, rawNodes: parseHTMLFragment(n.Text), text: n.Text}
+	case gox.KindHost:
+		// Host nodes belong to another renderer; leave a hole.
+		return &renderedNode{kind: gox.KindFragment}
 	case gox.KindFragment:
 		rn := &renderedNode{kind: gox.KindFragment}
 		for _, c := range n.Children {

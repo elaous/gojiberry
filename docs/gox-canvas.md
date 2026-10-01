@@ -1,6 +1,40 @@
 # Using gox with the canvas components
 
-*A proposal. Parts 1 and 2 already work; parts 3 onwards are suggestions.*
+*Status: parts 1 and 3 are built (generic tags and render props; the
+`goxcanvas` renderer with `Canvas`, `TextFlow`, `Header`, `Footer` and
+`PageNumber`, in `canvas/goxcanvas`, demo in `examples/goxcanvas-demo`).
+The rest is still a proposal; remaining work is in [canvas-todo.md](canvas-todo.md).*
+
+## 0. What works today
+
+```gox
+import canvas "github.com/elaous/gojiberry/canvas/goxcanvas"
+
+<canvas.Canvas width={900} height={560} mode={state.Mode}>
+	<canvas.TextFlow source={state.Source} pageCount={3}
+		margins={[]float64{60, 50, 60, 50}}
+		pages={func(page gox.Node, n int) gox.Node {
+			return <>
+				<canvas.Header text="Report" />
+				{page}
+				<canvas.Footer><canvas.PageNumber format="Page {n}" /></canvas.Footer>
+			</>
+		}} />
+</canvas.Canvas>
+```
+
+`root := goxcanvas.NewRoot(stage); root.Render(tree)` builds the canvas
+components on the first call and updates them in place on later ones.
+Differences from the first sketch: props are lower-camel (`pageCount`),
+`margins` is a `[]float64` in CSS order, and `pages` is called once per
+sheet with the sheet slot and its index. A sheet whose header, footer or
+number equals the previous sheet's inherits it (so the "this page and
+following" semantics of editing on the canvas stay the same); one that
+leaves an element out where the previous had it removes it, and `none`
+says so explicitly. Props are applied only when they change, so a header
+edited by double-click on the canvas survives a re-render that passes the
+same props.
+
 
 The `canvas` package is imperative Go: you build components (`TextFlow`,
 `ScrollView`, `PageSet`, ...), add them to a `Stage`, and they change

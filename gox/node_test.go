@@ -77,3 +77,14 @@ func TestWithKey(t *testing.T) {
 		t.Errorf("WithKey changed more than Key: got %+v, want %+v", keyed, original)
 	}
 }
+
+func TestHost(t *testing.T) {
+	type props struct{ N int }
+	n := Host("canvas.X", props{N: 3}, Text("a"))
+	if n.Kind != KindHost || n.Tag != "canvas.X" || n.Props.(props).N != 3 || len(n.Children) != 1 {
+		t.Fatalf("Host = %+v", n)
+	}
+	if _, err := RenderString(n); err == nil {
+		t.Fatal("RenderString of a host node should fail")
+	}
+}
