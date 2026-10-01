@@ -18,6 +18,12 @@ run(async () => {
   assert(items === s.commands, 'the DOM lists every registered command: ' + items);
   assert(await page.locator('.styleeditor, [class*=style]').count() > 0, 'the style editor is rendered');
 
+  // The components' stylesheets come from CSS imports, installed by domrt.Mount.
+  const sheets = await page.evaluate(() => Array.from(document.querySelectorAll('style[data-gox-style]')).map((e) => e.getAttribute('data-gox-style')));
+  assert(sheets.length > 10 && sheets[0].endsWith('/components/base.css') && sheets.some((x) => x.endsWith('/styleeditor.css')), 'component stylesheets installed in <head>: ' + sheets.length);
+  const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--gj-accent').trim());
+  assert(accent === '#2563eb', 'the design tokens apply: ' + accent);
+
   await d.toggleMode();
   s = await d.state();
   assert(s.mode === 'edit', 'edit mode');

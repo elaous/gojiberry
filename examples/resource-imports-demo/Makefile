@@ -1,5 +1,5 @@
 # resource-imports-demo dev workflow: prints a page rendered from a
-# JSON-decoded config and a @stylesheets-imported CSS file to stdout,
+# JSON-decoded config and a CSS file imported with `import _ "<module path>/style.css"` to stdout,
 # no WASM step.
 .PHONY: run
 run: generate
