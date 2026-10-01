@@ -156,6 +156,10 @@ type TextFlow struct {
 	X, Y          float64
 	Width, Height float64
 
+	// Styles are the named styles Format.Style and ParaFormat.Style refer
+	// to (DefaultStyles is a starting set).
+	Styles []StyleDef
+
 	Columns []float64
 	Gap     float64
 	// MinColumnWidth stops a drag from collapsing a column (default 40).
@@ -384,17 +388,18 @@ const opColumns BreakKind = -1
 func (f *TextFlow) flatten() *flowData {
 	d := &flowData{f: f, objs: map[int]Inline{}, dims: map[objKey][2]float64{}, maxW: 1e9, maxH: 1e9}
 	type styleKey struct {
-		f     Format
-		small bool
+		f, base Format
+		small   bool
 	}
 	styleID := map[styleKey]int{}
+	var paraBase Format // the character format of the current paragraph's style
 	styleFor := func(fm Format, small bool) int {
-		k := styleKey{fm, small}
+		k := styleKey{fm, paraBase, small}
 		id, ok := styleID[k]
 		if !ok {
 			id = len(d.styles)
 			styleID[k] = id
-			st := fm.resolve(f.Style)
+			st := f.expand(paraBase, fm).resolve(f.Style)
 			if small { // a small capital: the lower-case letter's capital at 0.8 size
 				if st.FontSize <= 0 {
 					st.FontSize = 16
@@ -416,6 +421,9 @@ func (f *TextFlow) flatten() *flowData {
 				d.runes = append(d.runes, r)
 				d.disp = append(d.disp, shown)
 				d.rs = append(d.rs, styleFor(it.Format, small))
+				if r == '\n' {
+					paraBase = Format{} // the next paragraph starts clean, until its own style item
+				}
 			}
 		case Inline:
 			id := styleFor(Format{}, false)
@@ -426,6 +434,7 @@ func (f *TextFlow) flatten() *flowData {
 			prevLetter = false
 		case ParaFormat:
 			d.paras = append(d.paras, paraRec{len(d.runes), it})
+			_, paraBase = f.expandPara(it)
 			prevLetter = false
 		case ColumnConfig:
 			d.ops = append(d.ops, flowOp{at: len(d.runes), cfg: idx, kind: opColumns})
@@ -808,7 +817,7 @@ func (l *layouter) segment(s, e int, last bool) {
 // after a break (ps is mid-paragraph) keeps its format but is not
 // numbered again and gets no marker or space.
 func (l *layouter) beginParagraph(ps, pe int) {
-	pf := l.d.paraIn(ps, pe)
+	pf, _ := l.f.expandPara(l.d.paraIn(ps, pe))
 	start := ps == 0 || l.d.runes[ps-1] == '\n'
 	l.para = paraCtx{pf: pf, first: start, left: pf.leftIndent()}
 	if !start {

@@ -76,6 +76,10 @@ type TextFlowProps struct {
 	Text      string
 	Style     *canvas.TextStyle
 
+	// Styles are the named styles Format.Style and ParaFormat.Style refer
+	// to (canvas.DefaultStyles is a starting set).
+	Styles []canvas.StyleDef
+
 	Columns []float64
 	Gap     float64
 

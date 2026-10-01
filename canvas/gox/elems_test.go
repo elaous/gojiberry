@@ -323,3 +323,26 @@ func TestWatermarkBackgroundSpreadAndOpacityProps(t *testing.T) {
 		t.Errorf("empty watermark and background change nothing: %+v %+v", ps.Pages[0].Watermark, ps.Pages[0].Background)
 	}
 }
+
+func TestStylesProp(t *testing.T) {
+	r, _ := newRoot()
+	tree := func(styles []canvas.StyleDef) gox.Node {
+		return Canvas(CanvasProps{Children: []gox.Node{TextFlow(TextFlowProps{Text: "x", Styles: styles})}})
+	}
+	_ = r.Render(tree(canvas.DefaultStyles()))
+	flow := r.Find(TagTextFlow, 0).(*canvas.TextFlow)
+	if _, ok := flow.StyleByName("Heading 1"); !ok {
+		t.Fatal("styles from props")
+	}
+	flow.DefineStyle(canvas.StyleDef{Name: "Mine"}) // defined at run time, e.g. by a command
+	redraws := 0
+	r.Redraw = func() { redraws++ }
+	_ = r.Render(tree(canvas.DefaultStyles()))
+	if _, ok := flow.StyleByName("Mine"); !ok || redraws != 0 {
+		t.Error("the same props keep what was defined on the canvas")
+	}
+	_ = r.Render(tree([]canvas.StyleDef{{Name: "Only"}}))
+	if _, ok := flow.StyleByName("Mine"); ok || len(flow.Styles) != 1 || redraws != 1 {
+		t.Errorf("changed props replace the styles: %v", flow.Styles)
+	}
+}

@@ -10,7 +10,7 @@ run(async () => {
   let s = await d.state();
   assert(!s.error, 'renders without error: ' + s.error);
   assert(s.mode === 'view' && s.pages === 3, 'starts in view mode with three pages');
-  assert(JSON.stringify(s.features) === JSON.stringify(['history', 'multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'page-furniture']), 'features registered: ' + s.features);
+  assert(JSON.stringify(s.features) === JSON.stringify(['history', 'multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'styles', 'page-furniture']), 'features registered: ' + s.features);
   for (const tag of ['canvas.TextFlow', 'canvas.Image', 'canvas.FloatingText', 'canvas.Table', 'canvas.ScrollView'])
     assert(s.elements.includes(tag), tag + ' is a registered element');
   assert(s.commands >= 30, 'commands registered: ' + s.commands);
@@ -20,7 +20,7 @@ run(async () => {
   // The menu bar is built from the registered commands: one submenu per feature.
   await page.click('button.gj-menubar-button:has-text("Edit")');
   const subs = await page.locator('.gj-menubar-panel > .gj-menu > .gj-menu-item-sub').count();
-  assert(subs === 9, 'Edit has a submenu per feature: ' + subs);
+  assert(subs === 10, 'Edit has a submenu per feature: ' + subs);
   const shortcut = await page.locator('.gj-menubar-panel li:has-text("Move line up") .gj-menu-shortcut').first().textContent();
   assert(shortcut === 'Alt+↑', 'a command shows its shortcut: ' + shortcut);
   await page.hover('.gj-menubar-panel li.gj-menu-item-sub:has-text("Paragraphs")');
@@ -90,6 +90,18 @@ run(async () => {
   await page.keyboard.press('Control+Shift+K');
   s = await d.state();
   assert(s.text.length === t0.length, 'Ctrl+Shift+K deletes it again');
+
+  // Styles: the gallery applies a paragraph style to the caret's paragraph.
+  await page.click('button[data-tab="styles"]');
+  assert(await page.locator('.gj-stylepicker-item[data-style="Heading 1"]').count() === 1, 'the style gallery lists the styles');
+  await d.click(180 + 60, 24 + 60 + 80);
+  const hBefore = (await d.state()).lineHeights.slice(0, 3);
+  await page.click('.gj-stylepicker-item[data-style="Heading 2"]');
+  s = await d.state();
+  assert(s.lineHeights[1] > hBefore[1], 'Heading 2 makes the paragraph taller: ' + hBefore + ' -> ' + s.lineHeights.slice(0, 3));
+  await page.click('.gj-stylepicker-item[data-style="Normal"]');
+  s = await d.state();
+  assert(s.lineHeights[1] === hBefore[1], 'Normal puts it back');
 
   // Symbols: pick one from the DOM picker into the canvas text.
   await page.click('button[data-tab="symbols"]');
