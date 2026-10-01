@@ -92,6 +92,9 @@ func (c *canvasInst) update(r *Root, p CanvasProps, children []gox.Node) (bool, 
 		changed = true
 	}
 	modeChanged := !c.has || p.Mode != c.props.Mode
+	if p.Features != nil && !sameFeatures(p.Features, c.props.Features) {
+		st.Features = canvas.NewRegistry(p.Features...)
+	}
 	c.props, c.has = p, true
 
 	var kids []inst
@@ -219,4 +222,16 @@ func clonePages(in []canvas.Page) []canvas.Page {
 		out[i] = p
 	}
 	return out
+}
+
+func sameFeatures(a, b []canvas.Feature) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Name() != b[i].Name() {
+			return false
+		}
+	}
+	return true
 }

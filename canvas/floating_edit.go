@@ -80,6 +80,10 @@ func (ft *FloatingText) InsertText(s string) bool {
 	if ft.mode != ModeEdit || !ft.editing || s == "" {
 		return false
 	}
+	if len(ft.extra) > 0 {
+		ft.multiInsert(s)
+		return true
+	}
 	rs := []rune(s)
 	if len(rs) != 1 || rs[0] == '\n' {
 		ok := ft.insertPlain(s)
@@ -96,6 +100,10 @@ func (ft *FloatingText) InsertText(s string) bool {
 
 // PasteText inserts clipboard text exactly as given (no auto-closing).
 func (ft *FloatingText) PasteText(text string) bool {
+	if len(ft.extra) > 0 && ft.mode == ModeEdit && ft.editing {
+		ft.multiPaste(text)
+		return true
+	}
 	ok := ft.insertPlain(text)
 	ft.closeSuggestions()
 	return ok
@@ -533,6 +541,9 @@ func (ft *FloatingText) CopyText() (string, bool) {
 	if ft.mode != ModeEdit || !ft.editing {
 		return "", false
 	}
+	if len(ft.extra) > 0 {
+		return ft.multiSelectedText()
+	}
 	if from, to := ft.Selection(); from == to {
 		return "", false
 	}
@@ -544,6 +555,10 @@ func (ft *FloatingText) CutText() (string, bool) {
 	text, ok := ft.CopyText()
 	if !ok {
 		return "", false
+	}
+	if len(ft.extra) > 0 {
+		ft.multiInsert("")
+		return text, true
 	}
 	from, to := ft.Selection()
 	ft.replace(from, to, nil)

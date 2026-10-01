@@ -99,6 +99,23 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 			input.Call("blur")
 		}
 	}
+	s.Redraw = redraw
+	// The async clipboard API (needs a secure context and, for reading,
+	// the user's permission; without it the commands do nothing).
+	if cb := js.Global().Get("navigator").Get("clipboard"); cb.Truthy() {
+		s.Clipboard = Clipboard{
+			Write: func(text string) { cb.Call("writeText", text) },
+			Read: func(fn func(string)) {
+				var then js.Func
+				then = js.FuncOf(func(_ js.Value, args []js.Value) any {
+					fn(args[0].String())
+					then.Release()
+					return nil
+				})
+				cb.Call("readText").Call("then", then)
+			},
+		}
+	}
 	local := func(e html.MouseEvent) (float64, float64) {
 		r := canvasEl.BoundingRect()
 		return e.X - r.Left, e.Y - r.Top
@@ -112,7 +129,7 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		// clears the input's focus once this handler returns.
 		e.PreventDefault()
 		x, y := local(e)
-		s.MouseDown(x, y)
+		s.MouseDownMods(x, y, Mods{Ctrl: e.CtrlKey, Shift: e.ShiftKey, Alt: e.AltKey, Meta: e.MetaKey})
 		if e.Detail == 2 { // the second press of a double click
 			s.DoubleClick(x, y)
 		}

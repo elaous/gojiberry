@@ -86,8 +86,9 @@ type FloatingText struct {
 
 	runes   []fRune
 	caret   int
-	anchor  int    // the other end of the selection
-	pending Format // format for the next typed text when nothing is selected
+	anchor  int      // the other end of the selection
+	extra   []Cursor // further cursors (multi-cursor); the caret and anchor are the primary one
+	pending Format   // format for the next typed text when nothing is selected
 	editing bool
 	caretOn bool
 
@@ -352,6 +353,9 @@ func (ft *FloatingText) handleEditKey(key string, shift bool) bool {
 		return false
 	}
 	ft.sync()
+	if len(ft.extra) > 0 {
+		return ft.multiKey(key, shift)
+	}
 	move := func(to int) {
 		ft.caret = min(max(to, 0), len(ft.runes))
 		if !shift {
@@ -598,6 +602,7 @@ func (ft *FloatingText) MouseDown(x, y float64) bool {
 		ft.drag = d
 	default: // inside the text
 		ft.sync()
+		ft.extra = nil
 		ft.editing = true
 		ft.caret = ft.inner.OffsetAt(x, y)
 		ft.anchor = ft.caret
@@ -751,9 +756,11 @@ func (ft *FloatingText) Draw() {
 	p.SetLineWidth(1)
 	p.StrokeRect(ft.X+0.5, ft.Y+0.5, ft.Width-1, ft.Height-1)
 	if ft.editing && ft.caretOn {
-		if x, y, h, ok := ft.inner.CaretRect(ft.caret); ok {
-			p.SetFillStyle(cs.OutlineColor)
-			p.FillRect(x, y+2, 1.5, h-4)
+		for _, c := range ft.Cursors() {
+			if x, y, h, ok := ft.inner.CaretRect(c.Caret); ok {
+				p.SetFillStyle(cs.OutlineColor)
+				p.FillRect(x, y+2, 1.5, h-4)
+			}
 		}
 	}
 	p.SetFont(cs.Font)
@@ -784,22 +791,24 @@ func (ft *FloatingText) Draw() {
 
 // drawSelection tints the selected text, line by line.
 func (ft *FloatingText) drawSelection() {
-	from, to := ft.Selection()
-	if from == to {
-		return
-	}
 	p := ft.Painter
 	p.SetFillStyle(ft.ChromeStyle.SelectColor)
 	lay := ft.inner.Layout()
 	data := ft.inner.data
-	for _, ln := range lay.Lines {
-		s, e := max(from, ln.Start), min(to, ln.End)
-		if s >= e {
+	for _, c := range ft.Cursors() {
+		from, to := c.Range()
+		if from == to {
 			continue
 		}
-		x0 := ln.X + data.measure(ln.Start, s)
-		x1 := ln.X + data.measure(ln.Start, e)
-		p.FillRect(x0, ln.Y, x1-x0, ln.H)
+		for _, ln := range lay.Lines {
+			s, e := max(from, ln.Start), min(to, ln.End)
+			if s >= e {
+				continue
+			}
+			x0 := ln.X + data.measure(ln.Start, s)
+			x1 := ln.X + data.measure(ln.Start, e)
+			p.FillRect(x0, ln.Y, x1-x0, ln.H)
+		}
 	}
 }
 

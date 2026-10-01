@@ -42,7 +42,11 @@ const (
 type CanvasProps struct {
 	Width, Height float64
 	// Mode is ModeView (default) or ModeEdit for every component below.
-	Mode     canvas.Mode
+	Mode canvas.Mode
+	// Features replaces the editing features registered on the stage
+	// (nil keeps canvas.DefaultFeatures): list only what the document
+	// should have, plus your own.
+	Features []canvas.Feature
 	Children []gox.Node
 }
 
