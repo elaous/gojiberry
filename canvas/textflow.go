@@ -42,6 +42,12 @@ type Run struct {
 	Font       string  // CSS font
 	Color      string
 	Start, End int // rune offsets into the text stream
+
+	// Decorations. DY is the baseline shift of a superscript (negative)
+	// or subscript (positive); Size is the size the run is drawn at.
+	Underline, Strike bool
+	Background        string
+	DY, Size          float64
 }
 
 // Line is one laid-out line of text. Start/End are rune offsets into
@@ -54,6 +60,7 @@ type Line struct {
 	Page, Col  int
 	Start, End int
 	Runs       []Run
+	Objects    []PlacedObject // inline objects on this line
 }
 
 // BreakMark records a break the layout honoured or made: a
@@ -115,6 +122,13 @@ type TextFlow struct {
 	Items []Item
 	Style TextStyle
 
+	// Transform, if set, turns Source into the content (Items and Text
+	// are then ignored): see Transform and Markdown. The result is
+	// cached until Source changes; call InvalidateTransform after
+	// changing the transform's own settings.
+	Source    string
+	Transform Transform
+
 	// Pages, if set, supplies the page rectangles (see PageSet); X, Y,
 	// Width and Height are then ignored.
 	Pages         *PageSet
@@ -134,6 +148,10 @@ type TextFlow struct {
 
 	// OnChange is called when the columns are resized by dragging.
 	OnChange func(*TextFlow)
+
+	derived    []Item
+	derivedSrc string
+	derivedOK  bool
 
 	obstacles []Obstacle
 	mode      Mode
@@ -213,11 +231,21 @@ func (f *TextFlow) minColumn() float64 {
 }
 
 func (f *TextFlow) items() []Item {
+	if f.Transform != nil {
+		if !f.derivedOK || f.derivedSrc != f.Source {
+			f.derived, f.derivedSrc, f.derivedOK = f.Transform.Transform(f.Source), f.Source, true
+		}
+		return f.derived
+	}
 	if len(f.Items) > 0 {
 		return f.Items
 	}
 	return []Item{Chars{Text: f.Text}}
 }
+
+// InvalidateTransform makes the next layout run the Transform again
+// (it otherwise reruns only when Source changes).
+func (f *TextFlow) InvalidateTransform() { f.derivedOK = false }
 
 func (f *TextFlow) pageCount() int {
 	if f.Pages != nil {
@@ -234,22 +262,23 @@ func (f *TextFlow) pageRect(page int) (x, y, w, h float64) {
 	return f.X, f.Y, f.Width, f.Height
 }
 
-// config returns the column widths and gap of config idx (-1: base).
-func (f *TextFlow) config(idx int) (widths []float64, gap float64) {
+// config returns column config idx (-1: the base Columns and Gap).
+func (f *TextFlow) config(idx int) ColumnConfig {
 	if idx >= 0 {
-		if c, ok := f.Items[idx].(ColumnConfig); ok {
-			return c.Widths, c.Gap
+		if c, ok := f.items()[idx].(ColumnConfig); ok {
+			return c
 		}
 	}
-	return f.Columns, f.Gap
+	return ColumnConfig{Widths: f.Columns, Gap: f.Gap}
 }
 
 // setConfigWidths writes widths back to config idx (-1: base).
 func (f *TextFlow) setConfigWidths(idx int, widths []float64) {
 	if idx >= 0 {
-		if c, ok := f.Items[idx].(ColumnConfig); ok {
+		items := f.items()
+		if c, ok := items[idx].(ColumnConfig); ok {
 			c.Widths = widths
-			f.Items[idx] = c
+			items[idx] = c
 			return
 		}
 	}
@@ -265,6 +294,15 @@ type flowData struct {
 	styles []TextStyle
 	ops    []flowOp
 	f      *TextFlow
+
+	objs       map[int]Inline // inline objects by text-stream offset
+	maxW, maxH float64        // room objects are measured against right now
+	dims       map[objKey][2]float64
+}
+
+type objKey struct {
+	at         int
+	maxW, maxH float64
 }
 
 type flowOp struct {
@@ -278,7 +316,7 @@ type flowOp struct {
 const opColumns BreakKind = -1
 
 func (f *TextFlow) flatten() *flowData {
-	d := &flowData{f: f}
+	d := &flowData{f: f, objs: map[int]Inline{}, dims: map[objKey][2]float64{}, maxW: 1e9, maxH: 1e9}
 	styleID := map[Format]int{}
 	for idx, it := range f.items() {
 		switch it := it.(type) {
@@ -293,6 +331,16 @@ func (f *TextFlow) flatten() *flowData {
 				d.runes = append(d.runes, r)
 				d.rs = append(d.rs, id)
 			}
+		case Inline:
+			id, ok := styleID[Format{}]
+			if !ok {
+				id = len(d.styles)
+				styleID[Format{}] = id
+				d.styles = append(d.styles, Format{}.resolve(f.Style))
+			}
+			d.objs[len(d.runes)] = it
+			d.runes = append(d.runes, objectRune)
+			d.rs = append(d.rs, id)
 		case ColumnConfig:
 			d.ops = append(d.ops, flowOp{at: len(d.runes), cfg: idx, kind: opColumns})
 		case Break:
@@ -309,13 +357,34 @@ func (f *TextFlow) flatten() *flowData {
 
 func isSpace(r rune) bool { return r == ' ' || r == '\t' }
 
-// measure returns the width of runes[a:b] with each rune in its style.
+// objDims returns the size of the inline object at offset i against the
+// current room (maxW x maxH), measuring it once per distinct room.
+func (d *flowData) objDims(i int) (w, h float64) {
+	k := objKey{i, d.maxW, d.maxH}
+	if v, ok := d.dims[k]; ok {
+		return v[0], v[1]
+	}
+	w, h = d.objs[i].Object.Measure(d.f.Painter, d.maxW, d.maxH)
+	d.dims[k] = [2]float64{w, h}
+	return w, h
+}
+
+func (d *flowData) isObj(i int) bool { _, ok := d.objs[i]; return ok }
+
+// measure returns the width of runes[a:b], each rune in its style and
+// each inline object at its size.
 func (d *flowData) measure(a, b int) float64 {
 	p := d.f.Painter
 	w := 0.0
 	for a < b {
+		if d.isObj(a) {
+			ow, _ := d.objDims(a)
+			w += ow
+			a++
+			continue
+		}
 		id, e := d.rs[a], a+1
-		for e < b && d.rs[e] == id {
+		for e < b && d.rs[e] == id && !d.isObj(e) {
 			e++
 		}
 		p.SetFont(d.styles[id].Font())
@@ -325,25 +394,49 @@ func (d *flowData) measure(a, b int) float64 {
 	return w
 }
 
-// runs splits runes[a:b] into styled runs positioned from x=0.
-func (d *flowData) runsOf(a, b int) (runs []Run, width, height, size float64) {
+// lineParts is runes[a:b] laid out as one line: styled runs and objects
+// positioned from x=0 (objects' Y is relative to the line's top).
+type lineParts struct {
+	runs          []Run
+	objs          []PlacedObject
+	width, height float64
+	size          float64 // largest font size on the line
+	objH          float64 // tallest object
+	block         bool    // the line is a block object alone
+}
+
+func (d *flowData) partsOf(a, b int) lineParts {
 	p := d.f.Painter
+	var lp lineParts
 	for a < b {
+		if in, ok := d.objs[a]; ok {
+			w, h := d.objDims(a)
+			lp.objs = append(lp.objs, PlacedObject{Object: in.Object, X: lp.width, W: w, H: h, Offset: a})
+			lp.width += w
+			lp.objH = max(lp.objH, h)
+			lp.block = lp.block || in.Block
+			a++
+			continue
+		}
 		id, e := d.rs[a], a+1
-		for e < b && d.rs[e] == id {
+		for e < b && d.rs[e] == id && !d.isObj(e) {
 			e++
 		}
 		st := d.styles[id]
 		p.SetFont(st.Font())
 		text := string(d.runes[a:e])
 		w := p.MeasureTextWidth(text)
-		runs = append(runs, Run{Text: text, X: width, W: w, Font: st.Font(), Color: st.Color, Start: a, End: e})
-		width += w
-		height = max(height, st.Leading())
-		size = max(size, st.FontSize)
+		lp.runs = append(lp.runs, Run{
+			Text: text, X: lp.width, W: w, Font: st.Font(), Color: st.Color, Start: a, End: e,
+			Underline: st.Underline, Strike: st.Strike, Background: st.Background,
+			DY: st.baselineShift(), Size: st.drawSize(),
+		})
+		lp.width += w
+		lp.height = max(lp.height, st.Leading())
+		lp.size = max(lp.size, st.FontSize)
 		a = e
 	}
-	return runs, width, height, size
+	return lp
 }
 
 // bandRec is a Band being built.
@@ -411,8 +504,8 @@ func (l *layouter) newBand(cfg, page int, top float64) *bandRec {
 	if top < 0 {
 		top = y
 	}
-	widths, gap := l.f.config(cfg)
-	widths = fitColumns(widths, gap, w)
+	cc := l.f.config(cfg)
+	widths, gap := fitColumns(cc, w), cc.Gap
 	xs := make([]float64, len(widths))
 	cx := x
 	for i, v := range widths {
@@ -426,8 +519,21 @@ func (l *layouter) newBand(cfg, page int, top float64) *bandRec {
 // one full-width column; widths that, with their gaps, are too wide are
 // scaled down proportionally (or collapse to one column if the gaps
 // alone don't fit).
-func fitColumns(widths []float64, gap, w float64) []float64 {
+func fitColumns(cc ColumnConfig, w float64) []float64 {
+	widths, gap := cc.Widths, cc.Gap
 	n := len(widths)
+	if n == 0 && cc.Count > 1 {
+		n = cc.Count
+		room := w - gap*float64(n-1)
+		if room <= 0 {
+			return []float64{w}
+		}
+		widths = make([]float64, n)
+		for i := range widths {
+			widths[i] = room / float64(n)
+		}
+		return widths
+	}
 	if n == 0 {
 		return []float64{w}
 	}
@@ -605,35 +711,72 @@ func (l *layouter) line(p, pe int) (int, bool) {
 			l.overflowAt(p)
 			return 0, false
 		}
+		_, _, _, ph := l.f.pageRect(st.page)
+		d.maxW, d.maxH = x1-x0, ph
 		textEnd, next := l.breakLine(p, pe, x1-x0)
-		runs, w, h, size := d.runsOf(p, textEnd)
+		lp := d.partsOf(p, textEnd)
+		h, baselineOff := lp.height, 0.0
+		switch {
+		case lp.block:
+			h = lp.objH
+		case len(lp.objs) > 0:
+			// Objects sit on the baseline; leave room under it for descenders.
+			h = max(lp.height, lp.objH+0.25*lp.size)
+			baselineOff = h - 0.2*lp.size
+		}
 		if h > lh+1e-9 && try < 3 {
 			lh = h // taller than the band we tried: look again with the real height
 			continue
 		}
-		h = max(h, lh)
-		l.place(st, marks, Line{
-			Text: string(d.runes[p:textEnd]), X: x0, W: w, H: h, Start: p, End: textEnd, Runs: runs,
-			Baseline: st.y + (h-size)/2 + size*0.8,
-		})
+		if !lp.block {
+			h = max(h, lh)
+		}
+		if baselineOff == 0 {
+			baselineOff = (h-lp.size)/2 + lp.size*0.8
+		}
+		line := Line{
+			Text: string(d.runes[p:textEnd]), X: x0, W: lp.width, H: h, Start: p, End: textEnd, Runs: lp.runs,
+			Baseline: st.y + baselineOff,
+		}
+		for _, o := range lp.objs {
+			o.X += x0
+			if lp.block {
+				o.Y = st.y
+			} else {
+				o.Y = st.y + baselineOff - o.H
+			}
+			line.Objects = append(line.Objects, o)
+		}
+		l.place(st, marks, line)
 		return next, true
 	}
 }
 
 // breakLine picks how much of runes[start:end] fits in width w: it
 // returns where the line's text ends (trailing spaces excluded) and
-// where the next line starts (skipping the spaces).
+// where the next line starts (skipping the spaces). An inline object is
+// one unbreakable word; a block object gets a line to itself.
 func (l *layouter) breakLine(start, end int, w float64) (textEnd, next int) {
 	d := l.d
 	textEnd, next = -1, start
 	for e := start; e < end; {
 		j := e
-		for j < end && !isSpace(d.runes[j]) {
+		if d.isObj(j) {
 			j++
+		} else {
+			for j < end && !isSpace(d.runes[j]) && !d.isObj(j) {
+				j++
+			}
 		}
 		k := j
 		for k < end && isSpace(d.runes[k]) {
 			k++
+		}
+		if in, ok := d.objs[e]; ok && in.Block {
+			if e > start { // the block goes on the next line
+				break
+			}
+			return e + 1, e + 1
 		}
 		if j > start && d.measure(start, j) > w {
 			break
@@ -646,7 +789,7 @@ func (l *layouter) breakLine(start, end int, w float64) (textEnd, next int) {
 	}
 	// A single word wider than the line: break inside it.
 	c := start + 1
-	for c < end && d.measure(start, c+1) <= w {
+	for c < end && !d.isObj(c) && d.measure(start, c+1) <= w {
 		c++
 	}
 	return c, c
@@ -851,9 +994,23 @@ func (f *TextFlow) Draw() {
 	p.SetTextBaseline("alphabetic")
 	for _, ln := range lay.Lines {
 		for _, r := range ln.Runs {
+			x, y := ln.X+r.X, ln.Baseline+r.DY
+			if r.Background != "" {
+				p.SetFillStyle(r.Background)
+				p.FillRect(x, ln.Y, r.W, ln.H)
+			}
 			p.SetFont(r.Font)
 			p.SetFillStyle(r.Color)
-			p.FillText(r.Text, ln.X+r.X, ln.Baseline)
+			p.FillText(r.Text, x, y)
+			if r.Underline {
+				p.FillRect(x, y+1.5, r.W, 1)
+			}
+			if r.Strike {
+				p.FillRect(x, y-r.Size*0.3, r.W, 1)
+			}
+		}
+		for _, o := range ln.Objects {
+			o.Object.DrawAt(p, o.X, o.Y)
 		}
 	}
 

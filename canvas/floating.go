@@ -60,6 +60,12 @@ type FloatingText struct {
 	BoundsW             float64   // if non-zero, keeps the box within x in [0, BoundsW]
 	Wrap                bool
 	WrapMargin          float64
+	// Anchor, if set, pins the box to a page: X, Y are derived from it
+	// (relative to that page's sheet) using Pages or, failing that, the
+	// Flow's pages. Moving the box re-anchors it to the page it ends up on.
+	Anchor *Anchor
+	// Pages is the PageSet Anchor refers to; if nil the flow's is used.
+	Pages *PageSet
 
 	ChromeStyle FloatingStyle
 	Painter     ImagePainter
@@ -103,6 +109,23 @@ func NewFloatingText(text string, x, y, w, h float64) *FloatingText {
 
 // SetPainter implements PainterSetter.
 func (ft *FloatingText) SetPainter(p ImagePainter) { ft.Painter = p; ft.inner.Painter = p }
+
+func (ft *FloatingText) pageSet() *PageSet {
+	if ft.Pages != nil {
+		return ft.Pages
+	}
+	if ft.flow != nil {
+		return ft.flow.Pages
+	}
+	return nil
+}
+
+// resolve updates X, Y from the Anchor.
+func (ft *FloatingText) resolve() {
+	if ps := ft.pageSet(); ft.Anchor != nil && ps != nil {
+		ft.X, ft.Y = ps.Resolve(*ft.Anchor)
+	}
+}
 
 // SetFlow sets the text flow to wrap around and registers the box as one
 // of its obstacles (removing it from any previous flow).
@@ -176,11 +199,15 @@ func (ft *FloatingText) Selection() (from, to int) {
 func (ft *FloatingText) Editing() bool { return ft.editing }
 
 // Box returns the box rectangle: x, y, w, h.
-func (ft *FloatingText) Box() (x, y, w, h float64) { return ft.X, ft.Y, ft.Width, ft.Height }
+func (ft *FloatingText) Box() (x, y, w, h float64) {
+	ft.resolve()
+	return ft.X, ft.Y, ft.Width, ft.Height
+}
 
 // Exclusion implements Obstacle: while Wrap is on, the box plus
 // WrapMargin is off limits to text.
 func (ft *FloatingText) Exclusion(y0, y1 float64) (x0, x1 float64, ok bool) {
+	ft.resolve()
 	if !ft.Wrap || y1 <= ft.Y-ft.WrapMargin || y0 >= ft.Y+ft.Height+ft.WrapMargin {
 		return 0, 0, false
 	}
@@ -212,6 +239,7 @@ func (ft *FloatingText) changed() {
 
 // sync pushes the content and geometry into the inner flow.
 func (ft *FloatingText) sync() {
+	ft.resolve()
 	f := ft.inner
 	f.Items, f.Style = ft.Items(), ft.Style
 	f.X, f.Y = ft.X+ft.Padding, ft.Y+ft.Padding
@@ -494,8 +522,8 @@ func (ft *FloatingText) MouseDown(x, y float64) bool {
 	if ft.mode != ModeEdit {
 		return false
 	}
+	ft.resolve()
 	what := ft.whatAt(x, y)
-	println("FT down", int(x), int(y), what, int(ft.X), int(ft.Y))
 	d := &floatDrag{startX: x, startY: y, boxX: ft.X, boxY: ft.Y, boxW: ft.Width, boxH: ft.Height}
 	switch {
 	case what == "":
@@ -542,6 +570,7 @@ func (ft *FloatingText) MouseMove(x, y float64) bool {
 	if ft.mode != ModeEdit {
 		return false
 	}
+	ft.resolve()
 	d := ft.drag
 	if d == nil {
 		old := ft.hover
@@ -569,6 +598,12 @@ func (ft *FloatingText) MouseMove(x, y float64) bool {
 		return false
 	case "move":
 		nx, ny := max(ft.snap(d.boxX+dx), 0), max(ft.snap(d.boxY+dy), 0)
+		if ps := ft.pageSet(); ft.Anchor != nil && ps != nil {
+			// Re-anchor to the page the box is over, and snap relative to it.
+			a := ps.AnchorAt(d.boxX+dx, d.boxY+dy)
+			a.X, a.Y = ft.snap(a.X), ft.snap(a.Y)
+			nx, ny = ps.Resolve(a)
+		}
 		if ft.BoundsW > 0 {
 			nx = min(nx, max(ft.BoundsW-ft.Width, 0))
 		}
@@ -576,6 +611,9 @@ func (ft *FloatingText) MouseMove(x, y float64) bool {
 			return false
 		}
 		ft.X, ft.Y = nx, ny
+		if ps := ft.pageSet(); ft.Anchor != nil && ps != nil {
+			*ft.Anchor = ps.AnchorAt(nx, ny)
+		}
 	case "resize":
 		nw, nh := max(ft.snap(d.boxW+dx), 20), max(ft.snap(d.boxH+dy), 20)
 		if nw == ft.Width && nh == ft.Height {

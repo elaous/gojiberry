@@ -406,3 +406,45 @@ func (ps *PageSet) drawHeaderFooter(i int) {
 }
 
 var _ Component = (*PageSet)(nil)
+
+// Anchor pins a floating object to a page: (X, Y) is the position of
+// the object's top-left corner relative to the top-left of Page's sheet,
+// so the object moves with the page.
+type Anchor struct {
+	Page int
+	X, Y float64
+}
+
+// Resolve converts a to absolute coordinates (those of the PageSet's
+// container). A Page out of range is clamped.
+func (ps *PageSet) Resolve(a Anchor) (x, y float64) {
+	if len(ps.Pages) == 0 {
+		return a.X, a.Y
+	}
+	px, py, _, _ := ps.PageRect(min(max(a.Page, 0), len(ps.Pages)-1))
+	return px + a.X, py + a.Y
+}
+
+// AnchorAt anchors the point (x, y) (absolute) to the page it is on, or
+// -- if it is in a gap or off the pages -- the nearest one.
+func (ps *PageSet) AnchorAt(x, y float64) Anchor {
+	if len(ps.Pages) == 0 {
+		return Anchor{X: x, Y: y}
+	}
+	best, bestDist := 0, 1e18
+	for i := range ps.Pages {
+		_, py, _, ph := ps.PageRect(i)
+		d := 0.0
+		switch {
+		case y < py:
+			d = py - y
+		case y >= py+ph:
+			d = y - (py + ph)
+		}
+		if d < bestDist {
+			best, bestDist = i, d
+		}
+	}
+	px, py, _, _ := ps.PageRect(best)
+	return Anchor{Page: best, X: x - px, Y: y - py}
+}
