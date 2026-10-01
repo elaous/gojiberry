@@ -100,6 +100,14 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		}
 	}
 	s.Redraw = redraw
+	s.Prompt = func(message, initial string) (string, bool) {
+		v := js.Global().Call("prompt", message, initial)
+		if v.IsNull() || v.IsUndefined() {
+			return "", false
+		}
+		return v.String(), true
+	}
+	s.OpenLink = func(url string) { js.Global().Call("open", url, "_blank", "noopener") }
 	// The async clipboard API (needs a secure context and, for reading,
 	// the user's permission; without it the commands do nothing).
 	if cb := js.Global().Get("navigator").Get("clipboard"); cb.Truthy() {

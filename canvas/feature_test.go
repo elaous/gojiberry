@@ -21,7 +21,7 @@ func TestRegistry(t *testing.T) {
 	for _, f := range st.Features.Features() {
 		names = append(names, f.Name())
 	}
-	if !reflect.DeepEqual(names, []string{"multi-cursor", "line-ops", "markdown-clipboard", "breaks", "paragraphs"}) {
+	if !reflect.DeepEqual(names, []string{"multi-cursor", "line-ops", "markdown-clipboard", "breaks", "paragraphs", "text-case", "links"}) {
 		t.Fatalf("default features = %v", names)
 	}
 	if !st.Features.Has(CmdMoveLineUp) || st.Features.Keymap()["Mod+D"] != CmdAddNextMatch {
@@ -721,5 +721,49 @@ func TestPasteMarkdownListIntoFlowAndBox(t *testing.T) {
 	bst.HandleChord("Mod+Shift+V")
 	if ft.Text() != "• one\n• two" {
 		t.Errorf("a box gets text prefixes: %q", ft.Text())
+	}
+}
+
+func TestEffectiveKeymapAndRebind(t *testing.T) {
+	st, ft := stageWith(t, "a\nb")
+	eff := st.EffectiveKeymap()
+	if eff["Alt+ArrowDown"] != CmdMoveLineDown || eff["Mod+B"] != CmdBold || eff["Mod+D"] != CmdAddNextMatch {
+		t.Fatalf("effective keymap has defaults and feature chords: %v", eff)
+	}
+	if got := eff.Chords(CmdMoveLineDown); len(got) != 1 || got[0] != "Alt+ArrowDown" {
+		t.Errorf("chords = %v", got)
+	}
+	// Rebinding a feature command moves it: the new chord works, the old one stops.
+	if prev := st.Rebind(CmdMoveLineDown, "Mod+J"); prev != "" {
+		t.Errorf("Mod+J was free, previous owner %q", prev)
+	}
+	ft.SetCursors([]Cursor{At(0)})
+	if st.HandleChord("Alt+ArrowDown") {
+		t.Error("the old chord is unbound")
+	}
+	if !st.HandleChord("Mod+J") || ft.Text() != "b\na" {
+		t.Errorf("the new chord works: %q", ft.Text())
+	}
+	// Taking a chord that another command has reports it, and takes it.
+	if prev := st.Rebind(CmdBold, "Mod+J"); prev != CmdMoveLineDown {
+		t.Errorf("previous owner = %q", prev)
+	}
+	if got := st.EffectiveKeymap().Chords(CmdMoveLineDown); len(got) != 0 {
+		t.Errorf("the displaced command has no chord now: %v", got)
+	}
+	// A built-in (non feature) command can be rebound and unbound too.
+	st.Rebind(CmdItalic, "")
+	if st.HandleChord("Mod+I") {
+		t.Error("unbound italic")
+	}
+	if st.EffectiveKeymap().Chords(CmdItalic) != nil {
+		t.Error("no chords left")
+	}
+	st.ResetKeymap()
+	if st.EffectiveKeymap()["Mod+I"] != CmdItalic || st.EffectiveKeymap()["Alt+ArrowDown"] != CmdMoveLineDown {
+		t.Error("reset restores the defaults")
+	}
+	if st.Keymap.Owner("Mod+I") != "" {
+		t.Error("Owner on a nil keymap")
 	}
 }

@@ -97,8 +97,14 @@ type TextFlowProps struct {
 	// explicitly.
 	Pages func(page gox.Node, index int) gox.Node
 
-	// OnChange is called when columns are resized by dragging.
+	// OnChange is called when columns are resized by dragging and after
+	// every edit to the content.
 	OnChange func(*canvas.TextFlow)
+	// OnLink opens a clicked link (the Stage opens it in a new browser
+	// tab if this is nil); OnHoverLink hears the URL under the pointer,
+	// "" when it leaves -- for a link preview in the DOM.
+	OnLink      func(url string)
+	OnHoverLink func(url string)
 }
 
 // TextFlow is a text flow across pages.

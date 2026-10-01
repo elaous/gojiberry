@@ -5,24 +5,19 @@
   <title>gojiberry editor showcase</title>
   <script src="wasm_exec.js"></script>
   <style>
-    body { font-family: sans-serif; margin: 1em; }
-    .layout { display: flex; gap: 1em; align-items: flex-start; }
-    .toolbar { width: 340px; flex: none; }
+    html, body { margin: 0; height: 100%; font-family: sans-serif; }
+    #app { height: calc(100% - 3.2em); }
+    .gj-keybindings-button.gj-symbolpicker-chip-on { background: var(--gj-accent); border-color: var(--gj-accent); color: var(--gj-accent-contrast); }
+    #app { overflow: hidden; }
     #stage { display: block; background: #f6f7f8; }
     .hidden-input { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; }
-    .command { font-size: 12px; } kbd { background: #eceef1; border-radius: 3px; padding: 0 4px; font-size: 11px; }
-    #state { font-family: monospace; font-size: 12px; color: #6b7280; word-break: break-all; max-height: 5em; overflow: auto; }
+    #state { font-family: monospace; font-size: 11px; color: #6b7280; word-break: break-all; max-height: 3em; overflow: auto; margin: 0.2em 0.9em; }
   </style>
 </head>
 <body>
-  <h1>Editor showcase</h1>
-  <div class="layout">
-    <div id="app"></div>
-    <div>
-      <canvas id="stage" width="920" height="640"></canvas>
-      <input id="input" class="hidden-input" type="text" autocomplete="off">
-    </div>
-  </div>
+  <div id="app"></div>
+  <canvas id="stage" width="920" height="640"></canvas>
+  <input id="input" class="hidden-input" type="text" autocomplete="off">
   <p id="state">(pending)</p>
   <script>
     const go = new Go();

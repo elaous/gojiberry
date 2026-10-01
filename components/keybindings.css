@@ -1,0 +1,16 @@
+/* KeyBindings stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-keybindings-head { display: flex; gap: 0.5em; margin-bottom: 0.5em; }
+.gj-keybindings-search { flex: 1; font: inherit; padding: 0.35em 0.5em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); }
+.gj-keybindings-message { margin: 0 0 0.5em; padding: 0.4em 0.6em; border-radius: var(--gj-radius); background: var(--gj-bg-muted); color: var(--gj-text); font-size: 0.9em; }
+.gj-keybindings-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+.gj-keybindings-row td { padding: 0.3em 0.4em; border-bottom: 1px solid var(--gj-border); vertical-align: middle; }
+.gj-keybindings-row-modified .gj-keybindings-title { font-weight: 600; }
+.gj-keybindings-title small { color: var(--gj-muted); font-weight: normal; }
+.gj-keybindings-keys kbd { display: inline-block; margin-right: 0.3em; padding: 0 0.4em; background: var(--gj-bg-muted); border: 1px solid var(--gj-border); border-radius: 4px; font-size: 0.85em; }
+.gj-keybindings-none { color: var(--gj-muted); }
+.gj-keybindings-capture { padding: 0.2em 0.5em; border: 2px dashed var(--gj-accent); border-radius: var(--gj-radius); outline: none; color: var(--gj-accent); }
+.gj-keybindings-actions { text-align: right; white-space: nowrap; }
+.gj-keybindings-button { font: inherit; font-size: 0.85em; padding: 0.15em 0.6em; margin-left: 0.25em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); cursor: pointer; }
+.gj-keybindings-button:hover { background: var(--gj-bg-muted); }

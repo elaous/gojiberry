@@ -126,3 +126,12 @@ func (n Node) WithKey(key string) Node {
 func Host(tag string, props any, children ...Node) Node {
 	return Node{Kind: KindHost, Tag: tag, Props: props, Children: children}
 }
+
+// KeyData is the Event.Value of a keyboard event (keydown, keyup,
+// keypress): which key, and which modifiers were held. Key is the DOM
+// KeyboardEvent.key ("a", "Enter", "ArrowUp"), Code the physical key
+// ("KeyA", "Digit8").
+type KeyData struct {
+	Key, Code              string
+	Ctrl, Shift, Alt, Meta bool
+}

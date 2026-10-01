@@ -1,6 +1,7 @@
 package canvas
 
 import (
+	"sort"
 	"strings"
 	"unicode"
 )
@@ -134,6 +135,12 @@ func CommonFormat(fs ...Format) Format {
 		if f.Background != c.Background {
 			c.Background = ""
 		}
+		if f.Case != c.Case {
+			c.Case = CaseNormal
+		}
+		if f.Link != c.Link {
+			c.Link = ""
+		}
 		c.Underline = c.Underline && f.Underline
 		c.Strike = c.Strike && f.Strike
 		c.Superscript = c.Superscript && f.Superscript
@@ -141,3 +148,66 @@ func CommonFormat(fs ...Format) Format {
 	}
 	return c
 }
+
+// Chords returns the chords bound to cmd, sorted.
+func (k Keymap) Chords(cmd Command) []string {
+	var out []string
+	for chord, c := range k {
+		if c == cmd {
+			out = append(out, chord)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// Owner returns the command chord is bound to ("" if none).
+func (k Keymap) Owner(chord string) Command { return k[chord] }
+
+// EffectiveKeymap is what the Stage really uses: the Keymap (or
+// DefaultKeymap), plus the chords the registered features bind where it
+// has none. A chord the Keymap maps to "" is unbound and is left out.
+func (s *Stage) EffectiveKeymap() Keymap {
+	km := s.Keymap
+	if km == nil {
+		km = DefaultKeymap()
+	}
+	out := Keymap{}
+	if s.Features != nil {
+		for chord, cmd := range s.Features.keys {
+			out[chord] = cmd
+		}
+	}
+	for chord, cmd := range km {
+		out[chord] = cmd
+	}
+	for chord, cmd := range out {
+		if cmd == "" {
+			delete(out, chord)
+		}
+	}
+	return out
+}
+
+// Rebind makes chord the (only) key binding of cmd, taking it away from
+// whatever it was bound to, and unbinding cmd's other chords. An empty
+// chord just unbinds cmd. The previous owner of chord, if any, is
+// returned so the caller can tell the user.
+func (s *Stage) Rebind(cmd Command, chord string) (previous Command) {
+	eff := s.EffectiveKeymap()
+	if s.Keymap == nil {
+		s.Keymap = DefaultKeymap()
+	}
+	for _, old := range eff.Chords(cmd) {
+		s.Keymap[old] = "" // an explicit blank wins over a feature's own chord
+	}
+	if chord == "" {
+		return ""
+	}
+	previous = eff[chord]
+	s.Keymap[chord] = cmd
+	return previous
+}
+
+// ResetKeymap goes back to the default bindings.
+func (s *Stage) ResetKeymap() { s.Keymap = nil }

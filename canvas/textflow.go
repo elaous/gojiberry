@@ -3,6 +3,7 @@ package canvas
 import (
 	"slices"
 	"sort"
+	"unicode"
 )
 
 // Obstacle is something text must flow around (see Image). Exclusion
@@ -50,6 +51,8 @@ type Run struct {
 	Underline, Strike bool
 	Background        string
 	DY, Size          float64
+	// Link is the URL the run links to, if any.
+	Link string
 }
 
 // Line is one laid-out line of text. Start/End are rune offsets into
@@ -164,8 +167,14 @@ type TextFlow struct {
 	// inside another component).
 	Transparent bool
 
-	// OnChange is called when the columns are resized by dragging.
+	// OnChange is called when the columns are resized by dragging, and
+	// after every edit to the content.
 	OnChange func(*TextFlow)
+	// OnLink is called to open a link (see Format.Link) that was clicked.
+	OnLink func(url string)
+	// OnHoverLink is called with the URL of the link the pointer moves
+	// onto, and with "" when it leaves.
+	OnHoverLink func(url string)
 
 	derived    []Item
 	derivedSrc string
@@ -186,6 +195,11 @@ type TextFlow struct {
 	hover     grip
 	drag      *flowDrag
 	data      *flowData // from the latest Layout, for caret queries
+
+	stageLink      func(url string)
+	hoverLink      string
+	hoverRect      [4]float64
+	hoverX, hoverY float64
 }
 
 type grip struct{ band, gap int }
@@ -319,7 +333,8 @@ func (f *TextFlow) setConfigWidths(idx int, widths []float64) {
 // flowData is the flattened content stream a Layout was made from.
 type flowData struct {
 	runes   []rune
-	rs      []int // per rune: index into styles
+	disp    []rune // what is drawn for each rune (case changes); same length
+	rs      []int  // per rune: index into styles
 	styles  []TextStyle
 	formats []Format // per style: the Format it was resolved from
 	ops     []flowOp
@@ -366,34 +381,50 @@ const opColumns BreakKind = -1
 
 func (f *TextFlow) flatten() *flowData {
 	d := &flowData{f: f, objs: map[int]Inline{}, dims: map[objKey][2]float64{}, maxW: 1e9, maxH: 1e9}
-	styleID := map[Format]int{}
+	type styleKey struct {
+		f     Format
+		small bool
+	}
+	styleID := map[styleKey]int{}
+	styleFor := func(fm Format, small bool) int {
+		k := styleKey{fm, small}
+		id, ok := styleID[k]
+		if !ok {
+			id = len(d.styles)
+			styleID[k] = id
+			st := fm.resolve(f.Style)
+			if small { // a small capital: the lower-case letter's capital at 0.8 size
+				if st.FontSize <= 0 {
+					st.FontSize = 16
+				}
+				st.FontSize *= 0.8
+			}
+			d.styles = append(d.styles, st)
+			d.formats = append(d.formats, fm)
+		}
+		return id
+	}
+	prevLetter := false
 	for idx, it := range f.items() {
 		switch it := it.(type) {
 		case Chars:
-			id, ok := styleID[it.Format]
-			if !ok {
-				id = len(d.styles)
-				styleID[it.Format] = id
-				d.styles = append(d.styles, it.Format.resolve(f.Style))
-				d.formats = append(d.formats, it.Format)
-			}
 			for _, r := range it.Text {
+				shown, small := displayRune(it.Format.Case, r, prevLetter)
+				prevLetter = unicode.IsLetter(r) || unicode.IsDigit(r) || (prevLetter && r == '\'')
 				d.runes = append(d.runes, r)
-				d.rs = append(d.rs, id)
+				d.disp = append(d.disp, shown)
+				d.rs = append(d.rs, styleFor(it.Format, small))
 			}
 		case Inline:
-			id, ok := styleID[Format{}]
-			if !ok {
-				id = len(d.styles)
-				styleID[Format{}] = id
-				d.styles = append(d.styles, Format{}.resolve(f.Style))
-				d.formats = append(d.formats, Format{})
-			}
+			id := styleFor(Format{}, false)
 			d.objs[len(d.runes)] = it
 			d.runes = append(d.runes, objectRune)
+			d.disp = append(d.disp, objectRune)
 			d.rs = append(d.rs, id)
+			prevLetter = false
 		case ParaFormat:
 			d.paras = append(d.paras, paraRec{len(d.runes), it})
+			prevLetter = false
 		case ColumnConfig:
 			d.ops = append(d.ops, flowOp{at: len(d.runes), cfg: idx, kind: opColumns})
 		case Break:
@@ -442,7 +473,7 @@ func (d *flowData) measure(a, b int) float64 {
 			e++
 		}
 		p.SetFont(d.styles[id].Font())
-		w += p.MeasureTextWidth(string(d.runes[a:e]))
+		w += p.MeasureTextWidth(string(d.disp[a:e]))
 		a = e
 	}
 	return w
@@ -478,12 +509,12 @@ func (d *flowData) partsOf(a, b int) lineParts {
 		}
 		st := d.styles[id]
 		p.SetFont(st.Font())
-		text := string(d.runes[a:e])
+		text := string(d.disp[a:e])
 		w := p.MeasureTextWidth(text)
 		lp.runs = append(lp.runs, Run{
 			Text: text, X: lp.width, W: w, Font: st.Font(), Color: st.Color, Start: a, End: e,
 			Underline: st.Underline, Strike: st.Strike, Background: st.Background,
-			DY: st.baselineShift(), Size: st.drawSize(),
+			DY: st.baselineShift(), Size: st.drawSize(), Link: d.formats[id].Link,
 		})
 		lp.width += w
 		lp.height = max(lp.height, st.Leading())
@@ -819,7 +850,7 @@ func (l *layouter) line(p, pe int) (int, bool) {
 	var capText string
 	var capStyle TextStyle
 	if l.para.first && pf.DropCap > 0 && p < pe && !d.isObj(p) && !isSpace(d.runes[p]) {
-		capText, capStyle = string(d.runes[p]), d.styles[d.rs[p]]
+		capText, capStyle = string(d.disp[p]), d.styles[d.rs[p]]
 		capStyle.FontSize, capStyle.LineHeight = base*float64(pf.DropCap)*0.85, 0
 		l.f.Painter.SetFont(capStyle.Font())
 		l.para.dropW = l.f.Painter.MeasureTextWidth(capText) + 6
@@ -1117,6 +1148,9 @@ func (f *TextFlow) Dragging() bool { return f.drag != nil }
 // MouseDown starts dragging a gap if (x, y) is on its grip (edit mode).
 func (f *TextFlow) MouseDown(x, y float64) bool {
 	if f.mode != ModeEdit {
+		if f.openLinkAt(x, y) {
+			return true
+		}
 		return f.beginSelect(x, y)
 	}
 	if f.ToggleCheckAt(x, y) {
@@ -1139,6 +1173,16 @@ func (f *TextFlow) MouseDown(x, y float64) bool {
 // MouseMove drags the gap (keeping the two neighbours' combined width)
 // or updates which grip is hovered.
 func (f *TextFlow) MouseMove(x, y float64) bool {
+	hover := false
+	if f.sel.dragging {
+		f.hoverLink = ""
+	} else {
+		hover = f.updateLinkHover(x, y)
+	}
+	return f.mouseMove(x, y) || hover
+}
+
+func (f *TextFlow) mouseMove(x, y float64) bool {
 	if f.sel.dragging {
 		o := f.OffsetAt(x, y)
 		changed := o != f.sel.caret
@@ -1183,6 +1227,12 @@ func (f *TextFlow) MouseUp(x, y float64) bool {
 // MouseLeave clears the hovered grip (a drag in progress continues).
 func (f *TextFlow) MouseLeave() bool {
 	changed := f.hover != noGrip
+	if f.hoverLink != "" {
+		f.hoverLink, changed = "", true
+		if f.OnHoverLink != nil {
+			f.OnHoverLink("")
+		}
+	}
 	f.hover = noGrip
 	return changed
 }
@@ -1192,6 +1242,9 @@ func (f *TextFlow) MouseLeave() bool {
 func (f *TextFlow) CSSCursor() string {
 	if f.mode == ModeEdit && (f.drag != nil || f.hover != noGrip) {
 		return "col-resize"
+	}
+	if f.hoverLink != "" && f.mode != ModeEdit {
+		return "pointer"
 	}
 	return ""
 }

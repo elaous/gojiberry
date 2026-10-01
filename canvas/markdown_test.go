@@ -116,8 +116,8 @@ func TestMarkdownLinksAndImages(t *testing.T) {
 	got := segs(Markdown{}.inline("see [the **docs**](http://x.y \"title\") now", Format{}))
 	want := []seg{
 		{"see ", Format{}},
-		{"the ", Format{Color: "#1a5fb4", Underline: true}},
-		{"docs", Format{Color: "#1a5fb4", Underline: true, FontWeight: 700}},
+		{"the ", Format{Link: "http://x.y"}},
+		{"docs", Format{Link: "http://x.y", FontWeight: 700}},
 		{" now", Format{}},
 	}
 	if !reflect.DeepEqual(got, want) {

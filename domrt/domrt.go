@@ -10,6 +10,7 @@
 package domrt
 
 import (
+	"strings"
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/gox"
@@ -201,6 +202,18 @@ func applyAttr(rn *renderedNode, a gox.Attr) {
 		return
 	}
 	rn.dom.Call("setAttribute", a.Name, a.Value)
+	if a.Name == "autofocus" {
+		// The attribute only works on page load: focus the element once it
+		// is in the document.
+		el := rn.dom
+		var focus js.Func
+		focus = js.FuncOf(func(js.Value, []js.Value) any {
+			el.Call("focus")
+			focus.Release()
+			return nil
+		})
+		js.Global().Call("requestAnimationFrame", focus)
+	}
 }
 
 func removeAttr(rn *renderedNode, a gox.Attr) {
@@ -264,6 +277,13 @@ func domEventToGoxEvent(ev js.Value) gox.Event {
 		}
 		if c := target.Get("checked"); c.Type() == js.TypeBoolean {
 			checked = c.Bool()
+		}
+	}
+	if strings.HasPrefix(typ, "key") {
+		value = gox.KeyData{
+			Key: ev.Get("key").String(), Code: ev.Get("code").String(),
+			Ctrl: ev.Get("ctrlKey").Bool(), Shift: ev.Get("shiftKey").Bool(),
+			Alt: ev.Get("altKey").Bool(), Meta: ev.Get("metaKey").Bool(),
 		}
 	}
 	preventDefault := func() { ev.Call("preventDefault") }

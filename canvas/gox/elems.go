@@ -56,6 +56,7 @@ func (f *flowElem) Update(_ *Context, props any, _ []gox.Node) (bool, error) {
 	fl := f.flow
 	fl.Pages = f.ps
 	fl.OnChange = p.OnChange
+	fl.OnLink, fl.OnHoverLink = p.OnLink, p.OnHoverLink
 	if p.Style != nil && (old.Style == nil || *old.Style != *p.Style) {
 		fl.Style = *p.Style
 		changed = true
