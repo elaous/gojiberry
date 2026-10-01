@@ -280,3 +280,54 @@ func TestCommentChordRunsThroughStage(t *testing.T) {
 		t.Fatal("bound")
 	}
 }
+
+func TestSetRemoteContentAndSetReplaceAll(t *testing.T) {
+	f, _ := editFlow(t, 3, Chars{Text: "hello"})
+	changes := 0
+	f.OnChange = func(*TextFlow) { changes++ }
+	f.InsertText("x")
+	if changes != 1 {
+		t.Fatal(changes)
+	}
+	f.SetRemoteContent([]Item{Chars{Text: "remote text"}}, []Cursor{{Anchor: 2, Caret: 4, After: true}, At(99)})
+	if changes != 1 || flowText(f) != "remote text" || !f.Editing() {
+		t.Fatalf("a remote change is not a local edit: %d %q %v", changes, flowText(f), f.Editing())
+	}
+	if cs := f.Cursors(); len(cs) != 2 || cs[0] != (Cursor{Anchor: 2, Caret: 4, After: true}) || cs[1] != At(11) {
+		t.Fatalf("%v", cs)
+	}
+	if _, ok := f.hist.back(f.histSnap()); ok {
+		t.Fatal("history cleared")
+	}
+	f.SetRemoteContent([]Item{Chars{Text: "x"}}, nil)
+	if f.Cursors()[0].Caret > 1 {
+		t.Fatal("cursors clamped")
+	}
+	// The sets are replaced in place.
+	cs := NewCommentSet(Comment{ID: "a"})
+	same := cs
+	cs.ReplaceAll([]Comment{{ID: "b"}, {ID: "c"}})
+	if same.Len() != 2 || cs.List()[0].ID != "b" {
+		t.Fatal(cs.List())
+	}
+	fs := NewFootnoteSet(Footnote{ID: "a"})
+	fs.ReplaceAll(nil)
+	if fs.Len() != 0 {
+		t.Fatal("notes replaced")
+	}
+	// Commands that change side data touch the target.
+	g, st := commentFlow(t)
+	g.Comments = NewCommentSet(Comment{ID: "k", Text: "t"})
+	g.Items = []Item{Chars{Text: "ab", Format: Format{Comment: "k"}}}
+	g.ResetContent()
+	g.Items = []Item{Chars{Text: "ab", Format: Format{Comment: "k"}}}
+	g.OnChange = nil
+	n := 0
+	g.OnChange = func(*TextFlow) { n++ }
+	g.SetCursors([]Cursor{At(1)})
+	runCmd(g, st, CmdCommentResolve, "x")
+	runCmd(g, st, CmdCommentEdit, "new")
+	if n < 2 {
+		t.Fatalf("resolve and edit notify listeners: %d", n)
+	}
+}

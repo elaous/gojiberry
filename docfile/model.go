@@ -45,6 +45,25 @@ type Item struct {
 	Footnote *FootnoteMark `json:"footnote,omitempty" pb:"5"`
 	TOC      *Block        `json:"toc,omitempty" pb:"6"`
 	Index    *Block        `json:"index,omitempty" pb:"7"`
+	// Rule is a horizontal rule; Table a table shown in the text.
+	Rule  *RuleItem  `json:"rule,omitempty" pb:"8"`
+	Table *TableItem `json:"table,omitempty" pb:"9"`
+}
+
+// RuleItem mirrors canvas.Rule.
+type RuleItem struct {
+	Color     string  `json:"color,omitempty" pb:"1"`
+	Thickness float64 `json:"thickness,omitempty" pb:"2"`
+}
+
+// TableItem is the text of a table in the flow, row by row.
+type TableItem struct {
+	Rows []TableRow `json:"rows,omitempty" pb:"1"`
+}
+
+// TableRow is one row of a TableItem.
+type TableRow struct {
+	Cells []string `json:"cells,omitempty" pb:"1"`
 }
 
 // FootnoteMark is a footnote mark in the text; its text is in
@@ -281,6 +300,14 @@ func FromItems(items []canvas.Item) []Item {
 				out = append(out, Item{TOC: &Block{Title: o.Title}})
 			case *canvas.IndexObject:
 				out = append(out, Item{Index: &Block{Title: o.Title}})
+			case *canvas.Rule:
+				out = append(out, Item{Rule: &RuleItem{Color: o.Color, Thickness: o.Thickness}})
+			case *canvas.TableObject:
+				t := &TableItem{}
+				for _, row := range o.View.Table.Cells {
+					t.Rows = append(t.Rows, TableRow{Cells: append([]string(nil), row...)})
+				}
+				out = append(out, Item{Table: t})
 			}
 		}
 	}
@@ -312,6 +339,17 @@ func ToItems(items []Item) []canvas.Item {
 			out = append(out, canvas.Inline{Object: &canvas.TOCObject{Title: it.TOC.Title}, Block: true})
 		case it.Index != nil:
 			out = append(out, canvas.Inline{Object: &canvas.IndexObject{Title: it.Index.Title}, Block: true})
+		case it.Rule != nil:
+			out = append(out, canvas.Inline{Object: &canvas.Rule{Color: it.Rule.Color, Thickness: it.Rule.Thickness}, Block: true})
+		case it.Table != nil:
+			cells := make([][]string, len(it.Table.Rows))
+			for i, r := range it.Table.Rows {
+				cells[i] = append([]string(nil), r.Cells...)
+			}
+			if len(cells) == 0 || len(cells[0]) == 0 {
+				cells = [][]string{{""}}
+			}
+			out = append(out, canvas.Inline{Object: canvas.NewTableObject(&canvas.Table{Cells: cells}), Block: true})
 		}
 	}
 	return out

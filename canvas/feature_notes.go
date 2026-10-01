@@ -112,6 +112,7 @@ func (Notes) Install(r *Registry) {
 			return false
 		}
 		h.FootnoteSet().Add(Footnote{ID: ref.ID, Text: text})
+		touch(c.Target)
 		return true
 	})
 	r.AddCommand(CmdFootnoteDelete, "Delete footnote", "", func(c *CommandContext) bool {

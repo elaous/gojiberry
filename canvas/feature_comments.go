@@ -74,11 +74,17 @@ func (Comments) Install(r *Registry) {
 		if !ok || text == "" {
 			return false
 		}
-		return h.CommentSet().Update(id, func(cm *Comment) { cm.Text = text })
+		ok = h.CommentSet().Update(id, func(cm *Comment) { cm.Text = text })
+		touch(c.Target)
+		return ok
 	})
 	r.AddCommand(CmdCommentResolve, "Resolve comment", "", func(c *CommandContext) bool {
 		h, id := commentAtCursor(c.Target)
-		return h != nil && h.CommentSet().Update(id, func(cm *Comment) { cm.Resolved = !cm.Resolved })
+		ok := h != nil && h.CommentSet().Update(id, func(cm *Comment) { cm.Resolved = !cm.Resolved })
+		if ok {
+			touch(c.Target)
+		}
+		return ok
 	})
 	r.AddCommand(CmdCommentDelete, "Delete comment", "", func(c *CommandContext) bool {
 		h, id := commentAtCursor(c.Target)
@@ -87,6 +93,7 @@ func (Comments) Install(r *Registry) {
 		}
 		h.CommentSet().Delete(id)
 		untagComment(c.Target, id)
+		touch(c.Target)
 		return true
 	})
 }
@@ -166,5 +173,12 @@ func untagComment(t EditTarget, id string) {
 		}
 		retag(t, i, j, func(string) string { return "" })
 		i = j
+	}
+}
+
+// touch tells a target with side data that it changed (see TextFlow.Touch).
+func touch(t EditTarget) {
+	if tt, ok := t.(interface{ Touch() }); ok {
+		tt.Touch()
 	}
 }
