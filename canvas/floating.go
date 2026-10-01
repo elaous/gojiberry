@@ -66,6 +66,17 @@ type FloatingText struct {
 	Anchor *Anchor
 	// Pages is the PageSet Anchor refers to; if nil the flow's is used.
 	Pages *PageSet
+	// AutoClose maps each opening character to its closer (NewFloatingText
+	// sets DefaultAutoClose: quotes, parentheses, brackets, braces).
+	// Typing an opener inserts both; typing the closer in front of one
+	// overtypes it; Backspace between a pair deletes both; typing an
+	// opener over a selection wraps it. Nil turns this off.
+	AutoClose map[rune]rune
+	// Completer suggests completions for the word before the caret
+	// (nil means the words already in the text and in Vocabulary).
+	Completer Completer
+	// Vocabulary adds words the default completer may suggest.
+	Vocabulary []string
 
 	ChromeStyle FloatingStyle
 	Painter     ImagePainter
@@ -82,9 +93,16 @@ type FloatingText struct {
 
 	inner *TextFlow
 	flow  *TextFlow // the flow this box wraps around
-	mode  Mode
-	drag  *floatDrag
-	hover string
+
+	formats  *FormatClipboard
+	pal      *Menu  // color palette
+	palKind  string // "text" or "highlight"
+	sugg     *Menu  // completion popup
+	suggFrom int    // offset where the word being completed starts
+	viewport [4]float64
+	mode     Mode
+	drag     *floatDrag
+	hover    string
 }
 
 type floatDrag struct {
@@ -99,7 +117,7 @@ type floatDrag struct {
 func NewFloatingText(text string, x, y, w, h float64) *FloatingText {
 	ft := &FloatingText{
 		X: x, Y: y, Width: w, Height: h, Padding: 8, Style: DefaultTextStyle(),
-		Snap: 5, WrapMargin: 8, ChromeStyle: DefaultFloatingStyle(), caretOn: true,
+		Snap: 5, WrapMargin: 8, ChromeStyle: DefaultFloatingStyle(), caretOn: true, AutoClose: DefaultAutoClose(),
 		inner: NewTextFlow("", 0, 0, 0, 0),
 	}
 	ft.inner.Transparent = true
@@ -214,6 +232,19 @@ func (ft *FloatingText) Exclusion(y0, y1 float64) (x0, x1 float64, ok bool) {
 	return ft.X - ft.WrapMargin, ft.X + ft.Width + ft.WrapMargin, true
 }
 
+// ContainsPoint implements Hitter: the box, and in edit mode its toolbar
+// and resize handle, so the text under it isn't selected through it.
+func (ft *FloatingText) ContainsPoint(x, y float64) bool {
+	ft.resolve()
+	if ft.inBox(x, y) {
+		return true
+	}
+	if ft.mode != ModeEdit {
+		return false
+	}
+	return ft.whatAt(x, y) != ""
+}
+
 // Mode returns the current mode.
 func (ft *FloatingText) Mode() Mode { return ft.mode }
 
@@ -227,6 +258,7 @@ func (ft *FloatingText) SetMode(m Mode) bool {
 	if m == ModeView {
 		ft.editing, ft.drag, ft.hover = false, nil, ""
 		ft.anchor = ft.caret
+		ft.closePopups()
 	}
 	return true
 }
@@ -278,9 +310,10 @@ func (ft *FloatingText) typingFormat() Format {
 	return Format{}
 }
 
-// InsertText types s at the caret, replacing any selection (edit mode,
-// while editing). Carriage returns are dropped.
-func (ft *FloatingText) InsertText(s string) bool {
+// insertPlain inserts s at the caret, replacing any selection (edit mode,
+// while editing), with no auto-closing or completion. Carriage returns
+// are dropped.
+func (ft *FloatingText) insertPlain(s string) bool {
 	s = strings.ReplaceAll(s, "\r", "")
 	if ft.mode != ModeEdit || !ft.editing || s == "" {
 		return false
@@ -312,8 +345,9 @@ func (ft *FloatingText) lineOf(o int) (Line, bool) {
 	return Line{}, false
 }
 
-// HandleKey handles editing keys while editing; see FloatingText.
-func (ft *FloatingText) HandleKey(key string, shift bool) bool {
+// handleEditKey handles the editing keys; HandleKey wraps it with the
+// palette and completion popups.
+func (ft *FloatingText) handleEditKey(key string, shift bool) bool {
 	if ft.mode != ModeEdit || !ft.editing {
 		return false
 	}
@@ -360,6 +394,9 @@ func (ft *FloatingText) HandleKey(key string, shift bool) bool {
 		from, to := ft.Selection()
 		switch {
 		case from != to:
+		case key == "Backspace" && ft.betweenPair():
+			from--
+			to++
 		case key == "Backspace" && from > 0:
 			from--
 		case key == "Delete" && to < len(ft.runes):
@@ -370,7 +407,7 @@ func (ft *FloatingText) HandleKey(key string, shift bool) bool {
 		ft.replace(from, to, nil)
 		ft.changed()
 	case "Enter":
-		return ft.InsertText("\n")
+		return ft.insertPlain("\n")
 	case "Escape":
 		ft.editing = false
 		ft.anchor = ft.caret
@@ -478,7 +515,7 @@ func (ft *FloatingText) ChangeSize(delta float64) bool {
 var floatButtons = [...]struct {
 	label string
 	w     float64
-}{{"Move", 44}, {"B", 28}, {"I", 28}, {"A-", 32}, {"A+", 32}, {"Wrap", 48}}
+}{{"Move", 44}, {"B", 28}, {"I", 28}, {"A-", 32}, {"A+", 32}, {"Wrap", 48}, {"Color", 46}, {"Mark", 42}}
 
 func (ft *FloatingText) buttonRect(i int) [4]float64 {
 	x := ft.X
@@ -523,6 +560,9 @@ func (ft *FloatingText) MouseDown(x, y float64) bool {
 		return false
 	}
 	ft.resolve()
+	if ft.popupsMouseDown(x, y) {
+		return true
+	}
 	what := ft.whatAt(x, y)
 	d := &floatDrag{startX: x, startY: y, boxX: ft.X, boxY: ft.Y, boxW: ft.Width, boxH: ft.Height}
 	switch {
@@ -547,6 +587,10 @@ func (ft *FloatingText) MouseDown(x, y float64) bool {
 		case "5":
 			ft.Wrap = !ft.Wrap
 			ft.changed()
+		case "6":
+			ft.openPalette(6, "text")
+		case "7":
+			ft.openPalette(7, "highlight")
 		}
 		return true
 	case what == "resize":
@@ -646,7 +690,9 @@ func (ft *FloatingText) MouseLeave() bool {
 func (ft *FloatingText) Dragging() bool { return ft.drag != nil }
 
 // WantsFocus implements Focuser.
-func (ft *FloatingText) WantsFocus() bool { return ft.mode == ModeEdit && ft.editing }
+func (ft *FloatingText) WantsFocus() bool {
+	return ft.mode == ModeEdit && (ft.editing || ft.palOpen())
+}
 
 // SetCaretVisible implements Blinker.
 func (ft *FloatingText) SetCaretVisible(on bool) bool {
@@ -715,7 +761,8 @@ func (ft *FloatingText) Draw() {
 	p.SetTextAlign("center")
 	for i, b := range floatButtons {
 		r := ft.buttonRect(i)
-		on := (b.label == "Wrap" && ft.Wrap) || (b.label == "Move" && ft.drag != nil && ft.drag.what == "move")
+		on := (b.label == "Wrap" && ft.Wrap) || (b.label == "Move" && ft.drag != nil && ft.drag.what == "move") ||
+			(b.label == "Color" && ft.palOpen() && ft.palKind == "text") || (b.label == "Mark" && ft.palOpen() && ft.palKind == "highlight")
 		if on {
 			p.SetFillStyle(cs.ButtonActive)
 		} else {

@@ -60,6 +60,10 @@ type Stage struct {
 	Painter       ImagePainter
 	Width, Height float64 // canvas size, cleared on every Draw
 	Components    []Drawer
+	// Keymap binds key chords to Commands (nil means DefaultKeymap).
+	Keymap Keymap
+	// Formats is the format clipboard shared by the components.
+	Formats *FormatClipboard
 	// OnDraw, if set, is called after every Draw (demos use it to
 	// publish state).
 	OnDraw func()
@@ -67,7 +71,7 @@ type Stage struct {
 
 // NewStage returns a stage for a width x height canvas.
 func NewStage(p ImagePainter, width, height float64, components ...Drawer) *Stage {
-	s := &Stage{Painter: p, Width: width, Height: height}
+	s := &Stage{Painter: p, Width: width, Height: height, Formats: &FormatClipboard{}}
 	s.Add(components...)
 	return s
 }
@@ -78,6 +82,9 @@ func (s *Stage) Add(cs ...Drawer) {
 		s.Components = append(s.Components, c)
 		if ps, ok := c.(PainterSetter); ok && s.Painter != nil {
 			ps.SetPainter(s.Painter)
+		}
+		if fs, ok := c.(FormatClipboardSetter); ok && s.Formats != nil {
+			fs.SetFormatClipboard(s.Formats)
 		}
 	}
 }
@@ -195,6 +202,83 @@ func (s *Stage) HandleKey(key string, shift bool) bool {
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		if h, ok := s.Components[i].(KeyHandler); ok && h.HandleKey(key, shift) {
 			return true
+		}
+	}
+	return false
+}
+
+// SetFormatClipboard replaces the format clipboard and hands it to every
+// component (ScrollView passes it on to its content).
+func (s *Stage) SetFormatClipboard(c *FormatClipboard) {
+	s.Formats = c
+	for _, d := range s.Components {
+		if fs, ok := d.(FormatClipboardSetter); ok {
+			fs.SetFormatClipboard(c)
+		}
+	}
+}
+
+// HandleChord runs the command bound to a key chord (see Keymap and
+// Chord), offering it to components topmost first until one applies it.
+func (s *Stage) HandleChord(chord string) bool {
+	km := s.Keymap
+	if km == nil {
+		km = DefaultKeymap()
+	}
+	cmd, ok := km[chord]
+	if !ok {
+		return false
+	}
+	return s.RunCommand(cmd)
+}
+
+// RunCommand offers cmd to components, topmost first, until one applies it.
+func (s *Stage) RunCommand(cmd Command) bool {
+	for i := len(s.Components) - 1; i >= 0; i-- {
+		if h, ok := s.Components[i].(Commander); ok && h.HandleCommand(cmd) {
+			return true
+		}
+	}
+	return false
+}
+
+// Copy asks components, topmost first, for the text to copy.
+func (s *Stage) Copy() (string, bool) {
+	for i := len(s.Components) - 1; i >= 0; i-- {
+		if c, ok := s.Components[i].(Copier); ok {
+			if text, ok := c.CopyText(); ok {
+				return text, true
+			}
+		}
+	}
+	return "", false
+}
+
+// Cut asks components, topmost first, to cut their selection.
+func (s *Stage) Cut() (string, bool) {
+	for i := len(s.Components) - 1; i >= 0; i-- {
+		if c, ok := s.Components[i].(Cutter); ok {
+			if text, ok := c.CutText(); ok {
+				return text, true
+			}
+		}
+	}
+	return "", false
+}
+
+// Paste offers clipboard text to components, topmost first: a Paster
+// takes it as a paste, others as typed text.
+func (s *Stage) Paste(text string) bool {
+	for i := len(s.Components) - 1; i >= 0; i-- {
+		switch c := s.Components[i].(type) {
+		case Paster:
+			if c.PasteText(text) {
+				return true
+			}
+		case TextInserter:
+			if c.InsertText(text) {
+				return true
+			}
 		}
 	}
 	return false

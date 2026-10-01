@@ -4,6 +4,7 @@ package canvas
 
 import (
 	"errors"
+	"strings"
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/domrt/html"
@@ -137,6 +138,10 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		r := canvasEl.BoundingRect()
 		ev := args[0]
 		if s.MouseUp(ev.Get("clientX").Float()-r.Left, ev.Get("clientY").Float()-r.Top) {
+			// A drag-selection only has something selected once it ends.
+			if s.WantsFocus() {
+				input.Call("focus", map[string]any{"preventScroll": true})
+			}
 			redraw()
 		}
 		return nil
@@ -166,6 +171,16 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 	}))
 	input.OnKeyDown(func(e html.KeyEvent) {
 		if e.CtrlKey || e.MetaKey || e.AltKey {
+			key := e.Key
+			// Alt changes the character on some layouts; the physical key
+			// is what a shortcut means.
+			if strings.HasPrefix(e.Code, "Key") && len(e.Code) == 4 {
+				key = e.Code[3:]
+			}
+			if s.HandleChord(Chord(key, e.CtrlKey, e.ShiftKey, e.AltKey, e.MetaKey)) {
+				e.PreventDefault()
+				redraw()
+			}
 			return
 		}
 		if s.HandleKey(e.Key, e.ShiftKey) {
@@ -173,6 +188,33 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 			redraw()
 		}
 	})
+
+	// The system clipboard, through the browser's own events (which is
+	// how a page is allowed to use it): copy and cut put the selection on
+	// it, paste inserts from it.
+	clip := func(args []js.Value) js.Value { return args[0].Get("clipboardData") }
+	input.AddEventListener("copy", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if text, ok := s.Copy(); ok {
+			clip(args).Call("setData", "text/plain", text)
+			args[0].Call("preventDefault")
+		}
+		return nil
+	}))
+	input.AddEventListener("cut", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if text, ok := s.Cut(); ok {
+			clip(args).Call("setData", "text/plain", text)
+			args[0].Call("preventDefault")
+			redraw()
+		}
+		return nil
+	}))
+	input.AddEventListener("paste", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if s.Paste(clip(args).Call("getData", "text/plain").String()) {
+			args[0].Call("preventDefault")
+			redraw()
+		}
+		return nil
+	}))
 
 	// Blink carets.
 	on := true

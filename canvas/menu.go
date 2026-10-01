@@ -7,7 +7,13 @@ type MenuItem struct {
 	Disabled  bool
 	Danger    bool // drawn in the danger color (e.g. "Delete")
 	Separator bool // a divider line; Label/Action are ignored
+	// Swatch, if set, draws a small square of that CSS color before the
+	// label (a color palette item).
+	Swatch string
 }
+
+// swatchW is the room a swatch takes before the label.
+const swatchW = 22
 
 // MenuStyle controls how a Menu looks.
 type MenuStyle struct {
@@ -68,6 +74,21 @@ func NewMenu(p Painter) *Menu {
 	return &Menu{Style: DefaultMenuStyle(), Painter: p, hover: -1}
 }
 
+// Hover returns the highlighted item's index, or -1.
+func (m *Menu) Hover() int { return m.hover }
+
+// SetHover highlights item i (ignored unless it can be chosen); -1
+// clears the highlight.
+func (m *Menu) SetHover(i int) {
+	if i < 0 || m.enabled(i) {
+		m.hover = i
+	}
+}
+
+// Activate runs item i as if it had been clicked: it closes the menu and
+// then calls the item's Action. Disabled items and separators do nothing.
+func (m *Menu) Activate(i int) { m.activate(i) }
+
 // Rect returns the open menu's rectangle (x, y, w, h); all zero while it
 // is closed.
 func (m *Menu) Rect() (x, y, w, h float64) {
@@ -122,7 +143,11 @@ func (m *Menu) OpenWithin(items []MenuItem, x, y float64, bounds [4]float64) {
 	m.w = m.Style.MinWidth
 	for _, it := range items {
 		if !it.Separator {
-			m.w = max(m.w, m.Painter.MeasureTextWidth(it.Label)+2*m.Style.PadX)
+			extra := 0.0
+			if it.Swatch != "" {
+				extra = swatchW
+			}
+			m.w = max(m.w, m.Painter.MeasureTextWidth(it.Label)+extra+2*m.Style.PadX)
 		}
 	}
 	if bounds[2] > 0 {
@@ -264,6 +289,14 @@ func (m *Menu) Draw() {
 				p.SetFillStyle(s.HoverBG)
 				p.FillRect(m.x+1, top, m.w-2, ih)
 			}
+			tx := m.x + s.PadX
+			if it.Swatch != "" {
+				p.SetFillStyle(it.Swatch)
+				p.FillRect(tx, top+(ih-14)/2, 14, 14)
+				p.SetStrokeStyle(s.BorderColor)
+				p.StrokeRect(tx+0.5, top+(ih-14)/2+0.5, 13, 13)
+				tx += swatchW
+			}
 			switch {
 			case it.Disabled:
 				p.SetFillStyle(s.DisabledColor)
@@ -272,7 +305,7 @@ func (m *Menu) Draw() {
 			default:
 				p.SetFillStyle(s.TextColor)
 			}
-			p.FillText(it.Label, m.x+s.PadX, top+ih/2)
+			p.FillText(it.Label, tx, top+ih/2)
 		}
 		top += ih
 	}
