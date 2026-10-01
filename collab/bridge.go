@@ -29,6 +29,10 @@ type Bridge struct {
 	Doc  *crdt.Doc
 	Flow *canvas.TextFlow
 
+	// Outgoing, if set, is called with the operations each local change
+	// produced (see Drain); wire it to client.Conn.Send.
+	Outgoing func([]crdt.Op)
+
 	ready    bool
 	applying bool
 	err      error
@@ -68,6 +72,13 @@ func New(replica string, f *canvas.TextFlow) (*Bridge, error) {
 // other side's Snapshot), and local edits are not shared before then.
 func Join(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	return attach(replica, f)
+}
+
+// Seed makes a joined bridge share the flow's own content as the start of
+// the document (when the server turned out to have none).
+func (b *Bridge) Seed() {
+	b.ready = true
+	b.pushLocal()
 }
 
 // Ready reports whether the bridge is sharing yet: always after New, after
@@ -215,6 +226,11 @@ func (b *Bridge) pushLocal() {
 	}
 	b.pushFormats(b.read(), cur)
 	b.pushSide()
+	if b.Outgoing != nil {
+		if ops := b.Doc.Drain(); len(ops) > 0 {
+			b.Outgoing(ops)
+		}
+	}
 }
 
 // pushFormats turns the differences between the replica's attributes (have)
