@@ -335,3 +335,33 @@ func TestDocumentView(t *testing.T) {
 		t.Errorf("minimal: %s", html)
 	}
 }
+
+func TestStylePicker(t *testing.T) {
+	var picked []string
+	n := StylePicker(StylePickerProps{
+		Styles:  canvas.DefaultStyles(),
+		Current: "Heading 2",
+		OnPick:  func(name string, paragraph bool) { picked = append(picked, name+map[bool]string{true: "/p", false: "/c"}[paragraph]) },
+	})
+	html := render(t, n)
+	for _, want := range []string{"Paragraph styles", "Character styles", `data-style="Heading 1"`, `data-style="Emphasis"`, "gj-stylepicker-item-on", "italic"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("lacks %q: %.300s", want, html)
+		}
+	}
+	if strings.Count(html, "gj-stylepicker-item-on") != 1 {
+		t.Error("only the current style is marked")
+	}
+	if !strings.Contains(html, "font-size:32px") && !strings.Contains(html, "font-size: 32px") {
+		t.Errorf("a heading is previewed larger: %.400s", html)
+	}
+	fire(t, n, "data-style", "Heading 1", "click", nil)
+	fire(t, n, "data-style", "Strong", "click", nil)
+	if strings.Join(picked, ",") != "Heading 1/p,Strong/c" {
+		t.Errorf("picked %v", picked)
+	}
+	html = render(t, StylePicker(StylePickerProps{Styles: []canvas.StyleDef{{Name: "Only", Paragraph: true}}}))
+	if strings.Contains(html, "Character styles") || !strings.Contains(html, "Only") {
+		t.Errorf("empty sections are left out: %s", html)
+	}
+}

@@ -50,6 +50,10 @@ type ParaFormat struct {
 	// QuoteBar draws a vertical bar of this color to the left of the
 	// paragraph (a block quote).
 	QuoteBar string
+	// Style names a paragraph style (see StyleDef) whose paragraph and
+	// character formatting this paragraph gets, under anything set
+	// directly here.
+	Style string
 	// DropCap makes the first letter this many lines tall, with the
 	// text wrapping around it; zero for none.
 	DropCap int

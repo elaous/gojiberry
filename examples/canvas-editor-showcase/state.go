@@ -13,6 +13,7 @@ type State struct {
 	Source string
 	Image  canvas.ImageSource
 	Note   string
+	Styles []canvas.StyleDef
 }
 
 const sample = "# Gojiberry editor\n\n" +

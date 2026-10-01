@@ -53,7 +53,7 @@ type ui struct {
 
 func main() {
 	doc := browser.Document()
-	state := State{Mode: canvas.ModeView, Pages: 3, Source: sample, Note: "Floating note: click to edit, try (brackets and \"quotes\"."}
+	state := State{Mode: canvas.ModeView, Pages: 3, Source: sample, Note: "Floating note: click to edit, try (brackets and \"quotes\".", Styles: canvas.DefaultStyles()}
 	u := &ui{title: "Quarterly report", menu: -1, tab: "format"}
 	repo := fonts.Multi(fonts.WebSafe())
 	u.catalog, _ = repo.Fonts(context.Background())
@@ -139,11 +139,36 @@ func main() {
 		toolbar := gox.Frag(
 			gox.El("button", []gox.Attr{gox.A("id", "mode"), gox.A("type", "button"), gox.A("class", "gj-keybindings-button"),
 				gox.On("click", func(gox.Event) { toggleMode() })}, gox.Text("Mode: "+state.Mode.String()+" (click to switch)")),
-			tabButton(u, "format", "Format", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
+			tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 		)
 
 		var panel gox.Node
 		switch u.tab {
+		case "styles":
+			current := ""
+			if flow != nil {
+				if fs := flow.ParagraphFormats(); len(fs) > 0 {
+					current = fs[0].Style
+				}
+			}
+			panel = components.StylePicker(components.StylePickerProps{
+				Styles: flow.Styles, Current: current,
+				OnPick: func(name string, paragraph bool) {
+					if paragraph {
+						flow.ApplyParagraph(func(p *canvas.ParaFormat) {
+							if name == "Normal" {
+								name = ""
+							}
+							p.Style = name
+						})
+					} else {
+						flow.ApplyFormat(func(f *canvas.Format) { f.Style = name })
+					}
+					redraw()
+					refocus()
+					renderUI()
+				},
+			})
 		case "symbols":
 			panel = components.SymbolPicker(components.SymbolPickerProps{
 				Query: u.symQuery, Category: u.symCat, Recent: u.symRecent,
@@ -256,6 +281,7 @@ func main() {
 		editing := false
 		var text string
 		markers, dropCaps := []string{}, 0
+		lineHeights := []float64{}
 		var link map[string]any
 		headers, watermarks := []string{}, []string{}
 		spread := false
@@ -276,7 +302,10 @@ func main() {
 			cursors, editing = flow.Cursors(), flow.Editing()
 			text = flow.EditText()
 			sv := root.Find(cgox.TagScrollView, 0).(*canvas.ScrollView)
-			for _, ln := range flow.Layout().Lines {
+			for i, ln := range flow.Layout().Lines {
+				if i < 8 {
+					lineHeights = append(lineHeights, ln.H)
+				}
 				if ln.Marker != nil {
 					markers = append(markers, ln.Marker.Text)
 				}
@@ -293,7 +322,7 @@ func main() {
 		b, _ := json.Marshal(map[string]any{
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cgox.Elements(), "editing": editing, "cursors": cursors, "text": text,
-			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps,
+			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
 			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "tab": u.tab, "menu": u.menu, "title": u.title,
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))
