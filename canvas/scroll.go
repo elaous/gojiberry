@@ -335,22 +335,48 @@ func (sv *ScrollView) MouseWheel(x, y, dx, dy float64) bool {
 func (sv *ScrollView) SetFormatClipboard(c *FormatClipboard) { sv.content.SetFormatClipboard(c) }
 
 // HandleCommand forwards to the content.
-func (sv *ScrollView) HandleCommand(cmd Command) bool { return sv.content.RunCommand(cmd) }
+func (sv *ScrollView) HandleCommand(cmd Command) bool {
+	ok := sv.content.RunCommand(cmd)
+	if ok {
+		sv.RevealCaret()
+	}
+	return ok
+}
 
 // CopyText, CutText and PasteText forward to the content.
 func (sv *ScrollView) CopyText() (string, bool) { return sv.content.Copy() }
-func (sv *ScrollView) CutText() (string, bool)  { return sv.content.Cut() }
+func (sv *ScrollView) CutText() (string, bool) {
+	t, ok := sv.content.Cut()
+	if ok {
+		sv.RevealCaret()
+	}
+	return t, ok
+}
 func (sv *ScrollView) PasteText(text string) bool {
-	return sv.content.Paste(text)
+	ok := sv.content.Paste(text)
+	if ok {
+		sv.RevealCaret()
+	}
+	return ok
 }
 
 // HandleKey forwards to the content.
 func (sv *ScrollView) HandleKey(key string, shift bool) bool {
-	return sv.content.HandleKey(key, shift)
+	ok := sv.content.HandleKey(key, shift)
+	if ok {
+		sv.RevealCaret()
+	}
+	return ok
 }
 
 // InsertText forwards to the content.
-func (sv *ScrollView) InsertText(s string) bool { return sv.content.InsertText(s) }
+func (sv *ScrollView) InsertText(s string) bool {
+	ok := sv.content.InsertText(s)
+	if ok {
+		sv.RevealCaret()
+	}
+	return ok
+}
 
 // WantsFocus reports whether the content needs keyboard focus.
 func (sv *ScrollView) WantsFocus() bool { return sv.content.WantsFocus() }
