@@ -30,3 +30,27 @@ func TestTextStyleLeading(t *testing.T) {
 		t.Errorf("zero style leading = %g", got)
 	}
 }
+
+func TestTextStyleCSS(t *testing.T) {
+	got := TextStyle{
+		FontFamily: `Georgia, serif`, FontSize: 20, FontWeight: 700, FontStyle: StyleItalic, LineHeight: 30,
+		Color: "#123456", Background: "#ff0", Underline: true, Strike: true,
+	}.CSS()
+	want := "font-family:Georgia, serif;font-size:20px;font-weight:700;font-style:italic;line-height:30px;" +
+		"color:#123456;background-color:#ff0;text-decoration:underline line-through;"
+	if got != want {
+		t.Fatalf("got  %s\nwant %s", got, want)
+	}
+	if got := (TextStyle{FontSize: 10, Superscript: true}).CSS(); got != "font-size:7px;vertical-align:super;" {
+		t.Fatalf("super: %s", got)
+	}
+	if got := (TextStyle{Subscript: true}).CSS(); got != "font-size:11.2px;vertical-align:sub;" {
+		t.Fatalf("sub: %s", got)
+	}
+	if got := (TextStyle{}).CSS(); got != "font-size:16px;" {
+		t.Fatalf("zero: %s", got)
+	}
+	if got := (Format{FontWeight: 700}).Resolve(TextStyle{FontSize: 12}); got.FontWeight != 700 || got.FontSize != 12 {
+		t.Fatalf("Resolve = %+v", got)
+	}
+}
