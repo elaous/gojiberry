@@ -53,6 +53,14 @@ submenus), `CommandMenu` (a menu from the registered commands),
 `Stage.Rebind`), `DocumentView` (the window around the canvas),
 `FontSelector`, `StylePicker`.
 
+**Outline and bookmarks** -- `TextFlow.Outline()` lists the headings (Heading 1-3 and
+Title styles, or Markdown-style big bold text); `components.Outline` shows
+them, the current one marked, and a click goes there (`GotoOffset`, with the
+`ScrollView` bringing it to the top). **Bookmarks** name a stretch of text
+(`Format.Bookmark`, so they follow edits): Ctrl/Cmd+Alt+B adds one,
+Ctrl/Cmd+Alt+G goes to one, `bookmark.remove` removes it, and a link to
+`#name` jumps to it; `components.BookmarkList` lists them.
+
 **Roles and comments** -- `canvas.Role` (owner, editor, viewer; the zero value is
 owner): a viewer's components are held in view mode (`Stage.SetRole`, the gox
 `Canvas` `role` prop), only owners and editors comment. `docstore.ACL.RoleOf`
@@ -83,8 +91,9 @@ in the selector is downloaded into the store the first time the text uses it
 Asked for, not started:
 
 - **Index** (table of contents and an alphabetical index with entries marked in
-  the text), **footnotes**, **outline** (the headings as a navigable tree),
-  **bookmarks** (named positions and links to them).
+  the text) and **footnotes**. Both can build on the outline and bookmarks.
+- Outline: no collapsing of sections or drag-to-reorder; bookmarks are not
+  drawn on the canvas (only listed).
 - **Map object** (OpenStreetMap tiles) and **flowcharts** as canvas objects.
 - **Multi-user editing**: the `crdt` and `syncserver` packages exist; the
   `TextFlow` is not wired to them yet. Roles are the permission half.

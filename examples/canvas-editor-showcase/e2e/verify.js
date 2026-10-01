@@ -10,7 +10,7 @@ run(async () => {
   let s = await d.state();
   assert(!s.error, 'renders without error: ' + s.error);
   assert(s.mode === 'view' && s.pages === 3, 'starts in view mode with three pages');
-  assert(JSON.stringify(s.features) === JSON.stringify(['history', 'multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'styles', 'comments', 'page-furniture']), 'features registered: ' + s.features);
+  assert(JSON.stringify(s.features) === JSON.stringify(['history', 'multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'styles', 'comments', 'bookmarks', 'page-furniture']), 'features registered: ' + s.features);
   for (const tag of ['canvas.TextFlow', 'canvas.Image', 'canvas.FloatingText', 'canvas.Table', 'canvas.ScrollView'])
     assert(s.elements.includes(tag), tag + ' is a registered element');
   assert(s.commands >= 30, 'commands registered: ' + s.commands);
@@ -20,7 +20,7 @@ run(async () => {
   // The menu bar is built from the registered commands: one submenu per feature.
   await page.click('button.gj-menubar-button:has-text("Edit")');
   const subs = await page.locator('.gj-menubar-panel > .gj-menu > .gj-menu-item-sub').count();
-  assert(subs === 11, 'Edit has a submenu per feature: ' + subs);
+  assert(subs === 12, 'Edit has a submenu per feature: ' + subs);
   const shortcut = await page.locator('.gj-menubar-panel li:has-text("Move line up") .gj-menu-shortcut').first().textContent();
   assert(shortcut === 'Alt+↑', 'a command shows its shortcut: ' + shortcut);
   await page.hover('.gj-menubar-panel li.gj-menu-item-sub:has-text("Paragraphs")');
@@ -227,14 +227,45 @@ run(async () => {
   s = await d.state();
   assert(s.text.includes('(note) feature') && s.suggestions.length === 0, 'Tab accepts the completion');
 
-  // Comments: comment the selection, see it listed with its text and mentions, hover it, reply, resolve, delete.
+  // Outline and bookmarks: the headings are a list that jumps; a bookmark is a named place.
+  await page.click('button[data-tab="outline"]');
+  s = await d.state();
+  assert(s.outline.includes('1:Gojiberry editor') && s.outline.includes('2:Second thoughts'), 'the outline lists the headings: ' + s.outline);
+  assert(await page.locator('.gj-outline-item[data-level="2"]').count() >= 1, 'the Outline component shows them with their levels');
+  const scroll0 = s.scrollY;
+  await page.click('.gj-outline-item:has-text("Second thoughts")');
+  s = await d.state();
+  assert(s.scrollY > scroll0, 'clicking a heading scrolls to it: ' + scroll0 + ' -> ' + s.scrollY);
+  assert(await page.locator('.gj-outline-item-on').textContent() === 'Second thoughts', 'and marks it current');
   await page.focus('#input');
+  page.once('dialog', (dlg) => dlg.accept('second'));
+  await page.keyboard.press('Control+Alt+b');
+  await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).bookmarks.includes('second'));
+  assert(await page.locator('.gj-bookmark[data-bookmark="second"], .gj-bookmark:has([data-bookmark="second"])').count() === 1, 'the bookmark is listed');
+  assert(await page.locator('.gj-bookmark-link').textContent() === '#second', 'with the link form to use');
+  await page.mouse.move(...d.at(450, 300));
+  await page.mouse.wheel(0, -5000);
+  await page.waitForTimeout(100);
+  assert((await d.state()).scrollY === 0, 'back at the top');
+  await page.click('.gj-bookmark-go');
+  s = await d.state();
+  assert(s.scrollY > 0, 'a bookmark takes you to its text: ' + s.scrollY);
+  await page.click('.gj-bookmark-remove');
+  assert((await d.state()).bookmarks.length === 0, 'Remove takes it off');
+
+  // Comments: comment the selection, see it listed with its text and mentions, hover it, reply, resolve, delete.
+  await page.mouse.move(...d.at(450, 300));
+  await page.mouse.wheel(0, -5000);
+  await page.waitForTimeout(100);
+  await d.click(180 + 60, 24 + 60 + 80); // a body line
+  await page.focus('#input');
+  await page.keyboard.press('End');
   for (let i = 0; i < 7; i++) await page.keyboard.press('Shift+ArrowLeft');
   page.once('dialog', (dlg) => dlg.accept('Check **this** wording, @bob or ana@example.com'));
   await page.keyboard.press('Control+Alt+n');
   await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).comments === 1, null, { timeout: 5000 });
   await page.click('button[data-tab="comments"]');
-  assert(await page.locator('.gj-comment-excerpt').textContent() === 'feature', 'the comment card shows the commented text');
+  assert((await page.locator('.gj-comment-excerpt').textContent()).length === 7, 'the comment card shows the commented text');
   assert(await page.locator('.gj-comment .gj-markdown strong').textContent() === 'this', 'the body is rendered as Markdown');
   assert(await page.locator('.gj-comment .gj-mention[data-mention="bob"]').count() === 1, 'an @username is highlighted');
   assert(await page.locator('.gj-comment a.gj-mention-email[href="mailto:ana@example.com"]').count() === 1, 'an e-mail address is a mailto mention');

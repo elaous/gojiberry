@@ -63,6 +63,7 @@ type ui struct {
 	saver    *saver.Session
 	transfer *transfer.Registry
 	fontLog  []string // what the font library did, newest last
+	navSig   string   // outline/bookmarks the Outline tab last showed
 	message  string   // the Import/Export tab's last message
 }
 
@@ -199,6 +200,7 @@ func main() {
 			{Label: "Insert", Items: []components.MenuItem{
 				{Label: "Symbol…", OnSelect: func() { u.tab = "symbols"; renderUI() }},
 				{Label: "Comment…", Shortcut: components.FormatChord("Mod+Alt+N", mac), OnSelect: func() { run(canvas.CmdCommentAdd); u.tab = "comments"; renderUI() }},
+				{Label: "Bookmark…", Shortcut: components.FormatChord("Mod+Alt+B", mac), OnSelect: func() { run(canvas.CmdBookmarkAdd); u.tab = "outline"; renderUI() }},
 				{Label: "Link…", Shortcut: components.FormatChord("Mod+K", mac), OnSelect: func() { run(canvas.CmdEditLink) }},
 				{Separator: true},
 				{Label: "Page break", Shortcut: components.FormatChord("Mod+Enter", mac), OnSelect: func() { run(canvas.CmdPageBreak) }},
@@ -221,7 +223,7 @@ func main() {
 			gox.El("button", []gox.Attr{gox.A("id", "mode"), gox.A("type", "button"), gox.A("class", "gj-keybindings-button"),
 				gox.On("click", func(gox.Event) { toggleMode() })}, gox.Text("Mode: "+state.Mode.String()+" (click to switch)")),
 			tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
-			tabButton(u, "comments", "Comments", renderUI),
+			tabButton(u, "comments", "Comments", renderUI), tabButton(u, "outline", "Outline", renderUI),
 			tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI),
 		)
 
@@ -247,6 +249,8 @@ func main() {
 
 		var panel gox.Node
 		switch u.tab {
+		case "outline":
+			panel = outlinePanel(&state, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cgox.TagScrollView, 0).(*canvas.ScrollView) }, redraw, refocus, renderUI)
 		case "comments":
 			panel = commentsPanel(u, &state, func() *canvas.TextFlow { return flow }, redraw, refocus, renderUI)
 		case "styles":
@@ -437,6 +441,9 @@ func main() {
 		markers, dropCaps := []string{}, 0
 		lineHeights := []float64{}
 		var link, comment map[string]any
+		scrollY := 0.0
+		current := -1
+		outline, bookmarks := []string{}, []string{}
 		headers, watermarks := []string{}, []string{}
 		suggestions := []string{}
 		spread := false
@@ -458,6 +465,14 @@ func main() {
 			suggestions = append(suggestions, flow.Suggestions()...)
 			text = flow.EditText()
 			sv := root.Find(cgox.TagScrollView, 0).(*canvas.ScrollView)
+			scrollY = sv.ScrollY
+			current = flow.OutlineIndexAt(flow.Cursors()[0].Caret)
+			for _, e := range flow.Outline() {
+				outline = append(outline, fmt.Sprintf("%d:%s", e.Level, e.Text))
+			}
+			for _, b := range flow.Bookmarks() {
+				bookmarks = append(bookmarks, b.Name)
+			}
 			for i, ln := range flow.Layout().Lines {
 				if i < 8 {
 					lineHeights = append(lineHeights, ln.H)
@@ -478,11 +493,15 @@ func main() {
 				}
 			}
 		}
+		if sig := fmt.Sprint(outline, bookmarks, current, state.Comments.Len()); (u.tab == "outline" || u.tab == "comments") && sig != u.navSig {
+			u.navSig = sig
+			renderUI()
+		}
 		b, _ := json.Marshal(map[string]any{
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cgox.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
-			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
+			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))
@@ -602,4 +621,39 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, re
 		},
 		OnToggleShowResolved: func(show bool) { u.showResolved = show; renderUI() },
 	})
+}
+
+// outlinePanel shows the headings (click to go there) and the bookmarks.
+func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, redraw, refocus, renderUI func()) gox.Node {
+	fl := flow()
+	if fl == nil {
+		return gox.Frag()
+	}
+	caret := fl.Cursors()[0].Caret
+	goTo := func(offset int) {
+		fl.GotoOffset(offset)
+		scroller().RevealPending()
+		redraw()
+		renderUI()
+	}
+	runes := []rune(fl.EditText())
+	excerpts := map[string]string{}
+	for _, b := range fl.Bookmarks() {
+		excerpts[b.Name] = string(runes[b.Start:min(b.End, len(runes))])
+	}
+	return gox.Frag(
+		components.Outline(components.OutlineProps{
+			Entries: fl.Outline(), Current: fl.OutlineIndexAt(caret),
+			OnSelect: func(_ int, e canvas.OutlineEntry) { goTo(e.Start) },
+		}),
+		gox.El("div", []gox.Attr{gox.A("style", "margin-top:1em")}, components.BookmarkList(components.BookmarksProps{
+			Bookmarks: fl.Bookmarks(), Excerpts: excerpts, CanEdit: state.Role.CanEdit(),
+			OnGoto: func(name string) { fl.GotoBookmark(name); scroller().RevealPending(); redraw(); renderUI() },
+			OnRemove: func(name string) {
+				fl.RemoveBookmark(name)
+				redraw()
+				renderUI()
+			},
+		})),
+	)
 }

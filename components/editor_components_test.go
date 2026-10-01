@@ -486,3 +486,35 @@ func TestCommentCardAndList(t *testing.T) {
 	mustContain(t, all, `data-comment="c2"`, `aria-pressed="true"`)
 	mustContain(t, render(t, CommentList(CommentListProps{})), "No comments.", "Show resolved<")
 }
+
+func TestOutlineAndBookmarkComponents(t *testing.T) {
+	var picked []string
+	entries := []canvas.OutlineEntry{{Level: 1, Text: "Intro", Start: 0}, {Level: 3, Text: "Deep <b>", Start: 10}}
+	n := Outline(OutlineProps{Entries: entries, Current: 1, OnSelect: func(i int, e canvas.OutlineEntry) { picked = append(picked, e.Text+itoa(i)) }})
+	html := render(t, n)
+	mustContain(t, html, `aria-label="Outline"`, `data-level="1"`, `data-level="3"`, "padding-left:8px", "padding-left:36px", `aria-current="location"`, "gj-outline-item-on", "Deep &lt;b&gt;")
+	for _, h := range findHandlers(n, "click") {
+		h(gox.Event{})
+	}
+	if len(picked) != 2 || picked[1] != "Deep <b>1" {
+		t.Fatal(picked)
+	}
+	mustContain(t, render(t, Outline(OutlineProps{Current: -1})), "No headings yet")
+	mustNotContain(t, render(t, Outline(OutlineProps{Entries: entries[:1], Current: -1})), "aria-current")
+
+	var log []string
+	bl := BookmarkList(BookmarksProps{
+		Bookmarks: []canvas.Bookmark{{Name: "intro", Start: 0, End: 5}}, Excerpts: map[string]string{"intro": "Hello"}, CanEdit: true,
+		OnGoto: func(s string) { log = append(log, "go:"+s) }, OnRemove: func(s string) { log = append(log, "rm:"+s) }})
+	mustContain(t, render(t, bl), `data-bookmark="intro"`, "Hello", "#intro", `data-remove="intro"`)
+	for _, h := range findHandlers(bl, "click") {
+		h(gox.Event{})
+	}
+	if strings.Join(log, " ") != "go:intro rm:intro" {
+		t.Fatal(log)
+	}
+	view := BookmarkList(BookmarksProps{Bookmarks: []canvas.Bookmark{{Name: "a"}}})
+	mustNotContain(t, render(t, view), "Remove")
+	mustContain(t, render(t, BookmarkList(BookmarksProps{CanEdit: true, Bookmarks: []canvas.Bookmark{{Name: "a"}}})), "disabled")
+	mustContain(t, render(t, BookmarkList(BookmarksProps{})), "No bookmarks")
+}

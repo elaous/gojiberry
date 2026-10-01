@@ -246,7 +246,11 @@ func (sv *ScrollView) MouseDownMods(x, y float64, m Mods) bool {
 	}
 	sv.contentDown = true
 	cx, cy := sv.toContent(x, y)
-	return sv.content.MouseDownMods(cx, cy, m)
+	changed := sv.content.MouseDownMods(cx, cy, m)
+	if sv.RevealPending() { // a link to a bookmark was followed
+		changed = true
+	}
+	return changed
 }
 
 // EditTarget implements Editable by asking the content.
@@ -338,7 +342,7 @@ func (sv *ScrollView) SetFormatClipboard(c *FormatClipboard) { sv.content.SetFor
 func (sv *ScrollView) HandleCommand(cmd Command) bool {
 	ok := sv.content.RunCommand(cmd)
 	if ok {
-		sv.RevealCaret()
+		sv.afterEvent()
 	}
 	return ok
 }
@@ -348,14 +352,14 @@ func (sv *ScrollView) CopyText() (string, bool) { return sv.content.Copy() }
 func (sv *ScrollView) CutText() (string, bool) {
 	t, ok := sv.content.Cut()
 	if ok {
-		sv.RevealCaret()
+		sv.afterEvent()
 	}
 	return t, ok
 }
 func (sv *ScrollView) PasteText(text string) bool {
 	ok := sv.content.Paste(text)
 	if ok {
-		sv.RevealCaret()
+		sv.afterEvent()
 	}
 	return ok
 }
@@ -364,7 +368,7 @@ func (sv *ScrollView) PasteText(text string) bool {
 func (sv *ScrollView) HandleKey(key string, shift bool) bool {
 	ok := sv.content.HandleKey(key, shift)
 	if ok {
-		sv.RevealCaret()
+		sv.afterEvent()
 	}
 	return ok
 }
@@ -373,7 +377,7 @@ func (sv *ScrollView) HandleKey(key string, shift bool) bool {
 func (sv *ScrollView) InsertText(s string) bool {
 	ok := sv.content.InsertText(s)
 	if ok {
-		sv.RevealCaret()
+		sv.afterEvent()
 	}
 	return ok
 }
