@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/fonts"
@@ -21,6 +22,8 @@ func sample() Document {
 	d := Document{Title: "T", Updated: 42, Content: FromItems(items),
 		Styles: FromStyles([]canvas.StyleDef{{Name: "Loud", Format: canvas.Format{Underline: true}, Para: canvas.ParaFormat{SpaceAfter: 6}, Paragraph: true}}),
 		Fonts:  []FontRef{{Family: "Lato", Source: "Google", Variants: []FontVariant{{Weight: 700, URL: "u", Key: "fonts/Lato/700-n"}}}}}
+	d.Comments = FromComments(canvas.NewCommentSet(canvas.Comment{ID: "c1", Author: "ana", Text: "**hi** @bob", Created: time.Unix(0, 5), Resolved: true,
+		Replies: []canvas.Reply{{Author: "bob", Text: "ok", Created: time.Unix(0, 9)}, {Author: "x"}}}, canvas.Comment{ID: "c2"}))
 	d.Set("author", "me")
 	return d
 }
@@ -150,5 +153,23 @@ func TestFontRefsRoundTrip(t *testing.T) {
 	}
 	if FromFonts(nil) != nil || ToFonts(nil) != nil {
 		t.Fatal("nil in, nil out")
+	}
+}
+
+func TestCommentsRoundTripThroughFlow(t *testing.T) {
+	f := &canvas.TextFlow{Items: []canvas.Item{canvas.Chars{Text: "abc", Format: canvas.Format{Comment: "c1"}}}}
+	f.Comments = canvas.NewCommentSet(canvas.Comment{ID: "c1", Author: "ana", Text: "hi", Created: time.Unix(0, 7)})
+	d := FromFlow("T", f)
+	g := &canvas.TextFlow{}
+	d.Apply(g)
+	c, ok := g.Comments.Get("c1")
+	if !ok || c.Author != "ana" || !c.Created.Equal(time.Unix(0, 7)) {
+		t.Fatalf("%+v", c)
+	}
+	if g.ContentItems()[0].(canvas.Chars).Format.Comment != "c1" {
+		t.Fatal("the text keeps its comment ID")
+	}
+	if FromComments(nil) != nil {
+		t.Fatal("nil set")
 	}
 }
