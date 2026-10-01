@@ -5,8 +5,9 @@
 // JSON config decoded directly into a struct you declare yourself
 // (config.(SiteConfig) tells gox to decode into SiteConfig -- gox
 // doesn't generate or infer it, so any shape you can declare in Go
-// works), and a page's stylesheet pulled in via the @stylesheets
-// doc-comment annotation on Page below, which also wraps Page's
+// works), and a page's stylesheet pulled in by a blank CSS import
+// (`import _ "<module path>/style.css"`, written like a Go package
+// import), and an @title annotation on Page below, which wraps Page's
 // return in the <html><head>...</head><body>...</body></html>
 // boilerplate (gox.Document) automatically.
 package main
@@ -28,23 +29,25 @@ var config SiteConfig = func() SiteConfig {
 	return v
 }()
 
+func init() {
+	gox.RegisterStyle("github.com/elaous/gojiberry/examples/resource-imports-demo/style.css", "body { font-family: sans-serif; }\n")
+}
+
 type SiteConfig struct {
 	Title string `json:"title"`
 }
 
-var pageStyle_Page_style_css = "body { font-family: sans-serif; }\n"
-
-// Page renders the configured title as a heading. @title/@stylesheets
-// are metadata, not a tool directive or an editor hint (see
-// internal/transpile/page_metadata.go) -- goxc reads them and wraps
-// Page's return value in gox.Document{Title: ..., Head: [gox.Style(...
-// the file's content)]}.Render(), so Page itself only needs to return
-// the page's actual content.
+// Page renders the configured title as a heading. @title is metadata,
+// not a tool directive or an editor hint (see
+// internal/transpile/page_metadata.go) -- goxc reads it and wraps Page's
+// return value in gox.Document{Title: ...}.Render(), which also puts
+// every stylesheet registered by a CSS import (the blank style.css import
+// above) in the head, so Page itself only needs to return the page's
+// actual content.
 //
 // @title resource-imports-demo
-// @stylesheets style.css
 func Page(cfg SiteConfig) gox.Node {
-	return gox.Document{Title: "resource-imports-demo", Head: []gox.Node{gox.Style(pageStyle_Page_style_css)}, Body: gox.El("h1", nil, gox.Child(cfg.Title))}.Render()
+	return gox.Document{Title: "resource-imports-demo", Head: []gox.Node{}, Body: gox.El("h1", nil, gox.Child(cfg.Title))}.Render()
 }
 
 func main() {

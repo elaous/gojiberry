@@ -165,7 +165,7 @@ expanded by the same recursive scan, with no extra grammar required.
   is `any`, read back type-safely via `gox.EventValue[T]`.
 - **`internal/transpile`** — the `.gox` → `.go` source-to-source
   transpiler described above, plus the stable resource-import loaders
-  (JSON/JSONC/JSONL) and the `@title`/`@stylesheets`/`@wasm`
+  (JSON/JSONC/JSONL, CSS) and the `@title`/`@wasm`
   page-metadata annotations, both described below. Beyond tag/brace
   structure (mismatched/unterminated tags, malformed attributes — all
   caught with a real line/col error), a lowercase tag's name and its
@@ -741,21 +741,19 @@ a `<style>` tag around raw CSS content, the same way `gox.Raw` does for
 any other trusted HTML. `Body` takes one node, so use `<>...</>`
 (`gox.Frag`) to group several top-level children there.
 
-For the common case — a static title and one or more stylesheets, both
-known at transpile time — `@title`/`@stylesheets` doc-comment
-annotations do this for you, so `Page` only needs to return its actual
-content:
+For the common case — a static title known at transpile time — an
+`@title` doc-comment annotation does this for you, so `Page` only needs
+to return its actual content (stylesheets come from CSS imports, below,
+and `gox.Document` adds them to the head itself):
 
 ```go
 // @title My App
-// @stylesheets App.css
 func Page(props PageProps) gox.Node {
 	return <h1>Hello, {props.Name}!</h1>
 }
 ```
 
-goxc reads these directly above a `func ... gox.Node` declaration,
-reads each `@stylesheets` file the same way a resource import would,
+goxc reads these directly above a `func ... gox.Node` declaration
 and rewrites every one of that function's own top-level `return`
 statements into the `gox.Document{...}.Render()` form above — so
 conditional early returns (`if props.Name == "" { return <p>...</p> }`)
@@ -783,7 +781,7 @@ func CanvasPage(props CanvasPageProps) gox.Node {
 }
 ```
 
-Unlike `@stylesheets`, `@wasm`'s value is a URL, not a file path — the
+`@wasm`'s value is a URL, not a file path — the
 compiled `.wasm` binary doesn't exist yet when its SSR page is
 transpiled (it's built separately, from a different package, usually
 afterward), so there's nothing to read at transpile time, only a
@@ -798,8 +796,8 @@ These are deliberately a third comment shape, not a reuse of either
 existing convention in this codebase: a tool directive (`//go:generate`,
 `//encore:api`) triggers an external command or build-time codegen,
 and `//language=SQL` (see `editors/vscode-gox`) is a pure editor hint
-with zero effect on the compiled program. `@title`/`@stylesheets`/
-`@wasm` are neither — they're informational metadata that a real tool
+with zero effect on the compiled program. `@title`/`@wasm`
+are neither — they're informational metadata that a real tool
 (goxc) turns into code — so they get the `@key value` shape instead,
 mirroring swaggo/swag's `// @Summary`/`// @Router` handler annotations
 (real, widely-used Go prior art for exactly this kind of per-function
@@ -1036,11 +1034,12 @@ CSS is split one file per component (`components/button.css`,
 `components/modal.css`, ...) plus `components/base.css` for the shared
 `--gj-*` design tokens and the couple of `@keyframes` more than one
 component reuses (`gj-spin`, `gj-progress-indeterminate`) — pull in
-`base.css` plus only the per-component files a page actually uses, e.g.
-`@stylesheets ../../components/base.css` and
-`@stylesheets ../../components/button.css` (paths relative to your
-`.gox` file), or plain `<link rel="stylesheet">` tags for a bare WASM
-page with no SSR step. A component's doc comment says which stylesheet
+`base.css` plus only the per-component files a page actually uses.
+Importing the `components` package already registers all of them (see
+"CSS imports" below), so `gox.Document` and `domrt.Mount` include them
+with nothing to link or copy; to ship only some, import the files you
+want yourself, e.g. `import _ "github.com/elaous/gojiberry/components/button.css"`,
+or use plain `<link rel="stylesheet">` tags. A component's doc comment says which stylesheet
 it needs; `Dialog` (and `Confirm`/`Alert`, built on it) also needs
 `modal.css`, since they render inside `Modal`'s box.
 
@@ -1096,11 +1095,45 @@ import (
   instead of a single value — `[]TypeName` with an annotation, `[]any`
   without one.
 
-CSS used to have its own `.css`/`.scss` resource-import loaders here.
-They're gone in favor of the `@stylesheets` page-metadata annotation
-(see "The `<html>` entrypoint" above), which reads a page's
-stylesheet(s) the same way but ties them to the page component they
-style instead of a standalone import line.
+- **`.css`** — see "CSS imports" below.
+
+### CSS imports
+
+A stylesheet is imported like a Go package: with its module-qualified
+path, and a blank name.
+
+```go
+import (
+	_ "github.com/me/app/components/button.css"
+	"net/http"
+)
+```
+
+goxc embeds the file and generates a `func init() { gox.RegisterStyle(id,
+css) }` for it, so — as with a blank import of a Go package — whoever
+imports the Go package gets its styles, wherever in the program that is:
+
+- `gox.Document` (what `@title`/`@wasm` pages return) puts every
+  registered stylesheet in `<head>`, one `<style data-gox-style="<path>">`
+  each, ahead of the page's own `Head`; `gox.Styles()` returns the same
+  nodes for a hand-written `<head>`; `Document.NoStyles` turns it off.
+- `domrt.Mount` installs them in the browser's `<head>` (skipping ones
+  the server already rendered); `domrt.InstallStyles()` does it by hand.
+- A sheet imported by several files is registered once (its ID is its
+  module-qualified path) and sheets keep package-initialisation order, so
+  a package's dependencies' styles come first.
+
+The path resolves, in order, relative to the `.gox` file (`"./dark.css"`,
+`"style.css"`, as `go:embed` paths do), as a path in the current module
+(`<module path>/dir/file.css`), and as a path in a required module (found
+with `go list -m`, so replace directives, vendoring and the module cache
+all work) — which is what lets a component library ship its CSS next to
+its code. A named import, `theme "<path>/dark.css"`, doesn't register
+anything: it binds the file's text to a constant, for code that wants to
+place it itself. A CSS import without `_` or a name is an error.
+
+The old `@stylesheets` annotation is gone; goxc says so, with this
+replacement, if it sees one.
 
 ### Experimental
 
@@ -1163,7 +1196,7 @@ verified too, against a stubbed `sqlc` executable standing in for the
 real tool (gox's own discovery/invocation/derivation logic is what's
 under test, not sqlc's codegen correctness). `.proto`/`.capnp` are
 verified only against their "tool not found" error path. JSON (both
-paths), `@title`/`@stylesheets`/`@wasm`, and HCL are exercised fully,
+paths), CSS imports, `@title`/`@wasm`, and HCL are exercised fully,
 including `mustCompileAndRun`-style tests that actually `go run` the
 generated code.
 
@@ -1504,8 +1537,9 @@ generated code.
 - `examples/resource-imports-demo` — a JSON config decoded straight
   into a hand-declared `SiteConfig` (`config.(SiteConfig)
   "config.json"`, bound directly from the `.gox` import block) and a
-  page component whose `@title`/`@stylesheets` doc-comment annotations
-  wrap it in `gox.Document{}.Render()` automatically:
+  page component whose `@title` doc-comment annotation wraps it in
+  `gox.Document{}.Render()` automatically, with its stylesheet pulled in
+  by `import _ "<module path>/style.css"`:
 
   ```
   go generate ./...
@@ -1527,8 +1561,8 @@ generated code.
   ```
 
 - `examples/canvas-app` — the big one: a bare-minimum Google-Docs-style
-  typing canvas tying together gox SSR pages (`@stylesheets` for the
-  page's CSS, `@wasm` for the autosave client's bootstrap `<script>`
+  typing canvas tying together gox SSR pages (a CSS import for the
+  page's stylesheet, `@title`, and `@wasm` for the autosave client's bootstrap `<script>`
   tags — neither page hand-writes either), a WASM autosave client
   (`domrt.Mount`/`Update` plus `domrt/browser.FetchOpts` for the
   debounced `PUT`), real Postgres
