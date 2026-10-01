@@ -298,6 +298,9 @@ func markRun(r Chars) string {
 	wrap(f.Strike, "~~")
 	wrap(f.FontStyle == "italic", "*")
 	wrap(f.FontWeight >= 600, "**")
+	if f.Link != "" {
+		s = "[" + s + "](" + f.Link + ")"
+	}
 	return lead + s + trail
 }
 

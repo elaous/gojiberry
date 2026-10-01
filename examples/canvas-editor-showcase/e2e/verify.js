@@ -10,13 +10,23 @@ run(async () => {
   let s = await d.state();
   assert(!s.error, 'renders without error: ' + s.error);
   assert(s.mode === 'view' && s.pages === 3, 'starts in view mode with three pages');
-  assert(JSON.stringify(s.features) === JSON.stringify(['multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs']), 'features registered: ' + s.features);
+  assert(JSON.stringify(s.features) === JSON.stringify(['multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links']), 'features registered: ' + s.features);
   for (const tag of ['canvas.TextFlow', 'canvas.Image', 'canvas.FloatingText', 'canvas.Table', 'canvas.ScrollView'])
     assert(s.elements.includes(tag), tag + ' is a registered element');
   assert(s.commands >= 30, 'commands registered: ' + s.commands);
-  const items = await page.locator('.command').count();
-  assert(items === s.commands, 'the DOM lists every registered command: ' + items);
-  assert(await page.locator('.styleeditor, [class*=style]').count() > 0, 'the style editor is rendered');
+  assert(await page.locator('.gj-docview-top input.gj-docview-title-edit').inputValue() === 'Quarterly report', 'the DocumentView title is an editable box');
+  assert(await page.locator('.gj-docview-desk canvas#stage').count() === 1, 'the canvas sits in the DocumentView desk');
+
+  // The menu bar is built from the registered commands: one submenu per feature.
+  await page.click('button.gj-menubar-button:has-text("Edit")');
+  const subs = await page.locator('.gj-menubar-panel > .gj-menu > .gj-menu-item-sub').count();
+  assert(subs === 7, 'Edit has a submenu per feature: ' + subs);
+  const shortcut = await page.locator('.gj-menubar-panel li:has-text("Move line up") .gj-menu-shortcut').first().textContent();
+  assert(shortcut === 'Alt+↑', 'a command shows its shortcut: ' + shortcut);
+  await page.hover('.gj-menubar-panel li.gj-menu-item-sub:has-text("Paragraphs")');
+  assert(await page.locator('li:has-text("Bulleted list") .gj-menu-shortcut').first().isVisible(), 'a submenu opens on hover');
+  await page.mouse.click(600, 700); // the backdrop closes the menu
+  assert(await page.locator('.gj-menubar-panel').count() === 0, 'a click outside closes the menu');
 
   // The components' stylesheets come from CSS imports, installed by domrt.Mount.
   const sheets = await page.evaluate(() => Array.from(document.querySelectorAll('style[data-gox-style]')).map((e) => e.getAttribute('data-gox-style')));
@@ -69,6 +79,57 @@ run(async () => {
   await page.keyboard.press('Control+Shift+K');
   s = await d.state();
   assert(s.text.length === t0.length, 'Ctrl+Shift+K deletes it again');
+
+  // Symbols: pick one from the DOM picker into the canvas text.
+  await page.click('button[data-tab="symbols"]');
+  await d.click(180 + 60, 24 + 60 + 80);
+  const tLen = (await d.state()).text.length;
+  await page.click('.gj-symbol[data-char="€"]');
+  s = await d.state();
+  assert(s.text.length === tLen + 1 && s.text.includes('€'), 'a symbol picked in the DOM lands at the canvas caret');
+  await page.fill('.gj-symbolpicker-search', 'omega');
+  assert(await page.locator('.gj-symbolpicker-grid .gj-symbol').count() === 2, 'the symbol search filters by name');
+  await page.click('button[data-tab="format"]');
+
+  // A link: hovering it shows its address on the canvas and a preview card in the DOM.
+  s = await d.state();
+  for (let i = 0; i < 20 && (s.link.y > 560 || s.link.y < 20); i++) {
+    await page.mouse.move(...d.at(450, 300));
+    await page.mouse.wheel(0, s.link.y > 560 ? 300 : -300);
+    await page.waitForTimeout(50);
+    s = await d.state();
+  }
+  assert(s.link && s.link.url === 'https://github.com/elaous/gojiberry', 'the Markdown link is a link: ' + JSON.stringify(s.link));
+  await page.mouse.move(...d.at(s.link.x, s.link.y));
+  await page.waitForTimeout(50);
+  s = await d.state();
+  assert(s.hoverLink === 'https://github.com/elaous/gojiberry', 'hovering a link reports it');
+  assert(await page.locator('#link-preview a.gj-linkpreview[href="https://github.com/elaous/gojiberry"]').count() === 1, 'and the DOM shows a preview card');
+  await page.mouse.move(...d.at(5, 5));
+  await page.waitForTimeout(50);
+  assert(await page.locator('#link-preview a.gj-linkpreview').count() === 0, 'the card goes when the pointer leaves');
+
+  // Key bindings editor: rebind Move line up to Ctrl+J.
+  await page.click('button[data-tab="keys"]');
+  await page.click('[data-action="change:line.move-up"]');
+  await page.waitForSelector('.gj-keybindings-capture');
+  await page.keyboard.press('Control+j');
+  await page.waitForTimeout(50);
+  assert(await page.locator('.gj-keybindings-message:has-text("Move line up is now Ctrl+J")').count() === 1, 'the editor reports the new binding');
+  assert(await page.locator('.gj-keybindings-row-modified:has-text("Move line up")').count() === 1, 'and marks it modified');
+  await page.mouse.move(...d.at(450, 300));
+  await page.mouse.wheel(0, -5000);
+  await page.waitForTimeout(50);
+  await d.click(180 + 60, 24 + 60 + 80 + 100);
+  const lineText = (await d.state()).text;
+  await page.keyboard.press('Alt+ArrowUp');
+  s = await d.state();
+  assert(s.text === lineText, 'the old chord no longer moves the line');
+  await page.keyboard.press('Control+j');
+  s = await d.state();
+  assert(s.text !== lineText && s.text.length === lineText.length, 'the new chord moves the line');
+  await page.click('[data-action="reset-all"]');
+  await page.click('button[data-tab="format"]');
 
   // Paragraph formatting: lists, numbering, drop cap.
   await d.click(180 + 60, 24 + 60 + 80);

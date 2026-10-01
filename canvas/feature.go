@@ -93,6 +93,11 @@ type CommandContext struct {
 	// Redraw asks the Stage to redraw; needed only by commands that
 	// finish later (an asynchronous clipboard read).
 	Redraw func()
+	// Prompt asks the user for a line of text (a link address); ok is
+	// false if they cancelled. Nil when the host cannot ask.
+	Prompt func(message, initial string) (text string, ok bool)
+	// OpenLink opens a URL.
+	OpenLink func(url string)
 }
 
 // CommandFunc runs a command; it reports whether it applied.
@@ -126,7 +131,7 @@ func NewRegistry(features ...Feature) *Registry {
 
 // DefaultFeatures are the features a new Stage has.
 func DefaultFeatures() []Feature {
-	return []Feature{MultiCursor{}, LineOps{}, MarkdownClipboard{}, Breaks{}, Paragraphs{}}
+	return []Feature{MultiCursor{}, LineOps{}, MarkdownClipboard{}, Breaks{}, Paragraphs{}, TextCase{}, Links{}}
 }
 
 // Register installs f. It panics on a duplicate feature or command

@@ -1,5 +1,7 @@
 package canvas
 
+import "unicode"
+
 // Format overrides a TextFlow's base TextStyle for a run of characters.
 // Zero fields inherit from the base style.
 type Format struct {
@@ -18,7 +20,28 @@ type Format struct {
 	Superscript bool
 	Subscript   bool
 	Background  string
+
+	// Case changes how the letters are displayed -- upper, lower, title
+	// case, small caps -- without changing the text itself.
+	Case CaseKind
+	// Link makes the text a link to this URL: drawn as a link (link
+	// color, underlined), with the URL shown on hover.
+	Link string
 }
+
+// CaseKind is how letters are displayed; see Format.Case.
+type CaseKind int
+
+const (
+	CaseNormal    CaseKind = iota
+	CaseUpper              // ALL CAPITALS
+	CaseLower              // all lower case
+	CaseTitle              // Each Word Capitalised
+	CaseSmallCaps          // lower-case letters as smaller capitals
+)
+
+// LinkColor is the color of linked text unless its Format sets one.
+const LinkColor = "#1a5fb4"
 
 // IsZero reports whether f changes nothing.
 func (f Format) IsZero() bool { return f == Format{} }
@@ -64,7 +87,36 @@ func (f Format) resolve(base TextStyle) TextStyle {
 	if f.Background != "" {
 		s.Background = f.Background
 	}
+	if f.Link != "" {
+		if f.Color == "" {
+			s.Color = LinkColor
+		}
+		s.Underline = true
+	}
 	return s
+}
+
+// displayRune is how the letter r is shown under case kind c: the rune
+// itself or its replacement (always one rune, so offsets stay put), and
+// whether it is a small capital. prevLetter says whether the previous
+// character was part of a word (title case capitalises word starts).
+func displayRune(c CaseKind, r rune, prevLetter bool) (rune, bool) {
+	switch c {
+	case CaseUpper:
+		return unicode.ToUpper(r), false
+	case CaseLower:
+		return unicode.ToLower(r), false
+	case CaseTitle:
+		if !prevLetter {
+			return unicode.ToTitle(r), false
+		}
+		return unicode.ToLower(r), false
+	case CaseSmallCaps:
+		if unicode.IsLower(r) {
+			return unicode.ToUpper(r), true
+		}
+	}
+	return r, false
 }
 
 // Item is one element of a TextFlow's content stream: Chars,
