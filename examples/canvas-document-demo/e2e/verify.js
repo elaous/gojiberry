@@ -31,9 +31,20 @@ run(async () => {
   const kinds = new Set(s.breaks.map((b) => b.kind));
   assert(kinds.has('natural') && kinds.has('page') && kinds.has('column'), 'natural, user page and user column breaks all occur: ' + [...kinds]);
   const colBreak = s.breaks.find((b) => b.kind === 'column');
-  assert(colBreak.page === 0 && colBreak.col === 1, 'the column break was in the last column of page 0');
-  assert(s.lines.some((l) => l.page === 1) && s.bands.some((b) => b.page === 0 && b.xs.length === 2), 'two columns on page 0');
-  assert(s.bands.some((b) => b.page === 1 && b.xs.length === 2), 'the column config carries on to page 1 (from the last-column break)');
+  assert(colBreak.page === 1 && colBreak.col === 0, 'the column break was in the first column of page 1');
+  assert(s.lines.some((l) => l.page === 1 && l.col === 1), 'text after it continues in the next column');
+  assert(s.bands.some((b) => b.page === 0 && b.xs.length === 2), 'two columns on page 0 (set by \\columns 2)');
+  assert(s.bands.some((b) => b.page === 1 && b.xs.length === 2), 'the column config carries on to page 1 (from a natural break)');
+  assert(s.breaks.some((b) => b.kind === 'natural' && b.page === 0 && b.col === 1), 'a natural page break after the last column of page 0');
+
+  // The Markdown transform: formats, an inline image fitted into the page, a table.
+  for (const k of ['underline', 'strike', 'super', 'sub', 'background']) {
+    assert(s.decorations[k] > 0, 'markdown produced a ' + k + ' run');
+  }
+  const inlineImg = s.objects.find((o) => o.kind === 'image');
+  const [px, py, pw] = s.pageRects[inlineImg.page];
+  assert(inlineImg.h <= 107 && inlineImg.x >= px + 50 && inlineImg.x + inlineImg.w <= px + pw - 50, 'the inline image sits inside the page margins');
+  assert(s.objects.some((o) => o.kind === 'table' && o.page === 2), 'the markdown table is laid out as a block object');
   const pb = s.breaks.find((b) => b.kind === 'page');
   const firstOnNext = s.lines.find((l) => l.page === pb.page + 1);
   assert(near(firstOnNext.y, s.pageRects[pb.page + 1][1] + 60), 'a user page break resumes at the top of the next page text area');
@@ -73,7 +84,7 @@ run(async () => {
   await d.drag(ix, iy, ix - 83, iy);
   await refresh();
   im = s.image;
-  assert(im.x === 345 && im.x % 5 === 0, 'the picture moved left and snapped to 5: x=' + im.x);
+  assert(im.anchor.Page === 1 && im.anchor.X === 245 && im.anchor.Y === 150, 'the anchored picture moved left, snapping to 5 relative to its page: ' + JSON.stringify(im.anchor));
   assert(!intrudes(s.lines.filter((l) => l.page === 1), grow(im.visible)), 'text re-wrapped around the moved picture');
   // Wrap button (4th in the toolbar) off: text ignores the picture.
   const [wx, wy] = view(im.visible[0] + 3 * 56 + 10, im.visible[1] - 17);
