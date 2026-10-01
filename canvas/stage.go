@@ -94,6 +94,9 @@ type Stage struct {
 	// OnDraw, if set, is called after every Draw (demos use it to
 	// publish state).
 	OnDraw func()
+	// Role is what the user may do (the zero value is the owner); a
+	// viewer's components stay in view mode. See SetRole.
+	Role Role
 	// OnFontUse is called, at a draw, the first time the content uses a
 	// font cut (family, weight, style): the moment to download it. See
 	// the fonts package's Library.
@@ -140,6 +143,7 @@ func (s *Stage) SetPainter(p ImagePainter) {
 
 // SetMode puts every component in mode m.
 func (s *Stage) SetMode(m Mode) {
+	m = s.Role.Mode(m)
 	for _, c := range s.Components {
 		if comp, ok := c.(Component); ok {
 			comp.SetMode(m)

@@ -49,6 +49,9 @@ type CanvasProps struct {
 	Width, Height float64
 	// Mode is ModeView (default) or ModeEdit for every component below.
 	Mode canvas.Mode
+	// Role is what the user may do (the zero value is the owner); a
+	// viewer's canvas is held in view mode whatever Mode says.
+	Role canvas.Role
 	// Features replaces the editing features registered on the stage
 	// (nil keeps canvas.DefaultFeatures): list only what the document
 	// should have, plus your own.

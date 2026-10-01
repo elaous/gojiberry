@@ -11,6 +11,7 @@ package docfile
 import (
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/fonts"
@@ -18,12 +19,13 @@ import (
 
 // Document is one saved document.
 type Document struct {
-	Title   string      `json:"title,omitempty" pb:"1"`
-	Updated int64       `json:"updated,omitempty" pb:"2"` // unix nanoseconds
-	Content []Item      `json:"content,omitempty" pb:"3"`
-	Styles  []StyleDef  `json:"styles,omitempty" pb:"4"`
-	Fonts   []FontRef   `json:"fonts,omitempty" pb:"5"`
-	Meta    []MetaEntry `json:"meta,omitempty" pb:"6"`
+	Title    string      `json:"title,omitempty" pb:"1"`
+	Updated  int64       `json:"updated,omitempty" pb:"2"` // unix nanoseconds
+	Content  []Item      `json:"content,omitempty" pb:"3"`
+	Styles   []StyleDef  `json:"styles,omitempty" pb:"4"`
+	Fonts    []FontRef   `json:"fonts,omitempty" pb:"5"`
+	Meta     []MetaEntry `json:"meta,omitempty" pb:"6"`
+	Comments []Comment   `json:"comments,omitempty" pb:"7"`
 }
 
 // MetaEntry is a free-form key and value kept with the document.
@@ -74,6 +76,7 @@ type Format struct {
 	Case        int     `json:"case,omitempty" pb:"12"`
 	Style       string  `json:"style,omitempty" pb:"13"`
 	Link        string  `json:"link,omitempty" pb:"14"`
+	Comment     string  `json:"comment,omitempty" pb:"15"`
 }
 
 // List mirrors canvas.ListStyle.
@@ -107,6 +110,63 @@ type StyleDef struct {
 	Format    Format `json:"format" pb:"2"`
 	Para      Para   `json:"para" pb:"3"`
 	Paragraph bool   `json:"paragraph,omitempty" pb:"4"`
+}
+
+// Comment mirrors canvas.Comment; Created is unix nanoseconds.
+type Comment struct {
+	ID       string  `json:"id" pb:"1"`
+	Author   string  `json:"author,omitempty" pb:"2"`
+	Text     string  `json:"text,omitempty" pb:"3"`
+	Created  int64   `json:"created,omitempty" pb:"4"`
+	Resolved bool    `json:"resolved,omitempty" pb:"5"`
+	Replies  []Reply `json:"replies,omitempty" pb:"6"`
+}
+
+// Reply mirrors canvas.Reply.
+type Reply struct {
+	Author  string `json:"author,omitempty" pb:"1"`
+	Text    string `json:"text,omitempty" pb:"2"`
+	Created int64  `json:"created,omitempty" pb:"3"`
+}
+
+// FromComments converts a comment set (nil gives none).
+func FromComments(set *canvas.CommentSet) []Comment {
+	var out []Comment
+	for _, c := range set.List() {
+		m := Comment{ID: c.ID, Author: c.Author, Text: c.Text, Resolved: c.Resolved}
+		if !c.Created.IsZero() {
+			m.Created = c.Created.UnixNano()
+		}
+		for _, r := range c.Replies {
+			rr := Reply{Author: r.Author, Text: r.Text}
+			if !r.Created.IsZero() {
+				rr.Created = r.Created.UnixNano()
+			}
+			m.Replies = append(m.Replies, rr)
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// ToComments converts saved comments back to a set.
+func ToComments(list []Comment) *canvas.CommentSet {
+	set := canvas.NewCommentSet()
+	for _, m := range list {
+		c := canvas.Comment{ID: m.ID, Author: m.Author, Text: m.Text, Resolved: m.Resolved}
+		if m.Created != 0 {
+			c.Created = time.Unix(0, m.Created)
+		}
+		for _, r := range m.Replies {
+			rr := canvas.Reply{Author: r.Author, Text: r.Text}
+			if r.Created != 0 {
+				rr.Created = time.Unix(0, r.Created)
+			}
+			c.Replies = append(c.Replies, rr)
+		}
+		set.Add(c)
+	}
+	return set
 }
 
 // FontRef is a font the document uses (or was given from the font
@@ -242,7 +302,7 @@ func ToStyles(defs []StyleDef) []canvas.StyleDef {
 // FromFlow captures a TextFlow's content and styles as a Document with
 // the given title.
 func FromFlow(title string, f *canvas.TextFlow) Document {
-	return Document{Title: title, Content: FromItems(f.ContentItems()), Styles: FromStyles(f.Styles)}
+	return Document{Title: title, Content: FromItems(f.ContentItems()), Styles: FromStyles(f.Styles), Comments: FromComments(f.Comments)}
 }
 
 // Apply puts the document's content and styles into f, replacing what
@@ -252,6 +312,7 @@ func (d Document) Apply(f *canvas.TextFlow) {
 	f.Source, f.Transform, f.Text = "", nil, ""
 	f.Items = ToItems(d.Content)
 	f.Styles = ToStyles(d.Styles)
+	f.Comments = ToComments(d.Comments)
 }
 
 // Get returns the value of a Meta key.

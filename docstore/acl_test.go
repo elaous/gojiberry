@@ -359,3 +359,12 @@ func TestACLRoutesRequireAuthConfigured(t *testing.T) {
 		t.Fatalf("status = %d, want 501", rec.Code)
 	}
 }
+
+func TestACLRoleOf(t *testing.T) {
+	a := ACL{Owner: "o@x", Grants: map[string]Role{"e@x": RoleEditor, "v@x": RoleViewer}}
+	for email, want := range map[string]string{"o@x": "owner", "e@x": "editor", "v@x": "viewer", "n@x": "", "": ""} {
+		if got := a.RoleOf(email); got != want {
+			t.Errorf("RoleOf(%q) = %q, want %q", email, got, want)
+		}
+	}
+}

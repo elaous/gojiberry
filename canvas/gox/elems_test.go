@@ -369,3 +369,35 @@ func TestTextFlowEditingAssistProps(t *testing.T) {
 		t.Fatal("vocabulary updates")
 	}
 }
+
+func TestCanvasRoleHoldsViewersInViewMode(t *testing.T) {
+	r, _ := newRoot()
+	tree := func(role canvas.Role) gox.Node {
+		return Canvas(CanvasProps{Width: 300, Height: 300, Mode: canvas.ModeEdit, Role: role, Children: []gox.Node{
+			TextFlow(TextFlow2()),
+		}})
+	}
+	if err := r.Render(tree(canvas.RoleViewer)); err != nil {
+		t.Fatal(err)
+	}
+	fl := r.Find(TagTextFlow, 0).(*canvas.TextFlow)
+	if fl.Mode() != canvas.ModeView || r.Stage.CanEdit() {
+		t.Fatal("a viewer is held in view mode")
+	}
+	if err := r.Render(tree(canvas.RoleEditor)); err != nil {
+		t.Fatal(err)
+	}
+	if fl.Mode() != canvas.ModeEdit {
+		t.Fatal("an editor gets edit mode")
+	}
+	if err := r.Render(tree(canvas.RoleViewer)); err != nil {
+		t.Fatal(err)
+	}
+	if fl.Mode() != canvas.ModeView {
+		t.Fatal("and loses it when the role changes")
+	}
+}
+
+func TextFlow2() TextFlowProps {
+	return TextFlowProps{Text: "x", PageCount: 1, PageWidth: 200, PageHeight: 200}
+}
