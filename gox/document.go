@@ -1,5 +1,7 @@
 package gox
 
+import "strings"
+
 // Document is the <html><head>...</head><body>...</body></html>
 // wrapper almost every top-level page needs, so individual pages don't
 // each hand-roll that boilerplate. Head holds extra <head> children
@@ -15,6 +17,24 @@ type Document struct {
 	Body  Node
 	// NoStyles leaves the registered stylesheets out.
 	NoStyles bool
+	// Styles, if not nil, limits the registered stylesheets to these: an
+	// entry is a sheet's full ID or the end of it ("components/button.css",
+	// "button.css"). An empty, non-nil slice means none -- the per-page
+	// choice (see the @styles page annotation).
+	Styles []string
+}
+
+// styleWanted reports whether a sheet with this ID is in the list.
+func styleWanted(id string, only []string) bool {
+	if only == nil {
+		return true
+	}
+	for _, o := range only {
+		if id == o || strings.HasSuffix(id, "/"+o) {
+			return true
+		}
+	}
+	return false
 }
 
 // Render assembles the document into a single <html> Node tree.
@@ -25,7 +45,9 @@ func (d Document) Render() Node {
 	}
 	if !d.NoStyles {
 		for _, s := range RegisteredStyles() {
-			head = append(head, El("style", []Attr{A("data-gox-style", s.ID)}, Raw(s.CSS)))
+			if styleWanted(s.ID, d.Styles) {
+				head = append(head, El("style", []Attr{A("data-gox-style", s.ID)}, Raw(s.CSS)))
+			}
 		}
 	}
 	head = append(head, d.Head...)
