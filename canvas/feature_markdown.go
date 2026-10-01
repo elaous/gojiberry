@@ -89,7 +89,7 @@ func PasteMarkdown(t EditTarget, md Markdown, text string) bool {
 	shift := 0
 	for i, c := range cs {
 		from, to := c.Range()
-		edits = append(edits, Edit{from, to, pieces[i]})
+		edits = append(edits, Edit{From: from, To: to, Items: pieces[i], AfterOps: c.After && from == to})
 		n := itemsLen(pieces[i])
 		out = append(out, At(from+shift+n))
 		shift += n - (to - from)

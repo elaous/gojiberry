@@ -76,7 +76,7 @@ func (f *TextFlow) EditText() string { return string(f.flatten().runes) }
 
 // Cursors implements EditTarget: the primary cursor first.
 func (f *TextFlow) Cursors() []Cursor {
-	return append([]Cursor{{f.sel.anchor, f.sel.caret}}, f.extra...)
+	return append([]Cursor{{Anchor: f.sel.anchor, Caret: f.sel.caret, After: f.sel.after}}, f.extra...)
 }
 
 // SetCursors implements EditTarget.
@@ -86,10 +86,10 @@ func (f *TextFlow) SetCursors(cs []Cursor) {
 	}
 	n := len(f.flatten().runes)
 	clamp := func(o int) int { return min(max(o, 0), n) }
-	f.sel.anchor, f.sel.caret = clamp(cs[0].Anchor), clamp(cs[0].Caret)
+	f.sel.anchor, f.sel.caret, f.sel.after = clamp(cs[0].Anchor), clamp(cs[0].Caret), cs[0].After
 	f.extra = nil
 	for _, c := range cs[1:] {
-		f.extra = append(f.extra, Cursor{clamp(c.Anchor), clamp(c.Caret)})
+		f.extra = append(f.extra, Cursor{Anchor: clamp(c.Anchor), Caret: clamp(c.Caret), After: c.After})
 	}
 	f.pending, f.caretOff = Format{}, false
 }
@@ -124,7 +124,7 @@ func (f *TextFlow) Replace(edits []Edit) {
 	es := slices.Clone(edits)
 	slices.SortFunc(es, func(a, b Edit) int { return b.From - a.From }) // last first
 	for _, e := range es {
-		f.replaceRange(e.From, e.To, e.Items)
+		f.replaceRange(e.From, e.To, e.Items, e.AfterOps)
 	}
 	f.clampCursors()
 	f.changed()
@@ -134,14 +134,15 @@ func (f *TextFlow) clampCursors() {
 	n := len(f.flatten().runes)
 	f.sel.anchor, f.sel.caret = min(f.sel.anchor, n), min(f.sel.caret, n)
 	for i, c := range f.extra {
-		f.extra[i] = Cursor{min(c.Anchor, n), min(c.Caret, n)}
+		f.extra[i] = Cursor{Anchor: min(c.Anchor, n), Caret: min(c.Caret, n), After: c.After}
 	}
 }
 
 // replaceRange swaps the stream range [from, to) of f.Items for ins.
 // Breaks and column configs strictly inside the range go with it; ones
-// at its ends stay. ins goes in front of any break at offset from.
-func (f *TextFlow) replaceRange(from, to int, ins []Item) {
+// at its ends stay. ins goes in front of any break at offset from, or
+// behind them with after.
+func (f *TextFlow) replaceRange(from, to int, ins []Item, after bool) {
 	n := len(f.flatten().runes)
 	from, to = min(max(from, 0), n), min(max(to, 0), n)
 	to = max(to, from)
@@ -161,7 +162,9 @@ func (f *TextFlow) replaceRange(from, to int, ins []Item) {
 	}
 	off := 0
 	for _, it := range f.Items {
-		if !inserted && off >= from {
+		_, isChars := it.(Chars)
+		_, isInline := it.(Inline)
+		if !inserted && (off > from || (off == from && (!after || isChars || isInline))) {
 			insert()
 		}
 		switch v := it.(type) {
@@ -362,7 +365,7 @@ func (f *TextFlow) editKey(key string, shift bool) bool {
 		cs := f.Cursors()
 		for i, c := range cs {
 			p := min(max(to(c), 0), n)
-			cs[i].Caret = p
+			cs[i].Caret, cs[i].After = p, false
 			if !shift {
 				cs[i].Anchor = p
 			}
@@ -411,8 +414,11 @@ func (f *TextFlow) editKey(key string, shift bool) bool {
 		})
 	case "Backspace", "Delete":
 		f.materialize()
-		if key == "Delete" && len(f.extra) == 0 && !f.HasSelection() {
+		// Delete removes a break in front of the caret; Backspace one
+		// behind it (a caret placed after a break).
+		if len(f.extra) == 0 && !f.HasSelection() && (key == "Delete" || f.sel.after) {
 			if i := f.opAt(f.sel.caret); i >= 0 {
+				f.sel.after = false
 				f.Items = mergeChars(slices.Delete(slices.Clone(f.Items), i, i+1))
 				f.changed()
 				break
@@ -462,7 +468,8 @@ func (f *TextFlow) WantsFocus() bool { return f.HasSelection() || f.Editing() }
 // adds a cursor.
 func (f *TextFlow) MouseDownMods(x, y float64, m Mods) bool {
 	if (m.Ctrl || m.Meta) && f.Editing() && f.Painter != nil && !f.obstructed(x, y) && f.inText(x, y) {
-		f.SetCursors(normalize(append(f.Cursors(), At(f.OffsetAt(x, y)))))
+		o, after := f.offsetAt(x, y)
+		f.SetCursors(normalize(append(f.Cursors(), Cursor{Anchor: o, Caret: o, After: after})))
 		return true
 	}
 	return f.MouseDown(x, y)
@@ -474,7 +481,7 @@ func (f *TextFlow) drawCarets() {
 		return
 	}
 	for _, c := range f.Cursors() {
-		if x, y, h, ok := f.CaretRect(c.Caret); ok {
+		if x, y, h, ok := f.caretRect(c); ok {
 			f.Painter.SetFillStyle(f.ChromeStyle.GripColor)
 			f.Painter.FillRect(x, y+2, 1.5, h-4)
 		}
@@ -542,7 +549,7 @@ func (f *TextFlow) ApplyFormat(fn func(*Format)) bool {
 				items[i] = Chars{Text: ch.Text, Format: fm}
 			}
 		}
-		edits = append(edits, Edit{from, to, items})
+		edits = append(edits, Edit{From: from, To: to, Items: items})
 	}
 	if changed {
 		keep := f.Cursors()
@@ -690,4 +697,27 @@ func (f *TextFlow) commonOfSelection() Format {
 		return f.CommonFormat()
 	}
 	return f.typeFormat(f.flatten(), f.sel.caret)
+}
+
+// caretRect is CaretRect for a cursor: with After it is on the line that
+// starts at its offset (after a break) when there is one.
+func (f *TextFlow) caretRect(c Cursor) (x, y, h float64, ok bool) {
+	if c.After {
+		for _, ln := range f.Layout().Lines {
+			if ln.Start == c.Caret {
+				return ln.X, ln.Y, ln.H, true
+			}
+		}
+	}
+	return f.CaretRect(c.Caret)
+}
+
+// hasOpAt reports whether a break or column config sits at offset o.
+func (d *flowData) hasOpAt(o int) bool {
+	for _, op := range d.ops {
+		if op.at == o {
+			return true
+		}
+	}
+	return false
 }

@@ -75,7 +75,7 @@ func TestFlowEditKeepsFormattingAndStructure(t *testing.T) {
 		t.Fatalf("the page break survives typing: %+v", items)
 	}
 	// Select across the break: it goes with the deleted range.
-	f.SetCursors([]Cursor{{4, 6}})
+	f.SetCursors([]Cursor{{Anchor: 4, Caret: 6}})
 	st.HandleKey("Delete", false)
 	if flowText(f) != "abXcf" {
 		t.Fatalf("after deleting across the break: %q", flowText(f))
@@ -151,7 +151,7 @@ func TestFlowInlineObjects(t *testing.T) {
 	if len(sl) != 3 || sl[1] != Item(obj) {
 		t.Fatalf("slice keeps the object: %+v", sl)
 	}
-	f.SetCursors([]Cursor{{2, 3}})
+	f.SetCursors([]Cursor{{Anchor: 2, Caret: 3}})
 	st.HandleKey("Backspace", false)
 	if flowText(f) != "abcd" {
 		t.Fatalf("deleting the object: %q", flowText(f))
@@ -160,7 +160,7 @@ func TestFlowInlineObjects(t *testing.T) {
 
 func TestFlowClipboardAndPaste(t *testing.T) {
 	f, st := editFlow(t, 0, Chars{Text: "one two"})
-	f.SetCursors([]Cursor{{0, 3}})
+	f.SetCursors([]Cursor{{Anchor: 0, Caret: 3}})
 	if text, ok := st.Cut(); !ok || text != "one" || flowText(f) != " two" {
 		t.Fatalf("cut %q -> %q", text, flowText(f))
 	}
@@ -171,7 +171,7 @@ func TestFlowClipboardAndPaste(t *testing.T) {
 	if !st.Paste("A\nB") || flowText(f) != "A1\nB2 two" {
 		t.Fatalf("one line per cursor: %q", flowText(f))
 	}
-	f.SetCursors([]Cursor{{0, 2}, {3, 5}})
+	f.SetCursors([]Cursor{{Anchor: 0, Caret: 2}, {Anchor: 3, Caret: 5}})
 	if text, ok := st.Copy(); !ok || text != "A1\nB2" {
 		t.Fatalf("multi copy: %q", text)
 	}
@@ -193,13 +193,13 @@ func TestFlowClipboardAndPaste(t *testing.T) {
 
 func TestFlowFormatting(t *testing.T) {
 	f, st := editFlow(t, 0, Chars{Text: "hello world"})
-	f.SetCursors([]Cursor{{0, 5}})
+	f.SetCursors([]Cursor{{Anchor: 0, Caret: 5}})
 	st.HandleChord("Mod+B")
 	items := f.ContentItems()
 	if items[0].(Chars).Text != "hello" || items[0].(Chars).Format.FontWeight != 700 || items[1].(Chars).Format.FontWeight != 0 {
 		t.Fatalf("bold: %+v", items)
 	}
-	if got := f.Cursors()[0]; got != (Cursor{0, 5}) {
+	if got := f.Cursors()[0]; got != (Cursor{Anchor: 0, Caret: 5}) {
 		t.Errorf("the selection stays: %v", got)
 	}
 	st.HandleChord("Mod+B")
@@ -238,9 +238,9 @@ func TestFlowFormatting(t *testing.T) {
 	}
 
 	// Format painter: copy from one place, paste on another.
-	f.SetCursors([]Cursor{{0, 5}})
+	f.SetCursors([]Cursor{{Anchor: 0, Caret: 5}})
 	st.HandleChord("Mod+Alt+C")
-	f.SetCursors([]Cursor{{6, 11}})
+	f.SetCursors([]Cursor{{Anchor: 6, Caret: 11}})
 	st.HandleChord("Mod+Alt+V")
 	if fm := f.Slice(6, 7)[0].(Chars).Format; fm.Color != "#f00" {
 		t.Errorf("pasted format: %+v", fm)
@@ -343,7 +343,7 @@ func TestFlowMarkdownPasteKeepsStructure(t *testing.T) {
 		t.Fatalf("a table pastes into a flow: %q %+v", flowText(f), f.ContentItems())
 	}
 	fc.written = ""
-	f.SetCursors([]Cursor{{0, 3}})
+	f.SetCursors([]Cursor{{Anchor: 0, Caret: 3}})
 	st.HandleChord("Mod+Shift+C")
 	if !strings.Contains(fc.written, "**x**") {
 		t.Errorf("copy as Markdown: %q", fc.written)
@@ -387,7 +387,7 @@ func TestFlowOnChangeAndSelectionDraw(t *testing.T) {
 	if n != 2 {
 		t.Errorf("OnChange calls = %d", n)
 	}
-	f.SetCursors([]Cursor{{0, 1}, {2, 3}})
+	f.SetCursors([]Cursor{{Anchor: 0, Caret: 1}, {Anchor: 2, Caret: 3}})
 	p := st.Painter.(*fakePainter)
 	st.Draw()
 	cnt := 0
