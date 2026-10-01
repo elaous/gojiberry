@@ -22,38 +22,62 @@ comments, which this design builds on.
   user's role. Note a mismatch: `components.CapabilitiesForRole` lets a
   *viewer comment*; `canvas.Role.CanComment` does not.
 
-## Model: one character sequence with attributes
+## Model: a character sequence and a list of marks
 
-Map the `TextFlow` stream onto **one RGA sequence for the whole document**,
-the way the stream already works: every rune is a character, `\n` ends a
-paragraph, and each non-text item is a special character.
+Two structures, both CRDTs, walked together to read the document:
+
+1. **Text**: one RGA sequence for the whole document, the way the stream
+   already works. Every rune is a character with an id, `\n` ends a paragraph,
+   and each non-text item (inline object, break, column config) is a special
+   character (`U+FFFC` for an object, carrying its `docfile` form as a payload).
+2. **Marks**: a separate list of formatting spans, in the style of Peritext.
+   A mark is `{id, key, value, start, end, ts}`: `key` is a `Format` field
+   (bold, colour, link, `Comment`, `Bookmark`, `Index`, ...), and `start` and
+   `end` are **anchors**: a character id plus a side (before or after it).
+   Anchoring to ids, not offsets, is what keeps a span right while other people
+   insert and delete around it. An empty value removes the key.
+
+Reading it is a merge of the two lists: walk the characters once, keep the
+marks that cover the current character, and for each key the covering mark
+with the latest timestamp wins. That is O(n + m log m) for n characters and m
+marks, and can be cached per run of characters and updated incrementally.
 
 | TextFlow | in the CRDT |
 |---|---|
-| rune | a character with an id |
-| `Format` fields (bold, colour, link, `Comment`, `Bookmark`, `Index`, ...) | **per-character attributes**, one last-writer-wins register per (character, key) |
-| inline object (`FootnoteRef`, TOC, index, later a map) | a character `U+FFFC` with an `obj` attribute (the `docfile` form) |
-| `ParaFormat` | attributes on the paragraph's terminating `\n` character |
-| `Break`, `ColumnConfig` | a special character with attributes |
-| comments, footnote text, named styles, title | separate LWW blocks (`comment:<id>`, `reply:<comment>:<id>`, `note:<id>`, `style:<name>`, `meta`) -- replies are their own blocks so two concurrent replies both survive |
+| rune | a character in `Text` |
+| `Format` fields | marks (one per key, over the formatted range) |
+| `ParaFormat` | a few attributes on the paragraph's `\n` character (one register per key; there are few paragraphs, so a mark list is not needed) |
+| inline object, `Break`, `ColumnConfig` | a special character with a payload |
+| comments, footnote text, named styles, title | separate LWW blocks (`comment:<id>`, `reply:<comment>:<id>`, `note:<id>`, `style:<name>`, `meta`); replies are their own blocks so two concurrent replies both survive |
 
-This needs one extension to `crdt`: a `CharAttr{Target, Key, Value, TS}` op and
-the matching snapshot form. Formatting a selection is one op per character,
-sent run-length encoded. Typing copies the format at the caret into the new
-characters' attributes (what `typeFormat` does now), so no range-expansion
-rules are needed. Concurrent formatting of the same character converges by
-timestamp; concurrent edits and formatting of different text all survive.
+### Why not one attribute set per character
+
+It is the simplest thing to make correct, but costly:
+
+| | per-character attributes | text + marks |
+|---|---|---|
+| bold 10,000 characters | 10,000 ops (or one run-length op that cannot name ids it has not seen) | **1 op** |
+| memory and snapshot | n x (keys) registers, even for plain text | proportional to the number of *formatting changes* |
+| text typed inside a bold range by someone else, concurrently | not bold (it had no attribute) | bold, if it lands between the anchors (what people expect) |
+| reading | direct | one sweep (cheap, cacheable) |
+
+Marks need more care (anchor sides, which end a mark grows at, tombstoned
+anchors), and the rules are the ones Peritext publishes: a bold, link or
+comment mark does not grow at its start; bold and colour grow at their end;
+links and comments do not. The bridge decides what a *typed* character gets:
+it compares the format the flow wants with what the marks would give and adds
+a mark only when they differ, so ordinary typing adds no marks at all.
 
 ## The bridge (`collab` package)
 
 Between the CRDT and a `TextFlow`:
 
 - **Local edits**: on `OnChange`, diff the previous synced model against the
-  flow's items (characters and their attributes) and turn the difference into
-  ops. One place covers typing, paste, formatting, paragraph commands, line
+  flow's items. A text difference becomes character ops; a format difference
+  becomes mark ops, one per changed run (not per character). One place covers typing, paste, formatting, paragraph commands, line
   operations and multi-cursor, because they all end in `Replace`.
-- **Remote ops**: apply to the model, rebuild items (runs of equal attributes
-  become `Chars`; `U+FFFC` becomes an `Inline`; newline attributes become
+- **Remote ops**: apply to the model, rebuild items (runs of equal resolved
+  marks become `Chars`; `U+FFFC` becomes an `Inline`; newline attributes become
   `ParaFormat`), and set them in the flow. Each cursor is kept as a character
   id plus side and re-resolved afterwards, so a remote insert before the caret
   moves it, as it should.
@@ -102,9 +126,10 @@ connected.
 
 ## Plan
 
-1. **`crdt`: attributes.** `CharAttr` op, snapshot, an id-to-index map so
-   edits are not O(n); convergence fuzz tests (random edits, shuffled and
-   duplicated delivery).
+1. **`crdt`: marks.** A `Mark` op and list with id anchors, resolution by
+   sweep, snapshot; paragraph and object attributes on characters; an
+   id-to-index map so edits are not O(n); convergence fuzz tests (random edits
+   and formatting, shuffled and duplicated delivery).
 2. **`collab` bridge.** Items to model and back (round-trip tests against
    `docfile`), diff to ops, remote apply with cursor mapping, side data. A test
    that connects two flows through a lossy, reordering fake network.
@@ -114,9 +139,8 @@ connected.
    mode for viewers (if wanted), per-user undo, a reconnect indicator; a
    showcase mode (`?doc=...&role=...`) and an e2e with two browser pages.
 
-Known limits to accept: RGA can interleave two people's simultaneous runs of
-typing at the same spot (converges, not always as intended); tombstones grow
-without garbage collection until a causal-stability protocol is added; tables,
+Known limits to accept: marks and tombstones both grow until a causal-stability garbage collection is added; RGA can interleave two people's simultaneous runs of
+typing at the same spot (converges, not always as intended);  tables,
 images and floating objects are replaced whole (last writer wins) rather than
 merged inside; page furniture (headers, footers, watermarks, margins) is LWW
 blocks.
