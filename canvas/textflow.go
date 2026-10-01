@@ -64,6 +64,21 @@ type Line struct {
 	ColX, ColW float64 // the column the line is in
 	Runs       []Run
 	Objects    []PlacedObject // inline objects on this line
+	// Marker is the list marker, on the first line of a list item.
+	Marker *LineMarker
+	// QuoteBar is the color of a block quote's bar (drawn at BarX).
+	QuoteBar string
+	BarX     float64
+	// DropCap is the large initial of a paragraph, on its first line.
+	DropCap *DropCapMark
+}
+
+// DropCapMark is a paragraph's large first letter. The line's Start is
+// just after it: the letter is not part of the line's Text or Runs.
+type DropCapMark struct {
+	Text        string
+	X, Baseline float64
+	Font, Color string
 }
 
 // BreakMark records a break the layout honoured or made: a
@@ -310,9 +325,28 @@ type flowData struct {
 	ops     []flowOp
 	f       *TextFlow
 
+	paras      []paraRec      // paragraph formats, in stream order
 	objs       map[int]Inline // inline objects by text-stream offset
 	maxW, maxH float64        // room objects are measured against right now
 	dims       map[objKey][2]float64
+}
+
+// paraRec is a ParaFormat and the stream offset it sits at.
+type paraRec struct {
+	at int
+	pf ParaFormat
+}
+
+// paraIn returns the format of the paragraph spanning [ps, pe] (pe being
+// the offset of its '\n', or of the end of the text): the first
+// ParaFormat sitting inside it.
+func (d *flowData) paraIn(ps, pe int) ParaFormat {
+	for _, r := range d.paras {
+		if r.at >= ps && r.at <= pe {
+			return r.pf
+		}
+	}
+	return ParaFormat{}
 }
 
 type objKey struct {
@@ -358,6 +392,8 @@ func (f *TextFlow) flatten() *flowData {
 			d.objs[len(d.runes)] = it
 			d.runes = append(d.runes, objectRune)
 			d.rs = append(d.rs, id)
+		case ParaFormat:
+			d.paras = append(d.paras, paraRec{len(d.runes), it})
 		case ColumnConfig:
 			d.ops = append(d.ops, flowOp{at: len(d.runes), cfg: idx, kind: opColumns})
 		case Break:
@@ -480,6 +516,23 @@ type layouter struct {
 	out   Layout
 	bands []*bandRec
 	stop  bool
+
+	nums listNumbers
+	para paraCtx
+}
+
+// paraCtx is the paragraph being laid out.
+type paraCtx struct {
+	pf     ParaFormat
+	first  bool   // the next line is the paragraph's first (not a continuation after a break)
+	marker string // the list marker to put on that line, if any
+	left   float64
+
+	// A drop cap: the first letter is dropped from the paragraph's text
+	// and drawn dropLines lines tall; those lines are indented dropW.
+	dropW     float64
+	dropLines int
+	dropLH    float64
 }
 
 // Layout flows the content and returns where every line goes.
@@ -688,22 +741,19 @@ func (l *layouter) segment(s, e int, last bool) {
 		return
 	}
 	d := l.d
-	base := l.f.Style.Leading()
 	for ps := s; ; {
 		pe := ps
 		for pe < e && d.runes[pe] != '\n' {
 			pe++
 		}
+		if ps == pe && ps == e && !last {
+			return
+		}
+		l.beginParagraph(ps, pe)
 		if ps == pe {
-			if ps == e && !last {
+			if _, ok := l.line(ps, pe); !ok {
 				return
 			}
-			st, x0, _, marks, ok := l.find(l.st, base, ps)
-			if !ok {
-				l.overflowAt(ps)
-				return
-			}
-			l.place(st, marks, Line{X: x0, H: base, Start: ps, End: ps, Baseline: st.y + base*0.75})
 		}
 		for p := ps; p < pe; {
 			next, ok := l.line(p, pe)
@@ -712,6 +762,7 @@ func (l *layouter) segment(s, e int, last bool) {
 			}
 			p = next
 		}
+		l.endParagraph()
 		if pe == e {
 			return
 		}
@@ -719,21 +770,88 @@ func (l *layouter) segment(s, e int, last bool) {
 	}
 }
 
-// line places one line starting at rune p of the paragraph ending at pe,
-// returning where the next line starts.
+// beginParagraph sets up the paragraph spanning [ps, pe]: its format,
+// its list number, and the space above it. A paragraph that continues
+// after a break (ps is mid-paragraph) keeps its format but is not
+// numbered again and gets no marker or space.
+func (l *layouter) beginParagraph(ps, pe int) {
+	pf := l.d.paraIn(ps, pe)
+	start := ps == 0 || l.d.runes[ps-1] == '\n'
+	l.para = paraCtx{pf: pf, first: start, left: pf.leftIndent()}
+	if !start {
+		return
+	}
+	if n := l.nums.next(pf.List); pf.List.Kind != ListNone {
+		l.para.marker = pf.List.markerText(n)
+	}
+	if pf.SpaceBefore > 0 {
+		l.st.y += pf.SpaceBefore
+		l.st.maxY = max(l.st.maxY, l.st.y)
+	}
+}
+
+// endParagraph adds the space below the paragraph.
+func (l *layouter) endParagraph() {
+	if l.para.dropLines > 0 && !l.stop { // a short paragraph: the cap hangs below it
+		l.st.y += float64(l.para.dropLines) * l.para.dropLH
+		l.st.maxY = max(l.st.maxY, l.st.y)
+		l.para.dropLines = 0
+	}
+	if sa := l.para.pf.SpaceAfter; sa > 0 && !l.stop {
+		l.st.y += sa
+		l.st.maxY = max(l.st.maxY, l.st.y)
+	}
+}
+
+// line places one line starting at rune p of the paragraph ending at pe
+// (p == pe: a blank paragraph's line), returning where the next line
+// starts.
 func (l *layouter) line(p, pe int) (int, bool) {
 	d := l.d
-	lh := l.f.Style.Leading()
+	pf := l.para.pf
+	base := l.f.Style.Leading()
+	if pf.LineSpacing > 0 {
+		base *= pf.LineSpacing
+	}
+	lh := base
+	// A drop cap takes the paragraph's first letter out of its text.
+	textStart := p
+	var capText string
+	var capStyle TextStyle
+	if l.para.first && pf.DropCap > 0 && p < pe && !d.isObj(p) && !isSpace(d.runes[p]) {
+		capText, capStyle = string(d.runes[p]), d.styles[d.rs[p]]
+		capStyle.FontSize, capStyle.LineHeight = base*float64(pf.DropCap)*0.85, 0
+		l.f.Painter.SetFont(capStyle.Font())
+		l.para.dropW = l.f.Painter.MeasureTextWidth(capText) + 6
+		l.para.dropLines, l.para.dropLH = pf.DropCap, base
+		textStart = p + 1
+	}
 	for try := 0; ; try++ {
 		st, x0, x1, marks, ok := l.find(l.st, lh, p)
 		if !ok {
 			l.overflowAt(p)
 			return 0, false
 		}
+		// The paragraph's indents narrow the free span; if that leaves too
+		// little (a narrow column), ignore them.
+		left, right := l.para.left, pf.IndentRight
+		if l.para.first && pf.List.Kind == ListNone {
+			left += pf.FirstLine
+		}
+		if l.para.dropLines > 0 {
+			left += l.para.dropW
+		}
+		ax0, ax1 := x0+max(left, 0), x1-right
+		if ax1-ax0 < min(60, x1-x0) {
+			ax0, ax1 = x0, x1
+		}
 		_, _, _, ph := l.f.pageRect(st.page)
-		d.maxW, d.maxH = x1-x0, ph
-		textEnd, next := l.breakLine(p, pe, x1-x0)
-		lp := d.partsOf(p, textEnd)
+		d.maxW, d.maxH = ax1-ax0, ph
+		textEnd, next := textStart, textStart
+		if textStart < pe {
+			textEnd, next = l.breakLine(textStart, pe, ax1-ax0)
+		}
+		lp := d.partsOf(textStart, textEnd)
 		h, baselineOff := lp.height, 0.0
 		switch {
 		case lp.block:
@@ -751,14 +869,25 @@ func (l *layouter) line(p, pe int) (int, bool) {
 			h = max(h, lh)
 		}
 		if baselineOff == 0 {
-			baselineOff = (h-lp.size)/2 + lp.size*0.8
+			size := lp.size
+			if size == 0 {
+				size = l.f.Style.FontSize
+			}
+			baselineOff = (h-size)/2 + size*0.8
+		}
+		x := ax0
+		switch room := ax1 - ax0 - lp.width; pf.Align {
+		case AlignCenter:
+			x += max(room, 0) / 2
+		case AlignRight:
+			x += max(room, 0)
 		}
 		line := Line{
-			Text: string(d.runes[p:textEnd]), X: x0, W: lp.width, H: h, Start: p, End: textEnd, Runs: lp.runs,
-			Baseline: st.y + baselineOff,
+			Text: string(d.runes[textStart:textEnd]), X: x, W: lp.width, H: h, Start: textStart, End: textEnd, Runs: lp.runs,
+			Baseline: st.y + baselineOff, QuoteBar: pf.QuoteBar, BarX: x0 + pf.IndentLeft - 8,
 		}
 		for _, o := range lp.objs {
-			o.X += x0
+			o.X += x
 			if lp.block {
 				o.Y = st.y
 			} else {
@@ -766,9 +895,42 @@ func (l *layouter) line(p, pe int) (int, bool) {
 			}
 			line.Objects = append(line.Objects, o)
 		}
+		if l.para.first && l.para.marker != "" {
+			line.Marker = l.marker(p, ax0)
+		}
+		if capText != "" {
+			line.DropCap = &DropCapMark{
+				Text: capText, X: ax0 - l.para.dropW, Font: capStyle.Font(), Color: capStyle.Color,
+				Baseline: st.y + baselineOff + float64(pf.DropCap-1)*h,
+			}
+		}
+		l.para.first, l.para.marker = false, ""
+		if l.para.dropLines > 0 {
+			l.para.dropLines--
+		}
 		l.place(st, marks, line)
 		return next, true
 	}
+}
+
+// marker builds the list marker of the paragraph's first line, right
+// aligned just left of the text at x.
+func (l *layouter) marker(p int, x float64) *LineMarker {
+	d := l.d
+	st := l.f.Style
+	if p < len(d.runes) && !d.isObj(p) {
+		st = d.styles[d.rs[p]]
+	}
+	lst := l.para.pf.List
+	m := &LineMarker{Text: l.para.marker, Font: st.Font(), Color: st.Color, Check: lst.Kind == ListCheck, Checked: lst.Checked && lst.Kind == ListCheck}
+	if m.Color == "" {
+		m.Color = "#222222"
+	}
+	pt := l.f.Painter
+	pt.SetFont(m.Font)
+	m.W = pt.MeasureTextWidth(m.Text)
+	m.X = x - 6 - m.W
+	return m
 }
 
 // breakLine picks how much of runes[start:end] fits in width w: it
@@ -957,6 +1119,9 @@ func (f *TextFlow) MouseDown(x, y float64) bool {
 	if f.mode != ModeEdit {
 		return f.beginSelect(x, y)
 	}
+	if f.ToggleCheckAt(x, y) {
+		return true
+	}
 	bands := f.Layout().Bands
 	g := f.gripAt(bands, x, y)
 	if g == noGrip {
@@ -1051,6 +1216,20 @@ func (f *TextFlow) Draw() {
 	p.SetTextAlign("left")
 	p.SetTextBaseline("alphabetic")
 	for _, ln := range lay.Lines {
+		if ln.QuoteBar != "" {
+			p.SetFillStyle(ln.QuoteBar)
+			p.FillRect(ln.BarX, ln.Y, 3, ln.H)
+		}
+		if c := ln.DropCap; c != nil {
+			p.SetFont(c.Font)
+			p.SetFillStyle(orStr(c.Color, "#222222"))
+			p.FillText(c.Text, c.X, c.Baseline)
+		}
+		if m := ln.Marker; m != nil {
+			p.SetFont(m.Font)
+			p.SetFillStyle(m.Color)
+			p.FillText(m.Text, m.X, ln.Baseline)
+		}
 		for _, r := range ln.Runs {
 			x, y := ln.X+r.X, ln.Baseline+r.DY
 			if r.Background != "" {

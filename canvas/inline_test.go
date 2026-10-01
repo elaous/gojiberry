@@ -288,7 +288,7 @@ func TestMarkdownFlowEndToEnd(t *testing.T) {
 		t.Fatalf("no table object laid out: %+v", l.Lines)
 	}
 	f.Draw()
-	for _, want := range []string{"font normal 700 32px sans-serif", "font normal 700 16px sans-serif", `fillText "2"`, `fillText "• item"`} {
+	for _, want := range []string{"font normal 700 32px sans-serif", "font normal 700 16px sans-serif", `fillText "2"`, `fillText "•"`, `fillText "item"`} {
 		if !p.has(want) {
 			t.Errorf("missing %q", want)
 		}

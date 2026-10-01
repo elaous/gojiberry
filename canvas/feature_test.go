@@ -21,7 +21,7 @@ func TestRegistry(t *testing.T) {
 	for _, f := range st.Features.Features() {
 		names = append(names, f.Name())
 	}
-	if !reflect.DeepEqual(names, []string{"multi-cursor", "line-ops", "markdown-clipboard", "breaks"}) {
+	if !reflect.DeepEqual(names, []string{"multi-cursor", "line-ops", "markdown-clipboard", "breaks", "paragraphs"}) {
 		t.Fatalf("default features = %v", names)
 	}
 	if !st.Features.Has(CmdMoveLineUp) || st.Features.Keymap()["Mod+D"] != CmdAddNextMatch {
@@ -682,5 +682,44 @@ func TestBreaksFeature(t *testing.T) {
 	fst, _ := stageWith(t, "text")
 	if fst.HandleChord("Mod+Enter") {
 		t.Error("a floating text cannot hold a break")
+	}
+}
+
+func TestMarkdownListsAndQuotesRoundTrip(t *testing.T) {
+	src := "- a\n  - nested\n- [ ] todo\n- [x] done\n\n3. c\n4. d\n\n> quoted text"
+	items := Markdown{}.Transform(src)
+	got := MarkdownFromItems(items)
+	for _, want := range []string{"- a\n", "  - nested\n", "- [ ] todo\n", "- [x] done\n", "3. c\n4. d\n", "> *quoted text*"} {
+		if !strings.Contains(got+"\n", want) {
+			t.Errorf("markdown %q lacks %q", got, want)
+		}
+	}
+	again := MarkdownFromItems(Markdown{}.Transform(got))
+	if again != got {
+		t.Errorf("round trip changed it:\n%q\n%q", got, again)
+	}
+	// Into a plain target the structure becomes text prefixes.
+	flat := plainOf(flattenItems(items, false))
+	if !strings.HasPrefix(flat, "• a\n  ◦ nested\n☐ todo\n☑ done") || !strings.Contains(flat, "3. c\n4. d") || !strings.Contains(flat, "▌ quoted text") {
+		t.Errorf("flattened: %q", flat)
+	}
+	// A numbered item after a ")" marker keeps it.
+	if got := MarkdownFromItems(Markdown{}.Transform("1) x\n2) y")); got != "1) x\n2) y" {
+		t.Errorf("paren numbering: %q", got)
+	}
+}
+
+func TestPasteMarkdownListIntoFlowAndBox(t *testing.T) {
+	f, st := editFlow(t, 0, Chars{Text: "x"})
+	st.Clipboard = (&fakeClip{content: "- one\n- two"}).clipboard()
+	st.HandleChord("Mod+Shift+V")
+	if ps := f.ParagraphFormats(); len(ps) == 0 || ps[0].List.Kind != ListBullet {
+		t.Errorf("a pasted list is a list in a flow: %+v", f.ContentItems())
+	}
+	bst, ft := stageWith(t, "")
+	bst.Clipboard = (&fakeClip{content: "- one\n- two"}).clipboard()
+	bst.HandleChord("Mod+Shift+V")
+	if ft.Text() != "• one\n• two" {
+		t.Errorf("a box gets text prefixes: %q", ft.Text())
 	}
 }
