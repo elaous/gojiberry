@@ -27,7 +27,7 @@
 # compose_test.go`, task #161) caught actually breaking the build in a
 # network-restricted sandbox that couldn't reach Alpine's own package
 # CDN for a package this image never used in the first place.
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
