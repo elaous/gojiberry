@@ -1315,7 +1315,10 @@ generated code.
   (`canvas.Registry`, `canvas.Feature`): multi-cursor (Ctrl/Cmd+click,
   Ctrl/Cmd+D, Ctrl/Cmd+Shift+L, Alt+Shift+I), line operations (Alt+Up/Down
   move, Alt+Shift+Up/Down copy, Ctrl/Cmd+Shift+K delete) and Markdown copy
-  and paste (Ctrl/Cmd+Shift+C / V). Each registers commands and default key
+  and paste (Ctrl/Cmd+Shift+C / V), page and column breaks (Ctrl/Cmd+Enter,
+  with Shift). The `TextFlow` is editable in edit mode, and
+  `examples/canvas-editor-showcase` registers everything -- the gox canvas
+  tree, the features, the style editor and font selector -- in one editor. Each registers commands and default key
   chords; leave one out of `Stage.Features` (or `<canvas.Canvas features=...>`)
   to switch it off, or add your own.
 
@@ -1323,7 +1326,7 @@ generated code.
   node/playwright/chromium are missing): `examples/canvas-table-demo`,
   `examples/canvas-flow-demo`, `examples/canvas-image-demo`,
   `examples/canvas-scroll-demo`, `examples/canvas-document-demo`,
-  `examples/canvas-gox-demo` (run one with
+  `examples/canvas-gox-demo`, `examples/canvas-editor-showcase` (run one with
   `make -C examples/<name> run`).
 
 - `examples/wasm-canvas-demo` — `domrt/html`'s `Context2D`/`Context3D`:

@@ -6,6 +6,7 @@ import "strings"
 // caret (so it may run backwards).
 type flowSel struct {
 	anchor, caret int
+	after         bool // the caret is after the breaks at its offset (see Cursor.After)
 	dragging      bool
 }
 
@@ -108,8 +109,8 @@ func (f *TextFlow) beginSelect(x, y float64) bool {
 		f.stopEditing()
 		return had
 	}
-	o := f.OffsetAt(x, y)
-	f.sel = flowSel{anchor: o, caret: o, dragging: true}
+	o, after := f.offsetAt(x, y)
+	f.sel = flowSel{anchor: o, caret: o, after: after, dragging: true}
 	f.extra, f.pending, f.caretOff = nil, Format{}, false
 	f.editing = f.mode == ModeEdit
 	return had || f.editing

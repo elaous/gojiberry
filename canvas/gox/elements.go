@@ -30,12 +30,16 @@ import (
 
 // Host tags.
 const (
-	TagCanvas     = "canvas.Canvas"
-	TagTextFlow   = "canvas.TextFlow"
-	TagPage       = "canvas.Page"
-	TagHeader     = "canvas.Header"
-	TagFooter     = "canvas.Footer"
-	TagPageNumber = "canvas.PageNumber"
+	TagCanvas       = "canvas.Canvas"
+	TagTextFlow     = "canvas.TextFlow"
+	TagPage         = "canvas.Page"
+	TagHeader       = "canvas.Header"
+	TagFooter       = "canvas.Footer"
+	TagPageNumber   = "canvas.PageNumber"
+	TagImage        = "canvas.Image"
+	TagFloatingText = "canvas.FloatingText"
+	TagTable        = "canvas.Table"
+	TagScrollView   = "canvas.ScrollView"
 )
 
 // CanvasProps is the root element: the stage's size and mode.
@@ -152,3 +156,75 @@ type PageNumberProps struct {
 
 // PageNumber is a page number.
 func PageNumber(p PageNumberProps) gox.Node { return gox.Host(TagPageNumber, p) }
+
+// ImageProps is a picture the text can wrap around.
+type ImageProps struct {
+	Key string
+	// Source is the bitmap (see canvas.LoadImage in the browser).
+	Source canvas.ImageSource
+	X, Y   float64
+	// Width and Height scale the picture; zero keeps the natural size.
+	Width, Height float64
+	// Anchor pins the picture to a page (X, Y are then relative to its
+	// sheet); the page set is that of the TextFlow before it.
+	Anchor *canvas.Anchor
+	Wrap   bool
+	// Inline makes it a character-like object instead of a floating one.
+	Inline bool
+	// Opacity is 0..1; zero means opaque.
+	Opacity  float64
+	Clip     canvas.Insets
+	OnChange func(*canvas.Image)
+}
+
+// Image is a floating or inline picture.
+func Image(p ImageProps) gox.Node { return gox.Host(TagImage, p).WithKey(p.Key) }
+
+// FloatingTextProps is an editable text box that text can wrap around.
+type FloatingTextProps struct {
+	Key  string
+	Text string
+	X, Y float64
+	// Width and Height default to 190 x 96.
+	Width, Height float64
+	Anchor        *canvas.Anchor
+	Wrap          bool
+	Background    string
+	// Vocabulary adds words the completion may suggest.
+	Vocabulary []string
+	OnChange   func(*canvas.FloatingText)
+}
+
+// FloatingText is an editable, floating text box.
+func FloatingText(p FloatingTextProps) gox.Node { return gox.Host(TagFloatingText, p).WithKey(p.Key) }
+
+// TableProps is an editable table that can float with text wrapped
+// around it.
+type TableProps struct {
+	Key string
+	// Cells are the rows of cells; changing them replaces the table.
+	Cells    [][]string
+	X, Y     float64
+	Anchor   *canvas.Anchor
+	Wrap     bool
+	OnChange func(*canvas.Table)
+}
+
+// Table is an editable table.
+func Table(p TableProps) gox.Node { return gox.Host(TagTable, p).WithKey(p.Key) }
+
+// ScrollViewProps is a clipping, scrolling viewport over its children.
+type ScrollViewProps struct {
+	Key                 string
+	X, Y, Width, Height float64
+	// ContentWidth and ContentHeight are the scrollable extent; zero
+	// takes it from the children (a TextFlow's pages, a table).
+	ContentWidth, ContentHeight float64
+	LockH, LockV                bool
+	Children                    []gox.Node
+}
+
+// ScrollView is a scroll container.
+func ScrollView(p ScrollViewProps) gox.Node {
+	return gox.Host(TagScrollView, p, p.Children...).WithKey(p.Key)
+}

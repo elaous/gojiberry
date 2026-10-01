@@ -86,7 +86,7 @@ func addNextMatch(t EditTarget) bool {
 		if !ok {
 			return false
 		}
-		cs[len(cs)-1] = Cursor{from, to}
+		cs[len(cs)-1] = Cursor{Anchor: from, Caret: to}
 		t.SetCursors(cs)
 		return true
 	}
@@ -123,7 +123,7 @@ func addNextMatch(t EditTarget) bool {
 	if pick < 0 {
 		return false
 	}
-	t.SetCursors(append(cs, Cursor{pick, pick + len(needle)}))
+	t.SetCursors(append(cs, Cursor{Anchor: pick, Caret: pick + len(needle)}))
 	return true
 }
 
@@ -145,7 +145,7 @@ func selectAllMatches(t EditTarget) bool {
 		if i < 0 {
 			break
 		}
-		out = append(out, Cursor{i, i + len(needle)})
+		out = append(out, Cursor{Anchor: i, Caret: i + len(needle)})
 		p = i + len(needle)
 	}
 	t.SetCursors(out)

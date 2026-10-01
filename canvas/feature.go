@@ -27,7 +27,14 @@ type Feature interface {
 // Cursor is one caret with an optional selection: Anchor is where the
 // selection started and Caret the end that moves; equal means no
 // selection. Offsets are in runes.
-type Cursor struct{ Anchor, Caret int }
+type Cursor struct {
+	Anchor, Caret int
+	// After says the caret sits after any page or column break at its
+	// offset (on the line that starts there) rather than before it: in
+	// a TextFlow both are the same offset. Only a TextFlow has the
+	// distinction; others ignore it.
+	After bool
+}
 
 // Range returns the selected range [from, to).
 func (c Cursor) Range() (from, to int) { return min(c.Anchor, c.Caret), max(c.Anchor, c.Caret) }
@@ -36,13 +43,16 @@ func (c Cursor) Range() (from, to int) { return min(c.Anchor, c.Caret), max(c.An
 func (c Cursor) Empty() bool { return c.Anchor == c.Caret }
 
 // At returns a Cursor with no selection at offset o.
-func At(o int) Cursor { return Cursor{o, o} }
+func At(o int) Cursor { return Cursor{Anchor: o, Caret: o} }
 
 // Edit replaces the runes [From, To) with Items (Chars only; other items
 // are ignored). From == To inserts; no Items deletes.
 type Edit struct {
 	From, To int
 	Items    []Item
+	// AfterOps puts an insertion after the page and column breaks at
+	// offset From instead of in front of them (TextFlow only).
+	AfterOps bool
 }
 
 // EditTarget is what a Feature edits: text with one or more cursors.
@@ -116,7 +126,7 @@ func NewRegistry(features ...Feature) *Registry {
 
 // DefaultFeatures are the features a new Stage has.
 func DefaultFeatures() []Feature {
-	return []Feature{MultiCursor{}, LineOps{}, MarkdownClipboard{}}
+	return []Feature{MultiCursor{}, LineOps{}, MarkdownClipboard{}, Breaks{}}
 }
 
 // Register installs f. It panics on a duplicate feature or command
@@ -190,7 +200,7 @@ func normalize(cs []Cursor) []Cursor {
 			pf, pt := merged[n-1].Range()
 			cf, ct := c.Range()
 			if cf < pt || (cf == pt && (cf == pf || c.Empty() || merged[n-1].Empty())) {
-				merged[n-1] = Cursor{pf, max(pt, ct)}
+				merged[n-1] = Cursor{Anchor: pf, Caret: max(pt, ct)}
 				continue
 			}
 		}
@@ -260,7 +270,7 @@ func editCursors(t EditTarget, gen func(c Cursor, rs []rune) (from, to int, ins 
 	shift := 0
 	for _, c := range normalize(t.Cursors()) {
 		from, to, ins := gen(c, rs)
-		edits = append(edits, Edit{from, to, ins})
+		edits = append(edits, Edit{From: from, To: to, Items: ins, AfterOps: c.After && from == to})
 		n := itemsLen(ins)
 		out = append(out, At(from+shift+n))
 		shift += n - (to - from)

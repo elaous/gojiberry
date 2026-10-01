@@ -35,9 +35,10 @@ Done, as registered features (see "Features" below): multi-cursor
 add cursor above/below), move/duplicate/delete line, copy as Markdown and
 paste Markdown.
 
-- Not yet: multi-cursor for the main `TextFlow` body (it is not editable
-  yet; `FloatingText` is), auto-closing and completion at several cursors,
-  undo/redo.
+- The main `TextFlow` body is editable (typing, selection, clipboard,
+  formatting commands, breaks, the registered features). Not yet:
+  auto-closing brackets and completion in the flow (`FloatingText` has
+  them) and at several cursors, undo/redo, scrolling the caret into view.
 - Markdown copy writes headings, bold, italic, strike, underline, highlight,
   super/subscript and code; links keep their text only (a character has no
   URL yet), and tables and images are not written.
@@ -74,9 +75,9 @@ links, symbols, formula, horizontal rule, watermark.
 
 ## gox integration (see gox-canvas.md)
 
-- Done: `gox.Host`, the `canvas/gox` renderer, `Canvas`, `TextFlow`
-  (with the `Pages` render prop), `Header`, `Footer`, `PageNumber`.
-- Next elements: `ScrollView`, `Image`, `FloatingText`, `TableView`
-  (with a cell render prop), `PageSet` as its own element.
-- `CanvasView`, a DOM component that mounts a `canvas/gox` tree.
-- Fragments inside `Canvas` children.
+- Done: `gox.Host`, the `canvas/gox` renderer and its element registry
+  (`gox.Register`), with `Canvas`, `TextFlow` (with the `Pages` render
+  prop), `Header`, `Footer`, `PageNumber`, `Image`, `FloatingText`,
+  `Table`, `ScrollView`; fragments as children.
+- Next: a cell render prop for `Table`, `PageSet` as its own element,
+  `CanvasView` (a DOM component that mounts a `canvas/gox` tree).
