@@ -1,5 +1,7 @@
 package canvas
 
+import "strings"
+
 // Links in a TextFlow: text with Format.Link set is drawn as a link and
 // shows its URL in a small tip on hover. A click opens it (OnLink) in
 // view mode; in edit mode a plain click puts the caret there and
@@ -49,6 +51,9 @@ func (f *TextFlow) updateLinkHover(x, y float64) bool {
 // listening.
 func (f *TextFlow) openLinkAt(x, y float64) bool {
 	url, _ := f.linkAt(x, y)
+	if name, ok := strings.CutPrefix(url, "#"); ok && f.GotoBookmark(name) {
+		return true
+	}
 	open := f.OnLink
 	if open == nil {
 		open = f.stageLink

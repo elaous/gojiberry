@@ -77,6 +77,7 @@ type Format struct {
 	Style       string  `json:"style,omitempty" pb:"13"`
 	Link        string  `json:"link,omitempty" pb:"14"`
 	Comment     string  `json:"comment,omitempty" pb:"15"`
+	Bookmark    string  `json:"bookmark,omitempty" pb:"16"`
 }
 
 // List mirrors canvas.ListStyle.
