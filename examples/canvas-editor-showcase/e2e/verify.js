@@ -10,7 +10,7 @@ run(async () => {
   let s = await d.state();
   assert(!s.error, 'renders without error: ' + s.error);
   assert(s.mode === 'view' && s.pages === 3, 'starts in view mode with three pages');
-  assert(JSON.stringify(s.features) === JSON.stringify(['history', 'multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'styles', 'comments', 'bookmarks', 'page-furniture']), 'features registered: ' + s.features);
+  assert(JSON.stringify(s.features) === JSON.stringify(['history', 'multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'styles', 'comments', 'bookmarks', 'notes', 'page-furniture']), 'features registered: ' + s.features);
   for (const tag of ['canvas.TextFlow', 'canvas.Image', 'canvas.FloatingText', 'canvas.Table', 'canvas.ScrollView'])
     assert(s.elements.includes(tag), tag + ' is a registered element');
   assert(s.commands >= 30, 'commands registered: ' + s.commands);
@@ -20,7 +20,7 @@ run(async () => {
   // The menu bar is built from the registered commands: one submenu per feature.
   await page.click('button.gj-menubar-button:has-text("Edit")');
   const subs = await page.locator('.gj-menubar-panel > .gj-menu > .gj-menu-item-sub').count();
-  assert(subs === 12, 'Edit has a submenu per feature: ' + subs);
+  assert(subs === 13, 'Edit has a submenu per feature: ' + subs);
   const shortcut = await page.locator('.gj-menubar-panel li:has-text("Move line up") .gj-menu-shortcut').first().textContent();
   assert(shortcut === 'Alt+↑', 'a command shows its shortcut: ' + shortcut);
   await page.hover('.gj-menubar-panel li.gj-menu-item-sub:has-text("Paragraphs")');
@@ -253,6 +253,33 @@ run(async () => {
   await page.click('.gj-bookmark-remove');
   assert((await d.state()).bookmarks.length === 0, 'Remove takes it off');
 
+  // Footnotes, a table of contents and an index.
+  await page.mouse.move(...d.at(450, 300));
+  await page.mouse.wheel(0, -5000);
+  await page.waitForTimeout(100);
+  await d.click(180 + 60, 24 + 60 + 80); // a body line
+  await page.focus('#input');
+  await page.keyboard.press('End');
+  page.once('dialog', (dlg) => dlg.accept('Source: the **gojiberry** docs'));
+  await page.keyboard.press('Control+Alt+f');
+  await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).footnotes.length === 1);
+  assert(await page.locator('.gj-footnote .gj-footnote-num').textContent() === '1', 'the footnote is numbered in the list');
+  assert(await page.locator('.gj-footnote strong').textContent() === 'gojiberry', 'its text is Markdown');
+  await page.click('button.gj-menubar-button:has-text("Insert")');
+  await page.click('.gj-menubar-panel li:has-text("Table of contents")');
+  await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).tocRows >= 2);
+  s = await d.state();
+  assert(s.tocRows >= 2, 'a table of contents lists the headings: ' + s.tocRows);
+  await page.focus('#input');
+  for (let i = 0; i < 5; i++) { await page.focus('#input'); await page.keyboard.press('Shift+ArrowLeft'); }
+  page.once('dialog', (dlg) => dlg.accept('terms'));
+  await page.keyboard.press('Control+Alt+x');
+  await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).indexTerms.includes('terms'));
+  assert(true, 'the selection is marked as an index entry');
+  await page.click('.gj-footnote-delete');
+  await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).footnotes.length === 0);
+  assert(true, 'deleting a footnote removes its mark and note');
+
   // Comments: comment the selection, see it listed with its text and mentions, hover it, reply, resolve, delete.
   await page.mouse.move(...d.at(450, 300));
   await page.mouse.wheel(0, -5000);
@@ -260,7 +287,8 @@ run(async () => {
   await d.click(180 + 60, 24 + 60 + 80); // a body line
   await page.focus('#input');
   await page.keyboard.press('End');
-  for (let i = 0; i < 7; i++) await page.keyboard.press('Shift+ArrowLeft');
+  for (let i = 0; i < 7; i++) { await page.focus('#input'); await page.keyboard.press('Shift+ArrowLeft'); }
+  await page.focus('#input');
   page.once('dialog', (dlg) => dlg.accept('Check **this** wording, @bob or ana@example.com'));
   await page.keyboard.press('Control+Alt+n');
   await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).comments === 1, null, { timeout: 5000 });

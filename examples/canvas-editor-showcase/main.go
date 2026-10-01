@@ -70,7 +70,7 @@ type ui struct {
 func main() {
 	doc := browser.Document()
 	state := State{Mode: canvas.ModeView, Pages: 3, Source: sample, Note: "Floating note: click to edit, try (brackets and \"quotes\".", Styles: canvas.DefaultStyles(),
-		Comments: canvas.NewCommentSet(), Author: "you@example.com"}
+		Comments: canvas.NewCommentSet(), Author: "you@example.com", Footnotes: canvas.NewFootnoteSet()}
 	u := &ui{title: "Quarterly report", menu: -1, tab: "format", drafts: map[string]string{}}
 	// The catalog has a font that is fetched from this site: picking it
 	// only adds it to the library; the file is downloaded (into the font
@@ -201,6 +201,10 @@ func main() {
 				{Label: "Symbol…", OnSelect: func() { u.tab = "symbols"; renderUI() }},
 				{Label: "Comment…", Shortcut: components.FormatChord("Mod+Alt+N", mac), OnSelect: func() { run(canvas.CmdCommentAdd); u.tab = "comments"; renderUI() }},
 				{Label: "Bookmark…", Shortcut: components.FormatChord("Mod+Alt+B", mac), OnSelect: func() { run(canvas.CmdBookmarkAdd); u.tab = "outline"; renderUI() }},
+				{Label: "Footnote…", Shortcut: components.FormatChord("Mod+Alt+F", mac), OnSelect: func() { run(canvas.CmdFootnoteAdd); u.tab = "outline"; renderUI() }},
+				{Label: "Index entry…", Shortcut: components.FormatChord("Mod+Alt+X", mac), OnSelect: func() { run(canvas.CmdIndexMark) }},
+				{Label: "Table of contents", OnSelect: func() { run(canvas.CmdTOCInsert) }},
+				{Label: "Index", OnSelect: func() { run(canvas.CmdIndexInsert) }},
 				{Label: "Link…", Shortcut: components.FormatChord("Mod+K", mac), OnSelect: func() { run(canvas.CmdEditLink) }},
 				{Separator: true},
 				{Label: "Page break", Shortcut: components.FormatChord("Mod+Enter", mac), OnSelect: func() { run(canvas.CmdPageBreak) }},
@@ -250,7 +254,7 @@ func main() {
 		var panel gox.Node
 		switch u.tab {
 		case "outline":
-			panel = outlinePanel(&state, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cgox.TagScrollView, 0).(*canvas.ScrollView) }, redraw, refocus, renderUI)
+			panel = outlinePanel(&state, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cgox.TagScrollView, 0).(*canvas.ScrollView) }, run, redraw, refocus, renderUI)
 		case "comments":
 			panel = commentsPanel(u, &state, func() *canvas.TextFlow { return flow }, redraw, refocus, renderUI)
 		case "styles":
@@ -444,6 +448,8 @@ func main() {
 		scrollY := 0.0
 		current := -1
 		outline, bookmarks := []string{}, []string{}
+		footnotes, indexTerms := []string{}, []string{}
+		tocRows := -1
 		headers, watermarks := []string{}, []string{}
 		suggestions := []string{}
 		spread := false
@@ -473,6 +479,19 @@ func main() {
 			for _, b := range flow.Bookmarks() {
 				bookmarks = append(bookmarks, b.Name)
 			}
+			for _, n := range flow.FootnoteList() {
+				footnotes = append(footnotes, n.Text)
+			}
+			for _, e := range flow.IndexEntries() {
+				indexTerms = append(indexTerms, e.Term)
+			}
+			for _, it := range flow.ContentItems() {
+				if in, ok := it.(canvas.Inline); ok {
+					if toc, ok := in.Object.(*canvas.TOCObject); ok {
+						tocRows = len(toc.Entries())
+					}
+				}
+			}
 			for i, ln := range flow.Layout().Lines {
 				if i < 8 {
 					lineHeights = append(lineHeights, ln.H)
@@ -493,7 +512,7 @@ func main() {
 				}
 			}
 		}
-		if sig := fmt.Sprint(outline, bookmarks, current, state.Comments.Len()); (u.tab == "outline" || u.tab == "comments") && sig != u.navSig {
+		if sig := fmt.Sprint(outline, bookmarks, current, state.Comments.Len(), footnotes); (u.tab == "outline" || u.tab == "comments") && sig != u.navSig {
 			u.navSig = sig
 			renderUI()
 		}
@@ -501,7 +520,7 @@ func main() {
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cgox.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
-			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
+			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))
@@ -624,7 +643,7 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, re
 }
 
 // outlinePanel shows the headings (click to go there) and the bookmarks.
-func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, redraw, refocus, renderUI func()) gox.Node {
+func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, run func(canvas.Command), redraw, refocus, renderUI func()) gox.Node {
 	fl := flow()
 	if fl == nil {
 		return gox.Frag()
@@ -646,6 +665,27 @@ func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *c
 			Entries: fl.Outline(), Current: fl.OutlineIndexAt(caret),
 			OnSelect: func(_ int, e canvas.OutlineEntry) { goTo(e.Start) },
 		}),
+		gox.El("div", []gox.Attr{gox.A("style", "margin-top:1em")}, components.FootnoteList(components.FootnoteListProps{
+			Entries: fl.FootnoteList(), CanEdit: state.Role.CanEdit(),
+			OnGoto: func(e canvas.FootnoteEntry) {
+				fl.GotoOffset(e.Offset)
+				scroller().RevealPending()
+				redraw()
+				renderUI()
+			},
+			OnEdit: func(e canvas.FootnoteEntry) {
+				if v := js.Global().Call("prompt", "Footnote", e.Text); !v.IsNull() && v.String() != "" {
+					fl.FootnoteSet().Add(canvas.Footnote{ID: e.ID, Text: v.String()})
+					redraw()
+					renderUI()
+				}
+			},
+			OnDelete: func(e canvas.FootnoteEntry) {
+				fl.SetCursors([]canvas.Cursor{canvas.At(e.Offset + 1)})
+				run(canvas.CmdFootnoteDelete)
+				renderUI()
+			},
+		})),
 		gox.El("div", []gox.Attr{gox.A("style", "margin-top:1em")}, components.BookmarkList(components.BookmarksProps{
 			Bookmarks: fl.Bookmarks(), Excerpts: excerpts, CanEdit: state.Role.CanEdit(),
 			OnGoto: func(name string) { fl.GotoBookmark(name); scroller().RevealPending(); redraw(); renderUI() },

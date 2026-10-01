@@ -135,3 +135,8 @@ func (f *TextFlow) TakeReveal() (x, y, h float64, ok bool) {
 type Revealer interface {
 	TakeReveal() (x, y, h float64, ok bool)
 }
+
+// flowBinder is implemented by inline objects that show the flow's own
+// structure (a table of contents): the flow hands itself over each time
+// it reads its content.
+type flowBinder interface{ bindFlow(f *TextFlow) }

@@ -88,3 +88,47 @@ func BookmarkList(props BookmarksProps) gox.Node {
 	return gox.El("div", []gox.Attr{gox.A("class", "gj-bookmarks")},
 		gox.El("h4", []gox.Attr{gox.A("class", "gj-outline-title")}, gox.Text("Bookmarks")), body)
 }
+
+// FootnoteListProps configures FootnoteList.
+type FootnoteListProps struct {
+	// Entries are the notes whose marks are in the text (TextFlow.FootnoteList).
+	Entries []canvas.FootnoteEntry
+	CanEdit bool
+	// OnGoto is called when a note's number is clicked (go to its mark).
+	OnGoto   func(e canvas.FootnoteEntry)
+	OnEdit   func(e canvas.FootnoteEntry)
+	OnDelete func(e canvas.FootnoteEntry)
+}
+
+// FootnoteList renders the numbered footnotes, their text as Markdown;
+// clicking a number goes to its mark and an editor gets Edit and Delete.
+func FootnoteList(props FootnoteListProps) gox.Node {
+	var items []gox.Node
+	for _, e := range props.Entries {
+		e := e
+		num := []gox.Attr{gox.A("type", "button"), gox.A("class", "gj-footnote-num"), gox.A("data-note", e.ID)}
+		if props.OnGoto != nil {
+			num = append(num, gox.On("click", func(gox.Event) { props.OnGoto(e) }))
+		}
+		row := []gox.Node{gox.El("button", num, gox.Text(itoa(e.N))), gox.El("div", []gox.Attr{gox.A("class", "gj-footnote-text")}, MarkdownText(e.Text))}
+		if props.CanEdit {
+			btn := func(class, label string, on func(canvas.FootnoteEntry)) gox.Node {
+				a := []gox.Attr{gox.A("type", "button"), gox.A("class", class), gox.A("data-note", e.ID)}
+				if on != nil {
+					a = append(a, gox.On("click", func(gox.Event) { on(e) }))
+				} else {
+					a = append(a, gox.A("disabled", "disabled"))
+				}
+				return gox.El("button", a, gox.Text(label))
+			}
+			row = append(row, btn("gj-footnote-edit", "Edit", props.OnEdit), btn("gj-footnote-delete", "Delete", props.OnDelete))
+		}
+		items = append(items, gox.El("li", []gox.Attr{gox.A("class", "gj-footnote")}, row...))
+	}
+	body := gox.El("ul", []gox.Attr{gox.A("class", "gj-bookmark-list")}, items...)
+	if len(items) == 0 {
+		body = gox.El("p", []gox.Attr{gox.A("class", "gj-outline-empty")}, gox.Text("No footnotes. Add one at the caret."))
+	}
+	return gox.El("div", []gox.Attr{gox.A("class", "gj-footnotes")},
+		gox.El("h4", []gox.Attr{gox.A("class", "gj-outline-title")}, gox.Text("Footnotes")), body)
+}

@@ -22,6 +22,8 @@ type State struct {
 	// Comments are the document's comments; Author is who adds new ones.
 	Comments *canvas.CommentSet
 	Author   string
+	// Footnotes are the notes the footnote marks in the text refer to.
+	Footnotes *canvas.FootnoteSet
 }
 
 const sample = "# Gojiberry editor\n\n" +

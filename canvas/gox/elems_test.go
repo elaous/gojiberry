@@ -422,3 +422,26 @@ func TestTextFlowCommentProps(t *testing.T) {
 		t.Fatal(heard)
 	}
 }
+
+func TestTextFlowFootnoteProps(t *testing.T) {
+	r, _ := newRoot()
+	set := canvas.NewFootnoteSet(canvas.Footnote{ID: "n1", Text: "x"})
+	tree := func(band float64) gox.Node {
+		return Canvas(CanvasProps{Width: 300, Height: 300, Children: []gox.Node{
+			TextFlow(TextFlowProps{Text: "x", PageCount: 1, PageWidth: 200, PageHeight: 200, Footnotes: set, FootnoteBand: band}),
+		}})
+	}
+	if err := r.Render(tree(50)); err != nil {
+		t.Fatal(err)
+	}
+	fl := r.Find(TagTextFlow, 0).(*canvas.TextFlow)
+	if fl.Footnotes != set || fl.FootnoteBand != 50 {
+		t.Fatal("props reach the flow")
+	}
+	if err := r.Render(tree(30)); err != nil {
+		t.Fatal(err)
+	}
+	if fl.FootnoteBand != 30 {
+		t.Fatal("band updates")
+	}
+}
