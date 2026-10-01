@@ -175,27 +175,76 @@ func TestMarkdownParagraphs(t *testing.T) {
 	}
 }
 
+// paraFormats lists the ParaFormats of items in order.
+func paraFormats(items []Item) []ParaFormat {
+	var out []ParaFormat
+	for _, it := range items {
+		if p, ok := it.(ParaFormat); ok {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func TestMarkdownLists(t *testing.T) {
 	src := "- a\n- b\n  - nested\n    - deeper\n- c\n\n1. one\n2. two\n   continued\n\n- [ ] todo\n- [x] done"
-	got := plainOf(Markdown{}.Transform(src))
-	want := "• a\n• b\n    ◦ nested\n        ▪ deeper\n• c\n\n" +
-		"1. one\n2. two continued\n\n" +
-		"☐ todo\n☑ done"
-	if got != want {
-		t.Fatalf("got\n%q\nwant\n%q", got, want)
+	items := Markdown{}.Transform(src)
+	if got := plainOf(items); got != "a\nb\nnested\ndeeper\nc\n\none\ntwo continued\n\ntodo\ndone" {
+		t.Fatalf("text = %q", got)
+	}
+	var kinds []string
+	for _, p := range paraFormats(items) {
+		k := map[ListKind]string{ListBullet: "b", ListOrdered: "o", ListCheck: "c"}[p.List.Kind]
+		if p.List.Checked {
+			k = "C"
+		}
+		kinds = append(kinds, k+itoaTest(p.List.Level))
+	}
+	if strings.Join(kinds, " ") != "b0 b0 b1 b2 b0 o0 o0 c0 C0" {
+		t.Fatalf("list items = %v", kinds)
+	}
+	// Laid out they get their markers, numbered by the layout.
+	f, _ := newFlow("", 600, 600)
+	f.Items = items
+	var markers []string
+	for _, ln := range f.Layout().Lines {
+		if ln.Marker != nil {
+			markers = append(markers, ln.Marker.Text)
+		}
+	}
+	if strings.Join(markers, " ") != "• • ◦ ▪ • 1. 2. ☐ ☑" {
+		t.Fatalf("markers = %v", markers)
 	}
 }
 
+func itoaTest(n int) string { return string(rune('0' + n)) }
+
 func TestMarkdownOrderedListStartsAtItsFirstNumber(t *testing.T) {
-	if got := plainOf(Markdown{}.Transform("3. c\n4. d")); got != "3. c\n4. d" {
-		t.Fatalf("got %q", got)
+	items := Markdown{}.Transform("3. c\n4. d\n\n1) x")
+	ps := paraFormats(items)
+	if len(ps) != 3 || ps[0].List.Start != 3 || ps[1].List.Start != 0 || ps[2].List.Start != 0 || ps[2].List.Marker != "{n})" {
+		t.Fatalf("formats = %+v", ps)
+	}
+	f, _ := newFlow("", 600, 600)
+	f.Items = items
+	var markers []string
+	for _, ln := range f.Layout().Lines {
+		if ln.Marker != nil {
+			markers = append(markers, ln.Marker.Text)
+		}
+	}
+	if strings.Join(markers, " ") != "3. 4. 1)" {
+		t.Fatalf("markers = %v", markers)
 	}
 }
 
 func TestMarkdownQuoteAndCode(t *testing.T) {
 	items := Markdown{}.Transform("> quoted *text*\n> more\n\n```go\nfunc x() {}\n  indented\n```\nafter")
-	if plainOf(items) != "▌ quoted text\n▌ more\n\nfunc x() {}\n  indented\n\nafter" {
+	if plainOf(items) != "quoted text\nmore\n\nfunc x() {}\n  indented\n\nafter" {
 		t.Fatalf("plain = %q", plainOf(items))
+	}
+	if ps := paraFormats(items); len(ps) != 2 || ps[0].QuoteBar != "#c4c7cd" || ps[0].IndentLeft != 16 {
+		t.Fatalf("quote formats = %+v", ps)
 	}
 	var sawQuote, sawCode bool
 	for _, s := range segs(items) {

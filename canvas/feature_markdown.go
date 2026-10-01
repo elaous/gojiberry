@@ -1,6 +1,7 @@
 package canvas
 
 import (
+	"strconv"
 	"strings"
 )
 
@@ -100,20 +101,43 @@ func PasteMarkdown(t EditTarget, md Markdown, text string) bool {
 }
 
 // flattenItems prepares converted Markdown for insertion. With keep (the
-// target holds objects) tables, images, breaks and column configs are
-// kept; otherwise only the text is: Chars as they are, breaks as
-// newlines. Trailing newlines are trimmed.
+// target holds objects) tables, images, breaks, column configs and
+// paragraph formats are kept; otherwise only the text is: Chars as they
+// are, breaks as newlines, list items and quotes as text prefixes ("• ",
+// "1. ", "▌ "). Trailing newlines are trimmed.
 func flattenItems(items []Item, keep bool) []Item {
 	var out []Item
+	var pending ParaFormat
+	var nums listNumbers
+	atStart := true
 	for _, it := range items {
 		switch v := it.(type) {
 		case Chars:
+			if !keep && atStart {
+				n := nums.next(pending.List)
+				prefix := ListPrefix(pending.List, n)
+				if pending.QuoteBar != "" {
+					prefix = "▌ " + prefix
+				}
+				if prefix != "" {
+					out = append(out, Chars{Text: prefix})
+				}
+				pending = ParaFormat{}
+			}
 			out = append(out, v)
+			atStart = strings.HasSuffix(v.Text, "\n")
+		case ParaFormat:
+			if keep {
+				out = append(out, v)
+			} else {
+				pending = v
+			}
 		case Break:
 			if keep {
 				out = append(out, v)
 			} else {
 				out = append(out, Chars{Text: "\n"})
+				atStart = true
 			}
 		case Inline, ColumnConfig:
 			if keep {
@@ -145,34 +169,61 @@ var headingScales = [5]float64{2, 1.6, 1.35, 1.2, 1.05}
 // MarkdownFromItems writes items as Markdown (the inverse of the
 // Markdown transform for text and character formatting).
 func MarkdownFromItems(items []Item) string {
-	var lines [][]Chars
-	cur := []Chars{}
+	type mdLine struct {
+		runs []Chars
+		pf   ParaFormat
+	}
+	var lines []mdLine
+	cur := mdLine{runs: []Chars{}}
 	for _, it := range items {
-		c, ok := it.(Chars)
-		if !ok {
-			continue
-		}
-		parts := strings.Split(c.Text, "\n")
-		for i, p := range parts {
-			if i > 0 {
-				lines = append(lines, cur)
-				cur = []Chars{}
-			}
-			if p != "" {
-				cur = append(cur, Chars{p, c.Format})
+		switch v := it.(type) {
+		case ParaFormat:
+			cur.pf = v
+		case Chars:
+			parts := strings.Split(v.Text, "\n")
+			for i, p := range parts {
+				if i > 0 {
+					lines = append(lines, cur)
+					cur = mdLine{runs: []Chars{}}
+				}
+				if p != "" {
+					cur.runs = append(cur.runs, Chars{p, v.Format})
+				}
 			}
 		}
 	}
 	lines = append(lines, cur)
 
 	var out []string
-	for _, runs := range lines {
+	var nums listNumbers
+	for _, ln := range lines {
+		runs := ln.runs
 		prefix := ""
 		if level := headingLevel(runs); level > 0 {
 			prefix = strings.Repeat("#", level) + " "
 			for i := range runs {
 				runs[i].Format.Scale = 0
 			}
+		}
+		n := nums.next(ln.pf.List)
+		switch ln.pf.List.Kind {
+		case ListBullet:
+			prefix = strings.Repeat("  ", ln.pf.List.Level) + "- "
+		case ListCheck:
+			box := "[ ] "
+			if ln.pf.List.Checked {
+				box = "[x] "
+			}
+			prefix = strings.Repeat("  ", ln.pf.List.Level) + "- " + box
+		case ListOrdered:
+			end := "."
+			if strings.HasSuffix(ln.pf.List.Marker, ")") {
+				end = ")"
+			}
+			prefix = strings.Repeat("  ", ln.pf.List.Level) + itoa(n) + end + " "
+		}
+		if ln.pf.QuoteBar != "" {
+			prefix = "> " + prefix
 		}
 		var b strings.Builder
 		b.WriteString(prefix)
@@ -272,3 +323,5 @@ func escapeInline(s string) string {
 	}
 	return b.String()
 }
+
+func itoa(n int) string { return strconv.Itoa(max(n, 1)) }

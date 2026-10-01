@@ -10,10 +10,10 @@ run(async () => {
   let s = await d.state();
   assert(!s.error, 'renders without error: ' + s.error);
   assert(s.mode === 'view' && s.pages === 3, 'starts in view mode with three pages');
-  assert(JSON.stringify(s.features) === JSON.stringify(['multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks']), 'features registered: ' + s.features);
+  assert(JSON.stringify(s.features) === JSON.stringify(['multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs']), 'features registered: ' + s.features);
   for (const tag of ['canvas.TextFlow', 'canvas.Image', 'canvas.FloatingText', 'canvas.Table', 'canvas.ScrollView'])
     assert(s.elements.includes(tag), tag + ' is a registered element');
-  assert(s.commands >= 14, 'commands registered: ' + s.commands);
+  assert(s.commands >= 30, 'commands registered: ' + s.commands);
   const items = await page.locator('.command').count();
   assert(items === s.commands, 'the DOM lists every registered command: ' + items);
   assert(await page.locator('.styleeditor, [class*=style]').count() > 0, 'the style editor is rendered');
@@ -69,6 +69,30 @@ run(async () => {
   await page.keyboard.press('Control+Shift+K');
   s = await d.state();
   assert(s.text.length === t0.length, 'Ctrl+Shift+K deletes it again');
+
+  // Paragraph formatting: lists, numbering, drop cap.
+  await d.click(180 + 60, 24 + 60 + 80);
+  const m0 = (await d.state()).markers.length;
+  await page.keyboard.press('Control+Shift+8');
+  s = await d.state();
+  assert(s.markers.length === m0 + 1 && s.markers.includes('•'), 'Ctrl+Shift+8 makes the paragraph a bullet item: ' + s.markers);
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  s = await d.state();
+  assert(s.markers.length === m0 + 2, 'Enter continues the list');
+  await page.keyboard.press('Control+Shift+7');
+  s = await d.state();
+  assert(s.markers.includes('1.'), 'Ctrl+Shift+7 numbers the new item: ' + s.markers);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  s = await d.state();
+  assert(s.markers.length === m0 + 2, 'Enter on an empty item ends the list: ' + s.markers);
+  const caps0 = s.dropCaps;
+  await d.click(180 + 60, 24 + 60 + 80);
+  await page.keyboard.press('Control+e');
+  await d.page.evaluate(() => 0);
+  s = await d.state();
+  assert(s.text.length > 0, 'Ctrl+E (centre) is handled without breaking the text');
 
   // Markdown clipboard.
   await d.page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://localhost:' + process.env.PORT });

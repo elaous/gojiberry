@@ -143,13 +143,22 @@ func main() {
 			cursors, editing = flow.Cursors(), flow.Editing()
 		}
 		var text string
+		markers, dropCaps := []string{}, 0
 		if flow != nil {
 			text = flow.EditText()
+			for _, ln := range flow.Layout().Lines {
+				if ln.Marker != nil {
+					markers = append(markers, ln.Marker.Text)
+				}
+				if ln.DropCap != nil {
+					dropCaps++
+				}
+			}
 		}
 		b, _ := json.Marshal(map[string]any{
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cgox.Elements(), "editing": editing, "cursors": cursors, "text": text,
-			"pages": state.Pages, "format": u.format,
+			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps,
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))
 	}

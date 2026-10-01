@@ -35,6 +35,7 @@ type Markdown struct {
 	CodeBackground string     // default "#eceef1"
 	MarkBackground string     // ==highlight==, default "#fff3a3"
 	QuoteColor     string     // default "#5b616b"
+	QuoteBar       string     // the bar beside a block quote, default "#c4c7cd"
 	// Images turns ![alt](url) into an inline object. If nil, or if it
 	// returns nil, the alt text is shown in brackets instead.
 	Images func(url, alt string) InlineObject
@@ -161,7 +162,7 @@ func (m Markdown) Transform(src string) []Item {
 			for i < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[i]), ">") {
 				body := strings.TrimPrefix(strings.TrimSpace(lines[i]), ">")
 				body = strings.TrimPrefix(body, " ")
-				text("▌ ", Format{Color: quote.Color})
+				out = append(out, ParaFormat{QuoteBar: orStr(m.QuoteBar, "#c4c7cd"), IndentLeft: 16})
 				out = append(out, m.inline(body, quote)...)
 				text("\n", Format{})
 				i++
@@ -169,40 +170,41 @@ func (m Markdown) Transform(src string) []Item {
 			gap(i)
 
 		case reListItem.MatchString(line):
-			counters := map[int]int{}
+			started := map[int]bool{} // levels whose numbering has begun in this list
 			for i < len(lines) {
 				mm := reListItem.FindStringSubmatch(lines[i])
 				if mm == nil {
 					break
 				}
 				level := len(strings.ReplaceAll(mm[1], "\t", "  ")) / 2
-				for l := range counters {
+				for l := range started {
 					if l > level {
-						delete(counters, l)
+						delete(started, l)
 					}
 				}
 				marker, body := mm[2], mm[3]
-				bullet := [...]string{"• ", "◦ ", "▪ "}[level%3]
+				ls := ListStyle{Kind: ListBullet, Level: level}
 				if reListStart.MatchString(marker) {
-					if _, ok := counters[level]; !ok {
-						counters[level], _ = strconv.Atoi(reListStart.FindString(marker))
-					} else {
-						counters[level]++
+					ls.Kind = ListOrdered
+					if !started[level] {
+						started[level] = true
+						if n, _ := strconv.Atoi(reListStart.FindString(marker)); n != 1 {
+							ls.Start = n
+						}
 					}
-					bullet = strconv.Itoa(counters[level]) + ". "
+					if strings.HasSuffix(marker, ")") {
+						ls.Marker = "{n})"
+					}
 				}
 				if tm := reTask.FindStringSubmatch(body); tm != nil {
-					bullet, body = "☐ ", tm[2]
-					if tm[1] != " " {
-						bullet = "☑ "
-					}
+					ls.Kind, ls.Checked, body = ListCheck, tm[1] != " ", tm[2]
 				}
 				i++
 				for i < len(lines) && strings.TrimSpace(lines[i]) != "" && !reListItem.MatchString(lines[i]) && strings.HasPrefix(lines[i], " ") {
 					body += " " + strings.TrimSpace(lines[i]) // a continuation line
 					i++
 				}
-				text(strings.Repeat("    ", level)+bullet, Format{})
+				out = append(out, ParaFormat{List: ls})
 				out = append(out, m.inline(body, Format{})...)
 				text("\n", Format{})
 			}

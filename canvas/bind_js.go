@@ -194,6 +194,10 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 			if strings.HasPrefix(e.Code, "Key") && len(e.Code) == 4 {
 				key = e.Code[3:]
 			}
+			// With Shift, a digit key types a symbol (Shift+8 is "*").
+			if strings.HasPrefix(e.Code, "Digit") && len(e.Code) == 6 {
+				key = e.Code[5:]
+			}
 			if s.HandleChord(Chord(key, e.CtrlKey, e.ShiftKey, e.AltKey, e.MetaKey)) {
 				e.PreventDefault()
 				redraw()
