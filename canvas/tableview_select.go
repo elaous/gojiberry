@@ -1,5 +1,7 @@
 package canvas
 
+import "math"
+
 // selectHandle selects what the clicked handle stands for and opens its
 // context menu just below/right of the handle.
 func (v *TableView) selectHandle(h Hit) {
@@ -121,12 +123,13 @@ func (v *TableView) drawHandles(g geometry) {
 			v.hover == Hit{Kind: HitRowHandle, Row: r}, v.sel == Selection{SelRow, r})
 	}
 
-	// Table handle: 2x2 boxes.
+	// Table handle: a pill with the 2x2 boxes.
 	p := v.Painter
 	x, y := v.X-gap-hs, v.Y-gap-hs
-	v.fillHandleBG(x, y, hs, hs, v.hover.Kind == HitTableHandle, v.sel.Kind == SelTable)
-	box, sp := 4.0, 2.0
-	bx, by := x+(hs-2*box-sp)/2, y+(hs-2*box-sp)/2
+	px, py, pw, ph := x+2, y+2, hs-4, hs-4
+	v.fillPill(px, py, pw, ph, v.hover.Kind == HitTableHandle, v.sel.Kind == SelTable)
+	box, sp := 3.0, 2.0
+	bx, by := px+(pw-2*box-sp)/2, py+(ph-2*box-sp)/2
 	p.SetFillStyle(v.iconColor(v.sel.Kind == SelTable))
 	for i := range 4 {
 		p.FillRect(bx+float64(i%2)*(box+sp), by+float64(i/2)*(box+sp), box, box)
@@ -140,7 +143,9 @@ func (v *TableView) iconColor(selected bool) string {
 	return v.Style.HandleIconColor
 }
 
-func (v *TableView) fillHandleBG(x, y, w, h float64, hovered, selected bool) {
+// fillPill fills a rounded pill (a rectangle with its corners cut by
+// the painter's rectangles, radius 4): the grip look of Obsidian's tables.
+func (v *TableView) fillPill(x, y, w, h float64, hovered, selected bool) {
 	p, s := v.Painter, v.Style
 	switch {
 	case selected:
@@ -150,17 +155,42 @@ func (v *TableView) fillHandleBG(x, y, w, h float64, hovered, selected bool) {
 	default:
 		p.SetFillStyle(s.BarColor)
 	}
-	p.FillRect(x, y, w, h)
+	const r = 4
+	if w < 2*r || h < 2*r {
+		p.FillRect(x, y, w, h)
+		return
+	}
+	for k := range r {
+		d := float64(r) - float64(k) - 0.5
+		inset := float64(r) - math.Sqrt(float64(r*r)-d*d)
+		p.FillRect(x+inset, y+float64(k), w-2*inset, 1)
+		p.FillRect(x+inset, y+h-float64(k)-1, w-2*inset, 1)
+	}
+	p.FillRect(x, y+r, w, h-2*r)
 }
 
-// drawHandle paints one column/row handle: a strip with a triple-line
-// grip centered in it.
+// drawHandle paints one column or row handle: a small pill centered on
+// the edge, with six grip dots (three across for a column, two for a row).
 func (v *TableView) drawHandle(x, y, w, h float64, hovered, selected bool) {
-	v.fillHandleBG(x, y, w, h, hovered, selected)
+	column := w > h
+	pw, ph := 26.0, h-4
+	if !column {
+		pw, ph = w-4, 26.0
+	}
+	pw, ph = min(pw, w-4), min(ph, h-4)
+	px, py := x+(w-pw)/2, y+(h-ph)/2
+	v.fillPill(px, py, pw, ph, hovered, selected)
 	v.Painter.SetFillStyle(v.iconColor(selected))
-	lw, lh, sp := 12.0, 2.0, 2.0
-	ly := y + (h-(3*lh+2*sp))/2
-	for i := range 3 {
-		v.Painter.FillRect(x+(w-lw)/2, ly+float64(i)*(lh+sp), lw, lh)
+	const dot, gap = 2.0, 3.0
+	across, down := 3, 2
+	if !column {
+		across, down = 2, 3
+	}
+	gw, gh := float64(across)*dot+float64(across-1)*gap, float64(down)*dot+float64(down-1)*gap
+	gx, gy := px+(pw-gw)/2, py+(ph-gh)/2
+	for i := range across {
+		for j := range down {
+			v.Painter.FillRect(gx+float64(i)*(dot+gap), gy+float64(j)*(dot+gap), dot, dot)
+		}
 	}
 }
