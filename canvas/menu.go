@@ -68,6 +68,24 @@ func NewMenu(p Painter) *Menu {
 	return &Menu{Style: DefaultMenuStyle(), Painter: p, hover: -1}
 }
 
+// Rect returns the open menu's rectangle (x, y, w, h); all zero while it
+// is closed.
+func (m *Menu) Rect() (x, y, w, h float64) {
+	if !m.open {
+		return 0, 0, 0, 0
+	}
+	return m.x, m.y, m.w, m.height()
+}
+
+// Labels returns the open menu's item labels, with "" for separators.
+func (m *Menu) Labels() []string {
+	var out []string
+	for _, it := range m.items {
+		out = append(out, it.Label)
+	}
+	return out
+}
+
 // IsOpen reports whether the menu is showing.
 func (m *Menu) IsOpen() bool { return m.open }
 
@@ -93,6 +111,12 @@ func (m *Menu) itemHeight(it MenuItem) float64 {
 // as needed to stay inside a boundsW x boundsH canvas (a zero bound
 // disables clamping on that axis).
 func (m *Menu) Open(items []MenuItem, x, y, boundsW, boundsH float64) {
+	m.OpenWithin(items, x, y, [4]float64{0, 0, boundsW, boundsH})
+}
+
+// OpenWithin is Open keeping the menu inside the bounds rectangle (x,
+// y, w, h); a zero width or height disables clamping on that axis.
+func (m *Menu) OpenWithin(items []MenuItem, x, y float64, bounds [4]float64) {
 	m.items = items
 	m.Painter.SetFont(m.Style.Font)
 	m.w = m.Style.MinWidth
@@ -101,11 +125,13 @@ func (m *Menu) Open(items []MenuItem, x, y, boundsW, boundsH float64) {
 			m.w = max(m.w, m.Painter.MeasureTextWidth(it.Label)+2*m.Style.PadX)
 		}
 	}
-	if boundsW > 0 {
-		x = min(x, boundsW-m.w)
+	if bounds[2] > 0 {
+		x = min(x, bounds[0]+bounds[2]-m.w)
+		x = max(x, bounds[0])
 	}
-	if boundsH > 0 {
-		y = min(y, boundsH-m.height())
+	if bounds[3] > 0 {
+		y = min(y, bounds[1]+bounds[3]-m.height())
+		y = max(y, bounds[1])
 	}
 	m.x, m.y = max(x, 0), max(y, 0)
 	m.open = true

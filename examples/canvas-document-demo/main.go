@@ -160,12 +160,32 @@ func main() {
 		for i := range numbers {
 			numbers[i] = ps.PageNumberText(i)
 		}
+		headers, footers := make([]string, len(ps.Pages)), make([]string, len(ps.Pages))
+		numberRects := make([][]float64, len(ps.Pages))
+		for i := range ps.Pages {
+			if h := ps.ResolvedHeader(i); h != nil {
+				headers[i] = h.Text
+			}
+			if f := ps.ResolvedFooter(i); f != nil {
+				footers[i] = f.Text
+			}
+			if x, y, w, h, ok := ps.PageNumberRect(i); ok {
+				numberRects[i] = []float64{x, y, w, h}
+			}
+		}
+		selPage, hasSel := ps.SelectedPageNumber()
+		mx, my, mw, _ := ps.Menu().Rect()
+		editPage, editFooter, editing := ps.Editing()
 		from, to := ft.Selection()
 		st := map[string]any{
 			"mode": ft.Mode().String(), "scroll": []float64{sv.ScrollX, sv.ScrollY},
 			"viewport": []float64{sv.X, sv.Y, sv.Width, sv.Height}, "content": []float64{w, h},
 			"pageCount": len(ps.Pages), "pagesUsed": lay.Pages, "overflow": lay.Overflow,
-			"lines": lines, "objects": objects, "decorations": deco, "breaks": breaks, "bands": bands, "pageNumbers": numbers,
+			"headers": headers, "footers": footers, "numberRects": numberRects,
+			"numberSelected": map[string]any{"ok": hasSel, "page": selPage},
+			"menu":           map[string]any{"open": ps.Menu().IsOpen(), "rect": []float64{mx, my, mw}, "labels": ps.Menu().Labels()},
+			"hfEdit":         map[string]any{"editing": editing, "page": editPage, "footer": editFooter},
+			"lines":          lines, "objects": objects, "decorations": deco, "breaks": breaks, "bands": bands, "pageNumbers": numbers,
 			"pageRects": func() [][]float64 {
 				var out [][]float64
 				for i := range ps.Pages {
