@@ -24,6 +24,9 @@ type Format struct {
 	// Case changes how the letters are displayed -- upper, lower, title
 	// case, small caps -- without changing the text itself.
 	Case CaseKind
+	// Style names a character style (see StyleDef) whose formatting this
+	// text gets, under anything set directly here.
+	Style string
 	// Link makes the text a link to this URL: drawn as a link (link
 	// color, underlined), with the URL shown on hover.
 	Link string

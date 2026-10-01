@@ -23,6 +23,13 @@ check boxes you can tick, block quotes, drop caps; Enter continues a list
 and ends it on an empty item, Tab nests; Markdown lists and quotes become
 paragraph formats.
 
+**Styles** (`Styles` feature, `TextFlow.Styles`) -- named character and
+paragraph styles (Normal, Title, Subtitle, Heading 1-3, Quote, Code,
+Emphasis, Strong, and your own: `define-paragraph`/`define-character` from
+the selection); a style expands to a format at layout time, so editing it
+restyles every use; Ctrl/Cmd+Alt+0-3, Ctrl/Cmd+\\ clears formatting;
+`components.StylePicker`.
+
 **Editing features** (registered with `Stage.Features`) -- multi-cursor,
 move/duplicate/delete line, Markdown copy and paste, page/column breaks and
 horizontal rules, paragraphs, text case, links, page furniture.
@@ -38,7 +45,7 @@ floating text (the Fade button).
 submenus), `CommandMenu` (a menu from the registered commands),
 `SymbolPicker`, `LinkPreview`, `KeyBindings` (a rebinding editor over
 `Stage.Rebind`), `DocumentView` (the window around the canvas),
-`FontSelector`, `StyleEditor`.
+`FontSelector`, `StylePicker`.
 
 **gox** -- `gox.Host`, the `canvas/gox` renderer and its element registry
 (`Canvas`, `TextFlow` with the `Pages` template, `Header`, `Footer`,
@@ -50,8 +57,6 @@ submenus), `CommandMenu` (a menu from the registered commands),
 ## To do
 
 - **Formula** editor and formula text element.
-- **Styles**: named character and paragraph styles, and the style editor
-  driving them.
 - Scrolling the caret into view.
 - Auto-closing brackets and completion in the `TextFlow` (a `FloatingText`
   has them), and at several cursors.

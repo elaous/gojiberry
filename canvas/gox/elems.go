@@ -66,6 +66,10 @@ func (f *flowElem) Update(_ *Context, props any, _ []gox.Node) (bool, error) {
 		changed = true
 	}
 	fl.Transform = p.Transform
+	if !reflect.DeepEqual(p.Styles, old.Styles) || first {
+		fl.Styles = append([]canvas.StyleDef(nil), p.Styles...)
+		changed = true
+	}
 	if first || p.Source != old.Source || p.Text != old.Text || !reflect.DeepEqual(p.Items, old.Items) {
 		// New content: forget what was typed into the flow.
 		fl.ResetContent()
