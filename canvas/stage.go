@@ -94,6 +94,11 @@ type Stage struct {
 	// OnDraw, if set, is called after every Draw (demos use it to
 	// publish state).
 	OnDraw func()
+	// OnFontUse is called, at a draw, the first time the content uses a
+	// font cut (family, weight, style): the moment to download it. See
+	// the fonts package's Library.
+	OnFontUse func(FontUse)
+	fontsSeen map[FontUse]bool
 }
 
 // NewStage returns a stage for a width x height canvas.
@@ -161,6 +166,7 @@ func (s *Stage) Paint() {
 func (s *Stage) Draw() {
 	s.Painter.ClearRect(0, 0, s.Width, s.Height)
 	s.Paint()
+	s.reportFonts()
 	if s.OnDraw != nil {
 		s.OnDraw()
 	}

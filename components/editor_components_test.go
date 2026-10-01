@@ -3,6 +3,7 @@ package components
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/gox"
@@ -341,7 +342,9 @@ func TestStylePicker(t *testing.T) {
 	n := StylePicker(StylePickerProps{
 		Styles:  canvas.DefaultStyles(),
 		Current: "Heading 2",
-		OnPick:  func(name string, paragraph bool) { picked = append(picked, name+map[bool]string{true: "/p", false: "/c"}[paragraph]) },
+		OnPick: func(name string, paragraph bool) {
+			picked = append(picked, name+map[bool]string{true: "/p", false: "/c"}[paragraph])
+		},
 	})
 	html := render(t, n)
 	for _, want := range []string{"Paragraph styles", "Character styles", `data-style="Heading 1"`, `data-style="Emphasis"`, "gj-stylepicker-item-on", "italic"} {
@@ -363,5 +366,75 @@ func TestStylePicker(t *testing.T) {
 	html = render(t, StylePicker(StylePickerProps{Styles: []canvas.StyleDef{{Name: "Only", Paragraph: true}}}))
 	if strings.Contains(html, "Character styles") || !strings.Contains(html, "Only") {
 		t.Errorf("empty sections are left out: %s", html)
+	}
+}
+
+func TestSaverRendersFormAndWiresCallbacks(t *testing.T) {
+	var log []string
+	n := Saver(SaverProps{
+		Targets: []SaverChoice{{"pg", "Postgres"}, {"sqlite", "SQLite"}, {"s3", "S3"}},
+		Formats: []SaverChoice{{"json", "JSON"}, {"proto", "Protobuf (binary)"}},
+		Target:  "sqlite", Format: "proto", Name: "notes",
+		Entries: []SaverEntry{{Key: "notes.json", Name: "notes", Format: "JSON", Size: 2500, Updated: time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC)},
+			{Key: "big.pb", Name: "big", Format: "Protobuf", Size: 3 << 20}, {Key: "tiny.pb", Name: "tiny", Format: "Protobuf", Size: 12}},
+		Status:    "Saved notes.json",
+		OnTarget:  func(s string) { log = append(log, "target:"+s) },
+		OnFormat:  func(s string) { log = append(log, "format:"+s) },
+		OnName:    func(s string) { log = append(log, "name:"+s) },
+		OnSave:    func() { log = append(log, "save") },
+		OnRefresh: func() { log = append(log, "refresh") },
+		OnOpen:    func(k string) { log = append(log, "open:"+k) },
+		OnDelete:  func(k string) { log = append(log, "delete:"+k) },
+	})
+	html := render(t, n)
+	mustContain(t, html, "Postgres", "S3", `value="sqlite" selected="selected"`, `value="proto" selected="selected"`, `value="notes"`,
+		"Saved notes.json", `role="status"`, "2.4 KB", "3.0 MB", "12 B", "2026-01-02 03:04", `data-key="notes.json"`)
+	mustNotContain(t, html, "gj-saver-failed", "Nothing saved yet")
+	for _, h := range findHandlers(n, "change") {
+		h(gox.Event{Value: "pick"})
+	}
+	findHandlers(n, "input")[0](gox.Event{Value: "typed"})
+	for _, h := range findHandlers(n, "click") {
+		h(gox.Event{})
+	}
+	want := "target:pick format:pick name:typed save refresh open:notes.json delete:notes.json open:big.pb delete:big.pb open:tiny.pb delete:tiny.pb"
+	if got := strings.Join(log, " "); got != want {
+		t.Fatalf("got  %s\nwant %s", got, want)
+	}
+}
+
+func TestSaverEmptyBusyAndFailed(t *testing.T) {
+	html := render(t, Saver(SaverProps{Busy: true, Status: "boom", Failed: true, Entries: nil,
+		OnSave: func() {}, OnOpen: func(string) {}}))
+	mustContain(t, html, "gj-saver-failed", "Nothing saved yet", `disabled="disabled"`)
+	// No name: Save is disabled even when not busy; no handlers: all inert.
+	n := Saver(SaverProps{OnSave: func() {}, Entries: []SaverEntry{{Key: "a.json", Name: "a", Format: "JSON"}}})
+	if got := len(findHandlers(n, "click")); got != 0 {
+		t.Fatalf("%d click handlers; Save needs a name and the rest have no callbacks", got)
+	}
+}
+
+func TestTransferButtons(t *testing.T) {
+	var got []string
+	n := Transfer(TransferProps{
+		Imports:  []SaverChoice{{"markdown", "Markdown"}, {"json", "JSON"}},
+		Exports:  []SaverChoice{{"markdown", "Markdown"}},
+		OnImport: func(f string) { got = append(got, "in:"+f) },
+		OnExport: func(f string) { got = append(got, "out:"+f) },
+	})
+	mustContain(t, render(t, n), `aria-label="Import"`, `aria-label="Export"`, `data-kind="export"`, "Markdown")
+	for _, h := range findHandlers(n, "click") {
+		h(gox.Event{})
+	}
+	if strings.Join(got, " ") != "in:markdown in:json out:markdown" {
+		t.Fatal(got)
+	}
+	off := Transfer(TransferProps{Imports: []SaverChoice{{"a", "A"}}, OnImport: func(string) {}, Disabled: true})
+	if len(findHandlers(off, "click")) != 0 {
+		t.Fatal("disabled has no handlers")
+	}
+	mustContain(t, render(t, off), `disabled="disabled"`)
+	if len(findHandlers(Transfer(TransferProps{Exports: []SaverChoice{{"a", "A"}}}), "click")) != 0 {
+		t.Fatal("no callback, no handler")
 	}
 }

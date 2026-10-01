@@ -208,6 +208,88 @@ run(async () => {
   await page.waitForTimeout(150);
   s = await d.state();
   assert(s.text.includes('pasted bold text'), 'Ctrl+Shift+V pastes Markdown as text, not marks');
+
+  // Lazy fonts: picking a font only adds it; the file is downloaded into
+  // the store the first time the text uses it.
+  const fs = require('fs');
+  const realFont = ['/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf', '/usr/share/fonts/truetype/freefont/FreeSerif.ttf'].find((p) => fs.existsSync(p));
+  let fontHits = 0;
+  await page.route('**/fonts/lazy-serif.ttf', (route) => {
+    fontHits++;
+    route.fulfill({ status: 200, contentType: 'font/ttf', headers: { 'access-control-allow-origin': '*' }, body: realFont ? fs.readFileSync(realFont) : Buffer.from('not a font') });
+  });
+  await page.keyboard.press('ArrowRight'); // a caret, nothing selected
+  await page.click('button[data-tab="format"]');
+  await page.click('.gj-fontselector-control');
+  await page.fill('.gj-fontselector-search', 'Lazy');
+  await page.click('.gj-fontselector-option[data-family="Lazy Serif"]');
+  await page.waitForTimeout(300);
+  s = await d.state();
+  assert(s.fontsAdded.includes('Lazy Serif='), 'the picked font is in the library, not yet downloaded: ' + s.fontsAdded);
+  assert(fontHits === 0, 'nothing was fetched yet: no text uses the font');
+  await page.focus('#input');
+  await page.keyboard.type('lazy');
+  await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).fontsAdded.some((f) => f.startsWith('Lazy Serif=fonts/')), null, { timeout: 5000 });
+  s = await d.state();
+  assert(fontHits === 1, 'the font file was fetched once, when the text used it: ' + fontHits);
+  assert(s.fontLog.some((l) => l.includes('Lazy Serif 400: downloaded into the store')), 'the library logged the download: ' + s.fontLog);
+  assert(s.fontsAdded.includes('Lazy Serif=fonts/Lazy Serif/400-n.ttf'), 'its store key is recorded: ' + s.fontsAdded);
+  if (realFont) {
+    await page.waitForFunction(() => Array.from(document.fonts).some((f) => f.family.replace(/"/g, '') === 'Lazy Serif' && f.status === 'loaded'), null, { timeout: 5000 });
+    assert(true, 'the browser loaded the downloaded font');
+  }
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(100);
+  assert(fontHits === 1, 'using it again does not download it again');
+
+  // Saver: memory target, protobuf binary, then the browser's localStorage as JSON.
+  await page.click('button[data-tab="save"]');
+  assert(await page.locator('.gj-saver-select[data-field="Save to"] option').count() === 2, 'the Saver offers its targets');
+  assert(await page.locator('.gj-saver-select[data-field="Format"] option').count() === 3, 'and the formats');
+  assert(await page.locator('.gj-saver-save').isDisabled(), 'Save waits for a name');
+  await page.fill('.gj-saver-name', 'notes');
+  await page.selectOption('.gj-saver-select[data-field="Save to"]', 'memory');
+  await page.selectOption('.gj-saver-select[data-field="Format"]', 'proto');
+  await page.click('.gj-saver-save');
+  await page.waitForSelector('.gj-saver-entry[data-key="notes.pb"]');
+  assert((await page.locator('.gj-saver-status').textContent()) === 'Saved notes.pb', 'status: ' + (await page.locator('.gj-saver-status').textContent()));
+  assert(await page.locator('.gj-saver-entry').count() === 1, 'the downloaded font in the same store is not listed as a document');
+  await page.selectOption('.gj-saver-select[data-field="Save to"]', 'browser');
+  await page.selectOption('.gj-saver-select[data-field="Format"]', 'json');
+  await page.waitForFunction(() => document.querySelectorAll('.gj-saver-entry').length === 0);
+  await page.click('.gj-saver-save');
+  await page.waitForSelector('.gj-saver-entry[data-key="notes.json"]');
+  const saved = JSON.parse(await page.evaluate(() => localStorage.getItem('showcase:notes.json')).then((r) => Buffer.from(JSON.parse(r).d, 'base64').toString()));
+  assert(saved.title === 'Quarterly report' && saved.content.length > 0, 'localStorage holds the document as JSON: ' + saved.title);
+  assert(saved.fonts.some((f) => f.family === 'Lazy Serif' && f.variants[0].key === 'fonts/Lazy Serif/400-n.ttf'), 'the saved document records the font and where its file is');
+  assert(saved.content.some((i) => i.chars && i.chars.format.fontFamily && i.chars.format.fontFamily.includes('Lazy Serif')), 'text in the font is saved with its family');
+
+  // Open: change the text, open the saved JSON, the text is back.
+  const textBefore = (await d.state()).text;
+  await page.focus('#input');
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('ZZZ');
+  assert((await d.state()).text.includes('ZZZ'), 'edited after saving');
+  await page.click('.gj-saver-entry[data-key="notes.json"] .gj-saver-open');
+  await page.waitForFunction(() => !JSON.parse(document.getElementById('state').textContent).text.includes('ZZZ'));
+  s = await d.state();
+  assert(s.text === textBefore, 'Open restores the saved text');
+  await page.selectOption('.gj-saver-select[data-field="Save to"]', 'memory');
+  await page.waitForSelector('.gj-saver-entry[data-key="notes.pb"]');
+  await page.click('.gj-saver-entry[data-key="notes.pb"] .gj-saver-delete');
+  await page.waitForFunction(() => document.querySelectorAll('.gj-saver-entry').length === 0);
+  assert((await page.locator('.gj-saver-status').textContent()) === 'Deleted notes.pb', 'Delete removes a saved document');
+
+  // Import / Export.
+  await page.click('button[data-tab="transfer"]');
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('.gj-transfer-button[data-kind="export"][data-format="markdown"]')]);
+  assert(download.suggestedFilename() === 'Quarterly report.md', 'Export downloads a file named after the title: ' + download.suggestedFilename());
+  const exported = fs.readFileSync(await download.path(), 'utf8');
+  assert(exported.includes('pasted'), 'the Markdown export has the text');
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('.gj-transfer-button[data-kind="import"][data-format="markdown"]')]);
+  await chooser.setFiles({ name: 'hello.md', mimeType: 'text/markdown', buffer: Buffer.from('# Imported\n\nfresh **words**') });
+  await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).text.includes('fresh words'));
+  assert((await page.locator('#transfer-message').textContent()) === 'Imported hello.md', 'Import reads the file into the editor');
   await page.keyboard.press('Escape');
   assert(d.errors.length === 0, 'no page errors: ' + d.errors.join('; '));
   await d.close();
