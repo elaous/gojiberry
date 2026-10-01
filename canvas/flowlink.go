@@ -57,6 +57,9 @@ func (f *TextFlow) openLinkAt(x, y float64) bool {
 
 // DrawOverlay implements Overlayer: the tip showing the hovered link's URL.
 func (f *TextFlow) DrawOverlay() {
+	if f.sugg != nil && f.mode == ModeEdit {
+		f.sugg.Draw()
+	}
 	if f.hoverLink == "" || f.Painter == nil {
 		return
 	}

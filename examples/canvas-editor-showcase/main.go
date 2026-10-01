@@ -407,6 +407,7 @@ func main() {
 		lineHeights := []float64{}
 		var link map[string]any
 		headers, watermarks := []string{}, []string{}
+		suggestions := []string{}
 		spread := false
 		if ps, ok := root.Find(cgox.TagPage, 0).(*canvas.PageSet); ok {
 			spread = ps.Spread
@@ -423,6 +424,7 @@ func main() {
 		}
 		if flow != nil {
 			cursors, editing = flow.Cursors(), flow.Editing()
+			suggestions = append(suggestions, flow.Suggestions()...)
 			text = flow.EditText()
 			sv := root.Find(cgox.TagScrollView, 0).(*canvas.ScrollView)
 			for i, ln := range flow.Layout().Lines {
@@ -446,7 +448,7 @@ func main() {
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cgox.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
-			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "tab": u.tab, "menu": u.menu, "title": u.title,
+			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))

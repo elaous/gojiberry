@@ -209,6 +209,22 @@ run(async () => {
   s = await d.state();
   assert(s.text.includes('pasted bold text'), 'Ctrl+Shift+V pastes Markdown as text, not marks');
 
+  // Auto-closing pairs and completion in the text flow (at several cursors too).
+  await page.focus('#input');
+  await page.keyboard.press('End');
+  await page.keyboard.type('(note');
+  s = await d.state();
+  assert(s.text.includes('(note)') && !s.text.includes('(note'+'))'), 'typing ( closes the pair in the text flow');
+  await page.keyboard.type(')');
+  s = await d.state();
+  assert(s.text.includes('(note)') && !s.text.includes('(note))'), 'typing ) steps over the closer');
+  await page.keyboard.type(' feat');
+  s = await d.state();
+  assert(s.suggestions && s.suggestions.includes('feature'), 'typing a prefix offers completions: ' + s.suggestions);
+  await page.keyboard.press('Tab');
+  s = await d.state();
+  assert(s.text.includes('(note) feature') && s.suggestions.length === 0, 'Tab accepts the completion');
+
   // Lazy fonts: picking a font only adds it; the file is downloaded into
   // the store the first time the text uses it.
   const fs = require('fs');

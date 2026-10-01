@@ -284,12 +284,21 @@ func (f *TextFlow) InsertText(s string) bool {
 	if rs := []rune(s); len(rs) == 1 && rs[0] != '\n' && !f.HasSelection() {
 		f.histKind = "type"
 	}
-	editCursors(f, func(c Cursor, _ []rune) (int, int, []Item) {
-		from, to := c.Range()
-		return from, to, []Item{Chars{Text: s, Format: f.typeFormat(d, from)}}
-	})
+	if rs := []rune(s); len(rs) == 1 && rs[0] != '\n' && f.AutoClose != nil {
+		f.typePaired(d, rs[0])
+	} else {
+		editCursors(f, func(c Cursor, _ []rune) (int, int, []Item) {
+			from, to := c.Range()
+			return from, to, []Item{Chars{Text: s, Format: f.typeFormat(d, from)}}
+		})
+	}
 	f.histKind = ""
 	f.pending, f.caretOff = Format{}, false
+	if len([]rune(s)) == 1 && s != "\n" {
+		f.updateSuggestions()
+	} else {
+		f.closeSuggestions()
+	}
 	return true
 }
 
@@ -358,7 +367,15 @@ func (f *TextFlow) CutText() (string, bool) {
 // HandleKey implements KeyHandler: the editing keys while the caret is in
 // the text; Escape otherwise clears the selection.
 func (f *TextFlow) HandleKey(key string, shift bool) bool {
+	if f.Editing() && f.suggestKey(key) {
+		return true
+	}
 	if f.Editing() && f.editKey(key, shift) {
+		if key == "Backspace" || key == "Delete" {
+			f.updateSuggestions()
+		} else {
+			f.closeSuggestions()
+		}
 		return true
 	}
 	if key == "Escape" && f.HasSelection() {

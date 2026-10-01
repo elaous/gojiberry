@@ -346,3 +346,26 @@ func TestStylesProp(t *testing.T) {
 		t.Errorf("changed props replace the styles: %v", flow.Styles)
 	}
 }
+
+func TestTextFlowEditingAssistProps(t *testing.T) {
+	r, _ := newRoot()
+	tree := func(vocab []string) gox.Node {
+		return Canvas(CanvasProps{Width: 300, Height: 300, Children: []gox.Node{
+			TextFlow(TextFlowProps{Text: "x", PageCount: 1, PageWidth: 200, PageHeight: 200,
+				AutoClose: canvas.DefaultAutoClose(), Complete: true, Vocabulary: vocab}),
+		}})
+	}
+	if err := r.Render(tree([]string{"alpha"})); err != nil {
+		t.Fatal(err)
+	}
+	fl := r.Find(TagTextFlow, 0).(*canvas.TextFlow)
+	if fl.AutoClose['('] != ')' || !fl.Complete || len(fl.Vocabulary) != 1 {
+		t.Fatalf("%+v %v", fl.AutoClose, fl.Vocabulary)
+	}
+	if err := r.Render(tree([]string{"alpha", "beta"})); err != nil {
+		t.Fatal(err)
+	}
+	if len(fl.Vocabulary) != 2 {
+		t.Fatal("vocabulary updates")
+	}
+}
