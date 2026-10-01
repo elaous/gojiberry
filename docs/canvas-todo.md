@@ -107,8 +107,9 @@ Asked for, not started:
 - Outline: no collapsing of sections or drag-to-reorder; bookmarks are not
   drawn on the canvas (only listed).
 - **Map object** (OpenStreetMap tiles) and **flowcharts** as canvas objects.
-- **Multi-user editing**: the `crdt` and `syncserver` packages exist; the
-  `TextFlow` is not wired to them yet. Roles are the permission half.
+- **Multi-user editing**: designed in [multiuser-design.md](multiuser-design.md)
+  (one attributed character sequence, a bridge to the `TextFlow`, SSE + POST,
+  server-side roles); not started. Roles are the permission half.
 - Comments: a viewer cannot comment (comments need edit mode); an author list for
   `@username` completion; notifications for mentions.
 
