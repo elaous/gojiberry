@@ -1,6 +1,7 @@
 package canvas
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -554,14 +555,15 @@ func TestViewModeClearsSelectionAndMenu(t *testing.T) {
 func TestHandlesVisibleOnHover(t *testing.T) {
 	v, p := newView()
 	v.Draw()
-	if p.has("fillRect 44 -7") {
+	if p.has("fillRect 44 -5.5 2 2") {
 		t.Fatal("handles must be hidden when not hovered")
 	}
 	v.MouseMove(3, 3) // over the table handle counts as hovering the table
 	p.calls = nil
 	v.Draw()
-	// Column 0's grip: three 12x2 lines centered in the 80px-wide strip at x=10.
-	if !p.has("fillRect 44 -7 12 2") {
+	// Column 0's grip: a pill with six dots (three across), centered in the
+	// 80px-wide strip at x=10.
+	if !p.has("fillRect 44 -5.5 2 2") || !p.has("fillRect 54 -0.5 2 2") {
 		t.Fatalf("column grip not drawn: %v", p.calls)
 	}
 }
@@ -580,4 +582,35 @@ func TestEdges(t *testing.T) {
 func clickTableHandle(v *TableView) {
 	v.MouseDown(3, 3)
 	v.MouseUp(3, 3)
+}
+
+func TestHandlesAreGripPills(t *testing.T) {
+	v, p := newView()
+	v.Style = DarkTableStyle()
+	v.MouseMove(3, 3) // hovering the table shows its handles
+	p.calls = nil
+	v.Draw()
+	var dots, pillRows int
+	for _, c := range p.calls {
+		if strings.HasPrefix(c, "fillRect") && strings.HasSuffix(c, " 2 2") {
+			dots++
+		}
+		if strings.HasPrefix(c, "fillRect") && strings.HasSuffix(c, " 1") {
+			pillRows++
+		}
+	}
+	// Six dots on each of the two column handles and two row handles.
+	if dots != 6*4 {
+		t.Fatalf("grip dots drawn: %d", dots)
+	}
+	if pillRows < 8*4 {
+		t.Fatalf("the handles are rounded pills: %d rows", pillRows)
+	}
+	if DarkTableStyle().CellBG == DefaultTableStyle().CellBG {
+		t.Fatal("dark style differs")
+	}
+	// Hovering and selecting change the pill's color; narrow strips still draw.
+	v.Style.MinColWidth = 12
+	v.MouseDown(40, -2)
+	v.Draw()
 }

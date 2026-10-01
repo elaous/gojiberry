@@ -51,3 +51,13 @@ func DefaultTableStyle() TableStyle {
 		HandleIconColor: "#7b818b",
 	}
 }
+
+// DarkTableStyle is DefaultTableStyle for a dark page: the table and its
+// grips in dark grays, like Obsidian's dark theme.
+func DarkTableStyle() TableStyle {
+	s := DefaultTableStyle()
+	s.TextColor, s.HeaderBG, s.CellBG, s.GridColor = "#dcddde", "#2b2b2b", "#1e1e1e", "#3a3a3a"
+	s.BarColor, s.BarHoverColor, s.BarTextColor = "#2f2f2f", "#3d3d3d", "#a8a8a8"
+	s.SelectColor, s.HandleIconColor = "rgba(124, 92, 255, 0.25)", "#8a8a8a"
+	return s
+}
