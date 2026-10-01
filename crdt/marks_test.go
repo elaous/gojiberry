@@ -337,3 +337,93 @@ func BenchmarkTypeInMiddle(b *testing.B) {
 		})
 	}
 }
+
+func TestSpliceAndPositions(t *testing.T) {
+	a, b := pair("hello world")
+	if _, ok := a.Splice("d", 6, 5, []rune("there")); !ok {
+		t.Fatal("splice")
+	}
+	if cur, _ := a.Get("d"); cur.Content != "hello there" {
+		t.Fatal(cur.Content)
+	}
+	b.Splice("d", 0, 0, []rune(">> "))
+	sync2(a, b)
+	got, _ := a.Get("d")
+	other, _ := b.Get("d")
+	if got.Content != ">> hello there" || other.Content != got.Content {
+		t.Fatalf("%q %q", got.Content, other.Content)
+	}
+	for _, bad := range [][2]int{{-1, 0}, {0, -1}, {5, 99}, {99, 0}} {
+		if _, ok := a.Splice("d", bad[0], bad[1], nil); ok {
+			t.Errorf("%v should be refused", bad)
+		}
+	}
+	lww := NewDoc("l")
+	if _, ok := lww.Splice("d", 0, 0, []rune("x")); ok {
+		t.Fatal("LWW has no splice")
+	}
+	// Splicing into a block that does not exist yet creates it.
+	c := newCharDoc("c")
+	c.Splice("new", 0, 0, []rune("hi"))
+	if cur, _ := c.Get("new"); cur.Content != "hi" {
+		t.Fatal(cur)
+	}
+	// Positions survive edits and deletions.
+	ids := a.VisibleIDs("d")
+	if len(ids) != len(">> hello there") {
+		t.Fatal(len(ids))
+	}
+	anchor := ids[5] // 'l' of "hello"... position after it is 6
+	if p, ok := a.PositionAfter("d", anchor); !ok || p != 6 {
+		t.Fatalf("%d %v", p, ok)
+	}
+	a.Splice("d", 0, 3, nil) // remove ">> "
+	if p, _ := a.PositionAfter("d", anchor); p != 3 {
+		t.Fatalf("moved with the text: %d", p)
+	}
+	a.Splice("d", 2, 1, nil) // delete the anchor character itself
+	if p, ok := a.PositionAfter("d", anchor); !ok || p != 2 {
+		t.Fatalf("deleted anchor keeps its place: %d %v", p, ok)
+	}
+	if _, ok := a.PositionAfter("d", Timestamp{999, "zz"}); ok {
+		t.Fatal("unknown character")
+	}
+	if _, ok := a.PositionAfter("nope", anchor); ok || a.VisibleIDs("nope") != nil {
+		t.Fatal("unknown block")
+	}
+}
+
+func TestLWWBlocksInACharDoc(t *testing.T) {
+	a, b := newCharDoc("a"), newCharDoc("b")
+	a.Put(Block{ID: "comment:1", Kind: "lww:side", Content: `{"text":"one"}`})
+	sync2(a, b)
+	// Concurrent writes: the later whole value wins, not a character-wise merge.
+	a.Put(Block{ID: "comment:1", Kind: "lww:side", Content: `{"text":"from a"}`})
+	b.Put(Block{ID: "comment:1", Kind: "lww:side", Content: `{"text":"from b!"}`})
+	sync2(a, b)
+	ga, _ := a.Get("comment:1")
+	gb, _ := b.Get("comment:1")
+	if ga.Content != gb.Content || (ga.Content != `{"text":"from a"}` && ga.Content != `{"text":"from b!"}`) {
+		t.Fatalf("a whole value won: %q %q", ga.Content, gb.Content)
+	}
+	a.Delete("comment:1")
+	sync2(a, b)
+	if _, ok := b.Get("comment:1"); !ok {
+		t.Fatal("tombstone kept")
+	}
+	for _, blk := range b.Blocks() {
+		if blk.ID == "comment:1" {
+			t.Fatal("deleted block listed")
+		}
+	}
+	// A fresh replica gets them from a snapshot.
+	a.Put(Block{ID: "style:Loud", Kind: "lww:side", Content: "x"})
+	c := newCharDoc("c")
+	c.Apply(a.Snapshot()...)
+	if g, ok := c.Get("style:Loud"); !ok || g.Content != "x" {
+		t.Fatal(g)
+	}
+	if !LWWKind("lww") || LWWKind("para") {
+		t.Fatal("LWWKind")
+	}
+}

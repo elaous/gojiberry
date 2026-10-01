@@ -180,7 +180,7 @@ func TestNotesRoundTrip(t *testing.T) {
 		canvas.Chars{Text: "text", Format: canvas.Format{Index: "term", Bookmark: "b"}},
 		canvas.Inline{Object: &canvas.FootnoteRef{ID: "n1"}},
 		canvas.Inline{Object: &canvas.IndexObject{}, Block: true},
-		canvas.Inline{Object: &canvas.Rule{}, Block: true}, // objects without a saved form are dropped
+		canvas.Inline{Object: oddObject{}, Block: true}, // objects without a saved form are dropped
 	}}
 	f.Footnotes = canvas.NewFootnoteSet(canvas.Footnote{ID: "n1", Text: "the note"})
 	for _, c := range Formats() {
@@ -215,3 +215,39 @@ func TestNotesRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestRuleAndTableRoundTrip(t *testing.T) {
+	tbl := &canvas.Table{Cells: [][]string{{"a", "b"}, {"c", "d"}}}
+	f := &canvas.TextFlow{Items: []canvas.Item{
+		canvas.Inline{Object: &canvas.Rule{Color: "#123", Thickness: 2}, Block: true},
+		canvas.Inline{Object: canvas.NewTableObject(tbl), Block: true},
+	}}
+	for _, c := range Formats() {
+		data, err := c.Marshal(FromFlow("T", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := c.Unmarshal(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		items := ToItems(d.Content)
+		if len(items) != 2 {
+			t.Fatalf("%s: %d items", c.Name(), len(items))
+		}
+		if r := items[0].(canvas.Inline).Object.(*canvas.Rule); r.Color != "#123" || r.Thickness != 2 {
+			t.Fatalf("%s: %+v", c.Name(), r)
+		}
+		if got := items[1].(canvas.Inline).Object.(*canvas.TableObject).View.Table.Cells; !reflect.DeepEqual(got, tbl.Cells) {
+			t.Fatalf("%s: %v", c.Name(), got)
+		}
+	}
+	if got := ToItems([]Item{{Table: &TableItem{}}}); len(got) != 1 {
+		t.Fatal("an empty table still has a cell")
+	}
+}
+
+type oddObject struct{}
+
+func (oddObject) Measure(canvas.Painter, float64, float64) (float64, float64) { return 1, 1 }
+func (oddObject) DrawAt(canvas.Painter, float64, float64)                     {}
