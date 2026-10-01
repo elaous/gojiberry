@@ -484,6 +484,9 @@ func (f *TextFlow) WantsFocus() bool { return f.HasSelection() || f.Editing() }
 // MouseDownMods implements ModMouseDowner: Ctrl/Cmd+click in the text
 // adds a cursor.
 func (f *TextFlow) MouseDownMods(x, y float64, m Mods) bool {
+	if (m.Ctrl || m.Meta) && f.mode == ModeEdit && f.openLinkAt(x, y) {
+		return true
+	}
 	if (m.Ctrl || m.Meta) && f.Editing() && f.Painter != nil && !f.obstructed(x, y) && f.inText(x, y) {
 		o, after := f.offsetAt(x, y)
 		f.SetCursors(normalize(append(f.Cursors(), Cursor{Anchor: o, Caret: o, After: after})))

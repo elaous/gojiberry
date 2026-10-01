@@ -23,7 +23,9 @@ const sample = "# Gojiberry editor\n\n" +
 	"The text flows across the pages, around the picture and the table. Edit this paragraph, then add some more text so that it " +
 	"runs on to the next sheet. Edit this paragraph, then add some more text so that it runs on to the next sheet. " +
 	"Edit this paragraph, then add some more text so that it runs on to the next sheet.\n\n" +
-	"H~2~O and E=mc^2^, ~~struck~~, ++underlined++ and ==highlighted== text, `code` too."
+	"H~2~O and E=mc^2^, ~~struck~~, ++underlined++ and ==highlighted== text, `code` too. " +
+	"Hover the link to [Gojiberry on GitHub](https://github.com/elaous/gojiberry) for its address.\n\n" +
+	"- bullets and\n- numbered lists work: try Ctrl+Shift+8 and Ctrl+Shift+7\n- [ ] check boxes too (click the box in edit mode)"
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160">
 <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">

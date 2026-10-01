@@ -8,7 +8,8 @@ import (
 
 // Callbacks are how the canvas reports what happened in it.
 type Callbacks struct {
-	OnFlow  func(*cv.TextFlow)
+	OnFlow      func(*cv.TextFlow)
+	OnHoverLink func(url string)
 	OnNote  func(*cv.FloatingText)
 	OnTable func(*cv.Table)
 }
@@ -29,6 +30,7 @@ func Doc(state State, cb Callbacks) gox.Node {
 				pageWidth={560} pageHeight={420}
 				margins={[]float64{60, 50, 60, 50}}
 				onChange={cb.OnFlow}
+				onHoverLink={cb.OnHoverLink}
 				pages={func(page gox.Node, n int) gox.Node {
 					return <>
 						<canvas.Header text="Gojiberry editor" />

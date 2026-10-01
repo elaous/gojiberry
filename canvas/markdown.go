@@ -31,7 +31,7 @@ import (
 type Markdown struct {
 	CodeFamily     string     // default "monospace"
 	HeadingScale   [6]float64 // size multipliers for # to ######; default 2, 1.6, 1.35, 1.2, 1.05, 1
-	LinkColor      string     // default "#1a5fb4"
+	LinkColor      string     // default LinkColor ("#1a5fb4")
 	CodeBackground string     // default "#eceef1"
 	MarkBackground string     // ==highlight==, default "#fff3a3"
 	QuoteColor     string     // default "#5b616b"
@@ -432,10 +432,13 @@ func (m Markdown) inline(s string, base Format) []Item {
 			}
 
 		case c == '[':
-			if label, _, end, ok := parseLink(r, i); ok {
+			if label, url, end, ok := parseLink(r, i); ok {
 				flush()
 				f := st.format(base, m)
-				f.Color, f.Underline = orStr(m.LinkColor, "#1a5fb4"), true
+				f.Link = url
+				if m.LinkColor != "" {
+					f.Color = m.LinkColor
+				}
 				out = append(out, m.inline(label, f)...)
 				i = end
 				continue

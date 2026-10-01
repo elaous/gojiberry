@@ -54,6 +54,8 @@ type (
 	// CursorProvider returns a CSS cursor for the last pointer
 	// position, or "" for no opinion.
 	CursorProvider interface{ CSSCursor() string }
+	// LinkHandlerSetter receives the Stage's handler for opening a link.
+	LinkHandlerSetter interface{ SetLinkHandler(open func(url string)) }
 	// Blinker toggles a caret's visibility; true means redraw.
 	Blinker interface{ SetCaretVisible(on bool) bool }
 )
@@ -83,6 +85,12 @@ type Stage struct {
 	// Redraw, if set, redraws the stage (Bind sets it); feature
 	// commands that finish later call it.
 	Redraw func()
+	// Prompt asks the user for a line of text; Bind sets it to the
+	// browser's prompt. Commands that need it decline without it.
+	Prompt func(message, initial string) (string, bool)
+	// OpenLink opens a clicked link's URL; Bind sets it to open a new
+	// browser tab.
+	OpenLink func(url string)
 	// OnDraw, if set, is called after every Draw (demos use it to
 	// publish state).
 	OnDraw func()
@@ -104,6 +112,13 @@ func (s *Stage) Add(cs ...Drawer) {
 		}
 		if fs, ok := c.(FormatClipboardSetter); ok && s.Formats != nil {
 			fs.SetFormatClipboard(s.Formats)
+		}
+		if ls, ok := c.(LinkHandlerSetter); ok {
+			ls.SetLinkHandler(func(url string) {
+				if s.OpenLink != nil {
+					s.OpenLink(url)
+				}
+			})
 		}
 	}
 }
@@ -264,7 +279,7 @@ func (s *Stage) HandleChord(chord string) bool {
 func (s *Stage) RunCommand(cmd Command) bool {
 	if s.Features != nil && s.Features.Has(cmd) {
 		if t := s.EditTarget(); t != nil {
-			ctx := &CommandContext{Target: t, Clipboard: &s.Clipboard, Formats: s.Formats, Redraw: s.Redraw}
+			ctx := &CommandContext{Target: t, Clipboard: &s.Clipboard, Formats: s.Formats, Redraw: s.Redraw, Prompt: s.Prompt, OpenLink: s.OpenLink}
 			if s.Features.Run(cmd, ctx) {
 				return true
 			}
