@@ -34,6 +34,9 @@ type Format struct {
 	Comment string
 	// Bookmark names this text as a place a link ("#name") can jump to.
 	Bookmark string
+	// Index marks this text as an entry of the alphabetical index, under
+	// this term (see IndexObject).
+	Index string
 }
 
 // CaseKind is how letters are displayed; see Format.Case.

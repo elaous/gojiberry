@@ -61,6 +61,17 @@ them, the current one marked, and a click goes there (`GotoOffset`, with the
 Ctrl/Cmd+Alt+G goes to one, `bookmark.remove` removes it, and a link to
 `#name` jumps to it; `components.BookmarkList` lists them.
 
+**Footnotes, table of contents, index** -- Ctrl/Cmd+Alt+F adds a footnote at the
+caret: a mark in the text (an inline object, numbered in text order) and the
+note's text drawn under a short rule in a band kept at the bottom of every
+page (`FootnoteBand`, 64px by default, only while there are notes; a note too
+long for the band is cut with an ellipsis). `toc.insert` puts a table of
+contents (the outline with page numbers) in the text; Ctrl/Cmd+Alt+X marks
+the selection as an index entry (`Format.Index`) and `index.insert` puts the
+alphabetical index (terms, with their pages) in; both blocks keep themselves
+current, with page numbers settling one redraw after a change. `docfile` saves
+all of it; `components.FootnoteList` lists the notes.
+
 **Roles and comments** -- `canvas.Role` (owner, editor, viewer; the zero value is
 owner): a viewer's components are held in view mode (`Stage.SetRole`, the gox
 `Canvas` `role` prop), only owners and editors comment. `docstore.ACL.RoleOf`
@@ -90,8 +101,9 @@ in the selector is downloaded into the store the first time the text uses it
 
 Asked for, not started:
 
-- **Index** (table of contents and an alphabetical index with entries marked in
-  the text) and **footnotes**. Both can build on the outline and bookmarks.
+- Footnotes sit in a fixed band per page rather than pushing text to the next
+  page; the table of contents and index are not clickable; a footnote cannot
+  be edited on the page itself (use the list or `footnote.edit`).
 - Outline: no collapsing of sections or drag-to-reorder; bookmarks are not
   drawn on the canvas (only listed).
 - **Map object** (OpenStreetMap tiles) and **flowcharts** as canvas objects.

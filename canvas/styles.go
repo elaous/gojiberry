@@ -80,6 +80,9 @@ func mergeFormat(under, over Format) Format {
 	if over.Bookmark != "" {
 		out.Bookmark = over.Bookmark
 	}
+	if over.Index != "" {
+		out.Index = over.Index
+	}
 	out.Underline = out.Underline || over.Underline
 	out.Strike = out.Strike || over.Strike
 	out.Superscript = out.Superscript || over.Superscript

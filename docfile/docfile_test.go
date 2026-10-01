@@ -173,3 +173,45 @@ func TestCommentsRoundTripThroughFlow(t *testing.T) {
 		t.Fatal("nil set")
 	}
 }
+
+func TestNotesRoundTrip(t *testing.T) {
+	f := &canvas.TextFlow{Items: []canvas.Item{
+		canvas.Inline{Object: &canvas.TOCObject{Title: "Contents"}, Block: true}, canvas.Chars{Text: "\n"},
+		canvas.Chars{Text: "text", Format: canvas.Format{Index: "term", Bookmark: "b"}},
+		canvas.Inline{Object: &canvas.FootnoteRef{ID: "n1"}},
+		canvas.Inline{Object: &canvas.IndexObject{}, Block: true},
+		canvas.Inline{Object: &canvas.Rule{}, Block: true}, // objects without a saved form are dropped
+	}}
+	f.Footnotes = canvas.NewFootnoteSet(canvas.Footnote{ID: "n1", Text: "the note"})
+	for _, c := range Formats() {
+		data, err := c.Marshal(FromFlow("T", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := c.Unmarshal(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g := &canvas.TextFlow{}
+		d.Apply(g)
+		items := g.ContentItems()
+		if len(items) != 5 {
+			t.Fatalf("%s: %d items: %#v", c.Name(), len(items), items)
+		}
+		if toc, ok := items[0].(canvas.Inline); !ok || !toc.Block || toc.Object.(*canvas.TOCObject).Title != "Contents" {
+			t.Fatalf("%s: toc %#v", c.Name(), items[0])
+		}
+		if ch := items[2].(canvas.Chars); ch.Format.Index != "term" || ch.Format.Bookmark != "b" {
+			t.Fatalf("%s: %#v", c.Name(), ch)
+		}
+		if ref := items[3].(canvas.Inline).Object.(*canvas.FootnoteRef); ref.ID != "n1" {
+			t.Fatal(ref)
+		}
+		if _, ok := items[4].(canvas.Inline).Object.(*canvas.IndexObject); !ok {
+			t.Fatal("index block")
+		}
+		if n, ok := g.Footnotes.Get("n1"); !ok || n.Text != "the note" {
+			t.Fatal(n)
+		}
+	}
+}

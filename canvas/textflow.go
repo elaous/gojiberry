@@ -197,6 +197,11 @@ type TextFlow struct {
 	// Comments holds the comments Format.Comment refers to; the text they
 	// are on is highlighted and, hovered, shows a tip with the summary.
 	Comments *CommentSet
+	// Footnotes holds the notes FootnoteRef marks in the text refer to;
+	// FootnoteBand is the height kept at the bottom of every page for them
+	// (DefaultFootnoteBand if zero) while there are any.
+	Footnotes    *FootnoteSet
+	FootnoteBand float64
 	// Author is who new comments are by (a name or e-mail address).
 	Author string
 	// OnHoverComment is called with the ID of the comment the pointer
@@ -230,6 +235,7 @@ type TextFlow struct {
 	hoverComment   string
 	revealAt       int
 	revealPending  bool
+	lastLay        Layout // the layout of the latest Draw, for objects that show the document's own structure
 	hoverCRect     [4]float64
 	sugg           *Menu // completion popup
 	suggFrom       int   // where the word being completed starts
@@ -336,9 +342,11 @@ func (f *TextFlow) pageCount() int {
 // pageRect is the rectangle text flows into on a page.
 func (f *TextFlow) pageRect(page int) (x, y, w, h float64) {
 	if f.Pages != nil {
-		return f.Pages.ContentRect(page)
+		x, y, w, h = f.Pages.ContentRect(page)
+	} else {
+		x, y, w, h = f.X, f.Y, f.Width, f.Height
 	}
-	return f.X, f.Y, f.Width, f.Height
+	return x, y, w, max(h-f.footnoteBand(), 0)
 }
 
 // config returns column config idx (-1: the base Columns and Gap).
@@ -442,6 +450,7 @@ func (f *TextFlow) flatten() *flowData {
 		return id
 	}
 	prevLetter := false
+	notes := 0 // footnote marks so far, to number them
 	for idx, it := range f.items() {
 		switch it := it.(type) {
 		case Chars:
@@ -456,6 +465,13 @@ func (f *TextFlow) flatten() *flowData {
 				}
 			}
 		case Inline:
+			switch o := it.Object.(type) {
+			case *FootnoteRef:
+				notes++
+				o.N = notes
+			case flowBinder:
+				o.bindFlow(f)
+			}
 			id := styleFor(Format{}, false)
 			d.objs[len(d.runes)] = it
 			d.runes = append(d.runes, objectRune)
@@ -1316,8 +1332,10 @@ func (f *TextFlow) Draw() {
 	}
 
 	lay := f.Layout()
+	f.lastLay = lay
 	f.drawSelection(lay)
 	defer f.drawCarets()
+	defer f.drawFootnotes(lay)
 	p.SetTextAlign("left")
 	p.SetTextBaseline("alphabetic")
 	for _, ln := range lay.Lines {

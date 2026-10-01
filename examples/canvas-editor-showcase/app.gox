@@ -38,6 +38,7 @@ func Doc(state State, cb Callbacks) gox.Node {
 				onChange={cb.OnFlow}
 				onHoverLink={cb.OnHoverLink}
 				comments={state.Comments}
+				footnotes={state.Footnotes}
 				author={state.Author}
 				onHoverComment={cb.OnHoverComment}
 				pages={func(page gox.Node, n int) gox.Node {
