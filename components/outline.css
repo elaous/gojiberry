@@ -15,3 +15,10 @@
 .gj-bookmark-link { font-size: 0.8em; color: var(--gj-accent); }
 .gj-bookmark-remove { padding: 0.2em 0.6em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); cursor: pointer; font: inherit; font-size: 0.8em; }
 .gj-bookmark-remove:disabled { opacity: 0.5; cursor: default; }
+
+.gj-footnotes { display: flex; flex-direction: column; gap: 0.4em; }
+.gj-footnote { display: flex; align-items: flex-start; gap: 0.5em; padding: 0.25em 0; border-bottom: 1px solid var(--gj-border); }
+.gj-footnote-num { min-width: 1.6em; padding: 0 0.3em; border: 0; border-radius: 3px; background: var(--gj-bg-muted); color: var(--gj-accent); font: inherit; font-weight: 600; cursor: pointer; }
+.gj-footnote-text { flex: 1; min-width: 0; font-size: 0.9em; }
+.gj-footnote-edit, .gj-footnote-delete { padding: 0.2em 0.6em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); cursor: pointer; font: inherit; font-size: 0.8em; }
+.gj-footnote-edit:disabled, .gj-footnote-delete:disabled { opacity: 0.5; cursor: default; }

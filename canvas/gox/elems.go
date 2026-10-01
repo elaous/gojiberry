@@ -72,6 +72,10 @@ func (f *flowElem) Update(_ *Context, props any, _ []gox.Node) (bool, error) {
 	}
 	fl.AutoClose, fl.Complete, fl.Completer = p.AutoClose, p.Complete, p.Completer
 	fl.Comments, fl.Author, fl.OnHoverComment = p.Comments, p.Author, p.OnHoverComment
+	if p.Footnotes != fl.Footnotes || p.FootnoteBand != fl.FootnoteBand {
+		fl.Footnotes, fl.FootnoteBand = p.Footnotes, p.FootnoteBand
+		changed = true
+	}
 	if first || !reflect.DeepEqual(p.Vocabulary, old.Vocabulary) {
 		fl.Vocabulary = append([]string(nil), p.Vocabulary...)
 		changed = true

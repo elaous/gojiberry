@@ -19,13 +19,14 @@ import (
 
 // Document is one saved document.
 type Document struct {
-	Title    string      `json:"title,omitempty" pb:"1"`
-	Updated  int64       `json:"updated,omitempty" pb:"2"` // unix nanoseconds
-	Content  []Item      `json:"content,omitempty" pb:"3"`
-	Styles   []StyleDef  `json:"styles,omitempty" pb:"4"`
-	Fonts    []FontRef   `json:"fonts,omitempty" pb:"5"`
-	Meta     []MetaEntry `json:"meta,omitempty" pb:"6"`
-	Comments []Comment   `json:"comments,omitempty" pb:"7"`
+	Title     string      `json:"title,omitempty" pb:"1"`
+	Updated   int64       `json:"updated,omitempty" pb:"2"` // unix nanoseconds
+	Content   []Item      `json:"content,omitempty" pb:"3"`
+	Styles    []StyleDef  `json:"styles,omitempty" pb:"4"`
+	Fonts     []FontRef   `json:"fonts,omitempty" pb:"5"`
+	Meta      []MetaEntry `json:"meta,omitempty" pb:"6"`
+	Comments  []Comment   `json:"comments,omitempty" pb:"7"`
+	Footnotes []Footnote  `json:"footnotes,omitempty" pb:"8"`
 }
 
 // MetaEntry is a free-form key and value kept with the document.
@@ -40,6 +41,28 @@ type Item struct {
 	Columns *Columns `json:"columns,omitempty" pb:"2"`
 	Break   *Break   `json:"break,omitempty" pb:"3"`
 	Para    *Para    `json:"para,omitempty" pb:"4"`
+	// Footnote is a footnote mark; TOC and Index are the generated blocks.
+	Footnote *FootnoteMark `json:"footnote,omitempty" pb:"5"`
+	TOC      *Block        `json:"toc,omitempty" pb:"6"`
+	Index    *Block        `json:"index,omitempty" pb:"7"`
+}
+
+// FootnoteMark is a footnote mark in the text; its text is in
+// Document.Footnotes under ID.
+type FootnoteMark struct {
+	ID string `json:"id" pb:"1"`
+}
+
+// Block is a generated block (table of contents or index); Title is its
+// heading, empty for the default.
+type Block struct {
+	Title string `json:"title,omitempty" pb:"1"`
+}
+
+// Footnote is a note's text.
+type Footnote struct {
+	ID   string `json:"id" pb:"1"`
+	Text string `json:"text,omitempty" pb:"2"`
 }
 
 // Chars is a run of text with one format.
@@ -78,6 +101,7 @@ type Format struct {
 	Link        string  `json:"link,omitempty" pb:"14"`
 	Comment     string  `json:"comment,omitempty" pb:"15"`
 	Bookmark    string  `json:"bookmark,omitempty" pb:"16"`
+	Index       string  `json:"index,omitempty" pb:"17"`
 }
 
 // List mirrors canvas.ListStyle.
@@ -249,6 +273,15 @@ func FromItems(items []canvas.Item) []Item {
 			p := &Para{}
 			copyFields(p, v)
 			out = append(out, Item{Para: p})
+		case canvas.Inline:
+			switch o := v.Object.(type) {
+			case *canvas.FootnoteRef:
+				out = append(out, Item{Footnote: &FootnoteMark{ID: o.ID}})
+			case *canvas.TOCObject:
+				out = append(out, Item{TOC: &Block{Title: o.Title}})
+			case *canvas.IndexObject:
+				out = append(out, Item{Index: &Block{Title: o.Title}})
+			}
 		}
 	}
 	return out
@@ -273,6 +306,12 @@ func ToItems(items []Item) []canvas.Item {
 			var p canvas.ParaFormat
 			copyFields(&p, *it.Para)
 			out = append(out, p)
+		case it.Footnote != nil:
+			out = append(out, canvas.Inline{Object: &canvas.FootnoteRef{ID: it.Footnote.ID}})
+		case it.TOC != nil:
+			out = append(out, canvas.Inline{Object: &canvas.TOCObject{Title: it.TOC.Title}, Block: true})
+		case it.Index != nil:
+			out = append(out, canvas.Inline{Object: &canvas.IndexObject{Title: it.Index.Title}, Block: true})
 		}
 	}
 	return out
@@ -303,7 +342,7 @@ func ToStyles(defs []StyleDef) []canvas.StyleDef {
 // FromFlow captures a TextFlow's content and styles as a Document with
 // the given title.
 func FromFlow(title string, f *canvas.TextFlow) Document {
-	return Document{Title: title, Content: FromItems(f.ContentItems()), Styles: FromStyles(f.Styles), Comments: FromComments(f.Comments)}
+	return Document{Title: title, Content: FromItems(f.ContentItems()), Styles: FromStyles(f.Styles), Comments: FromComments(f.Comments), Footnotes: FromFootnotes(f.Footnotes)}
 }
 
 // Apply puts the document's content and styles into f, replacing what
@@ -314,6 +353,7 @@ func (d Document) Apply(f *canvas.TextFlow) {
 	f.Items = ToItems(d.Content)
 	f.Styles = ToStyles(d.Styles)
 	f.Comments = ToComments(d.Comments)
+	f.Footnotes = ToFootnotes(d.Footnotes)
 }
 
 // Get returns the value of a Meta key.
@@ -367,4 +407,23 @@ func ToFonts(refs []FontRef) []fonts.Font {
 		out = append(out, f)
 	}
 	return out
+}
+
+// FromFootnotes converts a footnote set (nil gives none); only notes
+// that something refers to are worth saving, so callers may prune first.
+func FromFootnotes(set *canvas.FootnoteSet) []Footnote {
+	var out []Footnote
+	for _, n := range set.List() {
+		out = append(out, Footnote{ID: n.ID, Text: n.Text})
+	}
+	return out
+}
+
+// ToFootnotes converts saved footnotes back to a set.
+func ToFootnotes(list []Footnote) *canvas.FootnoteSet {
+	set := canvas.NewFootnoteSet()
+	for _, n := range list {
+		set.Add(canvas.Footnote{ID: n.ID, Text: n.Text})
+	}
+	return set
 }

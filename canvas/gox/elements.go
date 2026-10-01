@@ -88,7 +88,11 @@ type TextFlowProps struct {
 	AutoClose map[rune]rune
 	// Comments are the comments Format.Comment refers to (share the set
 	// with the DOM side to list them); Author is who new ones are by.
-	Comments       *canvas.CommentSet
+	Comments *canvas.CommentSet
+	// Footnotes holds the notes the footnote marks in the text refer to;
+	// FootnoteBand is the room kept at the bottom of each page for them.
+	Footnotes      *canvas.FootnoteSet
+	FootnoteBand   float64
 	Author         string
 	OnHoverComment func(id string)
 	Complete       bool

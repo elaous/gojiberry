@@ -518,3 +518,22 @@ func TestOutlineAndBookmarkComponents(t *testing.T) {
 	mustContain(t, render(t, BookmarkList(BookmarksProps{CanEdit: true, Bookmarks: []canvas.Bookmark{{Name: "a"}}})), "disabled")
 	mustContain(t, render(t, BookmarkList(BookmarksProps{})), "No bookmarks")
 }
+
+func TestFootnoteListComponent(t *testing.T) {
+	var log []string
+	entries := []canvas.FootnoteEntry{{N: 1, ID: "n1", Text: "See **this**"}, {N: 2, ID: "n2", Text: "plain"}}
+	n := FootnoteList(FootnoteListProps{Entries: entries, CanEdit: true,
+		OnGoto: func(e canvas.FootnoteEntry) { log = append(log, "go:"+e.ID) }, OnEdit: func(e canvas.FootnoteEntry) { log = append(log, "edit:"+e.ID) },
+		OnDelete: func(e canvas.FootnoteEntry) { log = append(log, "del:"+e.ID) }})
+	mustContain(t, render(t, n), `data-note="n1"`, "<strong>this</strong>", ">2<", "gj-footnote-edit")
+	for _, h := range findHandlers(n, "click") {
+		h(gox.Event{})
+	}
+	if got := strings.Join(log, " "); got != "go:n1 edit:n1 del:n1 go:n2 edit:n2 del:n2" {
+		t.Fatal(got)
+	}
+	view := FootnoteList(FootnoteListProps{Entries: entries})
+	mustNotContain(t, render(t, view), "Edit", "Delete")
+	mustContain(t, render(t, FootnoteList(FootnoteListProps{Entries: entries[:1], CanEdit: true})), "disabled")
+	mustContain(t, render(t, FootnoteList(FootnoteListProps{})), "No footnotes")
+}
