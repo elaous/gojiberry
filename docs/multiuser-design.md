@@ -1,7 +1,7 @@
 # Multi-user editing: design
 
-Status: proposal. Nothing here is built yet, except roles (`canvas.Role`) and
-comments, which this design builds on.
+Status: **phase 1 (`crdt` marks) is done**; phases 2-4 are not started. Roles
+(`canvas.Role`) and comments, which this design builds on, exist.
 
 ## What exists
 
@@ -126,7 +126,7 @@ connected.
 
 ## Plan
 
-1. **`crdt`: marks.** A `Mark` op and list with id anchors, resolution by
+1. **`crdt`: marks. Done.** A `Mark` op and list with id anchors, resolution by
    sweep, snapshot; paragraph and object attributes on characters; an
    id-to-index map so edits are not O(n); convergence fuzz tests (random edits
    and formatting, shuffled and duplicated delivery).
@@ -153,3 +153,31 @@ blocks.
 2. **Transport**: SSE + POST (no new dependency, recommended) or WebSocket.
 3. **Undo while connected**: per-user undo (right, more work) or clear on
    remote change (simple, a visible limit).
+
+## Phase 1 as built
+
+In `crdt`: `Mark` and `Anchor` (a gap named by a character id and a side; the
+zero id is the text's start or end), `Doc.Format(block, from, to, key, value,
+growEnd)` (one op for any range), `Doc.Runs(block)` and `Text.Runs()` (the
+sweep), `CharMark` ops in snapshots. Under MergeLWW there is no formatting.
+
+Two fixes the design needed along the way:
+
+- **Delivery order.** An insert whose origin had not arrived used to be
+  appended at the end, so replicas receiving ops out of causal order could
+  diverge. Such inserts are now held until their origin arrives.
+- **Loading cost.** Finding a character was a linear scan, so loading a
+  snapshot was O(n^2). A position cache, extended lazily, makes it linear.
+
+Measured here: loading and reading a 100,000-character formatted snapshot takes
+about 80 ms; one keystroke in the *middle* of a 10,000-character text costs about
+0.2 ms and of a 100,000-character text about 4 ms (the cache is rebuilt behind
+the insertion). Typing at the end costs next to nothing. A balanced tree would
+make the middle case logarithmic; it is not needed at document sizes up to tens
+of thousands of characters.
+
+Tests: unit tests for runs, grow-at-end rules, concurrent insert inside a
+range, deleted anchors, marks arriving before their characters, idempotence and
+snapshots; and a randomised test (150 trials, three replicas, random edits and
+formatting delivered late, out of order and twice) asserting the same text and
+formatting everywhere, including on a replica onboarded from a snapshot.

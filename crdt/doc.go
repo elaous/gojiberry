@@ -116,6 +116,46 @@ func (d *Doc) putCharCRDT(b Block) Op {
 	return op
 }
 
+// Format marks the visible characters [from, to) of block id with key =
+// value (an empty value removes the key there) and queues the op. It is a
+// single small op however long the range is. growEnd says whether text
+// typed at the end of the range joins it (bold, colour) or not (links,
+// comments); text typed at its start never does. Formatting needs
+// MergeCharCRDT, and reports false (and does nothing) under MergeLWW, for
+// an unknown block, or for an empty or out-of-range span.
+func (d *Doc) Format(id string, from, to int, key, value string, growEnd bool) (Op, bool) {
+	if d.strategy != MergeCharCRDT {
+		return Op{}, false
+	}
+	text, ok := d.texts[id]
+	if !ok {
+		return Op{}, false
+	}
+	start, end, ok := text.anchorsFor(from, to, growEnd)
+	if !ok {
+		return Op{}, false
+	}
+	ts := d.tick()
+	m := Mark{ID: ts, Key: key, Value: value, Start: start, End: end}
+	text.addMark(m)
+	op := Op{Block: d.blocks[id].block, TS: ts, CharOps: []CharOp{{Kind: CharMark, Mark: &m}}}
+	d.outbox = append(d.outbox, op)
+	return op, true
+}
+
+// Runs returns block id's visible text as runs of equal formatting (one
+// run, with no attributes, for a block that was never formatted). Only
+// MergeCharCRDT documents have formatting.
+func (d *Doc) Runs(id string) []Run {
+	if text, ok := d.texts[id]; ok {
+		return text.Runs()
+	}
+	if b, ok := d.blocks[id]; ok && b.block.Content != "" {
+		return []Run{{Text: b.block.Content, Attrs: map[string]string{}}}
+	}
+	return nil
+}
+
 // textFor returns the Text for a block ID, creating an empty one on
 // first use.
 func (d *Doc) textFor(id string) *Text {
@@ -171,6 +211,10 @@ func (d *Doc) applyLWW(op Op) {
 func (d *Doc) applyCharCRDT(op Op) {
 	text := d.textFor(op.Block.ID)
 	for _, c := range op.CharOps {
+		d.observe(c.ID) // keep later local writes after everything seen
+		if c.Mark != nil {
+			d.observe(c.Mark.ID)
+		}
 		text.apply(c)
 	}
 
