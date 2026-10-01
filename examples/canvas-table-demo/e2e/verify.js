@@ -49,7 +49,7 @@ run(async () => {
   await d.click(colX, 24);
   s = await d.state();
   assert(s.selection.kind === 'column' && s.selection.index === 1 && s.menuOpen, 'column grip selects it and opens the menu');
-  const grip = await d.pixel(s.colEdges[1] + 4, 24);
+  const grip = await d.pixel(Math.round(colX) - 10, 24); // the pill, left of its dots
   assert(grip[0] === 0x7c && grip[1] === 0x5c && grip[2] === 0xff, 'selected column grip is drawn in the accent color');
 
   // "Insert column left" is the menu's first item.
