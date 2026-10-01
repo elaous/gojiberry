@@ -13,6 +13,7 @@ import (
 // type LoaderFunc without living in this package.
 type LoaderInput struct {
 	Alias      string // the bound identifier: the import's alias, or one derived from the filename
+	AliasGiven bool   // the import spec wrote an alias (possibly "_"), rather than Alias being derived
 	TypeName   string // set from an optional `alias.(TypeName) "path"` annotation; "" if not given
 	Path       string // the import path exactly as written in the .gox source
 	BaseDir    string // the .gox file's directory; resource paths resolve relative to it, like go:embed
@@ -55,6 +56,7 @@ var loaders = map[string]LoaderFunc{
 	".json":  loadJSON,
 	".jsonc": loadJSON,
 	".jsonl": loadJSON,
+	".css":   loadCSS,
 }
 
 // experimentalExtensions are resource-import extensions gox recognizes
@@ -99,16 +101,26 @@ func DeriveIdent(path string) string {
 	return s
 }
 
-// ResolveResourcePath resolves in.Path relative to in.BaseDir (the
-// same convention go:embed uses: relative to the source file's
-// directory, not the module root or a fetched URL) and confirms it
-// exists. Exported for internal/transpile/experimental's loaders.
+// ResolveResourcePath finds the file a resource import names. The path
+// is, in order:
+//
+//   - relative to in.BaseDir (the .gox file's directory), the way go:embed
+//     paths are -- "style.css", "./theme/dark.css";
+//   - a path in the current module, written as for a Go package:
+//     "<module path>/components/button.css";
+//   - a path in a module the current one requires (found with `go list
+//     -m`, so it works with the module cache, vendoring and replace).
+//
+// Exported for internal/transpile/experimental's loaders.
 func ResolveResourcePath(in LoaderInput) (string, error) {
-	abs := filepath.Join(in.BaseDir, in.Path)
-	if _, err := os.Stat(abs); err != nil {
-		return "", fmt.Errorf("gox: resource import %q in %s: %w (resolved to %s)", in.Path, in.SourceFile, err, abs)
+	rel := filepath.Join(in.BaseDir, in.Path)
+	if _, err := os.Stat(rel); err == nil {
+		return rel, nil
 	}
-	return abs, nil
+	if abs, ok := resolveInModules(in.BaseDir, in.Path); ok {
+		return abs, nil
+	}
+	return "", fmt.Errorf("gox: resource import %q in %s: no such file relative to %s, in this module, or in a required module", in.Path, in.SourceFile, in.BaseDir)
 }
 
 // FindModuleRoot is module.go's findModuleRoot, exported for

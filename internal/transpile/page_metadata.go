@@ -5,7 +5,6 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
-	"os"
 	"path"
 	"sort"
 	"strconv"
@@ -93,25 +92,10 @@ func processPageMetadata(filename, baseDir, src string) (string, error) {
 			continue
 		}
 
-		var declText strings.Builder
+		if len(stylesheets) > 0 {
+			return "", fmt.Errorf("%s: @stylesheets on func %s is no longer supported: import the stylesheet instead, `import _ \"<module path>/%s\"`, and gox.Document includes it", filename, fn.Name.Name, stylesheets[0])
+		}
 		var headExprs []string
-		for _, sheet := range stylesheets {
-			abs, err := ResolveResourcePath(LoaderInput{Path: sheet, BaseDir: baseDir, SourceFile: filename})
-			if err != nil {
-				return "", fmt.Errorf("%s: @stylesheets on func %s: %w", filename, fn.Name.Name, err)
-			}
-			data, err := os.ReadFile(abs)
-			if err != nil {
-				return "", fmt.Errorf("%s: @stylesheets %q on func %s: %w", filename, sheet, fn.Name.Name, err)
-			}
-			varName := "pageStyle_" + fn.Name.Name + "_" + DeriveIdent(sheet)
-			fmt.Fprintf(&declText, "var %s = %s\n", varName, strconv.Quote(string(data)))
-			headExprs = append(headExprs, "gox.Style("+varName+")")
-		}
-		if declText.Len() > 0 {
-			docStart := fset.Position(fn.Doc.Pos()).Offset
-			edits = append(edits, returnEdit{start: docStart, end: docStart, replacement: declText.String()})
-		}
 
 		titleSrc := defaultTitleIdent
 		if title != "" {

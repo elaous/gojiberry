@@ -55,11 +55,11 @@ import (
 	"fmt"
 	"os"
 
+	_ "example.com/testmod/pkg/App.css"
 	"github.com/elaous/gojiberry/gox"
 )
 
 // @title bob
-// @stylesheets App.css
 func Page() gox.Node {
 	return gox.El("h1", nil, gox.Text("hello"))
 }
@@ -69,7 +69,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	want := ` + "`" + `<html><head><title>bob</title><style>body { color: red; }</style></head><body><h1>hello</h1></body></html>` + "`" + `
+	want := ` + "`" + `<html><head><title>bob</title><style data-gox-style="example.com/testmod/pkg/App.css">body { color: red; }</style></head><body><h1>hello</h1></body></html>` + "`" + `
 	if got != want {
 		panic(fmt.Sprintf("got %q want %q", got, want))
 	}
@@ -84,8 +84,8 @@ func main() {
 	if !strings.Contains(got, `gox.Document{Title: "bob"`) {
 		t.Errorf("expected a gox.Document wrapper with the literal title, got:\n%s", got)
 	}
-	if !strings.Contains(got, `gox.Style(pageStyle_Page_App_css)`) {
-		t.Errorf("expected the stylesheet injected via gox.Style, got:\n%s", got)
+	if !strings.Contains(got, `gox.RegisterStyle("example.com/testmod/pkg/App.css"`) {
+		t.Errorf("expected the CSS import to register the stylesheet, got:\n%s", got)
 	}
 	mustCompileAndRun(t, dir, "main.go", got)
 }
@@ -98,7 +98,7 @@ import "github.com/elaous/gojiberry/gox"
 
 var DefaultTitle = "fallback title"
 
-// @stylesheets does-not-need-to-exist-for-this-check.css
+// @wasm /static/main.wasm
 func Page() gox.Node {
 	return gox.Text("x")
 }
@@ -108,25 +108,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	want := "<html><head><title>fallback title</title><style>body{}</style></head><body>x</body></html>"
-	if got != want {
-		panic("got " + got + " want " + want)
+	if !strings.Contains(got, "<title>fallback title</title>") {
+		panic("got " + got)
 	}
 }
 `
-	// Fail fast on a missing stylesheet instead of silently doing
-	// nothing -- confirm the error names the file -- then rerun
-	// with the file present to check the DefaultTitle fallback.
-	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
-	if err == nil {
-		t.Fatal("expected an error for a missing @stylesheets file")
-	}
-	if !strings.Contains(err.Error(), "does-not-need-to-exist-for-this-check.css") {
-		t.Errorf("expected the error to name the missing file, got: %v", err)
-	}
-
-	writeFile(t, dir, "App.css", "body{}")
-	src = strings.Replace(src, "does-not-need-to-exist-for-this-check.css", "App.css", 1)
+	src = strings.Replace(src, `import "github.com/elaous/gojiberry/gox"`, "import (\n\t\"strings\"\n\n\t\"github.com/elaous/gojiberry/gox\"\n)", 1)
 	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
@@ -136,6 +123,21 @@ func main() {
 		t.Errorf("expected the omitted title to fall back to the DefaultTitle identifier, got:\n%s", got)
 	}
 	mustCompileAndRun(t, dir, "main.go", got)
+}
+
+func TestStylesheetsAnnotationIsRejectedWithAMigrationHint(t *testing.T) {
+	dir := setupModuleWithGox(t)
+	src := `package main
+
+import "github.com/elaous/gojiberry/gox"
+
+// @stylesheets App.css
+func Page() gox.Node { return gox.Text("x") }
+`
+	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	if err == nil || !strings.Contains(err.Error(), "no longer supported") || !strings.Contains(err.Error(), `import _ `) {
+		t.Fatalf("want a migration error, got %v", err)
+	}
 }
 
 func TestPageMetadataWrapsEveryTopLevelReturn(t *testing.T) {

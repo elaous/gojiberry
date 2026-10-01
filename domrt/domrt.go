@@ -24,9 +24,10 @@ type Root struct {
 	tree      *renderedNode
 }
 
-// Mount creates DOM nodes for initial and appends them to container,
-// returning a Root whose Update re-renders in place on future calls.
+// Mount installs the registered stylesheets (see InstallStyles), creates
+// DOM nodes for initial and appends them to container, returning a Root whose Update re-renders in place on future calls.
 func Mount(container js.Value, initial gox.Node) *Root {
+	InstallStyles()
 	rn := create(initial)
 	for _, n := range rn.ownedNodes() {
 		container.Call("appendChild", n)

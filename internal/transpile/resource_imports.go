@@ -183,7 +183,7 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int, opts Op
 			if ident == "" {
 				ident = DeriveIdent(path)
 			}
-			res, lerr := loader(LoaderInput{Alias: ident, TypeName: typeName, Path: path, BaseDir: baseDir, SourceFile: filename})
+			res, lerr := loader(LoaderInput{Alias: ident, AliasGiven: alias != "", TypeName: typeName, Path: path, BaseDir: baseDir, SourceFile: filename})
 			if lerr != nil {
 				return "", "", 0, lerr
 			}
