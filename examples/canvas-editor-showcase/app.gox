@@ -25,7 +25,8 @@ func Doc(state State, cb Callbacks) gox.Node {
 			<canvas.TextFlow
 				x={0} y={0} width={880}
 				source={state.Source}
-				transform={cv.Markdown{}}
+				items={state.Items}
+				transform={state.Transform()}
 				pageCount={state.Pages}
 				pageWidth={560} pageHeight={420}
 				spread={state.Spread}

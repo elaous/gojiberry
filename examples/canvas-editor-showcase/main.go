@@ -19,14 +19,19 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"syscall/js"
 
 	"github.com/elaous/gojiberry/canvas"
 	cgox "github.com/elaous/gojiberry/canvas/gox"
 	"github.com/elaous/gojiberry/components"
+	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/domrt"
 	"github.com/elaous/gojiberry/domrt/browser"
 	"github.com/elaous/gojiberry/fonts"
 	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/saver"
+	"github.com/elaous/gojiberry/transfer"
 )
 
 // ui is the DOM side's state.
@@ -49,14 +54,32 @@ type ui struct {
 	kbMessage string
 
 	hoverLink string
+
+	saver    *saver.Session
+	transfer *transfer.Registry
+	fontLog  []string // what the font library did, newest last
+	message  string   // the Import/Export tab's last message
 }
 
 func main() {
 	doc := browser.Document()
 	state := State{Mode: canvas.ModeView, Pages: 3, Source: sample, Note: "Floating note: click to edit, try (brackets and \"quotes\".", Styles: canvas.DefaultStyles()}
 	u := &ui{title: "Quarterly report", menu: -1, tab: "format"}
-	repo := fonts.Multi(fonts.WebSafe())
+	// The catalog has a font that is fetched from this site: picking it
+	// only adds it to the library; the file is downloaded (into the font
+	// store) the first time the text uses it.
+	origin := js.Global().Get("location").Get("origin").String()
+	repo := fonts.Multi(fonts.WebSafe(), fonts.Static("This site", fonts.Font{
+		Family: "Lazy Serif", Category: "serif",
+		Variants: []fonts.Variant{{Weight: 400, URL: origin + "/fonts/lazy-serif.ttf"}},
+	}))
 	u.catalog, _ = repo.Fonts(context.Background())
+	// Documents and fonts are kept in the browser (localStorage) or in
+	// memory; a docstore server in front of Postgres, SQLite or S3 is one
+	// more target (docstore.NewHTTPAdapter).
+	store := docstore.NewMemoryAdapter()
+	lib := &fonts.Library{Blobs: saver.Blobs(store)}
+	u.transfer = transfer.Default()
 
 	stage := canvas.NewStage(nil, 0, 0)
 	canvasEl, inputEl := doc.GetElementByID("stage"), doc.GetElementByID("input")
@@ -71,6 +94,26 @@ func main() {
 
 	var flow *canvas.TextFlow
 	var renderUI func()
+
+	// Lazy font download: a font picked in the selector is only Added;
+	// the stage tells us the first time the document really uses a cut,
+	// and only then is the file fetched into the store and loaded.
+	stage.OnFontUse = func(use canvas.FontUse) { lib.UseAsync(use.Family, use.Weight, use.Italic) }
+	logFont := func(s string) { u.fontLog = append(u.fontLog, s); renderUI() }
+	lib.OnReady = func(r fonts.Ready) {
+		how := "loaded from the store"
+		if r.Downloaded {
+			how = "downloaded into the store"
+		}
+		logFont(fmt.Sprintf("%s %d: %s (%d bytes)", r.Family, r.Variant.Weight, how, len(r.Data)))
+		fonts.LoadFace(r.Family, r.Variant, r.Data, func(err error) {
+			if err != nil {
+				logFont(r.Family + ": " + err.Error())
+			}
+			redraw()
+		})
+	}
+	lib.OnError = func(family string, err error) { logFont(family + ": " + err.Error()) }
 	refocus := func() { inputEl.Call("focus", map[string]any{"preventScroll": true}) }
 
 	cb := Callbacks{
@@ -84,6 +127,32 @@ func main() {
 		flow = root.Find(cgox.TagTextFlow, 0).(*canvas.TextFlow)
 		stage.Draw()
 	}
+
+	openDoc := func(d docfile.Document) {
+		state.Items, state.Source = docfile.ToItems(d.Content), ""
+		if len(d.Styles) > 0 {
+			state.Styles = docfile.ToStyles(d.Styles)
+		}
+		for _, f := range docfile.ToFonts(d.Fonts) {
+			lib.Add(f)
+		}
+		if d.Title != "" {
+			u.title = d.Title
+		}
+		stage.ForgetFonts() // the opened text may use fonts the library has
+		renderCanvas()
+		renderUI()
+	}
+	currentDoc := func() docfile.Document {
+		d := docfile.FromFlow(u.title, flow)
+		d.Fonts = docfile.FromFonts(lib.Added())
+		return d
+	}
+	u.saver = saver.NewSession(&saver.Saver{Targets: []saver.Target{
+		{Name: "browser", Label: "This browser (localStorage)", Adapter: docstore.NewBrowserAdapter("showcase:")},
+		{Name: "memory", Label: "Memory", Adapter: store},
+	}}, currentDoc, openDoc)
+	u.saver.OnChange = func() { renderUI() }
 
 	setMode := func(m canvas.Mode) {
 		state.Mode = m
@@ -115,6 +184,10 @@ func main() {
 				{Label: "Edit mode", Checked: state.Mode == canvas.ModeEdit, OnSelect: toggleMode},
 				{Label: "Two-page spread", Checked: state.Spread, OnSelect: func() { state.Spread = !state.Spread; renderCanvas(); renderUI() }},
 			}},
+			{Label: "File", Items: []components.MenuItem{
+				{Label: "Save…", OnSelect: func() { u.tab = "save"; renderUI() }},
+				{Label: "Import / Export…", OnSelect: func() { u.tab = "transfer"; renderUI() }},
+			}},
 			{Label: "Edit", Items: components.CommandMenu(stage.Features.Commands(), keymap, mac, run)},
 			{Label: "Insert", Items: []components.MenuItem{
 				{Label: "Symbol…", OnSelect: func() { u.tab = "symbols"; renderUI() }},
@@ -140,6 +213,7 @@ func main() {
 			gox.El("button", []gox.Attr{gox.A("id", "mode"), gox.A("type", "button"), gox.A("class", "gj-keybindings-button"),
 				gox.On("click", func(gox.Event) { toggleMode() })}, gox.Text("Mode: "+state.Mode.String()+" (click to switch)")),
 			tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
+			tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Import/Export", renderUI),
 		)
 
 		var panel gox.Node
@@ -169,6 +243,47 @@ func main() {
 					renderUI()
 				},
 			})
+		case "save":
+			panel = components.Saver(u.saver.Props())
+		case "transfer":
+			var imports, exports []components.SaverChoice
+			for _, i := range u.transfer.Importers() {
+				imports = append(imports, components.SaverChoice{Name: i.Format().Name, Label: i.Format().Label})
+			}
+			for _, e := range u.transfer.Exporters() {
+				exports = append(exports, components.SaverChoice{Name: e.Format().Name, Label: e.Format().Label})
+			}
+			panel = gox.Frag(
+				components.Transfer(components.TransferProps{
+					Imports: imports, Exports: exports,
+					OnExport: func(name string) {
+						file, data, mime, err := u.transfer.Export(name, currentDoc())
+						if err != nil {
+							u.message = err.Error()
+						} else {
+							transfer.Download(file, mime, data)
+							u.message = fmt.Sprintf("Exported %s (%d bytes)", file, len(data))
+						}
+						renderUI()
+					},
+					OnImport: func(name string) {
+						transfer.PickFile(u.transfer.Accept(), func(file string, data []byte, err error) {
+							var d docfile.Document
+							if err == nil {
+								d, err = u.transfer.Import(name, file, data)
+							}
+							if err != nil {
+								u.message = err.Error()
+								renderUI()
+								return
+							}
+							u.message = "Imported " + file
+							openDoc(d)
+						})
+					},
+				}),
+				gox.El("p", []gox.Attr{gox.A("id", "transfer-message")}, gox.Text(u.message)),
+			)
 		case "symbols":
 			panel = components.SymbolPicker(components.SymbolPickerProps{
 				Query: u.symQuery, Category: u.symCat, Recent: u.symRecent,
@@ -229,12 +344,20 @@ func main() {
 					OnQuery:      func(q string) { u.query = q; renderUI() },
 					OnSource:     func(s string) { u.source = s; renderUI() },
 					OnSelect: func(f fonts.Font) {
+						lib.Add(f) // downloaded only when the text uses it
 						u.open = false
 						u.recent = append([]string{f.Family}, slices.DeleteFunc(slices.Clone(u.recent), func(s string) bool { return s == f.Family })...)
 						renderUI()
 					},
 				},
 			})
+		}
+		if u.tab == "format" || u.tab == "" {
+			var rows []gox.Node
+			for _, l := range u.fontLog {
+				rows = append(rows, gox.El("li", nil, gox.Text(l)))
+			}
+			panel = gox.Frag(panel, gox.El("ul", []gox.Attr{gox.A("id", "font-log"), gox.A("style", "font-size:12px;color:#6b7280")}, rows...))
 		}
 		side := gox.Frag(panel,
 			gox.El("div", []gox.Attr{gox.A("id", "link-preview"), gox.A("style", "margin-top:1em")},
@@ -324,12 +447,14 @@ func main() {
 			"elements": cgox.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
 			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "tab": u.tab, "menu": u.menu, "title": u.title,
+			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))
 	}
 
 	renderCanvas()
 	renderUI()
+	go u.saver.Refresh(context.Background())
 	canvas.LoadImage("data:image/svg+xml;base64,"+base64.StdEncoding.EncodeToString([]byte(svg)),
 		func(src *canvas.HTMLImage) {
 			state.Image = src
@@ -379,4 +504,20 @@ func tabButton(u *ui, tab, label string, rerender func()) gox.Node {
 		gox.A("type", "button"), gox.A("class", class), gox.A("data-tab", tab),
 		gox.On("click", func(gox.Event) { u.tab = tab; rerender() }),
 	}, gox.Text(label))
+}
+
+// fontKeys lists "family=key" for every downloaded cut and "family" for the
+// added fonts with none yet.
+func fontKeys(lib *fonts.Library) []string {
+	out := []string{}
+	for _, f := range lib.Added() {
+		keys := []string{}
+		for _, v := range f.Variants {
+			if v.Key != "" {
+				keys = append(keys, v.Key)
+			}
+		}
+		out = append(out, f.Family+"="+strings.Join(keys, ","))
+	}
+	return out
 }

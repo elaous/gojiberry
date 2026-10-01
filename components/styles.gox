@@ -42,6 +42,8 @@ import (
 	_ "github.com/elaous/gojiberry/components/progress.css"
 	_ "github.com/elaous/gojiberry/components/radiogroup.css"
 	_ "github.com/elaous/gojiberry/components/search.css"
+	_ "github.com/elaous/gojiberry/components/saver.css"
+	_ "github.com/elaous/gojiberry/components/transfer.css"
 	_ "github.com/elaous/gojiberry/components/slider.css"
 	_ "github.com/elaous/gojiberry/components/styleeditor.css"
 	_ "github.com/elaous/gojiberry/components/stylepicker.css"

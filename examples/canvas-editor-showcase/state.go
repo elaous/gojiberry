@@ -11,6 +11,9 @@ type State struct {
 	// Source is the document's starting Markdown; once the text is edited
 	// on the canvas the canvas owns it, until Source changes.
 	Source string
+	// Items, when set (a document that was opened), are the content
+	// instead of Source.
+	Items  []canvas.Item
 	Image  canvas.ImageSource
 	Note   string
 	Styles []canvas.StyleDef
@@ -35,3 +38,12 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160">
 <stop offset="0" stop-color="#ff7a59"/><stop offset="1" stop-color="#3b2bd9"/></linearGradient></defs>
 <rect width="240" height="160" fill="url(#g)"/><circle cx="80" cy="60" r="34" fill="#ffd23f"/>
 <path d="M0 160 L90 90 L150 140 L190 110 L240 160 Z" fill="#1b1b3a"/></svg>`
+
+// Transform is the Markdown transform for Source, or none when the
+// content is Items.
+func (s State) Transform() canvas.Transform {
+	if len(s.Items) > 0 {
+		return nil
+	}
+	return canvas.Markdown{}
+}
