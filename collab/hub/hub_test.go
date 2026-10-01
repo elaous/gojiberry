@@ -240,3 +240,36 @@ func TestSaveFailureAndBadStore(t *testing.T) {
 		t.Fatal("no store")
 	}
 }
+
+func TestPresenceGoneWhenStreamCloses(t *testing.T) {
+	h := New(Config{KeepAlive: 20 * time.Millisecond})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	open := func(ctx context.Context, replica string) *bufio.Scanner {
+		req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL+"/docs/d/events?replica="+replica, nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bufio.NewScanner(resp.Body)
+	}
+	a := open(ctx, "a")
+	bctx, bcancel := context.WithCancel(ctx)
+	open(bctx, "b")
+	resp, err := http.Post(srv.URL+"/docs/d/presence", "application/json", strings.NewReader(`{"replica":"b","name":"Bo"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	bcancel()
+	var seen []string
+	for a.Scan() {
+		seen = append(seen, a.Text())
+		if strings.Contains(strings.Join(seen, "\n"), `"gone":true`) {
+			return
+		}
+	}
+	t.Fatalf("no gone event: %v", seen)
+}

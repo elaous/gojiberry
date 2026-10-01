@@ -106,6 +106,12 @@ func TestPresenceAndPeerCursors(t *testing.T) {
 	if pc.Presence.Name != "Ana" || pc.Presence.Color != "#f00" || pc.Anchor != 6 || pc.Caret != 11 || pc.Presence.Role != wire.Owner {
 		t.Fatalf("%+v", pc)
 	}
+	if rc := b.Bridge.Flow.RemoteCursors; len(rc) != 1 || rc[0].Name != "Ana" || rc[0].Color != "#f00" || rc[0].Anchor != 6 || rc[0].Caret != 11 {
+		t.Fatalf("the flow draws the peer: %+v", rc)
+	}
+	if b.Pending() != 0 {
+		t.Fatal("nothing waiting")
+	}
 	// The cursor follows the text when b types in front of it.
 	click(b.Bridge.Flow, 0)
 	b.Bridge.Flow.InsertText(">>")
@@ -121,6 +127,9 @@ func TestPresenceAndPeerCursors(t *testing.T) {
 	}, a, b)
 	a.Close()
 	waitFor(t, "a to leave", func() bool { return len(b.Peers) == 0 }, b)
+	if len(b.Bridge.Flow.RemoteCursors) != 0 {
+		t.Fatal("a left, so its cursor goes")
+	}
 	// Not ready: nothing to publish.
 	idle, _ := Join("z", newFlow())
 	(&Session{Bridge: idle}).PublishCursor()

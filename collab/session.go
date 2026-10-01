@@ -63,10 +63,32 @@ func (s *Session) Poll() bool {
 				changed = true
 			}
 		default:
+			if changed {
+				s.RefreshPeers()
+			}
 			return changed
 		}
 	}
 }
+
+// RefreshPeers puts the other people's cursors into the flow
+// (TextFlow.RemoteCursors) at the places their characters are now. Poll
+// does it when something arrived; call it again after local edits if you
+// want the cursors to stay on their text as you type.
+func (s *Session) RefreshPeers() {
+	var rc []canvas.RemoteCursor
+	for _, pc := range s.PeerCursors() {
+		name := pc.Presence.Name
+		if name == "" {
+			name = pc.Presence.User
+		}
+		rc = append(rc, canvas.RemoteCursor{Name: name, Color: pc.Presence.Color, Anchor: pc.Anchor, Caret: pc.Caret})
+	}
+	s.Bridge.Flow.RemoteCursors = rc
+}
+
+// Pending is how many of your changes have not reached the server yet.
+func (s *Session) Pending() int { return s.Conn.Pending() }
 
 func (s *Session) handle(e client.Event) bool {
 	switch e.Kind {
