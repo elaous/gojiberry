@@ -27,8 +27,13 @@ func (f *TextFlow) HoveredLink() string { return f.hoverLink }
 // updateLinkHover tracks the link under the pointer, and says whether
 // anything to redraw changed.
 func (f *TextFlow) updateLinkHover(x, y float64) bool {
+	cid, crect := f.commentAt(x, y)
+	commentChanged := f.setHoverComment(cid, crect)
 	url, rect := f.linkAt(x, y)
 	f.hoverX, f.hoverY = x, y
+	if commentChanged && url == f.hoverLink {
+		return true
+	}
 	if url == f.hoverLink && rect == f.hoverRect {
 		return url != "" // the tip follows the pointer
 	}
@@ -60,6 +65,7 @@ func (f *TextFlow) DrawOverlay() {
 	if f.sugg != nil && f.mode == ModeEdit {
 		f.sugg.Draw()
 	}
+	f.drawCommentTip()
 	if f.hoverLink == "" || f.Painter == nil {
 		return
 	}

@@ -270,13 +270,15 @@ func (c *canvasElem) update(r *Root, p CanvasProps, children []gox.Node) (bool, 
 		st.Width, st.Height = p.Width, p.Height
 		changed = true
 	}
-	modeChanged := !c.has || p.Mode != c.props.Mode
+	modeChanged := !c.has || p.Mode != c.props.Mode || p.Role != c.props.Role
+	st.Role = p.Role
+	mode := p.Role.Mode(p.Mode)
 	if p.Features != nil && !sameFeatures(p.Features, c.props.Features) {
 		st.Features = canvas.NewRegistry(p.Features...)
 	}
 	c.props, c.has = p, true
 
-	ds, ch, created, err := c.kids.update(&Context{Stage: st, Mode: p.Mode}, children)
+	ds, ch, created, err := c.kids.update(&Context{Stage: st, Mode: mode}, children)
 	if err != nil {
 		return false, err
 	}
@@ -286,7 +288,7 @@ func (c *canvasElem) update(r *Root, p CanvasProps, children []gox.Node) (bool, 
 		st.Add(ds...)
 	}
 	if modeChanged || created {
-		st.SetMode(p.Mode)
+		st.SetMode(mode)
 		changed = true
 	}
 	return changed, nil

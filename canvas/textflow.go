@@ -53,6 +53,8 @@ type Run struct {
 	DY, Size          float64
 	// Link is the URL the run links to, if any.
 	Link string
+	// Comment is the ID of the comment on the run, if any.
+	Comment string
 }
 
 // Line is one laid-out line of text. Start/End are rune offsets into
@@ -192,6 +194,14 @@ type TextFlow struct {
 	// OnHoverLink is called with the URL of the link the pointer moves
 	// onto, and with "" when it leaves.
 	OnHoverLink func(url string)
+	// Comments holds the comments Format.Comment refers to; the text they
+	// are on is highlighted and, hovered, shows a tip with the summary.
+	Comments *CommentSet
+	// Author is who new comments are by (a name or e-mail address).
+	Author string
+	// OnHoverComment is called with the ID of the comment the pointer
+	// moves onto ("" when it leaves).
+	OnHoverComment func(id string)
 
 	derived    []Item
 	derivedSrc string
@@ -217,6 +227,8 @@ type TextFlow struct {
 
 	stageLink      func(url string)
 	hoverLink      string
+	hoverComment   string
+	hoverCRect     [4]float64
 	sugg           *Menu // completion popup
 	suggFrom       int   // where the word being completed starts
 	viewport       [4]float64
@@ -541,7 +553,7 @@ func (d *flowData) partsOf(a, b int) lineParts {
 		lp.runs = append(lp.runs, Run{
 			Text: text, X: lp.width, W: w, Font: st.Font(), Color: st.Color, Start: a, End: e,
 			Underline: st.Underline, Strike: st.Strike, Background: st.Background,
-			DY: st.baselineShift(), Size: st.drawSize(), Link: d.formats[id].Link,
+			DY: st.baselineShift(), Size: st.drawSize(), Link: d.formats[id].Link, Comment: d.formats[id].Comment,
 		})
 		lp.width += w
 		lp.height = max(lp.height, st.Leading())
@@ -1209,6 +1221,7 @@ func (f *TextFlow) MouseMove(x, y float64) bool {
 	hover := false
 	if f.sel.dragging {
 		f.hoverLink = ""
+		f.setHoverComment("", [4]float64{})
 	} else {
 		hover = f.updateLinkHover(x, y)
 	}
@@ -1260,6 +1273,10 @@ func (f *TextFlow) MouseUp(x, y float64) bool {
 // MouseLeave clears the hovered grip (a drag in progress continues).
 func (f *TextFlow) MouseLeave() bool {
 	changed := f.hover != noGrip
+	if f.hoverComment != "" {
+		f.setHoverComment("", [4]float64{})
+		changed = true
+	}
 	if f.hoverLink != "" {
 		f.hoverLink, changed = "", true
 		if f.OnHoverLink != nil {
@@ -1320,6 +1337,9 @@ func (f *TextFlow) Draw() {
 			x, y := ln.X+r.X, ln.Baseline+r.DY
 			if r.Background != "" {
 				p.SetFillStyle(r.Background)
+				p.FillRect(x, ln.Y, r.W, ln.H)
+			} else if r.Comment != "" && !f.commentResolved(r.Comment) {
+				p.SetFillStyle(CommentHighlight)
 				p.FillRect(x, ln.Y, r.W, ln.H)
 			}
 			p.SetFont(r.Font)

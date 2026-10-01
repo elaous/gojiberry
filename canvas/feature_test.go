@@ -21,7 +21,7 @@ func TestRegistry(t *testing.T) {
 	for _, f := range st.Features.Features() {
 		names = append(names, f.Name())
 	}
-	if !reflect.DeepEqual(names, []string{"history", "multi-cursor", "line-ops", "markdown-clipboard", "breaks", "paragraphs", "text-case", "links", "styles", "page-furniture"}) {
+	if !reflect.DeepEqual(names, []string{"history", "multi-cursor", "line-ops", "markdown-clipboard", "breaks", "paragraphs", "text-case", "links", "styles", "comments", "page-furniture"}) {
 		t.Fatalf("default features = %v", names)
 	}
 	if !st.Features.Has(CmdMoveLineUp) || st.Features.Keymap()["Mod+D"] != CmdAddNextMatch {

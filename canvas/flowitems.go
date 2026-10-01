@@ -30,6 +30,8 @@ type Format struct {
 	// Link makes the text a link to this URL: drawn as a link (link
 	// color, underlined), with the URL shown on hover.
 	Link string
+	// Comment is the ID of a comment (see CommentSet) on this text.
+	Comment string
 }
 
 // CaseKind is how letters are displayed; see Format.Case.
