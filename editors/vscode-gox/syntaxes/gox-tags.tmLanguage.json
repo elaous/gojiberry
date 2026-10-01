@@ -4,77 +4,160 @@
   "scopeName": "gox.tags.injection",
   "injectionSelector": "L:source.gox - comment",
   "patterns": [
-    { "include": "#tag" }
+    {
+      "include": "#tag"
+    }
   ],
   "repository": {
     "tag": {
       "patterns": [
-        { "include": "#tagNamed" },
-        { "include": "#tagFragment" }
+        {
+          "include": "#tagNamed"
+        },
+        {
+          "include": "#tagFragment"
+        }
       ]
     },
     "tagNamed": {
-      "comment": "A <Tag ...>...</Tag> or self-closing <Tag ... />. The end pattern backreferences the opening name (group 2) so a nested tag with a different name can't prematurely close it -- a heuristic like every TextMate JSX grammar, not the real expression-start disambiguation goxc's transpiler does; a bare `a<B` with no surrounding spaces can still be miscolored as a tag-open, the same known class of limitation TSX's own grammar has.",
-      "begin": "(<)([A-Za-z][A-Za-z0-9_.\\-]*)",
+      "comment": "A <Tag ...>...</Tag>, <Tag/>, <pkg.Component .../> or a generic component <pkg.List[Item] ...>. The end pattern backreferences the opening name (group 2) so a nested tag with a different name can't prematurely close it -- a heuristic like every TextMate JSX grammar, not the real expression-start disambiguation goxc's transpiler does. The begin's lookahead (whitespace, '/', '>' or end of line must follow the name and optional [type arguments]) stops a tightly spaced comparison like `a<b[0])` from being read as a tag. Attributes live in the #openTag region, which starts right after the name (\\G -- also on the next line when the name ended the line) and ends at the tag's own '>' or '/>'; that is what lets a bare boolean attribute (`lockH`, `wrap`, `none`) be told apart from text between the tags.",
+      "begin": "(<)([A-Za-z][A-Za-z0-9_.\\-]*)(\\[[A-Za-z_*\\[][^\\]\\n]*\\])?(?=[\\s/>]|$)",
       "beginCaptures": {
-        "1": { "name": "punctuation.definition.tag.begin.gox" },
-        "2": { "name": "entity.name.tag.gox" }
+        "1": {
+          "name": "punctuation.definition.tag.begin.gox"
+        },
+        "2": {
+          "name": "entity.name.tag.gox"
+        },
+        "3": {
+          "name": "meta.type-arguments.gox",
+          "patterns": [
+            {
+              "match": "[\\[\\]]",
+              "name": "punctuation.definition.typeparameters.gox"
+            },
+            {
+              "match": ",",
+              "name": "punctuation.separator.comma.gox"
+            },
+            {
+              "match": "[A-Za-z_][A-Za-z0-9_.]*",
+              "name": "entity.name.type.go"
+            }
+          ]
+        }
       },
-      "end": "(/>)|(</)(\\2)\\s*(>)",
+      "end": "(/>)|(</)(\\2)(?:\\[[A-Za-z_*\\[][^\\]\\n]*\\])?\\s*(>)",
       "endCaptures": {
-        "1": { "name": "punctuation.definition.tag.end.gox" },
-        "2": { "name": "punctuation.definition.tag.begin.gox" },
-        "3": { "name": "entity.name.tag.gox" },
-        "4": { "name": "punctuation.definition.tag.end.gox" }
+        "1": {
+          "name": "punctuation.definition.tag.end.gox"
+        },
+        "2": {
+          "name": "punctuation.definition.tag.begin.gox"
+        },
+        "3": {
+          "name": "entity.name.tag.gox"
+        },
+        "4": {
+          "name": "punctuation.definition.tag.end.gox"
+        }
       },
       "name": "meta.tag.gox",
       "patterns": [
-        { "match": ">", "name": "punctuation.definition.tag.end.gox" },
-        { "include": "#tagAttributes" },
-        { "include": "#interpolation" },
-        { "include": "#tag" }
+        {
+          "match": "\\G\\s*(>)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.tag.end.gox"
+            }
+          }
+        },
+        {
+          "include": "#openTag"
+        },
+        {
+          "include": "#interpolation"
+        },
+        {
+          "include": "#tag"
+        }
       ]
     },
     "tagFragment": {
       "comment": "A fragment <>...</>.",
       "begin": "(<)(>)",
       "beginCaptures": {
-        "1": { "name": "punctuation.definition.tag.begin.gox" },
-        "2": { "name": "punctuation.definition.tag.end.gox" }
+        "1": {
+          "name": "punctuation.definition.tag.begin.gox"
+        },
+        "2": {
+          "name": "punctuation.definition.tag.end.gox"
+        }
       },
       "end": "(</)(>)",
       "endCaptures": {
-        "1": { "name": "punctuation.definition.tag.begin.gox" },
-        "2": { "name": "punctuation.definition.tag.end.gox" }
+        "1": {
+          "name": "punctuation.definition.tag.begin.gox"
+        },
+        "2": {
+          "name": "punctuation.definition.tag.end.gox"
+        }
       },
       "name": "meta.tag.fragment.gox",
       "patterns": [
-        { "include": "#interpolation" },
-        { "include": "#tag" }
+        {
+          "include": "#interpolation"
+        },
+        {
+          "include": "#tag"
+        }
       ]
     },
     "tagAttributes": {
       "patterns": [
         {
-          "match": "([A-Za-z_][A-Za-z0-9_\\-:]*)\\s*(=)",
+          "match": "([A-Za-z_][A-Za-z0-9_\\-:.]*)\\s*(=)",
           "captures": {
-            "1": { "name": "entity.other.attribute-name.gox" },
-            "2": { "name": "punctuation.separator.key-value.gox" }
+            "1": {
+              "name": "entity.other.attribute-name.gox"
+            },
+            "2": {
+              "name": "punctuation.separator.key-value.gox"
+            }
           }
         },
-        { "include": "#doubleQuotedString" }
+        {
+          "include": "#doubleQuotedString"
+        },
+        {
+          "comment": "a bare boolean attribute: lockH, wrap, none",
+          "match": "[A-Za-z_][A-Za-z0-9_\\-:]*",
+          "name": "entity.other.attribute-name.boolean.gox"
+        }
       ]
     },
     "interpolation": {
       "comment": "A {expr} hole in an attribute value or child position; always a single Go expression, so its contents are ordinary Go (and may themselves contain nested tags).",
       "begin": "\\{",
-      "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.gox" } },
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.begin.gox"
+        }
+      },
       "end": "\\}",
-      "endCaptures": { "0": { "name": "punctuation.section.embedded.end.gox" } },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.gox"
+        }
+      },
       "name": "meta.embedded.expression.gox",
       "patterns": [
-        { "include": "#tag" },
-        { "include": "source.go" }
+        {
+          "include": "#tag"
+        },
+        {
+          "include": "source.go"
+        }
       ]
     },
     "doubleQuotedString": {
@@ -82,7 +165,29 @@
       "end": "\"",
       "name": "string.quoted.double.gox",
       "patterns": [
-        { "match": "\\\\.", "name": "constant.character.escape.gox" }
+        {
+          "match": "\\\\.",
+          "name": "constant.character.escape.gox"
+        }
+      ]
+    },
+    "openTag": {
+      "comment": "The attributes of an opening tag, from just after its name to its '>' (or the lookahead for '/>', which the tag's own end pattern consumes). The begin needs a non-'>' next, so `<div>` and `<br/>` never push an empty region.",
+      "begin": "\\G\\s*(?!/?>)",
+      "end": "(?=/>)|(>)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.end.gox"
+        }
+      },
+      "name": "meta.tag.attributes.gox",
+      "patterns": [
+        {
+          "include": "#tagAttributes"
+        },
+        {
+          "include": "#interpolation"
+        }
       ]
     }
   }
