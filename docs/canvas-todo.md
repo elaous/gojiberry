@@ -30,15 +30,17 @@ examples; the gox integration is in [gox-canvas.md](gox-canvas.md).
 
 ## Editing
 
-- **Multi-cursor**, as in VS Code:
-  - Ctrl/Cmd + click puts a cursor before the clicked character.
-  - Ctrl/Cmd + D selects the word under the cursor; pressing it again
-    adds the next similar word.
-  - "Cursors at line ends": put a cursor at the end of every line of the
-    selected block.
-- **Move line up/down** and **duplicate line**, with VS Code's key bindings.
-- **Copy as Markdown** and **paste Markdown** (converted to text elements,
-  using the existing Markdown transform in reverse and forwards).
+Done, as registered features (see "Features" below): multi-cursor
+(Ctrl/Cmd+click, Ctrl/Cmd+D, select all matches, cursors at line ends,
+add cursor above/below), move/duplicate/delete line, copy as Markdown and
+paste Markdown.
+
+- Not yet: multi-cursor for the main `TextFlow` body (it is not editable
+  yet; `FloatingText` is), auto-closing and completion at several cursors,
+  undo/redo.
+- Markdown copy writes headings, bold, italic, strike, underline, highlight,
+  super/subscript and code; links keep their text only (a character has no
+  URL yet), and tables and images are not written.
 
 ## Pages
 
@@ -59,6 +61,16 @@ examples; the gox integration is in [gox-canvas.md](gox-canvas.md).
 - Key bindings configuration editor (`canvas.Keymap` is the model).
 - Document view like Google Docs (toolbar, ruler, side panels around the
   canvas).
+
+## Features
+
+Each feature is a `canvas.Feature` registered with the Stage's
+`canvas.Registry` (`MultiCursor`, `LineOps`, `MarkdownClipboard` are the
+defaults). The rest of this list is built the same way: a type with
+`Name()` and `Install(*Registry)`, commands that work on an `EditTarget`,
+default chords, and unit tests against `FloatingText`. Next candidates:
+lists (bullets, check boxes, numbering), indents and paragraph spacing,
+links, symbols, formula, horizontal rule, watermark.
 
 ## gox integration (see gox-canvas.md)
 

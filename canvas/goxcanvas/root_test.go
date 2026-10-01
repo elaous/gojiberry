@@ -230,3 +230,22 @@ func TestNumberingStartsAtSheetPosition(t *testing.T) {
 		t.Errorf("numbers = %q %q %q", ps.PageNumberText(0), ps.PageNumberText(1), ps.PageNumberText(2))
 	}
 }
+
+func TestFeaturesProp(t *testing.T) {
+	r, _ := newRoot()
+	if err := r.Render(Canvas(CanvasProps{})); err != nil {
+		t.Fatal(err)
+	}
+	if !r.Stage.Features.Has(canvas.CmdMoveLineUp) {
+		t.Fatal("default features stay when Features is nil")
+	}
+	_ = r.Render(Canvas(CanvasProps{Features: []canvas.Feature{canvas.MultiCursor{}}}))
+	if r.Stage.Features.Has(canvas.CmdMoveLineUp) || !r.Stage.Features.Has(canvas.CmdAddNextMatch) {
+		t.Error("Features replaces the registry")
+	}
+	reg := r.Stage.Features
+	_ = r.Render(Canvas(CanvasProps{Features: []canvas.Feature{canvas.MultiCursor{}}}))
+	if r.Stage.Features != reg {
+		t.Error("the same feature list must not rebuild the registry")
+	}
+}

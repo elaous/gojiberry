@@ -210,7 +210,11 @@ func (sv *ScrollView) toContent(x, y float64) (float64, float64) {
 
 // MouseDown grabs a scrollbar thumb, jumps along a track, or hands the
 // press to the content (only if it is inside the viewport).
-func (sv *ScrollView) MouseDown(x, y float64) bool {
+func (sv *ScrollView) MouseDown(x, y float64) bool { return sv.MouseDownMods(x, y, Mods{}) }
+
+// MouseDownMods is MouseDown with the modifier keys, passed on to the
+// content.
+func (sv *ScrollView) MouseDownMods(x, y float64, m Mods) bool {
 	switch sv.barAt(x, y) {
 	case 'v':
 		track, thumb := sv.bar(true)
@@ -232,8 +236,11 @@ func (sv *ScrollView) MouseDown(x, y float64) bool {
 	}
 	sv.contentDown = true
 	cx, cy := sv.toContent(x, y)
-	return sv.content.MouseDown(cx, cy)
+	return sv.content.MouseDownMods(cx, cy, m)
 }
+
+// EditTarget implements Editable by asking the content.
+func (sv *ScrollView) EditTarget() EditTarget { return sv.content.EditTarget() }
 
 // DoubleClick hands a double click to the content (inside the viewport).
 func (sv *ScrollView) DoubleClick(x, y float64) bool {

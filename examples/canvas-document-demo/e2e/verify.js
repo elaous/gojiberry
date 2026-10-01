@@ -259,6 +259,56 @@ run(async () => {
   await page.keyboard.press('Control+B');
   await refresh();
   assert(s.floating.items[0].Format.FontWeight === 400, 'Ctrl+B toggles bold off (keymap command)');
+
+  // --- registered features: multi-cursor, line operations, Markdown clipboard ---
+  await page.keyboard.type('a a a');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowRight');
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Control+D');
+  await refresh();
+  assert(s.floating.cursors === 3 && s.floating.text === 'a a a', 'Ctrl+D selects the word, then adds the next two matches: ' + s.floating.cursors);
+  await page.keyboard.type('Z');
+  await refresh();
+  assert(s.floating.text === 'Z Z Z', 'typing replaces every selected match: ' + s.floating.text);
+  await page.keyboard.press('Escape');
+  await refresh();
+  assert(s.floating.cursors === 1 && s.floating.editing, 'Escape goes back to one cursor and keeps editing');
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('one');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('two');
+  await page.keyboard.press('Alt+ArrowUp');
+  await refresh();
+  assert(s.floating.text === 'two\none', 'Alt+Up moves the line up: ' + JSON.stringify(s.floating.text));
+  await page.keyboard.press('Alt+Shift+ArrowDown');
+  await refresh();
+  assert(s.floating.text === 'two\ntwo\none', 'Alt+Shift+Down copies the line down: ' + JSON.stringify(s.floating.text));
+  await page.keyboard.press('Control+Shift+K');
+  await refresh();
+  assert(s.floating.text === 'two\none', 'Ctrl+Shift+K deletes the line: ' + JSON.stringify(s.floating.text));
+  await page.keyboard.press('Control+A');
+  await page.keyboard.press('Alt+Shift+I');
+  await refresh();
+  assert(s.floating.cursors === 2, 'Alt+Shift+I puts a cursor at the end of each selected line: ' + s.floating.cursors);
+  await page.keyboard.press('Escape');
+
+  // Markdown clipboard (the page needs clipboard permission).
+  await d.page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://localhost:' + process.env.PORT });
+  await page.keyboard.press('Control+A');
+  await page.keyboard.press('Control+Shift+C');
+  await page.waitForTimeout(100);
+  const md = await page.evaluate(() => navigator.clipboard.readText());
+  // The note's text is at heading size (Scale 2), which Markdown writes as '#'.
+  assert(md === '# two\n# one', 'Ctrl+Shift+C copies the selection as Markdown: ' + JSON.stringify(md));
+  await page.evaluate(() => navigator.clipboard.writeText('plain **loud** ~~old~~'));
+  await page.keyboard.press('Control+A');
+  await page.keyboard.press('Control+Shift+V');
+  await page.waitForTimeout(100);
+  await refresh();
+  assert(s.floating.text === 'plain loud old', 'Ctrl+Shift+V pastes Markdown as text, not as marks: ' + JSON.stringify(s.floating.text));
+  const loud = s.floating.items.find((i) => i.Text === 'loud');
+  const old = s.floating.items.find((i) => i.Text === 'old');
+  assert(loud && loud.Format.FontWeight === 700 && old && old.Format.Strike, 'the pasted text carries bold and strike formatting');
   await page.keyboard.press('Escape');
 
   // --- the floating table: text wraps around it; its icon drags it ---

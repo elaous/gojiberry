@@ -218,7 +218,7 @@ func main() {
 			"floating": map[string]any{
 				"x": ft.X, "y": ft.Y, "w": ft.Width, "h": ft.Height, "text": ft.Text(), "wrap": ft.Wrap, "anchor": ft.Anchor,
 				"editing": ft.Editing(), "selection": []int{from, to}, "items": ft.Items(),
-				"caret": ft.Caret(), "selectedText": ft.SelectedText(),
+				"caret": ft.Caret(), "selectedText": ft.SelectedText(), "cursors": len(ft.Cursors()),
 				"palette":     map[string]any{"open": pm.IsOpen(), "rect": []float64{px, py, pw}, "labels": pm.Labels()},
 				"suggestions": append([]string{}, ft.Suggestions()...), "suggestRect": []float64{sx, sy, sw},
 				"buttons": map[string]any{"color": []float64{bx, by, bw, bh}, "mark": []float64{mx2, my2, mw2, mh2}},
