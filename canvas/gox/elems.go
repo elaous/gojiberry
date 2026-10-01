@@ -45,6 +45,10 @@ func (f *flowElem) Update(_ *Context, props any, _ []gox.Node) (bool, error) {
 		f.ps.X, f.ps.Y, f.ps.Width = p.X, p.Y, p.Width
 		changed = true
 	}
+	if f.ps.Spread != p.Spread || f.ps.SpreadBook != p.SpreadBook || f.ps.Gutter != p.Gutter {
+		f.ps.Spread, f.ps.SpreadBook, f.ps.Gutter = p.Spread, p.SpreadBook, p.Gutter
+		changed = true
+	}
 
 	pages := buildPages(p)
 	if !reflect.DeepEqual(pages, f.pages) {
@@ -247,6 +251,10 @@ func (e *floatElem) Update(c *Context, props any, _ []gox.Node) (bool, error) {
 	}
 	if first || p.Background != old.Background {
 		ft.Background = p.Background
+		changed = true
+	}
+	if first || p.Opacity != old.Opacity {
+		ft.Opacity = p.Opacity
 		changed = true
 	}
 	if first || !reflect.DeepEqual(p.Vocabulary, old.Vocabulary) {

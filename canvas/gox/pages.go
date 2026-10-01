@@ -10,9 +10,11 @@ import (
 
 // furniture is what one sheet's template result asked for.
 type furniture struct {
-	header *HeaderProps
-	footer *FooterProps
-	number *PageNumberProps
+	header     *HeaderProps
+	footer     *FooterProps
+	number     *PageNumberProps
+	watermark  *WatermarkProps
+	background *BackgroundProps
 }
 
 // collect walks a template result for the furniture nodes.
@@ -30,6 +32,12 @@ func collect(n gox.Node, f *furniture) {
 			return
 		case PageNumberProps:
 			f.number = &p
+			return
+		case WatermarkProps:
+			f.watermark = &p
+			return
+		case BackgroundProps:
+			f.background = &p
 			return
 		}
 	}
@@ -115,6 +123,8 @@ func buildPages(p TextFlowProps) []canvas.Page {
 	pages := make([]canvas.Page, count)
 	var curHeader, curFooter *canvas.HeaderFooter // effective, nil = none
 	var curNum *canvas.PageNumberConfig
+	var curWatermark *canvas.Watermark
+	var curBackground *canvas.Background
 	next := 1 // number the next sheet would print while numbering is on
 	for i := range pages {
 		pg := canvas.Page{Width: w, Height: h, Margin: margin}
@@ -165,6 +175,25 @@ func buildPages(p TextFlowProps) []canvas.Page {
 		if curNum != nil {
 			next++
 		}
+
+		var wantW *canvas.Watermark
+		if f.watermark != nil && !f.watermark.None {
+			w := f.watermark
+			wantW = &canvas.Watermark{Text: w.Text, Color: w.Color, Image: w.Image, Scale: w.Scale, Opacity: w.Opacity, Angle: w.Angle, Straight: w.Straight}
+			if w.Style != nil {
+				wantW.Style = *w.Style
+			}
+			if wantW.None() {
+				wantW = nil
+			}
+		}
+		pg.Watermark, curWatermark = diffPtr(curWatermark, wantW, func() *canvas.Watermark { return &canvas.Watermark{} })
+
+		var wantB *canvas.Background
+		if f.background != nil && !f.background.None && f.background.Image != nil {
+			wantB = &canvas.Background{Image: f.background.Image, Opacity: f.background.Opacity, Fit: f.background.Fit}
+		}
+		pg.Background, curBackground = diffPtr(curBackground, wantB, func() *canvas.Background { return &canvas.Background{} })
 		pages[i] = pg
 	}
 	return pages
@@ -173,11 +202,17 @@ func buildPages(p TextFlowProps) []canvas.Page {
 // diffHF returns what to store on the Page (nil = inherit) and the new
 // effective value.
 func diffHF(cur, want *canvas.HeaderFooter) (store, eff *canvas.HeaderFooter) {
+	return diffPtr(cur, want, func() *canvas.HeaderFooter { return &canvas.HeaderFooter{} })
+}
+
+// diffPtr is diffHF for any per-page setting: none makes the "switched
+// off" value.
+func diffPtr[T any](cur, want *T, none func() *T) (store, eff *T) {
 	switch {
 	case want == nil && cur == nil:
 		return nil, nil
 	case want == nil:
-		return &canvas.HeaderFooter{}, nil // dropped
+		return none(), nil // dropped
 	case cur != nil && reflect.DeepEqual(*cur, *want):
 		return nil, cur
 	}

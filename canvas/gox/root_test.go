@@ -34,6 +34,7 @@ func (p *painter) Save()                             {}
 func (p *painter) Restore()                          {}
 func (p *painter) Translate(x, y float64)            {}
 func (p *painter) ClipRect(x, y, w, h float64)       {}
+func (p *painter) Rotate(float64)                    {}
 func (p *painter) DrawImage(_ canvas.ImageSource, sx, sy, sw, sh, dx, dy, dw, dh float64) {
 }
 

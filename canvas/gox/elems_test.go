@@ -263,3 +263,63 @@ func TestFragmentsAndStableMatching(t *testing.T) {
 		t.Error("a removed image stops obstructing the flow")
 	}
 }
+
+func TestWatermarkBackgroundSpreadAndOpacityProps(t *testing.T) {
+	r, _ := newRoot()
+	img := bitmap{40, 20}
+	tpl := func(page gox.Node, i int) gox.Node {
+		switch i {
+		case 0:
+			return gox.Frag(page, Watermark(WatermarkProps{Text: "DRAFT", Opacity: 0.3}), Background(BackgroundProps{Image: img, Opacity: 0.5, Fit: canvas.FitContain}))
+		case 3:
+			return gox.Frag(page, Watermark(WatermarkProps{None: true}))
+		default: // same as before: inherits; page 2 drops the background
+			if i == 2 {
+				return gox.Frag(page, Watermark(WatermarkProps{Text: "DRAFT", Opacity: 0.3}))
+			}
+			return gox.Frag(page, Watermark(WatermarkProps{Text: "DRAFT", Opacity: 0.3}), Background(BackgroundProps{Image: img, Opacity: 0.5, Fit: canvas.FitContain}))
+		}
+	}
+	err := r.Render(Canvas(CanvasProps{Children: []gox.Node{
+		TextFlow(TextFlowProps{Text: "x", PageCount: 4, Pages: tpl, Spread: true, SpreadBook: true, Gutter: 6}),
+		FloatingText(FloatingTextProps{Text: "n", Opacity: 0.4}),
+	}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps := r.Find(TagPage, 0).(*canvas.PageSet)
+	if ps.Pages[0].Watermark == nil || ps.Pages[0].Watermark.Text != "DRAFT" || ps.Pages[0].Watermark.Opacity != 0.3 {
+		t.Errorf("page 0 watermark = %+v", ps.Pages[0].Watermark)
+	}
+	if ps.Pages[1].Watermark != nil || ps.Pages[1].Background != nil {
+		t.Error("equal furniture inherits")
+	}
+	if ps.Pages[2].Background == nil || !ps.Pages[2].Background.None() {
+		t.Errorf("a dropped background is an empty one: %+v", ps.Pages[2].Background)
+	}
+	if ps.ResolvedBackground(2) != nil || ps.ResolvedBackground(1) == nil {
+		t.Error("background resolves: on for page 1, off from page 2")
+	}
+	if ps.Pages[3].Watermark == nil || !ps.Pages[3].Watermark.None() || ps.ResolvedWatermark(3) != nil {
+		t.Errorf("none removes the watermark: %+v", ps.Pages[3].Watermark)
+	}
+	if ps.Pages[3].Background != nil && !ps.Pages[3].Background.None() {
+		t.Errorf("the background stays off: %+v", ps.Pages[3].Background)
+	}
+	if !ps.Spread || !ps.SpreadBook || ps.Gutter != 6 {
+		t.Error("spread props")
+	}
+	ft := r.Find(TagFloatingText, 0).(*canvas.FloatingText)
+	if ft.Opacity != 0.4 {
+		t.Errorf("floating text opacity = %g", ft.Opacity)
+	}
+	r.Stage.Draw()
+	// A watermark with neither text nor image counts as none.
+	_ = r.Render(Canvas(CanvasProps{Children: []gox.Node{TextFlow(TextFlowProps{Text: "x", PageCount: 2, Pages: func(page gox.Node, i int) gox.Node {
+		return gox.Frag(page, Watermark(WatermarkProps{}), Background(BackgroundProps{}))
+	}})}}))
+	ps = r.Find(TagPage, 0).(*canvas.PageSet)
+	if ps.Pages[0].Watermark != nil || ps.Pages[0].Background != nil {
+		t.Errorf("empty watermark and background change nothing: %+v %+v", ps.Pages[0].Watermark, ps.Pages[0].Background)
+	}
+}

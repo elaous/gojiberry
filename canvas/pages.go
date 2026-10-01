@@ -1,6 +1,7 @@
 package canvas
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -64,6 +65,11 @@ type Page struct {
 	Header        *HeaderFooter
 	Footer        *HeaderFooter
 	PageNumber    *PageNumberConfig
+	// Watermark and Background inherit like the header: nil means the
+	// previous page's, and an empty Watermark{} / Background{} means none
+	// (from this page on).
+	Watermark  *Watermark
+	Background *Background
 }
 
 // PageStyle is how a PageSet draws its sheets, Google Docs-style: white
@@ -100,6 +106,15 @@ type PageSet struct {
 	X, Y  float64
 	Width float64
 	Gap   float64 // vertical space between sheets (NewPageSet sets 24)
+
+	// Spread lays the sheets out two to a row, as facing pages: sheets
+	// 0 and 1, 2 and 3... With SpreadBook the first sheet stands alone on
+	// the right, as the first page of a book does, and the facing pairs
+	// are 1 and 2, 3 and 4.... Gutter is the space between facing sheets
+	// (none by default); an image anchored near the inner edge of a sheet
+	// can run across the gutter onto its neighbour.
+	Spread, SpreadBook bool
+	Gutter             float64
 
 	Style   PageStyle
 	Painter Painter
@@ -147,13 +162,67 @@ func (ps *PageSet) SetMode(m Mode) bool {
 	return true
 }
 
+// rows groups the sheets into the rows they are laid out in: one sheet
+// each, or two facing sheets in a spread. A -1 is the empty left slot of
+// a book's first page.
+func (ps *PageSet) rows() [][]int {
+	var rows [][]int
+	n := len(ps.Pages)
+	switch {
+	case !ps.Spread:
+		for i := range n {
+			rows = append(rows, []int{i})
+		}
+	case ps.SpreadBook:
+		if n > 0 {
+			rows = append(rows, []int{-1, 0})
+		}
+		for i := 1; i < n; i += 2 {
+			if i+1 < n {
+				rows = append(rows, []int{i, i + 1})
+			} else {
+				rows = append(rows, []int{i})
+			}
+		}
+	default:
+		for i := 0; i < n; i += 2 {
+			if i+1 < n {
+				rows = append(rows, []int{i, i + 1})
+			} else {
+				rows = append(rows, []int{i})
+			}
+		}
+	}
+	return rows
+}
+
+// rowSize returns the width and height of a row: the sheets side by side
+// (an empty slot as wide as its neighbour), the tallest one's height.
+func (ps *PageSet) rowSize(row []int) (w, h float64) {
+	for k, i := range row {
+		if i < 0 {
+			continue
+		}
+		if k > 0 {
+			w += ps.Gutter
+		}
+		w += ps.Pages[i].Width
+		h = max(h, ps.Pages[i].Height)
+	}
+	if len(row) == 2 && row[0] < 0 {
+		w += ps.Pages[row[1]].Width + ps.Gutter
+	}
+	return w, h
+}
+
 // Size returns the width and height needed to show every page.
 func (ps *PageSet) Size() (w, h float64) {
 	pad := ps.Style.Pad
-	for i, pg := range ps.Pages {
-		w = max(w, pg.Width+2*pad)
-		h += pg.Height
-		if i > 0 {
+	for r, row := range ps.rows() {
+		rw, rh := ps.rowSize(row)
+		w = max(w, rw+2*pad)
+		h += rh
+		if r > 0 {
 			h += ps.Gap
 		}
 	}
@@ -164,23 +233,39 @@ func (ps *PageSet) Size() (w, h float64) {
 func (ps *PageSet) PageRect(i int) (x, y, w, h float64) {
 	pg := ps.Pages[i]
 	y = ps.Y + ps.Style.Pad
-	for j := range i {
-		y += ps.Pages[j].Height + ps.Gap
-	}
-	x = ps.X + ps.Style.Pad
-	if ps.Width > 0 {
-		x = ps.X + (ps.Width-pg.Width)/2
+	for _, row := range ps.rows() {
+		rw, rh := ps.rowSize(row)
+		if k := slices.Index(row, i); k >= 0 {
+			x = ps.X + ps.Style.Pad
+			if ps.Width > 0 {
+				x = ps.X + (ps.Width-rw)/2
+			}
+			for _, j := range row[:k] {
+				if j >= 0 {
+					x += ps.Pages[j].Width + ps.Gutter
+				} else {
+					x += ps.Pages[row[1]].Width + ps.Gutter
+				}
+			}
+			return x, y, pg.Width, pg.Height
+		}
+		y += rh + ps.Gap
 	}
 	return x, y, pg.Width, pg.Height
 }
 
-// PageAt returns the index of the sheet containing y, or -1 (y in a
-// gap or outside the pages).
+// PageAt returns the index of the first sheet of the row containing y, or
+// -1 (y in a gap or outside the pages).
 func (ps *PageSet) PageAt(y float64) int {
-	for i := range ps.Pages {
-		_, py, _, ph := ps.PageRect(i)
-		if y >= py && y < py+ph {
-			return i
+	for _, row := range ps.rows() {
+		first := row[len(row)-1]
+		if row[0] >= 0 {
+			first = row[0]
+		}
+		_, py, _, _ := ps.PageRect(first)
+		_, rh := ps.rowSize(row)
+		if y >= py && y < py+rh {
+			return first
 		}
 	}
 	return -1
@@ -362,6 +447,7 @@ func (ps *PageSet) Draw() {
 		p.FillRect(x+s.ShadowDelta, y+s.ShadowDelta, pw, phh)
 		p.SetFillStyle(s.Sheet)
 		p.FillRect(x, y, pw, phh)
+		ps.drawBackdrop(i)
 		p.SetStrokeStyle(s.Border)
 		p.SetLineWidth(1)
 		p.StrokeRect(x+0.5, y+0.5, pw-1, phh-1)
@@ -411,14 +497,21 @@ func (ps *PageSet) AnchorAt(x, y float64) Anchor {
 	}
 	best, bestDist := 0, 1e18
 	for i := range ps.Pages {
-		_, py, _, ph := ps.PageRect(i)
-		d := 0.0
+		px, py, pw, ph := ps.PageRect(i)
+		dx, dy := 0.0, 0.0
 		switch {
 		case y < py:
-			d = py - y
+			dy = py - y
 		case y >= py+ph:
-			d = y - (py + ph)
+			dy = y - (py + ph)
 		}
+		switch {
+		case x < px:
+			dx = px - x
+		case x >= px+pw:
+			dx = x - (px + pw)
+		}
+		d := dy*dy + dx*dx
 		if d < bestDist {
 			best, bestDist = i, d
 		}
