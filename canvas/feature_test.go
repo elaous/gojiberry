@@ -457,7 +457,7 @@ func TestMarkdownRoundTrip(t *testing.T) {
 		Chars{Text: "2", Format: Format{Superscript: true}},
 	}
 	md := MarkdownFromItems(src)
-	back := flattenItems(Markdown{}.Transform(md))
+	back := flattenItems(Markdown{}.Transform(md), false)
 	if plainOf(back) != "Plain bold and struck x2" {
 		t.Fatalf("text = %q (markdown %q)", plainOf(back), md)
 	}
@@ -559,7 +559,7 @@ func TestCustomFeature(t *testing.T) {
 	r := NewRegistry(featureFunc{"upper", func(r *Registry) {
 		r.AddCommand("text.upper", "Upper case", "Mod+Shift+U", func(c *CommandContext) bool {
 			ran = true
-			txt := c.Target.Text()
+			txt := c.Target.EditText()
 			c.Target.Replace([]Edit{{0, len([]rune(txt)), plainItems(strings.ToUpper(txt))}})
 			return true
 		})

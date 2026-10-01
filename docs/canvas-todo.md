@@ -48,7 +48,7 @@ paste Markdown.
   previous page's or setting a new one, and it can be **none**.
 - **None** for page numbers, headers and footers from the UI: remove from
   one page only, from this page forward, or from all pages. (The model
-  already has "empty header/footer" and "page number off"; `goxcanvas`
+  already has "empty header/footer" and "page number off"; `canvas/gox`
   exposes `None`. What is missing is the choice in the canvas menus.)
 - Background image with opacity.
 - Spread view mode for image placement (two facing pages).
@@ -74,9 +74,9 @@ links, symbols, formula, horizontal rule, watermark.
 
 ## gox integration (see gox-canvas.md)
 
-- Done: `gox.Host`, the `goxcanvas` renderer, `Canvas`, `TextFlow`
+- Done: `gox.Host`, the `canvas/gox` renderer, `Canvas`, `TextFlow`
   (with the `Pages` render prop), `Header`, `Footer`, `PageNumber`.
 - Next elements: `ScrollView`, `Image`, `FloatingText`, `TableView`
   (with a cell render prop), `PageSet` as its own element.
-- `CanvasView`, a DOM component that mounts a `goxcanvas` tree.
+- `CanvasView`, a DOM component that mounts a `canvas/gox` tree.
 - Fragments inside `Canvas` children.

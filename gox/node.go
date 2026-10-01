@@ -120,7 +120,7 @@ func (n Node) WithKey(key string) Node {
 // Host constructs a node for a renderer-specific component: tag names it
 // (for example "canvas.TextFlow"), props is its typed props value (any
 // Go type -- slices, structs, functions), and children are its child
-// nodes. Only a renderer that knows the tag can draw it (goxcanvas draws
+// nodes. Only a renderer that knows the tag can draw it (canvas/gox draws
 // the canvas components); the HTML renderer reports an error, and domrt
 // and goxgio draw nothing.
 func Host(tag string, props any, children ...Node) Node {

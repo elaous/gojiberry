@@ -1,4 +1,4 @@
-package goxcanvas
+package gox
 
 import (
 	"fmt"
@@ -55,7 +55,7 @@ func (r *Root) Find(tag string, n int) any {
 func (r *Root) Render(n gox.Node) error {
 	props, ok := n.Props.(CanvasProps)
 	if n.Kind != gox.KindHost || !ok {
-		return fmt.Errorf("goxcanvas: root node must be a Canvas element, got %q", n.Tag)
+		return fmt.Errorf("canvas/gox: root node must be a Canvas element, got %q", n.Tag)
 	}
 	if r.root == nil {
 		r.root = &canvasInst{}
@@ -101,7 +101,7 @@ func (c *canvasInst) update(r *Root, p CanvasProps, children []gox.Node) (bool, 
 	created := false
 	for i, ch := range children {
 		if ch.Kind == gox.KindFragment {
-			return false, fmt.Errorf("goxcanvas: fragments are not supported inside Canvas yet")
+			return false, fmt.Errorf("canvas/gox: fragments are not supported inside Canvas yet")
 		}
 		var old inst
 		if i < len(c.kids) && c.kids[i].tag() == ch.Tag && c.kids[i].key() == ch.Key {
@@ -142,7 +142,7 @@ func newInst(n gox.Node) (inst, error) {
 	case TagTextFlow:
 		return &flowInst{k: n.Key, ps: canvas.NewPageSet(), flow: canvas.NewTextFlow("", 0, 0, 0, 0)}, nil
 	}
-	return nil, fmt.Errorf("goxcanvas: unsupported element %q inside Canvas (supported: %s)", n.Tag, TagTextFlow)
+	return nil, fmt.Errorf("canvas/gox: unsupported element %q inside Canvas (supported: %s)", n.Tag, TagTextFlow)
 }
 
 // flowInst is a TextFlow element: a PageSet drawn under a TextFlow.
