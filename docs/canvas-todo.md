@@ -30,6 +30,10 @@ the selection); a style expands to a format at layout time, so editing it
 restyles every use; Ctrl/Cmd+Alt+0-3, Ctrl/Cmd+\\ clears formatting;
 `components.StylePicker`.
 
+**Typing aids** -- auto-closing pairs (`TextFlow.AutoClose`, at every cursor: wrap a
+selection, step over a closer) and a word-completion popup (`Complete`,
+`Completer`, `Vocabulary`; Up/Down, Tab/Enter, Escape), as in `FloatingText`.
+
 **Scrolling** -- a `ScrollView` keeps the caret in view while you type, move or paste (`RevealCaret`).
 
 **Editing features** (registered with `Stage.Features`) -- multi-cursor,
@@ -66,8 +70,6 @@ in the selector is downloaded into the store the first time the text uses it
 ## To do
 
 - **Formula** editor and formula text element.
-- Auto-closing brackets and completion in the `TextFlow` (a `FloatingText`
-  has them), and at several cursors.
 - `TextFlow` multi-cursor keeps one `Cursor.After` per cursor; typing at a
   break offset goes in front of the break unless the caret is "after".
 - Markdown: links round-trip, but tables and images are not written back;

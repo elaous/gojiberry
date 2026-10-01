@@ -31,6 +31,8 @@ func Doc(state State, cb Callbacks) gox.Node {
 				pageWidth={560} pageHeight={420}
 				spread={state.Spread}
 				styles={state.Styles}
+				autoClose={cv.DefaultAutoClose()}
+				vocabulary={[]string{"Gojiberry", "canvas", "feature", "paragraph"}}
 				margins={[]float64{60, 50, 60, 50}}
 				onChange={cb.OnFlow}
 				onHoverLink={cb.OnHoverLink}

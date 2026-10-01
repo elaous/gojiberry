@@ -160,6 +160,19 @@ type TextFlow struct {
 	// to (DefaultStyles is a starting set).
 	Styles []StyleDef
 
+	// AutoClose maps each opening character to its closer (nil: none;
+	// DefaultAutoClose is the code-editor set). Typing an opener inserts
+	// both, typing the closer in front of one steps over it, and an opener
+	// typed over a selection wraps it -- at every cursor.
+	AutoClose map[rune]rune
+	// Complete turns on the word-completion popup (for the primary
+	// cursor); so does setting Completer or Vocabulary.
+	Complete bool
+	// Completer suggests completions for the word before the caret (nil
+	// means the words already in the text and in Vocabulary).
+	Completer  Completer
+	Vocabulary []string
+
 	Columns []float64
 	Gap     float64
 	// MinColumnWidth stops a drag from collapsing a column (default 40).
@@ -204,6 +217,9 @@ type TextFlow struct {
 
 	stageLink      func(url string)
 	hoverLink      string
+	sugg           *Menu // completion popup
+	suggFrom       int   // where the word being completed starts
+	viewport       [4]float64
 	hoverRect      [4]float64
 	hoverX, hoverY float64
 }
@@ -1158,6 +1174,12 @@ func (f *TextFlow) Dragging() bool { return f.drag != nil }
 
 // MouseDown starts dragging a gap if (x, y) is on its grip (edit mode).
 func (f *TextFlow) MouseDown(x, y float64) bool {
+	if f.suggestionsOpen() {
+		if f.sugg.MouseDown(x, y) {
+			return true
+		}
+		f.closeSuggestions()
+	}
 	if f.mode != ModeEdit {
 		if f.openLinkAt(x, y) {
 			return true
