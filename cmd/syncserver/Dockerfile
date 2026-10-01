@@ -7,7 +7,7 @@
 # fontserver/translateserver: the delta-sync relay never makes an
 # outbound network call of its own, just relays what clients POST to
 # it (syncserver.Server's own doc comment).
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

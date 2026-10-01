@@ -18,7 +18,7 @@
 # Dockerfile carries none: this image makes no outbound network call
 # of its own at all, only execs a local subprocess and serves plain
 # HTTP.
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
