@@ -86,13 +86,15 @@ type FloatingText struct {
 	// or the box.
 	OnChange func(*FloatingText)
 
-	runes   []fRune
-	caret   int
-	anchor  int      // the other end of the selection
-	extra   []Cursor // further cursors (multi-cursor); the caret and anchor are the primary one
-	pending Format   // format for the next typed text when nothing is selected
-	editing bool
-	caretOn bool
+	runes    []fRune
+	hist     snapshotHistory[boxSnap]
+	histKind string
+	caret    int
+	anchor   int      // the other end of the selection
+	extra    []Cursor // further cursors (multi-cursor); the caret and anchor are the primary one
+	pending  Format   // format for the next typed text when nothing is selected
+	editing  bool
+	caretOn  bool
 
 	inner *TextFlow
 	flow  *TextFlow // the flow this box wraps around
@@ -180,6 +182,7 @@ func (ft *FloatingText) SetText(s string) {
 		ft.runes = append(ft.runes, fRune{r: r})
 	}
 	ft.caret, ft.anchor, ft.pending = len(ft.runes), len(ft.runes), Format{}
+	ft.hist.reset()
 }
 
 // Items returns the content as TextFlow items, one Chars per stretch of
@@ -267,6 +270,8 @@ func (ft *FloatingText) SetMode(m Mode) bool {
 }
 
 func (ft *FloatingText) changed() {
+	ft.hist.commit(ft.histSnap(), ft.histKind)
+	ft.histKind = ""
 	if ft.OnChange != nil {
 		ft.OnChange(ft)
 	}
@@ -354,6 +359,9 @@ func (ft *FloatingText) handleEditKey(key string, shift bool) bool {
 	if ft.mode != ModeEdit || !ft.editing {
 		return false
 	}
+	if endsRun(key) {
+		ft.hist.breakRun()
+	}
 	ft.sync()
 	if len(ft.extra) > 0 {
 		return ft.multiKey(key, shift)
@@ -398,6 +406,7 @@ func (ft *FloatingText) handleEditKey(key string, shift bool) bool {
 		}
 	case "Backspace", "Delete":
 		from, to := ft.Selection()
+		hadSelection := from != to
 		switch {
 		case from != to:
 		case key == "Backspace" && ft.betweenPair():
@@ -409,6 +418,9 @@ func (ft *FloatingText) handleEditKey(key string, shift bool) bool {
 			to++
 		default:
 			return true
+		}
+		if !hadSelection {
+			ft.histKind = "delete"
 		}
 		ft.replace(from, to, nil)
 		ft.changed()
@@ -607,6 +619,10 @@ func (ft *FloatingText) MouseDown(x, y float64) bool {
 	default: // inside the text
 		ft.sync()
 		ft.extra = nil
+		if !ft.editing {
+			ft.hist.start(ft.histSnap())
+		}
+		ft.hist.breakRun()
 		ft.editing = true
 		ft.caret = ft.inner.OffsetAt(x, y)
 		ft.anchor = ft.caret

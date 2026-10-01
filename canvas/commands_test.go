@@ -122,7 +122,7 @@ func TestStageChordsAndClipboardRouting(t *testing.T) {
 	if !s.HandleChord("Mod+B") || !reflect.DeepEqual(b.cmds, []Command{CmdBold}) || !reflect.DeepEqual(a.cmds, []Command{CmdBold}) {
 		t.Fatalf("topmost first, then on to a: b=%v a=%v", b.cmds, a.cmds)
 	}
-	if s.HandleChord("Mod+Z") {
+	if s.HandleChord("Mod+Q") {
 		t.Fatal("unbound chord")
 	}
 	s.Keymap = Keymap{"Mod+Q": CmdItalic}

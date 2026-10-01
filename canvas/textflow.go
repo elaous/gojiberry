@@ -189,6 +189,8 @@ type TextFlow struct {
 	extra    []Cursor // further cursors; sel is the primary one
 	pending  Format   // format for the next typed text when nothing is selected
 	edited   bool     // Items hold the content now (see materialize)
+	hist     snapshotHistory[flowSnap]
+	histKind string // the kind of the change being made, for merging typing runs
 
 	obstacles []Obstacle
 	mode      Mode

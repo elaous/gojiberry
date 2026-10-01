@@ -33,6 +33,7 @@ func (f *TextFlow) ResetContent() {
 	f.edited, f.derivedOK = false, false
 	f.sel, f.extra = flowSel{}, nil
 	f.Items = nil
+	f.hist.reset()
 }
 
 // Editing reports whether the caret is in the text.
@@ -43,14 +44,18 @@ func (f *TextFlow) stopEditing() { f.editing, f.extra, f.pending = false, nil, F
 // materialize makes Items the content, so it can be edited.
 func (f *TextFlow) materialize() {
 	if f.edited {
+		f.hist.start(f.histSnap())
 		return
 	}
 	f.Items = slices.Clone(f.items())
 	f.Text, f.edited = "", true
+	f.hist.start(f.histSnap())
 }
 
 func (f *TextFlow) changed() {
 	f.derivedOK = false
+	f.hist.commit(f.histSnap(), f.histKind)
+	f.histKind = ""
 	if f.OnChange != nil {
 		f.OnChange(f)
 	}
@@ -276,10 +281,14 @@ func (f *TextFlow) InsertText(s string) bool {
 	}
 	f.materialize()
 	d := f.flatten()
+	if rs := []rune(s); len(rs) == 1 && rs[0] != '\n' && !f.HasSelection() {
+		f.histKind = "type"
+	}
 	editCursors(f, func(c Cursor, _ []rune) (int, int, []Item) {
 		from, to := c.Range()
 		return from, to, []Item{Chars{Text: s, Format: f.typeFormat(d, from)}}
 	})
+	f.histKind = ""
 	f.pending, f.caretOff = Format{}, false
 	return true
 }
@@ -373,6 +382,9 @@ func (f *TextFlow) lineAt(o int) (Line, bool) {
 }
 
 func (f *TextFlow) editKey(key string, shift bool) bool {
+	if endsRun(key) {
+		f.hist.breakRun() // moving, Enter, Tab... end a run of typing or deleting
+	}
 	move := func(to func(c Cursor) int) {
 		n := len(f.flatten().runes)
 		cs := f.Cursors()
@@ -438,6 +450,9 @@ func (f *TextFlow) editKey(key string, shift bool) bool {
 			}
 		}
 		n := len(f.flatten().runes)
+		if !f.HasSelection() {
+			f.histKind = "delete"
+		}
 		editCursors(f, func(c Cursor, _ []rune) (int, int, []Item) {
 			from, to := c.Range()
 			switch {
@@ -449,6 +464,7 @@ func (f *TextFlow) editKey(key string, shift bool) bool {
 			}
 			return from, to, nil
 		})
+		f.histKind = ""
 	case "Enter":
 		return f.enter()
 	case "Tab":

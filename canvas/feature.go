@@ -131,7 +131,7 @@ func NewRegistry(features ...Feature) *Registry {
 
 // DefaultFeatures are the features a new Stage has.
 func DefaultFeatures() []Feature {
-	return []Feature{MultiCursor{}, LineOps{}, MarkdownClipboard{}, Breaks{}, Paragraphs{}, TextCase{}, Links{}, PageFurniture{}}
+	return []Feature{History{}, MultiCursor{}, LineOps{}, MarkdownClipboard{}, Breaks{}, Paragraphs{}, TextCase{}, Links{}, PageFurniture{}}
 }
 
 // Register installs f. It panics on a duplicate feature or command
@@ -159,6 +159,14 @@ func (r *Registry) AddCommand(name Command, title, chord string, fn CommandFunc)
 	if chord != "" {
 		r.keys[chord] = name
 	}
+}
+
+// Bind adds a further default chord for a registered command.
+func (r *Registry) Bind(chord string, cmd Command) {
+	if !r.Has(cmd) {
+		panic(fmt.Sprintf("canvas: Bind of unknown command %q", cmd))
+	}
+	r.keys[chord] = cmd
 }
 
 // Features returns the registered features.
