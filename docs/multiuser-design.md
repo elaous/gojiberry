@@ -1,6 +1,6 @@
 # Multi-user editing: design
 
-Status: **phases 1 (`crdt` marks), 2 (the `collab` bridge) and 3 (server and transport) are done**; phase 4 (UI) is not started. Roles
+Status: **phases 1 (`crdt` marks), 2 (the `collab` bridge) 3 (server and transport) and 4 (UI) are done**. Roles
 (`canvas.Role`) and comments, which this design builds on, exist.
 
 ## What exists
@@ -273,3 +273,27 @@ waiting), and a refused connection reported.
 Not yet: a rejected replica cannot repair itself (rebuild the session);
 presence is sent on demand, not throttled; two clients that both start an empty
 document at the same moment each seed their own copy of the content.
+
+## Phase 4 as built
+
+- `TextFlow.Subscribe` lets several observers hear about changes (the gox
+  element replaces `OnChange` on every render, so the bridge no longer uses it);
+  `Session.RefreshPeers` puts other people's cursors in `Flow.RemoteCursors`,
+  drawn as a tinted selection, a caret and a name flag (`canvas/flowpeers.go`).
+- Per-user undo (`collab/undo.go`): each local change records its inverse by
+  character id (inserted ids, deleted runs with their predecessor, old format
+  values); `TextFlow.UndoHook` routes Ctrl+Z / Ctrl+Shift+Z to it, so one
+  person's undo never touches another's text.
+- Viewers may comment: `Role.CanComment` is true for viewers and a
+  comment-only target (`canvas/commenttarget.go`) passes through nothing but
+  the comment mark; the hub applies the same rule to `comment:`/`reply:` blocks.
+- `components.Presence`: avatars, connection status with the number of
+  changes waiting to be sent, and a "View only" badge.
+- The showcase joins a document with `?doc=&hub=&token=&name=&color=`;
+  `cmd/collabhub` serves it. `e2e/live.js` runs three browsers (owner, editor,
+  viewer): shared typing, presence, per-user undo/redo, a viewer's comment.
+- `domrt` no longer re-inserts nodes that are already in place when patching
+  children; doing so took the focus away from the hidden text input on every
+  re-render of a live document.
+- In view mode a drag does not select text (a double click does); the
+  comment-only target reads that selection.

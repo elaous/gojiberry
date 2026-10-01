@@ -41,7 +41,6 @@ type Bridge struct {
 	// Per-user undo (see undo.go): the inverse of each of your own changes.
 	undo, redo []entry
 	recordTo   *[]entry // where the change being made is recorded; nil: the undo stack
-	prevChange func(*canvas.TextFlow)
 }
 
 func attach(replica string, f *canvas.TextFlow) (*Bridge, error) {
@@ -49,13 +48,7 @@ func attach(replica string, f *canvas.TextFlow) (*Bridge, error) {
 		return nil, err
 	}
 	b := &Bridge{Doc: crdt.NewDocWithStrategy(replica, crdt.MergeCharCRDT), Flow: f}
-	b.prevChange = f.OnChange
-	f.OnChange = func(tf *canvas.TextFlow) {
-		b.pushLocal()
-		if b.prevChange != nil {
-			b.prevChange(tf)
-		}
-	}
+	f.Subscribe(func(*canvas.TextFlow) { b.pushLocal() })
 	f.UndoHook = b.UndoStep
 	return b, nil
 }

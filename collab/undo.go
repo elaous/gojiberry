@@ -214,8 +214,8 @@ func (b *Bridge) revert(e entry) bool {
 
 	b.Flow.SetRemoteContent(itemsFromAtoms(out), []canvas.Cursor{canvas.At(o)})
 	b.pushLocal()
-	if b.prevChange != nil {
-		b.prevChange(b.Flow)
+	if b.Flow.OnChange != nil {
+		b.Flow.OnChange(b.Flow)
 	}
 	return true
 }

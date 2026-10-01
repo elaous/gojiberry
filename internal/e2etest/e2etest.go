@@ -26,7 +26,12 @@ var libJS []byte
 // serves it with index.html and wasm_exec.js, and runs script (a path
 // relative to the example directory) with PORT, PLAYWRIGHT_CHROMIUM and
 // E2E_LIB in its environment. The script must print "ALL CHECKS PASSED".
-func Run(t *testing.T, script string) {
+func Run(t *testing.T, script string) { t.Helper(); RunEnv(t, script) }
+
+// RunEnv is Run with extra environment variables ("NAME=value") for the
+// script: a test that starts a server of its own tells the script where it
+// is that way.
+func RunEnv(t *testing.T, script string, extraEnv ...string) {
 	t.Helper()
 	node, err := exec.LookPath("node")
 	if err != nil {
@@ -87,6 +92,7 @@ func Run(t *testing.T, script string) {
 		"PLAYWRIGHT_CHROMIUM="+chromium,
 		"E2E_LIB="+filepath.Join(site, "lib.js"),
 	)
+	cmd.Env = append(cmd.Env, extraEnv...)
 	out, err := cmd.CombinedOutput()
 	t.Logf("%s output:\n%s", script, out)
 	if err != nil {

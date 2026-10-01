@@ -18,11 +18,19 @@ var _ CommentHost = commentTarget{}
 
 func (t commentTarget) EditText() string          { return t.f.EditText() }
 func (t commentTarget) Slice(from, to int) []Item { return t.f.Slice(from, to) }
-func (t commentTarget) Cursors() []Cursor         { return t.f.Cursors() }
-func (t commentTarget) SetCursors(cs []Cursor)    { t.f.SetCursors(cs) }
-func (t commentTarget) CommentSet() *CommentSet   { return t.f.CommentSet() }
-func (t commentTarget) CommentAuthor() string     { return t.f.CommentAuthor() }
-func (t commentTarget) Touch()                    { t.f.Touch() }
+
+// Cursors is the selected text: in view mode the selection is the only
+// thing the person has made, and the edit cursor is somewhere else.
+func (t commentTarget) Cursors() []Cursor {
+	if from, to := t.f.Selection(); from != to {
+		return []Cursor{{Anchor: from, Caret: to}}
+	}
+	return t.f.Cursors()
+}
+func (t commentTarget) SetCursors(cs []Cursor)  { t.f.SetCursors(cs) }
+func (t commentTarget) CommentSet() *CommentSet { return t.f.CommentSet() }
+func (t commentTarget) CommentAuthor() string   { return t.f.CommentAuthor() }
+func (t commentTarget) Touch()                  { t.f.Touch() }
 
 // Replace applies the edits if they change nothing but Format.Comment.
 func (t commentTarget) Replace(edits []Edit) {

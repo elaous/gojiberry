@@ -537,3 +537,29 @@ func TestFootnoteListComponent(t *testing.T) {
 	mustContain(t, render(t, FootnoteList(FootnoteListProps{Entries: entries[:1], CanEdit: true})), "disabled")
 	mustContain(t, render(t, FootnoteList(FootnoteListProps{})), "No footnotes")
 }
+
+func TestPresenceComponent(t *testing.T) {
+	html := render(t, Presence(PresenceProps{
+		Self:   PresencePeer{Name: "Ana Souza", Color: "#f00", Role: "owner"},
+		Peers:  []PresencePeer{{Name: "bob@example.com", Role: "editor"}, {User: "vee@x.org"}, {}},
+		Status: "online", Pending: 0, Role: "viewer",
+	}))
+	mustContain(t, html, "gj-presence-self", ">AS<", ">BE<", ">VX<", ">?<", `title="Ana Souza (owner)"`, `title="vee@x.org"`, "background:#f00", "background:#7c5cff",
+		"gj-presence-online", ">Online<", "View only", `aria-label="People here"`)
+	off := render(t, Presence(PresenceProps{Self: PresencePeer{Name: "x"}, Status: "offline", Pending: 3}))
+	mustContain(t, off, "Offline · 3 waiting to send", "gj-presence-offline")
+	mustNotContain(t, off, "View only")
+	mustContain(t, render(t, Presence(PresenceProps{Self: PresencePeer{Name: "x"}, Status: "connecting"})), "Connecting…")
+	mustContain(t, render(t, Presence(PresenceProps{Self: PresencePeer{Name: "x"}, Status: "odd"})), ">odd<")
+	mustNotContain(t, render(t, Presence(PresenceProps{Self: PresencePeer{Name: "x"}})), "gj-presence-status")
+}
+
+func TestCommentCardReplyWithoutEditing(t *testing.T) {
+	c := canvas.Comment{ID: "c1", Text: "hi"}
+	html := render(t, CommentCard(CommentCardProps{Comment: c, CanReply: true}))
+	mustContain(t, html, "gj-comment-reply-row")
+	mustNotContain(t, html, "gj-comment-actions", "Delete")
+	list := render(t, CommentList(CommentListProps{Comments: []canvas.Comment{c}, CanReply: true}))
+	mustContain(t, list, "gj-comment-reply-row")
+	mustNotContain(t, list, "Resolve")
+}

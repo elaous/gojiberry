@@ -9,7 +9,7 @@ function assert(cond, msg) {
 // open launches headless Chromium on the example and returns helpers.
 // The demos write a JSON summary of their state into #state after every
 // change, since a canvas has no DOM to read back.
-async function open() {
+async function open(query = '') {
   const browser = await chromium.launch({
     executablePath: process.env.PLAYWRIGHT_CHROMIUM || '/opt/pw-browsers/chromium',
     args: ['--no-sandbox'],
@@ -17,7 +17,7 @@ async function open() {
   const page = await browser.newPage({ viewport: { width: 1000, height: 800 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(`http://localhost:${process.env.PORT}/index.html`);
+  await page.goto(`http://localhost:${process.env.PORT}/index.html${query}`);
   await page.waitForFunction(() => document.getElementById('state') && document.getElementById('state').textContent !== '(pending)', null, { timeout: 15000 });
   const box = await page.locator('#stage').boundingBox();
   return {
