@@ -110,6 +110,7 @@ func (f *TextFlow) beginSelect(x, y float64) bool {
 		return had
 	}
 	o, after := f.offsetAt(x, y)
+	f.hist.breakRun()
 	f.sel = flowSel{anchor: o, caret: o, after: after, dragging: true}
 	f.extra, f.pending, f.caretOff = nil, Format{}, false
 	f.editing = f.mode == ModeEdit

@@ -90,6 +90,9 @@ func (ft *FloatingText) InsertText(s string) bool {
 		ft.closeSuggestions()
 		return ok
 	}
+	if ft.anchor == ft.caret {
+		ft.histKind = "type"
+	}
 	ft.typeRune(rs[0])
 	ft.pending = Format{}
 	ft.caretOn = true

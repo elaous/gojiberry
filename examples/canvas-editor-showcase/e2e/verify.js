@@ -10,7 +10,7 @@ run(async () => {
   let s = await d.state();
   assert(!s.error, 'renders without error: ' + s.error);
   assert(s.mode === 'view' && s.pages === 3, 'starts in view mode with three pages');
-  assert(JSON.stringify(s.features) === JSON.stringify(['multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'page-furniture']), 'features registered: ' + s.features);
+  assert(JSON.stringify(s.features) === JSON.stringify(['history', 'multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'page-furniture']), 'features registered: ' + s.features);
   for (const tag of ['canvas.TextFlow', 'canvas.Image', 'canvas.FloatingText', 'canvas.Table', 'canvas.ScrollView'])
     assert(s.elements.includes(tag), tag + ' is a registered element');
   assert(s.commands >= 30, 'commands registered: ' + s.commands);
@@ -20,7 +20,7 @@ run(async () => {
   // The menu bar is built from the registered commands: one submenu per feature.
   await page.click('button.gj-menubar-button:has-text("Edit")');
   const subs = await page.locator('.gj-menubar-panel > .gj-menu > .gj-menu-item-sub').count();
-  assert(subs === 8, 'Edit has a submenu per feature: ' + subs);
+  assert(subs === 9, 'Edit has a submenu per feature: ' + subs);
   const shortcut = await page.locator('.gj-menubar-panel li:has-text("Move line up") .gj-menu-shortcut').first().textContent();
   assert(shortcut === 'Alt+↑', 'a command shows its shortcut: ' + shortcut);
   await page.hover('.gj-menubar-panel li.gj-menu-item-sub:has-text("Paragraphs")');
@@ -49,6 +49,17 @@ run(async () => {
   await page.keyboard.press('Backspace');
   s = await d.state();
   assert(s.text.length === before.length + 1 && s.text.includes('Q') && !s.text.includes('QQ'), 'Backspace deletes');
+
+  await page.keyboard.press('Control+z');
+  s = await d.state();
+  assert(s.text.length === before.length + 2 && s.text.includes('QQ'), 'Ctrl+Z undoes the Backspace');
+  await page.keyboard.press('Control+z');
+  s = await d.state();
+  assert(s.text === before, 'Ctrl+Z undoes the typing: ' + s.text.length + ' vs ' + before.length + ' ' + s.text.slice(0, 40));
+  await page.keyboard.press('Control+Shift+z');
+  await page.keyboard.press('Control+y');
+  s = await d.state();
+  assert(s.text.length === before.length + 1, 'Ctrl+Shift+Z and Ctrl+Y redo');
 
   // Multi-cursor: select the word at the caret, then every match.
   await page.keyboard.press('Control+D');
@@ -109,25 +120,25 @@ run(async () => {
   await page.waitForTimeout(50);
   assert(await page.locator('#link-preview a.gj-linkpreview').count() === 0, 'the card goes when the pointer leaves');
 
-  // Key bindings editor: rebind Move line up to Ctrl+J.
+  // Key bindings editor: rebind Copy line down to Ctrl+J.
   await page.click('button[data-tab="keys"]');
-  await page.click('[data-action="change:line.move-up"]');
+  await page.click('[data-action="change:line.duplicate-down"]');
   await page.waitForSelector('.gj-keybindings-capture');
   await page.keyboard.press('Control+j');
   await page.waitForTimeout(50);
-  assert(await page.locator('.gj-keybindings-message:has-text("Move line up is now Ctrl+J")').count() === 1, 'the editor reports the new binding');
-  assert(await page.locator('.gj-keybindings-row-modified:has-text("Move line up")').count() === 1, 'and marks it modified');
+  assert(await page.locator('.gj-keybindings-message:has-text("Copy line down is now Ctrl+J")').count() === 1, 'the editor reports the new binding');
+  assert(await page.locator('.gj-keybindings-row-modified:has-text("Copy line down")').count() === 1, 'and marks it modified');
   await page.mouse.move(...d.at(450, 300));
   await page.mouse.wheel(0, -5000);
   await page.waitForTimeout(50);
-  await d.click(180 + 60, 24 + 60 + 80); // a body line: the one above it is the heading
+  await d.click(180 + 60, 24 + 60 + 80); // a body line
   const lineText = (await d.state()).text;
-  await page.keyboard.press('Alt+ArrowUp');
+  await page.keyboard.press('Alt+Shift+ArrowDown');
   s = await d.state();
-  assert(s.text === lineText, 'the old chord no longer moves the line');
+  assert(s.text === lineText, 'the old chord no longer copies the line');
   await page.keyboard.press('Control+j');
   s = await d.state();
-  assert(s.text !== lineText && s.text.length === lineText.length, 'the new chord moves the line: cursors ' + JSON.stringify(s.cursors) + ' editing ' + s.editing + ' len ' + s.text.length + '/' + lineText.length);
+  assert(s.text.length > lineText.length, 'the new chord copies the line: ' + lineText.length + ' -> ' + s.text.length);
   await page.click('[data-action="reset-all"]');
   await page.click('button[data-tab="format"]');
 

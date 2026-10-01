@@ -7,7 +7,8 @@ canvas. The gox integration is described in [gox-canvas.md](gox-canvas.md).
 ## Built
 
 **Text and characters** -- the `TextFlow` is editable (typing, selection,
-clipboard, Markdown tables and images in the content, undo not yet);
+clipboard, Markdown tables and images in the content, **undo/redo**
+(Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z or Ctrl+Y; typing and deleting runs are one step));
 formats: bold, italic, underline, strike, super/subscript, color,
 highlight, font family/size/scale, **case** (UPPER, lower, Title, small
 caps; Ctrl/Cmd+Alt+U/L/T/M), **links** (`Format.Link`: link style, a
@@ -51,7 +52,7 @@ submenus), `CommandMenu` (a menu from the registered commands),
 - **Formula** editor and formula text element.
 - **Styles**: named character and paragraph styles, and the style editor
   driving them.
-- **Undo/redo**, and scrolling the caret into view.
+- Scrolling the caret into view.
 - Auto-closing brackets and completion in the `TextFlow` (a `FloatingText`
   has them), and at several cursors.
 - `TextFlow` multi-cursor keeps one `Cursor.After` per cursor; typing at a
