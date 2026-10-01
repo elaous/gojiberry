@@ -165,6 +165,18 @@ func (im *Image) SetWrap(on bool) {
 // Dragging reports whether a drag is in progress.
 func (im *Image) Dragging() bool { return im.drag != nil }
 
+// ContainsPoint implements Hitter: a floating image's visible part (and,
+// in edit mode, its toolbar) keeps presses from reaching the text beneath.
+func (im *Image) ContainsPoint(x, y float64) bool {
+	if im.Placement != PlaceFloating {
+		return false
+	}
+	if im.contains(x, y) {
+		return true
+	}
+	return im.mode == ModeEdit && im.whatAt(x, y) != ""
+}
+
 // Mode returns the current mode.
 func (im *Image) Mode() Mode { return im.mode }
 

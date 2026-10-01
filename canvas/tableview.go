@@ -65,11 +65,27 @@ type TableView struct {
 	// delete itself, so removing it from the page is up to the caller.
 	OnDeleteTable func()
 
+	// Anchor, if set, pins the table to a page: X, Y are derived from it
+	// (relative to that page's sheet) using Pages or, failing that, the
+	// Flow's pages. Moving the table re-anchors it to the page it is over.
+	Anchor *Anchor
+	// Pages is the PageSet Anchor refers to; if nil the flow's is used.
+	Pages *PageSet
+	// Wrap makes text flow around the table once a Flow is set (SetFlow).
+	Wrap       bool
+	WrapMargin float64 // clear space around the table (NewTableView sets 8)
+	// Snap is the move granularity in px (NewTableView sets 5).
+	Snap float64
+	// OnMove is called as the table is dragged to a new position.
+	OnMove func(*TableView)
+
 	// CanvasW/CanvasH, if non-zero, keep context menus inside the
 	// canvas (Bind sets them from the canvas element).
 	CanvasW, CanvasH float64
 
 	menu     *Menu
+	press    *tablePress
+	flow     *TextFlow
 	viewport [4]float64
 	sel      Selection
 	mode     Mode
@@ -85,7 +101,7 @@ type TableView struct {
 // NewTableView returns a view of t drawn with DefaultTableStyle, in
 // ModeView; call SetMode(ModeEdit) to make it editable.
 func NewTableView(t *Table, p Painter) *TableView {
-	return &TableView{Table: t, Style: DefaultTableStyle(), Painter: p, X: 36, Y: 36, caretOn: true, menu: NewMenu(p)}
+	return &TableView{Table: t, Style: DefaultTableStyle(), Painter: p, X: 36, Y: 36, caretOn: true, menu: NewMenu(p), WrapMargin: 8, Snap: 5}
 }
 
 // SetPainter implements PainterSetter.
@@ -176,6 +192,7 @@ func (g geometry) right() float64  { return g.colX[len(g.colX)-1] }
 func (g geometry) bottom() float64 { return g.rowY[len(g.rowY)-1] }
 
 func (v *TableView) layout() geometry {
+	v.resolve()
 	t, s := v.Table, v.Style
 	g := geometry{colX: make([]float64, t.Cols()+1), rowY: make([]float64, t.Rows()+1)}
 	widths := make([]float64, t.Cols())
@@ -271,6 +288,9 @@ func (v *TableView) MouseMove(x, y float64) bool {
 	if v.mode != ModeEdit {
 		return false
 	}
+	if v.press != nil {
+		return v.dragTable(x, y)
+	}
 	menuChanged := v.menu.MouseMove(x, y)
 	g := v.layout()
 	s := v.Style
@@ -304,7 +324,12 @@ func (v *TableView) MouseDown(x, y float64) bool {
 	h := v.HitTest(x, y)
 	v.hover = h
 	switch h.Kind {
-	case HitColumnHandle, HitRowHandle, HitTableHandle:
+	case HitTableHandle:
+		// Pressing the table icon either selects the table (a click) or
+		// moves it (a drag); which, is decided as the pointer moves.
+		v.press = &tablePress{x: x, y: y, startX: v.X, startY: v.Y, hit: h}
+		return true
+	case HitColumnHandle, HitRowHandle:
 		v.selectHandle(h)
 		return true
 	}

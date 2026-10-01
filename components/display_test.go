@@ -218,3 +218,22 @@ func TestBox(t *testing.T) {
 		mustContain(t, html, "height:300px")
 	})
 }
+
+func TestListRendersItemsThroughTheRenderProp(t *testing.T) {
+	type person struct{ Name string }
+	people := []person{{"Ada"}, {"Grace"}}
+	n := List(ListProps[person]{
+		Items: people,
+		Item:  func(p person) gox.Node { return gox.El("b", nil, gox.Text(p.Name)) },
+		Key:   func(p person) string { return "k-" + p.Name },
+	})
+	html := render(t, n)
+	mustContain(t, html, `<ul class="gj-list">`, `<li class="gj-list-item" data-key="k-Ada"><b>Ada</b></li>`, `data-key="k-Grace"`)
+
+	mustContain(t, render(t, List(ListProps[int]{Items: []int{1}, Ordered: true, Item: func(i int) gox.Node { return gox.Text("x") }})), "<ol")
+	empty := gox.Text("nothing here")
+	mustContain(t, render(t, List(ListProps[int]{Empty: &empty})), "nothing here")
+	mustContain(t, render(t, List(ListProps[int]{})), `<ul class="gj-list"></ul>`)
+	// A missing Item renders empty <li>s rather than panicking.
+	mustContain(t, render(t, List(ListProps[int]{Items: []int{1, 2}})), `<li class="gj-list-item"></li>`)
+}

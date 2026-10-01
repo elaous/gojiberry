@@ -20,6 +20,7 @@ type FlowStyle struct {
 	GripColor       string
 	GripActiveColor string
 	GripW, GripH    float64 // size of the draggable grip above each gap
+	SelectColor     string  // tint over selected text
 }
 
 // DefaultFlowStyle is a light look matching DefaultTableStyle.
@@ -32,6 +33,7 @@ func DefaultFlowStyle() FlowStyle {
 		GripActiveColor: "#7c5cff",
 		GripW:           16,
 		GripH:           16,
+		SelectColor:     "rgba(124, 92, 255, 0.28)",
 	}
 }
 
@@ -59,6 +61,7 @@ type Line struct {
 	Baseline   float64 // y to draw the runs' text at
 	Page, Col  int
 	Start, End int
+	ColX, ColW float64 // the column the line is in
 	Runs       []Run
 	Objects    []PlacedObject // inline objects on this line
 }
@@ -152,6 +155,9 @@ type TextFlow struct {
 	derived    []Item
 	derivedSrc string
 	derivedOK  bool
+
+	sel     flowSel
+	formats *FormatClipboard
 
 	obstacles []Obstacle
 	mode      Mode
@@ -289,11 +295,12 @@ func (f *TextFlow) setConfigWidths(idx int, widths []float64) {
 
 // flowData is the flattened content stream a Layout was made from.
 type flowData struct {
-	runes  []rune
-	rs     []int // per rune: index into styles
-	styles []TextStyle
-	ops    []flowOp
-	f      *TextFlow
+	runes   []rune
+	rs      []int // per rune: index into styles
+	styles  []TextStyle
+	formats []Format // per style: the Format it was resolved from
+	ops     []flowOp
+	f       *TextFlow
 
 	objs       map[int]Inline // inline objects by text-stream offset
 	maxW, maxH float64        // room objects are measured against right now
@@ -326,6 +333,7 @@ func (f *TextFlow) flatten() *flowData {
 				id = len(d.styles)
 				styleID[it.Format] = id
 				d.styles = append(d.styles, it.Format.resolve(f.Style))
+				d.formats = append(d.formats, it.Format)
 			}
 			for _, r := range it.Text {
 				d.runes = append(d.runes, r)
@@ -337,6 +345,7 @@ func (f *TextFlow) flatten() *flowData {
 				id = len(d.styles)
 				styleID[Format{}] = id
 				d.styles = append(d.styles, Format{}.resolve(f.Style))
+				d.formats = append(d.formats, Format{})
 			}
 			d.objs[len(d.runes)] = it
 			d.runes = append(d.runes, objectRune)
@@ -351,6 +360,7 @@ func (f *TextFlow) flatten() *flowData {
 	}
 	if len(d.styles) == 0 {
 		d.styles = []TextStyle{f.Style}
+		d.formats = []Format{{}}
 	}
 	return d
 }
@@ -647,6 +657,7 @@ func (l *layouter) find(st flowState, lh float64, offset int) (flowState, float6
 func (l *layouter) place(st flowState, marks []BreakMark, line Line) {
 	l.out.Breaks = append(l.out.Breaks, marks...)
 	line.Page, line.Col, line.Y = st.page, st.col, st.y
+	line.ColX, line.ColW = st.band.Xs[st.col], st.band.Widths[st.col]
 	if !st.band.registered {
 		st.band.registered = true
 		l.bands = append(l.bands, st.band)
@@ -850,19 +861,38 @@ func (f *TextFlow) CaretRect(offset int) (x, y, h float64, ok bool) {
 }
 
 // OffsetAt returns the text-stream offset nearest (x, y), for placing a
-// caret from a click.
+// caret from a click. With columns it picks the line whose column the
+// point is in, so a click in the second column doesn't land in the first.
 func (f *TextFlow) OffsetAt(x, y float64) int {
 	lay := f.Layout()
 	if len(lay.Lines) == 0 {
 		return 0
 	}
-	ln := lay.Lines[len(lay.Lines)-1]
-	for _, c := range lay.Lines {
-		if y < c.Y+c.H {
-			ln = c
-			break
+	best, bestScore := 0, 1e18
+	for i, c := range lay.Lines {
+		dy := 0.0
+		switch {
+		case y < c.Y:
+			dy = c.Y - y
+		case y >= c.Y+c.H:
+			dy = y - (c.Y + c.H)
+		}
+		dx := 0.0
+		colW := c.ColW
+		if colW == 0 {
+			colW = c.W
+		}
+		switch {
+		case x < c.ColX:
+			dx = c.ColX - x
+		case x >= c.ColX+colW:
+			dx = x - (c.ColX + colW)
+		}
+		if score := dy*1000 + dx; score < bestScore {
+			best, bestScore = i, score
 		}
 	}
+	ln := lay.Lines[best]
 	if x <= ln.X {
 		return ln.Start
 	}
@@ -910,13 +940,14 @@ func (f *TextFlow) Dragging() bool { return f.drag != nil }
 // MouseDown starts dragging a gap if (x, y) is on its grip (edit mode).
 func (f *TextFlow) MouseDown(x, y float64) bool {
 	if f.mode != ModeEdit {
-		return false
+		return f.beginSelect(x, y)
 	}
 	bands := f.Layout().Bands
 	g := f.gripAt(bands, x, y)
 	if g == noGrip {
-		return false
+		return f.beginSelect(x, y)
 	}
+	f.ClearSelection()
 	b := bands[g.band]
 	f.drag = &flowDrag{
 		grip: g, cfg: b.Cfg, widths: slices.Clone(b.Widths), startX: x,
@@ -928,6 +959,12 @@ func (f *TextFlow) MouseDown(x, y float64) bool {
 // MouseMove drags the gap (keeping the two neighbours' combined width)
 // or updates which grip is hovered.
 func (f *TextFlow) MouseMove(x, y float64) bool {
+	if f.sel.dragging {
+		o := f.OffsetAt(x, y)
+		changed := o != f.sel.caret
+		f.sel.caret = o
+		return changed
+	}
 	if f.mode != ModeEdit {
 		return false
 	}
@@ -952,6 +989,10 @@ func (f *TextFlow) MouseMove(x, y float64) bool {
 
 // MouseUp ends a drag.
 func (f *TextFlow) MouseUp(x, y float64) bool {
+	if f.sel.dragging {
+		f.sel.dragging = false
+		return true
+	}
 	if f.drag == nil {
 		return false
 	}
@@ -990,6 +1031,7 @@ func (f *TextFlow) Draw() {
 	}
 
 	lay := f.Layout()
+	f.drawSelection(lay)
 	p.SetTextAlign("left")
 	p.SetTextBaseline("alphabetic")
 	for _, ln := range lay.Lines {
