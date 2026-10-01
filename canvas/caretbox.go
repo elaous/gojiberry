@@ -72,3 +72,34 @@ func (sv *ScrollView) RevealCaret() bool {
 	}
 	return sv.ScrollTo(nx, ny)
 }
+
+// TakeReveal returns the pending position of the first component that has
+// one (see TextFlow.GotoOffset).
+func (s *Stage) TakeReveal() (x, y, h float64, ok bool) {
+	for i := len(s.Components) - 1; i >= 0; i-- {
+		if r, isR := s.Components[i].(Revealer); isR {
+			if x, y, h, ok = r.TakeReveal(); ok {
+				return x, y, h, true
+			}
+		}
+	}
+	return 0, 0, 0, false
+}
+
+// RevealPending scrolls so a position asked for with GotoOffset is at the
+// top of the view, and reports whether it moved.
+func (sv *ScrollView) RevealPending() bool {
+	_, y, _, ok := sv.content.TakeReveal()
+	if !ok {
+		return false
+	}
+	return sv.ScrollTo(sv.ScrollX, y-scrollMargin)
+}
+
+// afterEvent keeps the view on what the event did: a requested position,
+// else the caret.
+func (sv *ScrollView) afterEvent() {
+	if !sv.RevealPending() {
+		sv.RevealCaret()
+	}
+}

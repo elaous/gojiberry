@@ -228,6 +228,8 @@ type TextFlow struct {
 	stageLink      func(url string)
 	hoverLink      string
 	hoverComment   string
+	revealAt       int
+	revealPending  bool
 	hoverCRect     [4]float64
 	sugg           *Menu // completion popup
 	suggFrom       int   // where the word being completed starts

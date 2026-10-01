@@ -77,6 +77,9 @@ func mergeFormat(under, over Format) Format {
 	if over.Comment != "" {
 		out.Comment = over.Comment
 	}
+	if over.Bookmark != "" {
+		out.Bookmark = over.Bookmark
+	}
 	out.Underline = out.Underline || over.Underline
 	out.Strike = out.Strike || over.Strike
 	out.Superscript = out.Superscript || over.Superscript

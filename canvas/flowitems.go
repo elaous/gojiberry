@@ -32,6 +32,8 @@ type Format struct {
 	Link string
 	// Comment is the ID of a comment (see CommentSet) on this text.
 	Comment string
+	// Bookmark names this text as a place a link ("#name") can jump to.
+	Bookmark string
 }
 
 // CaseKind is how letters are displayed; see Format.Case.
