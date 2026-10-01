@@ -1,6 +1,6 @@
 # Multi-user editing: design
 
-Status: **phase 1 (`crdt` marks) is done**; phases 2-4 are not started. Roles
+Status: **phases 1 (`crdt` marks) and 2 (the `collab` bridge) are done**; phases 3-4 are not started. Roles
 (`canvas.Role`) and comments, which this design builds on, exist.
 
 ## What exists
@@ -130,7 +130,7 @@ connected.
    sweep, snapshot; paragraph and object attributes on characters; an
    id-to-index map so edits are not O(n); convergence fuzz tests (random edits
    and formatting, shuffled and duplicated delivery).
-2. **`collab` bridge.** Items to model and back (round-trip tests against
+2. **`collab` bridge. Done.** Items to model and back (round-trip tests against
    `docfile`), diff to ops, remote apply with cursor mapping, side data. A test
    that connects two flows through a lossy, reordering fake network.
 3. **Server and transport.** SSE + POST, persistence, role checks,
@@ -181,3 +181,43 @@ range, deleted anchors, marks arriving before their characters, idempotence and
 snapshots; and a randomised test (150 trials, three replicas, random edits and
 formatting delivered late, out of order and twice) asserting the same text and
 formatting everywhere, including on a replica onboarded from a snapshot.
+
+## Phase 2 as built
+
+`collab.New(replica, flow)` starts a shared document from a flow's content;
+`collab.Join(replica, flow)` waits for one (the flow's own content is replaced by
+the first operations, and nothing is shared before then). Then:
+
+- `Drain()` returns the operations to send; `Apply(ops...)` takes the ones that
+  arrive; `Snapshot()` onboards a newcomer; `Sync()` shares side data changed
+  without a text edit (commands that change a comment or note already do via
+  `TextFlow.Touch`); `Err()` reports flow content that cannot be shared.
+- **Atoms.** The flow's items are flattened to atoms: a character of text with
+  its format as string attributes, or a non-text item (paragraph format, break,
+  column config, inline object) as a reserved character with its `docfile` form
+  in a `ctl` attribute. Rules and tables now have a `docfile` form too.
+- **Local edits** go through `OnChange`: the text is diffed (common ends
+  trimmed, the middle matched by longest common subsequence, one replacement if
+  it is huge) into `Doc.Splice` calls, then the attribute differences become
+  `Doc.Format` marks, one per changed run.
+- **Remote edits** rebuild the flow's items from the replica
+  (`TextFlow.SetRemoteContent`, which is not an edit, keeps the caret in the
+  text and clears undo). Every cursor, selection end and extra cursor is kept as
+  the id of the character before it and moves with it.
+- **Side data** (comments, replies, footnotes, styles) are `lww:side` blocks,
+  merged whole-value (`crdt.LWWKind`): two simultaneous replies both survive.
+- New in `crdt`: `Doc.Splice`, `Doc.VisibleIDs`, `Doc.PositionAfter`, and
+  LWW-kind blocks inside a character-merged document.
+
+Tests: typing, deleting, formatting, paragraph formats, breaks, columns, rules,
+footnotes, comments with replies and styles all reach the other flow; cursors
+move with their text; unshareable content is refused with a clear error; and a
+randomised test (hundreds of trials) edits two flows at random -- typing,
+backspace, bold, colour, links, paragraph alignment, newlines -- delivers
+operations late, out of order and twice, and asserts both flows end identical
+and that each replica always matches its own flow.
+
+Limits: images and other inline objects with no `docfile` form are refused
+(`ErrUnsupported`) rather than silently dropped; the whole document is re-read
+on each local change (O(n), fine for tens of thousands of characters); undo is
+cleared by remote edits until per-user undo (phase 4).
