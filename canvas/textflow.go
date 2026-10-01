@@ -159,6 +159,13 @@ type TextFlow struct {
 	sel     flowSel
 	formats *FormatClipboard
 
+	// editing state (see flowedit.go)
+	editing  bool     // the caret is in the text (edit mode, after a click)
+	caretOff bool     // blink: the caret is hidden right now
+	extra    []Cursor // further cursors; sel is the primary one
+	pending  Format   // format for the next typed text when nothing is selected
+	edited   bool     // Items hold the content now (see materialize)
+
 	obstacles []Obstacle
 	mode      Mode
 	hover     grip
@@ -202,6 +209,7 @@ func (f *TextFlow) SetMode(m Mode) bool {
 	f.mode = m
 	if m == ModeView {
 		f.drag, f.hover = nil, noGrip
+		f.stopEditing()
 	}
 	return true
 }
@@ -237,7 +245,7 @@ func (f *TextFlow) minColumn() float64 {
 }
 
 func (f *TextFlow) items() []Item {
-	if f.Transform != nil {
+	if f.Transform != nil && !f.edited {
 		if !f.derivedOK || f.derivedSrc != f.Source {
 			f.derived, f.derivedSrc, f.derivedOK = f.Transform.Transform(f.Source), f.Source, true
 		}
@@ -1032,6 +1040,7 @@ func (f *TextFlow) Draw() {
 
 	lay := f.Layout()
 	f.drawSelection(lay)
+	defer f.drawCarets()
 	p.SetTextAlign("left")
 	p.SetTextBaseline("alphabetic")
 	for _, ln := range lay.Lines {

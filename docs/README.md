@@ -22,4 +22,4 @@ GOOS=js GOARCH=wasm go doc -all ./domrt/worker > docs/domrt-worker.txt
 Hand-written notes:
 
 - `gox-canvas.md` -- how gox (function props, generic components, a
-  possible `goxcanvas` renderer) can drive the canvas components.
+  possible `canvas/gox` renderer) can drive the canvas components.

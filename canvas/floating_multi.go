@@ -19,6 +19,9 @@ func (ft *FloatingText) EditTarget() EditTarget {
 	return ft
 }
 
+// EditText implements EditTarget.
+func (ft *FloatingText) EditText() string { return ft.Text() }
+
 // Cursors implements EditTarget: the primary cursor first.
 func (ft *FloatingText) Cursors() []Cursor {
 	return append([]Cursor{{ft.anchor, ft.caret}}, ft.extra...)

@@ -4,7 +4,7 @@ package main
 
 import (
 	cv "github.com/elaous/gojiberry/canvas"
-	canvas "github.com/elaous/gojiberry/canvas/goxcanvas"
+	canvas "github.com/elaous/gojiberry/canvas/gox"
 	"github.com/elaous/gojiberry/gox"
 )
 

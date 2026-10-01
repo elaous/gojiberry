@@ -1,10 +1,10 @@
-// Package goxcanvas draws gox trees on a canvas.Stage: the fourth
+// Package gox draws gox trees on a canvas.Stage (import path canvas/gox): the fourth
 // renderer after HTML (gox.Render), the DOM (domrt) and Gio (goxgio).
 //
 // The elements here are constructors with the shape every gox component
 // has -- Name(NameProps) gox.Node -- so .gox files use them as tags:
 //
-//	import canvas "github.com/elaous/gojiberry/canvas/goxcanvas"
+//	import canvas "github.com/elaous/gojiberry/canvas/gox"
 //
 //	<canvas.Canvas width={800} height={600}>
 //		<canvas.TextFlow source={doc} pageCount={3} margins={[]float64{60, 50}}
@@ -21,7 +21,7 @@
 // A Root turns the tree into live canvas components and, on later
 // renders, updates the same components in place, so selection, caret,
 // scroll position and open menus survive a re-render. See Root.
-package goxcanvas
+package gox
 
 import (
 	"github.com/elaous/gojiberry/canvas"

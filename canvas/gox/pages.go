@@ -1,4 +1,4 @@
-package goxcanvas
+package gox
 
 import (
 	"reflect"
