@@ -60,6 +60,8 @@ type FloatingText struct {
 	BoundsW             float64   // if non-zero, keeps the box within x in [0, BoundsW]
 	Wrap                bool
 	WrapMargin          float64
+	// Opacity is 0..1 for the whole box, text and all; zero means opaque.
+	Opacity float64
 	// Anchor, if set, pins the box to a page: X, Y are derived from it
 	// (relative to that page's sheet) using Pages or, failing that, the
 	// Flow's pages. Moving the box re-anchors it to the page it ends up on.
@@ -519,7 +521,7 @@ func (ft *FloatingText) ChangeSize(delta float64) bool {
 var floatButtons = [...]struct {
 	label string
 	w     float64
-}{{"Move", 44}, {"B", 28}, {"I", 28}, {"A-", 32}, {"A+", 32}, {"Wrap", 48}, {"Color", 46}, {"Mark", 42}}
+}{{"Move", 44}, {"B", 28}, {"I", 28}, {"A-", 32}, {"A+", 32}, {"Wrap", 48}, {"Color", 46}, {"Mark", 42}, {"Fade", 42}}
 
 func (ft *FloatingText) buttonRect(i int) [4]float64 {
 	x := ft.X
@@ -595,6 +597,8 @@ func (ft *FloatingText) MouseDown(x, y float64) bool {
 			ft.openPalette(6, "text")
 		case "7":
 			ft.openPalette(7, "highlight")
+		case "8":
+			ft.CycleOpacity()
 		}
 		return true
 	case what == "resize":
@@ -730,6 +734,10 @@ func (ft *FloatingText) CSSCursor() string {
 func (ft *FloatingText) Draw() {
 	p, cs := ft.Painter, ft.ChromeStyle
 	ft.sync()
+	if ft.Opacity > 0 && ft.Opacity < 1 {
+		p.SetGlobalAlpha(ft.Opacity)
+		defer p.SetGlobalAlpha(1)
+	}
 	bg := cs.Background
 	if ft.Background != "" {
 		bg = ft.Background
@@ -816,3 +824,19 @@ var (
 	_ Component = (*FloatingText)(nil)
 	_ Obstacle  = (*FloatingText)(nil)
 )
+
+// CycleOpacity steps the box's opacity through 1, 0.75, 0.5 and 0.25
+// (the Fade button).
+func (ft *FloatingText) CycleOpacity() {
+	switch cur := ft.Opacity; {
+	case cur == 0 || cur >= 1:
+		ft.Opacity = 0.75
+	case cur > 0.5:
+		ft.Opacity = 0.5
+	case cur > 0.25:
+		ft.Opacity = 0.25
+	default:
+		ft.Opacity = 0
+	}
+	ft.changed()
+}

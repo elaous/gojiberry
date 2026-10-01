@@ -1,11 +1,13 @@
 package canvas
 
-// Breaks inserts page and column breaks into a TextFlow:
+// Breaks inserts page breaks, column breaks and horizontal rules into a
+// TextFlow:
 //
 //   - Ctrl/Cmd+Enter is a page break: the text carries on at the top of
 //     the next page;
 //   - Ctrl/Cmd+Shift+Enter is a column break: it carries on in the next
-//     column (or the next page from the last column).
+//     column (or the next page from the last column);
+//   - Ctrl/Cmd+Alt+Enter inserts a horizontal rule (like Markdown ---).
 //
 // The caret ends up after the break, ready to type on the new page. Delete
 // in front of a break, or Backspace right after it, removes it. Targets
@@ -16,6 +18,7 @@ type Breaks struct{}
 const (
 	CmdPageBreak   Command = "break.page"
 	CmdColumnBreak Command = "break.column"
+	CmdRule        Command = "break.rule"
 )
 
 // Name implements Feature.
@@ -25,6 +28,18 @@ func (Breaks) Name() string { return "breaks" }
 func (Breaks) Install(r *Registry) {
 	r.AddCommand(CmdPageBreak, "Insert page break", "Mod+Enter", func(c *CommandContext) bool { return insertBreak(c.Target, BreakPage) })
 	r.AddCommand(CmdColumnBreak, "Insert column break", "Mod+Shift+Enter", func(c *CommandContext) bool { return insertBreak(c.Target, BreakColumn) })
+	r.AddCommand(CmdRule, "Insert horizontal rule", "Mod+Alt+Enter", func(c *CommandContext) bool { return insertRule(c.Target) })
+}
+
+func insertRule(t EditTarget) bool {
+	if !holdsObjects(t) {
+		return false
+	}
+	editCursors(t, func(c Cursor, _ []rune) (int, int, []Item) {
+		from, to := c.Range()
+		return from, to, []Item{Inline{Object: &Rule{}, Block: true}, Chars{Text: "\n"}}
+	})
+	return true
 }
 
 func insertBreak(t EditTarget, kind BreakKind) bool {

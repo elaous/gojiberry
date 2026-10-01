@@ -113,6 +113,7 @@ func main() {
 		menus := []components.MenuBarEntry{
 			{Label: "View", Items: []components.MenuItem{
 				{Label: "Edit mode", Checked: state.Mode == canvas.ModeEdit, OnSelect: toggleMode},
+				{Label: "Two-page spread", Checked: state.Spread, OnSelect: func() { state.Spread = !state.Spread; renderCanvas(); renderUI() }},
 			}},
 			{Label: "Edit", Items: components.CommandMenu(stage.Features.Commands(), keymap, mac, run)},
 			{Label: "Insert", Items: []components.MenuItem{
@@ -256,6 +257,21 @@ func main() {
 		var text string
 		markers, dropCaps := []string{}, 0
 		var link map[string]any
+		headers, watermarks := []string{}, []string{}
+		spread := false
+		if ps, ok := root.Find(cgox.TagPage, 0).(*canvas.PageSet); ok {
+			spread = ps.Spread
+			for i := range ps.Pages {
+				h, w := "", ""
+				if hf := ps.ResolvedHeader(i); hf != nil {
+					h = hf.Text
+				}
+				if wm := ps.ResolvedWatermark(i); wm != nil {
+					w = wm.Text
+				}
+				headers, watermarks = append(headers, h), append(watermarks, w)
+			}
+		}
 		if flow != nil {
 			cursors, editing = flow.Cursors(), flow.Editing()
 			text = flow.EditText()
@@ -278,7 +294,7 @@ func main() {
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cgox.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps,
-			"link": link, "hoverLink": u.hoverLink, "tab": u.tab, "menu": u.menu, "title": u.title,
+			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "tab": u.tab, "menu": u.menu, "title": u.title,
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))
 	}

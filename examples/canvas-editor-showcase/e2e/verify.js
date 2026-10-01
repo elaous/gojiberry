@@ -10,7 +10,7 @@ run(async () => {
   let s = await d.state();
   assert(!s.error, 'renders without error: ' + s.error);
   assert(s.mode === 'view' && s.pages === 3, 'starts in view mode with three pages');
-  assert(JSON.stringify(s.features) === JSON.stringify(['multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links']), 'features registered: ' + s.features);
+  assert(JSON.stringify(s.features) === JSON.stringify(['multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'page-furniture']), 'features registered: ' + s.features);
   for (const tag of ['canvas.TextFlow', 'canvas.Image', 'canvas.FloatingText', 'canvas.Table', 'canvas.ScrollView'])
     assert(s.elements.includes(tag), tag + ' is a registered element');
   assert(s.commands >= 30, 'commands registered: ' + s.commands);
@@ -20,7 +20,7 @@ run(async () => {
   // The menu bar is built from the registered commands: one submenu per feature.
   await page.click('button.gj-menubar-button:has-text("Edit")');
   const subs = await page.locator('.gj-menubar-panel > .gj-menu > .gj-menu-item-sub').count();
-  assert(subs === 7, 'Edit has a submenu per feature: ' + subs);
+  assert(subs === 8, 'Edit has a submenu per feature: ' + subs);
   const shortcut = await page.locator('.gj-menubar-panel li:has-text("Move line up") .gj-menu-shortcut').first().textContent();
   assert(shortcut === 'Alt+↑', 'a command shows its shortcut: ' + shortcut);
   await page.hover('.gj-menubar-panel li.gj-menu-item-sub:has-text("Paragraphs")');
@@ -120,23 +120,46 @@ run(async () => {
   await page.mouse.move(...d.at(450, 300));
   await page.mouse.wheel(0, -5000);
   await page.waitForTimeout(50);
-  await d.click(180 + 60, 24 + 60 + 80 + 100);
+  await d.click(180 + 60, 24 + 60 + 80); // a body line: the one above it is the heading
   const lineText = (await d.state()).text;
   await page.keyboard.press('Alt+ArrowUp');
   s = await d.state();
   assert(s.text === lineText, 'the old chord no longer moves the line');
   await page.keyboard.press('Control+j');
   s = await d.state();
-  assert(s.text !== lineText && s.text.length === lineText.length, 'the new chord moves the line');
+  assert(s.text !== lineText && s.text.length === lineText.length, 'the new chord moves the line: cursors ' + JSON.stringify(s.cursors) + ' editing ' + s.editing + ' len ' + s.text.length + '/' + lineText.length);
   await page.click('[data-action="reset-all"]');
   await page.click('button[data-tab="format"]');
 
+  // Page furniture: the watermark starts on page 2; removing the header from one page.
+  s = await d.state();
+  assert(JSON.stringify(s.watermarks) === JSON.stringify(['', 'DRAFT', 'DRAFT']), 'watermark from page 2 on: ' + s.watermarks);
+  assert(JSON.stringify(s.headers) === JSON.stringify(['Gojiberry editor', 'Gojiberry editor', 'Gojiberry editor']), 'headers: ' + s.headers);
+  await page.click('button.gj-menubar-button:has-text("Edit")');
+  await page.hover('.gj-menubar-panel li.gj-menu-item-sub:has-text("Page furniture")');
+  await page.click('.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("Remove watermark from all pages")');
+  s = await d.state();
+  assert(s.watermarks.every((w) => w === ''), 'Remove watermark from all pages (from the menu): ' + s.watermarks);
+  await page.click('button.gj-menubar-button:has-text("View")');
+  await page.click('.gj-menubar-panel li:has-text("Two-page spread")');
+  s = await d.state();
+  assert(s.spread === true, 'the View menu turns on the two-page spread');
+  await page.click('button.gj-menubar-button:has-text("View")');
+  await page.click('.gj-menubar-panel li:has-text("Two-page spread")');
+  s = await d.state();
+  assert(s.spread === false, 'and off again');
+
   // Paragraph formatting: lists, numbering, drop cap.
+  await page.mouse.move(...d.at(450, 300));
+  await page.mouse.wheel(0, -5000);
+  await page.waitForTimeout(50);
   await d.click(180 + 60, 24 + 60 + 80);
   const m0 = (await d.state()).markers.length;
+  const count = (a, ch) => a.filter((x) => x === ch).length;
+  const b0 = count((await d.state()).markers, '•');
   await page.keyboard.press('Control+Shift+8');
   s = await d.state();
-  assert(s.markers.length === m0 + 1 && s.markers.includes('•'), 'Ctrl+Shift+8 makes the paragraph a bullet item: ' + s.markers);
+  assert(s.markers.length === m0 + 1 && count(s.markers, '•') === b0 + 1, 'Ctrl+Shift+8 makes the paragraph a bullet item: ' + m0 + ' -> ' + s.markers);
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
   s = await d.state();

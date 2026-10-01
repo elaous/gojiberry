@@ -1,83 +1,64 @@
-# Canvas features: to do
+# Canvas features: status and to do
 
-What is **not** built yet, in the words of the requests, grouped by area.
-"(non canvas)" means a DOM component (like `components.FontSelector`), not
-something drawn on the canvas. Done work is in `canvas/doc.go` and the
-examples; the gox integration is in [gox-canvas.md](gox-canvas.md).
+What is built, in one place, and what is not. "(non canvas)" means a DOM
+component (like `components.FontSelector`), not something drawn on the
+canvas. The gox integration is described in [gox-canvas.md](gox-canvas.md).
 
-## Text formatting
+## Built
 
-- More character formats: small caps, title caps, lower case, upper case,
-  and the rest of what Word and extended Markdown accept.
-- **Styles** (named character and paragraph styles) and, with them, the
-  style editor driving the canvas.
-- Paragraph formatting:
-  - line spacing
-  - space before and after a paragraph
-  - indent left and right
-  - first-line indent (first line of a paragraph only)
-  - decorated or large initials (drop caps)
-- Lists:
-  - bullet points
-  - check boxes
-  - ordered lists
-  - editing the numbering character and the bullet character
-- A horizontal line element (like Markdown `---`).
-- **Links** (URLs): the hover text shows the target.
-  - Link preview (non canvas).
-- Formula editor / formula text element.
-- Insert symbols (non canvas picker).
+**Text and characters** -- the `TextFlow` is editable (typing, selection,
+clipboard, Markdown tables and images in the content, undo not yet);
+formats: bold, italic, underline, strike, super/subscript, color,
+highlight, font family/size/scale, **case** (UPPER, lower, Title, small
+caps; Ctrl/Cmd+Alt+U/L/T/M), **links** (`Format.Link`: link style, a
+URL tip on hover, click or Ctrl+click to open, Ctrl/Cmd+K to edit),
+format painter, Markdown in and out (`MarkdownFromItems`,
+`MarkdownClipboard`).
 
-## Editing
+**Paragraphs** (`ParaFormat`, `Paragraphs` feature) -- alignment, left and
+right indent, first-line indent, space before and after, line spacing,
+bullets, numbered lists (1. 1) (1) a. i. I. A., restart at N, nesting),
+check boxes you can tick, block quotes, drop caps; Enter continues a list
+and ends it on an empty item, Tab nests; Markdown lists and quotes become
+paragraph formats.
 
-Done, as registered features (see "Features" below): multi-cursor
-(Ctrl/Cmd+click, Ctrl/Cmd+D, select all matches, cursors at line ends,
-add cursor above/below), move/duplicate/delete line, copy as Markdown and
-paste Markdown.
+**Editing features** (registered with `Stage.Features`) -- multi-cursor,
+move/duplicate/delete line, Markdown copy and paste, page/column breaks and
+horizontal rules, paragraphs, text case, links, page furniture.
 
-- The main `TextFlow` body is editable (typing, selection, clipboard,
-  formatting commands, breaks, the registered features). Not yet:
-  auto-closing brackets and completion in the flow (`FloatingText` has
-  them) and at several cursors, undo/redo, scrolling the caret into view.
-- Markdown copy writes headings, bold, italic, strike, underline, highlight,
-  super/subscript and code; links keep their text only (a character has no
-  URL yet), and tables and images are not written.
+**Pages** -- headers, footers, page numbers, **watermarks** (text or
+picture), **background pictures** (cover/contain/stretch, opacity) that
+inherit page to page; **"none" from one page, from this page on, or from
+all pages** (menus on the header/footer badge and the page-number menu,
+and commands); **two-page and book spreads**; opacity for images and
+floating text (the Fade button).
 
-## Pages
+**Non-canvas** -- `components.Menu`/`MenuBar` (lightweight, CSS-only
+submenus), `CommandMenu` (a menu from the registered commands),
+`SymbolPicker`, `LinkPreview`, `KeyBindings` (a rebinding editor over
+`Stage.Rebind`), `DocumentView` (the window around the canvas),
+`FontSelector`, `StyleEditor`.
 
-- **Watermark**: like headers and footers it is per page, inheriting the
-  previous page's or setting a new one, and it can be **none**.
-- **None** for page numbers, headers and footers from the UI: remove from
-  one page only, from this page forward, or from all pages. (The model
-  already has "empty header/footer" and "page number off"; `canvas/gox`
-  exposes `None`. What is missing is the choice in the canvas menus.)
-- Background image with opacity.
-- Spread view mode for image placement (two facing pages).
-- Opacity for `Image` (it has `Alpha`; add the edit-mode control) and
-  `FloatingText`.
+**gox** -- `gox.Host`, the `canvas/gox` renderer and its element registry
+(`Canvas`, `TextFlow` with the `Pages` template, `Header`, `Footer`,
+`PageNumber`, `Watermark`, `Background`, `Image`, `FloatingText`, `Table`,
+`ScrollView`); CSS imports (`import _ "<module path>/x.css"`).
 
-## Non-canvas components
+`examples/canvas-editor-showcase` puts all of it in one window.
 
-- Nice, lightweight, clean **menus and sub-menus** (DOM).
-- Key bindings configuration editor (`canvas.Keymap` is the model).
-- Document view like Google Docs (toolbar, ruler, side panels around the
-  canvas).
+## To do
 
-## Features
-
-Each feature is a `canvas.Feature` registered with the Stage's
-`canvas.Registry` (`MultiCursor`, `LineOps`, `MarkdownClipboard` are the
-defaults). The rest of this list is built the same way: a type with
-`Name()` and `Install(*Registry)`, commands that work on an `EditTarget`,
-default chords, and unit tests against `FloatingText`. Next candidates:
-lists (bullets, check boxes, numbering), indents and paragraph spacing,
-links, symbols, formula, horizontal rule, watermark.
-
-## gox integration (see gox-canvas.md)
-
-- Done: `gox.Host`, the `canvas/gox` renderer and its element registry
-  (`gox.Register`), with `Canvas`, `TextFlow` (with the `Pages` render
-  prop), `Header`, `Footer`, `PageNumber`, `Image`, `FloatingText`,
-  `Table`, `ScrollView`; fragments as children.
-- Next: a cell render prop for `Table`, `PageSet` as its own element,
-  `CanvasView` (a DOM component that mounts a `canvas/gox` tree).
+- **Formula** editor and formula text element.
+- **Styles**: named character and paragraph styles, and the style editor
+  driving them.
+- **Undo/redo**, and scrolling the caret into view.
+- Auto-closing brackets and completion in the `TextFlow` (a `FloatingText`
+  has them), and at several cursors.
+- `TextFlow` multi-cursor keeps one `Cursor.After` per cursor; typing at a
+  break offset goes in front of the break unless the caret is "after".
+- Markdown: links round-trip, but tables and images are not written back;
+  case and small caps have no Markdown form.
+- Table cell render prop for the gox `Table`, `PageSet` as its own gox
+  element, `CanvasView` (a DOM component that mounts a `canvas/gox` tree).
+- Spread view: images can run across the gutter by anchor, but there is
+  no gutter shadow or page-turn UI.

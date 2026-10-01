@@ -1353,7 +1353,8 @@ generated code.
   `examples/canvas-editor-showcase` registers everything -- the gox canvas
   tree, the features, the style editor and font selector -- in one editor. Each registers commands and default key
   chords; leave one out of `Stage.Features` (or `<canvas.Canvas features=...>`)
-  to switch it off, or add your own.
+  to switch it off, or add your own. The status of everything built and what
+  is left is in `docs/canvas-todo.md`.
 
   Demos, each with a Playwright e2e test run by `go test` (skipped when
   node/playwright/chromium are missing): `examples/canvas-table-demo`,

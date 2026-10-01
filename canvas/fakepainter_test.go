@@ -56,3 +56,5 @@ func (f *fakePainter) Save()                       { f.rec("save") }
 func (f *fakePainter) Restore()                    { f.rec("restore") }
 func (f *fakePainter) Translate(x, y float64)      { f.rec("translate %g %g", x, y) }
 func (f *fakePainter) ClipRect(x, y, w, h float64) { f.rec("clipRect %g %g %g %g", x, y, w, h) }
+
+func (f *fakePainter) Rotate(a float64) { f.rec("rotate %.3f", a) }

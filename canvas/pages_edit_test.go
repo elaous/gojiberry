@@ -168,7 +168,7 @@ func TestBadgeShowsInheritanceAndUsePrevious(t *testing.T) {
 	ps.Pages[0].Header = &HeaderFooter{Text: "Report"}
 	ps.DoubleClick(headerPoint(1))
 	label, _, buttons := ps.badge()
-	if label != "Header · same as previous" || len(buttons) != 3 || buttons[0].label != "Left" {
+	if label != "Header · same as previous" || len(buttons) != 4 || buttons[0].label != "Remove ▾" || buttons[1].label != "Left" {
 		t.Fatalf("label=%q buttons=%v", label, buttons)
 	}
 	ps.InsertText("!")

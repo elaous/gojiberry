@@ -6,6 +6,8 @@ import "github.com/elaous/gojiberry/canvas"
 type State struct {
 	Mode  canvas.Mode
 	Pages int
+	// Spread shows the sheets two to a row, as facing pages.
+	Spread bool
 	// Source is the document's starting Markdown; once the text is edited
 	// on the canvas the canvas owns it, until Source changes.
 	Source string
