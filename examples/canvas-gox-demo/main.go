@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Command goxcanvas-demo draws a canvas from a gox tree (app.gox): a
+// Command canvas-gox-demo draws a canvas from a gox tree (app.gox): a
 // TextFlow over several pages whose header, footer and page number come
 // from a render prop. Buttons change the state (mode, page count, text)
 // and re-render the tree; the canvas components are updated in place.
@@ -13,7 +13,7 @@ import (
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/canvas/goxcanvas"
+	cgox "github.com/elaous/gojiberry/canvas/gox"
 	"github.com/elaous/gojiberry/domrt/browser"
 )
 
@@ -27,12 +27,12 @@ func main() {
 		doc.GetElementByID("state").SetTextContent(`{"error":"` + err.Error() + `"}`)
 		return
 	}
-	root := goxcanvas.NewRoot(stage)
+	root := cgox.NewRoot(stage)
 	root.Redraw = redraw
 
 	stage.OnDraw = func() {
-		ps := root.Find(goxcanvas.TagPage, 0).(*canvas.PageSet)
-		flow := root.Find(goxcanvas.TagTextFlow, 0).(*canvas.TextFlow)
+		ps := root.Find(cgox.TagPage, 0).(*canvas.PageSet)
+		flow := root.Find(cgox.TagTextFlow, 0).(*canvas.TextFlow)
 		headers := []string{}
 		numbers := []string{}
 		for i := range ps.Pages {

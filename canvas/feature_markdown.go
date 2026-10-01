@@ -72,13 +72,14 @@ func PasteMarkdown(t EditTarget, md Markdown, text string) bool {
 		return false
 	}
 	cs := normalize(t.Cursors())
+	keep := holdsObjects(t)
 	var pieces [][]Item
 	if lines := strings.Split(text, "\n"); len(lines) == len(cs) && len(cs) > 1 {
 		for _, l := range lines {
-			pieces = append(pieces, flattenItems(md.Transform(l)))
+			pieces = append(pieces, flattenItems(md.Transform(l), keep))
 		}
 	} else {
-		all := flattenItems(md.Transform(text))
+		all := flattenItems(md.Transform(text), keep)
 		for range cs {
 			pieces = append(pieces, all)
 		}
@@ -98,21 +99,33 @@ func PasteMarkdown(t EditTarget, md Markdown, text string) bool {
 	return true
 }
 
-// flattenItems keeps the text of items: Chars as they are, breaks as
-// newlines, trailing newlines trimmed; layout items (columns, tables,
-// images) have no text form here and are dropped.
-func flattenItems(items []Item) []Item {
+// flattenItems prepares converted Markdown for insertion. With keep (the
+// target holds objects) tables, images, breaks and column configs are
+// kept; otherwise only the text is: Chars as they are, breaks as
+// newlines. Trailing newlines are trimmed.
+func flattenItems(items []Item, keep bool) []Item {
 	var out []Item
 	for _, it := range items {
 		switch v := it.(type) {
 		case Chars:
 			out = append(out, v)
 		case Break:
-			out = append(out, Chars{Text: "\n"})
+			if keep {
+				out = append(out, v)
+			} else {
+				out = append(out, Chars{Text: "\n"})
+			}
+		case Inline, ColumnConfig:
+			if keep {
+				out = append(out, v)
+			}
 		}
 	}
 	for len(out) > 0 {
-		c := out[len(out)-1].(Chars)
+		c, ok := out[len(out)-1].(Chars)
+		if !ok {
+			break
+		}
 		trimmed := strings.TrimRight(c.Text, "\n")
 		if trimmed == c.Text {
 			break

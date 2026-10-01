@@ -1,4 +1,4 @@
-// Drives goxcanvas-demo: the gox tree renders, its pages template gives
+// Drives canvas-gox-demo: the gox tree renders, its pages template gives
 // per-page headers and numbers, state changes re-render in place, and a
 // header edited on the canvas survives a re-render.
 const { assert, open, run } = require(process.env.E2E_LIB);

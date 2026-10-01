@@ -47,8 +47,9 @@ type Edit struct {
 
 // EditTarget is what a Feature edits: text with one or more cursors.
 type EditTarget interface {
-	// Text returns the whole text.
-	Text() string
+	// EditText returns the whole text. Anything that is not text (an
+	// inline object) is one placeholder rune, so offsets line up.
+	EditText() string
 	// Slice returns the runes [from, to) with their formatting.
 	Slice(from, to int) []Item
 	// Cursors returns every cursor.
@@ -172,7 +173,7 @@ func (r *Registry) Run(cmd Command, ctx *CommandContext) bool {
 // --- helpers shared by features --------------------------------------
 
 // textRunes returns the target's text as runes.
-func textRunes(t EditTarget) []rune { return []rune(t.Text()) }
+func textRunes(t EditTarget) []rune { return []rune(t.EditText()) }
 
 // normalize sorts cursors by position and merges overlapping or equal
 // ones.
@@ -223,13 +224,47 @@ func plainItems(s string) []Item {
 	return []Item{Chars{Text: s}}
 }
 
-// itemsLen counts the runes in the Chars of items.
+// itemsLen counts the text-stream offsets items take: the runes of the
+// Chars, one per inline object (breaks and column configs take none).
 func itemsLen(items []Item) int {
 	n := 0
 	for _, it := range items {
-		if c, ok := it.(Chars); ok {
-			n += len([]rune(c.Text))
+		switch v := it.(type) {
+		case Chars:
+			n += len([]rune(v.Text))
+		case Inline:
+			n++
 		}
 	}
 	return n
+}
+
+// ObjectHolder is implemented by an EditTarget that can hold more than
+// text: inline objects, page and column breaks and column configs (a
+// TextFlow). Others keep only the Chars of what is inserted.
+type ObjectHolder interface{ HoldsObjects() bool }
+
+func holdsObjects(t EditTarget) bool {
+	h, ok := t.(ObjectHolder)
+	return ok && h.HoldsObjects()
+}
+
+// editCursors applies gen at every cursor of t, in document order: gen
+// gets the cursor and the text and returns the range to replace and what
+// to put there; afterwards each cursor is a plain one after its
+// insertion.
+func editCursors(t EditTarget, gen func(c Cursor, rs []rune) (from, to int, ins []Item)) {
+	rs := textRunes(t)
+	var edits []Edit
+	var out []Cursor
+	shift := 0
+	for _, c := range normalize(t.Cursors()) {
+		from, to, ins := gen(c, rs)
+		edits = append(edits, Edit{from, to, ins})
+		n := itemsLen(ins)
+		out = append(out, At(from+shift+n))
+		shift += n - (to - from)
+	}
+	t.Replace(edits)
+	t.SetCursors(out)
 }

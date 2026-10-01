@@ -1,14 +1,14 @@
 # Using gox with the canvas components
 
 *Status: parts 1 and 3 are built (generic tags and render props; the
-`goxcanvas` renderer with `Canvas`, `TextFlow`, `Header`, `Footer` and
-`PageNumber`, in `canvas/goxcanvas`, demo in `examples/goxcanvas-demo`).
+`canvas/gox` renderer with `Canvas`, `TextFlow`, `Header`, `Footer` and
+`PageNumber`, in `canvas/canvas/gox`, demo in `examples/canvas-gox-demo`).
 The rest is still a proposal; remaining work is in [canvas-todo.md](canvas-todo.md).*
 
 ## 0. What works today
 
 ```gox
-import canvas "github.com/elaous/gojiberry/canvas/goxcanvas"
+import canvas "github.com/elaous/gojiberry/canvas/canvas/gox"
 
 <canvas.Canvas width={900} height={560} mode={state.Mode}>
 	<canvas.TextFlow source={state.Source} pageCount={3}
@@ -23,7 +23,7 @@ import canvas "github.com/elaous/gojiberry/canvas/goxcanvas"
 </canvas.Canvas>
 ```
 
-`root := goxcanvas.NewRoot(stage); root.Render(tree)` builds the canvas
+`root := canvas/gox.NewRoot(stage); root.Render(tree)` builds the canvas
 components on the first call and updates them in place on later ones.
 Differences from the first sketch: props are lower-camel (`pageCount`),
 `margins` is a `[]float64` in CSS order, and `pages` is called once per
@@ -92,10 +92,10 @@ gox function describe canvas content:
 These need part 3, because a function that returns a `gox.Node` needs a
 renderer that understands canvas nodes.
 
-## 3. A fourth renderer: `goxcanvas`
+## 3. A fourth renderer: `canvas/gox`
 
 `gox.Node` is already renderer-agnostic -- `gox.Render` makes HTML,
-`domrt` patches the DOM, `goxgio` draws with Gio. A `goxcanvas` renderer
+`domrt` patches the DOM, `goxgio` draws with Gio. A `canvas/gox` renderer
 would turn a tree of *canvas* elements into a live `Stage`:
 
 ```gox
@@ -132,7 +132,7 @@ gox.Host(tag string, props any, children ...gox.Node) gox.Node
 and each canvas element gets a constructor with the same shape the
 `components` already use (`TextFlow(props TextFlowProps) gox.Node`), which
 returns `gox.Host("canvas.TextFlow", props, children...)`. DOM and HTML
-renderers would ignore or reject host nodes; `goxcanvas` keeps a registry
+renderers would ignore or reject host nodes; `canvas/gox` keeps a registry
 from tag to a small adapter:
 
 ```go
@@ -147,7 +147,7 @@ type Adapter interface {
 The hard part is not drawing, it is *identity*. A canvas component holds
 state the tree knows nothing about: the caret, the selection, an in-progress
 drag, an open menu. If every render built fresh components, a keystroke
-would reset all of it. `goxcanvas` should follow `domrt` and `goxgio`:
+would reset all of it. `canvas/gox` should follow `domrt` and `goxgio`:
 
 - **Match by position and `Key`**, reusing the component when the tag
   matches, so `Update` runs on the existing object.
@@ -171,7 +171,7 @@ when a real screen needs it.
 ## 4. Mixing DOM and canvas
 
 A page will usually want both: DOM controls (`FontSelector`, `StyleEditor`,
-a key bindings editor, a menu bar) around a canvas document. With `goxcanvas`
+a key bindings editor, a menu bar) around a canvas document. With `canvas/gox`
 the canvas is just another element in the DOM tree:
 
 ```gox
@@ -182,7 +182,7 @@ the canvas is just another element in the DOM tree:
 ```
 
 `CanvasView` renders a `<canvas>` (plus the hidden input the canvas needs for
-the keyboard) and mounts its child tree with `goxcanvas`. Both trees re-render
+the keyboard) and mounts its child tree with `canvas/gox`. Both trees re-render
 from the same state, so choosing a font in the DOM selector re-renders the
 canvas, and typing on the canvas updates the DOM controls.
 
@@ -193,7 +193,7 @@ canvas, and typing on the canvas updates the DOM controls.
 2. Add `gox.Host` and the canvas elements' constructors and `...Props`
    structs (mechanical: each already has most of its settings as exported
    fields).
-3. `goxcanvas.Mount(canvas, hiddenInput, node)` with the adapter registry and
+3. `canvas/gox.Mount(canvas, hiddenInput, node)` with the adapter registry and
    the identity rules above; start with `Stage`, `ScrollView`, `PageSet`,
    `TextFlow`.
 4. `CanvasView` for DOM pages; port `examples/canvas-document-demo` to a

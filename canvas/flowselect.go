@@ -105,11 +105,14 @@ func (f *TextFlow) beginSelect(x, y float64) bool {
 	had := f.HasSelection()
 	if f.Painter == nil || f.obstructed(x, y) || !f.inText(x, y) {
 		f.ClearSelection()
+		f.stopEditing()
 		return had
 	}
 	o := f.OffsetAt(x, y)
 	f.sel = flowSel{anchor: o, caret: o, dragging: true}
-	return had
+	f.extra, f.pending, f.caretOff = nil, Format{}, false
+	f.editing = f.mode == ModeEdit
+	return had || f.editing
 }
 
 // DoubleClick selects the word at (x, y).
@@ -139,75 +142,40 @@ func (f *TextFlow) DoubleClick(x, y float64) bool {
 	return true
 }
 
-// drawSelection tints the selected text, line by line.
+// drawSelection tints the selected text of every cursor, line by line.
 func (f *TextFlow) drawSelection(lay Layout) {
-	from, to := f.Selection()
-	if from == to {
-		return
-	}
 	p := f.Painter
 	p.SetFillStyle(f.ChromeStyle.SelectColor)
-	for _, ln := range lay.Lines {
-		s, e := max(from, ln.Start), min(to, ln.End)
-		if s >= e {
+	for _, c := range f.Cursors() {
+		from, to := c.Range()
+		if from == to {
 			continue
 		}
-		x0 := ln.X + f.data.measure(ln.Start, s)
-		x1 := ln.X + f.data.measure(ln.Start, e)
-		p.FillRect(x0, ln.Y, x1-x0, ln.H)
+		for _, ln := range lay.Lines {
+			s, e := max(from, ln.Start), min(to, ln.End)
+			if s >= e {
+				continue
+			}
+			x0 := ln.X + f.data.measure(ln.Start, s)
+			x1 := ln.X + f.data.measure(ln.Start, e)
+			p.FillRect(x0, ln.Y, x1-x0, ln.H)
+		}
 	}
 }
-
-// WantsFocus implements Focuser: a selection needs the keyboard so Copy
-// (and Select all) reach it.
-func (f *TextFlow) WantsFocus() bool { return f.HasSelection() }
 
 // SetFormatClipboard implements FormatClipboardSetter.
 func (f *TextFlow) SetFormatClipboard(c *FormatClipboard) { f.formats = c }
 
-// CopyText implements Copier.
-func (f *TextFlow) CopyText() (string, bool) {
-	if !f.HasSelection() {
-		return "", false
-	}
-	return f.SelectedText(), true
-}
-
-// HandleCommand implements Commander: copy-format (the selection's
-// common formatting goes to the format clipboard) and select-all. A
-// flow's content comes from its Items or Source, so it can't paste a
-// format onto its own text.
-func (f *TextFlow) HandleCommand(cmd Command) bool {
-	if !f.HasSelection() {
-		return false
-	}
-	switch cmd {
-	case CmdSelectAll:
-		f.SelectAll()
-	case CmdCopyFormat:
-		if f.formats == nil {
-			return false
-		}
-		f.formats.Set(f.CommonFormat())
-	default:
-		return false
-	}
-	return true
-}
-
 var (
 	_ Copier                = (*TextFlow)(nil)
 	_ Commander             = (*TextFlow)(nil)
+	_ Cutter                = (*TextFlow)(nil)
+	_ Paster                = (*TextFlow)(nil)
+	_ TextInserter          = (*TextFlow)(nil)
+	_ KeyHandler            = (*TextFlow)(nil)
+	_ Editable              = (*TextFlow)(nil)
+	_ ModMouseDowner        = (*TextFlow)(nil)
 	_ FormatClipboardSetter = (*TextFlow)(nil)
 	_ Focuser               = (*TextFlow)(nil)
 	_ DoubleClicker         = (*TextFlow)(nil)
 )
-
-// HandleKey implements KeyHandler: Escape clears the selection.
-func (f *TextFlow) HandleKey(key string, shift bool) bool {
-	if key == "Escape" && f.HasSelection() {
-		f.ClearSelection()
-		return true
-	}
-	return false
-}
