@@ -16,6 +16,7 @@ import (
 	_ "github.com/elaous/gojiberry/components/checkbox.css"
 	_ "github.com/elaous/gojiberry/components/checkboxgroup.css"
 	_ "github.com/elaous/gojiberry/components/chip.css"
+	_ "github.com/elaous/gojiberry/components/comments.css"
 	_ "github.com/elaous/gojiberry/components/collab.css"
 	_ "github.com/elaous/gojiberry/components/colorpicker.css"
 	_ "github.com/elaous/gojiberry/components/contextmenu.css"

@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strings"
 	"syscall/js"
+	"time"
 
 	"github.com/elaous/gojiberry/canvas"
 	cgox "github.com/elaous/gojiberry/canvas/gox"
@@ -53,7 +54,11 @@ type ui struct {
 	recording canvas.Command
 	kbMessage string
 
-	hoverLink string
+	hoverLink    string
+	hoverComment string
+	selComment   string
+	showResolved bool
+	drafts       map[string]string
 
 	saver    *saver.Session
 	transfer *transfer.Registry
@@ -63,8 +68,9 @@ type ui struct {
 
 func main() {
 	doc := browser.Document()
-	state := State{Mode: canvas.ModeView, Pages: 3, Source: sample, Note: "Floating note: click to edit, try (brackets and \"quotes\".", Styles: canvas.DefaultStyles()}
-	u := &ui{title: "Quarterly report", menu: -1, tab: "format"}
+	state := State{Mode: canvas.ModeView, Pages: 3, Source: sample, Note: "Floating note: click to edit, try (brackets and \"quotes\".", Styles: canvas.DefaultStyles(),
+		Comments: canvas.NewCommentSet(), Author: "you@example.com"}
+	u := &ui{title: "Quarterly report", menu: -1, tab: "format", drafts: map[string]string{}}
 	// The catalog has a font that is fetched from this site: picking it
 	// only adds it to the library; the file is downloaded (into the font
 	// store) the first time the text uses it.
@@ -117,7 +123,8 @@ func main() {
 	refocus := func() { inputEl.Call("focus", map[string]any{"preventScroll": true}) }
 
 	cb := Callbacks{
-		OnHoverLink: func(url string) { u.hoverLink = url; renderUI() },
+		OnHoverLink:    func(url string) { u.hoverLink = url; renderUI() },
+		OnHoverComment: func(id string) { u.hoverComment = id },
 	}
 	renderCanvas := func() {
 		if err := root.Render(Doc(state, cb)); err != nil {
@@ -155,7 +162,7 @@ func main() {
 	u.saver.OnChange = func() { renderUI() }
 
 	setMode := func(m canvas.Mode) {
-		state.Mode = m
+		state.Mode = state.Role.Mode(m)
 		renderCanvas()
 		renderUI()
 	}
@@ -191,6 +198,7 @@ func main() {
 			{Label: "Edit", Items: components.CommandMenu(stage.Features.Commands(), keymap, mac, run)},
 			{Label: "Insert", Items: []components.MenuItem{
 				{Label: "Symbol…", OnSelect: func() { u.tab = "symbols"; renderUI() }},
+				{Label: "Comment…", Shortcut: components.FormatChord("Mod+Alt+N", mac), OnSelect: func() { run(canvas.CmdCommentAdd); u.tab = "comments"; renderUI() }},
 				{Label: "Link…", Shortcut: components.FormatChord("Mod+K", mac), OnSelect: func() { run(canvas.CmdEditLink) }},
 				{Separator: true},
 				{Label: "Page break", Shortcut: components.FormatChord("Mod+Enter", mac), OnSelect: func() { run(canvas.CmdPageBreak) }},
@@ -213,11 +221,34 @@ func main() {
 			gox.El("button", []gox.Attr{gox.A("id", "mode"), gox.A("type", "button"), gox.A("class", "gj-keybindings-button"),
 				gox.On("click", func(gox.Event) { toggleMode() })}, gox.Text("Mode: "+state.Mode.String()+" (click to switch)")),
 			tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
-			tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Import/Export", renderUI),
+			tabButton(u, "comments", "Comments", renderUI),
+			tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI),
 		)
+
+		roleButtons := []gox.Node{gox.El("span", []gox.Attr{gox.A("style", "font-size:12px;color:#6b7280")}, gox.Text("Role:"))}
+		for _, r := range []canvas.Role{canvas.RoleOwner, canvas.RoleEditor, canvas.RoleViewer} {
+			r := r
+			class := "gj-keybindings-button"
+			if state.Role.String() == r.String() {
+				class += " gj-symbolpicker-chip-on"
+			}
+			roleButtons = append(roleButtons, gox.El("button", []gox.Attr{gox.A("type", "button"), gox.A("class", class), gox.A("data-role", r.String()),
+				gox.On("click", func(gox.Event) {
+					state.Role = r
+					stage.SetRole(r)
+					if !r.CanEdit() {
+						state.Mode = canvas.ModeView
+					}
+					renderCanvas()
+					renderUI()
+				})}, gox.Text(r.String())))
+		}
+		roleRow := gox.El("div", []gox.Attr{gox.A("id", "roles"), gox.A("style", "display:flex;gap:6px;align-items:center;margin-bottom:0.8em")}, roleButtons...)
 
 		var panel gox.Node
 		switch u.tab {
+		case "comments":
+			panel = commentsPanel(u, &state, func() *canvas.TextFlow { return flow }, redraw, refocus, renderUI)
 		case "styles":
 			current := ""
 			if flow != nil {
@@ -359,7 +390,7 @@ func main() {
 			}
 			panel = gox.Frag(panel, gox.El("ul", []gox.Attr{gox.A("id", "font-log"), gox.A("style", "font-size:12px;color:#6b7280")}, rows...))
 		}
-		side := gox.Frag(panel,
+		side := gox.Frag(roleRow, panel,
 			gox.El("div", []gox.Attr{gox.A("id", "link-preview"), gox.A("style", "margin-top:1em")},
 				components.LinkPreview(components.LinkPreviewProps{
 					URL: u.hoverLink, Title: "Gojiberry", Description: "Go components that render to HTML, the DOM, Gio and a canvas.",
@@ -405,7 +436,7 @@ func main() {
 		var text string
 		markers, dropCaps := []string{}, 0
 		lineHeights := []float64{}
-		var link map[string]any
+		var link, comment map[string]any
 		headers, watermarks := []string{}, []string{}
 		suggestions := []string{}
 		spread := false
@@ -438,6 +469,9 @@ func main() {
 					dropCaps++
 				}
 				for _, r := range ln.Runs {
+					if r.Comment != "" && comment == nil {
+						comment = map[string]any{"id": r.Comment, "x": ln.X + r.X + 4 + sv.X - sv.ScrollX, "y": ln.Y + 5 + sv.Y - sv.ScrollY}
+					}
 					if r.Link != "" && link == nil {
 						link = map[string]any{"url": r.Link, "x": ln.X + r.X + 4 + sv.X - sv.ScrollX, "y": ln.Y + 5 + sv.Y - sv.ScrollY}
 					}
@@ -448,7 +482,7 @@ func main() {
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cgox.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
-			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "tab": u.tab, "menu": u.menu, "title": u.title,
+			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))
@@ -522,4 +556,50 @@ func fontKeys(lib *fonts.Library) []string {
 		out = append(out, f.Family+"="+strings.Join(keys, ","))
 	}
 	return out
+}
+
+// commentsPanel lists the comments with their text; an owner or editor can
+// reply, resolve and delete, a viewer only reads.
+func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, refocus, renderUI func()) gox.Node {
+	fl := flow()
+	excerpts := map[string]string{}
+	if fl != nil {
+		excerpts = fl.CommentExcerpts()
+	}
+	set := state.Comments
+	return components.CommentList(components.CommentListProps{
+		Comments: set.List(), Excerpts: excerpts, ShowResolved: u.showResolved, Selected: u.selComment,
+		CanEdit: state.Role.CanComment(), Drafts: u.drafts,
+		OnSelect: func(id string) {
+			u.selComment = id
+			if fl != nil {
+				fl.SelectComment(id)
+			}
+			redraw()
+			renderUI()
+		},
+		OnResolve: func(id string) {
+			set.Update(id, func(c *canvas.Comment) { c.Resolved = !c.Resolved })
+			redraw()
+			renderUI()
+		},
+		OnDelete: func(id string) {
+			if fl != nil {
+				fl.DeleteComment(id)
+			} else {
+				set.Delete(id)
+			}
+			redraw()
+			renderUI()
+		},
+		OnReplyDraft: func(id, text string) { u.drafts[id] = text; renderUI() },
+		OnReply: func(id, text string) {
+			set.Update(id, func(c *canvas.Comment) {
+				c.Replies = append(c.Replies, canvas.Reply{Author: state.Author, Text: text, Created: time.Now()})
+			})
+			delete(u.drafts, id)
+			renderUI()
+		},
+		OnToggleShowResolved: func(show bool) { u.showResolved = show; renderUI() },
+	})
 }
