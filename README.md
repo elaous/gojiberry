@@ -1119,6 +1119,11 @@ imports the Go package gets its styles, wherever in the program that is:
   nodes for a hand-written `<head>`; `Document.NoStyles` turns it off.
 - `domrt.Mount` installs them in the browser's `<head>` (skipping ones
   the server already rendered); `domrt.InstallStyles()` does it by hand.
+- A page can pick its own: `// @styles components/base.css button.css`
+  above the page function (full IDs or their ends, whole path segments)
+  includes only those, `// @styles none` none -- the annotation becomes
+  `gox.Document{Styles: ...}`, which you can also set by hand. Without it a
+  page gets every registered sheet.
 - A sheet imported by several files is registered once (its ID is its
   module-qualified path) and sheets keep package-initialisation order, so
   a package's dependencies' styles come first.
