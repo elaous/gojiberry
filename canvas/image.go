@@ -14,6 +14,20 @@ const (
 	ToolAlpha                  // drag the slider to set opacity
 )
 
+// ImagePlacement says how an Image is positioned.
+type ImagePlacement int
+
+const (
+	// PlaceFloating positions the image by its own X, Y (or its Anchor)
+	// over the text, which can wrap around it.
+	PlaceFloating ImagePlacement = iota
+	// PlaceInline makes the image part of the text: put it in a
+	// TextFlow's items as Inline{Object: img}. The flow sizes it to fit
+	// the column and the page's text area (keeping its aspect ratio)
+	// and places it on the baseline like a character.
+	PlaceInline
+)
+
 // Insets are pixels cropped from each side of an image's frame.
 type Insets struct{ Left, Top, Right, Bottom float64 }
 
@@ -72,8 +86,17 @@ func DefaultImageStyle() ImageStyle {
 type Image struct {
 	Src        ImageSource
 	X, Y, W, H float64
-	Clip       Insets
-	Alpha      float64 // 0 (transparent) to 1 (opaque)
+	// Placement chooses floating (the default) or inline; see
+	// ImagePlacement. Inline images ignore X, Y, Wrap and the Move tool.
+	Placement ImagePlacement
+	// Anchor, if set, pins a floating image to a page: X, Y are then
+	// derived from it (relative to that page's sheet) using Pages or,
+	// failing that, the Flow's pages. Dragging updates it.
+	Anchor *Anchor
+	// Pages is the PageSet Anchor refers to; if nil the flow's is used.
+	Pages *PageSet
+	Clip  Insets
+	Alpha float64 // 0 (transparent) to 1 (opaque)
 	// Snap is the drag granularity in px (NewImage sets 5).
 	Snap float64
 	// BoundsW, if non-zero, keeps the visible rectangle within x in
@@ -93,6 +116,7 @@ type Image struct {
 
 	flow  *TextFlow
 	mode  Mode
+	scale float64 // displayed size / nominal size; 1 unless inline-fitted
 	tool  ImageTool
 	drag  *imageDrag
 	hover string // cursor the pointer position wants
@@ -110,7 +134,7 @@ type imageDrag struct {
 func NewImage(src ImageSource, x, y float64) *Image {
 	w, h := src.Size()
 	return &Image{
-		Src: src, X: x, Y: y, W: w, H: h, Alpha: 1, Snap: 5, WrapMargin: 8,
+		Src: src, X: x, Y: y, W: w, H: h, Alpha: 1, Snap: 5, WrapMargin: 8, scale: 1,
 		ChromeStyle: DefaultImageStyle(),
 	}
 }
@@ -165,14 +189,77 @@ func (im *Image) SetTool(t ImageTool) { im.tool = t }
 
 // Visible returns the visible (cropped) rectangle: x, y, w, h.
 func (im *Image) Visible() (x, y, w, h float64) {
-	return im.X + im.Clip.Left, im.Y + im.Clip.Top,
-		im.W - im.Clip.Left - im.Clip.Right, im.H - im.Clip.Top - im.Clip.Bottom
+	im.resolve()
+	sc := im.sc()
+	return im.X + im.Clip.Left*sc, im.Y + im.Clip.Top*sc,
+		(im.W - im.Clip.Left - im.Clip.Right) * sc, (im.H - im.Clip.Top - im.Clip.Bottom) * sc
+}
+
+// sc is the displayed-to-nominal scale: 1 unless the image was fitted
+// into the text by the flow.
+func (im *Image) sc() float64 {
+	if im.Placement == PlaceInline && im.scale > 0 {
+		return im.scale
+	}
+	return 1
+}
+
+func (im *Image) pageSet() *PageSet {
+	if im.Pages != nil {
+		return im.Pages
+	}
+	if im.flow != nil {
+		return im.flow.Pages
+	}
+	return nil
+}
+
+// resolve updates X, Y from the Anchor.
+func (im *Image) resolve() {
+	if ps := im.pageSet(); im.Anchor != nil && ps != nil && im.Placement == PlaceFloating {
+		im.X, im.Y = ps.Resolve(*im.Anchor)
+	}
+}
+
+// syncAnchor re-derives the Anchor from X, Y after a drag.
+func (im *Image) syncAnchor() {
+	if ps := im.pageSet(); im.Anchor != nil && ps != nil {
+		*im.Anchor = ps.AnchorAt(im.X, im.Y)
+	}
+}
+
+// Measure implements InlineObject: the image's visible part, scaled
+// down (never up) to fit maxW x maxH, keeping its aspect ratio.
+func (im *Image) Measure(_ Painter, maxW, maxH float64) (float64, float64) {
+	vw, vh := im.W-im.Clip.Left-im.Clip.Right, im.H-im.Clip.Top-im.Clip.Bottom
+	if vw <= 0 || vh <= 0 {
+		return 0, 0
+	}
+	im.scale = min(1, maxW/vw, maxH/vh)
+	return vw * im.scale, vh * im.scale
+}
+
+// DrawAt implements InlineObject: it draws the visible part with its
+// top-left at (x, y) and remembers where, for the edit chrome.
+func (im *Image) DrawAt(p Painter, x, y float64) {
+	sc := im.sc()
+	im.X, im.Y = x-im.Clip.Left*sc, y-im.Clip.Top*sc
+	ip, ok := p.(ImagePainter)
+	if !ok {
+		return
+	}
+	nw, nh := im.Src.Size()
+	vw, vh := im.W-im.Clip.Left-im.Clip.Right, im.H-im.Clip.Top-im.Clip.Bottom
+	sx, sy := nw/im.W, nh/im.H
+	ip.SetGlobalAlpha(im.Alpha)
+	ip.DrawImage(im.Src, im.Clip.Left*sx, im.Clip.Top*sy, vw*sx, vh*sy, x, y, vw*sc, vh*sc)
+	ip.SetGlobalAlpha(1)
 }
 
 // Exclusion implements Obstacle: while Wrap is on, the visible
 // rectangle plus WrapMargin is off limits to text.
 func (im *Image) Exclusion(y0, y1 float64) (x0, x1 float64, ok bool) {
-	if !im.Wrap {
+	if !im.Wrap || im.Placement == PlaceInline {
 		return 0, 0, false
 	}
 	vx, vy, vw, vh := im.Visible()
@@ -260,7 +347,7 @@ func (im *Image) whatAt(x, y float64) string {
 			return "alpha"
 		}
 	case ToolMove:
-		if im.contains(x, y) {
+		if im.Placement == PlaceFloating && im.contains(x, y) {
 			return "move"
 		}
 	}
@@ -279,6 +366,9 @@ func (im *Image) MouseDown(x, y float64) bool {
 		return false
 	case len(what) > 7 && what[:7] == "button:":
 		i, _ := strconv.Atoi(what[7:])
+		if im.Placement == PlaceInline && (i == int(ToolMove) || i == 3) {
+			return false // an inline image has no Move tool and doesn't wrap
+		}
 		if i == 3 {
 			im.Wrap = !im.Wrap
 		} else {
@@ -327,16 +417,24 @@ func (im *Image) MouseMove(x, y float64) bool {
 		return im.hover != old
 	}
 	dx, dy := x-d.startX, y-d.startY
+	if d.what != "move" { // clip drags happen in displayed pixels; clips are nominal
+		dx, dy = dx/im.sc(), dy/im.sc()
+	}
 	minSize := max(im.Snap, 10)
 	before := *im
 	switch d.what {
 	case "move":
 		nx := im.snap(d.startImgX + dx)
+		if ps := im.pageSet(); im.Anchor != nil && ps != nil { // snap relative to the page
+			px, _, _, _ := ps.PageRect(min(max(im.Anchor.Page, 0), len(ps.Pages)-1))
+			nx = px + im.snap(d.startImgX+dx-px)
+		}
 		if im.BoundsW > 0 {
 			_, _, vw, _ := im.Visible()
 			nx = min(nx, im.BoundsW-vw-im.Clip.Left)
 		}
 		im.X = max(nx, -im.Clip.Left)
+		im.syncAnchor()
 	case "left":
 		im.Clip.Left = min(max(im.snap(d.startClip.Left+dx), 0), im.W-im.Clip.Right-minSize)
 	case "right":
@@ -398,14 +496,18 @@ func (im *Image) Draw() {
 	nw, nh := im.Src.Size()
 	sx, sy := nw/im.W, nh/im.H
 	vx, vy, vw, vh := im.Visible()
+	sc := im.sc()
 
 	if im.mode == ModeEdit && im.tool == ToolClip {
 		// Show what's cropped away, dimmed, behind the kept part.
 		p.SetGlobalAlpha(im.Alpha * s.GhostAlpha)
-		p.DrawImage(im.Src, 0, 0, nw, nh, im.X, im.Y, im.W, im.H)
+		p.DrawImage(im.Src, 0, 0, nw, nh, im.X, im.Y, im.W*sc, im.H*sc)
 	}
-	p.SetGlobalAlpha(im.Alpha)
-	p.DrawImage(im.Src, im.Clip.Left*sx, im.Clip.Top*sy, vw*sx, vh*sy, vx, vy, vw, vh)
+	if im.Placement == PlaceFloating { // an inline image is drawn by the flow, via DrawAt
+		p.SetGlobalAlpha(im.Alpha)
+		p.DrawImage(im.Src, im.Clip.Left*sx, im.Clip.Top*sy, vw/sc*sx, vh/sc*sy, vx, vy, vw, vh)
+		p.SetGlobalAlpha(1)
+	}
 	p.SetGlobalAlpha(1)
 
 	if im.mode != ModeEdit {

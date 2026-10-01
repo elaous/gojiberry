@@ -5,9 +5,19 @@ package canvas
 type Format struct {
 	FontFamily string
 	FontSize   float64
+	// Scale multiplies the resulting font size (and line height), e.g.
+	// 2 for a heading twice the base size; zero means 1.
+	Scale      float64
 	FontWeight int
 	FontStyle  string
 	Color      string
+
+	// Decorations; see TextStyle.
+	Underline   bool
+	Strike      bool
+	Superscript bool
+	Subscript   bool
+	Background  string
 }
 
 // IsZero reports whether f changes nothing.
@@ -29,11 +39,27 @@ func (f Format) resolve(base TextStyle) TextStyle {
 	if f.FontWeight != 0 {
 		s.FontWeight = f.FontWeight
 	}
+	if f.Scale > 0 && f.Scale != 1 {
+		if s.LineHeight > 0 {
+			s.LineHeight *= f.Scale
+		}
+		if s.FontSize <= 0 {
+			s.FontSize = 16
+		}
+		s.FontSize *= f.Scale
+	}
 	if f.FontStyle != "" {
 		s.FontStyle = f.FontStyle
 	}
 	if f.Color != "" {
 		s.Color = f.Color
+	}
+	s.Underline = s.Underline || f.Underline
+	s.Strike = s.Strike || f.Strike
+	s.Superscript = s.Superscript || f.Superscript
+	s.Subscript = s.Subscript || f.Subscript
+	if f.Background != "" {
+		s.Background = f.Background
 	}
 	return s
 }
@@ -57,7 +83,9 @@ type Chars struct {
 // down to fit.
 type ColumnConfig struct {
 	Widths []float64
-	Gap    float64
+	// Count, with no Widths, makes that many equal columns.
+	Count int
+	Gap   float64
 }
 
 // BreakKind says what kind of break a Break is.
@@ -93,3 +121,18 @@ type Break struct{ Kind BreakKind }
 func (Chars) flowItem()        {}
 func (ColumnConfig) flowItem() {}
 func (Break) flowItem()        {}
+
+// Transform turns source text -- Markdown, say -- into a TextFlow's
+// content stream: Chars with Formats, Inline objects (tables, images,
+// rules), ColumnConfigs and Breaks. It is how patterns in the source
+// pick the right text format or component. See TextFlow.Transform and
+// Markdown.
+type Transform interface {
+	Transform(src string) []Item
+}
+
+// TransformFunc adapts a function to Transform.
+type TransformFunc func(src string) []Item
+
+// Transform implements Transform.
+func (f TransformFunc) Transform(src string) []Item { return f(src) }

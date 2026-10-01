@@ -26,6 +26,21 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160">
 <circle cx="80" cy="60" r="34" fill="#ffd23f"/>
 <path d="M0 160 L90 90 L150 140 L190 110 L240 160 Z" fill="#1b1b3a"/></svg>`
 
+var markdownSource = "# Quarterly Report\n\n" +
+	"A **Markdown** document flowing across pages: ~~strike~~, ++underline++, ==highlight==, x^2^, H~2~O, `code` and [links](https://example.com). " +
+	"The text carries on at the top of the next page when a page is full.\n\n" +
+	"![sun](sun) An inline image sits in the text like a character, scaled down to fit.\n\n" +
+	"\\columns 2 gap=20\n" +
+	"Columns keep their widths and gap until a new column config is set. Columns keep their widths and gap until a new column config is set. Columns keep their widths and gap until a new column config is set.\n" +
+	"\\columnbreak\n" +
+	"The column break above sent this text on to the next column (from the last column, the next page). Drag the grip above a column gap, in edit mode, to resize the columns. Drag the grip above a column gap to resize.\n\n" +
+	"\\columns 1\n" +
+	"| Region | Q1 | Q2 | Q3 |\n|---|---|---|---|\n| North | 12 | 15 | 18 |\n| South | 9 | 11 | 14 |\n\n" +
+	"- bullets and numbered lists\n- [x] task lists\n\n" +
+	"\\pagebreak\n" +
+	"## After a page break\n\n" +
+	para("This text starts on a fresh page because the break above forced it, and it runs on until the page is full, where the layout makes a natural page break of its own.", 4)
+
 func para(sentence string, n int) string {
 	return strings.TrimSpace(strings.Repeat(sentence+" ", n))
 }
@@ -48,27 +63,23 @@ func main() {
 
 	flow := canvas.NewTextFlow("", 0, 0, 0, 0)
 	flow.Pages = ps
-	flow.Items = []canvas.Item{
-		canvas.Chars{Text: "Quarterly Report\n", Format: canvas.Format{FontSize: 26, FontWeight: 700}},
-		canvas.Chars{Text: para("A text flow runs continuously across pages: when one page is full the text carries on at the top of the next.", 3)},
-		canvas.ColumnConfig{Widths: []float64{220, 220}, Gap: 20},
-		canvas.Chars{Text: para("Columns keep their widths and gap until a new column config is set.", 5)},
-		canvas.Break{Kind: canvas.BreakColumn},
-		canvas.Chars{Text: "The column break above sent this text on to the next column (from the last column, the next page). ", Format: canvas.Format{FontStyle: canvas.StyleItalic}},
-		canvas.Chars{Text: para("Drag the grip above a column gap, in edit mode, to resize the columns.", 3)},
-		canvas.ColumnConfig{},
-		canvas.Chars{Text: "Back to a single column, with "},
-		canvas.Chars{Text: "bold", Format: canvas.Format{FontWeight: 700}},
-		canvas.Chars{Text: " and "},
-		canvas.Chars{Text: "colored", Format: canvas.Format{Color: "#c0392b"}},
-		canvas.Chars{Text: " words in the same line.\n"},
-		canvas.Break{Kind: canvas.BreakPage},
-		canvas.Chars{Text: "After a page break\n", Format: canvas.Format{FontSize: 20, FontWeight: 700}},
-		canvas.Chars{Text: para("This text starts on a fresh page because the break above forced it, and it runs on until the page is full, where the layout makes a natural page break of its own.", 6)},
+
+	// An inline image sits in the text; the Markdown resolver hands the
+	// flow this object for ![sun](sun) once the bitmap has loaded.
+	var inline *canvas.Image
+	flow.Transform = canvas.Markdown{
+		Images: func(url, alt string) canvas.InlineObject {
+			if inline == nil {
+				return nil
+			}
+			return inline
+		},
 	}
+	flow.Source = markdownSource
 
 	var img *canvas.Image
-	ft := canvas.NewFloatingText("Floating note: click to edit, select text and use B / I.", 190, 985, 190, 96)
+	ft := canvas.NewFloatingText("Floating note: click to edit, select text and use B / I.", 0, 0, 190, 96)
+	ft.Anchor = &canvas.Anchor{Page: 2, X: 40, Y: 110}
 	ft.Wrap = true
 	ft.BoundsW = 880
 	ft.SetFlow(flow)
@@ -101,6 +112,41 @@ func main() {
 		for i, l := range lay.Lines {
 			lines[i] = line{l.Page, l.Col, l.X, l.Y, l.W, l.H}
 		}
+		deco := map[string]int{}
+		for _, l := range lay.Lines {
+			for _, r := range l.Runs {
+				if r.Underline {
+					deco["underline"]++
+				}
+				if r.Strike {
+					deco["strike"]++
+				}
+				if r.DY < 0 {
+					deco["super"]++
+				}
+				if r.DY > 0 {
+					deco["sub"]++
+				}
+				if r.Background != "" {
+					deco["background"]++
+				}
+			}
+		}
+		var objects []map[string]any
+		for _, l := range lay.Lines {
+			for _, o := range l.Objects {
+				kind := "other"
+				switch o.Object.(type) {
+				case *canvas.TableObject:
+					kind = "table"
+				case *canvas.Image:
+					kind = "image"
+				case *canvas.Rule:
+					kind = "rule"
+				}
+				objects = append(objects, map[string]any{"kind": kind, "page": l.Page, "x": o.X, "y": o.Y, "w": o.W, "h": o.H})
+			}
+		}
 		var breaks, bands []map[string]any
 		for _, b := range lay.Breaks {
 			breaks = append(breaks, map[string]any{"kind": b.Kind.String(), "page": b.Page, "col": b.Col})
@@ -119,7 +165,7 @@ func main() {
 			"mode": ft.Mode().String(), "scroll": []float64{sv.ScrollX, sv.ScrollY},
 			"viewport": []float64{sv.X, sv.Y, sv.Width, sv.Height}, "content": []float64{w, h},
 			"pageCount": len(ps.Pages), "pagesUsed": lay.Pages, "overflow": lay.Overflow,
-			"lines": lines, "breaks": breaks, "bands": bands, "pageNumbers": numbers,
+			"lines": lines, "objects": objects, "decorations": deco, "breaks": breaks, "bands": bands, "pageNumbers": numbers,
 			"pageRects": func() [][]float64 {
 				var out [][]float64
 				for i := range ps.Pages {
@@ -129,14 +175,14 @@ func main() {
 				return out
 			}(),
 			"floating": map[string]any{
-				"x": ft.X, "y": ft.Y, "w": ft.Width, "h": ft.Height, "text": ft.Text(), "wrap": ft.Wrap,
+				"x": ft.X, "y": ft.Y, "w": ft.Width, "h": ft.Height, "text": ft.Text(), "wrap": ft.Wrap, "anchor": ft.Anchor,
 				"editing": ft.Editing(), "selection": []int{from, to}, "items": ft.Items(),
 			},
 		}
 		if img != nil {
 			vx, vy, vw, vh := img.Visible()
 			st["image"] = map[string]any{
-				"x": img.X, "y": img.Y, "visible": []float64{vx, vy, vw, vh}, "wrap": img.Wrap,
+				"x": img.X, "y": img.Y, "visible": []float64{vx, vy, vw, vh}, "wrap": img.Wrap, "anchor": img.Anchor,
 				"tool": [...]string{"move", "clip", "alpha"}[img.Tool()], "alpha": img.Alpha,
 			}
 		}
@@ -147,12 +193,22 @@ func main() {
 
 	canvas.LoadImage("data:image/svg+xml;base64,"+base64.StdEncoding.EncodeToString([]byte(svg)),
 		func(src *canvas.HTMLImage) {
-			img = canvas.NewImage(src, 430, 545)
+			// A floating image, anchored to page 1: text wraps around it.
+			img = canvas.NewImage(src, 0, 0)
 			img.W, img.H = 120, 80
+			img.Anchor = &canvas.Anchor{Page: 1, X: 330, Y: 150}
 			img.BoundsW = 880
 			img.Wrap = true
 			img.SetFlow(flow)
 			sv.Add(img, 0, 0)
+
+			// And an inline one, placed in the text by the Markdown ![sun](sun).
+			inline = canvas.NewImage(src, 0, 0)
+			inline.W, inline.H = 160, 107
+			inline.Placement = canvas.PlaceInline
+			inline.SetFlow(flow)
+			sv.Add(inline, 0, 0)
+			flow.InvalidateTransform()
 			redraw()
 		}, nil)
 
