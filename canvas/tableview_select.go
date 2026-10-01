@@ -77,6 +77,8 @@ func (v *TableView) tableMenu() []MenuItem {
 		{Label: "Add column", Action: v.apply(func(t *Table) { t.AddColumn(); v.sel = Selection{} })},
 		{Separator: true},
 		{Label: "Clear contents", Action: v.apply(func(t *Table) { t.Clear() })},
+		{Separator: true},
+		{Label: check(v.Wrap, "Wrap text around"), Disabled: v.flow == nil, Action: func() { v.Wrap = !v.Wrap; v.sel = Selection{}; v.changed() }},
 	}
 	if v.OnDeleteTable != nil {
 		items = append(items,

@@ -156,7 +156,125 @@ run(async () => {
   await refresh();
   assert(!s.floating.editing, 'Escape stops editing');
 
+  // --- more formatting: text color and highlight from the toolbar palettes ---
+  await page.mouse.move(...d.at(...view(f.x + f.w - 14, f.y + 14)));
+  await d.click(...view(f.x + f.w - 14, f.y + 14));
+  await page.keyboard.down('Shift');
+  await page.keyboard.press('Home');
+  await page.keyboard.up('Shift');
+  await refresh();
+  const pick = async (button, index) => {
+    const [bx, by, bw, bh] = s.floating.buttons[button];
+    await d.click(...view(bx + bw / 2, by + bh / 2));
+    await refresh();
+    assert(s.floating.palette.open, button + ' button opens its palette: ' + s.floating.palette.labels.join(','));
+    const [px2, py2] = s.floating.palette.rect;
+    await d.click(...view(px2 + 20, py2 + 28 * index + 14));
+    await refresh();
+    assert(!s.floating.palette.open && s.floating.editing, 'choosing a swatch closes the palette and keeps editing');
+  };
+  await pick('color', 2); // Red
+  assert(s.floating.items.some((it) => it.Format && it.Format.Color === '#d93025'), 'the selected text is colored red: ' + JSON.stringify(s.floating.items.map((i) => i.Format.Color)));
+  await pick('mark', 0); // Yellow
+  assert(s.floating.items.some((it) => it.Format && it.Format.Background === '#fff475' && it.Format.Color === '#d93025'), 'and highlighted, keeping the color');
+
+  // --- auto-close pairs ---
+  await page.keyboard.press('ArrowRight'); // collapse to the end of the selection
+  await page.keyboard.type(' (x');
+  await refresh();
+  assert(s.floating.text.includes(' (x)') && s.floating.text.split(')').length === 2, 'typing ( inserts the closing ): ' + s.floating.text);
+  await page.keyboard.type(')');
+  await refresh();
+  assert(!s.floating.text.includes('))') && s.floating.text.includes('(x)'), 'typing the closer overtypes it');
+  await page.keyboard.type('[');
+  await page.keyboard.press('Backspace');
+  await refresh();
+  assert(!s.floating.text.includes('[') && !s.floating.text.includes(']'), 'Backspace between a pair deletes both');
+
+  // --- auto-complete from the words in the text ---
+  await page.keyboard.type(' Flo');
+  await refresh();
+  assert(s.floating.suggestions.includes('Floating'), 'typing a prefix offers completions: ' + s.floating.suggestions);
+  await page.keyboard.press('Tab');
+  await refresh();
+  assert(s.floating.text.includes('(x) Floating edit') && s.floating.suggestions.length === 0, 'Tab accepts the suggestion: ' + s.floating.text);
+  await page.keyboard.type(' Qua');
+  await refresh();
+  assert(s.floating.suggestions.includes('Quarterly'), 'the Vocabulary words are offered too');
+  await page.keyboard.press('Escape');
+  await refresh();
+  assert(s.floating.suggestions.length === 0 && s.floating.editing, 'Escape dismisses the popup but keeps editing');
+
+  // --- clipboard (through the browser's copy/paste events) ---
+  await page.keyboard.press('Control+A');
+  await refresh();
+  assert(s.floating.selection[1] - s.floating.selection[0] === s.floating.text.length, 'Ctrl+A selects all the text');
+  const copied = await page.evaluate(() => {
+    const dt = new DataTransfer();
+    document.getElementById('input').dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
+    return dt.getData('text/plain');
+  });
+  assert(copied === s.floating.text, 'copy puts the selection on the clipboard: ' + copied);
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', 'PASTED (');
+    document.getElementById('input').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await refresh();
+  assert(s.floating.text === 'PASTED (', 'paste replaces the selection, without auto-closing: ' + s.floating.text);
+  await page.keyboard.press('Control+A');
+  await page.evaluate(() => {
+    document.getElementById('input').dispatchEvent(new ClipboardEvent('cut', { clipboardData: new DataTransfer(), bubbles: true, cancelable: true }));
+  });
+  await refresh();
+  assert(s.floating.text === '', 'cut removes the selection');
+  await page.keyboard.type('Floating note');
+
+  // --- select text in the document, copy its format, paste it into the note ---
+  await scrollTo(0);
+  const heading = s.lines.find((l) => l.page === 0);
+  await page.mouse.dblclick(...d.at(...view(heading.x + 20, heading.y + 14)));
+  await refresh();
+  assert(s.flowSelection.text === 'Quarterly', 'double click selects a word of the document: ' + s.flowSelection.text);
+  await page.keyboard.press('Control+Alt+C');
+  await refresh();
+  assert(s.formatClipboard.has && s.formatClipboard.format.Scale === 2 && s.formatClipboard.format.FontWeight === 700, 'Ctrl+Alt+C copies the selection\'s common format: ' + JSON.stringify(s.formatClipboard.format));
+  // A drag-selection across differently formatted text copies only what they share.
+  const body = s.lines.filter((l) => l.page === 0)[2];
+  await d.drag(...view(heading.x + 2, heading.y + 14), ...view(body.x + 150, body.y + 8));
+  await refresh();
+  assert(s.flowSelection.text.includes('Quarterly Report') && s.flowSelection.text.includes('Markdown'), 'dragging selects across paragraphs');
+  await page.keyboard.press('Control+Alt+C');
+  await refresh();
+  assert(s.formatClipboard.format.Scale === 0 && s.formatClipboard.format.FontWeight === 0, 'a mixed selection has no common size or weight');
+  // Back to the heading word, then into the note.
+  await page.mouse.dblclick(...d.at(...view(heading.x + 20, heading.y + 14)));
+  await page.keyboard.press('Control+Alt+C');
+  await scrollTo(s.floating.y - 220);
+  await d.click(...view(s.floating.x + s.floating.w - 14, s.floating.y + 14));
+  await page.keyboard.press('Control+A');
+  await page.keyboard.press('Control+Alt+V');
+  await refresh();
+  assert(!s.flowSelection.text && s.floating.items.length === 1 && s.floating.items[0].Format.Scale === 2 && s.floating.items[0].Format.FontWeight === 700, 'Ctrl+Alt+V paints the format onto the note: ' + JSON.stringify(s.floating.items));
+  await page.keyboard.press('Control+B');
+  await refresh();
+  assert(s.floating.items[0].Format.FontWeight === 400, 'Ctrl+B toggles bold off (keymap command)');
+  await page.keyboard.press('Escape');
+
+  // --- the floating table: text wraps around it; its icon drags it ---
+  await scrollTo(s.table.rect[1] - 260);
+  let tb = s.table;
+  assert(tb.wrap && !intrudes(s.lines.filter((l) => l.page === 3), grow(tb.rect)), 'text wraps around the floating table');
+  assert(tb.anchor.Page === 3 && tb.anchor.X === 300, 'the table is anchored to page 3');
+  const icon = view(tb.rect[0] - 12, tb.rect[1] - 12);
+  await d.drag(...icon, icon[0] - 53, icon[1] + 0);
+  await refresh();
+  tb = s.table;
+  assert(tb.anchor.X === 245 && tb.anchor.Page === 3, 'dragging the table icon moves the table, snapping to 5 relative to its page: ' + JSON.stringify(tb.anchor));
+  assert(!intrudes(s.lines.filter((l) => l.page === 3), grow(tb.rect)) && !s.overflow, 'text re-wrapped around the moved table');
+
   // Move the note by its toolbar's Move button: both axes, snapping.
+  await scrollTo(s.floating.y - 220);
   f = s.floating;
   const [mx, my] = view(f.x + 20, f.y - 17);
   await d.drag(mx, my, mx + 22, my + 17);

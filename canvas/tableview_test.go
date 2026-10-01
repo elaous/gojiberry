@@ -458,7 +458,7 @@ func TestRowMoveAndDelete(t *testing.T) {
 
 func TestTableHandleMenu(t *testing.T) {
 	v, p := newView()
-	v.MouseDown(3, 3)
+	clickTableHandle(v)
 	if v.Selection().Kind != SelTable {
 		t.Fatalf("sel=%+v", v.Selection())
 	}
@@ -471,9 +471,9 @@ func TestTableHandleMenu(t *testing.T) {
 	if v.Table.Cell(0, 0) != "" || v.Table.Cell(1, 1) != "" {
 		t.Fatalf("got %v", v.Table.Cells)
 	}
-	v.MouseDown(3, 3)
+	clickTableHandle(v)
 	clickMenuItem(t, v, "Add column")
-	v.MouseDown(3, 3)
+	clickTableHandle(v)
 	clickMenuItem(t, v, "Add row")
 	if v.Table.Cols() != 3 || v.Table.Rows() != 3 {
 		t.Fatalf("got %v", v.Table.Cells)
@@ -481,7 +481,7 @@ func TestTableHandleMenu(t *testing.T) {
 
 	deleted := false
 	v.OnDeleteTable = func() { deleted = true }
-	v.MouseDown(3, 3)
+	clickTableHandle(v)
 	p.calls = nil
 	v.Draw()
 	if !p.has(`fillText "Delete table"`) {
@@ -574,4 +574,10 @@ func TestEdges(t *testing.T) {
 	if got := v.RowEdges(); len(got) != 3 || got[0] != 10 || got[2] != 74 {
 		t.Fatalf("RowEdges = %v", got)
 	}
+}
+
+// clickTableHandle presses and releases the 2x2-boxes icon.
+func clickTableHandle(v *TableView) {
+	v.MouseDown(3, 3)
+	v.MouseUp(3, 3)
 }

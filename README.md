@@ -1292,6 +1292,20 @@ generated code.
   by double-click (per page: same as previous, or new) and page numbers
   are selectable, with a settings menu.
 
+  Editing: `FloatingText` has color and highlight palettes, code-editor
+  auto-closing of quotes/brackets, word auto-completion, and key
+  bindings (`Keymap`, e.g. Ctrl+B, Ctrl+Alt+C / Ctrl+Alt+V to copy and
+  paste a format). Text in a `TextFlow` can be selected (drag or double
+  click) and copied; copying a format takes the minimum common
+  formatting of the selection, shared across components through the
+  `Stage`'s `FormatClipboard`. A `TableView` can float like an image
+  (page `Anchor`, `Wrap`, drag its icon to move it).
+
+  `.gox` components can be generic and take function props with markup:
+  `<components.List[Person] items={people} item={func(p Person) gox.Node { return <b>{p.Name}</b> }} />`
+  (see `examples/generic-list-demo`, and `docs/gox-canvas.md` for how gox
+  could drive the canvas components).
+
   Demos, each with a Playwright e2e test run by `go test` (skipped when
   node/playwright/chromium are missing): `examples/canvas-table-demo`,
   `examples/canvas-flow-demo`, `examples/canvas-image-demo`,

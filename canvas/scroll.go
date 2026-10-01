@@ -63,7 +63,7 @@ type scrollDrag struct {
 // NewScrollView returns an empty scroll view with a w x h viewport at
 // (x, y).
 func NewScrollView(x, y, w, h float64) *ScrollView {
-	return &ScrollView{X: x, Y: y, Width: w, Height: h, Style: DefaultScrollStyle(), content: &Stage{}}
+	return &ScrollView{X: x, Y: y, Width: w, Height: h, Style: DefaultScrollStyle(), content: &Stage{Formats: &FormatClipboard{}}}
 }
 
 // Add puts a canvas object in the content. w and h are the object's
@@ -312,6 +312,19 @@ func (sv *ScrollView) MouseWheel(x, y, dx, dy float64) bool {
 		return true
 	}
 	return sv.ScrollBy(dx, dy)
+}
+
+// SetFormatClipboard hands the format clipboard to the content.
+func (sv *ScrollView) SetFormatClipboard(c *FormatClipboard) { sv.content.SetFormatClipboard(c) }
+
+// HandleCommand forwards to the content.
+func (sv *ScrollView) HandleCommand(cmd Command) bool { return sv.content.RunCommand(cmd) }
+
+// CopyText, CutText and PasteText forward to the content.
+func (sv *ScrollView) CopyText() (string, bool) { return sv.content.Copy() }
+func (sv *ScrollView) CutText() (string, bool)  { return sv.content.Cut() }
+func (sv *ScrollView) PasteText(text string) bool {
+	return sv.content.Paste(text)
 }
 
 // HandleKey forwards to the content.

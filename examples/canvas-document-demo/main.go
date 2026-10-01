@@ -39,7 +39,7 @@ var markdownSource = "# Quarterly Report\n\n" +
 	"- bullets and numbered lists\n- [x] task lists\n\n" +
 	"\\pagebreak\n" +
 	"## After a page break\n\n" +
-	para("This text starts on a fresh page because the break above forced it, and it runs on until the page is full, where the layout makes a natural page break of its own.", 4)
+	para("This text starts on a fresh page because the break above forced it, and it runs on until the page is full, where the layout makes a natural page break of its own.", 3)
 
 func para(sentence string, n int) string {
 	return strings.TrimSpace(strings.Repeat(sentence+" ", n))
@@ -83,10 +83,20 @@ func main() {
 	ft.Wrap = true
 	ft.BoundsW = 880
 	ft.SetFlow(flow)
+	ft.Vocabulary = []string{"Quarterly", "Markdown"}
+
+	// A floating table, anchored to the last page, that text wraps around.
+	table := canvas.NewTableView(canvas.NewTableFrom([][]string{
+		{"Metric", "Value"}, {"Pages", "4"}, {"Columns", "2"},
+	}), nil)
+	table.Anchor = &canvas.Anchor{Page: 3, X: 300, Y: 230}
+	table.Wrap = true
+	table.SetFlow(flow)
 
 	sv := canvas.NewScrollView(10, 10, 900, 620)
 	sv.Add(ps, 0, 0)
 	sv.Add(flow, 0, 0)
+	sv.Add(table, 0, 0)
 	sv.Add(ft, 0, 0)
 	w, h := ps.Size()
 	sv.SetContentSize(w, h)
@@ -177,15 +187,26 @@ func main() {
 		mx, my, mw, _ := ps.Menu().Rect()
 		editPage, editFooter, editing := ps.Editing()
 		from, to := ft.Selection()
+		pm := ft.PaletteMenu()
+		px, py, pw, _ := pm.Rect()
+		bx, by, bw, bh := ft.ToolbarButtonRect(6)
+		mx2, my2, mw2, mh2 := ft.ToolbarButtonRect(7)
+		sx, sy, sw, _ := ft.SuggestionMenu().Rect()
+		tx, ty, tw, th := table.Rect()
+		selFrom, selTo := flow.Selection()
+		fmtClip, hasFmt := stage.Formats.Get()
 		st := map[string]any{
 			"mode": ft.Mode().String(), "scroll": []float64{sv.ScrollX, sv.ScrollY},
 			"viewport": []float64{sv.X, sv.Y, sv.Width, sv.Height}, "content": []float64{w, h},
 			"pageCount": len(ps.Pages), "pagesUsed": lay.Pages, "overflow": lay.Overflow,
 			"headers": headers, "footers": footers, "numberRects": numberRects,
-			"numberSelected": map[string]any{"ok": hasSel, "page": selPage},
-			"menu":           map[string]any{"open": ps.Menu().IsOpen(), "rect": []float64{mx, my, mw}, "labels": ps.Menu().Labels()},
-			"hfEdit":         map[string]any{"editing": editing, "page": editPage, "footer": editFooter},
-			"lines":          lines, "objects": objects, "decorations": deco, "breaks": breaks, "bands": bands, "pageNumbers": numbers,
+			"numberSelected":  map[string]any{"ok": hasSel, "page": selPage},
+			"menu":            map[string]any{"open": ps.Menu().IsOpen(), "rect": []float64{mx, my, mw}, "labels": ps.Menu().Labels()},
+			"hfEdit":          map[string]any{"editing": editing, "page": editPage, "footer": editFooter},
+			"table":           map[string]any{"rect": []float64{tx, ty, tw, th}, "anchor": table.Anchor, "wrap": table.Wrap, "cells": table.Table.Cells},
+			"flowSelection":   map[string]any{"from": selFrom, "to": selTo, "text": flow.SelectedText()},
+			"formatClipboard": map[string]any{"has": hasFmt, "format": fmtClip},
+			"lines":           lines, "objects": objects, "decorations": deco, "breaks": breaks, "bands": bands, "pageNumbers": numbers,
 			"pageRects": func() [][]float64 {
 				var out [][]float64
 				for i := range ps.Pages {
@@ -197,6 +218,10 @@ func main() {
 			"floating": map[string]any{
 				"x": ft.X, "y": ft.Y, "w": ft.Width, "h": ft.Height, "text": ft.Text(), "wrap": ft.Wrap, "anchor": ft.Anchor,
 				"editing": ft.Editing(), "selection": []int{from, to}, "items": ft.Items(),
+				"caret": ft.Caret(), "selectedText": ft.SelectedText(),
+				"palette":     map[string]any{"open": pm.IsOpen(), "rect": []float64{px, py, pw}, "labels": pm.Labels()},
+				"suggestions": append([]string{}, ft.Suggestions()...), "suggestRect": []float64{sx, sy, sw},
+				"buttons": map[string]any{"color": []float64{bx, by, bw, bh}, "mark": []float64{mx2, my2, mw2, mh2}},
 			},
 		}
 		if img != nil {
