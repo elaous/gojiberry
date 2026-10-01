@@ -288,7 +288,11 @@ func (s *Stage) HandleChord(chord string) bool {
 // RunCommand offers cmd to components, topmost first, until one applies it.
 func (s *Stage) RunCommand(cmd Command) bool {
 	if s.Features != nil && s.Features.Has(cmd) {
-		if t := s.EditTarget(); t != nil {
+		t := s.EditTarget()
+		if t == nil && cmd == CmdCommentAdd && s.Role.CanComment() {
+			t = s.commentTarget() // commenting needs no edit mode
+		}
+		if t != nil {
 			ctx := &CommandContext{Target: t, Clipboard: &s.Clipboard, Formats: s.Formats, Redraw: s.Redraw, Prompt: s.Prompt, OpenLink: s.OpenLink}
 			if s.Features.Run(cmd, ctx) {
 				return true

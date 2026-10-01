@@ -120,6 +120,9 @@ func (f *TextFlow) histRestore(s flowSnap) {
 
 // Undo implements Historian.
 func (f *TextFlow) Undo() bool {
+	if f.UndoHook != nil {
+		return f.UndoHook(false)
+	}
 	s, ok := f.hist.back(f.histSnap())
 	if ok {
 		f.histRestore(s)
@@ -129,6 +132,9 @@ func (f *TextFlow) Undo() bool {
 
 // Redo implements Historian.
 func (f *TextFlow) Redo() bool {
+	if f.UndoHook != nil {
+		return f.UndoHook(true)
+	}
 	s, ok := f.hist.forward(f.histSnap())
 	if ok {
 		f.histRestore(s)

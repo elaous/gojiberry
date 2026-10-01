@@ -11,8 +11,8 @@ const (
 	RoleOwner Role = "owner"
 	// RoleEditor may edit and comment.
 	RoleEditor Role = "editor"
-	// RoleViewer may only read: every component is in view mode, whatever
-	// mode is asked for.
+	// RoleViewer may read and comment, but not edit: every component is in
+	// view mode, whatever mode is asked for.
 	RoleViewer Role = "viewer"
 )
 
@@ -31,8 +31,10 @@ func ParseRole(s string) Role {
 // CanEdit reports whether the role may edit the document.
 func (r Role) CanEdit() bool { return r == "" || r == RoleOwner || r == RoleEditor }
 
-// CanComment reports whether the role may add and change comments.
-func (r Role) CanComment() bool { return r.CanEdit() }
+// CanComment reports whether the role may add comments and replies: every
+// role, a viewer included (a viewer comments on selected text without
+// editing it; see Stage.RunCommand).
+func (r Role) CanComment() bool { return r == "" || r == RoleOwner || r == RoleEditor || r == RoleViewer }
 
 // CanManage reports whether the role may change who has access.
 func (r Role) CanManage() bool { return r == "" || r == RoleOwner }
