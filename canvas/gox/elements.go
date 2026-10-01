@@ -79,6 +79,13 @@ type TextFlowProps struct {
 	// Styles are the named styles Format.Style and ParaFormat.Style refer
 	// to (canvas.DefaultStyles is a starting set).
 	Styles []canvas.StyleDef
+	// AutoClose maps openers to closers (canvas.DefaultAutoClose is the
+	// code-editor set); Complete, Completer or Vocabulary turn on the
+	// word-completion popup.
+	AutoClose  map[rune]rune
+	Complete   bool
+	Completer  canvas.Completer
+	Vocabulary []string
 
 	Columns []float64
 	Gap     float64
