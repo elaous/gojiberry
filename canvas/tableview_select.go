@@ -22,7 +22,11 @@ func (v *TableView) selectHandle(h Hit) {
 		items = v.tableMenu()
 		mx, my = v.X-s.BarGap-s.HandleSize, v.Y-s.BarGap
 	}
-	v.menu.Open(items, mx, my, v.CanvasW, v.CanvasH)
+	bounds := v.viewport
+	if bounds[2] == 0 {
+		bounds = [4]float64{0, 0, v.CanvasW, v.CanvasH}
+	}
+	v.menu.OpenWithin(items, mx, my, bounds)
 }
 
 // apply wraps a table mutation from a menu item: it then fires OnChange.

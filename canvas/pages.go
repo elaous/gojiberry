@@ -43,7 +43,7 @@ type HeaderFooter struct {
 // from it, counting up by one.
 type PageNumberConfig struct {
 	Show   bool
-	Format string // "{n}" is replaced by the number; empty means "{n}"
+	Format string // "{n}" is the number, "{total}" the page count; empty means "{n}"
 	Style  PageNumberStyle
 	Start  int
 	Align  Align
@@ -104,6 +104,18 @@ type PageSet struct {
 	Style   PageStyle
 	Painter Painter
 	mode    Mode
+
+	// OnChange is called when a header, footer or page-number setting is
+	// changed by editing in edit mode.
+	OnChange func(*PageSet)
+
+	viewport [4]float64 // visible part, from SetViewport
+	edit     *hfEdit    // header/footer being edited
+	menu     *Menu      // page-number settings menu
+	selNum   int        // page whose number is selected, when hasSel
+	hasSel   bool
+	caretOn  bool
+	hover    string
 }
 
 // NewPageSet returns a PageSet of pages at (0, 0) in ModeView.
@@ -114,6 +126,9 @@ func NewPageSet(pages ...Page) *PageSet {
 // SetPainter implements PainterSetter.
 func (ps *PageSet) SetPainter(p ImagePainter) { ps.Painter = p }
 
+// SetViewport implements ViewportSetter: popups stay inside the visible part.
+func (ps *PageSet) SetViewport(x, y, w, h float64) { ps.viewport = [4]float64{x, y, w, h} }
+
 // Mode returns the current mode.
 func (ps *PageSet) Mode() Mode { return ps.mode }
 
@@ -123,6 +138,12 @@ func (ps *PageSet) SetMode(m Mode) bool {
 		return false
 	}
 	ps.mode = m
+	if m == ModeView {
+		ps.edit, ps.hasSel, ps.hover = nil, false, ""
+		if ps.menu != nil {
+			ps.menu.Close()
+		}
+	}
 	return true
 }
 
@@ -218,6 +239,7 @@ func (ps *PageSet) PageNumberText(i int) string {
 	if format == "" {
 		format = "{n}"
 	}
+	format = strings.ReplaceAll(format, "{total}", strconv.Itoa(len(ps.Pages)))
 	return strings.ReplaceAll(format, "{n}", formatPageNumber(n, cfg.Style))
 }
 
@@ -289,19 +311,20 @@ func (ps *PageSet) ContentRect(i int) (x, y, w, h float64) {
 	px, py, pw, ph := ps.PageRect(i)
 	pg := ps.Pages[i]
 	top, bottom := pg.Margin.Top, pg.Margin.Bottom
-	if hd := ps.ResolvedHeader(i); hd != nil {
+	hd, ft := ps.effHeader(i), ps.effFooter(i)
+	if hd != nil {
 		off := ps.headerOffset(hd, pg.Margin.Top)
 		top = max(top, off+textBlockHeight(hd.Style, strings.Count(hd.Text, "\n")+1)+6)
 	}
 	footH := 0.0
-	if ft := ps.ResolvedFooter(i); ft != nil {
+	if ft != nil {
 		footH = textBlockHeight(ft.Style, strings.Count(ft.Text, "\n")+1)
 	}
 	if cfg, _ := ps.ResolvedPageNumber(i); cfg != nil {
 		footH = max(footH, textBlockHeight(cfg.TextStyle, 1))
 	}
 	if footH > 0 {
-		off := ps.footerOffset(footH, pg.Margin.Bottom, ps.ResolvedFooter(i))
+		off := ps.footerOffset(footH, pg.Margin.Bottom, ft)
 		bottom = max(bottom, off+footH+6)
 	}
 	return px + pg.Margin.Left, py + top, pw - pg.Margin.Left - pg.Margin.Right, ph - top - bottom
@@ -352,56 +375,11 @@ func (ps *PageSet) Draw() {
 }
 
 func (ps *PageSet) drawHeaderFooter(i int) {
-	p := ps.Painter
-	px, py, pw, ph := ps.PageRect(i)
-	pg := ps.Pages[i]
-	left, right := px+pg.Margin.Left, px+pw-pg.Margin.Right
-
-	drawLines := func(text string, orig TextStyle, align Align, top float64) {
-		style := footerStyle(orig)
-		p.SetFont(style.Font())
-		if orig.Color != "" {
-			p.SetFillStyle(orig.Color)
-		} else {
-			p.SetFillStyle(ps.Style.TextColor)
+	bx := ps.boxes(i)
+	for _, b := range []*textBox{bx.header, bx.footer, bx.number} {
+		if b != nil {
+			ps.drawBox(b)
 		}
-		p.SetTextBaseline("middle")
-		lh := style.Leading()
-		for k, line := range strings.Split(text, "\n") {
-			x := left
-			switch align {
-			case AlignCenter:
-				x = (left+right)/2 - p.MeasureTextWidth(line)/2
-			case AlignRight:
-				x = right - p.MeasureTextWidth(line)
-			}
-			p.SetTextAlign("left")
-			p.FillText(line, x, top+float64(k)*lh+lh/2)
-		}
-	}
-
-	if hd := ps.ResolvedHeader(i); hd != nil {
-		drawLines(hd.Text, hd.Style, hd.Align, py+ps.headerOffset(hd, pg.Margin.Top))
-	}
-	ft := ps.ResolvedFooter(i)
-	num, _ := ps.ResolvedPageNumber(i)
-	footH := 0.0
-	if ft != nil {
-		footH = textBlockHeight(ft.Style, strings.Count(ft.Text, "\n")+1)
-	}
-	if num != nil {
-		footH = max(footH, textBlockHeight(num.TextStyle, 1))
-	}
-	if footH == 0 {
-		return
-	}
-	bottom := py + ph - ps.footerOffset(footH, pg.Margin.Bottom, ft)
-	if ft != nil {
-		h := textBlockHeight(ft.Style, strings.Count(ft.Text, "\n")+1)
-		drawLines(ft.Text, ft.Style, ft.Align, bottom-h)
-	}
-	if num != nil {
-		drawLines(ps.PageNumberText(i), num.TextStyle, num.Align, bottom-textBlockHeight(num.TextStyle, 1))
 	}
 }
 

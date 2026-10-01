@@ -141,3 +141,49 @@ func TestMenuDraw(t *testing.T) {
 		t.Fatal("closed menu draws nothing")
 	}
 }
+
+func TestMenuOpenWithinKeepsInsideBounds(t *testing.T) {
+	p := &fakePainter{}
+	m := NewMenu(p)
+	items := []MenuItem{{Label: "Only"}, {Label: "Two"}}
+	h := 2 * 28.0
+	// Bounds are a rectangle that doesn't start at the origin.
+	m.OpenWithin(items, 500, 500, [4]float64{100, 200, 300, 150})
+	if m.x != 400-m.w || m.y != 350-h {
+		t.Fatalf("x,y = %g,%g", m.x, m.y)
+	}
+	m.OpenWithin(items, 0, 0, [4]float64{100, 200, 300, 150})
+	if m.x != 100 || m.y != 200 {
+		t.Fatalf("x,y = %g,%g", m.x, m.y)
+	}
+	if x, y, w, hh := m.Rect(); x != 100 || y != 200 || w != m.w || hh != h {
+		t.Fatal("Rect")
+	}
+	if got := m.Labels(); len(got) != 2 || got[0] != "Only" {
+		t.Fatalf("labels = %v", got)
+	}
+	m.Close()
+	if x, y, w, hh := m.Rect(); x != 0 || y != 0 || w != 0 || hh != 0 {
+		t.Fatal("closed menus have no rect")
+	}
+}
+
+func TestMenusInsideAScrollViewStayInTheVisiblePart(t *testing.T) {
+	p := &fakePainter{}
+	sv := NewScrollView(0, 0, 300, 500)
+	sv.SetPainter(p)
+	ps := docPages()
+	ps.SetPainter(p)
+	ps.Pages[0].PageNumber = &PageNumberConfig{Show: true, Start: 1}
+	w, h := ps.Size()
+	sv.Add(ps, w, h)
+	sv.SetContentMode(ModeEdit)
+	sv.ScrollTo(0, 50)
+	sv.Draw() // tells the content its visible part
+	x, y, rw, rh, _ := ps.PageNumberRect(0)
+	ps.MouseDown(x+rw/2, y+rh/2)
+	mx, my, mw, mh := ps.Menu().Rect()
+	if mx+mw > 300 || my < 50 || my+mh > 550 {
+		t.Fatalf("menu %g,%g %gx%g is outside the visible part (0,50)-(300,550)", mx, my, mw, mh)
+	}
+}

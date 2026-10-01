@@ -70,6 +70,7 @@ type TableView struct {
 	CanvasW, CanvasH float64
 
 	menu     *Menu
+	viewport [4]float64
 	sel      Selection
 	mode     Mode
 	refresh  func() // set by Bind
@@ -92,6 +93,9 @@ func (v *TableView) SetPainter(p ImagePainter) {
 	v.Painter = p
 	v.menu.Painter = p
 }
+
+// SetViewport implements ViewportSetter: menus stay inside the visible part.
+func (v *TableView) SetViewport(x, y, w, h float64) { v.viewport = [4]float64{x, y, w, h} }
 
 // WantsFocus implements Focuser: a cell is being edited or a menu is open.
 func (v *TableView) WantsFocus() bool { return v.editing || v.menu.IsOpen() }
