@@ -346,8 +346,18 @@ func ToItems(items []Item) []canvas.Item {
 			for i, r := range it.Table.Rows {
 				cells[i] = append([]string(nil), r.Cells...)
 			}
-			if len(cells) == 0 || len(cells[0]) == 0 {
-				cells = [][]string{{""}}
+			cols := 0
+			for _, r := range cells {
+				cols = max(cols, len(r))
+			}
+			if cols == 0 {
+				cells, cols = [][]string{{""}}, 1
+			}
+			for i, r := range cells { // a ragged or hand-edited table is made rectangular
+				for len(r) < cols {
+					r = append(r, "")
+				}
+				cells[i] = r
 			}
 			out = append(out, canvas.Inline{Object: canvas.NewTableObject(&canvas.Table{Cells: cells}), Block: true})
 		}

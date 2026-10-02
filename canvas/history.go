@@ -113,9 +113,7 @@ func (f *TextFlow) histRestore(s flowSnap) {
 	f.Items = slices.Clone(s.items)
 	f.SetCursors(s.cursors)
 	f.derivedOK = false
-	if f.OnChange != nil {
-		f.OnChange(f)
-	}
+	f.notify()
 }
 
 // Undo implements Historian.

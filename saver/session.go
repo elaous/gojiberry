@@ -23,6 +23,12 @@ type Session struct {
 	// OnChange is called after any state change, possibly from another
 	// goroutine.
 	OnChange func()
+	// OnUI, when set, runs f on the goroutine that owns the editor and
+	// returns once it has finished; Get and OnOpen are called through it,
+	// since saving and opening run in the background and the editor (a
+	// canvas.TextFlow, say) is not safe for concurrent use. Nil calls f
+	// directly.
+	OnUI func(f func())
 	// Go runs background work; nil means a goroutine. Tests set it to
 	// run the function inline.
 	Go func(func())
@@ -116,7 +122,8 @@ func (s *Session) Save(ctx context.Context) {
 	c, err := s.Saver.Codec(format)
 	var key string
 	if err == nil {
-		doc := s.Get()
+		var doc docfile.Document
+		s.ui(func() { doc = s.Get() })
 		if doc.Title == "" {
 			doc.Title = name
 		}
@@ -151,7 +158,7 @@ func (s *Session) Open(ctx context.Context, key string) {
 		}
 	})
 	if s.OnOpen != nil {
-		s.OnOpen(doc)
+		s.ui(func() { s.OnOpen(doc) })
 	}
 	s.finish("Opened "+key, nil)
 }
@@ -169,6 +176,14 @@ func (s *Session) Delete(ctx context.Context, key string) {
 	}
 	s.Refresh(ctx)
 	s.set(func() { s.status = "Deleted " + key })
+}
+
+func (s *Session) ui(f func()) {
+	if s.OnUI != nil {
+		s.OnUI(f)
+		return
+	}
+	f()
 }
 
 func (s *Session) run(f func(context.Context)) {

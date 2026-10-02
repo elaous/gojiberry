@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Blobs is where a Library keeps the font files it downloads: a
@@ -127,6 +128,11 @@ func (l *Library) fetch(ctx context.Context, u string) ([]byte, error) {
 	if l.Fetch != nil {
 		return l.Fetch(ctx, u)
 	}
+	if pu, err := url.Parse(u); err != nil || (pu.Scheme != "https" && pu.Scheme != "http") || pu.Host == "" {
+		return nil, fmt.Errorf("fonts: %q is not an http(s) URL", u)
+	}
+	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
@@ -139,8 +145,17 @@ func (l *Library) fetch(ctx context.Context, u string) ([]byte, error) {
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("fonts: %s: %s", u, resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxFontSize+1))
+	if err == nil && len(data) > maxFontSize {
+		err = fmt.Errorf("fonts: %s is larger than %d bytes", u, maxFontSize)
+	}
+	return data, err
 }
+
+const (
+	fetchTimeout = 60 * time.Second
+	maxFontSize  = 32 << 20
+)
 
 // Use makes sure the cut of family nearest weight/italic is in the store,
 // downloading it first if this is the first use, and reports it through

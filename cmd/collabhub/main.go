@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/elaous/gojiberry/collab/hub"
 	"github.com/elaous/gojiberry/docstore"
@@ -48,17 +49,24 @@ func main() {
 		addr = ":8081"
 	}
 	srv := &http.Server{Addr: addr, Handler: h.Handler()}
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		stop := make(chan os.Signal, 1)
 		signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 		<-stop
-		_ = srv.Shutdown(context.Background())
+		// Save first, and end the event streams (Shutdown would wait for
+		// them forever); then let the other requests finish.
 		if err := h.Close(); err != nil {
 			log.Printf("collabhub: saving on exit: %v", err)
 		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
 	}()
 	log.Printf("collabhub: listening on %s (backend=%s)", addr, cfg.Backend)
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+	<-done // the final save has finished
 }

@@ -56,6 +56,11 @@ func (f *TextFlow) changed() {
 	f.derivedOK = false
 	f.hist.commit(f.histSnap(), f.histKind)
 	f.histKind = ""
+	f.notify()
+}
+
+// notify tells OnChange and the Subscribe listeners that the content changed.
+func (f *TextFlow) notify() {
 	if f.OnChange != nil {
 		f.OnChange(f)
 	}

@@ -1271,9 +1271,7 @@ func (f *TextFlow) mouseMove(x, y float64) bool {
 		}
 		d.widths[d.grip.gap], d.widths[d.grip.gap+1] = left, total-left
 		f.setConfigWidths(d.cfg, slices.Clone(d.widths))
-		if f.OnChange != nil {
-			f.OnChange(f)
-		}
+		f.notify()
 		return true
 	}
 	h := f.gripAt(f.Layout().Bands, x, y)

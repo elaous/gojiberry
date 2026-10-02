@@ -77,7 +77,13 @@ func (s *Saver) Codec(name string) (docfile.Codec, error) {
 }
 
 func validName(name string) bool {
-	return name != "" && !strings.ContainsAny(name, "/\\\x00") && !strings.HasPrefix(name, "acl:") && name != "." && name != ".."
+	return name != "" && !strings.ContainsAny(name, "/\\\x00") && !reserved(name) && name != "." && name != ".."
+}
+
+// reserved reports whether key is in a keyspace owned by something else
+// (document access lists, the shared-editing hub's documents).
+func reserved(key string) bool {
+	return strings.HasPrefix(key, "acl:") || strings.HasPrefix(key, "collab:")
 }
 
 // Key is the store key for a document called name in codec c.
@@ -114,6 +120,9 @@ func (s *Saver) Load(ctx context.Context, target, key string) (docfile.Document,
 	if err != nil {
 		return docfile.Document{}, err
 	}
+	if reserved(key) {
+		return docfile.Document{}, ErrName
+	}
 	stored, err := t.Adapter.Load(ctx, key)
 	if err != nil {
 		return docfile.Document{}, err
@@ -130,6 +139,9 @@ func (s *Saver) Delete(ctx context.Context, target, key string) error {
 	t, err := s.Target(target)
 	if err != nil {
 		return err
+	}
+	if reserved(key) {
+		return ErrName
 	}
 	return t.Adapter.Delete(ctx, key)
 }

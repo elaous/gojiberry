@@ -110,6 +110,10 @@ type Conn struct {
 	status  Status
 	kick    chan struct{} // wakes the sender
 	done    sync.WaitGroup
+
+	presMu      sync.Mutex
+	presLatest  *wire.Presence
+	presRunning bool
 }
 
 // Dial starts connecting and returns at once. Watch Events.
@@ -251,19 +255,41 @@ func (c *Conn) Send(ops []crdt.Op) {
 }
 
 // SetPresence tells the others where this replica's cursor is. It is not
-// queued: a failure is ignored, the next update replaces it.
+// queued: a failure is ignored, the next update replaces it, and updates
+// made while one is in flight are collapsed into the latest (so they
+// arrive in order and a stalled server cannot pile up requests).
 func (c *Conn) SetPresence(p wire.Presence) {
 	p.Replica = c.opts.Replica
-	body, _ := json.Marshal(p)
-	go func() {
+	c.presMu.Lock()
+	c.presLatest = &p
+	start := !c.presRunning
+	c.presRunning = true
+	c.presMu.Unlock()
+	if start {
+		go c.presenceSender()
+	}
+}
+
+func (c *Conn) presenceSender() {
+	for c.ctx.Err() == nil {
+		c.presMu.Lock()
+		p := c.presLatest
+		c.presLatest = nil
+		if p == nil {
+			c.presRunning = false
+			c.presMu.Unlock()
+			return
+		}
+		c.presMu.Unlock()
+		body, _ := json.Marshal(p)
 		req, err := c.request(http.MethodPost, c.url("presence", nil), body)
 		if err != nil {
-			return
+			continue
 		}
 		if resp, err := c.client.Do(req); err == nil {
 			_ = resp.Body.Close()
 		}
-	}()
+	}
 }
 
 // Close stops the connection and closes Events.
@@ -282,6 +308,12 @@ func (c *Conn) Close() {
 
 // sender posts pending ops, retrying with backoff while the server is
 // unreachable.
+// maxBatch is how many operations one request carries, so that a long
+// offline session does not exceed the server's body limit as one piece. (A
+// 401 is not a rejection: the token may be renewed, so the queue is kept
+// and retried.)
+const maxBatch = 200
+
 func (c *Conn) sender() {
 	delay := c.opts.Retry
 	for {
@@ -292,7 +324,7 @@ func (c *Conn) sender() {
 		}
 		for {
 			c.mu.Lock()
-			batch := append([]crdt.Op(nil), c.pending...)
+			batch := append([]crdt.Op(nil), c.pending[:min(len(c.pending), maxBatch)]...)
 			c.mu.Unlock()
 			if len(batch) == 0 {
 				break
@@ -346,7 +378,7 @@ func (c *Conn) post(ops []crdt.Op) error {
 	switch {
 	case resp.StatusCode/100 == 2:
 		return nil
-	case resp.StatusCode == http.StatusForbidden, resp.StatusCode == http.StatusUnauthorized, resp.StatusCode == http.StatusBadRequest, resp.StatusCode == http.StatusRequestEntityTooLarge:
+	case resp.StatusCode == http.StatusForbidden, resp.StatusCode == http.StatusBadRequest, resp.StatusCode == http.StatusRequestEntityTooLarge:
 		var e struct{ Error string }
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		if json.Unmarshal(data, &e) != nil || e.Error == "" {
@@ -365,9 +397,13 @@ func (c *Conn) stream() {
 	delay := c.opts.Retry
 	for c.ctx.Err() == nil {
 		c.setStatus(Connecting)
+		began := time.Now()
 		err := c.readEvents()
 		if c.ctx.Err() != nil {
 			return
+		}
+		if time.Since(began) > c.opts.MaxRetry {
+			delay = c.opts.Retry // it was up for a while: start the backoff over
 		}
 		c.setStatus(Offline)
 		if err != nil {
