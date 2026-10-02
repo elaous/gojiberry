@@ -83,8 +83,18 @@ func (b *Bridge) pushSide() {
 // replica's records.
 func (b *Bridge) pullSide() {
 	synced := map[string]string{}
+	hadStyles := false
+	for id := range b.side.synced {
+		if strings.HasPrefix(id, "style:") {
+			hadStyles = true
+		}
+	}
 	var comments []docfile.Comment
-	replies := map[string][]docfile.Reply{}
+	type pendingReply struct {
+		rest string // "<comment id>:<key>"
+		r    docfile.Reply
+	}
+	var pendingReplies []pendingReply
 	var notes []docfile.Footnote
 	var styles []docfile.StyleDef
 	for _, blk := range b.Doc.Blocks() {
@@ -99,10 +109,9 @@ func (b *Bridge) pullSide() {
 				comments = append(comments, c)
 			}
 		case "reply":
-			cid, _, _ := strings.Cut(rest, ":")
 			var r docfile.Reply
 			if json.Unmarshal([]byte(blk.Content), &r) == nil {
-				replies[cid] = append(replies[cid], r)
+				pendingReplies = append(pendingReplies, pendingReply{rest, r})
 			}
 		case "note":
 			var n docfile.Footnote
@@ -123,6 +132,20 @@ func (b *Bridge) pullSide() {
 		}
 		return comments[i].ID < comments[j].ID
 	})
+	// A reply belongs to the comment whose id begins its key (the longest
+	// such id: an id may itself contain a colon).
+	replies := map[string][]docfile.Reply{}
+	for _, pr := range pendingReplies {
+		best := ""
+		for _, c := range comments {
+			if strings.HasPrefix(pr.rest, c.ID+":") && len(c.ID) >= len(best) {
+				best = c.ID
+			}
+		}
+		if best != "" {
+			replies[best] = append(replies[best], pr.r)
+		}
+	}
 	for i := range comments {
 		rs := replies[comments[i].ID]
 		sort.SliceStable(rs, func(a, c int) bool { return rs[a].Created < rs[c].Created })
@@ -140,7 +163,7 @@ func (b *Bridge) pullSide() {
 		f.Footnotes = canvas.NewFootnoteSet()
 	}
 	f.Footnotes.ReplaceAll(docfile.ToFootnotes(notes).List())
-	if len(styles) > 0 {
+	if len(styles) > 0 || hadStyles {
 		f.Styles = docfile.ToStyles(styles)
 	}
 }

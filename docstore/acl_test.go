@@ -325,6 +325,16 @@ func TestACLKeyspaceHiddenFromListAndDirectAccess(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("direct GET of a reserved id status = %d, want 400", rec.Code)
 	}
+
+	// The shared-editing hub keeps its documents under collab:, behind its
+	// own access control; they are not reachable here.
+	for _, method := range []string{http.MethodGet, http.MethodPut} {
+		rec = httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(method, "/docs/collab:doc1", strings.NewReader("x")))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s of a hub document status = %d, want 400", method, rec.Code)
+		}
+	}
 }
 
 func TestACLGetForUnsharedDocumentIsEmpty(t *testing.T) {

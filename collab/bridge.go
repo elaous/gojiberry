@@ -391,7 +391,7 @@ func (b *Bridge) Apply(ops ...crdt.Op) {
 	}
 
 	b.applying = true
+	defer func() { b.applying = false }()
 	b.Flow.SetRemoteContent(items, moved)
 	b.pullSide()
-	b.applying = false
 }

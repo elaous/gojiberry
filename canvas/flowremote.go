@@ -42,10 +42,16 @@ func (f *TextFlow) Touch() { f.changed() }
 // ReplaceAll makes the set hold exactly comments, in place (so a set
 // shared with other code stays the same set).
 func (s *CommentSet) ReplaceAll(comments []Comment) {
+	if s == nil {
+		return
+	}
 	s.list = append(s.list[:0:0], comments...)
 }
 
 // ReplaceAll makes the set hold exactly notes, in place.
 func (s *FootnoteSet) ReplaceAll(notes []Footnote) {
+	if s == nil {
+		return
+	}
 	s.list = append(s.list[:0:0], notes...)
 }

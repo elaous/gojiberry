@@ -2,6 +2,7 @@ package hub
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/elaous/gojiberry/auth"
@@ -17,8 +18,11 @@ import (
 func ACLRoles(store docstore.Adapter, who func(*http.Request) string) RoleFunc {
 	return func(r *http.Request, id string) Role {
 		stored, err := store.Load(r.Context(), "acl:"+id)
+		if errors.Is(err, docstore.ErrNotFound) {
+			return Owner // none stored: the document is open
+		}
 		if err != nil {
-			return Owner // none stored (or unreadable): the document is open
+			return "" // an unreadable list must not open the document
 		}
 		var acl docstore.ACL
 		if json.Unmarshal(stored.Data, &acl) != nil {

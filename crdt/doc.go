@@ -49,6 +49,9 @@ func (d *Doc) Strategy() MergeStrategy {
 	return d.strategy
 }
 
+// Clock is the highest Lamport counter this replica has produced or seen.
+func (d *Doc) Clock() uint64 { return d.clock }
+
 // tick advances this replica's Lamport clock and stamps a new write.
 func (d *Doc) tick() Timestamp {
 	d.clock++

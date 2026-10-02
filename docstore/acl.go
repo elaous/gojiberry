@@ -224,5 +224,7 @@ func writeACLJSON(w http.ResponseWriter, acl ACL) {
 // checked by handleDoc so a client can never PUT/GET/DELETE a real
 // document directly into/out of that space.
 func isReservedDocID(id string) bool {
-	return strings.HasPrefix(id, aclKeyPrefix)
+	// "collab:" is the shared-editing hub's own keyspace; its access
+	// control is the hub's, so these keys must not be reachable here.
+	return strings.HasPrefix(id, aclKeyPrefix) || strings.HasPrefix(id, "collab:")
 }

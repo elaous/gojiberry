@@ -120,6 +120,13 @@ func ByName(name string) (Codec, error) {
 // Detect guesses the format of data by its first bytes: JSON starts
 // with '{'; protobuf text with a field name; anything else is binary.
 func Detect(data []byte) Codec {
+	// A binary document starts with the tag byte 0x0A, which is also a
+	// newline; it is binary if it parses as such.
+	if len(data) > 0 && data[0] == 0x0A {
+		if _, err := ProtoBinary.Unmarshal(data); err == nil {
+			return ProtoBinary
+		}
+	}
 	for _, b := range data {
 		switch {
 		case b == ' ' || b == '\n' || b == '\t' || b == '\r':

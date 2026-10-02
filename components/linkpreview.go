@@ -1,6 +1,7 @@
 package components
 
 import (
+	"github.com/elaous/gojiberry/canvas"
 	"net/url"
 	"strings"
 
@@ -54,8 +55,12 @@ func LinkPreview(props LinkPreviewProps) gox.Node {
 	if site == "" {
 		site = LinkHost(props.URL)
 	}
+	href := props.URL
+	if !canvas.SafeLinkURL(href) {
+		href = "" // a javascript: or data: URL is never made a link
+	}
 	attrs := []gox.Attr{
-		gox.A("class", class), gox.A("href", props.URL), gox.A("target", "_blank"), gox.A("rel", "noopener noreferrer"),
+		gox.A("class", class), gox.A("href", href), gox.A("target", "_blank"), gox.A("rel", "noopener noreferrer"),
 	}
 	if props.OnOpen != nil {
 		attrs = append(attrs, gox.On("click", func(e gox.Event) {

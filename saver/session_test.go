@@ -123,3 +123,19 @@ func TestSessionRealGoroutine(t *testing.T) {
 	s.Props().OnRefresh()
 	<-got
 }
+
+func TestSessionTouchesTheEditorThroughOnUI(t *testing.T) {
+	ctx := context.Background()
+	s, opened, _ := newSession(t)
+	calls := 0
+	s.OnUI = func(f func()) { calls++; f() }
+	s.SetName("doc")
+	s.Save(ctx)
+	if calls != 1 {
+		t.Fatalf("Save read the editor %d times through OnUI, want 1", calls)
+	}
+	s.Open(ctx, "doc.json")
+	if calls != 2 || len(*opened) != 1 {
+		t.Fatalf("Open delivered the document through OnUI: calls=%d opened=%d", calls, len(*opened))
+	}
+}

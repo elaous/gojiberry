@@ -5,9 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -43,6 +46,19 @@ func TestAuthorizeTable(t *testing.T) {
 	unknown := crdt.Op{Block: crdt.Block{ID: "other"}, TS: formatOp.TS, CharOps: formatOp.CharOps}
 	nilMark := crdt.Op{Block: formatOp.Block, TS: formatOp.TS, CharOps: []crdt.CharOp{{Kind: crdt.CharMark}}}
 	newPlain := crdt.Op{Block: crdt.Block{ID: "reply:x", Content: "x"}} // not an lww kind
+	erase, _ := cl.Format("doc", 0, 5, "comment", "", false)            // would clear every comment on the text
+	farFuture := formatOp
+	farFuture.TS.Counter = 1 << 40
+	farMark := formatOp
+	farMark.CharOps = append([]crdt.CharOp(nil), formatOp.CharOps...)
+	for i := range farMark.CharOps {
+		if farMark.CharOps[i].Mark != nil {
+			m := *farMark.CharOps[i].Mark
+			m.ID.Counter = 1 << 40
+			farMark.CharOps[i].Mark = &m
+		}
+	}
+	hugeComment := cl.Put(crdt.Block{ID: "comment:big", Kind: "lww:side", Content: strings.Repeat("x", maxCommentSize+1)})
 	for _, tc := range []struct {
 		name string
 		role Role
@@ -65,6 +81,10 @@ func TestAuthorizeTable(t *testing.T) {
 		{"viewer cannot create blocks", Viewer, []crdt.Op{unknown}, false},
 		{"viewer cannot send a mark with no mark", Viewer, []crdt.Op{nilMark}, false},
 		{"viewer cannot send a plain block", Viewer, []crdt.Op{newPlain}, false},
+		{"viewer cannot erase comment marks", Viewer, []crdt.Op{erase}, false},
+		{"viewer cannot jump the op clock", Viewer, []crdt.Op{farFuture}, false},
+		{"viewer cannot jump a mark's clock", Viewer, []crdt.Op{farMark}, false},
+		{"viewer cannot add a huge comment", Viewer, []crdt.Op{hugeComment}, false},
 		{"one bad op refuses the batch", Viewer, []crdt.Op{formatOp, insertOp}, false},
 	} {
 		err := authorize(server, tc.role, tc.ops)
@@ -215,10 +235,10 @@ func TestSlowSubscriberIsDropped(t *testing.T) {
 		t.Fatal("a subscriber that cannot keep up is dropped")
 	}
 	if _, open := <-slow.ch; !open {
-		// the buffered event first, then closed
-		if _, open := <-slow.ch; open {
-			t.Fatal("channel closed")
-		}
+		t.Fatal("the event buffered before the drop is still delivered")
+	}
+	if _, open := <-slow.ch; open {
+		t.Fatal("then the channel is closed")
 	}
 }
 
@@ -272,4 +292,121 @@ func TestPresenceGoneWhenStreamCloses(t *testing.T) {
 		}
 	}
 	t.Fatalf("no gone event: %v", seen)
+}
+
+// failingStore fails loads (other than not-found) and saves on demand.
+type failingStore struct {
+	docstore.Adapter
+	mu                 sync.Mutex
+	failLoad, failSave bool
+	saves              int
+}
+
+func (f *failingStore) Load(ctx context.Context, id string) (docstore.Document, error) {
+	f.mu.Lock()
+	fail := f.failLoad
+	f.mu.Unlock()
+	if fail {
+		return docstore.Document{}, errors.New("backend down")
+	}
+	return f.Adapter.Load(ctx, id)
+}
+
+func (f *failingStore) Save(ctx context.Context, id string, data []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failSave {
+		return errors.New("backend down")
+	}
+	f.saves++
+	return f.Adapter.Save(ctx, id, data)
+}
+
+func TestACLRolesFailClosedOnStoreError(t *testing.T) {
+	store := &failingStore{Adapter: docstore.NewMemoryAdapter(), failLoad: true}
+	roles := ACLRoles(store, nil)
+	if got := roles(httptest.NewRequest("GET", "/", nil), "private"); got != "" {
+		t.Fatalf("a store error gave %q; it must not open the document", got)
+	}
+}
+
+func TestFailedSaveIsRetried(t *testing.T) {
+	store := &failingStore{Adapter: docstore.NewMemoryAdapter(), failSave: true}
+	h := New(Config{Store: store, SaveDelay: 10 * time.Millisecond})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	doc := charDoc("c")
+	op := doc.Put(crdt.Block{ID: "doc", Content: "x"})
+	body, _ := json.Marshal([]crdt.Op{op})
+	resp, err := http.Post(srv.URL+"/docs/d/ops", "application/json", bytes.NewReader(body))
+	if err != nil || resp.StatusCode != 204 {
+		t.Fatalf("post: %v %v", resp, err)
+	}
+	time.Sleep(60 * time.Millisecond) // a few failed attempts
+	store.mu.Lock()
+	store.failSave = false
+	store.mu.Unlock()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		store.mu.Lock()
+		n := store.saves
+		store.mu.Unlock()
+		if n > 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the failed save was never retried")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestRoomLimitAndStoreErrorsAreNotLeaked(t *testing.T) {
+	store := &failingStore{Adapter: docstore.NewMemoryAdapter(), failLoad: true}
+	h := New(Config{Store: store, MaxRooms: 1})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	resp, _ := http.Get(srv.URL + "/docs/a/snapshot")
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 500 || strings.Contains(string(b), "backend down") {
+		t.Fatalf("a store error is a plain 500: %d %q", resp.StatusCode, b)
+	}
+	store.mu.Lock()
+	store.failLoad = false
+	store.mu.Unlock()
+	if resp, _ := http.Get(srv.URL + "/docs/a/snapshot"); resp.StatusCode != 200 {
+		t.Fatalf("a failed load is retried: %d", resp.StatusCode)
+	}
+	if resp, _ := http.Get(srv.URL + "/docs/b/snapshot"); resp.StatusCode != 503 {
+		t.Fatalf("the room limit: %d", resp.StatusCode)
+	}
+}
+
+func TestStreamEndsWhenRoleChanges(t *testing.T) {
+	var mu sync.Mutex
+	role := Editor
+	h := New(Config{KeepAlive: 10 * time.Millisecond, Roles: func(*http.Request, string) Role {
+		mu.Lock()
+		defer mu.Unlock()
+		return role
+	}})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL+"/docs/d/events?replica=r", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	mu.Lock()
+	role = ""
+	mu.Unlock()
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+		t.Fatalf("the stream should end cleanly once access is gone: %v", err)
+	}
+	if ctx.Err() != nil {
+		t.Fatal("the stream stayed open after access was revoked")
+	}
 }
