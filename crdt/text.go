@@ -57,6 +57,9 @@ type char struct {
 	deleted bool
 }
 
+// maxPending is how many out-of-order inserts a Text will hold back.
+const maxPending = 1 << 16
+
 // Text is a per-character CRDT sequence -- a Replicated Growable Array
 // (RGA, Roh et al. 2011): a convergent, conflict-free ordered list of
 // characters supporting concurrent inserts and deletes at arbitrary
@@ -174,6 +177,9 @@ func (t *Text) insert(id, origin Timestamp, value rune) {
 				if p.ID == id {
 					return
 				}
+			}
+			if len(t.pending) >= maxPending {
+				return // a peer sending inserts whose origins never arrive must not grow this forever
 			}
 			if deleted {
 				t.tombstoned[id] = true // keep the early delete for when it is placed

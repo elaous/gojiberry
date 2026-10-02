@@ -58,7 +58,7 @@ func (f *TextFlow) openLinkAt(x, y float64) bool {
 	if open == nil {
 		open = f.stageLink
 	}
-	if url == "" || open == nil {
+	if url == "" || open == nil || !SafeLinkURL(url) {
 		return false
 	}
 	open(url)
@@ -101,3 +101,19 @@ var _ Overlayer = (*TextFlow)(nil)
 // SetLinkHandler implements LinkHandlerSetter: the Stage opens links
 // unless OnLink is set.
 func (f *TextFlow) SetLinkHandler(open func(url string)) { f.stageLink = open }
+
+// SafeLinkURL reports whether a link may be opened or shown as an href: a
+// relative reference, #bookmark, or an http, https, mailto or tel URL. Other
+// schemes (javascript:, data:, ...) in a document's links are not followed.
+func SafeLinkURL(u string) bool {
+	u = strings.TrimSpace(u)
+	i := strings.IndexAny(u, ":/?#")
+	if i < 0 || u[i] != ':' {
+		return true // no scheme
+	}
+	switch strings.ToLower(u[:i]) {
+	case "http", "https", "mailto", "tel":
+		return true
+	}
+	return false
+}

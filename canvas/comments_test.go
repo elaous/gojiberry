@@ -344,3 +344,19 @@ func TestSubscribeSurvivesOnChangeBeingReplaced(t *testing.T) {
 		t.Fatalf("subscribers keep hearing: %d, OnChange %d", heard, own)
 	}
 }
+
+func TestSafeLinkURL(t *testing.T) {
+	for u, want := range map[string]bool{
+		"https://a.example/x?y=1:2": true, "http://a": true, "mailto:a@b": true, "tel:+1": true,
+		"#bookmark": true, "/path/x": true, "rel/path:colon": true, "page.html": true,
+		"javascript:alert(1)": false, " JavaScript:alert(1)": false, "data:text/html,x": false, "vbscript:x": false,
+	} {
+		if got := SafeLinkURL(u); got != want {
+			t.Errorf("SafeLinkURL(%q) = %v, want %v", u, got, want)
+		}
+	}
+	var cs *CommentSet
+	cs.ReplaceAll(nil) // no panic on a nil set
+	var fs *FootnoteSet
+	fs.ReplaceAll(nil)
+}

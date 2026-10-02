@@ -104,9 +104,17 @@ func TestLoadDetectsFormatWithoutExtension(t *testing.T) {
 func TestErrors(t *testing.T) {
 	ctx := context.Background()
 	s := &Saver{Targets: []Target{{Name: "m", Adapter: docstore.NewMemoryAdapter()}}, Codecs: []docfile.Codec{docfile.JSON}}
-	for _, bad := range []string{"", "a/b", "..", "acl:x", `a\b`} {
+	for _, bad := range []string{"", "a/b", "..", "acl:x", "collab:x", `a\b`} {
 		if _, err := s.Save(ctx, "m", bad, docfile.JSON, doc()); !errors.Is(err, ErrName) {
 			t.Errorf("%q: %v", bad, err)
+		}
+	}
+	for _, key := range []string{"acl:doc", "collab:doc"} {
+		if _, err := s.Load(ctx, "m", key); !errors.Is(err, ErrName) {
+			t.Errorf("load %q: %v", key, err)
+		}
+		if err := s.Delete(ctx, "m", key); !errors.Is(err, ErrName) {
+			t.Errorf("delete %q: %v", key, err)
 		}
 	}
 	if _, err := s.Save(ctx, "nope", "a", docfile.JSON, doc()); err == nil {

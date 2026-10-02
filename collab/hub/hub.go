@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -70,6 +71,11 @@ type Config struct {
 	PresenceTTL time.Duration
 	// MaxBody limits a request body in bytes; 0 means 8 MiB.
 	MaxBody int64
+	// MaxRooms limits how many documents the hub keeps in memory; 0 means
+	// 1000. Further documents are refused until the hub restarts.
+	MaxRooms int
+	// MaxPeers limits the cursors kept per document; 0 means 256.
+	MaxPeers int
 }
 
 // Hub serves documents. Create one with New and mount Handler.
@@ -93,6 +99,12 @@ func New(cfg Config) *Hub {
 	}
 	if cfg.MaxBody == 0 {
 		cfg.MaxBody = 8 << 20
+	}
+	if cfg.MaxRooms == 0 {
+		cfg.MaxRooms = 1000
+	}
+	if cfg.MaxPeers == 0 {
+		cfg.MaxPeers = 256
 	}
 	return &Hub{cfg: cfg, rooms: map[string]*room{}, now: time.Now}
 }
@@ -119,6 +131,10 @@ type room struct {
 	pres  map[string]presenceEntry
 	dirty bool
 	timer *time.Timer
+
+	saveMu  sync.Mutex    // one save at a time, in order
+	loaded  chan struct{} // closed when the stored document has been read
+	loadErr error
 }
 
 type presenceEntry struct {
@@ -126,29 +142,59 @@ type presenceEntry struct {
 	seen time.Time
 }
 
+var errTooManyRooms = errors.New("hub: too many documents")
+
+// room finds or loads a document. The store is read outside the hub's lock,
+// so a slow load of one document does not hold up the others.
 func (h *Hub) room(ctx context.Context, id string) (*room, error) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	if rm, ok := h.rooms[id]; ok {
-		return rm, nil
-	}
-	rm := &room{id: id, doc: crdt.NewDocWithStrategy("hub", crdt.MergeCharCRDT), subs: map[*sub]bool{}, pres: map[string]presenceEntry{}}
-	if h.cfg.Store != nil {
-		stored, err := h.cfg.Store.Load(ctx, StoreKey(id))
-		switch {
-		case err == nil:
-			var ops []crdt.Op
-			if err := json.Unmarshal(stored.Data, &ops); err != nil {
-				return nil, fmt.Errorf("hub: the saved document %q is unreadable: %w", id, err)
-			}
-			rm.doc.Apply(ops...)
-		case errors.Is(err, docstore.ErrNotFound):
-		default:
-			return nil, err
+	rm, ok := h.rooms[id]
+	if !ok {
+		if len(h.rooms) >= h.cfg.MaxRooms {
+			h.mu.Unlock()
+			return nil, errTooManyRooms
 		}
+		rm = &room{id: id, doc: crdt.NewDocWithStrategy("hub", crdt.MergeCharCRDT), subs: map[*sub]bool{}, pres: map[string]presenceEntry{}, loaded: make(chan struct{})}
+		h.rooms[id] = rm
 	}
-	h.rooms[id] = rm
+	h.mu.Unlock()
+	if !ok {
+		rm.loadErr = h.load(ctx, rm)
+		if rm.loadErr != nil {
+			h.mu.Lock()
+			delete(h.rooms, id) // the next request tries again
+			h.mu.Unlock()
+		}
+		close(rm.loaded)
+	}
+	select {
+	case <-rm.loaded:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	if rm.loadErr != nil {
+		return nil, rm.loadErr
+	}
 	return rm, nil
+}
+
+func (h *Hub) load(ctx context.Context, rm *room) error {
+	if h.cfg.Store == nil {
+		return nil
+	}
+	stored, err := h.cfg.Store.Load(ctx, StoreKey(rm.id))
+	switch {
+	case err == nil:
+		var ops []crdt.Op
+		if err := json.Unmarshal(stored.Data, &ops); err != nil {
+			return fmt.Errorf("hub: the saved document %q is unreadable: %w", rm.id, err)
+		}
+		rm.doc.Apply(ops...)
+		return nil
+	case errors.Is(err, docstore.ErrNotFound):
+		return nil
+	}
+	return err
 }
 
 func (h *Hub) role(r *http.Request, id string) Role {
@@ -158,19 +204,29 @@ func (h *Hub) role(r *http.Request, id string) Role {
 	return h.cfg.Roles(r, id)
 }
 
-// save writes the document to the store.
+// save writes the document to the store. Saves of one document run one
+// after another, each taking its snapshot when its turn comes, so an older
+// snapshot never overwrites a newer one. A failed save leaves the document
+// dirty and is tried again.
 func (h *Hub) save(rm *room) error {
 	if h.cfg.Store == nil {
 		return nil
 	}
+	rm.saveMu.Lock()
+	defer rm.saveMu.Unlock()
 	rm.mu.Lock()
 	rm.dirty = false
 	data, err := json.Marshal(rm.doc.Snapshot())
 	rm.mu.Unlock()
-	if err != nil {
-		return err
+	if err == nil {
+		err = h.cfg.Store.Save(context.Background(), StoreKey(rm.id), data)
 	}
-	return h.cfg.Store.Save(context.Background(), StoreKey(rm.id), data)
+	if err != nil {
+		rm.mu.Lock()
+		h.markDirty(rm) // try again after the delay
+		rm.mu.Unlock()
+	}
+	return err
 }
 
 // markDirty schedules a save (rm.mu held).
@@ -179,7 +235,11 @@ func (h *Hub) markDirty(rm *room) {
 		return
 	}
 	rm.dirty = true
-	rm.timer = time.AfterFunc(h.cfg.SaveDelay, func() { _ = h.save(rm) })
+	rm.timer = time.AfterFunc(h.cfg.SaveDelay, func() {
+		if err := h.save(rm); err != nil {
+			log.Printf("collab hub: saving %q: %v (will retry)", rm.id, err)
+		}
+	})
 }
 
 // Flush saves every document with unsaved changes now.
@@ -269,8 +329,13 @@ func (h *Hub) access(w http.ResponseWriter, r *http.Request) (*room, Role, bool)
 		return nil, "", false
 	}
 	rm, err := h.room(r.Context(), id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	switch {
+	case errors.Is(err, errTooManyRooms):
+		http.Error(w, "too many documents", http.StatusServiceUnavailable)
+		return nil, "", false
+	case err != nil:
+		log.Printf("collab hub: opening %q: %v", id, err)
+		http.Error(w, "the document could not be opened", http.StatusInternalServerError)
 		return nil, "", false
 	}
 	return rm, role, true
@@ -342,6 +407,15 @@ func (h *Hub) handleOps(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+const (
+	// maxClockJump is how far past the document's clock a commenter's
+	// timestamps may be.
+	maxClockJump = 1 << 16
+	// maxCommentSize is the largest comment or reply record a commenter may
+	// add, in bytes.
+	maxCommentSize = 16 << 10
+)
+
 // authorize decides whether role may make these changes to doc. Owners and
 // editors may change anything. Anyone else who can read may comment: mark a
 // range of the text as commented (and nothing else about the text), and add
@@ -354,13 +428,19 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 		return errors.New("you do not have access to this document")
 	}
 	const viewOnly = "you can only view and comment on this document"
+	// A Lamport counter far ahead of anything the document has seen would
+	// win every later conflict on what it touches.
+	limit := doc.Clock() + maxClockJump
 	for _, op := range ops {
 		blk := op.Block
+		if op.TS.Counter > limit {
+			return errors.New(viewOnly)
+		}
 		existing, exists := doc.Get(blk.ID)
 		if crdt.LWWKind(blk.Kind) || (exists && crdt.LWWKind(existing.Kind)) {
 			isNew := !exists && !blk.Deleted
 			isComment := strings.HasPrefix(blk.ID, "comment:") || strings.HasPrefix(blk.ID, "reply:")
-			if !isNew || !isComment || !crdt.LWWKind(blk.Kind) {
+			if !isNew || !isComment || !crdt.LWWKind(blk.Kind) || len(blk.Content) > maxCommentSize || len(blk.ID) > 256 {
 				return errors.New(viewOnly)
 			}
 			continue
@@ -370,7 +450,9 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 			return errors.New(viewOnly)
 		}
 		for _, c := range op.CharOps {
-			if c.Kind != crdt.CharMark || c.Mark == nil || c.Mark.Key != "comment" {
+			// A comment mark that sets a comment: an empty value would erase
+			// the comments already on the text.
+			if c.Kind != crdt.CharMark || c.Mark == nil || c.Mark.Key != "comment" || c.Mark.Value == "" || c.Mark.ID.Counter > limit || len(c.Mark.Value) > 256 {
 				return errors.New(viewOnly)
 			}
 		}
@@ -388,8 +470,8 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if p.Replica == "" {
-		http.Error(w, "replica is required", http.StatusBadRequest)
+	if p.Replica == "" || len(p.Replica) > 128 || len(p.Name) > 256 || len(p.Color) > 64 {
+		http.Error(w, "replica is required (at most 128 characters)", http.StatusBadRequest)
 		return
 	}
 	p.Role, p.Gone = role, false
@@ -398,6 +480,17 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 		p.User = h.cfg.User(r)
 	}
 	rm.mu.Lock()
+	cutoff := h.now().Add(-h.cfg.PresenceTTL)
+	for id, e := range rm.pres {
+		if e.seen.Before(cutoff) {
+			delete(rm.pres, id)
+		}
+	}
+	if _, known := rm.pres[p.Replica]; !known && len(rm.pres) >= h.cfg.MaxPeers {
+		rm.mu.Unlock()
+		http.Error(w, "too many people on this document", http.StatusTooManyRequests)
+		return
+	}
 	rm.pres[p.Replica] = presenceEntry{p: p, seen: h.now()}
 	rm.broadcast(p.Replica, jsonEvent("presence", p))
 	rm.mu.Unlock()
@@ -409,6 +502,7 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	id := r.PathValue("id")
 	fl, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming is not supported here", http.StatusInternalServerError)
@@ -473,6 +567,11 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-tick.C:
+			// Access can be taken away or changed while a stream is open:
+			// end it, and the client reconnects with whatever it has now.
+			if h.role(r, id) != role {
+				return
+			}
 			if _, err := io.WriteString(w, ": keepalive\n\n"); err != nil {
 				return
 			}

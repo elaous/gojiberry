@@ -106,6 +106,10 @@ Asked for, not started:
   be edited on the page itself (use the list or `footnote.edit`).
 - Outline: no collapsing of sections or drag-to-reorder; bookmarks are not
   drawn on the canvas (only listed).
+- **Select all occurrences**: Ctrl/Cmd+Shift+L puts a cursor on every occurrence
+  of the selected word (multi-cursor; today only Mod+D adds the next match).
+- **Add cursor above / below**: Ctrl/Cmd+Alt+ArrowUp / ArrowDown adds a cursor
+  on the line above or below, at the same column (multi-cursor).
 - **Map object** (OpenStreetMap tiles) and **flowcharts** as canvas objects.
 - **Multi-user editing**: designed in [multiuser-design.md](multiuser-design.md)
   (one attributed character sequence, a bridge to the `TextFlow`, SSE + POST,
