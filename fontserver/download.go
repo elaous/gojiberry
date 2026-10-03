@@ -3,6 +3,7 @@ package fontserver
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -195,9 +196,19 @@ func (s *Server) handleLocalDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A few downloads at a time: each fetches megabytes and rescans the
+	// font directory.
+	select {
+	case s.downloads <- struct{}{}:
+		defer func() { <-s.downloads }()
+	default:
+		http.Error(w, "too many downloads in progress", http.StatusTooManyRequests)
+		return
+	}
 	files, err := s.fetchGoogleFontFiles(family)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		log.Printf("fontserver: downloading %q: %v", family, err)
+		http.Error(w, "could not download that family", http.StatusBadGateway)
 		return
 	}
 
@@ -217,8 +228,17 @@ func (s *Server) handleLocalDownload(w http.ResponseWriter, r *http.Request) {
 			name += "-italic"
 		}
 		name += ".ttf"
-		if err := os.WriteFile(filepath.Join(dir, name), f.Data, 0o644); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		// Write beside the final name, then rename: a rescan running at the
+		// same time never sees half a font.
+		tmp := filepath.Join(dir, "."+name+".part")
+		if err := os.WriteFile(tmp, f.Data, 0o644); err != nil {
+			log.Printf("fontserver: writing %s: %v", name, err)
+			http.Error(w, "could not store the font", http.StatusInternalServerError)
+			return
+		}
+		if err := os.Rename(tmp, filepath.Join(dir, name)); err != nil {
+			log.Printf("fontserver: renaming %s: %v", name, err)
+			http.Error(w, "could not store the font", http.StatusInternalServerError)
 			return
 		}
 	}

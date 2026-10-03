@@ -9,8 +9,10 @@ package fontserver
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -90,6 +92,8 @@ type Server struct {
 	// uses fetchGoogleFontFilesAPI (set by NewServer).
 	fetchGoogleFontFiles func(family string) ([]googleFontFile, error)
 
+	downloads chan struct{} // limits concurrent /local/download requests
+
 	mu            sync.Mutex
 	googleCache   []googleFont
 	googleFetched time.Time
@@ -106,7 +110,7 @@ func NewServer(cfg Config) *Server {
 	if err := repo.Scan(); err != nil {
 		fmt.Fprintf(os.Stderr, "fontserver: initial scan of %s: %v\n", cfg.FontsDir, err)
 	}
-	return &Server{cfg: cfg, repo: repo, fetchGoogleFonts: fetchGoogleFontsAPI, fetchGoogleFontFiles: fetchGoogleFontFilesAPI}
+	return &Server{cfg: cfg, repo: repo, fetchGoogleFonts: fetchGoogleFontsAPI, fetchGoogleFontFiles: fetchGoogleFontFilesAPI, downloads: make(chan struct{}, 2)}
 }
 
 // Handler returns the HTTP routes:
@@ -277,7 +281,8 @@ func (s *Server) handleGoogleFonts(w http.ResponseWriter, r *http.Request) {
 			// still an empty list -- same reasoning as the no-key case,
 			// a transient Google outage shouldn't surface as a picker
 			// error the user has to do anything about.
-			writeJSON(w, http.StatusOK, map[string]any{"families": []googleFont{}, "enabled": true, "error": fetchErr.Error()})
+			log.Printf("fontserver: %v", fetchErr)
+			writeJSON(w, http.StatusOK, map[string]any{"families": []googleFont{}, "enabled": true, "error": "google fonts is unavailable"})
 			return
 		}
 	}
@@ -289,11 +294,22 @@ func (s *Server) handleGoogleFonts(w http.ResponseWriter, r *http.Request) {
 // key travels only in this server-to-Google request, never to the
 // browser -- handleGoogleFonts proxies the result, not the key.
 func fetchGoogleFontsAPI(apiKey string) ([]googleFont, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	u := "https://www.googleapis.com/webfonts/v1/webfonts?key=" + url.QueryEscape(apiKey) + "&sort=popularity"
+	return fetchGoogleFontsFrom("https://www.googleapis.com/webfonts/v1/webfonts?key="+url.QueryEscape(apiKey)+"&sort=popularity", nil)
+}
+
+// fetchGoogleFontsFrom GETs the list at u (nil client: a 10s default).
+func fetchGoogleFontsFrom(u string, client *http.Client) ([]googleFont, error) {
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
 	resp, err := client.Get(u)
 	if err != nil {
-		return nil, err
+		// A *url.Error carries the whole URL, and the API key is in it.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
+		return nil, fmt.Errorf("fontserver: google fonts request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

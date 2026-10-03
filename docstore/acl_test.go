@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -30,6 +31,7 @@ type fakeOIDCProvider struct {
 	keyID      string
 	nextEmail  string
 	nextSub    string
+	nonce      string // echoed into the id_token, like a real provider
 }
 
 func newFakeOIDCProvider(t *testing.T) *fakeOIDCProvider {
@@ -62,8 +64,9 @@ func (f *fakeOIDCProvider) handleToken(w http.ResponseWriter, r *http.Request) {
 		"exp": %d,
 		"iat": %d,
 		"email": %q,
-		"name": "Test User"
-	}`, f.srv.URL, f.nextSub, time.Now().Add(time.Hour).Unix(), time.Now().Unix(), f.nextEmail)
+		"name": "Test User",
+		"nonce": %q
+	}`, f.srv.URL, f.nextSub, time.Now().Add(time.Hour).Unix(), time.Now().Unix(), f.nextEmail, f.nonce)
 	idToken := oidctest.SignIDToken(f.priv, f.keyID, oidc.RS256, claims)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -105,6 +108,7 @@ func sessionTokenFor(t *testing.T, handler http.Handler, provider *fakeOIDCProvi
 		t.Fatalf("parsing login Location: %v", err)
 	}
 	state := loc.Query().Get("state")
+	provider.nonce = loc.Query().Get("nonce")
 
 	callbackReq := httptest.NewRequest(http.MethodGet, "/auth/test/callback?code=fake-code&state="+url.QueryEscape(state), nil)
 	callbackW := httptest.NewRecorder()
@@ -359,3 +363,60 @@ func TestACLRoutesRequireAuthConfigured(t *testing.T) {
 		t.Fatalf("status = %d, want 501", rec.Code)
 	}
 }
+
+// aclFailAdapter fails loading acl: keys other than with ErrNotFound.
+type aclFailAdapter struct {
+	Adapter
+	fail bool
+}
+
+func (a *aclFailAdapter) Load(ctx context.Context, id string) (Document, error) {
+	if a.fail && strings.HasPrefix(id, aclKeyPrefix) {
+		return Document{}, fmt.Errorf("backend down")
+	}
+	return a.Adapter.Load(ctx, id)
+}
+
+func TestACLFailsClosedWhenItCannotBeRead(t *testing.T) {
+	provider := newFakeOIDCProvider(t)
+	m, err := auth.NewManager(context.Background(), auth.Config{
+		BaseURL:   "https://app.example.com",
+		Providers: []auth.Provider{{Name: "test", IssuerURL: provider.srv.URL, ClientID: "test-client", ClientSecret: "s"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &aclFailAdapter{Adapter: NewMemoryAdapter()}
+	_ = store.Save(context.Background(), "private", []byte("secret"))
+	handler := NewServer(store, "memory").WithAuth(m).Handler()
+	get := func() int {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/docs/private", nil))
+		return rec.Code
+	}
+	if get() != http.StatusOK {
+		t.Fatal("a document with no ACL is open")
+	}
+	store.fail = true
+	if code := get(); code == http.StatusOK {
+		t.Fatalf("an unreadable ACL opened the document (status %d)", code)
+	}
+}
+
+func TestPutBodyIsLimitedAndBackendErrorsAreNotEchoed(t *testing.T) {
+	handler := NewServer(NewMemoryAdapter(), "memory").Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/docs/big", io.LimitReader(zeroReader{}, maxDocBytes+1)))
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized PUT: status %d, want 413", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	serverError(rec, fmt.Errorf("dial postgres://user:pw@db/x"))
+	if rec.Code != 500 || strings.Contains(rec.Body.String(), "postgres") {
+		t.Fatalf("backend text leaked: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) { clear(p); return len(p), nil }

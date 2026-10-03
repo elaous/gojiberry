@@ -19,13 +19,17 @@ package brailleserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
+	"time"
 )
 
 // Config is loaded entirely from the environment, the same posture
@@ -161,14 +165,28 @@ func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "text is required", http.StatusBadRequest)
 		return
 	}
-	table := req.Table
-	if table == "" {
-		table = s.cfg.Table
+	table := s.cfg.Table
+	if req.Table != "" {
+		// The table names a file for lou_translate to read (and a leading
+		// "-" would be taken for an option): only plain table names pass.
+		if !tableNameRe.MatchString(req.Table) {
+			http.Error(w, "invalid table name", http.StatusBadRequest)
+			return
+		}
+		table = req.Table
+	}
+	select {
+	case translateSlots <- struct{}{}:
+		defer func() { <-translateSlots }()
+	default:
+		http.Error(w, "too many translations in progress", http.StatusTooManyRequests)
+		return
 	}
 
 	braille, err := s.translate(s.cfg.LouTranslateBinary, table, req.Text)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		log.Printf("brailleserver: %v", err)
+		http.Error(w, "translation failed", http.StatusBadGateway)
 		return
 	}
 	writeJSON(w, http.StatusOK, translateResponse{Braille: braille})
@@ -182,12 +200,21 @@ func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {
 // exactly BRF's own on-the-wire representation -- the North American
 // Braille ASCII Grade 2 embossers and braille-display software both
 // consume -- so this output needs no further re-encoding downstream.
+var tableNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._,-]{0,127}$`)
+
+const translateTimeout = 15 * time.Second
+
+// translateSlots bounds how many lou_translate processes run at once.
+var translateSlots = make(chan struct{}, 4)
+
 func execLouTranslate(binary, table, text string) (string, error) {
 	args := []string{}
 	if table != "" {
 		args = append(args, table)
 	}
-	cmd := exec.Command(binary, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), translateTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Stdin = strings.NewReader(text)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

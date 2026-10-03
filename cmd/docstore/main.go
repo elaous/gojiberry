@@ -12,6 +12,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/elaous/gojiberry/docstore"
 )
@@ -31,5 +32,5 @@ func main() {
 		log.Printf("docstore: sign-in enabled (%d provider(s))", len(cfg.Auth.Providers))
 	}
 	log.Printf("docstore: listening on %s (backend=%s)", cfg.Addr, cfg.Backend)
-	log.Fatal(http.ListenAndServe(cfg.Addr, srv.Handler()))
+	log.Fatal((&http.Server{Addr: cfg.Addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}).ListenAndServe())
 }

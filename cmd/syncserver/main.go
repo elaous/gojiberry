@@ -13,6 +13,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/elaous/gojiberry/syncserver"
 )
@@ -21,5 +22,5 @@ func main() {
 	cfg := syncserver.ConfigFromEnv()
 	srv := syncserver.NewServer(cfg)
 	log.Printf("syncserver: listening on %s (region=%s)", cfg.Addr, cfg.Region)
-	log.Fatal(http.ListenAndServe(cfg.Addr, srv.Handler()))
+	log.Fatal((&http.Server{Addr: cfg.Addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}).ListenAndServe())
 }
