@@ -114,7 +114,23 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 	}
 	acl, err := s.loadACL(r.Context(), id)
 	if errors.Is(err, ErrNotFound) {
-		return true, 0 // never shared this way: open
+		if !s.requireACL {
+			return true, 0 // never shared this way: open
+		}
+		// With RequireACL a document nobody owns is closed -- except to the
+		// first signed-in writer, who becomes its owner.
+		user, signedIn := s.auth.CurrentUser(r)
+		if !signedIn || user.Email == "" {
+			return false, http.StatusUnauthorized
+		}
+		if method != http.MethodPut {
+			return false, http.StatusForbidden
+		}
+		data, merr := json.Marshal(ACL{Owner: user.Email})
+		if merr != nil || s.adapter.Save(r.Context(), aclKey(id), data) != nil {
+			return false, http.StatusServiceUnavailable
+		}
+		return true, 0
 	}
 	if err != nil {
 		// An ACL that cannot be read (a backend error, damaged data) must

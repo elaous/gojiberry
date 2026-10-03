@@ -36,6 +36,7 @@ type Bridge struct {
 
 	ready    bool
 	applying bool
+	detached bool
 	err      error
 	side     sideSync
 
@@ -82,6 +83,15 @@ func New(replica string, f *canvas.TextFlow) (*Bridge, error) {
 // other side's Snapshot), and local edits are not shared before then.
 func Join(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	return attach(replica, f)
+}
+
+// Detach stops the bridge sharing: later edits to the flow stay local and
+// undo goes back to the flow's own history. A replacement bridge attached to
+// the same flow takes over (see Session.Repair).
+func (b *Bridge) Detach() {
+	b.detached = true
+	b.Outgoing = nil
+	b.Flow.UndoHook = nil
 }
 
 // seedReplica is the replica id the starting content of every shared document
@@ -267,7 +277,7 @@ func slideEdit(old, cur []rune, e edit, caret int) edit {
 // pushLocal shares what changed in the flow since the replica last agreed
 // with it.
 func (b *Bridge) pushLocal() {
-	if b.applying || !b.ready {
+	if b.applying || !b.ready || b.detached {
 		return
 	}
 	cur, err := atomsFromItems(b.Flow.ContentItems())

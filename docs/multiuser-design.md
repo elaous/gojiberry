@@ -270,8 +270,7 @@ presence following the text, a viewer's edit refused while its comment gets
 through, a connection cut mid-session (both sides converge, nothing left
 waiting), and a refused connection reported.
 
-Not yet: a rejected replica cannot repair itself (rebuild the session);
-presence is sent on demand, not throttled.
+Not yet: presence is sent on demand, not throttled.
 
 ## Phase 4 as built
 
@@ -306,3 +305,6 @@ presence is sent on demand, not throttled.
 - Two clients that open an empty document together and start from the same content write it as the replica `seed`, so their operations are identical and merge into one copy (different starting content from the two is still both kept).
 - When a client reconnects to a hub that answers with less than it holds (a restart that lost recent saves), it sends its whole document again; operations are idempotent. Viewers cannot, and their comment marks are not resent.
 - Several comments can sit on the same text (`Format.Comment` holds their IDs, comma-separated); comment and note IDs carry the replica's prefix so concurrent comments never collide; a commenter's records must name them as author when the hub has a `User` function.
+- A session repairs itself when the server refuses something it sent (`Session.Repair`, called by `Poll` unless `NoRepair`): the replica is dropped, a new one joins from the server's copy, and the flow shows what the server has; the refused edits are lost.
+- Inline images are shared by URL (see `docfile.ImageItem`); an image that cannot be saved (no URL) is refused by the bridge. Embed images as `data:` URLs only when small: they travel inside the document's operations.
+- `hub.ACLRolesWith(store, who, noACL)` chooses what everyone may do on a document that has no ACL (`GOJIBERRY_COLLAB_NO_ACL_ROLE=owner|editor|viewer|none` for `cmd/collabhub`); `none` makes only shared documents open.
