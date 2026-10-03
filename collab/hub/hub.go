@@ -133,13 +133,14 @@ type sub struct {
 }
 
 type room struct {
-	id    string
-	mu    sync.Mutex
-	doc   *crdt.Doc
-	subs  map[*sub]bool
-	pres  map[string]presenceEntry
-	dirty bool
-	timer *time.Timer
+	id     string
+	mu     sync.Mutex
+	doc    *crdt.Doc
+	subs   map[*sub]bool
+	pres   map[string]presenceEntry
+	owners map[string]string // replica id -> the signed-in user it first spoke for
+	dirty  bool
+	timer  *time.Timer
 
 	saveMu  sync.Mutex    // one save at a time, in order
 	loaded  chan struct{} // closed when the stored document has been read
@@ -404,6 +405,34 @@ func jsonEvent(name string, v any) event {
 	return event{name: name, data: b}
 }
 
+// bindReplica ties a replica id to the signed-in user who first used it in
+// this document (rm.mu held), so another user cannot speak under it: their
+// ops would otherwise be hidden from the real owner of the id, and their
+// presence would overwrite its cursor. Anonymous callers (no User function, or
+// no one signed in) cannot be bound.
+func (h *Hub) bindReplica(rm *room, replica string, r *http.Request) bool {
+	if replica == "" || h.cfg.User == nil {
+		return true
+	}
+	user := h.cfg.User(r)
+	if user == "" {
+		return true
+	}
+	if owner, ok := rm.owners[replica]; ok {
+		return owner == user
+	}
+	if rm.owners == nil {
+		rm.owners = map[string]string{}
+	}
+	if len(rm.owners) < maxBoundReplicas {
+		rm.owners[replica] = user
+	}
+	return true
+}
+
+// maxBoundReplicas bounds the replica-to-user table of one document.
+const maxBoundReplicas = 4096
+
 func (h *Hub) handleOps(w http.ResponseWriter, r *http.Request) {
 	rm, role, ok := h.access(w, r)
 	if !ok {
@@ -420,6 +449,11 @@ func (h *Hub) handleOps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rm.mu.Lock()
+	if !h.bindReplica(rm, r.URL.Query().Get("replica"), r) {
+		rm.mu.Unlock()
+		denied(w, "that replica id belongs to another user")
+		return
+	}
 	if err := authorize(rm.doc, role, ops); err != nil {
 		rm.mu.Unlock()
 		denied(w, err.Error())
@@ -524,6 +558,11 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 		p.User = h.cfg.User(r)
 	}
 	rm.mu.Lock()
+	if !h.bindReplica(rm, p.Replica, r) {
+		rm.mu.Unlock()
+		denied(w, "that replica id belongs to another user")
+		return
+	}
 	h.prunePresence(rm)
 	if _, known := rm.pres[p.Replica]; !known && len(rm.pres) >= h.cfg.MaxPeers {
 		rm.mu.Unlock()
@@ -551,6 +590,11 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	s := &sub{replica: replica, role: role, ch: make(chan event, 256)}
 
 	rm.mu.Lock()
+	if !h.bindReplica(rm, replica, r) {
+		rm.mu.Unlock()
+		denied(w, "that replica id belongs to another user")
+		return
+	}
 	snapshot := rm.doc.Snapshot()
 	var peers []Presence
 	h.prunePresence(rm)
