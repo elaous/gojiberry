@@ -50,7 +50,7 @@ func RegisteredStyles() []StyleSheet {
 func Styles() Node {
 	var out []Node
 	for _, s := range RegisteredStyles() {
-		out = append(out, El("style", []Attr{A("data-gox-style", s.ID)}, Raw(s.CSS)))
+		out = append(out, El("style", []Attr{A("data-gox-style", s.ID)}, Raw(styleEnd.ReplaceAllString(s.CSS, `<\/$1`))))
 	}
 	return Frag(out...)
 }
