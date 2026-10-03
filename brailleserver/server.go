@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/elaous/gojiberry/guard"
 	"io"
 	"log"
 	"net/http"
@@ -35,7 +36,12 @@ import (
 // Config is loaded entirely from the environment, the same posture
 // voiceserver.Config/translateserver.Config take.
 type Config struct {
-	Addr string // listen address, e.g. ":8085"
+	// Guard decides who may call the server: guard.Origins(...) for pages from
+	// listed origins, guard.Token(...) for callers holding a token, both with
+	// guard.Chain, or your own. Nil means guard.Open() (any origin, no check).
+	// ConfigFromEnv reads GOJIBERRY_BRAILLESERVER_ALLOW_ORIGINS and GOJIBERRY_BRAILLESERVER_TOKEN.
+	Guard guard.Guard
+	Addr  string // listen address, e.g. ":8085"
 
 	// LouTranslateBinary/Table gate /translate the same way
 	// voiceserver.Config.PiperBinary gates /speak: with
@@ -60,6 +66,7 @@ const defaultTable = "en-us-g2.ctb"
 // GOJIBERRY_BRAILLESERVER_TABLE (default defaultTable).
 func ConfigFromEnv() Config {
 	return Config{
+		Guard:              guard.FromEnv("GOJIBERRY_BRAILLESERVER", "/health"),
 		Addr:               envOr("GOJIBERRY_BRAILLESERVER_ADDR", ":8085"),
 		LouTranslateBinary: os.Getenv("GOJIBERRY_BRAILLESERVER_LOU_TRANSLATE_BINARY"),
 		Table:              envOr("GOJIBERRY_BRAILLESERVER_TABLE", defaultTable),
@@ -107,20 +114,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/translate", s.handleTranslate)
-	return corsMiddleware(mux)
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return guard.Or(s.cfg.Guard).Wrap(mux)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

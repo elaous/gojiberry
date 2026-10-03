@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
+	"github.com/elaous/gojiberry/guard"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -455,5 +456,21 @@ func TestACLEndpointFailsClosedAndNeedsAnEmail(t *testing.T) {
 	nobody := sessionTokenFor(t, handler, provider, "", "no-email-sub")
 	if code := put(nobody); code != http.StatusForbidden {
 		t.Fatalf("an account with no e-mail managed an ACL: %d", code)
+	}
+}
+
+func TestGuardTokenUsesItsOwnHeader(t *testing.T) {
+	h := NewServer(NewMemoryAdapter(), "memory").WithGuard(guard.Token("tok", guard.Options{TokenHeader: "X-Gojiberry-Token"})).Handler()
+	do := func(hdr, val string) int {
+		req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+		if hdr != "" {
+			req.Header.Set(hdr, val)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if do("", "") != http.StatusUnauthorized || do("Authorization", "Bearer tok") != http.StatusUnauthorized || do("X-Gojiberry-Token", "tok") != http.StatusOK {
+		t.Fatal("the guard token travels in its own header, leaving Authorization to sign-in")
 	}
 }

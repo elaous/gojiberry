@@ -3,6 +3,7 @@ package fontserver
 import (
 	"encoding/binary"
 	"errors"
+	"github.com/elaous/gojiberry/guard"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,4 +41,24 @@ func TestGoogleFetchErrorDoesNotLeakTheAPIKey(t *testing.T) {
 		t.Fatalf("the error carries the API key: %v", err)
 	}
 	var _ = errors.Is
+}
+
+func TestGuardTokenProtectsDownloads(t *testing.T) {
+	srv := NewServer(Config{FontsDir: t.TempDir(), Guard: guard.Token("tok", guard.Options{Public: []string{"/health"}})})
+	h := srv.Handler()
+	do := func(method, path, auth string) int {
+		req := httptest.NewRequest(method, path, nil)
+		if auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if do("POST", "/local/download?family=Roboto", "") != http.StatusUnauthorized || do("POST", "/local/rescan", "Bearer wrong") != http.StatusUnauthorized {
+		t.Fatal("unauthenticated callers must be refused")
+	}
+	if do("GET", "/health", "") != http.StatusOK || do("POST", "/local/rescan", "Bearer tok") != http.StatusOK {
+		t.Fatal("health is public and the token opens the rest")
+	}
 }

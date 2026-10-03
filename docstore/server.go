@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/elaous/gojiberry/guard"
 	"io"
 	"log"
 	"net/http"
@@ -35,6 +36,11 @@ import (
 // for "minio". Passed through unparsed; only the backend itself
 // understands its own shape.
 type Config struct {
+	// Guard decides who may call the server (see package guard); nil means
+	// guard.Open(). ConfigFromEnv reads GOJIBERRY_DOCSTORE_ALLOW_ORIGINS and
+	// GOJIBERRY_DOCSTORE_TOKEN (sent as X-Gojiberry-Token, since Authorization
+	// carries the sign-in session).
+	Guard         guard.Guard
 	Addr          string
 	Backend       string
 	BackendConfig json.RawMessage
@@ -80,6 +86,7 @@ type AuthConfig struct {
 // (besides AUTH_BASE_URL's own).
 func ConfigFromEnv() Config {
 	cfg := Config{
+		Guard:         guard.FromEnvWith("GOJIBERRY_DOCSTORE", guard.Options{Public: []string{"/health"}, TokenHeader: "X-Gojiberry-Token"}),
 		Addr:          envOr("GOJIBERRY_DOCSTORE_ADDR", ":8090"),
 		Backend:       envOr("GOJIBERRY_DOCSTORE_BACKEND", "memory"),
 		BackendConfig: json.RawMessage(os.Getenv("GOJIBERRY_DOCSTORE_BACKEND_CONFIG")),
@@ -153,6 +160,7 @@ type Server struct {
 	adapter Adapter
 	backend string
 	auth    *auth.Manager
+	guard   guard.Guard
 }
 
 // NewServer wraps an already-constructed Adapter. Use this directly
@@ -167,6 +175,13 @@ func NewServer(adapter Adapter, backendName string) *Server {
 // Returns s so it can chain off NewServer at the call site.
 func (s *Server) WithAuth(m *auth.Manager) *Server {
 	s.auth = m
+	return s
+}
+
+// WithGuard sets the access policy (CORS, origin or token checks; see package
+// guard). Without one the server is open to every origin.
+func (s *Server) WithGuard(g guard.Guard) *Server {
+	s.guard = g
 	return s
 }
 
@@ -199,20 +214,7 @@ func (s *Server) Handler() http.Handler {
 	if s.auth != nil {
 		mux.Handle("/auth/", s.auth.Routes())
 	}
-	return corsMiddleware(mux)
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return guard.Or(s.guard).Wrap(mux)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {

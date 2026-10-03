@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/elaous/gojiberry/guard"
 	"io"
 	"log"
 	"net/http"
@@ -35,7 +36,12 @@ import (
 // Config is loaded entirely from the environment, the same posture
 // syncserver.Config/fontserver.Config/translateserver.Config take.
 type Config struct {
-	Addr string // listen address, e.g. ":8084"
+	// Guard decides who may call the server: guard.Origins(...) for pages from
+	// listed origins, guard.Token(...) for callers holding a token, both with
+	// guard.Chain, or your own. Nil means guard.Open() (any origin, no check).
+	// ConfigFromEnv reads GOJIBERRY_VOICESERVER_ALLOW_ORIGINS and GOJIBERRY_VOICESERVER_TOKEN.
+	Guard guard.Guard
+	Addr  string // listen address, e.g. ":8084"
 
 	// PiperBinary/PiperModel gate /speak the same way
 	// translateserver.Config.DeepLAPIKey gates /translate: with
@@ -55,6 +61,7 @@ type Config struct {
 // means for each route).
 func ConfigFromEnv() Config {
 	return Config{
+		Guard:         guard.FromEnv("GOJIBERRY_VOICESERVER", "/health"),
 		Addr:          envOr("GOJIBERRY_VOICESERVER_ADDR", ":8084"),
 		PiperBinary:   os.Getenv("GOJIBERRY_VOICESERVER_PIPER_BINARY"),
 		PiperModel:    os.Getenv("GOJIBERRY_VOICESERVER_PIPER_MODEL"),
@@ -113,20 +120,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/speak", s.handleSpeak)
 	mux.HandleFunc("/transcribe", s.handleTranscribe)
-	return corsMiddleware(mux)
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return guard.Or(s.cfg.Guard).Wrap(mux)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
