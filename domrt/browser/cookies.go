@@ -65,7 +65,7 @@ func (j cookieJar) Get(name string) (string, bool) {
 // character would let the caller (or whatever data it came from) add
 // cookie attributes of its own, so such a cookie is not set at all.
 func (cookieJar) Set(name, value string, opts CookieOptions) {
-	if !cookieTokenOK(name) || strings.Contains(name, "=") || !cookieTokenOK(opts.Path) || !cookieTokenOK(opts.Domain) || !cookieTokenOK(opts.SameSite) {
+	if !cookieTokenOK(name) || strings.ContainsAny(name, "= \t,") || !cookieTokenOK(opts.Path) || !cookieTokenOK(opts.Domain) || !cookieTokenOK(opts.SameSite) {
 		return
 	}
 	var b strings.Builder
