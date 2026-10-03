@@ -153,7 +153,7 @@ func TestAddRecursiveSkipsHeavyDirsAndSurvivesUnreadableOnes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 	if err := addRecursive(w, root); err != nil {
 		t.Fatal(err)
 	}

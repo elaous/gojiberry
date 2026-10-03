@@ -24,7 +24,7 @@ func CapWords(s string) string {
 	}
 	out := b.String()
 	// A Go identifier cannot start with a digit (or be empty).
-	if r, _ := utf8.DecodeRuneInString(out); out == "" || !(unicode.IsLetter(r) || r == '_') {
+	if r, _ := utf8.DecodeRuneInString(out); out == "" || (!unicode.IsLetter(r) && r != '_') {
 		out = "X" + out
 	}
 	return out
