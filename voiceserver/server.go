@@ -19,20 +19,29 @@
 package voiceserver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/elaous/gojiberry/guard"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Config is loaded entirely from the environment, the same posture
 // syncserver.Config/fontserver.Config/translateserver.Config take.
 type Config struct {
-	Addr string // listen address, e.g. ":8084"
+	// Guard decides who may call the server: guard.Origins(...) for pages from
+	// listed origins, guard.Token(...) for callers holding a token, both with
+	// guard.Chain, or your own. Nil means guard.Open() (any origin, no check).
+	// ConfigFromEnv reads GOJIBERRY_VOICESERVER_ALLOW_ORIGINS and GOJIBERRY_VOICESERVER_TOKEN.
+	Guard guard.Guard
+	Addr  string // listen address, e.g. ":8084"
 
 	// PiperBinary/PiperModel gate /speak the same way
 	// translateserver.Config.DeepLAPIKey gates /translate: with
@@ -52,6 +61,7 @@ type Config struct {
 // means for each route).
 func ConfigFromEnv() Config {
 	return Config{
+		Guard:         guard.FromEnv("GOJIBERRY_VOICESERVER", "/health"),
 		Addr:          envOr("GOJIBERRY_VOICESERVER_ADDR", ":8084"),
 		PiperBinary:   os.Getenv("GOJIBERRY_VOICESERVER_PIPER_BINARY"),
 		PiperModel:    os.Getenv("GOJIBERRY_VOICESERVER_PIPER_MODEL"),
@@ -79,6 +89,9 @@ type Server struct {
 	// interface document.
 	speak      func(binary, model, text string) ([]byte, error)
 	transcribe func(binary, model string, wav []byte) (string, error)
+
+	// speakSlots and transcribeSlots bound the processes of each kind.
+	speakSlots, transcribeSlots chan struct{}
 }
 
 // NewServer creates a voice server for the given config. With
@@ -88,7 +101,7 @@ type Server struct {
 // handleGoogleFonts take with no key configured, rather than refusing
 // to start at all.
 func NewServer(cfg Config) *Server {
-	return &Server{cfg: cfg, speak: execPiper, transcribe: execWhisper}
+	return &Server{cfg: cfg, speak: execPiper, transcribe: execWhisper, speakSlots: make(chan struct{}, 2), transcribeSlots: make(chan struct{}, 2)}
 }
 
 // Handler returns the HTTP routes:
@@ -107,20 +120,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/speak", s.handleSpeak)
 	mux.HandleFunc("/transcribe", s.handleTranscribe)
-	return corsMiddleware(mux)
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return guard.Or(s.cfg.Guard).Wrap(mux)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -158,9 +158,14 @@ func (s *Server) handleSpeak(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !acquire(w, s.speakSlots) {
+		return
+	}
+	defer release(s.speakSlots)
 	audio, err := s.speak(s.cfg.PiperBinary, s.cfg.PiperModel, req.Text)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		log.Printf("voiceserver: speak: %v", err)
+		http.Error(w, "speech synthesis failed", http.StatusBadGateway)
 		return
 	}
 	w.Header().Set("Content-Type", "audio/wav")
@@ -191,9 +196,14 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !acquire(w, s.transcribeSlots) {
+		return
+	}
+	defer release(s.transcribeSlots)
 	text, err := s.transcribe(s.cfg.WhisperBinary, s.cfg.WhisperModel, wav)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		log.Printf("voiceserver: transcribe: %v", err)
+		http.Error(w, "transcription failed", http.StatusBadGateway)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"text": text})
@@ -204,6 +214,33 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 // well-established Piper CLI invocation shape (unchanged across the
 // rhasspy/piper -> OHF-Voice/piper1-gpl rename) -- `echo "text" | piper
 // --model voice.onnx --output_file out.wav`.
+const (
+	speakTimeout      = time.Minute
+	transcribeTimeout = 5 * time.Minute
+)
+
+// acquire takes a slot from sem (nil: no limit) or answers 429. Synthesis and
+// transcription have their own, so a long transcription does not turn every
+// /speak request away.
+func acquire(w http.ResponseWriter, sem chan struct{}) bool {
+	if sem == nil {
+		return true
+	}
+	select {
+	case sem <- struct{}{}:
+		return true
+	default:
+		http.Error(w, "too many requests in progress", http.StatusTooManyRequests)
+		return false
+	}
+}
+
+func release(sem chan struct{}) {
+	if sem != nil {
+		<-sem
+	}
+}
+
 func execPiper(binary, model, text string) ([]byte, error) {
 	out, err := os.CreateTemp("", "voiceserver-speak-*.wav")
 	if err != nil {
@@ -217,7 +254,9 @@ func execPiper(binary, model, text string) ([]byte, error) {
 	if model != "" {
 		args = append(args, "--model", model)
 	}
-	cmd := exec.Command(binary, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), speakTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Stdin = strings.NewReader(text)
 	if combined, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("piper: %w: %s", err, combined)
@@ -253,7 +292,9 @@ func execWhisper(binary, model string, wav []byte) (string, error) {
 	if model != "" {
 		args = append(args, "-m", model)
 	}
-	cmd := exec.Command(binary, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), transcribeTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, args...)
 	if combined, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("whisper: %w: %s", err, combined)
 	}

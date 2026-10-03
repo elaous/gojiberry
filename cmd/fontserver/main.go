@@ -7,6 +7,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/elaous/gojiberry/fontserver"
 )
@@ -15,5 +16,5 @@ func main() {
 	cfg := fontserver.ConfigFromEnv()
 	srv := fontserver.NewServer(cfg)
 	log.Printf("fontserver: listening on %s (fonts dir %s)", cfg.Addr, cfg.FontsDir)
-	log.Fatal(http.ListenAndServe(cfg.Addr, srv.Handler()))
+	log.Fatal((&http.Server{Addr: cfg.Addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}).ListenAndServe())
 }

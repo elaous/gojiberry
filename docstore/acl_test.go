@@ -6,6 +6,8 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
+	"github.com/elaous/gojiberry/guard"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -30,6 +32,7 @@ type fakeOIDCProvider struct {
 	keyID      string
 	nextEmail  string
 	nextSub    string
+	nonce      string // echoed into the id_token, like a real provider
 }
 
 func newFakeOIDCProvider(t *testing.T) *fakeOIDCProvider {
@@ -62,8 +65,9 @@ func (f *fakeOIDCProvider) handleToken(w http.ResponseWriter, r *http.Request) {
 		"exp": %d,
 		"iat": %d,
 		"email": %q,
-		"name": "Test User"
-	}`, f.srv.URL, f.nextSub, time.Now().Add(time.Hour).Unix(), time.Now().Unix(), f.nextEmail)
+		"name": "Test User",
+		"nonce": %q
+	}`, f.srv.URL, f.nextSub, time.Now().Add(time.Hour).Unix(), time.Now().Unix(), f.nextEmail, f.nonce)
 	idToken := oidctest.SignIDToken(f.priv, f.keyID, oidc.RS256, claims)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -105,6 +109,7 @@ func sessionTokenFor(t *testing.T, handler http.Handler, provider *fakeOIDCProvi
 		t.Fatalf("parsing login Location: %v", err)
 	}
 	state := loc.Query().Get("state")
+	provider.nonce = loc.Query().Get("nonce")
 
 	callbackReq := httptest.NewRequest(http.MethodGet, "/auth/test/callback?code=fake-code&state="+url.QueryEscape(state), nil)
 	callbackW := httptest.NewRecorder()
@@ -357,5 +362,115 @@ func TestACLRoutesRequireAuthConfigured(t *testing.T) {
 	handler.ServeHTTP(rec, get)
 	if rec.Code != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501", rec.Code)
+	}
+}
+
+// aclFailAdapter fails loading acl: keys other than with ErrNotFound.
+type aclFailAdapter struct {
+	Adapter
+	fail bool
+}
+
+func (a *aclFailAdapter) Load(ctx context.Context, id string) (Document, error) {
+	if a.fail && strings.HasPrefix(id, aclKeyPrefix) {
+		return Document{}, fmt.Errorf("backend down")
+	}
+	return a.Adapter.Load(ctx, id)
+}
+
+func TestACLFailsClosedWhenItCannotBeRead(t *testing.T) {
+	provider := newFakeOIDCProvider(t)
+	m, err := auth.NewManager(context.Background(), auth.Config{
+		BaseURL:   "https://app.example.com",
+		Providers: []auth.Provider{{Name: "test", IssuerURL: provider.srv.URL, ClientID: "test-client", ClientSecret: "s"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &aclFailAdapter{Adapter: NewMemoryAdapter()}
+	_ = store.Save(context.Background(), "private", []byte("secret"))
+	handler := NewServer(store, "memory").WithAuth(m).Handler()
+	get := func() int {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/docs/private", nil))
+		return rec.Code
+	}
+	if get() != http.StatusOK {
+		t.Fatal("a document with no ACL is open")
+	}
+	store.fail = true
+	if code := get(); code == http.StatusOK {
+		t.Fatalf("an unreadable ACL opened the document (status %d)", code)
+	}
+}
+
+func TestPutBodyIsLimitedAndBackendErrorsAreNotEchoed(t *testing.T) {
+	handler := NewServer(NewMemoryAdapter(), "memory").Handler()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/docs/big", io.LimitReader(zeroReader{}, maxDocBytes+1)))
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized PUT: status %d, want 413", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	serverError(rec, fmt.Errorf("dial postgres://user:pw@db/x"))
+	if rec.Code != 500 || strings.Contains(rec.Body.String(), "postgres") {
+		t.Fatalf("backend text leaked: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) { clear(p); return len(p), nil }
+
+func TestACLEndpointFailsClosedAndNeedsAnEmail(t *testing.T) {
+	provider := newFakeOIDCProvider(t)
+	m, err := auth.NewManager(context.Background(), auth.Config{
+		BaseURL:   "https://app.example.com",
+		Providers: []auth.Provider{{Name: "test", IssuerURL: provider.srv.URL, ClientID: "test-client", ClientSecret: "s"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &aclFailAdapter{Adapter: NewMemoryAdapter()}
+	handler := NewServer(store, "memory").WithAuth(m).Handler()
+	owner := sessionTokenFor(t, handler, provider, "owner@example.com", "owner-sub")
+	put := func(token string) int {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, withBearer(httptest.NewRequest(http.MethodPut, "/docs/doc/acl", strings.NewReader(`{}`)), token))
+		return rec.Code
+	}
+	if code := put(owner); code != http.StatusNoContent {
+		t.Fatalf("owner bootstrap: %d", code)
+	}
+	other := sessionTokenFor(t, handler, provider, "other@example.com", "other-sub")
+	store.fail = true // the ACL can no longer be read
+	if code := put(other); code == http.StatusNoContent {
+		t.Fatal("an unreadable ACL let another user take ownership")
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, withBearer(httptest.NewRequest(http.MethodGet, "/docs/doc/acl", nil), other))
+	if rec.Code == http.StatusOK {
+		t.Fatal("GET of an unreadable ACL answered as if it were empty")
+	}
+	store.fail = false
+	nobody := sessionTokenFor(t, handler, provider, "", "no-email-sub")
+	if code := put(nobody); code != http.StatusForbidden {
+		t.Fatalf("an account with no e-mail managed an ACL: %d", code)
+	}
+}
+
+func TestGuardTokenUsesItsOwnHeader(t *testing.T) {
+	h := NewServer(NewMemoryAdapter(), "memory").WithGuard(guard.Token("tok", guard.Options{TokenHeader: "X-Gojiberry-Token"})).Handler()
+	do := func(hdr, val string) int {
+		req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+		if hdr != "" {
+			req.Header.Set(hdr, val)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if do("", "") != http.StatusUnauthorized || do("Authorization", "Bearer tok") != http.StatusUnauthorized || do("X-Gojiberry-Token", "tok") != http.StatusOK {
+		t.Fatal("the guard token travels in its own header, leaving Authorization to sign-in")
 	}
 }

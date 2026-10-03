@@ -2,13 +2,21 @@
 
 package main
 
-import "github.com/elaous/gojiberry/domrt/html"
+import (
+	"math"
+
+	"github.com/elaous/gojiberry/domrt/html"
+)
 
 const (
 	fontSize   = 16.0
 	lineHeight = 22.0
 	leftMargin = 12.0
 	topMargin  = 24.0
+	// ascent is how far above its baseline a line's text reaches: line k is
+	// drawn with its baseline at topMargin+k*lineHeight, so the clickable band
+	// of line k starts ascent above that.
+	ascent = 16.0
 )
 
 // fontFor returns the CSS font string Context2D.SetFont expects for f.
@@ -74,7 +82,7 @@ func layoutDocument(ctx *html.Context2D, d *document, maxWidth float64) *layout 
 // (clickX, clickY) -- the same index space as document.Cursor, so its
 // result can be assigned directly to Cursor/Anchor on a click.
 func hitTest(lay *layout, clickX, clickY float64) int {
-	targetLine := int((clickY - topMargin) / lineHeight)
+	targetLine := int(math.Floor((clickY - topMargin + ascent) / lineHeight))
 	if targetLine < 0 {
 		targetLine = 0
 	}

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +34,9 @@ type fakeOIDCProvider struct {
 	// unexpected claims (e.g. the wrong audience) without needing a
 	// second server.
 	nextIDToken string
+	// nonce is put into the id_token like a provider echoing the login's
+	// nonce parameter; tests set it from the login redirect.
+	nonce string
 }
 
 func newFakeOIDCProvider(t *testing.T) *fakeOIDCProvider {
@@ -79,8 +83,9 @@ func (f *fakeOIDCProvider) signIDToken(aud, sub, email, name string) string {
 		"exp": %d,
 		"iat": %d,
 		"email": %q,
-		"name": %q
-	}`, f.srv.URL, aud, sub, time.Now().Add(time.Hour).Unix(), time.Now().Unix(), email, name)
+		"name": %q,
+		"nonce": %q
+	}`, f.srv.URL, aud, sub, time.Now().Add(time.Hour).Unix(), time.Now().Unix(), email, name, f.nonce)
 	return oidctest.SignIDToken(f.priv, f.keyID, oidc.RS256, claims)
 }
 
@@ -162,6 +167,7 @@ func TestCallbackFullFlow(t *testing.T) {
 		t.Fatalf("parsing login Location: %v", err)
 	}
 	state := loginLoc.Query().Get("state")
+	f.nonce = loginLoc.Query().Get("nonce")
 
 	callbackReq := httptest.NewRequest(http.MethodGet, "/auth/test/callback?code=fake-code&state="+url.QueryEscape(state), nil)
 	callbackW := httptest.NewRecorder()
@@ -235,6 +241,7 @@ func TestCallbackStateIsSingleUse(t *testing.T) {
 	routes.ServeHTTP(loginW, loginReq)
 	loginLoc, _ := url.Parse(loginW.Header().Get("Location"))
 	state := loginLoc.Query().Get("state")
+	f.nonce = loginLoc.Query().Get("nonce")
 
 	first := httptest.NewRequest(http.MethodGet, "/auth/test/callback?code=fake-code&state="+url.QueryEscape(state), nil)
 	firstW := httptest.NewRecorder()
@@ -261,6 +268,7 @@ func TestCallbackRejectsWrongAudienceIDToken(t *testing.T) {
 	routes.ServeHTTP(loginW, loginReq)
 	loginLoc, _ := url.Parse(loginW.Header().Get("Location"))
 	state := loginLoc.Query().Get("state")
+	f.nonce = loginLoc.Query().Get("nonce")
 
 	f.nextIDToken = f.signIDToken("some-other-client", "user-sub", "user@example.com", "Test User")
 
@@ -305,6 +313,116 @@ func TestBearerTokenParsing(t *testing.T) {
 		token, ok := bearerToken(req)
 		if token != tt.wantToken || ok != tt.wantOK {
 			t.Errorf("bearerToken(%q) = %q, %v; want %q, %v", tt.header, token, ok, tt.wantToken, tt.wantOK)
+		}
+	}
+}
+
+func TestReturnToIsRestrictedToKnownOrigins(t *testing.T) {
+	f := newFakeOIDCProvider(t)
+	m, err := NewManager(context.Background(), Config{
+		BaseURL:       "https://app.example.com",
+		ReturnOrigins: []string{"http://localhost:3000"},
+		Providers:     []Provider{{Name: "test", IssuerURL: f.srv.URL, ClientID: "test-client", ClientSecret: "s"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	routes := m.Routes()
+	for _, tc := range []struct{ returnTo, want string }{
+		{"https://app.example.com/doc/1", "https://app.example.com/doc/1"},
+		{"http://localhost:3000/x", "http://localhost:3000/x"},
+		{"/doc/2", "https://app.example.com/doc/2"},
+		{"https://evil.example/", "https://app.example.com"},
+		{"//evil.example/x", "https://app.example.com"},
+		{"https://app.example.com.evil.example/", "https://app.example.com"},
+		{"https://user@evil.example@app.example.com/", "https://app.example.com"},
+		{"javascript:alert(1)", "https://app.example.com"},
+		{"", "https://app.example.com"},
+	} {
+		login := httptest.NewRecorder()
+		routes.ServeHTTP(login, httptest.NewRequest(http.MethodGet, "/auth/test/login?return_to="+url.QueryEscape(tc.returnTo), nil))
+		loc, _ := url.Parse(login.Header().Get("Location"))
+		f.nonce = loc.Query().Get("nonce")
+		cb := httptest.NewRecorder()
+		routes.ServeHTTP(cb, httptest.NewRequest(http.MethodGet, "/auth/test/callback?code=c&state="+url.QueryEscape(loc.Query().Get("state")), nil))
+		got := cb.Header().Get("Location")
+		if !strings.HasPrefix(got, tc.want+"#auth_token=") {
+			t.Errorf("return_to %q: redirected to %q, want %q", tc.returnTo, got, tc.want)
+		}
+	}
+}
+
+func TestLoginUsesPKCEAndNonceAndChecksThem(t *testing.T) {
+	f := newFakeOIDCProvider(t)
+	m := newTestManager(t, f.srv.URL)
+	routes := m.Routes()
+	login := httptest.NewRecorder()
+	routes.ServeHTTP(login, httptest.NewRequest(http.MethodGet, "/auth/test/login", nil))
+	loc, _ := url.Parse(login.Header().Get("Location"))
+	if loc.Query().Get("code_challenge") == "" || loc.Query().Get("code_challenge_method") != "S256" || loc.Query().Get("nonce") == "" {
+		t.Fatalf("authorization request lacks PKCE or nonce: %s", loc.RawQuery)
+	}
+	f.nonce = "someone-elses-nonce"
+	cb := httptest.NewRecorder()
+	routes.ServeHTTP(cb, httptest.NewRequest(http.MethodGet, "/auth/test/callback?code=c&state="+url.QueryEscape(loc.Query().Get("state")), nil))
+	if cb.Code != http.StatusUnauthorized {
+		t.Fatalf("a token with another login's nonce: status %d, want 401", cb.Code)
+	}
+}
+
+func TestUnverifiedEmailIsDropped(t *testing.T) {
+	no, yes := false, true
+	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b", EmailVerified: &no}); u.Email != "" {
+		t.Fatalf("unverified email kept: %q", u.Email)
+	}
+	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b", EmailVerified: &yes}); u.Email != "a@b" {
+		t.Fatal("verified email lost")
+	}
+	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b"}); u.Email != "a@b" {
+		t.Fatal("an absent email_verified claim is not a refusal")
+	}
+}
+
+func TestTokenStorePrunesAndIsBounded(t *testing.T) {
+	s := newTokenStore[int]()
+	past, future := time.Now().Add(-time.Minute), time.Now().Add(time.Hour)
+	for i := 0; i < pruneAt; i++ {
+		if _, err := s.put(i, past); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.swept = time.Time{}
+	if _, err := s.put(1, future); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(s.entries); n != 1 {
+		t.Fatalf("expired entries were not swept: %d left", n)
+	}
+	for i := 0; i < maxEntries; i++ {
+		if _, err := s.put(i, future); err != nil {
+			if !errors.Is(err, errStoreFull) {
+				t.Fatal(err)
+			}
+			return
+		}
+	}
+	t.Fatal("the store never refused an entry")
+}
+
+func TestProvidersKeepConfiguredOrder(t *testing.T) {
+	f := newFakeOIDCProvider(t)
+	var ps []Provider
+	for _, n := range []string{"zeta", "alpha", "mid"} {
+		ps = append(ps, Provider{Name: n, IssuerURL: f.srv.URL, ClientID: "c", ClientSecret: "s"})
+	}
+	m, err := NewManager(context.Background(), Config{BaseURL: "https://app.example.com", Providers: ps})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 20; i++ {
+		got := m.Providers()
+		if got[0].Name != "zeta" || got[1].Name != "alpha" || got[2].Name != "mid" {
+			t.Fatalf("order: %+v", got)
 		}
 	}
 }
