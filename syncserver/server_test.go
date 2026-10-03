@@ -3,9 +3,11 @@ package syncserver
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/elaous/gojiberry/guard"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -277,5 +279,19 @@ func TestPresenceExpiresAfterTTL(t *testing.T) {
 	current = current.Add(presenceTTL + time.Second)
 	if peers := getPresence(t, srv, "laptop"); len(peers) != 0 {
 		t.Fatalf("expected phone's presence to have expired after presenceTTL, got %+v", peers)
+	}
+}
+
+func TestGuardOriginsBlocksOtherSites(t *testing.T) {
+	s := NewServer(Config{Guard: guard.Origins("https://app.example.com")})
+	do := func(origin string) int {
+		req := httptest.NewRequest(http.MethodPost, "/ops", strings.NewReader("[]"))
+		req.Header.Set("Origin", origin)
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if do("https://app.example.com") != http.StatusNoContent || do("https://evil.example") != http.StatusForbidden {
+		t.Fatal("origin allow-list not applied")
 	}
 }
