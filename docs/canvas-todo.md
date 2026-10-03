@@ -115,7 +115,7 @@ Asked for, not started:
   (one attributed character sequence, a bridge to the `TextFlow`, SSE + POST,
   server-side roles); built, with per-user undo, remote carets, presence and
   comment-only viewers. Left: see "Not yet" in the design doc.
-- Comments: an author list for
+- Comments: a character carries one comment, so commenting text that already has one replaces the anchor of the first (it stays in the list, unanchored); several comments on one range need the anchor to become a list. An author list for
   `@username` completion; notifications for mentions.
 
 - **Formula** editor and formula text element.

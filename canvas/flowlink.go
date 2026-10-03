@@ -51,8 +51,13 @@ func (f *TextFlow) updateLinkHover(x, y float64) bool {
 // listening.
 func (f *TextFlow) openLinkAt(x, y float64) bool {
 	url, _ := f.linkAt(x, y)
-	if name, ok := strings.CutPrefix(url, "#"); ok && f.GotoBookmark(name) {
-		return true
+	if name, ok := strings.CutPrefix(url, "#"); ok {
+		if f.GotoBookmark(name) {
+			return true
+		}
+		if f.OnLink == nil {
+			return false // the default would open this page again in a new tab
+		}
 	}
 	open := f.OnLink
 	if open == nil {
