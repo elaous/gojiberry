@@ -1,0 +1,29 @@
+// Package main shows a generic component and a render prop written in
+// .gox: List[Person] takes typed items and a function that turns each
+// one into markup -- markup that can itself use more components.
+package main
+
+import (
+	"github.com/elaous/gojiberry/components"
+	"github.com/elaous/gojiberry/gox"
+)
+
+type Person struct {
+	Name string
+	Role string
+}
+
+func Page(people []Person) gox.Node {
+	empty := <p class="empty">Nobody here yet.</p>
+	return <section>
+		<h1>Team</h1>
+		<components.List[Person]
+			items={people}
+			key={func(p Person) string { return p.Name }}
+			empty={&empty}
+			item={func(p Person) gox.Node {
+				return <span class="person"><strong>{p.Name}</strong>, {p.Role}</span>
+			}}
+		/>
+	</section>
+}

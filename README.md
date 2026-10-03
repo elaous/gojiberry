@@ -55,7 +55,7 @@ needs to know or care which renderer(s) will eventually consume it.
 
 ## Getting Started
 
-Requires Go 1.24+. This module (`github.com/elaous/gojiberry`) is
+Requires Go 1.26+. This module (`github.com/elaous/gojiberry`) is
 private, so it isn't `go get`-able from outside this checkout the way a
 public package would be — every consumer in this repo (including every
 separate-module example under `examples/`) uses it via a local
@@ -165,7 +165,7 @@ expanded by the same recursive scan, with no extra grammar required.
   is `any`, read back type-safely via `gox.EventValue[T]`.
 - **`internal/transpile`** — the `.gox` → `.go` source-to-source
   transpiler described above, plus the stable resource-import loaders
-  (JSON/JSONC/JSONL) and the `@title`/`@stylesheets`/`@wasm`
+  (JSON/JSONC/JSONL, CSS) and the `@title`/`@wasm`
   page-metadata annotations, both described below. Beyond tag/brace
   structure (mismatched/unterminated tags, malformed attributes — all
   caught with a real line/col error), a lowercase tag's name and its
@@ -447,6 +447,20 @@ expanded by the same recursive scan, with no extra grammar required.
   additional remote catalogs against, the same way `docstore`'s
   `RegisterAdapter` lets a deployment add a storage backend without
   touching this package) is also future work, not done here.
+- **`docfile`, `saver`, `transfer`** — saving canvas documents. `docfile.Document`
+  mirrors the editor's content (text runs, paragraph formats, columns, breaks,
+  named styles, fonts) and writes as JSON, protobuf text or protobuf binary
+  (`docfile.Schema()` prints the `.proto`). `saver.Saver` pairs a format with
+  named targets, each a `docstore.Adapter`: Postgres, **SQLite** (new,
+  pure Go), S3/MinIO, local files, memory, `docstore.NewHTTPAdapter` (a
+  docstore server in front of any of those, for a WASM client) or
+  `docstore.NewBrowserAdapter` (localStorage). `components.Saver` is the form
+  and `saver.Session` its state. `transfer.Registry` is the seam for
+  importers and exporters (Markdown and plain text built in), with
+  `components.Transfer` for the buttons. See [docs/saving.md](docs/saving.md).
+- **`fonts.Library`** — fonts added from the `FontSelector` are downloaded into
+  a store (any docstore backend) the first time the document uses them, then
+  loaded from there. See [docs/saving.md](docs/saving.md#lazy-fonts).
 - **`docstore`** — a storage-agnostic document persistence server. The
   `Adapter` interface (`Save`/`Load`/`List`/`Delete`, keyed by document
   ID) is implemented six ways: `MemoryAdapter` (in-process, the
@@ -741,21 +755,19 @@ a `<style>` tag around raw CSS content, the same way `gox.Raw` does for
 any other trusted HTML. `Body` takes one node, so use `<>...</>`
 (`gox.Frag`) to group several top-level children there.
 
-For the common case — a static title and one or more stylesheets, both
-known at transpile time — `@title`/`@stylesheets` doc-comment
-annotations do this for you, so `Page` only needs to return its actual
-content:
+For the common case — a static title known at transpile time — an
+`@title` doc-comment annotation does this for you, so `Page` only needs
+to return its actual content (stylesheets come from CSS imports, below,
+and `gox.Document` adds them to the head itself):
 
 ```go
 // @title My App
-// @stylesheets App.css
 func Page(props PageProps) gox.Node {
 	return <h1>Hello, {props.Name}!</h1>
 }
 ```
 
-goxc reads these directly above a `func ... gox.Node` declaration,
-reads each `@stylesheets` file the same way a resource import would,
+goxc reads these directly above a `func ... gox.Node` declaration
 and rewrites every one of that function's own top-level `return`
 statements into the `gox.Document{...}.Render()` form above — so
 conditional early returns (`if props.Name == "" { return <p>...</p> }`)
@@ -783,7 +795,7 @@ func CanvasPage(props CanvasPageProps) gox.Node {
 }
 ```
 
-Unlike `@stylesheets`, `@wasm`'s value is a URL, not a file path — the
+`@wasm`'s value is a URL, not a file path — the
 compiled `.wasm` binary doesn't exist yet when its SSR page is
 transpiled (it's built separately, from a different package, usually
 afterward), so there's nothing to read at transpile time, only a
@@ -798,8 +810,8 @@ These are deliberately a third comment shape, not a reuse of either
 existing convention in this codebase: a tool directive (`//go:generate`,
 `//encore:api`) triggers an external command or build-time codegen,
 and `//language=SQL` (see `editors/vscode-gox`) is a pure editor hint
-with zero effect on the compiled program. `@title`/`@stylesheets`/
-`@wasm` are neither — they're informational metadata that a real tool
+with zero effect on the compiled program. `@title`/`@wasm`
+are neither — they're informational metadata that a real tool
 (goxc) turns into code — so they get the `@key value` shape instead,
 mirroring swaggo/swag's `// @Summary`/`// @Router` handler annotations
 (real, widely-used Go prior art for exactly this kind of per-function
@@ -1036,11 +1048,12 @@ CSS is split one file per component (`components/button.css`,
 `components/modal.css`, ...) plus `components/base.css` for the shared
 `--gj-*` design tokens and the couple of `@keyframes` more than one
 component reuses (`gj-spin`, `gj-progress-indeterminate`) — pull in
-`base.css` plus only the per-component files a page actually uses, e.g.
-`@stylesheets ../../components/base.css` and
-`@stylesheets ../../components/button.css` (paths relative to your
-`.gox` file), or plain `<link rel="stylesheet">` tags for a bare WASM
-page with no SSR step. A component's doc comment says which stylesheet
+`base.css` plus only the per-component files a page actually uses.
+Importing the `components` package already registers all of them (see
+"CSS imports" below), so `gox.Document` and `domrt.Mount` include them
+with nothing to link or copy; to ship only some, import the files you
+want yourself, e.g. `import _ "github.com/elaous/gojiberry/components/button.css"`,
+or use plain `<link rel="stylesheet">` tags. A component's doc comment says which stylesheet
 it needs; `Dialog` (and `Confirm`/`Alert`, built on it) also needs
 `modal.css`, since they render inside `Modal`'s box.
 
@@ -1096,11 +1109,50 @@ import (
   instead of a single value — `[]TypeName` with an annotation, `[]any`
   without one.
 
-CSS used to have its own `.css`/`.scss` resource-import loaders here.
-They're gone in favor of the `@stylesheets` page-metadata annotation
-(see "The `<html>` entrypoint" above), which reads a page's
-stylesheet(s) the same way but ties them to the page component they
-style instead of a standalone import line.
+- **`.css`** — see "CSS imports" below.
+
+### CSS imports
+
+A stylesheet is imported like a Go package: with its module-qualified
+path, and a blank name.
+
+```go
+import (
+	_ "github.com/me/app/components/button.css"
+	"net/http"
+)
+```
+
+goxc embeds the file and generates a `func init() { gox.RegisterStyle(id,
+css) }` for it, so — as with a blank import of a Go package — whoever
+imports the Go package gets its styles, wherever in the program that is:
+
+- `gox.Document` (what `@title`/`@wasm` pages return) puts every
+  registered stylesheet in `<head>`, one `<style data-gox-style="<path>">`
+  each, ahead of the page's own `Head`; `gox.Styles()` returns the same
+  nodes for a hand-written `<head>`; `Document.NoStyles` turns it off.
+- `domrt.Mount` installs them in the browser's `<head>` (skipping ones
+  the server already rendered); `domrt.InstallStyles()` does it by hand.
+- A page can pick its own: `// @styles components/base.css button.css`
+  above the page function (full IDs or their ends, whole path segments)
+  includes only those, `// @styles none` none -- the annotation becomes
+  `gox.Document{Styles: ...}`, which you can also set by hand. Without it a
+  page gets every registered sheet.
+- A sheet imported by several files is registered once (its ID is its
+  module-qualified path) and sheets keep package-initialisation order, so
+  a package's dependencies' styles come first.
+
+The path resolves, in order, relative to the `.gox` file (`"./dark.css"`,
+`"style.css"`, as `go:embed` paths do), as a path in the current module
+(`<module path>/dir/file.css`), and as a path in a required module (found
+with `go list -m`, so replace directives, vendoring and the module cache
+all work) — which is what lets a component library ship its CSS next to
+its code. A named import, `theme "<path>/dark.css"`, doesn't register
+anything: it binds the file's text to a constant, for code that wants to
+place it itself. A CSS import without `_` or a name is an error.
+
+The old `@stylesheets` annotation is gone; goxc says so, with this
+replacement, if it sees one.
 
 ### Experimental
 
@@ -1163,7 +1215,7 @@ verified too, against a stubbed `sqlc` executable standing in for the
 real tool (gox's own discovery/invocation/derivation logic is what's
 under test, not sqlc's codegen correctness). `.proto`/`.capnp` are
 verified only against their "tool not found" error path. JSON (both
-paths), `@title`/`@stylesheets`/`@wasm`, and HCL are exercised fully,
+paths), CSS imports, `@title`/`@wasm`, and HCL are exercised fully,
 including `mustCompileAndRun`-style tests that actually `go run` the
 generated code.
 
@@ -1233,6 +1285,102 @@ generated code.
   # open http://localhost:8080/ -- devtools > Application > Service Workers
   # shows it installed, activated, and claimed the page.
   ```
+
+- `fonts` (package) — finding fonts: a `Repository` lists the families
+  one source offers (`WebSafe`, `Static`, `Local` -- a directory of
+  .ttf/.otf files, `Server` -- a gojiberry `fontserver` (its local
+  fonts or Google Fonts catalog), `BrowserLocal` -- the fonts installed
+  on the user's machine via the Local Font Access API), `Multi` merges
+  them, `Cached` remembers the answer, and `Search`/`CSSFamily`/
+  `FontFaceCSS` help a UI use the result. Used by the new `components`
+  `FontSelector` (searchable, previews each font in itself, filters by
+  source, remembers recents) and `StyleEditor` (edits a `canvas.Format`:
+  font, size, weight, bold/italic/underline/strike/super/subscript,
+  colors, with a live preview). Demo: `examples/wasm-style-editor-demo`.
+
+- `canvas` (package) — components drawn on an HTML `<canvas>` rather
+  than built from DOM. Every component has a view mode (read-only, the
+  default) and an edit mode (`SetMode`); layout, hit-testing, editing
+  state and drawing are plain Go behind a small `Painter` interface so
+  they're unit-tested natively, and only the browser glue
+  (`Stage.Bind`, `LoadImage`) is js/wasm. A `Stage` draws several
+  components on one canvas and routes mouse/keyboard events to them.
+  - `TableView` — Obsidian-style table: click-to-edit cells, Tab/Enter/
+    arrow navigation, `+` bars to add a column/row, grips above columns
+    and left of rows (and a 2x2 icon for the table) that select and open
+    a context menu (insert, move, sort, duplicate, delete, clear).
+  - `Menu` — a canvas context menu (no view/edit modes).
+  - `TextFlow` — flows text into a page of a given width/height using
+    font family/size/weight/style and line height, in one or more
+    columns (a width per column plus a gap); in edit mode, drag the grip
+    above a gap to resize the neighbouring columns. Can flow around
+    `Obstacle`s.
+  - `Image` — a bitmap with a crop (clip), opacity (alpha) and a
+    text-wrap-around mode; in edit mode a toolbar picks Move (left/right
+    drag, snapping to 5), Clip, Alpha or Wrap, and the `TextFlow` it is
+    attached to re-wraps live.
+  - `FloatingText` — a text box anchored at x, y with a width and height
+    that text wraps around like an `Image`, but whose own text is
+    editable (caret, selection, typing, per-character bold/italic/size).
+  - `ScrollView` — a scroll container (no edit mode): a width x height
+    viewport onto larger canvas objects, clipped like CSS `overflow`,
+    scrolled by wheel or scrollbar, with the vertical and horizontal
+    scroll lockable. Components inside it work unchanged.
+  - `PageSet` — pages as sheets (margins, border, shadow, like Google
+    Docs) with per-page headers, footers and page numbers; each page's
+    header/footer/number config is "same as the previous page" or new.
+  - `TextFlow` also flows continuously across a `PageSet`: its content is
+    a stream of `Chars` (text + `Format`), `ColumnConfig` (column widths
+    and gap, kept until the next one) and `Break` (user page or column
+    break); the layout adds natural page breaks when text overflows.
+
+  Also: `TextFlow.Transform` turns a `Source` string into the content
+  stream (`canvas.Markdown` is the first: headings, bold/italic, strike,
+  underline, highlight, `^super^`/`~sub~`, code, links, lists, tables,
+  rules, images and `\pagebreak`/`\columnbreak`/`\columns N`
+  directives); inline objects (tables, rules, inline `Image`s) sit in
+  the text and are fitted to the column and page; floating `Image`s and
+  `FloatingText` take a page `Anchor`; headers and footers are editable
+  by double-click (per page: same as previous, or new) and page numbers
+  are selectable, with a settings menu.
+
+  Editing: `FloatingText` has color and highlight palettes, code-editor
+  auto-closing of quotes/brackets, word auto-completion, and key
+  bindings (`Keymap`, e.g. Ctrl+B, Ctrl+Alt+C / Ctrl+Alt+V to copy and
+  paste a format). Text in a `TextFlow` can be selected (drag or double
+  click) and copied; copying a format takes the minimum common
+  formatting of the selection, shared across components through the
+  `Stage`'s `FormatClipboard`. A `TableView` can float like an image
+  (page `Anchor`, `Wrap`, drag its icon to move it).
+
+  `.gox` components can be generic and take function props with markup:
+  `<components.List[Person] items={people} item={func(p Person) gox.Node { return <b>{p.Name}</b> }} />`
+  (see `examples/generic-list-demo`).
+
+  `canvas/canvas/gox` draws a gox tree on a canvas (`<canvas.Canvas>`,
+  `<canvas.TextFlow pages={func(page gox.Node, n int) gox.Node {...}}>`,
+  `<canvas.Header>`, `<canvas.Footer>`, `<canvas.PageNumber>`), updating the
+  live components in place on each render: see `docs/gox-canvas.md` and
+  `examples/canvas-gox-demo`. What is still to do is in `docs/canvas-todo.md`.
+
+  Editing capabilities are *features* registered with the Stage
+  (`canvas.Registry`, `canvas.Feature`): multi-cursor (Ctrl/Cmd+click,
+  Ctrl/Cmd+D, Ctrl/Cmd+Shift+L, Alt+Shift+I), line operations (Alt+Up/Down
+  move, Alt+Shift+Up/Down copy, Ctrl/Cmd+Shift+K delete) and Markdown copy
+  and paste (Ctrl/Cmd+Shift+C / V), page and column breaks (Ctrl/Cmd+Enter,
+  with Shift). The `TextFlow` is editable in edit mode, and
+  `examples/canvas-editor-showcase` registers everything -- the gox canvas
+  tree, the features, the style editor and font selector -- in one editor. Each registers commands and default key
+  chords; leave one out of `Stage.Features` (or `<canvas.Canvas features=...>`)
+  to switch it off, or add your own. The status of everything built and what
+  is left is in `docs/canvas-todo.md`.
+
+  Demos, each with a Playwright e2e test run by `go test` (skipped when
+  node/playwright/chromium are missing): `examples/canvas-table-demo`,
+  `examples/canvas-flow-demo`, `examples/canvas-image-demo`,
+  `examples/canvas-scroll-demo`, `examples/canvas-document-demo`,
+  `examples/canvas-gox-demo`, `examples/canvas-editor-showcase` (run one with
+  `make -C examples/<name> run`).
 
 - `examples/wasm-canvas-demo` — `domrt/html`'s `Context2D`/`Context3D`:
   fills a 2D canvas with a solid color and draws a full-viewport quad
@@ -1409,8 +1557,9 @@ generated code.
 - `examples/resource-imports-demo` — a JSON config decoded straight
   into a hand-declared `SiteConfig` (`config.(SiteConfig)
   "config.json"`, bound directly from the `.gox` import block) and a
-  page component whose `@title`/`@stylesheets` doc-comment annotations
-  wrap it in `gox.Document{}.Render()` automatically:
+  page component whose `@title` doc-comment annotation wraps it in
+  `gox.Document{}.Render()` automatically, with its stylesheet pulled in
+  by `import _ "<module path>/style.css"`:
 
   ```
   go generate ./...
@@ -1432,8 +1581,8 @@ generated code.
   ```
 
 - `examples/canvas-app` — the big one: a bare-minimum Google-Docs-style
-  typing canvas tying together gox SSR pages (`@stylesheets` for the
-  page's CSS, `@wasm` for the autosave client's bootstrap `<script>`
+  typing canvas tying together gox SSR pages (a CSS import for the
+  page's stylesheet, `@title`, and `@wasm` for the autosave client's bootstrap `<script>`
   tags — neither page hand-writes either), a WASM autosave client
   (`domrt.Mount`/`Update` plus `domrt/browser.FetchOpts` for the
   debounced `PUT`), real Postgres

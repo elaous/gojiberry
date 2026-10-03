@@ -1,0 +1,36 @@
+package main
+
+import (
+	config.(SiteConfig) "config.json"
+	_ "github.com/elaous/gojiberry/components/button.css"
+	theme "./theme/dark.css"
+	logs "events.jsonl"
+	"net/http"
+
+	canvas "github.com/elaous/gojiberry/canvas/gox"
+)
+
+func Page(people []Person) gox.Node {
+	return <section>
+		<components.List[Person]
+			items={people}
+			item={func(p Person) gox.Node {
+				return <span>{p.Name}</span>
+			}}
+		/>
+		<canvas.Canvas width={800} height={600} mode={state.Mode}>
+			<canvas.TextFlow lockH wrap pages={func(page gox.Node, n int) gox.Node {
+				return <>
+					<canvas.Header text="Report" />
+					{page}
+					<canvas.Footer><canvas.PageNumber none /></canvas.Footer>
+				</>
+			}} />
+		</canvas.Canvas>
+		<p>plain words here are not attributes</p>
+	</section>
+}
+
+func cmp(x int, y []int) bool {
+	return x<y[0] && y[0] > 1
+}

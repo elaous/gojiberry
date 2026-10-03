@@ -18,3 +18,8 @@ GOOS=js GOARCH=wasm go doc -all ./domrt/worker > docs/domrt-worker.txt
 `domrt`, `domrt/browser`, `domrt/html`, `domrt/svg`, `domrt/sw`, and
 `domrt/worker` are `js`/`wasm`-only packages, hence `GOOS=js GOARCH=wasm`;
 `gox` and `components` are plain Go.
+
+Hand-written notes:
+
+- `gox-canvas.md` -- how gox (function props, generic components, a
+  possible `canvas/gox` renderer) can drive the canvas components.

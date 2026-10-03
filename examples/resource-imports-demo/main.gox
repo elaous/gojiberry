@@ -3,8 +3,9 @@
 // JSON config decoded directly into a struct you declare yourself
 // (config.(SiteConfig) tells gox to decode into SiteConfig -- gox
 // doesn't generate or infer it, so any shape you can declare in Go
-// works), and a page's stylesheet pulled in via the @stylesheets
-// doc-comment annotation on Page below, which also wraps Page's
+// works), and a page's stylesheet pulled in by a blank CSS import
+// (`import _ "<module path>/style.css"`, written like a Go package
+// import), and an @title annotation on Page below, which wraps Page's
 // return in the <html><head>...</head><body>...</body></html>
 // boilerplate (gox.Document) automatically.
 package main
@@ -14,6 +15,7 @@ import (
 	"os"
 
 	config.(SiteConfig) "config.json"
+	_ "github.com/elaous/gojiberry/examples/resource-imports-demo/style.css"
 
 	"github.com/elaous/gojiberry/gox"
 )
@@ -22,15 +24,15 @@ type SiteConfig struct {
 	Title string `json:"title"`
 }
 
-// Page renders the configured title as a heading. @title/@stylesheets
-// are metadata, not a tool directive or an editor hint (see
-// internal/transpile/page_metadata.go) -- goxc reads them and wraps
-// Page's return value in gox.Document{Title: ..., Head: [gox.Style(...
-// the file's content)]}.Render(), so Page itself only needs to return
-// the page's actual content.
+// Page renders the configured title as a heading. @title is metadata,
+// not a tool directive or an editor hint (see
+// internal/transpile/page_metadata.go) -- goxc reads it and wraps Page's
+// return value in gox.Document{Title: ...}.Render(), which also puts
+// every stylesheet registered by a CSS import (the blank style.css import
+// above) in the head, so Page itself only needs to return the page's
+// actual content.
 //
 // @title resource-imports-demo
-// @stylesheets style.css
 func Page(cfg SiteConfig) gox.Node {
 	return <h1>{cfg.Title}</h1>
 }

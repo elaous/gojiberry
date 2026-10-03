@@ -297,3 +297,66 @@ func TestComponentAttrsAreNotValidatedAsHTML(t *testing.T) {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
 }
+
+func TestFunctionPropWithNestedMarkup(t *testing.T) {
+	got := transpileExpr(t, `return <MyApp items={items} render={func(item Item) gox.Node {
+	return <li class="x">{item.Name}</li>
+}} />`)
+	want := `return MyApp(MyAppProps{Items: items, Render: func(item Item) gox.Node {
+	return gox.El("li", []gox.Attr{gox.A("class", "x")}, gox.Child(item.Name))
+}})`
+	if strings.TrimSpace(got) != want {
+		t.Errorf("got:  %s\nwant: %s", got, want)
+	}
+	mustFormat(t, got)
+}
+
+func TestFunctionPropAlongsideChildren(t *testing.T) {
+	got := transpileExpr(t, `return <MyApp render={func(i Item) gox.Node { return <b>{i.Name}</b> }}><i>child</i></MyApp>`)
+	want := `return MyApp(MyAppProps{Render: func(i Item) gox.Node { return gox.El("b", nil, gox.Child(i.Name)) }, Children: []gox.Node{gox.El("i", nil, gox.Text("child"))}})`
+	if strings.TrimSpace(got) != want {
+		t.Errorf("got:  %s\nwant: %s", got, want)
+	}
+}
+
+func TestGenericComponent(t *testing.T) {
+	got := transpileExpr(t, `return <List[Item] items={items} render={func(it Item) gox.Node { return <li>{it.Name}</li> }} />`)
+	want := `return List[Item](ListProps[Item]{Items: items, Render: func(it Item) gox.Node { return gox.El("li", nil, gox.Child(it.Name)) }})`
+	if strings.TrimSpace(got) != want {
+		t.Errorf("got:  %s\nwant: %s", got, want)
+	}
+	mustFormat(t, got)
+}
+
+func TestGenericComponentWithChildrenAndNestedTypeArgs(t *testing.T) {
+	got := transpileExpr(t, `return <Table[string, map[string][]int]>text</Table>`)
+	want := `return Table[string, map[string][]int](TableProps[string, map[string][]int]{Children: []gox.Node{gox.Text("text")}})`
+	if strings.TrimSpace(got) != want {
+		t.Errorf("got:  %s\nwant: %s", got, want)
+	}
+	mustFormat(t, got)
+}
+
+func TestGenericDottedComponent(t *testing.T) {
+	got := transpileExpr(t, `return <components.List[Item] items={xs} />`)
+	want := `return components.List[Item](components.ListProps[Item]{Items: xs})`
+	if strings.TrimSpace(got) != want {
+		t.Errorf("got:  %s\nwant: %s", got, want)
+	}
+}
+
+func TestGenericTypeArgsErrors(t *testing.T) {
+	for _, src := range []string{`return <List[Item items={x} />`, `return <List[<b>] />`} {
+		if _, err := (&parser{file: "t.gox"}).transpileChunk([]rune(src)); err == nil {
+			t.Errorf("%q: expected an error", src)
+		}
+	}
+}
+
+func TestIndexingAfterAComponentNameStillWorks(t *testing.T) {
+	// An HTML element followed by '[' is not generic syntax (only
+	// Components take type arguments).
+	if _, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <div[0]></div>`)); err == nil {
+		t.Error("<div[0]> should not parse as a generic tag")
+	}
+}

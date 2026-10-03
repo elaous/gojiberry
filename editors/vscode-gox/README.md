@@ -1,4 +1,4 @@
-# gox VS Code extension (v1: syntax highlighting only)
+# gox VS Code extension (syntax highlighting)
 
 Provides `.gox` file association and syntax highlighting: real Go
 tokenization (via VS Code's own bundled Go grammar or the
@@ -8,6 +8,28 @@ highlighting layered on top via a TextMate **injection grammar**. Also
 includes a second, general-purpose injection — not gox-specific, works
 in any `.go` file — for `//language=`-annotated embedded-language raw
 strings; see below.
+
+## What it highlights
+
+- **Tags** `<div class="x">`, components `<pkg.Component .../>` (dotted
+  names), fragments `<>...</>`, `{expr}` holes (Go, with tags allowed
+  inside), and Go **function props** whose bodies contain markup:
+  `pages={func(page gox.Node, n int) gox.Node { return <>...</> }}`.
+- **Generic component tags** `<components.List[Person] items={...} />`:
+  the `[Person]` type arguments are scoped as types, and the closing tag
+  may repeat them.
+- **Boolean attributes** with no value (`<canvas.ScrollView lockH>`,
+  `<canvas.PageNumber none />`), on the tag's line or on the lines below
+  it — text *between* tags is never mistaken for an attribute.
+- **Resource imports** in an `import (...)` block (see the root README):
+  the typed form `config.(SiteConfig) "config.json"` (which Go's own
+  grammar can't make sense of), blank and named CSS imports
+  `_ "github.com/me/app/components/button.css"`, and
+  `.json/.jsonc/.jsonl/.css/.hcl/.proto/.capnp/.sql` paths in general get
+  their own scopes (`meta.import.resource.gox`,
+  `entity.name.import.resource.gox`, `constant.other.extension.gox`), so a
+  theme can show them as files instead of packages. Ordinary Go imports
+  are left to the Go grammar.
 
 ## `//language=`-annotated embedded strings (any `.go` file)
 
@@ -85,10 +107,11 @@ regression test for exactly this against
 ## Known limitations
 
 - Tag detection in the grammar is a heuristic (`<` immediately
-  followed by a letter, ended by a backreference to its own opening
-  name) — it does not replicate goxc's real expression-start
-  disambiguation. A tightly-spaced `a<B` with no surrounding spaces
-  can be miscolored as a tag-open; idiomatic (gofmt'd) Go always
+  followed by a letter and then whitespace, `/`, `>` or the end of the
+  line; ended by a backreference to its own opening name) — it does not
+  replicate goxc's real expression-start disambiguation. A tightly-spaced
+  `a<B ` or `x<y[i] ` with no spaces around the `<` can be miscolored as
+  a tag-open (`x<y[0]` is not: type arguments must start with a letter); idiomatic (gofmt'd) Go always
   spaces binary operators, so this is rare in practice. TSX's own
   grammar has the same class of limitation for the same reason.
 - No language server: no completions, hover, go-to-definition, or
@@ -113,7 +136,12 @@ cd test
 npm install
 npm run fetch-go-grammar         # downloads VS Code's bundled Go grammar (not redistributed here)
 npm run fetch-embedded-grammars  # downloads its HTML/CSS/SQL/JSON grammars too
-npm test                         # tokenize.js: every examples/**/*.gox has Go
+npm test                         # syntax-test.js: fixtures/new-syntax.gox.txt -- resource
+                                  # imports, generic tags, boolean attributes, multi-line
+                                  # opening tags, prose and tight comparisons that must
+                                  # NOT be tags (node dump.js <file> prints every
+                                  # token's scopes, for debugging the grammar)
+                                  # tokenize.js: every examples/**/*.gox has Go
                                   # keywords and (where present) tags, including
                                   # deep inside nested blocks
                                   # highlight-test.js: fixtures/highlight-sample.go's
@@ -125,5 +153,5 @@ npm test                         # tokenize.js: every examples/**/*.gox has Go
 ## Installing locally
 
 Symlink or copy this directory into your VS Code extensions folder
-(`~/.vscode/extensions/gox-language-0.1.0`) and reload the window, or
+(`~/.vscode/extensions/gox-language-0.2.0`) and reload the window, or
 package it with `vsce package` once you're ready to distribute it.

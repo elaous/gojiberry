@@ -1,6 +1,6 @@
 module github.com/elaous/gojiberry/examples/collab-editor-app
 
-go 1.24.7
+go 1.26.0
 
 replace github.com/elaous/gojiberry => ../..
 

@@ -1,0 +1,14 @@
+/* SymbolPicker stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-symbolpicker { display: flex; flex-direction: column; gap: 0.5em; width: 20em; padding: 0.6em; background: var(--gj-bg); border: 1px solid var(--gj-border); border-radius: var(--gj-radius); }
+.gj-symbolpicker-search { font: inherit; padding: 0.35em 0.5em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); }
+.gj-symbolpicker-chips { display: flex; flex-wrap: wrap; gap: 0.25em; }
+.gj-symbolpicker-chip { font: inherit; font-size: 0.8em; padding: 0.15em 0.6em; border: 1px solid var(--gj-border); border-radius: 999px; background: var(--gj-bg); color: var(--gj-text); cursor: pointer; }
+.gj-symbolpicker-chip-on { background: var(--gj-accent); border-color: var(--gj-accent); color: var(--gj-accent-contrast); }
+.gj-symbolpicker-body { max-height: 15em; overflow: auto; }
+.gj-symbolpicker-grid { display: grid; gap: 2px; }
+.gj-symbolpicker-recent { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 0.4em; padding-bottom: 0.4em; border-bottom: 1px solid var(--gj-border); }
+.gj-symbol { font: inherit; font-size: 1.15em; min-width: 1.8em; height: 1.8em; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--gj-text); cursor: pointer; }
+.gj-symbol:hover, .gj-symbol:focus { background: var(--gj-bg-muted); outline: none; }
+.gj-symbolpicker-empty { margin: 0.5em 0; color: var(--gj-muted); text-align: center; }
