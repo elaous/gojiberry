@@ -342,3 +342,23 @@ func TestCharCRDTRandomizedConvergence(t *testing.T) {
 		}
 	}
 }
+
+func TestSnapshotKeepsDeletesThatArrivedBeforeTheirInsert(t *testing.T) {
+	a := Timestamp{Counter: 1, Replica: "a"}
+	b := Timestamp{Counter: 2, Replica: "a"}
+	var text Text
+	text.apply(CharOp{Kind: CharInsert, ID: a, Value: 'r'})
+	// 'z' is deleted before it (or its origin) has arrived.
+	z := Timestamp{Counter: 4, Replica: "a"}
+	text.apply(CharOp{Kind: CharDelete, ID: z})
+	text.apply(CharOp{Kind: CharInsert, ID: z, Origin: b, Value: 'z'}) // its origin b is missing: parked
+	var copy Text
+	for _, op := range text.snapshotOps() {
+		copy.apply(op)
+	}
+	copy.apply(CharOp{Kind: CharInsert, ID: b, Origin: a, Value: 'q'}) // the origin finally arrives
+	text.apply(CharOp{Kind: CharInsert, ID: b, Origin: a, Value: 'q'})
+	if text.String() != copy.String() {
+		t.Fatalf("direct apply gives %q, via snapshot %q", text.String(), copy.String())
+	}
+}

@@ -410,3 +410,62 @@ func TestStreamEndsWhenRoleChanges(t *testing.T) {
 		t.Fatal("the stream stayed open after access was revoked")
 	}
 }
+
+func TestViewerCannotPushTheClockThroughCharOps(t *testing.T) {
+	server := charDoc("hub")
+	server.Put(crdt.Block{ID: "doc", Content: "hello"})
+	cl := charDoc("viewer")
+	cl.Apply(server.Snapshot()...)
+	op, _ := cl.Format("doc", 0, 3, "comment", "c1", false)
+	for i := range op.CharOps {
+		op.CharOps[i].ID.Counter = ^uint64(0) // the op's own and mark ids stay small
+	}
+	if err := authorize(server, Viewer, []crdt.Op{op}); err == nil {
+		t.Fatal("a char operation with a huge counter was accepted")
+	}
+	if server.Clock() > 1<<20 {
+		t.Fatalf("clock moved to %d", server.Clock())
+	}
+}
+
+func TestStopRefusesWritesAndEndsStreams(t *testing.T) {
+	h := New(Config{KeepAlive: 10 * time.Millisecond})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL+"/docs/d/events?replica=r", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	h.Stop()
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil || ctx.Err() != nil {
+		t.Fatalf("the stream should end once the hub stops: %v", err)
+	}
+	post, err := http.Post(srv.URL+"/docs/d/ops", "application/json", strings.NewReader("[]"))
+	if err != nil || post.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("a write after Stop: %v %v", post, err)
+	}
+}
+
+func TestExpiredPresenceIsAnnouncedGone(t *testing.T) {
+	now := time.Now()
+	h := New(Config{PresenceTTL: time.Second, KeepAlive: 10 * time.Millisecond})
+	h.now = func() time.Time { return now }
+	rm := &room{subs: map[*sub]bool{}, pres: map[string]presenceEntry{"idle": {p: Presence{Replica: "idle"}, seen: now.Add(-time.Minute)}}}
+	watcher := &sub{replica: "w", ch: make(chan event, 4)}
+	rm.subs[watcher] = true
+	rm.mu.Lock()
+	h.prunePresence(rm)
+	rm.mu.Unlock()
+	select {
+	case e := <-watcher.ch:
+		if !strings.Contains(string(e.data), `"gone":true`) {
+			t.Fatalf("%s", e.data)
+		}
+	default:
+		t.Fatal("no gone event for the expired cursor")
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"syscall/js"
 	"time"
@@ -68,7 +69,8 @@ func (a *BrowserAdapter) read(s js.Value, key string) (browserRecord, bool) {
 }
 
 // Load implements Adapter.
-func (a *BrowserAdapter) Load(_ context.Context, id string) (Document, error) {
+func (a *BrowserAdapter) Load(_ context.Context, id string) (doc Document, err error) {
+	defer recoverJS(&err)
 	s, err := a.storage()
 	if err != nil {
 		return Document{}, err
@@ -85,12 +87,12 @@ func (a *BrowserAdapter) Load(_ context.Context, id string) (Document, error) {
 }
 
 // List implements Adapter.
-func (a *BrowserAdapter) List(context.Context) ([]Meta, error) {
+func (a *BrowserAdapter) List(context.Context) (metas []Meta, err error) {
+	defer recoverJS(&err)
 	s, err := a.storage()
 	if err != nil {
 		return nil, err
 	}
-	var metas []Meta
 	for i := range s.Get("length").Int() {
 		key := s.Call("key", i).String()
 		id, ok := strings.CutPrefix(key, a.prefix)
@@ -105,7 +107,8 @@ func (a *BrowserAdapter) List(context.Context) ([]Meta, error) {
 }
 
 // Delete implements Adapter.
-func (a *BrowserAdapter) Delete(_ context.Context, id string) error {
+func (a *BrowserAdapter) Delete(_ context.Context, id string) (err error) {
+	defer recoverJS(&err)
 	s, err := a.storage()
 	if err != nil {
 		return err
@@ -115,4 +118,12 @@ func (a *BrowserAdapter) Delete(_ context.Context, id string) error {
 	}
 	s.Call("removeItem", a.prefix+id)
 	return nil
+}
+
+// recoverJS turns a JS exception (storage blocked, say) into an error instead
+// of letting it end the program.
+func recoverJS(err *error) {
+	if r := recover(); r != nil {
+		*err = fmt.Errorf("docstore: browser storage: %v", r)
+	}
 }
