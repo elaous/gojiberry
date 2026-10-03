@@ -1365,7 +1365,7 @@ func (f *TextFlow) Draw() {
 			if r.Background != "" {
 				p.SetFillStyle(r.Background)
 				p.FillRect(x, ln.Y, r.W, ln.H)
-			} else if r.Comment != "" && !f.commentResolved(r.Comment) {
+			} else if r.Comment != "" && f.commentsOpen(r.Comment) {
 				p.SetFillStyle(CommentHighlight)
 				p.FillRect(x, ln.Y, r.W, ln.H)
 			}

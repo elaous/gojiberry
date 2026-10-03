@@ -459,11 +459,41 @@ func (h *Hub) handleOps(w http.ResponseWriter, r *http.Request) {
 		denied(w, err.Error())
 		return
 	}
+	if !role.CanEdit() && h.cfg.User != nil {
+		// A commenter may only write comments and replies under their own name.
+		if err := commentAuthors(ops, h.cfg.User(r)); err != nil {
+			rm.mu.Unlock()
+			denied(w, err.Error())
+			return
+		}
+	}
 	rm.doc.Apply(ops...)
 	rm.broadcast(r.URL.Query().Get("replica"), jsonEvent("ops", ops))
 	h.markDirty(rm)
 	rm.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// commentAuthors checks that every new comment or reply record in ops names
+// user as its author (case-insensitively). With nobody signed in (user "")
+// there is nothing to check against.
+func commentAuthors(ops []crdt.Op, user string) error {
+	if user == "" {
+		return nil
+	}
+	for _, op := range ops {
+		id := op.Block.ID
+		if op.Block.Deleted || !(strings.HasPrefix(id, "comment:") || strings.HasPrefix(id, "reply:")) {
+			continue
+		}
+		var rec struct {
+			Author string `json:"author"`
+		}
+		if json.Unmarshal([]byte(op.Block.Content), &rec) != nil || !strings.EqualFold(rec.Author, user) {
+			return errors.New("a comment must be written under your own name")
+		}
+	}
+	return nil
 }
 
 const (

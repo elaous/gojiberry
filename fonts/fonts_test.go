@@ -223,3 +223,12 @@ func TestEscapePath(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestMultiFillsInAURLAnEarlierSourceLacked(t *testing.T) {
+	first := Static("first", Font{Family: "Lato", Variants: []Variant{{Weight: 400}}})
+	second := Static("second", Font{Family: "Lato", Variants: []Variant{{Weight: 400, URL: "https://f/lato.woff2"}}})
+	fonts, err := Multi(first, second).Fonts(context.Background())
+	if err != nil || len(fonts) != 1 || len(fonts[0].Variants) != 1 || fonts[0].Variants[0].URL != "https://f/lato.woff2" {
+		t.Fatalf("%+v %v", fonts, err)
+	}
+}

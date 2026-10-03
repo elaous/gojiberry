@@ -29,6 +29,31 @@ type Response struct {
 	Status int
 	OK     bool
 	body   js.Value
+
+	// done releases a timeout's timer and callback; the timeout covers the
+	// body as well as the headers, so it lives until the body is read or
+	// Close is called. timedOut says it fired.
+	done     func()
+	timedOut *bool
+	timeout  time.Duration
+	url      string
+}
+
+// Close releases what a bounded fetch holds. Text, JSON and Bytes do it
+// themselves; call Close when the body is not read.
+func (r *Response) Close() {
+	if r.done != nil {
+		r.done()
+		r.done = nil
+	}
+}
+
+// bodyErr names a timeout that cut the body short.
+func (r *Response) bodyErr(err error) error {
+	if err != nil && r.timedOut != nil && *r.timedOut {
+		return fmt.Errorf("fetch %s: timed out after %s", r.url, r.timeout)
+	}
+	return err
 }
 
 // Fetch wraps window.fetch(url) with a plain GET, blocking until the
@@ -120,21 +145,30 @@ func doFetch(url string, init map[string]any, timeout time.Duration) (*Response,
 	controller := js.Global().Get("AbortController").New()
 	init["signal"] = controller.Get("signal")
 
-	timedOut := false
+	timedOut := new(bool)
 	onTimeout := js.FuncOf(func(this js.Value, args []js.Value) any {
-		timedOut = true
+		*timedOut = true
 		controller.Call("abort")
 		return nil
 	})
-	defer onTimeout.Release()
 	timerID := js.Global().Call("setTimeout", onTimeout, timeout.Milliseconds())
-	defer js.Global().Call("clearTimeout", timerID)
+	release := func() {
+		js.Global().Call("clearTimeout", timerID)
+		onTimeout.Release()
+	}
 
 	resp, err := awaitFetch(js.Global().Call("fetch", url, js.ValueOf(init)))
-	if err != nil && timedOut {
-		return nil, fmt.Errorf("fetch %s: timed out after %s", url, timeout)
+	if err != nil {
+		release()
+		if *timedOut {
+			return nil, fmt.Errorf("fetch %s: timed out after %s", url, timeout)
+		}
+		return nil, err
 	}
-	return resp, err
+	// Keep the timer running: a server that sends the headers and then
+	// stalls the body must not hang Text, JSON or Bytes forever.
+	resp.done, resp.timedOut, resp.timeout, resp.url = release, timedOut, timeout, url
+	return resp, nil
 }
 
 func awaitFetch(promise js.Value) (*Response, error) {
@@ -147,9 +181,10 @@ func awaitFetch(promise js.Value) (*Response, error) {
 
 // Text reads the full response body as a string.
 func (r *Response) Text() (string, error) {
+	defer r.Close()
 	v, err := domrt.Await(r.body.Call("text"))
 	if err != nil {
-		return "", err
+		return "", r.bodyErr(err)
 	}
 	return v.String(), nil
 }
@@ -172,9 +207,10 @@ func (r *Response) JSON(v any) error {
 // File.ReadAsArrayBuffer (fileapi.go) already uses for the same
 // binary-safety reason.
 func (r *Response) Bytes() ([]byte, error) {
+	defer r.Close()
 	v, err := domrt.Await(r.body.Call("arrayBuffer"))
 	if err != nil {
-		return nil, err
+		return nil, r.bodyErr(err)
 	}
 	arr := js.Global().Get("Uint8Array").New(v)
 	out := make([]byte, arr.Length())
@@ -292,6 +328,11 @@ func (s *Socket) replace(slot *js.Func, prop string, fn func(args []js.Value)) {
 // Close closes the connection and releases its registered callbacks.
 func (s *Socket) Close() {
 	s.v.Call("close")
+	// close() is asynchronous: take the handlers off before releasing them,
+	// or the browser would call a released function when "close" fires.
+	for _, ev := range []string{"onmessage", "onclose", "onerror"} {
+		s.v.Set(ev, js.Null())
+	}
 	for _, f := range []*js.Func{&s.onMessage, &s.onClose, &s.onError} {
 		if !f.IsUndefined() {
 			f.Release()

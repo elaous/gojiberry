@@ -80,7 +80,8 @@ func (b browserLocal) Fonts(ctx context.Context) ([]Font, error) {
 // classifyStyle derives a CSS weight and italic flag from a style name
 // like "Bold Italic" or "Semibold".
 func classifyStyle(style string) (weight int, italic bool) {
-	s := strings.ToLower(style)
+	// "Extra Bold", "Semi-Bold" and "ExtraBold" are one name.
+	s := strings.NewReplacer(" ", "", "-", "", "_", "").Replace(strings.ToLower(style))
 	italic = strings.Contains(s, "italic") || strings.Contains(s, "oblique")
 	for _, w := range []struct {
 		word   string

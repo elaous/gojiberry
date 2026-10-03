@@ -2,7 +2,10 @@
 
 package transfer
 
-import "syscall/js"
+import (
+	"errors"
+	"syscall/js"
+)
 
 // Download hands data to the user as a file named filename.
 func Download(filename, mime string, data []byte) {
@@ -33,11 +36,24 @@ func PickFile(accept string, done func(name string, data []byte, err error)) {
 	in := js.Global().Get("document").Call("createElement", "input")
 	in.Set("type", "file")
 	in.Set("accept", accept)
-	var onChange, onData js.Func
+	var onChange, onCancel, onData, onFail js.Func
+	releaseAll := func() {
+		onChange.Release()
+		onCancel.Release()
+		if onData.Truthy() {
+			onData.Release()
+			onFail.Release()
+		}
+	}
+	// A dismissed chooser fires "cancel" (current browsers), not "change".
+	onCancel = js.FuncOf(func(js.Value, []js.Value) any {
+		releaseAll()
+		return nil
+	})
 	onChange = js.FuncOf(func(js.Value, []js.Value) any {
 		files := in.Get("files")
 		if files.Length() == 0 {
-			onChange.Release()
+			releaseAll()
 			return nil
 		}
 		file := files.Index(0)
@@ -45,14 +61,19 @@ func PickFile(accept string, done func(name string, data []byte, err error)) {
 			buf := js.Global().Get("Uint8Array").New(args[0])
 			data := make([]byte, buf.Length())
 			js.CopyBytesToGo(data, buf)
-			onChange.Release()
-			onData.Release()
+			releaseAll()
 			done(file.Get("name").String(), data, nil)
 			return nil
 		})
-		file.Call("arrayBuffer").Call("then", onData)
+		onFail = js.FuncOf(func(_ js.Value, args []js.Value) any {
+			releaseAll()
+			done(file.Get("name").String(), nil, errors.New("transfer: could not read the chosen file"))
+			return nil
+		})
+		file.Call("arrayBuffer").Call("then", onData, onFail)
 		return nil
 	})
+	in.Call("addEventListener", "cancel", onCancel)
 	in.Call("addEventListener", "change", onChange)
 	in.Call("click")
 }
