@@ -55,6 +55,18 @@ func (b *Bridge) desiredSide() map[string]string {
 	return out
 }
 
+// ownsSideRecord reports whether id is a kind of record this bridge models.
+// Others (a newer client's, or one that failed to parse here) are not ours to
+// delete just because the flow does not hold them.
+func ownsSideRecord(id string) bool {
+	for _, p := range []string{"comment:", "reply:", "note:", "style:"} {
+		if strings.HasPrefix(id, p) {
+			return true
+		}
+	}
+	return false
+}
+
 func (b *Bridge) pushSide() {
 	want := b.desiredSide()
 	if b.side.synced == nil {
@@ -72,7 +84,7 @@ func (b *Bridge) pushSide() {
 		}
 	}
 	for id := range b.side.synced {
-		if _, ok := want[id]; !ok {
+		if _, ok := want[id]; !ok && ownsSideRecord(id) {
 			b.Doc.Delete(id)
 			delete(b.side.synced, id)
 		}

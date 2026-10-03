@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/elaous/gojiberry/collab/wire"
@@ -84,6 +85,8 @@ type Hub struct {
 	mu    sync.Mutex
 	rooms map[string]*room
 	now   func() time.Time
+
+	closing atomic.Bool // set by Stop: no more writes or new streams
 }
 
 // New creates a hub.
@@ -159,7 +162,11 @@ func (h *Hub) room(ctx context.Context, id string) (*room, error) {
 	}
 	h.mu.Unlock()
 	if !ok {
-		rm.loadErr = h.load(ctx, rm)
+		// Not the first requester's context: its client leaving must not fail
+		// the load for everyone waiting on it.
+		lctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		rm.loadErr = h.load(lctx, rm)
+		cancel()
 		if rm.loadErr != nil {
 			h.mu.Lock()
 			delete(h.rooms, id) // the next request tries again
@@ -252,6 +259,10 @@ func (h *Hub) Flush() error {
 	h.mu.Unlock()
 	var errs []error
 	for _, rm := range rooms {
+		// A save already running clears the dirty flag before it has
+		// written; wait for it, or its edits would count as saved.
+		rm.saveMu.Lock()
+		rm.saveMu.Unlock() //nolint:staticcheck // waiting for the holder is the point
 		rm.mu.Lock()
 		dirty := rm.dirty
 		if rm.timer != nil {
@@ -263,6 +274,23 @@ func (h *Hub) Flush() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// Stop refuses further writes and new event streams and ends the open ones
+// (a graceful shutdown calls it first, so http.Server.Shutdown does not wait
+// on them and nothing is acknowledged after the final Close).
+func (h *Hub) Stop() {
+	h.closing.Store(true)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, rm := range h.rooms {
+		rm.mu.Lock()
+		for s := range rm.subs {
+			close(s.ch)
+			delete(rm.subs, s)
+		}
+		rm.mu.Unlock()
+	}
 }
 
 // Close saves everything and drops the event streams.
@@ -321,6 +349,10 @@ func (h *Hub) access(w http.ResponseWriter, r *http.Request) (*room, Role, bool)
 	id := r.PathValue("id")
 	if id == "" || strings.ContainsAny(id, "/\\") {
 		http.Error(w, "bad document id", http.StatusBadRequest)
+		return nil, "", false
+	}
+	if h.closing.Load() {
+		http.Error(w, "the hub is shutting down", http.StatusServiceUnavailable)
 		return nil, "", false
 	}
 	role := h.role(r, id)
@@ -431,6 +463,9 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 	// A Lamport counter far ahead of anything the document has seen would
 	// win every later conflict on what it touches.
 	limit := doc.Clock() + maxClockJump
+	if limit < doc.Clock() { // wrapped: the clock is already at the top
+		limit = ^uint64(0)
+	}
 	for _, op := range ops {
 		blk := op.Block
 		if op.TS.Counter > limit {
@@ -450,6 +485,10 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 			return errors.New(viewOnly)
 		}
 		for _, c := range op.CharOps {
+			// Every character operation advances the document's clock to its id.
+			if c.ID.Counter > limit {
+				return errors.New(viewOnly)
+			}
 			// A comment mark that sets a comment: an empty value would erase
 			// the comments already on the text.
 			if c.Kind != crdt.CharMark || c.Mark == nil || c.Mark.Key != "comment" || c.Mark.Value == "" || c.Mark.ID.Counter > limit || len(c.Mark.Value) > 256 {
@@ -458,6 +497,18 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 		}
 	}
 	return nil
+}
+
+// prunePresence drops cursors that have not been refreshed within the TTL and
+// tells the others they are gone (rm.mu held).
+func (h *Hub) prunePresence(rm *room) {
+	cutoff := h.now().Add(-h.cfg.PresenceTTL)
+	for id, e := range rm.pres {
+		if e.seen.Before(cutoff) {
+			delete(rm.pres, id)
+			rm.broadcast(id, jsonEvent("presence", Presence{Replica: id, Gone: true}))
+		}
+	}
 }
 
 func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
@@ -480,12 +531,7 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 		p.User = h.cfg.User(r)
 	}
 	rm.mu.Lock()
-	cutoff := h.now().Add(-h.cfg.PresenceTTL)
-	for id, e := range rm.pres {
-		if e.seen.Before(cutoff) {
-			delete(rm.pres, id)
-		}
-	}
+	h.prunePresence(rm)
 	if _, known := rm.pres[p.Replica]; !known && len(rm.pres) >= h.cfg.MaxPeers {
 		rm.mu.Unlock()
 		http.Error(w, "too many people on this document", http.StatusTooManyRequests)
@@ -514,12 +560,9 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	rm.mu.Lock()
 	snapshot := rm.doc.Snapshot()
 	var peers []Presence
-	cutoff := h.now().Add(-h.cfg.PresenceTTL)
+	h.prunePresence(rm)
 	for id, e := range rm.pres {
-		switch {
-		case e.seen.Before(cutoff):
-			delete(rm.pres, id)
-		case id != replica:
+		if id != replica {
 			peers = append(peers, e.p)
 		}
 	}
@@ -531,10 +574,10 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 			delete(rm.subs, s)
 		}
 		if replica != "" {
-			if _, had := rm.pres[replica]; had {
-				delete(rm.pres, replica)
-				rm.broadcast(replica, jsonEvent("presence", Presence{Replica: replica, Gone: true}))
-			}
+			// Always say so: an idle replica's cursor may have been pruned
+			// already, and its peers would otherwise keep the ghost.
+			delete(rm.pres, replica)
+			rm.broadcast(replica, jsonEvent("presence", Presence{Replica: replica, Gone: true}))
 		}
 		rm.mu.Unlock()
 	}()

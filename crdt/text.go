@@ -1,5 +1,7 @@
 package crdt
 
+import "sort"
+
 // MergeStrategy selects how Doc.Apply resolves two replicas writing to
 // the same block's Content concurrently. The zero value, MergeLWW, is
 // this package's original behavior and NewDoc's default.
@@ -279,8 +281,23 @@ func (t *Text) snapshotOps() []CharOp {
 		ops = append(ops, CharOp{Kind: CharMark, Mark: &m})
 	}
 	// Inserts still waiting for their origin travel too, so a replica
-	// onboarded from this one ends up in the same state.
+	// onboarded from this one ends up in the same state -- and so do the
+	// deletes that arrived before their insert did, or the character would
+	// come back when it is finally placed.
 	ops = append(ops, t.pending...)
+	var early []Timestamp
+	for id := range t.tombstoned {
+		early = append(early, id)
+	}
+	sort.Slice(early, func(i, j int) bool {
+		if early[i].Counter != early[j].Counter {
+			return early[i].Counter < early[j].Counter
+		}
+		return early[i].Replica < early[j].Replica
+	})
+	for _, id := range early {
+		ops = append(ops, CharOp{Kind: CharDelete, ID: id})
+	}
 	return ops
 }
 

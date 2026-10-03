@@ -48,21 +48,23 @@ func main() {
 	if addr == "" {
 		addr = ":8081"
 	}
-	srv := &http.Server{Addr: addr, Handler: h.Handler()}
+	srv := &http.Server{Addr: addr, Handler: h.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		stop := make(chan os.Signal, 1)
 		signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 		<-stop
-		// Save first, and end the event streams (Shutdown would wait for
-		// them forever); then let the other requests finish.
-		if err := h.Close(); err != nil {
-			log.Printf("collabhub: saving on exit: %v", err)
-		}
+		// Refuse writes and end the event streams first (Shutdown would wait
+		// for them forever), let the requests in flight finish, and only then
+		// save: nothing can be acknowledged after the final save.
+		h.Stop()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(ctx)
+		if err := h.Close(); err != nil {
+			log.Printf("collabhub: saving on exit: %v", err)
+		}
 	}()
 	log.Printf("collabhub: listening on %s (backend=%s)", addr, cfg.Backend)
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {

@@ -105,7 +105,9 @@ func (s *Session) Refresh(ctx context.Context) {
 	s.changed()
 	list, err := s.Saver.List(ctx, target)
 	s.mu.Lock()
-	if err == nil {
+	// A slow answer for a target the user has since left must not replace
+	// the list of the one they are looking at.
+	if err == nil && s.target == target {
 		s.entries = list
 	}
 	s.mu.Unlock()
