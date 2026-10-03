@@ -578,7 +578,7 @@ func main() {
 // several).
 func liveLoop(u *ui, state *State, stage *canvas.Stage, renderCanvas, redraw, renderUI func(), flow *canvas.TextFlow) {
 	var lastCursor string
-	var lastSig string
+	var lastSig, lastCursors string
 	for range time.Tick(40 * time.Millisecond) {
 		s := u.live
 		changed := s.Poll()
@@ -597,11 +597,17 @@ func liveLoop(u *ui, state *State, stage *canvas.Stage, renderCanvas, redraw, re
 			s.PublishCursor()
 		}
 		sig := fmt.Sprint(len(s.Peers), s.Status, s.Pending(), len(flow.RemoteCursors), s.Role)
-		if changed || sig != lastSig {
-			lastSig = sig
+		// Where the others' cursors are only matters to the canvas: redraw
+		// when one moved, not on every tick (three browsers redrawing 25
+		// times a second starve each other's event loops).
+		cursors := fmt.Sprint(flow.RemoteCursors)
+		switch {
+		case changed || sig != lastSig:
+			lastSig, lastCursors = sig, cursors
 			redraw()
 			renderUI()
-		} else if len(flow.RemoteCursors) > 0 {
+		case cursors != lastCursors:
+			lastCursors = cursors
 			redraw()
 		}
 	}
