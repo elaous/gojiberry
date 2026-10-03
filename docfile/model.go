@@ -400,8 +400,18 @@ func (d Document) Apply(f *canvas.TextFlow) {
 	f.Source, f.Transform, f.Text = "", nil, ""
 	f.Items = ToItems(d.Content)
 	f.Styles = ToStyles(d.Styles)
-	f.Comments = ToComments(d.Comments)
-	f.Footnotes = ToFootnotes(d.Footnotes)
+	// Keep the sets themselves when there are some (something may hold them,
+	// and a shared document gave them an ID prefix); fill them in place.
+	if f.Comments != nil {
+		f.Comments.ReplaceAll(ToComments(d.Comments).List())
+	} else {
+		f.Comments = ToComments(d.Comments)
+	}
+	if f.Footnotes != nil {
+		f.Footnotes.ReplaceAll(ToFootnotes(d.Footnotes).List())
+	} else {
+		f.Footnotes = ToFootnotes(d.Footnotes)
+	}
 }
 
 // Get returns the value of a Meta key.

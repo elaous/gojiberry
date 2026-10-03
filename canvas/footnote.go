@@ -17,6 +17,9 @@ type Footnote struct {
 
 // FootnoteSet holds a document's footnotes.
 type FootnoteSet struct {
+	// IDPrefix is CommentSet.IDPrefix's counterpart for footnote IDs.
+	IDPrefix string
+
 	list []Footnote
 	next int
 }
@@ -36,7 +39,7 @@ func (s *FootnoteSet) Add(n Footnote) Footnote {
 	if n.ID == "" {
 		for {
 			s.next++
-			n.ID = "n" + strconv.Itoa(s.next)
+			n.ID = s.IDPrefix + "n" + strconv.Itoa(s.next)
 			if _, taken := s.Get(n.ID); !taken {
 				break
 			}

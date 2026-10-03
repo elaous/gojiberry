@@ -187,3 +187,10 @@ func TestScrollViewForwardsCommandsAndClipboard(t *testing.T) {
 		t.Fatal("paste")
 	}
 }
+
+func TestCommonFormatDropsPlaceMarks(t *testing.T) {
+	got := CommonFormat(Format{FontWeight: 700, Comment: "c1", Bookmark: "b", Index: "i"})
+	if got.Comment != "" || got.Bookmark != "" || got.Index != "" || got.FontWeight != 700 {
+		t.Fatalf("%+v", got)
+	}
+}

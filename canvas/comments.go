@@ -37,6 +37,11 @@ type Comment struct {
 // CommentSet holds a document's comments. A TextFlow's Comments field is
 // one; share it with the DOM side to list them.
 type CommentSet struct {
+	// IDPrefix, when set, starts every ID Add makes ("ana-c3"). Replicas of a
+	// shared document each use their own, so two people commenting at once
+	// never mint the same ID.
+	IDPrefix string
+
 	list []Comment
 	next int
 }
@@ -56,7 +61,7 @@ func (s *CommentSet) Add(c Comment) Comment {
 	if c.ID == "" {
 		for {
 			s.next++
-			c.ID = "c" + strconv.Itoa(s.next)
+			c.ID = s.IDPrefix + "c" + strconv.Itoa(s.next)
 			if _, taken := s.Get(c.ID); !taken {
 				break
 			}
@@ -151,8 +156,12 @@ var (
 	reEmail  = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+`)
 	reHandle = regexp.MustCompile(`(^|[^\w@.+-])(@[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)`)
 	reLinkMD = regexp.MustCompile(`!?\[([^\]]*)\]\([^)]*\)`)
-	reMarks  = regexp.MustCompile("(?m)^\\s{0,3}(?:#{1,6}\\s+|>\\s?|[-*+]\\s+(?:\\[[ xX]\\]\\s+)?|\\d+[.)]\\s+)|```[^\\n]*|[*_~`]+")
-	reSpaces = regexp.MustCompile(`\s+`)
+	reMarks  = regexp.MustCompile("(?m)^\\s{0,3}(?:#{1,6}\\s+|>\\s?|[-*+]\\s+(?:\\[[ xX]\\]\\s+)?|\\d+[.)]\\s+)|```[^\\n]*|[~`]+")
+	// Emphasis markers are only syntax at the edge of a word: snake_case and
+	// 2*3 keep theirs.
+	reEmphLead  = regexp.MustCompile(`(^|[^\w*_])[*_]+`)
+	reEmphTrail = regexp.MustCompile(`[*_]+([^\w*_]|$)`)
+	reSpaces    = regexp.MustCompile(`\s+`)
 )
 
 // Mentions finds the @usernames and e-mail addresses in text, in order.
@@ -188,7 +197,10 @@ func Mentions(text string) []Mention {
 // links (their text stays).
 func StripMarkdown(text string) string {
 	text = reLinkMD.ReplaceAllString(text, "$1")
-	return strings.TrimSpace(reMarks.ReplaceAllString(text, ""))
+	text = reMarks.ReplaceAllString(text, "")
+	text = reEmphLead.ReplaceAllString(text, "$1")
+	text = reEmphTrail.ReplaceAllString(text, "$1")
+	return strings.TrimSpace(text)
 }
 
 // CommentSummary is the plain one-line form of a comment's Markdown for a
