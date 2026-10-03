@@ -341,7 +341,7 @@ run(async () => {
   s = await d.state();
   assert(fontHits === 1, 'the font file was fetched once, when the text used it: ' + fontHits);
   assert(s.fontLog.some((l) => l.includes('Lazy Serif 400: downloaded into the store')), 'the library logged the download: ' + s.fontLog);
-  assert(s.fontsAdded.includes('Lazy Serif=fonts/Lazy Serif/400-n.ttf'), 'its store key is recorded: ' + s.fontsAdded);
+  assert(s.fontsAdded.some((k) => /^Lazy Serif=fonts\/Lazy Serif\/400-n-[0-9a-f]{8}\.ttf$/.test(k)), 'its store key is recorded: ' + s.fontsAdded);
   if (realFont) {
     await page.waitForFunction(() => Array.from(document.fonts).some((f) => f.family.replace(/"/g, '') === 'Lazy Serif' && f.status === 'loaded'), null, { timeout: 5000 });
     assert(true, 'the browser loaded the downloaded font');
@@ -369,7 +369,7 @@ run(async () => {
   await page.waitForSelector('.gj-saver-entry[data-key="notes.json"]');
   const saved = JSON.parse(await page.evaluate(() => localStorage.getItem('showcase:notes.json')).then((r) => Buffer.from(JSON.parse(r).d, 'base64').toString()));
   assert(saved.title === 'Quarterly report' && saved.content.length > 0, 'localStorage holds the document as JSON: ' + saved.title);
-  assert(saved.fonts.some((f) => f.family === 'Lazy Serif' && f.variants[0].key === 'fonts/Lazy Serif/400-n.ttf'), 'the saved document records the font and where its file is');
+  assert(saved.fonts.some((f) => f.family === 'Lazy Serif' && /^fonts\/Lazy Serif\/400-n-[0-9a-f]{8}\.ttf$/.test(f.variants[0].key)), 'the saved document records the font and where its file is');
   assert(saved.content.some((i) => i.chars && i.chars.format.fontFamily && i.chars.format.fontFamily.includes('Lazy Serif')), 'text in the font is saved with its family');
 
   // Open: change the text, open the saved JSON, the text is back.

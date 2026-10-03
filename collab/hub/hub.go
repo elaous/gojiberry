@@ -483,7 +483,7 @@ func commentAuthors(ops []crdt.Op, user string) error {
 	}
 	for _, op := range ops {
 		id := op.Block.ID
-		if op.Block.Deleted || !(strings.HasPrefix(id, "comment:") || strings.HasPrefix(id, "reply:")) {
+		if op.Block.Deleted || (!strings.HasPrefix(id, "comment:") && !strings.HasPrefix(id, "reply:")) {
 			continue
 		}
 		var rec struct {

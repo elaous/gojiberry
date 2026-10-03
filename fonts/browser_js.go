@@ -94,3 +94,5 @@ func classifyStyle(style string) (weight int, italic bool) {
 	}
 	return 400, italic
 }
+
+func hasVariant(vs []Variant, v Variant) bool { return variantIndex(vs, v) >= 0 }
