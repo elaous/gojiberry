@@ -387,3 +387,44 @@ func TestStripMarkdownKeepsIdentifiersAndAddresses(t *testing.T) {
 		}
 	}
 }
+
+func TestUndoRestoresCommentRecordsWithTheirTags(t *testing.T) {
+	f, st := editFlow(t, 0, Chars{Text: "hello world"})
+	st.Prompt = func(string, string) (string, bool) { return "note", true }
+	f.SetCursors([]Cursor{{Anchor: 0, Caret: 5}})
+	if !st.RunCommand(CmdCommentAdd) || f.Comments.Len() != 1 {
+		t.Fatal("comment not added")
+	}
+	if !st.RunCommand(CmdUndo) || f.Comments.Len() != 0 || len(f.CommentExcerpts()) != 0 {
+		t.Fatalf("undoing the add left %d records, %v", f.Comments.Len(), f.CommentExcerpts())
+	}
+	if !st.RunCommand(CmdRedo) || f.Comments.Len() != 1 || len(f.CommentExcerpts()) != 1 {
+		t.Fatal("redo did not bring the comment back")
+	}
+	f.SetCursors([]Cursor{{Anchor: 2, Caret: 2}})
+	if !st.RunCommand(CmdCommentDelete) || f.Comments.Len() != 0 {
+		t.Fatal("delete failed")
+	}
+	if !st.RunCommand(CmdUndo) || f.Comments.Len() != 1 || len(f.CommentExcerpts()) != 1 {
+		t.Fatalf("undoing the delete lost the record: %d, %v", f.Comments.Len(), f.CommentExcerpts())
+	}
+}
+
+func TestSelectedTextToleratesAStaleSelection(t *testing.T) {
+	f, _ := editFlow(t, 0, Chars{Text: "short"})
+	f.SetSelection(50, 60)
+	if got := f.SelectedText(); got != "" {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestOpenLinkCommandRefusesUnsafeURLs(t *testing.T) {
+	f, st := editFlow(t, 0, Chars{Text: "x", Format: Format{Link: "javascript:alert(1)"}})
+	opened := ""
+	st.OpenLink = func(u string) { opened = u }
+	f.SetCursors([]Cursor{{Anchor: 0, Caret: 0}})
+	st.RunCommand(CmdOpenLink)
+	if opened != "" {
+		t.Fatalf("opened %q", opened)
+	}
+}

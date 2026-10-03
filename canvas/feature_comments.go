@@ -1,6 +1,9 @@
 package canvas
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // CommentHost is implemented by targets that hold comments (a TextFlow).
 type CommentHost interface {
@@ -11,6 +14,10 @@ type CommentHost interface {
 }
 
 var _ CommentHost = (*TextFlow)(nil)
+
+// BeginEdit makes the content editable and starts its undo history, before a
+// change that is made in two steps (a comment record, then its tag).
+func (f *TextFlow) BeginEdit() { f.materialize() }
 
 // CommentSet implements CommentHost.
 func (f *TextFlow) CommentSet() *CommentSet {
@@ -60,8 +67,19 @@ func (Comments) Install(r *Registry) {
 			return false
 		}
 		from, to := cur.Range()
+		// Start the target's history before the record is added, so that undo
+		// takes the record away together with its tag.
+		if b, ok := c.Target.(interface{ BeginEdit() }); ok {
+			b.BeginEdit()
+		}
 		cm := h.CommentSet().Add(Comment{Author: h.CommentAuthor(), Text: text, Created: time.Now()})
 		tagComment(c.Target, from, to, cm.ID)
+		// If nothing took the tag (only an object was selected, or the target
+		// refused the edit) the comment would be anchored to nothing.
+		if !slices.Contains(charComments(c.Target.Slice(0, len([]rune(c.Target.EditText())))), cm.ID) {
+			h.CommentSet().Delete(cm.ID)
+			return false
+		}
 		return true
 	})
 	r.AddCommand(CmdCommentEdit, "Edit comment", "Mod+Alt+Shift+N", func(c *CommandContext) bool {

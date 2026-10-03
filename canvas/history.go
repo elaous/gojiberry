@@ -103,14 +103,25 @@ func (h *snapshotHistory[S]) forward(cur S) (S, bool) {
 type flowSnap struct {
 	items   []Item
 	cursors []Cursor
+	// comments are the comment records the items' comment marks refer to:
+	// undoing a tag without its record (or the reverse) would leave one
+	// without the other.
+	comments []Comment
 }
 
 func (f *TextFlow) histSnap() flowSnap {
-	return flowSnap{items: slices.Clone(f.Items), cursors: f.Cursors()}
+	s := flowSnap{items: slices.Clone(f.Items), cursors: f.Cursors()}
+	if f.Comments != nil {
+		s.comments = f.Comments.List()
+	}
+	return s
 }
 
 func (f *TextFlow) histRestore(s flowSnap) {
 	f.Items = slices.Clone(s.items)
+	if f.Comments != nil {
+		f.Comments.ReplaceAll(s.comments)
+	}
 	f.SetCursors(s.cursors)
 	f.derivedOK = false
 	f.notify()

@@ -303,6 +303,9 @@ func FromItems(items []canvas.Item) []Item {
 			case *canvas.Rule:
 				out = append(out, Item{Rule: &RuleItem{Color: o.Color, Thickness: o.Thickness}})
 			case *canvas.TableObject:
+				if o == nil || o.View == nil || o.View.Table == nil {
+					continue // nothing to save
+				}
 				t := &TableItem{}
 				for _, row := range o.View.Table.Cells {
 					t.Rows = append(t.Rows, TableRow{Cells: append([]string(nil), row...)})

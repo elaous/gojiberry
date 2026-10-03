@@ -784,6 +784,7 @@ func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *c
 			OnEdit: func(e canvas.FootnoteEntry) {
 				if v := js.Global().Call("prompt", "Footnote", e.Text); !v.IsNull() && v.String() != "" {
 					fl.FootnoteSet().Add(canvas.Footnote{ID: e.ID, Text: v.String()})
+					fl.Touch() // tell a shared document about it
 					redraw()
 					renderUI()
 				}
