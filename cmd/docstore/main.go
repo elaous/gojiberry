@@ -27,7 +27,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
-	srv := docstore.NewServer(adapter, cfg.Backend).WithAuth(authManager).WithGuard(cfg.Guard)
+	srv := docstore.NewServer(adapter, cfg.Backend).WithAuth(authManager).WithGuard(cfg.Guard).WithRequireACL(cfg.RequireACL)
 	if authManager != nil {
 		log.Printf("docstore: sign-in enabled (%d provider(s))", len(cfg.Auth.Providers))
 	}
