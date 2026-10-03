@@ -354,6 +354,8 @@ func (r *Renderer) Layout(gtx layout.Context, th *material.Theme, n gox.Node) la
 		return material.Label(th, th.TextSize, n.Text).Layout(gtx)
 	case gox.KindFragment:
 		return r.layoutChildren(gtx, th, n.Children, layout.Vertical, layout.Start)
+	case gox.KindHost:
+		return layout.Dimensions{}
 	case gox.KindRaw:
 		// No DOM to inject raw HTML into on a native target; render
 		// nothing rather than the markup as literal text.

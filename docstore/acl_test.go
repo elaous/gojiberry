@@ -330,6 +330,16 @@ func TestACLKeyspaceHiddenFromListAndDirectAccess(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("direct GET of a reserved id status = %d, want 400", rec.Code)
 	}
+
+	// The shared-editing hub keeps its documents under collab:, behind its
+	// own access control; they are not reachable here.
+	for _, method := range []string{http.MethodGet, http.MethodPut} {
+		rec = httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(method, "/docs/collab:doc1", strings.NewReader("x")))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s of a hub document status = %d, want 400", method, rec.Code)
+		}
+	}
 }
 
 func TestACLGetForUnsharedDocumentIsEmpty(t *testing.T) {
@@ -472,5 +482,14 @@ func TestGuardTokenUsesItsOwnHeader(t *testing.T) {
 	}
 	if do("", "") != http.StatusUnauthorized || do("Authorization", "Bearer tok") != http.StatusUnauthorized || do("X-Gojiberry-Token", "tok") != http.StatusOK {
 		t.Fatal("the guard token travels in its own header, leaving Authorization to sign-in")
+	}
+}
+
+func TestACLRoleOf(t *testing.T) {
+	a := ACL{Owner: "o@x", Grants: map[string]Role{"e@x": RoleEditor, "v@x": RoleViewer}}
+	for email, want := range map[string]string{"o@x": "owner", "e@x": "editor", "v@x": "viewer", "n@x": "", "": ""} {
+		if got := a.RoleOf(email); got != want {
+			t.Errorf("RoleOf(%q) = %q, want %q", email, got, want)
+		}
 	}
 }

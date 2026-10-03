@@ -16,7 +16,7 @@ func TestPageRendersConfigTitleAndCSS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `<html><head><title>resource-imports-demo</title><style>` + string(css) + `</style></head><body><h1>gojiberry</h1></body></html>`
+	want := `<html><head><title>resource-imports-demo</title><style data-gox-style="github.com/elaous/gojiberry/examples/resource-imports-demo/style.css">` + string(css) + `</style></head><body><h1>gojiberry</h1></body></html>`
 	if got != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}

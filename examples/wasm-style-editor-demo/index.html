@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gojiberry style editor</title>
+  <script src="wasm_exec.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 1em; max-width: 640px; }
+    #state { font-family: monospace; font-size: 12px; color: #6b7280; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h1>Style editor</h1>
+  <p>Pick a font, size, weight and decorations; the preview and the <code>canvas.Format</code> below follow.</p>
+  <div id="app"></div>
+  <p id="state">(pending)</p>
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((r) => go.run(r.instance));
+  </script>
+</body>
+</html>

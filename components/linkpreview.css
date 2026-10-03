@@ -1,0 +1,17 @@
+/* LinkPreview stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-linkpreview-wrap { position: relative; display: inline-block; }
+.gj-linkpreview {
+  display: flex; gap: 0.7em; max-width: 24em; padding: 0.6em; text-decoration: none; color: var(--gj-text);
+  background: var(--gj-bg); border: 1px solid var(--gj-border); border-radius: var(--gj-radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.gj-linkpreview:hover { border-color: var(--gj-accent); }
+.gj-linkpreview-image { width: 4.5em; height: 4.5em; object-fit: cover; border-radius: 4px; flex: none; }
+.gj-linkpreview-text { display: flex; flex-direction: column; gap: 0.15em; min-width: 0; }
+.gj-linkpreview-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gj-linkpreview-description { font-size: 0.85em; color: var(--gj-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.gj-linkpreview-site { font-size: 0.75em; color: var(--gj-muted); }
+.gj-linkpreview-loading .gj-linkpreview-title { color: var(--gj-muted); }
+.gj-linkpreview-close { position: absolute; top: 0.2em; right: 0.3em; border: 0; background: none; color: var(--gj-muted); cursor: pointer; font-size: 1.1em; line-height: 1; }

@@ -1,0 +1,14 @@
+/* Presence stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-presence { display: flex; align-items: center; gap: 0.7em; flex-wrap: wrap; }
+.gj-presence-people { display: inline-flex; }
+.gj-presence-avatar { width: 1.9em; height: 1.9em; border-radius: 50%; margin-left: -0.35em; border: 2px solid var(--gj-bg); color: #fff; font-size: 0.75em; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+.gj-presence-avatar:first-child { margin-left: 0; }
+.gj-presence-self { box-shadow: 0 0 0 1px var(--gj-text); }
+.gj-presence-status { display: inline-flex; align-items: center; gap: 0.4em; font-size: 0.8em; color: var(--gj-muted); }
+.gj-presence-dot { width: 0.6em; height: 0.6em; border-radius: 50%; background: #9ca3af; }
+.gj-presence-online .gj-presence-dot { background: #1f9d55; }
+.gj-presence-connecting .gj-presence-dot { background: #e0a800; }
+.gj-presence-offline .gj-presence-dot { background: #c01c28; }
+.gj-presence-badge { font-size: 0.75em; padding: 0.1em 0.6em; border-radius: 999px; background: var(--gj-bg-muted); color: var(--gj-muted); }

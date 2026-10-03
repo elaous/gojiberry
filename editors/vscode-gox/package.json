@@ -1,18 +1,25 @@
 {
   "name": "gox-language",
   "displayName": "gox",
-  "description": "Syntax highlighting for .gox files (Go with JSX-like tags), plus //language=-annotated embedded-language strings in any .go file",
-  "version": "0.1.0",
+  "description": "Syntax highlighting for .gox files (Go with JSX-like tags, generic component tags, boolean attributes and resource imports such as _ \"module/path/styles.css\"), plus //language=-annotated embedded-language strings in any .go file",
+  "version": "0.2.0",
   "engines": {
     "vscode": "^1.80.0"
   },
-  "categories": ["Programming Languages"],
+  "categories": [
+    "Programming Languages"
+  ],
   "contributes": {
     "languages": [
       {
         "id": "gox",
-        "aliases": ["gox", "Gojiberry"],
-        "extensions": [".gox"],
+        "aliases": [
+          "gox",
+          "Gojiberry"
+        ],
+        "extensions": [
+          ".gox"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -25,12 +32,24 @@
       {
         "scopeName": "gox.tags.injection",
         "path": "./syntaxes/gox-tags.tmLanguage.json",
-        "injectTo": ["source.gox"]
+        "injectTo": [
+          "source.gox"
+        ]
+      },
+      {
+        "scopeName": "gox.imports.injection",
+        "path": "./syntaxes/gox-imports.tmLanguage.json",
+        "injectTo": [
+          "source.gox"
+        ]
       },
       {
         "scopeName": "gox.embedded-highlight.injection",
         "path": "./syntaxes/embedded-highlight.tmLanguage.json",
-        "injectTo": ["source.go", "source.gox"]
+        "injectTo": [
+          "source.go",
+          "source.gox"
+        ]
       }
     ]
   }

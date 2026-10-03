@@ -35,6 +35,19 @@ type ACL struct {
 	Grants map[string]Role `json:"grants,omitempty"`
 }
 
+// RoleOf returns the role name email has on this document: "owner",
+// "editor" or "viewer", or "" for no access. These are the names
+// canvas.Role uses, so a client can pass the answer to canvas.ParseRole.
+func (a ACL) RoleOf(email string) string {
+	switch email {
+	case "":
+		return ""
+	case a.Owner:
+		return "owner"
+	}
+	return string(a.Grants[email])
+}
+
 // canRead reports whether email (the empty string for an anonymous/
 // unauthenticated caller) may GET this document -- the Owner, or
 // anyone with either Role.
@@ -233,5 +246,7 @@ func writeACLJSON(w http.ResponseWriter, acl ACL) {
 // checked by handleDoc so a client can never PUT/GET/DELETE a real
 // document directly into/out of that space.
 func isReservedDocID(id string) bool {
-	return strings.HasPrefix(id, aclKeyPrefix)
+	// "collab:" is the shared-editing hub's own keyspace; its access
+	// control is the hub's, so these keys must not be reachable here.
+	return strings.HasPrefix(id, aclKeyPrefix) || strings.HasPrefix(id, "collab:")
 }

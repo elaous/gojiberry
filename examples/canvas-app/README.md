@@ -48,15 +48,15 @@ the main module.
   `make test`, `make db-status`, `make db-diff name=...`, and `make
   clean` cover the rest.
 - **`canvas/pages.gox`** -- `HomePage` (list + "new document" form) and
-  `CanvasPage` (the textarea) as gox SSR components. Both are annotated
-  with `// @stylesheets static/style.css` (gojiberry's
-  `internal/transpile/page_metadata.go`), which reads
-  `canvas/static/style.css` and wraps each function's return in
-  `gox.Document{Title, Head, Body}.Render()` (`gox/document.go`)
-  automatically -- neither page hand-rolls
-  `<html><head>...</head><body>...</body></html>` or its own CSS
-  binding. Both fall back to a shared `DefaultTitle` package var since
-  neither needs a title that varies per document. `CanvasPage` is also
+  `CanvasPage` (the textarea) as gox SSR components. The file imports
+  its stylesheet with `_ ".../canvas/static/style.css"` (a blank import,
+  written like a Go package import: gojiberry's `loader_css.go` registers
+  it with the program) and both pages are annotated `// @title gox-canvas`
+  (`internal/transpile/page_metadata.go`), which wraps each function's
+  return in `gox.Document{Title, Head, Body}.Render()` (`gox/document.go`)
+  -- which puts the registered stylesheet in the head -- so neither page
+  hand-rolls `<html><head>...</head><body>...</body></html>` or its own
+  CSS binding. `CanvasPage` is also
   annotated `// @wasm /static/main.wasm`, which appends the
   `wasm_exec.js` loader and the `WebAssembly.instantiateStreaming`
   bootstrap script after its own content automatically -- it doesn't

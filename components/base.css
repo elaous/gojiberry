@@ -3,10 +3,10 @@
    component's own stylesheet reuses (gj-spin: Loader and Progress's
    circle-indeterminate variant; gj-progress-indeterminate: Progress's
    linear-indeterminate variant and FileUploader's indeterminate
-   progress bar). Load this once alongside whichever per-component
-   .css files you actually use (see the root README), e.g.
-   @stylesheets ../../components/base.css
-   @stylesheets ../../components/button.css
+   progress bar). Importing the components package registers this and
+   every per-component .css file (components/styles.gox), so Document and
+   domrt.Mount include them; to pick files yourself, import them like a
+   package: import _ "github.com/elaous/gojiberry/components/base.css"
 */
 
 :root, .gj-theme-light {

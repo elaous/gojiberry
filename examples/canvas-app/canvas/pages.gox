@@ -4,7 +4,10 @@
 // only exists in one place.
 package canvas
 
-import "github.com/elaous/gojiberry/gox"
+import (
+	_ "github.com/elaous/gojiberry/examples/canvas-app/canvas/static/style.css"
+	"github.com/elaous/gojiberry/gox"
+)
 
 // DefaultTitle is what an annotated page falls back to when it
 // doesn't set its own @title (see internal/transpile/page_metadata.go
@@ -20,7 +23,7 @@ type HomePageProps struct {
 // HomePage lists existing documents and offers a way to start a new
 // one.
 //
-// @stylesheets static/style.css
+// @title gox-canvas
 func HomePage(props HomePageProps) gox.Node {
 	return <>
 		<h1>gox-canvas</h1>
@@ -56,7 +59,7 @@ type CanvasPageProps struct {
 // write either <script> tag itself.
 //
 // @wasm /static/main.wasm
-// @stylesheets static/style.css
+// @title gox-canvas
 func CanvasPage(props CanvasPageProps) gox.Node {
 	return <>
 		<p><a href="/">Back</a></p>

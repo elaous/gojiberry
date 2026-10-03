@@ -4,7 +4,7 @@
 # one of these four service Dockerfiles shares, and
 # ../../docker-compose.yml/docs/README.md for how this fits into the
 # full stack.
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
 # ca-certificates: with GOJIBERRY_TRANSLATESERVER_DEEPL_KEY configured,
 # this proxies to DeepL's own API over TLS -- without this the request
 # fails cert verification. Harmless with no key configured either

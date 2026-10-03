@@ -1,0 +1,13 @@
+/* DocumentView stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-docview { display: flex; flex-direction: column; min-height: 100%; background: var(--gj-bg-muted); color: var(--gj-text); }
+.gj-docview-top { display: flex; align-items: center; gap: 1em; padding: 0.4em 0.9em; background: var(--gj-bg); border-bottom: 1px solid var(--gj-border); }
+.gj-docview-title { font-size: 1.1em; font-weight: 600; }
+.gj-docview-title-edit { font-family: inherit; color: inherit; background: none; border: 1px solid transparent; border-radius: var(--gj-radius); padding: 0.1em 0.4em; }
+.gj-docview-title-edit:hover, .gj-docview-title-edit:focus { border-color: var(--gj-border); }
+.gj-docview-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4em; padding: 0.4em 0.9em; background: var(--gj-bg); border-bottom: 1px solid var(--gj-border); }
+.gj-docview-main { display: flex; flex: 1; min-height: 0; }
+.gj-docview-desk { flex: 1; overflow: auto; display: flex; justify-content: center; padding: 1em; }
+.gj-docview-sidebar { width: 22em; flex: none; overflow: auto; padding: 0.8em; background: var(--gj-bg); border-left: 1px solid var(--gj-border); }
+.gj-docview-status { padding: 0.25em 0.9em; font-size: 0.8em; color: var(--gj-muted); background: var(--gj-bg); border-top: 1px solid var(--gj-border); }

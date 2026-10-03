@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gojiberry canvas table</title>
+  <script src="wasm_exec.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 1em; }
+    #stage { display: block; }
+    .hidden-input { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; }
+    #state { font-family: monospace; font-size: 12px; color: #6b7280; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h1>Canvas table</h1>
+  <p>Starts in view mode (read-only); switch to edit mode, then click a cell to edit. Tab / Shift+Tab / Enter / arrows move around; hover the table: click the <b>+</b> on the right edge or bottom to add a column or row, a grip (&#8801;) above a column or left of a row to select it and open its menu, or the 2&times;2 icon in the corner to select the table.</p>
+  <p><button id="mode">Mode: view (click to switch)</button></p>
+  <canvas id="stage" width="700" height="420"></canvas>
+  <input id="input" class="hidden-input" type="text" autocomplete="off">
+  <p id="state">(pending)</p>
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((r) => go.run(r.instance));
+  </script>
+</body>
+</html>

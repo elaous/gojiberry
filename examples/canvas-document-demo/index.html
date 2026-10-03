@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>gojiberry canvas document</title>
+  <script src="wasm_exec.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 1em; }
+    #stage { display: block; }
+    .hidden-input { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; }
+    #state { font-family: monospace; font-size: 12px; color: #6b7280; word-break: break-all; max-height: 6em; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>Canvas document</h1>
+  <p>Pages in a scrolling view, with one text flow running across them: column configs, page and column breaks, headers, footers and page numbers. Switch to edit mode to drag the column grips, move/crop/fade the picture, or click into the floating note to edit it (select text, then <b>B</b> / <b>I</b> / <b>A&plusmn;</b> in its toolbar).</p>
+  <p><button id="mode">Mode: view (click to switch)</button></p>
+  <canvas id="stage" width="920" height="640"></canvas>
+  <input id="input" class="hidden-input" type="text" autocomplete="off">
+  <p id="state">(pending)</p>
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((r) => go.run(r.instance));
+  </script>
+</body>
+</html>

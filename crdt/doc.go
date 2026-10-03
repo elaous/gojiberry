@@ -1,5 +1,7 @@
 package crdt
 
+import "strings"
+
 // Doc is one replica's view of a block document: a phone editing
 // entirely offline, a laptop, or a sync server. Every replica starts
 // from NewDoc and converges with every other replica it ever
@@ -47,6 +49,9 @@ func (d *Doc) Strategy() MergeStrategy {
 	return d.strategy
 }
 
+// Clock is the highest Lamport counter this replica has produced or seen.
+func (d *Doc) Clock() uint64 { return d.clock }
+
 // tick advances this replica's Lamport clock and stamps a new write.
 func (d *Doc) tick() Timestamp {
 	d.clock++
@@ -66,11 +71,20 @@ func (d *Doc) observe(ts Timestamp) {
 // b.Order via OrderBetween/OrderEnd to place it among siblings. The
 // resulting Op is queued in the outbox for the next sync.
 func (d *Doc) Put(b Block) Op {
-	if d.strategy == MergeCharCRDT {
+	if d.strategy == MergeCharCRDT && !LWWKind(b.Kind) {
 		return d.putCharCRDT(b)
 	}
 	return d.putLWW(b)
 }
+
+// LWWKindPrefix starts the Kind of blocks that are always merged
+// last-writer-wins, even in a MergeCharCRDT document: whole-value records
+// such as a comment or a style, whose Content must not be merged
+// character by character.
+const LWWKindPrefix = "lww"
+
+// LWWKind reports whether blocks of this kind merge last-writer-wins.
+func LWWKind(kind string) bool { return strings.HasPrefix(kind, LWWKindPrefix) }
 
 func (d *Doc) putLWW(b Block) Op {
 	ts := d.tick()
@@ -116,6 +130,46 @@ func (d *Doc) putCharCRDT(b Block) Op {
 	return op
 }
 
+// Format marks the visible characters [from, to) of block id with key =
+// value (an empty value removes the key there) and queues the op. It is a
+// single small op however long the range is. growEnd says whether text
+// typed at the end of the range joins it (bold, colour) or not (links,
+// comments); text typed at its start never does. Formatting needs
+// MergeCharCRDT, and reports false (and does nothing) under MergeLWW, for
+// an unknown block, or for an empty or out-of-range span.
+func (d *Doc) Format(id string, from, to int, key, value string, growEnd bool) (Op, bool) {
+	if d.strategy != MergeCharCRDT {
+		return Op{}, false
+	}
+	text, ok := d.texts[id]
+	if !ok {
+		return Op{}, false
+	}
+	start, end, ok := text.anchorsFor(from, to, growEnd)
+	if !ok {
+		return Op{}, false
+	}
+	ts := d.tick()
+	m := Mark{ID: ts, Key: key, Value: value, Start: start, End: end}
+	text.addMark(m)
+	op := Op{Block: d.blocks[id].block, TS: ts, CharOps: []CharOp{{Kind: CharMark, Mark: &m}}}
+	d.outbox = append(d.outbox, op)
+	return op, true
+}
+
+// Runs returns block id's visible text as runs of equal formatting (one
+// run, with no attributes, for a block that was never formatted). Only
+// MergeCharCRDT documents have formatting.
+func (d *Doc) Runs(id string) []Run {
+	if text, ok := d.texts[id]; ok {
+		return text.Runs()
+	}
+	if b, ok := d.blocks[id]; ok && b.block.Content != "" {
+		return []Run{{Text: b.block.Content, Attrs: map[string]string{}}}
+	}
+	return nil
+}
+
 // textFor returns the Text for a block ID, creating an empty one on
 // first use.
 func (d *Doc) textFor(id string) *Text {
@@ -153,12 +207,19 @@ func (d *Doc) Delete(id string) Op {
 func (d *Doc) Apply(ops ...Op) {
 	for _, op := range ops {
 		d.observe(op.TS)
-		if d.strategy == MergeCharCRDT {
+		if d.strategy == MergeCharCRDT && !LWWKind(op.Block.Kind) && !d.isLWWBlock(op.Block.ID) {
 			d.applyCharCRDT(op)
 			continue
 		}
 		d.applyLWW(op)
 	}
+}
+
+// isLWWBlock reports whether the block already stored under id is an LWW
+// kind (so a later op for it, whatever its own Kind says, merges LWW too).
+func (d *Doc) isLWWBlock(id string) bool {
+	s, ok := d.blocks[id]
+	return ok && LWWKind(s.block.Kind)
 }
 
 func (d *Doc) applyLWW(op Op) {
@@ -171,6 +232,10 @@ func (d *Doc) applyLWW(op Op) {
 func (d *Doc) applyCharCRDT(op Op) {
 	text := d.textFor(op.Block.ID)
 	for _, c := range op.CharOps {
+		d.observe(c.ID) // keep later local writes after everything seen
+		if c.Mark != nil {
+			d.observe(c.Mark.ID)
+		}
 		text.apply(c)
 	}
 
@@ -246,4 +311,76 @@ func (d *Doc) Blocks() []Block {
 func (d *Doc) Get(id string) (Block, bool) {
 	s, ok := d.blocks[id]
 	return s.block, ok
+}
+
+// Splice replaces del visible characters of block id starting at visible
+// index at with ins, as character ops (the block is created if it does not
+// exist), and queues the op. Unlike Put it does not diff the whole text, so
+// it is the call for editors that already know what changed. It needs
+// MergeCharCRDT and reports false under MergeLWW or for a range outside the
+// text.
+func (d *Doc) Splice(id string, at, del int, ins []rune) (Op, bool) {
+	if d.strategy != MergeCharCRDT {
+		return Op{}, false
+	}
+	text := d.textFor(id)
+	_, ids := text.visible()
+	if at < 0 || del < 0 || at+del > len(ids) {
+		return Op{}, false
+	}
+	ts := d.tick()
+	var charOps []CharOp
+	for _, cid := range ids[at : at+del] {
+		text.delete(cid)
+		charOps = append(charOps, CharOp{Kind: CharDelete, ID: cid})
+	}
+	origin := Timestamp{}
+	if at > 0 {
+		origin = ids[at-1]
+	}
+	for _, r := range ins {
+		cid := d.tick()
+		text.insert(cid, origin, r)
+		charOps = append(charOps, CharOp{Kind: CharInsert, ID: cid, Origin: origin, Value: r})
+		origin = cid
+	}
+	b := d.blocks[id].block
+	b.ID = id
+	b.Content = text.String()
+	op := Op{Block: b, TS: ts, CharOps: charOps}
+	d.blocks[id] = stamped{block: b, ts: ts}
+	d.outbox = append(d.outbox, op)
+	return op, true
+}
+
+// VisibleIDs returns the ids of block id's visible characters, in order:
+// stable names for positions, to keep cursors in place across remote edits.
+func (d *Doc) VisibleIDs(id string) []Timestamp {
+	if text, ok := d.texts[id]; ok {
+		_, ids := text.visible()
+		return ids
+	}
+	return nil
+}
+
+// PositionAfter returns how many visible characters of block id come up to
+// and including character cid: the visible index just behind it. It works
+// for a character that has since been deleted (the position where it was).
+// ok is false if the character is not known.
+func (d *Doc) PositionAfter(id string, cid Timestamp) (int, bool) {
+	text, ok := d.texts[id]
+	if !ok {
+		return 0, false
+	}
+	i := text.indexOf(cid)
+	if i < 0 {
+		return 0, false
+	}
+	n := 0
+	for _, c := range text.chars[:i+1] {
+		if !c.deleted {
+			n++
+		}
+	}
+	return n, true
 }
