@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/elaous/gojiberry/guard"
 	"io"
 	"log"
 	"net/http"
@@ -26,6 +27,11 @@ import (
 // font collection, or turning Google Fonts proxying on, is always an
 // environment variable, never a code change.
 type Config struct {
+	// Guard decides who may call the server: guard.Origins(...) for pages from
+	// listed origins, guard.Token(...) for callers holding a token, both with
+	// guard.Chain, or your own. Nil means guard.Open() (any origin, no check).
+	// ConfigFromEnv reads GOJIBERRY_FONTSERVER_ALLOW_ORIGINS and GOJIBERRY_FONTSERVER_TOKEN.
+	Guard          guard.Guard
 	Addr           string        // listen address, e.g. ":8082"
 	FontsDir       string        // local font directory Repo scans
 	GoogleAPIKey   string        // Google Fonts Developer API key; empty disables the online catalog
@@ -46,6 +52,7 @@ func ConfigFromEnv() Config {
 		}
 	}
 	return Config{
+		Guard:          guard.FromEnv("GOJIBERRY_FONTSERVER", "/health"),
 		Addr:           envOr("GOJIBERRY_FONTSERVER_ADDR", ":8082"),
 		FontsDir:       envOr("GOJIBERRY_FONTSERVER_DIR", "./fonts"),
 		GoogleAPIKey:   os.Getenv("GOJIBERRY_FONTSERVER_GOOGLE_KEY"),
@@ -135,20 +142,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/local/symbols", s.handleLocalSymbols)
 	mux.HandleFunc("/google/fonts", s.handleGoogleFonts)
 	mux.HandleFunc("/local/download", s.handleLocalDownload)
-	return corsMiddleware(mux)
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return guard.Or(s.cfg.Guard).Wrap(mux)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
