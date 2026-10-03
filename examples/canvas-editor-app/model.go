@@ -78,6 +78,9 @@ func (d *document) Len() int { return d.buf.Len() }
 // runeAt returns the rune at index i (0 <= i < Len()).
 func (d *document) runeAt(i int) rune { return d.buf.At(i).Rune }
 
+// isNewline reports whether character i is a line break.
+func (d *document) isNewline(i int) bool { return i >= 0 && i < d.Len() && d.runeAt(i) == '\n' }
+
 // fmtAt returns the format at index i (0 <= i < Len()).
 func (d *document) fmtAt(i int) charFormat { return d.buf.At(i).Fmt }
 

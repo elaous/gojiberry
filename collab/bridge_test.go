@@ -507,3 +507,39 @@ func TestSimultaneousSeedingMakesOneCopy(t *testing.T) {
 		t.Fatalf("a=%q b=%q, want one copy %q", text(a.Flow), text(b.Flow), want)
 	}
 }
+
+type urlSource struct{ url string }
+
+func (urlSource) Size() (w, h float64) { return 40, 30 }
+func (u urlSource) URL() string        { return u.url }
+
+// An inline image is shared by where it came from; the other side shows it as
+// a placeholder (or the real image if docfile.ImageLoader can supply it).
+func TestInlineImageIsShared(t *testing.T) {
+	img := canvas.NewImage(urlSource{"https://img.example/cat.png"}, 0, 0)
+	img.Placement, img.W, img.H = canvas.PlaceInline, 80, 60
+	a, b := pair(t, canvas.Chars{Text: "see "}, canvas.Inline{Object: img}, canvas.Chars{Text: " here"})
+	if text(a.Flow) != "see # here" || text(b.Flow) != "see # here" {
+		t.Fatalf("a=%q b=%q", text(a.Flow), text(b.Flow))
+	}
+	items := docfile.FromItems(b.Flow.ContentItems())
+	var found *docfile.ImageItem
+	for _, it := range items {
+		if it.Image != nil {
+			found = it.Image
+		}
+	}
+	if found == nil || found.URL != "https://img.example/cat.png" || found.Width != 80 {
+		t.Fatalf("the image did not arrive: %+v", items)
+	}
+	// An image with no URL cannot be shared: refuse it, as before.
+	bare := canvas.NewImage(fakeSize{}, 0, 0)
+	bare.Placement = canvas.PlaceInline
+	if _, err := New("c", newFlow(canvas.Inline{Object: bare})); err == nil {
+		t.Fatal("an image that cannot be saved cannot be shared")
+	}
+}
+
+type fakeSize struct{}
+
+func (fakeSize) Size() (w, h float64) { return 10, 10 }

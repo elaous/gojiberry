@@ -16,10 +16,18 @@ import (
 // caller (see AuthUser); a nil who, or an unknown caller, is anonymous and
 // gets no role on a document that has a list.
 func ACLRoles(store docstore.Adapter, who func(*http.Request) string) RoleFunc {
+	return ACLRolesWith(store, who, Owner)
+}
+
+// ACLRolesWith is ACLRoles with a choice for the documents that have no ACL:
+// noACL is the role everyone gets on them (Owner is what ACLRoles gives, so a
+// new document can be started by anyone; "" closes them, so only documents
+// someone has shared by ACL can be opened at all; Viewer lets anyone read).
+func ACLRolesWith(store docstore.Adapter, who func(*http.Request) string, noACL Role) RoleFunc {
 	return func(r *http.Request, id string) Role {
 		stored, err := store.Load(r.Context(), "acl:"+id)
 		if errors.Is(err, docstore.ErrNotFound) {
-			return Owner // none stored: the document is open
+			return noACL // none stored
 		}
 		if err != nil {
 			return "" // an unreadable list must not open the document

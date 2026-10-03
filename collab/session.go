@@ -1,6 +1,7 @@
 package collab
 
 import (
+	"fmt"
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/collab/client"
 	"github.com/elaous/gojiberry/collab/wire"
@@ -22,11 +23,20 @@ type Session struct {
 	// Status is the connection's state.
 	Status client.Status
 	// Err is the last error the server reported for something you sent
-	// (see client.Rejected); the replica is then out of step and the
-	// session should be rebuilt.
+	// (see client.Rejected). The replica is then out of step with the
+	// server; Poll repairs the session (see Repair) unless NoRepair is set.
 	Err error
+	// NoRepair stops Poll from repairing a session after a rejection; Err is
+	// then left set for the caller to deal with.
+	NoRepair bool
+	// Repairs counts how many times the session has been rebuilt.
+	Repairs int
 	// Name and Color are shown to others with your cursor.
 	Name, Color string
+
+	replica string
+	opts    client.Options
+	needFix bool
 
 	snapshots int
 }
@@ -42,7 +52,33 @@ func Connect(replica string, flow *canvas.TextFlow, opts client.Options) (*Sessi
 	opts.Replica = replica
 	conn := client.Dial(opts)
 	b.Outgoing = conn.Send
-	return &Session{Bridge: b, Conn: conn, Peers: map[string]wire.Presence{}}, nil
+	return &Session{Bridge: b, Conn: conn, Peers: map[string]wire.Presence{}, replica: replica, opts: opts}, nil
+}
+
+// Repair rebuilds the session after the server refused something: the local
+// replica holds changes the server will never have, so it is dropped, a new
+// replica joins from the server's copy, and the flow shows what the server
+// has. Edits that were refused are lost; the others' work and the document
+// are intact. It is called by Poll after a rejection (unless NoRepair), and
+// can be called by hand.
+func (s *Session) Repair() error {
+	s.needFix = false
+	s.Bridge.Detach()
+	s.Conn.Close()
+	s.Repairs++
+	replica := fmt.Sprintf("%s-r%d", s.replica, s.Repairs)
+	b, err := Join(replica, s.Bridge.Flow)
+	if err != nil {
+		return err
+	}
+	opts := s.opts
+	opts.Replica = replica
+	conn := client.Dial(opts)
+	b.Outgoing = conn.Send
+	s.Bridge, s.Conn, s.Err, s.needFix = b, conn, nil, false
+	s.Peers = map[string]wire.Presence{}
+	s.snapshots = 0
+	return nil
 }
 
 // Close ends the connection.
@@ -61,6 +97,10 @@ func (s *Session) Poll() bool {
 			}
 			if s.handle(e) {
 				changed = true
+			}
+			if s.needFix {
+				_ = s.Repair() // a flow the bridge cannot carry keeps its Err
+				return true
 			}
 		default:
 			if changed {
@@ -129,6 +169,7 @@ func (s *Session) handle(e client.Event) bool {
 		return true
 	case client.Rejected:
 		s.Err = e.Err
+		s.needFix = !s.NoRepair
 		return true
 	}
 	return false
