@@ -13,8 +13,8 @@ type Window struct {
 	Window js.Value
 }
 
-// pendingTimers tracks every outstanding SetTimeout/SetInterval/
-// RequestAnimationFrame call's own underlying js.Func, keyed by the id
+// pendingTimers tracks every outstanding SetTimeout/SetInterval
+// call's own underlying js.Func, keyed by the id
 // the browser returned for it -- package-level state, not a *Window
 // field: GetWindow() returns a fresh *Window wrapper on every call (see
 // its own doc comment), and there's only one real global `window`
@@ -25,10 +25,10 @@ type Window struct {
 // (still-unstable) threads build tag runs every goroutine cooperatively
 // on a single OS thread, so there's never genuine concurrent access to
 // race over, the same assumption every other piece of shared state in
-// this package already makes. Browsers draw setTimeout/setInterval/
-// requestAnimationFrame ids from the same counter (part of the spec,
-// not an implementation detail), so one shared map keyed by plain int
-// is safe across all three without id collisions.
+// this package already makes. setTimeout and setInterval draw their
+// ids from one counter (part of the spec), so they share this map;
+// requestAnimationFrame numbers its callbacks separately, so it has its
+// own, pendingFrames.
 //
 // Without this, every SetTimeout/SetInterval/RequestAnimationFrame
 // call leaked its own js.Func forever: syscall/js never garbage
@@ -39,6 +39,11 @@ type Window struct {
 // js.FuncOf call site after a similar, already-fixed leak turned up in
 // OnDesign's own documentmanager.go.
 var pendingTimers = map[int]js.Func{}
+
+// pendingFrames is pendingTimers' counterpart for requestAnimationFrame: the
+// browser numbers animation-frame callbacks separately from timers, so a
+// frame id and a timer id can be equal and must not share a map.
+var pendingFrames = map[int]js.Func{}
 
 // SetTimeout schedules fn to run once after delay milliseconds and
 // returns the id ClearTimeout needs to cancel it. The underlying
@@ -86,13 +91,13 @@ func (w *Window) RequestAnimationFrame(fn func()) int {
 	var cb js.Func
 	var id int
 	cb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		delete(pendingTimers, id)
+		delete(pendingFrames, id)
 		cb.Release()
 		fn()
 		return nil
 	})
 	id = w.Window.Call("requestAnimationFrame", cb).Int()
-	pendingTimers[id] = cb
+	pendingFrames[id] = cb
 	return id
 }
 
@@ -197,7 +202,10 @@ func (w *Window) ClearInterval(id int) {
 // describes.
 func (w *Window) ClearAnimationFrame(id int) {
 	w.Window.Call("cancelAnimationFrame", id)
-	releasePendingTimer(id)
+	if cb, ok := pendingFrames[id]; ok {
+		delete(pendingFrames, id)
+		cb.Release()
+	}
 }
 
 // releasePendingTimer releases and forgets id's own entry in

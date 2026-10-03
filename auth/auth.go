@@ -36,6 +36,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -103,6 +105,11 @@ type Config struct {
 	// SessionTTL is how long a session stays valid after login.
 	// Defaults to 30 days (720h) when zero.
 	SessionTTL time.Duration
+	// ReturnOrigins lists the origins (e.g. "https://app.example.com")
+	// a login may send the browser back to, besides BaseURL's own. A
+	// return_to anywhere else is ignored: the session token travels in the
+	// redirect, so an unchecked target would hand it to any site.
+	ReturnOrigins []string
 }
 
 // resolvedProvider is a Provider plus everything OIDC discovery
@@ -131,6 +138,8 @@ type Manager struct {
 	sessions   *tokenStore[User]
 	states     *tokenStore[loginState]
 	sessionTTL time.Duration
+	order      []string            // provider names, as configured
+	origins    map[string]struct{} // origins a login may return to
 }
 
 // loginState is what a login's own random state parameter maps to
@@ -141,6 +150,8 @@ type Manager struct {
 type loginState struct {
 	Provider string
 	ReturnTo string
+	Verifier string // PKCE code verifier
+	Nonce    string // bound into the ID token
 }
 
 const (
@@ -171,6 +182,12 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 		sessions:   newTokenStore[User](),
 		states:     newTokenStore[loginState](),
 		sessionTTL: ttl,
+		origins:    map[string]struct{}{},
+	}
+	for _, o := range append([]string{cfg.BaseURL}, cfg.ReturnOrigins...) {
+		if u, err := url.Parse(o); err == nil && u.Scheme != "" && u.Host != "" {
+			m.origins[strings.ToLower(u.Scheme+"://"+u.Host)] = struct{}{}
+		}
 	}
 	for _, p := range cfg.Providers {
 		if p.Name == "" || p.IssuerURL == "" || p.ClientID == "" {
@@ -183,6 +200,7 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 		if err != nil {
 			return nil, fmt.Errorf("auth: discovering provider %q: %w", p.Name, err)
 		}
+		m.order = append(m.order, p.Name)
 		m.byName[p.Name] = &resolvedProvider{
 			Provider: p,
 			oauth2Config: oauth2.Config{
@@ -204,7 +222,8 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 // buttons.
 func (m *Manager) Providers() []ProviderInfo {
 	out := make([]ProviderInfo, 0, len(m.byName))
-	for _, p := range m.byName {
+	for _, name := range m.order {
+		p := m.byName[name]
 		out = append(out, ProviderInfo{Name: p.Name, DisplayName: p.displayName()})
 	}
 	return out
@@ -216,7 +235,34 @@ func (m *Manager) Providers() []ProviderInfo {
 type idTokenClaims struct {
 	Subject string `json:"sub"`
 	Email   string `json:"email"`
-	Name    string `json:"name"`
+	// EmailVerified is a pointer: absent (some providers omit it) is not the
+	// same as false.
+	EmailVerified *bool  `json:"email_verified"`
+	Name          string `json:"name"`
+}
+
+// safeReturnTo returns target if a login may send the browser there: a
+// path on this server, or an absolute URL on an allowed origin. Anything
+// else is "" (the caller then uses BaseURL).
+func (m *Manager) safeReturnTo(target string) string {
+	if target == "" {
+		return ""
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return ""
+	}
+	if u.Scheme == "" && u.Host == "" {
+		// A bare path ("/doc/1"), but not "//host" or "/\\host".
+		if strings.HasPrefix(target, "/") && !strings.HasPrefix(target, "//") && !strings.HasPrefix(target, "/\\") {
+			return strings.TrimRight(m.baseURL, "/") + target
+		}
+		return ""
+	}
+	if _, ok := m.origins[strings.ToLower(u.Scheme+"://"+u.Host)]; ok && u.User == nil {
+		return target
+	}
+	return ""
 }
 
 // randomToken returns a cryptographically random, URL-safe token --
@@ -240,11 +286,12 @@ func randomToken() (string, error) {
 // sweep goroutine -- a deliberately simple v1 tradeoff (see this
 // package's own top doc comment); a long-running server with many
 // short-lived login attempts will accumulate some expired-but-
-// not-yet-touched entries between reads, bounded by actual traffic,
-// not unbounded.
+// not-yet-touched entries between reads; put sweeps them out once the
+// store passes pruneAt entries and refuses new ones at maxEntries.
 type tokenStore[T any] struct {
 	mu      sync.Mutex
 	entries map[string]tokenEntry[T]
+	swept   time.Time // the last sweep of expired entries
 }
 
 type tokenEntry[T any] struct {
@@ -264,10 +311,34 @@ func (s *tokenStore[T]) put(value T, ttl time.Time) (string, error) {
 		return "", err
 	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.entries) >= pruneAt {
+		// Sweep at most once a second: a flood of puts must not make each
+		// one walk the whole map.
+		if now := time.Now(); now.Sub(s.swept) >= time.Second {
+			s.swept = now
+			for k, e := range s.entries {
+				if now.After(e.expires) {
+					delete(s.entries, k)
+				}
+			}
+		}
+		if len(s.entries) >= maxEntries {
+			return "", errStoreFull
+		}
+	}
 	s.entries[token] = tokenEntry[T]{value: value, expires: ttl}
-	s.mu.Unlock()
 	return token, nil
 }
+
+const (
+	// pruneAt is the size from which put sweeps out expired entries.
+	pruneAt = 1024
+	// maxEntries bounds a store: logins that never finish cannot grow it.
+	maxEntries = 100000
+)
+
+var errStoreFull = errors.New("auth: too many pending logins or sessions")
 
 // get returns token's own value if present and not yet expired.
 func (s *tokenStore[T]) get(token string) (T, bool) {
@@ -307,5 +378,9 @@ func (s *tokenStore[T]) delete(token string) {
 // package's minimal User -- the one place that mapping happens, so
 // handleCallback (and any future caller) never duplicates it.
 func userFromClaims(providerName string, c idTokenClaims) User {
-	return User{ID: providerName + ":" + c.Subject, Email: c.Email, Name: c.Name}
+	email := c.Email
+	if c.EmailVerified != nil && !*c.EmailVerified {
+		email = "" // an address the provider has not verified identifies no one
+	}
+	return User{ID: providerName + ":" + c.Subject, Email: email, Name: c.Name}
 }

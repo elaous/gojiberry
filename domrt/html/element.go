@@ -114,9 +114,19 @@ func (e *Element) SetTextContent(text string) {
 	e.Element.Set("textContent", text)
 }
 
-// GetAttribute returns the named HTML attribute's value.
+// GetAttribute returns the named HTML attribute's value, or "" when the
+// element has no such attribute (use HasAttribute to tell it from an empty one).
 func (e *Element) GetAttribute(name string) string {
-	return e.Element.Call("getAttribute", name).String()
+	v := e.Element.Call("getAttribute", name)
+	if v.IsNull() || v.IsUndefined() {
+		return ""
+	}
+	return v.String()
+}
+
+// HasAttribute reports whether the element has the named attribute.
+func (e *Element) HasAttribute(name string) bool {
+	return e.Element.Call("hasAttribute", name).Bool()
 }
 
 // SetAttribute sets the named HTML attribute's value.

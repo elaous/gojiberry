@@ -151,3 +151,11 @@ func TestDataTable(t *testing.T) {
 		}
 	})
 }
+
+func TestDataTableSelectAllChecksTheRowsOnShowNotTheCount(t *testing.T) {
+	// Two selected ids from another page happen to equal the row count.
+	html := render(t, DataTable(DataTableProps{Columns: dtCols(), Rows: dtRows(), Selectable: true, Selected: []string{"9", "8"}}))
+	if count := strings.Count(html, `checked="checked"`); count != 0 {
+		t.Errorf("stale selections checked %d boxes: %s", count, html)
+	}
+}

@@ -192,7 +192,12 @@ var LocalStorage = storageArea{"localStorage"}
 var SessionStorage = storageArea{"sessionStorage"}
 
 // Get returns the stored value for key and whether it was present.
-func (s storageArea) Get(key string) (string, bool) {
+func (s storageArea) Get(key string) (value string, ok bool) {
+	defer func() {
+		if recover() != nil { // storage blocked: nothing is stored
+			value, ok = "", false
+		}
+	}()
 	v := js.Global().Get(s.name).Call("getItem", key)
 	if v.IsNull() {
 		return "", false
@@ -200,9 +205,17 @@ func (s storageArea) Get(key string) (string, bool) {
 	return v.String(), true
 }
 
-// Set stores value under key.
-func (s storageArea) Set(key, value string) {
+// Set stores value under key. It returns an error when the browser refuses
+// (storage full, or blocked by the browser's settings or private mode)
+// instead of letting the JS exception crash the program.
+func (s storageArea) Set(key, value string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("browser: %s.setItem: %v", s.name, r)
+		}
+	}()
 	js.Global().Get(s.name).Call("setItem", key, value)
+	return nil
 }
 
 // Remove deletes key.

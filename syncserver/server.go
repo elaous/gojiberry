@@ -10,6 +10,7 @@ package syncserver
 
 import (
 	"encoding/json"
+	"github.com/elaous/gojiberry/guard"
 	"net/http"
 	"os"
 	"sync"
@@ -23,6 +24,11 @@ import (
 // operator only ever requires new environment variables, never a
 // code change or a fork of this package.
 type Config struct {
+	// Guard decides who may call the server: guard.Origins(...) for pages from
+	// listed origins, guard.Token(...) for callers holding a token, both with
+	// guard.Chain, or your own. Nil means guard.Open() (any origin, no check).
+	// ConfigFromEnv reads GOJIBERRY_SYNC_ALLOW_ORIGINS and GOJIBERRY_SYNC_TOKEN.
+	Guard  guard.Guard
 	Addr   string // listen address, e.g. ":8080"
 	Region string // operator-chosen label for where this instance is hosted
 	// Strategy selects the crdt.MergeStrategy this relay's own Doc
@@ -48,6 +54,7 @@ func ConfigFromEnv() Config {
 		strategy = crdt.MergeCharCRDT
 	}
 	return Config{
+		Guard:    guard.FromEnv("GOJIBERRY_SYNC", "/health"),
 		Addr:     envOr("GOJIBERRY_SYNC_ADDR", ":8080"),
 		Region:   envOr("GOJIBERRY_SYNC_REGION", "unspecified"),
 		Strategy: strategy,
@@ -137,37 +144,35 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/ops", s.handleOps)
 	mux.HandleFunc("/presence", s.handlePresence)
-	return corsMiddleware(mux)
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return guard.Or(s.cfg.Guard).Wrap(mux)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"region": s.cfg.Region})
 }
 
+const (
+	maxBody     = 8 << 20 // bytes in one request
+	maxPresence = 256     // cursors kept
+)
+
+// applyOps merges ops into the shared document; the deferred unlock keeps a
+// panic in Apply from leaving the server locked for good.
+func (s *Server) applyOps(ops []crdt.Op) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.doc.Apply(ops...)
+}
+
 func (s *Server) handleOps(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		var ops []crdt.Op
-		if err := json.NewDecoder(r.Body).Decode(&ops); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(&ops); err != nil {
+			http.Error(w, "invalid or oversized request body", http.StatusBadRequest)
 			return
 		}
-		s.mu.Lock()
-		s.doc.Apply(ops...)
-		s.mu.Unlock()
+		s.applyOps(ops)
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodGet:
 		s.mu.Lock()
@@ -192,16 +197,27 @@ func (s *Server) handlePresence(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		var p Presence
-		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(&p); err != nil {
+			http.Error(w, "invalid or oversized request body", http.StatusBadRequest)
 			return
 		}
-		if p.Replica == "" {
-			http.Error(w, "replica is required", http.StatusBadRequest)
+		if p.Replica == "" || len(p.Replica) > 128 || len(p.Name) > 256 || len(p.Color) > 64 {
+			http.Error(w, "replica is required (at most 128 characters)", http.StatusBadRequest)
 			return
 		}
 		s.mu.Lock()
-		s.presence[p.Replica] = presenceEntry{Presence: p, lastSeen: s.now()}
+		now := s.now()
+		for id, e := range s.presence { // prune here too: a poster that never polls must not grow the map
+			if now.Sub(e.lastSeen) > presenceTTL {
+				delete(s.presence, id)
+			}
+		}
+		if _, known := s.presence[p.Replica]; !known && len(s.presence) >= maxPresence {
+			s.mu.Unlock()
+			http.Error(w, "too many people", http.StatusTooManyRequests)
+			return
+		}
+		s.presence[p.Replica] = presenceEntry{Presence: p, lastSeen: now}
 		s.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodGet:

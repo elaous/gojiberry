@@ -125,3 +125,16 @@ func TestConfigFromEnvDefaultsTableToGrade2(t *testing.T) {
 		t.Fatalf("ConfigFromEnv().Table = %q, want defaultTable (%q) with nothing set in the environment", cfg.Table, defaultTable)
 	}
 }
+
+func TestTranslateRejectsUnsafeTableNames(t *testing.T) {
+	for _, table := range []string{"/etc/passwd", "--help", "../../x", "a b", "-x.ctb", "a;b"} {
+		called := false
+		s := newTestServer(func(binary, table, text string) (string, error) { called = true; return "", nil })
+		body, _ := json.Marshal(translateRequest{Text: "hello", Table: table})
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/translate", bytes.NewReader(body)))
+		if w.Code != http.StatusBadRequest || called {
+			t.Errorf("table %q: status %d, translator called: %v", table, w.Code, called)
+		}
+	}
+}

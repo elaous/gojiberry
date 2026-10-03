@@ -33,16 +33,30 @@ func (e *JSError) AsJSException() js.Value { return e.Value }
 // event OnError and browser.Worker's OnError both receive) -- exported
 // for domrt/browser's Worker to reuse the same construction.
 func NewJSErrorFromEvent(ev js.Value) *JSError {
+	// A plain Event (a worker script that failed to load, say) is not an
+	// ErrorEvent and has none of these fields.
+	str := func(k string) string {
+		if v := ev.Get(k); v.Type() == js.TypeString {
+			return v.String()
+		}
+		return ""
+	}
+	num := func(k string) int {
+		if v := ev.Get(k); v.Type() == js.TypeNumber {
+			return v.Int()
+		}
+		return 0
+	}
 	value := ev.Get("error")
-	message := ev.Get("message").String()
+	message := str("message")
 	if message == "" {
 		message = messageFromValue(value)
 	}
 	return &JSError{
 		Message: message,
-		Source:  ev.Get("filename").String(),
-		Line:    ev.Get("lineno").Int(),
-		Column:  ev.Get("colno").Int(),
+		Source:  str("filename"),
+		Line:    num("lineno"),
+		Column:  num("colno"),
 		Value:   value,
 	}
 }

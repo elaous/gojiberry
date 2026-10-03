@@ -208,6 +208,12 @@ func (c *Context3D) GetShaderInfoLog(shader js.Value) string {
 // CreateProgram allocates a new, empty program object.
 func (c *Context3D) CreateProgram() js.Value { return c.Context.Call("createProgram") }
 
+// DeleteShader flags a shader for deletion (it is freed once no program uses it).
+func (c *Context3D) DeleteShader(shader js.Value) { c.Context.Call("deleteShader", shader) }
+
+// DeleteProgram frees a program.
+func (c *Context3D) DeleteProgram(program js.Value) { c.Context.Call("deleteProgram", program) }
+
 // AttachShader attaches a compiled shader to program.
 func (c *Context3D) AttachShader(program, shader js.Value) {
 	c.Context.Call("attachShader", program, shader)
@@ -239,7 +245,9 @@ func (c *Context3D) CompileProgram(vertexSrc, fragmentSrc string) (js.Value, err
 		c.ShaderSource(shader, src)
 		c.CompileShader(shader)
 		if !c.GetShaderParameter(shader, c.COMPILE_STATUS()).Bool() {
-			return js.Undefined(), &webglError{"compiling shader: " + c.GetShaderInfoLog(shader)}
+			msg := c.GetShaderInfoLog(shader)
+			c.DeleteShader(shader)
+			return js.Undefined(), &webglError{"compiling shader: " + msg}
 		}
 		return shader, nil
 	}
@@ -249,14 +257,20 @@ func (c *Context3D) CompileProgram(vertexSrc, fragmentSrc string) (js.Value, err
 	}
 	fs, err := compile(c.FRAGMENT_SHADER(), fragmentSrc)
 	if err != nil {
+		c.DeleteShader(vs)
 		return js.Undefined(), err
 	}
 	program := c.CreateProgram()
 	c.AttachShader(program, vs)
 	c.AttachShader(program, fs)
 	c.LinkProgram(program)
+	// The program keeps what it linked; the shader objects are no longer needed.
+	defer c.DeleteShader(vs)
+	defer c.DeleteShader(fs)
 	if !c.GetProgramParameter(program, c.LINK_STATUS()).Bool() {
-		return js.Undefined(), &webglError{"linking program: " + c.GetProgramInfoLog(program)}
+		msg := c.GetProgramInfoLog(program)
+		c.DeleteProgram(program)
+		return js.Undefined(), &webglError{"linking program: " + msg}
 	}
 	return program, nil
 }
