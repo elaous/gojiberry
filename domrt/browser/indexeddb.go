@@ -5,6 +5,7 @@ package browser
 import (
 	"errors"
 	"syscall/js"
+	"time"
 )
 
 // awaitIDBRequest blocks until an IDBRequest fires "success" or
@@ -88,8 +89,15 @@ func OpenDatabase(name string, version int, upgrade func(db *Database)) (*Databa
 		return &Database{Value: v}, nil
 	case err := <-fail:
 		return nil, err
+	case <-time.After(openTimeout):
+		// Neither success nor error: typically a "blocked" upgrade, with
+		// another tab still holding an older version of the database open.
+		return nil, errors.New("indexeddb: open timed out (another tab may be holding an older version open)")
 	}
 }
+
+// openTimeout is how long OpenDatabase waits for the browser.
+const openTimeout = 30 * time.Second
 
 // CreateObjectStore creates a new object store keyed by keyPath. Only
 // valid inside OpenDatabase's upgrade callback.
