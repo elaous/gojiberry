@@ -56,13 +56,18 @@ type editor struct {
 	lastLayout *layout
 	dragging   bool
 	caretOn    bool
-	scrollY    float64 // pixels of document content scrolled above the viewport's top edge
+	// rowEndAt is the position the caret sits at the END of the previous
+	// (soft-wrapped) row for, after End or a click past a row's end; -1 when
+	// it is at the start of its row. Any other movement or edit clears it.
+	rowEndAt int
+	scrollY  float64 // pixels of document content scrolled above the viewport's top edge
 }
 
 func newEditor(doc *html.Document) *editor {
 	canvas := doc.GetElementByID("editor-canvas").AsCanvas()
 	ed := &editor{
 		document:   doc,
+		rowEndAt:   -1,
 		canvas:     canvas,
 		canvasElem: doc.GetElementByID("editor-canvas"),
 		ctx:        canvas.GetContext2D(),
@@ -187,6 +192,13 @@ func (ed *editor) redrawImpl(followCursor bool) {
 				continue // has a selection -- the highlight above stands in for a caret
 			}
 			cl := lay.Chars[c.Pos]
+			if c.Pos == ed.rowEndAt && c.Pos > 0 {
+				// After End (or a click) at the end of a soft-wrapped row the
+				// caret is drawn after that row's last character, not at the
+				// start of the next row, though the position is the same.
+				prev := lay.Chars[c.Pos-1]
+				cl = charLayout{X: prev.X + prev.W, Y: prev.Y, Line: prev.Line}
+			}
 			ed.ctx.BeginPath()
 			ed.ctx.MoveTo(cl.X, cl.Y-fontSize-ed.scrollY)
 			ed.ctx.LineTo(cl.X, cl.Y+4-ed.scrollY)
@@ -332,7 +344,11 @@ func (ed *editor) wire() {
 		// doc comment.
 		evt.PreventDefault()
 		lx, ly := ed.canvasLocal(evt.X, evt.Y)
-		idx := hitTest(ed.lastLayout, lx, ly+ed.scrollY)
+		idx, atEnd := hitTestEnd(ed.lastLayout, lx, ly+ed.scrollY, ed.doc.isNewline)
+		ed.rowEndAt = -1
+		if atEnd {
+			ed.rowEndAt = idx
+		}
 		if evt.AltKey {
 			ed.doc.addCursorAt(idx)
 		} else {
@@ -349,6 +365,7 @@ func (ed *editor) wire() {
 		}
 		lx, ly := ed.canvasLocal(evt.X, evt.Y)
 		idx := hitTest(ed.lastLayout, lx, ly+ed.scrollY)
+		ed.rowEndAt = -1
 		ed.doc.moveCursor(idx, true)
 		ed.redraw()
 	})
@@ -364,6 +381,7 @@ func (ed *editor) wire() {
 	ed.hidden.AddEventListener("input", jsFuncOf(func() {
 		v := ed.hidden.GetValue()
 		if v != "" {
+			ed.rowEndAt = -1
 			ed.doc.insert(v)
 			ed.hidden.SetValue("")
 			ed.caretOn = true
@@ -373,6 +391,9 @@ func (ed *editor) wire() {
 	}))
 
 	ed.hidden.OnKeyDown(func(e html.KeyEvent) {
+		if e.Key != "End" {
+			ed.rowEndAt = -1 // any other key leaves the end of a wrapped row
+		}
 		switch e.Key {
 		case "Backspace":
 			e.PreventDefault()
@@ -419,7 +440,14 @@ func (ed *editor) wire() {
 			ed.doc.moveCursors(func(pos int) int { return lineStart(ed.lastLayout, pos) }, e.ShiftKey)
 		case "End":
 			e.PreventDefault()
-			ed.doc.moveCursors(func(pos int) int { return lineEnd(ed.lastLayout, pos) }, e.ShiftKey)
+			ed.rowEndAt = -1
+			ed.doc.moveCursors(func(pos int) int {
+				end, wrapped := lineEnd(ed.lastLayout, pos, ed.doc.isNewline)
+				if wrapped {
+					ed.rowEndAt = end
+				}
+				return end
+			}, e.ShiftKey)
 		case "Escape":
 			e.PreventDefault()
 			ed.doc.collapseCursors()
@@ -480,16 +508,6 @@ func lineStart(lay *layout, idx int) int {
 		}
 	}
 	return 0
-}
-
-func lineEnd(lay *layout, idx int) int {
-	line := lay.Chars[idx].Line
-	for i := idx; i < len(lay.Chars)-1; i++ {
-		if lay.Chars[i+1].Line != line {
-			return i
-		}
-	}
-	return len(lay.Chars) - 1
 }
 
 func main() {
