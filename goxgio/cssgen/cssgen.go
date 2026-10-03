@@ -34,6 +34,7 @@ package cssgen
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -144,8 +145,8 @@ func Generate(css string, classNames []string, tokens Tokens) (map[string]goxgio
 			}
 
 			style, had := styles[name]
-			for prop, val := range declsOf(r.decls) {
-				if _, warn := applyDecl(&style, name, prop, val, tokens); warn != (Warning{}) {
+			for _, d := range declsOf(r.decls) {
+				if _, warn := applyDecl(&style, name, d.prop, d.val, tokens); warn != (Warning{}) {
 					warnings = append(warnings, warn)
 				}
 			}
@@ -229,7 +230,6 @@ type rule struct {
 }
 
 var (
-	ruleRE    = regexp.MustCompile(`([^{}]+)\{([^{}]*)\}`)
 	commentRE = regexp.MustCompile(`(?s)/\*.*?\*/`)
 )
 
@@ -253,23 +253,60 @@ func baseClassOf(sel string) string {
 	return name
 }
 
-// findRules extracts every flat rule in css. It cannot and does not
-// try to handle nested rules (@media, ...) -- see this package's own
-// doc comment for why that's a deliberate, confirmed-safe assumption
-// for OnDesign's real CSS, not an oversight.
+// findRules extracts every flat rule in css, in source order. Block-less
+// at-rules (@import, @charset, ...) are skipped, and so are at-rules with a
+// block (@media, @supports, @keyframes, ...) together with everything inside
+// them: nested rules are not supported, and applying a @media body as if it
+// were unconditional would override the base styles.
 func findRules(css string) []rule {
-	matches := ruleRE.FindAllStringSubmatch(css, -1)
-	rules := make([]rule, 0, len(matches))
-	for _, m := range matches {
-		rules = append(rules, rule{selector: strings.TrimSpace(m[1]), decls: m[2]})
+	var rules []rule
+	i := 0
+	for i < len(css) {
+		// The prelude runs to the next '{', ';' or '}'.
+		j := strings.IndexAny(css[i:], "{;}")
+		if j < 0 {
+			break
+		}
+		j += i
+		prelude := strings.TrimSpace(css[i:j])
+		switch css[j] {
+		case ';', '}': // a block-less at-rule, or a stray brace: nothing to keep
+			i = j + 1
+			continue
+		}
+		// css[j] == '{': find the matching '}'.
+		depth, k := 1, j+1
+		for k < len(css) && depth > 0 {
+			switch css[k] {
+			case '{':
+				depth++
+			case '}':
+				depth--
+			}
+			k++
+		}
+		if depth > 0 { // unterminated block
+			break
+		}
+		body := css[j+1 : k-1]
+		i = k
+		if strings.HasPrefix(prelude, "@") || prelude == "" || strings.ContainsAny(body, "{}") {
+			continue
+		}
+		rules = append(rules, rule{selector: prelude, decls: body})
 	}
 	return rules
 }
 
-// declsOf splits a "prop: value; prop2: value2" declaration block into
-// a map, tolerating a trailing/missing final semicolon.
-func declsOf(decls string) map[string]string {
-	out := map[string]string{}
+// decl is one "prop: value" declaration.
+type decl struct{ prop, val string }
+
+// declsOf splits a "prop: value; prop2: value2" declaration block into its
+// declarations in source order (CSS lets a later declaration override an
+// earlier one, so the order matters), tolerating a trailing/missing final
+// semicolon.
+func declsOf(decls string) []decl {
+	var out []decl
 	for _, d := range strings.Split(decls, ";") {
 		d = strings.TrimSpace(d)
 		if d == "" {
@@ -279,9 +316,7 @@ func declsOf(decls string) map[string]string {
 		if i < 0 {
 			continue
 		}
-		prop := strings.TrimSpace(d[:i])
-		val := strings.TrimSpace(d[i+1:])
-		out[prop] = val
+		out = append(out, decl{strings.TrimSpace(d[:i]), strings.TrimSpace(d[i+1:])})
 	}
 	return out
 }
@@ -291,9 +326,9 @@ func declsOf(decls string) map[string]string {
 // "--".
 func customProps(decls string) map[string]string {
 	out := map[string]string{}
-	for prop, val := range declsOf(decls) {
-		if name, ok := strings.CutPrefix(prop, "--"); ok {
-			out[name] = val
+	for _, d := range declsOf(decls) {
+		if name, ok := strings.CutPrefix(d.prop, "--"); ok {
+			out[name] = d.val
 		}
 	}
 	return out
@@ -375,16 +410,24 @@ var (
 // Anything else (a named color like "red", a gradient, ...) reports
 // ok=false.
 func parseColorValue(s string, tokens Tokens) (color.NRGBA, bool) {
+	return parseColor(s, tokens, 0)
+}
+
+// maxVarDepth bounds var() chains, so a token that refers to itself (directly
+// or through others) is reported as unparseable instead of recursing forever.
+const maxVarDepth = 16
+
+func parseColor(s string, tokens Tokens, depth int) (color.NRGBA, bool) {
 	s = strings.TrimSpace(s)
 	if s == "none" || s == "transparent" {
 		return color.NRGBA{}, true
 	}
 	if m := varRE.FindStringSubmatch(s); m != nil {
 		v, ok := tokens[m[1]]
-		if !ok {
+		if !ok || depth >= maxVarDepth {
 			return color.NRGBA{}, false
 		}
-		return parseColorValue(v, tokens)
+		return parseColor(v, tokens, depth+1)
 	}
 	if m := hex6RE.FindStringSubmatch(s); m != nil {
 		r, _ := strconv.ParseUint(m[1][0:2], 16, 8)
@@ -405,9 +448,10 @@ func parseColorValue(s string, tokens Tokens) (color.NRGBA, bool) {
 		a := 255
 		if m[4] != "" {
 			af, _ := strconv.ParseFloat(m[4], 64)
-			a = int(af * 255)
+			a = int(math.Round(min(max(af, 0), 1) * 255))
 		}
-		return color.NRGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: uint8(a)}, true
+		clamp := func(v int) uint8 { return uint8(min(max(v, 0), 255)) }
+		return color.NRGBA{R: clamp(r), G: clamp(g), B: clamp(b), A: uint8(a)}, true
 	}
 	return color.NRGBA{}, false
 }

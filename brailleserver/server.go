@@ -19,19 +19,29 @@ package brailleserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/elaous/gojiberry/guard"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
+	"time"
 )
 
 // Config is loaded entirely from the environment, the same posture
 // voiceserver.Config/translateserver.Config take.
 type Config struct {
-	Addr string // listen address, e.g. ":8085"
+	// Guard decides who may call the server: guard.Origins(...) for pages from
+	// listed origins, guard.Token(...) for callers holding a token, both with
+	// guard.Chain, or your own. Nil means guard.Open() (any origin, no check).
+	// ConfigFromEnv reads GOJIBERRY_BRAILLESERVER_ALLOW_ORIGINS and GOJIBERRY_BRAILLESERVER_TOKEN.
+	Guard guard.Guard
+	Addr  string // listen address, e.g. ":8085"
 
 	// LouTranslateBinary/Table gate /translate the same way
 	// voiceserver.Config.PiperBinary gates /speak: with
@@ -56,6 +66,7 @@ const defaultTable = "en-us-g2.ctb"
 // GOJIBERRY_BRAILLESERVER_TABLE (default defaultTable).
 func ConfigFromEnv() Config {
 	return Config{
+		Guard:              guard.FromEnv("GOJIBERRY_BRAILLESERVER", "/health"),
 		Addr:               envOr("GOJIBERRY_BRAILLESERVER_ADDR", ":8085"),
 		LouTranslateBinary: os.Getenv("GOJIBERRY_BRAILLESERVER_LOU_TRANSLATE_BINARY"),
 		Table:              envOr("GOJIBERRY_BRAILLESERVER_TABLE", defaultTable),
@@ -103,20 +114,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/translate", s.handleTranslate)
-	return corsMiddleware(mux)
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return guard.Or(s.cfg.Guard).Wrap(mux)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -161,18 +159,39 @@ func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "text is required", http.StatusBadRequest)
 		return
 	}
-	table := req.Table
-	if table == "" {
-		table = s.cfg.Table
+	table := s.cfg.Table
+	if req.Table != "" {
+		// The table names a file for lou_translate to read (and a leading
+		// "-" would be taken for an option): only plain table names pass.
+		if !tableNameRe.MatchString(req.Table) {
+			http.Error(w, "invalid table name", http.StatusBadRequest)
+			return
+		}
+		table = req.Table
+	}
+	select {
+	case translateSlots <- struct{}{}:
+		defer func() { <-translateSlots }()
+	default:
+		http.Error(w, "too many translations in progress", http.StatusTooManyRequests)
+		return
 	}
 
 	braille, err := s.translate(s.cfg.LouTranslateBinary, table, req.Text)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		log.Printf("brailleserver: %v", err)
+		http.Error(w, "translation failed", http.StatusBadGateway)
 		return
 	}
 	writeJSON(w, http.StatusOK, translateResponse{Braille: braille})
 }
+
+var tableNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._,-]{0,127}$`)
+
+const translateTimeout = 15 * time.Second
+
+// translateSlots bounds how many lou_translate processes run at once.
+var translateSlots = make(chan struct{}, 4)
 
 // execLouTranslate is translate's real implementation: pipes text into
 // lou_translate's own stdin and reads the ASCII-braille text it writes
@@ -187,7 +206,9 @@ func execLouTranslate(binary, table, text string) (string, error) {
 	if table != "" {
 		args = append(args, table)
 	}
-	cmd := exec.Command(binary, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), translateTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Stdin = strings.NewReader(text)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

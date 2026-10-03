@@ -76,7 +76,9 @@ type Config struct {
 // goxc itself just wrote would create a feedback loop). A project's own
 // build-output directories (a WASM static/ dir, a temp binary path, ...)
 // are not covered here since there's no universal convention for them;
-// combine with Config.Ignore for those.
+// combine with Config.Ignore for those. (A rebuild that writes files under
+// Root -- generated code, a bundle -- triggers another rebuild unless Ignore
+// covers them.) Editors' scratch files are ignored too.
 func DefaultIgnore(path string) bool {
 	path = filepath.ToSlash(path)
 	switch {
@@ -84,20 +86,44 @@ func DefaultIgnore(path string) bool {
 		return true
 	case strings.HasSuffix(path, ".gox.go"):
 		return true
+	case isEditorTemp(filepath.Base(path)):
+		return true
 	default:
 		return false
 	}
 }
 
+// isEditorTemp matches the scratch files editors write beside the file being
+// saved (vim's swap files and its "4913" write probe, emacs lock files and
+// backups): they are not source and would only cause pointless rebuilds.
+func isEditorTemp(name string) bool {
+	switch {
+	case name == "4913", strings.HasPrefix(name, ".#"), strings.HasSuffix(name, "~"),
+		strings.HasSuffix(name, ".swp"), strings.HasSuffix(name, ".swx"), strings.HasSuffix(name, ".tmp"):
+		return true
+	}
+	return false
+}
+
+// skipDirs are directories that are never worth watching: dependency and
+// build-output trees hold thousands of subdirectories and would exhaust the
+// system's watch limit.
+var skipDirs = map[string]bool{".git": true, "node_modules": true, "vendor": true, "target": true, ".hg": true, ".svn": true}
+
 func addRecursive(watcher *fsnotify.Watcher, root string) error {
 	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			// One unreadable entry must not stop the whole watch.
+			log.Printf("devwatch: not watching %s: %v", path, err)
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if !d.IsDir() {
 			return nil
 		}
-		if d.Name() == ".git" {
+		if path != root && skipDirs[d.Name()] {
 			return filepath.SkipDir
 		}
 		return watcher.Add(path)
@@ -109,6 +135,7 @@ func addRecursive(watcher *fsnotify.Watcher, root string) error {
 type managedProcess struct {
 	mu   sync.Mutex
 	cmd  *exec.Cmd
+	done chan struct{} // closed once cmd has exited and been waited for
 	name string
 	args []string
 	env  []string
@@ -129,6 +156,21 @@ func (p *managedProcess) start() error {
 		return err
 	}
 	p.cmd = cmd
+	done := make(chan struct{})
+	p.done = done
+	// Wait at once, whoever stops it: a process that exits on its own is
+	// reported and reaped instead of lingering as a zombie until the next
+	// change.
+	go func() {
+		err := cmd.Wait()
+		p.mu.Lock()
+		current := p.cmd == cmd
+		p.mu.Unlock()
+		if current { // not one stop() is already tearing down
+			log.Printf("devwatch: the process exited (%v); it restarts after the next successful rebuild", err)
+		}
+		close(done)
+	}()
 	return nil
 }
 
@@ -137,18 +179,13 @@ func (p *managedProcess) start() error {
 // port the new one needs.
 func (p *managedProcess) stop() {
 	p.mu.Lock()
-	cmd := p.cmd
-	p.cmd = nil
+	cmd, done := p.cmd, p.done
+	p.cmd, p.done = nil, nil
 	p.mu.Unlock()
 	if cmd == nil || cmd.Process == nil {
 		return
 	}
 	_ = cmd.Process.Signal(syscall.SIGTERM) // best-effort -- the process may already be gone
-	done := make(chan struct{})
-	go func() {
-		_ = cmd.Wait()
-		close(done)
-	}()
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
@@ -192,6 +229,7 @@ func Run(cfg Config) error {
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
 
 	trigger := make(chan struct{}, 1)
 	var debounce *time.Timer
