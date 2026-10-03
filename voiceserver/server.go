@@ -82,6 +82,9 @@ type Server struct {
 	// interface document.
 	speak      func(binary, model, text string) ([]byte, error)
 	transcribe func(binary, model string, wav []byte) (string, error)
+
+	// speakSlots and transcribeSlots bound the processes of each kind.
+	speakSlots, transcribeSlots chan struct{}
 }
 
 // NewServer creates a voice server for the given config. With
@@ -91,7 +94,7 @@ type Server struct {
 // handleGoogleFonts take with no key configured, rather than refusing
 // to start at all.
 func NewServer(cfg Config) *Server {
-	return &Server{cfg: cfg, speak: execPiper, transcribe: execWhisper}
+	return &Server{cfg: cfg, speak: execPiper, transcribe: execWhisper, speakSlots: make(chan struct{}, 2), transcribeSlots: make(chan struct{}, 2)}
 }
 
 // Handler returns the HTTP routes:
@@ -161,10 +164,10 @@ func (s *Server) handleSpeak(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !acquire(w) {
+	if !acquire(w, s.speakSlots) {
 		return
 	}
-	defer release()
+	defer release(s.speakSlots)
 	audio, err := s.speak(s.cfg.PiperBinary, s.cfg.PiperModel, req.Text)
 	if err != nil {
 		log.Printf("voiceserver: speak: %v", err)
@@ -199,10 +202,10 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !acquire(w) {
+	if !acquire(w, s.transcribeSlots) {
 		return
 	}
-	defer release()
+	defer release(s.transcribeSlots)
 	text, err := s.transcribe(s.cfg.WhisperBinary, s.cfg.WhisperModel, wav)
 	if err != nil {
 		log.Printf("voiceserver: transcribe: %v", err)
@@ -222,13 +225,15 @@ const (
 	transcribeTimeout = 5 * time.Minute
 )
 
-// slots bounds how many piper/whisper processes run at once.
-var slots = make(chan struct{}, 2)
-
-// acquire takes a slot or answers 429.
-func acquire(w http.ResponseWriter) bool {
+// acquire takes a slot from sem (nil: no limit) or answers 429. Synthesis and
+// transcription have their own, so a long transcription does not turn every
+// /speak request away.
+func acquire(w http.ResponseWriter, sem chan struct{}) bool {
+	if sem == nil {
+		return true
+	}
 	select {
-	case slots <- struct{}{}:
+	case sem <- struct{}{}:
 		return true
 	default:
 		http.Error(w, "too many requests in progress", http.StatusTooManyRequests)
@@ -236,7 +241,11 @@ func acquire(w http.ResponseWriter) bool {
 	}
 }
 
-func release() { <-slots }
+func release(sem chan struct{}) {
+	if sem != nil {
+		<-sem
+	}
+}
 
 func execPiper(binary, model, text string) ([]byte, error) {
 	out, err := os.CreateTemp("", "voiceserver-speak-*.wav")

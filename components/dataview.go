@@ -114,6 +114,9 @@ func (v *DataView[T]) load(clamp bool) error {
 	}
 	v.Items, v.Total, v.TotalPages = result.Items, result.Total, result.TotalPages
 	if clamp && v.TotalPages > 0 && v.Page > v.TotalPages {
+		// A search or filter left fewer pages than this one: go to the last
+		// and fetch again. (A backend that reports no TotalPages gives us
+		// nothing to clamp to.)
 		v.Page = v.TotalPages
 		return v.load(false)
 	}
@@ -125,9 +128,11 @@ func (v *DataView[T]) SetPage(page int) error {
 	if page < 1 {
 		page = 1
 	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	previous := v.Page
 	v.Page = page
-	if err := v.Load(); err != nil {
+	if err := v.load(true); err != nil {
 		v.Page = previous // the table still shows the previous page's rows
 		return err
 	}
@@ -137,9 +142,11 @@ func (v *DataView[T]) SetPage(page int) error {
 // SetSearch sets Search, resets Page to 1 (a new search invalidates
 // whatever page the old result set was on), and reloads.
 func (v *DataView[T]) SetSearch(search string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	v.Search = search
 	v.Page = 1
-	return v.Load()
+	return v.load(true)
 }
 
 // SetSort sets SortKey/SortDesc and reloads. DataTableProps.OnSort's
@@ -149,9 +156,11 @@ func (v *DataView[T]) SetSearch(search string) error {
 // the same "caller decides asc/desc toggling" split DataTableProps.
 // OnSort's own doc comment already describes.
 func (v *DataView[T]) SetSort(key string, desc bool) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	v.SortKey, v.SortDesc = key, desc
 	v.Page = 1 // a new order starts from its first page, as a new search does
-	return v.Load()
+	return v.load(true)
 }
 
 // PaginationProps returns a ready-to-use Pagination configuration

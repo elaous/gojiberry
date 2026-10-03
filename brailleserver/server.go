@@ -192,6 +192,13 @@ func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, translateResponse{Braille: braille})
 }
 
+var tableNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._,-]{0,127}$`)
+
+const translateTimeout = 15 * time.Second
+
+// translateSlots bounds how many lou_translate processes run at once.
+var translateSlots = make(chan struct{}, 4)
+
 // execLouTranslate is translate's real implementation: pipes text into
 // lou_translate's own stdin and reads the ASCII-braille text it writes
 // to stdout -- the well-established liblouis CLI invocation shape,
@@ -200,13 +207,6 @@ func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {
 // exactly BRF's own on-the-wire representation -- the North American
 // Braille ASCII Grade 2 embossers and braille-display software both
 // consume -- so this output needs no further re-encoding downstream.
-var tableNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._,-]{0,127}$`)
-
-const translateTimeout = 15 * time.Second
-
-// translateSlots bounds how many lou_translate processes run at once.
-var translateSlots = make(chan struct{}, 4)
-
 func execLouTranslate(binary, table, text string) (string, error) {
 	args := []string{}
 	if table != "" {

@@ -120,7 +120,7 @@ func (m *Manager) handleCallbackFor(name string) http.HandlerFunc {
 		}
 		idToken, err := p.verifier.Verify(ctx, rawIDToken)
 		if err != nil {
-			http.Error(w, "auth: verifying id_token: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "auth: id_token verification failed", http.StatusUnauthorized)
 			return
 		}
 		if idToken.Nonce != state.Nonce {
@@ -129,7 +129,7 @@ func (m *Manager) handleCallbackFor(name string) http.HandlerFunc {
 		}
 		var claims idTokenClaims
 		if err := idToken.Claims(&claims); err != nil {
-			http.Error(w, "auth: decoding claims: "+err.Error(), http.StatusBadGateway)
+			http.Error(w, "auth: could not read the id_token claims", http.StatusBadGateway)
 			return
 		}
 		if claims.Subject == "" {

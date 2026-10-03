@@ -420,3 +420,40 @@ func TestPutBodyIsLimitedAndBackendErrorsAreNotEchoed(t *testing.T) {
 type zeroReader struct{}
 
 func (zeroReader) Read(p []byte) (int, error) { clear(p); return len(p), nil }
+
+func TestACLEndpointFailsClosedAndNeedsAnEmail(t *testing.T) {
+	provider := newFakeOIDCProvider(t)
+	m, err := auth.NewManager(context.Background(), auth.Config{
+		BaseURL:   "https://app.example.com",
+		Providers: []auth.Provider{{Name: "test", IssuerURL: provider.srv.URL, ClientID: "test-client", ClientSecret: "s"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &aclFailAdapter{Adapter: NewMemoryAdapter()}
+	handler := NewServer(store, "memory").WithAuth(m).Handler()
+	owner := sessionTokenFor(t, handler, provider, "owner@example.com", "owner-sub")
+	put := func(token string) int {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, withBearer(httptest.NewRequest(http.MethodPut, "/docs/doc/acl", strings.NewReader(`{}`)), token))
+		return rec.Code
+	}
+	if code := put(owner); code != http.StatusNoContent {
+		t.Fatalf("owner bootstrap: %d", code)
+	}
+	other := sessionTokenFor(t, handler, provider, "other@example.com", "other-sub")
+	store.fail = true // the ACL can no longer be read
+	if code := put(other); code == http.StatusNoContent {
+		t.Fatal("an unreadable ACL let another user take ownership")
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, withBearer(httptest.NewRequest(http.MethodGet, "/docs/doc/acl", nil), other))
+	if rec.Code == http.StatusOK {
+		t.Fatal("GET of an unreadable ACL answered as if it were empty")
+	}
+	store.fail = false
+	nobody := sessionTokenFor(t, handler, provider, "", "no-email-sub")
+	if code := put(nobody); code != http.StatusForbidden {
+		t.Fatalf("an account with no e-mail managed an ACL: %d", code)
+	}
+}
