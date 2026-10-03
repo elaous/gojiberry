@@ -198,12 +198,14 @@ func (s *Server) handleLocalDownload(w http.ResponseWriter, r *http.Request) {
 
 	// A few downloads at a time: each fetches megabytes and rescans the
 	// font directory.
-	select {
-	case s.downloads <- struct{}{}:
-		defer func() { <-s.downloads }()
-	default:
-		http.Error(w, "too many downloads in progress", http.StatusTooManyRequests)
-		return
+	if s.downloads != nil { // a Server built without NewServer has no limit
+		select {
+		case s.downloads <- struct{}{}:
+			defer func() { <-s.downloads }()
+		default:
+			http.Error(w, "too many downloads in progress", http.StatusTooManyRequests)
+			return
+		}
 	}
 	files, err := s.fetchGoogleFontFiles(family)
 	if err != nil {
