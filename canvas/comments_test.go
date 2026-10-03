@@ -360,3 +360,30 @@ func TestSafeLinkURL(t *testing.T) {
 	var fs *FootnoteSet
 	fs.ReplaceAll(nil)
 }
+
+func TestIDPrefixKeepsReplicasFromMintingTheSameID(t *testing.T) {
+	a, b := NewCommentSet(), NewCommentSet()
+	a.IDPrefix, b.IDPrefix = "ana-", "bo-"
+	ca, cb := a.Add(Comment{Text: "x"}), b.Add(Comment{Text: "y"})
+	if ca.ID == cb.ID || ca.ID != "ana-c1" || cb.ID != "bo-c1" {
+		t.Fatalf("ids %q %q", ca.ID, cb.ID)
+	}
+	fa, fb := NewFootnoteSet(), NewFootnoteSet()
+	fa.IDPrefix, fb.IDPrefix = "ana-", "bo-"
+	if fa.Add(Footnote{}).ID == fb.Add(Footnote{}).ID {
+		t.Fatal("footnote ids collide")
+	}
+}
+
+func TestStripMarkdownKeepsIdentifiersAndAddresses(t *testing.T) {
+	for in, want := range map[string]string{
+		"use snake_case and ana_b@example.com": "use snake_case and ana_b@example.com",
+		"**bold** and _italic_ and *it*":       "bold and italic and it",
+		"2*3 = 6":                              "2*3 = 6",
+		"`code` and ~~gone~~":                  "code and gone",
+	} {
+		if got := StripMarkdown(in); got != want {
+			t.Errorf("StripMarkdown(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

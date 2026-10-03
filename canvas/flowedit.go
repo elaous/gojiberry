@@ -698,7 +698,12 @@ func (f *TextFlow) ToggleSubscript() bool {
 // PasteFormat gives the selected text exactly format fm; with no
 // selection it applies to the text typed next.
 func (f *TextFlow) PasteFormat(fm Format) bool {
-	return f.ApplyFormat(func(x *Format) { *x = fm })
+	return f.ApplyFormat(func(x *Format) {
+		// The target keeps its own comment, bookmark and index marks.
+		comment, bookmark, index := x.Comment, x.Bookmark, x.Index
+		*x = fm
+		x.Comment, x.Bookmark, x.Index = comment, bookmark, index
+	})
 }
 
 // HandleCommand implements Commander. While the caret is in the text the

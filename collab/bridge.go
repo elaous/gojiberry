@@ -47,6 +47,14 @@ func attach(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	if _, err := atomsFromItems(f.ContentItems()); err != nil {
 		return nil, err
 	}
+	// Comments and notes made here get IDs no other replica can mint.
+	if f.Comments == nil {
+		f.Comments = canvas.NewCommentSet()
+	}
+	if f.Footnotes == nil {
+		f.Footnotes = canvas.NewFootnoteSet()
+	}
+	f.Comments.IDPrefix, f.Footnotes.IDPrefix = replica+"-", replica+"-"
 	b := &Bridge{Doc: crdt.NewDocWithStrategy(replica, crdt.MergeCharCRDT), Flow: f}
 	f.Subscribe(func(*canvas.TextFlow) { b.pushLocal() })
 	f.UndoHook = b.UndoStep
