@@ -73,7 +73,7 @@ func (Links) Install(r *Registry) {
 	r.AddCommand(CmdRemoveLink, "Remove link", "Mod+Alt+K", func(c *CommandContext) bool { return removeLink(c.Target) })
 	r.AddCommand(CmdOpenLink, "Open link", "Mod+Alt+O", func(c *CommandContext) bool {
 		url, _, _ := linkAtCursor(c.Target)
-		if url == "" || c.OpenLink == nil {
+		if url == "" || c.OpenLink == nil || !SafeLinkURL(url) {
 			return false
 		}
 		c.OpenLink(url)

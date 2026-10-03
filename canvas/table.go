@@ -42,7 +42,12 @@ func NewTableFrom(rows [][]string) *Table {
 func (t *Table) Rows() int { return len(t.Cells) }
 
 // Cols is the number of columns.
-func (t *Table) Cols() int { return len(t.Cells[0]) }
+func (t *Table) Cols() int {
+	if len(t.Cells) == 0 {
+		return 0
+	}
+	return len(t.Cells[0])
+}
 
 // Cell returns the text at (row, col), or "" if out of range.
 func (t *Table) Cell(row, col int) string {

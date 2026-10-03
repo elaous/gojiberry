@@ -46,7 +46,8 @@ func (f *TextFlow) SelectedText() string {
 	}
 	f.Layout()
 	from, to := f.Selection()
-	from, to = max(from, 0), min(to, len(f.data.runes))
+	from = min(max(from, 0), len(f.data.runes)) // a stale selection may lie past the end
+	to = min(max(to, from), len(f.data.runes))
 	var b strings.Builder
 	for _, r := range f.data.runes[from:to] {
 		if r != objectRune {
