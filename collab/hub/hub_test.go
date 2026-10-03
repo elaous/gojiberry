@@ -489,3 +489,35 @@ func TestGuardOriginsAndTokenApplyToTheHub(t *testing.T) {
 		t.Fatal("the hub's guard was not applied")
 	}
 }
+
+func TestReplicaIDsAreBoundToTheUserWhoFirstUsedThem(t *testing.T) {
+	h := New(Config{User: func(r *http.Request) string { return r.Header.Get("X-User") }})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	post := func(user, replica string) int {
+		req, _ := http.NewRequest("POST", srv.URL+"/docs/d/ops?replica="+replica, strings.NewReader("[]"))
+		req.Header.Set("X-User", user)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if post("ana@x", "r1") != 204 || post("ana@x", "r1") != 204 {
+		t.Fatal("the owner of a replica id keeps using it")
+	}
+	if post("bo@x", "r1") != 403 {
+		t.Fatal("another user spoke under ana's replica id")
+	}
+	if post("bo@x", "r2") != 204 || post("", "r1") != 204 {
+		t.Fatal("other ids are free, and anonymous callers are not bound")
+	}
+	pres, _ := http.NewRequest("POST", srv.URL+"/docs/d/presence", strings.NewReader(`{"replica":"r1","name":"x"}`))
+	pres.Header.Set("X-User", "bo@x")
+	resp, _ := http.DefaultClient.Do(pres)
+	resp.Body.Close()
+	if resp.StatusCode != 403 {
+		t.Fatalf("presence under another user's replica id: %d", resp.StatusCode)
+	}
+}
