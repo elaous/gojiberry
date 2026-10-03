@@ -1,0 +1,21 @@
+/* Saver stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-saver { display: flex; flex-direction: column; gap: 0.6em; min-width: 18em; }
+.gj-saver-row { display: flex; gap: 0.5em; align-items: flex-end; }
+.gj-saver-field { display: flex; flex-direction: column; gap: 0.15em; flex: 1; }
+.gj-saver-label, .gj-saver-title { font-size: 0.75em; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gj-muted); margin: 0; }
+.gj-saver-select, .gj-saver-name { padding: 0.35em 0.5em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); font: inherit; }
+.gj-saver-name { flex: 1; min-width: 0; }
+.gj-saver button { padding: 0.35em 0.8em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); cursor: pointer; font: inherit; }
+.gj-saver button:hover:not(:disabled) { background: var(--gj-bg-muted); }
+.gj-saver button:disabled { opacity: 0.5; cursor: default; }
+.gj-saver-save { background: var(--gj-accent) !important; color: var(--gj-accent-text, #fff) !important; border-color: var(--gj-accent) !important; }
+.gj-saver-status { font-size: 0.85em; color: var(--gj-muted); }
+.gj-saver-failed { color: var(--gj-danger, #c01c28); }
+.gj-saver-saved-head { display: flex; justify-content: space-between; align-items: center; }
+.gj-saver-list { list-style: none; margin: 0.3em 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.gj-saver-entry { display: flex; align-items: center; gap: 0.5em; padding: 0.25em 0; border-bottom: 1px solid var(--gj-border); }
+.gj-saver-entry-name { font-weight: 500; }
+.gj-saver-entry-meta { flex: 1; font-size: 0.8em; color: var(--gj-muted); }
+.gj-saver-empty { margin: 0.3em 0 0; font-size: 0.85em; color: var(--gj-muted); }

@@ -337,6 +337,17 @@ func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 		return "", 0, p.errorf(chunk, nameStart, "unknown HTML tag <%s>: not a recognized HTML element, not a custom element (needs a hyphen, e.g. <my-widget>), and not a Component (needs a capital first letter); if this is a real tag gox doesn't know about yet, add it to validHTMLTags in internal/transpile/htmlvalidate.go", name)
 	}
 
+	// A generic Component's type arguments: <List[Item] items={xs} />.
+	typeArgs := ""
+	if pos < n && chunk[pos] == '[' && isComponentName(name) {
+		end, err := findMatchingBracket(chunk, pos)
+		if err != nil {
+			return "", 0, p.errorf(chunk, pos, "in the type arguments of <%s>: %v", name, err)
+		}
+		typeArgs = string(chunk[pos : end+1])
+		pos = end + 1
+	}
+
 	attrs, pos, err := p.parseAttrs(chunk, pos, name)
 	if err != nil {
 		return "", 0, err
@@ -348,7 +359,7 @@ func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 	}
 	if pos+1 < n && chunk[pos] == '/' && chunk[pos+1] == '>' {
 		pos += 2
-		return p.renderTag(name, attrs, nil), pos, nil
+		return p.renderTag(name, typeArgs, attrs, nil), pos, nil
 	}
 	if pos >= n || chunk[pos] != '>' {
 		return "", 0, p.errorf(chunk, pos, "expected '>' or '/>' to close <%s> tag opened", name)
@@ -360,7 +371,7 @@ func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 		return "", 0, err
 	}
 	_ = startPos
-	return p.renderTag(name, attrs, children), pos, nil
+	return p.renderTag(name, typeArgs, attrs, children), pos, nil
 }
 
 func isSpace(r rune) bool { return r == ' ' || r == '\t' || r == '\n' || r == '\r' }
@@ -651,9 +662,9 @@ func childExprSource(c childNode) string {
 	return c.expr
 }
 
-func (p *parser) renderTag(name string, attrs []attr, children []childNode) string {
+func (p *parser) renderTag(name, typeArgs string, attrs []attr, children []childNode) string {
 	if isComponentName(name) {
-		return p.renderComponent(name, attrs, children)
+		return p.renderComponent(name, typeArgs, attrs, children)
 	}
 	return p.renderElement(name, attrs, children)
 }
@@ -699,8 +710,9 @@ func attrExprSource(a attr) string {
 }
 
 // renderComponent renders <Name attr=... >children</Name> as
-// Name(NameProps{Field: value, ..., Children: []gox.Node{...}}).
-func (p *parser) renderComponent(name string, attrs []attr, children []childNode) string {
+// Name(NameProps{Field: value, ..., Children: []gox.Node{...}}); for a
+// generic component, <Name[T] ...> becomes Name[T](NameProps[T]{...}).
+func (p *parser) renderComponent(name, typeArgs string, attrs []attr, children []childNode) string {
 	callName := name
 	propsType := name + "Props"
 	if idx := strings.LastIndexByte(name, '.'); idx >= 0 {
@@ -727,6 +739,26 @@ func (p *parser) renderComponent(name string, attrs []attr, children []childNode
 		fields = append(fields, fmt.Sprintf("Children: []gox.Node{%s}", strings.Join(childExprs, ", ")))
 	}
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("%s(%s{%s})", callName, propsType, strings.Join(fields, ", ")))
+	b.WriteString(fmt.Sprintf("%s%s(%s%s{%s})", callName, typeArgs, propsType, typeArgs, strings.Join(fields, ", ")))
 	return b.String()
+}
+
+// findMatchingBracket returns the index of the ']' matching the '[' at
+// chunk[open], skipping nested brackets (map[string]int, []T).
+func findMatchingBracket(chunk []rune, open int) (int, error) {
+	depth := 0
+	for i := open; i < len(chunk); i++ {
+		switch chunk[i] {
+		case '[':
+			depth++
+		case ']':
+			depth--
+			if depth == 0 {
+				return i, nil
+			}
+		case '\n', '<', '>', '{', '}':
+			return 0, fmt.Errorf("unexpected %q (type arguments look like [Item] or [string, map[string]int])", chunk[i])
+		}
+	}
+	return 0, fmt.Errorf("missing ']'")
 }

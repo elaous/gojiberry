@@ -10,6 +10,7 @@
 package domrt
 
 import (
+	"strings"
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/gox"
@@ -24,9 +25,10 @@ type Root struct {
 	tree      *renderedNode
 }
 
-// Mount creates DOM nodes for initial and appends them to container,
-// returning a Root whose Update re-renders in place on future calls.
+// Mount installs the registered stylesheets (see InstallStyles), creates
+// DOM nodes for initial and appends them to container, returning a Root whose Update re-renders in place on future calls.
 func Mount(container js.Value, initial gox.Node) *Root {
+	InstallStyles()
 	rn := create(initial)
 	for _, n := range rn.ownedNodes() {
 		container.Call("appendChild", n)
@@ -132,6 +134,9 @@ func createInner(n gox.Node) *renderedNode {
 		return &renderedNode{kind: gox.KindText, dom: d, text: n.Text}
 	case gox.KindRaw:
 		return &renderedNode{kind: gox.KindRaw, rawNodes: parseHTMLFragment(n.Text), text: n.Text}
+	case gox.KindHost:
+		// Host nodes belong to another renderer; leave a hole.
+		return &renderedNode{kind: gox.KindFragment}
 	case gox.KindFragment:
 		rn := &renderedNode{kind: gox.KindFragment}
 		for _, c := range n.Children {
@@ -197,6 +202,18 @@ func applyAttr(rn *renderedNode, a gox.Attr) {
 		return
 	}
 	rn.dom.Call("setAttribute", a.Name, a.Value)
+	if a.Name == "autofocus" {
+		// The attribute only works on page load: focus the element once it
+		// is in the document.
+		el := rn.dom
+		var focus js.Func
+		focus = js.FuncOf(func(js.Value, []js.Value) any {
+			el.Call("focus")
+			focus.Release()
+			return nil
+		})
+		js.Global().Call("requestAnimationFrame", focus)
+	}
 }
 
 func removeAttr(rn *renderedNode, a gox.Attr) {
@@ -260,6 +277,13 @@ func domEventToGoxEvent(ev js.Value) gox.Event {
 		}
 		if c := target.Get("checked"); c.Type() == js.TypeBoolean {
 			checked = c.Bool()
+		}
+	}
+	if strings.HasPrefix(typ, "key") {
+		value = gox.KeyData{
+			Key: ev.Get("key").String(), Code: ev.Get("code").String(),
+			Ctrl: ev.Get("ctrlKey").Bool(), Shift: ev.Get("shiftKey").Bool(),
+			Alt: ev.Get("altKey").Bool(), Meta: ev.Get("metaKey").Bool(),
 		}
 	}
 	preventDefault := func() { ev.Call("preventDefault") }
@@ -411,6 +435,12 @@ func patchChildren(parent js.Value, endAnchor js.Value, old []*renderedNode, nex
 			ref = endAnchor
 		}
 		for _, dn := range reverse(result[i].ownedNodes()) {
+			// A node already in place is left alone: re-inserting it would
+			// drop the focus (and the selection) from anything inside it.
+			if inPlace(parent, dn, ref) {
+				ref = dn
+				continue
+			}
 			if ref.IsUndefined() {
 				parent.Call("appendChild", dn)
 			} else {
@@ -433,3 +463,16 @@ func reverse(vs []js.Value) []js.Value {
 // key exists only because renderedNode doesn't otherwise retain the
 // gox.Node.Key it was created from; store it alongside text/attrs.
 func (rn *renderedNode) key() string { return rn.k }
+
+// inPlace reports whether dn is already a child of parent directly before
+// ref (the last child when ref is undefined).
+func inPlace(parent, dn, ref js.Value) bool {
+	if !dn.Get("parentNode").Equal(parent) {
+		return false
+	}
+	next := dn.Get("nextSibling")
+	if ref.IsUndefined() {
+		return next.IsNull()
+	}
+	return next.Equal(ref)
+}

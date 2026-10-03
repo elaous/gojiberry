@@ -8,7 +8,7 @@
 # image -- one Dockerfile per gojiberry binary, matching each having
 # its own single-static-binary shape already (docstore.ConfigFromEnv's
 # own doc comment).
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
 # ca-certificates isn't preinstalled on plain alpine -- installed here
 # (not in the scratch runtime stage below, which has no package
 # manager at all) purely so the file exists somewhere to COPY

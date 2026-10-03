@@ -1,0 +1,94 @@
+package main
+
+import (
+	cv "github.com/elaous/gojiberry/canvas"
+	canvas "github.com/elaous/gojiberry/canvas/gox"
+	"github.com/elaous/gojiberry/gox"
+)
+
+// Callbacks are how the canvas reports what happened in it.
+type Callbacks struct {
+	OnFlow      func(*cv.TextFlow)
+	OnHoverLink func(url string)
+	OnHoverComment func(id string)
+	OnNote  func(*cv.FloatingText)
+	OnTable func(*cv.Table)
+}
+
+// Doc is the whole editor canvas as one tree: a scrolling viewport over
+// three pages, the editable text flow (Markdown to start with), a picture
+// the text wraps around, a floating note and a floating table. The
+// editing features are registered explicitly, to show where to add or
+// remove one.
+func Doc(state State, cb Callbacks) gox.Node {
+	return <canvas.Canvas width={920} height={640} mode={state.Mode} role={state.Role} features={cv.DefaultFeatures()}>
+		<canvas.ScrollView x={10} y={10} width={900} height={620} lockH={!state.Spread}>
+			<canvas.TextFlow
+				x={0} y={0} width={880}
+				source={state.Source}
+				items={state.Items}
+				transform={state.Transform()}
+				pageCount={state.Pages}
+				pageWidth={560} pageHeight={420}
+				spread={state.Spread}
+				styles={state.Styles}
+				autoClose={cv.DefaultAutoClose()}
+				vocabulary={[]string{"Gojiberry", "canvas", "feature", "paragraph"}}
+				margins={[]float64{60, 50, 60, 50}}
+				onChange={cb.OnFlow}
+				onHoverLink={cb.OnHoverLink}
+				comments={state.Comments}
+				footnotes={state.Footnotes}
+				author={state.Author}
+				onHoverComment={cb.OnHoverComment}
+				pages={func(page gox.Node, n int) gox.Node {
+					return <>
+						<canvas.Header text="Gojiberry editor" />
+						{page}
+						{watermark(n)}
+						<canvas.Footer>
+							<canvas.PageNumber format="Page {n} of {total}" align={cv.AlignRight} />
+						</canvas.Footer>
+					</>
+				}}
+			/>
+			{picture(state)}
+			<canvas.FloatingText
+				text={state.Note}
+				opacity={0.95}
+				anchor={&cv.Anchor{Page: 0, X: 330, Y: 250}}
+				wrap
+				vocabulary={[]string{"Gojiberry", "canvas", "feature"}}
+				onChange={cb.OnNote}
+			/>
+			<canvas.Table
+				cells={[][]string{{"Feature", "Keys"}, {"Multi-cursor", "Ctrl+D"}, {"Move line", "Alt+Up/Down"}}}
+				anchor={&cv.Anchor{Page: 1, X: 60, Y: 200}}
+				wrap
+				onChange={cb.OnTable}
+			/>
+		</canvas.ScrollView>
+	</canvas.Canvas>
+}
+
+// watermark puts DRAFT across every sheet but the first: the later sheets
+// inherit the first one that sets it.
+func watermark(n int) gox.Node {
+	if n == 0 {
+		return <></>
+	}
+	return <canvas.Watermark text="DRAFT" opacity={0.12} />
+}
+
+// picture is the image, once it has loaded.
+func picture(state State) gox.Node {
+	if state.Image == nil {
+		return <></>
+	}
+	return <canvas.Image
+		source={state.Image}
+		width={120} height={80}
+		anchor={&cv.Anchor{Page: 1, X: 330, Y: 40}}
+		wrap
+	/>
+}

@@ -5,7 +5,6 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
-	"os"
 	"path"
 	"sort"
 	"strconv"
@@ -34,6 +33,10 @@ import (
 const (
 	titleMarker       = "@title "
 	stylesheetsMarker = "@stylesheets "
+	// stylesMarker picks which registered stylesheets (CSS imports) a
+	// page includes: `@styles components/base.css button.css` (full IDs or
+	// their ends), or `@styles none`. Without it a page gets them all.
+	stylesMarker = "@styles "
 	// wasmMarker names the URL a compiled WASM client is served from
 	// (e.g. "/static/main.wasm"), not a filesystem path: unlike
 	// @stylesheets, which reads a file's content at transpile time,
@@ -70,7 +73,7 @@ const defaultTitleIdent = "DefaultTitle"
 // A cheap substring pre-check means files that never use any of the
 // three markers are returned unchanged without paying for a parse.
 func processPageMetadata(filename, baseDir, src string) (string, error) {
-	if !strings.Contains(src, titleMarker) && !strings.Contains(src, stylesheetsMarker) && !strings.Contains(src, wasmMarker) {
+	if !strings.Contains(src, titleMarker) && !strings.Contains(src, stylesheetsMarker) && !strings.Contains(src, stylesMarker) && !strings.Contains(src, wasmMarker) {
 		return src, nil
 	}
 
@@ -88,36 +91,29 @@ func processPageMetadata(filename, baseDir, src string) (string, error) {
 			continue
 		}
 
-		title, stylesheets, wasmURL, found := parsePageDoc(fn.Doc)
+		title, stylesheets, styles, wasmURL, found := parsePageDoc(fn.Doc)
 		if !found {
 			continue
 		}
 
-		var declText strings.Builder
+		if len(stylesheets) > 0 {
+			return "", fmt.Errorf("%s: @stylesheets on func %s is no longer supported: import the stylesheet instead, `import _ \"<module path>/%s\"`, and gox.Document includes it", filename, fn.Name.Name, stylesheets[0])
+		}
 		var headExprs []string
-		for _, sheet := range stylesheets {
-			abs, err := ResolveResourcePath(LoaderInput{Path: sheet, BaseDir: baseDir, SourceFile: filename})
-			if err != nil {
-				return "", fmt.Errorf("%s: @stylesheets on func %s: %w", filename, fn.Name.Name, err)
-			}
-			data, err := os.ReadFile(abs)
-			if err != nil {
-				return "", fmt.Errorf("%s: @stylesheets %q on func %s: %w", filename, sheet, fn.Name.Name, err)
-			}
-			varName := "pageStyle_" + fn.Name.Name + "_" + DeriveIdent(sheet)
-			fmt.Fprintf(&declText, "var %s = %s\n", varName, strconv.Quote(string(data)))
-			headExprs = append(headExprs, "gox.Style("+varName+")")
-		}
-		if declText.Len() > 0 {
-			docStart := fset.Position(fn.Doc.Pos()).Offset
-			edits = append(edits, returnEdit{start: docStart, end: docStart, replacement: declText.String()})
-		}
 
 		titleSrc := defaultTitleIdent
 		if title != "" {
 			titleSrc = strconv.Quote(title)
 		}
 		headSrc := "[]gox.Node{" + strings.Join(headExprs, ", ") + "}"
+		stylesSrc := ""
+		if styles != nil {
+			quoted := make([]string, len(styles))
+			for i, st := range styles {
+				quoted[i] = strconv.Quote(st)
+			}
+			stylesSrc = ", Styles: []string{" + strings.Join(quoted, ", ") + "}"
+		}
 
 		bodyWrap := func(original string) string { return original }
 		if wasmURL != "" {
@@ -136,7 +132,7 @@ WebAssembly.instantiateStreaming(fetch(%s), go.importObject).then((result) => {
 			}
 		}
 
-		wrapped := wrapPageReturns(fset, src, fn.Body, titleSrc, headSrc, bodyWrap)
+		wrapped := wrapPageReturns(fset, src, fn.Body, titleSrc, headSrc+stylesSrc, bodyWrap)
 		if len(wrapped) == 0 {
 			return "", fmt.Errorf("%s: func %s has an @title/@stylesheets/@wasm annotation but no single-value return statement to wrap -- does it return exactly one gox.Node?", filename, fn.Name.Name)
 		}
@@ -158,7 +154,7 @@ WebAssembly.instantiateStreaming(fetch(%s), go.importObject).then((result) => {
 // parsePageDoc scans a func's doc comment for @title/@stylesheets/
 // @wasm lines, leaving ordinary prose lines alone. found is false if
 // none of the markers appear, meaning the function is left untouched.
-func parsePageDoc(doc *ast.CommentGroup) (title string, stylesheets []string, wasmURL string, found bool) {
+func parsePageDoc(doc *ast.CommentGroup) (title string, stylesheets, styles []string, wasmURL string, found bool) {
 	for _, c := range doc.List {
 		text := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
 		switch {
@@ -168,12 +164,20 @@ func parsePageDoc(doc *ast.CommentGroup) (title string, stylesheets []string, wa
 		case strings.HasPrefix(text, stylesheetsMarker):
 			stylesheets = append(stylesheets, strings.TrimSpace(strings.TrimPrefix(text, stylesheetsMarker)))
 			found = true
+		case strings.HasPrefix(text, stylesMarker):
+			styles = []string{} // non-nil: the page chose
+			for _, f := range strings.Fields(strings.TrimPrefix(text, stylesMarker)) {
+				if f != "none" {
+					styles = append(styles, f)
+				}
+			}
+			found = true
 		case strings.HasPrefix(text, wasmMarker):
 			wasmURL = strings.TrimSpace(strings.TrimPrefix(text, wasmMarker))
 			found = true
 		}
 	}
-	return title, stylesheets, wasmURL, found
+	return title, stylesheets, styles, wasmURL, found
 }
 
 type returnEdit struct {

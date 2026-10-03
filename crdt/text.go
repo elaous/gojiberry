@@ -1,5 +1,7 @@
 package crdt
 
+import "sort"
+
 // MergeStrategy selects how Doc.Apply resolves two replicas writing to
 // the same block's Content concurrently. The zero value, MergeLWW, is
 // this package's original behavior and NewDoc's default.
@@ -26,6 +28,9 @@ type CharOpKind int
 const (
 	CharInsert CharOpKind = iota
 	CharDelete
+	// CharMark adds a formatting Mark (see marks.go); the op carries it in
+	// CharOp.Mark.
+	CharMark
 )
 
 // CharOp is one character-level edit: the unit MergeCharCRDT exchanges
@@ -42,6 +47,8 @@ type CharOp struct {
 	Origin Timestamp
 	// Value is the inserted character. Unused for CharDelete.
 	Value rune
+	// Mark is the formatting span a CharMark adds; nil for other kinds.
+	Mark *Mark `json:",omitempty"`
 }
 
 // char is one element of a Text's converged sequence.
@@ -51,6 +58,9 @@ type char struct {
 	value   rune
 	deleted bool
 }
+
+// maxPending is how many out-of-order inserts a Text will hold back.
+const maxPending = 1 << 16
 
 // Text is a per-character CRDT sequence -- a Replicated Growable Array
 // (RGA, Roh et al. 2011): a convergent, conflict-free ordered list of
@@ -77,15 +87,43 @@ type Text struct {
 	// arrive instead of briefly resurrecting content that was
 	// supposed to be gone.
 	tombstoned map[Timestamp]bool
+	// pending holds inserts whose origin has not arrived yet (delivered
+	// out of causal order); they are placed as soon as it does, so the
+	// result does not depend on delivery order.
+	pending []CharOp
+	// marks are the formatting spans, in arrival order (see marks.go);
+	// markIDs makes adding one idempotent.
+	marks   []Mark
+	markIDs map[Timestamp]bool
+	// pos caches the index of each character id for chars[:posValid];
+	// an insert in the middle invalidates the cache from there on, and
+	// the next lookup extends it again (see indexOf).
+	pos      map[Timestamp]int
+	posValid int
 }
 
+// indexOf returns the position of character id in chars (tombstones
+// included), or -1. It reads a position cache that is extended lazily, so
+// loading a long text in order (a snapshot) costs O(n), not O(n^2).
 func (t *Text) indexOf(id Timestamp) int {
-	for i, c := range t.chars {
-		if c.id == id {
-			return i
-		}
+	if t.pos == nil {
+		t.pos = make(map[Timestamp]int, len(t.chars))
+	}
+	for ; t.posValid < len(t.chars); t.posValid++ {
+		t.pos[t.chars[t.posValid].id] = t.posValid
+	}
+	if i, ok := t.pos[id]; ok && i < len(t.chars) && t.chars[i].id == id {
+		return i
 	}
 	return -1
+}
+
+// invalidateFrom marks the position cache stale from index i on, after an
+// insertion at i moved everything behind it.
+func (t *Text) invalidateFrom(i int) {
+	if i < t.posValid {
+		t.posValid = i
+	}
 }
 
 func (t *Text) hasID(id Timestamp) bool {
@@ -135,11 +173,20 @@ func (t *Text) insert(id, origin Timestamp, value rune) {
 	if origin != (Timestamp{}) {
 		idx := t.indexOf(origin)
 		if idx < 0 {
-			// Origin not seen yet. A correct topology delivers ops in
-			// causal order per source replica, so this shouldn't
-			// happen in practice -- append rather than drop the
-			// character outright.
-			t.chars = append(t.chars, char{id: id, origin: origin, value: value, deleted: deleted})
+			// The origin has not arrived (delivery out of causal order):
+			// hold the insert until it does.
+			for _, p := range t.pending {
+				if p.ID == id {
+					return
+				}
+			}
+			if len(t.pending) >= maxPending {
+				return // a peer sending inserts whose origins never arrive must not grow this forever
+			}
+			if deleted {
+				t.tombstoned[id] = true // keep the early delete for when it is placed
+			}
+			t.pending = append(t.pending, CharOp{Kind: CharInsert, ID: id, Origin: origin, Value: value})
 			return
 		}
 		originPos = idx
@@ -169,6 +216,22 @@ func (t *Text) insert(id, origin Timestamp, value rune) {
 	t.chars = append(t.chars, char{})
 	copy(t.chars[pos+1:], t.chars[pos:])
 	t.chars[pos] = char{id: id, origin: origin, value: value, deleted: deleted}
+	t.invalidateFrom(pos)
+	t.placePending(id)
+}
+
+// placePending inserts the held inserts whose origin is id (and,
+// recursively, theirs).
+func (t *Text) placePending(id Timestamp) {
+	for i := 0; i < len(t.pending); i++ {
+		p := t.pending[i]
+		if p.Origin != id {
+			continue
+		}
+		t.pending = append(t.pending[:i], t.pending[i+1:]...)
+		t.insert(p.ID, p.Origin, p.Value)
+		i = -1 // the slice changed under us; start over
+	}
 }
 
 // delete tombstones a character by id, or records a pre-emptive
@@ -191,6 +254,10 @@ func (t *Text) apply(op CharOp) {
 		t.insert(op.ID, op.Origin, op.Value)
 	case CharDelete:
 		t.delete(op.ID)
+	case CharMark:
+		if op.Mark != nil {
+			t.addMark(*op.Mark)
+		}
 	}
 }
 
@@ -208,6 +275,28 @@ func (t *Text) snapshotOps() []CharOp {
 		if c.deleted {
 			ops = append(ops, CharOp{Kind: CharDelete, ID: c.id})
 		}
+	}
+	for i := range t.marks {
+		m := t.marks[i]
+		ops = append(ops, CharOp{Kind: CharMark, Mark: &m})
+	}
+	// Inserts still waiting for their origin travel too, so a replica
+	// onboarded from this one ends up in the same state -- and so do the
+	// deletes that arrived before their insert did, or the character would
+	// come back when it is finally placed.
+	ops = append(ops, t.pending...)
+	var early []Timestamp
+	for id := range t.tombstoned {
+		early = append(early, id)
+	}
+	sort.Slice(early, func(i, j int) bool {
+		if early[i].Counter != early[j].Counter {
+			return early[i].Counter < early[j].Counter
+		}
+		return early[i].Replica < early[j].Replica
+	})
+	for _, id := range early {
+		ops = append(ops, CharOp{Kind: CharDelete, ID: id})
 	}
 	return ops
 }
