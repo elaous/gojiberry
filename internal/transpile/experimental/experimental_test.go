@@ -106,7 +106,7 @@ func main() {
 	if err != nil {
 		t.Fatalf("expected generated migration at %s: %v", migrationPath, err)
 	}
-	for _, want := range []string{"CREATE TABLE IF NOT EXISTS users", "id UUID PRIMARY KEY", "email TEXT UNIQUE", "created_at TIMESTAMP NOT NULL"} {
+	for _, want := range []string{`CREATE TABLE IF NOT EXISTS "users"`, `"id" UUID PRIMARY KEY`, `"email" TEXT UNIQUE`, `"created_at" TIMESTAMP NOT NULL`} {
 		if !strings.Contains(string(migrationSQL), want) {
 			t.Errorf("expected generated migration to contain %q, got:\n%s", want, migrationSQL)
 		}
@@ -142,7 +142,7 @@ table "books" {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(migrationSQL), "author_id UUID REFERENCES users(id)") {
+	if !strings.Contains(string(migrationSQL), `"author_id" UUID REFERENCES "users"("id")`) {
 		t.Errorf("expected a REFERENCES clause derived from the references attribute, got:\n%s", migrationSQL)
 	}
 }
@@ -266,4 +266,41 @@ func installFakeSqlc(t *testing.T, body string) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestHCLMigrationQuotesOrdersAndValidates(t *testing.T) {
+	ref := func(s string) *string { return &s }
+	schema := hclSchema{Tables: []hclTable{
+		{Name: "order", Columns: []hclColumn{{Name: "user-id", Type: "uuid", References: ref("people.id")}}},
+		{Name: "people", Columns: []hclColumn{{Name: "id", Type: "uuid", PrimaryKey: true}}},
+	}}
+	sql, err := generateHCLMigration(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Index(sql, `"people"`) > strings.Index(sql, `"order"`) {
+		t.Errorf("a referenced table must be created first:\n%s", sql)
+	}
+	for _, want := range []string{`"order"`, `"user-id"`, `REFERENCES "people"("id")`} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("missing %s in:\n%s", want, sql)
+		}
+	}
+	schema.Tables[0].Columns[0].References = ref("people")
+	if _, err := generateHCLMigration(schema); err == nil {
+		t.Error("a references value without a column must be an error")
+	}
+}
+
+func TestClaimAliasRefusesASecondSchemaUnderOneAlias(t *testing.T) {
+	dir := t.TempDir()
+	if err := claimAlias(dir, "/a/schema.hcl"); err != nil {
+		t.Fatal(err)
+	}
+	if err := claimAlias(dir, "/a/schema.hcl"); err != nil {
+		t.Fatalf("the same file may regenerate: %v", err)
+	}
+	if err := claimAlias(dir, "/b/schema.hcl"); err == nil {
+		t.Fatal("another file under the same alias must be refused")
+	}
 }

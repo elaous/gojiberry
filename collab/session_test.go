@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -233,4 +234,31 @@ func TestConnectRefusesUnsupportedContent(t *testing.T) {
 	if _, err := Connect("a", odd, client.Options{BaseURL: "http://127.0.0.1:1", Doc: "d"}); err == nil {
 		t.Fatal("unshareable content")
 	}
+}
+
+// Edits a hub acknowledged are gone if it restarts without them; the client
+// sends its whole document again when it reconnects to a poorer one.
+func TestClientResendsWhatARestartedHubLost(t *testing.T) {
+	var cur atomic.Pointer[hub.Hub]
+	cur.Store(hub.New(hub.Config{}))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { cur.Load().Handler().ServeHTTP(w, r) }))
+	t.Cleanup(srv.Close)
+	connect := func(replica string, flow *canvas.TextFlow) *Session {
+		s, err := Connect(replica, flow, client.Options{BaseURL: srv.URL, Doc: "d1", Retry: 10 * time.Millisecond, MaxRetry: 50 * time.Millisecond})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(s.Close)
+		return s
+	}
+	a := connect("a", newFlow(canvas.Chars{Text: "one two"}))
+	waitFor(t, "a ready", func() bool { return a.Bridge.Ready() }, a)
+	click(a.Bridge.Flow, 7)
+	a.Bridge.Flow.InsertText("!")
+	waitFor(t, "the edit to be acknowledged", func() bool { return a.Conn.Pending() == 0 }, a)
+
+	cur.Store(hub.New(hub.Config{})) // the hub restarts with nothing
+	srv.CloseClientConnections()
+	b := connect("b", newFlow())
+	waitFor(t, "b to get the document from the reconnected a", func() bool { return text(b.Bridge.Flow) == "one two!" }, a, b)
 }

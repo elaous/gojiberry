@@ -104,6 +104,15 @@ func (s *Session) handle(e client.Event) bool {
 			return true
 		}
 		s.Bridge.Apply(e.Ops...)
+		// A hub that restarted (or lost its last saves) answers with less than
+		// we hold: the edits it acknowledged earlier are gone from it, and
+		// nothing else would send them again. Operations are idempotent, so
+		// sending the whole document is safe.
+		if s.Bridge.Ready() && s.Role.CanEdit() {
+			if all := s.Bridge.Snapshot(); opWeight(all) > opWeight(e.Ops) {
+				s.Conn.Send(all)
+			}
+		}
 		return true
 	case client.Ops:
 		s.Bridge.Apply(e.Ops...)
@@ -158,4 +167,14 @@ func (s *Session) PeerCursors() []PeerCursor {
 		}
 	}
 	return out
+}
+
+// opWeight counts operations including their character operations: how much a
+// set of operations says.
+func opWeight(ops []crdt.Op) int {
+	n := 0
+	for _, op := range ops {
+		n += 1 + len(op.CharOps)
+	}
+	return n
 }

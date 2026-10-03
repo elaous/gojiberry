@@ -486,3 +486,24 @@ func TestSlideEditFollowsTheCaret(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// Two clients that open an empty document together and start from the same
+// content must end with one copy of it, not two.
+func TestSimultaneousSeedingMakesOneCopy(t *testing.T) {
+	start := func() *canvas.TextFlow {
+		return newFlow(canvas.Chars{Text: "Starting text"}, canvas.Break{}, canvas.Chars{Text: "second line"})
+	}
+	a, _ := Join("a", start())
+	b, _ := Join("b", start())
+	var fromA, fromB []crdt.Op
+	a.Outgoing = func(ops []crdt.Op) { fromA = append(fromA, ops...) }
+	b.Outgoing = func(ops []crdt.Op) { fromB = append(fromB, ops...) }
+	a.Seed()
+	b.Seed()
+	a.Apply(fromB...)
+	b.Apply(fromA...)
+	want := text(start())
+	if text(a.Flow) != want || text(b.Flow) != want {
+		t.Fatalf("a=%q b=%q, want one copy %q", text(a.Flow), text(b.Flow), want)
+	}
+}

@@ -36,7 +36,14 @@ func (p jsPainter) DrawImage(src ImageSource, sx, sy, sw, sh, dx, dy, dw, dh flo
 }
 
 // HTMLImage is an ImageSource backed by a loaded HTMLImageElement.
-type HTMLImage struct{ v js.Value }
+type HTMLImage struct {
+	v   js.Value
+	url string
+}
+
+// URL is the address the image was loaded from (a data: URL included), so a
+// document that holds it can be saved and the image fetched again on load.
+func (i *HTMLImage) URL() string { return i.url }
 
 // Size implements ImageSource.
 func (i *HTMLImage) Size() (w, h float64) {
@@ -52,7 +59,7 @@ func LoadImage(url string, onLoad func(*HTMLImage), onError func()) {
 	release := func() { load.Release(); fail.Release() }
 	load = js.FuncOf(func(js.Value, []js.Value) any {
 		release()
-		onLoad(&HTMLImage{v: el})
+		onLoad(&HTMLImage{v: el, url: url})
 		return nil
 	})
 	fail = js.FuncOf(func(js.Value, []js.Value) any {

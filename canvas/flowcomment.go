@@ -10,6 +10,17 @@ func (f *TextFlow) commentResolved(id string) bool {
 	return ok && c.Resolved
 }
 
+// commentsOpen reports whether any of the comments in a Format.Comment value
+// is not resolved (the text is highlighted while one is).
+func (f *TextFlow) commentsOpen(value string) bool {
+	for _, id := range commentList(value) {
+		if !f.commentResolved(id) {
+			return true
+		}
+	}
+	return false
+}
+
 // commentAt returns the comment ID of the run at (x, y) and the run's
 // rectangle, or "".
 func (f *TextFlow) commentAt(x, y float64) (string, [4]float64) {
@@ -22,8 +33,10 @@ func (f *TextFlow) commentAt(x, y float64) (string, [4]float64) {
 		}
 		for _, r := range ln.Runs {
 			if r.Comment != "" && x >= ln.X+r.X && x < ln.X+r.X+r.W {
-				if _, ok := f.Comments.Get(r.Comment); ok {
-					return r.Comment, [4]float64{ln.X + r.X, ln.Y, r.W, ln.H}
+				for _, id := range commentList(r.Comment) {
+					if _, ok := f.Comments.Get(id); ok {
+						return id, [4]float64{ln.X + r.X, ln.Y, r.W, ln.H}
+					}
 				}
 			}
 		}
@@ -147,7 +160,7 @@ func (f *TextFlow) CommentRange(id string) (from, to int, ok bool) {
 	ids := charComments(f.ContentItems())
 	from, to = -1, 0
 	for i, c := range ids {
-		if c == id {
+		if commentHas(c, id) {
 			if from < 0 {
 				from = i
 			}
@@ -162,8 +175,10 @@ func (f *TextFlow) CommentRange(id string) (from, to int, ok bool) {
 func (f *TextFlow) CommentExcerpts() map[string]string {
 	out := map[string]string{}
 	for _, it := range f.ContentItems() {
-		if ch, ok := it.(Chars); ok && ch.Format.Comment != "" {
-			out[ch.Format.Comment] += ch.Text
+		if ch, ok := it.(Chars); ok {
+			for _, id := range commentList(ch.Format.Comment) {
+				out[id] += ch.Text
+			}
 		}
 	}
 	return out

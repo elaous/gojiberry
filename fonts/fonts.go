@@ -128,8 +128,14 @@ func (m *multi) Fonts(ctx context.Context) ([]Font, error) {
 				have.Category = f.Category
 			}
 			for _, v := range f.Variants {
-				if !hasVariant(have.Variants, v) {
+				i := variantIndex(have.Variants, v)
+				switch {
+				case i < 0:
 					have.Variants = append(have.Variants, v)
+				case have.Variants[i].URL == "" && v.URL != "":
+					// An earlier source only knew the cut by name (a
+					// web-safe font, say); this one can say where to get it.
+					have.Variants[i].URL = v.URL
 				}
 			}
 		}
@@ -144,14 +150,16 @@ func (m *multi) Fonts(ctx context.Context) ([]Font, error) {
 	return out, errors.Join(errs...)
 }
 
-func hasVariant(vs []Variant, v Variant) bool {
-	for _, x := range vs {
+func variantIndex(vs []Variant, v Variant) int {
+	for i, x := range vs {
 		if x.Weight == v.Weight && x.Italic == v.Italic {
-			return true
+			return i
 		}
 	}
-	return false
+	return -1
 }
+
+func hasVariant(vs []Variant, v Variant) bool { return variantIndex(vs, v) >= 0 }
 
 func sortVariants(vs []Variant) {
 	sort.SliceStable(vs, func(i, j int) bool {

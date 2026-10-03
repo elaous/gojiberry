@@ -513,7 +513,7 @@ func main() {
 				}
 				for _, r := range ln.Runs {
 					if r.Comment != "" && comment == nil {
-						comment = map[string]any{"id": r.Comment, "x": ln.X + r.X + 4 + sv.X - sv.ScrollX, "y": ln.Y + 5 + sv.Y - sv.ScrollY}
+						comment = map[string]any{"id": strings.SplitN(r.Comment, ",", 2)[0], "x": ln.X + r.X + 4 + sv.X - sv.ScrollX, "y": ln.Y + 5 + sv.Y - sv.ScrollY}
 					}
 					if r.Link != "" && link == nil {
 						link = map[string]any{"url": r.Link, "x": ln.X + r.X + 4 + sv.X - sv.ScrollX, "y": ln.Y + 5 + sv.Y - sv.ScrollY}

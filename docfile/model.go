@@ -48,6 +48,22 @@ type Item struct {
 	// Rule is a horizontal rule; Table a table shown in the text.
 	Rule  *RuleItem  `json:"rule,omitempty" pb:"8"`
 	Table *TableItem `json:"table,omitempty" pb:"9"`
+	// Image is an inline image: where it came from and how it is shown.
+	Image *ImageItem `json:"image,omitempty" pb:"10"`
+}
+
+// ImageItem is an inline image. URL is what to fetch it from (a data: URL
+// holds the bitmap itself); Width and Height are its displayed size.
+type ImageItem struct {
+	URL    string  `json:"url" pb:"1"`
+	Width  float64 `json:"width,omitempty" pb:"2"`
+	Height float64 `json:"height,omitempty" pb:"3"`
+	Alpha  float64 `json:"alpha,omitempty" pb:"4"`
+	// ClipLeft..ClipBottom are the pixels cropped from each side.
+	ClipLeft   float64 `json:"clipLeft,omitempty" pb:"5"`
+	ClipTop    float64 `json:"clipTop,omitempty" pb:"6"`
+	ClipRight  float64 `json:"clipRight,omitempty" pb:"7"`
+	ClipBottom float64 `json:"clipBottom,omitempty" pb:"8"`
 }
 
 // RuleItem mirrors canvas.Rule.
@@ -302,6 +318,14 @@ func FromItems(items []canvas.Item) []Item {
 				out = append(out, Item{Index: &Block{Title: o.Title}})
 			case *canvas.Rule:
 				out = append(out, Item{Rule: &RuleItem{Color: o.Color, Thickness: o.Thickness}})
+			case *canvas.Image:
+				if src, ok := o.Src.(canvas.URLSource); ok && src.URL() != "" {
+					out = append(out, Item{Image: &ImageItem{URL: src.URL(), Width: o.W, Height: o.H, Alpha: o.Alpha,
+						ClipLeft: o.Clip.Left, ClipTop: o.Clip.Top, ClipRight: o.Clip.Right, ClipBottom: o.Clip.Bottom}})
+				}
+			case *ImagePlaceholder:
+				c := o.Item
+				out = append(out, Item{Image: &c})
 			case *canvas.TableObject:
 				if o == nil || o.View == nil || o.View.Table == nil {
 					continue // nothing to save
@@ -363,6 +387,8 @@ func ToItems(items []Item) []canvas.Item {
 				cells[i] = r
 			}
 			out = append(out, canvas.Inline{Object: canvas.NewTableObject(&canvas.Table{Cells: cells}), Block: true})
+		case it.Image != nil:
+			out = append(out, canvas.Inline{Object: imageObject(*it.Image)})
 		}
 	}
 	return out
@@ -487,4 +513,56 @@ func ToFootnotes(list []Footnote) *canvas.FootnoteSet {
 		set.Add(canvas.Footnote{ID: n.ID, Text: n.Text})
 	}
 	return set
+}
+
+// ImageLoader, when set, turns an image's URL into a bitmap source the moment
+// a document is opened. A browser app that has already decoded the image
+// (canvas.LoadImage is asynchronous) returns it from its cache; returning nil
+// means "not available yet" and the document gets an ImagePlaceholder.
+var ImageLoader func(url string) canvas.ImageSource
+
+// imageObject makes the inline object for a saved image.
+func imageObject(it ImageItem) canvas.InlineObject {
+	if ImageLoader != nil {
+		if src := ImageLoader(it.URL); src != nil {
+			img := canvas.NewImage(src, 0, 0)
+			img.Placement = canvas.PlaceInline
+			if it.Width > 0 && it.Height > 0 {
+				img.W, img.H = it.Width, it.Height
+			}
+			if it.Alpha > 0 {
+				img.Alpha = it.Alpha
+			}
+			img.Clip = canvas.Insets{Left: it.ClipLeft, Top: it.ClipTop, Right: it.ClipRight, Bottom: it.ClipBottom}
+			return img
+		}
+	}
+	return &ImagePlaceholder{Item: it}
+}
+
+// ImagePlaceholder stands in for a saved image whose bitmap is not loaded: a
+// grey box of the right size that saves back as the same image, so opening
+// and saving a document does not lose it.
+type ImagePlaceholder struct{ Item ImageItem }
+
+// Measure implements canvas.InlineObject.
+func (p *ImagePlaceholder) Measure(_ canvas.Painter, maxW, maxH float64) (w, h float64) {
+	w, h = p.Item.Width, p.Item.Height
+	if w <= 0 || h <= 0 {
+		w, h = 96, 64
+	}
+	if w > maxW && maxW > 0 {
+		h, w = h*maxW/w, maxW
+	}
+	if h > maxH && maxH > 0 {
+		w, h = w*maxH/h, maxH
+	}
+	return w, h
+}
+
+// DrawAt implements canvas.InlineObject.
+func (p *ImagePlaceholder) DrawAt(pt canvas.Painter, x, y float64) {
+	w, h := p.Measure(pt, 0, 0)
+	pt.SetFillStyle("#e6e8eb")
+	pt.FillRect(x, y, w, h)
 }

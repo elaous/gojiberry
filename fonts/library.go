@@ -2,6 +2,7 @@ package fonts
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -121,7 +122,10 @@ func Key(family string, v Variant) string {
 	if weight == 0 {
 		weight = 400
 	}
-	return fmt.Sprintf("%s%s/%d-%s%s", KeyPrefix, family, weight, style, ext)
+	// The URL's hash keeps two sources of one family (or a variant re-Added
+	// with another URL) from sharing, and so serving, the same stored file.
+	sum := sha256.Sum256([]byte(v.URL))
+	return fmt.Sprintf("%s%s/%d-%s-%x%s", KeyPrefix, family, weight, style, sum[:4], ext)
 }
 
 func (l *Library) fetch(ctx context.Context, u string) ([]byte, error) {
@@ -149,7 +153,24 @@ func (l *Library) fetch(ctx context.Context, u string) ([]byte, error) {
 	if err == nil && len(data) > maxFontSize {
 		err = fmt.Errorf("fonts: %s is larger than %d bytes", u, maxFontSize)
 	}
+	if err == nil && !looksLikeFont(data) {
+		// A captive portal's or an error page's HTML must not be kept as a font.
+		err = fmt.Errorf("fonts: %s did not return a font file", u)
+	}
 	return data, err
+}
+
+// looksLikeFont checks the file's magic number: TrueType/OpenType, a
+// collection, WOFF or WOFF2.
+func looksLikeFont(b []byte) bool {
+	if len(b) < 4 {
+		return false
+	}
+	switch string(b[:4]) {
+	case "\x00\x01\x00\x00", "OTTO", "true", "ttcf", "wOFF", "wOF2":
+		return true
+	}
+	return false
 }
 
 const (

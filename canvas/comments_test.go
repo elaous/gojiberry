@@ -428,3 +428,35 @@ func TestOpenLinkCommandRefusesUnsafeURLs(t *testing.T) {
 		t.Fatalf("opened %q", opened)
 	}
 }
+
+func TestSeveralCommentsOnTheSameText(t *testing.T) {
+	f, st := editFlow(t, 0, Chars{Text: "hello world"})
+	n := 0
+	st.Prompt = func(string, string) (string, bool) { n++; return "note" + string(rune('0'+n)), true }
+	f.SetCursors([]Cursor{{Anchor: 0, Caret: 5}})
+	if !st.RunCommand(CmdCommentAdd) {
+		t.Fatal("first comment")
+	}
+	f.SetCursors([]Cursor{{Anchor: 0, Caret: 5}})
+	if !st.RunCommand(CmdCommentAdd) {
+		t.Fatal("second comment")
+	}
+	ex := f.CommentExcerpts()
+	if len(ex) != 2 || ex["c1"] != "hello" || ex["c2"] != "hello" {
+		t.Fatalf("both comments must stay anchored: %v", ex)
+	}
+	f.SetCursors([]Cursor{{Anchor: 2, Caret: 2}})
+	if _, id := commentAtCursor(f); id == "" {
+		t.Fatal("a comment at the cursor")
+	}
+	if !f.DeleteComment("c1") {
+		t.Fatal("delete")
+	}
+	ex = f.CommentExcerpts()
+	if len(ex) != 1 || ex["c2"] != "hello" {
+		t.Fatalf("deleting one leaves the other: %v", ex)
+	}
+	if from, to, ok := f.CommentRange("c2"); !ok || from != 0 || to != 5 {
+		t.Fatalf("range %d-%d %v", from, to, ok)
+	}
+}
