@@ -41,7 +41,9 @@ func (cookieJar) All() map[string]string {
 		if !found {
 			continue
 		}
-		if decoded, err := url.QueryUnescape(value); err == nil {
+		// PathUnescape, not QueryUnescape: a raw '+' in a cookie someone else
+		// set (base64, say) is a plus, not a space.
+		if decoded, err := url.PathUnescape(value); err == nil {
 			value = decoded
 		}
 		out[name] = value
@@ -58,11 +60,18 @@ func (j cookieJar) Get(name string) (string, bool) {
 // Set sets a cookie. Each call sets exactly one cookie (assigning to
 // document.cookie only ever adds/updates the one named in the
 // assignment string -- it doesn't replace the whole jar).
+//
+// A name, Path, Domain or SameSite containing a ';' or a control
+// character would let the caller (or whatever data it came from) add
+// cookie attributes of its own, so such a cookie is not set at all.
 func (cookieJar) Set(name, value string, opts CookieOptions) {
+	if !cookieTokenOK(name) || strings.Contains(name, "=") || !cookieTokenOK(opts.Path) || !cookieTokenOK(opts.Domain) || !cookieTokenOK(opts.SameSite) {
+		return
+	}
 	var b strings.Builder
 	b.WriteString(name)
 	b.WriteString("=")
-	b.WriteString(url.QueryEscape(value))
+	b.WriteString(strings.ReplaceAll(url.QueryEscape(value), "+", "%20")) // a space as %20, so a literal '+' stays one on the way back
 	if opts.Path != "" {
 		fmt.Fprintf(&b, "; path=%s", opts.Path)
 	}
@@ -89,4 +98,15 @@ func (cookieJar) Set(name, value string, opts CookieOptions) {
 // imposes.
 func (j cookieJar) Delete(name string, path, domain string) {
 	j.Set(name, "", CookieOptions{Path: path, Domain: domain, MaxAge: -1})
+}
+
+// cookieTokenOK reports whether s can be written into a cookie string as it
+// is: no ';' and no control characters.
+func cookieTokenOK(s string) bool {
+	for _, r := range s {
+		if r == ';' || r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
