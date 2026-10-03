@@ -504,7 +504,8 @@ func TestReplicaIDsAreBoundToTheUserWhoFirstUsedThem(t *testing.T) {
 		resp.Body.Close()
 		return resp.StatusCode
 	}
-	if post("ana@x", "r1") != 204 || post("ana@x", "r1") != 204 {
+	first := post("ana@x", "r1")
+	if again := post("ana@x", "r1"); first != 204 || again != 204 {
 		t.Fatal("the owner of a replica id keeps using it")
 	}
 	if post("bo@x", "r1") != 403 {
