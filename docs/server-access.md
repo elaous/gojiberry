@@ -29,3 +29,7 @@ The command-line servers read their guard from the environment (`guard.FromEnv`)
 | collabhub | `GOJIBERRY_COLLAB` |
 
 A browser page that talks to a token-guarded server has to hold the token, so it is visible to whoever can read the page: use a token for server-to-server calls or a private deployment, and `Origins` (plus the servers' own sign-in where they have one) for public pages.
+
+## Documents nobody owns
+
+By default a document with no ACL is open to everyone (for docstore, when sign-in is on; for the collab hub with `ACLRoles`). To close them: docstore `GOJIBERRY_DOCSTORE_REQUIRE_ACL=true` (`Server.WithRequireACL`) makes an unowned document inaccessible except to the first signed-in writer, who becomes its owner; the collab hub's `GOJIBERRY_COLLAB_NO_ACL_ROLE=none` (`hub.ACLRolesWith`) does the same, or gives everyone `viewer` or `editor` instead.

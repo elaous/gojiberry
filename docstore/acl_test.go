@@ -493,3 +493,29 @@ func TestACLRoleOf(t *testing.T) {
 		}
 	}
 }
+
+func TestRequireACLClosesUnownedDocumentsAndLetsTheFirstWriterOwnThem(t *testing.T) {
+	provider := newFakeOIDCProvider(t)
+	srv := newTestServerWithAuth(t, provider.srv.URL).WithRequireACL(true)
+	h := srv.Handler()
+	do := func(method, token string) int {
+		req := httptest.NewRequest(method, "/docs/new", strings.NewReader("data"))
+		if token != "" {
+			withBearer(req, token)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	ana := sessionTokenFor(t, h, provider, "ana@example.com", "ana")
+	bo := sessionTokenFor(t, h, provider, "bo@example.com", "bo")
+	if do(http.MethodPut, "") != http.StatusUnauthorized || do(http.MethodGet, ana) != http.StatusForbidden {
+		t.Fatal("an unowned document is closed to anonymous callers and cannot be read before it exists")
+	}
+	if do(http.MethodPut, ana) != http.StatusNoContent {
+		t.Fatal("the first signed-in writer creates it")
+	}
+	if do(http.MethodGet, ana) != http.StatusOK || do(http.MethodGet, bo) == http.StatusOK || do(http.MethodPut, bo) == http.StatusNoContent {
+		t.Fatal("and owns it: others are refused")
+	}
+}

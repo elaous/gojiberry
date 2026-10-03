@@ -40,7 +40,10 @@ type Config struct {
 	// guard.Open(). ConfigFromEnv reads GOJIBERRY_DOCSTORE_ALLOW_ORIGINS and
 	// GOJIBERRY_DOCSTORE_TOKEN (sent as X-Gojiberry-Token, since Authorization
 	// carries the sign-in session).
-	Guard         guard.Guard
+	Guard guard.Guard
+	// RequireACL closes documents that have no ACL (see Server.WithRequireACL);
+	// ConfigFromEnv reads GOJIBERRY_DOCSTORE_REQUIRE_ACL=true.
+	RequireACL    bool
 	Addr          string
 	Backend       string
 	BackendConfig json.RawMessage
@@ -106,6 +109,7 @@ func ConfigFromEnv() Config {
 		}
 		cfg.Auth.SessionTTL = ttl
 	}
+	cfg.RequireACL = os.Getenv("GOJIBERRY_DOCSTORE_REQUIRE_ACL") == "true"
 	if raw := os.Getenv("GOJIBERRY_DOCSTORE_AUTH_RETURN_ORIGINS"); raw != "" {
 		for _, o := range strings.Split(raw, ",") {
 			if o = strings.TrimSpace(o); o != "" {
@@ -161,6 +165,8 @@ type Server struct {
 	backend string
 	auth    *auth.Manager
 	guard   guard.Guard
+	// requireACL closes documents that have no ACL (see WithRequireACL).
+	requireACL bool
 }
 
 // NewServer wraps an already-constructed Adapter. Use this directly
@@ -182,6 +188,15 @@ func (s *Server) WithAuth(m *auth.Manager) *Server {
 // guard). Without one the server is open to every origin.
 func (s *Server) WithGuard(g guard.Guard) *Server {
 	s.guard = g
+	return s
+}
+
+// WithRequireACL makes a document without an ACL closed instead of open to
+// everyone: with sign-in configured, only the first signed-in writer of a new
+// document can create it, and becomes its owner (the ACL is written for
+// them). Without sign-in it has no effect.
+func (s *Server) WithRequireACL(on bool) *Server {
+	s.requireACL = on
 	return s
 }
 

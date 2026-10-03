@@ -537,3 +537,19 @@ func TestCommenterCannotWriteUnderAnotherName(t *testing.T) {
 		t.Fatal("with nobody signed in there is nothing to check")
 	}
 }
+
+func TestACLRolesWithChoosesTheRoleForUnsharedDocuments(t *testing.T) {
+	store := docstore.NewMemoryAdapter()
+	acl, _ := json.Marshal(docstore.ACL{Owner: "o@x"})
+	_ = store.Save(context.Background(), "acl:shared", acl)
+	req := httptest.NewRequest("GET", "/", nil)
+	for _, tc := range []struct {
+		noACL Role
+		doc   string
+		want  Role
+	}{{Owner, "new", Owner}, {Viewer, "new", Viewer}, {"", "new", ""}, {"", "shared", ""}} {
+		if got := ACLRolesWith(store, nil, tc.noACL)(req, tc.doc); got != tc.want {
+			t.Errorf("noACL %q on %s: %q, want %q", tc.noACL, tc.doc, got, tc.want)
+		}
+	}
+}

@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -44,7 +45,19 @@ func main() {
 	if authManager != nil {
 		who := hub.AuthUser(authManager)
 		hc.User = who
-		hc.Roles = hub.ACLRoles(adapter, who)
+		// What everyone may do on a document that has no ACL:
+		// GOJIBERRY_COLLAB_NO_ACL_ROLE = owner (the default: anyone can start
+		// a document), editor, viewer, or none (only shared documents open).
+		noACL := hub.Owner
+		switch strings.ToLower(os.Getenv("GOJIBERRY_COLLAB_NO_ACL_ROLE")) {
+		case "editor":
+			noACL = hub.Editor
+		case "viewer":
+			noACL = hub.Viewer
+		case "none":
+			noACL = ""
+		}
+		hc.Roles = hub.ACLRolesWith(adapter, who, noACL)
 		log.Printf("collabhub: sign-in enabled (%d provider(s))", len(cfg.Auth.Providers))
 	}
 	h := hub.New(hc)
