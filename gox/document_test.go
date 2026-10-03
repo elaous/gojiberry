@@ -1,6 +1,9 @@
 package gox
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestDocumentRender(t *testing.T) {
 	doc := Document{
@@ -27,5 +30,15 @@ func TestDocumentRenderWithoutTitle(t *testing.T) {
 	want := `<html><head></head><body>hi</body></html>`
 	if got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}
+
+func TestStyleCannotEndItsOwnElement(t *testing.T) {
+	out, err := RenderString(Style("a{b:c} /* </style><script>alert(1)</script> */"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(strings.ToLower(out), "</style") != 1 {
+		t.Fatalf("a </style> inside the CSS ended the element: %s", out)
 	}
 }

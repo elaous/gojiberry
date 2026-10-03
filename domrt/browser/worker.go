@@ -65,6 +65,9 @@ func (w *Worker) replace(slot *js.Func, prop string, fn func(args []js.Value)) {
 // Terminate immediately stops the worker and releases its registered callbacks.
 func (w *Worker) Terminate() {
 	w.v.Call("terminate")
+	for _, ev := range []string{"onmessage", "onerror"} {
+		w.v.Set(ev, js.Null())
+	}
 	for _, f := range []*js.Func{&w.onMessage, &w.onError} {
 		if !f.IsUndefined() {
 			f.Release()
