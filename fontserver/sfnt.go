@@ -137,7 +137,7 @@ func parseNameTable(table []byte) (map[uint16]string, error) {
 		if int(offset)+int(length) > len(storage) {
 			continue
 		}
-		raw := storage[offset : offset+length]
+		raw := storage[int(offset) : int(offset)+int(length)] // int arithmetic: uint16 would wrap
 		s := decodeNameString(platformID, encodingID, raw)
 		if s == "" {
 			continue

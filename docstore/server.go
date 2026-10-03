@@ -55,6 +55,9 @@ type AuthConfig struct {
 	BaseURL    string
 	Providers  []auth.Provider
 	SessionTTL time.Duration
+	// ReturnOrigins are the extra origins a login may redirect back to
+	// (see auth.Config.ReturnOrigins).
+	ReturnOrigins []string
 }
 
 // ConfigFromEnv reads GOJIBERRY_DOCSTORE_ADDR, GOJIBERRY_DOCSTORE_BACKEND,
@@ -72,7 +75,9 @@ type AuthConfig struct {
 // reachable base URL (see auth.Config.BaseURL); required when
 // AUTH_PROVIDERS is set. GOJIBERRY_DOCSTORE_AUTH_SESSION_TTL is a
 // Go duration string (e.g. "720h"); defaults to auth's own 30-day
-// default when unset.
+// default when unset. GOJIBERRY_DOCSTORE_AUTH_RETURN_ORIGINS is a comma-
+// separated list of extra origins a login may send the browser back to
+// (besides AUTH_BASE_URL's own).
 func ConfigFromEnv() Config {
 	cfg := Config{
 		Addr:          envOr("GOJIBERRY_DOCSTORE_ADDR", ":8090"),
@@ -94,7 +99,24 @@ func ConfigFromEnv() Config {
 		}
 		cfg.Auth.SessionTTL = ttl
 	}
+	if raw := os.Getenv("GOJIBERRY_DOCSTORE_AUTH_RETURN_ORIGINS"); raw != "" {
+		for _, o := range strings.Split(raw, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				cfg.Auth.ReturnOrigins = append(cfg.Auth.ReturnOrigins, o)
+			}
+		}
+	}
 	return cfg
+}
+
+// maxDocBytes is the largest document a PUT may carry.
+const maxDocBytes = 64 << 20
+
+// serverError answers a backend failure without handing its text (which can
+// hold a DSN, a bucket name or a path) to the caller.
+func serverError(w http.ResponseWriter, err error) {
+	log.Printf("docstore: %v", err)
+	http.Error(w, "storage error", http.StatusInternalServerError)
 }
 
 func envOr(key, fallback string) string {
@@ -161,9 +183,10 @@ func NewAuthManager(ctx context.Context, cfg AuthConfig) (*auth.Manager, error) 
 		return nil, fmt.Errorf("docstore: AuthConfig.BaseURL is required when Providers is set")
 	}
 	return auth.NewManager(ctx, auth.Config{
-		BaseURL:    cfg.BaseURL,
-		Providers:  cfg.Providers,
-		SessionTTL: cfg.SessionTTL,
+		BaseURL:       cfg.BaseURL,
+		Providers:     cfg.Providers,
+		SessionTTL:    cfg.SessionTTL,
+		ReturnOrigins: cfg.ReturnOrigins,
 	})
 }
 
@@ -182,7 +205,7 @@ func (s *Server) Handler() http.Handler {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -239,7 +262,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 	metas, err := s.adapter.List(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, err)
 		return
 	}
 	// Filter out the reserved ACL keyspace (acl.go) -- each one is
@@ -247,9 +270,14 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	// never appear in a document listing.
 	visible := make([]Meta, 0, len(metas))
 	for _, m := range metas {
-		if !isReservedDocID(m.ID) {
-			visible = append(visible, m)
+		if isReservedDocID(m.ID) {
+			continue
 		}
+		// With sign-in on, only list what the caller may read.
+		if allowed, _ := s.checkPermission(r, m.ID, http.MethodGet); !allowed {
+			continue
+		}
+		visible = append(visible, m)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(visible) // a write failure here means the client disconnected -- nothing actionable to do about it
@@ -276,13 +304,18 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			writePermissionError(w, status)
 			return
 		}
-		data, err := io.ReadAll(r.Body)
+		data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxDocBytes))
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			var tooBig *http.MaxBytesError
+			if errors.As(err, &tooBig) {
+				http.Error(w, "document too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			http.Error(w, "reading the request body failed", http.StatusBadRequest)
 			return
 		}
 		if err := s.adapter.Save(r.Context(), id, data); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -297,7 +330,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
@@ -313,7 +346,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

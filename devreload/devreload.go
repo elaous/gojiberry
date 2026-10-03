@@ -64,9 +64,11 @@ func (r *Reloader) Wrap(html string) string {
 	var v = %q;
 	setInterval(function () {
 		fetch(%q, { cache: "no-store" }).then(function (resp) {
+			// An error page (a proxy's 502 while the server restarts) is not a new version.
+			if (!resp.ok) return null;
 			return resp.text();
 		}).then(function (t) {
-			if (t !== v) location.reload();
+			if (t !== null && t !== v) location.reload();
 		}).catch(function () {});
 	}, 500);
 })();

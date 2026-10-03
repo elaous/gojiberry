@@ -19,14 +19,17 @@
 package voiceserver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Config is loaded entirely from the environment, the same posture
@@ -158,9 +161,14 @@ func (s *Server) handleSpeak(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !acquire(w) {
+		return
+	}
+	defer release()
 	audio, err := s.speak(s.cfg.PiperBinary, s.cfg.PiperModel, req.Text)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		log.Printf("voiceserver: speak: %v", err)
+		http.Error(w, "speech synthesis failed", http.StatusBadGateway)
 		return
 	}
 	w.Header().Set("Content-Type", "audio/wav")
@@ -191,9 +199,14 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !acquire(w) {
+		return
+	}
+	defer release()
 	text, err := s.transcribe(s.cfg.WhisperBinary, s.cfg.WhisperModel, wav)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		log.Printf("voiceserver: transcribe: %v", err)
+		http.Error(w, "transcription failed", http.StatusBadGateway)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"text": text})
@@ -204,6 +217,27 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 // well-established Piper CLI invocation shape (unchanged across the
 // rhasspy/piper -> OHF-Voice/piper1-gpl rename) -- `echo "text" | piper
 // --model voice.onnx --output_file out.wav`.
+const (
+	speakTimeout      = time.Minute
+	transcribeTimeout = 5 * time.Minute
+)
+
+// slots bounds how many piper/whisper processes run at once.
+var slots = make(chan struct{}, 2)
+
+// acquire takes a slot or answers 429.
+func acquire(w http.ResponseWriter) bool {
+	select {
+	case slots <- struct{}{}:
+		return true
+	default:
+		http.Error(w, "too many requests in progress", http.StatusTooManyRequests)
+		return false
+	}
+}
+
+func release() { <-slots }
+
 func execPiper(binary, model, text string) ([]byte, error) {
 	out, err := os.CreateTemp("", "voiceserver-speak-*.wav")
 	if err != nil {
@@ -217,7 +251,9 @@ func execPiper(binary, model, text string) ([]byte, error) {
 	if model != "" {
 		args = append(args, "--model", model)
 	}
-	cmd := exec.Command(binary, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), speakTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Stdin = strings.NewReader(text)
 	if combined, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("piper: %w: %s", err, combined)
@@ -253,7 +289,9 @@ func execWhisper(binary, model string, wav []byte) (string, error) {
 	if model != "" {
 		args = append(args, "-m", model)
 	}
-	cmd := exec.Command(binary, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), transcribeTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, args...)
 	if combined, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("whisper: %w: %s", err, combined)
 	}
