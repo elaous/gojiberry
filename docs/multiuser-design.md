@@ -297,3 +297,10 @@ document at the same moment each seed their own copy of the content.
   re-render of a live document.
 - In view mode a drag does not select text (a double click does); the
   comment-only target reads that selection.
+
+## Access and hardening since
+
+- Who may call the hub is a `guard.Guard` (`Config.Guard`; `GOJIBERRY_COLLAB_ALLOW_ORIGINS` / `GOJIBERRY_COLLAB_TOKEN` for `cmd/collabhub`): allowed origins, a token, both, or your own check. See [server-access.md](server-access.md).
+- With a `User` function, a replica id is tied to the signed-in user who first used it in a document; another user sending ops, presence or opening a stream under it gets 403. Anonymous callers cannot be bound.
+- A viewer's operations are bounded: counters (op, mark and character ids) may not run far past the document's clock, marks may not clear comments, records are size-limited.
+- Shutdown: `Hub.Stop` refuses writes and ends streams, then the server drains, then `Hub.Close` saves.
