@@ -32,6 +32,13 @@ type ImageSource interface {
 	Size() (w, h float64)
 }
 
+// URLSource is an ImageSource that knows where it came from; only such
+// images can be saved with a document.
+type URLSource interface {
+	ImageSource
+	URL() string
+}
+
 // ImagePainter is a Painter that can also draw bitmaps and change the
 // global alpha. NewPainter adapts an *html.Context2D to it.
 type ImagePainter interface {

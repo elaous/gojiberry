@@ -76,7 +76,7 @@ func (Comments) Install(r *Registry) {
 		tagComment(c.Target, from, to, cm.ID)
 		// If nothing took the tag (only an object was selected, or the target
 		// refused the edit) the comment would be anchored to nothing.
-		if !slices.Contains(charComments(c.Target.Slice(0, len([]rune(c.Target.EditText())))), cm.ID) {
+		if !slices.ContainsFunc(charComments(c.Target.Slice(0, len([]rune(c.Target.EditText())))), func(v string) bool { return commentHas(v, cm.ID) }) {
 			h.CommentSet().Delete(cm.ID)
 			return false
 		}
@@ -116,7 +116,8 @@ func (Comments) Install(r *Registry) {
 	})
 }
 
-// charComments lists the comment ID of every character of items.
+// charComments lists the Format.Comment value (the comment IDs, comma-
+// separated) of every character of items.
 func charComments(items []Item) []string {
 	var out []string
 	for _, it := range items {
@@ -147,9 +148,11 @@ func commentAtCursor(t EditTarget) (CommentHost, string) {
 	}
 	ids := charComments(t.Slice(0, len([]rune(t.EditText()))))
 	for _, i := range []int{pos, pos - 1} {
-		if i >= 0 && i < len(ids) && ids[i] != "" {
-			if _, ok := h.CommentSet().Get(ids[i]); ok {
-				return h, ids[i]
+		if i >= 0 && i < len(ids) {
+			for _, id := range commentList(ids[i]) {
+				if _, ok := h.CommentSet().Get(id); ok {
+					return h, id
+				}
 			}
 		}
 	}
@@ -174,22 +177,23 @@ func retag(t EditTarget, from, to int, fn func(old string) string) {
 
 // tagComment puts comment id on [from, to).
 func tagComment(t EditTarget, from, to int, id string) {
-	retag(t, from, to, func(string) string { return id })
+	retag(t, from, to, func(old string) string { return commentAdd(old, id) })
 }
 
-// untagComment takes comment id off all the text that has it.
+// untagComment takes comment id off all the text that has it (other
+// comments on the same text stay).
 func untagComment(t EditTarget, id string) {
 	ids := charComments(t.Slice(0, len([]rune(t.EditText()))))
 	for i := 0; i < len(ids); {
-		if ids[i] != id {
+		if !commentHas(ids[i], id) {
 			i++
 			continue
 		}
 		j := i
-		for j < len(ids) && ids[j] == id {
+		for j < len(ids) && commentHas(ids[j], id) {
 			j++
 		}
-		retag(t, i, j, func(string) string { return "" })
+		retag(t, i, j, func(old string) string { return commentRemove(old, id) })
 		i = j
 	}
 }

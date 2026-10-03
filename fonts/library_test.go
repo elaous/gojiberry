@@ -3,6 +3,8 @@ package fonts
 import (
 	"context"
 	"errors"
+	"regexp"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -56,7 +58,7 @@ func TestLibraryDownloadsOnFirstUseOnly(t *testing.T) {
 	}
 	ctx := context.Background()
 	key, err := lib.Use(ctx, "Lato", 700, false)
-	if err != nil || key != "fonts/Lato/700-n.ttf" {
+	if err != nil || !strings.HasPrefix(key, "fonts/Lato/700-n-") || !strings.HasSuffix(key, ".ttf") {
 		t.Fatalf("%q %v", key, err)
 	}
 	if len(fetched) != 1 || string(blobs.m[key]) != "bytes:https://f.test/lato-700.ttf" {
@@ -82,7 +84,8 @@ func TestLibraryDownloadsOnFirstUseOnly(t *testing.T) {
 }
 
 func TestLibraryLoadsFromStoreWithoutFetching(t *testing.T) {
-	blobs := &memBlobs{m: map[string][]byte{"fonts/Lato/400-n.woff2": []byte("kept")}}
+	lato400 := Key("Lato", func() Variant { v, _ := lato().Closest(400, false); return v }())
+	blobs := &memBlobs{m: map[string][]byte{lato400: []byte("kept")}}
 	var ready []Ready
 	lib := &Library{Blobs: blobs,
 		Fetch:   func(context.Context, string) ([]byte, error) { t.Fatal("must not fetch"); return nil, nil },
@@ -155,11 +158,15 @@ func TestLibraryAddKeepsKeysAndUseAsync(t *testing.T) {
 }
 
 func TestKey(t *testing.T) {
-	if k := Key("A/B", Variant{Weight: 0, Italic: true, URL: "https://x/y.WOFF"}); k != "fonts/A_B/400-i.woff" {
+	if k := Key("A/B", Variant{Weight: 0, Italic: true, URL: "https://x/y.WOFF"}); !regexp.MustCompile(`^fonts/A_B/400-i-[0-9a-f]{8}\.woff$`).MatchString(k) {
 		t.Fatal(k)
 	}
-	if k := Key("A", Variant{Weight: 300, URL: "https://x/y"}); k != "fonts/A/300-n.font" {
+	if k := Key("A", Variant{Weight: 300, URL: "https://x/y"}); !regexp.MustCompile(`^fonts/A/300-n-[0-9a-f]{8}\.font$`).MatchString(k) {
 		t.Fatal(k)
+	}
+	// Another URL for the same cut is another file.
+	if Key("A", Variant{Weight: 400, URL: "https://one/f.woff2"}) == Key("A", Variant{Weight: 400, URL: "https://two/f.woff2"}) {
+		t.Fatal("two sources of one cut share a key")
 	}
 }
 
@@ -170,4 +177,12 @@ func TestLoadFaceNeedsBrowser(t *testing.T) {
 		t.Fatal("no browser")
 	}
 	LoadFace("A", Variant{}, nil, nil)
+}
+
+func TestLooksLikeFont(t *testing.T) {
+	for in, want := range map[string]bool{"\x00\x01\x00\x00rest": true, "OTTOxxxx": true, "wOF2xxxx": true, "<html>": false, "": false, "<!DOCTYPE html>": false} {
+		if got := looksLikeFont([]byte(in)); got != want {
+			t.Errorf("%q: %v", in, got)
+		}
+	}
 }

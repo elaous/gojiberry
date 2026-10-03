@@ -3,6 +3,7 @@ package collab
 import (
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/crdt"
@@ -54,7 +55,8 @@ func attach(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	if f.Footnotes == nil {
 		f.Footnotes = canvas.NewFootnoteSet()
 	}
-	f.Comments.IDPrefix, f.Footnotes.IDPrefix = replica+"-", replica+"-"
+	prefix := strings.NewReplacer(",", "_", ":", "_").Replace(replica) + "-"
+	f.Comments.IDPrefix, f.Footnotes.IDPrefix = prefix, prefix
 	b := &Bridge{Doc: crdt.NewDocWithStrategy(replica, crdt.MergeCharCRDT), Flow: f}
 	f.Subscribe(func(*canvas.TextFlow) { b.pushLocal() })
 	f.UndoHook = b.UndoStep
@@ -82,12 +84,31 @@ func Join(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	return attach(replica, f)
 }
 
+// seedReplica is the replica id the starting content of every shared document
+// is written under.
+const seedReplica = "seed"
+
 // Seed makes a joined bridge share the flow's own content as the start of
 // the document (when the server turned out to have none).
+//
+// The content is written as the replica "seed", not as this replica: two
+// clients that open an empty document at the same moment and start from the
+// same content then produce the same operations, which merge into one copy
+// instead of two. (Different content from the two sides is still both kept.)
 func (b *Bridge) Seed() {
+	replica, outgoing := b.Doc, b.Outgoing
+	b.Doc, b.Outgoing = crdt.NewDocWithStrategy(seedReplica, crdt.MergeCharCRDT), nil
 	b.ready = true
 	b.pushLocal()
+	ops := b.Doc.Drain()
+	b.Doc, b.Outgoing = replica, outgoing
+	b.applying = true
+	b.Doc.Apply(ops...)
+	b.applying = false
 	b.undo, b.redo = nil, nil
+	if b.Outgoing != nil && len(ops) > 0 {
+		b.Outgoing(ops)
+	}
 }
 
 // Ready reports whether the bridge is sharing yet: always after New, after

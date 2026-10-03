@@ -213,3 +213,46 @@ func CommentSummary(text string, max int) string {
 	}
 	return s
 }
+
+// A character can carry several comments: Format.Comment holds their IDs
+// separated by commas (IDs never contain one; see CommentSet.IDPrefix).
+
+// commentList splits a Format.Comment value into IDs.
+func commentList(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, ",")
+}
+
+// commentHas reports whether the value includes id.
+func commentHas(s, id string) bool {
+	for _, c := range commentList(s) {
+		if c == id {
+			return true
+		}
+	}
+	return false
+}
+
+// commentAdd returns the value with id included.
+func commentAdd(s, id string) string {
+	if commentHas(s, id) {
+		return s
+	}
+	if s == "" {
+		return id
+	}
+	return s + "," + id
+}
+
+// commentRemove returns the value without id.
+func commentRemove(s, id string) string {
+	var keep []string
+	for _, c := range commentList(s) {
+		if c != id {
+			keep = append(keep, c)
+		}
+	}
+	return strings.Join(keep, ",")
+}

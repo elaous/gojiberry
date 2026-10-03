@@ -522,3 +522,18 @@ func TestReplicaIDsAreBoundToTheUserWhoFirstUsedThem(t *testing.T) {
 		t.Fatalf("presence under another user's replica id: %d", resp.StatusCode)
 	}
 }
+
+func TestCommenterCannotWriteUnderAnotherName(t *testing.T) {
+	op := func(content string) []crdt.Op {
+		return []crdt.Op{{Block: crdt.Block{ID: "comment:c1", Kind: "lww:side", Content: content}}}
+	}
+	if err := commentAuthors(op(`{"id":"c1","author":"Vee@X.com"}`), "vee@x.com"); err != nil {
+		t.Fatalf("own name: %v", err)
+	}
+	if commentAuthors(op(`{"id":"c1","author":"ana@x.com"}`), "vee@x.com") == nil || commentAuthors(op(`{"id":"c1"}`), "vee@x.com") == nil || commentAuthors(op(`not json`), "vee@x.com") == nil {
+		t.Fatal("another name, no name or bad content must be refused")
+	}
+	if commentAuthors(op(`{"author":"anyone"}`), "") != nil {
+		t.Fatal("with nobody signed in there is nothing to check")
+	}
+}
