@@ -36,7 +36,11 @@ func LoadProto(in transpile.LoaderInput) (transpile.LoaderResult, error) {
 		return transpile.LoaderResult{}, fmt.Errorf("gox: .proto import %q: %w", in.Path, err)
 	}
 	importPath := modulePath + "/internal/goxgen/proto/" + in.Alias
-	if err := os.MkdirAll(filepath.Join(moduleRoot, "internal", "goxgen", "proto", in.Alias), 0o755); err != nil {
+	protoDir := filepath.Join(moduleRoot, "internal", "goxgen", "proto", in.Alias)
+	if err := os.MkdirAll(protoDir, 0o755); err != nil {
+		return transpile.LoaderResult{}, fmt.Errorf("gox: .proto import %q: %w", in.Path, err)
+	}
+	if err := claimAlias(protoDir, abs); err != nil {
 		return transpile.LoaderResult{}, fmt.Errorf("gox: .proto import %q: %w", in.Path, err)
 	}
 
