@@ -3,6 +3,7 @@ package docstore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 )
@@ -99,8 +100,13 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 		return true, 0
 	}
 	acl, err := s.loadACL(r.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		return true, 0 // never shared this way: open
+	}
 	if err != nil {
-		return true, 0
+		// An ACL that cannot be read (a backend error, damaged data) must
+		// not open the document.
+		return false, http.StatusServiceUnavailable
 	}
 	user, signedIn := s.auth.CurrentUser(r)
 	email := ""

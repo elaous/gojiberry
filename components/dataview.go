@@ -1,5 +1,7 @@
 package components
 
+import "sync"
+
 // DataViewQuery is one request DataView's own Load makes through
 // Fetch -- deliberately abstract over which real pagination/filter/
 // sort protocol a backend actually speaks (JSON:API, OData, a
@@ -58,6 +60,7 @@ type DataViewProps[T any] struct {
 // Items/Total/TotalPages/Err in place, ready for the next re-render.
 type DataView[T any] struct {
 	props DataViewProps[T]
+	mu    sync.Mutex // serializes Load
 
 	Page     int
 	Search   string
@@ -88,6 +91,14 @@ func NewDataView[T any](props DataViewProps[T]) *DataView[T] {
 // caller's job, the same async-caller-drives-it split FileUploader/
 // Search already take for their own async work.
 func (v *DataView[T]) Load() error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.load(true)
+}
+
+// load runs the query; with clamp, a page past the end (a search or filter
+// shrank the results) is pulled back to the last page and fetched again.
+func (v *DataView[T]) load(clamp bool) error {
 	v.Loading = true
 	result, err := v.props.Fetch(DataViewQuery{
 		Page:     v.Page,
@@ -102,6 +113,10 @@ func (v *DataView[T]) Load() error {
 		return err
 	}
 	v.Items, v.Total, v.TotalPages = result.Items, result.Total, result.TotalPages
+	if clamp && v.TotalPages > 0 && v.Page > v.TotalPages {
+		v.Page = v.TotalPages
+		return v.load(false)
+	}
 	return nil
 }
 
@@ -110,8 +125,13 @@ func (v *DataView[T]) SetPage(page int) error {
 	if page < 1 {
 		page = 1
 	}
+	previous := v.Page
 	v.Page = page
-	return v.Load()
+	if err := v.Load(); err != nil {
+		v.Page = previous // the table still shows the previous page's rows
+		return err
+	}
+	return nil
 }
 
 // SetSearch sets Search, resets Page to 1 (a new search invalidates
@@ -130,6 +150,7 @@ func (v *DataView[T]) SetSearch(search string) error {
 // OnSort's own doc comment already describes.
 func (v *DataView[T]) SetSort(key string, desc bool) error {
 	v.SortKey, v.SortDesc = key, desc
+	v.Page = 1 // a new order starts from its first page, as a new search does
 	return v.Load()
 }
 
