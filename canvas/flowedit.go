@@ -354,6 +354,7 @@ func (f *TextFlow) CopyText() (string, bool) {
 	for _, c := range normalize(f.Cursors()) {
 		from, to := c.Range()
 		if from < to {
+			from = min(from, len(rs))
 			parts = append(parts, strings.ReplaceAll(string(rs[from:min(to, len(rs))]), string(objectRune), ""))
 		}
 	}
