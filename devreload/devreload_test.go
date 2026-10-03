@@ -110,3 +110,10 @@ func TestEndToEndDifferentVersionsTriggerReload(t *testing.T) {
 		t.Fatalf("Handler served %q, want the new process's own version %q", served, newProcess.version)
 	}
 }
+
+func TestWrapScriptIgnoresErrorResponses(t *testing.T) {
+	out := New().Wrap("<body></body>")
+	if !strings.Contains(out, "resp.ok") {
+		t.Fatal("the poller must not reload on a non-2xx response")
+	}
+}

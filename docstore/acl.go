@@ -3,6 +3,7 @@ package docstore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 )
@@ -112,8 +113,13 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 		return true, 0
 	}
 	acl, err := s.loadACL(r.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		return true, 0 // never shared this way: open
+	}
 	if err != nil {
-		return true, 0
+		// An ACL that cannot be read (a backend error, damaged data) must
+		// not open the document.
+		return false, http.StatusServiceUnavailable
 	}
 	user, signedIn := s.auth.CurrentUser(r)
 	email := ""
@@ -155,16 +161,26 @@ func (s *Server) handleACL(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	user, signedIn := s.auth.CurrentUser(r)
+	if signedIn && user.Email == "" {
+		// No (verified) e-mail address: there is nothing to own or share
+		// a document by, and "" would match any other such account.
+		http.Error(w, "your account has no verified e-mail address", http.StatusForbidden)
+		return
+	}
 
 	switch r.Method {
 	case http.MethodGet:
 		acl, err := s.loadACL(r.Context(), id)
-		if err != nil {
+		if errors.Is(err, ErrNotFound) {
 			if !signedIn {
 				http.Error(w, "sign in required", http.StatusUnauthorized)
 				return
 			}
 			writeACLJSON(w, ACL{})
+			return
+		}
+		if err != nil {
+			http.Error(w, "the access list cannot be read", http.StatusServiceUnavailable)
 			return
 		}
 		if !signedIn || acl.Owner != user.Email {
@@ -182,7 +198,13 @@ func (s *Server) handleACL(w http.ResponseWriter, r *http.Request, id string) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, err := s.loadACL(r.Context(), id); err == nil && existing.Owner != user.Email {
+		existing, err := s.loadACL(r.Context(), id)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			// Not knowing who owns it is not a reason to let the caller own it.
+			http.Error(w, "the access list cannot be read", http.StatusServiceUnavailable)
+			return
+		}
+		if err == nil && existing.Owner != user.Email {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}

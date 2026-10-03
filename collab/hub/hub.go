@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/elaous/gojiberry/guard"
 	"io"
 	"log"
 	"net/http"
@@ -70,6 +71,11 @@ type Config struct {
 	// PresenceTTL is how long a cursor stays after its last update; 0
 	// means 10 seconds.
 	PresenceTTL time.Duration
+	// Guard decides who may call the hub: guard.Origins(...) for pages from
+	// listed origins, guard.Token(...) for callers holding a token, both with
+	// guard.Chain, or your own. Nil means guard.Open() (any origin, no check;
+	// the roles still apply).
+	Guard guard.Guard
 	// MaxBody limits a request body in bytes; 0 means 8 MiB.
 	MaxBody int64
 	// MaxRooms limits how many documents the hub keeps in memory; 0 means
@@ -317,20 +323,7 @@ func (h *Hub) Handler() http.Handler {
 	mux.HandleFunc("POST /docs/{id}/ops", h.handleOps)
 	mux.HandleFunc("POST /docs/{id}/presence", h.handlePresence)
 	mux.HandleFunc("GET /docs/{id}/role", h.handleRole)
-	return cors(mux)
-}
-
-func cors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return guard.Or(h.cfg.Guard).Wrap(mux)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

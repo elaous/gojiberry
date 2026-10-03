@@ -5,6 +5,7 @@ package browser
 import (
 	"errors"
 	"syscall/js"
+	"time"
 )
 
 // awaitIDBRequest blocks until an IDBRequest fires "success" or
@@ -60,7 +61,17 @@ func OpenDatabase(name string, version int, upgrade func(db *Database)) (*Databa
 	result := make(chan js.Value, 1)
 	fail := make(chan error, 1)
 
+	// The handlers stay alive until the request settles, even if we stop
+	// waiting: a blocked upgrade that goes ahead after the timeout must
+	// still create its stores, and a connection that opens late is closed
+	// rather than left blocking the next upgrade.
 	var onUpgrade, onSuccess, onError js.Func
+	abandoned := false
+	releaseAll := func() {
+		onUpgrade.Release()
+		onSuccess.Release()
+		onError.Release()
+	}
 	onUpgrade = js.FuncOf(func(this js.Value, args []js.Value) any {
 		if upgrade != nil {
 			upgrade(&Database{Value: req.Get("result")})
@@ -68,16 +79,22 @@ func OpenDatabase(name string, version int, upgrade func(db *Database)) (*Databa
 		return nil
 	})
 	onSuccess = js.FuncOf(func(this js.Value, args []js.Value) any {
+		if abandoned {
+			req.Get("result").Call("close")
+			releaseAll()
+			return nil
+		}
 		result <- req.Get("result")
+		releaseAll()
 		return nil
 	})
 	onError = js.FuncOf(func(this js.Value, args []js.Value) any {
-		fail <- idbError(req, "indexeddb open failed")
+		if !abandoned {
+			fail <- idbError(req, "indexeddb open failed")
+		}
+		releaseAll()
 		return nil
 	})
-	defer onUpgrade.Release()
-	defer onSuccess.Release()
-	defer onError.Release()
 
 	req.Call("addEventListener", "upgradeneeded", onUpgrade)
 	req.Call("addEventListener", "success", onSuccess)
@@ -88,8 +105,16 @@ func OpenDatabase(name string, version int, upgrade func(db *Database)) (*Databa
 		return &Database{Value: v}, nil
 	case err := <-fail:
 		return nil, err
+	case <-time.After(openTimeout):
+		// Neither success nor error: typically a "blocked" upgrade, with
+		// another tab still holding an older version of the database open.
+		abandoned = true
+		return nil, errors.New("indexeddb: open timed out (another tab may be holding an older version open)")
 	}
 }
+
+// openTimeout is how long OpenDatabase waits for the browser.
+const openTimeout = 30 * time.Second
 
 // CreateObjectStore creates a new object store keyed by keyPath. Only
 // valid inside OpenDatabase's upgrade callback.
