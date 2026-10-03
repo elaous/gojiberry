@@ -271,8 +271,7 @@ through, a connection cut mid-session (both sides converge, nothing left
 waiting), and a refused connection reported.
 
 Not yet: a rejected replica cannot repair itself (rebuild the session);
-presence is sent on demand, not throttled; two clients that both start an empty
-document at the same moment each seed their own copy of the content.
+presence is sent on demand, not throttled.
 
 ## Phase 4 as built
 
@@ -304,3 +303,6 @@ document at the same moment each seed their own copy of the content.
 - With a `User` function, a replica id is tied to the signed-in user who first used it in a document; another user sending ops, presence or opening a stream under it gets 403. Anonymous callers cannot be bound.
 - A viewer's operations are bounded: counters (op, mark and character ids) may not run far past the document's clock, marks may not clear comments, records are size-limited.
 - Shutdown: `Hub.Stop` refuses writes and ends streams, then the server drains, then `Hub.Close` saves.
+- Two clients that open an empty document together and start from the same content write it as the replica `seed`, so their operations are identical and merge into one copy (different starting content from the two is still both kept).
+- When a client reconnects to a hub that answers with less than it holds (a restart that lost recent saves), it sends its whole document again; operations are idempotent. Viewers cannot, and their comment marks are not resent.
+- Several comments can sit on the same text (`Format.Comment` holds their IDs, comma-separated); comment and note IDs carry the replica's prefix so concurrent comments never collide; a commenter's records must name them as author when the hub has a `User` function.

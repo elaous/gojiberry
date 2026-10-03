@@ -159,8 +159,6 @@ func variantIndex(vs []Variant, v Variant) int {
 	return -1
 }
 
-func hasVariant(vs []Variant, v Variant) bool { return variantIndex(vs, v) >= 0 }
-
 func sortVariants(vs []Variant) {
 	sort.SliceStable(vs, func(i, j int) bool {
 		if vs[i].Weight != vs[j].Weight {

@@ -49,7 +49,7 @@ func (d Document) Render() Node {
 	if !d.NoStyles {
 		for _, s := range RegisteredStyles() {
 			if styleWanted(s.ID, d.Styles) {
-				head = append(head, El("style", []Attr{A("data-gox-style", s.ID)}, Raw(s.CSS)))
+				head = append(head, El("style", []Attr{A("data-gox-style", s.ID)}, Raw(styleEnd.ReplaceAllString(s.CSS, `<\/$1`))))
 			}
 		}
 	}
