@@ -47,9 +47,14 @@ func (d *Document) GetElementsByTagNameNS(namespace, tag string) []Element {
 	return wrapAll(d.Document.Call("getElementsByTagNameNS", namespace, tag))
 }
 
-// GetElementByID returns the element with the given id.
+// GetElementByID returns the element with the given id, or nil when there is
+// none (as QuerySelector does).
 func (d *Document) GetElementByID(id string) *Element {
-	return &Element{Element: d.Document.Call("getElementById", id)}
+	v := d.Document.Call("getElementById", id)
+	if v.IsNull() || v.IsUndefined() {
+		return nil
+	}
+	return &Element{Element: v}
 }
 
 // QuerySelector returns the first element in the document matching the

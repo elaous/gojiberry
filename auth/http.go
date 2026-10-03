@@ -2,9 +2,13 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/coreos/go-oidc/v3/oidc"
+	"golang.org/x/oauth2"
 )
 
 // Routes returns an http.Handler serving:
@@ -53,13 +57,23 @@ func (m *Manager) handleLoginFor(name string) http.HandlerFunc {
 			return
 		}
 		p := m.byName[name]
-		returnTo := r.URL.Query().Get("return_to")
-		state, err := m.states.put(loginState{Provider: name, ReturnTo: returnTo}, time.Now().Add(stateTTL))
+		returnTo := m.safeReturnTo(r.URL.Query().Get("return_to"))
+		nonce, err := randomToken()
 		if err != nil {
-			http.Error(w, "auth: generating state: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "auth: generating nonce", http.StatusInternalServerError)
 			return
 		}
-		http.Redirect(w, r, p.oauth2Config.AuthCodeURL(state), http.StatusFound)
+		verifier := oauth2.GenerateVerifier()
+		state, err := m.states.put(loginState{Provider: name, ReturnTo: returnTo, Verifier: verifier, Nonce: nonce}, time.Now().Add(stateTTL))
+		if errors.Is(err, errStoreFull) {
+			http.Error(w, "too many logins in progress", http.StatusServiceUnavailable)
+			return
+		}
+		if err != nil {
+			http.Error(w, "auth: generating state", http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, p.oauth2Config.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oidc.Nonce(nonce)), http.StatusFound)
 	}
 }
 
@@ -94,9 +108,9 @@ func (m *Manager) handleCallbackFor(name string) http.HandlerFunc {
 		}
 
 		ctx := r.Context()
-		oauth2Token, err := p.oauth2Config.Exchange(ctx, code)
+		oauth2Token, err := p.oauth2Config.Exchange(ctx, code, oauth2.VerifierOption(state.Verifier))
 		if err != nil {
-			http.Error(w, "auth: exchanging code: "+err.Error(), http.StatusBadGateway)
+			http.Error(w, "auth: exchanging code failed", http.StatusBadGateway)
 			return
 		}
 		rawIDToken, ok := oauth2Token.Extra("id_token").(string)
@@ -106,12 +120,20 @@ func (m *Manager) handleCallbackFor(name string) http.HandlerFunc {
 		}
 		idToken, err := p.verifier.Verify(ctx, rawIDToken)
 		if err != nil {
-			http.Error(w, "auth: verifying id_token: "+err.Error(), http.StatusUnauthorized)
+			http.Error(w, "auth: id_token verification failed", http.StatusUnauthorized)
+			return
+		}
+		if idToken.Nonce != state.Nonce {
+			http.Error(w, "auth: id_token nonce mismatch", http.StatusUnauthorized)
 			return
 		}
 		var claims idTokenClaims
 		if err := idToken.Claims(&claims); err != nil {
-			http.Error(w, "auth: decoding claims: "+err.Error(), http.StatusBadGateway)
+			http.Error(w, "auth: could not read the id_token claims", http.StatusBadGateway)
+			return
+		}
+		if claims.Subject == "" {
+			http.Error(w, "auth: id_token has no subject", http.StatusUnauthorized)
 			return
 		}
 		user := userFromClaims(name, claims)

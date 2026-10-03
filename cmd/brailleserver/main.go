@@ -8,6 +8,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/elaous/gojiberry/brailleserver"
 )
@@ -16,5 +17,5 @@ func main() {
 	cfg := brailleserver.ConfigFromEnv()
 	srv := brailleserver.NewServer(cfg)
 	log.Printf("brailleserver: listening on %s (lou_translate=%q table=%q)", cfg.Addr, cfg.LouTranslateBinary, cfg.Table)
-	log.Fatal(http.ListenAndServe(cfg.Addr, srv.Handler()))
+	log.Fatal((&http.Server{Addr: cfg.Addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}).ListenAndServe())
 }

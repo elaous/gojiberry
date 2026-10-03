@@ -9,8 +9,11 @@ package fontserver
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/elaous/gojiberry/guard"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -24,6 +27,11 @@ import (
 // font collection, or turning Google Fonts proxying on, is always an
 // environment variable, never a code change.
 type Config struct {
+	// Guard decides who may call the server: guard.Origins(...) for pages from
+	// listed origins, guard.Token(...) for callers holding a token, both with
+	// guard.Chain, or your own. Nil means guard.Open() (any origin, no check).
+	// ConfigFromEnv reads GOJIBERRY_FONTSERVER_ALLOW_ORIGINS and GOJIBERRY_FONTSERVER_TOKEN.
+	Guard          guard.Guard
 	Addr           string        // listen address, e.g. ":8082"
 	FontsDir       string        // local font directory Repo scans
 	GoogleAPIKey   string        // Google Fonts Developer API key; empty disables the online catalog
@@ -44,6 +52,7 @@ func ConfigFromEnv() Config {
 		}
 	}
 	return Config{
+		Guard:          guard.FromEnv("GOJIBERRY_FONTSERVER", "/health"),
 		Addr:           envOr("GOJIBERRY_FONTSERVER_ADDR", ":8082"),
 		FontsDir:       envOr("GOJIBERRY_FONTSERVER_DIR", "./fonts"),
 		GoogleAPIKey:   os.Getenv("GOJIBERRY_FONTSERVER_GOOGLE_KEY"),
@@ -90,6 +99,8 @@ type Server struct {
 	// uses fetchGoogleFontFilesAPI (set by NewServer).
 	fetchGoogleFontFiles func(family string) ([]googleFontFile, error)
 
+	downloads chan struct{} // limits concurrent /local/download requests
+
 	mu            sync.Mutex
 	googleCache   []googleFont
 	googleFetched time.Time
@@ -106,7 +117,7 @@ func NewServer(cfg Config) *Server {
 	if err := repo.Scan(); err != nil {
 		fmt.Fprintf(os.Stderr, "fontserver: initial scan of %s: %v\n", cfg.FontsDir, err)
 	}
-	return &Server{cfg: cfg, repo: repo, fetchGoogleFonts: fetchGoogleFontsAPI, fetchGoogleFontFiles: fetchGoogleFontFilesAPI}
+	return &Server{cfg: cfg, repo: repo, fetchGoogleFonts: fetchGoogleFontsAPI, fetchGoogleFontFiles: fetchGoogleFontFilesAPI, downloads: make(chan struct{}, 2)}
 }
 
 // Handler returns the HTTP routes:
@@ -131,20 +142,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/local/symbols", s.handleLocalSymbols)
 	mux.HandleFunc("/google/fonts", s.handleGoogleFonts)
 	mux.HandleFunc("/local/download", s.handleLocalDownload)
-	return corsMiddleware(mux)
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return guard.Or(s.cfg.Guard).Wrap(mux)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -277,7 +275,8 @@ func (s *Server) handleGoogleFonts(w http.ResponseWriter, r *http.Request) {
 			// still an empty list -- same reasoning as the no-key case,
 			// a transient Google outage shouldn't surface as a picker
 			// error the user has to do anything about.
-			writeJSON(w, http.StatusOK, map[string]any{"families": []googleFont{}, "enabled": true, "error": fetchErr.Error()})
+			log.Printf("fontserver: %v", fetchErr)
+			writeJSON(w, http.StatusOK, map[string]any{"families": []googleFont{}, "enabled": true, "error": "google fonts is unavailable"})
 			return
 		}
 	}
@@ -289,11 +288,22 @@ func (s *Server) handleGoogleFonts(w http.ResponseWriter, r *http.Request) {
 // key travels only in this server-to-Google request, never to the
 // browser -- handleGoogleFonts proxies the result, not the key.
 func fetchGoogleFontsAPI(apiKey string) ([]googleFont, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	u := "https://www.googleapis.com/webfonts/v1/webfonts?key=" + url.QueryEscape(apiKey) + "&sort=popularity"
+	return fetchGoogleFontsFrom("https://www.googleapis.com/webfonts/v1/webfonts?key="+url.QueryEscape(apiKey)+"&sort=popularity", nil)
+}
+
+// fetchGoogleFontsFrom GETs the list at u (nil client: a 10s default).
+func fetchGoogleFontsFrom(u string, client *http.Client) ([]googleFont, error) {
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
 	resp, err := client.Get(u)
 	if err != nil {
-		return nil, err
+		// A *url.Error carries the whole URL, and the API key is in it.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
+		return nil, fmt.Errorf("fontserver: google fonts request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

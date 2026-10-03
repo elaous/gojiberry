@@ -280,3 +280,50 @@ func TestParseLengthAndParseColorValueEdgeCases(t *testing.T) {
 		}
 	}
 }
+
+func TestAtRulesDoNotSwallowOrLeakRules(t *testing.T) {
+	css := "@charset \"utf-8\";\n@import \"x.css\";\n.a{background:#fff}\n" +
+		"@media (prefers-color-scheme: dark) { .a { background: #000 } .b { background: #111 } }\n" +
+		".c{background:#eee}"
+	styles, _ := Generate(css, []string{"a", "b", "c"}, nil)
+	if got := styles["a"].Background; got != (color.NRGBA{255, 255, 255, 255}) {
+		t.Errorf(".a = %+v: the @media override must not apply (and the @import must not eat the rule)", got)
+	}
+	if _, ok := styles["b"]; ok {
+		t.Error(".b exists only inside @media and must not be generated")
+	}
+	if _, ok := styles["c"]; !ok {
+		t.Error(".c after an at-rule block was lost")
+	}
+	light, _ := ParseTokens("@charset \"utf-8\";\n:root{--a:#fff}")
+	if light["a"] != "#fff" {
+		t.Errorf("tokens after an at-rule: %v", light)
+	}
+}
+
+func TestLaterDeclarationWins(t *testing.T) {
+	for i := 0; i < 50; i++ { // used to depend on map iteration order
+		styles, _ := Generate(".a{border:1px solid #f00; border-color:#00f}", []string{"a"}, nil)
+		if got := styles["a"].BorderColor; got != (color.NRGBA{0, 0, 255, 255}) {
+			t.Fatalf("run %d: border colour %+v, want the later border-color (blue)", i, got)
+		}
+	}
+}
+
+func TestSelfReferencingTokenTerminates(t *testing.T) {
+	for _, tokens := range []Tokens{{"x": "var(--x)"}, {"a": "var(--b)", "b": "var(--a)"}} {
+		if _, ok := parseColorValue("var(--x)", tokens); ok {
+			t.Errorf("%v resolved to a colour", tokens)
+		}
+		if _, ok := parseColorValue("var(--a)", tokens); ok {
+			t.Errorf("%v resolved to a colour", tokens)
+		}
+	}
+}
+
+func TestRGBIsClamped(t *testing.T) {
+	got, ok := parseColorValue("rgba(300, 0, 0, 1.5)", nil)
+	if !ok || got != (color.NRGBA{255, 0, 0, 255}) {
+		t.Fatalf("got %+v ok=%v, want {255 0 0 255}", got, ok)
+	}
+}

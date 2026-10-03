@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/elaous/gojiberry/guard"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -467,5 +468,24 @@ func TestExpiredPresenceIsAnnouncedGone(t *testing.T) {
 		}
 	default:
 		t.Fatal("no gone event for the expired cursor")
+	}
+}
+
+func TestGuardOriginsAndTokenApplyToTheHub(t *testing.T) {
+	h := New(Config{Guard: guard.Chain(guard.Origins("https://app.example.com"), guard.Token("tok", guard.Options{TokenHeader: "X-Gojiberry-Token"}))})
+	call := func(origin, token string) int {
+		req := httptest.NewRequest("GET", "/docs/d/snapshot", nil)
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		if token != "" {
+			req.Header.Set("X-Gojiberry-Token", token)
+		}
+		rec := httptest.NewRecorder()
+		h.Handler().ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if call("https://app.example.com", "tok") != 200 || call("https://evil.example", "tok") != 403 || call("https://app.example.com", "") != 401 {
+		t.Fatal("the hub's guard was not applied")
 	}
 }
