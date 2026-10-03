@@ -90,7 +90,13 @@ func DataTable(props DataTableProps) gox.Node {
 	for _, id := range props.Selected {
 		selected[id] = true
 	}
-	allSelected := props.Selectable && len(props.Rows) > 0 && len(props.Selected) == len(props.Rows)
+	allSelected := props.Selectable && len(props.Rows) > 0
+	for _, row := range props.Rows { // every row on show, not merely as many ids as rows
+		if !selected[row.ID] {
+			allSelected = false
+			break
+		}
+	}
 
 	var headerCells []gox.Node
 	if props.Selectable {

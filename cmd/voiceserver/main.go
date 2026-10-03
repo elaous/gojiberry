@@ -9,6 +9,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/elaous/gojiberry/voiceserver"
 )
@@ -17,5 +18,5 @@ func main() {
 	cfg := voiceserver.ConfigFromEnv()
 	srv := voiceserver.NewServer(cfg)
 	log.Printf("voiceserver: listening on %s (piper=%q whisper=%q)", cfg.Addr, cfg.PiperBinary, cfg.WhisperBinary)
-	log.Fatal(http.ListenAndServe(cfg.Addr, srv.Handler()))
+	log.Fatal((&http.Server{Addr: cfg.Addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}).ListenAndServe())
 }

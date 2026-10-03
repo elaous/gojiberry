@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 func TestDefaultIgnore(t *testing.T) {
@@ -126,5 +128,41 @@ func TestRunRebuildsAndRestartsOnRealFileChange(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("Run did not return after SIGTERM")
+	}
+}
+
+func TestEditorScratchFilesAreIgnored(t *testing.T) {
+	for _, p := range []string{"src/.main.go.swp", "src/main.go~", "src/4913", "src/.#main.go", "x/a.tmp"} {
+		if !DefaultIgnore(p) {
+			t.Errorf("%s should be ignored", p)
+		}
+	}
+	if DefaultIgnore("src/main.go") {
+		t.Error("source files must not be ignored")
+	}
+}
+
+func TestAddRecursiveSkipsHeavyDirsAndSurvivesUnreadableOnes(t *testing.T) {
+	root := t.TempDir()
+	for _, d := range []string{"src/pkg", "node_modules/dep", ".git/objects"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = w.Close() }()
+	if err := addRecursive(w, root); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range w.WatchList() {
+		if strings.Contains(p, "node_modules") || strings.Contains(p, ".git") {
+			t.Errorf("watching %s", p)
+		}
+	}
+	if len(w.WatchList()) != 3 { // root, src, src/pkg
+		t.Errorf("watch list %v", w.WatchList())
 	}
 }

@@ -1,5 +1,7 @@
 package components
 
+import "sync"
+
 // DataViewQuery is one request DataView's own Load makes through
 // Fetch -- deliberately abstract over which real pagination/filter/
 // sort protocol a backend actually speaks (JSON:API, OData, a
@@ -58,6 +60,7 @@ type DataViewProps[T any] struct {
 // Items/Total/TotalPages/Err in place, ready for the next re-render.
 type DataView[T any] struct {
 	props DataViewProps[T]
+	mu    sync.Mutex // serializes Load
 
 	Page     int
 	Search   string
@@ -88,6 +91,14 @@ func NewDataView[T any](props DataViewProps[T]) *DataView[T] {
 // caller's job, the same async-caller-drives-it split FileUploader/
 // Search already take for their own async work.
 func (v *DataView[T]) Load() error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.load(true)
+}
+
+// load runs the query; with clamp, a page past the end (a search or filter
+// shrank the results) is pulled back to the last page and fetched again.
+func (v *DataView[T]) load(clamp bool) error {
 	v.Loading = true
 	result, err := v.props.Fetch(DataViewQuery{
 		Page:     v.Page,
@@ -102,6 +113,13 @@ func (v *DataView[T]) Load() error {
 		return err
 	}
 	v.Items, v.Total, v.TotalPages = result.Items, result.Total, result.TotalPages
+	if clamp && v.TotalPages > 0 && v.Page > v.TotalPages {
+		// A search or filter left fewer pages than this one: go to the last
+		// and fetch again. (A backend that reports no TotalPages gives us
+		// nothing to clamp to.)
+		v.Page = v.TotalPages
+		return v.load(false)
+	}
 	return nil
 }
 
@@ -110,16 +128,25 @@ func (v *DataView[T]) SetPage(page int) error {
 	if page < 1 {
 		page = 1
 	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	previous := v.Page
 	v.Page = page
-	return v.Load()
+	if err := v.load(true); err != nil {
+		v.Page = previous // the table still shows the previous page's rows
+		return err
+	}
+	return nil
 }
 
 // SetSearch sets Search, resets Page to 1 (a new search invalidates
 // whatever page the old result set was on), and reloads.
 func (v *DataView[T]) SetSearch(search string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	v.Search = search
 	v.Page = 1
-	return v.Load()
+	return v.load(true)
 }
 
 // SetSort sets SortKey/SortDesc and reloads. DataTableProps.OnSort's
@@ -129,8 +156,11 @@ func (v *DataView[T]) SetSearch(search string) error {
 // the same "caller decides asc/desc toggling" split DataTableProps.
 // OnSort's own doc comment already describes.
 func (v *DataView[T]) SetSort(key string, desc bool) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	v.SortKey, v.SortDesc = key, desc
-	return v.Load()
+	v.Page = 1 // a new order starts from its first page, as a new search does
+	return v.load(true)
 }
 
 // PaginationProps returns a ready-to-use Pagination configuration

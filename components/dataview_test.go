@@ -142,3 +142,38 @@ func TestDataView(t *testing.T) {
 		}
 	})
 }
+
+func TestDataViewPagingEdgeCases(t *testing.T) {
+	fail := false
+	var lastPage int
+	v := NewDataView(DataViewProps[dvRow]{
+		PageSize: 10,
+		Fetch: func(q DataViewQuery) (DataViewResult[dvRow], error) {
+			lastPage = q.Page
+			if fail {
+				return DataViewResult[dvRow]{}, errors.New("down")
+			}
+			if q.Search == "few" { // only 2 pages of results
+				return DataViewResult[dvRow]{Items: []dvRow{{Name: "p"}}, Total: 15, TotalPages: 2}, nil
+			}
+			return DataViewResult[dvRow]{Items: []dvRow{{Name: "x"}}, Total: 100, TotalPages: 10}, nil
+		},
+	})
+	_ = v.Load()
+	_ = v.SetPage(5)
+	fail = true
+	if err := v.SetPage(6); err == nil || v.Page != 5 {
+		t.Fatalf("a failed page change must roll back: page %d, err %v", v.Page, err)
+	}
+	fail = false
+	_ = v.SetSort("name", true)
+	if v.Page != 1 {
+		t.Fatalf("sorting should return to page 1, got %d", v.Page)
+	}
+	_ = v.SetPage(9)
+	v.Search = "few"
+	_ = v.Load()
+	if v.Page != 2 || lastPage != 2 {
+		t.Fatalf("a page past the end should be clamped to the last: page %d, fetched %d", v.Page, lastPage)
+	}
+}

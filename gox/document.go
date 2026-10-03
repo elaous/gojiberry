@@ -1,5 +1,7 @@
 package gox
 
+import "regexp"
+
 // Document is the <html><head>...</head><body>...</body></html>
 // wrapper almost every top-level page needs, so individual pages don't
 // each hand-roll that boilerplate. Head holds extra <head> children
@@ -27,7 +29,11 @@ func (d Document) Render() Node {
 
 // Style returns a <style> element injecting css verbatim -- e.g. the
 // string a gox CSS resource import binds -- for use in a Document's
-// Head. css is trusted, unescaped content, same caveat as Raw.
+// Head. css is trusted content, but a "</style" inside it (in a string or a
+// comment) cannot end the element early: it is written as the equivalent
+// CSS escape "<\/style".
 func Style(css string) Node {
-	return El("style", nil, Raw(css))
+	return El("style", nil, Raw(styleEnd.ReplaceAllString(css, `<\/$1`)))
 }
+
+var styleEnd = regexp.MustCompile(`(?i)<\/(style)`)

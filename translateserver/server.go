@@ -18,6 +18,7 @@ package translateserver
 
 import (
 	"encoding/json"
+	"github.com/elaous/gojiberry/guard"
 	"io"
 	"net/http"
 	"os"
@@ -29,6 +30,11 @@ import (
 // syncserver.Config/fontserver.Config take: turning real translation
 // on is always an environment variable, never a code change.
 type Config struct {
+	// Guard decides who may call the server: guard.Origins(...) for pages from
+	// listed origins, guard.Token(...) for callers holding a token, both with
+	// guard.Chain, or your own. Nil means guard.Open() (any origin, no check).
+	// ConfigFromEnv reads GOJIBERRY_TRANSLATESERVER_ALLOW_ORIGINS and GOJIBERRY_TRANSLATESERVER_TOKEN.
+	Guard       guard.Guard
 	Addr        string // listen address, e.g. ":8083"
 	DeepLAPIKey string // DeepL API authentication key; empty disables translation
 }
@@ -38,6 +44,7 @@ type Config struct {
 // /translate always reports 503 -- see handleTranslate).
 func ConfigFromEnv() Config {
 	return Config{
+		Guard:       guard.FromEnv("GOJIBERRY_TRANSLATESERVER", "/health"),
 		Addr:        envOr("GOJIBERRY_TRANSLATESERVER_ADDR", ":8083"),
 		DeepLAPIKey: os.Getenv("GOJIBERRY_TRANSLATESERVER_DEEPL_KEY"),
 	}
@@ -94,20 +101,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/translate", s.handleTranslate)
-	return corsMiddleware(mux)
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return guard.Or(s.cfg.Guard).Wrap(mux)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
