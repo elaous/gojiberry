@@ -143,10 +143,16 @@ func TestRolesAreEnforced(t *testing.T) {
 	viewer := r.connect("v", "viewer", newFlow())
 	waitFor(t, "viewer has the text", func() bool { return text(viewer.Bridge.Flow) == "the text" && viewer.Role == wire.Viewer }, owner, viewer)
 
-	// A viewer's text edit is refused, and the owner never sees it.
+	// A viewer's text edit is refused, and the owner never sees it. The
+	// viewer's session repairs itself: its flow goes back to the server's text.
 	click(viewer.Bridge.Flow, 3)
 	viewer.Bridge.Flow.InsertText("X")
-	waitFor(t, "the viewer's edit to be rejected", func() bool { return viewer.Err != nil }, owner, viewer)
+	waitFor(t, "the viewer's session to repair itself", func() bool {
+		return viewer.Repairs > 0 && viewer.Bridge.Ready() && text(viewer.Bridge.Flow) == "the text"
+	}, owner, viewer)
+	if viewer.Err != nil || viewer.Conn.Pending() != 0 {
+		t.Fatalf("a repaired session starts clean: err %v pending %d", viewer.Err, viewer.Conn.Pending())
+	}
 	time.Sleep(30 * time.Millisecond)
 	owner.Poll()
 	if text(owner.Bridge.Flow) != "the text" {
@@ -261,4 +267,23 @@ func TestClientResendsWhatARestartedHubLost(t *testing.T) {
 	srv.CloseClientConnections()
 	b := connect("b", newFlow())
 	waitFor(t, "b to get the document from the reconnected a", func() bool { return text(b.Bridge.Flow) == "one two!" }, a, b)
+}
+
+func TestNoRepairLeavesTheErrorForTheCaller(t *testing.T) {
+	r := newRig(t, hub.Config{Roles: byHeader})
+	owner := r.connect("o", "owner", newFlow(canvas.Chars{Text: "the text"}))
+	waitFor(t, "owner ready", func() bool { return owner.Bridge.Ready() }, owner)
+	viewer := r.connect("v", "viewer", newFlow())
+	viewer.NoRepair = true
+	waitFor(t, "viewer has the text", func() bool { return text(viewer.Bridge.Flow) == "the text" && viewer.Role == wire.Viewer }, owner, viewer)
+	click(viewer.Bridge.Flow, 3)
+	viewer.Bridge.Flow.InsertText("X")
+	waitFor(t, "the rejection", func() bool { return viewer.Err != nil }, owner, viewer)
+	if viewer.Repairs != 0 || text(viewer.Bridge.Flow) != "theX text" {
+		t.Fatalf("NoRepair must leave the session as it is: repairs %d text %q", viewer.Repairs, text(viewer.Bridge.Flow))
+	}
+	if err := viewer.Repair(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the manual repair", func() bool { return viewer.Bridge.Ready() && text(viewer.Bridge.Flow) == "the text" }, owner, viewer)
 }
