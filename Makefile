@@ -100,8 +100,8 @@ coverage-badge: coverage
 # GapBuffer-vs-naive-slice benchmarks (fast, native, no extra setup)
 # and examples/domrt-bench's own patch/patchChildren benchmarks (drives
 # a real, wasm-built page through a real headless Chromium via
-# Playwright, skipping itself with b.Skip -- not failing -- if node/
-# Playwright/Chromium aren't available; see that example's own
+# chromedp (internal/e2etest), skipping itself with b.Skip -- not failing --
+# if no Chromium is available; see that example's own
 # bench_test.go and Makefile for the fuller picture). -benchtime=1x
 # matches examples/domrt-bench's own Makefile: each "iteration" already
 # represents a full weighted operation count measured browser-side, not

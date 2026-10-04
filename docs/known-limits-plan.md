@@ -49,20 +49,15 @@ order it should land in.
    (use a conditional save where the adapter has one); `pdftext` cannot stop a
    looping parser (run it out of process on a server).
 
-## C. Test tooling: follow opendocs (chromedp)
+## C. Test tooling: chromedp (done)
 
-opendocs drives the browser with **chromedp** under a `cdp` build tag
-(`editor/cdptestkit_test.go`, `*_cdp_test.go`), not Node/Playwright. Gojiberry's
-`internal/e2etest` currently shells out to Playwright with JS scripts.
-
-- **Step 1 (M).** Add a chromedp-based `internal/e2etest` driver exposing the
-  same helpers (`Run`, page, `#state`, errors). Keep the JS scripts running
-  until each is ported.
-- **Step 2 (L).** Port the scripts one at a time (verify, share, find, spell,
-  lang, columns, lifecycle, a11y), deleting the JS and the Node dependency at
-  the end. Reuse opendocs' helpers (`typeTextCDP`, `canvasBoxCDP`, `docStateCDP`)
-  where they are generic.
-- Risk: `go.mod` gains chromedp/cdproto; both are already vetted in opendocs.
+opendocs drives the browser with **chromedp** (`cdptestkit_test.go`); gojiberry now
+does too. `internal/e2etest` is a Go driver over chromedp (`Site` builds and serves
+a wasm example, `Tab` is a browser on it: selectors with `:has-text`/`:text-is`,
+real mouse and keyboard events, waits on the page's `#state`, dialogs, downloads,
+file choosers, routes). Every Playwright script was ported to a Go test and the
+Node dependency is gone; tests skip when no Chromium is found. Left to do: run
+the e2e tests in CI (it has Chrome) once they are known stable there.
 
 ## D. Still to do from earlier
 

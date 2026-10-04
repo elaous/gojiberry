@@ -22,9 +22,9 @@ type Site struct {
 
 // NewSite builds the package in the current directory (the example's own
 // directory, which is what `go test` uses as the working directory) and serves
-// it. A page at /d/{doc} is served index.html too, for documents addressed by
+// it, with any extra files (globs) next to index.html. A page at /d/{doc} is served index.html too, for documents addressed by
 // path. It is closed when the test ends.
-func NewSite(t *testing.T) *Site {
+func NewSite(t testing.TB, extra ...string) *Site {
 	t.Helper()
 	dir := t.TempDir()
 	build := exec.Command("go", "build", "-o", filepath.Join(dir, "main.wasm"), ".")
@@ -47,6 +47,22 @@ func NewSite(t *testing.T) *Site {
 	for name, data := range map[string][]byte{"wasm_exec.js": execJS, "index.html": index} {
 		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
 			t.Fatal(err)
+		}
+	}
+	// Extra files (globs) the page needs, copied next to index.html.
+	for _, pattern := range extra {
+		matches, err := filepath.Glob(pattern)
+		if err != nil || len(matches) == 0 {
+			t.Fatalf("e2etest: no files match %q: %v", pattern, err)
+		}
+		for _, m := range matches {
+			data, err := os.ReadFile(m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, filepath.Base(m)), data, 0o644); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	files := http.FileServer(http.Dir(dir))

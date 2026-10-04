@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -45,7 +46,7 @@ type Options struct {
 
 // Tab is one browser on a page.
 type Tab struct {
-	t    *testing.T
+	t    testing.TB
 	ctx  context.Context
 	site *Site
 
@@ -57,8 +58,8 @@ type Tab struct {
 	dlName   chan string
 	routes   []*route
 	mx, my   float64
-	box      [4]float64 // #stage, in page coordinates
-	downDir  string
+	mods     input.Modifier // keys held down with KeyDown
+	box      [4]float64     // #stage, in page coordinates
 	closeFns []func()
 }
 
@@ -68,15 +69,19 @@ type route struct {
 	hits   int
 }
 
-// Chromium is the browser executable, from PLAYWRIGHT_CHROMIUM or CHROMIUM.
-func chromiumPath(t *testing.T) string {
+// chromiumPath is the browser executable: $CHROMIUM or $PLAYWRIGHT_CHROMIUM, else the
+// first Chromium or Chrome found.
+func chromiumPath(t testing.TB) string {
 	for _, env := range []string{"CHROMIUM", "PLAYWRIGHT_CHROMIUM"} {
 		if p := os.Getenv(env); p != "" {
 			return p
 		}
 	}
-	for _, p := range []string{"/opt/pw-browsers/chromium", "/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome"} {
-		if _, err := os.Stat(p); err == nil {
+	if _, err := os.Stat("/opt/pw-browsers/chromium"); err == nil {
+		return "/opt/pw-browsers/chromium"
+	}
+	for _, name := range []string{"chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "chrome"} {
+		if p, err := exec.LookPath(name); err == nil {
 			return p
 		}
 	}
@@ -86,7 +91,7 @@ func chromiumPath(t *testing.T) string {
 
 // Open starts a browser and loads the page: query is "?x=y" on index.html, or a
 // path ("/d/doc?x=y"). It waits for the page's #state to be filled.
-func (s *Site) Open(t *testing.T, query string, opts ...Options) *Tab {
+func (s *Site) Open(t testing.TB, query string, opts ...Options) *Tab {
 	t.Helper()
 	var o Options
 	if len(opts) > 0 {
@@ -103,13 +108,13 @@ func (s *Site) Open(t *testing.T, query string, opts ...Options) *Tab {
 	tab.must(chromedp.Navigate(url))
 	tab.WaitFor("the page to start", "document.getElementById('state') && document.getElementById('state').textContent !== '(pending)'")
 	var b []float64
-	tab.Eval(`(() => { const r = document.getElementById('stage').getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()`, &b)
+	tab.Eval(`(() => { const c = document.getElementById('stage'); if (!c) return [0, 0, 0, 0]; const r = c.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()`, &b)
 	copy(tab.box[:], b)
 	return tab
 }
 
 // OpenURL loads any URL (a page that is not a canvas example, with no #state).
-func (s *Site) OpenURL(t *testing.T, path string, opts ...Options) *Tab {
+func (s *Site) OpenURL(t testing.TB, path string, opts ...Options) *Tab {
 	t.Helper()
 	var o Options
 	if len(opts) > 0 {
@@ -123,7 +128,7 @@ func (s *Site) OpenURL(t *testing.T, path string, opts ...Options) *Tab {
 	return tab
 }
 
-func (s *Site) launch(t *testing.T, o Options) *Tab {
+func (s *Site) launch(t testing.TB, o Options) *Tab {
 	exe := chromiumPath(t)
 	alloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
 		append(chromedp.DefaultExecAllocatorOptions[:],
@@ -234,7 +239,7 @@ func (d *Tab) OK(cond bool, msg string) {
 }
 
 // OK is a check that logs "ok: msg" or fails the test.
-func OK(t *testing.T, cond bool, msg string) {
+func OK(t testing.TB, cond bool, msg string) {
 	t.Helper()
 	if !cond {
 		t.Fatalf("FAIL: %s", msg)
@@ -430,7 +435,7 @@ func (d *Tab) mouse(typ input.MouseType, x, y float64, button input.MouseButton,
 		buttons = 1
 	}
 	d.must(chromedp.ActionFunc(func(ctx context.Context) error {
-		return input.DispatchMouseEvent(typ, x, y).WithButton(button).WithButtons(buttons).WithClickCount(clicks).WithDeltaX(dx).WithDeltaY(dy).Do(ctx)
+		return input.DispatchMouseEvent(typ, x, y).WithModifiers(d.mods).WithButton(button).WithButtons(buttons).WithClickCount(clicks).WithDeltaX(dx).WithDeltaY(dy).Do(ctx)
 	}))
 }
 
@@ -510,6 +515,16 @@ func (d *Tab) CanvasDblClick(x, y float64) {
 // CanvasMove moves the pointer to canvas coordinates.
 func (d *Tab) CanvasMove(x, y float64) { d.t.Helper(); px, py := d.At(x, y); d.MouseMove(px, py) }
 
+// CanvasDragPage presses at one page point and releases at another.
+func (d *Tab) CanvasDragPage(x0, y0, x1, y1 float64) {
+	d.t.Helper()
+	d.MouseMove(x0, y0)
+	d.mouse(input.MousePressed, x0, y0, input.Left, 1, 0, 0)
+	d.mouse(input.MouseMoved, (x0+x1)/2, (y0+y1)/2, input.Left, 0, 0, 0)
+	d.mouse(input.MouseMoved, x1, y1, input.Left, 0, 0, 0)
+	d.mouse(input.MouseReleased, x1, y1, input.Left, 1, 0, 0)
+}
+
 // CanvasDrag presses at one point and releases at another.
 func (d *Tab) CanvasDrag(x0, y0, x1, y1 float64) {
 	d.t.Helper()
@@ -572,6 +587,20 @@ func (d *Tab) Press(spec string) {
 		bits &^= modBits[mods[i]]
 		d.key(input.KeyUp, named[mods[i]], bits, "")
 	}
+}
+
+// KeyDown holds a modifier key down (until KeyUp), for mouse events with it.
+func (d *Tab) KeyDown(name string) {
+	d.t.Helper()
+	d.mods |= modBits[name]
+	d.key(input.KeyType("rawKeyDown"), named[name], d.mods, "")
+}
+
+// KeyUp releases a key held with KeyDown.
+func (d *Tab) KeyUp(name string) {
+	d.t.Helper()
+	d.key(input.KeyUp, named[name], d.mods, "")
+	d.mods &^= modBits[name]
 }
 
 // Type types text, a key press for each character.
