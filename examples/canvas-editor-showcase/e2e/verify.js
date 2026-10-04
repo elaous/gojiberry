@@ -399,6 +399,19 @@ run(async () => {
   await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).text.includes('fresh words'));
   assert((await page.locator('#transfer-message').textContent()) === 'Imported hello.md', 'Import reads the file into the editor');
 
+  // The other formats: each export is a real file of its kind, and a Word file comes back in.
+  for (const [format, ext, check] of [['docx', '.docx', (b) => b.slice(0, 2).toString() === 'PK'], ['pdf', '.pdf', (b) => b.slice(0, 5).toString() === '%PDF-'],
+    ['epub', '.epub', (b) => b.slice(0, 2).toString() === 'PK'], ['rtf', '.rtf', (b) => b.slice(0, 6).toString() === '{\\rtf1'], ['html', '.html', (b) => b.toString().includes('fresh') && b.toString().includes('<strong>words</strong>')]]) {
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click(`.gj-transfer-button[data-kind="export"][data-format="${format}"]`)]);
+    assert(dl.suggestedFilename() === 'Quarterly report' + ext, format + ' export is named after the title: ' + dl.suggestedFilename());
+    assert(check(fs.readFileSync(await dl.path())), format + ' export is a real ' + format + ' file');
+    if (format === 'docx') var docxBytes = fs.readFileSync(await dl.path());
+  }
+  const [docxChooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('.gj-transfer-button[data-kind="import"][data-format="docx"]')]);
+  await docxChooser.setFiles({ name: 'back.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: docxBytes });
+  await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).text.includes('fresh words') && document.getElementById('transfer-message').textContent === 'Imported back.docx');
+  assert(true, 'a Word file exported by the editor imports back with its text');
+
   // Roles: a viewer is held in view mode and cannot comment; an editor can edit but not manage.
   await d.click(100, 164); // into the imported text's second line
   await page.focus('#input');

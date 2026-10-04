@@ -34,6 +34,7 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/domrt"
 	"github.com/elaous/gojiberry/domrt/browser"
+	"github.com/elaous/gojiberry/export"
 	"github.com/elaous/gojiberry/fonts"
 	"github.com/elaous/gojiberry/saver"
 	"github.com/elaous/gojiberry/transfer"
@@ -96,6 +97,7 @@ func main() {
 	store := docstore.NewMemoryAdapter()
 	lib := &fonts.Library{Blobs: saver.Blobs(store)}
 	u.transfer = transfer.Default()
+	export.Register(u.transfer) // HTML, RTF, EPUB, PDF, Word out; Word and PDF in
 
 	stage := canvas.NewStage(nil, 0, 0)
 	canvasEl, inputEl := doc.GetElementByID("stage"), doc.GetElementByID("input")
