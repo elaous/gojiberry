@@ -91,6 +91,11 @@ type Options struct {
 	// Retry is the first reconnection delay, doubling to MaxRetry; the
 	// defaults are 500ms and 15s.
 	Retry, MaxRetry time.Duration
+	// PresenceInterval is the least time between two cursor updates sent to
+	// the server: SetPresence calls that come faster are merged, and the
+	// latest goes out when the interval ends. 0 means 100ms; negative sends
+	// every update at once.
+	PresenceInterval time.Duration
 	// OnError, if set, hears about connection errors.
 	OnError func(error)
 }
@@ -123,6 +128,9 @@ func Dial(opts Options) *Conn {
 	}
 	if opts.MaxRetry <= 0 {
 		opts.MaxRetry = 15 * time.Second
+	}
+	if opts.PresenceInterval == 0 {
+		opts.PresenceInterval = 100 * time.Millisecond
 	}
 	cl := opts.Client
 	if cl == nil {
@@ -288,6 +296,15 @@ func (c *Conn) presenceSender() {
 		}
 		if resp, err := c.client.Do(req); err == nil {
 			_ = resp.Body.Close()
+		}
+		// Whatever SetPresence is called with meanwhile waits for the
+		// interval and goes out as one update.
+		if c.opts.PresenceInterval > 0 {
+			select {
+			case <-time.After(c.opts.PresenceInterval):
+			case <-c.ctx.Done():
+				return
+			}
 		}
 	}
 }
