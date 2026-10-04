@@ -2,7 +2,11 @@
 // WASM client need not import the server's dependencies.
 package wire
 
-import "github.com/elaous/gojiberry/crdt"
+import (
+	"encoding/json"
+
+	"github.com/elaous/gojiberry/crdt"
+)
 
 // Role is what a person may do with a document. The names match
 // canvas.Role and docstore's access levels.
@@ -41,4 +45,20 @@ type Presence struct {
 	Caret   crdt.Timestamp `json:"caret"`
 	// Gone is set on the event sent when a replica leaves.
 	Gone bool `json:"gone,omitempty"`
+}
+
+// Frame is one WebSocket message of the collab protocol (the transport in
+// collab/ws and the hub's /docs/{id}/ws endpoint). It mirrors the HTTP
+// transport's server-sent events and posts, in one stream.
+//
+// From the server: Event is "hello", "snapshot", "ops" or "presence" with the
+// same Data the SSE events carry, and "ack" or "reject" answering a client
+// "ops" frame by its ID (Error says why a rejection happened). From the
+// client: "ops" (with an ID, Data the operations) and "presence" (Data the
+// cursor).
+type Frame struct {
+	Event string          `json:"event"`
+	ID    uint64          `json:"id,omitempty"`
+	Data  json.RawMessage `json:"data,omitempty"`
+	Error string          `json:"error,omitempty"`
 }

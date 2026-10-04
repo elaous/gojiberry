@@ -2,7 +2,10 @@ package collab
 
 import (
 	"errors"
+	"fmt"
+	"hash/fnv"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/elaous/gojiberry/canvas"
@@ -94,20 +97,39 @@ func (b *Bridge) Detach() {
 	b.Flow.UndoHook = nil
 }
 
-// seedReplica is the replica id the starting content of every shared document
-// is written under.
-const seedReplica = "seed"
+// seedReplica names the replica the starting content is written under: "seed"
+// and a hash of that content, so identical content gets identical ids (and
+// merges into one copy) while different content gets different ids (and is
+// kept in full, not interleaved by id).
+func seedReplica(atoms []atom) string {
+	h := fnv.New64a()
+	for _, a := range atoms {
+		_, _ = fmt.Fprintf(h, "%c", a.r)
+		keys := make([]string, 0, len(a.attrs))
+		for k := range a.attrs {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			_, _ = fmt.Fprintf(h, "\x00%s=%s", k, a.attrs[k])
+		}
+		h.Write([]byte{1})
+	}
+	return fmt.Sprintf("seed-%016x", h.Sum64())
+}
 
 // Seed makes a joined bridge share the flow's own content as the start of
 // the document (when the server turned out to have none).
 //
-// The content is written as the replica "seed", not as this replica: two
-// clients that open an empty document at the same moment and start from the
-// same content then produce the same operations, which merge into one copy
-// instead of two. (Different content from the two sides is still both kept.)
+// The content is written under a replica id made from the content itself,
+// not this replica's: two clients that open an empty document at the same
+// moment and start from the same content then produce the same operations,
+// which merge into one copy instead of two. (Different content from the two
+// sides is kept in full, one after the other.)
 func (b *Bridge) Seed() {
 	replica, outgoing := b.Doc, b.Outgoing
-	b.Doc, b.Outgoing = crdt.NewDocWithStrategy(seedReplica, crdt.MergeCharCRDT), nil
+	atoms, _ := atomsFromItems(b.Flow.ContentItems())
+	b.Doc, b.Outgoing = crdt.NewDocWithStrategy(seedReplica(atoms), crdt.MergeCharCRDT), nil
 	b.ready = true
 	b.pushLocal()
 	ops := b.Doc.Drain()

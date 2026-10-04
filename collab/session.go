@@ -15,7 +15,7 @@ import (
 // is only ever touched from one goroutine.
 type Session struct {
 	Bridge *Bridge
-	Conn   *client.Conn
+	Conn   Conn
 	// Role is what the server says you may do (empty until it says).
 	Role wire.Role
 	// Peers are the other people's cursors, by replica id.
@@ -34,9 +34,10 @@ type Session struct {
 	// Name and Color are shown to others with your cursor.
 	Name, Color string
 
-	replica string
-	opts    client.Options
-	needFix bool
+	replica   string
+	opts      client.Options
+	transport Transport
+	needFix   bool
 
 	snapshots int
 }
@@ -45,14 +46,23 @@ type Session struct {
 // content for it yet and you may edit, the flow's content becomes the
 // document. opts.Replica is set to replica.
 func Connect(replica string, flow *canvas.TextFlow, opts client.Options) (*Session, error) {
+	return ConnectWith(HTTPEndpoints(), replica, flow, opts)
+}
+
+// ConnectWith is Connect over the given transport (HTTPEndpoints, or another
+// such as collab/ws's WebSockets).
+func ConnectWith(t Transport, replica string, flow *canvas.TextFlow, opts client.Options) (*Session, error) {
+	if t == nil {
+		t = HTTPEndpoints()
+	}
 	b, err := Join(replica, flow)
 	if err != nil {
 		return nil, err
 	}
 	opts.Replica = replica
-	conn := client.Dial(opts)
+	conn := t.Dial(opts)
 	b.Outgoing = conn.Send
-	return &Session{Bridge: b, Conn: conn, Peers: map[string]wire.Presence{}, replica: replica, opts: opts}, nil
+	return &Session{Bridge: b, Conn: conn, Peers: map[string]wire.Presence{}, replica: replica, opts: opts, transport: t}, nil
 }
 
 // Repair rebuilds the session after the server refused something: the local
@@ -73,7 +83,7 @@ func (s *Session) Repair() error {
 	}
 	opts := s.opts
 	opts.Replica = replica
-	conn := client.Dial(opts)
+	conn := s.transport.Dial(opts)
 	b.Outgoing = conn.Send
 	s.Bridge, s.Conn, s.Err, s.needFix = b, conn, nil, false
 	s.Peers = map[string]wire.Presence{}

@@ -543,3 +543,23 @@ func TestInlineImageIsShared(t *testing.T) {
 type fakeSize struct{}
 
 func (fakeSize) Size() (w, h float64) { return 10, 10 }
+
+// Different starting content from two clients is kept whole, not interleaved.
+func TestSimultaneousSeedingOfDifferentContentKeepsBoth(t *testing.T) {
+	a, _ := Join("a", newFlow(canvas.Chars{Text: "AAAAAAAAAAAA"}))
+	b, _ := Join("b", newFlow(canvas.Chars{Text: "bbbb"}))
+	var fromA, fromB []crdt.Op
+	a.Outgoing = func(ops []crdt.Op) { fromA = append(fromA, ops...) }
+	b.Outgoing = func(ops []crdt.Op) { fromB = append(fromB, ops...) }
+	a.Seed()
+	b.Seed()
+	a.Apply(fromB...)
+	b.Apply(fromA...)
+	if text(a.Flow) != text(b.Flow) {
+		t.Fatalf("not converged: %q vs %q", text(a.Flow), text(b.Flow))
+	}
+	got := text(a.Flow)
+	if got != "AAAAAAAAAAAAbbbb" && got != "bbbbAAAAAAAAAAAA" {
+		t.Fatalf("both contents must survive whole, got %q", got)
+	}
+}

@@ -56,6 +56,11 @@ type Options struct {
 	// ("X-Gojiberry-Token: <token>"), for a server whose own sign-in already
 	// uses the Authorization header (docstore).
 	TokenHeader string
+	// TokenQuery, if set, also accepts the token as that URL query parameter
+	// when the header is absent: a browser cannot set headers on a WebSocket,
+	// so the collab hub's socket takes ?guard_token=... (a token in a URL can
+	// end up in logs: use TLS and short-lived tokens).
+	TokenQuery string
 	// Public lists paths (exact, e.g. "/health") a Token guard lets through
 	// without the token.
 	Public []string
@@ -81,11 +86,19 @@ func (o Options) headers() string {
 
 // bearer returns the token a request carries under the Options' header.
 func (o Options) bearer(r *http.Request) (string, bool) {
+	var v string
+	var ok bool
 	if o.TokenHeader == "" {
-		return strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		v, ok = strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	} else {
+		v = r.Header.Get(o.TokenHeader)
+		ok = v != ""
 	}
-	v := r.Header.Get(o.TokenHeader)
-	return v, v != ""
+	if !ok && o.TokenQuery != "" {
+		v = r.URL.Query().Get(o.TokenQuery)
+		ok = v != ""
+	}
+	return v, ok
 }
 
 func (o Options) public(path string) bool {

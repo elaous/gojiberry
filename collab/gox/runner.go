@@ -1,0 +1,124 @@
+package gox
+
+import (
+	"fmt"
+	"slices"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/elaous/gojiberry/canvas"
+	cgox "github.com/elaous/gojiberry/canvas/gox"
+	"github.com/elaous/gojiberry/collab"
+	"github.com/elaous/gojiberry/collab/wire"
+)
+
+// runner polls a session on a timer and applies what it learns: the others'
+// edits (Session.Poll puts them in the flow), their cursors, the role.
+type runner struct {
+	sess  *collab.Session
+	flow  *canvas.TextFlow
+	ctx   *cgox.Context
+	props atomic.Pointer[CollabProps]
+
+	quit chan struct{}
+	done sync.WaitGroup
+}
+
+func newRunner(ctx *cgox.Context, sess *collab.Session, flow *canvas.TextFlow, p *CollabProps) *runner {
+	r := &runner{sess: sess, flow: flow, ctx: ctx, quit: make(chan struct{})}
+	r.props.Store(p)
+	r.done.Add(1)
+	go r.loop()
+	return r
+}
+
+func (r *runner) stop() {
+	close(r.quit)
+	r.done.Wait()
+	r.sess.Close()
+}
+
+func (r *runner) do(f func()) {
+	if s := r.props.Load().Sync; s != nil {
+		s(f)
+		return
+	}
+	f()
+}
+
+func (r *runner) loop() {
+	defer r.done.Done()
+	interval := 40 * time.Millisecond
+	if iv := r.props.Load().Interval; iv > 0 {
+		interval = iv
+	}
+	tick := time.NewTicker(interval)
+	defer tick.Stop()
+	var lastCursor, lastCursors, lastState string
+	for {
+		select {
+		case <-r.quit:
+			return
+		case <-tick.C:
+		}
+		r.do(func() {
+			s := r.sess // Poll may repair the session and replace what is inside it
+			changed := s.Poll()
+			redraw := changed
+			if role := canvas.ParseRole(string(s.Role)); s.Role != "" && r.ctx.Stage != nil && role != r.ctx.Stage.Role {
+				r.ctx.Stage.SetRole(role)
+				redraw = true
+			}
+			s.RefreshPeers()
+			// Tell the others where we are when the cursor moves, and also when
+			// the session becomes ready or reconnects (they know nothing of us
+			// until then, and the cursor may not move for a while).
+			if c := fmt.Sprint(r.flow.Cursors()[0], s.Bridge.Ready(), s.Status, s.Repairs); c != lastCursor && s.Bridge.Ready() {
+				lastCursor = c
+				s.PublishCursor()
+			}
+			if cursors := fmt.Sprint(r.flow.RemoteCursors); cursors != lastCursors {
+				lastCursors = cursors
+				redraw = true
+			}
+			if st := r.state(); fmt.Sprint(st) != lastState {
+				lastState = fmt.Sprint(st)
+				if cb := r.props.Load().OnState; cb != nil {
+					cb(st)
+				}
+			}
+			if redraw && r.ctx.Redraw != nil {
+				r.ctx.Redraw()
+			}
+		})
+	}
+}
+
+// state summarises the session for OnState.
+func (r *runner) state() State {
+	s := r.sess
+	st := State{Status: s.Status, Role: s.Role, Pending: s.Pending(), Repairs: s.Repairs, Err: s.Err}
+	if err := s.Bridge.Err(); err != nil && st.Err == nil {
+		st.Err = err
+	}
+	for _, p := range s.Peers {
+		st.Peers = append(st.Peers, p)
+	}
+	slices.SortFunc(st.Peers, func(a, b wire.Presence) int {
+		if a.Name != b.Name {
+			if a.Name < b.Name {
+				return -1
+			}
+			return 1
+		}
+		if a.Replica < b.Replica {
+			return -1
+		}
+		if a.Replica > b.Replica {
+			return 1
+		}
+		return 0
+	})
+	return st
+}

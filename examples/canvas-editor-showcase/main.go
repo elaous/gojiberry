@@ -27,6 +27,8 @@ import (
 	cgox "github.com/elaous/gojiberry/canvas/gox"
 	"github.com/elaous/gojiberry/collab"
 	"github.com/elaous/gojiberry/collab/client"
+	collabgox "github.com/elaous/gojiberry/collab/gox"
+	"github.com/elaous/gojiberry/collab/ws"
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docstore"
@@ -63,13 +65,13 @@ type ui struct {
 	showResolved bool
 	drafts       map[string]string
 
-	saver    *saver.Session
-	live     *collab.Session // when the page was opened on a shared document (?doc=...)
-	liveErr  string
-	transfer *transfer.Registry
-	fontLog  []string // what the font library did, newest last
-	navSig   string   // outline/bookmarks the Outline tab last showed
-	message  string   // the Import/Export tab's last message
+	saver               *saver.Session
+	live                *collabgox.State // when the page was opened on a shared document (?doc=...)
+	liveName, liveColor string
+	transfer            *transfer.Registry
+	fontLog             []string // what the font library did, newest last
+	navSig              string   // outline/bookmarks the Outline tab last showed
+	message             string   // the Import/Export tab's last message
 }
 
 func main() {
@@ -529,12 +531,13 @@ func main() {
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cgox.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
-			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "live": liveState(u), "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
+			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "live": liveState(u, flow), "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))
 	}
 
+	state.Live = liveProps(u, &state, origin, renderCanvas, renderUI)
 	renderCanvas()
 	renderUI()
 	go u.saver.Refresh(context.Background())
@@ -543,89 +546,71 @@ func main() {
 			state.Image = src
 			renderCanvas()
 		}, nil)
-	if q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search")); q.Call("has", "doc").Bool() {
-		startLive := func() {
-			get := func(k, def string) string {
-				if q.Call("has", k).Bool() {
-					return q.Call("get", k).String()
-				}
-				return def
-			}
-			name := get("name", "guest")
-			replica := fmt.Sprintf("%s-%d", name, int(js.Global().Get("Math").Call("random").Float()*1e9))
-			hdr := http.Header{}
-			if tok := get("token", ""); tok != "" {
-				hdr.Set("Authorization", "Bearer "+tok)
-			}
-			hubURL := get("hub", origin+"/collab")
-			s, err := collab.Connect(replica, flow, client.Options{BaseURL: hubURL, Doc: get("doc", ""), Header: hdr, Retry: 300 * time.Millisecond, MaxRetry: 2 * time.Second})
-			if err != nil {
-				u.liveErr = err.Error()
-				renderUI()
-				return
-			}
-			s.Name, s.Color = name, get("color", "#7c5cff")
-			u.live = s
-			go liveLoop(u, &state, stage, renderCanvas, redraw, renderUI, flow)
-		}
-		startLive()
-	}
 	select {}
 }
 
-// liveLoop applies what other people did, shows their cursors and shares
-// ours, from this goroutine only (the canvas is not safe to touch from
-// several).
-func liveLoop(u *ui, state *State, stage *canvas.Stage, renderCanvas, redraw, renderUI func(), flow *canvas.TextFlow) {
-	var lastCursor string
-	var lastSig, lastCursors string
-	for range time.Tick(40 * time.Millisecond) {
-		s := u.live
-		changed := s.Poll()
-		if role := canvas.ParseRole(string(s.Role)); s.Role != "" && role != state.Role {
-			state.Role = role
-			stage.SetRole(role)
-			if !role.CanEdit() {
-				state.Mode = canvas.ModeView
+// liveProps makes the page a shared document when it was opened with ?doc=...:
+// the Collab element does the connecting; this says where, as whom, over what
+// (?transport=ws for a WebSocket) and what to do when the state changes.
+func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()) *collabgox.CollabProps {
+	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
+	if !q.Call("has", "doc").Bool() {
+		return nil
+	}
+	get := func(k, def string) string {
+		if q.Call("has", k).Bool() {
+			return q.Call("get", k).String()
+		}
+		return def
+	}
+	name := get("name", "guest")
+	hdr := http.Header{}
+	tok := get("token", "")
+	if tok != "" {
+		hdr.Set("Authorization", "Bearer "+tok)
+	}
+	var transport collab.Transport
+	if get("transport", "http") == "ws" {
+		transport = ws.WebSockets()
+	}
+	u.liveName, u.liveColor = name, get("color", "#7c5cff")
+	return &collabgox.CollabProps{
+		Transport: transport,
+		Client:    client.Options{BaseURL: get("hub", origin+"/collab"), Doc: get("doc", ""), Header: hdr, Retry: 300 * time.Millisecond, MaxRetry: 2 * time.Second},
+		Replica:   fmt.Sprintf("%s-%d", name, int(js.Global().Get("Math").Call("random").Float()*1e9)),
+		Name:      name,
+		Color:     u.liveColor,
+		OnState: func(st collabgox.State) {
+			u.live = &st
+			if role := canvas.ParseRole(string(st.Role)); st.Role != "" && role != state.Role {
+				state.Role = role
+				if !role.CanEdit() {
+					state.Mode = canvas.ModeView
+				}
+				renderCanvas()
 			}
-			renderCanvas()
-			changed = true
-		}
-		s.RefreshPeers()
-		if c := flow.Cursors()[0]; fmt.Sprint(c) != lastCursor {
-			lastCursor = fmt.Sprint(c)
-			s.PublishCursor()
-		}
-		sig := fmt.Sprint(len(s.Peers), s.Status, s.Pending(), len(flow.RemoteCursors), s.Role)
-		// Where the others' cursors are only matters to the canvas: redraw
-		// when one moved, not on every tick (three browsers redrawing 25
-		// times a second starve each other's event loops).
-		cursors := fmt.Sprint(flow.RemoteCursors)
-		switch {
-		case changed || sig != lastSig:
-			lastSig, lastCursors = sig, cursors
-			redraw()
 			renderUI()
-		case cursors != lastCursors:
-			lastCursors = cursors
-			redraw()
-		}
+		},
 	}
 }
 
 // liveState summarises a shared session for the e2e test.
-func liveState(u *ui) any {
+func liveState(u *ui, flow *canvas.TextFlow) any {
 	s := u.live
 	if s == nil {
-		return map[string]any{"error": u.liveErr}
+		return map[string]any{"error": ""}
 	}
 	names := []string{}
 	for _, p := range s.Peers {
 		names = append(names, p.Name)
 	}
 	slices.Sort(names)
-	return map[string]any{"role": string(s.Role), "status": s.Status.String(), "peers": names, "remote": len(s.Bridge.Flow.RemoteCursors),
-		"pending": s.Pending(), "canUndo": s.Bridge.CanUndo(), "bridgeError": fmt.Sprint(s.Bridge.Err()), "ready": s.Bridge.Ready(), "error": u.liveErr, "rejected": fmt.Sprint(s.Err)}
+	errText := ""
+	if s.Err != nil {
+		errText = s.Err.Error()
+	}
+	return map[string]any{"role": string(s.Role), "status": s.Status.String(), "peers": names, "remote": len(flow.RemoteCursors),
+		"pending": s.Pending, "repairs": s.Repairs, "error": errText}
 }
 
 // builtinCommands are the commands that are not registered by a feature.
@@ -751,8 +736,8 @@ func livePresence(u *ui) gox.Node {
 	}
 	slices.SortFunc(peers, func(a, b components.PresencePeer) int { return strings.Compare(a.Name, b.Name) })
 	return gox.El("div", []gox.Attr{gox.A("id", "presence"), gox.A("style", "margin-bottom:0.8em")}, components.Presence(components.PresenceProps{
-		Self: components.PresencePeer{Name: s.Name, Color: s.Color, Role: string(s.Role)}, Peers: peers,
-		Status: s.Status.String(), Pending: s.Pending(), Role: string(s.Role),
+		Self: components.PresencePeer{Name: u.liveName, Color: u.liveColor, Role: string(s.Role)}, Peers: peers,
+		Status: s.Status.String(), Pending: s.Pending, Role: string(s.Role),
 	}))
 }
 
