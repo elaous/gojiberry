@@ -383,3 +383,35 @@ func TestKeyedObjectsDoNotShift(t *testing.T) {
 		t.Error("Ana's note a landed on Bo's first note")
 	}
 }
+
+func TestMergedCellsAndCellStylesAreShared(t *testing.T) {
+	srv := httptest.NewServer(hub.New(hub.Config{}).Handler())
+	t.Cleanup(srv.Close)
+	mk := func(name string) *user {
+		u := newUser(t, srv, nil, nil)
+		u.props.Flow, u.props.Name, u.kids = collabxango.FlowObjects, name, page("hello", "Report")
+		u.render(t)
+		wait(t, name+" online", func() bool { return u.get(func(u *user) bool { return u.state.Status == client.Online }) })
+		return u
+	}
+	ana := mk("Ana")
+	time.Sleep(50 * time.Millisecond)
+	bo := mk("Bo")
+	ana.mu.Lock()
+	_, _, tv := ana.furniture()
+	tv.Table.MergeRange(0, 0, 1, 1)
+	tv.Table.SetCellStyle(0, 1, canvas.CellStyle{Background: "#ff0", Bold: true})
+	ana.mu.Unlock()
+	wait(t, "the merge and the style to reach Bo", func() bool {
+		return bo.get(func(u *user) bool {
+			_, _, btv := u.furniture()
+			return len(btv.Table.Merges) == 1 && btv.Table.Merges[0] == (canvas.Merge{Row: 0, Col: 0, Rows: 2, Cols: 2}) && btv.Table.StyleAt(0, 1).Bold
+		})
+	})
+	ana.mu.Lock()
+	tv.Table.Unmerge(0, 0)
+	ana.mu.Unlock()
+	wait(t, "the split to reach Bo", func() bool {
+		return bo.get(func(u *user) bool { _, _, btv := u.furniture(); return len(btv.Table.Merges) == 0 })
+	})
+}

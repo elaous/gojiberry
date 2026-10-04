@@ -322,15 +322,15 @@ func (e *tableElem) Update(c *Context, props any, _ []xango.Node) (bool, error) 
 	first := e.v == nil
 	old := e.last
 	if first {
-		e.v = canvas.NewTableView(canvas.NewTableFrom(p.Cells), nil)
+		e.v = canvas.NewTableView(newTable(p), nil)
 		e.v.X, e.v.Y = p.X, p.Y
 		changed = true
 	}
 	e.last = p
 	v := e.v
 	v.OnChange = p.OnChange
-	if !first && !reflect.DeepEqual(p.Cells, old.Cells) {
-		v.Table = canvas.NewTableFrom(p.Cells)
+	if !first && (!reflect.DeepEqual(p.Cells, old.Cells) || !reflect.DeepEqual(p.Merges, old.Merges) || !reflect.DeepEqual(p.Styles, old.Styles)) {
+		v.Table = newTable(p)
 		changed = true
 	}
 	if !first && (p.X != old.X || p.Y != old.Y) {
@@ -436,4 +436,19 @@ func sameValue(a, b any) (same bool) {
 		}
 	}()
 	return a == b
+}
+
+// newTable builds the table a TableProps describes; a merge that does not fit
+// the grid is left out.
+func newTable(p TableProps) *canvas.Table {
+	t := canvas.NewTableFrom(p.Cells)
+	for _, m := range p.Merges {
+		if m.Row >= 0 && m.Col >= 0 && m.Rows >= 1 && m.Cols >= 1 && m.Row+m.Rows <= t.Rows() && m.Col+m.Cols <= t.Cols() {
+			t.MergeRange(m.Row, m.Col, m.Row+m.Rows-1, m.Col+m.Cols-1)
+		}
+	}
+	for pos, st := range p.Styles {
+		t.SetCellStyle(pos.Row, pos.Col, st)
+	}
+	return t
 }

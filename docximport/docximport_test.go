@@ -4,8 +4,11 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/base64"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/elaous/gojiberry/docfile"
 )
 
 const nsDecl = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:dc="http://purl.org/dc/elements/1.1/"`
@@ -133,4 +136,40 @@ func docxZipOnly(t *testing.T) []byte {
 	_, _ = w.Write([]byte("not a docx"))
 	_ = zw.Close()
 	return buf.Bytes()
+}
+
+func TestImportsTableMergesAndCellStyles(t *testing.T) {
+	body := `<w:tbl>
+<w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/><w:shd w:val="clear" w:fill="FFF3B0"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>wide</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>c</w:t></w:r></w:p></w:tc></w:tr>
+<w:tr><w:tc><w:tcPr><w:vMerge w:val="restart"/></w:tcPr><w:p><w:r><w:t>tall</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>e</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>f</w:t></w:r></w:p></w:tc></w:tr>
+<w:tr><w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p/></w:tc><w:tc><w:p><w:r><w:t>h</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>i</w:t></w:r></w:p></w:tc></w:tr>
+</w:tbl>`
+	d, err := Import(docx(t, body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tb *docfile.TableItem
+	for _, it := range d.Content {
+		if it.Table != nil {
+			tb = it.Table
+		}
+	}
+	if tb == nil {
+		t.Fatalf("no table in %+v", d.Content)
+	}
+	wantRows := [][]string{{"wide", "", "c"}, {"tall", "e", "f"}, {"", "h", "i"}}
+	for r, row := range wantRows {
+		for c, want := range row {
+			if got := tb.Rows[r].Cells[c]; got != want {
+				t.Errorf("cell %d,%d = %q, want %q", r, c, got, want)
+			}
+		}
+	}
+	wantMerges := []docfile.TableMerge{{Row: 0, Col: 0, Rows: 1, Cols: 2}, {Row: 1, Col: 0, Rows: 2, Cols: 1}}
+	if !reflect.DeepEqual(tb.Merges, wantMerges) {
+		t.Errorf("merges %+v, want %+v", tb.Merges, wantMerges)
+	}
+	if len(tb.Styles) != 1 || tb.Styles[0].Background != "#fff3b0" || !tb.Styles[0].Bold || tb.Styles[0].Align != 1 {
+		t.Errorf("styles %+v", tb.Styles)
+	}
 }

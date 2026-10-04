@@ -569,15 +569,17 @@ func main() {
 			renderUI()
 		}
 		var stats canvas.FlowStats
+		columnCount := 0
 		if flow != nil {
 			stats = flow.Stats()
+			columnCount = flow.ColumnsAt(flow.Cursors()[0].Caret).Count
 		}
 		if sig := fmt.Sprint(stats); sig != u.statsSig {
 			u.statsSig = sig
 			renderUI()
 		}
 		b, _ := json.Marshal(map[string]any{
-			"hyphenate": state.Hyphenate, "language": map[string]any{"translate": u.lang.translator != nil, "grammar": u.lang.grammar != nil, "issues": len(u.lang.issues), "translated": u.lang.translated, "error": u.lang.err, "busy": u.lang.busy},
+			"hyphenate": state.Hyphenate, "columns": columnCount, "language": map[string]any{"translate": u.lang.translator != nil, "grammar": u.lang.grammar != nil, "issues": len(u.lang.issues), "translated": u.lang.translated, "error": u.lang.err, "busy": u.lang.busy},
 			"stats": statsState(stats), "share": u.shareLink, "spell": map[string]any{"enabled": u.spell.enabled, "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,

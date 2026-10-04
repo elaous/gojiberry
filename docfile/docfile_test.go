@@ -251,3 +251,31 @@ type oddObject struct{}
 
 func (oddObject) Measure(canvas.Painter, float64, float64) (float64, float64) { return 1, 1 }
 func (oddObject) DrawAt(canvas.Painter, float64, float64)                     {}
+
+func TestTableMergesAndStylesRoundTrip(t *testing.T) {
+	tbl := canvas.NewTableFrom([][]string{{"a", "b", "c"}, {"d", "e", "f"}})
+	tbl.MergeRange(0, 0, 1, 1)
+	tbl.SetCellStyle(0, 2, canvas.CellStyle{Background: "#ff0", Bold: true, Align: canvas.AlignRight})
+	tbl.SetCellStyle(1, 2, canvas.CellStyle{Color: "#f00", Italic: true})
+	f := &canvas.TextFlow{Items: []canvas.Item{canvas.Inline{Object: canvas.NewTableObject(tbl), Block: true}}}
+	for _, c := range Formats() {
+		data, err := c.Marshal(FromFlow("T", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := c.Unmarshal(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := ToItems(d.Content)[0].(canvas.Inline).Object.(*canvas.TableObject).View.Table
+		if !reflect.DeepEqual(got.Cells, tbl.Cells) || !reflect.DeepEqual(got.Merges, tbl.Merges) || !reflect.DeepEqual(got.Styles, tbl.Styles) {
+			t.Fatalf("%s: got %v %+v %+v, want %v %+v %+v", c.Name(), got.Cells, got.Merges, got.Styles, tbl.Cells, tbl.Merges, tbl.Styles)
+		}
+	}
+	// A file with merges that do not fit the grid loads without them.
+	bad := ToItems([]Item{{Table: &TableItem{Rows: []TableRow{{Cells: []string{"a", "b"}}},
+		Merges: []TableMerge{{Row: 0, Col: 1, Rows: 2, Cols: 2}, {Row: -1, Col: 0, Rows: 2, Cols: 1}, {Row: 0, Col: 0, Rows: 1, Cols: 1}}}}})
+	if m := bad[0].(canvas.Inline).Object.(*canvas.TableObject).View.Table.Merges; len(m) != 0 {
+		t.Errorf("bad merges kept: %+v", m)
+	}
+}

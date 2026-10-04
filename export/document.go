@@ -105,12 +105,33 @@ func FromDocument(d docfile.Document) Snapshot {
 }
 
 // tableLines gives a table's cells as marker lines blocksFrom turns into
-// table-cell blocks.
+// table-cell blocks, with their merges (spans, and the cells they cover) and
+// bold.
 func tableLines(t *docfile.TableItem) []line {
 	rows := len(t.Rows)
 	cols := 0
 	for _, r := range t.Rows {
 		cols = max(cols, len(r.Cells))
+	}
+	span := func(r, c int) (rs, cs int, covered bool) {
+		rs, cs = 1, 1
+		for _, m := range t.Merges {
+			if r >= m.Row && r < m.Row+m.Rows && c >= m.Col && c < m.Col+m.Cols {
+				if r == m.Row && c == m.Col {
+					return m.Rows, m.Cols, false
+				}
+				return 1, 1, true
+			}
+		}
+		return rs, cs, false
+	}
+	bold := func(r, c int) bool {
+		for _, st := range t.Styles {
+			if st.Row == r && st.Col == c {
+				return st.Bold
+			}
+		}
+		return false
 	}
 	var out []line
 	for r, row := range t.Rows {
@@ -119,10 +140,16 @@ func tableLines(t *docfile.TableItem) []line {
 			if c < len(row.Cells) {
 				text = row.Cells[c]
 			}
+			rs, cs, covered := span(r, c)
+			f := docfile.Format{}
+			if bold(r, c) {
+				f.FontWeight = 700
+			}
+			runs := []docfile.Chars{{Text: text, Format: f}}
 			out = append(out, line{
-				runs: []docfile.Chars{{Text: text}},
-				after: []Block{{Kind: TableCell, TableRow: r, TableCol: c, TableRows: rows, TableCols: cols, TableColSpan: 1, TableRowSpan: 1,
-					Segments: segmentsOf([]docfile.Chars{{Text: text}})}},
+				runs: runs,
+				after: []Block{{Kind: TableCell, TableRow: r, TableCol: c, TableRows: rows, TableCols: cols, TableColSpan: cs, TableRowSpan: rs, TableCovered: covered,
+					Segments: segmentsOf(runs)}},
 			})
 		}
 	}

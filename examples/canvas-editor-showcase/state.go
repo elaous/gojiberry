@@ -38,9 +38,10 @@ type State struct {
 	Hyphenate bool
 }
 
-// Features is what the canvas registers: the defaults and find and replace.
+// Features is what the canvas registers: the defaults, find and replace and
+// columns.
 func (s State) Features() []canvas.Feature {
-	return append(canvas.DefaultFeatures(), s.FindFeature)
+	return append(canvas.DefaultFeatures(), s.FindFeature, canvas.Columns{})
 }
 
 const sample = "# Gojiberry editor\n\n" +

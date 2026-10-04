@@ -3,6 +3,7 @@ package xango
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -132,8 +133,17 @@ type floatRec struct {
 
 type tableRec struct {
 	Cells  [][]string
+	Merges []canvas.Merge
+	Styles []styledCell
 	X, Y   float64
 	Anchor *canvas.Anchor
+}
+
+// styledCell is a cell's style with its place (a map with struct keys does not
+// go through JSON).
+type styledCell struct {
+	Row, Col int
+	Style    canvas.CellStyle
 }
 
 type imageRec struct {
@@ -182,7 +192,17 @@ func (o objects) Read() map[string]string {
 	})
 	o.in.Each(cxango.TagTable, func(key string, n int, v any) {
 		tv := v.(*canvas.TableView)
-		put(out, "table:"+ref(key, n), tableRec{tv.Table.Cells, tv.X, tv.Y, tv.Anchor})
+		rec := tableRec{Cells: tv.Table.Cells, Merges: tv.Table.Merges, X: tv.X, Y: tv.Y, Anchor: tv.Anchor}
+		for pos, st := range tv.Table.Styles {
+			rec.Styles = append(rec.Styles, styledCell{pos.Row, pos.Col, st})
+		}
+		slices.SortFunc(rec.Styles, func(a, b styledCell) int { // the same record every time for the same table
+			if a.Row != b.Row {
+				return a.Row - b.Row
+			}
+			return a.Col - b.Col
+		})
+		put(out, "table:"+ref(key, n), rec)
 	})
 	o.in.Each(cxango.TagImage, func(key string, n int, v any) {
 		im := v.(*canvas.Image)
@@ -211,8 +231,18 @@ func (o objects) Write(recs map[string]string) {
 			if tv == nil || json.Unmarshal([]byte(v), &r) != nil {
 				continue
 			}
-			if !reflect.DeepEqual(tv.Table.Cells, r.Cells) && len(r.Cells) > 0 {
-				tv.Table.Cells = r.Cells
+			if len(r.Cells) > 0 {
+				r.Merges = fitting(r.Merges, len(r.Cells), len(r.Cells[0]))
+				styles := map[canvas.CellPos]canvas.CellStyle{}
+				for _, sc := range r.Styles {
+					styles[canvas.CellPos{Row: sc.Row, Col: sc.Col}] = sc.Style
+				}
+				if !reflect.DeepEqual(tv.Table.Cells, r.Cells) || !reflect.DeepEqual(tv.Table.Merges, r.Merges) || !reflect.DeepEqual(nonNil(tv.Table.Styles), styles) {
+					tv.Table.Cells, tv.Table.Merges, tv.Table.Styles = r.Cells, r.Merges, styles
+					if len(styles) == 0 {
+						tv.Table.Styles = nil
+					}
+				}
 			}
 			tv.X, tv.Y, tv.Anchor = r.X, r.Y, r.Anchor
 		case "image":
@@ -242,4 +272,22 @@ func (f Flow) sharing(in finder) (collab.Sharing, bool) {
 		return collab.Sharing{Surfaces: []collab.Surface{furniture{in: in}, furniture{in: in, footer: true}, objects{in}}}, true
 	}
 	return collab.Sharing{}, false
+}
+
+func nonNil(m map[canvas.CellPos]canvas.CellStyle) map[canvas.CellPos]canvas.CellStyle {
+	if m == nil {
+		return map[canvas.CellPos]canvas.CellStyle{}
+	}
+	return m
+}
+
+// fitting keeps the merges that lie inside a rows x cols grid.
+func fitting(ms []canvas.Merge, rows, cols int) []canvas.Merge {
+	var out []canvas.Merge
+	for _, m := range ms {
+		if m.Row >= 0 && m.Col >= 0 && m.Rows >= 1 && m.Cols >= 1 && m.Row+m.Rows <= rows && m.Col+m.Cols <= cols && (m.Rows > 1 || m.Cols > 1) {
+			out = append(out, m)
+		}
+	}
+	return out
 }

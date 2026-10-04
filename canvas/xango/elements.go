@@ -248,7 +248,11 @@ func FloatingText(p FloatingTextProps) xango.Node {
 type TableProps struct {
 	Key string
 	// Cells are the rows of cells; changing them replaces the table.
-	Cells    [][]string
+	Cells [][]string
+	// Merges and Styles are the table's merged cells and per-cell formatting;
+	// like Cells, changing them replaces what the table has.
+	Merges   []canvas.Merge
+	Styles   map[canvas.CellPos]canvas.CellStyle
 	X, Y     float64
 	Anchor   *canvas.Anchor
 	Wrap     bool

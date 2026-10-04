@@ -1,6 +1,7 @@
 package docximport_test
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -14,7 +15,9 @@ const pngB64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQ
 // What the exporter writes, the importer reads back: links, super and
 // subscript, lists (ordered restarting, nested), a table and a picture.
 func TestDocxRoundTrip(t *testing.T) {
-	c := func(text string, f docfile.Format) docfile.Item { return docfile.Item{Chars: &docfile.Chars{Text: text, Format: f}} }
+	c := func(text string, f docfile.Format) docfile.Item {
+		return docfile.Item{Chars: &docfile.Chars{Text: text, Format: f}}
+	}
 	in := docfile.Document{Title: "Round trip", Content: []docfile.Item{
 		c("A heading", docfile.Format{Scale: 2}), c("\n", docfile.Format{}),
 		c("Some ", docfile.Format{}), c("bold", docfile.Format{FontWeight: 700}), c(" and ", docfile.Format{}),
@@ -66,5 +69,46 @@ func TestDocxRoundTrip(t *testing.T) {
 	}
 	if !strings.Contains(text.String(), "Some bold and a link H2O") || !strings.HasSuffix(text.String(), "the end") {
 		t.Errorf("text %q", text.String())
+	}
+}
+
+// Merged cells survive the trip through a Word file: the writer emits gridSpan
+// and vMerge, the reader turns them back into merges.
+func TestDocxRoundTripKeepsMergedCells(t *testing.T) {
+	in := docfile.Document{Content: []docfile.Item{{Table: &docfile.TableItem{
+		Rows: []docfile.TableRow{
+			{Cells: []string{"wide", "", "c", "d"}},
+			{Cells: []string{"tall", "e", "block", ""}},
+			{Cells: []string{"", "g", "", ""}},
+			{Cells: []string{"x", "y", "z", "w"}},
+		},
+		Merges: []docfile.TableMerge{{Row: 0, Col: 0, Rows: 1, Cols: 2}, {Row: 1, Col: 0, Rows: 2, Cols: 1}, {Row: 1, Col: 2, Rows: 2, Cols: 2}},
+	}}}}
+	data, err := export.DOCX{}.Export(export.FromDocument(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := docximport.Import(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got *docfile.TableItem
+	for _, it := range out.Content {
+		if it.Table != nil {
+			got = it.Table
+		}
+	}
+	if got == nil {
+		t.Fatalf("no table: %+v", out.Content)
+	}
+	if !reflect.DeepEqual(got.Merges, in.Content[0].Table.Merges) {
+		t.Errorf("merges %+v, want %+v", got.Merges, in.Content[0].Table.Merges)
+	}
+	for r, row := range in.Content[0].Table.Rows {
+		for c, want := range row.Cells {
+			if got.Rows[r].Cells[c] != want {
+				t.Errorf("cell %d,%d = %q, want %q", r, c, got.Rows[r].Cells[c], want)
+			}
+		}
 	}
 }

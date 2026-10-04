@@ -271,19 +271,55 @@ func (b *docxBuilder) table(cells []Block) {
 		w.WriteString(`<w:gridCol w:w="2000"/>`)
 	}
 	w.WriteString(`</w:tblGrid>`)
+	// A cell a merge covers from above continues its vertical merge; one it
+	// covers from the left is not written at all (the owner's gridSpan holds it).
 	for r := 0; r < rows; r++ {
 		w.WriteString(`<w:tr>`)
 		for c := 0; c < cols; c++ {
 			cell := cells[r*cols+c]
-			content := ""
-			if !cell.TableCovered {
-				content = b.inline(cell.Segments)
+			if cell.TableCovered {
+				// Beside its owner: the owner's gridSpan holds it, so nothing is written.
+				// Below its owner, in the owner's column: continue the vertical merge,
+				// as wide as the owner; elsewhere under the span: nothing again.
+				owner := ownerOf(cells, rows, cols, r, c)
+				if owner.row != r && owner.col == c {
+					span := cells[owner.row*cols+owner.col].TableColSpan
+					w.WriteString(`<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/>` + gridSpan(span) + `<w:vMerge/></w:tcPr><w:p/></w:tc>`)
+				}
+				continue
 			}
-			w.WriteString(`<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p>` + content + `</w:p></w:tc>`)
+			props := `<w:tcW w:w="0" w:type="auto"/>` + gridSpan(cell.TableColSpan)
+			if cell.TableRowSpan > 1 {
+				props += `<w:vMerge w:val="restart"/>`
+			}
+			w.WriteString(`<w:tc><w:tcPr>` + props + `</w:tcPr><w:p>` + b.inline(cell.Segments) + `</w:p></w:tc>`)
 		}
 		w.WriteString(`</w:tr>`)
 	}
 	w.WriteString(`</w:tbl><w:p/>`)
+}
+
+func gridSpan(n int) string {
+	if n > 1 {
+		return `<w:gridSpan w:val="` + strconv.Itoa(n) + `"/>`
+	}
+	return ""
+}
+
+type cellPos struct{ row, col int }
+
+// ownerOf finds the merged cell that covers (r, c): the nearest owner above
+// and to the left whose span reaches it.
+func ownerOf(cells []Block, rows, cols, r, c int) cellPos {
+	for or := r; or >= 0; or-- {
+		for oc := c; oc >= 0; oc-- {
+			o := cells[or*cols+oc]
+			if !o.TableCovered && (o.TableRowSpan > 1 || o.TableColSpan > 1) && or+o.TableRowSpan > r && oc+o.TableColSpan > c {
+				return cellPos{or, oc}
+			}
+		}
+	}
+	return cellPos{r, c}
 }
 
 // picture embeds a data: URL image; "" when it cannot be (not a data URL, or

@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -314,24 +315,154 @@ func (r *reader) blocks(kids []*node) {
 }
 
 func (r *reader) table(tbl *node) {
-	var rows []docfile.TableRow
+	type cell struct {
+		text          string
+		colSpan, rows int // the cell's own width in columns; how many rows a vertical merge reaches
+		covered       bool
+		style         docfile.TableCellStyle
+		hasStyle      bool
+		restart, cont bool // starts / continues a vertical merge
+	}
+	var grid [][]cell
+	cols := 0
 	for _, tr := range tbl.children("tr") {
-		var cells []string
+		var row []cell
 		for _, tc := range tr.children("tc") {
+			c := cell{colSpan: 1}
 			var parts []string
 			for _, p := range tc.find2("p") {
 				if t := strings.TrimSpace(plainText(p)); t != "" {
 					parts = append(parts, t)
 				}
 			}
-			cells = append(cells, strings.Join(parts, " "))
+			c.text = strings.Join(parts, " ")
+			if pr := tc.child("tcPr"); pr != nil {
+				if g := pr.child("gridSpan"); g != nil {
+					if n, err := strconv.Atoi(g.attr("val")); err == nil && n > 1 && n < 64 {
+						c.colSpan = n
+					}
+				}
+				if vm := pr.child("vMerge"); vm != nil {
+					if vm.attr("val") == "restart" {
+						c.restart = true
+					} else {
+						c.cont = true
+					}
+				}
+				if sh := pr.child("shd"); sh != nil {
+					if fill := sh.attr("fill"); fill != "" && fill != "auto" && len(fill) == 6 {
+						c.style.Background, c.hasStyle = "#"+strings.ToLower(fill), true
+					}
+				}
+			}
+			if p := tc.find("p"); p != nil {
+				if ppr := p.child("pPr"); ppr != nil {
+					if jc := ppr.child("jc"); jc != nil {
+						switch jc.attr("val") {
+						case "center":
+							c.style.Align, c.hasStyle = 1, true
+						case "right", "end":
+							c.style.Align, c.hasStyle = 2, true
+						}
+					}
+				}
+				if allBold(p) {
+					c.style.Bold, c.hasStyle = true, true
+				}
+			}
+			row = append(row, c)
 		}
-		rows = append(rows, docfile.TableRow{Cells: cells})
+		grid = append(grid, row)
 	}
-	if len(rows) == 0 {
+	if len(grid) == 0 {
 		return
 	}
-	r.add(docfile.Item{Table: &docfile.TableItem{Rows: rows}})
+	// Place the cells on the column grid: a cell is gridSpan wide and the columns
+	// it spans after the first are covered.
+	type placed struct {
+		cell
+		col int
+	}
+	var rows [][]placed
+	for _, row := range grid {
+		var pr []placed
+		col := 0
+		for _, c := range row {
+			pr = append(pr, placed{c, col})
+			col += c.colSpan
+		}
+		cols = max(cols, col)
+		rows = append(rows, pr)
+	}
+	out := &docfile.TableItem{}
+	cells := make([][]string, len(rows))
+	for i := range cells {
+		cells[i] = make([]string, cols)
+	}
+	owner := map[int]int{} // column -> row of the cell a vertical merge there started in
+	merges := map[[2]int]*docfile.TableMerge{}
+	for ri, pr := range rows {
+		for _, p := range pr {
+			c := p.col
+			switch {
+			case p.cont:
+				if or, ok := owner[c]; ok {
+					merges[[2]int{or, c}].Rows = ri - or + 1
+					continue
+				}
+				// A continuation with nothing above it is an ordinary cell.
+				fallthrough
+			default:
+				delete(owner, c)
+				cells[ri][c] = p.text
+				if p.hasStyle {
+					out.Styles = append(out.Styles, at(p.style, ri, c))
+				}
+				if p.colSpan > 1 || p.restart {
+					m := &docfile.TableMerge{Row: ri, Col: c, Rows: 1, Cols: p.colSpan}
+					merges[[2]int{ri, c}] = m
+					if p.restart {
+						owner[c] = ri
+					}
+				}
+			}
+		}
+	}
+	for ri := range cells {
+		out.Rows = append(out.Rows, docfile.TableRow{Cells: cells[ri]})
+	}
+	for _, m := range merges {
+		if m.Rows > 1 || m.Cols > 1 {
+			out.Merges = append(out.Merges, *m)
+		}
+	}
+	sort.Slice(out.Merges, func(i, j int) bool {
+		a, b := out.Merges[i], out.Merges[j]
+		return a.Row < b.Row || a.Row == b.Row && a.Col < b.Col
+	})
+	r.add(docfile.Item{Table: out})
+}
+
+func allBold(p *node) bool {
+	n := 0
+	for _, run := range p.children("r") {
+		if strings.TrimSpace(plainText(run)) == "" {
+			continue
+		}
+		n++
+		if !on(run.child("rPr").childOrNil("b")) {
+			return false
+		}
+	}
+	return n > 0
+}
+
+// childOrNil is child that tolerates a nil receiver.
+func (n *node) childOrNil(name string) *node {
+	if n == nil {
+		return nil
+	}
+	return n.child(name)
 }
 
 // find2 returns every descendant called name, not looking inside one.
@@ -345,6 +476,12 @@ func (n *node) find2(name string) []*node {
 		}
 	}
 	return out
+}
+
+// at gives the style a place in the table.
+func at(st docfile.TableCellStyle, row, col int) docfile.TableCellStyle {
+	st.Row, st.Col = row, col
+	return st
 }
 
 type paraInfo struct {

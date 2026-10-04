@@ -142,3 +142,38 @@ func TestBrailleAsksTheServer(t *testing.T) {
 		t.Error("a refusal from the server must be an error")
 	}
 }
+
+func TestMergedCellsReachTheFormats(t *testing.T) {
+	d := docfile.Document{Content: []docfile.Item{{Table: &docfile.TableItem{
+		Rows:   []docfile.TableRow{{Cells: []string{"wide", "", "c"}}, {Cells: []string{"tall", "e", "f"}}, {Cells: []string{"", "h", "i"}}},
+		Merges: []docfile.TableMerge{{Row: 0, Col: 0, Rows: 1, Cols: 2}, {Row: 1, Col: 0, Rows: 2, Cols: 1}},
+		Styles: []docfile.TableCellStyle{{Row: 0, Col: 0, Bold: true}},
+	}}}}
+	snap := FromDocument(d)
+	var spans []string
+	for _, b := range snap.Blocks {
+		if b.Kind == TableCell && (b.TableColSpan > 1 || b.TableRowSpan > 1 || b.TableCovered) {
+			spans = append(spans, strings.TrimSpace(strings.Join([]string{itoa(b.TableRow), itoa(b.TableCol), itoa(b.TableRowSpan) + "x" + itoa(b.TableColSpan)}, ",")))
+		}
+	}
+	if got := strings.Join(spans, " "); got != "0,0,1x2 0,1,1x1 1,0,2x1 2,0,1x1" {
+		t.Errorf("spans %q", got)
+	}
+	if !snap.Blocks[0].Segments[0].Format.Bold {
+		t.Error("a bold cell is bold in the snapshot")
+	}
+	html, err := HTML{}.Export(snap)
+	if err != nil || !strings.Contains(string(html), `colspan="2"`) || !strings.Contains(string(html), `rowspan="2"`) {
+		t.Errorf("html %v:\n%s", err, html)
+	}
+	rtf, err := RTF{}.Export(snap)
+	if err != nil || !strings.Contains(string(rtf), `\clmgf`) || !strings.Contains(string(rtf), `\clvmgf`) {
+		t.Errorf("rtf %v:\n%s", err, rtf)
+	}
+	if _, err := (PDF{}).Export(snap); err != nil {
+		t.Error(err)
+	}
+	if _, err := (EPUB{}).Export(snap); err != nil {
+		t.Error(err)
+	}
+}
