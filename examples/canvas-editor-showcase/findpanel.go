@@ -49,6 +49,13 @@ func (u *ui) refreshFind(flow *canvas.TextFlow, scroll func(), jump bool) {
 	}
 	f.cur = min(f.cur, max(len(f.matches)-1, 0))
 	flow.SetSearch(f.matches, f.cur)
+	switch {
+	case f.opts.Query == "":
+	case len(f.matches) == 0:
+		u.announce(T("a11y.noMatches", "No matches"))
+	default:
+		u.announce(T("a11y.matches", "%d matches", len(f.matches)))
+	}
 	if jump && len(f.matches) > 0 {
 		flow.GotoMatch(f.matches[f.cur])
 		scroll()
@@ -62,6 +69,7 @@ func (u *ui) stepFind(flow *canvas.TextFlow, scroll func(), dir int) {
 		return
 	}
 	f.cur = (f.cur + dir + len(f.matches)) % len(f.matches)
+	u.announce(T("a11y.match", "Match %d of %d", f.cur+1, len(f.matches)))
 	flow.SetSearch(f.matches, f.cur)
 	flow.GotoMatch(f.matches[f.cur])
 	scroll()

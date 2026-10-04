@@ -205,12 +205,12 @@ func CommandMenu(cmds []canvas.CommandInfo, keymap canvas.Keymap, mac bool, run 
 			shortcut = FormatChord(chords[0], mac)
 		}
 		byFeature[c.Feature] = append(byFeature[c.Feature], MenuItem{
-			Label: c.Title, Shortcut: shortcut, OnSelect: func() { run(c.Name) },
+			Label: tr("cmd."+string(c.Name), c.Title), Shortcut: shortcut, OnSelect: func() { run(c.Name) },
 		})
 	}
 	var out []MenuItem
 	for _, f := range order {
-		out = append(out, MenuItem{Label: featureTitle(f), Items: byFeature[f]})
+		out = append(out, MenuItem{Label: tr("feature."+f, featureTitle(f)), Items: byFeature[f]})
 	}
 	return out
 }

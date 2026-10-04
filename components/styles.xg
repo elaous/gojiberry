@@ -7,6 +7,7 @@ package components
 // tokens and shared keyframes) comes first.
 import (
 	_ "github.com/elaous/gojiberry/components/base.css"
+	_ "github.com/elaous/gojiberry/components/a11y.css"
 	_ "github.com/elaous/gojiberry/components/accordion.css"
 	_ "github.com/elaous/gojiberry/components/avatar.css"
 	_ "github.com/elaous/gojiberry/components/box.css"

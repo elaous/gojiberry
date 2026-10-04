@@ -102,7 +102,7 @@ func TestTrashRestorePurge(t *testing.T) {
 			t.Fatalf("%s: trashed %+v %v", tg.Name, tr, err)
 		}
 		// Save a new "report" while the old one is in the trash: restore must not overwrite it.
-		s.Save(ctx, tg.Name, "report", docfile.JSON, doc())
+		_, _ = s.Save(ctx, tg.Name, "report", docfile.JSON, doc())
 		restored, err := s.Restore(ctx, tg.Name, tr[0].Key)
 		if err != nil || restored != "report (restored).json" {
 			t.Fatalf("%s: restored as %q %v", tg.Name, restored, err)
@@ -117,8 +117,8 @@ func TestTrashRestorePurge(t *testing.T) {
 			t.Errorf("%s: the history went with the document: %d", tg.Name, len(vs))
 		}
 		// Purge and EmptyTrash.
-		s.Trash(ctx, tg.Name, restored)
-		s.Trash(ctx, tg.Name, "report.json")
+		_ = s.Trash(ctx, tg.Name, restored)
+		_ = s.Trash(ctx, tg.Name, "report.json")
 		tr, _ = s.Trashed(ctx, tg.Name)
 		if len(tr) != 2 {
 			t.Fatalf("%s: %v", tg.Name, tr)
@@ -189,7 +189,7 @@ func TestTags(t *testing.T) {
 		if got.Title != "Notes" || len(got.Content) != 1 || !got.HasTag("RPG") {
 			t.Errorf("%s: the document changed: %+v", tg.Name, got)
 		}
-		s.SetTags(ctx, tg.Name, a, nil)
+		_ = s.SetTags(ctx, tg.Name, a, nil)
 		got, _ = s.Load(ctx, tg.Name, a)
 		if len(got.Tags()) != 0 {
 			t.Errorf("%s: %v", tg.Name, got.Tags())

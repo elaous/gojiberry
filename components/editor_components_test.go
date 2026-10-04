@@ -655,3 +655,41 @@ func TestSaverShowsVersionsTrashAndTags(t *testing.T) {
 		t.Error("with no name, no trash and no tags those sections are absent")
 	}
 }
+
+func TestAccessibleTextKeepsTheDocumentsStructure(t *testing.T) {
+	html := render(t, AccessibleText(AccessibleTextProps{Blocks: []A11yBlock{
+		{Kind: A11yHeading, Level: 1, Text: "Title"},
+		{Kind: A11yParagraph, Text: "Some text."},
+		{Kind: A11yListItem, Text: "one", Ordered: true}, {Kind: A11yListItem, Text: "two", Ordered: true},
+		{Kind: A11yListItem, Text: "bullet", Level: 1},
+		{Kind: A11yQuote, Text: "quoted"}, {Kind: A11yCode, Text: "x := 1"},
+		{Kind: A11yTableRow, Cells: []string{"A", "B"}}, {Kind: A11yTableRow, Cells: []string{"1", "2"}},
+	}, Selection: "Some"}))
+	for _, want := range []string{`class="gj-sr-only"`, `role="document"`, `aria-label="Document text"`, `id="a11y-text"`, "<h1>Title</h1>", "<p>Some text.</p>",
+		"<ol><li", ">two</li></ol>", "<ul><li", `aria-level="2"`, "<blockquote>", "<pre><code>x := 1</code></pre>", "<th>A</th>", "<td>2</td>", "Selected: Some"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in\n%s", want, html)
+		}
+	}
+	live := render(t, Announcer("3 matches"))
+	if !strings.Contains(live, `aria-live="polite"`) || !strings.Contains(live, `role="status"`) || !strings.Contains(live, "3 matches") {
+		t.Errorf("announcer: %s", live)
+	}
+}
+
+func TestTranslateHookChangesTheComponentsWords(t *testing.T) {
+	defer func(old func(string, string) string) { Translate = old }(Translate)
+	Translate = func(id, def string) string {
+		if id == "find.replaceAll" {
+			return "Tout remplacer"
+		}
+		if id == "find.nOfM" {
+			return "%d sur %d"
+		}
+		return def
+	}
+	html := render(t, FindReplace(FindReplaceProps{Query: "x", Count: 4, Current: 2}))
+	if !strings.Contains(html, "Tout remplacer") || !strings.Contains(html, "2 sur 4") || !strings.Contains(html, "Replace the current match") {
+		t.Errorf("translated:\n%s", html)
+	}
+}

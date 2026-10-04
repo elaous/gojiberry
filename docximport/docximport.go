@@ -317,8 +317,7 @@ func (r *reader) blocks(kids []*node) {
 func (r *reader) table(tbl *node) {
 	type cell struct {
 		text          string
-		colSpan, rows int // the cell's own width in columns; how many rows a vertical merge reaches
-		covered       bool
+		colSpan       int // the cell's own width in columns
 		style         docfile.TableCellStyle
 		hasStyle      bool
 		restart, cont bool // starts / continues a vertical merge

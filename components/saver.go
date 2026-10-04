@@ -85,7 +85,7 @@ type SaverProps struct {
 // controlled-component notes); saver.Session keeps its state and does the
 // saving.
 func Saver(props SaverProps) xango.Node {
-	choice := func(label string, items []SaverChoice, current string, on func(string)) xango.Node {
+	choice := func(field, label string, items []SaverChoice, current string, on func(string)) xango.Node {
 		var opts []xango.Node
 		for _, c := range items {
 			attrs := []xango.Attr{xango.A("value", c.Name)}
@@ -94,7 +94,7 @@ func Saver(props SaverProps) xango.Node {
 			}
 			opts = append(opts, xango.El("option", attrs, xango.Text(c.Label)))
 		}
-		attrs := []xango.Attr{xango.A("class", "gj-saver-select"), xango.A("aria-label", label), xango.A("data-field", label)}
+		attrs := []xango.Attr{xango.A("class", "gj-saver-select"), xango.A("aria-label", label), xango.A("data-field", field)}
 		if on != nil {
 			attrs = append(attrs, xango.On("change", func(e xango.Event) { on(xango.EventValue[string](e)) }))
 		}
@@ -113,18 +113,18 @@ func Saver(props SaverProps) xango.Node {
 	}
 
 	nameAttrs := []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-saver-name"), xango.A("value", props.Name),
-		xango.A("placeholder", "Document name"), xango.A("aria-label", "Document name")}
+		xango.A("placeholder", tr("saver.docName", "Document name")), xango.A("aria-label", tr("saver.docName", "Document name"))}
 	if props.OnName != nil {
 		nameAttrs = append(nameAttrs, xango.On("input", func(e xango.Event) { props.OnName(xango.EventValue[string](e)) }))
 	}
 
 	children := []xango.Node{
 		xango.El("div", []xango.Attr{xango.A("class", "gj-saver-row")},
-			choice("Save to", props.Targets, props.Target, props.OnTarget),
-			choice("Format", props.Formats, props.Format, props.OnFormat)),
+			choice("Save to", tr("saver.saveTo", "Save to"), props.Targets, props.Target, props.OnTarget),
+			choice("Format", tr("saver.format", "Format"), props.Formats, props.Format, props.OnFormat)),
 		xango.El("div", []xango.Attr{xango.A("class", "gj-saver-row")},
 			xango.El("input", nameAttrs),
-			button("gj-saver-save", "Save", props.Busy || props.Name == "", props.OnSave)),
+			button("gj-saver-save", tr("saver.save", "Save"), props.Busy || props.Name == "", props.OnSave)),
 	}
 	if props.Status != "" {
 		class := "gj-saver-status"
@@ -139,8 +139,8 @@ func Saver(props SaverProps) xango.Node {
 		if props.TagFilter != "" && !hasTag(e.Tags, props.TagFilter) {
 			continue
 		}
-		tagAttrs := []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-saver-tags"), xango.A("placeholder", "tags, separated by commas"),
-			xango.A("aria-label", "Tags of "+e.Name), xango.A("value", strings.Join(e.Tags, ", "))}
+		tagAttrs := []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-saver-tags"), xango.A("placeholder", tr("saver.tagsPlaceholder", "tags, separated by commas")),
+			xango.A("aria-label", trf("saver.tagsOf", "Tags of %s", e.Name)), xango.A("value", strings.Join(e.Tags, ", "))}
 		if props.OnTags != nil {
 			key := e.Key
 			tagAttrs = append(tagAttrs, xango.On("change", func(ev xango.Event) { props.OnTags(key, splitTags(xango.EventValue[string](ev))) }))
@@ -148,18 +148,18 @@ func Saver(props SaverProps) xango.Node {
 		rows = append(rows, xango.El("li", []xango.Attr{xango.A("class", "gj-saver-entry"), xango.A("data-key", e.Key)},
 			xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-name")}, xango.Text(e.Name)),
 			xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-meta")}, xango.Text(entryMeta(e))),
-			button("gj-saver-open", "Open", props.Busy, openFn(props.OnOpen, e.Key)),
-			button("gj-saver-duplicate", "Duplicate", props.Busy, openFn(props.OnDuplicate, e.Key)),
-			button("gj-saver-trash", "Trash", props.Busy, openFn(props.OnTrash, e.Key)),
-			button("gj-saver-delete", "Delete", props.Busy, openFn(props.OnDelete, e.Key)),
+			button("gj-saver-open", tr("saver.open", "Open"), props.Busy, openFn(props.OnOpen, e.Key)),
+			button("gj-saver-duplicate", tr("saver.duplicate", "Duplicate"), props.Busy, openFn(props.OnDuplicate, e.Key)),
+			button("gj-saver-trash", tr("saver.trash", "Trash"), props.Busy, openFn(props.OnTrash, e.Key)),
+			button("gj-saver-delete", tr("saver.delete", "Delete"), props.Busy, openFn(props.OnDelete, e.Key)),
 			xango.El("input", tagAttrs)))
 	}
 	list := xango.El("div", []xango.Attr{xango.A("class", "gj-saver-saved")},
 		xango.El("div", []xango.Attr{xango.A("class", "gj-saver-saved-head")},
-			xango.El("h4", []xango.Attr{xango.A("class", "gj-saver-title")}, xango.Text("Saved here")),
-			button("gj-saver-refresh", "Refresh", props.Busy, props.OnRefresh)))
+			xango.El("h4", []xango.Attr{xango.A("class", "gj-saver-title")}, xango.Text(tr("saver.savedHere", "Saved here"))),
+			button("gj-saver-refresh", tr("saver.refresh", "Refresh"), props.Busy, props.OnRefresh)))
 	if len(rows) == 0 {
-		list.Children = append(list.Children, xango.El("p", []xango.Attr{xango.A("class", "gj-saver-empty")}, xango.Text("Nothing saved yet.")))
+		list.Children = append(list.Children, xango.El("p", []xango.Attr{xango.A("class", "gj-saver-empty")}, xango.Text(tr("saver.empty", "Nothing saved yet."))))
 	} else {
 		list.Children = append(list.Children, xango.El("ul", []xango.Attr{xango.A("class", "gj-saver-list")}, rows...))
 	}
@@ -175,30 +175,30 @@ func Saver(props SaverProps) xango.Node {
 			}
 			return xango.El("button", attrs, xango.Text(label))
 		}
-		chips := []xango.Node{chip("All", "")}
+		chips := []xango.Node{chip(tr("saver.all", "All"), "")}
 		for _, t := range props.AllTags {
 			chips = append(chips, chip(t, t))
 		}
-		list.Children = append([]xango.Node{list.Children[0], xango.El("div", []xango.Attr{xango.A("class", "gj-saver-tagbar"), xango.A("role", "group"), xango.A("aria-label", "Filter by tag")}, chips...)}, list.Children[1:]...)
+		list.Children = append([]xango.Node{list.Children[0], xango.El("div", []xango.Attr{xango.A("class", "gj-saver-tagbar"), xango.A("role", "group"), xango.A("aria-label", tr("saver.filterByTag", "Filter by tag"))}, chips...)}, list.Children[1:]...)
 	}
 	children = append(children, list)
 
 	// Versions of the document being edited.
 	if props.Name != "" {
 		head := xango.El("div", []xango.Attr{xango.A("class", "gj-saver-saved-head")},
-			xango.El("h4", []xango.Attr{xango.A("class", "gj-saver-title")}, xango.Text("Versions of "+props.Name)),
-			button("gj-saver-version-save", "Save version", props.Busy, props.OnSaveVersion))
+			xango.El("h4", []xango.Attr{xango.A("class", "gj-saver-title")}, xango.Text(trf("saver.versionsOf", "Versions of %s", props.Name))),
+			button("gj-saver-version-save", tr("saver.saveVersion", "Save version"), props.Busy, props.OnSaveVersion))
 		var vrows []xango.Node
 		for _, v := range props.Versions {
 			vrows = append(vrows, xango.El("li", []xango.Attr{xango.A("class", "gj-saver-version"), xango.A("data-key", v.Key)},
 				xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-name")}, xango.Text(v.Time.Format("2006-01-02 15:04:05"))),
 				xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-meta")}, xango.Text(byteSize(v.Size))),
-				button("gj-saver-version-open", "Open", props.Busy, openFn(props.OnOpenVersion, v.Key)),
-				button("gj-saver-version-delete", "Delete", props.Busy, openFn(props.OnDeleteVersion, v.Key))))
+				button("gj-saver-version-open", tr("saver.open", "Open"), props.Busy, openFn(props.OnOpenVersion, v.Key)),
+				button("gj-saver-version-delete", tr("saver.delete", "Delete"), props.Busy, openFn(props.OnDeleteVersion, v.Key))))
 		}
 		sec := []xango.Node{head}
 		if len(vrows) == 0 {
-			sec = append(sec, xango.El("p", []xango.Attr{xango.A("class", "gj-saver-empty")}, xango.Text("No versions yet.")))
+			sec = append(sec, xango.El("p", []xango.Attr{xango.A("class", "gj-saver-empty")}, xango.Text(tr("saver.noVersions", "No versions yet."))))
 		} else {
 			sec = append(sec, xango.El("ul", []xango.Attr{xango.A("class", "gj-saver-list")}, vrows...))
 		}
@@ -212,13 +212,13 @@ func Saver(props SaverProps) xango.Node {
 			trows = append(trows, xango.El("li", []xango.Attr{xango.A("class", "gj-saver-trashed"), xango.A("data-key", e.Key)},
 				xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-name")}, xango.Text(e.Name)),
 				xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-meta")}, xango.Text(entryMeta(e))),
-				button("gj-saver-restore", "Restore", props.Busy, openFn(props.OnRestore, e.Key)),
-				button("gj-saver-purge", "Delete forever", props.Busy, openFn(props.OnPurge, e.Key))))
+				button("gj-saver-restore", tr("saver.restore", "Restore"), props.Busy, openFn(props.OnRestore, e.Key)),
+				button("gj-saver-purge", tr("saver.deleteForever", "Delete forever"), props.Busy, openFn(props.OnPurge, e.Key))))
 		}
 		children = append(children, xango.El("div", []xango.Attr{xango.A("class", "gj-saver-trashbin")},
 			xango.El("div", []xango.Attr{xango.A("class", "gj-saver-saved-head")},
-				xango.El("h4", []xango.Attr{xango.A("class", "gj-saver-title")}, xango.Text("Trash")),
-				button("gj-saver-empty-trash", "Empty trash", props.Busy, props.OnEmptyTrash)),
+				xango.El("h4", []xango.Attr{xango.A("class", "gj-saver-title")}, xango.Text(tr("saver.trashTitle", "Trash"))),
+				button("gj-saver-empty-trash", tr("saver.emptyTrash", "Empty trash"), props.Busy, props.OnEmptyTrash)),
 			xango.El("ul", []xango.Attr{xango.A("class", "gj-saver-list")}, trows...)))
 	}
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-saver")}, children...)

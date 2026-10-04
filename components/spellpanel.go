@@ -37,7 +37,7 @@ type SpellPanelProps struct {
 // SpellPanel lists the misspelled words with their suggestions, and an
 // "Ignore" and "Add to dictionary" for each.
 func SpellPanel(p SpellPanelProps) xango.Node {
-	box := []xango.Attr{xango.A("type", "checkbox"), xango.A("class", "gj-spell-enable"), xango.A("aria-label", "Check spelling"),
+	box := []xango.Attr{xango.A("type", "checkbox"), xango.A("class", "gj-spell-enable"), xango.A("aria-label", tr("spell.check", "Check spelling")),
 		xango.On("change", func(xango.Event) {
 			if p.OnToggle != nil {
 				p.OnToggle(!p.Enabled)
@@ -46,16 +46,16 @@ func SpellPanel(p SpellPanelProps) xango.Node {
 	if p.Enabled {
 		box = append(box, xango.A("checked", "checked"))
 	}
-	toggle := xango.El("label", []xango.Attr{xango.A("class", "gj-spell-toggle")}, xango.El("input", box), xango.Text(" Check spelling"))
+	toggle := xango.El("label", []xango.Attr{xango.A("class", "gj-spell-toggle")}, xango.El("input", box), xango.Text(" "+tr("spell.check", "Check spelling")))
 	kids := []xango.Node{toggle}
 	if p.Enabled {
-		info := "Dictionary: " + p.Language
+		info := trf("spell.dictionary", "Dictionary: %s", p.Language)
 		if p.Detected != "" && p.Detected != p.Language {
-			info += " · the text looks like " + p.Detected
+			info += trf("spell.looksLike", " · the text looks like %s", p.Detected)
 		}
 		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-spell-info")}, xango.Text(info)))
 		if len(p.Items) == 0 {
-			kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-spell-none"), xango.A("role", "status")}, xango.Text("No misspelled words")))
+			kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-spell-none"), xango.A("role", "status")}, xango.Text(tr("spell.none", "No misspelled words"))))
 		}
 	}
 	btn := func(class, label string, f func(string), word string) xango.Node {
@@ -67,7 +67,7 @@ func SpellPanel(p SpellPanelProps) xango.Node {
 			})}, xango.Text(label))
 	}
 	for _, it := range p.Items {
-		head := xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-spell-word"), xango.A("title", "Go to the word"),
+		head := xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-spell-word"), xango.A("title", tr("spell.goto", "Go to the word")),
 			xango.On("click", func(xango.Event) {
 				if p.OnGoto != nil {
 					p.OnGoto(it.Word)
@@ -89,16 +89,16 @@ func SpellPanel(p SpellPanelProps) xango.Node {
 			}
 		}
 		if len(it.Suggestions) == 0 {
-			sugg = append(sugg, xango.El("span", []xango.Attr{xango.A("class", "gj-spell-nosuggestion")}, xango.Text("No suggestions")))
+			sugg = append(sugg, xango.El("span", []xango.Attr{xango.A("class", "gj-spell-nosuggestion")}, xango.Text(tr("spell.noSuggestions", "No suggestions"))))
 		}
-		actions := []xango.Node{btn("gj-spell-ignore", "Ignore", p.OnIgnore, it.Word)}
+		actions := []xango.Node{btn("gj-spell-ignore", tr("spell.ignore", "Ignore"), p.OnIgnore, it.Word)}
 		if !p.ReadOnly {
-			actions = append(actions, btn("gj-spell-add", "Add to dictionary", p.OnAdd, it.Word))
+			actions = append(actions, btn("gj-spell-add", tr("spell.add", "Add to dictionary"), p.OnAdd, it.Word))
 		}
 		kids = append(kids, xango.El("div", []xango.Attr{xango.A("class", "gj-spell-item"), xango.A("data-word", it.Word)},
 			xango.El("div", []xango.Attr{xango.A("class", "gj-spell-head")}, row...),
 			xango.El("div", []xango.Attr{xango.A("class", "gj-spell-suggestions")}, sugg...),
 			xango.El("div", []xango.Attr{xango.A("class", "gj-spell-actions")}, actions...)))
 	}
-	return xango.El("div", []xango.Attr{xango.A("class", "gj-spell"), xango.A("aria-label", "Spelling")}, kids...)
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-spell"), xango.A("aria-label", tr("spell.region", "Spelling"))}, kids...)
 }

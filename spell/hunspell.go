@@ -20,6 +20,7 @@ const (
 	// hunspellFlagDefault is Hunspell's own default: each flag is
 	// exactly one ASCII byte, several concatenated with no separator
 	// ("URTP" is four flags: U, R, T, P).
+	//nolint:unused // the zero value, selected by not naming a FLAG mode
 	hunspellFlagDefault hunspellFlagMode = iota
 	// hunspellFlagUTF8 ("FLAG UTF-8"): each flag is one Unicode code
 	// point, letting a flag be a non-ASCII character.

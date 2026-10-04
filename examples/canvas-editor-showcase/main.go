@@ -73,6 +73,9 @@ type ui struct {
 	fontLog             []string // what the font library did, newest last
 	navSig              string   // outline/bookmarks the Outline tab last showed
 	find                findState
+	a11ySig             string
+	a11yCache           []components.A11yBlock
+	announcement        string
 	spell               spellState
 	lang                langState
 	statsSig            string // the counts the status bar and Stats tab last showed
@@ -178,6 +181,7 @@ func main() {
 
 	setMode := func(m canvas.Mode) {
 		state.Mode = state.Role.Mode(m)
+		u.announce(T("a11y.mode."+state.Mode.String(), strings.ToUpper(state.Mode.String()[:1])+state.Mode.String()[1:]+" mode"))
 		renderCanvas()
 		renderUI()
 	}
@@ -202,17 +206,18 @@ func main() {
 		}
 
 		menus := []components.MenuBarEntry{
-			{Label: "View", Items: []components.MenuItem{
+			{Label: T("menu.view", "View"), Items: []components.MenuItem{
 				{Label: "Edit mode", Checked: state.Mode == canvas.ModeEdit, OnSelect: toggleMode},
 				{Label: "Hyphenate long words", Checked: state.Hyphenate, OnSelect: func() { state.Hyphenate = !state.Hyphenate; renderCanvas(); renderUI() }},
+				{Label: T("menu.language", "Interface language"), Items: languageMenu(u, renderUI)},
 				{Label: "Two-page spread", Checked: state.Spread, OnSelect: func() { state.Spread = !state.Spread; renderCanvas(); renderUI() }},
 			}},
-			{Label: "File", Items: []components.MenuItem{
+			{Label: T("menu.file", "File"), Items: []components.MenuItem{
 				{Label: "Save…", OnSelect: func() { u.tab = "save"; renderUI() }},
 				{Label: "Import / Export…", OnSelect: func() { u.tab = "transfer"; renderUI() }},
 			}},
-			{Label: "Edit", Items: components.CommandMenu(stage.Features.Commands(), keymap, mac, run)},
-			{Label: "Insert", Items: []components.MenuItem{
+			{Label: T("menu.edit", "Edit"), Items: components.CommandMenu(stage.Features.Commands(), keymap, mac, run)},
+			{Label: T("menu.insert", "Insert"), Items: []components.MenuItem{
 				{Label: "Word count…", OnSelect: func() { u.tab = "stats"; renderUI() }},
 				{Label: "Share selection…", OnSelect: func() { u.tab = "share"; renderUI() }},
 				{Label: "Symbol…", OnSelect: func() { u.tab = "symbols"; renderUI() }},
@@ -452,9 +457,13 @@ func main() {
 		node := components.DocumentView(components.DocumentViewProps{
 			Title: u.title, OnTitle: func(t string) { u.title = t; renderUI() },
 			MenuBar: menubar, Toolbar: toolbar,
-			Canvas:  xango.El("div", []xango.Attr{xango.A("id", "canvas-host")}),
+			Canvas: xango.Frag(
+				xango.El("div", []xango.Attr{xango.A("id", "canvas-host")}),
+				components.AccessibleText(components.AccessibleTextProps{Blocks: append(u.a11yBlocks(flow, u.title), a11yObjects(root)...), Selection: selectedText(flow)}),
+				components.Announcer(u.announcement)),
 			Sidebar: &side, Status: status,
 		})
+		labelCanvas(canvasEl.Element, inputEl.Element)
 		if domRoot == nil {
 			domRoot = domrt.Mount(doc.GetElementByID("app").Element, node)
 			// The canvas was made by the page; put it where the layout wants it.
@@ -590,6 +599,7 @@ func main() {
 		doc.GetElementByID("state").SetTextContent(string(b))
 	}
 
+	initLocale()
 	u.setupLanguage(func(k string) string {
 		q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 		if q.Call("has", k).Bool() {
@@ -739,7 +749,7 @@ func tabButton(u *ui, tab, label string, rerender func()) xango.Node {
 	return xango.El("button", []xango.Attr{
 		xango.A("type", "button"), xango.A("class", class), xango.A("data-tab", tab),
 		xango.On("click", func(xango.Event) { u.tab = tab; rerender() }),
-	}, xango.Text(label))
+	}, xango.Text(components.Translate("tab."+tab, label)))
 }
 
 // fontKeys lists "family=key" for every downloaded cut and "family" for the

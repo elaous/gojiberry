@@ -71,22 +71,22 @@ func LanguagePanel(p LanguagePanelProps) xango.Node {
 		}
 		return xango.El("button", a, xango.Text(label))
 	}
-	detected := "Language: not sure"
+	detected := trf("lang.detected", "Language: %s", tr("lang.notSure", "not sure"))
 	if p.Detected != "" {
-		detected = "Language: " + p.Detected
+		detected = trf("lang.detected", "Language: %s", p.Detected)
 	}
 	kids := []xango.Node{xango.El("p", []xango.Attr{xango.A("class", "gj-lang-detected")}, xango.Text(detected))}
 	if p.Busy {
-		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-busy"), xango.A("role", "status")}, xango.Text("Working…")))
+		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-busy"), xango.A("role", "status")}, xango.Text(tr("lang.working", "Working…"))))
 	}
 	if p.Error != "" {
 		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-error"), xango.A("role", "alert")}, xango.Text(p.Error)))
 	}
 
 	// Translation.
-	kids = append(kids, xango.El("h4", nil, xango.Text("Translate the selection")))
+	kids = append(kids, xango.El("h4", nil, xango.Text(tr("lang.translateHead", "Translate the selection"))))
 	if len(p.Targets) == 0 {
-		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-off")}, xango.Text("No translation server is set up.")))
+		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-off")}, xango.Text(tr("lang.noTranslator", "No translation server is set up."))))
 	} else {
 		var opts []xango.Node
 		for _, t := range p.Targets {
@@ -96,37 +96,37 @@ func LanguagePanel(p LanguagePanelProps) xango.Node {
 			}
 			opts = append(opts, xango.El("option", o, xango.Text(t.Name)))
 		}
-		sel := xango.El("select", []xango.Attr{xango.A("class", "gj-lang-target"), xango.A("aria-label", "Translate into"),
+		sel := xango.El("select", []xango.Attr{xango.A("class", "gj-lang-target"), xango.A("aria-label", tr("lang.translateInto", "Translate into")),
 			xango.On("change", func(e xango.Event) {
 				if p.OnTarget != nil {
 					p.OnTarget(xango.EventValue[string](e))
 				}
 			})}, opts...)
 		kids = append(kids, xango.El("div", []xango.Attr{xango.A("class", "gj-lang-row")}, sel,
-			btn("gj-lang-translate", "Translate", !p.HasSelection || p.Busy, p.OnTranslate)))
+			btn("gj-lang-translate", tr("lang.translate", "Translate"), !p.HasSelection || p.Busy, p.OnTranslate)))
 		if !p.HasSelection {
-			kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-off")}, xango.Text("Select some text to translate it.")))
+			kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-off")}, xango.Text(tr("lang.selectFirst", "Select some text to translate it."))))
 		}
 		if p.Translation != "" {
 			kids = append(kids, xango.El("blockquote", []xango.Attr{xango.A("class", "gj-lang-translation")}, xango.Text(p.Translation)))
 			if !p.ReadOnly {
-				kids = append(kids, btn("gj-lang-use", "Replace the selection", false, p.OnUseTranslate))
+				kids = append(kids, btn("gj-lang-use", tr("lang.replaceSelection", "Replace the selection"), false, p.OnUseTranslate))
 			}
 		}
 	}
 
 	// Grammar.
-	kids = append(kids, xango.El("h4", nil, xango.Text("Grammar")))
+	kids = append(kids, xango.El("h4", nil, xango.Text(tr("lang.grammar", "Grammar"))))
 	if !p.GrammarEnabled {
-		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-off")}, xango.Text("No grammar model is set up.")))
+		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-off")}, xango.Text(tr("lang.noGrammar", "No grammar model is set up."))))
 	} else {
-		kids = append(kids, btn("gj-lang-check", "Check grammar", p.Busy, p.OnCheckGrammar))
+		kids = append(kids, btn("gj-lang-check", tr("lang.checkGrammar", "Check grammar"), p.Busy, p.OnCheckGrammar))
 		if p.Checked && len(p.Issues) == 0 {
-			kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-none"), xango.A("role", "status")}, xango.Text("No grammar issues found")))
+			kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-none"), xango.A("role", "status")}, xango.Text(tr("lang.noIssues", "No grammar issues found"))))
 		}
 		for i, is := range p.Issues {
 			row := []xango.Node{
-				xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-lang-issue-text"), xango.A("title", "Go to it"), xango.On("click", call(func() {
+				xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-lang-issue-text"), xango.A("title", tr("lang.goIssue", "Go to it")), xango.On("click", call(func() {
 					if p.OnGotoIssue != nil {
 						p.OnGotoIssue(i)
 					}
@@ -134,7 +134,7 @@ func LanguagePanel(p LanguagePanelProps) xango.Node {
 				xango.El("span", []xango.Attr{xango.A("class", "gj-lang-issue-message")}, xango.Text(is.Message)),
 			}
 			if is.Suggestion != "" && !p.ReadOnly {
-				row = append(row, btn("gj-lang-apply", "Change to “"+is.Suggestion+"”", false, func() {
+				row = append(row, btn("gj-lang-apply", trf("lang.changeTo", "Change to “%s”", is.Suggestion), false, func() {
 					if p.OnApplyIssue != nil {
 						p.OnApplyIssue(i)
 					}
@@ -143,5 +143,5 @@ func LanguagePanel(p LanguagePanelProps) xango.Node {
 			kids = append(kids, xango.El("div", []xango.Attr{xango.A("class", "gj-lang-issue"), xango.A("data-index", strconv.Itoa(i))}, row...))
 		}
 	}
-	return xango.El("div", []xango.Attr{xango.A("class", "gj-lang"), xango.A("aria-label", "Language tools")}, kids...)
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-lang"), xango.A("aria-label", tr("lang.region", "Language tools"))}, kids...)
 }

@@ -1,0 +1,22 @@
+/* Accessibility stylesheet for github.com/elaous/gojiberry/components:
+   hides the screen-reader mirror of a canvas from sight, but not from assistive
+   technology (display:none would hide it from both). */
+
+.gj-sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Keyboard focus is always visible. */
+.gj-keybindings-button:focus-visible, .gj-menubar-button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--gj-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}
