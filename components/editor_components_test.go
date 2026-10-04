@@ -631,3 +631,27 @@ func TestLanguagePanelStates(t *testing.T) {
 		}
 	}
 }
+
+func TestSaverShowsVersionsTrashAndTags(t *testing.T) {
+	now := time.Date(2026, 10, 4, 9, 30, 0, 0, time.UTC)
+	html := render(t, Saver(SaverProps{
+		Target: "memory", Format: "json", Name: "plan",
+		Entries: []SaverEntry{{Key: "plan.json", Name: "plan", Format: "JSON", Size: 10, Updated: now, Tags: []string{"rpg", "draft"}}, {Key: "b.json", Name: "b", Format: "JSON", Size: 5}},
+		AllTags: []string{"draft", "rpg"}, TagFilter: "rpg",
+		Versions: []SaverVersion{{Key: "versions/plan/1.json", Time: now, Size: 12}},
+		Trashed:  []SaverEntry{{Key: "trash/old.json", Name: "old", Format: "JSON", Size: 3, Updated: now}},
+	}))
+	for _, want := range []string{`data-key="plan.json"`, `value="rpg, draft"`, "gj-saver-duplicate", "gj-saver-trash", "gj-saver-tagchip gj-saver-tagchip-on",
+		"Versions of plan", `data-key="versions/plan/1.json"`, "2026-10-04 09:30:00", "gj-saver-version-save", "gj-saver-trashed", "gj-saver-restore", "gj-saver-empty-trash"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(html, `data-key="b.json"`) {
+		t.Error("the tag filter must hide documents without the tag")
+	}
+	none := render(t, Saver(SaverProps{}))
+	if strings.Contains(none, "Versions of") || strings.Contains(none, "gj-saver-trashbin") || strings.Contains(none, "gj-saver-tagbar") {
+		t.Error("with no name, no trash and no tags those sections are absent")
+	}
+}

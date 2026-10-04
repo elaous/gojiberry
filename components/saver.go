@@ -2,6 +2,7 @@ package components
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/elaous/gojiberry/xango"
@@ -15,7 +16,16 @@ type SaverEntry struct {
 	Key, Name string
 	Format    string // the format's label
 	Size      int
-	Updated   time.Time
+	// Updated is when it was saved (for a trashed one, when it was trashed).
+	Updated time.Time
+	Tags    []string
+}
+
+// SaverVersion is one snapshot of the document being edited.
+type SaverVersion struct {
+	Key  string
+	Time time.Time
+	Size int
 }
 
 // SaverProps configures Saver.
@@ -35,6 +45,14 @@ type SaverProps struct {
 	Failed bool
 	Busy   bool
 
+	// Versions are the snapshots of the document called Name, newest first;
+	// Trashed are the documents in the trash. AllTags lists every tag in use and
+	// TagFilter the one the list is narrowed to ("" for all).
+	Versions  []SaverVersion
+	Trashed   []SaverEntry
+	AllTags   []string
+	TagFilter string
+
 	OnTarget  func(name string)
 	OnFormat  func(name string)
 	OnName    func(name string)
@@ -42,6 +60,23 @@ type SaverProps struct {
 	OnRefresh func()
 	OnOpen    func(key string)
 	OnDelete  func(key string)
+
+	// OnDuplicate copies a document; OnTrash moves it to the trash (OnDelete
+	// removes it for good); OnTags sets its tags; OnTagFilter narrows the list.
+	OnDuplicate func(key string)
+	OnTrash     func(key string)
+	OnTags      func(key string, tags []string)
+	OnTagFilter func(tag string)
+	// OnSaveVersion snapshots the document being edited; OnOpenVersion opens a
+	// snapshot and OnDeleteVersion removes it.
+	OnSaveVersion   func()
+	OnOpenVersion   func(key string)
+	OnDeleteVersion func(key string)
+	// OnRestore takes a document out of the trash; OnPurge deletes it for good
+	// and OnEmptyTrash all of them.
+	OnRestore    func(key string)
+	OnPurge      func(key string)
+	OnEmptyTrash func()
 }
 
 // Saver renders the save form: pick a target and a format, name the
@@ -101,11 +136,23 @@ func Saver(props SaverProps) xango.Node {
 
 	var rows []xango.Node
 	for _, e := range props.Entries {
+		if props.TagFilter != "" && !hasTag(e.Tags, props.TagFilter) {
+			continue
+		}
+		tagAttrs := []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-saver-tags"), xango.A("placeholder", "tags, separated by commas"),
+			xango.A("aria-label", "Tags of "+e.Name), xango.A("value", strings.Join(e.Tags, ", "))}
+		if props.OnTags != nil {
+			key := e.Key
+			tagAttrs = append(tagAttrs, xango.On("change", func(ev xango.Event) { props.OnTags(key, splitTags(xango.EventValue[string](ev))) }))
+		}
 		rows = append(rows, xango.El("li", []xango.Attr{xango.A("class", "gj-saver-entry"), xango.A("data-key", e.Key)},
 			xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-name")}, xango.Text(e.Name)),
 			xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-meta")}, xango.Text(entryMeta(e))),
 			button("gj-saver-open", "Open", props.Busy, openFn(props.OnOpen, e.Key)),
-			button("gj-saver-delete", "Delete", props.Busy, openFn(props.OnDelete, e.Key))))
+			button("gj-saver-duplicate", "Duplicate", props.Busy, openFn(props.OnDuplicate, e.Key)),
+			button("gj-saver-trash", "Trash", props.Busy, openFn(props.OnTrash, e.Key)),
+			button("gj-saver-delete", "Delete", props.Busy, openFn(props.OnDelete, e.Key)),
+			xango.El("input", tagAttrs)))
 	}
 	list := xango.El("div", []xango.Attr{xango.A("class", "gj-saver-saved")},
 		xango.El("div", []xango.Attr{xango.A("class", "gj-saver-saved-head")},
@@ -116,8 +163,92 @@ func Saver(props SaverProps) xango.Node {
 	} else {
 		list.Children = append(list.Children, xango.El("ul", []xango.Attr{xango.A("class", "gj-saver-list")}, rows...))
 	}
+	if len(props.AllTags) > 0 {
+		chip := func(label, tag string) xango.Node {
+			class := "gj-saver-tagchip"
+			if props.TagFilter == tag {
+				class += " gj-saver-tagchip-on"
+			}
+			attrs := []xango.Attr{xango.A("type", "button"), xango.A("class", class), xango.A("aria-pressed", boolString(props.TagFilter == tag))}
+			if props.OnTagFilter != nil {
+				attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnTagFilter(tag) }))
+			}
+			return xango.El("button", attrs, xango.Text(label))
+		}
+		chips := []xango.Node{chip("All", "")}
+		for _, t := range props.AllTags {
+			chips = append(chips, chip(t, t))
+		}
+		list.Children = append([]xango.Node{list.Children[0], xango.El("div", []xango.Attr{xango.A("class", "gj-saver-tagbar"), xango.A("role", "group"), xango.A("aria-label", "Filter by tag")}, chips...)}, list.Children[1:]...)
+	}
 	children = append(children, list)
+
+	// Versions of the document being edited.
+	if props.Name != "" {
+		head := xango.El("div", []xango.Attr{xango.A("class", "gj-saver-saved-head")},
+			xango.El("h4", []xango.Attr{xango.A("class", "gj-saver-title")}, xango.Text("Versions of "+props.Name)),
+			button("gj-saver-version-save", "Save version", props.Busy, props.OnSaveVersion))
+		var vrows []xango.Node
+		for _, v := range props.Versions {
+			vrows = append(vrows, xango.El("li", []xango.Attr{xango.A("class", "gj-saver-version"), xango.A("data-key", v.Key)},
+				xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-name")}, xango.Text(v.Time.Format("2006-01-02 15:04:05"))),
+				xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-meta")}, xango.Text(byteSize(v.Size))),
+				button("gj-saver-version-open", "Open", props.Busy, openFn(props.OnOpenVersion, v.Key)),
+				button("gj-saver-version-delete", "Delete", props.Busy, openFn(props.OnDeleteVersion, v.Key))))
+		}
+		sec := []xango.Node{head}
+		if len(vrows) == 0 {
+			sec = append(sec, xango.El("p", []xango.Attr{xango.A("class", "gj-saver-empty")}, xango.Text("No versions yet.")))
+		} else {
+			sec = append(sec, xango.El("ul", []xango.Attr{xango.A("class", "gj-saver-list")}, vrows...))
+		}
+		children = append(children, xango.El("div", []xango.Attr{xango.A("class", "gj-saver-versions")}, sec...))
+	}
+
+	// The trash.
+	if len(props.Trashed) > 0 {
+		var trows []xango.Node
+		for _, e := range props.Trashed {
+			trows = append(trows, xango.El("li", []xango.Attr{xango.A("class", "gj-saver-trashed"), xango.A("data-key", e.Key)},
+				xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-name")}, xango.Text(e.Name)),
+				xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-meta")}, xango.Text(entryMeta(e))),
+				button("gj-saver-restore", "Restore", props.Busy, openFn(props.OnRestore, e.Key)),
+				button("gj-saver-purge", "Delete forever", props.Busy, openFn(props.OnPurge, e.Key))))
+		}
+		children = append(children, xango.El("div", []xango.Attr{xango.A("class", "gj-saver-trashbin")},
+			xango.El("div", []xango.Attr{xango.A("class", "gj-saver-saved-head")},
+				xango.El("h4", []xango.Attr{xango.A("class", "gj-saver-title")}, xango.Text("Trash")),
+				button("gj-saver-empty-trash", "Empty trash", props.Busy, props.OnEmptyTrash)),
+			xango.El("ul", []xango.Attr{xango.A("class", "gj-saver-list")}, trows...)))
+	}
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-saver")}, children...)
+}
+
+func hasTag(tags []string, want string) bool {
+	for _, t := range tags {
+		if strings.EqualFold(t, want) {
+			return true
+		}
+	}
+	return false
+}
+
+// splitTags reads a comma-separated list of tags.
+func splitTags(s string) []string {
+	var out []string
+	for _, t := range strings.Split(s, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func boolString(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
 }
 
 func openFn(on func(string), key string) func() {

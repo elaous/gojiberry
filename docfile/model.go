@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/elaous/gojiberry/canvas"
@@ -612,4 +613,48 @@ func (p *ImagePlaceholder) DrawAt(pt canvas.Painter, x, y float64) {
 	w, h := p.Measure(pt, 0, 0)
 	pt.SetFillStyle("#e6e8eb")
 	pt.FillRect(x, y, w, h)
+}
+
+// TagsKey is the Meta key a document's tags are kept under.
+const TagsKey = "tags"
+
+// Tags returns the document's tags, in the order they were set.
+func (d Document) Tags() []string {
+	v, _ := d.Get(TagsKey)
+	var out []string
+	for _, t := range strings.Split(v, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// SetTags replaces the document's tags: trimmed, without commas or empty ones,
+// and without repeats (compared ignoring case).
+func (d *Document) SetTags(tags []string) {
+	seen := map[string]bool{}
+	var clean []string
+	for _, t := range tags {
+		t = strings.TrimSpace(strings.ReplaceAll(t, ",", " "))
+		if k := strings.ToLower(t); t != "" && !seen[k] {
+			seen[k] = true
+			clean = append(clean, t)
+		}
+	}
+	if len(clean) == 0 {
+		d.Meta = slices.DeleteFunc(d.Meta, func(m MetaEntry) bool { return m.Key == TagsKey })
+		return
+	}
+	d.Set(TagsKey, strings.Join(clean, ","))
+}
+
+// HasTag reports whether the document has the tag (ignoring case).
+func (d Document) HasTag(tag string) bool {
+	for _, t := range d.Tags() {
+		if strings.EqualFold(t, strings.TrimSpace(tag)) {
+			return true
+		}
+	}
+	return false
 }

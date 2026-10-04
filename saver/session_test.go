@@ -2,6 +2,7 @@ package saver
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -138,4 +139,73 @@ func TestSessionTouchesTheEditorThroughOnUI(t *testing.T) {
 	if calls != 2 || len(*opened) != 1 {
 		t.Fatalf("Open delivered the document through OnUI: calls=%d opened=%d", calls, len(*opened))
 	}
+}
+
+func TestSessionLifecycleThroughTheComponentsHandlers(t *testing.T) {
+	ctx := context.Background()
+	s, opened, _ := newSession(t)
+	s.SetName("report")
+	s.Props().OnSave()
+	s.Props().OnSaveVersion()
+	p := s.Props()
+	if len(p.Versions) != 1 || p.Status != "Saved a version of report" {
+		t.Fatalf("after a version: %+v", p)
+	}
+	s.Props().OnOpenVersion(p.Versions[0].Key)
+	if len(*opened) != 1 || s.Props().Status != "Opened a version" {
+		t.Fatalf("opening a version: %d opened, %q", len(*opened), s.Props().Status)
+	}
+	s.Props().OnDeleteVersion(s.Props().Versions[0].Key)
+	if len(s.Props().Versions) != 0 {
+		t.Error("version not deleted")
+	}
+
+	// Tags, and filtering by them.
+	s.SetName("second")
+	s.Props().OnSave()
+	s.Props().OnTags("report.json", []string{"rpg", "draft"})
+	s.Props().OnTags("second.json", []string{"draft"})
+	p = s.Props()
+	if !reflect.DeepEqual(p.AllTags, []string{"draft", "rpg"}) {
+		t.Fatalf("all tags %v", p.AllTags)
+	}
+	s.Props().OnTagFilter("rpg")
+	if p = s.Props(); p.TagFilter != "rpg" {
+		t.Errorf("filter %q", p.TagFilter)
+	}
+	s.Props().OnTags("report.json", nil) // the last "rpg" goes: the filter must not strand the list
+	if p = s.Props(); p.TagFilter != "" || len(p.AllTags) != 1 {
+		t.Errorf("after the last rpg tag went: %q %v", p.TagFilter, p.AllTags)
+	}
+
+	// Duplicate, trash, restore, purge.
+	s.Props().OnDuplicate("report.json")
+	if p = s.Props(); len(p.Entries) != 3 || p.Status != "Copied report.json to Copy of report.json" {
+		t.Fatalf("duplicate: %d entries, %q", len(p.Entries), p.Status)
+	}
+	s.Props().OnTrash("report.json")
+	p = s.Props()
+	if len(p.Entries) != 2 || len(p.Trashed) != 1 || p.Trashed[0].Name != "report" {
+		t.Fatalf("trash: %+v", p)
+	}
+	s.Props().OnRestore(p.Trashed[0].Key)
+	if p = s.Props(); len(p.Entries) != 3 || len(p.Trashed) != 0 || p.Status != "Restored report.json" {
+		t.Fatalf("restore: %d entries, %d trashed, %q", len(p.Entries), len(p.Trashed), p.Status)
+	}
+	s.Props().OnTrash("second.json")
+	s.Props().OnPurge(s.Props().Trashed[0].Key)
+	if p = s.Props(); len(p.Trashed) != 0 || len(p.Entries) != 2 {
+		t.Fatalf("purge: %+v", p)
+	}
+	s.Props().OnTrash("report.json")
+	s.Props().OnTrash("Copy of report.json")
+	s.Props().OnEmptyTrash()
+	if p = s.Props(); len(p.Trashed) != 0 || p.Status != "Emptied the trash (2)" || p.Failed {
+		t.Fatalf("empty: %+v", p)
+	}
+	s.Props().OnTrash("missing.json")
+	if p = s.Props(); !p.Failed {
+		t.Error("a failure must show")
+	}
+	_ = ctx
 }
