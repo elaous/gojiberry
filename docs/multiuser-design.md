@@ -326,9 +326,9 @@ Headers, footers and objects are not part of the text flow, so they travel as wh
 - A record is never deleted by a session (it may only be missing from view), and what an element reads back after `Write` is taken as agreed, so normalisation cannot start an echo between two peers.
 - Not yet: adding or removing objects at run time (elements come from each side's own tree), character formatting inside floating text, an image's picture.
 
-### Known limits found in review
+### Hardening from review
 
-- Over WebSockets the client sends up to 200 operations per frame with no size cap; a batch over the hub's `MaxBody` makes the server close the socket and the client resends it forever (HTTP would answer 413). Fix: split batches by encoded size.
-- A downgraded editor can keep writing over a socket until the next keep-alive tick (the role is checked on each tick, not on each frame).
-- The socket accepts any `Origin`; only the guard protects it. With cookie-based auth and a guard that sets no `Origins`, a page on another site could open one. The default Bearer setup is not affected.
-- Surface records are keyed by element order (`float:0`), so concurrent adding or removing of objects shifts them, and they are never deleted.
+- **Frames over WebSockets.** The client splits batches by encoded size (256 KiB a frame, 200 operations at most) and does not send an operation over 4 MiB. The hub answers a frame over `MaxBody` with a 413 `reject` (as the POST would) instead of closing the socket; its hard read limit is four times `MaxBody`. If a hub still closes the socket with "message too big", the client gives that batch up as refused instead of resending it for ever. A hub configured with a `MaxBody` under 256 KiB would still refuse ordinary batches.
+- **Roles are checked on every ops and presence frame**, not only on the keep-alive tick: a downgraded user's socket is closed (policy violation) at their next frame and the client reconnects with the new role.
+- **Cookies.** A socket from another origin that carries cookies is refused (403) unless the origin is in `Config.CookieOrigins`: with cookie sign-in it would let any site act as the signed-in user. Pages sending a bearer token carry no cookies for the hub and are not affected. `guard.TokenQuery` applies to paths ending in `/ws` only.
+- Still open: surface records are keyed by element order (`float:0`), so concurrent adding or removing of objects shifts them, and they are never deleted.

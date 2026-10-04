@@ -1,4 +1,4 @@
-<img src="docs/brand/xango.svg" alt="Xangô logo: a lightning bolt in kente colours" width="96" align="right">
+<img src="docs/brand/xango.svg" alt="Xangô logo: a yellow lightning bolt" width="96" align="right">
 
 # gojiberry / Xangô
 
