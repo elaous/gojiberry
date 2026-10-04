@@ -60,6 +60,13 @@ func main() {
 		hc.Roles = hub.ACLRolesWith(adapter, who, noACL)
 		log.Printf("collabhub: sign-in enabled (%d provider(s))", len(cfg.Auth.Providers))
 	}
+	if v := os.Getenv("GOJIBERRY_COLLAB_PRESENCE_INTERVAL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			log.Fatalf("collabhub: GOJIBERRY_COLLAB_PRESENCE_INTERVAL: %v", err)
+		}
+		hc.PresenceInterval = d
+	}
 	h := hub.New(hc)
 	addr := os.Getenv("GOJIBERRY_COLLAB_ADDR")
 	if addr == "" {
