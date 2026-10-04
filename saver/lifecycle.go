@@ -182,7 +182,20 @@ func (s *Saver) Trash(ctx context.Context, target, key string) error {
 	if err != nil {
 		return err
 	}
-	if err := t.Adapter.Save(ctx, TrashPrefix+key, stored.Data); err != nil {
+	// An earlier trashed copy by the same name is kept, not overwritten.
+	c, name := s.codecOf(key)
+	dest := TrashPrefix + key
+	if c != nil {
+		for i := 2; ; i++ {
+			if _, err := t.Adapter.Load(ctx, dest); errors.Is(err, docstore.ErrNotFound) {
+				break
+			} else if err != nil {
+				return err
+			}
+			dest = fmt.Sprintf("%s%s (%d)%s", TrashPrefix, name, i, c.Ext())
+		}
+	}
+	if err := t.Adapter.Save(ctx, dest, stored.Data); err != nil {
 		return err
 	}
 	return t.Adapter.Delete(ctx, key)
@@ -252,7 +265,7 @@ func (s *Saver) Restore(ctx context.Context, target, trashKey string) (string, e
 	}
 	orig := strings.TrimPrefix(trashKey, TrashPrefix)
 	c, name := s.codecOf(orig)
-	if c == nil {
+	if c == nil || !validName(name) || reserved(orig) || strings.Contains(orig, "/") {
 		return "", ErrName
 	}
 	key := orig

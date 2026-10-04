@@ -40,6 +40,13 @@ const (
 	relNS     = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 	emuPerPx  = 9525
 	maxImages = 200
+	// Limits on what one file may cost to read: untrusted input.
+	maxTotalBytes = 256 << 20 // all entries read, together
+	maxImageBytes = 64 << 20  // all pictures kept, together
+	maxDepth      = 256       // element nesting
+	maxElements   = 2_000_000
+	maxCols       = 256
+	maxCells      = 200_000
 )
 
 // headingScales are the sizes the canvas gives heading levels 1-5.
@@ -92,6 +99,7 @@ func parseXML(data []byte) (*node, error) {
 	dec := xml.NewDecoder(bytes.NewReader(data))
 	var stack []*node
 	var root *node
+	elements := 0
 	for {
 		tok, err := dec.Token()
 		if err == io.EOF {
@@ -102,6 +110,9 @@ func parseXML(data []byte) (*node, error) {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
+			if elements++; elements > maxElements || len(stack) >= maxDepth {
+				return nil, errors.New("XML too large or too deeply nested")
+			}
 			n := &node{name: t.Name.Local, attrs: map[string]string{}}
 			for _, a := range t.Attr {
 				if a.Name.Space == relNS {
@@ -143,6 +154,12 @@ type reader struct {
 
 	doc    docfile.Document
 	images int
+
+	bytesRead  int64 // bytes read so far
+	imageBytes int
+	cells      int
+	seenNotes  map[string]bool
+	pics       map[string]string // picture target -> data URL
 }
 
 func (r *reader) read(name string) ([]byte, error) {
@@ -155,7 +172,13 @@ func (r *reader) read(name string) ([]byte, error) {
 		return nil, err
 	}
 	defer func() { _ = rc.Close() }()
-	return io.ReadAll(io.LimitReader(rc, 64<<20))
+	left := maxTotalBytes - r.bytesRead
+	if left <= 0 {
+		return nil, errors.New("docx too large")
+	}
+	b, err := io.ReadAll(io.LimitReader(rc, min(64<<20, left)))
+	r.bytesRead += int64(len(b))
+	return b, err
 }
 
 func (r *reader) xml(name string) *node {
@@ -176,7 +199,7 @@ func Import(data []byte) (docfile.Document, error) {
 	if err != nil {
 		return docfile.Document{}, ErrNotDocx
 	}
-	r := &reader{files: map[string]*zip.File{}, rels: map[string]string{}, styles: map[string]string{}, numbers: map[string]map[int]bool{}, notes: map[string]string{}}
+	r := &reader{files: map[string]*zip.File{}, rels: map[string]string{}, styles: map[string]string{}, numbers: map[string]map[int]bool{}, notes: map[string]string{}, seenNotes: map[string]bool{}, pics: map[string]string{}}
 	for _, f := range zr.File {
 		r.files[f.Name] = f
 	}
@@ -327,6 +350,9 @@ func (r *reader) table(tbl *node) {
 	for _, tr := range tbl.children("tr") {
 		var row []cell
 		for _, tc := range tr.children("tc") {
+			if r.cells++; r.cells > maxCells {
+				break
+			}
 			c := cell{colSpan: 1}
 			var parts []string
 			for _, p := range tc.find2("p") {
@@ -390,7 +416,7 @@ func (r *reader) table(tbl *node) {
 			pr = append(pr, placed{c, col})
 			col += c.colSpan
 		}
-		cols = max(cols, col)
+		cols = min(max(cols, col), maxCols)
 		rows = append(rows, pr)
 	}
 	out := &docfile.TableItem{}
@@ -403,6 +429,10 @@ func (r *reader) table(tbl *node) {
 	for ri, pr := range rows {
 		for _, p := range pr {
 			c := p.col
+			if c >= cols {
+				continue
+			}
+			p.colSpan = min(p.colSpan, cols-c)
 			switch {
 			case p.cont:
 				if or, ok := owner[c]; ok {
@@ -681,7 +711,10 @@ func (r *reader) run(run *node, inherit docfile.Format, info paraInfo) {
 			flush()
 			if id := k.attr("id"); r.notes[id] != "" {
 				r.add(docfile.Item{Footnote: &docfile.FootnoteMark{ID: id}})
-				r.doc.Footnotes = append(r.doc.Footnotes, docfile.Footnote{ID: id, Text: r.notes[id]})
+				if !r.seenNotes[id] {
+					r.seenNotes[id] = true
+					r.doc.Footnotes = append(r.doc.Footnotes, docfile.Footnote{ID: id, Text: r.notes[id]})
+				}
 			}
 		case "drawing", "pict":
 			flush()
@@ -700,15 +733,21 @@ func (r *reader) picture(d *node) {
 	if target == "" {
 		return
 	}
-	data, err := r.read(target)
-	if err != nil {
-		return
-	}
 	mime := map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml", ".bmp": "image/bmp", ".webp": "image/webp"}[strings.ToLower(path.Ext(target))]
 	if mime == "" {
 		return
 	}
-	img := &docfile.ImageItem{URL: "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)}
+	url, ok := r.pics[target]
+	if !ok {
+		data, err := r.read(target)
+		if err != nil || r.imageBytes+len(data) > maxImageBytes {
+			return
+		}
+		r.imageBytes += len(data)
+		url = "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
+		r.pics[target] = url
+	}
+	img := &docfile.ImageItem{URL: url}
 	if ext := d.find("extent"); ext != nil {
 		cx, _ := strconv.ParseFloat(ext.attr("cx"), 64)
 		cy, _ := strconv.ParseFloat(ext.attr("cy"), 64)

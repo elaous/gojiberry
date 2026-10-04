@@ -83,7 +83,7 @@ func epubContentOPF(snap Snapshot) string {
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:identifier id="book-id">urn:gojiberry:` + snap.ID + `</dc:identifier>
+    <dc:identifier id="book-id">urn:gojiberry:` + escapeHTMLText(snap.ID) + `</dc:identifier>
     <dc:title>` + escapeHTMLText(snap.Title) + `</dc:title>
     <dc:language>en</dc:language>
     <meta property="dcterms:modified">` + time.Now().UTC().Format("2006-01-02T15:04:05Z") + `</meta>

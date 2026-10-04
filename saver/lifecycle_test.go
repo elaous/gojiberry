@@ -202,3 +202,25 @@ func TestTags(t *testing.T) {
 		t.Error("clearing the tags removes the entry")
 	}
 }
+
+func TestTrashKeepsEarlierCopyWithSameName(t *testing.T) {
+	ctx := context.Background()
+	for _, tg := range targets(t) {
+		s := &Saver{Targets: []Target{tg}}
+		for range 2 {
+			key, _ := s.Save(ctx, tg.Name, "a", docfile.JSON, doc())
+			if err := s.Trash(ctx, tg.Name, key); err != nil {
+				t.Fatalf("%s: %v", tg.Name, err)
+			}
+		}
+		tr, err := s.Trashed(ctx, tg.Name)
+		if err != nil || len(tr) != 2 {
+			t.Fatalf("%s: the second trashed copy replaced the first: %+v %v", tg.Name, tr, err)
+		}
+		for _, bad := range []string{"trash/a/b.json", "trash/acl:x.json"} {
+			if _, err := s.Restore(ctx, tg.Name, bad); err == nil {
+				t.Errorf("%s: restored %q", tg.Name, bad)
+			}
+		}
+	}
+}

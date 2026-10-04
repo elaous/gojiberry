@@ -9,9 +9,27 @@ package pdftext
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/dslipak/pdf"
+)
+
+// MaxSize is the largest PDF read, and Timeout how long one may take. A
+// malformed file can send the parser into a loop it never leaves; the wait is
+// then abandoned, but the goroutine is not, so a caller taking PDFs from
+// strangers should also run the import out of process. Under wasm, where one
+// thread runs everything, the timeout cannot fire while the parser spins.
+const (
+	MaxSize = 64 << 20
+	Timeout = 20 * time.Second
+)
+
+// Errors for a PDF that is refused.
+var (
+	ErrTooLarge = errors.New("pdftext: PDF too large")
+	ErrTimeout  = errors.New("pdftext: reading the PDF took too long")
 )
 
 // ExtractPagesBytes parses data (a whole PDF file's own bytes, already
@@ -24,12 +42,36 @@ import (
 // between. Callers matching exact substrings, or wanting readable
 // prose out of pdfimport_wire.go's own Import PDF… feature, need to
 // account for that gap themselves.
-func ExtractPagesBytes(data []byte) ([]string, error) {
-	r, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		return nil, err
+func ExtractPagesBytes(data []byte) (pages []string, err error) {
+	if len(data) > MaxSize {
+		return nil, ErrTooLarge
 	}
-	return extractPages(r)
+	type result struct {
+		pages []string
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() {
+		// The parser panics on some malformed files.
+		defer func() {
+			if p := recover(); p != nil {
+				done <- result{err: fmt.Errorf("pdftext: malformed PDF: %v", p)}
+			}
+		}()
+		r, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			done <- result{err: err}
+			return
+		}
+		pages, err := extractPages(r)
+		done <- result{pages, err}
+	}()
+	select {
+	case res := <-done:
+		return res.pages, res.err
+	case <-time.After(Timeout):
+		return nil, ErrTimeout
+	}
 }
 
 // ExtractBytes is ExtractPagesBytes with every page's own text

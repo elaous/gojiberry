@@ -206,7 +206,7 @@ func wrapHTMLRun(text string, f Format) string {
 	if text == "" {
 		return text
 	}
-	if f.Href != "" {
+	if f.Href != "" && safeHref(f.Href) {
 		text = "<a href=\"" + escapeHTMLAttr(f.Href) + "\">" + text + "</a>"
 	}
 	if f.Underline {

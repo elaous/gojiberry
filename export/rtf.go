@@ -183,7 +183,7 @@ func wrapRTFRun(text string, f Format) string {
 		return text
 	}
 	formatted := wrapRTFRunFormatting(text, f)
-	if f.Href != "" {
+	if f.Href != "" && safeHref(f.Href) {
 		return `{\field{\*\fldinst HYPERLINK "` + escapeRTFText(f.Href) + `"}{\fldrslt ` + formatted + `}}`
 	}
 	return formatted

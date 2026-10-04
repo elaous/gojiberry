@@ -186,7 +186,7 @@ func wrapMarkdownRun(text string, f Format) string {
 	if text == "" {
 		return text
 	}
-	if f.Href != "" {
+	if f.Href != "" && safeHref(f.Href) {
 		text = "[" + text + "](" + f.Href + ")"
 	}
 	if f.Underline {
