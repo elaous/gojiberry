@@ -138,10 +138,13 @@ func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc do
 		return Entry{}, ErrID
 	}
 	var out Entry
-	err := s.update(ctx, target, func(t Target, cat *catalog) error {
+	err := s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		prev, existed := cat.Docs[id]
-		if existed && len(doc.Tags()) == 0 && len(prev.Tags) > 0 {
+		if existed {
+			// The catalog is where tags are edited (SetTags); saving the document
+			// does not bring back what was removed there.
 			doc.SetTags(prev.Tags)
+			doc.SetTrashed(prev.Trashed)
 		}
 		doc.SetID(id)
 		doc.Updated = time.Now().UnixNano()
@@ -153,8 +156,9 @@ func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc do
 		if err := t.Adapter.Save(ctx, key, data); err != nil {
 			return err
 		}
-		if existed && prev.Key != key { // saved in another format: the old file goes
-			_ = t.Adapter.Delete(ctx, prev.Key)
+		if existed && prev.Key != key { // saved in another format: the old file goes, after the catalog
+			old := prev.Key
+			*later = append(*later, func() { _ = t.Adapter.Delete(ctx, old) })
 		}
 		cat.Docs[id] = catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: len(data), Updated: doc.Updated, Tags: doc.Tags(), Trashed: prev.Trashed}
 		out = cat.entry(s, id)
@@ -193,16 +197,16 @@ func (s *Saver) Load(ctx context.Context, target, id string) (docfile.Document, 
 
 // Delete removes a document, its history and its place in the trash for good.
 func (s *Saver) Delete(ctx context.Context, target, id string) error {
-	return s.update(ctx, target, func(t Target, cat *catalog) error {
+	return s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		e, ok := cat.Docs[id]
 		if !ok {
 			return ErrNotFound
 		}
-		if err := t.Adapter.Delete(ctx, e.Key); err != nil && !errors.Is(err, docstore.ErrNotFound) {
-			return err
-		}
 		delete(cat.Docs, id)
-		s.dropVersions(ctx, t, id)
+		*later = append(*later, func() {
+			_ = t.Adapter.Delete(ctx, e.Key)
+			s.dropVersions(ctx, t, id)
+		})
 		return nil
 	})
 }
@@ -216,6 +220,16 @@ func (s *Saver) List(ctx context.Context, target string) ([]Entry, error) {
 		return nil
 	})
 	return out, err
+}
+
+// Lists returns the documents in the target and those in its trash from one read
+// of the catalog, so a document is in exactly one of them.
+func (s *Saver) Lists(ctx context.Context, target string) (live, trashed []Entry, err error) {
+	err = s.view(ctx, target, func(_ Target, cat *catalog) error {
+		live, trashed = cat.sorted(s, false), cat.sorted(s, true)
+		return nil
+	})
+	return live, trashed, err
 }
 
 // Get returns one document's entry.

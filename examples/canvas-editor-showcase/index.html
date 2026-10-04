@@ -5,7 +5,7 @@
   <title>gojiberry editor showcase</title>
   <script>
     // The page may be served at .../d/{doc}: assets are relative to the app, not to that path.
-    document.write('<base href="' + location.pathname.replace(/d\/[^\/]*\/?$/, '') .replace(/[^\/]*$/, '') + '">');
+    document.write('<base href="' + location.pathname.replace(/(^|\/)d\/[^\/]*\/?$/, '$1') .replace(/[^\/]*$/, '') + '">');
   </script>
   <script src="wasm_exec.js"></script>
   <style>

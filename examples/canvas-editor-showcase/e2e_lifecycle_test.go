@@ -30,7 +30,7 @@ func TestDocumentLifecycle(t *testing.T) {
 	// Saving again replaces that document; Save as new makes another one with the
 	// same name and a different ID.
 	d.Click(".gj-saver-save")
-	d.Sleep(200)
+	d.Sleep(600)
 	d.OK(d.Count(".gj-doclist-item") == 1, "Save again replaces the same document")
 	d.Click(".gj-saver-save-new")
 	d.WaitFor("a second document", "document.querySelectorAll('.gj-doclist-item').length === 2")

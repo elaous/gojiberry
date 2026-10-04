@@ -104,9 +104,10 @@ func Link(base string, params url.Values, s Selection) string {
 		return base
 	}
 	if doc := params.Get("doc"); doc != "" {
-		root, _ := SplitPath(u.Path)
-		u.Path = DocPath(root, doc)
-		u.RawPath = ""
+		root, _ := SplitPath(u.EscapedPath())
+		escaped := DocPath(root, doc)
+		u.Path, _ = url.PathUnescape(escaped) // Path is decoded; RawPath keeps the escaping
+		u.RawPath = escaped
 		params = cloneWithout(params, "doc")
 	}
 	q := u.Query()

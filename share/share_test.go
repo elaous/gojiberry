@@ -83,3 +83,16 @@ func TestDocumentInThePath(t *testing.T) {
 		t.Errorf("link = %s", link)
 	}
 }
+
+func TestLinkEscapesTheDocumentOnce(t *testing.T) {
+	for _, doc := range []string{"a b", "a/b", "é", "50%", "plain"} {
+		link := Link("https://h/app/", url.Values{"doc": {doc}}, Selection{})
+		u, err := url.Parse(link)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, got := SplitPath(u.EscapedPath()); got != doc {
+			t.Errorf("%q came back as %q (%s)", doc, got, link)
+		}
+	}
+}

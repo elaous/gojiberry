@@ -77,15 +77,19 @@ func (p *Pending) Run(f func(ctx context.Context) error) {
 		return
 	}
 	p.mu.Lock()
+	if p.busy == 0 {
+		p.err = nil // a new burst of work: the last one's error has been seen
+	}
 	p.busy++
-	p.err = nil
 	p.mu.Unlock()
 	p.notify()
 	job := func() {
 		err := f(context.Background())
 		p.mu.Lock()
 		p.busy--
-		p.err = err
+		if err != nil {
+			p.err = err // a later success does not hide it
+		}
 		p.mu.Unlock()
 		p.notify()
 	}

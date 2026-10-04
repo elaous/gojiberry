@@ -135,10 +135,15 @@ func (s *Site) launch(t testing.TB, o Options) *Tab {
 			chromedp.ExecPath(exe), chromedp.NoSandbox, chromedp.Flag("headless", true),
 			chromedp.Flag("disable-gpu", true), chromedp.WindowSize(o.Width, o.Height))...)
 	ctx, cancel := chromedp.NewContext(alloc)
-	tab := &Tab{t: t, ctx: ctx, site: s, chooser: make(chan struct{}, 1), dlName: make(chan string, 4)}
+	tab := &Tab{t: t, ctx: ctx, site: s, chooser: make(chan struct{}, 8), dlName: make(chan string, 64)}
 	tab.closeFns = append(tab.closeFns, cancel, cancelAlloc)
 	t.Cleanup(tab.Close)
 	chromedp.ListenTarget(ctx, tab.onEvent(o))
+	// Start the browser on the long-lived context: a Run on a context with a
+	// timeout would tie the browser to it.
+	if err := chromedp.Run(ctx); err != nil {
+		t.Fatalf("starting the browser: %v", err)
+	}
 	tab.must(chromedp.Tasks{
 		chromedp.EmulateViewport(int64(o.Width), int64(o.Height)),
 		page.SetInterceptFileChooserDialog(true),
@@ -160,9 +165,20 @@ func (d *Tab) Close() {
 	d.closeFns = nil
 }
 
+// CallTimeout bounds one call to the browser: a page that hangs (or an awaited
+// promise that never settles) fails the test instead of waiting for go test's own
+// limit.
+const CallTimeout = 45 * time.Second
+
+func (d *Tab) run(a chromedp.Action) error {
+	ctx, cancel := context.WithTimeout(d.ctx, CallTimeout)
+	defer cancel()
+	return chromedp.Run(ctx, a)
+}
+
 func (d *Tab) must(a chromedp.Action) {
 	d.t.Helper()
-	if err := chromedp.Run(d.ctx, a); err != nil {
+	if err := d.run(a); err != nil {
 		d.t.Fatalf("browser: %v", err)
 	}
 }
@@ -177,6 +193,13 @@ func (d *Tab) onEvent(o Options) func(any) {
 			}
 			d.addErr(msg)
 		case *runtime.EventConsoleAPICalled:
+			// The Go runtime writes a panic's trace to the console as plain log
+			// output, not as an error: catch that too.
+			for _, a := range e.Args {
+				if v := string(a.Value); strings.Contains(v, "panic: ") || strings.Contains(v, "fatal error: ") {
+					d.addErr(strings.Trim(v, `"`))
+				}
+			}
 			if o.ConsoleErrors && e.Type == runtime.APITypeError {
 				var parts []string
 				for _, a := range e.Args {
@@ -207,10 +230,16 @@ func (d *Tab) onEvent(o Options) func(any) {
 				_ = chromedp.Run(d.ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 					return dom.SetFileInputFiles(files).WithBackendNodeID(id).Do(ctx)
 				}))
-				d.chooser <- struct{}{}
+				select {
+				case d.chooser <- struct{}{}:
+				default:
+				}
 			}()
 		case *browser.EventDownloadWillBegin:
-			d.dlName <- e.SuggestedFilename
+			select {
+			case d.dlName <- e.SuggestedFilename:
+			default: // nobody is waiting for it: never block the event loop
+			}
 		case *fetch.EventRequestPaused:
 			go d.fulfil(e)
 		}
@@ -302,7 +331,7 @@ func (d *Tab) WaitForTimeout(what, expr string, limit time.Duration) {
 	deadline := time.Now().Add(limit)
 	for {
 		var ok bool
-		_ = chromedp.Run(d.ctx, chromedp.Evaluate(`(() => { try { return !!(`+expr+`); } catch (e) { return false; } })()`, &ok))
+		_ = d.run(chromedp.Evaluate(`(() => { try { return !!(`+expr+`); } catch (e) { return false; } })()`, &ok))
 		if ok {
 			return
 		}
@@ -503,7 +532,17 @@ func (d *Tab) clickSel(selector string, clicks int) {
 }
 
 // At turns canvas (#stage) coordinates into page coordinates.
-func (d *Tab) At(x, y float64) (float64, float64) { return d.box[0] + x, d.box[1] + y }
+func (d *Tab) At(x, y float64) (float64, float64) {
+	d.t.Helper()
+	d.refreshBox() // the page may have scrolled or reflowed since it was last measured
+	return d.box[0] + x, d.box[1] + y
+}
+
+func (d *Tab) refreshBox() {
+	var b []float64
+	d.Eval(`(() => { const c = document.getElementById('stage'); if (!c) return [0, 0, 0, 0]; const r = c.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()`, &b)
+	copy(d.box[:], b)
+}
 
 // CanvasClick clicks at canvas coordinates.
 func (d *Tab) CanvasClick(x, y float64) { d.t.Helper(); px, py := d.At(x, y); d.MouseClick(px, py, 1) }
@@ -570,7 +609,7 @@ func (d *Tab) key(typ input.KeyType, k keyDef, mods input.Modifier, text string)
 func (d *Tab) Press(spec string) {
 	d.t.Helper()
 	mods, name := splitKeys(spec)
-	var bits input.Modifier
+	bits := d.mods // keys held with KeyDown count
 	for _, m := range mods {
 		bits |= modBits[m]
 		d.key(input.KeyType("rawKeyDown"), named[m], bits, "")
@@ -587,7 +626,9 @@ func (d *Tab) Press(spec string) {
 	}
 	d.key(input.KeyUp, k, bits, "")
 	for i := len(mods) - 1; i >= 0; i-- {
-		bits &^= modBits[mods[i]]
+		if d.mods&modBits[mods[i]] == 0 {
+			bits &^= modBits[mods[i]]
+		}
 		d.key(input.KeyUp, named[mods[i]], bits, "")
 	}
 }
@@ -620,8 +661,8 @@ func (d *Tab) Type(text string) {
 			continue
 		}
 		k := keyOf(s)
-		d.key(input.KeyDown, k, 0, s)
-		d.key(input.KeyUp, k, 0, "")
+		d.key(input.KeyDown, k, d.mods, s)
+		d.key(input.KeyUp, k, d.mods, "")
 	}
 }
 
@@ -695,7 +736,13 @@ func (d *Tab) Route(substr string, handle func() (status int, contentType string
 	d.mu.Lock()
 	d.routes = append(d.routes, r)
 	d.mu.Unlock()
-	d.must(fetch.Enable().WithPatterns([]*fetch.RequestPattern{{URLPattern: "*" + substr + "*"}}))
+	var patterns []*fetch.RequestPattern
+	d.mu.Lock()
+	for _, c := range d.routes {
+		patterns = append(patterns, &fetch.RequestPattern{URLPattern: "*" + c.substr + "*"})
+	}
+	d.mu.Unlock()
+	d.must(fetch.Enable().WithPatterns(patterns))
 	return func() int { d.mu.Lock(); defer d.mu.Unlock(); return r.hits }
 }
 
@@ -707,13 +754,18 @@ func (d *Tab) fulfil(e *fetch.EventRequestPaused) {
 			r = c
 		}
 	}
-	if r != nil {
+	preflight := e.Request.Method == "OPTIONS"
+	if r != nil && !preflight {
 		r.hits++
 	}
 	d.mu.Unlock()
-	_ = chromedp.Run(d.ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+	_ = d.run(chromedp.ActionFunc(func(ctx context.Context) error {
 		if r == nil {
 			return fetch.ContinueRequest(e.RequestID).Do(ctx)
+		}
+		if preflight { // answer the CORS preflight, which is not a use of the route
+			return fetch.FulfillRequest(e.RequestID, 204).WithResponseHeaders([]*fetch.HeaderEntry{
+				{Name: "access-control-allow-origin", Value: "*"}, {Name: "access-control-allow-headers", Value: "*"}}).Do(ctx)
 		}
 		status, ctype, body := r.handle()
 		return fetch.FulfillRequest(e.RequestID, int64(status)).WithResponseHeaders([]*fetch.HeaderEntry{

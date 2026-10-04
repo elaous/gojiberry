@@ -26,7 +26,7 @@ window.__e2e = window.__e2e || (() => {
     return r.width > 0 && r.height > 0 && st.visibility !== 'hidden' && st.display !== 'none';
   };
   return { all, visible, norm,
-    first: (sel) => all(sel)[0] || null,
+    first: (sel) => { const m = all(sel); return m.find(visible) || m[0] || null; },
     // The centre of the first match, scrolled into view; null while none is visible.
     centre: (sel) => {
       const el = all(sel).find(visible) || null;

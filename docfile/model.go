@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -504,6 +505,7 @@ func (d Document) Get(key string) (string, bool) {
 
 // Set sets a Meta key.
 func (d *Document) Set(key, value string) {
+	d.Meta = slices.Clone(d.Meta) // Document is passed by value: never write through to the caller's slice
 	for i := range d.Meta {
 		if d.Meta[i].Key == key {
 			d.Meta[i].Value = value
@@ -644,7 +646,7 @@ func (d *Document) SetTags(tags []string) {
 		}
 	}
 	if len(clean) == 0 {
-		d.Meta = slices.DeleteFunc(d.Meta, func(m MetaEntry) bool { return m.Key == TagsKey })
+		d.Meta = slices.DeleteFunc(slices.Clone(d.Meta), func(m MetaEntry) bool { return m.Key == TagsKey })
 		return
 	}
 	d.Set(TagsKey, strings.Join(clean, ","))
@@ -708,3 +710,23 @@ func (d Document) Name() string { v, _ := d.Get(NameKey); return v }
 
 // SetName names the document.
 func (d *Document) SetName(name string) { d.Set(NameKey, name) }
+
+// TrashedKey is the Meta key holding when the document was moved to the trash
+// (unix nanoseconds); a document that is not in the trash has none.
+const TrashedKey = "trashed"
+
+// Trashed returns when the document was trashed, 0 if it is not in the trash.
+func (d Document) Trashed() int64 {
+	v, _ := d.Get(TrashedKey)
+	n, _ := strconv.ParseInt(v, 10, 64)
+	return n
+}
+
+// SetTrashed records when the document was trashed; 0 takes it out of the trash.
+func (d *Document) SetTrashed(ns int64) {
+	if ns == 0 {
+		d.Meta = slices.DeleteFunc(slices.Clone(d.Meta), func(m MetaEntry) bool { return m.Key == TrashedKey })
+		return
+	}
+	d.Set(TrashedKey, strconv.FormatInt(ns, 10))
+}

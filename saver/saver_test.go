@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -139,43 +140,65 @@ func TestCatalogIsRebuiltFromTheDocuments(t *testing.T) {
 	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
 	a, _ := s.Save(ctx, "m", docfile.JSON, named("alpha"))
 	b, _ := s.Save(ctx, "m", docfile.ProtoBinary, named("beta"))
+	// Edits made through the catalog are kept in the documents too.
 	if err := s.SetTags(ctx, "m", a.ID, []string{"x"}); err != nil {
 		t.Fatal(err)
 	}
-	// A saved document from before IDs, under its name, is adopted under its key.
-	old := doc()
-	data, _ := docfile.JSON.Marshal(old)
+	if err := s.Rename(ctx, "m", a.ID, "alpha renamed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Trash(ctx, "m", b.ID); err != nil {
+		t.Fatal(err)
+	}
+	// A saved document from before IDs, under its name, gets an ID and the key that goes with it.
+	data, _ := docfile.JSON.Marshal(doc())
 	_ = mem.Save(ctx, "legacy.json", data)
 	if err := mem.Delete(ctx, CatalogKey); err != nil {
 		t.Fatal(err)
 	}
-	list, err := s.List(ctx, "m") // reading a missing catalog builds it
-	if err != nil || len(list) != 3 {
-		t.Fatalf("%v %v", list, err)
+	live, trashed, err := s.Lists(ctx, "m") // reading a missing catalog builds it
+	if err != nil || len(live) != 2 || len(trashed) != 1 {
+		t.Fatalf("%v %v %v", live, trashed, err)
 	}
-	byID := map[string]Entry{}
-	for _, e := range list {
-		byID[e.ID] = e
+	byName := map[string]Entry{}
+	for _, e := range live {
+		byName[e.Name] = e
 	}
-	if byID[a.ID].Name != "alpha" || byID[b.ID].Name != "beta" || byID["legacy"].Name != "legacy" {
-		t.Errorf("%+v", byID)
+	if byName["alpha renamed"].ID != a.ID || !reflect.DeepEqual(byName["alpha renamed"].Tags, []string{"x"}) || trashed[0].ID != b.ID {
+		t.Errorf("a rebuilt catalog lost an edit: %+v %+v", byName, trashed)
 	}
-	if got, err := s.Load(ctx, "m", "legacy"); err != nil || got.Title != "Notes" {
+	leg := byName["legacy"]
+	if !docfile.ValidID(leg.ID) || leg.Key != leg.ID+".json" {
+		t.Fatalf("legacy document: %+v", leg)
+	}
+	if _, err := mem.Load(ctx, "legacy.json"); !errors.Is(err, docstore.ErrNotFound) {
+		t.Error("the old key should be gone")
+	}
+	got, err := s.Load(ctx, "m", leg.ID)
+	if err != nil || got.Title != "Notes" {
 		t.Errorf("%+v %v", got, err)
 	}
-	// A damaged catalog is rebuilt too, and keeps what the catalog alone knew (trash).
-	if err := s.Trash(ctx, "m", b.ID); err != nil {
-		t.Fatal(err)
+	// It can be saved back and versioned like any other.
+	if _, err := s.Save(ctx, "m", docfile.JSON, got); err != nil {
+		t.Errorf("saving an adopted document: %v", err)
 	}
-	_ = mem.Save(ctx, CatalogKey, []byte("{not json"))
-	if list, _ = s.List(ctx, "m"); len(list) != 3 {
-		t.Fatalf("after damage: %v", list)
+	if _, err := s.SaveVersion(ctx, "m", docfile.JSON, got); err != nil {
+		t.Errorf("versioning an adopted document: %v", err)
 	}
+	// Two legacy files with one stem are two documents.
+	_ = mem.Save(ctx, "twin.json", data)
+	pb, _ := docfile.ProtoBinary.Marshal(doc())
+	_ = mem.Save(ctx, "twin.pb", pb)
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
 	}
-	if tr, _ := s.Trashed(ctx, "m"); len(tr) != 0 {
-		t.Logf("a damaged catalog forgets the trash: %v", tr) // documented: only the documents are the source of truth
+	if list, _ := s.List(ctx, "m"); len(list) != 4 {
+		t.Errorf("same-stem legacy files collided: %v", list)
+	}
+	// A damaged catalog is rebuilt too.
+	_ = mem.Save(ctx, CatalogKey, []byte("{not json"))
+	if list, _ := s.List(ctx, "m"); len(list) != 4 {
+		t.Fatalf("after damage: %v", list)
 	}
 }
 

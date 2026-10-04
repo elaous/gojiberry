@@ -41,6 +41,7 @@ type Session struct {
 	// them inline.
 	Pending *components.Pending
 
+	op                   sync.Mutex // one saving, opening or deleting at a time
 	mu                   sync.Mutex
 	target, format, name string
 	id                   string // the saved document being edited, "" for one never saved
@@ -129,12 +130,8 @@ func (s *Session) Detach() { s.set(func() { s.id = "" }) }
 // the versions of the document being edited.
 func (s *Session) Refresh(ctx context.Context) error {
 	target, id := s.targetName(), s.ID()
-	list, err := s.Saver.List(ctx, target)
-	var trashed []Entry
+	list, trashed, err := s.Saver.Lists(ctx, target) // one read: a document is in one list
 	var versions []Version
-	if err == nil {
-		trashed, err = s.Saver.Trashed(ctx, target)
-	}
 	if err == nil && id != "" {
 		versions, _ = s.Saver.Versions(ctx, target, id)
 	}
@@ -179,12 +176,18 @@ func (s *Session) after(ctx context.Context, msg string) error {
 
 // current is the document to save, named and with the ID of the one being edited.
 func (s *Session) current() (docfile.Document, docfile.Codec, error) {
+	doc, c, _, err := s.currentIn()
+	return doc, c, err
+}
+
+// currentIn is current and the target it is for, read together.
+func (s *Session) currentIn() (docfile.Document, docfile.Codec, string, error) {
 	s.mu.Lock()
-	format, name, id := s.format, s.name, s.id
+	format, name, id, target := s.format, s.name, s.id, s.target
 	s.mu.Unlock()
 	c, err := s.Saver.Codec(format)
 	if err != nil {
-		return docfile.Document{}, nil, err
+		return docfile.Document{}, nil, "", err
 	}
 	var doc docfile.Document
 	s.ui(func() { doc = s.Get() })
@@ -195,34 +198,48 @@ func (s *Session) current() (docfile.Document, docfile.Codec, error) {
 	if id != "" {
 		doc.SetID(id)
 	}
-	return doc, c, nil
+	return doc, c, target, nil
 }
 
 // Save writes the current document to the target in the chosen format: as the
 // saved document being edited if there is one, else as a new document.
 func (s *Session) Save(ctx context.Context) error {
-	doc, c, err := s.current()
+	s.op.Lock()
+	defer s.op.Unlock()
+	return s.save(ctx)
+}
+
+func (s *Session) save(ctx context.Context) error {
+	doc, c, target, err := s.currentIn()
 	if err != nil {
 		return err
 	}
-	e, err := s.Saver.Save(ctx, s.targetName(), c, doc)
+	e, err := s.Saver.Save(ctx, target, c, doc)
 	if err != nil {
 		return err
 	}
-	s.set(func() { s.id = e.ID })
+	s.set(func() {
+		if s.target == target { // not if the user has moved on to another target meanwhile
+			s.id = e.ID
+		}
+	})
 	return s.after(ctx, "Saved "+e.Name)
 }
 
 // SaveAsNew saves the current document as a new document, with a new ID, leaving
 // the one that was open as it was.
 func (s *Session) SaveAsNew(ctx context.Context) error {
+	s.op.Lock()
+	defer s.op.Unlock()
 	s.Detach()
-	return s.Save(ctx)
+	return s.save(ctx)
 }
 
 // Open loads a saved document and hands it to OnOpen, taking its ID, name and
 // format.
 func (s *Session) Open(ctx context.Context, id string) error {
+	s.op.Lock()
+	defer s.op.Unlock()
 	target := s.targetName()
 	doc, err := s.Saver.Load(ctx, target, id)
 	if err != nil {
@@ -246,6 +263,8 @@ func (s *Session) Open(ctx context.Context, id string) error {
 
 // Delete removes a saved document for good, with no trash in between.
 func (s *Session) Delete(ctx context.Context, id string) error {
+	s.op.Lock()
+	defer s.op.Unlock()
 	if err := s.Saver.Delete(ctx, s.targetName(), id); err != nil {
 		return err
 	}
@@ -300,6 +319,11 @@ func (s *Session) TrashDocs(ctx context.Context, ids []string) error {
 	if err := s.Saver.Trash(ctx, s.targetName(), ids...); err != nil {
 		return err
 	}
+	s.set(func() {
+		if slices.Contains(ids, s.id) {
+			s.id = "" // the open document is in the trash: saving is a new document
+		}
+	})
 	return s.after(ctx, fmt.Sprintf("Moved %d to the trash", len(ids)))
 }
 

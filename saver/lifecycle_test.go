@@ -253,3 +253,43 @@ func TestRenameAndTags(t *testing.T) {
 		t.Error("clearing the tags removes the entry")
 	}
 }
+
+func TestPurgeChangesNothingWhenOneIDIsWrong(t *testing.T) {
+	ctx := context.Background()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: docstore.NewMemoryAdapter()}}}
+	b := saved(t, s, "m", "b", docfile.JSON)
+	c := saved(t, s, "m", "c", docfile.JSON)
+	if err := s.Trash(ctx, "m", b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Purge(ctx, "m", b.ID, c.ID); err == nil {
+		t.Fatal("c is not in the trash")
+	}
+	if got, err := s.Load(ctx, "m", b.ID); err != nil || got.Name() != "b" {
+		t.Errorf("a failed purge left b broken: %+v %v", got, err)
+	}
+	if tr, _ := s.Trashed(ctx, "m"); len(tr) != 1 {
+		t.Errorf("trash %v", tr)
+	}
+}
+
+func TestSavingDoesNotBringBackRemovedTags(t *testing.T) {
+	ctx := context.Background()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: docstore.NewMemoryAdapter()}}}
+	e := saved(t, s, "m", "a", docfile.JSON)
+	_ = s.SetTags(ctx, "m", e.ID, []string{"t"})
+	stale, _ := s.Load(ctx, "m", e.ID) // an editor holding the document with its tag
+	_ = s.SetTags(ctx, "m", e.ID, nil) // the tag is removed in the list
+	again, err := s.Save(ctx, "m", docfile.JSON, stale)
+	if err != nil || len(again.Tags) != 0 {
+		t.Fatalf("%+v %v", again, err)
+	}
+	// And a trashed document stays trashed when it is saved.
+	_ = s.Trash(ctx, "m", e.ID)
+	if _, err := s.Save(ctx, "m", docfile.JSON, stale); err != nil {
+		t.Fatal(err)
+	}
+	if tr, _ := s.Trashed(ctx, "m"); len(tr) != 1 {
+		t.Errorf("trash %v", tr)
+	}
+}

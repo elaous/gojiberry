@@ -61,6 +61,9 @@ func (s *Saver) SaveVersion(ctx context.Context, target string, c docfile.Codec,
 	if !docfile.ValidID(id) {
 		return Version{}, ErrID
 	}
+	if _, err := s.Get(ctx, target, id); err != nil {
+		return Version{}, err // a late snapshot of a deleted document would be an orphan
+	}
 	now := time.Now()
 	doc.Updated = now.UnixNano()
 	data, err := c.Marshal(doc)
@@ -174,19 +177,26 @@ func (s *Saver) dropVersions(ctx context.Context, t Target, id string) {
 	}
 }
 
-// mark sets or clears the trash flag of each document.
+// mark sets or clears the trash flag of each document, in the document and the
+// catalog; it changes nothing unless every ID is there.
 func (s *Saver) mark(ctx context.Context, target string, ids []string, trashed bool) error {
-	return s.update(ctx, target, func(_ Target, cat *catalog) error {
+	return s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
 		for _, id := range ids {
-			e, ok := cat.Docs[id]
-			if !ok {
+			if _, ok := cat.Docs[id]; !ok {
 				return fmt.Errorf("%w: %s", ErrNotFound, id)
 			}
+		}
+		now := time.Now().UnixNano()
+		for _, id := range ids {
+			e := cat.Docs[id]
+			stamp := int64(0)
 			if trashed {
-				e.Trashed = time.Now().UnixNano()
-			} else {
-				e.Trashed = 0
+				stamp = now
 			}
+			if err := s.touch(ctx, t, &e, func(d *docfile.Document) { d.SetTrashed(stamp) }); err != nil {
+				return err
+			}
+			e.Trashed = stamp
 			cat.Docs[id] = e
 		}
 		return nil
@@ -214,10 +224,10 @@ func (s *Saver) Trashed(ctx context.Context, target string) ([]Entry, error) {
 	return out, err
 }
 
-// Purge deletes documents in the trash for good; one that is not in the trash is
-// left alone and reported.
+// Purge deletes documents in the trash for good. It checks every ID first and
+// changes nothing if one is missing or not in the trash.
 func (s *Saver) Purge(ctx context.Context, target string, ids ...string) error {
-	return s.update(ctx, target, func(t Target, cat *catalog) error {
+	return s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		for _, id := range ids {
 			e, ok := cat.Docs[id]
 			if !ok {
@@ -226,11 +236,14 @@ func (s *Saver) Purge(ctx context.Context, target string, ids ...string) error {
 			if e.Trashed == 0 {
 				return fmt.Errorf("saver: %s is not in the trash", id)
 			}
-			if err := t.Adapter.Delete(ctx, e.Key); err != nil && !errors.Is(err, docstore.ErrNotFound) {
-				return err
-			}
+		}
+		for _, id := range ids {
+			e := cat.Docs[id]
 			delete(cat.Docs, id)
-			s.dropVersions(ctx, t, id)
+			*later = append(*later, func() {
+				_ = t.Adapter.Delete(ctx, e.Key)
+				s.dropVersions(ctx, t, id)
+			})
 		}
 		return nil
 	})
@@ -278,10 +291,13 @@ func (s *Saver) Rename(ctx context.Context, target, id, name string) error {
 	if !ValidName(name) {
 		return ErrName
 	}
-	return s.update(ctx, target, func(_ Target, cat *catalog) error {
+	return s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
 		e, ok := cat.Docs[id]
 		if !ok {
 			return ErrNotFound
+		}
+		if err := s.touch(ctx, t, &e, func(d *docfile.Document) { d.SetName(name) }); err != nil {
+			return err
 		}
 		e.Name = name
 		cat.Docs[id] = e
@@ -292,14 +308,17 @@ func (s *Saver) Rename(ctx context.Context, target, id, name string) error {
 // SetTags replaces the tags of a document (trimmed, without repeats; see
 // Document.SetTags).
 func (s *Saver) SetTags(ctx context.Context, target, id string, tags []string) error {
-	var d docfile.Document
-	d.SetTags(tags)
-	return s.update(ctx, target, func(_ Target, cat *catalog) error {
+	var clean docfile.Document
+	clean.SetTags(tags)
+	return s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
 		e, ok := cat.Docs[id]
 		if !ok {
 			return ErrNotFound
 		}
-		e.Tags = d.Tags()
+		if err := s.touch(ctx, t, &e, func(d *docfile.Document) { d.SetTags(clean.Tags()) }); err != nil {
+			return err
+		}
+		e.Tags = clean.Tags()
 		cat.Docs[id] = e
 		return nil
 	})

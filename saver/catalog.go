@@ -15,8 +15,9 @@ import (
 // CatalogKey is where a target keeps its catalog: one small document listing
 // every saved document by ID with its name, tags and whether it is in the
 // trash, so a document list is one read, not one read per document. The
-// documents hold the same facts (Document.ID, Name and Tags), so a lost or
-// damaged catalog is rebuilt from them (Saver.Rebuild).
+// documents hold the same facts (Document.ID, Name, Tags and Trashed), kept in
+// step by every operation, so a lost or damaged catalog is rebuilt from them
+// (Saver.Rebuild).
 const CatalogKey = "catalog:index"
 
 type catalogEntry struct {
@@ -68,9 +69,11 @@ func (s *Saver) writeCatalog(ctx context.Context, t Target, c *catalog) error {
 	return t.Adapter.Save(ctx, CatalogKey, data)
 }
 
-// update runs f on the target's catalog and writes it back, one update at a
-// time within this process.
-func (s *Saver) update(ctx context.Context, target string, f func(t Target, c *catalog) error) error {
+// update runs f on the target's catalog and writes it back, one update at a time
+// within this process. f may add to later the work to do once the catalog is
+// written (deleting files): the catalog goes first, so a failure in between leaves
+// an orphan file, which a rebuild can find, never an entry pointing at nothing.
+func (s *Saver) update(ctx context.Context, target string, f func(t Target, c *catalog, later *[]func()) error) error {
 	t, err := s.Target(target)
 	if err != nil {
 		return err
@@ -81,10 +84,17 @@ func (s *Saver) update(ctx context.Context, target string, f func(t Target, c *c
 	if err != nil {
 		return err
 	}
-	if err := f(t, c); err != nil {
+	var later []func()
+	if err := f(t, c, &later); err != nil {
 		return err
 	}
-	return s.writeCatalog(ctx, t, c)
+	if err := s.writeCatalog(ctx, t, c); err != nil {
+		return err
+	}
+	for _, g := range later {
+		g()
+	}
+	return nil
 }
 
 // view runs f on the target's catalog without writing it.
@@ -118,13 +128,6 @@ func (s *Saver) Rebuild(ctx context.Context, target string) error {
 }
 
 func (s *Saver) rebuild(ctx context.Context, t Target) (*catalog, error) {
-	old := &catalog{Docs: map[string]catalogEntry{}}
-	if stored, err := t.Adapter.Load(ctx, CatalogKey); err == nil {
-		_ = json.Unmarshal(stored.Data, old) // trash flags survive a rebuild
-		if old.Docs == nil {
-			old.Docs = map[string]catalogEntry{}
-		}
-	}
 	metas, err := t.Adapter.List(ctx)
 	if err != nil {
 		return nil, err
@@ -146,27 +149,74 @@ func (s *Saver) rebuild(ctx context.Context, t Target) (*catalog, error) {
 		if err != nil {
 			continue
 		}
+		key, size := m.ID, m.Size
 		id := doc.ID()
 		if !docfile.ValidID(id) {
+			// A document from before IDs, under its name: it gets an ID, and its file
+			// the key that goes with it.
 			id = stem
-		}
-		name := doc.Name()
-		if name == "" {
-			name = stem
-		}
-		e := catalogEntry{Key: m.ID, Name: name, Format: c.Name(), Size: m.Size, Updated: m.UpdatedAt.UnixNano(), Tags: doc.Tags()}
-		if prev, ok := old.Docs[id]; ok {
-			e.Trashed = prev.Trashed
-			if len(prev.Tags) > 0 {
-				e.Tags = prev.Tags
+			if !docfile.ValidID(id) {
+				id = docfile.NewID()
 			}
+			if doc.Name() == "" {
+				doc.SetName(stem)
+			}
+			doc.SetID(id)
+			data, err := c.Marshal(doc)
+			if err != nil {
+				return nil, err
+			}
+			newKey := id + c.Ext()
+			if err := t.Adapter.Save(ctx, newKey, data); err != nil {
+				return nil, err
+			}
+			if newKey != m.ID {
+				_ = t.Adapter.Delete(ctx, m.ID)
+			}
+			key, size = newKey, len(data)
 		}
-		out.Docs[id] = e
+		// Two files with one ID (a crash between writing a new format and deleting the
+		// old): the newer one is the document.
+		if prev, ok := out.Docs[id]; ok && prev.Updated >= m.UpdatedAt.UnixNano() {
+			continue
+		}
+		out.Docs[id] = catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: size, Updated: m.UpdatedAt.UnixNano(), Tags: doc.Tags(), Trashed: doc.Trashed()}
+	}
+	for id, e := range out.Docs {
+		if e.Name == "" {
+			e.Name = id
+			out.Docs[id] = e
+		}
 	}
 	if err := s.writeCatalog(ctx, t, out); err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+// touch rewrites a document's own metadata (name, tags, trash flag) so the
+// document and the catalog agree and a rebuilt catalog loses nothing. The
+// document's Updated time is not changed.
+func (s *Saver) touch(ctx context.Context, t Target, e *catalogEntry, f func(*docfile.Document)) error {
+	c, _ := s.codecOf(e.Key)
+	if c == nil {
+		return nil
+	}
+	stored, err := t.Adapter.Load(ctx, e.Key)
+	if err != nil {
+		return err
+	}
+	doc, err := c.Unmarshal(stored.Data)
+	if err != nil {
+		return err
+	}
+	f(&doc)
+	data, err := c.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	e.Size = len(data)
+	return t.Adapter.Save(ctx, e.Key, data)
 }
 
 // sorted returns the catalog's entries (those in or out of the trash), newest
