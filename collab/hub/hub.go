@@ -68,6 +68,12 @@ type Config struct {
 	SaveDelay time.Duration
 	// KeepAlive is how often an idle event stream is pinged; 0 means 15s.
 	KeepAlive time.Duration
+	// PresenceInterval is the least time between two updates of one
+	// replica's cursor sent to the others: updates that come faster are
+	// merged and the latest goes out when the interval ends (so a cursor
+	// dragged across the text costs a few messages a second, not hundreds).
+	// 0 means 100ms; negative sends every update at once.
+	PresenceInterval time.Duration
 	// PresenceTTL is how long a cursor stays after its last update; 0
 	// means 10 seconds.
 	PresenceTTL time.Duration
@@ -102,6 +108,9 @@ func New(cfg Config) *Hub {
 	}
 	if cfg.KeepAlive == 0 {
 		cfg.KeepAlive = 15 * time.Second
+	}
+	if cfg.PresenceInterval == 0 {
+		cfg.PresenceInterval = 100 * time.Millisecond
 	}
 	if cfg.PresenceTTL == 0 {
 		cfg.PresenceTTL = 10 * time.Second
@@ -150,6 +159,23 @@ type room struct {
 type presenceEntry struct {
 	p    Presence
 	seen time.Time
+
+	// lastSent is when this cursor was last passed to the others, and timer
+	// (when set) is a send of the latest one scheduled for the end of the
+	// throttling interval.
+	lastSent time.Time
+	timer    *time.Timer
+}
+
+// dropPresence forgets a replica's cursor and any send still scheduled for it
+// (rm.mu held).
+func (rm *room) dropPresence(replica string) {
+	if e, ok := rm.pres[replica]; ok {
+		if e.timer != nil {
+			e.timer.Stop()
+		}
+		delete(rm.pres, replica)
+	}
 }
 
 var errTooManyRooms = errors.New("hub: too many documents")
@@ -562,9 +588,46 @@ func (h *Hub) prunePresence(rm *room) {
 	cutoff := h.now().Add(-h.cfg.PresenceTTL)
 	for id, e := range rm.pres {
 		if e.seen.Before(cutoff) {
-			delete(rm.pres, id)
+			rm.dropPresence(id)
 			rm.broadcast(id, jsonEvent("presence", Presence{Replica: id, Gone: true}))
 		}
+	}
+}
+
+// setPresence records p as its replica's cursor (what newcomers are told at
+// once) and tells the others, at most once per PresenceInterval: an update
+// inside the interval is held, and one send of the latest value goes out when
+// it ends (rm.mu held).
+func (h *Hub) setPresence(rm *room, p Presence) {
+	now := h.now()
+	e := rm.pres[p.Replica]
+	e.p, e.seen = p, now
+	interval := h.cfg.PresenceInterval
+	switch {
+	case interval < 0 || now.Sub(e.lastSent) >= interval:
+		if e.timer != nil {
+			e.timer.Stop()
+			e.timer = nil
+		}
+		e.lastSent = now
+		rm.pres[p.Replica] = e
+		rm.broadcast(p.Replica, jsonEvent("presence", p))
+	case e.timer == nil:
+		replica := p.Replica
+		e.timer = time.AfterFunc(interval-now.Sub(e.lastSent), func() {
+			rm.mu.Lock()
+			defer rm.mu.Unlock()
+			cur, ok := rm.pres[replica]
+			if !ok {
+				return
+			}
+			cur.timer, cur.lastSent = nil, h.now()
+			rm.pres[replica] = cur
+			rm.broadcast(replica, jsonEvent("presence", cur.p)) // the latest, whatever came meanwhile
+		})
+		rm.pres[p.Replica] = e
+	default:
+		rm.pres[p.Replica] = e // the scheduled send will carry this one
 	}
 }
 
@@ -599,8 +662,7 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "too many people on this document", http.StatusTooManyRequests)
 		return
 	}
-	rm.pres[p.Replica] = presenceEntry{p: p, seen: h.now()}
-	rm.broadcast(p.Replica, jsonEvent("presence", p))
+	h.setPresence(rm, p)
 	rm.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -643,7 +705,7 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 		if replica != "" {
 			// Always say so: an idle replica's cursor may have been pruned
 			// already, and its peers would otherwise keep the ghost.
-			delete(rm.pres, replica)
+			rm.dropPresence(replica)
 			rm.broadcast(replica, jsonEvent("presence", Presence{Replica: replica, Gone: true}))
 		}
 		rm.mu.Unlock()

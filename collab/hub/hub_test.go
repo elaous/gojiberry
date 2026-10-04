@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -551,5 +552,74 @@ func TestACLRolesWithChoosesTheRoleForUnsharedDocuments(t *testing.T) {
 		if got := ACLRolesWith(store, nil, tc.noACL)(req, tc.doc); got != tc.want {
 			t.Errorf("noACL %q on %s: %q, want %q", tc.noACL, tc.doc, got, tc.want)
 		}
+	}
+}
+
+func TestPresenceUpdatesAreThrottledAndTheLatestAlwaysArrives(t *testing.T) {
+	h := New(Config{PresenceInterval: 80 * time.Millisecond, KeepAlive: time.Second})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL+"/docs/d/events?replica=watcher", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var mu sync.Mutex
+	var names []string
+	go func() {
+		sc := bufio.NewScanner(resp.Body)
+		for sc.Scan() {
+			if line, ok := strings.CutPrefix(sc.Text(), "data: "); ok && strings.Contains(line, `"replica":"mover"`) {
+				var p Presence
+				if json.Unmarshal([]byte(line), &p) == nil {
+					mu.Lock()
+					names = append(names, p.Name)
+					mu.Unlock()
+				}
+			}
+		}
+	}()
+	for i := 0; i < 30; i++ { // a cursor dragged across the text
+		body := `{"replica":"mover","name":"n` + strconv.Itoa(i) + `"}`
+		r, err := http.Post(srv.URL+"/docs/d/presence", "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Body.Close()
+		time.Sleep(5 * time.Millisecond)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		got := append([]string(nil), names...)
+		mu.Unlock()
+		if len(got) > 0 && got[len(got)-1] == "n29" {
+			if len(got) > 6 {
+				t.Fatalf("30 updates in ~150ms became %d messages: %v", len(got), got)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the latest update never arrived: %v", got)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestPresenceThrottleCanBeSwitchedOff(t *testing.T) {
+	h := New(Config{PresenceInterval: -1})
+	rm := &room{subs: map[*sub]bool{}, pres: map[string]presenceEntry{}}
+	w := &sub{replica: "w", ch: make(chan event, 16)}
+	rm.subs[w] = true
+	for i := 0; i < 5; i++ {
+		rm.mu.Lock()
+		h.setPresence(rm, Presence{Replica: "m", Name: strconv.Itoa(i)})
+		rm.mu.Unlock()
+	}
+	if len(w.ch) != 5 {
+		t.Fatalf("a negative interval sends every update: %d", len(w.ch))
 	}
 }
