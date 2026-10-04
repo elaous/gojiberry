@@ -270,7 +270,7 @@ presence following the text, a viewer's edit refused while its comment gets
 through, a connection cut mid-session (both sides converge, nothing left
 waiting), and a refused connection reported.
 
-Not yet: presence is sent on demand, not throttled.
+Not yet: nothing outstanding that is known.
 
 ## Phase 4 as built
 
@@ -308,3 +308,4 @@ Not yet: presence is sent on demand, not throttled.
 - A session repairs itself when the server refuses something it sent (`Session.Repair`, called by `Poll` unless `NoRepair`): the replica is dropped, a new one joins from the server's copy, and the flow shows what the server has; the refused edits are lost.
 - Inline images are shared by URL (see `docfile.ImageItem`); an image that cannot be saved (no URL) is refused by the bridge. Embed images as `data:` URLs only when small: they travel inside the document's operations.
 - `hub.ACLRolesWith(store, who, noACL)` chooses what everyone may do on a document that has no ACL (`GOJIBERRY_COLLAB_NO_ACL_ROLE=owner|editor|viewer|none` for `cmd/collabhub`); `none` makes only shared documents open.
+- Presence is throttled at both ends: a client sends at most one cursor update per `client.Options.PresenceInterval` (default 100ms) and the hub passes on at most one per replica per `hub.Config.PresenceInterval` (default 100ms, `GOJIBERRY_COLLAB_PRESENCE_INTERVAL` for `cmd/collabhub`; negative turns it off). Updates inside the interval are merged and the latest always goes out when it ends, so a cursor dragged across the text costs a few messages a second and the final position is never lost. Newcomers are told each cursor's latest position at once.
