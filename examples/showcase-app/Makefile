@@ -1,5 +1,5 @@
 # showcase-app dev workflow. Run `make run` for the full path from a
-# clean checkout: regenerates .go from every *.gox in this tree, builds
+# clean checkout: regenerates .go from every *.xg in this tree, builds
 # the main WASM client and the separate worker/ WASM binary it spawns,
 # stages the components package's CSS alongside them, and serves it --
 # then open http://localhost:8080/.
@@ -9,7 +9,7 @@ run: generate wasm
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/goxc examples/showcase-app
+	cd ../.. && go run ./cmd/xgc examples/showcase-app
 
 .PHONY: wasm
 wasm:

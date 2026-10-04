@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // PresencePeer is one person at the document.
@@ -47,8 +47,8 @@ func initials(name string) string {
 // their cursor color, with their name and role as the tip -- the state of the
 // connection, and, for a viewer, a "View only" badge. It is controlled; feed
 // it from collab.Session.
-func Presence(props PresenceProps) gox.Node {
-	avatar := func(p PresencePeer, self bool) gox.Node {
+func Presence(props PresenceProps) xango.Node {
+	avatar := func(p PresencePeer, self bool) xango.Node {
 		title := p.Name
 		if title == "" {
 			title = p.User
@@ -64,14 +64,14 @@ func Presence(props PresenceProps) gox.Node {
 		if color == "" {
 			color = "#7c5cff"
 		}
-		return gox.El("span", []gox.Attr{gox.A("class", class), gox.A("title", title), gox.A("data-name", p.Name),
-			gox.A("style", "background:"+color)}, gox.Text(initials(orString(p.Name, p.User))))
+		return xango.El("span", []xango.Attr{xango.A("class", class), xango.A("title", title), xango.A("data-name", p.Name),
+			xango.A("style", "background:"+color)}, xango.Text(initials(orString(p.Name, p.User))))
 	}
-	people := []gox.Node{avatar(props.Self, true)}
+	people := []xango.Node{avatar(props.Self, true)}
 	for _, p := range props.Peers {
 		people = append(people, avatar(p, false))
 	}
-	kids := []gox.Node{gox.El("span", []gox.Attr{gox.A("class", "gj-presence-people"), gox.A("role", "list"), gox.A("aria-label", "People here")}, people...)}
+	kids := []xango.Node{xango.El("span", []xango.Attr{xango.A("class", "gj-presence-people"), xango.A("role", "list"), xango.A("aria-label", "People here")}, people...)}
 	if props.Status != "" {
 		label := map[string]string{"online": "Online", "connecting": "Connecting…", "offline": "Offline"}[props.Status]
 		if label == "" {
@@ -80,13 +80,13 @@ func Presence(props PresenceProps) gox.Node {
 		if props.Pending > 0 {
 			label += " · " + itoa(props.Pending) + " waiting to send"
 		}
-		kids = append(kids, gox.El("span", []gox.Attr{gox.A("class", "gj-presence-status gj-presence-"+props.Status), gox.A("role", "status")},
-			gox.El("span", []gox.Attr{gox.A("class", "gj-presence-dot")}), gox.Text(label)))
+		kids = append(kids, xango.El("span", []xango.Attr{xango.A("class", "gj-presence-status gj-presence-"+props.Status), xango.A("role", "status")},
+			xango.El("span", []xango.Attr{xango.A("class", "gj-presence-dot")}), xango.Text(label)))
 	}
 	if props.Role == "viewer" {
-		kids = append(kids, gox.El("span", []gox.Attr{gox.A("class", "gj-presence-badge")}, gox.Text("View only")))
+		kids = append(kids, xango.El("span", []xango.Attr{xango.A("class", "gj-presence-badge")}, xango.Text("View only")))
 	}
-	return gox.El("div", []gox.Attr{gox.A("class", "gj-presence")}, kids...)
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-presence")}, kids...)
 }
 
 func orString(a, b string) string {

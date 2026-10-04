@@ -11,8 +11,8 @@ by line, so treat the effort notes as estimates).
 opendocs does **not** use gojiberry's `canvas` package. Its editor is its own:
 `editor/model` (30k lines: a gap-buffer `Document`, `BlockMeta` per line,
 its own layout, columns and frames, tables, undo, sync) drawn on a canvas by
-`editor/*.go` (wasm-only). It imports from gojiberry only `gox`, `domrt`,
-`goxgio`, `components`, `crdt`, `buffer`, `fontserver` and `syncserver`.
+`editor/*.go` (wasm-only). It imports from gojiberry only `xango`, `domrt`,
+`xangogio`, `components`, `crdt`, `buffer`, `fontserver` and `syncserver`.
 
 So "port to opendocs V1" is really a choice, and it should be made before
 copying features across:
@@ -20,7 +20,7 @@ copying features across:
 | | Move opendocs onto gojiberry's `canvas` | Keep opendocs' engine, adopt gojiberry's services |
 |---|---|---|
 | What it means | `editor/model` + rendering are replaced by `canvas.TextFlow`/`PageSet`/elements | gojiberry's collab, saver, guard, share and stats are plugged into `model.Document` |
-| Gains | one engine to maintain; gox element tree; per-user undo and the CRDT bridge already work | no rewrite; opendocs' columns/frames/tables stay |
+| Gains | one engine to maintain; xango element tree; per-user undo and the CRDT bridge already work | no rewrite; opendocs' columns/frames/tables stay |
 | Costs | opendocs' multi-column frames, table merge/split/styling, forms, index marks, hyphenation, a11y surface would have to be rebuilt in `canvas` | the collab bridge is written against `canvas.TextFlow` (atoms/marks), so it would need a second bridge for `model.Document` |
 
 The rest of this page lists the pieces that are worth having either way.
@@ -45,7 +45,7 @@ The rest of this page lists the pieces that are worth having either way.
 
 - `collab` (this PR series): per-user undo, roles enforced on the server, HTTP and WebSocket transports, `<collab.Collab>`, and now headers, footers and objects. opendocs uses `syncserver` with a character CRDT that, per its own roadmap, loses per-character formatting on remote edits and re-sends every line's order on each push.
 - `guard`, token and origin checks in front of any hub.
-- `canvas/gox`: the whole editor as one component tree (the showcase's `app.gox`).
+- `canvas/xango`: the whole editor as one component tree (the showcase's `app.xg`).
 - `saver`, `transfer`, `fonts` (lazy font downloads), and this PR's `canvas.CountText`/`TextFlow.Stats` and `share` (links to selected text).
 
 ## What opendocs has in the editor that the showcase does not

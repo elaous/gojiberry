@@ -1,14 +1,14 @@
-// Package canvas is the gox-canvas demo: a bare-minimum Google-Docs
+// Package canvas is the xango-canvas demo: a bare-minimum Google-Docs
 // -style typing canvas. Store holds the plain-Go business logic (DB
 // queries, no framework dependency) that both the Encore-annotated
 // handlers (api.go) and the plain net/http dev server
 // (cmd/devserver) call into, so the two entry points share one
 // implementation instead of duplicating it.
 //
-// Queries are plain database/sql, not gox's sqlc-backed .sql import:
+// Queries are plain database/sql, not xango's sqlc-backed .sql import:
 // sqlc isn't installed in the environment this was built in, so using
 // it here would mean shipping an example that can't actually be
-// regenerated or verified. They're annotated with the gox VS Code
+// regenerated or verified. They're annotated with the xango VS Code
 // extension's `//language=SQL` marker instead, for real editor value
 // without depending on a tool this session couldn't install.
 package canvas
@@ -33,7 +33,7 @@ func NewStore(db *sql.DB) *Store {
 }
 
 // sqlQuery strips a leading `//language=SQL` Go comment line if
-// present. The marker is a real editor annotation (see the gox VS
+// present. The marker is a real editor annotation (see the xango VS
 // Code extension), not SQL comment syntax -- Postgres only recognizes
 // `--`, not `//` -- so it has to come out of the string before it's
 // sent to the driver, or the "query" is actually "a Go comment

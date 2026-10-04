@@ -16,15 +16,15 @@ import (
 // needing a concrete type can json.Unmarshal(...Bytes, &v) itself.
 //
 // With `alias.(TypeName) "file.json"`: TypeName must already be
-// declared (by you, elsewhere in the package or an import) -- gox
+// declared (by you, elsewhere in the package or an import) -- xango
 // does not generate it or infer its shape. This just decodes directly
 // into that type instead of `any` (or `[]TypeName` for .jsonl), the
 // same as the untyped path's json.Unmarshal(...Bytes, &v) but with
-// the boilerplate written for you. Because gox isn't guessing a shape
+// the boilerplate written for you. Because xango isn't guessing a shape
 // from sample data, any JSON value (not just a top-level object) is
 // fine, and the only failure mode is the ordinary one of your type
 // not matching your data -- ordinary encoding/json risk, not a
-// gox-specific one.
+// xango-specific one.
 //
 // .jsonc allows // and /* */ comments, stripped before parsing (a
 // small string-literal-aware preprocessor, not a jsonc library).
@@ -36,7 +36,7 @@ func loadJSON(in LoaderInput) (LoaderResult, error) {
 	}
 	raw, err := os.ReadFile(abs)
 	if err != nil {
-		return LoaderResult{}, fmt.Errorf("gox: JSON import %q: %w", in.Path, err)
+		return LoaderResult{}, fmt.Errorf("xango: JSON import %q: %w", in.Path, err)
 	}
 
 	ext := strings.ToLower(filepath.Ext(in.Path))
@@ -48,10 +48,10 @@ func loadJSON(in LoaderInput) (LoaderResult, error) {
 	if ext == ".jsonc" {
 		data = stripJSONComments(raw)
 	}
-	// Validate at transpile time so a malformed file is a clear goxc
+	// Validate at transpile time so a malformed file is a clear xgc
 	// error instead of a runtime panic in generated code.
 	if !json.Valid(data) {
-		return LoaderResult{}, fmt.Errorf("gox: JSON import %q: invalid JSON", in.Path)
+		return LoaderResult{}, fmt.Errorf("xango: JSON import %q: invalid JSON", in.Path)
 	}
 
 	// <alias>Bytes is always parseable JSON: for .jsonc that's the
@@ -66,7 +66,7 @@ func loadJSON(in LoaderInput) (LoaderResult, error) {
 		goType = in.TypeName
 	}
 	fmt.Fprintf(&decl, "var %s %s = func() %s {\n\tvar v %s\n\tif err := json.Unmarshal(%sBytes, &v); err != nil {\n\t\tpanic(%s + err.Error())\n\t}\n\treturn v\n}()\n",
-		in.Alias, goType, goType, goType, in.Alias, strconv.Quote("gox: invalid embedded JSON "+in.Path+": "))
+		in.Alias, goType, goType, goType, in.Alias, strconv.Quote("xango: invalid embedded JSON "+in.Path+": "))
 	return LoaderResult{Decls: decl.String(), GoImports: []string{"encoding/json"}}, nil
 }
 
@@ -82,7 +82,7 @@ func loadJSONL(in LoaderInput, raw []byte) (LoaderResult, error) {
 		}
 	}
 	if !hasContent {
-		return LoaderResult{}, fmt.Errorf("gox: JSONL import %q: no non-blank lines", in.Path)
+		return LoaderResult{}, fmt.Errorf("xango: JSONL import %q: no non-blank lines", in.Path)
 	}
 
 	var decl strings.Builder
@@ -96,7 +96,7 @@ func loadJSONL(in LoaderInput, raw []byte) (LoaderResult, error) {
 	fmt.Fprintf(&decl, "var %s []%s = func() []%s {\n", in.Alias, elemType, elemType)
 	fmt.Fprintf(&decl, "\tvar out []%s\n\tfor _, line := range bytes.Split(%sBytes, []byte(\"\\n\")) {\n", elemType, in.Alias)
 	decl.WriteString("\t\tif len(bytes.TrimSpace(line)) == 0 {\n\t\t\tcontinue\n\t\t}\n")
-	fmt.Fprintf(&decl, "\t\tvar v %s\n\t\tif err := json.Unmarshal(line, &v); err != nil {\n\t\t\tpanic(%s + err.Error())\n\t\t}\n", elemType, strconv.Quote("gox: invalid embedded JSONL line in "+in.Path+": "))
+	fmt.Fprintf(&decl, "\t\tvar v %s\n\t\tif err := json.Unmarshal(line, &v); err != nil {\n\t\t\tpanic(%s + err.Error())\n\t\t}\n", elemType, strconv.Quote("xango: invalid embedded JSONL line in "+in.Path+": "))
 	decl.WriteString("\t\tout = append(out, v)\n\t}\n\treturn out\n}()\n")
 
 	return LoaderResult{Decls: decl.String(), GoImports: []string{"encoding/json", "bytes"}}, nil

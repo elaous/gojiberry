@@ -7,11 +7,11 @@ import (
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/fonts"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // byAttr returns the first node under n carrying attribute name=value.
-func byAttr(n gox.Node, name, value string) (gox.Node, bool) {
+func byAttr(n xango.Node, name, value string) (xango.Node, bool) {
 	for _, a := range n.Attrs {
 		if a.Name == name && a.Value == value {
 			return n, true
@@ -22,11 +22,11 @@ func byAttr(n gox.Node, name, value string) (gox.Node, bool) {
 			return found, true
 		}
 	}
-	return gox.Node{}, false
+	return xango.Node{}, false
 }
 
 // fire runs the handler for event on the node found by attribute.
-func fire(t *testing.T, root gox.Node, attr, value, event string, payload any) {
+func fire(t *testing.T, root xango.Node, attr, value, event string, payload any) {
 	t.Helper()
 	n, ok := byAttr(root, attr, value)
 	if !ok {
@@ -34,7 +34,7 @@ func fire(t *testing.T, root gox.Node, attr, value, event string, payload any) {
 	}
 	for _, a := range n.Attrs {
 		if a.Name == event && a.Handler != nil {
-			a.Handler(gox.Event{Type: event, Value: payload})
+			a.Handler(xango.Event{Type: event, Value: payload})
 			return
 		}
 	}
@@ -67,9 +67,9 @@ func TestFontSelectorClosed(t *testing.T) {
 func TestFontSelectorToggle(t *testing.T) {
 	var got []bool
 	n := FontSelector(FontSelectorProps{Fonts: testFonts, OnToggleOpen: func(o bool) { got = append(got, o) }})
-	findHandlers(n, "click")[0](gox.Event{})
+	findHandlers(n, "click")[0](xango.Event{})
 	n = FontSelector(FontSelectorProps{Fonts: testFonts, Open: true, OnToggleOpen: func(o bool) { got = append(got, o) }})
-	findHandlers(n, "click")[0](gox.Event{})
+	findHandlers(n, "click")[0](xango.Event{})
 	if fmt.Sprint(got) != "[true false]" {
 		t.Fatalf("toggles = %v", got)
 	}
@@ -280,13 +280,13 @@ func TestStyleEditorFields(t *testing.T) {
 func TestStyleEditorWithoutOnChangeIsInert(t *testing.T) {
 	n := StyleEditor(StyleEditorProps{})
 	for _, h := range findHandlers(n, "click") {
-		h(gox.Event{})
+		h(xango.Event{})
 	}
 	for _, h := range findHandlers(n, "input") {
-		h(gox.Event{Value: "5"})
+		h(xango.Event{Value: "5"})
 	}
 	for _, h := range findHandlers(n, "change") {
-		h(gox.Event{Value: "5"})
+		h(xango.Event{Value: "5"})
 	}
 }
 

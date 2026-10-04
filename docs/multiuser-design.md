@@ -274,7 +274,7 @@ Not yet: nothing outstanding that is known.
 
 ## Phase 4 as built
 
-- `TextFlow.Subscribe` lets several observers hear about changes (the gox
+- `TextFlow.Subscribe` lets several observers hear about changes (the xango
   element replaces `OnChange` on every render, so the bridge no longer uses it);
   `Session.RefreshPeers` puts other people's cursors in `Flow.RemoteCursors`,
   drawn as a tinted selection, a caret and a name flag (`canvas/flowpeers.go`).
@@ -314,7 +314,7 @@ Not yet: nothing outstanding that is known.
 
 - A session talks to the hub through a `collab.Transport` (`collab/link`: `Dial(client.Options) Conn`, where a `Conn` delivers events, sends ops and presence and reports what is still waiting). `collab.HTTPEndpoints()` is the default (SSE `GET /docs/{id}/events` plus `POST /ops` and `/presence`); `ws.WebSockets()` (`collab/ws`, own import so the root module stays dependency-free) uses one socket at `GET /docs/{id}/ws` carrying JSON `wire.Frame`s (`hello`, `snapshot`, `ops`, `presence`, `ack`, `reject`). Both go through the same hub checks (guard, roles, replica binding, throttling, authorization, comment authors), and the same session scenarios run over each.
 - A browser WebSocket cannot set headers, so under `js` the sign-in token goes in the query as `access_token` (the hub treats it as `Authorization: Bearer`) and a guard token as `guard_token` (`guard.Options.TokenQuery`). Native clients send headers.
-- `collab/gox.Collab` wraps canvas elements and makes the text flow inside shared: `Transport`, `Client` (hub URL, document, headers), `Name`, `Color`, `OnState` (status, role, peers, pending, repairs, error). The server's role is applied to the stage. `Flow` chooses what is shared: `textflow` (default: text, comments, notes, styles), `header`, `footer` (with page numbers), `objects` (floating text, tables and images) or `*` (all). An unknown value reports `ErrFlowNotSupported`. Content props only seed the document, and a deterministic seed replica means two tabs starting from the same content merge into one copy. The showcase opens as a shared document with `?doc=…&transport=http|ws`.
+- `collab/xango.Collab` wraps canvas elements and makes the text flow inside shared: `Transport`, `Client` (hub URL, document, headers), `Name`, `Color`, `OnState` (status, role, peers, pending, repairs, error). The server's role is applied to the stage. `Flow` chooses what is shared: `textflow` (default: text, comments, notes, styles), `header`, `footer` (with page numbers), `objects` (floating text, tables and images) or `*` (all). An unknown value reports `ErrFlowNotSupported`. Content props only seed the document, and a deterministic seed replica means two tabs starting from the same content merge into one copy. The showcase opens as a shared document with `?doc=…&transport=http|ws`.
 
 ### Surfaces: sharing more than the text
 

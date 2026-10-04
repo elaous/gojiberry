@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func dtCols() []DataTableColumn {
@@ -16,8 +16,8 @@ func dtCols() []DataTableColumn {
 
 func dtRows() []DataTableRow {
 	return []DataTableRow{
-		{ID: "1", Cells: []gox.Node{gox.Text("Ada"), gox.Text("ada@example.com")}},
-		{ID: "2", Cells: []gox.Node{gox.Text("Bo"), gox.Text("bo@example.com")}},
+		{ID: "1", Cells: []xango.Node{xango.Text("Ada"), xango.Text("ada@example.com")}},
+		{ID: "2", Cells: []xango.Node{xango.Text("Bo"), xango.Text("bo@example.com")}},
 	}
 }
 
@@ -40,7 +40,7 @@ func TestDataTable(t *testing.T) {
 		if len(handlers) != 1 {
 			t.Fatalf("expected 1 sort click handler (only Name is Sortable), got %d", len(handlers))
 		}
-		handlers[0](gox.NewEvent("click", nil, false, nil, nil))
+		handlers[0](xango.NewEvent("click", nil, false, nil, nil))
 		if got != "name" {
 			t.Errorf("OnSort got %q, want \"name\"", got)
 		}
@@ -84,7 +84,7 @@ func TestDataTable(t *testing.T) {
 		if len(handlers) != 2 {
 			t.Fatalf("expected 2 row change handlers, got %d", len(handlers))
 		}
-		handlers[1](gox.NewEvent("change", nil, true, nil, nil))
+		handlers[1](xango.NewEvent("change", nil, true, nil, nil))
 		if gotID != "2" || !gotChecked {
 			t.Errorf("OnSelectChange got (%q, %v), want (\"2\", true)", gotID, gotChecked)
 		}
@@ -100,7 +100,7 @@ func TestDataTable(t *testing.T) {
 		if len(handlers) != 1 {
 			t.Fatalf("expected 1 change handler (select-all only), got %d", len(handlers))
 		}
-		handlers[0](gox.NewEvent("change", nil, true, nil, nil))
+		handlers[0](xango.NewEvent("change", nil, true, nil, nil))
 		if !got {
 			t.Error("OnSelectAll did not receive true")
 		}
@@ -109,7 +109,7 @@ func TestDataTable(t *testing.T) {
 	t.Run("RowActions adds a trailing column with that row's own buttons", func(t *testing.T) {
 		html := render(t, DataTable(DataTableProps{
 			Columns: dtCols(), Rows: dtRows(),
-			RowActions: func(id string) []gox.Node { return []gox.Node{gox.Text("edit-" + id)} },
+			RowActions: func(id string) []xango.Node { return []xango.Node{xango.Text("edit-" + id)} },
 		}))
 		mustContain(t, html, "Actions", "edit-1", "edit-2")
 	})
@@ -120,7 +120,7 @@ func TestDataTable(t *testing.T) {
 	})
 
 	t.Run("Empty overrides the default message", func(t *testing.T) {
-		custom := gox.Text("Nothing here yet")
+		custom := xango.Text("Nothing here yet")
 		html := render(t, DataTable(DataTableProps{Columns: dtCols(), Empty: &custom}))
 		mustContain(t, html, "Nothing here yet")
 		mustNotContain(t, html, "No data")
@@ -129,7 +129,7 @@ func TestDataTable(t *testing.T) {
 	t.Run("colspan accounts for the selection and actions columns too", func(t *testing.T) {
 		html := render(t, DataTable(DataTableProps{
 			Columns: dtCols(), Selectable: true,
-			RowActions: func(string) []gox.Node { return nil },
+			RowActions: func(string) []xango.Node { return nil },
 		}))
 		mustContain(t, html, `colspan="4"`)
 	})

@@ -7,7 +7,7 @@ run: generate
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/goxc examples/resource-imports-demo
+	cd ../.. && go run ./cmd/xgc examples/resource-imports-demo
 
 .PHONY: test
 test: generate

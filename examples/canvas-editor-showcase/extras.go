@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/gox"
 	"github.com/elaous/gojiberry/share"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // statusLine is the status bar: the pages the text reaches, its counts, and
@@ -45,16 +45,16 @@ func statsState(st canvas.FlowStats) map[string]any {
 
 // statsPanel is the Stats tab: a table of the counts, for the whole text and
 // for the selection.
-func statsPanel(st canvas.FlowStats, sheets int) gox.Node {
-	row := func(label string, whole, sel any) gox.Node {
-		selCell := gox.El("td", []gox.Attr{gox.A("style", "text-align:right;color:#6b7280")}, gox.Text("–"))
+func statsPanel(st canvas.FlowStats, sheets int) xango.Node {
+	row := func(label string, whole, sel any) xango.Node {
+		selCell := xango.El("td", []xango.Attr{xango.A("style", "text-align:right;color:#6b7280")}, xango.Text("–"))
 		if st.HasSelection {
-			selCell = gox.El("td", []gox.Attr{gox.A("style", "text-align:right")}, gox.Text(fmt.Sprint(sel)))
+			selCell = xango.El("td", []xango.Attr{xango.A("style", "text-align:right")}, xango.Text(fmt.Sprint(sel)))
 		}
-		return gox.El("tr", nil, gox.El("td", nil, gox.Text(label)), gox.El("td", []gox.Attr{gox.A("style", "text-align:right")}, gox.Text(fmt.Sprint(whole))), selCell)
+		return xango.El("tr", nil, xango.El("td", nil, xango.Text(label)), xango.El("td", []xango.Attr{xango.A("style", "text-align:right")}, xango.Text(fmt.Sprint(whole))), selCell)
 	}
-	return gox.El("table", []gox.Attr{gox.A("id", "stats"), gox.A("style", "width:100%;border-collapse:collapse")},
-		gox.El("tr", nil, gox.El("th", []gox.Attr{gox.A("style", "text-align:left")}, gox.Text("")), gox.El("th", nil, gox.Text("Document")), gox.El("th", nil, gox.Text("Selection"))),
+	return xango.El("table", []xango.Attr{xango.A("id", "stats"), xango.A("style", "width:100%;border-collapse:collapse")},
+		xango.El("tr", nil, xango.El("th", []xango.Attr{xango.A("style", "text-align:left")}, xango.Text("")), xango.El("th", nil, xango.Text("Document")), xango.El("th", nil, xango.Text("Selection"))),
 		row("Words", st.Text.Words, st.Selection.Words),
 		row("Characters", st.Text.Characters, st.Selection.Characters),
 		row("Characters (no spaces)", st.Text.CharactersNoSpaces, st.Selection.CharactersNoSpaces),
@@ -85,23 +85,23 @@ func pageBase() string {
 
 // sharePanel is the Share tab: the selected text, a link to it, and buttons to
 // copy the link or hand it to the device's share sheet.
-func sharePanel(u *ui, flow *canvas.TextFlow, origin string, renderUI func()) gox.Node {
+func sharePanel(u *ui, flow *canvas.TextFlow, origin string, renderUI func()) xango.Node {
 	from, to := flow.Selection()
 	sel := share.Of(flow.EditText(), from, to)
 	if sel.Empty() {
 		u.shareLink = ""
-		return gox.El("p", []gox.Attr{gox.A("id", "share-hint")}, gox.Text("Select some text to get a link to it."))
+		return xango.El("p", []xango.Attr{xango.A("id", "share-hint")}, xango.Text("Select some text to get a link to it."))
 	}
 	u.shareLink = share.Link(pageBase(), shareParams(), sel)
 	quote := sel.Quote
 	if sel.To-sel.From > share.QuoteRunes {
 		quote += "…"
 	}
-	button := func(id, label string, f func()) gox.Node {
-		return gox.El("button", []gox.Attr{gox.A("type", "button"), gox.A("class", "gj-keybindings-button"), gox.A("id", id),
-			gox.On("click", func(gox.Event) { f() })}, gox.Text(label))
+	button := func(id, label string, f func()) xango.Node {
+		return xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-keybindings-button"), xango.A("id", id),
+			xango.On("click", func(xango.Event) { f() })}, xango.Text(label))
 	}
-	buttons := []gox.Node{button("share-copy", "Copy link", func() {
+	buttons := []xango.Node{button("share-copy", "Copy link", func() {
 		if nav := js.Global().Get("navigator"); !nav.Get("clipboard").IsUndefined() {
 			nav.Get("clipboard").Call("writeText", u.shareLink)
 		}
@@ -113,10 +113,10 @@ func sharePanel(u *ui, flow *canvas.TextFlow, origin string, renderUI func()) go
 			js.Global().Get("navigator").Call("share", map[string]any{"title": u.title, "text": "“" + sel.Quote + "”", "url": u.shareLink})
 		}))
 	}
-	return gox.Frag(
-		gox.El("blockquote", []gox.Attr{gox.A("id", "share-quote"), gox.A("style", "margin:0 0 0.8em;padding-left:0.8em;border-left:3px solid #7c5cff")}, gox.Text(quote)),
-		gox.El("input", []gox.Attr{gox.A("id", "share-link"), gox.A("readonly", "readonly"), gox.A("style", "width:100%"), gox.A("value", u.shareLink)}),
-		gox.El("div", []gox.Attr{gox.A("style", "display:flex;gap:6px;margin-top:0.6em")}, buttons...),
+	return xango.Frag(
+		xango.El("blockquote", []xango.Attr{xango.A("id", "share-quote"), xango.A("style", "margin:0 0 0.8em;padding-left:0.8em;border-left:3px solid #7c5cff")}, xango.Text(quote)),
+		xango.El("input", []xango.Attr{xango.A("id", "share-link"), xango.A("readonly", "readonly"), xango.A("style", "width:100%"), xango.A("value", u.shareLink)}),
+		xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px;margin-top:0.6em")}, buttons...),
 	)
 }
 

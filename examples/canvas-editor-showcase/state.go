@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/elaous/gojiberry/canvas"
-	collab "github.com/elaous/gojiberry/collab/gox"
+	collab "github.com/elaous/gojiberry/collab/xango"
 )
 
 // State is everything the canvas tree depends on.
@@ -33,7 +33,7 @@ type State struct {
 }
 
 const sample = "# Gojiberry editor\n\n" +
-	"Everything on this canvas is a **gox** tree: pages, a text flow, a picture, a floating note and a table. " +
+	"Everything on this canvas is a **xango** tree: pages, a text flow, a picture, a floating note and a table. " +
 	"Switch to *edit* mode and click into the text to type; select text and use Ctrl+B, Ctrl+I, Ctrl+U or the style editor above.\n\n" +
 	"Registered features: multi-cursor (Ctrl+D picks the next match, Ctrl+click adds a cursor), line operations " +
 	"(Alt+Up/Down move, Alt+Shift+Up/Down copy, Ctrl+Shift+K delete) and Markdown copy and paste (Ctrl+Shift+C / V). " +

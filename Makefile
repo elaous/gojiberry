@@ -1,9 +1,9 @@
-# gojiberry / gox dev workflow.
+# gojiberry / xango dev workflow.
 #
-# `make check` is the full local CI: regenerate every *.gox.go,
+# `make check` is the full local CI: regenerate every *.xg.go,
 # gofmt/vet/test the root module for both native and GOOS=js
 # GOARCH=wasm (domrt and friends are js/wasm-only), and run the
-# vscode-gox grammar suite against every *.gox file in the repo.
+# vscode-xango grammar suite against every *.xg file in the repo.
 .PHONY: check
 check: generate fmt-check vet test wasm-vet lint wasm-lint grammar-test-setup grammar-test
 
@@ -138,22 +138,22 @@ perf-clean:
 	rm -rf $(PERF_DIR)
 
 # grammar-test-setup only needs to run once (or after upgrading
-# editors/vscode-gox/test's dependencies) -- it downloads VS Code's own
+# editors/vscode-xango/test's dependencies) -- it downloads VS Code's own
 # Go/HTML/CSS/SQL/JSON grammars, which aren't redistributed here.
 .PHONY: grammar-test-setup
 grammar-test-setup:
-	cd editors/vscode-gox/test && npm install \
+	cd editors/vscode-xango/test && npm install \
 		&& npm run fetch-go-grammar \
 		&& npm run fetch-embedded-grammars
 
 .PHONY: grammar-test
 grammar-test:
-	cd editors/vscode-gox/test && npm test
+	cd editors/vscode-xango/test && npm test
 
-# vscode-package builds editors/vscode-gox's own installable .vsix
+# vscode-package builds editors/vscode-xango's own installable .vsix
 # (Extensions view -> "..." -> Install from VSIX...) via @vscode/vsce,
 # fetched ad hoc through npx rather than tracked as a package.json
-# devDependency -- vscode-gox's own package.json is a plain extension
+# devDependency -- vscode-xango's own package.json is a plain extension
 # manifest, not an npm project with its own install step, the same
 # reasoning grammar-test's own separate test/package.json already
 # keeps the grammar suite's dependencies out of it.
@@ -162,19 +162,19 @@ grammar-test:
 # this extension has never had (it ships from this monorepo, not its
 # own standalone repo) -- suppresses that warning rather than adding a
 # repository field that would point nowhere real.
-# .vscodeignore (editors/vscode-gox's own) keeps test/ -- its own
+# .vscodeignore (editors/vscode-xango's own) keeps test/ -- its own
 # node_modules/fetched grammars included, ~260KB of real weight --
 # out of the packaged .vsix; without it vsce bundles the entire
 # directory, tests and all, into what a user installs.
 .PHONY: vscode-package
 vscode-package:
-	cd editors/vscode-gox && npx --yes @vscode/vsce package --allow-missing-repository
+	cd editors/vscode-xango && npx --yes @vscode/vsce package --allow-missing-repository
 
 # docs regenerates the plain-text `go doc -all` dump for every public
 # package under docs/ -- see docs/README.md for the exact commands.
 .PHONY: docs
 docs:
-	go doc -all ./gox > docs/gox.txt
+	go doc -all ./xango > docs/xango.txt
 	go doc -all ./components > docs/components.txt
 	go doc -all ./devreload > docs/devreload.txt
 	go doc -all ./devwatch > docs/devwatch.txt

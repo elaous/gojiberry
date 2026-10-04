@@ -1,0 +1,43 @@
+package components
+
+import "github.com/elaous/gojiberry/xango"
+
+// SwitchProps configures Switch.
+type SwitchProps struct {
+	Label    string
+	Checked  bool
+	Disabled bool
+	OnChange func(checked bool)
+}
+
+// Switch renders a toggle switch: a native checkbox (visually hidden
+// but still keyboard/screen-reader accessible) styled as a sliding
+// track and thumb via the CSS :checked sibling selector, the same
+// "real control, custom look" approach FileUploader's hidden file
+// input uses.
+func Switch(props SwitchProps) xango.Node {
+	attrs := []xango.Attr{
+		xango.A("type", "checkbox"),
+		xango.A("class", "gj-switch-input"),
+		xango.A("role", "switch"),
+		xango.A("aria-checked", boolAttr(props.Checked)),
+	}
+	if props.Checked {
+		attrs = append(attrs, xango.A("checked", "checked"))
+	}
+	if props.Disabled {
+		attrs = append(attrs, xango.A("disabled", "disabled"))
+	}
+	if props.OnChange != nil {
+		attrs = append(attrs, xango.On("change", func(e xango.Event) { props.OnChange(e.Checked) }))
+	}
+	children := []xango.Node{
+		xango.El("input", attrs),
+		xango.El("span", []xango.Attr{xango.A("class", "gj-switch-track")},
+			xango.El("span", []xango.Attr{xango.A("class", "gj-switch-thumb")})),
+	}
+	if props.Label != "" {
+		children = append(children, xango.El("span", []xango.Attr{xango.A("class", "gj-switch-label")}, xango.Text(props.Label)))
+	}
+	return xango.El("label", []xango.Attr{xango.A("class", "gj-switch")}, children...)
+}

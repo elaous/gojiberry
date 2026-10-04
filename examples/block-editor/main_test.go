@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/elaous/gojiberry/crdt"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // buildDiverged reproduces main's scenario: two replicas edit the
@@ -49,11 +49,11 @@ func TestRenderedOutputIdenticalRegardlessOfSyncOrder(t *testing.T) {
 		applyOrder(phone, desktop)
 		blocks := phone.Blocks()
 
-		e, err := gox.RenderString(Editor(EditorProps{Blocks: blocks}))
+		e, err := xango.RenderString(Editor(EditorProps{Blocks: blocks}))
 		if err != nil {
 			t.Fatalf("editor render: %v", err)
 		}
-		o, err := gox.RenderString(Output(OutputProps{Blocks: blocks}))
+		o, err := xango.RenderString(Output(OutputProps{Blocks: blocks}))
 		if err != nil {
 			t.Fatalf("output render: %v", err)
 		}
@@ -85,11 +85,11 @@ func TestOutputDecoupledFromEditorMarkup(t *testing.T) {
 		NewLineItem("l1", "Consultoria", "R$ 100,00", 1),
 	}
 
-	editorHTML, err := gox.RenderString(Editor(EditorProps{Blocks: blocks}))
+	editorHTML, err := xango.RenderString(Editor(EditorProps{Blocks: blocks}))
 	if err != nil {
 		t.Fatalf("editor render: %v", err)
 	}
-	outputHTML, err := gox.RenderString(Output(OutputProps{Blocks: blocks}))
+	outputHTML, err := xango.RenderString(Output(OutputProps{Blocks: blocks}))
 	if err != nil {
 		t.Fatalf("output render: %v", err)
 	}

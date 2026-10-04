@@ -1,0 +1,62 @@
+package components
+
+import "github.com/elaous/gojiberry/xango"
+
+// SearchProps configures Search.
+type SearchProps struct {
+	Value       string
+	Placeholder string
+	Suggestions []string
+	Open        bool // whether the suggestion list is shown
+	Disabled    bool
+
+	// OnChange fires on every keystroke. Filtering Suggestions (and
+	// any debouncing of a remote lookup) is the caller's job -- Search
+	// itself has no fetch/timer logic of its own, the same
+	// "consumer drives the async part" split FileUploader uses for
+	// reading files.
+	OnChange func(value string)
+	// OnSelect fires when a suggestion is clicked; the caller typically
+	// sets Value to it and closes the list (Open: false).
+	OnSelect func(suggestion string)
+}
+
+// Search renders a text input plus, when Open, a listbox of
+// Suggestions below it -- a basic implementation of the ARIA combobox
+// pattern (role/aria-* attributes only, no keyboard navigation of its
+// own, the same scope RadioGroup/Dropdown/etc. keep to elsewhere in
+// this package).
+func Search(props SearchProps) xango.Node {
+	inputAttrs := []xango.Attr{
+		xango.A("type", "search"),
+		xango.A("class", "gj-search-input"),
+		xango.A("value", props.Value),
+		xango.A("role", "combobox"),
+		xango.A("aria-expanded", boolAttr(props.Open)),
+		xango.A("aria-autocomplete", "list"),
+	}
+	if props.Placeholder != "" {
+		inputAttrs = append(inputAttrs, xango.A("placeholder", props.Placeholder))
+	}
+	if props.Disabled {
+		inputAttrs = append(inputAttrs, xango.A("disabled", "disabled"))
+	}
+	if props.OnChange != nil {
+		inputAttrs = append(inputAttrs, xango.On("input", func(e xango.Event) { props.OnChange(xango.EventValue[string](e)) }))
+	}
+	children := []xango.Node{xango.El("input", inputAttrs)}
+
+	if props.Open && len(props.Suggestions) > 0 {
+		var items []xango.Node
+		for _, s := range props.Suggestions {
+			attrs := []xango.Attr{xango.A("class", "gj-search-option"), xango.A("role", "option")}
+			if props.OnSelect != nil {
+				suggestion := s
+				attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnSelect(suggestion) }))
+			}
+			items = append(items, xango.El("div", attrs, xango.Text(s)))
+		}
+		children = append(children, xango.El("div", []xango.Attr{xango.A("class", "gj-search-list"), xango.A("role", "listbox")}, items...))
+	}
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-search")}, children...)
+}

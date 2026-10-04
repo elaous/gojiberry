@@ -1,5 +1,5 @@
 // bench.js drives one benchmark scenario against the wasm harness
-// main.gox mounts: load the page, wait for window.runBench to exist,
+// main.xg mounts: load the page, wait for window.runBench to exist,
 // call it once with the scenario/iteration-count bench_test.go passes
 // in via env vars, and print the elapsed nanoseconds it returns as
 // the last line of stdout (RESULT:<float>) for bench_test.go to parse

@@ -861,7 +861,7 @@ func (e *Element) OnCustomEvent(name string, fn func(detail js.Value)) js.Func
     OnCustomEvent registers fn for a custom event named name, e.g. one
     dispatched by DispatchCustomEvent (by e or a descendant, if bubbling) or by
     non-Go JS elsewhere on the page. fn receives the event's raw detail value;
-    use js.Value's own accessors (or gox.EventValue-style type assertions) to
+    use js.Value's own accessors (or xango.EventValue-style type assertions) to
     read it, since detail's shape is whatever the dispatcher chose.
 
 func (e *Element) OnDragOver(fn func(evt DragEvent)) js.Func
@@ -1192,10 +1192,10 @@ type KeyEvent struct {
 	MetaKey  bool
 }
     KeyEvent wraps a keydown/keyup DOM event with the fields a text editor or
-    shortcut handler actually needs -- gox.Event carries none of these (see
+    shortcut handler actually needs -- xango.Event carries none of these (see
     its doc comment: Value is only ever a simple string/bool payload), so,
     like DragEvent and SubmitEvent, this is a typed escape hatch for the parts a
-    plain gox.EventHandler can't express.
+    plain xango.EventHandler can't express.
 
 func (e KeyEvent) PreventDefault()
     PreventDefault suppresses the browser's default handling of the event (e.g.
@@ -1220,7 +1220,7 @@ type MouseEvent struct {
     ... -- already computed using the OS/browser's own multi-click timing and
     movement thresholds, so consumers that care about double/triple-click
     should read this rather than hand-rolling their own click-timer state
-    machine) and modifier keys -- gox.Event carries neither at all (see its
+    machine) and modifier keys -- xango.Event carries neither at all (see its
     doc comment), so, like DragEvent and KeyEvent, this is a typed escape
     hatch for building anything that needs a real click/drag position or a
     modifier-qualified click: canvas hit-testing, custom selection, image
@@ -1328,7 +1328,7 @@ type WheelEvent struct {
 	Value          js.Value
 	DeltaX, DeltaY float64
 }
-    WheelEvent wraps a wheel DOM event -- gox.Event carries no delta
+    WheelEvent wraps a wheel DOM event -- xango.Event carries no delta
     information at all (see its doc comment), so, like MouseEvent and KeyEvent,
     this is a typed escape hatch for anything that needs real scroll input:
     a canvas-rendered document's own scroll offset (which has no native

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // KeyBindingsProps configures KeyBindings.
@@ -42,7 +42,7 @@ type KeyBindingsProps struct {
 // OnBind/OnClear/OnReset to the Stage (canvas.Stage.Rebind) and says what
 // happened in Message. A modifier-only press is ignored and Escape
 // cancels.
-func KeyBindings(props KeyBindingsProps) gox.Node {
+func KeyBindings(props KeyBindingsProps) xango.Node {
 	cmds := append([]canvas.CommandInfo(nil), props.Commands...)
 	sort.SliceStable(cmds, func(i, j int) bool {
 		if cmds[i].Feature != cmds[j].Feature {
@@ -51,7 +51,7 @@ func KeyBindings(props KeyBindingsProps) gox.Node {
 		return cmds[i].Title < cmds[j].Title
 	})
 	words := strings.Fields(strings.ToLower(props.Query))
-	var rows []gox.Node
+	var rows []xango.Node
 	for _, c := range cmds {
 		c := c
 		chords := props.Keymap.Chords(c.Name)
@@ -69,13 +69,13 @@ func KeyBindings(props KeyBindingsProps) gox.Node {
 		}
 		modified := props.Defaults != nil && strings.Join(chords, ",") != strings.Join(props.Defaults.Chords(c.Name), ",")
 
-		var keyCell gox.Node
+		var keyCell xango.Node
 		if props.Recording == c.Name {
-			keyCell = gox.El("div", []gox.Attr{
-				gox.A("class", "gj-keybindings-capture"), gox.A("tabindex", "0"), gox.A("autofocus", "true"),
-				gox.A("data-capture", string(c.Name)),
-				gox.On("keydown", func(e gox.Event) {
-					k, ok := e.Value.(gox.KeyData)
+			keyCell = xango.El("div", []xango.Attr{
+				xango.A("class", "gj-keybindings-capture"), xango.A("tabindex", "0"), xango.A("autofocus", "true"),
+				xango.A("data-capture", string(c.Name)),
+				xango.On("keydown", func(e xango.Event) {
+					k, ok := e.Value.(xango.KeyData)
 					if !ok {
 						return
 					}
@@ -91,30 +91,30 @@ func KeyBindings(props KeyBindingsProps) gox.Node {
 						props.OnBind(c.Name, chord)
 					}
 				}),
-				gox.On("blur", func(gox.Event) {
+				xango.On("blur", func(xango.Event) {
 					if props.OnRecord != nil {
 						props.OnRecord("")
 					}
 				}),
-			}, gox.Text("Press the new shortcut… (Esc cancels)"))
+			}, xango.Text("Press the new shortcut… (Esc cancels)"))
 		} else if len(shown) == 0 {
-			keyCell = gox.El("span", []gox.Attr{gox.A("class", "gj-keybindings-none")}, gox.Text("—"))
+			keyCell = xango.El("span", []xango.Attr{xango.A("class", "gj-keybindings-none")}, xango.Text("—"))
 		} else {
-			var keys []gox.Node
+			var keys []xango.Node
 			for _, s := range shown {
-				keys = append(keys, gox.El("kbd", nil, gox.Text(s)))
+				keys = append(keys, xango.El("kbd", nil, xango.Text(s)))
 			}
-			keyCell = gox.El("span", []gox.Attr{gox.A("class", "gj-keybindings-keys")}, keys...)
+			keyCell = xango.El("span", []xango.Attr{xango.A("class", "gj-keybindings-keys")}, keys...)
 		}
 
-		btn := func(label, action string, on func()) gox.Node {
-			attrs := []gox.Attr{gox.A("class", "gj-keybindings-button"), gox.A("type", "button"), gox.A("data-action", action+":"+string(c.Name))}
+		btn := func(label, action string, on func()) xango.Node {
+			attrs := []xango.Attr{xango.A("class", "gj-keybindings-button"), xango.A("type", "button"), xango.A("data-action", action+":"+string(c.Name))}
 			if on != nil {
-				attrs = append(attrs, gox.On("click", func(gox.Event) { on() }))
+				attrs = append(attrs, xango.On("click", func(xango.Event) { on() }))
 			}
-			return gox.El("button", attrs, gox.Text(label))
+			return xango.El("button", attrs, xango.Text(label))
 		}
-		actions := []gox.Node{btn("Change", "change", func() {
+		actions := []xango.Node{btn("Change", "change", func() {
 			if props.OnRecord != nil {
 				props.OnRecord(c.Name)
 			}
@@ -137,38 +137,38 @@ func KeyBindings(props KeyBindingsProps) gox.Node {
 		if modified {
 			class += " gj-keybindings-row-modified"
 		}
-		rows = append(rows, gox.El("tr", []gox.Attr{gox.A("class", class)},
-			gox.El("td", []gox.Attr{gox.A("class", "gj-keybindings-title")}, gox.Text(c.Title),
-				gox.El("small", nil, gox.Text(" "+featureTitle(c.Feature)))),
-			gox.El("td", nil, keyCell),
-			gox.El("td", []gox.Attr{gox.A("class", "gj-keybindings-actions")}, actions...),
+		rows = append(rows, xango.El("tr", []xango.Attr{xango.A("class", class)},
+			xango.El("td", []xango.Attr{xango.A("class", "gj-keybindings-title")}, xango.Text(c.Title),
+				xango.El("small", nil, xango.Text(" "+featureTitle(c.Feature)))),
+			xango.El("td", nil, keyCell),
+			xango.El("td", []xango.Attr{xango.A("class", "gj-keybindings-actions")}, actions...),
 		))
 	}
 
-	search := []gox.Attr{gox.A("class", "gj-keybindings-search"), gox.A("type", "search"), gox.A("placeholder", "Search commands or keys"), gox.A("value", props.Query)}
+	search := []xango.Attr{xango.A("class", "gj-keybindings-search"), xango.A("type", "search"), xango.A("placeholder", "Search commands or keys"), xango.A("value", props.Query)}
 	if props.OnQuery != nil {
-		search = append(search, gox.On("input", func(e gox.Event) { props.OnQuery(gox.EventValue[string](e)) }))
+		search = append(search, xango.On("input", func(e xango.Event) { props.OnQuery(xango.EventValue[string](e)) }))
 	}
-	head := []gox.Node{gox.El("input", search)}
+	head := []xango.Node{xango.El("input", search)}
 	if props.OnResetAll != nil {
-		head = append(head, gox.El("button", []gox.Attr{
-			gox.A("class", "gj-keybindings-button"), gox.A("type", "button"), gox.A("data-action", "reset-all"),
-			gox.On("click", func(gox.Event) { props.OnResetAll() }),
-		}, gox.Text("Reset all")))
+		head = append(head, xango.El("button", []xango.Attr{
+			xango.A("class", "gj-keybindings-button"), xango.A("type", "button"), xango.A("data-action", "reset-all"),
+			xango.On("click", func(xango.Event) { props.OnResetAll() }),
+		}, xango.Text("Reset all")))
 	}
-	out := []gox.Node{gox.El("div", []gox.Attr{gox.A("class", "gj-keybindings-head")}, head...)}
+	out := []xango.Node{xango.El("div", []xango.Attr{xango.A("class", "gj-keybindings-head")}, head...)}
 	if props.Message != "" {
-		out = append(out, gox.El("p", []gox.Attr{gox.A("class", "gj-keybindings-message"), gox.A("role", "status")}, gox.Text(props.Message)))
+		out = append(out, xango.El("p", []xango.Attr{xango.A("class", "gj-keybindings-message"), xango.A("role", "status")}, xango.Text(props.Message)))
 	}
-	out = append(out, gox.El("table", []gox.Attr{gox.A("class", "gj-keybindings-table")}, gox.El("tbody", nil, rows...)))
-	return gox.El("div", []gox.Attr{gox.A("class", "gj-keybindings")}, out...)
+	out = append(out, xango.El("table", []xango.Attr{xango.A("class", "gj-keybindings-table")}, xango.El("tbody", nil, rows...)))
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-keybindings")}, out...)
 }
 
 // ChordFromKey builds the chord string (canvas.Chord) for a key press,
 // reading letters and digits from the physical key the way the canvas
 // does. ok is false for a press of a modifier on its own, and for one
 // with no Ctrl, Cmd or Alt (the canvas only runs shortcuts that have one).
-func ChordFromKey(k gox.KeyData) (chord string, ok bool) {
+func ChordFromKey(k xango.KeyData) (chord string, ok bool) {
 	switch k.Key {
 	case "Control", "Shift", "Alt", "Meta", "AltGraph", "CapsLock", "Dead":
 		return "", false

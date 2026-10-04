@@ -3,19 +3,19 @@ package components
 import (
 	"testing"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func TestModal(t *testing.T) {
 	t.Run("renders nothing when closed", func(t *testing.T) {
-		html := render(t, Modal(ModalProps{Open: false, Content: []gox.Node{gox.Text("hi")}}))
+		html := render(t, Modal(ModalProps{Open: false, Content: []xango.Node{xango.Text("hi")}}))
 		if html != "" {
 			t.Errorf("expected empty output when closed, got: %s", html)
 		}
 	})
 
 	t.Run("open renders a backdrop and content as siblings", func(t *testing.T) {
-		html := render(t, Modal(ModalProps{Open: true, Label: "My modal", Content: []gox.Node{gox.Text("body")}}))
+		html := render(t, Modal(ModalProps{Open: true, Label: "My modal", Content: []xango.Node{xango.Text("body")}}))
 		mustContain(t, html, "gj-modal-backdrop", `role="dialog"`, `aria-modal="true"`, `aria-label="My modal"`, "body")
 	})
 
@@ -31,7 +31,7 @@ func TestModal(t *testing.T) {
 		if len(handlers) != 1 {
 			t.Fatalf("expected 1 click handler (the backdrop), got %d", len(handlers))
 		}
-		handlers[0](gox.Event{})
+		handlers[0](xango.Event{})
 		if !closed {
 			t.Error("OnClose did not fire on backdrop click")
 		}
@@ -42,8 +42,8 @@ func TestDialog(t *testing.T) {
 	html := render(t, Dialog(DialogProps{
 		Open:    true,
 		Title:   "Confirm action",
-		Body:    []gox.Node{gox.Text("Are you sure?")},
-		Actions: []gox.Node{Button(ButtonProps{Label: "OK"})},
+		Body:    []xango.Node{xango.Text("Are you sure?")},
+		Actions: []xango.Node{Button(ButtonProps{Label: "OK"})},
 	}))
 	mustContain(t, html, "gj-dialog-title", "Confirm action", "Are you sure?", "gj-dialog-actions", ">OK<")
 
@@ -64,7 +64,7 @@ func TestAlert(t *testing.T) {
 		t.Fatal("expected at least one click handler (OK button)")
 	}
 	// The OK button's handler is the last one registered (after the backdrop's, if any).
-	handlers[len(handlers)-1](gox.Event{})
+	handlers[len(handlers)-1](xango.Event{})
 	if !closed {
 		t.Error("clicking OK did not invoke OnClose")
 	}
@@ -92,11 +92,11 @@ func TestConfirm(t *testing.T) {
 	if len(handlers) != 3 {
 		t.Fatalf("expected 3 click handlers, got %d", len(handlers))
 	}
-	handlers[1](gox.Event{}) // Cancel
+	handlers[1](xango.Event{}) // Cancel
 	if !cancelled {
 		t.Error("Cancel button did not invoke OnCancel")
 	}
-	handlers[2](gox.Event{}) // Confirm
+	handlers[2](xango.Event{}) // Confirm
 	if !confirmed {
 		t.Error("Confirm button did not invoke OnConfirm")
 	}
@@ -137,7 +137,7 @@ func TestToast(t *testing.T) {
 		if len(handlers) != 1 {
 			t.Fatalf("expected 1 click handler, got %d", len(handlers))
 		}
-		handlers[0](gox.Event{})
+		handlers[0](xango.Event{})
 		if !dismissed {
 			t.Error("OnClose did not fire")
 		}
@@ -188,7 +188,7 @@ func TestContextMenu(t *testing.T) {
 		if len(handlers) != 1 {
 			t.Fatalf("expected 1 click handler (no backdrop handler since OnClose is nil), got %d", len(handlers))
 		}
-		handlers[0](gox.Event{})
+		handlers[0](xango.Event{})
 		if !selected {
 			t.Error("OnSelect did not fire")
 		}
@@ -209,13 +209,13 @@ func TestContextMenu(t *testing.T) {
 		if len(handlers) != 2 {
 			t.Fatalf("expected 2 click handlers, got %d", len(handlers))
 		}
-		handlers[1](gox.Event{})
+		handlers[1](xango.Event{})
 		if !selected || !closed {
 			t.Errorf("selecting an item should call both OnSelect and OnClose, got selected=%v closed=%v", selected, closed)
 		}
 
 		closed = false
-		handlers[0](gox.Event{}) // clicking the backdrop itself also invokes OnClose
+		handlers[0](xango.Event{}) // clicking the backdrop itself also invokes OnClose
 		if !closed {
 			t.Error("clicking the backdrop did not invoke OnClose")
 		}
@@ -224,7 +224,7 @@ func TestContextMenu(t *testing.T) {
 
 func TestPopover(t *testing.T) {
 	t.Run("closed shows only the trigger", func(t *testing.T) {
-		html := render(t, Popover(PopoverProps{Trigger: []gox.Node{gox.Text("Open menu")}}))
+		html := render(t, Popover(PopoverProps{Trigger: []xango.Node{xango.Text("Open menu")}}))
 		mustContain(t, html, "gj-popover-trigger", "Open menu")
 		mustNotContain(t, html, "gj-popover-panel")
 	})
@@ -232,8 +232,8 @@ func TestPopover(t *testing.T) {
 	t.Run("open renders the panel with a placement class and backdrop", func(t *testing.T) {
 		html := render(t, Popover(PopoverProps{
 			Open:      true,
-			Trigger:   []gox.Node{gox.Text("Trigger")},
-			Content:   []gox.Node{gox.Text("Panel content")},
+			Trigger:   []xango.Node{xango.Text("Trigger")},
+			Content:   []xango.Node{xango.Text("Panel content")},
 			Placement: PopoverTop,
 		}))
 		mustContain(t, html, "gj-popover-panel gj-popover-top", "Panel content", "gj-popover-backdrop")
@@ -252,11 +252,11 @@ func TestPopover(t *testing.T) {
 		if len(handlers) != 2 {
 			t.Fatalf("expected 2 click handlers (trigger, backdrop), got %d", len(handlers))
 		}
-		handlers[0](gox.Event{})
+		handlers[0](xango.Event{})
 		if !toggledCalled || toggledTo != false {
 			t.Errorf("clicking the trigger while Open=true should call OnToggleOpen(false), got called=%v value=%v", toggledCalled, toggledTo)
 		}
-		handlers[1](gox.Event{})
+		handlers[1](xango.Event{})
 		if !closed {
 			t.Error("clicking the backdrop did not invoke OnClose")
 		}
@@ -282,11 +282,11 @@ func TestImageZoom(t *testing.T) {
 		if len(handlers) != 2 {
 			t.Fatalf("expected 2 click handlers (thumb, backdrop), got %d", len(handlers))
 		}
-		handlers[0](gox.Event{}) // thumb -> true
+		handlers[0](xango.Event{}) // thumb -> true
 		if !got {
 			t.Error("clicking the thumbnail should invoke OnToggle(true)")
 		}
-		handlers[1](gox.Event{}) // backdrop -> false
+		handlers[1](xango.Event{}) // backdrop -> false
 		if got {
 			t.Error("clicking the backdrop should invoke OnToggle(false)")
 		}

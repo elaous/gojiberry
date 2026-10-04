@@ -1,6 +1,6 @@
 # gin-ssr-demo
 
-`examples/http-server-demo`'s "gox over plain net/http" SSR demo,
+`examples/http-server-demo`'s "xango over plain net/http" SSR demo,
 except served by [Gin](https://github.com/gin-gonic/gin), with three
 real security middlewares fronting the page: secure headers, CORS, and
 a per-client rate limit.
@@ -12,10 +12,10 @@ root module.
 
 ## How it works
 
-- `page.gox` is `Page`, unchanged in spirit from `http-server-demo`'s
-  own: `gox.Render` only needs an `io.Writer`, and `*gin.Context`'s own
+- `page.xg` is `Page`, unchanged in spirit from `http-server-demo`'s
+  own: `xango.Render` only needs an `io.Writer`, and `*gin.Context`'s own
   `Writer` field satisfies that directly -- Gin's routing, binding, and
-  middleware stack are completely untouched; gox just replaces
+  middleware stack are completely untouched; xango just replaces
   `html/template` as the thing producing the response body.
 - `router.go`'s `newRouter` wires three middlewares ahead of the page
   route:
@@ -40,7 +40,7 @@ root module.
 
 ```
 cd examples/gin-ssr-demo
-(cd ../.. && go run ./cmd/goxc examples/gin-ssr-demo)
+(cd ../.. && go run ./cmd/xgc examples/gin-ssr-demo)
 go run .
 # open http://localhost:8097/?name=world
 ```

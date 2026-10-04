@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="t">
+  <title id="t">Xangô: a lightning bolt in kente colours</title>
+  <defs>
+    <clipPath id="bolt">
+      <path d="M150 12 62 140h58l-22 104 100-142h-60z"/>
+    </clipPath>
+    <pattern id="kente" width="32" height="32" patternUnits="userSpaceOnUse" patternTransform="rotate(-18)">
+      <rect width="32" height="8" fill="#F2B705"/>
+      <rect y="8" width="32" height="8" fill="#C1272D"/>
+      <rect y="16" width="32" height="8" fill="#007A3D"/>
+      <rect y="24" width="32" height="8" fill="#111111"/>
+    </pattern>
+  </defs>
+  <!-- the sky: a rounded square, with a zigzag edge like a woven border -->
+  <rect x="8" y="8" width="240" height="240" rx="40" fill="#1B1034"/>
+  <path d="M8 232l12-12 12 12 12-12 12 12 12-12 12 12 12-12 12 12 12-12 12 12 12-12 12 12 12-12 12 12 12-12 12 12 12-12 12 12 12-12 12 12V248H8z" fill="#F2B705" opacity=".9" clip-path="inset(0 round 40px)"/>
+  <!-- the bolt, woven in kente stripes, with a gold edge -->
+  <g clip-path="url(#bolt)"><rect width="256" height="256" fill="url(#kente)"/></g>
+  <path d="M150 12 62 140h58l-22 104 100-142h-60z" fill="none" stroke="#FFF3C4" stroke-width="5" stroke-linejoin="round"/>
+  <!-- the double-headed axe's diamond, Xangô's emblem, as a small mark -->
+  <path d="M40 40l10-10 10 10-10 10zM196 40l10-10 10 10-10 10z" fill="#FFF3C4"/>
+</svg>

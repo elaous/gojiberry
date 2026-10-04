@@ -1,0 +1,27 @@
+package components
+
+import "github.com/elaous/gojiberry/xango"
+
+// ColorPickerProps configures ColorPicker.
+type ColorPickerProps struct {
+	Value    string // "#rrggbb"
+	Disabled bool
+	OnChange func(value string)
+}
+
+// ColorPicker renders a styled native color input, letting the browser
+// handle the actual color-picker UI.
+func ColorPicker(props ColorPickerProps) xango.Node {
+	attrs := []xango.Attr{
+		xango.A("type", "color"),
+		xango.A("class", "gj-colorpicker"),
+		xango.A("value", props.Value),
+	}
+	if props.Disabled {
+		attrs = append(attrs, xango.A("disabled", "disabled"))
+	}
+	if props.OnChange != nil {
+		attrs = append(attrs, xango.On("change", func(e xango.Event) { props.OnChange(xango.EventValue[string](e)) }))
+	}
+	return xango.El("input", attrs)
+}

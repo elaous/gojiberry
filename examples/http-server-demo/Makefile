@@ -1,4 +1,4 @@
-# http-server-demo dev workflow: gox.Render served over real net/http,
+# http-server-demo dev workflow: xango.Render served over real net/http,
 # no WASM step.
 .PHONY: run
 run: generate
@@ -7,7 +7,7 @@ run: generate
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/goxc examples/http-server-demo
+	cd ../.. && go run ./cmd/xgc examples/http-server-demo
 
 .PHONY: test
 test: generate

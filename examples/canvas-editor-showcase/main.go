@@ -1,7 +1,7 @@
 //go:build js && wasm
 
 // Command canvas-editor-showcase is a small word processor with every
-// piece we have built registered in one place: the canvas tree (app.gox)
+// piece we have built registered in one place: the canvas tree (app.xg)
 // -- scrolling pages, an editable text flow with headers, footers and page
 // numbers, a picture, a floating note and a floating table -- the
 // registered editing features (multi-cursor, line operations, paragraphs,
@@ -24,20 +24,20 @@ import (
 	"time"
 
 	"github.com/elaous/gojiberry/canvas"
-	cgox "github.com/elaous/gojiberry/canvas/gox"
+	cxango "github.com/elaous/gojiberry/canvas/xango"
 	"github.com/elaous/gojiberry/collab"
 	"github.com/elaous/gojiberry/collab/client"
-	collabgox "github.com/elaous/gojiberry/collab/gox"
 	"github.com/elaous/gojiberry/collab/ws"
+	collabxango "github.com/elaous/gojiberry/collab/xango"
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/domrt"
 	"github.com/elaous/gojiberry/domrt/browser"
 	"github.com/elaous/gojiberry/fonts"
-	"github.com/elaous/gojiberry/gox"
 	"github.com/elaous/gojiberry/saver"
 	"github.com/elaous/gojiberry/transfer"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // ui is the DOM side's state.
@@ -66,7 +66,7 @@ type ui struct {
 	drafts       map[string]string
 
 	saver               *saver.Session
-	live                *collabgox.State // when the page was opened on a shared document (?doc=...)
+	live                *collabxango.State // when the page was opened on a shared document (?doc=...)
 	liveName, liveColor string
 	transfer            *transfer.Registry
 	fontLog             []string // what the font library did, newest last
@@ -104,7 +104,7 @@ func main() {
 		doc.GetElementByID("state").SetTextContent(`{"error":"` + err.Error() + `"}`)
 		return
 	}
-	root := cgox.NewRoot(stage)
+	root := cxango.NewRoot(stage)
 	root.Redraw = redraw
 	defaults := stage.EffectiveKeymap()
 
@@ -141,7 +141,7 @@ func main() {
 			doc.GetElementByID("state").SetTextContent(`{"error":"` + err.Error() + `"}`)
 			return
 		}
-		flow = root.Find(cgox.TagTextFlow, 0).(*canvas.TextFlow)
+		flow = root.Find(cxango.TagTextFlow, 0).(*canvas.TextFlow)
 		stage.Draw()
 	}
 
@@ -234,24 +234,24 @@ func main() {
 		}
 		menubar := components.MenuBar(components.MenuBarProps{Entries: menus, Open: u.menu, OnOpen: func(i int) { u.menu = i; renderUI() }})
 
-		toolbar := gox.Frag(
-			gox.El("button", []gox.Attr{gox.A("id", "mode"), gox.A("type", "button"), gox.A("class", "gj-keybindings-button"),
-				gox.On("click", func(gox.Event) { toggleMode() })}, gox.Text("Mode: "+state.Mode.String()+" (click to switch)")),
+		toolbar := xango.Frag(
+			xango.El("button", []xango.Attr{xango.A("id", "mode"), xango.A("type", "button"), xango.A("class", "gj-keybindings-button"),
+				xango.On("click", func(xango.Event) { toggleMode() })}, xango.Text("Mode: "+state.Mode.String()+" (click to switch)")),
 			tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 			tabButton(u, "comments", "Comments", renderUI), tabButton(u, "outline", "Outline", renderUI),
 			tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI),
 			tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI),
 		)
 
-		roleButtons := []gox.Node{gox.El("span", []gox.Attr{gox.A("style", "font-size:12px;color:#6b7280")}, gox.Text("Role:"))}
+		roleButtons := []xango.Node{xango.El("span", []xango.Attr{xango.A("style", "font-size:12px;color:#6b7280")}, xango.Text("Role:"))}
 		for _, r := range []canvas.Role{canvas.RoleOwner, canvas.RoleEditor, canvas.RoleViewer} {
 			r := r
 			class := "gj-keybindings-button"
 			if state.Role.String() == r.String() {
 				class += " gj-symbolpicker-chip-on"
 			}
-			roleButtons = append(roleButtons, gox.El("button", []gox.Attr{gox.A("type", "button"), gox.A("class", class), gox.A("data-role", r.String()),
-				gox.On("click", func(gox.Event) {
+			roleButtons = append(roleButtons, xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", class), xango.A("data-role", r.String()),
+				xango.On("click", func(xango.Event) {
 					state.Role = r
 					stage.SetRole(r)
 					if !r.CanEdit() {
@@ -259,14 +259,14 @@ func main() {
 					}
 					renderCanvas()
 					renderUI()
-				})}, gox.Text(r.String())))
+				})}, xango.Text(r.String())))
 		}
-		roleRow := gox.El("div", []gox.Attr{gox.A("id", "roles"), gox.A("style", "display:flex;gap:6px;align-items:center;margin-bottom:0.8em")}, roleButtons...)
+		roleRow := xango.El("div", []xango.Attr{xango.A("id", "roles"), xango.A("style", "display:flex;gap:6px;align-items:center;margin-bottom:0.8em")}, roleButtons...)
 
-		var panel gox.Node
+		var panel xango.Node
 		switch u.tab {
 		case "outline":
-			panel = outlinePanel(&state, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cgox.TagScrollView, 0).(*canvas.ScrollView) }, run, redraw, refocus, renderUI)
+			panel = outlinePanel(&state, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, run, redraw, refocus, renderUI)
 		case "comments":
 			panel = commentsPanel(u, &state, func() *canvas.TextFlow { return flow }, run, redraw, refocus, renderUI)
 		case "styles":
@@ -312,7 +312,7 @@ func main() {
 			for _, e := range u.transfer.Exporters() {
 				exports = append(exports, components.SaverChoice{Name: e.Format().Name, Label: e.Format().Label})
 			}
-			panel = gox.Frag(
+			panel = xango.Frag(
 				components.Transfer(components.TransferProps{
 					Imports: imports, Exports: exports,
 					OnExport: func(name string) {
@@ -341,7 +341,7 @@ func main() {
 						})
 					},
 				}),
-				gox.El("p", []gox.Attr{gox.A("id", "transfer-message")}, gox.Text(u.message)),
+				xango.El("p", []xango.Attr{xango.A("id", "transfer-message")}, xango.Text(u.message)),
 			)
 		case "symbols":
 			panel = components.SymbolPicker(components.SymbolPickerProps{
@@ -412,18 +412,18 @@ func main() {
 			})
 		}
 		if u.tab == "format" || u.tab == "" {
-			var rows []gox.Node
+			var rows []xango.Node
 			for _, l := range u.fontLog {
-				rows = append(rows, gox.El("li", nil, gox.Text(l)))
+				rows = append(rows, xango.El("li", nil, xango.Text(l)))
 			}
-			panel = gox.Frag(panel, gox.El("ul", []gox.Attr{gox.A("id", "font-log"), gox.A("style", "font-size:12px;color:#6b7280")}, rows...))
+			panel = xango.Frag(panel, xango.El("ul", []xango.Attr{xango.A("id", "font-log"), xango.A("style", "font-size:12px;color:#6b7280")}, rows...))
 		}
 		topRow := roleRow
 		if u.live != nil {
 			topRow = livePresence(u)
 		}
-		side := gox.Frag(topRow, panel,
-			gox.El("div", []gox.Attr{gox.A("id", "link-preview"), gox.A("style", "margin-top:1em")},
+		side := xango.Frag(topRow, panel,
+			xango.El("div", []xango.Attr{xango.A("id", "link-preview"), xango.A("style", "margin-top:1em")},
 				components.LinkPreview(components.LinkPreviewProps{
 					URL: u.hoverLink, Title: "Gojiberry", Description: "Go components that render to HTML, the DOM, Gio and a canvas.",
 					SiteName: "GitHub",
@@ -436,7 +436,7 @@ func main() {
 		node := components.DocumentView(components.DocumentViewProps{
 			Title: u.title, OnTitle: func(t string) { u.title = t; renderUI() },
 			MenuBar: menubar, Toolbar: toolbar,
-			Canvas:  gox.El("div", []gox.Attr{gox.A("id", "canvas-host")}),
+			Canvas:  xango.El("div", []xango.Attr{xango.A("id", "canvas-host")}),
 			Sidebar: &side, Status: status,
 		})
 		if domRoot == nil {
@@ -475,7 +475,7 @@ func main() {
 		headers, watermarks := []string{}, []string{}
 		suggestions := []string{}
 		spread := false
-		if ps, ok := root.Find(cgox.TagPage, 0).(*canvas.PageSet); ok {
+		if ps, ok := root.Find(cxango.TagPage, 0).(*canvas.PageSet); ok {
 			spread = ps.Spread
 			for i := range ps.Pages {
 				h, w := "", ""
@@ -492,7 +492,7 @@ func main() {
 			cursors, editing = flow.Cursors(), flow.Editing()
 			suggestions = append(suggestions, flow.Suggestions()...)
 			text = flow.EditText()
-			sv := root.Find(cgox.TagScrollView, 0).(*canvas.ScrollView)
+			sv := root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView)
 			scrollY = sv.ScrollY
 			current = flow.OutlineIndexAt(flow.Cursors()[0].Caret)
 			for _, e := range flow.Outline() {
@@ -549,7 +549,7 @@ func main() {
 		b, _ := json.Marshal(map[string]any{
 			"stats": statsState(stats), "share": u.shareLink,
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
-			"elements": cgox.Elements(), "editing": editing, "cursors": cursors, "text": text,
+			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
 			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "live": liveState(u, flow), "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
@@ -560,7 +560,7 @@ func main() {
 	state.Live = liveProps(u, &state, origin, renderCanvas, renderUI)
 	renderCanvas()
 	renderUI()
-	go openSharedSelection(u, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cgox.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
+	go openSharedSelection(u, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
 	go u.saver.Refresh(context.Background())
 	canvas.LoadImage("data:image/svg+xml;base64,"+base64.StdEncoding.EncodeToString([]byte(svg)),
 		func(src *canvas.HTMLImage) {
@@ -573,7 +573,7 @@ func main() {
 // liveProps makes the page a shared document when it was opened with ?doc=...:
 // the Collab element does the connecting; this says where, as whom, over what
 // (?transport=ws for a WebSocket) and what to do when the state changes.
-func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()) *collabgox.CollabProps {
+func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()) *collabxango.CollabProps {
 	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 	if !q.Call("has", "doc").Bool() {
 		return nil
@@ -595,14 +595,14 @@ func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()
 		transport = ws.WebSockets()
 	}
 	u.liveName, u.liveColor = name, get("color", "#7c5cff")
-	return &collabgox.CollabProps{
+	return &collabxango.CollabProps{
 		Transport: transport,
-		Flow:      collabgox.Flow(get("flow", "")),
+		Flow:      collabxango.Flow(get("flow", "")),
 		Client:    client.Options{BaseURL: get("hub", origin+"/collab"), Doc: get("doc", ""), Header: hdr, Retry: 300 * time.Millisecond, MaxRetry: 2 * time.Second},
 		Replica:   fmt.Sprintf("%s-%d", name, int(js.Global().Get("Math").Call("random").Float()*1e9)),
 		Name:      name,
 		Color:     u.liveColor,
-		OnState: func(st collabgox.State) {
+		OnState: func(st collabxango.State) {
 			u.live = &st
 			if role := canvas.ParseRole(string(st.Role)); st.Role != "" && role != state.Role {
 				state.Role = role
@@ -667,15 +667,15 @@ func resetBinding(stage *canvas.Stage, defaults canvas.Keymap, cmd canvas.Comman
 	}
 }
 
-func tabButton(u *ui, tab, label string, rerender func()) gox.Node {
+func tabButton(u *ui, tab, label string, rerender func()) xango.Node {
 	class := "gj-keybindings-button"
 	if u.tab == tab {
 		class += " gj-symbolpicker-chip-on"
 	}
-	return gox.El("button", []gox.Attr{
-		gox.A("type", "button"), gox.A("class", class), gox.A("data-tab", tab),
-		gox.On("click", func(gox.Event) { u.tab = tab; rerender() }),
-	}, gox.Text(label))
+	return xango.El("button", []xango.Attr{
+		xango.A("type", "button"), xango.A("class", class), xango.A("data-tab", tab),
+		xango.On("click", func(xango.Event) { u.tab = tab; rerender() }),
+	}, xango.Text(label))
 }
 
 // fontKeys lists "family=key" for every downloaded cut and "family" for the
@@ -696,21 +696,21 @@ func fontKeys(lib *fonts.Library) []string {
 
 // commentsPanel lists the comments with their text; an owner or editor can
 // reply, resolve and delete, a viewer only reads.
-func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(canvas.Command), redraw, refocus, renderUI func()) gox.Node {
+func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(canvas.Command), redraw, refocus, renderUI func()) xango.Node {
 	fl := flow()
 	excerpts := map[string]string{}
 	if fl != nil {
 		excerpts = fl.CommentExcerpts()
 	}
 	set := state.Comments
-	add := gox.El("button", []gox.Attr{gox.A("type", "button"), gox.A("class", "gj-keybindings-button"), gox.A("data-action", "add-comment"),
-		gox.On("click", func(gox.Event) { run(canvas.CmdCommentAdd); redraw(); renderUI() })}, gox.Text("Comment on the selection"))
+	add := xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-keybindings-button"), xango.A("data-action", "add-comment"),
+		xango.On("click", func(xango.Event) { run(canvas.CmdCommentAdd); redraw(); renderUI() })}, xango.Text("Comment on the selection"))
 	touch := func() {
 		if fl != nil {
 			fl.Touch() // tell a shared document about it
 		}
 	}
-	return gox.Frag(add, gox.El("div", []gox.Attr{gox.A("style", "margin-top:0.8em")}, components.CommentList(components.CommentListProps{
+	return xango.Frag(add, xango.El("div", []xango.Attr{xango.A("style", "margin-top:0.8em")}, components.CommentList(components.CommentListProps{
 		Comments: set.List(), Excerpts: excerpts, ShowResolved: u.showResolved, Selected: u.selComment,
 		CanEdit: state.Role.CanEdit(), CanReply: state.Role.CanComment(), Drafts: u.drafts,
 		OnSelect: func(id string) {
@@ -750,24 +750,24 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(c
 }
 
 // livePresence shows who is at a shared document and the connection.
-func livePresence(u *ui) gox.Node {
+func livePresence(u *ui) xango.Node {
 	s := u.live
 	var peers []components.PresencePeer
 	for _, p := range s.Peers {
 		peers = append(peers, components.PresencePeer{Name: p.Name, Color: p.Color, User: p.User, Role: string(p.Role)})
 	}
 	slices.SortFunc(peers, func(a, b components.PresencePeer) int { return strings.Compare(a.Name, b.Name) })
-	return gox.El("div", []gox.Attr{gox.A("id", "presence"), gox.A("style", "margin-bottom:0.8em")}, components.Presence(components.PresenceProps{
+	return xango.El("div", []xango.Attr{xango.A("id", "presence"), xango.A("style", "margin-bottom:0.8em")}, components.Presence(components.PresenceProps{
 		Self: components.PresencePeer{Name: u.liveName, Color: u.liveColor, Role: string(s.Role)}, Peers: peers,
 		Status: s.Status.String(), Pending: s.Pending, Role: string(s.Role),
 	}))
 }
 
 // outlinePanel shows the headings (click to go there) and the bookmarks.
-func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, run func(canvas.Command), redraw, refocus, renderUI func()) gox.Node {
+func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, run func(canvas.Command), redraw, refocus, renderUI func()) xango.Node {
 	fl := flow()
 	if fl == nil {
-		return gox.Frag()
+		return xango.Frag()
 	}
 	caret := fl.Cursors()[0].Caret
 	goTo := func(offset int) {
@@ -781,12 +781,12 @@ func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *c
 	for _, b := range fl.Bookmarks() {
 		excerpts[b.Name] = string(runes[b.Start:min(b.End, len(runes))])
 	}
-	return gox.Frag(
+	return xango.Frag(
 		components.Outline(components.OutlineProps{
 			Entries: fl.Outline(), Current: fl.OutlineIndexAt(caret),
 			OnSelect: func(_ int, e canvas.OutlineEntry) { goTo(e.Start) },
 		}),
-		gox.El("div", []gox.Attr{gox.A("style", "margin-top:1em")}, components.FootnoteList(components.FootnoteListProps{
+		xango.El("div", []xango.Attr{xango.A("style", "margin-top:1em")}, components.FootnoteList(components.FootnoteListProps{
 			Entries: fl.FootnoteList(), CanEdit: state.Role.CanEdit(),
 			OnGoto: func(e canvas.FootnoteEntry) {
 				fl.GotoOffset(e.Offset)
@@ -808,7 +808,7 @@ func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *c
 				renderUI()
 			},
 		})),
-		gox.El("div", []gox.Attr{gox.A("style", "margin-top:1em")}, components.BookmarkList(components.BookmarksProps{
+		xango.El("div", []xango.Attr{xango.A("style", "margin-top:1em")}, components.BookmarkList(components.BookmarksProps{
 			Bookmarks: fl.Bookmarks(), Excerpts: excerpts, CanEdit: state.Role.CanEdit(),
 			OnGoto: func(name string) { fl.GotoBookmark(name); scroller().RevealPending(); redraw(); renderUI() },
 			OnRemove: func(name string) {

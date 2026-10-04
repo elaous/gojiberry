@@ -6,7 +6,7 @@ import (
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/fonts"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // StyleEditorProps configures StyleEditor.
@@ -41,13 +41,13 @@ var styleWeights = []int{100, 200, 300, 400, 500, 600, 700, 800, 900}
 // controlled: it shows props.Format and reports edits through OnChange.
 // Superscript and subscript exclude each other; "clear" buttons (and an
 // empty size) put a field back to inheriting from Base.
-func StyleEditor(props StyleEditorProps) gox.Node {
+func StyleEditor(props StyleEditorProps) xango.Node {
 	resolved := props.Format.Resolve(props.Base)
 	if resolved.FontSize <= 0 {
 		resolved.FontSize = 16 // what the canvas draws unset sizes at
 	}
-	change := func(edit func(*canvas.Format)) func(gox.Event) {
-		return func(gox.Event) {
+	change := func(edit func(*canvas.Format)) func(xango.Event) {
+		return func(xango.Event) {
 			if props.OnChange == nil {
 				return
 			}
@@ -56,40 +56,40 @@ func StyleEditor(props StyleEditorProps) gox.Node {
 			props.OnChange(f)
 		}
 	}
-	withValue := func(edit func(f *canvas.Format, v string)) func(gox.Event) {
-		return func(e gox.Event) {
+	withValue := func(edit func(f *canvas.Format, v string)) func(xango.Event) {
+		return func(e xango.Event) {
 			if props.OnChange == nil {
 				return
 			}
 			f := props.Format
-			edit(&f, gox.EventValue[string](e))
+			edit(&f, xango.EventValue[string](e))
 			props.OnChange(f)
 		}
 	}
-	disabled := func(attrs []gox.Attr) []gox.Attr {
+	disabled := func(attrs []xango.Attr) []xango.Attr {
 		if props.Disabled {
-			attrs = append(attrs, gox.A("disabled", "disabled"))
+			attrs = append(attrs, xango.A("disabled", "disabled"))
 		}
 		return attrs
 	}
 
-	toggle := func(action, label, title string, on bool, edit func(*canvas.Format)) gox.Node {
+	toggle := func(action, label, title string, on bool, edit func(*canvas.Format)) xango.Node {
 		class := "gj-styleeditor-toggle"
 		if on {
 			class += " gj-styleeditor-toggle-on"
 		}
-		attrs := disabled([]gox.Attr{
-			gox.A("type", "button"), gox.A("class", class), gox.A("title", title), gox.A("aria-label", title),
-			gox.A("aria-pressed", boolAttr(on)), gox.A("data-action", action),
-			gox.On("click", change(edit)),
+		attrs := disabled([]xango.Attr{
+			xango.A("type", "button"), xango.A("class", class), xango.A("title", title), xango.A("aria-label", title),
+			xango.A("aria-pressed", boolAttr(on)), xango.A("data-action", action),
+			xango.On("click", change(edit)),
 		})
-		return gox.El("button", attrs, gox.Text(label))
+		return xango.El("button", attrs, xango.Text(label))
 	}
 
-	var rows []gox.Node
+	var rows []xango.Node
 
 	// Row 1: font family, size, weight.
-	var fontRow []gox.Node
+	var fontRow []xango.Node
 	if props.FontPicker != nil {
 		picker := *props.FontPicker
 		picker.Selected = primaryFamily(props.Format.FontFamily)
@@ -108,11 +108,11 @@ func StyleEditor(props StyleEditorProps) gox.Node {
 		fontRow = append(fontRow, FontSelector(picker))
 	}
 	fontRow = append(fontRow,
-		gox.El("input", disabled([]gox.Attr{
-			gox.A("type", "number"), gox.A("class", "gj-styleeditor-size"), gox.A("min", "1"), gox.A("step", "1"),
-			gox.A("aria-label", "Font size"), gox.A("data-field", "size"),
-			gox.A("value", strconv.FormatFloat(roundTo(resolved.FontSize, 2), 'f', -1, 64)),
-			gox.On("input", withValue(func(f *canvas.Format, v string) {
+		xango.El("input", disabled([]xango.Attr{
+			xango.A("type", "number"), xango.A("class", "gj-styleeditor-size"), xango.A("min", "1"), xango.A("step", "1"),
+			xango.A("aria-label", "Font size"), xango.A("data-field", "size"),
+			xango.A("value", strconv.FormatFloat(roundTo(resolved.FontSize, 2), 'f', -1, 64)),
+			xango.On("input", withValue(func(f *canvas.Format, v string) {
 				if n, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil && n > 0 {
 					f.FontSize = n / maxFloat(f.Scale, 1)
 				} else if strings.TrimSpace(v) == "" {
@@ -121,24 +121,24 @@ func StyleEditor(props StyleEditorProps) gox.Node {
 			})),
 		})),
 	)
-	weightOpts := []gox.Node{gox.El("option", []gox.Attr{gox.A("value", "")}, gox.Text("Weight: inherit"))}
+	weightOpts := []xango.Node{xango.El("option", []xango.Attr{xango.A("value", "")}, xango.Text("Weight: inherit"))}
 	for _, w := range styleWeights {
-		attrs := []gox.Attr{gox.A("value", strconv.Itoa(w))}
+		attrs := []xango.Attr{xango.A("value", strconv.Itoa(w))}
 		if props.Format.FontWeight == w {
-			attrs = append(attrs, gox.A("selected", "selected"))
+			attrs = append(attrs, xango.A("selected", "selected"))
 		}
-		weightOpts = append(weightOpts, gox.El("option", attrs, gox.Text(strconv.Itoa(w))))
+		weightOpts = append(weightOpts, xango.El("option", attrs, xango.Text(strconv.Itoa(w))))
 	}
-	fontRow = append(fontRow, gox.El("select", disabled([]gox.Attr{
-		gox.A("class", "gj-styleeditor-weight"), gox.A("aria-label", "Font weight"), gox.A("data-field", "weight"),
-		gox.On("change", withValue(func(f *canvas.Format, v string) {
+	fontRow = append(fontRow, xango.El("select", disabled([]xango.Attr{
+		xango.A("class", "gj-styleeditor-weight"), xango.A("aria-label", "Font weight"), xango.A("data-field", "weight"),
+		xango.On("change", withValue(func(f *canvas.Format, v string) {
 			f.FontWeight, _ = strconv.Atoi(v)
 		})),
 	}), weightOpts...))
-	rows = append(rows, gox.El("div", []gox.Attr{gox.A("class", "gj-styleeditor-row")}, fontRow...))
+	rows = append(rows, xango.El("div", []xango.Attr{xango.A("class", "gj-styleeditor-row")}, fontRow...))
 
 	// Row 2: toggles.
-	rows = append(rows, gox.El("div", []gox.Attr{gox.A("class", "gj-styleeditor-row gj-styleeditor-toggles"), gox.A("role", "group")},
+	rows = append(rows, xango.El("div", []xango.Attr{xango.A("class", "gj-styleeditor-row gj-styleeditor-toggles"), xango.A("role", "group")},
 		toggle("bold", "B", "Bold", resolved.FontWeight >= 600, func(f *canvas.Format) {
 			if resolved.FontWeight >= 600 {
 				f.FontWeight = 400
@@ -164,25 +164,25 @@ func StyleEditor(props StyleEditorProps) gox.Node {
 	))
 
 	// Row 3: colors.
-	colorField := func(field, label, value string, set func(*canvas.Format, string)) gox.Node {
+	colorField := func(field, label, value string, set func(*canvas.Format, string)) xango.Node {
 		hex := value
 		if !isHexColor(hex) {
 			hex = map[string]string{"color": "#000000", "background": "#ffff00"}[field]
 		}
-		return gox.El("label", []gox.Attr{gox.A("class", "gj-styleeditor-color")},
-			gox.El("span", nil, gox.Text(label)),
-			gox.El("input", disabled([]gox.Attr{
-				gox.A("type", "color"), gox.A("value", hex), gox.A("data-field", field),
-				gox.On("input", withValue(func(f *canvas.Format, v string) { set(f, v) })),
+		return xango.El("label", []xango.Attr{xango.A("class", "gj-styleeditor-color")},
+			xango.El("span", nil, xango.Text(label)),
+			xango.El("input", disabled([]xango.Attr{
+				xango.A("type", "color"), xango.A("value", hex), xango.A("data-field", field),
+				xango.On("input", withValue(func(f *canvas.Format, v string) { set(f, v) })),
 			})),
-			gox.El("button", disabled([]gox.Attr{
-				gox.A("type", "button"), gox.A("class", "gj-styleeditor-clear"), gox.A("data-clear", field),
-				gox.A("aria-label", "Clear "+strings.ToLower(label)),
-				gox.On("click", change(func(f *canvas.Format) { set(f, "") })),
-			}), gox.Text("×")),
+			xango.El("button", disabled([]xango.Attr{
+				xango.A("type", "button"), xango.A("class", "gj-styleeditor-clear"), xango.A("data-clear", field),
+				xango.A("aria-label", "Clear "+strings.ToLower(label)),
+				xango.On("click", change(func(f *canvas.Format) { set(f, "") })),
+			}), xango.Text("×")),
 		)
 	}
-	rows = append(rows, gox.El("div", []gox.Attr{gox.A("class", "gj-styleeditor-row")},
+	rows = append(rows, xango.El("div", []xango.Attr{xango.A("class", "gj-styleeditor-row")},
 		colorField("color", "Text color", props.Format.Color, func(f *canvas.Format, v string) { f.Color = v }),
 		colorField("background", "Highlight", props.Format.Background, func(f *canvas.Format, v string) { f.Background = v }),
 	))
@@ -192,11 +192,11 @@ func StyleEditor(props StyleEditorProps) gox.Node {
 	if text == "" {
 		text = "The quick brown fox jumps over the lazy dog"
 	}
-	rows = append(rows, gox.El("div", []gox.Attr{
-		gox.A("class", "gj-styleeditor-preview"), gox.A("data-preview", "true"), gox.A("style", resolved.CSS()),
-	}, gox.Text(text)))
+	rows = append(rows, xango.El("div", []xango.Attr{
+		xango.A("class", "gj-styleeditor-preview"), xango.A("data-preview", "true"), xango.A("style", resolved.CSS()),
+	}, xango.Text(text)))
 
-	return gox.El("div", []gox.Attr{gox.A("class", "gj-styleeditor")}, rows...)
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-styleeditor")}, rows...)
 }
 
 // primaryFamily extracts the first family from a CSS font-family list

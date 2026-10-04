@@ -19,7 +19,7 @@ that into the root module.
   edit to every *other* connected client and remembers the document's
   current content so a client joining later starts in sync instead of
   from a blank page.
-- `client/main.gox` is the WASM half: it opens `/ws` via
+- `client/main.xg` is the WASM half: it opens `/ws` via
   `domrt/browser.Connect`, reads its role from the page's own URL
   (`?role=owner`/`editor`/`viewer`), and renders the shared document
   inside `components.Collab`. Typing sends the whole current text over
@@ -40,7 +40,7 @@ that into the root module.
 ## Running it
 
 ```
-cd ../.. && go run ./cmd/goxc examples/collab-editor-app   # from the repo root, transpiles client/main.gox
+cd ../.. && go run ./cmd/xgc examples/collab-editor-app   # from the repo root, transpiles client/main.xg
 cd examples/collab-editor-app
 GOOS=js GOARCH=wasm go build -o static/main.wasm ./client/
 cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" static/

@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // LinkPreviewProps configures LinkPreview.
@@ -39,9 +39,9 @@ func LinkHost(raw string) string {
 // LinkPreview renders a small card for a link: its image, title,
 // description and site. With only a URL it shows the host; renders nothing
 // without one. The card is itself a link to the URL.
-func LinkPreview(props LinkPreviewProps) gox.Node {
+func LinkPreview(props LinkPreviewProps) xango.Node {
 	if props.URL == "" {
-		return gox.Frag()
+		return xango.Frag()
 	}
 	class := "gj-linkpreview"
 	if props.Loading {
@@ -59,34 +59,34 @@ func LinkPreview(props LinkPreviewProps) gox.Node {
 	if !canvas.SafeLinkURL(href) {
 		href = "" // a javascript: or data: URL is never made a link
 	}
-	attrs := []gox.Attr{
-		gox.A("class", class), gox.A("href", href), gox.A("target", "_blank"), gox.A("rel", "noopener noreferrer"),
+	attrs := []xango.Attr{
+		xango.A("class", class), xango.A("href", href), xango.A("target", "_blank"), xango.A("rel", "noopener noreferrer"),
 	}
 	if props.OnOpen != nil {
-		attrs = append(attrs, gox.On("click", func(e gox.Event) {
+		attrs = append(attrs, xango.On("click", func(e xango.Event) {
 			e.PreventDefault()
 			props.OnOpen()
 		}))
 	}
-	var body []gox.Node
+	var body []xango.Node
 	if props.Image != "" {
-		body = append(body, gox.El("img", []gox.Attr{gox.A("class", "gj-linkpreview-image"), gox.A("src", props.Image), gox.A("alt", "")}))
+		body = append(body, xango.El("img", []xango.Attr{xango.A("class", "gj-linkpreview-image"), xango.A("src", props.Image), xango.A("alt", "")}))
 	}
-	text := []gox.Node{
-		gox.El("span", []gox.Attr{gox.A("class", "gj-linkpreview-title")}, gox.Text(title)),
+	text := []xango.Node{
+		xango.El("span", []xango.Attr{xango.A("class", "gj-linkpreview-title")}, xango.Text(title)),
 	}
 	if props.Description != "" && !props.Loading {
-		text = append(text, gox.El("span", []gox.Attr{gox.A("class", "gj-linkpreview-description")}, gox.Text(props.Description)))
+		text = append(text, xango.El("span", []xango.Attr{xango.A("class", "gj-linkpreview-description")}, xango.Text(props.Description)))
 	}
-	text = append(text, gox.El("span", []gox.Attr{gox.A("class", "gj-linkpreview-site")}, gox.Text(site)))
-	body = append(body, gox.El("span", []gox.Attr{gox.A("class", "gj-linkpreview-text")}, text...))
-	card := gox.El("a", attrs, body...)
+	text = append(text, xango.El("span", []xango.Attr{xango.A("class", "gj-linkpreview-site")}, xango.Text(site)))
+	body = append(body, xango.El("span", []xango.Attr{xango.A("class", "gj-linkpreview-text")}, text...))
+	card := xango.El("a", attrs, body...)
 	if props.OnClose == nil {
 		return card
 	}
-	return gox.El("div", []gox.Attr{gox.A("class", "gj-linkpreview-wrap")}, card,
-		gox.El("button", []gox.Attr{
-			gox.A("class", "gj-linkpreview-close"), gox.A("type", "button"), gox.A("aria-label", "Close preview"),
-			gox.On("click", func(gox.Event) { props.OnClose() }),
-		}, gox.Text("×")))
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-linkpreview-wrap")}, card,
+		xango.El("button", []xango.Attr{
+			xango.A("class", "gj-linkpreview-close"), xango.A("type", "button"), xango.A("aria-label", "Close preview"),
+			xango.On("click", func(xango.Event) { props.OnClose() }),
+		}, xango.Text("×")))
 }

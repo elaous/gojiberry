@@ -1,11 +1,11 @@
 // Command gio-counter-demo mounts shared.Counter -- the exact same
 // component wasm-counter mounts into a real browser DOM via domrt --
-// into a real native Gio window instead, via goxgio.Renderer. Run it
+// into a real native Gio window instead, via xangogio.Renderer. Run it
 // on a machine with a display:
 //
 //	go run .
 //
-// See goxgio_test.go for headless verification (no display required):
+// See xangogio_test.go for headless verification (no display required):
 // a real, software-rendered Gio frame plus simulated pointer clicks
 // prove Counter's OnInc/OnDec handlers actually fire through the
 // renderer, not just that the process starts without panicking.
@@ -20,8 +20,8 @@ import (
 	"gioui.org/widget/material"
 
 	"github.com/elaous/gojiberry/examples/gio-counter-demo/shared"
-	"github.com/elaous/gojiberry/gox"
-	"github.com/elaous/gojiberry/goxgio"
+	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/gojiberry/xangogio"
 )
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 
 func run(w *app.Window) error {
 	th := material.NewTheme()
-	renderer := goxgio.New()
+	renderer := xangogio.New()
 
 	count := 0
 	var ops op.Ops
@@ -50,8 +50,8 @@ func run(w *app.Window) error {
 			gtx := app.NewContext(&ops, e)
 			node := shared.Counter(shared.CounterProps{
 				Count: count,
-				OnInc: func(gox.Event) { count++ },
-				OnDec: func(gox.Event) { count-- },
+				OnInc: func(xango.Event) { count++ },
+				OnDec: func(xango.Event) { count-- },
 			})
 			renderer.Layout(gtx, th, node)
 			e.Frame(gtx.Ops)

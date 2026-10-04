@@ -1,4 +1,4 @@
-// Drives canvas-editor-showcase: the gox tree renders with every element
+// Drives canvas-editor-showcase: the xango tree renders with every element
 // registered, the features are registered, the DOM command list and style
 // editor are there, and in edit mode the text flow is editable -- typing,
 // multi-cursor, line operations, page breaks and Markdown copy/paste.
@@ -29,7 +29,7 @@ run(async () => {
   assert(await page.locator('.gj-menubar-panel').count() === 0, 'a click outside closes the menu');
 
   // The components' stylesheets come from CSS imports, installed by domrt.Mount.
-  const sheets = await page.evaluate(() => Array.from(document.querySelectorAll('style[data-gox-style]')).map((e) => e.getAttribute('data-gox-style')));
+  const sheets = await page.evaluate(() => Array.from(document.querySelectorAll('style[data-xango-style]')).map((e) => e.getAttribute('data-xango-style')));
   assert(sheets.length > 10 && sheets[0].endsWith('/components/base.css') && sheets.some((x) => x.endsWith('/styleeditor.css')), 'component stylesheets installed in <head>: ' + sheets.length);
   const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--gj-accent').trim());
   assert(accent === '#2563eb', 'the design tokens apply: ' + accent);

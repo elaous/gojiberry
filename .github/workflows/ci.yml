@@ -83,7 +83,7 @@ jobs:
           git push
 
   grammar-test:
-    name: vscode-gox grammar suite
+    name: vscode-gox grammar suite # job name kept: a required status check may be bound to it
     runs-on: ubuntu-latest
     # grammar-test-setup downloads VS Code's own Go/HTML/CSS/SQL/JSON
     # grammars on every run (not redistributed here, no cache key

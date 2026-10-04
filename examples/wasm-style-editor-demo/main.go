@@ -18,7 +18,7 @@ import (
 	"github.com/elaous/gojiberry/domrt"
 	"github.com/elaous/gojiberry/domrt/browser"
 	"github.com/elaous/gojiberry/fonts"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 type state struct {
@@ -48,7 +48,7 @@ func main() {
 	var root *domrt.Root
 	var render func()
 	render = func() {
-		node := gox.El("div", nil,
+		node := xango.El("div", nil,
 			components.StyleEditor(components.StyleEditorProps{
 				Format: st.format,
 				Base:   base,
@@ -68,11 +68,11 @@ func main() {
 					},
 				},
 			}),
-			gox.El("button", []gox.Attr{
-				gox.A("id", "load-device-fonts"), gox.A("type", "button"),
-				gox.On("click", func(gox.Event) { go loadDeviceFonts(st, repo, render) }),
-			}, gox.Text("Load fonts from this device")),
-			gox.El("span", []gox.Attr{gox.A("id", "status")}, gox.Text(st.status)),
+			xango.El("button", []xango.Attr{
+				xango.A("id", "load-device-fonts"), xango.A("type", "button"),
+				xango.On("click", func(xango.Event) { go loadDeviceFonts(st, repo, render) }),
+			}, xango.Text("Load fonts from this device")),
+			xango.El("span", []xango.Attr{xango.A("id", "status")}, xango.Text(st.status)),
 		)
 		if root == nil {
 			root = domrt.Mount(container.Element, node)

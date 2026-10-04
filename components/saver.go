@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // SaverChoice is one option in a Saver's target or format menu.
@@ -49,46 +49,46 @@ type SaverProps struct {
 // each to open or delete. It is controlled (see the root README's
 // controlled-component notes); saver.Session keeps its state and does the
 // saving.
-func Saver(props SaverProps) gox.Node {
-	choice := func(label string, items []SaverChoice, current string, on func(string)) gox.Node {
-		var opts []gox.Node
+func Saver(props SaverProps) xango.Node {
+	choice := func(label string, items []SaverChoice, current string, on func(string)) xango.Node {
+		var opts []xango.Node
 		for _, c := range items {
-			attrs := []gox.Attr{gox.A("value", c.Name)}
+			attrs := []xango.Attr{xango.A("value", c.Name)}
 			if c.Name == current {
-				attrs = append(attrs, gox.A("selected", "selected"))
+				attrs = append(attrs, xango.A("selected", "selected"))
 			}
-			opts = append(opts, gox.El("option", attrs, gox.Text(c.Label)))
+			opts = append(opts, xango.El("option", attrs, xango.Text(c.Label)))
 		}
-		attrs := []gox.Attr{gox.A("class", "gj-saver-select"), gox.A("aria-label", label), gox.A("data-field", label)}
+		attrs := []xango.Attr{xango.A("class", "gj-saver-select"), xango.A("aria-label", label), xango.A("data-field", label)}
 		if on != nil {
-			attrs = append(attrs, gox.On("change", func(e gox.Event) { on(gox.EventValue[string](e)) }))
+			attrs = append(attrs, xango.On("change", func(e xango.Event) { on(xango.EventValue[string](e)) }))
 		}
-		return gox.El("label", []gox.Attr{gox.A("class", "gj-saver-field")},
-			gox.El("span", []gox.Attr{gox.A("class", "gj-saver-label")}, gox.Text(label)),
-			gox.El("select", attrs, opts...))
+		return xango.El("label", []xango.Attr{xango.A("class", "gj-saver-field")},
+			xango.El("span", []xango.Attr{xango.A("class", "gj-saver-label")}, xango.Text(label)),
+			xango.El("select", attrs, opts...))
 	}
-	button := func(class, label string, disabled bool, on func()) gox.Node {
-		attrs := []gox.Attr{gox.A("type", "button"), gox.A("class", class)}
+	button := func(class, label string, disabled bool, on func()) xango.Node {
+		attrs := []xango.Attr{xango.A("type", "button"), xango.A("class", class)}
 		if disabled || on == nil {
-			attrs = append(attrs, gox.A("disabled", "disabled"))
+			attrs = append(attrs, xango.A("disabled", "disabled"))
 		} else {
-			attrs = append(attrs, gox.On("click", func(gox.Event) { on() }))
+			attrs = append(attrs, xango.On("click", func(xango.Event) { on() }))
 		}
-		return gox.El("button", attrs, gox.Text(label))
+		return xango.El("button", attrs, xango.Text(label))
 	}
 
-	nameAttrs := []gox.Attr{gox.A("type", "text"), gox.A("class", "gj-saver-name"), gox.A("value", props.Name),
-		gox.A("placeholder", "Document name"), gox.A("aria-label", "Document name")}
+	nameAttrs := []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-saver-name"), xango.A("value", props.Name),
+		xango.A("placeholder", "Document name"), xango.A("aria-label", "Document name")}
 	if props.OnName != nil {
-		nameAttrs = append(nameAttrs, gox.On("input", func(e gox.Event) { props.OnName(gox.EventValue[string](e)) }))
+		nameAttrs = append(nameAttrs, xango.On("input", func(e xango.Event) { props.OnName(xango.EventValue[string](e)) }))
 	}
 
-	children := []gox.Node{
-		gox.El("div", []gox.Attr{gox.A("class", "gj-saver-row")},
+	children := []xango.Node{
+		xango.El("div", []xango.Attr{xango.A("class", "gj-saver-row")},
 			choice("Save to", props.Targets, props.Target, props.OnTarget),
 			choice("Format", props.Formats, props.Format, props.OnFormat)),
-		gox.El("div", []gox.Attr{gox.A("class", "gj-saver-row")},
-			gox.El("input", nameAttrs),
+		xango.El("div", []xango.Attr{xango.A("class", "gj-saver-row")},
+			xango.El("input", nameAttrs),
 			button("gj-saver-save", "Save", props.Busy || props.Name == "", props.OnSave)),
 	}
 	if props.Status != "" {
@@ -96,28 +96,28 @@ func Saver(props SaverProps) gox.Node {
 		if props.Failed {
 			class += " gj-saver-failed"
 		}
-		children = append(children, gox.El("div", []gox.Attr{gox.A("class", class), gox.A("role", "status")}, gox.Text(props.Status)))
+		children = append(children, xango.El("div", []xango.Attr{xango.A("class", class), xango.A("role", "status")}, xango.Text(props.Status)))
 	}
 
-	var rows []gox.Node
+	var rows []xango.Node
 	for _, e := range props.Entries {
-		rows = append(rows, gox.El("li", []gox.Attr{gox.A("class", "gj-saver-entry"), gox.A("data-key", e.Key)},
-			gox.El("span", []gox.Attr{gox.A("class", "gj-saver-entry-name")}, gox.Text(e.Name)),
-			gox.El("span", []gox.Attr{gox.A("class", "gj-saver-entry-meta")}, gox.Text(entryMeta(e))),
+		rows = append(rows, xango.El("li", []xango.Attr{xango.A("class", "gj-saver-entry"), xango.A("data-key", e.Key)},
+			xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-name")}, xango.Text(e.Name)),
+			xango.El("span", []xango.Attr{xango.A("class", "gj-saver-entry-meta")}, xango.Text(entryMeta(e))),
 			button("gj-saver-open", "Open", props.Busy, openFn(props.OnOpen, e.Key)),
 			button("gj-saver-delete", "Delete", props.Busy, openFn(props.OnDelete, e.Key))))
 	}
-	list := gox.El("div", []gox.Attr{gox.A("class", "gj-saver-saved")},
-		gox.El("div", []gox.Attr{gox.A("class", "gj-saver-saved-head")},
-			gox.El("h4", []gox.Attr{gox.A("class", "gj-saver-title")}, gox.Text("Saved here")),
+	list := xango.El("div", []xango.Attr{xango.A("class", "gj-saver-saved")},
+		xango.El("div", []xango.Attr{xango.A("class", "gj-saver-saved-head")},
+			xango.El("h4", []xango.Attr{xango.A("class", "gj-saver-title")}, xango.Text("Saved here")),
 			button("gj-saver-refresh", "Refresh", props.Busy, props.OnRefresh)))
 	if len(rows) == 0 {
-		list.Children = append(list.Children, gox.El("p", []gox.Attr{gox.A("class", "gj-saver-empty")}, gox.Text("Nothing saved yet.")))
+		list.Children = append(list.Children, xango.El("p", []xango.Attr{xango.A("class", "gj-saver-empty")}, xango.Text("Nothing saved yet.")))
 	} else {
-		list.Children = append(list.Children, gox.El("ul", []gox.Attr{gox.A("class", "gj-saver-list")}, rows...))
+		list.Children = append(list.Children, xango.El("ul", []xango.Attr{xango.A("class", "gj-saver-list")}, rows...))
 	}
 	children = append(children, list)
-	return gox.El("div", []gox.Attr{gox.A("class", "gj-saver")}, children...)
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-saver")}, children...)
 }
 
 func openFn(on func(string), key string) func() {

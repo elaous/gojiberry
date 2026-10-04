@@ -3,7 +3,7 @@
 Plain-text `go doc -all` output for each public package, regenerate with:
 
 ```sh
-go doc -all ./gox > docs/gox.txt
+go doc -all ./xango > docs/xango.txt
 go doc -all ./components > docs/components.txt
 go doc -all ./devreload > docs/devreload.txt
 go doc -all ./devwatch > docs/devwatch.txt
@@ -17,9 +17,9 @@ GOOS=js GOARCH=wasm go doc -all ./domrt/worker > docs/domrt-worker.txt
 
 `domrt`, `domrt/browser`, `domrt/html`, `domrt/svg`, `domrt/sw`, and
 `domrt/worker` are `js`/`wasm`-only packages, hence `GOOS=js GOARCH=wasm`;
-`gox` and `components` are plain Go.
+`xango` and `components` are plain Go.
 
 Hand-written notes:
 
-- `gox-canvas.md` -- how gox (function props, generic components, a
-  possible `canvas/gox` renderer) can drive the canvas components.
+- `xango-canvas.md` -- how xango (function props, generic components, a
+  possible `canvas/xango` renderer) can drive the canvas components.

@@ -11,7 +11,7 @@ run: generate
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/goxc examples/block-editor
+	cd ../.. && go run ./cmd/xgc examples/block-editor
 
 .PHONY: test
 test: generate

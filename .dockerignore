@@ -2,7 +2,7 @@
 # is several MB, and none of the dev-tooling directories below are
 # needed to build any of the four service binaries.
 .git
-editors/vscode-gox/test/node_modules
+editors/vscode-xango/test/node_modules
 examples/*/node_modules
 coverage.out
 coverage.out.html
