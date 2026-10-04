@@ -62,7 +62,7 @@ func (u *ui) refreshSpell(flow *canvas.TextFlow) {
 	s.spans, s.words = nil, nil
 	if flow == nil || !s.enabled || s.checker == nil {
 		if flow != nil {
-			flow.SetSquiggles(nil, "")
+			flow.SetSquigglesAs("spell", nil, "")
 		}
 		return
 	}
@@ -89,7 +89,7 @@ func (u *ui) refreshSpell(flow *canvas.TextFlow) {
 		}
 		s.words = append(s.words, *it)
 	}
-	flow.SetSquiggles(s.spans, "")
+	flow.SetSquigglesAs("spell", s.spans, "")
 }
 
 // occurrences returns the spans of word (any case) in the checked text.

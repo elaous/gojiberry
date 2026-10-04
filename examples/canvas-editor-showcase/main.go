@@ -74,6 +74,7 @@ type ui struct {
 	navSig              string   // outline/bookmarks the Outline tab last showed
 	find                findState
 	spell               spellState
+	lang                langState
 	statsSig            string // the counts the status bar and Stats tab last showed
 	shareLink           string // the link the Share tab shows
 	message             string // the Import/Export tab's last message
@@ -244,7 +245,7 @@ func main() {
 				xango.On("click", func(xango.Event) { toggleMode() })}, xango.Text("Mode: "+state.Mode.String()+" (click to switch)")),
 			tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 			tabButton(u, "comments", "Comments", renderUI), tabButton(u, "outline", "Outline", renderUI),
-			tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI),
+			tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI),
 			tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI),
 		)
 
@@ -304,6 +305,10 @@ func main() {
 		case "spell":
 			if flow != nil {
 				panel = spellPanel(u, &state, func() *canvas.TextFlow { return flow }, func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }, redraw, renderUI)
+			}
+		case "language":
+			if flow != nil {
+				panel = langPanel(u, &state, func() *canvas.TextFlow { return flow }, func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }, redraw, renderUI)
 			}
 		case "stats":
 			if flow != nil {
@@ -572,7 +577,8 @@ func main() {
 			renderUI()
 		}
 		b, _ := json.Marshal(map[string]any{
-			"hyphenate": state.Hyphenate, "stats": statsState(stats), "share": u.shareLink, "spell": map[string]any{"enabled": u.spell.enabled, "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
+			"hyphenate": state.Hyphenate, "language": map[string]any{"translate": u.lang.translator != nil, "grammar": u.lang.grammar != nil, "issues": len(u.lang.issues), "translated": u.lang.translated, "error": u.lang.err, "busy": u.lang.busy},
+			"stats": statsState(stats), "share": u.shareLink, "spell": map[string]any{"enabled": u.spell.enabled, "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
@@ -582,6 +588,13 @@ func main() {
 		doc.GetElementByID("state").SetTextContent(string(b))
 	}
 
+	u.setupLanguage(func(k string) string {
+		q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
+		if q.Call("has", k).Bool() {
+			return q.Call("get", k).String()
+		}
+		return ""
+	})
 	scrollToMatch := func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }
 	state.FindFeature = canvas.FindFeature{
 		OnOpen: func(replace bool) {

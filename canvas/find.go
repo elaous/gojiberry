@@ -153,6 +153,21 @@ func expandReplacement(re *regexp.Regexp, matched, repl string) string {
 	return string(re.ExpandString(nil, repl, matched, loc))
 }
 
+// ReplaceRange puts text in place of the range [from, to) of the text stream,
+// in the formatting of its first character (an empty range inserts).
+func (f *TextFlow) ReplaceRange(from, to int, text string) {
+	d := f.flatten()
+	var fm Format
+	if from < len(d.rs) {
+		fm = d.formats[d.rs[from]]
+	}
+	var items []Item
+	if text != "" {
+		items = []Item{Chars{Text: text, Format: fm}}
+	}
+	f.Replace([]Edit{{From: from, To: to, Items: items}})
+}
+
 // ReplaceAll finds every match of o and replaces it with repl; it returns how
 // many it changed.
 func (f *TextFlow) ReplaceAll(o FindOptions, repl string) (int, error) {

@@ -604,3 +604,30 @@ func TestSpellPanelListsWordsSuggestionsAndActions(t *testing.T) {
 		t.Errorf("clean:\n%s\noff:\n%s", clean, off)
 	}
 }
+
+func TestLanguagePanelStates(t *testing.T) {
+	off := render(t, LanguagePanel(LanguagePanelProps{}))
+	for _, want := range []string{"Language: not sure", "No translation server is set up.", "No grammar model is set up."} {
+		if !strings.Contains(off, want) {
+			t.Errorf("missing %q in\n%s", want, off)
+		}
+	}
+	on := render(t, LanguagePanel(LanguagePanelProps{
+		Detected: "English", Targets: []LanguageTarget{{"DE", "German"}, {"FR", "French"}}, Target: "FR", HasSelection: true, Translation: "Bonjour",
+		GrammarEnabled: true, Checked: true, Issues: []GrammarIssue{{Text: "He go", Message: "agreement", Suggestion: "He goes"}},
+	}))
+	for _, want := range []string{"Language: English", `value="FR" selected="selected"`, "Bonjour", "gj-lang-use", `data-index="0"`, "Change to “He goes”"} {
+		if !strings.Contains(on, want) {
+			t.Errorf("missing %q in\n%s", want, on)
+		}
+	}
+	if strings.Contains(on, `class="gj-lang-translate" disabled`) {
+		t.Error("translate is enabled with a selection")
+	}
+	noSel := render(t, LanguagePanel(LanguagePanelProps{Targets: []LanguageTarget{{"DE", "German"}}, Busy: true, Error: "boom", ReadOnly: true, GrammarEnabled: true, Checked: true}))
+	for _, want := range []string{"Select some text to translate it.", "Working…", "boom", "No grammar issues found", `disabled="disabled"`} {
+		if !strings.Contains(noSel, want) {
+			t.Errorf("missing %q in\n%s", want, noSel)
+		}
+	}
+}
