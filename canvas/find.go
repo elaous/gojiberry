@@ -116,8 +116,21 @@ func (f *TextFlow) ReplaceMatches(matches []Match, o FindOptions, repl string) (
 	if err != nil {
 		return 0, err
 	}
-	rs := []rune(f.EditText())
+	text := f.EditText()
+	rs := []rune(text)
 	d := f.flatten()
+	// The matches' groups are found in the whole text, not in the matched text
+	// alone, so a pattern that looks around (\b, \B, ^) means what it did in Find.
+	var all [][]int
+	var byteAt []int // rune offset -> byte offset
+	if o.Regex {
+		all = re.FindAllStringSubmatchIndex(text, -1)
+		byteAt = make([]int, 0, len(rs)+1)
+		for i := range text {
+			byteAt = append(byteAt, i)
+		}
+		byteAt = append(byteAt, len(text))
+	}
 	var edits []Edit
 	for _, m := range matches {
 		if m.From < 0 || m.To > len(rs) || m.To <= m.From {
@@ -125,7 +138,7 @@ func (f *TextFlow) ReplaceMatches(matches []Match, o FindOptions, repl string) (
 		}
 		with := repl
 		if o.Regex {
-			with = expandReplacement(re, string(rs[m.From:m.To]), repl)
+			with = expandReplacement(re, text, all, byteAt[m.From], byteAt[m.To], repl)
 		}
 		var fm Format
 		if m.From < len(d.rs) {
@@ -144,13 +157,15 @@ func (f *TextFlow) ReplaceMatches(matches []Match, o FindOptions, repl string) (
 	return len(edits), nil
 }
 
-// expandReplacement applies a regex replacement template to one match's text.
-func expandReplacement(re *regexp.Regexp, matched, repl string) string {
-	loc := re.FindStringSubmatchIndex(matched)
-	if loc == nil {
-		return repl
+// expandReplacement applies a regex replacement template to the match of the
+// bytes [from, to) of text, whose groups are in all.
+func expandReplacement(re *regexp.Regexp, text string, all [][]int, from, to int, repl string) string {
+	for _, loc := range all {
+		if loc[0] == from && loc[1] == to {
+			return string(re.ExpandString(nil, repl, text, loc))
+		}
 	}
-	return string(re.ExpandString(nil, repl, matched, loc))
+	return repl
 }
 
 // ReplaceRange puts text in place of the range [from, to) of the text stream,

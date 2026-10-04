@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 )
 
@@ -266,3 +267,48 @@ func isReservedDocID(id string) bool {
 	// control is the hub's, so these keys must not be reachable here.
 	return strings.HasPrefix(id, aclKeyPrefix) || strings.HasPrefix(id, "collab:")
 }
+
+// Grant gives email a role on the document (changing it if they have one). The
+// owner's access cannot be changed, and an empty address or a role that is not
+// RoleEditor or RoleViewer is refused.
+func (a *ACL) Grant(email string, role Role) error {
+	switch {
+	case strings.TrimSpace(email) == "":
+		return errors.New("docstore: no address to share with")
+	case email == a.Owner:
+		return errors.New("docstore: the owner's access cannot be changed")
+	case role != RoleEditor && role != RoleViewer:
+		return errors.New("docstore: a role is editor or viewer")
+	}
+	if a.Grants == nil {
+		a.Grants = map[string]Role{}
+	}
+	a.Grants[email] = role
+	return nil
+}
+
+// Revoke takes away what email was given; the owner cannot be removed.
+func (a *ACL) Revoke(email string) error {
+	if email == a.Owner {
+		return errors.New("docstore: the owner cannot be removed")
+	}
+	delete(a.Grants, email)
+	return nil
+}
+
+// People lists who has access: the owner first, then the others by address.
+func (a ACL) People() []Person {
+	out := []Person{{ID: a.Owner, Role: "owner"}}
+	var rest []string
+	for e := range a.Grants {
+		rest = append(rest, e)
+	}
+	sort.Strings(rest)
+	for _, e := range rest {
+		out = append(out, Person{ID: e, Role: string(a.Grants[e])})
+	}
+	return out
+}
+
+// Person is someone with access to a document.
+type Person struct{ ID, Role string }

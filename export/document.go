@@ -125,13 +125,13 @@ func tableLines(t *docfile.TableItem) []line {
 		}
 		return rs, cs, false
 	}
-	bold := func(r, c int) bool {
+	style := func(r, c int) docfile.TableCellStyle {
 		for _, st := range t.Styles {
 			if st.Row == r && st.Col == c {
-				return st.Bold
+				return st
 			}
 		}
-		return false
+		return docfile.TableCellStyle{}
 	}
 	var out []line
 	for r, row := range t.Rows {
@@ -142,13 +142,14 @@ func tableLines(t *docfile.TableItem) []line {
 			}
 			rs, cs, covered := span(r, c)
 			f := docfile.Format{}
-			if bold(r, c) {
+			st := style(r, c)
+			if st.Bold {
 				f.FontWeight = 700
 			}
 			runs := []docfile.Chars{{Text: text, Format: f}}
 			out = append(out, line{
 				runs: runs,
-				after: []Block{{Kind: TableCell, TableRow: r, TableCol: c, TableRows: rows, TableCols: cols, TableColSpan: cs, TableRowSpan: rs, TableCovered: covered,
+				after: []Block{{Kind: TableCell, TableRow: r, TableCol: c, TableRows: rows, TableCols: cols, TableColSpan: cs, TableRowSpan: rs, TableCovered: covered, TableBackground: st.Background, TableAlign: st.Align,
 					Segments: segmentsOf(runs)}},
 			})
 		}

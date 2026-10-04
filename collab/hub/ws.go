@@ -39,8 +39,9 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = c.CloseNow() }()
 	// A frame over MaxBody is answered with a 413 reject, as the POST would be,
 	// so the client learns that it will never be accepted; the library's hard
-	// limit (which closes the socket) is a few times higher.
-	c.SetReadLimit(4 * h.cfg.MaxBody)
+	// limit (which closes the socket) is twice as high, so a client cannot make the
+	// hub buffer much more than a POST could carry.
+	c.SetReadLimit(2*h.cfg.MaxBody + 64<<10)
 	s, snapshot, peers, ok := h.join(rm, role, r, replica)
 	if !ok {
 		_ = c.Close(websocket.StatusPolicyViolation, "that replica id belongs to another user")
@@ -199,8 +200,13 @@ func (h *Hub) cookieSocketAllowed(r *http.Request) bool {
 	if origin == "" || r.Header.Get("Cookie") == "" {
 		return true
 	}
-	if u, err := url.Parse(origin); err == nil && strings.EqualFold(u.Host, r.Host) {
-		return true
+	if u, err := url.Parse(origin); err == nil {
+		if strings.EqualFold(u.Host, r.Host) {
+			return true
+		}
+		if fwd := r.Header.Get("X-Forwarded-Host"); h.cfg.TrustForwardedHost && fwd != "" && strings.EqualFold(u.Host, fwd) {
+			return true
+		}
 	}
 	for _, o := range h.cfg.CookieOrigins {
 		if strings.EqualFold(o, origin) {

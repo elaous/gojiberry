@@ -519,3 +519,29 @@ func TestRequireACLClosesUnownedDocumentsAndLetsTheFirstWriterOwnThem(t *testing
 		t.Fatal("and owns it: others are refused")
 	}
 }
+
+func TestACLGrantRevokePeople(t *testing.T) {
+	a := ACL{Owner: "me@x.test"}
+	for _, bad := range []struct {
+		who  string
+		role Role
+	}{{"", RoleEditor}, {"me@x.test", RoleEditor}, {"a@x.test", "admin"}} {
+		if err := a.Grant(bad.who, bad.role); err == nil {
+			t.Errorf("granted %+v", bad)
+		}
+	}
+	_ = a.Grant("zed@x.test", RoleViewer)
+	_ = a.Grant("ana@x.test", RoleEditor)
+	_ = a.Grant("zed@x.test", RoleEditor) // changes the role
+	p := a.People()
+	if len(p) != 3 || p[0].Role != "owner" || p[1].ID != "ana@x.test" || p[2].Role != "editor" {
+		t.Errorf("%+v", p)
+	}
+	if err := a.Revoke("me@x.test"); err == nil {
+		t.Error("the owner cannot be revoked")
+	}
+	_ = a.Revoke("ana@x.test")
+	if a.RoleOf("ana@x.test") != "" || len(a.People()) != 2 {
+		t.Errorf("%+v", a)
+	}
+}

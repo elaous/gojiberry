@@ -1,7 +1,10 @@
 package export
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -176,4 +179,33 @@ func TestMergedCellsReachTheFormats(t *testing.T) {
 	if _, err := (EPUB{}).Export(snap); err != nil {
 		t.Error(err)
 	}
+}
+
+func TestDocxKeepsCellsThatAreNotAWholeTable(t *testing.T) {
+	snap := Snapshot{Blocks: []Block{{Kind: TableCell, TableRow: 0, TableCol: 0, TableRows: 2, TableCols: 2, TableColSpan: 1, TableRowSpan: 1, Segments: []Segment{{Text: "lonely"}}}}}
+	data, err := DOCX{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(unzipEntry(t, data, "word/document.xml")), "lonely") {
+		t.Error("the cell's text was dropped")
+	}
+}
+
+func unzipEntry(t *testing.T, data []byte, name string) []byte {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range zr.File {
+		if f.Name == name {
+			rc, _ := f.Open()
+			defer func() { _ = rc.Close() }()
+			b, _ := io.ReadAll(rc)
+			return b
+		}
+	}
+	t.Fatalf("no %s in the file", name)
+	return nil
 }

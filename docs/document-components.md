@@ -11,6 +11,7 @@ nil is not drawn.
 | `TagFilter` | All + one chip per tag | `OnSelect` |
 | `Trash` | documents in the trash, with `Children` (usually the live list) above | `Restore`, `Delete`, optional `OnSelect` for batches |
 | `Versions` | snapshots of one document | `Save`, `Open`, `Delete` |
+| `People` | who can open the document (owner, editors, viewers) | `Invite`, `SetRole`, `Remove` (over a `docstore.ACL`, or any backend) |
 | `Saver` | the save form, composing the three above | `OnSave`, `OnSaveAsNew`, `OnTarget`, `OnFormat`, `OnName` |
 
 ```go
