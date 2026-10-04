@@ -5,14 +5,14 @@ import (
 	"strings"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // --- Markdown text with mentions -----------------------------------------
 
 type inlinePattern struct {
 	re   *regexp.Regexp
-	make func(m []string) gox.Node
+	make func(m []string) xango.Node
 }
 
 // inlinePatterns is set in init: the makers call inlineNodes, which reads it.
@@ -20,17 +20,17 @@ var inlinePatterns []inlinePattern
 
 func init() {
 	inlinePatterns = []inlinePattern{
-		{regexp.MustCompile("`([^`]+)`"), func(m []string) gox.Node { return gox.El("code", nil, gox.Text(m[1])) }},
-		{regexp.MustCompile(`\[([^\]]+)\]\(([^)\s]+)\)`), func(m []string) gox.Node {
+		{regexp.MustCompile("`([^`]+)`"), func(m []string) xango.Node { return xango.El("code", nil, xango.Text(m[1])) }},
+		{regexp.MustCompile(`\[([^\]]+)\]\(([^)\s]+)\)`), func(m []string) xango.Node {
 			if !safeURL(m[2]) {
-				return gox.Text(m[1])
+				return xango.Text(m[1])
 			}
-			return gox.El("a", []gox.Attr{gox.A("href", m[2]), gox.A("rel", "noopener noreferrer"), gox.A("target", "_blank")}, inlineNodes(m[1])...)
+			return xango.El("a", []xango.Attr{xango.A("href", m[2]), xango.A("rel", "noopener noreferrer"), xango.A("target", "_blank")}, inlineNodes(m[1])...)
 		}},
-		{regexp.MustCompile(`\*\*(.+?)\*\*`), func(m []string) gox.Node { return gox.El("strong", nil, inlineNodes(m[1])...) }},
-		{regexp.MustCompile(`~~(.+?)~~`), func(m []string) gox.Node { return gox.El("s", nil, inlineNodes(m[1])...) }},
-		{regexp.MustCompile(`\*([^*\s][^*]*?)\*`), func(m []string) gox.Node { return gox.El("em", nil, inlineNodes(m[1])...) }},
-		{regexp.MustCompile(`(?:^|\b)_([^_\s][^_]*?)_(?:\b|$)`), func(m []string) gox.Node { return gox.El("em", nil, inlineNodes(m[1])...) }},
+		{regexp.MustCompile(`\*\*(.+?)\*\*`), func(m []string) xango.Node { return xango.El("strong", nil, inlineNodes(m[1])...) }},
+		{regexp.MustCompile(`~~(.+?)~~`), func(m []string) xango.Node { return xango.El("s", nil, inlineNodes(m[1])...) }},
+		{regexp.MustCompile(`\*([^*\s][^*]*?)\*`), func(m []string) xango.Node { return xango.El("em", nil, inlineNodes(m[1])...) }},
+		{regexp.MustCompile(`(?:^|\b)_([^_\s][^_]*?)_(?:\b|$)`), func(m []string) xango.Node { return xango.El("em", nil, inlineNodes(m[1])...) }},
 	}
 }
 
@@ -43,7 +43,7 @@ func safeURL(u string) bool {
 // italics, and -- in the plain text between them -- @mentions and e-mail
 // addresses, which become highlighted spans (e-mail addresses mailto
 // links).
-func inlineNodes(s string) []gox.Node {
+func inlineNodes(s string) []xango.Node {
 	best, bestIdx := -1, []int(nil)
 	for i, p := range inlinePatterns {
 		if loc := p.re.FindStringSubmatchIndex(s); loc != nil && (bestIdx == nil || loc[0] < bestIdx[0]) {
@@ -54,32 +54,32 @@ func inlineNodes(s string) []gox.Node {
 		return mentionNodes(s)
 	}
 	m := inlinePatterns[best].re.FindStringSubmatch(s)
-	var out []gox.Node
+	var out []xango.Node
 	out = append(out, mentionNodes(s[:bestIdx[0]])...)
 	out = append(out, inlinePatterns[best].make(m))
 	return append(out, inlineNodes(s[bestIdx[1]:])...)
 }
 
-func mentionNodes(s string) []gox.Node {
+func mentionNodes(s string) []xango.Node {
 	if s == "" {
 		return nil
 	}
-	var out []gox.Node
+	var out []xango.Node
 	last := 0
 	for _, m := range canvas.Mentions(s) {
 		if m.Start > last {
-			out = append(out, gox.Text(s[last:m.Start]))
+			out = append(out, xango.Text(s[last:m.Start]))
 		}
 		switch m.Kind {
 		case canvas.MentionEmail:
-			out = append(out, gox.El("a", []gox.Attr{gox.A("class", "gj-mention gj-mention-email"), gox.A("href", "mailto:"+m.Name), gox.A("data-mention", m.Name)}, gox.Text(m.Text)))
+			out = append(out, xango.El("a", []xango.Attr{xango.A("class", "gj-mention gj-mention-email"), xango.A("href", "mailto:"+m.Name), xango.A("data-mention", m.Name)}, xango.Text(m.Text)))
 		default:
-			out = append(out, gox.El("span", []gox.Attr{gox.A("class", "gj-mention"), gox.A("data-mention", m.Name)}, gox.Text(m.Text)))
+			out = append(out, xango.El("span", []xango.Attr{xango.A("class", "gj-mention"), xango.A("data-mention", m.Name)}, xango.Text(m.Text)))
 		}
 		last = m.End
 	}
 	if last < len(s) {
-		out = append(out, gox.Text(s[last:]))
+		out = append(out, xango.Text(s[last:]))
 	}
 	return out
 }
@@ -94,21 +94,21 @@ var (
 // numbered lists, quotes, headings (as bold lines), and the inline forms
 // of inlineNodes, with @username and e-mail mentions highlighted. Raw HTML
 // is shown as text, and only http, https and mailto links are live.
-func MarkdownText(text string) gox.Node {
-	var blocks []gox.Node
+func MarkdownText(text string) xango.Node {
+	var blocks []xango.Node
 	var para []string
 	flush := func() {
 		if len(para) == 0 {
 			return
 		}
-		var kids []gox.Node
+		var kids []xango.Node
 		for i, l := range para {
 			if i > 0 {
-				kids = append(kids, gox.El("br", nil))
+				kids = append(kids, xango.El("br", nil))
 			}
 			kids = append(kids, inlineNodes(l)...)
 		}
-		blocks = append(blocks, gox.El("p", nil, kids...))
+		blocks = append(blocks, xango.El("p", nil, kids...))
 		para = nil
 	}
 	lines := strings.Split(strings.ReplaceAll(text, "\r", ""), "\n")
@@ -119,19 +119,19 @@ func MarkdownText(text string) gox.Node {
 			flush()
 		case reHeading.MatchString(line):
 			flush()
-			blocks = append(blocks, gox.El("p", []gox.Attr{gox.A("class", "gj-md-heading")}, inlineNodes(reHeading.FindStringSubmatch(line)[1])...))
+			blocks = append(blocks, xango.El("p", []xango.Attr{xango.A("class", "gj-md-heading")}, inlineNodes(reHeading.FindStringSubmatch(line)[1])...))
 		case reBullet.MatchString(line) || reOrdered.MatchString(line):
 			flush()
 			tag, re := "ul", reBullet
 			if reOrdered.MatchString(line) {
 				tag, re = "ol", reOrdered
 			}
-			var items []gox.Node
+			var items []xango.Node
 			for ; i < len(lines) && re.MatchString(lines[i]); i++ {
-				items = append(items, gox.El("li", nil, inlineNodes(re.FindStringSubmatch(lines[i])[1])...))
+				items = append(items, xango.El("li", nil, inlineNodes(re.FindStringSubmatch(lines[i])[1])...))
 			}
 			i--
-			blocks = append(blocks, gox.El(tag, nil, items...))
+			blocks = append(blocks, xango.El(tag, nil, items...))
 		case strings.HasPrefix(strings.TrimSpace(line), ">"):
 			flush()
 			var q []string
@@ -139,13 +139,13 @@ func MarkdownText(text string) gox.Node {
 				q = append(q, strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[i]), ">")))
 			}
 			i--
-			blocks = append(blocks, gox.El("blockquote", nil, inlineNodes(strings.Join(q, " "))...))
+			blocks = append(blocks, xango.El("blockquote", nil, inlineNodes(strings.Join(q, " "))...))
 		default:
 			para = append(para, line)
 		}
 	}
 	flush()
-	return gox.El("div", []gox.Attr{gox.A("class", "gj-markdown")}, blocks...)
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-markdown")}, blocks...)
 }
 
 // --- CommentCard and CommentList -------------------------------------------
@@ -184,7 +184,7 @@ func timeLabel(t interface {
 // CommentCard renders one comment: author and time, the commented text,
 // the Markdown body with mentions highlighted, its replies and, for an
 // editor, Resolve/Reopen, Delete and a reply box.
-func CommentCard(props CommentCardProps) gox.Node {
+func CommentCard(props CommentCardProps) xango.Node {
 	c := props.Comment
 	class := "gj-comment"
 	if props.Selected {
@@ -193,57 +193,57 @@ func CommentCard(props CommentCardProps) gox.Node {
 	if c.Resolved {
 		class += " gj-comment-resolved"
 	}
-	attrs := []gox.Attr{gox.A("class", class), gox.A("data-comment", c.ID)}
+	attrs := []xango.Attr{xango.A("class", class), xango.A("data-comment", c.ID)}
 	if props.OnSelect != nil {
-		attrs = append(attrs, gox.On("click", func(gox.Event) { props.OnSelect(c.ID) }))
+		attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnSelect(c.ID) }))
 	}
 	author := c.Author
 	if author == "" {
 		author = "Someone"
 	}
-	head := gox.El("div", []gox.Attr{gox.A("class", "gj-comment-head")},
-		gox.El("strong", []gox.Attr{gox.A("class", "gj-comment-author")}, gox.Text(author)),
-		gox.El("span", []gox.Attr{gox.A("class", "gj-comment-time")}, gox.Text(timeLabel(c.Created))))
-	kids := []gox.Node{head}
+	head := xango.El("div", []xango.Attr{xango.A("class", "gj-comment-head")},
+		xango.El("strong", []xango.Attr{xango.A("class", "gj-comment-author")}, xango.Text(author)),
+		xango.El("span", []xango.Attr{xango.A("class", "gj-comment-time")}, xango.Text(timeLabel(c.Created))))
+	kids := []xango.Node{head}
 	if props.Excerpt != "" {
-		kids = append(kids, gox.El("blockquote", []gox.Attr{gox.A("class", "gj-comment-excerpt")}, gox.Text(props.Excerpt)))
+		kids = append(kids, xango.El("blockquote", []xango.Attr{xango.A("class", "gj-comment-excerpt")}, xango.Text(props.Excerpt)))
 	}
 	kids = append(kids, MarkdownText(c.Text))
 	if c.Resolved {
-		kids = append(kids, gox.El("span", []gox.Attr{gox.A("class", "gj-comment-badge")}, gox.Text("Resolved")))
+		kids = append(kids, xango.El("span", []xango.Attr{xango.A("class", "gj-comment-badge")}, xango.Text("Resolved")))
 	}
 	if len(c.Replies) > 0 {
-		var rs []gox.Node
+		var rs []xango.Node
 		for _, r := range c.Replies {
 			name := r.Author
 			if name == "" {
 				name = "Someone"
 			}
-			rs = append(rs, gox.El("li", []gox.Attr{gox.A("class", "gj-comment-reply")},
-				gox.El("strong", nil, gox.Text(name)), gox.Text(" "), MarkdownText(r.Text)))
+			rs = append(rs, xango.El("li", []xango.Attr{xango.A("class", "gj-comment-reply")},
+				xango.El("strong", nil, xango.Text(name)), xango.Text(" "), MarkdownText(r.Text)))
 		}
-		kids = append(kids, gox.El("ul", []gox.Attr{gox.A("class", "gj-comment-replies")}, rs...))
+		kids = append(kids, xango.El("ul", []xango.Attr{xango.A("class", "gj-comment-replies")}, rs...))
 	}
-	btn := func(class, label string, on func()) gox.Node {
-		a := []gox.Attr{gox.A("type", "button"), gox.A("class", class)}
+	btn := func(class, label string, on func()) xango.Node {
+		a := []xango.Attr{xango.A("type", "button"), xango.A("class", class)}
 		if on != nil {
-			a = append(a, gox.On("click", func(gox.Event) { on() }))
+			a = append(a, xango.On("click", func(xango.Event) { on() }))
 		} else {
-			a = append(a, gox.A("disabled", "disabled"))
+			a = append(a, xango.A("disabled", "disabled"))
 		}
-		return gox.El("button", a, gox.Text(label))
+		return xango.El("button", a, xango.Text(label))
 	}
 	if props.CanEdit || props.CanReply {
 		var onReply func()
 		if props.OnReply != nil && strings.TrimSpace(props.ReplyDraft) != "" {
 			onReply = func() { props.OnReply(c.ID, props.ReplyDraft) }
 		}
-		in := []gox.Attr{gox.A("type", "text"), gox.A("class", "gj-comment-input"), gox.A("placeholder", "Reply…"),
-			gox.A("aria-label", "Reply"), gox.A("value", props.ReplyDraft)}
+		in := []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-comment-input"), xango.A("placeholder", "Reply…"),
+			xango.A("aria-label", "Reply"), xango.A("value", props.ReplyDraft)}
 		if props.OnReplyDraft != nil {
-			in = append(in, gox.On("input", func(e gox.Event) { props.OnReplyDraft(c.ID, gox.EventValue[string](e)) }))
+			in = append(in, xango.On("input", func(e xango.Event) { props.OnReplyDraft(c.ID, xango.EventValue[string](e)) }))
 		}
-		kids = append(kids, gox.El("div", []gox.Attr{gox.A("class", "gj-comment-reply-row")}, gox.El("input", in), btn("gj-comment-send", "Reply", onReply)))
+		kids = append(kids, xango.El("div", []xango.Attr{xango.A("class", "gj-comment-reply-row")}, xango.El("input", in), btn("gj-comment-send", "Reply", onReply)))
 	}
 	if props.CanEdit {
 		resolve := "Resolve"
@@ -257,9 +257,9 @@ func CommentCard(props CommentCardProps) gox.Node {
 		if props.OnDelete != nil {
 			onDelete = func() { props.OnDelete(c.ID) }
 		}
-		kids = append(kids, gox.El("div", []gox.Attr{gox.A("class", "gj-comment-actions")}, btn("gj-comment-resolve", resolve, onResolve), btn("gj-comment-delete", "Delete", onDelete)))
+		kids = append(kids, xango.El("div", []xango.Attr{xango.A("class", "gj-comment-actions")}, btn("gj-comment-resolve", resolve, onResolve), btn("gj-comment-delete", "Delete", onDelete)))
 	}
-	return gox.El("div", attrs, kids...)
+	return xango.El("div", attrs, kids...)
 }
 
 // CommentListProps configures CommentList.
@@ -284,7 +284,7 @@ type CommentListProps struct {
 
 // CommentList renders the comments as cards, open ones first, with a
 // switch for the resolved ones.
-func CommentList(props CommentListProps) gox.Node {
+func CommentList(props CommentListProps) xango.Node {
 	var open, done []canvas.Comment
 	for _, c := range props.Comments {
 		if c.Resolved {
@@ -297,7 +297,7 @@ func CommentList(props CommentListProps) gox.Node {
 	if props.ShowResolved {
 		list = append(list, done...)
 	}
-	var cards []gox.Node
+	var cards []xango.Node
 	for _, c := range list {
 		cards = append(cards, CommentCard(CommentCardProps{
 			Comment: c, Excerpt: props.Excerpts[c.ID], Selected: c.ID == props.Selected, CanEdit: props.CanEdit, CanReply: props.CanReply,
@@ -307,20 +307,20 @@ func CommentList(props CommentListProps) gox.Node {
 		}))
 	}
 	if len(cards) == 0 {
-		cards = append(cards, gox.El("p", []gox.Attr{gox.A("class", "gj-comment-empty")}, gox.Text("No comments.")))
+		cards = append(cards, xango.El("p", []xango.Attr{xango.A("class", "gj-comment-empty")}, xango.Text("No comments.")))
 	}
-	toggle := []gox.Attr{gox.A("type", "button"), gox.A("class", "gj-comment-toggle"), gox.A("aria-pressed", boolAttr(props.ShowResolved))}
+	toggle := []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-comment-toggle"), xango.A("aria-pressed", boolAttr(props.ShowResolved))}
 	if props.OnToggleShowResolved != nil {
 		show := !props.ShowResolved
-		toggle = append(toggle, gox.On("click", func(gox.Event) { props.OnToggleShowResolved(show) }))
+		toggle = append(toggle, xango.On("click", func(xango.Event) { props.OnToggleShowResolved(show) }))
 	}
 	label := "Show resolved"
 	if len(done) > 0 {
 		label += " (" + itoa(len(done)) + ")"
 	}
-	return gox.El("div", []gox.Attr{gox.A("class", "gj-comments")},
-		gox.El("div", []gox.Attr{gox.A("class", "gj-comments-head")},
-			gox.El("h4", []gox.Attr{gox.A("class", "gj-comments-title")}, gox.Text("Comments")),
-			gox.El("button", toggle, gox.Text(label))),
-		gox.El("div", []gox.Attr{gox.A("class", "gj-comments-list")}, cards...))
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-comments")},
+		xango.El("div", []xango.Attr{xango.A("class", "gj-comments-head")},
+			xango.El("h4", []xango.Attr{xango.A("class", "gj-comments-title")}, xango.Text("Comments")),
+			xango.El("button", toggle, xango.Text(label))),
+		xango.El("div", []xango.Attr{xango.A("class", "gj-comments-list")}, cards...))
 }

@@ -38,7 +38,7 @@ import (
 // devserverBin is where the managed devserver binary is built --
 // outside the watched tree (the OS temp dir) so building it can never
 // itself trigger a rebuild.
-var devserverBin = filepath.Join(os.TempDir(), "gox-canvas-devwatch-server")
+var devserverBin = filepath.Join(os.TempDir(), "xango-canvas-devwatch-server")
 
 func runStep(name string, args ...string) bool {
 	cmd := exec.Command(name, args...)
@@ -51,7 +51,7 @@ func runStep(name string, args ...string) bool {
 	return true
 }
 
-// rebuild regenerates .go from .gox, rebuilds the WASM client, and
+// rebuild regenerates .go from .xg, rebuilds the WASM client, and
 // builds cmd/devserver to devserverBin.
 func rebuild() bool {
 	if !runStep("make", "generate") {

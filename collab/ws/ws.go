@@ -37,8 +37,15 @@ func WebSockets() link.Transport {
 	return link.TransportFunc(func(opts client.Options) link.Conn { return Dial(opts) })
 }
 
-// maxBatch is how many operations one frame carries.
-const maxBatch = 200
+// maxBatch is how many operations one frame carries, and maxFrame (bytes of
+// encoded operations) how much: a hub refuses a frame over its MaxBody, which
+// would otherwise close the socket and have the same batch sent again forever.
+// An operation that alone is over maxOp is not sent at all.
+const (
+	maxBatch = 200
+	maxFrame = 256 << 10
+	maxOp    = 4 << 20
+)
 
 // Conn is a WebSocket connection to a hub.
 type Conn struct {
@@ -246,7 +253,7 @@ func (c *Conn) run() {
 }
 
 // session is one connection's life.
-func (c *Conn) session() error {
+func (c *Conn) session() (retErr error) {
 	u, err := c.wsURL()
 	if err != nil {
 		return err
@@ -300,10 +307,29 @@ func (c *Conn) session() error {
 		}
 		c.mu.Lock()
 		n := min(len(c.pending), maxBatch)
-		batch := append([]crdt.Op(nil), c.pending[:n]...)
+		head := append([]crdt.Op(nil), c.pending[:n]...)
 		c.mu.Unlock()
 		if n == 0 {
 			return nil
+		}
+		var batch []crdt.Op
+		size := 0
+		for _, op := range head {
+			b, err := json.Marshal(op)
+			if err != nil {
+				return err
+			}
+			if len(batch) > 0 && size+len(b)+1 > maxFrame {
+				break
+			}
+			batch, size = append(batch, op), size+len(b)+1
+		}
+		if len(batch) == 1 && size > maxOp {
+			c.mu.Lock()
+			c.pending = c.pending[1:]
+			c.mu.Unlock()
+			c.emit(client.Event{Kind: client.Rejected, Ops: batch, Err: errors.New("collab: an operation is too large to send")})
+			return nil // the session repairs itself; what is left goes after
 		}
 		data, err := json.Marshal(batch)
 		if err != nil {
@@ -319,6 +345,26 @@ func (c *Conn) session() error {
 		c.mu.Unlock()
 		inflight = nil
 	}
+	// When a write fails because the hub shut the socket over a batch that is too
+	// big, the close code is in the reader's error: look for it, and give the
+	// batch up (it would be sent again, and refused again, for ever).
+	defer func() {
+		if len(inflight) == 0 || retErr == nil {
+			return
+		}
+		if websocket.CloseStatus(retErr) != websocket.StatusMessageTooBig {
+			select {
+			case e := <-readErr:
+				retErr = e
+			case <-time.After(300 * time.Millisecond):
+			}
+		}
+		if websocket.CloseStatus(retErr) == websocket.StatusMessageTooBig {
+			refused := inflight
+			settle()
+			c.emit(client.Event{Kind: client.Rejected, Ops: refused, Err: errors.New("collab: the hub refused a batch as too large")})
+		}
+	}()
 	sendPresence := func() error {
 		c.mu.Lock()
 		p := c.presence
@@ -406,6 +452,12 @@ func (c *Conn) session() error {
 				return err
 			}
 		case err := <-readErr:
+			if websocket.CloseStatus(err) == websocket.StatusMessageTooBig && len(inflight) > 0 {
+				// The hub will not take this batch however often it is sent.
+				refused := inflight
+				settle()
+				c.emit(client.Event{Kind: client.Rejected, Ops: refused, Err: errors.New("collab: the hub refused a batch as too large")})
+			}
 			return err
 		case <-c.ctx.Done():
 			return nil

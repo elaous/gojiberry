@@ -83,7 +83,7 @@ jobs:
           git push
 
   grammar-test:
-    name: vscode-gox grammar suite
+    name: vscode-xango grammar suite
     runs-on: ubuntu-latest
     # grammar-test-setup downloads VS Code's own Go/HTML/CSS/SQL/JSON
     # grammars on every run (not redistributed here, no cache key

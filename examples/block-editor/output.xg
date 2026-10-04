@@ -1,0 +1,36 @@
+package main
+
+import (
+	"github.com/elaous/gojiberry/crdt"
+	"github.com/elaous/gojiberry/xango"
+)
+
+// OutputProps renders the exact same Blocks as Editor, but as the
+// clean, final document (an invoice, here) a client actually receives
+// — proving data capture and rendered output are decoupled: swapping
+// this component for a PDF layout or a lesson-plan template never
+// touches how blocks are edited or synced.
+type OutputProps struct {
+	Blocks []crdt.Block
+}
+
+func Output(props OutputProps) xango.Node {
+	return <div class="output">{func() []xango.Node {
+		var out []xango.Node
+		for _, b := range props.Blocks {
+			switch b.Kind {
+			case KindHeading:
+				out = append(out, <h1>{b.Content}</h1>)
+			case KindLineItem:
+				desc, amount := ParseLineItem(b)
+				out = append(out, <div class="line-item">
+					<span class="desc">{desc}</span>
+					<span class="amount">{amount}</span>
+				</div>)
+			case KindNote:
+				out = append(out, <p class="note">{b.Content}</p>)
+			}
+		}
+		return out
+	}()}</div>
+}

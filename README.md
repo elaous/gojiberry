@@ -1,4 +1,6 @@
-# gojiberry / gox
+<img src="docs/brand/xango.svg" alt="Xangô logo: a yellow lightning bolt" width="96" align="right">
+
+# gojiberry / Xangô
 
 [![CI](https://github.com/elaous/gojiberry/actions/workflows/ci.yml/badge.svg)](https://github.com/elaous/gojiberry/actions/workflows/ci.yml)
 ![coverage](https://img.shields.io/badge/coverage-91.4%25-4c1)
@@ -9,7 +11,7 @@ Go that renders identically on the server (HTML strings) and in the
 browser (real DOM, via WASM), with no separate template language.
 
 ```go
-func Greeting(props GreetingProps) gox.Node {
+func Greeting(props GreetingProps) xango.Node {
 	if props.Name == "" {
 		return <p class="greeting">Hello, stranger!</p>
 	}
@@ -17,40 +19,49 @@ func Greeting(props GreetingProps) gox.Node {
 }
 ```
 
+## The name
+
+Xangô (shan-GOH) is the Yoruba orisha of thunder, lightning and justice
+(Sàngó in Yoruba; Xangô in Brazil, where Candomblé keeps his worship alive).
+The engine takes his name for the lightning: markup goes in, plain Go comes out
+in a flash, and the result is fair to every renderer, the same tree for
+server, browser and window. In code the name is ASCII: the package is `xango`,
+templates are `.xg` files and the generated Go is `.xg.go`. (Xangô was called Gox before.)
+
 ## How it works
 
 Two separate steps, run at two separate times:
 
-1. **Transpile time** (`go run ./cmd/goxc <dir>`, or `go generate ./...`
-   via the repo-root `go:generate` directive): every `*.gox` file's
-   `<Tag>` expressions are rewritten into plain `gox.El`/`gox.Text`
-   calls, emitted as an ordinary `*.gox.go` file next to it. This file
+1. **Transpile time** (`go run ./cmd/xgc <dir>`, or `go generate ./...`
+   via the repo-root `go:generate` directive): every `*.xg` file's
+   `<Tag>` expressions are rewritten into plain `xango.El`/`xango.Text`
+   calls, emitted as an ordinary `*.xg.go` file next to it. This file
    is committed like `templ`'s own `*_templ.go` convention, so
-   `go build`/`go test` never need `goxc` on the critical path.
+   `go build`/`go test` never need `xgc` on the critical path.
 2. **Run time**: your component function runs as plain compiled Go —
    there's no interpreter, template engine, or reflection involved —
-   and returns a `gox.Node`, a plain tree (element / text / fragment /
+   and returns a `xango.Node`, a plain tree (element / text / fragment /
    raw) that carries no opinion about how it gets displayed. The same
    tree feeds whichever renderer(s) your program calls:
 
 ```mermaid
 flowchart LR
-    A[".gox source<br/>&lt;Tag&gt; as Go expressions"] -- "go run ./cmd/goxc<br/>(transpile time)" --> B[".gox.go source<br/>gox.El / gox.Text calls"]
+    A[".xg source<br/>&lt;Tag&gt; as Go expressions"] -- "go run ./cmd/xgc<br/>(transpile time)" --> B[".xg.go source<br/>xango.El / xango.Text calls"]
     B -- "go build" --> C["your compiled program"]
-    C -- "Component(props)" --> D(("gox.Node tree<br/>(renderer-agnostic)"))
-    D -- "gox.Render / RenderString" --> E["HTML string<br/>net/http, Gin, Echo, Encore, ..."]
+    C -- "Component(props)" --> D(("xango.Node tree<br/>(renderer-agnostic)"))
+    D -- "xango.Render / RenderString" --> E["HTML string<br/>net/http, Gin, Echo, Encore, ..."]
     D -- "domrt.Mount / Update<br/>GOOS=js GOARCH=wasm" --> F["real DOM<br/>diff/patch on every re-render"]
-    D -- "goxgio.Renderer.Layout" --> G["native Gio window<br/>desktop/mobile"]
+    D -- "xangogio.Renderer.Layout" --> G["native Gio window<br/>desktop/mobile"]
 ```
 
-The `gox.Node` tree itself never knows which of these it's headed for
-— `gox.Render`/`domrt.Mount`/a `goxgio.Renderer` are just three
+The `xango.Node` tree itself never knows which of these it's headed for
+— `xango.Render`/`domrt.Mount`/a `xangogio.Renderer` are just three
 different functions that each walk the exact same tree shape and do
-something different with it (see `gox/render.go`, `domrt/domrt.go`, and
-`goxgio/render.go`, in that order, if you want to read the actual walk
-each one does — `goxgio` is its own separate Go module, like `domrt`'s
+something different with it (see `xango/render.go`, `domrt/domrt.go`, and
+`xangogio/render.go`, in that order, if you want to read the actual walk
+each one does — `xangogio` is its own separate Go module, like `domrt`'s
 sibling examples are, so it can depend on `gioui.org` without adding it
-to this one; see `goxgio/README.md`). Nothing about writing a component
+to this one; see `xangogio/README.md`). Nothing about writing a component
 needs to know or care which renderer(s) will eventually consume it.
 
 ## Getting Started
@@ -68,7 +79,7 @@ require github.com/elaous/gojiberry v0.0.0
 replace github.com/elaous/gojiberry => /path/to/gojiberry
 ```
 
-Write a component (`hello.gox`):
+Write a component (`hello.xg`):
 
 ```go
 package main
@@ -76,10 +87,10 @@ package main
 import (
 	"fmt"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
-func Greeting(name string) gox.Node {
+func Greeting(name string) xango.Node {
 	if name == "" {
 		return <p class="greeting">Hello, stranger!</p>
 	}
@@ -87,7 +98,7 @@ func Greeting(name string) gox.Node {
 }
 
 func main() {
-	html, err := gox.RenderString(Greeting("gojiberry"))
+	html, err := xango.RenderString(Greeting("gojiberry"))
 	if err != nil {
 		panic(err)
 	}
@@ -95,14 +106,14 @@ func main() {
 }
 ```
 
-Transpile it by running `goxc` from *this* checkout, pointed at your
-project's directory (this avoids needing `goxc`'s own dependencies —
+Transpile it by running `xgc` from *this* checkout, pointed at your
+project's directory (this avoids needing `xgc`'s own dependencies —
 HCL, sqlc, etc. — in your project's `go.mod`; see the `-experimental`
 flag below for when those matter to you):
 
 ```
 cd /path/to/gojiberry
-go run ./cmd/goxc /path/to/your-project
+go run ./cmd/xgc /path/to/your-project
 ```
 
 Then, from your own project:
@@ -130,7 +141,7 @@ From here:
 Go's generics use `Foo[T]`, not `Foo<T>`, so unlike TSX there's no
 ambiguity between a tag and a generic instantiation to resolve. The
 only remaining question is distinguishing a tag-open from the
-less-than operator (`a < b`), which `.gox` resolves the same way JSX
+less-than operator (`a < b`), which `.xg` resolves the same way JSX
 parsers do: `<` only means "less than" immediately after something
 that completes a value (an identifier, a literal, or a closing
 `)`/`]`/`}`). Everywhere else — after `return`, `(`, `,`, `=`, `{`, or
@@ -143,8 +154,8 @@ always a single Go expression, exactly like JSX. There's no separate
 usually via an inline closure —
 
 ```go
-<ul>{func() []gox.Node {
-	var items []gox.Node
+<ul>{func() []xango.Node {
+	var items []xango.Node
 	for _, s := range list {
 		items = append(items, <li>{s}</li>)
 	}
@@ -157,13 +168,13 @@ expanded by the same recursive scan, with no extra grammar required.
 
 ## Packages
 
-- **`gox`** — the runtime. `Node` is a plain, renderer-agnostic tree
+- **`xango`** — the runtime. `Node` is a plain, renderer-agnostic tree
   (element / text / fragment / raw) that both the server and the
   client render from, so a component behaves identically either way.
-  `gox.Render`/`gox.RenderString` render to HTML with automatic
-  escaping (`gox.Raw` is the explicit escape hatch). `gox.Event.Value`
-  is `any`, read back type-safely via `gox.EventValue[T]`.
-- **`internal/transpile`** — the `.gox` → `.go` source-to-source
+  `xango.Render`/`xango.RenderString` render to HTML with automatic
+  escaping (`xango.Raw` is the explicit escape hatch). `xango.Event.Value`
+  is `any`, read back type-safely via `xango.EventValue[T]`.
+- **`internal/transpile`** — the `.xg` → `.go` source-to-source
   transpiler described above, plus the stable resource-import loaders
   (JSON/JSONC/JSONL, CSS) and the `@title`/`@wasm`
   page-metadata annotations, both described below. Beyond tag/brace
@@ -176,23 +187,23 @@ expanded by the same recursive scan, with no extra grammar required.
   name containing a hyphen (a custom element, e.g. `<my-widget>`) and
   its attributes are always accepted, the same as a Component's own
   props — neither is a fixed HTML vocabulary. `data-*`/`aria-*`
-  attributes are always accepted too, per their own specs. If gox
+  attributes are always accepted too, per their own specs. If xango
   rejects a real tag/attribute this list is simply missing, add it to
   `validHTMLTags`/`validHTMLAttrs`.
 - **`internal/transpile/experimental`** — the resource-import loaders
   that shell out to a mature external tool this project doesn't
   reimplement (HCL/proto/capnp/sqlc), wired in only via
   `transpile.Options.ExperimentalLoaders` — see Resource imports below.
-- **`cmd/goxc`** — the CLI: `go run ./cmd/goxc <dir>` transpiles every
-  `*.gox` under `<dir>` into a gofmt-clean `*.gox.go` next to it (the
+- **`cmd/xgc`** — the CLI: `go run ./cmd/xgc <dir>` transpiles every
+  `*.xg` under `<dir>` into a gofmt-clean `*.xg.go` next to it (the
   generated file is committed, like `templ`'s `*_templ.go` convention,
-  so `go build`/`go test` work without running goxc first). Wired up
+  so `go build`/`go test` work without running xgc first). Wired up
   as `go generate` via the repo-root `generate.go`. `-experimental`
-  (or `GOX_EXPERIMENTAL=1`) enables the experimental resource imports
+  (or `XANGO_EXPERIMENTAL=1`) enables the experimental resource imports
   below; a directory literally named `experimental` is otherwise
   skipped entirely.
 - **`domrt`** — the client runtime (`GOOS=js GOARCH=wasm` only).
-  `domrt.Mount` creates real DOM nodes for a `gox.Node` tree;
+  `domrt.Mount` creates real DOM nodes for a `xango.Node` tree;
   `Root.Update` diffs the next tree against what's live and patches
   only what changed — text content in place, attributes added/removed,
   event listeners registered at most once per (element, event) with
@@ -291,7 +302,7 @@ expanded by the same recursive scan, with no extra grammar required.
   fires for (arrows, Backspace, Enter, shortcuts); `Element.OnMouseDown`/
   `OnMouseMove`/`OnMouseUp` report a typed `MouseEvent` (`X`/`Y`,
   viewport-relative) for anything that needs a real click/drag
-  position gox.Event can't carry — canvas hit-testing, custom
+  position xango.Event can't carry — canvas hit-testing, custom
   selection, and so on. Both mirror `DragEvent`'s shape (a
   `PreventDefault`/`StopPropagation` pair alongside the typed fields);
   see `examples/canvas-editor-app` for `MouseEvent.PreventDefault`
@@ -644,9 +655,9 @@ expanded by the same recursive scan, with no extra grammar required.
   translation table (`en-us-g2.ctb`, contracted Grade 2 US English,
   out of the box), overridable per request via the JSON body's own
   `table` field.
-- **`devreload`** / **`devwatch`** — the two halves of gox's dev-mode
+- **`devreload`** / **`devwatch`** — the two halves of xango's dev-mode
   hot-reload loop, generalized out of `examples/canvas-app`'s own
-  hand-rolled version so any gox server can opt in with a few lines
+  hand-rolled version so any xango server can opt in with a few lines
   instead of re-deriving it. `devreload` is the browser-side half:
   `Reloader.Wrap(html)` injects a small script that polls
   `Reloader.Handler()`'s endpoint and reloads the tab once the served
@@ -654,14 +665,14 @@ expanded by the same recursive scan, with no extra grammar required.
   `*Reloader` makes both calls no-ops, so production code needs no
   separate devMode branch. `devwatch` is the process-supervision half:
   `devwatch.Run(Config{...})` watches a source tree, and on a relevant
-  change (debounced, with `.gox.go`/VCS metadata always skipped via
+  change (debounced, with `.xg.go`/VCS metadata always skipped via
   `DefaultIgnore`) reruns the project's own `Rebuild` and restarts a
   managed server subprocess — not real hot module replacement (a
   compiled binary is one opaque unit), just a fast watch/rebuild/
   restart/reload cycle, the same tradeoff `examples/canvas-app`'s own
-  version already made. `cmd/goxdev` is a generic CLI front end for
+  version already made. `cmd/xgdev` is a generic CLI front end for
   projects with no Go code of their own to wire `devwatch.Run` into:
-  `go run github.com/elaous/gojiberry/cmd/goxdev -build "..." -- ./myserver`.
+  `go run github.com/elaous/gojiberry/cmd/xgdev -build "..." -- ./myserver`.
   `examples/canvas-app`'s `cmd/devwatch`/`cmd/devserver` now use both
   packages directly, verified via a real watch/rebuild/restart cycle
   against the running app (a file change triggers a real rebuild, a
@@ -675,10 +686,10 @@ A component is a plain Go function taking a typed props struct:
 ```go
 type ButtonProps struct {
 	Label   string
-	OnClick gox.EventHandler
+	OnClick xango.EventHandler
 }
 
-func Button(props ButtonProps) gox.Node {
+func Button(props ButtonProps) xango.Node {
 	return <button onClick={props.OnClick}>{props.Label}</button>
 }
 ```
@@ -687,9 +698,9 @@ func Button(props ButtonProps) gox.Node {
 compiles to `Button(ButtonProps{Label: "Save", OnClick: handleSave})` —
 attribute names map to struct fields by capitalizing the first letter.
 If the tag has children, they're collected into a `Children
-[]gox.Node` field. Lowercase tag names (`<div>`, `<span>`, custom
+[]xango.Node` field. Lowercase tag names (`<div>`, `<span>`, custom
 elements like `<my-widget>`) are real HTML elements and compile to
-`gox.El(...)` instead.
+`xango.El(...)` instead.
 
 ### Components with instance state or helper methods
 
@@ -699,23 +710,23 @@ that wants real instance state or extra methods beyond just rendering
 (a class component, in React terms). None is needed: Go doesn't allow a
 type and a func to share a name, so `Name`'s callable surface is always
 that one plain function — but nothing stops its body from delegating
-to an unexported struct instead of building the returned `gox.Node`
+to an unexported struct instead of building the returned `xango.Node`
 inline:
 
 ```go
 type CounterProps struct {
 	Count int
-	OnInc gox.EventHandler
+	OnInc xango.EventHandler
 }
 
 // Counter is called exactly like any other component:
 // <Counter count={5} onInc={handleInc}/> -> Counter(CounterProps{...}).
-func Counter(props CounterProps) gox.Node {
+func Counter(props CounterProps) xango.Node {
 	return counter{props}.Render()
 }
 
 // counter is unexported -- callers never see it, only Counter's usual
-// Name(NameProps) gox.Node signature.
+// Name(NameProps) xango.Node signature.
 type counter struct {
 	Props CounterProps
 }
@@ -726,7 +737,7 @@ func (c counter) Label() string {
 	return strconv.Itoa(c.Props.Count)
 }
 
-func (c counter) Render() gox.Node {
+func (c counter) Render() xango.Node {
 	return <button onClick={c.Props.OnInc}>{c.Label()}</button>
 }
 ```
@@ -735,51 +746,51 @@ See `examples/wasm-struct-counter-demo` for a full working example.
 
 ### The `<html>` entrypoint
 
-`gox.Document{Title, Head, Body}.Render()` builds the
+`xango.Document{Title, Head, Body}.Render()` builds the
 `<html><head>...</head><body>...</body></html>` wrapper almost every
 top-level page needs, so pages don't each hand-roll it:
 
 ```go
-func Page(props PageProps) gox.Node {
-	return gox.Document{
+func Page(props PageProps) xango.Node {
+	return xango.Document{
 		Title: "My App",
-		Head:  []gox.Node{gox.Style(someCSSContent)},
+		Head:  []xango.Node{xango.Style(someCSSContent)},
 		Body:  <h1>Hello, {props.Name}!</h1>,
 	}.Render()
 }
 ```
 
-`Head` is just `[]gox.Node` — append whatever `<meta>`/`<link>`/
-`<script>` nodes a page needs. `gox.Style(css string) gox.Node` wraps
-a `<style>` tag around raw CSS content, the same way `gox.Raw` does for
+`Head` is just `[]xango.Node` — append whatever `<meta>`/`<link>`/
+`<script>` nodes a page needs. `xango.Style(css string) xango.Node` wraps
+a `<style>` tag around raw CSS content, the same way `xango.Raw` does for
 any other trusted HTML. `Body` takes one node, so use `<>...</>`
-(`gox.Frag`) to group several top-level children there.
+(`xango.Frag`) to group several top-level children there.
 
 For the common case — a static title known at transpile time — an
 `@title` doc-comment annotation does this for you, so `Page` only needs
 to return its actual content (stylesheets come from CSS imports, below,
-and `gox.Document` adds them to the head itself):
+and `xango.Document` adds them to the head itself):
 
 ```go
 // @title My App
-func Page(props PageProps) gox.Node {
+func Page(props PageProps) xango.Node {
 	return <h1>Hello, {props.Name}!</h1>
 }
 ```
 
-goxc reads these directly above a `func ... gox.Node` declaration
+xgc reads these directly above a `func ... xango.Node` declaration
 and rewrites every one of that function's own top-level `return`
-statements into the `gox.Document{...}.Render()` form above — so
+statements into the `xango.Document{...}.Render()` form above — so
 conditional early returns (`if props.Name == "" { return <p>...</p> }`)
 all get wrapped too, while a `return` inside a nested closure (e.g. the
-immediately-invoked `func() []gox.Node {...}()` idiom used for
+immediately-invoked `func() []xango.Node {...}()` idiom used for
 rendering a list) is left alone, since that's a different function's
 return value, not the page's. Omitting `@title` falls back to a
 package-level `DefaultTitle` identifier, which you declare once
-yourself (`gox` does not declare it for you — same "trust the Go
+yourself (`xango` does not declare it for you — same "trust the Go
 compiler" stance as the JSON typed-import annotation: an undeclared
 `DefaultTitle` just fails with an ordinary undefined-identifier error).
-Use `gox.Document` directly instead when a page's title or stylesheets
+Use `xango.Document` directly instead when a page's title or stylesheets
 genuinely need to vary at runtime, not just per document/request
 content within an otherwise-static page.
 
@@ -790,7 +801,7 @@ bootstrap script:
 
 ```go
 // @wasm /static/main.wasm
-func CanvasPage(props CanvasPageProps) gox.Node {
+func CanvasPage(props CanvasPageProps) xango.Node {
 	return <textarea id="canvas">{props.Content}</textarea>
 }
 ```
@@ -809,10 +820,10 @@ target to already exist.
 These are deliberately a third comment shape, not a reuse of either
 existing convention in this codebase: a tool directive (`//go:generate`,
 `//encore:api`) triggers an external command or build-time codegen,
-and `//language=SQL` (see `editors/vscode-gox`) is a pure editor hint
+and `//language=SQL` (see `editors/vscode-xango`) is a pure editor hint
 with zero effect on the compiled program. `@title`/`@wasm`
 are neither — they're informational metadata that a real tool
-(goxc) turns into code — so they get the `@key value` shape instead,
+(xgc) turns into code — so they get the `@key value` shape instead,
 mirroring swaggo/swag's `// @Summary`/`// @Router` handler annotations
 (real, widely-used Go prior art for exactly this kind of per-function
 informational comment).
@@ -850,7 +861,7 @@ selector — the same "real control, custom look" idea `FileUploader`'s
 hidden file input already uses), `Textarea`, `OTPInput` (N
 single-character boxes for a verification code; like `FileUploader`
 and `ContextMenu`, advancing focus to the next/previous box on
-input/backspace needs a real DOM reference `gox.Event` doesn't carry,
+input/backspace needs a real DOM reference `xango.Event` doesn't carry,
 so it's the caller's job via `domrt/html`, keyed off each box's
 `fmt.Sprintf("%s-%d", ID, i)` id), `Breadcrumbs`, `Pagination` (with
 ellipsis windowing so its width stays constant regardless of page
@@ -871,7 +882,7 @@ see the `Progress` circle-variant note below for why an `<svg>` tree
 silently fails to render once mounted client-side, a constraint this
 hits directly since an icon is exactly the kind of thing you'd reach
 for `<svg>` for. Reach for `domrt/svg.CreateElement` directly (paired
-with one of this package's existing `Icon *gox.Node` slots on `Chip`/
+with one of this package's existing `Icon *xango.Node` slots on `Chip`/
 `Dropdown`/`ContextMenu`) if you need a real vector icon client-side.
 
 Three more round out the set. `Collab` wraps shared content and gates
@@ -896,7 +907,7 @@ exactly that mix of units in one declaration.
 
 `DataTable` rounds out data display: a sortable, optionally
 selectable/searchable/paginated table. It isn't generic over your own
-row type — there's no way to write a type parameter into the `.gox`
+row type — there's no way to write a type parameter into the `.xg`
 tag syntax every other component here is invoked through (`<DataTable
 columns=... />`) — so, the same way `Tabs`' own `Tab.Content` or
 `DropdownOption`'s own `Icon` already work, you turn each real row into
@@ -910,7 +921,7 @@ caller's job, the same controlled-component split every other
 component here takes — it only reflects `SortKey`/`SortDesc`/
 `Selected`/`Search.Value` back and fires `OnSort`/`OnSelectChange`/
 `OnSearchChange` when they change. `DataView[T]` is the data-*source*
-half: a small generic type (no `.gox` tag needed, since nothing renders
+half: a small generic type (no `.xg` tag needed, since nothing renders
 it directly) that owns the paginated/filtered/sorted query state for a
 dataset fetched from some backend and hands `DataTable` already-loaded
 data as plain props, the same "component is a pure function of props,
@@ -944,7 +955,7 @@ smaller via `DataView` (which already avoids fetching more than one
 page's worth at a time, just not rendering-side windowing within a
 page). A `DataSource`-style interface swapped in for `Rows` wouldn't
 fix this on its own — `DataTable` isn't generic (no way to write a type
-parameter into the `.gox` tag syntax it's invoked through), so such an
+parameter into the `.xg` tag syntax it's invoked through), so such an
 interface could only ever hand back `[]DataTableRow` too, no different
 from passing the slice directly — the part that would actually help is
 rendering only the currently-visible rows and re-querying the source as
@@ -963,14 +974,14 @@ class toggle (the pattern `OnDesign`'s own `applyConfig` uses) can't.
 `ContextProvider`/`ContextValue` are gojiberry's answer to the "how
 would a Context API even work here" question a stateless-component
 library like this one has to answer differently than React: a
-`gox.Node` tree is built *eagerly*, one plain Go function call at a
-time, entirely before `gox.Render`/`domrt.Mount` ever walks it, so
+`xango.Node` tree is built *eagerly*, one plain Go function call at a
+time, entirely before `xango.Render`/`domrt.Mount` ever walks it, so
 there's no implicit, ambient scope left for either renderer to inject a
 value into by the time it sees the tree — whatever a descendant needs
 has to already be resolved during that eager build. `ContextProvider`
 resolves this the same way stdlib's own `context.Context` is meant to
 be used: `ContextProvider(ctx, key, value, func(ctx context.Context)
-gox.Node { ... })` calls your `render` closure with a *new* context
+xango.Node { ... })` calls your `render` closure with a *new* context
 carrying `value` attached, and whatever it returns is built from that
 — typically reading the value back out with `ContextValue[T](ctx,
 key)` and handing it down as an ordinary prop, or nesting a further
@@ -988,13 +999,13 @@ value some deeper descendant happens to need, and it works identically
 in SSR and client rendering since resolution always happens before
 either renderer runs.
 
-Last, a `.gox` syntax note: `<>...</>` has no room for an attribute at
+Last, a `.xg` syntax note: `<>...</>` has no room for an attribute at
 all, so there was previously no way to give a fragment its own
-reconciliation `Key` (`gox.Node.Key`, which `domrt`'s differ already
-reads) without dropping out of `.gox` syntax entirely and calling
-`gox.Frag(...).WithKey(id)` by hand. `<Fragment key="...">...
+reconciliation `Key` (`xango.Node.Key`, which `domrt`'s differ already
+reads) without dropping out of `.xg` syntax entirely and calling
+`xango.Frag(...).WithKey(id)` by hand. `<Fragment key="...">...
 </Fragment>` (or `key={expr}` for a non-literal key) now covers that
-case directly in `.gox` syntax — the same split JSX itself draws
+case directly in `.xg` syntax — the same split JSX itself draws
 between the bare `<>...</>` shorthand and the long-form `<React.
 Fragment key={id}>...</React.Fragment>` for exactly the same reason.
 `Fragment` is a reserved pseudo-tag name for this, not an ordinary
@@ -1034,12 +1045,12 @@ it implements the ARIA listbox pattern's roles/attributes but not its
 own keyboard navigation. `FileUploader` renders a `<label>` wrapping a
 visually-hidden `<input type="file">`, so click-to-browse works with
 zero JS (a label natively opens its associated control), but since
-`gox.Event` carries no file/`DataTransfer` payload, reading the actual
+`xango.Event` carries no file/`DataTransfer` payload, reading the actual
 selected or dropped files is done through `domrt/html` directly by the
 consuming app (`InputElement.Files()`, or `Element.OnDrop` for
 drag-and-drop) — see `FileUploaderProps`'s doc comment and the
 `wasm-components-demo` example below. `ContextMenu` has the same
-split for the same reason: `gox.Event` carries no `clientX`/`clientY`,
+split for the same reason: `xango.Event` carries no `clientX`/`clientY`,
 so the consuming app wires `domrt/html`'s `Element.OnContextMenu` on
 whatever should be right-clickable and passes the position it reports
 straight through as `ContextMenuProps.X`/`Y`.
@@ -1050,7 +1061,7 @@ CSS is split one file per component (`components/button.css`,
 component reuses (`gj-spin`, `gj-progress-indeterminate`) — pull in
 `base.css` plus only the per-component files a page actually uses.
 Importing the `components` package already registers all of them (see
-"CSS imports" below), so `gox.Document` and `domrt.Mount` include them
+"CSS imports" below), so `xango.Document` and `domrt.Mount` include them
 with nothing to link or copy; to ship only some, import the files you
 want yourself, e.g. `import _ "github.com/elaous/gojiberry/components/button.css"`,
 or use plain `<link rel="stylesheet">` tags. A component's doc comment says which stylesheet
@@ -1062,18 +1073,18 @@ it needs; `Dialog` (and `Confirm`/`Alert`, built on it) also needs
 An import spec whose path ends in a recognized non-Go extension is a
 resource import, not a Go package import — the file is loaded (and,
 where needed, compiled) at transpile time instead of at runtime. Paths
-resolve relative to the `.gox` file's own directory, the same
+resolve relative to the `.xg` file's own directory, the same
 convention `go:embed` uses — not fetched from a URL or module proxy.
 
 Resource imports split into two tiers: **stable** (on by default) and
-**experimental** (opt-in via `goxc -experimental` or
-`GOX_EXPERIMENTAL=1`, or `transpile.Options{Experimental: true}`).
+**experimental** (opt-in via `xgc -experimental` or
+`XANGO_EXPERIMENTAL=1`, or `transpile.Options{Experimental: true}`).
 Experimental means shelling out to a mature external tool this project
-doesn't try to reimplement — gox still *recognizes* these extensions
+doesn't try to reimplement — xango still *recognizes* these extensions
 without opting in (so it can give an actionable "enable experimental
 mode" error instead of a confusing "not a valid Go import path" one),
 but none of that code runs, and a directory literally named
-`experimental` is skipped entirely by an ordinary `goxc`/`go generate`
+`experimental` is skipped entirely by an ordinary `xgc`/`go generate`
 walk so a checked-in experimental example can't break the default
 build.
 
@@ -1089,10 +1100,10 @@ import (
 - **`.json`** binds the alias to the decoded value (as `any`) and
   `<alias>Bytes` to the raw content. With an `alias.(TypeName)
   "file.json"` annotation — reusing Go's type assertion syntax for a
-  new meaning that's never valid in a real import spec — gox instead
+  new meaning that's never valid in a real import spec — xango instead
   decodes directly into `TypeName` and binds `alias` as that type.
   **`TypeName` must already be declared by you** (in the same package
-  or an import); gox does not generate it or infer its shape from the
+  or an import); xango does not generate it or infer its shape from the
   file's data — it's exactly `json.Unmarshal(configBytes, &v)` with
   the boilerplate written for you, not schema inference, so the only
   failure mode is the ordinary one of your type not matching your
@@ -1123,26 +1134,26 @@ import (
 )
 ```
 
-goxc embeds the file and generates a `func init() { gox.RegisterStyle(id,
+xgc embeds the file and generates a `func init() { xango.RegisterStyle(id,
 css) }` for it, so — as with a blank import of a Go package — whoever
 imports the Go package gets its styles, wherever in the program that is:
 
-- `gox.Document` (what `@title`/`@wasm` pages return) puts every
-  registered stylesheet in `<head>`, one `<style data-gox-style="<path>">`
-  each, ahead of the page's own `Head`; `gox.Styles()` returns the same
+- `xango.Document` (what `@title`/`@wasm` pages return) puts every
+  registered stylesheet in `<head>`, one `<style data-xango-style="<path>">`
+  each, ahead of the page's own `Head`; `xango.Styles()` returns the same
   nodes for a hand-written `<head>`; `Document.NoStyles` turns it off.
 - `domrt.Mount` installs them in the browser's `<head>` (skipping ones
   the server already rendered); `domrt.InstallStyles()` does it by hand.
 - A page can pick its own: `// @styles components/base.css button.css`
   above the page function (full IDs or their ends, whole path segments)
   includes only those, `// @styles none` none -- the annotation becomes
-  `gox.Document{Styles: ...}`, which you can also set by hand. Without it a
+  `xango.Document{Styles: ...}`, which you can also set by hand. Without it a
   page gets every registered sheet.
 - A sheet imported by several files is registered once (its ID is its
   module-qualified path) and sheets keep package-initialisation order, so
   a package's dependencies' styles come first.
 
-The path resolves, in order, relative to the `.gox` file (`"./dark.css"`,
+The path resolves, in order, relative to the `.xg` file (`"./dark.css"`,
 `"style.css"`, as `go:embed` paths do), as a path in the current module
 (`<module path>/dir/file.css`), and as a path in a required module (found
 with `go list -m`, so replace directives, vendoring and the module cache
@@ -1151,7 +1162,7 @@ its code. A named import, `theme "<path>/dark.css"`, doesn't register
 anything: it binds the file's text to a constant, for code that wants to
 place it itself. A CSS import without `_` or a name is an error.
 
-The old `@stylesheets` annotation is gone; goxc says so, with this
+The old `@stylesheets` annotation is gone; xgc says so, with this
 replacement, if it sees one.
 
 ### Experimental
@@ -1164,9 +1175,9 @@ import (
 )
 ```
 
-- **`.hcl`** is gox's schema DSL (`table "x" { column "y" { type = ...
+- **`.hcl`** is xango's schema DSL (`table "x" { column "y" { type = ...
   } }`), parsed with `hashicorp/hcl/v2`. Generates a real Go
-  subpackage at `internal/goxgen/hcl/<alias>/` with model structs
+  subpackage at `internal/xggen/hcl/<alias>/` with model structs
   (`models.go`) and an initial `CREATE TABLE` migration
   (`migrations/0001_init.sql`), and rewrites the import to point at
   it — so `schema.Users{}` works like any normal imported type, which
@@ -1176,9 +1187,9 @@ import (
   the current schema; there's no diffing against a previous version
   for incremental migrations.
 - **`.proto`** shells out to the real `protoc`/`protoc-gen-go`
-  toolchain (gox doesn't reimplement a protobuf compiler), using
+  toolchain (xango doesn't reimplement a protobuf compiler), using
   protoc-gen-go's `-M` file-mapping flag to place output at
-  `internal/goxgen/proto/<alias>/` under gox's control rather than
+  `internal/xggen/proto/<alias>/` under xango's control rather than
   requiring the `.proto` to declare its own `go_package`. Also runs
   `protoc-gen-go-grpc` if it's on `PATH`. Requires `protoc` +
   `protoc-gen-go` on `PATH`.
@@ -1187,16 +1198,16 @@ import (
   the package and Go import path solely from a
   `$Go.import("...")`/`$Go.package("...")` annotation the schema
   itself must declare (the real go-capnp convention), and writes
-  output next to the source file; gox parses that annotation back out
+  output next to the source file; xango parses that annotation back out
   to know what to import. Requires `capnp` + `capnpc-go` on `PATH`.
-- **`.sql`** shells out to the real `sqlc` toolchain (gox doesn't
+- **`.sql`** shells out to the real `sqlc` toolchain (xango doesn't
   reimplement sqlc's query analysis/codegen). sqlc's own config
   (`sqlc.yaml`/`sqlc.json`, found by walking up from the `.sql` file)
   already fully owns pairing queries with a schema and choosing output
-  location — gox doesn't generate or validate that config, only
+  location — xango doesn't generate or validate that config, only
   locate it, run `sqlc generate -f <config>`, and derive the Go import
   path from its `gen.go.package`/`out` fields. Requires `sqlc` on
-  `PATH` and a real sqlc project config; gox does not verify the
+  `PATH` and a real sqlc project config; xango does not verify the
   config actually lists this specific `.sql` file among its query
   sources (that would mean reimplementing sqlc's own config
   resolution), only that a config exists somewhere above it.
@@ -1212,7 +1223,7 @@ Neither `protoc` nor `capnp` nor `sqlc` are installed in the sandbox
 this was built in. The sqlc loader's "no config found" error path is
 verified, and its actual invocation and import-path derivation are
 verified too, against a stubbed `sqlc` executable standing in for the
-real tool (gox's own discovery/invocation/derivation logic is what's
+real tool (xango's own discovery/invocation/derivation logic is what's
 under test, not sqlc's codegen correctness). `.proto`/`.capnp` are
 verified only against their "tool not found" error path. JSON (both
 paths), CSS imports, `@title`/`@wasm`, and HCL are exercised fully,
@@ -1244,7 +1255,7 @@ generated code.
 
 - `examples/wasm-struct-counter-demo` — the same counter, but `Counter`
   delegates to an unexported `counter` struct with a `Label` helper
-  method alongside `Render`, instead of building its `gox.Node` inline
+  method alongside `Render`, instead of building its `xango.Node` inline
   -- called exactly the same way (`<Counter .../>` ->
   `Counter(CounterProps{...})`) as any other component, since Go won't
   let a type and a func share a name in the first place. Verified
@@ -1274,7 +1285,7 @@ generated code.
   ```
 
 - `examples/wasm-sw-demo` — a cache-first service worker compiled from
-  `.gox`, proving a Go/WASM binary can run as a real browser service
+  `.xg`, proving a Go/WASM binary can run as a real browser service
   worker (not just page-context script):
 
   ```
@@ -1353,15 +1364,15 @@ generated code.
   `Stage`'s `FormatClipboard`. A `TableView` can float like an image
   (page `Anchor`, `Wrap`, drag its icon to move it).
 
-  `.gox` components can be generic and take function props with markup:
-  `<components.List[Person] items={people} item={func(p Person) gox.Node { return <b>{p.Name}</b> }} />`
+  `.xg` components can be generic and take function props with markup:
+  `<components.List[Person] items={people} item={func(p Person) xango.Node { return <b>{p.Name}</b> }} />`
   (see `examples/generic-list-demo`).
 
-  `canvas/canvas/gox` draws a gox tree on a canvas (`<canvas.Canvas>`,
-  `<canvas.TextFlow pages={func(page gox.Node, n int) gox.Node {...}}>`,
+  `canvas/canvas/xango` draws an xango tree on a canvas (`<canvas.Canvas>`,
+  `<canvas.TextFlow pages={func(page xango.Node, n int) xango.Node {...}}>`,
   `<canvas.Header>`, `<canvas.Footer>`, `<canvas.PageNumber>`), updating the
-  live components in place on each render: see `docs/gox-canvas.md` and
-  `examples/canvas-gox-demo`. What is still to do is in `docs/canvas-todo.md`.
+  live components in place on each render: see `docs/xango-canvas.md` and
+  `examples/canvas-xango-demo`. What is still to do is in `docs/canvas-todo.md`.
 
   Editing capabilities are *features* registered with the Stage
   (`canvas.Registry`, `canvas.Feature`): multi-cursor (Ctrl/Cmd+click,
@@ -1369,7 +1380,7 @@ generated code.
   move, Alt+Shift+Up/Down copy, Ctrl/Cmd+Shift+K delete) and Markdown copy
   and paste (Ctrl/Cmd+Shift+C / V), page and column breaks (Ctrl/Cmd+Enter,
   with Shift). The `TextFlow` is editable in edit mode, and
-  `examples/canvas-editor-showcase` registers everything -- the gox canvas
+  `examples/canvas-editor-showcase` registers everything -- the xango canvas
   tree, the features, the style editor and font selector -- in one editor. Each registers commands and default key
   chords; leave one out of `Stage.Features` (or `<canvas.Canvas features=...>`)
   to switch it off, or add your own. The status of everything built and what
@@ -1379,7 +1390,7 @@ generated code.
   node/playwright/chromium are missing): `examples/canvas-table-demo`,
   `examples/canvas-flow-demo`, `examples/canvas-image-demo`,
   `examples/canvas-scroll-demo`, `examples/canvas-document-demo`,
-  `examples/canvas-gox-demo`, `examples/canvas-editor-showcase` (run one with
+  `examples/canvas-xango-demo`, `examples/canvas-editor-showcase` (run one with
   `make -C examples/<name> run`).
 
 - `examples/wasm-canvas-demo` — `domrt/html`'s `Context2D`/`Context3D`:
@@ -1475,7 +1486,7 @@ generated code.
   ```
 
 - `examples/wasm-worker-demo` — two separate Go/WASM binaries: the page
-  (`main.gox`) spawns a dedicated Web Worker running `worker/worker.go`
+  (`main.xg`) spawns a dedicated Web Worker running `worker/worker.go`
   via `browser.NewWorker`, and exchanges messages with it via
   `PostMessage`/`OnMessage`. The worker counts primes up to N by trial
   division and posts the count back. Verified against a real headless
@@ -1556,9 +1567,9 @@ generated code.
 
 - `examples/resource-imports-demo` — a JSON config decoded straight
   into a hand-declared `SiteConfig` (`config.(SiteConfig)
-  "config.json"`, bound directly from the `.gox` import block) and a
+  "config.json"`, bound directly from the `.xg` import block) and a
   page component whose `@title` doc-comment annotation wraps it in
-  `gox.Document{}.Render()` automatically, with its stylesheet pulled in
+  `xango.Document{}.Render()` automatically, with its stylesheet pulled in
   by `import _ "<module path>/style.css"`:
 
   ```
@@ -1568,8 +1579,8 @@ generated code.
   ```
 
 - `examples/http-server-demo` — SSR the way it's actually meant to be
-  used: served over real HTTP (`gox.Render` takes any `io.Writer`, and
-  `http.ResponseWriter` satisfies that directly — no gox changes
+  used: served over real HTTP (`xango.Render` takes any `io.Writer`, and
+  `http.ResponseWriter` satisfies that directly — no xango changes
   needed). Verified against a real `httptest.Server` TCP listener, and
   by curling a locally-run instance:
 
@@ -1581,7 +1592,7 @@ generated code.
   ```
 
 - `examples/canvas-app` — the big one: a bare-minimum Google-Docs-style
-  typing canvas tying together gox SSR pages (a CSS import for the
+  typing canvas tying together xango SSR pages (a CSS import for the
   page's stylesheet, `@title`, and `@wasm` for the autosave client's bootstrap `<script>`
   tags — neither page hand-writes either), a WASM autosave client
   (`domrt.Mount`/`Update` plus `domrt/browser.FetchOpts` for the
@@ -1596,7 +1607,7 @@ generated code.
   (`examples/canvas-app/go.mod`, `replace`-ing this repo) so it depends
   on gojiberry the way an actual consumer would. See
   `examples/canvas-app/README.md` for what's
-  genuinely verified here (the gox pages, the WASM client against a
+  genuinely verified here (the xango pages, the WASM client against a
   real headless browser, the store against a real Postgres) versus
   what's best-effort and unverified (the `//encore:api` handlers'
   actual behavior under `encore run`, since this sandbox's network
@@ -1649,7 +1660,7 @@ generated code.
   intercepted on "keydown" via two small additions this example
   motivated — `Element.OnKeyDown`/`OnKeyUp` (a typed `KeyEvent`) and
   `Element.OnMouseDown`/`OnMouseMove`/`OnMouseUp` (a typed
-  `MouseEvent`) — since gox.Event carries neither key nor position
+  `MouseEvent`) — since xango.Event carries neither key nor position
   information. A real, non-obvious gotcha surfaced building this:
   clicking a non-focusable element like a bare canvas makes the
   browser clear focus right after every mousedown handler returns,
@@ -1693,7 +1704,7 @@ generated code.
   browser needed) via a `//go:build !(js && wasm)` split: `model.go`/
   `linewise.go` carry no build tag so `go test` can exercise them
   directly, and `native_stub.go` supplies the `func main` other
-  platforms need since the real one (in `main.gox`) is wasm-only.
+  platforms need since the real one (in `main.xg`) is wasm-only.
 
   Verified against a real headless Chromium, via a committed test
   (`canvas_editor_test.go` + `e2e/verify.js`, driven by Playwright) —
@@ -1736,7 +1747,7 @@ generated code.
   in-memory hub that relays every edit to every *other* connected
   client and remembers the document's current content so a client
   joining later starts in sync instead of from a blank page.
-  `client/main.gox` opens `/ws` via `domrt/browser.Connect`, reads its
+  `client/main.xg` opens `/ws` via `domrt/browser.Connect`, reads its
   role from the page's own URL (`?role=owner`/`editor`/`viewer`), and
   renders the shared document inside `components.Collab`. Every edit
   sends the document's entire current text over the socket rather than
@@ -1759,7 +1770,7 @@ generated code.
 
   ```
   cd examples/collab-editor-app
-  (cd ../.. && go run ./cmd/goxc examples/collab-editor-app)
+  (cd ../.. && go run ./cmd/xgc examples/collab-editor-app)
   GOOS=js GOARCH=wasm go build -o static/main.wasm ./client/
   cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" static/
   cp ../../components/base.css ../../components/button.css ../../components/textarea.css ../../components/collab.css static/
@@ -1770,14 +1781,14 @@ generated code.
 - `examples/gio-counter-demo` — the same stateful counter
   `examples/wasm-counter` mounts into a real browser DOM via `domrt`,
   mounted instead into a real native window via
-  [Gio](https://gioui.org) through `goxgio` (`../../goxgio`, its own
+  [Gio](https://gioui.org) through `xangogio` (`../../xangogio`, its own
   separate Go module -- see that module's own README for how the
-  renderer works and what it covers): proof `gox.Node` is
+  renderer works and what it covers): proof `xango.Node` is
   renderer-agnostic in the sense that actually matters, since a
   genuinely different target platform (a native GPU window, not a
   browser) is a new consumer of the tree rather than a rewrite of it.
-  `shared/counter.gox` has no `js`/`wasm` or Gio import at all -- only
-  `gox.El`/`gox.Text`/`gox.On`. Verified via Gio's own headless GPU
+  `shared/counter.xg` has no `js`/`wasm` or Gio import at all -- only
+  `xango.El`/`xango.Text`/`xango.On`. Verified via Gio's own headless GPU
   backend (no display server needed): a real (software-rasterized
   where no GPU device is present) frame is rendered, read back
   pixel-for-pixel, a real `widget.Clickable.Click()` drives the "+"/"-"
@@ -1814,10 +1825,10 @@ generated code.
   # add GOJIBERRY_SYNC_STRATEGY=char-crdt too if the client uses MergeCharCRDT
   ```
 
-- `examples/gin-ssr-demo` and `examples/echo-ssr-demo` — the same "gox
+- `examples/gin-ssr-demo` and `examples/echo-ssr-demo` — the same "xango
   over plain net/http" SSR demo (`examples/http-server-demo`), served
   by [Gin](https://github.com/gin-gonic/gin) and
-  [Echo](https://github.com/labstack/echo) instead: `gox.Render` only
+  [Echo](https://github.com/labstack/echo) instead: `xango.Render` only
   needs an `io.Writer`, and both frameworks' own response writer
   (`*gin.Context.Writer`, `c.Response().Writer`) satisfy that directly
   -- routing, binding, and the rest of each framework's middleware
@@ -1875,14 +1886,14 @@ generated code.
 
 ## Editor support
 
-`editors/vscode-gox` is a minimal VS Code extension: `.gox` file
+`editors/vscode-xango` is a minimal VS Code extension: `.xg` file
 association plus syntax highlighting (real Go tokenization with
 `<Tag>`/`{expr}` highlighting layered on top via a TextMate injection
 grammar — see that directory's README for why a naive combined pattern
 list doesn't work here). No completions/hover/diagnostics yet; see
 Known limitations.
 
-It also includes a second, general-purpose injection — not gox
+It also includes a second, general-purpose injection — not xango
 -specific, works in any `.go` file — for `//language=`-annotated
 embedded-language raw strings, e.g. `` `//language=SQL\nSELECT...` ``
 gets SQL highlighting inside the string. This is JetBrains' own
@@ -1897,9 +1908,9 @@ a line with the opening backtick).
 ## Development
 
 The root `Makefile` wraps the repo-wide checks used throughout this
-README: `make check` regenerates every `*.gox.go` and runs
+README: `make check` regenerates every `*.xg.go` and runs
 `gofmt`/`vet`/`test` for both native and `GOOS=js GOARCH=wasm`, plus
-the `editors/vscode-gox` grammar suite (`make grammar-test-setup` once
+the `editors/vscode-xango` grammar suite (`make grammar-test-setup` once
 first, to fetch the VS Code grammars it tokenizes against); `make docs`
 regenerates every `docs/*.txt` API dump. Every example under
 `examples/` has its own `Makefile` too (`make run`, `make test`, and
@@ -1987,12 +1998,12 @@ push` leaves your machine.
 
 - Generated `.go` files don't yet carry `//line` directives, so a
   panic inside transpiled code reports a line number in the generated
-  file, not the original `.gox` source.
+  file, not the original `.xg` source.
 - No LSP support yet (completion, hover, go-to-definition,
-  diagnostics) — that needs an LSP proxy translating `.gox` positions
+  diagnostics) — that needs an LSP proxy translating `.xg` positions
   to `gopls`'s view of the generated file, which in turn needs the
   `//line` directives above. Syntax highlighting alone is covered by
-  `editors/vscode-gox`.
+  `editors/vscode-xango`.
 - Children/attribute list diffing in `domrt` is a straightforward
   keyed-or-positional reconciliation, not a minimal-move (LIS-based)
   algorithm — correct, but not necessarily the fewest possible DOM

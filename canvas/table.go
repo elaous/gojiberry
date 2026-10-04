@@ -12,6 +12,11 @@ import (
 // column, and every row always has the same number of cells.
 type Table struct {
 	Cells [][]string
+	// Merges are blocks of cells shown as one: each owner cell (top left of
+	// its block) spans several rows and columns, and the cells it covers are
+	// empty. Styles are per-cell formatting. See table_cells.go.
+	Merges []Merge
+	Styles map[CellPos]CellStyle
 }
 
 // NewTable returns a table of rows x cols empty cells (minimum 1x1).
@@ -82,6 +87,7 @@ func (t *Table) InsertRow(at int) {
 	t.Cells = append(t.Cells, nil)
 	copy(t.Cells[at+1:], t.Cells[at:])
 	t.Cells[at] = make([]string, t.Cols())
+	t.shift(at, 0, 1, 0)
 }
 
 // InsertColumn inserts an empty column so it becomes column index at
@@ -94,6 +100,7 @@ func (t *Table) InsertColumn(at int) {
 		row[at] = ""
 		t.Cells[r] = row
 	}
+	t.shift(0, at, 0, 1)
 }
 
 // DeleteRow removes row index at. The last remaining row is never
@@ -104,9 +111,12 @@ func (t *Table) DeleteRow(at int) {
 	}
 	if t.Rows() == 1 {
 		clear(t.Cells[0])
+		t.Merges, t.Styles = nil, nil
 		return
 	}
+	t.removeRowOfMerges(at)
 	t.Cells = append(t.Cells[:at], t.Cells[at+1:]...)
+	t.shift(at, 0, -1, 0)
 }
 
 // DeleteColumn removes column index at. The last remaining column is
@@ -119,11 +129,14 @@ func (t *Table) DeleteColumn(at int) {
 		for _, row := range t.Cells {
 			row[0] = ""
 		}
+		t.Merges, t.Styles = nil, nil
 		return
 	}
+	t.removeColumnOfMerges(at)
 	for r, row := range t.Cells {
 		t.Cells[r] = append(row[:at], row[at+1:]...)
 	}
+	t.shift(0, at, 0, -1)
 }
 
 // MoveRow moves row from so it ends up at index to (both must be in
@@ -132,6 +145,8 @@ func (t *Table) MoveRow(from, to int) {
 	if from < 0 || from >= t.Rows() || to < 0 || to >= t.Rows() || from == to {
 		return
 	}
+	t.remapStyles(func(p CellPos) CellPos { p.Row = moved(p.Row, from, to); return p })
+	t.Merges = nil // a moved row would tear a merged block apart
 	row := t.Cells[from]
 	t.Cells = append(t.Cells[:from], t.Cells[from+1:]...)
 	t.Cells = append(t.Cells, nil)
@@ -145,6 +160,8 @@ func (t *Table) MoveColumn(from, to int) {
 	if from < 0 || from >= t.Cols() || to < 0 || to >= t.Cols() || from == to {
 		return
 	}
+	t.remapStyles(func(p CellPos) CellPos { p.Col = moved(p.Col, from, to); return p })
+	t.Merges = nil
 	for r, row := range t.Cells {
 		v := row[from]
 		row = append(row[:from], row[from+1:]...)
@@ -162,6 +179,11 @@ func (t *Table) DuplicateRow(at int) {
 	}
 	t.InsertRow(at + 1)
 	copy(t.Cells[at+1], t.Cells[at])
+	for c := 0; c < t.Cols(); c++ { // the copy looks like the original
+		if st, ok := t.Styles[CellPos{at, c}]; ok {
+			t.SetCellStyle(at+1, c, st)
+		}
+	}
 }
 
 // SortByColumn stably sorts the body rows (every row but the header)
@@ -171,13 +193,31 @@ func (t *Table) SortByColumn(col int, desc bool) {
 	if col < 0 || col >= t.Cols() {
 		return
 	}
-	body := t.Cells[1:]
-	sort.SliceStable(body, func(i, j int) bool {
-		c := compareCells(body[i][col], body[j][col])
+	t.Merges = nil // sorting rows would tear a merged block apart
+	n := t.Rows() - 1
+	order := make([]int, n) // order[i] is the old body row that becomes body row i
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		c := compareCells(t.Cells[1+order[i]][col], t.Cells[1+order[j]][col])
 		if desc {
 			return c > 0
 		}
 		return c < 0
+	})
+	body := make([][]string, n)
+	newRow := make([]int, n) // old body row -> new
+	for i, o := range order {
+		body[i] = t.Cells[1+o]
+		newRow[o] = i
+	}
+	copy(t.Cells[1:], body)
+	t.remapStyles(func(p CellPos) CellPos {
+		if p.Row >= 1 {
+			p.Row = 1 + newRow[p.Row-1]
+		}
+		return p
 	})
 }
 
@@ -195,4 +235,17 @@ func (t *Table) Clear() {
 	for _, row := range t.Cells {
 		clear(row)
 	}
+}
+
+// moved is where index i ends up when the element at from is moved to to.
+func moved(i, from, to int) int {
+	switch {
+	case i == from:
+		return to
+	case from < to && i > from && i <= to:
+		return i - 1
+	case from > to && i >= to && i < from:
+		return i + 1
+	}
+	return i
 }

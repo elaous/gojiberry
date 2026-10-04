@@ -1,5 +1,5 @@
 # wasm-worker-demo dev workflow. Run `make run` for the full path from
-# a clean checkout: regenerates .go from .gox, builds both the main
+# a clean checkout: regenerates .go from .xg, builds both the main
 # page's WASM binary and the separate worker/ WASM binary it spawns
 # onto a real background thread, and serves it -- then open
 # http://localhost:8080/.
@@ -9,7 +9,7 @@ run: generate wasm
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/goxc examples/wasm-worker-demo
+	cd ../.. && go run ./cmd/xgc examples/wasm-worker-demo
 
 .PHONY: wasm
 wasm:

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "xango-imports",
+  "scopeName": "xango.imports.injection",
+  "injectionSelector": "L:source.xg - comment - string",
+  "comment": "Resource imports: an import spec whose path ends in a non-Go extension is loaded at transpile time instead of imported as a package. Go's own grammar colors these lines as ordinary imports, which is fine for a plain `alias \"file.json\"`, but not for the typed form `alias.(TypeName) \"file.json\"` (Go sees a call-like `.(`), and none of them say 'this is a file'. The patterns are anchored to a whole import-spec line (`^\\s*alias? \"path.ext\"`), so they cannot misfire in expressions.",
+  "patterns": [
+    { "include": "#typedResource" },
+    { "include": "#resource" }
+  ],
+  "repository": {
+    "typedResource": {
+      "comment": "alias.(TypeName) \"config.json\" -- decode the file into TypeName.",
+      "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)(\\.)(\\()([A-Za-z_][A-Za-z0-9_.\\[\\]*]*)(\\))\\s+((\")([^\"\\n]*?)(\\.(?:jsonc|jsonl|json|css|hcl|proto|capnp|sql))(\"))",
+      "captures": {
+        "1": { "name": "variable.other.import.go" },
+        "2": { "name": "punctuation.other.period.go" },
+        "3": { "name": "punctuation.definition.begin.bracket.round.go" },
+        "4": { "name": "entity.name.type.go" },
+        "5": { "name": "punctuation.definition.end.bracket.round.go" },
+        "6": { "name": "meta.import.resource.xg string.quoted.double.import.resource.xg" },
+        "7": { "name": "punctuation.definition.string.begin.go" },
+        "8": { "name": "entity.name.import.resource.xg" },
+        "9": { "name": "constant.other.extension.xg" },
+        "10": { "name": "punctuation.definition.string.end.go" }
+      }
+    },
+    "resource": {
+      "comment": "[alias | _] \"path/to/file.ext\" -- a blank `_` registers a stylesheet, a name binds the file's content.",
+      "match": "^\\s*(?:([A-Za-z_][A-Za-z0-9_]*)\\s+)?((\")([^\"\\n]*?)(\\.(?:jsonc|jsonl|json|css|hcl|proto|capnp|sql))(\"))\\s*(?=$|//|/\\*)",
+      "captures": {
+        "1": { "name": "variable.other.import.go" },
+        "2": { "name": "meta.import.resource.xg string.quoted.double.import.resource.xg" },
+        "3": { "name": "punctuation.definition.string.begin.go" },
+        "4": { "name": "entity.name.import.resource.xg" },
+        "5": { "name": "constant.other.extension.xg" },
+        "6": { "name": "punctuation.definition.string.end.go" }
+      }
+    }
+  }
+}

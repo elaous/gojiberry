@@ -4,18 +4,18 @@ import (
 	"context"
 	"testing"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func TestContextProvider(t *testing.T) {
 	t.Run("render receives a ctx carrying the provided value", func(t *testing.T) {
 		key := NewContextKey("theme")
-		n := ContextProvider(context.Background(), key, "dark", func(ctx context.Context) gox.Node {
+		n := ContextProvider(context.Background(), key, "dark", func(ctx context.Context) xango.Node {
 			v, ok := ContextValue[string](ctx, key)
 			if !ok {
 				t.Fatal("ContextValue reported ok=false for a key ContextProvider just set")
 			}
-			return gox.Text(v)
+			return xango.Text(v)
 		})
 		html := render(t, n)
 		mustContain(t, html, "dark")
@@ -23,10 +23,10 @@ func TestContextProvider(t *testing.T) {
 
 	t.Run("nested ContextProvider calls compose, inner value winning for a shared key", func(t *testing.T) {
 		key := NewContextKey("mode")
-		n := ContextProvider(context.Background(), key, "outer", func(ctx context.Context) gox.Node {
-			return ContextProvider(ctx, key, "inner", func(ctx context.Context) gox.Node {
+		n := ContextProvider(context.Background(), key, "outer", func(ctx context.Context) xango.Node {
+			return ContextProvider(ctx, key, "inner", func(ctx context.Context) xango.Node {
 				v, _ := ContextValue[string](ctx, key)
-				return gox.Text(v)
+				return xango.Text(v)
 			})
 		})
 		html := render(t, n)
@@ -59,12 +59,12 @@ func TestContextProvider(t *testing.T) {
 
 	t.Run("works from any real parent context, e.g. context.TODO", func(t *testing.T) {
 		key := NewContextKey("k")
-		n := ContextProvider(context.TODO(), key, "v", func(ctx context.Context) gox.Node {
+		n := ContextProvider(context.TODO(), key, "v", func(ctx context.Context) xango.Node {
 			v, ok := ContextValue[string](ctx, key)
 			if !ok || v != "v" {
 				t.Errorf("ContextValue = (%q, %v), want (\"v\", true)", v, ok)
 			}
-			return gox.Text(v)
+			return xango.Text(v)
 		})
 		render(t, n)
 	})

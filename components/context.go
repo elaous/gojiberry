@@ -3,7 +3,7 @@ package components
 import (
 	"context"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // ContextKey is an opaque, unforgeable key created by NewContextKey --
@@ -27,14 +27,14 @@ func NewContextKey(name string) *ContextKey {
 // of its own props (see the root README's own "A ready-made component
 // library" section) -- there is no implicit, ambient scope a
 // deeply-nested component could read a value out of without it having
-// been passed somehow, in *either* rendering mode. A gox.Node tree is
+// been passed somehow, in *either* rendering mode. A xango.Node tree is
 // built eagerly, one plain Go function call at a time, entirely before
-// gox.Render/domrt.Mount ever walks it -- so by the time either
+// xango.Render/domrt.Mount ever walks it -- so by the time either
 // renderer sees the tree, there's no "current context" left to
 // consult; whatever a descendant needed had to already be resolved
 // during that eager build, the same constraint that makes keyed
-// fragments need dedicated .gox syntax rather than a runtime trick
-// (see gox's own Frag/WithKey doc comments).
+// fragments need dedicated .xg syntax rather than a runtime trick
+// (see xango's own Frag/WithKey doc comments).
 //
 // The answer here is the same one stdlib's own context.Context is
 // designed for: an explicit, ordinary Go value threaded through an
@@ -53,7 +53,7 @@ func NewContextKey(name string) *ContextKey {
 // one generic context.Context parameter, rather than growing a
 // bespoke, unrelated prop of their own for every distinct value a
 // deeper descendant happens to need.
-func ContextProvider(parent context.Context, key *ContextKey, value any, render func(ctx context.Context) gox.Node) gox.Node {
+func ContextProvider(parent context.Context, key *ContextKey, value any, render func(ctx context.Context) xango.Node) xango.Node {
 	return render(context.WithValue(parent, key, value))
 }
 

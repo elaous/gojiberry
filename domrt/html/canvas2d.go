@@ -22,7 +22,7 @@ func (c *CanvasElement) GetContext2D() *Context2D {
 }
 
 // Canvas2D is the subset of *Context2D's own method set a real
-// consumer (OnDesign's own layout.go/main.gox rendering, audited
+// consumer (OnDesign's own layout.go/main.xg rendering, audited
 // directly rather than guessed at) actually calls -- task #107's own
 // mobile-backend groundwork (see OnDesign's docs/ROADMAP.md, "genuine
 // native mobile backend"): the seam a second, non-browser

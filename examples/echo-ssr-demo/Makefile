@@ -8,7 +8,7 @@ run: generate
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/goxc examples/echo-ssr-demo
+	cd ../.. && go run ./cmd/xgc examples/echo-ssr-demo
 
 .PHONY: test
 test: generate

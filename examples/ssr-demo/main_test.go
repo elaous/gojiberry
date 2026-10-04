@@ -3,12 +3,12 @@ package main
 import (
 	"testing"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func TestPageRendersExpectedHTML(t *testing.T) {
 	page := Page(PageProps{Name: "Gopher", Items: []string{"alpha", "beta", "gamma"}})
-	got, err := gox.RenderString(page)
+	got, err := xango.RenderString(page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -19,7 +19,7 @@ func TestPageRendersExpectedHTML(t *testing.T) {
 }
 
 func TestGreetingFallsBackForEmptyName(t *testing.T) {
-	got, err := gox.RenderString(Greeting(GreetingProps{}))
+	got, err := xango.RenderString(Greeting(GreetingProps{}))
 	if err != nil {
 		t.Fatal(err)
 	}

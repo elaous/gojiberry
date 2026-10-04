@@ -1,0 +1,35 @@
+package components
+
+import "github.com/elaous/gojiberry/xango"
+
+// TooltipPlacement selects which side of the trigger Tooltip's bubble appears on.
+type TooltipPlacement string
+
+const (
+	TooltipTop    TooltipPlacement = "top"
+	TooltipBottom TooltipPlacement = "bottom"
+	TooltipLeft   TooltipPlacement = "left"
+	TooltipRight  TooltipPlacement = "right"
+)
+
+// TooltipProps configures Tooltip.
+type TooltipProps struct {
+	Content   string
+	Placement TooltipPlacement // defaults to TooltipTop
+	Children  []xango.Node       // whatever should trigger the tooltip on hover/focus
+}
+
+// Tooltip wraps Children with a bubble that shows Content on hover or
+// keyboard focus. Pure CSS (:hover/:focus-within) -- no JS, no
+// positioning logic to keep in sync with anything.
+func Tooltip(props TooltipProps) xango.Node {
+	placement := props.Placement
+	if placement == "" {
+		placement = TooltipTop
+	}
+	children := append([]xango.Node{}, props.Children...)
+	children = append(children, xango.El("span",
+		[]xango.Attr{xango.A("class", "gj-tooltip-bubble gj-tooltip-"+string(placement)), xango.A("role", "tooltip")},
+		xango.Text(props.Content)))
+	return xango.El("span", []xango.Attr{xango.A("class", "gj-tooltip")}, children...)
+}

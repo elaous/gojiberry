@@ -18,18 +18,18 @@ func mustFormat(t *testing.T, got string) string {
 	return string(out)
 }
 
-func transpileExpr(t *testing.T, gox string) string {
+func transpileExpr(t *testing.T, xango string) string {
 	t.Helper()
-	got, err := (&parser{file: "t.gox"}).transpileChunk([]rune(gox))
+	got, err := (&parser{file: "t.xg"}).transpileChunk([]rune(xango))
 	if err != nil {
-		t.Fatalf("transpile error: %v\ninput: %s", err, gox)
+		t.Fatalf("transpile error: %v\ninput: %s", err, xango)
 	}
 	return got
 }
 
 func TestSimpleElement(t *testing.T) {
 	got := transpileExpr(t, `x := <div class="greeting">Hello</div>`)
-	want := `x := gox.El("div", []gox.Attr{gox.A("class", "greeting")}, gox.Text("Hello"))`
+	want := `x := xango.El("div", []xango.Attr{xango.A("class", "greeting")}, xango.Text("Hello"))`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -38,7 +38,7 @@ func TestSimpleElement(t *testing.T) {
 
 func TestSelfClosingVoidElement(t *testing.T) {
 	got := transpileExpr(t, `return <br/>`)
-	want := `return gox.El("br", nil)`
+	want := `return xango.El("br", nil)`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -46,7 +46,7 @@ func TestSelfClosingVoidElement(t *testing.T) {
 
 func TestTextInterpolation(t *testing.T) {
 	got := transpileExpr(t, `return <p>Hello, {name}!</p>`)
-	want := `return gox.El("p", nil, gox.Text("Hello, "), gox.Child(name), gox.Text("!"))`
+	want := `return xango.El("p", nil, xango.Text("Hello, "), xango.Child(name), xango.Text("!"))`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -54,7 +54,7 @@ func TestTextInterpolation(t *testing.T) {
 
 func TestNestedElements(t *testing.T) {
 	got := transpileExpr(t, `return <div><span>a</span><span>b</span></div>`)
-	want := `return gox.El("div", nil, gox.El("span", nil, gox.Text("a")), gox.El("span", nil, gox.Text("b")))`
+	want := `return xango.El("div", nil, xango.El("span", nil, xango.Text("a")), xango.El("span", nil, xango.Text("b")))`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -62,7 +62,7 @@ func TestNestedElements(t *testing.T) {
 
 func TestFragment(t *testing.T) {
 	got := transpileExpr(t, `return <><li>a</li><li>b</li></>`)
-	want := `return gox.Frag(gox.El("li", nil, gox.Text("a")), gox.El("li", nil, gox.Text("b")))`
+	want := `return xango.Frag(xango.El("li", nil, xango.Text("a")), xango.El("li", nil, xango.Text("b")))`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -70,7 +70,7 @@ func TestFragment(t *testing.T) {
 
 func TestKeyedFragmentWithLiteralKey(t *testing.T) {
 	got := transpileExpr(t, `return <Fragment key="row-1"><td>a</td><td>b</td></Fragment>`)
-	want := `return gox.Frag(gox.El("td", nil, gox.Text("a")), gox.El("td", nil, gox.Text("b"))).WithKey("row-1")`
+	want := `return xango.Frag(xango.El("td", nil, xango.Text("a")), xango.El("td", nil, xango.Text("b"))).WithKey("row-1")`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -79,7 +79,7 @@ func TestKeyedFragmentWithLiteralKey(t *testing.T) {
 
 func TestKeyedFragmentWithExprKey(t *testing.T) {
 	got := transpileExpr(t, `return <Fragment key={item.ID}><td>a</td></Fragment>`)
-	want := `return gox.Frag(gox.El("td", nil, gox.Text("a"))).WithKey(gox.AttrVal(item.ID))`
+	want := `return xango.Frag(xango.El("td", nil, xango.Text("a"))).WithKey(xango.AttrVal(item.ID))`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -87,26 +87,26 @@ func TestKeyedFragmentWithExprKey(t *testing.T) {
 
 func TestKeyedFragmentSelfClosing(t *testing.T) {
 	got := transpileExpr(t, `return <Fragment key="empty"/>`)
-	want := `return gox.Frag().WithKey("empty")`
+	want := `return xango.Frag().WithKey("empty")`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
 }
 
 func TestKeyedFragmentRequiresExactlyOneKeyAttr(t *testing.T) {
-	if _, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <Fragment>hi</Fragment>`)); err == nil {
+	if _, err := (&parser{file: "t.xg"}).transpileChunk([]rune(`return <Fragment>hi</Fragment>`)); err == nil {
 		t.Fatal("expected an error for <Fragment> with no key attribute at all")
 	}
-	if _, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <Fragment key="a" other="b">hi</Fragment>`)); err == nil {
+	if _, err := (&parser{file: "t.xg"}).transpileChunk([]rune(`return <Fragment key="a" other="b">hi</Fragment>`)); err == nil {
 		t.Fatal("expected an error for <Fragment> with an extra attribute besides key")
 	}
-	if _, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <Fragment key>hi</Fragment>`)); err == nil {
+	if _, err := (&parser{file: "t.xg"}).transpileChunk([]rune(`return <Fragment key>hi</Fragment>`)); err == nil {
 		t.Fatal("expected an error for a bare key attribute with no value")
 	}
 }
 
 func TestKeyedFragmentMismatchedCloseTagErrors(t *testing.T) {
-	_, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <Fragment key="a">hi</>`))
+	_, err := (&parser{file: "t.xg"}).transpileChunk([]rune(`return <Fragment key="a">hi</>`))
 	if err == nil {
 		t.Fatal("expected an error: <Fragment key=...> must close with </Fragment>, not the bare </> shorthand")
 	}
@@ -114,7 +114,7 @@ func TestKeyedFragmentMismatchedCloseTagErrors(t *testing.T) {
 
 func TestEventAttr(t *testing.T) {
 	got := transpileExpr(t, `return <button onClick={handleClick}>Go</button>`)
-	want := `return gox.El("button", []gox.Attr{gox.On("click", handleClick)}, gox.Text("Go"))`
+	want := `return xango.El("button", []xango.Attr{xango.On("click", handleClick)}, xango.Text("Go"))`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -122,7 +122,7 @@ func TestEventAttr(t *testing.T) {
 
 func TestDynamicAttrValue(t *testing.T) {
 	got := transpileExpr(t, `return <div class={cls}></div>`)
-	want := `return gox.El("div", []gox.Attr{gox.A("class", gox.AttrVal(cls))})`
+	want := `return xango.El("div", []xango.Attr{xango.A("class", xango.AttrVal(cls))})`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -130,7 +130,7 @@ func TestDynamicAttrValue(t *testing.T) {
 
 func TestBareAttr(t *testing.T) {
 	got := transpileExpr(t, `return <input disabled/>`)
-	want := `return gox.El("input", []gox.Attr{gox.A("disabled", "disabled")})`
+	want := `return xango.El("input", []xango.Attr{xango.A("disabled", "disabled")})`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -138,7 +138,7 @@ func TestBareAttr(t *testing.T) {
 
 func TestComponentWithChildren(t *testing.T) {
 	got := transpileExpr(t, `return <Button label="Click" onClick={handleClick}>Text</Button>`)
-	want := `return Button(ButtonProps{Label: "Click", OnClick: handleClick, Children: []gox.Node{gox.Text("Text")}})`
+	want := `return Button(ButtonProps{Label: "Click", OnClick: handleClick, Children: []xango.Node{xango.Text("Text")}})`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -153,15 +153,15 @@ func TestDottedComponent(t *testing.T) {
 }
 
 func TestLoopViaIIFEExpression(t *testing.T) {
-	src := `return <ul>{ func() []gox.Node {
-		var items []gox.Node
+	src := `return <ul>{ func() []xango.Node {
+		var items []xango.Node
 		for _, s := range list {
 			items = append(items, <li>{s}</li>)
 		}
 		return items
 	}() }</ul>`
 	got := transpileExpr(t, src)
-	if !strings.Contains(got, `gox.El("li", nil, gox.Child(s))`) {
+	if !strings.Contains(got, `xango.El("li", nil, xango.Child(s))`) {
 		t.Errorf("expected nested <li> inside for-loop to be expanded, got: %s", got)
 	}
 	mustFormat(t, got)
@@ -187,7 +187,7 @@ func TestTagAfterReturnOnNewLineAfterCall(t *testing.T) {
 	// ASI: foo() ends a statement, so a tag on the next line is a fresh
 	// expression-statement, not "foo() < div".
 	got := transpileExpr(t, "foo()\nx := <div></div>")
-	want := "foo()\nx := gox.El(\"div\", nil)"
+	want := "foo()\nx := xango.El(\"div\", nil)"
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -204,7 +204,7 @@ func TestStringContainingAngleBracketIsUntouched(t *testing.T) {
 func TestWhitespaceOnlyChildTextIsDropped(t *testing.T) {
 	src := "return <div>\n  <span>a</span>\n  <span>b</span>\n</div>"
 	got := transpileExpr(t, src)
-	want := `return gox.El("div", nil, gox.El("span", nil, gox.Text("a")), gox.El("span", nil, gox.Text("b")))`
+	want := `return xango.El("div", nil, xango.El("span", nil, xango.Text("a")), xango.El("span", nil, xango.Text("b")))`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -217,18 +217,18 @@ func TestWhitespaceOnlyChildTextIsDropped(t *testing.T) {
 // string/rune literal and the scanner skipped everything -- including
 // real tags -- up to the next quote character (e.g. the apostrophe in a
 // following paragraph's "Couldn't"), silently merging both paragraphs
-// and the tag between them into one gox.Text call.
+// and the tag between them into one xango.Text call.
 func TestApostropheInChildTextDoesNotSwallowFollowingTag(t *testing.T) {
 	src := `return <div><p>Only this document's own.</p><p>Couldn't load.</p></div>`
 	got := transpileExpr(t, src)
-	want := `return gox.El("div", nil, gox.El("p", nil, gox.Text("Only this document's own.")), gox.El("p", nil, gox.Text("Couldn't load.")))`
+	want := `return xango.El("div", nil, xango.El("p", nil, xango.Text("Only this document's own.")), xango.El("p", nil, xango.Text("Couldn't load.")))`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
 }
 
 func TestMismatchedCloseTagErrors(t *testing.T) {
-	_, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <div>hi</span>`))
+	_, err := (&parser{file: "t.xg"}).transpileChunk([]rune(`return <div>hi</span>`))
 	if err == nil {
 		t.Fatal("expected an error for mismatched closing tag")
 	}
@@ -243,14 +243,14 @@ func TestMismatchedCloseTagErrors(t *testing.T) {
 // their event names have no second capital letter to get wrong.
 func TestMultiWordEventAttrUsesRealDOMEventName(t *testing.T) {
 	got := transpileExpr(t, `return <div onKeyDown={handleKey}>x</div>`)
-	want := `return gox.El("div", []gox.Attr{gox.On("keydown", handleKey)}, gox.Text("x"))`
+	want := `return xango.El("div", []xango.Attr{xango.On("keydown", handleKey)}, xango.Text("x"))`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
 }
 
 func TestUnknownTagErrors(t *testing.T) {
-	_, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <dvi>hi</dvi>`))
+	_, err := (&parser{file: "t.xg"}).transpileChunk([]rune(`return <dvi>hi</dvi>`))
 	if err == nil {
 		t.Fatal("expected an error for a typo'd tag name (<dvi> for <div>)")
 	}
@@ -261,14 +261,14 @@ func TestUnknownTagErrors(t *testing.T) {
 
 func TestCustomElementWithHyphenIsAlwaysAllowed(t *testing.T) {
 	got := transpileExpr(t, `return <my-widget foo="bar"></my-widget>`)
-	want := `return gox.El("my-widget", []gox.Attr{gox.A("foo", "bar")})`
+	want := `return xango.El("my-widget", []xango.Attr{xango.A("foo", "bar")})`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
 }
 
 func TestUnknownAttrErrors(t *testing.T) {
-	_, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <div calss="x">hi</div>`))
+	_, err := (&parser{file: "t.xg"}).transpileChunk([]rune(`return <div calss="x">hi</div>`))
 	if err == nil {
 		t.Fatal("expected an error for a typo'd attribute name (calss for class)")
 	}
@@ -279,7 +279,7 @@ func TestUnknownAttrErrors(t *testing.T) {
 
 func TestDataAndAriaAttrsAreAlwaysAllowed(t *testing.T) {
 	got := transpileExpr(t, `return <div data-testid="x" aria-label="y"></div>`)
-	want := `return gox.El("div", []gox.Attr{gox.A("data-testid", "x"), gox.A("aria-label", "y")})`
+	want := `return xango.El("div", []xango.Attr{xango.A("data-testid", "x"), xango.A("aria-label", "y")})`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -289,7 +289,7 @@ func TestDataAndAriaAttrsAreAlwaysAllowed(t *testing.T) {
 // Component's attributes (its Props struct's own field names, which
 // can be anything the component declares) as if they were HTML
 // attributes -- "label" isn't a real HTML attribute, but <Button
-// label="Save"/> is completely ordinary, valid gox.
+// label="Save"/> is completely ordinary, valid xango.
 func TestComponentAttrsAreNotValidatedAsHTML(t *testing.T) {
 	got := transpileExpr(t, `return <Button label="Save" onClick={handleSave}/>`)
 	want := `return Button(ButtonProps{Label: "Save", OnClick: handleSave})`
@@ -299,11 +299,11 @@ func TestComponentAttrsAreNotValidatedAsHTML(t *testing.T) {
 }
 
 func TestFunctionPropWithNestedMarkup(t *testing.T) {
-	got := transpileExpr(t, `return <MyApp items={items} render={func(item Item) gox.Node {
+	got := transpileExpr(t, `return <MyApp items={items} render={func(item Item) xango.Node {
 	return <li class="x">{item.Name}</li>
 }} />`)
-	want := `return MyApp(MyAppProps{Items: items, Render: func(item Item) gox.Node {
-	return gox.El("li", []gox.Attr{gox.A("class", "x")}, gox.Child(item.Name))
+	want := `return MyApp(MyAppProps{Items: items, Render: func(item Item) xango.Node {
+	return xango.El("li", []xango.Attr{xango.A("class", "x")}, xango.Child(item.Name))
 }})`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
@@ -312,16 +312,16 @@ func TestFunctionPropWithNestedMarkup(t *testing.T) {
 }
 
 func TestFunctionPropAlongsideChildren(t *testing.T) {
-	got := transpileExpr(t, `return <MyApp render={func(i Item) gox.Node { return <b>{i.Name}</b> }}><i>child</i></MyApp>`)
-	want := `return MyApp(MyAppProps{Render: func(i Item) gox.Node { return gox.El("b", nil, gox.Child(i.Name)) }, Children: []gox.Node{gox.El("i", nil, gox.Text("child"))}})`
+	got := transpileExpr(t, `return <MyApp render={func(i Item) xango.Node { return <b>{i.Name}</b> }}><i>child</i></MyApp>`)
+	want := `return MyApp(MyAppProps{Render: func(i Item) xango.Node { return xango.El("b", nil, xango.Child(i.Name)) }, Children: []xango.Node{xango.El("i", nil, xango.Text("child"))}})`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
 }
 
 func TestGenericComponent(t *testing.T) {
-	got := transpileExpr(t, `return <List[Item] items={items} render={func(it Item) gox.Node { return <li>{it.Name}</li> }} />`)
-	want := `return List[Item](ListProps[Item]{Items: items, Render: func(it Item) gox.Node { return gox.El("li", nil, gox.Child(it.Name)) }})`
+	got := transpileExpr(t, `return <List[Item] items={items} render={func(it Item) xango.Node { return <li>{it.Name}</li> }} />`)
+	want := `return List[Item](ListProps[Item]{Items: items, Render: func(it Item) xango.Node { return xango.El("li", nil, xango.Child(it.Name)) }})`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -330,7 +330,7 @@ func TestGenericComponent(t *testing.T) {
 
 func TestGenericComponentWithChildrenAndNestedTypeArgs(t *testing.T) {
 	got := transpileExpr(t, `return <Table[string, map[string][]int]>text</Table>`)
-	want := `return Table[string, map[string][]int](TableProps[string, map[string][]int]{Children: []gox.Node{gox.Text("text")}})`
+	want := `return Table[string, map[string][]int](TableProps[string, map[string][]int]{Children: []xango.Node{xango.Text("text")}})`
 	if strings.TrimSpace(got) != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}
@@ -347,7 +347,7 @@ func TestGenericDottedComponent(t *testing.T) {
 
 func TestGenericTypeArgsErrors(t *testing.T) {
 	for _, src := range []string{`return <List[Item items={x} />`, `return <List[<b>] />`} {
-		if _, err := (&parser{file: "t.gox"}).transpileChunk([]rune(src)); err == nil {
+		if _, err := (&parser{file: "t.xg"}).transpileChunk([]rune(src)); err == nil {
 			t.Errorf("%q: expected an error", src)
 		}
 	}
@@ -356,7 +356,7 @@ func TestGenericTypeArgsErrors(t *testing.T) {
 func TestIndexingAfterAComponentNameStillWorks(t *testing.T) {
 	// An HTML element followed by '[' is not generic syntax (only
 	// Components take type arguments).
-	if _, err := (&parser{file: "t.gox"}).transpileChunk([]rune(`return <div[0]></div>`)); err == nil {
+	if _, err := (&parser{file: "t.xg"}).transpileChunk([]rune(`return <div[0]></div>`)); err == nil {
 		t.Error("<div[0]> should not parse as a generic tag")
 	}
 }

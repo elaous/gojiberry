@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // MenuItem is one entry of a Menu: a command, a separator, or (with
@@ -38,34 +38,34 @@ type MenuProps struct {
 // has no position of its own: put it in whatever popup or panel you
 // like, or use MenuBar for a bar of them. It is built from plain <ul>/
 // <li> with ARIA menu roles; its stylesheet is menu.css.
-func Menu(props MenuProps) gox.Node {
-	attrs := []gox.Attr{gox.A("class", "gj-menu"), gox.A("role", "menu")}
+func Menu(props MenuProps) xango.Node {
+	attrs := []xango.Attr{xango.A("class", "gj-menu"), xango.A("role", "menu")}
 	if props.Label != "" {
-		attrs = append(attrs, gox.A("aria-label", props.Label))
+		attrs = append(attrs, xango.A("aria-label", props.Label))
 	}
-	var items []gox.Node
+	var items []xango.Node
 	for _, it := range props.Items {
 		items = append(items, menuItem(it, props.OnClose))
 	}
-	return gox.El("ul", attrs, items...)
+	return xango.El("ul", attrs, items...)
 }
 
-func menuItem(it MenuItem, onClose func()) gox.Node {
+func menuItem(it MenuItem, onClose func()) xango.Node {
 	if it.Separator {
-		return gox.El("li", []gox.Attr{gox.A("class", "gj-menu-separator"), gox.A("role", "separator")})
+		return xango.El("li", []xango.Attr{xango.A("class", "gj-menu-separator"), xango.A("role", "separator")})
 	}
 	class := "gj-menu-item"
-	attrs := []gox.Attr{gox.A("role", "menuitem")}
+	attrs := []xango.Attr{xango.A("role", "menuitem")}
 	if it.Disabled {
 		class += " gj-menu-item-disabled"
-		attrs = append(attrs, gox.A("aria-disabled", "true"))
+		attrs = append(attrs, xango.A("aria-disabled", "true"))
 	}
 	if len(it.Items) > 0 {
 		class += " gj-menu-item-sub"
-		attrs = append(attrs, gox.A("aria-haspopup", "menu"), gox.A("tabindex", "0"))
+		attrs = append(attrs, xango.A("aria-haspopup", "menu"), xango.A("tabindex", "0"))
 	} else if !it.Disabled && it.OnSelect != nil {
 		sel := it.OnSelect
-		attrs = append(attrs, gox.A("tabindex", "0"), gox.On("click", func(gox.Event) {
+		attrs = append(attrs, xango.A("tabindex", "0"), xango.On("click", func(xango.Event) {
 			sel()
 			if onClose != nil {
 				onClose()
@@ -73,25 +73,25 @@ func menuItem(it MenuItem, onClose func()) gox.Node {
 		}))
 	}
 	if it.Checked {
-		attrs = append(attrs, gox.A("aria-checked", "true"))
+		attrs = append(attrs, xango.A("aria-checked", "true"))
 	}
-	attrs = append([]gox.Attr{gox.A("class", class)}, attrs...)
+	attrs = append([]xango.Attr{xango.A("class", class)}, attrs...)
 	check := ""
 	if it.Checked {
 		check = "✓"
 	}
-	row := []gox.Node{
-		gox.El("span", []gox.Attr{gox.A("class", "gj-menu-check")}, gox.Text(check)),
-		gox.El("span", []gox.Attr{gox.A("class", "gj-menu-label")}, gox.Text(it.Label)),
+	row := []xango.Node{
+		xango.El("span", []xango.Attr{xango.A("class", "gj-menu-check")}, xango.Text(check)),
+		xango.El("span", []xango.Attr{xango.A("class", "gj-menu-label")}, xango.Text(it.Label)),
 	}
 	switch {
 	case len(it.Items) > 0:
-		row = append(row, gox.El("span", []gox.Attr{gox.A("class", "gj-menu-arrow"), gox.A("aria-hidden", "true")}, gox.Text("▸")))
+		row = append(row, xango.El("span", []xango.Attr{xango.A("class", "gj-menu-arrow"), xango.A("aria-hidden", "true")}, xango.Text("▸")))
 		row = append(row, Menu(MenuProps{Items: it.Items, OnClose: onClose}))
 	case it.Shortcut != "":
-		row = append(row, gox.El("span", []gox.Attr{gox.A("class", "gj-menu-shortcut")}, gox.Text(it.Shortcut)))
+		row = append(row, xango.El("span", []xango.Attr{xango.A("class", "gj-menu-shortcut")}, xango.Text(it.Shortcut)))
 	}
-	return gox.El("li", attrs, row...)
+	return xango.El("li", attrs, row...)
 }
 
 // MenuBarEntry is one top-level menu of a MenuBar.
@@ -113,8 +113,8 @@ type MenuBarProps struct {
 // MenuBar renders a row of menus (File, Edit, ...), at most one open at a
 // time. It is controlled: the caller owns Open. A click anywhere outside
 // closes it.
-func MenuBar(props MenuBarProps) gox.Node {
-	var entries []gox.Node
+func MenuBar(props MenuBarProps) xango.Node {
+	var entries []xango.Node
 	for i, e := range props.Entries {
 		i, e := i, e
 		open := i == props.Open
@@ -122,43 +122,43 @@ func MenuBar(props MenuBarProps) gox.Node {
 		if open {
 			class += " gj-menubar-entry-open"
 		}
-		btn := gox.El("button", []gox.Attr{
-			gox.A("class", "gj-menubar-button"), gox.A("type", "button"), gox.A("role", "menuitem"),
-			gox.A("aria-haspopup", "menu"), gox.A("aria-expanded", map[bool]string{true: "true", false: "false"}[open]),
-			gox.On("click", func(gox.Event) {
+		btn := xango.El("button", []xango.Attr{
+			xango.A("class", "gj-menubar-button"), xango.A("type", "button"), xango.A("role", "menuitem"),
+			xango.A("aria-haspopup", "menu"), xango.A("aria-expanded", map[bool]string{true: "true", false: "false"}[open]),
+			xango.On("click", func(xango.Event) {
 				if props.OnOpen != nil {
 					props.OnOpen(map[bool]int{true: -1, false: i}[open])
 				}
 			}),
-			gox.On("mouseenter", func(gox.Event) {
+			xango.On("mouseenter", func(xango.Event) {
 				if props.Open >= 0 && !open && props.OnOpen != nil {
 					props.OnOpen(i)
 				}
 			}),
-		}, gox.Text(e.Label))
-		children := []gox.Node{btn}
+		}, xango.Text(e.Label))
+		children := []xango.Node{btn}
 		if open {
-			children = append(children, gox.El("div", []gox.Attr{gox.A("class", "gj-menubar-panel")},
+			children = append(children, xango.El("div", []xango.Attr{xango.A("class", "gj-menubar-panel")},
 				Menu(MenuProps{Items: e.Items, Label: e.Label, OnClose: func() {
 					if props.OnOpen != nil {
 						props.OnOpen(-1)
 					}
 				}})))
 		}
-		entries = append(entries, gox.El("div", []gox.Attr{gox.A("class", class)}, children...))
+		entries = append(entries, xango.El("div", []xango.Attr{xango.A("class", class)}, children...))
 	}
-	nodes := []gox.Node{gox.El("nav", []gox.Attr{gox.A("class", "gj-menubar"), gox.A("role", "menubar")}, entries...)}
+	nodes := []xango.Node{xango.El("nav", []xango.Attr{xango.A("class", "gj-menubar"), xango.A("role", "menubar")}, entries...)}
 	if props.Open >= 0 {
-		nodes = append([]gox.Node{gox.El("div", []gox.Attr{
-			gox.A("class", "gj-menubar-backdrop"),
-			gox.On("click", func(gox.Event) {
+		nodes = append([]xango.Node{xango.El("div", []xango.Attr{
+			xango.A("class", "gj-menubar-backdrop"),
+			xango.On("click", func(xango.Event) {
 				if props.OnOpen != nil {
 					props.OnOpen(-1)
 				}
 			}),
 		})}, nodes...)
 	}
-	return gox.Frag(nodes...)
+	return xango.Frag(nodes...)
 }
 
 // FormatChord writes a key chord ("Mod+Alt+Shift+K") for people: "Ctrl+
@@ -205,12 +205,12 @@ func CommandMenu(cmds []canvas.CommandInfo, keymap canvas.Keymap, mac bool, run 
 			shortcut = FormatChord(chords[0], mac)
 		}
 		byFeature[c.Feature] = append(byFeature[c.Feature], MenuItem{
-			Label: c.Title, Shortcut: shortcut, OnSelect: func() { run(c.Name) },
+			Label: tr("cmd."+string(c.Name), c.Title), Shortcut: shortcut, OnSelect: func() { run(c.Name) },
 		})
 	}
 	var out []MenuItem
 	for _, f := range order {
-		out = append(out, MenuItem{Label: featureTitle(f), Items: byFeature[f]})
+		out = append(out, MenuItem{Label: tr("feature."+f, featureTitle(f)), Items: byFeature[f]})
 	}
 	return out
 }

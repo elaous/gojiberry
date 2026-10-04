@@ -1,4 +1,4 @@
-// Package experimental holds gox resource-import loaders that are
+// Package experimental holds xango resource-import loaders that are
 // either shell-outs to (and thin wrappers around) a mature external
 // tool this project doesn't try to reimplement (HCL/proto/capnp/sqlc,
 // each generating a real Go subpackage) or carry real footgun risk
@@ -8,8 +8,8 @@
 //
 // None of this runs unless a caller explicitly opts in: pass
 // Loaders() as transpile.Options.ExperimentalLoaders with
-// Options.Experimental set to true (goxc's -experimental flag does
-// this). Without that, gox still recognizes these extensions -- so it
+// Options.Experimental set to true (xgc's -experimental flag does
+// this). Without that, xango still recognizes these extensions -- so it
 // can give an actionable "this needs experimental mode" error -- but
 // this package's code is never reached.
 package experimental

@@ -5,9 +5,9 @@
 // <textarea>. model.go holds the document itself, independent of any
 // rendering or DOM concern; linewise.go adds line/word commands on top
 // of it; layout.go does word-wrap/hit-testing against a Context2D;
-// main.gox wires it all up to the canvas, a hidden input for real
+// main.xg wires it all up to the canvas, a hidden input for real
 // keyboard capture, and a formatting toolbar. model.go/linewise.go
-// carry no js/wasm-only dependency (only layout.go and main.gox do,
+// carry no js/wasm-only dependency (only layout.go and main.xg do,
 // via domrt/html), so they -- and native_stub.go's no-op func main --
 // build and unit-test natively via a plain `go test`, fast and without
 // a browser; canvas_editor_test.go separately drives the real,

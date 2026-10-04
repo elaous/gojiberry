@@ -1,0 +1,80 @@
+//go:build js && wasm
+
+// Package main mirrors wasm-counter, but Counter delegates to an
+// unexported struct instead of rendering inline, showing that the
+// ordinary <Name attr>{children}</Name> -> Name(NameProps{...})
+// convention already supports a React-class-component-like shape with
+// zero transpiler changes: Go won't let a type and a func share a
+// name, so the exported, callable surface stays a plain function --
+// only its body is free to be "a struct with a Render method and
+// helpers alongside it" instead of one big literal expression.
+package main
+
+import (
+	"strconv"
+	"syscall/js"
+
+	"github.com/elaous/gojiberry/domrt"
+	"github.com/elaous/gojiberry/xango"
+)
+
+type CounterProps struct {
+	Count int
+	OnInc xango.EventHandler
+	OnDec xango.EventHandler
+}
+
+// Counter is called exactly like any other component (see main below):
+// <Counter count={5} .../> -> Counter(CounterProps{Count: 5, ...}).
+func Counter(props CounterProps) xango.Node {
+	return counter{props}.Render()
+}
+
+// counter is unexported: callers never see it, only Counter's usual
+// Name(NameProps) xango.Node signature. Holding Props on a value lets it
+// carry helper methods -- Label below -- alongside Render, the kind of
+// thing a plain function component would otherwise have to take as an
+// extra parameter or recompute inline.
+type counter struct {
+	Props CounterProps
+}
+
+// Label describes the current count in words.
+func (c counter) Label() string {
+	parity := "even"
+	if c.Props.Count%2 != 0 {
+		parity = "odd"
+	}
+	return strconv.Itoa(c.Props.Count) + " (" + parity + ")"
+}
+
+func (c counter) Render() xango.Node {
+	return <div id="counter">
+		<button id="dec" onClick={c.Props.OnDec}>-</button>
+		<span id="count">{c.Label()}</span>
+		<button id="inc" onClick={c.Props.OnInc}>+</button>
+	</div>
+}
+
+func main() {
+	count := 0
+	container := js.Global().Get("document").Call("getElementById", "app")
+
+	var root *domrt.Root
+	var render func()
+	render = func() {
+		node := <Counter
+			count={count}
+			onInc={func(xango.Event) { count++; render() }}
+			onDec={func(xango.Event) { count--; render() }}
+		/>
+		if root == nil {
+			root = domrt.Mount(container, node)
+		} else {
+			root.Update(node)
+		}
+	}
+	render()
+
+	select {} // keep the wasm program alive so event callbacks keep firing
+}

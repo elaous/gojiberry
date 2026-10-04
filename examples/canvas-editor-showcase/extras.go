@@ -10,19 +10,24 @@ import (
 	"time"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/gox"
+	cxango "github.com/elaous/gojiberry/canvas/xango"
+	"github.com/elaous/gojiberry/components"
+	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/export"
+	"github.com/elaous/gojiberry/i18n"
 	"github.com/elaous/gojiberry/share"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // statusLine is the status bar: the pages the text reaches, its counts, and
 // the selection's when there is one.
 func statusLine(st canvas.FlowStats, sheets int, mode canvas.Mode) string {
 	pages := max(st.Pages, 1)
-	line := fmt.Sprintf("%d of %d pages · %d words · %d characters", pages, sheets, st.Text.Words, st.Text.Characters)
+	line := T("status.pages", "%d of %d pages", pages, sheets) + " · " + T("status.words", "%d words", st.Text.Words) + " · " + T("status.characters", "%d characters", st.Text.Characters)
 	if st.HasSelection {
-		line = fmt.Sprintf("Selection: %d words, %d characters · ", st.Selection.Words, st.Selection.Characters) + line
+		line = T("status.selection", "Selection: %d words, %d characters", st.Selection.Words, st.Selection.Characters) + " · " + line
 	}
-	return line + " · " + mode.String() + " mode"
+	return line + " · " + T("status.mode."+mode.String(), mode.String()+" mode")
 }
 
 // readTime formats a reading time the way a status bar would.
@@ -45,16 +50,16 @@ func statsState(st canvas.FlowStats) map[string]any {
 
 // statsPanel is the Stats tab: a table of the counts, for the whole text and
 // for the selection.
-func statsPanel(st canvas.FlowStats, sheets int) gox.Node {
-	row := func(label string, whole, sel any) gox.Node {
-		selCell := gox.El("td", []gox.Attr{gox.A("style", "text-align:right;color:#6b7280")}, gox.Text("–"))
+func statsPanel(st canvas.FlowStats, sheets int) xango.Node {
+	row := func(label string, whole, sel any) xango.Node {
+		selCell := xango.El("td", []xango.Attr{xango.A("style", "text-align:right;color:#6b7280")}, xango.Text("–"))
 		if st.HasSelection {
-			selCell = gox.El("td", []gox.Attr{gox.A("style", "text-align:right")}, gox.Text(fmt.Sprint(sel)))
+			selCell = xango.El("td", []xango.Attr{xango.A("style", "text-align:right")}, xango.Text(fmt.Sprint(sel)))
 		}
-		return gox.El("tr", nil, gox.El("td", nil, gox.Text(label)), gox.El("td", []gox.Attr{gox.A("style", "text-align:right")}, gox.Text(fmt.Sprint(whole))), selCell)
+		return xango.El("tr", nil, xango.El("td", nil, xango.Text(label)), xango.El("td", []xango.Attr{xango.A("style", "text-align:right")}, xango.Text(fmt.Sprint(whole))), selCell)
 	}
-	return gox.El("table", []gox.Attr{gox.A("id", "stats"), gox.A("style", "width:100%;border-collapse:collapse")},
-		gox.El("tr", nil, gox.El("th", []gox.Attr{gox.A("style", "text-align:left")}, gox.Text("")), gox.El("th", nil, gox.Text("Document")), gox.El("th", nil, gox.Text("Selection"))),
+	return xango.El("table", []xango.Attr{xango.A("id", "stats"), xango.A("style", "width:100%;border-collapse:collapse")},
+		xango.El("tr", nil, xango.El("th", []xango.Attr{xango.A("style", "text-align:left")}, xango.Text("")), xango.El("th", nil, xango.Text("Document")), xango.El("th", nil, xango.Text("Selection"))),
 		row("Words", st.Text.Words, st.Selection.Words),
 		row("Characters", st.Text.Characters, st.Selection.Characters),
 		row("Characters (no spaces)", st.Text.CharactersNoSpaces, st.Selection.CharactersNoSpaces),
@@ -85,23 +90,23 @@ func pageBase() string {
 
 // sharePanel is the Share tab: the selected text, a link to it, and buttons to
 // copy the link or hand it to the device's share sheet.
-func sharePanel(u *ui, flow *canvas.TextFlow, origin string, renderUI func()) gox.Node {
+func sharePanel(u *ui, flow *canvas.TextFlow, origin string, renderUI func()) xango.Node {
 	from, to := flow.Selection()
 	sel := share.Of(flow.EditText(), from, to)
 	if sel.Empty() {
 		u.shareLink = ""
-		return gox.El("p", []gox.Attr{gox.A("id", "share-hint")}, gox.Text("Select some text to get a link to it."))
+		return xango.El("p", []xango.Attr{xango.A("id", "share-hint")}, xango.Text("Select some text to get a link to it."))
 	}
 	u.shareLink = share.Link(pageBase(), shareParams(), sel)
 	quote := sel.Quote
 	if sel.To-sel.From > share.QuoteRunes {
 		quote += "…"
 	}
-	button := func(id, label string, f func()) gox.Node {
-		return gox.El("button", []gox.Attr{gox.A("type", "button"), gox.A("class", "gj-keybindings-button"), gox.A("id", id),
-			gox.On("click", func(gox.Event) { f() })}, gox.Text(label))
+	button := func(id, label string, f func()) xango.Node {
+		return xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-keybindings-button"), xango.A("id", id),
+			xango.On("click", func(xango.Event) { f() })}, xango.Text(label))
 	}
-	buttons := []gox.Node{button("share-copy", "Copy link", func() {
+	buttons := []xango.Node{button("share-copy", "Copy link", func() {
 		if nav := js.Global().Get("navigator"); !nav.Get("clipboard").IsUndefined() {
 			nav.Get("clipboard").Call("writeText", u.shareLink)
 		}
@@ -113,10 +118,10 @@ func sharePanel(u *ui, flow *canvas.TextFlow, origin string, renderUI func()) go
 			js.Global().Get("navigator").Call("share", map[string]any{"title": u.title, "text": "“" + sel.Quote + "”", "url": u.shareLink})
 		}))
 	}
-	return gox.Frag(
-		gox.El("blockquote", []gox.Attr{gox.A("id", "share-quote"), gox.A("style", "margin:0 0 0.8em;padding-left:0.8em;border-left:3px solid #7c5cff")}, gox.Text(quote)),
-		gox.El("input", []gox.Attr{gox.A("id", "share-link"), gox.A("readonly", "readonly"), gox.A("style", "width:100%"), gox.A("value", u.shareLink)}),
-		gox.El("div", []gox.Attr{gox.A("style", "display:flex;gap:6px;margin-top:0.6em")}, buttons...),
+	return xango.Frag(
+		xango.El("blockquote", []xango.Attr{xango.A("id", "share-quote"), xango.A("style", "margin:0 0 0.8em;padding-left:0.8em;border-left:3px solid #7c5cff")}, xango.Text(quote)),
+		xango.El("input", []xango.Attr{xango.A("id", "share-link"), xango.A("readonly", "readonly"), xango.A("style", "width:100%"), xango.A("value", u.shareLink)}),
+		xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px;margin-top:0.6em")}, buttons...),
 	)
 }
 
@@ -144,4 +149,175 @@ func openSharedSelection(u *ui, flow func() *canvas.TextFlow, scroller func() *c
 			return
 		}
 	}
+}
+
+// --- the interface language ---------------------------------------------
+
+var (
+	catalog = i18n.Default()
+	locale  = "en"
+)
+
+// T is the text for a message id in the interface language, or def (English).
+func T(id, def string, args ...any) string { return catalog.Text(locale, id, def, args...) }
+
+// languageNames are the interface languages on offer, by their own names.
+var languageNames = map[string]string{"en": "English", "es": "Español", "fr": "Français", "de": "Deutsch"}
+
+// setLocale changes the interface language: the components, the page's lang and
+// reading direction.
+func setLocale(code string) {
+	locale = code
+	components.Translate = func(id, def string) string { return catalog.Text(locale, id, def) }
+	root := js.Global().Get("document").Get("documentElement")
+	root.Call("setAttribute", "lang", code)
+	root.Call("setAttribute", "dir", i18n.Direction(code))
+}
+
+// initLocale picks the language from ?lang=, else the browser's preferences.
+func initLocale() {
+	avail := append([]string{"en"}, catalog.Languages()...)
+	var prefs []string
+	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
+	if q.Call("has", "lang").Bool() {
+		prefs = append(prefs, q.Call("get", "lang").String())
+	}
+	if langs := js.Global().Get("navigator").Get("languages"); langs.Truthy() {
+		for i := range langs.Length() {
+			prefs = append(prefs, langs.Index(i).String())
+		}
+	}
+	setLocale(i18n.Match(prefs, avail, "en"))
+}
+
+// languageMenu lists the interface languages, the current one ticked.
+func languageMenu(u *ui, renderUI func()) []components.MenuItem {
+	codes := append([]string{"en"}, catalog.Languages()...)
+	var items []components.MenuItem
+	for _, c := range codes {
+		name := languageNames[c]
+		if name == "" {
+			name = c
+		}
+		items = append(items, components.MenuItem{Label: name, Checked: c == locale, OnSelect: func() {
+			setLocale(c)
+			u.announce(T("a11y.language", "Interface language: %s", languageNames[c]))
+			renderUI()
+		}})
+	}
+	return items
+}
+
+// --- accessibility -------------------------------------------------------
+
+// a11yBlocks is the document as the blocks a screen reader is given, found
+// again only when the text changes.
+func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBlock {
+	if flow == nil {
+		return nil
+	}
+	sig := flow.EditText()
+	if u.a11ySig == sig && u.a11yCache != nil {
+		return u.a11yCache
+	}
+	snap := export.FromDocument(docfile.FromFlow(title, flow))
+	var out []components.A11yBlock
+	for i := 0; i < len(snap.Blocks); i++ {
+		b := snap.Blocks[i]
+		text := ""
+		for _, s := range b.Segments {
+			if s.SoftBreak {
+				text += " "
+			} else {
+				text += s.Text
+			}
+		}
+		switch b.Kind {
+		case export.Heading1, export.Heading2, export.Heading3:
+			out = append(out, components.A11yBlock{Kind: components.A11yHeading, Level: b.Level, Text: text})
+		case export.BulletItem, export.NumberedItem:
+			out = append(out, components.A11yBlock{Kind: components.A11yListItem, Level: b.Level, Ordered: b.Kind == export.NumberedItem, Text: text})
+		case export.Quote:
+			out = append(out, components.A11yBlock{Kind: components.A11yQuote, Text: text})
+		case export.Code:
+			out = append(out, components.A11yBlock{Kind: components.A11yCode, Text: text})
+		case export.Image:
+			out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.image", "Image")})
+		case export.TableCell:
+			if b.TableCol == 0 {
+				row := components.A11yBlock{Kind: components.A11yTableRow}
+				for c := 0; c < b.TableCols && i+c < len(snap.Blocks); c++ {
+					var cell string
+					for _, s := range snap.Blocks[i+c].Segments {
+						cell += s.Text
+					}
+					row.Cells = append(row.Cells, cell)
+				}
+				out = append(out, row)
+			}
+		default:
+			if text != "" {
+				out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: text})
+			}
+		}
+	}
+	u.a11ySig, u.a11yCache = sig, out
+	return out
+}
+
+// announce has a screen reader say msg.
+func (u *ui) announce(msg string) { u.announcement = msg }
+
+// selectedText is what is selected, cut short, for the screen reader's copy of
+// the document.
+func selectedText(flow *canvas.TextFlow) string {
+	if flow == nil || !flow.HasSelection() {
+		return ""
+	}
+	s := flow.SelectedText()
+	if rs := []rune(s); len(rs) > 200 {
+		return string(rs[:200]) + "…"
+	}
+	return s
+}
+
+// labelCanvas gives the canvas and its hidden input names and a description a
+// screen reader can use: the canvas is a text box whose text is the hidden copy.
+func labelCanvas(canvasEl, inputEl js.Value) {
+	for _, el := range []js.Value{canvasEl, inputEl} {
+		el.Call("setAttribute", "aria-describedby", "a11y-text")
+		el.Call("setAttribute", "aria-multiline", "true")
+	}
+	canvasEl.Call("setAttribute", "role", "textbox")
+	canvasEl.Call("setAttribute", "aria-readonly", "true") // typing goes through the input
+	canvasEl.Call("setAttribute", "aria-label", T("a11y.canvas", "Document"))
+	inputEl.Call("setAttribute", "aria-label", T("a11y.input", "Document editor"))
+}
+
+// a11yObjects is the floating text, tables and pictures of the page, which are
+// not in the text flow, as blocks for the screen reader's copy.
+func a11yObjects(root *cxango.Root) []components.A11yBlock {
+	var out []components.A11yBlock
+	for n := 0; ; n++ {
+		ft, ok := root.Find(cxango.TagFloatingText, n).(*canvas.FloatingText)
+		if !ok {
+			break
+		}
+		if t := ft.Text(); t != "" {
+			out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.note", "Note: %s", t)})
+		}
+	}
+	for n := 0; ; n++ {
+		tv, ok := root.Find(cxango.TagTable, n).(*canvas.TableView)
+		if !ok {
+			break
+		}
+		for _, row := range tv.Table.Cells {
+			out = append(out, components.A11yBlock{Kind: components.A11yTableRow, Cells: append([]string(nil), row...)})
+		}
+	}
+	for n := 0; root.Find(cxango.TagImage, n) != nil; n++ {
+		out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.image", "Image")})
+	}
+	return out
 }

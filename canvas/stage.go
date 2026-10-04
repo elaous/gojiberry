@@ -292,7 +292,7 @@ func (s *Stage) RunCommand(cmd Command) bool {
 		if t == nil && cmd == CmdCommentAdd && s.Role.CanComment() {
 			t = s.commentTarget() // commenting needs no edit mode
 		}
-		if t != nil {
+		if t != nil || s.Features.global[cmd] {
 			ctx := &CommandContext{Target: t, Clipboard: &s.Clipboard, Formats: s.Formats, Redraw: s.Redraw, Prompt: s.Prompt, OpenLink: s.OpenLink}
 			if s.Features.Run(cmd, ctx) {
 				return true

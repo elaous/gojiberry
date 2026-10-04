@@ -12,12 +12,12 @@ import (
 	"gioui.org/widget/material"
 
 	"github.com/elaous/gojiberry/examples/gio-counter-demo/shared"
-	"github.com/elaous/gojiberry/gox"
-	"github.com/elaous/gojiberry/goxgio"
+	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/gojiberry/xangogio"
 )
 
 // TestCounterRendersAndClicksThroughRealGio drives the exact same
-// shared.Counter component and goxgio.Renderer that main.go's run
+// shared.Counter component and xangogio.Renderer that main.go's run
 // mounts into a real desktop window, but through Gio's own headless
 // GPU backend (gioui.org/gpu/headless) instead of app.Window, so it
 // runs without a display server or compositor: each frame is a real
@@ -33,7 +33,7 @@ func TestCounterRendersAndClicksThroughRealGio(t *testing.T) {
 	defer w.Release()
 
 	th := material.NewTheme()
-	renderer := goxgio.New()
+	renderer := xangogio.New()
 	count := 0
 
 	frame := func() *image.RGBA {
@@ -46,8 +46,8 @@ func TestCounterRendersAndClicksThroughRealGio(t *testing.T) {
 		}
 		node := shared.Counter(shared.CounterProps{
 			Count: count,
-			OnInc: func(gox.Event) { count++ },
-			OnDec: func(gox.Event) { count-- },
+			OnInc: func(xango.Event) { count++ },
+			OnDec: func(xango.Event) { count-- },
 		})
 		renderer.Layout(gtx, th, node)
 		router.Frame(gtx.Ops)

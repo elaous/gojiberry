@@ -15,9 +15,9 @@ type LoaderInput struct {
 	Alias      string // the bound identifier: the import's alias, or one derived from the filename
 	AliasGiven bool   // the import spec wrote an alias (possibly "_"), rather than Alias being derived
 	TypeName   string // set from an optional `alias.(TypeName) "path"` annotation; "" if not given
-	Path       string // the import path exactly as written in the .gox source
-	BaseDir    string // the .gox file's directory; resource paths resolve relative to it, like go:embed
-	SourceFile string // the .gox file's path, for error messages
+	Path       string // the import path exactly as written in the .xg source
+	BaseDir    string // the .xg file's directory; resource paths resolve relative to it, like go:embed
+	SourceFile string // the .xg file's path, for error messages
 }
 
 // LoaderResult is what a loader hands back to be spliced into the
@@ -59,10 +59,10 @@ var loaders = map[string]LoaderFunc{
 	".css":   loadCSS,
 }
 
-// experimentalExtensions are resource-import extensions gox recognizes
+// experimentalExtensions are resource-import extensions xango recognizes
 // but whose loader lives in internal/transpile/experimental and isn't
 // wired in unless Options.Experimental is set. Listing them here (even
-// without an implementation loaded) lets gox give an actionable "this
+// without an implementation loaded) lets xango give an actionable "this
 // needs experimental mode" error instead of a confusing "not a valid
 // Go import path" one when they're used without opting in.
 var experimentalExtensions = map[string]bool{
@@ -72,7 +72,7 @@ var experimentalExtensions = map[string]bool{
 	".sql":   true,
 }
 
-// isResourceImport reports whether path names a file gox recognizes as
+// isResourceImport reports whether path names a file xango recognizes as
 // an import-time resource (stable or experimental), rather than an
 // ordinary Go package import path.
 func isResourceImport(path string) bool {
@@ -104,7 +104,7 @@ func DeriveIdent(path string) string {
 // ResolveResourcePath finds the file a resource import names. The path
 // is, in order:
 //
-//   - relative to in.BaseDir (the .gox file's directory), the way go:embed
+//   - relative to in.BaseDir (the .xg file's directory), the way go:embed
 //     paths are -- "style.css", "./theme/dark.css";
 //   - a path in the current module, written as for a Go package:
 //     "<module path>/components/button.css";
@@ -120,7 +120,7 @@ func ResolveResourcePath(in LoaderInput) (string, error) {
 	if abs, ok := resolveInModules(in.BaseDir, in.Path); ok {
 		return abs, nil
 	}
-	return "", fmt.Errorf("gox: resource import %q in %s: no such file relative to %s, in this module, or in a required module", in.Path, in.SourceFile, in.BaseDir)
+	return "", fmt.Errorf("xango: resource import %q in %s: no such file relative to %s, in this module, or in a required module", in.Path, in.SourceFile, in.BaseDir)
 }
 
 // FindModuleRoot is module.go's findModuleRoot, exported for

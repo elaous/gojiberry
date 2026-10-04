@@ -3,7 +3,7 @@ package components
 import (
 	"testing"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func TestButton(t *testing.T) {
@@ -25,12 +25,12 @@ func TestButton(t *testing.T) {
 
 	t.Run("OnClick fires", func(t *testing.T) {
 		clicked := false
-		n := Button(ButtonProps{Label: "Go", OnClick: func(gox.Event) { clicked = true }})
+		n := Button(ButtonProps{Label: "Go", OnClick: func(xango.Event) { clicked = true }})
 		handlers := findHandlers(n, "click")
 		if len(handlers) != 1 {
 			t.Fatalf("expected 1 click handler, got %d", len(handlers))
 		}
-		handlers[0](gox.Event{})
+		handlers[0](xango.Event{})
 		if !clicked {
 			t.Error("OnClick did not fire")
 		}
@@ -38,7 +38,7 @@ func TestButton(t *testing.T) {
 }
 
 func TestCarousel(t *testing.T) {
-	slides := []gox.Node{gox.Text("slide 0"), gox.Text("slide 1"), gox.Text("slide 2")}
+	slides := []xango.Node{xango.Text("slide 0"), xango.Text("slide 1"), xango.Text("slide 2")}
 
 	t.Run("marks the Active slide and aria-hides the rest", func(t *testing.T) {
 		html := render(t, Carousel(CarouselProps{Slides: slides, Active: 1}))
@@ -64,15 +64,15 @@ func TestCarousel(t *testing.T) {
 		if len(handlers) != 5 {
 			t.Fatalf("expected 5 click handlers, got %d", len(handlers))
 		}
-		handlers[0](gox.Event{}) // prev
+		handlers[0](xango.Event{}) // prev
 		if !prevCalled {
 			t.Error("OnPrev did not fire")
 		}
-		handlers[1](gox.Event{}) // next
+		handlers[1](xango.Event{}) // next
 		if !nextCalled {
 			t.Error("OnNext did not fire")
 		}
-		handlers[2](gox.Event{}) // dot 0
+		handlers[2](xango.Event{}) // dot 0
 		if selected != 0 {
 			t.Errorf("OnSelect got %d, want 0", selected)
 		}
@@ -81,8 +81,8 @@ func TestCarousel(t *testing.T) {
 
 func TestAccordion(t *testing.T) {
 	items := []AccordionItem{
-		{Title: "Section A", Content: gox.Text("content A")},
-		{Title: "Section B", Content: gox.Text("content B")},
+		{Title: "Section A", Content: xango.Text("content A")},
+		{Title: "Section B", Content: xango.Text("content B")},
 	}
 
 	t.Run("open state drives aria-expanded and the collapsed class", func(t *testing.T) {
@@ -97,7 +97,7 @@ func TestAccordion(t *testing.T) {
 		if len(handlers) != 2 {
 			t.Fatalf("expected 2 click handlers, got %d", len(handlers))
 		}
-		handlers[1](gox.Event{})
+		handlers[1](xango.Event{})
 		if got != 1 {
 			t.Errorf("OnToggle got %d, want 1", got)
 		}
@@ -150,7 +150,7 @@ func TestFileUploader(t *testing.T) {
 				t.Fatalf("expected 1 %s handler, got %d", event, len(handlers))
 			}
 			prevented := false
-			handlers[0](gox.NewEvent(event, nil, false, func() { prevented = true }, nil))
+			handlers[0](xango.NewEvent(event, nil, false, func() { prevented = true }, nil))
 			if !prevented {
 				t.Errorf("%s handler did not call PreventDefault", event)
 			}
@@ -159,12 +159,12 @@ func TestFileUploader(t *testing.T) {
 
 	t.Run("OnFilesSelected fires on the input's change event", func(t *testing.T) {
 		fired := false
-		n := FileUploader(FileUploaderProps{OnFilesSelected: func(gox.Event) { fired = true }})
+		n := FileUploader(FileUploaderProps{OnFilesSelected: func(xango.Event) { fired = true }})
 		handlers := findHandlers(n, "change")
 		if len(handlers) != 1 {
 			t.Fatalf("expected 1 change handler, got %d", len(handlers))
 		}
-		handlers[0](gox.Event{})
+		handlers[0](xango.Event{})
 		if !fired {
 			t.Error("OnFilesSelected did not fire")
 		}
@@ -189,10 +189,10 @@ func TestCapabilitiesForRole(t *testing.T) {
 }
 
 func TestCollab(t *testing.T) {
-	content := []gox.Node{gox.Text("the document")}
+	content := []xango.Node{xango.Text("the document")}
 
 	t.Run("a viewer sees a read-only badge and content, no actions", func(t *testing.T) {
-		html := render(t, Collab(CollabProps{Role: CollabViewer, Content: content, Actions: []gox.Node{gox.Text("toolbar")}}))
+		html := render(t, Collab(CollabProps{Role: CollabViewer, Content: content, Actions: []xango.Node{xango.Text("toolbar")}}))
 		mustContain(t, html, "gj-collab-readonly", "gj-collab-badge", "View only", "the document")
 		mustNotContain(t, html, "gj-collab-actions", "toolbar")
 	})
@@ -207,7 +207,7 @@ func TestCollab(t *testing.T) {
 		html := render(t, Collab(CollabProps{
 			Role:     CollabEditor,
 			Content:  content,
-			Actions:  []gox.Node{gox.Text("toolbar")},
+			Actions:  []xango.Node{xango.Text("toolbar")},
 			OnDelete: func() {},
 			OnShare:  func() {},
 		}))
@@ -230,18 +230,18 @@ func TestCollab(t *testing.T) {
 		if len(handlers) != 2 {
 			t.Fatalf("expected 2 click handlers (Share, Delete), got %d", len(handlers))
 		}
-		handlers[0](gox.Event{})
+		handlers[0](xango.Event{})
 		if !shared {
 			t.Error("Share button did not invoke OnShare")
 		}
-		handlers[1](gox.Event{})
+		handlers[1](xango.Event{})
 		if !deleted {
 			t.Error("Delete button did not invoke OnDelete")
 		}
 	})
 
 	t.Run("Comments only render when CanComment and non-empty", func(t *testing.T) {
-		html := render(t, Collab(CollabProps{Role: CollabOwner, Content: content, Comments: []gox.Node{gox.Text("a comment")}}))
+		html := render(t, Collab(CollabProps{Role: CollabOwner, Content: content, Comments: []xango.Node{xango.Text("a comment")}}))
 		mustContain(t, html, "gj-collab-comments", "a comment")
 
 		noComments := render(t, Collab(CollabProps{Role: CollabOwner, Content: content}))
@@ -254,7 +254,7 @@ func TestCollab(t *testing.T) {
 			Role:         CollabViewer, // would normally deny edit
 			Capabilities: &custom,
 			Content:      content,
-			Actions:      []gox.Node{gox.Text("toolbar")},
+			Actions:      []xango.Node{xango.Text("toolbar")},
 		}))
 		mustContain(t, html, "toolbar") // edit allowed via the override
 		mustNotContain(t, html, "gj-collab-readonly")

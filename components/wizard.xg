@@ -1,0 +1,77 @@
+package components
+
+import (
+	"strconv"
+
+	"github.com/elaous/gojiberry/xango"
+)
+
+// WizardStep is one step in a Wizard.
+type WizardStep struct {
+	Title   string
+	Content xango.Node
+}
+
+// WizardProps configures Wizard.
+type WizardProps struct {
+	Steps  []WizardStep
+	Active int
+
+	OnBack func()          // called when Back is clicked (never called for step 0; Back renders disabled instead)
+	OnNext func()          // called when Next/Finish is clicked
+	OnStep func(index int) // optional: called when a step header is clicked, to jump directly to it
+}
+
+// Wizard renders a multi-step form flow: a step header strip, the
+// active step's content, and Back/Next actions.
+func Wizard(props WizardProps) xango.Node {
+	var headers []xango.Node
+	for i, s := range props.Steps {
+		class := "gj-wizard-step-header"
+		switch {
+		case i == props.Active:
+			class += " gj-wizard-step-header-active"
+		case i < props.Active:
+			class += " gj-wizard-step-header-done"
+		}
+		attrs := []xango.Attr{xango.A("class", class), xango.A("type", "button")}
+		if props.OnStep != nil {
+			index := i
+			attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnStep(index) }))
+		}
+		headers = append(headers, xango.El("button", attrs,
+			xango.El("span", []xango.Attr{xango.A("class", "gj-wizard-step-number")}, xango.Text(strconv.Itoa(i+1))),
+			xango.El("span", []xango.Attr{xango.A("class", "gj-wizard-step-title")}, xango.Text(s.Title)),
+		))
+	}
+
+	var content xango.Node
+	if props.Active >= 0 && props.Active < len(props.Steps) {
+		content = props.Steps[props.Active].Content
+	}
+
+	backAttrs := []xango.Attr{xango.A("class", "gj-wizard-back"), xango.A("type", "button")}
+	if props.Active == 0 {
+		backAttrs = append(backAttrs, xango.A("disabled", "disabled"))
+	} else if props.OnBack != nil {
+		backAttrs = append(backAttrs, xango.On("click", func(xango.Event) { props.OnBack() }))
+	}
+
+	nextLabel := "Next"
+	if props.Active == len(props.Steps)-1 {
+		nextLabel = "Finish"
+	}
+	nextAttrs := []xango.Attr{xango.A("class", "gj-wizard-next"), xango.A("type", "button")}
+	if props.OnNext != nil {
+		nextAttrs = append(nextAttrs, xango.On("click", func(xango.Event) { props.OnNext() }))
+	}
+
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-wizard")},
+		xango.El("div", []xango.Attr{xango.A("class", "gj-wizard-steps")}, headers...),
+		xango.El("div", []xango.Attr{xango.A("class", "gj-wizard-content")}, content),
+		xango.El("div", []xango.Attr{xango.A("class", "gj-wizard-actions")},
+			xango.El("button", backAttrs, xango.Text("Back")),
+			xango.El("button", nextAttrs, xango.Text(nextLabel)),
+		),
+	)
+}

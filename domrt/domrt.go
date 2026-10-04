@@ -1,19 +1,19 @@
 //go:build js && wasm
 
-// Package domrt is the client-side runtime: it mounts a gox.Node tree
+// Package domrt is the client-side runtime: it mounts a xango.Node tree
 // into a real DOM element and, on each Update, diffs the new tree
 // against what's currently mounted, patching only what changed (text
 // content, attributes, event listeners, children) instead of tearing
 // down and rebuilding the DOM. Only builds under GOOS=js GOARCH=wasm;
-// gox itself has no browser dependency so the same components render
-// both here and via gox.Render on the server.
+// xango itself has no browser dependency so the same components render
+// both here and via xango.Render on the server.
 package domrt
 
 import (
 	"strings"
 	"syscall/js"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func document() js.Value { return js.Global().Get("document") }
@@ -27,7 +27,7 @@ type Root struct {
 
 // Mount installs the registered stylesheets (see InstallStyles), creates
 // DOM nodes for initial and appends them to container, returning a Root whose Update re-renders in place on future calls.
-func Mount(container js.Value, initial gox.Node) *Root {
+func Mount(container js.Value, initial xango.Node) *Root {
 	InstallStyles()
 	rn := create(initial)
 	for _, n := range rn.ownedNodes() {
@@ -39,7 +39,7 @@ func Mount(container js.Value, initial gox.Node) *Root {
 // Update diffs next against the currently mounted tree and patches the
 // real DOM to match, preserving node identity (and therefore focus,
 // scroll position, input state, etc.) wherever the shape is unchanged.
-func (r *Root) Update(next gox.Node) {
+func (r *Root) Update(next xango.Node) {
 	r.tree = patch(r.container, r.tree, next)
 }
 
@@ -75,23 +75,23 @@ func (r *Root) Listener(event string) js.Func {
 	return js.Func{}
 }
 
-// renderedNode pairs a previously-rendered gox.Node with the live DOM
+// renderedNode pairs a previously-rendered xango.Node with the live DOM
 // node(s) it produced, so the next patch can diff against it.
 type renderedNode struct {
-	kind      gox.Kind
+	kind      xango.Kind
 	tag       string
-	k         string   // the gox.Node.Key this was created from, for keyed diffing
+	k         string   // the xango.Node.Key this was created from, for keyed diffing
 	dom       js.Value // the single owned node, for Element/Text
 	rawNodes  []js.Value
 	children  []*renderedNode
-	attrs     []gox.Attr
+	attrs     []xango.Attr
 	text      string
 	listeners map[string]*eventBinding
 }
 
 type eventBinding struct {
 	jsFunc  js.Func
-	handler gox.EventHandler
+	handler xango.EventHandler
 }
 
 // ownedNodes returns every top-level DOM node this renderedNode is
@@ -100,13 +100,13 @@ type eventBinding struct {
 // (a fragment has no wrapper node of its own).
 func (rn *renderedNode) ownedNodes() []js.Value {
 	switch rn.kind {
-	case gox.KindFragment:
+	case xango.KindFragment:
 		var out []js.Value
 		for _, c := range rn.children {
 			out = append(out, c.ownedNodes()...)
 		}
 		return out
-	case gox.KindRaw:
+	case xango.KindRaw:
 		return rn.rawNodes
 	default:
 		return []js.Value{rn.dom}
@@ -121,31 +121,31 @@ func (rn *renderedNode) firstNode() js.Value {
 	return nodes[0]
 }
 
-func create(n gox.Node) *renderedNode {
+func create(n xango.Node) *renderedNode {
 	rn := createInner(n)
 	rn.k = n.Key
 	return rn
 }
 
-func createInner(n gox.Node) *renderedNode {
+func createInner(n xango.Node) *renderedNode {
 	switch n.Kind {
-	case gox.KindText:
+	case xango.KindText:
 		d := document().Call("createTextNode", n.Text)
-		return &renderedNode{kind: gox.KindText, dom: d, text: n.Text}
-	case gox.KindRaw:
-		return &renderedNode{kind: gox.KindRaw, rawNodes: parseHTMLFragment(n.Text), text: n.Text}
-	case gox.KindHost:
+		return &renderedNode{kind: xango.KindText, dom: d, text: n.Text}
+	case xango.KindRaw:
+		return &renderedNode{kind: xango.KindRaw, rawNodes: parseHTMLFragment(n.Text), text: n.Text}
+	case xango.KindHost:
 		// Host nodes belong to another renderer; leave a hole.
-		return &renderedNode{kind: gox.KindFragment}
-	case gox.KindFragment:
-		rn := &renderedNode{kind: gox.KindFragment}
+		return &renderedNode{kind: xango.KindFragment}
+	case xango.KindFragment:
+		rn := &renderedNode{kind: xango.KindFragment}
 		for _, c := range n.Children {
 			rn.children = append(rn.children, create(c))
 		}
 		return rn
-	case gox.KindElement:
+	case xango.KindElement:
 		el := document().Call("createElement", n.Tag)
-		rn := &renderedNode{kind: gox.KindElement, tag: n.Tag, dom: el, attrs: n.Attrs, listeners: map[string]*eventBinding{}}
+		rn := &renderedNode{kind: xango.KindElement, tag: n.Tag, dom: el, attrs: n.Attrs, listeners: map[string]*eventBinding{}}
 		for _, a := range n.Attrs {
 			applyAttr(rn, a)
 		}
@@ -188,7 +188,7 @@ func truthyAttr(s string) bool {
 	return s != "" && s != "false" && s != "0"
 }
 
-func applyAttr(rn *renderedNode, a gox.Attr) {
+func applyAttr(rn *renderedNode, a xango.Attr) {
 	if a.Handler != nil {
 		setListener(rn, a.Name, a.Handler)
 		return
@@ -216,7 +216,7 @@ func applyAttr(rn *renderedNode, a gox.Attr) {
 	}
 }
 
-func removeAttr(rn *renderedNode, a gox.Attr) {
+func removeAttr(rn *renderedNode, a xango.Attr) {
 	if a.Handler != nil {
 		clearListener(rn, a.Name)
 		return
@@ -236,7 +236,7 @@ func removeAttr(rn *renderedNode, a gox.Attr) {
 // (element, event name); re-renders that keep binding the same event
 // just swap the Go closure a stable JS trampoline calls through,
 // avoiding duplicate listeners and js.Func churn.
-func setListener(rn *renderedNode, name string, handler gox.EventHandler) {
+func setListener(rn *renderedNode, name string, handler xango.EventHandler) {
 	if b, ok := rn.listeners[name]; ok {
 		b.handler = handler
 		return
@@ -247,7 +247,7 @@ func setListener(rn *renderedNode, name string, handler gox.EventHandler) {
 		if len(args) > 0 {
 			ev = args[0]
 		}
-		b.handler(domEventToGoxEvent(ev))
+		b.handler(domEventToXangoEvent(ev))
 		return nil
 	})
 	rn.listeners[name] = b
@@ -264,9 +264,9 @@ func clearListener(rn *renderedNode, name string) {
 	delete(rn.listeners, name)
 }
 
-func domEventToGoxEvent(ev js.Value) gox.Event {
+func domEventToXangoEvent(ev js.Value) xango.Event {
 	if ev.IsUndefined() || ev.IsNull() {
-		return gox.NewEvent("", nil, false, nil, nil)
+		return xango.NewEvent("", nil, false, nil, nil)
 	}
 	typ := ev.Get("type").String()
 	var value any
@@ -280,7 +280,7 @@ func domEventToGoxEvent(ev js.Value) gox.Event {
 		}
 	}
 	if strings.HasPrefix(typ, "key") {
-		value = gox.KeyData{
+		value = xango.KeyData{
 			Key: ev.Get("key").String(), Code: ev.Get("code").String(),
 			Ctrl: ev.Get("ctrlKey").Bool(), Shift: ev.Get("shiftKey").Bool(),
 			Alt: ev.Get("altKey").Bool(), Meta: ev.Get("metaKey").Bool(),
@@ -288,7 +288,7 @@ func domEventToGoxEvent(ev js.Value) gox.Event {
 	}
 	preventDefault := func() { ev.Call("preventDefault") }
 	stopProp := func() { ev.Call("stopPropagation") }
-	return gox.NewEvent(typ, value, checked, preventDefault, stopProp)
+	return xango.NewEvent(typ, value, checked, preventDefault, stopProp)
 }
 
 // patch diffs newNode against the tree rooted at old (whose last
@@ -296,7 +296,7 @@ func domEventToGoxEvent(ev js.Value) gox.Event {
 // returning the renderedNode to track for the next patch. parent is
 // used only when old must be replaced wholesale (to know where in the
 // DOM to splice the replacement in).
-func patch(parent js.Value, old *renderedNode, next gox.Node) *renderedNode {
+func patch(parent js.Value, old *renderedNode, next xango.Node) *renderedNode {
 	if old == nil {
 		rn := create(next)
 		for _, n := range rn.ownedNodes() {
@@ -304,26 +304,26 @@ func patch(parent js.Value, old *renderedNode, next gox.Node) *renderedNode {
 		}
 		return rn
 	}
-	if old.kind != next.Kind || (next.Kind == gox.KindElement && old.tag != next.Tag) {
+	if old.kind != next.Kind || (next.Kind == xango.KindElement && old.tag != next.Tag) {
 		return replace(parent, old, next)
 	}
 	old.k = next.Key
 	switch next.Kind {
-	case gox.KindText:
+	case xango.KindText:
 		if old.text != next.Text {
 			old.dom.Set("data", next.Text)
 			old.text = next.Text
 		}
 		return old
-	case gox.KindRaw:
+	case xango.KindRaw:
 		if old.text != next.Text {
 			return replace(parent, old, next)
 		}
 		return old
-	case gox.KindFragment:
+	case xango.KindFragment:
 		old.children = patchChildren(parent, anchorAfter(parent, old), old.children, next.Children)
 		return old
-	case gox.KindElement:
+	case xango.KindElement:
 		patchAttrs(old, next.Attrs)
 		old.attrs = next.Attrs
 		old.children = patchChildren(old.dom, js.Undefined(), old.children, next.Children)
@@ -334,7 +334,7 @@ func patch(parent js.Value, old *renderedNode, next gox.Node) *renderedNode {
 
 // replace tears down old's DOM nodes and mounts next fresh in their
 // place, preserving position via insertBefore against old's first node.
-func replace(parent js.Value, old *renderedNode, next gox.Node) *renderedNode {
+func replace(parent js.Value, old *renderedNode, next xango.Node) *renderedNode {
 	oldNodes := old.ownedNodes()
 	rn := create(next)
 	if len(oldNodes) > 0 {
@@ -364,8 +364,8 @@ func anchorAfter(parent js.Value, rn *renderedNode) js.Value {
 	return nodes[len(nodes)-1].Get("nextSibling")
 }
 
-func patchAttrs(old *renderedNode, next []gox.Attr) {
-	nextByName := make(map[string]gox.Attr, len(next))
+func patchAttrs(old *renderedNode, next []xango.Attr) {
+	nextByName := make(map[string]xango.Attr, len(next))
 	for _, a := range next {
 		nextByName[a.Name] = a
 	}
@@ -380,10 +380,10 @@ func patchAttrs(old *renderedNode, next []gox.Attr) {
 }
 
 // patchChildren reconciles an old list of rendered children against a
-// new list of gox.Node children. Children carrying a Key are matched by
+// new list of xango.Node children. Children carrying a Key are matched by
 // key (so reorders move existing DOM nodes instead of recreating them);
 // unkeyed children are matched positionally.
-func patchChildren(parent js.Value, endAnchor js.Value, old []*renderedNode, next []gox.Node) []*renderedNode {
+func patchChildren(parent js.Value, endAnchor js.Value, old []*renderedNode, next []xango.Node) []*renderedNode {
 	oldByKey := make(map[string]*renderedNode)
 	oldKeys := make([]string, len(old))
 	for i, o := range old {
@@ -461,7 +461,7 @@ func reverse(vs []js.Value) []js.Value {
 }
 
 // key exists only because renderedNode doesn't otherwise retain the
-// gox.Node.Key it was created from; store it alongside text/attrs.
+// xango.Node.Key it was created from; store it alongside text/attrs.
 func (rn *renderedNode) key() string { return rn.k }
 
 // inPlace reports whether dn is already a child of parent directly before

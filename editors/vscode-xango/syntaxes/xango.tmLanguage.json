@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "xango",
+  "scopeName": "source.xg",
+  "fileTypes": ["xango"],
+  "comment": "A .xg file is Go with <tag> markup mixed in, so the base grammar just delegates entirely to Go's own; tag highlighting is a separate injection grammar (xango-tags.tmLanguage.json) rather than combined into these top-level patterns. A plain top-level {include:'#tag'} alongside {include:'source.go'} only wins the position race at the outermost scope -- once Go's own grammar pushes a nested context (e.g. entering a function body via '{'), that nested context has its own self-contained pattern set with no knowledge of a sibling top-level rule, so tags inside a function body would silently stop highlighting. An injectionSelector reapplies at every nesting depth, which a top-level pattern list cannot.",
+  "patterns": [
+    { "include": "source.go" }
+  ]
+}

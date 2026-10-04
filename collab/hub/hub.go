@@ -84,6 +84,13 @@ type Config struct {
 	Guard guard.Guard
 	// MaxBody limits a request body in bytes; 0 means 8 MiB.
 	MaxBody int64
+	// CookieOrigins lists the origins (exactly as the browser sends them,
+	// "https://app.example") whose pages may open a WebSocket that carries
+	// cookies. A socket from another origin that carries cookies is refused:
+	// with cookie-based sign-in it would be a way for any site to act as the
+	// signed-in user. Pages sending a bearer token carry no cookies for this
+	// host and are not affected.
+	CookieOrigins []string
 	// MaxRooms limits how many documents the hub keeps in memory; 0 means
 	// 1000. Further documents are refused until the hub restarts.
 	MaxRooms int

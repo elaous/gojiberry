@@ -7,7 +7,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/time/rate"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // newRouter builds the real Echo instance this demo serves, with the
@@ -63,7 +63,7 @@ func newRouter() *echo.Echo {
 
 	e.GET("/", func(c echo.Context) error {
 		c.Response().Header().Set(echo.HeaderContentType, "text/html; charset=utf-8")
-		return gox.Render(c.Response().Writer, Page(PageProps{Name: c.QueryParam("name")}))
+		return xango.Render(c.Response().Writer, Page(PageProps{Name: c.QueryParam("name")}))
 	})
 
 	return e

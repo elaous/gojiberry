@@ -7,7 +7,7 @@ import (
 	"github.com/gin-contrib/secure"
 	"github.com/gin-gonic/gin"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // newRouter builds the real Gin engine this demo serves, with the same
@@ -55,7 +55,7 @@ func newRouter() *gin.Engine {
 
 	r.GET("/", func(c *gin.Context) {
 		c.Header("Content-Type", "text/html; charset=utf-8")
-		if err := gox.Render(c.Writer, Page(PageProps{Name: c.Query("name")})); err != nil {
+		if err := xango.Render(c.Writer, Page(PageProps{Name: c.Query("name")})); err != nil {
 			c.AbortWithStatus(http.StatusInternalServerError)
 		}
 	})

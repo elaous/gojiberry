@@ -4,16 +4,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // render renders n to an HTML string, failing the test on error --
 // every component test in this package goes through this instead of
-// asserting against the gox.Node tree directly, since HTML output is
+// asserting against the xango.Node tree directly, since HTML output is
 // what a real page actually gets.
-func render(t *testing.T, n gox.Node) string {
+func render(t *testing.T, n xango.Node) string {
 	t.Helper()
-	html, err := gox.RenderString(n)
+	html, err := xango.RenderString(n)
 	if err != nil {
 		t.Fatalf("RenderString: %v", err)
 	}
@@ -24,12 +24,12 @@ func render(t *testing.T, n gox.Node) string {
 // attached under the given event name (e.g. "click"), in document
 // order. Tests use this to fire a component's wiring directly --
 // verifying an OnClick/OnChange/etc. prop actually reaches a real
-// gox.On(...) attribute in the rendered tree -- without needing a
+// xango.On(...) attribute in the rendered tree -- without needing a
 // browser or domrt.
-func findHandlers(n gox.Node, event string) []gox.EventHandler {
-	var out []gox.EventHandler
-	var walk func(gox.Node)
-	walk = func(n gox.Node) {
+func findHandlers(n xango.Node, event string) []xango.EventHandler {
+	var out []xango.EventHandler
+	var walk func(xango.Node)
+	walk = func(n xango.Node) {
 		for _, a := range n.Attrs {
 			if a.Name == event && a.Handler != nil {
 				out = append(out, a.Handler)

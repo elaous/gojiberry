@@ -79,17 +79,17 @@ func main() {
 	_ = u
 }
 `
-	out, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), experimentalOpts())
+	out, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.xg"), []byte(src), experimentalOpts())
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := string(out)
-	wantImport := `schema "example.com/testmod/internal/goxgen/hcl/schema"`
+	wantImport := `schema "example.com/testmod/internal/xggen/hcl/schema"`
 	if !strings.Contains(got, wantImport) {
 		t.Errorf("expected generated package import %q, got:\n%s", wantImport, got)
 	}
 
-	modelsPath := filepath.Join(moduleRoot, "internal", "goxgen", "hcl", "schema", "models.go")
+	modelsPath := filepath.Join(moduleRoot, "internal", "xggen", "hcl", "schema", "models.go")
 	modelsSrc, err := os.ReadFile(modelsPath)
 	if err != nil {
 		t.Fatalf("expected generated models file at %s: %v", modelsPath, err)
@@ -101,7 +101,7 @@ func main() {
 		}
 	}
 
-	migrationPath := filepath.Join(moduleRoot, "internal", "goxgen", "hcl", "schema", "migrations", "0001_init.sql")
+	migrationPath := filepath.Join(moduleRoot, "internal", "xggen", "hcl", "schema", "migrations", "0001_init.sql")
 	migrationSQL, err := os.ReadFile(migrationPath)
 	if err != nil {
 		t.Fatalf("expected generated migration at %s: %v", migrationPath, err)
@@ -135,10 +135,10 @@ table "books" {
 }
 `)
 	src := "package main\n\nimport (\n\tschema \"schema.hcl\"\n)\n\nfunc main() { _ = schema.Books{} }\n"
-	if _, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), experimentalOpts()); err != nil {
+	if _, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.xg"), []byte(src), experimentalOpts()); err != nil {
 		t.Fatal(err)
 	}
-	migrationSQL, err := os.ReadFile(filepath.Join(moduleRoot, "internal", "goxgen", "hcl", "schema", "migrations", "0001_init.sql"))
+	migrationSQL, err := os.ReadFile(filepath.Join(moduleRoot, "internal", "xggen", "hcl", "schema", "migrations", "0001_init.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestProtoImportErrorsWithoutProtocInstalled(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "books.proto", `syntax = "proto3";`)
 	src := "package main\n\nimport (\n\tbooks \"books.proto\"\n)\n\nfunc main() {}\n"
-	_, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), experimentalOpts())
+	_, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.xg"), []byte(src), experimentalOpts())
 	if err == nil {
 		t.Fatal("expected an error since `protoc` is not installed in this environment")
 	}
@@ -164,7 +164,7 @@ func TestCapnpImportErrorsWithoutCapnpInstalled(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "books.capnp", "@0xdbb9ad1f14bf0b36;\n")
 	src := "package main\n\nimport (\n\tbooks \"books.capnp\"\n)\n\nfunc main() {}\n"
-	_, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), experimentalOpts())
+	_, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.xg"), []byte(src), experimentalOpts())
 	if err == nil {
 		t.Fatal("expected an error since `capnp` is not installed in this environment")
 	}
@@ -177,7 +177,7 @@ func TestSQLImportErrorsWithoutSqlcInstalled(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "queries.sql", "-- name: GetX :one\nSELECT 1;\n")
 	src := "package main\n\nimport (\n\tq \"queries.sql\"\n)\n\nfunc main() { _ = q }\n"
-	_, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), experimentalOpts())
+	_, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.xg"), []byte(src), experimentalOpts())
 	if err == nil {
 		t.Fatal("expected an error since `sqlc` is not installed in this environment")
 	}
@@ -191,7 +191,7 @@ func TestSQLImportErrorsWithoutSqlcConfig(t *testing.T) {
 	writeFile(t, dir, "queries.sql", "-- name: GetX :one\nSELECT 1;\n")
 	installFakeSqlc(t, "") // present on PATH, but no sqlc.yaml anywhere above dir
 	src := "package main\n\nimport (\n\tq \"queries.sql\"\n)\n\nfunc main() { _ = q }\n"
-	_, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), experimentalOpts())
+	_, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.xg"), []byte(src), experimentalOpts())
 	if err == nil {
 		t.Fatal("expected an error when no sqlc.yaml is found")
 	}
@@ -201,14 +201,14 @@ func TestSQLImportErrorsWithoutSqlcConfig(t *testing.T) {
 }
 
 // TestSQLImportInvokesSqlcAndImportsResult stubs `sqlc` on PATH rather
-// than requiring the real tool: this exercises gox's own logic
+// than requiring the real tool: this exercises xango's own logic
 // (finding sqlc.yaml, invoking `sqlc generate -f <config>`, deriving
 // the Go import path from gen.go.package/out) without depending on
-// sqlc's actual query-analysis/codegen correctness, which isn't gox's
+// sqlc's actual query-analysis/codegen correctness, which isn't xango's
 // to test. Since the test itself writes sqlc.yaml, it already knows
 // the output directory `sqlc generate` is supposed to populate, so the
 // fake script can just write a plausible generated file there
-// directly instead of needing gox to report anything back.
+// directly instead of needing xango to report anything back.
 func TestSQLImportInvokesSqlcAndImportsResult(t *testing.T) {
 	dir := setupModule(t)
 	moduleRoot := filepath.Dir(dir)
@@ -239,7 +239,7 @@ func main() {
 	}
 }
 `
-	out, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.gox"), []byte(src), experimentalOpts())
+	out, err := transpile.TranspileWithOptions(filepath.Join(dir, "main.xg"), []byte(src), experimentalOpts())
 	if err != nil {
 		t.Fatal(err)
 	}

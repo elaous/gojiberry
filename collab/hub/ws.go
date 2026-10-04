@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -22,6 +23,10 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.cookieSocketAllowed(r) {
+		http.Error(w, "cross-origin WebSocket with cookies", http.StatusForbidden)
+		return
+	}
 	id := r.PathValue("id")
 	replica := r.URL.Query().Get("replica")
 	// Who may open the socket was decided above (the Guard, the roles, the
@@ -32,7 +37,10 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 		return // Accept has answered
 	}
 	defer func() { _ = c.CloseNow() }()
-	c.SetReadLimit(h.cfg.MaxBody)
+	// A frame over MaxBody is answered with a 413 reject, as the POST would be,
+	// so the client learns that it will never be accepted; the library's hard
+	// limit (which closes the socket) is a few times higher.
+	c.SetReadLimit(4 * h.cfg.MaxBody)
 	s, snapshot, peers, ok := h.join(rm, role, r, replica)
 	if !ok {
 		_ = c.Close(websocket.StatusPolicyViolation, "that replica id belongs to another user")
@@ -66,7 +74,22 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			switch f.Event {
+			case "ops", "presence":
+				// Access is checked on every frame, not only on the keep-alive tick:
+				// a downgraded user must not write until the next tick.
+				if h.role(r, id) != role {
+					_ = c.Close(websocket.StatusPolicyViolation, "access changed")
+					return
+				}
+			}
+			switch f.Event {
 			case "ops":
+				if int64(len(f.Data)) > h.cfg.MaxBody {
+					if !send(ackEvent("reject", f.ID, "operations too large", http.StatusRequestEntityTooLarge)) {
+						return
+					}
+					continue
+				}
 				var ops []crdt.Op
 				if json.Unmarshal(f.Data, &ops) != nil {
 					if !send(ackEvent("reject", f.ID, "bad operations", http.StatusBadRequest)) {
@@ -167,4 +190,22 @@ func tokenFromQuery(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// cookieSocketAllowed refuses a WebSocket from another origin that carries
+// cookies unless the origin is listed in Config.CookieOrigins (see there).
+func (h *Hub) cookieSocketAllowed(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" || r.Header.Get("Cookie") == "" {
+		return true
+	}
+	if u, err := url.Parse(origin); err == nil && strings.EqualFold(u.Host, r.Host) {
+		return true
+	}
+	for _, o := range h.cfg.CookieOrigins {
+		if strings.EqualFold(o, origin) {
+			return true
+		}
+	}
+	return false
 }

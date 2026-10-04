@@ -1,0 +1,26 @@
+package components
+
+import "github.com/elaous/gojiberry/xango"
+
+// ChipProps configures Chip.
+type ChipProps struct {
+	Label    string
+	Icon     *xango.Node        // optional, rendered before Label
+	OnRemove xango.EventHandler // nil renders a plain, non-removable chip
+}
+
+// Chip renders a small labeled pill, optionally with a leading icon
+// and a remove button.
+func Chip(props ChipProps) xango.Node {
+	var children []xango.Node
+	if props.Icon != nil {
+		children = append(children, xango.El("span", []xango.Attr{xango.A("class", "gj-chip-icon")}, *props.Icon))
+	}
+	children = append(children, xango.El("span", []xango.Attr{xango.A("class", "gj-chip-label")}, xango.Text(props.Label)))
+	if props.OnRemove != nil {
+		children = append(children, xango.El("button",
+			[]xango.Attr{xango.A("class", "gj-chip-remove"), xango.A("aria-label", "Remove "+props.Label), xango.On("click", props.OnRemove)},
+			xango.Text("×")))
+	}
+	return xango.El("span", []xango.Attr{xango.A("class", "gj-chip")}, children...)
+}

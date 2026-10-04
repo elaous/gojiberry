@@ -1,0 +1,47 @@
+package components
+
+import "github.com/elaous/gojiberry/xango"
+
+// GridProps configures Grid.
+type GridProps struct {
+	// Width sizes the grid itself; "" defaults to "100%" (fill the
+	// parent), the same default Box's own Height takes, for the same
+	// reason -- a layout container should fill its parent unless told
+	// otherwise.
+	Width string
+	// Columns is a CSS grid-template-columns value (e.g. "1fr 1fr 1fr",
+	// "repeat(3, 1fr)", "200px 1fr auto"); "" defaults to a responsive
+	// auto-fill of 200px-minimum tracks, so a Grid with no explicit
+	// Columns still lays out sensibly regardless of how many Children
+	// it gets.
+	Columns string
+	// Gap is the space between grid cells (e.g. "1rem", "16px"); ""
+	// means no gap at all, CSS's own default.
+	Gap      string
+	Children []xango.Node
+}
+
+// Grid is a plain CSS Grid layout container: arranges Children into a
+// grid, normally filling its parent's own width, with Columns/Gap
+// controlling track sizing and the spacing between cells -- Box's own
+// sibling for a two-dimensional layout instead of Box's single-axis
+// stacked divisions. This is a layout primitive, not a data-display
+// component: it has no notion of rows, selection, sorting, or
+// pagination at all -- reach for DataTable when what's actually being
+// browsed is tabular data, Grid when the job is just arranging an
+// arbitrary set of already-built children into a responsive grid.
+func Grid(props GridProps) xango.Node {
+	width := props.Width
+	if width == "" {
+		width = "100%"
+	}
+	columns := props.Columns
+	if columns == "" {
+		columns = "repeat(auto-fill, minmax(200px, 1fr))"
+	}
+	style := "width:" + width + ";grid-template-columns:" + columns + ";"
+	if props.Gap != "" {
+		style += "gap:" + props.Gap + ";"
+	}
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-grid"), xango.A("style", style)}, props.Children...)
+}

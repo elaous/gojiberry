@@ -1,0 +1,17 @@
+/* LanguagePanel stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-lang { display: flex; flex-direction: column; gap: 0.5em; }
+.gj-lang h4 { margin: 0.6em 0 0; }
+.gj-lang p { margin: 0; }
+.gj-lang-detected { font-weight: 600; }
+.gj-lang-off, .gj-lang-busy, .gj-lang-none { font-size: 0.85em; color: var(--gj-muted); }
+.gj-lang-error { color: var(--gj-danger); font-size: 0.85em; }
+.gj-lang-row { display: flex; gap: 0.4em; }
+.gj-lang-target { flex: 1; padding: 0.25em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); font: inherit; }
+.gj-lang-translation { margin: 0; padding-left: 0.8em; border-left: 3px solid var(--gj-accent); }
+.gj-lang-issue { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4em; border-top: 1px solid var(--gj-border); padding-top: 0.4em; }
+.gj-lang-issue-text { border: none; background: none; padding: 0; font: inherit; font-weight: 600; color: #7c5cff; cursor: pointer; text-decoration: underline wavy; }
+.gj-lang-issue-message { font-size: 0.85em; color: var(--gj-muted); }
+.gj-lang button:not(.gj-lang-issue-text) { border: 1px solid var(--gj-border); background: var(--gj-bg); border-radius: var(--gj-radius); padding: 0.2em 0.7em; cursor: pointer; font: inherit; }
+.gj-lang button:disabled { opacity: 0.45; cursor: default; }

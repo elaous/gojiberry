@@ -2,10 +2,10 @@ package transpile
 
 import "strings"
 
-// validHTMLTags is the living-standard HTML element set gox recognizes
+// validHTMLTags is the living-standard HTML element set xango recognizes
 // for a lowercase (non-Component) tag. Deliberately excludes obsolete/
 // deprecated elements (center, font, marquee, tt, ...) -- there's no
-// good reason a new .gox file should start using one of those, and
+// good reason a new .xg file should start using one of those, and
 // omitting them helps catch a typo'd real tag rather than silently
 // accepting a fossil. isKnownTag below also accepts any name
 // containing a hyphen unconditionally (a custom element, e.g.
@@ -38,7 +38,7 @@ var validHTMLTags = map[string]bool{
 }
 
 // validHTMLAttrs is the global-attribute set plus commonly-used
-// element-specific attributes gox recognizes on a lowercase tag.
+// element-specific attributes xango recognizes on a lowercase tag.
 // data-* and aria-* are accepted unconditionally by isKnownAttr below
 // (both are explicitly open-ended extension points per the HTML/ARIA
 // specs, not a fixed list), so this only needs to cover everything
@@ -88,7 +88,7 @@ var validHTMLAttrs = map[string]bool{
 	"border": true, "cellpadding": true, "cellspacing": true,
 }
 
-// isKnownTag reports whether name is a real HTML element gox will
+// isKnownTag reports whether name is a real HTML element xango will
 // render as-is, or a custom element (any name containing a hyphen is
 // always accepted, per the Custom Elements spec and this repo's own
 // <my-widget> convention).
@@ -99,7 +99,7 @@ func isKnownTag(name string) bool {
 	return validHTMLTags[name]
 }
 
-// isKnownAttr reports whether name is a real HTML attribute gox will
+// isKnownAttr reports whether name is a real HTML attribute xango will
 // set as-is, or a data-*/aria-* attribute (both open-ended extension
 // points, not a fixed list, per the HTML and ARIA specs).
 func isKnownAttr(name string) bool {

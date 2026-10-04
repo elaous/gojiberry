@@ -1,0 +1,47 @@
+//go:build js && wasm
+
+// Package main demos domrt/browser: localStorage read/write and a
+// fetch() call, both wrapped in idiomatic Go instead of raw syscall/js.
+package main
+
+import (
+	"syscall/js"
+
+	"github.com/elaous/gojiberry/domrt"
+	"github.com/elaous/gojiberry/domrt/browser"
+	"github.com/elaous/gojiberry/xango"
+)
+
+type configData struct {
+	Message string `json:"message"`
+}
+
+func View(storedVisits, fetchedMessage string) xango.Node {
+	return <div id="content">
+		<p id="storage-value">{storedVisits}</p>
+		<p id="fetch-value">{fetchedMessage}</p>
+	</div>
+}
+
+func main() {
+	container := js.Global().Get("document").Call("getElementById", "app")
+
+	browser.LocalStorage.Set("visits", "1")
+	visits, _ := browser.LocalStorage.Get("visits")
+
+	root := domrt.Mount(container, View(visits, "(pending)"))
+
+	go func() {
+		msg := "(error)"
+		resp, err := browser.Fetch("config.json")
+		if err == nil && resp.OK {
+			var cfg configData
+			if jerr := resp.JSON(&cfg); jerr == nil {
+				msg = cfg.Message
+			}
+		}
+		root.Update(View(visits, msg))
+	}()
+
+	select {}
+}
