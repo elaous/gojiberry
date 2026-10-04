@@ -117,7 +117,8 @@ type Registry struct {
 	infos    []CommandInfo
 	funcs    map[Command]CommandFunc
 	keys     Keymap
-	current  string // feature being installed
+	current  string           // feature being installed
+	global   map[Command]bool // commands that run without an edit target (AddGlobalCommand)
 }
 
 // NewRegistry returns a Registry with the features installed.
@@ -161,6 +162,17 @@ func (r *Registry) AddCommand(name Command, title, chord string, fn CommandFunc)
 	}
 }
 
+// AddGlobalCommand is AddCommand for a command that needs no text to act on
+// (find, say, which a viewer may use too): it runs with CommandContext.Target
+// nil when nothing is being edited, so fn must not use it without checking.
+func (r *Registry) AddGlobalCommand(name Command, title, chord string, fn CommandFunc) {
+	r.AddCommand(name, title, chord, fn)
+	if r.global == nil {
+		r.global = map[Command]bool{}
+	}
+	r.global[name] = true
+}
+
 // Bind adds a further default chord for a registered command.
 func (r *Registry) Bind(chord string, cmd Command) {
 	if !r.Has(cmd) {
@@ -190,7 +202,7 @@ func (r *Registry) Has(cmd Command) bool { _, ok := r.funcs[cmd]; return ok }
 // Run runs cmd, if registered, on ctx.
 func (r *Registry) Run(cmd Command, ctx *CommandContext) bool {
 	fn, ok := r.funcs[cmd]
-	return ok && ctx.Target != nil && fn(ctx)
+	return ok && (ctx.Target != nil || r.global[cmd]) && fn(ctx)
 }
 
 // --- helpers shared by features --------------------------------------

@@ -22,19 +22,24 @@ type FlowStyle struct {
 	GripActiveColor string
 	GripW, GripH    float64 // size of the draggable grip above each gap
 	SelectColor     string  // tint over selected text
+	// FindColor tints the matches of a search, FindCurrentColor the one that is
+	// current (see TextFlow.SetSearch).
+	FindColor, FindCurrentColor string
 }
 
 // DefaultFlowStyle is a light look matching DefaultTableStyle.
 func DefaultFlowStyle() FlowStyle {
 	return FlowStyle{
-		PageBG:          "#ffffff",
-		PageBorder:      "#d4d6da",
-		GuideColor:      "#b9a9ff",
-		GripColor:       "#7b818b",
-		GripActiveColor: "#7c5cff",
-		GripW:           16,
-		GripH:           16,
-		SelectColor:     "rgba(124, 92, 255, 0.28)",
+		PageBG:           "#ffffff",
+		PageBorder:       "#d4d6da",
+		GuideColor:       "#b9a9ff",
+		GripColor:        "#7b818b",
+		GripActiveColor:  "#7c5cff",
+		GripW:            16,
+		GripH:            16,
+		SelectColor:      "rgba(124, 92, 255, 0.28)",
+		FindColor:        "rgba(255, 213, 0, 0.45)",
+		FindCurrentColor: "rgba(255, 140, 0, 0.6)",
 	}
 }
 
@@ -242,7 +247,8 @@ type TextFlow struct {
 	listeners      []func(*TextFlow)
 	revealAt       int
 	revealPending  bool
-	lastLay        Layout // the layout of the latest Draw, for objects that show the document's own structure
+	lastLay        Layout      // the layout of the latest Draw, for objects that show the document's own structure
+	search         searchState // the matches a search highlights (see SetSearch)
 	hoverCRect     [4]float64
 	sugg           *Menu // completion popup
 	suggFrom       int   // where the word being completed starts
@@ -1338,6 +1344,7 @@ func (f *TextFlow) Draw() {
 
 	lay := f.Layout()
 	f.lastLay = lay
+	f.drawSearch(lay)
 	f.drawSelection(lay)
 	f.drawPeerSelections(lay)
 	defer f.drawCarets()

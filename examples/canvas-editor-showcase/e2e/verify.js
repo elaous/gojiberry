@@ -10,7 +10,7 @@ run(async () => {
   let s = await d.state();
   assert(!s.error, 'renders without error: ' + s.error);
   assert(s.mode === 'view' && s.pages === 3, 'starts in view mode with three pages');
-  assert(JSON.stringify(s.features) === JSON.stringify(['history', 'multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'styles', 'comments', 'bookmarks', 'notes', 'page-furniture']), 'features registered: ' + s.features);
+  assert(JSON.stringify(s.features) === JSON.stringify(['history', 'multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'styles', 'comments', 'bookmarks', 'notes', 'page-furniture', 'find']), 'features registered: ' + s.features);
   for (const tag of ['canvas.TextFlow', 'canvas.Image', 'canvas.FloatingText', 'canvas.Table', 'canvas.ScrollView'])
     assert(s.elements.includes(tag), tag + ' is a registered element');
   assert(s.commands >= 30, 'commands registered: ' + s.commands);
@@ -20,7 +20,7 @@ run(async () => {
   // The menu bar is built from the registered commands: one submenu per feature.
   await page.click('button.gj-menubar-button:has-text("Edit")');
   const subs = await page.locator('.gj-menubar-panel > .gj-menu > .gj-menu-item-sub').count();
-  assert(subs === 13, 'Edit has a submenu per feature: ' + subs);
+  assert(subs === 14, 'Edit has a submenu per feature: ' + subs);
   const shortcut = await page.locator('.gj-menubar-panel li:has-text("Move line up") .gj-menu-shortcut').first().textContent();
   assert(shortcut === 'Alt+↑', 'a command shows its shortcut: ' + shortcut);
   await page.hover('.gj-menubar-panel li.gj-menu-item-sub:has-text("Paragraphs")');

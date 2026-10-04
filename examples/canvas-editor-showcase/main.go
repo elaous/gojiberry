@@ -72,9 +72,10 @@ type ui struct {
 	transfer            *transfer.Registry
 	fontLog             []string // what the font library did, newest last
 	navSig              string   // outline/bookmarks the Outline tab last showed
-	statsSig            string   // the counts the status bar and Stats tab last showed
-	shareLink           string   // the link the Share tab shows
-	message             string   // the Import/Export tab's last message
+	find                findState
+	statsSig            string // the counts the status bar and Stats tab last showed
+	shareLink           string // the link the Share tab shows
+	message             string // the Import/Export tab's last message
 }
 
 func main() {
@@ -241,7 +242,7 @@ func main() {
 				xango.On("click", func(xango.Event) { toggleMode() })}, xango.Text("Mode: "+state.Mode.String()+" (click to switch)")),
 			tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 			tabButton(u, "comments", "Comments", renderUI), tabButton(u, "outline", "Outline", renderUI),
-			tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI),
+			tabButton(u, "find", "Find", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI),
 			tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI),
 		)
 
@@ -296,6 +297,8 @@ func main() {
 					renderUI()
 				},
 			})
+		case "find":
+			panel = findPanel(u, &state, func() *canvas.TextFlow { return flow }, func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }, redraw, renderUI)
 		case "stats":
 			if flow != nil {
 				panel = statsPanel(flow.Stats(), state.Pages)
@@ -459,6 +462,12 @@ func main() {
 				renderUI()
 			}
 		}
+		if u.find.open && flow != nil {
+			if text := flow.EditText(); text != u.find.text { // the text changed under the matches
+				u.refreshFind(flow, nil, false)
+				renderUI()
+			}
+		}
 		var names []string
 		for _, f := range stage.Features.Features() {
 			names = append(names, f.Name())
@@ -549,7 +558,7 @@ func main() {
 			renderUI()
 		}
 		b, _ := json.Marshal(map[string]any{
-			"stats": statsState(stats), "share": u.shareLink,
+			"stats": statsState(stats), "share": u.shareLink, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
@@ -559,6 +568,30 @@ func main() {
 		doc.GetElementByID("state").SetTextContent(string(b))
 	}
 
+	scrollToMatch := func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }
+	state.FindFeature = canvas.FindFeature{
+		OnOpen: func(replace bool) {
+			u.find.open, u.find.replace, u.tab = true, replace, "find"
+			if flow != nil {
+				if sel := flow.SelectedText(); sel != "" && len([]rune(sel)) <= 80 && !strings.ContainsAny(sel, "\n") {
+					u.find.opts.Query = sel // search for what is selected
+				}
+			}
+			u.refreshFind(flow, scrollToMatch, true)
+			redraw()
+			renderUI()
+		},
+		OnStep: func(dir int) {
+			if !u.find.open {
+				u.find.open, u.tab = true, "find"
+				u.refreshFind(flow, scrollToMatch, true)
+			} else {
+				u.stepFind(flow, scrollToMatch, dir)
+			}
+			redraw()
+			renderUI()
+		},
+	}
 	state.Live = liveProps(u, &state, origin, renderCanvas, renderUI)
 	renderCanvas()
 	renderUI()

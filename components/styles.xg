@@ -28,6 +28,7 @@ import (
 	_ "github.com/elaous/gojiberry/components/documentview.css"
 	_ "github.com/elaous/gojiberry/components/dropdown.css"
 	_ "github.com/elaous/gojiberry/components/fileuploader.css"
+	_ "github.com/elaous/gojiberry/components/findreplace.css"
 	_ "github.com/elaous/gojiberry/components/floating.css"
 	_ "github.com/elaous/gojiberry/components/fontselector.css"
 	_ "github.com/elaous/gojiberry/components/grid.css"

@@ -563,3 +563,23 @@ func TestCommentCardReplyWithoutEditing(t *testing.T) {
 	mustContain(t, list, "gj-comment-reply-row")
 	mustNotContain(t, list, "Resolve")
 }
+
+func TestFindReplaceShowsCountOptionsAndReplaceRow(t *testing.T) {
+	html := render(t, FindReplace(FindReplaceProps{Query: "cat", Count: 4, Current: 2, WholeWord: true}))
+	for _, want := range []string{`class="gj-find"`, `value="cat"`, `2 of 4`, `gj-find-toggle gj-find-word gj-find-on`, `aria-pressed="true"`, `gj-find-replace-all`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in\n%s", want, html)
+		}
+	}
+	if strings.Contains(html, "gj-find-case gj-find-on") {
+		t.Error("match case is off")
+	}
+	none := render(t, FindReplace(FindReplaceProps{Query: "zzz", ReadOnly: true}))
+	if !strings.Contains(none, "No matches") || strings.Contains(none, "gj-find-replace-all") || !strings.Contains(none, `disabled="disabled"`) {
+		t.Errorf("no matches / read only:\n%s", none)
+	}
+	bad := render(t, FindReplace(FindReplaceProps{Query: "(", Regex: true, Error: "missing closing )"}))
+	if !strings.Contains(bad, "gj-find-error") || !strings.Contains(bad, "missing closing )") {
+		t.Errorf("error:\n%s", bad)
+	}
+}

@@ -30,6 +30,14 @@ type State struct {
 	// Live, when set (the page was opened with ?doc=...), makes the text
 	// flow a shared document.
 	Live *collab.CollabProps
+	// FindFeature is the find and replace commands, with the app's own bar
+	// behind them.
+	FindFeature canvas.FindFeature
+}
+
+// Features is what the canvas registers: the defaults and find and replace.
+func (s State) Features() []canvas.Feature {
+	return append(canvas.DefaultFeatures(), s.FindFeature)
 }
 
 const sample = "# Gojiberry editor\n\n" +
