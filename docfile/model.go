@@ -11,6 +11,8 @@ package docfile
 import (
 	"fmt"
 	"reflect"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/elaous/gojiberry/canvas"
@@ -75,6 +77,30 @@ type RuleItem struct {
 // TableItem is the text of a table in the flow, row by row.
 type TableItem struct {
 	Rows []TableRow `json:"rows,omitempty" pb:"1"`
+	// Merges are blocks of cells shown as one; Styles are per-cell formatting.
+	Merges []TableMerge     `json:"merges,omitempty" pb:"2"`
+	Styles []TableCellStyle `json:"styles,omitempty" pb:"3"`
+}
+
+// TableMerge is a block of cells shown as one: the cell at (Row, Col) spans
+// Rows x Cols cells (see canvas.Merge).
+type TableMerge struct {
+	Row  int `json:"row" pb:"1"`
+	Col  int `json:"col" pb:"2"`
+	Rows int `json:"rows" pb:"3"`
+	Cols int `json:"cols" pb:"4"`
+}
+
+// TableCellStyle is the formatting of the cell at (Row, Col) (see
+// canvas.CellStyle; Align is the canvas.Align number).
+type TableCellStyle struct {
+	Row        int    `json:"row" pb:"1"`
+	Col        int    `json:"col" pb:"2"`
+	Background string `json:"background,omitempty" pb:"3"`
+	Color      string `json:"color,omitempty" pb:"4"`
+	Bold       bool   `json:"bold,omitempty" pb:"5"`
+	Italic     bool   `json:"italic,omitempty" pb:"6"`
+	Align      int    `json:"align,omitempty" pb:"7"`
 }
 
 // TableRow is one row of a TableItem.
@@ -334,6 +360,19 @@ func FromItems(items []canvas.Item) []Item {
 				for _, row := range o.View.Table.Cells {
 					t.Rows = append(t.Rows, TableRow{Cells: append([]string(nil), row...)})
 				}
+				for _, m := range o.View.Table.Merges {
+					t.Merges = append(t.Merges, TableMerge{Row: m.Row, Col: m.Col, Rows: m.Rows, Cols: m.Cols})
+				}
+				for pos, st := range o.View.Table.Styles { // in reading order, so the file is the same every time
+					t.Styles = append(t.Styles, TableCellStyle{Row: pos.Row, Col: pos.Col, Background: st.Background, Color: st.Color,
+						Bold: st.Bold, Italic: st.Italic, Align: int(st.Align)})
+				}
+				slices.SortFunc(t.Styles, func(a, b TableCellStyle) int {
+					if a.Row != b.Row {
+						return a.Row - b.Row
+					}
+					return a.Col - b.Col
+				})
 				out = append(out, Item{Table: t})
 			}
 		}
@@ -386,7 +425,16 @@ func ToItems(items []Item) []canvas.Item {
 				}
 				cells[i] = r
 			}
-			out = append(out, canvas.Inline{Object: canvas.NewTableObject(&canvas.Table{Cells: cells}), Block: true})
+			table := &canvas.Table{Cells: cells}
+			for _, m := range it.Table.Merges { // a merge that does not fit the grid is dropped
+				if m.Row >= 0 && m.Col >= 0 && m.Rows >= 1 && m.Cols >= 1 && m.Row+m.Rows <= len(cells) && m.Col+m.Cols <= cols && (m.Rows > 1 || m.Cols > 1) {
+					table.MergeRange(m.Row, m.Col, m.Row+m.Rows-1, m.Col+m.Cols-1)
+				}
+			}
+			for _, st := range it.Table.Styles {
+				table.SetCellStyle(st.Row, st.Col, canvas.CellStyle{Background: st.Background, Color: st.Color, Bold: st.Bold, Italic: st.Italic, Align: canvas.Align(st.Align)})
+			}
+			out = append(out, canvas.Inline{Object: canvas.NewTableObject(table), Block: true})
 		case it.Image != nil:
 			out = append(out, canvas.Inline{Object: imageObject(*it.Image)})
 		}
@@ -565,4 +613,48 @@ func (p *ImagePlaceholder) DrawAt(pt canvas.Painter, x, y float64) {
 	w, h := p.Measure(pt, 0, 0)
 	pt.SetFillStyle("#e6e8eb")
 	pt.FillRect(x, y, w, h)
+}
+
+// TagsKey is the Meta key a document's tags are kept under.
+const TagsKey = "tags"
+
+// Tags returns the document's tags, in the order they were set.
+func (d Document) Tags() []string {
+	v, _ := d.Get(TagsKey)
+	var out []string
+	for _, t := range strings.Split(v, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// SetTags replaces the document's tags: trimmed, without commas or empty ones,
+// and without repeats (compared ignoring case).
+func (d *Document) SetTags(tags []string) {
+	seen := map[string]bool{}
+	var clean []string
+	for _, t := range tags {
+		t = strings.TrimSpace(strings.ReplaceAll(t, ",", " "))
+		if k := strings.ToLower(t); t != "" && !seen[k] {
+			seen[k] = true
+			clean = append(clean, t)
+		}
+	}
+	if len(clean) == 0 {
+		d.Meta = slices.DeleteFunc(d.Meta, func(m MetaEntry) bool { return m.Key == TagsKey })
+		return
+	}
+	d.Set(TagsKey, strings.Join(clean, ","))
+}
+
+// HasTag reports whether the document has the tag (ignoring case).
+func (d Document) HasTag(tag string) bool {
+	for _, t := range d.Tags() {
+		if strings.EqualFold(t, strings.TrimSpace(tag)) {
+			return true
+		}
+	}
+	return false
 }

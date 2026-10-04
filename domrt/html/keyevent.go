@@ -5,10 +5,10 @@ package html
 import "syscall/js"
 
 // KeyEvent wraps a keydown/keyup DOM event with the fields a text
-// editor or shortcut handler actually needs -- gox.Event carries none
+// editor or shortcut handler actually needs -- xango.Event carries none
 // of these (see its doc comment: Value is only ever a simple
 // string/bool payload), so, like DragEvent and SubmitEvent, this is a
-// typed escape hatch for the parts a plain gox.EventHandler can't
+// typed escape hatch for the parts a plain xango.EventHandler can't
 // express.
 type KeyEvent struct {
 	Value    js.Value

@@ -1,6 +1,6 @@
 package components
 
-import "github.com/elaous/gojiberry/gox"
+import "github.com/elaous/gojiberry/xango"
 
 // TransferProps configures Transfer.
 type TransferProps struct {
@@ -19,23 +19,23 @@ type TransferProps struct {
 // Transfer renders "Import" and "Export" button groups, one button per
 // format. It is controlled and does no I/O itself: the callbacks choose
 // the file and write it.
-func Transfer(props TransferProps) gox.Node {
-	group := func(title, kind string, items []SaverChoice, on func(string)) gox.Node {
-		var buttons []gox.Node
+func Transfer(props TransferProps) xango.Node {
+	group := func(title, kind string, items []SaverChoice, on func(string)) xango.Node {
+		var buttons []xango.Node
 		for _, c := range items {
-			attrs := []gox.Attr{gox.A("type", "button"), gox.A("class", "gj-transfer-button"), gox.A("data-format", c.Name), gox.A("data-kind", kind)}
+			attrs := []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-transfer-button"), xango.A("data-format", c.Name), xango.A("data-kind", kind)}
 			if props.Disabled || on == nil {
-				attrs = append(attrs, gox.A("disabled", "disabled"))
+				attrs = append(attrs, xango.A("disabled", "disabled"))
 			} else {
 				name := c.Name
-				attrs = append(attrs, gox.On("click", func(gox.Event) { on(name) }))
+				attrs = append(attrs, xango.On("click", func(xango.Event) { on(name) }))
 			}
-			buttons = append(buttons, gox.El("button", attrs, gox.Text(c.Label)))
+			buttons = append(buttons, xango.El("button", attrs, xango.Text(c.Label)))
 		}
-		return gox.El("div", []gox.Attr{gox.A("class", "gj-transfer-group"), gox.A("role", "group"), gox.A("aria-label", title)},
-			append([]gox.Node{gox.El("h4", []gox.Attr{gox.A("class", "gj-transfer-title")}, gox.Text(title))}, buttons...)...)
+		return xango.El("div", []xango.Attr{xango.A("class", "gj-transfer-group"), xango.A("role", "group"), xango.A("aria-label", title)},
+			append([]xango.Node{xango.El("h4", []xango.Attr{xango.A("class", "gj-transfer-title")}, xango.Text(title))}, buttons...)...)
 	}
-	return gox.El("div", []gox.Attr{gox.A("class", "gj-transfer")},
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-transfer")},
 		group("Import", "import", props.Imports, props.OnImport),
 		group("Export", "export", props.Exports, props.OnExport))
 }

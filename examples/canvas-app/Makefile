@@ -1,6 +1,6 @@
-# gox-canvas dev workflow. Run `make run` for the full path from a
+# xango-canvas dev workflow. Run `make run` for the full path from a
 # clean checkout: starts Postgres, applies migrations via Atlas,
-# regenerates .go from .gox, builds the WASM autosave client, and runs
+# regenerates .go from .xg, builds the WASM autosave client, and runs
 # the dev server.
 #
 # DATABASE_URL matches docker-compose.yml's mapped host port (5433,
@@ -20,7 +20,7 @@ watch: db-up db-migrate
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/goxc examples/canvas-app
+	cd ../.. && go run ./cmd/xgc examples/canvas-app
 
 .PHONY: wasm
 wasm:

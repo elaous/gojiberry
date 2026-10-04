@@ -4,7 +4,7 @@
    circle-indeterminate variant; gj-progress-indeterminate: Progress's
    linear-indeterminate variant and FileUploader's indeterminate
    progress bar). Importing the components package registers this and
-   every per-component .css file (components/styles.gox), so Document and
+   every per-component .css file (components/styles.xg), so Document and
    domrt.Mount include them; to pick files yourself, import them like a
    package: import _ "github.com/elaous/gojiberry/components/base.css"
 */
@@ -22,7 +22,7 @@
 }
 
 /* .gj-theme-dark/.gj-theme-light are Theme's own palette-switch
-   classes (components/theme.gox): CSS custom properties already
+   classes (components/theme.xg): CSS custom properties already
    cascade to every descendant regardless of DOM depth, so scoping is
    just picking which of these two classes wraps a subtree -- no
    Go-level plumbing needed the way ContextProvider's own open design

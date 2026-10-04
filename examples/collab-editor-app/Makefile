@@ -1,5 +1,5 @@
 # collab-editor-app dev workflow. Run `make run` for the full path
-# from a clean checkout: regenerates client/main.gox.go, builds the
+# from a clean checkout: regenerates client/main.xg.go, builds the
 # WASM client, stages its CSS, and starts the relay server -- then
 # open http://localhost:8096/?role=owner in one tab and ?role=editor
 # or ?role=viewer in another.
@@ -13,7 +13,7 @@ run: generate wasm
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/goxc examples/collab-editor-app
+	cd ../.. && go run ./cmd/xgc examples/collab-editor-app
 
 .PHONY: wasm
 wasm:

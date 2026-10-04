@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/elaous/gojiberry/crdt"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func main() {
@@ -40,11 +40,11 @@ func main() {
 func render(doc *crdt.Doc) error {
 	blocks := doc.Blocks()
 
-	editorHTML, err := gox.RenderString(Editor(EditorProps{Blocks: blocks}))
+	editorHTML, err := xango.RenderString(Editor(EditorProps{Blocks: blocks}))
 	if err != nil {
 		return fmt.Errorf("editor render error: %w", err)
 	}
-	outputHTML, err := gox.RenderString(Output(OutputProps{Blocks: blocks}))
+	outputHTML, err := xango.RenderString(Output(OutputProps{Blocks: blocks}))
 	if err != nil {
 		return fmt.Errorf("output render error: %w", err)
 	}

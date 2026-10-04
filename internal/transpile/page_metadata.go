@@ -19,11 +19,11 @@ import (
 //
 //   - a tool directive (//go:generate, //encore:api) triggers an
 //     external command or build-time codegen;
-//   - //language=SQL (see editors/vscode-gox) is a pure editor hint
+//   - //language=SQL (see editors/vscode-xango) is a pure editor hint
 //     with zero effect on the compiled program;
 //   - @title/@stylesheets/@wasm, below, are neither: they're
 //     informational metadata about the function that a real tool
-//     (goxc) does turn into code (a gox.Document{}.Render() wrapper),
+//     (xgc) does turn into code (a xango.Document{}.Render() wrapper),
 //     which is why they get a third shape instead of overloading
 //     either existing one. The @-prefixed, space-separated form
 //     mirrors swaggo/swag's `// @Summary`/`// @Router` handler
@@ -42,7 +42,7 @@ const (
 	// @stylesheets, which reads a file's content at transpile time,
 	// the .wasm binary doesn't exist yet when its SSR page is
 	// transpiled -- it's built separately, from a different package,
-	// typically after this page's own build. goxc only needs to know
+	// typically after this page's own build. xgc only needs to know
 	// where it'll be served from to generate the bootstrap <script>
 	// tags.
 	wasmMarker = "@wasm "
@@ -52,7 +52,7 @@ const (
 // to when a page component doesn't specify one: the caller declares
 // `var DefaultTitle = "..."` once anywhere in the package (in main.go
 // or alongside the pages themselves) and every annotated page without
-// its own @title picks it up. gox does not declare it itself -- same
+// its own @title picks it up. xango does not declare it itself -- same
 // "trust the Go compiler" stance as the JSON typed-import annotation:
 // if it's never declared, the generated code fails to compile with an
 // ordinary undefined-identifier error.
@@ -61,14 +61,14 @@ const defaultTitleIdent = "DefaultTitle"
 // processPageMetadata scans src (already past tag expansion, so it's
 // syntactically valid Go) for func declarations annotated with
 // @title/@stylesheets/@wasm doc comments and rewrites their return
-// statements to wrap the returned gox.Node in a gox.Document{}.Render()
+// statements to wrap the returned xango.Node in a xango.Document{}.Render()
 // call: each stylesheet's file content is injected into Head via
-// gox.Style, and @wasm appends the wasm_exec.js loader plus an
+// xango.Style, and @wasm appends the wasm_exec.js loader plus an
 // WebAssembly.instantiateStreaming bootstrap script after the
 // function's own returned content -- the same two <script> tags every
 // WASM-consuming page in this repo otherwise had to hand-write. baseDir
 // resolves @stylesheets paths the same way resource imports do:
-// relative to the .gox file's own directory.
+// relative to the .xg file's own directory.
 //
 // A cheap substring pre-check means files that never use any of the
 // three markers are returned unchanged without paying for a parse.
@@ -97,7 +97,7 @@ func processPageMetadata(filename, baseDir, src string) (string, error) {
 		}
 
 		if len(stylesheets) > 0 {
-			return "", fmt.Errorf("%s: @stylesheets on func %s is no longer supported: import the stylesheet instead, `import _ \"<module path>/%s\"`, and gox.Document includes it", filename, fn.Name.Name, stylesheets[0])
+			return "", fmt.Errorf("%s: @stylesheets on func %s is no longer supported: import the stylesheet instead, `import _ \"<module path>/%s\"`, and xango.Document includes it", filename, fn.Name.Name, stylesheets[0])
 		}
 		var headExprs []string
 
@@ -105,7 +105,7 @@ func processPageMetadata(filename, baseDir, src string) (string, error) {
 		if title != "" {
 			titleSrc = strconv.Quote(title)
 		}
-		headSrc := "[]gox.Node{" + strings.Join(headExprs, ", ") + "}"
+		headSrc := "[]xango.Node{" + strings.Join(headExprs, ", ") + "}"
 		stylesSrc := ""
 		if styles != nil {
 			quoted := make([]string, len(styles))
@@ -126,7 +126,7 @@ WebAssembly.instantiateStreaming(fetch(%s), go.importObject).then((result) => {
 `, strconv.Quote(wasmURL))
 			bodyWrap = func(original string) string {
 				return fmt.Sprintf(
-					`gox.Frag(%s, gox.El("script", []gox.Attr{gox.A("src", %s)}), gox.El("script", nil, gox.Raw(%s)))`,
+					`xango.Frag(%s, xango.El("script", []xango.Attr{xango.A("src", %s)}), xango.El("script", nil, xango.Raw(%s)))`,
 					original, strconv.Quote(wasmExecURL), strconv.Quote(bootstrapJS),
 				)
 			}
@@ -134,7 +134,7 @@ WebAssembly.instantiateStreaming(fetch(%s), go.importObject).then((result) => {
 
 		wrapped := wrapPageReturns(fset, src, fn.Body, titleSrc, headSrc+stylesSrc, bodyWrap)
 		if len(wrapped) == 0 {
-			return "", fmt.Errorf("%s: func %s has an @title/@stylesheets/@wasm annotation but no single-value return statement to wrap -- does it return exactly one gox.Node?", filename, fn.Name.Name)
+			return "", fmt.Errorf("%s: func %s has an @title/@stylesheets/@wasm annotation but no single-value return statement to wrap -- does it return exactly one xango.Node?", filename, fn.Name.Name)
 		}
 		edits = append(edits, wrapped...)
 	}
@@ -188,12 +188,12 @@ type returnEdit struct {
 // wrapPageReturns locates every return statement in body's own
 // top-level control flow -- ifs, fors, switches, blocks -- and
 // reports a text edit wrapping each one's expression in
-// gox.Document{Title: ..., Head: ..., Body: wrapBody(<original
+// xango.Document{Title: ..., Head: ..., Body: wrapBody(<original
 // expression text, untouched>)}.Render(). It never descends into a
 // nested func literal: those returns belong to that closure, not to
 // the page component itself, and must be left alone (e.g. the
 // immediately-invoked closures this codebase already uses for
-// rendering a []gox.Node from a loop).
+// rendering a []xango.Node from a loop).
 func wrapPageReturns(fset *token.FileSet, src string, body *ast.BlockStmt, titleSrc, headSrc string, wrapBody func(string) string) []returnEdit {
 	var edits []returnEdit
 	var walkStmt func(ast.Stmt)
@@ -211,7 +211,7 @@ func wrapPageReturns(fset *token.FileSet, src string, body *ast.BlockStmt, title
 			start := fset.Position(st.Results[0].Pos()).Offset
 			end := fset.Position(st.Results[0].End()).Offset
 			original := src[start:end]
-			replacement := fmt.Sprintf("gox.Document{Title: %s, Head: %s, Body: %s}.Render()", titleSrc, headSrc, wrapBody(original))
+			replacement := fmt.Sprintf("xango.Document{Title: %s, Head: %s, Body: %s}.Render()", titleSrc, headSrc, wrapBody(original))
 			edits = append(edits, returnEdit{start: start, end: end, replacement: replacement})
 		case *ast.BlockStmt:
 			walkStmts(st.List)

@@ -18,7 +18,7 @@ func (e *Element) DispatchCustomEvent(name string, detail any, bubbles bool) {
 // OnCustomEvent registers fn for a custom event named name, e.g. one
 // dispatched by DispatchCustomEvent (by e or a descendant, if bubbling)
 // or by non-Go JS elsewhere on the page. fn receives the event's raw
-// detail value; use js.Value's own accessors (or gox.EventValue-style
+// detail value; use js.Value's own accessors (or xango.EventValue-style
 // type assertions) to read it, since detail's shape is whatever the
 // dispatcher chose.
 func (e *Element) OnCustomEvent(name string, fn func(detail js.Value)) js.Func {

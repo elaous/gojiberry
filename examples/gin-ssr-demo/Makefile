@@ -9,7 +9,7 @@ run: generate
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/goxc examples/gin-ssr-demo
+	cd ../.. && go run ./cmd/xgc examples/gin-ssr-demo
 
 .PHONY: test
 test: generate

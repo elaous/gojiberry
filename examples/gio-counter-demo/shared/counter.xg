@@ -1,0 +1,33 @@
+// Package shared holds Counter, the one component this demo mounts
+// through two completely different runtimes: domrt (a real browser
+// DOM, see the sibling wasm-counter example this was copied from) and
+// xangogio (a real native Gio window, see ../main.go). Counter itself has
+// no js/wasm or Gio import at all -- it only calls xango.El/xango.Text/
+// xango.On, proving xango.Node really is renderer-agnostic and not just in
+// the SSR-vs-DOM sense already established elsewhere in this repo.
+//
+// data-axis="horizontal" on the outer div is a layout hint xangogio
+// understands (there's no CSS to carry it on a native target); domrt
+// ignores it as an inert, harmless attribute since nothing in
+// components/*.css or this demo's own styling reacts to it.
+package shared
+
+import (
+	"strconv"
+
+	"github.com/elaous/gojiberry/xango"
+)
+
+type CounterProps struct {
+	Count int
+	OnInc xango.EventHandler
+	OnDec xango.EventHandler
+}
+
+func Counter(props CounterProps) xango.Node {
+	return <div id="counter" data-axis="horizontal">
+		<button id="dec" onClick={props.OnDec}>-</button>
+		<span id="count">{strconv.Itoa(props.Count)}</span>
+		<button id="inc" onClick={props.OnInc}>+</button>
+	</div>
+}

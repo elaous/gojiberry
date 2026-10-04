@@ -1,4 +1,4 @@
-// Package devwatch is the process-supervision half of gox's dev loop:
+// Package devwatch is the process-supervision half of xango's dev loop:
 // watch a source tree, and on a relevant change, rebuild and restart a
 // managed server subprocess. Pair it with the sibling devreload package
 // for the browser-side half (reloading a tab once the restarted
@@ -7,13 +7,13 @@
 // This began as examples/canvas-app's own cmd/devwatch, hardcoded to
 // that app's `make generate`/`make wasm`/cmd/devserver specifics; this
 // package is that same watch/debounce/rebuild/restart loop generalized
-// behind a Config so any gox project's own thin cmd/devwatch (or
-// cmd/goxdev, for a project with no Go code of its own to add) can
+// behind a Config so any xango project's own thin cmd/devwatch (or
+// cmd/xgdev, for a project with no Go code of its own to add) can
 // reuse it instead of re-deriving fsnotify wiring and subprocess
 // lifecycle management from scratch. It is not real hot module
 // replacement -- a compiled binary (or .wasm blob) is one opaque unit,
 // not a set of hot-swappable modules -- just a fast watch/rebuild/
-// restart/reload loop, an acceptable tradeoff for any gox app whose
+// restart/reload loop, an acceptable tradeoff for any xango app whose
 // server holds no unrecoverable in-memory state a full restart would
 // lose (canvas-app's own state lives in Postgres, for instance).
 package devwatch
@@ -41,7 +41,7 @@ type Config struct {
 
 	// Ignore reports whether a changed path should never trigger a
 	// rebuild. Combine with DefaultIgnore to keep its universal skips
-	// (VCS metadata, generated *.gox.go files) alongside a project's
+	// (VCS metadata, generated *.xg.go files) alongside a project's
 	// own build-output paths, e.g.:
 	//
 	//	Ignore: func(p string) bool {
@@ -52,7 +52,7 @@ type Config struct {
 	Ignore func(path string) bool
 
 	// Rebuild runs the project's build steps (regenerating .go from
-	// .gox, compiling a WASM client, building the server binary this
+	// .xg, compiling a WASM client, building the server binary this
 	// Config's Command runs, ...), streaming their own output as they
 	// go. It reports whether the build succeeded; false leaves whatever
 	// server is currently running alone rather than restarting it into
@@ -71,9 +71,9 @@ type Config struct {
 }
 
 // DefaultIgnore reports whether path should never trigger a rebuild
-// regardless of project: VCS metadata (.git) and goxc's own generated
-// *.gox.go files (edit the .gox source instead -- watching the file
-// goxc itself just wrote would create a feedback loop). A project's own
+// regardless of project: VCS metadata (.git) and xgc's own generated
+// *.xg.go files (edit the .xg source instead -- watching the file
+// xgc itself just wrote would create a feedback loop). A project's own
 // build-output directories (a WASM static/ dir, a temp binary path, ...)
 // are not covered here since there's no universal convention for them;
 // combine with Config.Ignore for those. (A rebuild that writes files under
@@ -84,7 +84,7 @@ func DefaultIgnore(path string) bool {
 	switch {
 	case strings.Contains(path, "/.git/"), strings.HasPrefix(path, ".git/"):
 		return true
-	case strings.HasSuffix(path, ".gox.go"):
+	case strings.HasSuffix(path, ".xg.go"):
 		return true
 	case isEditorTemp(filepath.Base(path)):
 		return true

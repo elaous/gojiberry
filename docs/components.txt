@@ -1,7 +1,7 @@
 package components // import "github.com/elaous/gojiberry/components"
 
-Package components is a small library of ready-made gox components:
-plain Go functions taking a typed props struct and returning a gox.Node,
+Package components is a small library of ready-made xango components:
+plain Go functions taking a typed props struct and returning a xango.Node,
 the same shape as any other component in this framework (see the root README's
 "Components" section). None of them import domrt or syscall/js directly --
 interactive ones take the current state and On* event handlers as props (the
@@ -11,53 +11,53 @@ domrt.Mount/Update.
 
 FUNCTIONS
 
-func Accordion(props AccordionProps) gox.Node
+func Accordion(props AccordionProps) xango.Node
     Accordion renders a vertical stack of collapsible sections.
 
-func Alert(props AlertProps) gox.Node
+func Alert(props AlertProps) xango.Node
     Alert is a Dialog preset for a single acknowledgment, rendered with
     role="alertdialog" (per ARIA, for a dialog demanding an immediate response)
     instead of Dialog's default role="dialog".
 
-func Avatar(props AvatarProps) gox.Node
+func Avatar(props AvatarProps) xango.Node
     Avatar renders a profile picture, or a colored circle of Initials when Src
     is empty (e.g. the user hasn't uploaded one).
 
-func Box(props BoxProps) gox.Node
+func Box(props BoxProps) xango.Node
     Box is a layout container, normally full height, split into however many
     sub-boxes Divisions describes -- each independently sized by percentage,
     a fixed unit value, or left flexible to fill whatever height its siblings
     don't claim. Built on CSS Grid's grid-template-rows, which already handles
     exactly this mix of units in one declaration.
 
-func Breadcrumbs(props BreadcrumbsProps) gox.Node
+func Breadcrumbs(props BreadcrumbsProps) xango.Node
     Breadcrumbs renders a trail of links with the last item marked as the
     current page (aria-current, and rendered as plain text even if it has an
     Href -- you're already there).
 
-func Button(props ButtonProps) gox.Node
+func Button(props ButtonProps) xango.Node
     Button renders a styled <button>.
 
-func Carousel(props CarouselProps) gox.Node
+func Carousel(props CarouselProps) xango.Node
     Carousel renders a single active slide, prev/next arrows, and a dot per
     slide for direct navigation. All slides are rendered (the inactive ones
     aria-hidden) so this works before any client-side hydration runs, with CSS
     choosing which one shows.
 
-func Checkbox(props CheckboxProps) gox.Node
+func Checkbox(props CheckboxProps) xango.Node
     Checkbox renders a single labeled checkbox, the label wrapping the input so
     clicking the text toggles it too (same zero-JS trick FileUploader's dropzone
     label uses).
 
-func CheckboxGroup(props CheckboxGroupProps) gox.Node
+func CheckboxGroup(props CheckboxGroupProps) xango.Node
     CheckboxGroup renders a set of independent checkboxes -- unlike RadioGroup,
     any number (including all or none) may be checked at once.
 
-func Chip(props ChipProps) gox.Node
+func Chip(props ChipProps) xango.Node
     Chip renders a small labeled pill, optionally with a leading icon and a
     remove button.
 
-func Collab(props CollabProps) gox.Node
+func Collab(props CollabProps) xango.Node
     Collab wraps a shared document's content and, based on Role's capabilities,
     gates what the current collaborator can see and do with it: viewers get
     read-only Content plus a "View only" badge and nothing else; editors
@@ -69,7 +69,7 @@ func Collab(props CollabProps) gox.Node
     see examples/collab-editor-app for one way to wire that up.
 
     Collab only gates the affordances *around* Content -- Actions/
-    Delete/Share/Comments -- since Content is an opaque []gox.Node it
+    Delete/Share/Comments -- since Content is an opaque []xango.Node it
     can't reach into. The gj-collab-readonly class it adds when !CanEdit
     is purely cosmetic (a slight opacity change); if Content includes a
     real input/textarea, making it genuinely non-interactive for a viewer
@@ -77,47 +77,47 @@ func Collab(props CollabProps) gox.Node
     Disabled field driven off the same CapabilitiesForRole(Role) call.
     examples/collab-editor-app does exactly this.
 
-func ColorPicker(props ColorPickerProps) gox.Node
+func ColorPicker(props ColorPickerProps) xango.Node
     ColorPicker renders a styled native color input, letting the browser handle
     the actual color-picker UI.
 
-func Confirm(props ConfirmProps) gox.Node
+func Confirm(props ConfirmProps) xango.Node
     Confirm is a Dialog preset for a yes/no decision, rendered with
     role="alertdialog" (per ARIA, for a dialog demanding an immediate response)
     instead of Dialog's default role="dialog".
 
-func ContextMenu(props ContextMenuProps) gox.Node
+func ContextMenu(props ContextMenuProps) xango.Node
     ContextMenu renders a positioned menu (typically opened from a right-click
     -- see html.Element.OnContextMenu) plus a full-viewport backdrop that closes
     it on an outside click. Renders nothing when !Open.
 
-func DatePicker(props DatePickerProps) gox.Node
+func DatePicker(props DatePickerProps) xango.Node
     DatePicker renders a styled native date input, letting the browser handle
     the actual calendar UI/locale formatting/keyboard input.
 
-func Dialog(props DialogProps) gox.Node
+func Dialog(props DialogProps) xango.Node
     Dialog is Modal with the common title/body/footer-actions shape.
 
-func Dropdown(props DropdownProps) gox.Node
+func Dropdown(props DropdownProps) xango.Node
     Dropdown renders a closed control button and, when Open, a listbox of
     options below it. This is a basic implementation of the ARIA listbox pattern
     (role/aria-* attributes only) -- it doesn't implement its own keyboard
     navigation, so pair it with native <button>/focus behavior for accessible
     keyboard use.
 
-func FileUploader(props FileUploaderProps) gox.Node
+func FileUploader(props FileUploaderProps) xango.Node
     FileUploader renders a dropzone that's also a native file-input label
     (clicking anywhere on it opens the file browser, no JS needed for that part)
     plus an optional progress bar.
 
-func Floating(props FloatingProps) gox.Node
+func Floating(props FloatingProps) xango.Node
     Floating makes Children float above the surrounding content at a fixed
     corner/edge position -- a formalized version of the "wrap one or more Toasts
     in your own position:fixed container" idiom Toast's own doc comment already
     describes, generalized to any content: a floating action button, a badge,
     a persistent status widget, or a Toast stack.
 
-func Icon(props IconProps) gox.Node
+func Icon(props IconProps) xango.Node
     Icon renders a small inline glyph, sized and colored via CSS. It's
     deliberately text (a Unicode character), not an inline <svg>: domrt's
     client-side Mount/Update create elements with plain createElement, which
@@ -127,47 +127,47 @@ func Icon(props IconProps) gox.Node
     and domrt/svg's own doc comment, for the same constraint solved the same
     way elsewhere in this package). For a real vector icon that must render
     client-side, build it yourself with domrt/svg.CreateElement and pass it
-    through one of this package's existing Icon *gox.Node slots (Chip, Dropdown,
+    through one of this package's existing Icon *xango.Node slots (Chip, Dropdown,
     ContextMenu) instead.
 
-func ImageZoom(props ImageZoomProps) gox.Node
+func ImageZoom(props ImageZoomProps) xango.Node
     ImageZoom renders a thumbnail that, when Zoomed, also shows a full-viewport
     overlay with the same image enlarged -- a Modal-style backdrop (see Modal's
     doc comment for why backdrop and content are DOM siblings, not nested:
     so a click on the enlarged image itself can't be mistaken for a click on the
     backdrop behind it).
 
-func Link(props LinkProps) gox.Node
+func Link(props LinkProps) xango.Node
     Link renders a styled <a>. A disabled link renders as a non-interactive
     <span> instead of an <a> without an href, since an anchor's disabled-looking
     states aren't real disabled controls to assistive tech the way a <button
     disabled> is.
 
-func Loader(props LoaderProps) gox.Node
+func Loader(props LoaderProps) xango.Node
     Loader renders a spinning indicator for an in-progress operation with no
     known completion percentage -- see Progress for one that has one.
 
-func Modal(props ModalProps) gox.Node
+func Modal(props ModalProps) xango.Node
     Modal renders a full-viewport backdrop plus a centered content box. Renders
     nothing when !Open. This is the base Dialog (and, through it, Confirm and
     Alert) builds on; use it directly for fully custom modal content.
 
-func OTPInput(props OTPInputProps) gox.Node
+func OTPInput(props OTPInputProps) xango.Node
     OTPInput renders Length single-character text boxes for entering a
     one-time-passcode/verification code.
 
-func Pagination(props PaginationProps) gox.Node
+func Pagination(props PaginationProps) xango.Node
     Pagination renders Prev/Next buttons plus page-number buttons, with an
     ellipsis collapsing the middle of a long run so it stays a constant width
     regardless of TotalPages. Renders nothing when TotalPages < 1.
 
-func Popover(props PopoverProps) gox.Node
+func Popover(props PopoverProps) xango.Node
     Popover renders Trigger, and, when Open, a panel of Content anchored
     to it plus a full-viewport backdrop that closes it on an outside click.
     Unlike Tooltip (pure CSS hover), Popover is click-triggered and can hold
     interactive content of its own.
 
-func Progress(props ProgressProps) gox.Node
+func Progress(props ProgressProps) xango.Node
     Progress renders a linear bar or a circular ring showing Value percent
     complete, or an indeterminate animation when the actual completion isn't
     known yet. The circle variant is drawn with a CSS conic-gradient rather
@@ -177,30 +177,30 @@ func Progress(props ProgressProps) gox.Node
     mounted (server-rendered HTML wouldn't show the bug -- the browser's HTML
     parser switches namespace for a parsed <svg> tag on its own).
 
-func RadioGroup(props RadioGroupProps) gox.Node
+func RadioGroup(props RadioGroupProps) xango.Node
     RadioGroup renders a set of mutually exclusive radio buttons.
 
-func Search(props SearchProps) gox.Node
+func Search(props SearchProps) xango.Node
     Search renders a text input plus, when Open, a listbox of Suggestions below
     it -- a basic implementation of the ARIA combobox pattern (role/aria-*
     attributes only, no keyboard navigation of its own, the same scope
     RadioGroup/Dropdown/etc. keep to elsewhere in this package).
 
-func Slider(props SliderProps) gox.Node
+func Slider(props SliderProps) xango.Node
     Slider renders a styled native range input.
 
-func Switch(props SwitchProps) gox.Node
+func Switch(props SwitchProps) xango.Node
     Switch renders a toggle switch: a native checkbox (visually hidden but still
     keyboard/screen-reader accessible) styled as a sliding track and thumb via
     the CSS :checked sibling selector, the same "real control, custom look"
     approach FileUploader's hidden file input uses.
 
-func Tabs(props TabsProps) gox.Node
+func Tabs(props TabsProps) xango.Node
     Tabs renders a tab strip plus the active tab's content. The caller owns
     which tab is active (see OnSelect), the same controlled-component pattern
     every interactive component in this package uses.
 
-func Textarea(props TextareaProps) gox.Node
+func Textarea(props TextareaProps) xango.Node
     Textarea renders a styled native <textarea>. Value is set via a "value"
     attribute rather than child text content, the same controlled-input
     convention Slider/DatePicker/ColorPicker already use: domrt patches "value"
@@ -208,11 +208,11 @@ func Textarea(props TextareaProps) gox.Node
     genuinely controlled on the client. A "value" attribute has no meaning in
     the HTML spec for <textarea> though (initial content there only ever comes
     from child text) -- harmless for domrt-mounted pages, but if you render this
-    with gox.Render for pure static HTML with no client hydration, the initial
-    content won't show up; use gox.El("textarea", ..., gox.Text(props.Value))
+    with xango.Render for pure static HTML with no client hydration, the initial
+    content won't show up; use xango.El("textarea", ..., xango.Text(props.Value))
     directly for that case instead.
 
-func Toast(props ToastProps) gox.Node
+func Toast(props ToastProps) xango.Node
     Toast renders a single transient notification -- unlike Modal/Dialog,
     it has no backdrop and doesn't block interaction with the rest of the page.
     It has no opinion on where it sits on screen (no fixed positioning of its
@@ -220,12 +220,12 @@ func Toast(props ToastProps) gox.Node
     Auto-dismissal, if wanted, is the caller's job too (e.g. Window.SetTimeout),
     the same way FileUploader leaves progress tracking to the caller.
 
-func Tooltip(props TooltipProps) gox.Node
+func Tooltip(props TooltipProps) xango.Node
     Tooltip wraps Children with a bubble that shows Content on hover or keyboard
     focus. Pure CSS (:hover/:focus-within) -- no JS, no positioning logic to
     keep in sync with anything.
 
-func Wizard(props WizardProps) gox.Node
+func Wizard(props WizardProps) xango.Node
     Wizard renders a multi-step form flow: a step header strip, the active
     step's content, and Back/Next actions.
 
@@ -234,7 +234,7 @@ TYPES
 
 type AccordionItem struct {
 	Title   string
-	Content gox.Node
+	Content xango.Node
 }
     AccordionItem is one collapsible section in an Accordion.
 
@@ -282,7 +282,7 @@ type BoxDivision struct {
 	// compiles to). Divisions can mix all three: e.g. a "48px" header,
 	// a "" flexible body, and a "30%" footer.
 	Height  string
-	Content []gox.Node
+	Content []xango.Node
 }
     BoxDivision is one of Box's sub-boxes.
 
@@ -304,7 +304,7 @@ type BreadcrumbItem struct {
 	// drive client-side routing (see domrt/browser.Router) instead of
 	// a full page load. Call e.PreventDefault() in it to suppress the
 	// browser's own navigation.
-	OnClick gox.EventHandler
+	OnClick xango.EventHandler
 }
     BreadcrumbItem is one entry in a Breadcrumbs trail.
 
@@ -318,7 +318,7 @@ type ButtonProps struct {
 	Variant  ButtonVariant // defaults to ButtonPrimary
 	Type     string        // "button" (default), "submit", or "reset"
 	Disabled bool
-	OnClick  gox.EventHandler
+	OnClick  xango.EventHandler
 }
     ButtonProps configures Button.
 
@@ -331,7 +331,7 @@ const (
 	ButtonDanger    ButtonVariant = "danger"
 )
 type CarouselProps struct {
-	Slides []gox.Node
+	Slides []xango.Node
 	Active int
 
 	OnPrev   func()          // called when the previous-slide arrow is clicked
@@ -364,8 +364,8 @@ type CheckboxProps struct {
 
 type ChipProps struct {
 	Label    string
-	Icon     *gox.Node        // optional, rendered before Label
-	OnRemove gox.EventHandler // nil renders a plain, non-removable chip
+	Icon     *xango.Node        // optional, rendered before Label
+	OnRemove xango.EventHandler // nil renders a plain, non-removable chip
 }
     ChipProps configures Chip.
 
@@ -392,16 +392,16 @@ type CollabProps struct {
 	// custom permission set beyond the three built-in roles.
 	Capabilities *CollabCapabilities
 
-	Content []gox.Node // the document itself; shown whenever CanView
+	Content []xango.Node // the document itself; shown whenever CanView
 
-	Actions []gox.Node // edit controls (a toolbar, a save button, ...); shown only when CanEdit
+	Actions []xango.Node // edit controls (a toolbar, a save button, ...); shown only when CanEdit
 
 	// OnDelete/OnShare, if set, each render as a button gated on
 	// CanDelete/CanShare respectively.
 	OnDelete func()
 	OnShare  func()
 
-	Comments []gox.Node // a comment thread/composer; shown only when CanComment
+	Comments []xango.Node // a comment thread/composer; shown only when CanComment
 }
     CollabProps configures Collab.
 
@@ -433,7 +433,7 @@ type ConfirmProps struct {
 
 type ContextMenuItem struct {
 	Label    string
-	Icon     *gox.Node // optional, rendered before Label
+	Icon     *xango.Node // optional, rendered before Label
 	Disabled bool
 	OnSelect func()
 }
@@ -463,8 +463,8 @@ type DialogProps struct {
 	Open    bool
 	Role    string // "dialog" (default) or "alertdialog"; see Modal.Role
 	Title   string
-	Body    []gox.Node
-	Actions []gox.Node // typically Button components; rendered right-aligned in a footer
+	Body    []xango.Node
+	Actions []xango.Node // typically Button components; rendered right-aligned in a footer
 	OnClose func()     // backdrop-click to close; nil disables it
 }
     DialogProps configures Dialog.
@@ -472,7 +472,7 @@ type DialogProps struct {
 type DropdownOption struct {
 	Value string
 	Label string
-	Icon  *gox.Node // optional, rendered before Label
+	Icon  *xango.Node // optional, rendered before Label
 }
     DropdownOption is one choice in a Dropdown.
 
@@ -508,11 +508,11 @@ type FileUploaderProps struct {
 	Progress      float64 // 0-100, ignored when Indeterminate
 	Indeterminate bool    // show a moving/indeterminate bar instead of a fixed percentage
 
-	OnFilesSelected gox.EventHandler // fired on the input's change event
+	OnFilesSelected xango.EventHandler // fired on the input's change event
 }
     FileUploaderProps configures FileUploader.
 
-    gox.Event carries no file data (see gox.Event's doc comment: Value is
+    xango.Event carries no file data (see xango.Event's doc comment: Value is
     only ever a string/bool/similar simple payload), so reading the actual
     selected/dropped files is the caller's job, done through domrt/html directly
     on the client: look the input up by InputID and call its AsInput().Files(),
@@ -542,7 +542,7 @@ type FloatingProps struct {
 	// to false (position:fixed, relative to the viewport), the more
 	// common "float over the whole page" case.
 	Absolute bool
-	Children []gox.Node
+	Children []xango.Node
 }
     FloatingProps configures Floating.
 
@@ -591,7 +591,7 @@ type LinkProps struct {
 	Href     string
 	Target   string // e.g. "_blank"; "" stays in the same tab
 	Disabled bool
-	Children []gox.Node
+	Children []xango.Node
 }
     LinkProps configures Link.
 
@@ -614,7 +614,7 @@ type ModalProps struct {
 	Role string // "dialog" (default) or "alertdialog" for a Confirm/Alert-style prompt demanding an immediate response
 	// Label is used as the modal's aria-label (e.g. its title text).
 	Label   string
-	Content []gox.Node
+	Content []xango.Node
 	// OnClose is called when the backdrop is clicked; nil disables
 	// backdrop-click-to-close.
 	OnClose func()
@@ -624,7 +624,7 @@ type ModalProps struct {
 type OTPInputProps struct {
 	// ID is a base id; each box gets fmt.Sprintf("%s-%d", ID, i). Like
 	// FileUploaderProps.InputID, this exists so a caller can reach a
-	// specific box through domrt/html: gox.Event carries no reference
+	// specific box through domrt/html: xango.Event carries no reference
 	// to the input element itself, so advancing focus to the next box
 	// after a digit is typed (or back after a backspace on an empty
 	// one) is done by the consuming app, calling html.Element.Focus()
@@ -653,8 +653,8 @@ const (
 	PopoverTop    PopoverPlacement = "top"
 )
 type PopoverProps struct {
-	Trigger   []gox.Node
-	Content   []gox.Node
+	Trigger   []xango.Node
+	Content   []xango.Node
 	Open      bool
 	Placement PopoverPlacement // defaults to PopoverBottom
 
@@ -733,7 +733,7 @@ type SwitchProps struct {
 
 type Tab struct {
 	Label   string
-	Content gox.Node
+	Content xango.Node
 }
     Tab is one tab in a Tabs component.
 
@@ -783,7 +783,7 @@ const (
 type TooltipProps struct {
 	Content   string
 	Placement TooltipPlacement // defaults to TooltipTop
-	Children  []gox.Node       // whatever should trigger the tooltip on hover/focus
+	Children  []xango.Node       // whatever should trigger the tooltip on hover/focus
 }
     TooltipProps configures Tooltip.
 
@@ -799,7 +799,7 @@ type WizardProps struct {
 
 type WizardStep struct {
 	Title   string
-	Content gox.Node
+	Content xango.Node
 }
     WizardStep is one step in a Wizard.
 

@@ -15,11 +15,11 @@ import (
 
 func TestDefaultIgnore(t *testing.T) {
 	cases := map[string]bool{
-		".git/HEAD":                true,
-		"foo/.git/index":           true,
-		"components/button.gox.go": true,
-		"components/button.gox":    false,
-		"main.go":                  false,
+		".git/HEAD":               true,
+		"foo/.git/index":          true,
+		"components/button.xg.go": true,
+		"components/button.xg":    false,
+		"main.go":                 false,
 	}
 	for path, want := range cases {
 		if got := DefaultIgnore(path); got != want {
@@ -109,12 +109,12 @@ func TestRunRebuildsAndRestartsOnRealFileChange(t *testing.T) {
 	// A change under a path DefaultIgnore covers should not trigger
 	// another rebuild.
 	rebuildsBeforeIgnored := rebuilds.Load()
-	if err := os.WriteFile(filepath.Join(dir, "generated.gox.go"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "generated.xg.go"), []byte("x"), 0o644); err != nil {
 		t.Fatalf("writing ignored file: %v", err)
 	}
 	time.Sleep(500 * time.Millisecond) // long enough for the 200ms debounce to have fired if it was going to
 	if got := rebuilds.Load(); got != rebuildsBeforeIgnored {
-		t.Errorf("a change to a *.gox.go file triggered a rebuild (count %d -> %d), want no change", rebuildsBeforeIgnored, got)
+		t.Errorf("a change to a *.xg.go file triggered a rebuild (count %d -> %d), want no change", rebuildsBeforeIgnored, got)
 	}
 
 	// Exercise Run's shutdown path for real.

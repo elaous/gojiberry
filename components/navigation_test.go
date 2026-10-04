@@ -3,7 +3,7 @@ package components
 import (
 	"testing"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func TestBreadcrumbs(t *testing.T) {
@@ -34,14 +34,14 @@ func TestBreadcrumbs(t *testing.T) {
 	t.Run("OnClick fires for a link item", func(t *testing.T) {
 		clicked := false
 		n := Breadcrumbs(BreadcrumbsProps{Items: []BreadcrumbItem{
-			{Label: "Home", Href: "/", OnClick: func(gox.Event) { clicked = true }},
+			{Label: "Home", Href: "/", OnClick: func(xango.Event) { clicked = true }},
 			{Label: "Here"},
 		}})
 		handlers := findHandlers(n, "click")
 		if len(handlers) != 1 {
 			t.Fatalf("expected 1 click handler, got %d", len(handlers))
 		}
-		handlers[0](gox.Event{})
+		handlers[0](xango.Event{})
 		if !clicked {
 			t.Error("OnClick did not fire")
 		}
@@ -89,7 +89,7 @@ func TestPagination(t *testing.T) {
 			t.Fatal("expected at least one click handler")
 		}
 		// Clicking "2" (the second enabled handler, since Prev is disabled on page 1).
-		handlers[1](gox.Event{})
+		handlers[1](xango.Event{})
 		if got != 2 {
 			t.Errorf("OnChange got %d, want 2", got)
 		}
@@ -124,8 +124,8 @@ func TestPaginationWindow(t *testing.T) {
 
 func TestTabs(t *testing.T) {
 	tabs := []Tab{
-		{Label: "One", Content: gox.Text("content one")},
-		{Label: "Two", Content: gox.Text("content two")},
+		{Label: "One", Content: xango.Text("content one")},
+		{Label: "Two", Content: xango.Text("content two")},
 	}
 
 	t.Run("only the Active tab's content renders", func(t *testing.T) {
@@ -151,7 +151,7 @@ func TestTabs(t *testing.T) {
 		if len(handlers) != 2 {
 			t.Fatalf("expected 2 click handlers, got %d", len(handlers))
 		}
-		handlers[1](gox.Event{})
+		handlers[1](xango.Event{})
 		if got != 1 {
 			t.Errorf("OnSelect got %d, want 1", got)
 		}
@@ -160,9 +160,9 @@ func TestTabs(t *testing.T) {
 
 func TestWizard(t *testing.T) {
 	steps := []WizardStep{
-		{Title: "Step A", Content: gox.Text("content A")},
-		{Title: "Step B", Content: gox.Text("content B")},
-		{Title: "Step C", Content: gox.Text("content C")},
+		{Title: "Step A", Content: xango.Text("content A")},
+		{Title: "Step B", Content: xango.Text("content B")},
+		{Title: "Step C", Content: xango.Text("content C")},
 	}
 
 	t.Run("shows the active step's content and header state classes", func(t *testing.T) {
@@ -197,15 +197,15 @@ func TestWizard(t *testing.T) {
 		if len(clickHandlers) != 5 {
 			t.Fatalf("expected 5 click handlers, got %d", len(clickHandlers))
 		}
-		clickHandlers[2](gox.Event{}) // third step header
+		clickHandlers[2](xango.Event{}) // third step header
 		if stepped != 2 {
 			t.Errorf("OnStep got %d, want 2", stepped)
 		}
-		clickHandlers[3](gox.Event{}) // Back
+		clickHandlers[3](xango.Event{}) // Back
 		if !backCalled {
 			t.Error("OnBack did not fire")
 		}
-		clickHandlers[4](gox.Event{}) // Next
+		clickHandlers[4](xango.Event{}) // Next
 		if !nextCalled {
 			t.Error("OnNext did not fire")
 		}

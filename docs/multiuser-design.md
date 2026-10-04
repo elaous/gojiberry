@@ -274,7 +274,7 @@ Not yet: nothing outstanding that is known.
 
 ## Phase 4 as built
 
-- `TextFlow.Subscribe` lets several observers hear about changes (the gox
+- `TextFlow.Subscribe` lets several observers hear about changes (the xango
   element replaces `OnChange` on every render, so the bridge no longer uses it);
   `Session.RefreshPeers` puts other people's cursors in `Flow.RemoteCursors`,
   drawn as a tinted selection, a caret and a name flag (`canvas/flowpeers.go`).
@@ -314,21 +314,21 @@ Not yet: nothing outstanding that is known.
 
 - A session talks to the hub through a `collab.Transport` (`collab/link`: `Dial(client.Options) Conn`, where a `Conn` delivers events, sends ops and presence and reports what is still waiting). `collab.HTTPEndpoints()` is the default (SSE `GET /docs/{id}/events` plus `POST /ops` and `/presence`); `ws.WebSockets()` (`collab/ws`, own import so the root module stays dependency-free) uses one socket at `GET /docs/{id}/ws` carrying JSON `wire.Frame`s (`hello`, `snapshot`, `ops`, `presence`, `ack`, `reject`). Both go through the same hub checks (guard, roles, replica binding, throttling, authorization, comment authors), and the same session scenarios run over each.
 - A browser WebSocket cannot set headers, so under `js` the sign-in token goes in the query as `access_token` (the hub treats it as `Authorization: Bearer`) and a guard token as `guard_token` (`guard.Options.TokenQuery`). Native clients send headers.
-- `collab/gox.Collab` wraps canvas elements and makes the text flow inside shared: `Transport`, `Client` (hub URL, document, headers), `Name`, `Color`, `OnState` (status, role, peers, pending, repairs, error). The server's role is applied to the stage. `Flow` chooses what is shared: `textflow` (default: text, comments, notes, styles), `header`, `footer` (with page numbers), `objects` (floating text, tables and images) or `*` (all). An unknown value reports `ErrFlowNotSupported`. Content props only seed the document, and a deterministic seed replica means two tabs starting from the same content merge into one copy. The showcase opens as a shared document with `?doc=…&transport=http|ws`.
+- `collab/xango.Collab` wraps canvas elements and makes the text flow inside shared: `Transport`, `Client` (hub URL, document, headers), `Name`, `Color`, `OnState` (status, role, peers, pending, repairs, error). The server's role is applied to the stage. `Flow` chooses what is shared: `textflow` (default: text, comments, notes, styles), `header`, `footer` (with page numbers), `objects` (floating text, tables and images) or `*` (all). An unknown value reports `ErrFlowNotSupported`. Content props only seed the document, and a deterministic seed replica means two tabs starting from the same content merge into one copy. The showcase opens as a shared document with `?doc=…&transport=http|ws`.
 
 ### Surfaces: sharing more than the text
 
 Headers, footers and objects are not part of the text flow, so they travel as whole-value records through a `collab.Surface` (`Owns`, `Read`, `Write`), configured with `collab.Sharing{NoText, Surfaces}` and `ConnectShared`. `NoText` shares only the surfaces (the `header`, `footer` and `objects` flows); `*` shares both.
 
 - Surfaces are polled, not subscribed to (element `OnChange` callbacks are replaced by the props on every render): the Collab runner calls `Bridge.SyncSurfaces` at its interval and a change is sent once it has held still for two ticks, so a drag shares where the object was dropped, not each step.
-- Records: `header:<page>`, `footer:<page>` and `pagenum:<page>` (JSON, `null` where a page sets none, so removing a header reaches the others), `float:<n>`, `table:<n>`, `image:<n>` (n is the element's place among its kind). Floating text is shared as plain text plus position, size and anchor; a table by its cells; an image by position and size (the picture is not sent).
+- Records: `header:<page>`, `footer:<page>` and `pagenum:<page>` (JSON, `null` where a page sets none, so removing a header reaches the others), `float:<key>`, `table:<key>`, `image:<key>` (by the element's Key, else its place among the unkeyed ones: see "Hardening from review"). Floating text is shared as plain text plus position, size and anchor; a table by its cells; an image by position and size (the picture is not sent).
 - After applying a snapshot an editor sends the surface records the document lacks (`PushSurfaces`), so a late joiner's local header or note reaches the others; a viewer never does.
 - A record is never deleted by a session (it may only be missing from view), and what an element reads back after `Write` is taken as agreed, so normalisation cannot start an echo between two peers.
 - Not yet: adding or removing objects at run time (elements come from each side's own tree), character formatting inside floating text, an image's picture.
 
-### Known limits found in review
+### Hardening from review
 
-- Over WebSockets the client sends up to 200 operations per frame with no size cap; a batch over the hub's `MaxBody` makes the server close the socket and the client resends it forever (HTTP would answer 413). Fix: split batches by encoded size.
-- A downgraded editor can keep writing over a socket until the next keep-alive tick (the role is checked on each tick, not on each frame).
-- The socket accepts any `Origin`; only the guard protects it. With cookie-based auth and a guard that sets no `Origins`, a page on another site could open one. The default Bearer setup is not affected.
-- Surface records are keyed by element order (`float:0`), so concurrent adding or removing of objects shifts them, and they are never deleted.
+- **Frames over WebSockets.** The client splits batches by encoded size (256 KiB a frame, 200 operations at most) and does not send an operation over 4 MiB. The hub answers a frame over `MaxBody` with a 413 `reject` (as the POST would) instead of closing the socket; its hard read limit is four times `MaxBody`. If a hub still closes the socket with "message too big", the client gives that batch up as refused instead of resending it for ever. A hub configured with a `MaxBody` under 256 KiB would still refuse ordinary batches.
+- **Roles are checked on every ops and presence frame**, not only on the keep-alive tick: a downgraded user's socket is closed (policy violation) at their next frame and the client reconnects with the new role.
+- **Cookies.** A socket from another origin that carries cookies is refused (403) unless the origin is in `Config.CookieOrigins`: with cookie sign-in it would let any site act as the signed-in user. Pages sending a bearer token carry no cookies for the hub and are not affected. `guard.TokenQuery` applies to paths ending in `/ws` only.
+- **Objects have stable ids.** A floating text, table or image with a `Key` prop is shared as `float:<key>` / `table:<key>` / `image:<key>`, so adding or removing other objects never shifts it; one without a key goes by its place among the unkeyed ones (`float:#0`), stable only while those do not change. Give shared objects keys. Records for a key a peer does not have are ignored, and records are never deleted.

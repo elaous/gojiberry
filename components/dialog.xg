@@ -1,0 +1,31 @@
+package components
+
+import "github.com/elaous/gojiberry/xango"
+
+// DialogProps configures Dialog.
+type DialogProps struct {
+	Open    bool
+	Role    string // "dialog" (default) or "alertdialog"; see Modal.Role
+	Title   string
+	Body    []xango.Node
+	Actions []xango.Node // typically Button components; rendered right-aligned in a footer
+	OnClose func()     // backdrop-click to close; nil disables it
+}
+
+// Dialog is Modal with the common title/body/footer-actions shape.
+func Dialog(props DialogProps) xango.Node {
+	content := []xango.Node{
+		xango.El("h2", []xango.Attr{xango.A("class", "gj-dialog-title")}, xango.Text(props.Title)),
+		xango.El("div", []xango.Attr{xango.A("class", "gj-dialog-body")}, props.Body...),
+	}
+	if len(props.Actions) > 0 {
+		content = append(content, xango.El("div", []xango.Attr{xango.A("class", "gj-dialog-actions")}, props.Actions...))
+	}
+	return Modal(ModalProps{
+		Open:    props.Open,
+		Role:    props.Role,
+		Label:   props.Title,
+		Content: content,
+		OnClose: props.OnClose,
+	})
+}

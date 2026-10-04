@@ -1,0 +1,134 @@
+//go:build js && wasm
+
+// Package main is the browser half of the live collab-editor-app demo:
+// it opens a real WebSocket to the server (cmd/server) via
+// domrt/browser.Connect/Socket, sends its own edits, applies edits
+// broadcast from other connected clients, and gates what the current
+// visitor can do with components.Collab based on a role read from the
+// page's own URL (?role=owner/editor/viewer) -- so opening the same
+// URL with a different role query param in two browser tabs is
+// exactly how you'd demo (or test) two collaborators with different
+// permissions editing the same live document.
+package main
+
+import (
+	"net/url"
+
+	"github.com/elaous/gojiberry/components"
+	"github.com/elaous/gojiberry/domrt"
+	"github.com/elaous/gojiberry/domrt/browser"
+	"github.com/elaous/gojiberry/xango"
+)
+
+// currentRole reads ?role= off the page's own URL, defaulting to
+// CollabEditor when absent or unrecognized.
+func currentRole() components.CollabRole {
+	window := browser.Window()
+	href := window.Location().Get("href").String()
+	role := "editor"
+	if u, err := url.Parse(href); err == nil {
+		if r := u.Query().Get("role"); r != "" {
+			role = r
+		}
+	}
+	return components.CollabRole(role)
+}
+
+// wsURL builds the ws(s):// URL for /ws on the same host this page
+// was served from, so the demo works unmodified on any host/port.
+func wsURL() string {
+	loc := browser.Window().Location()
+	scheme := "ws"
+	if loc.Get("protocol").String() == "https:" {
+		scheme = "wss"
+	}
+	return scheme + "://" + loc.Get("host").String() + "/ws"
+}
+
+type state struct {
+	role       components.CollabRole
+	content    string
+	status     string
+	lastAction string
+}
+
+func App(st *state, render func(), sock *browser.Socket) xango.Node {
+	// Collab only gates the surrounding affordances (Actions/Delete/
+	// Share/Comments) -- Content is an opaque []xango.Node it can't
+	// reach into, so making a non-editor's Content actually
+	// non-interactive (not just visually muted) is this caller's job.
+	// A genuinely disabled textarea is browser-enforced, unlike Collab's
+	// own gj-collab-readonly CSS class.
+	caps := components.CapabilitiesForRole(st.role)
+	content := []xango.Node{
+		components.Textarea(components.TextareaProps{
+			Value:    st.content,
+			Rows:     12,
+			Disabled: !caps.CanEdit,
+			OnChange: func(v string) {
+				st.content = v
+				render()
+				sock.Send(v)
+			},
+		}),
+	}
+	return xango.El("div", nil,
+		xango.El("p", nil, xango.Text("Role: "+string(st.role))),
+		xango.El("p", []xango.Attr{xango.A("id", "status")}, xango.Text(st.status)),
+		components.Collab(components.CollabProps{
+			Role:    st.role,
+			Content: content,
+			OnDelete: func() {
+				st.content = ""
+				st.lastAction = "deleted"
+				render()
+				sock.Send("")
+			},
+			OnShare: func() {
+				loc := browser.Window().Location()
+				st.lastAction = "share link (editor): " + loc.Get("origin").String() + "/?role=editor"
+				render()
+			},
+			Comments: []xango.Node{xango.El("p", nil, xango.Text("Comments are shared across all collaborators."))},
+		}),
+		xango.El("p", []xango.Attr{xango.A("id", "last-action")}, xango.Text(st.lastAction)),
+	)
+}
+
+func main() {
+	document := browser.Document()
+	container := document.GetElementByID("app")
+
+	st := &state{role: currentRole(), status: "connecting..."}
+
+	var sock *browser.Socket
+	var root *domrt.Root
+	var render func()
+	render = func() {
+		node := App(st, render, sock)
+		if root == nil {
+			root = domrt.Mount(container.Element, node)
+		} else {
+			root.Update(node)
+		}
+	}
+
+	sock = browser.Connect(wsURL())
+	sock.OnMessage(func(data string) {
+		st.content = data
+		st.status = "synced"
+		render()
+	})
+	sock.OnClose(func() {
+		st.status = "disconnected"
+		render()
+	})
+	sock.OnError(func() {
+		st.status = "error"
+		render()
+	})
+
+	render()
+
+	select {} // keep the wasm program alive for the socket's callbacks above
+}

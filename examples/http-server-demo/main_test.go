@@ -10,7 +10,7 @@ import (
 // TestServesOverRealHTTP starts an actual TCP listener (httptest.Server,
 // not just an in-memory handler call) and makes a real HTTP request
 // against it, proving this renders over the network the way a browser
-// would see it -- not just that gox.Render doesn't error.
+// would see it -- not just that xango.Render doesn't error.
 func TestServesOverRealHTTP(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(handler))
 	defer srv.Close()

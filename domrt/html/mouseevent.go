@@ -9,7 +9,7 @@ import "syscall/js"
 // (0 = left/primary, 1 = middle, 2 = right, matching the DOM's own
 // MouseEvent.button -- mousedown/mouseup fire for every button, not
 // just the primary one, so check this before treating one as a plain
-// click) and modifier keys -- gox.Event carries neither at all (see
+// click) and modifier keys -- xango.Event carries neither at all (see
 // its doc comment), so,
 // like DragEvent and KeyEvent, this is a typed escape hatch for
 // building anything that needs a real click/drag position or a

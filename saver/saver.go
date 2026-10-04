@@ -31,6 +31,9 @@ type Saver struct {
 	Targets []Target
 	// Codecs are the formats offered; nil means all of docfile.Formats.
 	Codecs []docfile.Codec
+	// MaxVersions is how many snapshots SaveVersion keeps of one document; 0
+	// means DefaultMaxVersions.
+	MaxVersions int
 }
 
 // Entry is a saved document, as List reports it.
@@ -40,6 +43,8 @@ type Entry struct {
 	Format  docfile.Codec
 	Size    int
 	Updated time.Time
+	// Tags are the document's tags; only ListTagged fills them in.
+	Tags []string
 }
 
 // FontPrefix starts the store keys of downloaded font files; List skips
@@ -83,7 +88,8 @@ func validName(name string) bool {
 // reserved reports whether key is in a keyspace owned by something else
 // (document access lists, the shared-editing hub's documents).
 func reserved(key string) bool {
-	return strings.HasPrefix(key, "acl:") || strings.HasPrefix(key, "collab:")
+	return strings.HasPrefix(key, "acl:") || strings.HasPrefix(key, "collab:") ||
+		strings.HasPrefix(key, VersionPrefix) || strings.HasPrefix(key, TrashPrefix)
 }
 
 // Key is the store key for a document called name in codec c.
@@ -168,7 +174,7 @@ func (s *Saver) List(ctx context.Context, target string) ([]Entry, error) {
 	}
 	var out []Entry
 	for _, m := range metas {
-		if strings.HasPrefix(m.ID, FontPrefix) {
+		if strings.HasPrefix(m.ID, FontPrefix) || reserved(m.ID) {
 			continue
 		}
 		if c, name := s.codecOf(m.ID); c != nil {

@@ -3,7 +3,7 @@ package components
 import (
 	"testing"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func TestAvatar(t *testing.T) {
@@ -68,7 +68,7 @@ func TestChip(t *testing.T) {
 
 	t.Run("OnRemove renders and fires a remove button", func(t *testing.T) {
 		removed := false
-		n := Chip(ChipProps{Label: "tag", OnRemove: func(gox.Event) { removed = true }})
+		n := Chip(ChipProps{Label: "tag", OnRemove: func(xango.Event) { removed = true }})
 		html := render(t, n)
 		mustContain(t, html, "gj-chip-remove", `aria-label="Remove tag"`)
 
@@ -76,7 +76,7 @@ func TestChip(t *testing.T) {
 		if len(handlers) != 1 {
 			t.Fatalf("expected exactly 1 click handler, got %d", len(handlers))
 		}
-		handlers[0](gox.Event{})
+		handlers[0](xango.Event{})
 		if !removed {
 			t.Error("clicking the remove button did not invoke OnRemove")
 		}
@@ -150,14 +150,14 @@ func TestProgress(t *testing.T) {
 func TestTooltip(t *testing.T) {
 	html := render(t, Tooltip(TooltipProps{
 		Content:  "More info",
-		Children: []gox.Node{gox.Text("hover me")}},
+		Children: []xango.Node{xango.Text("hover me")}},
 	))
 	mustContain(t, html, "gj-tooltip", "gj-tooltip-top", `role="tooltip"`, "More info", "hover me")
 }
 
 func TestLink(t *testing.T) {
 	t.Run("a plain link", func(t *testing.T) {
-		html := render(t, Link(LinkProps{Href: "/home", Children: []gox.Node{gox.Text("Home")}}))
+		html := render(t, Link(LinkProps{Href: "/home", Children: []xango.Node{xango.Text("Home")}}))
 		mustContain(t, html, `<a`, `href="/home"`, ">Home<")
 	})
 
@@ -172,7 +172,7 @@ func TestLink(t *testing.T) {
 	})
 
 	t.Run("Disabled renders a non-interactive span, not an anchor", func(t *testing.T) {
-		html := render(t, Link(LinkProps{Href: "/x", Disabled: true, Children: []gox.Node{gox.Text("nope")}}))
+		html := render(t, Link(LinkProps{Href: "/x", Disabled: true, Children: []xango.Node{xango.Text("nope")}}))
 		mustContain(t, html, "<span", "gj-link-disabled", `aria-disabled="true"`, ">nope<")
 		mustNotContain(t, html, "<a ", "href")
 	})
@@ -180,7 +180,7 @@ func TestLink(t *testing.T) {
 
 func TestFloating(t *testing.T) {
 	t.Run("defaults to bottom-right and fixed positioning", func(t *testing.T) {
-		html := render(t, Floating(FloatingProps{Children: []gox.Node{gox.Text("badge")}}))
+		html := render(t, Floating(FloatingProps{Children: []xango.Node{xango.Text("badge")}}))
 		mustContain(t, html, "gj-floating-bottom-right", "badge")
 		mustNotContain(t, html, "gj-floating-absolute")
 	})
@@ -205,9 +205,9 @@ func TestBox(t *testing.T) {
 	t.Run("defaults Height to 100% and mixes division units", func(t *testing.T) {
 		html := render(t, Box(BoxProps{
 			Divisions: []BoxDivision{
-				{Height: "48px", Content: []gox.Node{gox.Text("header")}},
-				{Content: []gox.Node{gox.Text("body")}},
-				{Height: "20%", Content: []gox.Node{gox.Text("footer")}},
+				{Height: "48px", Content: []xango.Node{xango.Text("header")}},
+				{Content: []xango.Node{xango.Text("body")}},
+				{Height: "20%", Content: []xango.Node{xango.Text("footer")}},
 			},
 		}))
 		mustContain(t, html, "height:100%", "grid-template-rows:48px 1fr 20%", "header", "body", "footer")
@@ -224,14 +224,14 @@ func TestListRendersItemsThroughTheRenderProp(t *testing.T) {
 	people := []person{{"Ada"}, {"Grace"}}
 	n := List(ListProps[person]{
 		Items: people,
-		Item:  func(p person) gox.Node { return gox.El("b", nil, gox.Text(p.Name)) },
+		Item:  func(p person) xango.Node { return xango.El("b", nil, xango.Text(p.Name)) },
 		Key:   func(p person) string { return "k-" + p.Name },
 	})
 	html := render(t, n)
 	mustContain(t, html, `<ul class="gj-list">`, `<li class="gj-list-item" data-key="k-Ada"><b>Ada</b></li>`, `data-key="k-Grace"`)
 
-	mustContain(t, render(t, List(ListProps[int]{Items: []int{1}, Ordered: true, Item: func(i int) gox.Node { return gox.Text("x") }})), "<ol")
-	empty := gox.Text("nothing here")
+	mustContain(t, render(t, List(ListProps[int]{Items: []int{1}, Ordered: true, Item: func(i int) xango.Node { return xango.Text("x") }})), "<ol")
+	empty := xango.Text("nothing here")
 	mustContain(t, render(t, List(ListProps[int]{Empty: &empty})), "nothing here")
 	mustContain(t, render(t, List(ListProps[int]{})), `<ul class="gj-list"></ul>`)
 	// A missing Item renders empty <li>s rather than panicking.

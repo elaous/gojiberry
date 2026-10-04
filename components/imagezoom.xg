@@ -1,0 +1,39 @@
+package components
+
+import "github.com/elaous/gojiberry/xango"
+
+// ImageZoomProps configures ImageZoom.
+type ImageZoomProps struct {
+	Src    string
+	Alt    string
+	Zoomed bool
+	// OnToggle is called with true when the thumbnail is clicked, and
+	// with false when the zoomed overlay (or its backdrop) is
+	// clicked, closing it.
+	OnToggle func(zoomed bool)
+}
+
+// ImageZoom renders a thumbnail that, when Zoomed, also shows a
+// full-viewport overlay with the same image enlarged -- a Modal-style
+// backdrop (see Modal's doc comment for why backdrop and content are
+// DOM siblings, not nested: so a click on the enlarged image itself
+// can't be mistaken for a click on the backdrop behind it).
+func ImageZoom(props ImageZoomProps) xango.Node {
+	thumbAttrs := []xango.Attr{xango.A("class", "gj-imagezoom-thumb"), xango.A("src", props.Src), xango.A("alt", props.Alt)}
+	if props.OnToggle != nil {
+		thumbAttrs = append(thumbAttrs, xango.On("click", func(xango.Event) { props.OnToggle(true) }))
+	}
+	thumb := xango.El("img", thumbAttrs)
+	if !props.Zoomed {
+		return xango.El("span", []xango.Attr{xango.A("class", "gj-imagezoom")}, thumb)
+	}
+	backdropAttrs := []xango.Attr{xango.A("class", "gj-imagezoom-backdrop")}
+	if props.OnToggle != nil {
+		backdropAttrs = append(backdropAttrs, xango.On("click", func(xango.Event) { props.OnToggle(false) }))
+	}
+	return xango.El("span", []xango.Attr{xango.A("class", "gj-imagezoom")},
+		thumb,
+		xango.El("div", backdropAttrs),
+		xango.El("img", []xango.Attr{xango.A("class", "gj-imagezoom-full"), xango.A("src", props.Src), xango.A("alt", props.Alt)}),
+	)
+}

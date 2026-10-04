@@ -1,6 +1,6 @@
 // verify.js drives the canvas-editor-app demo through a real headless
 // Chromium (via Playwright) and asserts on #doc-state, the
-// machine-readable summary main.gox's updateDebugState writes after
+// machine-readable summary main.xg's updateDebugState writes after
 // every redraw -- there's no DOM text to read back from a
 // canvas-rendered document otherwise. Run via canvas_editor_test.go
 // (`go test`), which starts the HTTP server and passes its port in

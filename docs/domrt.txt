@@ -1,11 +1,11 @@
 package domrt // import "github.com/elaous/gojiberry/domrt"
 
-Package domrt is the client-side runtime: it mounts a gox.Node tree into a real
+Package domrt is the client-side runtime: it mounts a xango.Node tree into a real
 DOM element and, on each Update, diffs the new tree against what's currently
 mounted, patching only what changed (text content, attributes, event listeners,
 children) instead of tearing down and rebuilding the DOM. Only builds under
-GOOS=js GOARCH=wasm; gox itself has no browser dependency so the same components
-render both here and via gox.Render on the server.
+GOOS=js GOARCH=wasm; xango itself has no browser dependency so the same components
+render both here and via xango.Render on the server.
 
 FUNCTIONS
 
@@ -31,11 +31,11 @@ type Root struct {
     Root is a live mount point: the result of Mount, and the handle Update is
     called on for every subsequent render.
 
-func Mount(container js.Value, initial gox.Node) *Root
+func Mount(container js.Value, initial xango.Node) *Root
     Mount creates DOM nodes for initial and appends them to container, returning
     a Root whose Update re-renders in place on future calls.
 
-func (r *Root) Update(next gox.Node)
+func (r *Root) Update(next xango.Node)
     Update diffs next against the currently mounted tree and patches the
     real DOM to match, preserving node identity (and therefore focus, scroll
     position, input state, etc.) wherever the shape is unchanged.

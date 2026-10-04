@@ -131,7 +131,7 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int, opts Op
 		// real import spec: `alias.(TypeName) "path.json"` tells the
 		// loader to decode into TypeName instead of the untyped
 		// default. TypeName must already be declared by the caller (in
-		// this package or an import) -- gox does not generate it or
+		// this package or an import) -- xango does not generate it or
 		// infer its shape from the file's data.
 		var typeName string
 		if alias != "" && alias != "." && i+1 < n && runes[i] == '.' && runes[i+1] == '(' {
@@ -162,12 +162,12 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int, opts Op
 
 			loader, ok := loaders[ext]
 			if !ok {
-				// Recognized only via experimentalExtensions: gox knows
+				// Recognized only via experimentalExtensions: xango knows
 				// the extension but its loader lives in
 				// internal/transpile/experimental and isn't wired in
 				// unless the caller opted in.
 				if !opts.Experimental {
-					return "", "", 0, fmt.Errorf("%s: %s imports are experimental; enable with `goxc -experimental` (or transpile.Options{Experimental: true}) -- see internal/transpile/experimental", filename, ext)
+					return "", "", 0, fmt.Errorf("%s: %s imports are experimental; enable with `xgc -experimental` (or transpile.Options{Experimental: true}) -- see internal/transpile/experimental", filename, ext)
 				}
 				loader, ok = opts.ExperimentalLoaders[ext]
 				if !ok {

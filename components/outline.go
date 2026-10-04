@@ -2,7 +2,7 @@ package components
 
 import (
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // OutlineProps configures Outline.
@@ -18,30 +18,30 @@ type OutlineProps struct {
 // Outline renders the document's headings as an indented list, the
 // current one marked; clicking one reports it (go there with
 // TextFlow.GotoOffset and ScrollView.RevealPending). It is controlled.
-func Outline(props OutlineProps) gox.Node {
-	var items []gox.Node
+func Outline(props OutlineProps) xango.Node {
+	var items []xango.Node
 	for i, e := range props.Entries {
 		i, e := i, e
 		class := "gj-outline-item"
 		if i == props.Current {
 			class += " gj-outline-item-on"
 		}
-		attrs := []gox.Attr{gox.A("type", "button"), gox.A("class", class), gox.A("data-level", itoa(e.Level)), gox.A("data-index", itoa(i)),
-			gox.A("style", "padding-left:"+itoa(8+(e.Level-1)*14)+"px")}
+		attrs := []xango.Attr{xango.A("type", "button"), xango.A("class", class), xango.A("data-level", itoa(e.Level)), xango.A("data-index", itoa(i)),
+			xango.A("style", "padding-left:"+itoa(8+(e.Level-1)*14)+"px")}
 		if i == props.Current {
-			attrs = append(attrs, gox.A("aria-current", "location"))
+			attrs = append(attrs, xango.A("aria-current", "location"))
 		}
 		if props.OnSelect != nil {
-			attrs = append(attrs, gox.On("click", func(gox.Event) { props.OnSelect(i, e) }))
+			attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnSelect(i, e) }))
 		}
-		items = append(items, gox.El("li", nil, gox.El("button", attrs, gox.Text(e.Text))))
+		items = append(items, xango.El("li", nil, xango.El("button", attrs, xango.Text(e.Text))))
 	}
-	body := gox.El("ul", []gox.Attr{gox.A("class", "gj-outline-list")}, items...)
+	body := xango.El("ul", []xango.Attr{xango.A("class", "gj-outline-list")}, items...)
 	if len(items) == 0 {
-		body = gox.El("p", []gox.Attr{gox.A("class", "gj-outline-empty")}, gox.Text("No headings yet. Use Heading 1-3 styles."))
+		body = xango.El("p", []xango.Attr{xango.A("class", "gj-outline-empty")}, xango.Text("No headings yet. Use Heading 1-3 styles."))
 	}
-	return gox.El("nav", []gox.Attr{gox.A("class", "gj-outline"), gox.A("aria-label", "Outline")},
-		gox.El("h4", []gox.Attr{gox.A("class", "gj-outline-title")}, gox.Text("Outline")), body)
+	return xango.El("nav", []xango.Attr{xango.A("class", "gj-outline"), xango.A("aria-label", "Outline")},
+		xango.El("h4", []xango.Attr{xango.A("class", "gj-outline-title")}, xango.Text("Outline")), body)
 }
 
 // BookmarksProps configures BookmarkList.
@@ -58,35 +58,35 @@ type BookmarksProps struct {
 // BookmarkList renders the bookmarks with the text each is on; clicking
 // one goes there and, for an editor, Remove takes it off. The link form
 // "#name" is shown, to type into a link.
-func BookmarkList(props BookmarksProps) gox.Node {
-	var items []gox.Node
+func BookmarkList(props BookmarksProps) xango.Node {
+	var items []xango.Node
 	for _, b := range props.Bookmarks {
 		b := b
-		go_ := []gox.Attr{gox.A("type", "button"), gox.A("class", "gj-bookmark-go"), gox.A("data-bookmark", b.Name)}
+		go_ := []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-bookmark-go"), xango.A("data-bookmark", b.Name)}
 		if props.OnGoto != nil {
-			go_ = append(go_, gox.On("click", func(gox.Event) { props.OnGoto(b.Name) }))
+			go_ = append(go_, xango.On("click", func(xango.Event) { props.OnGoto(b.Name) }))
 		}
-		row := []gox.Node{
-			gox.El("button", go_, gox.El("strong", nil, gox.Text(b.Name)), gox.El("span", []gox.Attr{gox.A("class", "gj-bookmark-text")}, gox.Text(props.Excerpts[b.Name]))),
-			gox.El("code", []gox.Attr{gox.A("class", "gj-bookmark-link")}, gox.Text("#"+b.Name)),
+		row := []xango.Node{
+			xango.El("button", go_, xango.El("strong", nil, xango.Text(b.Name)), xango.El("span", []xango.Attr{xango.A("class", "gj-bookmark-text")}, xango.Text(props.Excerpts[b.Name]))),
+			xango.El("code", []xango.Attr{xango.A("class", "gj-bookmark-link")}, xango.Text("#"+b.Name)),
 		}
 		if props.CanEdit {
-			rm := []gox.Attr{gox.A("type", "button"), gox.A("class", "gj-bookmark-remove"), gox.A("data-remove", b.Name)}
+			rm := []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-bookmark-remove"), xango.A("data-remove", b.Name)}
 			if props.OnRemove != nil {
-				rm = append(rm, gox.On("click", func(gox.Event) { props.OnRemove(b.Name) }))
+				rm = append(rm, xango.On("click", func(xango.Event) { props.OnRemove(b.Name) }))
 			} else {
-				rm = append(rm, gox.A("disabled", "disabled"))
+				rm = append(rm, xango.A("disabled", "disabled"))
 			}
-			row = append(row, gox.El("button", rm, gox.Text("Remove")))
+			row = append(row, xango.El("button", rm, xango.Text("Remove")))
 		}
-		items = append(items, gox.El("li", []gox.Attr{gox.A("class", "gj-bookmark")}, row...))
+		items = append(items, xango.El("li", []xango.Attr{xango.A("class", "gj-bookmark")}, row...))
 	}
-	body := gox.El("ul", []gox.Attr{gox.A("class", "gj-bookmark-list")}, items...)
+	body := xango.El("ul", []xango.Attr{xango.A("class", "gj-bookmark-list")}, items...)
 	if len(items) == 0 {
-		body = gox.El("p", []gox.Attr{gox.A("class", "gj-outline-empty")}, gox.Text("No bookmarks. Select text and add one."))
+		body = xango.El("p", []xango.Attr{xango.A("class", "gj-outline-empty")}, xango.Text("No bookmarks. Select text and add one."))
 	}
-	return gox.El("div", []gox.Attr{gox.A("class", "gj-bookmarks")},
-		gox.El("h4", []gox.Attr{gox.A("class", "gj-outline-title")}, gox.Text("Bookmarks")), body)
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-bookmarks")},
+		xango.El("h4", []xango.Attr{xango.A("class", "gj-outline-title")}, xango.Text("Bookmarks")), body)
 }
 
 // FootnoteListProps configures FootnoteList.
@@ -102,33 +102,33 @@ type FootnoteListProps struct {
 
 // FootnoteList renders the numbered footnotes, their text as Markdown;
 // clicking a number goes to its mark and an editor gets Edit and Delete.
-func FootnoteList(props FootnoteListProps) gox.Node {
-	var items []gox.Node
+func FootnoteList(props FootnoteListProps) xango.Node {
+	var items []xango.Node
 	for _, e := range props.Entries {
 		e := e
-		num := []gox.Attr{gox.A("type", "button"), gox.A("class", "gj-footnote-num"), gox.A("data-note", e.ID)}
+		num := []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-footnote-num"), xango.A("data-note", e.ID)}
 		if props.OnGoto != nil {
-			num = append(num, gox.On("click", func(gox.Event) { props.OnGoto(e) }))
+			num = append(num, xango.On("click", func(xango.Event) { props.OnGoto(e) }))
 		}
-		row := []gox.Node{gox.El("button", num, gox.Text(itoa(e.N))), gox.El("div", []gox.Attr{gox.A("class", "gj-footnote-text")}, MarkdownText(e.Text))}
+		row := []xango.Node{xango.El("button", num, xango.Text(itoa(e.N))), xango.El("div", []xango.Attr{xango.A("class", "gj-footnote-text")}, MarkdownText(e.Text))}
 		if props.CanEdit {
-			btn := func(class, label string, on func(canvas.FootnoteEntry)) gox.Node {
-				a := []gox.Attr{gox.A("type", "button"), gox.A("class", class), gox.A("data-note", e.ID)}
+			btn := func(class, label string, on func(canvas.FootnoteEntry)) xango.Node {
+				a := []xango.Attr{xango.A("type", "button"), xango.A("class", class), xango.A("data-note", e.ID)}
 				if on != nil {
-					a = append(a, gox.On("click", func(gox.Event) { on(e) }))
+					a = append(a, xango.On("click", func(xango.Event) { on(e) }))
 				} else {
-					a = append(a, gox.A("disabled", "disabled"))
+					a = append(a, xango.A("disabled", "disabled"))
 				}
-				return gox.El("button", a, gox.Text(label))
+				return xango.El("button", a, xango.Text(label))
 			}
 			row = append(row, btn("gj-footnote-edit", "Edit", props.OnEdit), btn("gj-footnote-delete", "Delete", props.OnDelete))
 		}
-		items = append(items, gox.El("li", []gox.Attr{gox.A("class", "gj-footnote")}, row...))
+		items = append(items, xango.El("li", []xango.Attr{xango.A("class", "gj-footnote")}, row...))
 	}
-	body := gox.El("ul", []gox.Attr{gox.A("class", "gj-bookmark-list")}, items...)
+	body := xango.El("ul", []xango.Attr{xango.A("class", "gj-bookmark-list")}, items...)
 	if len(items) == 0 {
-		body = gox.El("p", []gox.Attr{gox.A("class", "gj-outline-empty")}, gox.Text("No footnotes. Add one at the caret."))
+		body = xango.El("p", []xango.Attr{xango.A("class", "gj-outline-empty")}, xango.Text("No footnotes. Add one at the caret."))
 	}
-	return gox.El("div", []gox.Attr{gox.A("class", "gj-footnotes")},
-		gox.El("h4", []gox.Attr{gox.A("class", "gj-outline-title")}, gox.Text("Footnotes")), body)
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-footnotes")},
+		xango.El("h4", []xango.Attr{xango.A("class", "gj-outline-title")}, xango.Text("Footnotes")), body)
 }

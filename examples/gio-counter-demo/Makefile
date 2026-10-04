@@ -8,9 +8,9 @@ run: generate
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/goxc examples/gio-counter-demo
+	cd ../.. && go run ./cmd/xgc examples/gio-counter-demo
 
-# test runs headless -- no display required (see goxgio's own doc
+# test runs headless -- no display required (see xangogio's own doc
 # comment on the real Gio GPU backend it exercises). run needs a real
 # display; it's not part of test.
 .PHONY: test

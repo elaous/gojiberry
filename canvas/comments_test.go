@@ -338,7 +338,7 @@ func TestSubscribeSurvivesOnChangeBeingReplaced(t *testing.T) {
 	f.Subscribe(func(*TextFlow) { heard++ })
 	f.OnChange = func(*TextFlow) { own++ }
 	f.InsertText("x")
-	f.OnChange = nil // a gox tree setting its props does this
+	f.OnChange = nil // an xango tree setting its props does this
 	f.InsertText("y")
 	if heard != 2 || own != 1 {
 		t.Fatalf("subscribers keep hearing: %d, OnChange %d", heard, own)

@@ -1,4 +1,4 @@
-// Drives canvas-editor-showcase: the gox tree renders with every element
+// Drives canvas-editor-showcase: the xango tree renders with every element
 // registered, the features are registered, the DOM command list and style
 // editor are there, and in edit mode the text flow is editable -- typing,
 // multi-cursor, line operations, page breaks and Markdown copy/paste.
@@ -10,7 +10,7 @@ run(async () => {
   let s = await d.state();
   assert(!s.error, 'renders without error: ' + s.error);
   assert(s.mode === 'view' && s.pages === 3, 'starts in view mode with three pages');
-  assert(JSON.stringify(s.features) === JSON.stringify(['history', 'multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'styles', 'comments', 'bookmarks', 'notes', 'page-furniture']), 'features registered: ' + s.features);
+  assert(JSON.stringify(s.features) === JSON.stringify(['history', 'multi-cursor', 'line-ops', 'markdown-clipboard', 'breaks', 'paragraphs', 'text-case', 'links', 'styles', 'comments', 'bookmarks', 'notes', 'page-furniture', 'find', 'columns']), 'features registered: ' + s.features);
   for (const tag of ['canvas.TextFlow', 'canvas.Image', 'canvas.FloatingText', 'canvas.Table', 'canvas.ScrollView'])
     assert(s.elements.includes(tag), tag + ' is a registered element');
   assert(s.commands >= 30, 'commands registered: ' + s.commands);
@@ -20,7 +20,7 @@ run(async () => {
   // The menu bar is built from the registered commands: one submenu per feature.
   await page.click('button.gj-menubar-button:has-text("Edit")');
   const subs = await page.locator('.gj-menubar-panel > .gj-menu > .gj-menu-item-sub').count();
-  assert(subs === 13, 'Edit has a submenu per feature: ' + subs);
+  assert(subs === 15, 'Edit has a submenu per feature: ' + subs);
   const shortcut = await page.locator('.gj-menubar-panel li:has-text("Move line up") .gj-menu-shortcut').first().textContent();
   assert(shortcut === 'Alt+↑', 'a command shows its shortcut: ' + shortcut);
   await page.hover('.gj-menubar-panel li.gj-menu-item-sub:has-text("Paragraphs")');
@@ -29,7 +29,7 @@ run(async () => {
   assert(await page.locator('.gj-menubar-panel').count() === 0, 'a click outside closes the menu');
 
   // The components' stylesheets come from CSS imports, installed by domrt.Mount.
-  const sheets = await page.evaluate(() => Array.from(document.querySelectorAll('style[data-gox-style]')).map((e) => e.getAttribute('data-gox-style')));
+  const sheets = await page.evaluate(() => Array.from(document.querySelectorAll('style[data-xango-style]')).map((e) => e.getAttribute('data-xango-style')));
   assert(sheets.length > 10 && sheets[0].endsWith('/components/base.css') && sheets.some((x) => x.endsWith('/styleeditor.css')), 'component stylesheets installed in <head>: ' + sheets.length);
   const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--gj-accent').trim());
   assert(accent === '#2563eb', 'the design tokens apply: ' + accent);
@@ -398,6 +398,19 @@ run(async () => {
   await chooser.setFiles({ name: 'hello.md', mimeType: 'text/markdown', buffer: Buffer.from('# Imported\n\nfresh **words**') });
   await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).text.includes('fresh words'));
   assert((await page.locator('#transfer-message').textContent()) === 'Imported hello.md', 'Import reads the file into the editor');
+
+  // The other formats: each export is a real file of its kind, and a Word file comes back in.
+  for (const [format, ext, check] of [['docx', '.docx', (b) => b.slice(0, 2).toString() === 'PK'], ['pdf', '.pdf', (b) => b.slice(0, 5).toString() === '%PDF-'],
+    ['epub', '.epub', (b) => b.slice(0, 2).toString() === 'PK'], ['rtf', '.rtf', (b) => b.slice(0, 6).toString() === '{\\rtf1'], ['html', '.html', (b) => b.toString().includes('fresh') && b.toString().includes('<strong>words</strong>')]]) {
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click(`.gj-transfer-button[data-kind="export"][data-format="${format}"]`)]);
+    assert(dl.suggestedFilename() === 'Quarterly report' + ext, format + ' export is named after the title: ' + dl.suggestedFilename());
+    assert(check(fs.readFileSync(await dl.path())), format + ' export is a real ' + format + ' file');
+    if (format === 'docx') var docxBytes = fs.readFileSync(await dl.path());
+  }
+  const [docxChooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('.gj-transfer-button[data-kind="import"][data-format="docx"]')]);
+  await docxChooser.setFiles({ name: 'back.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: docxBytes });
+  await page.waitForFunction(() => JSON.parse(document.getElementById('state').textContent).text.includes('fresh words') && document.getElementById('transfer-message').textContent === 'Imported back.docx');
+  assert(true, 'a Word file exported by the editor imports back with its text');
 
   // Roles: a viewer is held in view mode and cannot comment; an editor can edit but not manage.
   await d.click(100, 164); // into the imported text's second line

@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func TestPageRendersConfigTitleAndCSS(t *testing.T) {
@@ -12,11 +12,11 @@ func TestPageRendersConfigTitleAndCSS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := gox.RenderString(Page(config))
+	got, err := xango.RenderString(Page(config))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `<html><head><title>resource-imports-demo</title><style data-gox-style="github.com/elaous/gojiberry/examples/resource-imports-demo/style.css">` + string(css) + `</style></head><body><h1>gojiberry</h1></body></html>`
+	want := `<html><head><title>resource-imports-demo</title><style data-xango-style="github.com/elaous/gojiberry/examples/resource-imports-demo/style.css">` + string(css) + `</style></head><body><h1>gojiberry</h1></body></html>`
 	if got != want {
 		t.Errorf("got:  %s\nwant: %s", got, want)
 	}

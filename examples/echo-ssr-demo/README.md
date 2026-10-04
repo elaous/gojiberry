@@ -1,6 +1,6 @@
 # echo-ssr-demo
 
-`examples/http-server-demo`'s "gox over plain net/http" SSR demo,
+`examples/http-server-demo`'s "xango over plain net/http" SSR demo,
 except served by [Echo](https://github.com/labstack/echo), with three
 real security middlewares fronting the page: secure headers, CORS, and
 a per-client rate limit -- all three built into Echo itself, unlike the
@@ -13,10 +13,10 @@ on Echo without adding it to the root module.
 
 ## How it works
 
-- `page.gox` is `Page`, unchanged in spirit from `http-server-demo`'s
-  own: `gox.Render` only needs an `io.Writer`, and `c.Response().Writer`
+- `page.xg` is `Page`, unchanged in spirit from `http-server-demo`'s
+  own: `xango.Render` only needs an `io.Writer`, and `c.Response().Writer`
   satisfies that directly -- Echo's routing, binding, and middleware
-  stack are completely untouched; gox just replaces `html/template` as
+  stack are completely untouched; xango just replaces `html/template` as
   the thing producing the response body.
 - `router.go`'s `newRouter` wires three middlewares ahead of the page
   route, all from `github.com/labstack/echo/v4/middleware`:
@@ -48,7 +48,7 @@ on Echo without adding it to the root module.
 
 ```
 cd examples/echo-ssr-demo
-(cd ../.. && go run ./cmd/goxc examples/echo-ssr-demo)
+(cd ../.. && go run ./cmd/xgc examples/echo-ssr-demo)
 go run .
 # open http://localhost:8098/?name=world
 ```

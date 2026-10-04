@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -138,5 +139,103 @@ func TestWebSocketSpeaksOnlyForItsOwnReplica(t *testing.T) {
 	}
 	if p.Replica != "mover" {
 		t.Fatalf("a socket spoke for %q", p.Replica)
+	}
+}
+
+func TestWebSocketRoleIsCheckedOnEveryFrame(t *testing.T) {
+	var role atomic.Value
+	role.Store("editor")
+	h := New(Config{KeepAlive: time.Hour, Roles: func(*http.Request, string) Role { return Role(role.Load().(string)) }})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/docs/d/ws?replica=r", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.CloseNow() }()
+	readFrame(t, ctx, c, "snapshot")
+	role.Store("viewer") // downgraded; the next keep-alive tick is an hour away
+	ops, _ := json.Marshal([]crdt.Op{charDoc("c").Put(crdt.Block{ID: "doc", Content: "x"})})
+	b, _ := json.Marshal(wire.Frame{Event: "ops", ID: 1, Data: ops})
+	if err := c.Write(ctx, websocket.MessageText, b); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		_, data, err := c.Read(ctx)
+		if err != nil {
+			if websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+				t.Fatalf("closed with %v, want a policy violation", err)
+			}
+			return
+		}
+		var f wire.Frame
+		_ = json.Unmarshal(data, &f)
+		if f.Event == "ack" {
+			t.Fatal("a downgraded user's ops were accepted")
+		}
+	}
+}
+
+func TestWebSocketWithCookiesNeedsASameOriginOrAListedOne(t *testing.T) {
+	h := New(Config{CookieOrigins: []string{"https://app.example"}})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	dial := func(origin, cookie string) (int, error) {
+		hdr := http.Header{}
+		if origin != "" {
+			hdr.Set("Origin", origin)
+		}
+		if cookie != "" {
+			hdr.Set("Cookie", cookie)
+		}
+		c, resp, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/docs/d/ws?replica=r", &websocket.DialOptions{HTTPHeader: hdr})
+		if err == nil {
+			_ = c.CloseNow()
+			return http.StatusSwitchingProtocols, nil
+		}
+		if resp != nil {
+			return resp.StatusCode, err
+		}
+		return 0, err
+	}
+	for _, c := range []struct {
+		name, origin, cookie string
+		want                 int
+	}{
+		{"another site with cookies", "https://evil.example", "sid=1", http.StatusForbidden},
+		{"a listed origin with cookies", "https://app.example", "sid=1", http.StatusSwitchingProtocols},
+		{"the same host with cookies", srv.URL, "sid=1", http.StatusSwitchingProtocols},
+		{"another site without cookies (bearer tokens)", "https://evil.example", "", http.StatusSwitchingProtocols},
+	} {
+		if got, err := dial(c.origin, c.cookie); got != c.want {
+			t.Errorf("%s: status %d (%v), want %d", c.name, got, err, c.want)
+		}
+	}
+}
+
+func TestWebSocketAnswers413ToAnOversizedFrame(t *testing.T) {
+	h := New(Config{MaxBody: 1 << 10})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/docs/d/ws?replica=r", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.CloseNow() }()
+	readFrame(t, ctx, c, "snapshot")
+	big, _ := json.Marshal(strings.Repeat("x", 2<<10))
+	b, _ := json.Marshal(wire.Frame{Event: "ops", ID: 3, Data: big})
+	if err := c.Write(ctx, websocket.MessageText, b); err != nil {
+		t.Fatal(err)
+	}
+	f := readFrame(t, ctx, c, "reject")
+	if f.ID != 3 {
+		t.Fatalf("reject %+v", f)
 	}
 }

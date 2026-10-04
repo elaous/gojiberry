@@ -4,7 +4,7 @@ package html
 
 import "syscall/js"
 
-// WheelEvent wraps a wheel DOM event -- gox.Event carries no delta
+// WheelEvent wraps a wheel DOM event -- xango.Event carries no delta
 // information at all (see its doc comment), so, like MouseEvent and
 // KeyEvent, this is a typed escape hatch for anything that needs real
 // scroll input: a canvas-rendered document's own scroll offset (which

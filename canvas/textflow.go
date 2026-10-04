@@ -22,19 +22,24 @@ type FlowStyle struct {
 	GripActiveColor string
 	GripW, GripH    float64 // size of the draggable grip above each gap
 	SelectColor     string  // tint over selected text
+	// FindColor tints the matches of a search, FindCurrentColor the one that is
+	// current (see TextFlow.SetSearch).
+	FindColor, FindCurrentColor string
 }
 
 // DefaultFlowStyle is a light look matching DefaultTableStyle.
 func DefaultFlowStyle() FlowStyle {
 	return FlowStyle{
-		PageBG:          "#ffffff",
-		PageBorder:      "#d4d6da",
-		GuideColor:      "#b9a9ff",
-		GripColor:       "#7b818b",
-		GripActiveColor: "#7c5cff",
-		GripW:           16,
-		GripH:           16,
-		SelectColor:     "rgba(124, 92, 255, 0.28)",
+		PageBG:           "#ffffff",
+		PageBorder:       "#d4d6da",
+		GuideColor:       "#b9a9ff",
+		GripColor:        "#7b818b",
+		GripActiveColor:  "#7c5cff",
+		GripW:            16,
+		GripH:            16,
+		SelectColor:      "rgba(124, 92, 255, 0.28)",
+		FindColor:        "rgba(255, 213, 0, 0.45)",
+		FindCurrentColor: "rgba(255, 140, 0, 0.6)",
 	}
 }
 
@@ -71,6 +76,10 @@ type Line struct {
 	Objects    []PlacedObject // inline objects on this line
 	// Marker is the list marker, on the first line of a list item.
 	Marker *LineMarker
+	// Hyphen is true when the line ends inside a word that a Hyphenator broke:
+	// a "-" of width HyphenW is drawn after the last run (and counted in W).
+	Hyphen  bool
+	HyphenW float64
 	// QuoteBar is the color of a block quote's bar (drawn at BarX).
 	QuoteBar string
 	BarX     float64
@@ -236,13 +245,18 @@ type TextFlow struct {
 	drag      *flowDrag
 	data      *flowData // from the latest Layout, for caret queries
 
-	stageLink      func(url string)
-	hoverLink      string
-	hoverComment   string
-	listeners      []func(*TextFlow)
-	revealAt       int
-	revealPending  bool
-	lastLay        Layout // the layout of the latest Draw, for objects that show the document's own structure
+	stageLink     func(url string)
+	hoverLink     string
+	hoverComment  string
+	listeners     []func(*TextFlow)
+	revealAt      int
+	revealPending bool
+	lastLay       Layout        // the layout of the latest Draw, for objects that show the document's own structure
+	search        searchState   // the matches a search highlights (see SetSearch)
+	squiggles     squiggleState // wavy underlines (see SetSquiggles)
+	// Hyphenator, if set, breaks words that do not fit at their hyphenation points,
+	// drawing a hyphen at the end of the line. See package hyphen.
+	Hyphenator     Hyphenator
 	hoverCRect     [4]float64
 	sugg           *Menu // completion popup
 	suggFrom       int   // where the word being completed starts
@@ -614,6 +628,11 @@ type layouter struct {
 
 	nums listNumbers
 	para paraCtx
+
+	// hyph and hyphW say the line breakLine just chose ends inside a word,
+	// with a hyphen of width hyphW to draw after it.
+	hyph  bool
+	hyphW float64
 }
 
 // paraCtx is the paragraph being laid out.
@@ -943,10 +962,15 @@ func (l *layouter) line(p, pe int) (int, bool) {
 		_, _, _, ph := l.f.pageRect(st.page)
 		d.maxW, d.maxH = ax1-ax0, ph
 		textEnd, next := textStart, textStart
+		l.hyph, l.hyphW = false, 0
 		if textStart < pe {
 			textEnd, next = l.breakLine(textStart, pe, ax1-ax0)
 		}
+		hyph, hyphW := l.hyph, l.hyphW
 		lp := d.partsOf(textStart, textEnd)
+		if hyph {
+			lp.width += hyphW
+		}
 		h, baselineOff := lp.height, 0.0
 		switch {
 		case lp.block:
@@ -980,6 +1004,7 @@ func (l *layouter) line(p, pe int) (int, bool) {
 		line := Line{
 			Text: string(d.runes[textStart:textEnd]), X: x, W: lp.width, H: h, Start: textStart, End: textEnd, Runs: lp.runs,
 			Baseline: st.y + baselineOff, QuoteBar: pf.QuoteBar, BarX: x0 + pf.IndentLeft - 8,
+			Hyphen: hyph, HyphenW: hyphW,
 		}
 		for _, o := range lp.objs {
 			o.X += x
@@ -1055,6 +1080,11 @@ func (l *layouter) breakLine(start, end int, w float64) (textEnd, next int) {
 			return e + 1, e + 1
 		}
 		if j > start && d.measure(start, j) > w {
+			// This word does not fit: hyphenate it to fill the line, if it can be.
+			if pos, hw, ok := l.hyphenate(start, e, j, w); ok {
+				l.hyph, l.hyphW = true, hw
+				return pos, pos
+			}
 			break
 		}
 		textEnd, next = j, k
@@ -1063,12 +1093,74 @@ func (l *layouter) breakLine(start, end int, w float64) (textEnd, next int) {
 	if textEnd > start {
 		return textEnd, next
 	}
-	// A single word wider than the line: break inside it.
+	// A single word wider than the line: break inside it (at a hyphenation
+	// point if there is a Hyphenator and one fits).
+	if end > start {
+		j := start
+		for j < end && !isSpace(d.runes[j]) && !d.isObj(j) {
+			j++
+		}
+		if pos, hw, ok := l.hyphenate(start, start, j, w); ok {
+			l.hyph, l.hyphW = true, hw
+			return pos, pos
+		}
+	}
 	c := start + 1
 	for c < end && !d.isObj(c) && d.measure(start, c+1) <= w {
 		c++
 	}
 	return c, c
+}
+
+// hyphenate finds where to break the word runes[e:j] so that the line that
+// starts at start, with a hyphen after it, fits in w: the last hyphenation
+// point that does. ok is false without a Hyphenator, for a word with an inline
+// object or a symbol in it, or when no point fits.
+func (l *layouter) hyphenate(start, e, j int, w float64) (pos int, hyphW float64, ok bool) {
+	h := l.f.Hyphenator
+	d := l.d
+	if h == nil || j-e < 5 {
+		return 0, 0, false
+	}
+	// The letters of the word, without the punctuation around it.
+	a, b := e, j
+	for a < b && !isHyphenWordRune(d.runes[a]) {
+		a++
+	}
+	for b > a && !isHyphenWordRune(d.runes[b-1]) {
+		b--
+	}
+	for i := a; i < b; i++ {
+		if d.isObj(i) || !isHyphenWordRune(d.runes[i]) {
+			return 0, 0, false
+		}
+	}
+	best := -1
+	for _, p := range h.Positions(string(d.runes[a:b])) {
+		at := a + p
+		if at <= start || at >= j || at <= e {
+			continue
+		}
+		hw := l.hyphenWidth(at - 1)
+		if d.measure(start, at)+hw <= w && at > best {
+			best, hyphW = at, hw
+		}
+	}
+	if best < 0 {
+		return 0, 0, false
+	}
+	return best, hyphW, true
+}
+
+// isHyphenWordRune is a character a word may be hyphenated through: letters and
+// an apostrophe.
+func isHyphenWordRune(r rune) bool { return unicode.IsLetter(r) || r == '\'' }
+
+// hyphenWidth is the width of a hyphen in the style of the rune at i.
+func (l *layouter) hyphenWidth(i int) float64 {
+	p := l.f.Painter
+	p.SetFont(l.d.styles[l.d.rs[i]].Font())
+	return p.MeasureTextWidth("-")
 }
 
 // freeSpan returns the widest stretch of [c0, c1] that no obstacle
@@ -1338,8 +1430,10 @@ func (f *TextFlow) Draw() {
 
 	lay := f.Layout()
 	f.lastLay = lay
+	f.drawSearch(lay)
 	f.drawSelection(lay)
 	f.drawPeerSelections(lay)
+	defer f.drawSquiggles(lay)
 	defer f.drawCarets()
 	defer f.drawPeerCarets()
 	defer f.drawFootnotes(lay)
@@ -1379,6 +1473,12 @@ func (f *TextFlow) Draw() {
 				p.FillRect(x, y-r.Size*0.3, r.W, 1)
 			}
 		}
+		if ln.Hyphen && len(ln.Runs) > 0 {
+			r := ln.Runs[len(ln.Runs)-1]
+			p.SetFont(r.Font)
+			p.SetFillStyle(r.Color)
+			p.FillText("-", ln.X+r.X+r.W, ln.Baseline+r.DY)
+		}
 		for _, o := range ln.Objects {
 			o.Object.DrawAt(p, o.X, o.Y)
 		}
@@ -1411,3 +1511,10 @@ func (f *TextFlow) Draw() {
 }
 
 var _ Component = (*TextFlow)(nil)
+
+// Hyphenator says where a word may be broken.
+type Hyphenator interface {
+	// Positions returns, in ascending order, the rune offsets k in word at which
+	// word[:k] (plus a hyphen) may end a line and word[k:] start the next.
+	Positions(word string) []int
+}

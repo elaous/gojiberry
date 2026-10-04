@@ -3,7 +3,7 @@
 package main
 
 // main is a no-op stand-in so this package -- whose real entry point,
-// main.gox's func main, is js/wasm-only -- still satisfies "package
+// main.xg's func main, is js/wasm-only -- still satisfies "package
 // main" on other platforms. This is what lets model.go/linewise.go's
 // pure document logic (multi-cursor editing, line/word commands) be
 // unit-tested natively via a plain `go test`, fast and without needing
