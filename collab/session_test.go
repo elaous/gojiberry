@@ -1,6 +1,7 @@
 package collab
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -12,13 +13,43 @@ import (
 	"github.com/elaous/gojiberry/collab/client"
 	"github.com/elaous/gojiberry/collab/hub"
 	"github.com/elaous/gojiberry/collab/wire"
+	"github.com/elaous/gojiberry/collab/ws"
 	"github.com/elaous/gojiberry/docstore"
 )
+
+// testTransport is what the rig's sessions connect over; TestOverWebSockets
+// runs the same scenarios again with the WebSocket transport.
+var testTransport Transport = HTTPEndpoints()
 
 type rig struct {
 	t   *testing.T
 	hub *hub.Hub
 	srv *httptest.Server
+
+	mu    sync.Mutex
+	conns map[net.Conn]bool
+}
+
+// track remembers the server's connections (ConnState sees hijacked ones too).
+func (r *rig) track(c net.Conn, st http.ConnState) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if st == http.StateClosed {
+		delete(r.conns, c)
+	} else {
+		r.conns[c] = true
+	}
+}
+
+// cut closes every connection the server has, hijacked ones (WebSockets)
+// included, as a network failure would.
+func (r *rig) cut() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for c := range r.conns {
+		_ = c.Close()
+	}
+	r.conns = map[net.Conn]bool{}
 }
 
 func newRig(t *testing.T, cfg hub.Config) *rig {
@@ -27,9 +58,13 @@ func newRig(t *testing.T, cfg hub.Config) *rig {
 		cfg.SaveDelay = 10 * time.Millisecond
 	}
 	h := hub.New(cfg)
-	srv := httptest.NewServer(h.Handler())
+	r := &rig{t: t, hub: h, conns: map[net.Conn]bool{}}
+	srv := httptest.NewUnstartedServer(h.Handler())
+	srv.Config.ConnState = r.track
+	srv.Start()
+	r.srv = srv
 	t.Cleanup(func() { srv.Close(); _ = h.Close() })
-	return &rig{t: t, hub: h, srv: srv}
+	return r
 }
 
 func (r *rig) connect(replica, role string, flow *canvas.TextFlow) *Session {
@@ -38,7 +73,7 @@ func (r *rig) connect(replica, role string, flow *canvas.TextFlow) *Session {
 	if role != "" {
 		hdr.Set("X-Role", role)
 	}
-	s, err := Connect(replica, flow, client.Options{BaseURL: r.srv.URL, Doc: "d1", Header: hdr, Retry: 10 * time.Millisecond, MaxRetry: 50 * time.Millisecond})
+	s, err := ConnectWith(testTransport, replica, flow, client.Options{BaseURL: r.srv.URL, Doc: "d1", Header: hdr, Retry: 10 * time.Millisecond, MaxRetry: 50 * time.Millisecond})
 	if err != nil {
 		r.t.Fatal(err)
 	}
@@ -221,7 +256,7 @@ func TestReconnectResyncsAndSendsWhatWaited(t *testing.T) {
 	b := r.connect("b", "", newFlow())
 	waitFor(t, "b has it", func() bool { return text(b.Bridge.Flow) == "one two" }, a, b)
 
-	r.srv.CloseClientConnections() // cut every stream
+	r.cut() // cut every connection
 	click(a.Bridge.Flow, 7)
 	a.Bridge.Flow.InsertText("!")
 	click(b.Bridge.Flow, 0)
@@ -229,9 +264,8 @@ func TestReconnectResyncsAndSendsWhatWaited(t *testing.T) {
 	waitFor(t, "both to reconnect and converge", func() bool {
 		return text(a.Bridge.Flow) == ">one two!" && normalized(a.Bridge.Flow) == normalized(b.Bridge.Flow)
 	}, a, b)
-	if a.Conn.Pending() != 0 {
-		t.Fatalf("%d ops still waiting", a.Conn.Pending())
-	}
+	// The others may see an edit a moment before its sender hears it accepted.
+	waitFor(t, "nothing left waiting", func() bool { return a.Conn.Pending() == 0 }, a, b)
 }
 
 func TestConnectRefusesUnsupportedContent(t *testing.T) {
@@ -247,10 +281,13 @@ func TestConnectRefusesUnsupportedContent(t *testing.T) {
 func TestClientResendsWhatARestartedHubLost(t *testing.T) {
 	var cur atomic.Pointer[hub.Hub]
 	cur.Store(hub.New(hub.Config{}))
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { cur.Load().Handler().ServeHTTP(w, r) }))
+	tr := &rig{t: t, conns: map[net.Conn]bool{}}
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { cur.Load().Handler().ServeHTTP(w, r) }))
+	srv.Config.ConnState = tr.track
+	srv.Start()
 	t.Cleanup(srv.Close)
 	connect := func(replica string, flow *canvas.TextFlow) *Session {
-		s, err := Connect(replica, flow, client.Options{BaseURL: srv.URL, Doc: "d1", Retry: 10 * time.Millisecond, MaxRetry: 50 * time.Millisecond})
+		s, err := ConnectWith(testTransport, replica, flow, client.Options{BaseURL: srv.URL, Doc: "d1", Retry: 10 * time.Millisecond, MaxRetry: 50 * time.Millisecond})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -264,7 +301,7 @@ func TestClientResendsWhatARestartedHubLost(t *testing.T) {
 	waitFor(t, "the edit to be acknowledged", func() bool { return a.Conn.Pending() == 0 }, a)
 
 	cur.Store(hub.New(hub.Config{})) // the hub restarts with nothing
-	srv.CloseClientConnections()
+	tr.cut()
 	b := connect("b", newFlow())
 	waitFor(t, "b to get the document from the reconnected a", func() bool { return text(b.Bridge.Flow) == "one two!" }, a, b)
 }
@@ -286,4 +323,22 @@ func TestNoRepairLeavesTheErrorForTheCaller(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, "the manual repair", func() bool { return viewer.Bridge.Ready() && text(viewer.Bridge.Flow) == "the text" }, owner, viewer)
+}
+
+// TestOverWebSockets runs the session scenarios again over the WebSocket
+// transport: everything the HTTP transport does, the socket does too.
+func TestOverWebSockets(t *testing.T) {
+	testTransport = ws.WebSockets()
+	defer func() { testTransport = HTTPEndpoints() }()
+	for name, fn := range map[string]func(*testing.T){
+		"share edits":          TestTwoSessionsShareEdits,
+		"presence":             TestPresenceAndPeerCursors,
+		"roles and repair":     TestRolesAreEnforced,
+		"no repair":            TestNoRepairLeavesTheErrorForTheCaller,
+		"persist and reload":   TestDocumentsPersistAndReload,
+		"reconnect and resend": TestReconnectResyncsAndSendsWhatWaited,
+		"hub restart resend":   TestClientResendsWhatARestartedHubLost,
+	} {
+		t.Run(name, fn)
+	}
 }
