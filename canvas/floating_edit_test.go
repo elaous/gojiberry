@@ -280,11 +280,11 @@ func TestVocabularyAndCustomCompleter(t *testing.T) {
 	}
 	ft.Completer = CompleterFunc(func(prefix string) []string { return []string{prefix + "-one", prefix + "-two"} })
 	typeText(ft, "x")
-	if got := ft.Suggestions(); !reflect.DeepEqual(got, []string{"xango-one", "xango-two"}) {
+	if got := ft.Suggestions(); !reflect.DeepEqual(got, []string{"gox-one", "gox-two"}) {
 		t.Fatalf("custom completer: %v", got)
 	}
 	ft.sugg.Activate(1)
-	if ft.Text() != "xango-two" {
+	if ft.Text() != "gox-two" {
 		t.Fatalf("text = %q", ft.Text())
 	}
 }
