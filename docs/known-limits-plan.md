@@ -39,6 +39,16 @@ order it should land in.
 8. **WS role edge cases (S).** The remaining items under "Known limits" in
    `multiuser-design.md`.
 
+9. **Review leftovers (S each).** `saver.Refresh` loads every document to read
+   tags (cache tags in the listing metadata); WebSocket read limit is
+   `4 * MaxBody` before the 413 check; `cookieSocketAllowed` ignores scheme and
+   needs `CookieOrigins` behind a Host-rewriting proxy; `expandReplacement`
+   re-runs the regexp on the isolated match (fails for `\b`/`\B` patterns);
+   DOCX export drops a table whose cell count mismatches its grid and writes
+   media in map order; `Duplicate`/`Restore`/`SetTags` are check-then-write
+   (use a conditional save where the adapter has one); `pdftext` cannot stop a
+   looping parser (run it out of process on a server).
+
 ## C. Test tooling: follow opendocs (chromedp)
 
 opendocs drives the browser with **chromedp** under a `cdp` build tag
@@ -56,22 +66,15 @@ opendocs drives the browser with **chromedp** under a `cdp` build tag
 
 ## D. Still to do from earlier
 
-1. **Path-style links (M).** `…/{doc}` for the document, optional settings in
-   the query string (`?mode=view&lang=es`). Server routes `GET /{doc}` and the
-   WS/SSE endpoints under `/{doc}/…`; `share` builds and parses them; the
-   showcase reads the doc id from `location.pathname`. Old `?doc=` links keep
-   working through a redirect for one release.
-2. **opendocs port plan (S, writing).** `docs/opendocs-port-plan.md`: for each
-   clean opendocs package, port as a component (which gojiberry package, what
-   changes, what tests come with it), cleanest first; the rest listed as
-   "rewrite" or "drop". Uses `opendocs-scan.md` and `opendocs-missing-features.md`.
-3. **Refresh the two opendocs docs (S).** Mark what now exists (columns, export/
-   import, find, spell, tables, lifecycle, a11y/i18n) and what remains.
+1. **Path-style links. Done.** A shared page is `…/d/{doc}`; hub/transport/
+   selection stay in the query; `?doc=` is still read. `share.SplitPath`,
+   `share.DocPath`; the hub already used `/docs/{id}/…`.
+2. **opendocs port plan. Done:** [opendocs-port-plan.md](opendocs-port-plan.md).
+3. **Refresh the two opendocs docs. Done.**
 
 ## Order
 
-1. Merge PR #48 after review (this step).
-2. D3, D2 (documents), then D1 (path links) so share links are stable early.
-3. B1, B3, B8 (small), then C step 1.
-4. B2, B4, B6 while porting e2e to chromedp.
-5. B5, B7 last (largest, least coupled).
+1. B1, B3, B8 (small), then C step 1.
+2. B2, B4, B6, B9 while porting e2e to chromedp.
+3. Port-plan rows 1–5 (doc manager, login, templates, margins, feature config).
+4. B5, B7 last (largest, least coupled).

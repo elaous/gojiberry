@@ -17,7 +17,7 @@ async function open(query = '') {
   const page = await browser.newPage({ viewport: { width: 1000, height: 800 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(`http://localhost:${process.env.PORT}/index.html${query}`);
+  await page.goto(`http://localhost:${process.env.PORT}${query.startsWith('/') ? query : '/index.html' + query}`);
   await page.waitForFunction(() => document.getElementById('state') && document.getElementById('state').textContent !== '(pending)', null, { timeout: 15000 });
   const box = await page.locator('#stage').boundingBox();
   return {

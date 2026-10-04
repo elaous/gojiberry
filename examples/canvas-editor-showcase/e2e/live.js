@@ -3,7 +3,7 @@
 const { assert, open, run } = require(process.env.E2E_LIB);
 
 const q = (name, token, color) =>
-  `?doc=live1&hub=${encodeURIComponent(process.env.HUB_URL)}&token=${token}&transport=${process.env.TRANSPORT || 'http'}&flow=${encodeURIComponent(process.env.FLOW || '')}&name=${name}&color=${encodeURIComponent(color)}`;
+  `/d/live1?hub=${encodeURIComponent(process.env.HUB_URL)}&token=${token}&transport=${process.env.TRANSPORT || 'http'}&flow=${encodeURIComponent(process.env.FLOW || '')}&name=${name}&color=${encodeURIComponent(color)}`;
 const live = async (d) => (await d.state()).live;
 const until = (d, what, fn, ms = 10000) =>
   d.page.waitForFunction(fn, null, { timeout: ms }).catch(async (e) => { throw new Error('timed out waiting for ' + what + ': ' + JSON.stringify((await d.state()).live)); });

@@ -10,10 +10,10 @@ two engines differ and what moves cleanly.
 
 | Feature (opendocs) | Here |
 |---|---|
-| Find and replace (panel, case, whole word, regex) | Missing |
-| Spell check with suggestions, Tab autocomplete, Hunspell dictionaries (English embedded, others downloaded), custom words | Missing (only word completion from the text and a vocabulary list) |
-| Grammar check (LLM backend), language detection, translation through a backend | Missing |
-| Hyphenation (soft, on request, pattern based) | Missing |
+| Find and replace (panel, case, whole word, regex) | Have (`canvas` find/replace, `components.FindReplace`) |
+| Spell check with suggestions, Tab autocomplete, Hunspell dictionaries (English embedded, others downloaded), custom words | Partial (squiggles, suggestions and custom words; English only embedded, no download of other dictionaries) |
+| Grammar check (LLM backend), language detection, translation through a backend | Have (`grammar`, `lang`, `translate` clients; a language panel) |
+| Hyphenation (soft, on request, pattern based) | Have (`hyphen`, a layouter hook, a View toggle) |
 | Special-characters picker | Have (`components` symbol picker) |
 | Typography: size, family, colour, highlight; named styles and a style editor | Have |
 | Custom list symbols, nested bullet lists, numbered lists, check lists | Partial (lists and check lists yes; custom symbols and nesting options no) |
@@ -32,22 +32,22 @@ two engines differ and what moves cleanly.
 
 | Feature | Here |
 |---|---|
-| Multi-column text, up to 4, per block, column gap, 2+1 and 1+2 widths, column break | Partial (equal columns for the whole flow; no per-block counts, gaps, widths or column break) |
+| Multi-column text, up to 4, per block, column gap, 2+1 and 1+2 widths, column break | Have (per-block `ColumnConfig`, Edit-menu commands; column break not checked) |
 | Linked text frames you can move, resize, reshape, explode | Missing |
 | Images: insert, float, wrap by bounding box and by the picture's shape, clip, rotate, metadata, edit externally, paste or drop from the clipboard | Partial (insert, float, wrap by box, alpha; no shape wrap, rotate, metadata or paste) |
-| Tables: word wrap, alignment, merge and split cells, per-cell styling, schemes, sort, formulas | Partial (grid, rows and columns, move, sort, wrap-around; no merge, per-cell styles or formulas) |
+| Tables: word wrap, alignment, merge and split cells, per-cell styling, schemes, sort, formulas | Partial (grid, rows and columns, move, sort, wrap-around, merge and split, per-cell background, alignment and bold; no formulas, schemes) |
 | Headers, footers, page numbers, watermark, background, page elements | Have |
 | Background images (fixed, random) | Partial (a background picture per page with opacity and fit; no random picker) |
-| Right-to-left and non-Latin scripts (CJK, Cyrillic, Arabic) | Missing (not tested) |
+| Right-to-left and non-Latin scripts (CJK, Cyrillic, Arabic) | Missing (not tested; `dir` is set on the page only) |
 
 ## Documents, files and sharing
 
 | Feature | Here |
 |---|---|
-| Export: HTML, RTF, EPUB, PDF, DOCX, braille (BRF), Markdown, text | Partial (Markdown, text) |
-| Import: Word and Google Docs (docx), PDF text, import CLI and long-running import job | Missing |
-| Document manager: list, open, duplicate, tags, trash and restore | Partial (`saver`: list, open, save, delete; no trash, duplicate or tags) |
-| Version history (save a version, list, restore) | Missing |
+| Export: HTML, RTF, EPUB, PDF, DOCX, braille (BRF), Markdown, text | Have (HTML, RTF, EPUB, PDF, DOCX, BRF, Markdown, text; DOCX cell colours not written) |
+| Import: Word and Google Docs (docx), PDF text, import CLI and long-running import job | Partial (docx and PDF text through `transfer`, with input limits; no CLI or background job) |
+| Document manager: list, open, duplicate, tags, trash and restore | Have (`saver`: list, open, save, delete, duplicate, trash and restore, tags) |
+| Version history (save a version, list, restore) | Have (`saver` versions; a Save-tab list) |
 | Storage adapters with quota, MinIO, local cache fallback on a failed save | Partial (`docstore` has several adapters and an ACL; no quota readout) |
 | Share by link (view only or edit) and a People panel with server-enforced access | Partial (share link to a selection, roles and ACL on the hub; no People panel) |
 | Signed documents | Missing |
@@ -59,8 +59,8 @@ two engines differ and what moves cleanly.
 
 | Feature | Here |
 |---|---|
-| Accessibility: a navigable accessible text surface, screen-reader announcements, braille display support | Missing |
-| UI internationalization and language packs | Missing |
+| Accessibility: a navigable accessible text surface, screen-reader announcements, braille display support | Partial (DOM mirror, live announcer, labelled canvas; no braille display, menus not roving-focus) |
+| UI internationalization and language packs | Partial (catalog with es, fr, de for stock components, tabs, menus, status; no RTL layout) |
 | Plugins and sandboxed scripting (Worker-isolated, several at once), example plugins | Missing |
 | Build-time feature config to compile subsystems out | Missing |
 | Keyboard shortcut reference and editor | Have |
@@ -69,7 +69,11 @@ two engines differ and what moves cleanly.
 | Electron desktop app, Docker and compose, Vercel config, CI with local pre-push hooks, manual-testing checklist, user guide | Missing (the repo has its own CI) |
 | Performance and memory-leak tests | Missing |
 
-## Biggest gaps for an opendocs V1
+## Status
+
+Updated after the five "biggest gaps" below were built (export/import, find and text tools, tables and columns, document lifecycle, accessibility and i18n). The rows above show what is left. What still stands between the showcase and a V1 is in [known-limits-plan.md](known-limits-plan.md) and [opendocs-port-plan.md](opendocs-port-plan.md).
+
+## The five gaps that were the biggest (built)
 
 1. Export and import (DOCX, PDF, EPUB, HTML, RTF, BRF): users expect to leave and arrive with files.
 2. Find and replace, spell check, hyphenation, language tools.

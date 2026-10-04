@@ -67,7 +67,7 @@ type ui struct {
 	drafts       map[string]string
 
 	saver               *saver.Session
-	live                *collabxango.State // when the page was opened on a shared document (?doc=...)
+	live                *collabxango.State // when the page was opened on a shared document (/d/{doc})
 	liveName, liveColor string
 	transfer            *transfer.Registry
 	fontLog             []string // what the font library did, newest last
@@ -644,12 +644,13 @@ func main() {
 	select {}
 }
 
-// liveProps makes the page a shared document when it was opened with ?doc=...:
+// liveProps makes the page a shared document when it was opened on /d/{doc} (or ?doc=):
 // the Collab element does the connecting; this says where, as whom, over what
 // (?transport=ws for a WebSocket) and what to do when the state changes.
 func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()) *collabxango.CollabProps {
 	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
-	if !q.Call("has", "doc").Bool() {
+	doc := pageDoc()
+	if doc == "" {
 		return nil
 	}
 	get := func(k, def string) string {
@@ -672,7 +673,7 @@ func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()
 	return &collabxango.CollabProps{
 		Transport: transport,
 		Flow:      collabxango.Flow(get("flow", "")),
-		Client:    client.Options{BaseURL: get("hub", origin+"/collab"), Doc: get("doc", ""), Header: hdr, Retry: 300 * time.Millisecond, MaxRetry: 2 * time.Second},
+		Client:    client.Options{BaseURL: get("hub", origin+"/collab"), Doc: doc, Header: hdr, Retry: 300 * time.Millisecond, MaxRetry: 2 * time.Second},
 		Replica:   fmt.Sprintf("%s-%d", name, int(js.Global().Get("Math").Call("random").Float()*1e9)),
 		Name:      name,
 		Color:     u.liveColor,

@@ -75,7 +75,10 @@ func statsPanel(st canvas.FlowStats, sheets int) xango.Node {
 func shareParams() url.Values {
 	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 	out := url.Values{}
-	for _, k := range []string{"doc", "hub", "transport"} {
+	if doc := pageDoc(); doc != "" {
+		out.Set("doc", doc)
+	}
+	for _, k := range []string{"hub", "transport"} {
 		if q.Call("has", k).Bool() {
 			out.Set(k, q.Call("get", k).String())
 		}
@@ -83,9 +86,25 @@ func shareParams() url.Values {
 	return out
 }
 
+// pageDoc is the shared document the page was opened on: /d/{doc} in the path,
+// or the older ?doc= in the query.
+func pageDoc() string {
+	loc := js.Global().Get("location")
+	if _, doc := share.SplitPath(loc.Get("pathname").String()); doc != "" {
+		return doc
+	}
+	q := js.Global().Get("URLSearchParams").New(loc.Get("search"))
+	if q.Call("has", "doc").Bool() {
+		return q.Call("get", "doc").String()
+	}
+	return ""
+}
+
+// pageBase is the page's address without a /d/{doc} on the end.
 func pageBase() string {
 	loc := js.Global().Get("location")
-	return loc.Get("origin").String() + loc.Get("pathname").String()
+	base, _ := share.SplitPath(loc.Get("pathname").String())
+	return loc.Get("origin").String() + base
 }
 
 // sharePanel is the Share tab: the selected text, a link to it, and buttons to

@@ -79,7 +79,14 @@ func RunEnv(t *testing.T, script string, extraEnv ...string) {
 		}
 	}
 
-	srv := httptest.NewServer(http.FileServer(http.Dir(site)))
+	files := http.FileServer(http.Dir(site))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/d/") { // a document's page: /d/{doc}
+			http.ServeFile(w, r, filepath.Join(site, "index.html"))
+			return
+		}
+		files.ServeHTTP(w, r)
+	}))
 	defer srv.Close()
 	abs, err := filepath.Abs(script)
 	if err != nil {
