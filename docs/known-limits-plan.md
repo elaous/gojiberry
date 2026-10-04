@@ -34,7 +34,7 @@ order it should land in.
 7. **Hunspell breadth (M).** Dictionaries beyond embedded en_US: load `.aff`/
    `.dic` on demand (fontserver-style), with morphology flags beyond the
    supported subset (compound rules, `REP`, `KEY`).
-8. **WS role edge cases (S). Done:** read limit twice `MaxBody`, `Config.TrustForwardedHost` for proxies.
+8. **WS role edge cases (S). Done:** read limit four times `MaxBody`, at most 1 MiB over it, `Config.TrustForwardedHost` for proxies.
 
 9. **Review leftovers.** Done: the WebSocket read limit, the proxy `Host`,
    `expandReplacement` with context (`\b`, `\B`), whole-table-less cells and media

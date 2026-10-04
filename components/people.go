@@ -2,6 +2,7 @@ package components
 
 import (
 	"context"
+	"slices"
 
 	"github.com/elaous/gojiberry/xango"
 )
@@ -41,7 +42,11 @@ func People(p PeopleProps) xango.Node {
 	busy := p.Pending.Busy()
 	roleSelect := func(class, label, current string, on func(string)) xango.Node {
 		var opts []xango.Node
-		for _, r := range roles {
+		offered := roles
+		if current != "" && !slices.Contains(roles, current) {
+			offered = append([]string{current}, roles...) // a role the list does not know is still shown
+		}
+		for _, r := range offered {
 			attrs := []xango.Attr{xango.A("value", r)}
 			if r == current {
 				attrs = append(attrs, xango.A("selected", "selected"))

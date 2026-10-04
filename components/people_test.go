@@ -45,3 +45,8 @@ func TestPeopleListsAndPlugsIn(t *testing.T) {
 	mustNotContain(t, bare, "gj-people-remove", "gj-people-invite")
 	mustContain(t, bare, `disabled="disabled"`) // with no SetRole the roles are shown, not editable
 }
+
+func TestPeopleShowsARoleTheListDoesNotKnow(t *testing.T) {
+	html := render(t, People(PeopleProps{People: []Person{{ID: "a@x.test", Role: "commenter"}}, SetRole: func(context.Context, string, string) error { return nil }}))
+	mustContain(t, html, `<option value="commenter" selected="selected">`)
+}

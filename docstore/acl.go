@@ -40,10 +40,11 @@ type ACL struct {
 // "editor" or "viewer", or "" for no access. These are the names
 // canvas.Role uses, so a client can pass the answer to canvas.ParseRole.
 func (a ACL) RoleOf(email string) string {
+	email = NormalizeAddress(email)
 	switch email {
 	case "":
 		return ""
-	case a.Owner:
+	case NormalizeAddress(a.Owner):
 		return "owner"
 	}
 	return string(a.Grants[email])
@@ -56,7 +57,8 @@ func (a ACL) canRead(email string) bool {
 	if email == "" {
 		return false
 	}
-	if email == a.Owner {
+	email = NormalizeAddress(email)
+	if email == NormalizeAddress(a.Owner) {
 		return true
 	}
 	_, ok := a.Grants[email]
@@ -69,7 +71,8 @@ func (a ACL) canWrite(email string) bool {
 	if email == "" {
 		return false
 	}
-	if email == a.Owner {
+	email = NormalizeAddress(email)
+	if email == NormalizeAddress(a.Owner) {
 		return true
 	}
 	return a.Grants[email] == RoleEditor
@@ -96,6 +99,14 @@ func (s *Server) loadACL(ctx context.Context, id string) (ACL, error) {
 	var acl ACL
 	if err := json.Unmarshal(doc.Data, &acl); err != nil {
 		return ACL{}, err
+	}
+	// Grants are looked up by normalised address; an ACL written with another
+	// spelling still means the same people.
+	for k, v := range acl.Grants {
+		if n := NormalizeAddress(k); n != k {
+			delete(acl.Grants, k)
+			acl.Grants[n] = v
+		}
 	}
 	return acl, nil
 }
@@ -272,10 +283,11 @@ func isReservedDocID(id string) bool {
 // owner's access cannot be changed, and an empty address or a role that is not
 // RoleEditor or RoleViewer is refused.
 func (a *ACL) Grant(email string, role Role) error {
+	email = NormalizeAddress(email)
 	switch {
 	case strings.TrimSpace(email) == "":
 		return errors.New("docstore: no address to share with")
-	case email == a.Owner:
+	case email == NormalizeAddress(a.Owner):
 		return errors.New("docstore: the owner's access cannot be changed")
 	case role != RoleEditor && role != RoleViewer:
 		return errors.New("docstore: a role is editor or viewer")
@@ -289,7 +301,8 @@ func (a *ACL) Grant(email string, role Role) error {
 
 // Revoke takes away what email was given; the owner cannot be removed.
 func (a *ACL) Revoke(email string) error {
-	if email == a.Owner {
+	email = NormalizeAddress(email)
+	if email == NormalizeAddress(a.Owner) {
 		return errors.New("docstore: the owner cannot be removed")
 	}
 	delete(a.Grants, email)
@@ -312,3 +325,8 @@ func (a ACL) People() []Person {
 
 // Person is someone with access to a document.
 type Person struct{ ID, Role string }
+
+// NormalizeAddress is how an address is kept and compared in an ACL: trimmed and
+// in lower case, so "Ana@X.com " and "ana@x.com" are one person. An owner set on
+// an ACL should be written that way too.
+func NormalizeAddress(email string) string { return strings.ToLower(strings.TrimSpace(email)) }

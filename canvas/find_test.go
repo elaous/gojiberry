@@ -95,3 +95,17 @@ func TestSearchHighlightsAreDrawn(t *testing.T) {
 		t.Errorf("selection %d-%d", from, to)
 	}
 }
+
+func TestRegexReplacementWithNonASCIIAndWholeWord(t *testing.T) {
+	f := NewTextFlow("é café cafés ça", 0, 0, 400, 200)
+	n, err := f.ReplaceAll(FindOptions{Query: `\b(caf)é\b`, Regex: true, MatchCase: true}, "${1}E")
+	// Go's \b is ASCII: it falls between é and s, not between é and a space.
+	if err != nil || n != 1 || f.EditText() != "é café cafEs ça" {
+		t.Fatalf("%d %v %q", n, err, f.EditText())
+	}
+	g := NewTextFlow("one two one", 0, 0, 400, 200)
+	n, err = g.ReplaceAll(FindOptions{Query: `(o)ne`, Regex: true, WholeWord: true, MatchCase: true}, "<$1>")
+	if err != nil || n != 2 || g.EditText() != "<o> two <o>" {
+		t.Fatalf("%d %v %q", n, err, g.EditText())
+	}
+}

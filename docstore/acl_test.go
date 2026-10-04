@@ -545,3 +545,26 @@ func TestACLGrantRevokePeople(t *testing.T) {
 		t.Errorf("%+v", a)
 	}
 }
+
+func TestACLAddressesAreTrimmedAndCaseFolded(t *testing.T) {
+	a := ACL{Owner: "Me@X.test"}
+	if err := a.Grant("me@x.test ", RoleEditor); err == nil {
+		t.Error("the owner under another spelling must still be refused")
+	}
+	_ = a.Grant(" Ana@X.test ", RoleEditor)
+	_ = a.Grant("ana@x.TEST", RoleViewer) // the same person: one grant, the new role
+	if len(a.Grants) != 1 || a.RoleOf("ANA@x.test") != "viewer" || a.RoleOf("me@x.test") != "owner" {
+		t.Errorf("%+v", a)
+	}
+	if !a.canRead("Ana@x.test") || a.canWrite("ana@x.test") || !a.canWrite(" ME@x.test") {
+		t.Error("permissions go by the normalised address")
+	}
+	_ = a.Revoke("ANA@x.test ")
+	if len(a.Grants) != 0 || a.Revoke("nobody@x.test") != nil {
+		t.Errorf("%+v", a)
+	}
+	var empty ACL
+	if err := empty.Revoke("x"); err != nil {
+		t.Error(err)
+	}
+}
