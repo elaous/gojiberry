@@ -1,0 +1,22 @@
+/* Document components (DocList, Trash, Versions, TagFilter) for
+   github.com/elaous/gojiberry/components. Requires base.css for shared tokens (--gj-*). */
+
+.gj-doclist, .gj-trash, .gj-versions { display: flex; flex-direction: column; gap: 0.6em; min-width: 18em; }
+.gj-trash-bin, .gj-versions { margin-top: 1em; }
+.gj-doc-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5em; flex-wrap: wrap; }
+.gj-doc-title { font-size: 0.75em; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gj-muted); margin: 0; }
+.gj-doc-list { list-style: none; margin: 0.3em 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.gj-doclist-item, .gj-trash-item, .gj-versions-item { display: flex; align-items: center; gap: 0.5em; padding: 0.25em 0; border-bottom: 1px solid var(--gj-border); flex-wrap: wrap; }
+.gj-doclist-current .gj-doc-name::after { content: " \2022"; color: var(--gj-accent); }
+.gj-doc-name { font-weight: 500; }
+.gj-doc-meta { flex: 1; font-size: 0.8em; color: var(--gj-muted); }
+.gj-doc-empty { margin: 0.3em 0 0; font-size: 0.85em; color: var(--gj-muted); }
+.gj-doc-error { margin: 0; font-size: 0.85em; color: var(--gj-danger, #c01c28); }
+.gj-doclist button, .gj-trash button, .gj-versions button { padding: 0.35em 0.8em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); cursor: pointer; font: inherit; }
+.gj-doclist button:hover:not(:disabled), .gj-trash button:hover:not(:disabled), .gj-versions button:hover:not(:disabled) { background: var(--gj-bg-muted); }
+.gj-doclist button:disabled, .gj-trash button:disabled, .gj-versions button:disabled { opacity: 0.5; cursor: default; }
+
+.gj-tagbar { display: flex; flex-wrap: wrap; gap: 0.3em; margin: 0.3em 0; }
+.gj-doclist .gj-tagchip, .gj-tagchip { border: 1px solid var(--gj-border); background: var(--gj-bg); border-radius: 999px; padding: 0.1em 0.7em; cursor: pointer; font: inherit; font-size: 0.85em; }
+.gj-tagchip-on, .gj-doclist .gj-tagchip-on { background: var(--gj-accent); color: var(--gj-accent-contrast); border-color: var(--gj-accent); }
+.gj-doclist-tags { flex-basis: 100%; margin-top: 0.2em; padding: 0.2em 0.4em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); font: inherit; font-size: 0.85em; }

@@ -1386,8 +1386,8 @@ generated code.
   to switch it off, or add your own. The status of everything built and what
   is left is in `docs/canvas-todo.md`.
 
-  Demos, each with a Playwright e2e test run by `go test` (skipped when
-  node/playwright/chromium are missing): `examples/canvas-table-demo`,
+  Demos, each with a chromedp e2e test run by `go test` (skipped when
+  no Chromium is found): `examples/canvas-table-demo`,
   `examples/canvas-flow-demo`, `examples/canvas-image-demo`,
   `examples/canvas-scroll-demo`, `examples/canvas-document-demo`,
   `examples/canvas-xango-demo`, `examples/canvas-editor-showcase` (run one with
@@ -1707,7 +1707,7 @@ generated code.
   platforms need since the real one (in `main.xg`) is wasm-only.
 
   Verified against a real headless Chromium, via a committed test
-  (`canvas_editor_test.go` + `e2e/verify.js`, driven by Playwright) —
+  (`canvas_editor_test.go`, driven by chromedp) —
   not just ad hoc manual checking: typing, Backspace, Enter/line
   breaks, click-to-position, Shift+Arrow and real mouse-drag selection,
   Bold/Italic actually flipping the model's per-character format (not
@@ -1971,8 +1971,8 @@ print.
 `make bench` runs every Go benchmark in the module: `buffer`'s own
 `GapBuffer`-vs-naive-slice benchmarks (fast, native) and
 `examples/domrt-bench`'s own patch/patchChildren benchmarks (drives a
-real, wasm-built page through a real headless Chromium via Playwright,
-skipping itself rather than failing if Playwright/Chromium isn't set
+real, wasm-built page through a real headless Chromium via chromedp,
+skipping itself rather than failing if Chromium isn't set
 up -- see that example's own README/Makefile). `make perf` is `bench`'s
 profiling counterpart: the same benchmarks, but with a CPU and memory
 profile captured per package under `perf/` (Go's own `-cpuprofile`/
@@ -2015,7 +2015,7 @@ push` leaves your machine.
   can't exercise them the way `buffer`'s own pure-Go benchmark does;
   measuring them for real needs either a headless-browser benchmark
   harness (timing via JS `performance.now()`, launched the same way
-  the example apps' own Playwright e2e suites already drive a real
+  the example apps' own chromedp e2e suites already drive a real
   browser) driving a realistic reorder/insert against a large keyed
   list, or splitting `patchChildren`'s own diff/plan computation
   (which keys move where) out from applying that plan to real DOM
