@@ -57,6 +57,7 @@ type user struct {
 	redraws int
 	props   collabgox.CollabProps
 	items   []canvas.Item
+	kids    func(u *user) []gox.Node // the wrapped elements; the default is one text flow
 }
 
 func newUser(t *testing.T, srv *httptest.Server, tr collab.Transport, header http.Header, items ...canvas.Item) *user {
@@ -84,6 +85,9 @@ func (u *user) render(t *testing.T) {
 	t.Helper()
 	p := u.props
 	p.Children = []gox.Node{cgox.TextFlow(cgox.TextFlowProps{Items: u.items, PageCount: 1, PageWidth: 300, PageHeight: 200, Margins: []float64{20}})}
+	if u.kids != nil {
+		p.Children = u.kids(u)
+	}
 	tree := cgox.Canvas(cgox.CanvasProps{Width: 600, Height: 400, Mode: canvas.ModeEdit, Children: []gox.Node{collabgox.Collab(p)}})
 	if err := u.root.Render(tree); err != nil {
 		t.Fatal(err)
@@ -194,20 +198,93 @@ func TestReRenderingDoesNotReconnectOrResetTheDocument(t *testing.T) {
 	}
 }
 
-func TestFlowsOtherThanTextAreNotSupportedYet(t *testing.T) {
+func TestUnknownFlowIsReported(t *testing.T) {
 	srv := httptest.NewServer(hub.New(hub.Config{}).Handler())
 	defer srv.Close()
-	for _, f := range []collabgox.Flow{collabgox.FlowHeader, collabgox.FlowFooter, collabgox.FlowInserts, collabgox.FlowAll} {
-		var got collabgox.State
-		root := cgox.NewRoot(canvas.NewStage(painter{}, 0, 0))
-		p := collabgox.CollabProps{Flow: f, Client: client.Options{BaseURL: srv.URL, Doc: "d"}, OnState: func(s collabgox.State) { got = s },
-			Children: []gox.Node{cgox.TextFlow(cgox.TextFlowProps{Text: "x", PageCount: 1, PageWidth: 300, PageHeight: 200})}}
-		if err := root.Render(cgox.Canvas(cgox.CanvasProps{Width: 400, Height: 300, Children: []gox.Node{collabgox.Collab(p)}})); err != nil {
-			t.Fatal(err)
+	var got collabgox.State
+	root := cgox.NewRoot(canvas.NewStage(painter{}, 0, 0))
+	p := collabgox.CollabProps{Flow: "inserts", Client: client.Options{BaseURL: srv.URL, Doc: "d"}, OnState: func(s collabgox.State) { got = s },
+		Children: []gox.Node{cgox.TextFlow(cgox.TextFlowProps{Text: "x", PageCount: 1, PageWidth: 300, PageHeight: 200})}}
+	if err := root.Render(cgox.Canvas(cgox.CanvasProps{Width: 400, Height: 300, Children: []gox.Node{collabgox.Collab(p)}})); err != nil {
+		t.Fatal(err)
+	}
+	if got.Err != collabgox.ErrFlowNotSupported {
+		t.Errorf("unknown flow: %v", got.Err)
+	}
+}
+
+// page is a canvas with furniture and objects: a text flow with a header and
+// footer, a floating note and a table.
+func page(text, header string) func(u *user) []gox.Node {
+	return func(u *user) []gox.Node {
+		tpl := func(pg gox.Node, _ int) gox.Node {
+			return gox.Frag(cgox.Header(cgox.HeaderProps{Text: header}), pg, cgox.Footer(cgox.FooterProps{Text: "foot"}))
 		}
-		if got.Err != collabgox.ErrFlowNotSupported {
-			t.Errorf("flow %q: %v", f, got.Err)
+		return []gox.Node{
+			cgox.TextFlow(cgox.TextFlowProps{Text: text, PageCount: 1, PageWidth: 300, PageHeight: 200, Margins: []float64{20}, Pages: tpl}),
+			cgox.FloatingText(cgox.FloatingTextProps{Text: "note", Width: 100, Height: 40}),
+			cgox.Table(cgox.TableProps{Cells: [][]string{{"a", "b"}, {"c", "d"}}}),
 		}
+	}
+}
+
+func (u *user) furniture() (*canvas.PageSet, *canvas.FloatingText, *canvas.TableView) {
+	return u.root.Find(cgox.TagPage, 0).(*canvas.PageSet), u.root.Find(cgox.TagFloatingText, 0).(*canvas.FloatingText), u.root.Find(cgox.TagTable, 0).(*canvas.TableView)
+}
+
+func TestFlows(t *testing.T) {
+	cases := []struct {
+		flow                     collabgox.Flow
+		text, header, footer, ob bool // what reaches the other person
+	}{
+		{collabgox.FlowText, true, false, false, false},
+		{collabgox.FlowHeader, false, true, false, false},
+		{collabgox.FlowFooter, false, false, true, false},
+		{collabgox.FlowObjects, false, false, false, true},
+		{collabgox.FlowAll, true, true, true, true},
+	}
+	for _, c := range cases {
+		t.Run(string(c.flow), func(t *testing.T) {
+			srv := httptest.NewServer(hub.New(hub.Config{}).Handler())
+			t.Cleanup(srv.Close)
+			ana := newUser(t, srv, nil, nil)
+			ana.props.Flow, ana.props.Name, ana.kids = c.flow, "Ana", page("hello", "Report")
+			ana.render(t)
+			wait(t, "Ana online", func() bool { return ana.get(func(u *user) bool { return u.state.Status == client.Online }) })
+			time.Sleep(50 * time.Millisecond) // her content reaches the hub
+			bo := newUser(t, srv, nil, nil)
+			bo.props.Flow, bo.props.Name, bo.kids = c.flow, "Bo", page("hello", "Report")
+			bo.render(t)
+			wait(t, "Bo online", func() bool { return bo.get(func(u *user) bool { return u.state.Status == client.Online }) })
+
+			ana.mu.Lock()
+			ps, ft, tv := ana.furniture()
+			ps.Pages[0].Header = &canvas.HeaderFooter{Text: "Ana's header"}
+			ps.Pages[0].Footer = &canvas.HeaderFooter{Text: "Ana's footer"}
+			ft.X, ft.Y = 111, 222
+			ft.SetText("Ana's note")
+			tv.Table.SetCell(1, 1, "Z")
+			ana.flow().Replace([]canvas.Edit{{From: 0, To: 0, Items: []canvas.Item{canvas.Chars{Text: "ANA "}}}})
+			ana.mu.Unlock()
+
+			arrives := func(what string, want bool, cond func() bool) {
+				t.Helper()
+				if want {
+					wait(t, what, func() bool { return bo.get(func(*user) bool { return cond() }) })
+					return
+				}
+				time.Sleep(300 * time.Millisecond)
+				if bo.get(func(*user) bool { return cond() }) {
+					t.Errorf("%s reached Bo although flow %q does not share it", what, c.flow)
+				}
+			}
+			bps, bft, btv := bo.furniture()
+			arrives("the text", c.text, func() bool { return strings.HasPrefix(bo.flow().EditText(), "ANA ") })
+			arrives("the header", c.header, func() bool { return bps.Pages[0].Header != nil && bps.Pages[0].Header.Text == "Ana's header" })
+			arrives("the footer", c.footer, func() bool { return bps.Pages[0].Footer != nil && bps.Pages[0].Footer.Text == "Ana's footer" })
+			arrives("the note", c.ob, func() bool { return bft.Text() == "Ana's note" && bft.X == 111 && bft.Y == 222 })
+			arrives("the table cell", c.ob, func() bool { return btv.Table.Cell(1, 1) == "Z" })
+		})
 	}
 }
 

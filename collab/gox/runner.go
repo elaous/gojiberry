@@ -3,7 +3,6 @@ package gox
 import (
 	"fmt"
 	"slices"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -22,22 +21,19 @@ type runner struct {
 	props atomic.Pointer[CollabProps]
 
 	quit chan struct{}
-	done sync.WaitGroup
 }
 
 func newRunner(ctx *cgox.Context, sess *collab.Session, flow *canvas.TextFlow, p *CollabProps) *runner {
 	r := &runner{sess: sess, flow: flow, ctx: ctx, quit: make(chan struct{})}
 	r.props.Store(p)
-	r.done.Add(1)
 	go r.loop()
 	return r
 }
 
-func (r *runner) stop() {
-	close(r.quit)
-	r.done.Wait()
-	r.sess.Close()
-}
+// stop ends the runner without waiting for it: it is called from the goroutine
+// that owns the canvas, which the loop may be waiting for (Sync). The loop
+// closes the session itself when it sees quit, and does nothing once it has.
+func (r *runner) stop() { close(r.quit) }
 
 func (r *runner) do(f func()) {
 	if s := r.props.Load().Sync; s != nil {
@@ -48,7 +44,7 @@ func (r *runner) do(f func()) {
 }
 
 func (r *runner) loop() {
-	defer r.done.Done()
+	defer func() { r.sess.Close() }() // the loop owns the session, which Repair may replace
 	interval := 40 * time.Millisecond
 	if iv := r.props.Load().Interval; iv > 0 {
 		interval = iv
@@ -63,8 +59,14 @@ func (r *runner) loop() {
 		case <-tick.C:
 		}
 		r.do(func() {
+			select {
+			case <-r.quit:
+				return // stopped while waiting for the canvas
+			default:
+			}
 			s := r.sess // Poll may repair the session and replace what is inside it
 			changed := s.Poll()
+			s.Bridge.SyncSurfaces()
 			redraw := changed
 			if role := canvas.ParseRole(string(s.Role)); s.Role != "" && r.ctx.Stage != nil && role != r.ctx.Stage.Role {
 				r.ctx.Stage.SetRole(role)

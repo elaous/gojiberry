@@ -53,27 +53,28 @@ import (
 // TagCollab is the element's tag.
 const TagCollab = "collab.Collab"
 
-// Flow says which of the wrapped canvas's text is shared.
+// Flow says which part of the wrapped canvas is shared.
 type Flow string
 
 const (
 	// FlowText is the main text flow (a canvas.TextFlow element): the first
-	// one inside the wrapper. This is the default and the only flow that can
-	// be shared so far.
+	// one inside the wrapper, with its comments, notes and styles. This is
+	// the default.
 	FlowText Flow = "textflow"
-	// FlowHeader and FlowFooter are the pages' headers and footers.
+	// FlowHeader and FlowFooter are the pages' headers, and footers with
+	// their page numbers.
 	FlowHeader Flow = "header"
 	FlowFooter Flow = "footer"
-	// FlowInserts is everything else that holds text: floating text and the
-	// other elements.
-	FlowInserts Flow = "inserts"
+	// FlowObjects is the elements placed on the pages: floating text,
+	// tables and images (their position and size, and the text or cells).
+	FlowObjects Flow = "objects"
 	// FlowAll is all of the above.
 	FlowAll Flow = "*"
 )
 
-// ErrFlowNotSupported is reported (State.Err) for a Flow that cannot be
-// shared yet: only FlowText can.
-var ErrFlowNotSupported = errors.New("collab: sharing this flow is not supported yet (only \"textflow\" is)")
+// ErrFlowNotSupported is reported (State.Err) for a Flow that is not one of
+// the constants above.
+var ErrFlowNotSupported = errors.New("collab: unknown flow (want textflow, header, footer, objects or *)")
 
 // ErrNoFlow is reported when the wrapper has no canvas.TextFlow inside.
 var ErrNoFlow = errors.New("collab: no canvas.TextFlow inside the Collab element")
@@ -206,16 +207,17 @@ func (e *element) start(p CollabProps, flow *canvas.TextFlow, id string) {
 			p.OnState(State{Err: err, Status: client.Offline})
 		}
 	}
-	switch {
-	case flow == nil:
+	if flow == nil {
 		report(ErrNoFlow)
 		return
-	case p.Flow != "" && p.Flow != FlowText:
+	}
+	sharing, ok := p.Flow.sharing(&e.kids)
+	if !ok {
 		report(ErrFlowNotSupported)
 		return
 	}
 	opts := p.Client
-	sess, err := collab.ConnectWith(p.Transport, p.Replica, flow, opts)
+	sess, err := collab.ConnectShared(p.Transport, p.Replica, flow, sharing, opts)
 	if err != nil {
 		report(err)
 		return

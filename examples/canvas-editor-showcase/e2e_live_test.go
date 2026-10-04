@@ -19,7 +19,9 @@ import (
 // bearer token it sends, which this test's hub reads as the role name. It
 // runs over both transports (?transport=http|ws).
 func TestLiveEndToEnd(t *testing.T) {
-	for _, transport := range []string{"http", "ws"} {
+	// The WebSocket run shares everything (?flow=*), the HTTP one the text only.
+	for _, c := range []struct{ transport, flow string }{{"http", ""}, {"ws", "*"}} {
+		transport, flow := c.transport, c.flow
 		t.Run(transport, func(t *testing.T) {
 			h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
 				return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
@@ -27,7 +29,7 @@ func TestLiveEndToEnd(t *testing.T) {
 			srv := httptest.NewServer(h.Handler())
 			defer srv.Close()
 			defer h.Close()
-			e2etest.RunEnv(t, "e2e/live.js", "HUB_URL="+srv.URL, "TRANSPORT="+transport)
+			e2etest.RunEnv(t, "e2e/live.js", "HUB_URL="+srv.URL, "TRANSPORT="+transport, "FLOW="+flow)
 		})
 	}
 }

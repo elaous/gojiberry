@@ -71,6 +71,8 @@ type ui struct {
 	transfer            *transfer.Registry
 	fontLog             []string // what the font library did, newest last
 	navSig              string   // outline/bookmarks the Outline tab last showed
+	statsSig            string   // the counts the status bar and Stats tab last showed
+	shareLink           string   // the link the Share tab shows
 	message             string   // the Import/Export tab's last message
 }
 
@@ -205,6 +207,8 @@ func main() {
 			}},
 			{Label: "Edit", Items: components.CommandMenu(stage.Features.Commands(), keymap, mac, run)},
 			{Label: "Insert", Items: []components.MenuItem{
+				{Label: "Word count…", OnSelect: func() { u.tab = "stats"; renderUI() }},
+				{Label: "Share selection…", OnSelect: func() { u.tab = "share"; renderUI() }},
 				{Label: "Symbol…", OnSelect: func() { u.tab = "symbols"; renderUI() }},
 				{Label: "Comment…", Shortcut: components.FormatChord("Mod+Alt+N", mac), OnSelect: func() { run(canvas.CmdCommentAdd); u.tab = "comments"; renderUI() }},
 				{Label: "Bookmark…", Shortcut: components.FormatChord("Mod+Alt+B", mac), OnSelect: func() { run(canvas.CmdBookmarkAdd); u.tab = "outline"; renderUI() }},
@@ -235,6 +239,7 @@ func main() {
 				gox.On("click", func(gox.Event) { toggleMode() })}, gox.Text("Mode: "+state.Mode.String()+" (click to switch)")),
 			tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 			tabButton(u, "comments", "Comments", renderUI), tabButton(u, "outline", "Outline", renderUI),
+			tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI),
 			tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI),
 		)
 
@@ -289,6 +294,14 @@ func main() {
 					renderUI()
 				},
 			})
+		case "stats":
+			if flow != nil {
+				panel = statsPanel(flow.Stats(), state.Pages)
+			}
+		case "share":
+			if flow != nil {
+				panel = sharePanel(u, flow, origin, renderUI)
+			}
 		case "save":
 			panel = components.Saver(u.saver.Props())
 		case "transfer":
@@ -416,12 +429,10 @@ func main() {
 					SiteName: "GitHub",
 				})))
 
-		words := 0
+		status := fmt.Sprintf("%s mode", state.Mode)
 		if flow != nil {
-			words = len(strings.Fields(flow.EditText()))
+			status = statusLine(flow.Stats(), state.Pages, state.Mode)
 		}
-		pages := state.Pages
-		status := fmt.Sprintf("%d pages · %d words · %s mode", pages, words, state.Mode)
 		node := components.DocumentView(components.DocumentViewProps{
 			Title: u.title, OnTitle: func(t string) { u.title = t; renderUI() },
 			MenuBar: menubar, Toolbar: toolbar,
@@ -527,7 +538,16 @@ func main() {
 			u.navSig = sig
 			renderUI()
 		}
+		var stats canvas.FlowStats
+		if flow != nil {
+			stats = flow.Stats()
+		}
+		if sig := fmt.Sprint(stats); sig != u.statsSig {
+			u.statsSig = sig
+			renderUI()
+		}
 		b, _ := json.Marshal(map[string]any{
+			"stats": statsState(stats), "share": u.shareLink,
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cgox.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
@@ -540,6 +560,7 @@ func main() {
 	state.Live = liveProps(u, &state, origin, renderCanvas, renderUI)
 	renderCanvas()
 	renderUI()
+	go openSharedSelection(u, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cgox.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
 	go u.saver.Refresh(context.Background())
 	canvas.LoadImage("data:image/svg+xml;base64,"+base64.StdEncoding.EncodeToString([]byte(svg)),
 		func(src *canvas.HTMLImage) {
@@ -576,6 +597,7 @@ func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()
 	u.liveName, u.liveColor = name, get("color", "#7c5cff")
 	return &collabgox.CollabProps{
 		Transport: transport,
+		Flow:      collabgox.Flow(get("flow", "")),
 		Client:    client.Options{BaseURL: get("hub", origin+"/collab"), Doc: get("doc", ""), Header: hdr, Retry: 300 * time.Millisecond, MaxRetry: 2 * time.Second},
 		Replica:   fmt.Sprintf("%s-%d", name, int(js.Global().Get("Math").Call("random").Float()*1e9)),
 		Name:      name,
