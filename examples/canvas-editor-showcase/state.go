@@ -28,7 +28,7 @@ type State struct {
 	Author   string
 	// Footnotes are the notes the footnote marks in the text refer to.
 	Footnotes *canvas.FootnoteSet
-	// Live, when set (the page was opened with ?doc=...), makes the text
+	// Live, when set (the page was opened on /d/{doc}), makes the text
 	// flow a shared document.
 	Live *collab.CollabProps
 	// FindFeature is the find and replace commands, with the app's own bar

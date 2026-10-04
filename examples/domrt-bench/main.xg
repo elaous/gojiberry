@@ -6,8 +6,8 @@
 // of four scenarios and returning the elapsed wall time in
 // nanoseconds -- measured with Go's own time.Now/time.Since inside the
 // wasm program itself, not a second JS round trip, so per-call CDP/
-// subprocess overhead never pollutes the number. Driven by e2e/bench.js
-// the same way every other gojiberry example's own e2e/verify.js
+// subprocess overhead never pollutes the number. Driven by bench_test.go (chromedp)
+// the same way every other gojiberry example's own e2e test
 // drives its own app end to end (see bench_test.go), just reading back
 // one number instead of asserting DOM state.
 package main

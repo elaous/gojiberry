@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -47,5 +48,35 @@ func TestLanguageTab(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"response": answer})
 	}))
 	defer gr.Close()
-	e2etest.RunEnv(t, "e2e/lang.js", "TRANSLATE_URL="+tr.URL, "GRAMMAR_URL="+gr.URL)
+	d := e2etest.NewSite(t).Open(t, "?translate="+url.QueryEscape(tr.URL)+"&grammar="+url.QueryEscape(gr.URL)+"&model=m1")
+	d.ToggleMode()
+	d.Click(`button[data-tab="language"]`)
+	d.OK(strings.Contains(d.Text(".gj-lang-detected"), "Language: English"), "the language is detected: "+d.Text(".gj-lang-detected"))
+	d.OK(d.Count(".gj-lang-target") == 1 && d.Count(".gj-lang-check") == 1, "both backends are offered")
+	d.OK(d.Is("s.language.translate && s.language.grammar"), "the page knows both are set up")
+
+	// Translate a selected word.
+	d.OK(d.Disabled(".gj-lang-translate"), "translate waits for a selection")
+	d.CanvasDblClick(240, 164)
+	d.Click(`button[data-tab="stats"]`)
+	d.Click(`button[data-tab="language"]`)
+	d.Select(".gj-lang-target", "FR")
+	d.Click(".gj-lang-translate")
+	translated := d.Text(".gj-lang-translation")
+	d.OK(strings.Contains(translated, "[FR]"), "the selection is translated by the server: "+translated)
+	before := d.State().Str("text")
+	d.Click(".gj-lang-use")
+	d.Wait("s.text !== " + e2etest.J(before))
+	d.OK(strings.Contains(d.State().Str("text"), "[FR]"), "Replace the selection puts the translation in the text")
+
+	// Grammar: the fake model flags the first "canvas" and offers "canvases".
+	d.Click(".gj-lang-check")
+	d.WaitFor("an issue", "document.querySelector('.gj-lang-issue')")
+	d.OK(d.State().Int("language.issues") == 1, "an issue is found")
+	label := d.Text(".gj-lang-apply")
+	d.OK(strings.Contains(label, "canvases"), "with the fix on offer: "+label)
+	d.Click(".gj-lang-apply")
+	d.Wait("s.text.includes('canvases')")
+	d.OK(d.Count(".gj-lang-issue") == 0, "applying it changes the text and clears the issue")
+	d.NoErrors()
 }
