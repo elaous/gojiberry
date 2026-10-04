@@ -309,3 +309,26 @@ Not yet: nothing outstanding that is known.
 - Inline images are shared by URL (see `docfile.ImageItem`); an image that cannot be saved (no URL) is refused by the bridge. Embed images as `data:` URLs only when small: they travel inside the document's operations.
 - `hub.ACLRolesWith(store, who, noACL)` chooses what everyone may do on a document that has no ACL (`GOJIBERRY_COLLAB_NO_ACL_ROLE=owner|editor|viewer|none` for `cmd/collabhub`); `none` makes only shared documents open.
 - Presence is throttled at both ends: a client sends at most one cursor update per `client.Options.PresenceInterval` (default 100ms) and the hub passes on at most one per replica per `hub.Config.PresenceInterval` (default 100ms, `GOJIBERRY_COLLAB_PRESENCE_INTERVAL` for `cmd/collabhub`; negative turns it off). Updates inside the interval are merged and the latest always goes out when it ends, so a cursor dragged across the text costs a few messages a second and the final position is never lost. Newcomers are told each cursor's latest position at once.
+
+## Transports and the `Collab` element
+
+- A session talks to the hub through a `collab.Transport` (`collab/link`: `Dial(client.Options) Conn`, where a `Conn` delivers events, sends ops and presence and reports what is still waiting). `collab.HTTPEndpoints()` is the default (SSE `GET /docs/{id}/events` plus `POST /ops` and `/presence`); `ws.WebSockets()` (`collab/ws`, own import so the root module stays dependency-free) uses one socket at `GET /docs/{id}/ws` carrying JSON `wire.Frame`s (`hello`, `snapshot`, `ops`, `presence`, `ack`, `reject`). Both go through the same hub checks (guard, roles, replica binding, throttling, authorization, comment authors), and the same session scenarios run over each.
+- A browser WebSocket cannot set headers, so under `js` the sign-in token goes in the query as `access_token` (the hub treats it as `Authorization: Bearer`) and a guard token as `guard_token` (`guard.Options.TokenQuery`). Native clients send headers.
+- `collab/gox.Collab` wraps canvas elements and makes the text flow inside shared: `Transport`, `Client` (hub URL, document, headers), `Name`, `Color`, `OnState` (status, role, peers, pending, repairs, error). The server's role is applied to the stage. `Flow` chooses what is shared: `textflow` (default: text, comments, notes, styles), `header`, `footer` (with page numbers), `objects` (floating text, tables and images) or `*` (all). An unknown value reports `ErrFlowNotSupported`. Content props only seed the document, and a deterministic seed replica means two tabs starting from the same content merge into one copy. The showcase opens as a shared document with `?doc=…&transport=http|ws`.
+
+### Surfaces: sharing more than the text
+
+Headers, footers and objects are not part of the text flow, so they travel as whole-value records through a `collab.Surface` (`Owns`, `Read`, `Write`), configured with `collab.Sharing{NoText, Surfaces}` and `ConnectShared`. `NoText` shares only the surfaces (the `header`, `footer` and `objects` flows); `*` shares both.
+
+- Surfaces are polled, not subscribed to (element `OnChange` callbacks are replaced by the props on every render): the Collab runner calls `Bridge.SyncSurfaces` at its interval and a change is sent once it has held still for two ticks, so a drag shares where the object was dropped, not each step.
+- Records: `header:<page>`, `footer:<page>` and `pagenum:<page>` (JSON, `null` where a page sets none, so removing a header reaches the others), `float:<n>`, `table:<n>`, `image:<n>` (n is the element's place among its kind). Floating text is shared as plain text plus position, size and anchor; a table by its cells; an image by position and size (the picture is not sent).
+- After applying a snapshot an editor sends the surface records the document lacks (`PushSurfaces`), so a late joiner's local header or note reaches the others; a viewer never does.
+- A record is never deleted by a session (it may only be missing from view), and what an element reads back after `Write` is taken as agreed, so normalisation cannot start an echo between two peers.
+- Not yet: adding or removing objects at run time (elements come from each side's own tree), character formatting inside floating text, an image's picture.
+
+### Known limits found in review
+
+- Over WebSockets the client sends up to 200 operations per frame with no size cap; a batch over the hub's `MaxBody` makes the server close the socket and the client resends it forever (HTTP would answer 413). Fix: split batches by encoded size.
+- A downgraded editor can keep writing over a socket until the next keep-alive tick (the role is checked on each tick, not on each frame).
+- The socket accepts any `Origin`; only the guard protects it. With cookie-based auth and a guard that sets no `Origins`, a page on another site could open one. The default Bearer setup is not affected.
+- Surface records are keyed by element order (`float:0`), so concurrent adding or removing of objects shifts them, and they are never deleted.

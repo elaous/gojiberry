@@ -20,6 +20,9 @@ import (
 //	reply:<id>:<key>    one reply
 //	note:<id>           a footnote's text
 //	style:<name>        a named style
+//
+// A Surface adds records of its own (page headers, floating objects) beside
+// these; see Sharing.
 const sideKind = crdt.LWWKindPrefix + ":side"
 
 // sideSync remembers each record's last agreed value, to send only changes.
@@ -31,9 +34,18 @@ func replyKey(r docfile.Reply) string {
 	return fmt.Sprintf("%d-%s", r.Created, r.Author)
 }
 
-// desiredSide lists the records the flow holds now.
+// desiredSide lists the records the flow (unless its text is not shared) and
+// the surfaces hold now.
 func (b *Bridge) desiredSide() map[string]string {
 	out := map[string]string{}
+	for _, sf := range b.surfaces {
+		for id, v := range sf.Read() {
+			out[id] = v
+		}
+	}
+	if b.noText {
+		return out
+	}
 	put := func(id string, v any) {
 		j, _ := json.Marshal(v)
 		out[id] = string(j)
@@ -58,7 +70,15 @@ func (b *Bridge) desiredSide() map[string]string {
 // ownsSideRecord reports whether id is a kind of record this bridge models.
 // Others (a newer client's, or one that failed to parse here) are not ours to
 // delete just because the flow does not hold them.
-func ownsSideRecord(id string) bool {
+func (b *Bridge) ownsSideRecord(id string) bool {
+	for _, sf := range b.surfaces {
+		if sf.Owns(id) {
+			return true
+		}
+	}
+	if b.noText {
+		return false
+	}
 	for _, p := range []string{"comment:", "reply:", "note:", "style:"} {
 		if strings.HasPrefix(id, p) {
 			return true
@@ -68,7 +88,10 @@ func ownsSideRecord(id string) bool {
 }
 
 func (b *Bridge) pushSide() {
-	want := b.desiredSide()
+	b.pushRecords(b.desiredSide())
+}
+
+func (b *Bridge) pushRecords(want map[string]string) {
 	if b.side.synced == nil {
 		b.side.synced = map[string]string{}
 	}
@@ -84,7 +107,7 @@ func (b *Bridge) pushSide() {
 		}
 	}
 	for id := range b.side.synced {
-		if _, ok := want[id]; !ok && ownsSideRecord(id) {
+		if _, ok := want[id]; !ok && b.ownsSideRecord(id) && !b.surfaceOwns(id) { // a surface's record is never deleted: it may only be missing from view
 			b.Doc.Delete(id)
 			delete(b.side.synced, id)
 		}
@@ -94,6 +117,11 @@ func (b *Bridge) pushSide() {
 // pullSide rebuilds the flow's comments, notes and styles from the
 // replica's records.
 func (b *Bridge) pullSide() {
+	if b.noText {
+		b.pullSurfaces()
+		return
+	}
+	defer b.pullSurfaces()
 	synced := map[string]string{}
 	hadStyles := false
 	for id := range b.side.synced {
@@ -110,7 +138,7 @@ func (b *Bridge) pullSide() {
 	var notes []docfile.Footnote
 	var styles []docfile.StyleDef
 	for _, blk := range b.Doc.Blocks() {
-		if !crdt.LWWKind(blk.Kind) {
+		if !crdt.LWWKind(blk.Kind) || b.surfaceOwns(blk.ID) {
 			continue
 		}
 		synced[blk.ID] = blk.Content
@@ -135,6 +163,11 @@ func (b *Bridge) pullSide() {
 			if json.Unmarshal([]byte(blk.Content), &s) == nil {
 				styles = append(styles, s)
 			}
+		}
+	}
+	for id, v := range b.side.synced { // the surfaces' records, which pullSurfaces settles
+		if _, ok := synced[id]; !ok && b.surfaceOwns(id) {
+			synced[id] = v
 		}
 	}
 	b.side.synced = synced

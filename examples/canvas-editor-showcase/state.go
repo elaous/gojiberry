@@ -1,6 +1,9 @@
 package main
 
-import "github.com/elaous/gojiberry/canvas"
+import (
+	"github.com/elaous/gojiberry/canvas"
+	collab "github.com/elaous/gojiberry/collab/gox"
+)
 
 // State is everything the canvas tree depends on.
 type State struct {
@@ -24,6 +27,9 @@ type State struct {
 	Author   string
 	// Footnotes are the notes the footnote marks in the text refer to.
 	Footnotes *canvas.FootnoteSet
+	// Live, when set (the page was opened with ?doc=...), makes the text
+	// flow a shared document.
+	Live *collab.CollabProps
 }
 
 const sample = "# Gojiberry editor\n\n" +

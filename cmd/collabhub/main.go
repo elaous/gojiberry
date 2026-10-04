@@ -41,7 +41,7 @@ func main() {
 	// GOJIBERRY_COLLAB_ALLOW_ORIGINS and GOJIBERRY_COLLAB_TOKEN (sent as
 	// X-Gojiberry-Token: Authorization carries the sign-in session) choose who
 	// may call the hub; with neither it is open to any origin.
-	hc := hub.Config{Store: adapter, Guard: guard.FromEnvWith("GOJIBERRY_COLLAB", guard.Options{TokenHeader: "X-Gojiberry-Token"})}
+	hc := hub.Config{Store: adapter, Guard: guard.FromEnvWith("GOJIBERRY_COLLAB", guard.Options{TokenHeader: "X-Gojiberry-Token", TokenQuery: "guard_token"})}
 	if authManager != nil {
 		who := hub.AuthUser(authManager)
 		hc.User = who

@@ -3,6 +3,7 @@ package main
 import (
 	cv "github.com/elaous/gojiberry/canvas"
 	canvas "github.com/elaous/gojiberry/canvas/gox"
+	collab "github.com/elaous/gojiberry/collab/gox"
 	"github.com/elaous/gojiberry/gox"
 )
 
@@ -22,7 +23,7 @@ type Callbacks struct {
 // remove one.
 func Doc(state State, cb Callbacks) gox.Node {
 	return <canvas.Canvas width={920} height={640} mode={state.Mode} role={state.Role} features={cv.DefaultFeatures()}>
-		<canvas.ScrollView x={10} y={10} width={900} height={620} lockH={!state.Spread}>
+		{shared(state, <canvas.ScrollView x={10} y={10} width={900} height={620} lockH={!state.Spread}>
 			<canvas.TextFlow
 				x={0} y={0} width={880}
 				source={state.Source}
@@ -67,7 +68,7 @@ func Doc(state State, cb Callbacks) gox.Node {
 				wrap
 				onChange={cb.OnTable}
 			/>
-		</canvas.ScrollView>
+		</canvas.ScrollView>)}
 	</canvas.Canvas>
 }
 
@@ -91,4 +92,15 @@ func picture(state State) gox.Node {
 		anchor={&cv.Anchor{Page: 1, X: 330, Y: 40}}
 		wrap
 	/>
+}
+
+// shared makes the document multi-user when the page was opened on one: the
+// Collab element wraps what is shared and leaves the rest of the tree alone.
+func shared(state State, content gox.Node) gox.Node {
+	if state.Live == nil {
+		return content
+	}
+	p := *state.Live
+	p.Children = []gox.Node{content}
+	return collab.Collab(p)
 }

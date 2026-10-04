@@ -15,7 +15,7 @@ import (
 // is only ever touched from one goroutine.
 type Session struct {
 	Bridge *Bridge
-	Conn   *client.Conn
+	Conn   Conn
 	// Role is what the server says you may do (empty until it says).
 	Role wire.Role
 	// Peers are the other people's cursors, by replica id.
@@ -34,9 +34,11 @@ type Session struct {
 	// Name and Color are shown to others with your cursor.
 	Name, Color string
 
-	replica string
-	opts    client.Options
-	needFix bool
+	replica   string
+	opts      client.Options
+	transport Transport
+	needFix   bool
+	sharing   Sharing
 
 	snapshots int
 }
@@ -45,14 +47,30 @@ type Session struct {
 // content for it yet and you may edit, the flow's content becomes the
 // document. opts.Replica is set to replica.
 func Connect(replica string, flow *canvas.TextFlow, opts client.Options) (*Session, error) {
+	return ConnectWith(HTTPEndpoints(), replica, flow, opts)
+}
+
+// ConnectWith is Connect over the given transport (HTTPEndpoints, or another
+// such as collab/ws's WebSockets).
+func ConnectWith(t Transport, replica string, flow *canvas.TextFlow, opts client.Options) (*Session, error) {
+	return ConnectShared(t, replica, flow, Sharing{}, opts)
+}
+
+// ConnectShared is ConnectWith sharing more (or less) than the flow's text:
+// see Sharing.
+func ConnectShared(t Transport, replica string, flow *canvas.TextFlow, sh Sharing, opts client.Options) (*Session, error) {
+	if t == nil {
+		t = HTTPEndpoints()
+	}
 	b, err := Join(replica, flow)
 	if err != nil {
 		return nil, err
 	}
+	b.Configure(sh)
 	opts.Replica = replica
-	conn := client.Dial(opts)
+	conn := t.Dial(opts)
 	b.Outgoing = conn.Send
-	return &Session{Bridge: b, Conn: conn, Peers: map[string]wire.Presence{}, replica: replica, opts: opts}, nil
+	return &Session{Bridge: b, Conn: conn, Peers: map[string]wire.Presence{}, replica: replica, opts: opts, transport: t, sharing: sh}, nil
 }
 
 // Repair rebuilds the session after the server refused something: the local
@@ -71,9 +89,10 @@ func (s *Session) Repair() error {
 	if err != nil {
 		return err
 	}
+	b.Configure(s.sharing)
 	opts := s.opts
 	opts.Replica = replica
-	conn := client.Dial(opts)
+	conn := s.transport.Dial(opts)
 	b.Outgoing = conn.Send
 	s.Bridge, s.Conn, s.Err, s.needFix = b, conn, nil, false
 	s.Peers = map[string]wire.Presence{}
@@ -144,6 +163,9 @@ func (s *Session) handle(e client.Event) bool {
 			return true
 		}
 		s.Bridge.Apply(e.Ops...)
+		if s.Role.CanEdit() {
+			s.Bridge.PushSurfaces() // what this side has and the document lacks
+		}
 		// A hub that restarted (or lost its last saves) answers with less than
 		// we hold: the edits it acknowledged earlier are gone from it, and
 		// nothing else would send them again. Operations are idempotent, so
