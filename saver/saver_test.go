@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/elaous/gojiberry/canvas"
@@ -38,17 +39,25 @@ func doc() docfile.Document {
 	return docfile.FromFlow("Notes", &canvas.TextFlow{Items: []canvas.Item{canvas.Chars{Text: "hello", Format: canvas.Format{FontWeight: 700}}}})
 }
 
+// named is the test document with a name for a document list.
+func named(name string) docfile.Document {
+	d := doc()
+	d.SetName(name)
+	return d
+}
+
 func TestSaveLoadListDeleteEveryTargetAndFormat(t *testing.T) {
 	ctx := context.Background()
 	s := &Saver{Targets: targets(t)}
 	for _, tg := range s.Targets {
 		for _, c := range docfile.Formats() {
-			key, err := s.Save(ctx, tg.Name, "notes", c, doc())
-			if err != nil || key != "notes"+c.Ext() {
-				t.Fatalf("%s/%s: %q %v", tg.Name, c.Name(), key, err)
+			// Three documents with one name: three IDs, three files.
+			e, err := s.Save(ctx, tg.Name, c, named("notes"))
+			if err != nil || !docfile.ValidID(e.ID) || e.Key != e.ID+c.Ext() || e.Name != "notes" || e.Format != c {
+				t.Fatalf("%s/%s: %+v %v", tg.Name, c.Name(), e, err)
 			}
-			got, err := s.Load(ctx, tg.Name, key)
-			if err != nil || got.Title != "Notes" || got.Updated == 0 || len(got.Content) != 1 {
+			got, err := s.Load(ctx, tg.Name, e.ID)
+			if err != nil || got.Title != "Notes" || got.ID() != e.ID || got.Name() != "notes" || got.Updated == 0 || len(got.Content) != 1 {
 				t.Fatalf("%s/%s: %+v %v", tg.Name, c.Name(), got, err)
 			}
 		}
@@ -56,25 +65,60 @@ func TestSaveLoadListDeleteEveryTargetAndFormat(t *testing.T) {
 		if err != nil || len(list) != 3 {
 			t.Fatalf("%s: %v %v", tg.Name, list, err)
 		}
-		if err := s.Delete(ctx, tg.Name, list[0].Key); err != nil {
+		ids := map[string]bool{}
+		for _, e := range list {
+			ids[e.ID] = true
+			if e.Name != "notes" {
+				t.Errorf("%s: %+v", tg.Name, e)
+			}
+		}
+		if len(ids) != 3 {
+			t.Fatalf("%s: documents with the same name share an ID: %v", tg.Name, list)
+		}
+		if err := s.Delete(ctx, tg.Name, list[0].ID); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.Load(ctx, tg.Name, list[0].Key); !errors.Is(err, docstore.ErrNotFound) {
+		if _, err := s.Load(ctx, tg.Name, list[0].ID); !errors.Is(err, docstore.ErrNotFound) {
 			t.Fatalf("%s: deleted but %v", tg.Name, err)
+		}
+		if list, _ = s.List(ctx, tg.Name); len(list) != 2 {
+			t.Fatalf("%s: %v", tg.Name, list)
 		}
 	}
 }
 
-func TestListSkipsFontsAndForeignKeys(t *testing.T) {
+func TestSavingAgainReplacesTheSameDocumentEvenInAnotherFormat(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	e, err := s.Save(ctx, "m", docfile.JSON, named("plan"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := named("plan renamed")
+	d.SetID(e.ID)
+	e2, err := s.Save(ctx, "m", docfile.ProtoBinary, d)
+	if err != nil || e2.ID != e.ID || e2.Name != "plan renamed" || e2.Key != e.ID+".pb" {
+		t.Fatalf("%+v %v", e2, err)
+	}
+	if _, err := mem.Load(ctx, e.Key); !errors.Is(err, docstore.ErrNotFound) {
+		t.Error("the old format's file should be gone")
+	}
+	if list, _ := s.List(ctx, "m"); len(list) != 1 {
+		t.Fatalf("%v", list)
+	}
+}
+
+func TestListSkipsFontsAndForeignKeysAndIsNewestFirst(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
 	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
 	_ = mem.Save(ctx, FontPrefix+"Lato/400-n.json", []byte("x")) // looks like a doc, is a font
 	_ = mem.Save(ctx, "readme.txt", []byte("x"))
-	if _, err := s.Save(ctx, "m", "a", docfile.JSON, doc()); err != nil {
+	if _, err := s.Save(ctx, "m", docfile.JSON, named("a")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Save(ctx, "m", "b", docfile.ProtoBinary, doc()); err != nil {
+	if _, err := s.Save(ctx, "m", docfile.ProtoBinary, named("b")); err != nil {
 		t.Fatal(err)
 	}
 	list, err := s.List(ctx, "m")
@@ -89,35 +133,86 @@ func TestListSkipsFontsAndForeignKeys(t *testing.T) {
 	}
 }
 
-func TestLoadDetectsFormatWithoutExtension(t *testing.T) {
+func TestCatalogIsRebuiltFromTheDocuments(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
-	data, _ := docfile.ProtoText.Marshal(doc())
-	_ = mem.Save(ctx, "weird", data)
 	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
-	got, err := s.Load(ctx, "m", "weird")
-	if err != nil || got.Title != "Notes" {
-		t.Fatalf("%+v %v", got, err)
+	a, _ := s.Save(ctx, "m", docfile.JSON, named("alpha"))
+	b, _ := s.Save(ctx, "m", docfile.ProtoBinary, named("beta"))
+	if err := s.SetTags(ctx, "m", a.ID, []string{"x"}); err != nil {
+		t.Fatal(err)
+	}
+	// A saved document from before IDs, under its name, is adopted under its key.
+	old := doc()
+	data, _ := docfile.JSON.Marshal(old)
+	_ = mem.Save(ctx, "legacy.json", data)
+	if err := mem.Delete(ctx, CatalogKey); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.List(ctx, "m") // reading a missing catalog builds it
+	if err != nil || len(list) != 3 {
+		t.Fatalf("%v %v", list, err)
+	}
+	byID := map[string]Entry{}
+	for _, e := range list {
+		byID[e.ID] = e
+	}
+	if byID[a.ID].Name != "alpha" || byID[b.ID].Name != "beta" || byID["legacy"].Name != "legacy" {
+		t.Errorf("%+v", byID)
+	}
+	if got, err := s.Load(ctx, "m", "legacy"); err != nil || got.Title != "Notes" {
+		t.Errorf("%+v %v", got, err)
+	}
+	// A damaged catalog is rebuilt too, and keeps what the catalog alone knew (trash).
+	if err := s.Trash(ctx, "m", b.ID); err != nil {
+		t.Fatal(err)
+	}
+	_ = mem.Save(ctx, CatalogKey, []byte("{not json"))
+	if list, _ = s.List(ctx, "m"); len(list) != 3 {
+		t.Fatalf("after damage: %v", list)
+	}
+	if err := s.Rebuild(ctx, "m"); err != nil {
+		t.Fatal(err)
+	}
+	if tr, _ := s.Trashed(ctx, "m"); len(tr) != 0 {
+		t.Logf("a damaged catalog forgets the trash: %v", tr) // documented: only the documents are the source of truth
+	}
+}
+
+func TestFilesWithAnUnknownExtensionAreNotDocuments(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	d := doc()
+	d.SetID(docfile.NewID())
+	d.SetName("weird")
+	data, _ := docfile.ProtoText.Marshal(d)
+	_ = mem.Save(ctx, d.ID()+".txt", data) // an extension no codec owns: not a document
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	if _, err := s.Load(ctx, "m", d.ID()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a file with an unknown extension is not a saved document: %v", err)
 	}
 }
 
 func TestErrors(t *testing.T) {
 	ctx := context.Background()
 	s := &Saver{Targets: []Target{{Name: "m", Adapter: docstore.NewMemoryAdapter()}}, Codecs: []docfile.Codec{docfile.JSON}}
-	for _, bad := range []string{"", "a/b", "..", "acl:x", "collab:x", `a\b`} {
-		if _, err := s.Save(ctx, "m", bad, docfile.JSON, doc()); !errors.Is(err, ErrName) {
+	for _, bad := range []string{"", "   ", "a\x00b", "tab\there", strings.Repeat("x", MaxNameRunes+1)} {
+		if _, err := s.Save(ctx, "m", docfile.JSON, named(bad)); !errors.Is(err, ErrName) {
 			t.Errorf("%q: %v", bad, err)
 		}
 	}
-	for _, key := range []string{"acl:doc", "collab:doc"} {
-		if _, err := s.Load(ctx, "m", key); !errors.Is(err, ErrName) {
-			t.Errorf("load %q: %v", key, err)
-		}
-		if err := s.Delete(ctx, "m", key); !errors.Is(err, ErrName) {
-			t.Errorf("delete %q: %v", key, err)
+	// Any other name is fine: slashes, dots, the same name twice.
+	for _, ok := range []string{"a/b", "..", "acl:x", `a\b`, "plan", "plan"} {
+		if _, err := s.Save(ctx, "m", docfile.JSON, named(ok)); err != nil {
+			t.Errorf("%q: %v", ok, err)
 		}
 	}
-	if _, err := s.Save(ctx, "nope", "a", docfile.JSON, doc()); err == nil {
+	d := named("x")
+	d.SetID("../etc/passwd")
+	if _, err := s.Save(ctx, "m", docfile.JSON, d); !errors.Is(err, ErrID) {
+		t.Errorf("a bad id: %v", err)
+	}
+	if _, err := s.Save(ctx, "nope", docfile.JSON, named("a")); err == nil {
 		t.Error("unknown target")
 	}
 	if _, err := s.Load(ctx, "nope", "a"); err == nil {
@@ -129,8 +224,13 @@ func TestErrors(t *testing.T) {
 	if err := s.Delete(ctx, "nope", "a"); err == nil {
 		t.Error("unknown target")
 	}
-	if _, err := s.Load(ctx, "m", "missing.json"); !errors.Is(err, docstore.ErrNotFound) {
-		t.Error(err)
+	for _, id := range []string{"acl:doc", "collab:doc", CatalogKey, "missing"} {
+		if _, err := s.Load(ctx, "m", id); !errors.Is(err, ErrNotFound) {
+			t.Errorf("load %q: %v", id, err)
+		}
+		if err := s.Delete(ctx, "m", id); !errors.Is(err, ErrNotFound) {
+			t.Errorf("delete %q: %v", id, err)
+		}
 	}
 	if _, err := s.Codec("proto"); err == nil {
 		t.Error("restricted codecs")

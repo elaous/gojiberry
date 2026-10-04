@@ -4,6 +4,10 @@
 // SQLite, S3, local files, memory, or an HTTP server in front of any of
 // them.
 //
+// A document is known by its ID, a UUID kept in the document itself; its name is
+// only a label, so two documents can have the same name. Each target keeps a
+// catalog of its documents (CatalogKey), which is what List reads.
+//
 // components.Saver is the user interface for it.
 package saver
 
@@ -11,9 +15,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
+	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docstore"
@@ -34,25 +39,36 @@ type Saver struct {
 	// MaxVersions is how many snapshots SaveVersion keeps of one document; 0
 	// means DefaultMaxVersions.
 	MaxVersions int
+
+	mu sync.Mutex // one catalog update at a time
 }
 
 // Entry is a saved document, as List reports it.
 type Entry struct {
-	Key     string // what Load and Delete take
-	Name    string // the document's name, without the extension
+	ID      string // the document's UUID: what every method here takes
+	Key     string // where the target stores it: the ID and the format's extension
+	Name    string // a label; not unique
 	Format  docfile.Codec
 	Size    int
 	Updated time.Time
-	// Tags are the document's tags; only ListTagged fills them in.
-	Tags []string
+	Tags    []string
+	// Trashed is when it was moved to the trash; zero for a document that is not.
+	Trashed time.Time
 }
 
-// FontPrefix starts the store keys of downloaded font files; List skips
-// them.
+// FontPrefix starts the store keys of downloaded font files; they are not
+// documents.
 const FontPrefix = "fonts/"
 
-// ErrName is returned for a name that cannot be a key.
-var ErrName = errors.New("saver: the name is empty or has a slash or other reserved characters")
+// ErrName is returned for a name that cannot be used: empty, too long, or with
+// control characters.
+var ErrName = errors.New("saver: the name is empty, too long, or has control characters")
+
+// ErrID is returned for something that is not a document ID.
+var ErrID = errors.New("saver: not a document id")
+
+// MaxNameRunes is the longest document name.
+const MaxNameRunes = 200
 
 func (s *Saver) codecs() []docfile.Codec {
 	if s.Codecs != nil {
@@ -81,113 +97,138 @@ func (s *Saver) Codec(name string) (docfile.Codec, error) {
 	return nil, fmt.Errorf("saver: no format %q", name)
 }
 
-func validName(name string) bool {
-	return name != "" && !strings.ContainsAny(name, "/\\\x00") && !reserved(name) && name != "." && name != ".."
+// ValidName reports whether name can label a document.
+func ValidName(name string) bool {
+	if strings.TrimSpace(name) == "" || utf8.RuneCountInString(name) > MaxNameRunes {
+		return false
+	}
+	return !strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f })
 }
 
 // reserved reports whether key is in a keyspace owned by something else
-// (document access lists, the shared-editing hub's documents).
+// (document access lists, the shared-editing hub's documents, the catalog,
+// version history).
 func reserved(key string) bool {
-	return strings.HasPrefix(key, "acl:") || strings.HasPrefix(key, "collab:") ||
-		strings.HasPrefix(key, VersionPrefix) || strings.HasPrefix(key, TrashPrefix)
-}
-
-// Key is the store key for a document called name in codec c.
-func Key(name string, c docfile.Codec) (string, error) {
-	if !validName(name) {
-		return "", ErrName
-	}
-	return name + c.Ext(), nil
-}
-
-// Save writes doc, stamped with the current time, to the target in the
-// codec, as name + the codec's extension, and returns the key.
-func (s *Saver) Save(ctx context.Context, target, name string, c docfile.Codec, doc docfile.Document) (string, error) {
-	t, err := s.Target(target)
-	if err != nil {
-		return "", err
-	}
-	key, err := Key(name, c)
-	if err != nil {
-		return "", err
-	}
-	doc.Updated = time.Now().UnixNano()
-	data, err := c.Marshal(doc)
-	if err != nil {
-		return "", err
-	}
-	return key, t.Adapter.Save(ctx, key, data)
-}
-
-// Load reads a document back. The format comes from the key's
-// extension, or from the contents when that says nothing.
-func (s *Saver) Load(ctx context.Context, target, key string) (docfile.Document, error) {
-	t, err := s.Target(target)
-	if err != nil {
-		return docfile.Document{}, err
-	}
-	if reserved(key) {
-		return docfile.Document{}, ErrName
-	}
-	stored, err := t.Adapter.Load(ctx, key)
-	if err != nil {
-		return docfile.Document{}, err
-	}
-	c, _ := s.codecOf(key)
-	if c == nil {
-		c = docfile.Detect(stored.Data)
-	}
-	return c.Unmarshal(stored.Data)
-}
-
-// Delete removes a saved document.
-func (s *Saver) Delete(ctx context.Context, target, key string) error {
-	t, err := s.Target(target)
-	if err != nil {
-		return err
-	}
-	if reserved(key) {
-		return ErrName
-	}
-	return t.Adapter.Delete(ctx, key)
+	return strings.HasPrefix(key, "acl:") || strings.HasPrefix(key, "collab:") || strings.HasPrefix(key, "catalog:") ||
+		strings.HasPrefix(key, VersionPrefix)
 }
 
 func (s *Saver) codecOf(key string) (docfile.Codec, string) {
 	for _, c := range s.codecs() {
-		if name, ok := strings.CutSuffix(key, c.Ext()); ok {
-			return c, name
+		if stem, ok := strings.CutSuffix(key, c.Ext()); ok {
+			return c, stem
 		}
 	}
 	return nil, ""
 }
 
-// List returns the documents saved in the target, newest first. Keys
-// that are not a document (downloaded fonts, other files) are left out.
-func (s *Saver) List(ctx context.Context, target string) ([]Entry, error) {
-	t, err := s.Target(target)
-	if err != nil {
-		return nil, err
+// Save writes doc to the target in the codec. The document's name is
+// doc.Name() (set it with SetName), and its ID doc.ID(): a document with none is
+// a new one and gets a fresh UUID; one with an ID replaces the saved document
+// with that ID. Saving does not change the document's tags if doc has none of its
+// own. It returns the entry as listed.
+func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc docfile.Document) (Entry, error) {
+	if !ValidName(doc.Name()) {
+		return Entry{}, ErrName
 	}
-	metas, err := t.Adapter.List(ctx)
-	if err != nil {
-		return nil, err
+	id := doc.ID()
+	if id == "" {
+		id = docfile.NewID()
+	} else if !docfile.ValidID(id) {
+		return Entry{}, ErrID
 	}
-	var out []Entry
-	for _, m := range metas {
-		if strings.HasPrefix(m.ID, FontPrefix) || reserved(m.ID) {
-			continue
+	var out Entry
+	err := s.update(ctx, target, func(t Target, cat *catalog) error {
+		prev, existed := cat.Docs[id]
+		if existed && len(doc.Tags()) == 0 && len(prev.Tags) > 0 {
+			doc.SetTags(prev.Tags)
 		}
-		if c, name := s.codecOf(m.ID); c != nil {
-			out = append(out, Entry{Key: m.ID, Name: name, Format: c, Size: m.Size, Updated: m.UpdatedAt})
+		doc.SetID(id)
+		doc.Updated = time.Now().UnixNano()
+		data, err := c.Marshal(doc)
+		if err != nil {
+			return err
 		}
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if !out[i].Updated.Equal(out[j].Updated) {
-			return out[i].Updated.After(out[j].Updated)
+		key := id + c.Ext()
+		if err := t.Adapter.Save(ctx, key, data); err != nil {
+			return err
 		}
-		return out[i].Key < out[j].Key
+		if existed && prev.Key != key { // saved in another format: the old file goes
+			_ = t.Adapter.Delete(ctx, prev.Key)
+		}
+		cat.Docs[id] = catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: len(data), Updated: doc.Updated, Tags: doc.Tags(), Trashed: prev.Trashed}
+		out = cat.entry(s, id)
+		return nil
 	})
-	return out, nil
+	return out, err
+}
+
+// Load reads a document back by ID.
+func (s *Saver) Load(ctx context.Context, target, id string) (docfile.Document, error) {
+	var doc docfile.Document
+	err := s.view(ctx, target, func(t Target, cat *catalog) error {
+		e, ok := cat.Docs[id]
+		if !ok {
+			return ErrNotFound
+		}
+		stored, err := t.Adapter.Load(ctx, e.Key)
+		if err != nil {
+			return err
+		}
+		c, _ := s.codecOf(e.Key)
+		if c == nil {
+			c = docfile.Detect(stored.Data)
+		}
+		doc, err = c.Unmarshal(stored.Data)
+		if err != nil {
+			return err
+		}
+		doc.SetID(id)
+		doc.SetName(e.Name)
+		doc.SetTags(e.Tags)
+		return nil
+	})
+	return doc, err
+}
+
+// Delete removes a document, its history and its place in the trash for good.
+func (s *Saver) Delete(ctx context.Context, target, id string) error {
+	return s.update(ctx, target, func(t Target, cat *catalog) error {
+		e, ok := cat.Docs[id]
+		if !ok {
+			return ErrNotFound
+		}
+		if err := t.Adapter.Delete(ctx, e.Key); err != nil && !errors.Is(err, docstore.ErrNotFound) {
+			return err
+		}
+		delete(cat.Docs, id)
+		s.dropVersions(ctx, t, id)
+		return nil
+	})
+}
+
+// List returns the documents saved in the target that are not in the trash,
+// newest first.
+func (s *Saver) List(ctx context.Context, target string) ([]Entry, error) {
+	var out []Entry
+	err := s.view(ctx, target, func(_ Target, cat *catalog) error {
+		out = cat.sorted(s, false)
+		return nil
+	})
+	return out, err
+}
+
+// Get returns one document's entry.
+func (s *Saver) Get(ctx context.Context, target, id string) (Entry, error) {
+	var out Entry
+	err := s.view(ctx, target, func(_ Target, cat *catalog) error {
+		if _, ok := cat.Docs[id]; !ok {
+			return ErrNotFound
+		}
+		out = cat.entry(s, id)
+		return nil
+	})
+	return out, err
 }
 
 // Build makes a Target from a docstore config, the way a server's

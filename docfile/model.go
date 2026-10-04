@@ -9,6 +9,7 @@
 package docfile
 
 import (
+	"crypto/rand"
 	"fmt"
 	"reflect"
 	"slices"
@@ -658,3 +659,52 @@ func (d Document) HasTag(tag string) bool {
 	}
 	return false
 }
+
+// IDKey and NameKey are the Meta keys a document's identity is kept under: its
+// ID, a UUID that never changes (two documents may share a name, never an ID),
+// and its Name in a document list.
+const (
+	IDKey   = "id"
+	NameKey = "name"
+)
+
+// NewID returns a new random (version 4) UUID.
+func NewID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic("docfile: no randomness: " + err.Error())
+	}
+	b[6] = b[6]&0x0f | 0x40
+	b[8] = b[8]&0x3f | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+}
+
+// ValidID reports whether s is a UUID as NewID writes it.
+func ValidID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	for i, c := range s {
+		switch {
+		case i == 8 || i == 13 || i == 18 || i == 23:
+			if c != '-' {
+				return false
+			}
+		case (c < '0' || c > '9') && (c < 'a' || c > 'f'):
+			return false
+		}
+	}
+	return true
+}
+
+// ID returns the document's ID, "" for one that has none yet.
+func (d Document) ID() string { v, _ := d.Get(IDKey); return v }
+
+// SetID gives the document its ID.
+func (d *Document) SetID(id string) { d.Set(IDKey, id) }
+
+// Name returns the document's name in a list, "" if it has none.
+func (d Document) Name() string { v, _ := d.Get(NameKey); return v }
+
+// SetName names the document.
+func (d *Document) SetName(name string) { d.Set(NameKey, name) }

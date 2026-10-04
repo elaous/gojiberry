@@ -341,6 +341,9 @@ func (d *Tab) need(selector string) {
 	d.WaitFor("an element "+selector, `window.__e2e.first(`+sel(selector)+`)`)
 }
 
+// WaitSelector waits for an element matching the selector to exist.
+func (d *Tab) WaitSelector(selector string) { d.t.Helper(); d.need(selector) }
+
 // Text is the text of the first match (waiting for it).
 func (d *Tab) Text(selector string) string {
 	d.t.Helper()

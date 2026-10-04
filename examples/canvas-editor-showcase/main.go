@@ -154,7 +154,13 @@ func main() {
 	}
 
 	openDoc := func(d docfile.Document) {
-		state.Items, state.Source = docfile.ToItems(d.Content), ""
+		// The text flow takes its items from props, and only when they differ from
+		// the last ones it was given: opening the same content again (a saved
+		// version after edits) would leave the edits in place. Render it empty
+		// first so the opened content is always applied.
+		state.Items, state.Source = nil, ""
+		renderCanvas()
+		state.Items = docfile.ToItems(d.Content)
 		if len(d.Styles) > 0 {
 			state.Styles = docfile.ToStyles(d.Styles)
 		}
@@ -358,6 +364,7 @@ func main() {
 								return
 							}
 							u.message = "Imported " + file
+							u.saver.Detach() // what was imported is not the saved document that was open
 							openDoc(d)
 						})
 					},

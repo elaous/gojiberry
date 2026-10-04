@@ -39,14 +39,14 @@ order it should land in.
 8. **WS role edge cases (S).** The remaining items under "Known limits" in
    `multiuser-design.md`.
 
-9. **Review leftovers (S each).** `saver.Refresh` loads every document to read
-   tags (cache tags in the listing metadata); WebSocket read limit is
+9. **Review leftovers (S each).** WebSocket read limit is
    `4 * MaxBody` before the 413 check; `cookieSocketAllowed` ignores scheme and
    needs `CookieOrigins` behind a Host-rewriting proxy; `expandReplacement`
    re-runs the regexp on the isolated match (fails for `\b`/`\B` patterns);
    DOCX export drops a table whose cell count mismatches its grid and writes
    media in map order; `Duplicate`/`Restore`/`SetTags` are check-then-write
-   (use a conditional save where the adapter has one); `pdftext` cannot stop a
+   (now serialised per process by the catalog lock; across processes they need a conditional save);
+   `pdftext` cannot stop a
    looping parser (run it out of process on a server).
 
 ## C. Test tooling: chromedp (done)
