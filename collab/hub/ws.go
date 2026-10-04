@@ -44,6 +44,16 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	out := make(chan event, 64) // answers to the client's frames, written by the loop below
 	incoming := make(chan struct{})
+	// send queues an answer, or gives up when the connection is done (a client
+	// that floods frames and never reads must not park this goroutine).
+	send := func(e event) bool {
+		select {
+		case out <- e:
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
 	go func() { // reads what the client sends
 		defer close(incoming)
 		for {
@@ -59,13 +69,17 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 			case "ops":
 				var ops []crdt.Op
 				if json.Unmarshal(f.Data, &ops) != nil {
-					out <- ackEvent("reject", f.ID, "bad operations", http.StatusBadRequest)
+					if !send(ackEvent("reject", f.ID, "bad operations", http.StatusBadRequest)) {
+						return
+					}
 					continue
 				}
 				if status, msg := h.acceptOps(rm, role, r, replica, ops); status == http.StatusNoContent {
-					out <- ackEvent("ack", f.ID, "", 0)
-				} else {
-					out <- ackEvent("reject", f.ID, msg, status)
+					if !send(ackEvent("ack", f.ID, "", 0)) {
+						return
+					}
+				} else if !send(ackEvent("reject", f.ID, msg, status)) {
+					return
 				}
 			case "presence":
 				var p Presence

@@ -299,3 +299,43 @@ func TestNoFlowInsideIsReported(t *testing.T) {
 		t.Fatalf("%v", got.Err)
 	}
 }
+
+// A viewer cannot change the page furniture, so the session must not try to
+// share what it holds locally (the hub would refuse it and the session would
+// rebuild itself over and over).
+func TestViewerDoesNotPushSurfaces(t *testing.T) {
+	srv := httptest.NewServer(hub.New(hub.Config{Roles: func(r *http.Request, _ string) hub.Role {
+		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	}}).Handler())
+	t.Cleanup(srv.Close)
+	mk := func(role string) *user {
+		u := newUser(t, srv, nil, http.Header{"Authorization": {"Bearer " + role}})
+		u.props.Flow, u.kids = collabgox.FlowAll, page("hello", "Report")
+		u.render(t)
+		wait(t, role+" online", func() bool {
+			return u.get(func(u *user) bool { return u.state.Status == client.Online && u.state.Role != "" })
+		})
+		return u
+	}
+	ana := mk("owner")
+	time.Sleep(50 * time.Millisecond)
+	vee := mk("viewer")
+
+	vee.mu.Lock()
+	ps, ft, _ := vee.furniture()
+	ps.Pages[0].Header = &canvas.HeaderFooter{Text: "Vee's header"}
+	ft.X = 321
+	vee.mu.Unlock()
+	time.Sleep(400 * time.Millisecond)
+
+	if vee.get(func(u *user) bool { return u.state.Repairs != 0 || u.state.Err != nil }) {
+		t.Errorf("the viewer's session was rejected and repaired: %+v", vee.state)
+	}
+	ana.mu.Lock()
+	aps, aft, _ := ana.furniture()
+	h, x := aps.Pages[0].Header, aft.X
+	ana.mu.Unlock()
+	if h == nil || h.Text != "Report" || x == 321 {
+		t.Errorf("a viewer's local change reached the owner: header %+v, x %v", h, x)
+	}
+}

@@ -57,7 +57,7 @@ type Options struct {
 	// uses the Authorization header (docstore).
 	TokenHeader string
 	// TokenQuery, if set, also accepts the token as that URL query parameter
-	// when the header is absent: a browser cannot set headers on a WebSocket,
+	// when the header is absent, on a path ending in "/ws" only: a browser cannot set headers on a WebSocket,
 	// so the collab hub's socket takes ?guard_token=... (a token in a URL can
 	// end up in logs: use TLS and short-lived tokens).
 	TokenQuery string
@@ -94,7 +94,7 @@ func (o Options) bearer(r *http.Request) (string, bool) {
 		v = r.Header.Get(o.TokenHeader)
 		ok = v != ""
 	}
-	if !ok && o.TokenQuery != "" {
+	if !ok && o.TokenQuery != "" && strings.HasSuffix(r.URL.Path, "/ws") {
 		v = r.URL.Query().Get(o.TokenQuery)
 		ok = v != ""
 	}

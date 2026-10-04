@@ -325,3 +325,10 @@ Headers, footers and objects are not part of the text flow, so they travel as wh
 - After applying a snapshot an editor sends the surface records the document lacks (`PushSurfaces`), so a late joiner's local header or note reaches the others; a viewer never does.
 - A record is never deleted by a session (it may only be missing from view), and what an element reads back after `Write` is taken as agreed, so normalisation cannot start an echo between two peers.
 - Not yet: adding or removing objects at run time (elements come from each side's own tree), character formatting inside floating text, an image's picture.
+
+### Known limits found in review
+
+- Over WebSockets the client sends up to 200 operations per frame with no size cap; a batch over the hub's `MaxBody` makes the server close the socket and the client resends it forever (HTTP would answer 413). Fix: split batches by encoded size.
+- A downgraded editor can keep writing over a socket until the next keep-alive tick (the role is checked on each tick, not on each frame).
+- The socket accepts any `Origin`; only the guard protects it. With cookie-based auth and a guard that sets no `Origins`, a page on another site could open one. The default Bearer setup is not affected.
+- Surface records are keyed by element order (`float:0`), so concurrent adding or removing of objects shifts them, and they are never deleted.

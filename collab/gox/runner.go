@@ -33,7 +33,10 @@ func newRunner(ctx *cgox.Context, sess *collab.Session, flow *canvas.TextFlow, p
 // stop ends the runner without waiting for it: it is called from the goroutine
 // that owns the canvas, which the loop may be waiting for (Sync). The loop
 // closes the session itself when it sees quit, and does nothing once it has.
-func (r *runner) stop() { close(r.quit) }
+func (r *runner) stop() {
+	close(r.quit)
+	r.sess.Bridge.Detach() // the flow stops sharing and gets its own undo back
+}
 
 func (r *runner) do(f func()) {
 	if s := r.props.Load().Sync; s != nil {
@@ -66,7 +69,9 @@ func (r *runner) loop() {
 			}
 			s := r.sess // Poll may repair the session and replace what is inside it
 			changed := s.Poll()
-			s.Bridge.SyncSurfaces()
+			if s.Role.CanEdit() { // a viewer's or commenter's surface records would be refused
+				s.Bridge.SyncSurfaces()
+			}
 			redraw := changed
 			if role := canvas.ParseRole(string(s.Role)); s.Role != "" && r.ctx.Stage != nil && role != r.ctx.Stage.Role {
 				r.ctx.Stage.SetRole(role)
