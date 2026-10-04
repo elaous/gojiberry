@@ -1,0 +1,48 @@
+//go:build js && wasm
+
+// router_section.xg is a minimal two-page mini-SPA proving
+// browser.Router actually unifies programmatic navigation and the
+// browser's own back/forward buttons under one callback: OnNavigate
+// re-renders the section for whatever the current path is, regardless
+// of whether it got there via Navigate, Replace, or the user clicking
+// Back/Forward.
+package main
+
+import (
+	"net/url"
+	"syscall/js"
+
+	"github.com/elaous/gojiberry/domrt/browser"
+	"github.com/elaous/gojiberry/domrt/html"
+)
+
+func renderRouterSection(document *html.Document, u *url.URL) {
+	content := "Home page"
+	if u.Path == "/about" {
+		content = "About page"
+	}
+	document.GetElementByID("router-content").SetTextContent(content)
+	document.GetElementByID("router-path-result").SetTextContent(u.Path)
+}
+
+func onRouterClick(fn func()) js.Func {
+	return js.FuncOf(func(this js.Value, args []js.Value) any {
+		fn()
+		return nil
+	})
+}
+
+func wireRouterSection(document *html.Document) {
+	router := browser.NewRouter()
+
+	router.OnNavigate(func(u *url.URL) { renderRouterSection(document, u) })
+
+	document.GetElementByID("router-go-about").AddEventListener("click", onRouterClick(func() {
+		router.Navigate("/about")
+	}))
+	document.GetElementByID("router-replace-home").AddEventListener("click", onRouterClick(func() {
+		router.Replace("/")
+	}))
+
+	renderRouterSection(document, router.URL())
+}

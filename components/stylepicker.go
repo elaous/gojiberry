@@ -2,7 +2,7 @@ package components
 
 import (
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // StylePickerProps configures StylePicker.
@@ -25,7 +25,7 @@ type StylePickerProps struct {
 // way a word processor's style list does. It is controlled: the caller
 // applies the pick (see canvas.Styles for the commands, or
 // TextFlow.ApplyParagraph / ApplyFormat with a Style).
-func StylePicker(props StylePickerProps) gox.Node {
+func StylePicker(props StylePickerProps) xango.Node {
 	base := props.Base
 	if base.FontSize <= 0 {
 		base.FontSize = 16
@@ -33,8 +33,8 @@ func StylePicker(props StylePickerProps) gox.Node {
 	if base.FontFamily == "" {
 		base.FontFamily = "sans-serif"
 	}
-	section := func(title string, paragraph bool) gox.Node {
-		var items []gox.Node
+	section := func(title string, paragraph bool) xango.Node {
+		var items []xango.Node
 		for _, s := range props.Styles {
 			if s.Paragraph != paragraph {
 				continue
@@ -46,22 +46,22 @@ func StylePicker(props StylePickerProps) gox.Node {
 			}
 			ts := s.Format.Resolve(base)
 			ts.LineHeight = 0
-			attrs := []gox.Attr{
-				gox.A("class", class), gox.A("type", "button"), gox.A("data-style", s.Name),
-				gox.A("style", ts.CSS()),
+			attrs := []xango.Attr{
+				xango.A("class", class), xango.A("type", "button"), xango.A("data-style", s.Name),
+				xango.A("style", ts.CSS()),
 			}
 			if props.OnPick != nil {
-				attrs = append(attrs, gox.On("click", func(gox.Event) { props.OnPick(s.Name, s.Paragraph) }))
+				attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnPick(s.Name, s.Paragraph) }))
 			}
-			items = append(items, gox.El("button", attrs, gox.Text(s.Name)))
+			items = append(items, xango.El("button", attrs, xango.Text(s.Name)))
 		}
 		if len(items) == 0 {
-			return gox.Frag()
+			return xango.Frag()
 		}
-		return gox.El("div", []gox.Attr{gox.A("class", "gj-stylepicker-section")},
-			gox.El("h4", []gox.Attr{gox.A("class", "gj-stylepicker-title")}, gox.Text(title)),
-			gox.El("div", []gox.Attr{gox.A("class", "gj-stylepicker-list")}, items...))
+		return xango.El("div", []xango.Attr{xango.A("class", "gj-stylepicker-section")},
+			xango.El("h4", []xango.Attr{xango.A("class", "gj-stylepicker-title")}, xango.Text(title)),
+			xango.El("div", []xango.Attr{xango.A("class", "gj-stylepicker-list")}, items...))
 	}
-	return gox.El("div", []gox.Attr{gox.A("class", "gj-stylepicker")},
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-stylepicker")},
 		section("Paragraph styles", true), section("Character styles", false))
 }

@@ -1,0 +1,41 @@
+package components
+
+import (
+	"strconv"
+
+	"github.com/elaous/gojiberry/xango"
+)
+
+// SliderProps configures Slider.
+type SliderProps struct {
+	Min, Max, Value float64
+	Step            float64 // 0 leaves the browser's default step (1)
+	Disabled        bool
+	OnChange        func(value float64) // called continuously while dragging
+}
+
+func formatFloat(f float64) string { return strconv.FormatFloat(f, 'g', -1, 64) }
+
+// Slider renders a styled native range input.
+func Slider(props SliderProps) xango.Node {
+	attrs := []xango.Attr{
+		xango.A("type", "range"),
+		xango.A("class", "gj-slider"),
+		xango.A("min", formatFloat(props.Min)),
+		xango.A("max", formatFloat(props.Max)),
+		xango.A("value", formatFloat(props.Value)),
+	}
+	if props.Step != 0 {
+		attrs = append(attrs, xango.A("step", formatFloat(props.Step)))
+	}
+	if props.Disabled {
+		attrs = append(attrs, xango.A("disabled", "disabled"))
+	}
+	if props.OnChange != nil {
+		attrs = append(attrs, xango.On("input", func(e xango.Event) {
+			v, _ := strconv.ParseFloat(xango.EventValue[string](e), 64)
+			props.OnChange(v)
+		}))
+	}
+	return xango.El("input", attrs)
+}

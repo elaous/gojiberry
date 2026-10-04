@@ -1,5 +1,5 @@
 # wasm-struct-counter-demo dev workflow. Run `make run` for the full path from a
-# clean checkout: regenerates .go from .gox, builds the WASM client,
+# clean checkout: regenerates .go from .xg, builds the WASM client,
 # and serves it -- then open http://localhost:8080/.
 .PHONY: run
 run: generate wasm
@@ -7,7 +7,7 @@ run: generate wasm
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/goxc examples/wasm-struct-counter-demo
+	cd ../.. && go run ./cmd/xgc examples/wasm-struct-counter-demo
 
 .PHONY: wasm
 wasm:

@@ -1,0 +1,122 @@
+//go:build js && wasm
+
+// Package main is task #128's own rendering-benchmark harness: it
+// mounts a real domrt.Root and exposes window.runBench(scenario, n) to
+// JS, running n patch/patchChildren-exercising update cycles for one
+// of four scenarios and returning the elapsed wall time in
+// nanoseconds -- measured with Go's own time.Now/time.Since inside the
+// wasm program itself, not a second JS round trip, so per-call CDP/
+// subprocess overhead never pollutes the number. Driven by e2e/bench.js
+// the same way every other gojiberry example's own e2e/verify.js
+// drives its own app end to end (see bench_test.go), just reading back
+// one number instead of asserting DOM state.
+package main
+
+import (
+	"fmt"
+	"strconv"
+	"syscall/js"
+	"time"
+
+	"github.com/elaous/gojiberry/domrt"
+	"github.com/elaous/gojiberry/xango"
+)
+
+// benchListSize is how many list-item children each scenario's list starts
+// (and, for every scenario but "append", stays) at -- large enough
+// that patchChildren's own bookkeeping (the oldByKey map, the used
+// set, the final DOM-order-fixup pass) isn't dwarfed by per-call
+// overhead, small enough that one iteration is still fast.
+const benchListSize = 100
+
+func keyedList(keys []string, labelFor func(key string) string) xango.Node {
+	items := make([]xango.Node, len(keys))
+	for i, k := range keys {
+		items[i] = xango.El("li", nil, xango.Text(labelFor(k))).WithKey(k)
+	}
+	return xango.El("ul", []xango.Attr{xango.A("id", "list")}, items...)
+}
+
+func initialKeys(n int) []string {
+	keys := make([]string, n)
+	for i := range keys {
+		keys[i] = "item-" + strconv.Itoa(i)
+	}
+	return keys
+}
+
+// rotate left-rotates s by by positions in place.
+func rotate(s []string, by int) {
+	by = by % len(s)
+	tmp := append([]string(nil), s[:by]...)
+	copy(s, s[by:])
+	copy(s[len(s)-by:], tmp)
+}
+
+// runBenchScenario mounts a fresh root, then runs n update cycles of
+// the named scenario against it, returning elapsed nanoseconds.
+func runBenchScenario(scenario string, n int) (float64, error) {
+	container := js.Global().Get("document").Call("getElementById", "root")
+	container.Set("innerHTML", "")
+
+	keys := initialKeys(benchListSize)
+	root := domrt.Mount(container, keyedList(keys, func(k string) string { return k }))
+
+	start := time.Now()
+	switch scenario {
+	case "attrs-only":
+		// Same keys, same order, every cycle -- only the text content
+		// changes. patch's cheapest real path: no create/destroy/move.
+		for i := 0; i < n; i++ {
+			suffix := "-v" + strconv.Itoa(i)
+			root.Update(keyedList(keys, func(k string) string { return k + suffix }))
+		}
+	case "keyed-reorder":
+		// Same keys every cycle, rotated into a new order -- exercises
+		// patchChildren's key-match lookup plus its own DOM-order-fixup
+		// pass (every child ends up needing an insertBefore call, even
+		// though none are created or destroyed).
+		shuffled := append([]string(nil), keys...)
+		for i := 0; i < n; i++ {
+			rotate(shuffled, 1)
+			root.Update(keyedList(shuffled, func(k string) string { return k }))
+		}
+	case "append":
+		// Every prior key stays exactly where it was; one new keyed
+		// child appends at the end each cycle -- the "add one more
+		// item" interaction a real app actually hits most often.
+		grown := append([]string(nil), keys...)
+		for i := 0; i < n; i++ {
+			grown = append(grown, "new-"+strconv.Itoa(i))
+			root.Update(keyedList(grown, func(k string) string { return k }))
+		}
+	case "full-replace":
+		// A completely different key set every cycle -- patchChildren's
+		// worst case: nothing matches, every old child is torn down and
+		// every new one created fresh.
+		for i := 0; i < n; i++ {
+			fresh := make([]string, benchListSize)
+			for j := range fresh {
+				fresh[j] = "gen" + strconv.Itoa(i) + "-" + strconv.Itoa(j)
+			}
+			root.Update(keyedList(fresh, func(k string) string { return k }))
+		}
+	default:
+		return 0, fmt.Errorf("unknown scenario %q", scenario)
+	}
+	return float64(time.Since(start).Nanoseconds()), nil
+}
+
+func main() {
+	js.Global().Set("runBench", js.FuncOf(func(this js.Value, args []js.Value) any {
+		scenario := args[0].String()
+		n := args[1].Int()
+		ns, err := runBenchScenario(scenario, n)
+		if err != nil {
+			return js.ValueOf(map[string]any{"error": err.Error()})
+		}
+		return js.ValueOf(ns)
+	}))
+
+	select {} // keep the wasm program alive so window.runBench keeps working
+}

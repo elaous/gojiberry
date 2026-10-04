@@ -3,7 +3,7 @@ package components
 import (
 	"testing"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func TestTheme(t *testing.T) {
@@ -19,7 +19,7 @@ func TestTheme(t *testing.T) {
 	})
 
 	t.Run("Children render inside the wrapper", func(t *testing.T) {
-		html := render(t, Theme(ThemeProps{Children: []gox.Node{gox.Text("hello")}}))
+		html := render(t, Theme(ThemeProps{Children: []xango.Node{xango.Text("hello")}}))
 		mustContain(t, html, "hello")
 	})
 

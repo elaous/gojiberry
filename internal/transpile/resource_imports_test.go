@@ -51,7 +51,7 @@ func mustCompileAndRun(t *testing.T, dir, filename, src string) {
 func TestOrdinaryImportsPassThroughUnchanged(t *testing.T) {
 	dir := setupModule(t)
 	src := "package main\n\nimport (\n\t\"fmt\"\n\tfoo \"example.com/other/foo\"\n)\n\nfunc main() { fmt.Println(foo.X) }\n"
-	got, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	got, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func main() {
 	_ = configBytes
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func main() {
 	_ = config
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func main() {
 
 // TestTypedJSONImportDecodesIntoUserDeclaredType covers the current
 // design: TypeName in `alias.(TypeName)` must already be declared by
-// the caller (gox does not generate it or infer its shape), so any
+// the caller (xango does not generate it or infer its shape), so any
 // JSON shape works, not just a top-level object -- including this
 // case, where nested/array/scalar fields all just flow straight into
 // a struct the test itself writes.
@@ -160,7 +160,7 @@ func main() {
 	}
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func main() {
 		t.Fatalf("expected the user's own ConfigType declaration to survive untouched, got:\n%s", got)
 	}
 	if strings.Count(got, "type ConfigType struct") != 1 {
-		t.Errorf("expected gox not to generate a second ConfigType, got:\n%s", got)
+		t.Errorf("expected xango not to generate a second ConfigType, got:\n%s", got)
 	}
 	if !strings.Contains(got, "var config ConfigType") {
 		t.Errorf("expected config bound as ConfigType, got:\n%s", got)
@@ -181,7 +181,7 @@ func TestTypedJSONImportAcceptsNonObjectRootNow(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "list.json", `[1, 2, 3]`)
 	src := "package main\n\nimport (\n\tv.(Ints) \"list.json\"\n)\n\nfunc main() {\n\tvar _ Ints = v\n\tif len(v) != 3 {\n\t\tpanic(\"unexpected\")\n\t}\n}\n\ntype Ints []int\n"
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestJSONCImportTypedDecodesIntoUserDeclaredType(t *testing.T) {
 		"title": "gojiberry", /* inline */ "count": 2
 	}`)
 	src := "package main\n\nimport (\n\tconfig.(ConfigType) \"config.jsonc\"\n)\n\ntype ConfigType struct {\n\tTitle string `json:\"title\"`\n\tCount int `json:\"count\"`\n}\n\nfunc main() {\n\t_ = config.Title\n\t_ = config.Count\n}\n"
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func main() {
 	_ = config
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func main() {
 	}
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +283,7 @@ func main() {
 	}
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +298,7 @@ func main() {
 // (non-experimental) gating boundary for .hcl/.proto/.capnp/.sql --
 // their actual loaders now live in internal/transpile/experimental
 // and are tested there (with Options{Experimental: true}); this only
-// confirms gox refuses to run them silently.
+// confirms xango refuses to run them silently.
 func TestExperimentalExtensionsRejectedWithoutOptIn(t *testing.T) {
 	for _, tc := range []struct {
 		ext     string
@@ -313,7 +313,7 @@ func TestExperimentalExtensionsRejectedWithoutOptIn(t *testing.T) {
 			dir := setupModule(t)
 			writeFile(t, dir, "resource"+tc.ext, tc.content)
 			src := "package main\n\nimport (\n\tr \"resource" + tc.ext + "\"\n)\n\nfunc main() { _ = r }\n"
-			_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+			_, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 			if err == nil {
 				t.Fatalf("expected %s imports to be rejected without Options.Experimental", tc.ext)
 			}
@@ -334,7 +334,7 @@ func TestTypedJSONAnnotationWorksByDefault(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "config.json", `{"title": "gojiberry"}`)
 	src := "package main\n\nimport (\n\tconfig.(ConfigType) \"config.json\"\n)\n\ntype ConfigType struct {\n\tTitle string `json:\"title\"`\n}\n\nfunc main() {\n\tif config.Title != \"gojiberry\" {\n\t\tpanic(\"unexpected\")\n\t}\n}\n"
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,15 +342,15 @@ func TestTypedJSONAnnotationWorksByDefault(t *testing.T) {
 }
 
 // TestTypedJSONAnnotationWithUndeclaredTypeFailsAtGoCompile confirms
-// gox doesn't try to verify TypeName actually exists -- that's the Go
+// xango doesn't try to verify TypeName actually exists -- that's the Go
 // compiler's job, not a source-to-source transpiler's; using a type
-// gox never heard of should transpile fine and fail where any other
+// xango never heard of should transpile fine and fail where any other
 // undefined-identifier mistake would.
 func TestTypedJSONAnnotationWithUndeclaredTypeFailsAtGoCompile(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "config.json", `{"title": "gojiberry"}`)
 	src := "package main\n\nimport (\n\tconfig.(NeverDeclared) \"config.json\"\n)\n\nfunc main() { _ = config }\n"
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +371,7 @@ func TestTypedJSONAnnotationWithUndeclaredTypeFailsAtGoCompile(t *testing.T) {
 func TestMissingResourceFileErrorsWithResolvedPath(t *testing.T) {
 	dir := setupModule(t)
 	src := "package main\n\nimport (\n\tconfig \"missing.json\"\n)\n\nfunc main() { _ = config }\n"
-	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	_, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err == nil {
 		t.Fatal("expected an error for a missing resource file")
 	}

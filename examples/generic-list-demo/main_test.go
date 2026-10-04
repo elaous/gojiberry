@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func TestPageRendersTypedItemsThroughTheRenderProp(t *testing.T) {
-	html, err := gox.RenderString(Page([]Person{{"Ada", "Engineer"}, {"Grace", "Admiral"}}))
+	html, err := xango.RenderString(Page([]Person{{"Ada", "Engineer"}, {"Grace", "Admiral"}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +20,7 @@ func TestPageRendersTypedItemsThroughTheRenderProp(t *testing.T) {
 			t.Errorf("missing %q in %s", want, html)
 		}
 	}
-	empty, _ := gox.RenderString(Page(nil))
+	empty, _ := xango.RenderString(Page(nil))
 	if !strings.Contains(empty, "Nobody here yet.") || strings.Contains(empty, "<ul") {
 		t.Errorf("empty page = %s", empty)
 	}

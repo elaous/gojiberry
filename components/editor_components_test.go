@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func TestMenuRendersItemsSubmenusAndRunsOnSelect(t *testing.T) {
@@ -39,7 +39,7 @@ func TestMenuRendersItemsSubmenusAndRunsOnSelect(t *testing.T) {
 		t.Fatalf("click handlers = %d, want 4 (disabled and submenu parents have none)", len(hs))
 	}
 	for _, h := range hs {
-		h(gox.Event{})
+		h(xango.Event{})
 	}
 	if strings.Join(picked, ",") != "undo,bold,symbol,leaf" || closed != 4 {
 		t.Errorf("picked %v, closed %d", picked, closed)
@@ -58,14 +58,14 @@ func TestMenuBarOpensOneMenuAtATime(t *testing.T) {
 		t.Errorf("nothing open: %s", html)
 	}
 	clicks := findHandlers(closedBar, "click")
-	clicks[1](gox.Event{}) // click Edit
+	clicks[1](xango.Event{}) // click Edit
 	if len(opened) != 1 || opened[0] != 1 {
 		t.Fatalf("click opens: %v", opened)
 	}
 	if hs := findHandlers(closedBar, "mouseenter"); len(hs) != 2 {
 		t.Fatal("mouseenter handlers")
 	} else {
-		hs[0](gox.Event{}) // nothing is open: hovering does not open
+		hs[0](xango.Event{}) // nothing is open: hovering does not open
 		if len(opened) != 1 {
 			t.Errorf("hover with nothing open: %v", opened)
 		}
@@ -79,18 +79,18 @@ func TestMenuBarOpensOneMenuAtATime(t *testing.T) {
 		t.Errorf("File open: %s", html)
 	}
 	hs := findHandlers(bar, "click") // backdrop, File, New (an item), Edit
-	hs[0](gox.Event{})               // the backdrop closes
-	hs[1](gox.Event{})               // File again toggles it closed
-	hs[2](gox.Event{})               // choosing an item closes
+	hs[0](xango.Event{})             // the backdrop closes
+	hs[1](xango.Event{})             // File again toggles it closed
+	hs[2](xango.Event{})             // choosing an item closes
 	if len(opened) != 3 || opened[0] != -1 || opened[1] != -1 || opened[2] != -1 {
 		t.Errorf("close calls = %v", opened)
 	}
 	enter := findHandlers(bar, "mouseenter")
-	enter[1](gox.Event{}) // moving onto Edit while File is open switches
+	enter[1](xango.Event{}) // moving onto Edit while File is open switches
 	if opened[len(opened)-1] != 1 {
 		t.Errorf("hover switches: %v", opened)
 	}
-	enter[0](gox.Event{}) // onto the open entry: nothing
+	enter[0](xango.Event{}) // onto the open entry: nothing
 	if len(opened) != 4 {
 		t.Errorf("hover on the open entry: %v", opened)
 	}
@@ -210,8 +210,8 @@ func TestLinkPreview(t *testing.T) {
 			t.Errorf("lacks %q: %s", want, html)
 		}
 	}
-	findHandlers(n, "click")[0](gox.NewEvent("click", nil, false, func() {}, nil))
-	findHandlers(n, "click")[1](gox.Event{})
+	findHandlers(n, "click")[0](xango.NewEvent("click", nil, false, func() {}, nil))
+	findHandlers(n, "click")[1](xango.Event{})
 	if opened != 1 || closed != 1 {
 		t.Errorf("opened %d closed %d", opened, closed)
 	}
@@ -285,41 +285,41 @@ func TestKeyBindings(t *testing.T) {
 		t.Errorf("recording: %s", html)
 	}
 	capture, _ := byAttr(n, "data-capture", string(canvas.CmdMoveLineUp))
-	keydown := func(k gox.KeyData) {
+	keydown := func(k xango.KeyData) {
 		for _, a := range capture.Attrs {
 			if a.Name == "keydown" {
-				a.Handler(gox.NewEvent("keydown", k, false, func() {}, nil))
+				a.Handler(xango.NewEvent("keydown", k, false, func() {}, nil))
 			}
 		}
 	}
 	recorded = nil
-	keydown(gox.KeyData{Key: "Shift", Shift: true})                         // modifier alone: ignored
-	keydown(gox.KeyData{Key: "y", Code: "KeyY", Ctrl: true, Shift: true})   // a chord
-	keydown(gox.KeyData{Key: "*", Code: "Digit8", Ctrl: true, Shift: true}) // Shift+8 is "*": read as 8
-	keydown(gox.KeyData{Key: "x"})                                          // no modifier: ignored
-	keydown(gox.KeyData{Key: "Escape"})
+	keydown(xango.KeyData{Key: "Shift", Shift: true})                         // modifier alone: ignored
+	keydown(xango.KeyData{Key: "y", Code: "KeyY", Ctrl: true, Shift: true})   // a chord
+	keydown(xango.KeyData{Key: "*", Code: "Digit8", Ctrl: true, Shift: true}) // Shift+8 is "*": read as 8
+	keydown(xango.KeyData{Key: "x"})                                          // no modifier: ignored
+	keydown(xango.KeyData{Key: "Escape"})
 	if strings.Join(bound, ",") != "line.move-up=Mod+Shift+Y,line.move-up=Mod+Shift+8" || len(recorded) != 1 || recorded[0] != "" {
 		t.Errorf("bound %v recorded %v", bound, recorded)
 	}
 	for _, a := range capture.Attrs {
 		if a.Name == "blur" {
-			a.Handler(gox.Event{})
+			a.Handler(xango.Event{})
 		}
 	}
 	if len(recorded) != 2 {
 		t.Error("losing focus cancels recording")
 	}
-	if k, ok := ChordFromKey(gox.KeyData{Key: " ", Code: "Space", Alt: true}); !ok || k != "Alt+Space" {
+	if k, ok := ChordFromKey(xango.KeyData{Key: " ", Code: "Space", Alt: true}); !ok || k != "Alt+Space" {
 		t.Errorf("space = %q", k)
 	}
 }
 
 func TestDocumentView(t *testing.T) {
-	side := gox.Text("panel")
+	side := xango.Text("panel")
 	titles := []string{}
 	n := DocumentView(DocumentViewProps{
 		Title: "Report", OnTitle: func(s string) { titles = append(titles, s) },
-		MenuBar: gox.Text("MENU"), Toolbar: gox.Text("TOOLS"), Canvas: gox.Text("CANVAS"), Sidebar: &side, Status: "Page 1 of 2",
+		MenuBar: xango.Text("MENU"), Toolbar: xango.Text("TOOLS"), Canvas: xango.Text("CANVAS"), Sidebar: &side, Status: "Page 1 of 2",
 	})
 	html := render(t, n)
 	for _, want := range []string{"gj-docview", "gj-docview-top", `value="Report"`, "MENU", "TOOLS", "CANVAS", "gj-docview-sidebar", "panel", "Page 1 of 2", `role="toolbar"`} {
@@ -331,7 +331,7 @@ func TestDocumentView(t *testing.T) {
 	if len(titles) != 1 || titles[0] != "New name" {
 		t.Errorf("titles = %v", titles)
 	}
-	html = render(t, DocumentView(DocumentViewProps{Title: "Plain", Canvas: gox.Text("c")}))
+	html = render(t, DocumentView(DocumentViewProps{Title: "Plain", Canvas: xango.Text("c")}))
 	if strings.Contains(html, "<input") || strings.Contains(html, "sidebar") || !strings.Contains(html, ">Plain<") {
 		t.Errorf("minimal: %s", html)
 	}
@@ -391,11 +391,11 @@ func TestSaverRendersFormAndWiresCallbacks(t *testing.T) {
 		"Saved notes.json", `role="status"`, "2.4 KB", "3.0 MB", "12 B", "2026-01-02 03:04", `data-key="notes.json"`)
 	mustNotContain(t, html, "gj-saver-failed", "Nothing saved yet")
 	for _, h := range findHandlers(n, "change") {
-		h(gox.Event{Value: "pick"})
+		h(xango.Event{Value: "pick"})
 	}
-	findHandlers(n, "input")[0](gox.Event{Value: "typed"})
+	findHandlers(n, "input")[0](xango.Event{Value: "typed"})
 	for _, h := range findHandlers(n, "click") {
-		h(gox.Event{})
+		h(xango.Event{})
 	}
 	want := "target:pick format:pick name:typed save refresh open:notes.json delete:notes.json open:big.pb delete:big.pb open:tiny.pb delete:tiny.pb"
 	if got := strings.Join(log, " "); got != want {
@@ -424,7 +424,7 @@ func TestTransferButtons(t *testing.T) {
 	})
 	mustContain(t, render(t, n), `aria-label="Import"`, `aria-label="Export"`, `data-kind="export"`, "Markdown")
 	for _, h := range findHandlers(n, "click") {
-		h(gox.Event{})
+		h(xango.Event{})
 	}
 	if strings.Join(got, " ") != "in:markdown in:json out:markdown" {
 		t.Fatal(got)
@@ -458,9 +458,9 @@ func TestCommentCardAndList(t *testing.T) {
 		OnReply: func(id, s string) { log = append(log, "reply:"+id+":"+s) }})
 	mustContain(t, render(t, card), "gj-comment-selected", `data-comment="c1"`, "ana", "2026-03-04 05:06", "the text", "<strong>this</strong>", `data-mention="bob"`,
 		"gj-comment-replies", "Someone", ">Resolve<", `value="ok"`)
-	findHandlers(card, "input")[0](gox.Event{Value: "typed"})
+	findHandlers(card, "input")[0](xango.Event{Value: "typed"})
 	for _, h := range findHandlers(card, "click") {
-		h(gox.Event{})
+		h(xango.Event{})
 	}
 	if got := strings.Join(log, " "); got != "draft:c1:typed select:c1 reply:c1:ok resolve:c1 delete:c1" {
 		t.Fatal(got)
@@ -478,7 +478,7 @@ func TestCommentCardAndList(t *testing.T) {
 	html := render(t, list)
 	mustContain(t, html, "Show resolved (1)", `aria-pressed="false"`, "quoted")
 	mustNotContain(t, html, `data-comment="c2"`)
-	findHandlers(list, "click")[0](gox.Event{})
+	findHandlers(list, "click")[0](xango.Event{})
 	if len(shown) != 1 || !shown[0] {
 		t.Fatal(shown)
 	}
@@ -494,7 +494,7 @@ func TestOutlineAndBookmarkComponents(t *testing.T) {
 	html := render(t, n)
 	mustContain(t, html, `aria-label="Outline"`, `data-level="1"`, `data-level="3"`, "padding-left:8px", "padding-left:36px", `aria-current="location"`, "gj-outline-item-on", "Deep &lt;b&gt;")
 	for _, h := range findHandlers(n, "click") {
-		h(gox.Event{})
+		h(xango.Event{})
 	}
 	if len(picked) != 2 || picked[1] != "Deep <b>1" {
 		t.Fatal(picked)
@@ -508,7 +508,7 @@ func TestOutlineAndBookmarkComponents(t *testing.T) {
 		OnGoto: func(s string) { log = append(log, "go:"+s) }, OnRemove: func(s string) { log = append(log, "rm:"+s) }})
 	mustContain(t, render(t, bl), `data-bookmark="intro"`, "Hello", "#intro", `data-remove="intro"`)
 	for _, h := range findHandlers(bl, "click") {
-		h(gox.Event{})
+		h(xango.Event{})
 	}
 	if strings.Join(log, " ") != "go:intro rm:intro" {
 		t.Fatal(log)
@@ -527,7 +527,7 @@ func TestFootnoteListComponent(t *testing.T) {
 		OnDelete: func(e canvas.FootnoteEntry) { log = append(log, "del:"+e.ID) }})
 	mustContain(t, render(t, n), `data-note="n1"`, "<strong>this</strong>", ">2<", "gj-footnote-edit")
 	for _, h := range findHandlers(n, "click") {
-		h(gox.Event{})
+		h(xango.Event{})
 	}
 	if got := strings.Join(log, " "); got != "go:n1 edit:n1 del:n1 go:n2 edit:n2 del:n2" {
 		t.Fatal(got)
@@ -562,4 +562,134 @@ func TestCommentCardReplyWithoutEditing(t *testing.T) {
 	list := render(t, CommentList(CommentListProps{Comments: []canvas.Comment{c}, CanReply: true}))
 	mustContain(t, list, "gj-comment-reply-row")
 	mustNotContain(t, list, "Resolve")
+}
+
+func TestFindReplaceShowsCountOptionsAndReplaceRow(t *testing.T) {
+	html := render(t, FindReplace(FindReplaceProps{Query: "cat", Count: 4, Current: 2, WholeWord: true}))
+	for _, want := range []string{`class="gj-find"`, `value="cat"`, `2 of 4`, `gj-find-toggle gj-find-word gj-find-on`, `aria-pressed="true"`, `gj-find-replace-all`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in\n%s", want, html)
+		}
+	}
+	if strings.Contains(html, "gj-find-case gj-find-on") {
+		t.Error("match case is off")
+	}
+	none := render(t, FindReplace(FindReplaceProps{Query: "zzz", ReadOnly: true}))
+	if !strings.Contains(none, "No matches") || strings.Contains(none, "gj-find-replace-all") || !strings.Contains(none, `disabled="disabled"`) {
+		t.Errorf("no matches / read only:\n%s", none)
+	}
+	bad := render(t, FindReplace(FindReplaceProps{Query: "(", Regex: true, Error: "missing closing )"}))
+	if !strings.Contains(bad, "gj-find-error") || !strings.Contains(bad, "missing closing )") {
+		t.Errorf("error:\n%s", bad)
+	}
+}
+
+func TestSpellPanelListsWordsSuggestionsAndActions(t *testing.T) {
+	html := render(t, SpellPanel(SpellPanelProps{Enabled: true, Language: "English", Detected: "Español", Items: []SpellItem{
+		{Word: "teh", Count: 3, Suggestions: []string{"the", "tech"}},
+		{Word: "xyzzy"},
+	}}))
+	for _, want := range []string{`checked="checked"`, `data-word="teh"`, `×3`, `gj-spell-suggestion`, `>the<`, `No suggestions`, `gj-spell-add`, `the text looks like Español`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in\n%s", want, html)
+		}
+	}
+	ro := render(t, SpellPanel(SpellPanelProps{Enabled: true, Language: "English", ReadOnly: true, Items: []SpellItem{{Word: "teh", Suggestions: []string{"the"}}}}))
+	if strings.Contains(ro, "gj-spell-add") || strings.Contains(ro, `class="gj-spell-suggestion"`) || !strings.Contains(ro, "gj-spell-ignore") {
+		t.Errorf("read-only:\n%s", ro)
+	}
+	clean := render(t, SpellPanel(SpellPanelProps{Enabled: true, Language: "English"}))
+	off := render(t, SpellPanel(SpellPanelProps{}))
+	if !strings.Contains(clean, "No misspelled words") || strings.Contains(off, "Dictionary") || strings.Contains(off, "checked=") {
+		t.Errorf("clean:\n%s\noff:\n%s", clean, off)
+	}
+}
+
+func TestLanguagePanelStates(t *testing.T) {
+	off := render(t, LanguagePanel(LanguagePanelProps{}))
+	for _, want := range []string{"Language: not sure", "No translation server is set up.", "No grammar model is set up."} {
+		if !strings.Contains(off, want) {
+			t.Errorf("missing %q in\n%s", want, off)
+		}
+	}
+	on := render(t, LanguagePanel(LanguagePanelProps{
+		Detected: "English", Targets: []LanguageTarget{{"DE", "German"}, {"FR", "French"}}, Target: "FR", HasSelection: true, Translation: "Bonjour",
+		GrammarEnabled: true, Checked: true, Issues: []GrammarIssue{{Text: "He go", Message: "agreement", Suggestion: "He goes"}},
+	}))
+	for _, want := range []string{"Language: English", `value="FR" selected="selected"`, "Bonjour", "gj-lang-use", `data-index="0"`, "Change to “He goes”"} {
+		if !strings.Contains(on, want) {
+			t.Errorf("missing %q in\n%s", want, on)
+		}
+	}
+	if strings.Contains(on, `class="gj-lang-translate" disabled`) {
+		t.Error("translate is enabled with a selection")
+	}
+	noSel := render(t, LanguagePanel(LanguagePanelProps{Targets: []LanguageTarget{{"DE", "German"}}, Busy: true, Error: "boom", ReadOnly: true, GrammarEnabled: true, Checked: true}))
+	for _, want := range []string{"Select some text to translate it.", "Working…", "boom", "No grammar issues found", `disabled="disabled"`} {
+		if !strings.Contains(noSel, want) {
+			t.Errorf("missing %q in\n%s", want, noSel)
+		}
+	}
+}
+
+func TestSaverShowsVersionsTrashAndTags(t *testing.T) {
+	now := time.Date(2026, 10, 4, 9, 30, 0, 0, time.UTC)
+	html := render(t, Saver(SaverProps{
+		Target: "memory", Format: "json", Name: "plan",
+		Entries: []SaverEntry{{Key: "plan.json", Name: "plan", Format: "JSON", Size: 10, Updated: now, Tags: []string{"rpg", "draft"}}, {Key: "b.json", Name: "b", Format: "JSON", Size: 5}},
+		AllTags: []string{"draft", "rpg"}, TagFilter: "rpg",
+		Versions: []SaverVersion{{Key: "versions/plan/1.json", Time: now, Size: 12}},
+		Trashed:  []SaverEntry{{Key: "trash/old.json", Name: "old", Format: "JSON", Size: 3, Updated: now}},
+	}))
+	for _, want := range []string{`data-key="plan.json"`, `value="rpg, draft"`, "gj-saver-duplicate", "gj-saver-trash", "gj-saver-tagchip gj-saver-tagchip-on",
+		"Versions of plan", `data-key="versions/plan/1.json"`, "2026-10-04 09:30:00", "gj-saver-version-save", "gj-saver-trashed", "gj-saver-restore", "gj-saver-empty-trash"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(html, `data-key="b.json"`) {
+		t.Error("the tag filter must hide documents without the tag")
+	}
+	none := render(t, Saver(SaverProps{}))
+	if strings.Contains(none, "Versions of") || strings.Contains(none, "gj-saver-trashbin") || strings.Contains(none, "gj-saver-tagbar") {
+		t.Error("with no name, no trash and no tags those sections are absent")
+	}
+}
+
+func TestAccessibleTextKeepsTheDocumentsStructure(t *testing.T) {
+	html := render(t, AccessibleText(AccessibleTextProps{Blocks: []A11yBlock{
+		{Kind: A11yHeading, Level: 1, Text: "Title"},
+		{Kind: A11yParagraph, Text: "Some text."},
+		{Kind: A11yListItem, Text: "one", Ordered: true}, {Kind: A11yListItem, Text: "two", Ordered: true},
+		{Kind: A11yListItem, Text: "bullet", Level: 1},
+		{Kind: A11yQuote, Text: "quoted"}, {Kind: A11yCode, Text: "x := 1"},
+		{Kind: A11yTableRow, Cells: []string{"A", "B"}}, {Kind: A11yTableRow, Cells: []string{"1", "2"}},
+	}, Selection: "Some"}))
+	for _, want := range []string{`class="gj-sr-only"`, `role="document"`, `aria-label="Document text"`, `id="a11y-text"`, "<h1>Title</h1>", "<p>Some text.</p>",
+		"<ol><li", ">two</li></ol>", "<ul><li", `aria-level="2"`, "<blockquote>", "<pre><code>x := 1</code></pre>", "<th>A</th>", "<td>2</td>", "Selected: Some"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in\n%s", want, html)
+		}
+	}
+	live := render(t, Announcer("3 matches"))
+	if !strings.Contains(live, `aria-live="polite"`) || !strings.Contains(live, `role="status"`) || !strings.Contains(live, "3 matches") {
+		t.Errorf("announcer: %s", live)
+	}
+}
+
+func TestTranslateHookChangesTheComponentsWords(t *testing.T) {
+	defer func(old func(string, string) string) { Translate = old }(Translate)
+	Translate = func(id, def string) string {
+		if id == "find.replaceAll" {
+			return "Tout remplacer"
+		}
+		if id == "find.nOfM" {
+			return "%d sur %d"
+		}
+		return def
+	}
+	html := render(t, FindReplace(FindReplaceProps{Query: "x", Count: 4, Current: 2}))
+	if !strings.Contains(html, "Tout remplacer") || !strings.Contains(html, "2 sur 4") || !strings.Contains(html, "Replace the current match") {
+		t.Errorf("translated:\n%s", html)
+	}
 }

@@ -2,7 +2,7 @@
 
 What is built, in one place, and what is not. "(non canvas)" means a DOM
 component (like `components.FontSelector`), not something drawn on the
-canvas. The gox integration is described in [gox-canvas.md](gox-canvas.md).
+canvas. The xango integration is described in [xango-canvas.md](xango-canvas.md).
 
 ## Built
 
@@ -73,7 +73,7 @@ current, with page numbers settling one redraw after a change. `docfile` saves
 all of it; `components.FootnoteList` lists the notes.
 
 **Roles and comments** -- `canvas.Role` (owner, editor, viewer; the zero value is
-owner): a viewer's components are held in view mode (`Stage.SetRole`, the gox
+owner): a viewer's components are held in view mode (`Stage.SetRole`, the xango
 `Canvas` `role` prop), only owners and editors comment. `docstore.ACL.RoleOf`
 gives the role name. **Comments** are notes on text: `Format.Comment` anchors a
 `canvas.CommentSet` entry (author, Markdown body, `@username` and e-mail
@@ -90,7 +90,7 @@ Markdown and text) and `components.Transfer`; **lazy fonts**: a font picked
 in the selector is downloaded into the store the first time the text uses it
 (`fonts.Library`, `Stage.OnFontUse`).
 
-**gox** -- `gox.Host`, the `canvas/gox` renderer and its element registry
+**xango** -- `xango.Host`, the `canvas/xango` renderer and its element registry
 (`Canvas`, `TextFlow` with the `Pages` template, `Header`, `Footer`,
 `PageNumber`, `Watermark`, `Background`, `Image`, `FloatingText`, `Table`,
 `ScrollView`); CSS imports (`import _ "<module path>/x.css"`).
@@ -124,7 +124,7 @@ Asked for, not started:
 - Markdown: links round-trip, but tables and images are not written back;
   case and small caps have no Markdown form.
 - Importers/exporters beyond Markdown and text (Word, PDF, HTML); saving pages, floating objects and images.
-- Table cell render prop for the gox `Table`, `PageSet` as its own gox
-  element, `CanvasView` (a DOM component that mounts a `canvas/gox` tree).
+- Table cell render prop for the xango `Table`, `PageSet` as its own xango
+  element, `CanvasView` (a DOM component that mounts a `canvas/xango` tree).
 - Spread view: images can run across the gutter by anchor, but there is
   no gutter shadow or page-turn UI.

@@ -7,7 +7,7 @@ import (
 
 	"encore.dev/storage/sqldb"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // encoreStore wires the same Store business logic (store.go) that
@@ -71,7 +71,7 @@ func SaveDocument(ctx context.Context, id string, req *SaveDocumentRequest) erro
 }
 
 // ViewDocument serves the canvas page for one document. A raw
-// endpoint (not a typed API) because it renders HTML via gox, not
+// endpoint (not a typed API) because it renders HTML via xango, not
 // JSON.
 //
 //encore:api public raw method=GET path=/documents/:id
@@ -83,7 +83,7 @@ func ViewDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := gox.Render(w, CanvasPage(CanvasPageProps{ID: id, Content: content})); err != nil {
+	if err := xango.Render(w, CanvasPage(CanvasPageProps{ID: id, Content: content})); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -98,7 +98,7 @@ func Home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := gox.Render(w, HomePage(HomePageProps{Documents: docs})); err != nil {
+	if err := xango.Render(w, HomePage(HomePageProps{Documents: docs})); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

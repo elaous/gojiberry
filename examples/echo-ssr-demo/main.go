@@ -1,4 +1,4 @@
-// Command echo-ssr-demo serves page.gox's Page over a real Echo
+// Command echo-ssr-demo serves page.xg's Page over a real Echo
 // instance (see router.go), fronted by three security middlewares --
 // secure headers, CORS, and a per-client rate limit, all built into
 // Echo itself -- see main_test.go for end-to-end verification against

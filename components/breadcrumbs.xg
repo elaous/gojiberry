@@ -1,0 +1,48 @@
+package components
+
+import "github.com/elaous/gojiberry/xango"
+
+// BreadcrumbItem is one entry in a Breadcrumbs trail.
+type BreadcrumbItem struct {
+	Label string
+	Href  string // "" renders a plain (non-link) span instead of an <a>
+
+	// OnClick fires alongside a real navigation to Href -- e.g. to
+	// drive client-side routing (see domrt/browser.Router) instead of
+	// a full page load. Call e.PreventDefault() in it to suppress the
+	// browser's own navigation.
+	OnClick xango.EventHandler
+}
+
+// BreadcrumbsProps configures Breadcrumbs.
+type BreadcrumbsProps struct {
+	Items []BreadcrumbItem
+}
+
+// Breadcrumbs renders a trail of links with the last item marked as
+// the current page (aria-current, and rendered as plain text even if
+// it has an Href -- you're already there).
+func Breadcrumbs(props BreadcrumbsProps) xango.Node {
+	var items []xango.Node
+	for i, it := range props.Items {
+		last := i == len(props.Items)-1
+		var content xango.Node
+		if it.Href != "" && !last {
+			attrs := []xango.Attr{xango.A("class", "gj-breadcrumb-link"), xango.A("href", it.Href)}
+			if it.OnClick != nil {
+				attrs = append(attrs, xango.On("click", it.OnClick))
+			}
+			content = xango.El("a", attrs, xango.Text(it.Label))
+		} else {
+			attrs := []xango.Attr{xango.A("class", "gj-breadcrumb-current")}
+			if last {
+				attrs = append(attrs, xango.A("aria-current", "page"))
+			}
+			content = xango.El("span", attrs, xango.Text(it.Label))
+		}
+		items = append(items, xango.El("li", []xango.Attr{xango.A("class", "gj-breadcrumb-item")}, content))
+	}
+	return xango.El("nav", []xango.Attr{xango.A("class", "gj-breadcrumbs"), xango.A("aria-label", "Breadcrumb")},
+		xango.El("ol", []xango.Attr{xango.A("class", "gj-breadcrumbs-list")}, items...),
+	)
+}

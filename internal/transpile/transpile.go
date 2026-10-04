@@ -1,6 +1,6 @@
-// Package transpile turns .gox source (Go, extended so that <tag> markup
+// Package transpile turns .xg source (Go, extended so that <tag> markup
 // is a valid expression anywhere a Go expression may start) into plain,
-// gofmt-clean Go source targeting the gox runtime package.
+// gofmt-clean Go source targeting the xango runtime package.
 //
 // Disambiguation rule: in Go, '<' is the less-than operator only
 // immediately after something that completes a value (identifier,
@@ -12,7 +12,7 @@
 //
 // {expr} holes (in attribute values or child position) are always a
 // single Go expression, never raw statements -- for loops/conditionals,
-// write an immediately-invoked closure (func() []gox.Node { ... }()),
+// write an immediately-invoked closure (func() []xango.Node { ... }()),
 // which is itself an expression; any tags inside its body are expanded
 // by the same recursive scan.
 package transpile
@@ -33,7 +33,7 @@ type Options struct {
 	// real Go subpackage) or carry real footgun risk (the JSON
 	// .(TypeName) annotation's sample-based struct inference, which can
 	// silently panic at runtime against differently-shaped data). Off
-	// by default: gox recognizes these extensions/annotations either
+	// by default: xango recognizes these extensions/annotations either
 	// way, but without this set it errors with an actionable message
 	// instead of running them.
 	Experimental bool
@@ -44,7 +44,7 @@ type Options struct {
 	ExperimentalLoaders map[string]LoaderFunc
 }
 
-// Transpile converts .gox source into Go source using only the stable,
+// Transpile converts .xg source into Go source using only the stable,
 // on-by-default loaders. filename is used only for error messages.
 func Transpile(filename string, src []byte) ([]byte, error) {
 	return TranspileWithOptions(filename, src, Options{})
@@ -149,7 +149,7 @@ func (p *parser) errorf(chunk []rune, pos int, format string, args ...any) error
 // transpileChunk scans chunk from start to end, copying ordinary Go
 // source through unchanged, skipping over string/rune literals and
 // comments verbatim, and expanding any tag it finds at a tag-open
-// position into a call into the gox package.
+// position into a call into the xango package.
 func (p *parser) transpileChunk(chunk []rune) (string, error) {
 	var out strings.Builder
 	pos := 0
@@ -288,7 +288,7 @@ type attr struct {
 
 type childNode struct {
 	text   string // set for a literal text run
-	expr   string // set for a nested tag or a {expr} hole (already transpiled to a gox.Node expression)
+	expr   string // set for a nested tag or a {expr} hole (already transpiled to a xango.Node expression)
 	isText bool
 }
 
@@ -320,7 +320,7 @@ func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 	name := string(chunk[nameStart:pos])
 	if name == "Fragment" {
 		// <Fragment key="...">...</Fragment> (or key={expr}): the only
-		// way to give a fragment its own reconciliation Key from .gox
+		// way to give a fragment its own reconciliation Key from .xg
 		// syntax -- the bare <>...</> shorthand just above has no room
 		// for an attribute at all. Mirrors JSX's own split between
 		// <>...</> and the long-form <React.Fragment key={id}>...
@@ -334,7 +334,7 @@ func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 		return p.parseKeyedFragment(chunk, pos)
 	}
 	if !isComponentName(name) && !isKnownTag(name) {
-		return "", 0, p.errorf(chunk, nameStart, "unknown HTML tag <%s>: not a recognized HTML element, not a custom element (needs a hyphen, e.g. <my-widget>), and not a Component (needs a capital first letter); if this is a real tag gox doesn't know about yet, add it to validHTMLTags in internal/transpile/htmlvalidate.go", name)
+		return "", 0, p.errorf(chunk, nameStart, "unknown HTML tag <%s>: not a recognized HTML element, not a custom element (needs a hyphen, e.g. <my-widget>), and not a Component (needs a capital first letter); if this is a real tag xango doesn't know about yet, add it to validHTMLTags in internal/transpile/htmlvalidate.go", name)
 	}
 
 	// A generic Component's type arguments: <List[Item] items={xs} />.
@@ -499,7 +499,7 @@ func (p *parser) parseChildren(chunk []rune, pos int, tagName string) ([]childNo
 			if err != nil {
 				return nil, 0, err
 			}
-			children = append(children, childNode{expr: fmt.Sprintf("gox.Child(%s)", exprSrc)})
+			children = append(children, childNode{expr: fmt.Sprintf("xango.Child(%s)", exprSrc)})
 			pos = closeIdx + 1
 			textStart = pos
 			continue
@@ -597,8 +597,8 @@ func eventNameFor(attrName string) string {
 // parseAttrs/parseChildren exactly as an ordinary element would
 // (validateAttrs is already false for any component-cased name, so
 // parseAttrs accepts "key" unvalidated); only the render step at the
-// end differs, emitting gox.Frag(children...).WithKey(...) instead of
-// a gox.El or component call.
+// end differs, emitting xango.Frag(children...).WithKey(...) instead of
+// a xango.El or component call.
 func (p *parser) parseKeyedFragment(chunk []rune, pos int) (string, int, error) {
 	n := len(chunk)
 	attrs, pos, err := p.parseAttrs(chunk, pos, "Fragment")
@@ -615,7 +615,7 @@ func (p *parser) parseKeyedFragment(chunk []rune, pos int) (string, int, error) 
 	}
 	if pos+1 < n && chunk[pos] == '/' && chunk[pos+1] == '>' {
 		pos += 2
-		return fmt.Sprintf("gox.Frag().WithKey(%s)", keyExpr), pos, nil
+		return fmt.Sprintf("xango.Frag().WithKey(%s)", keyExpr), pos, nil
 	}
 	if pos >= n || chunk[pos] != '>' {
 		return "", 0, p.errorf(chunk, pos, "expected '>' or '/>' to close <Fragment> tag opened")
@@ -631,20 +631,20 @@ func (p *parser) parseKeyedFragment(chunk []rune, pos int) (string, int, error) 
 
 // keyAttrExprSource renders a Fragment's own key attribute's value --
 // a literal is quoted directly (WithKey takes a plain string, no
-// AttrVal adaptation needed), an {expr} hole goes through gox.AttrVal
+// AttrVal adaptation needed), an {expr} hole goes through xango.AttrVal
 // the same way any other plain attribute's {expr} value does
 // (attrExprSource's own a.isExpr case), so a non-string key (an int
 // ID, a fmt.Stringer, ...) still compiles.
 func keyAttrExprSource(a attr) string {
 	if a.isExpr {
-		return fmt.Sprintf("gox.AttrVal(%s)", a.expr)
+		return fmt.Sprintf("xango.AttrVal(%s)", a.expr)
 	}
 	return strconv.Quote(a.literal)
 }
 
 func (p *parser) renderFragment(children []childNode) string {
 	var b strings.Builder
-	b.WriteString("gox.Frag(")
+	b.WriteString("xango.Frag(")
 	for i, c := range children {
 		if i > 0 {
 			b.WriteString(", ")
@@ -657,7 +657,7 @@ func (p *parser) renderFragment(children []childNode) string {
 
 func childExprSource(c childNode) string {
 	if c.isText {
-		return fmt.Sprintf("gox.Text(%s)", strconv.Quote(c.text))
+		return fmt.Sprintf("xango.Text(%s)", strconv.Quote(c.text))
 	}
 	return c.expr
 }
@@ -671,11 +671,11 @@ func (p *parser) renderTag(name, typeArgs string, attrs []attr, children []child
 
 func (p *parser) renderElement(name string, attrs []attr, children []childNode) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("gox.El(%s, ", strconv.Quote(name)))
+	b.WriteString(fmt.Sprintf("xango.El(%s, ", strconv.Quote(name)))
 	if len(attrs) == 0 {
 		b.WriteString("nil")
 	} else {
-		b.WriteString("[]gox.Attr{")
+		b.WriteString("[]xango.Attr{")
 		for i, a := range attrs {
 			if i > 0 {
 				b.WriteString(", ")
@@ -695,22 +695,22 @@ func (p *parser) renderElement(name string, attrs []attr, children []childNode) 
 func attrExprSource(a attr) string {
 	if isEventAttr(a.name) {
 		if !a.isExpr {
-			return fmt.Sprintf("gox.On(%s, nil /* event attrs need {handlerExpr} */)", strconv.Quote(eventNameFor(a.name)))
+			return fmt.Sprintf("xango.On(%s, nil /* event attrs need {handlerExpr} */)", strconv.Quote(eventNameFor(a.name)))
 		}
-		return fmt.Sprintf("gox.On(%s, %s)", strconv.Quote(eventNameFor(a.name)), a.expr)
+		return fmt.Sprintf("xango.On(%s, %s)", strconv.Quote(eventNameFor(a.name)), a.expr)
 	}
 	switch {
 	case a.bare:
-		return fmt.Sprintf("gox.A(%s, %s)", strconv.Quote(a.name), strconv.Quote(a.name))
+		return fmt.Sprintf("xango.A(%s, %s)", strconv.Quote(a.name), strconv.Quote(a.name))
 	case a.isExpr:
-		return fmt.Sprintf("gox.A(%s, gox.AttrVal(%s))", strconv.Quote(a.name), a.expr)
+		return fmt.Sprintf("xango.A(%s, xango.AttrVal(%s))", strconv.Quote(a.name), a.expr)
 	default:
-		return fmt.Sprintf("gox.A(%s, %s)", strconv.Quote(a.name), strconv.Quote(a.literal))
+		return fmt.Sprintf("xango.A(%s, %s)", strconv.Quote(a.name), strconv.Quote(a.literal))
 	}
 }
 
 // renderComponent renders <Name attr=... >children</Name> as
-// Name(NameProps{Field: value, ..., Children: []gox.Node{...}}); for a
+// Name(NameProps{Field: value, ..., Children: []xango.Node{...}}); for a
 // generic component, <Name[T] ...> becomes Name[T](NameProps[T]{...}).
 func (p *parser) renderComponent(name, typeArgs string, attrs []attr, children []childNode) string {
 	callName := name
@@ -736,7 +736,7 @@ func (p *parser) renderComponent(name, typeArgs string, attrs []attr, children [
 		for i, c := range children {
 			childExprs[i] = childExprSource(c)
 		}
-		fields = append(fields, fmt.Sprintf("Children: []gox.Node{%s}", strings.Join(childExprs, ", ")))
+		fields = append(fields, fmt.Sprintf("Children: []xango.Node{%s}", strings.Join(childExprs, ", ")))
 	}
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("%s%s(%s%s{%s})", callName, typeArgs, propsType, typeArgs, strings.Join(fields, ", ")))

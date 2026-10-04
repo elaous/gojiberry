@@ -1,0 +1,12 @@
+/* FindReplace stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-find { display: flex; flex-direction: column; gap: 0.4em; }
+.gj-find-row { display: flex; align-items: center; gap: 0.4em; }
+.gj-find-input, .gj-find-replacement { flex: 1; min-width: 0; padding: 0.3em 0.5em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); font: inherit; }
+.gj-find-status { font-size: 0.8em; color: var(--gj-muted); white-space: nowrap; }
+.gj-find-error { color: var(--gj-danger); }
+.gj-find button { border: 1px solid var(--gj-border); background: var(--gj-bg); border-radius: var(--gj-radius); padding: 0.2em 0.6em; cursor: pointer; font: inherit; }
+.gj-find button:disabled { opacity: 0.45; cursor: default; }
+.gj-find-toggle { font-family: ui-monospace, monospace; }
+.gj-find-on { background: var(--gj-accent) !important; color: var(--gj-accent-contrast); border-color: var(--gj-accent) !important; }

@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // Symbol is a character in a SymbolPicker.
@@ -77,7 +77,7 @@ type SymbolPickerProps struct {
 // each a button titled with its name. It is controlled (Query, Category);
 // the caller inserts the picked character where it belongs (for a canvas
 // editor, FloatingText.InsertText or TextFlow.InsertText).
-func SymbolPicker(props SymbolPickerProps) gox.Node {
+func SymbolPicker(props SymbolPickerProps) xango.Node {
 	symbols := props.Symbols
 	if symbols == nil {
 		symbols = defaultSymbols
@@ -86,63 +86,63 @@ func SymbolPicker(props SymbolPickerProps) gox.Node {
 	if cols <= 0 {
 		cols = 10
 	}
-	btn := func(s Symbol) gox.Node {
-		attrs := []gox.Attr{
-			gox.A("class", "gj-symbol"), gox.A("type", "button"), gox.A("title", s.Name), gox.A("data-char", s.Char),
+	btn := func(s Symbol) xango.Node {
+		attrs := []xango.Attr{
+			xango.A("class", "gj-symbol"), xango.A("type", "button"), xango.A("title", s.Name), xango.A("data-char", s.Char),
 		}
 		if props.OnPick != nil {
 			char := s.Char
-			attrs = append(attrs, gox.On("click", func(gox.Event) { props.OnPick(char) }))
+			attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnPick(char) }))
 		}
-		return gox.El("button", attrs, gox.Text(s.Char))
+		return xango.El("button", attrs, xango.Text(s.Char))
 	}
 
-	search := []gox.Attr{
-		gox.A("class", "gj-symbolpicker-search"), gox.A("type", "search"), gox.A("placeholder", "Search symbols"), gox.A("value", props.Query),
+	search := []xango.Attr{
+		xango.A("class", "gj-symbolpicker-search"), xango.A("type", "search"), xango.A("placeholder", "Search symbols"), xango.A("value", props.Query),
 	}
 	if props.OnQuery != nil {
-		search = append(search, gox.On("input", func(e gox.Event) { props.OnQuery(gox.EventValue[string](e)) }))
+		search = append(search, xango.On("input", func(e xango.Event) { props.OnQuery(xango.EventValue[string](e)) }))
 	}
-	chip := func(label, cat string) gox.Node {
+	chip := func(label, cat string) xango.Node {
 		class := "gj-symbolpicker-chip"
 		if props.Category == cat {
 			class += " gj-symbolpicker-chip-on"
 		}
-		attrs := []gox.Attr{gox.A("class", class), gox.A("type", "button"), gox.A("data-category", cat)}
+		attrs := []xango.Attr{xango.A("class", class), xango.A("type", "button"), xango.A("data-category", cat)}
 		if props.OnCategory != nil {
-			attrs = append(attrs, gox.On("click", func(gox.Event) { props.OnCategory(cat) }))
+			attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnCategory(cat) }))
 		}
-		return gox.El("button", attrs, gox.Text(label))
+		return xango.El("button", attrs, xango.Text(label))
 	}
-	chips := []gox.Node{chip("All", "")}
+	chips := []xango.Node{chip("All", "")}
 	for _, c := range SymbolCategories(symbols) {
 		chips = append(chips, chip(c, c))
 	}
 
-	var body []gox.Node
+	var body []xango.Node
 	if props.Query == "" && props.Category == "" && len(props.Recent) > 0 {
-		var recent []gox.Node
+		var recent []xango.Node
 		for _, ch := range props.Recent {
 			recent = append(recent, btn(Symbol{Char: ch, Name: "recently used"}))
 		}
-		body = append(body, gox.El("div", []gox.Attr{gox.A("class", "gj-symbolpicker-recent")}, recent...))
+		body = append(body, xango.El("div", []xango.Attr{xango.A("class", "gj-symbolpicker-recent")}, recent...))
 	}
-	var grid []gox.Node
+	var grid []xango.Node
 	for _, s := range FilterSymbols(symbols, props.Query, props.Category) {
 		grid = append(grid, btn(s))
 	}
 	if len(grid) == 0 {
-		body = append(body, gox.El("p", []gox.Attr{gox.A("class", "gj-symbolpicker-empty")}, gox.Text("No symbols match.")))
+		body = append(body, xango.El("p", []xango.Attr{xango.A("class", "gj-symbolpicker-empty")}, xango.Text("No symbols match.")))
 	} else {
-		body = append(body, gox.El("div", []gox.Attr{
-			gox.A("class", "gj-symbolpicker-grid"),
-			gox.A("style", "grid-template-columns: repeat("+itoa(cols)+", 1fr);"),
+		body = append(body, xango.El("div", []xango.Attr{
+			xango.A("class", "gj-symbolpicker-grid"),
+			xango.A("style", "grid-template-columns: repeat("+itoa(cols)+", 1fr);"),
 		}, grid...))
 	}
-	return gox.El("div", []gox.Attr{gox.A("class", "gj-symbolpicker")},
-		gox.El("input", search),
-		gox.El("div", []gox.Attr{gox.A("class", "gj-symbolpicker-chips")}, chips...),
-		gox.El("div", []gox.Attr{gox.A("class", "gj-symbolpicker-body")}, body...),
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-symbolpicker")},
+		xango.El("input", search),
+		xango.El("div", []xango.Attr{xango.A("class", "gj-symbolpicker-chips")}, chips...),
+		xango.El("div", []xango.Attr{xango.A("class", "gj-symbolpicker-body")}, body...),
 	)
 }
 

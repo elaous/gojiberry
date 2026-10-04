@@ -8,11 +8,11 @@ import (
 	"testing"
 )
 
-// setupModuleWithGox is setupModule plus a replace directive pointing
+// setupModuleWithXango is setupModule plus a replace directive pointing
 // back at this repo, for tests whose generated code imports the real
-// gox package (gox.Document{}.Render() needs a real gox.Node tree to
+// xango package (xango.Document{}.Render() needs a real xango.Node tree to
 // wrap, not just a resource-import string binding).
-func setupModuleWithGox(t *testing.T) (pkgDir string) {
+func setupModuleWithXango(t *testing.T) (pkgDir string) {
 	t.Helper()
 	repoRoot, err := filepath.Abs("../..")
 	if err != nil {
@@ -47,7 +47,7 @@ func setupModuleWithGox(t *testing.T) (pkgDir string) {
 var goDirectiveRE = regexp.MustCompile(`(?m)^go (\S+)$`)
 
 func TestPageMetadataWrapsReturnInDocument(t *testing.T) {
-	dir := setupModuleWithGox(t)
+	dir := setupModuleWithXango(t)
 	writeFile(t, dir, "App.css", "body { color: red; }")
 	src := `package main
 
@@ -56,55 +56,55 @@ import (
 	"os"
 
 	_ "example.com/testmod/pkg/App.css"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // @title bob
-func Page() gox.Node {
-	return gox.El("h1", nil, gox.Text("hello"))
+func Page() xango.Node {
+	return xango.El("h1", nil, xango.Text("hello"))
 }
 
 func main() {
-	got, err := gox.RenderString(Page())
+	got, err := xango.RenderString(Page())
 	if err != nil {
 		panic(err)
 	}
-	want := ` + "`" + `<html><head><title>bob</title><style data-gox-style="example.com/testmod/pkg/App.css">body { color: red; }</style></head><body><h1>hello</h1></body></html>` + "`" + `
+	want := ` + "`" + `<html><head><title>bob</title><style data-xango-style="example.com/testmod/pkg/App.css">body { color: red; }</style></head><body><h1>hello</h1></body></html>` + "`" + `
 	if got != want {
 		panic(fmt.Sprintf("got %q want %q", got, want))
 	}
 	os.Exit(0)
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := string(out)
-	if !strings.Contains(got, `gox.Document{Title: "bob"`) {
-		t.Errorf("expected a gox.Document wrapper with the literal title, got:\n%s", got)
+	if !strings.Contains(got, `xango.Document{Title: "bob"`) {
+		t.Errorf("expected a xango.Document wrapper with the literal title, got:\n%s", got)
 	}
-	if !strings.Contains(got, `gox.RegisterStyle("example.com/testmod/pkg/App.css"`) {
+	if !strings.Contains(got, `xango.RegisterStyle("example.com/testmod/pkg/App.css"`) {
 		t.Errorf("expected the CSS import to register the stylesheet, got:\n%s", got)
 	}
 	mustCompileAndRun(t, dir, "main.go", got)
 }
 
 func TestPageMetadataFallsBackToDefaultTitleWhenOmitted(t *testing.T) {
-	dir := setupModuleWithGox(t)
+	dir := setupModuleWithXango(t)
 	src := `package main
 
-import "github.com/elaous/gojiberry/gox"
+import "github.com/elaous/gojiberry/xango"
 
 var DefaultTitle = "fallback title"
 
 // @wasm /static/main.wasm
-func Page() gox.Node {
-	return gox.Text("x")
+func Page() xango.Node {
+	return xango.Text("x")
 }
 
 func main() {
-	got, err := gox.RenderString(Page())
+	got, err := xango.RenderString(Page())
 	if err != nil {
 		panic(err)
 	}
@@ -113,52 +113,52 @@ func main() {
 	}
 }
 `
-	src = strings.Replace(src, `import "github.com/elaous/gojiberry/gox"`, "import (\n\t\"strings\"\n\n\t\"github.com/elaous/gojiberry/gox\"\n)", 1)
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	src = strings.Replace(src, `import "github.com/elaous/gojiberry/xango"`, "import (\n\t\"strings\"\n\n\t\"github.com/elaous/gojiberry/xango\"\n)", 1)
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := string(out)
-	if !strings.Contains(got, "gox.Document{Title: DefaultTitle") {
+	if !strings.Contains(got, "xango.Document{Title: DefaultTitle") {
 		t.Errorf("expected the omitted title to fall back to the DefaultTitle identifier, got:\n%s", got)
 	}
 	mustCompileAndRun(t, dir, "main.go", got)
 }
 
 func TestStylesheetsAnnotationIsRejectedWithAMigrationHint(t *testing.T) {
-	dir := setupModuleWithGox(t)
+	dir := setupModuleWithXango(t)
 	src := `package main
 
-import "github.com/elaous/gojiberry/gox"
+import "github.com/elaous/gojiberry/xango"
 
 // @stylesheets App.css
-func Page() gox.Node { return gox.Text("x") }
+func Page() xango.Node { return xango.Text("x") }
 `
-	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	_, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err == nil || !strings.Contains(err.Error(), "no longer supported") || !strings.Contains(err.Error(), `import _ `) {
 		t.Fatalf("want a migration error, got %v", err)
 	}
 }
 
 func TestPageMetadataWrapsEveryTopLevelReturn(t *testing.T) {
-	dir := setupModuleWithGox(t)
+	dir := setupModuleWithXango(t)
 	src := `package main
 
 import (
 	"fmt"
 	"os"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 var DefaultTitle = "t"
 
 // @title conditional
-func Page(empty bool) gox.Node {
+func Page(empty bool) xango.Node {
 	if empty {
-		return gox.Text("empty")
+		return xango.Text("empty")
 	}
-	return gox.Text("full")
+	return xango.Text("full")
 }
 
 func main() {
@@ -169,7 +169,7 @@ func main() {
 		{true, "<html><head><title>conditional</title></head><body>empty</body></html>"},
 		{false, "<html><head><title>conditional</title></head><body>full</body></html>"},
 	} {
-		got, err := gox.RenderString(Page(tc.empty))
+		got, err := xango.RenderString(Page(tc.empty))
 		if err != nil {
 			panic(err)
 		}
@@ -180,12 +180,12 @@ func main() {
 	os.Exit(0)
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := string(out)
-	if strings.Count(got, "gox.Document{Title:") != 2 {
+	if strings.Count(got, "xango.Document{Title:") != 2 {
 		t.Errorf("expected both branches' return statements wrapped, got:\n%s", got)
 	}
 	mustCompileAndRun(t, dir, "main.go", got)
@@ -197,24 +197,24 @@ func main() {
 // WASM-consuming example in this repo otherwise hand-writes -- with
 // wasm_exec.js's URL derived from the .wasm URL's own directory.
 func TestPageMetadataInjectsWasmBootstrapScripts(t *testing.T) {
-	dir := setupModuleWithGox(t)
+	dir := setupModuleWithXango(t)
 	src := `package main
 
 import (
 	"os"
 	"strings"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // @title app
 // @wasm /static/main.wasm
-func Page() gox.Node {
-	return gox.El("div", []gox.Attr{gox.A("id", "app")})
+func Page() xango.Node {
+	return xango.El("div", []xango.Attr{xango.A("id", "app")})
 }
 
 func main() {
-	got, err := gox.RenderString(Page())
+	got, err := xango.RenderString(Page())
 	if err != nil {
 		panic(err)
 	}
@@ -230,50 +230,50 @@ func main() {
 	os.Exit(0)
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := string(out)
-	if !strings.Contains(got, `gox.A("src", "/static/wasm_exec.js")`) {
+	if !strings.Contains(got, `xango.A("src", "/static/wasm_exec.js")`) {
 		t.Errorf("expected wasm_exec.js's URL derived from the .wasm URL's directory, got:\n%s", got)
 	}
-	if !strings.Contains(got, "gox.Frag(gox.El(\"div\"") {
+	if !strings.Contains(got, "xango.Frag(xango.El(\"div\"") {
 		t.Errorf("expected the original body wrapped in a Frag alongside the scripts, got:\n%s", got)
 	}
 	mustCompileAndRun(t, dir, "main.go", got)
 }
 
 // TestPageMetadataDoesNotWrapNestedClosureReturns covers the idiom
-// this codebase already uses for rendering a []gox.Node from a loop
+// this codebase already uses for rendering a []xango.Node from a loop
 // (see examples/ssr-demo's ItemList): the immediately-invoked
-// closure's own "return" produces a []gox.Node, not a gox.Node, and
-// must not be rewritten into a gox.Document -- only the annotated
+// closure's own "return" produces a []xango.Node, not a xango.Node, and
+// must not be rewritten into a xango.Document -- only the annotated
 // function's own top-level return should be.
 func TestPageMetadataDoesNotWrapNestedClosureReturns(t *testing.T) {
-	dir := setupModuleWithGox(t)
+	dir := setupModuleWithXango(t)
 	src := `package main
 
 import (
 	"fmt"
 	"os"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // @title list
-func Page(items []string) gox.Node {
-	return gox.Frag(func() []gox.Node {
-		var out []gox.Node
+func Page(items []string) xango.Node {
+	return xango.Frag(func() []xango.Node {
+		var out []xango.Node
 		for _, s := range items {
-			out = append(out, gox.El("li", nil, gox.Text(s)))
+			out = append(out, xango.El("li", nil, xango.Text(s)))
 		}
 		return out
 	}()...)
 }
 
 func main() {
-	got, err := gox.RenderString(Page([]string{"a", "b"}))
+	got, err := xango.RenderString(Page([]string{"a", "b"}))
 	if err != nil {
 		panic(err)
 	}
@@ -284,12 +284,12 @@ func main() {
 	os.Exit(0)
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := string(out)
-	if strings.Count(got, "gox.Document{Title:") != 1 {
+	if strings.Count(got, "xango.Document{Title:") != 1 {
 		t.Errorf("expected exactly one wrap (the outer return only), got:\n%s", got)
 	}
 	mustCompileAndRun(t, dir, "main.go", got)
@@ -299,18 +299,18 @@ func TestPageMetadataLeavesUnannotatedFunctionsUntouched(t *testing.T) {
 	dir := setupModule(t)
 	src := `package main
 
-import "github.com/elaous/gojiberry/gox"
+import "github.com/elaous/gojiberry/xango"
 
 // Greeting is an ordinary component with an ordinary doc comment.
-func Greeting() gox.Node {
-	return gox.Text("hi")
+func Greeting() xango.Node {
+	return xango.Text("hi")
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(out), "gox.Document") {
+	if strings.Contains(string(out), "xango.Document") {
 		t.Errorf("expected an unannotated function to be left alone, got:\n%s", out)
 	}
 }
@@ -319,16 +319,16 @@ func TestPageMetadataErrorsWithoutASingleValueReturn(t *testing.T) {
 	dir := setupModule(t)
 	src := `package main
 
-import "github.com/elaous/gojiberry/gox"
+import "github.com/elaous/gojiberry/xango"
 
 var DefaultTitle = "t"
 
 // @title no-return-to-wrap
 func Setup() {
-	_ = gox.Text("unused")
+	_ = xango.Text("unused")
 }
 `
-	_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	_, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err == nil {
 		t.Fatal("expected an error: no return statement to wrap")
 	}
@@ -338,7 +338,7 @@ func Setup() {
 }
 
 func TestStylesAnnotationChoosesStylesPerPage(t *testing.T) {
-	dir := setupModuleWithGox(t)
+	dir := setupModuleWithXango(t)
 	writeFile(t, dir, "a.css", "A{}")
 	writeFile(t, dir, "b.css", "B{}")
 	src := `package main
@@ -349,26 +349,26 @@ import (
 
 	_ "example.com/testmod/pkg/a.css"
 	_ "example.com/testmod/pkg/b.css"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 // @title all
-func All() gox.Node { return gox.Text("x") }
+func All() xango.Node { return xango.Text("x") }
 
 // @title only a
 // @styles a.css
-func OnlyA() gox.Node { return gox.Text("x") }
+func OnlyA() xango.Node { return xango.Text("x") }
 
 // @title none
 // @styles none
-func None() gox.Node { return gox.Text("x") }
+func None() xango.Node { return xango.Text("x") }
 
 // @title both, by full path
 // @styles example.com/testmod/pkg/a.css b.css
-func Both() gox.Node { return gox.Text("x") }
+func Both() xango.Node { return xango.Text("x") }
 
 func main() {
-	render := func(n gox.Node) string { s, _ := gox.RenderString(n); return s }
+	render := func(n xango.Node) string { s, _ := xango.RenderString(n); return s }
 	has := func(s, sheet string) bool { return strings.Contains(s, sheet) }
 	all, a, none, both := render(All()), render(OnlyA()), render(None()), render(Both())
 	if !has(all, "A{}") || !has(all, "B{}") {
@@ -386,7 +386,7 @@ func main() {
 	fmt.Println("ok")
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-# gox-canvas
+# xango-canvas
 
 A bare-minimum, Google-Docs-style typing canvas: a list of documents,
 each one a big textarea that autosaves as you type. It's a proof of
@@ -14,7 +14,7 @@ the main module.
 
 - **`canvas/store.go`** -- plain `database/sql` business logic (create
   /get/save/list a document). No framework dependency. Queries are
-  annotated with the gox VS Code extension's `//language=SQL` marker
+  annotated with the xango VS Code extension's `//language=SQL` marker
   for editor syntax highlighting; `sqlQuery` strips that marker before
   the string reaches the driver (Postgres comments are `--`, not `//`,
   so leaving it in would be a syntax error, not a no-op).
@@ -41,19 +41,19 @@ the main module.
   (`atlas_schema_revisions`) stays authoritative instead of racing a
   container auto-init script.
 - **`Makefile`** -- wraps the whole workflow: `make run` chains
-  `generate` (goxc) → `wasm` (build + stage the WASM client) → `db-up`
+  `generate` (xgc) → `wasm` (build + stage the WASM client) → `db-up`
   (docker compose, waits for the healthcheck) → `db-migrate` (Atlas)
   → the dev server itself. `make watch` runs `cmd/devwatch` instead of
   the plain dev server, for live reload while editing (see below).
   `make test`, `make db-status`, `make db-diff name=...`, and `make
   clean` cover the rest.
-- **`canvas/pages.gox`** -- `HomePage` (list + "new document" form) and
-  `CanvasPage` (the textarea) as gox SSR components. The file imports
+- **`canvas/pages.xg`** -- `HomePage` (list + "new document" form) and
+  `CanvasPage` (the textarea) as xango SSR components. The file imports
   its stylesheet with `_ ".../canvas/static/style.css"` (a blank import,
   written like a Go package import: gojiberry's `loader_css.go` registers
-  it with the program) and both pages are annotated `// @title gox-canvas`
+  it with the program) and both pages are annotated `// @title xango-canvas`
   (`internal/transpile/page_metadata.go`), which wraps each function's
-  return in `gox.Document{Title, Head, Body}.Render()` (`gox/document.go`)
+  return in `xango.Document{Title, Head, Body}.Render()` (`xango/document.go`)
   -- which puts the registered stylesheet in the head -- so neither page
   hand-rolls `<html><head>...</head><body>...</body></html>` or its own
   CSS binding. `CanvasPage` is also
@@ -90,7 +90,7 @@ the main module.
   (a full reload always reconstructs the right state from Postgres).
 
 Both entry points (`api.go`'s Encore handlers and `cmd/devserver`) call
-the same `Store` methods and render the same `pages.gox` components --
+the same `Store` methods and render the same `pages.xg` components --
 the routing layer is the only thing that differs.
 
 ## What's actually verified, and how
@@ -102,7 +102,7 @@ Run from this directory (`examples/canvas-app`), with Docker and
 make run
 ```
 
-That's `generate` (goxc) + `wasm` (build the WASM client) + `db-up`
+That's `generate` (xgc) + `wasm` (build the WASM client) + `db-up`
 (Postgres via Docker Compose) + `db-migrate` (Atlas applies
 `canvas/migrations/` to it) + the dev server itself, in order. `make
 test` runs the same way against the same database. Use `make watch`
@@ -161,7 +161,7 @@ DATABASE_URL="postgres://canvas:canvas@127.0.0.1:5432/canvas?sslmode=disable" go
   content really round-tripped through Postgres. The home page listing
   was also confirmed to pick up the new preview text.
 - **`make watch`** (`cmd/devwatch`), end to end, with a real headless
-  Chromium tab already open: editing `canvas/pages.gox` was picked up
+  Chromium tab already open: editing `canvas/pages.xg` was picked up
   by the file watcher, triggered exactly one rebuild-and-restart (no
   feedback loop from the watcher seeing its own build output), and the
   open tab reloaded on its own once the new process was listening --

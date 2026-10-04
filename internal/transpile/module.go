@@ -26,13 +26,13 @@ func findModuleRoot(startDir string) (dir string, modulePath string, err error) 
 		if data, err := os.ReadFile(goModPath); err == nil {
 			m := moduleLineRe.FindSubmatch(data)
 			if m == nil {
-				return "", "", fmt.Errorf("gox: %s has no `module` line", goModPath)
+				return "", "", fmt.Errorf("xango: %s has no `module` line", goModPath)
 			}
 			return dir, string(m[1]), nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", "", fmt.Errorf("gox: no go.mod found above %s", startDir)
+			return "", "", fmt.Errorf("xango: no go.mod found above %s", startDir)
 		}
 		dir = parent
 	}
@@ -80,7 +80,7 @@ var (
 
 // requiredModules lists the modules of the build rooted at root, with
 // their directories, by asking the go command (cached per root for the
-// life of the process, which is one goxc run).
+// life of the process, which is one xgc run).
 func requiredModules(root string) []goModule {
 	modulesMu.Lock()
 	defer modulesMu.Unlock()

@@ -1,19 +1,19 @@
 package components
 
-import "github.com/elaous/gojiberry/gox"
+import "github.com/elaous/gojiberry/xango"
 
 // ListProps configures List. T is the item type; write it as a type
-// argument in .gox: <List[Person] items={people} item={func(p Person) gox.Node {...}} />.
+// argument in .xg: <List[Person] items={people} item={func(p Person) xango.Node {...}} />.
 type ListProps[T any] struct {
 	Items []T
 	// Item renders one item (a "render prop": a function whose body may
 	// itself contain markup).
-	Item func(item T) gox.Node
+	Item func(item T) xango.Node
 	// Key, if set, gives each item's <li> a reconciliation key so
 	// re-renders keep DOM identity as items move.
 	Key func(item T) string
 	// Empty is shown instead of the list when Items is empty.
-	Empty *gox.Node
+	Empty *xango.Node
 	// Ordered renders an <ol> instead of a <ul>.
 	Ordered bool
 }
@@ -22,7 +22,7 @@ type ListProps[T any] struct {
 // render prop. It is the smallest generic component: it shows how a
 // component can take typed data and a function that turns an item into
 // markup.
-func List[T any](props ListProps[T]) gox.Node {
+func List[T any](props ListProps[T]) xango.Node {
 	if len(props.Items) == 0 && props.Empty != nil {
 		return *props.Empty
 	}
@@ -30,17 +30,17 @@ func List[T any](props ListProps[T]) gox.Node {
 	if props.Ordered {
 		tag = "ol"
 	}
-	items := make([]gox.Node, 0, len(props.Items))
+	items := make([]xango.Node, 0, len(props.Items))
 	for _, it := range props.Items {
-		var content []gox.Node
+		var content []xango.Node
 		if props.Item != nil {
 			content = append(content, props.Item(it))
 		}
-		attrs := []gox.Attr{gox.A("class", "gj-list-item")}
+		attrs := []xango.Attr{xango.A("class", "gj-list-item")}
 		if props.Key != nil {
-			attrs = append(attrs, gox.A("data-key", props.Key(it)))
+			attrs = append(attrs, xango.A("data-key", props.Key(it)))
 		}
-		items = append(items, gox.El("li", attrs, content...))
+		items = append(items, xango.El("li", attrs, content...))
 	}
-	return gox.El(tag, []gox.Attr{gox.A("class", "gj-list")}, items...)
+	return xango.El(tag, []xango.Attr{xango.A("class", "gj-list")}, items...)
 }

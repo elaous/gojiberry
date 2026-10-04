@@ -2,7 +2,8 @@ package main
 
 import (
 	"github.com/elaous/gojiberry/canvas"
-	collab "github.com/elaous/gojiberry/collab/gox"
+	collab "github.com/elaous/gojiberry/collab/xango"
+	"github.com/elaous/gojiberry/hyphen"
 )
 
 // State is everything the canvas tree depends on.
@@ -30,10 +31,21 @@ type State struct {
 	// Live, when set (the page was opened with ?doc=...), makes the text
 	// flow a shared document.
 	Live *collab.CollabProps
+	// FindFeature is the find and replace commands, with the app's own bar
+	// behind them.
+	FindFeature canvas.FindFeature
+	// Hyphenate breaks long words at their hyphenation points.
+	Hyphenate bool
+}
+
+// Features is what the canvas registers: the defaults, find and replace and
+// columns.
+func (s State) Features() []canvas.Feature {
+	return append(canvas.DefaultFeatures(), s.FindFeature, canvas.Columns{})
 }
 
 const sample = "# Gojiberry editor\n\n" +
-	"Everything on this canvas is a **gox** tree: pages, a text flow, a picture, a floating note and a table. " +
+	"Everything on this canvas is a **xango** tree: pages, a text flow, a picture, a floating note and a table. " +
 	"Switch to *edit* mode and click into the text to type; select text and use Ctrl+B, Ctrl+I, Ctrl+U or the style editor above.\n\n" +
 	"Registered features: multi-cursor (Ctrl+D picks the next match, Ctrl+click adds a cursor), line operations " +
 	"(Alt+Up/Down move, Alt+Shift+Up/Down copy, Ctrl+Shift+K delete) and Markdown copy and paste (Ctrl+Shift+C / V). " +
@@ -59,4 +71,13 @@ func (s State) Transform() canvas.Transform {
 		return nil
 	}
 	return canvas.Markdown{}
+}
+
+// Hyphenator is what the text flow breaks words with: English patterns when
+// Hyphenate is on, nothing otherwise.
+func (s State) Hyphenator() canvas.Hyphenator {
+	if s.Hyphenate {
+		return hyphen.English()
+	}
+	return nil
 }

@@ -15,7 +15,13 @@
 .gj-saver-failed { color: var(--gj-danger, #c01c28); }
 .gj-saver-saved-head { display: flex; justify-content: space-between; align-items: center; }
 .gj-saver-list { list-style: none; margin: 0.3em 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.gj-saver-entry { display: flex; align-items: center; gap: 0.5em; padding: 0.25em 0; border-bottom: 1px solid var(--gj-border); }
+.gj-saver-entry { display: flex; align-items: center; gap: 0.5em; padding: 0.25em 0; border-bottom: 1px solid var(--gj-border);  flex-wrap: wrap; }
 .gj-saver-entry-name { font-weight: 500; }
 .gj-saver-entry-meta { flex: 1; font-size: 0.8em; color: var(--gj-muted); }
 .gj-saver-empty { margin: 0.3em 0 0; font-size: 0.85em; color: var(--gj-muted); }
+
+.gj-saver-tagbar { display: flex; flex-wrap: wrap; gap: 0.3em; margin: 0.3em 0; }
+.gj-saver-tagchip { border: 1px solid var(--gj-border); background: var(--gj-bg); border-radius: 999px; padding: 0.1em 0.7em; cursor: pointer; font: inherit; font-size: 0.85em; }
+.gj-saver-tagchip-on { background: var(--gj-accent); color: var(--gj-accent-contrast); border-color: var(--gj-accent); }
+.gj-saver-tags { flex-basis: 100%; margin-top: 0.2em; padding: 0.2em 0.4em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); font: inherit; font-size: 0.85em; }
+.gj-saver-versions, .gj-saver-trashbin { margin-top: 1em; }

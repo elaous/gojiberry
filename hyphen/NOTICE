@@ -1,0 +1,9 @@
+hyph-en-us.txt.gz holds the TeX hyphenation patterns for American English
+(hyph-en-us.pat.txt from https://github.com/hyphenation/tex-hyphen), by Gerard
+D.C. Kuiken, Copyright (C) 1990, 2004, 2005.
+
+Copying and distribution of this file, with or without modification, are
+permitted in any medium without royalty provided the copyright notice and this
+notice are preserved.
+
+The patterns are read with github.com/speedata/hyphenation (CC0).

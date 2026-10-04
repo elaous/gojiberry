@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func TestCheckbox(t *testing.T) {
@@ -26,7 +26,7 @@ func TestCheckbox(t *testing.T) {
 		if len(handlers) != 1 {
 			t.Fatalf("expected 1 change handler, got %d", len(handlers))
 		}
-		handlers[0](gox.NewEvent("change", nil, true, nil, nil))
+		handlers[0](xango.NewEvent("change", nil, true, nil, nil))
 		if !got {
 			t.Error("OnChange did not receive Checked=true from the event")
 		}
@@ -64,7 +64,7 @@ func TestCheckboxGroup(t *testing.T) {
 		if len(handlers) != 2 {
 			t.Fatalf("expected 2 change handlers (one per option), got %d", len(handlers))
 		}
-		handlers[1](gox.NewEvent("change", nil, true, nil, nil))
+		handlers[1](xango.NewEvent("change", nil, true, nil, nil))
 		if gotValue != "b" || !gotChecked {
 			t.Errorf("second handler reported (%q, %v), want (\"b\", true)", gotValue, gotChecked)
 		}
@@ -93,7 +93,7 @@ func TestRadioGroup(t *testing.T) {
 		if len(handlers) != 2 {
 			t.Fatalf("expected 2 change handlers, got %d", len(handlers))
 		}
-		handlers[0](gox.Event{})
+		handlers[0](xango.Event{})
 		if got != "x" {
 			t.Errorf("first handler reported %q, want \"x\"", got)
 		}
@@ -125,7 +125,7 @@ func TestSwitch(t *testing.T) {
 		var got bool
 		n := Switch(SwitchProps{OnChange: func(checked bool) { got = checked }})
 		handlers := findHandlers(n, "change")
-		handlers[0](gox.NewEvent("change", nil, true, nil, nil))
+		handlers[0](xango.NewEvent("change", nil, true, nil, nil))
 		if !got {
 			t.Error("OnChange did not receive true")
 		}
@@ -153,7 +153,7 @@ func TestSlider(t *testing.T) {
 		var got float64
 		n := Slider(SliderProps{OnChange: func(v float64) { got = v }})
 		handlers := findHandlers(n, "input")
-		handlers[0](gox.NewEvent("input", "7.5", false, nil, nil))
+		handlers[0](xango.NewEvent("input", "7.5", false, nil, nil))
 		if got != 7.5 {
 			t.Errorf("OnChange got %v, want 7.5", got)
 		}
@@ -181,7 +181,7 @@ func TestDatePicker(t *testing.T) {
 		var got string
 		n := DatePicker(DatePickerProps{OnChange: func(v string) { got = v }})
 		handlers := findHandlers(n, "change")
-		handlers[0](gox.NewEvent("change", "2024-06-01", false, nil, nil))
+		handlers[0](xango.NewEvent("change", "2024-06-01", false, nil, nil))
 		if got != "2024-06-01" {
 			t.Errorf("OnChange got %q, want %q", got, "2024-06-01")
 		}
@@ -194,7 +194,7 @@ func TestColorPicker(t *testing.T) {
 
 	var got string
 	n := ColorPicker(ColorPickerProps{OnChange: func(v string) { got = v }})
-	findHandlers(n, "change")[0](gox.NewEvent("change", "#00ff00", false, nil, nil))
+	findHandlers(n, "change")[0](xango.NewEvent("change", "#00ff00", false, nil, nil))
 	if got != "#00ff00" {
 		t.Errorf("OnChange got %q, want %q", got, "#00ff00")
 	}
@@ -223,7 +223,7 @@ func TestTextarea(t *testing.T) {
 	t.Run("OnChange receives the new value", func(t *testing.T) {
 		var got string
 		n := Textarea(TextareaProps{OnChange: func(v string) { got = v }})
-		findHandlers(n, "input")[0](gox.NewEvent("input", "new text", false, nil, nil))
+		findHandlers(n, "input")[0](xango.NewEvent("input", "new text", false, nil, nil))
 		if got != "new text" {
 			t.Errorf("OnChange got %q, want %q", got, "new text")
 		}
@@ -244,7 +244,7 @@ func TestOTPInput(t *testing.T) {
 		if len(handlers) != 3 {
 			t.Fatalf("expected 3 input handlers, got %d", len(handlers))
 		}
-		handlers[2](gox.NewEvent("input", "9", false, nil, nil))
+		handlers[2](xango.NewEvent("input", "9", false, nil, nil))
 		if gotIndex != 2 || gotValue != "9" {
 			t.Errorf("got (%d, %q), want (2, \"9\")", gotIndex, gotValue)
 		}
@@ -279,7 +279,7 @@ func TestSearch(t *testing.T) {
 		if len(handlers) != 2 {
 			t.Fatalf("expected 2 click handlers, got %d", len(handlers))
 		}
-		handlers[1](gox.Event{})
+		handlers[1](xango.Event{})
 		if got != "banana" {
 			t.Errorf("OnSelect got %q, want %q", got, "banana")
 		}
@@ -288,7 +288,7 @@ func TestSearch(t *testing.T) {
 	t.Run("OnChange fires on input", func(t *testing.T) {
 		var got string
 		n := Search(SearchProps{OnChange: func(v string) { got = v }})
-		findHandlers(n, "input")[0](gox.NewEvent("input", "query", false, nil, nil))
+		findHandlers(n, "input")[0](xango.NewEvent("input", "query", false, nil, nil))
 		if got != "query" {
 			t.Errorf("OnChange got %q, want %q", got, "query")
 		}
@@ -342,11 +342,11 @@ func TestDropdown(t *testing.T) {
 		if len(clickHandlers) != 1+len(opts) {
 			t.Fatalf("expected %d click handlers, got %d", 1+len(opts), len(clickHandlers))
 		}
-		clickHandlers[0](gox.Event{})
+		clickHandlers[0](xango.Event{})
 		if !toggled || toggledTo != false {
 			t.Errorf("clicking the control while Open=true should invoke OnToggleOpen(false), got called=%v with %v", toggled, toggledTo)
 		}
-		clickHandlers[2](gox.Event{})
+		clickHandlers[2](xango.Event{})
 		if selected != "b" {
 			t.Errorf("OnSelect got %q, want \"b\"", selected)
 		}

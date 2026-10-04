@@ -1,4 +1,4 @@
-// Command devserver runs the gox-canvas demo against a real Postgres
+// Command devserver runs the xango-canvas demo against a real Postgres
 // using plain net/http -- no Encore CLI required. It exists because
 // this sandbox's network policy blocked the Encore CLI installer, so
 // this is how the app is actually run and tested in this repo; a real
@@ -30,7 +30,7 @@ import (
 
 	"github.com/elaous/gojiberry/devreload"
 	"github.com/elaous/gojiberry/examples/canvas-app/canvas"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func main() {
@@ -62,7 +62,7 @@ func main() {
 	if v := os.Getenv("ADDR"); v != "" {
 		addr = v
 	}
-	fmt.Println("gox-canvas devserver listening on", addr)
+	fmt.Println("xango-canvas devserver listening on", addr)
 	if reloader != nil {
 		fmt.Println("dev mode: live-reload script injected, GET", devreload.Path(), "enabled")
 	}
@@ -75,8 +75,8 @@ func main() {
 func newMux(store *canvas.Store, reloader *devreload.Reloader) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	renderPage := func(w http.ResponseWriter, page gox.Node) error {
-		html, err := gox.RenderString(page)
+	renderPage := func(w http.ResponseWriter, page xango.Node) error {
+		html, err := xango.RenderString(page)
 		if err != nil {
 			return err
 		}

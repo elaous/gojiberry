@@ -14,11 +14,11 @@ import (
 	"os"
 
 	%s
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func main() {
-	got := gox.RegisteredStyles()
+	got := xango.RegisteredStyles()
 	%s
 	_ = fmt.Sprint
 	_ = os.Exit
@@ -26,7 +26,7 @@ func main() {
 `
 
 func TestBlankCSSImportRegistersTheStylesheet(t *testing.T) {
-	dir := setupModuleWithGox(t)
+	dir := setupModuleWithXango(t)
 	writeFile(t, dir, "button.css", ".b { color: red; }")
 	if err := os.MkdirAll(filepath.Join(dir, "theme"), 0o755); err != nil {
 		t.Fatal(err)
@@ -39,7 +39,7 @@ func TestBlankCSSImportRegistersTheStylesheet(t *testing.T) {
 		got[1].ID != "example.com/testmod/pkg/theme/dark.css" || got[1].CSS != ".d { color: white; }" {
 		panic(fmt.Sprintf("registered: %+v", got))
 	}`, 1)
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,23 +50,23 @@ func TestBlankCSSImportRegistersTheStylesheet(t *testing.T) {
 }
 
 func TestNamedCSSImportBindsTheText(t *testing.T) {
-	dir := setupModuleWithGox(t)
+	dir := setupModuleWithXango(t)
 	writeFile(t, dir, "x.css", "a{b:c}")
 	src := `package main
 
 import (
 	"fmt"
 	theme "example.com/testmod/pkg/x.css"
-	"github.com/elaous/gojiberry/gox"
+	"github.com/elaous/gojiberry/xango"
 )
 
 func main() {
-	if theme != "a{b:c}" || len(gox.RegisteredStyles()) != 0 {
-		panic(fmt.Sprintf("theme=%q registered=%v", theme, gox.RegisteredStyles()))
+	if theme != "a{b:c}" || len(xango.RegisteredStyles()) != 0 {
+		panic(fmt.Sprintf("theme=%q registered=%v", theme, xango.RegisteredStyles()))
 	}
 }
 `
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func main() {
 }
 
 func TestCSSImportErrors(t *testing.T) {
-	dir := setupModuleWithGox(t)
+	dir := setupModuleWithXango(t)
 	writeFile(t, dir, "x.css", "a{}")
 	for name, tc := range map[string]struct{ spec, want string }{
 		"no name":      {`"example.com/testmod/pkg/x.css"`, "needs a name or _"},
@@ -82,7 +82,7 @@ func TestCSSImportErrors(t *testing.T) {
 		"not a module": {`_ "example.org/other/x.css"`, "required module"},
 	} {
 		src := "package main\n\nimport (\n\t" + tc.spec + "\n)\n\nfunc main() {}\n"
-		_, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+		_, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: err = %v, want it to contain %q", name, err, tc.want)
 		}
@@ -92,7 +92,7 @@ func TestCSSImportErrors(t *testing.T) {
 // A stylesheet in a module the current one requires -- found through the
 // go command, so replace directives and the module cache both work.
 func TestCSSImportFromARequiredModule(t *testing.T) {
-	dir := setupModuleWithGox(t)
+	dir := setupModuleWithXango(t)
 	lib := t.TempDir()
 	writeFile(t, lib, "go.mod", "module example.com/lib\n\ngo 1.21\n")
 	if err := os.MkdirAll(filepath.Join(lib, "ui"), 0o755); err != nil {
@@ -112,7 +112,7 @@ func TestCSSImportFromARequiredModule(t *testing.T) {
 	src = strings.Replace(src, "%s", `if len(got) != 1 || got[0].ID != "example.com/lib/ui/card.css" || got[0].CSS != ".card{}" {
 		panic(fmt.Sprintf("registered: %+v", got))
 	}`, 1)
-	out, err := Transpile(filepath.Join(dir, "main.gox"), []byte(src))
+	out, err := Transpile(filepath.Join(dir, "main.xg"), []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}

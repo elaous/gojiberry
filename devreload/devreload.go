@@ -1,4 +1,4 @@
-// Package devreload lets a gox SSR server opt into a live-reload dev
+// Package devreload lets an xango SSR server opt into a live-reload dev
 // loop with two calls: wrap rendered HTML with (*Reloader).Wrap and
 // mount (*Reloader).Handler wherever the injected script polls. A
 // browser tab reloads itself once that endpoint reports a different
@@ -8,9 +8,9 @@
 //
 // This began as examples/canvas-app's own hand-rolled devVersion/
 // devReloadScript pair, wired into that app's net/http mux by hand;
-// this package is that same mechanism generalized so any gox server
+// this package is that same mechanism generalized so any xango server
 // (net/http, Gin, Echo, Encore's raw endpoints, ...) can use it without
-// re-deriving it, matching gox's own opt-in-per-call style rather than
+// re-deriving it, matching xango's own opt-in-per-call style rather than
 // a magic global. A Reloader is nil-safe everywhere a *Reloader is
 // accepted (Wrap becomes a no-op, Handler serves 404) specifically so
 // callers can keep one code path and pass nil in production instead of

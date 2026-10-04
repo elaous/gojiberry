@@ -92,10 +92,14 @@ type TableView struct {
 	refresh  func() // set by Bind
 	editing  bool
 	row, col int
-	cursor   int // rune index into the active cell's text
-	hover    Hit
-	inRegion bool // pointer is over the table or its "+" bars (or their gap)
-	caretOn  bool
+	cursor   int       // rune index into the active cell's text
+	rng      cellRange // the block of cells selected with Shift (see SelectRange)
+	// active is true once a cell has been edited or selected, so cell 0,0 is not
+	// "active" just because row and col start at zero.
+	everActive bool
+	hover      Hit
+	inRegion   bool // pointer is over the table or its "+" bars (or their gap)
+	caretOn    bool
 }
 
 // NewTableView returns a view of t drawn with DefaultTableStyle, in
@@ -200,9 +204,26 @@ func (v *TableView) layout() geometry {
 		widths[c] = s.MinColWidth
 	}
 	for r, row := range t.Cells {
-		v.Painter.SetFont(v.font(r))
 		for c, text := range row {
+			if rs, cs := t.Span(r, c); rs == 0 || cs > 1 {
+				continue // covered, or wider than a column: see below
+			}
+			v.Painter.SetFont(v.cellFont(r, t.StyleAt(r, c)))
 			widths[c] = max(widths[c], v.Painter.MeasureTextWidth(text)+2*s.PadX)
+		}
+	}
+	for _, m := range t.Merges { // a merged cell wider than its columns widens the last of them
+		if m.Cols < 2 {
+			continue
+		}
+		v.Painter.SetFont(v.cellFont(m.Row, t.StyleAt(m.Row, m.Col)))
+		need := v.Painter.MeasureTextWidth(t.Cell(m.Row, m.Col)) + 2*s.PadX
+		have := 0.0
+		for c := m.Col; c < m.Col+m.Cols; c++ {
+			have += widths[c]
+		}
+		if need > have {
+			widths[m.Col+m.Cols-1] += need - have
 		}
 	}
 	g.colX[0], g.rowY[0] = v.X, v.Y
@@ -213,6 +234,26 @@ func (v *TableView) layout() geometry {
 		g.rowY[r+1] = g.rowY[r] + s.RowHeight
 	}
 	return g
+}
+
+// cellFont is the font of a cell in row, with its own style on top.
+func (v *TableView) cellFont(row int, st CellStyle) string {
+	f := v.font(row)
+	if st.Italic && !strings.Contains(f, "italic") {
+		f = "italic " + f
+	}
+	if st.Bold && !strings.Contains(f, "bold") {
+		f = "bold " + f
+	}
+	return f
+}
+
+// cellRect is where the cell at (row, col) is drawn: a merged cell covers the
+// block, and a covered cell the block's too.
+func (g geometry) cellRect(t *Table, row, col int) (x, y, w, h float64) {
+	r, c := t.Owner(row, col)
+	rs, cs := t.Span(r, c)
+	return g.colX[c], g.rowY[r], g.colX[c+cs] - g.colX[c], g.rowY[r+rs] - g.rowY[r]
 }
 
 // Size returns the width and height of canvas needed to draw the table
@@ -271,7 +312,8 @@ func (v *TableView) HitTest(x, y float64) Hit {
 	case x < v.X || x >= g.right() || y < v.Y || y >= g.bottom():
 		return Hit{}
 	}
-	return Hit{Kind: HitCell, Row: indexAt(g.rowY, y), Col: indexAt(g.colX, x)}
+	r, c := v.Table.Owner(indexAt(g.rowY, y), indexAt(g.colX, x))
+	return Hit{Kind: HitCell, Row: r, Col: c}
 }
 
 // indexAt returns which of the cumulative edges' spans contains pos.
@@ -355,9 +397,17 @@ func (v *TableView) MouseDown(x, y float64) bool {
 // cursorAt returns the rune offset in cell (row, col) closest to x.
 func (v *TableView) cursorAt(x float64, row, col int) int {
 	g := v.layout()
-	rel := x - (g.colX[col] + v.Style.PadX)
+	cx, _, cw, _ := g.cellRect(v.Table, row, col)
+	st := v.Table.StyleAt(row, col)
 	runes := []rune(v.Table.Cell(row, col))
-	v.Painter.SetFont(v.font(row))
+	v.Painter.SetFont(v.cellFont(row, st))
+	rel := x - (cx + v.Style.PadX)
+	switch st.Align {
+	case AlignCenter:
+		rel = x - (cx + (cw-v.Painter.MeasureTextWidth(string(runes)))/2)
+	case AlignRight:
+		rel = x - (cx + cw - v.Style.PadX - v.Painter.MeasureTextWidth(string(runes)))
+	}
 	prev := 0.0
 	for i := 1; i <= len(runes); i++ {
 		w := v.Painter.MeasureTextWidth(string(runes[:i]))
@@ -370,7 +420,9 @@ func (v *TableView) cursorAt(x float64, row, col int) int {
 }
 
 func (v *TableView) edit(row, col int) {
-	v.editing, v.row, v.col = true, row, col
+	row, col = v.Table.Owner(row, col)
+	v.editing, v.row, v.col, v.everActive = true, row, col, true
+	v.rng = cellRange{}
 	v.cursor = len([]rune(v.Table.Cell(row, col)))
 	v.caretOn = true
 }
@@ -436,26 +488,43 @@ func (v *TableView) HandleKey(key string, shift bool) bool {
 			v.step(1)
 		}
 	case "Enter":
-		if v.row == t.Rows()-1 {
+		rs, _ := t.Span(v.row, v.col)
+		if v.row+rs >= t.Rows() {
 			t.AddRow()
 			v.changed()
 		}
-		v.edit(v.row+1, v.col)
+		v.edit(v.row+rs, v.col)
 	case "ArrowDown":
-		if v.row+1 < t.Rows() {
-			v.moveTo(v.row+1, v.col)
+		if shift {
+			v.extendRange(1, 0)
+			break
+		}
+		if rs, _ := t.Span(v.row, v.col); v.row+rs < t.Rows() {
+			v.moveTo(v.row+rs, v.col)
 		}
 	case "ArrowUp":
+		if shift {
+			v.extendRange(-1, 0)
+			break
+		}
 		if v.row > 0 {
 			v.moveTo(v.row-1, v.col)
 		}
 	case "ArrowLeft":
+		if shift {
+			v.extendRange(0, -1)
+			break
+		}
 		if v.cursor > 0 {
 			v.cursor--
 		} else {
 			v.step(-1)
 		}
 	case "ArrowRight":
+		if shift {
+			v.extendRange(0, 1)
+			break
+		}
 		if v.cursor < len([]rune(t.Cell(v.row, v.col))) {
 			v.cursor++
 		} else {
@@ -499,7 +568,7 @@ func (v *TableView) moveTo(row, col int) {
 // row; stepping back from the first cell stays put.
 func (v *TableView) step(delta int) {
 	t := v.Table
-	i := v.row*t.Cols() + v.col + delta
+	i := v.nextCell(v.row*t.Cols()+v.col, delta)
 	if i < 0 {
 		return
 	}
@@ -514,11 +583,27 @@ func (v *TableView) step(delta int) {
 	v.cursor = 0
 }
 
+// nextCell is the index (row*cols+col) delta cells on in reading order,
+// skipping cells a merge covers; it is negative before the first cell and may
+// be past the last.
+func (v *TableView) nextCell(i, delta int) int {
+	t := v.Table
+	for {
+		i += delta
+		if i < 0 {
+			return -1
+		}
+		if i >= t.Rows()*t.Cols() || !t.Covered(i/t.Cols(), i%t.Cols()) {
+			return i
+		}
+	}
+}
+
 // stepNoGrow is ArrowRight at the end of a cell: go to the next cell
 // (caret at its start) but, unlike Tab, never add a row.
 func (v *TableView) stepNoGrow(delta int) {
 	t := v.Table
-	i := v.row*t.Cols() + v.col + delta
+	i := v.nextCell(v.row*t.Cols()+v.col, delta)
 	if i < 0 || i >= t.Rows()*t.Cols() {
 		return
 	}
@@ -538,35 +623,61 @@ func (v *TableView) Draw() {
 	p.SetLineWidth(1)
 	for r := range t.Cells {
 		for c := range t.Cells[r] {
-			x, y, w, h := g.colX[c], g.rowY[r], g.colX[c+1]-g.colX[c], g.rowY[r+1]-g.rowY[r]
+			if t.Covered(r, c) {
+				continue
+			}
+			x, y, w, h := g.cellRect(t, r, c)
+			st := t.StyleAt(r, c)
 			bg := s.CellBG
 			if r == 0 {
 				bg = s.HeaderBG
+			}
+			if st.Background != "" {
+				bg = st.Background
 			}
 			p.SetFillStyle(bg)
 			p.FillRect(x, y, w, h)
 			p.SetStrokeStyle(s.GridColor)
 			p.StrokeRect(x+0.5, y+0.5, w-1, h-1)
-			p.SetFont(v.font(r))
-			p.SetFillStyle(s.TextColor)
-			p.FillText(t.Cells[r][c], x+s.PadX, y+h/2)
+			p.SetFont(v.cellFont(r, st))
+			p.SetFillStyle(orStr(st.Color, s.TextColor))
+			text := t.Cells[r][c]
+			switch st.Align {
+			case AlignCenter:
+				p.SetTextAlign("center")
+				p.FillText(text, x+w/2, y+h/2)
+			case AlignRight:
+				p.SetTextAlign("right")
+				p.FillText(text, x+w-s.PadX, y+h/2)
+			default:
+				p.SetTextAlign("left")
+				p.FillText(text, x+s.PadX, y+h/2)
+			}
+			p.SetTextAlign("left")
 		}
 	}
 
 	if v.mode == ModeEdit {
+		v.drawRange(g)
 		v.drawSelection(g)
 	}
 
 	if v.mode == ModeEdit && v.editing {
-		x, y := g.colX[v.col], g.rowY[v.row]
-		w, h := g.colX[v.col+1]-x, g.rowY[v.row+1]-y
+		x, y, w, h := g.cellRect(t, v.row, v.col)
 		p.SetStrokeStyle(s.ActiveColor)
 		p.SetLineWidth(2)
 		p.StrokeRect(x+1, y+1, w-2, h-2)
 		if v.caretOn {
-			p.SetFont(v.font(v.row))
+			st := t.StyleAt(v.row, v.col)
+			p.SetFont(v.cellFont(v.row, st))
 			runes := []rune(t.Cell(v.row, v.col))
 			cx := x + s.PadX + p.MeasureTextWidth(string(runes[:min(v.cursor, len(runes))]))
+			switch st.Align {
+			case AlignCenter:
+				cx = x + (w-p.MeasureTextWidth(string(runes)))/2 + p.MeasureTextWidth(string(runes[:min(v.cursor, len(runes))]))
+			case AlignRight:
+				cx = x + w - s.PadX - p.MeasureTextWidth(string(runes)) + p.MeasureTextWidth(string(runes[:min(v.cursor, len(runes))]))
+			}
 			p.BeginPath()
 			p.MoveTo(cx+0.5, y+6)
 			p.LineTo(cx+0.5, y+h-6)

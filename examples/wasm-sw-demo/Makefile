@@ -1,5 +1,5 @@
 # wasm-sw-demo dev workflow. Run `make run` for the full path from a
-# clean checkout: regenerates .go from .gox, builds the service worker
+# clean checkout: regenerates .go from .xg, builds the service worker
 # to sw.wasm, and serves it -- then open http://localhost:8080/ and
 # check devtools > Application > Service Workers for it installed,
 # activated, and claiming the page.
@@ -9,7 +9,7 @@ run: generate wasm
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/goxc examples/wasm-sw-demo
+	cd ../.. && go run ./cmd/xgc examples/wasm-sw-demo
 
 .PHONY: wasm
 wasm:

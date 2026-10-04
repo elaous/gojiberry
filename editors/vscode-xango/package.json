@@ -1,0 +1,56 @@
+{
+  "name": "xango-language",
+  "displayName": "Xangô",
+  "description": "Syntax highlighting for .xg files (Go with JSX-like tags, generic component tags, boolean attributes and resource imports such as _ \"module/path/styles.css\"), plus //language=-annotated embedded-language strings in any .go file",
+  "version": "0.2.0",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "xango",
+        "aliases": [
+          "xango",
+          "Gojiberry"
+        ],
+        "extensions": [
+          ".xg"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "xango",
+        "scopeName": "source.xg",
+        "path": "./syntaxes/xango.tmLanguage.json"
+      },
+      {
+        "scopeName": "xango.tags.injection",
+        "path": "./syntaxes/xango-tags.tmLanguage.json",
+        "injectTo": [
+          "source.xg"
+        ]
+      },
+      {
+        "scopeName": "xango.imports.injection",
+        "path": "./syntaxes/xango-imports.tmLanguage.json",
+        "injectTo": [
+          "source.xg"
+        ]
+      },
+      {
+        "scopeName": "xango.embedded-highlight.injection",
+        "path": "./syntaxes/embedded-highlight.tmLanguage.json",
+        "injectTo": [
+          "source.go",
+          "source.xg"
+        ]
+      }
+    ]
+  }
+}
