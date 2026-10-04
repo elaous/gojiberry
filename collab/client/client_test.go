@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -279,4 +280,45 @@ loop:
 	bad.Send([]crdt.Op{op("a", "b")})
 	bad.SetPresence(wire.Presence{})
 	bad.Close()
+}
+
+func TestSetPresenceIsThrottledAndTheLatestIsSent(t *testing.T) {
+	var mu sync.Mutex
+	var names []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/presence") {
+			var p wire.Presence
+			if json.NewDecoder(r.Body).Decode(&p) == nil {
+				mu.Lock()
+				names = append(names, p.Name)
+				mu.Unlock()
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.Error(w, "no stream here", http.StatusNotFound)
+	}))
+	defer srv.Close()
+	c := Dial(Options{BaseURL: srv.URL, Doc: "d", Replica: "r", PresenceInterval: 60 * time.Millisecond, Retry: time.Second})
+	defer c.Close()
+	for i := 0; i < 30; i++ {
+		c.SetPresence(wire.Presence{Name: "n" + strconv.Itoa(i)})
+		time.Sleep(4 * time.Millisecond)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		got := append([]string(nil), names...)
+		mu.Unlock()
+		if len(got) > 0 && got[len(got)-1] == "n29" {
+			if len(got) > 6 {
+				t.Fatalf("30 updates in ~120ms became %d requests: %v", len(got), got)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the latest update was never sent: %v", got)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
