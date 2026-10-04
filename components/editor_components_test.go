@@ -583,3 +583,24 @@ func TestFindReplaceShowsCountOptionsAndReplaceRow(t *testing.T) {
 		t.Errorf("error:\n%s", bad)
 	}
 }
+
+func TestSpellPanelListsWordsSuggestionsAndActions(t *testing.T) {
+	html := render(t, SpellPanel(SpellPanelProps{Enabled: true, Language: "English", Detected: "Español", Items: []SpellItem{
+		{Word: "teh", Count: 3, Suggestions: []string{"the", "tech"}},
+		{Word: "xyzzy"},
+	}}))
+	for _, want := range []string{`checked="checked"`, `data-word="teh"`, `×3`, `gj-spell-suggestion`, `>the<`, `No suggestions`, `gj-spell-add`, `the text looks like Español`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in\n%s", want, html)
+		}
+	}
+	ro := render(t, SpellPanel(SpellPanelProps{Enabled: true, Language: "English", ReadOnly: true, Items: []SpellItem{{Word: "teh", Suggestions: []string{"the"}}}}))
+	if strings.Contains(ro, "gj-spell-add") || strings.Contains(ro, `class="gj-spell-suggestion"`) || !strings.Contains(ro, "gj-spell-ignore") {
+		t.Errorf("read-only:\n%s", ro)
+	}
+	clean := render(t, SpellPanel(SpellPanelProps{Enabled: true, Language: "English"}))
+	off := render(t, SpellPanel(SpellPanelProps{}))
+	if !strings.Contains(clean, "No misspelled words") || strings.Contains(off, "Dictionary") || strings.Contains(off, "checked=") {
+		t.Errorf("clean:\n%s\noff:\n%s", clean, off)
+	}
+}

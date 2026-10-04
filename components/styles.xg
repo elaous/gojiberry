@@ -31,6 +31,7 @@ import (
 	_ "github.com/elaous/gojiberry/components/findreplace.css"
 	_ "github.com/elaous/gojiberry/components/floating.css"
 	_ "github.com/elaous/gojiberry/components/fontselector.css"
+	_ "github.com/elaous/gojiberry/components/spellpanel.css"
 	_ "github.com/elaous/gojiberry/components/grid.css"
 	_ "github.com/elaous/gojiberry/components/icon.css"
 	_ "github.com/elaous/gojiberry/components/imagezoom.css"

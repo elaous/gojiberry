@@ -61,6 +61,10 @@ func (f *flowElem) Update(_ *Context, props any, _ []xango.Node) (bool, error) {
 	fl.Pages = f.ps
 	fl.OnChange = p.OnChange
 	fl.OnLink, fl.OnHoverLink = p.OnLink, p.OnHoverLink
+	if !sameValue(p.Hyphenator, old.Hyphenator) {
+		fl.Hyphenator = p.Hyphenator
+		changed = true
+	}
 	if p.Style != nil && (old.Style == nil || *old.Style != *p.Style) {
 		fl.Style = *p.Style
 		changed = true
@@ -422,3 +426,14 @@ func (e *floatElem) Close() { e.ft.SetFlow(nil) }
 
 // Close implements Closer.
 func (e *tableElem) Close() { e.v.SetFlow(nil) }
+
+// sameValue reports whether two interface values are equal, false for ones
+// that cannot be compared (so a changed value is never missed).
+func sameValue(a, b any) (same bool) {
+	defer func() {
+		if recover() != nil {
+			same = false
+		}
+	}()
+	return a == b
+}

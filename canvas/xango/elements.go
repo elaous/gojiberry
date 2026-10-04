@@ -136,6 +136,10 @@ type TextFlowProps struct {
 	// "" when it leaves -- for a link preview in the DOM.
 	OnLink      func(url string)
 	OnHoverLink func(url string)
+
+	// Hyphenator, if set, breaks words that do not fit at their hyphenation
+	// points (hyphen.English() is one).
+	Hyphenator canvas.Hyphenator
 }
 
 // TextFlow is a text flow across pages.

@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/elaous/gojiberry/canvas"
 	collab "github.com/elaous/gojiberry/collab/xango"
+	"github.com/elaous/gojiberry/hyphen"
 )
 
 // State is everything the canvas tree depends on.
@@ -33,6 +34,8 @@ type State struct {
 	// FindFeature is the find and replace commands, with the app's own bar
 	// behind them.
 	FindFeature canvas.FindFeature
+	// Hyphenate breaks long words at their hyphenation points.
+	Hyphenate bool
 }
 
 // Features is what the canvas registers: the defaults and find and replace.
@@ -67,4 +70,13 @@ func (s State) Transform() canvas.Transform {
 		return nil
 	}
 	return canvas.Markdown{}
+}
+
+// Hyphenator is what the text flow breaks words with: English patterns when
+// Hyphenate is on, nothing otherwise.
+func (s State) Hyphenator() canvas.Hyphenator {
+	if s.Hyphenate {
+		return hyphen.English()
+	}
+	return nil
 }
