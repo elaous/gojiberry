@@ -136,3 +136,13 @@ func TestTokenHeader(t *testing.T) {
 		t.Fatalf("allow headers %q", h)
 	}
 }
+
+func TestTokenQueryForBrowserSockets(t *testing.T) {
+	g := Token("tok", Options{TokenHeader: "X-Gojiberry-Token", TokenQuery: "guard_token"})
+	if do(g, "GET", "/docs/d/ws?guard_token=tok", nil).Code != 200 || do(g, "GET", "/docs/d/ws?guard_token=bad", nil).Code != 401 || do(g, "GET", "/docs/d/ws", nil).Code != 401 {
+		t.Fatal("the token as a query parameter")
+	}
+	if do(Token("tok"), "GET", "/x?guard_token=tok", nil).Code != 401 {
+		t.Fatal("without TokenQuery a query parameter is not a token")
+	}
+}

@@ -347,10 +347,11 @@ func (h *Hub) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /docs/{id}/events", h.handleEvents)
 	mux.HandleFunc("GET /docs/{id}/snapshot", h.handleSnapshot)
+	mux.HandleFunc("GET /docs/{id}/ws", h.handleWS)
 	mux.HandleFunc("POST /docs/{id}/ops", h.handleOps)
 	mux.HandleFunc("POST /docs/{id}/presence", h.handlePresence)
 	mux.HandleFunc("GET /docs/{id}/role", h.handleRole)
-	return guard.Or(h.cfg.Guard).Wrap(mux)
+	return tokenFromQuery(guard.Or(h.cfg.Guard).Wrap(mux))
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -474,30 +475,38 @@ func (h *Hub) handleOps(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	switch status, msg := h.acceptOps(rm, role, r, r.URL.Query().Get("replica"), ops); status {
+	case http.StatusNoContent:
+		w.WriteHeader(http.StatusNoContent)
+	case http.StatusForbidden:
+		denied(w, msg)
+	default:
+		http.Error(w, msg, status)
+	}
+}
+
+// acceptOps checks and applies operations from replica, whatever the
+// transport carried them, and tells the others. It returns 204, or the status
+// and message the transport should report (403: refused).
+func (h *Hub) acceptOps(rm *room, role Role, r *http.Request, replica string, ops []crdt.Op) (int, string) {
 	rm.mu.Lock()
-	if !h.bindReplica(rm, r.URL.Query().Get("replica"), r) {
-		rm.mu.Unlock()
-		denied(w, "that replica id belongs to another user")
-		return
+	defer rm.mu.Unlock()
+	if !h.bindReplica(rm, replica, r) {
+		return http.StatusForbidden, "that replica id belongs to another user"
 	}
 	if err := authorize(rm.doc, role, ops); err != nil {
-		rm.mu.Unlock()
-		denied(w, err.Error())
-		return
+		return http.StatusForbidden, err.Error()
 	}
 	if !role.CanEdit() && h.cfg.User != nil {
 		// A commenter may only write comments and replies under their own name.
 		if err := commentAuthors(ops, h.cfg.User(r)); err != nil {
-			rm.mu.Unlock()
-			denied(w, err.Error())
-			return
+			return http.StatusForbidden, err.Error()
 		}
 	}
 	rm.doc.Apply(ops...)
-	rm.broadcast(r.URL.Query().Get("replica"), jsonEvent("ops", ops))
+	rm.broadcast(replica, jsonEvent("ops", ops))
 	h.markDirty(rm)
-	rm.mu.Unlock()
-	w.WriteHeader(http.StatusNoContent)
+	return http.StatusNoContent, ""
 }
 
 // commentAuthors checks that every new comment or reply record in ops names
@@ -641,9 +650,20 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	switch status, msg := h.acceptPresence(rm, role, r, p); status {
+	case http.StatusNoContent:
+		w.WriteHeader(http.StatusNoContent)
+	case http.StatusForbidden:
+		denied(w, msg)
+	default:
+		http.Error(w, msg, status)
+	}
+}
+
+// acceptPresence validates and records a cursor update from any transport.
+func (h *Hub) acceptPresence(rm *room, role Role, r *http.Request, p Presence) (int, string) {
 	if p.Replica == "" || len(p.Replica) > 128 || len(p.Name) > 256 || len(p.Color) > 64 {
-		http.Error(w, "replica is required (at most 128 characters)", http.StatusBadRequest)
-		return
+		return http.StatusBadRequest, "replica is required (at most 128 characters)"
 	}
 	p.Role, p.Gone = role, false
 	p.User = ""
@@ -651,20 +671,52 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 		p.User = h.cfg.User(r)
 	}
 	rm.mu.Lock()
+	defer rm.mu.Unlock()
 	if !h.bindReplica(rm, p.Replica, r) {
-		rm.mu.Unlock()
-		denied(w, "that replica id belongs to another user")
-		return
+		return http.StatusForbidden, "that replica id belongs to another user"
 	}
 	h.prunePresence(rm)
 	if _, known := rm.pres[p.Replica]; !known && len(rm.pres) >= h.cfg.MaxPeers {
-		rm.mu.Unlock()
-		http.Error(w, "too many people on this document", http.StatusTooManyRequests)
-		return
+		return http.StatusTooManyRequests, "too many people on this document"
 	}
 	h.setPresence(rm, p)
-	rm.mu.Unlock()
-	w.WriteHeader(http.StatusNoContent)
+	return http.StatusNoContent, ""
+}
+
+// join subscribes replica to the document: it returns the subscription, the
+// snapshot and the others' cursors to tell it first. The caller must call
+// leave. ok is false if the replica id belongs to someone else.
+func (h *Hub) join(rm *room, role Role, r *http.Request, replica string) (s *sub, snapshot []crdt.Op, peers []Presence, ok bool) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	if !h.bindReplica(rm, replica, r) {
+		return nil, nil, nil, false
+	}
+	s = &sub{replica: replica, role: role, ch: make(chan event, 256)}
+	snapshot = rm.doc.Snapshot()
+	h.prunePresence(rm)
+	for id, e := range rm.pres {
+		if id != replica {
+			peers = append(peers, e.p)
+		}
+	}
+	rm.subs[s] = true
+	return s, snapshot, peers, true
+}
+
+// leave ends a subscription and tells the others the cursor is gone.
+func (h *Hub) leave(rm *room, s *sub) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	if rm.subs[s] {
+		delete(rm.subs, s)
+	}
+	if s.replica != "" {
+		// Always say so: an idle replica's cursor may have been pruned
+		// already, and its peers would otherwise keep the ghost.
+		rm.dropPresence(s.replica)
+		rm.broadcast(s.replica, jsonEvent("presence", Presence{Replica: s.replica, Gone: true}))
+	}
 }
 
 func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
@@ -679,37 +731,12 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	replica := r.URL.Query().Get("replica")
-	s := &sub{replica: replica, role: role, ch: make(chan event, 256)}
-
-	rm.mu.Lock()
-	if !h.bindReplica(rm, replica, r) {
-		rm.mu.Unlock()
+	s, snapshot, peers, ok := h.join(rm, role, r, replica)
+	if !ok {
 		denied(w, "that replica id belongs to another user")
 		return
 	}
-	snapshot := rm.doc.Snapshot()
-	var peers []Presence
-	h.prunePresence(rm)
-	for id, e := range rm.pres {
-		if id != replica {
-			peers = append(peers, e.p)
-		}
-	}
-	rm.subs[s] = true
-	rm.mu.Unlock()
-	defer func() {
-		rm.mu.Lock()
-		if rm.subs[s] {
-			delete(rm.subs, s)
-		}
-		if replica != "" {
-			// Always say so: an idle replica's cursor may have been pruned
-			// already, and its peers would otherwise keep the ghost.
-			rm.dropPresence(replica)
-			rm.broadcast(replica, jsonEvent("presence", Presence{Replica: replica, Gone: true}))
-		}
-		rm.mu.Unlock()
-	}()
+	defer h.leave(rm, s)
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")

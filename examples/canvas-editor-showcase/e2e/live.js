@@ -3,7 +3,7 @@
 const { assert, open, run } = require(process.env.E2E_LIB);
 
 const q = (name, token, color) =>
-  `?doc=live1&hub=${encodeURIComponent(process.env.HUB_URL)}&token=${token}&name=${name}&color=${encodeURIComponent(color)}`;
+  `?doc=live1&hub=${encodeURIComponent(process.env.HUB_URL)}&token=${token}&transport=${process.env.TRANSPORT || 'http'}&flow=${encodeURIComponent(process.env.FLOW || '')}&name=${name}&color=${encodeURIComponent(color)}`;
 const live = async (d) => (await d.state()).live;
 const until = (d, what, fn, ms = 10000) =>
   d.page.waitForFunction(fn, null, { timeout: ms }).catch(async (e) => { throw new Error('timed out waiting for ' + what + ': ' + JSON.stringify((await d.state()).live)); });
@@ -76,7 +76,7 @@ run(async () => {
   c.page.once('dialog', (dlg) => dlg.accept('A viewer\'s comment'));
   await c.page.click('[data-action="add-comment"]');
   await until(a, 'the viewer\'s comment to reach Ana', () => stateText().comments === 1);
-  assert((await c.state()).live.rejected === '<nil>', 'the server accepted the viewer\'s comment');
+  assert((await c.state()).live.error === '', 'the server accepted the viewer\'s comment');
   assert((await a.state()).text === (await c.state()).text, 'and commenting changed no text');
   await a.page.click('button[data-tab="comments"]');
   assert(await a.page.locator('.gj-comment .gj-markdown').first().textContent() === 'A viewer\'s comment', 'Ana sees it in her comments list');

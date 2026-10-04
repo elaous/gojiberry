@@ -40,6 +40,12 @@ func (r *Root) Find(tag string, n int) any {
 	if r.root == nil {
 		return nil
 	}
+	return findIn(r.root.kids.elems(), tag, n)
+}
+
+// findIn is Find's search over some elements: the n-th component for tag in
+// document order, containers included.
+func findIn(es []Element, tag string, n int) any {
 	var found any
 	var walk func(es []Element) bool
 	walk = func(es []Element) bool {
@@ -59,8 +65,15 @@ func (r *Root) Find(tag string, n int) any {
 		}
 		return false
 	}
-	walk(r.root.kids.elems())
+	walk(es)
 	return found
+}
+
+// redraw calls Redraw if it is set.
+func (r *Root) redraw() {
+	if r.Redraw != nil {
+		r.Redraw()
+	}
 }
 
 // Render reconciles the stage with n, which must be a Canvas node.
@@ -118,6 +131,10 @@ type Context struct {
 	// objects wrap around it and anchor to its pages.
 	Flow  *canvas.TextFlow
 	Pages *canvas.PageSet
+	// Redraw asks the Root's owner to redraw the canvas; elements that
+	// change state outside a Render (a background connection, a timer) call
+	// it. It is never nil while an element updates.
+	Redraw func()
 }
 
 var (
@@ -209,7 +226,7 @@ func (l *childList) update(parent *Context, nodes []gox.Node) (ds []canvas.Drawe
 	nodes = flattenHosts(nodes)
 	var next []slot
 	used := make([]bool, len(l.slots))
-	ctx := &Context{Stage: parent.Stage, Mode: parent.Mode}
+	ctx := &Context{Stage: parent.Stage, Mode: parent.Mode, Redraw: parent.Redraw}
 	for _, n := range nodes {
 		if n.Kind != gox.KindHost {
 			return nil, false, false, fmt.Errorf("canvas/gox: only canvas elements can be children of Canvas or ScrollView, got a %v node", n.Kind)
@@ -271,14 +288,16 @@ func (c *canvasElem) update(r *Root, p CanvasProps, children []gox.Node) (bool, 
 		changed = true
 	}
 	modeChanged := !c.has || p.Mode != c.props.Mode || p.Role != c.props.Role
-	st.Role = p.Role
+	if !c.has || p.Role != c.props.Role {
+		st.Role = p.Role // a prop change; otherwise a role the app set (from a server, say) stays
+	}
 	mode := p.Role.Mode(p.Mode)
 	if p.Features != nil && !sameFeatures(p.Features, c.props.Features) {
 		st.Features = canvas.NewRegistry(p.Features...)
 	}
 	c.props, c.has = p, true
 
-	ds, ch, created, err := c.kids.update(&Context{Stage: st, Mode: mode}, children)
+	ds, ch, created, err := c.kids.update(&Context{Stage: st, Mode: mode, Redraw: r.redraw}, children)
 	if err != nil {
 		return false, err
 	}

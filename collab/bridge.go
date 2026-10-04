@@ -2,7 +2,10 @@ package collab
 
 import (
 	"errors"
+	"fmt"
+	"hash/fnv"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/elaous/gojiberry/canvas"
@@ -33,6 +36,10 @@ type Bridge struct {
 	// Outgoing, if set, is called with the operations each local change
 	// produced (see Drain); wire it to client.Conn.Send.
 	Outgoing func([]crdt.Op)
+
+	surfaces []Surface
+	noText   bool // the flow's text and side data are not shared (see Sharing)
+	seen     string
 
 	ready    bool
 	applying bool
@@ -89,25 +96,56 @@ func Join(replica string, f *canvas.TextFlow) (*Bridge, error) {
 // undo goes back to the flow's own history. A replacement bridge attached to
 // the same flow takes over (see Session.Repair).
 func (b *Bridge) Detach() {
+	b.surfaces = nil
 	b.detached = true
 	b.Outgoing = nil
 	b.Flow.UndoHook = nil
 }
 
-// seedReplica is the replica id the starting content of every shared document
-// is written under.
-const seedReplica = "seed"
+// seedReplica names the replica the starting content is written under: "seed"
+// and a hash of that content, so identical content gets identical ids (and
+// merges into one copy) while different content gets different ids (and is
+// kept in full, not interleaved by id).
+func seedReplica(atoms []atom, extra map[string]string) string {
+	h := fnv.New64a()
+	ids := make([]string, 0, len(extra))
+	for id := range extra {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		_, _ = fmt.Fprintf(h, "%s\x00%s\x02", id, extra[id])
+	}
+	for _, a := range atoms {
+		_, _ = fmt.Fprintf(h, "%c", a.r)
+		keys := make([]string, 0, len(a.attrs))
+		for k := range a.attrs {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			_, _ = fmt.Fprintf(h, "\x00%s=%s", k, a.attrs[k])
+		}
+		h.Write([]byte{1})
+	}
+	return fmt.Sprintf("seed-%016x", h.Sum64())
+}
 
 // Seed makes a joined bridge share the flow's own content as the start of
 // the document (when the server turned out to have none).
 //
-// The content is written as the replica "seed", not as this replica: two
-// clients that open an empty document at the same moment and start from the
-// same content then produce the same operations, which merge into one copy
-// instead of two. (Different content from the two sides is still both kept.)
+// The content is written under a replica id made from the content itself,
+// not this replica's: two clients that open an empty document at the same
+// moment and start from the same content then produce the same operations,
+// which merge into one copy instead of two. (Different content from the two
+// sides is kept in full, one after the other.)
 func (b *Bridge) Seed() {
 	replica, outgoing := b.Doc, b.Outgoing
-	b.Doc, b.Outgoing = crdt.NewDocWithStrategy(seedReplica, crdt.MergeCharCRDT), nil
+	var atoms []atom
+	if !b.noText {
+		atoms, _ = atomsFromItems(b.Flow.ContentItems())
+	}
+	b.Doc, b.Outgoing = crdt.NewDocWithStrategy(seedReplica(atoms, b.surfaceRecords()), crdt.MergeCharCRDT), nil
 	b.ready = true
 	b.pushLocal()
 	ops := b.Doc.Drain()
@@ -280,6 +318,11 @@ func (b *Bridge) pushLocal() {
 	if b.applying || !b.ready || b.detached {
 		return
 	}
+	if b.noText {
+		b.pushSide()
+		b.flush()
+		return
+	}
 	cur, err := atomsFromItems(b.Flow.ContentItems())
 	if err != nil {
 		b.err = err
@@ -324,6 +367,11 @@ func (b *Bridge) pushLocal() {
 	b.pushFormats(b.read(), cur, &rec)
 	b.pushSide()
 	b.record(rec)
+	b.flush()
+}
+
+// flush sends the operations made since the last send.
+func (b *Bridge) flush() {
 	if b.Outgoing != nil {
 		if ops := b.Doc.Drain(); len(ops) > 0 {
 			b.Outgoing(ops)
@@ -411,6 +459,14 @@ func (b *Bridge) offsetOf(a cursorAnchor, atoms []atom) int {
 // up to date. Cursors stay beside the characters they were beside; the undo
 // history is cleared (see canvas.TextFlow.SetRemoteContent).
 func (b *Bridge) Apply(ops ...crdt.Op) {
+	if b.noText {
+		b.Doc.Apply(ops...)
+		b.ready = true
+		b.applying = true
+		defer func() { b.applying = false }()
+		b.pullSide()
+		return
+	}
 	oldAtoms := b.read()
 	oldIDs := b.Doc.VisibleIDs(block)
 	cursors := b.Flow.Cursors()
