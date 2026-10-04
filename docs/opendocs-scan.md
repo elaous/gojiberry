@@ -57,6 +57,10 @@ find and replace, a special-characters picker, version history UI, margins
 view, dictation and voice-over, braille export and an accessible text
 surface, RTL and non-Latin script work (task #134), an Electron shell.
 
+## Status
+
+Steps 2, 3 and 4 of the order below are done (export/import, spell/hyphenation/language detection, versions/trash/tags in `saver`), as ports written for gojiberry (an adapter from `canvas` items to `export.Snapshot`, an own DOCX writer and reader). Step 6 is partly done (per-block columns, table merge and styles). The engine question is still open; [opendocs-port-plan.md](opendocs-port-plan.md) says what to port next.
+
 ## Suggested order
 
 1. Decide the engine question above (it changes everything below it).

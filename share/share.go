@@ -67,11 +67,48 @@ func Parse(v url.Values) (Selection, bool) {
 	return Selection{From: from, To: to, Quote: v.Get("q")}, true
 }
 
-// Link is base with params and the selection added.
+// DocSegment is the path segment before a document's id in a page's address:
+// https://host/app/d/{doc}. The document is a path argument; what is optional
+// (hub, transport, a selection) stays in the query string.
+const DocSegment = "d"
+
+// SplitPath splits a page's path into the app's own base (ending in "/") and
+// the document id; doc is empty when the path does not end in /d/{doc}.
+func SplitPath(pathname string) (base, doc string) {
+	p := strings.TrimSuffix(pathname, "/")
+	i := strings.LastIndex(p, "/")
+	if i < 0 {
+		return pathname, ""
+	}
+	if j := strings.LastIndex(p[:i], "/"); j >= 0 && p[j+1:i] == DocSegment && p[i+1:] != "" {
+		id, err := url.PathUnescape(p[i+1:])
+		if err != nil {
+			return pathname, ""
+		}
+		return p[:j+1], id
+	}
+	return pathname, ""
+}
+
+// DocPath is the page address for a document under base (an app's base path
+// ending in "/"): base + "d/" + doc, the id escaped.
+func DocPath(base, doc string) string {
+	return strings.TrimSuffix(base, "/") + "/" + DocSegment + "/" + url.PathEscape(doc)
+}
+
+// Link is base with params and the selection added. A document in params
+// under "doc" goes in the path (see DocPath) rather than the query.
 func Link(base string, params url.Values, s Selection) string {
 	u, err := url.Parse(base)
 	if err != nil {
 		return base
+	}
+	if doc := params.Get("doc"); doc != "" {
+		root, _ := SplitPath(u.EscapedPath())
+		escaped := DocPath(root, doc)
+		u.Path, _ = url.PathUnescape(escaped) // Path is decoded; RawPath keeps the escaping
+		u.RawPath = escaped
+		params = cloneWithout(params, "doc")
 	}
 	q := u.Query()
 	for k, vs := range params {
@@ -123,4 +160,14 @@ func abs(n int) int {
 		return -n
 	}
 	return n
+}
+
+func cloneWithout(v url.Values, key string) url.Values {
+	out := url.Values{}
+	for k, vs := range v {
+		if k != key {
+			out[k] = vs
+		}
+	}
+	return out
 }

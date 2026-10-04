@@ -279,3 +279,27 @@ func TestTableMergesAndStylesRoundTrip(t *testing.T) {
 		t.Errorf("bad merges kept: %+v", m)
 	}
 }
+
+func TestIDsAreUUIDsAndSurviveEveryFormat(t *testing.T) {
+	a, b := NewID(), NewID()
+	if a == b || !ValidID(a) || a[14] != '4' {
+		t.Fatalf("ids %s %s", a, b)
+	}
+	if ValidID("plan.json") || ValidID(strings.ToUpper(a)) {
+		t.Error("ValidID accepts what is not a UUID")
+	}
+	var d Document
+	d.SetID(a)
+	d.SetName("Plan")
+	d.SetTags([]string{"x"})
+	for _, c := range Formats() {
+		data, err := c.Marshal(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		back, err := c.Unmarshal(data)
+		if err != nil || back.ID() != a || back.Name() != "Plan" || !back.HasTag("x") {
+			t.Errorf("%s: %q %q %v", c.Name(), back.ID(), back.Name(), err)
+		}
+	}
+}

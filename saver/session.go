@@ -2,9 +2,9 @@ package saver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 
@@ -12,11 +12,16 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// Session is the state behind components.Saver: the chosen target and
-// format, the document name, what is saved in the target, and the last
-// message. Props gives the component its props, with handlers that save,
-// open and delete in the background and call OnChange when something
-// changed so the page can render again.
+// Session is the state behind the document components: the chosen target and
+// format, the document being edited (its ID and name), what is saved in the
+// target, and the last message. It is a backend for components.DocList,
+// Versions and Trash (Docs, Versions and Trash give each its props, with the
+// operations plugged in) and for components.Saver, which composes the three
+// with the save form (Props).
+//
+// Operations run in the background through Pending, which tells the components
+// when one is running and shows the error of one that failed; OnChange is called
+// after any change so the page can render again.
 type Session struct {
 	Saver *Saver
 	// Get returns the document to save (the editor's current content).
@@ -32,23 +37,26 @@ type Session struct {
 	// canvas.TextFlow, say) is not safe for concurrent use. Nil calls f
 	// directly.
 	OnUI func(f func())
-	// Go runs background work; nil means a goroutine. Tests set it to
-	// run the function inline.
-	Go func(func())
+	// Pending tracks the background operations; tests set Pending.Inline to run
+	// them inline.
+	Pending *components.Pending
 
+	op                   sync.Mutex // one saving, opening or deleting at a time
 	mu                   sync.Mutex
 	target, format, name string
+	id                   string // the saved document being edited, "" for one never saved
 	entries              []Entry
 	versions             []Version
 	trashed              []Entry
+	selected             []string
 	tagFilter            string
 	status               string
-	failed, busy         bool
 }
 
 // NewSession starts a session on the saver's first target, in JSON.
 func NewSession(s *Saver, get func() docfile.Document, onOpen func(docfile.Document)) *Session {
 	ss := &Session{Saver: s, Get: get, OnOpen: onOpen, format: docfile.JSON.Name()}
+	ss.Pending = components.NewPending(ss.changed)
 	if len(s.Targets) > 0 {
 		ss.target = s.Targets[0].Name
 	}
@@ -71,22 +79,25 @@ func (s *Session) set(f func()) {
 	s.changed()
 }
 
-func (s *Session) finish(ok string, err error) {
-	s.set(func() {
-		s.busy = false
-		s.failed = err != nil
-		if err != nil {
-			s.status = err.Error()
-		} else {
-			s.status = ok
-		}
-	})
+func (s *Session) ui(f func()) {
+	if s.OnUI != nil {
+		s.OnUI(f)
+		return
+	}
+	f()
 }
 
-// SetTarget chooses the target and lists what is saved in it.
-func (s *Session) SetTarget(ctx context.Context, name string) {
-	s.set(func() { s.target, s.entries, s.status, s.failed = name, nil, "", false })
-	s.Refresh(ctx)
+func (s *Session) targetName() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.target
+}
+
+// SetTarget chooses the target and lists what is saved in it. The document being
+// edited is not in the new target, so it is saved there as a new document.
+func (s *Session) SetTarget(ctx context.Context, name string) error {
+	s.set(func() { s.target, s.entries, s.trashed, s.versions, s.status, s.id = name, nil, nil, nil, "", "" })
+	return s.Refresh(ctx)
 }
 
 // SetFormat chooses the format; SetName names the document.
@@ -102,297 +113,330 @@ func (s *Session) Name() string {
 	return s.name
 }
 
-// Refresh lists the documents saved in the current target.
-func (s *Session) Refresh(ctx context.Context) {
+// ID returns the ID of the saved document being edited, "" if it was never saved.
+func (s *Session) ID() string {
 	s.mu.Lock()
-	target := s.target
-	s.busy = true
-	s.mu.Unlock()
-	s.changed()
-	list, err := s.Saver.ListTagged(ctx, target)
-	var trashed []Entry
+	defer s.mu.Unlock()
+	return s.id
+}
+
+// Detach makes the document being edited a new one: the next Save creates a
+// document with a new ID instead of replacing the one that was open. Call it when
+// the editor's content is replaced by something that is not a saved document (an
+// import, a template).
+func (s *Session) Detach() { s.set(func() { s.id = "" }) }
+
+// Refresh lists the documents saved in the current target, those in the trash and
+// the versions of the document being edited.
+func (s *Session) Refresh(ctx context.Context) error {
+	target, id := s.targetName(), s.ID()
+	list, trashed, err := s.Saver.Lists(ctx, target) // one read: a document is in one list
 	var versions []Version
-	if err == nil {
-		trashed, err = s.Saver.Trashed(ctx, target)
+	if err == nil && id != "" {
+		versions, _ = s.Saver.Versions(ctx, target, id)
 	}
-	if err == nil {
-		s.mu.Lock()
-		name := s.name
-		s.mu.Unlock()
-		if validName(name) {
-			versions, _ = s.Saver.Versions(ctx, target, name)
+	if err != nil {
+		return err
+	}
+	s.set(func() {
+		// A slow answer for a target the user has since left must not replace
+		// the list of the one they are looking at.
+		if s.target != target {
+			return
 		}
-	}
-	s.mu.Lock()
-	// A slow answer for a target the user has since left must not replace
-	// the list of the one they are looking at.
-	if err == nil && s.target == target {
 		s.entries, s.trashed, s.versions = list, trashed, versions
+		s.selected = slices.DeleteFunc(s.selected, func(id string) bool {
+			return !slices.ContainsFunc(trashed, func(e Entry) bool { return e.ID == id })
+		})
 		if s.tagFilter != "" && !slices.ContainsFunc(allTags(list), func(t string) bool { return strings.EqualFold(t, s.tagFilter) }) {
 			s.tagFilter = "" // the last document with that tag lost it
 		}
-	}
-	s.mu.Unlock()
-	s.finish("", err)
+	})
+	return nil
 }
 
 func allTags(entries []Entry) []string {
-	seen := map[string]bool{}
 	var out []string
 	for _, e := range entries {
-		for _, t := range e.Tags {
-			if k := strings.ToLower(t); !seen[k] {
-				seen[k] = true
-				out = append(out, t)
-			}
-		}
+		out = append(out, e.Tags...)
 	}
-	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i]) < strings.ToLower(out[j]) })
 	return out
 }
 
-// Save writes the current document to the target in the chosen format.
-func (s *Session) Save(ctx context.Context) {
-	s.mu.Lock()
-	target, format, name := s.target, s.format, s.name
-	s.busy = true
-	s.mu.Unlock()
-	s.changed()
-	c, err := s.Saver.Codec(format)
-	var key string
-	if err == nil {
-		var doc docfile.Document
-		s.ui(func() { doc = s.Get() })
-		if doc.Title == "" {
-			doc.Title = name
-		}
-		key, err = s.Saver.Save(ctx, target, name, c, doc)
+func (s *Session) say(msg string) { s.set(func() { s.status = msg }) }
+
+// after refreshes the lists and then shows msg as the status.
+func (s *Session) after(ctx context.Context, msg string) error {
+	if err := s.Refresh(ctx); err != nil {
+		return err
 	}
-	if err != nil {
-		s.finish("", err)
-		return
-	}
-	s.finish("Saved "+key, nil)
-	s.Refresh(ctx)
-	s.set(func() { s.status = "Saved " + key })
+	s.say(msg)
+	return nil
 }
 
-// Open loads a saved document and hands it to OnOpen, taking its name and
-// format.
-func (s *Session) Open(ctx context.Context, key string) {
+// current is the document to save, named and with the ID of the one being edited.
+func (s *Session) current() (docfile.Document, docfile.Codec, error) {
+	doc, c, _, err := s.currentIn()
+	return doc, c, err
+}
+
+// currentIn is current and the target it is for, read together.
+func (s *Session) currentIn() (docfile.Document, docfile.Codec, string, error) {
 	s.mu.Lock()
-	target := s.target
-	s.busy = true
+	format, name, id, target := s.format, s.name, s.id, s.target
 	s.mu.Unlock()
-	s.changed()
-	doc, err := s.Saver.Load(ctx, target, key)
+	c, err := s.Saver.Codec(format)
 	if err != nil {
-		s.finish("", err)
-		return
+		return docfile.Document{}, nil, "", err
 	}
-	c, name := s.Saver.codecOf(key)
+	var doc docfile.Document
+	s.ui(func() { doc = s.Get() })
+	if doc.Title == "" {
+		doc.Title = name
+	}
+	doc.SetName(name)
+	if id != "" {
+		doc.SetID(id)
+	}
+	return doc, c, target, nil
+}
+
+// Save writes the current document to the target in the chosen format: as the
+// saved document being edited if there is one, else as a new document.
+func (s *Session) Save(ctx context.Context) error {
+	s.op.Lock()
+	defer s.op.Unlock()
+	return s.save(ctx)
+}
+
+func (s *Session) save(ctx context.Context) error {
+	doc, c, target, err := s.currentIn()
+	if err != nil {
+		return err
+	}
+	e, err := s.Saver.Save(ctx, target, c, doc)
+	if err != nil {
+		return err
+	}
 	s.set(func() {
-		if c != nil {
-			s.format, s.name = c.Name(), name
+		if s.target == target { // not if the user has moved on to another target meanwhile
+			s.id = e.ID
+		}
+	})
+	return s.after(ctx, "Saved "+e.Name)
+}
+
+// SaveAsNew saves the current document as a new document, with a new ID, leaving
+// the one that was open as it was.
+func (s *Session) SaveAsNew(ctx context.Context) error {
+	s.op.Lock()
+	defer s.op.Unlock()
+	s.Detach()
+	return s.save(ctx)
+}
+
+// Open loads a saved document and hands it to OnOpen, taking its ID, name and
+// format.
+func (s *Session) Open(ctx context.Context, id string) error {
+	s.op.Lock()
+	defer s.op.Unlock()
+	target := s.targetName()
+	doc, err := s.Saver.Load(ctx, target, id)
+	if err != nil {
+		return err
+	}
+	e, err := s.Saver.Get(ctx, target, id)
+	if err != nil {
+		return err
+	}
+	s.set(func() {
+		s.id, s.name = id, e.Name
+		if e.Format != nil {
+			s.format = e.Format.Name()
 		}
 	})
 	if s.OnOpen != nil {
 		s.ui(func() { s.OnOpen(doc) })
 	}
-	s.finish("Opened "+key, nil)
-	s.Refresh(ctx) // the versions are those of the document just opened
-	s.set(func() { s.status, s.failed = "Opened "+key, false })
+	return s.after(ctx, "Opened "+e.Name) // the versions are those of the document just opened
 }
 
-// Delete removes a saved document.
-func (s *Session) Delete(ctx context.Context, key string) {
-	s.mu.Lock()
-	target := s.target
-	s.busy = true
-	s.mu.Unlock()
-	s.changed()
-	if err := s.Saver.Delete(ctx, target, key); err != nil {
-		s.finish("", err)
-		return
+// Delete removes a saved document for good, with no trash in between.
+func (s *Session) Delete(ctx context.Context, id string) error {
+	s.op.Lock()
+	defer s.op.Unlock()
+	if err := s.Saver.Delete(ctx, s.targetName(), id); err != nil {
+		return err
 	}
-	s.Refresh(ctx)
-	s.set(func() { s.status = "Deleted " + key })
-}
-
-// begin marks the session busy and returns the target.
-func (s *Session) begin() string {
-	s.mu.Lock()
-	target := s.target
-	s.busy = true
-	s.mu.Unlock()
-	s.changed()
-	return target
-}
-
-// after refreshes the lists and then shows msg as the status.
-func (s *Session) after(ctx context.Context, msg string) {
-	s.Refresh(ctx)
-	s.set(func() { s.status, s.failed = msg, false })
-}
-
-// SaveVersion snapshots the current document as a version of the one called
-// by the name.
-func (s *Session) SaveVersion(ctx context.Context) {
-	target := s.begin()
-	s.mu.Lock()
-	format, name := s.format, s.name
-	s.mu.Unlock()
-	c, err := s.Saver.Codec(format)
-	if err == nil {
-		var doc docfile.Document
-		s.ui(func() { doc = s.Get() })
-		if doc.Title == "" {
-			doc.Title = name
+	s.set(func() {
+		if s.id == id {
+			s.id = ""
 		}
-		_, err = s.Saver.SaveVersion(ctx, target, name, c, doc)
-	}
-	if err != nil {
-		s.finish("", err)
-		return
-	}
-	s.after(ctx, "Saved a version of "+name)
+	})
+	return s.after(ctx, "Deleted it")
 }
 
-// OpenVersion opens a snapshot in the editor. The document keeps its name, so
-// saving it afterwards replaces the saved one: go back, then Save.
-func (s *Session) OpenVersion(ctx context.Context, key string) {
-	target := s.begin()
-	doc, err := s.Saver.LoadVersion(ctx, target, key)
+// SaveVersion snapshots the document being edited. It has to have been saved, to
+// have an ID the snapshots are kept under.
+func (s *Session) SaveVersion(ctx context.Context) error {
+	if s.ID() == "" {
+		return errors.New("save the document before saving a version of it")
+	}
+	doc, c, err := s.current()
 	if err != nil {
-		s.finish("", err)
-		return
+		return err
+	}
+	if _, err := s.Saver.SaveVersion(ctx, s.targetName(), c, doc); err != nil {
+		return err
+	}
+	return s.after(ctx, "Saved a version of "+s.Name())
+}
+
+// OpenVersion opens a snapshot in the editor. The document keeps its ID, so saving
+// it afterwards replaces the saved one: go back, then Save.
+func (s *Session) OpenVersion(ctx context.Context, key string) error {
+	doc, err := s.Saver.LoadVersion(ctx, s.targetName(), key)
+	if err != nil {
+		return err
 	}
 	if s.OnOpen != nil {
 		s.ui(func() { s.OnOpen(doc) })
 	}
-	s.finish("Opened a version", nil)
+	s.say("Opened a version")
+	return nil
 }
 
 // DeleteVersion removes one snapshot.
-func (s *Session) DeleteVersion(ctx context.Context, key string) {
-	target := s.begin()
-	if err := s.Saver.DeleteVersion(ctx, target, key); err != nil {
-		s.finish("", err)
-		return
+func (s *Session) DeleteVersion(ctx context.Context, key string) error {
+	if err := s.Saver.DeleteVersion(ctx, s.targetName(), key); err != nil {
+		return err
 	}
-	s.after(ctx, "Deleted a version")
+	return s.after(ctx, "Deleted a version")
 }
 
-// Trash moves a saved document to the trash.
-func (s *Session) Trash(ctx context.Context, key string) {
-	target := s.begin()
-	if err := s.Saver.Trash(ctx, target, key); err != nil {
-		s.finish("", err)
-		return
+// TrashDocs moves saved documents to the trash.
+func (s *Session) TrashDocs(ctx context.Context, ids []string) error {
+	if err := s.Saver.Trash(ctx, s.targetName(), ids...); err != nil {
+		return err
 	}
-	s.after(ctx, "Moved "+key+" to the trash")
+	s.set(func() {
+		if slices.Contains(ids, s.id) {
+			s.id = "" // the open document is in the trash: saving is a new document
+		}
+	})
+	return s.after(ctx, fmt.Sprintf("Moved %d to the trash", len(ids)))
 }
 
-// Restore takes a document out of the trash.
-func (s *Session) Restore(ctx context.Context, trashKey string) {
-	target := s.begin()
-	key, err := s.Saver.Restore(ctx, target, trashKey)
+// Restore takes documents out of the trash (components.TrashBackend).
+func (s *Session) Restore(ctx context.Context, ids ...string) error {
+	if err := s.Saver.Restore(ctx, s.targetName(), ids...); err != nil {
+		return err
+	}
+	return s.after(ctx, fmt.Sprintf("Restored %d", len(ids)))
+}
+
+// Purge deletes documents in the trash for good (components.TrashBackend).
+func (s *Session) Purge(ctx context.Context, ids ...string) error {
+	if err := s.Saver.Purge(ctx, s.targetName(), ids...); err != nil {
+		return err
+	}
+	return s.after(ctx, fmt.Sprintf("Deleted %d for good", len(ids)))
+}
+
+// Duplicate saves a copy of a document, as a new document with its own ID.
+func (s *Session) Duplicate(ctx context.Context, id string) error {
+	e, err := s.Saver.Duplicate(ctx, s.targetName(), id, "")
 	if err != nil {
-		s.finish("", err)
-		return
+		return err
 	}
-	s.after(ctx, "Restored "+key)
-}
-
-// Purge deletes a trashed document for good.
-func (s *Session) Purge(ctx context.Context, trashKey string) {
-	target := s.begin()
-	if err := s.Saver.Purge(ctx, target, trashKey); err != nil {
-		s.finish("", err)
-		return
-	}
-	s.after(ctx, "Deleted it for good")
-}
-
-// EmptyTrash deletes everything in the trash.
-func (s *Session) EmptyTrash(ctx context.Context) {
-	target := s.begin()
-	n, err := s.Saver.EmptyTrash(ctx, target)
-	if err != nil {
-		s.finish("", err)
-		return
-	}
-	s.after(ctx, fmt.Sprintf("Emptied the trash (%d)", n))
-}
-
-// Duplicate saves a copy of a document.
-func (s *Session) Duplicate(ctx context.Context, key string) {
-	target := s.begin()
-	newKey, err := s.Saver.Duplicate(ctx, target, key, "")
-	if err != nil {
-		s.finish("", err)
-		return
-	}
-	s.after(ctx, "Copied "+key+" to "+newKey)
+	return s.after(ctx, "Copied to "+e.Name)
 }
 
 // SetTags sets a saved document's tags.
-func (s *Session) SetTags(ctx context.Context, key string, tags []string) {
-	target := s.begin()
-	if err := s.Saver.SetTags(ctx, target, key, tags); err != nil {
-		s.finish("", err)
-		return
+func (s *Session) SetTags(ctx context.Context, id string, tags []string) error {
+	if err := s.Saver.SetTags(ctx, s.targetName(), id, tags); err != nil {
+		return err
 	}
-	s.after(ctx, "Tagged "+key)
+	return s.after(ctx, "Tagged it")
 }
 
 // SetTagFilter narrows the list to the documents with the tag ("" for all).
 func (s *Session) SetTagFilter(tag string) { s.set(func() { s.tagFilter = tag }) }
 
-func (s *Session) ui(f func()) {
-	if s.OnUI != nil {
-		s.OnUI(f)
-		return
+func docOf(e Entry) components.Doc {
+	d := components.Doc{ID: e.ID, Name: e.Name, Size: e.Size, Updated: e.Updated, Trashed: e.Trashed, Tags: e.Tags}
+	if e.Format != nil {
+		d.Format = e.Format.Label()
 	}
-	f()
+	return d
 }
 
-func (s *Session) run(f func(context.Context)) {
-	job := func() { f(context.Background()) }
-	if s.Go != nil {
-		s.Go(job)
-		return
+// Docs returns the props for components.DocList: the saved documents with the
+// session's operations plugged in.
+func (s *Session) Docs() components.DocListProps {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p := components.DocListProps{
+		Current: s.id, TagFilter: s.tagFilter, OnTagFilter: s.SetTagFilter, Pending: s.Pending,
+		Open:      s.Open,
+		Duplicate: s.Duplicate,
+		Trash:     s.TrashDocs,
+		Delete:    s.Delete,
+		Tag:       s.SetTags,
+		Refresh:   func() { s.Pending.Run(s.Refresh) },
 	}
-	go job()
+	for _, e := range s.entries {
+		p.Docs = append(p.Docs, docOf(e))
+	}
+	return p
+}
+
+// Versions returns the props for components.Versions: the snapshots of the
+// document being edited.
+func (s *Session) Versions() components.VersionsProps {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p := components.VersionsProps{Pending: s.Pending, Save: s.SaveVersion, Open: s.OpenVersion, Delete: s.DeleteVersion}
+	if s.id != "" {
+		p.Name = s.name
+	}
+	for _, v := range s.versions {
+		p.Versions = append(p.Versions, components.DocVersion{Key: v.Key, Time: v.Time, Size: v.Size})
+	}
+	return p
+}
+
+// Trash returns the props for components.Trash: the documents in the trash, to
+// restore or delete for good.
+func (s *Session) Trash() components.TrashProps {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p := components.TrashProps{Pending: s.Pending, Selected: s.selected, OnSelect: func(ids []string) { s.set(func() { s.selected = ids }) }}
+	p = p.Use(s)
+	for _, e := range s.trashed {
+		p.Docs = append(p.Docs, docOf(e))
+	}
+	return p
 }
 
 // Props returns the props for components.Saver as the session stands.
 func (s *Session) Props() components.SaverProps {
+	docs, versions, trash := s.Docs(), s.Versions(), s.Trash()
+	trash.OnSelect = nil // the form's trash is the simple one: a row, its buttons
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p := components.SaverProps{
 		Target: s.target, Format: s.format, Name: s.name,
-		Status: s.status, Failed: s.failed, Busy: s.busy,
-		OnTarget:  func(n string) { s.run(func(ctx context.Context) { s.SetTarget(ctx, n) }) },
-		OnFormat:  s.SetFormat,
-		OnName:    s.SetName,
-		OnSave:    func() { s.run(s.Save) },
-		OnRefresh: func() { s.run(s.Refresh) },
-		OnOpen:    func(k string) { s.run(func(ctx context.Context) { s.Open(ctx, k) }) },
-		OnDelete:  func(k string) { s.run(func(ctx context.Context) { s.Delete(ctx, k) }) },
-
-		TagFilter:   s.tagFilter,
-		OnTagFilter: s.SetTagFilter,
-		OnDuplicate: func(k string) { s.run(func(ctx context.Context) { s.Duplicate(ctx, k) }) },
-		OnTrash:     func(k string) { s.run(func(ctx context.Context) { s.Trash(ctx, k) }) },
-		OnTags:      func(k string, tags []string) { s.run(func(ctx context.Context) { s.SetTags(ctx, k, tags) }) },
-
-		OnSaveVersion:   func() { s.run(s.SaveVersion) },
-		OnOpenVersion:   func(k string) { s.run(func(ctx context.Context) { s.OpenVersion(ctx, k) }) },
-		OnDeleteVersion: func(k string) { s.run(func(ctx context.Context) { s.DeleteVersion(ctx, k) }) },
-		OnRestore:       func(k string) { s.run(func(ctx context.Context) { s.Restore(ctx, k) }) },
-		OnPurge:         func(k string) { s.run(func(ctx context.Context) { s.Purge(ctx, k) }) },
-		OnEmptyTrash:    func() { s.run(s.EmptyTrash) },
+		Status: s.status, Busy: s.Pending.Busy(),
+		OnTarget:    func(n string) { s.Pending.Run(func(ctx context.Context) error { return s.SetTarget(ctx, n) }) },
+		OnFormat:    s.SetFormat,
+		OnName:      s.SetName,
+		OnSave:      func() { s.Pending.Run(s.Save) },
+		OnSaveAsNew: func() { s.Pending.Run(s.SaveAsNew) },
+		Docs:        docs, Versions: versions, Trash: trash,
+	}
+	if err := s.Pending.Err(); err != nil {
+		p.Status, p.Failed = err.Error(), true
 	}
 	for _, t := range s.Saver.Targets {
 		label := t.Label
@@ -403,16 +447,6 @@ func (s *Session) Props() components.SaverProps {
 	}
 	for _, c := range s.Saver.codecs() {
 		p.Formats = append(p.Formats, components.SaverChoice{Name: c.Name(), Label: c.Label()})
-	}
-	for _, e := range s.entries {
-		p.Entries = append(p.Entries, components.SaverEntry{Key: e.Key, Name: e.Name, Format: e.Format.Label(), Size: e.Size, Updated: e.Updated, Tags: e.Tags})
-	}
-	p.AllTags = allTags(s.entries)
-	for _, e := range s.trashed {
-		p.Trashed = append(p.Trashed, components.SaverEntry{Key: e.Key, Name: e.Name, Format: e.Format.Label(), Size: e.Size, Updated: e.Updated})
-	}
-	for _, v := range s.versions {
-		p.Versions = append(p.Versions, components.SaverVersion{Key: v.Key, Time: v.Time, Size: v.Size})
 	}
 	return p
 }

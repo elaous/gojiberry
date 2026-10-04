@@ -1,6 +1,7 @@
 package components
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -371,24 +372,25 @@ func TestStylePicker(t *testing.T) {
 
 func TestSaverRendersFormAndWiresCallbacks(t *testing.T) {
 	var log []string
+	pending := &Pending{Inline: true}
 	n := Saver(SaverProps{
 		Targets: []SaverChoice{{"pg", "Postgres"}, {"sqlite", "SQLite"}, {"s3", "S3"}},
 		Formats: []SaverChoice{{"json", "JSON"}, {"proto", "Protobuf (binary)"}},
 		Target:  "sqlite", Format: "proto", Name: "notes",
-		Entries: []SaverEntry{{Key: "notes.json", Name: "notes", Format: "JSON", Size: 2500, Updated: time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC)},
-			{Key: "big.pb", Name: "big", Format: "Protobuf", Size: 3 << 20}, {Key: "tiny.pb", Name: "tiny", Format: "Protobuf", Size: 12}},
-		Status:    "Saved notes.json",
-		OnTarget:  func(s string) { log = append(log, "target:"+s) },
-		OnFormat:  func(s string) { log = append(log, "format:"+s) },
-		OnName:    func(s string) { log = append(log, "name:"+s) },
-		OnSave:    func() { log = append(log, "save") },
-		OnRefresh: func() { log = append(log, "refresh") },
-		OnOpen:    func(k string) { log = append(log, "open:"+k) },
-		OnDelete:  func(k string) { log = append(log, "delete:"+k) },
+		Docs: DocListProps{Pending: pending,
+			Docs: []Doc{{ID: "id-notes", Name: "notes", Format: "JSON", Size: 2500, Updated: time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC)},
+				{ID: "id-big", Name: "big", Format: "Protobuf", Size: 3 << 20}, {ID: "id-tiny", Name: "tiny", Format: "Protobuf", Size: 12}},
+			Open:   func(_ context.Context, id string) error { log = append(log, "open:"+id); return nil },
+			Delete: func(_ context.Context, id string) error { log = append(log, "delete:"+id); return nil }},
+		Status:   "Saved notes.json",
+		OnTarget: func(s string) { log = append(log, "target:"+s) },
+		OnFormat: func(s string) { log = append(log, "format:"+s) },
+		OnName:   func(s string) { log = append(log, "name:"+s) },
+		OnSave:   func() { log = append(log, "save") },
 	})
 	html := render(t, n)
 	mustContain(t, html, "Postgres", "S3", `value="sqlite" selected="selected"`, `value="proto" selected="selected"`, `value="notes"`,
-		"Saved notes.json", `role="status"`, "2.4 KB", "3.0 MB", "12 B", "2026-01-02 03:04", `data-key="notes.json"`)
+		"Saved notes.json", `role="status"`, "2.4 KB", "3.0 MB", "12 B", "2026-01-02 03:04", `data-id="id-notes"`)
 	mustNotContain(t, html, "gj-saver-failed", "Nothing saved yet")
 	for _, h := range findHandlers(n, "change") {
 		h(xango.Event{Value: "pick"})
@@ -397,20 +399,22 @@ func TestSaverRendersFormAndWiresCallbacks(t *testing.T) {
 	for _, h := range findHandlers(n, "click") {
 		h(xango.Event{})
 	}
-	want := "target:pick format:pick name:typed save refresh open:notes.json delete:notes.json open:big.pb delete:big.pb open:tiny.pb delete:tiny.pb"
+	want := "target:pick format:pick name:typed save open:id-notes delete:id-notes open:id-big delete:id-big open:id-tiny delete:id-tiny"
 	if got := strings.Join(log, " "); got != want {
 		t.Fatalf("got  %s\nwant %s", got, want)
 	}
 }
 
 func TestSaverEmptyBusyAndFailed(t *testing.T) {
-	html := render(t, Saver(SaverProps{Busy: true, Status: "boom", Failed: true, Entries: nil,
-		OnSave: func() {}, OnOpen: func(string) {}}))
+	busy := &Pending{}
+	busy.busy = 1
+	html := render(t, Saver(SaverProps{Busy: true, Status: "boom", Failed: true,
+		OnSave: func() {}, Docs: DocListProps{Pending: busy, Open: func(context.Context, string) error { return nil }}}))
 	mustContain(t, html, "gj-saver-failed", "Nothing saved yet", `disabled="disabled"`)
-	// No name: Save is disabled even when not busy; no handlers: all inert.
-	n := Saver(SaverProps{OnSave: func() {}, Entries: []SaverEntry{{Key: "a.json", Name: "a", Format: "JSON"}}})
+	// No name: Save is disabled even when not busy; no operations: all inert.
+	n := Saver(SaverProps{OnSave: func() {}, Docs: DocListProps{Docs: []Doc{{ID: "a", Name: "a", Format: "JSON"}}}})
 	if got := len(findHandlers(n, "click")); got != 0 {
-		t.Fatalf("%d click handlers; Save needs a name and the rest have no callbacks", got)
+		t.Fatalf("%d click handlers; Save needs a name and the rest have no operations", got)
 	}
 }
 
@@ -636,22 +640,24 @@ func TestSaverShowsVersionsTrashAndTags(t *testing.T) {
 	now := time.Date(2026, 10, 4, 9, 30, 0, 0, time.UTC)
 	html := render(t, Saver(SaverProps{
 		Target: "memory", Format: "json", Name: "plan",
-		Entries: []SaverEntry{{Key: "plan.json", Name: "plan", Format: "JSON", Size: 10, Updated: now, Tags: []string{"rpg", "draft"}}, {Key: "b.json", Name: "b", Format: "JSON", Size: 5}},
-		AllTags: []string{"draft", "rpg"}, TagFilter: "rpg",
-		Versions: []SaverVersion{{Key: "versions/plan/1.json", Time: now, Size: 12}},
-		Trashed:  []SaverEntry{{Key: "trash/old.json", Name: "old", Format: "JSON", Size: 3, Updated: now}},
+		Docs: DocListProps{
+			Docs:      []Doc{{ID: "plan-id", Name: "plan", Format: "JSON", Size: 10, Updated: now, Tags: []string{"rpg", "draft"}}, {ID: "b-id", Name: "b", Format: "JSON", Size: 5}},
+			TagFilter: "rpg", Tag: func(context.Context, string, []string) error { return nil },
+			Duplicate: func(context.Context, string) error { return nil }, Trash: func(context.Context, []string) error { return nil }},
+		Versions: VersionsProps{Name: "plan", Versions: []DocVersion{{Key: "versions/plan/1.json", Time: now, Size: 12}}, Save: func(context.Context) error { return nil }},
+		Trash:    TrashProps{Docs: []Doc{{ID: "old-id", Name: "old", Format: "JSON", Size: 3, Trashed: now}}, Restore: func(context.Context, []string) error { return nil }, Delete: func(context.Context, []string) error { return nil }},
 	}))
-	for _, want := range []string{`data-key="plan.json"`, `value="rpg, draft"`, "gj-saver-duplicate", "gj-saver-trash", "gj-saver-tagchip gj-saver-tagchip-on",
-		"Versions of plan", `data-key="versions/plan/1.json"`, "2026-10-04 09:30:00", "gj-saver-version-save", "gj-saver-trashed", "gj-saver-restore", "gj-saver-empty-trash"} {
+	for _, want := range []string{`data-id="plan-id"`, `value="rpg, draft"`, "gj-doclist-duplicate", "gj-doclist-trash", "gj-tagchip gj-tagchip-on",
+		"Versions of plan", `data-key="versions/plan/1.json"`, "2026-10-04 09:30:00", "gj-versions-save", "gj-trash-item", "gj-trash-restore", "gj-trash-empty"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	if strings.Contains(html, `data-key="b.json"`) {
+	if strings.Contains(html, `data-id="b-id"`) {
 		t.Error("the tag filter must hide documents without the tag")
 	}
 	none := render(t, Saver(SaverProps{}))
-	if strings.Contains(none, "Versions of") || strings.Contains(none, "gj-saver-trashbin") || strings.Contains(none, "gj-saver-tagbar") {
+	if strings.Contains(none, "Versions of") || strings.Contains(none, "gj-trash-bin") || strings.Contains(none, "gj-tagbar") {
 		t.Error("with no name, no trash and no tags those sections are absent")
 	}
 }

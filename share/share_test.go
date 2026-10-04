@@ -64,3 +64,35 @@ func TestLongQuoteAndEdges(t *testing.T) {
 		t.Errorf("no quote: %d-%d %v", from, to, ok)
 	}
 }
+
+func TestDocumentInThePath(t *testing.T) {
+	for in, want := range map[string][2]string{
+		"/d/abc":        {"/", "abc"},
+		"/app/d/a%20b/": {"/app/", "a b"},
+		"/app/":         {"/app/", ""},
+		"/index.html":   {"/index.html", ""},
+		"/x/d/":         {"/x/d/", ""},
+	} {
+		if base, doc := SplitPath(in); base != want[0] || doc != want[1] {
+			t.Errorf("SplitPath(%q) = %q, %q; want %q, %q", in, base, doc, want[0], want[1])
+		}
+	}
+	link := Link("https://x.test/app/d/old?x=1", url.Values{"doc": {"my doc"}, "hub": {"h"}}, Selection{From: 1, To: 4, Quote: "abc"})
+	u, _ := url.Parse(link)
+	if u.Path != "/app/d/my%20doc" && u.EscapedPath() != "/app/d/my%20doc" || u.Query().Get("doc") != "" || u.Query().Get("hub") != "h" || u.Query().Get("sel") == "" {
+		t.Errorf("link = %s", link)
+	}
+}
+
+func TestLinkEscapesTheDocumentOnce(t *testing.T) {
+	for _, doc := range []string{"a b", "a/b", "é", "50%", "plain"} {
+		link := Link("https://h/app/", url.Values{"doc": {doc}}, Selection{})
+		u, err := url.Parse(link)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, got := SplitPath(u.EscapedPath()); got != doc {
+			t.Errorf("%q came back as %q (%s)", doc, got, link)
+		}
+	}
+}

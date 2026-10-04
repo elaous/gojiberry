@@ -1,110 +1,152 @@
+//go:build !(js && wasm)
+
 package main
 
 import (
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestCanvasEditorEndToEnd builds the WASM client, serves this
-// directory over a real HTTP server, and runs e2e/verify.js against
-// it through a real headless Chromium (via Playwright) -- driving the
-// actual canvas-rendered editor through real keyboard/mouse/wheel
-// input and asserting on #doc-state, since there's no DOM text to
-// read a canvas-rendered document's content back from any other way.
-// Skips (doesn't fail) when node, the playwright module, or the
-// chromium executable aren't available, the same "skip when infra is
-// missing" convention gojiberry/examples/canvas-app's Postgres tests
-// use.
+// TestCanvasEditorEndToEnd builds the WASM client, serves it, and drives the
+// canvas-rendered editor in a real headless Chromium through real
+// keyboard/mouse/wheel input, asserting on #doc-state (the machine-readable
+// summary main.xg writes after every redraw: there is no DOM text to read a
+// canvas-rendered document's content back from any other way).
 func TestCanvasEditorEndToEnd(t *testing.T) {
-	nodePath, err := exec.LookPath("node")
-	if err != nil {
-		t.Skip("node not found on PATH")
-	}
+	d := e2etest.NewSite(t).OpenURL(t, "/index.html", e2etest.Options{Width: 900, Height: 700, ConsoleErrors: true})
+	d.Sleep(800)
+	ok := d.OK
 
-	chromiumPath := os.Getenv("PLAYWRIGHT_CHROMIUM")
-	if chromiumPath == "" {
-		chromiumPath = "/opt/pw-browsers/chromium"
+	docState := func() string { return d.Text("#doc-state") }
+	// field extracts one key=value pair out of #doc-state. "text" is special:
+	// the document's own text contains spaces and newlines, so it runs up to the
+	// next known field (" cursor=").
+	field := func(name string) string {
+		state := docState()
+		if name == "text" {
+			m := regexp.MustCompile(`(?s)^text=(.*) cursor=`).FindStringSubmatch(state)
+			if m == nil {
+				return ""
+			}
+			return m[1]
+		}
+		m := regexp.MustCompile(name + `=([^ ]*)`).FindStringSubmatch(state)
+		if m == nil {
+			return ""
+		}
+		return m[1]
 	}
-	if _, err := os.Stat(chromiumPath); err != nil {
-		t.Skipf("no chromium executable at %s: %v", chromiumPath, err)
-	}
+	var box []float64
+	d.Eval(`(r => [r.x, r.y, r.width, r.height])(document.getElementById('editor-canvas').getBoundingClientRect())`, &box)
+	at := func(x, y float64) (float64, float64) { return box[0] + x, box[1] + y }
+	click := func(x, y float64) { px, py := at(x, y); d.MouseClick(px, py, 1) }
+	clearAll := func() { d.Press("Control+a"); d.Press("Backspace") }
 
-	npmRoot, err := exec.Command("npm", "root", "-g").Output()
-	if err != nil {
-		t.Skipf("npm root -g failed: %v", err)
+	// --- Regression: click positions the cursor, typing inserts there ---
+	click(10, 10)
+	clearAll()
+	ok(field("text") == "", "select-all + backspace clears the document")
+	d.Type("hello")
+	ok(field("text") == "hello", "typing after a click inserts at the cursor")
+
+	// --- Regression: drag-select + Bold toolbar button ---
+	x0, y0 := at(10, 20)
+	x1, _ := at(50, 20)
+	d.MouseMove(x0, y0)
+	d.CanvasDragPage(x0, y0, x1, y0)
+	ok(field("sel") != "0-0" && field("sel") != "", "drag produced a non-empty selection, got sel="+field("sel"))
+	d.Click("#toolbar-bold")
+	ok(field("selBold") == "true", "clicking Bold toggled the dragged selection bold")
+
+	// Clicking the toolbar button moved focus off the hidden input; re-focus it
+	// via the canvas's own mousedown handler before any more keyboard assertions.
+	click(10, 10)
+
+	// --- Move line up/down ---
+	clearAll()
+	d.Type("line one\nline two\nline three")
+	ok(field("text") == "line one\nline two\nline three", fmt.Sprintf("typed three lines, got: %q", field("text")))
+
+	d.Press("Home") // cursor was at the end (line three); Home -> start of line three
+	d.Press("Alt+ArrowUp")
+	ok(field("text") == "line one\nline three\nline two", fmt.Sprintf("Alt+ArrowUp swapped line three above line two, got: %q", field("text")))
+	d.Press("Alt+ArrowDown")
+	ok(field("text") == "line one\nline two\nline three", fmt.Sprintf("Alt+ArrowDown swapped it back, got: %q", field("text")))
+
+	// --- Duplicate line ---
+	d.Press("Home") // still on "line three"
+	d.Press("Shift+Alt+ArrowDown")
+	ok(field("text") == "line one\nline two\nline three\nline three", fmt.Sprintf("Shift+Alt+ArrowDown duplicated the current line, got: %q", field("text")))
+
+	// --- Word boundary selection + case transform ---
+	clearAll()
+	d.Type("hello world")
+	d.Press("Home")
+	d.Press("Control+Shift+ArrowRight")
+	ok(field("sel") == "0-5", `Ctrl+Shift+ArrowRight selected exactly "hello" (0-5), got sel=`+field("sel"))
+	d.Press("Control+Shift+U")
+	ok(field("text") == "HELLO world", fmt.Sprintf("Ctrl+Shift+U uppercased the selection, got: %q", field("text")))
+	d.Press("Control+Shift+L")
+	ok(field("text") == "hello world", fmt.Sprintf("Ctrl+Shift+L lowercased it back, got: %q", field("text")))
+	d.Press("End")
+	d.Press("Control+Shift+ArrowLeft")
+	ok(field("sel") == "6-11", `Ctrl+Shift+ArrowLeft from end selected "world" (6-11), got sel=`+field("sel"))
+
+	// --- Scrolling: auto-follow on typing, manual wheel-scroll, clamping ---
+	clearAll()
+	var lines []string
+	for i := range 60 {
+		lines = append(lines, "line number "+strconv.Itoa(i))
 	}
-	nodePathEnv := strings.TrimSpace(string(npmRoot))
-	if probe := exec.Command(nodePath, "-e", "require('playwright')"); true {
-		probe.Env = append(os.Environ(), "NODE_PATH="+nodePathEnv)
-		if out, err := probe.CombinedOutput(); err != nil {
-			t.Skipf("playwright module not resolvable (NODE_PATH=%s): %v\n%s", nodePathEnv, err, out)
+	d.Type(strings.Join(lines, "\n"))
+	afterTyping, _ := strconv.Atoi(field("scrollY"))
+	ok(afterTyping > 0, fmt.Sprintf("typing past the viewport auto-scrolled (scrollY=%d > 0)", afterTyping))
+	d.Hover("#editor-canvas")
+	d.Wheel(0, -100000) // an unreasonably large delta: clampScroll should still floor it at 0
+	ok(field("scrollY") == "0", "wheel-scrolling far up clamps to scrollY=0, got "+field("scrollY"))
+	d.Wheel(0, 100000) // and ceil it at the document's actual max scroll
+	atBottom, _ := strconv.Atoi(field("scrollY"))
+	ok(atBottom > afterTyping-50, fmt.Sprintf("wheel-scrolling far down clamps near the bottom, got scrollY=%d", atBottom))
+
+	// --- Multi-cursor: Alt+Click adds a cursor, typing fans out to all of them,
+	// Escape collapses back to one ---
+	clearAll()
+	d.Type("aaaaaaaaaa")
+	click(10, 10)
+	ok(len(strings.Split(field("cursors"), ",")) == 1, "plain click leaves a single cursor, got cursors="+field("cursors"))
+	d.KeyDown("Alt")
+	click(60, 10)
+	d.KeyUp("Alt")
+	ok(len(strings.Split(field("cursors"), ",")) == 2, "Alt+Click added a second cursor, got cursors="+field("cursors"))
+
+	lenBefore := len(field("text"))
+	d.Type("X")
+	text := field("text")
+	ok(len(text) == lenBefore+2, fmt.Sprintf(`typing "X" inserted at both cursors, got: %q`, text))
+	ok(strings.Count(text, "X") == 2, fmt.Sprintf("exactly two X characters were inserted, got: %q", text))
+	ok(len(strings.Split(field("cursors"), ",")) == 2, "both cursors are still live after typing, got cursors="+field("cursors"))
+
+	d.Press("Escape")
+	ok(len(strings.Split(field("cursors"), ",")) == 1, "Escape collapsed back to a single cursor, got cursors="+field("cursors"))
+
+	lenBefore = len(field("text"))
+	d.Type("Y")
+	text = field("text")
+	ok(len(text) == lenBefore+1, fmt.Sprintf(`typing "Y" after Escape inserted only once, got: %q`, text))
+	ok(strings.Count(text, "Y") == 1, fmt.Sprintf("exactly one Y character was inserted, got: %q", text))
+
+	// Chromium's automatic favicon.ico request 404s (this demo serves none) and
+	// is logged as a generic console error with no URL in its text.
+	var real []string
+	for _, e := range d.Errors() {
+		if !strings.Contains(e, "the server responded with a status of 404") {
+			real = append(real, e)
 		}
 	}
-
-	if err := buildWASM(t); err != nil {
-		t.Fatalf("building main.wasm: %v", err)
-	}
-	if err := ensureWasmExecJS(t); err != nil {
-		t.Fatalf("staging wasm_exec.js: %v", err)
-	}
-
-	srv := httptest.NewServer(http.FileServer(http.Dir(".")))
-	defer srv.Close()
-	port := srv.URL[strings.LastIndex(srv.URL, ":")+1:]
-
-	cmd := exec.Command(nodePath, "e2e/verify.js")
-	cmd.Env = append(os.Environ(),
-		"NODE_PATH="+nodePathEnv,
-		"PORT="+port,
-		"PLAYWRIGHT_CHROMIUM="+chromiumPath,
-	)
-	out, err := cmd.CombinedOutput()
-	t.Logf("verify.js output:\n%s", out)
-	if err != nil {
-		t.Fatalf("e2e/verify.js failed: %v", err)
-	}
-	if !strings.Contains(string(out), "ALL CHECKS PASSED") {
-		t.Fatalf("e2e/verify.js did not report success")
-	}
-}
-
-// buildWASM cross-compiles this package for GOOS=js GOARCH=wasm into
-// main.wasm, the same build a real `make wasm` performs, so the test
-// exercises the actual binary a user would run rather than a native
-// build of the same source (which wouldn't even compile -- this
-// package is js/wasm-only, see the //go:build tag on every file here).
-func buildWASM(t *testing.T) error {
-	t.Helper()
-	cmd := exec.Command("go", "build", "-o", "main.wasm", ".")
-	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Logf("go build output:\n%s", out)
-	}
-	return err
-}
-
-// ensureWasmExecJS copies the Go toolchain's own wasm_exec.js next to
-// main.wasm if it isn't already there, the same manual step every
-// other wasm example's Makefile/README documents.
-func ensureWasmExecJS(t *testing.T) error {
-	t.Helper()
-	if _, err := os.Stat("wasm_exec.js"); err == nil {
-		return nil
-	}
-	out, err := exec.Command("go", "env", "GOROOT").Output()
-	if err != nil {
-		return err
-	}
-	src := filepath.Join(strings.TrimSpace(string(out)), "lib", "wasm", "wasm_exec.js")
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile("wasm_exec.js", data, 0o644)
+	ok(len(real) == 0, "no console or page errors: "+strings.Join(real, "; "))
 }
