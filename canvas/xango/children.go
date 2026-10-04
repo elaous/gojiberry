@@ -37,6 +37,41 @@ func (c *Children) Elements() []Element { return c.list.elems() }
 // among the children, containers included: see Root.Find.
 func (c *Children) Find(tag string, n int) any { return findIn(c.list.elems(), tag, n) }
 
+// Keyed is implemented by elements that have a Key prop (Image,
+// FloatingText, Table), so that what is shared about them can follow the key
+// rather than their place among the others.
+type Keyed interface{ Key() string }
+
+// Each calls f for every live component for tag among the children, in
+// document order, containers included, with its Key ("" when it has none) and
+// its place n among those of its kind that have no key.
+func (c *Children) Each(tag string, f func(key string, n int, v any)) {
+	unkeyed := 0
+	var walk func(es []Element)
+	walk = func(es []Element) {
+		for _, e := range es {
+			if fd, ok := e.(Finder); ok {
+				if v := fd.Find(tag); v != nil {
+					key := ""
+					if k, ok := e.(Keyed); ok {
+						key = k.Key()
+					}
+					n := -1
+					if key == "" {
+						n = unkeyed
+						unkeyed++
+					}
+					f(key, n, v)
+				}
+			}
+			if h, ok := e.(Holder); ok {
+				walk(h.Elements())
+			}
+		}
+	}
+	walk(c.list.elems())
+}
+
 // Close closes every child element that needs it.
 func (c *Children) Close() {
 	for _, e := range c.list.elems() {

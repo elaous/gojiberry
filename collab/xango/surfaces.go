@@ -19,6 +19,7 @@ import (
 // finder is what a surface needs of the wrapper.
 type finder interface {
 	Find(tag string, n int) any
+	Each(tag string, f func(key string, n int, v any))
 }
 
 func put(m map[string]string, id string, v any) {
@@ -113,10 +114,12 @@ func (f furniture) Write(recs map[string]string) {
 	}
 }
 
-// objects shares floating text, tables and images, each by its place among
-// the elements of its kind ("float:0", "table:1", "image:0"). Floating text
-// is shared as plain text (its character formatting stays local), a table by
-// its cells, an image by where it is and how big (its picture is not sent).
+// objects shares floating text, tables and images. An element with a Key is
+// shared under it ("float:intro"), so adding or removing others never shifts
+// it; one without a Key goes by its place among the unkeyed ones of its kind
+// ("float:#0"), which is only stable while the others do not change. Floating
+// text is shared as plain text plus position, size and anchor, a table by its
+// cells, an image by where it is and how big (its picture is not sent).
 type objects struct{ in finder }
 
 type floatRec struct {
@@ -139,46 +142,61 @@ type imageRec struct {
 	Alpha      float64
 }
 
+var objectKinds = []struct{ kind, tag string }{
+	{"float", cxango.TagFloatingText}, {"table", cxango.TagTable}, {"image", cxango.TagImage},
+}
+
+// ref names an element: its key, or "#n" by place among the unkeyed.
+func ref(key string, n int) string {
+	if key != "" {
+		return key
+	}
+	return "#" + strconv.Itoa(n)
+}
+
 func (objects) Owns(id string) bool {
-	for _, k := range []string{"float", "table", "image"} {
-		if _, ok := pageRecord(id, k); ok {
+	for _, k := range objectKinds {
+		if strings.HasPrefix(id, k.kind+":") {
 			return true
 		}
 	}
 	return false
 }
 
-func (o objects) each(tag string, f func(n int, v any)) {
-	for n := 0; ; n++ {
-		v := o.in.Find(tag, n)
-		if v == nil {
-			return
+// find returns the element of the kind that the reference names, or nil.
+func (o objects) find(tag, want string) any {
+	var found any
+	o.in.Each(tag, func(key string, n int, v any) {
+		if found == nil && ref(key, n) == want {
+			found = v
 		}
-		f(n, v)
-	}
+	})
+	return found
 }
 
 func (o objects) Read() map[string]string {
 	out := map[string]string{}
-	o.each(cxango.TagFloatingText, func(n int, v any) {
+	o.in.Each(cxango.TagFloatingText, func(key string, n int, v any) {
 		ft := v.(*canvas.FloatingText)
-		put(out, "float:"+strconv.Itoa(n), floatRec{ft.Text(), ft.X, ft.Y, ft.Width, ft.Height, ft.Anchor, ft.Opacity})
+		put(out, "float:"+ref(key, n), floatRec{ft.Text(), ft.X, ft.Y, ft.Width, ft.Height, ft.Anchor, ft.Opacity})
 	})
-	o.each(cxango.TagTable, func(n int, v any) {
+	o.in.Each(cxango.TagTable, func(key string, n int, v any) {
 		tv := v.(*canvas.TableView)
-		put(out, "table:"+strconv.Itoa(n), tableRec{tv.Table.Cells, tv.X, tv.Y, tv.Anchor})
+		put(out, "table:"+ref(key, n), tableRec{tv.Table.Cells, tv.X, tv.Y, tv.Anchor})
 	})
-	o.each(cxango.TagImage, func(n int, v any) {
+	o.in.Each(cxango.TagImage, func(key string, n int, v any) {
 		im := v.(*canvas.Image)
-		put(out, "image:"+strconv.Itoa(n), imageRec{im.X, im.Y, im.W, im.H, im.Anchor, im.Alpha})
+		put(out, "image:"+ref(key, n), imageRec{im.X, im.Y, im.W, im.H, im.Anchor, im.Alpha})
 	})
 	return out
 }
 
 func (o objects) Write(recs map[string]string) {
 	for id, v := range recs {
-		if n, ok := pageRecord(id, "float"); ok {
-			ft, _ := o.in.Find(cxango.TagFloatingText, n).(*canvas.FloatingText)
+		kind, want, _ := strings.Cut(id, ":")
+		switch kind {
+		case "float":
+			ft, _ := o.find(cxango.TagFloatingText, want).(*canvas.FloatingText)
 			var r floatRec
 			if ft == nil || json.Unmarshal([]byte(v), &r) != nil {
 				continue
@@ -187,8 +205,8 @@ func (o objects) Write(recs map[string]string) {
 				ft.SetText(r.Text)
 			}
 			ft.X, ft.Y, ft.Width, ft.Height, ft.Anchor, ft.Opacity = r.X, r.Y, r.W, r.H, r.Anchor, r.Opacity
-		} else if n, ok := pageRecord(id, "table"); ok {
-			tv, _ := o.in.Find(cxango.TagTable, n).(*canvas.TableView)
+		case "table":
+			tv, _ := o.find(cxango.TagTable, want).(*canvas.TableView)
 			var r tableRec
 			if tv == nil || json.Unmarshal([]byte(v), &r) != nil {
 				continue
@@ -197,8 +215,8 @@ func (o objects) Write(recs map[string]string) {
 				tv.Table.Cells = r.Cells
 			}
 			tv.X, tv.Y, tv.Anchor = r.X, r.Y, r.Anchor
-		} else if n, ok := pageRecord(id, "image"); ok {
-			im, _ := o.in.Find(cxango.TagImage, n).(*canvas.Image)
+		case "image":
+			im, _ := o.find(cxango.TagImage, want).(*canvas.Image)
 			var r imageRec
 			if im == nil || json.Unmarshal([]byte(v), &r) != nil {
 				continue

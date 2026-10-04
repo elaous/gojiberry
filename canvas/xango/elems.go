@@ -122,6 +122,9 @@ type imageElem struct {
 	last ImageProps
 }
 
+// Key implements Keyed.
+func (e *imageElem) Key() string { return e.last.Key }
+
 func (e *imageElem) Drawers() []canvas.Drawer { return []canvas.Drawer{e.im} }
 
 func (e *imageElem) Find(tag string) any {
@@ -207,6 +210,9 @@ type floatElem struct {
 	last FloatingTextProps
 }
 
+// Key implements Keyed.
+func (e *floatElem) Key() string { return e.last.Key }
+
 func (e *floatElem) Drawers() []canvas.Drawer { return []canvas.Drawer{e.ft} }
 
 func (e *floatElem) Find(tag string) any {
@@ -287,6 +293,9 @@ type tableElem struct {
 	v    *canvas.TableView
 	last TableProps
 }
+
+// Key implements Keyed.
+func (e *tableElem) Key() string { return e.last.Key }
 
 func (e *tableElem) Drawers() []canvas.Drawer { return []canvas.Drawer{e.v} }
 

@@ -339,3 +339,47 @@ func TestViewerDoesNotPushSurfaces(t *testing.T) {
 		t.Errorf("a viewer's local change reached the owner: header %+v, x %v", h, x)
 	}
 }
+
+// Objects with a Key are shared under it, so a peer whose tree has other
+// objects (or the same ones in another order) still gets the right one.
+func TestKeyedObjectsDoNotShift(t *testing.T) {
+	srv := httptest.NewServer(hub.New(hub.Config{}).Handler())
+	t.Cleanup(srv.Close)
+	tree := func(keys ...string) func(u *user) []xango.Node {
+		return func(u *user) []xango.Node {
+			kids := []xango.Node{cxango.TextFlow(cxango.TextFlowProps{Text: "hello", PageCount: 1, PageWidth: 300, PageHeight: 200})}
+			for _, k := range keys {
+				kids = append(kids, cxango.FloatingText(cxango.FloatingTextProps{Key: k, Text: "note " + k, Width: 100, Height: 40}))
+			}
+			return kids
+		}
+	}
+	ana := newUser(t, srv, nil, nil)
+	ana.props.Flow, ana.kids = collabxango.FlowObjects, tree("a", "b")
+	ana.render(t)
+	wait(t, "Ana online", func() bool { return ana.get(func(u *user) bool { return u.state.Status == client.Online }) })
+	time.Sleep(50 * time.Millisecond)
+	bo := newUser(t, srv, nil, nil)
+	bo.props.Flow, bo.kids = collabxango.FlowObjects, tree("b") // no "a": Bo's first note is Ana's second
+	bo.render(t)
+	wait(t, "Bo online", func() bool { return bo.get(func(u *user) bool { return u.state.Status == client.Online }) })
+
+	ana.mu.Lock()
+	notes := func(u *user) (a, b *canvas.FloatingText) {
+		u.root.Find(cxango.TagFloatingText, 0)
+		a, _ = u.root.Find(cxango.TagFloatingText, 0).(*canvas.FloatingText)
+		b, _ = u.root.Find(cxango.TagFloatingText, 1).(*canvas.FloatingText)
+		return a, b
+	}
+	a, b := notes(ana)
+	a.SetText("A moved on")
+	b.SetText("B moved on")
+	ana.mu.Unlock()
+
+	wait(t, "Bo's note b to change", func() bool {
+		return bo.get(func(u *user) bool { n, _ := notes(u); return n.Text() == "B moved on" })
+	})
+	if got := bo.get(func(u *user) bool { n, _ := notes(u); return n.Text() != "A moved on" }); !got {
+		t.Error("Ana's note a landed on Bo's first note")
+	}
+}

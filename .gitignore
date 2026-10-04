@@ -52,3 +52,7 @@ go.work.sum
 examples/collab-editor-app/server
 examples/echo-ssr-demo/echo-ssr-demo
 examples/gin-ssr-demo/gin-ssr-demo
+
+# built binaries (go build in the repo root)
+/canvas-editor-showcase
+/collabhub
