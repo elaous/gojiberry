@@ -155,7 +155,7 @@
   "saver.versionOpened": "Version ouverte",
   "saver.versionDeleted": "Version supprimée",
   "saver.trashed": "%s placé dans la corbeille",
-  "saver.restored": "%s restauré",
+  "saver.restored": "%s était endommagé : la copie enregistrée %s a été ouverte (c’est maintenant la version enregistrée)",
   "saver.purged": "%s supprimé définitivement",
   "saver.created": "%s créé",
   "saver.tagged": "Étiquettes de %s mises à jour",
@@ -222,6 +222,9 @@
   "migrate.truncated": "Trop de fichiers : seuls les premiers ont été migrés.",
   "migrate.failed": "%d n’ont pas pu être migrés :",
   "migrate.convertTo": "Convertir en",
-  "saver.purgedUnreadable": "(%d documents illisibles de la corbeille ont été supprimés : %s)"
+  "saver.purgedUnreadable": "(%d documents illisibles de la corbeille ont été supprimés : %s)",
+  "saver.checkedOK": "%d documents vérifiés : tout va bien",
+  "saver.checkedProblems": "%d documents vérifiés : %d rétablis depuis une copie précédente (%s), %d endommagés sans copie (%s)",
+  "docs.check": "Vérifier les documents"
  }
 }

@@ -73,6 +73,7 @@ type ui struct {
 	liveName, liveColor string
 	transfer            *transfer.Registry
 	migrate             *migrate.Session
+	persisted           bool     // the browser promised to keep this origin's storage
 	fontLog             []string // what the font library did, newest last
 	navSig              string   // outline/bookmarks the Outline tab last showed
 	find                findState
@@ -650,7 +651,7 @@ func main() {
 			"stats": statsState(stats), "share": u.shareLink, "people": u.people.list(), "spell": map[string]any{"enabled": u.spell.enabled, "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
-			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
+			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "persisted": u.persisted, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
 			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "live": liveState(u, flow), "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
 		})
@@ -693,6 +694,12 @@ func main() {
 	renderCanvas()
 	renderUI()
 	go openSharedSelection(u, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
+	go func() {
+		// Ask the browser to keep what is saved in it (it may delete a site's storage when
+		// the disk is short); the answer is in #state.
+		u.persisted = docstore.RequestPersistence()
+		renderUI()
+	}()
 	go func() {
 		ctx := context.Background()
 		_ = u.saver.Refresh(ctx)

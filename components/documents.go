@@ -162,7 +162,7 @@ func docButton(class, label string, disabled bool, on func()) xango.Node {
 // docIcons are the icons of the document components' buttons, by class.
 var docIcons = map[string]string{
 	"gj-doclist-open": "description", "gj-doclist-duplicate": "content_copy", "gj-doclist-trash": "delete",
-	"gj-doclist-delete": "delete_forever", "gj-doclist-refresh": "refresh", "gj-doclist-download": "download",
+	"gj-doclist-delete": "delete_forever", "gj-doclist-refresh": "refresh", "gj-doclist-check": "fact_check", "gj-doclist-download": "download",
 	"gj-doclist-folder-open": "folder_open", "gj-doclist-folder-delete": "delete_forever",
 	"gj-doclist-folder-download": "download", "gj-doclist-newfolder": "create_new_folder",
 	"gj-migrate-pick": "upload_file", "gj-migrate-start": "download",
@@ -194,6 +194,9 @@ func docMeta(d Doc) string {
 
 // --- DocList -------------------------------------------------------------
 
+// DocCheck is the operation behind DocListProps.Check.
+type DocCheck func(ctx context.Context) error
+
 // DocListProps configures DocList.
 type DocListProps struct {
 	// Docs are the documents to list (the ones not in the trash). Current is the
@@ -215,6 +218,9 @@ type DocListProps struct {
 	// Title heads the list; Refresh, if set, adds a Refresh button.
 	Title   string
 	Refresh func()
+	// Check reads every document and compares it with its checksum, restoring damaged
+	// ones from their previous copy (saver.Session.Check); nil leaves the button out.
+	Check   DocCheck
 	Pending *Pending
 	// Confirm, if set, is asked before Delete (see Asker.Ask); nil deletes at once.
 	Confirm func(message string, do func())
@@ -262,6 +268,10 @@ func DocList(p DocListProps) xango.Node {
 	head := []xango.Node{xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(title))}
 	if p.Refresh != nil {
 		head = append(head, docButton("gj-doclist-refresh", tr("docs.refresh", "Refresh"), busy, p.Refresh))
+	}
+	if p.Check != nil {
+		check := p.Check
+		head = append(head, docButton("gj-doclist-check", tr("docs.check", "Check documents"), busy, func() { p.Pending.Run(check) }))
 	}
 	children := []xango.Node{xango.El("div", []xango.Attr{xango.A("class", "gj-doc-head")}, head...)}
 	if crumbs, ok := docBreadcrumbs(p); ok {

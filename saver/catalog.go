@@ -55,6 +55,13 @@ type catalogEntry struct {
 	Tags    []string `json:"tags,omitempty"`
 	Trashed int64    `json:"trashed,omitempty"`
 	Folder  string   `json:"folder,omitempty"` // the folder it is in; "" at the top level
+	// Sum is the SHA-256 (hex) of the current file's bytes, "" for a document saved
+	// before checksums (Verify gives it one). Prev is the file of the save before the
+	// current one, with its checksum, kept as a light redundancy: if the current file is
+	// missing or damaged the document is read from it (see integrity.go).
+	Sum     string `json:"sum,omitempty"`
+	Prev    string `json:"prev,omitempty"`
+	PrevSum string `json:"prevSum,omitempty"`
 }
 
 type folderEntry struct {
@@ -173,6 +180,15 @@ func (s *Saver) update(ctx context.Context, target string, f func(t Target, c *c
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// A store that others share but that cannot write conditionally (a browser's
+	// localStorage) offers a lock instead: hold it across the read and the write.
+	if l, ok := t.Adapter.(docstore.Locker); ok {
+		unlock, err := l.Lock(ctx)
+		if err != nil {
+			return err
+		}
+		defer unlock()
+	}
 	// With an adapter that can write conditionally, a catalog changed by another
 	// process since it was read is read again and f is run again on it, so f must
 	// be safe to repeat (it is: files are keyed by ID).
@@ -282,7 +298,7 @@ func (s *Saver) build(ctx context.Context, t Target) (*catalog, error) {
 			out.Skipped = append(out.Skipped, m.ID)
 			continue
 		}
-		key, size := m.ID, m.Size
+		key, size, sum := m.ID, m.Size, docstore.Digest(stored.Data)
 		id := doc.ID()
 		if !docfile.ValidID(id) {
 			// A document from before IDs, under its name: it gets an ID, and its file
@@ -306,18 +322,28 @@ func (s *Saver) build(ctx context.Context, t Target) (*catalog, error) {
 			if newKey != m.ID {
 				_ = t.Adapter.Delete(ctx, m.ID)
 			}
-			key, size = newKey, len(data)
+			key, size, sum = newKey, len(data), docstore.Digest(data)
 		}
-		// Two files with one ID (a crash between writing a new format and deleting the
-		// old): the newer one is the document.
-		if prev, ok := out.Docs[id]; ok {
-			if prev.Updated >= m.UpdatedAt.UnixNano() {
-				out.Skipped = append(out.Skipped, key)
-				continue
+		// Two files with one ID are a document and its previous copy (or the leftovers of
+		// a crash between writing a new save and the catalog): the newer is the document,
+		// the next newer its previous copy, any others are left out.
+		entry := catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: size, Updated: m.UpdatedAt.UnixNano(), Tags: doc.Tags(), Trashed: doc.Trashed(), Folder: doc.Folder(), Sum: sum}
+		if cur, ok := out.Docs[id]; ok {
+			older, newer := entry, cur
+			if cur.Updated < entry.Updated {
+				older, newer = cur, entry
 			}
-			out.Skipped = append(out.Skipped, prev.Key)
+			if s.previousCopies() > 0 && newer.Prev == "" {
+				newer.Prev, newer.PrevSum = older.Key, older.Sum
+			} else {
+				out.Skipped = append(out.Skipped, older.Key)
+			}
+			if older.Prev != "" { // the older one's own previous copy
+				out.Skipped = append(out.Skipped, older.Prev)
+			}
+			entry = newer
 		}
-		out.Docs[id] = catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: size, Updated: m.UpdatedAt.UnixNano(), Tags: doc.Tags(), Trashed: doc.Trashed(), Folder: doc.Folder()}
+		out.Docs[id] = entry
 	}
 	// A folder whose parent is gone (deleted since its record was written), or that
 	// sits in a cycle, goes to the top level.
@@ -342,8 +368,8 @@ func (s *Saver) build(ctx context.Context, t Target) (*catalog, error) {
 // touch rewrites a document's own metadata (name, tags, trash flag, folder) so
 // the document and the catalog agree and a rebuilt catalog loses nothing. The
 // document's Updated time is not changed.
-func (s *Saver) touch(ctx context.Context, t Target, e *catalogEntry, f func(*docfile.Document)) error {
-	write, err := s.prepareTouch(ctx, t, e, f)
+func (s *Saver) touch(ctx context.Context, t Target, id string, e *catalogEntry, later *[]func(), f func(*docfile.Document)) error {
+	write, err := s.prepareTouch(ctx, t, id, e, later, f)
 	if err != nil {
 		return err
 	}
@@ -351,31 +377,30 @@ func (s *Saver) touch(ctx context.Context, t Target, e *catalogEntry, f func(*do
 }
 
 // prepareTouch is touch in two steps: everything that can fail without changing
-// anything (reading, converting) now, and the write it returns. Operations on
-// several documents prepare all of them first.
-func (s *Saver) prepareTouch(ctx context.Context, t Target, e *catalogEntry, f func(*docfile.Document)) (write func() error, err error) {
+// anything (reading, checking, converting) now, and the write it returns. Operations
+// on several documents prepare all of them first. Like a save it writes a new file
+// (the entry e is given its key, checksum and previous copy here; the catalog entry is
+// the caller's to store), and refuses a document whose file does not match its checksum
+// (ErrUnreadable) rather than copying damage into a fresh, valid-looking file.
+func (s *Saver) prepareTouch(ctx context.Context, t Target, id string, e *catalogEntry, later *[]func(), f func(*docfile.Document)) (write func() error, err error) {
 	c, _ := s.codecOf(e.Key)
 	if c == nil {
 		return func() error { return nil }, nil
 	}
-	stored, err := t.Adapter.Load(ctx, e.Key)
-	if errors.Is(err, docstore.ErrNotFound) {
-		return nil, fmt.Errorf("%w: %w", ErrUnreadable, err)
-	}
+	doc, _, err := s.tryRead(ctx, t, e.Key, e.Sum)
 	if err != nil {
+		if missingOrDamaged(err) {
+			return nil, fmt.Errorf("%w: %w", ErrUnreadable, err)
+		}
 		return nil, err
-	}
-	doc, err := c.Unmarshal(stored.Data)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrUnreadable, err)
 	}
 	f(&doc)
 	data, err := c.Marshal(doc)
 	if err != nil {
 		return nil, err
 	}
-	e.Size = len(data)
-	key := e.Key
+	key := genKey(id, c)
+	s.rotate(ctx, t, e, key, data, later)
 	return func() error { return t.Adapter.Save(ctx, key, data) }, nil
 }
 
@@ -500,9 +525,20 @@ func (s *Saver) disagrees(ctx context.Context, t Target, c *catalog) (bool, erro
 			files[m.ID] = true
 		}
 	}
-	same := len(files) == len(c.Docs) && len(records) == len(c.Folders)
+	// Every file there is must be one the catalog knows (a document's current file or
+	// its previous copy), and every current file must be there; a previous copy that is
+	// gone does not matter.
+	known := map[string]bool{}
+	same := len(records) == len(c.Folders)
 	for _, e := range c.Docs {
+		known[e.Key] = true
+		if e.Prev != "" {
+			known[e.Prev] = true
+		}
 		same = same && files[e.Key]
+	}
+	for k := range files {
+		same = same && known[k]
 	}
 	for id := range c.Folders {
 		same = same && records[id]
