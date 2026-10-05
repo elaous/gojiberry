@@ -80,6 +80,22 @@ documents in it go back to the top level); folders nest at most
 document is saved in the folder being shown (`Session.OpenFolder`), and opening a
 document shows its folder.
 
+## Link and Download
+
+1. **Link.** `DocListProps.Link` / `FolderLink` give an item's address and
+   `CopyLink` puts it on the clipboard; all three are needed for the Link button.
+   `Session.Link(kind, id)` is how a host answers: the showcase uses
+   `share.DocPath` (`/d/{id}`, a shared document) and `share.FolderPath`
+   (`/f/{id}`; a page opened there shows that folder).
+2. **Download.** `Download(ctx, id, format)` and `DownloadFolder(ctx, id)`.
+   With `DownloadFormats` a row gets a "Download as…" menu, without it one
+   button. `Session.Deliver` hands the file to the person (`transfer.Download` in
+   a browser), `Session.Export` converts (`transfer.Registry.Export` fits); with
+   no `Export` a document goes as saved.
+3. **Folder download** is `Saver.Archive`: a ZIP with the folders drawn as
+   directories (they are virtual in the store), documents as saved, the trash
+   left out.
+
 ## One Person
 
 `user.Person` (`ID`, `Name`, `Role`; `user.Normalize` for addresses) is shared by

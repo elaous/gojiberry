@@ -394,3 +394,53 @@ func TestStatusLinesNameWhatTheyAreAbout(t *testing.T) {
 		t.Errorf("two names: %q", status())
 	}
 }
+
+func TestSessionDownloadsAndLinks(t *testing.T) {
+	s, _, _ := newSession(t)
+	s.Props().OnName("report")
+	s.Props().OnSave()
+	id := s.Props().Docs.Docs[0].ID
+	if p := s.Docs(); p.Download != nil || p.Link != nil {
+		t.Fatal("no Deliver and no Link: the controls are left out")
+	}
+
+	type file struct {
+		name, mime string
+		data       []byte
+	}
+	var got []file
+	var copied []string
+	s.Deliver = func(name, mime string, data []byte) { got = append(got, file{name, mime, data}) }
+	s.Copy = func(text string) { copied = append(copied, text) }
+	s.Link = func(kind, id string) string { return "https://opendocs.io/" + kind + "/" + id }
+	s.Export = func(format string, d docfile.Document) (string, []byte, string, error) {
+		return d.Name() + "." + format, []byte("as " + format), "text/plain", nil
+	}
+	s.DownloadFormats = []components.SaverChoice{{Name: "txt", Label: "Text"}}
+
+	p := s.Docs()
+	if p.Download == nil || p.DownloadFolder == nil || len(p.DownloadFormats) != 1 || p.Link(id) != "https://opendocs.io/document/"+id || p.FolderLink("f") != "https://opendocs.io/folder/f" {
+		t.Fatalf("%+v", p)
+	}
+	ctx := context.Background()
+	if err := s.Download(ctx, id, "txt"); err != nil || len(got) != 1 || got[0].name != "report.txt" || string(got[0].data) != "as txt" {
+		t.Fatalf("%v %+v", err, got)
+	}
+	if s.Props().Status != "report downloaded" {
+		t.Errorf("status %q", s.Props().Status)
+	}
+	// With no format, the document as saved.
+	if err := s.Download(ctx, id, ""); err != nil || got[1].name != "report.json" || !strings.Contains(string(got[1].data), "report") {
+		t.Fatalf("%v %+v", err, got)
+	}
+	if err := s.DownloadFolder(ctx, ""); err != nil || got[2].name != "documents.zip" || got[2].mime != "application/zip" || len(zipNames(t, got[2].data)) != 1 {
+		t.Fatalf("%v %+v", err, got)
+	}
+	s.CopyLink("https://opendocs.io/document/" + id)
+	if len(copied) != 1 || !strings.HasPrefix(s.Props().Status, "Link copied: ") {
+		t.Errorf("%v %q", copied, s.Props().Status)
+	}
+	if err := s.Download(ctx, docfile.NewID(), ""); err == nil {
+		t.Error("a document that is not there")
+	}
+}

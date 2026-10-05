@@ -198,3 +198,44 @@ func TestCapacityShowsPercentUsedAndLeft(t *testing.T) {
 	mustContain(t, unknown, "2.0 KB used", "allocated space not known", "Disk")
 	mustNotContain(t, unknown, `role="meter"`, "documents")
 }
+
+func TestDocListLinkAndDownload(t *testing.T) {
+	docs := []Doc{{ID: "x", Name: "a"}}
+	var copied, got []string
+	p := DocListProps{Docs: docs, Folders: []DocFolder{{ID: "f", Name: "Work"}}, AllFolders: []DocFolder{{ID: "f", Name: "Work"}},
+		Pending: &Pending{Inline: true},
+		Link:    func(id string) string { return "https://opendocs.io/d/" + id }, FolderLink: func(id string) string { return "https://opendocs.io/f/" + id },
+		CopyLink:       func(u string) { copied = append(copied, u) },
+		Download:       func(_ context.Context, id, format string) error { got = append(got, id+":"+format); return nil },
+		DownloadFolder: func(_ context.Context, id string) error { got = append(got, "folder:"+id); return nil }}
+	html := render(t, DocList(p))
+	mustContain(t, html, `data-url="https://opendocs.io/d/x"`, `data-url="https://opendocs.io/f/f"`, "gj-doclist-download", "gj-doclist-folder-download")
+	mustNotContain(t, html, "Download as")
+	n := DocList(p)
+	for _, h := range findHandlers(n, "click") {
+		h(xango.Event{})
+	}
+	if strings.Join(copied, " ") != "https://opendocs.io/f/f https://opendocs.io/d/x" {
+		t.Errorf("copied %v", copied)
+	}
+	if strings.Join(got, " ") != "folder:f x:" {
+		t.Errorf("downloads %v", got)
+	}
+
+	// With formats, a menu instead of a button.
+	got = nil
+	p.DownloadFormats = []DocChoice{{Name: "txt", Label: "Text"}}
+	n = DocList(p)
+	mustContain(t, render(t, n), "Download as…", `value="format:txt"`, ">Text<")
+	for _, h := range findHandlers(n, "change") {
+		h(xango.Event{Value: "-"})
+		h(xango.Event{Value: "format:txt"})
+	}
+	if strings.Join(got, " ") != "x:txt" {
+		t.Errorf("menu: %v", got)
+	}
+
+	// Left out when not plugged in.
+	mustNotContain(t, render(t, DocList(DocListProps{Docs: docs})), "gj-doclist-link", "gj-doclist-download")
+	mustNotContain(t, render(t, DocList(DocListProps{Docs: docs, Link: p.Link})), "gj-doclist-link") // nowhere to copy to
+}

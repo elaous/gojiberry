@@ -174,6 +174,12 @@
   "comments.open": "Ouverts",
   "comments.resolved": "Résolus",
   "comments.all": "Tous",
-  "comments.filter": "Afficher les commentaires"
+  "comments.filter": "Afficher les commentaires",
+  "docs.download": "Télécharger",
+  "docs.link": "Lien",
+  "docs.downloadAs": "Télécharger en…",
+  "docs.downloadOf": "Télécharger %s en",
+  "saver.downloaded": "%s téléchargé",
+  "saver.linkCopied": "Lien copié : %s"
  }
 }

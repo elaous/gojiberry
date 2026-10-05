@@ -37,6 +37,7 @@ import (
 	"github.com/elaous/gojiberry/export"
 	"github.com/elaous/gojiberry/fonts"
 	"github.com/elaous/gojiberry/saver"
+	"github.com/elaous/gojiberry/share"
 	"github.com/elaous/gojiberry/transfer"
 	"github.com/elaous/gojiberry/xango"
 )
@@ -185,6 +186,22 @@ func main() {
 		{Name: "memory", Label: "Memory", Adapter: store, Capacity: 16 << 20},
 	}}, currentDoc, openDoc)
 	u.saver.OnChange = func() { renderUI() }
+	u.saver.Deliver = transfer.Download
+	u.saver.Export = u.transfer.Export
+	for _, e := range u.transfer.Exporters() {
+		u.saver.DownloadFormats = append(u.saver.DownloadFormats, components.SaverChoice{Name: e.Format().Name, Label: e.Format().Label})
+	}
+	u.saver.Link = func(kind, id string) string {
+		if kind == "folder" {
+			return share.FolderPath(pageBase(), id)
+		}
+		return share.DocPath(pageBase(), id)
+	}
+	u.saver.Copy = func(text string) {
+		if nav := js.Global().Get("navigator"); !nav.Get("clipboard").IsUndefined() {
+			nav.Get("clipboard").Call("writeText", text)
+		}
+	}
 	u.people = newPeople("you@example.com", func() { renderUI() })
 
 	setMode := func(m canvas.Mode) {
@@ -649,7 +666,14 @@ func main() {
 	renderCanvas()
 	renderUI()
 	go openSharedSelection(u, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
-	go u.saver.Refresh(context.Background())
+	go func() {
+		ctx := context.Background()
+		_ = u.saver.Refresh(ctx)
+		// A page opened on /f/{folder} shows that folder.
+		if _, folder := share.SplitFolderPath(js.Global().Get("location").Get("pathname").String()); folder != "" {
+			_ = u.saver.OpenFolder(ctx, folder)
+		}
+	}()
 	canvas.LoadImage("data:image/svg+xml;base64,"+base64.StdEncoding.EncodeToString([]byte(svg)),
 		func(src *canvas.HTMLImage) {
 			state.Image = src

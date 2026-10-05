@@ -96,3 +96,20 @@ func TestLinkEscapesTheDocumentOnce(t *testing.T) {
 		}
 	}
 }
+
+func TestFolderPaths(t *testing.T) {
+	p := FolderPath("https://opendocs.io/app/", "a b")
+	if p != "https://opendocs.io/app/f/a%20b" {
+		t.Fatal(p)
+	}
+	u, _ := url.Parse(p)
+	if base, id := SplitFolderPath(u.EscapedPath()); base != "/app/" || id != "a b" {
+		t.Errorf("%q %q", base, id)
+	}
+	if _, id := SplitFolderPath("/app/d/x"); id != "" {
+		t.Errorf("a document path is not a folder: %q", id)
+	}
+	if _, id := SplitPath("/app/f/x"); id != "" {
+		t.Errorf("a folder path is not a document: %q", id)
+	}
+}

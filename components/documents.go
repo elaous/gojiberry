@@ -223,7 +223,21 @@ type DocListProps struct {
 	RenameFolder  func(ctx context.Context, id, name string) error
 	DeleteFolder  DocAction
 	Move          func(ctx context.Context, ids []string, folder string) error
+
+	// Link gives the address of a document and FolderLink of a folder; with
+	// CopyLink (which receives that address) they add a Link button to each row.
+	Link, FolderLink func(id string) string
+	CopyLink         func(url string)
+	// Download hands a document over in a format picked from DownloadFormats
+	// (none: one Download button, "" for the format); DownloadFolder hands over
+	// a folder's documents together.
+	Download        func(ctx context.Context, id, format string) error
+	DownloadFolder  DocAction
+	DownloadFormats []DocChoice
 }
+
+// DocChoice is a name and the label shown for it.
+type DocChoice struct{ Name, Label string }
 
 // DocList lists documents, each with the operations the host plugs in: Open,
 // Duplicate, Trash, Delete and a tag editor, and above them a filter by tag.
@@ -272,6 +286,8 @@ func DocList(p DocListProps) xango.Node {
 		if p.Duplicate != nil {
 			row = append(row, docButton("gj-doclist-duplicate", tr("docs.duplicate", "Duplicate"), busy, actOne(p.Pending, p.Duplicate, d.ID)))
 		}
+		row = append(row, linkButton(p, p.Link, d.ID)...)
+		row = append(row, downloadControl(p, d, busy)...)
 		if p.Trash != nil {
 			row = append(row, docButton("gj-doclist-trash", tr("docs.trash", "Trash"), busy, act(p.Pending, p.Trash, d.ID)))
 		}
@@ -590,6 +606,10 @@ func folderRows(p DocListProps, busy bool) []xango.Node {
 					p.Pending.Run(func(ctx context.Context) error { return p.RenameFolder(ctx, id, name) })
 				})}))
 		}
+		row = append(row, linkButton(p, p.FolderLink, id)...)
+		if p.DownloadFolder != nil {
+			row = append(row, docButton("gj-doclist-folder-download", tr("docs.download", "Download"), busy, actOne(p.Pending, p.DownloadFolder, id)))
+		}
 		if p.DeleteFolder != nil {
 			row = append(row, docButton("gj-doclist-folder-delete", tr("docs.deleteFolder", "Delete folder"), busy,
 				confirmed(p.Confirm, trf("docs.confirmDeleteFolder", "Delete the folder %s? It has to be empty.", f.Name), actOne(p.Pending, p.DeleteFolder, id))))
@@ -662,4 +682,46 @@ func moveSelect(p DocListProps, d Doc, busy bool) xango.Node {
 		}))
 	}
 	return xango.El("select", attrs, opts...)
+}
+
+// linkButton is the Link button of a row: it copies the address of the item.
+func linkButton(p DocListProps, link func(id string) string, id string) []xango.Node {
+	if link == nil || p.CopyLink == nil {
+		return nil
+	}
+	url := link(id)
+	if url == "" {
+		return nil
+	}
+	return []xango.Node{xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-doclist-link"),
+		xango.A("data-url", url), xango.A("title", url), xango.On("click", func(xango.Event) { p.CopyLink(url) })},
+		xango.Text(tr("docs.link", "Link")))}
+}
+
+// downloadControl is a document's Download: one button, or a "Download as…" menu
+// of the formats offered.
+func downloadControl(p DocListProps, d Doc, busy bool) []xango.Node {
+	if p.Download == nil {
+		return nil
+	}
+	id := d.ID
+	if len(p.DownloadFormats) == 0 {
+		return []xango.Node{docButton("gj-doclist-download", tr("docs.download", "Download"), busy,
+			func() { p.Pending.Run(func(ctx context.Context) error { return p.Download(ctx, id, "") }) })}
+	}
+	opts := []xango.Node{xango.El("option", []xango.Attr{xango.A("value", "-"), xango.A("selected", "selected")}, xango.Text(tr("docs.downloadAs", "Download as…")))}
+	for _, f := range p.DownloadFormats {
+		opts = append(opts, xango.El("option", []xango.Attr{xango.A("value", "format:"+f.Name)}, xango.Text(f.Label)))
+	}
+	attrs := []xango.Attr{xango.A("class", "gj-doclist-download"), xango.A("aria-label", trf("docs.downloadOf", "Download %s as", d.Name))}
+	if busy {
+		attrs = append(attrs, xango.A("disabled", "disabled"))
+	} else {
+		attrs = append(attrs, xango.On("change", func(e xango.Event) {
+			if format, ok := strings.CutPrefix(xango.EventValue[string](e), "format:"); ok {
+				p.Pending.Run(func(ctx context.Context) error { return p.Download(ctx, id, format) })
+			}
+		}))
+	}
+	return []xango.Node{xango.El("select", attrs, opts...)}
 }

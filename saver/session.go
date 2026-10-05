@@ -43,6 +43,20 @@ type Session struct {
 	// Asker asks before documents are deleted for good; the Saver form shows its
 	// dialog. Set Asker.Title and the labels to change its words.
 	Asker *components.Asker
+	// Deliver hands a file to the person (in a browser: transfer.Download); nil
+	// leaves the Download controls out.
+	Deliver func(file, mime string, data []byte)
+	// Export turns a document into a file in a format (transfer.Registry.Export
+	// fits, with the registry's name for the format); nil makes Download send
+	// the document as saved. DownloadFormats lists the formats offered, in the
+	// order given: a name and the label shown.
+	Export          func(format string, doc docfile.Document) (file string, data []byte, mime string, err error)
+	DownloadFormats []components.SaverChoice
+	// Link gives the address of a document ("document") or folder ("folder") by
+	// ID; nil leaves the Link controls out. Copy puts a link where it can be
+	// pasted (the clipboard); without it the link is shown in the status line.
+	Link func(kind, id string) string
+	Copy func(text string)
 
 	op                   sync.Mutex // one saving, opening or deleting at a time
 	mu                   sync.Mutex
@@ -543,6 +557,14 @@ func (s *Session) Docs() components.DocListProps {
 	}
 	p.OpenFolder, p.NewFolder, p.RenameFolder, p.DeleteFolder, p.Move = s.OpenFolder, s.NewFolder, s.RenameFolder, s.DeleteFolder, s.MoveDocs
 	p.FolderDraft, p.OnFolderDraft = s.folderDraft, s.SetFolderDraft
+	if s.Deliver != nil {
+		p.Download, p.DownloadFolder, p.DownloadFormats = s.Download, s.DownloadFolder, s.downloadChoices()
+	}
+	if s.Link != nil {
+		p.Link = func(id string) string { return s.Link("document", id) }
+		p.FolderLink = func(id string) string { return s.Link("folder", id) }
+		p.CopyLink = s.CopyLink
+	}
 	return p
 }
 
@@ -613,4 +635,73 @@ func (s *Session) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return fmt.Sprintf("saver session: %s as %s", s.target, s.format)
+}
+
+// Download hands a saved document over as a file: in the format, or as saved when
+// format is "" or the session has no Export.
+func (s *Session) Download(ctx context.Context, id, format string) error {
+	if s.Deliver == nil {
+		return errors.New("saver: nowhere to deliver files")
+	}
+	doc, err := s.Saver.Load(ctx, s.targetName(), id)
+	if err != nil {
+		return err
+	}
+	if format == "" || s.Export == nil {
+		e, err := s.Saver.Get(ctx, s.targetName(), id)
+		if err != nil {
+			return err
+		}
+		c := e.Format
+		if c == nil {
+			c = docfile.JSON
+		}
+		data, err := c.Marshal(doc)
+		if err != nil {
+			return err
+		}
+		s.Deliver(safeName(doc.Name())+c.Ext(), "application/octet-stream", data)
+	} else {
+		file, data, mime, err := s.Export(format, doc)
+		if err != nil {
+			return err
+		}
+		s.Deliver(file, mime, data)
+	}
+	s.say(msg("saver.downloaded", "%s downloaded", doc.Name()))
+	return nil
+}
+
+// DownloadFolder hands over a ZIP of a folder's documents ("" for all of them).
+func (s *Session) DownloadFolder(ctx context.Context, id string) error {
+	if s.Deliver == nil {
+		return errors.New("saver: nowhere to deliver files")
+	}
+	data, name, err := s.Saver.Archive(ctx, s.targetName(), id)
+	if err != nil {
+		return err
+	}
+	s.Deliver(safeName(name)+".zip", "application/zip", data)
+	s.say(msg("saver.downloaded", "%s downloaded", name))
+	return nil
+}
+
+// CopyLink copies the link to a document or folder and says so.
+func (s *Session) CopyLink(url string) {
+	if s.Copy != nil {
+		s.Copy(url)
+		s.say(msg("saver.linkCopied", "Link copied: %s", url))
+		return
+	}
+	s.say(url)
+}
+
+func (s *Session) downloadChoices() []components.DocChoice {
+	var out []components.DocChoice
+	if s.Export != nil {
+		for _, c := range s.DownloadFormats {
+			out = append(out, components.DocChoice(c))
+		}
+	}
+	return out
 }
