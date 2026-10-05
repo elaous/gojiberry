@@ -258,3 +258,77 @@ func TestSessionPlugsIntoTheDocumentComponents(t *testing.T) {
 	}
 	var _ components.TrashBackend = s
 }
+
+func TestSessionFoldersAndBreadcrumb(t *testing.T) {
+	ctx := context.Background()
+	s, _, _ := newSession(t)
+	s.SetName("plan")
+	if err := s.Save(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rootDoc := s.ID()
+	docs := s.Docs()
+	if len(docs.Docs) != 1 || len(docs.Path) != 0 || docs.OpenFolder == nil {
+		t.Fatalf("%+v", docs)
+	}
+	// Make Work, go in; a document saved there is in it, and the root list no longer shows it.
+	if err := docs.NewFolder(ctx, "Work"); err != nil {
+		t.Fatal(err)
+	}
+	work := s.Docs().Folders[0]
+	if err := s.Docs().OpenFolder(ctx, work.ID); err != nil {
+		t.Fatal(err)
+	}
+	s.Detach()
+	s.SetName("inside")
+	if err := s.Save(ctx); err != nil {
+		t.Fatal(err)
+	}
+	inside := s.ID()
+	d := s.Docs()
+	if len(d.Docs) != 1 || d.Docs[0].ID != inside || len(d.Path) != 1 || d.Path[0].ID != work.ID {
+		t.Fatalf("in Work: %+v", d)
+	}
+	if err := d.NewFolder(ctx, "2026"); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Docs(); len(got.Folders) != 1 || got.Folders[0].Name != "2026" || len(got.AllFolders) != 2 {
+		t.Fatalf("%+v", got)
+	}
+	// Move the root document in; opening a document goes to its folder.
+	if err := s.Docs().Move(ctx, []string{rootDoc}, work.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Docs(); len(got.Docs) != 2 {
+		t.Fatalf("after the move: %+v", got.Docs)
+	}
+	if err := s.OpenFolder(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Open(ctx, inside); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Docs(); len(got.Path) != 1 || got.Path[0].ID != work.ID {
+		t.Errorf("opening a document should show its folder: %+v", got.Path)
+	}
+	// A folder with documents cannot be deleted; an empty one can, and the view moves up.
+	if err := s.Docs().DeleteFolder(ctx, work.ID); err == nil {
+		t.Error("deleted a folder with documents")
+	}
+	sub := s.Docs().Folders[0]
+	_ = s.OpenFolder(ctx, sub.ID)
+	if err := s.Docs().DeleteFolder(ctx, sub.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Docs(); len(got.Path) != 1 || got.Path[0].ID != work.ID || len(got.Folders) != 0 {
+		t.Errorf("after deleting the folder being shown: %+v", got)
+	}
+	if err := s.OpenFolder(ctx, docfile.NewID()); err == nil {
+		t.Error("opened a folder that is not there")
+	}
+	// Changing target starts at the top.
+	_ = s.SetTarget(ctx, "memory")
+	if got := s.Docs(); len(got.Path) != 0 || len(got.Folders) != 0 {
+		t.Errorf("%+v", got)
+	}
+}

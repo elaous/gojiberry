@@ -20,6 +20,10 @@ import (
 // (Saver.Rebuild).
 const CatalogKey = "catalog:index"
 
+// FolderRecordPrefix starts the key each folder is also written under
+// (catalog:folder/<id>), so a rebuild finds folders that hold no document.
+const FolderRecordPrefix = "catalog:folder/"
+
 type catalogEntry struct {
 	Key     string   `json:"key"`
 	Name    string   `json:"name"`
@@ -28,16 +32,23 @@ type catalogEntry struct {
 	Updated int64    `json:"updated,omitempty"`
 	Tags    []string `json:"tags,omitempty"`
 	Trashed int64    `json:"trashed,omitempty"`
+	Folder  string   `json:"folder,omitempty"` // the folder it is in; "" at the top level
+}
+
+type folderEntry struct {
+	Name   string `json:"name"`
+	Parent string `json:"parent,omitempty"`
 }
 
 type catalog struct {
-	Docs map[string]catalogEntry `json:"docs"`
+	Docs    map[string]catalogEntry `json:"docs"`
+	Folders map[string]folderEntry  `json:"folders,omitempty"`
 }
 
 func (c *catalog) entry(s *Saver, id string) Entry {
 	e := c.Docs[id]
 	codec, _ := s.Codec(e.Format)
-	out := Entry{ID: id, Key: e.Key, Name: e.Name, Format: codec, Size: e.Size, Updated: time.Unix(0, e.Updated), Tags: e.Tags}
+	out := Entry{ID: id, Key: e.Key, Name: e.Name, Format: codec, Size: e.Size, Updated: time.Unix(0, e.Updated), Tags: e.Tags, Folder: e.Folder}
 	if e.Trashed != 0 {
 		out.Trashed = time.Unix(0, e.Trashed)
 	}
@@ -57,6 +68,9 @@ func (s *Saver) readCatalog(ctx context.Context, t Target) (*catalog, error) {
 	var c catalog
 	if err := json.Unmarshal(stored.Data, &c); err != nil || c.Docs == nil {
 		return s.rebuild(ctx, t)
+	}
+	if c.Folders == nil {
+		c.Folders = map[string]folderEntry{}
 	}
 	return &c, nil
 }
@@ -132,8 +146,17 @@ func (s *Saver) rebuild(ctx context.Context, t Target) (*catalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := &catalog{Docs: map[string]catalogEntry{}}
+	out := &catalog{Docs: map[string]catalogEntry{}, Folders: map[string]folderEntry{}}
 	for _, m := range metas {
+		if id, ok := strings.CutPrefix(m.ID, FolderRecordPrefix); ok && docfile.ValidID(id) {
+			if stored, err := t.Adapter.Load(ctx, m.ID); err == nil {
+				var f folderEntry
+				if json.Unmarshal(stored.Data, &f) == nil && f.Name != "" {
+					out.Folders[id] = f
+				}
+			}
+			continue
+		}
 		if strings.HasPrefix(m.ID, FontPrefix) || reserved(m.ID) {
 			continue
 		}
@@ -180,13 +203,16 @@ func (s *Saver) rebuild(ctx context.Context, t Target) (*catalog, error) {
 		if prev, ok := out.Docs[id]; ok && prev.Updated >= m.UpdatedAt.UnixNano() {
 			continue
 		}
-		out.Docs[id] = catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: size, Updated: m.UpdatedAt.UnixNano(), Tags: doc.Tags(), Trashed: doc.Trashed()}
+		out.Docs[id] = catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: size, Updated: m.UpdatedAt.UnixNano(), Tags: doc.Tags(), Trashed: doc.Trashed(), Folder: doc.Folder()}
 	}
 	for id, e := range out.Docs {
 		if e.Name == "" {
 			e.Name = id
-			out.Docs[id] = e
 		}
+		if _, ok := out.Folders[e.Folder]; e.Folder != "" && !ok {
+			e.Folder = "" // its folder is gone: the top level
+		}
+		out.Docs[id] = e
 	}
 	if err := s.writeCatalog(ctx, t, out); err != nil {
 		return nil, err

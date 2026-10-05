@@ -135,6 +135,16 @@
   "docs.confirmForever": "%s endgültig löschen? Das lässt sich nicht rückgängig machen.",
   "docs.confirmForeverN": "%d Dokumente endgültig löschen? Das lässt sich nicht rückgängig machen.",
   "docs.confirmEmpty": "Alle %d Dokumente im Papierkorb endgültig löschen? Das lässt sich nicht rückgängig machen.",
-  "people.confirmRemove": "Zugriff von %s entfernen?"
+  "people.confirmRemove": "Zugriff von %s entfernen?",
+  "docs.allDocuments": "Alle Dokumente",
+  "docs.openFolder": "Öffnen",
+  "docs.renameFolder": "Name des Ordners %s",
+  "docs.deleteFolder": "Ordner löschen",
+  "docs.confirmDeleteFolder": "Ordner %s löschen? Er muss leer sein.",
+  "docs.newFolderPlaceholder": "Neuer Ordner",
+  "docs.newFolder": "Neuer Ordner",
+  "docs.createFolder": "Ordner anlegen",
+  "docs.moveTo": "Verschieben nach…",
+  "docs.moveOf": "%s in einen Ordner verschieben"
  }
 }

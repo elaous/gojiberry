@@ -24,3 +24,7 @@
 .gj-people-invite-form { margin-top: 0.4em; }
 .gj-people-invite-id { flex: 1; min-width: 8em; }
 .gj-people button:disabled { opacity: 0.5; cursor: default; }
+.gj-doclist .gj-breadcrumbs { margin: 0.2em 0; font-size: 0.9em; }
+.gj-doclist-folder { display: flex; align-items: center; gap: 0.5em; padding: 0.25em 0; border-bottom: 1px solid var(--gj-border); flex-wrap: wrap; }
+.gj-doclist-folder-name, .gj-doclist-newfolder-name, .gj-doclist-move { padding: 0.25em 0.4em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); font: inherit; font-size: 0.85em; }
+.gj-doclist-newfolder-name { flex: 1; min-width: 8em; }

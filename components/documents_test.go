@@ -131,3 +131,57 @@ func TestVersionsListsAndSaves(t *testing.T) {
 		t.Errorf("log %v", log)
 	}
 }
+
+func TestDocListShowsFoldersBreadcrumbAndMoves(t *testing.T) {
+	var log []string
+	p := &Pending{Inline: true}
+	props := DocListProps{
+		Pending:    p,
+		Docs:       []Doc{{ID: "d1", Name: "plan"}},
+		Folders:    []DocFolder{{ID: "f2", Name: "2026", Parent: "f1"}},
+		Path:       []DocFolder{{ID: "f1", Name: "Work"}},
+		AllFolders: []DocFolder{{ID: "f1", Name: "Work"}, {ID: "f2", Name: "2026", Parent: "f1"}},
+		OpenFolder: func(_ context.Context, id string) error { log = append(log, "open:"+id); return nil },
+		NewFolder:  func(_ context.Context, name string) error { log = append(log, "new:"+name); return nil },
+		RenameFolder: func(_ context.Context, id, name string) error {
+			log = append(log, "rename:"+id+":"+name)
+			return nil
+		},
+		DeleteFolder: func(_ context.Context, id string) error { log = append(log, "delete:"+id); return nil },
+		Move: func(_ context.Context, ids []string, folder string) error {
+			log = append(log, "move:"+strings.Join(ids, ",")+":"+folder)
+			return nil
+		},
+		FolderDraft:   "Ideas",
+		OnFolderDraft: func(s string) { log = append(log, "draft:"+s) },
+	}
+	n := DocList(props)
+	html := render(t, n)
+	mustContain(t, html, "gj-breadcrumbs", "All documents", `aria-current="page"`, ">Work<", "📁 2026", `data-id="f2"`,
+		"Work / 2026", "Move to…", "gj-doclist-newfolder", `value="Ideas"`)
+	for _, h := range findHandlers(n, "click") {
+		h(xango.Event{})
+	}
+	for _, h := range findHandlers(n, "change") {
+		h(xango.Event{Value: "folder:f1"})
+	}
+	findHandlers(n, "input")[0](xango.Event{Value: "typed"})
+	got := strings.Join(log, " ")
+	for _, want := range []string{"open:", "open:f2", "new:Ideas", "delete:f2", "move:d1:f1", "rename:f2:folder:f1", "draft:typed"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %s", want, got)
+		}
+	}
+	// The top-level move option and a placeholder that does nothing.
+	log = nil
+	for _, h := range findHandlers(n, "change") {
+		h(xango.Event{Value: "top"})
+		h(xango.Event{Value: "-"})
+	}
+	if !strings.Contains(strings.Join(log, " "), "move:d1:") || strings.Count(strings.Join(log, " "), "move:") != 1 {
+		t.Errorf("top / placeholder: %v", log)
+	}
+	// With none of it plugged in there is no breadcrumb, folder or move control.
+	bare := render(t, DocList(DocListProps{Docs: props.Docs}))
+	mustNotContain(t, bare, "gj-breadcrumbs", "gj-doclist-folder", "gj-doclist-move", "gj-doclist-newfolder")
+}

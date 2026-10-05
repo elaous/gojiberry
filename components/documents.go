@@ -37,6 +37,10 @@ type Doc struct {
 	Tags    []string
 }
 
+// DocFolder is a folder as the components list it: like a document, an ID and a
+// name that need not be unique; Parent is the folder it is in, "" at the top.
+type DocFolder struct{ ID, Name, Parent string }
+
 // DocVersion is a snapshot of a document.
 type DocVersion struct {
 	Key  string // what the version operations take
@@ -202,6 +206,23 @@ type DocListProps struct {
 	Pending *Pending
 	// Confirm, if set, is asked before Delete (see Asker.Ask); nil deletes at once.
 	Confirm func(message string, do func())
+
+	// Folders are the folders inside the one being shown, and Path the folders from
+	// the top down to it (empty at the top level), drawn as a breadcrumb.
+	// AllFolders, with their Parents, are where a document can be moved to.
+	Folders, Path, AllFolders []DocFolder
+	// OpenFolder goes into a folder ("" is the top level, the breadcrumb's first
+	// item); NewFolder makes one in the folder shown, named by FolderDraft (typed
+	// into a box that reports to OnFolderDraft); RenameFolder and DeleteFolder
+	// (which asks first) and Move (documents to a folder, "" the top level)
+	// complete it. A nil operation leaves its control out.
+	OpenFolder    DocAction
+	NewFolder     func(ctx context.Context, name string) error
+	FolderDraft   string
+	OnFolderDraft func(name string)
+	RenameFolder  func(ctx context.Context, id, name string) error
+	DeleteFolder  DocAction
+	Move          func(ctx context.Context, ids []string, folder string) error
 }
 
 // DocList lists documents, each with the operations the host plugs in: Open,
@@ -217,6 +238,12 @@ func DocList(p DocListProps) xango.Node {
 		head = append(head, docButton("gj-doclist-refresh", tr("docs.refresh", "Refresh"), busy, p.Refresh))
 	}
 	children := []xango.Node{xango.El("div", []xango.Attr{xango.A("class", "gj-doc-head")}, head...)}
+	if crumbs, ok := docBreadcrumbs(p); ok {
+		children = append(children, crumbs)
+	}
+	if len(p.Folders) > 0 || p.NewFolder != nil {
+		children = append(children, folderRows(p, busy)...)
+	}
 
 	var tags []string
 	for _, d := range p.Docs {
@@ -251,6 +278,9 @@ func DocList(p DocListProps) xango.Node {
 		if p.Delete != nil {
 			row = append(row, docButton("gj-doclist-delete", tr("docs.delete", "Delete"), busy,
 				confirmed(p.Confirm, trf("docs.confirmDelete", "Delete %s for good? This cannot be undone.", d.Name), actOne(p.Pending, p.Delete, d.ID))))
+		}
+		if p.Move != nil && len(p.AllFolders) > 0 || p.Move != nil && len(p.Path) > 0 {
+			row = append(row, moveSelect(p, d, busy))
 		}
 		if p.Tag != nil {
 			id := d.ID
@@ -513,4 +543,114 @@ func byteSize(n int) string {
 		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
 	}
 	return fmt.Sprintf("%d B", n)
+}
+
+// docBreadcrumbs is the trail from the top level to the folder being shown; not
+// there when folders are not in use.
+func docBreadcrumbs(p DocListProps) (xango.Node, bool) {
+	if p.OpenFolder == nil && len(p.Path) == 0 {
+		return xango.Node{}, false
+	}
+	item := func(label, id string, last bool) BreadcrumbItem {
+		it := BreadcrumbItem{Label: label}
+		if !last && p.OpenFolder != nil {
+			it.Href = "#" + id
+			it.OnClick = func(e xango.Event) {
+				e.PreventDefault()
+				p.Pending.Run(func(ctx context.Context) error { return p.OpenFolder(ctx, id) })
+			}
+		}
+		return it
+	}
+	items := []BreadcrumbItem{item(tr("docs.allDocuments", "All documents"), "", len(p.Path) == 0)}
+	for i, f := range p.Path {
+		items = append(items, item(f.Name, f.ID, i == len(p.Path)-1))
+	}
+	return Breadcrumbs(BreadcrumbsProps{Items: items}), true
+}
+
+// folderRows are the folders in the one shown, each to open, rename or delete,
+// and the form for a new one.
+func folderRows(p DocListProps, busy bool) []xango.Node {
+	var rows []xango.Node
+	for _, f := range p.Folders {
+		id := f.ID
+		row := []xango.Node{xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text("📁 "+f.Name))}
+		if p.OpenFolder != nil {
+			row = append(row, docButton("gj-doclist-folder-open", tr("docs.openFolder", "Open"), busy, actOne(p.Pending, p.OpenFolder, id)))
+		}
+		if p.RenameFolder != nil {
+			row = append(row, xango.El("input", []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-doclist-folder-name"),
+				xango.A("aria-label", trf("docs.renameFolder", "Name of folder %s", f.Name)), xango.A("value", f.Name),
+				xango.On("change", func(ev xango.Event) {
+					name := xango.EventValue[string](ev)
+					p.Pending.Run(func(ctx context.Context) error { return p.RenameFolder(ctx, id, name) })
+				})}))
+		}
+		if p.DeleteFolder != nil {
+			row = append(row, docButton("gj-doclist-folder-delete", tr("docs.deleteFolder", "Delete folder"), busy,
+				confirmed(p.Confirm, trf("docs.confirmDeleteFolder", "Delete the folder %s? It has to be empty.", f.Name), actOne(p.Pending, p.DeleteFolder, id))))
+		}
+		rows = append(rows, xango.El("li", []xango.Attr{xango.A("class", "gj-doclist-folder"), xango.A("data-id", id)}, row...))
+	}
+	var out []xango.Node
+	if len(rows) > 0 {
+		out = append(out, xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list gj-doclist-folders")}, rows...))
+	}
+	if p.NewFolder != nil {
+		draft := strings.TrimSpace(p.FolderDraft)
+		input := []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-doclist-newfolder-name"), xango.A("value", p.FolderDraft),
+			xango.A("placeholder", tr("docs.newFolderPlaceholder", "New folder")), xango.A("aria-label", tr("docs.newFolder", "New folder"))}
+		if p.OnFolderDraft != nil {
+			input = append(input, xango.On("input", func(e xango.Event) { p.OnFolderDraft(xango.EventValue[string](e)) }))
+		}
+		out = append(out, xango.El("div", []xango.Attr{xango.A("class", "gj-doc-head gj-doclist-newfolder-form")},
+			xango.El("input", input),
+			docButton("gj-doclist-newfolder", tr("docs.createFolder", "Create folder"), busy || draft == "", func() {
+				p.Pending.Run(func(ctx context.Context) error { return p.NewFolder(ctx, draft) })
+			})))
+	}
+	return out
+}
+
+// moveSelect is the "Move to…" menu of one document.
+func moveSelect(p DocListProps, d Doc, busy bool) xango.Node {
+	byID := map[string]DocFolder{}
+	for _, f := range p.AllFolders {
+		byID[f.ID] = f
+	}
+	label := func(f DocFolder) string {
+		name := f.Name
+		for n, parent := 0, f.Parent; parent != "" && n < 20; n++ {
+			up, ok := byID[parent]
+			if !ok {
+				break
+			}
+			name = up.Name + " / " + name
+			parent = up.Parent
+		}
+		return name
+	}
+	opts := []xango.Node{
+		xango.El("option", []xango.Attr{xango.A("value", "-"), xango.A("selected", "selected")}, xango.Text(tr("docs.moveTo", "Move to…"))),
+		xango.El("option", []xango.Attr{xango.A("value", "top")}, xango.Text(tr("docs.allDocuments", "All documents"))),
+	}
+	for _, f := range p.AllFolders {
+		opts = append(opts, xango.El("option", []xango.Attr{xango.A("value", "folder:"+f.ID)}, xango.Text(label(f))))
+	}
+	id := d.ID
+	attrs := []xango.Attr{xango.A("class", "gj-doclist-move"), xango.A("aria-label", trf("docs.moveOf", "Move %s to a folder", d.Name))}
+	if busy {
+		attrs = append(attrs, xango.A("disabled", "disabled"))
+	} else {
+		attrs = append(attrs, xango.On("change", func(e xango.Event) {
+			v := xango.EventValue[string](e)
+			folder, ok := strings.CutPrefix(v, "folder:")
+			if v == "-" || (!ok && v != "top") {
+				return
+			}
+			p.Pending.Run(func(ctx context.Context) error { return p.Move(ctx, []string{id}, folder) })
+		}))
+	}
+	return xango.El("select", attrs, opts...)
 }

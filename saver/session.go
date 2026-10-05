@@ -49,6 +49,9 @@ type Session struct {
 	target, format, name string
 	id                   string // the saved document being edited, "" for one never saved
 	entries              []Entry
+	folder               string   // the folder being shown, "" at the top level
+	folders              []Folder // every folder
+	folderDraft          string
 	versions             []Version
 	trashed              []Entry
 	selected             []string
@@ -100,7 +103,10 @@ func (s *Session) targetName() string {
 // SetTarget chooses the target and lists what is saved in it. The document being
 // edited is not in the new target, so it is saved there as a new document.
 func (s *Session) SetTarget(ctx context.Context, name string) error {
-	s.set(func() { s.target, s.entries, s.trashed, s.versions, s.status, s.id = name, nil, nil, nil, "", "" })
+	s.set(func() {
+		s.target, s.entries, s.trashed, s.versions, s.status, s.id = name, nil, nil, nil, "", ""
+		s.folder, s.folders = "", nil
+	})
 	return s.Refresh(ctx)
 }
 
@@ -134,7 +140,7 @@ func (s *Session) Detach() { s.set(func() { s.id = "" }) }
 // the versions of the document being edited.
 func (s *Session) Refresh(ctx context.Context) error {
 	target, id := s.targetName(), s.ID()
-	list, trashed, err := s.Saver.Lists(ctx, target) // one read: a document is in one list
+	list, trashed, folders, err := s.Saver.Overview(ctx, target) // one read: a document is in one list
 	var versions []Version
 	if err == nil && id != "" {
 		versions, _ = s.Saver.Versions(ctx, target, id)
@@ -148,7 +154,10 @@ func (s *Session) Refresh(ctx context.Context) error {
 		if s.target != target {
 			return
 		}
-		s.entries, s.trashed, s.versions = list, trashed, versions
+		s.entries, s.trashed, s.versions, s.folders = list, trashed, versions, folders
+		if s.folder != "" && !slices.ContainsFunc(folders, func(f Folder) bool { return f.ID == s.folder }) {
+			s.folder = "" // the folder was deleted from elsewhere
+		}
 		s.selected = slices.DeleteFunc(s.selected, func(id string) bool {
 			return !slices.ContainsFunc(trashed, func(e Entry) bool { return e.ID == id })
 		})
@@ -187,7 +196,7 @@ func (s *Session) current() (docfile.Document, docfile.Codec, error) {
 // currentIn is current and the target it is for, read together.
 func (s *Session) currentIn() (docfile.Document, docfile.Codec, string, error) {
 	s.mu.Lock()
-	format, name, id, target := s.format, s.name, s.id, s.target
+	format, name, id, target, folder := s.format, s.name, s.id, s.target, s.folder
 	s.mu.Unlock()
 	c, err := s.Saver.Codec(format)
 	if err != nil {
@@ -201,6 +210,8 @@ func (s *Session) currentIn() (docfile.Document, docfile.Codec, string, error) {
 	doc.SetName(name)
 	if id != "" {
 		doc.SetID(id)
+	} else {
+		doc.SetFolder(folder) // a new document goes in the folder being shown
 	}
 	return doc, c, target, nil
 }
@@ -254,7 +265,7 @@ func (s *Session) Open(ctx context.Context, id string) error {
 		return err
 	}
 	s.set(func() {
-		s.id, s.name = id, e.Name
+		s.id, s.name, s.folder = id, e.Name, e.Folder // show where it is
 		if e.Format != nil {
 			s.format = e.Format.Name()
 		}
@@ -367,6 +378,68 @@ func (s *Session) SetTags(ctx context.Context, id string, tags []string) error {
 // SetTagFilter narrows the list to the documents with the tag ("" for all).
 func (s *Session) SetTagFilter(tag string) { s.set(func() { s.tagFilter = tag }) }
 
+// OpenFolder shows a folder ("" for the top level); a new document is saved in it.
+func (s *Session) OpenFolder(ctx context.Context, id string) error {
+	s.mu.Lock()
+	known := id == "" || slices.ContainsFunc(s.folders, func(f Folder) bool { return f.ID == id })
+	s.mu.Unlock()
+	if !known {
+		return ErrFolder
+	}
+	s.set(func() { s.folder = id })
+	return nil
+}
+
+// NewFolder makes a folder in the one being shown.
+func (s *Session) NewFolder(ctx context.Context, name string) error {
+	s.mu.Lock()
+	parent := s.folder
+	s.mu.Unlock()
+	if _, err := s.Saver.CreateFolder(ctx, s.targetName(), parent, name); err != nil {
+		return err
+	}
+	s.set(func() { s.folderDraft = "" })
+	return s.after(ctx, "Made the folder "+name)
+}
+
+// RenameFolder renames a folder.
+func (s *Session) RenameFolder(ctx context.Context, id, name string) error {
+	if err := s.Saver.RenameFolder(ctx, s.targetName(), id, name); err != nil {
+		return err
+	}
+	return s.after(ctx, "Renamed the folder")
+}
+
+// DeleteFolder removes an empty folder; if it is the one being shown, the one
+// above it is shown instead.
+func (s *Session) DeleteFolder(ctx context.Context, id string) error {
+	if err := s.Saver.DeleteFolder(ctx, s.targetName(), id); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	if s.folder == id {
+		s.folder = ""
+		for _, f := range s.folders {
+			if f.ID == id {
+				s.folder = f.Parent
+			}
+		}
+	}
+	s.mu.Unlock()
+	return s.after(ctx, "Deleted the folder")
+}
+
+// MoveDocs puts documents in a folder ("" for the top level).
+func (s *Session) MoveDocs(ctx context.Context, ids []string, folder string) error {
+	if err := s.Saver.Move(ctx, s.targetName(), folder, ids...); err != nil {
+		return err
+	}
+	return s.after(ctx, fmt.Sprintf("Moved %d", len(ids)))
+}
+
+// SetFolderDraft keeps what is typed in the new-folder box.
+func (s *Session) SetFolderDraft(name string) { s.set(func() { s.folderDraft = name }) }
+
 func docOf(e Entry) components.Doc {
 	d := components.Doc{ID: e.ID, Name: e.Name, Size: e.Size, Updated: e.Updated, Trashed: e.Trashed, Tags: e.Tags}
 	if e.Format != nil {
@@ -391,8 +464,21 @@ func (s *Session) Docs() components.DocListProps {
 		Confirm:   s.Asker.Ask,
 	}
 	for _, e := range s.entries {
-		p.Docs = append(p.Docs, docOf(e))
+		if e.Folder == s.folder { // the folder being shown
+			p.Docs = append(p.Docs, docOf(e))
+		}
 	}
+	for _, f := range s.folders {
+		p.AllFolders = append(p.AllFolders, components.DocFolder{ID: f.ID, Name: f.Name, Parent: f.Parent})
+		if f.Parent == s.folder {
+			p.Folders = append(p.Folders, components.DocFolder{ID: f.ID, Name: f.Name, Parent: f.Parent})
+		}
+	}
+	for _, f := range FolderPath(s.folders, s.folder) {
+		p.Path = append(p.Path, components.DocFolder{ID: f.ID, Name: f.Name, Parent: f.Parent})
+	}
+	p.OpenFolder, p.NewFolder, p.RenameFolder, p.DeleteFolder, p.Move = s.OpenFolder, s.NewFolder, s.RenameFolder, s.DeleteFolder, s.MoveDocs
+	p.FolderDraft, p.OnFolderDraft = s.folderDraft, s.SetFolderDraft
 	return p
 }
 

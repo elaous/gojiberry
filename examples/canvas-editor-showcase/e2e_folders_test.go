@@ -1,0 +1,65 @@
+//go:build !(js && wasm)
+
+package main
+
+import (
+	"testing"
+
+	"github.com/elaous/gojiberry/internal/e2etest"
+)
+
+// TestFoldersAndBreadcrumb drives folders in the Save tab: a folder is made and
+// opened, the breadcrumb shows where you are and takes you back, a document saved
+// there is in it, another can be moved in, and a folder with something in it
+// cannot be deleted.
+func TestFoldersAndBreadcrumb(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "")
+	confirm := func() { d.Click(`[role="alertdialog"] .gj-dialog-actions button:last-child`) }
+	d.Click(`button[data-tab="save"]`)
+	d.Select(`.gj-saver-select[data-field="Save to"]`, "memory")
+	d.Fill(".gj-saver-name", "top doc")
+	d.Click(".gj-saver-save")
+	d.WaitFor("the saved document", "document.querySelectorAll('.gj-doclist-item').length === 1")
+
+	d.Fill(".gj-doclist-newfolder-name", "Work")
+	d.WaitFor("the create button", `!document.querySelector('.gj-doclist-newfolder').disabled`)
+	d.Click(".gj-doclist-newfolder")
+	d.WaitFor("the folder", "document.querySelectorAll('.gj-doclist-folder').length === 1")
+	d.OK(d.Count(".gj-doclist-item") == 1, "the top level shows its document and the new folder")
+	d.OK(d.Text(".gj-doclist-folder .gj-doc-name") == "📁 Work", "the folder is listed")
+
+	d.Click(".gj-doclist-folder .gj-doclist-folder-open")
+	d.WaitFor("the folder to open", `document.querySelector('.gj-breadcrumb-current') && document.querySelector('.gj-breadcrumb-current').textContent === 'Work'`)
+	d.OK(d.Count(".gj-doclist-item") == 0, "the folder is empty: the top-level document is not shown in it")
+	d.OK(d.Text(".gj-breadcrumb-link") == "All documents", "the breadcrumb leads back to the top")
+
+	// A document saved here belongs here.
+	d.Fill(".gj-saver-name", "inside")
+	d.Click(".gj-saver-save-new")
+	d.WaitFor("the document in the folder", "document.querySelectorAll('.gj-doclist-item').length === 1")
+	d.OK(d.Text(".gj-doclist-item .gj-doc-name") == "inside", "a document saved in a folder is in it")
+	d.Fill(".gj-doclist-newfolder-name", "2026")
+	d.WaitFor("the create button", `!document.querySelector('.gj-doclist-newfolder').disabled`)
+	d.Click(".gj-doclist-newfolder")
+	d.WaitFor("the subfolder", "document.querySelectorAll('.gj-doclist-folder').length === 1")
+
+	// Back to the top, and the other document moves in from there.
+	d.Click(".gj-breadcrumb-link")
+	d.WaitFor("the top level", "!document.querySelector('.gj-breadcrumb-link')")
+	d.OK(d.Count(".gj-doclist-item") == 1 && d.Text(".gj-doclist-item .gj-doc-name") == "top doc", "the top level has its own document")
+	d.Select(".gj-doclist-item .gj-doclist-move", "folder:"+d.Attr(".gj-doclist-folder", "data-id"))
+	d.WaitFor("the move", "document.querySelectorAll('.gj-doclist-item').length === 0")
+	d.OK(true, "a document can be moved into a folder")
+
+	// A folder with something in it cannot be deleted; the error shows.
+	d.Click(".gj-doclist-folder .gj-doclist-folder-delete")
+	confirm()
+	d.WaitSelector(".gj-doc-error")
+	d.OK(d.Count(".gj-doclist-folder") == 1, "a folder with documents in it stays: "+d.Text(".gj-doc-error"))
+
+	// Opening a document in a folder shows its folder.
+	d.Click(".gj-doclist-folder .gj-doclist-folder-open")
+	d.WaitFor("the folder", `document.querySelector('.gj-breadcrumb-current')`)
+	d.OK(d.Count(".gj-doclist-item") == 2, "both documents are in Work now")
+	d.NoErrors()
+}
