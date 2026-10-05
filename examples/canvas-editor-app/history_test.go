@@ -97,3 +97,62 @@ func TestCutIsOneUndoStep(t *testing.T) {
 		t.Errorf("%q", d.String())
 	}
 }
+
+func TestCutDeletesOnlyTheSelections(t *testing.T) {
+	var d document
+	typeText(&d, "foo bar x")
+	// One cursor selects "foo", another is a bare caret after "x": only "foo" was copied.
+	d.setCursors([]cursor{{Pos: 3, Anchor: 0}, {Pos: 9, Anchor: 9}})
+	if d.selectedText() != "foo" {
+		t.Fatal(d.selectedText())
+	}
+	d.cutSelections()
+	if d.String() != " bar x" {
+		t.Fatalf("the bare caret must not delete the x: %q", d.String())
+	}
+	d.Undo()
+	if d.String() != "foo bar x" {
+		t.Errorf("one undo step: %q", d.String())
+	}
+}
+
+func TestMovingTheCaretEndsTheTypingStep(t *testing.T) {
+	var d document
+	typeText(&d, "ab")
+	d.resetCursorTo(0)
+	d.resetCursorTo(2) // away and back to where typing left off
+	typeText(&d, "cd")
+	if !d.Undo() || d.String() != "ab" {
+		t.Fatalf("moving the caret splits the steps: %q", d.String())
+	}
+	if !d.Undo() || d.String() != "" {
+		t.Fatalf("%q", d.String())
+	}
+}
+
+func TestTheHistoryHasABudget(t *testing.T) {
+	var d document
+	d.insert(string(make([]rune, 1000)))
+	for i := 0; i < 500; i++ { // each Backspace is a step holding a copy of the document
+		d.backspace()
+	}
+	if len(d.hist.undo) > maxUndo {
+		t.Errorf("%d steps", len(d.hist.undo))
+	}
+	total := 0
+	for _, s := range d.hist.undo {
+		total += len(s.chars)
+	}
+	if total > maxUndoChars+1000 {
+		t.Errorf("%d characters held", total)
+	}
+	// A large document gets fewer steps.
+	var big document
+	big.insert(string(make([]rune, 400_000)))
+	for i := 0; i < 20; i++ {
+		big.backspace()
+	}
+	if len(big.hist.undo) > maxUndoChars/400_000+1 {
+		t.Errorf("%d steps of a 400,000-character document", len(big.hist.undo))
+	}
+}

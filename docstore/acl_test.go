@@ -671,3 +671,48 @@ func TestRequireACLGivesEachPersonTheirOwnCatalog(t *testing.T) {
 		t.Errorf("Bo's listing: %s", l)
 	}
 }
+
+// The keys that look like someone's catalog but are not under their prefix are refused,
+// in any case, and a catalog key is not reachable through the ACL routes either.
+func TestCatalogKeyTricksAreRefused(t *testing.T) {
+	provider := newFakeOIDCProvider(t)
+	srv := newTestServerWithAuth(t, provider.srv.URL).WithRequireACL(true)
+	h := srv.Handler()
+	ana := sessionTokenFor(t, h, provider, "ana@example.com", "ana")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	withBearer(req, ana)
+	u, _ := srv.auth.CurrentUser(req)
+	mine := UserCatalogPrefix(u.ID)
+	do := func(method, path, token string) int {
+		r := httptest.NewRequest(method, path, strings.NewReader("x"))
+		if token != "" {
+			withBearer(r, token)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		return rec.Code
+	}
+	esc := func(key string) string { return "/docs/" + url.PathEscape(key) }
+	if do(http.MethodPut, esc(mine+"index"), ana) != http.StatusNoContent {
+		t.Fatal("my own catalog works")
+	}
+	for name, key := range map[string]string{
+		"no trailing slash":  strings.TrimSuffix(mine, "/") + "index",
+		"a longer hash":      strings.TrimSuffix(mine, "/") + "0/index",
+		"upper case":         strings.ToUpper(mine) + "index",
+		"capitalised":        "Catalog:index",
+		"the shared catalog": "catalog:index",
+		"a folder record":    "catalog:folder/" + "00000000-0000-4000-8000-000000000000",
+	} {
+		if c := do(http.MethodPut, esc(key), ana); c != http.StatusForbidden {
+			t.Errorf("%s: %q got %d", name, key, c)
+		}
+	}
+	// The ACL route of a catalog key does not give anything either: it can only create an
+	// unrelated acl: record, and access to a catalog key is decided by checkCatalog.
+	other := UserCatalogPrefix("someone:else") + "index"
+	do(http.MethodPut, esc(other)+"/acl", ana)
+	if c := do(http.MethodGet, esc(other), ana); c != http.StatusForbidden {
+		t.Errorf("another person's catalog after touching its ACL route: %d", c)
+	}
+}

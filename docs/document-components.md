@@ -149,16 +149,19 @@ is right for a store of one person and wrong for many. Folder records live next 
 catalog. **The server enforces it:** with `RequireACL`, a signed-in person may read and
 write only the keys under `docstore.UserCatalogPrefix(their ID)`, the shared
 `catalog:index` is closed, and a listing shows each person only their own catalog, so
-access lists and catalogs work together. A server that lists only what the caller may
+access lists and catalogs work together. **This changes a setup that ran RequireACL
+with the shared `catalog:index`: its saves now get 403. Give each person their own
+`Target.CatalogKey` (above).** A server that lists only what the caller may
 read also makes a new catalog start with just those documents.
 
 ## Damaged files in the trash
 
-A document in the trash whose file is missing or damaged cannot be opened or moved, and
-used to stop its folder from being deleted. Deleting the folder now removes such
-documents (and their versions) and the status line says which ("Old deleted (2
-unreadable documents in the trash were removed: a, b)"). Only a missing or damaged file
-counts; any other store error still stops the operation.
+A document in the trash whose file is missing used to stop its folder from being deleted.
+Deleting the folder now removes such documents (and their versions) and the status line
+says which ("Old deleted (2 documents in the trash whose files were gone were removed: a,
+b)"). A file that is there but does not parse is not destroyed (a newer version of the
+library may read it): that document goes to the top level of the trash, untouched. Any
+other store error still stops the operation.
 
 ## Two processes on one store
 

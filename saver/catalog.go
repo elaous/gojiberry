@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -387,12 +386,17 @@ func (s *Saver) prepareTouch(ctx context.Context, t Target, id string, e *catalo
 	if c == nil {
 		return func() error { return nil }, nil
 	}
-	doc, _, err := s.tryRead(ctx, t, e.Key, e.Sum)
+	doc, _, fromPrev, err := s.readEntry(ctx, t, *e)
 	if err != nil {
-		if missingOrDamaged(err) {
-			return nil, fmt.Errorf("%w: %w", ErrUnreadable, err)
-		}
-		return nil, err
+		return nil, err // wraps ErrUnreadable when no copy is good
+	}
+	if fromPrev {
+		// The current file is bad; the previous copy stands in, and the new file
+		// replaces the bad one.
+		bad := e.Key
+		e.Key, e.Sum = e.Prev, e.PrevSum
+		e.Prev, e.PrevSum = "", ""
+		*later = append(*later, func() { _ = t.Adapter.Delete(ctx, bad) })
 	}
 	f(&doc)
 	data, err := c.Marshal(doc)

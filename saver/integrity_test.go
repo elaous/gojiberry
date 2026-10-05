@@ -305,3 +305,31 @@ func TestTheCatalogIsUpdatedWhileHoldingTheStoresLock(t *testing.T) {
 		t.Errorf("locks=%d catalog writes without the lock=%d still held=%v", l.locks, l.badWrites, l.held)
 	}
 }
+
+// Deleting a folder does not remove a trashed document whose current file is bad but
+// whose previous copy is good: it is restored from that copy and moved out of the folder.
+func TestDeleteFolderKeepsATrashedDocumentWithAGoodPreviousCopy(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	f, _ := s.CreateFolder(ctx, "m", "", "Old")
+	d := docWithText("plan", "kept")
+	d.SetFolder(f.ID)
+	e, err := s.Save(ctx, "m", docfile.JSON, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Trash(ctx, "m", e.ID); err != nil {
+		t.Fatal(err)
+	}
+	cur, _ := s.Get(ctx, "m", e.ID)
+	_ = mem.Save(ctx, cur.Key, []byte("{ not json"))
+	purged, err := s.DeleteFolderReport(ctx, "m", f.ID)
+	if err != nil || len(purged) != 0 {
+		t.Fatalf("nothing is removed: %v, %v", purged, err)
+	}
+	got, err := s.Load(ctx, "m", e.ID)
+	if err != nil || textOf(got) != "kept" {
+		t.Fatalf("the previous copy stands in: %q, %v", textOf(got), err)
+	}
+}

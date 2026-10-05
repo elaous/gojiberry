@@ -7,8 +7,13 @@ import (
 	"github.com/elaous/gojiberry/buffer"
 )
 
-// maxUndo is how many steps the history keeps.
-const maxUndo = 200
+// maxUndo is how many steps the history keeps, and maxUndoChars how many characters
+// all the snapshots together may hold (a step is a copy of the document, so a large
+// document gets fewer steps than a small one).
+const (
+	maxUndo      = 200
+	maxUndoChars = 2_000_000
+)
 
 // snapshot is the document as it was: its characters (with their formats) and its
 // cursors. A whole copy per step is simple and right for this editor's size; a
@@ -50,10 +55,24 @@ func (d *document) edit(op func()) {
 		return
 	}
 	d.hist.undo = append(d.hist.undo, before)
-	if len(d.hist.undo) > maxUndo {
-		d.hist.undo = d.hist.undo[len(d.hist.undo)-maxUndo:]
-	}
 	d.hist.redo = nil
+	d.trimHistory()
+}
+
+// trimHistory drops the oldest steps while there are too many or they hold too much.
+func (d *document) trimHistory() {
+	total := 0
+	for _, s := range d.hist.undo {
+		total += len(s.chars)
+	}
+	drop := 0
+	for drop < len(d.hist.undo)-1 && (len(d.hist.undo)-drop > maxUndo || total > maxUndoChars) {
+		total -= len(d.hist.undo[drop].chars)
+		drop++
+	}
+	if drop > 0 {
+		d.hist.undo = append([]snapshot(nil), d.hist.undo[drop:]...)
+	}
 }
 
 func sameSnapshot(a, b snapshot) bool {
