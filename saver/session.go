@@ -56,6 +56,7 @@ type Session struct {
 	trashed              []Entry
 	selected             []string
 	tagFilter            string
+	usage                Usage
 	checked              map[string]bool // targets already checked for leftovers of a crash
 	status               string
 }
@@ -106,7 +107,7 @@ func (s *Session) targetName() string {
 func (s *Session) SetTarget(ctx context.Context, name string) error {
 	s.set(func() {
 		s.target, s.entries, s.trashed, s.versions, s.status, s.id = name, nil, nil, nil, "", ""
-		s.folder, s.folders = "", nil
+		s.folder, s.folders, s.usage = "", nil, Usage{}
 	})
 	return s.Refresh(ctx)
 }
@@ -153,6 +154,7 @@ func (s *Session) Refresh(ctx context.Context) error {
 		// (see Saver.Repair) are put right before the lists are read.
 		_, _ = s.Saver.Repair(ctx, target)
 	}
+	usage, usageErr := s.Saver.Usage(ctx, target)
 	list, trashed, folders, err := s.Saver.Overview(ctx, target) // one read: a document is in one list
 	var versions []Version
 	if err == nil && id != "" {
@@ -168,6 +170,9 @@ func (s *Session) Refresh(ctx context.Context) error {
 			return
 		}
 		s.entries, s.trashed, s.versions, s.folders = list, trashed, versions, folders
+		if usageErr == nil {
+			s.usage = usage
+		}
 		if s.folder != "" && !slices.ContainsFunc(folders, func(f Folder) bool { return f.ID == s.folder }) {
 			s.folder = "" // the folder was deleted from elsewhere
 		}
@@ -590,6 +595,7 @@ func (s *Session) Props() components.SaverProps {
 	if err := s.Pending.Err(); err != nil {
 		p.Status, p.Failed = err.Error(), true
 	}
+	p.Capacity = &components.CapacityProps{Used: s.usage.Used, Total: s.usage.Total, ShowCounts: true, Documents: s.usage.Documents, Trashed: s.usage.Trashed}
 	for _, t := range s.Saver.Targets {
 		label := t.Label
 		if label == "" {

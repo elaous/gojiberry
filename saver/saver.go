@@ -29,6 +29,10 @@ type Target struct {
 	// Name identifies the target ("postgres"); Label is what a menu shows.
 	Name, Label string
 	Adapter     docstore.Adapter
+	// Capacity is the space allocated to the store in bytes, for Usage to measure
+	// against; 0 means the adapter's own answer if it gives one (a local disk does,
+	// a database or bucket does not).
+	Capacity int64
 }
 
 // Saver writes documents to its targets.

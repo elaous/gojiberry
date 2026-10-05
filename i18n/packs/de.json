@@ -160,6 +160,14 @@
   "saver.created": "%s erstellt",
   "saver.tagged": "Tags von %s aktualisiert",
   "saver.renamed": "%s umbenannt",
-  "saver.moved": "%s verschoben"
+  "saver.moved": "%s verschoben",
+  "capacity.storage": "Speicher",
+  "capacity.valuetext": "%.0f%% belegt",
+  "capacity.used": "%s von %s belegt",
+  "capacity.left": "%s frei",
+  "capacity.usedOnly": "%s belegt",
+  "capacity.unknown": "zugewiesener Platz unbekannt",
+  "capacity.documents": "%d Dokumente",
+  "capacity.trashed": "%d im Papierkorb"
  }
 }

@@ -38,6 +38,8 @@ type SaverProps struct {
 	// Asker, if set, is where Docs, Trash and People ask before destructive
 	// actions (give them its Ask as Confirm); the form draws its dialog.
 	Asker *Asker
+	// Capacity, if set, shows how full the target is.
+	Capacity *CapacityProps
 }
 
 // Saver renders the save form: pick a target and a format, name the
@@ -96,6 +98,9 @@ func Saver(props SaverProps) xango.Node {
 		children = append(children, xango.El("div", []xango.Attr{xango.A("class", class), xango.A("role", "status")}, xango.Text(props.Status)))
 	}
 
+	if props.Capacity != nil {
+		children = append(children, Capacity(*props.Capacity))
+	}
 	children = append(children, DocList(props.Docs))
 	if props.Versions.Name != "" {
 		children = append(children, Versions(props.Versions))

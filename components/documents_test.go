@@ -186,3 +186,15 @@ func TestDocListShowsFoldersBreadcrumbAndMoves(t *testing.T) {
 	bare := render(t, DocList(DocListProps{Docs: props.Docs}))
 	mustNotContain(t, bare, "gj-breadcrumbs", "gj-doclist-folder", "gj-doclist-move", "gj-doclist-newfolder")
 }
+
+func TestCapacityShowsPercentUsedAndLeft(t *testing.T) {
+	html := render(t, Capacity(CapacityProps{Used: 25 << 20, Total: 100 << 20, ShowCounts: true, Documents: 3, Trashed: 1}))
+	mustContain(t, html, `role="meter"`, `aria-valuenow="25"`, ">25%<", "25.0 MB of 100.0 MB used", "75.0 MB left", "width:25.0%", "3 documents", "1 in the trash")
+	mustNotContain(t, html, "gj-capacity-high", "gj-capacity-over")
+	mustContain(t, render(t, Capacity(CapacityProps{Used: 95, Total: 100})), "gj-capacity-high", "5 B left")
+	over := render(t, Capacity(CapacityProps{Used: 150, Total: 100}))
+	mustContain(t, over, "gj-capacity-over", "width:100.0%", "0 B left", ">150%<")
+	unknown := render(t, Capacity(CapacityProps{Used: 2048, Label: "Disk"}))
+	mustContain(t, unknown, "2.0 KB used", "allocated space not known", "Disk")
+	mustNotContain(t, unknown, `role="meter"`, "documents")
+}

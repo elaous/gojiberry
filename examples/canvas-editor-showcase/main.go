@@ -181,8 +181,8 @@ func main() {
 		return d
 	}
 	u.saver = saver.NewSession(&saver.Saver{Targets: []saver.Target{
-		{Name: "browser", Label: "This browser (localStorage)", Adapter: docstore.NewBrowserAdapter("showcase:")},
-		{Name: "memory", Label: "Memory", Adapter: store},
+		{Name: "browser", Label: "This browser (localStorage)", Adapter: docstore.NewBrowserAdapter("showcase:"), Capacity: 5 << 20},
+		{Name: "memory", Label: "Memory", Adapter: store, Capacity: 16 << 20},
 	}}, currentDoc, openDoc)
 	u.saver.OnChange = func() { renderUI() }
 	u.people = newPeople("you@example.com", func() { renderUI() })

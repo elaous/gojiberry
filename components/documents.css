@@ -28,3 +28,12 @@
 .gj-doclist-folder { display: flex; align-items: center; gap: 0.5em; padding: 0.25em 0; border-bottom: 1px solid var(--gj-border); flex-wrap: wrap; }
 .gj-doclist-folder-name, .gj-doclist-newfolder-name, .gj-doclist-move { padding: 0.25em 0.4em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); font: inherit; font-size: 0.85em; }
 .gj-doclist-newfolder-name { flex: 1; min-width: 8em; }
+.gj-capacity { display: flex; flex-direction: column; gap: 0.25em; font-size: 0.85em; }
+.gj-capacity-head, .gj-capacity-text { display: flex; gap: 0.6em; align-items: baseline; flex-wrap: wrap; }
+.gj-capacity-label { font-size: 0.85em; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gj-muted); }
+.gj-capacity-meter { height: 0.6em; border-radius: 999px; background: var(--gj-bg-muted); overflow: hidden; }
+.gj-capacity-bar { height: 100%; background: var(--gj-accent); }
+.gj-capacity-high .gj-capacity-bar { background: #d97706; }
+.gj-capacity-over .gj-capacity-bar { background: var(--gj-danger, #c01c28); }
+.gj-capacity-percent { font-weight: 600; }
+.gj-capacity-left, .gj-capacity-unknown, .gj-capacity-counts { color: var(--gj-muted); }

@@ -160,6 +160,14 @@
   "saver.created": "%s créé",
   "saver.tagged": "Étiquettes de %s mises à jour",
   "saver.renamed": "%s renommé",
-  "saver.moved": "%s déplacé"
+  "saver.moved": "%s déplacé",
+  "capacity.storage": "Stockage",
+  "capacity.valuetext": "%.0f%% utilisé",
+  "capacity.used": "%s utilisés sur %s",
+  "capacity.left": "%s restants",
+  "capacity.usedOnly": "%s utilisés",
+  "capacity.unknown": "espace alloué inconnu",
+  "capacity.documents": "%d documents",
+  "capacity.trashed": "%d dans la corbeille"
  }
 }

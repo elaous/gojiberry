@@ -104,3 +104,12 @@ func TestDocumentLifecycle(t *testing.T) {
 	d.OK(d.Count(".gj-doclist-item") == 1, "Delete forever removes it for good")
 	d.NoErrors()
 }
+
+// TestCapacityMeter checks the Save tab shows how full the chosen store is.
+func TestCapacityMeter(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "")
+	d.Click(`button[data-tab="save"]`)
+	d.Select(`.gj-saver-select[data-field="Save to"]`, "memory")
+	d.WaitSelector(".gj-capacity")
+	d.OK(strings.Contains(d.Text(".gj-capacity"), "%"), "the meter shows a percentage: "+d.Text(".gj-capacity"))
+}
