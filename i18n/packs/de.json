@@ -168,6 +168,12 @@
   "capacity.usedOnly": "%s belegt",
   "capacity.unknown": "zugewiesener Platz unbekannt",
   "capacity.documents": "%d Dokumente",
-  "capacity.trashed": "%d im Papierkorb"
+  "capacity.trashed": "%d im Papierkorb",
+  "comments.title": "Kommentare",
+  "comments.none": "Keine Kommentare.",
+  "comments.open": "Offen",
+  "comments.resolved": "Gelöst",
+  "comments.all": "Alle",
+  "comments.filter": "Kommentare anzeigen"
  }
 }

@@ -168,6 +168,12 @@
   "capacity.usedOnly": "%s utilisés",
   "capacity.unknown": "espace alloué inconnu",
   "capacity.documents": "%d documents",
-  "capacity.trashed": "%d dans la corbeille"
+  "capacity.trashed": "%d dans la corbeille",
+  "comments.title": "Commentaires",
+  "comments.none": "Aucun commentaire.",
+  "comments.open": "Ouverts",
+  "comments.resolved": "Résolus",
+  "comments.all": "Tous",
+  "comments.filter": "Afficher les commentaires"
  }
 }

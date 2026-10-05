@@ -262,28 +262,36 @@ func CommentCard(props CommentCardProps) xango.Node {
 	return xango.El("div", attrs, kids...)
 }
 
+// Comment filters for CommentListProps.Filter.
+const (
+	CommentsOpen     = "open"
+	CommentsResolved = "resolved"
+	CommentsAll      = "all"
+)
+
 // CommentListProps configures CommentList.
 type CommentListProps struct {
 	Comments []canvas.Comment
 	// Excerpts maps a comment ID to the text it is on.
 	Excerpts map[string]string
-	// ShowResolved includes resolved comments (hidden by default).
-	ShowResolved bool
-	Selected     string
-	CanEdit      bool
-	CanReply     bool
-	Drafts       map[string]string
+	// Filter is CommentsOpen (the default when empty), CommentsResolved or CommentsAll.
+	Filter   string
+	Selected string
+	CanEdit  bool
+	CanReply bool
+	Drafts   map[string]string
 
-	OnSelect             func(id string)
-	OnResolve            func(id string)
-	OnDelete             func(id string)
-	OnReplyDraft         func(id, text string)
-	OnReply              func(id, text string)
-	OnToggleShowResolved func(show bool)
+	OnSelect     func(id string)
+	OnResolve    func(id string)
+	OnDelete     func(id string)
+	OnReplyDraft func(id, text string)
+	OnReply      func(id, text string)
+	// OnFilter is called with the filter the person picked; nil hides the choice.
+	OnFilter func(filter string)
 }
 
-// CommentList renders the comments as cards, open ones first, with a
-// switch for the resolved ones.
+// CommentList renders the comments as cards, filtered by status (open,
+// resolved or all) with a count on each choice.
 func CommentList(props CommentListProps) xango.Node {
 	var open, done []canvas.Comment
 	for _, c := range props.Comments {
@@ -293,9 +301,15 @@ func CommentList(props CommentListProps) xango.Node {
 			open = append(open, c)
 		}
 	}
-	list := open
-	if props.ShowResolved {
-		list = append(list, done...)
+	filter := props.Filter
+	var list []canvas.Comment
+	switch filter {
+	case CommentsResolved:
+		list = done
+	case CommentsAll:
+		list = append(append(list, open...), done...)
+	default:
+		filter, list = CommentsOpen, open
 	}
 	var cards []xango.Node
 	for _, c := range list {
@@ -307,20 +321,30 @@ func CommentList(props CommentListProps) xango.Node {
 		}))
 	}
 	if len(cards) == 0 {
-		cards = append(cards, xango.El("p", []xango.Attr{xango.A("class", "gj-comment-empty")}, xango.Text("No comments.")))
+		cards = append(cards, xango.El("p", []xango.Attr{xango.A("class", "gj-comment-empty")}, xango.Text(tr("comments.none", "No comments."))))
 	}
-	toggle := []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-comment-toggle"), xango.A("aria-pressed", boolAttr(props.ShowResolved))}
-	if props.OnToggleShowResolved != nil {
-		show := !props.ShowResolved
-		toggle = append(toggle, xango.On("click", func(xango.Event) { props.OnToggleShowResolved(show) }))
-	}
-	label := "Show resolved"
-	if len(done) > 0 {
-		label += " (" + itoa(len(done)) + ")"
+	head := []xango.Node{xango.El("h4", []xango.Attr{xango.A("class", "gj-comments-title")}, xango.Text(tr("comments.title", "Comments")))}
+	if props.OnFilter != nil {
+		var choices []xango.Node
+		for _, f := range []struct {
+			id, key, def string
+			n            int
+		}{
+			{CommentsOpen, "comments.open", "Open", len(open)},
+			{CommentsResolved, "comments.resolved", "Resolved", len(done)},
+			{CommentsAll, "comments.all", "All", len(props.Comments)},
+		} {
+			id := f.id
+			choices = append(choices, xango.El("button", []xango.Attr{
+				xango.A("type", "button"), xango.A("class", "gj-comment-filter"), xango.A("data-filter", id),
+				xango.A("aria-pressed", boolAttr(id == filter)),
+				xango.On("click", func(xango.Event) { props.OnFilter(id) }),
+			}, xango.Text(tr(f.key, f.def)+" ("+itoa(f.n)+")")))
+		}
+		head = append(head, xango.El("div", []xango.Attr{xango.A("class", "gj-comment-filters"), xango.A("role", "group"),
+			xango.A("aria-label", tr("comments.filter", "Show comments"))}, choices...))
 	}
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-comments")},
-		xango.El("div", []xango.Attr{xango.A("class", "gj-comments-head")},
-			xango.El("h4", []xango.Attr{xango.A("class", "gj-comments-title")}, xango.Text("Comments")),
-			xango.El("button", toggle, xango.Text(label))),
+		xango.El("div", []xango.Attr{xango.A("class", "gj-comments-head")}, head...),
 		xango.El("div", []xango.Attr{xango.A("class", "gj-comments-list")}, cards...))
 }

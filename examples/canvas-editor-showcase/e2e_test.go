@@ -320,8 +320,8 @@ func TestEndToEnd(t *testing.T) {
 	ok(d.Text(".gj-comment-reply") == "you@example.com Agreed", "a reply is added")
 	d.Click(".gj-comment-resolve")
 	ok(d.Count(".gj-comment") == 0, "a resolved comment leaves the open list")
-	d.Click(".gj-comment-toggle")
-	ok(d.Count(".gj-comment-resolved") == 1, "and shows when asked")
+	d.Click(`.gj-comment-filter[data-filter="resolved"]`)
+	ok(d.Count(".gj-comment-resolved") == 1, "and shows under the Resolved filter")
 	d.Click(".gj-comment-delete")
 	ok(d.Is("s.comments === 0 && s.comment === null"), "Delete removes the comment and un-marks its text")
 
@@ -486,6 +486,7 @@ func TestEndToEnd(t *testing.T) {
 	d.Type("nope")
 	ok(S().Str("text") == typed, "typing changes nothing for a viewer")
 	d.Click(`button[data-tab="comments"]`)
+	d.Click(`.gj-comment-filter[data-filter="all"]`)
 	ok(d.Count(".gj-comment") == 1 && d.Count(".gj-comment-actions") == 0, "a viewer reads comments but has no controls")
 	d.Click(`button[data-role="editor"]`)
 	d.ToggleMode()

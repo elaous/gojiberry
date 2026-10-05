@@ -475,20 +475,24 @@ func TestCommentCardAndList(t *testing.T) {
 	mustNotContain(t, view, "Reply", "Delete")
 	mustContain(t, render(t, CommentCard(CommentCardProps{Comment: canvas.Comment{ID: "c3", Resolved: true}, CanEdit: true})), ">Reopen<", "disabled")
 
-	var shown []bool
+	var picked []string
 	list := CommentList(CommentListProps{
 		Comments: []canvas.Comment{c, {ID: "c2", Resolved: true, Text: "done"}}, Excerpts: map[string]string{"c1": "quoted"},
-		Selected: "c1", CanEdit: true, Drafts: map[string]string{"c1": "d"}, OnToggleShowResolved: func(b bool) { shown = append(shown, b) }})
+		Selected: "c1", CanEdit: true, Drafts: map[string]string{"c1": "d"}, OnFilter: func(f string) { picked = append(picked, f) }})
 	html := render(t, list)
-	mustContain(t, html, "Show resolved (1)", `aria-pressed="false"`, "quoted")
+	mustContain(t, html, "Open (1)", "Resolved (1)", "All (2)", `data-filter="open" aria-pressed="true"`, "quoted")
 	mustNotContain(t, html, `data-comment="c2"`)
-	findHandlers(list, "click")[0](xango.Event{})
-	if len(shown) != 1 || !shown[0] {
-		t.Fatal(shown)
+	findHandlers(list, "click")[1](xango.Event{})
+	if len(picked) != 1 || picked[0] != CommentsResolved {
+		t.Fatal(picked)
 	}
-	all := render(t, CommentList(CommentListProps{Comments: []canvas.Comment{c, {ID: "c2", Resolved: true}}, ShowResolved: true}))
-	mustContain(t, all, `data-comment="c2"`, `aria-pressed="true"`)
-	mustContain(t, render(t, CommentList(CommentListProps{})), "No comments.", "Show resolved<")
+	resolved := render(t, CommentList(CommentListProps{Comments: []canvas.Comment{c, {ID: "c2", Resolved: true}}, Filter: CommentsResolved, OnFilter: func(string) {}}))
+	mustContain(t, resolved, `data-comment="c2"`, `data-filter="resolved" aria-pressed="true"`)
+	mustNotContain(t, resolved, `data-comment="c1"`)
+	all := render(t, CommentList(CommentListProps{Comments: []canvas.Comment{c, {ID: "c2", Resolved: true}}, Filter: CommentsAll}))
+	mustContain(t, all, `data-comment="c1"`, `data-comment="c2"`)
+	mustNotContain(t, all, "gj-comment-filter")
+	mustContain(t, render(t, CommentList(CommentListProps{})), "No comments.")
 }
 
 func TestOutlineAndBookmarkComponents(t *testing.T) {

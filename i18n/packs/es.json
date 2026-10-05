@@ -168,6 +168,12 @@
   "capacity.usedOnly": "%s usados",
   "capacity.unknown": "espacio asignado desconocido",
   "capacity.documents": "%d documentos",
-  "capacity.trashed": "%d en la papelera"
+  "capacity.trashed": "%d en la papelera",
+  "comments.title": "Comentarios",
+  "comments.none": "Sin comentarios.",
+  "comments.open": "Abiertos",
+  "comments.resolved": "Resueltos",
+  "comments.all": "Todos",
+  "comments.filter": "Mostrar comentarios"
  }
 }

@@ -60,11 +60,11 @@ type ui struct {
 	recording canvas.Command
 	kbMessage string
 
-	hoverLink    string
-	hoverComment string
-	selComment   string
-	showResolved bool
-	drafts       map[string]string
+	hoverLink     string
+	hoverComment  string
+	selComment    string
+	commentFilter string
+	drafts        map[string]string
 
 	saver               *saver.Session
 	live                *collabxango.State // when the page was opened on a shared document (/d/{doc})
@@ -800,7 +800,7 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(c
 		}
 	}
 	return xango.Frag(add, xango.El("div", []xango.Attr{xango.A("style", "margin-top:0.8em")}, components.CommentList(components.CommentListProps{
-		Comments: set.List(), Excerpts: excerpts, ShowResolved: u.showResolved, Selected: u.selComment,
+		Comments: set.List(), Excerpts: excerpts, Filter: u.commentFilter, Selected: u.selComment,
 		CanEdit: state.Role.CanEdit(), CanReply: state.Role.CanComment(), Drafts: u.drafts,
 		OnSelect: func(id string) {
 			u.selComment = id
@@ -834,7 +834,7 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(c
 			touch()
 			renderUI()
 		},
-		OnToggleShowResolved: func(show bool) { u.showResolved = show; renderUI() },
+		OnFilter: func(f string) { u.commentFilter = f; renderUI() },
 	})))
 }
 
