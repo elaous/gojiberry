@@ -406,7 +406,7 @@ func (s *Session) Open(ctx context.Context, id string) error {
 	line := msg("saver.opened", "%s opened", e.Name)
 	if rec.FromPrevious {
 		// Say so: the text is an earlier save, and the person should know.
-		line = msg("saver.restored", "%s was damaged: opened the copy saved %s (it is now the saved one)", e.Name, rec.Saved.Format("2006-01-02 15:04"))
+		line = msg("saver.recovered", "%s was damaged: opened the copy saved %s (it is now the saved one)", e.Name, rec.Saved.Format("2006-01-02 15:04"))
 	}
 	return s.after(ctx, line) // the versions are those of the document just opened
 }

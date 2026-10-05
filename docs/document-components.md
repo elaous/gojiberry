@@ -193,6 +193,14 @@ copy, or negative for none; more than one is not stored. Local files are written
 `fsync` of the file and its directory, so a power cut does not leave a half-written file.
 Copy-on-write and checksums are in the data, so they work with every store.
 
+Limits: a save needs room for a whole new file while the old one is still kept, so in a
+browser's few megabytes the capacity for large documents is about halved. A rebuilt catalog
+(and `Verify` for entries from before checksums) seals whatever bytes are on disk, so a
+bit-flip that still parses is trusted from then on: the checksum protects what the catalog
+has seen. `Verify` checks current files, not previous copies, until one is needed. A
+rename, tag or trash rewrites the current file but keeps the earlier save as the previous
+copy (a document with only one save gets that file as its previous copy).
+
 `docstore.RequestPersistence` and `Persisted` ask the browser not to evict the storage.
 
 ## What a browser build links

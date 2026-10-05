@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docstore"
@@ -331,5 +332,140 @@ func TestDeleteFolderKeepsATrashedDocumentWithAGoodPreviousCopy(t *testing.T) {
 	got, err := s.Load(ctx, "m", e.ID)
 	if err != nil || textOf(got) != "kept" {
 		t.Fatalf("the previous copy stands in: %q, %v", textOf(got), err)
+	}
+	if ent, err := s.Get(ctx, "m", e.ID); err != nil || ent.Folder != "" {
+		t.Fatalf("it is out of the folder: %+v, %v", ent, err)
+	}
+}
+
+// A store whose modification times are coarse (every file the same): a rebuild still
+// picks the newest save as the current one, by the save time inside the file.
+type coarseTimes struct{ docstore.Adapter }
+
+func (c coarseTimes) List(ctx context.Context) ([]docstore.Meta, error) {
+	ms, err := c.Adapter.List(ctx)
+	for i := range ms {
+		ms[i].UpdatedAt = ms[i].UpdatedAt.Truncate(time.Hour)
+	}
+	return ms, err
+}
+
+func TestRebuildPicksTheNewestSaveWhenModificationTimesTie(t *testing.T) {
+	ctx := context.Background()
+	for range 10 { // the order of a listing is not fixed
+		s := &Saver{Targets: []Target{{Name: "m", Adapter: coarseTimes{docstore.NewMemoryAdapter()}}}}
+		id := twoSaves(t, s, docfile.JSON)
+		if err := s.Rebuild(ctx, "m"); err != nil {
+			t.Fatal(err)
+		}
+		d, err := s.Load(ctx, "m", id)
+		if err != nil || !strings.HasPrefix(textOf(d), "version two") {
+			t.Fatalf("after a rebuild: %q, %v", textOf(d), err)
+		}
+	}
+}
+
+// A conflicting catalog write makes the update start over; the file the failed try
+// wrote is removed, not left as an orphan.
+type conflictOnce struct {
+	docstore.Adapter
+	done bool
+}
+
+func (c *conflictOnce) SaveIf(ctx context.Context, id string, data []byte, prev string) error {
+	if strings.HasPrefix(id, CatalogKey) && !c.done {
+		c.done = true
+		return docstore.ErrConflict
+	}
+	return c.Adapter.(docstore.ConditionalAdapter).SaveIf(ctx, id, data, prev)
+}
+
+func TestARetriedSaveLeavesNoOrphanFile(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: &conflictOnce{Adapter: mem}}}}
+	e, err := s.Save(ctx, "m", docfile.JSON, docWithText("plan", "one"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	metas, _ := mem.List(ctx)
+	n := 0
+	for _, m := range metas {
+		if strings.HasPrefix(m.ID, e.ID) {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("%d files for one saved document", n)
+	}
+}
+
+// Renaming rewrites the file but does not use up the previous copy: it stays the
+// earlier save.
+func TestRenameKeepsThePreviousSave(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	id := twoSaves(t, s, docfile.JSON)
+	if err := s.Rename(ctx, "m", id, "renamed"); err != nil {
+		t.Fatal(err)
+	}
+	cur, _ := s.Get(ctx, "m", id)
+	_ = mem.Save(ctx, cur.Key, []byte("{ not json"))
+	d, rec, err := s.LoadChecked(ctx, "m", id)
+	if err != nil || !rec.FromPrevious || textOf(d) != "version one" || d.Name() != "renamed" {
+		t.Fatalf("%q %q %+v %v", textOf(d), d.Name(), rec, err)
+	}
+}
+
+// After a recovery the new current file carries the catalog's name, so a rebuilt
+// catalog keeps it.
+func TestRecoveredFileKeepsTheCatalogsMetadata(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	id := twoSaves(t, s, docfile.JSON)
+	if err := s.Rename(ctx, "m", id, "renamed"); err != nil {
+		t.Fatal(err)
+	}
+	cur, _ := s.Get(ctx, "m", id)
+	_ = mem.Save(ctx, cur.Key, []byte("{ not json"))
+	if _, _, err := s.LoadChecked(ctx, "m", id); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Rebuild(ctx, "m"); err != nil {
+		t.Fatal(err)
+	}
+	e, err := s.Get(ctx, "m", id)
+	if err != nil || e.Name != "renamed" {
+		t.Fatalf("%+v %v", e, err)
+	}
+}
+
+// A current file that is gone with a damaged previous copy is not "gone": deleting the
+// folder keeps the document.
+func TestDeleteFolderKeepsADocumentWithADamagedPreviousCopy(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	f, _ := s.CreateFolder(ctx, "m", "", "Old")
+	d := docWithText("plan", "x")
+	d.SetFolder(f.ID)
+	e, _ := s.Save(ctx, "m", docfile.JSON, d)
+	_ = s.Trash(ctx, "m", e.ID)
+	cur, _ := s.Get(ctx, "m", e.ID)
+	var prev string
+	_ = s.view(ctx, "m", func(_ Target, c *catalog) error { prev = c.Docs[e.ID].Prev; return nil })
+	_ = mem.Delete(ctx, cur.Key)
+	_ = mem.Save(ctx, prev, []byte("{ not json"))
+	purged, err := s.DeleteFolderReport(ctx, "m", f.ID)
+	if err != nil || len(purged) != 0 {
+		t.Fatalf("%v %v", purged, err)
+	}
+	if _, err := s.Get(ctx, "m", e.ID); err != nil {
+		t.Fatalf("the entry is kept: %v", err)
+	}
+	if _, err := mem.Load(ctx, prev); err != nil {
+		t.Fatalf("the damaged copy is left alone: %v", err)
 	}
 }

@@ -49,7 +49,8 @@ type Saver struct {
 	MaxVersions int
 	// PreviousCopies is how many earlier saves of each document are kept beside the
 	// current one, to fall back on if it is lost or damaged (see LoadChecked): 0 means
-	// DefaultPreviousCopies (1), negative means none. They take space, and Usage counts it.
+	// DefaultPreviousCopies (1), negative means none. Only one earlier save is kept: any
+	// positive value means that one. It takes space, and Usage counts it.
 	PreviousCopies int
 	// RepairGrace is how long Repair waits, when it finds the store and its catalog
 	// disagreeing, before looking again and repairing what is still wrong: another
@@ -188,6 +189,7 @@ func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc do
 		// A new file, never the one the catalog points at: the catalog switches to it once
 		// it is written, and the file it replaces stays as the previous copy.
 		key := genKey(id, c)
+		cat.fresh = append(cat.fresh, key)
 		if err := t.Adapter.Save(ctx, key, data); err != nil {
 			return err
 		}

@@ -43,6 +43,21 @@ func genKey(id string, c docfile.Codec) string {
 	return id + "~" + hex.EncodeToString(b[:]) + c.Ext()
 }
 
+// rotateTouch is rotate for a change of metadata only: the new file takes the place of
+// the current one. If the document has an earlier save as its previous copy, that stays
+// (the old current file is dropped, it only differs in metadata); if it has none, the
+// old file becomes the previous copy, so the rewrite is never the only copy.
+func (s *Saver) rotateTouch(ctx context.Context, t Target, e *catalogEntry, key string, data []byte, later *[]func()) {
+	if old := e.Key; old != "" {
+		if e.Prev == "" && s.previousCopies() > 0 {
+			e.Prev, e.PrevSum = old, e.Sum
+		} else {
+			*later = append(*later, func() { _ = t.Adapter.Delete(ctx, old) })
+		}
+	}
+	e.Key, e.Sum, e.Size = key, docstore.Digest(data), len(data)
+}
+
 // rotate makes data the current generation of the entry: it gets key as its file and
 // a checksum, the file that was current becomes the previous copy, and the copy
 // before that (and, with no previous copies kept, the old current one) is queued for
@@ -104,17 +119,26 @@ func (s *Saver) readEntry(ctx context.Context, t Target, e catalogEntry) (doc do
 	if !missingOrDamaged(err) {
 		return docfile.Document{}, nil, false, err
 	}
+	prevGone := true // no previous copy, or it is missing too
 	if e.Prev != "" {
-		if pdoc, pdata, perr := s.tryRead(ctx, t, e.Prev, e.PrevSum); perr == nil {
+		pdoc, pdata, perr := s.tryRead(ctx, t, e.Prev, e.PrevSum)
+		switch {
+		case perr == nil:
 			return pdoc, pdata, true, nil
-		} else if !missingOrDamaged(perr) {
+		case !missingOrDamaged(perr):
 			return docfile.Document{}, nil, false, perr
 		}
+		prevGone = errors.Is(perr, docstore.ErrNotFound)
+	}
+	// Gone for good only when every copy is missing; a damaged one is something to
+	// keep (callers that delete what is gone do not touch it).
+	if errors.Is(err, docstore.ErrNotFound) && prevGone {
+		return docfile.Document{}, nil, false, fmt.Errorf("%w: %w: %w", ErrUnreadable, ErrDamaged, err)
 	}
 	if errors.Is(err, ErrDamaged) {
 		return docfile.Document{}, nil, false, fmt.Errorf("%w: %w", ErrUnreadable, err)
 	}
-	return docfile.Document{}, nil, false, fmt.Errorf("%w: %w: %w", ErrUnreadable, ErrDamaged, err)
+	return docfile.Document{}, nil, false, fmt.Errorf("%w: %w: %v", ErrUnreadable, ErrDamaged, err)
 }
 
 // Recovery says a document had to be read from its previous copy.
@@ -132,51 +156,103 @@ type Recovery struct {
 // something good; the damaged file is deleted. When both are bad the error wraps
 // ErrUnreadable (and ErrDamaged for a damaged file).
 func (s *Saver) LoadChecked(ctx context.Context, target, id string) (docfile.Document, Recovery, error) {
-	var doc docfile.Document
 	var rec Recovery
-	var e catalogEntry
-	var t Target
-	err := s.view(ctx, target, func(tg Target, cat *catalog) error {
-		var ok bool
-		if e, ok = cat.Docs[id]; !ok {
-			return ErrNotFound
+	// The catalog is read under the lock and the files outside it. A save that lands in
+	// between replaces both files the snapshot names; a document that cannot be read
+	// through a snapshot that is no longer current is looked at again.
+	for try := 0; ; try++ {
+		var e catalogEntry
+		var t Target
+		err := s.view(ctx, target, func(tg Target, cat *catalog) error {
+			var ok bool
+			if e, ok = cat.Docs[id]; !ok {
+				return ErrNotFound
+			}
+			t = tg
+			return nil
+		})
+		if err != nil {
+			return docfile.Document{}, rec, err
 		}
-		t = tg
+		doc, _, fromPrev, err := s.readEntry(ctx, t, e)
+		if err != nil {
+			if try < 3 && errors.Is(err, ErrUnreadable) && s.changed(ctx, target, id, e) {
+				continue
+			}
+			return docfile.Document{}, rec, err
+		}
+		if fromPrev {
+			rec = Recovery{FromPrevious: true, Saved: time.Unix(0, doc.Updated)}
+			_ = s.promotePrevious(ctx, target, id, e, doc) // best effort: the document is readable either way
+		}
+		doc.SetID(id)
+		doc.SetName(e.Name)
+		doc.SetTags(e.Tags)
+		doc.SetFolder(e.Folder)
+		return doc, rec, nil
+	}
+}
+
+// changed says whether the document's entry is no longer the one e (or it is gone).
+func (s *Saver) changed(ctx context.Context, target, id string, e catalogEntry) bool {
+	same := false
+	err := s.view(ctx, target, func(_ Target, cat *catalog) error {
+		cur, ok := cat.Docs[id]
+		same = ok && cur.Key == e.Key && cur.Prev == e.Prev
 		return nil
 	})
-	if err != nil {
-		return doc, rec, err
+	return err == nil && !same
+}
+
+// promoteEntry makes doc (read from the entry's previous copy) the current file of the
+// entry: written as a new generation with the metadata the catalog has (the old file
+// holds the name, tags, folder and trash flag of its time), so that a catalog rebuilt
+// later from the files loses nothing. The bad file and the old previous copy are dropped.
+func (s *Saver) promoteEntry(ctx context.Context, t Target, cat *catalog, id string, e *catalogEntry, doc docfile.Document, later *[]func()) error {
+	c, _ := s.codecOf(e.Prev)
+	if c == nil {
+		c, _ = s.codecOf(e.Key)
 	}
-	doc, data, fromPrev, err := s.readEntry(ctx, t, e)
-	if err != nil {
-		return docfile.Document{}, rec, err
-	}
-	if fromPrev {
-		rec = Recovery{FromPrevious: true, Saved: time.Unix(0, doc.Updated)}
-		_ = s.promotePrevious(ctx, target, id, e.Key, e.Prev, data) // best effort: the document is readable either way
+	if c == nil {
+		return errors.New("saver: unknown format")
 	}
 	doc.SetID(id)
 	doc.SetName(e.Name)
 	doc.SetTags(e.Tags)
 	doc.SetFolder(e.Folder)
-	return doc, rec, nil
+	doc.SetTrashed(e.Trashed)
+	data, err := c.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	key := genKey(id, c)
+	cat.fresh = append(cat.fresh, key)
+	if err := t.Adapter.Save(ctx, key, data); err != nil {
+		return err
+	}
+	for _, k := range []string{e.Key, e.Prev} {
+		if k != "" {
+			k := k
+			*later = append(*later, func() { _ = t.Adapter.Delete(ctx, k) })
+		}
+	}
+	e.Key, e.Sum, e.Size = key, docstore.Digest(data), len(data)
+	e.Prev, e.PrevSum = "", ""
+	return nil
 }
 
 // promotePrevious makes the previous copy of a document the current one, if the entry is
 // still as it was when it was found damaged (somebody may have saved since).
-func (s *Saver) promotePrevious(ctx context.Context, target, id, damagedKey, prevKey string, prevData []byte) error {
+func (s *Saver) promotePrevious(ctx context.Context, target, id string, found catalogEntry, doc docfile.Document) error {
 	return s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		e, ok := cat.Docs[id]
-		if !ok || e.Key != damagedKey || e.Prev != prevKey {
+		if !ok || e.Key != found.Key || e.Prev != found.Prev {
 			return nil
 		}
-		e.Key, e.Sum, e.Size = e.Prev, e.PrevSum, len(prevData)
-		if e.Sum == "" {
-			e.Sum = docstore.Digest(prevData)
+		if err := s.promoteEntry(ctx, t, cat, id, &e, doc, later); err != nil {
+			return err
 		}
-		e.Prev, e.PrevSum = "", ""
 		cat.Docs[id] = e
-		*later = append(*later, func() { _ = t.Adapter.Delete(ctx, damagedKey) })
 		return nil
 	})
 }
@@ -223,6 +299,7 @@ func (s *Saver) Verify(ctx context.Context, target string) (VerifyReport, error)
 	sort.Slice(items, func(i, j int) bool { return items[i].id < items[j].id })
 	type fix struct {
 		item
+		doc      docfile.Document
 		data     []byte
 		fromPrev bool
 	}
@@ -231,14 +308,14 @@ func (s *Saver) Verify(ctx context.Context, target string) (VerifyReport, error)
 		if err := ctx.Err(); err != nil {
 			return rep, err
 		}
-		_, data, fromPrev, err := s.readEntry(ctx, t, it.e)
+		doc, data, fromPrev, err := s.readEntry(ctx, t, it.e)
 		rep.Checked++
 		switch {
 		case err == nil && fromPrev:
-			fixes = append(fixes, fix{it, data, true})
+			fixes = append(fixes, fix{it, doc, data, true})
 			rep.Restored = append(rep.Restored, it.e.Name)
 		case err == nil && it.e.Sum == "":
-			fixes = append(fixes, fix{it, data, false})
+			fixes = append(fixes, fix{it, doc, data, false})
 			rep.Sealed++
 		case err == nil:
 		case errors.Is(err, ErrUnreadable):
@@ -257,10 +334,9 @@ func (s *Saver) Verify(ctx context.Context, target string) (VerifyReport, error)
 				continue // saved or removed since: not this fix's to apply
 			}
 			if f.fromPrev {
-				damaged := e.Key
-				e.Key, e.Sum, e.Size = e.Prev, e.PrevSum, len(f.data)
-				e.Prev, e.PrevSum = "", ""
-				*later = append(*later, func() { _ = t.Adapter.Delete(ctx, damaged) })
+				if err := s.promoteEntry(ctx, t, cat, f.id, &e, f.doc, later); err != nil {
+					return err
+				}
 			}
 			if e.Sum == "" {
 				e.Sum = docstore.Digest(f.data)
