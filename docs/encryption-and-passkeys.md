@@ -107,15 +107,14 @@ key** that wraps a key pair or the data key, so:
      live collaboration for them (A.4).
    - The level is a field of the document's envelope and the catalog (`protection`:
      `server` or `e2ee`), not something inferred from the name.
-2. **The catalog stays readable, except for confidential items, decided by the level,
-   not by `[CONFIDENTIAL]` in the name.** A marker in a name defeats itself: the name is
-   in the catalog, so the server has already read it. Instead: when a document or
-   folder is made confidential, its real name, tags and folder names move inside the
-   envelope, and the catalog holds a placeholder ("Confidential document") that the
-   client replaces after decrypting. Sizes, times and the folder tree's shape stay
-   visible. Typing `[CONFIDENTIAL]` at the start of a name is kept as a **shortcut**:
-   the UI offers to switch the document to end to end and strips the marker from the
-   stored name.
+2. **The catalog stays readable, except for confidential items, and confidentiality is
+   a setting, never a word in a name.** A marker in a name defeats itself: the name is in
+   the catalog, so the server has already read it. A document or folder is made
+   confidential with the protection level (a switch in the UI and the `protection` field).
+   Doing so moves its real name, tags and folder names inside the envelope, and the
+   catalog holds a placeholder ("Confidential document") that the client replaces after
+   decrypting. Sizes, times and the folder tree's shape stay visible. There is no
+   `[CONFIDENTIAL]` shortcut: names are never interpreted.
 3. **A passkey is never the only way to unlock an end-to-end document.** Making one
    confidential requires a second recipient: a recovery key generated in the browser
    and shown once to download (or an SSH key). Exception: a document marked disposable
