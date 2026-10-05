@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docstore"
@@ -176,7 +177,7 @@ func TestMoveLeavesDocumentsAlreadyThereAlone(t *testing.T) {
 func TestRepairFindsWhatACrashLeftBehind(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
-	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}, RepairGrace: -1}
 	keep, _ := s.CreateFolder(ctx, "m", "", "Keep")
 	e, _ := s.Save(ctx, "m", docfile.JSON, named("a"))
 	if fixed, err := s.Repair(ctx, "m"); err != nil || fixed {
@@ -210,5 +211,53 @@ func TestRepairFindsWhatACrashLeftBehind(t *testing.T) {
 	_ = keep
 	if fixed, _ := s.Repair(ctx, "m"); fixed {
 		t.Error("repair is idempotent")
+	}
+}
+
+// A delete takes the document out of the catalog first and removes its file after.
+// A Repair that lists the store in between must not take the file for a document
+// nobody listed and bring it back.
+func TestRepairDoesNotResurrectADocumentBeingDeleted(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}, RepairGrace: 200 * time.Millisecond}
+	e, err := s.Save(ctx, "m", docfile.JSON, named("doomed"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The catalog no longer lists it; its file is still there (the first half of a delete).
+	c, _ := s.readCatalogForTest(ctx, "m")
+	delete(c.Docs, e.ID)
+	data, _ := json.Marshal(c)
+	_ = mem.Save(ctx, CatalogKey, data)
+	go func() { // the second half, a moment later
+		time.Sleep(50 * time.Millisecond)
+		_ = mem.Delete(ctx, e.Key)
+	}()
+	if repaired, err := s.Repair(ctx, "m"); err != nil || repaired {
+		t.Fatalf("repaired=%v err=%v: the delete was in flight", repaired, err)
+	}
+	if live, _, _ := s.Lists(ctx, "m"); len(live) != 0 {
+		t.Errorf("the deleted document came back: %+v", live)
+	}
+}
+
+// Files the last rebuild left out (unreadable ones) are not work for every Repair.
+func TestRepairLeavesWhatARebuildSkipped(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}, RepairGrace: -1}
+	if _, err := s.Save(ctx, "m", docfile.JSON, named("fine")); err != nil {
+		t.Fatal(err)
+	}
+	_ = mem.Save(ctx, docfile.NewID()+".json", []byte("not a document {"))
+	if repaired, err := s.Repair(ctx, "m"); err != nil || !repaired {
+		t.Fatalf("the unreadable file is found once: %v %v", repaired, err)
+	}
+	if repaired, err := s.Repair(ctx, "m"); err != nil || repaired {
+		t.Fatalf("and then left alone: %v %v", repaired, err)
+	}
+	if live, _, _ := s.Lists(ctx, "m"); len(live) != 1 {
+		t.Errorf("%+v", live)
 	}
 }

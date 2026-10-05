@@ -115,7 +115,17 @@ func (s *Session) Connect(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	s.set(func() { s.src, s.path, s.items, s.selected, s.report = src, nil, items, map[string]bool{}, nil })
+	var stale bool
+	s.set(func() {
+		if s.choice != choice { // the platform was changed while this was listing
+			stale = true
+			return
+		}
+		s.src, s.path, s.items, s.selected, s.report = src, nil, items, map[string]bool{}, nil
+	})
+	if stale {
+		return errors.New("migrate: the platform changed while connecting")
+	}
 	return nil
 }
 
@@ -152,7 +162,12 @@ func (s *Session) OpenFolder(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	s.set(func() { s.path, s.items, s.selected = path, items, map[string]bool{} })
+	s.set(func() {
+		if s.src != src { // reconnected or changed platform meanwhile: this listing is not of it
+			return
+		}
+		s.path, s.items, s.selected = path, items, map[string]bool{}
+	})
 	return nil
 }
 

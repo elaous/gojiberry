@@ -592,3 +592,23 @@ func TestACLRecognisesAPersonByAnyOfTheirIdentifiers(t *testing.T) {
 		t.Error("nobody has no role")
 	}
 }
+
+// A username is whatever the person picked at their identity provider, so it never
+// grants access: someone who calls themselves "ana@x.com" is not Ana.
+func TestUsernameNeverGrantsAccess(t *testing.T) {
+	acl := ACL{Owner: "ana@x.com", Grants: map[string]Role{"bob@x.com": RoleEditor, "bobby": RoleEditor}}
+	impostor := user.Person{ID: "weak-idp:7", Username: "ana@x.com"}
+	if r := acl.RoleOfPerson(impostor); r != "" || acl.canRead(impostor) || acl.owns(impostor) {
+		t.Errorf("an impostor with Ana's address as a username has role %q", r)
+	}
+	if r := acl.RoleOfPerson(user.Person{ID: "p:1", Username: "bobby"}); r != "" {
+		t.Errorf("a grant to a bare name is not matched by a username: %q", r)
+	}
+	// The ID and the verified e-mail still do.
+	if r := acl.RoleOfPerson(user.Person{ID: "p:2", Email: "Ana@X.com"}); r != user.Owner {
+		t.Errorf("owner by e-mail: %q", r)
+	}
+	if r := acl.RoleOfPerson(user.Person{ID: "bob@x.com"}); r != string(RoleEditor) {
+		t.Errorf("editor by ID: %q", r)
+	}
+}

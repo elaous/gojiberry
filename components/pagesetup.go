@@ -69,6 +69,9 @@ func (p PageSetup) Normalized() PageSetup {
 	p.Paper = p.paper().Name
 	w, h := p.Size()
 	for i, m := range p.Margins {
+		if math.IsNaN(m) || math.IsInf(m, 0) {
+			m = 0 // "NaN" and "Inf" parse as numbers
+		}
 		p.Margins[i] = math.Max(0, math.Round(m))
 	}
 	fit := func(a, b *float64, size float64) {

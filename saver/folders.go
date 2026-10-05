@@ -55,7 +55,7 @@ func (s *Saver) writeFolder(ctx context.Context, t Target, id string, f folderEn
 	if err != nil {
 		return err
 	}
-	return t.Adapter.Save(ctx, FolderRecordPrefix+id, data)
+	return t.Adapter.Save(ctx, t.folderPrefix()+id, data)
 }
 
 // CreateFolder makes a folder called name in parent ("" for the top level).
@@ -196,7 +196,7 @@ func (s *Saver) DeleteFolder(ctx context.Context, target, id string) error {
 			}
 		}
 		delete(cat.Folders, id)
-		*later = append(*later, func() { _ = t.Adapter.Delete(ctx, FolderRecordPrefix+id) })
+		*later = append(*later, func() { _ = t.Adapter.Delete(ctx, t.folderPrefix()+id) })
 		return nil
 	})
 }

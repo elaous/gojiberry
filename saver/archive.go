@@ -4,9 +4,12 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/elaous/gojiberry/docstore"
 )
 
 // Archive returns a ZIP of the documents in a folder and, below it, its
@@ -18,7 +21,13 @@ import (
 // for the archive: the folder's, or "documents" for the top level.
 func (s *Saver) Archive(ctx context.Context, target, folder string) (data []byte, name string, err error) {
 	name = "documents"
-	err = s.view(ctx, target, func(t Target, cat *catalog) error {
+	type item struct{ id, key, name, dir string }
+	var items []item
+	var t Target
+	// Read the catalog under the saver's lock, then let go of it: loading every document
+	// of a big folder must not hold up the other operations.
+	err = s.view(ctx, target, func(tg Target, cat *catalog) error {
+		t = tg
 		if folder != "" {
 			f, ok := cat.Folders[folder]
 			if !ok {
@@ -40,43 +49,46 @@ func (s *Saver) Archive(ctx context.Context, target, folder string) (data []byte
 			return path.Join(parts...)
 		}
 		root := dir(folder)
-		ids := make([]string, 0, len(cat.Docs))
 		for id, e := range cat.Docs {
 			if e.Trashed == 0 && (folder == "" || e.Folder == folder || cat.inside(e.Folder, folder)) {
-				ids = append(ids, id)
+				items = append(items, item{id, e.Key, e.Name, strings.TrimPrefix(strings.TrimPrefix(dir(e.Folder), root), "/")})
 			}
 		}
-		sort.Strings(ids)
-		var buf bytes.Buffer
-		zw := zip.NewWriter(&buf)
-		used := map[string]bool{}
-		for _, id := range ids {
-			e := cat.Docs[id]
-			stored, err := t.Adapter.Load(ctx, e.Key)
-			if err != nil {
-				return err
-			}
-			file := safeName(e.Name) + path.Ext(e.Key)
-			full := path.Join(strings.TrimPrefix(strings.TrimPrefix(dir(e.Folder), root), "/"), file)
-			if used[strings.ToLower(full)] {
-				full = path.Join(path.Dir(full), safeName(e.Name)+" ("+id[:8]+")"+path.Ext(e.Key))
-			}
-			used[strings.ToLower(full)] = true
-			w, err := zw.Create(full)
-			if err != nil {
-				return err
-			}
-			if _, err := w.Write(stored.Data); err != nil {
-				return err
-			}
-		}
-		if err := zw.Close(); err != nil {
-			return err
-		}
-		data = buf.Bytes()
 		return nil
 	})
-	return data, name, err
+	if err != nil {
+		return nil, name, err
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].id < items[j].id })
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	used := map[string]bool{}
+	for _, it := range items {
+		stored, err := t.Adapter.Load(ctx, it.key)
+		if errors.Is(err, docstore.ErrNotFound) {
+			continue // deleted since the catalog was read
+		}
+		if err != nil {
+			return nil, name, err
+		}
+		ext := path.Ext(it.key)
+		full := path.Join(it.dir, safeName(it.name)+ext)
+		if used[strings.ToLower(full)] {
+			full = path.Join(path.Dir(full), safeName(it.name)+" ("+it.id[:8]+")"+ext)
+		}
+		used[strings.ToLower(full)] = true
+		w, err := zw.Create(full)
+		if err != nil {
+			return nil, name, err
+		}
+		if _, err := w.Write(stored.Data); err != nil {
+			return nil, name, err
+		}
+	}
+	if err := zw.Close(); err != nil {
+		return nil, name, err
+	}
+	return buf.Bytes(), name, nil
 }
 
 // safeName is a name as one path element: no separators, nothing hidden.

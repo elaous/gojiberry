@@ -488,3 +488,30 @@ func TestSessionSaveState(t *testing.T) {
 		t.Errorf("%q", s.SaveState())
 	}
 }
+
+func TestSaveStateAfterTheOpenDocumentIsDeletedOrTrashed(t *testing.T) {
+	s, _, _ := newSession(t)
+	s.Props().OnName("one")
+	s.Props().OnSave()
+	id := s.Docs().Docs[0].ID
+	if s.SaveState() != SaveSaved {
+		t.Fatal(s.SaveState())
+	}
+	if err := s.TrashDocs(context.Background(), []string{id}); err != nil {
+		t.Fatal(err)
+	}
+	if s.SaveState() != SaveUnsaved {
+		t.Errorf("the open document went to the trash, so the editor's text is stored nowhere: %q", s.SaveState())
+	}
+	s.Props().OnSave() // a new document
+	id2 := s.Docs().Docs[0].ID
+	if s.SaveState() != SaveSaved {
+		t.Fatal(s.SaveState())
+	}
+	if err := s.Delete(context.Background(), id2); err != nil {
+		t.Fatal(err)
+	}
+	if s.SaveState() != SaveUnsaved {
+		t.Errorf("deleted: %q", s.SaveState())
+	}
+}

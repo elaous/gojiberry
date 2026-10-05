@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -63,6 +64,9 @@ func (o *OneDrive) List(ctx context.Context, folder string) ([]Item, error) {
 			break
 		}
 		u = out.Next
+		if u != "" && !sameHost(u, o.base()) {
+			return nil, errors.New("migrate: the next page is at another address than the API's")
+		}
 	}
 	return items, nil
 }
@@ -70,4 +74,12 @@ func (o *OneDrive) List(ctx context.Context, folder string) ([]Item, error) {
 // Fetch implements Source.
 func (o *OneDrive) Fetch(ctx context.Context, item Item) ([]byte, error) {
 	return getBytes(ctx, o.Client, o.Token, o.base()+"/me/drive/items/"+url.PathEscape(item.ID)+"/content")
+}
+
+// sameHost says whether two addresses are at one host: a next-page link is followed
+// with the access token, so it must not lead anywhere else.
+func sameHost(a, b string) bool {
+	ua, err1 := url.Parse(a)
+	ub, err2 := url.Parse(b)
+	return err1 == nil && err2 == nil && ua.Host != "" && ua.Host == ub.Host && ua.Scheme == ub.Scheme
 }

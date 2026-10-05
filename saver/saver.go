@@ -33,6 +33,10 @@ type Target struct {
 	// against; 0 means the adapter's own answer if it gives one (a local disk does,
 	// a database or bucket does not).
 	Capacity int64
+	// CatalogKey is where the target keeps its catalog; "" means CatalogKey. It must
+	// start with "catalog:" and end with "index" (see UserCatalogKey). Give each person
+	// their own when several share one store: the default is one catalog for the store.
+	CatalogKey string
 }
 
 // Saver writes documents to its targets.
@@ -43,6 +47,11 @@ type Saver struct {
 	// MaxVersions is how many snapshots SaveVersion keeps of one document; 0
 	// means DefaultMaxVersions.
 	MaxVersions int
+	// RepairGrace is how long Repair waits, when it finds the store and its catalog
+	// disagreeing, before looking again and repairing what is still wrong: another
+	// process may be half way through an operation. 0 means DefaultRepairGrace; a
+	// negative value means no wait (for tests).
+	RepairGrace time.Duration
 
 	mu sync.Mutex // one catalog update at a time
 }
@@ -68,6 +77,9 @@ const FontPrefix = "fonts/"
 
 // ErrName is returned for a name that cannot be used: empty, too long, or with
 // control characters.
+// DefaultRepairGrace is the RepairGrace used when none is set.
+const DefaultRepairGrace = 2 * time.Second
+
 // ErrBusy is returned when other processes keep changing the store's catalog and an
 // update could not get in after several tries.
 var ErrBusy = errors.New("saver: the store is busy, try again")

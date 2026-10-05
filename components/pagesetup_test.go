@@ -1,6 +1,7 @@
 package components
 
 import (
+	"math"
 	"testing"
 
 	"github.com/elaous/gojiberry/canvas"
@@ -64,5 +65,17 @@ func TestStatusBarAndHeadingPath(t *testing.T) {
 	}
 	if HeadingBreadcrumb(es, -1) != "" || HeadingBreadcrumb(nil, 0) != "" {
 		t.Error("no heading, no path")
+	}
+}
+
+func TestPageSetupIgnoresNonNumbers(t *testing.T) {
+	n := PageSetup{Paper: "a4", Margins: [4]float64{math.NaN(), math.Inf(1), math.Inf(-1), 10}}.Normalized()
+	for i, m := range n.Margins {
+		if math.IsNaN(m) || math.IsInf(m, 0) || m < 0 {
+			t.Errorf("margin %d is %v", i, m)
+		}
+	}
+	if n.Margins[3] != 10 {
+		t.Error(n.Margins)
 	}
 }

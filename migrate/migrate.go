@@ -49,6 +49,9 @@ type Sink interface {
 const (
 	MaxFiles = 2000
 	MaxDepth = 16
+	// MaxFolders is how many folders are listed in one run: every folder costs a
+	// request to the platform, however few files it holds.
+	MaxFolders = 500
 	// MaxFileBytes is the largest file taken from a source.
 	MaxFileBytes = 64 << 20
 )
@@ -89,11 +92,15 @@ type file struct {
 func Run(ctx context.Context, src Source, items []Item, sink Sink, o Options) (Report, error) {
 	var rep Report
 	var files []file
+	folders := 0
 	var walk func(items []Item, path []string, depth int) error
 	walk = func(items []Item, path []string, depth int) error {
 		for _, it := range items {
 			if err := ctx.Err(); err != nil {
 				return err
+			}
+			if rep.Truncated {
+				return nil // a limit was reached: stop asking for more
 			}
 			if !it.Folder {
 				if len(files) >= MaxFiles {
@@ -103,6 +110,11 @@ func Run(ctx context.Context, src Source, items []Item, sink Sink, o Options) (R
 				files = append(files, file{it, path})
 				continue
 			}
+			if folders >= MaxFolders {
+				rep.Truncated = true
+				return nil
+			}
+			folders++
 			if depth >= MaxDepth {
 				rep.Failed = append(rep.Failed, Failure{it.Name, errors.New("migrate: folders nest too deep")})
 				continue

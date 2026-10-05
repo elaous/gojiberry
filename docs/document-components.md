@@ -134,4 +134,25 @@ builds elements without the SVG namespace, so an inline `<svg>` would not draw. 
 ## One Person
 
 `user.Person` (`ID`, `Name`, `Role`; `user.Normalize` for addresses) is shared by
-`docstore.ACL.People()` and `components.People`.
+`docstore.ACL.People()` and `components.People`. It also has `Email`, `Username` and
+`Picture` (OpenID Connect claims). **Access is decided by `ID` and the verified `Email`
+only** (`Person.AccessIDs`): a username is whatever the person chose at their provider,
+so it is for finding and showing people and never grants access (otherwise a username
+of "ana@x.com" would inherit Ana's documents).
+
+## Shared stores
+
+A store several people use (an HTTP docstore with access lists) should give each person
+their own catalog: `saver.Target.CatalogKey = saver.UserCatalogKey(userID)`. The
+default is one catalog for the store, which is right for a store of one person and wrong
+for many (it would be owned by whoever saved first). Folder records live next to the
+catalog. A server that lists only what the caller may read also makes a new catalog
+start with just those documents.
+
+## Two processes on one store
+
+Catalog updates are conditional (`docstore.ConditionalAdapter`): memory, SQLite (a busy
+timeout and an immediate write transaction), local files (an `flock` on the directory, on
+Unix) and the HTTP store (`If-Match`). `Repair` waits `RepairGrace` (2 s) and looks again
+before repairing, so it does not undo a delete another process is half way through, and
+a rebuild never overwrites a catalog changed since it was read.

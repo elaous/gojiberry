@@ -42,6 +42,12 @@ func TestPageSetupAndStatusBar(t *testing.T) {
 	d.Fill(".gj-saver-name", "plan")
 	d.Click(".gj-saver-save")
 	d.WaitFor("Saved", `document.querySelector('.gj-status-item[data-item="save"]') && document.querySelector('.gj-status-item[data-item="save"]').textContent === 'Saved'`)
+	// Changing the page setup rebuilds the flow but edits nothing: still saved.
+	d.Click(`button[data-tab="page"]`)
+	d.Select(".gj-pagesetup-paper", "a4")
+	d.Wait("s.pageSetup.width === 842 || s.pageSetup.width === 595")
+	d.Sleep(300)
+	d.OK(item("save") == "Saved", "a page setup change is not an edit: "+item("save"))
 	d.ToggleMode()
 	d.CanvasClick(200, 260)
 	d.Type("x")

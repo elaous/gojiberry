@@ -45,9 +45,10 @@ type ACL struct {
 func (a ACL) RoleOf(email string) string { return a.RoleOfPerson(user.Person{ID: email}) }
 
 // RoleOfPerson is RoleOf for someone who can be found by more than one identifier
-// (their ID, e-mail address or username): the best role any of them has.
+// (their ID or verified e-mail address; never their username, see
+// user.Person.AccessIDs): the best role any of them has.
 func (a ACL) RoleOfPerson(p user.Person) string {
-	ids := p.Identifiers()
+	ids := p.AccessIDs()
 	owner := user.Normalize(a.Owner)
 	role := ""
 	for _, id := range ids {

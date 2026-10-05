@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -330,3 +331,73 @@ func TestSessionBrowsesSelectsAndMigrates(t *testing.T) {
 		t.Error("an unknown folder")
 	}
 }
+
+// manyFolders is a source whose top holds a thousand empty folders.
+type manyFolders struct{ lists int }
+
+func (*manyFolders) Label() string { return "many" }
+func (m *manyFolders) List(_ context.Context, folder string) ([]Item, error) {
+	m.lists++
+	if folder != "" {
+		return nil, nil
+	}
+	items := make([]Item, 1000)
+	for i := range items {
+		items[i] = Item{ID: fmt.Sprint(i + 1), Name: "f", Folder: true}
+	}
+	return items, nil
+}
+func (*manyFolders) Fetch(context.Context, Item) ([]byte, error) { return nil, errors.New("none") }
+
+func TestRunStopsListingAfterTheFolderLimit(t *testing.T) {
+	src := &manyFolders{}
+	top, _ := src.List(context.Background(), "")
+	src.lists = 0
+	rep, err := Run(context.Background(), src, top, discard{}, Options{})
+	if err != nil || !rep.Truncated || src.lists > MaxFolders {
+		t.Errorf("%d folders were listed (limit %d): %+v %v", src.lists, MaxFolders, rep, err)
+	}
+}
+
+func TestOneDriveRefusesANextPageAtAnotherHost(t *testing.T) {
+	var other int
+	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { other++ }))
+	defer evil.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"@odata.nextLink": evil.URL + "/steal", "value": []map[string]any{}})
+	}))
+	defer srv.Close()
+	if _, err := (&OneDrive{Token: "tok", BaseURL: srv.URL}).List(context.Background(), ""); err == nil || other != 0 {
+		t.Errorf("err=%v, and the other host got %d requests (it must get none: the token would go with them)", err, other)
+	}
+}
+
+func TestSessionIgnoresAConnectOverTakenByAnotherPlatform(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{})
+	slow := func(string) Source { return &blocking{started: started, release: release} }
+	s := NewSession([]SourceChoice{{Name: "a", Label: "A", New: slow}, {Name: "b", Label: "B", New: func(string) Source { return Files{} }}}, func(docfile.Codec) Sink { return discard{} })
+	s.SetSource("a")
+	s.SetToken("t")
+	done := make(chan error)
+	go func() { done <- s.Connect(context.Background()) }()
+	<-started
+	s.SetSource("b") // while A is still listing
+	close(release)
+	if err := <-done; err == nil {
+		t.Error("the connect belonged to a platform that is no longer chosen")
+	}
+	if s.Props(nil).Connected {
+		t.Error("a source of another platform was kept")
+	}
+}
+
+type blocking struct{ started, release chan struct{} }
+
+func (*blocking) Label() string { return "A" }
+func (b *blocking) List(context.Context, string) ([]Item, error) {
+	close(b.started)
+	<-b.release
+	return nil, nil
+}
+func (*blocking) Fetch(context.Context, Item) ([]byte, error) { return nil, nil }

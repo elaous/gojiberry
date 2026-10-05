@@ -338,9 +338,19 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "conditional save is not supported", http.StatusNotImplemented)
 				return
 			}
+			// If-None-Match: * means "only if there is none"; If-Match carries the digest
+			// of what was read, in quotes. Anything else (another If-None-Match value,
+			// If-Match: *) is not something this store means by those headers.
 			prev := strings.Trim(match, `"`)
 			if none != "" {
+				if strings.TrimSpace(none) != "*" || match != "" {
+					http.Error(w, "unsupported precondition", http.StatusBadRequest)
+					return
+				}
 				prev = ""
+			} else if prev == "" || prev == "*" {
+				http.Error(w, "unsupported precondition", http.StatusBadRequest)
+				return
 			}
 			saveErr = cond.SaveIf(r.Context(), id, data, prev)
 		} else {

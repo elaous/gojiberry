@@ -135,6 +135,14 @@ func (s *Session) SaveState() string {
 	return s.saveState
 }
 
+// unsaved marks the editor's content as not stored, if the session has been tracking
+// it (call with the lock held).
+func (s *Session) unsaved() {
+	if s.saveState != "" {
+		s.saveState = SaveUnsaved
+	}
+}
+
 // MarkEdited tells the session the document in the editor changed (call it from
 // the editor's change callback). It does not render again: the host is already
 // rendering for the edit.
@@ -331,11 +339,12 @@ func (s *Session) Save(ctx context.Context) error {
 
 func (s *Session) save(ctx context.Context) (err error) {
 	var edits int
+	stored := false // the document is saved, whatever happens after (the list refresh)
 	s.set(func() { s.saveState, edits = SaveSaving, s.edits })
 	defer func() {
 		s.set(func() {
 			switch {
-			case err != nil:
+			case err != nil && !stored:
 				s.saveState = SaveFailed
 			case s.edits != edits:
 				s.saveState = SaveUnsaved // edited while saving
@@ -352,6 +361,7 @@ func (s *Session) save(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	stored = true
 	s.set(func() {
 		if s.target == target { // not if the user has moved on to another target meanwhile
 			s.id = e.ID
@@ -407,6 +417,7 @@ func (s *Session) Delete(ctx context.Context, id string) error {
 	s.set(func() {
 		if s.id == id {
 			s.id = ""
+			s.unsaved() // what is in the editor is no longer stored anywhere
 		}
 	})
 	return s.after(ctx, msg("saver.deleted", "%s deleted", name))
@@ -459,6 +470,7 @@ func (s *Session) TrashDocs(ctx context.Context, ids []string) error {
 	s.set(func() {
 		if slices.Contains(ids, s.id) {
 			s.id = "" // the open document is in the trash: saving is a new document
+			s.unsaved()
 		}
 	})
 	return s.after(ctx, msg("saver.trashed", "%s moved to the trash", name))

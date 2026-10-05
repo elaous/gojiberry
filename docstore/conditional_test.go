@@ -5,8 +5,10 @@ package docstore
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -87,5 +89,38 @@ func TestServerOnAStoreWithoutSaveIfSaysSo(t *testing.T) {
 	defer ts.Close()
 	if err := NewHTTPAdapter(ts.URL, nil).SaveIf(context.Background(), "x", []byte("v"), ""); !errors.Is(err, ErrConditionalUnsupported) {
 		t.Fatal(err)
+	}
+}
+
+func TestServerOnlyTakesTheConditionsItMeans(t *testing.T) {
+	ts := httptest.NewServer(NewServer(NewMemoryAdapter(), "memory").Handler())
+	defer ts.Close()
+	put := func(hdr, val string) int {
+		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/docs/x", strings.NewReader("v"))
+		req.Header.Set(hdr, val)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	if c := put("If-Match", "*"); c != http.StatusBadRequest {
+		t.Errorf("If-Match: * is not a digest: %d", c)
+	}
+	if c := put("If-None-Match", `"abc"`); c != http.StatusBadRequest {
+		t.Errorf("If-None-Match with a value other than *: %d", c)
+	}
+	if c := put("If-None-Match", "*"); c != http.StatusNoContent {
+		t.Errorf("create: %d", c)
+	}
+	if c := put("If-None-Match", "*"); c != http.StatusPreconditionFailed {
+		t.Errorf("create again: %d", c)
+	}
+	if c := put("If-Match", `"`+Digest([]byte("v"))+`"`); c != http.StatusNoContent {
+		t.Errorf("replace what was read, quoted: %d", c)
+	}
+	if c := put("If-Match", Digest([]byte("zzz"))); c != http.StatusPreconditionFailed {
+		t.Errorf("replace what was not: %d", c)
 	}
 }

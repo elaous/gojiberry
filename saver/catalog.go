@@ -2,6 +2,8 @@ package saver
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"sort"
@@ -24,6 +26,30 @@ const CatalogKey = "catalog:index"
 // (catalog:folder/<id>), so a rebuild finds folders that hold no document.
 const FolderRecordPrefix = "catalog:folder/"
 
+// catalogKey is where this target keeps its catalog: Target.CatalogKey, or CatalogKey.
+func (t Target) catalogKey() string {
+	if t.CatalogKey != "" {
+		return t.CatalogKey
+	}
+	return CatalogKey
+}
+
+// folderPrefix is where this target keeps its folder records: next to its catalog
+// ("catalog:index" has "catalog:folder/", "catalog:u/ab12/index" has
+// "catalog:u/ab12/folder/").
+func (t Target) folderPrefix() string {
+	return strings.TrimSuffix(t.catalogKey(), "index") + "folder/"
+}
+
+// UserCatalogKey is a catalog key for one person's view of a store several people
+// share (Target.CatalogKey): the catalog lists documents, so one catalog for everyone
+// would be one person's list, owned by whoever saved first. The key hides the
+// identifier (it is a hash of it).
+func UserCatalogKey(userID string) string {
+	sum := sha256.Sum256([]byte(userID))
+	return "catalog:u/" + hex.EncodeToString(sum[:16]) + "/index"
+}
+
 type catalogEntry struct {
 	Key     string   `json:"key"`
 	Name    string   `json:"name"`
@@ -43,6 +69,9 @@ type folderEntry struct {
 type catalog struct {
 	Docs    map[string]catalogEntry `json:"docs"`
 	Folders map[string]folderEntry  `json:"folders,omitempty"`
+	// Skipped are the files the last rebuild left out (unreadable, or the older of two
+	// files with one ID), so that Repair does not take them for work to do each time.
+	Skipped []string `json:"skipped,omitempty"`
 }
 
 func (c *catalog) entry(s *Saver, id string) Entry {
@@ -67,7 +96,7 @@ func (s *Saver) readCatalog(ctx context.Context, t Target) (*catalog, error) {
 // documents and stored only if nobody else got there first (else it is read again).
 func (s *Saver) readCatalogRev(ctx context.Context, t Target) (*catalog, string, error) {
 	for try := 0; try < maxUpdateTries; try++ {
-		stored, err := t.Adapter.Load(ctx, CatalogKey)
+		stored, err := t.Adapter.Load(ctx, t.catalogKey())
 		rev := ""
 		if err == nil {
 			rev = docstore.Digest(stored.Data)
@@ -105,7 +134,7 @@ func (s *Saver) writeCatalog(ctx context.Context, t Target, c *catalog) error {
 	if err != nil {
 		return err
 	}
-	return t.Adapter.Save(ctx, CatalogKey, data)
+	return t.Adapter.Save(ctx, t.catalogKey(), data)
 }
 
 // writeCatalogIf writes the catalog only if it is still the one read (rev, from
@@ -121,7 +150,7 @@ func (s *Saver) writeCatalogIf(ctx context.Context, t Target, c *catalog, rev st
 	if err != nil {
 		return false, err
 	}
-	switch err := cond.SaveIf(ctx, CatalogKey, data, rev); {
+	switch err := cond.SaveIf(ctx, t.catalogKey(), data, rev); {
 	case err == nil:
 		return true, nil
 	case errors.Is(err, docstore.ErrConflict):
@@ -232,7 +261,7 @@ func (s *Saver) build(ctx context.Context, t Target) (*catalog, error) {
 	}
 	out := &catalog{Docs: map[string]catalogEntry{}, Folders: map[string]folderEntry{}}
 	for _, m := range metas {
-		if id, ok := strings.CutPrefix(m.ID, FolderRecordPrefix); ok && docfile.ValidID(id) {
+		if id, ok := strings.CutPrefix(m.ID, t.folderPrefix()); ok && docfile.ValidID(id) {
 			if stored, err := t.Adapter.Load(ctx, m.ID); err == nil {
 				var f folderEntry
 				if json.Unmarshal(stored.Data, &f) == nil && f.Name != "" {
@@ -254,6 +283,7 @@ func (s *Saver) build(ctx context.Context, t Target) (*catalog, error) {
 		}
 		doc, err := c.Unmarshal(stored.Data)
 		if err != nil {
+			out.Skipped = append(out.Skipped, m.ID)
 			continue
 		}
 		key, size := m.ID, m.Size
@@ -284,8 +314,12 @@ func (s *Saver) build(ctx context.Context, t Target) (*catalog, error) {
 		}
 		// Two files with one ID (a crash between writing a new format and deleting the
 		// old): the newer one is the document.
-		if prev, ok := out.Docs[id]; ok && prev.Updated >= m.UpdatedAt.UnixNano() {
-			continue
+		if prev, ok := out.Docs[id]; ok {
+			if prev.Updated >= m.UpdatedAt.UnixNano() {
+				out.Skipped = append(out.Skipped, key)
+				continue
+			}
+			out.Skipped = append(out.Skipped, prev.Key)
 		}
 		out.Docs[id] = catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: size, Updated: m.UpdatedAt.UnixNano(), Tags: doc.Tags(), Trashed: doc.Trashed(), Folder: doc.Folder()}
 	}
@@ -382,30 +416,85 @@ func (s *Saver) Repair(ctx context.Context, target string) (repaired bool, err e
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	stored, err := t.Adapter.Load(ctx, CatalogKey)
-	if errors.Is(err, docstore.ErrNotFound) {
-		_, err = s.rebuild(ctx, t)
-		return true, err
+	grace := s.RepairGrace
+	if grace == 0 {
+		grace = DefaultRepairGrace
 	}
-	if err != nil {
-		return false, err
+	for try := 0; try < maxUpdateTries; try++ {
+		stored, err := t.Adapter.Load(ctx, t.catalogKey())
+		var c catalog
+		if err == nil && (json.Unmarshal(stored.Data, &c) != nil || c.Docs == nil) {
+			err = errors.New("unreadable catalog")
+		}
+		if err != nil {
+			if !errors.Is(err, docstore.ErrNotFound) && err.Error() != "unreadable catalog" {
+				return false, err
+			}
+			// None, or not readable: readCatalogRev builds one (and only stores it if nobody
+			// else did first).
+			if _, _, err := s.readCatalogRev(ctx, t); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+		bad, err := s.disagrees(ctx, t, &c)
+		if err != nil || !bad {
+			return false, err
+		}
+		// Another process may be half way through an operation (a delete takes the
+		// document out of the catalog first and removes its file after): look again
+		// after a moment, and only repair what is still wrong.
+		if grace > 0 {
+			select {
+			case <-ctx.Done():
+				return false, ctx.Err()
+			case <-time.After(grace):
+			}
+			stored, err = t.Adapter.Load(ctx, t.catalogKey())
+			if err != nil {
+				continue
+			}
+			c = catalog{}
+			if json.Unmarshal(stored.Data, &c) != nil || c.Docs == nil {
+				continue
+			}
+			if bad, err = s.disagrees(ctx, t, &c); err != nil || !bad {
+				return false, err
+			}
+		}
+		built, err := s.build(ctx, t)
+		if err != nil {
+			return false, err
+		}
+		ok, err := s.writeCatalogIf(ctx, t, built, docstore.Digest(stored.Data))
+		if err != nil {
+			return false, err
+		}
+		if ok {
+			return true, nil
+		}
 	}
-	var c catalog
-	if json.Unmarshal(stored.Data, &c) != nil || c.Docs == nil {
-		_, err = s.rebuild(ctx, t)
-		return true, err
-	}
+	return false, ErrBusy
+}
+
+// disagrees reports whether the catalog and the files and folder records in the
+// store do not match (ignoring the files the last rebuild chose to skip).
+func (s *Saver) disagrees(ctx context.Context, t Target, c *catalog) (bool, error) {
 	metas, err := t.Adapter.List(ctx)
 	if err != nil {
 		return false, err
 	}
+	skipped := map[string]bool{}
+	for _, k := range c.Skipped {
+		skipped[k] = true
+	}
 	files, records := map[string]bool{}, map[string]bool{}
 	for _, m := range metas {
-		if id, ok := strings.CutPrefix(m.ID, FolderRecordPrefix); ok {
+		if id, ok := strings.CutPrefix(m.ID, t.folderPrefix()); ok {
 			records[id] = true
 			continue
 		}
-		if strings.HasPrefix(m.ID, FontPrefix) || reserved(m.ID) {
+		if strings.HasPrefix(m.ID, FontPrefix) || reserved(m.ID) || skipped[m.ID] {
 			continue
 		}
 		if codec, _ := s.codecOf(m.ID); codec != nil {
@@ -419,9 +508,5 @@ func (s *Saver) Repair(ctx context.Context, target string) (repaired bool, err e
 	for id := range c.Folders {
 		same = same && records[id]
 	}
-	if same {
-		return false, nil
-	}
-	_, err = s.rebuild(ctx, t)
-	return true, err
+	return !same, nil
 }

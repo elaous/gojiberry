@@ -38,8 +38,25 @@ func (p Person) DisplayName() string {
 	return p.ID
 }
 
-// Identifiers are the ways the person can be found in an access list: ID, Email and
-// Username, those that are set, each as Normalize writes it.
+// AccessIDs are the identifiers an access list may grant to: the ID and the e-mail
+// address, those that are set, each as Normalize writes it. The username is not one:
+// it is whatever the person chose at their identity provider (often with no
+// verification and no provider in front of it), so letting it grant access would let
+// anyone take the name "ana@x.com" and inherit Ana's documents. The e-mail is only
+// set when the provider verified it (see auth).
+func (p Person) AccessIDs() []string {
+	var out []string
+	for _, s := range []string{p.ID, p.Email} {
+		if n := Normalize(s); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// Identifiers are the ways the person can be found in a list of people: ID, Email and
+// Username, those that are set, each as Normalize writes it. For finding and showing
+// people only; access is decided by AccessIDs.
 func (p Person) Identifiers() []string {
 	var out []string
 	for _, s := range []string{p.ID, p.Email, p.Username} {
