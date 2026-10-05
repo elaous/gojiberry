@@ -117,6 +117,16 @@
   "docs.select": "Sélectionner %s",
   "docs.restoreN": "Restaurer %d",
   "docs.deleteN": "Supprimer %d définitivement",
-  "saver.saveAsNew": "Enregistrer comme nouveau"
+  "saver.saveAsNew": "Enregistrer comme nouveau",
+  "tab.people": "Personnes",
+  "people.title": "Personnes ayant accès",
+  "people.role.owner": "propriétaire",
+  "people.role.editor": "éditeur",
+  "people.role.viewer": "lecteur",
+  "people.roleOf": "Rôle de %s",
+  "people.remove": "Retirer",
+  "people.invite": "Inviter",
+  "people.invitePlaceholder": "nom@exemple.com",
+  "people.inviteRole": "Rôle de la personne invitée"
  }
 }

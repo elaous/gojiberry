@@ -31,7 +31,7 @@ Each row: what to port, how, test that comes with it. Sizes as in
 
 | # | opendocs | Port as | Size | Notes |
 |---|---|---|---|---|
-| 1 | `docmanager` UI (breadcrumb, list, confirm, collaborators panel, history UI) | **List, trash, versions, tags done** as plug-in components (`docs/document-components.md`); left: breadcrumb, confirm, `components.People` on `docstore/acl` | S | The People panel is the only real gap in sharing. |
+| 1 | `docmanager` UI (breadcrumb, list, confirm, collaborators panel, history UI) | **List, trash, versions, tags done** as plug-in components (`docs/document-components.md`); **`components.People` done** (over `docstore.ACL` Grant/Revoke); `Breadcrumbs` and `Confirm` already exist in `components` (opendocs' folders have no counterpart here); left: confirm before Delete forever | S | |
 | 2 | `identity.go`, `authgate.go`, login page | `components.Login` on `auth`/`guard` | S | Compare with `auth` first; keep one token format. |
 | 3 | `templates.go`, `snippets.go`, `tag.go`, `mention.go` | `canvas` feature + panel; tags already in `docfile.Meta` | M | Templates as `docfile.Document` values; snippets as inserted `Item`s; @mentions as a mark. |
 | 4 | `margins.go` | `components.MarginsEditor` over page props | S | |

@@ -112,3 +112,39 @@ func TestDocxRoundTripKeepsMergedCells(t *testing.T) {
 		}
 	}
 }
+
+// Cell background, alignment and bold survive the trip too.
+func TestDocxRoundTripKeepsCellStyles(t *testing.T) {
+	in := docfile.Document{Content: []docfile.Item{{Table: &docfile.TableItem{
+		Rows: []docfile.TableRow{{Cells: []string{"a", "b"}}, {Cells: []string{"c", "d"}}},
+		Styles: []docfile.TableCellStyle{
+			{Row: 0, Col: 0, Background: "#fff3b0", Align: 1, Bold: true},
+			{Row: 1, Col: 1, Align: 2},
+		},
+	}}}}
+	data, err := export.DOCX{}.Export(export.FromDocument(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := docximport.Import(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got *docfile.TableItem
+	for _, it := range out.Content {
+		if it.Table != nil {
+			got = it.Table
+		}
+	}
+	if got == nil {
+		t.Fatal("no table")
+	}
+	want := in.Content[0].Table.Styles
+	if !reflect.DeepEqual(got.Styles, want) {
+		t.Errorf("styles %+v, want %+v", got.Styles, want)
+	}
+	html, _ := export.HTML{}.Export(export.FromDocument(in))
+	if !strings.Contains(string(html), `background:#fff3b0;text-align:center;`) || !strings.Contains(string(html), `text-align:right;`) {
+		t.Errorf("html: %s", html)
+	}
+}
