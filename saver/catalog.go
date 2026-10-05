@@ -2,10 +2,9 @@ package saver
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -45,10 +44,7 @@ func (t Target) folderPrefix() string {
 // share (Target.CatalogKey): the catalog lists documents, so one catalog for everyone
 // would be one person's list, owned by whoever saved first. The key hides the
 // identifier (it is a hash of it).
-func UserCatalogKey(userID string) string {
-	sum := sha256.Sum256([]byte(userID))
-	return "catalog:u/" + hex.EncodeToString(sum[:16]) + "/index"
-}
+func UserCatalogKey(userID string) string { return docstore.UserCatalogPrefix(userID) + "index" }
 
 type catalogEntry struct {
 	Key     string   `json:"key"`
@@ -363,12 +359,15 @@ func (s *Saver) prepareTouch(ctx context.Context, t Target, e *catalogEntry, f f
 		return func() error { return nil }, nil
 	}
 	stored, err := t.Adapter.Load(ctx, e.Key)
+	if errors.Is(err, docstore.ErrNotFound) {
+		return nil, fmt.Errorf("%w: %w", ErrUnreadable, err)
+	}
 	if err != nil {
 		return nil, err
 	}
 	doc, err := c.Unmarshal(stored.Data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrUnreadable, err)
 	}
 	f(&doc)
 	data, err := c.Marshal(doc)

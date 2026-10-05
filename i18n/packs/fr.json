@@ -221,6 +221,7 @@
   "migrate.imported": "%d documents migrés",
   "migrate.truncated": "Trop de fichiers : seuls les premiers ont été migrés.",
   "migrate.failed": "%d n’ont pas pu être migrés :",
-  "migrate.convertTo": "Convertir en"
+  "migrate.convertTo": "Convertir en",
+  "saver.purgedUnreadable": "(%d documents illisibles de la corbeille ont été supprimés : %s)"
  }
 }
