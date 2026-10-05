@@ -11,7 +11,8 @@
 // via domrt/html), so they -- and native_stub.go's no-op func main --
 // build and unit-test natively via a plain `go test`, fast and without
 // a browser; canvas_editor_test.go separately drives the real,
-// GOOS=js GOARCH=wasm-built binary through Playwright for true
+// GOOS=js GOARCH=wasm-built binary through the chromedp driver
+// (internal/e2etest) for true
 // end-to-end coverage.
 package main
 
@@ -70,6 +71,8 @@ type document struct {
 
 	Cursor, Anchor int
 	ExtraCursors   []cursor
+
+	hist history // undo and redo (history.go)
 }
 
 // Len returns the number of characters in the document.
@@ -152,6 +155,7 @@ func (d *document) setCursors(cs []cursor) {
 // addCursorAt appends a new, unselected cursor at pos (clamped into
 // range) -- Alt+Click's effect.
 func (d *document) addCursorAt(pos int) {
+	d.hist.typingAt = 0 // moving the caret ends the step that typing was
 	pos = clamp(pos, 0, d.Len())
 	d.setCursors(append(d.cursors(), cursor{Pos: pos, Anchor: pos}))
 }
@@ -159,6 +163,7 @@ func (d *document) addCursorAt(pos int) {
 // resetCursorTo collapses every cursor to a single one at pos, with no
 // selection -- a plain (non-modifier) click's effect.
 func (d *document) resetCursorTo(pos int) {
+	d.hist.typingAt = 0 // moving the caret ends the step that typing was
 	pos = clamp(pos, 0, d.Len())
 	d.Cursor, d.Anchor = pos, pos
 	d.ExtraCursors = nil
@@ -172,6 +177,7 @@ func (d *document) resetCursorTo(pos int) {
 // there first" -- there's no per-cursor identity tracked across edits
 // to make the latter meaningful anyway.
 func (d *document) collapseCursors() {
+	d.hist.typingAt = 0 // moving the caret ends the step that typing was
 	d.ExtraCursors = nil
 }
 
@@ -179,6 +185,7 @@ func (d *document) collapseCursors() {
 // -- Ctrl/Cmd+A's effect. Matches most editors in discarding any
 // additional cursors rather than selecting everything under each one.
 func (d *document) selectAll() {
+	d.hist.typingAt = 0 // moving the caret ends the step that typing was
 	d.Anchor, d.Cursor = 0, d.Len()
 	d.ExtraCursors = nil
 }
@@ -191,6 +198,7 @@ func (d *document) selectAll() {
 // (arrow keys, word jumps, Home/End) uses moveCursors instead, to move
 // every live cursor at once.
 func (d *document) moveCursor(idx int, extend bool) {
+	d.hist.typingAt = 0 // moving the caret ends the step that typing was
 	idx = clamp(idx, 0, d.Len())
 	d.Cursor = idx
 	if !extend {
@@ -205,6 +213,7 @@ func (d *document) moveCursor(idx int, extend bool) {
 // backspace/delete) cursors never need processing in any particular
 // order relative to each other.
 func (d *document) moveCursors(newPos func(pos int) int, extend bool) {
+	d.hist.typingAt = 0 // moving the caret ends the step that typing was
 	cs := d.cursors()
 	for i := range cs {
 		p := clamp(newPos(cs[i].Pos), 0, d.Len())
@@ -275,6 +284,21 @@ func clamp(v, lo, hi int) int {
 // before each insertion point (or unformatted, at the very start of
 // the document).
 func (d *document) insert(text string) {
+	typing := text != "\n" && utf8.RuneCountInString(text) <= 1
+	// Typing at a caret that has not moved continues the last step, so Undo takes back
+	// a word and not a letter; a paste or a new line is a step of its own.
+	if typing && d.hist.typingAt == d.Cursor+1 && len(d.ExtraCursors) == 0 && !d.hasSelection() {
+		d.insertNow(text)
+		d.hist.typingAt = d.Cursor + 1
+		return
+	}
+	d.edit(func() { d.insertNow(text) })
+	if typing {
+		d.hist.typingAt = d.Cursor + 1
+	}
+}
+
+func (d *document) insertNow(text string) {
 	d.forEachCursorDescending(func(pos, anchor int) (int, int) {
 		lo, hi := pos, anchor
 		if lo > hi {
@@ -300,7 +324,9 @@ func (d *document) insert(text string) {
 
 // backspace deletes, at every live cursor, that cursor's own selection
 // -- or the character before it if it has none.
-func (d *document) backspace() {
+func (d *document) backspace() { d.edit(d.backspaceNow) }
+
+func (d *document) backspaceNow() {
 	d.forEachCursorDescending(func(pos, anchor int) (int, int) {
 		lo, hi := pos, anchor
 		if lo > hi {
@@ -320,7 +346,9 @@ func (d *document) backspace() {
 
 // delete deletes, at every live cursor, that cursor's own selection --
 // or the character after it if it has none.
-func (d *document) delete() {
+func (d *document) delete() { d.edit(d.deleteNow) }
+
+func (d *document) deleteNow() {
 	d.forEachCursorDescending(func(pos, anchor int) (int, int) {
 		lo, hi := pos, anchor
 		if lo > hi {
@@ -335,6 +363,25 @@ func (d *document) delete() {
 		}
 		d.buf.DeleteAt(pos, 1)
 		return pos, pos
+	})
+}
+
+// cutSelections deletes every cursor's selection and nothing else: a cursor with no
+// selection is left alone (Backspace would delete the character before it, which was
+// never copied).
+func (d *document) cutSelections() { d.edit(d.cutNow) }
+
+func (d *document) cutNow() {
+	d.forEachCursorDescending(func(pos, anchor int) (int, int) {
+		lo, hi := pos, anchor
+		if lo > hi {
+			lo, hi = hi, lo
+		}
+		if hi > lo {
+			d.buf.DeleteAt(lo, hi-lo)
+			return lo, lo
+		}
+		return pos, anchor
 	})
 }
 
@@ -377,6 +424,10 @@ func (d *document) toggleSelectionFormat(lo, hi int, kind formatKind) {
 // every live cursor's own selection (a no-op for any cursor with
 // none) -- the toolbar Bold/Italic buttons' effect.
 func (d *document) toggleSelectionFormatAllCursors(kind formatKind) {
+	d.edit(func() { d.toggleFormatNow(kind) })
+}
+
+func (d *document) toggleFormatNow(kind formatKind) {
 	for _, c := range d.cursors() {
 		lo, hi := c.Pos, c.Anchor
 		if lo > hi {
@@ -402,6 +453,10 @@ func (d *document) transformCaseRange(lo, hi int, upper bool) {
 // transformSelectionCaseAllCursors upper/lowercases every live
 // cursor's own selection in place (a no-op for any cursor with none).
 func (d *document) transformSelectionCaseAllCursors(upper bool) {
+	d.edit(func() { d.transformCaseNow(upper) })
+}
+
+func (d *document) transformCaseNow(upper bool) {
 	for _, c := range d.cursors() {
 		lo, hi := c.Pos, c.Anchor
 		if lo > hi {

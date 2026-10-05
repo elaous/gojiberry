@@ -30,6 +30,9 @@ func NewHeading(id, text string, order float64) crdt.Block {
 // into Block.Content with a tab separator so the sync engine still
 // only ever handles a single opaque string per block.
 func NewLineItem(id, description, amount string, order float64) crdt.Block {
+	// The tab is the separator, so a tab inside the description would be taken for it
+	// and move the rest into the amount.
+	description = strings.ReplaceAll(description, "\t", " ")
 	return crdt.Block{ID: id, Kind: KindLineItem, Content: description + "\t" + amount, Order: order}
 }
 

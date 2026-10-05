@@ -221,6 +221,7 @@
   "migrate.imported": "%d documentos migrados",
   "migrate.truncated": "Demasiados archivos: solo se migraron los primeros.",
   "migrate.failed": "%d no se pudieron migrar:",
-  "migrate.convertTo": "Convertir a"
+  "migrate.convertTo": "Convertir a",
+  "saver.purgedUnreadable": "(%d documentos de la papelera cuyos archivos ya no existían se eliminaron: %s)"
  }
 }

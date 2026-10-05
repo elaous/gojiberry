@@ -97,6 +97,32 @@ func CacheAddAll(cache js.Value, urls []string) error {
 	return err
 }
 
+// CachesKeys wraps caches.keys(): the names of every cache this origin has.
+func CachesKeys() ([]string, error) {
+	v, err := domrt.Await(js.Global().Get("caches").Call("keys"))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, v.Length())
+	for i := range out {
+		out[i] = v.Index(i).String()
+	}
+	return out, nil
+}
+
+// CachesDelete wraps caches.delete(name).
+func CachesDelete(name string) error {
+	_, err := domrt.Await(js.Global().Get("caches").Call("delete", name))
+	return err
+}
+
+// CachePut wraps cache.put(request, response). A response can be read once, so put a
+// clone (response.clone()) and answer with the original.
+func CachePut(cache, request, response js.Value) error {
+	_, err := domrt.Await(cache.Call("put", request, response))
+	return err
+}
+
 // CachesMatch wraps caches.match(request), returning ok=false on a
 // cache miss (not treated as an error).
 func CachesMatch(request js.Value) (js.Value, bool) {

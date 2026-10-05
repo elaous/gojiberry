@@ -15,7 +15,9 @@ import (
 // newMigrate is the Migrate tab's session: Google Docs and Microsoft Word on
 // OneDrive, into the folder the Save tab is showing. The access token is typed
 // into the tab (a real app gets it from its OAuth sign-in); ?driveapi= and
-// ?graphapi= point the clients at another address (a proxy, or a test server).
+// ?graphapi= point the clients at another address (a proxy, or a test server) but only
+// at this origin or a loopback host (see allowedEndpoint): a link must not be able to
+// send the typed token to another host.
 func newMigrate(u *ui, renderUI func()) *migrate.Session {
 	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 	param := func(k string) string {
@@ -24,7 +26,7 @@ func newMigrate(u *ui, renderUI func()) *migrate.Session {
 		}
 		return ""
 	}
-	drive, graph := param("driveapi"), param("graphapi")
+	drive, graph := pageEndpoint(param("driveapi")), pageEndpoint(param("graphapi"))
 	s := migrate.NewSession([]migrate.SourceChoice{
 		{Name: "google", Label: "Google Docs", New: func(tok string) migrate.Source { return &migrate.GoogleDocs{Token: tok, BaseURL: drive} }},
 		{Name: "microsoft", Label: "Microsoft Word (OneDrive)", New: func(tok string) migrate.Source { return &migrate.OneDrive{Token: tok, BaseURL: graph} }},

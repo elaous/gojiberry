@@ -87,3 +87,18 @@ func TestMigrateFromGoogleDocsAndWordFiles(t *testing.T) {
 	d.Click(`button[data-tab="save"]`)
 	d.WaitFor("Letter in Work", `Array.from(document.querySelectorAll('.gj-doclist-item .gj-doc-name')).some((e) => e.textContent === 'Letter')`)
 }
+
+// A link can set ?driveapi=, so it must not be able to send the token typed in the
+// Migrate tab to another host: the address is ignored and Google's own is used.
+func TestMigrateIgnoresAnAddressOnAnotherHost(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?driveapi=https://evil.example")
+	evil := d.Route("evil.example", func() (int, string, []byte) { return 200, "application/json", []byte(`{"files":[]}`) })
+	google := d.Route("www.googleapis.com", func() (int, string, []byte) { return 401, "text/plain", []byte("no") })
+	d.Click(`button[data-tab="migrate"]`)
+	d.Select(".gj-migrate-source", "google")
+	d.Fill(".gj-migrate-token", "my-secret-token")
+	d.Click(".gj-migrate-connect")
+	d.WaitFor("the refusal", `(document.querySelector('.gj-doc-error') || {textContent: ''}).textContent.includes('401')`)
+	d.OK(evil() == 0, "nothing was sent to the host in the link")
+	d.OK(google() > 0, "the request went to Google's own address")
+}

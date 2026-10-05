@@ -20,6 +20,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -108,8 +109,13 @@ func newMux(store *canvas.Store, reloader *devreload.Reloader) *http.ServeMux {
 	mux.HandleFunc("GET /documents/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		content, err := store.GetDocument(r.Context(), id)
-		if err != nil {
+		if errors.Is(err, canvas.ErrNotFound) {
 			http.Error(w, "document not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			log.Println("reading a document:", err)
+			http.Error(w, "could not read the document", http.StatusInternalServerError)
 			return
 		}
 		if err := renderPage(w, canvas.CanvasPage(canvas.CanvasPageProps{ID: id, Content: content})); err != nil {
@@ -120,12 +126,23 @@ func newMux(store *canvas.Store, reloader *devreload.Reloader) *http.ServeMux {
 	mux.HandleFunc("PUT /api/documents/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		var req canvas.SaveDocumentRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// A document is text typed in a box: a few MiB is far more than it needs.
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&req); err != nil {
+			var tooBig *http.MaxBytesError
+			if errors.As(err, &tooBig) {
+				http.Error(w, "document too large", http.StatusRequestEntityTooLarge)
+				return
+			}
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		if err := store.SaveDocument(r.Context(), id, req.Content); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			if errors.Is(err, canvas.ErrNotFound) {
+				http.Error(w, "document not found", http.StatusNotFound)
+				return
+			}
+			log.Println("saving a document:", err)
+			http.Error(w, "could not save the document", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

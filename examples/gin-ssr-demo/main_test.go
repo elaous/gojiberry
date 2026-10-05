@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -91,6 +92,25 @@ func TestPageAndSecurityMiddleware(t *testing.T) {
 		}
 		if last.StatusCode != http.StatusTooManyRequests {
 			t.Fatalf("4th rapid request from the same client got status %d, want 429 (burst of 3 should be exhausted)", last.StatusCode)
+		}
+	})
+
+	t.Run("a forged X-Forwarded-For does not walk around the rate limiter", func(t *testing.T) {
+		limSrv := httptest.NewServer(newRouter())
+		defer limSrv.Close()
+		var last int
+		for i := 0; i < 6; i++ {
+			req, _ := http.NewRequest(http.MethodGet, limSrv.URL+"/", nil)
+			req.Header.Set("X-Forwarded-For", fmt.Sprintf("203.0.113.%d", i)) // a new "client" each time
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+			last = resp.StatusCode
+		}
+		if last != http.StatusTooManyRequests {
+			t.Fatalf("6 rapid requests with 6 forged client addresses got status %d at the end, want 429: the header was trusted", last)
 		}
 	})
 }

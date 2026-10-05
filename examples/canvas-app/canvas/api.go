@@ -2,6 +2,7 @@ package canvas
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 
@@ -78,8 +79,12 @@ func SaveDocument(ctx context.Context, id string, req *SaveDocumentRequest) erro
 func ViewDocument(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	content, err := encoreStore().GetDocument(r.Context(), id)
-	if err != nil {
+	if errors.Is(err, ErrNotFound) {
 		http.Error(w, "document not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "could not read the document", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

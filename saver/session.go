@@ -551,7 +551,8 @@ func (s *Session) RenameFolder(ctx context.Context, id, name string) error {
 // above it is shown instead.
 func (s *Session) DeleteFolder(ctx context.Context, id string) error {
 	name := s.names([]string{id})
-	if err := s.Saver.DeleteFolder(ctx, s.targetName(), id); err != nil {
+	purged, err := s.Saver.DeleteFolderReport(ctx, s.targetName(), id)
+	if err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -564,7 +565,16 @@ func (s *Session) DeleteFolder(ctx context.Context, id string) error {
 		}
 	}
 	s.mu.Unlock()
-	return s.after(ctx, msg("saver.deleted", "%s deleted", name))
+	line := msg("saver.deleted", "%s deleted", name)
+	if len(purged) > 0 {
+		// Say what else went, so nothing disappears unexplained.
+		shown := purged
+		if len(shown) > 5 {
+			shown = append(append([]string(nil), purged[:5]...), "…")
+		}
+		line += " " + msg("saver.purgedUnreadable", "(%d documents in the trash whose files were gone were removed: %s)", len(purged), strings.Join(shown, ", "))
+	}
+	return s.after(ctx, line)
 }
 
 // MoveDocs puts documents in a folder ("" for the top level).
