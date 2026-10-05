@@ -13,8 +13,9 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 1. **Download submenu.** "Download as" with a submenu: Docx, the other export
    formats, and *Open*, opendocs' own `.open` file (a document with its history and
-   comments, for moving between opendocs installations). Needs the `.open`
-   container written down first (what it holds, how it is versioned).
+   comments, for moving between opendocs installations). `docfile.Open` exists
+   (protobuf, `.open`); what is left is the submenu and checking that versions and
+   comments are fields of the document message.
 2. **Console mode.** A command line for work that is clumsy with a mouse: bulk
    rename, move and tag by pattern, import and export of a folder, repair and
    rebuild of a catalog. The operations already exist as `saver.Saver` methods; the

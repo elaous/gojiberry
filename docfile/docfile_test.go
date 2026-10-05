@@ -41,7 +41,11 @@ func TestRoundTripAllFormats(t *testing.T) {
 		if !reflect.DeepEqual(got, sample()) {
 			t.Fatalf("%s: round trip differs\n got %+v\nwant %+v", c.Name(), got, sample())
 		}
-		if got2 := Detect(data); got2.Name() != c.Name() {
+		want := c.Name()
+		if want == Open.Name() {
+			want = ProtoBinary.Name() // the same bytes: only the file extension tells them apart
+		}
+		if got2 := Detect(data); got2.Name() != want {
 			t.Errorf("%s detected as %s", c.Name(), got2.Name())
 		}
 		if c.Ext() == "" || c.MIME() == "" || c.Label() == "" {
@@ -140,7 +144,7 @@ func TestMetaAndLookup(t *testing.T) {
 	if c, err := ByName("json"); err != nil || c.Name() != "json" {
 		t.Fatal(err)
 	}
-	if got := strings.Join(FormatNames(), ","); got != "json,proto,proto-text" {
+	if got := strings.Join(FormatNames(), ","); got != "json,open,proto,proto-text" {
 		t.Fatal(got)
 	}
 }

@@ -250,6 +250,8 @@ func TestMigratePanel(t *testing.T) {
 	mustContain(t, html, "Choose a platform…", `value="google"`)
 	mustNotContain(t, html, "gj-migrate-token", "gj-migrate-list", "gj-migrate-pick") // no platform yet, not connected, no file picker
 
+	p.Formats, p.Format, p.OnFormat = []DocChoice{{Name: "open", Label: "opendocs (.open)"}, {Name: "json", Label: "JSON"}}, "open", func(n string) { log = append(log, "format:"+n) }
+	mustContain(t, render(t, Migrate(p)), "Convert to", `value="open" selected="selected"`, ">JSON<")
 	p.Source, p.Token = "google", "tok"
 	p.OnConnect = func() { log = append(log, "connect") }
 	n := Migrate(p)

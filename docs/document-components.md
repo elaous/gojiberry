@@ -113,7 +113,10 @@ panel and `migrate.Session` its state (like `saver.Session` for the document lis
    with `docximport`, and saves it through a `Sink`. `SaverSink` keeps the source's
    folders (reusing a folder of the same name), tags each document with its platform
    (`google-docs`) and saves under the folder open in the Save tab. A file that fails
-   is listed in the report; the rest go on. Migrating twice makes the documents
+   is listed in the report; the rest go on. A "Convert to" menu picks the format the
+   documents are stored in: `.open` by default (`docfile.Open`, opendocs' own format:
+   protobuf wire format, byte for byte what `docfile.ProtoBinary` writes, so the two
+   cannot be told apart by content, only by extension), or any other format. Migrating twice makes the documents
    twice (they get new IDs).
 
 ## One Person

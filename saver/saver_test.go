@@ -52,7 +52,7 @@ func TestSaveLoadListDeleteEveryTargetAndFormat(t *testing.T) {
 	s := &Saver{Targets: targets(t)}
 	for _, tg := range s.Targets {
 		for _, c := range docfile.Formats() {
-			// Three documents with one name: three IDs, three files.
+			// One document per format, all with one name: as many IDs, as many files.
 			e, err := s.Save(ctx, tg.Name, c, named("notes"))
 			if err != nil || !docfile.ValidID(e.ID) || e.Key != e.ID+c.Ext() || e.Name != "notes" || e.Format != c {
 				t.Fatalf("%s/%s: %+v %v", tg.Name, c.Name(), e, err)
@@ -63,7 +63,7 @@ func TestSaveLoadListDeleteEveryTargetAndFormat(t *testing.T) {
 			}
 		}
 		list, err := s.List(ctx, tg.Name)
-		if err != nil || len(list) != 3 {
+		if err != nil || len(list) != len(docfile.Formats()) {
 			t.Fatalf("%s: %v %v", tg.Name, list, err)
 		}
 		ids := map[string]bool{}
@@ -73,7 +73,7 @@ func TestSaveLoadListDeleteEveryTargetAndFormat(t *testing.T) {
 				t.Errorf("%s: %+v", tg.Name, e)
 			}
 		}
-		if len(ids) != 3 {
+		if len(ids) != len(docfile.Formats()) {
 			t.Fatalf("%s: documents with the same name share an ID: %v", tg.Name, list)
 		}
 		if err := s.Delete(ctx, tg.Name, list[0].ID); err != nil {
@@ -82,7 +82,7 @@ func TestSaveLoadListDeleteEveryTargetAndFormat(t *testing.T) {
 		if _, err := s.Load(ctx, tg.Name, list[0].ID); !errors.Is(err, docstore.ErrNotFound) {
 			t.Fatalf("%s: deleted but %v", tg.Name, err)
 		}
-		if list, _ = s.List(ctx, tg.Name); len(list) != 2 {
+		if list, _ = s.List(ctx, tg.Name); len(list) != len(docfile.Formats())-1 {
 			t.Fatalf("%s: %v", tg.Name, list)
 		}
 	}

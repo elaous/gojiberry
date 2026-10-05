@@ -242,7 +242,7 @@ func TestSessionBrowsesSelectsAndMigrates(t *testing.T) {
 	srv := fakeDrive(t)
 	sink, saverUnder := newSink(t)
 	var done []Report
-	s := NewSession([]SourceChoice{{Name: "google", Label: "Google Docs", New: func(tok string) Source { return &GoogleDocs{Token: tok, BaseURL: srv.URL} }}}, func() Sink { return sink })
+	s := NewSession([]SourceChoice{{Name: "google", Label: "Google Docs", New: func(tok string) Source { return &GoogleDocs{Token: tok, BaseURL: srv.URL} }}}, func(c docfile.Codec) Sink { sink.Codec = c; return sink })
 	s.Pending.Inline = true
 	s.OnDone = func(r Report) { done = append(done, r) }
 
@@ -290,6 +290,23 @@ func TestSessionBrowsesSelectsAndMigrates(t *testing.T) {
 	if len(live) != 1 || live[0].Name != "Plan" || live[0].Tags[0] != "google-docs" {
 		t.Errorf("%+v", live)
 	}
+	// Converted to .open unless another format is chosen.
+	if p.Format != "open" || len(p.Formats) != 4 || live[0].Format.Name() != "open" || !strings.HasSuffix(live[0].Key, ".open") {
+		t.Errorf("format %q of %d, stored as %v %q", p.Format, len(p.Formats), live[0].Format.Name(), live[0].Key)
+	}
+	s.Props(nil).OnFormat("json")
+	s.Props(nil).OnStart() // d1 is still the selection
+	live, _, _, _ = saverUnder.Overview(context.Background(), "mem")
+	var inJSON int
+	for _, e := range live {
+		if e.Format.Name() == "json" {
+			inJSON++
+		}
+	}
+	if inJSON != 1 {
+		t.Errorf("%d documents in JSON", inJSON)
+	}
+	s.Props(nil).OnFormat("open")
 	// Nothing selected: everything listed, folders walked.
 	s.Props(nil).OnToggle("d1") // unselect it
 	s.Props(nil).OnStart()      // nothing selected: Work and Plan, so Budget and Plan come, Notes fails

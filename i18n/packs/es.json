@@ -220,6 +220,7 @@
   "migrate.working": "%d de %d: %s",
   "migrate.imported": "%d documentos migrados",
   "migrate.truncated": "Demasiados archivos: solo se migraron los primeros.",
-  "migrate.failed": "%d no se pudieron migrar:"
+  "migrate.failed": "%d no se pudieron migrar:",
+  "migrate.convertTo": "Convertir a"
  }
 }

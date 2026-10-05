@@ -27,7 +27,7 @@ func newSession(t *testing.T) (*Session, *[]docfile.Document, *int) {
 func TestSessionSaveOpenDeleteFlow(t *testing.T) {
 	s, opened, changes := newSession(t)
 	p := s.Props()
-	if p.Target != "sqlite" || p.Format != "json" || len(p.Targets) != 4 || len(p.Formats) != 3 {
+	if p.Target != "sqlite" || p.Format != "json" || len(p.Targets) != 4 || len(p.Formats) != 4 {
 		t.Fatalf("%+v", p)
 	}
 	// Drive it the way the component does.

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/elaous/gojiberry/components"
+	"github.com/elaous/gojiberry/docfile"
 )
 
 // SourceChoice is a platform a Session can migrate from. New makes the Source
@@ -25,8 +26,11 @@ type SourceChoice struct {
 type Session struct {
 	Sources []SourceChoice
 	// Sink says where documents go, read when a migration starts (the folder open
-	// in the document list, say).
-	Sink func() Sink
+	// in the document list, say), and stores them in the codec chosen.
+	Sink func(docfile.Codec) Sink
+	// Formats are the formats a migrated document can be converted to; Format is the
+	// chosen one (SetFormat), .open by default.
+	Formats []docfile.Codec
 	// OnChange is called after any state change, possibly from another goroutine.
 	OnChange func()
 	// OnDone is called after a migration with its report (refresh the document
@@ -36,6 +40,7 @@ type Session struct {
 
 	mu       sync.Mutex
 	choice   *SourceChoice
+	format   string
 	token    string
 	src      Source
 	path     []Item
@@ -49,8 +54,8 @@ type Session struct {
 }
 
 // NewSession makes a Session over the platforms.
-func NewSession(sources []SourceChoice, sink func() Sink) *Session {
-	s := &Session{Sources: sources, Sink: sink, selected: map[string]bool{}}
+func NewSession(sources []SourceChoice, sink func(docfile.Codec) Sink) *Session {
+	s := &Session{Sources: sources, Sink: sink, selected: map[string]bool{}, Formats: docfile.Formats(), format: docfile.Open.Name()}
 	s.Pending = components.NewPending(s.changed)
 	return s
 }
@@ -78,6 +83,20 @@ func (s *Session) SetSource(name string) {
 			}
 		}
 	})
+}
+
+// SetFormat chooses the format migrated documents are stored in.
+func (s *Session) SetFormat(name string) { s.set(func() { s.format = name }) }
+
+func (s *Session) codec() docfile.Codec {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range s.Formats {
+		if c.Name() == s.format {
+			return c
+		}
+	}
+	return docfile.JSON
 }
 
 // SetToken keeps the access token typed.
@@ -200,7 +219,7 @@ func (s *Session) run(ctx context.Context, src Source, items []Item, tag string)
 	if s.Sink == nil {
 		return errors.New("migrate: nowhere to put the documents")
 	}
-	rep, err := Run(ctx, src, items, s.Sink(), Options{Tag: tag, OnProgress: func(done, total int, name string) {
+	rep, err := Run(ctx, src, items, s.Sink(s.codec()), Options{Tag: tag, OnProgress: func(done, total int, name string) {
 		s.set(func() { s.done, s.total, s.current = done, total, name })
 	}})
 	s.set(func() { s.report = &rep })
@@ -219,6 +238,8 @@ func (s *Session) Props(pickFiles func()) components.MigrateProps {
 		OnSource:  s.SetSource,
 		Token:     s.token,
 		OnToken:   s.SetToken,
+		Format:    s.format,
+		OnFormat:  s.SetFormat,
 		OnConnect: run(s.Connect),
 		Connected: s.src != nil,
 		OnOpenFolder: func(id string) {
@@ -230,6 +251,9 @@ func (s *Session) Props(pickFiles func()) components.MigrateProps {
 		OnPickFiles: pickFiles,
 		Busy:        s.Pending.Busy() || s.running,
 		Done:        s.done, Total: s.total, Current: s.current,
+	}
+	for _, c := range s.Formats {
+		p.Formats = append(p.Formats, components.DocChoice{Name: c.Name(), Label: c.Label()})
 	}
 	for _, c := range s.Sources {
 		p.Sources = append(p.Sources, components.DocChoice{Name: c.Name, Label: c.Label})

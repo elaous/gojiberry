@@ -374,7 +374,7 @@ func TestEndToEnd(t *testing.T) {
 	// Saver: memory target, protobuf binary, then the browser's localStorage as JSON.
 	d.Click(`button[data-tab="save"]`)
 	ok(d.Count(`.gj-saver-select[data-field="Save to"] option`) == 2, "the Saver offers its targets")
-	ok(d.Count(`.gj-saver-select[data-field="Format"] option`) == 3, "and the formats")
+	ok(d.Count(`.gj-saver-select[data-field="Format"] option`) == 4, "and the formats")
 	ok(d.Disabled(".gj-saver-save"), "Save waits for a name")
 	d.Fill(".gj-saver-name", "notes")
 	d.Select(`.gj-saver-select[data-field="Save to"]`, "memory")

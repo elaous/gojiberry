@@ -28,6 +28,12 @@ type MigrateProps struct {
 	Source   string
 	OnSource func(name string)
 
+	// Formats are the formats documents can be converted to while migrating;
+	// Format is the chosen one, reported to OnFormat. None leaves the choice out.
+	Formats  []DocChoice
+	Format   string
+	OnFormat func(name string)
+
 	// Token is the access token for the platform, typed into a box that reports to
 	// OnToken; OnConnect signs in with it and lists the top of the platform.
 	// Connected says that has been done.
@@ -100,6 +106,21 @@ func Migrate(p MigrateProps) xango.Node {
 				xango.A("value", p.Token),
 				xango.On("input", func(e xango.Event) { p.OnToken(xango.EventValue[string](e)) })}),
 			docButton("gj-migrate-connect", tr("migrate.connect", "Connect"), p.Busy || strings.TrimSpace(p.Token) == "", p.OnConnect)))
+	}
+
+	// The format the documents are stored in.
+	if len(p.Formats) > 0 && p.OnFormat != nil {
+		var opts []xango.Node
+		for _, f := range p.Formats {
+			opts = append(opts, migrateOption(f.Name, f.Label, f.Name == p.Format))
+		}
+		attrs := []xango.Attr{xango.A("class", "gj-migrate-format"), xango.On("change", func(e xango.Event) { p.OnFormat(xango.EventValue[string](e)) })}
+		if p.Busy {
+			attrs = append(attrs, xango.A("disabled", "disabled"))
+		}
+		kids = append(kids, xango.El("label", []xango.Attr{xango.A("class", "gj-migrate-formatrow")},
+			xango.El("span", nil, xango.Text(tr("migrate.convertTo", "Convert to"))),
+			xango.El("select", attrs, opts...)))
 	}
 
 	// Browsing.

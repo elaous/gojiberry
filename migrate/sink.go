@@ -16,6 +16,8 @@ type SaverSink struct {
 	Saver  *saver.Saver
 	Target string
 	Folder string
+	// Codec is the format documents are stored in; nil is JSON.
+	Codec docfile.Codec
 
 	mu      sync.Mutex
 	folders map[string]string // path joined by "\x00" -> folder ID
@@ -33,7 +35,11 @@ func (s *SaverSink) Save(ctx context.Context, path []string, name, tag string, d
 	if tag != "" {
 		doc.SetTags(append(doc.Tags(), tag))
 	}
-	_, err = s.Saver.Save(ctx, s.Target, docfile.JSON, doc)
+	c := s.Codec
+	if c == nil {
+		c = docfile.JSON
+	}
+	_, err = s.Saver.Save(ctx, s.Target, c, doc)
 	return err
 }
 
