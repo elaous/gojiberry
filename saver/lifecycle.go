@@ -193,7 +193,7 @@ func (s *Saver) mark(ctx context.Context, target string, ids []string, trashed b
 			if trashed {
 				stamp = now
 			}
-			if err := s.touch(ctx, t, id, &e, later, func(d *docfile.Document) { d.SetTrashed(stamp) }); err != nil {
+			if err := s.touch(ctx, t, cat, id, &e, later, func(d *docfile.Document) { d.SetTrashed(stamp) }); err != nil {
 				return err
 			}
 			e.Trashed = stamp
@@ -299,7 +299,7 @@ func (s *Saver) Rename(ctx context.Context, target, id, name string) error {
 		if !ok {
 			return ErrNotFound
 		}
-		if err := s.touch(ctx, t, id, &e, later, func(d *docfile.Document) { d.SetName(name) }); err != nil {
+		if err := s.touch(ctx, t, cat, id, &e, later, func(d *docfile.Document) { d.SetName(name) }); err != nil {
 			return err
 		}
 		e.Name = name
@@ -318,7 +318,7 @@ func (s *Saver) SetTags(ctx context.Context, target, id string, tags []string) e
 		if !ok {
 			return ErrNotFound
 		}
-		if err := s.touch(ctx, t, id, &e, later, func(d *docfile.Document) { d.SetTags(clean.Tags()) }); err != nil {
+		if err := s.touch(ctx, t, cat, id, &e, later, func(d *docfile.Document) { d.SetTags(clean.Tags()) }); err != nil {
 			return err
 		}
 		e.Tags = clean.Tags()

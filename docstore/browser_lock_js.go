@@ -17,6 +17,7 @@ func (a *BrowserAdapter) Lock(ctx context.Context) (func(), error) {
 		return func() {}, nil
 	}
 	acquired, release := make(chan struct{}), make(chan struct{})
+	failed := make(chan struct{}) // the request was refused (an opaque origin, a sandbox)
 	var cb js.Func
 	cb = js.FuncOf(func(js.Value, []js.Value) any {
 		close(acquired)
@@ -34,8 +35,32 @@ func (a *BrowserAdapter) Lock(ctx context.Context) (func(), error) {
 		})
 		return js.Global().Get("Promise").New(executor)
 	})
-	locks.Call("request", "gojiberry-docstore:"+a.prefix, cb)
+	var refused js.Func
+	refused = js.FuncOf(func(js.Value, []js.Value) any {
+		refused.Release()
+		close(failed)
+		return nil
+	})
+	var request js.Value
+	func() {
+		defer func() {
+			if recover() != nil { // a synchronous throw
+				request = js.Undefined()
+			}
+		}()
+		request = locks.Call("request", "gojiberry-docstore:"+a.prefix, cb)
+	}()
+	if !request.Truthy() {
+		cb.Release()
+		refused.Release()
+		return func() {}, nil // no exclusion, as without the API
+	}
+	request.Call("catch", refused)
 	select {
+	case <-failed:
+		// Refused: save unlocked, as a browser without Web Locks does.
+		cb.Release()
+		return func() {}, nil
 	case <-acquired:
 	case <-ctx.Done():
 		// Still queued: give the lock back the moment it is granted.

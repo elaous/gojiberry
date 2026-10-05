@@ -74,6 +74,11 @@ type catalog struct {
 	// Skipped are the files the last rebuild left out (unreadable, or the older of two
 	// files with one ID), so that Repair does not take them for work to do each time.
 	Skipped []string `json:"skipped,omitempty"`
+
+	// fresh are the files this attempt of an update wrote under new keys: if the
+	// catalog is not written (a conflict, an error), nobody points at them, and update
+	// deletes them.
+	fresh []string
 }
 
 func (c *catalog) entry(s *Saver, id string) Entry {
@@ -181,30 +186,37 @@ func (s *Saver) update(ctx context.Context, target string, f func(t Target, c *c
 	defer s.mu.Unlock()
 	// A store that others share but that cannot write conditionally (a browser's
 	// localStorage) offers a lock instead: hold it across the read and the write.
-	if l, ok := t.Adapter.(docstore.Locker); ok {
-		unlock, err := l.Lock(ctx)
-		if err != nil {
-			return err
-		}
-		defer unlock()
+	unlock, err := lockTarget(ctx, t)
+	if err != nil {
+		return err
 	}
+	defer unlock()
 	// With an adapter that can write conditionally, a catalog changed by another
 	// process since it was read is read again and f is run again on it, so f must
-	// be safe to repeat (it is: files are keyed by ID).
+	// be safe to repeat (it is: a file it wrote is listed in c.fresh, and removed).
 	for try := 0; try < maxUpdateTries; try++ {
 		c, rev, err := s.readCatalogRev(ctx, t)
 		if err != nil {
 			return err
 		}
 		var later []func()
+		// Files this attempt wrote that no catalog points at are removed when it fails.
+		discard := func() {
+			for _, k := range c.fresh {
+				_ = t.Adapter.Delete(ctx, k)
+			}
+		}
 		if err := f(t, c, &later); err != nil {
+			discard()
 			return err
 		}
 		ok, err := s.writeCatalogIf(ctx, t, c, rev)
 		if err != nil {
+			discard()
 			return err
 		}
 		if !ok {
+			discard()
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -218,6 +230,15 @@ func (s *Saver) update(ctx context.Context, target string, f func(t Target, c *c
 		return nil
 	}
 	return ErrBusy
+}
+
+// lockTarget takes the store's cross-process lock if it has one (docstore.Locker), and
+// returns what releases it.
+func lockTarget(ctx context.Context, t Target) (func(), error) {
+	if l, ok := t.Adapter.(docstore.Locker); ok {
+		return l.Lock(ctx)
+	}
+	return func() {}, nil
 }
 
 // view runs f on the target's catalog without writing it.
@@ -246,6 +267,11 @@ func (s *Saver) Rebuild(ctx context.Context, target string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	unlock, err := lockTarget(ctx, t)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	_, err = s.rebuild(ctx, t)
 	return err
 }
@@ -271,6 +297,7 @@ func (s *Saver) build(ctx context.Context, t Target) (*catalog, error) {
 		return nil, err
 	}
 	out := &catalog{Docs: map[string]catalogEntry{}, Folders: map[string]folderEntry{}}
+	modified := map[string]int64{} // each file's modification time, to break a tie
 	for _, m := range metas {
 		if id, ok := strings.CutPrefix(m.ID, t.folderPrefix()); ok && docfile.ValidID(id) {
 			if stored, err := t.Adapter.Load(ctx, m.ID); err == nil {
@@ -326,10 +353,17 @@ func (s *Saver) build(ctx context.Context, t Target) (*catalog, error) {
 		// Two files with one ID are a document and its previous copy (or the leftovers of
 		// a crash between writing a new save and the catalog): the newer is the document,
 		// the next newer its previous copy, any others are left out.
-		entry := catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: size, Updated: m.UpdatedAt.UnixNano(), Tags: doc.Tags(), Trashed: doc.Trashed(), Folder: doc.Folder(), Sum: sum}
+		// The document's own save time (to the nanosecond, in the file) says which file is
+		// newer; a store's modification times can be coarse, and equal for two files.
+		saved := doc.Updated
+		if saved == 0 {
+			saved = m.UpdatedAt.UnixNano()
+		}
+		entry := catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: size, Updated: saved, Tags: doc.Tags(), Trashed: doc.Trashed(), Folder: doc.Folder(), Sum: sum}
+		modified[key] = m.UpdatedAt.UnixNano()
 		if cur, ok := out.Docs[id]; ok {
 			older, newer := entry, cur
-			if cur.Updated < entry.Updated {
+			if cur.Updated < entry.Updated || cur.Updated == entry.Updated && modified[cur.Key] < modified[entry.Key] {
 				older, newer = cur, entry
 			}
 			if s.previousCopies() > 0 && newer.Prev == "" {
@@ -367,8 +401,8 @@ func (s *Saver) build(ctx context.Context, t Target) (*catalog, error) {
 // touch rewrites a document's own metadata (name, tags, trash flag, folder) so
 // the document and the catalog agree and a rebuilt catalog loses nothing. The
 // document's Updated time is not changed.
-func (s *Saver) touch(ctx context.Context, t Target, id string, e *catalogEntry, later *[]func(), f func(*docfile.Document)) error {
-	write, err := s.prepareTouch(ctx, t, id, e, later, f)
+func (s *Saver) touch(ctx context.Context, t Target, cat *catalog, id string, e *catalogEntry, later *[]func(), f func(*docfile.Document)) error {
+	write, err := s.prepareTouch(ctx, t, cat, id, e, later, f)
 	if err != nil {
 		return err
 	}
@@ -381,7 +415,7 @@ func (s *Saver) touch(ctx context.Context, t Target, id string, e *catalogEntry,
 // (the entry e is given its key, checksum and previous copy here; the catalog entry is
 // the caller's to store), and refuses a document whose file does not match its checksum
 // (ErrUnreadable) rather than copying damage into a fresh, valid-looking file.
-func (s *Saver) prepareTouch(ctx context.Context, t Target, id string, e *catalogEntry, later *[]func(), f func(*docfile.Document)) (write func() error, err error) {
+func (s *Saver) prepareTouch(ctx context.Context, t Target, cat *catalog, id string, e *catalogEntry, later *[]func(), f func(*docfile.Document)) (write func() error, err error) {
 	c, _ := s.codecOf(e.Key)
 	if c == nil {
 		return func() error { return nil }, nil
@@ -404,8 +438,13 @@ func (s *Saver) prepareTouch(ctx context.Context, t Target, id string, e *catalo
 		return nil, err
 	}
 	key := genKey(id, c)
-	s.rotate(ctx, t, e, key, data, later)
-	return func() error { return t.Adapter.Save(ctx, key, data) }, nil
+	// Only the metadata changes: the previous copy stays the previous save, and the
+	// file it replaces is dropped.
+	s.rotateTouch(ctx, t, e, key, data, later)
+	return func() error {
+		cat.fresh = append(cat.fresh, key)
+		return t.Adapter.Save(ctx, key, data)
+	}, nil
 }
 
 // sorted returns the catalog's entries (those in or out of the trash), newest
@@ -444,6 +483,11 @@ func (s *Saver) Repair(ctx context.Context, target string) (repaired bool, err e
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	unlock, err := lockTarget(ctx, t)
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
 	grace := s.RepairGrace
 	if grace == 0 {
 		grace = DefaultRepairGrace
