@@ -34,7 +34,7 @@ func TestSessionSaveOpenDeleteFlow(t *testing.T) {
 	s.Props().OnFormat("proto")
 	s.Props().OnSave()
 	p = s.Props()
-	if p.Failed || p.Status != "Saved report" || len(p.Docs.Docs) != 1 || p.Docs.Docs[0].Name != "report" || p.Docs.Docs[0].Format != "Protobuf (binary)" {
+	if p.Failed || p.Status != "report saved" || len(p.Docs.Docs) != 1 || p.Docs.Docs[0].Name != "report" || p.Docs.Docs[0].Format != "Protobuf (binary)" {
 		t.Fatalf("after save: %+v", p)
 	}
 	id := p.Docs.Docs[0].ID
@@ -68,7 +68,7 @@ func TestSessionSaveOpenDeleteFlow(t *testing.T) {
 	if err := p.Docs.Open(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
-	if len(*opened) != 1 || (*opened)[0].Title != "report" || s.Name() != "report" || s.ID() != id || s.Props().Format != "proto" || s.Props().Status != "Opened report" {
+	if len(*opened) != 1 || (*opened)[0].Title != "report" || s.Name() != "report" || s.ID() != id || s.Props().Format != "proto" || s.Props().Status != "report opened" {
 		t.Fatalf("%+v %q %+v", *opened, s.Name(), s.Props())
 	}
 	// Detach: what is in the editor is not that document any more.
@@ -79,7 +79,7 @@ func TestSessionSaveOpenDeleteFlow(t *testing.T) {
 	if err := s.Props().Docs.Delete(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
-	if p = s.Props(); len(p.Docs.Docs) != 1 || p.Status != "Deleted it" {
+	if p = s.Props(); len(p.Docs.Docs) != 1 || p.Status != "report deleted" {
 		t.Fatalf("%+v", p)
 	}
 	if !strings.Contains(s.String(), "sqlite") {
@@ -171,10 +171,10 @@ func TestSessionPlugsIntoTheDocumentComponents(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := s.Versions()
-	if v.Name != "report" || len(v.Versions) != 1 || s.Props().Status != "Saved a version of report" {
+	if v.Name != "report" || len(v.Versions) != 1 || s.Props().Status != "A version of report saved" {
 		t.Fatalf("after a version: %+v", v)
 	}
-	if err := v.Open(ctx, v.Versions[0].Key); err != nil || len(*opened) != 1 || s.Props().Status != "Opened a version" {
+	if err := v.Open(ctx, v.Versions[0].Key); err != nil || len(*opened) != 1 || s.Props().Status != "Version opened" {
 		t.Fatalf("opening a version: %d opened, %q, %v", len(*opened), s.Props().Status, err)
 	}
 	if err := v.Delete(ctx, v.Versions[0].Key); err != nil || len(s.Versions().Versions) != 0 {
@@ -217,7 +217,7 @@ func TestSessionPlugsIntoTheDocumentComponents(t *testing.T) {
 	if err := docs.Duplicate(ctx, first); err != nil {
 		t.Fatal(err)
 	}
-	if p := s.Props(); len(p.Docs.Docs) != 3 || p.Status != "Copied to Copy of report" {
+	if p := s.Props(); len(p.Docs.Docs) != 3 || p.Status != "Copy of report created" {
 		t.Fatalf("duplicate: %d docs, %q", len(p.Docs.Docs), p.Status)
 	}
 	if err := docs.Trash(ctx, []string{first}); err != nil {
@@ -230,7 +230,7 @@ func TestSessionPlugsIntoTheDocumentComponents(t *testing.T) {
 	if err := tr.Restore(ctx, []string{first}); err != nil {
 		t.Fatal(err)
 	}
-	if p := s.Props(); len(p.Docs.Docs) != 3 || len(p.Trash.Docs) != 0 || p.Status != "Restored 1" {
+	if p := s.Props(); len(p.Docs.Docs) != 3 || len(p.Trash.Docs) != 0 || p.Status != "report restored" {
 		t.Fatalf("restore: %d docs, %d trashed, %q", len(p.Docs.Docs), len(p.Trash.Docs), p.Status)
 	}
 	_ = docs.Trash(ctx, []string{second})
@@ -341,5 +341,56 @@ func TestOnlyTheFormAsksBeforeDeleting(t *testing.T) {
 	p := s.Props()
 	if p.Docs.Confirm == nil || p.Trash.Confirm == nil || p.Asker == nil {
 		t.Error("the Saver form draws the dialog, so it asks")
+	}
+}
+
+func TestStatusLinesNameWhatTheyAreAbout(t *testing.T) {
+	ctx := context.Background()
+	s, _, _ := newSession(t)
+	s.SetName("plan")
+	_ = s.Save(ctx)
+	id := s.ID()
+	status := func() string { return s.Props().Status }
+	_ = s.NewFolder(ctx, "Work")
+	if status() != "Work created" {
+		t.Errorf("%q", status())
+	}
+	work := s.Docs().Folders[0]
+	_ = s.Docs().Move(ctx, []string{id}, work.ID)
+	if status() != "plan moved" {
+		t.Errorf("%q", status())
+	}
+	_ = s.RenameFolder(ctx, work.ID, "Job")
+	if status() != "Job renamed" {
+		t.Errorf("%q", status())
+	}
+	_ = s.Docs().Trash(ctx, []string{id})
+	if status() != "plan moved to the trash" {
+		t.Errorf("%q", status())
+	}
+	_ = s.Trash().Restore(ctx, []string{id})
+	if status() != "plan restored" {
+		t.Errorf("%q", status())
+	}
+	_ = s.Docs().Move(ctx, []string{id}, "")
+	_ = s.DeleteFolder(ctx, work.ID)
+	if status() != "Job deleted" {
+		t.Errorf("%q", status())
+	}
+	_ = s.Docs().Tag(ctx, id, []string{"a"})
+	if status() != "Tags of plan updated" {
+		t.Errorf("%q", status())
+	}
+	_ = s.Docs().Duplicate(ctx, id)
+	if status() != "Copy of plan created" {
+		t.Errorf("%q", status())
+	}
+	ids := []string{}
+	for _, d := range s.Docs().Docs {
+		ids = append(ids, d.ID)
+	}
+	_ = s.Docs().Trash(ctx, ids)
+	if status() != "plan, Copy of plan moved to the trash" && status() != "Copy of plan, plan moved to the trash" {
+		t.Errorf("two names: %q", status())
 	}
 }

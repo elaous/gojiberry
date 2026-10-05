@@ -557,9 +557,6 @@ func docBreadcrumbs(p DocListProps) (xango.Node, bool) {
 			it.Href = "#" + id
 			it.OnClick = func(e xango.Event) {
 				e.PreventDefault()
-				if p.Pending.Busy() {
-					return
-				}
 				p.Pending.Run(func(ctx context.Context) error { return p.OpenFolder(ctx, id) })
 			}
 		}
@@ -587,8 +584,8 @@ func folderRows(p DocListProps, busy bool) []xango.Node {
 				xango.A("aria-label", trf("docs.renameFolder", "Name of folder %s", f.Name)), xango.A("value", f.Name),
 				xango.On("change", func(ev xango.Event) {
 					name := strings.TrimSpace(xango.EventValue[string](ev))
-					if name == "" || name == f.Name || p.Pending.Busy() {
-						return // a blank or unchanged name is not a rename
+					if name == "" || name == f.Name {
+						return // a blank or unchanged name is not a rename; folders are found by ID, so renaming while something else runs is safe
 					}
 					p.Pending.Run(func(ctx context.Context) error { return p.RenameFolder(ctx, id, name) })
 				})}))

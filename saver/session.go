@@ -56,6 +56,7 @@ type Session struct {
 	trashed              []Entry
 	selected             []string
 	tagFilter            string
+	checked              map[string]bool // targets already checked for leftovers of a crash
 	status               string
 }
 
@@ -140,6 +141,18 @@ func (s *Session) Detach() { s.set(func() { s.id = "" }) }
 // the versions of the document being edited.
 func (s *Session) Refresh(ctx context.Context) error {
 	target, id := s.targetName(), s.ID()
+	s.mu.Lock()
+	first := !s.checked[target]
+	if s.checked == nil {
+		s.checked = map[string]bool{}
+	}
+	s.checked[target] = true
+	s.mu.Unlock()
+	if first {
+		// Once per session and target: leftovers of an operation that was cut short
+		// (see Saver.Repair) are put right before the lists are read.
+		_, _ = s.Saver.Repair(ctx, target)
+	}
 	list, trashed, folders, err := s.Saver.Overview(ctx, target) // one read: a document is in one list
 	var versions []Version
 	if err == nil && id != "" {
@@ -177,6 +190,45 @@ func allTags(entries []Entry) []string {
 }
 
 func (s *Session) say(msg string) { s.set(func() { s.status = msg }) }
+
+// msg is a status line in the interface language, with args put into it ("%s saved").
+func msg(id, def string, args ...any) string {
+	return fmt.Sprintf(components.Translate(id, def), args...)
+}
+
+// names says which documents or folders an operation was about: the name, a few
+// names, or how many.
+func (s *Session) names(ids []string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []string
+	for _, id := range ids {
+		found := id
+		for _, e := range s.entries {
+			if e.ID == id {
+				found = e.Name
+			}
+		}
+		for _, e := range s.trashed {
+			if e.ID == id {
+				found = e.Name
+			}
+		}
+		for _, f := range s.folders {
+			if f.ID == id {
+				found = f.Name
+			}
+		}
+		out = append(out, found)
+	}
+	switch {
+	case len(out) == 0:
+		return ""
+	case len(out) <= 2:
+		return strings.Join(out, ", ")
+	}
+	return msg("saver.nItems", "%d items", len(out))
+}
 
 // after refreshes the lists and then shows msg as the status.
 func (s *Session) after(ctx context.Context, msg string) error {
@@ -238,7 +290,7 @@ func (s *Session) save(ctx context.Context) error {
 			s.id = e.ID
 		}
 	})
-	return s.after(ctx, "Saved "+e.Name)
+	return s.after(ctx, msg("saver.saved", "%s saved", e.Name))
 }
 
 // SaveAsNew saves the current document as a new document, with a new ID, leaving
@@ -273,13 +325,14 @@ func (s *Session) Open(ctx context.Context, id string) error {
 	if s.OnOpen != nil {
 		s.ui(func() { s.OnOpen(doc) })
 	}
-	return s.after(ctx, "Opened "+e.Name) // the versions are those of the document just opened
+	return s.after(ctx, msg("saver.opened", "%s opened", e.Name)) // the versions are those of the document just opened
 }
 
 // Delete removes a saved document for good, with no trash in between.
 func (s *Session) Delete(ctx context.Context, id string) error {
 	s.op.Lock()
 	defer s.op.Unlock()
+	name := s.names([]string{id})
 	if err := s.Saver.Delete(ctx, s.targetName(), id); err != nil {
 		return err
 	}
@@ -288,7 +341,7 @@ func (s *Session) Delete(ctx context.Context, id string) error {
 			s.id = ""
 		}
 	})
-	return s.after(ctx, "Deleted it")
+	return s.after(ctx, msg("saver.deleted", "%s deleted", name))
 }
 
 // SaveVersion snapshots the document being edited. It has to have been saved, to
@@ -304,7 +357,7 @@ func (s *Session) SaveVersion(ctx context.Context) error {
 	if _, err := s.Saver.SaveVersion(ctx, s.targetName(), c, doc); err != nil {
 		return err
 	}
-	return s.after(ctx, "Saved a version of "+s.Name())
+	return s.after(ctx, msg("saver.versionSaved", "A version of %s saved", s.Name()))
 }
 
 // OpenVersion opens a snapshot in the editor. The document keeps its ID, so saving
@@ -317,7 +370,7 @@ func (s *Session) OpenVersion(ctx context.Context, key string) error {
 	if s.OnOpen != nil {
 		s.ui(func() { s.OnOpen(doc) })
 	}
-	s.say("Opened a version")
+	s.say(msg("saver.versionOpened", "Version opened"))
 	return nil
 }
 
@@ -326,11 +379,12 @@ func (s *Session) DeleteVersion(ctx context.Context, key string) error {
 	if err := s.Saver.DeleteVersion(ctx, s.targetName(), key); err != nil {
 		return err
 	}
-	return s.after(ctx, "Deleted a version")
+	return s.after(ctx, msg("saver.versionDeleted", "Version deleted"))
 }
 
 // TrashDocs moves saved documents to the trash.
 func (s *Session) TrashDocs(ctx context.Context, ids []string) error {
+	name := s.names(ids)
 	if err := s.Saver.Trash(ctx, s.targetName(), ids...); err != nil {
 		return err
 	}
@@ -339,23 +393,25 @@ func (s *Session) TrashDocs(ctx context.Context, ids []string) error {
 			s.id = "" // the open document is in the trash: saving is a new document
 		}
 	})
-	return s.after(ctx, fmt.Sprintf("Moved %d to the trash", len(ids)))
+	return s.after(ctx, msg("saver.trashed", "%s moved to the trash", name))
 }
 
 // Restore takes documents out of the trash (components.TrashBackend).
 func (s *Session) Restore(ctx context.Context, ids ...string) error {
+	name := s.names(ids)
 	if err := s.Saver.Restore(ctx, s.targetName(), ids...); err != nil {
 		return err
 	}
-	return s.after(ctx, fmt.Sprintf("Restored %d", len(ids)))
+	return s.after(ctx, msg("saver.restored", "%s restored", name))
 }
 
 // Purge deletes documents in the trash for good (components.TrashBackend).
 func (s *Session) Purge(ctx context.Context, ids ...string) error {
+	name := s.names(ids)
 	if err := s.Saver.Purge(ctx, s.targetName(), ids...); err != nil {
 		return err
 	}
-	return s.after(ctx, fmt.Sprintf("Deleted %d for good", len(ids)))
+	return s.after(ctx, msg("saver.purged", "%s deleted for good", name))
 }
 
 // Duplicate saves a copy of a document, as a new document with its own ID.
@@ -364,15 +420,16 @@ func (s *Session) Duplicate(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	return s.after(ctx, "Copied to "+e.Name)
+	return s.after(ctx, msg("saver.created", "%s created", e.Name))
 }
 
 // SetTags sets a saved document's tags.
 func (s *Session) SetTags(ctx context.Context, id string, tags []string) error {
+	name := s.names([]string{id})
 	if err := s.Saver.SetTags(ctx, s.targetName(), id, tags); err != nil {
 		return err
 	}
-	return s.after(ctx, "Tagged it")
+	return s.after(ctx, msg("saver.tagged", "Tags of %s updated", name))
 }
 
 // SetTagFilter narrows the list to the documents with the tag ("" for all).
@@ -399,7 +456,7 @@ func (s *Session) NewFolder(ctx context.Context, name string) error {
 		return err
 	}
 	s.set(func() { s.folderDraft = "" })
-	return s.after(ctx, "Made the folder "+name)
+	return s.after(ctx, msg("saver.created", "%s created", name))
 }
 
 // RenameFolder renames a folder.
@@ -407,12 +464,13 @@ func (s *Session) RenameFolder(ctx context.Context, id, name string) error {
 	if err := s.Saver.RenameFolder(ctx, s.targetName(), id, name); err != nil {
 		return err
 	}
-	return s.after(ctx, "Renamed the folder")
+	return s.after(ctx, msg("saver.renamed", "%s renamed", name))
 }
 
 // DeleteFolder removes an empty folder; if it is the one being shown, the one
 // above it is shown instead.
 func (s *Session) DeleteFolder(ctx context.Context, id string) error {
+	name := s.names([]string{id})
 	if err := s.Saver.DeleteFolder(ctx, s.targetName(), id); err != nil {
 		return err
 	}
@@ -426,15 +484,16 @@ func (s *Session) DeleteFolder(ctx context.Context, id string) error {
 		}
 	}
 	s.mu.Unlock()
-	return s.after(ctx, "Deleted the folder")
+	return s.after(ctx, msg("saver.deleted", "%s deleted", name))
 }
 
 // MoveDocs puts documents in a folder ("" for the top level).
 func (s *Session) MoveDocs(ctx context.Context, ids []string, folder string) error {
+	name := s.names(ids)
 	if err := s.Saver.Move(ctx, s.targetName(), folder, ids...); err != nil {
 		return err
 	}
-	return s.after(ctx, fmt.Sprintf("Moved %d", len(ids)))
+	return s.after(ctx, msg("saver.moved", "%s moved", name))
 }
 
 // SetFolderDraft keeps what is typed in the new-folder box.

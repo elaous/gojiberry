@@ -146,6 +146,20 @@
   "docs.createFolder": "Créer le dossier",
   "docs.moveTo": "Déplacer vers…",
   "docs.moveOf": "Déplacer %s dans un dossier",
-  "docs.topLevel": "Documents (niveau supérieur)"
+  "docs.topLevel": "Documents (niveau supérieur)",
+  "saver.nItems": "%d éléments",
+  "saver.saved": "%s enregistré",
+  "saver.opened": "%s ouvert",
+  "saver.deleted": "%s supprimé",
+  "saver.versionSaved": "Version de %s enregistrée",
+  "saver.versionOpened": "Version ouverte",
+  "saver.versionDeleted": "Version supprimée",
+  "saver.trashed": "%s placé dans la corbeille",
+  "saver.restored": "%s restauré",
+  "saver.purged": "%s supprimé définitivement",
+  "saver.created": "%s créé",
+  "saver.tagged": "Étiquettes de %s mises à jour",
+  "saver.renamed": "%s renommé",
+  "saver.moved": "%s déplacé"
  }
 }

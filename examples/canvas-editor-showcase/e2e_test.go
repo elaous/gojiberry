@@ -373,7 +373,7 @@ func TestEndToEnd(t *testing.T) {
 	d.Select(`.gj-saver-select[data-field="Format"]`, "proto")
 	d.Click(".gj-saver-save")
 	d.WaitFor("the saved entry", `document.querySelector('.gj-doclist-item')`)
-	ok(d.Text(".gj-saver-status") == "Saved notes", "status: "+d.Text(".gj-saver-status"))
+	ok(d.Text(".gj-saver-status") == "notes saved", "status: "+d.Text(".gj-saver-status"))
 	ok(d.Count(".gj-doclist-item") == 1, "the downloaded font in the same store is not listed as a document")
 	d.Select(`.gj-saver-select[data-field="Save to"]`, "browser")
 	d.Select(`.gj-saver-select[data-field="Format"]`, "json")
@@ -427,7 +427,7 @@ func TestEndToEnd(t *testing.T) {
 	d.Click(".gj-doclist-item .gj-doclist-delete")
 	d.Click(`[role="alertdialog"] .gj-dialog-actions button:last-child`) // Delete for good asks first
 	d.WaitFor("an empty list", "document.querySelectorAll('.gj-doclist-item').length === 0")
-	ok(d.Text(".gj-saver-status") == "Deleted it", "Delete removes a saved document")
+	ok(d.Text(".gj-saver-status") == "notes deleted", "Delete removes a saved document")
 
 	// Import / Export.
 	d.Click(`button[data-tab="transfer"]`)

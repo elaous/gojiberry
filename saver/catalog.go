@@ -286,3 +286,61 @@ func (c *catalog) sorted(s *Saver, trashed bool) []Entry {
 	})
 	return out
 }
+
+// Repair makes the catalog agree with what is in the store, if it does not: a
+// document file nobody listed, a listed document whose file is gone, a folder
+// record the catalog lacks, or the other way round. These are what a crash between
+// the two writes of an operation leaves behind (the file or record is written
+// first, so the leftovers are orphans, never lost data). It costs one listing of
+// the store when everything agrees, and a rebuild (which reads the documents)
+// when not; it reports whether it had to repair.
+func (s *Saver) Repair(ctx context.Context, target string) (repaired bool, err error) {
+	t, err := s.Target(target)
+	if err != nil {
+		return false, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stored, err := t.Adapter.Load(ctx, CatalogKey)
+	if errors.Is(err, docstore.ErrNotFound) {
+		_, err = s.rebuild(ctx, t)
+		return true, err
+	}
+	if err != nil {
+		return false, err
+	}
+	var c catalog
+	if json.Unmarshal(stored.Data, &c) != nil || c.Docs == nil {
+		_, err = s.rebuild(ctx, t)
+		return true, err
+	}
+	metas, err := t.Adapter.List(ctx)
+	if err != nil {
+		return false, err
+	}
+	files, records := map[string]bool{}, map[string]bool{}
+	for _, m := range metas {
+		if id, ok := strings.CutPrefix(m.ID, FolderRecordPrefix); ok {
+			records[id] = true
+			continue
+		}
+		if strings.HasPrefix(m.ID, FontPrefix) || reserved(m.ID) {
+			continue
+		}
+		if codec, _ := s.codecOf(m.ID); codec != nil {
+			files[m.ID] = true
+		}
+	}
+	same := len(files) == len(c.Docs) && len(records) == len(c.Folders)
+	for _, e := range c.Docs {
+		same = same && files[e.Key]
+	}
+	for id := range c.Folders {
+		same = same && records[id]
+	}
+	if same {
+		return false, nil
+	}
+	_, err = s.rebuild(ctx, t)
+	return true, err
+}

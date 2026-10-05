@@ -2,6 +2,7 @@ package saver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -169,5 +170,45 @@ func TestMoveLeavesDocumentsAlreadyThereAlone(t *testing.T) {
 	after, _ := mem.Load(ctx, e.Key)
 	if string(before.Data) != string(after.Data) {
 		t.Error("a document already in the folder was rewritten")
+	}
+}
+
+func TestRepairFindsWhatACrashLeftBehind(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	keep, _ := s.CreateFolder(ctx, "m", "", "Keep")
+	e, _ := s.Save(ctx, "m", docfile.JSON, named("a"))
+	if fixed, err := s.Repair(ctx, "m"); err != nil || fixed {
+		t.Fatalf("a consistent store needs no repair: %v %v", fixed, err)
+	}
+	// A folder whose catalog write never happened: its record is an orphan.
+	orphan, _ := s.CreateFolder(ctx, "m", "", "Orphan")
+	c, _ := s.readCatalogForTest(ctx, "m")
+	delete(c.Folders, orphan.ID)
+	data, _ := json.Marshal(c)
+	_ = mem.Save(ctx, CatalogKey, data)
+	if fixed, _ := s.Repair(ctx, "m"); !fixed {
+		t.Fatal("an orphan record is a repair")
+	}
+	if fs, _ := s.Folders(ctx, "m"); len(fs) != 2 {
+		t.Errorf("the folder should be back: %+v", fs)
+	}
+	// A listed document whose file is gone is dropped; a file nobody listed is adopted.
+	_ = mem.Delete(ctx, e.Key)
+	extra := named("late")
+	extra.SetID(docfile.NewID())
+	raw, _ := docfile.JSON.Marshal(extra)
+	_ = mem.Save(ctx, extra.ID()+".json", raw)
+	if fixed, _ := s.Repair(ctx, "m"); !fixed {
+		t.Fatal("expected a repair")
+	}
+	list, _ := s.List(ctx, "m")
+	if len(list) != 1 || list[0].Name != "late" {
+		t.Errorf("%+v", list)
+	}
+	_ = keep
+	if fixed, _ := s.Repair(ctx, "m"); fixed {
+		t.Error("repair is idempotent")
 	}
 }
