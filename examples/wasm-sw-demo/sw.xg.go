@@ -11,15 +11,20 @@
 package main
 
 import (
+	"strings"
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/domrt"
 	"github.com/elaous/gojiberry/domrt/sw"
 )
 
-// cacheName names this version of the cache: change it with the worker and the old
-// one is deleted when the new worker activates.
-const cacheName = "gojiberry-demo-v2"
+// cacheName names this version of the cache: change the number with the worker and the
+// older versions are deleted when the new worker activates. Only caches that start with
+// cachePrefix are this worker's: other apps on the same origin keep theirs.
+const (
+	cachePrefix = "gojiberry-demo-"
+	cacheName   = cachePrefix + "v2"
+)
 
 var precacheURLs = []string{"hello.txt"}
 
@@ -41,10 +46,8 @@ func main() {
 				return err
 			}
 			for _, name := range names {
-				if name != cacheName {
-					if err := sw.CachesDelete(name); err != nil {
-						return err
-					}
+				if strings.HasPrefix(name, cachePrefix) && name != cacheName {
+					_ = sw.CachesDelete(name) // an old cache that cannot be deleted must not stop the worker from activating
 				}
 			}
 			return sw.ClaimClients()
@@ -57,11 +60,16 @@ func main() {
 			resp, err := domrt.Await(js.Global().Call("fetch", req))
 			if err == nil {
 				// Keep what the network said (a successful answer to a GET), for when it is
-				// not there; the original response goes to the page.
+				// not there; the original response goes to the page at once (the put waits
+				// for the whole body, so it must not hold the answer back), and the clone is
+				// taken before the page starts reading it.
 				if req.Get("method").String() == "GET" && resp.Get("ok").Bool() {
-					if cache, cerr := sw.CachesOpen(cacheName); cerr == nil {
-						_ = sw.CachePut(cache, req, resp.Call("clone"))
-					}
+					kept := resp.Call("clone")
+					go func() {
+						if cache, cerr := sw.CachesOpen(cacheName); cerr == nil {
+							_ = sw.CachePut(cache, req, kept)
+						}
+					}()
 				}
 				return resp, nil
 			}

@@ -122,6 +122,9 @@ func TestCanvasEditorEndToEnd(t *testing.T) {
 	ok(field("text") == "hello world", "and leaves the text alone")
 	shortcut("x")
 	clip = clipboard("world")
+	for i := 0; i < 40 && field("text") != "hello "; i++ { // the cut finishes when the clipboard write does
+		d.Sleep(50)
+	}
 	ok(clip == "world" && field("text") == "hello ", fmt.Sprintf("Ctrl+X copies and removes it, got clipboard %q and text %q", clip, field("text")))
 	d.Press("Control+z")
 	ok(field("text") == "hello world", fmt.Sprintf("Ctrl+Z undoes the cut in one step, got %q", field("text")))

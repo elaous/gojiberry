@@ -139,7 +139,7 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 	if s.auth == nil {
 		return true, 0
 	}
-	if strings.HasPrefix(id, "catalog:") {
+	if strings.HasPrefix(strings.ToLower(id), "catalog:") { // any case: a backend that folds case would alias them
 		return s.checkCatalog(r, id)
 	}
 	acl, err := s.loadACL(r.Context(), id)
@@ -298,7 +298,7 @@ func (s *Server) checkCatalog(r *http.Request, id string) (allowed bool, status 
 	if !signedIn || me.ID == "" {
 		return false, http.StatusUnauthorized
 	}
-	if strings.HasPrefix(id, UserCatalogPrefix(me.ID)) {
+	if strings.HasPrefix(id, UserCatalogPrefix(me.ID)) { // exact, and ending in "/": a prefix of the hash is not the hash
 		return true, 0
 	}
 	return false, http.StatusForbidden

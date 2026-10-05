@@ -47,7 +47,7 @@ func TestSpellCheckAndHyphenation(t *testing.T) {
 	d.Click(`button[data-tab="spell"]`)
 	d.SetChecked(".gj-spell-enable", true)
 	d.Wait("s.spell.enabled")
-	d.Wait("s.spell.words > 0") // the check has run
+	d.Wait("s.spell.checked") // the check has run
 	d.OK(d.Count(`.gj-spell-item[data-word="Gojiberry"]`) == 0, "and still known after a reload")
 
 	// Hyphenation: a View menu switch.
