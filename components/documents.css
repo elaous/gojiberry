@@ -37,3 +37,9 @@
 .gj-capacity-over .gj-capacity-bar { background: var(--gj-danger, #c01c28); }
 .gj-capacity-percent { font-weight: 600; }
 .gj-capacity-left, .gj-capacity-unknown, .gj-capacity-counts { color: var(--gj-muted); }
+.gj-migrate { display: flex; flex-direction: column; gap: 0.5em; }
+.gj-migrate-signin, .gj-migrate-actions, .gj-migrate-files { display: flex; gap: 0.4em; align-items: center; }
+.gj-migrate-token { flex: 1; min-width: 0; padding: 0.3em 0.5em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); font: inherit; }
+.gj-migrate-item { display: flex; gap: 0.5em; align-items: center; }
+.gj-migrate-progress { width: 100%; }
+.gj-migrate-failures { margin: 0; padding-left: 1.2em; font-size: 0.85em; color: var(--gj-muted); }

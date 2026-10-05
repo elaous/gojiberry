@@ -5,10 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Next
 
-1. **Migrate** (Google Docs, Microsoft Word): a `migrate` package with a `Source`
-   interface (list, fetch), bulk `.docx` import into the current folder, a Google
-   Drive client (export as DOCX) and a Microsoft Graph client, tested against fake
-   servers. Signing in is the host's job.
+1. **Migrate: done** (see [document-components.md](document-components.md)); left: skipping what an earlier run already brought (needs the source ID kept on the document), Google Docs comments and revision history.
 2. **Button icons** from opendocs into `components` menus and toolbars.
 3. **Fresh review** of the grown PR before it merges.
 

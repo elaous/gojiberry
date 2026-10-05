@@ -77,3 +77,68 @@ func PickFile(accept string, done func(name string, data []byte, err error)) {
 	in.Call("addEventListener", "change", onChange)
 	in.Call("click")
 }
+
+// PickedFile is a file the person chose.
+type PickedFile struct {
+	Name string
+	Data []byte
+}
+
+// PickFiles is PickFile for several files: the chooser lets more than one be
+// picked, and done gets them all (in the order of the chooser) once they are
+// read. Nothing is called if the person cancels.
+func PickFiles(accept string, done func(files []PickedFile, err error)) {
+	in := js.Global().Get("document").Call("createElement", "input")
+	in.Set("type", "file")
+	in.Set("multiple", true)
+	in.Set("accept", accept)
+	var onChange, onCancel, onData, onFail js.Func
+	releaseAll := func() {
+		onChange.Release()
+		onCancel.Release()
+		if onData.Truthy() {
+			onData.Release()
+			onFail.Release()
+		}
+	}
+	onCancel = js.FuncOf(func(js.Value, []js.Value) any {
+		releaseAll()
+		return nil
+	})
+	onChange = js.FuncOf(func(js.Value, []js.Value) any {
+		files := in.Get("files")
+		n := files.Length()
+		if n == 0 {
+			releaseAll()
+			return nil
+		}
+		reads := js.Global().Get("Array").New()
+		names := make([]string, n)
+		for i := 0; i < n; i++ {
+			names[i] = files.Index(i).Get("name").String()
+			reads.Call("push", files.Index(i).Call("arrayBuffer"))
+		}
+		onData = js.FuncOf(func(_ js.Value, args []js.Value) any {
+			out := make([]PickedFile, n)
+			for i := range out {
+				buf := js.Global().Get("Uint8Array").New(args[0].Index(i))
+				data := make([]byte, buf.Length())
+				js.CopyBytesToGo(data, buf)
+				out[i] = PickedFile{Name: names[i], Data: data}
+			}
+			releaseAll()
+			done(out, nil)
+			return nil
+		})
+		onFail = js.FuncOf(func(js.Value, []js.Value) any {
+			releaseAll()
+			done(nil, errors.New("transfer: could not read the chosen files"))
+			return nil
+		})
+		js.Global().Get("Promise").Call("all", reads).Call("then", onData, onFail)
+		return nil
+	})
+	in.Call("addEventListener", "cancel", onCancel)
+	in.Call("addEventListener", "change", onChange)
+	in.Call("click")
+}

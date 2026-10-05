@@ -201,6 +201,25 @@
   "status.save.saved": "Gespeichert",
   "status.save.saving": "Speichern…",
   "status.save.unsaved": "Nicht gespeicherte Änderungen",
-  "status.save.failed": "Speichern fehlgeschlagen"
+  "status.save.failed": "Speichern fehlgeschlagen",
+  "tab.migrate": "Migrieren",
+  "menu.migrate": "Migrieren…",
+  "migrate.title": "Migrieren",
+  "migrate.choose": "Plattform wählen…",
+  "migrate.platform": "Plattform",
+  "migrate.tokenPlaceholder": "Zugriffstoken",
+  "migrate.token": "Zugriffstoken",
+  "migrate.connect": "Verbinden",
+  "migrate.top": "Alle Dateien",
+  "migrate.empty": "Hier sind keine Dokumente.",
+  "migrate.select": "%s auswählen",
+  "migrate.selectAll": "Alle auswählen",
+  "migrate.start": "Migrieren",
+  "migrate.pickFiles": "Word-Dateien importieren…",
+  "migrate.progress": "Fortschritt der Migration",
+  "migrate.working": "%d von %d: %s",
+  "migrate.imported": "%d Dokumente migriert",
+  "migrate.truncated": "Zu viele Dateien: Nur die ersten wurden migriert.",
+  "migrate.failed": "%d konnten nicht migriert werden:"
  }
 }

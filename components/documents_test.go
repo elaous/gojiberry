@@ -239,3 +239,56 @@ func TestDocListLinkAndDownload(t *testing.T) {
 	mustNotContain(t, render(t, DocList(DocListProps{Docs: docs})), "gj-doclist-link", "gj-doclist-download")
 	mustNotContain(t, render(t, DocList(DocListProps{Docs: docs, Link: p.Link})), "gj-doclist-link") // nowhere to copy to
 }
+
+func TestMigratePanel(t *testing.T) {
+	var log []string
+	p := MigrateProps{
+		Sources: []DocChoice{{Name: "google", Label: "Google Docs"}}, OnSource: func(n string) { log = append(log, "source:"+n) },
+		OnToken: func(s string) { log = append(log, "token:"+s) },
+	}
+	html := render(t, Migrate(p))
+	mustContain(t, html, "Choose a platform…", `value="google"`)
+	mustNotContain(t, html, "gj-migrate-token", "gj-migrate-list", "gj-migrate-pick") // no platform yet, not connected, no file picker
+
+	p.Source, p.Token = "google", "tok"
+	p.OnConnect = func() { log = append(log, "connect") }
+	n := Migrate(p)
+	mustContain(t, render(t, n), "gj-migrate-token", `value="tok"`, "gj-migrate-connect")
+	mustNotContain(t, render(t, n), "gj-migrate-list")
+	p.Token = " "
+	mustContain(t, render(t, Migrate(p)), `class="gj-migrate-connect" disabled="disabled"`)
+
+	p.Token, p.Connected = "tok", true
+	p.Path = []MigrateItem{{ID: "f1", Name: "Work"}}
+	p.Items = []MigrateItem{{ID: "f2", Name: "Sub", Folder: true}, {ID: "d1", Name: "Plan", Meta: "2026-01-02", Selected: true}}
+	p.OnOpenFolder = func(id string) { log = append(log, "open:"+id) }
+	p.OnToggle = func(id string) { log = append(log, "toggle:"+id) }
+	p.OnSelectAll = func() { log = append(log, "all") }
+	p.OnStart = func() { log = append(log, "start") }
+	p.OnPickFiles = func() { log = append(log, "pick") }
+	n = Migrate(p)
+	html = render(t, n)
+	mustContain(t, html, "All files", "Work", "📁 Sub", "Plan", "2026-01-02", `data-id="d1"`, `checked="checked"`, "Select all", "Import Word files…")
+	for _, h := range findHandlers(n, "click") {
+		h(xango.Event{})
+	}
+	for _, h := range findHandlers(n, "change") {
+		h(xango.Event{Value: "google"})
+	}
+	joined := strings.Join(log, " ")
+	for _, want := range []string{"open:", "open:f2", "all", "start", "pick", "toggle:"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("%q never happened: %s", want, joined)
+		}
+	}
+
+	// Progress while it runs, the report after.
+	p.Busy, p.Done, p.Total, p.Current = true, 2, 5, "Plan.docx"
+	mustContain(t, render(t, Migrate(p)), "<progress", "2 of 5: Plan.docx")
+	p.Busy, p.Reported, p.Imported, p.Failed = false, true, 4, []MigrateFailure{{Name: "Bad", Err: "not a Word file"}}
+	html = render(t, Migrate(p))
+	mustContain(t, html, "4 documents migrated", "1 could not be migrated:", "Bad: not a Word file")
+	mustNotContain(t, html, "<progress")
+	p.Error = "boom"
+	mustContain(t, render(t, Migrate(p)), `role="alert"`, "boom")
+}

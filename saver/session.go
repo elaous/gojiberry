@@ -754,3 +754,10 @@ func (s *Session) downloadChoices() []components.DocChoice {
 	}
 	return out
 }
+
+// Where is the target and folder a new document would be saved in.
+func (s *Session) Where() (target, folder string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.target, s.folder
+}

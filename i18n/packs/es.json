@@ -201,6 +201,25 @@
   "status.save.saved": "Guardado",
   "status.save.saving": "Guardando…",
   "status.save.unsaved": "Cambios sin guardar",
-  "status.save.failed": "Error al guardar"
+  "status.save.failed": "Error al guardar",
+  "tab.migrate": "Migrar",
+  "menu.migrate": "Migrar…",
+  "migrate.title": "Migrar",
+  "migrate.choose": "Elige una plataforma…",
+  "migrate.platform": "Plataforma",
+  "migrate.tokenPlaceholder": "Token de acceso",
+  "migrate.token": "Token de acceso",
+  "migrate.connect": "Conectar",
+  "migrate.top": "Todos los archivos",
+  "migrate.empty": "No hay documentos aquí.",
+  "migrate.select": "Seleccionar %s",
+  "migrate.selectAll": "Seleccionar todo",
+  "migrate.start": "Migrar",
+  "migrate.pickFiles": "Importar archivos de Word…",
+  "migrate.progress": "Progreso de la migración",
+  "migrate.working": "%d de %d: %s",
+  "migrate.imported": "%d documentos migrados",
+  "migrate.truncated": "Demasiados archivos: solo se migraron los primeros.",
+  "migrate.failed": "%d no se pudieron migrar:"
  }
 }

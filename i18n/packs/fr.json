@@ -201,6 +201,25 @@
   "status.save.saved": "Enregistré",
   "status.save.saving": "Enregistrement…",
   "status.save.unsaved": "Modifications non enregistrées",
-  "status.save.failed": "Échec de l'enregistrement"
+  "status.save.failed": "Échec de l'enregistrement",
+  "tab.migrate": "Migrer",
+  "menu.migrate": "Migrer…",
+  "migrate.title": "Migrer",
+  "migrate.choose": "Choisir une plateforme…",
+  "migrate.platform": "Plateforme",
+  "migrate.tokenPlaceholder": "Jeton d'accès",
+  "migrate.token": "Jeton d'accès",
+  "migrate.connect": "Se connecter",
+  "migrate.top": "Tous les fichiers",
+  "migrate.empty": "Aucun document ici.",
+  "migrate.select": "Sélectionner %s",
+  "migrate.selectAll": "Tout sélectionner",
+  "migrate.start": "Migrer",
+  "migrate.pickFiles": "Importer des fichiers Word…",
+  "migrate.progress": "Progression de la migration",
+  "migrate.working": "%d sur %d : %s",
+  "migrate.imported": "%d documents migrés",
+  "migrate.truncated": "Trop de fichiers : seuls les premiers ont été migrés.",
+  "migrate.failed": "%d n’ont pas pu être migrés :"
  }
 }

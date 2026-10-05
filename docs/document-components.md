@@ -96,6 +96,26 @@ document shows its folder.
    directories (they are virtual in the store), documents as saved, the trash
    left out.
 
+## Migrate
+
+`migrate` moves documents in from other platforms; `components.Migrate` is its
+panel and `migrate.Session` its state (like `saver.Session` for the document list).
+
+1. **Sources.** `migrate.Source` lists (`List(folder)`) and fetches (`Fetch(item)`, a
+   `.docx`). `GoogleDocs` uses the Drive API (Google Docs exported as Word),
+   `OneDrive` uses Microsoft Graph (the `.docx` files); both take an access token and
+   an optional `BaseURL` and `Client`, and are tested against fake servers. Getting
+   the token (OAuth) is the host's job; the showcase has a box for it, and
+   `?driveapi=` / `?graphapi=` change the addresses.
+2. **Word files on this computer** (`migrate.Files`, from `transfer.PickFiles`) go
+   through the same path.
+3. **Run** walks the folders chosen (at most 2000 files, 16 deep), converts each file
+   with `docximport`, and saves it through a `Sink`. `SaverSink` keeps the source's
+   folders (reusing a folder of the same name), tags each document with its platform
+   (`google-docs`) and saves under the folder open in the Save tab. A file that fails
+   is listed in the report; the rest go on. Migrating twice makes the documents
+   twice (they get new IDs).
+
 ## One Person
 
 `user.Person` (`ID`, `Name`, `Role`; `user.Normalize` for addresses) is shared by
