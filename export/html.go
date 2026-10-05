@@ -126,6 +126,16 @@ func renderHTMLDocument(snap Snapshot, xhtml bool) string {
 					if b.TableRowSpan > 1 {
 						attrs += ` rowspan="` + strconv.Itoa(b.TableRowSpan) + `"`
 					}
+					var css string
+					if fill, ok := hexFill(b.TableBackground); ok {
+						css += "background:#" + fill + ";"
+					}
+					if a := map[int]string{1: "center", 2: "right"}[b.TableAlign]; a != "" {
+						css += "text-align:" + a + ";"
+					}
+					if css != "" {
+						attrs += ` style="` + css + `"`
+					}
 					body.WriteString("<" + tag + attrs + ">" + htmlInline(b.Segments, br) + "</" + tag + ">")
 				}
 				if b.TableCol == b.TableCols-1 {

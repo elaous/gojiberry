@@ -91,6 +91,11 @@ type Config struct {
 	// signed-in user. Pages sending a bearer token carry no cookies for this
 	// host and are not affected.
 	CookieOrigins []string
+	// TrustForwardedHost makes the same-origin test for such a socket compare the
+	// Origin with X-Forwarded-Host as well as Host, for a hub behind a reverse proxy
+	// that rewrites Host. Set it only when the proxy sets that header itself (a
+	// client could otherwise send it).
+	TrustForwardedHost bool
 	// MaxRooms limits how many documents the hub keeps in memory; 0 means
 	// 1000. Further documents are refused until the hub restarts.
 	MaxRooms int

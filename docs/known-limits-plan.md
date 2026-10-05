@@ -14,15 +14,13 @@ order it should land in.
 
 ## B. Known limits from PR #48
 
-1. **DOCX export of cell styles (S).** Write `w:shd` (background) and `w:jc`
+1. **DOCX export of cell styles (S). Done** (background, alignment, bold; HTML too). Write `w:shd` (background) and `w:jc`
    (alignment) for `TableCellStyle`, matching what `docximport` already reads.
    Test: export → import round trip keeps styles; XML element order checked.
 2. **Table end-to-end in the browser (M).** Merge, split, set background and
    align through the cell menu; undo; collaboration of a styled table between
    two clients. Lives with the other e2e tests (see C).
-3. **Columns e2e (S).** Cover every column command, not one (the second menu
-   command failed because the menu steals the caret; drive them from the
-   keyboard shortcuts / `RunCommand` instead of the menu).
+3. **Columns e2e (S). Done:** every column command, the caret put back in the text between menu uses.
 4. **i18n breadth (M).** Move the remaining hard-coded strings (canvas context
    menus, collab/presence, saver errors, spell/language panels) into the
    catalog; add a test that fails on any `T()` id missing from `en`/`es`/`fr`/`de`.
@@ -36,18 +34,14 @@ order it should land in.
 7. **Hunspell breadth (M).** Dictionaries beyond embedded en_US: load `.aff`/
    `.dic` on demand (fontserver-style), with morphology flags beyond the
    supported subset (compound rules, `REP`, `KEY`).
-8. **WS role edge cases (S).** The remaining items under "Known limits" in
-   `multiuser-design.md`.
+8. **WS role edge cases (S). Done:** read limit four times `MaxBody`, at most 1 MiB over it, `Config.TrustForwardedHost` for proxies.
 
-9. **Review leftovers (S each).** WebSocket read limit is
-   `4 * MaxBody` before the 413 check; `cookieSocketAllowed` ignores scheme and
-   needs `CookieOrigins` behind a Host-rewriting proxy; `expandReplacement`
-   re-runs the regexp on the isolated match (fails for `\b`/`\B` patterns);
-   DOCX export drops a table whose cell count mismatches its grid and writes
-   media in map order; `Duplicate`/`Restore`/`SetTags` are check-then-write
-   (now serialised per process by the catalog lock; across processes they need a conditional save);
-   `pdftext` cannot stop a
-   looping parser (run it out of process on a server).
+9. **Review leftovers.** Done: the WebSocket read limit, the proxy `Host`,
+   `expandReplacement` with context (`\b`, `\B`), whole-table-less cells and media
+   order in DOCX export. Left: `pdftext` cannot stop a looping parser (run it out
+   of process on a server); version operations list the whole store; two server
+   processes sharing one store can lose catalog updates (they need a conditional
+   save); the trash checkbox handler can drop one of two quick ticks.
 
 ## C. Test tooling: chromedp (done)
 

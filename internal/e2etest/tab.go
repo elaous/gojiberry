@@ -336,7 +336,7 @@ func (d *Tab) WaitForTimeout(what, expr string, limit time.Duration) {
 			return
 		}
 		if time.Now().After(deadline) {
-			d.t.Fatalf("timed out waiting for %s: %s", what, expr)
+			d.t.Fatalf("timed out waiting for %s: %s\npage errors: %v", what, expr, d.Errors())
 		}
 		time.Sleep(40 * time.Millisecond)
 	}

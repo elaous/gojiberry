@@ -80,6 +80,7 @@ type ui struct {
 	lang                langState
 	statsSig            string // the counts the status bar and Stats tab last showed
 	shareLink           string // the link the Share tab shows
+	people              *peopleState
 	message             string // the Import/Export tab's last message
 }
 
@@ -184,6 +185,7 @@ func main() {
 		{Name: "memory", Label: "Memory", Adapter: store},
 	}}, currentDoc, openDoc)
 	u.saver.OnChange = func() { renderUI() }
+	u.people = newPeople("you@example.com", func() { renderUI() })
 
 	setMode := func(m canvas.Mode) {
 		state.Mode = state.Role.Mode(m)
@@ -256,7 +258,7 @@ func main() {
 				xango.On("click", func(xango.Event) { toggleMode() })}, xango.Text("Mode: "+state.Mode.String()+" (click to switch)")),
 			tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 			tabButton(u, "comments", "Comments", renderUI), tabButton(u, "outline", "Outline", renderUI),
-			tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI),
+			tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
 			tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI),
 		)
 
@@ -325,6 +327,8 @@ func main() {
 			if flow != nil {
 				panel = statsPanel(flow.Stats(), state.Pages)
 			}
+		case "people":
+			panel = u.people.panel()
 		case "share":
 			if flow != nil {
 				panel = sharePanel(u, flow, origin, renderUI)
@@ -586,17 +590,20 @@ func main() {
 		}
 		var stats canvas.FlowStats
 		columnCount := 0
+		columnCfg := map[string]any{}
 		if flow != nil {
 			stats = flow.Stats()
-			columnCount = flow.ColumnsAt(flow.Cursors()[0].Caret).Count
+			cfg := flow.ColumnsAt(flow.Cursors()[0].Caret)
+			columnCount = cfg.Count
+			columnCfg = map[string]any{"count": cfg.Count, "gap": cfg.Gap, "widths": cfg.Widths}
 		}
 		if sig := fmt.Sprint(stats); sig != u.statsSig {
 			u.statsSig = sig
 			renderUI()
 		}
 		b, _ := json.Marshal(map[string]any{
-			"hyphenate": state.Hyphenate, "columns": columnCount, "language": map[string]any{"translate": u.lang.translator != nil, "grammar": u.lang.grammar != nil, "issues": len(u.lang.issues), "translated": u.lang.translated, "error": u.lang.err, "busy": u.lang.busy},
-			"stats": statsState(stats), "share": u.shareLink, "spell": map[string]any{"enabled": u.spell.enabled, "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
+			"hyphenate": state.Hyphenate, "columns": columnCount, "columnConfig": columnCfg, "language": map[string]any{"translate": u.lang.translator != nil, "grammar": u.lang.grammar != nil, "issues": len(u.lang.issues), "translated": u.lang.translated, "error": u.lang.err, "busy": u.lang.busy},
+			"stats": statsState(stats), "share": u.shareLink, "people": u.people.list(), "spell": map[string]any{"enabled": u.spell.enabled, "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
