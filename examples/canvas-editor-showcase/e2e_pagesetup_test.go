@@ -45,8 +45,7 @@ func TestPageSetupAndStatusBar(t *testing.T) {
 	// Changing the page setup rebuilds the flow but edits nothing: still saved.
 	d.Click(`button[data-tab="page"]`)
 	d.Select(".gj-pagesetup-paper", "a4")
-	d.Wait("s.pageSetup.width === 842 || s.pageSetup.width === 595")
-	d.Sleep(300)
+	d.Wait("s.pageSetup.width === 842") // landscape A4: the rebuild has happened
 	d.OK(item("save") == "Saved", "a page setup change is not an edit: "+item("save"))
 	d.ToggleMode()
 	d.CanvasClick(200, 260)

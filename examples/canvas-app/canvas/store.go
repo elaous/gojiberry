@@ -16,11 +16,16 @@ package canvas
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 )
+
+// ErrNotFound is wrapped in the error of an operation on a document that does not
+// exist (an unknown ID, or one that is not a UUID at all).
+var ErrNotFound = errors.New("canvas: document not found")
 
 // Store is the canvas document store.
 type Store struct {
@@ -65,14 +70,20 @@ func (s *Store) CreateDocument(ctx context.Context) (string, error) {
 	return id, nil
 }
 
-// GetDocument returns a document's content, or an error wrapping
-// sql.ErrNoRows if it doesn't exist.
+// GetDocument returns a document's content, or an error wrapping ErrNotFound if it
+// doesn't exist. Any other error is the database's.
 func (s *Store) GetDocument(ctx context.Context, id string) (string, error) {
+	if _, err := uuid.Parse(id); err != nil {
+		return "", fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
 	query := sqlQuery(`//language=SQL
 		SELECT content FROM documents WHERE id = $1
 	`)
 	var content string
 	if err := s.db.QueryRowContext(ctx, query, id).Scan(&content); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", fmt.Errorf("%w: %s", ErrNotFound, id)
+		}
 		return "", fmt.Errorf("canvas: getting document %s: %w", id, err)
 	}
 	return content, nil
@@ -80,6 +91,9 @@ func (s *Store) GetDocument(ctx context.Context, id string) (string, error) {
 
 // SaveDocument overwrites a document's content.
 func (s *Store) SaveDocument(ctx context.Context, id, content string) error {
+	if _, err := uuid.Parse(id); err != nil {
+		return fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
 	query := sqlQuery(`//language=SQL
 		UPDATE documents SET content = $1, updated_at = now() WHERE id = $2
 	`)
@@ -92,7 +106,7 @@ func (s *Store) SaveDocument(ctx context.Context, id, content string) error {
 		return fmt.Errorf("canvas: saving document %s: %w", id, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("canvas: document %s not found", id)
+		return fmt.Errorf("%w: %s", ErrNotFound, id)
 	}
 	return nil
 }

@@ -2,21 +2,29 @@
 
 //go:build js && wasm
 
-// Package main is a minimal cache-first service worker compiled from
-// Go/xango: on install it pre-caches a fixed asset list, on fetch it
-// serves from cache first and falls back to the network. Proves a
-// Go/WASM binary runs as a real browser service worker, not just a
-// page-context script.
+// Package main is a minimal offline-capable service worker compiled from
+// Go/xango: on install it pre-caches a fixed asset list; on fetch it asks the
+// network first and keeps the answer in the cache, falling back to the cache when the
+// network is not there (so a changed file is seen at once, and the page still works
+// offline); on activate it deletes the caches of older versions. Proves a Go/WASM binary
+// runs as a real browser service worker, not just a page-context script.
 package main
 
 import (
+	"strings"
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/domrt"
 	"github.com/elaous/gojiberry/domrt/sw"
 )
 
-const cacheName = "gojiberry-demo-v1"
+// cacheName names this version of the cache: change the number with the worker and the
+// older versions are deleted when the new worker activates. Only caches that start with
+// cachePrefix are this worker's: other apps on the same origin keep theirs.
+const (
+	cachePrefix = "gojiberry-demo-"
+	cacheName   = cachePrefix + "v2"
+)
 
 var precacheURLs = []string{"hello.txt"}
 
@@ -32,16 +40,43 @@ func main() {
 	})
 
 	sw.OnActivate(func(e sw.ExtendableEvent) {
-		e.WaitUntil(sw.ClaimClients)
+		e.WaitUntil(func() error {
+			names, err := sw.CachesKeys()
+			if err != nil {
+				return err
+			}
+			for _, name := range names {
+				if strings.HasPrefix(name, cachePrefix) && name != cacheName {
+					_ = sw.CachesDelete(name) // an old cache that cannot be deleted must not stop the worker from activating
+				}
+			}
+			return sw.ClaimClients()
+		})
 	})
 
 	sw.OnFetch(func(e sw.FetchEvent) {
 		e.RespondWith(func() (js.Value, error) {
 			req := e.Request()
+			resp, err := domrt.Await(js.Global().Call("fetch", req))
+			if err == nil {
+				// Keep what the network said (a successful answer to a GET), for when it is
+				// not there; the original response goes to the page at once (the put waits
+				// for the whole body, so it must not hold the answer back), and the clone is
+				// taken before the page starts reading it.
+				if req.Get("method").String() == "GET" && resp.Get("ok").Bool() {
+					copy := resp.Call("clone")
+					go func() {
+						if cache, cerr := sw.CachesOpen(cacheName); cerr == nil {
+							_ = sw.CachePut(cache, req, copy)
+						}
+					}()
+				}
+				return resp, nil
+			}
 			if cached, ok := sw.CachesMatch(req); ok {
 				return cached, nil
 			}
-			return domrt.Await(js.Global().Call("fetch", req))
+			return js.Value{}, err
 		})
 	})
 

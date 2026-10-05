@@ -166,9 +166,16 @@ func main() {
 		state.Items, state.Source = nil, ""
 		renderCanvas()
 		state.Items = docfile.ToItems(d.Content)
+		// What the document says about itself replaces what the last one said: its
+		// styles (the defaults when it has none), comments and footnotes. The sets are
+		// filled in place; the page holds them for its whole life.
 		if len(d.Styles) > 0 {
 			state.Styles = docfile.ToStyles(d.Styles)
+		} else {
+			state.Styles = canvas.DefaultStyles()
 		}
+		state.Comments.ReplaceAll(docfile.ToComments(d.Comments).List())
+		state.Footnotes.ReplaceAll(docfile.ToFootnotes(d.Footnotes).List())
 		for _, f := range docfile.ToFonts(d.Fonts) {
 			lib.Add(f)
 		}
@@ -184,6 +191,10 @@ func main() {
 		d.Fonts = docfile.FromFonts(lib.Added())
 		return d
 	}
+	// The browser target (localStorage) cannot write the catalog conditionally, so two
+	// tabs saving at the same moment can drop one catalog entry (Repair finds the
+	// orphaned file next time). The memory target, a local directory, SQLite and the HTTP
+	// store do write conditionally (docstore.ConditionalAdapter).
 	u.saver = saver.NewSession(&saver.Saver{Targets: []saver.Target{
 		{Name: "browser", Label: "This browser (localStorage)", Adapter: docstore.NewBrowserAdapter("showcase:"), Capacity: 5 << 20},
 		{Name: "memory", Label: "Memory", Adapter: store, Capacity: 16 << 20},
@@ -312,11 +323,12 @@ func main() {
 		case "comments":
 			panel = commentsPanel(u, &state, func() *canvas.TextFlow { return flow }, run, redraw, refocus, renderUI)
 		case "styles":
+			if flow == nil {
+				break
+			}
 			current := ""
-			if flow != nil {
-				if fs := flow.ParagraphFormats(); len(fs) > 0 {
-					current = fs[0].Style
-				}
+			if fs := flow.ParagraphFormats(); len(fs) > 0 {
+				current = fs[0].Style
 			}
 			panel = components.StylePicker(components.StylePickerProps{
 				Styles: flow.Styles, Current: current,
@@ -635,7 +647,7 @@ func main() {
 		}
 		b, _ := json.Marshal(map[string]any{
 			"hyphenate": state.Hyphenate, "columns": columnCount, "columnConfig": columnCfg, "language": map[string]any{"translate": u.lang.translator != nil, "grammar": u.lang.grammar != nil, "issues": len(u.lang.issues), "translated": u.lang.translated, "error": u.lang.err, "busy": u.lang.busy},
-			"stats": statsState(stats), "share": u.shareLink, "people": u.people.list(), "spell": map[string]any{"enabled": u.spell.enabled, "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
+			"stats": statsState(stats), "share": u.shareLink, "people": u.people.list(), "spell": map[string]any{"enabled": u.spell.enabled, "checked": u.spell.text != "", "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
@@ -726,7 +738,7 @@ func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()
 	return &collabxango.CollabProps{
 		Transport: transport,
 		Flow:      collabxango.Flow(get("flow", "")),
-		Client:    client.Options{BaseURL: get("hub", origin+"/collab"), Doc: doc, Header: hdr, Retry: 300 * time.Millisecond, MaxRetry: 2 * time.Second},
+		Client:    client.Options{BaseURL: hubURL(get("hub", ""), origin), Doc: doc, Header: hdr, Retry: 300 * time.Millisecond, MaxRetry: 2 * time.Second},
 		Replica:   fmt.Sprintf("%s-%d", name, int(js.Global().Get("Math").Call("random").Float()*1e9)),
 		Name:      name,
 		Color:     u.liveColor,
@@ -957,4 +969,13 @@ func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *c
 			},
 		})),
 	)
+}
+
+// hubURL is the collaboration hub's address: the page's own /collab unless ?hub= names
+// another that allowedEndpoint accepts.
+func hubURL(param, origin string) string {
+	if u := pageEndpoint(param); u != "" {
+		return u
+	}
+	return origin + "/collab"
 }

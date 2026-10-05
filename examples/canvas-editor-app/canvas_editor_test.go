@@ -97,6 +97,47 @@ func TestCanvasEditorEndToEnd(t *testing.T) {
 	d.Press("Control+Shift+ArrowLeft")
 	ok(field("sel") == "6-11", `Ctrl+Shift+ArrowLeft from end selected "world" (6-11), got sel=`+field("sel"))
 
+	// --- Copy, cut, undo and redo ---
+	d.GrantClipboard()
+	// The write to the clipboard is asynchronous: read it until it says what is expected.
+	clipboard := func(want string) (got string) {
+		for i := 0; i < 40; i++ {
+			d.Eval(`navigator.clipboard.readText()`, &got)
+			if got == want {
+				return got
+			}
+			d.Sleep(50)
+		}
+		return got
+	}
+	// Chrome's automation does not deliver the keydown of Ctrl+C and Ctrl+X to the page
+	// (it takes them for browser commands), so these two are sent as the event a real key
+	// press makes; everything else here is a real key press.
+	shortcut := func(key string) {
+		d.Eval(`document.getElementById('editor-hidden-input').dispatchEvent(new KeyboardEvent('keydown', {key: `+e2etest.J(key)+`, ctrlKey: true, bubbles: true, cancelable: true}))`, nil)
+	}
+	shortcut("c")
+	clip := clipboard("world")
+	ok(clip == "world", fmt.Sprintf("Ctrl+C puts the selection on the clipboard, got %q", clip))
+	ok(field("text") == "hello world", "and leaves the text alone")
+	shortcut("x")
+	clip = clipboard("world")
+	for i := 0; i < 40 && field("text") != "hello "; i++ { // the cut finishes when the clipboard write does
+		d.Sleep(50)
+	}
+	ok(clip == "world" && field("text") == "hello ", fmt.Sprintf("Ctrl+X copies and removes it, got clipboard %q and text %q", clip, field("text")))
+	d.Press("Control+z")
+	ok(field("text") == "hello world", fmt.Sprintf("Ctrl+Z undoes the cut in one step, got %q", field("text")))
+	d.Press("Control+Shift+z")
+	ok(field("text") == "hello ", fmt.Sprintf("Ctrl+Shift+Z redoes it, got %q", field("text")))
+	d.Press("Control+z")
+	d.Press("Control+y")
+	ok(field("text") == "hello ", fmt.Sprintf("Ctrl+Y redoes too, got %q", field("text")))
+	d.Press("Control+z")
+	d.Type("there")
+	d.Press("Control+z")
+	ok(field("text") == "hello world", fmt.Sprintf("typing is one step: Ctrl+Z takes back the whole word, got %q", field("text")))
+
 	// --- Scrolling: auto-follow on typing, manual wheel-scroll, clamping ---
 	clearAll()
 	var lines []string

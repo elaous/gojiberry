@@ -143,11 +143,25 @@ of "ana@x.com" would inherit Ana's documents).
 ## Shared stores
 
 A store several people use (an HTTP docstore with access lists) should give each person
-their own catalog: `saver.Target.CatalogKey = saver.UserCatalogKey(userID)`. The
-default is one catalog for the store, which is right for a store of one person and wrong
-for many (it would be owned by whoever saved first). Folder records live next to the
-catalog. A server that lists only what the caller may read also makes a new catalog
-start with just those documents.
+their own catalog: `saver.Target.CatalogKey = saver.UserCatalogKey(user.ID)` (the
+`auth.User.ID` of the signed-in person). The default is one catalog for the store, which
+is right for a store of one person and wrong for many. Folder records live next to the
+catalog. **The server enforces it:** with `RequireACL`, a signed-in person may read and
+write only the keys under `docstore.UserCatalogPrefix(their ID)`, the shared
+`catalog:index` is closed, and a listing shows each person only their own catalog, so
+access lists and catalogs work together. **This changes a setup that ran RequireACL
+with the shared `catalog:index`: its saves now get 403. Give each person their own
+`Target.CatalogKey` (above).** A server that lists only what the caller may
+read also makes a new catalog start with just those documents.
+
+## Damaged files in the trash
+
+A document in the trash whose file is missing used to stop its folder from being deleted.
+Deleting the folder now removes such documents (and their versions) and the status line
+says which ("Old deleted (2 documents in the trash whose files were gone were removed: a,
+b)"). A file that is there but does not parse is not destroyed (a newer version of the
+library may read it): that document goes to the top level of the trash, untouched. Any
+other store error still stops the operation.
 
 ## Two processes on one store
 
@@ -155,4 +169,13 @@ Catalog updates are conditional (`docstore.ConditionalAdapter`): memory, SQLite 
 timeout and an immediate write transaction), local files (an `flock` on the directory, on
 Unix) and the HTTP store (`If-Match`). `Repair` waits `RepairGrace` (2 s) and looks again
 before repairing, so it does not undo a delete another process is half way through, and
-a rebuild never overwrites a catalog changed since it was read.
+a rebuild never overwrites a catalog changed since it was read. The browser's
+localStorage target cannot write conditionally: two tabs saving at the same moment can
+drop one catalog entry, and `Repair` finds the orphaned file on the next session.
+
+## What a browser build links
+
+`docstore`'s server-side backends (the Go CDK blob adapter, S3, MongoDB and PostgreSQL, like
+SQLite) are `//go:build !js`: a page has no use for a database driver or a cloud SDK, and
+linking them put gRPC, the AWS SDK and the Mongo and Postgres drivers into every
+browser build. The showcase's `main.wasm` went from 73.7 MB to 31.1 MB without them.

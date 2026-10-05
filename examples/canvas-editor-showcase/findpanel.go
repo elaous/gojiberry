@@ -82,7 +82,7 @@ func (u *ui) closeFind(flow *canvas.TextFlow) {
 		flow.ClearSearch()
 	}
 	if u.tab == "find" {
-		u.tab = ""
+		u.tab = "format" // what the sidebar shows when no tab is chosen: and its button is the marked one
 	}
 }
 
