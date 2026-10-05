@@ -12,7 +12,7 @@ func TestRoundTrip(t *testing.T) {
 	if s.Quote != "quick brown fox" {
 		t.Fatalf("quote = %q", s.Quote)
 	}
-	link := Link("https://x.test/app?doc=d1&hub=h", url.Values{"transport": {"ws"}}, s)
+	link := Link("https://gojiberry.io/app?doc=d1&hub=h", url.Values{"transport": {"ws"}}, s)
 	u, _ := url.Parse(link)
 	if u.Query().Get("doc") != "d1" || u.Query().Get("transport") != "ws" {
 		t.Errorf("link %q lost its parameters", link)
@@ -77,7 +77,7 @@ func TestDocumentInThePath(t *testing.T) {
 			t.Errorf("SplitPath(%q) = %q, %q; want %q, %q", in, base, doc, want[0], want[1])
 		}
 	}
-	link := Link("https://x.test/app/d/old?x=1", url.Values{"doc": {"my doc"}, "hub": {"h"}}, Selection{From: 1, To: 4, Quote: "abc"})
+	link := Link("https://gojiberry.io/app/d/old?x=1", url.Values{"doc": {"my doc"}, "hub": {"h"}}, Selection{From: 1, To: 4, Quote: "abc"})
 	u, _ := url.Parse(link)
 	if u.Path != "/app/d/my%20doc" && u.EscapedPath() != "/app/d/my%20doc" || u.Query().Get("doc") != "" || u.Query().Get("hub") != "h" || u.Query().Get("sel") == "" {
 		t.Errorf("link = %s", link)

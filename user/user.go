@@ -29,7 +29,7 @@ func (p Person) DisplayName() string {
 }
 
 // Normalize is how an address is kept and compared: trimmed and in lower case, so
-// "Ana@X.com " and "ana@x.com" are one person.
+// "Ana@Gojiberry.io " and "ana@gojiberry.io" are one person.
 func Normalize(id string) string { return strings.ToLower(strings.TrimSpace(id)) }
 
 // Same reports whether two addresses are the same person.

@@ -444,9 +444,9 @@ func TestTransferButtons(t *testing.T) {
 }
 
 func TestMarkdownTextRendersAndEscapes(t *testing.T) {
-	html := render(t, MarkdownText("## Title\n\n**bold** and *it* and _under_ ~~old~~ `code` [site](https://x.test/a?b=1)\nsecond line\n\n- one\n- two\n\n1. first\n\n> quoted <b>raw</b>\n\n[bad](javascript:alert(1)) hi @ana, ask ana@example.com <script>x</script>"))
+	html := render(t, MarkdownText("## Title\n\n**bold** and *it* and _under_ ~~old~~ `code` [site](https://gojiberry.io/a?b=1)\nsecond line\n\n- one\n- two\n\n1. first\n\n> quoted <b>raw</b>\n\n[bad](javascript:alert(1)) hi @ana, ask ana@example.com <script>x</script>"))
 	mustContain(t, html, `class="gj-md-heading"`, "<strong>bold</strong>", "<em>it</em>", "<em>under</em>", "<s>old</s>", "<code>code</code>",
-		`href="https://x.test/a?b=1"`, "<br>", "<ul><li>one</li><li>two</li></ul>", "<ol><li>first</li></ol>", "<blockquote>quoted &lt;b&gt;raw&lt;/b&gt;</blockquote>",
+		`href="https://gojiberry.io/a?b=1"`, "<br>", "<ul><li>one</li><li>two</li></ul>", "<ol><li>first</li></ol>", "<blockquote>quoted &lt;b&gt;raw&lt;/b&gt;</blockquote>",
 		`class="gj-mention" data-mention="ana"`, `href="mailto:ana@example.com"`, "gj-mention-email", "&lt;script&gt;")
 	mustNotContain(t, html, "javascript:", "<script>", "<b>raw")
 	mustContain(t, html, "<p>bad") // an unsafe link keeps its text only
@@ -545,10 +545,10 @@ func TestFootnoteListComponent(t *testing.T) {
 func TestPresenceComponent(t *testing.T) {
 	html := render(t, Presence(PresenceProps{
 		Self:   PresencePeer{Name: "Ana Souza", Color: "#f00", Role: "owner"},
-		Peers:  []PresencePeer{{Name: "bob@example.com", Role: "editor"}, {User: "vee@x.org"}, {}},
+		Peers:  []PresencePeer{{Name: "bob@example.com", Role: "editor"}, {User: "vee@gojiberry.io"}, {}},
 		Status: "online", Pending: 0, Role: "viewer",
 	}))
-	mustContain(t, html, "gj-presence-self", ">AS<", ">BE<", ">VX<", ">?<", `title="Ana Souza (owner)"`, `title="vee@x.org"`, "background:#f00", "background:#7c5cff",
+	mustContain(t, html, "gj-presence-self", ">AS<", ">BE<", ">VG<", ">?<", `title="Ana Souza (owner)"`, `title="vee@gojiberry.io"`, "background:#f00", "background:#7c5cff",
 		"gj-presence-online", ">Online<", "View only", `aria-label="People here"`)
 	off := render(t, Presence(PresenceProps{Self: PresencePeer{Name: "x"}, Status: "offline", Pending: 3}))
 	mustContain(t, off, "Offline · 3 waiting to send", "gj-presence-offline")

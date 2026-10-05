@@ -13,7 +13,7 @@ import (
 func sample() Document {
 	items := []canvas.Item{
 		canvas.ParaFormat{Style: "Heading 1", Align: canvas.AlignCenter, List: canvas.ListStyle{Kind: canvas.ListOrdered, Level: 1, Start: 3, Checked: true}},
-		canvas.Chars{Text: "Hello ", Format: canvas.Format{FontFamily: "Lato", FontWeight: 700, Color: "#123", Case: canvas.CaseSmallCaps, Link: "https://x.test"}},
+		canvas.Chars{Text: "Hello ", Format: canvas.Format{FontFamily: "Lato", FontWeight: 700, Color: "#123", Case: canvas.CaseSmallCaps, Link: "https://gojiberry.io"}},
 		canvas.Chars{Text: "world\n"},
 		canvas.ColumnConfig{Widths: []float64{100, 50.5}, Gap: 8},
 		canvas.Break{}, // the zero value must survive
