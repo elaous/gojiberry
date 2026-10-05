@@ -23,7 +23,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
+	"time"
 
 	"nhooyr.io/websocket"
 )
@@ -51,17 +53,22 @@ func (h *hub) broadcast(ctx context.Context, from *websocket.Conn, msg []byte) {
 	}
 	h.mu.Unlock()
 	for _, c := range peers {
-		_ = c.Write(ctx, websocket.MessageText, msg)
+		// A peer that is not reading must not hold up everyone else: give each write a
+		// deadline, and drop the peer that misses it.
+		wctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		if err := c.Write(wctx, websocket.MessageText, msg); err != nil {
+			_ = c.CloseNow()
+		}
+		cancel()
 	}
 }
 
 func (h *hub) handleWS(w http.ResponseWriter, r *http.Request) {
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		// This demo's own static client is the only intended origin,
-		// but there's no real deployment/origin to lock this down to
-		// here, so accept any -- a real product would restrict this.
-		OriginPatterns: []string{"*"},
-	})
+	// Only pages served by this server may open the socket (the library's default
+	// check: the Origin's host must be the request's Host), so another site open in the
+	// same browser cannot read or overwrite the document through localhost. Set
+	// ALLOWED_ORIGINS (comma-separated host patterns) to let others in.
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: allowedOrigins()})
 	if err != nil {
 		log.Println("websocket accept:", err)
 		return
@@ -96,6 +103,18 @@ func (h *hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// allowedOrigins reads ALLOWED_ORIGINS ("example.com,*.example.com"); none means only
+// the server's own origin.
+func allowedOrigins() []string {
+	var out []string
+	for _, p := range strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func main() {
 	h := newHub()
 
@@ -103,7 +122,9 @@ func main() {
 	mux.HandleFunc("/ws", h.handleWS)
 	mux.Handle("/", http.FileServer(http.Dir("static")))
 
-	addr := ":8096"
+	// Loopback by default: the demo has no sign-in, so it is not offered to the network.
+	// Set ADDR (":8096") to listen on every interface.
+	addr := "127.0.0.1:8096"
 	if v := os.Getenv("ADDR"); v != "" {
 		addr = v
 	}

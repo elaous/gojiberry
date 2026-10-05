@@ -75,8 +75,10 @@ type Entry struct {
 // documents.
 const FontPrefix = "fonts/"
 
-// ErrName is returned for a name that cannot be used: empty, too long, or with
-// control characters.
+// ErrUnreadable is wrapped in the error of an operation that met a document whose
+// file is missing or does not parse.
+var ErrUnreadable = errors.New("saver: the document's file is missing or damaged")
+
 // DefaultRepairGrace is the RepairGrace used when none is set.
 const DefaultRepairGrace = 2 * time.Second
 
@@ -84,6 +86,8 @@ const DefaultRepairGrace = 2 * time.Second
 // update could not get in after several tries.
 var ErrBusy = errors.New("saver: the store is busy, try again")
 
+// ErrName is returned for a name that cannot be used: empty, too long, or with
+// control characters.
 var ErrName = errors.New("saver: the name is empty, too long, or has control characters")
 
 // ErrID is returned for something that is not a document ID.

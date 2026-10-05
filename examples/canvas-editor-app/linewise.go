@@ -60,7 +60,9 @@ func lineContaining(lines []lineRange, idx int) int {
 // just the primary first: using one of them while multiple cursors
 // are active drops back to single-cursor mode, a clearly-visible
 // effect instead of a silent bug.
-func (d *document) moveLineUp() {
+func (d *document) moveLineUp() { d.edit(d.moveLineUpNow) }
+
+func (d *document) moveLineUpNow() {
 	d.collapseCursors()
 	lines := d.logicalLines()
 	li := lineContaining(lines, d.Cursor)
@@ -73,7 +75,9 @@ func (d *document) moveLineUp() {
 // moveLineDown is moveLineUp's mirror (VSCode's Alt+Down). No-op on
 // the last line. See moveLineUp's doc comment for why this collapses
 // to the primary cursor first.
-func (d *document) moveLineDown() {
+func (d *document) moveLineDown() { d.edit(d.moveLineDownNow) }
+
+func (d *document) moveLineDownNow() {
 	d.collapseCursors()
 	lines := d.logicalLines()
 	li := lineContaining(lines, d.Cursor)
@@ -117,7 +121,9 @@ func (d *document) swapLines(a, b lineRange) {
 // leaving the cursor at the same column in the new copy. See
 // moveLineUp's doc comment for why this collapses to the primary
 // cursor first.
-func (d *document) duplicateLine() {
+func (d *document) duplicateLine() { d.edit(d.duplicateLineNow) }
+
+func (d *document) duplicateLineNow() {
 	d.collapseCursors()
 	lines := d.logicalLines()
 	li := lineContaining(lines, d.Cursor)

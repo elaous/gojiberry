@@ -107,3 +107,11 @@ func TestOutputDecoupledFromEditorMarkup(t *testing.T) {
 		t.Fatalf("expected output view to render the heading as <h1>, got: %s", outputHTML)
 	}
 }
+
+func TestALineItemDescriptionWithATabKeepsItsAmount(t *testing.T) {
+	b := NewLineItem("1", "Design\twork", "100.00", 1)
+	d, a := ParseLineItem(b)
+	if d != "Design work" || a != "100.00" {
+		t.Errorf("description %q, amount %q", d, a)
+	}
+}

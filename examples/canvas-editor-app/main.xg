@@ -3,8 +3,8 @@
 // Package main wires model.go's document, linewise.go's line/word
 // commands, and layout.go's word-wrap engine to a real canvas element
 // and a hidden input element that captures actual keyboard input
-// (including paste and IME composition, which the browser handles for
-// us): typed characters arrive as ordinary "input" events, while
+// (including paste, and IME composition, which is held until it ends):
+// typed characters arrive as ordinary "input" events, while
 // navigation/deletion (arrows, Backspace, Delete, Enter) are
 // intercepted on "keydown" via domrt/html's Element.OnKeyDown, since a
 // plain xango.EventHandler carries none of that. Mouse position for
@@ -19,7 +19,11 @@
 // /Right jumps by word (Shift extends the selection the same way
 // plain arrows do); Alt+Up/Down moves the current logical line;
 // Shift+Alt+Down duplicates it; Ctrl/Cmd+Shift+U/L upper/lowercases
-// the current selection. "Logical line" means a run delimited by
+// the current selection; Ctrl/Cmd+Z undoes and Ctrl/Cmd+Shift+Z or +Y
+// redoes (history.go: typing is one step, an edit that changes nothing
+// is none); Ctrl/Cmd+C and +X copy and cut every cursor's selection
+// (to the clipboard from the key handler, since the hidden input is
+// always empty). "Logical line" means a run delimited by
 // '\n', not a word-*wrapped* visual row -- see linewise.go's doc
 // comment for why that distinction matters here.
 package main
@@ -112,6 +116,7 @@ func loadDocument() *document {
 		d.setFmtAt(i, f)
 	}
 	d.insert(".")
+	d.clearHistory() // the starting text is not something to undo
 	return d
 }
 
@@ -370,13 +375,19 @@ func (ed *editor) wire() {
 	ed.canvasElem.OnMouseUp(func(evt html.MouseEvent) {
 		ed.dragging = false
 	})
+	// The button can be let go outside the canvas: then the drag is over too, or the
+	// selection would keep following the pointer with no button pressed.
+	js.Global().Get("window").Call("addEventListener", "mouseup", jsFuncOf(func() { ed.dragging = false }))
 	ed.canvasElem.OnWheel(func(evt html.WheelEvent) {
 		evt.PreventDefault()
 		ed.scrollY += evt.DeltaY
 		ed.redrawPreservingScroll()
 	})
 
-	ed.hidden.AddEventListener("input", jsFuncOf(func() {
+	// Text typed arrives as "input" events, except while an IME or a dead key is
+	// composing: the box then holds the unfinished text, which must not be inserted
+	// (or cleared) until the composition ends.
+	takeInput := func() {
 		v := ed.hidden.GetValue()
 		if v != "" {
 			ed.rowEndAt = -1
@@ -386,9 +397,49 @@ func (ed *editor) wire() {
 			ed.redraw()
 			ed.save()
 		}
+	}
+	composing := false
+	ed.hidden.AddEventListener("compositionstart", jsFuncOf(func() { composing = true }))
+	ed.hidden.AddEventListener("compositionend", jsFuncOf(func() {
+		composing = false
+		takeInput()
+	}))
+	ed.hidden.AddEventListener("input", jsFuncOf(func() {
+		if !composing {
+			takeInput()
+		}
 	}))
 
+	// Copy and cut: the box is always empty, so the browser has nothing of its own to
+	// copy (and does not even fire a copy event for an empty box): the keys are handled
+	// in OnKeyDown and the selection (every cursor's, a line each) is written to the
+	// clipboard from there, where the key press counts as the user gesture it needs. A cut
+	// removes the text only once the clipboard has accepted it (it is not there on a page
+	// that is not a secure context, and the write can be refused).
+	writeClipboard := func(text string, written func()) bool {
+		clip := js.Global().Get("navigator").Get("clipboard")
+		if !clip.Truthy() {
+			return false
+		}
+		var then, fail js.Func
+		release := func() { then.Release(); fail.Release() }
+		then = js.FuncOf(func(js.Value, []js.Value) any {
+			release()
+			written()
+			return nil
+		})
+		fail = js.FuncOf(func(js.Value, []js.Value) any {
+			release()
+			return nil
+		})
+		clip.Call("writeText", text).Call("then", then, fail)
+		return true
+	}
+
 	ed.hidden.OnKeyDown(func(e html.KeyEvent) {
+		if composing {
+			return // the IME owns the keys until the composition ends
+		}
 		if e.Key != "End" {
 			ed.rowEndAt = -1 // any other key leaves the end of a wrapped row
 		}
@@ -449,6 +500,44 @@ func (ed *editor) wire() {
 		case "Escape":
 			e.PreventDefault()
 			ed.doc.collapseCursors()
+		case "c", "C", "x", "X":
+			if !(e.CtrlKey || e.MetaKey) || e.ShiftKey || e.AltKey {
+				return
+			}
+			text := ed.doc.selectedText()
+			if text == "" {
+				return
+			}
+			cut := e.Key == "x" || e.Key == "X"
+			if !writeClipboard(text, func() {
+				if cut {
+					ed.doc.cutSelections() // one undo step, and only the selections
+					ed.rowEndAt = -1
+					ed.caretOn = true
+					ed.redraw()
+					ed.save()
+				}
+			}) {
+				return // no clipboard here: leave the keys to the browser, and the text where it is
+			}
+			e.PreventDefault()
+			return // a cut finishes when the write does
+		case "z", "Z":
+			if !(e.CtrlKey || e.MetaKey) {
+				return
+			}
+			e.PreventDefault()
+			if e.ShiftKey {
+				ed.doc.Redo()
+			} else {
+				ed.doc.Undo()
+			}
+		case "y", "Y":
+			if !(e.CtrlKey || e.MetaKey) {
+				return
+			}
+			e.PreventDefault()
+			ed.doc.Redo()
 		case "a", "A":
 			if e.CtrlKey || e.MetaKey {
 				e.PreventDefault()

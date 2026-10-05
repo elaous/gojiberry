@@ -9,5 +9,5 @@ package main
 // unit-tested natively via a plain `go test`, fast and without needing
 // GOOS=js GOARCH=wasm or a browser at all -- canvas_editor_test.go
 // (also native) still separately builds and drives the real WASM
-// binary through Playwright for true end-to-end coverage.
+// binary through the chromedp driver for true end-to-end coverage.
 func main() {}
