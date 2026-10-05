@@ -29,6 +29,14 @@ type Target struct {
 	// Name identifies the target ("postgres"); Label is what a menu shows.
 	Name, Label string
 	Adapter     docstore.Adapter
+	// Capacity is the space allocated to the store in bytes, for Usage to measure
+	// against; 0 means the adapter's own answer if it gives one (a local disk does,
+	// a database or bucket does not).
+	Capacity int64
+	// CatalogKey is where the target keeps its catalog; "" means CatalogKey. It must
+	// start with "catalog:" and end with "index" (see UserCatalogKey). Give each person
+	// their own when several share one store: the default is one catalog for the store.
+	CatalogKey string
 }
 
 // Saver writes documents to its targets.
@@ -39,6 +47,11 @@ type Saver struct {
 	// MaxVersions is how many snapshots SaveVersion keeps of one document; 0
 	// means DefaultMaxVersions.
 	MaxVersions int
+	// RepairGrace is how long Repair waits, when it finds the store and its catalog
+	// disagreeing, before looking again and repairing what is still wrong: another
+	// process may be half way through an operation. 0 means DefaultRepairGrace; a
+	// negative value means no wait (for tests).
+	RepairGrace time.Duration
 
 	mu sync.Mutex // one catalog update at a time
 }
@@ -52,6 +65,8 @@ type Entry struct {
 	Size    int
 	Updated time.Time
 	Tags    []string
+	// Folder is the ID of the folder it is in, "" at the top level.
+	Folder string
 	// Trashed is when it was moved to the trash; zero for a document that is not.
 	Trashed time.Time
 }
@@ -62,6 +77,13 @@ const FontPrefix = "fonts/"
 
 // ErrName is returned for a name that cannot be used: empty, too long, or with
 // control characters.
+// DefaultRepairGrace is the RepairGrace used when none is set.
+const DefaultRepairGrace = 2 * time.Second
+
+// ErrBusy is returned when other processes keep changing the store's catalog and an
+// update could not get in after several tries.
+var ErrBusy = errors.New("saver: the store is busy, try again")
+
 var ErrName = errors.New("saver: the name is empty, too long, or has control characters")
 
 // ErrID is returned for something that is not a document ID.
@@ -145,6 +167,9 @@ func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc do
 			// does not bring back what was removed there.
 			doc.SetTags(prev.Tags)
 			doc.SetTrashed(prev.Trashed)
+			doc.SetFolder(prev.Folder) // moving is Move's job
+		} else if _, ok := cat.Folders[doc.Folder()]; !ok {
+			doc.SetFolder("") // a new document in a folder that is not there goes to the top
 		}
 		doc.SetID(id)
 		doc.Updated = time.Now().UnixNano()
@@ -160,7 +185,7 @@ func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc do
 			old := prev.Key
 			*later = append(*later, func() { _ = t.Adapter.Delete(ctx, old) })
 		}
-		cat.Docs[id] = catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: len(data), Updated: doc.Updated, Tags: doc.Tags(), Trashed: prev.Trashed}
+		cat.Docs[id] = catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: len(data), Updated: doc.Updated, Tags: doc.Tags(), Trashed: prev.Trashed, Folder: doc.Folder()}
 		out = cat.entry(s, id)
 		return nil
 	})
@@ -190,6 +215,7 @@ func (s *Saver) Load(ctx context.Context, target, id string) (docfile.Document, 
 		doc.SetID(id)
 		doc.SetName(e.Name)
 		doc.SetTags(e.Tags)
+		doc.SetFolder(e.Folder)
 		return nil
 	})
 	return doc, err
@@ -230,6 +256,15 @@ func (s *Saver) Lists(ctx context.Context, target string) (live, trashed []Entry
 		return nil
 	})
 	return live, trashed, err
+}
+
+// Overview is Lists and the folders, from one read of the catalog.
+func (s *Saver) Overview(ctx context.Context, target string) (live, trashed []Entry, folders []Folder, err error) {
+	err = s.view(ctx, target, func(_ Target, cat *catalog) error {
+		live, trashed, folders = cat.sorted(s, false), cat.sorted(s, true), cat.folderList()
+		return nil
+	})
+	return live, trashed, folders, err
 }
 
 // Get returns one document's entry.

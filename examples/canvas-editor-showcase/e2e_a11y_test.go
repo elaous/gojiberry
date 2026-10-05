@@ -4,6 +4,7 @@ package main
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/elaous/gojiberry/internal/e2etest"
@@ -54,7 +55,7 @@ func TestAccessibilityAndTranslation(t *testing.T) {
 	d.WaitFor("Spanish", "document.documentElement.lang === 'es'")
 	d.OK(d.Text(`button[data-tab="find"]`) == "Buscar", "the tabs are in Spanish: "+d.Text(`button[data-tab="find"]`))
 	d.OK(d.Count(`button.gj-menubar-button:has-text("Ver")`) == 1, "and the menus")
-	d.OK(regexp.MustCompile(`páginas · \d+ palabras · \d+ caracteres`).MatchString(d.Text(".gj-docview-status")), "and the status bar: "+d.Text(".gj-docview-status"))
+	d.OK(regexp.MustCompile(`páginas`).MatchString(d.Text(`.gj-status-item[data-item="pages"]`)) && regexp.MustCompile(`^\d+ palabras$`).MatchString(d.Text(`.gj-status-item[data-item="words"]`)) && strings.Contains(d.Text(`.gj-status-item[data-item="setup"]`), "vertical"), "and the status bar: "+d.Text(".gj-docview-status"))
 	d.Click(`button[data-tab="save"]`)
 	d.OK(d.Text(".gj-saver-save") == "Guardar", "and the components")
 	d.OK(d.Attr("#a11y-text", "aria-label") == "Texto del documento" && d.Attr("#stage", "aria-label") == "Documento", "including what a screen reader hears")

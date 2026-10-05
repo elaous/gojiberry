@@ -3,6 +3,7 @@ package saver
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -26,7 +27,7 @@ func newSession(t *testing.T) (*Session, *[]docfile.Document, *int) {
 func TestSessionSaveOpenDeleteFlow(t *testing.T) {
 	s, opened, changes := newSession(t)
 	p := s.Props()
-	if p.Target != "sqlite" || p.Format != "json" || len(p.Targets) != 4 || len(p.Formats) != 3 {
+	if p.Target != "sqlite" || p.Format != "json" || len(p.Targets) != 4 || len(p.Formats) != 4 {
 		t.Fatalf("%+v", p)
 	}
 	// Drive it the way the component does.
@@ -34,7 +35,7 @@ func TestSessionSaveOpenDeleteFlow(t *testing.T) {
 	s.Props().OnFormat("proto")
 	s.Props().OnSave()
 	p = s.Props()
-	if p.Failed || p.Status != "Saved report" || len(p.Docs.Docs) != 1 || p.Docs.Docs[0].Name != "report" || p.Docs.Docs[0].Format != "Protobuf (binary)" {
+	if p.Failed || p.Status != "report saved" || len(p.Docs.Docs) != 1 || p.Docs.Docs[0].Name != "report" || p.Docs.Docs[0].Format != "Protobuf (binary)" {
 		t.Fatalf("after save: %+v", p)
 	}
 	id := p.Docs.Docs[0].ID
@@ -68,7 +69,7 @@ func TestSessionSaveOpenDeleteFlow(t *testing.T) {
 	if err := p.Docs.Open(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
-	if len(*opened) != 1 || (*opened)[0].Title != "report" || s.Name() != "report" || s.ID() != id || s.Props().Format != "proto" || s.Props().Status != "Opened report" {
+	if len(*opened) != 1 || (*opened)[0].Title != "report" || s.Name() != "report" || s.ID() != id || s.Props().Format != "proto" || s.Props().Status != "report opened" {
 		t.Fatalf("%+v %q %+v", *opened, s.Name(), s.Props())
 	}
 	// Detach: what is in the editor is not that document any more.
@@ -79,7 +80,7 @@ func TestSessionSaveOpenDeleteFlow(t *testing.T) {
 	if err := s.Props().Docs.Delete(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
-	if p = s.Props(); len(p.Docs.Docs) != 1 || p.Status != "Deleted it" {
+	if p = s.Props(); len(p.Docs.Docs) != 1 || p.Status != "report deleted" {
 		t.Fatalf("%+v", p)
 	}
 	if !strings.Contains(s.String(), "sqlite") {
@@ -171,10 +172,10 @@ func TestSessionPlugsIntoTheDocumentComponents(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := s.Versions()
-	if v.Name != "report" || len(v.Versions) != 1 || s.Props().Status != "Saved a version of report" {
+	if v.Name != "report" || len(v.Versions) != 1 || s.Props().Status != "A version of report saved" {
 		t.Fatalf("after a version: %+v", v)
 	}
-	if err := v.Open(ctx, v.Versions[0].Key); err != nil || len(*opened) != 1 || s.Props().Status != "Opened a version" {
+	if err := v.Open(ctx, v.Versions[0].Key); err != nil || len(*opened) != 1 || s.Props().Status != "Version opened" {
 		t.Fatalf("opening a version: %d opened, %q, %v", len(*opened), s.Props().Status, err)
 	}
 	if err := v.Delete(ctx, v.Versions[0].Key); err != nil || len(s.Versions().Versions) != 0 {
@@ -217,7 +218,7 @@ func TestSessionPlugsIntoTheDocumentComponents(t *testing.T) {
 	if err := docs.Duplicate(ctx, first); err != nil {
 		t.Fatal(err)
 	}
-	if p := s.Props(); len(p.Docs.Docs) != 3 || p.Status != "Copied to Copy of report" {
+	if p := s.Props(); len(p.Docs.Docs) != 3 || p.Status != "Copy of report created" {
 		t.Fatalf("duplicate: %d docs, %q", len(p.Docs.Docs), p.Status)
 	}
 	if err := docs.Trash(ctx, []string{first}); err != nil {
@@ -230,7 +231,7 @@ func TestSessionPlugsIntoTheDocumentComponents(t *testing.T) {
 	if err := tr.Restore(ctx, []string{first}); err != nil {
 		t.Fatal(err)
 	}
-	if p := s.Props(); len(p.Docs.Docs) != 3 || len(p.Trash.Docs) != 0 || p.Status != "Restored 1" {
+	if p := s.Props(); len(p.Docs.Docs) != 3 || len(p.Trash.Docs) != 0 || p.Status != "report restored" {
 		t.Fatalf("restore: %d docs, %d trashed, %q", len(p.Docs.Docs), len(p.Trash.Docs), p.Status)
 	}
 	_ = docs.Trash(ctx, []string{second})
@@ -257,4 +258,260 @@ func TestSessionPlugsIntoTheDocumentComponents(t *testing.T) {
 		t.Error("a failure must show")
 	}
 	var _ components.TrashBackend = s
+}
+
+func TestSessionFoldersAndBreadcrumb(t *testing.T) {
+	ctx := context.Background()
+	s, _, _ := newSession(t)
+	s.SetName("plan")
+	if err := s.Save(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rootDoc := s.ID()
+	docs := s.Docs()
+	if len(docs.Docs) != 1 || len(docs.Path) != 0 || docs.OpenFolder == nil {
+		t.Fatalf("%+v", docs)
+	}
+	// Make Work, go in; a document saved there is in it, and the root list no longer shows it.
+	if err := docs.NewFolder(ctx, "Work"); err != nil {
+		t.Fatal(err)
+	}
+	work := s.Docs().Folders[0]
+	if err := s.Docs().OpenFolder(ctx, work.ID); err != nil {
+		t.Fatal(err)
+	}
+	s.Detach()
+	s.SetName("inside")
+	if err := s.Save(ctx); err != nil {
+		t.Fatal(err)
+	}
+	inside := s.ID()
+	d := s.Docs()
+	if len(d.Docs) != 1 || d.Docs[0].ID != inside || len(d.Path) != 1 || d.Path[0].ID != work.ID {
+		t.Fatalf("in Work: %+v", d)
+	}
+	if err := d.NewFolder(ctx, "2026"); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Docs(); len(got.Folders) != 1 || got.Folders[0].Name != "2026" || len(got.AllFolders) != 2 {
+		t.Fatalf("%+v", got)
+	}
+	// Move the root document in; opening a document goes to its folder.
+	if err := s.Docs().Move(ctx, []string{rootDoc}, work.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Docs(); len(got.Docs) != 2 {
+		t.Fatalf("after the move: %+v", got.Docs)
+	}
+	if err := s.OpenFolder(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Open(ctx, inside); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Docs(); len(got.Path) != 1 || got.Path[0].ID != work.ID {
+		t.Errorf("opening a document should show its folder: %+v", got.Path)
+	}
+	// A folder with documents cannot be deleted; an empty one can, and the view moves up.
+	if err := s.Docs().DeleteFolder(ctx, work.ID); err == nil {
+		t.Error("deleted a folder with documents")
+	}
+	sub := s.Docs().Folders[0]
+	_ = s.OpenFolder(ctx, sub.ID)
+	if err := s.Docs().DeleteFolder(ctx, sub.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Docs(); len(got.Path) != 1 || got.Path[0].ID != work.ID || len(got.Folders) != 0 {
+		t.Errorf("after deleting the folder being shown: %+v", got)
+	}
+	if err := s.OpenFolder(ctx, docfile.NewID()); err == nil {
+		t.Error("opened a folder that is not there")
+	}
+	// Changing target starts at the top.
+	_ = s.SetTarget(ctx, "memory")
+	if got := s.Docs(); len(got.Path) != 0 || len(got.Folders) != 0 {
+		t.Errorf("%+v", got)
+	}
+}
+
+func TestOnlyTheFormAsksBeforeDeleting(t *testing.T) {
+	s, _, _ := newSession(t)
+	if s.Docs().Confirm != nil || s.Trash().Confirm != nil {
+		t.Error("Docs and Trash used alone would store a question nothing draws: they delete at once")
+	}
+	p := s.Props()
+	if p.Docs.Confirm == nil || p.Trash.Confirm == nil || p.Asker == nil {
+		t.Error("the Saver form draws the dialog, so it asks")
+	}
+}
+
+func TestStatusLinesNameWhatTheyAreAbout(t *testing.T) {
+	ctx := context.Background()
+	s, _, _ := newSession(t)
+	s.SetName("plan")
+	_ = s.Save(ctx)
+	id := s.ID()
+	status := func() string { return s.Props().Status }
+	_ = s.NewFolder(ctx, "Work")
+	if status() != "Work created" {
+		t.Errorf("%q", status())
+	}
+	work := s.Docs().Folders[0]
+	_ = s.Docs().Move(ctx, []string{id}, work.ID)
+	if status() != "plan moved" {
+		t.Errorf("%q", status())
+	}
+	_ = s.RenameFolder(ctx, work.ID, "Job")
+	if status() != "Job renamed" {
+		t.Errorf("%q", status())
+	}
+	_ = s.Docs().Trash(ctx, []string{id})
+	if status() != "plan moved to the trash" {
+		t.Errorf("%q", status())
+	}
+	_ = s.Trash().Restore(ctx, []string{id})
+	if status() != "plan restored" {
+		t.Errorf("%q", status())
+	}
+	_ = s.Docs().Move(ctx, []string{id}, "")
+	_ = s.DeleteFolder(ctx, work.ID)
+	if status() != "Job deleted" {
+		t.Errorf("%q", status())
+	}
+	_ = s.Docs().Tag(ctx, id, []string{"a"})
+	if status() != "Tags of plan updated" {
+		t.Errorf("%q", status())
+	}
+	_ = s.Docs().Duplicate(ctx, id)
+	if status() != "Copy of plan created" {
+		t.Errorf("%q", status())
+	}
+	ids := []string{}
+	for _, d := range s.Docs().Docs {
+		ids = append(ids, d.ID)
+	}
+	_ = s.Docs().Trash(ctx, ids)
+	if status() != "plan, Copy of plan moved to the trash" && status() != "Copy of plan, plan moved to the trash" {
+		t.Errorf("two names: %q", status())
+	}
+}
+
+func TestSessionDownloadsAndLinks(t *testing.T) {
+	s, _, _ := newSession(t)
+	s.Props().OnName("report")
+	s.Props().OnSave()
+	id := s.Props().Docs.Docs[0].ID
+	if p := s.Docs(); p.Download != nil || p.Link != nil {
+		t.Fatal("no Deliver and no Link: the controls are left out")
+	}
+
+	type file struct {
+		name, mime string
+		data       []byte
+	}
+	var got []file
+	var copied []string
+	s.Deliver = func(name, mime string, data []byte) { got = append(got, file{name, mime, data}) }
+	s.Copy = func(text string) { copied = append(copied, text) }
+	s.Link = func(kind, id string) string { return "https://opendocs.io/" + kind + "/" + id }
+	s.Export = func(format string, d docfile.Document) (string, []byte, string, error) {
+		return d.Name() + "." + format, []byte("as " + format), "text/plain", nil
+	}
+	s.DownloadFormats = []components.SaverChoice{{Name: "txt", Label: "Text"}}
+
+	p := s.Docs()
+	if p.Download == nil || p.DownloadFolder == nil || len(p.DownloadFormats) != 1 || p.Link(id) != "https://opendocs.io/document/"+id || p.FolderLink("f") != "https://opendocs.io/folder/f" {
+		t.Fatalf("%+v", p)
+	}
+	ctx := context.Background()
+	if err := s.Download(ctx, id, "txt"); err != nil || len(got) != 1 || got[0].name != "report.txt" || string(got[0].data) != "as txt" {
+		t.Fatalf("%v %+v", err, got)
+	}
+	if s.Props().Status != "report downloaded" {
+		t.Errorf("status %q", s.Props().Status)
+	}
+	// With no format, the document as saved.
+	if err := s.Download(ctx, id, ""); err != nil || got[1].name != "report.json" || !strings.Contains(string(got[1].data), "report") {
+		t.Fatalf("%v %+v", err, got)
+	}
+	if err := s.DownloadFolder(ctx, ""); err != nil || got[2].name != "documents.zip" || got[2].mime != "application/zip" || len(zipNames(t, got[2].data)) != 1 {
+		t.Fatalf("%v %+v", err, got)
+	}
+	s.CopyLink("https://opendocs.io/document/" + id)
+	if len(copied) != 1 || !strings.HasPrefix(s.Props().Status, "Link copied: ") {
+		t.Errorf("%v %q", copied, s.Props().Status)
+	}
+	if err := s.Download(ctx, docfile.NewID(), ""); err == nil {
+		t.Error("a document that is not there")
+	}
+}
+
+func TestSessionSaveState(t *testing.T) {
+	s, _, _ := newSession(t)
+	if s.SaveState() != "" {
+		t.Fatal(s.SaveState())
+	}
+	s.MarkEdited()
+	if s.SaveState() != SaveUnsaved {
+		t.Fatal(s.SaveState())
+	}
+	s.Props().OnName("report")
+	s.Props().OnSave()
+	if s.SaveState() != SaveSaved {
+		t.Fatal(s.SaveState())
+	}
+	s.MarkEdited()
+	if s.SaveState() != SaveUnsaved {
+		t.Fatal(s.SaveState())
+	}
+	// Edited while a save runs: still unsaved afterwards.
+	s.Get = func() docfile.Document {
+		s.MarkEdited()
+		return docfile.FromFlow("", &canvas.TextFlow{Items: []canvas.Item{canvas.Chars{Text: "body"}}})
+	}
+	var during []string
+	s.OnChange = func() { during = append(during, s.SaveState()) }
+	s.Props().OnSave()
+	if !slices.Contains(during, SaveSaving) || s.SaveState() != SaveUnsaved {
+		t.Errorf("during %q after %q", during, s.SaveState())
+	}
+	// A failed save says so.
+	s.Props().OnName("")
+	s.Props().OnSave()
+	if s.SaveState() != SaveFailed {
+		t.Errorf("%q", s.SaveState())
+	}
+	// Opening a document leaves the editor holding what is saved.
+	id := s.Docs().Docs[0].ID
+	s.Pending.Run(func(ctx context.Context) error { return s.Open(ctx, id) })
+	if s.SaveState() != SaveSaved {
+		t.Errorf("%q", s.SaveState())
+	}
+}
+
+func TestSaveStateAfterTheOpenDocumentIsDeletedOrTrashed(t *testing.T) {
+	s, _, _ := newSession(t)
+	s.Props().OnName("one")
+	s.Props().OnSave()
+	id := s.Docs().Docs[0].ID
+	if s.SaveState() != SaveSaved {
+		t.Fatal(s.SaveState())
+	}
+	if err := s.TrashDocs(context.Background(), []string{id}); err != nil {
+		t.Fatal(err)
+	}
+	if s.SaveState() != SaveUnsaved {
+		t.Errorf("the open document went to the trash, so the editor's text is stored nowhere: %q", s.SaveState())
+	}
+	s.Props().OnSave() // a new document
+	id2 := s.Docs().Docs[0].ID
+	if s.SaveState() != SaveSaved {
+		t.Fatal(s.SaveState())
+	}
+	if err := s.Delete(context.Background(), id2); err != nil {
+		t.Fatal(err)
+	}
+	if s.SaveState() != SaveUnsaved {
+		t.Errorf("deleted: %q", s.SaveState())
+	}
 }

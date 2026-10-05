@@ -124,14 +124,22 @@ func TestEndToEnd(t *testing.T) {
 	ok(d.Count(`.gj-stylepicker-item[data-style="Heading 1"]`) == 1, "the style gallery lists the styles")
 	body()
 	var hBefore []float64
-	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights.slice(0, 3)`, &hBefore)
+	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights`, &hBefore)
 	d.Click(`.gj-stylepicker-item[data-style="Heading 2"]`)
+	d.Sleep(300)
 	var hAfter []float64
-	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights.slice(0, 3)`, &hAfter)
-	ok(hAfter[1] > hBefore[1], fmt.Sprint("Heading 2 makes the paragraph taller: ", hBefore, " -> ", hAfter))
+	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights`, &hAfter)
+	sum := func(h []float64) (n float64) {
+		for _, v := range h {
+			n += v
+		}
+		return n
+	}
+	ok(sum(hAfter) > sum(hBefore), fmt.Sprint("Heading 2 makes the paragraph taller: ", sum(hBefore), " -> ", sum(hAfter)))
 	d.Click(`.gj-stylepicker-item[data-style="Normal"]`)
-	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights.slice(0, 3)`, &hAfter)
-	ok(hAfter[1] == hBefore[1], "Normal puts it back")
+	d.Sleep(300)
+	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights`, &hAfter)
+	ok(sum(hAfter) == sum(hBefore), "Normal puts it back")
 
 	// Symbols: pick one from the DOM picker into the canvas text.
 	d.Click(`button[data-tab="symbols"]`)
@@ -320,8 +328,8 @@ func TestEndToEnd(t *testing.T) {
 	ok(d.Text(".gj-comment-reply") == "you@example.com Agreed", "a reply is added")
 	d.Click(".gj-comment-resolve")
 	ok(d.Count(".gj-comment") == 0, "a resolved comment leaves the open list")
-	d.Click(".gj-comment-toggle")
-	ok(d.Count(".gj-comment-resolved") == 1, "and shows when asked")
+	d.Click(`.gj-comment-filter[data-filter="resolved"]`)
+	ok(d.Count(".gj-comment-resolved") == 1, "and shows under the Resolved filter")
 	d.Click(".gj-comment-delete")
 	ok(d.Is("s.comments === 0 && s.comment === null"), "Delete removes the comment and un-marks its text")
 
@@ -366,14 +374,14 @@ func TestEndToEnd(t *testing.T) {
 	// Saver: memory target, protobuf binary, then the browser's localStorage as JSON.
 	d.Click(`button[data-tab="save"]`)
 	ok(d.Count(`.gj-saver-select[data-field="Save to"] option`) == 2, "the Saver offers its targets")
-	ok(d.Count(`.gj-saver-select[data-field="Format"] option`) == 3, "and the formats")
+	ok(d.Count(`.gj-saver-select[data-field="Format"] option`) == 4, "and the formats")
 	ok(d.Disabled(".gj-saver-save"), "Save waits for a name")
 	d.Fill(".gj-saver-name", "notes")
 	d.Select(`.gj-saver-select[data-field="Save to"]`, "memory")
 	d.Select(`.gj-saver-select[data-field="Format"]`, "proto")
 	d.Click(".gj-saver-save")
 	d.WaitFor("the saved entry", `document.querySelector('.gj-doclist-item')`)
-	ok(d.Text(".gj-saver-status") == "Saved notes", "status: "+d.Text(".gj-saver-status"))
+	ok(d.Text(".gj-saver-status") == "notes saved", "status: "+d.Text(".gj-saver-status"))
 	ok(d.Count(".gj-doclist-item") == 1, "the downloaded font in the same store is not listed as a document")
 	d.Select(`.gj-saver-select[data-field="Save to"]`, "browser")
 	d.Select(`.gj-saver-select[data-field="Format"]`, "json")
@@ -425,8 +433,9 @@ func TestEndToEnd(t *testing.T) {
 	d.Select(`.gj-saver-select[data-field="Save to"]`, "memory")
 	d.WaitFor("the memory entry", `document.querySelector('.gj-doclist-item')`)
 	d.Click(".gj-doclist-item .gj-doclist-delete")
+	d.Click(`[role="alertdialog"] .gj-dialog-actions button:last-child`) // Delete for good asks first
 	d.WaitFor("an empty list", "document.querySelectorAll('.gj-doclist-item').length === 0")
-	ok(d.Text(".gj-saver-status") == "Deleted it", "Delete removes a saved document")
+	ok(d.Text(".gj-saver-status") == "notes deleted", "Delete removes a saved document")
 
 	// Import / Export.
 	d.Click(`button[data-tab="transfer"]`)
@@ -485,6 +494,7 @@ func TestEndToEnd(t *testing.T) {
 	d.Type("nope")
 	ok(S().Str("text") == typed, "typing changes nothing for a viewer")
 	d.Click(`button[data-tab="comments"]`)
+	d.Click(`.gj-comment-filter[data-filter="all"]`)
 	ok(d.Count(".gj-comment") == 1 && d.Count(".gj-comment-actions") == 0, "a viewer reads comments but has no controls")
 	d.Click(`button[data-role="editor"]`)
 	d.ToggleMode()

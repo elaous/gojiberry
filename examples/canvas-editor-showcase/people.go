@@ -7,6 +7,7 @@ import (
 
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docstore"
+	"github.com/elaous/gojiberry/user"
 	"github.com/elaous/gojiberry/xango"
 )
 
@@ -24,9 +25,10 @@ func newPeople(owner string, rerender func()) *peopleState {
 	return &peopleState{acl: docstore.ACL{Owner: owner}, pending: components.NewPending(rerender), rerender: rerender}
 }
 
-func (p *peopleState) panel() xango.Node {
+func (p *peopleState) panel(confirm func(string, func())) xango.Node {
 	return components.People(components.PeopleProps{
-		People: p.list(), Self: p.acl.Owner, Pending: p.pending,
+		Confirm: confirm,
+		People:  p.list(), Self: p.acl.Owner, Pending: p.pending,
 		Draft: p.draft, DraftRole: p.role,
 		OnDraft: func(id, role string) { p.draft, p.role = id, role; p.rerender() },
 		Invite: func(_ context.Context, id, role string) error {
@@ -41,10 +43,4 @@ func (p *peopleState) panel() xango.Node {
 	})
 }
 
-func (p *peopleState) list() []components.Person {
-	var out []components.Person
-	for _, who := range p.acl.People() {
-		out = append(out, components.Person{ID: who.ID, Role: who.Role})
-	}
-	return out
-}
+func (p *peopleState) list() []user.Person { return p.acl.People() }

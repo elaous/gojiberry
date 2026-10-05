@@ -101,7 +101,7 @@ func TestAuthorizeTable(t *testing.T) {
 
 func TestACLRoles(t *testing.T) {
 	store := docstore.NewMemoryAdapter()
-	acl, _ := json.Marshal(docstore.ACL{Owner: "o@x", Grants: map[string]docstore.Role{"e@x": docstore.RoleEditor, "v@x": docstore.RoleViewer}})
+	acl, _ := json.Marshal(docstore.ACL{Owner: "o@gojiberry.io", Grants: map[string]docstore.Role{"e@gojiberry.io": docstore.RoleEditor, "v@gojiberry.io": docstore.RoleViewer}})
 	_ = store.Save(context.Background(), "acl:shared", acl)
 	_ = store.Save(context.Background(), "acl:broken", []byte("{not json"))
 	roles := ACLRoles(store, func(r *http.Request) string { return r.Header.Get("X-User") })
@@ -116,9 +116,9 @@ func TestACLRoles(t *testing.T) {
 		user, doc string
 		want      Role
 	}{
-		{"o@x", "shared", Owner}, {"e@x", "shared", Editor}, {"v@x", "shared", Viewer},
-		{"stranger@x", "shared", ""}, {"", "shared", ""},
-		{"anyone", "unshared", Owner}, {"o@x", "broken", ""},
+		{"o@gojiberry.io", "shared", Owner}, {"e@gojiberry.io", "shared", Editor}, {"v@gojiberry.io", "shared", Viewer},
+		{"stranger@gojiberry.io", "shared", ""}, {"", "shared", ""},
+		{"anyone", "unshared", Owner}, {"o@gojiberry.io", "broken", ""},
 	} {
 		if got := as(tc.user, tc.doc); got != tc.want {
 			t.Errorf("%s on %s: %q, want %q", tc.user, tc.doc, got, tc.want)
@@ -505,18 +505,18 @@ func TestReplicaIDsAreBoundToTheUserWhoFirstUsedThem(t *testing.T) {
 		resp.Body.Close()
 		return resp.StatusCode
 	}
-	first := post("ana@x", "r1")
-	if again := post("ana@x", "r1"); first != 204 || again != 204 {
+	first := post("ana@gojiberry.io", "r1")
+	if again := post("ana@gojiberry.io", "r1"); first != 204 || again != 204 {
 		t.Fatal("the owner of a replica id keeps using it")
 	}
-	if post("bo@x", "r1") != 403 {
+	if post("bo@gojiberry.io", "r1") != 403 {
 		t.Fatal("another user spoke under ana's replica id")
 	}
-	if post("bo@x", "r2") != 204 || post("", "r1") != 204 {
+	if post("bo@gojiberry.io", "r2") != 204 || post("", "r1") != 204 {
 		t.Fatal("other ids are free, and anonymous callers are not bound")
 	}
 	pres, _ := http.NewRequest("POST", srv.URL+"/docs/d/presence", strings.NewReader(`{"replica":"r1","name":"x"}`))
-	pres.Header.Set("X-User", "bo@x")
+	pres.Header.Set("X-User", "bo@gojiberry.io")
 	resp, _ := http.DefaultClient.Do(pres)
 	resp.Body.Close()
 	if resp.StatusCode != 403 {
@@ -528,10 +528,10 @@ func TestCommenterCannotWriteUnderAnotherName(t *testing.T) {
 	op := func(content string) []crdt.Op {
 		return []crdt.Op{{Block: crdt.Block{ID: "comment:c1", Kind: "lww:side", Content: content}}}
 	}
-	if err := commentAuthors(op(`{"id":"c1","author":"Vee@X.com"}`), "vee@x.com"); err != nil {
+	if err := commentAuthors(op(`{"id":"c1","author":"Vee@Gojiberry.io"}`), "vee@gojiberry.io"); err != nil {
 		t.Fatalf("own name: %v", err)
 	}
-	if commentAuthors(op(`{"id":"c1","author":"ana@x.com"}`), "vee@x.com") == nil || commentAuthors(op(`{"id":"c1"}`), "vee@x.com") == nil || commentAuthors(op(`not json`), "vee@x.com") == nil {
+	if commentAuthors(op(`{"id":"c1","author":"ana@gojiberry.io"}`), "vee@gojiberry.io") == nil || commentAuthors(op(`{"id":"c1"}`), "vee@gojiberry.io") == nil || commentAuthors(op(`not json`), "vee@gojiberry.io") == nil {
 		t.Fatal("another name, no name or bad content must be refused")
 	}
 	if commentAuthors(op(`{"author":"anyone"}`), "") != nil {
@@ -541,7 +541,7 @@ func TestCommenterCannotWriteUnderAnotherName(t *testing.T) {
 
 func TestACLRolesWithChoosesTheRoleForUnsharedDocuments(t *testing.T) {
 	store := docstore.NewMemoryAdapter()
-	acl, _ := json.Marshal(docstore.ACL{Owner: "o@x"})
+	acl, _ := json.Marshal(docstore.ACL{Owner: "o@gojiberry.io"})
 	_ = store.Save(context.Background(), "acl:shared", acl)
 	req := httptest.NewRequest("GET", "/", nil)
 	for _, tc := range []struct {

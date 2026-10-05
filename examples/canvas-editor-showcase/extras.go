@@ -19,15 +19,33 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// statusLine is the status bar: the pages the text reaches, its counts, and
-// the selection's when there is one.
-func statusLine(st canvas.FlowStats, sheets int, mode canvas.Mode) string {
-	pages := max(st.Pages, 1)
-	line := T("status.pages", "%d of %d pages", pages, sheets) + " · " + T("status.words", "%d words", st.Text.Words) + " · " + T("status.characters", "%d characters", st.Text.Characters)
+// saveLabels are the English words for the save states.
+var saveLabels = map[string]string{"saved": "Saved", "saving": "Saving…", "unsaved": "Unsaved changes", "failed": "Save failed"}
+
+// statusBar is the status bar: a selection's counts when there is one, the page
+// setup, the pages the text reaches, where saving stands, the heading the caret
+// is under, the counts and the mode.
+func statusBar(flow *canvas.TextFlow, st canvas.FlowStats, sheets int, mode canvas.Mode, setup components.PageSetup, save string) components.StatusBarProps {
+	var items []components.StatusItem
 	if st.HasSelection {
-		line = T("status.selection", "Selection: %d words, %d characters", st.Selection.Words, st.Selection.Characters) + " · " + line
+		items = append(items, components.StatusItem{ID: "selection", Text: T("status.selection", "Selection: %d words, %d characters", st.Selection.Words, st.Selection.Characters)})
 	}
-	return line + " · " + T("status.mode."+mode.String(), mode.String()+" mode")
+	items = append(items,
+		components.StatusItem{ID: "setup", Text: setup.Label(), Title: T("status.pageSetup", "Page setup")},
+		components.StatusItem{ID: "pages", Text: T("status.pages", "%d of %d pages", max(st.Pages, 1), sheets)},
+	)
+	if save != "" {
+		items = append(items, components.StatusItem{ID: "save", Live: true, State: save, Text: T("status.save."+save, saveLabels[save])})
+	}
+	if flow != nil {
+		if cs := flow.Cursors(); len(cs) > 0 {
+			items = append(items, components.StatusItem{ID: "breadcrumb", Text: components.HeadingBreadcrumb(flow.Outline(), flow.OutlineIndexAt(cs[0].Caret))})
+		}
+	}
+	return components.StatusBarProps{Items: append(items,
+		components.StatusItem{ID: "words", Text: T("status.words", "%d words", st.Text.Words)},
+		components.StatusItem{ID: "characters", Text: T("status.characters", "%d characters", st.Text.Characters)},
+		components.StatusItem{ID: "mode", Text: T("status.mode."+mode.String(), mode.String()+" mode")})}
 }
 
 // readTime formats a reading time the way a status bar would.

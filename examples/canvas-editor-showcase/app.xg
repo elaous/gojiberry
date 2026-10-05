@@ -30,13 +30,13 @@ func Doc(state State, cb Callbacks) xango.Node {
 				items={state.Items}
 				transform={state.Transform()}
 				pageCount={state.Pages}
-				pageWidth={560} pageHeight={420}
+				pageWidth={state.PageWidth()} pageHeight={state.PageHeight()}
 				spread={state.Spread}
 				styles={state.Styles}
 				autoClose={cv.DefaultAutoClose()}
 				hyphenator={state.Hyphenator()}
 				vocabulary={[]string{"Gojiberry", "canvas", "feature", "paragraph"}}
-				margins={[]float64{60, 50, 60, 50}}
+				margins={state.Setup.MarginList()}
 				onChange={cb.OnFlow}
 				onHoverLink={cb.OnHoverLink}
 				comments={state.Comments}
