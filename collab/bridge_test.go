@@ -113,7 +113,7 @@ func TestJoinReceivesFormattedContent(t *testing.T) {
 	a, b := pair(t,
 		canvas.ParaFormat{Align: canvas.AlignCenter, List: canvas.ListStyle{Kind: canvas.ListBullet}},
 		canvas.Chars{Text: "bold ", Format: canvas.Format{FontWeight: 700, Color: "#123"}},
-		canvas.Chars{Text: "link", Format: canvas.Format{Link: "https://x.test"}},
+		canvas.Chars{Text: "link", Format: canvas.Format{Link: "https://gojiberry.io"}},
 		canvas.Chars{Text: "\nsecond"},
 		canvas.Break{Kind: canvas.BreakPage},
 		canvas.ColumnConfig{Count: 2, Gap: 8},

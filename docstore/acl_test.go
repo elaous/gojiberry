@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
-	"github.com/elaous/gojiberry/guard"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +18,8 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc/oidctest"
 
 	"github.com/elaous/gojiberry/auth"
+	"github.com/elaous/gojiberry/guard"
+	"github.com/elaous/gojiberry/user"
 )
 
 // fakeOIDCProvider mirrors gojiberry/auth's own test helper of the
@@ -486,8 +487,8 @@ func TestGuardTokenUsesItsOwnHeader(t *testing.T) {
 }
 
 func TestACLRoleOf(t *testing.T) {
-	a := ACL{Owner: "o@x", Grants: map[string]Role{"e@x": RoleEditor, "v@x": RoleViewer}}
-	for email, want := range map[string]string{"o@x": "owner", "e@x": "editor", "v@x": "viewer", "n@x": "", "": ""} {
+	a := ACL{Owner: "o@gojiberry.io", Grants: map[string]Role{"e@gojiberry.io": RoleEditor, "v@gojiberry.io": RoleViewer}}
+	for email, want := range map[string]string{"o@gojiberry.io": "owner", "e@gojiberry.io": "editor", "v@gojiberry.io": "viewer", "n@gojiberry.io": "", "": ""} {
 		if got := a.RoleOf(email); got != want {
 			t.Errorf("RoleOf(%q) = %q, want %q", email, got, want)
 		}
@@ -521,50 +522,93 @@ func TestRequireACLClosesUnownedDocumentsAndLetsTheFirstWriterOwnThem(t *testing
 }
 
 func TestACLGrantRevokePeople(t *testing.T) {
-	a := ACL{Owner: "me@x.test"}
+	a := ACL{Owner: "me@gojiberry.io"}
 	for _, bad := range []struct {
 		who  string
 		role Role
-	}{{"", RoleEditor}, {"me@x.test", RoleEditor}, {"a@x.test", "admin"}} {
+	}{{"", RoleEditor}, {"me@gojiberry.io", RoleEditor}, {"a@gojiberry.io", "admin"}} {
 		if err := a.Grant(bad.who, bad.role); err == nil {
 			t.Errorf("granted %+v", bad)
 		}
 	}
-	_ = a.Grant("zed@x.test", RoleViewer)
-	_ = a.Grant("ana@x.test", RoleEditor)
-	_ = a.Grant("zed@x.test", RoleEditor) // changes the role
+	_ = a.Grant("zed@gojiberry.io", RoleViewer)
+	_ = a.Grant("ana@gojiberry.io", RoleEditor)
+	_ = a.Grant("zed@gojiberry.io", RoleEditor) // changes the role
 	p := a.People()
-	if len(p) != 3 || p[0].Role != "owner" || p[1].ID != "ana@x.test" || p[2].Role != "editor" {
+	if len(p) != 3 || p[0].Role != "owner" || p[1].ID != "ana@gojiberry.io" || p[2].Role != "editor" {
 		t.Errorf("%+v", p)
 	}
-	if err := a.Revoke("me@x.test"); err == nil {
+	if err := a.Revoke("me@gojiberry.io"); err == nil {
 		t.Error("the owner cannot be revoked")
 	}
-	_ = a.Revoke("ana@x.test")
-	if a.RoleOf("ana@x.test") != "" || len(a.People()) != 2 {
+	_ = a.Revoke("ana@gojiberry.io")
+	if a.RoleOf("ana@gojiberry.io") != "" || len(a.People()) != 2 {
 		t.Errorf("%+v", a)
 	}
 }
 
 func TestACLAddressesAreTrimmedAndCaseFolded(t *testing.T) {
-	a := ACL{Owner: "Me@X.test"}
-	if err := a.Grant("me@x.test ", RoleEditor); err == nil {
+	a := ACL{Owner: "Me@Gojiberry.io"}
+	if err := a.Grant("me@gojiberry.io ", RoleEditor); err == nil {
 		t.Error("the owner under another spelling must still be refused")
 	}
-	_ = a.Grant(" Ana@X.test ", RoleEditor)
-	_ = a.Grant("ana@x.TEST", RoleViewer) // the same person: one grant, the new role
-	if len(a.Grants) != 1 || a.RoleOf("ANA@x.test") != "viewer" || a.RoleOf("me@x.test") != "owner" {
+	_ = a.Grant(" Ana@Gojiberry.io ", RoleEditor)
+	_ = a.Grant("ana@GOJIBERRY.IO", RoleViewer) // the same person: one grant, the new role
+	if len(a.Grants) != 1 || a.RoleOf("ANA@gojiberry.io") != "viewer" || a.RoleOf("me@gojiberry.io") != "owner" {
 		t.Errorf("%+v", a)
 	}
-	if !a.canRead("Ana@x.test") || a.canWrite("ana@x.test") || !a.canWrite(" ME@x.test") {
+	if !a.canRead(user.Person{ID: "Ana@gojiberry.io"}) || a.canWrite(user.Person{ID: "ana@gojiberry.io"}) || !a.canWrite(user.Person{ID: " ME@gojiberry.io"}) {
 		t.Error("permissions go by the normalised address")
 	}
-	_ = a.Revoke("ANA@x.test ")
-	if len(a.Grants) != 0 || a.Revoke("nobody@x.test") != nil {
+	_ = a.Revoke("ANA@gojiberry.io ")
+	if len(a.Grants) != 0 || a.Revoke("nobody@gojiberry.io") != nil {
 		t.Errorf("%+v", a)
 	}
 	var empty ACL
 	if err := empty.Revoke("x"); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestACLRecognisesAPersonByAnyOfTheirIdentifiers(t *testing.T) {
+	a := ACL{Owner: "me@gojiberry.io"}
+	_ = a.Grant("google:Sub-ABC", RoleEditor) // invited by their provider subject
+	_ = a.Grant("bo@gojiberry.io", RoleViewer)
+	_ = a.Grant("ana", RoleViewer) // by username
+	ana := user.Person{ID: "google:Sub-ABC", Email: "Ana@Gojiberry.io"}
+	if a.RoleOfPerson(ana) != "editor" || !a.canWrite(ana) || a.owns(ana) {
+		t.Errorf("by subject: %q", a.RoleOfPerson(ana))
+	}
+	// The best role of any identifier counts; the owner is found by e-mail.
+	both := user.Person{ID: "github:7", Email: "bo@gojiberry.io", Username: "ana"}
+	if a.RoleOfPerson(both) != "viewer" || a.canWrite(both) {
+		t.Errorf("%q", a.RoleOfPerson(both))
+	}
+	me := user.Person{ID: "google:Other", Email: "ME@gojiberry.io"}
+	if !a.owns(me) || a.RoleOfPerson(user.Person{ID: "google:sub-abc"}) != "" {
+		t.Error("the owner by e-mail; a subject differing in case is someone else")
+	}
+	if a.RoleOfPerson(user.Person{}) != "" {
+		t.Error("nobody has no role")
+	}
+}
+
+// A username is whatever the person picked at their identity provider, so it never
+// grants access: someone who calls themselves "ana@x.com" is not Ana.
+func TestUsernameNeverGrantsAccess(t *testing.T) {
+	acl := ACL{Owner: "ana@x.com", Grants: map[string]Role{"bob@x.com": RoleEditor, "bobby": RoleEditor}}
+	impostor := user.Person{ID: "weak-idp:7", Username: "ana@x.com"}
+	if r := acl.RoleOfPerson(impostor); r != "" || acl.canRead(impostor) || acl.owns(impostor) {
+		t.Errorf("an impostor with Ana's address as a username has role %q", r)
+	}
+	if r := acl.RoleOfPerson(user.Person{ID: "p:1", Username: "bobby"}); r != "" {
+		t.Errorf("a grant to a bare name is not matched by a username: %q", r)
+	}
+	// The ID and the verified e-mail still do.
+	if r := acl.RoleOfPerson(user.Person{ID: "p:2", Email: "Ana@X.com"}); r != user.Owner {
+		t.Errorf("owner by e-mail: %q", r)
+	}
+	if r := acl.RoleOfPerson(user.Person{ID: "bob@x.com"}); r != string(RoleEditor) {
+		t.Errorf("editor by ID: %q", r)
 	}
 }

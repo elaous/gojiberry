@@ -131,3 +131,166 @@ func TestVersionsListsAndSaves(t *testing.T) {
 		t.Errorf("log %v", log)
 	}
 }
+
+func TestDocListShowsFoldersBreadcrumbAndMoves(t *testing.T) {
+	var log []string
+	p := &Pending{Inline: true}
+	props := DocListProps{
+		Pending:    p,
+		Docs:       []Doc{{ID: "d1", Name: "plan"}},
+		Folders:    []DocFolder{{ID: "f2", Name: "2026", Parent: "f1"}},
+		Path:       []DocFolder{{ID: "f1", Name: "Work"}},
+		AllFolders: []DocFolder{{ID: "f1", Name: "Work"}, {ID: "f2", Name: "2026", Parent: "f1"}},
+		OpenFolder: func(_ context.Context, id string) error { log = append(log, "open:"+id); return nil },
+		NewFolder:  func(_ context.Context, name string) error { log = append(log, "new:"+name); return nil },
+		RenameFolder: func(_ context.Context, id, name string) error {
+			log = append(log, "rename:"+id+":"+name)
+			return nil
+		},
+		DeleteFolder: func(_ context.Context, id string) error { log = append(log, "delete:"+id); return nil },
+		Move: func(_ context.Context, ids []string, folder string) error {
+			log = append(log, "move:"+strings.Join(ids, ",")+":"+folder)
+			return nil
+		},
+		FolderDraft:   "Ideas",
+		OnFolderDraft: func(s string) { log = append(log, "draft:"+s) },
+	}
+	n := DocList(props)
+	html := render(t, n)
+	mustContain(t, html, "gj-breadcrumbs", ">Documents<", `aria-current="page"`, ">Work<", "📁 2026", `data-id="f2"`,
+		"Work / 2026", "Move to…", "gj-doclist-newfolder", `value="Ideas"`)
+	mustNotContain(t, html, `value="folder:f1"`) // the folder the document is in is not a place to move it to
+	for _, h := range findHandlers(n, "click") {
+		h(xango.Event{})
+	}
+	for _, h := range findHandlers(n, "change") {
+		h(xango.Event{Value: "folder:f1"})
+	}
+	findHandlers(n, "input")[0](xango.Event{Value: "typed"})
+	got := strings.Join(log, " ")
+	for _, want := range []string{"open:", "open:f2", "new:Ideas", "delete:f2", "move:d1:f1", "rename:f2:folder:f1", "draft:typed"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %s", want, got)
+		}
+	}
+	// The top-level move option and a placeholder that does nothing.
+	log = nil
+	for _, h := range findHandlers(n, "change") {
+		h(xango.Event{Value: "top"})
+		h(xango.Event{Value: "-"})
+	}
+	if !strings.Contains(strings.Join(log, " "), "move:d1:") || strings.Count(strings.Join(log, " "), "move:") != 1 {
+		t.Errorf("top / placeholder: %v", log)
+	}
+	// With none of it plugged in there is no breadcrumb, folder or move control.
+	bare := render(t, DocList(DocListProps{Docs: props.Docs}))
+	mustNotContain(t, bare, "gj-breadcrumbs", "gj-doclist-folder", "gj-doclist-move", "gj-doclist-newfolder")
+}
+
+func TestCapacityShowsPercentUsedAndLeft(t *testing.T) {
+	html := render(t, Capacity(CapacityProps{Used: 25 << 20, Total: 100 << 20, ShowCounts: true, Documents: 3, Trashed: 1}))
+	mustContain(t, html, `role="meter"`, `aria-valuenow="25"`, ">25%<", "25.0 MB of 100.0 MB used", "75.0 MB left", "width:25.0%", "3 documents", "1 in the trash")
+	mustNotContain(t, html, "gj-capacity-high", "gj-capacity-over")
+	mustContain(t, render(t, Capacity(CapacityProps{Used: 95, Total: 100})), "gj-capacity-high", "5 B left")
+	over := render(t, Capacity(CapacityProps{Used: 150, Total: 100}))
+	mustContain(t, over, "gj-capacity-over", "width:100.0%", "0 B left", ">150%<")
+	unknown := render(t, Capacity(CapacityProps{Used: 2048, Label: "Disk"}))
+	mustContain(t, unknown, "2.0 KB used", "allocated space not known", "Disk")
+	mustNotContain(t, unknown, `role="meter"`, "documents")
+}
+
+func TestDocListLinkAndDownload(t *testing.T) {
+	docs := []Doc{{ID: "x", Name: "a"}}
+	var copied, got []string
+	p := DocListProps{Docs: docs, Folders: []DocFolder{{ID: "f", Name: "Work"}}, AllFolders: []DocFolder{{ID: "f", Name: "Work"}},
+		Pending: &Pending{Inline: true},
+		Link:    func(id string) string { return "https://opendocs.io/d/" + id }, FolderLink: func(id string) string { return "https://opendocs.io/f/" + id },
+		CopyLink:       func(u string) { copied = append(copied, u) },
+		Download:       func(_ context.Context, id, format string) error { got = append(got, id+":"+format); return nil },
+		DownloadFolder: func(_ context.Context, id string) error { got = append(got, "folder:"+id); return nil }}
+	html := render(t, DocList(p))
+	mustContain(t, html, `data-url="https://opendocs.io/d/x"`, `data-url="https://opendocs.io/f/f"`, "gj-doclist-download", "gj-doclist-folder-download")
+	mustNotContain(t, html, "Download as")
+	n := DocList(p)
+	for _, h := range findHandlers(n, "click") {
+		h(xango.Event{})
+	}
+	if strings.Join(copied, " ") != "https://opendocs.io/f/f https://opendocs.io/d/x" {
+		t.Errorf("copied %v", copied)
+	}
+	if strings.Join(got, " ") != "folder:f x:" {
+		t.Errorf("downloads %v", got)
+	}
+
+	// With formats, a menu instead of a button.
+	got = nil
+	p.DownloadFormats = []DocChoice{{Name: "txt", Label: "Text"}}
+	n = DocList(p)
+	mustContain(t, render(t, n), "Download as…", `value="format:txt"`, ">Text<")
+	for _, h := range findHandlers(n, "change") {
+		h(xango.Event{Value: "-"})
+		h(xango.Event{Value: "format:txt"})
+	}
+	if strings.Join(got, " ") != "x:txt" {
+		t.Errorf("menu: %v", got)
+	}
+
+	// Left out when not plugged in.
+	mustNotContain(t, render(t, DocList(DocListProps{Docs: docs})), "gj-doclist-link", "gj-doclist-download")
+	mustNotContain(t, render(t, DocList(DocListProps{Docs: docs, Link: p.Link})), "gj-doclist-link") // nowhere to copy to
+}
+
+func TestMigratePanel(t *testing.T) {
+	var log []string
+	p := MigrateProps{
+		Sources: []DocChoice{{Name: "google", Label: "Google Docs"}}, OnSource: func(n string) { log = append(log, "source:"+n) },
+		OnToken: func(s string) { log = append(log, "token:"+s) },
+	}
+	html := render(t, Migrate(p))
+	mustContain(t, html, "Choose a platform…", `value="google"`)
+	mustNotContain(t, html, "gj-migrate-token", "gj-migrate-list", "gj-migrate-pick") // no platform yet, not connected, no file picker
+
+	p.Formats, p.Format, p.OnFormat = []DocChoice{{Name: "open", Label: "opendocs (.open)"}, {Name: "json", Label: "JSON"}}, "open", func(n string) { log = append(log, "format:"+n) }
+	mustContain(t, render(t, Migrate(p)), "Convert to", `value="open" selected="selected"`, ">JSON<")
+	p.Source, p.Token = "google", "tok"
+	p.OnConnect = func() { log = append(log, "connect") }
+	n := Migrate(p)
+	mustContain(t, render(t, n), "gj-migrate-token", `value="tok"`, "gj-migrate-connect")
+	mustNotContain(t, render(t, n), "gj-migrate-list")
+	p.Token = " "
+	mustContain(t, render(t, Migrate(p)), `class="gj-migrate-connect" disabled="disabled"`)
+
+	p.Token, p.Connected = "tok", true
+	p.Path = []MigrateItem{{ID: "f1", Name: "Work"}}
+	p.Items = []MigrateItem{{ID: "f2", Name: "Sub", Folder: true}, {ID: "d1", Name: "Plan", Meta: "2026-01-02", Selected: true}}
+	p.OnOpenFolder = func(id string) { log = append(log, "open:"+id) }
+	p.OnToggle = func(id string) { log = append(log, "toggle:"+id) }
+	p.OnSelectAll = func() { log = append(log, "all") }
+	p.OnStart = func() { log = append(log, "start") }
+	p.OnPickFiles = func() { log = append(log, "pick") }
+	n = Migrate(p)
+	html = render(t, n)
+	mustContain(t, html, "All files", "Work", "📁 Sub", "Plan", "2026-01-02", `data-id="d1"`, `checked="checked"`, "Select all", "Import Word files…")
+	for _, h := range findHandlers(n, "click") {
+		h(xango.Event{})
+	}
+	for _, h := range findHandlers(n, "change") {
+		h(xango.Event{Value: "google"})
+	}
+	joined := strings.Join(log, " ")
+	for _, want := range []string{"open:", "open:f2", "all", "start", "pick", "toggle:"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("%q never happened: %s", want, joined)
+		}
+	}
+
+	// Progress while it runs, the report after.
+	p.Busy, p.Done, p.Total, p.Current = true, 2, 5, "Plan.docx"
+	mustContain(t, render(t, Migrate(p)), "<progress", "2 of 5: Plan.docx")
+	p.Busy, p.Reported, p.Imported, p.Failed = false, true, 4, []MigrateFailure{{Name: "Bad", Err: "not a Word file"}}
+	html = render(t, Migrate(p))
+	mustContain(t, html, "4 documents migrated", "1 could not be migrated:", "Bad: not a Word file")
+	mustNotContain(t, html, "<progress")
+	p.Error = "boom"
+	mustContain(t, render(t, Migrate(p)), `role="alert"`, "boom")
+}

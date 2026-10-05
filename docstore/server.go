@@ -331,8 +331,37 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "reading the request body failed", http.StatusBadRequest)
 			return
 		}
-		if err := s.adapter.Save(r.Context(), id, data); err != nil {
-			serverError(w, err)
+		var saveErr error
+		if match, none := r.Header.Get("If-Match"), r.Header.Get("If-None-Match"); match != "" || none != "" {
+			cond, ok := s.adapter.(ConditionalAdapter)
+			if !ok {
+				http.Error(w, "conditional save is not supported", http.StatusNotImplemented)
+				return
+			}
+			// If-None-Match: * means "only if there is none"; If-Match carries the digest
+			// of what was read, in quotes. Anything else (another If-None-Match value,
+			// If-Match: *) is not something this store means by those headers.
+			prev := strings.Trim(match, `"`)
+			if none != "" {
+				if strings.TrimSpace(none) != "*" || match != "" {
+					http.Error(w, "unsupported precondition", http.StatusBadRequest)
+					return
+				}
+				prev = ""
+			} else if prev == "" || prev == "*" {
+				http.Error(w, "unsupported precondition", http.StatusBadRequest)
+				return
+			}
+			saveErr = cond.SaveIf(r.Context(), id, data, prev)
+		} else {
+			saveErr = s.adapter.Save(r.Context(), id, data)
+		}
+		if errors.Is(saveErr, ErrConflict) {
+			http.Error(w, "the document changed", http.StatusPreconditionFailed)
+			return
+		}
+		if saveErr != nil {
+			serverError(w, saveErr)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

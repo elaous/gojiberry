@@ -74,13 +74,23 @@ const DocSegment = "d"
 
 // SplitPath splits a page's path into the app's own base (ending in "/") and
 // the document id; doc is empty when the path does not end in /d/{doc}.
-func SplitPath(pathname string) (base, doc string) {
+func SplitPath(pathname string) (base, doc string) { return splitSegment(pathname, DocSegment) }
+
+// FolderSegment is the path segment before a folder's id: https://host/app/f/{folder}.
+const FolderSegment = "f"
+
+// SplitFolderPath is SplitPath for /f/{folder}.
+func SplitFolderPath(pathname string) (base, folder string) {
+	return splitSegment(pathname, FolderSegment)
+}
+
+func splitSegment(pathname, segment string) (base, id string) {
 	p := strings.TrimSuffix(pathname, "/")
 	i := strings.LastIndex(p, "/")
 	if i < 0 {
 		return pathname, ""
 	}
-	if j := strings.LastIndex(p[:i], "/"); j >= 0 && p[j+1:i] == DocSegment && p[i+1:] != "" {
+	if j := strings.LastIndex(p[:i], "/"); j >= 0 && p[j+1:i] == segment && p[i+1:] != "" {
 		id, err := url.PathUnescape(p[i+1:])
 		if err != nil {
 			return pathname, ""
@@ -88,6 +98,11 @@ func SplitPath(pathname string) (base, doc string) {
 		return p[:j+1], id
 	}
 	return pathname, ""
+}
+
+// FolderPath is the page address for a folder under base: base + "f/" + folder.
+func FolderPath(base, folder string) string {
+	return strings.TrimSuffix(base, "/") + "/" + FolderSegment + "/" + url.PathEscape(folder)
 }
 
 // DocPath is the page address for a document under base (an app's base path

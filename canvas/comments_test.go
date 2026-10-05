@@ -38,7 +38,7 @@ func TestCommentSet(t *testing.T) {
 }
 
 func TestMentions(t *testing.T) {
-	text := "Hi @ana, ask ana.b@example.com or @bob_2 (cc: @c-d.). Not a@b, nor x@@y; mail me@x.org."
+	text := "Hi @ana, ask ana.b@example.com or @bob_2 (cc: @c-d.). Not a@b, nor x@@y; mail me@gojiberry.io."
 	var got []string
 	for _, m := range Mentions(text) {
 		got = append(got, m.Text)
@@ -46,12 +46,12 @@ func TestMentions(t *testing.T) {
 			t.Errorf("range of %q", m.Text)
 		}
 	}
-	want := []string{"@ana", "ana.b@example.com", "@bob_2", "@c-d", "me@x.org"}
+	want := []string{"@ana", "ana.b@example.com", "@bob_2", "@c-d", "me@gojiberry.io"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q\nwant %q", got, want)
 	}
-	ms := Mentions("@ana and ana@x.io")
-	if ms[0].Kind != MentionUser || ms[0].Name != "ana" || ms[1].Kind != MentionEmail || ms[1].Name != "ana@x.io" {
+	ms := Mentions("@ana and ana@gojiberry.io")
+	if ms[0].Kind != MentionUser || ms[0].Name != "ana" || ms[1].Kind != MentionEmail || ms[1].Name != "ana@gojiberry.io" {
 		t.Fatalf("%+v", ms)
 	}
 	if len(Mentions("no one here")) != 0 {
@@ -60,9 +60,9 @@ func TestMentions(t *testing.T) {
 }
 
 func TestSummaryStripsMarkdown(t *testing.T) {
-	md := "## Fix this\n\n**Bold** and _italic_ with `code` and a [link](http://x.test) and ![img](u.png).\n- item one\n1. item two\n> quoted ~~gone~~\n```go\nx := 1\n```"
+	md := "## Fix this\n\n**Bold** and _italic_ with `code` and a [link](https://gojiberry.io) and ![img](u.png).\n- item one\n1. item two\n> quoted ~~gone~~\n```go\nx := 1\n```"
 	got := CommentSummary(md, 0)
-	for _, bad := range []string{"#", "**", "_", "`", "](", "http://x.test", "- ", "~~", ">"} {
+	for _, bad := range []string{"#", "**", "_", "`", "](", "https://gojiberry.io", "- ", "~~", ">"} {
 		if strings.Contains(got, bad) {
 			t.Errorf("%q still has %q", got, bad)
 		}

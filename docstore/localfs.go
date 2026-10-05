@@ -57,6 +57,11 @@ func (a *LocalFSAdapter) path(id string) string {
 func (a *LocalFSAdapter) Save(_ context.Context, id string, data []byte) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	unlock, err := a.lockDir() // so a conditional save in another process is not overtaken
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	tmp := a.path(id) + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err
@@ -109,7 +114,12 @@ func (a *LocalFSAdapter) List(_ context.Context) ([]Meta, error) {
 func (a *LocalFSAdapter) Delete(_ context.Context, id string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	err := os.Remove(a.path(id))
+	unlock, err := a.lockDir()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	err = os.Remove(a.path(id))
 	if errors.Is(err, os.ErrNotExist) {
 		return ErrNotFound
 	}

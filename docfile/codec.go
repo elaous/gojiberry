@@ -78,6 +78,16 @@ var ProtoBinary Codec = &format{
 	},
 }
 
+// Open is opendocs' own file format, a .open file: the document as protobuf wire
+// format, byte for byte what ProtoBinary writes, under its own name and extension.
+// Fields are only ever added (a removed one is reserved, its number never reused),
+// so older readers skip what they do not know.
+var Open Codec = &format{
+	name: "open", label: "opendocs (.open)", ext: ".open", mime: "application/vnd.opendocs.document",
+	marshal:   func(d Document) ([]byte, error) { return ProtoBinary.Marshal(d) },
+	unmarshal: func(b []byte) (Document, error) { return ProtoBinary.Unmarshal(b) },
+}
+
 func fromProto(_ []byte, decode func(*dynamicpb.Message) error) (Document, error) {
 	md, err := messageDescriptor(reflect.TypeFor[Document]())
 	if err != nil {
@@ -92,7 +102,7 @@ func fromProto(_ []byte, decode func(*dynamicpb.Message) error) (Document, error
 	return d, nil
 }
 
-var formats = []Codec{JSON, ProtoText, ProtoBinary}
+var formats = []Codec{JSON, ProtoText, ProtoBinary, Open}
 
 // Formats lists the built-in codecs.
 func Formats() []Codec { return append([]Codec(nil), formats...) }
