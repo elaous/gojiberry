@@ -155,7 +155,7 @@
   "saver.versionOpened": "Versión abierta",
   "saver.versionDeleted": "Versión eliminada",
   "saver.trashed": "%s movido a la papelera",
-  "saver.restored": "%s restaurado",
+  "saver.restored": "%s estaba dañado: se abrió la copia guardada %s (ahora es la guardada)",
   "saver.purged": "%s eliminado para siempre",
   "saver.created": "%s creado",
   "saver.tagged": "Etiquetas de %s actualizadas",
@@ -222,6 +222,9 @@
   "migrate.truncated": "Demasiados archivos: solo se migraron los primeros.",
   "migrate.failed": "%d no se pudieron migrar:",
   "migrate.convertTo": "Convertir a",
-  "saver.purgedUnreadable": "(%d documentos ilegibles de la papelera se eliminaron: %s)"
+  "saver.purgedUnreadable": "(%d documentos ilegibles de la papelera se eliminaron: %s)",
+  "saver.checkedOK": "Comprobados %d documentos: todo bien",
+  "saver.checkedProblems": "Comprobados %d documentos: %d recuperados de una copia anterior (%s), %d dañados sin copia (%s)",
+  "docs.check": "Comprobar documentos"
  }
 }

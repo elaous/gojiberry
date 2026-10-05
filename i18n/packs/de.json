@@ -155,7 +155,7 @@
   "saver.versionOpened": "Version geöffnet",
   "saver.versionDeleted": "Version gelöscht",
   "saver.trashed": "%s in den Papierkorb verschoben",
-  "saver.restored": "%s wiederhergestellt",
+  "saver.restored": "%s war beschädigt: die am %s gespeicherte Kopie wurde geöffnet (sie ist jetzt die gespeicherte)",
   "saver.purged": "%s endgültig gelöscht",
   "saver.created": "%s erstellt",
   "saver.tagged": "Tags von %s aktualisiert",
@@ -222,6 +222,9 @@
   "migrate.truncated": "Zu viele Dateien: Nur die ersten wurden migriert.",
   "migrate.failed": "%d konnten nicht migriert werden:",
   "migrate.convertTo": "Umwandeln in",
-  "saver.purgedUnreadable": "(%d unlesbare Dokumente im Papierkorb wurden entfernt: %s)"
+  "saver.purgedUnreadable": "(%d unlesbare Dokumente im Papierkorb wurden entfernt: %s)",
+  "saver.checkedOK": "%d Dokumente geprüft: alles in Ordnung",
+  "saver.checkedProblems": "%d Dokumente geprüft: %d aus einer früheren Kopie wiederhergestellt (%s), %d beschädigt ohne Kopie (%s)",
+  "docs.check": "Dokumente prüfen"
  }
 }
