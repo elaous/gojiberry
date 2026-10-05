@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/user"
 )
 
@@ -41,43 +42,52 @@ type ACL struct {
 // RoleOf returns the role name email has on this document: "owner",
 // "editor" or "viewer", or "" for no access. These are the names
 // canvas.Role uses, so a client can pass the answer to canvas.ParseRole.
-func (a ACL) RoleOf(email string) string {
-	email = NormalizeAddress(email)
-	switch email {
-	case "":
-		return ""
-	case NormalizeAddress(a.Owner):
-		return "owner"
+func (a ACL) RoleOf(email string) string { return a.RoleOfPerson(user.Person{ID: email}) }
+
+// RoleOfPerson is RoleOf for someone who can be found by more than one identifier
+// (their ID, e-mail address or username): the best role any of them has.
+func (a ACL) RoleOfPerson(p user.Person) string {
+	ids := p.Identifiers()
+	owner := user.Normalize(a.Owner)
+	role := ""
+	for _, id := range ids {
+		switch {
+		case id == owner:
+			return user.Owner
+		case a.Grants[id] == RoleEditor:
+			role = string(RoleEditor)
+		case a.Grants[id] == RoleViewer && role == "":
+			role = string(RoleViewer)
+		}
 	}
-	return string(a.Grants[email])
+	return role
 }
 
 // canRead reports whether email (the empty string for an anonymous/
 // unauthenticated caller) may GET this document -- the Owner, or
 // anyone with either Role.
-func (a ACL) canRead(email string) bool {
-	if email == "" {
-		return false
-	}
-	email = NormalizeAddress(email)
-	if email == NormalizeAddress(a.Owner) {
-		return true
-	}
-	_, ok := a.Grants[email]
-	return ok
-}
+func (a ACL) canRead(p user.Person) bool { return a.RoleOfPerson(p) != "" }
 
 // canWrite reports whether email may PUT/DELETE this document -- the
 // Owner, or an Editor grant; a Viewer cannot.
-func (a ACL) canWrite(email string) bool {
-	if email == "" {
-		return false
+func (a ACL) canWrite(p user.Person) bool {
+	r := a.RoleOfPerson(p)
+	return r == user.Owner || r == user.Editor
+}
+
+// owns reports whether the person is the owner.
+func (a ACL) owns(p user.Person) bool { return a.RoleOfPerson(p) == user.Owner }
+
+// personOf is the signed-in user as the access lists know them.
+func personOf(u auth.User) user.Person { return u.Person("") }
+
+// ownerKey is what an ACL records for an owner: the verified e-mail address when
+// there is one (what people share by), else the stable ID.
+func ownerKey(u auth.User) string {
+	if u.Email != "" {
+		return u.Email
 	}
-	email = NormalizeAddress(email)
-	if email == NormalizeAddress(a.Owner) {
-		return true
-	}
-	return a.Grants[email] == RoleEditor
+	return u.ID
 }
 
 // aclKeyPrefix marks a reserved region of the document-ID keyspace
@@ -133,14 +143,14 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 		}
 		// With RequireACL a document nobody owns is closed -- except to the
 		// first signed-in writer, who becomes its owner.
-		user, signedIn := s.auth.CurrentUser(r)
-		if !signedIn || user.Email == "" {
+		me, signedIn := s.auth.CurrentUser(r)
+		if !signedIn || ownerKey(me) == "" {
 			return false, http.StatusUnauthorized
 		}
 		if method != http.MethodPut {
 			return false, http.StatusForbidden
 		}
-		data, merr := json.Marshal(ACL{Owner: user.Email})
+		data, merr := json.Marshal(ACL{Owner: ownerKey(me)})
 		if merr != nil || s.adapter.Save(r.Context(), aclKey(id), data) != nil {
 			return false, http.StatusServiceUnavailable
 		}
@@ -151,18 +161,18 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 		// not open the document.
 		return false, http.StatusServiceUnavailable
 	}
-	user, signedIn := s.auth.CurrentUser(r)
-	email := ""
+	me, signedIn := s.auth.CurrentUser(r)
+	who := user.Person{}
 	if signedIn {
-		email = user.Email
+		who = personOf(me)
 	}
 	switch method {
 	case http.MethodGet:
-		if acl.canRead(email) {
+		if acl.canRead(who) {
 			return true, 0
 		}
 	case http.MethodPut, http.MethodDelete:
-		if acl.canWrite(email) {
+		if acl.canWrite(who) {
 			return true, 0
 		}
 	}
@@ -190,11 +200,11 @@ func (s *Server) handleACL(w http.ResponseWriter, r *http.Request, id string) {
 		http.Error(w, "docstore: auth is not configured on this server", http.StatusNotImplemented)
 		return
 	}
-	user, signedIn := s.auth.CurrentUser(r)
-	if signedIn && user.Email == "" {
-		// No (verified) e-mail address: there is nothing to own or share
-		// a document by, and "" would match any other such account.
-		http.Error(w, "your account has no verified e-mail address", http.StatusForbidden)
+	me, signedIn := s.auth.CurrentUser(r)
+	if signedIn && ownerKey(me) == "" {
+		// Neither a verified e-mail address nor an ID: there is nothing to own or
+		// share a document by, and "" would match any other such account.
+		http.Error(w, "your account has no identity to share a document by", http.StatusForbidden)
 		return
 	}
 
@@ -213,7 +223,7 @@ func (s *Server) handleACL(w http.ResponseWriter, r *http.Request, id string) {
 			http.Error(w, "the access list cannot be read", http.StatusServiceUnavailable)
 			return
 		}
-		if !signedIn || acl.Owner != user.Email {
+		if !signedIn || !acl.owns(personOf(me)) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -234,11 +244,15 @@ func (s *Server) handleACL(w http.ResponseWriter, r *http.Request, id string) {
 			http.Error(w, "the access list cannot be read", http.StatusServiceUnavailable)
 			return
 		}
-		if err == nil && existing.Owner != user.Email {
+		if err == nil && !existing.owns(personOf(me)) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		body.Owner = user.Email
+		body.Owner = ownerKey(me)
+		if err == nil {
+			body.Owner = existing.Owner // the owner stays the owner
+		}
+		body.Grants = normalizedGrants(body.Grants)
 		data, err := json.Marshal(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -327,3 +341,18 @@ func (a ACL) People() []user.Person {
 
 // NormalizeAddress is how an address is kept and compared in an ACL (see user.Normalize).
 func NormalizeAddress(email string) string { return user.Normalize(email) }
+
+// normalizedGrants is grants with each identifier as Normalize writes it, and only
+// valid roles.
+func normalizedGrants(in map[string]Role) map[string]Role {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]Role, len(in))
+	for k, v := range in {
+		if n := NormalizeAddress(k); n != "" && (v == RoleEditor || v == RoleViewer) {
+			out[n] = v
+		}
+	}
+	return out
+}

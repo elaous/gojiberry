@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
-	"github.com/elaous/gojiberry/guard"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +18,8 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc/oidctest"
 
 	"github.com/elaous/gojiberry/auth"
+	"github.com/elaous/gojiberry/guard"
+	"github.com/elaous/gojiberry/user"
 )
 
 // fakeOIDCProvider mirrors gojiberry/auth's own test helper of the
@@ -556,7 +557,7 @@ func TestACLAddressesAreTrimmedAndCaseFolded(t *testing.T) {
 	if len(a.Grants) != 1 || a.RoleOf("ANA@gojiberry.io") != "viewer" || a.RoleOf("me@gojiberry.io") != "owner" {
 		t.Errorf("%+v", a)
 	}
-	if !a.canRead("Ana@gojiberry.io") || a.canWrite("ana@gojiberry.io") || !a.canWrite(" ME@gojiberry.io") {
+	if !a.canRead(user.Person{ID: "Ana@gojiberry.io"}) || a.canWrite(user.Person{ID: "ana@gojiberry.io"}) || !a.canWrite(user.Person{ID: " ME@gojiberry.io"}) {
 		t.Error("permissions go by the normalised address")
 	}
 	_ = a.Revoke("ANA@gojiberry.io ")
@@ -566,5 +567,28 @@ func TestACLAddressesAreTrimmedAndCaseFolded(t *testing.T) {
 	var empty ACL
 	if err := empty.Revoke("x"); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestACLRecognisesAPersonByAnyOfTheirIdentifiers(t *testing.T) {
+	a := ACL{Owner: "me@gojiberry.io"}
+	_ = a.Grant("google:Sub-ABC", RoleEditor) // invited by their provider subject
+	_ = a.Grant("bo@gojiberry.io", RoleViewer)
+	_ = a.Grant("ana", RoleViewer) // by username
+	ana := user.Person{ID: "google:Sub-ABC", Email: "Ana@Gojiberry.io"}
+	if a.RoleOfPerson(ana) != "editor" || !a.canWrite(ana) || a.owns(ana) {
+		t.Errorf("by subject: %q", a.RoleOfPerson(ana))
+	}
+	// The best role of any identifier counts; the owner is found by e-mail.
+	both := user.Person{ID: "github:7", Email: "bo@gojiberry.io", Username: "ana"}
+	if a.RoleOfPerson(both) != "viewer" || a.canWrite(both) {
+		t.Errorf("%q", a.RoleOfPerson(both))
+	}
+	me := user.Person{ID: "google:Other", Email: "ME@gojiberry.io"}
+	if !a.owns(me) || a.RoleOfPerson(user.Person{ID: "google:sub-abc"}) != "" {
+		t.Error("the owner by e-mail; a subject differing in case is someone else")
+	}
+	if a.RoleOfPerson(user.Person{}) != "" {
+		t.Error("nobody has no role")
 	}
 }
