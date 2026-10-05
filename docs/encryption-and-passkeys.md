@@ -37,10 +37,7 @@ not code: **encrypting documents to keys** and **signing in with a passkey**.
    the saver, folders and versions work unchanged because they see plain `Adapter`
    calls.
 2. **What stays readable.** The catalog (names, tags, folders, sizes) is what lists and
-   searches a store. Option 1 (default): leave it readable by the server and encrypt
-   only the documents. Option 2: encrypt the catalog too, for the store owner, so the
-   server sees opaque blobs; listing is then done on the client after one catalog
-   download. A store picks one.
+   searches a store, and stays readable except for confidential items (C.2).
 3. **`.opendoc` packs.** A record's data may be an envelope (a record flag). The index
    hashes are of the stored bytes, so a pack's integrity and signature are checked
    **without** any key; a document is decrypted only when opened.
@@ -97,16 +94,40 @@ key** that wraps a key pair or the data key, so:
    Chrome's virtual authenticator (the CDP WebAuthn domain), which `internal/e2etest`
    can drive. Replay is covered by the signature counter and one-time challenges.
 
-## C. Open decisions
+## C. Decisions
 
-1. End-to-end (this design: keys stay with the person) or encryption at rest on the
-   server (simpler, the server holds the key, and search and collaboration keep
-   working)? This draft assumes end-to-end; at-rest is a smaller second mode that
-   reuses `EncryptedAdapter` with a server-held key.
-2. Catalog readable by the server (A.2 option 1) or encrypted?
-3. Whether a passkey may be the only way to unlock (this draft: no).
-4. Whether the e-mail should be verified (the OIDC e-mail is; one typed when adding a
-   recipient is a label only).
+1. **Both modes, chosen per document or folder: a protection level.** Convention (the
+   way Google Drive and Dropbox differ from Proton Drive and Tresorit, in one product):
+   - **Everything is encrypted at rest** with a key the server holds (`EncryptedAdapter`
+     with a server keyring). This protects disks, backups and copies of the store; it
+     does not protect against whoever runs the server. Search, spelling, translation and
+     collaboration work.
+   - **Confidential** documents and folders are **end to end**: the data key is wrapped
+     only for people's keys; the server holds ciphertext. No server-side features and no
+     live collaboration for them (A.4).
+   - The level is a field of the document's envelope and the catalog (`protection`:
+     `server` or `e2ee`), not something inferred from the name.
+2. **The catalog stays readable, except for confidential items, decided by the level,
+   not by `[CONFIDENTIAL]` in the name.** A marker in a name defeats itself: the name is
+   in the catalog, so the server has already read it. Instead: when a document or
+   folder is made confidential, its real name, tags and folder names move inside the
+   envelope, and the catalog holds a placeholder ("Confidential document") that the
+   client replaces after decrypting. Sizes, times and the folder tree's shape stay
+   visible. Typing `[CONFIDENTIAL]` at the start of a name is kept as a **shortcut**:
+   the UI offers to switch the document to end to end and strips the marker from the
+   stored name.
+3. **A passkey is never the only way to unlock an end-to-end document.** Making one
+   confidential requires a second recipient: a recovery key generated in the browser
+   and shown once to download (or an SSH key). Exception: a document marked disposable
+   (the public store, `public-docstore.md`) may skip it, with the warning. Passkeys for
+   **signing in** are different (B): losing one costs a login, not data, so they only
+   need another way back in (another passkey, an OIDC identity or a recovery e-mail).
+4. **A recipient's e-mail is "verified" when it is the verified e-mail of an account on
+   the store** and the key was registered by that account while signed in. Picking
+   people from the store's directory shows a verified mark and their registered keys; a
+   pasted key for an address with no account stays "label only" and the owner confirms
+   its fingerprint. Verified e-mail proves the account, and the key was published by it;
+   it does not prove the key is not the account's compromised one.
 
 ## D. Plan
 
@@ -116,4 +137,4 @@ key** that wraps a key pair or the data key, so:
 3. `auth/passkey` and `components.Passkey`, with the virtual-authenticator e2e.
 4. Passkey as an encryption recipient through PRF, with detection and the
    second-recipient rule.
-5. `.opendoc` encrypted records, and encrypted catalogs if chosen.
+5. `.opendoc` encrypted records, and the placeholder catalog entries for confidential items.
