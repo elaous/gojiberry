@@ -158,16 +158,17 @@ func (s *Saver) MoveFolder(ctx context.Context, target, id, parent string) error
 }
 
 // DeleteFolder removes a folder that holds no document (not in the trash) and no
-// folder. Documents in the trash that were in it go back to the top level; one whose
-// file is missing or damaged cannot go anywhere and is removed (the person already
-// put it in the trash, and nothing could open it). See DeleteFolderReport.
+// folder. Documents in the trash that were in it go back to the top level. One whose
+// file is gone has nothing left to keep and is removed from the trash; one whose file is
+// there but does not parse (it may be from a newer version of the library) is kept and
+// goes to the top level without being rewritten. See DeleteFolderReport.
 func (s *Saver) DeleteFolder(ctx context.Context, target, id string) error {
 	_, err := s.DeleteFolderReport(ctx, target, id)
 	return err
 }
 
-// DeleteFolderReport is DeleteFolder that also returns the names of the unreadable
-// documents it removed from the trash.
+// DeleteFolderReport is DeleteFolder that also returns the names of the documents whose
+// files were gone and that it removed from the trash.
 func (s *Saver) DeleteFolderReport(ctx context.Context, target, id string) (purged []string, err error) {
 	err = s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		purged = nil // update may run this again
@@ -193,6 +194,14 @@ func (s *Saver) DeleteFolderReport(ctx context.Context, target, id string) (purg
 		for _, did := range gone {
 			e := cat.Docs[did]
 			w, err := s.prepareTouch(ctx, t, &e, func(d *docfile.Document) { d.SetFolder("") })
+			if errors.Is(err, ErrUnreadable) && !errors.Is(err, docstore.ErrNotFound) {
+				// The file is there but cannot be read as a document: not ours to destroy
+				// (a newer version of the library may read it). It cannot be rewritten with
+				// the new folder, so only the catalog says it is at the top level.
+				e.Folder = ""
+				cat.Docs[did] = e
+				continue
+			}
 			if errors.Is(err, ErrUnreadable) {
 				purged = append(purged, e.Name)
 				delete(cat.Docs, did)

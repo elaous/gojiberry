@@ -360,7 +360,7 @@ func (s *Saver) prepareTouch(ctx context.Context, t Target, e *catalogEntry, f f
 	}
 	stored, err := t.Adapter.Load(ctx, e.Key)
 	if errors.Is(err, docstore.ErrNotFound) {
-		return nil, fmt.Errorf("%w: %w", ErrUnreadable, err)
+		return nil, fmt.Errorf("%w: %w", ErrUnreadable, err) // errors.Is(err, docstore.ErrNotFound) too: the file is gone
 	}
 	if err != nil {
 		return nil, err

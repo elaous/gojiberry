@@ -155,6 +155,7 @@ func (d *document) setCursors(cs []cursor) {
 // addCursorAt appends a new, unselected cursor at pos (clamped into
 // range) -- Alt+Click's effect.
 func (d *document) addCursorAt(pos int) {
+	d.hist.typingAt = 0 // moving the caret ends the step that typing was
 	pos = clamp(pos, 0, d.Len())
 	d.setCursors(append(d.cursors(), cursor{Pos: pos, Anchor: pos}))
 }
@@ -162,6 +163,7 @@ func (d *document) addCursorAt(pos int) {
 // resetCursorTo collapses every cursor to a single one at pos, with no
 // selection -- a plain (non-modifier) click's effect.
 func (d *document) resetCursorTo(pos int) {
+	d.hist.typingAt = 0 // moving the caret ends the step that typing was
 	pos = clamp(pos, 0, d.Len())
 	d.Cursor, d.Anchor = pos, pos
 	d.ExtraCursors = nil
@@ -175,6 +177,7 @@ func (d *document) resetCursorTo(pos int) {
 // there first" -- there's no per-cursor identity tracked across edits
 // to make the latter meaningful anyway.
 func (d *document) collapseCursors() {
+	d.hist.typingAt = 0 // moving the caret ends the step that typing was
 	d.ExtraCursors = nil
 }
 
@@ -182,6 +185,7 @@ func (d *document) collapseCursors() {
 // -- Ctrl/Cmd+A's effect. Matches most editors in discarding any
 // additional cursors rather than selecting everything under each one.
 func (d *document) selectAll() {
+	d.hist.typingAt = 0 // moving the caret ends the step that typing was
 	d.Anchor, d.Cursor = 0, d.Len()
 	d.ExtraCursors = nil
 }
@@ -194,6 +198,7 @@ func (d *document) selectAll() {
 // (arrow keys, word jumps, Home/End) uses moveCursors instead, to move
 // every live cursor at once.
 func (d *document) moveCursor(idx int, extend bool) {
+	d.hist.typingAt = 0 // moving the caret ends the step that typing was
 	idx = clamp(idx, 0, d.Len())
 	d.Cursor = idx
 	if !extend {
@@ -208,6 +213,7 @@ func (d *document) moveCursor(idx int, extend bool) {
 // backspace/delete) cursors never need processing in any particular
 // order relative to each other.
 func (d *document) moveCursors(newPos func(pos int) int, extend bool) {
+	d.hist.typingAt = 0 // moving the caret ends the step that typing was
 	cs := d.cursors()
 	for i := range cs {
 		p := clamp(newPos(cs[i].Pos), 0, d.Len())
@@ -357,6 +363,25 @@ func (d *document) deleteNow() {
 		}
 		d.buf.DeleteAt(pos, 1)
 		return pos, pos
+	})
+}
+
+// cutSelections deletes every cursor's selection and nothing else: a cursor with no
+// selection is left alone (Backspace would delete the character before it, which was
+// never copied).
+func (d *document) cutSelections() { d.edit(d.cutNow) }
+
+func (d *document) cutNow() {
+	d.forEachCursorDescending(func(pos, anchor int) (int, int) {
+		lo, hi := pos, anchor
+		if lo > hi {
+			lo, hi = hi, lo
+		}
+		if hi > lo {
+			d.buf.DeleteAt(lo, hi-lo)
+			return lo, lo
+		}
+		return pos, anchor
 	})
 }
 

@@ -263,9 +263,11 @@ func TestRepairLeavesWhatARebuildSkipped(t *testing.T) {
 	}
 }
 
-// A document in the trash whose file is gone or damaged cannot be moved out of its
-// folder, and nobody can open it: deleting the folder removes it, and says so.
-func TestDeleteFolderRemovesUnreadableTrashedDocuments(t *testing.T) {
+// A document in the trash whose file is gone has nothing left to keep: deleting its
+// folder removes it, and says so. One whose file is there but does not parse is not
+// destroyed (it may be from a newer version of the library): it goes to the top level
+// of the trash, untouched, and the folder can be deleted.
+func TestDeleteFolderRemovesTrashedDocumentsWhoseFilesAreGone(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
 	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
@@ -287,19 +289,16 @@ func TestDeleteFolderRemovesUnreadableTrashedDocuments(t *testing.T) {
 	_ = mem.Save(ctx, damaged.Key, []byte("{ not json"))
 
 	purged, err := s.DeleteFolderReport(ctx, "m", f.ID)
-	if err != nil || len(purged) != 2 {
-		t.Fatalf("purged %v, %v", purged, err)
-	}
-	sort.Strings(purged)
-	if purged[0] != "damaged" || purged[1] != "missing" {
-		t.Errorf("%v", purged)
+	if err != nil || len(purged) != 1 || purged[0] != "missing" {
+		t.Fatalf("only the one whose file is gone is removed: %v, %v", purged, err)
 	}
 	trash, _ := s.Trashed(ctx, "m")
-	if len(trash) != 1 || trash[0].ID != good.ID || trash[0].Folder != "" {
-		t.Errorf("the readable one goes to the top level and stays in the trash: %+v", trash)
+	sort.Slice(trash, func(i, j int) bool { return trash[i].Name < trash[j].Name })
+	if len(trash) != 2 || trash[0].ID != damaged.ID || trash[1].ID != good.ID || trash[0].Folder != "" || trash[1].Folder != "" {
+		t.Errorf("the readable one and the one that does not parse are at the top level of the trash: %+v", trash)
 	}
-	if _, err := mem.Load(ctx, damaged.Key); !errors.Is(err, docstore.ErrNotFound) {
-		t.Errorf("the damaged file is deleted: %v", err)
+	if stored, err := mem.Load(ctx, damaged.Key); err != nil || string(stored.Data) != "{ not json" {
+		t.Errorf("the file that does not parse is left exactly as it was: %v", err)
 	}
 	if folders, _ := s.Folders(ctx, "m"); len(folders) != 0 {
 		t.Errorf("the folder is gone: %+v", folders)

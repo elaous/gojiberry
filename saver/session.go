@@ -568,7 +568,11 @@ func (s *Session) DeleteFolder(ctx context.Context, id string) error {
 	line := msg("saver.deleted", "%s deleted", name)
 	if len(purged) > 0 {
 		// Say what else went, so nothing disappears unexplained.
-		line += " " + msg("saver.purgedUnreadable", "(%d unreadable documents in the trash were removed: %s)", len(purged), strings.Join(purged, ", "))
+		shown := purged
+		if len(shown) > 5 {
+			shown = append(append([]string(nil), purged[:5]...), "…")
+		}
+		line += " " + msg("saver.purgedUnreadable", "(%d documents in the trash whose files were gone were removed: %s)", len(purged), strings.Join(shown, ", "))
 	}
 	return s.after(ctx, line)
 }
