@@ -61,3 +61,17 @@ from the WebSocket broadcast, a late-joining third client receiving
 the document's current state immediately instead of a blank page, an
 edit from that third (editor) client propagating to both others, and
 Delete clearing the document live everywhere.
+
+
+## What the roles are (and are not)
+
+`?role=viewer` is read from the page's own URL and only changes what the client draws:
+a viewer's textarea is disabled and the Delete/Share buttons are gone. **The server does
+not enforce it**: it relays whatever any connected socket sends, so anyone who can reach
+the server can edit. That is what a demo with no sign-in can honestly do; real role
+enforcement needs the signed-in identity checked on the server (see the `collab/hub`
+package, whose access lists are checked there).
+
+The server listens on `127.0.0.1:8096` (set `ADDR` to change it) and only accepts
+WebSocket connections from pages it served itself (set `ALLOWED_ORIGINS` to allow
+others), so another website open in your browser cannot reach it through localhost.

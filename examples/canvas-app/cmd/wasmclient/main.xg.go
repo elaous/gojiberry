@@ -39,30 +39,52 @@ func main() {
 
 	root := domrt.Mount(statusContainer.Element, StatusView("saved"))
 
-	save := func() {
+	// One save at a time, so an older request cannot land after a newer one and win on
+	// the server; edits made while one is in flight are saved right after it, and
+	// "saved" is only shown when nothing is waiting.
+	saving, queued, typing := false, false, false
+	var save func()
+	put := func(content string) bool {
+		body, err := json.Marshal(saveRequest{Content: content})
+		if err != nil {
+			return false
+		}
+		resp, err := browser.FetchOpts("/api/documents/"+docID, browser.FetchOptions{
+			Method:  "PUT",
+			Body:    string(body),
+			Headers: map[string]string{"Content-Type": "application/json"},
+		})
+		return err == nil && resp.OK
+	}
+	save = func() {
+		typing = false
+		if saving {
+			queued = true
+			return
+		}
+		saving = true
 		content := textarea.GetValue()
 		root.Update(StatusView("saving..."))
 		go func() {
-			body, err := json.Marshal(saveRequest{Content: content})
-			if err != nil {
+			ok := put(content)
+			saving = false
+			switch {
+			case queued:
+				queued = false
+				save()
+			case typing:
+				root.Update(StatusView("editing..."))
+			case ok:
+				root.Update(StatusView("saved"))
+			default:
 				root.Update(StatusView("error saving"))
-				return
 			}
-			resp, err := browser.FetchOpts("/api/documents/"+docID, browser.FetchOptions{
-				Method:  "PUT",
-				Body:    string(body),
-				Headers: map[string]string{"Content-Type": "application/json"},
-			})
-			if err != nil || !resp.OK {
-				root.Update(StatusView("error saving"))
-				return
-			}
-			root.Update(StatusView("saved"))
 		}()
 	}
 
 	var debounce *time.Timer
 	onInput := js.FuncOf(func(this js.Value, args []js.Value) any {
+		typing = true
 		root.Update(StatusView("editing..."))
 		if debounce != nil {
 			debounce.Stop()

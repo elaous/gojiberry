@@ -25,6 +25,7 @@ type langState struct {
 	translated string
 	selFrom    int // the selection that was translated
 	selTo      int
+	transText  string // the whole text when it was translated: the offsets mean something only in it
 	issues     []grammar.Issue
 	text       string // the text the issues were found in
 	checked    bool
@@ -39,10 +40,10 @@ var translateTargets = []components.LanguageTarget{
 
 // setupLanguage reads the backends from the page's query parameters.
 func (u *ui) setupLanguage(param func(string) string) {
-	if url := param("translate"); url != "" {
+	if url := pageEndpoint(param("translate")); url != "" {
 		u.lang.translator = &translate.Client{BaseURL: url}
 	}
-	if url := param("grammar"); url != "" {
+	if url := pageEndpoint(param("grammar")); url != "" {
 		model := param("model")
 		if model == "" {
 			model = "llama3.1"
@@ -84,6 +85,7 @@ func langPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(),
 		}
 		text := fl.SelectedText()
 		l.selFrom, l.selTo = fl.Selection()
+		l.transText = fl.EditText()
 		l.busy, l.err = true, ""
 		renderUI()
 		go func() {
@@ -100,7 +102,12 @@ func langPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(),
 		}()
 	}
 	props.OnUseTranslate = func() {
-		if fl == nil || l.translated == "" {
+		if fl == nil || l.translated == "" || props.ReadOnly {
+			return
+		}
+		if fl.EditText() != l.transText { // edited since (by this person or a collaborator): the range is not the text that was translated
+			l.translated, l.err = "", "The text changed since it was translated: translate the selection again."
+			renderUI()
 			return
 		}
 		fl.ReplaceRange(l.selFrom, l.selTo, l.translated)
