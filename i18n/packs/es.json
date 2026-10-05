@@ -127,6 +127,14 @@
   "people.remove": "Quitar",
   "people.invite": "Invitar",
   "people.invitePlaceholder": "nombre@ejemplo.com",
-  "people.inviteRole": "Rol de la persona invitada"
+  "people.inviteRole": "Rol de la persona invitada",
+  "confirm.title": "¿Seguro?",
+  "confirm.yes": "Eliminar",
+  "confirm.no": "Cancelar",
+  "docs.confirmDelete": "¿Eliminar %s definitivamente? No se puede deshacer.",
+  "docs.confirmForever": "¿Eliminar %s para siempre? No se puede deshacer.",
+  "docs.confirmForeverN": "¿Eliminar %d documentos para siempre? No se puede deshacer.",
+  "docs.confirmEmpty": "¿Eliminar para siempre los %d documentos de la papelera? No se puede deshacer.",
+  "people.confirmRemove": "¿Quitar el acceso de %s?"
  }
 }

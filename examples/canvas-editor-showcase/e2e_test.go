@@ -425,6 +425,7 @@ func TestEndToEnd(t *testing.T) {
 	d.Select(`.gj-saver-select[data-field="Save to"]`, "memory")
 	d.WaitFor("the memory entry", `document.querySelector('.gj-doclist-item')`)
 	d.Click(".gj-doclist-item .gj-doclist-delete")
+	d.Click(`[role="alertdialog"] .gj-dialog-actions button:last-child`) // Delete for good asks first
 	d.WaitFor("an empty list", "document.querySelectorAll('.gj-doclist-item').length === 0")
 	ok(d.Text(".gj-saver-status") == "Deleted it", "Delete removes a saved document")
 

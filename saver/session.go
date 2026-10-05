@@ -40,6 +40,9 @@ type Session struct {
 	// Pending tracks the background operations; tests set Pending.Inline to run
 	// them inline.
 	Pending *components.Pending
+	// Asker asks before documents are deleted for good; the Saver form shows its
+	// dialog. Set Asker.Title and the labels to change its words.
+	Asker *components.Asker
 
 	op                   sync.Mutex // one saving, opening or deleting at a time
 	mu                   sync.Mutex
@@ -57,6 +60,7 @@ type Session struct {
 func NewSession(s *Saver, get func() docfile.Document, onOpen func(docfile.Document)) *Session {
 	ss := &Session{Saver: s, Get: get, OnOpen: onOpen, format: docfile.JSON.Name()}
 	ss.Pending = components.NewPending(ss.changed)
+	ss.Asker = components.NewAsker(ss.changed)
 	if len(s.Targets) > 0 {
 		ss.target = s.Targets[0].Name
 	}
@@ -384,6 +388,7 @@ func (s *Session) Docs() components.DocListProps {
 		Delete:    s.Delete,
 		Tag:       s.SetTags,
 		Refresh:   func() { s.Pending.Run(s.Refresh) },
+		Confirm:   s.Asker.Ask,
 	}
 	for _, e := range s.entries {
 		p.Docs = append(p.Docs, docOf(e))
@@ -411,7 +416,7 @@ func (s *Session) Versions() components.VersionsProps {
 func (s *Session) Trash() components.TrashProps {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p := components.TrashProps{Pending: s.Pending, Selected: s.selected, OnSelect: func(ids []string) { s.set(func() { s.selected = ids }) }}
+	p := components.TrashProps{Pending: s.Pending, Confirm: s.Asker.Ask, Selected: s.selected, OnSelect: func(ids []string) { s.set(func() { s.selected = ids }) }}
 	p = p.Use(s)
 	for _, e := range s.trashed {
 		p.Docs = append(p.Docs, docOf(e))
@@ -433,7 +438,7 @@ func (s *Session) Props() components.SaverProps {
 		OnName:      s.SetName,
 		OnSave:      func() { s.Pending.Run(s.Save) },
 		OnSaveAsNew: func() { s.Pending.Run(s.SaveAsNew) },
-		Docs:        docs, Versions: versions, Trash: trash,
+		Docs:        docs, Versions: versions, Trash: trash, Asker: s.Asker,
 	}
 	if err := s.Pending.Err(); err != nil {
 		p.Status, p.Failed = err.Error(), true

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+
+	"github.com/elaous/gojiberry/user"
 )
 
 // Role is a collaborator's own access level on a document, beyond its
@@ -310,23 +312,18 @@ func (a *ACL) Revoke(email string) error {
 }
 
 // People lists who has access: the owner first, then the others by address.
-func (a ACL) People() []Person {
-	out := []Person{{ID: a.Owner, Role: "owner"}}
+func (a ACL) People() []user.Person {
+	out := []user.Person{{ID: a.Owner, Role: user.Owner}}
 	var rest []string
 	for e := range a.Grants {
 		rest = append(rest, e)
 	}
 	sort.Strings(rest)
 	for _, e := range rest {
-		out = append(out, Person{ID: e, Role: string(a.Grants[e])})
+		out = append(out, user.Person{ID: e, Role: string(a.Grants[e])})
 	}
 	return out
 }
 
-// Person is someone with access to a document.
-type Person struct{ ID, Role string }
-
-// NormalizeAddress is how an address is kept and compared in an ACL: trimmed and
-// in lower case, so "Ana@X.com " and "ana@x.com" are one person. An owner set on
-// an ACL should be written that way too.
-func NormalizeAddress(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
+// NormalizeAddress is how an address is kept and compared in an ACL (see user.Normalize).
+func NormalizeAddress(email string) string { return user.Normalize(email) }

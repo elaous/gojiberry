@@ -127,6 +127,14 @@
   "people.remove": "Entfernen",
   "people.invite": "Einladen",
   "people.invitePlaceholder": "name@beispiel.de",
-  "people.inviteRole": "Rolle der eingeladenen Person"
+  "people.inviteRole": "Rolle der eingeladenen Person",
+  "confirm.title": "Sind Sie sicher?",
+  "confirm.yes": "Löschen",
+  "confirm.no": "Abbrechen",
+  "docs.confirmDelete": "%s endgültig löschen? Das lässt sich nicht rückgängig machen.",
+  "docs.confirmForever": "%s endgültig löschen? Das lässt sich nicht rückgängig machen.",
+  "docs.confirmForeverN": "%d Dokumente endgültig löschen? Das lässt sich nicht rückgängig machen.",
+  "docs.confirmEmpty": "Alle %d Dokumente im Papierkorb endgültig löschen? Das lässt sich nicht rückgängig machen.",
+  "people.confirmRemove": "Zugriff von %s entfernen?"
  }
 }

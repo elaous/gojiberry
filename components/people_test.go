@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/elaous/gojiberry/user"
 	"github.com/elaous/gojiberry/xango"
 )
 
@@ -12,7 +13,7 @@ func TestPeopleListsAndPlugsIn(t *testing.T) {
 	var log []string
 	pending := &Pending{Inline: true}
 	p := PeopleProps{
-		People:  []Person{{ID: "me@x.test", Role: "owner"}, {ID: "ana@x.test", Role: "editor"}, {ID: "bo@x.test", Name: "Bo", Role: "viewer"}},
+		People:  []user.Person{{ID: "me@x.test", Role: "owner"}, {ID: "ana@x.test", Role: "editor"}, {ID: "bo@x.test", Name: "Bo", Role: "viewer"}},
 		Pending: pending, Self: "me@x.test", Draft: "new@x.test", DraftRole: "viewer",
 		Invite:  func(_ context.Context, id, role string) error { log = append(log, "invite:"+id+":"+role); return nil },
 		SetRole: func(_ context.Context, id, role string) error { log = append(log, "role:"+id+":"+role); return nil },
@@ -39,7 +40,7 @@ func TestPeopleListsAndPlugsIn(t *testing.T) {
 		}
 	}
 	// You cannot remove yourself; nothing offered means nothing drawn.
-	self := render(t, People(PeopleProps{People: []Person{{ID: "me@x.test", Role: "owner"}, {ID: "me2@x.test", Role: "editor"}}, Self: "me2@x.test", Remove: p.Remove}))
+	self := render(t, People(PeopleProps{People: []user.Person{{ID: "me@x.test", Role: "owner"}, {ID: "me2@x.test", Role: "editor"}}, Self: "me2@x.test", Remove: p.Remove}))
 	mustNotContain(t, self, "gj-people-remove", "gj-people-invite")
 	bare := render(t, People(PeopleProps{People: p.People}))
 	mustNotContain(t, bare, "gj-people-remove", "gj-people-invite")
@@ -47,6 +48,6 @@ func TestPeopleListsAndPlugsIn(t *testing.T) {
 }
 
 func TestPeopleShowsARoleTheListDoesNotKnow(t *testing.T) {
-	html := render(t, People(PeopleProps{People: []Person{{ID: "a@x.test", Role: "commenter"}}, SetRole: func(context.Context, string, string) error { return nil }}))
+	html := render(t, People(PeopleProps{People: []user.Person{{ID: "a@x.test", Role: "commenter"}}, SetRole: func(context.Context, string, string) error { return nil }}))
 	mustContain(t, html, `<option value="commenter" selected="selected">`)
 }

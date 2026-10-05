@@ -328,7 +328,7 @@ func main() {
 				panel = statsPanel(flow.Stats(), state.Pages)
 			}
 		case "people":
-			panel = u.people.panel()
+			panel = xango.Frag(u.people.panel(u.saver.Asker.Ask), u.saver.Asker.Dialog())
 		case "share":
 			if flow != nil {
 				panel = sharePanel(u, flow, origin, renderUI)

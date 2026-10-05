@@ -35,6 +35,9 @@ type SaverProps struct {
 	Docs     DocListProps
 	Versions VersionsProps
 	Trash    TrashProps
+	// Asker, if set, is where Docs, Trash and People ask before destructive
+	// actions (give them its Ask as Confirm); the form draws its dialog.
+	Asker *Asker
 }
 
 // Saver renders the save form: pick a target and a format, name the
@@ -99,6 +102,9 @@ func Saver(props SaverProps) xango.Node {
 	}
 	if len(props.Trash.Docs) > 0 {
 		children = append(children, Trash(props.Trash))
+	}
+	if props.Asker != nil {
+		children = append(children, props.Asker.Dialog())
 	}
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-saver")}, children...)
 }

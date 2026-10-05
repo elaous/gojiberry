@@ -3,17 +3,15 @@ package components
 import (
 	"context"
 	"slices"
+	"strings"
 
+	"github.com/elaous/gojiberry/user"
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Person is someone with access to a document. ID is how they are known (an
-// address); Role is "owner", "editor" or "viewer".
-type Person struct{ ID, Name, Role string }
-
 // PeopleProps configures People.
 type PeopleProps struct {
-	People []Person
+	People []user.Person
 	// Roles are the roles that can be given, in the order offered ("editor",
 	// "viewer" if empty).
 	Roles []string
@@ -29,6 +27,8 @@ type PeopleProps struct {
 	// Self is the signed-in user, who cannot remove themselves here.
 	Self    string
 	Pending *Pending
+	// Confirm, if set, is asked before access is removed (see Asker.Ask).
+	Confirm func(message string, do func())
 }
 
 // People lists who can open a document, each with a role to change and a Remove,
@@ -65,14 +65,11 @@ func People(p PeopleProps) xango.Node {
 		xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(tr("people.title", "People with access"))))
 	var rows []xango.Node
 	for _, who := range p.People {
-		name := who.Name
-		if name == "" {
-			name = who.ID
-		}
+		name := who.DisplayName()
 		row := []xango.Node{
 			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text(name)),
 		}
-		if who.Role == "owner" {
+		if who.Role == user.Owner {
 			row = append(row, xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-people-owner")}, xango.Text(tr("people.role.owner", "owner"))))
 		} else {
 			id := who.ID
@@ -82,7 +79,8 @@ func People(p PeopleProps) xango.Node {
 			}
 			row = append(row, xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta")}, roleSelect("gj-people-role", trf("people.roleOf", "Role of %s", name), who.Role, on)))
 			if p.Remove != nil && who.ID != p.Self {
-				row = append(row, docButton("gj-people-remove", tr("people.remove", "Remove"), busy, actOne(p.Pending, p.Remove, id)))
+				row = append(row, docButton("gj-people-remove", tr("people.remove", "Remove"), busy,
+					confirmed(p.Confirm, trf("people.confirmRemove", "Remove %s's access?", name), actOne(p.Pending, p.Remove, id))))
 			}
 		}
 		rows = append(rows, xango.El("li", []xango.Attr{xango.A("class", "gj-people-item"), xango.A("data-id", who.ID)}, row...))
@@ -106,7 +104,7 @@ func People(p PeopleProps) xango.Node {
 		draft := p.Draft
 		children = append(children, xango.El("div", []xango.Attr{xango.A("class", "gj-doc-head gj-people-invite-form")},
 			xango.El("input", input), pick,
-			docButton("gj-people-invite", tr("people.invite", "Invite"), busy || draft == "", func() {
+			docButton("gj-people-invite", tr("people.invite", "Invite"), busy || strings.TrimSpace(draft) == "", func() {
 				p.Pending.Run(func(ctx context.Context) error { return p.Invite(ctx, draft, role) })
 			})))
 	}

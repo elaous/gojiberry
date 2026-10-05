@@ -33,8 +33,26 @@ func TestPeoplePanel(t *testing.T) {
 	d.WaitFor("an error", "document.querySelector('.gj-doc-error')")
 	d.OK(d.Count(".gj-people-item") == 2, "the owner's access cannot be changed: "+d.Text(".gj-doc-error"))
 
+	// Addresses are trimmed and case-folded: a padded, capitalised repeat is the same
+	// person, not a second one; a blank address cannot be invited.
+	d.Fill(".gj-people-invite-id", "  Bo@Example.COM ")
+	d.WaitFor("the invite button to enable", `!document.querySelector('.gj-people-invite').disabled`)
+	d.Click(".gj-people-invite")
+	d.WaitSelector(`.gj-people-item[data-id="bo@example.com"]`)
+	d.Fill(".gj-people-invite-id", "BO@example.com")
+	d.WaitFor("the invite button to enable", `!document.querySelector('.gj-people-invite').disabled`)
+	d.Click(".gj-people-invite")
+	d.WaitFor("the form to clear", `document.querySelector('.gj-people-invite-id').value === ''`)
+	d.OK(d.Count(".gj-people-item") == 3, "inviting the same person again does not list them twice")
+	d.Fill(".gj-people-invite-id", "   ")
+	d.WaitFor("a blank draft", `document.querySelector('.gj-people-invite').disabled`)
+	d.OK(true, "a blank address cannot be invited")
+	d.Fill(".gj-people-invite-id", "")
+
 	d.Click(`.gj-people-item[data-id="ana@example.com"] .gj-people-remove`)
-	d.WaitFor("access removed", "document.querySelectorAll('.gj-people-item').length === 1")
+	d.WaitSelector(`[role="alertdialog"]`)
+	d.Click(`[role="alertdialog"] .gj-dialog-actions button:last-child`)
+	d.WaitFor("access removed", "document.querySelectorAll('.gj-people-item').length === 2")
 	d.OK(true, "access can be removed")
 	d.NoErrors()
 }

@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/elaous/gojiberry/internal/e2etest"
@@ -19,6 +20,8 @@ func TestDocumentLifecycle(t *testing.T) {
 	row := func(name string) string {
 		return fmt.Sprintf(`.gj-doclist-item:has(.gj-doc-name:text-is(%q))`, name)
 	}
+	// Deleting for good asks first: this answers the dialog.
+	confirm := func() { d.Click(`[role="alertdialog"] .gj-dialog-actions button:last-child`) }
 	d.Click(`button[data-tab="save"]`)
 	d.Select(`.gj-saver-select[data-field="Save to"]`, "memory")
 	d.Fill(".gj-saver-name", "plan")
@@ -42,6 +45,13 @@ func TestDocumentLifecycle(t *testing.T) {
 		extra = ids[1]
 	}
 	d.Click(`.gj-doclist-item[data-id="` + extra + `"] .gj-doclist-delete`)
+	d.WaitSelector(`[role="alertdialog"]`)
+	d.OK(strings.Contains(d.Text(`[role="alertdialog"]`), "cannot be undone"), "deleting for good asks first")
+	d.Click(`[role="alertdialog"] .gj-dialog-actions button:first-child`)
+	d.WaitFor("the dialog to close", `!document.querySelector('[role="alertdialog"]')`)
+	d.OK(d.Count(".gj-doclist-item") == 2, "Cancel leaves the document alone")
+	d.Click(`.gj-doclist-item[data-id="` + extra + `"] .gj-doclist-delete`)
+	confirm()
 	d.WaitFor("one document", "document.querySelectorAll('.gj-doclist-item').length === 1")
 	d.Click(`.gj-doclist-item[data-id="` + id + `"] .gj-doclist-open`)
 	d.WaitFor("the document to open", "document.querySelector('.gj-doclist-current')")
@@ -89,6 +99,7 @@ func TestDocumentLifecycle(t *testing.T) {
 	d.Click(row("Copy of plan") + " .gj-doclist-trash")
 	d.WaitFor("a trashed entry", "document.querySelector('.gj-trash-item')")
 	d.Click(".gj-trash-item .gj-trash-delete")
+	confirm()
 	d.WaitFor("an empty trash", "document.querySelectorAll('.gj-trash-item').length === 0")
 	d.OK(d.Count(".gj-doclist-item") == 1, "Delete forever removes it for good")
 	d.NoErrors()

@@ -127,6 +127,14 @@
   "people.remove": "Retirer",
   "people.invite": "Inviter",
   "people.invitePlaceholder": "nom@exemple.com",
-  "people.inviteRole": "Rôle de la personne invitée"
+  "people.inviteRole": "Rôle de la personne invitée",
+  "confirm.title": "Êtes-vous sûr ?",
+  "confirm.yes": "Supprimer",
+  "confirm.no": "Annuler",
+  "docs.confirmDelete": "Supprimer %s définitivement ? Cette action est irréversible.",
+  "docs.confirmForever": "Supprimer %s définitivement ? Cette action est irréversible.",
+  "docs.confirmForeverN": "Supprimer %d documents définitivement ? Cette action est irréversible.",
+  "docs.confirmEmpty": "Supprimer définitivement les %d documents de la corbeille ? Cette action est irréversible.",
+  "people.confirmRemove": "Retirer l’accès de %s ?"
  }
 }

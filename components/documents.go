@@ -200,6 +200,8 @@ type DocListProps struct {
 	Title   string
 	Refresh func()
 	Pending *Pending
+	// Confirm, if set, is asked before Delete (see Asker.Ask); nil deletes at once.
+	Confirm func(message string, do func())
 }
 
 // DocList lists documents, each with the operations the host plugs in: Open,
@@ -247,7 +249,8 @@ func DocList(p DocListProps) xango.Node {
 			row = append(row, docButton("gj-doclist-trash", tr("docs.trash", "Trash"), busy, act(p.Pending, p.Trash, d.ID)))
 		}
 		if p.Delete != nil {
-			row = append(row, docButton("gj-doclist-delete", tr("docs.delete", "Delete"), busy, actOne(p.Pending, p.Delete, d.ID)))
+			row = append(row, docButton("gj-doclist-delete", tr("docs.delete", "Delete"), busy,
+				confirmed(p.Confirm, trf("docs.confirmDelete", "Delete %s for good? This cannot be undone.", d.Name), actOne(p.Pending, p.Delete, d.ID))))
 		}
 		if p.Tag != nil {
 			id := d.ID
@@ -330,6 +333,9 @@ type TrashProps struct {
 	// can be trashed. They are drawn above it.
 	Children []xango.Node
 	Pending  *Pending
+	// Confirm, if set, is asked before documents are deleted for good (see
+	// Asker.Ask); nil deletes at once.
+	Confirm func(message string, do func())
 }
 
 // TrashBackend is what a trash needs from a store; Use fills Restore and Delete
@@ -378,7 +384,8 @@ func Trash(p TrashProps) xango.Node {
 			if p.OnSelect == nil {
 				row = append(row,
 					docButton("gj-trash-restore", tr("docs.restore", "Restore"), busy, act(p.Pending, p.Restore, d.ID)),
-					docButton("gj-trash-delete", tr("docs.deleteForever", "Delete forever"), busy, act(p.Pending, p.Delete, d.ID)))
+					docButton("gj-trash-delete", tr("docs.deleteForever", "Delete forever"), busy,
+						confirmed(p.Confirm, trf("docs.confirmForever", "Delete %s forever? This cannot be undone.", d.Name), act(p.Pending, p.Delete, d.ID))))
 			}
 			rows = append(rows, xango.El("li", []xango.Attr{xango.A("class", "gj-trash-item"), xango.A("data-id", d.ID)}, row...))
 		}
@@ -386,9 +393,11 @@ func Trash(p TrashProps) xango.Node {
 		if p.OnSelect != nil && len(p.Selected) > 0 {
 			head = append(head,
 				docButton("gj-trash-restore-selected", trf("docs.restoreN", "Restore %d", len(p.Selected)), busy, act(p.Pending, p.Restore, p.Selected...)),
-				docButton("gj-trash-delete-selected", trf("docs.deleteN", "Delete %d forever", len(p.Selected)), busy, act(p.Pending, p.Delete, p.Selected...)))
+				docButton("gj-trash-delete-selected", trf("docs.deleteN", "Delete %d forever", len(p.Selected)), busy,
+					confirmed(p.Confirm, trf("docs.confirmForeverN", "Delete %d documents forever? This cannot be undone.", len(p.Selected)), act(p.Pending, p.Delete, p.Selected...))))
 		}
-		head = append(head, docButton("gj-trash-empty", tr("docs.emptyTrash", "Empty trash"), busy, act(p.Pending, p.Delete, allIDs...)))
+		head = append(head, docButton("gj-trash-empty", tr("docs.emptyTrash", "Empty trash"), busy,
+			confirmed(p.Confirm, trf("docs.confirmEmpty", "Delete all %d documents in the trash forever? This cannot be undone.", len(allIDs)), act(p.Pending, p.Delete, allIDs...))))
 		bin := []xango.Node{xango.El("div", []xango.Attr{xango.A("class", "gj-doc-head")}, head...),
 			xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list")}, rows...)}
 		bin = append(bin, pendingError(p.Pending)...)
