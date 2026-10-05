@@ -169,3 +169,10 @@ before repairing, so it does not undo a delete another process is half way throu
 a rebuild never overwrites a catalog changed since it was read. The browser's
 localStorage target cannot write conditionally: two tabs saving at the same moment can
 drop one catalog entry, and `Repair` finds the orphaned file on the next session.
+
+## What a browser build links
+
+`docstore`'s server-side backends (the Go CDK blob adapter, S3, MongoDB and PostgreSQL, like
+SQLite) are `//go:build !js`: a page has no use for a database driver or a cloud SDK, and
+linking them put gRPC, the AWS SDK and the Mongo and Postgres drivers into every
+browser build. The showcase's `main.wasm` went from 73.7 MB to 31.1 MB without them.
