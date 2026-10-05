@@ -46,7 +46,7 @@ func TestPeoplePanel(t *testing.T) {
 	d.OK(d.Count(".gj-people-item") == 3, "inviting the same person again does not list them twice")
 	d.Fill(".gj-people-invite-id", "   ")
 	d.WaitFor("a blank draft", `document.querySelector('.gj-people-invite').disabled`)
-	d.OK(true, "a blank address cannot be invited")
+	d.OK(d.Bool(`document.querySelector('.gj-people-invite').disabled`), "a blank address cannot be invited")
 	d.Fill(".gj-people-invite-id", "")
 
 	d.Click(`.gj-people-item[data-id="ana@example.com"] .gj-people-remove`)

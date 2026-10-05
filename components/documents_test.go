@@ -157,8 +157,9 @@ func TestDocListShowsFoldersBreadcrumbAndMoves(t *testing.T) {
 	}
 	n := DocList(props)
 	html := render(t, n)
-	mustContain(t, html, "gj-breadcrumbs", "All documents", `aria-current="page"`, ">Work<", "📁 2026", `data-id="f2"`,
+	mustContain(t, html, "gj-breadcrumbs", ">Documents<", `aria-current="page"`, ">Work<", "📁 2026", `data-id="f2"`,
 		"Work / 2026", "Move to…", "gj-doclist-newfolder", `value="Ideas"`)
+	mustNotContain(t, html, `value="folder:f1"`) // the folder the document is in is not a place to move it to
 	for _, h := range findHandlers(n, "click") {
 		h(xango.Event{})
 	}

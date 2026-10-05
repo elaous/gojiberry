@@ -136,7 +136,7 @@
   "docs.confirmForeverN": "Supprimer %d documents définitivement ? Cette action est irréversible.",
   "docs.confirmEmpty": "Supprimer définitivement les %d documents de la corbeille ? Cette action est irréversible.",
   "people.confirmRemove": "Retirer l’accès de %s ?",
-  "docs.allDocuments": "Tous les documents",
+  "docs.allDocuments": "Documents",
   "docs.openFolder": "Ouvrir",
   "docs.renameFolder": "Nom du dossier %s",
   "docs.deleteFolder": "Supprimer le dossier",
@@ -145,6 +145,7 @@
   "docs.newFolder": "Nouveau dossier",
   "docs.createFolder": "Créer le dossier",
   "docs.moveTo": "Déplacer vers…",
-  "docs.moveOf": "Déplacer %s dans un dossier"
+  "docs.moveOf": "Déplacer %s dans un dossier",
+  "docs.topLevel": "Documents (niveau supérieur)"
  }
 }

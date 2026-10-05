@@ -332,3 +332,14 @@ func TestSessionFoldersAndBreadcrumb(t *testing.T) {
 		t.Errorf("%+v", got)
 	}
 }
+
+func TestOnlyTheFormAsksBeforeDeleting(t *testing.T) {
+	s, _, _ := newSession(t)
+	if s.Docs().Confirm != nil || s.Trash().Confirm != nil {
+		t.Error("Docs and Trash used alone would store a question nothing draws: they delete at once")
+	}
+	p := s.Props()
+	if p.Docs.Confirm == nil || p.Trash.Confirm == nil || p.Asker == nil {
+		t.Error("the Saver form draws the dialog, so it asks")
+	}
+}

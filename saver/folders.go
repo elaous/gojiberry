@@ -47,6 +47,9 @@ func (c *catalog) inside(id, ancestor string) bool {
 	return false
 }
 
+// A folder's record is written before the catalog, so a failure between the two
+// leaves a record the catalog does not list; a rebuild then adopts it. Orphans are
+// the safe side: nothing is lost.
 func (s *Saver) writeFolder(ctx context.Context, t Target, id string, f folderEntry) error {
 	data, err := json.Marshal(f)
 	if err != nil {
@@ -176,13 +179,21 @@ func (s *Saver) DeleteFolder(ctx context.Context, target, id string) error {
 			}
 			gone = append(gone, did)
 		}
+		var writes []func() error
 		for _, did := range gone {
 			e := cat.Docs[did]
-			if err := s.touch(ctx, t, &e, func(d *docfile.Document) { d.SetFolder("") }); err != nil {
+			w, err := s.prepareTouch(ctx, t, &e, func(d *docfile.Document) { d.SetFolder("") })
+			if err != nil {
 				return err
 			}
+			writes = append(writes, w)
 			e.Folder = ""
 			cat.Docs[did] = e
+		}
+		for _, w := range writes {
+			if err := w(); err != nil {
+				return err
+			}
 		}
 		delete(cat.Folders, id)
 		*later = append(*later, func() { _ = t.Adapter.Delete(ctx, FolderRecordPrefix+id) })
@@ -191,7 +202,7 @@ func (s *Saver) DeleteFolder(ctx context.Context, target, id string) error {
 }
 
 // Move puts documents in a folder ("" for the top level). It changes nothing
-// unless every document and the folder are there.
+// unless every document and the folder are there, and every document can be read.
 func (s *Saver) Move(ctx context.Context, target, folder string, ids ...string) error {
 	return s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
 		if _, ok := cat.Folders[folder]; folder != "" && !ok {
@@ -202,13 +213,26 @@ func (s *Saver) Move(ctx context.Context, target, folder string, ids ...string) 
 				return fmt.Errorf("%w: %s", docstore.ErrNotFound, id)
 			}
 		}
+		// Everything that can fail without changing anything is done first; documents
+		// already in the folder are left alone.
+		var writes []func() error
 		for _, id := range ids {
 			e := cat.Docs[id]
-			if err := s.touch(ctx, t, &e, func(d *docfile.Document) { d.SetFolder(folder) }); err != nil {
+			if e.Folder == folder {
+				continue
+			}
+			w, err := s.prepareTouch(ctx, t, &e, func(d *docfile.Document) { d.SetFolder(folder) })
+			if err != nil {
 				return err
 			}
+			writes = append(writes, w)
 			e.Folder = folder
 			cat.Docs[id] = e
+		}
+		for _, w := range writes {
+			if err := w(); err != nil {
+				return err
+			}
 		}
 		return nil
 	})

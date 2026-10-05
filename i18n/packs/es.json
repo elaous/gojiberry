@@ -136,7 +136,7 @@
   "docs.confirmForeverN": "¿Eliminar %d documentos para siempre? No se puede deshacer.",
   "docs.confirmEmpty": "¿Eliminar para siempre los %d documentos de la papelera? No se puede deshacer.",
   "people.confirmRemove": "¿Quitar el acceso de %s?",
-  "docs.allDocuments": "Todos los documentos",
+  "docs.allDocuments": "Documentos",
   "docs.openFolder": "Abrir",
   "docs.renameFolder": "Nombre de la carpeta %s",
   "docs.deleteFolder": "Eliminar carpeta",
@@ -145,6 +145,7 @@
   "docs.newFolder": "Nueva carpeta",
   "docs.createFolder": "Crear carpeta",
   "docs.moveTo": "Mover a…",
-  "docs.moveOf": "Mover %s a una carpeta"
+  "docs.moveOf": "Mover %s a una carpeta",
+  "docs.topLevel": "Documentos (nivel superior)"
  }
 }

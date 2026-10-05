@@ -25,13 +25,13 @@ func TestFoldersAndBreadcrumb(t *testing.T) {
 	d.WaitFor("the create button", `!document.querySelector('.gj-doclist-newfolder').disabled`)
 	d.Click(".gj-doclist-newfolder")
 	d.WaitFor("the folder", "document.querySelectorAll('.gj-doclist-folder').length === 1")
-	d.OK(d.Count(".gj-doclist-item") == 1, "the top level shows its document and the new folder")
+	d.OK(d.Count(".gj-doclist-item") == 1 && d.Count(".gj-doclist-folder") == 1, "the top level shows its document and the new folder")
 	d.OK(d.Text(".gj-doclist-folder .gj-doc-name") == "📁 Work", "the folder is listed")
 
 	d.Click(".gj-doclist-folder .gj-doclist-folder-open")
 	d.WaitFor("the folder to open", `document.querySelector('.gj-breadcrumb-current') && document.querySelector('.gj-breadcrumb-current').textContent === 'Work'`)
 	d.OK(d.Count(".gj-doclist-item") == 0, "the folder is empty: the top-level document is not shown in it")
-	d.OK(d.Text(".gj-breadcrumb-link") == "All documents", "the breadcrumb leads back to the top")
+	d.OK(d.Text(".gj-breadcrumb-link") == "Documents", "the breadcrumb leads back to the top")
 
 	// A document saved here belongs here.
 	d.Fill(".gj-saver-name", "inside")
@@ -49,7 +49,7 @@ func TestFoldersAndBreadcrumb(t *testing.T) {
 	d.OK(d.Count(".gj-doclist-item") == 1 && d.Text(".gj-doclist-item .gj-doc-name") == "top doc", "the top level has its own document")
 	d.Select(".gj-doclist-item .gj-doclist-move", "folder:"+d.Attr(".gj-doclist-folder", "data-id"))
 	d.WaitFor("the move", "document.querySelectorAll('.gj-doclist-item').length === 0")
-	d.OK(true, "a document can be moved into a folder")
+	d.OK(d.Count(".gj-doclist-item") == 0, "a document moved into a folder leaves the top level")
 
 	// A folder with something in it cannot be deleted; the error shows.
 	d.Click(".gj-doclist-folder .gj-doclist-folder-delete")
@@ -57,9 +57,16 @@ func TestFoldersAndBreadcrumb(t *testing.T) {
 	d.WaitSelector(".gj-doc-error")
 	d.OK(d.Count(".gj-doclist-folder") == 1, "a folder with documents in it stays: "+d.Text(".gj-doc-error"))
 
-	// Opening a document in a folder shows its folder.
+	// Both documents are in Work now; opening one from the top level shows its folder.
 	d.Click(".gj-doclist-folder .gj-doclist-folder-open")
 	d.WaitFor("the folder", `document.querySelector('.gj-breadcrumb-current')`)
 	d.OK(d.Count(".gj-doclist-item") == 2, "both documents are in Work now")
+	d.Click(".gj-breadcrumb-link")
+	d.WaitFor("the top level", "!document.querySelector('.gj-breadcrumb-link')")
+	d.Click(".gj-doclist-folder .gj-doclist-folder-open")
+	d.WaitFor("the folder", `document.querySelector('.gj-breadcrumb-current')`)
+	d.Click(`.gj-doclist-item:has(.gj-doc-name:text-is("top doc")) .gj-doclist-open`)
+	d.WaitFor("the document to open", "document.querySelector('.gj-doclist-current')")
+	d.OK(d.Text(".gj-breadcrumb-current") == "Work" && d.Text(".gj-doclist-current .gj-doc-name") == "top doc", "an open document is marked in its folder")
 	d.NoErrors()
 }

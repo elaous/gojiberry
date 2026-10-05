@@ -139,3 +139,35 @@ func TestFoldersSurviveARebuildAndHaveALimit(t *testing.T) {
 		t.Errorf("a missing parent: %v", err)
 	}
 }
+
+func TestRebuildRepairsAFolderWhoseParentIsGone(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	parent, _ := s.CreateFolder(ctx, "m", "", "Parent")
+	child, _ := s.CreateFolder(ctx, "m", parent.ID, "Child")
+	_ = mem.Delete(ctx, FolderRecordPrefix+parent.ID) // a record that did not survive
+	_ = mem.Delete(ctx, CatalogKey)
+	fs, err := s.Folders(ctx, "m")
+	if err != nil || len(fs) != 1 || fs[0].ID != child.ID || fs[0].Parent != "" {
+		t.Fatalf("the child must go to the top level, not hang from a missing parent: %+v %v", fs, err)
+	}
+}
+
+func TestMoveLeavesDocumentsAlreadyThereAlone(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	f, _ := s.CreateFolder(ctx, "m", "", "F")
+	d := named("a")
+	d.SetFolder(f.ID)
+	e, _ := s.Save(ctx, "m", docfile.JSON, d)
+	before, _ := mem.Load(ctx, e.Key)
+	if err := s.Move(ctx, "m", f.ID, e.ID); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := mem.Load(ctx, e.Key)
+	if string(before.Data) != string(after.Data) {
+		t.Error("a document already in the folder was rewritten")
+	}
+}

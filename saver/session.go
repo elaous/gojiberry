@@ -386,7 +386,7 @@ func (s *Session) OpenFolder(ctx context.Context, id string) error {
 	if !known {
 		return ErrFolder
 	}
-	s.set(func() { s.folder = id })
+	s.set(func() { s.folder, s.folderDraft = id, "" })
 	return nil
 }
 
@@ -449,7 +449,8 @@ func docOf(e Entry) components.Doc {
 }
 
 // Docs returns the props for components.DocList: the saved documents with the
-// session's operations plugged in.
+// session's operations plugged in. Deleting for good happens at once; to ask first
+// set Confirm to Asker.Ask and draw Asker.Dialog() somewhere (Props does both).
 func (s *Session) Docs() components.DocListProps {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -461,7 +462,6 @@ func (s *Session) Docs() components.DocListProps {
 		Delete:    s.Delete,
 		Tag:       s.SetTags,
 		Refresh:   func() { s.Pending.Run(s.Refresh) },
-		Confirm:   s.Asker.Ask,
 	}
 	for _, e := range s.entries {
 		if e.Folder == s.folder { // the folder being shown
@@ -498,11 +498,11 @@ func (s *Session) Versions() components.VersionsProps {
 }
 
 // Trash returns the props for components.Trash: the documents in the trash, to
-// restore or delete for good.
+// restore or delete for good (at once; see Docs for asking first).
 func (s *Session) Trash() components.TrashProps {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p := components.TrashProps{Pending: s.Pending, Confirm: s.Asker.Ask, Selected: s.selected, OnSelect: func(ids []string) { s.set(func() { s.selected = ids }) }}
+	p := components.TrashProps{Pending: s.Pending, Selected: s.selected, OnSelect: func(ids []string) { s.set(func() { s.selected = ids }) }}
 	p = p.Use(s)
 	for _, e := range s.trashed {
 		p.Docs = append(p.Docs, docOf(e))
@@ -514,6 +514,8 @@ func (s *Session) Trash() components.TrashProps {
 func (s *Session) Props() components.SaverProps {
 	docs, versions, trash := s.Docs(), s.Versions(), s.Trash()
 	trash.OnSelect = nil // the form's trash is the simple one: a row, its buttons
+	// The form draws the question's dialog, so here deleting for good asks first.
+	docs.Confirm, trash.Confirm = s.Asker.Ask, s.Asker.Ask
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p := components.SaverProps{

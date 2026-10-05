@@ -205,6 +205,14 @@ func (s *Saver) rebuild(ctx context.Context, t Target) (*catalog, error) {
 		}
 		out.Docs[id] = catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: size, Updated: m.UpdatedAt.UnixNano(), Tags: doc.Tags(), Trashed: doc.Trashed(), Folder: doc.Folder()}
 	}
+	// A folder whose parent is gone (deleted since its record was written), or that
+	// sits in a cycle, goes to the top level.
+	for id, f := range out.Folders {
+		if _, ok := out.Folders[f.Parent]; f.Parent != "" && !ok || out.depth(id) > MaxFolderDepth+1 {
+			f.Parent = ""
+			out.Folders[id] = f
+		}
+	}
 	for id, e := range out.Docs {
 		if e.Name == "" {
 			e.Name = id
@@ -220,29 +228,41 @@ func (s *Saver) rebuild(ctx context.Context, t Target) (*catalog, error) {
 	return out, nil
 }
 
-// touch rewrites a document's own metadata (name, tags, trash flag) so the
-// document and the catalog agree and a rebuilt catalog loses nothing. The
+// touch rewrites a document's own metadata (name, tags, trash flag, folder) so
+// the document and the catalog agree and a rebuilt catalog loses nothing. The
 // document's Updated time is not changed.
 func (s *Saver) touch(ctx context.Context, t Target, e *catalogEntry, f func(*docfile.Document)) error {
+	write, err := s.prepareTouch(ctx, t, e, f)
+	if err != nil {
+		return err
+	}
+	return write()
+}
+
+// prepareTouch is touch in two steps: everything that can fail without changing
+// anything (reading, converting) now, and the write it returns. Operations on
+// several documents prepare all of them first.
+func (s *Saver) prepareTouch(ctx context.Context, t Target, e *catalogEntry, f func(*docfile.Document)) (write func() error, err error) {
 	c, _ := s.codecOf(e.Key)
 	if c == nil {
-		return nil
+		return func() error { return nil }, nil
 	}
 	stored, err := t.Adapter.Load(ctx, e.Key)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	doc, err := c.Unmarshal(stored.Data)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	f(&doc)
 	data, err := c.Marshal(doc)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	e.Size = len(data)
-	return t.Adapter.Save(ctx, e.Key, data)
+	key := e.Key
+	return func() error { return t.Adapter.Save(ctx, key, data) }, nil
 }
 
 // sorted returns the catalog's entries (those in or out of the trash), newest

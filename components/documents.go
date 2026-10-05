@@ -279,7 +279,7 @@ func DocList(p DocListProps) xango.Node {
 			row = append(row, docButton("gj-doclist-delete", tr("docs.delete", "Delete"), busy,
 				confirmed(p.Confirm, trf("docs.confirmDelete", "Delete %s for good? This cannot be undone.", d.Name), actOne(p.Pending, p.Delete, d.ID))))
 		}
-		if p.Move != nil && len(p.AllFolders) > 0 || p.Move != nil && len(p.Path) > 0 {
+		if p.Move != nil && (len(p.AllFolders) > 1 || len(p.AllFolders) == 1 && len(p.Path) == 0 || len(p.Path) > 0) {
 			row = append(row, moveSelect(p, d, busy))
 		}
 		if p.Tag != nil {
@@ -557,12 +557,15 @@ func docBreadcrumbs(p DocListProps) (xango.Node, bool) {
 			it.Href = "#" + id
 			it.OnClick = func(e xango.Event) {
 				e.PreventDefault()
+				if p.Pending.Busy() {
+					return
+				}
 				p.Pending.Run(func(ctx context.Context) error { return p.OpenFolder(ctx, id) })
 			}
 		}
 		return it
 	}
-	items := []BreadcrumbItem{item(tr("docs.allDocuments", "All documents"), "", len(p.Path) == 0)}
+	items := []BreadcrumbItem{item(tr("docs.allDocuments", "Documents"), "", len(p.Path) == 0)}
 	for i, f := range p.Path {
 		items = append(items, item(f.Name, f.ID, i == len(p.Path)-1))
 	}
@@ -583,7 +586,10 @@ func folderRows(p DocListProps, busy bool) []xango.Node {
 			row = append(row, xango.El("input", []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-doclist-folder-name"),
 				xango.A("aria-label", trf("docs.renameFolder", "Name of folder %s", f.Name)), xango.A("value", f.Name),
 				xango.On("change", func(ev xango.Event) {
-					name := xango.EventValue[string](ev)
+					name := strings.TrimSpace(xango.EventValue[string](ev))
+					if name == "" || name == f.Name || p.Pending.Busy() {
+						return // a blank or unchanged name is not a rename
+					}
 					p.Pending.Run(func(ctx context.Context) error { return p.RenameFolder(ctx, id, name) })
 				})}))
 		}
@@ -631,12 +637,18 @@ func moveSelect(p DocListProps, d Doc, busy bool) xango.Node {
 		}
 		return name
 	}
-	opts := []xango.Node{
-		xango.El("option", []xango.Attr{xango.A("value", "-"), xango.A("selected", "selected")}, xango.Text(tr("docs.moveTo", "Move to…"))),
-		xango.El("option", []xango.Attr{xango.A("value", "top")}, xango.Text(tr("docs.allDocuments", "All documents"))),
+	here := ""
+	if len(p.Path) > 0 {
+		here = p.Path[len(p.Path)-1].ID // where the document is: not a place to move it to
+	}
+	opts := []xango.Node{xango.El("option", []xango.Attr{xango.A("value", "-"), xango.A("selected", "selected")}, xango.Text(tr("docs.moveTo", "Move to…")))}
+	if here != "" {
+		opts = append(opts, xango.El("option", []xango.Attr{xango.A("value", "top")}, xango.Text(tr("docs.topLevel", "Documents (top level)"))))
 	}
 	for _, f := range p.AllFolders {
-		opts = append(opts, xango.El("option", []xango.Attr{xango.A("value", "folder:"+f.ID)}, xango.Text(label(f))))
+		if f.ID != here {
+			opts = append(opts, xango.El("option", []xango.Attr{xango.A("value", "folder:"+f.ID)}, xango.Text(label(f))))
+		}
 	}
 	id := d.ID
 	attrs := []xango.Attr{xango.A("class", "gj-doclist-move"), xango.A("aria-label", trf("docs.moveOf", "Move %s to a folder", d.Name))}
