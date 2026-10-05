@@ -612,3 +612,62 @@ func TestUsernameNeverGrantsAccess(t *testing.T) {
 		t.Errorf("editor by ID: %q", r)
 	}
 }
+
+// A catalog lists one person's documents, so with RequireACL each signed-in person
+// uses their own (UserCatalogPrefix) and the shared key is closed; nobody sees
+// another's in a listing.
+func TestRequireACLGivesEachPersonTheirOwnCatalog(t *testing.T) {
+	provider := newFakeOIDCProvider(t)
+	srv := newTestServerWithAuth(t, provider.srv.URL).WithRequireACL(true)
+	h := srv.Handler()
+	ana := sessionTokenFor(t, h, provider, "ana@example.com", "ana")
+	bo := sessionTokenFor(t, h, provider, "bo@example.com", "bo")
+	idOf := func(token string) string {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		withBearer(req, token)
+		u, ok := srv.auth.CurrentUser(req)
+		if !ok {
+			t.Fatal("not signed in")
+		}
+		return u.ID
+	}
+	anaKey, boKey := UserCatalogPrefix(idOf(ana))+"index", UserCatalogPrefix(idOf(bo))+"index"
+	do := func(method, key, token string) int {
+		req := httptest.NewRequest(method, "/docs/"+url.PathEscape(key), strings.NewReader("catalog"))
+		if token != "" {
+			withBearer(req, token)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if do(http.MethodPut, anaKey, ana) != http.StatusNoContent || do(http.MethodPut, boKey, bo) != http.StatusNoContent {
+		t.Fatal("each may write their own catalog")
+	}
+	if do(http.MethodGet, anaKey, ana) != http.StatusOK {
+		t.Error("and read it")
+	}
+	if c := do(http.MethodGet, anaKey, bo); c != http.StatusForbidden {
+		t.Errorf("Bo reading Ana's catalog: %d", c)
+	}
+	if c := do(http.MethodPut, anaKey, bo); c != http.StatusForbidden {
+		t.Errorf("Bo overwriting Ana's catalog: %d", c)
+	}
+	if c := do(http.MethodPut, "catalog:index", ana); c != http.StatusForbidden {
+		t.Errorf("the shared catalog key is closed: %d", c)
+	}
+	if c := do(http.MethodPut, anaKey, ""); c != http.StatusUnauthorized {
+		t.Errorf("anonymous: %d", c)
+	}
+	// A listing shows each person only their own.
+	list := func(token string) string {
+		req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+		withBearer(req, token)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Body.String()
+	}
+	if l := list(bo); strings.Contains(l, anaKey) || !strings.Contains(l, boKey) {
+		t.Errorf("Bo's listing: %s", l)
+	}
+}

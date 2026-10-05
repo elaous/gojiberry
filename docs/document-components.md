@@ -143,11 +143,22 @@ of "ana@x.com" would inherit Ana's documents).
 ## Shared stores
 
 A store several people use (an HTTP docstore with access lists) should give each person
-their own catalog: `saver.Target.CatalogKey = saver.UserCatalogKey(userID)`. The
-default is one catalog for the store, which is right for a store of one person and wrong
-for many (it would be owned by whoever saved first). Folder records live next to the
-catalog. A server that lists only what the caller may read also makes a new catalog
-start with just those documents.
+their own catalog: `saver.Target.CatalogKey = saver.UserCatalogKey(user.ID)` (the
+`auth.User.ID` of the signed-in person). The default is one catalog for the store, which
+is right for a store of one person and wrong for many. Folder records live next to the
+catalog. **The server enforces it:** with `RequireACL`, a signed-in person may read and
+write only the keys under `docstore.UserCatalogPrefix(their ID)`, the shared
+`catalog:index` is closed, and a listing shows each person only their own catalog, so
+access lists and catalogs work together. A server that lists only what the caller may
+read also makes a new catalog start with just those documents.
+
+## Damaged files in the trash
+
+A document in the trash whose file is missing or damaged cannot be opened or moved, and
+used to stop its folder from being deleted. Deleting the folder now removes such
+documents (and their versions) and the status line says which ("Old deleted (2
+unreadable documents in the trash were removed: a, b)"). Only a missing or damaged file
+counts; any other store error still stops the operation.
 
 ## Two processes on one store
 
