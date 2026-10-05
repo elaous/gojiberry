@@ -58,21 +58,46 @@ func (c *catalog) entry(s *Saver, id string) Entry {
 // readCatalog loads the target's catalog, building it from the documents when
 // there is none.
 func (s *Saver) readCatalog(ctx context.Context, t Target) (*catalog, error) {
-	stored, err := t.Adapter.Load(ctx, CatalogKey)
-	if errors.Is(err, docstore.ErrNotFound) {
-		return s.rebuild(ctx, t)
+	c, _, err := s.readCatalogRev(ctx, t)
+	return c, err
+}
+
+// readCatalogRev is readCatalog and the digest of what was stored, for a
+// conditional write back. A missing or unreadable catalog is built from the
+// documents and stored only if nobody else got there first (else it is read again).
+func (s *Saver) readCatalogRev(ctx context.Context, t Target) (*catalog, string, error) {
+	for try := 0; try < maxUpdateTries; try++ {
+		stored, err := t.Adapter.Load(ctx, CatalogKey)
+		rev := ""
+		if err == nil {
+			rev = docstore.Digest(stored.Data)
+			var c catalog
+			if json.Unmarshal(stored.Data, &c) == nil && c.Docs != nil {
+				if c.Folders == nil {
+					c.Folders = map[string]folderEntry{}
+				}
+				return &c, rev, nil
+			}
+		} else if !errors.Is(err, docstore.ErrNotFound) {
+			return nil, "", err
+		}
+		c, err := s.build(ctx, t)
+		if err != nil {
+			return nil, "", err
+		}
+		ok, err := s.writeCatalogIf(ctx, t, c, rev)
+		if err != nil {
+			return nil, "", err
+		}
+		if ok {
+			data, err := json.Marshal(c)
+			if err != nil {
+				return nil, "", err
+			}
+			return c, docstore.Digest(data), nil
+		}
 	}
-	if err != nil {
-		return nil, err
-	}
-	var c catalog
-	if err := json.Unmarshal(stored.Data, &c); err != nil || c.Docs == nil {
-		return s.rebuild(ctx, t)
-	}
-	if c.Folders == nil {
-		c.Folders = map[string]folderEntry{}
-	}
-	return &c, nil
+	return nil, "", ErrBusy
 }
 
 func (s *Saver) writeCatalog(ctx context.Context, t Target, c *catalog) error {
@@ -82,6 +107,35 @@ func (s *Saver) writeCatalog(ctx context.Context, t Target, c *catalog) error {
 	}
 	return t.Adapter.Save(ctx, CatalogKey, data)
 }
+
+// writeCatalogIf writes the catalog only if it is still the one read (rev, from
+// readCatalogRev), when the target's adapter can say; ok is false then and the
+// caller read again. An adapter that cannot (or a store behind one that cannot)
+// just writes.
+func (s *Saver) writeCatalogIf(ctx context.Context, t Target, c *catalog, rev string) (ok bool, err error) {
+	cond, can := t.Adapter.(docstore.ConditionalAdapter)
+	if !can {
+		return true, s.writeCatalog(ctx, t, c)
+	}
+	data, err := json.Marshal(c)
+	if err != nil {
+		return false, err
+	}
+	switch err := cond.SaveIf(ctx, CatalogKey, data, rev); {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, docstore.ErrConflict):
+		return false, nil
+	case errors.Is(err, docstore.ErrConditionalUnsupported):
+		return true, s.writeCatalog(ctx, t, c)
+	default:
+		return false, err
+	}
+}
+
+// maxUpdateTries is how often update starts over when another process changes the
+// catalog under it.
+const maxUpdateTries = 12
 
 // update runs f on the target's catalog and writes it back, one update at a time
 // within this process. f may add to later the work to do once the catalog is
@@ -94,21 +148,36 @@ func (s *Saver) update(ctx context.Context, target string, f func(t Target, c *c
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	c, err := s.readCatalog(ctx, t)
-	if err != nil {
-		return err
+	// With an adapter that can write conditionally, a catalog changed by another
+	// process since it was read is read again and f is run again on it, so f must
+	// be safe to repeat (it is: files are keyed by ID).
+	for try := 0; try < maxUpdateTries; try++ {
+		c, rev, err := s.readCatalogRev(ctx, t)
+		if err != nil {
+			return err
+		}
+		var later []func()
+		if err := f(t, c, &later); err != nil {
+			return err
+		}
+		ok, err := s.writeCatalogIf(ctx, t, c, rev)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(try+1) * 5 * time.Millisecond):
+			}
+			continue
+		}
+		for _, g := range later {
+			g()
+		}
+		return nil
 	}
-	var later []func()
-	if err := f(t, c, &later); err != nil {
-		return err
-	}
-	if err := s.writeCatalog(ctx, t, c); err != nil {
-		return err
-	}
-	for _, g := range later {
-		g()
-	}
-	return nil
+	return ErrBusy
 }
 
 // view runs f on the target's catalog without writing it.
@@ -141,7 +210,22 @@ func (s *Saver) Rebuild(ctx context.Context, target string) error {
 	return err
 }
 
+// rebuild builds the catalog from the documents and writes it, over whatever is
+// there: for a repair, where the stored catalog is what is wrong.
 func (s *Saver) rebuild(ctx context.Context, t Target) (*catalog, error) {
+	out, err := s.build(ctx, t)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.writeCatalog(ctx, t, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// build reads the catalog the documents in the target add up to, writing nothing
+// but the files of documents that had no ID.
+func (s *Saver) build(ctx context.Context, t Target) (*catalog, error) {
 	metas, err := t.Adapter.List(ctx)
 	if err != nil {
 		return nil, err
@@ -221,9 +305,6 @@ func (s *Saver) rebuild(ctx context.Context, t Target) (*catalog, error) {
 			e.Folder = "" // its folder is gone: the top level
 		}
 		out.Docs[id] = e
-	}
-	if err := s.writeCatalog(ctx, t, out); err != nil {
-		return nil, err
 	}
 	return out, nil
 }

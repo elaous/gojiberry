@@ -73,6 +73,42 @@ func (a *HTTPAdapter) Save(ctx context.Context, id string, data []byte) error {
 	return nil
 }
 
+// SaveIf implements ConditionalAdapter with If-Match / If-None-Match on the PUT: the
+// server answers 412 when the document changed and 501 when its store cannot say.
+func (a *HTTPAdapter) SaveIf(ctx context.Context, id string, data []byte, prev string) error {
+	if data == nil {
+		data = []byte{}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, a.base+docPath(id), bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	for k, vs := range a.Header {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
+	}
+	if prev == "" {
+		req.Header.Set("If-None-Match", "*")
+	} else {
+		req.Header.Set("If-Match", `"`+prev+`"`)
+	}
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	switch {
+	case resp.StatusCode == http.StatusPreconditionFailed:
+		return ErrConflict
+	case resp.StatusCode == http.StatusNotImplemented:
+		return ErrConditionalUnsupported
+	case resp.StatusCode/100 != 2:
+		return httpError(resp)
+	}
+	return nil
+}
+
 // Load implements Adapter. The server does not send a modification
 // time with a document, so UpdatedAt is the time of the load; List has
 // the real one.

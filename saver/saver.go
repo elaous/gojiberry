@@ -68,6 +68,10 @@ const FontPrefix = "fonts/"
 
 // ErrName is returned for a name that cannot be used: empty, too long, or with
 // control characters.
+// ErrBusy is returned when other processes keep changing the store's catalog and an
+// update could not get in after several tries.
+var ErrBusy = errors.New("saver: the store is busy, try again")
+
 var ErrName = errors.New("saver: the name is empty, too long, or has control characters")
 
 // ErrID is returned for something that is not a document ID.

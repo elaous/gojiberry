@@ -64,6 +64,7 @@ func (s *Saver) CreateFolder(ctx context.Context, target, parent, name string) (
 		return Folder{}, ErrName
 	}
 	var out Folder
+	id := docfile.NewID() // outside the closure: update may run it again
 	err := s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
 		if _, ok := cat.Folders[parent]; parent != "" && !ok {
 			return ErrFolder
@@ -71,7 +72,6 @@ func (s *Saver) CreateFolder(ctx context.Context, target, parent, name string) (
 		if cat.depth(parent) >= MaxFolderDepth {
 			return fmt.Errorf("saver: folders nest at most %d deep", MaxFolderDepth)
 		}
-		id := docfile.NewID()
 		f := folderEntry{Name: name, Parent: parent}
 		if err := s.writeFolder(ctx, t, id, f); err != nil {
 			return err
