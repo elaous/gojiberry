@@ -33,6 +33,11 @@ import (
 func newRouter() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+	// This server is reached directly, not through a proxy, so the client is whoever the
+	// connection says it is: a forwarded-for header is only the client's own claim, and
+	// trusting it would let anyone pick a new "client" per request and walk around the
+	// rate limiter. (Behind a real proxy, list its address here instead.)
+	_ = r.SetTrustedProxies(nil)
 	r.Use(gin.Recovery())
 
 	r.Use(secure.New(secure.Config{

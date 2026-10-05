@@ -166,4 +166,6 @@ Catalog updates are conditional (`docstore.ConditionalAdapter`): memory, SQLite 
 timeout and an immediate write transaction), local files (an `flock` on the directory, on
 Unix) and the HTTP store (`If-Match`). `Repair` waits `RepairGrace` (2 s) and looks again
 before repairing, so it does not undo a delete another process is half way through, and
-a rebuild never overwrites a catalog changed since it was read.
+a rebuild never overwrites a catalog changed since it was read. The browser's
+localStorage target cannot write conditionally: two tabs saving at the same moment can
+drop one catalog entry, and `Repair` finds the orphaned file on the next session.

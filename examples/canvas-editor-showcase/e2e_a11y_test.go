@@ -4,6 +4,7 @@ package main
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -61,3 +62,23 @@ func TestAccessibilityAndTranslation(t *testing.T) {
 	d.OK(d.Attr("#a11y-text", "aria-label") == "Texto del documento" && d.Attr("#stage", "aria-label") == "Documento", "including what a screen reader hears")
 	d.NoErrors()
 }
+
+// The screen-reader copy follows the structure, not only the text: turning a
+// paragraph into a heading changes it with the text unchanged.
+func TestScreenReaderCopyFollowsStructure(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "")
+	d.ToggleMode()
+	headings := func() int { return d.Count("#a11y-text h1, #a11y-text h2, #a11y-text h3") }
+	before := headings()
+	d.CanvasClick(240, 164)
+	text := d.State().Str("text")
+	d.Click(`button[data-tab="styles"]`)
+	d.Click(`.gj-stylepicker-item[data-style="Heading 2"]`)
+	d.WaitFor("one more heading", "document.querySelectorAll('#a11y-text h1, #a11y-text h2, #a11y-text h3').length === "+itoa(before+1))
+	d.OK(d.State().Str("text") == text, "the text did not change")
+	d.Click(`.gj-stylepicker-item[data-style="Normal"]`)
+	d.WaitFor("back to the first count", "document.querySelectorAll('#a11y-text h1, #a11y-text h2, #a11y-text h3').length === "+itoa(before))
+	_ = headings
+}
+
+func itoa(n int) string { return strconv.Itoa(n) }

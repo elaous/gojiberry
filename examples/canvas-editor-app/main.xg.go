@@ -5,8 +5,10 @@
 // Package main wires model.go's document, linewise.go's line/word
 // commands, and layout.go's word-wrap engine to a real canvas element
 // and a hidden input element that captures actual keyboard input
-// (including paste and IME composition, which the browser handles for
-// us): typed characters arrive as ordinary "input" events, while
+// (including paste, and IME composition, which is held until it ends;
+// copy, cut and undo are not implemented: the box is always empty, so
+// there is nothing for the browser to copy, and no history is kept):
+// typed characters arrive as ordinary "input" events, while
 // navigation/deletion (arrows, Backspace, Delete, Enter) are
 // intercepted on "keydown" via domrt/html's Element.OnKeyDown, since a
 // plain xango.EventHandler carries none of that. Mouse position for
@@ -372,13 +374,19 @@ func (ed *editor) wire() {
 	ed.canvasElem.OnMouseUp(func(evt html.MouseEvent) {
 		ed.dragging = false
 	})
+	// The button can be let go outside the canvas: then the drag is over too, or the
+	// selection would keep following the pointer with no button pressed.
+	js.Global().Get("window").Call("addEventListener", "mouseup", jsFuncOf(func() { ed.dragging = false }))
 	ed.canvasElem.OnWheel(func(evt html.WheelEvent) {
 		evt.PreventDefault()
 		ed.scrollY += evt.DeltaY
 		ed.redrawPreservingScroll()
 	})
 
-	ed.hidden.AddEventListener("input", jsFuncOf(func() {
+	// Text typed arrives as "input" events, except while an IME or a dead key is
+	// composing: the box then holds the unfinished text, which must not be inserted
+	// (or cleared) until the composition ends.
+	takeInput := func() {
 		v := ed.hidden.GetValue()
 		if v != "" {
 			ed.rowEndAt = -1
@@ -387,6 +395,17 @@ func (ed *editor) wire() {
 			ed.caretOn = true
 			ed.redraw()
 			ed.save()
+		}
+	}
+	composing := false
+	ed.hidden.AddEventListener("compositionstart", jsFuncOf(func() { composing = true }))
+	ed.hidden.AddEventListener("compositionend", jsFuncOf(func() {
+		composing = false
+		takeInput()
+	}))
+	ed.hidden.AddEventListener("input", jsFuncOf(func() {
+		if !composing {
+			takeInput()
 		}
 	}))
 
