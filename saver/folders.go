@@ -192,13 +192,16 @@ func (s *Saver) DeleteFolderReport(ctx context.Context, target, id string) (purg
 		var writes []func() error
 		for _, did := range gone {
 			e := cat.Docs[did]
-			w, err := s.prepareTouch(ctx, t, &e, func(d *docfile.Document) { d.SetFolder("") })
+			w, err := s.prepareTouch(ctx, t, did, &e, later, func(d *docfile.Document) { d.SetFolder("") })
 			if errors.Is(err, ErrUnreadable) {
 				purged = append(purged, e.Name)
 				delete(cat.Docs, did)
-				key := e.Key
+				key, prevKey := e.Key, e.Prev
 				*later = append(*later, func() {
 					_ = t.Adapter.Delete(ctx, key)
+					if prevKey != "" {
+						_ = t.Adapter.Delete(ctx, prevKey)
+					}
 					s.dropVersions(ctx, t, did)
 				})
 				continue
@@ -228,7 +231,7 @@ func (s *Saver) DeleteFolderReport(ctx context.Context, target, id string) (purg
 // Move puts documents in a folder ("" for the top level). It changes nothing
 // unless every document and the folder are there, and every document can be read.
 func (s *Saver) Move(ctx context.Context, target, folder string, ids ...string) error {
-	return s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
+	return s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		if _, ok := cat.Folders[folder]; folder != "" && !ok {
 			return ErrFolder
 		}
@@ -245,7 +248,7 @@ func (s *Saver) Move(ctx context.Context, target, folder string, ids ...string) 
 			if e.Folder == folder {
 				continue
 			}
-			w, err := s.prepareTouch(ctx, t, &e, func(d *docfile.Document) { d.SetFolder(folder) })
+			w, err := s.prepareTouch(ctx, t, id, &e, later, func(d *docfile.Document) { d.SetFolder(folder) })
 			if err != nil {
 				return err
 			}

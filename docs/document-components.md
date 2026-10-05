@@ -167,8 +167,30 @@ timeout and an immediate write transaction), local files (an `flock` on the dire
 Unix) and the HTTP store (`If-Match`). `Repair` waits `RepairGrace` (2 s) and looks again
 before repairing, so it does not undo a delete another process is half way through, and
 a rebuild never overwrites a catalog changed since it was read. The browser's
-localStorage target cannot write conditionally: two tabs saving at the same moment can
-drop one catalog entry, and `Repair` finds the orphaned file on the next session.
+localStorage target cannot write conditionally, but it can take a lock: `docstore.Locker`
+is an optional interface, and the browser store implements it with the Web Locks API, so
+two tabs of one origin save one at a time. Where Web Locks is missing the store saves
+unlocked, and `Repair` still finds an orphaned file on the next session.
+
+## Damaged files and previous copies
+
+Every saved file is a new *generation*: its key is the document's ID, a short random
+suffix and the format extension, and the catalog entry records the key, a SHA-256 checksum
+and the key and checksum of the previous copy. A save writes the new file first, then
+swaps the catalog entry, then deletes the copy before last, so a crash between the two
+steps leaves the old document intact and the new file an orphan for `Repair`.
+
+`Saver.Load` checks the checksum and parses the file. If the current copy is missing or
+damaged it opens the previous copy instead, and writes it back as the current one. A
+store error (offline, permission) is never taken for damage. If no copy is good, `Load`
+returns `saver.ErrDamaged`. `Saver.Verify` does this for every document and reports which
+were restored, lost or sealed (a file with no checksum yet gets one); the Documents tab
+has a Check button for it. `Saver.PreviousCopies` is 0 for the default of one previous
+copy, or negative for none; more than one is not stored. Local files are written with
+`fsync` of the file and its directory, so a power cut does not leave a half-written file.
+Copy-on-write and checksums are in the data, so they work with every store.
+
+`docstore.RequestPersistence` and `Persisted` ask the browser not to evict the storage.
 
 ## What a browser build links
 

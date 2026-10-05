@@ -388,7 +388,8 @@ func TestEndToEnd(t *testing.T) {
 	d.WaitFor("the saved entry", `document.querySelector('.gj-doclist-item')`)
 	savedID := d.Attr(".gj-doclist-item", "data-id")
 	var stored string
-	d.Eval(`JSON.parse(localStorage.getItem('showcase:`+savedID+`.json')).d`, &stored)
+	// The file's key carries a generation suffix: find it by its ID and extension.
+	d.Eval(`(() => { const k = Object.keys(localStorage).find((k) => k.startsWith('showcase:`+savedID+`~') && k.endsWith('.json')); return JSON.parse(localStorage.getItem(k)).d })()`, &stored)
 	raw, err := base64.StdEncoding.DecodeString(stored)
 	if err != nil {
 		t.Fatal(err)

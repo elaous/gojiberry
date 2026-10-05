@@ -47,6 +47,10 @@ type Saver struct {
 	// MaxVersions is how many snapshots SaveVersion keeps of one document; 0
 	// means DefaultMaxVersions.
 	MaxVersions int
+	// PreviousCopies is how many earlier saves of each document are kept beside the
+	// current one, to fall back on if it is lost or damaged (see LoadChecked): 0 means
+	// DefaultPreviousCopies (1), negative means none. They take space, and Usage counts it.
+	PreviousCopies int
 	// RepairGrace is how long Repair waits, when it finds the store and its catalog
 	// disagreeing, before looking again and repairing what is still wrong: another
 	// process may be half way through an operation. 0 means DefaultRepairGrace; a
@@ -181,47 +185,26 @@ func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc do
 		if err != nil {
 			return err
 		}
-		key := id + c.Ext()
+		// A new file, never the one the catalog points at: the catalog switches to it once
+		// it is written, and the file it replaces stays as the previous copy.
+		key := genKey(id, c)
 		if err := t.Adapter.Save(ctx, key, data); err != nil {
 			return err
 		}
-		if existed && prev.Key != key { // saved in another format: the old file goes, after the catalog
-			old := prev.Key
-			*later = append(*later, func() { _ = t.Adapter.Delete(ctx, old) })
-		}
-		cat.Docs[id] = catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: len(data), Updated: doc.Updated, Tags: doc.Tags(), Trashed: prev.Trashed, Folder: doc.Folder()}
+		e := catalogEntry{Key: prev.Key, Sum: prev.Sum, Prev: prev.Prev, PrevSum: prev.PrevSum}
+		s.rotate(ctx, t, &e, key, data, later)
+		e.Name, e.Format, e.Updated, e.Tags, e.Trashed, e.Folder = doc.Name(), c.Name(), doc.Updated, doc.Tags(), prev.Trashed, doc.Folder()
+		cat.Docs[id] = e
 		out = cat.entry(s, id)
 		return nil
 	})
 	return out, err
 }
 
-// Load reads a document back by ID.
+// Load reads a document back by ID. A document whose file is missing or damaged is read
+// from its previous copy when there is one (see LoadChecked).
 func (s *Saver) Load(ctx context.Context, target, id string) (docfile.Document, error) {
-	var doc docfile.Document
-	err := s.view(ctx, target, func(t Target, cat *catalog) error {
-		e, ok := cat.Docs[id]
-		if !ok {
-			return ErrNotFound
-		}
-		stored, err := t.Adapter.Load(ctx, e.Key)
-		if err != nil {
-			return err
-		}
-		c, _ := s.codecOf(e.Key)
-		if c == nil {
-			c = docfile.Detect(stored.Data)
-		}
-		doc, err = c.Unmarshal(stored.Data)
-		if err != nil {
-			return err
-		}
-		doc.SetID(id)
-		doc.SetName(e.Name)
-		doc.SetTags(e.Tags)
-		doc.SetFolder(e.Folder)
-		return nil
-	})
+	doc, _, err := s.LoadChecked(ctx, target, id)
 	return doc, err
 }
 
@@ -235,6 +218,9 @@ func (s *Saver) Delete(ctx context.Context, target, id string) error {
 		delete(cat.Docs, id)
 		*later = append(*later, func() {
 			_ = t.Adapter.Delete(ctx, e.Key)
+			if e.Prev != "" {
+				_ = t.Adapter.Delete(ctx, e.Prev)
+			}
 			s.dropVersions(ctx, t, id)
 		})
 		return nil
