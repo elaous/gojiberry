@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 	"testing"
 	"time"
 
@@ -260,4 +261,74 @@ func TestRepairLeavesWhatARebuildSkipped(t *testing.T) {
 	if live, _, _ := s.Lists(ctx, "m"); len(live) != 1 {
 		t.Errorf("%+v", live)
 	}
+}
+
+// A document in the trash whose file is gone or damaged cannot be moved out of its
+// folder, and nobody can open it: deleting the folder removes it, and says so.
+func TestDeleteFolderRemovesUnreadableTrashedDocuments(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	f, _ := s.CreateFolder(ctx, "m", "", "Old")
+	mk := func(name string) Entry {
+		d := named(name)
+		d.SetFolder(f.ID)
+		e, err := s.Save(ctx, "m", docfile.JSON, d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Trash(ctx, "m", e.ID); err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	good, missing, damaged := mk("good"), mk("missing"), mk("damaged")
+	_ = mem.Delete(ctx, missing.Key)
+	_ = mem.Save(ctx, damaged.Key, []byte("{ not json"))
+
+	purged, err := s.DeleteFolderReport(ctx, "m", f.ID)
+	if err != nil || len(purged) != 2 {
+		t.Fatalf("purged %v, %v", purged, err)
+	}
+	sort.Strings(purged)
+	if purged[0] != "damaged" || purged[1] != "missing" {
+		t.Errorf("%v", purged)
+	}
+	trash, _ := s.Trashed(ctx, "m")
+	if len(trash) != 1 || trash[0].ID != good.ID || trash[0].Folder != "" {
+		t.Errorf("the readable one goes to the top level and stays in the trash: %+v", trash)
+	}
+	if _, err := mem.Load(ctx, damaged.Key); !errors.Is(err, docstore.ErrNotFound) {
+		t.Errorf("the damaged file is deleted: %v", err)
+	}
+	if folders, _ := s.Folders(ctx, "m"); len(folders) != 0 {
+		t.Errorf("the folder is gone: %+v", folders)
+	}
+
+	// A store error that is not "the file is missing or damaged" still stops it.
+	g, _ := s.CreateFolder(ctx, "m", "", "Flaky")
+	d := named("flaky")
+	d.SetFolder(g.ID)
+	e, _ := s.Save(ctx, "m", docfile.JSON, d)
+	_ = s.Trash(ctx, "m", e.ID)
+	s2 := &Saver{Targets: []Target{{Name: "m", Adapter: failingLoads{mem, e.Key}}}}
+	if _, err := s2.DeleteFolderReport(ctx, "m", g.ID); err == nil || errors.Is(err, ErrUnreadable) {
+		t.Errorf("a transient failure is not a reason to delete anything: %v", err)
+	}
+	if _, err := mem.Load(ctx, e.Key); err != nil {
+		t.Errorf("the document was deleted: %v", err)
+	}
+}
+
+// failingLoads fails loading one key with an error that is not "not found".
+type failingLoads struct {
+	docstore.Adapter
+	key string
+}
+
+func (f failingLoads) Load(ctx context.Context, id string) (docstore.Document, error) {
+	if id == f.key {
+		return docstore.Document{}, errors.New("disk on fire")
+	}
+	return f.Adapter.Load(ctx, id)
 }

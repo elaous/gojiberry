@@ -77,6 +77,10 @@ const FontPrefix = "fonts/"
 
 // ErrName is returned for a name that cannot be used: empty, too long, or with
 // control characters.
+// ErrUnreadable is wrapped in the error of an operation that met a document whose
+// file is missing or damaged.
+var ErrUnreadable = errors.New("saver: the document's file is missing or damaged")
+
 // DefaultRepairGrace is the RepairGrace used when none is set.
 const DefaultRepairGrace = 2 * time.Second
 
