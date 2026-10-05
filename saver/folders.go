@@ -193,7 +193,7 @@ func (s *Saver) DeleteFolderReport(ctx context.Context, target, id string) (purg
 		var writes []func() error
 		for _, did := range gone {
 			e := cat.Docs[did]
-			w, err := s.prepareTouch(ctx, t, did, &e, later, func(d *docfile.Document) { d.SetFolder("") })
+			w, err := s.prepareTouch(ctx, t, cat, did, &e, later, func(d *docfile.Document) { d.SetFolder("") })
 			if errors.Is(err, ErrUnreadable) && !errors.Is(err, docstore.ErrNotFound) {
 				// The file is there but cannot be read as a document: not ours to destroy
 				// (a newer version of the library may read it). It cannot be rewritten with
@@ -257,7 +257,7 @@ func (s *Saver) Move(ctx context.Context, target, folder string, ids ...string) 
 			if e.Folder == folder {
 				continue
 			}
-			w, err := s.prepareTouch(ctx, t, id, &e, later, func(d *docfile.Document) { d.SetFolder(folder) })
+			w, err := s.prepareTouch(ctx, t, cat, id, &e, later, func(d *docfile.Document) { d.SetFolder(folder) })
 			if err != nil {
 				return err
 			}
