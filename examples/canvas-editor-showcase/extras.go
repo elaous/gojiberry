@@ -3,7 +3,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"net/url"
 	"strings"
 	"syscall/js"
@@ -253,11 +255,18 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 	if flow == nil {
 		return nil
 	}
-	sig := flow.EditText()
+	// What the screen-reader copy says depends on the structure (a heading, a list, a
+	// quote), not only on the text, so the cache key is the whole content.
+	doc := docfile.FromFlow(title, flow)
+	content, _ := json.Marshal(doc.Content)
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(title))
+	_, _ = h.Write(content)
+	sig := fmt.Sprint(h.Sum64())
 	if u.a11ySig == sig && u.a11yCache != nil {
 		return u.a11yCache
 	}
-	snap := export.FromDocument(docfile.FromFlow(title, flow))
+	snap := export.FromDocument(doc)
 	var out []components.A11yBlock
 	for i := 0; i < len(snap.Blocks); i++ {
 		b := snap.Blocks[i]
@@ -357,4 +366,19 @@ func a11yObjects(root *cxango.Root) []components.A11yBlock {
 		out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.image", "Image")})
 	}
 	return out
+}
+
+// pageEndpoint is a backend address from the page's query string if it passes
+// allowedEndpoint, else "" (and a warning in the console says it was ignored).
+func pageEndpoint(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return ""
+	}
+	origin := js.Global().Get("location").Get("origin").String()
+	got, ok := allowedEndpoint(raw, origin)
+	if !ok {
+		js.Global().Get("console").Call("warn", "ignored a backend address in the page's query string: only this origin and loopback hosts are allowed ("+raw+")")
+		return ""
+	}
+	return got
 }

@@ -166,9 +166,16 @@ func main() {
 		state.Items, state.Source = nil, ""
 		renderCanvas()
 		state.Items = docfile.ToItems(d.Content)
+		// What the document says about itself replaces what the last one said: its
+		// styles (the defaults when it has none), comments and footnotes. The sets are
+		// filled in place; the page holds them for its whole life.
 		if len(d.Styles) > 0 {
 			state.Styles = docfile.ToStyles(d.Styles)
+		} else {
+			state.Styles = canvas.DefaultStyles()
 		}
+		state.Comments.ReplaceAll(docfile.ToComments(d.Comments).List())
+		state.Footnotes.ReplaceAll(docfile.ToFootnotes(d.Footnotes).List())
 		for _, f := range docfile.ToFonts(d.Fonts) {
 			lib.Add(f)
 		}
@@ -184,6 +191,10 @@ func main() {
 		d.Fonts = docfile.FromFonts(lib.Added())
 		return d
 	}
+	// The browser target (localStorage) cannot write the catalog conditionally, so two
+	// tabs saving at the same moment can drop one catalog entry (Repair finds the
+	// orphaned file next time). The memory target, a local directory, SQLite and the HTTP
+	// store do write conditionally (docstore.ConditionalAdapter).
 	u.saver = saver.NewSession(&saver.Saver{Targets: []saver.Target{
 		{Name: "browser", Label: "This browser (localStorage)", Adapter: docstore.NewBrowserAdapter("showcase:"), Capacity: 5 << 20},
 		{Name: "memory", Label: "Memory", Adapter: store, Capacity: 16 << 20},
@@ -312,11 +323,12 @@ func main() {
 		case "comments":
 			panel = commentsPanel(u, &state, func() *canvas.TextFlow { return flow }, run, redraw, refocus, renderUI)
 		case "styles":
+			if flow == nil {
+				break
+			}
 			current := ""
-			if flow != nil {
-				if fs := flow.ParagraphFormats(); len(fs) > 0 {
-					current = fs[0].Style
-				}
+			if fs := flow.ParagraphFormats(); len(fs) > 0 {
+				current = fs[0].Style
 			}
 			panel = components.StylePicker(components.StylePickerProps{
 				Styles: flow.Styles, Current: current,
@@ -726,7 +738,7 @@ func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()
 	return &collabxango.CollabProps{
 		Transport: transport,
 		Flow:      collabxango.Flow(get("flow", "")),
-		Client:    client.Options{BaseURL: get("hub", origin+"/collab"), Doc: doc, Header: hdr, Retry: 300 * time.Millisecond, MaxRetry: 2 * time.Second},
+		Client:    client.Options{BaseURL: hubURL(get("hub", ""), origin), Doc: doc, Header: hdr, Retry: 300 * time.Millisecond, MaxRetry: 2 * time.Second},
 		Replica:   fmt.Sprintf("%s-%d", name, int(js.Global().Get("Math").Call("random").Float()*1e9)),
 		Name:      name,
 		Color:     u.liveColor,
@@ -957,4 +969,13 @@ func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *c
 			},
 		})),
 	)
+}
+
+// hubURL is the collaboration hub's address: the page's own /collab unless ?hub= names
+// another that allowedEndpoint accepts.
+func hubURL(param, origin string) string {
+	if u := pageEndpoint(param); u != "" {
+		return u
+	}
+	return origin + "/collab"
 }
