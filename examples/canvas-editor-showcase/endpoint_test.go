@@ -19,7 +19,12 @@ func TestAllowedEndpoint(t *testing.T) {
 		{"//evil.example/x", "", false},
 		{"javascript:alert(1)", "", false},
 		{"ftp://127.0.0.1", "", false},
-		{"http://app.opendocs.io", "", false}, // another scheme is another origin
+		{"http://app.opendocs.io", "", false},                 // another scheme is another origin
+		{"https://app.opendocs.io\\@evil.example", "", false}, // a backslash before the @ is userinfo to Go
+		{"https://app.opendocs.io/\tx", "", false},            // control characters do not parse
+		{"HTTPS://APP.OPENDOCS.IO/api", "", false},            // not the page's own spelling: refused, never accepted
+		{"https://app.opendocs.io./api", "", false},           // a trailing dot is another host name
+		{"http://127.0.0.1.evil.example", "", false},
 		{"", "", false},
 		{"  ", "", false},
 	} {

@@ -222,7 +222,7 @@
   "migrate.truncated": "Zu viele Dateien: Nur die ersten wurden migriert.",
   "migrate.failed": "%d konnten nicht migriert werden:",
   "migrate.convertTo": "Umwandeln in",
-  "saver.purgedUnreadable": "(%d unlesbare Dokumente im Papierkorb wurden entfernt: %s)",
+  "saver.purgedUnreadable": "(%d Dokumente im Papierkorb, deren Dateien fehlten, wurden entfernt: %s)",
   "saver.checkedOK": "%d Dokumente geprüft: alles in Ordnung",
   "saver.checkedProblems": "%d Dokumente geprüft: %d aus einer früheren Kopie wiederhergestellt (%s), %d beschädigt ohne Kopie (%s)",
   "docs.check": "Dokumente prüfen"

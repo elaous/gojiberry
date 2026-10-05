@@ -222,7 +222,7 @@
   "migrate.truncated": "Demasiados archivos: solo se migraron los primeros.",
   "migrate.failed": "%d no se pudieron migrar:",
   "migrate.convertTo": "Convertir a",
-  "saver.purgedUnreadable": "(%d documentos ilegibles de la papelera se eliminaron: %s)",
+  "saver.purgedUnreadable": "(%d documentos de la papelera cuyos archivos ya no existían se eliminaron: %s)",
   "saver.checkedOK": "Comprobados %d documentos: todo bien",
   "saver.checkedProblems": "Comprobados %d documentos: %d recuperados de una copia anterior (%s), %d dañados sin copia (%s)",
   "docs.check": "Comprobar documentos"

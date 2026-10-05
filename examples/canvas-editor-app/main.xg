@@ -413,19 +413,33 @@ func (ed *editor) wire() {
 	// Copy and cut: the box is always empty, so the browser has nothing of its own to
 	// copy (and does not even fire a copy event for an empty box): the keys are handled
 	// in OnKeyDown and the selection (every cursor's, a line each) is written to the
-	// clipboard from there, where the key press counts as the user gesture it needs.
-	copySelection := func() bool {
-		text := ed.doc.selectedText()
-		if text == "" {
+	// clipboard from there, where the key press counts as the user gesture it needs. A cut
+	// removes the text only once the clipboard has accepted it (it is not there on a page
+	// that is not a secure context, and the write can be refused).
+	writeClipboard := func(text string, written func()) bool {
+		clip := js.Global().Get("navigator").Get("clipboard")
+		if !clip.Truthy() {
 			return false
 		}
-		if clip := js.Global().Get("navigator").Get("clipboard"); clip.Truthy() {
-			clip.Call("writeText", text)
-		}
+		var then, fail js.Func
+		release := func() { then.Release(); fail.Release() }
+		then = js.FuncOf(func(js.Value, []js.Value) any {
+			release()
+			written()
+			return nil
+		})
+		fail = js.FuncOf(func(js.Value, []js.Value) any {
+			release()
+			return nil
+		})
+		clip.Call("writeText", text).Call("then", then, fail)
 		return true
 	}
 
 	ed.hidden.OnKeyDown(func(e html.KeyEvent) {
+		if composing {
+			return // the IME owns the keys until the composition ends
+		}
 		if e.Key != "End" {
 			ed.rowEndAt = -1 // any other key leaves the end of a wrapped row
 		}
@@ -487,13 +501,27 @@ func (ed *editor) wire() {
 			e.PreventDefault()
 			ed.doc.collapseCursors()
 		case "c", "C", "x", "X":
-			if !(e.CtrlKey || e.MetaKey) || e.ShiftKey || e.AltKey || !copySelection() {
+			if !(e.CtrlKey || e.MetaKey) || e.ShiftKey || e.AltKey {
 				return
 			}
-			e.PreventDefault()
-			if e.Key == "x" || e.Key == "X" {
-				ed.doc.backspace() // one undo step
+			text := ed.doc.selectedText()
+			if text == "" {
+				return
 			}
+			cut := e.Key == "x" || e.Key == "X"
+			if !writeClipboard(text, func() {
+				if cut {
+					ed.doc.cutSelections() // one undo step, and only the selections
+					ed.rowEndAt = -1
+					ed.caretOn = true
+					ed.redraw()
+					ed.save()
+				}
+			}) {
+				return // no clipboard here: leave the keys to the browser, and the text where it is
+			}
+			e.PreventDefault()
+			return // a cut finishes when the write does
 		case "z", "Z":
 			if !(e.CtrlKey || e.MetaKey) {
 				return
