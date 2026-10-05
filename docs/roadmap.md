@@ -6,7 +6,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 ## Next
 
 1. **Migrate: done** (see [document-components.md](document-components.md)); left: skipping what an earlier run already brought (needs the source ID kept on the document), Google Docs comments and revision history.
-2. **Button icons** from opendocs into `components` menus and toolbars.
+2. **Button icons: done** (`components.Material`, see [document-components.md](document-components.md)); left: a toolbar of icon buttons for the formatting commands.
 3. **Fresh review** of the grown PR before it merges.
 
 ## Later

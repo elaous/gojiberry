@@ -119,6 +119,18 @@ panel and `migrate.Session` its state (like `saver.Session` for the document lis
    cannot be told apart by content, only by extension), or any other format. Migrating twice makes the documents
    twice (they get new IDs).
 
+## Icons
+
+`components.Material(name)` draws a Material Symbols icon (the ones opendocs uses, by the
+same names: `format_bold`, `delete`, `link`...). `MenuItem.Icon` puts one before a menu
+entry, `CommandMaterial` maps the editing commands to theirs (the Edit menu uses it),
+and the document list, migrate and sidebar-tab buttons show them next to their names.
+It is a `<span>` with a CSS mask made from the icon's path data, because the DOM runtime
+builds elements without the SVG namespace, so an inline `<svg>` would not draw. Only the
+~85 icons in `material_data.go` are in the binary (no font); they are Apache-2.0, and
+`sh components/material_update.sh` regenerates the file from the
+`@material-symbols/svg-400` package when more are needed.
+
 ## One Person
 
 `user.Person` (`ID`, `Name`, `Role`; `user.Normalize` for addresses) is shared by

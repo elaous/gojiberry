@@ -153,7 +153,19 @@ func docButton(class, label string, disabled bool, on func()) xango.Node {
 	} else {
 		attrs = append(attrs, xango.On("click", func(xango.Event) { on() }))
 	}
+	if icon, ok := docIcons[class]; ok {
+		return xango.El("button", attrs, Material(icon), xango.Text(label))
+	}
 	return xango.El("button", attrs, xango.Text(label))
+}
+
+// docIcons are the icons of the document components' buttons, by class.
+var docIcons = map[string]string{
+	"gj-doclist-open": "description", "gj-doclist-duplicate": "content_copy", "gj-doclist-trash": "delete",
+	"gj-doclist-delete": "delete_forever", "gj-doclist-refresh": "refresh", "gj-doclist-download": "download",
+	"gj-doclist-folder-open": "folder_open", "gj-doclist-folder-delete": "delete_forever",
+	"gj-doclist-folder-download": "download", "gj-doclist-newfolder": "create_new_folder",
+	"gj-migrate-pick": "upload_file", "gj-migrate-start": "download",
 }
 
 // pendingError is the line under a component saying what went wrong.
@@ -695,7 +707,7 @@ func linkButton(p DocListProps, link func(id string) string, id string) []xango.
 	}
 	return []xango.Node{xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-doclist-link"),
 		xango.A("data-url", url), xango.A("title", url), xango.On("click", func(xango.Event) { p.CopyLink(url) })},
-		xango.Text(tr("docs.link", "Link")))}
+		Material("link"), xango.Text(tr("docs.link", "Link")))}
 }
 
 // downloadControl is a document's Download: one button, or a "Download as…" menu

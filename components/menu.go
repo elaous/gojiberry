@@ -11,6 +11,9 @@ import (
 // Items) a submenu.
 type MenuItem struct {
 	Label string
+	// Icon is the name of a Material Symbols icon drawn before the label (see Material);
+	// "" for none.
+	Icon string
 	// Shortcut is shown at the right ("Ctrl+B"); see FormatChord.
 	Shortcut string
 	// Checked puts a check mark in front (a toggle that is on).
@@ -80,10 +83,11 @@ func menuItem(it MenuItem, onClose func()) xango.Node {
 	if it.Checked {
 		check = "✓"
 	}
-	row := []xango.Node{
-		xango.El("span", []xango.Attr{xango.A("class", "gj-menu-check")}, xango.Text(check)),
-		xango.El("span", []xango.Attr{xango.A("class", "gj-menu-label")}, xango.Text(it.Label)),
+	row := []xango.Node{xango.El("span", []xango.Attr{xango.A("class", "gj-menu-check")}, xango.Text(check))}
+	if HasMaterial(it.Icon) {
+		row = append(row, xango.El("span", []xango.Attr{xango.A("class", "gj-menu-icon")}, Material(it.Icon)))
 	}
+	row = append(row, xango.El("span", []xango.Attr{xango.A("class", "gj-menu-label")}, xango.Text(it.Label)))
 	switch {
 	case len(it.Items) > 0:
 		row = append(row, xango.El("span", []xango.Attr{xango.A("class", "gj-menu-arrow"), xango.A("aria-hidden", "true")}, xango.Text("▸")))
@@ -205,7 +209,7 @@ func CommandMenu(cmds []canvas.CommandInfo, keymap canvas.Keymap, mac bool, run 
 			shortcut = FormatChord(chords[0], mac)
 		}
 		byFeature[c.Feature] = append(byFeature[c.Feature], MenuItem{
-			Label: tr("cmd."+string(c.Name), c.Title), Shortcut: shortcut, OnSelect: func() { run(c.Name) },
+			Label: tr("cmd."+string(c.Name), c.Title), Icon: CommandMaterial(string(c.Name)), Shortcut: shortcut, OnSelect: func() { run(c.Name) },
 		})
 	}
 	var out []MenuItem

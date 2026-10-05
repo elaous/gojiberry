@@ -290,7 +290,7 @@ func main() {
 			r := r
 			class := "gj-keybindings-button"
 			if state.Role.String() == r.String() {
-				class += " gj-symbolpicker-chip-on"
+				class += " gj-materialpicker-chip-on"
 			}
 			roleButtons = append(roleButtons, xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", class), xango.A("data-role", r.String()),
 				xango.On("click", func(xango.Event) {
@@ -795,15 +795,26 @@ func resetBinding(stage *canvas.Stage, defaults canvas.Keymap, cmd canvas.Comman
 	}
 }
 
+// tabIcons are the icons of the sidebar tabs (Material Symbols names, as in opendocs).
+var tabIcons = map[string]string{
+	"format": "tune", "styles": "style", "symbols": "functions", "keys": "keyboard", "comments": "comment", "outline": "toc",
+	"find": "search", "spell": "spellcheck", "language": "language", "stats": "numbers", "share": "ios_share", "people": "account_circle",
+	"migrate": "upload_file", "page": "margin", "save": "description", "transfer": "input",
+}
+
 func tabButton(u *ui, tab, label string, rerender func()) xango.Node {
 	class := "gj-keybindings-button"
 	if u.tab == tab {
-		class += " gj-symbolpicker-chip-on"
+		class += " gj-materialpicker-chip-on"
+	}
+	kids := []xango.Node{xango.Text(components.Translate("tab."+tab, label))}
+	if icon := tabIcons[tab]; icon != "" {
+		kids = append([]xango.Node{components.Material(icon)}, kids...)
 	}
 	return xango.El("button", []xango.Attr{
 		xango.A("type", "button"), xango.A("class", class), xango.A("data-tab", tab),
 		xango.On("click", func(xango.Event) { u.tab = tab; rerender() }),
-	}, xango.Text(components.Translate("tab."+tab, label)))
+	}, kids...)
 }
 
 // fontKeys lists "family=key" for every downloaded cut and "family" for the
