@@ -63,6 +63,16 @@ func TestFlowFindAndReplacePreserveFormatting(t *testing.T) {
 	}
 }
 
+// A pattern that looks around (\B here) means what it meant in Find when its
+// replacement is worked out: the match is not re-run on its own text.
+func TestRegexReplacementKnowsTheContext(t *testing.T) {
+	f := NewTextFlow("cat at", 0, 0, 400, 200)
+	n, err := f.ReplaceAll(FindOptions{Query: `\Bat`, Regex: true, MatchCase: true}, "[$0]")
+	if err != nil || n != 1 || f.EditText() != "c[at] at" {
+		t.Errorf("%d %v %q", n, err, f.EditText())
+	}
+}
+
 func TestSearchHighlightsAreDrawn(t *testing.T) {
 	p := &fakePainter{}
 	f := NewTextFlow("find the needle in this text", 0, 0, 400, 200)
@@ -83,5 +93,19 @@ func TestSearchHighlightsAreDrawn(t *testing.T) {
 	f.GotoMatch(ms[0])
 	if from, to := f.Selection(); from != ms[0].From || to != ms[0].To {
 		t.Errorf("selection %d-%d", from, to)
+	}
+}
+
+func TestRegexReplacementWithNonASCIIAndWholeWord(t *testing.T) {
+	f := NewTextFlow("é café cafés ça", 0, 0, 400, 200)
+	n, err := f.ReplaceAll(FindOptions{Query: `\b(caf)é\b`, Regex: true, MatchCase: true}, "${1}E")
+	// Go's \b is ASCII: it falls between é and s, not between é and a space.
+	if err != nil || n != 1 || f.EditText() != "é café cafEs ça" {
+		t.Fatalf("%d %v %q", n, err, f.EditText())
+	}
+	g := NewTextFlow("one two one", 0, 0, 400, 200)
+	n, err = g.ReplaceAll(FindOptions{Query: `(o)ne`, Regex: true, WholeWord: true, MatchCase: true}, "<$1>")
+	if err != nil || n != 2 || g.EditText() != "<o> two <o>" {
+		t.Fatalf("%d %v %q", n, err, g.EditText())
 	}
 }

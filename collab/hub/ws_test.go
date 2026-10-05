@@ -239,3 +239,27 @@ func TestWebSocketAnswers413ToAnOversizedFrame(t *testing.T) {
 		t.Fatalf("reject %+v", f)
 	}
 }
+
+func TestWebSocketBehindAProxyThatRewritesHost(t *testing.T) {
+	for _, trust := range []bool{false, true} {
+		h := New(Config{TrustForwardedHost: trust})
+		srv := httptest.NewServer(h.Handler())
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		hdr := http.Header{}
+		hdr.Set("Origin", "https://app.example")
+		hdr.Set("Cookie", "sid=1")
+		hdr.Set("X-Forwarded-Host", "app.example")
+		c, resp, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/docs/d/ws?replica=r", &websocket.DialOptions{HTTPHeader: hdr})
+		switch {
+		case trust && err != nil:
+			t.Errorf("trusted forwarded host refused: %v", err)
+		case !trust && (err == nil || resp == nil || resp.StatusCode != http.StatusForbidden):
+			t.Errorf("an untrusted X-Forwarded-Host must not make a cross-origin socket same-origin (err %v)", err)
+		}
+		if err == nil {
+			_ = c.CloseNow()
+		}
+		cancel()
+		srv.Close()
+	}
+}

@@ -93,15 +93,19 @@ type Block struct {
 	// "should I draw this cell's own grid position at all" (every
 	// Exporter skips a covered cell's own output entirely, the owner's
 	// span already reserves its space in the rendered grid).
-	TableRow      int
-	TableCol      int
-	TableRows     int
-	TableCols     int
-	TableColSpan  int
-	TableRowSpan  int
-	TableCovered  bool
-	NumberedIndex int
-	Segments      []Segment
+	TableRow     int
+	TableCol     int
+	TableRows    int
+	TableCols    int
+	TableColSpan int
+	TableRowSpan int
+	TableCovered bool
+	// TableBackground is a cell's fill ("#rrggbb", "" for none) and TableAlign its
+	// horizontal alignment (0 left, 1 centre, 2 right).
+	TableBackground string
+	TableAlign      int
+	NumberedIndex   int
+	Segments        []Segment
 }
 
 // Snapshot is a complete, self-contained, point-in-time view of one

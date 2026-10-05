@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"image"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -65,8 +66,12 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 				if n > 0 && i+n <= len(snap.Blocks) {
 					b.table(snap.Blocks[i : i+n])
 					i += n - 1
+					continue
 				}
 			}
+			// Cells that do not make up a whole table are kept as paragraphs rather
+			// than dropped.
+			b.block(Block{Kind: Paragraph, Segments: blk.Segments})
 			continue
 		}
 		b.block(blk)
@@ -113,7 +118,13 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 			return nil, err
 		}
 	}
-	for name, data := range b.media {
+	names := make([]string, 0, len(b.media))
+	for name := range b.media {
+		names = append(names, name)
+	}
+	sort.Strings(names) // the same document gives the same bytes
+	for _, name := range names {
+		data := b.media[name]
 		w, err := zw.Create("word/media/" + name)
 		if err != nil {
 			return nil, err
@@ -288,11 +299,19 @@ func (b *docxBuilder) table(cells []Block) {
 				}
 				continue
 			}
+			// tcPr children in schema order: tcW, gridSpan, vMerge, shd.
 			props := `<w:tcW w:w="0" w:type="auto"/>` + gridSpan(cell.TableColSpan)
 			if cell.TableRowSpan > 1 {
 				props += `<w:vMerge w:val="restart"/>`
 			}
-			w.WriteString(`<w:tc><w:tcPr>` + props + `</w:tcPr><w:p>` + b.inline(cell.Segments) + `</w:p></w:tc>`)
+			if fill, ok := hexFill(cell.TableBackground); ok {
+				props += `<w:shd w:val="clear" w:color="auto" w:fill="` + fill + `"/>`
+			}
+			para := `<w:p>`
+			if jc := map[int]string{1: "center", 2: "right"}[cell.TableAlign]; jc != "" {
+				para = `<w:p><w:pPr><w:jc w:val="` + jc + `"/></w:pPr>`
+			}
+			w.WriteString(`<w:tc><w:tcPr>` + props + `</w:tcPr>` + para + b.inline(cell.Segments) + `</w:p></w:tc>`)
 		}
 		w.WriteString(`</w:tr>`)
 	}
@@ -357,4 +376,18 @@ func (b *docxBuilder) picture(blk Block) string {
 	b.docPr++
 	return fmt.Sprintf(`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="Picture %d"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="%d" name="%s"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
 		cx, cy, b.docPr, b.docPr, b.docPr, name, id, cx, cy)
+}
+
+// hexFill reads "#rrggbb" as the six hex digits Word wants.
+func hexFill(c string) (string, bool) {
+	c = strings.TrimPrefix(c, "#")
+	if len(c) != 6 {
+		return "", false
+	}
+	for _, r := range c {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') {
+			return "", false
+		}
+	}
+	return strings.ToLower(c), true
 }

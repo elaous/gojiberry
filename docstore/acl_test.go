@@ -519,3 +519,52 @@ func TestRequireACLClosesUnownedDocumentsAndLetsTheFirstWriterOwnThem(t *testing
 		t.Fatal("and owns it: others are refused")
 	}
 }
+
+func TestACLGrantRevokePeople(t *testing.T) {
+	a := ACL{Owner: "me@x.test"}
+	for _, bad := range []struct {
+		who  string
+		role Role
+	}{{"", RoleEditor}, {"me@x.test", RoleEditor}, {"a@x.test", "admin"}} {
+		if err := a.Grant(bad.who, bad.role); err == nil {
+			t.Errorf("granted %+v", bad)
+		}
+	}
+	_ = a.Grant("zed@x.test", RoleViewer)
+	_ = a.Grant("ana@x.test", RoleEditor)
+	_ = a.Grant("zed@x.test", RoleEditor) // changes the role
+	p := a.People()
+	if len(p) != 3 || p[0].Role != "owner" || p[1].ID != "ana@x.test" || p[2].Role != "editor" {
+		t.Errorf("%+v", p)
+	}
+	if err := a.Revoke("me@x.test"); err == nil {
+		t.Error("the owner cannot be revoked")
+	}
+	_ = a.Revoke("ana@x.test")
+	if a.RoleOf("ana@x.test") != "" || len(a.People()) != 2 {
+		t.Errorf("%+v", a)
+	}
+}
+
+func TestACLAddressesAreTrimmedAndCaseFolded(t *testing.T) {
+	a := ACL{Owner: "Me@X.test"}
+	if err := a.Grant("me@x.test ", RoleEditor); err == nil {
+		t.Error("the owner under another spelling must still be refused")
+	}
+	_ = a.Grant(" Ana@X.test ", RoleEditor)
+	_ = a.Grant("ana@x.TEST", RoleViewer) // the same person: one grant, the new role
+	if len(a.Grants) != 1 || a.RoleOf("ANA@x.test") != "viewer" || a.RoleOf("me@x.test") != "owner" {
+		t.Errorf("%+v", a)
+	}
+	if !a.canRead("Ana@x.test") || a.canWrite("ana@x.test") || !a.canWrite(" ME@x.test") {
+		t.Error("permissions go by the normalised address")
+	}
+	_ = a.Revoke("ANA@x.test ")
+	if len(a.Grants) != 0 || a.Revoke("nobody@x.test") != nil {
+		t.Errorf("%+v", a)
+	}
+	var empty ACL
+	if err := empty.Revoke("x"); err != nil {
+		t.Error(err)
+	}
+}
