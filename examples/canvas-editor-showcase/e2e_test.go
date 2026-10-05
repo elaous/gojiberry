@@ -125,21 +125,19 @@ func TestEndToEnd(t *testing.T) {
 	body()
 	var hBefore []float64
 	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights`, &hBefore)
-	d.Click(`.gj-stylepicker-item[data-style="Heading 2"]`)
-	d.Sleep(300)
-	var hAfter []float64
-	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights`, &hAfter)
 	sum := func(h []float64) (n float64) {
 		for _, v := range h {
 			n += v
 		}
 		return n
 	}
-	ok(sum(hAfter) > sum(hBefore), fmt.Sprint("Heading 2 makes the paragraph taller: ", sum(hBefore), " -> ", sum(hAfter)))
+	total := "s.lineHeights.reduce((a, b) => a + b, 0)"
+	d.Click(`.gj-stylepicker-item[data-style="Heading 2"]`)
+	d.Wait(total + " > " + fmt.Sprint(sum(hBefore)))
+	ok(true, fmt.Sprint("Heading 2 makes the paragraph taller: ", sum(hBefore)))
 	d.Click(`.gj-stylepicker-item[data-style="Normal"]`)
-	d.Sleep(300)
-	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights`, &hAfter)
-	ok(sum(hAfter) == sum(hBefore), "Normal puts it back")
+	d.Wait(total + " === " + fmt.Sprint(sum(hBefore)))
+	ok(true, "Normal puts it back")
 
 	// Symbols: pick one from the DOM picker into the canvas text.
 	d.Click(`button[data-tab="symbols"]`)
@@ -167,11 +165,11 @@ func TestEndToEnd(t *testing.T) {
 	}
 	ok(s.Str("link.url") == "https://github.com/elaous/gojiberry", fmt.Sprint("the Markdown link is a link: ", s.Get("link")))
 	d.CanvasMove(s.Num("link.x"), s.Num("link.y"))
-	d.Sleep(50)
+	d.Wait("s.hoverLink === 'https://github.com/elaous/gojiberry'")
 	ok(S().Str("hoverLink") == "https://github.com/elaous/gojiberry", "hovering a link reports it")
 	ok(d.Count(`#link-preview a.gj-linkpreview[href="https://github.com/elaous/gojiberry"]`) == 1, "and the DOM shows a preview card")
 	d.CanvasMove(5, 5)
-	d.Sleep(50)
+	d.WaitFor("the card to go", "!document.querySelector('#link-preview a.gj-linkpreview')")
 	ok(d.Count("#link-preview a.gj-linkpreview") == 0, "the card goes when the pointer leaves")
 
 	// Key bindings editor: rebind Copy line down to Ctrl+J.
@@ -179,7 +177,7 @@ func TestEndToEnd(t *testing.T) {
 	d.Click(`[data-action="change:line.duplicate-down"]`)
 	d.WaitFor("the key capture", "document.querySelector('.gj-keybindings-capture')")
 	d.Press("Control+j")
-	d.Sleep(50)
+	d.WaitFor("the new binding", "document.querySelector('.gj-keybindings-message')")
 	ok(d.Count(`.gj-keybindings-message:has-text("Copy line down is now Ctrl+J")`) == 1, "the editor reports the new binding")
 	ok(d.Count(`.gj-keybindings-row-modified:has-text("Copy line down")`) == 1, "and marks it modified")
 	// The long key list may have scrolled the whole page (overflow:hidden still scrolls).
@@ -234,7 +232,7 @@ func TestEndToEnd(t *testing.T) {
 	d.GrantClipboard()
 	d.Eval(`navigator.clipboard.writeText('pasted **bold** text')`, nil)
 	d.Press("Control+Shift+V")
-	d.Sleep(150)
+	d.Wait("s.text.includes('pasted bold text')")
 	ok(strings.Contains(S().Str("text"), "pasted bold text"), "Ctrl+Shift+V pastes Markdown as text, not marks")
 
 	// Auto-closing pairs and completion in the text flow (at several cursors too).
@@ -318,7 +316,7 @@ func TestEndToEnd(t *testing.T) {
 	ok(d.Text(".gj-comment-author") == "you@example.com", "the author is the current user")
 	s = S()
 	d.CanvasMove(s.Num("comment.x"), s.Num("comment.y"))
-	d.Sleep(100)
+	d.Wait("s.hoverComment === s.comment.id")
 	s = S()
 	ok(s.Get("hoverComment") == s.Get("comment.id"), fmt.Sprint("hovering commented text finds its comment: ", s.Get("hoverComment")))
 	tip := d.Pixel(int(s.Num("comment.x")+0.5), int(s.Num("comment.y")+0.5)+28)
@@ -354,7 +352,7 @@ func TestEndToEnd(t *testing.T) {
 	d.Click(".gj-fontselector-control")
 	d.Fill(".gj-fontselector-search", "Lazy")
 	d.Click(`.gj-fontselector-option[data-family="Lazy Serif"]`)
-	d.Sleep(300)
+	d.Wait("s.fontsAdded.includes('Lazy Serif=')")
 	ok(d.Is("s.fontsAdded.includes('Lazy Serif=')"), fmt.Sprint("the picked font is in the library, not yet downloaded: ", S().Get("fontsAdded")))
 	ok(fontHits() == 0, "nothing was fetched yet: no text uses the font")
 	d.Focus("#input")
