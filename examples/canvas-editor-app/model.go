@@ -11,7 +11,8 @@
 // via domrt/html), so they -- and native_stub.go's no-op func main --
 // build and unit-test natively via a plain `go test`, fast and without
 // a browser; canvas_editor_test.go separately drives the real,
-// GOOS=js GOARCH=wasm-built binary through Playwright for true
+// GOOS=js GOARCH=wasm-built binary through the chromedp driver
+// (internal/e2etest) for true
 // end-to-end coverage.
 package main
 
@@ -70,6 +71,8 @@ type document struct {
 
 	Cursor, Anchor int
 	ExtraCursors   []cursor
+
+	hist history // undo and redo (history.go)
 }
 
 // Len returns the number of characters in the document.
@@ -275,6 +278,21 @@ func clamp(v, lo, hi int) int {
 // before each insertion point (or unformatted, at the very start of
 // the document).
 func (d *document) insert(text string) {
+	typing := text != "\n" && utf8.RuneCountInString(text) <= 1
+	// Typing at a caret that has not moved continues the last step, so Undo takes back
+	// a word and not a letter; a paste or a new line is a step of its own.
+	if typing && d.hist.typingAt == d.Cursor+1 && len(d.ExtraCursors) == 0 && !d.hasSelection() {
+		d.insertNow(text)
+		d.hist.typingAt = d.Cursor + 1
+		return
+	}
+	d.edit(func() { d.insertNow(text) })
+	if typing {
+		d.hist.typingAt = d.Cursor + 1
+	}
+}
+
+func (d *document) insertNow(text string) {
 	d.forEachCursorDescending(func(pos, anchor int) (int, int) {
 		lo, hi := pos, anchor
 		if lo > hi {
@@ -300,7 +318,9 @@ func (d *document) insert(text string) {
 
 // backspace deletes, at every live cursor, that cursor's own selection
 // -- or the character before it if it has none.
-func (d *document) backspace() {
+func (d *document) backspace() { d.edit(d.backspaceNow) }
+
+func (d *document) backspaceNow() {
 	d.forEachCursorDescending(func(pos, anchor int) (int, int) {
 		lo, hi := pos, anchor
 		if lo > hi {
@@ -320,7 +340,9 @@ func (d *document) backspace() {
 
 // delete deletes, at every live cursor, that cursor's own selection --
 // or the character after it if it has none.
-func (d *document) delete() {
+func (d *document) delete() { d.edit(d.deleteNow) }
+
+func (d *document) deleteNow() {
 	d.forEachCursorDescending(func(pos, anchor int) (int, int) {
 		lo, hi := pos, anchor
 		if lo > hi {
@@ -377,6 +399,10 @@ func (d *document) toggleSelectionFormat(lo, hi int, kind formatKind) {
 // every live cursor's own selection (a no-op for any cursor with
 // none) -- the toolbar Bold/Italic buttons' effect.
 func (d *document) toggleSelectionFormatAllCursors(kind formatKind) {
+	d.edit(func() { d.toggleFormatNow(kind) })
+}
+
+func (d *document) toggleFormatNow(kind formatKind) {
 	for _, c := range d.cursors() {
 		lo, hi := c.Pos, c.Anchor
 		if lo > hi {
@@ -402,6 +428,10 @@ func (d *document) transformCaseRange(lo, hi int, upper bool) {
 // transformSelectionCaseAllCursors upper/lowercases every live
 // cursor's own selection in place (a no-op for any cursor with none).
 func (d *document) transformSelectionCaseAllCursors(upper bool) {
+	d.edit(func() { d.transformCaseNow(upper) })
+}
+
+func (d *document) transformCaseNow(upper bool) {
 	for _, c := range d.cursors() {
 		lo, hi := c.Pos, c.Anchor
 		if lo > hi {

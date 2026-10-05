@@ -2,11 +2,12 @@
 
 //go:build js && wasm
 
-// Package main is a minimal cache-first service worker compiled from
-// Go/xango: on install it pre-caches a fixed asset list, on fetch it
-// serves from cache first and falls back to the network. Proves a
-// Go/WASM binary runs as a real browser service worker, not just a
-// page-context script.
+// Package main is a minimal offline-capable service worker compiled from
+// Go/xango: on install it pre-caches a fixed asset list; on fetch it asks the
+// network first and keeps the answer in the cache, falling back to the cache when the
+// network is not there (so a changed file is seen at once, and the page still works
+// offline); on activate it deletes the caches of older versions. Proves a Go/WASM binary
+// runs as a real browser service worker, not just a page-context script.
 package main
 
 import (
@@ -16,7 +17,9 @@ import (
 	"github.com/elaous/gojiberry/domrt/sw"
 )
 
-const cacheName = "gojiberry-demo-v1"
+// cacheName names this version of the cache: change it with the worker and the old
+// one is deleted when the new worker activates.
+const cacheName = "gojiberry-demo-v2"
 
 var precacheURLs = []string{"hello.txt"}
 
@@ -32,16 +35,40 @@ func main() {
 	})
 
 	sw.OnActivate(func(e sw.ExtendableEvent) {
-		e.WaitUntil(sw.ClaimClients)
+		e.WaitUntil(func() error {
+			names, err := sw.CachesKeys()
+			if err != nil {
+				return err
+			}
+			for _, name := range names {
+				if name != cacheName {
+					if err := sw.CachesDelete(name); err != nil {
+						return err
+					}
+				}
+			}
+			return sw.ClaimClients()
+		})
 	})
 
 	sw.OnFetch(func(e sw.FetchEvent) {
 		e.RespondWith(func() (js.Value, error) {
 			req := e.Request()
+			resp, err := domrt.Await(js.Global().Call("fetch", req))
+			if err == nil {
+				// Keep what the network said (a successful answer to a GET), for when it is
+				// not there; the original response goes to the page.
+				if req.Get("method").String() == "GET" && resp.Get("ok").Bool() {
+					if cache, cerr := sw.CachesOpen(cacheName); cerr == nil {
+						_ = sw.CachePut(cache, req, resp.Call("clone"))
+					}
+				}
+				return resp, nil
+			}
 			if cached, ok := sw.CachesMatch(req); ok {
 				return cached, nil
 			}
-			return domrt.Await(js.Global().Call("fetch", req))
+			return js.Value{}, err
 		})
 	})
 
