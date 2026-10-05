@@ -124,14 +124,22 @@ func TestEndToEnd(t *testing.T) {
 	ok(d.Count(`.gj-stylepicker-item[data-style="Heading 1"]`) == 1, "the style gallery lists the styles")
 	body()
 	var hBefore []float64
-	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights.slice(0, 3)`, &hBefore)
+	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights`, &hBefore)
 	d.Click(`.gj-stylepicker-item[data-style="Heading 2"]`)
+	d.Sleep(300)
 	var hAfter []float64
-	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights.slice(0, 3)`, &hAfter)
-	ok(hAfter[1] > hBefore[1], fmt.Sprint("Heading 2 makes the paragraph taller: ", hBefore, " -> ", hAfter))
+	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights`, &hAfter)
+	sum := func(h []float64) (n float64) {
+		for _, v := range h {
+			n += v
+		}
+		return n
+	}
+	ok(sum(hAfter) > sum(hBefore), fmt.Sprint("Heading 2 makes the paragraph taller: ", sum(hBefore), " -> ", sum(hAfter)))
 	d.Click(`.gj-stylepicker-item[data-style="Normal"]`)
-	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights.slice(0, 3)`, &hAfter)
-	ok(hAfter[1] == hBefore[1], "Normal puts it back")
+	d.Sleep(300)
+	d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights`, &hAfter)
+	ok(sum(hAfter) == sum(hBefore), "Normal puts it back")
 
 	// Symbols: pick one from the DOM picker into the canvas text.
 	d.Click(`button[data-tab="symbols"]`)

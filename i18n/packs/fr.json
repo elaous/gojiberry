@@ -180,6 +180,27 @@
   "docs.downloadAs": "Télécharger en…",
   "docs.downloadOf": "Télécharger %s en",
   "saver.downloaded": "%s téléchargé",
-  "saver.linkCopied": "Lien copié : %s"
+  "saver.linkCopied": "Lien copié : %s",
+  "tab.page": "Page",
+  "menu.pageSetup": "Mise en page…",
+  "status.pageSetup": "Mise en page",
+  "page.setup": "Mise en page",
+  "page.paper": "Papier",
+  "page.orientation": "Orientation",
+  "page.portrait": "portrait",
+  "page.landscape": "paysage",
+  "page.marginPreset": "Marges",
+  "page.custom": "Personnalisées",
+  "page.margins.normal": "Normales",
+  "page.margins.narrow": "Étroites",
+  "page.margins.wide": "Larges",
+  "page.margin.top": "Haut",
+  "page.margin.right": "Droite",
+  "page.margin.bottom": "Bas",
+  "page.margin.left": "Gauche",
+  "status.save.saved": "Enregistré",
+  "status.save.saving": "Enregistrement…",
+  "status.save.unsaved": "Modifications non enregistrées",
+  "status.save.failed": "Échec de l'enregistrement"
  }
 }

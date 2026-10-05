@@ -3,6 +3,7 @@ package saver
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -442,5 +443,48 @@ func TestSessionDownloadsAndLinks(t *testing.T) {
 	}
 	if err := s.Download(ctx, docfile.NewID(), ""); err == nil {
 		t.Error("a document that is not there")
+	}
+}
+
+func TestSessionSaveState(t *testing.T) {
+	s, _, _ := newSession(t)
+	if s.SaveState() != "" {
+		t.Fatal(s.SaveState())
+	}
+	s.MarkEdited()
+	if s.SaveState() != SaveUnsaved {
+		t.Fatal(s.SaveState())
+	}
+	s.Props().OnName("report")
+	s.Props().OnSave()
+	if s.SaveState() != SaveSaved {
+		t.Fatal(s.SaveState())
+	}
+	s.MarkEdited()
+	if s.SaveState() != SaveUnsaved {
+		t.Fatal(s.SaveState())
+	}
+	// Edited while a save runs: still unsaved afterwards.
+	s.Get = func() docfile.Document {
+		s.MarkEdited()
+		return docfile.FromFlow("", &canvas.TextFlow{Items: []canvas.Item{canvas.Chars{Text: "body"}}})
+	}
+	var during []string
+	s.OnChange = func() { during = append(during, s.SaveState()) }
+	s.Props().OnSave()
+	if !slices.Contains(during, SaveSaving) || s.SaveState() != SaveUnsaved {
+		t.Errorf("during %q after %q", during, s.SaveState())
+	}
+	// A failed save says so.
+	s.Props().OnName("")
+	s.Props().OnSave()
+	if s.SaveState() != SaveFailed {
+		t.Errorf("%q", s.SaveState())
+	}
+	// Opening a document leaves the editor holding what is saved.
+	id := s.Docs().Docs[0].ID
+	s.Pending.Run(func(ctx context.Context) error { return s.Open(ctx, id) })
+	if s.SaveState() != SaveSaved {
+		t.Errorf("%q", s.SaveState())
 	}
 }

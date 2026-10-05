@@ -180,6 +180,27 @@
   "docs.downloadAs": "Herunterladen als…",
   "docs.downloadOf": "%s herunterladen als",
   "saver.downloaded": "%s heruntergeladen",
-  "saver.linkCopied": "Link kopiert: %s"
+  "saver.linkCopied": "Link kopiert: %s",
+  "tab.page": "Seite",
+  "menu.pageSetup": "Seite einrichten…",
+  "status.pageSetup": "Seiteneinrichtung",
+  "page.setup": "Seite einrichten",
+  "page.paper": "Papier",
+  "page.orientation": "Ausrichtung",
+  "page.portrait": "Hochformat",
+  "page.landscape": "Querformat",
+  "page.marginPreset": "Ränder",
+  "page.custom": "Benutzerdefiniert",
+  "page.margins.normal": "Normal",
+  "page.margins.narrow": "Schmal",
+  "page.margins.wide": "Breit",
+  "page.margin.top": "Oben",
+  "page.margin.right": "Rechts",
+  "page.margin.bottom": "Unten",
+  "page.margin.left": "Links",
+  "status.save.saved": "Gespeichert",
+  "status.save.saving": "Speichern…",
+  "status.save.unsaved": "Nicht gespeicherte Änderungen",
+  "status.save.failed": "Speichern fehlgeschlagen"
  }
 }

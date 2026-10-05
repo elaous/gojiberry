@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/elaous/gojiberry/canvas"
 	collab "github.com/elaous/gojiberry/collab/xango"
+	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/hyphen"
 )
 
@@ -10,6 +11,8 @@ import (
 type State struct {
 	Mode  canvas.Mode
 	Pages int
+	// Setup is the paper, orientation and margins of every sheet.
+	Setup components.PageSetup
 	// Spread shows the sheets two to a row, as facing pages.
 	Spread bool
 	// Source is the document's starting Markdown; once the text is edited
@@ -81,3 +84,7 @@ func (s State) Hyphenator() canvas.Hyphenator {
 	}
 	return nil
 }
+
+// PageWidth and PageHeight are the sheet's size in points, from Setup.
+func (s State) PageWidth() float64  { w, _ := s.Setup.Size(); return w }
+func (s State) PageHeight() float64 { _, h := s.Setup.Size(); return h }

@@ -180,6 +180,27 @@
   "docs.downloadAs": "Descargar como…",
   "docs.downloadOf": "Descargar %s como",
   "saver.downloaded": "%s descargado",
-  "saver.linkCopied": "Enlace copiado: %s"
+  "saver.linkCopied": "Enlace copiado: %s",
+  "tab.page": "Página",
+  "menu.pageSetup": "Configurar página…",
+  "status.pageSetup": "Configuración de página",
+  "page.setup": "Configurar página",
+  "page.paper": "Papel",
+  "page.orientation": "Orientación",
+  "page.portrait": "vertical",
+  "page.landscape": "horizontal",
+  "page.marginPreset": "Márgenes",
+  "page.custom": "Personalizados",
+  "page.margins.normal": "Normales",
+  "page.margins.narrow": "Estrechos",
+  "page.margins.wide": "Anchos",
+  "page.margin.top": "Superior",
+  "page.margin.right": "Derecho",
+  "page.margin.bottom": "Inferior",
+  "page.margin.left": "Izquierdo",
+  "status.save.saved": "Guardado",
+  "status.save.saving": "Guardando…",
+  "status.save.unsaved": "Cambios sin guardar",
+  "status.save.failed": "Error al guardar"
  }
 }

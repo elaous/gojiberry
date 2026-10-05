@@ -87,7 +87,7 @@ type ui struct {
 
 func main() {
 	doc := browser.Document()
-	state := State{Mode: canvas.ModeView, Pages: 3, Source: sample, Note: "Floating note: click to edit, try (brackets and \"quotes\".", Styles: canvas.DefaultStyles(),
+	state := State{Mode: canvas.ModeView, Pages: 3, Setup: components.DefaultPageSetup(), Source: sample, Note: "Floating note: click to edit, try (brackets and \"quotes\".", Styles: canvas.DefaultStyles(),
 		Comments: canvas.NewCommentSet(), Author: "you@example.com", Footnotes: canvas.NewFootnoteSet()}
 	u := &ui{title: "Quarterly report", menu: -1, tab: "format", drafts: map[string]string{}}
 	// The catalog has a font that is fetched from this site: picking it
@@ -143,6 +143,7 @@ func main() {
 	refocus := func() { inputEl.Call("focus", map[string]any{"preventScroll": true}) }
 
 	cb := Callbacks{
+		OnFlow:         func(*canvas.TextFlow) { u.saver.MarkEdited() },
 		OnHoverLink:    func(url string) { u.hoverLink = url; renderUI() },
 		OnHoverComment: func(id string) { u.hoverComment = id },
 	}
@@ -239,6 +240,7 @@ func main() {
 			}},
 			{Label: T("menu.file", "File"), Items: []components.MenuItem{
 				{Label: "Save…", OnSelect: func() { u.tab = "save"; renderUI() }},
+				{Label: T("menu.pageSetup", "Page setup…"), OnSelect: func() { u.tab = "page"; renderUI() }},
 				{Label: "Import / Export…", OnSelect: func() { u.tab = "transfer"; renderUI() }},
 			}},
 			{Label: T("menu.edit", "Edit"), Items: components.CommandMenu(stage.Features.Commands(), keymap, mac, run)},
@@ -276,7 +278,7 @@ func main() {
 			tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 			tabButton(u, "comments", "Comments", renderUI), tabButton(u, "outline", "Outline", renderUI),
 			tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
-			tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI),
+			tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI),
 		)
 
 		roleButtons := []xango.Node{xango.El("span", []xango.Attr{xango.A("style", "font-size:12px;color:#6b7280")}, xango.Text("Role:"))}
@@ -340,6 +342,12 @@ func main() {
 			if flow != nil {
 				panel = langPanel(u, &state, func() *canvas.TextFlow { return flow }, func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }, redraw, renderUI)
 			}
+		case "page":
+			panel = components.PageSetupPanel(components.PageSetupProps{Setup: state.Setup, OnChange: func(p components.PageSetup) {
+				state.Setup = p
+				renderCanvas()
+				renderUI()
+			}})
 		case "stats":
 			if flow != nil {
 				panel = statsPanel(flow.Stats(), state.Pages)
@@ -478,10 +486,11 @@ func main() {
 					SiteName: "GitHub",
 				})))
 
-		status := fmt.Sprintf("%s mode", state.Mode)
+		var stats canvas.FlowStats
 		if flow != nil {
-			status = statusLine(flow.Stats(), state.Pages, state.Mode)
+			stats = flow.Stats()
 		}
+		bar := components.StatusBar(statusBar(flow, stats, state.Pages, state.Mode, state.Setup, u.saver.SaveState()))
 		node := components.DocumentView(components.DocumentViewProps{
 			Title: u.title, OnTitle: func(t string) { u.title = t; renderUI() },
 			MenuBar: menubar, Toolbar: toolbar,
@@ -489,7 +498,7 @@ func main() {
 				xango.El("div", []xango.Attr{xango.A("id", "canvas-host")}),
 				components.AccessibleText(components.AccessibleTextProps{Blocks: append(u.a11yBlocks(flow, u.title), a11yObjects(root)...), Selection: selectedText(flow)}),
 				components.Announcer(u.announcement)),
-			Sidebar: &side, Status: status,
+			Sidebar: &side, StatusBar: &bar,
 		})
 		labelCanvas(canvasEl.Element, inputEl.Element)
 		if domRoot == nil {
@@ -582,7 +591,7 @@ func main() {
 				}
 			}
 			for i, ln := range flow.Layout().Lines {
-				if i < 8 {
+				if i < 24 {
 					lineHeights = append(lineHeights, ln.H)
 				}
 				if ln.Marker != nil {
@@ -623,7 +632,7 @@ func main() {
 			"stats": statsState(stats), "share": u.shareLink, "people": u.people.list(), "spell": map[string]any{"enabled": u.spell.enabled, "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
-			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
+			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
 			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "live": liveState(u, flow), "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
 		})

@@ -73,6 +73,8 @@ type Session struct {
 	usage                Usage
 	checked              map[string]bool // targets already checked for leftovers of a crash
 	status               string
+	saveState            string // see SaveState
+	edits                int    // MarkEdited calls, to tell whether the document changed during a save
 }
 
 // NewSession starts a session on the saver's first target, in JSON.
@@ -116,12 +118,44 @@ func (s *Session) targetName() string {
 	return s.target
 }
 
+// What SaveState says.
+const (
+	SaveSaved   = "saved"   // the editor holds what is saved
+	SaveSaving  = "saving"  // a save is running
+	SaveUnsaved = "unsaved" // edited since the last save or open
+	SaveFailed  = "failed"  // the last save failed
+)
+
+// SaveState tells where saving stands, for a status bar: "" for a document never
+// saved or opened and not yet edited, else SaveSaved, SaveSaving, SaveUnsaved or
+// SaveFailed.
+func (s *Session) SaveState() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveState
+}
+
+// MarkEdited tells the session the document in the editor changed (call it from
+// the editor's change callback). It does not render again: the host is already
+// rendering for the edit.
+func (s *Session) MarkEdited() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.edits++
+	if s.saveState != SaveSaving {
+		s.saveState = SaveUnsaved
+	}
+}
+
 // SetTarget chooses the target and lists what is saved in it. The document being
 // edited is not in the new target, so it is saved there as a new document.
 func (s *Session) SetTarget(ctx context.Context, name string) error {
 	s.set(func() {
 		s.target, s.entries, s.trashed, s.versions, s.status, s.id = name, nil, nil, nil, "", ""
 		s.folder, s.folders, s.usage = "", nil, Usage{}
+		if s.saveState != "" {
+			s.saveState = SaveUnsaved // the document is not in the new target
+		}
 	})
 	return s.Refresh(ctx)
 }
@@ -295,7 +329,21 @@ func (s *Session) Save(ctx context.Context) error {
 	return s.save(ctx)
 }
 
-func (s *Session) save(ctx context.Context) error {
+func (s *Session) save(ctx context.Context) (err error) {
+	var edits int
+	s.set(func() { s.saveState, edits = SaveSaving, s.edits })
+	defer func() {
+		s.set(func() {
+			switch {
+			case err != nil:
+				s.saveState = SaveFailed
+			case s.edits != edits:
+				s.saveState = SaveUnsaved // edited while saving
+			default:
+				s.saveState = SaveSaved
+			}
+		})
+	}()
 	doc, c, target, err := s.currentIn()
 	if err != nil {
 		return err
@@ -344,6 +392,7 @@ func (s *Session) Open(ctx context.Context, id string) error {
 	if s.OnOpen != nil {
 		s.ui(func() { s.OnOpen(doc) })
 	}
+	s.set(func() { s.saveState = SaveSaved; s.edits++ })          // the editor holds what was saved
 	return s.after(ctx, msg("saver.opened", "%s opened", e.Name)) // the versions are those of the document just opened
 }
 
