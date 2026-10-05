@@ -32,3 +32,4 @@
 .gj-menubar-panel { position: absolute; left: 0; top: 100%; z-index: 1000; }
 .gj-menubar-backdrop { position: fixed; inset: 0; z-index: 999; }
 .gj-menubar { position: relative; z-index: 1000; }
+.gj-menu-icon { display: inline-flex; color: var(--gj-muted); }

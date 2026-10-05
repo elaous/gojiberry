@@ -730,3 +730,19 @@ func (d *Document) SetTrashed(ns int64) {
 	}
 	d.Set(TrashedKey, strconv.FormatInt(ns, 10))
 }
+
+// FolderKey is the Meta key holding the ID of the folder a document is in; a
+// document at the top level has none.
+const FolderKey = "folder"
+
+// Folder returns the ID of the folder the document is in, "" at the top level.
+func (d Document) Folder() string { v, _ := d.Get(FolderKey); return v }
+
+// SetFolder puts the document in a folder; "" takes it to the top level.
+func (d *Document) SetFolder(id string) {
+	if id == "" {
+		d.Meta = slices.DeleteFunc(slices.Clone(d.Meta), func(m MetaEntry) bool { return m.Key == FolderKey })
+		return
+	}
+	d.Set(FolderKey, id)
+}

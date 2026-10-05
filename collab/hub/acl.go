@@ -45,11 +45,15 @@ func ACLRolesWith(store docstore.Adapter, who func(*http.Request) string, noACL 
 }
 
 // AuthUser makes the User function of a Config from an auth.Manager: the
-// e-mail address of the signed-in caller (a bearer token), or "".
+// verified e-mail address of the signed-in caller (a bearer token), else their
+// ID, or "".
 func AuthUser(m *auth.Manager) func(*http.Request) string {
 	return func(r *http.Request) string {
 		if u, ok := m.CurrentUser(r); ok {
-			return u.Email
+			if u.Email != "" {
+				return u.Email
+			}
+			return u.ID // no verified address: the provider's subject
 		}
 		return ""
 	}

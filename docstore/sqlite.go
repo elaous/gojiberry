@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // pure-Go driver, registered as "sqlite"
@@ -48,7 +49,15 @@ type SQLiteAdapter struct{ db *sql.DB }
 
 // NewSQLiteAdapter opens (creating if needed) the database at path.
 func NewSQLiteAdapter(ctx context.Context, path string) (*SQLiteAdapter, error) {
-	db, err := sql.Open("sqlite", path)
+	// Another process may have the file open: wait for its write lock instead of
+	// failing at once with SQLITE_BUSY, and take the write lock when a transaction
+	// begins (a deferred one that reads first and writes later is refused outright
+	// when it cannot upgrade).
+	dsn := path
+	if !strings.Contains(dsn, "?") {
+		dsn += "?_pragma=busy_timeout(10000)&_txlock=immediate"
+	}
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}

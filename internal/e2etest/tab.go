@@ -130,20 +130,31 @@ func (s *Site) OpenURL(t testing.TB, path string, opts ...Options) *Tab {
 
 func (s *Site) launch(t testing.TB, o Options) *Tab {
 	exe := chromiumPath(t)
-	alloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
-		append(chromedp.DefaultExecAllocatorOptions[:],
-			chromedp.ExecPath(exe), chromedp.NoSandbox, chromedp.Flag("headless", true),
-			chromedp.Flag("disable-gpu", true), chromedp.WindowSize(o.Width, o.Height))...)
-	ctx, cancel := chromedp.NewContext(alloc)
-	tab := &Tab{t: t, ctx: ctx, site: s, chooser: make(chan struct{}, 8), dlName: make(chan string, 64)}
-	tab.closeFns = append(tab.closeFns, cancel, cancelAlloc)
-	t.Cleanup(tab.Close)
-	chromedp.ListenTarget(ctx, tab.onEvent(o))
-	// Start the browser on the long-lived context: a Run on a context with a
-	// timeout would tie the browser to it.
-	if err := chromedp.Run(ctx); err != nil {
+	// Many packages start a browser at once on a busy machine (CI), and one can
+	// miss Chrome's start-up deadline: give it longer and try again before failing.
+	var tab *Tab
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		alloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
+			append(chromedp.DefaultExecAllocatorOptions[:],
+				chromedp.ExecPath(exe), chromedp.NoSandbox, chromedp.Flag("headless", true),
+				chromedp.Flag("disable-gpu", true), chromedp.WindowSize(o.Width, o.Height),
+				chromedp.WSURLReadTimeout(60*time.Second))...)
+		ctx, cancel := chromedp.NewContext(alloc)
+		tab = &Tab{t: t, ctx: ctx, site: s, chooser: make(chan struct{}, 8), dlName: make(chan string, 64)}
+		tab.closeFns = append(tab.closeFns, cancel, cancelAlloc)
+		chromedp.ListenTarget(ctx, tab.onEvent(o))
+		// Start the browser on the long-lived context: a Run on a context with a
+		// timeout would tie the browser to it.
+		if err = chromedp.Run(ctx); err == nil {
+			break
+		}
+		tab.Close()
+	}
+	if err != nil {
 		t.Fatalf("starting the browser: %v", err)
 	}
+	t.Cleanup(tab.Close)
 	tab.must(chromedp.Tasks{
 		chromedp.EmulateViewport(int64(o.Width), int64(o.Height)),
 		page.SetInterceptFileChooserDialog(true),

@@ -20,6 +20,8 @@ type DocumentViewProps struct {
 	Sidebar *xango.Node
 	// Status is the line at the bottom ("Page 2 of 3 · 412 words").
 	Status string
+	// StatusBar, if set, replaces Status with the structured bar (see StatusBar).
+	StatusBar *xango.Node
 }
 
 // DocumentView lays out a word-processor window around a canvas editor,
@@ -41,11 +43,15 @@ func DocumentView(props DocumentViewProps) xango.Node {
 	if props.Sidebar != nil {
 		main = append(main, xango.El("aside", []xango.Attr{xango.A("class", "gj-docview-sidebar")}, *props.Sidebar))
 	}
+	status := xango.Node(xango.Text(props.Status))
+	if props.StatusBar != nil {
+		status = *props.StatusBar
+	}
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-docview")},
 		xango.El("header", []xango.Attr{xango.A("class", "gj-docview-top")}, title,
 			xango.El("div", []xango.Attr{xango.A("class", "gj-docview-menubar")}, props.MenuBar)),
 		xango.El("div", []xango.Attr{xango.A("class", "gj-docview-toolbar"), xango.A("role", "toolbar")}, props.Toolbar),
 		xango.El("main", []xango.Attr{xango.A("class", "gj-docview-main")}, main...),
-		xango.El("footer", []xango.Attr{xango.A("class", "gj-docview-status")}, xango.Text(props.Status)),
+		xango.El("footer", []xango.Attr{xango.A("class", "gj-docview-status")}, status),
 	)
 }

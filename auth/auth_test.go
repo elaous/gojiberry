@@ -101,3 +101,19 @@ func TestNewManagerRequiresProviders(t *testing.T) {
 		t.Fatal("NewManager with no providers should error")
 	}
 }
+
+func TestUserFromClaimsKeepsUsernamePictureAndMakesAPerson(t *testing.T) {
+	yes := true
+	u := userFromClaims("google", idTokenClaims{Subject: "S1", Email: "ana@gojiberry.io", EmailVerified: &yes, Name: "Ana", PreferredUsername: "ana", Picture: "https://gojiberry.io/a.png"})
+	if u.Username != "ana" || u.Picture != "https://gojiberry.io/a.png" || u.ID != "google:S1" {
+		t.Fatalf("%+v", u)
+	}
+	p := u.Person("editor")
+	if p.ID != "google:S1" || p.Email != "ana@gojiberry.io" || p.Username != "ana" || p.Name != "Ana" || p.Role != "editor" {
+		t.Fatalf("%+v", p)
+	}
+	no := false
+	if v := userFromClaims("google", idTokenClaims{Subject: "S2", Email: "x@gojiberry.io", EmailVerified: &no}); v.Email != "" {
+		t.Error("an unverified address identifies no one")
+	}
+}

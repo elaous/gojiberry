@@ -444,9 +444,9 @@ func TestTransferButtons(t *testing.T) {
 }
 
 func TestMarkdownTextRendersAndEscapes(t *testing.T) {
-	html := render(t, MarkdownText("## Title\n\n**bold** and *it* and _under_ ~~old~~ `code` [site](https://x.test/a?b=1)\nsecond line\n\n- one\n- two\n\n1. first\n\n> quoted <b>raw</b>\n\n[bad](javascript:alert(1)) hi @ana, ask ana@example.com <script>x</script>"))
+	html := render(t, MarkdownText("## Title\n\n**bold** and *it* and _under_ ~~old~~ `code` [site](https://gojiberry.io/a?b=1)\nsecond line\n\n- one\n- two\n\n1. first\n\n> quoted <b>raw</b>\n\n[bad](javascript:alert(1)) hi @ana, ask ana@example.com <script>x</script>"))
 	mustContain(t, html, `class="gj-md-heading"`, "<strong>bold</strong>", "<em>it</em>", "<em>under</em>", "<s>old</s>", "<code>code</code>",
-		`href="https://x.test/a?b=1"`, "<br>", "<ul><li>one</li><li>two</li></ul>", "<ol><li>first</li></ol>", "<blockquote>quoted &lt;b&gt;raw&lt;/b&gt;</blockquote>",
+		`href="https://gojiberry.io/a?b=1"`, "<br>", "<ul><li>one</li><li>two</li></ul>", "<ol><li>first</li></ol>", "<blockquote>quoted &lt;b&gt;raw&lt;/b&gt;</blockquote>",
 		`class="gj-mention" data-mention="ana"`, `href="mailto:ana@example.com"`, "gj-mention-email", "&lt;script&gt;")
 	mustNotContain(t, html, "javascript:", "<script>", "<b>raw")
 	mustContain(t, html, "<p>bad") // an unsafe link keeps its text only
@@ -475,20 +475,24 @@ func TestCommentCardAndList(t *testing.T) {
 	mustNotContain(t, view, "Reply", "Delete")
 	mustContain(t, render(t, CommentCard(CommentCardProps{Comment: canvas.Comment{ID: "c3", Resolved: true}, CanEdit: true})), ">Reopen<", "disabled")
 
-	var shown []bool
+	var picked []string
 	list := CommentList(CommentListProps{
 		Comments: []canvas.Comment{c, {ID: "c2", Resolved: true, Text: "done"}}, Excerpts: map[string]string{"c1": "quoted"},
-		Selected: "c1", CanEdit: true, Drafts: map[string]string{"c1": "d"}, OnToggleShowResolved: func(b bool) { shown = append(shown, b) }})
+		Selected: "c1", CanEdit: true, Drafts: map[string]string{"c1": "d"}, OnFilter: func(f string) { picked = append(picked, f) }})
 	html := render(t, list)
-	mustContain(t, html, "Show resolved (1)", `aria-pressed="false"`, "quoted")
+	mustContain(t, html, "Open (1)", "Resolved (1)", "All (2)", `data-filter="open" aria-pressed="true"`, "quoted")
 	mustNotContain(t, html, `data-comment="c2"`)
-	findHandlers(list, "click")[0](xango.Event{})
-	if len(shown) != 1 || !shown[0] {
-		t.Fatal(shown)
+	findHandlers(list, "click")[1](xango.Event{})
+	if len(picked) != 1 || picked[0] != CommentsResolved {
+		t.Fatal(picked)
 	}
-	all := render(t, CommentList(CommentListProps{Comments: []canvas.Comment{c, {ID: "c2", Resolved: true}}, ShowResolved: true}))
-	mustContain(t, all, `data-comment="c2"`, `aria-pressed="true"`)
-	mustContain(t, render(t, CommentList(CommentListProps{})), "No comments.", "Show resolved<")
+	resolved := render(t, CommentList(CommentListProps{Comments: []canvas.Comment{c, {ID: "c2", Resolved: true}}, Filter: CommentsResolved, OnFilter: func(string) {}}))
+	mustContain(t, resolved, `data-comment="c2"`, `data-filter="resolved" aria-pressed="true"`)
+	mustNotContain(t, resolved, `data-comment="c1"`)
+	all := render(t, CommentList(CommentListProps{Comments: []canvas.Comment{c, {ID: "c2", Resolved: true}}, Filter: CommentsAll}))
+	mustContain(t, all, `data-comment="c1"`, `data-comment="c2"`)
+	mustNotContain(t, all, "gj-comment-filter")
+	mustContain(t, render(t, CommentList(CommentListProps{})), "No comments.")
 }
 
 func TestOutlineAndBookmarkComponents(t *testing.T) {
@@ -545,10 +549,10 @@ func TestFootnoteListComponent(t *testing.T) {
 func TestPresenceComponent(t *testing.T) {
 	html := render(t, Presence(PresenceProps{
 		Self:   PresencePeer{Name: "Ana Souza", Color: "#f00", Role: "owner"},
-		Peers:  []PresencePeer{{Name: "bob@example.com", Role: "editor"}, {User: "vee@x.org"}, {}},
+		Peers:  []PresencePeer{{Name: "bob@example.com", Role: "editor"}, {User: "vee@gojiberry.io"}, {}},
 		Status: "online", Pending: 0, Role: "viewer",
 	}))
-	mustContain(t, html, "gj-presence-self", ">AS<", ">BE<", ">VX<", ">?<", `title="Ana Souza (owner)"`, `title="vee@x.org"`, "background:#f00", "background:#7c5cff",
+	mustContain(t, html, "gj-presence-self", ">AS<", ">BE<", ">VG<", ">?<", `title="Ana Souza (owner)"`, `title="vee@gojiberry.io"`, "background:#f00", "background:#7c5cff",
 		"gj-presence-online", ">Online<", "View only", `aria-label="People here"`)
 	off := render(t, Presence(PresenceProps{Self: PresencePeer{Name: "x"}, Status: "offline", Pending: 3}))
 	mustContain(t, off, "Offline · 3 waiting to send", "gj-presence-offline")

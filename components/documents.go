@@ -37,6 +37,10 @@ type Doc struct {
 	Tags    []string
 }
 
+// DocFolder is a folder as the components list it: like a document, an ID and a
+// name that need not be unique; Parent is the folder it is in, "" at the top.
+type DocFolder struct{ ID, Name, Parent string }
+
 // DocVersion is a snapshot of a document.
 type DocVersion struct {
 	Key  string // what the version operations take
@@ -149,7 +153,19 @@ func docButton(class, label string, disabled bool, on func()) xango.Node {
 	} else {
 		attrs = append(attrs, xango.On("click", func(xango.Event) { on() }))
 	}
+	if icon, ok := docIcons[class]; ok {
+		return xango.El("button", attrs, Material(icon), xango.Text(label))
+	}
 	return xango.El("button", attrs, xango.Text(label))
+}
+
+// docIcons are the icons of the document components' buttons, by class.
+var docIcons = map[string]string{
+	"gj-doclist-open": "description", "gj-doclist-duplicate": "content_copy", "gj-doclist-trash": "delete",
+	"gj-doclist-delete": "delete_forever", "gj-doclist-refresh": "refresh", "gj-doclist-download": "download",
+	"gj-doclist-folder-open": "folder_open", "gj-doclist-folder-delete": "delete_forever",
+	"gj-doclist-folder-download": "download", "gj-doclist-newfolder": "create_new_folder",
+	"gj-migrate-pick": "upload_file", "gj-migrate-start": "download",
 }
 
 // pendingError is the line under a component saying what went wrong.
@@ -200,7 +216,40 @@ type DocListProps struct {
 	Title   string
 	Refresh func()
 	Pending *Pending
+	// Confirm, if set, is asked before Delete (see Asker.Ask); nil deletes at once.
+	Confirm func(message string, do func())
+
+	// Folders are the folders inside the one being shown, and Path the folders from
+	// the top down to it (empty at the top level), drawn as a breadcrumb.
+	// AllFolders, with their Parents, are where a document can be moved to.
+	Folders, Path, AllFolders []DocFolder
+	// OpenFolder goes into a folder ("" is the top level, the breadcrumb's first
+	// item); NewFolder makes one in the folder shown, named by FolderDraft (typed
+	// into a box that reports to OnFolderDraft); RenameFolder and DeleteFolder
+	// (which asks first) and Move (documents to a folder, "" the top level)
+	// complete it. A nil operation leaves its control out.
+	OpenFolder    DocAction
+	NewFolder     func(ctx context.Context, name string) error
+	FolderDraft   string
+	OnFolderDraft func(name string)
+	RenameFolder  func(ctx context.Context, id, name string) error
+	DeleteFolder  DocAction
+	Move          func(ctx context.Context, ids []string, folder string) error
+
+	// Link gives the address of a document and FolderLink of a folder; with
+	// CopyLink (which receives that address) they add a Link button to each row.
+	Link, FolderLink func(id string) string
+	CopyLink         func(url string)
+	// Download hands a document over in a format picked from DownloadFormats
+	// (none: one Download button, "" for the format); DownloadFolder hands over
+	// a folder's documents together.
+	Download        func(ctx context.Context, id, format string) error
+	DownloadFolder  DocAction
+	DownloadFormats []DocChoice
 }
+
+// DocChoice is a name and the label shown for it.
+type DocChoice struct{ Name, Label string }
 
 // DocList lists documents, each with the operations the host plugs in: Open,
 // Duplicate, Trash, Delete and a tag editor, and above them a filter by tag.
@@ -215,6 +264,12 @@ func DocList(p DocListProps) xango.Node {
 		head = append(head, docButton("gj-doclist-refresh", tr("docs.refresh", "Refresh"), busy, p.Refresh))
 	}
 	children := []xango.Node{xango.El("div", []xango.Attr{xango.A("class", "gj-doc-head")}, head...)}
+	if crumbs, ok := docBreadcrumbs(p); ok {
+		children = append(children, crumbs)
+	}
+	if len(p.Folders) > 0 || p.NewFolder != nil {
+		children = append(children, folderRows(p, busy)...)
+	}
 
 	var tags []string
 	for _, d := range p.Docs {
@@ -243,11 +298,17 @@ func DocList(p DocListProps) xango.Node {
 		if p.Duplicate != nil {
 			row = append(row, docButton("gj-doclist-duplicate", tr("docs.duplicate", "Duplicate"), busy, actOne(p.Pending, p.Duplicate, d.ID)))
 		}
+		row = append(row, linkButton(p, p.Link, d.ID)...)
+		row = append(row, downloadControl(p, d, busy)...)
 		if p.Trash != nil {
 			row = append(row, docButton("gj-doclist-trash", tr("docs.trash", "Trash"), busy, act(p.Pending, p.Trash, d.ID)))
 		}
 		if p.Delete != nil {
-			row = append(row, docButton("gj-doclist-delete", tr("docs.delete", "Delete"), busy, actOne(p.Pending, p.Delete, d.ID)))
+			row = append(row, docButton("gj-doclist-delete", tr("docs.delete", "Delete"), busy,
+				confirmed(p.Confirm, trf("docs.confirmDelete", "Delete %s for good? This cannot be undone.", d.Name), actOne(p.Pending, p.Delete, d.ID))))
+		}
+		if p.Move != nil && (len(p.AllFolders) > 1 || len(p.AllFolders) == 1 && len(p.Path) == 0 || len(p.Path) > 0) {
+			row = append(row, moveSelect(p, d, busy))
 		}
 		if p.Tag != nil {
 			id := d.ID
@@ -330,6 +391,9 @@ type TrashProps struct {
 	// can be trashed. They are drawn above it.
 	Children []xango.Node
 	Pending  *Pending
+	// Confirm, if set, is asked before documents are deleted for good (see
+	// Asker.Ask); nil deletes at once.
+	Confirm func(message string, do func())
 }
 
 // TrashBackend is what a trash needs from a store; Use fills Restore and Delete
@@ -378,7 +442,8 @@ func Trash(p TrashProps) xango.Node {
 			if p.OnSelect == nil {
 				row = append(row,
 					docButton("gj-trash-restore", tr("docs.restore", "Restore"), busy, act(p.Pending, p.Restore, d.ID)),
-					docButton("gj-trash-delete", tr("docs.deleteForever", "Delete forever"), busy, act(p.Pending, p.Delete, d.ID)))
+					docButton("gj-trash-delete", tr("docs.deleteForever", "Delete forever"), busy,
+						confirmed(p.Confirm, trf("docs.confirmForever", "Delete %s forever? This cannot be undone.", d.Name), act(p.Pending, p.Delete, d.ID))))
 			}
 			rows = append(rows, xango.El("li", []xango.Attr{xango.A("class", "gj-trash-item"), xango.A("data-id", d.ID)}, row...))
 		}
@@ -386,9 +451,11 @@ func Trash(p TrashProps) xango.Node {
 		if p.OnSelect != nil && len(p.Selected) > 0 {
 			head = append(head,
 				docButton("gj-trash-restore-selected", trf("docs.restoreN", "Restore %d", len(p.Selected)), busy, act(p.Pending, p.Restore, p.Selected...)),
-				docButton("gj-trash-delete-selected", trf("docs.deleteN", "Delete %d forever", len(p.Selected)), busy, act(p.Pending, p.Delete, p.Selected...)))
+				docButton("gj-trash-delete-selected", trf("docs.deleteN", "Delete %d forever", len(p.Selected)), busy,
+					confirmed(p.Confirm, trf("docs.confirmForeverN", "Delete %d documents forever? This cannot be undone.", len(p.Selected)), act(p.Pending, p.Delete, p.Selected...))))
 		}
-		head = append(head, docButton("gj-trash-empty", tr("docs.emptyTrash", "Empty trash"), busy, act(p.Pending, p.Delete, allIDs...)))
+		head = append(head, docButton("gj-trash-empty", tr("docs.emptyTrash", "Empty trash"), busy,
+			confirmed(p.Confirm, trf("docs.confirmEmpty", "Delete all %d documents in the trash forever? This cannot be undone.", len(allIDs)), act(p.Pending, p.Delete, allIDs...))))
 		bin := []xango.Node{xango.El("div", []xango.Attr{xango.A("class", "gj-doc-head")}, head...),
 			xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list")}, rows...)}
 		bin = append(bin, pendingError(p.Pending)...)
@@ -504,4 +571,169 @@ func byteSize(n int) string {
 		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
 	}
 	return fmt.Sprintf("%d B", n)
+}
+
+// docBreadcrumbs is the trail from the top level to the folder being shown; not
+// there when folders are not in use.
+func docBreadcrumbs(p DocListProps) (xango.Node, bool) {
+	if p.OpenFolder == nil && len(p.Path) == 0 {
+		return xango.Node{}, false
+	}
+	item := func(label, id string, last bool) BreadcrumbItem {
+		it := BreadcrumbItem{Label: label}
+		if !last && p.OpenFolder != nil {
+			it.Href = "#" + id
+			it.OnClick = func(e xango.Event) {
+				e.PreventDefault()
+				p.Pending.Run(func(ctx context.Context) error { return p.OpenFolder(ctx, id) })
+			}
+		}
+		return it
+	}
+	items := []BreadcrumbItem{item(tr("docs.allDocuments", "Documents"), "", len(p.Path) == 0)}
+	for i, f := range p.Path {
+		items = append(items, item(f.Name, f.ID, i == len(p.Path)-1))
+	}
+	return Breadcrumbs(BreadcrumbsProps{Items: items}), true
+}
+
+// folderRows are the folders in the one shown, each to open, rename or delete,
+// and the form for a new one.
+func folderRows(p DocListProps, busy bool) []xango.Node {
+	var rows []xango.Node
+	for _, f := range p.Folders {
+		id := f.ID
+		row := []xango.Node{xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text("📁 "+f.Name))}
+		if p.OpenFolder != nil {
+			row = append(row, docButton("gj-doclist-folder-open", tr("docs.openFolder", "Open"), busy, actOne(p.Pending, p.OpenFolder, id)))
+		}
+		if p.RenameFolder != nil {
+			row = append(row, xango.El("input", []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-doclist-folder-name"),
+				xango.A("aria-label", trf("docs.renameFolder", "Name of folder %s", f.Name)), xango.A("value", f.Name),
+				xango.On("change", func(ev xango.Event) {
+					name := strings.TrimSpace(xango.EventValue[string](ev))
+					if name == "" || name == f.Name {
+						return // a blank or unchanged name is not a rename; folders are found by ID, so renaming while something else runs is safe
+					}
+					p.Pending.Run(func(ctx context.Context) error { return p.RenameFolder(ctx, id, name) })
+				})}))
+		}
+		row = append(row, linkButton(p, p.FolderLink, id)...)
+		if p.DownloadFolder != nil {
+			row = append(row, docButton("gj-doclist-folder-download", tr("docs.download", "Download"), busy, actOne(p.Pending, p.DownloadFolder, id)))
+		}
+		if p.DeleteFolder != nil {
+			row = append(row, docButton("gj-doclist-folder-delete", tr("docs.deleteFolder", "Delete folder"), busy,
+				confirmed(p.Confirm, trf("docs.confirmDeleteFolder", "Delete the folder %s? It has to be empty.", f.Name), actOne(p.Pending, p.DeleteFolder, id))))
+		}
+		rows = append(rows, xango.El("li", []xango.Attr{xango.A("class", "gj-doclist-folder"), xango.A("data-id", id)}, row...))
+	}
+	var out []xango.Node
+	if len(rows) > 0 {
+		out = append(out, xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list gj-doclist-folders")}, rows...))
+	}
+	if p.NewFolder != nil {
+		draft := strings.TrimSpace(p.FolderDraft)
+		input := []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-doclist-newfolder-name"), xango.A("value", p.FolderDraft),
+			xango.A("placeholder", tr("docs.newFolderPlaceholder", "New folder")), xango.A("aria-label", tr("docs.newFolder", "New folder"))}
+		if p.OnFolderDraft != nil {
+			input = append(input, xango.On("input", func(e xango.Event) { p.OnFolderDraft(xango.EventValue[string](e)) }))
+		}
+		out = append(out, xango.El("div", []xango.Attr{xango.A("class", "gj-doc-head gj-doclist-newfolder-form")},
+			xango.El("input", input),
+			docButton("gj-doclist-newfolder", tr("docs.createFolder", "Create folder"), busy || draft == "", func() {
+				p.Pending.Run(func(ctx context.Context) error { return p.NewFolder(ctx, draft) })
+			})))
+	}
+	return out
+}
+
+// moveSelect is the "Move to…" menu of one document.
+func moveSelect(p DocListProps, d Doc, busy bool) xango.Node {
+	byID := map[string]DocFolder{}
+	for _, f := range p.AllFolders {
+		byID[f.ID] = f
+	}
+	label := func(f DocFolder) string {
+		name := f.Name
+		for n, parent := 0, f.Parent; parent != "" && n < 20; n++ {
+			up, ok := byID[parent]
+			if !ok {
+				break
+			}
+			name = up.Name + " / " + name
+			parent = up.Parent
+		}
+		return name
+	}
+	here := ""
+	if len(p.Path) > 0 {
+		here = p.Path[len(p.Path)-1].ID // where the document is: not a place to move it to
+	}
+	opts := []xango.Node{xango.El("option", []xango.Attr{xango.A("value", "-"), xango.A("selected", "selected")}, xango.Text(tr("docs.moveTo", "Move to…")))}
+	if here != "" {
+		opts = append(opts, xango.El("option", []xango.Attr{xango.A("value", "top")}, xango.Text(tr("docs.topLevel", "Documents (top level)"))))
+	}
+	for _, f := range p.AllFolders {
+		if f.ID != here {
+			opts = append(opts, xango.El("option", []xango.Attr{xango.A("value", "folder:"+f.ID)}, xango.Text(label(f))))
+		}
+	}
+	id := d.ID
+	attrs := []xango.Attr{xango.A("class", "gj-doclist-move"), xango.A("aria-label", trf("docs.moveOf", "Move %s to a folder", d.Name))}
+	if busy {
+		attrs = append(attrs, xango.A("disabled", "disabled"))
+	} else {
+		attrs = append(attrs, xango.On("change", func(e xango.Event) {
+			v := xango.EventValue[string](e)
+			folder, ok := strings.CutPrefix(v, "folder:")
+			if v == "-" || (!ok && v != "top") {
+				return
+			}
+			p.Pending.Run(func(ctx context.Context) error { return p.Move(ctx, []string{id}, folder) })
+		}))
+	}
+	return xango.El("select", attrs, opts...)
+}
+
+// linkButton is the Link button of a row: it copies the address of the item.
+func linkButton(p DocListProps, link func(id string) string, id string) []xango.Node {
+	if link == nil || p.CopyLink == nil {
+		return nil
+	}
+	url := link(id)
+	if url == "" {
+		return nil
+	}
+	return []xango.Node{xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-doclist-link"),
+		xango.A("data-url", url), xango.A("title", url), xango.On("click", func(xango.Event) { p.CopyLink(url) })},
+		Material("link"), xango.Text(tr("docs.link", "Link")))}
+}
+
+// downloadControl is a document's Download: one button, or a "Download as…" menu
+// of the formats offered.
+func downloadControl(p DocListProps, d Doc, busy bool) []xango.Node {
+	if p.Download == nil {
+		return nil
+	}
+	id := d.ID
+	if len(p.DownloadFormats) == 0 {
+		return []xango.Node{docButton("gj-doclist-download", tr("docs.download", "Download"), busy,
+			func() { p.Pending.Run(func(ctx context.Context) error { return p.Download(ctx, id, "") }) })}
+	}
+	opts := []xango.Node{xango.El("option", []xango.Attr{xango.A("value", "-"), xango.A("selected", "selected")}, xango.Text(tr("docs.downloadAs", "Download as…")))}
+	for _, f := range p.DownloadFormats {
+		opts = append(opts, xango.El("option", []xango.Attr{xango.A("value", "format:"+f.Name)}, xango.Text(f.Label)))
+	}
+	attrs := []xango.Attr{xango.A("class", "gj-doclist-download"), xango.A("aria-label", trf("docs.downloadOf", "Download %s as", d.Name))}
+	if busy {
+		attrs = append(attrs, xango.A("disabled", "disabled"))
+	} else {
+		attrs = append(attrs, xango.On("change", func(e xango.Event) {
+			if format, ok := strings.CutPrefix(xango.EventValue[string](e), "format:"); ok {
+				p.Pending.Run(func(ctx context.Context) error { return p.Download(ctx, id, format) })
+			}
+		}))
+	}
+	return []xango.Node{xango.El("select", attrs, opts...)}
 }

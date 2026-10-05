@@ -22,7 +22,7 @@ type Site struct {
 
 // NewSite builds the package in the current directory (the example's own
 // directory, which is what `go test` uses as the working directory) and serves
-// it, with any extra files (globs) next to index.html. A page at /d/{doc} is served index.html too, for documents addressed by
+// it, with any extra files (globs) next to index.html. A page at /d/{doc} or /f/{folder} is served index.html too, for documents addressed by
 // path. It is closed when the test ends.
 func NewSite(t testing.TB, extra ...string) *Site {
 	t.Helper()
@@ -67,7 +67,7 @@ func NewSite(t testing.TB, extra ...string) *Site {
 	}
 	files := http.FileServer(http.Dir(dir))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/d/") {
+		if strings.HasPrefix(r.URL.Path, "/d/") || strings.HasPrefix(r.URL.Path, "/f/") {
 			http.ServeFile(w, r, filepath.Join(dir, "index.html"))
 			return
 		}

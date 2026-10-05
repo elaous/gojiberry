@@ -11,3 +11,12 @@
 .gj-docview-desk { flex: 1; overflow: auto; display: flex; justify-content: center; padding: 1em; }
 .gj-docview-sidebar { width: 22em; flex: none; overflow: auto; padding: 0.8em; background: var(--gj-bg); border-left: 1px solid var(--gj-border); }
 .gj-docview-status { padding: 0.25em 0.9em; font-size: 0.8em; color: var(--gj-muted); background: var(--gj-bg); border-top: 1px solid var(--gj-border); }
+.gj-statusbar { display: flex; flex-wrap: wrap; gap: 0.2em 1.1em; align-items: center; }
+.gj-status-item { white-space: nowrap; }
+.gj-status-item + .gj-status-item::before { content: "·"; margin-right: 0.55em; color: var(--gj-muted); }
+.gj-status-item[data-item="breadcrumb"] { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.gj-status-item[data-item="save"][data-state="failed"] { color: var(--gj-danger, #b3261e); }
+.gj-pagesetup { display: flex; flex-direction: column; gap: 0.5em; }
+.gj-pagesetup-title { margin: 0; font-size: 0.75em; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gj-muted); }
+.gj-pagesetup-field { display: flex; flex-direction: column; gap: 0.2em; font-size: 0.85em; }
+.gj-pagesetup-field select, .gj-pagesetup-field input { padding: 0.3em 0.5em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); font: inherit; }

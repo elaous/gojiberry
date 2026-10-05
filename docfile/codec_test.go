@@ -61,3 +61,25 @@ func TestInlineImageSurvivesSaveAndOpen(t *testing.T) {
 		t.Fatalf("with a loader the real image returns: %T", got)
 	}
 }
+
+func TestOpenIsProtobufUnderItsOwnName(t *testing.T) {
+	d := Document{Title: "Plan", Content: []Item{{Chars: &Chars{Text: "hello"}}}}
+	a, err := Open.Marshal(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := ProtoBinary.Marshal(d)
+	if string(a) != string(b) {
+		t.Error(".open is the protobuf wire format, byte for byte")
+	}
+	got, err := Open.Unmarshal(a)
+	if err != nil || got.Title != "Plan" || len(got.Content) != 1 {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if Open.Ext() != ".open" || Open.Name() != "open" {
+		t.Error(Open.Ext(), Open.Name())
+	}
+	if c, err := ByName("open"); err != nil || c != Open {
+		t.Error("registered", err)
+	}
+}

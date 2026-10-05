@@ -36,6 +36,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/elaous/gojiberry/user"
 	"net/url"
 	"strings"
 	"sync"
@@ -48,8 +49,8 @@ import (
 // User is the minimal identity this package -- and everything that
 // consumes it -- actually needs: a stable ID (for de-duplication and
 // as a session's own subject), an email (the natural way to invite/
-// mention someone by), and a display name. No picture, locale, or any
-// other OIDC claim this repo has no use for yet.
+// mention someone by), a display name, and the username and picture for
+// showing them. No locale or any other OIDC claim this repo has no use for yet.
 type User struct {
 	// ID is "{provider}:{sub}" -- the issuing provider's own name
 	// (Provider.Name) plus its own subject claim, so two different
@@ -59,6 +60,15 @@ type User struct {
 	ID    string
 	Email string
 	Name  string
+	// Username is the provider's preferred_username, and Picture its picture (a
+	// URL), when it gives them; both are for display and for finding people.
+	Username, Picture string
+}
+
+// Person is the user as the rest of the library describes people, with a role
+// (user.Owner, user.Editor or user.Viewer) or "" for none.
+func (u User) Person(role string) user.Person {
+	return user.Person{ID: u.ID, Email: u.Email, Username: u.Username, Name: u.Name, Picture: u.Picture, Role: role}
 }
 
 // Provider configures one OpenID Connect identity provider this
@@ -237,8 +247,10 @@ type idTokenClaims struct {
 	Email   string `json:"email"`
 	// EmailVerified is a pointer: absent (some providers omit it) is not the
 	// same as false.
-	EmailVerified *bool  `json:"email_verified"`
-	Name          string `json:"name"`
+	EmailVerified     *bool  `json:"email_verified"`
+	Name              string `json:"name"`
+	PreferredUsername string `json:"preferred_username"`
+	Picture           string `json:"picture"`
 }
 
 // safeReturnTo returns target if a login may send the browser there: a
@@ -382,5 +394,5 @@ func userFromClaims(providerName string, c idTokenClaims) User {
 	if c.EmailVerified != nil && !*c.EmailVerified {
 		email = "" // an address the provider has not verified identifies no one
 	}
-	return User{ID: providerName + ":" + c.Subject, Email: email, Name: c.Name}
+	return User{ID: providerName + ":" + c.Subject, Email: email, Name: c.Name, Username: c.PreferredUsername, Picture: c.Picture}
 }

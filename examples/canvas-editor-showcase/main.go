@@ -36,7 +36,9 @@ import (
 	"github.com/elaous/gojiberry/domrt/browser"
 	"github.com/elaous/gojiberry/export"
 	"github.com/elaous/gojiberry/fonts"
+	"github.com/elaous/gojiberry/migrate"
 	"github.com/elaous/gojiberry/saver"
+	"github.com/elaous/gojiberry/share"
 	"github.com/elaous/gojiberry/transfer"
 	"github.com/elaous/gojiberry/xango"
 )
@@ -60,16 +62,17 @@ type ui struct {
 	recording canvas.Command
 	kbMessage string
 
-	hoverLink    string
-	hoverComment string
-	selComment   string
-	showResolved bool
-	drafts       map[string]string
+	hoverLink     string
+	hoverComment  string
+	selComment    string
+	commentFilter string
+	drafts        map[string]string
 
 	saver               *saver.Session
 	live                *collabxango.State // when the page was opened on a shared document (/d/{doc})
 	liveName, liveColor string
 	transfer            *transfer.Registry
+	migrate             *migrate.Session
 	fontLog             []string // what the font library did, newest last
 	navSig              string   // outline/bookmarks the Outline tab last showed
 	find                findState
@@ -86,7 +89,7 @@ type ui struct {
 
 func main() {
 	doc := browser.Document()
-	state := State{Mode: canvas.ModeView, Pages: 3, Source: sample, Note: "Floating note: click to edit, try (brackets and \"quotes\".", Styles: canvas.DefaultStyles(),
+	state := State{Mode: canvas.ModeView, Pages: 3, Setup: components.DefaultPageSetup(), Source: sample, Note: "Floating note: click to edit, try (brackets and \"quotes\".", Styles: canvas.DefaultStyles(),
 		Comments: canvas.NewCommentSet(), Author: "you@example.com", Footnotes: canvas.NewFootnoteSet()}
 	u := &ui{title: "Quarterly report", menu: -1, tab: "format", drafts: map[string]string{}}
 	// The catalog has a font that is fetched from this site: picking it
@@ -142,6 +145,7 @@ func main() {
 	refocus := func() { inputEl.Call("focus", map[string]any{"preventScroll": true}) }
 
 	cb := Callbacks{
+		OnFlow:         func(*canvas.TextFlow) { u.saver.MarkEdited() },
 		OnHoverLink:    func(url string) { u.hoverLink = url; renderUI() },
 		OnHoverComment: func(id string) { u.hoverComment = id },
 	}
@@ -181,10 +185,27 @@ func main() {
 		return d
 	}
 	u.saver = saver.NewSession(&saver.Saver{Targets: []saver.Target{
-		{Name: "browser", Label: "This browser (localStorage)", Adapter: docstore.NewBrowserAdapter("showcase:")},
-		{Name: "memory", Label: "Memory", Adapter: store},
+		{Name: "browser", Label: "This browser (localStorage)", Adapter: docstore.NewBrowserAdapter("showcase:"), Capacity: 5 << 20},
+		{Name: "memory", Label: "Memory", Adapter: store, Capacity: 16 << 20},
 	}}, currentDoc, openDoc)
 	u.saver.OnChange = func() { renderUI() }
+	u.saver.Deliver = transfer.Download
+	u.saver.Export = u.transfer.Export
+	for _, e := range u.transfer.Exporters() {
+		u.saver.DownloadFormats = append(u.saver.DownloadFormats, components.SaverChoice{Name: e.Format().Name, Label: e.Format().Label})
+	}
+	u.saver.Link = func(kind, id string) string {
+		if kind == "folder" {
+			return share.FolderPath(pageBase(), id)
+		}
+		return share.DocPath(pageBase(), id)
+	}
+	u.saver.Copy = func(text string) {
+		if nav := js.Global().Get("navigator"); !nav.Get("clipboard").IsUndefined() {
+			nav.Get("clipboard").Call("writeText", text)
+		}
+	}
+	u.migrate = newMigrate(u, func() { renderUI() })
 	u.people = newPeople("you@example.com", func() { renderUI() })
 
 	setMode := func(m canvas.Mode) {
@@ -222,7 +243,9 @@ func main() {
 			}},
 			{Label: T("menu.file", "File"), Items: []components.MenuItem{
 				{Label: "Save…", OnSelect: func() { u.tab = "save"; renderUI() }},
+				{Label: T("menu.pageSetup", "Page setup…"), OnSelect: func() { u.tab = "page"; renderUI() }},
 				{Label: "Import / Export…", OnSelect: func() { u.tab = "transfer"; renderUI() }},
+				{Label: T("menu.migrate", "Migrate…"), OnSelect: func() { u.tab = "migrate"; renderUI() }},
 			}},
 			{Label: T("menu.edit", "Edit"), Items: components.CommandMenu(stage.Features.Commands(), keymap, mac, run)},
 			{Label: T("menu.insert", "Insert"), Items: []components.MenuItem{
@@ -259,7 +282,7 @@ func main() {
 			tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 			tabButton(u, "comments", "Comments", renderUI), tabButton(u, "outline", "Outline", renderUI),
 			tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
-			tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI),
+			tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI),
 		)
 
 		roleButtons := []xango.Node{xango.El("span", []xango.Attr{xango.A("style", "font-size:12px;color:#6b7280")}, xango.Text("Role:"))}
@@ -267,7 +290,7 @@ func main() {
 			r := r
 			class := "gj-keybindings-button"
 			if state.Role.String() == r.String() {
-				class += " gj-symbolpicker-chip-on"
+				class += " gj-materialpicker-chip-on"
 			}
 			roleButtons = append(roleButtons, xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", class), xango.A("data-role", r.String()),
 				xango.On("click", func(xango.Event) {
@@ -323,12 +346,20 @@ func main() {
 			if flow != nil {
 				panel = langPanel(u, &state, func() *canvas.TextFlow { return flow }, func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }, redraw, renderUI)
 			}
+		case "migrate":
+			panel = components.Migrate(u.migrate.Props(func() { pickWordFiles(u) }))
+		case "page":
+			panel = components.PageSetupPanel(components.PageSetupProps{Setup: state.Setup, OnChange: func(p components.PageSetup) {
+				state.Setup = p
+				renderCanvas()
+				renderUI()
+			}})
 		case "stats":
 			if flow != nil {
 				panel = statsPanel(flow.Stats(), state.Pages)
 			}
 		case "people":
-			panel = u.people.panel()
+			panel = xango.Frag(u.people.panel(u.saver.Asker.Ask), u.saver.Asker.Dialog())
 		case "share":
 			if flow != nil {
 				panel = sharePanel(u, flow, origin, renderUI)
@@ -461,10 +492,11 @@ func main() {
 					SiteName: "GitHub",
 				})))
 
-		status := fmt.Sprintf("%s mode", state.Mode)
+		var stats canvas.FlowStats
 		if flow != nil {
-			status = statusLine(flow.Stats(), state.Pages, state.Mode)
+			stats = flow.Stats()
 		}
+		bar := components.StatusBar(statusBar(flow, stats, state.Pages, state.Mode, state.Setup, u.saver.SaveState()))
 		node := components.DocumentView(components.DocumentViewProps{
 			Title: u.title, OnTitle: func(t string) { u.title = t; renderUI() },
 			MenuBar: menubar, Toolbar: toolbar,
@@ -472,7 +504,7 @@ func main() {
 				xango.El("div", []xango.Attr{xango.A("id", "canvas-host")}),
 				components.AccessibleText(components.AccessibleTextProps{Blocks: append(u.a11yBlocks(flow, u.title), a11yObjects(root)...), Selection: selectedText(flow)}),
 				components.Announcer(u.announcement)),
-			Sidebar: &side, Status: status,
+			Sidebar: &side, StatusBar: &bar,
 		})
 		labelCanvas(canvasEl.Element, inputEl.Element)
 		if domRoot == nil {
@@ -565,7 +597,7 @@ func main() {
 				}
 			}
 			for i, ln := range flow.Layout().Lines {
-				if i < 8 {
+				if i < 24 {
 					lineHeights = append(lineHeights, ln.H)
 				}
 				if ln.Marker != nil {
@@ -606,7 +638,7 @@ func main() {
 			"stats": statsState(stats), "share": u.shareLink, "people": u.people.list(), "spell": map[string]any{"enabled": u.spell.enabled, "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
-			"pages": state.Pages, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
+			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
 			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "live": liveState(u, flow), "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
 		})
@@ -649,7 +681,14 @@ func main() {
 	renderCanvas()
 	renderUI()
 	go openSharedSelection(u, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
-	go u.saver.Refresh(context.Background())
+	go func() {
+		ctx := context.Background()
+		_ = u.saver.Refresh(ctx)
+		// A page opened on /f/{folder} shows that folder.
+		if _, folder := share.SplitFolderPath(js.Global().Get("location").Get("pathname").String()); folder != "" {
+			_ = u.saver.OpenFolder(ctx, folder)
+		}
+	}()
 	canvas.LoadImage("data:image/svg+xml;base64,"+base64.StdEncoding.EncodeToString([]byte(svg)),
 		func(src *canvas.HTMLImage) {
 			state.Image = src
@@ -756,15 +795,26 @@ func resetBinding(stage *canvas.Stage, defaults canvas.Keymap, cmd canvas.Comman
 	}
 }
 
+// tabIcons are the icons of the sidebar tabs (Material Symbols names, as in opendocs).
+var tabIcons = map[string]string{
+	"format": "tune", "styles": "style", "symbols": "functions", "keys": "keyboard", "comments": "comment", "outline": "toc",
+	"find": "search", "spell": "spellcheck", "language": "language", "stats": "numbers", "share": "ios_share", "people": "account_circle",
+	"migrate": "upload_file", "page": "margin", "save": "description", "transfer": "input",
+}
+
 func tabButton(u *ui, tab, label string, rerender func()) xango.Node {
 	class := "gj-keybindings-button"
 	if u.tab == tab {
-		class += " gj-symbolpicker-chip-on"
+		class += " gj-materialpicker-chip-on"
+	}
+	kids := []xango.Node{xango.Text(components.Translate("tab."+tab, label))}
+	if icon := tabIcons[tab]; icon != "" {
+		kids = append([]xango.Node{components.Material(icon)}, kids...)
 	}
 	return xango.El("button", []xango.Attr{
 		xango.A("type", "button"), xango.A("class", class), xango.A("data-tab", tab),
 		xango.On("click", func(xango.Event) { u.tab = tab; rerender() }),
-	}, xango.Text(components.Translate("tab."+tab, label)))
+	}, kids...)
 }
 
 // fontKeys lists "family=key" for every downloaded cut and "family" for the
@@ -800,7 +850,7 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(c
 		}
 	}
 	return xango.Frag(add, xango.El("div", []xango.Attr{xango.A("style", "margin-top:0.8em")}, components.CommentList(components.CommentListProps{
-		Comments: set.List(), Excerpts: excerpts, ShowResolved: u.showResolved, Selected: u.selComment,
+		Comments: set.List(), Excerpts: excerpts, Filter: u.commentFilter, Selected: u.selComment,
 		CanEdit: state.Role.CanEdit(), CanReply: state.Role.CanComment(), Drafts: u.drafts,
 		OnSelect: func(id string) {
 			u.selComment = id
@@ -834,7 +884,7 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(c
 			touch()
 			renderUI()
 		},
-		OnToggleShowResolved: func(show bool) { u.showResolved = show; renderUI() },
+		OnFilter: func(f string) { u.commentFilter = f; renderUI() },
 	})))
 }
 

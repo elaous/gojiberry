@@ -36,12 +36,10 @@ order it should land in.
    supported subset (compound rules, `REP`, `KEY`).
 8. **WS role edge cases (S). Done:** read limit four times `MaxBody`, at most 1 MiB over it, `Config.TrustForwardedHost` for proxies.
 
-9. **Review leftovers.** Done: the WebSocket read limit, the proxy `Host`,
+9. **Review leftovers.** Done: catalog updates are conditional (`docstore.ConditionalAdapter`, `SaveIf` with a content digest; two processes on a SQLite, file, memory or HTTP store lose nothing, others write as before), the WebSocket read limit, the proxy `Host`,
    `expandReplacement` with context (`\b`, `\B`), whole-table-less cells and media
    order in DOCX export. Left: `pdftext` cannot stop a looping parser (run it out
-   of process on a server); version operations list the whole store; two server
-   processes sharing one store can lose catalog updates (they need a conditional
-   save); the trash checkbox handler can drop one of two quick ticks.
+   of process on a server); version operations list the whole store; the trash checkbox handler can drop one of two quick ticks.
 
 ## C. Test tooling: chromedp (done)
 
