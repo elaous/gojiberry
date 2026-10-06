@@ -666,7 +666,13 @@ func (s *Session) Docs() components.DocListProps {
 	if d := s.openDlg; d != nil {
 		p.OpenDownload = &components.OpenDownload{
 			Name: d.name, Current: d.sizes.Current, History: d.sizes.History, Versions: d.sizes.Versions, Drop: d.drop,
-			OnDrop:    func(drop bool) { s.set(func() { s.openDlg.drop = drop }) },
+			OnDrop: func(drop bool) {
+				s.set(func() {
+					if s.openDlg != nil {
+						s.openDlg.drop = drop
+					}
+				})
+			},
 			OnConfirm: func() { s.Pending.Run(s.DownloadOpen) },
 			OnCancel:  s.CancelOpenDownload,
 		}
@@ -872,7 +878,7 @@ func (s *Session) pickPack() {
 }
 
 // ImportPackData imports the .opendoc pack in data into the folder being shown, keeping what is
-// already there (a document with the same ID is skipped), and says what came in, what was
+// already there (a document with the same ID is always skipped: the UI offers no other policy), and says what came in, what was
 // skipped and what failed, and whether the pack was signed.
 func (s *Session) ImportPackData(ctx context.Context, name string, data []byte) error {
 	s.op.Lock()
@@ -889,6 +895,9 @@ func (s *Session) ImportPackData(ctx context.Context, name string, data []byte) 
 	line := msg("saver.packImported", "%s: %d documents and %d folders imported", name, rep.Documents, rep.Folders)
 	if len(rep.Skipped) > 0 {
 		line += " " + msg("saver.packSkipped", "(%d already here, left as they are)", len(rep.Skipped))
+	}
+	if len(rep.Warnings) > 0 {
+		line += " " + msg("saver.packWarnings", "(%d warnings: %s)", len(rep.Warnings), strings.Join(rep.Warnings[:min(3, len(rep.Warnings))], "; "))
 	}
 	if len(rep.Failed) > 0 {
 		line += " " + msg("saver.packFailed", "(%d failed: %s)", len(rep.Failed), strings.Join(rep.Failed[:min(3, len(rep.Failed))], "; "))
