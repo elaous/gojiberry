@@ -331,7 +331,11 @@ func isReservedDocID(id string) bool {
 	// "directory/" is the key directory's keyspace (see Server.WithDirectory): its records
 	// are written only by the server's own publish route, so a signed-in session cannot forge
 	// one through the document API.
-	return strings.HasPrefix(id, aclKeyPrefix) || strings.HasPrefix(id, "collab:") || strings.HasPrefix(id, DirectoryPrefix) || strings.HasPrefix(id, ExpiryPrefix)
+	// "public/" and "report/" are the public offer's records and abuse reports (docstore/public);
+	// compared without case, since a backend that folds case would alias them.
+	lower := strings.ToLower(id)
+	return strings.HasPrefix(id, aclKeyPrefix) || strings.HasPrefix(id, "collab:") || strings.HasPrefix(id, DirectoryPrefix) || strings.HasPrefix(id, ExpiryPrefix) ||
+		strings.HasPrefix(lower, PublicPrefix) || strings.HasPrefix(lower, ReportPrefix)
 }
 
 // Grant gives email a role on the document (changing it if they have one). The
