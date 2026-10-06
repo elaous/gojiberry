@@ -326,3 +326,56 @@ func (s *Saver) SetTags(ctx context.Context, target, id string, tags []string) e
 		return nil
 	})
 }
+
+// restoreHistory stores the revisions of an imported document as its versions, at the
+// times they were saved, and keeps the newest MaxVersions of all of them.
+func (s *Saver) restoreHistory(ctx context.Context, target, id string, c docfile.Codec, history []docfile.Revision) error {
+	t, err := s.Target(target)
+	if err != nil {
+		return err
+	}
+	for _, r := range history {
+		if r.Doc == nil {
+			continue
+		}
+		d := *r.Doc
+		d.History = nil
+		d.SetID(id)
+		data, err := c.Marshal(d)
+		if err != nil {
+			return err
+		}
+		if err := t.Adapter.Save(ctx, versionKey(id, c, time.Unix(0, r.Saved)), data); err != nil {
+			return err
+		}
+	}
+	if vs, err := s.Versions(ctx, target, id); err == nil && len(vs) > s.maxVersions() {
+		for _, old := range vs[s.maxVersions():] {
+			_ = t.Adapter.Delete(ctx, old.Key)
+		}
+	}
+	return nil
+}
+
+// ExportOpen writes a document with its history as one .open file (docfile.Open): the
+// document and each of its versions, oldest first. Saving the file somewhere else
+// (Saver.Save) brings the versions back.
+func (s *Saver) ExportOpen(ctx context.Context, target, id string) ([]byte, error) {
+	doc, err := s.Load(ctx, target, id)
+	if err != nil {
+		return nil, err
+	}
+	vs, err := s.Versions(ctx, target, id)
+	if err != nil {
+		return nil, err
+	}
+	for i := len(vs) - 1; i >= 0; i-- { // Versions is newest first
+		d, err := s.LoadVersion(ctx, target, vs[i].Key)
+		if err != nil {
+			return nil, err
+		}
+		d.History = nil
+		doc.History = append(doc.History, docfile.Revision{Saved: vs[i].Time.UnixNano(), Doc: &d})
+	}
+	return docfile.Open.Marshal(doc)
+}

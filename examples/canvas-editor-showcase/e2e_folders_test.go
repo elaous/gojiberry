@@ -89,6 +89,15 @@ func TestLinkAndDownload(t *testing.T) {
 	d.OK(strings.HasSuffix(name, ".md") && len(data) > 0, "a document downloads in the chosen format: "+name)
 	d.WaitFor("the status line", "(document.querySelector('.gj-saver-status') || {}).textContent === 'plan downloaded'")
 
+	// The formats are under headings, and opendocs' own file carries the history.
+	groups := d.Strs(`Array.from(document.querySelectorAll('.gj-doclist-item .gj-doclist-download optgroup')).map((g) => g.label)`)
+	d.OK(strings.Join(groups, ",") == "Documents,Web and text,Data,opendocs", "the formats are grouped: "+strings.Join(groups, ","))
+	d.Click(".gj-versions-save")
+	d.WaitFor("a version", "document.querySelector('.gj-versions-item')")
+	oname, odata := d.Download(func() { d.Select(".gj-doclist-item .gj-doclist-download", "format:open") })
+	d.OK(strings.HasSuffix(oname, ".open") && len(odata) > 0, "the .open download: "+oname)
+	d.OK(strings.Contains(string(odata), "plan"), "it holds the document")
+
 	d.Fill(".gj-doclist-newfolder-name", "Work")
 	d.WaitFor("the create button", `!document.querySelector('.gj-doclist-newfolder').disabled`)
 	d.Click(".gj-doclist-newfolder")
