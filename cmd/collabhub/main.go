@@ -10,6 +10,11 @@
 // caller is identified by its bearer token; without it, every document is
 // open to everyone, as in docstore.
 //
+// Expiry: with GOJIBERRY_DOCSTORE_EXPIRY_TTL (and _SWEEP, _ADOPT) set, this process expires
+// documents like the docstore server and collaborators' edits renew them; with
+// GOJIBERRY_COLLAB_RENEW_URL (and optionally GOJIBERRY_COLLAB_RENEW_TOKEN) it asks the docstore
+// server that expires the shared store to (POST /docs/{id}/renew, see docs/public-docstore.md).
+//
 // GOJIBERRY_COLLAB_ADDR is the listen address (default ":8081").
 package main
 
@@ -34,6 +39,27 @@ func main() {
 	if err != nil {
 		log.Fatalf("collabhub: %v", err)
 	}
+	// Expiry. With GOJIBERRY_DOCSTORE_EXPIRY_TTL set, this process wraps the store (and sweeps it)
+	// exactly as the docstore server does, and the hub renews a document in-process when
+	// collaborators edit it. Otherwise, with GOJIBERRY_COLLAB_RENEW_URL set (the base URL of the
+	// docstore server that owns the expiry of this store), each renewal is a POST
+	// /docs/{id}/renew there, carrying the Authorization of the editor and, if set,
+	// GOJIBERRY_COLLAB_RENEW_TOKEN as X-Gojiberry-Token (the docstore server's guard token).
+	adapter, expiring := docstore.WithConfiguredExpiry(context.Background(), adapter, cfg)
+	var renewer docstore.Renewer
+	if renewURL := os.Getenv("GOJIBERRY_COLLAB_RENEW_URL"); renewURL != "" {
+		if expiring != nil {
+			log.Fatal("collabhub: GOJIBERRY_COLLAB_RENEW_URL and GOJIBERRY_DOCSTORE_EXPIRY_TTL are both set: this process either owns the expiry or asks the docstore server to")
+		}
+		remote := docstore.NewHTTPAdapter(renewURL, &http.Client{Timeout: 10 * time.Second})
+		if t := os.Getenv("GOJIBERRY_COLLAB_RENEW_TOKEN"); t != "" {
+			remote.Header.Set("X-Gojiberry-Token", t)
+		}
+		renewer = remote
+		log.Printf("collabhub: collaborators' edits renew documents at %s", renewURL)
+	} else if expiring != nil {
+		renewer = expiring
+	}
 	authManager, err := docstore.NewAuthManager(context.Background(), cfg.Auth)
 	if err != nil {
 		log.Fatalf("collabhub: %v", err)
@@ -41,7 +67,7 @@ func main() {
 	// GOJIBERRY_COLLAB_ALLOW_ORIGINS and GOJIBERRY_COLLAB_TOKEN (sent as
 	// X-Gojiberry-Token: Authorization carries the sign-in session) choose who
 	// may call the hub; with neither it is open to any origin.
-	hc := hub.Config{Store: adapter, Guard: guard.FromEnvWith("GOJIBERRY_COLLAB", guard.Options{TokenHeader: "X-Gojiberry-Token", TokenQuery: "guard_token"})}
+	hc := hub.Config{Store: adapter, Renewer: renewer, Guard: guard.FromEnvWith("GOJIBERRY_COLLAB", guard.Options{TokenHeader: "X-Gojiberry-Token", TokenQuery: "guard_token"})}
 	if authManager != nil {
 		who := hub.AuthUser(authManager)
 		hc.User = who

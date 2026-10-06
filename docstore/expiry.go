@@ -203,7 +203,17 @@ func NewExpiringAdapter(inner Adapter, policy ExpiryPolicy) *ExpiringAdapter {
 	return &ExpiringAdapter{Inner: inner, Policy: policy}
 }
 
+// Renewer is what a collaborative editor calls to say "document id was edited": the deadline of
+// a live document moves to now + TTL without the document itself being written. It is
+// ErrNotFound for a document that does not exist or has expired (a Renewer never revives one).
+// ExpiringAdapter implements it (Touch), and HTTPAdapter does over POST /docs/{id}/renew, so
+// a collaboration hub in another process renews through the docstore server.
+type Renewer interface {
+	Renew(ctx context.Context, docID string) error
+}
+
 var (
+	_ Renewer            = (*ExpiringAdapter)(nil)
 	_ ConditionalAdapter = (*ExpiringAdapter)(nil)
 	_ Locker             = (*ExpiringAdapter)(nil)
 	_ PrefixLister       = (*ExpiringAdapter)(nil)
@@ -475,6 +485,65 @@ func (e *ExpiringAdapter) SaveIf(ctx context.Context, id string, data []byte, pr
 	return e.renewed(ctx, id, func() error { return c.SaveIf(ctx, id, data, prev) })
 }
 
+// Renew implements Renewer; it is Touch.
+func (e *ExpiringAdapter) Renew(ctx context.Context, id string) error { return e.Touch(ctx, id) }
+
+// Touch renews document id as a Save would, without writing the document: the deadline record
+// becomes now + TTL and nothing else changes. It is for edits that are kept elsewhere (the
+// collaboration hub keeps its state under "collab:<id>", which is not a document and never
+// expires by itself).
+//
+// It is ErrNotFound when no such document exists or its deadline has passed: a dead document is
+// never revived (nor purged here; Sweep does that), and a record with no document (the crash
+// leftover described on ExpiringAdapter) does not count. id names a document key; when there is
+// none by that exact name, the live documents whose logical id is id (the saver's
+// "<id>~<generation>.<ext>" keys) are renewed instead. A document the policy gives no lifetime
+// is live and unchanged (nil).
+//
+// Order: the only write is the record, so there is nothing to undo; a crash or failure leaves
+// either the old deadline or the new one, and the document is never touched. Like Save, it is
+// serialized with Sweep and other writes of this ExpiringAdapter.
+func (e *ExpiringAdapter) Touch(ctx context.Context, id string) error {
+	if isExpiryKey(id) {
+		return fmt.Errorf("docstore: %q is in the reserved expiry keyspace", id)
+	}
+	if id == "" {
+		return ErrNotFound
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	now := e.now()
+	metas, err := ListPrefix(ctx, e.Inner, id)
+	if err != nil {
+		return err
+	}
+	live := 0
+	for _, m := range metas {
+		if isExpiryKey(m.ID) || (m.ID != id && (!IsDocumentKey(m.ID) || logicalID(m.ID) != id)) {
+			continue
+		}
+		t, has, err := e.readRecord(ctx, m.ID)
+		if err != nil {
+			return err
+		}
+		if has && !now.Before(t) {
+			continue // expired: not revived
+		}
+		live++
+		ttl, ok := e.Policy.TTL(m.ID, now)
+		if !ok {
+			continue
+		}
+		if err := e.writeRecord(ctx, m.ID, now.Add(ttl)); err != nil {
+			return err
+		}
+	}
+	if live == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // Load implements Adapter. It does not renew; an expired document is ErrNotFound.
 func (e *ExpiringAdapter) Load(ctx context.Context, id string) (Document, error) {
 	if isExpiryKey(id) {
@@ -671,6 +740,22 @@ func (e *ExpiringAdapter) Sweep(ctx context.Context) (deleted int, err error) {
 		}
 	}
 	return deleted, first
+}
+
+// WithConfiguredExpiry wraps adapter in an ExpiringAdapter when cfg asks for expiry
+// (GOJIBERRY_DOCSTORE_EXPIRY_TTL), starts its sweeper (until ctx is done) and logs it; it returns
+// the adapter to use and the ExpiringAdapter, which is nil, with adapter unchanged, when expiry
+// is off. The docstore server and the collaboration hub program share it, so a hub in the same
+// process can pass the ExpiringAdapter as its Renewer.
+func WithConfiguredExpiry(ctx context.Context, adapter Adapter, cfg Config) (Adapter, *ExpiringAdapter) {
+	if cfg.ExpiryTTL <= 0 {
+		return adapter, nil
+	}
+	ea := NewExpiringAdapter(adapter, FixedTTL(cfg.ExpiryTTL))
+	ea.AdoptUpdatedAt = cfg.ExpiryAdoptUpdated
+	go ea.Run(ctx, cfg.ExpirySweep)
+	log.Printf("docstore: documents expire %s after their last write (sweep every %s)", cfg.ExpiryTTL, cfg.ExpirySweep)
+	return ea, ea
 }
 
 // Run sweeps now and then every interval until ctx is done. Errors go to OnError (the log).

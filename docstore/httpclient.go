@@ -163,3 +163,44 @@ func (a *HTTPAdapter) Delete(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+type authKey struct{}
+
+// WithAuthorization returns a context whose Authorization header value HTTPAdapter.Renew sends,
+// so a renewal is made with the credentials of the person whose edit caused it (the server
+// checks the same write permission as for a save).
+func WithAuthorization(ctx context.Context, value string) context.Context {
+	return context.WithValue(ctx, authKey{}, value)
+}
+
+var _ Renewer = (*HTTPAdapter)(nil)
+
+// Renew implements Renewer with POST /docs/{id}/renew: the server moves the document's
+// deadline if the caller may write it (see WithAuthorization) and the document is alive.
+// ErrNotFound means it does not exist or has expired.
+func (a *HTTPAdapter) Renew(ctx context.Context, id string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.base+docPath(id)+"/renew", nil)
+	if err != nil {
+		return err
+	}
+	for k, vs := range a.Header {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
+	}
+	if v, _ := ctx.Value(authKey{}).(string); v != "" {
+		req.Header.Set("Authorization", v)
+	}
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	switch {
+	case resp.StatusCode == http.StatusNotFound:
+		return ErrNotFound
+	case resp.StatusCode/100 != 2:
+		return httpError(resp)
+	}
+	return nil
+}

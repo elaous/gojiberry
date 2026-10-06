@@ -243,6 +243,11 @@ Three small packages and a command:
     kind, order or deleted flag) and *new* `comment:`/`reply:` records, not
     changes or deletions of existing ones. A batch with any refused op is refused
     whole with a 403 and a message.
+  - **Expiry.** `Config.Renewer` (a `docstore.Renewer`) is told after each accepted edit
+    by an owner or editor, at most once a minute per document, so a store that expires
+    documents counts live edits as edits (`ExpiringAdapter.Touch`; across processes
+    `POST /docs/{id}/renew` on the docstore server). The `collab:<id>` state goes with its
+    document. See [public-docstore.md](public-docstore.md).
   - `hub.ACLRoles(store, who)` takes roles from docstore's access lists (owner,
     editors, viewers; no list means open, as in docstore); `hub.AuthUser(manager)`
     names the caller from a bearer token.
@@ -260,7 +265,8 @@ Three small packages and a command:
   (as character ids) and `PeerCursors()` places everyone else's in your text.
 - **`cmd/collabhub`**: the server as a program, backed by the same docstore
   settings (`GOJIBERRY_DOCSTORE_BACKEND`, sign-in) and `GOJIBERRY_COLLAB_ADDR`
-  (default `:8081`), with a Dockerfile.
+  (default `:8081`), with a Dockerfile. With `GOJIBERRY_DOCSTORE_EXPIRY_TTL` it expires and renews in-process;
+  with `GOJIBERRY_COLLAB_RENEW_URL` (and `GOJIBERRY_COLLAB_RENEW_TOKEN`) it renews through a docstore server.
 
 Tests: the role table (every kind of op for every role, including a comment mark
 smuggling a block delete), ACL roles, every endpoint and its errors, the event

@@ -96,16 +96,50 @@ launch, not after:
      so nothing is deleted for one TTL, and the number adopted is logged. Set
      `GOJIBERRY_DOCSTORE_EXPIRY_ADOPT=updated` to use `UpdatedAt + TTL` instead: documents
      older than the TTL are then deleted by that first sweep, so take a backup first.
-   - Left in this item: edits through the collaboration hub (`collab:` writes) do not yet renew
-     the document, so the hub must call the wrapper's `Save` of the document (or the policy must
-     learn the pairing) before collaborators' edits count; two server processes on one store can
-     race at the instant of expiry; backups of the store are outside this (see 2.2).
+   - **Collaboration-hub edits renew: done.** The hub keeps its state under `collab:<id>`
+     (system keyspace, never expires by itself, deleted with its document by the sweeper and by
+     `Delete`: `DefaultRelated`), so it never touched the document. Now `hub.Config.Renewer`
+     (`docstore.Renewer`, `Renew(ctx, docID) error`) is called after an *accepted* batch of
+     operations from an owner or editor, on POST or WebSocket, at most once per
+     `RenewInterval` per document (default one minute; a fake clock via `Config.Now`), in the
+     background so a slow store never delays an ack. Joining, watching, snapshots, cursors,
+     empty or refused batches and a viewer's comments never renew. An error (document gone,
+     store down) is logged and never fails the edit.
+     - `ExpiringAdapter.Touch(ctx, id)` (also `Renew`) is the implementation: the deadline
+       record becomes now + TTL and nothing else is written, so there is no order to get wrong
+       (a failure or crash leaves the old or the new deadline, the document untouched). It is
+       `ErrNotFound` for a document that does not exist, has expired (not revived, not purged;
+       the sweeper does that) or is only a leftover record. `id` is the document key; if no key
+       has that exact name, the live saver generation keys of that logical id
+       (`<id>~<gen>.<ext>`) are renewed.
+     - **One process** (`cmd/collabhub` with `GOJIBERRY_DOCSTORE_EXPIRY_TTL` set): it wraps the
+       store with `docstore.WithConfiguredExpiry` (the same wrapper, sweep and adopt settings as
+       the docstore server) and passes the `ExpiringAdapter` to the hub as its Renewer.
+     - **Separate processes**: the docstore server serves `POST /docs/{id}/renew` (204 and
+       `X-Gojiberry-Expires`; 404 if the document does not exist or has expired; 501 if the store
+       does not expire; `collab:`, `acl:` and `expiry:` ids are 400). It needs the permission
+       of a PUT and nothing weaker: owner or editor on a document with an access list, so a
+       viewer, a stranger or an anonymous caller is 403/401; a document nobody has shared is
+       open, as for a PUT, and with `RequireACL` it is closed (a renewal never creates the
+       access list a first PUT does). The hub (`GOJIBERRY_COLLAB_RENEW_URL`, optional
+       `GOJIBERRY_COLLAB_RENEW_TOKEN` sent as `X-Gojiberry-Token` for the server's guard) calls it
+       through `docstore.HTTPAdapter.Renew`, forwarding the `Authorization` header of the edit
+       that caused it, so the server checks that editor's write role. There is no
+       `docstore/public` package on `main` yet: the anonymous-session item (below) must keep
+       view-only and public-link sessions out of write roles, and the route inherits whatever it
+       decides, since it is checked as a PUT.
+     - Still true: two server processes on one store can race at the instant of expiry; backups
+       of the store are outside this (see 2.2). A document that exists only in the hub
+       (never saved directly) has nothing to renew, so the hub's `collab:` state of it is not
+       swept; and a late edit of a document that has expired is accepted by the hub and written
+       again to `collab:<id>` (the document is not revived, and that state is an orphan until the
+       document id is reused or deleted).
 2. **Anonymous sessions.** A signed, opaque session token (no user record); the server
    keeps `session → document` only as long as the document lives.
 3. **Links** are `/d/{id}` as now, with the capability in the ID (edit) and a derived
    second ID for view only.
 4. **Collaboration** runs through the existing hub with the same expiry; an edit through
-   the hub renews.
+   the hub renews (done, see 1).
 5. **Encryption** is the natural fit: with the key in the link's fragment (`#key`, never
    sent to the server) the server holds only ciphertext and "we hold no user data" becomes
    literally true. That needs the encrypted-collaboration work (see

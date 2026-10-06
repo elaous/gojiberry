@@ -101,7 +101,28 @@ type Config struct {
 	MaxRooms int
 	// MaxPeers limits the cursors kept per document; 0 means 256.
 	MaxPeers int
+	// Renewer is told that a document was edited, so a store that expires documents
+	// (docstore.ExpiringAdapter, or a docstore server through docstore.HTTPAdapter) counts
+	// collaborators' edits as edits: the hub keeps its state under "collab:<id>", which
+	// never expires by itself and never touches the document. Nil does nothing.
+	//
+	// Renew is called for the document id after an edit by an owner or editor was accepted
+	// (comments by viewers, joining, watching and cursors never renew), at most once per
+	// RenewInterval per document, in the background, so a slow store never delays an
+	// acknowledgement. An error (a document that does not exist or has expired, a store that is
+	// down) is logged and the next attempt waits for the interval again. Over HTTP the call
+	// carries the Authorization header of the edit that caused it (docstore.WithAuthorization),
+	// so the docstore server checks the same write permission.
+	Renewer Renewer
+	// RenewInterval is the least time between two renewals of one document; 0 means one
+	// minute, negative renews on every accepted edit.
+	RenewInterval time.Duration
+	// Now is the clock (time.Now when nil); tests inject a fake one.
+	Now func() time.Time
 }
+
+// Renewer is docstore.Renewer: what the hub calls to renew a document's expiry.
+type Renewer = docstore.Renewer
 
 // Hub serves documents. Create one with New and mount Handler.
 type Hub struct {
@@ -111,6 +132,10 @@ type Hub struct {
 	now   func() time.Time
 
 	closing atomic.Bool // set by Stop: no more writes or new streams
+
+	renewMu   sync.Mutex // guards renewing; renewIdle is signalled when it reaches zero
+	renewing  int        // renewals in flight
+	renewIdle *sync.Cond
 }
 
 // New creates a hub.
@@ -136,7 +161,15 @@ func New(cfg Config) *Hub {
 	if cfg.MaxPeers == 0 {
 		cfg.MaxPeers = 256
 	}
-	return &Hub{cfg: cfg, rooms: map[string]*room{}, now: time.Now}
+	if cfg.RenewInterval == 0 {
+		cfg.RenewInterval = time.Minute
+	}
+	h := &Hub{cfg: cfg, rooms: map[string]*room{}, now: time.Now}
+	if cfg.Now != nil {
+		h.now = cfg.Now
+	}
+	h.renewIdle = sync.NewCond(&h.renewMu)
+	return h
 }
 
 // StoreKey is the docstore key a document is saved under.
@@ -162,6 +195,9 @@ type room struct {
 	owners map[string]string // replica id -> the signed-in user it first spoke for
 	dirty  bool
 	timer  *time.Timer
+
+	lastRenew time.Time // when a renewal of the document's expiry was last started
+	renewed   bool      // lastRenew is set
 
 	saveMu  sync.Mutex    // one save at a time, in order
 	loaded  chan struct{} // closed when the stored document has been read
@@ -294,8 +330,59 @@ func (h *Hub) markDirty(rm *room) {
 	})
 }
 
-// Flush saves every document with unsaved changes now.
+// renewDue says whether an accepted edit should now renew the document's expiry, and if so
+// starts the interval (rm.mu held).
+func (h *Hub) renewDue(rm *room) bool {
+	if h.cfg.Renewer == nil {
+		return false
+	}
+	now := h.now()
+	if rm.renewed && h.cfg.RenewInterval > 0 && now.Sub(rm.lastRenew) < h.cfg.RenewInterval && !now.Before(rm.lastRenew) {
+		return false
+	}
+	rm.lastRenew, rm.renewed = now, true
+	return true
+}
+
+// renew calls the Renewer for document id in the background; auth is the Authorization header
+// of the request whose edit caused it.
+func (h *Hub) renew(id, auth string) {
+	h.renewMu.Lock()
+	h.renewing++
+	h.renewMu.Unlock()
+	go func() {
+		defer func() {
+			h.renewMu.Lock()
+			h.renewing--
+			if h.renewing == 0 {
+				h.renewIdle.Broadcast()
+			}
+			h.renewMu.Unlock()
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if auth != "" {
+			ctx = docstore.WithAuthorization(ctx, auth)
+		}
+		if err := h.cfg.Renewer.Renew(ctx, id); err != nil {
+			log.Printf("collab hub: renewing the expiry of %q: %v", id, err)
+		}
+	}()
+}
+
+// waitRenewals blocks until the renewals in flight have finished.
+func (h *Hub) waitRenewals() {
+	h.renewMu.Lock()
+	for h.renewing > 0 {
+		h.renewIdle.Wait()
+	}
+	h.renewMu.Unlock()
+}
+
+// Flush saves every document with unsaved changes now, and waits for the expiry renewals in
+// flight.
 func (h *Hub) Flush() error {
+	defer h.waitRenewals()
 	h.mu.Lock()
 	rooms := make([]*room, 0, len(h.rooms))
 	for _, rm := range h.rooms {
@@ -500,25 +587,36 @@ func (h *Hub) handleOps(w http.ResponseWriter, r *http.Request) {
 // acceptOps checks and applies operations from replica, whatever the
 // transport carried them, and tells the others. It returns 204, or the status
 // and message the transport should report (403: refused).
+//
+// An accepted batch from an owner or editor renews the document's expiry (see
+// Config.Renewer); nothing else does.
 func (h *Hub) acceptOps(rm *room, role Role, r *http.Request, replica string, ops []crdt.Op) (int, string) {
+	status, msg, renew := h.applyOps(rm, role, r, replica, ops)
+	if renew {
+		h.renew(rm.id, r.Header.Get("Authorization"))
+	}
+	return status, msg
+}
+
+func (h *Hub) applyOps(rm *room, role Role, r *http.Request, replica string, ops []crdt.Op) (status int, msg string, renew bool) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 	if !h.bindReplica(rm, replica, r) {
-		return http.StatusForbidden, "that replica id belongs to another user"
+		return http.StatusForbidden, "that replica id belongs to another user", false
 	}
 	if err := authorize(rm.doc, role, ops); err != nil {
-		return http.StatusForbidden, err.Error()
+		return http.StatusForbidden, err.Error(), false
 	}
 	if !role.CanEdit() && h.cfg.User != nil {
 		// A commenter may only write comments and replies under their own name.
 		if err := commentAuthors(ops, h.cfg.User(r)); err != nil {
-			return http.StatusForbidden, err.Error()
+			return http.StatusForbidden, err.Error(), false
 		}
 	}
 	rm.doc.Apply(ops...)
 	rm.broadcast(replica, jsonEvent("ops", ops))
 	h.markDirty(rm)
-	return http.StatusNoContent, ""
+	return http.StatusNoContent, "", role.CanEdit() && len(ops) > 0 && h.renewDue(rm)
 }
 
 // commentAuthors checks that every new comment or reply record in ops names

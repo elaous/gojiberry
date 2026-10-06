@@ -204,6 +204,8 @@ func envOr(key, fallback string) string {
 //	GET    /docs           -- list metadata, as a JSON array of Meta (plus "expires" when the
 //	                          store expires documents, see WithExpiry; reads and writes then
 //	                          carry X-Gojiberry-Expires)
+//	POST   /docs/{id}/renew -- an edit kept elsewhere (the collaboration hub): move the deadline
+//	                          of a live document, needs write permission (see handleRenew)
 //	GET    /docs/{id}/acl  -- this document's own ACL (see acl.go), Owner-only
 //	PUT    /docs/{id}/acl  -- replace it (bootstraps ownership on first use)
 //	GET    /health         -- liveness + configured backend name
@@ -446,6 +448,10 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/docs/")
+	if id, ok := strings.CutSuffix(path, "/renew"); ok {
+		s.handleRenew(w, r, id)
+		return
+	}
 	if id, ok := strings.CutSuffix(path, "/acl"); ok {
 		if id == "" || s.reserved(id) {
 			http.Error(w, "missing or invalid document id", http.StatusBadRequest)
@@ -548,5 +554,42 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleRenew serves POST /docs/{id}/renew: the caller says document id was edited somewhere
+// else (the collaboration hub, which keeps its state apart from the document), and the store
+// moves its deadline to now + TTL without writing it. The permission is the one a PUT needs
+// (checkPermission): the owner or an editor, never a viewer, never an anonymous caller of a
+// document with an access list; a document nobody has shared is open, as for a PUT, and with
+// RequireACL it is closed (a renewal never creates the access list the way a first PUT does).
+// 204 with X-Gojiberry-Expires; 404 for a document that does not exist or has expired (it is
+// never revived); 501 when the store does not expire documents.
+func (s *Server) handleRenew(w http.ResponseWriter, r *http.Request, id string) {
+	if id == "" || s.reserved(id) {
+		http.Error(w, "missing or invalid document id", http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if allowed, status := s.checkPermission(r, id, methodRenew); !allowed {
+		writePermissionError(w, status)
+		return
+	}
+	rn, ok := s.adapter.(Renewer)
+	if !ok {
+		http.Error(w, "this store does not expire documents", http.StatusNotImplemented)
+		return
+	}
+	switch err := rn.Renew(r.Context(), id); {
+	case errors.Is(err, ErrNotFound):
+		http.Error(w, "not found", http.StatusNotFound)
+	case err != nil:
+		serverError(w, err)
+	default:
+		s.setExpires(w, r, id)
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
