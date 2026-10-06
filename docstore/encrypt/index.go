@@ -54,7 +54,7 @@ func loadIndex(ctx context.Context, store docstore.Adapter, owners []ed25519.Pub
 	d, err := store.Load(ctx, IndexKey)
 	if errors.Is(err, docstore.ErrNotFound) {
 		if floor != nil {
-			f, ferr := floor.Get(ctx, IndexKey)
+			f, ferr := floorGet(ctx, floor, IndexKey)
 			if ferr != nil {
 				return rec, "", ferr
 			}
@@ -89,14 +89,14 @@ func loadIndex(ctx context.Context, store docstore.Adapter, owners []ed25519.Pub
 		return indexRecord{}, digest, fmt.Errorf("%s: %w", IndexKey, ErrBadSignature)
 	}
 	if floor != nil {
-		f, ferr := floor.Get(ctx, IndexKey)
+		f, ferr := floorGet(ctx, floor, IndexKey)
 		if ferr != nil {
 			return indexRecord{}, digest, ferr
 		}
 		if rec.Seq < f {
 			return indexRecord{}, digest, fmt.Errorf("%s: %w", IndexKey, ErrStaleRecord)
 		}
-		if ferr := floor.Raise(ctx, IndexKey, rec.Seq); ferr != nil {
+		if ferr := floorRaise(ctx, floor, IndexKey, rec.Seq); ferr != nil {
 			return indexRecord{}, digest, ferr
 		}
 	}
@@ -124,6 +124,19 @@ func (s *Sharing) Index(ctx context.Context) (Index, error) {
 func (s *Sharing) setIndex(ctx context.Context, docID, level string, seq uint64) error {
 	if s.Signer == nil {
 		return ErrNoSigner
+	}
+	if _, cas := s.Store.(docstore.ConditionalAdapter); !cas {
+		// No compare-and-swap: two clients changing the index at the same moment would each
+		// write their own version of it and lose the other's entry. The store's Lock, where it
+		// has one, serializes them; without one, serialize index changes yourself (one owner
+		// client at a time) and let VerifyIndex's findings tell you of a document left unlisted.
+		if l, ok := s.Store.(docstore.Locker); ok {
+			unlock, err := l.Lock(ctx)
+			if err != nil {
+				return err
+			}
+			defer unlock()
+		}
 	}
 	for range mutateAttempts {
 		rec, digest, err := loadIndex(ctx, s.Store, s.verifiers(), s.SeqFloor)
@@ -164,7 +177,7 @@ func (s *Sharing) setIndex(ctx context.Context, docID, level string, seq uint64)
 			err = s.Store.Save(ctx, IndexKey, data)
 		}
 		if err == nil && s.SeqFloor != nil {
-			err = s.SeqFloor.Raise(ctx, IndexKey, rec.Seq)
+			err = floorRaise(ctx, s.SeqFloor, IndexKey, rec.Seq)
 		}
 		return err
 	}
@@ -179,20 +192,31 @@ type IndexFinding struct {
 	Err   error
 }
 
+// ErrIndexUnverifiable is the Err of the finding VerifyIndex returns when the index lists no
+// documents and no floor has ever seen one (no SeqFloor, or an empty one): an index that was
+// deleted cannot be told from one that was never written, so "no end-to-end documents" is only
+// the store's word. It is a warning, not an ErrDowngrade: set a SeqFloor on the Sharing and the
+// StoreKeyring (the first VerifyIndex after an index exists raises it) to turn it into a check.
+var ErrIndexUnverifiable = errors.New("encrypt: the index of end-to-end documents is empty or missing and no floor has seen one: a deleted index cannot be told from none")
+
 // VerifyIndex compares the owner-signed index with the stored records, for every document it
 // lists, whether or not this client ever opened it: a listed document whose keys:<ID> record
 // is missing, does not verify, is older than the entry's seq, or disagrees with it at the same
 // seq is a finding (ErrDowngrade). Nothing is changed. A client calls it once after sign-in.
 //
 // When the Sharing has a SeqFloor it is raised, as a side effect, to the index's own seq and
-// to every entry's seq (or the record's, if higher), so from then on the ordinary reads refuse
-// a deleted or older record of any listed document (ErrStaleRecord) even on a client that never
-// saw that document: the index is how a fresh client gets a floor for the documents that
-// matter.
+// to every entry's seq (or the record's, if higher), in one batch (BatchSeqFloor: one write for
+// a FileSeqFloor), so from then on the ordinary reads refuse a deleted or older record of any
+// listed document (ErrStaleRecord) even on a client that never saw that document: the index is
+// how a fresh client gets a floor for the documents that matter.
 //
 // The index is only as good as its own freshness: a store writer can delete it or put back an
-// older one (see ErrStaleRecord, and the floor). What it adds over the frames is a check that
-// needs no file to be opened, and covers files still in the v1 frame.
+// older one (see ErrStaleRecord, and the floor). When it lists nothing and the floor has never
+// seen an index (or there is no floor), a finding with ErrIndexUnverifiable (Doc is IndexKey)
+// says so: that is the one state in which a deleted index looks like an honest empty one. What
+// it adds over the frames is a check that needs no file to be opened, and covers files still
+// in the v1 frame. Without a floor, a client holds no state at all and an index rolled back
+// to an older one that lists fewer documents is not noticed either.
 func (s *Sharing) VerifyIndex(ctx context.Context) ([]IndexFinding, error) {
 	idx, _, err := loadIndex(ctx, s.Store, s.verifiers(), s.SeqFloor)
 	if err != nil {
@@ -204,6 +228,18 @@ func (s *Sharing) VerifyIndex(ctx context.Context) ([]IndexFinding, error) {
 	}
 	sort.Strings(docs)
 	var out []IndexFinding
+	if len(docs) == 0 {
+		var seen uint64
+		if s.SeqFloor != nil {
+			if seen, err = floorGet(ctx, s.SeqFloor, IndexKey); err != nil {
+				return nil, err
+			}
+		}
+		if seen == 0 {
+			out = append(out, IndexFinding{Doc: IndexKey, Err: ErrIndexUnverifiable})
+		}
+	}
+	raises := map[string]uint64{}
 	for _, doc := range docs {
 		e := idx.Docs[doc]
 		raise := e.Seq
@@ -211,7 +247,7 @@ func (s *Sharing) VerifyIndex(ctx context.Context) ([]IndexFinding, error) {
 		var ferr error
 		switch {
 		case errors.Is(err, docstore.ErrNotFound):
-			ferr = downgrade(doc, "the index lists it as %s (record %d) and its record is missing: it was deleted", levelName(e.Level), e.Seq)
+			ferr = downgrade(doc, "the index lists it as %s (record %d) and its record is missing: it was deleted"+recoverHint, levelName(e.Level), e.Seq)
 		case err != nil:
 			return out, err
 		default:
@@ -220,9 +256,9 @@ func (s *Sharing) VerifyIndex(ctx context.Context) ([]IndexFinding, error) {
 			case verr != nil:
 				ferr = fmt.Errorf("%w: %s: the index lists it and its record does not verify: %w", ErrDowngrade, doc, verr)
 			case rec.Seq < e.Seq:
-				ferr = downgrade(doc, "the index lists it at record %d and the record is %d: an older signed record was put back", e.Seq, rec.Seq)
+				ferr = downgrade(doc, "the index lists it at record %d and the record is %d: an older signed record was put back"+recoverHint, e.Seq, rec.Seq)
 			case rec.Seq == e.Seq && levelOf(rec) != e.Level:
-				ferr = downgrade(doc, "the index lists it as %s and the record at the same seq says %s", levelName(e.Level), levelName(levelOf(rec)))
+				ferr = downgrade(doc, "the index lists it as %s and the record at the same seq says %s"+recoverHint, levelName(e.Level), levelName(levelOf(rec)))
 			default:
 				if rec.Seq > raise {
 					raise = rec.Seq
@@ -232,10 +268,11 @@ func (s *Sharing) VerifyIndex(ctx context.Context) ([]IndexFinding, error) {
 		if ferr != nil {
 			out = append(out, IndexFinding{Doc: doc, Entry: e, Err: ferr})
 		}
-		if s.SeqFloor != nil {
-			if err := s.SeqFloor.Raise(ctx, doc, raise); err != nil {
-				return out, err
-			}
+		raises[doc] = raise
+	}
+	if s.SeqFloor != nil {
+		if err := floorRaiseMany(ctx, s.SeqFloor, raises); err != nil {
+			return out, err
 		}
 	}
 	return out, nil
@@ -254,7 +291,7 @@ func levelOf(r sharedRecord) string {
 func (s *Sharing) highestSeq(ctx context.Context, docID string) (uint64, error) {
 	var top uint64
 	if s.SeqFloor != nil {
-		f, err := s.SeqFloor.Get(ctx, docID)
+		f, err := floorGet(ctx, s.SeqFloor, docID)
 		if err != nil {
 			return 0, err
 		}

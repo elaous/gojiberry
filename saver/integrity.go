@@ -280,6 +280,15 @@ type VerifyReport struct {
 	// record of who the document is encrypted to was deleted or an older one put back). They
 	// are not read, restored or touched; the owner decides (encrypt.Sharing.Recover).
 	Downgraded []string
+	// Pending lists the documents whose recipient re-key was cut short (Saver.PendingCheck): a
+	// switch of level or a change of the shared list was saved and not every file was re-keyed
+	// yet. While a document is pending the check that a file wrapped below its level is a
+	// downgrade is off for it. The owner finishes it with encrypt.Sharing.Repair.
+	Pending []string
+	// PendingStuck is the subset of Pending that has been pending for longer than the
+	// checker's limit (30 minutes in encrypt.PendingHook): not a re-key in flight but one that
+	// was abandoned. Run encrypt.Sharing.Repair.
+	PendingStuck []string
 }
 
 // Verify reads every document of the target and checks it against the checksum the
@@ -307,6 +316,11 @@ func (s *Saver) Verify(ctx context.Context, target string) (VerifyReport, error)
 		return rep, err
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].id < items[j].id })
+	if s.PendingCheck != nil {
+		if rep.Pending, rep.PendingStuck, err = s.PendingCheck(ctx, target); err != nil {
+			return rep, err
+		}
+	}
 	type fix struct {
 		item
 		doc      docfile.Document

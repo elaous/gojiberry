@@ -13,13 +13,25 @@
 // Each file's plaintext is framed: a small header inside the encryption holds a format
 // version, the stored id and, from frame version 2, the protection level, the sequence number
 // of the signed keys:<ID> record the file was sealed under and a hash of that record's
-// recipient list. Load checks the id, so a ciphertext copied over another id is refused
-// (ErrWrongDocument), and checks the rest against the record (see Binding and ErrDowngrade):
-// only a holder of a recipient key can write a frame, so the file itself proves what level and
-// record it was written under, which a store writer who deletes or replays the record cannot
-// undo. Rolling an id back to an older ciphertext of the same id is not detectable at this
-// level (the store can always return an older version of what it held); the saver's catalog
-// checksums are what notice that.
+// recipient list. From frame version 3 the header also carries an Ed25519 signature by an
+// owner Signer over the version, id, level, seq, recipient-list hash and a hash of the content
+// that follows (Adapter.Signer signs, the owners' public keys, StoreKeyring.OwnerSigners,
+// verify). Load checks the id, so a ciphertext copied over another id is refused
+// (ErrWrongDocument), and checks the rest against the record (see Binding and ErrDowngrade).
+//
+// What the frame proves, precisely. age has no sender authentication: anyone who knows a
+// recipient's PUBLIC key (an SSH key, the server's key) can mint a file that opens for that
+// recipient, with any content and any frame. So an age file proves nothing about who wrote it;
+// the signature does. A v3 frame whose signature is missing, is by no owner signer, or does not
+// match the content is ErrForgedFrame (an ErrDowngrade-class failure) and returns no data, so
+// a writer who knows only public keys can no longer forge a frame (a level, a seq, content) for
+// a document the owner's signers wrote. What is NOT defended: a store writer can still roll an
+// id, or the whole store, back to a genuine older consistent snapshot (files, records and
+// index together): every signature in it is genuine, and only a client-side floor
+// (SeqFloor) that outlives the rollback notices. Frames in the older formats (v1: no level;
+// v2: level and seq, unsigned) are read as before, with a warning logged once, and can be
+// forged by a holder of a public key until the first save or re-key of the file writes v3
+// (Adapter.RequireSigned refuses them once everything was upgraded).
 //
 // Reading is strict by default: a stored file without the age header is refused
 // (ErrNotEncrypted), so a store writer cannot replace a ciphertext with forged plaintext.
@@ -29,11 +41,13 @@ package encrypt
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -119,6 +133,28 @@ type Adapter struct {
 	// false otherwise: with it, anyone who can write the store can replace a ciphertext
 	// with plaintext of their own and have it read as the document.
 	AllowPlaintext bool
+	// Signer is an owner's signing key (the same Signer that signs the keys:<ID> records): every
+	// file the Adapter writes for a document with a record carries a frame signed with it (v3),
+	// which is what lets a reader tell an owner's file from one minted by anyone who knows a
+	// recipient's public key (ErrForgedFrame). Without it only documents below the end-to-end
+	// level are written, with the older unsigned frame; a confidential document is not saved
+	// (ErrNoFrameSigner), nor re-keyed.
+	Signer *Signer
+	// OwnerSigners are further public signing keys whose frames are accepted, besides the ones
+	// the keyring lists (StoreKeyring.OwnerSigners) and Signer's own.
+	OwnerSigners []ed25519.PublicKey
+	// RequireSigned refuses a frame that is not signed (v1, v2) of a document that has a record
+	// (ErrForgedFrame), instead of reading it with a warning. Turn it on once every file was
+	// written or re-keyed by a signing client (Sharing.Repair of each document upgrades them): until
+	// then an unsigned frame can be minted by anyone who knows a recipient's public key.
+	RequireSigned bool
+
+	warnOnce sync.Once
+	// afterBind, when set, is called by Save and SaveIf between reading the record and checking
+	// the files against it: the window in which another client can complete a switch (tests).
+	afterBind func()
+	// beforeBinding, when set, is called by Load between reading the file and the record (tests).
+	beforeBinding func()
 
 	// mu serializes Save of an encrypted id with the re-keys, which hold it from their read
 	// to their write: on a store without SaveIf a Save between the two would otherwise be
@@ -144,13 +180,21 @@ var header = []byte("age-encryption.org/v1\n")
 // The frame is the plaintext inside the encryption. Version 1 (written before the protection
 // level was bound in): magic "GJE\x01", the id as a uvarint length and bytes, the data.
 // Version 2: magic "GJE\x02", the id, then a level byte (0 server, 1 end to end), the seq of the
-// signed record as a uvarint, the 32-byte hash of its recipient list, the data. A v1 file is
-// read as before and carries no level to cross-check; the first Save or re-key of it writes v2
-// (which pins the level from then on).
+// signed record as a uvarint, the 32-byte hash of its recipient list, the data (unsigned).
+// Version 3: magic "GJE\x03", the same header as v2, then the 32-byte SHA-256 of the data and a
+// 64-byte Ed25519 signature over everything before it (frameSigMessage), then the data. The
+// signature covers the content hash, so a signed header cannot be put on other content, and a
+// reader that only needs the header (the checks that scan a document's files) can verify it
+// without reading the rest. A v1 file is read as before and carries no level to cross-check;
+// the first Save or re-key of it writes v3 (v2 when the adapter has no Signer and the
+// document is not end to end), which pins the level from then on.
 var (
 	frameMagicV1 = []byte("GJE\x01")
-	frameMagic   = []byte("GJE\x02")
+	frameMagicV2 = []byte("GJE\x02")
+	frameMagic   = []byte("GJE\x03")
 )
+
+const frameSigContext = "gojiberry/frame/v3"
 
 const (
 	levelServer byte = 0
@@ -173,6 +217,9 @@ type Binding struct {
 	Pending bool
 	// Hash is a hash of the record's recipient list (zero when there is no record).
 	Hash [sha256.Size]byte
+	// Signed is the record's flag that every file of the document carries a signed frame; only
+	// the record has it.
+	Signed bool
 }
 
 // Binder is a Keyring that can also say the Binding of the record it chose recipients by. The
@@ -199,6 +246,14 @@ func downgrade(id, format string, args ...any) error {
 	return fmt.Errorf("%w: %s: %s", ErrDowngrade, id, fmt.Sprintf(format, args...))
 }
 
+// Hints appended to the findings, so the message says how the owner goes on: Recover when the
+// record was lost or replaced (and the owner knows what it should say), Repair when the record is
+// right and some file was left wrapped below its level by a switch that was cut short.
+const (
+	recoverHint = " (if the record was restored on purpose, the owner can run Sharing.Recover to write a new one)"
+	repairHint  = " (if a switch of level was cut short, the owner can run Sharing.Repair to re-key the files; if the record was replaced on purpose, Sharing.Recover)"
+)
+
 func levelByte(l string) byte {
 	if l == ProtectionE2EE {
 		return levelE2EE
@@ -223,31 +278,59 @@ func rank(level string) int {
 	return 0
 }
 
-// frameInfo says which frame version a file had and, for v2, the binding in it.
+// frameInfo says which frame version a file had and, from v2, the binding in it; for v3 also the
+// content hash and signature it carries.
 type frameInfo struct {
 	version int
 	b       Binding
+	content [sha256.Size]byte
+	sig     []byte
 }
 
-func frame(id string, b Binding, data []byte) []byte {
-	out := make([]byte, 0, len(frameMagic)+binary.MaxVarintLen64*2+len(id)+1+sha256.Size+len(data))
-	out = append(out, frameMagic...)
+// frameSigMessage is what a v3 frame's signature covers.
+func frameSigMessage(id string, level byte, seq uint64, recipients, content [sha256.Size]byte) []byte {
+	out := append([]byte(frameSigContext), 0)
+	out = binary.AppendUvarint(out, uint64(len(id)))
+	out = append(out, id...)
+	out = append(out, level)
+	out = binary.AppendUvarint(out, seq)
+	out = append(out, recipients[:]...)
+	return append(out, content[:]...)
+}
+
+// frame writes the frame: v3, signed, when there is a signer, else v2.
+func frame(id string, b Binding, data []byte, signer *Signer) []byte {
+	out := make([]byte, 0, len(frameMagic)+binary.MaxVarintLen64*2+len(id)+1+2*sha256.Size+ed25519.SignatureSize+len(data))
+	if signer == nil {
+		out = append(out, frameMagicV2...)
+	} else {
+		out = append(out, frameMagic...)
+	}
 	out = binary.AppendUvarint(out, uint64(len(id)))
 	out = append(out, id...)
 	out = append(out, levelByte(b.Level))
 	out = binary.AppendUvarint(out, b.Seq)
 	out = append(out, b.Hash[:]...)
+	if signer != nil {
+		content := sha256.Sum256(data)
+		out = append(out, content[:]...)
+		out = append(out, ed25519.Sign(signer.key, frameSigMessage(id, levelByte(b.Level), b.Seq, b.Hash, content))...)
+	}
 	return append(out, data...)
 }
 
 // unframe checks the frame of the decrypted b against id and returns the data and what the
-// frame said. A prefix of a frame (the header alone) parses too: the data is then short.
+// frame said. It does not verify a v3 signature (Adapter.verifyFrame does). A prefix of a frame
+// (the header alone) parses too: the data is then short.
 func unframe(id string, b []byte) ([]byte, frameInfo, error) {
 	var fi frameInfo
 	switch {
 	case bytes.HasPrefix(b, frameMagic):
-		fi.version = 2
+		fi.version = 3
 		b = b[len(frameMagic):]
+	case bytes.HasPrefix(b, frameMagicV2):
+		fi.version = 2
+		b = b[len(frameMagicV2):]
 	case bytes.HasPrefix(b, frameMagicV1):
 		fi.version = 1
 		b = b[len(frameMagicV1):]
@@ -282,8 +365,50 @@ func unframe(id string, b []byte) ([]byte, frameInfo, error) {
 	fi.b.Seq = seq
 	b = b[k:]
 	copy(fi.b.Hash[:], b[:sha256.Size])
-	return b[sha256.Size:], fi, nil
+	b = b[sha256.Size:]
+	if fi.version == 2 {
+		return b, fi, nil
+	}
+	if len(b) < sha256.Size+ed25519.SignatureSize {
+		return nil, fi, ErrFormat
+	}
+	copy(fi.content[:], b[:sha256.Size])
+	fi.sig = append([]byte(nil), b[sha256.Size:sha256.Size+ed25519.SignatureSize]...)
+	return b[sha256.Size+ed25519.SignatureSize:], fi, nil
 }
+
+// ErrForgedFrame is returned when a file's frame is not what an owner signer wrote: a v3 frame
+// whose signature is missing, is by none of the owners' signing keys, or does not match the
+// content it came with (the header put on other content), or, with Adapter.RequireSigned, an
+// unsigned frame. age gives no sender authentication, so a holder of a recipient's public key
+// can mint a file that opens: this is what tells it from the owner's. It is an ErrDowngrade-class
+// failure (errors.Is(err, docstore.ErrDowngrade)): nothing is read from the file or written
+// over it.
+var ErrForgedFrame error = forgedError{}
+
+type forgedError struct{}
+
+func (forgedError) Error() string {
+	return "encrypt: the file's frame was not written by an owner of this document"
+}
+func (forgedError) Is(target error) bool { return target == docstore.ErrDowngrade }
+
+func forged(id, format string, args ...any) error {
+	return fmt.Errorf("%w: %s: %s", ErrForgedFrame, id, fmt.Sprintf(format, args...))
+}
+
+// ErrNoFrameSigner is returned by Save and the re-keys when a document would be sealed at the
+// end-to-end level and the Adapter has no Signer: the frame of a confidential document must be
+// signed (see ErrForgedFrame), so it is not saved unsigned.
+var ErrNoFrameSigner = errors.New("encrypt: a confidential document is saved with the owner's signature: the Adapter has no Signer")
+
+// ErrUnreadable is returned (wrapped, naming the file) when a stored file of a document exists
+// and cannot be opened here for a reason other than being provably someone else's: it has the age
+// header but is malformed, damaged, or opens with a key of ours and says something else. The
+// checks that compare a document's files with its record cannot tell such a file from one that
+// hides what the record should say, so the operation stops instead of skipping it: restore the
+// file, or delete it (a version snapshot: saver.Saver.DropVersions).
+var ErrUnreadable = errors.New("encrypt: a stored file of this document cannot be opened")
 
 // crossCheck compares what a file says (f) with the record as read now (r). The rules, with
 // Fs and Rs the two seqs:
@@ -301,8 +426,12 @@ func unframe(id string, b []byte) ([]byte, frameInfo, error) {
 //     re-key has not reached yet. A file wrapped above the record's level (people only, in a
 //     document the record calls server) is the safe direction and accepted.
 //
-// A v1 frame has nothing to compare and always passes.
+// A v1 frame has nothing to compare and passes, except in a document whose record says every
+// file is signed (Binding.Signed), where any unsigned frame is ErrForgedFrame.
 func crossCheck(id string, f frameInfo, r Binding, strict bool) error {
+	if r.Exists && r.Signed && f.version < 3 {
+		return forged(id, "its frame is not signed (v%d), but the document's record says every file of it is: it was not written by an owner"+recoverHint, f.version)
+	}
 	if f.version < 2 {
 		return nil
 	}
@@ -310,16 +439,16 @@ func crossCheck(id string, f frameInfo, r Binding, strict bool) error {
 	switch {
 	case !r.Exists:
 		if fb.Seq > 0 || fb.Level == ProtectionE2EE {
-			return downgrade(id, "the file was sealed under recipient record %d (%s) and that record is missing: it was deleted", fb.Seq, levelName(fb.Level))
+			return downgrade(id, "the file was sealed under recipient record %d (%s) and that record is missing: it was deleted"+recoverHint, fb.Seq, levelName(fb.Level))
 		}
 	case fb.Seq > r.Seq:
-		return downgrade(id, "the file was sealed under recipient record %d (%s) but the record is %d (%s): an older signed record was put back", fb.Seq, levelName(fb.Level), r.Seq, levelName(r.Level))
+		return downgrade(id, "the file was sealed under recipient record %d (%s) but the record is %d (%s): an older signed record was put back"+recoverHint, fb.Seq, levelName(fb.Level), r.Seq, levelName(r.Level))
 	case fb.Seq == r.Seq:
 		if fb.Level != r.Level || fb.Hash != r.Hash {
-			return downgrade(id, "the file and the record disagree about level or recipients at record %d", r.Seq)
+			return downgrade(id, "the file and the record disagree about level or recipients at record %d"+recoverHint, r.Seq)
 		}
 	case strict && rank(fb.Level) < rank(r.Level) && !r.Pending:
-		return downgrade(id, "the file is wrapped at the %s level but the document is %s and no switch is in progress", levelName(fb.Level), levelName(r.Level))
+		return downgrade(id, "the file is wrapped at the %s level but the document is %s and no switch is in progress"+repairHint, levelName(fb.Level), levelName(r.Level))
 	}
 	return nil
 }
@@ -369,25 +498,83 @@ func (a *Adapter) seal(ctx context.Context, id string, data []byte) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
-	return sealTo(id, rs, b, data)
+	return a.sealTo(id, rs, b, data)
 }
 
-func sealTo(id string, rs []age.Recipient, b Binding, data []byte) ([]byte, error) {
+// sealTo encrypts data to rs under the frame for binding b: signed when the adapter has a Signer.
+// A confidential document is never sealed without one.
+func (a *Adapter) sealTo(id string, rs []age.Recipient, b Binding, data []byte) ([]byte, error) {
 	if len(rs) == 0 {
 		return nil, ErrNoRecipients
+	}
+	if a.Signer == nil && (b.Level == ProtectionE2EE || b.Signed) {
+		return nil, fmt.Errorf("%w: %s", ErrNoFrameSigner, id)
 	}
 	var buf bytes.Buffer
 	w, err := age.Encrypt(&buf, rs...)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := w.Write(frame(id, b, data)); err != nil {
+	if _, err := w.Write(frame(id, b, data, a.Signer)); err != nil {
 		return nil, err
 	}
 	if err := w.Close(); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// signerKeys is implemented by the keyrings that know the owners' signing keys.
+type signerKeys interface{ ownerSignerKeys() []ed25519.PublicKey }
+
+func (k StoreKeyring) ownerSignerKeys() []ed25519.PublicKey        { return k.OwnerSigners }
+func (k ConfidentialKeyring) ownerSignerKeys() []ed25519.PublicKey { return k.People.OwnerSigners }
+
+// frameVerifiers are the public keys a v3 frame may be signed by.
+func (a *Adapter) frameVerifiers() []ed25519.PublicKey {
+	out := append([]ed25519.PublicKey(nil), a.OwnerSigners...)
+	if sk, ok := a.Ring.(signerKeys); ok {
+		out = append(out, sk.ownerSignerKeys()...)
+	}
+	if a.Signer != nil {
+		out = append(out, a.Signer.Public())
+	}
+	return out
+}
+
+// verifyFrame checks the signature of a frame of a document that has a record (a Binder keyring):
+// a v3 frame must verify against the owners' signing keys, and, when full is set (data is the
+// whole content, not just what followed the header), carry the hash of that content; an
+// unsigned frame is read with a warning logged once, unless RequireSigned. Anything else is
+// ErrForgedFrame.
+func (a *Adapter) verifyFrame(id string, fi frameInfo, data []byte, full bool) error {
+	if !a.binds(id) {
+		return nil
+	}
+	if fi.version < 3 {
+		if a.RequireSigned {
+			return forged(id, "the frame is not signed (v%d) and this adapter requires signed frames", fi.version)
+		}
+		a.warnOnce.Do(func() {
+			log.Printf("encrypt: %s has a frame without the owner's signature (v%d): anyone who knows a recipient's public key could have written it; saving or re-keying the document (Sharing.Repair) writes a signed one", id, fi.version)
+		})
+		return nil
+	}
+	msg := frameSigMessage(id, levelByte(fi.b.Level), fi.b.Seq, fi.b.Hash, fi.content)
+	ok := false
+	for _, k := range a.frameVerifiers() {
+		if len(k) == ed25519.PublicKeySize && ed25519.Verify(k, msg, fi.sig) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return forged(id, "its signature is not by any owner signing key")
+	}
+	if full && sha256.Sum256(data) != fi.content {
+		return forged(id, "its content is not the content the owner signed")
+	}
+	return nil
 }
 
 // decrypt opens the age layer of a stored file; ok is false for a file that is not encrypted
@@ -433,11 +620,20 @@ func (a *Adapter) open(ctx context.Context, id string, stored []byte) (plain []b
 		return nil, frameInfo{}, true, fmt.Errorf("encrypt: %w", err)
 	}
 	plain, fi, err = unframe(id, framed)
-	return plain, fi, true, err
+	if err == nil {
+		err = a.verifyFrame(id, fi, plain, true)
+	}
+	if err != nil {
+		return nil, frameInfo{}, true, err
+	}
+	return plain, fi, true, nil
 }
 
 // peekFrame reads only the frame header of a stored file: age authenticates the first chunk
-// of the stream before releasing it, which is all that is read here.
+// of the stream before releasing it, which is all that is read here. The header's signature is
+// verified (it covers the content hash), the content is not: what the header says is what an
+// owner signed even if the file around it has been given other content, and the readers of the
+// content (open) check the hash.
 func (a *Adapter) peekFrame(ctx context.Context, id string, stored []byte) (frameInfo, error) {
 	r, enc, err := a.decrypt(ctx, id, stored)
 	if err != nil {
@@ -452,6 +648,9 @@ func (a *Adapter) peekFrame(ctx context.Context, id string, stored []byte) (fram
 		return frameInfo{}, fmt.Errorf("encrypt: %w", err)
 	}
 	_, fi, err := unframe(id, buf[:n])
+	if err == nil {
+		err = a.verifyFrame(id, fi, nil, false)
+	}
 	return fi, err
 }
 
@@ -464,15 +663,10 @@ func mainPrefix(id string) string {
 	return DocID(id)
 }
 
-// peekAttempts is how many of a document's newest files checkDocument tries to read a frame
-// from (one that cannot be opened here gives none).
-const peekAttempts = 3
-
 // checkDocument cross-checks the record binding r of the document id belongs to with what the
-// newest stored file of that document says (the rules of crossCheck without the strict one:
-// this is the write side). It reads nothing for an id that is not a document's or for a keyring
-// that is not a Binder, and finds no evidence (so passes) when the document has no file that
-// can be opened here or only v1 files, which have no level to compare.
+// document's stored files say (the rules of crossCheck without the strict one: this is the write
+// side). It reads nothing for an id that is not a document's or for a keyring that is not a
+// Binder. See checkFiles for which files count as evidence and which stop the operation.
 func (a *Adapter) checkDocument(ctx context.Context, id string, r Binding) error {
 	return a.checkFiles(ctx, DocID(id), []string{mainPrefix(id)}, r)
 }
@@ -484,51 +678,110 @@ func (a *Adapter) checkDocumentByID(ctx context.Context, docID string, r Binding
 	return a.checkFiles(ctx, docID, []string{docID, docstore.FolderSecretPrefix + docID}, r)
 }
 
+// checkFiles cross-checks r with EVERY stored file of the document, whatever order the store
+// lists them in or times it reports (both are the store's to choose, so neither is evidence):
+//
+//   - a file that opens here and verifies (a v3 frame signed by an owner signer, or an older
+//     unsigned one, v1 carrying no level) is evidence, and each is checked with crossCheck;
+//   - a file that is provably someone else's (a well-formed age file none of our keys matches:
+//     ErrNoKey) is skipped, and so is one that is gone (ErrNotFound);
+//   - a file that is forged (ErrForgedFrame) fails the check with that error;
+//   - any other file that cannot be opened (the age header but malformed or damaged, opening with
+//     a key of ours but saying something else, not an age file at all unless AllowPlaintext) is
+//     ErrUnreadable: it could be hiding what the record should say, so the operation stops. It
+//     is never counted as "no evidence".
+//
+// A document none of whose files opens (all provably foreign, or none stored) has no evidence
+// and passes: what the record says is then all there is.
 func (a *Adapter) checkFiles(ctx context.Context, docID string, prefixes []string, r Binding) error {
 	if docID == "" || !a.binds(docID) {
 		return nil
 	}
-	var files []docstore.Meta
+	seen := map[string]bool{}
+	var files []string
 	for _, prefix := range prefixes {
 		metas, err := docstore.ListPrefix(ctx, a.Inner, prefix)
 		if err != nil {
 			return err
 		}
 		for _, m := range metas {
-			if !a.skip(m.ID) && DocID(m.ID) == docID {
-				files = append(files, m)
+			if !seen[m.ID] && !a.skip(m.ID) && DocID(m.ID) == docID {
+				seen[m.ID] = true
+				files = append(files, m.ID)
 			}
 		}
 	}
-	sort.Slice(files, func(i, j int) bool { return files[i].UpdatedAt.After(files[j].UpdatedAt) })
-	tried := 0
-	for _, m := range files {
-		if tried == peekAttempts {
-			break
-		}
-		d, err := a.Inner.Load(ctx, m.ID)
+	sort.Strings(files)
+	type evidence struct {
+		id string
+		fi frameInfo
+	}
+	var found []evidence
+	for _, id := range files {
+		d, err := a.Inner.Load(ctx, id)
 		if errors.Is(err, docstore.ErrNotFound) {
 			continue
 		}
 		if err != nil {
 			return err
 		}
-		tried++
-		fi, err := a.peekFrame(ctx, m.ID, d.Data)
-		if err != nil {
-			continue // not openable here: no evidence from this one
+		fi, err := a.peekFrame(ctx, id, d.Data)
+		switch {
+		case err == nil:
+			found = append(found, evidence{id, fi})
+		case errors.Is(err, ErrNoKey):
+			// Provably someone else's: no evidence from this one.
+		case errors.Is(err, ErrNotEncrypted) && a.AllowPlaintext:
+			// A file the migration has not encrypted yet.
+		case errors.Is(err, ErrForgedFrame):
+			return err
+		default:
+			return fmt.Errorf("%w: %s: %w", ErrUnreadable, id, err)
 		}
-		return crossCheck(m.ID, fi, r, false)
+	}
+	// The highest seq first: it is the one that names the record most precisely.
+	sort.SliceStable(found, func(i, j int) bool { return found[i].fi.b.Seq > found[j].fi.b.Seq })
+	for _, e := range found {
+		if err := crossCheck(e.id, e.fi, r, false); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// bindChecked reads the record (the recipients and their Binding) and checks the document's
+// files against it. A downgrade finding is made again once with the record read again: a client
+// that finished a switch between the two reads leaves files sealed under a record newer than
+// the one this read, which is not a downgrade; a record that is really missing or replaced is
+// the same the second time.
+func (a *Adapter) bindChecked(ctx context.Context, id string) ([]age.Recipient, Binding, error) {
+	for attempt := 0; ; attempt++ {
+		rs, b, err := a.bind(ctx, id)
+		if err != nil {
+			return nil, Binding{}, err
+		}
+		if a.afterBind != nil {
+			a.afterBind()
+		}
+		err = a.checkDocument(ctx, id, b)
+		if err == nil {
+			return rs, b, nil
+		}
+		if attempt == 0 && errors.Is(err, ErrDowngrade) && !errors.Is(err, ErrForgedFrame) {
+			continue
+		}
+		return nil, Binding{}, err
+	}
 }
 
 // Save implements docstore.Adapter: the data is encrypted to the keyring's recipients.
 //
 // For a document with a record (a Binder keyring) the file written carries the record's level,
-// seq and recipient hash, and before it is written the document's newest stored file is
-// cross-checked with the record the recipients came from: a record that is missing or older
-// than the file says it was sealed under is ErrDowngrade, and nothing is written.
+// seq and recipient hash, signed by Signer, and before it is written the document's stored
+// files are cross-checked with the record the recipients came from: a record that is missing or
+// older than a file says it was sealed under is ErrDowngrade, a file that cannot be opened and
+// is not provably someone else's is ErrUnreadable, and nothing is written. A confidential
+// document without a Signer is ErrNoFrameSigner.
 func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 	if a.skip(id) {
 		return a.Inner.Save(ctx, id, data)
@@ -538,14 +791,11 @@ func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	rs, b, err := a.bind(ctx, id)
+	rs, b, err := a.bindChecked(ctx, id)
 	if err != nil {
 		return err
 	}
-	if err := a.checkDocument(ctx, id, b); err != nil {
-		return err
-	}
-	ct, err := sealTo(id, rs, b, data)
+	ct, err := a.sealTo(id, rs, b, data)
 	if err != nil {
 		return err
 	}
@@ -558,25 +808,36 @@ func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 // the document's level with no switch in progress, is ErrDowngrade and returns no data. A v1
 // file (written before the frame had a level) is read without that check.
 func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error) {
-	d, err := a.Inner.Load(ctx, id)
-	if err != nil || a.skip(id) {
-		return d, err
-	}
-	plain, fi, _, err := a.open(ctx, id, d.Data)
-	if err != nil {
-		return docstore.Document{}, err
-	}
-	if fi.version >= 2 && a.binds(id) {
-		r, err := a.Ring.(Binder).Binding(ctx, id)
+	for attempt := 0; ; attempt++ {
+		d, err := a.Inner.Load(ctx, id)
+		if err != nil || a.skip(id) {
+			return d, err
+		}
+		plain, fi, _, err := a.open(ctx, id, d.Data)
 		if err != nil {
 			return docstore.Document{}, err
 		}
-		if err := crossCheck(id, fi, r, true); err != nil {
-			return docstore.Document{}, err
+		if a.binds(id) {
+			if a.beforeBinding != nil {
+				a.beforeBinding()
+			}
+			r, err := a.Ring.(Binder).Binding(ctx, id)
+			if err != nil {
+				return docstore.Document{}, err
+			}
+			if err := crossCheck(id, fi, r, true); err != nil {
+				// A switch completed between the read of the file and the record leaves the
+				// file as it was and the record newer: read both again once. A real finding is
+				// the same the second time.
+				if attempt == 0 && errors.Is(err, ErrDowngrade) && !errors.Is(err, ErrForgedFrame) {
+					continue
+				}
+				return docstore.Document{}, err
+			}
 		}
+		d.Data = plain
+		return d, nil
 	}
-	d.Data = plain
-	return d, nil
 }
 
 // List implements docstore.Adapter. Sizes are of what is stored (the ciphertext).
@@ -626,14 +887,11 @@ func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest
 		}
 		rawPrev = docstore.Digest(d.Data)
 	}
-	rs, b, err := a.bind(ctx, id)
+	rs, b, err := a.bindChecked(ctx, id)
 	if err != nil {
 		return err
 	}
-	if err := a.checkDocument(ctx, id, b); err != nil {
-		return err
-	}
-	ct, err := sealTo(id, rs, b, data)
+	ct, err := a.sealTo(id, rs, b, data)
 	if err != nil {
 		return err
 	}
@@ -698,7 +956,7 @@ func (a *Adapter) rekeyOne(ctx context.Context, id string) error {
 		if err != nil {
 			return err
 		}
-		ct, err := sealTo(id, p.rs, p.b, p.plain)
+		ct, err := a.sealTo(id, p.rs, p.b, p.plain)
 		if err != nil {
 			return err
 		}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -25,6 +26,7 @@ import (
 func (w *world) legacyV1(t *testing.T, id string) {
 	t.Helper()
 	ctx := context.Background()
+	w.rewriteRecord(t, id, func(r *sharedRecord) { r.Signed = false }) // a record from before frames were signed
 	for _, f := range w.files(t, id) {
 		d, err := w.inner.Load(ctx, f)
 		if err != nil {
@@ -57,6 +59,43 @@ func (w *world) legacyV1(t *testing.T, id string) {
 			t.Fatal(err)
 		}
 	}
+}
+
+// rewriteRecord signs the document's record again, at the same seq, with fn applied: a record as
+// an older version (or a crafted one) would have written it.
+func (w *world) rewriteRecord(t *testing.T, id string, fn func(*sharedRecord)) {
+	t.Helper()
+	ctx := context.Background()
+	rec, digest, err := loadRecord(ctx, w.inner, id, w.ring.People.OwnerSigners, nil)
+	if err != nil || digest == "" {
+		return
+	}
+	fn(&rec)
+	payload, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(signedRecord{Payload: payload, Sig: ed25519.Sign(w.signer.key, recordMessage(id, payload)), Signer: w.signer.Public()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.inner.Save(ctx, KeysPrefix+id, data); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// legacyRecordBytes is a stored record as a version from before frames were signed wrote it: the
+// same record without the signed flag, signed again.
+func (w *world) legacyRecordBytes(t *testing.T, id string, raw []byte) []byte {
+	t.Helper()
+	rec, err := verifyRecord(raw, id, w.ring.People.OwnerSigners)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec.Signed = false
+	payload, _ := json.Marshal(rec)
+	data, _ := json.Marshal(signedRecord{Payload: payload, Sig: ed25519.Sign(w.signer.key, recordMessage(id, payload)), Signer: w.signer.Public()})
+	return data
 }
 
 func (w *world) frameOf(t *testing.T, f string) frameInfo {
@@ -145,7 +184,7 @@ func TestFrameV2CarriesLevelSeqAndRecipientHash(t *testing.T) {
 	want := rec.binding(true)
 	for _, f := range w.files(t, id) {
 		fi := w.frameOf(t, f)
-		if fi.version != 2 || fi.b.Level != ProtectionE2EE || fi.b.Seq == 0 || fi.b.Seq > want.Seq || fi.b.Hash != want.Hash || fi.b.Hash == ([32]byte{}) {
+		if fi.version != 3 || fi.b.Level != ProtectionE2EE || fi.b.Seq == 0 || fi.b.Seq > want.Seq || fi.b.Hash != want.Hash || fi.b.Hash == ([32]byte{}) {
 			t.Errorf("%s: %+v (record %+v)", f, fi, want)
 		}
 	}
@@ -153,7 +192,7 @@ func TestFrameV2CarriesLevelSeqAndRecipientHash(t *testing.T) {
 	w2 := newWorld(t)
 	id2 := w2.history(t)
 	for _, f := range w2.files(t, id2) {
-		if fi := w2.frameOf(t, f); fi.version != 2 || fi.b.Seq != 0 || fi.b.Level != "" {
+		if fi := w2.frameOf(t, f); fi.version != 3 || fi.b.Seq != 0 || fi.b.Level != "" {
 			t.Errorf("%s: %+v", f, fi)
 		}
 	}
@@ -402,18 +441,18 @@ func TestV1FilesAreAcceptedAndTheFirstSavePinsTheLevel(t *testing.T) {
 			t.Errorf("a v1 file is read as before: %v", err)
 		}
 	}
-	// The first save under the intact record writes v2: from then on the level is pinned.
+	// The first save under the intact record writes a signed v3 frame: from then on the level is pinned.
 	if _, err := w.saver.Save(ctx, "m", docfile.Open, w.doc(t, id)); err != nil {
 		t.Fatal(err)
 	}
-	var v2 int
+	var v3 int
 	for _, f := range w.files(t, id) {
-		if w.frameVersion(t, f) == 2 {
-			v2++
+		if w.frameVersion(t, f) == 3 {
+			v3++
 		}
 	}
-	if v2 == 0 {
-		t.Fatal("the first save did not write a v2 frame")
+	if v3 == 0 {
+		t.Fatal("the first save did not write a v3 frame")
 	}
 	saved := w.doc(t, id)
 	if err := w.inner.Delete(ctx, KeysPrefix+id); err != nil {
@@ -431,7 +470,7 @@ func TestV1FilesAreAcceptedAndTheFirstSavePinsTheLevel(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, f := range w2.files(t, id2) {
-		if v := w2.frameVersion(t, f); v != 2 {
+		if v := w2.frameVersion(t, f); v != 3 {
 			t.Errorf("%s is v%d after a re-key", f, v)
 		}
 	}
@@ -748,7 +787,7 @@ func TestConfidentialFolderRecordsAreCrossCheckedToo(t *testing.T) {
 			t.Fatal(err)
 		}
 		fi := w.frameOf(t, saver.FolderSecretKey(sec))
-		if fi.version != 2 || fi.b.Level != ProtectionE2EE || fi.b.Seq == 0 {
+		if fi.version != 3 || fi.b.Level != ProtectionE2EE || fi.b.Seq == 0 {
 			t.Fatalf("%+v", fi)
 		}
 		w.replay(t, sec, old)

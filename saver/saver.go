@@ -78,8 +78,16 @@ type Saver struct {
 	// Save and SetProtection as it is, wrapped: nothing is written, and the saver does not
 	// retry or re-assert over it (that would sign the replay again). Load, Reveal and Verify
 	// report the same finding (VerifyReport.Downgraded); encrypt.Sharing.Recover is the owner's
-	// way forward.
+	// way forward when the record was lost or replaced (the error text says so), and
+	// encrypt.Sharing.Repair finishes a switch that was cut short. A file whose frame is not
+	// the owner's (encrypt.ErrForgedFrame) is the same finding, and a document file that cannot be
+	// opened and is not provably someone else's stops a save (encrypt.ErrUnreadable).
 	Rekey func(ctx context.Context, target, id, protection string) error
+	// PendingCheck, when set, is called by Verify and says which documents have a recipient
+	// re-key that was cut short (pending) and which of those for too long (stuck)
+	// (encrypt.PendingHook; the saver does not import it). The results are VerifyReport.Pending
+	// and PendingStuck. Nil means none are reported.
+	PendingCheck func(ctx context.Context, target string) (pending, stuck []string, err error)
 
 	mu sync.Mutex   // one catalog update at a time
 	tm sync.RWMutex // Targets, which AddTarget and RemoveTarget change

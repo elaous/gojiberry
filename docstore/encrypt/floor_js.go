@@ -73,7 +73,10 @@ func (localStorageKV) Set(key, value string) error {
 // It survives reloads and new tabs of the same origin, which is where the page's own code runs
 // and a store's writers do not; clearing site data resets it, like a fresh client. When
 // localStorage is unavailable or throws (a private window, blocked or full storage) it works
-// from memory instead (see StorageSeqFloor.Err).
+// from memory instead, and says so: Get and Raise return the value with an error that wraps
+// ErrFloorDegraded, the keyring and Sharing report it through SetFloorDegradedHandler, and
+// StorageSeqFloor.Err keeps the last failure for a page that polls. A page that offers this layer
+// should show it: this browser is not remembering what it saw.
 func LocalStorageSeqFloor(prefix string) *StorageSeqFloor {
 	return &StorageSeqFloor{Prefix: prefix, Store: localStorageKV{}}
 }

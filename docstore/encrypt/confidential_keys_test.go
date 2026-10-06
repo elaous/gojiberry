@@ -83,6 +83,7 @@ func newWorldFloor(t *testing.T, floor SeqFloor) *world {
 		ServerRecipients: []age.Recipient{w.server.Recipient()},
 	}
 	w.ad = New(w.inner, w.ring)
+	w.ad.Signer = w.signer
 	w.sharing = &Sharing{Store: w.inner, Adapter: w.ad, Signer: w.signer, SeqFloor: floor}
 	w.saver = &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: w.ad}}}
 	w.saver.ConfidentialCheck = ConfidentialCheck(w.sharing, w.ana.r)
@@ -474,7 +475,7 @@ func (w *world) rawRecord(t *testing.T, id string) []byte {
 // TestSaveOfAConfidentialDocumentHealsAReplayedServerLevelRecord is the saver's re-assertion,
 // the layer that is left for a document whose files are still in the v1 frame (written before
 // the frame carried the level): nothing in them proves the record was newer, so the replay
-// reads as the record and the next save asserts e2ee again and pins the level in a v2 frame.
+// reads as the record and the next save asserts e2ee again and pins the level in a signed (v3) frame.
 func TestSaveOfAConfidentialDocumentHealsAReplayedServerLevelRecord(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -487,7 +488,7 @@ func TestSaveOfAConfidentialDocumentHealsAReplayedServerLevelRecord(t *testing.T
 		t.Fatal(err)
 	}
 	w.legacyV1(t, id)
-	w.replay(t, id, old) // a store writer puts the older, validly signed record back
+	w.replay(t, id, w.legacyRecordBytes(t, id, old)) // a store writer puts the older, validly signed record back
 	if c, _ := w.ring.IsConfidential(ctx, id); c {
 		t.Fatal("setup: the replay should read as server level")
 	}
@@ -504,7 +505,7 @@ func TestSaveOfAConfidentialDocumentHealsAReplayedServerLevelRecord(t *testing.T
 	}
 	w.assertOnly(t, id, "after a save over a replay", []age.Identity{w.ana.id, w.bo.id}, []age.Identity{w.server})
 	for _, f := range w.files(t, id) {
-		if v := w.frameVersion(t, f); v != 2 {
+		if v := w.frameVersion(t, f); v != 3 {
 			t.Errorf("%s is still frame v%d after the heal", f, v)
 		}
 	}
@@ -679,7 +680,9 @@ func TestServerSSHKeysAreNeverRecipientsOfAConfidentialDocument(t *testing.T) {
 				t.Fatalf("want ana and bo, got %d recipients", len(got))
 			}
 			doc := "00000000-0000-4000-8000-000000000001"
-			if err := New(w.inner, w.ring).Save(ctx, doc+"~aaaaaaaaaaaa.json", []byte("secret")); err != nil {
+			owner := New(w.inner, w.ring)
+			owner.Signer = w.signer
+			if err := owner.Save(ctx, doc+"~aaaaaaaaaaaa.json", []byte("secret")); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := New(w.inner, Static{Keys: []age.Identity{srvID}}).Load(ctx, doc+"~aaaaaaaaaaaa.json"); err == nil {

@@ -4,6 +4,7 @@ package encrypt
 
 import (
 	"context"
+	"errors"
 	"syscall/js"
 	"testing"
 )
@@ -77,11 +78,14 @@ func TestLocalStorageSeqFloorFallsBackToMemoryWhenStorageThrows(t *testing.T) {
 		t.Run(throwOn, func(t *testing.T) {
 			fakeLocalStorage(t, throwOn)
 			f := LocalStorageSeqFloor("p:")
-			if err := f.Raise(ctx, "doc", 5); err != nil {
-				t.Fatalf("a throwing localStorage must not fail the document: %v", err)
+			// The floor keeps working from memory, and says so: the value comes with an error
+			// that wraps ErrFloorDegraded (the keyring goes on, and notes it).
+			if err := f.Raise(ctx, "doc", 5); !errors.Is(err, ErrFloorDegraded) {
+				t.Fatalf("a throwing localStorage must be reported: %v", err)
 			}
-			if v, err := f.Get(ctx, "doc"); err != nil || v != 5 {
-				t.Errorf("memory floor: %d %v", v, err)
+			v, err := f.Get(ctx, "doc")
+			if v != 5 || (throwOn != "setItem" && !errors.Is(err, ErrFloorDegraded)) || (throwOn == "setItem" && err != nil) {
+				t.Errorf("memory floor: %d %v", v, err) // reads fail with getItem and the accessor, not with setItem
 			}
 			if f.Err() == nil {
 				t.Error("Err should say storage failed")
@@ -91,7 +95,7 @@ func TestLocalStorageSeqFloorFallsBackToMemoryWhenStorageThrows(t *testing.T) {
 	// A missing localStorage (a worker) behaves the same way.
 	js.Global().Get("Object").Call("defineProperty", js.Global(), "localStorage", map[string]any{"value": js.Undefined(), "configurable": true})
 	f := LocalStorageSeqFloor("p:")
-	if err := f.Raise(ctx, "doc", 2); err != nil {
+	if err := f.Raise(ctx, "doc", 2); !errors.Is(err, ErrFloorDegraded) {
 		t.Fatal(err)
 	}
 	if v, _ := f.Get(ctx, "doc"); v != 2 || f.Err() == nil {

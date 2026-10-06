@@ -29,12 +29,23 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
   `GOJIBERRY_DOCSTORE_AUTH_PROVIDERS`). The key directory publishes only for `VerifiedEmail` users
   and its lookup is closed to passkey sessions.
 
-- **Encrypted files now carry their protection level (frame v2).** Inside each encrypted file
-  the frame is `GJE\x02` + id + level + the seq of the signed `keys:<ID>` record + a hash of its
-  recipient list; files written before are v1 and still read. The first save or re-key of a
-  document writes v2 (`Sharing.Repair(doc)` upgrades one at once), and only from then does the file
-  prove its level: a v1 file cannot detect a downgrade, so the first save after upgrading pins the
-  level. Older builds cannot read v2 files. A client that reads or saves with a `StoreKeyring` or
+- **Encrypted files now carry their protection level, signed (frame v3).** Inside each encrypted file
+  the frame is `GJE\x03` + id + level + the seq of the signed `keys:<ID>` record + a hash of its
+  recipient list + a hash of the content + an owner's Ed25519 signature over all of it; files written
+  before are v1 (no level) or v2 (level, unsigned) and still read, with a warning logged once. The
+  first save or re-key of a document writes v3 (`Sharing.Repair(doc)` upgrades one at once), and only
+  from then does the file prove its level: a v1 file cannot detect a downgrade, so the first save
+  after upgrading pins the level. age has no sender authentication, so without the signature anyone who
+  knew a recipient's public key could forge a frame; with it a forged frame is `encrypt.ErrForgedFrame`.
+  **Upgrade notes:** set `Adapter.Signer` (a confidential document is not saved without it,
+  `ErrNoFrameSigner`) and list the signers in `StoreKeyring.OwnerSigners`; run `Sharing.Repair` per
+  document to upgrade old files, after which the record says `signed` and unsigned frames in it are
+  forged (`Adapter.RequireSigned` refuses them everywhere). Older builds cannot read v2 or v3 files.
+  The checks now look at every file of a document (an unreadable one that is not provably someone
+  else's is `ErrUnreadable`, not skipped), `Sharing.PendingStatus`/`saver.VerifyReport.Pending`
+  surface a re-key left pending, `FileSeqFloor` is cached and `RaiseMany` batches it, and a floor
+  whose storage fails reports `ErrFloorDegraded` (`encrypt.SetFloorDegradedHandler`; the showcase,
+  once it uses the encrypting adapter, must set it or poll `StorageSeqFloor.Err()`). A client that reads or saves with a `StoreKeyring` or
   `ConfidentialKeyring` now also reads the record on `Load` (it needs `OwnerSigners`, as saving
   already did); a key-only reader (`Static`) is unchanged. New errors: `docstore.ErrDowngrade`
   (`encrypt.ErrDowngrade`) from `Load`/`Save`/re-key/`SetProtection`, `saver.VerifyReport.Downgraded`;
@@ -74,9 +85,13 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
       inside the encrypted frame, so a store writer who deletes or replays a `keys:<ID>` record is
       caught on `Save`, `Load` and every re-key with no client state (`ErrDowngrade`); an owner-signed
       `keys:index` lists the end-to-end documents (`Sharing.VerifyIndex`), and `SeqFloor` has a
-      persistent form (`FileSeqFloor`, `LocalStorageSeqFloor`). Left: a whole-store rollback to an older
-      consistent snapshot is a rollback of data that only a client-side floor outliving it notices;
-      wiring `VerifyIndex` and a floor into the showcase sign-in.
+      persistent form (`FileSeqFloor`, `LocalStorageSeqFloor`). The frame is signed by an owner signer, so
+      a writer who knows only public keys cannot forge one. Left, stated plainly: a whole-store rollback
+      to an older genuine consistent snapshot (files, records and index together) cannot be told from
+      the truth by anything inside the store, and only a client-side floor that outlives it notices
+      (a fresh client has none); files still in the unsigned v1/v2 frames are forgeable until their
+      document is re-keyed (`Sharing.Repair`); wiring `VerifyIndex`, a floor and its degraded warning
+      into the showcase sign-in.
 3. **Public docstore.** An anonymous offer: no account, one document per session, a link
    and a download always, deleted 24 hours after the last edit (viewing does not renew).
    Design, wording of the promise, and the abuse controls that must exist before launch:
