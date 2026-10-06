@@ -45,3 +45,10 @@
 .gj-migrate-failures { margin: 0; padding-left: 1.2em; font-size: 0.85em; color: var(--gj-muted); }
 .gj-doclist button, .gj-migrate button { display: inline-flex; align-items: center; gap: 0.3em; }
 .gj-material { flex: none; display: inline-block; width: 1.25em; height: 1.25em; vertical-align: -0.25em; background-color: currentColor; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; -webkit-mask-size: contain; mask-size: contain; }
+.gj-folder { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5em; margin: 0 0 0.6em; font-size: 0.9em; }
+.gj-folder button { padding: 0.35em 0.8em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); cursor: pointer; font: inherit; }
+.gj-folder button:hover:not(:disabled) { background: var(--gj-bg-muted); }
+.gj-folder button:disabled { opacity: 0.5; cursor: default; }
+.gj-folder-name { font-weight: 500; }
+.gj-folder-reconnect, .gj-folder-unsupported { margin: 0; flex-basis: 100%; color: var(--gj-muted); }
+.gj-folder-reconnect { color: #b45309; }
