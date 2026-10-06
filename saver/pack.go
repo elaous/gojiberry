@@ -102,7 +102,9 @@ type ConflictPolicy int
 const (
 	// ConflictSkip leaves the document in the target as it is, and reports it skipped.
 	ConflictSkip ConflictPolicy = iota
-	// ConflictReplace saves the pack's document over the one in the target.
+	// ConflictReplace saves the pack's document over the one in the target, and takes the
+	// pack's folder, tags and trash flag too (a trashed document replaced by a live one is
+	// restored).
 	ConflictReplace
 	// ConflictCopy imports it as a new document, under a new ID.
 	ConflictCopy
@@ -127,6 +129,9 @@ type ImportReport struct {
 	Skipped []string
 	// Failed names the documents that could not be read or saved, with why.
 	Failed []string
+	// Warnings are things that went wrong after a document was saved (it is counted in
+	// Documents): its trash flag, its folder or its tags could not be applied.
+	Warnings []string
 	// Signed and SignatureOK say whether the pack carried a signature and it checked out;
 	// Signer is the key. Whether to trust it is for the caller.
 	Signed, SignatureOK bool
@@ -149,13 +154,8 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 	if c == nil {
 		c = docfile.JSON
 	}
-	if o.Into != "" {
-		if _, err := s.Folders(ctx, target); err != nil {
-			return rep, err
-		}
-	}
 	idx := rd.Index()
-	existing, err := s.Folders(ctx, target)
+	existing, err := s.Folders(ctx, target) // read once: the folders of the target before the import
 	if err != nil {
 		return rep, err
 	}
@@ -225,8 +225,12 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 			}
 		}
 		doc.SetFolder(folder)
+		tags := doc.Tags()
+		doc.SetTrashed(0) // the catalog and the file agree: Trash below sets it in both
 		id := doc.ID()
-		if _, err := s.Get(ctx, target, id); err == nil {
+		replacing := false
+		var prev Entry
+		if p, err := s.Get(ctx, target, id); err == nil {
 			switch o.Conflict {
 			case ConflictSkip:
 				rep.Skipped = append(rep.Skipped, e.Name)
@@ -234,6 +238,8 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 			case ConflictCopy:
 				doc.SetID(docfile.NewID())
 				doc.SetName(e.Name + " (imported)")
+			case ConflictReplace:
+				replacing, prev = true, p
 			}
 		}
 		saved, err := s.Save(ctx, target, c, doc)
@@ -241,13 +247,32 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 			rep.Failed = append(rep.Failed, e.Name+": "+err.Error())
 			continue
 		}
-		if e.Trashed {
-			if err := s.Trash(ctx, target, saved.ID); err != nil {
-				rep.Failed = append(rep.Failed, e.Name+": "+err.Error())
-				continue
+		rep.Documents++
+		warn := func(what string, err error) {
+			rep.Warnings = append(rep.Warnings, e.Name+": "+what+": "+err.Error())
+		}
+		if replacing {
+			// Save keeps the tags, folder and trash flag of the document it replaces;
+			// the pack's are what was asked for.
+			if err := s.SetTags(ctx, target, saved.ID, tags); err != nil {
+				warn("tags", err)
+			}
+			if prev.Folder != folder {
+				if err := s.Move(ctx, target, folder, saved.ID); err != nil {
+					warn("folder", err)
+				}
+			}
+			if !e.Trashed && !prev.Trashed.IsZero() {
+				if err := s.Restore(ctx, target, saved.ID); err != nil {
+					warn("restore", err)
+				}
 			}
 		}
-		rep.Documents++
+		if e.Trashed && (!replacing || prev.Trashed.IsZero()) {
+			if err := s.Trash(ctx, target, saved.ID); err != nil {
+				warn("trash", err)
+			}
+		}
 	}
 	return rep, nil
 }

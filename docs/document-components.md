@@ -105,7 +105,8 @@ document shows its folder.
 3. **Packs.** A folder row has "As .opendoc" (`DownloadPack`, `Saver.ExportPack`: folders by ID,
    tags, the trash flag and each document's history in one `.opendoc` file) and the list has
    "Import .opendoc" (`ImportPack`, from `Session.Pick`; `Saver.ImportPack` skips documents
-   already there and reports what it skipped, what failed and whether the pack was signed).
+   already there (the UI import always uses Skip; Replace and Copy are for callers of
+   `ImportPack`, and Replace takes the pack's folder, tags and trash flag too) and reports what it skipped, what failed and whether the pack was signed).
    Migrate's format menu has "One .opendoc pack": the documents are gathered into a pack and
    downloaded, and nothing is saved in the store.
 4. **Folder download** is `Saver.Archive`: a ZIP with the folders drawn as
