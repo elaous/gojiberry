@@ -31,6 +31,17 @@ type Document struct {
 	Meta      []MetaEntry `json:"meta,omitempty" pb:"6"`
 	Comments  []Comment   `json:"comments,omitempty" pb:"7"`
 	Footnotes []Footnote  `json:"footnotes,omitempty" pb:"8"`
+	// History holds the earlier versions of the document. It is only filled in a file
+	// made to move a document with its history (the .open format); saving such a
+	// document restores the versions in the store, and a stored document never has it.
+	History []Revision `json:"history,omitempty" pb:"9"`
+}
+
+// Revision is one earlier version of a document: the document as it was, and when it was
+// saved (unix nanoseconds).
+type Revision struct {
+	Saved int64     `json:"saved" pb:"1"`
+	Doc   *Document `json:"doc,omitempty" pb:"2"`
 }
 
 // MetaEntry is a free-form key and value kept with the document.

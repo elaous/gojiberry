@@ -89,6 +89,22 @@ func TestLinkAndDownload(t *testing.T) {
 	d.OK(strings.HasSuffix(name, ".md") && len(data) > 0, "a document downloads in the chosen format: "+name)
 	d.WaitFor("the status line", "(document.querySelector('.gj-saver-status') || {}).textContent === 'plan downloaded'")
 
+	// The formats are under headings, and opendocs' own file carries the history.
+	groups := d.Strs(`Array.from(document.querySelectorAll('.gj-doclist-item .gj-doclist-download optgroup')).map((g) => g.label)`)
+	d.OK(strings.Join(groups, ",") == "Documents,Web and text,Data,opendocs", "the formats are grouped: "+strings.Join(groups, ","))
+	d.Click(".gj-versions-save")
+	d.WaitFor("a version", "document.querySelector('.gj-versions-item')")
+	d.Select(".gj-doclist-item .gj-doclist-download", "format:open")
+	d.WaitSelector(".gj-opendl-current")
+	d.OK(strings.Contains(d.Text(".gj-opendl-current"), "bytes)") && strings.Contains(d.Text(".gj-opendl-history"), "1 versions"), "the dialog sizes the current version and the history: "+d.Text(".gj-opendl-current")+" / "+d.Text(".gj-opendl-history"))
+	withSize := d.Text(".gj-opendl-total")
+	d.Click(".gj-dialog-body .gj-checkbox-input")
+	d.WaitFor("the total without the history", "document.querySelector('.gj-opendl-total').textContent !== "+e2etest.J(withSize))
+	oname, odata := d.Download(func() { d.Click(".gj-dialog-actions button:last-child") })
+	d.OK(strings.HasSuffix(oname, ".open") && len(odata) > 0, "the .open download: "+oname)
+	d.WaitFor("the dialog to close", "!document.querySelector('.gj-opendl-current')")
+	d.WaitFor("the status line", "(document.querySelector('.gj-saver-status') || {}).textContent === 'plan downloaded'")
+
 	d.Fill(".gj-doclist-newfolder-name", "Work")
 	d.WaitFor("the create button", `!document.querySelector('.gj-doclist-newfolder').disabled`)
 	d.Click(".gj-doclist-newfolder")
