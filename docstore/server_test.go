@@ -2,6 +2,7 @@ package docstore
 
 import (
 	"context"
+	"github.com/elaous/gojiberry/auth"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -192,4 +193,99 @@ func TestServerHidesPrefixesAndMountsExtraRoutes(t *testing.T) {
 	if code, body := do("GET", "/docs/visible"); code != 200 || body != "hello" {
 		t.Errorf("%d %q", code, body)
 	}
+}
+
+func serve(h http.Handler, method, path, body string, hdr ...string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	for i := 0; i+1 < len(hdr); i += 2 {
+		req.Header.Set(hdr[i], hdr[i+1])
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// CloseDocs answers 404 for the whole generic API, whatever the id; /health stays.
+func TestCloseDocsClosesTheGenericAPI(t *testing.T) {
+	mem := NewMemoryAdapter()
+	_ = mem.Save(context.Background(), "doc1", []byte("secret"))
+	open := NewServer(mem, "memory")
+	if open.DocsClosed() {
+		t.Fatal("a plain server counts as closed")
+	}
+	if rec := serve(open.Handler(), "GET", "/docs/doc1", ""); rec.Code != 200 {
+		t.Fatalf("open server GET = %d", rec.Code)
+	}
+	closed := NewServer(mem, "memory").CloseDocs()
+	if !closed.DocsClosed() {
+		t.Fatal("CloseDocs did not close")
+	}
+	h := closed.Handler()
+	for _, c := range []struct{ method, path string }{
+		{"GET", "/docs"}, {"GET", "/docs/doc1"}, {"PUT", "/docs/new"}, {"DELETE", "/docs/doc1"},
+		{"GET", "/docs/doc1/acl"}, {"PUT", "/docs/doc1/acl"}, {"GET", "/quota"},
+	} {
+		if rec := serve(h, c.method, c.path, "x"); rec.Code != http.StatusNotFound {
+			t.Errorf("%s %s = %d, want 404", c.method, c.path, rec.Code)
+		}
+	}
+	if d, err := mem.Load(context.Background(), "new"); err == nil {
+		t.Fatalf("a closed server stored %q", d.Data)
+	}
+	if rec := serve(h, "GET", "/health", ""); rec.Code != 200 {
+		t.Fatalf("/health = %d", rec.Code)
+	}
+	if !NewServer(mem, "memory").WithRequireACL(true).WithAuth(newTestAuthManager(t)).DocsClosed() {
+		t.Fatal("required ACLs with sign-in do not count as closed")
+	}
+	if NewServer(mem, "memory").WithRequireACL(true).DocsClosed() {
+		t.Fatal("required ACLs without sign-in count as closed")
+	}
+}
+
+// Hide matches without regard to case, so a backend that folds case cannot alias a hidden prefix.
+func TestHideIgnoresCase(t *testing.T) {
+	mem := NewMemoryAdapter()
+	_ = mem.Save(context.Background(), "pubdoc/a", []byte("x"))
+	h := NewServer(mem, "memory").Hide("PubDoc/").Hide("passkey/").Handler()
+	for _, id := range []string{"pubdoc/a", "PubDoc/a", "PUBDOC/a", "pubDoc/zzz", "Passkey/u", "PASSKEY/u"} {
+		for _, method := range []string{"GET", "PUT", "DELETE"} {
+			if rec := serve(h, method, "/docs/"+id, "y"); rec.Code != http.StatusBadRequest {
+				t.Errorf("%s /docs/%s = %d, want 400", method, id, rec.Code)
+			}
+		}
+		if rec := serve(h, "GET", "/docs/"+id+"/acl", ""); rec.Code != http.StatusBadRequest {
+			t.Errorf("acl of %s = %d", id, rec.Code)
+		}
+	}
+	rec := serve(h, "GET", "/docs", "")
+	if strings.Contains(rec.Body.String(), "pubdoc/a") {
+		t.Fatalf("a hidden id is listed: %s", rec.Body.String())
+	}
+	if rec := serve(h, "PUT", "/docs/pubdocs-not-hidden", "y"); rec.Code != http.StatusNoContent {
+		t.Fatalf("a similar id was hidden: %d", rec.Code)
+	}
+}
+
+// The document routes name the headers a browser script may read.
+func TestDocsRoutesExposeHeadersToCORS(t *testing.T) {
+	h := newTestServer().Handler()
+	for _, path := range []string{"/docs", "/docs/x", "/health"} {
+		rec := serve(h, "GET", path, "", "Origin", "https://app.example")
+		v := rec.Header().Get("Access-Control-Expose-Headers")
+		for _, want := range []string{"X-Gojiberry-Expires", "Retry-After", "Link"} {
+			if !strings.Contains(v, want) {
+				t.Errorf("%s: Access-Control-Expose-Headers = %q lacks %s", path, v, want)
+			}
+		}
+	}
+}
+
+func newTestAuthManager(t *testing.T) *auth.Manager {
+	t.Helper()
+	m, err := auth.NewManager(context.Background(), auth.Config{BaseURL: "https://app.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
 }

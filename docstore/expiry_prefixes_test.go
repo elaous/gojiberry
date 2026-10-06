@@ -11,6 +11,7 @@ import (
 	"github.com/elaous/gojiberry/collab/hub"
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/docstore/encrypt"
+	"github.com/elaous/gojiberry/docstore/public"
 	"github.com/elaous/gojiberry/fonts"
 	"github.com/elaous/gojiberry/saver"
 )
@@ -22,6 +23,9 @@ func TestSystemPrefixesCoverExportedConstants(t *testing.T) {
 		"docstore.ExpiryPrefix":        docstore.ExpiryPrefix + "x",
 		"docstore.DirectoryPrefix":     docstore.DirectoryPrefix + "x",
 		"docstore.FolderSecretPrefix":  docstore.FolderSecretPrefix + "x",
+		"docstore.PublicPrefix":        docstore.PublicPrefix + "doc/x",
+		"docstore.ReportPrefix":        docstore.ReportPrefix + "x",
+		"public.TombstonePrefix":       public.TombstonePrefix + "x",
 		"docstore.UserCatalogPrefix":   docstore.UserCatalogPrefix("u") + "index",
 		"encrypt.KeysPrefix":           encrypt.KeysPrefix + "doc",
 		"fonts.KeyPrefix":              fonts.KeyPrefix + "Inter/400.ttf",
@@ -47,6 +51,7 @@ var irrelevantPrefixConstants = map[string]string{
 	"LWWKindPrefix":        "CRDT op kind",
 	"accountPrefix":        "first part of a passkey user ID (\"passkey:...\"), not a key",
 	"passkeySessionPrefix": "user ID prefix, not a key",
+	"docKeyPrefix":         "where docstore/public keeps public documents: ordinary expiring documents, hidden from /docs by Server.Hide instead",
 }
 
 var prefixConst = regexp.MustCompile(`(?m)^\s*(?:const\s+)?(\w*[Pp]refix\w*)\s*=\s*"([^"]*)"`)
