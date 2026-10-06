@@ -230,3 +230,30 @@ func TestRecoveryKeyButtonNeedsAHostThatCanShowTheSecret(t *testing.T) {
 	p.CreateRecoveryKey = func(context.Context) (string, error) { return "x", nil }
 	mustContain(t, render(t, Recipients(p)), "Create a recovery key")
 }
+
+// A key whose own signature binds it to the address shows a stronger mark than a verified one;
+// a key that is only verified keeps the plain mark, and neither claims the key is safe.
+func TestAttestedKeysShowAStrongerMark(t *testing.T) {
+	p := RecipientsProps{
+		Shared:  []RecipientRow{{Label: "bo@x.io", Type: "ssh-ed25519", Fingerprint: "SHA256:bo", Verified: true, Attested: true}, {Label: "cy", Type: "age-x25519", Fingerprint: "SHA256:cy", Verified: true}},
+		Pending: &Pending{Inline: true},
+		Add:     func(_ context.Context, k, c string) error { return nil },
+		Directory: func(context.Context, string) ([]DirRow, error) {
+			return nil, nil
+		},
+		DirSearched: true,
+		DirResults: []DirRow{
+			{Label: "a", Type: "ssh-ed25519", Fingerprint: "SHA256:a", Key: "ssh-ed25519 AAAA", Verified: true, Attested: true},
+			{Label: "b", Type: "age-x25519", Fingerprint: "SHA256:b", Key: "age1b", Verified: true},
+			{Label: "c", Type: "age-x25519", Fingerprint: "SHA256:c", Key: "age1c", Attested: true}, // not verified: no mark of trust at all
+		},
+	}
+	html := render(t, Recipients(p))
+	if strings.Count(html, "gj-recip-attested") != 2 { // bo in the list, a in the picker
+		t.Errorf("attested marks: %d in %s", strings.Count(html, "gj-recip-attested"), html)
+	}
+	mustContain(t, html, "verified e-mail, signed by the key", "does not prove the key is safe", "label only: confirm the fingerprint")
+	// A draft that parsed to an attested key shows it.
+	p.Parsed = &RecipientRow{Type: "ssh-ed25519", Fingerprint: "SHA256:a", Verified: true, Attested: true}
+	mustContain(t, render(t, Recipients(p)), "gj-recip-parsed-fingerprint")
+}

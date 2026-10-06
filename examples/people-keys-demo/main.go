@@ -57,7 +57,9 @@ type page struct {
 	dirRows        []components.DirRow
 	dirSearched    bool
 	dirVerified    map[string]bool // fingerprint -> the directory said so, for the last lookup
+	dirAttested    map[string]bool // fingerprint -> the directory said the key signed the binding too
 	verifiedAdded  map[string]bool // keys added from a verified row
+	attestedAdded  map[string]bool // keys added from an attested row
 	recoverySecret string
 	myAdded        *components.RecipientRow
 	notice         string
@@ -67,8 +69,8 @@ type page struct {
 	c       *client.Client
 }
 
-func recipientRow(r encrypt.Recipient, verified bool) components.RecipientRow {
-	return components.RecipientRow{Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint, Verified: verified}
+func recipientRow(r encrypt.Recipient, verified, attested bool) components.RecipientRow {
+	return components.RecipientRow{Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint, Verified: verified, Attested: verified && attested}
 }
 
 func parseKey(text string) (encrypt.Recipient, error) {
@@ -79,7 +81,7 @@ func parseKey(text string) (encrypt.Recipient, error) {
 }
 
 func newPage() (*page, error) {
-	p := &page{dirVerified: map[string]bool{}, verifiedAdded: map[string]bool{}}
+	p := &page{dirVerified: map[string]bool{}, dirAttested: map[string]bool{}, verifiedAdded: map[string]bool{}, attestedAdded: map[string]bool{}}
 	p.pending = components.NewPending(func() { p.render() })
 	p.asker = components.NewAsker(func() { p.render() })
 	p.c = &client.Client{Token: func() string { return p.token }}
@@ -113,7 +115,7 @@ func (p *page) refreshShared(ctx context.Context) error {
 		if own[s.Fingerprint] {
 			continue
 		}
-		p.shared = append(p.shared, components.RecipientRow{Label: s.Label, Type: s.Type, Fingerprint: s.Fingerprint, Verified: p.verifiedAdded[s.Fingerprint]})
+		p.shared = append(p.shared, components.RecipientRow{Label: s.Label, Type: s.Type, Fingerprint: s.Fingerprint, Verified: p.verifiedAdded[s.Fingerprint], Attested: p.attestedAdded[s.Fingerprint]})
 	}
 	return nil
 }
@@ -121,7 +123,7 @@ func (p *page) refreshShared(ctx context.Context) error {
 func (p *page) ownerRows() []components.RecipientRow {
 	var rows []components.RecipientRow
 	for _, o := range p.owner {
-		rows = append(rows, recipientRow(o, false))
+		rows = append(rows, recipientRow(o, false, false))
 	}
 	return rows
 }
@@ -148,7 +150,7 @@ func (p *page) addMyPasskey(ctx context.Context) error {
 		return err
 	}
 	p.owner = append(p.owner, r)
-	row := recipientRow(r, false)
+	row := recipientRow(r, false, false)
 	p.myAdded = &row
 	return p.refreshShared(ctx)
 }
@@ -207,7 +209,7 @@ func (p *page) lookup(ctx context.Context, email string) ([]components.DirRow, e
 	var out struct {
 		Keys []struct {
 			Key, Label, Type, Fingerprint string
-			Verified                      bool
+			Verified, Attested            bool
 		}
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
@@ -215,7 +217,7 @@ func (p *page) lookup(ctx context.Context, email string) ([]components.DirRow, e
 	}
 	rows := make([]components.DirRow, 0, len(out.Keys))
 	for _, k := range out.Keys {
-		rows = append(rows, components.DirRow{Label: k.Label, Type: k.Type, Fingerprint: k.Fingerprint, Key: k.Key, Verified: k.Verified})
+		rows = append(rows, components.DirRow{Label: k.Label, Type: k.Type, Fingerprint: k.Fingerprint, Key: k.Key, Verified: k.Verified, Attested: k.Attested})
 	}
 	return rows, nil
 }
@@ -232,7 +234,7 @@ func (p *page) parsed() *components.RecipientRow {
 		return nil
 	}
 	p.parseErr = ""
-	row := recipientRow(r, p.dirVerified[r.Fingerprint])
+	row := recipientRow(r, p.dirVerified[r.Fingerprint], p.dirAttested[r.Fingerprint])
 	if row.Label == "" {
 		row.Label = p.dirEmail
 	}
@@ -254,6 +256,7 @@ func (p *page) add(ctx context.Context, key, confirm string) error {
 		return err
 	}
 	p.verifiedAdded[r.Fingerprint] = p.dirVerified[r.Fingerprint]
+	p.attestedAdded[r.Fingerprint] = p.dirAttested[r.Fingerprint]
 	p.draft, p.confirm, p.parseErr = "", "", ""
 	return p.refreshShared(ctx)
 }
@@ -316,10 +319,11 @@ func (p *page) view() xango.Node {
 // onDirResults keeps what the directory said: which fingerprints it vouches for.
 func (p *page) onDirResults(email string, rows []components.DirRow) {
 	p.dirRows, p.dirSearched = rows, true
-	p.dirVerified = map[string]bool{}
+	p.dirVerified, p.dirAttested = map[string]bool{}, map[string]bool{}
 	for _, r := range rows {
 		if r.Verified {
 			p.dirVerified[r.Fingerprint] = true
+			p.dirAttested[r.Fingerprint] = r.Attested
 		}
 	}
 }

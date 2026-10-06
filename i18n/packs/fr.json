@@ -235,6 +235,8 @@
   "recipients.owner": "propriétaire",
   "recipients.verified": "e-mail vérifié",
   "recipients.verifiedHelp": "La clé a été publiée par un compte dont l’e-mail est vérifié. Cela prouve le compte, pas que la clé soit sûre.",
+  "recipients.attested": "e-mail vérifié, signé par la clé",
+  "recipients.attestedHelp": "La clé a été publiée par un compte dont l’e-mail est vérifié, et la clé elle-même a signé qu’elle appartient à cette adresse : le serveur seul n’aurait pas pu l’inventer. Cela ne prouve pas que la clé soit sûre.",
   "recipients.labelOnly": "simple libellé : confirmez l’empreinte",
   "recipients.dirEmail": "Adresse e-mail à rechercher",
   "recipients.dirPlaceholder": "Trouver une personne par e-mail",

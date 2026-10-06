@@ -56,7 +56,7 @@ func TestDirectoryPublishRefusesUsersWithoutAVerifiedProviderEmail(t *testing.T)
 		}
 	}
 	if metas, _ := store.List(ctx); len(metas) != 0 {
-		t.Errorf("nothing was written: %v", metas)
+		t.Errorf("nothing was written: %v", metas) // not even a log entry
 	}
 	if err := d.Publish(ctx, auth.User{ID: "google:1", Email: "ana@x.io", VerifiedEmail: true}, Recipient{Text: "garbage"}); err == nil {
 		t.Error("a key that does not parse is refused")
@@ -288,7 +288,7 @@ func TestDirectoryConcurrentPublishesRespectTheCap(t *testing.T) {
 		}(k)
 	}
 	wg.Wait()
-	metas, _ := store.List(ctx)
+	metas, _ := docstore.ListPrefix(ctx, store, "directory/")
 	if len(metas) != 3 {
 		t.Fatalf("%d keys published for one address with a cap of 3", len(metas))
 	}

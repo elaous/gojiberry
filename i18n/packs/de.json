@@ -235,6 +235,8 @@
   "recipients.owner": "Eigentümer",
   "recipients.verified": "E-Mail bestätigt",
   "recipients.verifiedHelp": "Der Schlüssel wurde von einem Konto mit bestätigter E-Mail veröffentlicht. Das belegt das Konto, nicht dass der Schlüssel sicher ist.",
+  "recipients.attested": "E-Mail bestätigt, vom Schlüssel signiert",
+  "recipients.attestedHelp": "Der Schlüssel wurde von einem Konto mit bestätigter E-Mail veröffentlicht, und der Schlüssel selbst hat signiert, dass er zu dieser Adresse gehört; der Server allein hätte das nicht erfinden können. Das belegt nicht, dass der Schlüssel sicher ist.",
   "recipients.labelOnly": "nur Bezeichnung: Fingerabdruck bestätigen",
   "recipients.dirEmail": "Nachzuschlagende E-Mail-Adresse",
   "recipients.dirPlaceholder": "Person per E-Mail finden",

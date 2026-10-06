@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/elaous/gojiberry/auth"
@@ -54,10 +55,15 @@ type Config struct {
 	// before expiry was switched on the deadline UpdatedAt + TTL, so old ones are deleted by the
 	// first sweep. The default is now + TTL, a full grace period.
 	ExpiryAdoptUpdated bool
-	Addr               string
-	Backend            string
-	BackendConfig      json.RawMessage
-	Auth               AuthConfig
+	// Limiter chooses where rate limits (the directory's, and the passkey routes') are kept:
+	// "memory" (the default: a budget per process) or "store" (a budget shared through the
+	// store by every replica on it, see StoreLimiter). ConfigFromEnv reads
+	// GOJIBERRY_DOCSTORE_LIMITER.
+	Limiter       string
+	Addr          string
+	Backend       string
+	BackendConfig json.RawMessage
+	Auth          AuthConfig
 }
 
 // AuthConfig configures the optional Sign-in-with-OIDC endpoints
@@ -137,6 +143,9 @@ func ConfigFromEnv() Config {
 	if cfg.ExpiryAdoptUpdated, err = ParseExpiryAdopt(os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_ADOPT")); err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
+	if cfg.Limiter, err = ParseLimiterMode(os.Getenv("GOJIBERRY_DOCSTORE_LIMITER")); err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
 	return cfg
 }
 
@@ -213,8 +222,9 @@ func envOr(key, fallback string) string {
 // /auth/{provider}/login, /auth/{provider}/callback, /auth/me,
 // /auth/logout.
 //
-// Plus, with WithDirectory and an auth.Manager, POST /directory/publish and
-// GET /directory/lookup (directory.go); the "directory/" ids are reserved from /docs.
+// Plus, with WithDirectory and an auth.Manager, the /directory/* routes (challenge, publish,
+// revoke, lookup, log: see WithDirectory); the "directory/", "directory-log/" and "ratelimit/"
+// ids are reserved from /docs.
 //
 // GET/PUT/DELETE on /docs/{id} enforce that document's own ACL, if any
 // (checkPermission, acl.go) -- a document nobody has ever shared via
@@ -235,9 +245,14 @@ type Server struct {
 	// prefixes of ids the server keeps for itself (Hide).
 	extra  []extraRoute
 	hidden []string
-	// directory is the key directory behind /directory/* (WithDirectory); limiter limits it.
-	directory DirectoryService
-	limiter   windowLimiter
+	// directory is the key directory behind /directory/* (WithDirectory); its routes are limited
+	// by the limiters the factory makes (WithDirectoryLimits) and its lookups narrowed by
+	// dirPolicy (WithDirectoryPolicy).
+	directory       DirectoryService
+	dirLimitFactory LimiterFactory
+	dirLimitOnce    sync.Once
+	dirLimits       *directoryLimits
+	dirPolicy       DirectoryPolicy
 }
 
 type extraRoute struct {
@@ -358,8 +373,11 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("/auth/", s.auth.Routes())
 	}
 	if s.auth != nil && s.directory != nil {
+		mux.HandleFunc("/directory/challenge", s.handleChallenge)
 		mux.HandleFunc("/directory/publish", s.handlePublish)
+		mux.HandleFunc("/directory/keys/", s.handleRevoke)
 		mux.HandleFunc("/directory/lookup", s.handleLookup)
+		mux.HandleFunc("/directory/log", s.handleLog)
 	}
 	for _, e := range s.extra {
 		mux.Handle(e.pattern, e.h)

@@ -25,9 +25,15 @@ func needsSecondKey(p RecipientsProps) bool {
 	return true
 }
 
-// verifiedMark is the mark next to a key: verified e-mail, or a label only that needs its
-// fingerprint confirmed. Neither says the key is safe.
-func verifiedMark(verified bool) xango.Node {
+// verifiedMark is the mark next to a key: verified e-mail, the stronger "verified e-mail and the
+// key's own signature" when the key attested the binding, or a label only that needs its
+// fingerprint confirmed. None says the key is safe.
+func verifiedMark(verified, attested bool) xango.Node {
+	if verified && attested {
+		return xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-mark gj-recip-verified gj-recip-attested"),
+			xango.A("title", tr("recipients.attestedHelp", "The key was published by an account whose e-mail is verified, and the key itself signed that it belongs to this address, so the server alone could not have made that up. That does not prove the key is safe."))},
+			xango.Text(tr("recipients.attested", "verified e-mail, signed by the key")))
+	}
 	if verified {
 		return xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-mark gj-recip-verified"),
 			xango.A("title", tr("recipients.verifiedHelp", "The key was published by an account whose e-mail is verified. That proves the account, not that the key is safe."))},
@@ -80,7 +86,7 @@ func directoryPicker(p RecipientsProps, busy bool) []xango.Node {
 				xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text(orNone(label))),
 				xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-type")}, xango.Text(r.Type)),
 				xango.El("code", []xango.Attr{xango.A("class", "gj-recip-fingerprint")}, xango.Text(r.Fingerprint)),
-				verifiedMark(r.Verified),
+				verifiedMark(r.Verified, r.Attested),
 				docButton("gj-recip-pick", tr("recipients.pick", "Use this key"), busy, pick)))
 		}
 		nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list gj-recip-dir-results")}, items...))
