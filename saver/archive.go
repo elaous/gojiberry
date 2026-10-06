@@ -65,7 +65,12 @@ func (s *Saver) ArchiveReport(ctx context.Context, target, folder string) (data 
 				if !ok {
 					break
 				}
-				parts = append([]string{safeName(f.Name)}, parts...)
+				part := safeName(f.Name)
+				if f.Protection == ProtectionE2EE {
+					// Every confidential folder is called the placeholder: the ID tells them apart.
+					part += " (" + id[:min(8, len(id))] + ")"
+				}
+				parts = append([]string{part}, parts...)
 				id = f.Parent
 			}
 			return path.Join(parts...)

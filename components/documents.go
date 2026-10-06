@@ -39,7 +39,13 @@ type Doc struct {
 
 // DocFolder is a folder as the components list it: like a document, an ID and a
 // name that need not be unique; Parent is the folder it is in, "" at the top.
-type DocFolder struct{ ID, Name, Parent string }
+//
+// Confidential marks a folder whose real name is kept inside the envelope: Name is then the
+// placeholder ("Confidential folder") until the host has revealed it, so a UI can draw a lock.
+type DocFolder struct {
+	ID, Name, Parent string
+	Confidential     bool
+}
 
 // DocVersion is a snapshot of a document.
 type DocVersion struct {
@@ -626,7 +632,12 @@ func folderRows(p DocListProps, busy bool) []xango.Node {
 	var rows []xango.Node
 	for _, f := range p.Folders {
 		id := f.ID
-		row := []xango.Node{xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text("📁 "+f.Name))}
+		nameNodes := []xango.Node{xango.Text("📁 " + f.Name)}
+		if f.Confidential {
+			// The name is the placeholder until revealed: a lock says why.
+			nameNodes = append(nameNodes, xango.Text(" "), Icon(IconProps{Glyph: "🔒", Size: 14, Label: tr("docs.folderConfidential", "Confidential folder")}))
+		}
+		row := []xango.Node{xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name"+confidentialClass(f.Confidential))}, nameNodes...)}
 		if p.OpenFolder != nil {
 			row = append(row, docButton("gj-doclist-folder-open", tr("docs.openFolder", "Open"), busy, actOne(p.Pending, p.OpenFolder, id)))
 		}
@@ -775,4 +786,12 @@ func downloadControl(p DocListProps, d Doc, busy bool) []xango.Node {
 		}))
 	}
 	return []xango.Node{xango.El("select", attrs, opts...)}
+}
+
+// confidentialClass marks the name of a confidential folder for styling.
+func confidentialClass(c bool) string {
+	if c {
+		return " gj-doc-confidential"
+	}
+	return ""
 }

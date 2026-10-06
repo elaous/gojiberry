@@ -69,6 +69,10 @@ type catalogEntry struct {
 type folderEntry struct {
 	Name   string `json:"name"`
 	Parent string `json:"parent,omitempty"`
+	// Protection is ProtectionE2EE for a confidential folder, whose Name is then
+	// ConfidentialFolderName (the real one is in the encrypted record folderSecretKey);
+	// "" is the server's. The record stays readable: the shape of the tree is not hidden.
+	Protection string `json:"protection,omitempty"`
 }
 
 type catalog struct {
@@ -351,11 +355,25 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 	}
 	for _, m := range metas {
 		if id, ok := strings.CutPrefix(m.ID, t.folderPrefix()); ok && docfile.ValidID(id) {
-			if stored, err := t.Adapter.Load(ctx, m.ID); err == nil {
+			stored, err := t.Adapter.Load(ctx, m.ID)
+			if err == nil {
 				var f folderEntry
 				if json.Unmarshal(stored.Data, &f) == nil && f.Name != "" {
+					if f.Protection == ProtectionE2EE {
+						f.Name = ConfidentialFolderName // whatever the record says: the name is in the secret
+					}
 					out.Folders[id] = f
 				}
+			} else if errors.Is(err, docstore.ErrLocked) {
+				// A store whose folder records are encrypted and no key here opens one: it is
+				// listed as a confidential folder under the placeholder, with its place in the
+				// tree from the catalog being replaced (the top level if that did not list it).
+				f := folderEntry{}
+				if known != nil {
+					f = known.Folders[id]
+				}
+				f.Name, f.Protection = ConfidentialFolderName, ProtectionE2EE
+				out.Folders[id] = f
 			}
 			continue
 		}
