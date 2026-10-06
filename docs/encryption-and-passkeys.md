@@ -103,6 +103,24 @@ key** that wraps a key pair or the data key, so:
    Chrome's virtual authenticator (the CDP WebAuthn domain), which `internal/e2etest`
    can drive. Replay is covered by the signature counter and one-time challenges.
 
+### B.1 Extension points
+
+Everything a second replica or a larger deployment needs to share is an interface, with a
+default that works in one process. Pass your own in `passkey.Config` (or the store you give
+`passkey.New`):
+
+| Interface | What it does | Default | Plug in |
+|---|---|---|---|
+| `Store` (+ optional `Updater`, `Creator`) | accounts and credentials; `Updater` changes one account atomically (the function may run again on a conflict), `Creator` makes one only if none exists | `MemoryStore`; `AdapterStore` (compare-and-set over a `docstore.ConditionalAdapter`, else this process's lock) | SQL tables, anything with a transaction or conditional write |
+| `ChallengeStore` | started ceremonies; `Take` must be atomic so a challenge is good once | `MemoryChallenges` (10,000 at most, swept every 5 s) | Redis `GETDEL`, a table with a delete-returning |
+| `Limiter` | per client and route group: allowed now, or wait this long | `RateLimiter` (token bucket per address and group: 20 at once, 30 a minute) | Redis, a gateway; `Unlimited{}` to switch off |
+| `Config.ClientIP` | who the client is for the limiter | the remote address; `TrustedProxies(cidrs...)` reads `X-Forwarded-For` only from your proxies | your own function |
+
+Over the limit the routes answer 429 with `Retry-After`. `cmd/docstore` reads
+`GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES` (comma separated CIDRs) for the last row.
+A store without `Updater`/`Creator` still works in one process; behind several replicas it
+needs them (a conditional write), or two sign-ins can overwrite each other's counter update.
+
 ## C. Decisions
 
 1. **Both modes, chosen per document or folder: a protection level.** Convention (the

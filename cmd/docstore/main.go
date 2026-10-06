@@ -22,7 +22,8 @@ import (
 )
 
 // withPasskeys turns on sign-in with passkeys when GOJIBERRY_DOCSTORE_PASSKEY_RPID is set (with
-// GOJIBERRY_DOCSTORE_PASSKEY_ORIGINS, comma separated, and GOJIBERRY_DOCSTORE_PASSKEY_NAME): the
+// GOJIBERRY_DOCSTORE_PASSKEY_ORIGINS, comma separated, GOJIBERRY_DOCSTORE_PASSKEY_NAME and, behind
+// a reverse proxy, GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES, comma separated CIDRs): the
 // accounts are kept in the same store under "passkey/", which the server hides from its own
 // HTTP routes. With no OpenID Connect provider the session manager is made for passkeys alone.
 func withPasskeys(ctx context.Context, srv *docstore.Server, adapter docstore.Adapter, m *auth.Manager) (*auth.Manager, error) {
@@ -45,7 +46,13 @@ func withPasskeys(ctx context.Context, srv *docstore.Server, adapter docstore.Ad
 			return nil, err
 		}
 	}
-	svc, err := passkey.New(passkey.Config{RPID: rp, RPName: os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_NAME"), Origins: origins},
+	cfg := passkey.Config{RPID: rp, RPName: os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_NAME"), Origins: origins}
+	// Behind a reverse proxy the per-client rate limit needs the proxy's addresses, so that
+	// X-Forwarded-For is believed from it and from nobody else.
+	if px := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES")); px != "" {
+		cfg.ClientIP = passkey.TrustedProxies(strings.Split(px, ",")...)
+	}
+	svc, err := passkey.New(cfg,
 		&passkey.AdapterStore{Adapter: adapter}, m)
 	if err != nil {
 		return nil, err

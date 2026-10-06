@@ -46,3 +46,25 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
    processes can lose a catalog update.
 8. The rest of the [known limits plan](known-limits-plan.md): i18n breadth,
    accessibility depth, right-to-left, Hunspell dictionaries on demand.
+
+## Backlog: pluggable infrastructure for passkeys
+
+`auth/passkey` takes each piece of shared infrastructure as an interface, so a deployment can
+plug in its own once it exists, with no change to the library (see
+[encryption-and-passkeys.md](encryption-and-passkeys.md), "Extension points"). What ships is the
+single-process default of each. To build when a deployment needs it:
+
+1. **A shared rate limiter** (`passkey.Limiter`): Redis or a gateway's decision, so replicas share
+   one budget. Default today: a per-address token bucket in the process.
+2. **A shared challenge store** (`passkey.ChallengeStore`): Redis or a database, with an atomic
+   Take, so a ceremony begun on one replica finishes on another. Default today: memory.
+3. **Account stores with a conditional write.** `AdapterStore` already does compare-and-set
+   (`Updater`, `Creator`) over any `docstore.ConditionalAdapter`; the S3, Mongo and Postgres
+   adapters get it from #55. To check once #55 merges: run the passkey tests against each
+   backend (a live Postgres and Mongo in CI), and add a store that is not a docstore (SQL
+   tables) behind the same two interfaces.
+4. **Per-account limits** (not only per address): a failed-sign-in budget per account, through
+   the same `Limiter` with a different key.
+5. **The same pattern for the rest of the encryption stack**: `Sharing` and `Adapter` take the
+   store and signer as interfaces already; a shared lock (`docstore.Locker`) for stores without
+   conditional writes is the open piece.

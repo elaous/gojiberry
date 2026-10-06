@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	mrand "math/rand/v2"
 	"sync"
 	"time"
 
@@ -94,6 +95,27 @@ type Store interface {
 	Delete(ctx context.Context, id string) error
 }
 
+// Updater is an optional capability of a Store: change one account atomically. fn is given the
+// account as it is stored and changes it in place; if fn returns an error nothing is written and
+// the error is returned. A store shared by several processes implements this with a conditional
+// write (read, change, write only if nobody else wrote in between, else read again and call fn
+// again), so fn must be safe to run more than once. Without it the Service serializes changes
+// within its own process only. MemoryStore and AdapterStore (over a docstore.ConditionalAdapter)
+// implement it.
+type Updater interface {
+	Update(ctx context.Context, id string, fn func(*Account) error) error
+}
+
+// Creator is an optional capability of a Store: make an account only if none exists with that
+// ID (ErrExists otherwise), atomically. Without it the Service checks and writes within its own
+// process only.
+type Creator interface {
+	Create(ctx context.Context, a *Account) error
+}
+
+// ErrExists is returned by Creator.Create when the account already exists.
+var ErrExists = errors.New("passkey: the account already exists")
+
 func newHandle() ([]byte, error) {
 	h := make([]byte, 32)
 	_, err := rand.Read(h)
@@ -142,6 +164,33 @@ func (m *MemoryStore) ByHandle(_ context.Context, handle []byte) (*Account, erro
 func (m *MemoryStore) Put(_ context.Context, a *Account) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.accounts[a.ID] = clone(a)
+	return nil
+}
+
+// Update implements Updater.
+func (m *MemoryStore) Update(_ context.Context, id string, fn func(*Account) error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	a, ok := m.accounts[id]
+	if !ok {
+		return ErrNotFound
+	}
+	c := clone(a)
+	if err := fn(c); err != nil {
+		return err
+	}
+	m.accounts[id] = clone(c)
+	return nil
+}
+
+// Create implements Creator.
+func (m *MemoryStore) Create(_ context.Context, a *Account) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.accounts[a.ID]; ok {
+		return ErrExists
+	}
 	m.accounts[a.ID] = clone(a)
 	return nil
 }
@@ -204,6 +253,10 @@ func (s *AdapterStore) ByHandle(ctx context.Context, handle []byte) (*Account, e
 func (s *AdapterStore) Put(ctx context.Context, a *Account) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.putLocked(ctx, a)
+}
+
+func (s *AdapterStore) putLocked(ctx context.Context, a *Account) error {
 	data, err := json.Marshal(a)
 	if err != nil {
 		return err
@@ -214,6 +267,85 @@ func (s *AdapterStore) Put(ctx context.Context, a *Account) error {
 		return err
 	}
 	return s.Adapter.Save(ctx, handleKey(a.Handle), []byte(a.ID))
+}
+
+// maxUpdateTries bounds the read-change-write loop of Update when others keep writing.
+const maxUpdateTries = 32
+
+// Update implements Updater. Over a docstore.ConditionalAdapter it is a compare-and-set loop, so
+// several processes may share the adapter; over any other adapter it is serialized within this
+// process only (see the Updater doc).
+func (s *AdapterStore) Update(ctx context.Context, id string, fn func(*Account) error) error {
+	ca, ok := s.Adapter.(docstore.ConditionalAdapter)
+	if !ok {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		a, err := s.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := fn(a); err != nil {
+			return err
+		}
+		return s.putLocked(ctx, a)
+	}
+	for try := 0; try < maxUpdateTries; try++ {
+		d, err := s.Adapter.Load(ctx, accountKey(id))
+		if errors.Is(err, docstore.ErrNotFound) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		var a Account
+		if err := json.Unmarshal(d.Data, &a); err != nil {
+			return err
+		}
+		if err := fn(&a); err != nil {
+			return err
+		}
+		data, err := json.Marshal(&a)
+		if err != nil {
+			return err
+		}
+		if err := ca.SaveIf(ctx, accountKey(id), data, docstore.Digest(d.Data)); err != nil {
+			if errors.Is(err, docstore.ErrConflict) {
+				// Someone else wrote: wait a little (more each time, randomly) and redo the change.
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(time.Duration(mrand.IntN(1+try)) * time.Millisecond):
+				}
+				continue
+			}
+			return err
+		}
+		return s.Adapter.Save(ctx, handleKey(a.Handle), []byte(a.ID))
+	}
+	return docstore.ErrConflict
+}
+
+// Create implements Creator (atomic over a docstore.ConditionalAdapter).
+func (s *AdapterStore) Create(ctx context.Context, a *Account) error {
+	data, err := json.Marshal(a)
+	if err != nil {
+		return err
+	}
+	if ca, ok := s.Adapter.(docstore.ConditionalAdapter); ok {
+		if err := ca.SaveIf(ctx, accountKey(a.ID), data, ""); err != nil {
+			if errors.Is(err, docstore.ErrConflict) {
+				return ErrExists
+			}
+			return err
+		}
+		return s.Adapter.Save(ctx, handleKey(a.Handle), []byte(a.ID))
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.Get(ctx, a.ID); err == nil {
+		return ErrExists
+	}
+	return s.putLocked(ctx, a)
 }
 
 // Delete implements Store.
