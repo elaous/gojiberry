@@ -5,7 +5,7 @@
 // whisper.cpp itself, so its own CLI or plain whisper.cpp's own `main`/
 // `whisper-cli` both work here) -- both genuinely local, offline tools
 // with no API key or third-party network call involved, so (unlike
-// translateserver's DeepL proxy) there's no secret to hide server-
+// translate/server's DeepL proxy) there's no secret to hide server-
 // side. This package exists purely because neither tool speaks HTTP on
 // its own the way Ollama does (task #160's own scripts/start-ollama.sh
 // needed no server code at all, just a startup script, since Ollama
@@ -14,7 +14,7 @@
 // small HTTP contract OnDesign's own browser-side editor/voice package
 // talks to instead. Same environment-configured, CORS-open, single-
 // binary shape as gojiberry/syncserver, gojiberry/fontserver, and
-// gojiberry/translateserver -- see cmd/voiceserver for the entry
+// gojiberry/translate/server -- see cmd/voiceserver for the entry
 // point.
 package voiceserver
 
@@ -34,7 +34,7 @@ import (
 )
 
 // Config is loaded entirely from the environment, the same posture
-// syncserver.Config/fontserver.Config/translateserver.Config take.
+// syncserver.Config/fontserver.Config/server.Config take.
 type Config struct {
 	// Guard decides who may call the server: guard.Origins(...) for pages from
 	// listed origins, guard.Token(...) for callers holding a token, both with
@@ -44,7 +44,7 @@ type Config struct {
 	Addr  string // listen address, e.g. ":8084"
 
 	// PiperBinary/PiperModel gate /speak the same way
-	// translateserver.Config.DeepLAPIKey gates /translate: with
+	// server.Config.DeepLAPIKey gates /translate: with
 	// PiperBinary empty, /speak always reports 503.
 	PiperBinary string // e.g. "piper", or a full path
 	PiperModel  string // path to a Piper .onnx voice model (its .onnx.json sits alongside it)
@@ -85,7 +85,7 @@ type Server struct {
 	// speak/transcribe are swappable so tests can inject a fake
 	// instead of shelling out to a real piper/whisper-cli binary --
 	// the same "swappable network call" reasoning fontserver's own
-	// fetchGoogleFonts field and translateserver's own translator
+	// fetchGoogleFonts field and translate/server's own translator
 	// interface document.
 	speak      func(binary, model, text string) ([]byte, error)
 	transcribe func(binary, model string, wav []byte) (string, error)
@@ -97,7 +97,7 @@ type Server struct {
 // NewServer creates a voice server for the given config. With
 // PiperBinary/WhisperBinary empty, the corresponding route stays wired
 // but always reports 503 -- the same "still runs, just reports the
-// feature is off" posture translateserver.NewServer/fontserver's own
+// feature is off" posture server.NewServer/fontserver's own
 // handleGoogleFonts take with no key configured, rather than refusing
 // to start at all.
 func NewServer(cfg Config) *Server {
@@ -112,7 +112,7 @@ func NewServer(cfg Config) *Server {
 //	                       file -> {"text"}
 //
 // Every response carries permissive CORS headers, the same reasoning
-// as syncserver/fontserver/translateserver's own Handler: this
+// as syncserver/fontserver/translate/server's own Handler: this
 // server's whole point is being reachable from a page served from a
 // different origin.
 func (s *Server) Handler() http.Handler {
@@ -132,7 +132,7 @@ type speakRequest struct {
 }
 
 // maxSpeakBody/maxTranscribeBody cap request bodies at a generous but
-// finite size, the same defensive posture translateserver's own
+// finite size, the same defensive posture translate/server's own
 // maxTranslateBody takes against a client-supplied Content-Length that
 // can't be trusted.
 const maxSpeakBody = 200 * 1024            // ~200KB of text, plenty for a document read aloud in one request
