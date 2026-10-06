@@ -56,6 +56,7 @@ type Session struct {
 	total    int
 	current  string
 	report   *Report
+	partial  bool // a pack run failed or was cancelled, and the pack was not delivered
 }
 
 // NewSession makes a Session over the platforms.
@@ -233,12 +234,9 @@ func (s *Session) run(ctx context.Context, src Source, items []Item, tag string)
 		s.mu.Unlock()
 		return errors.New("migrate: a migration is already running")
 	}
-	s.running, s.report, s.done, s.total, s.current = true, nil, 0, 0, ""
+	s.running, s.report, s.done, s.total, s.current, s.partial = true, nil, 0, 0, "", false
 	s.mu.Unlock()
 	defer s.set(func() { s.running = false })
-	if s.Sink == nil {
-		return errors.New("migrate: nowhere to put the documents")
-	}
 	sink, finish, err := s.sinkFor()
 	if err != nil {
 		return err
@@ -247,7 +245,12 @@ func (s *Session) run(ctx context.Context, src Source, items []Item, tag string)
 		s.set(func() { s.done, s.total, s.current = done, total, name })
 	}})
 	if finish != nil {
-		if ferr := finish(); ferr != nil && err == nil {
+		// A run that failed or was cancelled is not delivered: a partial pack handed over
+		// as if it were the whole migration is worse than none. The report still says how
+		// far it got.
+		if err != nil {
+			s.set(func() { s.partial = true })
+		} else if ferr := finish(); ferr != nil {
 			err = ferr
 		}
 	}
@@ -265,6 +268,9 @@ func (s *Session) sinkFor() (Sink, func() error, error) {
 	pick := s.format
 	s.mu.Unlock()
 	if pick != PackFormat || s.Deliver == nil {
+		if s.Sink == nil {
+			return nil, nil, errors.New("migrate: nowhere to put the documents")
+		}
 		return s.Sink(s.codec()), nil, nil
 	}
 	ps, err := NewPackSink("migrated " + time.Now().Format("2006-01-02"))
@@ -327,7 +333,7 @@ func (s *Session) Props(pickFiles func()) components.MigrateProps {
 		p.Items = append(p.Items, mi)
 	}
 	if r := s.report; r != nil {
-		p.Reported, p.Imported, p.Truncated = true, r.Imported, r.Truncated
+		p.Reported, p.Imported, p.Truncated, p.Partial = true, r.Imported, r.Truncated, s.partial
 		for _, f := range r.Failed {
 			p.Failed = append(p.Failed, components.MigrateFailure{Name: f.Name, Err: f.Err.Error()})
 		}

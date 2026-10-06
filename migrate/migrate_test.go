@@ -438,3 +438,46 @@ func TestSessionCanGatherTheMigrationIntoOnePack(t *testing.T) {
 		t.Errorf("nothing was saved in the store: %d", len(live))
 	}
 }
+
+func TestSessionPackNeedsNoStoreSink(t *testing.T) {
+	ctx := context.Background()
+	s := NewSession(nil, nil)
+	s.Pending.Inline = true
+	var data []byte
+	s.Deliver = func(_, _ string, d []byte) { data = d }
+	s.SetFormat(PackFormat)
+	if err := s.ImportFiles(ctx, Files{{"One.docx", wordFile(t, "one")}}); err != nil || len(data) == 0 {
+		t.Fatalf("%v %d", err, len(data))
+	}
+	// Into a store, a missing Sink is still an error.
+	s.SetFormat(docfile.Open.Name())
+	if err := s.ImportFiles(ctx, Files{{"One.docx", wordFile(t, "one")}}); err == nil {
+		t.Error("nowhere to put the documents")
+	}
+}
+
+func TestSessionCancelledPackRunIsNotDeliveredAndSaysPartial(t *testing.T) {
+	s := NewSession(nil, nil)
+	s.Pending.Inline = true
+	delivered := false
+	s.Deliver = func(_, _ string, _ []byte) { delivered = true }
+	s.SetFormat(PackFormat)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := s.ImportFiles(ctx, Files{{"One.docx", wordFile(t, "one")}, {"Two.docx", wordFile(t, "two")}}); err == nil {
+		t.Fatal("a cancelled run is an error")
+	}
+	if delivered {
+		t.Error("a partial pack is not handed over")
+	}
+	if p := s.Props(nil); !p.Partial || !p.Reported {
+		t.Errorf("the report says the pack is partial: %+v", p)
+	}
+	// The next run starts clean.
+	if err := s.ImportFiles(context.Background(), Files{{"One.docx", wordFile(t, "one")}}); err != nil || !delivered {
+		t.Fatalf("%v %v", err, delivered)
+	}
+	if s.Props(nil).Partial {
+		t.Error("partial is per run")
+	}
+}
