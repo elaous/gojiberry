@@ -228,6 +228,11 @@
   "saver.checkedProblems": "%d documents vérifiés : %d rétablis depuis une copie précédente (%s), %d endommagés sans copie (%s)",
   "saver.checkedBackups": "(%d sans bonne copie précédente ; la prochaine sauvegarde en crée une)",
   "saver.checkedOrphans": "(%d fichiers résiduels supprimés)",
-  "docs.check": "Vérifier les documents"
+  "docs.check": "Vérifier les documents",
+  "capacity.nearlyFull": "Ce stockage se remplit. Pour ne rien perdre : téléchargez vos documents maintenant (Télécharger au format, ou un dossier en ZIP), supprimez les anciennes versions et videz la corbeille, ou enregistrez ailleurs avant qu’il soit plein.",
+  "capacity.full": "Ce stockage est plein ou presque : un enregistrement peut être refusé, et le document n’est alors pas enregistré. Téléchargez vos documents maintenant (Télécharger au format, ou un dossier en ZIP), puis faites de la place en supprimant les anciennes versions et en vidant la corbeille, ou enregistrez ailleurs.",
+  "saver.storageFull": "Stockage plein à %.0f%% : téléchargez vos documents maintenant, puis supprimez les anciennes versions et la corbeille.",
+  "saver.storageFilling": "Stockage plein à %.0f%% : téléchargez vos documents, ou supprimez les anciennes versions et la corbeille, avant qu’il soit plein.",
+  "saver.notSavedFull": "Non enregistré : le stockage est plein. Téléchargez le document (Télécharger au format) pour ne rien perdre, puis supprimez les anciennes versions ou la corbeille, ou enregistrez ailleurs"
  }
 }
