@@ -36,6 +36,7 @@ func newMigrate(u *ui, renderUI func()) *migrate.Session {
 	})
 	s.OnChange = func() { renderUI() }
 	s.OnDone = func(migrate.Report) { u.saver.Pending.Run(u.saver.Refresh) }
+	s.Deliver = transfer.Download
 	return s
 }
 
