@@ -627,6 +627,71 @@ func TestVerifyForgetsABadPreviousCopy(t *testing.T) {
 	}
 }
 
+func TestOpenFileCarriesTheHistoryAndSavingItBringsItBack(t *testing.T) {
+	ctx := context.Background()
+	src := &Saver{Targets: []Target{{Name: "m", Adapter: docstore.NewMemoryAdapter()}}}
+	e, err := src.Save(ctx, "m", docfile.JSON, docWithText("plan", "one"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d1 := docWithText("plan", "one")
+	d1.SetID(e.ID)
+	if _, err := src.SaveVersion(ctx, "m", docfile.JSON, d1); err != nil {
+		t.Fatal(err)
+	}
+	d2 := docWithText("plan", "two")
+	d2.SetID(e.ID)
+	if _, err := src.Save(ctx, "m", docfile.JSON, d2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.SaveVersion(ctx, "m", docfile.JSON, d2); err != nil {
+		t.Fatal(err)
+	}
+	data, err := src.ExportOpen(ctx, "m", e.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := docfile.Open.Unmarshal(data)
+	if err != nil || len(doc.History) != 2 || textOf(*doc.History[0].Doc) != "one" || textOf(*doc.History[1].Doc) != "two" || doc.History[0].Saved >= doc.History[1].Saved {
+		t.Fatalf("history in the file: %d %v", len(doc.History), err)
+	}
+	dst := &Saver{Targets: []Target{{Name: "m", Adapter: docstore.NewMemoryAdapter()}}}
+	got, err := dst.Save(ctx, "m", docfile.JSON, doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vs, err := dst.Versions(ctx, "m", got.ID)
+	if err != nil || len(vs) != 2 {
+		t.Fatalf("versions restored: %d %v", len(vs), err)
+	}
+	if stored, err := dst.Load(ctx, "m", got.ID); err != nil || len(stored.History) != 0 {
+		t.Fatalf("the stored document has no history inside: %v", err)
+	}
+}
+
+func TestOpenSizesAndDownloadWithoutHistory(t *testing.T) {
+	ctx := context.Background()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: docstore.NewMemoryAdapter()}}}
+	e, _ := s.Save(ctx, "m", docfile.JSON, docWithText("plan", strings.Repeat("a", 3000)))
+	d := docWithText("plan", strings.Repeat("b", 2000))
+	d.SetID(e.ID)
+	_, _ = s.SaveVersion(ctx, "m", docfile.JSON, d)
+	_, _ = s.SaveVersion(ctx, "m", docfile.JSON, d)
+	sz, err := s.OpenSizes(ctx, "m", e.ID)
+	if err != nil || sz.Versions != 2 || sz.Current < 3000 || sz.History < 4000 {
+		t.Fatalf("%+v %v", sz, err)
+	}
+	with, _ := s.ExportOpen(ctx, "m", e.ID, true)
+	without, _ := s.ExportOpen(ctx, "m", e.ID, false)
+	if int64(len(without)) != sz.Current || int64(len(with)) != sz.Current+sz.History {
+		t.Errorf("sizes %d/%d against %+v", len(without), len(with), sz)
+	}
+	doc, _ := docfile.Open.Unmarshal(without)
+	if len(doc.History) != 0 {
+		t.Error("no history in the file without it")
+	}
+}
+
 // An older file the old catalog knows no checksum for is not vouched for: it does not
 // win over the newer file.
 func TestRebuildDoesNotPutBackAnUnvouchedOlderFile(t *testing.T) {

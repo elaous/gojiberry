@@ -1,13 +1,12 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	deepl "github.com/cluttrdev/deepl-go/deepl"
 )
 
 // fakeTranslator is a translator stub for hermetic tests -- no real
@@ -16,14 +15,16 @@ type fakeTranslator struct {
 	got struct {
 		text       []string
 		targetLang string
+		sourceLang string
 	}
-	result []deepl.Translation
+	result []Translation
 	err    error
 }
 
-func (f *fakeTranslator) TranslateText(text []string, targetLang string, opts ...deepl.TranslateOption) ([]deepl.Translation, error) {
+func (f *fakeTranslator) Translate(_ context.Context, text []string, targetLang, sourceLang string) ([]Translation, error) {
 	f.got.text = text
 	f.got.targetLang = targetLang
+	f.got.sourceLang = sourceLang
 	return f.result, f.err
 }
 
@@ -75,7 +76,7 @@ func TestHandleTranslateNoTranslatorConfigured(t *testing.T) {
 }
 
 func TestHandleTranslateSuccess(t *testing.T) {
-	fake := &fakeTranslator{result: []deepl.Translation{{Text: "Bonjour, le monde !", DetectedSourceLanguage: "EN"}}}
+	fake := &fakeTranslator{result: []Translation{{Text: "Bonjour, le monde !", DetectedSourceLanguage: "EN"}}}
 	srv := newTestServer(fake)
 
 	req := httptest.NewRequest(http.MethodPost, "/translate", strings.NewReader(`{"text":"Hello, world!","targetLang":"FR"}`))
@@ -137,7 +138,7 @@ func TestHandleTranslateUpstreamError(t *testing.T) {
 }
 
 func TestHandleTranslatePassesSourceLangOption(t *testing.T) {
-	fake := &fakeTranslator{result: []deepl.Translation{{Text: "ok"}}}
+	fake := &fakeTranslator{result: []Translation{{Text: "ok"}}}
 	srv := newTestServer(fake)
 	req := httptest.NewRequest(http.MethodPost, "/translate", strings.NewReader(`{"text":"hi","targetLang":"FR","sourceLang":"EN"}`))
 	rec := httptest.NewRecorder()

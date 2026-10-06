@@ -63,8 +63,15 @@ func (s *Saver) CreateFolder(ctx context.Context, target, parent, name string) (
 	if !ValidName(name) {
 		return Folder{}, ErrName
 	}
+	return s.createFolder(ctx, target, docfile.NewID(), parent, name)
+}
+
+// createFolder is CreateFolder with the folder's ID given (an import keeps the IDs of a pack).
+func (s *Saver) createFolder(ctx context.Context, target, id, parent, name string) (Folder, error) {
+	if !ValidName(name) {
+		return Folder{}, ErrName
+	}
 	var out Folder
-	id := docfile.NewID() // outside the closure: update may run it again
 	err := s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
 		if _, ok := cat.Folders[parent]; parent != "" && !ok {
 			return ErrFolder
