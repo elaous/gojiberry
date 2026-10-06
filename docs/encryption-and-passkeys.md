@@ -137,11 +137,53 @@ key** that wraps a key pair or the data key, so:
    that anything already opened or copied cannot be taken back. Confirming decrypts and encrypts
    again, without that key, every document that used it (`Sharing.Usage` counts them, `Sharing.RemoveEverywhere` does it; `components.Recipients` shows "opens N documents" and a "Remove from all N documents" button with that warning). A failure stops it naming the document, and running it again finishes the rest.
 
+### C.5 Who may change a recipient list
+
+The `keys:<ID>` record decides who a document is encrypted to, so it is authenticated, not just
+stored. Design:
+
+- Each record is `{payload, sig}`: the payload is JSON (`v`, the document ID, a growing `seq`, a
+  `pending` flag, the recipients), and `sig` is an **Ed25519 signature** over a fixed context, the
+  document ID and the payload bytes. The ID in the signed message means a valid record cannot be
+  moved to another document.
+- The signing key is the owner's: `encrypt.SignerFromAge` derives it from an age identity (HMAC of a
+  fixed context under the identity's secret, so a PRF-derived or recovery identity works),
+  `SignerFromSSH` uses an ed25519 SSH key. Every owner key that may change lists has its public
+  signing key in `StoreKeyring.OwnerSigners` (and `Sharing.OwnerSigners`) of whoever reads them.
+  `Sharing` needs the `Signer` to Add or Remove (`ErrNoSigner` without it).
+- `StoreKeyring.Recipients` (what every save asks) verifies the record and **fails closed**: an
+  unsigned record (`ErrUnsignedRecord`), a record signed by a key that is not an owner's, or a
+  changed or moved one (`ErrBadSignature`) makes the save fail, never a longer or shorter list.
+  Fingerprints and types are recomputed from the stored key text, not read from the record.
+
+Threat model, store write access only (no owner key):
+- **Cannot** add themselves, or anyone, as a recipient of future saves: the record they write does
+  not verify, and saves fail until the owner repairs it.
+- **Cannot** edit a signed list to drop a recipient or change a key.
+- **Can** delete a record (the document then reads as shared with no one besides the owner: the
+  owner can still open everything, and the people it was shared with lose access to later saves,
+  silently). Detecting this needs owner-held state (a signed index of which documents have lists);
+  not built. `Sharing` keeps an empty signed record rather than deleting when the last key goes,
+  but a reader cannot tell a deleted record from a document that was never shared.
+- **Can** put back an older signed record (for example one that still lists a person the owner
+  removed), and future saves then go to them. `seq` is in the signed payload so a client that
+  remembers the highest it has seen per document can refuse a lower one; no client does yet.
+- **Can** still delete or replace files (availability), and read the catalog and the recipient
+  lists: fingerprints, labels and public keys are not secret.
+Someone who holds an owner key (it opens the documents anyway) can change lists.
+
+Re-keying after a change is crash-safe: the list is saved first with `pending` set, then every file
+of the document is encrypted again, and `pending` is cleared only when all of them are. `Remove` of a
+key that is already gone from the list finishes a pending re-key (it is `ErrNotFound` only when
+nothing is pending), `Add` of a listed key encrypts again, and `Sharing.Repair` does the same
+without naming a key. `Adapter.RekeyDocument` opens all the files first and writes none if one
+cannot be opened.
+
 ## D. Plan
 
 1. **Done:** `docstore/encrypt` (`encrypt.Adapter`, `Keyring`, `Static`) using `filippo.io/age`
    and `agessh`: SSH (ed25519, RSA), age and recovery-key recipients, `Rekey` and `RekeyAll`,
-   `RequireEncrypted`, catalogs / folder records / ACL records / fonts left readable
+   strict reads by default (a file without the age header is refused; `AllowPlaintext` is the opt-out for migrating a clear store), ciphertext bound to its id by a framed header (`ErrWrongDocument`), `SaveIf` on encrypted ids compared against the plaintext, serialized and conditional re-keys that continue past failures, catalogs / folder records / ACL records / fonts left readable
    (`DefaultSkip`), conditional catalog writes and the store lock passed through. Tests: round
    trip, wrong key, tampered ciphertext, sharing and re-key on revoke, a recovery key, bad keys,
    and the whole saver (folders, versions, `Verify`) on an encrypted store. It is its own
@@ -149,7 +191,8 @@ key** that wraps a key pair or the data key, so:
    does).
 2. **Done (library and component):** `encrypt.Sharing` (`Add` needs the fingerprint the owner
    confirmed, `Remove`, `List`) over `encrypt.StoreKeyring`, which keeps each document's
-   recipients in a readable `keys:<ID>` record (public keys only) beside the owner's keys; every
+   recipients in a readable, **owner-signed** `keys:<ID>` record (public keys only, see "Who may
+   change a recipient list" below) beside the owner's keys; every
    file of the document (its copies and versions) is encrypted again to the new list
    (`Adapter.RekeyDocument`). `components.Recipients` is the People tab's control: the owner's keys,
    the shared keys with Remove (which says it cannot take back what was already opened), and a form
