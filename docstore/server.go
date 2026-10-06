@@ -167,6 +167,15 @@ type Server struct {
 	guard   guard.Guard
 	// requireACL closes documents that have no ACL (see WithRequireACL).
 	requireACL bool
+	// extra are more routes mounted beside /docs and /auth (WithRoutes); hidden are the
+	// prefixes of ids the server keeps for itself (Hide).
+	extra  []extraRoute
+	hidden []string
+}
+
+type extraRoute struct {
+	pattern string
+	h       http.Handler
 }
 
 // NewServer wraps an already-constructed Adapter. Use this directly
@@ -200,6 +209,34 @@ func (s *Server) WithRequireACL(on bool) *Server {
 	return s
 }
 
+// WithRoutes mounts another handler on the server (the passkey routes of auth/passkey, say),
+// next to /docs and /auth, under the same guard.
+func (s *Server) WithRoutes(pattern string, h http.Handler) *Server {
+	s.extra = append(s.extra, extraRoute{pattern, h})
+	return s
+}
+
+// Hide keeps ids that start with prefix away from people: they are not listed and cannot be
+// read, written or deleted over HTTP. For records a part of the program keeps in the same
+// store ("passkey/" holds accounts and their credentials) that only that part should touch.
+func (s *Server) Hide(prefix string) *Server {
+	s.hidden = append(s.hidden, prefix)
+	return s
+}
+
+// reserved says an id is not for people to use: this package's own keys and the hidden ones.
+func (s *Server) reserved(id string) bool {
+	if isReservedDocID(id) {
+		return true
+	}
+	for _, p := range s.hidden {
+		if strings.HasPrefix(id, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // NewAuthManager builds an auth.Manager from cfg, or returns (nil,
 // nil) when cfg has no providers configured -- the "auth is entirely
 // optional" case ConfigFromEnv's own doc comment describes. Exists
@@ -228,6 +265,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/docs/", s.handleDoc)
 	if s.auth != nil {
 		mux.Handle("/auth/", s.auth.Routes())
+	}
+	for _, e := range s.extra {
+		mux.Handle(e.pattern, e.h)
 	}
 	return guard.Or(s.guard).Wrap(mux)
 }
@@ -287,7 +327,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	// never appear in a document listing.
 	visible := make([]Meta, 0, len(metas))
 	for _, m := range metas {
-		if isReservedDocID(m.ID) {
+		if s.reserved(m.ID) {
 			continue
 		}
 		// With sign-in on, only list what the caller may read.
@@ -303,7 +343,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/docs/")
 	if id, ok := strings.CutSuffix(path, "/acl"); ok {
-		if id == "" || isReservedDocID(id) {
+		if id == "" || s.reserved(id) {
 			http.Error(w, "missing or invalid document id", http.StatusBadRequest)
 			return
 		}
@@ -311,7 +351,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := path
-	if id == "" || isReservedDocID(id) {
+	if id == "" || s.reserved(id) {
 		http.Error(w, "missing or invalid document id", http.StatusBadRequest)
 		return
 	}
