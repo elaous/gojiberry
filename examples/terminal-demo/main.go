@@ -8,6 +8,8 @@
 //
 // Commands: ls cd mkdir mv cp tag rm restore purge pack unpack check usage help (see
 // docs/console.md), and: new NAME | open NAME | edit | save [NAME] | quit.
+// new, open, rm and purge ask first when that would lose unsaved text or the open document;
+// "new! NAME", "open! NAME", "rm! ..." and "purge! ..." go ahead.
 package main
 
 import (
@@ -46,6 +48,7 @@ type app struct {
 	lines []string // the document being edited, a line each
 	dirty bool     // edited since it was last saved or opened
 	ansi  bool     // clear the screen between screens
+	note  string   // an error to show under the next screen, so redrawing does not erase it
 }
 
 func openStore(spec string) (saver.Target, error) {
@@ -63,9 +66,17 @@ func openStore(spec string) (saver.Target, error) {
 }
 
 func run(store string, in io.Reader, out io.Writer, ansi bool) error {
-	t, err := openStore(store)
+	a, err := newApp(store, in, out, ansi)
 	if err != nil {
 		return err
+	}
+	return a.loop()
+}
+
+func newApp(store string, in io.Reader, out io.Writer, ansi bool) (*app, error) {
+	t, err := openStore(store)
+	if err != nil {
+		return nil, err
 	}
 	a := &app{ctx: context.Background(), in: bufio.NewReader(in), out: out, ansi: ansi}
 	sv := &saver.Saver{Targets: []saver.Target{t}}
@@ -73,9 +84,9 @@ func run(store string, in io.Reader, out io.Writer, ansi bool) error {
 	a.s.Pending.Inline = true
 	a.sh = console.New(sv, t.Name, a.in, out, out)
 	if err := a.s.Refresh(a.ctx); err != nil {
-		return err
+		return nil, err
 	}
-	return a.loop()
+	return a, nil
 }
 
 // document is what the session saves: the lines as the text of one run.
@@ -142,13 +153,17 @@ func (a *app) screen() {
 func (a *app) loop() error {
 	for {
 		a.screen()
+		if a.note != "" {
+			a.printf("error: %s\n", a.note)
+			a.note = ""
+		}
 		a.printf("> ")
 		line, err := a.in.ReadString('\n')
 		line = strings.TrimSpace(line)
 		if line != "" {
 			quit, cerr := a.command(line)
 			if cerr != nil {
-				a.printf("error: %v\n", cerr)
+				a.note = cerr.Error()
 			}
 			if quit {
 				return nil
@@ -165,6 +180,12 @@ func (a *app) command(line string) (quit bool, err error) {
 	if err != nil || len(words) == 0 {
 		return false, err
 	}
+	// A "!" after new, open, rm or purge says the warning was read.
+	force := false
+	switch words[0] {
+	case "new!", "open!", "rm!", "purge!":
+		words[0], force = strings.TrimSuffix(words[0], "!"), true
+	}
 	switch words[0] {
 	case "quit", "exit":
 		if a.dirty {
@@ -177,6 +198,9 @@ func (a *app) command(line string) (quit bool, err error) {
 		if len(words) < 2 {
 			return false, errors.New("usage: new NAME")
 		}
+		if a.dirty && !force {
+			return false, errors.New("the text has unsaved changes: save first, or discard them with 'new! NAME'")
+		}
 		a.s.Detach()
 		a.s.SetName(strings.Join(words[1:], " "))
 		a.lines, a.dirty = []string{}, true
@@ -184,6 +208,9 @@ func (a *app) command(line string) (quit bool, err error) {
 	case "open":
 		if len(words) < 2 {
 			return false, errors.New("usage: open NAME")
+		}
+		if a.dirty && !force {
+			return false, errors.New("the text has unsaved changes: save first, or discard them with 'open! NAME'")
 		}
 		name := strings.Join(words[1:], " ")
 		for _, d := range a.s.Docs().Docs {
@@ -213,14 +240,35 @@ func (a *app) command(line string) (quit bool, err error) {
 		a.dirty = false
 		return false, nil
 	}
+	// rm and purge of the document that is open would leave the editor saving it back.
+	closes := false
+	if (words[0] == "rm" || words[0] == "purge") && len(words) > 1 {
+		if cur := a.s.Props().Docs.Current; cur != "" {
+			ids, err := a.sh.Matches(a.ctx, words[0] == "purge", words[1:]...)
+			for _, id := range ids {
+				if err == nil && id == cur {
+					closes = true
+				}
+			}
+			if closes && !force {
+				return false, fmt.Errorf("%q is open in the editor: close it first, or repeat as '%s! ...' to drop the text too", a.s.Name(), words[0])
+			}
+		}
+	}
 	// Everything else is the console's: mv, tag, rm, pack...
-	if err := a.sh.Exec(a.ctx, words); err != nil {
-		return false, err
+	cerr := a.sh.Exec(a.ctx, words)
+	if cerr == nil && closes {
+		a.s.Detach()
+		a.lines, a.dirty = nil, false
 	}
-	if err := a.s.OpenFolder(a.ctx, a.sh.Cwd()); err != nil { // the list follows cd
-		return false, err
+	// The list follows cd, and is redrawn from the store after an error too.
+	if err := a.s.OpenFolder(a.ctx, a.sh.Cwd()); err != nil && cerr == nil {
+		cerr = err
 	}
-	return false, a.s.Refresh(a.ctx)
+	if err := a.s.Refresh(a.ctx); err != nil && cerr == nil {
+		cerr = err
+	}
+	return false, cerr
 }
 
 // editor is a line editor: the text is shown with numbers, and commands start with a colon.
@@ -239,7 +287,7 @@ func (a *app) editor() error {
 		if strings.HasPrefix(line, ":") {
 			done, cerr := a.editCommand(line[1:])
 			if cerr != nil {
-				a.printf("error: %v\n", cerr)
+				a.note = cerr.Error()
 			}
 			if done {
 				return nil
