@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -566,7 +567,7 @@ func TestCollectOrphansRemovesOnlyOldLeftoverGenerations(t *testing.T) {
 	}
 }
 
-func TestRebuildDoesNotGiveADamagedFileANewChecksum(t *testing.T) {
+func TestRebuildPutsBackTheSaveTheOldCatalogVouchedFor(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
 	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
@@ -579,9 +580,29 @@ func TestRebuildDoesNotGiveADamagedFileANewChecksum(t *testing.T) {
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
 	}
+	// The earlier save, which the old catalog vouched for, is the document again.
 	d, rec, err := s.LoadChecked(ctx, "m", id)
-	if err != nil || !rec.FromPrevious || textOf(d) != "version one" {
-		t.Fatalf("the change is still found: %q %+v %v", textOf(d), rec, err)
+	if err != nil || rec.FromPrevious || textOf(d) != "version one" {
+		t.Fatalf("the rebuild put the vouched-for save back: %q %+v %v", textOf(d), rec, err)
+	}
+}
+
+// With no earlier copy to put back, a changed file is still found damaged after a rebuild.
+func TestRebuildKeepsAChangedOnlyCopyFlagged(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	e, err := s.Save(ctx, "m", docfile.JSON, docWithText("plan", "version one"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := mem.Load(ctx, e.Key)
+	_ = mem.Save(ctx, e.Key, []byte(strings.Replace(string(stored.Data), "version one", "version onX", 1)))
+	if err := s.Rebuild(ctx, "m"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Load(ctx, "m", e.ID); !errors.Is(err, ErrDamaged) {
+		t.Fatalf("%v", err)
 	}
 }
 
@@ -603,5 +624,149 @@ func TestVerifyForgetsABadPreviousCopy(t *testing.T) {
 	rep, _ = s.Verify(ctx, "m")
 	if len(rep.BackupsLost) != 0 {
 		t.Errorf("found again: %+v", rep)
+	}
+}
+
+// An older file the old catalog knows no checksum for is not vouched for: it does not
+// win over the newer file.
+func TestRebuildDoesNotPutBackAnUnvouchedOlderFile(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	e, err := s.Save(ctx, "m", docfile.JSON, docWithText("plan", "version two"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := mem.Load(ctx, e.Key)
+	// A leftover with the same ID, older by its own save time, that no catalog lists.
+	old := docWithText("plan", "version one")
+	old.SetID(e.ID)
+	old.Updated = 1
+	data, _ := docfile.JSON.Marshal(old)
+	_ = mem.Save(ctx, e.ID+"~aaaaaaaaaaaa.json", data)
+	// The newer file changes (still parses).
+	_ = mem.Save(ctx, e.Key, []byte(strings.Replace(string(stored.Data), "version two", "version twX", 1)))
+	if err := s.Rebuild(ctx, "m"); err != nil {
+		t.Fatal(err)
+	}
+	var cur catalogEntry
+	_ = s.view(ctx, "m", func(_ Target, c *catalog) error { cur = c.Docs[e.ID]; return nil })
+	if cur.Key != e.Key {
+		t.Fatalf("the unvouched leftover won: %+v", cur)
+	}
+	if _, err := mem.Load(ctx, e.Key); err != nil {
+		t.Errorf("the newer file was deleted: %v", err)
+	}
+}
+
+// Three files for one ID: the vouched-for one is the document, the changed one is
+// skipped, and only an old enough skipped file is deleted.
+func TestRebuildWithThreeFilesAndTheChangedOneIsCollectedOnlyWhenOld(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	id := twoSaves(t, s, docfile.JSON)
+	var cur catalogEntry
+	_ = s.view(ctx, "m", func(_ Target, c *catalog) error { cur = c.Docs[id]; return nil })
+	stored, _ := mem.Load(ctx, cur.Key)
+	_ = mem.Save(ctx, cur.Key, []byte(strings.Replace(string(stored.Data), "version two", "version twX", 1)))
+	extra := docWithText("plan", "stray")
+	extra.SetID(id)
+	extra.Updated = 1
+	data, _ := docfile.JSON.Marshal(extra)
+	_ = mem.Save(ctx, id+"~cccccccccccc.json", data)
+	if err := s.Rebuild(ctx, "m"); err != nil {
+		t.Fatal(err)
+	}
+	var skipped []string
+	var now catalogEntry
+	_ = s.view(ctx, "m", func(_ Target, c *catalog) error { skipped, now = c.Skipped, c.Docs[id]; return nil })
+	if now.Key == cur.Key || !slices.Contains(skipped, cur.Key) {
+		t.Fatalf("the changed file is skipped and not the document: %+v %v", now, skipped)
+	}
+	// Young: kept.
+	if n, _ := s.CollectOrphans(ctx, "m", time.Hour); n != 0 {
+		t.Errorf("a young skipped file was removed (%d)", n)
+	}
+	if _, err := mem.Load(ctx, cur.Key); err != nil {
+		t.Fatalf("kept: %v", err)
+	}
+	// Old: removed.
+	old := &Saver{Targets: []Target{{Name: "m", Adapter: aged{mem}}}}
+	if n, err := old.CollectOrphans(ctx, "m", time.Hour); err != nil || n == 0 {
+		t.Fatalf("removed %d: %v", n, err)
+	}
+	if _, err := mem.Load(ctx, cur.Key); !errors.Is(err, docstore.ErrNotFound) {
+		t.Errorf("the old changed file is gone: %v", err)
+	}
+}
+
+// listOrdered lists the files in the given key order (any others after them).
+type listOrdered struct {
+	docstore.Adapter
+	order []string
+}
+
+func (l listOrdered) List(ctx context.Context) ([]docstore.Meta, error) {
+	ms, err := l.Adapter.List(ctx)
+	rank := func(m docstore.Meta) int {
+		if i := slices.Index(l.order, m.ID); i >= 0 {
+			return i
+		}
+		return len(l.order)
+	}
+	slices.SortStableFunc(ms, func(a, b docstore.Meta) int { return rank(a) - rank(b) })
+	return ms, err
+}
+
+// The outcome of a rebuild with a vouched-for save, a changed newer file and a stray does
+// not depend on the order of the listing (the stray first or last, and the changed file
+// before or after the vouched one), and the catalog it writes agrees with the store.
+func TestRebuildWithAStrayDoesNotDependOnListOrder(t *testing.T) {
+	ctx := context.Background()
+	for _, order := range []string{"S B A", "S A B", "B S A", "B A S", "A S B", "A B S"} {
+		mem := docstore.NewMemoryAdapter()
+		s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+		id := twoSaves(t, s, docfile.JSON)
+		var cur catalogEntry
+		_ = s.view(ctx, "m", func(_ Target, c *catalog) error { cur = c.Docs[id]; return nil })
+		stored, _ := mem.Load(ctx, cur.Key)
+		_ = mem.Save(ctx, cur.Key, []byte(strings.Replace(string(stored.Data), "version two", "version twX", 1)))
+		stray := docWithText("plan", "stray")
+		stray.SetID(id)
+		stray.Updated = 1
+		data, _ := docfile.JSON.Marshal(stray)
+		strayKey := id + "~cccccccccccc.json"
+		_ = mem.Save(ctx, strayKey, data)
+		keys := map[string]string{"S": strayKey, "B": cur.Key, "A": cur.Prev}
+		var keyOrder []string
+		for _, k := range strings.Fields(order) {
+			keyOrder = append(keyOrder, keys[k])
+		}
+
+		s = &Saver{Targets: []Target{{Name: "m", Adapter: listOrdered{mem, keyOrder}}}}
+		if err := s.Rebuild(ctx, "m"); err != nil {
+			t.Fatal(err)
+		}
+		c := s.peekCatalog(ctx, s.Targets[0])
+		if c == nil {
+			t.Fatalf("%s: no catalog", order)
+		}
+		now := c.Docs[id]
+		if now.Key != cur.Prev || !slices.Contains(c.Skipped, cur.Key) {
+			t.Errorf("%s: the vouched file is the document, the changed one skipped: %+v %v", order, now, c.Skipped)
+		}
+		if now.Prev == cur.Key {
+			t.Errorf("%s: the changed file is not the previous copy: %+v", order, now)
+		}
+		if now.Prev == strayKey && slices.Contains(c.Skipped, strayKey) {
+			t.Errorf("%s: the stray is both previous copy and skipped: %+v %v", order, now, c.Skipped)
+		}
+		if bad, err := s.disagrees(ctx, s.Targets[0], c); err != nil || bad {
+			t.Errorf("%s: the rebuilt catalog disagrees with the store (%v): %+v %v", order, err, now, c.Skipped)
+		}
+		if d, _, err := s.LoadChecked(ctx, "m", id); err != nil || textOf(d) != "version one" {
+			t.Errorf("%s: %q %v", order, textOf(d), err)
+		}
 	}
 }

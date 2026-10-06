@@ -1,6 +1,6 @@
 # Who may call the servers
 
-Every HTTP server in this repo (docstore, fontserver, syncserver, voiceserver, translateserver, brailleserver, and the collab hub) takes a `guard.Guard` in its `Config`. The guard sets the CORS headers and decides who gets through; the operator picks the policy.
+Every HTTP server in this repo (docstore, fontserver, syncserver, voiceserver, translate/server, brailleserver, and the collab hub) takes a `guard.Guard` in its `Config`. The guard sets the CORS headers and decides who gets through; the operator picks the policy.
 
 | Guard | What it does |
 |---|---|
@@ -24,7 +24,7 @@ The command-line servers read their guard from the environment (`guard.FromEnv`)
 | fontserver | `GOJIBERRY_FONTSERVER` |
 | syncserver | `GOJIBERRY_SYNC` |
 | voiceserver | `GOJIBERRY_VOICESERVER` |
-| translateserver | `GOJIBERRY_TRANSLATESERVER` |
+| translate/server | `GOJIBERRY_TRANSLATESERVER` |
 | brailleserver | `GOJIBERRY_BRAILLESERVER` |
 | collabhub | `GOJIBERRY_COLLAB` |
 

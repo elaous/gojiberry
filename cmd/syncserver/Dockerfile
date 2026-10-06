@@ -4,7 +4,7 @@
 # these four service Dockerfiles shares, and
 # ../../docker-compose.yml/docs/README.md for how this fits into the
 # full stack. No ca-certificates layer here, unlike docstore/
-# fontserver/translateserver: the delta-sync relay never makes an
+# fontserver/translate/server: the delta-sync relay never makes an
 # outbound network call of its own, just relays what clients POST to
 # it (syncserver.Server's own doc comment).
 FROM golang:1.26-alpine AS build
