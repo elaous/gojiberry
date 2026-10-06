@@ -180,7 +180,7 @@ func (s *Saver) dropVersions(ctx context.Context, t Target, id string) {
 // mark sets or clears the trash flag of each document, in the document and the
 // catalog; it changes nothing unless every ID is there.
 func (s *Saver) mark(ctx context.Context, target string, ids []string, trashed bool) error {
-	return s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
+	return s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		for _, id := range ids {
 			if _, ok := cat.Docs[id]; !ok {
 				return fmt.Errorf("%w: %s", ErrNotFound, id)
@@ -193,7 +193,7 @@ func (s *Saver) mark(ctx context.Context, target string, ids []string, trashed b
 			if trashed {
 				stamp = now
 			}
-			if err := s.touch(ctx, t, &e, func(d *docfile.Document) { d.SetTrashed(stamp) }); err != nil {
+			if err := s.touch(ctx, t, cat, id, &e, later, func(d *docfile.Document) { d.SetTrashed(stamp) }); err != nil {
 				return err
 			}
 			e.Trashed = stamp
@@ -242,6 +242,9 @@ func (s *Saver) Purge(ctx context.Context, target string, ids ...string) error {
 			delete(cat.Docs, id)
 			*later = append(*later, func() {
 				_ = t.Adapter.Delete(ctx, e.Key)
+				if e.Prev != "" {
+					_ = t.Adapter.Delete(ctx, e.Prev)
+				}
 				s.dropVersions(ctx, t, id)
 			})
 		}
@@ -291,12 +294,12 @@ func (s *Saver) Rename(ctx context.Context, target, id, name string) error {
 	if !ValidName(name) {
 		return ErrName
 	}
-	return s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
+	return s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		e, ok := cat.Docs[id]
 		if !ok {
 			return ErrNotFound
 		}
-		if err := s.touch(ctx, t, &e, func(d *docfile.Document) { d.SetName(name) }); err != nil {
+		if err := s.touch(ctx, t, cat, id, &e, later, func(d *docfile.Document) { d.SetName(name) }); err != nil {
 			return err
 		}
 		e.Name = name
@@ -310,12 +313,12 @@ func (s *Saver) Rename(ctx context.Context, target, id, name string) error {
 func (s *Saver) SetTags(ctx context.Context, target, id string, tags []string) error {
 	var clean docfile.Document
 	clean.SetTags(tags)
-	return s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
+	return s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		e, ok := cat.Docs[id]
 		if !ok {
 			return ErrNotFound
 		}
-		if err := s.touch(ctx, t, &e, func(d *docfile.Document) { d.SetTags(clean.Tags()) }); err != nil {
+		if err := s.touch(ctx, t, cat, id, &e, later, func(d *docfile.Document) { d.SetTags(clean.Tags()) }); err != nil {
 			return err
 		}
 		e.Tags = clean.Tags()
