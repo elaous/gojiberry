@@ -148,31 +148,59 @@ func Open(r io.ReaderAt, size int64) (*Reader, error) {
 	return rd, nil
 }
 
-// validate checks an index against the area [lo, hi) records may be in.
+// validate checks an index against the area [lo, hi) records may be in: IDs are
+// document IDs and unique, records lie inside the area and do not overlap, tags and names
+// are within their caps, and every folder an entry or folder names exists.
 func (x Index) validate(lo, hi int64) error {
-	ids := map[string]bool{}
+	ids := make(map[string]bool, len(x.Entries))
 	for _, e := range x.Entries {
-		if e.ID == "" || ids[e.ID] {
-			return fmt.Errorf("%w: a missing or repeated document ID", ErrFormat)
+		if !docfile.ValidID(e.ID) || ids[e.ID] {
+			return fmt.Errorf("%w: a missing, malformed or repeated document ID", ErrFormat)
 		}
 		ids[e.ID] = true
-		if checkName(e.Name) != nil || e.Length > MaxRecord || e.Offset%8 != 0 ||
-			int64(e.Offset) < lo || int64(e.Offset) > hi || int64(e.Offset)+int64(recordSize(e.Length)) > hi {
+		if checkName(e.Name) != nil || len(e.Tags) > MaxTags || e.Length > MaxRecord || e.Offset%8 != 0 ||
+			e.Offset > uint64(hi) || int64(e.Offset) < lo || int64(e.Offset)+int64(recordSize(e.Length)) > hi {
 			return fmt.Errorf("%w: entry %q points outside the records", ErrFormat, e.ID)
 		}
+		for _, t := range e.Tags {
+			if len(t) > MaxName {
+				return fmt.Errorf("%w: entry %q has a tag that is too long", ErrFormat, e.ID)
+			}
+		}
 	}
-	folders := map[string]Folder{}
+	// No two records overlap: sorted by offset, each ends before the next begins.
+	byOffset := make([]*Entry, len(x.Entries))
+	for i := range x.Entries {
+		byOffset[i] = &x.Entries[i]
+	}
+	sort.Slice(byOffset, func(i, j int) bool { return byOffset[i].Offset < byOffset[j].Offset })
+	for i := 1; i < len(byOffset); i++ {
+		if byOffset[i].Offset < byOffset[i-1].Offset+recordSize(byOffset[i-1].Length) {
+			return fmt.Errorf("%w: entry %q overlaps another record", ErrFormat, byOffset[i].ID)
+		}
+	}
+	folders := make(map[string]Folder, len(x.Folders))
 	for _, f := range x.Folders {
-		if f.ID == "" || checkName(f.Name) != nil {
+		if !docfile.ValidID(f.ID) || checkName(f.Name) != nil {
 			return fmt.Errorf("%w: a bad folder", ErrFormat)
+		}
+		if _, dup := folders[f.ID]; dup {
+			return fmt.Errorf("%w: a repeated folder ID", ErrFormat)
 		}
 		folders[f.ID] = f
 	}
-	for id := range folders {
+	for _, e := range x.Entries {
+		if _, ok := folders[e.Folder]; e.Folder != "" && !ok {
+			return fmt.Errorf("%w: entry %q is in a folder the index does not list", ErrFormat, e.ID)
+		}
+	}
+	for id, f := range folders {
+		if _, ok := folders[f.Parent]; f.Parent != "" && !ok {
+			return fmt.Errorf("%w: folder %q has a parent the index does not list", ErrFormat, id)
+		}
 		depth := 0
 		for cur := id; cur != ""; cur = folders[cur].Parent {
-			depth++
-			if _, ok := folders[cur]; !ok && cur != id || depth > MaxDepth {
+			if depth++; depth > MaxDepth {
 				return fmt.Errorf("%w: folders nested too deep, or in a loop", ErrFormat)
 			}
 		}
@@ -223,7 +251,14 @@ func (r *Reader) Read(id string) (docfile.Document, error) {
 	if err != nil {
 		return docfile.Document{}, err
 	}
-	return docfile.Open.Unmarshal(data)
+	doc, err := docfile.Open.Unmarshal(data)
+	if err != nil {
+		return docfile.Document{}, err
+	}
+	if doc.ID() != id {
+		return docfile.Document{}, fmt.Errorf("%w: the document in the record of %q has the ID %q", ErrFormat, id, doc.ID())
+	}
+	return doc, nil
 }
 
 // Problem is a document that could not be read.

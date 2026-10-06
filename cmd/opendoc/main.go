@@ -5,14 +5,22 @@
 //	opendoc convert [-sign key] [-name N] out.opendoc  file-or-folder...   (the same: .docx, .pdf, .md, .txt, .open, .json too)
 //	opendoc unpack  pack.opendoc  dir     (each document as a .open file, folders as directories)
 //	opendoc list    pack.opendoc
-//	opendoc verify  pack.opendoc          (reads every document; exit 1 if anything is wrong)
+//	opendoc verify  [-pubkey hex] pack.opendoc  (reads every document; exit 1 if anything is wrong)
 //	opendoc sign    -key key pack.opendoc (signs, or signs again, in place)
 //	opendoc recover pack.opendoc out.opendoc  (what is intact in a cut or damaged pack)
 //
-// A key is a file holding an Ed25519 seed as 64 hex characters (opendoc keygen prints one).
+//	opendoc keygen  [key-file]            (prints a seed; with a file, writes it there, mode 0600, and prints the public key)
+//
+// A key is a file holding an Ed25519 seed as 64 hex characters.
+//
+// "signed by" in list and verify names the key the pack carries, and "valid" says only that
+// the signature matches the pack under that key. Anyone can sign a pack with a key of
+// their own, so neither is trust: to know a pack is from someone, check it with
+// verify -pubkey, giving that someone's public key (64 hex characters).
 package main
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
@@ -25,6 +33,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docfile/pack"
@@ -58,10 +67,7 @@ func run(args []string, out outWriter) error {
 	case "recover":
 		return recoverCmd(args, out)
 	case "keygen":
-		seed := make([]byte, ed25519.SeedSize)
-		_, _ = rand.Read(seed)
-		say(out, "%s\n", hex.EncodeToString(seed))
-		return nil
+		return keygenCmd(args, out)
 	}
 	return fmt.Errorf("unknown command %q", cmd)
 }
@@ -79,6 +85,96 @@ func readKey(path string) (ed25519.PrivateKey, error) {
 		return nil, errors.New("a key file holds an Ed25519 seed as 64 hex characters")
 	}
 	return ed25519.NewKeyFromSeed(seed), nil
+}
+
+func keygenCmd(args []string, out outWriter) error {
+	if len(args) > 1 {
+		return errors.New("usage: opendoc keygen [key-file]")
+	}
+	seed := make([]byte, ed25519.SeedSize)
+	if _, err := rand.Read(seed); err != nil {
+		return fmt.Errorf("no random bytes: %w", err)
+	}
+	if len(args) == 0 {
+		say(out, "%s\n", hex.EncodeToString(seed))
+		return nil
+	}
+	f, err := os.OpenFile(args[0], os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(hex.EncodeToString(seed) + "\n")
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		_ = os.Remove(args[0])
+		return err
+	}
+	pub, _ := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
+	say(out, "%s written; public key %x\n", args[0], []byte(pub))
+	return nil
+}
+
+// esc makes text from a pack safe to print: control and invisible formatting characters
+// (terminal escapes, bidi overrides, newlines) become \u escapes.
+func esc(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == 0x2028 || r == 0x2029 {
+			fmt.Fprintf(&b, "\\u%04x", r)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// output is a file written beside its destination and renamed over it only when whole, so
+// an error leaves nothing partial, and an existing file is not touched until then.
+type output struct {
+	f   *os.File
+	dst string
+}
+
+func newOutput(dst string) (*output, error) {
+	f, err := os.CreateTemp(filepath.Dir(dst), ".opendoc-*.tmp")
+	if err != nil {
+		return nil, err
+	}
+	return &output{f: f, dst: dst}, nil
+}
+
+// finish closes the file and moves it into place if err is nil, else removes it.
+func (o *output) finish(err error) error {
+	if err == nil {
+		err = o.f.Sync()
+	}
+	if cerr := o.f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		if err = os.Chmod(o.f.Name(), 0o644); err == nil {
+			err = os.Rename(o.f.Name(), o.dst)
+		}
+	}
+	if err != nil {
+		_ = os.Remove(o.f.Name())
+	}
+	return err
+}
+
+// sameFile says whether the two paths are the same file (either may not exist).
+func sameFile(a, b string) bool {
+	if filepath.Clean(a) == filepath.Clean(b) {
+		return true
+	}
+	ia, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	ib, err := os.Stat(b)
+	return err == nil && os.SameFile(ia, ib)
 }
 
 func registry() *transfer.Registry {
@@ -107,11 +203,19 @@ func packCmd(args []string, out outWriter) error {
 		return err
 	}
 	dst, inputs := fl.Arg(0), fl.Args()[1:]
-	f, err := os.Create(dst)
+	o, err := newOutput(dst)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
+	// The output, and what it replaces, are never packed, wherever they are.
+	skip := []string{o.f.Name(), dst}
+	done := false
+	defer func() {
+		if !done {
+			_ = o.finish(errors.New("failed"))
+		}
+	}()
+	f := o.f
 	pname := *name
 	if pname == "" {
 		pname = strings.TrimSuffix(filepath.Base(dst), filepath.Ext(dst))
@@ -123,7 +227,7 @@ func packCmd(args []string, out outWriter) error {
 	reg := registry()
 	n, skipped := 0, 0
 	for _, in := range inputs {
-		added, bad, err := addTree(w, reg, in)
+		added, bad, err := addTree(w, reg, in, skip)
 		if err != nil {
 			return err
 		}
@@ -135,7 +239,8 @@ func packCmd(args []string, out outWriter) error {
 	if err := w.Close(key); err != nil {
 		return err
 	}
-	if err := f.Sync(); err != nil {
+	done = true
+	if err := o.finish(nil); err != nil {
 		return err
 	}
 	say(out, "%s: %d documents", dst, n)
@@ -148,7 +253,7 @@ func packCmd(args []string, out outWriter) error {
 
 // addTree adds a file, or the files of a folder (its subfolders becoming folders of the
 // pack), converting each to a document.
-func addTree(w *pack.Writer, reg *transfer.Registry, root string) (added int, skipped []string, err error) {
+func addTree(w *pack.Writer, reg *transfer.Registry, root string, skip []string) (added int, skipped []string, err error) {
 	info, err := os.Stat(root)
 	if err != nil {
 		return 0, nil, err
@@ -183,6 +288,11 @@ func addTree(w *pack.Writer, reg *transfer.Registry, root string) (added int, sk
 		}
 		if d.IsDir() {
 			return nil
+		}
+		for _, s := range skip {
+			if sameFile(p, s) {
+				return nil
+			}
 		}
 		data, err := os.ReadFile(p)
 		if err != nil {
@@ -267,7 +377,7 @@ func unpackCmd(args []string, out outWriter) error {
 	for _, e := range idx.Entries {
 		data, err := r.ReadRaw(e.ID)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "opendoc: %s (%s): %v\n", e.Name, e.ID, err)
+			fmt.Fprintf(os.Stderr, "opendoc: %s (%s): %v\n", esc(e.Name), esc(e.ID), err)
 			continue
 		}
 		dir := filepath.Join(args[1], dirOf(e.Folder))
@@ -277,7 +387,7 @@ func unpackCmd(args []string, out outWriter) error {
 		name := safe(e.Name)
 		path := filepath.Join(dir, name+docfile.Open.Ext())
 		if used[strings.ToLower(path)] {
-			path = filepath.Join(dir, name+" ("+e.ID[:8]+")"+docfile.Open.Ext())
+			path = filepath.Join(dir, name+" ("+shortID(e.ID)+")"+docfile.Open.Ext())
 		}
 		used[strings.ToLower(path)] = true
 		if err := os.WriteFile(path, data, 0o644); err != nil {
@@ -286,6 +396,14 @@ func unpackCmd(args []string, out outWriter) error {
 	}
 	say(out, "%d documents written to %s\n", len(idx.Entries), args[1])
 	return nil
+}
+
+// shortID is the first 8 characters of an ID, or all of a shorter one.
+func shortID(id string) string {
+	if len(id) > 8 {
+		return safe(id[:8])
+	}
+	return safe(id)
 }
 
 func safe(s string) string {
@@ -312,9 +430,9 @@ func listCmd(args []string, out outWriter) error {
 	}
 	defer func() { _ = f.Close() }()
 	m, idx := r.Meta(), r.Index()
-	say(out, "%s (%s), %d documents, %d folders", m.Name, m.Producer, len(idx.Entries), len(idx.Folders))
+	say(out, "%s (%s), %d documents, %d folders", esc(m.Name), esc(m.Producer), len(idx.Entries), len(idx.Folders))
 	if sig, ok := r.Signature(); sig != nil {
-		say(out, ", signed by %x (valid: %v)", sig.PublicKey[:min(8, len(sig.PublicKey))], ok)
+		say(out, ", signed by %x (valid: %v; the key is not checked against anyone)", sig.PublicKey[:min(8, len(sig.PublicKey))], ok)
 	}
 	say(out, "\n")
 	names := map[string]string{}
@@ -324,20 +442,36 @@ func listCmd(args []string, out outWriter) error {
 	es := append([]pack.Entry(nil), idx.Entries...)
 	sort.Slice(es, func(i, j int) bool { return es[i].Name < es[j].Name })
 	for _, e := range es {
-		folder := names[e.Folder]
+		folder := esc(names[e.Folder])
 		if e.Trashed {
 			folder += " (trash)"
 		}
-		say(out, "%s  %8d  %-30s %s %s\n", e.ID, e.Length, e.Name, folder, strings.Join(e.Tags, ","))
+		tags := make([]string, len(e.Tags))
+		for i, t := range e.Tags {
+			tags[i] = esc(t)
+		}
+		say(out, "%s  %8d  %-30s %s %s\n", esc(e.ID), e.Length, esc(e.Name), folder, strings.Join(tags, ","))
 	}
 	return nil
 }
 
 func verifyCmd(args []string, out outWriter) error {
-	if len(args) != 1 {
-		return errors.New("usage: opendoc verify pack.opendoc")
+	fl := flag.NewFlagSet("verify", flag.ContinueOnError)
+	pubHex := fl.String("pubkey", "", "require the pack to be signed by this Ed25519 public key (64 hex characters)")
+	if err := fl.Parse(args); err != nil {
+		return err
 	}
-	f, r, err := openPack(args[0])
+	if fl.NArg() != 1 {
+		return errors.New("usage: opendoc verify [-pubkey hex] pack.opendoc")
+	}
+	var want []byte
+	if *pubHex != "" {
+		var err error
+		if want, err = hex.DecodeString(strings.TrimSpace(*pubHex)); err != nil || len(want) != ed25519.PublicKeySize {
+			return errors.New("-pubkey is an Ed25519 public key as 64 hex characters")
+		}
+	}
+	f, r, err := openPack(fl.Arg(0))
 	if err != nil {
 		return err
 	}
@@ -349,13 +483,20 @@ func verifyCmd(args []string, out outWriter) error {
 	}
 	if rep.Signed {
 		say(out, ", signed by %x (valid: %v)", rep.Signer[:min(8, len(rep.Signer))], rep.SignatureOK)
+		if want == nil {
+			say(out, " (not checked against anyone: use -pubkey)")
+		}
 	}
 	say(out, "\n")
 	for _, p := range rep.Bad {
-		say(out, "BAD %s (%s): %v\n", p.Name, p.ID, p.Err)
+		say(out, "BAD %s (%s): %v\n", esc(p.Name), esc(p.ID), p.Err)
 	}
 	if rep.Gap {
 		say(out, "%s\n", "BAD the records do not follow one another up to the index")
+	}
+	if want != nil && (!rep.Signed || !bytes.Equal(rep.Signer, want)) {
+		say(out, "BAD the pack is not signed by the key given\n")
+		return errors.New("the pack is not signed by the key given")
 	}
 	if !rep.OK() {
 		return errors.New("the pack has problems")
@@ -400,6 +541,9 @@ func recoverCmd(args []string, out outWriter) error {
 	if len(args) != 2 {
 		return errors.New("usage: opendoc recover pack.opendoc out.opendoc")
 	}
+	if sameFile(args[0], args[1]) {
+		return errors.New("recover writes a new pack: the output must not be the pack being read")
+	}
 	f, err := os.Open(args[0])
 	if err != nil {
 		return err
@@ -413,12 +557,11 @@ func recoverCmd(args []string, out outWriter) error {
 	if err != nil {
 		return err
 	}
-	dst, err := os.Create(args[1])
+	o, err := newOutput(args[1])
 	if err != nil {
 		return err
 	}
-	defer func() { _ = dst.Close() }()
-	if err := pack.Repack(rec, dst); err != nil {
+	if err := o.finish(pack.Repack(rec, o.f)); err != nil {
 		return err
 	}
 	say(out, "%d documents recovered into %s (complete: %v)\n", len(rec.Docs), args[1], rec.Complete)
