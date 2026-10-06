@@ -29,9 +29,11 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	"filippo.io/age"
 
+	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docstore"
 )
 
@@ -97,6 +99,13 @@ type Adapter struct {
 	// false otherwise: with it, anyone who can write the store can replace a ciphertext
 	// with plaintext of their own and have it read as the document.
 	AllowPlaintext bool
+
+	// mu serializes Save of an encrypted id with the re-keys, which hold it from their read
+	// to their write: on a store without SaveIf a Save between the two would otherwise be
+	// overwritten by the old content. (Taking the store's own Lock in Save is not an option:
+	// the saver holds it around its catalog updates, which save documents.) It is taken after
+	// the store's Lock, never before.
+	mu sync.Mutex
 }
 
 // New wraps inner. It is secure by default: every stored file that Skip does not leave
@@ -216,6 +225,8 @@ func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 	if err := a.checkID(id); err != nil {
 		return err
 	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	ct, err := a.seal(id, data)
 	if err != nil {
 		return err
@@ -348,17 +359,27 @@ func (a *Adapter) rekeyOne(ctx context.Context, id string) error {
 // others. The caller holds the lock.
 func (a *Adapter) rekeyGroup(ctx context.Context, ids []string) (int, error) {
 	var errs []error
+	var present []string
 	for _, id := range ids {
-		if _, _, err := a.plan(ctx, id); err != nil {
+		_, _, err := a.plan(ctx, id)
+		switch {
+		case errors.Is(err, docstore.ErrNotFound):
+			// Deleted since it was listed: nothing to re-key.
+		case err != nil:
 			errs = append(errs, fmt.Errorf("%s: %w", id, err))
+		default:
+			present = append(present, id)
 		}
 	}
 	if len(errs) > 0 {
 		return 0, errors.Join(errs...)
 	}
 	n := 0
-	for _, id := range ids {
+	for _, id := range present {
 		if err := a.rekeyOne(ctx, id); err != nil {
+			if errors.Is(err, docstore.ErrNotFound) {
+				continue
+			}
 			errs = append(errs, fmt.Errorf("%s: %w", id, err))
 			continue
 		}
@@ -367,22 +388,108 @@ func (a *Adapter) rekeyGroup(ctx context.Context, ids []string) (int, error) {
 	return n, errors.Join(errs...)
 }
 
+// exclusive takes the store's Lock and then the adapter's own, which a Save of an encrypted
+// id takes: what a re-key holds from its read to its write.
+func (a *Adapter) exclusive(ctx context.Context) (func(), error) {
+	unlock, err := a.Lock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	a.mu.Lock()
+	return func() { a.mu.Unlock(); unlock() }, nil
+}
+
+// DocID finds the document a stored item belongs to: the document file (the ID, a generation
+// suffix, an extension) and its versions ("versions/<ID>/..."); "" for anything else.
+func DocID(id string) string {
+	if rest, ok := strings.CutPrefix(id, "versions/"); ok {
+		if i := strings.IndexByte(rest, '/'); i > 0 {
+			rest = rest[:i]
+		}
+		if docfile.ValidID(rest) {
+			return rest
+		}
+		return ""
+	}
+	if len(id) >= 36 && docfile.ValidID(id[:36]) {
+		return id[:36]
+	}
+	return ""
+}
+
+// groupOf names the group of files that are re-keyed as one unit: the document that DocID
+// finds, or, for a stored item that is not a document's, the item alone. Rekey, RekeyAll and
+// RekeyDocument all group this way.
+func groupOf(id string) string {
+	if d := DocID(id); d != "" {
+		return d
+	}
+	return id
+}
+
+// filesOf lists the stored files, not skipped, whose group is g. The caller holds the lock,
+// so what is listed is what is then read.
+func (a *Adapter) filesOf(ctx context.Context, g string) ([]string, error) {
+	metas, err := a.Inner.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for _, m := range metas {
+		if !a.skip(m.ID) && groupOf(m.ID) == g {
+			ids = append(ids, m.ID)
+		}
+	}
+	return ids, nil
+}
+
 // Rekey saves a document again to the keyring's current recipients, with a new data key:
 // after a recipient is taken out of the keyring, this is what stops them reading what is
 // saved from now on (they keep whatever they decrypted before, and a copy of the old
-// ciphertext they may hold). It holds the store lock (so a caller must not already hold
-// it) and, on a store that writes conditionally, does not overwrite a Save that happened
-// meanwhile. A file that is stored in the clear (AllowPlaintext) is encrypted by it.
+// ciphertext they may hold). It re-keys every file of the document id belongs to (as
+// RekeyDocument does), all or none. It holds the store lock (so a caller must not already
+// hold it) and the adapter's, so a Save through this adapter is not overwritten by it, on a
+// store that writes conditionally or not. A file that is stored in the clear
+// (AllowPlaintext) is encrypted by it.
 func (a *Adapter) Rekey(ctx context.Context, id string) error {
 	if a.skip(id) {
 		return nil
 	}
-	unlock, err := a.Lock(ctx)
+	unlock, err := a.exclusive(ctx)
 	if err != nil {
 		return err
 	}
 	defer unlock()
-	return a.rekeyOne(ctx, id)
+	ids, err := a.filesOf(ctx, groupOf(id))
+	if err != nil {
+		return err
+	}
+	found := false
+	for _, x := range ids {
+		found = found || x == id
+	}
+	if !found {
+		return docstore.ErrNotFound
+	}
+	_, err = a.rekeyGroup(ctx, ids)
+	return err
+}
+
+// RekeyDocument encrypts every stored file of one document again, to the keyring's current
+// recipients for it (a new data key each): its current and previous copies and its versions.
+// The files are listed under the lock and all opened first, and none is written if one
+// cannot be (see RekeyIDs).
+func (a *Adapter) RekeyDocument(ctx context.Context, docID string) (int, error) {
+	unlock, err := a.exclusive(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
+	ids, err := a.filesOf(ctx, docID)
+	if err != nil {
+		return 0, err
+	}
+	return a.rekeyGroup(ctx, ids)
 }
 
 // RekeyIDs re-keys the given files as one unit (the files of one document): all are opened
@@ -395,7 +502,7 @@ func (a *Adapter) RekeyIDs(ctx context.Context, ids []string) (int, error) {
 			todo = append(todo, id)
 		}
 	}
-	unlock, err := a.Lock(ctx)
+	unlock, err := a.exclusive(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -403,21 +510,16 @@ func (a *Adapter) RekeyIDs(ctx context.Context, ids []string) (int, error) {
 	return a.rekeyGroup(ctx, todo)
 }
 
-// groupOf names the document a stored file belongs to, so RekeyAll treats a document's
-// files as a unit: "versions/<id>/..." and "<id>~<tag>.<ext>" both give <id>.
-func groupOf(id string) string {
-	if rest, ok := strings.CutPrefix(id, "versions/"); ok {
-		g, _, _ := strings.Cut(rest, "/")
-		return g
-	}
-	g, _, _ := strings.Cut(id, "~")
-	return g
-}
-
 // RekeyAll re-keys every document that is encrypted (not the ones Skip leaves readable),
 // and returns how many files it wrote. A document with a file it cannot open is left as it
 // was (none of its files written) and the others go on; every error is returned, joined.
+// The files are listed under the lock; one that is gone by the time it is read is skipped.
 func (a *Adapter) RekeyAll(ctx context.Context) (int, error) {
+	unlock, err := a.exclusive(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer unlock()
 	metas, err := a.Inner.List(ctx)
 	if err != nil {
 		return 0, err
@@ -434,11 +536,6 @@ func (a *Adapter) RekeyAll(ctx context.Context) (int, error) {
 		}
 		groups[g] = append(groups[g], m.ID)
 	}
-	unlock, err := a.Lock(ctx)
-	if err != nil {
-		return 0, err
-	}
-	defer unlock()
 	n := 0
 	var errs []error
 	for _, g := range order {
