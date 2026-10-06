@@ -1,7 +1,7 @@
 // Package docstore defines a small, storage-agnostic document
 // persistence contract (Adapter) plus a handful of concrete
 // implementations (Memory, LocalFS, Postgres, MongoDB, S3 -- the
-// "minio" backend is the same S3Adapter, registered a second time
+// "minio" backend is the same S3 adapter (docstore/backends/s3), registered a second time
 // under a name that defaults its own config for MinIO instead of
 // real AWS, see s3.go's own doc comment) and an HTTP server that
 // exposes whichever one an operator configures.
@@ -30,6 +30,10 @@ var ErrNotFound = errors.New("docstore: document not found")
 // room (a browser's quota, a full disk). A caller may free what it can do without and try
 // again.
 var ErrStorageFull = errors.New("docstore: storage full")
+
+// ErrPermission is returned (wrapped) when the store refuses access the person may be able to
+// give again, such as a folder whose browser permission has lapsed; test with errors.Is.
+var ErrPermission = errors.New("docstore: permission needed")
 
 // Document is one stored unit: an opaque payload (OnDesign's own
 // marshaled document JSON, from the client's point of view) keyed by
@@ -122,7 +126,7 @@ func BuildAdapter(ctx context.Context, cfg Config) (Adapter, error) {
 	}
 	factory, ok := adapterFactories[name]
 	if !ok {
-		return nil, fmt.Errorf("docstore: unknown backend %q", name)
+		return nil, fmt.Errorf("docstore: unknown backend %q (the Postgres, MongoDB, S3/MinIO and blob backends are registered by importing github.com/elaous/gojiberry/docstore/backends/all)", name)
 	}
 	return factory(ctx, cfg.BackendConfig)
 }

@@ -840,3 +840,13 @@ func (d *Tab) ReloadPage() {
 	d.t.Helper()
 	d.must(chromedp.Reload())
 }
+
+// OnNewDocument runs a script at the start of every document the tab loads from now on (and
+// not in the current one): to replace a browser API before the page's own code looks at it.
+func (d *Tab) OnNewDocument(script string) {
+	d.t.Helper()
+	d.must(chromedp.ActionFunc(func(ctx context.Context) error {
+		_, err := page.AddScriptToEvaluateOnNewDocument(script).Do(ctx)
+		return err
+	}))
+}
