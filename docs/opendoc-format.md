@@ -120,8 +120,13 @@ is the application's.
 
 Bounds, always: a length or offset is checked against the file size before anything
 is allocated or seeked to. Caps: one record 256 MiB, 1,000,000 entries, an index
-256 MiB, folders nested at most 16 deep (as in a store), names 256 bytes. An index
-entry pointing outside `[end of header, index offset)` is invalid.
+128 MiB (128 bytes per entry at the entry cap), one entry or folder message 32 KiB, 64
+tags of at most 256 bytes per entry, folders nested at most 16 deep (as in a store),
+names 256 bytes. The index is parsed as a stream, counting entries as they are read.
+An index is invalid if: an entry or folder ID is not a UUID as `NewID` writes it, or is
+repeated; an entry points outside `[end of header, index offset)`; two entries'
+records overlap; an entry or folder names a folder the index does not list. A reader also
+checks that a document's own ID is the ID the index lists it under.
 
 ## 4. Writing and appending
 
@@ -142,7 +147,12 @@ is checked by its CRCs, a document record whose data parses as a `Document` is k
 and the walk stops at the first bad frame. The result is a pack of the documents that
 are intact, with names taken from `Document` metadata (id, name, folder, tags). This
 loses the index's folders only if the documents' own `folder` metadata is also gone.
-A recovered pack is reported as such and must be rewritten before it is signed.
+A document whose ID appears in more than one record is recovered once, as the last of
+them. If the index is still intact, it decides which records are in the pack (a document
+removed from the index is not brought back); without an index a removed document cannot
+be told from a live one and is recovered. Folders are listed from the documents' folder
+IDs under made-up names (`recovered-<id>`). A recovered pack is reported as such and
+must be rewritten before it is signed.
 
 ## 6. Decisions and what is left open
 
