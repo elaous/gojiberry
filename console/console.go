@@ -63,6 +63,13 @@ func New(s *saver.Saver, target string, in io.Reader, out, errw io.Writer) *Shel
 	return &Shell{Saver: s, Target: target, In: in, Out: out, Err: errw}
 }
 
+// Cwd is the ID of the folder commands work in ("" for the top); SetCwd moves there. A host
+// that shows folders itself keeps the two in step with them.
+func (sh *Shell) Cwd() string { return sh.cwd }
+
+// SetCwd sets the folder commands work in.
+func (sh *Shell) SetCwd(id string) { sh.cwd = id }
+
 func (sh *Shell) registry() *transfer.Registry {
 	if sh.Registry == nil {
 		r := transfer.Default()
