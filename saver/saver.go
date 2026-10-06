@@ -64,7 +64,8 @@ type Saver struct {
 	// no check. The saver does not know about keys: it only asks.
 	ConfidentialCheck func(ctx context.Context, target, id string) error
 
-	mu sync.Mutex // one catalog update at a time
+	mu sync.Mutex   // one catalog update at a time
+	tm sync.RWMutex // Targets, which AddTarget and RemoveTarget change
 }
 
 // Entry is a saved document, as List reports it.
@@ -119,12 +120,47 @@ func (s *Saver) codecs() []docfile.Codec {
 
 // Target returns the target called name.
 func (s *Saver) Target(name string) (Target, error) {
+	s.tm.RLock()
+	defer s.tm.RUnlock()
 	for _, t := range s.Targets {
 		if t.Name == name {
 			return t, nil
 		}
 	}
 	return Target{}, fmt.Errorf("saver: no target %q", name)
+}
+
+// TargetList is a copy of the targets, safe to read while AddTarget and RemoveTarget run.
+func (s *Saver) TargetList() []Target {
+	s.tm.RLock()
+	defer s.tm.RUnlock()
+	return append([]Target(nil), s.Targets...)
+}
+
+// AddTarget adds a place to save to while the program runs (a folder the person has just
+// chosen), replacing the one of the same name.
+func (s *Saver) AddTarget(t Target) {
+	s.tm.Lock()
+	defer s.tm.Unlock()
+	for i := range s.Targets {
+		if s.Targets[i].Name == t.Name {
+			s.Targets[i] = t
+			return
+		}
+	}
+	s.Targets = append(s.Targets, t)
+}
+
+// RemoveTarget takes a place out (nothing stored in it is touched).
+func (s *Saver) RemoveTarget(name string) {
+	s.tm.Lock()
+	defer s.tm.Unlock()
+	for i := range s.Targets {
+		if s.Targets[i].Name == name {
+			s.Targets = append(s.Targets[:i], s.Targets[i+1:]...)
+			return
+		}
+	}
 }
 
 // Codec returns the format called name.

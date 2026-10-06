@@ -5,10 +5,6 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
-
-	"google.golang.org/protobuf/encoding/prototext"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/dynamicpb"
 )
 
 // Codec is a way to write a Document as bytes.
@@ -52,14 +48,11 @@ var JSON Codec = &format{
 var ProtoText Codec = &format{
 	name: "proto-text", label: "Protobuf (text)", ext: ".pbtxt", mime: "text/plain",
 	marshal: func(d Document) ([]byte, error) {
-		msg, err := toMessage(reflect.ValueOf(d))
-		if err != nil {
-			return nil, err
-		}
-		return prototext.MarshalOptions{Multiline: true, Indent: "  "}.Marshal(msg)
+		return marshalText(schema(), reflect.ValueOf(d)), nil
 	},
-	unmarshal: func(b []byte) (Document, error) {
-		return fromProto(b, func(msg *dynamicpb.Message) error { return prototext.Unmarshal(b, msg) })
+	unmarshal: func(b []byte) (d Document, err error) {
+		err = unmarshalText(schema(), b, reflect.ValueOf(&d).Elem())
+		return d, err
 	},
 }
 
@@ -67,14 +60,11 @@ var ProtoText Codec = &format{
 var ProtoBinary Codec = &format{
 	name: "proto", label: "Protobuf (binary)", ext: ".pb", mime: "application/x-protobuf",
 	marshal: func(d Document) ([]byte, error) {
-		msg, err := toMessage(reflect.ValueOf(d))
-		if err != nil {
-			return nil, err
-		}
-		return proto.MarshalOptions{Deterministic: true}.Marshal(msg)
+		return marshalWire(schema(), reflect.ValueOf(d)), nil
 	},
-	unmarshal: func(b []byte) (Document, error) {
-		return fromProto(b, func(msg *dynamicpb.Message) error { return proto.Unmarshal(b, msg) })
+	unmarshal: func(b []byte) (d Document, err error) {
+		err = unmarshalWire(schema(), b, reflect.ValueOf(&d).Elem())
+		return d, err
 	},
 }
 
@@ -86,20 +76,6 @@ var Open Codec = &format{
 	name: "open", label: "opendocs (.open)", ext: ".open", mime: "application/vnd.opendocs.document",
 	marshal:   func(d Document) ([]byte, error) { return ProtoBinary.Marshal(d) },
 	unmarshal: func(b []byte) (Document, error) { return ProtoBinary.Unmarshal(b) },
-}
-
-func fromProto(_ []byte, decode func(*dynamicpb.Message) error) (Document, error) {
-	md, err := messageDescriptor(reflect.TypeFor[Document]())
-	if err != nil {
-		return Document{}, err
-	}
-	msg := dynamicpb.NewMessage(md)
-	if err := decode(msg); err != nil {
-		return Document{}, err
-	}
-	var d Document
-	fromMessage(reflect.ValueOf(&d).Elem(), msg)
-	return d, nil
 }
 
 var formats = []Codec{JSON, ProtoText, ProtoBinary, Open}

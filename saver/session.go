@@ -96,8 +96,8 @@ func NewSession(s *Saver, get func() docfile.Document, onOpen func(docfile.Docum
 	ss := &Session{Saver: s, Get: get, OnOpen: onOpen, format: docfile.JSON.Name()}
 	ss.Pending = components.NewPending(ss.changed)
 	ss.Asker = components.NewAsker(ss.changed)
-	if len(s.Targets) > 0 {
-		ss.target = s.Targets[0].Name
+	if ts := s.TargetList(); len(ts) > 0 {
+		ss.target = ts[0].Name
 	}
 	if cs := s.codecs(); len(cs) > 0 {
 		ss.format = cs[0].Name()
@@ -866,7 +866,7 @@ func (s *Session) Props() components.SaverProps {
 		p.Status, p.Failed = err.Error(), true
 	}
 	p.Capacity = &components.CapacityProps{Used: s.usage.Used, Total: s.usage.Total, ShowCounts: true, Documents: s.usage.Documents, Trashed: s.usage.Trashed}
-	for _, t := range s.Saver.Targets {
+	for _, t := range s.Saver.TargetList() {
 		label := t.Label
 		if label == "" {
 			label = t.Name
