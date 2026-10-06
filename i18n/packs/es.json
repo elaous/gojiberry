@@ -226,6 +226,8 @@
   "saver.purgedUnreadable": "(%d documentos de la papelera cuyos archivos ya no existían se eliminaron: %s)",
   "saver.checkedOK": "Comprobados %d documentos: todo bien",
   "saver.checkedProblems": "Comprobados %d documentos: %d recuperados de una copia anterior (%s), %d dañados sin copia (%s)",
+  "saver.checkedBackups": "(%d sin una copia anterior válida; el próximo guardado crea una)",
+  "saver.checkedOrphans": "(%d archivos sobrantes eliminados)",
   "docs.check": "Comprobar documentos"
  }
 }

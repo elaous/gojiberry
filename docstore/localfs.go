@@ -5,9 +5,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 )
 
 // LocalFSConfig is the localfs backend's own config, decoded from
@@ -72,6 +74,14 @@ func (a *LocalFSAdapter) Save(_ context.Context, id string, data []byte) error {
 // by the power going. (os.WriteFile alone leaves the data in the cache: a file can come
 // back empty.)
 func (a *LocalFSAdapter) writeFile(id string, data []byte) error {
+	err := a.writeFile1(id, data)
+	if errors.Is(err, syscall.ENOSPC) {
+		err = fmt.Errorf("%w: %w", ErrStorageFull, err)
+	}
+	return err
+}
+
+func (a *LocalFSAdapter) writeFile1(id string, data []byte) error {
 	tmp := a.path(id) + ".tmp"
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {

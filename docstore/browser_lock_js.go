@@ -12,6 +12,11 @@ import (
 // is called. A browser without it (or a page that is not a secure context) gets no
 // exclusion across tabs, which is how it was; Lock then returns at once.
 func (a *BrowserAdapter) Lock(ctx context.Context) (func(), error) {
+	return a.lock(ctx, "gojiberry-docstore:"+a.prefix)
+}
+
+// lock takes the Web Lock called name.
+func (a *BrowserAdapter) lock(ctx context.Context, name string) (func(), error) {
 	locks := js.Global().Get("navigator").Get("locks")
 	if !locks.Truthy() {
 		return func() {}, nil
@@ -48,7 +53,7 @@ func (a *BrowserAdapter) Lock(ctx context.Context) (func(), error) {
 				request = js.Undefined()
 			}
 		}()
-		request = locks.Call("request", "gojiberry-docstore:"+a.prefix, cb)
+		request = locks.Call("request", name, cb)
 	}()
 	if !request.Truthy() {
 		cb.Release()

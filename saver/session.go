@@ -426,6 +426,12 @@ func (s *Session) Check(ctx context.Context) error {
 		line = msg("saver.checkedProblems", "Checked %d documents: %d put back from an earlier copy (%s), %d damaged with no copy (%s)",
 			rep.Checked, len(rep.Restored), strings.Join(rep.Restored, ", "), len(rep.Lost), strings.Join(rep.Lost, ", "))
 	}
+	if len(rep.BackupsLost) > 0 {
+		line += " " + msg("saver.checkedBackups", "(%d had no good previous copy; the next save makes one)", len(rep.BackupsLost))
+	}
+	if rep.Orphans > 0 {
+		line += " " + msg("saver.checkedOrphans", "(%d leftover files removed)", rep.Orphans)
+	}
 	return s.after(ctx, line)
 }
 
