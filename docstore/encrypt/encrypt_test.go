@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -375,6 +376,50 @@ func TestSharingByKeyNeedsTheFingerprintAndRemovingIsAReKey(t *testing.T) {
 	recID, _ := ParseAgeIdentity(secret)
 	if d, err := New(inner, Static{Keys: []age.Identity{recID}}).Load(ctx, cur); err != nil || string(d.Data) != "newer" {
 		t.Errorf("%v", err)
+	}
+}
+
+func TestRemoveEverywhere(t *testing.T) {
+	ctx := context.Background()
+	ana, bo := newPerson(t, "ana"), newPerson(t, "bo")
+	inner := docstore.NewMemoryAdapter()
+	ad, sh := sharingSetup(t, inner, ana)
+	a, b, c := "44444444-4444-4444-8444-444444444444~aaaaaaaaaaaa.json", "55555555-5555-4555-8555-555555555555~bbbbbbbbbbbb.json", "66666666-6666-4666-8666-666666666666~cccccccccccc.json"
+	for _, id := range []string{a, b, c} {
+		if err := ad.Save(ctx, id, []byte("text of "+id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, doc := range []string{DocID(a), DocID(b)} {
+		if err := sh.Add(ctx, doc, bo.r, bo.r.Fingerprint); err != nil {
+			t.Fatal(err)
+		}
+	}
+	used, err := sh.Usage(ctx, bo.r.Fingerprint)
+	if err != nil || len(used) != 2 || used[0] != DocID(a) || used[1] != DocID(b) {
+		t.Fatalf("%v %v", used, err)
+	}
+	asBo := New(inner, Static{Keys: []age.Identity{bo.id}})
+	if _, err := asBo.Load(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	docs, files, err := sh.RemoveEverywhere(ctx, bo.r.Fingerprint)
+	if err != nil || len(docs) != 2 || files != 2 {
+		t.Fatalf("%v %d %v", docs, files, err)
+	}
+	for _, id := range []string{a, b} {
+		if _, err := asBo.Load(ctx, id); !errors.Is(err, ErrNoKey) {
+			t.Errorf("%s: %v", id, err)
+		}
+		if d, err := ad.Load(ctx, id); err != nil || string(d.Data) != "text of "+id {
+			t.Errorf("%s: Ana still reads it: %v", id, err)
+		}
+	}
+	if used, _ := sh.Usage(ctx, bo.r.Fingerprint); len(used) != 0 {
+		t.Errorf("%v", used)
+	}
+	if docs, files, err := sh.RemoveEverywhere(ctx, bo.r.Fingerprint); err != nil || len(docs) != 0 || files != 0 {
+		t.Errorf("nothing left to do: %v %d %v", docs, files, err)
 	}
 }
 
@@ -818,5 +863,50 @@ func TestSignersFromAgeAndSSHKeys(t *testing.T) {
 	}
 	if _, err := NewSigner([]byte("short")); err == nil {
 		t.Error("short seed")
+	}
+}
+
+func TestRemoveEverywhereContinuesPastAFailureAndCanBeRerun(t *testing.T) {
+	ctx := context.Background()
+	ana, bo := newPerson(t, "ana"), newPerson(t, "bo")
+	mem := docstore.NewMemoryAdapter()
+	inner := &failing{Adapter: mem, fail: map[string]int{}}
+	ad, sh := sharingSetup(t, inner, ana)
+	files := map[string]string{
+		"11111111-aaaa-4aaa-8aaa-111111111111": "11111111-aaaa-4aaa-8aaa-111111111111~aaaaaaaaaaaa.json",
+		"22222222-bbbb-4bbb-8bbb-222222222222": "22222222-bbbb-4bbb-8bbb-222222222222~bbbbbbbbbbbb.json",
+		"33333333-cccc-4ccc-8ccc-333333333333": "33333333-cccc-4ccc-8ccc-333333333333~cccccccccccc.json",
+	}
+	var ids []string
+	for doc, f := range files {
+		_ = ad.Save(ctx, f, []byte(f))
+		if err := sh.Add(ctx, doc, bo.r, bo.r.Fingerprint); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, doc)
+	}
+	sort.Strings(ids)
+	inner.fail[files[ids[1]]] = 1
+	done, n, err := sh.RemoveEverywhere(ctx, bo.r.Fingerprint)
+	if err == nil || !strings.Contains(err.Error(), ids[1]) || len(done) != 2 || n != 2 {
+		t.Fatalf("%v %d %v", done, n, err)
+	}
+	// The failed document's list no longer has the key, but Usage still finds it: its re-key is pending.
+	used, err := sh.Usage(ctx, bo.r.Fingerprint)
+	if err != nil || len(used) != 1 || used[0] != ids[1] {
+		t.Fatalf("%v %v", used, err)
+	}
+	done, n, err = sh.RemoveEverywhere(ctx, bo.r.Fingerprint)
+	if err != nil || len(done) != 1 || n != 1 {
+		t.Fatalf("%v %d %v", done, n, err)
+	}
+	asBo := New(mem, Static{Keys: []age.Identity{bo.id}})
+	for _, f := range files {
+		if _, err := asBo.Load(ctx, f); !errors.Is(err, ErrNoKey) {
+			t.Errorf("%s: %v", f, err)
+		}
+	}
+	if used, _ := sh.Usage(ctx, bo.r.Fingerprint); len(used) != 0 {
+		t.Errorf("%v", used)
 	}
 }

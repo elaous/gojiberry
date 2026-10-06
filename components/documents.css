@@ -55,3 +55,10 @@
 .gj-recip-hint { color: var(--gj-muted); }
 .gj-recip button { padding: 0.35em 0.8em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); cursor: pointer; font: inherit; }
 .gj-recip button:disabled { opacity: 0.5; cursor: default; }
+.gj-passkey { display: flex; flex-direction: column; gap: 0.6em; min-width: 18em; }
+.gj-passkey-create-form, .gj-passkey-add-form { display: flex; gap: 0.5em; flex-wrap: wrap; }
+.gj-passkey-item { display: flex; align-items: center; gap: 0.5em; padding: 0.25em 0; border-bottom: 1px solid var(--gj-border); flex-wrap: wrap; }
+.gj-passkey-email, .gj-passkey-label { flex: 1; min-width: 10em; padding: 0.3em 0.5em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); font: inherit; }
+.gj-passkey button { padding: 0.35em 0.8em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); cursor: pointer; font: inherit; }
+.gj-passkey button:disabled { opacity: 0.5; cursor: default; }
+.gj-passkey-note, .gj-passkey-unsupported { margin: 0; font-size: 0.85em; color: var(--gj-muted); }

@@ -23,6 +23,8 @@ type Recipient struct {
 	// Text is the public key as it was read ("ssh-ed25519 AAAA..." or "age1..."), what is kept
 	// in a document's recipient list.
 	Text string
+	// Hint is, for a passkey key, the credential ID (base64url) to ask when opening.
+	Hint string
 }
 
 // ParseSSHRecipient reads an SSH public key as an authorized_keys or .pub file holds it

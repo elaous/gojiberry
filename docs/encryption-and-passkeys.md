@@ -83,8 +83,17 @@ key** that wraps a key pair or the data key, so:
    and allowed origins are configuration (`opendocs.io`, not guessed from the request).
 3. **One session format.** A successful passkey login issues the same bearer token as
    OIDC (the package's rule: one token format). The user is `passkey:{credential owner
-   id}` with the e-mail the person gave when registering; linking a passkey to an
-   existing OIDC identity is done while signed in with that identity.
+   id}`, **with no e-mail**: the address typed when registering is stored on the account as a
+   label (it names the passkey in the browser) but nothing has verified it, and the rest of the
+   library (access lists, `User.Email`) treats an e-mail as verified, so putting it in the
+   session would let anyone register as `victim@corp.com` and be matched by an ACL that names
+   that address. Marking an address verified (a link mailed to it, then a signed marker on the
+   account) is future work. Linking a passkey to an existing OIDC identity is done while
+   signed in with that identity (the e-mail in the request body is ignored then), and the
+   registration token can only be finished by the session that began it.
+   Sign-in refuses a credential whose signature counter did not go up (`CloneWarning`: logged,
+   401, the credential stays flagged: remove it and register again). A server keeps at most
+   10,000 unfinished ceremonies (503 beyond), and the provider name `passkey` is reserved.
 4. **Discoverable credentials** allow signing in without typing a username. A person can
    register several passkeys, list them and remove one (not the last, unless another way
    to sign in exists).
@@ -127,6 +136,15 @@ key** that wraps a key pair or the data key, so:
    pasted key for an address with no account stays "label only" and the owner confirms
    its fingerprint. Verified e-mail proves the account, and the key was published by it;
    it does not prove the key is not the account's compromised one.
+
+5. **MFA: no separate second factor.** A passkey with user verification (required by default) is
+   already two factors in one: the device and a PIN or biometric. We do not add TOTP or SMS codes
+   (weaker than the passkey they would guard). For OIDC sign-in, MFA is the provider's policy. Left,
+   and not built: an optional **step-up** (a fresh passkey assertion within a few minutes) before
+   sensitive actions: removing a key, purging, sharing.
+6. **Removing a key warns and re-encrypts.** The warning names how many documents use the key and
+   that anything already opened or copied cannot be taken back. Confirming decrypts and encrypts
+   again, without that key, every document that used it (`Sharing.Usage` counts them, `Sharing.RemoveEverywhere` does it; `components.Recipients` shows "opens N documents" and a "Remove from all N documents" button with that warning). A failure stops it naming the document, and running it again finishes the rest.
 
 ### C.5 Who may change a recipient list
 
@@ -191,7 +209,30 @@ cannot be opened.
    fingerprint is typed. *Left:* wiring it into an application (the showcase has no encrypted store
    yet: it needs the key management of steps 3 and 4, where the owner's key lives and how it is
    unlocked) and the "verified e-mail" mark of C.4.
-3. `auth/passkey` and `components.Passkey`, with the virtual-authenticator e2e.
-4. Passkey as an encryption recipient through PRF, with detection and the
-   second-recipient rule.
+3. **Done:** `auth/passkey` (go-webauthn; discoverable credentials, user verification required,
+   one-time challenges with a TTL, `Store` with `MemoryStore` and `AdapterStore`), the
+   `components.Passkey` control, `Server.WithRoutes`/`Hide` on the docstore server (`cmd/docstore`
+   mounts `/auth/passkey/` when `GOJIBERRY_DOCSTORE_PASSKEY_RPID`, `_ORIGINS` and `_NAME` are set and
+   hides the `passkey/` records from the API), `auth.Manager.StartSession` and a provider-less
+   manager (a passkey-only deployment). `examples/passkey-demo` has the e2e against Chrome's virtual
+   authenticator. Linking to an OIDC identity: a passkey registered while signed in uses that
+   identity's ID, so both ways reach the same account.
+4. **Done (library, browser client, e2e):** a passkey as an encryption recipient through the WebAuthn PRF
+   extension. `encrypt.PRFSalt`, `PRFIdentity` (HKDF of the 32 PRF bytes into an age X25519 identity),
+   `PRFRecipient` (type `passkey-prf`, the credential ID kept as the `Hint` of which passkey to ask),
+   `CheckRecoverableOwner(owner, shared)` (`ErrNeedSecondRecipient` unless one of the **owner's** keys is
+   not a passkey: a recovery key must be one the owner controls, not someone else's; two passkeys are not
+   enough, they can be lost together; `CheckRecoverable(keys...)` counts whatever it is given, so prefer
+   the owner form). Known-answer tests pin the derivation (fixed PRF output to the exact
+   `AGE-SECRET-KEY-1...` and `age1...` strings, and the encoding checked against the age library and
+   `crypto/ecdh`), because changing it would lock people out. The secret is the root of the key: callers
+   `clear(secret)` after `PRFIdentity`/`PRFRecipient` (the demo does), and `DeriveKey` zeroes the browser's
+   buffer once copied. The credential ID kept as the `Hint` is readable in the signed recipient list: it
+   shows that a passkey is in use and which, and links documents that share it (leave it empty to avoid
+   that, at the cost of the browser asking which passkey). Registration asks for PRF
+   (`WithExtensionPRFSupport`), and `client.DeriveKey` asks a passkey for the bytes (`ErrNoPRF` when the
+   authenticator does not do PRF: passkeys made before this, some security keys and password managers;
+   `ErrPRFLength` when it answers with the wrong size).
+   The e2e derives the same key twice in Chrome. *Left:* the People-tab control that adds "my passkey" as a
+   key, and calling `CheckRecoverableOwner` when a document is made confidential (step 5).
 5. `.opendoc` encrypted records, and the placeholder catalog entries for confidential items.

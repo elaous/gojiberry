@@ -368,3 +368,69 @@ func disabledAdd(t *testing.T, p RecipientsProps) bool {
 	j := strings.Index(html[i:], ">")
 	return strings.Contains(html[i:i+j], "disabled")
 }
+
+func TestPasskeyControlStates(t *testing.T) {
+	var did []string
+	p := PasskeyProps{Supported: true, Pending: &Pending{Inline: true}, Email: "ana@opendocs.io",
+		SignIn: func(context.Context) error { did = append(did, "signin"); return nil },
+		Create: func(_ context.Context, e, _ string) error { did = append(did, "create:"+e); return nil },
+		Add:    func(_ context.Context, l string) error { did = append(did, "add:"+l); return nil },
+		Remove: func(_ context.Context, id string) error { did = append(did, "remove:"+id); return nil },
+		Ask: func(msg string, do func()) {
+			mustContain(t, msg, "Remove the passkey Laptop", "only way to sign in")
+			do()
+		},
+		Label: "Phone",
+		Rows:  []PasskeyRow{{ID: "c1", Label: "Laptop", Created: "2026-10-06", LastUsed: "2026-10-07", Synced: true}}}
+	html := render(t, Passkey(p))
+	mustContain(t, html, "Sign in with a passkey", "Create an account with a passkey", "two factors in one", "gj-passkey-email")
+	mustNotContain(t, html, "gj-passkey-item", "Your passkeys")
+	for _, h := range findHandlers(Passkey(p), "click") {
+		h(xango.NewEvent("click", nil, false, nil, nil))
+	}
+	if len(did) != 2 || did[0] != "signin" || did[1] != "create:ana@opendocs.io" {
+		t.Errorf("%v", did)
+	}
+	// Create needs an address.
+	p.Email = ""
+	html = render(t, Passkey(p))
+	if i := strings.Index(html, `class="gj-passkey-create"`); i < 0 || !strings.Contains(html[i:i+strings.Index(html[i:], ">")], "disabled") {
+		t.Error("Create is off with no e-mail address")
+	}
+	did = nil
+	p.SignedIn = true
+	html = render(t, Passkey(p))
+	mustContain(t, html, "Your passkeys", "Laptop", "added 2026-10-06", "last used 2026-10-07", "synced across your devices", "gj-passkey-remove", "Add a passkey")
+	mustNotContain(t, html, "gj-passkey-signin")
+	for _, h := range findHandlers(Passkey(p), "click") {
+		h(xango.NewEvent("click", nil, false, nil, nil))
+	}
+	if len(did) != 2 || did[0] != "remove:c1" || did[1] != "add:Phone" {
+		t.Errorf("%v", did)
+	}
+	mustContain(t, render(t, Passkey(PasskeyProps{Pending: &Pending{Inline: true}})), "cannot use passkeys")
+}
+
+func TestRecipientsRemoveEverywhereWarnsAndCountsDocuments(t *testing.T) {
+	var removed []string
+	var asked string
+	p := RecipientsProps{
+		Shared:           []RecipientRow{{Label: "bo", Type: "ssh-ed25519", Fingerprint: "SHA256:bo", Uses: 3}, {Label: "cy", Type: "ssh-ed25519", Fingerprint: "SHA256:cy", Uses: 1}},
+		Pending:          &Pending{Inline: true},
+		RemoveEverywhere: func(_ context.Context, fp string) error { removed = append(removed, fp); return nil },
+		Ask:              func(msg string, do func()) { asked = msg; do() },
+	}
+	html := render(t, Recipients(p))
+	mustContain(t, html, "gj-recip-remove-all", "Remove from all 3 documents", "opens 3 documents")
+	if strings.Count(html, "gj-recip-remove-all") != 1 {
+		t.Error("only a key used on several documents gets the button")
+	}
+	mustNotContain(t, html, "gj-recip-remove\"") // no single Remove without the operation
+	for _, h := range findHandlers(Recipients(p), "click") {
+		h(xango.NewEvent("click", nil, false, nil, nil))
+	}
+	mustContain(t, asked, "bo can open 3 documents", "decrypts every one", "cannot be taken back")
+	if len(removed) != 1 || removed[0] != "SHA256:bo" {
+		t.Errorf("%v", removed)
+	}
+}

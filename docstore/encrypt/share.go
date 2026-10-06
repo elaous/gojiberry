@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -120,6 +121,7 @@ type Shared struct {
 	Type        string
 	Fingerprint string // computed from Key
 	Key         string // the public key's text
+	Hint        string // for a passkey key, the credential to ask
 	Added       time.Time
 }
 
@@ -149,18 +151,23 @@ type sharedEntry struct {
 	// Fingerprint is for people reading the record; it is recomputed from Key, never trusted.
 	Fingerprint string `json:"fingerprint,omitempty"`
 	Key         string `json:"key"`
+	Hint        string `json:"hint,omitempty"`
 	Added       int64  `json:"added,omitempty"`
 }
 
 // parseShared reads an entry's key and returns the Recipient, with the fingerprint and type
 // computed from the key itself.
 func parseShared(e sharedEntry) (Recipient, error) {
-	if e.Type == "age-x25519" {
+	switch e.Type {
+	case "age-x25519", TypePasskey:
 		r, err := ParseAgeRecipient(e.Key)
 		if err != nil {
 			return Recipient{}, err
 		}
 		r.Label = e.Label
+		if e.Type == TypePasskey {
+			r.Type, r.Hint = TypePasskey, e.Hint
+		}
 		return r, nil
 	}
 	r, err := ParseSSHRecipient(e.Key)
@@ -327,7 +334,7 @@ func (s *Sharing) List(ctx context.Context, docID string) ([]Shared, error) {
 		if err != nil {
 			return nil, fmt.Errorf("encrypt: a recipient of %s cannot be read: %w", docID, err)
 		}
-		out = append(out, Shared{Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint, Key: r.Text, Added: time.Unix(e.Added, 0)})
+		out = append(out, Shared{Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint, Key: r.Text, Hint: r.Hint, Added: time.Unix(e.Added, 0)})
 	}
 	return out, nil
 }
@@ -372,7 +379,7 @@ func (s *Sharing) Add(ctx context.Context, docID string, r Recipient, confirmed 
 	if r.Text == "" {
 		return errors.New("encrypt: the recipient has no key text")
 	}
-	parsed, err := parseShared(sharedEntry{Type: r.Type, Key: r.Text, Label: r.Label})
+	parsed, err := parseShared(sharedEntry{Type: r.Type, Key: r.Text, Label: r.Label, Hint: r.Hint})
 	if err != nil {
 		return err
 	}
@@ -389,7 +396,7 @@ func (s *Sharing) Add(ctx context.Context, docID string, r Recipient, confirmed 
 		if label == "" {
 			label = parsed.Label
 		}
-		rec.Recipients = append(rec.Recipients, sharedEntry{Label: label, Type: parsed.Type, Fingerprint: parsed.Fingerprint, Key: parsed.Text, Added: time.Now().Unix()})
+		rec.Recipients = append(rec.Recipients, sharedEntry{Label: label, Type: parsed.Type, Fingerprint: parsed.Fingerprint, Key: parsed.Text, Hint: parsed.Hint, Added: time.Now().Unix()})
 		rec.Pending = true
 		return true, nil
 	}); err != nil {
@@ -459,4 +466,66 @@ func (a *Adapter) RekeyDocument(ctx context.Context, docID string) (int, error) 
 		}
 	}
 	return a.RekeyIDs(ctx, ids)
+}
+
+// Usage lists the documents (their IDs, sorted) that removing a key changes: the ones it is a
+// recipient of, and the ones with a pending re-key (a change that was cut short, whose files
+// may still be encrypted to an older list), so a caller can say what removing it will do and a
+// re-run finds what an earlier run left. A record that does not verify is skipped and
+// reported in the error, joined, beside the documents found.
+func (s *Sharing) Usage(ctx context.Context, fingerprint string) ([]string, error) {
+	metas, err := s.Store.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var docs []string
+	var errs []error
+	for _, m := range metas {
+		doc, ok := strings.CutPrefix(m.ID, KeysPrefix)
+		if !ok {
+			continue
+		}
+		rec, _, err := loadRecord(ctx, s.Store, doc, s.verifiers())
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		hit := rec.Pending
+		for _, e := range rec.Recipients {
+			if p, err := parseShared(e); err == nil && p.Fingerprint == fingerprint {
+				hit = true
+				break
+			}
+		}
+		if hit {
+			docs = append(docs, doc)
+		}
+	}
+	sort.Strings(docs)
+	return docs, errors.Join(errs...)
+}
+
+// RemoveEverywhere takes a key out of every document it is shared with: each is decrypted and
+// encrypted again, with a new data key, to who is left. It returns the documents done and how
+// many files were encrypted again. A document that fails does not stop the others: every
+// failure is returned, joined and each naming its document, and running it again finishes
+// those (Usage lists a document whose re-key is pending even when the key is already out of
+// its list, and Remove finishes it). As with Remove, nothing takes back what the key's owner
+// already opened or copied.
+func (s *Sharing) RemoveEverywhere(ctx context.Context, fingerprint string) (docs []string, files int, err error) {
+	all, uerr := s.Usage(ctx, fingerprint)
+	var errs []error
+	if uerr != nil {
+		errs = append(errs, uerr)
+	}
+	for _, doc := range all {
+		n, err := s.Remove(ctx, doc, fingerprint)
+		files += n
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", doc, err))
+			continue
+		}
+		docs = append(docs, doc)
+	}
+	return docs, files, errors.Join(errs...)
 }
