@@ -50,15 +50,9 @@ func withPasskeys(ctx context.Context, srv *docstore.Server, adapter docstore.Ad
 	if err != nil {
 		return nil, err
 	}
-	// A passkey linked to an OpenID Connect identity can be removed even when it is the last.
-	svc.HasOtherWay = func(_ context.Context, id string) bool {
-		for _, p := range m.Providers() {
-			if strings.HasPrefix(id, p.Name+":") {
-				return true
-			}
-		}
-		return false
-	}
+	// A passkey linked to an OpenID Connect identity can be removed even when it is the last
+	// (the provider name must match exactly; "passkey" is reserved).
+	svc.HasOtherWay = passkey.OtherWayFromProviders(m.Providers())
 	srv.WithRoutes("/auth/passkey/", svc.Handler()).Hide("passkey/")
 	log.Printf("docstore: sign-in with passkeys enabled (rp=%s)", rp)
 	return m, nil

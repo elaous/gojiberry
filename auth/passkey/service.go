@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -42,6 +43,22 @@ var (
 	ErrNeedEmail    = errors.New("passkey: an e-mail address is needed to make an account")
 	ErrBadChallenge = errors.New("passkey: the sign-in expired or was already used; start again")
 	ErrLastPasskey  = errors.New("passkey: this is the only way to sign in to the account; add another passkey or sign-in method first")
+	// ErrCloneDetected is returned by LoginFinish when the credential's signature counter did
+	// not go up: the authenticator may have been copied. The sign-in is refused and the
+	// credential stays flagged (remove it and register again).
+	ErrCloneDetected = errors.New("passkey: this passkey may have been cloned; sign-in refused")
+	// ErrSessionMismatch is returned by RegistrationFinish when the ceremony was begun by
+	// another session (or by none) than the one finishing it.
+	ErrSessionMismatch = errors.New("passkey: this registration was started by another session")
+	// ErrBusy is returned when too many ceremonies are waiting to be finished.
+	ErrBusy = errors.New("passkey: too many sign-ins in progress; try again shortly")
+)
+
+// maxChallenges bounds the ceremonies waiting to be finished (memory held per anonymous
+// request), and sweepEvery how often expired ones are looked for.
+const (
+	maxChallenges = 10000
+	sweepEvery    = 5 * time.Second
 )
 
 // Service runs the passkey ceremonies for a Store and gives the people who pass them a session of
@@ -55,6 +72,13 @@ type Service struct {
 
 	mu         sync.Mutex
 	challenges map[string]pending
+	lastSweep  time.Time
+	maxPending int
+
+	// acctMu serializes read-modify-write of an account's credentials within this process
+	// (a sign-in raising a counter against a removal). A store shared by several processes
+	// needs its own conditional write for that.
+	acctMu sync.Mutex
 	// HasOtherWay, if set, says whether an account has another way to sign in than its passkeys
 	// (an OpenID Connect identity of the same user ID), which lets its last passkey be removed.
 	HasOtherWay func(ctx context.Context, accountID string) bool
@@ -63,6 +87,7 @@ type Service struct {
 type pending struct {
 	session webauthn.SessionData
 	account string // the account a registration is for, "" for a sign-in
+	begunBy string // the user ID of the session that began a registration, "" if none
 	email   string // for a new account
 	name    string
 	create  bool // the registration makes the account
@@ -96,7 +121,7 @@ func New(cfg Config, store Store, sessions *auth.Manager) (*Service, error) {
 	if ttl <= 0 {
 		ttl = 5 * time.Minute
 	}
-	return &Service{wa: wa, store: store, sessions: sessions, ttl: ttl, uv: uv, challenges: map[string]pending{}}, nil
+	return &Service{wa: wa, store: store, sessions: sessions, ttl: ttl, uv: uv, challenges: map[string]pending{}, maxPending: maxChallenges}, nil
 }
 
 func (s *Service) put(p pending) (string, error) {
@@ -105,17 +130,27 @@ func (s *Service) put(p pending) (string, error) {
 		return "", err
 	}
 	token := base64.RawURLEncoding.EncodeToString(b)
-	p.expires = time.Now().Add(s.ttl)
+	now := time.Now()
+	p.expires = now.Add(s.ttl)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	now := time.Now()
-	for k, v := range s.challenges { // drop what has expired
-		if now.After(v.expires) {
-			delete(s.challenges, k)
+	if len(s.challenges) >= s.maxPending || now.Sub(s.lastSweep) >= sweepEvery {
+		s.sweepLocked(now) // drop what has expired: not on every start, but when it matters
+		if len(s.challenges) >= s.maxPending {
+			return "", ErrBusy
 		}
 	}
 	s.challenges[token] = p
 	return token, nil
+}
+
+func (s *Service) sweepLocked(now time.Time) {
+	s.lastSweep = now
+	for k, v := range s.challenges {
+		if now.After(v.expires) {
+			delete(s.challenges, k)
+		}
+	}
 }
 
 // take returns and removes a started ceremony: a challenge is good for one finish.
@@ -134,7 +169,9 @@ func (s *Service) take(token string) (pending, bool) {
 // Connect user, or an earlier passkey account) it adds a passkey to that identity: this is how
 // a passkey is linked to a login the person already has. With no accountID it makes a new
 // account for email (and name), which is only created when the ceremony finishes. It returns
-// the options for navigator.credentials.create and the token to finish with.
+// the options for navigator.credentials.create and the token to finish with. The e-mail of a
+// new account is a stored label only (it names the passkey in the browser); it is never the
+// session's identity, because nothing here has verified it.
 func (s *Service) RegistrationStart(ctx context.Context, accountID, email, name string) (*protocol.CredentialCreation, string, error) {
 	var acct *Account
 	create := false
@@ -162,7 +199,7 @@ func (s *Service) RegistrationStart(ctx context.Context, accountID, email, name 
 		if err != nil {
 			return nil, "", err
 		}
-		id := "passkey:" + base64.RawURLEncoding.EncodeToString(h[:12])
+		id := accountPrefix + ":" + base64.RawURLEncoding.EncodeToString(h[:12])
 		acct = &Account{ID: id, Handle: h, Email: email, Name: name, Created: time.Now()}
 		create = true
 	}
@@ -176,7 +213,7 @@ func (s *Service) RegistrationStart(ctx context.Context, accountID, email, name 
 	if err != nil {
 		return nil, "", fmt.Errorf("passkey: %w", err)
 	}
-	token, err := s.put(pending{session: *session, account: acct.ID, email: acct.Email, name: acct.Name, create: create})
+	token, err := s.put(pending{session: *session, account: acct.ID, begunBy: accountID, email: acct.Email, name: acct.Name, create: create})
 	if err != nil {
 		return nil, "", err
 	}
@@ -184,41 +221,50 @@ func (s *Service) RegistrationStart(ctx context.Context, accountID, email, name 
 }
 
 // RegistrationFinish checks the authenticator's answer (the JSON the browser's
-// PublicKeyCredential serialises to) and saves the new passkey under label. It returns the
-// account; for a new one the caller may start a session with Session.
-func (s *Service) RegistrationFinish(ctx context.Context, token, label string, body []byte) (*Account, *Credential, error) {
+// PublicKeyCredential serialises to) and saves the new passkey under label. signedIn is the
+// user ID of the session that is finishing it ("" for none) and must be the one that began it
+// (ErrSessionMismatch otherwise): a token started while signed in links a passkey to that
+// identity and cannot be finished by anyone else, and a token started signed out cannot be
+// finished into someone's session. It returns the account, and whether it was just made
+// by this call for a person with no session, in which case the caller starts one with
+// Session; a passkey added to a signed-in identity gives no new session.
+func (s *Service) RegistrationFinish(ctx context.Context, signedIn, token, label string, body []byte) (acct *Account, cred *Credential, newSession bool, err error) {
 	p, ok := s.take(token)
 	if !ok || p.account == "" {
-		return nil, nil, ErrBadChallenge
+		return nil, nil, false, ErrBadChallenge
 	}
-	var acct *Account
+	if p.begunBy != signedIn {
+		return nil, nil, false, ErrSessionMismatch
+	}
+	s.acctMu.Lock()
+	defer s.acctMu.Unlock()
 	if p.create {
 		h := p.session.UserID
 		acct = &Account{ID: p.account, Handle: h, Email: p.email, Name: p.name, Created: time.Now()}
 		if _, err := s.store.Get(ctx, p.account); err == nil {
-			return nil, nil, ErrBadChallenge // made by someone else since: the challenge is stale
+			return nil, nil, false, ErrBadChallenge // made by someone else since: the challenge is stale
 		}
 	} else {
 		a, err := s.store.Get(ctx, p.account)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
 		acct = a
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "/", bytes.NewReader(body))
-	cred, err := s.wa.FinishRegistration(acct, p.session, req)
+	nc, err := s.wa.FinishRegistration(acct, p.session, req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("passkey: %w", err)
+		return nil, nil, false, fmt.Errorf("passkey: %w", err)
 	}
 	if label == "" {
 		label = fmt.Sprintf("Passkey %d", len(acct.Credentials)+1)
 	}
-	c := Credential{Cred: *cred, Label: label, Created: time.Now()}
+	c := Credential{Cred: *nc, Label: label, Created: time.Now()}
 	acct.Credentials = append(acct.Credentials, c)
 	if err := s.store.Put(ctx, acct); err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
-	return acct, &c, nil
+	return acct, &c, p.create && p.begunBy == "", nil
 }
 
 // LoginStart begins a sign-in with a discoverable passkey: no user name is typed, the
@@ -263,22 +309,70 @@ func (s *Service) LoginFinish(ctx context.Context, token string, body []byte) (*
 	if acct == nil {
 		return nil, ErrNotFound
 	}
-	for i := range acct.Credentials {
-		if bytes.Equal(acct.Credentials[i].Cred.ID, cred.ID) {
-			acct.Credentials[i].Cred = *cred // the new signature counter and flags
-			acct.Credentials[i].LastUsed = time.Now()
-		}
-	}
-	if err := s.store.Put(ctx, acct); err != nil {
+	// Raise the counter on the stored account as it is now (a removal or another sign-in may
+	// have changed it since it was read for the check).
+	s.acctMu.Lock()
+	defer s.acctMu.Unlock()
+	fresh, err := s.store.Get(ctx, acct.ID)
+	if err != nil {
 		return nil, err
 	}
-	return acct, nil
+	hit := false
+	for i := range fresh.Credentials {
+		if bytes.Equal(fresh.Credentials[i].Cred.ID, cred.ID) {
+			fresh.Credentials[i].Cred = *cred // the new signature counter and flags
+			fresh.Credentials[i].LastUsed = time.Now()
+			hit = true
+		}
+	}
+	if !hit {
+		return nil, ErrNotFound // removed while this sign-in was being checked
+	}
+	if err := s.store.Put(ctx, fresh); err != nil {
+		return nil, err
+	}
+	if cred.Authenticator.CloneWarning {
+		log.Printf("passkey: clone warning for account %s, credential %s: the signature counter did not go up; sign-in refused", fresh.ID, base64.RawURLEncoding.EncodeToString(cred.ID))
+		return nil, ErrCloneDetected
+	}
+	return fresh, nil
 }
 
 // Session starts the session of an account, the same bearer token an OpenID Connect login gives.
+// The session carries the account's ID and name but no e-mail address: the address an account
+// was made with was typed by whoever made it and nothing has verified it, and the rest of the
+// library treats User.Email as verified (an access list that names an address would match it).
+// An account linked to an OpenID Connect identity signs in as that identity's own ID, so it
+// is that provider's verified address that counts, in that session. Marking a passkey
+// account's address as verified (by a link mailed to it) is future work.
 func (s *Service) Session(a *Account) (string, error) {
-	return s.sessions.StartSession(auth.User{ID: a.ID, Email: a.Email, Name: a.Name})
+	return s.sessions.StartSession(sessionUser(a))
 }
+
+func sessionUser(a *Account) auth.User { return auth.User{ID: a.ID, Name: a.Name} }
+
+// OtherWayFromProviders is a HasOtherWay for the OpenID Connect providers (auth.Manager.Providers):
+// an account has another way in when its ID is "<provider>:<subject>" for a configured provider,
+// matching the provider's name exactly. The name "passkey" is this package's own and is never a
+// provider.
+func OtherWayFromProviders(providers []auth.ProviderInfo) func(ctx context.Context, accountID string) bool {
+	return func(_ context.Context, id string) bool {
+		name, _, ok := strings.Cut(id, ":")
+		if !ok || name == "" || name == accountPrefix {
+			return false
+		}
+		for _, p := range providers {
+			if p.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// accountPrefix is the first part of the ID of an account a passkey made; no provider may be
+// called that.
+const accountPrefix = "passkey"
 
 // Credentials lists an account's passkeys.
 func (s *Service) Credentials(ctx context.Context, accountID string) ([]Credential, error) {
@@ -295,6 +389,8 @@ func (s *Service) Credentials(ctx context.Context, accountID string) ([]Credenti
 // Remove takes a passkey out of an account. The last one stays unless the account has another
 // way to sign in (HasOtherWay): losing a passkey should cost a login, not the account.
 func (s *Service) Remove(ctx context.Context, accountID, credentialID string) error {
+	s.acctMu.Lock()
+	defer s.acctMu.Unlock()
 	a, err := s.store.Get(ctx, accountID)
 	if err != nil {
 		return err
@@ -352,6 +448,10 @@ func fail(w http.ResponseWriter, err error) {
 		status = http.StatusGone
 	case errors.Is(err, ErrLastPasskey):
 		status = http.StatusConflict
+	case errors.Is(err, ErrSessionMismatch):
+		status = http.StatusForbidden
+	case errors.Is(err, ErrBusy):
+		status = http.StatusServiceUnavailable
 	}
 	jsonOut(w, status, map[string]string{"error": err.Error()})
 }
@@ -365,10 +465,10 @@ func (s *Service) handleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&in)
 	accountID := ""
 	if u, ok := s.sessions.CurrentUser(r); ok {
+		// Signed in: the passkey is linked to this identity, and what the body says about who
+		// it is does not count.
 		accountID = u.ID
-		if in.Email == "" {
-			in.Email, in.Name = u.Email, u.Name
-		}
+		in.Email, in.Name = u.Email, u.Name
 	}
 	opts, token, err := s.RegistrationStart(r.Context(), accountID, in.Email, in.Name)
 	if err != nil {
@@ -388,14 +488,17 @@ func (s *Service) handleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	_, signedIn := s.sessions.CurrentUser(r)
-	acct, cred, err := s.RegistrationFinish(r.Context(), r.URL.Query().Get("token"), r.URL.Query().Get("label"), body)
+	signedIn := ""
+	if u, ok := s.sessions.CurrentUser(r); ok {
+		signedIn = u.ID
+	}
+	acct, cred, newSession, err := s.RegistrationFinish(r.Context(), signedIn, r.URL.Query().Get("token"), r.URL.Query().Get("label"), body)
 	if err != nil {
 		fail(w, err)
 		return
 	}
 	out := map[string]any{"id": cred.ID(), "label": cred.Label}
-	if !signedIn { // a new account: it is signed in now
+	if newSession { // a new account for someone with no session: it is signed in now
 		tok, err := s.Session(acct)
 		if err != nil {
 			fail(w, err)
@@ -444,7 +547,7 @@ func (s *Service) handleLoginFinish(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	jsonOut(w, http.StatusOK, map[string]any{"auth_token": tok, "user": auth.User{ID: acct.ID, Email: acct.Email, Name: acct.Name}})
+	jsonOut(w, http.StatusOK, map[string]any{"auth_token": tok, "user": sessionUser(acct)})
 }
 
 func (s *Service) handleCredentials(w http.ResponseWriter, r *http.Request) {

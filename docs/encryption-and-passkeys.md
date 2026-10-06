@@ -83,8 +83,17 @@ key** that wraps a key pair or the data key, so:
    and allowed origins are configuration (`opendocs.io`, not guessed from the request).
 3. **One session format.** A successful passkey login issues the same bearer token as
    OIDC (the package's rule: one token format). The user is `passkey:{credential owner
-   id}` with the e-mail the person gave when registering; linking a passkey to an
-   existing OIDC identity is done while signed in with that identity.
+   id}`, **with no e-mail**: the address typed when registering is stored on the account as a
+   label (it names the passkey in the browser) but nothing has verified it, and the rest of the
+   library (access lists, `User.Email`) treats an e-mail as verified, so putting it in the
+   session would let anyone register as `victim@corp.com` and be matched by an ACL that names
+   that address. Marking an address verified (a link mailed to it, then a signed marker on the
+   account) is future work. Linking a passkey to an existing OIDC identity is done while
+   signed in with that identity (the e-mail in the request body is ignored then), and the
+   registration token can only be finished by the session that began it.
+   Sign-in refuses a credential whose signature counter did not go up (`CloneWarning`: logged,
+   401, the credential stays flagged: remove it and register again). A server keeps at most
+   10,000 unfinished ceremonies (503 beyond), and the provider name `passkey` is reserved.
 4. **Discoverable credentials** allow signing in without typing a username. A person can
    register several passkeys, list them and remove one (not the last, unless another way
    to sign in exists).
