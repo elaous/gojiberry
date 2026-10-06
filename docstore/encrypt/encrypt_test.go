@@ -663,9 +663,13 @@ func TestAStoreWriterCannotAddARecipientOrChangeTheList(t *testing.T) {
 	evil, _ := NewSigner(bytes.Repeat([]byte{9}, 32))
 	forged := &Sharing{Store: inner, Adapter: ad, Signer: evil}
 	_ = inner.Delete(ctx, KeysPrefix+docA)
-	if err := forged.Add(ctx, docA, mallory.r, mallory.r.Fingerprint); err != nil && !errors.Is(err, ErrBadSignature) {
-		// Add re-keys through ad, whose keyring does not trust the forged record.
-		t.Log("add:", err)
+	// Mallory writes a record under her own key (recover mode: no check against the files'
+	// frames, which would refuse the deleted record; the point here is the signature).
+	if _, err := forged.mutateWith(ctx, docA, mutateOpts{recover: true}, func(rec *sharedRecord) (bool, error) {
+		rec.Recipients = append(rec.Recipients, sharedEntry{Type: mallory.r.Type, Key: mallory.r.Text})
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 	if err := ad.Save(ctx, f, []byte("v2")); !errors.Is(err, ErrBadSignature) {
 		t.Fatalf("a record signed by a stranger: %v", err)
