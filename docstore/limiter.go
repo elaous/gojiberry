@@ -177,9 +177,10 @@ func (l *RateLimiter) sweepLocked(now time.Time) {
 // failure is logged at most once a minute: a broken store must neither lock everyone out nor
 // switch the limit off. When the loop loses the race too many times (a hot key) the request is
 // refused for a second. Clocks: each replica uses its own clock; a record "from the future" of
-// this replica's clock refills nothing until that time has passed, but never further ahead than
-// maxClockSkew (a replica with a clock hours ahead cannot lock the others out), so skew changes
-// the refill by seconds, never the burst.
+// this replica's clock refills nothing until that time has passed, but a record dated more than
+// maxClockSkew ahead of this replica's clock (a replica whose clock is hours ahead) is re-dated to
+// it on first sight, with its tokens, so it cannot lock the others out: skew changes the refill by
+// seconds, never the burst.
 //
 // Records of callers that stopped calling are deleted by SweepRateLimits.
 type StoreLimiter struct {
@@ -275,9 +276,28 @@ func (l *StoreLimiter) Allow(ctx context.Context, key string) (bool, time.Durati
 		if st.At == 0 {
 			st = limitState{Tokens: float64(l.Burst), At: now.UnixNano()}
 		}
-		// A record from a replica whose clock is far ahead must not lock the others out: its
-		// time counts as at most maxClockSkew past this replica's own.
-		st.At = min(st.At, now.UnixNano()+int64(maxClockSkew))
+		if st.At > now.UnixNano()+int64(maxClockSkew) {
+			// A record from a replica whose clock is far ahead must not lock the others out
+			// (nothing would refill until their clocks caught up): it is re-dated to this
+			// replica's clock, keeping its tokens, and the request goes on from there.
+			fixed := limitState{Tokens: st.Tokens, At: now.UnixNano(), Full: now.UnixNano()}
+			if l.PerMinute > 0 {
+				fixed.Full += int64((float64(l.Burst) - st.Tokens) / l.PerMinute * float64(time.Minute))
+			}
+			data, _ := json.Marshal(fixed)
+			switch err := cas.SaveIf(ctx, id, data, prev); {
+			case err == nil:
+				st, prev = fixed, Digest(data)
+			case errors.Is(err, ErrConflict):
+				continue
+			case errors.Is(err, ErrConditionalUnsupported):
+				l.noCAS.Store(true)
+				return l.memory().Allow(ctx, key)
+			default:
+				l.warn(err)
+				return l.memory().Allow(ctx, key)
+			}
+		}
 		at := max(st.At, now.UnixNano()) // never move a record's time backwards (within the skew)
 		tokens := refill(st.Tokens, time.Duration(now.UnixNano()-st.At), l.PerMinute, l.Burst)
 		if tokens < 1 {

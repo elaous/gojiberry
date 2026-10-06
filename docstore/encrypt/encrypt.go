@@ -98,7 +98,7 @@ func (s Static) Identities(context.Context, string) ([]age.Identity, error) { re
 // encrypted like any document file and, once the folder's signed record says e2ee, wrapped
 // for people's keys only.
 func DefaultSkip(id string) bool {
-	return strings.HasPrefix(id, "catalog:") || strings.HasPrefix(id, "acl:") || strings.HasPrefix(id, "fonts/") || strings.HasPrefix(id, KeysPrefix) || strings.HasPrefix(id, directoryPrefix) || strings.HasPrefix(id, docstore.DirectoryLogPrefix) || strings.HasPrefix(id, docstore.RateLimitPrefix)
+	return strings.HasPrefix(id, "catalog:") || strings.HasPrefix(id, "acl:") || strings.HasPrefix(id, "fonts/") || strings.HasPrefix(id, KeysPrefix) || strings.HasPrefix(id, directoryPrefix) || strings.HasPrefix(id, docstore.DirectoryLogPrefix) || strings.HasPrefix(id, docstore.DirectoryEnrollPrefix) || strings.HasPrefix(id, docstore.RateLimitPrefix)
 }
 
 // Adapter is a docstore.Adapter that encrypts what it saves in Inner.

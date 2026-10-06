@@ -10,9 +10,10 @@
 //	SessionStore     live anonymous sessions, the global and the    MemorySessionStore           Redis, a table (SetDoc must be a
 //	                 per-client cap, the one-document claim                                      compare-and-set; Create takes the
 //	                 (SetDoc: atomic CAS); optional SessionReaper                                per-client figure)
-//	Limiters         per-group request budgets (Session, Write,     passkey.RateLimiter per      a shared Redis budget, a gateway's
-//	                 WriteAddr, View, Report, Admin), keyed by      group from Config            decision; passkey.Unlimited{}
-//	                 ClientKey (IPv4, IPv6 /64); passkey.Limiter
+//	Limiters         per-group request budgets (Session, Write,     passkey.RateLimiter per      docstore.StoreLimiters via Options.LimiterFactory
+//	                 WriteAddr, View, Report, Admin), keyed by      group from Config            (replicas share them through the store), a
+//	                 ClientKey (IPv4, IPv6 /64); passkey.Limiter                                 shared Redis budget, a gateway's decision;
+//	                                                                                             passkey.Unlimited{}
 //	Quota            bytes per client per day, charged before the   MemoryQuota (fixed 24 h      Redis INCRBY with expiry, a table
 //	                 body is read and refunded (QuotaRefunder)      window per client)
 //	                 for what is not stored

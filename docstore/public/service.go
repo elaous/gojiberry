@@ -48,20 +48,20 @@ type Options struct {
 	Config Config
 
 	// The injectable pieces, each with a single-process default (see doc.go):
-	Sessions   SessionStore               // NewMemorySessionStore(Config.MaxSessions)
-	Limiters   Limiters                   // passkey.RateLimiter from the Config
+	Sessions SessionStore // NewMemorySessionStore(Config.MaxSessions)
+	Limiters Limiters     // passkey.RateLimiter from the Config
 	// LimiterFactory, when set, makes the budgets that Limiters leaves nil: docstore.StoreLimiters
 	// (replicas on one store share them) or any factory, instead of a per-process RateLimiter.
 	// The names are "public-session", "public-write", "public-writeaddr", "public-view",
 	// "public-report" and "public-admin"; with docstore.StoreLimiters they are records under
 	// docstore.RateLimitPrefix, which the document API refuses and expiry leaves alone.
 	LimiterFactory docstore.LimiterFactory
-	Quota      Quota                      // NewMemoryQuota(Config.IPDailyBytes, 24h)
-	Admin      AdminGuard                 // TokenAdmin(Config.AdminToken)
-	Blocklist  Blocklist                  // NoBlocklist
-	Challenger Challenger                 // NoChallenge
-	ClientIP   func(*http.Request) string // passkey.TrustedProxies(Config.TrustedProxies...), else the remote address
-	Now        func() time.Time           // time.Now; use the clock of the ExpiringAdapter in tests
+	Quota          Quota                      // NewMemoryQuota(Config.IPDailyBytes, 24h)
+	Admin          AdminGuard                 // TokenAdmin(Config.AdminToken)
+	Blocklist      Blocklist                  // NoBlocklist
+	Challenger     Challenger                 // NoChallenge
+	ClientIP       func(*http.Request) string // passkey.TrustedProxies(Config.TrustedProxies...), else the remote address
+	Now            func() time.Time           // time.Now; use the clock of the ExpiringAdapter in tests
 }
 
 // Service is the public (anonymous) offer: session, document, view link, report and takedown

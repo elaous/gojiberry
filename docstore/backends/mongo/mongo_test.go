@@ -93,3 +93,30 @@ func TestMongoAdapterListPrefix(t *testing.T) {
 		return a
 	})
 }
+
+// The conditional delete needs a real MongoDB too (see above).
+func TestMongoAdapterDeleteIf(t *testing.T) {
+	uri := os.Getenv("TEST_MONGO_URI")
+	if uri == "" {
+		t.Skip("TEST_MONGO_URI not set; skipping MongoDB integration test (no live MongoDB in this environment)")
+	}
+	ctx := context.Background()
+	a, err := New(ctx, uri, "docstore_test_conditional")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	_ = a.coll.Drop(ctx)
+	var _ docstore.ConditionalDeleter = a
+	if err := a.Save(ctx, "x", []byte("one")); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("other"))); err != docstore.ErrConflict {
+		t.Errorf("a stale digest: %v", err)
+	}
+	if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); err != nil {
+		t.Errorf("the document that was read: %v", err)
+	}
+	if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); err != docstore.ErrNotFound {
+		t.Errorf("a document that is gone: %v", err)
+	}
+}

@@ -215,6 +215,52 @@ func TestPostgresSaveIf(t *testing.T) {
 	})
 }
 
+func TestPostgresDeleteIf(t *testing.T) {
+	sel := regexp.QuoteMeta(`SELECT data FROM documents WHERE id = $1 FOR UPDATE`)
+	del := regexp.QuoteMeta(`DELETE FROM documents WHERE id = $1`)
+	ctx := context.Background()
+	newMock := func(t *testing.T) (*Adapter, sqlmock.Sqlmock) {
+		db, mock, err := sqlmock.New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		return newFromDB(db), mock
+	}
+	var _ docstore.ConditionalDeleter = (*Adapter)(nil)
+	t.Run("the document that was read", func(t *testing.T) {
+		a, mock := newMock(t)
+		mock.ExpectBegin()
+		mock.ExpectQuery(sel).WithArgs("x").WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow([]byte("one")))
+		mock.ExpectExec(del).WithArgs("x").WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+		if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); err != nil {
+			t.Fatal(err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("a document that changed, and one that is gone", func(t *testing.T) {
+		a, mock := newMock(t)
+		mock.ExpectBegin()
+		mock.ExpectQuery(sel).WithArgs("x").WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow([]byte("two")))
+		mock.ExpectRollback()
+		if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); !errors.Is(err, docstore.ErrConflict) {
+			t.Errorf("changed: %v", err)
+		}
+		mock.ExpectBegin()
+		mock.ExpectQuery(sel).WithArgs("x").WillReturnError(sql.ErrNoRows)
+		mock.ExpectRollback()
+		if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); !errors.Is(err, docstore.ErrNotFound) {
+			t.Errorf("gone: %v", err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
 func TestPostgresListPrefixEscapesTheLikePattern(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
