@@ -577,7 +577,9 @@ expanded by the same recursive scan, with no extra grammar required.
   Okta, Auth0, or any other OIDC-compliant provider all work through
   the same code, no per-provider branching. `User` carries only `ID`
   (`"{provider}:{sub}"`, so two providers' subject claims can never
-  collide), `Email`, and `Name` — no picture/locale/etc. Sessions are
+  collide), `Email` (set only when the ID token says
+  `email_verified: true`, or the provider sets `AssumeEmailVerified`;
+  `VerifiedEmail` says so), and `Name` — no picture/locale/etc. Sessions are
   bearer tokens (`Authorization: Bearer <token>`), not cookies: this
   repo's HTTP servers already answer CORS with a wildcard
   `Access-Control-Allow-Origin`, which a credentialed cookie-based
