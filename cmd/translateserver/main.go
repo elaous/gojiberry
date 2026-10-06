@@ -1,7 +1,7 @@
 // Command translateserver runs the translation proxy: with
 // GOJIBERRY_TRANSLATESERVER_DEEPL_KEY configured, POST /translate
 // forwards to DeepL and returns the translated text -- see
-// gojiberry/translateserver for the HTTP API.
+// gojiberry/translate/server for the HTTP API.
 package main
 
 import (
@@ -9,12 +9,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/elaous/gojiberry/translateserver"
+	"github.com/elaous/gojiberry/translate/server"
 )
 
 func main() {
-	cfg := translateserver.ConfigFromEnv()
-	srv, err := translateserver.NewServer(cfg)
+	cfg := server.ConfigFromEnv()
+	srv, err := server.NewServer(cfg)
 	if err != nil {
 		log.Fatalf("translateserver: %v", err)
 	}
