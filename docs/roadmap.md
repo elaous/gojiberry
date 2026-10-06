@@ -25,13 +25,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
    and a download always, deleted 24 hours after the last edit (viewing does not renew).
    Design, wording of the promise, and the abuse controls that must exist before launch:
    [public-docstore.md](public-docstore.md). Needs expiry in `docstore` first.
-4. **Console mode.** A command line for work that is clumsy with a mouse: bulk
-   rename, move and tag by pattern, import and export of a folder, repair and
-   rebuild of a catalog. The operations already exist as `saver.Saver` methods; the
-   work is a command grammar (`mv 'Report *' Archive/`, `tag +draft *.docx`), a
-   dry-run mode that says what would change, and the confirm step for destructive
-   ones. A `cmd/` CLI comes first; the same engine can then drive a panel in the
-   editor.
+4. **Console mode: done** (`console`, `cmd/docsh`, [console.md](console.md)); left: the editor panel that drives the same engine.
 5. **Terminal app demo.** A text-mode demo of the same engine (a file manager and a
    plain-text editor over `saver.Session`) to show the components are not tied to
    the browser. It reuses the console grammar above.
