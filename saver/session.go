@@ -748,6 +748,16 @@ func (s *Session) Download(ctx context.Context, id, format string) error {
 	if err != nil {
 		return err
 	}
+	if format == docfile.Open.Name() {
+		// opendocs' own file carries the history too.
+		data, err := s.Saver.ExportOpen(ctx, s.targetName(), id)
+		if err != nil {
+			return err
+		}
+		s.Deliver(safeName(doc.Name())+docfile.Open.Ext(), docfile.Open.MIME(), data)
+		s.say(msg("saver.downloaded", "%s downloaded", doc.Name()))
+		return nil
+	}
 	if format == "" || s.Export == nil {
 		e, err := s.Saver.Get(ctx, s.targetName(), id)
 		if err != nil {

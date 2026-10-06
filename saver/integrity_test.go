@@ -605,3 +605,45 @@ func TestVerifyForgetsABadPreviousCopy(t *testing.T) {
 		t.Errorf("found again: %+v", rep)
 	}
 }
+
+func TestOpenFileCarriesTheHistoryAndSavingItBringsItBack(t *testing.T) {
+	ctx := context.Background()
+	src := &Saver{Targets: []Target{{Name: "m", Adapter: docstore.NewMemoryAdapter()}}}
+	e, err := src.Save(ctx, "m", docfile.JSON, docWithText("plan", "one"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d1 := docWithText("plan", "one")
+	d1.SetID(e.ID)
+	if _, err := src.SaveVersion(ctx, "m", docfile.JSON, d1); err != nil {
+		t.Fatal(err)
+	}
+	d2 := docWithText("plan", "two")
+	d2.SetID(e.ID)
+	if _, err := src.Save(ctx, "m", docfile.JSON, d2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.SaveVersion(ctx, "m", docfile.JSON, d2); err != nil {
+		t.Fatal(err)
+	}
+	data, err := src.ExportOpen(ctx, "m", e.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := docfile.Open.Unmarshal(data)
+	if err != nil || len(doc.History) != 2 || textOf(*doc.History[0].Doc) != "one" || textOf(*doc.History[1].Doc) != "two" || doc.History[0].Saved >= doc.History[1].Saved {
+		t.Fatalf("history in the file: %d %v", len(doc.History), err)
+	}
+	dst := &Saver{Targets: []Target{{Name: "m", Adapter: docstore.NewMemoryAdapter()}}}
+	got, err := dst.Save(ctx, "m", docfile.JSON, doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vs, err := dst.Versions(ctx, "m", got.ID)
+	if err != nil || len(vs) != 2 {
+		t.Fatalf("versions restored: %d %v", len(vs), err)
+	}
+	if stored, err := dst.Load(ctx, "m", got.ID); err != nil || len(stored.History) != 0 {
+		t.Fatalf("the stored document has no history inside: %v", err)
+	}
+}
