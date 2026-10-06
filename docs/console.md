@@ -13,7 +13,12 @@ docsh -store files:./docs -f script.txt                      # a script, one com
 A store is `memory`, `files:DIR`, `sqlite:FILE` or the URL of a docstore server (with `-token`).
 `-n` is a dry run, `-y` answers every question yes. A script (`-f`) **stops at the first command
 that fails**, prints the line, and docsh exits 1; an interactive session prints the error and
-carries on with the next line.
+carries on with the next line. In a script a question that is not answered yes (no `-y`) is
+such a failure too: `purge` and `rebuild` return an error ("not confirmed") instead of being
+left alone, so the script stops and docsh exits 1. `unpack` prints the pack's warnings and
+whether it is signed and the signature checks out, and fails (exit 1 in a script) if any
+document failed; `import` of a file it cannot read as a document fails in a script (an
+interactive session prints "skipped" and carries on).
 
 ## Commands
 
@@ -47,7 +52,7 @@ that are called the same matches both.
    changes nothing; `check` and `repair` and `rebuild` too.
 2. **Questions.** `purge` (which lists up to ten names) and `rebuild` ask `[y/N]` and do
    nothing on anything but `y` (or `-y`). In a script the next line is a command, never an
-   answer: without `-y` the question is answered no, and the output says so. `rm` is not destructive: the trash keeps what it takes.
+   answer: without `-y` the question is answered no, the output says so, and the command fails. `rm` is not destructive: the trash keeps what it takes.
 3. **Nothing partial by surprise.** A command stops at the first error and says which step
    failed; what ran before it is printed. A script stops there too (see above). `pack` and
    `export` write through a temporary file, so a failure leaves no partial output, and they do
