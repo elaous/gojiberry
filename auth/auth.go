@@ -79,6 +79,18 @@ func (u User) Person(role string) user.Person {
 	return user.Person{ID: u.ID, Email: u.Email, Username: u.Username, Name: u.Name, Picture: u.Picture, Role: role}
 }
 
+// AnonProvider is the reserved provider name of anonymous users: an anonymous session's User.ID is
+// AnonProvider + ":" + a random string, with no e-mail and no profile (see docstore/public).
+// NewManager refuses a Provider with this name so a real provider's subject can never be mistaken
+// for an anonymous one.
+const AnonProvider = "anon"
+
+// AnonymousUser returns the User of an anonymous session whose random part is id.
+func AnonymousUser(id string) User { return User{ID: AnonProvider + ":" + id} }
+
+// IsAnonymous reports whether u is an anonymous user (ID "anon:<random>").
+func (u User) IsAnonymous() bool { return strings.HasPrefix(u.ID, AnonProvider+":") }
+
 // Provider configures one OpenID Connect identity provider this
 // Manager can start a login with. IssuerURL is used for OIDC
 // discovery (GET {IssuerURL}/.well-known/openid-configuration) --
@@ -217,6 +229,9 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 		}
 		if p.Name == "passkey" {
 			return nil, errors.New(`auth: the provider name "passkey" is reserved for accounts made by passkeys (auth/passkey)`)
+		}
+		if p.Name == AnonProvider {
+			return nil, errors.New(`auth: the provider name "anon" is reserved for anonymous sessions (docstore/public): its user IDs ("anon:<random>") must not collide with a provider's`)
 		}
 		if _, exists := m.byName[p.Name]; exists {
 			return nil, fmt.Errorf("auth: duplicate provider name %q", p.Name)
