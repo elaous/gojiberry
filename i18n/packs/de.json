@@ -236,6 +236,12 @@
   "opendl.current": "Aktuelle Version: %s.",
   "opendl.drop": "Versionsverlauf weglassen (nur die aktuelle Version herunterladen)",
   "opendl.total": "Die Datei wird etwa %s groß.",
-  "opendl.title": "%s als .open herunterladen"
+  "opendl.title": "%s als .open herunterladen",
+  "download.group.documents": "Dokumente",
+  "download.group.web": "Web und Text",
+  "download.group.data": "Daten",
+  "download.group.opendocs": "opendocs",
+  "download.group.more": "Weitere",
+  "download.openWithHistory": "opendocs (.open), mit Versionsverlauf"
  }
 }

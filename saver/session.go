@@ -662,7 +662,13 @@ func (s *Session) Docs() components.DocListProps {
 	if d := s.openDlg; d != nil {
 		p.OpenDownload = &components.OpenDownload{
 			Name: d.name, Current: d.sizes.Current, History: d.sizes.History, Versions: d.sizes.Versions, Drop: d.drop,
-			OnDrop:    func(drop bool) { s.set(func() { s.openDlg.drop = drop }) },
+			OnDrop: func(drop bool) {
+				s.set(func() {
+					if s.openDlg != nil {
+						s.openDlg.drop = drop
+					}
+				})
+			},
 			OnConfirm: func() { s.Pending.Run(s.DownloadOpen) },
 			OnCancel:  s.CancelOpenDownload,
 		}
