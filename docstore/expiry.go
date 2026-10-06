@@ -42,9 +42,19 @@ const (
 	fontsPrefix    = "fonts/"    // the font library (fonts.KeyPrefix, saver.FontPrefix)
 )
 
+// The keyspaces of the public (anonymous) offer, see package docstore/public. Neither expires by
+// itself: the records under PublicPrefix that belong to one document (its metadata and view-id
+// record) are deleted by the public service's own sweep once the document is gone, and its
+// tombstones (PublicPrefix+"tomb/") and the reports (ReportPrefix) have a TTL of their own that
+// the same sweep enforces. Both are reserved from the /docs API.
+const (
+	PublicPrefix = "public/" // document metadata, view-id records and tombstones of the public offer
+	ReportPrefix = "report/" // abuse reports about public documents
+)
+
 // systemPrefixes are the keyspaces that are not documents: they never expire by themselves (the
 // ones that belong to a document go with it, see DefaultRelated).
-var systemPrefixes = []string{ExpiryPrefix, aclKeyPrefix, collabPrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix}
+var systemPrefixes = []string{ExpiryPrefix, aclKeyPrefix, collabPrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix, PublicPrefix, ReportPrefix}
 
 // IsDocumentKey reports whether key is a plain document: what the saver writes ("<id>~<gen><ext>"
 // generation keys) or a client PUTs under a plain id. It is an allowlist of the document
