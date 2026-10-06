@@ -4,7 +4,7 @@
 # this cmd has no dependency outside its own module. See
 # docs/README.md (deploy section) / ../../docker-compose.yml for how
 # this fits into the full "run the whole app" stack alongside
-# fontserver/syncserver/translateserver and OnDesign's own client
+# fontserver/syncserver/translate/server and OnDesign's own client
 # image -- one Dockerfile per gojiberry binary, matching each having
 # its own single-static-binary shape already (docstore.ConfigFromEnv's
 # own doc comment).

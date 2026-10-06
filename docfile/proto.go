@@ -7,6 +7,7 @@ import (
 	"sync"
 	"unicode"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -74,13 +75,13 @@ func buildMessage(t reflect.Type, seen map[reflect.Type]bool, out *[]*descriptor
 		return
 	}
 	seen[t] = true
-	m := &descriptorpb.DescriptorProto{Name: new(t.Name())}
+	m := &descriptorpb.DescriptorProto{Name: proto.String(t.Name())}
 	for i := range t.NumField() {
 		f := t.Field(i)
 		fd := &descriptorpb.FieldDescriptorProto{
-			Name:     new(snake(f.Name)),
-			JsonName: new(f.Name),
-			Number:   new(fieldNumber(f)),
+			Name:     proto.String(snake(f.Name)),
+			JsonName: proto.String(f.Name),
+			Number:   proto.Int32(fieldNumber(f)),
 			Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
 		}
 		if f.Type.Kind() == reflect.Slice {
@@ -88,7 +89,7 @@ func buildMessage(t reflect.Type, seen map[reflect.Type]bool, out *[]*descriptor
 		}
 		if st, ok := elemStruct(f.Type); ok {
 			fd.Type = descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum()
-			fd.TypeName = new("." + protoPackage + "." + st.Name())
+			fd.TypeName = proto.String("." + protoPackage + "." + st.Name())
 			buildMessage(st, seen, out)
 		} else {
 			et := f.Type
@@ -107,9 +108,9 @@ func schema() (protoreflect.FileDescriptor, error) {
 		var msgs []*descriptorpb.DescriptorProto
 		buildMessage(reflect.TypeFor[Document](), map[reflect.Type]bool{}, &msgs)
 		schemaDesc = &descriptorpb.FileDescriptorProto{
-			Name:        new("gojiberry/doc.proto"),
-			Package:     new(protoPackage),
-			Syntax:      new("proto3"),
+			Name:        proto.String("gojiberry/doc.proto"),
+			Package:     proto.String(protoPackage),
+			Syntax:      proto.String("proto3"),
 			MessageType: msgs,
 		}
 		schemaFile, schemaErr = protodesc.NewFile(schemaDesc, nil)

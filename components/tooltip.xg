@@ -27,9 +27,8 @@ func Tooltip(props TooltipProps) xango.Node {
 	if placement == "" {
 		placement = TooltipTop
 	}
-	children := append([]xango.Node{}, props.Children...)
-	children = append(children, xango.El("span",
-		[]xango.Attr{xango.A("class", "gj-tooltip-bubble gj-tooltip-"+string(placement)), xango.A("role", "tooltip")},
-		xango.Text(props.Content)))
-	return xango.El("span", []xango.Attr{xango.A("class", "gj-tooltip")}, children...)
+	return <span class="gj-tooltip">
+		{props.Children}
+		<span class={"gj-tooltip-bubble gj-tooltip-" + string(placement)} role="tooltip">{props.Content}</span>
+	</span>
 }
