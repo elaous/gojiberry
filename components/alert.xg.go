@@ -21,22 +21,10 @@ func Alert(props AlertProps) xango.Node {
 	if okLabel == "" {
 		okLabel = "OK"
 	}
-	return Dialog(DialogProps{
-		Open:  props.Open,
-		Role:  "alertdialog",
-		Title: props.Title,
-		Body:  []xango.Node{xango.Text(props.Message)},
-		Actions: []xango.Node{
-			Button(ButtonProps{
-				Label:   okLabel,
-				Variant: ButtonPrimary,
-				OnClick: func(xango.Event) {
-					if props.OnClose != nil {
-						props.OnClose()
-					}
-				},
-			}),
-		},
-		OnClose: props.OnClose,
-	})
+	onOK := func(xango.Event) {
+		if props.OnClose != nil {
+			props.OnClose()
+		}
+	}
+	return Dialog(DialogProps{Open: props.Open, Role: "alertdialog", Title: props.Title, Body: []xango.Node{xango.Text(props.Message)}, Actions: []xango.Node{Button(ButtonProps{Label: okLabel, Variant: ButtonPrimary, OnClick: onOK})}, OnClose: props.OnClose})
 }
