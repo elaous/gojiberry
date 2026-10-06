@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"time"
 
@@ -267,6 +268,11 @@ type VerifyReport struct {
 	Restored []string
 	// Lost names the documents that are damaged and have no good previous copy.
 	Lost []string
+	// BackupsLost names the documents whose current file is fine but whose previous copy is
+	// missing or damaged (it is forgotten; the next save makes a new one).
+	BackupsLost []string
+	// Orphans is how many leftover files (from a crashed or refused save) were removed.
+	Orphans int
 	// Sealed counts documents saved before checksums existed that were read, found
 	// fine, and given one.
 	Sealed int
@@ -301,7 +307,9 @@ func (s *Saver) Verify(ctx context.Context, target string) (VerifyReport, error)
 		item
 		doc      docfile.Document
 		data     []byte
-		fromPrev bool
+		fromPrev bool // the current file was bad: the previous copy takes its place
+		seal     bool // no checksum yet: the one just read
+		dropPrev bool // the previous copy is missing or damaged: forget it
 	}
 	var fixes []fix
 	for _, it := range items {
@@ -312,38 +320,110 @@ func (s *Saver) Verify(ctx context.Context, target string) (VerifyReport, error)
 		rep.Checked++
 		switch {
 		case err == nil && fromPrev:
-			fixes = append(fixes, fix{it, doc, data, true})
+			fixes = append(fixes, fix{item: it, doc: doc, data: data, fromPrev: true})
 			rep.Restored = append(rep.Restored, it.e.Name)
-		case err == nil && it.e.Sum == "":
-			fixes = append(fixes, fix{it, doc, data, false})
-			rep.Sealed++
 		case err == nil:
+			f := fix{item: it, doc: doc, data: data, seal: it.e.Sum == ""}
+			if f.seal {
+				rep.Sealed++
+			}
+			if it.e.Prev != "" {
+				// The backup is only found out to be bad when it is needed, unless it is looked at.
+				_, _, perr := s.tryRead(ctx, t, it.e.Prev, it.e.PrevSum)
+				switch {
+				case perr == nil:
+				case missingOrDamaged(perr):
+					f.dropPrev = true
+					rep.BackupsLost = append(rep.BackupsLost, it.e.Name)
+				default:
+					return rep, perr
+				}
+			}
+			if f.seal || f.dropPrev {
+				fixes = append(fixes, f)
+			}
 		case errors.Is(err, ErrUnreadable):
 			rep.Lost = append(rep.Lost, it.e.Name)
 		default:
 			return rep, err // the store failing is not a finding
 		}
 	}
-	if len(fixes) == 0 {
-		return rep, nil
-	}
-	err = s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
-		for _, f := range fixes {
-			e, ok := cat.Docs[f.id]
-			if !ok || e.Key != f.e.Key || e.Prev != f.e.Prev {
-				continue // saved or removed since: not this fix's to apply
+	if len(fixes) > 0 {
+		err = s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
+			for _, f := range fixes {
+				e, ok := cat.Docs[f.id]
+				if !ok || e.Key != f.e.Key || e.Prev != f.e.Prev {
+					continue // saved or removed since: not this fix's to apply
+				}
+				if f.fromPrev {
+					if err := s.promoteEntry(ctx, t, cat, f.id, &e, f.doc, later); err != nil {
+						return err
+					}
+				}
+				if f.dropPrev {
+					if bad := e.Prev; bad != "" {
+						*later = append(*later, func() { _ = t.Adapter.Delete(ctx, bad) })
+					}
+					e.Prev, e.PrevSum = "", ""
+				}
+				if e.Sum == "" {
+					e.Sum = docstore.Digest(f.data)
+				}
+				cat.Docs[f.id] = e
 			}
-			if f.fromPrev {
-				if err := s.promoteEntry(ctx, t, cat, f.id, &e, f.doc, later); err != nil {
-					return err
+			return nil
+		})
+		if err != nil {
+			return rep, err
+		}
+	}
+	rep.Orphans, err = s.CollectOrphans(ctx, target, OrphanAge)
+	return rep, err
+}
+
+// OrphanAge is how old a file nothing points to must be before CollectOrphans removes it,
+// so that the file of a save that is being made right now is never taken for a leftover.
+const OrphanAge = time.Hour
+
+var generationKey = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}~[0-9a-f]{12}\.[a-z]+$`)
+
+// CollectOrphans removes the files of documents that no catalog entry points to (as its
+// current or its previous copy) and that are older than olderThan: what a save that crashed
+// between its file and its catalog leaves, or a rebuild left out. Only files named like a
+// saved generation are looked at; nothing else in the store is touched. It returns how
+// many it removed.
+func (s *Saver) CollectOrphans(ctx context.Context, target string, olderThan time.Duration) (int, error) {
+	n := 0
+	err := s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
+		n = 0 // update may run this again
+		metas, err := t.Adapter.List(ctx)
+		if err != nil {
+			return err
+		}
+		used := map[string]bool{}
+		for _, e := range cat.Docs {
+			used[e.Key], used[e.Prev] = true, true
+		}
+		gone := map[string]bool{}
+		for _, m := range metas {
+			if used[m.ID] || !generationKey.MatchString(m.ID) || time.Since(m.UpdatedAt) < olderThan {
+				continue
+			}
+			key := m.ID
+			gone[key] = true
+			n++
+			*later = append(*later, func() { _ = t.Adapter.Delete(ctx, key) })
+		}
+		if len(gone) > 0 && len(cat.Skipped) > 0 {
+			kept := cat.Skipped[:0]
+			for _, k := range cat.Skipped {
+				if !gone[k] {
+					kept = append(kept, k)
 				}
 			}
-			if e.Sum == "" {
-				e.Sum = docstore.Digest(f.data)
-			}
-			cat.Docs[f.id] = e
+			cat.Skipped = kept
 		}
 		return nil
 	})
-	return rep, err
+	return n, err
 }

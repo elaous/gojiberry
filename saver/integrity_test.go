@@ -469,3 +469,139 @@ func TestDeleteFolderKeepsADocumentWithADamagedPreviousCopy(t *testing.T) {
 		t.Fatalf("the damaged copy is left alone: %v", err)
 	}
 }
+
+// capped is a store with room for a number of bytes: a save that would go over is refused
+// with ErrStorageFull, as a browser's quota does.
+type capped struct {
+	docstore.Adapter
+	room int
+}
+
+func (c *capped) used(ctx context.Context) int {
+	n := 0
+	ms, _ := c.List(ctx)
+	for _, m := range ms {
+		n += m.Size
+	}
+	return n
+}
+
+func (c *capped) Save(ctx context.Context, id string, data []byte) error {
+	old := 0
+	if d, err := c.Load(ctx, id); err == nil {
+		old = len(d.Data)
+	}
+	if c.used(ctx)-old+len(data) > c.room {
+		return docstore.ErrStorageFull
+	}
+	return c.Adapter.Save(ctx, id, data)
+}
+
+// A store with room for little more than one copy of a document still takes saves: the
+// previous copy is given up first, and as a last resort the current file is written over.
+func TestASaveFitsInAFullStoreByGivingUpTheBackup(t *testing.T) {
+	ctx := context.Background()
+	for _, rooms := range []struct{ room int }{{room: 2300}, {room: 1500}} {
+		mem := &capped{Adapter: docstore.NewMemoryAdapter(), room: rooms.room}
+		s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+		text := strings.Repeat("x", 900)
+		d := docWithText("plan", text+"1")
+		var id string
+		for i := 1; i <= 4; i++ {
+			d = docWithText("plan", text+string(rune('0'+i)))
+			if id != "" {
+				d.SetID(id)
+			}
+			e, err := s.Save(ctx, "m", docfile.JSON, d)
+			if err != nil {
+				t.Fatalf("room %d, save %d: %v", rooms.room, i, err)
+			}
+			id = e.ID
+			got, err := s.Load(ctx, "m", id)
+			if err != nil || textOf(got) != text+string(rune('0'+i)) {
+				t.Fatalf("room %d, save %d reads back %q: %v", rooms.room, i, textOf(got)[len(text):], err)
+			}
+		}
+	}
+}
+
+// aged reports every file as saved long ago.
+type aged struct{ docstore.Adapter }
+
+func (a aged) List(ctx context.Context) ([]docstore.Meta, error) {
+	ms, err := a.Adapter.List(ctx)
+	for i := range ms {
+		ms[i].UpdatedAt = time.Now().Add(-48 * time.Hour)
+	}
+	return ms, err
+}
+
+func TestCollectOrphansRemovesOnlyOldLeftoverGenerations(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: aged{mem}}}}
+	id := twoSaves(t, s, docfile.JSON)
+	orphan := id + "~aaaaaaaaaaaa.json"
+	other := "notes.txt"
+	_ = mem.Save(ctx, orphan, []byte("{}"))
+	_ = mem.Save(ctx, other, []byte("keep"))
+	n, err := s.CollectOrphans(ctx, "m", time.Hour)
+	if err != nil || n != 1 {
+		t.Fatalf("removed %d: %v", n, err)
+	}
+	if _, err := mem.Load(ctx, orphan); !errors.Is(err, docstore.ErrNotFound) {
+		t.Errorf("the leftover is gone: %v", err)
+	}
+	if _, err := mem.Load(ctx, other); err != nil {
+		t.Errorf("a file that is not a saved generation is left alone: %v", err)
+	}
+	if d, err := s.Load(ctx, "m", id); err != nil || !strings.HasPrefix(textOf(d), "version two") {
+		t.Errorf("the document and its previous copy are untouched: %v", err)
+	}
+	// A young file might be a save in progress.
+	_ = mem.Save(ctx, id+"~bbbbbbbbbbbb.json", []byte("{}"))
+	young := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	if n, _ := young.CollectOrphans(ctx, "m", time.Hour); n != 0 {
+		t.Errorf("a file just written was removed")
+	}
+}
+
+func TestRebuildDoesNotGiveADamagedFileANewChecksum(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	id := twoSaves(t, s, docfile.JSON)
+	cur, _ := s.Get(ctx, "m", id)
+	stored, _ := mem.Load(ctx, cur.Key)
+	// A change that still parses: one character of the text.
+	flipped := strings.Replace(string(stored.Data), "version two", "version twX", 1)
+	_ = mem.Save(ctx, cur.Key, []byte(flipped))
+	if err := s.Rebuild(ctx, "m"); err != nil {
+		t.Fatal(err)
+	}
+	d, rec, err := s.LoadChecked(ctx, "m", id)
+	if err != nil || !rec.FromPrevious || textOf(d) != "version one" {
+		t.Fatalf("the change is still found: %q %+v %v", textOf(d), rec, err)
+	}
+}
+
+func TestVerifyForgetsABadPreviousCopy(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	id := twoSaves(t, s, docfile.JSON)
+	var prev string
+	_ = s.view(ctx, "m", func(_ Target, c *catalog) error { prev = c.Docs[id].Prev; return nil })
+	_ = mem.Save(ctx, prev, []byte("{ not json"))
+	rep, err := s.Verify(ctx, "m")
+	if err != nil || len(rep.BackupsLost) != 1 || len(rep.Lost) != 0 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	if _, err := mem.Load(ctx, prev); !errors.Is(err, docstore.ErrNotFound) {
+		t.Errorf("the bad copy is deleted: %v", err)
+	}
+	rep, _ = s.Verify(ctx, "m")
+	if len(rep.BackupsLost) != 0 {
+		t.Errorf("found again: %+v", rep)
+	}
+}

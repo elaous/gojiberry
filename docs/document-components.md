@@ -170,10 +170,11 @@ timeout and an immediate write transaction), local files (an `flock` on the dire
 Unix) and the HTTP store (`If-Match`). `Repair` waits `RepairGrace` (2 s) and looks again
 before repairing, so it does not undo a delete another process is half way through, and
 a rebuild never overwrites a catalog changed since it was read. The browser's
-localStorage target cannot write conditionally, but it can take a lock: `docstore.Locker`
-is an optional interface, and the browser store implements it with the Web Locks API, so
-two tabs of one origin save one at a time. Where Web Locks is missing the store saves
-unlocked, and `Repair` still finds an orphaned file on the next session.
+localStorage target writes conditionally too (`SaveIf` under a Web Lock shared by every tab
+of the origin, and read back to be sure), so two tabs saving at once make the second start
+over on the catalog the first wrote and keep both changes. Where the browser has no Web
+Locks the read-back still catches most of it. `docstore.Locker` is the optional interface
+for a store that offers a lock instead (Rebuild and Repair hold it).
 
 ## Damaged files and previous copies
 
@@ -193,13 +194,18 @@ copy, or negative for none; more than one is not stored. Local files are written
 `fsync` of the file and its directory, so a power cut does not leave a half-written file.
 Copy-on-write and checksums are in the data, so they work with every store.
 
-Limits: a save needs room for a whole new file while the old one is still kept, so in a
-browser's few megabytes the capacity for large documents is about halved. A rebuilt catalog
-(and `Verify` for entries from before checksums) seals whatever bytes are on disk, so a
-bit-flip that still parses is trusted from then on: the checksum protects what the catalog
-has seen. `Verify` checks current files, not previous copies, until one is needed. A
-rename, tag or trash rewrites the current file but keeps the earlier save as the previous
-copy (a document with only one save gets that file as its previous copy).
+A save that finds the store full (`docstore.ErrStorageFull`: a browser's quota, a full
+disk) first gives up the previous copy of that document, and if that is not enough writes
+over the current file, as before copies existed, so a save that fits is not refused. A
+rebuild keeps the checksums of the catalog it replaces, so a file that changed since and
+still parses is found damaged on the next read, not sealed as good; only with no readable
+catalog are files taken as they are. `Verify` also looks at the previous copies and forgets
+one that is missing or damaged (the next save makes a new one), and removes leftover files
+(`Saver.CollectOrphans`: generation-named files nothing points to, older than an hour,
+what a crashed save leaves). A rename, tag or trash rewrites the current file but keeps
+the earlier save as the previous copy (a document with only one save gets that file as its
+previous copy). A rename or tag in a store with no room for a second copy of the file is
+refused.
 
 `docstore.RequestPersistence` and `Persisted` ask the browser not to evict the storage.
 

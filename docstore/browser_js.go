@@ -49,10 +49,48 @@ func (a *BrowserAdapter) Save(_ context.Context, id string, data []byte) (err er
 	rec, _ := json.Marshal(browserRecord{Data: base64.StdEncoding.EncodeToString(data), Updated: time.Now().UnixNano()})
 	defer func() { // setItem throws when the quota is exceeded
 		if r := recover(); r != nil {
-			err = errors.New("docstore: the browser refused to store the document (storage full?)")
+			err = fmt.Errorf("%w: the browser refused to store the document (quota)", ErrStorageFull)
 		}
 	}()
 	s.Call("setItem", a.prefix+id, string(rec))
+	return nil
+}
+
+// SaveIf implements ConditionalAdapter: the catalog of two tabs is written without losing
+// either one's change. The check and the write are made under a Web Lock shared by every
+// tab of the origin (where the browser has them), and the write is read back: if what is
+// stored is not what was written, another tab got in between and ErrConflict is returned.
+func (a *BrowserAdapter) SaveIf(ctx context.Context, id string, data []byte, prev string) (err error) {
+	release, err := a.lock(ctx, "gojiberry-docstore:"+a.prefix+"#cas")
+	if err != nil {
+		return err
+	}
+	defer release()
+	defer recoverJS(&err)
+	s, err := a.storage()
+	if err != nil {
+		return err
+	}
+	key := a.prefix + id
+	cur, ok := a.read(s, key)
+	if prev == "" && ok {
+		return ErrConflict
+	}
+	if prev != "" {
+		if !ok {
+			return ErrConflict
+		}
+		have, derr := base64.StdEncoding.DecodeString(cur.Data)
+		if derr != nil || Digest(have) != prev {
+			return ErrConflict
+		}
+	}
+	if err := a.Save(ctx, id, data); err != nil {
+		return err
+	}
+	if back, ok := a.read(s, key); !ok || back.Data != base64.StdEncoding.EncodeToString(data) {
+		return ErrConflict
+	}
 	return nil
 }
 

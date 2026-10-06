@@ -190,11 +190,33 @@ func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc do
 		// it is written, and the file it replaces stays as the previous copy.
 		key := genKey(id, c)
 		cat.fresh = append(cat.fresh, key)
-		if err := t.Adapter.Save(ctx, key, data); err != nil {
+		err = t.Adapter.Save(ctx, key, data)
+		inPlace := false
+		if errors.Is(err, docstore.ErrStorageFull) && existed {
+			// No room for a second whole file beside the current one and its previous
+			// copy. Give up the backup first, and if that is not enough, write over the
+			// current file, as before copies existed: a save that fits is better than
+			// one refused.
+			if prev.Prev != "" {
+				_ = t.Adapter.Delete(ctx, prev.Prev)
+				prev.Prev, prev.PrevSum = "", ""
+				err = t.Adapter.Save(ctx, key, data)
+			}
+			if errors.Is(err, docstore.ErrStorageFull) {
+				if err = t.Adapter.Save(ctx, prev.Key, data); err == nil {
+					inPlace = true
+				}
+			}
+		}
+		if err != nil {
 			return err
 		}
 		e := catalogEntry{Key: prev.Key, Sum: prev.Sum, Prev: prev.Prev, PrevSum: prev.PrevSum}
-		s.rotate(ctx, t, &e, key, data, later)
+		if inPlace {
+			e.Sum, e.Size = docstore.Digest(data), len(data)
+		} else {
+			s.rotate(ctx, t, &e, key, data, later)
+		}
 		e.Name, e.Format, e.Updated, e.Tags, e.Trashed, e.Folder = doc.Name(), c.Name(), doc.Updated, doc.Tags(), prev.Trashed, doc.Folder()
 		cat.Docs[id] = e
 		out = cat.entry(s, id)

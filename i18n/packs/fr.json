@@ -226,6 +226,8 @@
   "saver.purgedUnreadable": "(%d documents de la corbeille dont les fichiers n’existaient plus ont été supprimés : %s)",
   "saver.checkedOK": "%d documents vérifiés : tout va bien",
   "saver.checkedProblems": "%d documents vérifiés : %d rétablis depuis une copie précédente (%s), %d endommagés sans copie (%s)",
+  "saver.checkedBackups": "(%d sans bonne copie précédente ; la prochaine sauvegarde en crée une)",
+  "saver.checkedOrphans": "(%d fichiers résiduels supprimés)",
   "docs.check": "Vérifier les documents"
  }
 }
