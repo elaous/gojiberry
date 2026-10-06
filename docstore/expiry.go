@@ -44,11 +44,7 @@ const (
 
 // systemPrefixes are the keyspaces that are not documents: they never expire by themselves (the
 // ones that belong to a document go with it, see DefaultRelated).
-// folderSecretPrefix is the confidential folders' encrypted names (saver FolderSecretKey, added with
-// confidential folders); declared here so expiry never sweeps a folder's real name.
-const folderSecretPrefix = "folder-secret/"
-
-var systemPrefixes = []string{ExpiryPrefix, aclKeyPrefix, collabPrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, passkeyPrefix, keysPrefix, fontsPrefix, folderSecretPrefix}
+var systemPrefixes = []string{ExpiryPrefix, aclKeyPrefix, collabPrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix}
 
 // IsDocumentKey reports whether key is a plain document: what the saver writes ("<id>~<gen><ext>"
 // generation keys) or a client PUTs under a plain id. It is an allowlist of the document

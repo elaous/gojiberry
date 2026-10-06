@@ -78,7 +78,7 @@ launch, not after:
      so a new document with the same id inherits neither an access list nor history.
    - Only plain documents expire (`docstore.IsDocumentKey`, an allowlist; `FixedTTL` uses it).
      Every system keyspace is exempt: `acl:`, `collab:`, `catalog:`, `versions/`, `directory/`,
-     `passkey/`, `keys:` (wrapped document keys: losing one makes an encrypted document
+     `passkey/`, `folder-secret/` (a confidential folder's real name: it lives as long as the folder), `keys:` (wrapped document keys: losing one makes an encrypted document
      unreadable), `fonts/`, `expiry:`, and any `name:...` key. A test scans the repository for
      keyspace constants, so a new one fails the build until it is listed.
    - Listings read the deadlines from an in-memory copy (invalidated by this process's writes,

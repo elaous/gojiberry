@@ -317,6 +317,8 @@
   "saver.notSavedFull": "No guardado: el almacenamiento está lleno. Descargue el documento (Descargar como) para no perder trabajo, luego elimine versiones antiguas o la papelera, o guarde en otro lugar",
   "saver.confidential": "%s es ahora confidencial: su nombre y etiquetas se guardan dentro del documento",
   "saver.notConfidential": "%s ya no es confidencial",
-  "saver.revealed": "%s se puede leer: se muestra su nombre"
+  "saver.revealed": "%s se puede leer: se muestra su nombre",
+  "saver.folderConfidential": "%s es ahora una carpeta confidencial: su nombre se guarda dentro del sobre",
+  "saver.folderNotConfidential": "%s ya no es una carpeta confidencial"
  }
 }

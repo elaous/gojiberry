@@ -91,7 +91,12 @@ func (s Static) Recipients(context.Context, string) ([]age.Recipient, error) { r
 func (s Static) Identities(context.Context, string) ([]age.Identity, error) { return s.Keys, nil }
 
 // DefaultSkip says which stored items stay readable: the catalogs, the folder records, the
-// ACL records and the fonts, which list or serve a store and hold no document text.
+// ACL records and the fonts, which list or serve a store and hold no document text. The
+// folder records ("catalog:folder/<ID>") hold only a folder's place in the tree and its
+// name, or the placeholder for a confidential folder. That folder's real name is NOT
+// skipped: it lives in "folder-secret/<ID>" (docstore.FolderSecretPrefix), which is
+// encrypted like any document file and, once the folder's signed record says e2ee, wrapped
+// for people's keys only.
 func DefaultSkip(id string) bool {
 	return strings.HasPrefix(id, "catalog:") || strings.HasPrefix(id, "acl:") || strings.HasPrefix(id, "fonts/") || strings.HasPrefix(id, KeysPrefix) || strings.HasPrefix(id, directoryPrefix)
 }
@@ -424,8 +429,18 @@ func (a *Adapter) exclusive(ctx context.Context) (func(), error) {
 }
 
 // DocID finds the document a stored item belongs to: the document file (the ID, a generation
-// suffix, an extension) and its versions ("versions/<ID>/..."); "" for anything else.
+// suffix, an extension), its versions ("versions/<ID>/...") and, for a confidential folder
+// (whose ID is a UUID like a document's), the record of its real name
+// ("folder-secret/<ID>"); "" for anything else.
 func DocID(id string) string {
+	// A confidential folder's real name ("folder-secret/<folder ID>") is governed by the
+	// folder's own keys:<ID> record, the way a document's files are by the document's.
+	if rest, ok := strings.CutPrefix(id, docstore.FolderSecretPrefix); ok {
+		if docfile.ValidID(rest) {
+			return rest
+		}
+		return ""
+	}
 	if rest, ok := strings.CutPrefix(id, "versions/"); ok {
 		if i := strings.IndexByte(rest, '/'); i > 0 {
 			rest = rest[:i]

@@ -546,3 +546,13 @@ func TestCapacityWarnsWhenFillingUp(t *testing.T) {
 	mustContain(t, full, "gj-capacity-warning", `role="alert"`, "full or nearly", "not saved")
 	mustNotContain(t, render(t, Capacity(CapacityProps{Used: 900})), "gj-capacity-warning") // size not known: no percentage
 }
+
+func TestDocListMarksConfidentialFolders(t *testing.T) {
+	p := DocListProps{Folders: []DocFolder{{ID: "a", Name: "Work"}, {ID: "b", Name: "Confidential folder", Confidential: true}},
+		Pending: &Pending{Inline: true}}
+	html := render(t, DocList(p))
+	if n := strings.Count(html, "🔒"); n != 1 {
+		t.Fatalf("want one lock, got %d: %s", n, html)
+	}
+	mustContain(t, html, `aria-label="Confidential folder"`, "gj-doc-confidential")
+}
