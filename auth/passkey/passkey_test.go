@@ -405,7 +405,8 @@ func TestARegistrationTokenBelongsToTheSessionThatBegan(t *testing.T) {
 
 func TestChallengesAreCappedAndSweptRarely(t *testing.T) {
 	r := newRig(t, NewMemoryStore())
-	r.svc.maxPending = 3
+	mc := NewMemoryChallenges(3)
+	r.svc.challenges = mc
 	for range 3 {
 		if code, _ := r.do("POST", "/auth/passkey/login/begin", "", nil); code != 200 {
 			t.Fatal(code)
@@ -414,30 +415,32 @@ func TestChallengesAreCappedAndSweptRarely(t *testing.T) {
 	if code, out := r.do("POST", "/auth/passkey/login/begin", "", nil); code != http.StatusServiceUnavailable {
 		t.Fatalf("beyond the cap: %d %v", code, out)
 	}
-	// Expired ones make room (the sweep runs when the map is full).
-	r.svc.mu.Lock()
-	for k, v := range r.svc.challenges {
-		v.expires = time.Now().Add(-time.Second)
-		r.svc.challenges[k] = v
+	expireAll := func() {
+		mc.mu.Lock()
+		defer mc.mu.Unlock()
+		for k, v := range mc.items {
+			v.Expires = time.Now().Add(-time.Second)
+			mc.items[k] = v
+		}
 	}
-	r.svc.mu.Unlock()
+	// Expired ones make room (the sweep runs when the map is full).
+	expireAll()
 	if code, _ := r.do("POST", "/auth/passkey/login/begin", "", nil); code != 200 {
 		t.Errorf("expired challenges are swept when full: %d", code)
 	}
 	// Not on every start: with room left, an expired one stays until the interval is up.
-	r.svc.maxPending = 100
-	r.svc.mu.Lock()
-	r.svc.lastSweep = time.Now()
-	for k, v := range r.svc.challenges {
-		v.expires = time.Now().Add(-time.Second)
-		r.svc.challenges[k] = v
-	}
-	n := len(r.svc.challenges)
-	r.svc.mu.Unlock()
+	mc.mu.Lock()
+	mc.max = 100
+	mc.lastSweep = time.Now()
+	mc.mu.Unlock()
+	expireAll()
+	mc.mu.Lock()
+	n := len(mc.items)
+	mc.mu.Unlock()
 	r.do("POST", "/auth/passkey/login/begin", "", nil)
-	r.svc.mu.Lock()
-	got := len(r.svc.challenges)
-	r.svc.mu.Unlock()
+	mc.mu.Lock()
+	got := len(mc.items)
+	mc.mu.Unlock()
 	if got != n+1 {
 		t.Errorf("no sweep within the interval: %d -> %d", n, got)
 	}
