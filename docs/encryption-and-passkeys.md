@@ -135,7 +135,7 @@ key** that wraps a key pair or the data key, so:
    sensitive actions: removing a key, purging, sharing.
 6. **Removing a key warns and re-encrypts.** The warning names how many documents use the key and
    that anything already opened or copied cannot be taken back. Confirming decrypts and encrypts
-   again, without that key, every document that used it (`Sharing.RemoveEverywhere`).
+   again, without that key, every document that used it (`Sharing.Usage` counts them, `Sharing.RemoveEverywhere` does it; `components.Recipients` shows "opens N documents" and a "Remove from all N documents" button with that warning). A failure stops it naming the document, and running it again finishes the rest.
 
 ## D. Plan
 

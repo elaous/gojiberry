@@ -13,6 +13,8 @@ type RecipientRow struct {
 	// trusted. Type is "ssh-ed25519", "ssh-rsa" or "age-x25519". Fingerprint is what the
 	// owner confirms.
 	Label, Type, Fingerprint string
+	// Uses is how many documents the key can open (this one included); 0 means unknown.
+	Uses int
 }
 
 // RecipientsProps configures Recipients.
@@ -29,9 +31,12 @@ type RecipientsProps struct {
 	OnDraft        func(key, confirm string)
 	// Add shares the document with the draft key, given the fingerprint confirmed; Remove takes a
 	// key out and encrypts the document again without it. A nil operation leaves its control out.
-	Add     func(ctx context.Context, key, confirm string) error
-	Remove  func(ctx context.Context, fingerprint string) error
-	Pending *Pending
+	Add    func(ctx context.Context, key, confirm string) error
+	Remove func(ctx context.Context, fingerprint string) error
+	// RemoveEverywhere takes a key out of every document that uses it (each is decrypted and
+	// encrypted again without it). Offered next to Remove for a key with Uses above one.
+	RemoveEverywhere func(ctx context.Context, fingerprint string) error
+	Pending          *Pending
 	// Ask, if set, is asked before a key is removed (see Asker.Ask).
 	Ask func(message string, do func())
 }
@@ -70,6 +75,18 @@ func Recipients(p RecipientsProps) xango.Node {
 			extra = append(extra, docButton("gj-recip-remove", tr("recipients.remove", "Remove"), busy,
 				confirmed(p.Ask, trf("recipients.confirmRemove", "Stop sharing with %s? The document is encrypted again without them, so they cannot open what is saved from now on. They keep anything they already opened or copied: that cannot be taken back.", name),
 					actOne(p.Pending, p.Remove, fp))))
+		}
+		if p.RemoveEverywhere != nil && r.Uses > 1 {
+			fp, name := r.Fingerprint, r.Label
+			if name == "" {
+				name = fp
+			}
+			extra = append(extra,
+				xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-uses")},
+					xango.Text(trf("recipients.uses", "opens %d documents", r.Uses))),
+				docButton("gj-recip-remove-all", trf("recipients.removeAll", "Remove from all %d documents", r.Uses), busy,
+					confirmed(p.Ask, trf("recipients.confirmRemoveAll", "%s can open %d documents. Removing this key decrypts every one of them and encrypts it again without it, so they cannot open what is saved from now on. They keep anything they already opened or copied: that cannot be taken back. Continue?", name, r.Uses),
+						actOne(p.Pending, p.RemoveEverywhere, fp))))
 		}
 		rows = append(rows, row(r, "gj-recip-item", extra...))
 	}

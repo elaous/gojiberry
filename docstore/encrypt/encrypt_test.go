@@ -372,3 +372,49 @@ func TestSharingByKeyNeedsTheFingerprintAndRemovingIsAReKey(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 }
+
+func TestRemoveEverywhere(t *testing.T) {
+	ctx := context.Background()
+	ana, bo := newPerson(t, "ana"), newPerson(t, "bo")
+	inner := docstore.NewMemoryAdapter()
+	kr := StoreKeyring{Store: inner, Owners: []age.Recipient{ana.r.Key}, Keys: []age.Identity{ana.id}}
+	ad := New(inner, kr)
+	sh := &Sharing{Store: inner, Adapter: ad}
+	a, b, c := "44444444-4444-4444-8444-444444444444~aaaaaaaaaaaa.json", "55555555-5555-4555-8555-555555555555~bbbbbbbbbbbb.json", "66666666-6666-4666-8666-666666666666~cccccccccccc.json"
+	for _, id := range []string{a, b, c} {
+		if err := ad.Save(ctx, id, []byte("text of "+id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, doc := range []string{DocID(a), DocID(b)} {
+		if err := sh.Add(ctx, doc, bo.r, bo.r.Fingerprint); err != nil {
+			t.Fatal(err)
+		}
+	}
+	used, err := sh.Usage(ctx, bo.r.Fingerprint)
+	if err != nil || len(used) != 2 || used[0] != DocID(a) || used[1] != DocID(b) {
+		t.Fatalf("%v %v", used, err)
+	}
+	asBo := New(inner, Static{Keys: []age.Identity{bo.id}})
+	if _, err := asBo.Load(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	docs, files, err := sh.RemoveEverywhere(ctx, bo.r.Fingerprint)
+	if err != nil || len(docs) != 2 || files != 2 {
+		t.Fatalf("%v %d %v", docs, files, err)
+	}
+	for _, id := range []string{a, b} {
+		if _, err := asBo.Load(ctx, id); !errors.Is(err, ErrNoKey) {
+			t.Errorf("%s: %v", id, err)
+		}
+		if d, err := ad.Load(ctx, id); err != nil || string(d.Data) != "text of "+id {
+			t.Errorf("%s: Ana still reads it: %v", id, err)
+		}
+	}
+	if used, _ := sh.Usage(ctx, bo.r.Fingerprint); len(used) != 0 {
+		t.Errorf("%v", used)
+	}
+	if docs, files, err := sh.RemoveEverywhere(ctx, bo.r.Fingerprint); err != nil || len(docs) != 0 || files != 0 {
+		t.Errorf("nothing left to do: %v %d %v", docs, files, err)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -234,4 +235,53 @@ func (a *Adapter) RekeyDocument(ctx context.Context, docID string) (int, error) 
 		n++
 	}
 	return n, nil
+}
+
+// Usage lists the documents a key is a recipient of (their IDs, sorted), so a caller can say
+// what removing it will change before doing it.
+func (s *Sharing) Usage(ctx context.Context, fingerprint string) ([]string, error) {
+	metas, err := s.Store.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var docs []string
+	for _, m := range metas {
+		if !strings.HasPrefix(m.ID, KeysPrefix) {
+			continue
+		}
+		doc := strings.TrimPrefix(m.ID, KeysPrefix)
+		rec, err := loadRecord(ctx, s.Store, doc)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range rec.Recipients {
+			if e.Fingerprint == fingerprint {
+				docs = append(docs, doc)
+				break
+			}
+		}
+	}
+	sort.Strings(docs)
+	return docs, nil
+}
+
+// RemoveEverywhere takes a key out of every document it is shared with: each is decrypted and
+// encrypted again, with a new data key, to who is left. It returns the documents changed and
+// how many files were encrypted again. A document that fails stops it with an error naming it;
+// the ones before it stay done and running it again finishes the rest. As with Remove, nothing
+// takes back what the key's owner already opened or copied.
+func (s *Sharing) RemoveEverywhere(ctx context.Context, fingerprint string) (docs []string, files int, err error) {
+	all, err := s.Usage(ctx, fingerprint)
+	if err != nil {
+		return nil, 0, err
+	}
+	for _, doc := range all {
+		n, err := s.Remove(ctx, doc, fingerprint)
+		if err != nil {
+			return docs, files, fmt.Errorf("%s: %w", doc, err)
+		}
+		docs = append(docs, doc)
+		files += n
+	}
+	return docs, files, nil
 }
