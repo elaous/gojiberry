@@ -122,7 +122,7 @@ func (n Node) WithKey(key string) Node {
 // Go type -- slices, structs, functions), and children are its child
 // nodes. Only a renderer that knows the tag can draw it (canvas/xango draws
 // the canvas components); the HTML renderer reports an error, and domrt
-// and xangogio draw nothing.
+// and xango/gio draw nothing.
 func Host(tag string, props any, children ...Node) Node {
 	return Node{Kind: KindHost, Tag: tag, Props: props, Children: children}
 }

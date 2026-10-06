@@ -12,7 +12,7 @@
 // tooling (PiperBinary/WhisperBinary) -- this package execs it as a
 // subprocess per request rather than embedding a WASM/cgo binding.
 // Same environment-configured, CORS-open, single-binary shape as
-// gojiberry/syncserver, gojiberry/fontserver, gojiberry/translateserver,
+// gojiberry/syncserver, gojiberry/fontserver, gojiberry/translate/server,
 // and gojiberry/voiceserver -- see cmd/brailleserver for the entry
 // point.
 package brailleserver
@@ -34,7 +34,7 @@ import (
 )
 
 // Config is loaded entirely from the environment, the same posture
-// voiceserver.Config/translateserver.Config take.
+// voiceserver.Config/server.Config take.
 type Config struct {
 	// Guard decides who may call the server: guard.Origins(...) for pages from
 	// listed origins, guard.Token(...) for callers holding a token, both with
@@ -107,7 +107,7 @@ func NewServer(cfg Config) *Server {
 //	POST /translate  -- {"text", "table"(optional)} -> {"braille"}
 //
 // Every response carries permissive CORS headers, the same reasoning
-// as syncserver/fontserver/translateserver/voiceserver's own Handler:
+// as syncserver/fontserver/translate/server/voiceserver's own Handler:
 // this server's whole point is being reachable from a page served
 // from a different origin.
 func (s *Server) Handler() http.Handler {
@@ -135,7 +135,7 @@ type translateResponse struct {
 }
 
 // maxTranslateBody caps the request body at a generous but finite
-// size, the same defensive posture translateserver's own
+// size, the same defensive posture translate/server's own
 // maxTranslateBody/voiceserver's own maxSpeakBody take against a
 // client-supplied Content-Length that can't be trusted.
 const maxTranslateBody = 2 * 1024 * 1024 // ~2MB of text, far past any realistic single document

@@ -2,6 +2,7 @@ package saver
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"slices"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/docstore"
 )
 
 func newSession(t *testing.T) (*Session, *[]docfile.Document, *int) {
@@ -608,5 +610,31 @@ func TestSessionPackDownloadAndImport(t *testing.T) {
 	s.Pick = func(string, func(string, []byte, error)) {}
 	if s.Docs().ImportPack == nil {
 		t.Error("Pick turns the import button on")
+	}
+}
+
+func TestSessionWarnsWhenTheStoreIsFillingUpAndExplainsAFullOne(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := NewSession(&Saver{Targets: []Target{{Name: "m", Adapter: mem, Capacity: 1200}}}, func() docfile.Document {
+		return docfile.FromFlow("", &canvas.TextFlow{Items: []canvas.Item{canvas.Chars{Text: strings.Repeat("x", 800)}}})
+	}, nil)
+	s.Pending.Inline = true
+	s.SetName("big")
+	if err := s.Save(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if st := s.Props().Status; !strings.Contains(st, "big saved") || !strings.Contains(st, "Storage is") || !strings.Contains(st, "full") {
+		t.Errorf("a save into a filling store says so: %q", st)
+	}
+
+	full := NewSession(&Saver{Targets: []Target{{Name: "m", Adapter: &capped{Adapter: docstore.NewMemoryAdapter(), room: 10}}}}, func() docfile.Document {
+		return docfile.FromFlow("", &canvas.TextFlow{Items: []canvas.Item{canvas.Chars{Text: "text"}}})
+	}, nil)
+	full.Pending.Inline = true
+	full.SetName("x")
+	err := full.Save(ctx)
+	if err == nil || !strings.Contains(err.Error(), "Not saved") || !strings.Contains(err.Error(), "Download the document") || !errors.Is(err, docstore.ErrStorageFull) {
+		t.Fatalf("%v", err)
 	}
 }
