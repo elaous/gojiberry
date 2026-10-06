@@ -3,13 +3,14 @@ package passkey
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,17 @@ type Config struct {
 	// biometric or PIN, which makes a passkey two factors by itself), "preferred" or
 	// "discouraged".
 	UserVerification protocol.UserVerificationRequirement
+	// Challenges keeps started ceremonies; nil means NewMemoryChallenges (one process). Inject a
+	// shared store when several replicas serve the routes (see ChallengeStore).
+	Challenges ChallengeStore
+	// Limiter limits the routes per client; nil means a per-address token bucket in this
+	// process (NewRateLimiter, 20 at once, 30 a minute). Inject your own (a shared budget, a
+	// gateway's decision) or Unlimited{} to turn it off (see Limiter).
+	Limiter Limiter
+	// ClientIP names the client of a request for the Limiter; nil means its remote address.
+	// Behind a reverse proxy use TrustedProxies("10.0.0.0/8") so X-Forwarded-For is believed
+	// only from your proxy.
+	ClientIP func(*http.Request) string
 }
 
 // Errors a caller may want to tell apart.
@@ -50,15 +62,11 @@ var (
 	// ErrSessionMismatch is returned by RegistrationFinish when the ceremony was begun by
 	// another session (or by none) than the one finishing it.
 	ErrSessionMismatch = errors.New("passkey: this registration was started by another session")
+	// ErrRateLimited is returned by the HTTP routes (429, with Retry-After) when a client is over
+	// the Limiter's budget.
+	ErrRateLimited = errors.New("passkey: too many requests; wait a moment and try again")
 	// ErrBusy is returned when too many ceremonies are waiting to be finished.
 	ErrBusy = errors.New("passkey: too many sign-ins in progress; try again shortly")
-)
-
-// maxChallenges bounds the ceremonies waiting to be finished (memory held per anonymous
-// request), and sweepEvery how often expired ones are looked for.
-const (
-	maxChallenges = 10000
-	sweepEvery    = 5 * time.Second
 )
 
 // Service runs the passkey ceremonies for a Store and gives the people who pass them a session of
@@ -70,29 +78,19 @@ type Service struct {
 	ttl      time.Duration
 	uv       protocol.UserVerificationRequirement
 
-	mu         sync.Mutex
-	challenges map[string]pending
-	lastSweep  time.Time
-	maxPending int
+	challenges ChallengeStore
+	limiter    Limiter
+	clientIP   func(*http.Request) string
 
-	// acctMu serializes read-modify-write of an account's credentials within this process
-	// (a sign-in raising a counter against a removal). A store shared by several processes
-	// needs its own conditional write for that.
+	// acctMu serializes read-modify-write of an account's credentials within this process when
+	// the Store has no Updater (a sign-in raising a counter against a removal).
 	acctMu sync.Mutex
 	// HasOtherWay, if set, says whether an account has another way to sign in than its passkeys
 	// (an OpenID Connect identity of the same user ID), which lets its last passkey be removed.
 	HasOtherWay func(ctx context.Context, accountID string) bool
 }
 
-type pending struct {
-	session webauthn.SessionData
-	account string // the account a registration is for, "" for a sign-in
-	begunBy string // the user ID of the session that began a registration, "" if none
-	email   string // for a new account
-	name    string
-	create  bool // the registration makes the account
-	expires time.Time
-}
+type pending = Challenge
 
 // New makes a Service.
 func New(cfg Config, store Store, sessions *auth.Manager) (*Service, error) {
@@ -121,48 +119,65 @@ func New(cfg Config, store Store, sessions *auth.Manager) (*Service, error) {
 	if ttl <= 0 {
 		ttl = 5 * time.Minute
 	}
-	return &Service{wa: wa, store: store, sessions: sessions, ttl: ttl, uv: uv, challenges: map[string]pending{}, maxPending: maxChallenges}, nil
+	ch := cfg.Challenges
+	if ch == nil {
+		ch = NewMemoryChallenges(0)
+	}
+	lim := cfg.Limiter
+	if lim == nil {
+		lim = NewRateLimiter(defaultPerMinute, defaultBurst)
+	}
+	ip := cfg.ClientIP
+	if ip == nil {
+		ip = ClientIP
+	}
+	return &Service{wa: wa, store: store, sessions: sessions, ttl: ttl, uv: uv, challenges: ch, limiter: lim, clientIP: ip}, nil
 }
 
-func (s *Service) put(p pending) (string, error) {
-	b := make([]byte, 24)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	token := base64.RawURLEncoding.EncodeToString(b)
-	now := time.Now()
-	p.expires = now.Add(s.ttl)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(s.challenges) >= s.maxPending || now.Sub(s.lastSweep) >= sweepEvery {
-		s.sweepLocked(now) // drop what has expired: not on every start, but when it matters
-		if len(s.challenges) >= s.maxPending {
-			return "", ErrBusy
-		}
-	}
-	s.challenges[token] = p
-	return token, nil
-}
-
-func (s *Service) sweepLocked(now time.Time) {
-	s.lastSweep = now
-	for k, v := range s.challenges {
-		if now.After(v.expires) {
-			delete(s.challenges, k)
-		}
-	}
+func (s *Service) put(ctx context.Context, p pending) (string, error) {
+	p.Expires = time.Now().Add(s.ttl)
+	return s.challenges.Put(ctx, p)
 }
 
 // take returns and removes a started ceremony: a challenge is good for one finish.
-func (s *Service) take(token string) (pending, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	p, ok := s.challenges[token]
-	delete(s.challenges, token)
-	if !ok || time.Now().After(p.expires) {
+func (s *Service) take(ctx context.Context, token string) (pending, bool) {
+	p, ok, err := s.challenges.Take(ctx, token)
+	if err != nil || !ok || time.Now().After(p.Expires) {
 		return pending{}, false
 	}
 	return p, true
+}
+
+// update changes one account atomically: through the store's Updater when it has one (a
+// conditional write, safe across processes), otherwise under this process's lock.
+func (s *Service) update(ctx context.Context, id string, fn func(*Account) error) error {
+	if u, ok := s.store.(Updater); ok {
+		return u.Update(ctx, id, fn)
+	}
+	s.acctMu.Lock()
+	defer s.acctMu.Unlock()
+	a, err := s.store.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := fn(a); err != nil {
+		return err
+	}
+	return s.store.Put(ctx, a)
+}
+
+// create makes an account if there is none with its ID: through the store's Creator when it has
+// one, otherwise under this process's lock.
+func (s *Service) create(ctx context.Context, a *Account) error {
+	if c, ok := s.store.(Creator); ok {
+		return c.Create(ctx, a)
+	}
+	s.acctMu.Lock()
+	defer s.acctMu.Unlock()
+	if _, err := s.store.Get(ctx, a.ID); err == nil {
+		return ErrExists
+	}
+	return s.store.Put(ctx, a)
 }
 
 // RegistrationStart begins making a passkey. For a person signed in as accountID (an OpenID
@@ -216,7 +231,7 @@ func (s *Service) RegistrationStart(ctx context.Context, accountID, email, name 
 	if err != nil {
 		return nil, "", fmt.Errorf("passkey: %w", err)
 	}
-	token, err := s.put(pending{session: *session, account: acct.ID, begunBy: accountID, email: acct.Email, name: acct.Name, create: create})
+	token, err := s.put(ctx, pending{Session: *session, Account: acct.ID, BegunBy: accountID, Email: acct.Email, Name: acct.Name, Create: create})
 	if err != nil {
 		return nil, "", err
 	}
@@ -232,42 +247,57 @@ func (s *Service) RegistrationStart(ctx context.Context, accountID, email, name 
 // by this call for a person with no session, in which case the caller starts one with
 // Session; a passkey added to a signed-in identity gives no new session.
 func (s *Service) RegistrationFinish(ctx context.Context, signedIn, token, label string, body []byte) (acct *Account, cred *Credential, newSession bool, err error) {
-	p, ok := s.take(token)
-	if !ok || p.account == "" {
+	p, ok := s.take(ctx, token)
+	if !ok || p.Account == "" {
 		return nil, nil, false, ErrBadChallenge
 	}
-	if p.begunBy != signedIn {
+	if p.BegunBy != signedIn {
 		return nil, nil, false, ErrSessionMismatch
 	}
-	s.acctMu.Lock()
-	defer s.acctMu.Unlock()
-	if p.create {
-		h := p.session.UserID
-		acct = &Account{ID: p.account, Handle: h, Email: p.email, Name: p.name, Created: time.Now()}
-		if _, err := s.store.Get(ctx, p.account); err == nil {
-			return nil, nil, false, ErrBadChallenge // made by someone else since: the challenge is stale
-		}
+	if p.Create {
+		acct = &Account{ID: p.Account, Handle: p.Session.UserID, Email: p.Email, Name: p.Name, Created: time.Now()}
 	} else {
-		a, err := s.store.Get(ctx, p.account)
+		a, err := s.store.Get(ctx, p.Account)
 		if err != nil {
 			return nil, nil, false, err
 		}
 		acct = a
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "/", bytes.NewReader(body))
-	nc, err := s.wa.FinishRegistration(acct, p.session, req)
+	nc, err := s.wa.FinishRegistration(acct, p.Session, req)
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("passkey: %w", err)
 	}
-	if label == "" {
-		label = fmt.Sprintf("Passkey %d", len(acct.Credentials)+1)
+	add := func(a *Account) Credential {
+		l := label
+		if l == "" {
+			l = fmt.Sprintf("Passkey %d", len(a.Credentials)+1)
+		}
+		c := Credential{Cred: *nc, Label: l, Created: time.Now()}
+		a.Credentials = append(a.Credentials, c)
+		return c
 	}
-	c := Credential{Cred: *nc, Label: label, Created: time.Now()}
-	acct.Credentials = append(acct.Credentials, c)
-	if err := s.store.Put(ctx, acct); err != nil {
-		return nil, nil, false, err
+	var c Credential
+	if p.Create {
+		c = add(acct)
+		if err := s.create(ctx, acct); err != nil {
+			if errors.Is(err, ErrExists) {
+				return nil, nil, false, ErrBadChallenge // made by someone else since: the challenge is stale
+			}
+			return nil, nil, false, err
+		}
+	} else {
+		err := s.update(ctx, p.Account, func(a *Account) error {
+			a.Credentials = slices.DeleteFunc(a.Credentials, func(x Credential) bool { return bytes.Equal(x.Cred.ID, nc.ID) })
+			c = add(a)
+			acct = a
+			return nil
+		})
+		if err != nil {
+			return nil, nil, false, err
+		}
 	}
-	return acct, &c, p.create && p.begunBy == "", nil
+	return acct, &c, p.Create && p.BegunBy == "", nil
 }
 
 // LoginStart begins a sign-in with a discoverable passkey: no user name is typed, the
@@ -278,7 +308,7 @@ func (s *Service) LoginStart(ctx context.Context) (*protocol.CredentialAssertion
 	if err != nil {
 		return nil, "", fmt.Errorf("passkey: %w", err)
 	}
-	token, err := s.put(pending{session: *session})
+	token, err := s.put(ctx, pending{Session: *session})
 	if err != nil {
 		return nil, "", err
 	}
@@ -288,8 +318,8 @@ func (s *Service) LoginStart(ctx context.Context) (*protocol.CredentialAssertion
 // LoginFinish checks the signed challenge, and on success raises the credential's signature
 // counter and returns the account that owns it.
 func (s *Service) LoginFinish(ctx context.Context, token string, body []byte) (*Account, error) {
-	p, ok := s.take(token)
-	if !ok || p.account != "" {
+	p, ok := s.take(ctx, token)
+	if !ok || p.Account != "" {
 		return nil, ErrBadChallenge
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "/", bytes.NewReader(body))
@@ -301,7 +331,7 @@ func (s *Service) LoginFinish(ctx context.Context, token string, body []byte) (*
 		}
 		found = a
 		return a, nil
-	}, p.session, req)
+	}, p.Session, req)
 	if err != nil {
 		return nil, fmt.Errorf("passkey: %w", err)
 	}
@@ -314,24 +344,23 @@ func (s *Service) LoginFinish(ctx context.Context, token string, body []byte) (*
 	}
 	// Raise the counter on the stored account as it is now (a removal or another sign-in may
 	// have changed it since it was read for the check).
-	s.acctMu.Lock()
-	defer s.acctMu.Unlock()
-	fresh, err := s.store.Get(ctx, acct.ID)
-	if err != nil {
-		return nil, err
-	}
-	hit := false
-	for i := range fresh.Credentials {
-		if bytes.Equal(fresh.Credentials[i].Cred.ID, cred.ID) {
-			fresh.Credentials[i].Cred = *cred // the new signature counter and flags
-			fresh.Credentials[i].LastUsed = time.Now()
-			hit = true
+	var fresh *Account
+	err = s.update(ctx, acct.ID, func(a *Account) error {
+		hit := false
+		for i := range a.Credentials {
+			if bytes.Equal(a.Credentials[i].Cred.ID, cred.ID) {
+				a.Credentials[i].Cred = *cred // the new signature counter and flags
+				a.Credentials[i].LastUsed = time.Now()
+				hit = true
+			}
 		}
-	}
-	if !hit {
-		return nil, ErrNotFound // removed while this sign-in was being checked
-	}
-	if err := s.store.Put(ctx, fresh); err != nil {
+		if !hit {
+			return ErrNotFound // removed while this sign-in was being checked
+		}
+		fresh = a
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	if cred.Authenticator.CloneWarning {
@@ -392,26 +421,22 @@ func (s *Service) Credentials(ctx context.Context, accountID string) ([]Credenti
 // Remove takes a passkey out of an account. The last one stays unless the account has another
 // way to sign in (HasOtherWay): losing a passkey should cost a login, not the account.
 func (s *Service) Remove(ctx context.Context, accountID, credentialID string) error {
-	s.acctMu.Lock()
-	defer s.acctMu.Unlock()
-	a, err := s.store.Get(ctx, accountID)
-	if err != nil {
-		return err
-	}
-	idx := -1
-	for i, c := range a.Credentials {
-		if c.ID() == credentialID {
-			idx = i
+	return s.update(ctx, accountID, func(a *Account) error {
+		idx := -1
+		for i, c := range a.Credentials {
+			if c.ID() == credentialID {
+				idx = i
+			}
 		}
-	}
-	if idx < 0 {
-		return ErrNotFound
-	}
-	if len(a.Credentials) == 1 && (s.HasOtherWay == nil || !s.HasOtherWay(ctx, accountID)) {
-		return ErrLastPasskey
-	}
-	a.Credentials = append(a.Credentials[:idx], a.Credentials[idx+1:]...)
-	return s.store.Put(ctx, a)
+		if idx < 0 {
+			return ErrNotFound
+		}
+		if len(a.Credentials) == 1 && (s.HasOtherWay == nil || !s.HasOtherWay(ctx, accountID)) {
+			return ErrLastPasskey
+		}
+		a.Credentials = append(a.Credentials[:idx], a.Credentials[idx+1:]...)
+		return nil
+	})
 }
 
 // Handler is the passkey routes:
@@ -427,13 +452,27 @@ func (s *Service) Remove(ctx context.Context, accountID, credentialID string) er
 // Authorization header. Every route answers JSON.
 func (s *Service) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/auth/passkey/register/begin", s.handleRegisterBegin)
-	mux.HandleFunc("/auth/passkey/register/finish", s.handleRegisterFinish)
-	mux.HandleFunc("/auth/passkey/login/begin", s.handleLoginBegin)
-	mux.HandleFunc("/auth/passkey/login/finish", s.handleLoginFinish)
+	mux.HandleFunc("/auth/passkey/register/begin", s.limited("register", s.handleRegisterBegin))
+	mux.HandleFunc("/auth/passkey/register/finish", s.limited("register", s.handleRegisterFinish))
+	mux.HandleFunc("/auth/passkey/login/begin", s.limited("login", s.handleLoginBegin))
+	mux.HandleFunc("/auth/passkey/login/finish", s.limited("login", s.handleLoginFinish))
 	mux.HandleFunc("/auth/passkey/credentials", s.handleCredentials)
 	mux.HandleFunc("/auth/passkey/credentials/", s.handleCredential)
 	return mux
+}
+
+// limited asks the Limiter before running h, per route group and client; over budget it answers
+// 429 with Retry-After.
+func (s *Service) limited(group string, h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if ok, wait := s.limiter.Allow(r.Context(), group+"|"+s.clientIP(r)); !ok {
+			secs := int(wait/time.Second) + 1
+			w.Header().Set("Retry-After", strconv.Itoa(secs))
+			jsonOut(w, http.StatusTooManyRequests, map[string]string{"error": ErrRateLimited.Error()})
+			return
+		}
+		h(w, r)
+	}
 }
 
 func jsonOut(w http.ResponseWriter, status int, v any) {
