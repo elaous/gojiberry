@@ -27,6 +27,24 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
   (was the per-client integer) and `Session` has a `Net`; a `Quota` may implement `WindowQuota`; the
   report record gains a salted reporter hash and a store key `public/salt`; reports are deduplicated per
   (document, reporter, reason). Details: [public-docstore.md](public-docstore.md) sections 7.2 and 7.5.
+- **Expiry records and rollback.** The deadline record `expiry:<id>` is one line holding only the
+  deadline (RFC 3339), the format every earlier build parses, so a rollback to an older build
+  keeps working. The creation time that `MaxAge` needs lives in a new system keyspace,
+  `expiry-created:<id>` (reserved from `/docs` like `expiry:`, never a document, deleted with the
+  deadline record). A build that predates it ignores those records, so after a rollback they
+  stay in the store (they appear in a raw listing of the backend and in an old build's `/docs`
+  listing; delete `expiry-created:*` by hand if that matters) and `MaxAge` is not enforced. A
+  record that no build can parse (damaged by hand) no longer stops anything: it is logged once,
+  skipped by `Load`, `Save` and `Sweep`, and replaced with a full lifetime by the next sweep (or
+  deleted when its document is gone). An id starting with `expiry-created:` is reserved too.
+- **Renewals: only a marked 404 means "gone".** `POST /docs/{id}/renew` answers a document that
+  is gone with `404`, `X-Gojiberry-Gone: 1` and `{"error":"gone"}`; `HTTPAdapter.Renew` returns
+  `ErrNotFound` only for that, and `ErrRenewUnsupported` for any other 404, 405 or 501. A
+  collaboration hub of this version needs a docstore of this version for rooms to be closed when
+  their document expires (with an older docstore the hub just logs that renewals are unsupported,
+  once, and never closes a room), and the hub closes a room only after two consecutive "gone"
+  answers (`hub.Config.GoneConfirmDelay`). In public mode the orphan sweep
+  (`GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS`) is on by default; `off` disables it.
 - **Public mode closes `/docs`.** With `GOJIBERRY_DOCSTORE_PUBLIC=true` the generic `/docs`, `/docs/<id>/acl`
   and `/quota` routes answer 404 unless sign-in with `GOJIBERRY_DOCSTORE_REQUIRE_ACL=true` protects them or
   `GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS=true` keeps them open. `Server.Hide` prefixes now match without
@@ -72,7 +90,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 3. **Public docstore.** An anonymous offer: no account, one document per session, a link
    and a download always, deleted 24 hours after the last edit (viewing does not renew).
    Design, wording of the promise, and the abuse controls that must exist before launch:
-   [public-docstore.md](public-docstore.md). Expiry in `docstore` is done (`ExpiringAdapter`: TTL policy, renewed by writes, sweeper, `X-Gojiberry-Expires`, `GOJIBERRY_DOCSTORE_EXPIRY_TTL`/`_SWEEP`/`_ADOPT`); **server side done** (`docstore/public`, `GOJIBERRY_DOCSTORE_PUBLIC=true`: anonymous sessions, one document per session, size/version/rate/daily-byte caps, view-only IDs, reports, takedown with tombstones, `Blocklist`/`Challenger`/`AdminGuard`/`SessionStore`/`Quota` hooks; see [public-docstore.md](public-docstore.md) section 7); hardened after review (per-client session cap with a 1 h idle TTL and an hourly issue rate, limits keyed by IPv6 /64, a global storage budget and report bound, `/docs` closed in public mode, request deadlines, charge-before-body with refunds, `/public/health`, takedown that bans after the records are swept; section 7.2 items 6-15); hardened again (a per-/48 and per-/24 session cap with a reserve for new networks, an exact byte ledger that fails closed, a minimal public health with the detail behind the admin guard, deduplicated and prioritised reports, failed-only admin rate limit, a global cap on bodies in flight; items 6, 8, 16-20); left: the legal terms text, real abuse operations (who reads reports), a captcha or proof of work behind `Challenger`, shared stores for replicas (the counters and limits are per process, section 7.5), the editor side (links, countdown, report link, creating the document within the idle hour), collaboration-hub edits renewing a document.
+   [public-docstore.md](public-docstore.md). Expiry in `docstore` is done (`ExpiringAdapter`: TTL policy, renewed by writes, sweeper, `X-Gojiberry-Expires`, `GOJIBERRY_DOCSTORE_EXPIRY_TTL`/`_SWEEP`/`_ADOPT`); **server side done** (`docstore/public`, `GOJIBERRY_DOCSTORE_PUBLIC=true`: anonymous sessions, one document per session, size/version/rate/daily-byte caps, view-only IDs, reports, takedown with tombstones, `Blocklist`/`Challenger`/`AdminGuard`/`SessionStore`/`Quota` hooks; see [public-docstore.md](public-docstore.md) section 7); hardened after review (per-client session cap with a 1 h idle TTL and an hourly issue rate, limits keyed by IPv6 /64, a global storage budget and report bound, `/docs` closed in public mode, request deadlines, charge-before-body with refunds, `/public/health`, takedown that bans after the records are swept; section 7.2 items 6-15); hardened again (a per-/48 and per-/24 session cap with a reserve for new networks, an exact byte ledger that fails closed, a minimal public health with the detail behind the admin guard, deduplicated and prioritised reports, failed-only admin rate limit, a global cap on bodies in flight; items 6, 8, 16-20); left: the legal terms text, real abuse operations (who reads reports), a captcha or proof of work behind `Challenger`, shared stores for replicas (the counters and limits are per process, section 7.5), the editor side (links, countdown, report link, creating the document within the idle hour); collaboration-hub edits renew a document (`hub.Config.Renewer`, `ExpiringAdapter.Touch`, `POST /docs/{id}/renew`, never for public sessions), a room whose document expired is closed with 410 after a confirming check, hub-only state is swept (`GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=collab`, on by default in public mode) and `MaxAge` caps a document's life.
 4. **Console mode: done** (`console`, `cmd/docsh`, [console.md](console.md)); left: the editor panel that drives the same engine.
 5. **Terminal app demo: done** (`examples/terminal-demo`: a file manager and a line editor over `saver.Session`, with the console grammar).
 6. **Store backends with conditional saves: done** for PostgreSQL, MongoDB and S3/MinIO (`SaveIf` in `docstore/backends`; the PostgreSQL one is tested with sqlmock, S3 against a fake that enforces `If-Match`/`If-None-Match`, and MongoDB, which has no fake, runs when `TEST_MONGO_URI` is set, so it has not run against a live server yet).

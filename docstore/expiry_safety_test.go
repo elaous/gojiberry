@@ -267,11 +267,11 @@ func TestExpirySaveWritesRecordBeforeDocument(t *testing.T) {
 	if err := ea.Save(ctx, "d", []byte("x")); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := strings.Join(st.ops(), ","), "save:expiry:d,save:d"; got != want {
+	if got, want := strings.Join(st.ops(), ","), "save:expiry-created:d,save:expiry:d,save:d"; got != want {
 		t.Fatalf("order = %s, want %s", got, want)
 	}
 	// Crash between the two writes (the document write never happens): record, no document.
-	st2 := &stepAdapter{Adapter: NewMemoryAdapter(), failAt: 2}
+	st2 := &stepAdapter{Adapter: NewMemoryAdapter(), failAt: 3}
 	ea2, _ := newExpiring(st2)
 	if err := ea2.Save(ctx, "d", []byte("x")); err == nil {
 		t.Fatal("injected failure not reported")
@@ -358,7 +358,7 @@ func TestExpiryPolicyFlipOnWriteDeletesRecordAndNeverSweeps(t *testing.T) {
 	put(t, ea, "d")
 	// The stale record goes before the document is written: a crash in between leaves a
 	// document with no record (lives on), never a record that outlives the policy.
-	if got, want := strings.Join(st.ops(), ","), "delete:expiry:d,save:d"; got != want {
+	if got, want := strings.Join(st.ops(), ","), "delete:expiry-created:d,delete:expiry:d,save:d"; got != want {
 		t.Fatalf("order = %s, want %s", got, want)
 	}
 	if has(t, inner, "expiry:d") {

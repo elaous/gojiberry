@@ -64,7 +64,9 @@ launch, not after:
      (`Now`). `Save` and `SaveIf` renew; `Load` and `List` do not; an expired document is
      invisible at once (404, left out of listings) before `Sweep` deletes it, and a delete of one
      answers 404.
-   - The deadline is a side record `expiry:<id>` written through the same adapter, so nothing
+   - The deadline is a side record `expiry:<id>` (one line: the deadline and nothing else, the
+     format every older build parses; the creation time for `MaxAge` is a sibling record
+     `expiry-created:<id>`, see the upgrade notes in the roadmap) written through the same adapter, so nothing
      is needed from memory, local files, SQLite or the nested backends beyond the wrapper, and
      `SaveIf`, `Locker`, `PrefixLister` and the quota report pass through. Order: Save writes the
      record, then the document (a failed write puts the old record back, so failures do not
@@ -96,10 +98,128 @@ launch, not after:
      so nothing is deleted for one TTL, and the number adopted is logged. Set
      `GOJIBERRY_DOCSTORE_EXPIRY_ADOPT=updated` to use `UpdatedAt + TTL` instead: documents
      older than the TTL are then deleted by that first sweep, so take a backup first.
-   - Left in this item: edits through the collaboration hub (`collab:` writes) do not yet renew
-     the document, so the hub must call the wrapper's `Save` of the document (or the policy must
-     learn the pairing) before collaborators' edits count; two server processes on one store can
-     race at the instant of expiry; backups of the store are outside this (see 2.2).
+   - **Collaboration-hub edits renew: done.** The hub keeps its state under `collab:<id>`
+     (system keyspace, never expires by itself, deleted with its document by the sweeper and by
+     `Delete`: `DefaultRelated`), so it never touched the document. Now `hub.Config.Renewer`
+     (`docstore.Renewer`, `Renew(ctx, docID) error`) is called after an *accepted* batch of
+     operations from an owner or editor, on POST or WebSocket, at most once per
+     `RenewInterval` per document (default one minute; a fake clock via `Config.Now`), in the
+     background so a slow store never delays an ack. Joining, watching, snapshots, cursors,
+     empty or refused batches and a viewer's comments never renew. An error (document gone,
+     store down) is logged and never fails the edit.
+     - `ExpiringAdapter.Touch(ctx, id)` (also `Renew`) is the implementation: the deadline
+       record becomes now + TTL and nothing else is written, so there is no order to get wrong
+       (a failure or crash leaves the old or the new deadline, the document untouched). It is
+       `ErrNotFound` for a document that does not exist, has expired (not revived, not purged;
+       the sweeper does that) or is only a leftover record. `id` is the document key; if no key
+       has that exact name, the live saver generation keys of that logical id
+       (`<id>~<gen>.<ext>`) are renewed.
+     - **One process** (`cmd/collabhub` with `GOJIBERRY_DOCSTORE_EXPIRY_TTL` set): it wraps the
+       store with `docstore.WithConfiguredExpiry` (the same wrapper, sweep and adopt settings as
+       the docstore server) and passes the `ExpiringAdapter` to the hub as its Renewer.
+     - **Separate processes**: the docstore server serves `POST /docs/{id}/renew` (204 and
+       `X-Gojiberry-Expires`; **404 with the header `X-Gojiberry-Gone: 1` and the body
+       `{"error":"gone"}`** if the document does not exist or has expired; 501 if the store
+       does not expire; `collab:`, `acl:`, `expiry:` and `expiry-created:` ids are 400). It needs the permission
+       of a PUT and nothing weaker: owner or editor on a document with an access list, so a
+       viewer, a stranger or an anonymous caller is 403/401; a document nobody has shared is
+       open, as for a PUT, and with `RequireACL` it is closed (a renewal never creates the
+       access list a first PUT does). The hub (`GOJIBERRY_COLLAB_RENEW_URL`, optional
+       `GOJIBERRY_COLLAB_RENEW_TOKEN` sent as `X-Gojiberry-Token` for the server's guard) calls it
+       through `docstore.HTTPAdapter.Renew`, forwarding the `Authorization` header of the edit
+       that caused it, so the server checks that editor's write role. **Public sessions cannot
+       use it**: the session token of the public offer is not an `auth.Manager` sign-in, so on a
+       document with an access list it is nobody (401/403); the public documents' own keys
+       (`pubdoc/`) are hidden from `/docs` (400); and with the generic API closed, which is the
+       default in public mode, the route is a plain 404. Nor can the hub reach a public
+       document: it refuses a document id with a slash, so no room can be named `pubdoc/<id>`.
+       Tests: `TestPublicSessionTokenCannotUseTheRenewRoute`,
+       `TestPublicSessionTokenHasNoRoleInTheHub`. (A hub with no sign-in is open to everyone
+       on a document without an access list, as documented for the hub; that is its design,
+       not the public offer's.)
+     - **Only the marked 404 means "gone".** `HTTPAdapter.Renew` returns `ErrNotFound` solely
+       for the 404 that carries `X-Gojiberry-Gone: 1` and `{"error":"gone"}`. Any other 404 (a
+       reverse proxy during a docstore deploy, a base URL that changed, `/docs` closed in public
+       mode, a docstore older than the route) and a 405 or 501 is `ErrRenewUnsupported` (also a
+       `*StatusError`): a plain failure, logged once per adapter with advice and counted in the
+       hub's `renewFailures`; it never closes a room. Renewals then do not happen, so such a
+       deployment must be fixed (the log line says how): documents expire under active editing.
+     - **Expired under an open room: done.** After one successful renewal, a "not found" that
+       is **confirmed** means the document expired and was swept while a stale tab kept its room:
+       the hub asks the Renewer once more after `hub.Config.GoneConfirmDelay` (default 2 s) and
+       closes only on a second "gone" (a success in between keeps the room and says so in the
+       log). The hub then closes that room: further operations get **410 Gone** with a plain message (a WebSocket is closed
+       with code 4410 and the reason), it stops saving, deletes `collab:<id>` through the store,
+       leaves the hub, and refuses the id with 410 for an hour (so a reconnecting tab does not
+       start a new room that writes the content back). A 404 *before* any success (a document that
+       lives only in the hub, never saved to the store) never closes anything, and is logged
+       **once per room** and counted once (`hubOnlyRooms` in `/healthz`), then silence for as long
+       as it is edited. The edit that discovers the expiry is still acknowledged: renewals are
+       asynchronous, so a slow store never delays an ack.
+     - **The tombstone clears when the document returns.** The hub's one-hour memory of a closed
+       room (410) is not blind: when an *editor's* request names the id, the hub asks the Renewer
+       (with that editor's credentials); a success (the document was deleted and re-created, or a
+       late renewal landed) clears the tombstone and counts `revivedRooms`. A viewer's request
+       cannot clear it (it may not renew) and keeps getting 410 until an editor opens the
+       document; a document that is still gone stays 410.
+     - **Hub-only documents are swept: done; opt-in in general, ON in public mode.** A document that exists only in the hub has
+       nothing to renew and no deadline. With `GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=collab` the
+       sweeper (`ExpiringAdapter.Orphans`, `docstore.CollabOrphans(grace)`) deletes a `collab:<id>`
+       entry when no live document has that id (no exact key, no live generation) and the entry's
+       own `UpdatedAt` is older than TTL plus a grace period (`GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE`,
+       default 1h). Every hub save bumps `UpdatedAt`, so a hub-only document that is being edited
+       stays; the check is repeated under the write lock, so a save never races the delete.
+       **Sweep policy in public mode.** With `GOJIBERRY_DOCSTORE_PUBLIC=true` the orphan sweep
+       is **on by default** (`docstore.ConfigFromEnv`: `ExpiryOrphans` true, grace 1 h unless
+       `GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE` says otherwise), because the offer promises that
+       nothing outlives its deadline and the state of a document that only ever lived in the hub
+       has no deadline of its own. Without public mode it stays off unless
+       `GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=collab`. `GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=off` turns it
+       off in public mode too (logged as a `WARNING`, since it breaks the promise for hub-only
+       state), and a grace beside `off` is a startup error. A hub process that shares the store
+       (`cmd/collabhub` reads the same variables) gets the same default when it is started with
+       `GOJIBERRY_DOCSTORE_PUBLIC=true`. The orphans swept are counted in `Sweep`'s result.
+     - **`MaxAge`: done, default off** (`ExpiringAdapter.MaxAge`, `GOJIBERRY_DOCSTORE_EXPIRY_MAX_AGE`).
+       An absolute cap counted from creation: renewals (`Save`, `SaveIf`, `Touch`) never move the
+       deadline past `created + MaxAge`, so a document edited for ever still expires. This bounds
+       junk-edit keep-alive for the public offer (a 24 h life with a 7-day cap, say). The creation
+       time is the sibling record `expiry-created:<id>` (written before the deadline record,
+       deleted before it; a creation record without a deadline record, left by a crash, is
+       dropped by the sweep, and a new document never inherits one). A `Save` of a document that has
+       reached the cap starts a new one (old content, versions and access list are purged), the
+       same as for an expired one; so the cap bounds one document's life, not what a client that
+       re-creates it does (that is the per-session limits' job, section 3).
+     - **Touch renews exactly one thing.** The exact key if a live document has it; only when
+       there is none, the newest live saver generation of the logical id (by `UpdatedAt`, with
+       the keys of the same generation). A stale generation left by a failed cleanup of the saver
+       is therefore not kept alive by renewals meant for the current one; it expires on its own.
+     - **Ids ending in `/renew` or `/acl` are reserved.** The router decodes `%2F`, so such an id
+       would be taken for the renew or ACL route of another document; any request naming one
+       (PUT, POST, ...) is 400 with "a document id may not end in /renew or /acl". Reserved ids
+       (`collab:`, `acl:`, `expiry:`, `directory/`) are matched case-insensitively (`Collab:x`
+       and `EXPIRY:x` are 400 like the lowercase forms).
+     - **The hub's roles and the docstore's access rule must match.** `GOJIBERRY_COLLAB_NO_ACL_ROLE`
+       owner/editor against a docstore with `GOJIBERRY_DOCSTORE_REQUIRE_ACL=true` makes every renewal
+       403 and the document expire under active editing. The first 401/403 per document is logged
+       as a `WARNING` that says so, and `GET /healthz` on the hub reports `renewFailures`,
+       `renewDenied` and `expiredRooms` (behind the hub's guard; `Hub.Health()` in process).
+     - **Renewal credentials.** The renewal carries the `Authorization` of the edit; on a long-lived
+       WebSocket that is the header of the upgrade request, whose token expires, so
+       `hub.Config.AuthFunc` (called per renewal with that request) lets a deployment look up the
+       current token. The renew interval is clamped to TTL/4 when the hub knows the TTL (in-process;
+       `GOJIBERRY_COLLAB_EXPIRY_TTL` says it for a remote docstore; `GOJIBERRY_COLLAB_RENEW_INTERVAL`
+       sets the interval) and a configured interval longer than the TTL is logged as a warning.
+       A panicking renewer is recovered and logged. `GOJIBERRY_COLLAB_RENEW_URL` is logged with its
+       user name, password, query and fragment removed, error messages are redacted the same way,
+       and `GOJIBERRY_COLLAB_RENEW_TOKEN` is never logged (tests capture the log).
+     - Residual limits, stated plainly: two server processes on one store can race at the instant of
+       expiry (a `Save` in the same second as the deadline may be deleted; the locks serialize one
+       process only); backups of the store are outside this (see 2.2); the edit that discovers an
+       expiry is acknowledged and then lost with the room; a hub-only document is not kept alive by
+       renewals at all, only by never being swept while edited (the orphan policy), and without
+       that policy its `collab:` state stays; a save that wins a race against the discovery is
+       deleted again by it, but if edits stop before any renewal runs the resurrected state waits
+       for the orphan sweep; `MaxAge` cannot stop a client from creating a new document; a room is closed only after two "gone" answers `GoneConfirmDelay` apart, so a document that is deleted and re-created inside that window keeps its room (the new document's content is not the hub's state); the hub's tombstone is in memory (a restart forgets it, and a stale tab can then open a new room), and only an editor's request clears it; after a rollback to an older build the `expiry-created:` records stay and `MaxAge` is not enforced.
 2. **Anonymous sessions: done** (`docstore/public`, section 7). `POST /public/session` issues an
    unguessable bearer token (256 bits, stored only as its SHA-256) for the user `anon:<random>`
    (`auth.AnonymousUser`; `anon` is a reserved provider name): no e-mail, no profile, a bounded
@@ -112,7 +232,7 @@ launch, not after:
    neither the token nor the owner nor the document ID. (The links are not `/d/{id}` pages yet: that
    is the editor's routing, not the store's.)
 4. **Collaboration** runs through the existing hub with the same expiry; an edit through
-   the hub renews.
+   the hub renews (done, see 1).
 5. **Encryption** is the natural fit: with the key in the link's fragment (`#key`, never
    sent to the server) the server holds only ciphertext and "we hold no user data" becomes
    literally true. That needs the encrypted-collaboration work (see
@@ -151,6 +271,8 @@ a tombstone, a content `Blocklist` hook and a `Challenger` hook. Still to do bef
 7. Reports are bounded per document (20), deduplicated per (document, reporter, reason), rate-limited
    per address, bounded as a whole (`_MAX_REPORTS`, `_MAX_REPORT_BYTES`), with slots reserved for new
    reporters and a priority list (`csam`, `illegal`) that is evicted last (section 7.2, items 12 and 17).
+
+The retention half is done, including the hub-only sweep and the age cap; **the orphan sweep is ON by default in public mode** (see section 7).
 
 ## 6. Open questions
 
