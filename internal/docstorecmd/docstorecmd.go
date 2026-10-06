@@ -25,8 +25,17 @@ import (
 // GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN, DELETE /admin/takedown/<id>. Unset, nothing is mounted.
 //
 // The offer promises deletion 24 hours after the last edit, so it refuses to start unless
-// expiry is on (GOJIBERRY_DOCSTORE_EXPIRY_TTL, and the adapter is the expiring one). It returns
-// the service so the caller can run its sweep.
+// expiry is on (GOJIBERRY_DOCSTORE_EXPIRY_TTL, and the adapter is the expiring one).
+//
+// It also refuses to start with the generic /docs API open: that API would let any visitor read and
+// write every document that has no ACL. /docs counts as closed when sign-in is configured with
+// GOJIBERRY_DOCSTORE_REQUIRE_ACL=true (srv must already have its auth manager, see Main). Otherwise
+// withPublic closes it (Server.CloseDocs: 404 for /docs, /docs/{id}, its /acl and /quota), unless the
+// operator sets GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS=true, which keeps it open and says so loudly
+// in the log. Behind a reverse proxy, GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES must name it ("none"
+// says there is none and silences the startup warning).
+//
+// It returns the service so the caller can run its sweep.
 func withPublic(srv *docstore.Server, adapter docstore.Adapter, expiryTTL time.Duration) (*public.Service, error) {
 	cfg, err := public.FromEnv(os.Getenv)
 	if err != nil {
@@ -42,9 +51,39 @@ func withPublic(srv *docstore.Server, adapter docstore.Adapter, expiryTTL time.D
 	if err != nil {
 		return nil, err
 	}
+	switch {
+	case srv.DocsClosed():
+		log.Print("docstore: public offer: the generic /docs API is protected by required ACLs with sign-in")
+	case cfg.AllowOpenDocs:
+		log.Print("docstore: WARNING: GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS=true: the generic /docs API stays OPEN to anonymous readers and writers beside the public offer; anyone can read, overwrite and delete every document that has no ACL")
+	default:
+		srv.CloseDocs()
+		log.Print("docstore: public offer: the generic /docs API is closed (404); configure sign-in with GOJIBERRY_DOCSTORE_REQUIRE_ACL=true to keep it, or set GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS=true to leave it open")
+	}
+	if err := public.RequireDocsClosed(srv, cfg.AllowOpenDocs); err != nil {
+		return nil, err
+	}
+	for _, w := range cfg.Warnings() {
+		log.Printf("docstore: WARNING: %s", w)
+	}
 	svc.Mount(srv)
 	log.Printf("docstore: public offer enabled (takedown route %t, terms link %t)", cfg.AdminToken != "", cfg.TermsURL != "")
 	return svc, nil
+}
+
+// Timeouts of the HTTP server: a client has this long to send a whole request (header timeout
+// aside), so a slow body cannot hold a connection (and its memory) for ever. The public routes set
+// tighter ones of their own per request (public.Config.RequestTimeout). The write side is not
+// bounded here: a document download may be large and slow, and the public routes bound theirs.
+const (
+	readHeaderTimeout = 10 * time.Second
+	readTimeout       = 5 * time.Minute
+	idleTimeout       = 2 * time.Minute
+)
+
+// newHTTPServer is the server Main runs.
+func newHTTPServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: readHeaderTimeout, ReadTimeout: readTimeout, IdleTimeout: idleTimeout}
 }
 
 // withDirectory turns on the verified e-mail key directory (POST /directory/publish, GET
@@ -135,6 +174,9 @@ func Main() {
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
+	// The manager is attached before the public offer is wired: whether /docs counts as closed
+	// depends on it (WithRequireACL with sign-in).
+	srv = srv.WithAuth(authManager)
 	withDirectory(srv, adapter)
 	publicSvc, err := withPublic(srv, adapter, cfg.ExpiryTTL)
 	if err != nil {
@@ -143,10 +185,9 @@ func Main() {
 	if publicSvc != nil {
 		go publicSvc.Run(context.Background(), cfg.ExpirySweep)
 	}
-	srv = srv.WithAuth(authManager)
 	if authManager != nil {
 		log.Printf("docstore: sign-in enabled (%d provider(s))", len(cfg.Auth.Providers))
 	}
 	log.Printf("docstore: listening on %s (backend=%s)", cfg.Addr, cfg.Backend)
-	log.Fatal((&http.Server{Addr: cfg.Addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}).ListenAndServe())
+	log.Fatal(newHTTPServer(cfg.Addr, srv.Handler()).ListenAndServe())
 }

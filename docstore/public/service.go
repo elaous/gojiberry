@@ -12,9 +12,11 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/elaous/gojiberry/auth"
@@ -27,11 +29,13 @@ import (
 type Limiter = passkey.Limiter
 
 // Limiters are the per-group request budgets. A nil one is a passkey.RateLimiter made from the
-// Config's figures. Keys: Session "session|<ip>", Write "write|<user id>", View "view|<ip>",
-// Report "report|<ip>", Admin "admin|<ip>" (a generous default of 20 a minute: it is what slows
-// down guessing the admin token).
+// Config's figures. Every "<client>" is the ClientKey of the address (an IPv4 address, an IPv6
+// /64). Keys: Session "session|<client>", Write "write|<session id>" and WriteAddr
+// "writeaddr|<client>" (a write must pass both, so rotating sessions buys no write budget),
+// View "view|<client>", Report "report|<client>", Admin "admin|<client>" (a generous default
+// of 20 a minute: it is what slows down guessing the admin token).
 type Limiters struct {
-	Session, Write, View, Report, Admin Limiter
+	Session, Write, WriteAddr, View, Report, Admin Limiter
 }
 
 // Options builds a Service. Only Store is required.
@@ -70,6 +74,20 @@ type Service struct {
 	now       func() time.Time
 	terms     string
 	locks     [64]sync.Mutex // per document (by hash): serializes the read-modify-write of its record
+
+	bytes   budget      // live bytes of public documents (Config.MaxTotalBytes)
+	reports reportStats // stored abuse reports
+	recMu   sync.Mutex  // serializes reconcile
+
+	prefixOK bool // the store lists by prefix (else Sweep's listings are throttled)
+
+	healthMu     sync.Mutex
+	born         time.Time
+	lastSweep    time.Time
+	lastFull     time.Time
+	sweepFailing bool
+	sweepEvery   time.Duration
+	noDeadline   atomic.Bool
 }
 
 // ErrExpiryRequired is returned by New for a store that does not expire documents.
@@ -103,6 +121,9 @@ func New(o Options) (*Service, error) {
 		return nil, ErrExpiryRequired
 	}
 	cfg := o.Config.withDefaults()
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	s := &Service{
 		store: o.Store, cfg: cfg,
 		sessions: o.Sessions, lim: o.Limiters, quota: o.Quota, admin: o.Admin,
@@ -118,22 +139,26 @@ func New(o Options) (*Service, error) {
 	if s.now == nil {
 		s.now = time.Now
 	}
+	s.born = s.now()
+	s.prefixOK = canListPrefix(o.Store)
 	if s.sessions == nil {
 		s.sessions = NewMemorySessionStore(cfg.MaxSessions)
 	}
-	rl := func(l Limiter, perMinute float64) Limiter {
+	// rl makes a token bucket of burst `figure` refilled at figure per `per`.
+	rl := func(l Limiter, figure float64, per time.Duration) Limiter {
 		if l != nil {
 			return l
 		}
-		r := passkey.NewRateLimiter(perMinute, burst(perMinute))
+		r := passkey.NewRateLimiter(figure*float64(time.Minute)/float64(per), burst(figure))
 		r.Now = s.now
 		return r
 	}
-	s.lim.Session = rl(s.lim.Session, cfg.SessionsPerMinute)
-	s.lim.Write = rl(s.lim.Write, cfg.WritesPerMinute)
-	s.lim.View = rl(s.lim.View, cfg.ViewsPerMinute)
-	s.lim.Report = rl(s.lim.Report, cfg.ReportsPerMinute)
-	s.lim.Admin = rl(s.lim.Admin, 20)
+	s.lim.Session = rl(s.lim.Session, cfg.SessionsPerHour, time.Hour)
+	s.lim.Write = rl(s.lim.Write, cfg.WritesPerMinute, time.Minute)
+	s.lim.WriteAddr = rl(s.lim.WriteAddr, cfg.WritesPerMinutePerAddress, time.Minute)
+	s.lim.View = rl(s.lim.View, cfg.ViewsPerMinute, time.Minute)
+	s.lim.Report = rl(s.lim.Report, cfg.ReportsPerMinute, time.Minute)
+	s.lim.Admin = rl(s.lim.Admin, 20, time.Minute)
 	if s.quota == nil {
 		q := NewMemoryQuota(cfg.IPDailyBytes, 24*time.Hour)
 		q.Now = s.now
@@ -154,6 +179,12 @@ func New(o Options) (*Service, error) {
 			s.clientIP = passkey.TrustedProxies(cfg.TrustedProxies...)
 		}
 	}
+	if s.expiryDisabled() {
+		log.Printf("public docstore: ALARM: the store's expiry policy gives public documents no deadline: every create will be refused (500) until it does; see /public/health")
+	}
+	if !s.prefixOK {
+		log.Printf("public docstore: warning: the store cannot list by prefix, so the sweep lists the whole store; it does so at most every %s (Config.FullSweepInterval)", cfg.FullSweepInterval)
+	}
 	return s, nil
 }
 
@@ -171,9 +202,10 @@ func (s *Service) Mount(srv *docstore.Server) *docstore.Server {
 	return srv
 }
 
-// Handler serves /public/session, /public/doc, /public/view/<id> and /public/report.
+// Handler serves /public/session, /public/doc, /public/view/<id>, /public/report and /public/health.
 func (s *Service) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/public/health", s.handleHealth)
 	mux.HandleFunc("/public/session", s.handleSession)
 	mux.HandleFunc("/public/doc", s.handleDoc)
 	mux.HandleFunc("/public/view/", s.handleView)
@@ -190,10 +222,18 @@ func (s *Service) AdminHandler() http.Handler {
 
 // headers adds what every public response carries: no indexing, no caching, no sniffing, no
 // referrer (a view link must not leak through the Referer of a click on a link in the
-// document), and the terms link.
+// document), the terms link, the headers a browser client on another origin may read, and the
+// deadlines of the request (a slow body is cut off).
 func (s *Service) headers(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if d := s.cfg.RequestTimeout; d > 0 {
+			rc := http.NewResponseController(w)
+			now := time.Now()
+			_ = rc.SetReadDeadline(now.Add(d)) // not supported by every writer (tests): then the server's own timeouts apply
+			_ = rc.SetWriteDeadline(now.Add(2 * d))
+		}
 		h := w.Header()
+		h.Set("Access-Control-Expose-Headers", ExposedHeaders)
 		h.Set("X-Robots-Tag", "noindex, nofollow, noarchive")
 		h.Set("Cache-Control", "no-store")
 		h.Set("X-Content-Type-Options", "nosniff")
@@ -205,6 +245,11 @@ func (s *Service) headers(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// ExposedHeaders is Access-Control-Expose-Headers of the public routes (and of /docs, see
+// docstore.ExposedHeaders): the response headers a script on another origin needs to read, which a
+// browser otherwise hides.
+const ExposedHeaders = docstore.ExposedHeaders
 
 // ---- identifiers and records
 
@@ -309,18 +354,34 @@ func (s *Service) removed(ctx context.Context, docID string) (bool, error) {
 
 // live reports whether the document is stored and not expired (an expired one is invisible to
 // the ExpiringAdapter at once, before its sweep).
+//
+// It asks for the one document's deadline (a single small read), never for a listing; a store
+// that has no deadline for it falls back to loading it.
 func (s *Service) live(ctx context.Context, docID string) (bool, error) {
 	key := docKey(docID)
-	metas, err := docstore.ListPrefix(ctx, s.store, key)
-	if err != nil {
-		return false, err
-	}
-	for _, m := range metas {
-		if m.ID == key {
-			return true, nil
+	if x, ok := s.store.(docstore.Expirer); ok {
+		t, has, err := x.Expiry(ctx, key)
+		if err != nil {
+			return false, err
+		}
+		if has {
+			return s.now().Before(t), nil
 		}
 	}
-	return false, nil
+	_, err := s.store.Load(ctx, key)
+	if errors.Is(err, docstore.ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// recordedBytes is the size the document's record says it has (0 if there is no record).
+func (s *Service) recordedBytes(ctx context.Context, docID string) int64 {
+	var meta docMeta
+	if found, err := s.getJSON(ctx, docRecordPrefix+docID, &meta); err != nil || !found {
+		return 0
+	}
+	return int64(meta.Bytes)
 }
 
 // dropRecords deletes the document's own records (not the document, not the tombstone).
@@ -339,8 +400,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v) // a write failure means the client went away
 }
 
+// fail answers 500 without the error's text, and logs it with the store keys (which hold document
+// IDs) taken out.
 func (s *Service) fail(w http.ResponseWriter, err error) {
-	log.Printf("public docstore: %v", err)
+	log.Printf("public docstore: %s", redact(err))
 	http.Error(w, "storage error", http.StatusInternalServerError)
 }
 
@@ -355,10 +418,14 @@ func methodNotAllowed(w http.ResponseWriter, allow string) {
 	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
+// clientKey is the ClientKey of the address the request comes from (the remote address, or what
+// Options.ClientIP names).
+func (s *Service) clientKey(r *http.Request) string { return ClientKey(s.clientIP(r)) }
+
 // allow asks the limiter for group's budget of the client of r (or of key, if not "").
 func (s *Service) allow(w http.ResponseWriter, r *http.Request, l Limiter, group, who string) bool {
 	if who == "" {
-		who = s.clientIP(r)
+		who = s.clientKey(r)
 	}
 	ok, retry := l.Allow(r.Context(), group+"|"+who)
 	if !ok {
@@ -376,13 +443,20 @@ func (s *Service) setExpires(ctx context.Context, w http.ResponseWriter, docID s
 	}
 }
 
-func (s *Service) expiresOf(ctx context.Context, docID string) (time.Time, bool) {
-	if x, ok := s.store.(docstore.Expirer); ok {
-		if t, has, err := x.Expiry(ctx, docKey(docID)); err == nil && has {
-			return t.UTC(), true
-		}
+// expiresOf is the document's deadline; has is false when it has none (err nil) and err says the
+// store could not be asked.
+func (s *Service) expiresOf(ctx context.Context, docID string) (t time.Time, has bool, err error) {
+	x, ok := s.store.(docstore.Expirer)
+	if !ok {
+		return time.Time{}, false, nil
 	}
-	return time.Time{}, false
+	t, has, err = x.Expiry(ctx, docKey(docID))
+	return t.UTC(), has, err
+}
+
+// writeAllowed charges a write to the session's budget and to its address's.
+func (s *Service) writeAllowed(w http.ResponseWriter, r *http.Request, sess Session) bool {
+	return s.allow(w, r, s.lim.Write, "write", sess.ID) && s.allow(w, r, s.lim.WriteAddr, "writeaddr", "")
 }
 
 // ---- sessions
@@ -428,8 +502,13 @@ func (s *Service) handleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := s.now()
-	sess := Session{ID: id, Created: now, Expires: now.Add(s.cfg.SessionTTL)}
-	switch err := s.sessions.Create(r.Context(), TokenKey(token), sess, now); {
+	// A session that has not stored a document yet is short-lived: the first write extends it.
+	sess := Session{ID: id, Client: s.clientKey(r), Created: now, Expires: now.Add(s.cfg.SessionIdleTTL)}
+	switch err := s.sessions.Create(r.Context(), TokenKey(token), sess, now, s.cfg.MaxSessionsPerAddress); {
+	case errors.Is(err, ErrClientSessionsFull):
+		w.Header().Set("Retry-After", "900")
+		http.Error(w, "too many live sessions from your address; finish or wait for the others to expire", http.StatusTooManyRequests)
+		return
 	case errors.Is(err, ErrSessionsFull):
 		w.Header().Set("Retry-After", "60")
 		http.Error(w, "the public offer is full right now; try again later", http.StatusServiceUnavailable)
@@ -500,7 +579,8 @@ type docResponse struct {
 	Versions int       `json:"versions"`
 }
 
-// readBody reads the document body, refusing more than MaxDocBytes (413) and an empty one (400).
+// readBody reads the document body, refusing more than MaxDocBytes (413), an empty one (400) and
+// one that arrives too slowly (408: the request's read deadline, see headers).
 func (s *Service) readBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 	if r.ContentLength > s.cfg.MaxDocBytes {
 		http.Error(w, "document too large", http.StatusRequestEntityTooLarge)
@@ -511,6 +591,10 @@ func (s *Service) readBody(w http.ResponseWriter, r *http.Request) ([]byte, bool
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
 			http.Error(w, "document too large", http.StatusRequestEntityTooLarge)
+			return nil, false
+		}
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			http.Error(w, "the request body took too long to arrive", http.StatusRequestTimeout)
 			return nil, false
 		}
 		http.Error(w, "reading the request body failed", http.StatusBadRequest)
@@ -536,19 +620,6 @@ func (s *Service) screen(w http.ResponseWriter, r *http.Request, data []byte) bo
 		return false
 	}
 	return true
-}
-
-// charge takes len(data) bytes from the client address's daily budget.
-func (s *Service) charge(w http.ResponseWriter, r *http.Request, n int) bool {
-	ok, retry, err := s.quota.Take(r.Context(), "ip:"+s.clientIP(r), int64(n))
-	if err != nil {
-		s.fail(w, err)
-		return false
-	}
-	if !ok {
-		tooMany(w, retry)
-	}
-	return ok
 }
 
 // handleDoc serves the session's own document:
@@ -582,15 +653,11 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
-	if !s.allow(w, r, s.lim.Write, "write", sess.ID) {
-		return
-	}
-	data, ok := s.readBody(w, r)
-	if !ok || !s.screen(w, r, data) {
+	if !s.writeAllowed(w, r, sess) {
 		return
 	}
 	// One document per session. A document that is gone (expired) frees the session; one that
-	// was taken down does not: that session is done.
+	// was taken down does not: that session is done. Checked before the body is read.
 	old := sess.DocID
 	if old != "" {
 		if gone, err := s.removed(ctx, old); err != nil {
@@ -608,9 +675,31 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if !s.charge(w, r, len(data)) {
+	// Size, storage and the daily bytes are settled before the body is read.
+	tk, ok := s.admit(w, r)
+	if !ok {
 		return
 	}
+	defer tk.release()
+	data, ok := s.readBody(w, r)
+	if !ok {
+		return
+	}
+	tk.settle(int64(len(data)))
+	if !s.screen(w, r, data) {
+		return
+	}
+	n := int64(len(data))
+	if !s.bytes.reserve(n, s.cfg.MaxTotalBytes) {
+		storeFull(w)
+		return
+	}
+	stored := false
+	defer func() {
+		if !stored {
+			s.bytes.add(-n)
+		}
+	}()
 	docID, err := randomString(16)
 	if err != nil {
 		s.fail(w, err)
@@ -655,14 +744,37 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	exp, has := s.expiresOf(ctx, docID)
+	exp, has, err := s.expiresOf(ctx, docID)
+	if err != nil {
+		rollback()
+		s.fail(w, err)
+		return
+	}
 	if !has {
 		// The store did not give the document a deadline (a policy that skips it): never keep a
 		// public document that would live for ever.
 		rollback()
-		s.fail(w, errors.New("a public document got no expiry; check the expiry policy"))
+		s.alarmNoDeadline()
+		s.fail(w, errNoDeadline)
 		return
 	}
+	// A takedown that arrived while this create was in flight (it tombstones an ID it cannot
+	// resolve yet, see handleTakedown) wins: look again now that the document is stored, so
+	// either this sees the tombstone or the takedown sees the records and deletes them.
+	if gone, err := s.removed(ctx, docID); err != nil {
+		rollback()
+		s.fail(w, err)
+		return
+	} else if gone {
+		// Removed, and the session keeps the claim on the dead document ID: it stays banned.
+		bg := context.WithoutCancel(ctx)
+		_ = s.deleteKey(bg, docKey(docID))
+		_ = s.dropRecords(bg, docID)
+		http.Error(w, "this document was removed", http.StatusGone)
+		return
+	}
+	stored = true
+	tk.keep()
 	s.renewSession(ctx, key, sess)
 	w.Header().Set("X-Gojiberry-Expires", exp.Format(time.RFC3339))
 	writeJSON(w, http.StatusCreated, docResponse{ID: docID, ViewID: view, Expires: exp, Versions: 1})
@@ -696,11 +808,30 @@ func (s *Service) editDoc(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !s.allow(w, r, s.lim.Write, "write", sess.ID) {
+	if !s.writeAllowed(w, r, sess) {
 		return
 	}
+	// The save limit is checked on the record as it is now, before the body is read, and again
+	// under the lock below.
+	var early docMeta
+	if found, err := s.getJSON(ctx, docRecordPrefix+docID, &early); err != nil {
+		s.fail(w, err)
+		return
+	} else if found && early.Versions >= s.cfg.MaxVersions {
+		http.Error(w, "this document has reached its limit of saves; download it and start a new one", http.StatusForbidden)
+		return
+	}
+	tk, ok := s.admit(w, r)
+	if !ok {
+		return
+	}
+	defer tk.release()
 	data, ok := s.readBody(w, r)
-	if !ok || !s.screen(w, r, data) {
+	if !ok {
+		return
+	}
+	tk.settle(int64(len(data)))
+	if !s.screen(w, r, data) {
 		return
 	}
 	unlock := s.lock(docID)
@@ -725,21 +856,50 @@ func (s *Service) editDoc(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "this document has reached its limit of saves; download it and start a new one", http.StatusForbidden)
 		return
 	}
-	if !s.charge(w, r, len(data)) {
+	delta := int64(len(data)) - int64(meta.Bytes)
+	if !s.bytes.reserve(delta, s.cfg.MaxTotalBytes) {
+		storeFull(w)
+		return
+	}
+	stored := false
+	defer func() {
+		if !stored {
+			s.bytes.add(-delta)
+		}
+	}()
+	// The count goes up before the save and comes back down if the save fails: a crash between
+	// the two can only leave the count one too high (the safe side), never an uncounted edit.
+	next := meta
+	next.Versions++
+	next.Bytes = len(data)
+	if err := s.putJSON(ctx, docRecordPrefix+docID, next); err != nil {
+		s.fail(w, err)
 		return
 	}
 	if err := s.store.Save(ctx, docKey(docID), data); err != nil {
+		_ = s.putJSON(context.WithoutCancel(ctx), docRecordPrefix+docID, meta)
 		s.fail(w, err)
 		return
 	}
-	meta.Versions++
-	meta.Bytes = len(data)
-	if err := s.putJSON(ctx, docRecordPrefix+docID, meta); err != nil {
+	// The save renewed the deadline; make sure there is one. Without it the document would
+	// live for ever: remove it (the edit cannot be taken back) and raise the alarm.
+	exp, has, err := s.expiresOf(ctx, docID)
+	if err != nil {
 		s.fail(w, err)
 		return
 	}
+	if !has {
+		bg := context.WithoutCancel(ctx)
+		_ = s.deleteKey(bg, docKey(docID))
+		_ = s.dropRecords(bg, docID)
+		s.alarmNoDeadline()
+		s.fail(w, errNoDeadline)
+		return
+	}
+	stored = true
+	tk.keep()
 	s.renewSession(ctx, key, sess)
-	s.setExpires(ctx, w, docID)
+	w.Header().Set("X-Gojiberry-Expires", exp.Format(time.RFC3339))
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -780,6 +940,7 @@ func (s *Service) discardDoc(w http.ResponseWriter, r *http.Request) {
 	}
 	unlock := s.lock(docID)
 	defer unlock()
+	size := s.recordedBytes(ctx, docID)
 	if err := s.deleteKey(ctx, docKey(docID)); err != nil {
 		s.fail(w, err)
 		return
@@ -788,6 +949,7 @@ func (s *Service) discardDoc(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	s.bytes.add(-size)
 	if _, err := s.sessions.SetDoc(ctx, key, docID, "", s.now()); err != nil && !errors.Is(err, ErrNoSession) {
 		s.fail(w, err)
 		return
@@ -936,9 +1098,18 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if found && meta.Reports < maxReportsOfDoc {
 		rep := Report{ID: reportID, ViewID: view, DocID: docID, Reason: reason, At: s.now().UTC()}
-		if err := s.putJSON(ctx, docstore.ReportPrefix+reportID, rep); err != nil {
+		raw, _ := json.Marshal(rep)
+		s.ensureCounters(ctx)
+		if err := s.store.Save(ctx, docstore.ReportPrefix+reportID, raw); err != nil {
 			s.fail(w, err)
 			return
+		}
+		s.reports.add(1, int64(len(raw)))
+		if s.reports.over(s.cfg.MaxReports, s.cfg.MaxReportBytes) {
+			// Over the global bound: the oldest reports go, the new one stays.
+			if metas, err := docstore.ListPrefix(ctx, s.store, docstore.ReportPrefix); err == nil {
+				s.evictReports(context.WithoutCancel(ctx), metas)
+			}
 		}
 		meta.Reports++
 		if err := s.putJSON(ctx, docRecordPrefix+docID, meta); err != nil {
@@ -982,27 +1153,53 @@ func (s *Service) handleTakedown(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	reason := strings.ToValidUTF8(r.URL.Query().Get("reason"), "")
+	if len(reason) > 200 {
+		reason = strings.ToValidUTF8(reason[:200], "")
+	}
+	tomb := func(view string) error {
+		return s.putJSON(ctx, tombPrefix+view, tombstone{At: s.now().UTC(), Reason: reason})
+	}
 	docID, view, found, err := s.resolve(ctx, id)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
 	if !found {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	reason := strings.ToValidUTF8(r.URL.Query().Get("reason"), "")
-	if len(reason) > 200 {
-		reason = strings.ToValidUTF8(reason[:200], "")
+		// No record names this ID: the document expired and its records were swept (its session,
+		// which keeps the document ID, must still be banned), or it is being created right now.
+		// The ban is the tombstone of the view ID, which the session's check derives from its
+		// document ID, so it is written for both readings of the ID (as a view ID, and as a
+		// document ID whose view ID follows) before anything else, and then looked up once more:
+		// a create in flight sees the tombstone when it finishes (createDoc), or has left records
+		// this finds now.
+		if err := tomb(id); err != nil {
+			s.fail(w, err)
+			return
+		}
+		if err := tomb(viewIDOf(id)); err != nil {
+			s.fail(w, err)
+			return
+		}
+		if docID, view, found, err = s.resolve(ctx, id); err != nil {
+			s.fail(w, err)
+			return
+		}
+		if !found {
+			log.Print("public docstore: takedown of an ID with no records: tombstoned (the document is gone or not yet stored)")
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
 	}
 	unlock := s.lock(docID)
 	defer unlock()
 	// The tombstone first: from this write on the view ID answers 410, whatever fails below
 	// (a retry finishes the deletion).
-	if err := s.putJSON(ctx, tombPrefix+view, tombstone{At: s.now().UTC(), Reason: reason}); err != nil {
+	if err := tomb(view); err != nil {
 		s.fail(w, err)
 		return
 	}
+	size := s.recordedBytes(ctx, docID)
 	if err := s.deleteKey(ctx, docKey(docID)); err != nil {
 		s.fail(w, err)
 		return
@@ -1011,6 +1208,7 @@ func (s *Service) handleTakedown(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	s.bytes.add(-size)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1022,10 +1220,22 @@ const recordGrace = time.Minute
 
 // Sweep removes what the ExpiringAdapter does not: the records of documents that expired or are
 // gone (metadata and view-ID records, which are in a system keyspace and so never expire by
-// themselves), and the reports and tombstones past their own TTL. It returns how many records it
-// deleted. Run calls it on an interval.
+// themselves), the reports and tombstones past their own TTL, and the reports over the global
+// bound (oldest first); it reaps expired sessions, and reconciles the byte and report counters
+// with the store. It returns how many records it deleted. Run calls it on an interval.
+//
+// Cost. Its listings are by prefix, so with a PrefixLister they cost what the public data costs
+// (live documents, records, reports, tombstones: all bounded by the caps). Over a store without
+// prefix listing every listing is the whole store, so the listing part runs at most every
+// Config.FullSweepInterval there; the other calls only reap sessions.
 func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 	var first error
+	defer func() {
+		s.healthMu.Lock()
+		s.lastSweep = s.now()
+		s.sweepFailing = first != nil || err != nil
+		s.healthMu.Unlock()
+	}()
 	note := func(err error) {
 		if err != nil && first == nil {
 			first = err
@@ -1039,14 +1249,44 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 		removed++
 	}
 	now := s.now()
+	if r, ok := s.sessions.(SessionReaper); ok {
+		if _, err := r.Reap(ctx, now); err != nil {
+			note(err)
+		}
+	}
+	if !s.prefixOK {
+		s.healthMu.Lock()
+		skip := !s.lastFull.IsZero() && now.Sub(s.lastFull) < s.cfg.FullSweepInterval
+		if !skip {
+			s.lastFull = now
+		}
+		s.healthMu.Unlock()
+		if skip {
+			return 0, first
+		}
+	}
 
+	s.recMu.Lock()
+	s.bytes.begin()
+	s.reports.begin()
+	s.recMu.Unlock()
 	liveMetas, err := docstore.ListPrefix(ctx, s.store, docKeyPrefix)
 	if err != nil {
 		return 0, err
 	}
 	live := make(map[string]bool, len(liveMetas))
+	var liveBytes int64
 	for _, m := range liveMetas {
 		live[strings.TrimPrefix(m.ID, docKeyPrefix)] = true
+		liveBytes += int64(m.Size)
+	}
+	if vs, err := docstore.ListPrefix(ctx, s.store, versionsKeyPrefix); err != nil {
+		note(err)
+	} else {
+		for _, m := range vs {
+			liveBytes += int64(m.Size)
+		}
+		s.bytes.set(liveBytes) // version snapshots count with their documents
 	}
 	docs, err := docstore.ListPrefix(ctx, s.store, docRecordPrefix)
 	if err != nil {
@@ -1055,13 +1295,17 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 	known := map[string]bool{} // views of document records that stay
 	for _, m := range docs {
 		docID := strings.TrimPrefix(m.ID, docRecordPrefix)
+		if live[docID] {
+			known[viewIDOf(docID)] = true
+			continue
+		}
 		var meta docMeta
 		found, err := s.getJSON(ctx, m.ID, &meta)
 		if err != nil {
 			note(err)
 			continue
 		}
-		if !found || live[docID] || now.Sub(meta.Created) < recordGrace {
+		if !found || now.Sub(meta.Created) < recordGrace {
 			known[viewIDOf(docID)] = true
 			continue
 		}
@@ -1104,22 +1348,45 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 		var t tombstone
 		return t.At, json.Unmarshal(raw, &t) == nil
 	}, del, note)
-	s.sweepOld(ctx, docstore.ReportPrefix, s.cfg.ReportTTL, func(raw []byte) (time.Time, bool) {
+	kept := s.sweepOld(ctx, docstore.ReportPrefix, s.cfg.ReportTTL, func(raw []byte) (time.Time, bool) {
 		var r Report
 		return r.At, json.Unmarshal(raw, &r) == nil
 	}, del, note)
+	if kept != nil {
+		removed += s.evictReports(ctx, kept.metas)
+	}
+	s.recountReports(ctx, note)
 	return removed, first
 }
 
-// sweepOld deletes the records under prefix whose own timestamp is older than ttl; one that
-// cannot be read as a record is deleted too once it is, by its adapter timestamp, that old.
-func (s *Service) sweepOld(ctx context.Context, prefix string, ttl time.Duration, at func([]byte) (time.Time, bool), del func(string), note func(error)) {
-	metas, err := docstore.ListPrefix(ctx, s.store, prefix)
+// recountReports sets the report counters from a fresh listing.
+func (s *Service) recountReports(ctx context.Context, note func(error)) {
+	metas, err := docstore.ListPrefix(ctx, s.store, docstore.ReportPrefix)
 	if err != nil {
 		note(err)
 		return
 	}
+	var b int64
+	for _, m := range metas {
+		b += int64(m.Size)
+	}
+	s.reports.set(len(metas), b)
+}
+
+// swept is what sweepOld leaves.
+type swept struct{ metas []docstore.Meta }
+
+// sweepOld deletes the records under prefix whose own timestamp is older than ttl; one that
+// cannot be read as a record is deleted too once it is, by its adapter timestamp, that old. It
+// returns the records that stay (nil if the listing failed).
+func (s *Service) sweepOld(ctx context.Context, prefix string, ttl time.Duration, at func([]byte) (time.Time, bool), del func(string), note func(error)) *swept {
+	metas, err := docstore.ListPrefix(ctx, s.store, prefix)
+	if err != nil {
+		note(err)
+		return nil
+	}
 	now := s.now()
+	out := &swept{}
 	for _, m := range metas {
 		d, err := s.store.Load(ctx, m.ID)
 		if errors.Is(err, docstore.ErrNotFound) {
@@ -1127,6 +1394,7 @@ func (s *Service) sweepOld(ctx context.Context, prefix string, ttl time.Duration
 		}
 		if err != nil {
 			note(err)
+			out.metas = append(out.metas, m)
 			continue
 		}
 		t, ok := at(d.Data)
@@ -1135,25 +1403,32 @@ func (s *Service) sweepOld(ctx context.Context, prefix string, ttl time.Duration
 		}
 		if now.Sub(t) >= ttl {
 			del(m.ID)
+			continue
 		}
+		out.metas = append(out.metas, m)
 	}
+	return out
 }
 
-// Run sweeps every interval until ctx is done; errors go to the log.
+// Run sweeps now and then every interval until ctx is done (the first sweep reconciles the
+// counters, so the byte budget is right from the start); errors go to the log.
 func (s *Service) Run(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
-		interval = 5 * time.Minute
+		interval = DefaultSweepInterval
 	}
+	s.healthMu.Lock()
+	s.sweepEvery = interval
+	s.healthMu.Unlock()
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
+		if _, err := s.Sweep(ctx); err != nil && ctx.Err() == nil {
+			log.Printf("public docstore: sweep: %s", redact(err))
+		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if _, err := s.Sweep(ctx); err != nil {
-				log.Printf("public docstore: sweep: %v", err)
-			}
 		}
 	}
 }

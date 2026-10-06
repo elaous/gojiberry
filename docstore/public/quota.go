@@ -14,6 +14,14 @@ type Quota interface {
 	Take(ctx context.Context, key string, n int64) (ok bool, retryAfter time.Duration, err error)
 }
 
+// QuotaRefunder is an optional capability of a Quota: Refund gives n bytes back to key's budget
+// (within the window they were charged in). The service charges before it reads a body, and refunds
+// what a request did not end up writing (refused content, a conflict, a failed store); a Quota
+// without it simply keeps those charges.
+type QuotaRefunder interface {
+	Refund(ctx context.Context, key string, n int64)
+}
+
 // UnlimitedQuota is a Quota that allows everything.
 type UnlimitedQuota struct{}
 
@@ -93,4 +101,13 @@ func (q *MemoryQuota) Take(_ context.Context, key string, n int64) (bool, time.D
 	}
 	w.used += n
 	return true, 0, nil
+}
+
+// Refund implements QuotaRefunder.
+func (q *MemoryQuota) Refund(_ context.Context, key string, n int64) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if w := q.keys[key]; w != nil {
+		w.used = max(0, w.used-n)
+	}
 }

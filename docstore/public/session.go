@@ -23,6 +23,9 @@ type Session struct {
 	// kept even after the document is gone, taken down or expired, until the session ends
 	// (see Service: a taken-down session cannot start another).
 	DocID string
+	// Client is the ClientKey of the address that was given the session: what the per-address
+	// cap of live sessions counts.
+	Client string
 	// Created is when the session was issued; it never extends the session beyond MaxAge.
 	Created time.Time
 	// Expires is the instant the session stops working.
@@ -37,6 +40,9 @@ func (s Session) User() auth.User { return auth.AnonymousUser(s.ID) }
 var (
 	// ErrSessionsFull is returned by Create when the store holds its maximum of live sessions.
 	ErrSessionsFull = errors.New("public: too many live anonymous sessions")
+	// ErrClientSessionsFull is returned by Create when the session's Client already holds its
+	// maximum of live sessions.
+	ErrClientSessionsFull = errors.New("public: too many live anonymous sessions for this address")
 	// ErrNoSession is returned by the methods that need a session that is not there (or has expired).
 	ErrNoSession = errors.New("public: no such session")
 )
@@ -47,11 +53,13 @@ var (
 // needs no clock of its own, and an expired session behaves as absent.
 //
 // Create must refuse (ErrSessionsFull) when the live sessions are at the cap, counting without
-// the expired ones; SetDoc must be atomic (a compare-and-set), since it is what makes "one
+// the expired ones, and (ErrClientSessionsFull) when the live sessions with the same Client
+// already number perClient (perClient <= 0: no per-client cap), so that one address cannot fill
+// the global cap; SetDoc must be atomic (a compare-and-set), since it is what makes "one
 // document per session" hold under concurrent requests.
 type SessionStore interface {
-	// Create stores a new session, or returns ErrSessionsFull.
-	Create(ctx context.Context, key string, s Session, now time.Time) error
+	// Create stores a new session, or returns ErrSessionsFull or ErrClientSessionsFull.
+	Create(ctx context.Context, key string, s Session, now time.Time, perClient int) error
 	// Get returns the live session.
 	Get(ctx context.Context, key string, now time.Time) (Session, bool, error)
 	// SetDoc sets the session's DocID to newDoc if it is currently old (use "" for the first),
@@ -62,6 +70,13 @@ type SessionStore interface {
 	Extend(ctx context.Context, key string, expires, now time.Time) error
 	// Delete ends the session; deleting a missing one is not an error.
 	Delete(ctx context.Context, key string) error
+}
+
+// SessionReaper is an optional capability of a SessionStore: Reap deletes the sessions that have
+// expired (idle ones included: a session that never wrote lives only Config.SessionIdleTTL) and
+// returns how many. Service.Sweep calls it, so expired sessions do not wait for the store to be full.
+type SessionReaper interface {
+	Reap(ctx context.Context, now time.Time) (int, error)
 }
 
 // TokenKey is the store key of a bearer token: its SHA-256 in hex.
@@ -88,6 +103,7 @@ type MemorySessionStore struct {
 
 	mu       sync.Mutex
 	sessions map[string]Session
+	byClient map[string]int // live-or-unswept sessions per Client
 }
 
 // DefaultMaxSessions is the live-session cap when none is set.
@@ -95,7 +111,7 @@ const DefaultMaxSessions = 10000
 
 // NewMemorySessionStore makes a store holding at most max live sessions (0: DefaultMaxSessions).
 func NewMemorySessionStore(max int) *MemorySessionStore {
-	return &MemorySessionStore{Max: max, sessions: map[string]Session{}}
+	return &MemorySessionStore{Max: max, sessions: map[string]Session{}, byClient: map[string]int{}}
 }
 
 func (m *MemorySessionStore) cap() int {
@@ -105,29 +121,62 @@ func (m *MemorySessionStore) cap() int {
 	return DefaultMaxSessions
 }
 
-// sweepLocked drops the expired sessions.
-func (m *MemorySessionStore) sweepLocked(now time.Time) {
+// sweepLocked drops the expired sessions and returns how many.
+func (m *MemorySessionStore) sweepLocked(now time.Time) int {
+	n := 0
 	for k, s := range m.sessions {
 		if !now.Before(s.Expires) {
-			delete(m.sessions, k)
+			m.dropLocked(k)
+			n++
+		}
+	}
+	return n
+}
+
+// dropLocked removes one session and its count.
+func (m *MemorySessionStore) dropLocked(key string) {
+	s, ok := m.sessions[key]
+	if !ok {
+		return
+	}
+	delete(m.sessions, key)
+	if s.Client != "" {
+		if m.byClient[s.Client]--; m.byClient[s.Client] <= 0 {
+			delete(m.byClient, s.Client)
 		}
 	}
 }
 
+// Reap implements SessionReaper.
+func (m *MemorySessionStore) Reap(_ context.Context, now time.Time) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.sweepLocked(now), nil
+}
+
 // Create implements SessionStore.
-func (m *MemorySessionStore) Create(_ context.Context, key string, s Session, now time.Time) error {
+func (m *MemorySessionStore) Create(_ context.Context, key string, s Session, now time.Time, perClient int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.sessions == nil {
 		m.sessions = map[string]Session{}
 	}
-	if len(m.sessions) >= m.cap() {
+	if m.byClient == nil {
+		m.byClient = map[string]int{}
+	}
+	if len(m.sessions) >= m.cap() || (perClient > 0 && s.Client != "" && m.byClient[s.Client] >= perClient) {
 		m.sweepLocked(now)
-		if len(m.sessions) >= m.cap() {
-			return ErrSessionsFull
-		}
+	}
+	if len(m.sessions) >= m.cap() {
+		return ErrSessionsFull
+	}
+	if perClient > 0 && s.Client != "" && m.byClient[s.Client] >= perClient {
+		return ErrClientSessionsFull
 	}
 	m.sessions[key] = s
+	if s.Client != "" {
+		m.byClient[s.Client]++
+	}
 	return nil
 }
 
@@ -137,7 +186,7 @@ func (m *MemorySessionStore) live(key string, now time.Time) (Session, bool) {
 		return Session{}, false
 	}
 	if !now.Before(s.Expires) {
-		delete(m.sessions, key)
+		m.dropLocked(key)
 		return Session{}, false
 	}
 	return s, true
@@ -185,7 +234,7 @@ func (m *MemorySessionStore) Extend(_ context.Context, key string, expires, now 
 // Delete implements SessionStore.
 func (m *MemorySessionStore) Delete(_ context.Context, key string) error {
 	m.mu.Lock()
-	delete(m.sessions, key)
+	m.dropLocked(key)
 	m.mu.Unlock()
 	return nil
 }

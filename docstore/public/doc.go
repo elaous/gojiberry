@@ -7,12 +7,15 @@
 // replace is an interface with a single-process default, passed in Options:
 //
 //	Interface        What it does                                   Default                      Plug in
-//	SessionStore     live anonymous sessions, the global cap,       MemorySessionStore           Redis, a table (SetDoc must be a
-//	                 the one-document claim (SetDoc: atomic CAS)                                 compare-and-set)
+//	SessionStore     live anonymous sessions, the global and the    MemorySessionStore           Redis, a table (SetDoc must be a
+//	                 per-client cap, the one-document claim                                      compare-and-set; Create takes the
+//	                 (SetDoc: atomic CAS); optional SessionReaper                                per-client figure)
 //	Limiters         per-group request budgets (Session, Write,     passkey.RateLimiter per      a shared Redis budget, a gateway's
-//	                 View, Report, Admin); it is passkey.Limiter    group from Config            decision; passkey.Unlimited{}
-//	Quota            bytes per client address per day (413-sized    MemoryQuota (fixed 24 h      Redis INCRBY with expiry, a table
-//	                 writes count; refused ones do not)             window per address)
+//	                 WriteAddr, View, Report, Admin), keyed by      group from Config            decision; passkey.Unlimited{}
+//	                 ClientKey (IPv4, IPv6 /64); passkey.Limiter
+//	Quota            bytes per client per day, charged before the   MemoryQuota (fixed 24 h      Redis INCRBY with expiry, a table
+//	                 body is read and refunded (QuotaRefunder)      window per client)
+//	                 for what is not stored
 //	Options.ClientIP who the client is, for the limits and quota    remote address, or           your own function
 //	                                                                passkey.TrustedProxies
 //	AdminGuard       who may call DELETE /admin/takedown/<id>       TokenAdmin (header           operator sign-in, mTLS, a gateway
@@ -25,8 +28,8 @@
 //	Options.Store    documents and records; must implement          docstore.ExpiringAdapter     any adapter wrapped by it
 //	                 docstore.Expirer (New refuses a store without)
 //
-// Over a limit the routes answer 429 with Retry-After (a global session cap is 503; a document
-// over Config.MaxDocBytes is 413).
+// Over a limit the routes answer 429 with Retry-After (a global session cap or a full storage
+// budget is 503; a document over Config.MaxDocBytes is 413; a body that arrives too slowly is 408).
 //
 // # Routes
 //
@@ -36,6 +39,7 @@
 //	GET    /public/doc            download it (never renews)
 //	DELETE /public/doc            discard it, freeing the session
 //	GET    /public/view/<viewId>  the document, read-only; never renews; 410 once taken down
+//	GET    /public/health         whether the offer's promises hold (deadlines, sweeper, storage); 503 if not
 //	POST   /public/report         {"id": "<view id or document id>", "reason": "..."} -> 202
 //	DELETE /admin/takedown/<id>   operator: delete, tombstone, 410 from then on (AdminGuard)
 //

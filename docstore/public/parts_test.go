@@ -31,7 +31,7 @@ func TestFromEnv(t *testing.T) {
 		t.Fatalf("config = %+v", c)
 	}
 	d := c.withDefaults()
-	if d.SessionMaxAge != DefaultSessionMaxAge || d.TombstoneTTL != DefaultRecordTTL || d.SessionsPerMinute != DefaultSessionsPerMinute {
+	if d.SessionMaxAge != DefaultSessionMaxAge || d.TombstoneTTL != DefaultRecordTTL || d.SessionsPerHour != DefaultSessionsPerHour {
 		t.Fatalf("defaults = %+v", d)
 	}
 	// off by default
@@ -62,17 +62,17 @@ func TestMemorySessionStore(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	st := NewMemorySessionStore(2)
 	mk := func(exp time.Duration) Session { return Session{ID: "x", Created: now, Expires: now.Add(exp)} }
-	if err := st.Create(ctx, "a", mk(time.Hour), now); err != nil {
+	if err := st.Create(ctx, "a", mk(time.Hour), now, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Create(ctx, "b", mk(time.Minute), now); err != nil {
+	if err := st.Create(ctx, "b", mk(time.Minute), now, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Create(ctx, "c", mk(time.Hour), now); err != ErrSessionsFull {
+	if err := st.Create(ctx, "c", mk(time.Hour), now, 0); err != ErrSessionsFull {
 		t.Fatalf("err = %v", err)
 	}
 	later := now.Add(2 * time.Minute) // b expired: room again
-	if err := st.Create(ctx, "c", mk(time.Hour), later); err != nil {
+	if err := st.Create(ctx, "c", mk(time.Hour), later, 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok, _ := st.Get(ctx, "b", later); ok {
@@ -137,5 +137,57 @@ func TestMemoryQuota(t *testing.T) {
 	}
 	if ok, _, _ := (UnlimitedQuota{}).Take(ctx, "a", 1<<40); !ok {
 		t.Fatal("UnlimitedQuota refused")
+	}
+}
+
+func TestFromEnvHardeningVariables(t *testing.T) {
+	env := map[string]string{
+		"GOJIBERRY_DOCSTORE_PUBLIC_SESSION_IDLE_TTL":          "30m",
+		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS_PER_ADDRESS":  "4",
+		"GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS_PER_HOUR":         "3",
+		"GOJIBERRY_DOCSTORE_PUBLIC_ADDRESS_WRITES_PER_MINUTE": "50",
+		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_TOTAL_BYTES":           "123456",
+		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_REPORTS":               "77",
+		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_REPORT_BYTES":          "4096",
+		"GOJIBERRY_DOCSTORE_PUBLIC_REQUEST_TIMEOUT":           "5s",
+		"GOJIBERRY_DOCSTORE_PUBLIC_FULL_SWEEP_INTERVAL":       "2h",
+		"GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS":           "true",
+	}
+	c, err := FromEnv(func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.SessionIdleTTL != 30*time.Minute || c.MaxSessionsPerAddress != 4 || c.SessionsPerHour != 3 || c.WritesPerMinutePerAddress != 50 ||
+		c.MaxTotalBytes != 123456 || c.MaxReports != 77 || c.MaxReportBytes != 4096 || c.RequestTimeout != 5*time.Second ||
+		c.FullSweepInterval != 2*time.Hour || !c.AllowOpenDocs {
+		t.Fatalf("config = %+v", c)
+	}
+	d := Config{}.withDefaults()
+	if d.SessionIdleTTL != time.Hour || d.MaxSessionsPerAddress != DefaultMaxPerAddress || d.MaxTotalBytes != DefaultMaxTotalBytes ||
+		d.MaxReports != DefaultMaxReports || d.RequestTimeout != DefaultRequestTimeout || d.SessionsPerHour != DefaultSessionsPerHour {
+		t.Fatalf("defaults = %+v", d)
+	}
+	if c := (Config{SessionTTL: 10 * time.Minute}).withDefaults(); c.SessionIdleTTL != 10*time.Minute {
+		t.Fatalf("the idle TTL exceeds the session TTL: %v", c.SessionIdleTTL)
+	}
+}
+
+func TestMemoryQuotaRefund(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	q := NewMemoryQuota(100, time.Hour)
+	q.Now = func() time.Time { return now }
+	if ok, _, _ := q.Take(ctx, "a", 80); !ok {
+		t.Fatal("refused")
+	}
+	if ok, _, _ := q.Take(ctx, "a", 80); ok {
+		t.Fatal("over budget accepted")
+	}
+	var r QuotaRefunder = q
+	r.Refund(ctx, "a", 80)
+	r.Refund(ctx, "a", 500) // never below zero
+	r.Refund(ctx, "nobody", 5)
+	if ok, _, _ := q.Take(ctx, "a", 100); !ok {
+		t.Fatal("the refund was not given back")
 	}
 }
