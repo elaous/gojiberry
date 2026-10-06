@@ -214,3 +214,34 @@ func TestPostgresSaveIf(t *testing.T) {
 		}
 	})
 }
+
+func TestPostgresListPrefixEscapesTheLikePattern(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	a := newFromDB(db)
+	var _ docstore.PrefixLister = a
+	now := time.Now()
+	for _, c := range []struct{ prefix, pattern string }{
+		{"directory/ab/", `directory/ab/%`},
+		{`a_b%c\d/`, `a\_b\%c\\d/%`}, // wildcards and the escape character are literal
+		{"", `%`},
+	} {
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, length(data), updated_at FROM documents WHERE id LIKE $1 ESCAPE '\'`)).
+			WithArgs(c.pattern).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "length", "updated_at"}).AddRow(c.prefix+"1", 3, now))
+		got, err := a.ListPrefix(context.Background(), c.prefix)
+		if err != nil || len(got) != 1 || got[0].ID != c.prefix+"1" || got[0].Size != 3 {
+			t.Fatalf("%q: %v %v", c.prefix, got, err)
+		}
+	}
+	mock.ExpectQuery(`SELECT id`).WillReturnError(errors.New("boom"))
+	if _, err := a.ListPrefix(context.Background(), "x/"); err == nil {
+		t.Error("a database error is returned")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

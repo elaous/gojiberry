@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/elaous/gojiberry/docstore"
+	"strings"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -146,7 +147,20 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 }
 
 func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
-	rows, err := a.db.QueryContext(ctx, `SELECT id, length(data), updated_at FROM documents`)
+	return a.list(ctx, `SELECT id, length(data), updated_at FROM documents`)
+}
+
+// likeEscaper escapes what LIKE treats as a pattern (backslash is the escape character).
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// ListPrefix implements docstore.PrefixLister: the database filters, with a LIKE whose
+// pattern is the prefix with its wildcards escaped.
+func (a *Adapter) ListPrefix(ctx context.Context, prefix string) ([]docstore.Meta, error) {
+	return a.list(ctx, `SELECT id, length(data), updated_at FROM documents WHERE id LIKE $1 ESCAPE '\'`, likeEscaper.Replace(prefix)+"%")
+}
+
+func (a *Adapter) list(ctx context.Context, query string, args ...any) ([]docstore.Meta, error) {
+	rows, err := a.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

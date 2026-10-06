@@ -88,3 +88,17 @@ func TestDirectoryKeyspaceIsReservedFromTheDocumentAPI(t *testing.T) {
 		t.Errorf("listed: %s", s)
 	}
 }
+
+func TestCheckPrefixListerMemoryLocalFS(t *testing.T) {
+	CheckPrefixLister(t, func() Adapter { return NewMemoryAdapter() })
+	CheckPrefixLister(t, func() Adapter {
+		lf, err := NewLocalFSAdapter(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return lf
+	})
+	if sq := sqliteForTest(t); sq != nil {
+		CheckPrefixLister(t, func() Adapter { return sq })
+	}
+}

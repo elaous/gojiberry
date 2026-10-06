@@ -80,3 +80,18 @@ func TestBuildAdapterBlobBackendRequiresURL(t *testing.T) {
 		t.Fatal("BuildAdapter with no url = nil error, want an error")
 	}
 }
+
+func TestBlobAdapterListPrefix(t *testing.T) {
+	docstore.CheckPrefixLister(t, func() docstore.Adapter { return New(newTestBlobBucket(t), "docs/") })
+	docstore.CheckPrefixLister(t, func() docstore.Adapter { return New(newTestBlobBucket(t), "") })
+	// The adapter's own prefix scopes the listing: another deployment's keys are not seen.
+	bucket := newTestBlobBucket(t)
+	ctx := context.Background()
+	_ = New(bucket, "other/").Save(ctx, "directory/a/1", []byte("x"))
+	a := New(bucket, "docs/")
+	_ = a.Save(ctx, "directory/a/2", []byte("x"))
+	got, err := a.ListPrefix(ctx, "directory/a/")
+	if err != nil || len(got) != 1 || got[0].ID != "directory/a/2" {
+		t.Fatalf("%v %v", got, err)
+	}
+}

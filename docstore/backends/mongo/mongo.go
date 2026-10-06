@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/elaous/gojiberry/docstore"
+	"regexp"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -119,7 +120,23 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 }
 
 func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
-	cur, err := a.coll.Find(ctx, bson.M{})
+	return a.list(ctx, bson.M{})
+}
+
+// prefixFilter matches the documents whose _id starts with prefix: a regular expression
+// anchored at the start with the prefix quoted, which MongoDB answers from the _id index as a
+// range scan (case-sensitive and anchored, so no full scan).
+func prefixFilter(prefix string) bson.M {
+	return bson.M{"_id": bson.M{"$regex": "^" + regexp.QuoteMeta(prefix)}}
+}
+
+// ListPrefix implements docstore.PrefixLister.
+func (a *Adapter) ListPrefix(ctx context.Context, prefix string) ([]docstore.Meta, error) {
+	return a.list(ctx, prefixFilter(prefix))
+}
+
+func (a *Adapter) list(ctx context.Context, filter bson.M) ([]docstore.Meta, error) {
+	cur, err := a.coll.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
