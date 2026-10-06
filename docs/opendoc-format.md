@@ -20,7 +20,9 @@ records** (§2) whose bytes are an envelope someone else made.
 2. Every structure is aligned to 8 bytes; padding is zero bytes and must be zero.
 3. Messages are protobuf wire format. Unknown fields are skipped, so fields are only
    ever added: a removed field is `reserved` and its number is never reused. The
-   format version is bumped only for a change old readers cannot skip.
+   format version is bumped only for a change old readers cannot skip. The Go reader
+   and writer use a small hand-written wire package (`docfile/internal/wire`), not a
+   protobuf library; groups, field number 0 and over-long varints are errors.
 4. Names, IDs and tags are UTF-8. Document and folder IDs are UUIDs, the same as in
    a store.
 

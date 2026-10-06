@@ -713,7 +713,7 @@ func TestTheFingerprintIsComputedFromTheStoredKey(t *testing.T) {
 	// Rewrite the stored fingerprint (re-signing as the owner would be needed to do this
 	// for real; here the list is read through the same path with the field changed).
 	var lied sharedEntry
-	rec, _, _ := loadRecord(ctx, inner, docA, sh.verifiers())
+	rec, _, _ := loadRecord(ctx, inner, docA, sh.verifiers(), nil)
 	lied = rec.Recipients[0]
 	lied.Fingerprint = "SHA256:somebodyelse"
 	p, err := parseShared(lied)
