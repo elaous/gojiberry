@@ -152,6 +152,9 @@ func envOr(key, fallback string) string {
 // /auth/{provider}/login, /auth/{provider}/callback, /auth/me,
 // /auth/logout.
 //
+// Plus, with WithDirectory and an auth.Manager, POST /directory/publish and
+// GET /directory/lookup (directory.go); the "directory/" ids are reserved from /docs.
+//
 // GET/PUT/DELETE on /docs/{id} enforce that document's own ACL, if any
 // (checkPermission, acl.go) -- a document nobody has ever shared via
 // PUT /docs/{id}/acl is unaffected, exactly as before this file
@@ -171,6 +174,9 @@ type Server struct {
 	// prefixes of ids the server keeps for itself (Hide).
 	extra  []extraRoute
 	hidden []string
+	// directory is the key directory behind /directory/* (WithDirectory); limiter limits it.
+	directory DirectoryService
+	limiter   windowLimiter
 }
 
 type extraRoute struct {
@@ -265,6 +271,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/docs/", s.handleDoc)
 	if s.auth != nil {
 		mux.Handle("/auth/", s.auth.Routes())
+	}
+	if s.auth != nil && s.directory != nil {
+		mux.HandleFunc("/directory/publish", s.handlePublish)
+		mux.HandleFunc("/directory/lookup", s.handleLookup)
 	}
 	for _, e := range s.extra {
 		mux.Handle(e.pattern, e.h)

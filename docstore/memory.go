@@ -3,6 +3,7 @@ package docstore
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 )
@@ -55,6 +56,19 @@ func (m *MemoryAdapter) List(_ context.Context) ([]Meta, error) {
 	metas := make([]Meta, 0, len(m.docs))
 	for _, doc := range m.docs {
 		metas = append(metas, Meta{ID: doc.ID, UpdatedAt: doc.UpdatedAt, Size: len(doc.Data)})
+	}
+	return metas, nil
+}
+
+// ListPrefix implements PrefixLister.
+func (m *MemoryAdapter) ListPrefix(_ context.Context, prefix string) ([]Meta, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var metas []Meta
+	for id, doc := range m.docs {
+		if strings.HasPrefix(id, prefix) {
+			metas = append(metas, Meta{ID: doc.ID, UpdatedAt: doc.UpdatedAt, Size: len(doc.Data)})
+		}
 	}
 	return metas, nil
 }

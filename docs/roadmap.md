@@ -26,8 +26,10 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
       its older copies on the switch.
    3. **Done (components and library):** the People-tab "my passkey" control with the second-key rule and
       the recovery key shown once, and the verified-e-mail mark with `encrypt.KeyDirectory` /
-      `AdapterDirectory` (C.4). Left: a host that wires them, and the server rule that only a session
-      of an address may publish under it.
+      `AdapterDirectory` (C.4); the server rule (the `directory/` prefix is reserved from `/docs`, records
+      are signed by a configured directory key and written only by `POST /directory/publish`, which needs a
+      provider session with a verified e-mail) and a demo host, `examples/people-keys-demo`. Left: wiring
+      it in the showcase/app, a publish button, `PrefixLister` in the nested backends, revoking a published key.
    4. Hiding folder names of confidential folders.
 3. **Public docstore.** An anonymous offer: no account, one document per session, a link
    and a download always, deleted 24 hours after the last edit (viewing does not renew).

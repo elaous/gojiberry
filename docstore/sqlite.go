@@ -125,6 +125,48 @@ func (a *SQLiteAdapter) List(ctx context.Context) ([]Meta, error) {
 	return metas, rows.Err()
 }
 
+// ListPrefix implements PrefixLister with a range over the primary key, so the index is used.
+func (a *SQLiteAdapter) ListPrefix(ctx context.Context, prefix string) ([]Meta, error) {
+	if prefix == "" {
+		return a.List(ctx)
+	}
+	// ids in [prefix, prefix with its last byte raised by one) all start with prefix
+	// (a prefix ending in 0xff, which no valid ID has, falls back to the filter).
+	upper := []byte(prefix)
+	if upper[len(upper)-1] == 0xff {
+		all, err := a.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		var out []Meta
+		for _, m := range all {
+			if strings.HasPrefix(m.ID, prefix) {
+				out = append(out, m)
+			}
+		}
+		return out, nil
+	}
+	upper[len(upper)-1]++
+	rows, err := a.db.QueryContext(ctx, `SELECT id, length(data), updated_at FROM documents WHERE id >= ? AND id < ?`, prefix, string(upper))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var metas []Meta
+	for rows.Next() {
+		var m Meta
+		var ns int64
+		if err := rows.Scan(&m.ID, &m.Size, &ns); err != nil {
+			return nil, err
+		}
+		m.UpdatedAt = time.Unix(0, ns)
+		if strings.HasPrefix(m.ID, prefix) {
+			metas = append(metas, m)
+		}
+	}
+	return metas, rows.Err()
+}
+
 // Delete implements Adapter.
 func (a *SQLiteAdapter) Delete(ctx context.Context, id string) error {
 	res, err := a.db.ExecContext(ctx, `DELETE FROM documents WHERE id = ?`, id)

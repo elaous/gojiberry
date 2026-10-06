@@ -9,6 +9,8 @@ import (
 type PublishedKey struct {
 	// Text is the public key as it was published ("ssh-ed25519 AAAA..." or "age1...").
 	Text string
+	// Label is what the publisher called the key (signed with the record).
+	Label string
 	// Type and Fingerprint are computed from Text when the directory is read, not taken from
 	// what the publisher wrote.
 	Type, Fingerprint string

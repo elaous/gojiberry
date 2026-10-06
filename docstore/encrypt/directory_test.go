@@ -2,8 +2,12 @@ package encrypt
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/elaous/gojiberry/auth"
@@ -23,16 +27,26 @@ func newRecovery(t *testing.T) Recipient {
 	return r
 }
 
+func testSigner(t *testing.T, fill byte) DirectorySigner {
+	t.Helper()
+	sg, err := DirectorySignerFromSeed([]byte(strings.Repeat(string([]byte{fill}), 32)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sg
+}
+
 func TestDirectoryPublishRefusesUsersWithoutAVerifiedProviderEmail(t *testing.T) {
 	ctx := context.Background()
 	store := docstore.NewMemoryAdapter()
-	d := &AdapterDirectory{Store: store}
+	d := &AdapterDirectory{Store: store, Signer: testSigner(t, 1)}
 	key := newRecovery(t)
 	for name, u := range map[string]auth.User{
 		"no email":     {ID: "google:1"},
 		"blank email":  {ID: "google:1", Email: "  "},
 		"passkey user": {ID: "passkey:abc", Email: "ana@x.io"}, // an address typed at registration is a label
 		"no id":        {Email: "ana@x.io"},
+		"no provider":  {ID: "1", Email: "ana@x.io"},
 	} {
 		if err := d.Publish(ctx, u, key); !errors.Is(err, ErrNotPublishable) {
 			t.Errorf("%s: %v", name, err)
@@ -46,11 +60,41 @@ func TestDirectoryPublishRefusesUsersWithoutAVerifiedProviderEmail(t *testing.T)
 	}
 }
 
-func TestDirectoryLookupMarksVerifiedOnlyForPublishedRecords(t *testing.T) {
+func TestDirectoryIsOffWithoutASigner(t *testing.T) {
 	ctx := context.Background()
 	store := docstore.NewMemoryAdapter()
 	d := &AdapterDirectory{Store: store}
+	if err := d.Publish(ctx, auth.User{ID: "google:1", Email: "ana@x.io"}, newRecovery(t)); !errors.Is(err, ErrDirectoryOff) {
+		t.Errorf("%v", err)
+	}
+	if got, err := d.Lookup(ctx, "ana@x.io"); err != nil || got != nil {
+		t.Errorf("%v %v", got, err)
+	}
+	t.Setenv(DirectoryKeyEnv, "")
+	if sg, err := DirectorySignerFromEnv(); sg != nil || err != nil {
+		t.Errorf("an unset key is off, not an error: %v %v", sg, err)
+	}
+	t.Setenv(DirectoryKeyEnv, "zz")
+	if _, err := DirectorySignerFromEnv(); err == nil {
+		t.Error("a bad key is an error")
+	}
+	t.Setenv(DirectoryKeyEnv, "abcd")
+	if _, err := DirectorySignerFromEnv(); err == nil {
+		t.Error("a short key is an error")
+	}
+	t.Setenv(DirectoryKeyEnv, strings.Repeat("ab", 32))
+	if sg, err := DirectorySignerFromEnv(); sg == nil || err != nil {
+		t.Errorf("%v %v", sg, err)
+	}
+}
+
+func TestDirectoryLookupMarksVerifiedOnlyForPublishedRecords(t *testing.T) {
+	ctx := context.Background()
+	store := docstore.NewMemoryAdapter()
+	signer := testSigner(t, 1)
+	d := &AdapterDirectory{Store: store, Signer: signer}
 	key := newRecovery(t)
+	key.Label = "Ana's laptop\n"
 	if err := d.Publish(ctx, auth.User{ID: "google:1", Email: " Ana@X.io "}, key); err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +102,7 @@ func TestDirectoryLookupMarksVerifiedOnlyForPublishedRecords(t *testing.T) {
 	if err != nil || len(got) != 1 {
 		t.Fatalf("%v %v", got, err)
 	}
-	if !got[0].Verified || got[0].Fingerprint != key.Fingerprint || got[0].Text != key.Text || got[0].Type != "age-x25519" {
+	if !got[0].Verified || got[0].Fingerprint != key.Fingerprint || got[0].Text != key.Text || got[0].Type != "age-x25519" || got[0].Label != "Ana's laptop" {
 		t.Errorf("%+v", got[0])
 	}
 	if other, _ := d.Lookup(ctx, "bo@x.io"); len(other) != 0 {
@@ -67,46 +111,150 @@ func TestDirectoryLookupMarksVerifiedOnlyForPublishedRecords(t *testing.T) {
 	if none, err := d.Lookup(ctx, " "); err != nil || none != nil {
 		t.Errorf("blank: %v %v", none, err)
 	}
+	// A directory with another key reads the same store and verifies nothing (and cannot even
+	// find the records: their names depend on the key).
+	if other, _ := (&AdapterDirectory{Store: store, Signer: testSigner(t, 2)}).Lookup(ctx, "ana@x.io"); len(other) != 0 {
+		t.Errorf("another key: %v", other)
+	}
 
-	// Records someone wrote by hand do not get the mark.
-	put := func(email string, rec directoryRecord, r Recipient) {
+	// Records someone wrote by hand, who knows the record's name but not the key, do not get
+	// the mark: unsigned, signed with another key, tampered after signing, moved to another
+	// name, from a passkey user, or for another address.
+	put := func(email string, rec directoryRecord, r Recipient, sign DirectorySigner) {
 		t.Helper()
+		id := d.directoryID(email, r.Fingerprint)
+		if sign != nil {
+			rec.Sig = base64.StdEncoding.EncodeToString(sign.Sign(rec.message(id)))
+		}
 		b, _ := json.Marshal(rec)
-		if err := store.Save(ctx, directoryID(email, r.Fingerprint), b); err != nil {
+		if err := store.Save(ctx, id, b); err != nil {
 			t.Fatal(err)
 		}
 	}
-	k2, k3, k4, k5 := newRecovery(t), newRecovery(t), newRecovery(t), newRecovery(t)
-	put("ana@x.io", directoryRecord{V: 1, Key: k2.Text, Publisher: "google:9", Email: "ana@x.io"}, k2)                     // does not claim it
-	put("ana@x.io", directoryRecord{V: 1, Key: k3.Text, Publisher: "passkey:9", Email: "ana@x.io", Verified: true}, k3)    // a passkey session
-	put("ana@x.io", directoryRecord{V: 1, Key: k4.Text, Publisher: "google:9", Email: "mallory@x.io", Verified: true}, k4) // another address
-	// A record whose key is not the one its ID names is dropped, not trusted.
-	b, _ := json.Marshal(directoryRecord{V: 1, Key: k5.Text, Publisher: "google:9", Email: "ana@x.io", Verified: true})
-	if err := store.Save(ctx, directoryID("ana@x.io", "SHA256:other"), b); err != nil {
+	mk := func() (Recipient, directoryRecord) {
+		r := newRecovery(t)
+		return r, directoryRecord{V: 2, Key: r.Text, Publisher: "google:9", Provider: "google", Email: "ana@x.io", At: 1}
+	}
+	k2, r2 := mk()
+	put("ana@x.io", r2, k2, nil) // unsigned
+	k3, r3 := mk()
+	put("ana@x.io", r3, k3, testSigner(t, 7)) // another key
+	k4, r4 := mk()
+	put("ana@x.io", r4, k4, signer)
+	b, _ := store.Load(ctx, d.directoryID("ana@x.io", k4.Fingerprint))
+	tampered := strings.Replace(string(b.Data), "google:9", "google:1", 1)
+	if err := store.Save(ctx, d.directoryID("ana@x.io", k4.Fingerprint), []byte(tampered)); err != nil { // publisher changed after signing
 		t.Fatal(err)
 	}
-	if err := store.Save(ctx, directoryID("ana@x.io", "SHA256:junk"), []byte("not json")); err != nil {
+	k5, r5 := mk()
+	r5.Publisher, r5.Provider = "passkey:9", "passkey"
+	put("ana@x.io", r5, k5, signer) // a passkey session, even signed
+	k6, r6 := mk()
+	r6.Email = "mallory@x.io"
+	put("ana@x.io", r6, k6, signer) // signed for another address
+	// A record signed for one name and stored under another (copied from mallory's records).
+	k7, r7 := mk()
+	r7.Email = "ana@x.io"
+	other := d.directoryID("mallory@x.io", k7.Fingerprint)
+	r7.Sig = base64.StdEncoding.EncodeToString(signer.Sign(r7.message(other)))
+	b7, _ := json.Marshal(r7)
+	if err := store.Save(ctx, d.directoryID("ana@x.io", k7.Fingerprint), b7); err != nil {
+		t.Fatal(err)
+	}
+	// A record whose key is not the one its ID names is dropped, not trusted.
+	k8, r8 := mk()
+	b8, _ := json.Marshal(r8)
+	if err := store.Save(ctx, d.directoryID("ana@x.io", "SHA256:other"), b8); err != nil {
+		t.Fatal(err)
+	}
+	_ = k8
+	if err := store.Save(ctx, d.directoryID("ana@x.io", "SHA256:junk"), []byte("not json")); err != nil {
 		t.Fatal(err)
 	}
 	got, err = d.Lookup(ctx, "ana@x.io")
-	if err != nil || len(got) != 4 {
+	if err != nil || len(got) != 7 {
 		t.Fatalf("%v %v", got, err)
 	}
 	verified := map[string]bool{}
 	for _, k := range got {
 		verified[k.Fingerprint] = k.Verified
 	}
-	if !verified[key.Fingerprint] || verified[k2.Fingerprint] || verified[k3.Fingerprint] || verified[k4.Fingerprint] {
-		t.Errorf("only the published key is verified: %v", verified)
+	if !verified[key.Fingerprint] {
+		t.Error("the published key is verified")
+	}
+	for i, k := range []Recipient{k2, k3, k4, k5, k6, k7} {
+		if verified[k.Fingerprint] {
+			t.Errorf("forged record %d is verified", i+2)
+		}
 	}
 }
 
-func TestDirectoryIDIsPathSafe(t *testing.T) {
-	id := directoryID("A@x.io", "SHA256:ab+/cd")
-	if id != directoryID(" a@x.io", "SHA256:ab+/cd") {
+func TestDirectoryRecordNamesDoNotRevealAddresses(t *testing.T) {
+	d := &AdapterDirectory{Store: docstore.NewMemoryAdapter(), Signer: testSigner(t, 1)}
+	id := d.directoryID("A@x.io", "SHA256:ab+/cd")
+	if id != d.directoryID(" a@x.io", "SHA256:ab+/cd") {
 		t.Error("case and spaces do not change the ID")
 	}
-	if want := directoryPrefix + emailHash("a@x.io") + "/SHA256-ab-_cd"; id != want {
+	if want := directoryPrefix + d.emailHash("a@x.io") + "/SHA256-ab-_cd"; id != want {
 		t.Errorf("%q, want %q", id, want)
+	}
+	// Not the plain hash of the address, which anyone could compute from a guess; and another key
+	// names it differently.
+	plain := sha256.Sum256([]byte("a@x.io"))
+	if strings.Contains(id, hex.EncodeToString(plain[:])) {
+		t.Error("the name is a bare hash of the address")
+	}
+	if id == (&AdapterDirectory{Signer: testSigner(t, 2)}).directoryID("a@x.io", "SHA256:ab+/cd") {
+		t.Error("the name does not depend on the key")
+	}
+}
+
+func TestDirectoryKeepsAtMostMaxKeysPerAddress(t *testing.T) {
+	ctx := context.Background()
+	d := &AdapterDirectory{Store: docstore.NewMemoryAdapter(), Signer: testSigner(t, 1), MaxKeys: 2}
+	u := auth.User{ID: "google:1", Email: "ana@x.io"}
+	k1, k2 := newRecovery(t), newRecovery(t)
+	for _, k := range []Recipient{k1, k2, k1} { // publishing k1 again replaces it
+		if err := d.Publish(ctx, u, k); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := d.Publish(ctx, u, newRecovery(t)); !errors.Is(err, ErrTooManyKeys) {
+		t.Errorf("%v", err)
+	}
+	// Another address has its own room.
+	if err := d.Publish(ctx, auth.User{ID: "google:2", Email: "bo@x.io"}, newRecovery(t)); err != nil {
+		t.Error(err)
+	}
+}
+
+// countingStore counts how it is listed.
+type countingStore struct {
+	docstore.Adapter
+	lists, prefixLists int
+}
+
+func (c *countingStore) List(ctx context.Context) ([]docstore.Meta, error) {
+	c.lists++
+	return c.Adapter.List(ctx)
+}
+
+func (c *countingStore) ListPrefix(ctx context.Context, p string) ([]docstore.Meta, error) {
+	c.prefixLists++
+	return docstore.ListPrefix(ctx, c.Adapter, p)
+}
+
+func TestDirectoryLookupDoesNotListTheWholeStore(t *testing.T) {
+	ctx := context.Background()
+	cs := &countingStore{Adapter: docstore.NewMemoryAdapter()}
+	d := &AdapterDirectory{Store: cs, Signer: testSigner(t, 1)}
+	if err := d.Publish(ctx, auth.User{ID: "google:1", Email: "ana@x.io"}, newRecovery(t)); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := d.Lookup(ctx, "ana@x.io"); err != nil || len(got) != 1 {
+		t.Fatalf("%v %v", got, err)
+	}
+	if cs.lists != 0 || cs.prefixLists != 2 {
+		t.Errorf("lists=%d prefixLists=%d", cs.lists, cs.prefixLists)
 	}
 }
