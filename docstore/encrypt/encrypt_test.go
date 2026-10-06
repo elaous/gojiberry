@@ -7,7 +7,9 @@ import (
 	"crypto/rand"
 	"encoding/pem"
 	"errors"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"filippo.io/age"
@@ -108,14 +110,15 @@ func TestWrongKeyAndTamperedCiphertextAreRefused(t *testing.T) {
 	if d, err := New(inner, Static{Keys: []age.Identity{ana.id}}).Load(ctx, "d"); err == nil {
 		t.Fatalf("tampered ciphertext was read: %q", d.Data)
 	}
-	// A document stored in the clear is read unless encryption is required.
+	// A document stored in the clear is refused by default (a store writer cannot replace a
+	// ciphertext with plaintext), and read only with the explicit opt-out.
 	_ = inner.Save(ctx, "plain", []byte("not secret"))
 	a := New(inner, Static{Keys: []age.Identity{ana.id}})
-	if d, err := a.Load(ctx, "plain"); err != nil || string(d.Data) != "not secret" {
+	if _, err := a.Load(ctx, "plain"); !errors.Is(err, ErrNotEncrypted) {
 		t.Errorf("%v", err)
 	}
-	a.RequireEncrypted = true
-	if _, err := a.Load(ctx, "plain"); !errors.Is(err, ErrNotEncrypted) {
+	a.AllowPlaintext = true
+	if d, err := a.Load(ctx, "plain"); err != nil || string(d.Data) != "not secret" {
 		t.Errorf("%v", err)
 	}
 	if err := New(inner, Static{}).Save(ctx, "x", []byte("y")); !errors.Is(err, ErrNoRecipients) {
@@ -157,8 +160,9 @@ func TestSharingIsAnotherRecipientAndRevokingIsAReKey(t *testing.T) {
 		t.Fatalf("Ana still reads it: %v", err)
 	}
 	// What Bo already had still opens for him: nothing can take that back.
-	_ = inner.Save(ctx, "kept", oldCopy.Data)
-	if d, err := asBo.Load(ctx, "kept"); err != nil || string(d.Data) != "version 1" {
+	kept := docstore.NewMemoryAdapter()
+	_ = kept.Save(ctx, "d", oldCopy.Data)
+	if d, err := New(kept, Static{Keys: []age.Identity{bo.id}}).Load(ctx, "d"); err != nil || string(d.Data) != "version 1" {
 		t.Errorf("an old copy keeps working for who has it: %v", err)
 	}
 }
@@ -217,7 +221,6 @@ func TestTheSaverWorksOnAnEncryptedStore(t *testing.T) {
 	ana := newPerson(t, "ana")
 	inner := docstore.NewMemoryAdapter()
 	ad := New(inner, Static{To: []age.Recipient{ana.r.Key}, Keys: []age.Identity{ana.id}})
-	ad.RequireEncrypted = true
 	s := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: ad}}}
 	f, err := s.CreateFolder(ctx, "m", "", "Private")
 	if err != nil {
@@ -370,5 +373,207 @@ func TestSharingByKeyNeedsTheFingerprintAndRemovingIsAReKey(t *testing.T) {
 	recID, _ := ParseAgeIdentity(secret)
 	if d, err := New(inner, Static{Keys: []age.Identity{recID}}).Load(ctx, cur); err != nil || string(d.Data) != "newer" {
 		t.Errorf("%v", err)
+	}
+}
+
+func setup(t *testing.T) (*Adapter, *docstore.MemoryAdapter, person) {
+	t.Helper()
+	ana := newPerson(t, "ana")
+	inner := docstore.NewMemoryAdapter()
+	return New(inner, Static{To: []age.Recipient{ana.r.Key}, Keys: []age.Identity{ana.id}}), inner, ana
+}
+
+func TestACiphertextIsBoundToItsID(t *testing.T) {
+	ctx := context.Background()
+	a, inner, _ := setup(t)
+	_ = a.Save(ctx, "A", []byte("secret of A"))
+	_ = a.Save(ctx, "B", []byte("secret of B"))
+	rawA, _ := inner.Load(ctx, "A")
+	_ = inner.Save(ctx, "B", rawA.Data)
+	if d, err := a.Load(ctx, "B"); !errors.Is(err, ErrWrongDocument) {
+		t.Fatalf("A's ciphertext swapped into B: %q %v", d.Data, err)
+	}
+	if d, err := a.Load(ctx, "A"); err != nil || string(d.Data) != "secret of A" {
+		t.Fatal(err)
+	}
+}
+
+func TestEmptyPlaintextRoundTrips(t *testing.T) {
+	ctx := context.Background()
+	a, _, _ := setup(t)
+	if err := a.Save(ctx, "e", nil); err != nil {
+		t.Fatal(err)
+	}
+	if d, err := a.Load(ctx, "e"); err != nil || len(d.Data) != 0 {
+		t.Fatalf("%q %v", d.Data, err)
+	}
+}
+
+func TestTruncatedTrailingAndFlippedCiphertextAreRefused(t *testing.T) {
+	ctx := context.Background()
+	a, inner, _ := setup(t)
+	_ = a.Save(ctx, "d", bytes.Repeat([]byte("x"), 70000)) // more than one chunk
+	raw, _ := inner.Load(ctx, "d")
+	good := raw.Data
+	try := func(name string, b []byte) {
+		t.Helper()
+		_ = inner.Save(ctx, "d", b)
+		if d, err := a.Load(ctx, "d"); err == nil {
+			t.Errorf("%s was read (%d bytes)", name, len(d.Data))
+		}
+	}
+	try("empty", nil)
+	try("3 bytes", good[:3])
+	try("header only", good[:len(header)])
+	try("one chunk cut", good[:len(good)-65536-16])
+	try("last byte cut", good[:len(good)-1])
+	try("trailing bytes", append(append([]byte(nil), good...), 'x'))
+	// A flip in the header (the stanza or its MAC).
+	for _, off := range []int{len(header) + 2, len(header) + 40, bytes.Index(good, []byte("\n--- ")) + 8} {
+		b := append([]byte(nil), good...)
+		b[off] ^= 1
+		try("header flip", b)
+	}
+	_ = inner.Save(ctx, "d", good)
+	if _, err := a.Load(ctx, "d"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCustomSkip(t *testing.T) {
+	ctx := context.Background()
+	a, inner, _ := setup(t)
+	a.Skip = func(id string) bool { return strings.HasPrefix(id, "open/") }
+	_ = a.Save(ctx, "open/x", []byte("readable"))
+	_ = a.Save(ctx, "closed", []byte("hidden"))
+	if r, _ := inner.Load(ctx, "open/x"); string(r.Data) != "readable" {
+		t.Error("skipped id is stored as is")
+	}
+	if r, _ := inner.Load(ctx, "closed"); !IsEncrypted(r.Data) {
+		t.Error("the rest is encrypted")
+	}
+	// With a custom Skip, the catalog is not skipped, and writing it encrypted is refused.
+	if err := a.Save(ctx, "catalog:index", []byte("{}")); !errors.Is(err, ErrReservedID) {
+		t.Errorf("%v", err)
+	}
+}
+
+func TestReservedIDsAreNotEncrypted(t *testing.T) {
+	ctx := context.Background()
+	a, _, _ := setup(t)
+	a.Skip = func(string) bool { return false }
+	for _, id := range []string{"catalog:x", "acl:x", "fonts/x"} {
+		if err := a.Save(ctx, id, nil); !errors.Is(err, ErrReservedID) {
+			t.Errorf("%s: %v", id, err)
+		}
+		if err := a.SaveIf(ctx, id, nil, ""); !errors.Is(err, ErrReservedID) {
+			t.Errorf("%s: %v", id, err)
+		}
+	}
+}
+
+func TestSaveIfOnAnEncryptedID(t *testing.T) {
+	ctx := context.Background()
+	a, inner, _ := setup(t)
+	if err := a.SaveIf(ctx, "d", []byte("one"), ""); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := a.SaveIf(ctx, "d", []byte("again"), ""); !errors.Is(err, docstore.ErrConflict) {
+		t.Fatalf("create over an existing one: %v", err)
+	}
+	if err := a.SaveIf(ctx, "d", []byte("two"), docstore.Digest([]byte("one"))); err != nil {
+		t.Fatalf("digest of the plaintext read: %v", err)
+	}
+	if err := a.SaveIf(ctx, "d", []byte("three"), docstore.Digest([]byte("one"))); !errors.Is(err, docstore.ErrConflict) {
+		t.Fatalf("stale digest: %v", err)
+	}
+	if d, _ := a.Load(ctx, "d"); string(d.Data) != "two" {
+		t.Fatalf("%q", d.Data)
+	}
+	if err := a.SaveIf(ctx, "gone", []byte("x"), docstore.Digest([]byte("x"))); !errors.Is(err, docstore.ErrConflict) {
+		t.Fatalf("%v", err)
+	}
+	// Not conditional inside: it says so.
+	plainStore := New(unconditional{inner}, Static{})
+	if err := plainStore.SaveIf(ctx, "d", nil, ""); !errors.Is(err, docstore.ErrConditionalUnsupported) {
+		t.Fatalf("%v", err)
+	}
+}
+
+// unconditional hides the inner adapter's SaveIf.
+type unconditional struct{ docstore.Adapter }
+
+func TestRekeyAllContinuesAndDoesNotHalfRekeyADocument(t *testing.T) {
+	ctx := context.Background()
+	ana, bo := newPerson(t, "ana"), newPerson(t, "bo")
+	inner := docstore.NewMemoryAdapter()
+	ring := &mutable{to: []age.Recipient{ana.r.Key}, keys: []age.Identity{ana.id}}
+	a := New(inner, ring)
+	const d1, d2, d3 = "doc1", "doc2", "doc3"
+	for _, id := range []string{d1 + "~a.json", d1 + "~b.json", d2 + "~a.json", d3 + "~a.json"} {
+		_ = a.Save(ctx, id, []byte(id))
+	}
+	// doc1's second file is damaged; doc3's is stored in the clear.
+	_ = inner.Save(ctx, d1+"~b.json", []byte("junk"))
+	_ = inner.Save(ctx, d3+"~a.json", []byte("clear"))
+	before, _ := inner.Load(ctx, d1+"~a.json")
+	ring.to = []age.Recipient{ana.r.Key, bo.r.Key}
+	n, err := a.RekeyAll(ctx)
+	if err == nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	for _, id := range []string{d1 + "~b.json", d3 + "~a.json"} {
+		if !strings.Contains(err.Error(), id) {
+			t.Errorf("error does not name %s: %v", id, err)
+		}
+	}
+	after, _ := inner.Load(ctx, d1+"~a.json")
+	if !bytes.Equal(before.Data, after.Data) {
+		t.Error("doc1 was half re-keyed")
+	}
+	asBo := New(inner, Static{Keys: []age.Identity{bo.id}})
+	if _, err := asBo.Load(ctx, d2+"~a.json"); err != nil {
+		t.Errorf("doc2 went on: %v", err)
+	}
+	// The clear store is migrated with the opt-out.
+	a.AllowPlaintext = true
+	if n, err := a.RekeyIDs(ctx, []string{d3 + "~a.json"}); err != nil || n != 1 {
+		t.Fatalf("%d %v", n, err)
+	}
+	if d, err := asBo.Load(ctx, d3+"~a.json"); err != nil || string(d.Data) != "clear" {
+		t.Fatalf("migrated: %v", err)
+	}
+}
+
+func TestConcurrentSaveAndRekeyLoseNothing(t *testing.T) {
+	ctx := context.Background()
+	ana, bo := newPerson(t, "ana"), newPerson(t, "bo")
+	inner := docstore.NewMemoryAdapter()
+	a := New(inner, Static{To: []age.Recipient{ana.r.Key, bo.r.Key}, Keys: []age.Identity{ana.id}})
+	_ = a.Save(ctx, "d", []byte("0"))
+	var wg sync.WaitGroup
+	wg.Add(2)
+	last := 0
+	go func() {
+		defer wg.Done()
+		for i := 1; i <= 30; i++ {
+			if err := a.Save(ctx, "d", []byte(strconv.Itoa(i))); err != nil {
+				t.Error(err)
+			}
+			last = i
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 30 {
+			if err := a.Rekey(ctx, "d"); err != nil && !errors.Is(err, docstore.ErrConflict) {
+				t.Error(err)
+			}
+		}
+	}()
+	wg.Wait()
+	d, err := a.Load(ctx, "d")
+	if err != nil || string(d.Data) != strconv.Itoa(last) {
+		t.Fatalf("the last save won: %q %v", d.Data, err)
 	}
 }
