@@ -96,7 +96,9 @@ func newPage() (*page, error) {
 	}
 	p.store = docstore.NewMemoryAdapter()
 	p.ring = &encrypt.StoreKeyring{Store: p.store, OwnerSigners: []ed25519.PublicKey{signer.Public()}}
-	p.sharing = &encrypt.Sharing{Store: p.store, Adapter: encrypt.New(p.store, p.ring), Signer: signer}
+	adapter := encrypt.New(p.store, p.ring)
+	adapter.Signer = signer // frames are signed with the owner's key: a public key alone cannot forge one
+	p.sharing = &encrypt.Sharing{Store: p.store, Adapter: adapter, Signer: signer}
 	return p, nil
 }
 

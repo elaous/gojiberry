@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -28,17 +29,26 @@ import (
 // the document is encrypted to, so it is never trusted unsigned: StoreKeyring.Recipients
 // verifies it against the owners' signing keys and fails closed. A person who can only
 // write the store cannot add themselves as a recipient, or change the list, without
-// being refused. What the signature does not stop is in docs/encryption-and-passkeys.md
-// C.5: a store writer can still delete a record, or put back an older validly signed one
-// (a replay), which no signature check can tell from the current one. The defences against a
-// replay are the optional SeqFloor (a record older than the highest seen is refused) and the
-// saver's re-assertion of a confidential document's level on each save (saver.Saver.Rekey).
+// being refused. What the signature does not stop (C.5): a store writer can still delete a
+// record, or put back an older validly signed one (a replay), which no signature check can
+// tell from the current one. Three layers answer that, none needing the client to remember
+// anything except the last:
+//
+//   - the frame inside every encrypted file carries the level and the record's seq (Binding),
+//     so Save, Load and the re-keys cross-check the file with the record and report
+//     ErrDowngrade for a record that is missing or older than the file was sealed under;
+//   - the owner-signed index (IndexKey, Sharing.VerifyIndex) lists the end-to-end documents,
+//     so a deleted or replaced record is found even for a document never opened here;
+//   - the optional SeqFloor (MemorySeqFloor, FileSeqFloor, StorageSeqFloor) refuses a record
+//     older than the highest seen on this client, and the saver re-asserts a confidential
+//     document's level on each save (saver.Saver.Rekey).
 const KeysPrefix = "keys:"
 
 // ErrStaleRecord is returned when a document's record is older than the highest sequence
 // number the SeqFloor has seen for it (an older signed record was put back), or is missing
 // where one was seen. It is not used, because it decides who a document is encrypted to and
-// at what level.
+// at what level. ErrDowngrade is the same finding made from the files themselves, with no
+// client state.
 var ErrStaleRecord = errors.New("encrypt: the recipient list is older than one already seen (a replayed record)")
 
 // SeqFloor remembers, per document, the highest record sequence number seen, so that an older
@@ -185,8 +195,43 @@ type sharedRecord struct {
 	// document's files must be wrapped for people's keys only. The catalog and the document
 	// say it too, but the keyring reads this one, which a store writer cannot forge (it can
 	// still put back an older signed record: see SeqFloor and C.5).
-	Protection string        `json:"protection,omitempty"`
-	Recipients []sharedEntry `json:"recipients"`
+	Protection string `json:"protection,omitempty"`
+	// Signed says every stored file of the document was last written, or re-keyed, with a signed
+	// frame (v3): set when a re-key that a signing adapter ran finished (pending cleared). From
+	// then on an unsigned frame in the document is ErrForgedFrame, whatever it claims, and
+	// whoever saves it must sign (ErrNoFrameSigner). A document whose record does not say it
+	// still accepts older unsigned frames, with a warning, until Sharing.Repair upgrades it.
+	Signed bool `json:"signed,omitempty"`
+	// PendingSince is when Pending was set (Unix seconds), so a re-key that never finished can be
+	// told from one in progress (Sharing.PendingStatus).
+	PendingSince int64         `json:"pendingSince,omitempty"`
+	Recipients   []sharedEntry `json:"recipients"`
+}
+
+// binding is the Binding the record gives its document's files: level, seq, pending, and a
+// hash of the recipient list (the type and key of each entry, sorted: the entries' own order
+// and labels do not matter). exists says the record was found.
+func (r sharedRecord) binding(exists bool) Binding {
+	b := Binding{Exists: exists, Seq: r.Seq, Pending: r.Pending, Signed: r.Signed}
+	if r.Protection == ProtectionE2EE {
+		b.Level = ProtectionE2EE
+	}
+	if !exists {
+		return Binding{}
+	}
+	lines := make([]string, 0, len(r.Recipients))
+	for _, e := range r.Recipients {
+		lines = append(lines, e.Type+" "+e.Key)
+	}
+	sort.Strings(lines)
+	h := sha256.New()
+	h.Write([]byte("gojiberry/frame-recipients/v1\n"))
+	for _, l := range lines {
+		h.Write([]byte(l))
+		h.Write([]byte{'\n'})
+	}
+	copy(b.Hash[:], h.Sum(nil))
+	return b
 }
 
 // signedRecord is what is stored under keys:<ID>.
@@ -268,7 +313,7 @@ func loadRecord(ctx context.Context, store docstore.Adapter, docID string, owner
 	d, err := store.Load(ctx, KeysPrefix+docID)
 	if errors.Is(err, docstore.ErrNotFound) {
 		if floor != nil {
-			if f, ferr := floor.Get(ctx, docID); ferr != nil {
+			if f, ferr := floorGet(ctx, floor, docID); ferr != nil {
 				return sharedRecord{}, "", ferr
 			} else if f > 0 {
 				return sharedRecord{}, "", fmt.Errorf("%s: %w", docID, ErrStaleRecord)
@@ -284,14 +329,14 @@ func loadRecord(ctx context.Context, store docstore.Adapter, docID string, owner
 		return rec, docstore.Digest(d.Data), err
 	}
 	if floor != nil {
-		f, ferr := floor.Get(ctx, docID)
+		f, ferr := floorGet(ctx, floor, docID)
 		if ferr != nil {
 			return sharedRecord{}, "", ferr
 		}
 		if rec.Seq < f {
 			return sharedRecord{}, docstore.Digest(d.Data), fmt.Errorf("%s: %w", docID, ErrStaleRecord)
 		}
-		if ferr := floor.Raise(ctx, docID, rec.Seq); ferr != nil {
+		if ferr := floorRaise(ctx, floor, docID, rec.Seq); ferr != nil {
 			return sharedRecord{}, "", ferr
 		}
 	}
@@ -318,23 +363,43 @@ type StoreKeyring struct {
 // Recipients implements Keyring. A record that is missing its signature, or has a wrong
 // one, is an error, never a shorter or longer list.
 func (k StoreKeyring) Recipients(ctx context.Context, id string) ([]age.Recipient, error) {
+	rs, _, err := k.Bind(ctx, id)
+	return rs, err
+}
+
+// Bind implements Binder: the recipients (the owners' keys and the signed list's) and the
+// record's Binding, from one read.
+func (k StoreKeyring) Bind(ctx context.Context, id string) ([]age.Recipient, Binding, error) {
 	out := append([]age.Recipient(nil), k.Owners...)
 	doc := DocID(id)
 	if doc == "" {
-		return out, nil
+		return out, Binding{}, nil
 	}
-	rec, _, err := loadRecord(ctx, k.Store, doc, k.OwnerSigners, k.SeqFloor)
+	rec, digest, err := loadRecord(ctx, k.Store, doc, k.OwnerSigners, k.SeqFloor)
 	if err != nil {
-		return nil, err
+		return nil, Binding{}, err
 	}
 	for _, e := range rec.Recipients {
 		r, err := parseShared(e)
 		if err != nil {
-			return nil, fmt.Errorf("encrypt: a recipient of %s cannot be read: %w", doc, err)
+			return nil, Binding{}, fmt.Errorf("encrypt: a recipient of %s cannot be read: %w", doc, err)
 		}
 		out = append(out, r.Key)
 	}
-	return out, nil
+	return out, rec.binding(digest != ""), nil
+}
+
+// Binding implements Binder.
+func (k StoreKeyring) Binding(ctx context.Context, id string) (Binding, error) {
+	doc := DocID(id)
+	if doc == "" {
+		return Binding{}, nil
+	}
+	rec, digest, err := loadRecord(ctx, k.Store, doc, k.OwnerSigners, k.SeqFloor)
+	if err != nil {
+		return Binding{}, err
+	}
+	return rec.binding(digest != ""), nil
 }
 
 // Identities implements Keyring.
@@ -349,9 +414,13 @@ func (k StoreKeyring) Identities(context.Context, string) ([]age.Identity, error
 // docstore.ConditionalAdapter (SaveIf) a change made by someone else in between is noticed
 // and the change is made again; on a Store without it, two changes to one document's list at
 // the same moment can lose one of them, so serialize them (one owner client, or a Store
-// Lock) there. A custom Adapter.Skip must keep the "keys:" prefix (KeysPrefix) readable, as
-// DefaultSkip does: the records are plain signed lists, and encrypting them would make the
-// keyring unable to read them.
+// Lock) there. A custom Adapter.Skip must keep the "keys:" prefix (KeysPrefix, which includes
+// IndexKey) readable, as DefaultSkip does: the records are plain signed lists, and encrypting
+// them would make the keyring unable to read them.
+//
+// The Adapter must be the encrypting adapter over Store: a change to a list first checks the
+// record against the document's stored files (ErrDowngrade) so it never signs over a replayed
+// or deleted record, and re-keys through it.
 type Sharing struct {
 	Store        docstore.Adapter
 	Adapter      *Adapter
@@ -360,6 +429,45 @@ type Sharing struct {
 	// SeqFloor, when set, refuses a record older than the highest seen (ErrStaleRecord) and
 	// is raised by every record this Sharing writes. Share the one of the StoreKeyring.
 	SeqFloor SeqFloor
+	// PendingWarnAfter is how long a pending re-key may last before PendingStatus calls it
+	// stuck; 0 is DefaultPendingWarnAfter.
+	PendingWarnAfter time.Duration
+
+	now func() time.Time // tests
+	// afterRead, when set, is called by mutate between reading the record and checking the
+	// files against it (tests).
+	afterRead func()
+	// beforeFlip, when set, is called by finishFiles after the files were re-keyed and before the
+	// record is changed to say they are signed (tests).
+	beforeFlip func()
+}
+
+// RepairOption changes what Repair and Recover accept.
+type RepairOption func(*repairOpts)
+
+type repairOpts struct{ acceptUnsigned bool }
+
+// AcceptUnsigned is the owner's confirmation that a file of the document whose frame is not
+// signed (v1, v2) is theirs, so that Repair (or Recover) seals it again with a signed frame
+// even though the record says every file is signed (or the Adapter has RequireSigned): the
+// state a client without the owner's signing key, or a build that wrote unsigned frames, leaves
+// behind once the record has been marked signed, where Save, Load and every re-key otherwise
+// refuse the file as forged (ErrForgedFrame). Without the option these refuse, naming the file.
+//
+// It launders nothing that carries a signature: a v3 frame whose signature is not an owner's, or
+// that does not match its content, is a forgery and is refused (ErrForgedFrame) with or without
+// it. It cannot tell an unsigned file the owner's own client wrote from one minted by someone
+// who knows a recipient's public key (an unsigned frame carries no proof): confirm that the
+// file is yours (its content, with Load through an Adapter that has no RequireSigned, if need
+// be) before using it. It needs the Adapter's Signer (ErrNoFrameSigner otherwise).
+func AcceptUnsigned() RepairOption { return func(o *repairOpts) { o.acceptUnsigned = true } }
+
+func repairOptions(opts []RepairOption) repairOpts {
+	var o repairOpts
+	for _, f := range opts {
+		f(&o)
+	}
+	return o
 }
 
 func (s *Sharing) verifiers() []ed25519.PublicKey {
@@ -373,23 +481,74 @@ func (s *Sharing) verifiers() []ed25519.PublicKey {
 // mutateAttempts is how many times a change to a list is redone when it was changed meanwhile.
 const mutateAttempts = 5
 
+// mutateOpts changes how mutate reads and numbers a record.
+type mutateOpts struct {
+	// recover is Recover's: the record is read without the floor and without the check against
+	// the files' frames (it may be the replayed or missing one being replaced), and the new seq
+	// is above minSeq.
+	recover bool
+	minSeq  uint64
+}
+
 // mutate reads and verifies the list, lets fn change it, and writes it back signed, only if it
 // is still what was read (on a store that writes conditionally). It returns the list as it is
 // after fn, whether or not fn changed it.
+//
+// Before anything is written the record is cross-checked with what the document's newest
+// stored file says it was sealed under (Adapter.checkDocument): a record that is missing, or
+// older than that file, is ErrDowngrade, never signed over (signing the replayed record again
+// would make the replay the truth). Sharing.Recover is the way past it.
 func (s *Sharing) mutate(ctx context.Context, docID string, fn func(*sharedRecord) (changed bool, err error)) (sharedRecord, error) {
+	return s.mutateWith(ctx, docID, mutateOpts{}, fn)
+}
+
+func (s *Sharing) mutateWith(ctx context.Context, docID string, o mutateOpts, fn func(*sharedRecord) (changed bool, err error)) (sharedRecord, error) {
 	if s.Signer == nil {
 		return sharedRecord{}, ErrNoSigner
 	}
+	floor := s.SeqFloor
+	if o.recover {
+		floor = nil
+	}
+	raced := false
 	for range mutateAttempts {
-		rec, digest, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
+		rec, digest, err := loadRecord(ctx, s.Store, docID, s.verifiers(), floor)
 		if err != nil {
 			return rec, err
 		}
+		before := rec.binding(digest != "") // fn changes rec: the check is of the record as read
 		changed, err := fn(&rec)
 		if err != nil || !changed {
 			return rec, err
 		}
+		if s.afterRead != nil {
+			s.afterRead()
+		}
+		if !o.recover && s.Adapter != nil {
+			if err := s.Adapter.checkDocumentByID(ctx, docID, before); err != nil {
+				if !raced && errors.Is(err, ErrDowngrade) && !errors.Is(err, ErrForgedFrame) {
+					// A client that completed a switch between the read of the record and the
+					// files leaves files sealed under a newer record: read the record again
+					// once. A record really missing or replaced is the same the second time.
+					raced = true
+					continue
+				}
+				return rec, err
+			}
+		}
 		rec.V, rec.Doc = 1, docID
+		switch {
+		case !rec.Pending:
+			rec.PendingSince = 0
+		case !before.Pending || rec.PendingSince == 0:
+			rec.PendingSince = s.clock().Unix()
+		}
+		if rec.Seq < o.minSeq {
+			rec.Seq = o.minSeq
+		}
+		if rec.Seq == math.MaxUint64 {
+			return rec, errors.New("encrypt: the record's sequence number cannot go higher: a file claims the highest one possible")
+		}
 		rec.Seq++
 		payload, err := json.Marshal(rec)
 		if err != nil {
@@ -408,7 +567,7 @@ func (s *Sharing) mutate(ctx context.Context, docID string, fn func(*sharedRecor
 			err = s.Store.Save(ctx, KeysPrefix+docID, data)
 		}
 		if err == nil && s.SeqFloor != nil {
-			err = s.SeqFloor.Raise(ctx, docID, rec.Seq)
+			err = floorRaise(ctx, s.SeqFloor, docID, rec.Seq)
 		}
 		return rec, err
 	}
@@ -443,10 +602,108 @@ func (s *Sharing) List(ctx context.Context, docID string) ([]Shared, error) {
 
 // Pending says whether a change to the list was saved whose re-key did not finish, so some
 // files of the document may still be encrypted to the old list. Repair (or Remove or Add
-// again) finishes it.
+// again) finishes it. While it is set Load does not apply the strict rule that a file wrapped
+// below the document's level is a downgrade (the stale files are the ones the re-key has not
+// reached), so a flag that stays set weakens that check for the document: PendingStatus says
+// for how long, and the saver's Verify reports it (saver.VerifyReport.Pending).
 func (s *Sharing) Pending(ctx context.Context, docID string) (bool, error) {
 	rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
 	return rec.Pending, err
+}
+
+// DefaultPendingWarnAfter is how long a re-key may be in flight before PendingStatus calls it
+// stuck.
+const DefaultPendingWarnAfter = 30 * time.Minute
+
+// PendingStatus is Pending with the time it was set.
+type PendingStatus struct {
+	Pending bool
+	// Since is when the record was marked pending (zero if it did not say).
+	Since time.Time
+	// Stuck says it has been pending for longer than Sharing.PendingWarnAfter (30 minutes if
+	// unset), or for an unknown time: a re-key that was cut short and never repaired. Run Repair.
+	Stuck bool
+}
+
+func (s *Sharing) clock() time.Time {
+	if s.now != nil {
+		return s.now()
+	}
+	return time.Now()
+}
+
+func (s *Sharing) pendingStatus(rec sharedRecord) PendingStatus {
+	st := PendingStatus{Pending: rec.Pending}
+	if !rec.Pending {
+		return st
+	}
+	warn := s.PendingWarnAfter
+	if warn <= 0 {
+		warn = DefaultPendingWarnAfter
+	}
+	if rec.PendingSince > 0 {
+		st.Since = time.Unix(rec.PendingSince, 0)
+	}
+	st.Stuck = st.Since.IsZero() || s.clock().Sub(st.Since) > warn
+	return st
+}
+
+// PendingStatus reads the record and says whether, and for how long, a re-key is pending.
+func (s *Sharing) PendingStatus(ctx context.Context, docID string) (PendingStatus, error) {
+	rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
+	if err != nil {
+		return PendingStatus{}, err
+	}
+	return s.pendingStatus(rec), nil
+}
+
+// PendingDoc is a document whose re-key is pending, as PendingDocs lists it.
+type PendingDoc struct {
+	Doc string
+	PendingStatus
+}
+
+// PendingDocs lists the documents (sorted by ID) whose record is pending, with how long: the
+// ones a Repair would finish. A record that does not verify is skipped and reported in the
+// error, joined, beside the documents found.
+func (s *Sharing) PendingDocs(ctx context.Context) ([]PendingDoc, error) {
+	metas, err := s.Store.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []PendingDoc
+	var errs []error
+	for _, m := range metas {
+		doc, ok := strings.CutPrefix(m.ID, KeysPrefix)
+		if !ok || m.ID == IndexKey || !docfile.ValidID(doc) {
+			continue
+		}
+		rec, _, err := loadRecord(ctx, s.Store, doc, s.verifiers(), s.SeqFloor)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if rec.Pending {
+			out = append(out, PendingDoc{Doc: doc, PendingStatus: s.pendingStatus(rec)})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Doc < out[j].Doc })
+	return out, errors.Join(errs...)
+}
+
+// PendingHook returns the function to set as saver.Saver.PendingCheck: the documents whose
+// re-key is pending, and, among them, the ones pending for too long (PendingStatus.Stuck).
+func PendingHook(sharing *Sharing) func(ctx context.Context, target string) (pending, stuck []string, err error) {
+	return func(ctx context.Context, _ string) (pending, stuck []string, err error) {
+		docs, err := sharing.PendingDocs(ctx)
+		for _, d := range docs {
+			pending = append(pending, d.Doc)
+			if d.Stuck {
+				stuck = append(stuck, d.Doc)
+			}
+		}
+		return pending, stuck, err
+	}
 }
 
 // finishAttempts is how many times finish re-keys a document whose list changed while it
@@ -461,13 +718,23 @@ const finishAttempts = 5
 // unchanged): a Remove or Add that saved a newer list meanwhile set it pending for files this
 // pass may have sealed to the old one, so the document is re-keyed again.
 func (s *Sharing) finish(ctx context.Context, docID string) (int, error) {
-	n, _, _, err := s.finishFiles(ctx, docID)
+	n, _, _, err := s.finishFiles(ctx, docID, repairOpts{})
 	return n, err
 }
 
 // finishFiles is finish that also says, when a pass failed, which files were left encrypted to
 // their old recipients (stale) and which of them could not be opened (unreadable).
-func (s *Sharing) finishFiles(ctx context.Context, docID string) (n int, stale, unreadable []string, err error) {
+//
+// A client without the Signer that read the record before it said Signed can save an unsigned
+// file at any moment up to the change of the record (Saves do not change the record, so the change
+// cannot be made conditional on them). So just before the record is changed to say Signed every
+// file is looked at again: one that is not signed is sealed again (another pass) first. The
+// window left is the few steps between that look and the write of the record; a file saved in it
+// is what Repair with AcceptUnsigned recovers.
+func (s *Sharing) finishFiles(ctx context.Context, docID string, ro repairOpts) (n int, stale, unreadable []string, err error) {
+	if ro.acceptUnsigned && (s.Adapter == nil || s.Adapter.Signer == nil) {
+		return 0, nil, nil, fmt.Errorf("%w: %s: AcceptUnsigned seals files again with the owner's signature", ErrNoFrameSigner, docID)
+	}
 	for range finishAttempts {
 		rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
 		if err != nil {
@@ -475,20 +742,40 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string) (n int, stale, 
 		}
 		seq := rec.Seq
 		var done []string
-		done, stale, unreadable, err = s.Adapter.RekeyDocumentReport(ctx, docID)
+		done, stale, unreadable, err = s.Adapter.rekeyDocumentReport(ctx, docID, rekeyOpts{acceptUnsigned: ro.acceptUnsigned})
 		if n = len(done); err != nil {
 			return n, stale, unreadable, err
 		}
 		again := false
+		// A re-key by an adapter that signs leaves every file with a signed frame: the record
+		// then says so (Signed), which is what makes an unsigned frame in the document forged.
+		signs := s.Adapter != nil && s.Adapter.Signer != nil
+		if s.beforeFlip != nil {
+			s.beforeFlip()
+		}
 		if _, err = s.mutate(ctx, docID, func(rec *sharedRecord) (bool, error) {
-			if !rec.Pending {
+			if !rec.Pending && (rec.Signed || !signs) {
 				return false, nil
 			}
 			if rec.Seq != seq {
 				again = true
 				return false, nil
 			}
+			if signs && !rec.Signed {
+				// Last look, as close to the write as it can be: an unsigned file that a
+				// client without the Signer saved since the re-key would be forged from the
+				// flip on. Seal it again (another pass) before saying every file is signed.
+				unsigned, err := s.Adapter.unsignedFiles(ctx, docID)
+				if err != nil {
+					return false, err
+				}
+				if len(unsigned) > 0 {
+					again = true
+					return false, nil
+				}
+			}
 			rec.Pending = false
+			rec.Signed = rec.Signed || signs
 			return true, nil
 		}); err != nil {
 			return n, nil, nil, err
@@ -576,14 +863,19 @@ func (s *Sharing) Remove(ctx context.Context, docID, fingerprint string) (int, e
 
 // Repair encrypts every file of a document again to its current list and clears a pending
 // mark: the way to finish a share or removal that was cut short, whichever key it was for.
-func (s *Sharing) Repair(ctx context.Context, docID string) (int, error) {
+//
+// A file whose frame is not signed in a document whose record says every file is signed is
+// ErrForgedFrame (naming the file) and nothing is written, unless the owner confirms with the
+// AcceptUnsigned option; see there for what that does and does not accept.
+func (s *Sharing) Repair(ctx context.Context, docID string, opts ...RepairOption) (int, error) {
 	if !docfile.ValidID(docID) {
 		return 0, errors.New("encrypt: not a document ID")
 	}
 	if _, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor); err != nil {
 		return 0, err
 	}
-	return s.finish(ctx, docID)
+	n, _, _, err := s.finishFiles(ctx, docID, repairOptions(opts))
+	return n, err
 }
 
 // Usage lists the documents (their IDs, sorted) that removing a key changes: the ones it is a
@@ -600,7 +892,7 @@ func (s *Sharing) Usage(ctx context.Context, fingerprint string) ([]string, erro
 	var errs []error
 	for _, m := range metas {
 		doc, ok := strings.CutPrefix(m.ID, KeysPrefix)
-		if !ok {
+		if !ok || m.ID == IndexKey {
 			continue
 		}
 		rec, _, err := loadRecord(ctx, s.Store, doc, s.verifiers(), s.SeqFloor)
