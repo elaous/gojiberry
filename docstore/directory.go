@@ -24,6 +24,11 @@ const DirectoryPrefix = "directory/"
 // DirectoryService.Log): written only by the directory, reserved from /docs like DirectoryPrefix.
 const DirectoryLogPrefix = "directory-log/"
 
+// DirectoryEnrollPrefix is the keyspace of the owner enrollments (see DirectoryService.Enroll):
+// one record per address that has enrolled an owner signing key. Written only by the directory,
+// reserved from /docs like DirectoryPrefix, exempt from expiry and from encryption.
+const DirectoryEnrollPrefix = "directory-enroll/"
+
 // Errors a DirectoryService returns, so the routes can say what went wrong.
 var (
 	// ErrDirectoryRefused: the user may not publish (no verified e-mail, a passkey session, too
@@ -44,6 +49,26 @@ var (
 	ErrDirectoryNotFound = errors.New("docstore: no such published key")
 	// ErrDirectoryRevoked: the key was revoked and may not be published again yet. Answered 409.
 	ErrDirectoryRevoked = errors.New("docstore: this key was revoked and cannot be published again yet")
+	// ErrDirectoryBadAddress: the e-mail address is not a single local part and domain (exactly
+	// one "@"). Answered 400.
+	ErrDirectoryBadAddress = errors.New("docstore: not an e-mail address")
+	// ErrDirectoryOwnerRequired: the address has an enrolled owner key and the request carries no
+	// owner signature. Answered 428.
+	ErrDirectoryOwnerRequired = errors.New("docstore: the owner of this address requires an owner signature")
+	// ErrDirectoryBadOwnerSig: the owner signature does not verify, is stale, or names a log
+	// position that does not exist. Answered 403.
+	ErrDirectoryBadOwnerSig = errors.New("docstore: the owner signature is not valid")
+	// ErrDirectoryEnrolled: the address has an owner key already (rotate it, or reset it with the
+	// waiting period). Answered 409.
+	ErrDirectoryEnrolled = errors.New("docstore: this address already has an owner key")
+	// ErrDirectoryNotEnrolled: the address has no owner key. Answered 409.
+	ErrDirectoryNotEnrolled = errors.New("docstore: this address has no owner key")
+	// ErrDirectoryResetWait: a reset of the owner key was requested and its waiting period is not
+	// over, or none was requested. Answered 409.
+	ErrDirectoryResetWait = errors.New("docstore: the owner key reset is not due")
+	// ErrDirectoryBusy: the log is too busy to take the entry now; try again. Answered 503 with
+	// Retry-After.
+	ErrDirectoryBusy = errors.New("docstore: the directory log is busy")
 )
 
 // DirectoryKey is a key found in the directory, as the lookup route answers it.
@@ -63,6 +88,15 @@ type DirectoryKey struct {
 	// trusting the server's word.
 	Attested    bool                  `json:"attested"`
 	Attestation *DirectoryAttestation `json:"attestation,omitempty"`
+	// OwnerEnrolled: the address has an owner key (see DirectoryService.Enroll). OwnerSigned:
+	// Verified, and the owner signed this publication (the strongest mark, the only one that
+	// holds against the server itself); Owner is the evidence a client checks without trusting
+	// the server's word (VerifyOwnerEvidence). OwnerResetPending: a reset of the owner key was
+	// requested and has not completed (the waiting period is running).
+	OwnerEnrolled     bool                    `json:"owner_enrolled,omitempty"`
+	OwnerSigned       bool                    `json:"owner_signed,omitempty"`
+	OwnerResetPending bool                    `json:"owner_reset_pending,omitempty"`
+	Owner             *DirectoryOwnerEvidence `json:"owner,omitempty"`
 	// Seq is the number of the log entry of the publication (0: none), Kid the ID of the server
 	// key that signed the record.
 	Seq int64  `json:"seq,omitempty"`
@@ -96,13 +130,119 @@ type DirectoryChallenge struct {
 	Expires   int64  `json:"expires"` // Unix seconds
 }
 
-// DirectoryPublish is a publish request.
+// DirectoryOwnerSig is an owner's signature of one operation: the owner key's Ed25519 signature
+// (base64) over "directory-op|<op>|<address>|<fingerprint>|<Time>|<Prev>", Time in Unix seconds
+// (close to now) and Prev the log position the owner last saw ("<seq>:<entry hash>", from
+// GET /directory/log/head; "0:" + 64 zeros for an empty log). encrypt.OwnerOpMessage builds the
+// text.
+type DirectoryOwnerSig struct {
+	Time int64  `json:"time"`
+	Prev string `json:"prev"`
+	Sig  string `json:"sig"`
+}
+
+// DirectoryOwnerEvidence is what a lookup row carries so a client can check an owner signature
+// itself: the owner's public key (base64 of the 32 raw bytes) and the signature of the
+// publication, which names the operation ("publish") and the fingerprint through the row.
+type DirectoryOwnerEvidence struct {
+	Pub  string `json:"pub"`
+	Time int64  `json:"time"`
+	Prev string `json:"prev"`
+	Sig  string `json:"sig"`
+}
+
+// DirectoryPublish is a publish request. Owner is required when the address has an enrolled owner
+// key.
 type DirectoryPublish struct {
 	Key         string                `json:"key"`
 	Label       string                `json:"label"`
 	Email       string                `json:"email"`
 	Proof       *DirectoryProof       `json:"proof,omitempty"`
 	Attestation *DirectoryAttestation `json:"attestation,omitempty"`
+	Owner       *DirectoryOwnerSig    `json:"owner,omitempty"`
+}
+
+// DirectoryRevoke is the optional body of DELETE /directory/keys/<fingerprint>: the owner's
+// signature, required when the address has an enrolled owner key.
+type DirectoryRevoke struct {
+	Owner *DirectoryOwnerSig `json:"owner,omitempty"`
+}
+
+// DirectoryEnrollChallenge is what POST /directory/enroll/challenge answers: the time and log
+// position the server wants the enrollment signatures to carry, and the token that binds them to
+// the user and address and is returned with the enrollment (single use, short lived).
+type DirectoryEnrollChallenge struct {
+	Token   string `json:"token"`
+	Time    int64  `json:"time"`
+	Prev    string `json:"prev"`
+	Expires int64  `json:"expires"`
+}
+
+// DirectoryEnroll is a request to enroll, rotate or reset the owner key of the signed-in user's
+// address. OwnerPub is the new key (base64 of 32 raw bytes). Mode is "enroll" (the address has no
+// owner key: Sig is the new key's signature over the "enroll" operation), "rotate" (Sig is the
+// current owner key's signature over "rotate", Proof the new key's over "accept") or "reset"
+// (the waiting period after RequestReset is over: only Proof, the new key's signature over
+// "accept"). Token, Time and Prev come from the enroll challenge.
+type DirectoryEnroll struct {
+	Mode     string `json:"mode"`
+	OwnerPub string `json:"owner_pub"`
+	Token    string `json:"token"`
+	Time     int64  `json:"time"`
+	Prev     string `json:"prev"`
+	Sig      string `json:"sig,omitempty"`
+	Proof    string `json:"proof,omitempty"`
+}
+
+// DirectoryOwnerKey is one owner key of an address, as the enrollment shows it: Seq is the log
+// entry that enrolled it and Until the one that replaced it (0 while it is the current key).
+type DirectoryOwnerKey struct {
+	Pub   string `json:"pub"`
+	Seq   int64  `json:"seq"`
+	Until int64  `json:"until,omitempty"`
+}
+
+// DirectoryEnrollment is the owner enrollment of an address: the chain of owner keys (the last is
+// current) and, when a reset was requested and has not completed, when (Unix seconds) and the
+// earliest time it can complete.
+type DirectoryEnrollment struct {
+	Enrolled   bool                `json:"enrolled"`
+	Keys       []DirectoryOwnerKey `json:"keys,omitempty"`
+	ResetSince int64               `json:"reset_since,omitempty"`
+	ResetDue   int64               `json:"reset_due,omitempty"`
+	Seq        int64               `json:"seq,omitempty"`
+}
+
+// DirectoryLogAddress is what GET /directory/log/address answers the signed-in owner: the
+// pseudonym that names their address in the log (a keyed hash: only the directory can compute
+// it, and it hands it to the owner only), and the pseudonyms of the same address under retired
+// directory keys (entries made before a rotation).
+type DirectoryLogAddress struct {
+	Address  string   `json:"address"`
+	Previous []string `json:"previous,omitempty"`
+}
+
+// DirectoryHead is the signed head of the log: the number and hash of the last entry, when the
+// server said so (Unix seconds) and its signature (base64) by the key Kid. A client that
+// remembers the head it saw detects a log that was cut back or rewritten.
+type DirectoryHead struct {
+	Seq  int64  `json:"seq"`
+	Hash string `json:"hash"`
+	At   int64  `json:"at"`
+	Kid  string `json:"kid"`
+	Sig  string `json:"sig"`
+}
+
+// DirectoryHealth is what the directory reports about itself at start-up, shown by /health.
+type DirectoryHealth struct {
+	// Records, Resigned, Skipped and UnknownKeys are the census of the last start-up check (see
+	// encrypt.AdapterDirectory.Startup): UnknownKeys is how many records are named under keys the
+	// server does not know (a wrong or missing directory key), which no lookup can find.
+	Records     int   `json:"records"`
+	Resigned    int   `json:"resigned"`
+	Skipped     int   `json:"skipped"`
+	UnknownKeys int   `json:"unknown_keys"`
+	CheckedAt   int64 `json:"checked_at,omitempty"`
 }
 
 // DirectoryLogEntry is one entry of the directory's transparency log: a publication or a
@@ -111,14 +251,31 @@ type DirectoryLogEntry struct {
 	Seq  int64  `json:"seq"`
 	Prev string `json:"prev"` // Hash of entry Seq-1 (64 zeros for the first)
 	At   int64  `json:"at"`
-	Op   string `json:"op"` // "publish" or "revoke"
-	// Address is the hex SHA-256 of "gojiberry-directory-log|<address>": a client finds the
-	// entries about its own address by hashing it.
+	// Op is "publish", "revoke", "enroll", "rotate", "reset-request", "reset", "reset-cancel" or
+	// "void" (the entry Ref did not take effect: its record could not be written).
+	Op string `json:"op"`
+	// Address is a keyed hash (HMAC under the directory's key material, domain-separated) of the
+	// address: only the directory can compute it, and the owner asks for theirs
+	// (GET /directory/log/address) to find the entries about their own address. A guessed
+	// address cannot be tested against it.
 	Address     string `json:"address"`
-	Fingerprint string `json:"fingerprint"`
+	Fingerprint string `json:"fingerprint,omitempty"`
 	Kid         string `json:"kid"`
-	Hash        string `json:"hash"`
-	Sig         string `json:"sig"` // base64
+	// Ref is the entry a "void" entry cancels.
+	Ref int64 `json:"ref,omitempty"`
+	// The owner's part: OwnerPub is the key an enroll, rotate or reset entry installs (base64);
+	// OwnerSig the owner key's signature of the operation (for "enroll", the new key's own; for
+	// "rotate", the current key's; for publish, revoke and reset-cancel on an enrolled address,
+	// the current key's), ProofSig the new key's acceptance of a rotate or reset, and OpTime and
+	// OwnerPrev the time and log position the signatures name. All are in the hash, so a client
+	// that knows the address checks them (encrypt.AuditAddress) without trusting the server.
+	OwnerPub  string `json:"owner_pub,omitempty"`
+	OwnerSig  string `json:"owner_sig,omitempty"`
+	ProofSig  string `json:"proof_sig,omitempty"`
+	OpTime    int64  `json:"op_time,omitempty"`
+	OwnerPrev string `json:"owner_prev,omitempty"`
+	Hash      string `json:"hash"`
+	Sig       string `json:"sig"` // base64
 }
 
 // DirectoryLog is what GET /directory/log answers: entries after the one asked for, and the
@@ -138,13 +295,36 @@ type DirectoryService interface {
 	// Publish records the key as a key of the user's own address.
 	Publish(ctx context.Context, user auth.User, req DirectoryPublish) (DirectoryKey, error)
 	// Revoke removes the key with this fingerprint from the user's own address and remembers
-	// that it was revoked.
-	Revoke(ctx context.Context, user auth.User, fingerprint string) (DirectoryKey, error)
+	// that it was revoked. owner is the owner's signature (nil if none was sent), required when
+	// the address has an enrolled owner key.
+	Revoke(ctx context.Context, user auth.User, fingerprint string, owner *DirectoryOwnerSig) (DirectoryKey, error)
 	// Lookup lists the keys published for an address; with includeRevoked, the revoked ones too,
 	// flagged.
 	Lookup(ctx context.Context, email string, includeRevoked bool) ([]DirectoryKey, error)
 	// Log returns up to limit log entries after seq since.
 	Log(ctx context.Context, since int64, limit int) (DirectoryLog, error)
+	// Head is the signed head of the log (its last entry).
+	Head(ctx context.Context) (DirectoryHead, error)
+	// LogAddress is the pseudonym of the user's own address in the log.
+	LogAddress(ctx context.Context, user auth.User) (DirectoryLogAddress, error)
+	// Enrollment is the owner enrollment of an address (Enrolled false if none).
+	Enrollment(ctx context.Context, email string) (DirectoryEnrollment, error)
+	// EnrollChallenge starts an enrollment, rotation or reset for the user's own address.
+	EnrollChallenge(ctx context.Context, user auth.User) (DirectoryEnrollChallenge, error)
+	// Enroll installs an owner key for the user's own address: the first one, a rotation signed
+	// by the current key, or a reset after the waiting period (see DirectoryEnroll).
+	Enroll(ctx context.Context, user auth.User, req DirectoryEnroll) (DirectoryEnrollment, error)
+	// RequestReset starts the waiting period of a provider-session reset of the owner key; the
+	// request is logged, where the owner (and everybody who watches the address) sees it.
+	RequestReset(ctx context.Context, user auth.User) (DirectoryEnrollment, error)
+	// CancelReset ends a pending reset; it needs the current owner key's signature.
+	CancelReset(ctx context.Context, user auth.User, owner *DirectoryOwnerSig) (DirectoryEnrollment, error)
+}
+
+// DirectoryHealther is implemented by a DirectoryService that reports on itself (the start-up
+// census): /health shows it under "directory".
+type DirectoryHealther interface {
+	DirectoryHealth() DirectoryHealth
 }
 
 // DirectoryPolicy decides who may look up an address. The default allows every signed-in
@@ -225,25 +405,34 @@ func addressDomain(email string) string {
 // present (without sign-in there is nobody to vouch for an address, so they are not mounted):
 //
 //	POST   /directory/challenge     {"key"}  -> {token, encrypted, expires}: a nonce encrypted to the key
-//	POST   /directory/publish       {"key", "label", "proof": {token, nonce}, "attestation": {at, sig}}
-//	DELETE /directory/keys/<fingerprint>     -> the revoked key
-//	GET    /directory/lookup?email=[&revoked=1] -> {"keys": [{key, type, fingerprint, verified, held, attested, ...}]}
-//	GET    /directory/log?since=    -> {"entries": [...], "keys": {...}}: the transparency log
+//	POST   /directory/publish       {"key", "label", "proof": {token, nonce}, "attestation": {at, sig}, "owner": {time, prev, sig}}
+//	DELETE /directory/keys/<fingerprint>   [{"owner": {time, prev, sig}}] -> the revoked key
+//	GET    /directory/lookup?email=[&revoked=1] -> {"keys": [{key, type, fingerprint, verified, held, attested, owner_signed, ...}]}
+//	GET    /directory/log?since=    -> {"entries": [...], "keys": {...}}: the transparency log (200 entries at most)
+//	GET    /directory/log/head      -> {seq, hash, at, kid, sig}: the signed head of the log
+//	GET    /directory/log/address   -> {address, previous}: the signed-in owner's pseudonym in the log
+//	GET    /directory/enroll?email= -> the owner enrollment of an address
+//	POST   /directory/enroll/challenge, POST /directory/enroll, POST /directory/enroll/reset,
+//	POST   /directory/enroll/cancel -> owner key enrollment, rotation and reset (see DirectoryEnroll)
 //
-// All but the log need a signed-in identity-provider session (a passkey session gets 403); the
-// log needs any session. Publishing and revoking need an explicitly verified e-mail
-// (User.VerifiedEmail: the provider sent email_verified true, or is configured with
-// auth.Provider.AssumeEmailVerified) and act on that address only: only the signed-in owner of an
-// address can publish or revoke its keys, and an "email" in the body that is not the session's
-// own is refused. What the directory proves, and what it does not, is in
-// docs/encryption-and-passkeys.md (step 4b).
+// Every route needs a signed-in identity-provider session (a passkey session gets 403). Publishing
+// and revoking, and the owner routes, need an explicitly verified e-mail (User.VerifiedEmail: the
+// provider sent email_verified true, or is configured with auth.Provider.AssumeEmailVerified) and
+// act on that address only: only the signed-in owner of an address can publish or revoke its
+// keys, and an "email" in the body that is not the session's own is refused. What the directory
+// proves, and what it does not, is in docs/encryption-and-passkeys.md (step 4b).
 //
 // Lookup reveals the public keys published for any address to every signed-in provider user
 // that the DirectoryPolicy allows (all, by default), by design: a key is public, and finding a
-// person's key by address is what the directory is for. Every route is limited (WithDirectoryLimits):
-// publishes and revokes per user, lookups per user, per client IP (the connection's address:
-// behind a proxy every client shares it, so the real limiting belongs to the gateway) and for the
-// whole server. Bodies are small.
+// person's key by address is what the directory is for. The log, its head and the enrollment
+// follow the same rule (the log asks the policy about the user's own address, since it names no
+// address in the clear). Every route is limited (WithDirectoryLimits): publishes and revokes per
+// user, lookups and log reads per user first and then per client IP and for the whole server (a
+// user over their own limit does not spend the shared tokens). The IP is the connection's
+// address: behind a proxy every client shares it, so the real per-client limiting, and any
+// limiting of unauthenticated floods, belongs to the gateway in front of the server; the shared
+// budgets only keep one tenant from draining the service. WithDirectoryGlobalPerDomain makes
+// the whole-server lookup budget one per e-mail domain of the caller. Bodies are small.
 func (s *Server) WithDirectory(d DirectoryService) *Server {
 	s.directory = d
 	return s
@@ -251,10 +440,18 @@ func (s *Server) WithDirectory(d DirectoryService) *Server {
 
 // WithDirectoryLimits chooses where the directory's rate limits live: MemoryLimiters (the
 // default, a budget per process) or StoreLimiters(store), which replicas sharing one store
-// share. The names are "dir-publish", "dir-challenge", "dir-lookup" (per user), "dir-lookup-ip"
-// and "dir-lookup-all".
+// share. The names are "dir-publish", "dir-challenge", "dir-lookup" and "dir-log" (per user),
+// "dir-lookup-ip" and "dir-lookup-all".
 func (s *Server) WithDirectoryLimits(f LimiterFactory) *Server {
 	s.dirLimitFactory = f
+	return s
+}
+
+// WithDirectoryGlobalPerDomain makes the whole-server lookup budget one per e-mail domain of the
+// caller instead of one for everybody: with the SameDomain policy that is one budget per policy
+// domain, so one company's probing cannot spend another's. Off by default (one shared budget).
+func (s *Server) WithDirectoryGlobalPerDomain(on bool) *Server {
+	s.dirDomainBudget = on
 	return s
 }
 
@@ -271,6 +468,7 @@ const (
 	maxLookupKeys      = 50
 	maxLogEntries      = 200
 	publishesPerMinute = 10
+	logReadsPerMinute  = 30
 	challengesPerMin   = 20
 	lookupsPerMinute   = 60
 	lookupsPerIP       = 120
@@ -278,7 +476,7 @@ const (
 )
 
 type directoryLimits struct {
-	publish, challenge, lookup, lookupIP, lookupAll Limiter
+	publish, challenge, lookup, lookupIP, lookupAll, logRead Limiter
 }
 
 func (s *Server) limits() *directoryLimits {
@@ -293,6 +491,7 @@ func (s *Server) limits() *directoryLimits {
 			lookup:    f("dir-lookup", lookupsPerMinute, lookupsPerMinute),
 			lookupIP:  f("dir-lookup-ip", lookupsPerIP, lookupsPerIP),
 			lookupAll: f("dir-lookup-all", lookupsInTotal, lookupsInTotal),
+			logRead:   f("dir-log", logReadsPerMinute, logReadsPerMinute),
 		}
 	})
 	return s.dirLimits
@@ -334,16 +533,27 @@ func directoryError(w http.ResponseWriter, err error) {
 		http.Error(w, "the directory refuses this publisher", http.StatusForbidden)
 	case errors.Is(err, ErrDirectoryBadKey):
 		http.Error(w, "not a public key", http.StatusBadRequest)
+	case errors.Is(err, ErrDirectoryBadAddress):
+		http.Error(w, "not an e-mail address", http.StatusBadRequest)
 	case errors.Is(err, ErrDirectoryProofRequired):
 		http.Error(w, "proof of possession required: POST /directory/challenge first", http.StatusPreconditionRequired)
 	case errors.Is(err, ErrDirectoryBadProof):
 		http.Error(w, "the proof of possession is not valid", http.StatusForbidden)
 	case errors.Is(err, ErrDirectoryBadAttestation):
 		http.Error(w, "the attestation is not valid", http.StatusBadRequest)
+	case errors.Is(err, ErrDirectoryOwnerRequired):
+		http.Error(w, "this address has an owner key: sign the operation with it", http.StatusPreconditionRequired)
+	case errors.Is(err, ErrDirectoryBadOwnerSig):
+		http.Error(w, "the owner signature is not valid", http.StatusForbidden)
+	case errors.Is(err, ErrDirectoryEnrolled), errors.Is(err, ErrDirectoryNotEnrolled), errors.Is(err, ErrDirectoryResetWait):
+		http.Error(w, err.Error(), http.StatusConflict)
 	case errors.Is(err, ErrDirectoryNotFound):
 		http.Error(w, "no such published key", http.StatusNotFound)
 	case errors.Is(err, ErrDirectoryRevoked):
 		http.Error(w, "this key was revoked and cannot be published again yet", http.StatusConflict)
+	case errors.Is(err, ErrDirectoryBusy):
+		w.Header().Set("Retry-After", "2")
+		http.Error(w, "the directory is busy, try again", http.StatusServiceUnavailable)
 	default:
 		serverError(w, err)
 	}
@@ -358,6 +568,27 @@ func readDirectoryBody(w http.ResponseWriter, r *http.Request, v any) bool {
 	if json.Unmarshal(data, v) != nil {
 		http.Error(w, "expected a JSON body", http.StatusBadRequest)
 		return false
+	}
+	return true
+}
+
+// ValidAddress reports whether email is an address the directory accepts: at most 320 bytes,
+// exactly one "@" with something on each side, and no space or control character. The directory
+// names records by the address and takes its domain after the "@", so a malformed one ("a@b@c")
+// would be read differently by different parts of the program.
+func ValidAddress(email string) bool {
+	email = NormalizeAddress(email)
+	if email == "" || len(email) > 320 || strings.Count(email, "@") != 1 {
+		return false
+	}
+	local, domain, _ := strings.Cut(email, "@")
+	if local == "" || domain == "" {
+		return false
+	}
+	for _, r := range email {
+		if r <= ' ' || r == 0x7f {
+			return false
+		}
 	}
 	return true
 }
@@ -436,7 +667,8 @@ func DirectoryFingerprintSegment(fp string) string {
 }
 
 // handleRevoke serves DELETE /directory/keys/<fingerprint>. The fingerprint is the one lookup
-// shows ("SHA256:...") or its DirectoryFingerprintSegment form.
+// shows ("SHA256:...") or its DirectoryFingerprintSegment form. The body is optional: the
+// owner's signature ({"owner": {...}}), which an address with an owner key needs.
 func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -455,7 +687,19 @@ func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
 		tooMany(w, wait)
 		return
 	}
-	k, err := s.directory.Revoke(r.Context(), u, fp)
+	var body DirectoryRevoke
+	if r.ContentLength != 0 && r.Body != nil {
+		data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxDirectoryBody))
+		if err != nil {
+			http.Error(w, "request too large or unreadable", http.StatusRequestEntityTooLarge)
+			return
+		}
+		if len(strings.TrimSpace(string(data))) > 0 && json.Unmarshal(data, &body) != nil {
+			http.Error(w, "expected a JSON body", http.StatusBadRequest)
+			return
+		}
+	}
+	k, err := s.directory.Revoke(r.Context(), u, fp, body.Owner)
 	if err != nil {
 		directoryError(w, err)
 		return
@@ -463,47 +707,83 @@ func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, k)
 }
 
+// directoryReader is directoryUser for the routes that read the directory: only a provider
+// session may (a passkey account's address was typed by whoever made it, and nothing vouches for
+// the account, so it is not a directory reader).
+func (s *Server) directoryReader(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
+	u, ok := s.directoryUser(w, r)
+	if !ok {
+		return auth.User{}, false
+	}
+	if strings.HasPrefix(u.ID, "passkey:") {
+		http.Error(w, "only a signed-in provider account can read the directory", http.StatusForbidden)
+		return auth.User{}, false
+	}
+	return u, true
+}
+
+func clientIP(r *http.Request) string {
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
+}
+
+// readBudget spends the budgets of a read of the directory (a lookup, the log): the user's own
+// first, and only then the shared ones (per client IP, and for the whole server or, with
+// WithDirectoryGlobalPerDomain, the caller's e-mail domain), so a user who is over their own
+// limit is refused without taking a token from the budget everybody shares. own is the user's
+// limiter. It answers 429 itself and returns false when a budget is spent.
+func (s *Server) readBudget(w http.ResponseWriter, r *http.Request, u auth.User, own Limiter, ownKey string) bool {
+	lim := s.limits()
+	all := "all"
+	if s.dirDomainBudget {
+		all = "all:" + addressDomain(u.Email)
+	}
+	for _, c := range []struct {
+		l   Limiter
+		key string
+	}{{own, ownKey + u.ID}, {lim.lookupIP, "li:" + clientIP(r)}, {lim.lookupAll, all}} {
+		if ok, wait := c.l.Allow(r.Context(), c.key); !ok {
+			tooMany(w, wait)
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Server) policy() DirectoryPolicy {
+	if s.dirPolicy == nil {
+		return AllowAllLookups
+	}
+	return s.dirPolicy
+}
+
 func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	u, ok := s.directoryUser(w, r)
+	u, ok := s.directoryReader(w, r)
 	if !ok {
 		return
 	}
-	// Only a provider session may look up: a passkey account's address was typed by whoever
-	// made it, and nothing vouches for the account, so it is not a directory reader.
-	if strings.HasPrefix(u.ID, "passkey:") {
-		http.Error(w, "only a signed-in provider account can look up keys", http.StatusForbidden)
+	email := strings.TrimSpace(r.URL.Query().Get("email"))
+	if email == "" {
+		http.Error(w, "email is required", http.StatusBadRequest)
 		return
 	}
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		ip = r.RemoteAddr
+	if !ValidAddress(email) {
+		http.Error(w, "not an e-mail address", http.StatusBadRequest)
+		return
 	}
-	lim := s.limits()
-	for _, c := range []struct {
-		l   Limiter
-		key string
-	}{{lim.lookupIP, "li:" + ip}, {lim.lookup, "l:" + u.ID}, {lim.lookupAll, "all"}} {
-		if ok, wait := c.l.Allow(r.Context(), c.key); !ok {
-			tooMany(w, wait)
-			return
-		}
-	}
-	email := strings.TrimSpace(r.URL.Query().Get("email"))
-	if email == "" || len(email) > 320 {
-		http.Error(w, "email is required", http.StatusBadRequest)
+	if !s.readBudget(w, r, u, s.limits().lookup, "l:") {
 		return
 	}
 	// The policy is asked after the budgets, so that probing a refused address costs budget too.
 	// Its answer does not depend on whether the address has keys, so a refusal leaks nothing.
-	policy := s.dirPolicy
-	if policy == nil {
-		policy = AllowAllLookups
-	}
-	if !policy.CanLookup(u, email) {
+	if !s.policy().CanLookup(u, email) {
 		http.Error(w, "this directory does not look up that address for you", http.StatusForbidden)
 		return
 	}
@@ -522,13 +802,29 @@ func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, map[string]any{"keys": keys})
 }
 
-// handleLog serves GET /directory/log?since=<seq>: the entries after seq since (at most 200).
+// logReader is what the log routes check: a provider session (like lookup), the policy (asked
+// about the user's own address: the log names no address in the clear, so the question is whether
+// this user is a reader of this directory at all) and the per-user, per-IP and global budgets.
+func (s *Server) logReader(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
+	u, ok := s.directoryReader(w, r)
+	if !ok {
+		return auth.User{}, false
+	}
+	if !s.readBudget(w, r, u, s.limits().logRead, "g:") {
+		return auth.User{}, false
+	}
+	if !s.policy().CanLookup(u, u.Email) {
+		http.Error(w, "this directory does not show its log to you", http.StatusForbidden)
+		return auth.User{}, false
+	}
+	return u, true
+}
+
+// handleLog serves GET /directory/log?since=<seq>: the entries after seq since (at most 200;
+// ask again from the last number for more).
 func (s *Server) handleLog(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if _, ok := s.directoryUser(w, r); !ok {
 		return
 	}
 	var since int64
@@ -540,28 +836,60 @@ func (s *Server) handleLog(w http.ResponseWriter, r *http.Request) {
 		}
 		since = n
 	}
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		ip = r.RemoteAddr
-	}
-	lim := s.limits()
-	if ok, wait := lim.lookupIP.Allow(r.Context(), "li:"+ip); !ok {
-		tooMany(w, wait)
-		return
-	}
-	if ok, wait := lim.lookupAll.Allow(r.Context(), "all"); !ok {
-		tooMany(w, wait)
+	if _, ok := s.logReader(w, r); !ok {
 		return
 	}
 	l, err := s.directory.Log(r.Context(), since, maxLogEntries)
 	if err != nil {
-		serverError(w, err)
+		directoryError(w, err)
 		return
+	}
+	if len(l.Entries) > maxLogEntries {
+		l.Entries = l.Entries[:maxLogEntries]
 	}
 	if l.Entries == nil {
 		l.Entries = []DirectoryLogEntry{}
 	}
 	writeJSONStatus(w, http.StatusOK, l)
+}
+
+// handleLogHead serves GET /directory/log/head: the signed head of the log.
+func (s *Server) handleLogHead(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := s.logReader(w, r); !ok {
+		return
+	}
+	h, err := s.directory.Head(r.Context())
+	if err != nil {
+		directoryError(w, err)
+		return
+	}
+	writeJSONStatus(w, http.StatusOK, h)
+}
+
+// handleLogAddress serves GET /directory/log/address: the signed-in owner's pseudonym in the log.
+func (s *Server) handleLogAddress(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	u, ok := s.directoryPublisher(w, r)
+	if !ok {
+		return
+	}
+	if ok, wait := s.limits().logRead.Allow(r.Context(), "a:"+u.ID); !ok {
+		tooMany(w, wait)
+		return
+	}
+	a, err := s.directory.LogAddress(r.Context(), u)
+	if err != nil {
+		directoryError(w, err)
+		return
+	}
+	writeJSONStatus(w, http.StatusOK, a)
 }
 
 func writeJSONStatus(w http.ResponseWriter, status int, v any) {

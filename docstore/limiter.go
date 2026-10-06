@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -176,8 +177,9 @@ func (l *RateLimiter) sweepLocked(now time.Time) {
 // failure is logged at most once a minute: a broken store must neither lock everyone out nor
 // switch the limit off. When the loop loses the race too many times (a hot key) the request is
 // refused for a second. Clocks: each replica uses its own clock; a record "from the future" of
-// this replica's clock refills nothing until that time has passed, so skew of a few seconds
-// changes the refill, never the burst.
+// this replica's clock refills nothing until that time has passed, but never further ahead than
+// maxClockSkew (a replica with a clock hours ahead cannot lock the others out), so skew changes
+// the refill by seconds, never the burst.
 //
 // Records of callers that stopped calling are deleted by SweepRateLimits.
 type StoreLimiter struct {
@@ -202,6 +204,11 @@ type StoreLimiter struct {
 func NewStoreLimiter(store Adapter, name string, perMinute float64, burst int) *StoreLimiter {
 	return &StoreLimiter{Store: store, Name: name, PerMinute: perMinute, Burst: burst}
 }
+
+// maxClockSkew is how far into the future a StoreLimiter believes a record's time: replicas'
+// clocks differ by seconds, not by hours, and a record written by one that is far ahead would
+// otherwise refill nothing for everybody else until their clocks caught up.
+const maxClockSkew = 5 * time.Second
 
 // maxCASRounds bounds the compare-and-set loop. Every lost round means another caller won one,
 // so a loop of this length is lost only under very hot contention on one key.
@@ -268,7 +275,10 @@ func (l *StoreLimiter) Allow(ctx context.Context, key string) (bool, time.Durati
 		if st.At == 0 {
 			st = limitState{Tokens: float64(l.Burst), At: now.UnixNano()}
 		}
-		at := max(st.At, now.UnixNano()) // never move a record's time backwards
+		// A record from a replica whose clock is far ahead must not lock the others out: its
+		// time counts as at most maxClockSkew past this replica's own.
+		st.At = min(st.At, now.UnixNano()+int64(maxClockSkew))
+		at := max(st.At, now.UnixNano()) // never move a record's time backwards (within the skew)
 		tokens := refill(st.Tokens, time.Duration(now.UnixNano()-st.At), l.PerMinute, l.Burst)
 		if tokens < 1 {
 			return false, waitFor(tokens, l.PerMinute)
@@ -315,18 +325,40 @@ func (l *StoreLimiter) read(ctx context.Context, a Adapter, id string) (limitSta
 // rateLimitGrace is how long a bucket must have been full before its record is deleted.
 const rateLimitGrace = time.Minute
 
+// MaxRateLimitRecords is how many budget records SweepRateLimits leaves in the store: past it the
+// ones written longest ago are deleted, even if their bucket is not yet full again (their callers
+// get a fresh bucket, which is the cost of bounding what a flood of different callers, say
+// unauthenticated clients behind rotating addresses, can make the store hold).
+const MaxRateLimitRecords = 100000
+
 // SweepRateLimits deletes the budget records in store of callers that have been idle: whose
 // bucket has been full again for a minute (a full bucket and a missing record mean the same, so
-// nothing is lost), and records that cannot be read and have not been written for an hour. It
-// returns how many it deleted. A caller that comes back between the read and the delete loses
-// one token at most; the next SaveIf of a replica that read the deleted record conflicts and
-// starts from the empty record, which is the same as a full bucket.
+// nothing is lost), and records that cannot be read and have not been written for an hour; then,
+// if more than MaxRateLimitRecords remain, the oldest. It returns how many it deleted.
+//
+// A record that fails to load or delete is skipped and the sweep goes on; the errors are returned
+// together at the end (with the count), so one bad record cannot stop the rest from being swept.
+// The delete is conditional on the record being the one that was read (ConditionalDeleter): a
+// caller who came back in between keeps their update. A store without that gets a two step
+// delete (the record is first replaced, conditionally, by a full bucket, which means the same as
+// no record, and then deleted), which narrows the race to one token at most.
 func SweepRateLimits(ctx context.Context, store Adapter, now time.Time) (int, error) {
+	return SweepRateLimitsMax(ctx, store, now, MaxRateLimitRecords)
+}
+
+// SweepRateLimitsMax is SweepRateLimits with the number of records to keep chosen by the caller
+// (zero or less: MaxRateLimitRecords).
+func SweepRateLimitsMax(ctx context.Context, store Adapter, now time.Time, maxRecords int) (int, error) {
+	if maxRecords <= 0 {
+		maxRecords = MaxRateLimitRecords
+	}
 	metas, err := ListPrefix(ctx, store, RateLimitPrefix)
 	if err != nil {
 		return 0, err
 	}
 	n := 0
+	var errs []error
+	kept := make([]Meta, 0, len(metas))
 	for _, m := range metas {
 		if err := ctx.Err(); err != nil {
 			return n, err
@@ -336,7 +368,9 @@ func SweepRateLimits(ctx context.Context, store Adapter, now time.Time) (int, er
 			continue
 		}
 		if err != nil {
-			return n, err
+			errs = append(errs, err)
+			kept = append(kept, m)
+			continue
 		}
 		var st limitState
 		stale := false
@@ -346,14 +380,70 @@ func SweepRateLimits(ctx context.Context, store Adapter, now time.Time) (int, er
 			stale = now.UnixNano()-st.Full > int64(rateLimitGrace)
 		}
 		if !stale {
+			m.UpdatedAt = doc.UpdatedAt
+			kept = append(kept, m)
 			continue
 		}
-		if err := store.Delete(ctx, m.ID); err != nil && !errors.Is(err, ErrNotFound) {
-			return n, err
+		switch gone, err := deleteRateLimit(ctx, store, m.ID, doc.Data); {
+		case err != nil:
+			errs = append(errs, err)
+			kept = append(kept, m)
+		case gone:
+			n++
 		}
-		n++
 	}
-	return n, nil
+	if over := len(kept) - maxRecords; over > 0 {
+		sort.Slice(kept, func(i, j int) bool { return kept[i].UpdatedAt.Before(kept[j].UpdatedAt) })
+		for _, m := range kept[:over] {
+			doc, err := store.Load(ctx, m.ID)
+			if errors.Is(err, ErrNotFound) {
+				continue
+			}
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			switch gone, err := deleteRateLimit(ctx, store, m.ID, doc.Data); {
+			case err != nil:
+				errs = append(errs, err)
+			case gone:
+				n++
+			}
+		}
+	}
+	return n, errors.Join(errs...)
+}
+
+// deleteRateLimit deletes the record id if it still holds data (a conditional delete when the
+// store has one). It reports whether the record is gone; a record that changed meanwhile is kept
+// (false, nil).
+func deleteRateLimit(ctx context.Context, store Adapter, id string, data []byte) (bool, error) {
+	prev := Digest(data)
+	if c, ok := store.(ConditionalDeleter); ok {
+		switch err := c.DeleteIf(ctx, id, prev); {
+		case err == nil || errors.Is(err, ErrNotFound):
+			return true, nil
+		case errors.Is(err, ErrConflict):
+			return false, nil
+		case !errors.Is(err, ErrConditionalUnsupported):
+			return false, err
+		}
+	}
+	// No conditional delete: claim the record with a conditional write first (a full bucket, the
+	// same as no record), so a caller that changed it in between makes the claim conflict.
+	if c, ok := store.(ConditionalAdapter); ok {
+		blank, _ := json.Marshal(limitState{})
+		switch err := c.SaveIf(ctx, id, blank, prev); {
+		case errors.Is(err, ErrConflict):
+			return false, nil
+		case err != nil && !errors.Is(err, ErrConditionalUnsupported):
+			return false, err
+		}
+	}
+	if err := store.Delete(ctx, id); err != nil && !errors.Is(err, ErrNotFound) {
+		return false, err
+	}
+	return true, nil
 }
 
 // RunRateLimitSweep calls SweepRateLimits every interval (ten minutes when not positive) until

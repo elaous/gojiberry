@@ -76,10 +76,10 @@ func TestDirectoryRoutesChallengePublishRevokeLogAndLookup(t *testing.T) {
 		t.Errorf("bad attestation = %d", rec.Code)
 	}
 
-	// The log, for any signed-in session, including a passkey one.
-	rec = e.do("GET", "/directory/log?since=0", e.token(auth.User{ID: "passkey:z"}), "")
+	// The log, for a provider session (a passkey one is refused, see TestDirectoryLogRoutesNeedAProviderSession).
+	rec = e.do("GET", "/directory/log?since=0", e.token(auth.User{ID: "google:z", Email: "z@x.io", VerifiedEmail: true}), "")
 	var lg docstore.DirectoryLog
-	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &lg) != nil || len(lg.Entries) != 1 || lg.Entries[0].Address != LogAddress("ana@x.io") || len(lg.Keys) != 1 {
+	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &lg) != nil || len(lg.Entries) != 1 || lg.Entries[0].Address != e.dir.LogAddressFor("ana@x.io") || len(lg.Keys) != 1 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 	if rec := e.do("GET", "/directory/log?since=1", boTok, ""); !strings.Contains(rec.Body.String(), `"entries":[]`) {

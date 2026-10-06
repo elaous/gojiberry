@@ -42,9 +42,19 @@ const (
 	fontsPrefix    = "fonts/"    // the font library (fonts.KeyPrefix, saver.FontPrefix)
 )
 
+// The keyspaces of the public (anonymous) offer, see package docstore/public. Neither expires by
+// itself: the records under PublicPrefix that belong to one document (its metadata and view-id
+// record) are deleted by the public service's own sweep once the document is gone, and its
+// tombstones (PublicPrefix+"tomb/") and the reports (ReportPrefix) have a TTL of their own that
+// the same sweep enforces. Both are reserved from the /docs API.
+const (
+	PublicPrefix = "public/" // document metadata, view-id records and tombstones of the public offer
+	ReportPrefix = "report/" // abuse reports about public documents
+)
+
 // systemPrefixes are the keyspaces that are not documents: they never expire by themselves (the
 // ones that belong to a document go with it, see DefaultRelated).
-var systemPrefixes = []string{ExpiryPrefix, aclKeyPrefix, collabPrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, DirectoryLogPrefix, RateLimitPrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix}
+var systemPrefixes = []string{ExpiryPrefix, aclKeyPrefix, collabPrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix, PublicPrefix, ReportPrefix}
 
 // IsDocumentKey reports whether key is a plain document: what the saver writes ("<id>~<gen><ext>"
 // generation keys) or a client PUTs under a plain id. It is an allowlist of the document
@@ -473,6 +483,18 @@ func (e *ExpiringAdapter) SaveIf(ctx context.Context, id string, data []byte, pr
 		return ErrConditionalUnsupported
 	}
 	return e.renewed(ctx, id, func() error { return c.SaveIf(ctx, id, data, prev) })
+}
+
+// DeleteIf implements ConditionalDeleter for the keys that are not documents (system records
+// such as "ratelimit/", which have no deadline of their own to clean up) over an inner adapter
+// that has it; a document key is ErrConditionalUnsupported, since deleting one also removes its
+// deadline and related records.
+func (e *ExpiringAdapter) DeleteIf(ctx context.Context, id string, prev string) error {
+	c, ok := e.Inner.(ConditionalDeleter)
+	if !ok || IsDocumentKey(id) {
+		return ErrConditionalUnsupported
+	}
+	return c.DeleteIf(ctx, id, prev)
 }
 
 // Load implements Adapter. It does not renew; an expired document is ErrNotFound.

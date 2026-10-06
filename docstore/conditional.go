@@ -2,6 +2,7 @@ package docstore
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -36,6 +37,31 @@ type ConditionalAdapter interface {
 	SaveIf(ctx context.Context, id string, data []byte, prev string) error
 }
 
+// ConditionalDeleter is an optional capability of an Adapter: a delete that only happens if the
+// document is still the one the caller read. It is what lets a sweeper remove a record without
+// removing a change somebody made between its read and its delete (SweepRateLimits).
+type ConditionalDeleter interface {
+	Adapter
+	// DeleteIf removes the document if its content has digest prev (see Digest). A document
+	// that is no longer there is ErrNotFound; one that changed is ErrConflict.
+	DeleteIf(ctx context.Context, id string, prev string) error
+}
+
+// DeleteIf implements ConditionalDeleter.
+func (m *MemoryAdapter) DeleteIf(_ context.Context, id string, prev string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cur, ok := m.docs[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if prev == "" || Digest(cur.Data) != prev {
+		return ErrConflict
+	}
+	delete(m.docs, id)
+	return nil
+}
+
 // SaveIf implements ConditionalAdapter.
 func (m *MemoryAdapter) SaveIf(_ context.Context, id string, data []byte, prev string) error {
 	m.mu.Lock()
@@ -58,4 +84,24 @@ func (m *MemoryAdapter) SaveIf(_ context.Context, id string, data []byte, prev s
 // returns gives the lock back and must be called exactly once.
 type Locker interface {
 	Lock(ctx context.Context) (unlock func(), err error)
+}
+
+// SupportsConditional probes whether store really writes conditionally: it has the SaveIf method
+// and the store behind it honours it (a wrapper, an HTTP client of a server on a store that
+// cannot, answers ErrConditionalUnsupported). The probe creates a record under
+// "directory-log/probe/" twice (the second create must conflict) and deletes it; a store that
+// fails to do any of that counts as not supporting it.
+func SupportsConditional(ctx context.Context, store Adapter) bool {
+	c, ok := store.(ConditionalAdapter)
+	if !ok {
+		return false
+	}
+	var raw [8]byte
+	_, _ = rand.Read(raw[:])
+	id := DirectoryLogPrefix + "probe/" + hex.EncodeToString(raw[:])
+	if err := c.SaveIf(ctx, id, []byte("probe"), ""); err != nil {
+		return false
+	}
+	defer func() { _ = store.Delete(ctx, id) }()
+	return errors.Is(c.SaveIf(ctx, id, []byte("probe"), ""), ErrConflict)
 }

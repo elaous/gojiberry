@@ -79,8 +79,8 @@ func (d *AdapterDirectory) Challenge(_ context.Context, user auth.User, keyText 
 	if d.Signer == nil {
 		return docstore.DirectoryChallenge{}, ErrDirectoryOff
 	}
-	if !publishable(user) {
-		return docstore.DirectoryChallenge{}, ErrNotPublishable
+	if err := d.checkUser(user); err != nil {
+		return docstore.DirectoryChallenge{}, err
 	}
 	r, err := parsePublic(keyText)
 	if err != nil {
@@ -128,7 +128,7 @@ func OpenChallenge(c docstore.DirectoryChallenge, id age.Identity) (docstore.Dir
 }
 
 // checkProof verifies a proof for user and key r at time now, without using it up: the token is
-// the server's (a current or retired key's signature), not expired, for this user, address and
+// the server's (the current key's signature, not a retired one's), not expired, for this user, address and
 // key, and the nonce is the one it was made for.
 func (d *AdapterDirectory) checkProof(user auth.User, r Recipient, token, nonce string, now time.Time) (challengeToken, error) {
 	bad := func(why string) (challengeToken, error) {
@@ -144,7 +144,9 @@ func (d *AdapterDirectory) checkProof(user auth.User, r Recipient, token, nonce 
 	if err1 != nil || err2 != nil || json.Unmarshal(payload, &tok) != nil {
 		return bad("malformed")
 	}
-	if tok.Kid == "" || !d.Signer.Verify(tok.Kid, challengeMessage(payload), sig) {
+	// Only the current key's challenges are honoured: a retired key may be one that leaked, and a
+	// challenge lives two minutes, so there is nothing to carry over a rotation.
+	if tok.Kid == "" || tok.Kid != d.Signer.KeyID() || !d.Signer.Verify(tok.Kid, challengeMessage(payload), sig) {
 		return bad("not issued by this directory")
 	}
 	if now.Unix() > tok.Exp {
@@ -153,12 +155,7 @@ func (d *AdapterDirectory) checkProof(user auth.User, r Recipient, token, nonce 
 	if tok.User != user.ID || tok.Email != normalizeEmail(user.Email) || tok.FP != r.Fingerprint {
 		return bad("issued for another user or key")
 	}
-	okNonce := false
-	for _, h := range d.Signer.Pseudonyms(popHash(tok.ID, nonce)) {
-		if subtle.ConstantTimeCompare([]byte(h), []byte(tok.H)) == 1 {
-			okNonce = true
-		}
-	}
+	okNonce := subtle.ConstantTimeCompare([]byte(d.Signer.Pseudonym(popHash(tok.ID, nonce))), []byte(tok.H)) == 1
 	if !okNonce || tok.ID == "" || strings.Trim(tok.ID, "0123456789abcdef") != "" {
 		return bad("wrong nonce")
 	}

@@ -133,6 +133,30 @@ func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest
 	return tx.Commit()
 }
 
+// DeleteIf implements docstore.ConditionalDeleter in one transaction: the row is locked, compared
+// with prevDigest and deleted.
+func (a *Adapter) DeleteIf(ctx context.Context, id string, prevDigest string) error {
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var cur []byte
+	err = tx.QueryRowContext(ctx, `SELECT data FROM documents WHERE id = $1 FOR UPDATE`, id).Scan(&cur)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return docstore.ErrNotFound
+	case err != nil:
+		return err
+	case prevDigest == "" || docstore.Digest(cur) != prevDigest:
+		return docstore.ErrConflict
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM documents WHERE id = $1`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error) {
 	var doc docstore.Document
 	doc.ID = id

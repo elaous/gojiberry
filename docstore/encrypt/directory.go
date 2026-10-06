@@ -29,6 +29,12 @@ type PublishedKey struct {
 	Held        bool
 	Attested    bool
 	Attestation *docstore.DirectoryAttestation
+	// OwnerEnrolled: the address has an owner signing key. OwnerSigned: Verified, and the
+	// owner signed this publication under that key (the strongest mark: it holds against the
+	// directory's server too; Owner is the evidence, VerifyOwnerEvidence checks it without the
+	// server's word). OwnerResetPending: a reset of the owner key is waiting out its delay.
+	OwnerEnrolled, OwnerSigned, OwnerResetPending bool
+	Owner                                         *docstore.DirectoryOwnerEvidence
 	// Seq is the number of the transparency log entry of the publication (0: none: a record
 	// written before the log, or by someone without the log's key), Kid the ID of the server key
 	// that signed the record.

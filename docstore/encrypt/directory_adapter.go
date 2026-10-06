@@ -10,6 +10,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -78,9 +79,15 @@ type AdapterDirectory struct {
 	// published again (ErrRevoked), so a replayed request cannot silently bring it back, and a
 	// lookup that asks for revoked keys shows it. DefaultRevokeWindow when 0.
 	RevokeWindow time.Duration
+	// ResetWait is how long a provider-session reset of an address's owner key waits between its
+	// request and its taking effect (DefaultResetWait, 24 hours, when 0). Do not shorten it in a
+	// deployment: auditors hold the server to 24 hours (AuditOptions.ResetWait).
+	ResetWait time.Duration
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
 
+	// report is the census of the last Startup, for DirectoryHealth.
+	report atomic.Pointer[docstore.DirectoryHealth]
 	// locks serialise Publish per address within this process (striped by the address's hash).
 	locks [64]sync.Mutex
 	// casMu serialises the transparency log's appends and the challenge claims in this process.
@@ -133,7 +140,12 @@ type directoryRecord struct {
 	AttestAt int64  `json:"attest_at,omitempty"`
 	Seq      int64  `json:"seq,omitempty"`
 	Revoked  int64  `json:"revoked,omitempty"`
-	Sig      string `json:"sig"`
+	// Owner*: the owner's signature of this publication (or revocation), its time and the log
+	// position it names (V 4); the same values are in the log entry Seq.
+	OwnerSig  string `json:"owner_sig,omitempty"`
+	OwnerTime int64  `json:"owner_time,omitempty"`
+	OwnerPrev string `json:"owner_prev,omitempty"`
+	Sig       string `json:"sig"`
 }
 
 func (rec directoryRecord) message(id string) []byte {
@@ -141,13 +153,17 @@ func (rec directoryRecord) message(id string) []byte {
 		b, _ := json.Marshal([]any{"gojiberry-directory-v1", id, rec.Key, rec.Label, rec.Publisher, rec.Provider, rec.Email, rec.At})
 		return b
 	}
-	b, _ := json.Marshal([]any{"gojiberry-directory-v3", id, rec.Kid, rec.Key, rec.Label, rec.Publisher, rec.Provider, rec.Email, rec.At, rec.Held, rec.Attest, rec.AttestAt, rec.Seq, rec.Revoked})
+	if rec.V == 3 {
+		b, _ := json.Marshal([]any{"gojiberry-directory-v3", id, rec.Kid, rec.Key, rec.Label, rec.Publisher, rec.Provider, rec.Email, rec.At, rec.Held, rec.Attest, rec.AttestAt, rec.Seq, rec.Revoked})
+		return b
+	}
+	b, _ := json.Marshal([]any{"gojiberry-directory-v4", id, rec.Kid, rec.Key, rec.Label, rec.Publisher, rec.Provider, rec.Email, rec.At, rec.Held, rec.Attest, rec.AttestAt, rec.Seq, rec.Revoked, rec.OwnerSig, rec.OwnerTime, rec.OwnerPrev})
 	return b
 }
 
 // sign makes rec a current record: the current key's ID and signature for id.
 func (d *AdapterDirectory) sign(rec directoryRecord, id string) directoryRecord {
-	rec.V, rec.Kid = 3, d.Signer.KeyID()
+	rec.V, rec.Kid = 4, d.Signer.KeyID()
 	rec.Sig = base64.StdEncoding.EncodeToString(d.Signer.Sign(rec.message(id)))
 	return rec
 }
@@ -218,6 +234,9 @@ func providerOf(userID string) string {
 type PublishOptions struct {
 	Challenge, Nonce string
 	Attestation      *docstore.DirectoryAttestation
+	// Owner is the owner's signature of the publish operation, required when the address has an
+	// enrolled owner key (see Enroll).
+	Owner *docstore.DirectoryOwnerSig
 }
 
 // Errors of Publish and Revoke besides ErrNotPublishable, ErrTooManyKeys and ErrDirectoryOff.
@@ -237,28 +256,38 @@ func publishable(user auth.User) bool {
 
 // stored is a record read from the store under one of an address's names.
 type stored struct {
-	id   string
-	rec  directoryRecord
-	fp   string
-	typ  string
-	text string
-	name int // index into names: 0 is the current key's
+	id     string
+	rec    directoryRecord
+	fp     string
+	typ    string
+	text   string
+	name   int    // index into names: 0 is the current key's
+	digest string // docstore.Digest of the stored bytes, for the conditional write that replaces them
 }
 
 func (st stored) when() int64 { return max(st.rec.At, st.rec.Revoked) }
 
+// addrState is everything the store holds about one address: for each fingerprint the newest
+// record (best, in the order they were found: list), every copy under every name (all) and the
+// digest of each stored record by ID (digests; what a conditional write must be given).
+type addrState struct {
+	best    map[string]stored
+	list    []stored
+	all     []stored
+	digests map[string]string
+}
+
 // readAddress reads every record of an address (under every key's name) whose key is the one its
 // ID names, and for each fingerprint keeps the newest (the current name's wins a tie); an
 // unreadable or misnamed record is skipped.
-func (d *AdapterDirectory) readAddress(ctx context.Context, email string) (map[string]stored, []stored, error) {
+func (d *AdapterDirectory) readAddress(ctx context.Context, email string) (addrState, error) {
 	want := normalizeEmail(email)
-	best := map[string]stored{}
+	out := addrState{best: map[string]stored{}, digests: map[string]string{}}
 	var order []string
-	var all []stored
 	for i, prefix := range d.names(want) {
 		metas, err := docstore.ListPrefix(ctx, d.Store, prefix)
 		if err != nil {
-			return nil, nil, fmt.Errorf("encrypt: listing the key directory: %w", err)
+			return addrState{}, fmt.Errorf("encrypt: listing the key directory: %w", err)
 		}
 		for _, m := range metas {
 			if !strings.HasPrefix(m.ID, prefix) {
@@ -269,7 +298,7 @@ func (d *AdapterDirectory) readAddress(ctx context.Context, email string) (map[s
 				continue
 			}
 			if err != nil {
-				return nil, nil, err
+				return addrState{}, err
 			}
 			var rec directoryRecord
 			if json.Unmarshal(doc.Data, &rec) != nil {
@@ -279,34 +308,63 @@ func (d *AdapterDirectory) readAddress(ctx context.Context, email string) (map[s
 			if err != nil || prefix+fingerprintSegment(r.Fingerprint) != m.ID {
 				continue // a key that is not the one its record is named for
 			}
-			st := stored{id: m.ID, rec: rec, fp: r.Fingerprint, typ: r.Type, text: r.Text, name: i}
-			all = append(all, st)
-			if cur, ok := best[r.Fingerprint]; !ok {
-				best[r.Fingerprint] = st
+			st := stored{id: m.ID, rec: rec, fp: r.Fingerprint, typ: r.Type, text: r.Text, name: i, digest: docstore.Digest(doc.Data)}
+			out.all = append(out.all, st)
+			out.digests[m.ID] = st.digest
+			if cur, ok := out.best[r.Fingerprint]; !ok {
+				out.best[r.Fingerprint] = st
 				order = append(order, r.Fingerprint)
 			} else if st.when() > cur.when() {
-				best[r.Fingerprint] = st
+				out.best[r.Fingerprint] = st
 			}
 		}
 	}
-	var list []stored
 	for _, fp := range order {
-		list = append(list, best[fp])
+		out.list = append(out.list, out.best[fp])
 	}
-	return best, list, nil
+	return out, nil
 }
 
 // signedBy says the record's signature is a server key's for this record, this address and a
 // provider user (not a passkey one).
 func (d *AdapterDirectory) signedBy(st stored, want string) bool {
 	rec := st.rec
-	if rec.V != 2 && rec.V != 3 {
+	if rec.V != 2 && rec.V != 3 && rec.V != 4 {
 		return false
 	}
 	sig, _ := base64.StdEncoding.DecodeString(rec.Sig)
 	return d.Signer.Verify(rec.Kid, rec.message(st.id), sig) &&
 		normalizeEmail(rec.Email) == want &&
 		rec.Provider != "" && rec.Provider != "passkey" && providerOf(rec.Publisher) == rec.Provider
+}
+
+// backedEntry finds the log entry a record stands on: the one its Seq names, which must be a
+// validly signed and hashed entry of this address (under any of the directory's keys), for this
+// fingerprint and for the operation the record is (publish, or revoke for a tombstone). A record
+// with no such entry (Seq 0, a number that is not that entry) was not made by the publish route.
+func (d *AdapterDirectory) backedEntry(ctx context.Context, st stored, want string) (LogEntry, bool, error) {
+	rec := st.rec
+	if rec.Seq <= 0 {
+		return LogEntry{}, false, nil
+	}
+	e, found, err := d.readEntry(ctx, rec.Seq)
+	if err != nil || !found {
+		return LogEntry{}, false, err
+	}
+	op := OpPublish
+	if rec.Revoked > 0 {
+		op = OpRevoke
+	}
+	sig, _ := base64.StdEncoding.DecodeString(e.Sig)
+	if e.Op != op || e.Fingerprint != st.fp || e.Hash != logHash(e) || !d.Signer.Verify(e.Kid, logSigMessage(e.Hash), sig) {
+		return LogEntry{}, false, nil
+	}
+	for _, a := range d.LogAddressesFor(want) {
+		if e.Address == a {
+			return e, true, nil
+		}
+	}
+	return LogEntry{}, false, nil
 }
 
 // Publish records key as a key of user's e-mail address, with no proof of possession (it
@@ -325,23 +383,36 @@ func (d *AdapterDirectory) Publish(ctx context.Context, user auth.User, key Reci
 // revoked within that window is refused (ErrRevoked).
 //
 // Proof of possession. With opt.Challenge and opt.Nonce (from a challenge made for this user and
-// key and not yet used, answered before it expired) the record says Held. A proof that does not
-// check is refused (ErrBadProof) and consumes nothing but itself; a missing one is refused
-// (ErrProofRequired) only when RequireProof is set. The challenge is used up as soon as it
-// checks, whatever happens next.
+// key and not yet used, answered before it expired, issued by the current directory key) the
+// record says Held. A proof that does not check is refused (ErrBadProof) and consumes nothing
+// but itself; a missing one is refused (ErrProofRequired) only when RequireProof is set. The
+// challenge is used up as soon as it checks, whatever happens next.
 //
 // Attestation. An opt.Attestation must be a valid signature by the key over the binding
 // (AttestationMessage) for this address, dated within ten minutes of now, and the key must be an
 // ssh-ed25519 one (ErrBadAttestation otherwise); the record then carries it and Lookup reports
 // the key Attested.
 //
-// The publication is appended to the transparency log first and the record carries its number.
+// Owner. If the address has an enrolled owner key (Enroll), opt.Owner is required: the owner's
+// signature over the publish operation (ErrOwnerRequired, ErrBadOwnerSig), recorded in the log
+// entry and in the record; Lookup then marks the key OwnerSigned. A key an owner-enrolled
+// address did not sign is not Verified.
+//
+// Atomicity. The publication is appended to the transparency log first and the record carries
+// its number; the record is then written conditionally on being what was read (create it if there
+// was none), and the checks (tombstones, the cap, the owner) are made again from a fresh read if
+// another replica got there first. A record that cannot be written leaves a "void" entry behind,
+// so the log never claims a publication that did not happen. On a store without a conditional
+// write this holds only inside this process (see CheckStore).
 func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key Recipient, opt PublishOptions) (PublishedKey, error) {
 	if d.Signer == nil {
 		return PublishedKey{}, ErrDirectoryOff
 	}
 	if !publishable(user) {
 		return PublishedKey{}, ErrNotPublishable
+	}
+	if err := d.checkUser(user); err != nil {
+		return PublishedKey{}, err
 	}
 	r, err := parsePublic(key.Text)
 	if err != nil {
@@ -376,67 +447,93 @@ func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key 
 	}
 
 	defer d.lockAddress(user.Email)()
-	best, _, err := d.readAddress(ctx, email)
-	if err != nil {
-		return PublishedKey{}, err
-	}
 	maxKeys := d.MaxKeys
 	if maxKeys <= 0 {
 		maxKeys = 20
 	}
-	counted := 0
-	var stale []stored // tombstones past their window: pruned
-	for fp, st := range best {
-		if st.rec.Revoked > 0 {
-			if !d.signedBy(st, email) { // an unsigned tombstone is not believed, and not counted
+	id := d.directoryID(email, r.Fingerprint)
+	claimed := false
+	for round := 0; round < maxCASRounds; round++ {
+		state, err := d.readAddress(ctx, email)
+		if err != nil {
+			return PublishedKey{}, err
+		}
+		enr, _, err := d.readEnrollment(ctx, email)
+		if err != nil {
+			return PublishedKey{}, err
+		}
+		owner, err := d.checkOwner(ctx, enr, OpPublish, email, r.Fingerprint, opt.Owner, now)
+		if err != nil {
+			return PublishedKey{}, err
+		}
+		counted := 0
+		var stale []stored // tombstones past their window: pruned
+		for fp, st := range state.best {
+			if st.rec.Revoked > 0 {
+				if !d.signedBy(st, email) { // an unsigned tombstone is not believed, and not counted
+					continue
+				}
+				if now.Sub(time.Unix(st.rec.Revoked, 0)) < d.window() {
+					if fp == r.Fingerprint {
+						return PublishedKey{}, ErrRevoked
+					}
+					counted++
+				} else {
+					stale = append(stale, st)
+				}
 				continue
 			}
-			if now.Sub(time.Unix(st.rec.Revoked, 0)) < d.window() {
-				if fp == r.Fingerprint {
-					return PublishedKey{}, ErrRevoked
-				}
-				counted++
-			} else {
-				stale = append(stale, st)
-			}
-			continue
+			counted++
 		}
-		counted++
-	}
-	if cur, ok := best[r.Fingerprint]; (!ok || cur.rec.Revoked > 0) && counted >= maxKeys {
-		return PublishedKey{}, ErrTooManyKeys
-	}
-	// Everything has checked: the challenge is used up now (single use), and the publication
-	// is logged before the record is written.
-	if proven {
-		if err := d.claimChallenge(ctx, tok); err != nil {
+		if cur, ok := state.best[r.Fingerprint]; (!ok || cur.rec.Revoked > 0) && counted >= maxKeys {
+			return PublishedKey{}, ErrTooManyKeys
+		}
+		// Everything has checked: the challenge is used up now (single use), and the publication
+		// is logged before the record is written.
+		if proven && !claimed {
+			if err := d.claimChallenge(ctx, tok); err != nil {
+				return PublishedKey{}, err
+			}
+			claimed = true
+		}
+		in := logInput{Op: OpPublish, Email: email, Fingerprint: r.Fingerprint}
+		rec := directoryRecord{Key: r.Text, Label: cleanLabel(key.Label), Publisher: user.ID, Provider: providerOf(user.ID), Email: email, At: now.Unix(), Held: proven}
+		if owner != nil {
+			in.OwnerSig, in.OpTime, in.OwnerPrev = owner.Sig, owner.Time, owner.Prev
+			rec.OwnerSig, rec.OwnerTime, rec.OwnerPrev = owner.Sig, owner.Time, owner.Prev
+		}
+		seq, err := d.appendLog(ctx, in, now)
+		if err != nil {
+			return PublishedKey{}, err
+		}
+		rec.Seq = seq
+		if att != nil {
+			rec.Attest, rec.AttestAt = att.Sig, att.At
+		}
+		rec = d.sign(rec, id)
+		data, err := json.Marshal(rec)
+		if err != nil {
+			d.voidLog(ctx, email, seq, r.Fingerprint, now)
+			return PublishedKey{}, err
+		}
+		switch err := d.saveIf(ctx, id, data, state.digests[id]); {
+		case err == nil:
+			d.dropOtherNames(ctx, email, r.Fingerprint, id)
+			for _, st := range stale {
+				if st.fp != r.Fingerprint {
+					_ = d.deleteIf(ctx, st.id, st.digest) // best effort: a tombstone left behind is pruned next time
+				}
+			}
+			st := stored{id: id, rec: rec, fp: r.Fingerprint, typ: r.Type, text: r.Text}
+			return d.publishedKey(ctx, st, email, false, enr)
+		case errors.Is(err, docstore.ErrConflict):
+			d.voidLog(ctx, email, seq, r.Fingerprint, now) // another replica changed it: look again
+		default:
+			d.voidLog(ctx, email, seq, r.Fingerprint, now)
 			return PublishedKey{}, err
 		}
 	}
-	seq, err := d.appendLog(ctx, "publish", email, r.Fingerprint, now)
-	if err != nil {
-		return PublishedKey{}, err
-	}
-	id := d.directoryID(email, r.Fingerprint)
-	rec := directoryRecord{Key: r.Text, Label: cleanLabel(key.Label), Publisher: user.ID, Provider: providerOf(user.ID), Email: email, At: now.Unix(), Held: proven, Seq: seq}
-	if att != nil {
-		rec.Attest, rec.AttestAt = att.Sig, att.At
-	}
-	rec = d.sign(rec, id)
-	data, err := json.Marshal(rec)
-	if err != nil {
-		return PublishedKey{}, err
-	}
-	if err := d.Store.Save(ctx, id, data); err != nil {
-		return PublishedKey{}, err
-	}
-	d.dropOtherNames(ctx, email, r.Fingerprint, id)
-	for _, st := range stale {
-		if st.fp != r.Fingerprint {
-			_ = d.Store.Delete(ctx, st.id) // best effort: a tombstone left behind is pruned next time
-		}
-	}
-	return d.publishedKey(stored{id: id, rec: rec, fp: r.Fingerprint, typ: r.Type, text: r.Text}, email, false), nil
+	return PublishedKey{}, docstore.ErrDirectoryBusy
 }
 
 // dropOtherNames deletes the records of fingerprint fp that a retired key's name holds (the
@@ -449,19 +546,65 @@ func (d *AdapterDirectory) dropOtherNames(ctx context.Context, email, fp, id str
 	}
 }
 
+// deleteIf deletes the record id only if it still has digest prev: with the store's conditional
+// delete when it has one (docstore.ConditionalDeleter), otherwise as one step inside this process.
+// docstore.ErrConflict if it changed, docstore.ErrNotFound if it is gone.
+func (d *AdapterDirectory) deleteIf(ctx context.Context, id, prev string) error {
+	if c, ok := d.Store.(docstore.ConditionalDeleter); ok {
+		err := c.DeleteIf(ctx, id, prev)
+		if !errors.Is(err, docstore.ErrConditionalUnsupported) {
+			return err
+		}
+	}
+	d.casMu.Lock()
+	defer d.casMu.Unlock()
+	doc, err := d.Store.Load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if docstore.Digest(doc.Data) != prev {
+		return docstore.ErrConflict
+	}
+	return d.Store.Delete(ctx, id)
+}
+
 // ErrTooManyKeys is returned by Publish when the address already has as many published keys as
 // the directory keeps.
 var ErrTooManyKeys = errors.New("encrypt: this address already has the most keys the directory keeps")
 
-// publishedKey is the lookup row of a stored record, with its flags computed: Verified from the
-// server's signature, Attested from that and the key's own.
-func (d *AdapterDirectory) publishedKey(st stored, want string, includeRevoked bool) PublishedKey {
+// publishedKey is the lookup row of a stored record, with its flags computed. Verified needs the
+// server's signature, and, for a record that a retired key signed or that belongs to an address
+// with an owner key, a log entry that backs it (backedEntry): a retired key that was compromised
+// cannot make a record Verified by signing one, and a server that holds the directory key cannot
+// put an unlogged record under an owner's address. On an owner-enrolled address a record newer
+// than the enrollment must also carry the owner's signature (OwnerSigned) to be Verified. Attested
+// is from that and the key's own signature.
+func (d *AdapterDirectory) publishedKey(ctx context.Context, st stored, want string, includeRevoked bool, enr *enrollRecord) (PublishedKey, error) {
 	rec := st.rec
 	k := PublishedKey{Label: rec.Label, Text: st.text, Type: st.typ, Fingerprint: st.fp, Kid: rec.Kid, Seq: rec.Seq}
-	k.Verified = d.signedBy(st, want)
+	verified := d.signedBy(st, want)
+	var entry LogEntry
+	if verified && (enr != nil || rec.Kid != d.Signer.KeyID()) {
+		e, backed, err := d.backedEntry(ctx, st, want)
+		if err != nil {
+			return PublishedKey{}, err
+		}
+		verified, entry = backed, e
+	}
+	if enr != nil {
+		k.OwnerEnrolled, k.OwnerResetPending = true, enr.ResetSince > 0
+		if verified {
+			if ev, ok := ownerEvidence(enr, st, entry); ok {
+				k.OwnerSigned, k.Owner = true, &ev
+			} else if len(enr.Keys) > 0 && rec.Seq > enr.Keys[0].Seq && rec.Revoked == 0 {
+				verified = false // published after the enrollment without the owner's signature
+			}
+		}
+	}
+	k.Verified = verified
 	if k.Verified {
-		k.Held = rec.V == 3 && rec.Held
-		if rec.V == 3 && rec.Attest != "" {
+		k.Held = rec.V >= 3 && rec.Held
+		if rec.V >= 3 && rec.Attest != "" {
 			att := docstore.DirectoryAttestation{At: rec.AttestAt, Sig: rec.Attest}
 			if VerifyAttestation(st.text, want, att) {
 				k.Attested, k.Attestation = true, &att
@@ -471,7 +614,30 @@ func (d *AdapterDirectory) publishedKey(st stored, want string, includeRevoked b
 	if rec.Revoked > 0 && includeRevoked {
 		k.Revoked, k.RevokedAt = true, rec.Revoked
 	}
-	return k
+	return k, nil
+}
+
+// ownerEvidence says the record carries the signature of an owner key that was the address's
+// owner key at the time of its log entry, the same one the entry carries, and returns it.
+func ownerEvidence(enr *enrollRecord, st stored, entry LogEntry) (docstore.DirectoryOwnerEvidence, bool) {
+	rec := st.rec
+	if rec.V < 4 || rec.OwnerSig == "" || entry.OwnerSig != rec.OwnerSig || entry.OpTime != rec.OwnerTime || entry.OwnerPrev != rec.OwnerPrev {
+		return docstore.DirectoryOwnerEvidence{}, false
+	}
+	op := OpPublish
+	if rec.Revoked > 0 {
+		op = OpRevoke
+	}
+	for _, k := range enr.Keys {
+		if k.Seq >= rec.Seq || (k.Until != 0 && rec.Seq >= k.Until) {
+			continue
+		}
+		pub, err := ParseOwnerPub(k.Pub)
+		if err == nil && verifyOwner(pub, op, rec.Email, st.fp, rec.OwnerTime, rec.OwnerPrev, rec.OwnerSig) {
+			return docstore.DirectoryOwnerEvidence{Pub: k.Pub, Time: rec.OwnerTime, Prev: rec.OwnerPrev, Sig: rec.OwnerSig}, true
+		}
+	}
+	return docstore.DirectoryOwnerEvidence{}, false
 }
 
 // LookupOptions are the choices of LookupWith.
@@ -482,9 +648,11 @@ type LookupOptions struct {
 
 // Lookup returns the keys published for email. A record counts as Verified only when its
 // signature is a server key's (current or retired), for this record and this address, from a
-// provider user; a record that fails any of that is returned unverified (the owner then confirms
-// the fingerprint), one whose key does not match its ID, or that cannot be read, is skipped.
-// Revoked keys are not returned. With no Signer it returns nothing.
+// provider user, backed by a log entry where that matters (see publishedKey); a record that
+// fails any of that is returned unverified (the owner then confirms the fingerprint), one whose
+// key does not match its ID, or that cannot be read, is skipped. Revoked keys are not returned.
+// With no Signer it returns nothing; a malformed address (not exactly one "@") is
+// docstore.ErrDirectoryBadAddress.
 func (d *AdapterDirectory) Lookup(ctx context.Context, email string) ([]PublishedKey, error) {
 	return d.LookupWith(ctx, email, LookupOptions{})
 }
@@ -498,141 +666,113 @@ func (d *AdapterDirectory) LookupWith(ctx context.Context, email string, opt Loo
 	if want == "" || d.Signer == nil {
 		return nil, nil
 	}
-	_, list, err := d.readAddress(ctx, want)
+	if !docstore.ValidAddress(want) {
+		return nil, docstore.ErrDirectoryBadAddress
+	}
+	state, err := d.readAddress(ctx, want)
+	if err != nil {
+		return nil, err
+	}
+	enr, _, err := d.readEnrollment(ctx, want)
 	if err != nil {
 		return nil, err
 	}
 	now := d.now()
 	var out []PublishedKey
-	for _, st := range list {
+	for _, st := range state.list {
 		if st.rec.Revoked > 0 {
 			if !opt.IncludeRevoked || !d.signedBy(st, want) || now.Sub(time.Unix(st.rec.Revoked, 0)) >= d.window() {
 				continue
 			}
 		}
-		out = append(out, d.publishedKey(st, want, opt.IncludeRevoked))
+		k, err := d.publishedKey(ctx, st, want, opt.IncludeRevoked, enr)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, k)
 	}
 	return out, nil
 }
 
 // Revoke removes the key with this fingerprint ("SHA256:..." or the form fingerprintSegment
 // makes of it) from user's own address: the record is replaced at once by a signed tombstone, so
-// Lookup stops returning the key, and the revocation is logged. The tombstone is kept for
-// RevokeWindow, during which the key cannot be published again (ErrRevoked) and a lookup can ask
-// for it. Only the address of the signed-in user is reachable: ErrKeyNotFound if it has no such
-// published key (or it was revoked already), ErrNotPublishable for a user who could not have
-// published.
-func (d *AdapterDirectory) Revoke(ctx context.Context, user auth.User, fingerprint string) (PublishedKey, error) {
+// Lookup stops returning the key, and the revocation is logged. The tombstone carries the number
+// of the revoke entry, and is kept for RevokeWindow, during which the key cannot be published
+// again (ErrRevoked) and a lookup can ask for it. Only the address of the signed-in user is
+// reachable: ErrKeyNotFound if it has no such published key (or it was revoked already),
+// ErrNotPublishable for a user who could not have published. On an address with an owner key,
+// owner is required (the owner's signature over the revoke operation). Like Publish, the
+// tombstone is written conditionally on the record that was read, and a record that cannot be
+// written leaves a void log entry.
+func (d *AdapterDirectory) Revoke(ctx context.Context, user auth.User, fingerprint string, owner *docstore.DirectoryOwnerSig) (PublishedKey, error) {
 	if d.Signer == nil {
 		return PublishedKey{}, ErrDirectoryOff
 	}
 	if !publishable(user) {
 		return PublishedKey{}, ErrNotPublishable
 	}
+	if err := d.checkUser(user); err != nil {
+		return PublishedKey{}, err
+	}
 	email := normalizeEmail(user.Email)
 	seg := fingerprintSegment(strings.TrimSpace(fingerprint))
 	defer d.lockAddress(user.Email)()
-	best, _, err := d.readAddress(ctx, email)
-	if err != nil {
-		return PublishedKey{}, err
-	}
-	var st stored
-	found := false
-	for fp, cand := range best {
-		if fingerprintSegment(fp) == seg && cand.rec.Revoked == 0 {
-			st, found = cand, true
-		}
-	}
-	if !found {
-		return PublishedKey{}, ErrKeyNotFound
-	}
 	now := d.now()
-	if _, err := d.appendLog(ctx, "revoke", email, st.fp, now); err != nil {
-		return PublishedKey{}, err
-	}
-	id := d.directoryID(email, st.fp)
-	tomb := st.rec
-	tomb.Publisher, tomb.Provider, tomb.Revoked = user.ID, providerOf(user.ID), now.Unix()
-	tomb.Held, tomb.Attest, tomb.AttestAt = false, "", 0
-	tomb = d.sign(tomb, id)
-	data, err := json.Marshal(tomb)
-	if err != nil {
-		return PublishedKey{}, err
-	}
-	if err := d.Store.Save(ctx, id, data); err != nil {
-		return PublishedKey{}, err
-	}
-	d.dropOtherNames(ctx, email, st.fp, id)
-	return d.publishedKey(stored{id: id, rec: tomb, fp: st.fp, typ: st.typ, text: st.text}, email, true), nil
-}
-
-// Resign moves every record that a retired key signed or named to the current key: the record
-// is verified (by the retired key; one that does not verify is left alone, not endorsed), written
-// again under the current key's name with the current key's signature, and the old copy deleted.
-// It is what finishes a rotation (GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV): when it reports no more
-// records, the retired key can be removed from the list. It returns how many it moved. Nothing
-// the publisher proved is touched (the proof flag, attestation and log number are copied), and
-// nothing is logged: the log records publications and revocations, which this is not. Expired
-// tombstones are dropped on the way.
-func (d *AdapterDirectory) Resign(ctx context.Context) (int, error) {
-	if d.Signer == nil {
-		return 0, ErrDirectoryOff
-	}
-	metas, err := docstore.ListPrefix(ctx, d.Store, directoryPrefix)
-	if err != nil {
-		return 0, err
-	}
-	moved := 0
-	for _, m := range metas {
-		if strings.HasPrefix(m.ID, popPrefix) {
-			continue
-		}
-		doc, err := d.Store.Load(ctx, m.ID)
-		if errors.Is(err, docstore.ErrNotFound) {
-			continue
-		}
+	for round := 0; round < maxCASRounds; round++ {
+		state, err := d.readAddress(ctx, email)
 		if err != nil {
-			return moved, err
+			return PublishedKey{}, err
 		}
-		var rec directoryRecord
-		if json.Unmarshal(doc.Data, &rec) != nil || (rec.V != 2 && rec.V != 3) {
-			continue
+		var st stored
+		found := false
+		for fp, cand := range state.best {
+			if fingerprintSegment(fp) == seg && cand.rec.Revoked == 0 {
+				st, found = cand, true
+			}
 		}
-		r, err := parsePublic(rec.Key)
+		if !found {
+			return PublishedKey{}, ErrKeyNotFound
+		}
+		enr, _, err := d.readEnrollment(ctx, email)
 		if err != nil {
-			continue
+			return PublishedKey{}, err
 		}
-		email := normalizeEmail(rec.Email)
-		oldPrefix := m.ID[:strings.LastIndex(m.ID, "/")+1]
-		if email == "" || oldPrefix+fingerprintSegment(r.Fingerprint) != m.ID {
-			continue
-		}
-		current := d.addressPrefix(email) + fingerprintSegment(r.Fingerprint)
-		st := stored{id: m.ID, rec: rec, fp: r.Fingerprint, typ: r.Type, text: r.Text}
-		if !d.signedBy(st, email) {
-			continue
-		}
-		if rec.Revoked > 0 && d.now().Sub(time.Unix(rec.Revoked, 0)) >= d.window() {
-			_ = d.Store.Delete(ctx, m.ID)
-			continue
-		}
-		if rec.V == 3 && rec.Kid == d.Signer.KeyID() && m.ID == current {
-			continue // already current
-		}
-		next := d.sign(rec, current)
-		data, err := json.Marshal(next)
+		o, err := d.checkOwner(ctx, enr, OpRevoke, email, st.fp, owner, now)
 		if err != nil {
-			return moved, err
+			return PublishedKey{}, err
 		}
-		if err := d.Store.Save(ctx, current, data); err != nil {
-			return moved, err
+		in := logInput{Op: OpRevoke, Email: email, Fingerprint: st.fp}
+		tomb := st.rec
+		tomb.OwnerSig, tomb.OwnerTime, tomb.OwnerPrev = "", 0, ""
+		if o != nil {
+			in.OwnerSig, in.OpTime, in.OwnerPrev = o.Sig, o.Time, o.Prev
+			tomb.OwnerSig, tomb.OwnerTime, tomb.OwnerPrev = o.Sig, o.Time, o.Prev
 		}
-		if m.ID != current {
-			_ = d.Store.Delete(ctx, m.ID)
+		seq, err := d.appendLog(ctx, in, now)
+		if err != nil {
+			return PublishedKey{}, err
 		}
-		moved++
+		id := d.directoryID(email, st.fp)
+		tomb.Publisher, tomb.Provider, tomb.Revoked, tomb.Seq = user.ID, providerOf(user.ID), now.Unix(), seq
+		tomb.Held, tomb.Attest, tomb.AttestAt = false, "", 0
+		tomb = d.sign(tomb, id)
+		data, err := json.Marshal(tomb)
+		if err != nil {
+			d.voidLog(ctx, email, seq, st.fp, now)
+			return PublishedKey{}, err
+		}
+		switch err := d.saveIf(ctx, id, data, state.digests[id]); {
+		case err == nil:
+			d.dropOtherNames(ctx, email, st.fp, id)
+			return d.publishedKey(ctx, stored{id: id, rec: tomb, fp: st.fp, typ: st.typ, text: st.text}, email, true, enr)
+		case errors.Is(err, docstore.ErrConflict):
+			d.voidLog(ctx, email, seq, st.fp, now)
+		default:
+			d.voidLog(ctx, email, seq, st.fp, now)
+			return PublishedKey{}, err
+		}
 	}
-	return moved, nil
+	return PublishedKey{}, docstore.ErrDirectoryBusy
 }
 
 // Sweep deletes what has expired: used challenges (kept until the challenge itself could no
@@ -709,6 +849,10 @@ type dirService struct{ d *AdapterDirectory }
 // docstore errors pass through.
 func refusal(err error) error {
 	switch {
+	case errors.Is(err, docstore.ErrDirectoryBadAddress):
+		return err
+	case errors.Is(err, errEnrollmentCorrupt):
+		return fmt.Errorf("%w: %v", docstore.ErrDirectoryRefused, err)
 	case errors.Is(err, ErrNotPublishable), errors.Is(err, ErrTooManyKeys), errors.Is(err, ErrDirectoryOff):
 		return fmt.Errorf("%w: %v", docstore.ErrDirectoryRefused, err)
 	}
@@ -717,7 +861,8 @@ func refusal(err error) error {
 
 func toDirectoryKey(k PublishedKey) docstore.DirectoryKey {
 	return docstore.DirectoryKey{Key: k.Text, Label: k.Label, Type: k.Type, Fingerprint: k.Fingerprint, Verified: k.Verified,
-		Held: k.Held, Attested: k.Attested, Attestation: k.Attestation, Seq: k.Seq, Kid: k.Kid, Revoked: k.Revoked, RevokedAt: k.RevokedAt}
+		Held: k.Held, Attested: k.Attested, Attestation: k.Attestation, Seq: k.Seq, Kid: k.Kid, Revoked: k.Revoked, RevokedAt: k.RevokedAt,
+		OwnerEnrolled: k.OwnerEnrolled, OwnerSigned: k.OwnerSigned, OwnerResetPending: k.OwnerResetPending, Owner: k.Owner}
 }
 
 func (s dirService) Challenge(ctx context.Context, user auth.User, key string) (docstore.DirectoryChallenge, error) {
@@ -734,7 +879,7 @@ func (s dirService) Publish(ctx context.Context, user auth.User, req docstore.Di
 		return docstore.DirectoryKey{}, fmt.Errorf("%w: %v", docstore.ErrDirectoryBadKey, err)
 	}
 	r.Label = req.Label
-	opt := PublishOptions{Attestation: req.Attestation}
+	opt := PublishOptions{Attestation: req.Attestation, Owner: req.Owner}
 	if req.Proof != nil {
 		opt.Challenge, opt.Nonce = req.Proof.Token, req.Proof.Nonce
 	}
@@ -745,8 +890,8 @@ func (s dirService) Publish(ctx context.Context, user auth.User, req docstore.Di
 	return toDirectoryKey(k), nil
 }
 
-func (s dirService) Revoke(ctx context.Context, user auth.User, fingerprint string) (docstore.DirectoryKey, error) {
-	k, err := s.d.Revoke(ctx, user, fingerprint)
+func (s dirService) Revoke(ctx context.Context, user auth.User, fingerprint string, owner *docstore.DirectoryOwnerSig) (docstore.DirectoryKey, error) {
+	k, err := s.d.Revoke(ctx, user, fingerprint, owner)
 	if err != nil {
 		return docstore.DirectoryKey{}, refusal(err)
 	}
@@ -768,3 +913,44 @@ func (s dirService) Lookup(ctx context.Context, email string, includeRevoked boo
 func (s dirService) Log(ctx context.Context, since int64, limit int) (docstore.DirectoryLog, error) {
 	return s.d.ReadLog(ctx, since, limit)
 }
+
+func (s dirService) Head(ctx context.Context) (docstore.DirectoryHead, error) { return s.d.Head(ctx) }
+
+func (s dirService) LogAddress(_ context.Context, user auth.User) (docstore.DirectoryLogAddress, error) {
+	if s.d.Signer == nil {
+		return docstore.DirectoryLogAddress{}, refusal(ErrDirectoryOff)
+	}
+	if err := s.d.checkUser(user); err != nil {
+		return docstore.DirectoryLogAddress{}, refusal(err)
+	}
+	all := s.d.LogAddressesFor(user.Email)
+	return docstore.DirectoryLogAddress{Address: all[0], Previous: all[1:]}, nil
+}
+
+func (s dirService) Enrollment(ctx context.Context, email string) (docstore.DirectoryEnrollment, error) {
+	e, err := s.d.Enrollment(ctx, email)
+	return e, refusal(err)
+}
+
+func (s dirService) EnrollChallenge(ctx context.Context, user auth.User) (docstore.DirectoryEnrollChallenge, error) {
+	c, err := s.d.EnrollChallenge(ctx, user)
+	return c, refusal(err)
+}
+
+func (s dirService) Enroll(ctx context.Context, user auth.User, req docstore.DirectoryEnroll) (docstore.DirectoryEnrollment, error) {
+	e, err := s.d.Enroll(ctx, user, req)
+	return e, refusal(err)
+}
+
+func (s dirService) RequestReset(ctx context.Context, user auth.User) (docstore.DirectoryEnrollment, error) {
+	e, err := s.d.RequestReset(ctx, user)
+	return e, refusal(err)
+}
+
+func (s dirService) CancelReset(ctx context.Context, user auth.User, owner *docstore.DirectoryOwnerSig) (docstore.DirectoryEnrollment, error) {
+	e, err := s.d.CancelReset(ctx, user, owner)
+	return e, refusal(err)
+}
+
+// DirectoryHealth implements docstore.DirectoryHealther: the census of the last Startup.
+func (s dirService) DirectoryHealth() docstore.DirectoryHealth { return s.d.Health() }

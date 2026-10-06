@@ -223,7 +223,7 @@ func envOr(key, fallback string) string {
 // /auth/logout.
 //
 // Plus, with WithDirectory and an auth.Manager, the /directory/* routes (challenge, publish,
-// revoke, lookup, log: see WithDirectory); the "directory/", "directory-log/" and "ratelimit/"
+// revoke, lookup, log, owner enrollment: see WithDirectory); the "directory/", "directory-log/", "directory-enroll/" and "ratelimit/"
 // ids are reserved from /docs.
 //
 // GET/PUT/DELETE on /docs/{id} enforce that document's own ACL, if any
@@ -244,7 +244,9 @@ type Server struct {
 	// extra are more routes mounted beside /docs and /auth (WithRoutes); hidden are the
 	// prefixes of ids the server keeps for itself (Hide).
 	extra  []extraRoute
-	hidden []string
+	hidden []string // lowercased (Hide)
+	// docsClosed answers 404 to the generic API (see CloseDocs).
+	docsClosed bool
 	// directory is the key directory behind /directory/* (WithDirectory); its routes are limited
 	// by the limiters the factory makes (WithDirectoryLimits) and its lookups narrowed by
 	// dirPolicy (WithDirectoryPolicy).
@@ -253,6 +255,9 @@ type Server struct {
 	dirLimitOnce    sync.Once
 	dirLimits       *directoryLimits
 	dirPolicy       DirectoryPolicy
+	// dirDomainBudget makes the whole-server lookup budget one per e-mail domain
+	// (WithDirectoryGlobalPerDomain).
+	dirDomainBudget bool
 }
 
 type extraRoute struct {
@@ -325,9 +330,28 @@ func (s *Server) WithRoutes(pattern string, h http.Handler) *Server {
 // Hide keeps ids that start with prefix away from people: they are not listed and cannot be
 // read, written or deleted over HTTP. For records a part of the program keeps in the same
 // store ("passkey/" holds accounts and their credentials) that only that part should touch.
+// The match ignores case ("PubDoc/x" is hidden by "pubdoc/"), since a backend that folds case
+// would alias the two.
 func (s *Server) Hide(prefix string) *Server {
-	s.hidden = append(s.hidden, prefix)
+	s.hidden = append(s.hidden, strings.ToLower(prefix))
 	return s
+}
+
+// CloseDocs shuts the generic document API: /docs, /docs/{id}, /docs/{id}/acl and /quota answer 404
+// to everybody, whatever the guard or the ACLs say. For a server whose store is shared with a
+// public (anonymous) offer, where the generic API would otherwise let anyone read and write every
+// document that has no ACL. /health, /auth/*, /directory/* and the routes added with WithRoutes
+// stay.
+func (s *Server) CloseDocs() *Server {
+	s.docsClosed = true
+	return s
+}
+
+// DocsClosed reports whether the generic document API is closed to anonymous callers: shut by
+// CloseDocs, or every document without an ACL is closed (WithRequireACL) and sign-in is configured
+// (WithAuth), so that nobody can write or read without being signed in and listed.
+func (s *Server) DocsClosed() bool {
+	return s.docsClosed || (s.requireACL && s.auth != nil)
 }
 
 // reserved says an id is not for people to use: this package's own keys and the hidden ones.
@@ -335,8 +359,9 @@ func (s *Server) reserved(id string) bool {
 	if isReservedDocID(id) {
 		return true
 	}
+	lower := strings.ToLower(id)
 	for _, p := range s.hidden {
-		if strings.HasPrefix(id, p) {
+		if strings.HasPrefix(lower, p) {
 			return true
 		}
 	}
@@ -366,9 +391,16 @@ func NewAuthManager(ctx context.Context, cfg AuthConfig) (*auth.Manager, error) 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
-	mux.HandleFunc("/quota", s.handleQuota)
-	mux.HandleFunc("/docs", s.handleList)
-	mux.HandleFunc("/docs/", s.handleDoc)
+	if s.docsClosed {
+		closed := http.NotFoundHandler()
+		mux.Handle("/quota", closed)
+		mux.Handle("/docs", closed)
+		mux.Handle("/docs/", closed)
+	} else {
+		mux.HandleFunc("/quota", s.handleQuota)
+		mux.HandleFunc("/docs", s.handleList)
+		mux.HandleFunc("/docs/", s.handleDoc)
+	}
 	if s.auth != nil {
 		mux.Handle("/auth/", s.auth.Routes())
 	}
@@ -378,16 +410,37 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("/directory/keys/", s.handleRevoke)
 		mux.HandleFunc("/directory/lookup", s.handleLookup)
 		mux.HandleFunc("/directory/log", s.handleLog)
+		mux.HandleFunc("/directory/log/head", s.handleLogHead)
+		mux.HandleFunc("/directory/log/address", s.handleLogAddress)
+		mux.HandleFunc("/directory/enroll", s.handleEnrollRoot)
+		mux.HandleFunc("/directory/enroll/", s.handleEnrollSub)
 	}
 	for _, e := range s.extra {
 		mux.Handle(e.pattern, e.h)
 	}
-	return guard.Or(s.guard).Wrap(mux)
+	return guard.Or(s.guard).Wrap(exposeHeaders(mux))
+}
+
+// ExposedHeaders is the Access-Control-Expose-Headers value of the document routes: the response
+// headers a script on another origin needs (the deadline of an expiring document, how long to wait
+// after a 429 or 503, and the terms link of a public offer), which a browser hides unless they are
+// listed.
+const ExposedHeaders = "X-Gojiberry-Expires, Retry-After, Link"
+
+func exposeHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Expose-Headers", ExposedHeaders)
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "backend": s.backend}) // a write failure here means the client disconnected -- nothing actionable to do about it
+	out := map[string]any{"status": "ok", "backend": s.backend}
+	if h, ok := s.directory.(DirectoryHealther); ok {
+		out["directory"] = h.DirectoryHealth()
+	}
+	_ = json.NewEncoder(w).Encode(out) // a write failure here means the client disconnected -- nothing actionable to do about it
 }
 
 // quotaResponse is handleQuota's own JSON shape -- Available false

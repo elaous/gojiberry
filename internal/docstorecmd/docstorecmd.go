@@ -5,9 +5,12 @@ package docstorecmd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,59 +18,164 @@ import (
 	"github.com/elaous/gojiberry/auth/passkey"
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/docstore/encrypt"
+	"github.com/elaous/gojiberry/docstore/public"
 )
 
+// withPublic turns on the public (anonymous) offer when GOJIBERRY_DOCSTORE_PUBLIC=true (limits and
+// secrets in GOJIBERRY_DOCSTORE_PUBLIC_*, see public.FromEnv): POST /public/session, the session's
+// one document under /public/doc, read-only /public/view/<id>, POST /public/report and, with
+// GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN, DELETE /admin/takedown/<id>. Unset, nothing is mounted.
+//
+// The offer promises deletion 24 hours after the last edit, so it refuses to start unless
+// expiry is on (GOJIBERRY_DOCSTORE_EXPIRY_TTL, and the adapter is the expiring one).
+//
+// It also refuses to start with the generic /docs API open: that API would let any visitor read and
+// write every document that has no ACL. /docs counts as closed when sign-in is configured with
+// GOJIBERRY_DOCSTORE_REQUIRE_ACL=true (srv must already have its auth manager, see Main). Otherwise
+// withPublic closes it (Server.CloseDocs: 404 for /docs, /docs/{id}, its /acl and /quota), unless the
+// operator sets GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS=true, which keeps it open and says so loudly
+// in the log. Behind a reverse proxy, GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES must name it ("none"
+// says there is none and silences the startup warning).
+//
+// limiters is where the offer's request budgets live (GOJIBERRY_DOCSTORE_LIMITER): with "store"
+// the replicas that share the store share them, as for the directory and the passkey routes.
+//
+// It returns the service so the caller can run its sweep.
+func withPublic(srv *docstore.Server, adapter docstore.Adapter, expiryTTL time.Duration, limiters docstore.LimiterFactory) (*public.Service, error) {
+	cfg, err := public.FromEnv(os.Getenv)
+	if err != nil {
+		return nil, err
+	}
+	if !cfg.Enabled {
+		return nil, nil
+	}
+	if expiryTTL <= 0 {
+		return nil, errors.New("GOJIBERRY_DOCSTORE_PUBLIC needs GOJIBERRY_DOCSTORE_EXPIRY_TTL: the public offer promises that documents are deleted after the last edit")
+	}
+	svc, err := public.New(public.Options{Store: adapter, Config: cfg, LimiterFactory: limiters})
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case srv.DocsClosed():
+		log.Print("docstore: public offer: the generic /docs API is protected by required ACLs with sign-in")
+	case cfg.AllowOpenDocs:
+		log.Print("docstore: WARNING: GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS=true: the generic /docs API stays OPEN to anonymous readers and writers beside the public offer; anyone can read, overwrite and delete every document that has no ACL")
+	default:
+		srv.CloseDocs()
+		log.Print("docstore: public offer: the generic /docs API is closed (404); configure sign-in with GOJIBERRY_DOCSTORE_REQUIRE_ACL=true to keep it, or set GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS=true to leave it open")
+	}
+	if err := public.RequireDocsClosed(srv, cfg.AllowOpenDocs); err != nil {
+		return nil, err
+	}
+	for _, w := range cfg.Warnings() {
+		log.Printf("docstore: WARNING: %s", w)
+	}
+	svc.Mount(srv)
+	log.Printf("docstore: public offer enabled (takedown route %t, terms link %t)", cfg.AdminToken != "", cfg.TermsURL != "")
+	return svc, nil
+}
+
+// Timeouts of the HTTP server: a client has this long to send a whole request (header timeout
+// aside), so a slow body cannot hold a connection (and its memory) for ever. The public routes set
+// tighter ones of their own per request (public.Config.RequestTimeout). The write side is not
+// bounded here: a document download may be large and slow, and the public routes bound theirs.
+const (
+	readHeaderTimeout = 10 * time.Second
+	readTimeout       = 5 * time.Minute
+	idleTimeout       = 2 * time.Minute
+)
+
+// newHTTPServer is the server Main runs.
+func newHTTPServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: readHeaderTimeout, ReadTimeout: readTimeout, IdleTimeout: idleTimeout}
+}
+
 // withDirectory turns on the verified e-mail key directory (POST /directory/challenge and
-// /directory/publish, DELETE /directory/keys/<fingerprint>, GET /directory/lookup and
-// /directory/log) when GOJIBERRY_DOCSTORE_DIRECTORY_KEY holds a 32-byte seed in hex: it signs the
-// records and keys the hash that names them, so it must be kept. To rotate it, put the new seed
-// there and the old one (a comma separated list) in GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV: the old
-// records keep verifying, and are moved to the new key at start-up (AdapterDirectory.Resign), after
-// which the old seed can be removed. Unset, the directory is off. Options, all off by default:
+// /directory/publish, DELETE /directory/keys/<fingerprint>, GET /directory/lookup, /directory/log,
+// /directory/log/head and /directory/log/address, and the owner key routes under
+// /directory/enroll) when GOJIBERRY_DOCSTORE_DIRECTORY_KEY holds a 32-byte seed in hex: it signs
+// the records and keys the hashes that name them and the log's addresses, so it must be kept. To
+// rotate it, put the new seed there and the old one (a comma separated list) in
+// GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV: the old records keep verifying, and at start-up, before
+// the server listens, those that a log entry stands behind are moved to the new key
+// (AdapterDirectory.Startup), after which the old seed can be removed. If the old key leaked, do
+// not rotate through it: remove it from the list instead. Unset, the directory is off. Options,
+// all off by default:
 //
 //   - GOJIBERRY_DOCSTORE_DIRECTORY_REQUIRE_POP=true: a key can be published only with proof of
 //     possession (answer to POST /directory/challenge);
 //   - GOJIBERRY_DOCSTORE_DIRECTORY_LOOKUP=domain: a user can look up only addresses of their own
 //     verified e-mail domain (default "any");
 //   - GOJIBERRY_DOCSTORE_DIRECTORY_REVOKE_WINDOW=48h: how long a revoked key is remembered
-//     (default 24h).
+//     (default 24h);
+//   - GOJIBERRY_DOCSTORE_DIRECTORY_GLOBAL_BUDGET=domain: the whole-server lookup budget is one per
+//     e-mail domain of the caller (default one for everybody).
 //
-// "directory/" and "directory-log/" are reserved from the document API either way. The routes need
-// sign-in, so with no session manager they are not mounted. limiters is where the routes' rate
-// limits live (GOJIBERRY_DOCSTORE_LIMITER).
-func withDirectory(ctx context.Context, srv *docstore.Server, adapter docstore.Adapter, limiters docstore.LimiterFactory) {
+// GOJIBERRY_DOCSTORE_REPLICAS (default 1) says how many server processes share the store. The
+// directory's log and challenge claims are atomic across processes only on a store with
+// conditional writes: with more than one replica on a store without them withDirectory refuses to
+// enable the directory (an error), and with one it logs a warning.
+//
+// "directory/", "directory-log/" and "directory-enroll/" are reserved from the document API either
+// way. The routes need sign-in, so with no session manager they are not mounted. limiters is where
+// the routes' rate limits live (GOJIBERRY_DOCSTORE_LIMITER). The start-up census (records moved,
+// skipped, and named under unknown keys) is logged and shown by /health.
+func withDirectory(ctx context.Context, srv *docstore.Server, adapter docstore.Adapter, limiters docstore.LimiterFactory) error {
 	signer, err := encrypt.DirectorySignerFromEnv()
 	if err != nil {
-		log.Fatalf("docstore: %v", err)
+		return err
 	}
 	if signer == nil {
-		return
+		return nil
 	}
 	dir := &encrypt.AdapterDirectory{Store: adapter, Signer: signer}
 	dir.RequireProof = os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_REQUIRE_POP") == "true"
 	if v := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_REVOKE_WINDOW")); v != "" {
 		w, err := time.ParseDuration(v)
 		if err != nil || w <= 0 {
-			log.Fatalf("docstore: parsing GOJIBERRY_DOCSTORE_DIRECTORY_REVOKE_WINDOW %q: want a positive duration such as \"48h\"", v)
+			return fmt.Errorf("parsing GOJIBERRY_DOCSTORE_DIRECTORY_REVOKE_WINDOW %q: want a positive duration such as \"48h\"", v)
 		}
 		dir.RevokeWindow = w
 	}
+	replicas := 1
+	if v := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_REPLICAS")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return fmt.Errorf("parsing GOJIBERRY_DOCSTORE_REPLICAS %q: want a positive whole number", v)
+		}
+		replicas = n
+	}
 	policy, err := docstore.ParseDirectoryLookupMode(os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_LOOKUP"))
 	if err != nil {
-		log.Fatalf("docstore: %v", err)
+		return err
 	}
-	srv.WithDirectory(encrypt.DirectoryService(dir)).WithDirectoryPolicy(policy).WithDirectoryLimits(limiters)
-	if strings.TrimSpace(os.Getenv(encrypt.DirectoryKeyPrevEnv)) != "" {
-		go func() { // finishes a rotation: records the retired keys signed move to the current key
-			if n, err := dir.Resign(ctx); err != nil {
-				log.Printf("docstore: key directory: moving records to the current key: %v", err)
-			} else {
-				log.Printf("docstore: key directory: %d record(s) moved to the current key (once it reports 0 the retired keys can be removed)", n)
-			}
-		}()
+	perDomain := false
+	switch m := strings.ToLower(strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_GLOBAL_BUDGET"))); m {
+	case "", "all":
+	case "domain":
+		perDomain = true
+	default:
+		return fmt.Errorf("parsing GOJIBERRY_DOCSTORE_DIRECTORY_GLOBAL_BUDGET %q: want \"all\" or \"domain\"", m)
 	}
+	if err := dir.CheckStore(ctx, replicas); err != nil {
+		return err
+	}
+	// Before serving: a record a retired key signed moves to the current key now, under the same
+	// rules as a publish (the address lock and conditional writes), not while requests are in
+	// flight.
+	rep, err := dir.Startup(ctx)
+	if err != nil {
+		return fmt.Errorf("key directory start-up check: %w", err)
+	}
+	log.Printf("docstore: key directory: %s", rep.Summary())
+	if rep.Unknown > 0 {
+		log.Printf("docstore: WARNING: %d directory records are named under unknown keys: check GOJIBERRY_DOCSTORE_DIRECTORY_KEY and GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV; those keys cannot be found by a lookup", rep.Unknown)
+	}
+	srv.WithDirectory(encrypt.DirectoryService(dir)).WithDirectoryPolicy(policy).WithDirectoryLimits(limiters).WithDirectoryGlobalPerDomain(perDomain)
 	go dir.RunSweep(ctx, time.Hour)
 	log.Printf("docstore: key directory enabled (proof of possession required: %v)", dir.RequireProof)
+	return nil
 }
 
 // withPasskeys turns on sign-in with passkeys when GOJIBERRY_DOCSTORE_PASSKEY_RPID is set (with
@@ -152,11 +260,22 @@ func Main() {
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
-	withDirectory(context.Background(), srv, adapter, limiters)
+	// The manager is attached before the public offer is wired: whether /docs counts as closed
+	// depends on it (WithRequireACL with sign-in).
 	srv = srv.WithAuth(authManager)
+	if err := withDirectory(context.Background(), srv, adapter, limiters); err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
+	publicSvc, err := withPublic(srv, adapter, cfg.ExpiryTTL, limiters)
+	if err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
+	if publicSvc != nil {
+		go publicSvc.Run(context.Background(), cfg.ExpirySweep)
+	}
 	if authManager != nil {
 		log.Printf("docstore: sign-in enabled (%d provider(s))", len(cfg.Auth.Providers))
 	}
 	log.Printf("docstore: listening on %s (backend=%s)", cfg.Addr, cfg.Backend)
-	log.Fatal((&http.Server{Addr: cfg.Addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}).ListenAndServe())
+	log.Fatal(newHTTPServer(cfg.Addr, srv.Handler()).ListenAndServe())
 }

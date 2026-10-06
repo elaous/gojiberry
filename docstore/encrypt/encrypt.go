@@ -275,6 +275,16 @@ func (a *Adapter) ListPrefix(ctx context.Context, prefix string) ([]docstore.Met
 // Delete implements docstore.Adapter.
 func (a *Adapter) Delete(ctx context.Context, id string) error { return a.Inner.Delete(ctx, id) }
 
+// DeleteIf implements docstore.ConditionalDeleter for the ids this adapter leaves in the clear
+// (see DefaultSkip); an encrypted id is docstore.ErrConditionalUnsupported.
+func (a *Adapter) DeleteIf(ctx context.Context, id string, prevDigest string) error {
+	c, ok := a.Inner.(docstore.ConditionalDeleter)
+	if !ok || !a.skip(id) {
+		return docstore.ErrConditionalUnsupported
+	}
+	return c.DeleteIf(ctx, id, prevDigest)
+}
+
 // SaveIf implements docstore.ConditionalAdapter. prevDigest is the Digest of what the caller
 // read through this adapter: for an encrypted id, the plaintext (what Load returned), and ""
 // for "there is no such document". It is compared with the decrypted stored file, and the

@@ -149,11 +149,11 @@ func TestDirectoryRotationKeepsRecordsValidAndResignMovesThem(t *testing.T) {
 	}
 
 	// Resign finishes the job; a second run has nothing to do.
-	if n, err := d2.Resign(ctx); err != nil || n != 1 {
-		t.Fatalf("Resign = %d %v, want 1", n, err)
+	if rep, err := d2.Resign(ctx); err != nil || rep.Resigned != 1 {
+		t.Fatalf("Resign = %+v %v, want 1", rep, err)
 	}
-	if n, err := d2.Resign(ctx); err != nil || n != 0 {
-		t.Fatalf("second Resign = %d %v", n, err)
+	if rep, err := d2.Resign(ctx); err != nil || rep.Resigned != 0 {
+		t.Fatalf("second Resign = %+v %v", rep, err)
 	}
 	// Now the retired key can go.
 	d3 := &AdapterDirectory{Store: store, Signer: mustSigner(t, newSeed)}
@@ -252,15 +252,15 @@ func TestDirectoryRevokeRemovesTheKeyAndRemembersIt(t *testing.T) {
 		}
 	}
 	// Only the signed-in owner of the address can revoke; another address cannot reach it.
-	if _, err := d.Revoke(ctx, bo, k1.Fingerprint); !errors.Is(err, ErrKeyNotFound) {
+	if _, err := d.Revoke(ctx, bo, k1.Fingerprint, nil); !errors.Is(err, ErrKeyNotFound) {
 		t.Errorf("another user's revoke: %v", err)
 	}
 	for name, u := range map[string]auth.User{"passkey": {ID: "passkey:z", Email: "ana@x.io", VerifiedEmail: true}, "unverified": {ID: "google:1", Email: "ana@x.io"}} {
-		if _, err := d.Revoke(ctx, u, k1.Fingerprint); !errors.Is(err, ErrNotPublishable) {
+		if _, err := d.Revoke(ctx, u, k1.Fingerprint, nil); !errors.Is(err, ErrNotPublishable) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if _, err := d.Revoke(ctx, ana, "SHA256:nothing"); !errors.Is(err, ErrKeyNotFound) {
+	if _, err := d.Revoke(ctx, ana, "SHA256:nothing", nil); !errors.Is(err, ErrKeyNotFound) {
 		t.Errorf("unknown key: %v", err)
 	}
 	if got, _ := d.Lookup(ctx, "ana@x.io"); len(got) != 2 {
@@ -268,7 +268,7 @@ func TestDirectoryRevokeRemovesTheKeyAndRemembersIt(t *testing.T) {
 	}
 
 	clk.Add(time.Minute)
-	k, err := d.Revoke(ctx, ana, k1.Fingerprint)
+	k, err := d.Revoke(ctx, ana, k1.Fingerprint, nil)
 	if err != nil || !k.Revoked || k.Fingerprint != k1.Fingerprint || k.RevokedAt != clk.Now().Unix() {
 		t.Fatalf("%+v %v", k, err)
 	}
@@ -291,10 +291,10 @@ func TestDirectoryRevokeRemovesTheKeyAndRemembersIt(t *testing.T) {
 		}
 	}
 	// Revoking again finds nothing to revoke. The fingerprint also works in its path form.
-	if _, err := d.Revoke(ctx, ana, k1.Fingerprint); !errors.Is(err, ErrKeyNotFound) {
+	if _, err := d.Revoke(ctx, ana, k1.Fingerprint, nil); !errors.Is(err, ErrKeyNotFound) {
 		t.Errorf("twice: %v", err)
 	}
-	if _, err := d.Revoke(ctx, ana, fingerprintSegment(k2.Fingerprint)); err != nil {
+	if _, err := d.Revoke(ctx, ana, fingerprintSegment(k2.Fingerprint), nil); err != nil {
 		t.Errorf("path form: %v", err)
 	}
 
@@ -344,7 +344,7 @@ func TestDirectoryTombstonesCountAgainstTheCapAndForgedOnesAreIgnored(t *testing
 	k1, k2, k3 := newRecovery(t), newRecovery(t), newRecovery(t)
 	_ = d.Publish(ctx, ana, k1)
 	_ = d.Publish(ctx, ana, k2)
-	if _, err := d.Revoke(ctx, ana, k1.Fingerprint); err != nil {
+	if _, err := d.Revoke(ctx, ana, k1.Fingerprint, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Cycling keys does not get past the cap within the window: the revoked one still counts.
@@ -675,7 +675,7 @@ func TestDirectoryLogChainsAndDetectsRewrites(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	_, _ = d.Revoke(ctx, ana, fps[0])
+	_, _ = d.Revoke(ctx, ana, fps[0], nil)
 	l, err := d.ReadLog(ctx, 0, 100)
 	if err != nil || len(l.Entries) != 5 {
 		t.Fatalf("%v %v", l, err)
@@ -688,7 +688,7 @@ func TestDirectoryLogChainsAndDetectsRewrites(t *testing.T) {
 	if err != nil || last != l.Entries[4].Hash {
 		t.Fatalf("%v", err)
 	}
-	if l.Entries[0].Prev != zeroHash || l.Entries[0].Address != LogAddress(" ANA@x.io") || l.Entries[4].Op != "revoke" || l.Entries[4].Fingerprint != fps[0] {
+	if l.Entries[0].Prev != zeroHash || l.Entries[0].Address != d.LogAddressFor(" ANA@x.io") || l.Entries[4].Op != "revoke" || l.Entries[4].Fingerprint != fps[0] {
 		t.Errorf("%+v", l.Entries)
 	}
 	if strings.Contains(l.Entries[0].Address, "ana") {
