@@ -5,6 +5,7 @@ package docstorecmd
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -15,7 +16,36 @@ import (
 	"github.com/elaous/gojiberry/auth/passkey"
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/docstore/encrypt"
+	"github.com/elaous/gojiberry/docstore/public"
 )
+
+// withPublic turns on the public (anonymous) offer when GOJIBERRY_DOCSTORE_PUBLIC=true (limits and
+// secrets in GOJIBERRY_DOCSTORE_PUBLIC_*, see public.FromEnv): POST /public/session, the session's
+// one document under /public/doc, read-only /public/view/<id>, POST /public/report and, with
+// GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN, DELETE /admin/takedown/<id>. Unset, nothing is mounted.
+//
+// The offer promises deletion 24 hours after the last edit, so it refuses to start unless
+// expiry is on (GOJIBERRY_DOCSTORE_EXPIRY_TTL, and the adapter is the expiring one). It returns
+// the service so the caller can run its sweep.
+func withPublic(srv *docstore.Server, adapter docstore.Adapter, expiryTTL time.Duration) (*public.Service, error) {
+	cfg, err := public.FromEnv(os.Getenv)
+	if err != nil {
+		return nil, err
+	}
+	if !cfg.Enabled {
+		return nil, nil
+	}
+	if expiryTTL <= 0 {
+		return nil, errors.New("GOJIBERRY_DOCSTORE_PUBLIC needs GOJIBERRY_DOCSTORE_EXPIRY_TTL: the public offer promises that documents are deleted after the last edit")
+	}
+	svc, err := public.New(public.Options{Store: adapter, Config: cfg})
+	if err != nil {
+		return nil, err
+	}
+	svc.Mount(srv)
+	log.Printf("docstore: public offer enabled (takedown route %t, terms link %t)", cfg.AdminToken != "", cfg.TermsURL != "")
+	return svc, nil
+}
 
 // withDirectory turns on the verified e-mail key directory (POST /directory/publish, GET
 // /directory/lookup) when GOJIBERRY_DOCSTORE_DIRECTORY_KEY holds a 32-byte seed in hex: it signs
@@ -106,6 +136,13 @@ func Main() {
 		log.Fatalf("docstore: %v", err)
 	}
 	withDirectory(srv, adapter)
+	publicSvc, err := withPublic(srv, adapter, cfg.ExpiryTTL)
+	if err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
+	if publicSvc != nil {
+		go publicSvc.Run(context.Background(), cfg.ExpirySweep)
+	}
 	srv = srv.WithAuth(authManager)
 	if authManager != nil {
 		log.Printf("docstore: sign-in enabled (%d provider(s))", len(cfg.Auth.Providers))
