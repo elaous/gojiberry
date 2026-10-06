@@ -49,10 +49,16 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
       turned on): "Encrypt this store" in the Save tab (a local passkey through PRF, an SSH public key, a
       recovery key shown once; unlock state in memory only, a Lock button), lock marks and "Make
       (not) confidential" with a question for documents and folders, Reveal, sealed `.opendoc` packs
-      (`encrypt.PackSealer` through `Session.PackKeys`), and the People tab's keys control. Left: the real
-      app (the owner signers must live out of reach of the store's writers, a passkey from a server session
-      rather than a local one), forgetting the editor's open document on Lock, removing or rotating an
-      owner key, a UI to publish an owner key to the directory.
+      (`encrypt.PackSealer` through `Session.PackKeys`), and the People tab's keys control. Also done
+      there (PR #81 review): every change of the keys is a transaction with a journal (a failure puts everything
+      back, a crash is finished or undone on the next load), a recovery key's secret is shown and confirmed before
+      it is committed, a passkey alone needs an explicit acknowledgement, Lock closes the open document (and asks
+      about unsaved edits), Erase the encrypted store for lost keys, removing a key and replacing a passkey, seals
+      that make a replaced key list detectable at unlock, passkey failures told apart, the directory picker and
+      "Publish my keys" behind `dirclient`, and placeholders drawn in the interface's language. Left: the real
+      app (the owner signers must live out of reach of the store's writers: the seals cannot stop someone who
+      strips them or puts back an older list, see section 5.7; a passkey from a server session rather than a
+      local one), and the publish route's proof of possession.
    2. **Done:** a keyring that wraps a confidential document's files for people's keys only, and re-keys
       its older copies on the switch (`ConfidentialKeyring`, `Sharing.SetProtection`, `RekeyHook`).
    3. **Done (components and library):** the People-tab "my passkey" control with the second-key rule and
@@ -60,8 +66,9 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
       `AdapterDirectory` (C.4); the server rule (the `directory/` prefix is reserved from `/docs`, records
       are signed by a configured directory key and written only by `POST /directory/publish`, which needs a
       provider session with a verified e-mail) and a demo host, `examples/people-keys-demo`; the showcase's People tab
-      now has the same key controls (without the directory: it has no server). Left: the directory in the
-      showcase/app, a publish button, `PrefixLister` in the nested backends, revoking a published key.
+      now has the same key controls, with the directory picker and a publish button when a docstore server is
+      configured. Left: the directory in the real app, `PrefixLister` in the nested backends, revoking a
+      published key.
    4. **Done:** hiding folder names of confidential folders (and the showcase's switch for them).
 3. **Public docstore.** An anonymous offer: no account, one document per session, a link
    and a download always, deleted 24 hours after the last edit (viewing does not renew).

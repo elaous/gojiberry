@@ -317,7 +317,34 @@ in (`Session.ProtectionAvailable` says which targets can keep a secret; `Session
 back when the keys are forgotten; `Session.PackKeys` gives the pack buttons their `Seal` and `Open`, and the status
 line says how many confidential items were left out or need a key). A document that no unlocked key opens fails with
 a message that says to unlock the store (still an error that wraps `docstore.ErrLocked`).
+A hidden name is stored as the English constant (`saver.ConfidentialName`, `saver.ConfidentialFolderName`: catalogs
+and packs carry it) and **drawn translated**: whenever `NameHidden` is set the components show the interface's
+word for it (`docs.confidentialName`, `docs.confidentialFolderName` through `Translate`), in the list, the trash, the
+folder rows, the breadcrumb, the move menu and the rename box; a translated string is never stored. The rows'
+buttons have accessible names that say which row they are for ("Make Budget confidential"; when two rows would read
+alike, as two hidden documents do, a short ID is added), so a screen reader can tell them apart. `Session.Clear`
+drops the open document from the session (ID, name, tag filter, selection, revealed names, status) when the keys are
+forgotten and the host empties the editor.
 The showcase's "Encrypt this store" (`examples/canvas-editor-showcase`, `encstore`) is a host of all this.
+
+### Keys in the People tab: `Recipients`
+
+`Recipients` lists the keys a document is encrypted to and shares it with one more (type the fingerprint to
+confirm). The key controls of a store, all optional props the host fills:
+- **My passkey / recovery key.** `AddMyPasskey`, `CreateRecoveryKey` + `OnRecoveryKey`, with `Confidential` for the
+  second-key rule. A host that wants a recovery key to be committed only after its secret was seen sets
+  `CommitRecoveryKey` (and `CancelRecoveryKey`, `RecoveryAcknowledged` / `OnRecoveryAcknowledge`): `CreateRecoveryKey` then
+  only *prepares* the key and returns its secret, the component shows it (Copy, Download), and "Add this recovery
+  key" stays off until the person ticks "I have saved this recovery key somewhere safe" and then runs
+  `CommitRecoveryKey`. Without it the older behavior is kept (the key is already added when its secret is shown;
+  "I have saved it" only hides the secret).
+- **Remove and replace.** `RemoveOwner` adds "Remove this key" to each owner row, enabled by the row's `CanRemove`
+  (`RecipientRow.RemoveBlocked` says why not); `ReplaceOwner` adds "Replace this passkey" to the rows of type
+  `passkey-prf`. Both ask first through `Ask`, saying what it does and what it cannot take back.
+- **Directory.** `Directory` (+ `DirEmail`, `OnDirEmail`, `OnDirResults`, `DirResults`, `OnPick`) is the lookup by
+  e-mail with the verified mark as the server answered; `Publish` / `PublishNotice` add "Publish my keys", independent
+  of any document.
+The showcase wires all of it over `encstore` (transactions) and `dirclient` (the server's directory routes).
 
 ## A folder on this computer
 

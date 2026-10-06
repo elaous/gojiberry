@@ -78,6 +78,10 @@ type encUI struct {
 	peopleKey       *prepared // the recovery key being added from the People tab
 
 	dir dirUI
+
+	// swap makes the saver use the store's adapter as it stands now (set by the page): called after
+	// every change, so a change that left the store interrupted, or one that finished, is followed.
+	swap func()
 }
 
 func readEncConfig() (cfg encstore.Config) {
@@ -258,20 +262,15 @@ func (e *encUI) passkeyFailed(err error) error {
 }
 
 // run is pending.Run with the page's errors in the interface's language and handled stops dropped.
-func (e *encUI) run(f func(ctx context.Context) error) {
-	e.pending.Run(func(ctx context.Context) error {
-		err := f(ctx)
-		if errors.Is(err, errHandled) {
-			return nil
-		}
-		return tErr(err)
-	})
-}
+func (e *encUI) run(f func(ctx context.Context) error) { e.pending.Run(e.wrapDo(f)) }
 
 // wrapDo is run for an operation a component calls itself (it runs it under e.pending).
-func wrapDo(f func(ctx context.Context) error) func(ctx context.Context) error {
+func (e *encUI) wrapDo(f func(ctx context.Context) error) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		err := f(ctx)
+		if e.swap != nil {
+			e.swap()
+		}
 		if errors.Is(err, errHandled) {
 			return nil
 		}
@@ -903,17 +902,17 @@ func (u *ui) encPeople() xango.Node {
 	case !unlocked:
 		note = T("enc.peopleLocked", "Unlock the store (Save tab) to add keys or share documents.")
 	default:
-		props.AddMyPasskey, props.MyPasskeyAdded = wrapDo(e.addMyPasskey), e.myAdded
+		props.AddMyPasskey, props.MyPasskeyAdded = e.wrapDo(e.addMyPasskey), e.myAdded
 		props.RemoveOwner = func(ctx context.Context, fp string) error {
-			return wrapDo(func(ctx context.Context) error { return e.removeOwner(ctx, u, fp) })(ctx)
+			return e.wrapDo(func(ctx context.Context) error { return e.removeOwner(ctx, u, fp) })(ctx)
 		}
 		props.ReplaceOwner = func(ctx context.Context, fp string) error {
-			return wrapDo(func(ctx context.Context) error { return e.replacePasskey(ctx, u, fp) })(ctx)
+			return e.wrapDo(func(ctx context.Context) error { return e.replacePasskey(ctx, u, fp) })(ctx)
 		}
 		if !e.store.HasKind(encstore.KindRecovery) || e.peopleKey != nil {
 			props.CreateRecoveryKey = func(ctx context.Context) (string, error) { return e.prepareRecoveryKey() }
 			props.OnRecoveryKey = func(string) { e.render() }
-			props.CommitRecoveryKey = wrapDo(e.commitRecoveryKey)
+			props.CommitRecoveryKey = e.wrapDo(e.commitRecoveryKey)
 			props.CancelRecoveryKey = func() { e.peopleKey = nil; e.render() }
 			props.OnRecoveryAcknowledge = func(on bool) {
 				if e.peopleKey != nil {
@@ -942,7 +941,7 @@ func (u *ui) encPeople() xango.Node {
 			}
 			props.OnDraft = func(k, c string) { e.draft, e.confirm = k, c; e.render() }
 			props.Add = func(ctx context.Context, key, confirm string) error {
-				return wrapDo(func(ctx context.Context) error {
+				return e.wrapDo(func(ctx context.Context) error {
 					r, err := parseRecipient(key)
 					if err != nil {
 						return err

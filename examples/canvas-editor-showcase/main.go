@@ -193,8 +193,8 @@ func main() {
 	u.clearEditor = func() {
 		// Locking closes the document that is open: the editor, and everything that was worked out
 		// from its text (find results, spelling, outline and statistics caches, comments).
-		openDoc(docfile.Document{})
 		u.title = ""
+		openDoc(docfile.Document{})
 		u.find, u.spell.spans, u.spell.words, u.spell.text = findState{}, nil, nil, ""
 		u.navSig, u.statsSig, u.a11ySig, u.a11yCache, u.shareLink = "", "", "", nil, ""
 		renderUI()
@@ -224,6 +224,7 @@ func main() {
 	// into packs for the owner's keys while unlocked.
 	u.saver.Saver.ConfidentialCheck, u.saver.Saver.Rekey = u.enc.store.Check, u.enc.store.Rekey
 	u.saver.PackKeys = u.enc.store.PackKeys
+	u.enc.swap = u.encSwap
 	u.saver.ProtectionAvailable = func(target string) bool { return target == "browser" && u.enc.store.Enabled() }
 	u.saver.OnChange = func() {
 		t, _ := u.saver.Where()
