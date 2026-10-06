@@ -214,7 +214,7 @@ refused.
 `docstore/encrypt` wraps any adapter so the store holds ciphertext only: each saved file is an
 age file whose data key is wrapped for each recipient (the owner's SSH key, a recovery key, whoever
 the document is shared with). The saver, folders, versions, `Verify` and packs work on it
-unchanged, because they see an `Adapter`; the catalog stays readable (names, tags, folders,
+unchanged, because they see an `Adapter`; the catalog stays readable, as plaintext metadata (names, tags, folders,
 sizes), which is also why a confidential item's name needs the placeholder described in
 [encryption-and-passkeys.md](encryption-and-passkeys.md) (not built yet). Server-side features
 (search, spelling, translation, the collaboration hub) cannot read ciphertext.
@@ -224,6 +224,11 @@ pub, _ := encrypt.ParseSSHRecipient(sshPublicKeyLine)   // label, type and finge
 id, _ := encrypt.ParseSSHIdentity(sshPrivateKeyPEM)     // unencrypted key; open a passphrase one first
 store := encrypt.New(adapter, encrypt.Static{To: []age.Recipient{pub.Key}, Keys: []age.Identity{id}})
 ```
+
+`New` is strict: a stored file that is not an age file for its own id is refused (so a store writer
+cannot swap in plaintext or another document's ciphertext). To migrate a store that was clear, set
+`store.AllowPlaintext = true`, run `store.RekeyAll(ctx)`, and turn it off again. Rolling a file back
+to an older ciphertext of the same id is not detected by this layer.
 
 ## What a browser build links
 
