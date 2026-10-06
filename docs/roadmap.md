@@ -22,10 +22,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
    [public-docstore.md](public-docstore.md). Needs expiry in `docstore` first.
 4. **Console mode: done** (`console`, `cmd/docsh`, [console.md](console.md)); left: the editor panel that drives the same engine.
 5. **Terminal app demo: done** (`examples/terminal-demo`: a file manager and a line editor over `saver.Session`, with the console grammar).
-6. **Store backends with conditional saves.** SQLite, local files, memory and the
-   HTTP store now save the catalog conditionally; PostgreSQL, MongoDB and S3 (which
-   has `If-Match` writes) still write unconditionally and keep the old limit that two
-   processes can lose a catalog update.
+6. **Store backends with conditional saves: done** for PostgreSQL, MongoDB and S3/MinIO (`SaveIf` in `docstore/backends`; the PostgreSQL one is tested with sqlmock, S3 against a fake that enforces `If-Match`/`If-None-Match`, and MongoDB, which has no fake, runs when `TEST_MONGO_URI` is set, so it has not run against a live server yet).
 7. The rest of the [known limits plan](known-limits-plan.md): i18n breadth,
    accessibility depth, right-to-left, Hunspell dictionaries on demand.
 
