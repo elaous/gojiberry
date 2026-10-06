@@ -171,6 +171,11 @@ message Footnote {
   string text = 2;
 }
 
+message Revision {
+  int64 saved = 1;
+  Document doc = 2;
+}
+
 message Document {
   string title = 1;
   int64 updated = 2;
@@ -180,4 +185,5 @@ message Document {
   repeated MetaEntry meta = 6;
   repeated Comment comments = 7;
   repeated Footnote footnotes = 8;
+  repeated Revision history = 9;
 }
