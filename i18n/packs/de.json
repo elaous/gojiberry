@@ -245,6 +245,12 @@
   "saver.packFailed": "(%d fehlgeschlagen: %s)",
   "saver.packSigned": "(signiert mit Schlüssel %x)",
   "saver.packBadSignature": "(WARNUNG: Die Signatur passt nicht zum Paket)",
-  "migrate.pack": "Ein .opendoc-Paket (heruntergeladen, hier nicht gespeichert)"
+  "migrate.pack": "Ein .opendoc-Paket (heruntergeladen, hier nicht gespeichert)",
+  "download.group.documents": "Dokumente",
+  "download.group.web": "Web und Text",
+  "download.group.data": "Daten",
+  "download.group.opendocs": "opendocs",
+  "download.group.more": "Weitere",
+  "download.openWithHistory": "opendocs (.open), mit Versionsverlauf"
  }
 }

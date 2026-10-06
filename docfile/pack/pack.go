@@ -18,10 +18,17 @@ import (
 const (
 	MaxRecord  = 256 << 20
 	MaxEntries = 1_000_000
-	MaxIndex   = 256 << 20
-	MaxName    = 256
-	MaxDepth   = 16
-	maxMeta    = 1 << 20
+	// MaxIndex is 128 bytes per entry at the entry cap (a typical entry is ~150 bytes with
+	// a short name, so a pack near MaxEntries needs short names). The index is parsed as a
+	// stream: memory is the index bytes plus the entries kept, never one slot per field.
+	MaxIndex = MaxEntries * 128
+	MaxName  = 256
+	MaxDepth = 16
+	// MaxTags is the most tags one entry may have, and maxEntryBytes the size of one
+	// entry or folder message in the index.
+	MaxTags       = 64
+	maxEntryBytes = 32 << 10
+	maxMeta       = 1 << 20
 )
 
 const (
@@ -164,13 +171,14 @@ type field struct {
 	bytes  []byte
 }
 
-// fields reads every field of a message, skipping none: the caller picks what it knows.
-func fields(b []byte) ([]field, error) {
-	var out []field
+// walk reads the fields of a message one at a time, calling fn for each (unknown ones
+// included: fn picks what it knows). Nothing is accumulated, so the memory used does not
+// depend on how many fields the message has.
+func walk(b []byte, fn func(field) error) error {
 	for len(b) > 0 {
 		tag, n := binary.Uvarint(b)
-		if n <= 0 || tag>>3 == 0 {
-			return nil, fmt.Errorf("%w: bad field tag", ErrFormat)
+		if n <= 0 || tag>>3 == 0 || tag>>3 > 1<<29 {
+			return fmt.Errorf("%w: bad field tag", ErrFormat)
 		}
 		b = b[n:]
 		f := field{num: int(tag >> 3), wire: int(tag & 7)}
@@ -178,31 +186,33 @@ func fields(b []byte) ([]field, error) {
 		case 0:
 			v, n := binary.Uvarint(b)
 			if n <= 0 {
-				return nil, fmt.Errorf("%w: bad varint", ErrFormat)
+				return fmt.Errorf("%w: bad varint", ErrFormat)
 			}
 			f.varint, b = v, b[n:]
 		case 1:
 			if len(b) < 8 {
-				return nil, fmt.Errorf("%w: short fixed64", ErrFormat)
+				return fmt.Errorf("%w: short fixed64", ErrFormat)
 			}
 			b = b[8:]
 		case 2:
 			l, n := binary.Uvarint(b)
 			if n <= 0 || l > uint64(len(b)-n) {
-				return nil, fmt.Errorf("%w: bad length", ErrFormat)
+				return fmt.Errorf("%w: bad length", ErrFormat)
 			}
 			f.bytes, b = b[n:n+int(l)], b[n+int(l):]
 		case 5:
 			if len(b) < 4 {
-				return nil, fmt.Errorf("%w: short fixed32", ErrFormat)
+				return fmt.Errorf("%w: short fixed32", ErrFormat)
 			}
 			b = b[4:]
 		default:
-			return nil, fmt.Errorf("%w: unsupported wire type %d", ErrFormat, f.wire)
+			return fmt.Errorf("%w: unsupported wire type %d", ErrFormat, f.wire)
 		}
-		out = append(out, f)
+		if err := fn(f); err != nil {
+			return err
+		}
 	}
-	return out, nil
+	return nil
 }
 
 func utf8String(f field) (string, error) {
@@ -225,18 +235,14 @@ func (m Meta) marshal() []byte {
 }
 
 func unmarshalMeta(b []byte) (m Meta, err error) {
-	fs, err := fields(b)
-	if err != nil {
-		return m, err
-	}
-	for _, f := range fs {
+	err = walk(b, func(f field) error {
 		switch {
 		case f.num == 3 && f.wire == 0:
 			m.Created = int64(f.varint)
 		case f.wire == 2 && f.num >= 1 && f.num <= 5 && f.num != 3:
 			s, err := utf8String(f)
 			if err != nil {
-				return m, err
+				return err
 			}
 			switch f.num {
 			case 1:
@@ -249,8 +255,9 @@ func unmarshalMeta(b []byte) (m Meta, err error) {
 				m.Description = s
 			}
 		}
-	}
-	return m, nil
+		return nil
+	})
+	return m, err
 }
 
 func (e Entry) marshal() []byte {
@@ -274,16 +281,12 @@ func (e Entry) marshal() []byte {
 }
 
 func unmarshalEntry(b []byte) (e Entry, err error) {
-	fs, err := fields(b)
-	if err != nil {
-		return e, err
-	}
-	for _, f := range fs {
+	err = walk(b, func(f field) error {
 		switch {
 		case f.wire == 2 && (f.num == 1 || f.num == 2 || f.num == 3 || f.num == 4):
 			s, err := utf8String(f)
 			if err != nil {
-				return e, err
+				return err
 			}
 			switch f.num {
 			case 1:
@@ -293,6 +296,9 @@ func unmarshalEntry(b []byte) (e Entry, err error) {
 			case 3:
 				e.Folder = s
 			case 4:
+				if len(e.Tags) >= MaxTags || len(s) > MaxName {
+					return fmt.Errorf("%w: too many or too long tags", ErrFormat)
+				}
 				e.Tags = append(e.Tags, s)
 			}
 		case f.wire == 0 && f.num == 5:
@@ -303,14 +309,15 @@ func unmarshalEntry(b []byte) (e Entry, err error) {
 			e.Length = f.varint
 		case f.wire == 2 && f.num == 8:
 			if len(f.bytes) != 32 {
-				return e, fmt.Errorf("%w: a hash of %d bytes", ErrFormat, len(f.bytes))
+				return fmt.Errorf("%w: a hash of %d bytes", ErrFormat, len(f.bytes))
 			}
 			copy(e.SHA256[:], f.bytes)
 		case f.wire == 0 && f.num == 9:
 			e.Trashed = f.varint != 0
 		}
-	}
-	return e, nil
+		return nil
+	})
+	return e, err
 }
 
 func (f Folder) marshal() []byte {
@@ -322,17 +329,13 @@ func (f Folder) marshal() []byte {
 }
 
 func unmarshalFolder(b []byte) (fo Folder, err error) {
-	fs, err := fields(b)
-	if err != nil {
-		return fo, err
-	}
-	for _, f := range fs {
+	err = walk(b, func(f field) error {
 		if f.wire != 2 || f.num < 1 || f.num > 3 {
-			continue
+			return nil
 		}
 		s, err := utf8String(f)
 		if err != nil {
-			return fo, err
+			return err
 		}
 		switch f.num {
 		case 1:
@@ -342,8 +345,9 @@ func unmarshalFolder(b []byte) (fo Folder, err error) {
 		case 3:
 			fo.Parent = s
 		}
-	}
-	return fo, nil
+		return nil
+	})
+	return fo, err
 }
 
 func (x Index) marshal() []byte {
@@ -363,37 +367,38 @@ func (x Index) marshal() []byte {
 	return b
 }
 
+// unmarshalIndex parses the index as a stream, counting entries and folders as they are
+// read, so a hostile index is refused at MaxEntries without being held in memory.
 func unmarshalIndex(b []byte) (x Index, err error) {
-	fs, err := fields(b)
-	if err != nil {
-		return x, err
-	}
-	for _, f := range fs {
-		if f.wire != 2 {
-			continue
+	err = walk(b, func(f field) error {
+		if f.wire != 2 || (f.num != 1 && f.num != 2) {
+			return nil
 		}
-		switch f.num {
-		case 1:
+		if len(f.bytes) > maxEntryBytes {
+			return fmt.Errorf("%w: an entry of %d bytes", ErrFormat, len(f.bytes))
+		}
+		if f.num == 1 {
 			if len(x.Entries) >= MaxEntries {
-				return x, fmt.Errorf("%w: more than %d entries", ErrFormat, MaxEntries)
+				return fmt.Errorf("%w: more than %d entries", ErrFormat, MaxEntries)
 			}
 			e, err := unmarshalEntry(f.bytes)
 			if err != nil {
-				return x, err
+				return err
 			}
 			x.Entries = append(x.Entries, e)
-		case 2:
-			if len(x.Folders) >= MaxEntries {
-				return x, fmt.Errorf("%w: more than %d folders", ErrFormat, MaxEntries)
-			}
-			fo, err := unmarshalFolder(f.bytes)
-			if err != nil {
-				return x, err
-			}
-			x.Folders = append(x.Folders, fo)
+			return nil
 		}
-	}
-	return x, nil
+		if len(x.Folders) >= MaxEntries {
+			return fmt.Errorf("%w: more than %d folders", ErrFormat, MaxEntries)
+		}
+		fo, err := unmarshalFolder(f.bytes)
+		if err != nil {
+			return err
+		}
+		x.Folders = append(x.Folders, fo)
+		return nil
+	})
+	return x, err
 }
 
 func (s Signature) marshal() []byte {
@@ -405,26 +410,23 @@ func (s Signature) marshal() []byte {
 }
 
 func unmarshalSignature(b []byte) (s Signature, err error) {
-	fs, err := fields(b)
-	if err != nil {
-		return s, err
-	}
-	for _, f := range fs {
+	err = walk(b, func(f field) error {
 		if f.wire != 2 {
-			continue
+			return nil
 		}
 		switch f.num {
 		case 1:
-			if s.Alg, err = utf8String(f); err != nil {
-				return s, err
-			}
+			var err error
+			s.Alg, err = utf8String(f)
+			return err
 		case 2:
 			s.PublicKey = append([]byte(nil), f.bytes...)
 		case 3:
 			s.Sig = append([]byte(nil), f.bytes...)
 		}
-	}
-	return s, nil
+		return nil
+	})
+	return s, err
 }
 
 // ---- layout ----

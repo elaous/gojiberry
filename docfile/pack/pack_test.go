@@ -3,9 +3,11 @@ package pack
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -20,10 +22,11 @@ func doc(id, name, text string) docfile.Document {
 }
 
 const (
-	id1 = "11111111-1111-4111-8111-111111111111"
-	id2 = "22222222-2222-4222-8222-222222222222"
-	id3 = "33333333-3333-4333-8333-333333333333"
-	fid = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	id1  = "11111111-1111-4111-8111-111111111111"
+	id2  = "22222222-2222-4222-8222-222222222222"
+	id3  = "33333333-3333-4333-8333-333333333333"
+	fid  = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	fid2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 )
 
 func text(d docfile.Document) string { return d.Content[0].Chars.Text }
@@ -321,8 +324,11 @@ func TestWriterRefusesBadInput(t *testing.T) {
 	if err := w.Add(doc(id1, "again", "y")); err == nil {
 		t.Error("the same ID twice")
 	}
-	_ = w.AddFolder(Folder{ID: "a", Name: "a", Parent: "b"})
-	_ = w.AddFolder(Folder{ID: "b", Name: "b", Parent: "a"})
+	if err := w.AddFolder(Folder{ID: "a", Name: "a"}); err == nil {
+		t.Error("a folder ID that is not a document-style ID")
+	}
+	_ = w.AddFolder(Folder{ID: fid, Name: "a", Parent: fid2})
+	_ = w.AddFolder(Folder{ID: fid2, Name: "b", Parent: fid})
 	if err := w.Close(nil); err == nil {
 		t.Error("folders in a loop")
 	}
@@ -358,6 +364,9 @@ func TestTestVector(t *testing.T) {
 
 func FuzzOpen(f *testing.F) {
 	f.Add([]byte("OPENDOC\x00"))
+	if v, err := os.ReadFile(filepath.Join("testdata", "vector.opendoc")); err == nil {
+		f.Add(v)
+	}
 	f.Fuzz(func(t *testing.T, b []byte) {
 		r, err := Open(bytes.NewReader(b), int64(len(b)))
 		if err == nil {
@@ -368,4 +377,182 @@ func FuzzOpen(f *testing.F) {
 		}
 		_, _ = Recover(bytes.NewReader(b), int64(len(b)))
 	})
+}
+
+// rawPack lays out a pack whose index is exactly idx (nothing checks it): the documents
+// are written first, each entry's Offset/Length/SHA256 filled in by fill, which returns
+// the entries to list.
+func rawPack(t *testing.T, docs []docfile.Document, fill func(offs []uint64, lens []uint64) Index) []byte {
+	t.Helper()
+	hdr := headerBytes(Meta{Name: "hostile"})
+	buf := append([]byte(nil), hdr...)
+	var offs, lens []uint64
+	for _, d := range docs {
+		data, err := docfile.Open.Marshal(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		offs, lens = append(offs, uint64(len(buf))), append(lens, uint64(len(data)))
+		buf = append(buf, frame(kindDocument, data)...)
+	}
+	idx := fill(offs, lens)
+	data := idx.marshal()
+	f := footer{indexOffset: uint64(len(buf)), indexLen: uint64(len(data)), indexSum: sha256.Sum256(data)}
+	buf = append(buf, frame(kindIndex, data)...)
+	return append(buf, f.marshal()...)
+}
+
+func TestIndexValidation(t *testing.T) {
+	d1 := doc(id1, "one", "first")
+	one := func(mod func(e *Entry, x *Index)) []byte {
+		return rawPack(t, []docfile.Document{d1}, func(offs, lens []uint64) Index {
+			x := Index{Entries: []Entry{{ID: id1, Name: "one", Offset: offs[0], Length: lens[0]}}}
+			mod(&x.Entries[0], &x)
+			return x
+		})
+	}
+	cases := map[string][]byte{
+		"entry ID too short": one(func(e *Entry, _ *Index) { e.ID = "abc" }),
+		"entry ID empty":     one(func(e *Entry, _ *Index) { e.ID = "" }),
+		"folder ID bad":      one(func(_ *Entry, x *Index) { x.Folders = []Folder{{ID: "f", Name: "f"}} }),
+		"dangling folder":    one(func(e *Entry, _ *Index) { e.Folder = fid }),
+		"dangling parent":    one(func(_ *Entry, x *Index) { x.Folders = []Folder{{ID: fid, Name: "f", Parent: fid2}} }),
+		"repeated folder ID": one(func(_ *Entry, x *Index) { x.Folders = []Folder{{ID: fid, Name: "f"}, {ID: fid, Name: "g"}} }),
+		"too many tags":      one(func(e *Entry, _ *Index) { e.Tags = make([]string, MaxTags+1) }),
+		"folders in a loop": one(func(_ *Entry, x *Index) {
+			x.Folders = []Folder{{ID: fid, Name: "a", Parent: fid2}, {ID: fid2, Name: "b", Parent: fid}}
+		}),
+		"offset past the end": one(func(e *Entry, _ *Index) { e.Offset = 1 << 40 }),
+	}
+	// Overlap: the second entry points into the first one's record, or at the same one.
+	cases["same record twice"] = rawPack(t, []docfile.Document{d1}, func(offs, lens []uint64) Index {
+		return Index{Entries: []Entry{{ID: id1, Offset: offs[0], Length: lens[0]}, {ID: id2, Offset: offs[0], Length: lens[0]}}}
+	})
+	cases["records that overlap"] = rawPack(t, []docfile.Document{d1, doc(id2, "two", "x")}, func(offs, lens []uint64) Index {
+		return Index{Entries: []Entry{{ID: id1, Offset: offs[0], Length: lens[0]}, {ID: id2, Offset: offs[0] + 8, Length: lens[1]}}}
+	})
+	for name, data := range cases {
+		if _, err := Open(bytes.NewReader(data), int64(len(data))); !errors.Is(err, ErrFormat) {
+			t.Errorf("%s: opened (%v)", name, err)
+		}
+	}
+	// And the good one opens.
+	data := one(func(*Entry, *Index) {})
+	if _, err := Open(bytes.NewReader(data), int64(len(data))); err != nil {
+		t.Errorf("the control pack should open: %v", err)
+	}
+}
+
+func TestReadChecksTheDocumentID(t *testing.T) {
+	// The record holds the document id2, listed under id1.
+	data := rawPack(t, []docfile.Document{doc(id2, "two", "x")}, func(offs, lens []uint64) Index {
+		d, _ := docfile.Open.Marshal(doc(id2, "two", "x"))
+		return Index{Entries: []Entry{{ID: id1, Offset: offs[0], Length: lens[0], SHA256: sha256.Sum256(d)}}}
+	})
+	r := open(t, data)
+	if _, err := r.Read(id1); !errors.Is(err, ErrFormat) {
+		t.Errorf("a document listed under another ID was read: %v", err)
+	}
+}
+
+func TestWriterRefusesBadFolderReferences(t *testing.T) {
+	var buf bytes.Buffer
+	w, _ := NewWriter(&buf, Meta{})
+	d := doc(id1, "x", "y")
+	d.SetFolder(fid) // never added
+	_ = w.Add(d)
+	if err := w.Close(nil); err == nil {
+		t.Error("a document in a folder that is not listed")
+	}
+}
+
+// A huge index of two-byte fields is refused without building a slice of its fields.
+func TestHugeIndex(t *testing.T) {
+	junk := bytes.Repeat([]byte{0x78, 0x01}, 32<<20) // 64 MiB of field 15, varint 1
+	hdr := headerBytes(Meta{})
+	buf := append([]byte(nil), hdr...)
+	f := footer{indexOffset: uint64(len(buf)), indexLen: uint64(len(junk)), indexSum: sha256.Sum256(junk)}
+	buf = append(buf, frame(kindIndex, junk)...)
+	buf = append(buf, f.marshal()...)
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	r, err := Open(bytes.NewReader(buf), int64(len(buf)))
+	runtime.ReadMemStats(&after)
+	if err != nil || len(r.Index().Entries) != 0 {
+		t.Fatalf("%v", err)
+	}
+	// The index itself is 64 MiB; a slice of fields would be 32M * 48 bytes.
+	if grew := after.TotalAlloc - before.TotalAlloc; grew > 300<<20 {
+		t.Errorf("opening allocated %d MiB", grew>>20)
+	}
+	// Over MaxEntries entries is refused while streaming.
+	var many []byte
+	e := Entry{ID: id1}.marshal()
+	for i := 0; i <= MaxEntries; i++ {
+		many = appendTag(many, 1, 2)
+		many = appendVarint(many, uint64(len(e)))
+		many = append(many, e...)
+	}
+	if len(many) <= MaxIndex {
+		if _, err := unmarshalIndex(many); !errors.Is(err, ErrFormat) {
+			t.Errorf("more than MaxEntries entries: %v", err)
+		}
+	}
+	// One entry message over its cap.
+	big := appendTag(nil, 1, 2)
+	big = appendVarint(big, maxEntryBytes+1)
+	big = append(big, make([]byte, maxEntryBytes+1)...)
+	if _, err := unmarshalIndex(big); !errors.Is(err, ErrFormat) {
+		t.Errorf("an oversized entry: %v", err)
+	}
+}
+
+func TestRecoverDedupesAndHonoursTheIndex(t *testing.T) {
+	// Two records with one ID and no usable index: the last wins, and Repack works.
+	hdr := headerBytes(Meta{Name: "cut"})
+	buf := append([]byte(nil), hdr...)
+	for _, txt := range []string{"old", "new"} {
+		data, _ := docfile.Open.Marshal(doc(id1, "one", txt))
+		buf = append(buf, frame(kindDocument, data)...)
+	}
+	rec, err := Recover(bytes.NewReader(buf), int64(len(buf)))
+	if err != nil || len(rec.Docs) != 1 || text(rec.Docs[0]) != "new" {
+		t.Fatalf("%v %+v", err, rec)
+	}
+	var out bytes.Buffer
+	if err := Repack(rec, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := open(t, out.Bytes()).Index().Entries; len(got) != 1 {
+		t.Errorf("%+v", got)
+	}
+	// A document with a folder ID the pack never listed repacks, with a folder made for it.
+	d := doc(id2, "two", "x")
+	d.SetFolder(fid)
+	d2 := doc(id3, "three", "x")
+	d2.SetFolder("not-an-id")
+	var out2 bytes.Buffer
+	if err := Repack(Recovered{Docs: []docfile.Document{d, d2}}, &out2); err != nil {
+		t.Fatal(err)
+	}
+	if r := open(t, out2.Bytes()); len(r.Index().Folders) != 1 {
+		t.Errorf("%+v", r.Index())
+	}
+	// A pack whose index is intact: a document taken out with Remove stays out.
+	mf := &memFile{b: build(t, nil)}
+	a, err := OpenAppend(mf, int64(len(mf.b)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Remove(id2); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+	rec, err = Recover(bytes.NewReader(mf.b), int64(len(mf.b)))
+	if err != nil || !rec.Complete || len(rec.Docs) != 1 || rec.Docs[0].ID() != id1 {
+		t.Errorf("%v %+v", err, rec.Docs)
+	}
 }
