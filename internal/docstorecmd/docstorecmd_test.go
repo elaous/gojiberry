@@ -451,3 +451,19 @@ func TestOrphanSweepDefaultMatchesThePublicSwitch(t *testing.T) {
 		}
 	}
 }
+
+// A short admin token is refused at start; the explicit override starts the server and warns loudly.
+func TestPublicRefusesAShortAdminTokenUnlessAllowed(t *testing.T) {
+	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC", "true")
+	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES", "none")
+	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN", "short")
+	a := expiring()
+	if _, err := withPublic(docstore.NewServer(a, "memory"), a, 24*time.Hour); err == nil || !strings.Contains(err.Error(), "ADMIN_TOKEN") || !strings.Contains(err.Error(), "ALLOW_SHORT_ADMIN_TOKEN") {
+		t.Fatalf("err = %v, want the refusal naming the token and the override", err)
+	}
+	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_SHORT_ADMIN_TOKEN", "true")
+	a = expiring()
+	if svc, err := withPublic(docstore.NewServer(a, "memory"), a, 24*time.Hour); err != nil || svc == nil {
+		t.Fatalf("with the override: %v", err)
+	}
+}

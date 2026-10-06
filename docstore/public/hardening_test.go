@@ -55,6 +55,28 @@ type hookStore struct {
 	lists     atomic.Int64
 	failLists atomic.Bool                                             // listings by prefix fail (a store in trouble)
 	beforePub func(ctx context.Context, id string, data []byte) error // called before saving "pubdoc/..."
+	listHook  func(ctx context.Context) error                         // called by every ListPrefix before it lists (set before use)
+	saltFail  atomic.Bool                                             // loading or saving the reporter salt fails
+	saltRace  func()                                                  // called before the conditional save of the salt (set before use)
+}
+
+func (h *hookStore) Load(ctx context.Context, id string) (docstore.Document, error) {
+	if id == saltKey && h.saltFail.Load() {
+		return docstore.Document{}, errors.New("loading public/salt failed")
+	}
+	return h.ExpiringAdapter.Load(ctx, id)
+}
+
+func (h *hookStore) SaveIf(ctx context.Context, id string, data []byte, prev string) error {
+	if id == saltKey {
+		if h.saltFail.Load() {
+			return errors.New("saving public/salt failed")
+		}
+		if f := h.saltRace; f != nil {
+			f()
+		}
+	}
+	return h.ExpiringAdapter.SaveIf(ctx, id, data, prev)
 }
 
 func (h *hookStore) Save(ctx context.Context, id string, data []byte) error {
@@ -73,6 +95,11 @@ func (h *hookStore) List(ctx context.Context) ([]docstore.Meta, error) {
 
 func (h *hookStore) ListPrefix(ctx context.Context, p string) ([]docstore.Meta, error) {
 	h.lists.Add(1)
+	if f := h.listHook; f != nil {
+		if err := f(ctx); err != nil {
+			return nil, err
+		}
+	}
 	if h.failLists.Load() {
 		return nil, errors.New("listing pubdoc/ABCDEFGHIJKLMNOPQRSTUV failed")
 	}

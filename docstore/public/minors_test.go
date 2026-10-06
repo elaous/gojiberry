@@ -178,7 +178,7 @@ func TestReserveKeepsRoomForNewNetworksUnderABotnet(t *testing.T) {
 	}
 	// ... while legitimate newcomers from networks with no session fill the 10 places
 	for i := 0; i < 9; i++ {
-		if st := sessionStatus(e, fmt.Sprintf("192.0.%d.1", i+10)); st != 201 {
+		if st := sessionStatus(e, fmt.Sprintf("100.%d.0.1", i+10) /* a different /16 each: the reserve looks at the coarsest level */); st != 201 {
 			t.Fatalf("newcomer %d: %d", i, st)
 		}
 	}
@@ -539,6 +539,12 @@ func (e *env) report(id, reason string, ip string) resp {
 	return e.do("POST", "/public/report", "", []byte(fmt.Sprintf(`{"id":%q,"reason":%q}`, id, reason)), xff(ip)...)
 }
 
+// reportCat is report with a category.
+func (e *env) reportCat(id, category, reason string, ip string) resp {
+	e.t.Helper()
+	return e.do("POST", "/public/report", "", []byte(fmt.Sprintf(`{"id":%q,"reason":%q,"category":%q}`, id, reason, category)), xff(ip)...)
+}
+
 func (e *env) reportsOf(doc string) []Report {
 	e.t.Helper()
 	var out []Report
@@ -635,9 +641,9 @@ func TestPriorityReportsTakeTheSlotOfAnOrdinaryOne(t *testing.T) {
 			firstID = r.ID
 		}
 	}
-	// the document is full, and a report whose reason is on the priority list gets in anyway, case
-	// and spacing aside, evicting the oldest ordinary report
-	e.want(e.report(d.ViewID, "  CSAM ", "198.51.100.1"), 202)
+	// the document is full, and a report whose CATEGORY is on the priority list gets in anyway
+	// (case and spacing aside), evicting the oldest ordinary report
+	e.want(e.reportCat(d.ViewID, "  CSAM ", "see the link", "198.51.100.1"), 202)
 	now := e.reportsOf(d.ID)
 	if len(now) != maxReportsOfDoc {
 		t.Fatalf("%d reports, want %d", len(now), maxReportsOfDoc)
@@ -647,7 +653,7 @@ func TestPriorityReportsTakeTheSlotOfAnOrdinaryOne(t *testing.T) {
 		if r.ID == firstID {
 			t.Fatal("the oldest ordinary report was kept")
 		}
-		if normalizeReason(r.Reason) == "csam" {
+		if r.Priority && r.Category == CategoryCSAM {
 			csam++
 		}
 	}
@@ -659,31 +665,32 @@ func TestPriorityReportsTakeTheSlotOfAnOrdinaryOne(t *testing.T) {
 	if n := len(e.reportsOf(d.ID)); n != maxReportsOfDoc {
 		t.Fatalf("%d", n)
 	}
-	// with the document full of priority reports none is evicted for another
+	// priority reports hold at most half of the slots: more of them from other reporters are kept
+	// as ordinary ones, which a full document refuses
 	for i := 0; i < maxReportsOfDoc+3; i++ {
-		e.want(e.report(d.ViewID, "illegal", fmt.Sprintf("192.0.2.%d", i+1)), 202)
+		e.want(e.reportCat(d.ViewID, CategoryIllegal, "illegal here", fmt.Sprintf("192.0.2.%d", i+1)), 202)
 	}
 	all := e.reportsOf(d.ID)
 	if len(all) != maxReportsOfDoc {
 		t.Fatalf("%d", len(all))
 	}
+	prio := 0
 	for _, r := range all {
-		if !e.svc.isPriority(r.Reason) {
-			t.Fatalf("an ordinary report %q survived", r.Reason)
+		if r.Priority {
+			prio++
 		}
 	}
-	e.want(e.report(d.ViewID, "csam", "192.0.2.200"), 202)
-	if len(e.reportsOf(d.ID)) != maxReportsOfDoc {
-		t.Fatal("a priority report overflowed a document full of priority reports")
+	if prio != maxPriorityOfDoc {
+		t.Fatalf("%d priority reports in a document, want the half cap %d", prio, maxPriorityOfDoc)
 	}
 	// the priority list is configurable
-	e2 := newEnv(t, func(o *Options) { behindProxy(o); o.Config.ReportPriorityReasons = []string{"Threat"} })
-	if !e2.svc.isPriority(" threat") || e2.svc.isPriority("csam") {
-		t.Fatal("configured priority reasons")
+	e2 := newEnv(t, func(o *Options) { behindProxy(o); o.Config.ReportPriorityCategories = []string{"Spam"} })
+	if !e2.svc.isPriority(" spam") || e2.svc.isPriority("csam") {
+		t.Fatal("configured priority categories")
 	}
-	e3 := newEnv(t, func(o *Options) { o.Config.ReportPriorityReasons = []string{} })
+	e3 := newEnv(t, func(o *Options) { o.Config.ReportPriorityCategories = []string{} })
 	if e3.svc.isPriority("csam") {
-		t.Fatal("an empty list means no priority reasons")
+		t.Fatal("an empty list means no priority categories")
 	}
 }
 
@@ -706,7 +713,7 @@ func TestGlobalEvictionKeepsPriorityReportsLongest(t *testing.T) {
 		tok, _ := e.session()
 		docs = append(docs, e.create(tok, "x"))
 	}
-	r := e.want(e.report(docs[0].ViewID, "illegal", "203.0.113.200"), 202) // the oldest of all
+	r := e.want(e.reportCat(docs[0].ViewID, CategoryIllegal, "illegal", "203.0.113.200"), 202) // the oldest of all
 	var prio map[string]string
 	_ = json.Unmarshal(r.body, &prio)
 	time.Sleep(2 * time.Millisecond)
@@ -771,7 +778,7 @@ func TestReporterSaltPersistsAcrossRestarts(t *testing.T) {
 	d := e.create(tok, "x")
 	r1 := e.want(e.report(d.ViewID, "spam", "203.0.113.1"), 202)
 	// a second service over the same store: the same reporter is recognised
-	svc2, err := New(Options{Store: e.store, Now: e.clk.Now, Config: Config{NoProxy: true}, ClientIP: func(r *http.Request) string { return "203.0.113.1" }})
+	svc2, err := New(Options{Store: e.store, Now: e.clk.Now, Config: Config{NoProxy: true, ReportKey: testReportKey}, ClientIP: func(r *http.Request) string { return "203.0.113.1" }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -852,10 +859,10 @@ func TestOneClientsWrongGuessesDoNotLockOutTheOperator(t *testing.T) {
 }
 
 func TestShortAdminTokenIsWarnedAbout(t *testing.T) {
-	if w := (Config{AdminToken: "short", NoProxy: true}).Warnings(); len(w) != 1 || !strings.Contains(w[0], "ADMIN_TOKEN") {
+	if w := (Config{AdminToken: "short", NoProxy: true, ReportKey: testReportKey}).Warnings(); len(w) != 1 || !strings.Contains(w[0], "ALLOW_SHORT_ADMIN_TOKEN") || !strings.Contains(w[0], "GUESSED ONLINE") {
 		t.Fatalf("warnings %v", w)
 	}
-	if w := (Config{AdminToken: strings.Repeat("a", 32), NoProxy: true}).Warnings(); len(w) != 0 {
+	if w := (Config{AdminToken: strings.Repeat("a", 32), NoProxy: true, ReportKey: testReportKey}).Warnings(); len(w) != 0 {
 		t.Fatalf("warnings %v", w)
 	}
 }
@@ -890,6 +897,7 @@ func TestInflightBytesAreCappedGlobally(t *testing.T) {
 	e := newEnv(t, func(o *Options) {
 		o.Config.MaxDocBytes = 600
 		o.Config.MaxInflightBytes = 1000
+		o.Config.MaxInflightPerClient = 1000 // every request here is one client: only the global cap is under test
 	})
 	a, _ := e.session()
 	b, _ := e.session()
@@ -928,11 +936,11 @@ func TestInflightNeverBelowTheDocumentCap(t *testing.T) {
 	}
 	var f inflight
 	f.max = 10
-	if !f.acquire(6) || f.acquire(5) || !f.acquire(4) {
+	if f.acquire("c", "n", 6) != flightOK || f.acquire("c", "n", 5) != flightGlobal || f.acquire("c", "n", 4) != flightOK {
 		t.Fatal("acquire")
 	}
-	f.release(10)
-	f.release(3) // more than held: clamped
+	f.release("c", "n", 10)
+	f.release("c", "n", 3) // more than held: clamped
 	if f.held() != 0 {
 		t.Fatal(f.held())
 	}
@@ -1044,32 +1052,32 @@ func TestFromEnvMinorsVariables(t *testing.T) {
 		return FromEnv(func(k string) string { return env[k] })
 	}
 	c, err := get(map[string]string{
-		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS_PER_NET":     "40",
-		"GOJIBERRY_DOCSTORE_PUBLIC_SESSION_RESERVE_PERCENT":  "0",
-		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_INFLIGHT_BYTES":       "1048576",
-		"GOJIBERRY_DOCSTORE_PUBLIC_REPORT_RESERVED_PER_DOC":  "3",
-		"GOJIBERRY_DOCSTORE_PUBLIC_REPORT_RESERVE_PERCENT":   "30",
-		"GOJIBERRY_DOCSTORE_PUBLIC_REPORT_PRIORITY_REASONS":  " CSAM , Threat ,",
-		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_DOC_BYTES":            "1000",
-		"GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES":          "none",
-		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS_PER_ADDRESS": "5",
-		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS":             "1000",
+		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS_PER_NET":       "40",
+		"GOJIBERRY_DOCSTORE_PUBLIC_SESSION_RESERVE_PERCENT":    "0",
+		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_INFLIGHT_BYTES":         "1048576",
+		"GOJIBERRY_DOCSTORE_PUBLIC_REPORT_RESERVED_PER_DOC":    "3",
+		"GOJIBERRY_DOCSTORE_PUBLIC_REPORT_RESERVE_PERCENT":     "30",
+		"GOJIBERRY_DOCSTORE_PUBLIC_REPORT_PRIORITY_CATEGORIES": " CSAM , Spam ,",
+		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_DOC_BYTES":              "1000",
+		"GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES":            "none",
+		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS_PER_ADDRESS":   "5",
+		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS":               "1000",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	d := c.withDefaults()
 	if d.MaxSessionsPerNet != 40 || d.SessionReservePercent != -1 || d.MaxInflightBytes != 1<<20 ||
-		d.ReportReservedPerDoc != 3 || d.ReportReservePercent != 30 || len(d.ReportPriorityReasons) != 2 ||
-		d.ReportPriorityReasons[0] != "csam" || d.ReportPriorityReasons[1] != "threat" {
+		d.ReportReservedPerDoc != 3 || d.ReportReservePercent != 30 || len(d.ReportPriorityCategories) != 2 ||
+		d.ReportPriorityCategories[0] != "csam" || d.ReportPriorityCategories[1] != "spam" {
 		t.Fatalf("config %+v", d)
 	}
 	d = Config{}.withDefaults()
 	if d.MaxSessionsPerNet != DefaultMaxPerNet || d.SessionReservePercent != 20 || d.MaxInflightBytes != 256<<20 ||
-		d.ReportReservedPerDoc != 5 || d.ReportReservePercent != 20 || len(d.ReportPriorityReasons) != 2 {
+		d.ReportReservedPerDoc != 5 || d.ReportReservePercent != 20 || len(d.ReportPriorityCategories) != 2 {
 		t.Fatalf("defaults %+v", d)
 	}
-	if c, err := get(map[string]string{"GOJIBERRY_DOCSTORE_PUBLIC_REPORT_PRIORITY_REASONS": "none"}); err != nil || c.ReportPriorityReasons == nil || len(c.withDefaults().ReportPriorityReasons) != 0 {
+	if c, err := get(map[string]string{"GOJIBERRY_DOCSTORE_PUBLIC_REPORT_PRIORITY_CATEGORIES": "none"}); err != nil || c.ReportPriorityCategories == nil || len(c.withDefaults().ReportPriorityCategories) != 0 {
 		t.Fatalf("none: %+v %v", c, err)
 	}
 	for k, v := range map[string]string{

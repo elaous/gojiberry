@@ -19,16 +19,19 @@ import (
 // ---- finding 4: the proxy warning, and finding 9: the tombstone must outlive the session
 
 func TestTrustedProxiesWarning(t *testing.T) {
-	if w := (Config{}).Warnings(); len(w) != 1 || !strings.Contains(w[0], "TRUSTED_PROXIES") {
+	if w := (Config{ReportKey: testReportKey}).Warnings(); len(w) != 1 || !strings.Contains(w[0], "TRUSTED_PROXIES") {
 		t.Fatalf("warnings = %v", w)
 	}
-	if w := (Config{TrustedProxies: []string{"10.0.0.0/8"}}).Warnings(); len(w) != 0 {
+	if w := (Config{TrustedProxies: []string{"10.0.0.0/8"}, ReportKey: testReportKey}).Warnings(); len(w) != 0 {
 		t.Fatalf("warnings = %v", w)
 	}
 	get := func(v string) func(string) string {
 		return func(k string) string {
-			if k == "GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES" {
+			switch k {
+			case "GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES":
 				return v
+			case "GOJIBERRY_DOCSTORE_PUBLIC_REPORT_KEY":
+				return "a report key of some length"
 			}
 			return ""
 		}
@@ -183,8 +186,6 @@ func TestChargeIsRefundedWhenTheWriteIsNotStored(t *testing.T) {
 		o.Blocklist = blocklistContains("bad")
 	})
 	tok, _ := e.session()
-	// refused content (422)
-	e.want(e.do("POST", "/public/doc", tok, append([]byte("bad"), bytes.Repeat([]byte("a"), 77)...)), 422)
 	// a store failure (rollback)
 	fail := true
 	hs.beforePub = func(context.Context, string, []byte) error {
@@ -198,11 +199,14 @@ func TestChargeIsRefundedWhenTheWriteIsNotStored(t *testing.T) {
 	// the budget (100) is whole: 80 fits
 	d := e.create(tok, strings.Repeat("a", 80))
 	_ = d
-	// a refused edit (422) and a failed edit give theirs back too: 20 bytes left in the day
-	e.want(e.do("PUT", "/public/doc", tok, append([]byte("bad"), bytes.Repeat([]byte("a"), 7)...)), 422)
+	// a failed edit gives its charge back too: 20 bytes left in the day
 	fail = true
 	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 10)), 500)
-	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 20)), 204)
+	// content refused for what it is (422) is NOT given back: it was sent, and a client that could
+	// send refused content for free could do it all day
+	e.want(e.do("PUT", "/public/doc", tok, append([]byte("bad"), bytes.Repeat([]byte("a"), 7)...)), 422)
+	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 11)), 429)
+	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 10)), 204)
 	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 1)), 429)
 }
 

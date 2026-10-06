@@ -28,10 +28,14 @@ type budgetEntry struct{ doc, extra int64 }
 
 func (e budgetEntry) bytes() int64 { return e.doc + e.extra }
 
-// budgetTouch is what a write did to a document while a reconcile was listing the store.
+// budgetTouch is what writes did to a document while a reconcile was listing the store: removed
+// (a discard, a takedown), the size of the document a commit stored (hasDoc, doc), and the bytes of
+// version snapshots written since (extra), which a listing that predates them has not counted.
 type budgetTouch struct {
-	present bool
-	e       budgetEntry
+	removed bool
+	hasDoc  bool
+	doc     int64
+	extra   int64
 }
 
 // budget is the global counter of live public bytes (documents and their version snapshots).
@@ -48,6 +52,13 @@ type budgetTouch struct {
 // it: the total can neither go below the sum of its documents nor subtract a document twice.
 // The one inexactness is the safe one: a write that lands while a listing runs can be counted
 // twice until the next reconcile, never missed.
+//
+// Version snapshots (the saver's "versions/pubdoc/<id>/...", written by something other than this
+// service) are added to their document's entry when they are written (addExtra, fed by the
+// ExpiringAdapter's OnSave hook or Service.NoteVersionWrite), not only when a reconcile lists
+// them, so the budget stops admitting new documents as soon as they fill it. Nothing here can
+// refuse a snapshot (the writer is not asking), so the budget can be exceeded by the snapshots
+// written after it was reached; a snapshot that is deleted is subtracted by the next reconcile.
 type budget struct {
 	mu         sync.Mutex
 	ledger     map[string]budgetEntry
@@ -140,7 +151,33 @@ func (b *budget) setLocked(doc string, e, old budgetEntry) {
 	b.ledger[doc] = e
 	b.total += e.bytes() - old.bytes()
 	for _, w := range b.windows {
-		w[doc] = budgetTouch{present: true, e: e}
+		t := w[doc]
+		t.removed, t.hasDoc, t.doc = false, true, e.doc
+		w[doc] = t
+	}
+}
+
+// addExtra counts n bytes of a version snapshot of document doc at once (a snapshot of a document
+// the ledger does not know yet gets an entry of its own: its bytes are in the store).
+func (b *budget) addExtra(doc string, n int64) {
+	if n <= 0 {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	e := b.ledger[doc]
+	ne := e
+	ne.extra += n
+	if b.ledger == nil {
+		b.ledger = map[string]budgetEntry{}
+	}
+	b.ledger[doc] = ne
+	b.total += n
+	for _, w := range b.windows {
+		t := w[doc]
+		t.removed = false
+		t.extra += n
+		w[doc] = t
 	}
 }
 
@@ -152,7 +189,7 @@ func (b *budget) release(doc string) int64 {
 	defer b.mu.Unlock()
 	e, ok := b.ledger[doc]
 	for _, w := range b.windows {
-		w[doc] = budgetTouch{}
+		w[doc] = budgetTouch{removed: true}
 	}
 	if !ok {
 		return 0
@@ -198,11 +235,16 @@ func (b *budget) set(win uint64, listed map[string]budgetEntry) {
 		ledger[k] = e
 	}
 	for k, t := range touches {
-		if !t.present {
+		if t.removed {
 			delete(ledger, k)
 			continue
 		}
-		ledger[k] = budgetEntry{doc: t.e.doc, extra: ledger[k].extra}
+		e := ledger[k]
+		if t.hasDoc {
+			e.doc = t.doc
+		}
+		e.extra += t.extra
+		ledger[k] = e
 	}
 	var total int64
 	for _, e := range ledger {
@@ -230,7 +272,9 @@ func (b *budget) generation() uint64 {
 // reportInfo is what the counters need to know about a stored report.
 type reportInfo struct {
 	reporter string
+	doc      string
 	priority bool
+	at       time.Time
 }
 
 // reportWindow is what was added while a reconcile listed the reports.
@@ -334,13 +378,35 @@ func (r *reportStats) held(reporter string) (all, mine int) {
 // are unknown, and guessing zero would admit writes past the budget.
 const reconcileBackoff = 15 * time.Second
 
+// reconcileTimeout bounds the first reconcile. It runs on a context of its own (the request that
+// happens to start it may go away, and its disconnect must not fail the reconcile for everyone),
+// so it needs a bound of its own.
+const reconcileTimeout = 2 * time.Minute
+
 // ensureCounters reconciles the counters with the store once before the first write (every Sweep
 // does it afterwards): the budget must not start from zero after a restart. It reports whether
 // writes may go on. If the first reconcile fails, writes fail CLOSED (false) for
 // reconcileBackoff, then try again, instead of running against an empty count.
+//
+// The reconcile does not run on the caller's context: a client that disconnects mid-way would
+// cancel the store listing and put every write of everyone into the backoff. It runs under
+// context.WithoutCancel with reconcileTimeout. A request that finds a reconcile under way waits for
+// it for at most its own context (its client going away) or RequestTimeout, and is answered as a
+// refusal (false) if that runs out first; the reconcile goes on.
 func (s *Service) ensureCounters(ctx context.Context) bool {
-	s.recMu.Lock()
-	defer s.recMu.Unlock()
+	if _, done := s.bytes.get(); done {
+		return true
+	}
+	wait := time.NewTimer(s.cfg.RequestTimeout)
+	defer wait.Stop()
+	select {
+	case s.recSem <- struct{}{}:
+	case <-ctx.Done():
+		return false
+	case <-wait.C:
+		return false
+	}
+	defer func() { <-s.recSem }()
 	if _, done := s.bytes.get(); done {
 		return true
 	}
@@ -348,7 +414,9 @@ func (s *Service) ensureCounters(ctx context.Context) bool {
 	if now.Before(s.recRetry) {
 		return false
 	}
-	if err := s.reconcile(ctx); err != nil {
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), reconcileTimeout)
+	defer cancel()
+	if err := s.reconcile(rctx); err != nil {
 		log.Printf("public docstore: counting stored bytes: %s (writes are refused for %s)", redact(err), reconcileBackoff)
 	}
 	if _, done := s.bytes.get(); !done {
@@ -409,7 +477,7 @@ func (s *Service) listReports(ctx context.Context) ([]docstore.Meta, map[string]
 		if found, err := s.getJSON(ctx, m.ID, &rep); err != nil {
 			return nil, nil, err
 		} else if found {
-			info[m.ID] = reportInfo{reporter: rep.Reporter, priority: s.isPriority(rep.Reason)}
+			info[m.ID] = reportInfo{reporter: rep.Reporter, doc: rep.DocID, priority: rep.Priority, at: rep.At}
 		}
 	}
 	return metas, info, nil
@@ -423,12 +491,14 @@ func (s *Service) recountReports(ctx context.Context) error {
 // recountReportsIn is recountReports for a window opened earlier (Sweep opens it at its start, so
 // the reports stored while it works are kept).
 func (s *Service) recountReportsIn(ctx context.Context, win uint64) error {
+	start := s.now()
 	metas, info, err := s.listReports(ctx)
 	if err != nil {
 		s.reports.abort(win)
 		return err
 	}
 	s.setReportCounts(win, metas, info)
+	s.prio.rebuild(info, s.now(), start)
 	return nil
 }
 
@@ -444,10 +514,11 @@ func (s *Service) setReportCounts(win uint64, metas []docstore.Meta, info map[st
 	s.reports.set(win, len(metas), b, reporters)
 }
 
-// isPriority reports whether a report's reason is on the priority list.
-func (s *Service) isPriority(reason string) bool {
-	n := normalizeReason(reason)
-	for _, p := range s.cfg.ReportPriorityReasons {
+// isPriority reports whether a report category is on the priority list. The free-text reason has
+// no say.
+func (s *Service) isPriority(category string) bool {
+	n := categoryOf(category)
+	for _, p := range s.cfg.ReportPriorityCategories {
 		if n == p {
 			return true
 		}
@@ -491,37 +562,112 @@ func (s *Service) evictReports(ctx context.Context, metas []docstore.Meta, info 
 		n--
 		bytes -= int64(m.Size)
 		s.reports.add(-1, -int64(m.Size), info[m.ID].reporter)
+		s.dropRef(ctx, info[m.ID].doc, strings.TrimPrefix(m.ID, docstore.ReportPrefix))
 		evicted++
 	}
 	return evicted
 }
 
-// ---- the global cap on request bodies in flight
-
-// inflight bounds the bytes of request bodies being read at once, across all clients.
-type inflight struct {
-	mu   sync.Mutex
-	used int64
-	max  int64
+// dropRef removes the reference to report reportID from its document's record, under the
+// document's lock: a report that was deleted (evicted, or past its TTL) must not stay in the
+// record, where it would count against the document's slots and answer a duplicate with the id of
+// a report that is gone. The caller must not hold any document lock.
+func (s *Service) dropRef(ctx context.Context, docID, reportID string) {
+	if !validID(docID) || reportID == "" {
+		return
+	}
+	unlock := s.lock(docID)
+	defer unlock()
+	var meta docMeta
+	if found, err := s.getJSON(ctx, docRecordPrefix+docID, &meta); err != nil {
+		log.Printf("public docstore: updating a document's report list: %s", redact(err))
+		return
+	} else if !found {
+		return
+	}
+	if !removeRef(&meta, reportID) {
+		return
+	}
+	if err := s.putJSON(ctx, docRecordPrefix+docID, meta); err != nil {
+		log.Printf("public docstore: updating a document's report list: %s", redact(err))
+	}
 }
 
-func (f *inflight) acquire(n int64) bool {
+// removeRef deletes the reference with the given report id from meta and reports whether it was
+// there; the count follows.
+func removeRef(meta *docMeta, reportID string) bool {
+	for i, ref := range meta.ReportRefs {
+		if ref.ID == reportID {
+			meta.ReportRefs = append(meta.ReportRefs[:i:i], meta.ReportRefs[i+1:]...)
+			meta.Reports = len(meta.ReportRefs)
+			return true
+		}
+	}
+	return false
+}
+
+// ---- the cap on request bodies in flight
+
+// inflight bounds the bytes of request bodies being read at once: in all, per client (an IPv4
+// address or an IPv6 /64) and per network (a /48 or a /24). The shares are what keep a few slow
+// writers from holding the whole cap and turning every write of everyone else into a 503.
+type inflight struct {
+	mu        sync.Mutex
+	used      int64
+	max       int64
+	perClient int64 // 0: no per-client share
+	perNet    int64 // 0: no per-network share
+	byClient  map[string]int64
+	byNet     map[string]int64
+}
+
+// flightResult says why acquire refused.
+type flightResult int
+
+const (
+	flightOK flightResult = iota
+	flightClient
+	flightNet
+	flightGlobal
+)
+
+func (f *inflight) acquire(client, net string, n int64) flightResult {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.used+n > f.max {
-		return false
+	switch {
+	case f.used+n > f.max:
+		return flightGlobal
+	case f.perClient > 0 && f.byClient[client]+n > f.perClient:
+		return flightClient
+	case f.perNet > 0 && f.byNet[net]+n > f.perNet:
+		return flightNet
 	}
 	f.used += n
-	return true
+	if f.byClient == nil {
+		f.byClient, f.byNet = map[string]int64{}, map[string]int64{}
+	}
+	f.byClient[client] += n
+	f.byNet[net] += n
+	return flightOK
 }
 
-func (f *inflight) release(n int64) {
+func (f *inflight) release(client, net string, n int64) {
 	f.mu.Lock()
 	f.used -= n
 	if f.used < 0 {
 		log.Printf("public docstore: in-flight counter went to %d; clamped to 0", f.used)
 		f.used = 0
 	}
+	sub := func(m map[string]int64, k string) {
+		if m == nil {
+			return
+		}
+		if m[k] -= n; m[k] <= 0 {
+			delete(m, k)
+		}
+	}
+	sub(f.byClient, client)
+	sub(f.byNet, net)
 	f.mu.Unlock()
 }
 
@@ -531,14 +677,25 @@ func (f *inflight) held() int64 {
 	return f.used
 }
 
+// heldBy is what the client holds.
+func (f *inflight) heldBy(client string) int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.byClient[client]
+}
+
 // ---- charging before the body is read
 
 // ticket is what a write holds while it is in flight: the bytes charged to the address's daily
-// quota (in the quota window it was charged in) and the bytes reserved in the global in-flight
-// cap. release gives back what the request did not end up writing.
+// quota (in the quota window it was charged in) and the bytes reserved in the in-flight caps.
+// release gives back what the request did not end up writing, for a failure of the server's own
+// (a store error, a refusal that is not the client's doing); a charge the client earned, a body
+// that arrived too slowly or was refused for its content, is made final with keep.
 type ticket struct {
 	s      *Service
 	key    string
+	client string
+	net    string
 	held   int64
 	win    int64 // the quota window the charge went into (WindowQuota)
 	hasWin bool
@@ -546,10 +703,11 @@ type ticket struct {
 }
 
 // admit runs the checks that need no body, in front of reading one: a declared size over the
-// cap (413), a full store (503), too many bytes of bodies in flight (503), the address's daily
-// bytes (429, the declared size, or the cap for a body of unknown length, is charged and settle
-// gives the difference back). The caller must `defer t.release()` and call t.keep() once the
-// write is stored. It answers 503 while the counters are unknown (a failed first reconcile).
+// cap (413), a full store (503), too many bytes of bodies in flight for the client or its network
+// (429) or in all (503), the address's daily bytes (429, the declared size, or the cap for a body
+// of unknown length, is charged and settle gives the difference back). The caller must
+// `defer t.release()` and call t.keep() once the write is stored (or the charge is the client's to
+// pay). It answers 503 while the counters are unknown (a failed first reconcile).
 func (s *Service) admit(w http.ResponseWriter, r *http.Request) (*ticket, bool) {
 	if r.ContentLength > s.cfg.MaxDocBytes {
 		http.Error(w, "document too large", http.StatusRequestEntityTooLarge)
@@ -568,12 +726,19 @@ func (s *Service) admit(w http.ResponseWriter, r *http.Request) (*ticket, bool) 
 	if n < 0 {
 		n = s.cfg.MaxDocBytes
 	}
-	if !s.flight.acquire(n) {
+	addr := s.clientIP(r)
+	client, net := ClientKey(addr), NetKey(addr)
+	switch s.flight.acquire(client, net, n) {
+	case flightClient, flightNet:
+		w.Header().Set("Retry-After", "5")
+		http.Error(w, "too many of your uploads in progress; try again shortly", http.StatusTooManyRequests)
+		return nil, false
+	case flightGlobal:
 		w.Header().Set("Retry-After", "5")
 		http.Error(w, "too many uploads in progress; try again shortly", http.StatusServiceUnavailable)
 		return nil, false
 	}
-	t := &ticket{s: s, key: "ip:" + s.clientKey(r), held: n, flight: n}
+	t := &ticket{s: s, key: "ip:" + client, client: client, net: net, held: n, flight: n}
 	if n > 0 {
 		var ok bool
 		var retry time.Duration
@@ -620,7 +785,7 @@ func (t *ticket) settle(actual int64) {
 		t.held = actual
 	}
 	if t.flight > actual {
-		t.s.flight.release(t.flight - actual)
+		t.s.flight.release(t.client, t.net, t.flight-actual)
 		t.flight = actual
 	}
 }
@@ -633,7 +798,7 @@ func (t *ticket) release() {
 	}
 	t.refund(t.held)
 	t.held = 0
-	t.s.flight.release(t.flight)
+	t.s.flight.release(t.client, t.net, t.flight)
 	t.flight = 0
 }
 
@@ -658,6 +823,12 @@ type Health struct {
 	// StorageBytes and StorageMax are the byte counter and its budget.
 	StorageBytes int64 `json:"storageBytes"`
 	StorageMax   int64 `json:"storageMax"`
+	// PriorityBursts is how many networks sent priority-category reports for more than
+	// Config.PriorityBurstDocs different documents within the last hour: a flood of the path that
+	// outranks other reports, or a real wave of abuse, either way for the operator to look at.
+	// It is not a Problem (it does not turn /public/health to 503: that is for the offer's own
+	// promises).
+	PriorityBursts int `json:"priorityBursts"`
 }
 
 // Problem names reported in Health.Problems.
@@ -694,7 +865,7 @@ func (s *Service) Health() Health {
 	if every <= 0 {
 		every = DefaultSweepInterval
 	}
-	h := Health{LastSweep: last.UTC(), StorageMax: s.cfg.MaxTotalBytes}
+	h := Health{LastSweep: last.UTC(), StorageMax: s.cfg.MaxTotalBytes, PriorityBursts: s.prio.bursts(now, s.cfg.PriorityBurstDocs)}
 	h.StorageBytes, _ = s.bytes.get()
 	if s.expiryDisabled() {
 		h.Problems = append(h.Problems, ProblemExpiryDisabled)

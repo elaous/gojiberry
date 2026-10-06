@@ -49,6 +49,10 @@ type env struct {
 
 const adminToken = "s3cret-admin-token"
 
+// testReportKey keys the reporter hashes of the test services, so that two of them over one store
+// agree (a service without a key makes one of its own).
+var testReportKey = deriveReportKey([]byte("test report key material"))
+
 func newEnv(t *testing.T, mod func(*Options)) *env {
 	t.Helper()
 	clk := newClock()
@@ -58,7 +62,7 @@ func newEnv(t *testing.T, mod func(*Options)) *env {
 	o := Options{
 		Store: ea, Now: clk.Now,
 		Config: Config{
-			AdminToken: adminToken, TermsURL: "https://example.org/terms", NoProxy: true,
+			AdminToken: adminToken, TermsURL: "https://example.org/terms", NoProxy: true, ReportKey: testReportKey,
 			SessionTTL: 48 * hour, SessionMaxAge: 96 * hour,
 			// roomy rate limits unless a test narrows them
 			SessionsPerHour: 100000, MaxSessionsPerAddress: 100000, WritesPerMinute: 1000, WritesPerMinutePerAddress: 100000, ViewsPerMinute: 1000, ReportsPerMinute: 1000,

@@ -270,7 +270,7 @@ a tombstone, a content `Blocklist` hook and a `Challenger` hook. Still to do bef
    routes themselves send `X-Robots-Tag: noindex` and `Cache-Control: no-store`).
 7. Reports are bounded per document (20), deduplicated per (document, reporter, reason), rate-limited
    per address, bounded as a whole (`_MAX_REPORTS`, `_MAX_REPORT_BYTES`), with slots reserved for new
-   reporters and a priority list (`csam`, `illegal`) that is evicted last (section 7.2, items 12 and 17).
+   reporters and a priority list of report *categories* (`csam`, `illegal`) that is evicted last, with its own caps (section 7.2, items 12 and 17).
 
 The retention half is done, including the hub-only sweep and the age cap; **the orphan sweep is ON by default in public mode** (see section 7).
 
@@ -299,9 +299,9 @@ is tested, including a whole-flow test with a fake clock (`docstore/public/publi
 | `GET /public/doc` | the owner's download; never renews; 404 after expiry, 410 after takedown |
 | `DELETE /public/doc` | discard it; the session may then start another |
 | `GET /public/view/<viewId>` | read-only; never renews; 410 once taken down |
-| `POST /public/report` | `{"id": "<view id or doc id>", "reason": "..."}` -> 202; stored as `report/<id>` unless it is a duplicate or finds no slot (the answer is 202 either way; item 17) |
+| `POST /public/report` | `{"id": "<view id or doc id>", "reason": "...", "category": "csam\|illegal\|spam\|other"}` -> 202; stored as `report/<id>` unless it is a duplicate or finds no slot (the answer is 202 either way; item 17); an unknown or missing category is `other`; 503 while the reporter salt cannot be read or created (item 17) |
 | `GET /public/health` | `{"ok":true}` with 200, or `{"ok":false}` with 503, and nothing else: no figures, no problem names, no sweep time (they would tell an attacker when the offer is full or its sweeper is down); point a load balancer or an outside monitor at it |
-| `GET /admin/health` | the detailed report, behind the admin guard (header `X-Gojiberry-Admin-Token`): `{ok, problems[], lastSweep, storageBytes, storageMax}`, 200 or 503 with the problem names (`expiry-disabled`, `no-deadline`, `sweeper-stale`, `sweep-failing`, `storage-full`); no secrets and nothing per document; point the operator's monitoring at it |
+| `GET /admin/health` | the detailed report, behind the admin guard (header `X-Gojiberry-Admin-Token`): `{ok, problems[], lastSweep, storageBytes, storageMax, priorityBursts}`, 200 or 503 with the problem names (`expiry-disabled`, `no-deadline`, `sweeper-stale`, `sweep-failing`, `storage-full`); no secrets and nothing per document; point the operator's monitoring at it |
 | `DELETE /admin/takedown/<id>` | operator (header `X-Gojiberry-Admin-Token`; item 18); deletes the document, its records, writes the tombstone; the view ID answers 410 and the session cannot start another document; idempotent (204); an ID no record names (expired and swept, or being created) is tombstoned all the same and answers 202; `?reason=` is kept |
 
 Every public response carries `X-Robots-Tag: noindex, nofollow, noarchive`, `Cache-Control:
@@ -358,11 +358,23 @@ the same with `rel="terms-of-service"`, the registered name); document responses
    each with no session yet, each take one place of the reserve; and a second visitor on a network
    that already holds a session (a shared IPv4 /24, a campus) is refused while the offer is above 80%
    full, which is what the reserve costs. Behind carrier-grade NAT raise the net cap.
+
+   A **third level** closes the same gap one step up. An attacker holding a /32 (65,536 /48s) is
+   held by no per-/48 cap, and moving between /48s it looked like a new network every time, so it
+   could also spend the reserve. `_MAX_SESSIONS_PER_WIDE` (500; never below the per-net figure nor
+   above `_MAX_SESSIONS`) caps the live sessions per IPv6 /32 or IPv4 /16 (`public.WideKey`), 429
+   above it, and **the reserve is judged at the coarsest level**: inside it only a visitor whose
+   /32 or /16 has no live session is admitted. The price is that a second visitor of an ISP that
+   already holds a session is refused while the offer is above 80% full; raise the reserve down (`0`)
+   or the caps for a deployment that is mostly one large provider. Residual, named plainly: a
+   **botnet** with addresses in many different /32s and /16s is a crowd of newcomers; each takes one
+   place of the reserve and each address is still held to its own per-address cap and issue rate,
+   but nothing here tells it from visitors. A `Challenger` is the answer to that.
 7. **A client is an IPv4 address or an IPv6 /64** (`public.ClientKey`), for every limiter and the
    byte quota: session issue, writes (per session and per client, so new sessions do not buy
    write budget), views, reports, admin, the daily bytes and the live-session cap. A subscriber who
    rotates through the addresses of its /64 is one client. Only the second-level session cap and the
-   reserve (item 6) look at the wider network (`public.NetKey`: the /48 or /24).
+   reserve (item 6) look at the wider network (`public.NetKey`: the /48 or /24, `public.WideKey`: the /32 or /16), and so do the in-flight shares (item 19) and the admin failure counts (item 18).
 8. **A global storage budget.** `_MAX_TOTAL_BYTES` (1 GiB) bounds the bytes of live public
    documents (and the version snapshots a store keeps for them, `versions/pubdoc/`). The service
    keeps a counter that writes reserve against atomically and `Sweep` rebuilds from the store (so
@@ -387,7 +399,24 @@ the same with `rel="terms-of-service"`, the registered name); document responses
    listing runs can be counted twice until the next reconcile, never missed. If the **first**
    reconcile fails (the store cannot be listed), writes fail **closed**: 503 with `Retry-After` for
    15 seconds (`reconcileBackoff`), then one new attempt, instead of running against a count of zero.
-   Reads, views and reports are not held back by it.
+   Reads, views and reports are not held back by it. The first reconcile runs on a context of its own
+   (`context.WithoutCancel` with a 2 minute bound), not on the request that happens to start it: a
+   client that goes away mid-way (an HTTP/2 stream reset, a closed connection) must not cancel the
+   store listing and put every write of everyone into the 15 second backoff. Requests that find it
+   running wait for it for at most their own context or `_REQUEST_TIMEOUT`, then are answered 503.
+
+   **Version snapshots** (`versions/pubdoc/<id>/...`, the saver's layout) are written by something
+   other than this service. They are added to their document's ledger entry **when they are written**:
+   a service over a `*docstore.ExpiringAdapter` sets the adapter's `OnSave` hook (so build the service
+   before the adapter is in use), and a deployment that writes snapshots another way calls
+   `Service.NoteVersionWrite(key, size)`. A reconcile still rebuilds the figure from a listing, and a
+   snapshot written while it lists is kept (it may be counted twice until the next one). The overshoot
+   bound, plainly: nothing here can *refuse* a snapshot (its writer is not asking the budget), so the
+   budget can be exceeded by the snapshots written after it was reached, until they are deleted
+   with their document (a discard, a takedown and the expiry sweep subtract them); what the
+   write-time count buys is that the budget stops admitting new documents at once instead of after
+   the next sweep (up to 5 minutes of snapshot writes, before). A deleted snapshot is subtracted by
+   the next reconcile only.
 9. **The generic `/docs` API is closed in public mode.** Anonymous visitors must not be able to
    read or write the store's other documents. `docstorecmd` refuses to start the public offer
    unless `/docs` is closed: by default it closes it itself (`docstore.Server.CloseDocs`: 404 for
@@ -407,15 +436,23 @@ the same with `rel="terms-of-service"`, the registered name); document responses
 11. **Slow clients, and the order of checks.** The `http.Server` has a `ReadTimeout` (5 minutes: the
     generic API takes documents up to 64 MiB), and every public request gets its own deadlines
     through `http.NewResponseController`: `_REQUEST_TIMEOUT` (30 s) to send the request, twice that
-    to take the answer; a body that is too slow is answered 408. A write is checked in this order,
+    to take the answer; a body that is too slow is answered 408. A body of 64 KiB or more declared (or
+    of unknown length) must also keep a **minimum average rate**, `_MIN_UPLOAD_RATE` (32 KiB/s) after
+    `_UPLOAD_GRACE` (5 s): the reader sets the connection's read deadline to the moment the rate would
+    be missed if nothing more came (grace + bytes read / rate, never past `_REQUEST_TIMEOUT`), so a
+    client that sends nothing is cut off after the grace, not after 30 s, and a trickle is cut as
+    soon as it falls behind (408, `Connection: close`). A write is checked in this order,
     all before its body is read: session, challenge, rate (session and address), one-document
     state (409, 403), declared size (413), counters known (503), storage budget (503), bytes in
-    flight (503, item 19), daily byte quota (429). The quota
+    flight (503 in all, 429 per client or network, item 19), daily byte quota (429). The quota
     is charged the declared `Content-Length` (the document cap for a chunked body, so a chunked
     upload near the end of a day's budget may be refused though it is small) and given back
-    (`QuotaRefunder`, implemented by `MemoryQuota`) for what is not stored: the difference once the
-    body is read (a chunked body of a few bytes leaves the quota almost untouched), all of it on
-    422, a lost claim (409), a failed store or a rollback. The charge remembers the window it went
+    (`QuotaRefunder`, implemented by `MemoryQuota`) for what is not stored **by the server's doing**:
+    the difference once the body is read (a chunked body of a few bytes leaves the quota almost
+    untouched), and all of it on a lost claim (409), a failed store or a rollback, a content check
+    that is down (503). What the client earned stays charged: a body that was too slow (408), that
+    was abandoned half-way, that was too large, or that was refused for its content (422). Before,
+    a 408 gave the bytes back, so slow uploads cost nothing. The charge remembers the window it went
     into (`WindowQuota`, implemented by `MemoryQuota`): a refund that arrives after that window
     rolled over is not credited to the new one.
 12. **Bounded cost.** A document's liveness is one deadline lookup (`Expirer.Expiry`), never a prefix
@@ -453,37 +490,88 @@ the same with `rel="terms-of-service"`, the registered name); document responses
 17. **Report slots cannot be used up by one link holder, or by a flood.** Anyone holding a view link
     can report, and a reporter with many addresses can send many reports, so a document's 20 slots
     and the global bound are protected in layers. (a) **Dedupe:** a report is keyed by (document,
-    reporter, reason), the reporter being a salted hash of its client (`ClientKey`, never the
-    address; the salt is kept in the store as `public/salt`, so it holds across restarts and
-    replicas) and the reason compared trimmed, lowercase, spaces collapsed; a repeat counts once and
-    is answered 202 with the first report's id. The document's record keeps a short reference per
-    stored report for this. (b) **Reserved slots:** the last 5 of a document's 20 slots
+    reporter, category, reason), the reason compared trimmed, lowercase, spaces collapsed; a repeat
+    counts once and is answered 202 with the first report's id. The document's record keeps a short
+    reference per stored report for this. The references follow the reports: a report that is
+    evicted (the global bound) or deleted (its TTL) is removed from its document's record under the
+    document's lock, and the slots and the dedupe are counted from the reports that still exist (a
+    reference whose report is gone is dropped when the document is near full and when a duplicate
+    is matched, so a deleted report's id is never handed out and a ghost never takes a slot).
+    **The reporter hash** is `HMAC-SHA-256(key, "gojiberry/public/reporter/v1" 0 salt 0 client)`
+    cut to 96 bits, `client` being the `ClientKey` and never stored. The salt (`public/salt`) is in
+    the store and so is in any dump of it; with it alone all four billion IPv4 addresses could be
+    tried, so the **key** is a secret kept *outside* that store: `_REPORT_KEY` (16+ characters), else
+    derived (HMAC under its own label) from the directory's signing seed `GOJIBERRY_DOCSTORE_DIRECTORY_KEY`,
+    else made for the process with a warning (the dedupe then restarts with the process). "The report
+    holds no address" is true as long as the key stays out of the store: do not keep it there. The salt is
+    created with a create-if-absent write (`SaveIf` with no previous content), so replicas starting
+    together converge on the first one written, and it is never made up for a process when the store
+    fails: a failure is retried after a backoff (1 s doubling to 30 s) and the report is answered
+    503 until a salt exists. (b) **Reserved slots:** the last 5 of a document's 20 slots
     (`_REPORT_RESERVED_PER_DOC`, `0` for none) are for reporters with no report on that document;
     and once the stored reports pass `_MAX_REPORTS` less 20% (`_REPORT_RESERVE_PERCENT`, `0` for none)
-    only reporters with no stored report at all are taken. (c) **Priority:** a report whose whole
-    reason (trimmed, any case) is in `_REPORT_PRIORITY_REASONS` (default `csam,illegal`; `none` for no
-    list) is exempt from both reserves, is never evicted before the ordinary reports (the global
-    eviction, at the bound and in the sweep, takes oldest first among the ordinary ones, then among
-    the priority ones), and when its document is full takes the place of the document's oldest
-    ordinary report (a full document of priority reports takes no more). A dropped report is answered
-    202 like a kept one. The editor should send the category code as the reason, since the match is on
-    the whole text. Residual: an attacker with many addresses still collects its share of the
-    reserved slots one address at a time, and can send the priority words itself; the layers make that
-    cost one address per report slot, not remove it.
-18. **Failed admin authentication is rate-limited; a right token never is.** `adminAllowed` checks the
-    token first (constant time, `TokenAdmin`) and only a failure draws on the per-client budget
-    (`Limiters.Admin`, 20 a minute), answering 429 with `Retry-After` once it is spent. Before, every
-    attempt drew on it, so behind a proxy that was not named (every caller sharing the proxy's
-    address) wrong guesses locked the operator out. The same guard protects `GET /admin/health`.
-    The limit therefore keeps the noise down but does not hold back a correct guess: use a long
-    random token (the server warns below 16 characters), and keep `_TRUSTED_PROXIES` right, since the
-    budget is per client address (see item 10 for the start-up refusal).
-19. **A global cap on request bodies in flight.** The per-client limits do not bound memory when
-    many clients upload at once. `_MAX_INFLIGHT_BYTES` (256 MiB, at least `_MAX_DOC_BYTES`) bounds
-    the bytes of bodies being read at the same moment, across all clients: a write holds its declared
-    `Content-Length` (the document cap for a chunked body) from admission until the write ends, trimmed
-    to what was actually read once the body is in, and one that would pass the cap is answered 503 with
-    `Retry-After` before anything is read or charged.
+    only reporters with no stored report at all are taken. (c) **Priority:** the report API takes a
+    `category` from a fixed set (`csam`, `illegal`, `spam`, `other`; anything else is `other`), and
+    only a category in `_REPORT_PRIORITY_CATEGORIES` (default `csam,illegal`; `none` for no list)
+    can make a report a priority one; the free-text reason never does. A priority report is exempt
+    from both reserves, is never evicted before the ordinary reports (the global eviction, at the bound
+    and in the sweep, takes oldest first among the ordinary ones, then among the priority ones), and
+    when its document is full takes the place of the document's oldest ordinary report. Three caps
+    keep that path from being flooded or used to pin a document: a reporter (the salted hash) has
+    `_REPORT_PRIORITY_PER_REPORTER` (3) priority reports per 24 hours, the next ones being kept as
+    ordinary reports; priority reports hold at most **half** of a document's slots (10 of 20), so the
+    ordinary reports of others still find room; and when priority-category reports from one network
+    (`NetKey`) name more than `_REPORT_PRIORITY_BURST` (10) different documents within an hour the
+    operator is told: an `ALARM` log line (once per network per hour; it names the network prefix, the
+    one place an address prefix is logged) and `priorityBursts` in `GET /admin/health` (a field, not
+    a problem: `/public/health` stays 200). The per-reporter counts are rebuilt from the stored
+    reports by each sweep. A dropped report is answered 202 like a kept one. Residual: an attacker
+    with many addresses still collects its share of the reserved slots one address at a time, can
+    name a priority category itself (3 a day per address, half a document), and can spread over networks
+    to stay under the burst flag; the layers make that cost one address per report slot, not remove it.
+18. **Failed admin authentication is limited per /64, per network and in all; a right token never is.**
+    `adminAllowed` checks the token first (constant time, `TokenAdmin`) and only a failure draws on
+    a budget: per client (`Limiters.Admin`, a /64 or IPv4 address, 20 a minute), per network
+    (`Limiters.AdminNet`, a /48 or /24, 60 a minute) and in all (`Limiters.AdminGlobal`, 300 a
+    minute); the three are `_ADMIN_FAILURES_PER_MINUTE`, `_ADMIN_FAILURES_PER_NET_PER_MINUTE` and
+    `_ADMIN_FAILURES_GLOBAL_PER_MINUTE`. Past the first two a failure answers 429 with `Retry-After`;
+    when the global budget is used up the admin route goes into a **30 second cooldown** in which every
+    wrong token is answered 429 (with the time left) and nothing is counted, whatever the network.
+    A request with the right token is never counted and never throttled, in the cooldown or out of
+    it (before, every attempt drew on the budget, so behind a proxy that was not named wrong guesses
+    locked the operator out). Ten failures within a minute are logged (`WARNING`, once a minute at
+    most) and the start of a cooldown is an `ALARM`. The same guard protects `GET /admin/health`.
+    The per-/64 limit alone left an attacker with a /48 (65,536 /64s) 20 guesses a minute *each*; the
+    per-network and global budgets bound that to 60 and 300.
+
+    **What the limits can and cannot do**, plainly: they slow a guesser down, bound the work it can
+    ask for and make a burst visible. They cannot make an online guess impossible, because a right
+    guess is answered at once however many wrong ones came before, and a distributed guesser with
+    enough networks is held only by the global budget. The safety is the token's length. So the
+    server **refuses to start** with an admin token shorter than 16 characters (`ErrAdminTokenTooShort`
+    from `New`, and an error from `FromEnv`); `GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_SHORT_ADMIN_TOKEN=true`
+    overrides it explicitly, and then every start logs a loud `WARNING`. Keep `_TRUSTED_PROXIES`
+    right, since the budgets are per client address (see item 10 for the start-up refusal).
+19. **Caps on request bodies in flight: in all, per client, per network.** The per-client limits do
+    not bound memory when many clients upload at once. `_MAX_INFLIGHT_BYTES` (256 MiB, at least
+    `_MAX_DOC_BYTES`) bounds the bytes of bodies being read at the same moment: a write holds its
+    declared `Content-Length` (the document cap for a chunked body) from admission until the write
+    ends, trimmed to what was actually read once the body is in, and one that would pass the cap is
+    answered 503 with `Retry-After` before anything is read or charged. On its own that let a few
+    addresses hold the whole cap: each write held up to 4 MiB for up to the request timeout, and a
+    408 gave the quota back, so about six addresses could keep 256 MiB claimed for nothing and turn
+    every write of everyone else into a 503. So each client (a /64 or an IPv4 address) may hold
+    `_MAX_INFLIGHT_PER_CLIENT` (cap/8, 32 MiB) and each network (a /48 or /24)
+    `_MAX_INFLIGHT_PER_NET` (cap/4, 64 MiB), never below `_MAX_DOC_BYTES`, answered 429 above them.
+    Holding is also short and not free: a large body must keep the minimum rate (item 11), so a stalled
+    one is cut after the 5 second grace, and a 408 or an abandoned upload stays charged to the
+    client's 50 MiB a day (item 11), so one client can hold a 4 MiB claim only a dozen times a day.
+    Residual, stated plainly: the global cap is still shared. Four networks at 64 MiB each, or
+    eight /64s at 32 MiB, fill it while they last; what bounds them is the daily bytes (a client that
+    stalls is charged the full declared size), the grace, the write rate and the number of addresses
+    the attacker has: keeping 256 MiB held around the clock with 4 MiB claims of 5 seconds each, 12
+    a day per client, takes on the order of 90,000 addresses. A botnet that large is not stopped,
+    only made expensive.
 20. **Reserved IDs, in every mode.** Document IDs that start with `public/` or `report/` (in any
     case) are reserved for this package's records and reports in *all* modes, whether or not the public
     offer is on: `docstore.Server` refuses them through `/docs`. An existing document with such an ID
@@ -503,18 +591,25 @@ the same with `rel="terms-of-service"`, the registered name); document responses
 | `_MAX_SESSIONS` | 10000 | live sessions, all clients, 503 above |
 | `_MAX_SESSIONS_PER_ADDRESS` | 10 | live sessions per client (IPv4 address, IPv6 /64), 429 above |
 | `_MAX_SESSIONS_PER_NET` | 100 | live sessions per network (IPv6 /48, IPv4 /24), 429 above; never below the per-address figure |
-| `_SESSION_RESERVE_PERCENT` | 20 | share of `_MAX_SESSIONS` kept for visitors whose network has no live session (`0`: none), 503 otherwise |
+| `_MAX_SESSIONS_PER_WIDE` | 500 | live sessions per wide prefix (IPv6 /32, IPv4 /16), 429 above; never below the per-net figure nor above `_MAX_SESSIONS` |
+| `_SESSION_RESERVE_PERCENT` | 20 | share of `_MAX_SESSIONS` kept for visitors whose wide prefix (/32 or /16) has no live session (`0`: none), 503 otherwise |
 | `_MAX_INFLIGHT_BYTES` | 256 MiB | request bodies being read at once, all clients (at least `_MAX_DOC_BYTES`), 503 above |
+| `_MAX_INFLIGHT_PER_CLIENT`, `_MAX_INFLIGHT_PER_NET` | cap/8, cap/4 | the share of it one client (/64) and one network (/48, /24) may hold, 429 above; never below `_MAX_DOC_BYTES` |
+| `_MIN_UPLOAD_RATE`, `_UPLOAD_GRACE` | 32768, 5s | bytes per second a body of 64 KiB or more (or of unknown length) must average after the grace, else 408 and cut off (the daily bytes stay charged) |
 | `_SESSIONS_PER_HOUR` | 6 | sessions issued per client per hour (token bucket, burst = the figure; replaces `_SESSIONS_PER_MINUTE`) |
 | `_WRITES_PER_MINUTE`, `_ADDRESS_WRITES_PER_MINUTE`, `_VIEWS_PER_MINUTE`, `_REPORTS_PER_MINUTE` | 30, 120, 120, 5 | token buckets (burst = the figure): per session, per client, per client, per client |
 | `_MAX_REPORTS`, `_MAX_REPORT_BYTES` | 5000, 8 MiB | stored reports as a whole; the oldest ordinary ones are evicted beyond either |
 | `_REPORT_RESERVED_PER_DOC`, `_REPORT_RESERVE_PERCENT` | 5, 20 | of a document's 20 report slots, and of `_MAX_REPORTS`, the share kept for reporters with no report there (`0`: none) |
-| `_REPORT_PRIORITY_REASONS` | `csam,illegal` | whole reasons (any case) never evicted before others, exempt from the reserves; `none` for no list |
+| `_REPORT_PRIORITY_CATEGORIES` | `csam,illegal` | report categories (of `csam,illegal,spam,other`) never evicted before others, exempt from the reserves; `none` for no list; the free-text reason never counts |
+| `_REPORT_PRIORITY_PER_REPORTER`, `_REPORT_PRIORITY_BURST` | 3, 10 | priority reports per reporter per 24 h (the rest are ordinary); different documents with priority reports from one network within an hour before the operator is told (log, `priorityBursts`) |
+| `_REPORT_KEY` | none | secret (16+ characters) keying the reporter hashes; else derived from `GOJIBERRY_DOCSTORE_DIRECTORY_KEY`, else per process with a warning. Keep it out of the store |
 | `_REQUEST_TIMEOUT` | 30s | to send a request body (the answer gets twice that); 408 |
 | `_FULL_SWEEP_INTERVAL` | 1h | listing sweeps over a store that cannot list by prefix |
 | `_REPORT_TTL`, `_TOMBSTONE_TTL` | 720h, 720h | `_TOMBSTONE_TTL` must be at least `_SESSION_MAX_AGE` + 24h or the server does not start |
 | `_TERMS_URL` | none | the `Link: rel="terms"` target (an http(s) URL) |
-| `_ADMIN_TOKEN` | none | secret of the takedown route and `/admin/health`; without it they are not mounted; use 16+ random characters |
+| `_ADMIN_TOKEN` | none | secret of the takedown route and `/admin/health`; without it they are not mounted; at least 16 characters or the server does not start |
+| `_ALLOW_SHORT_ADMIN_TOKEN` | off | `true` starts the server with a shorter token (loud warning at every start) |
+| `_ADMIN_FAILURES_PER_MINUTE`, `_ADMIN_FAILURES_PER_NET_PER_MINUTE`, `_ADMIN_FAILURES_GLOBAL_PER_MINUTE` | 20, 60, 300 | failed admin attempts per client, per network, in all; the global one used up means a 30 s cooldown for wrong tokens (item 18) |
 | `_TRUSTED_PROXIES` | none | CIDRs whose `X-Forwarded-For` is believed (else a caller could pick its own limiter key); empty logs a warning, and with the admin route on it refuses to start; `none` says there is no proxy |
 | `_ALLOW_OPEN_DOCS` | off | `true` keeps the generic `/docs` API open beside the public offer (logged as a warning); by default public mode closes it (item 9) |
 
@@ -525,8 +620,8 @@ pattern as `auth/passkey`, see [encryption-and-passkeys.md](encryption-and-passk
 
 | Interface | What it does | Default | Plug in |
 |---|---|---|---|
-| `SessionStore` | live sessions, the global, per-client and per-network caps and the reserve for new networks (`Create` takes `SessionCaps`), the one-document claim (`SetDoc` is a compare-and-set); optional `SessionReaper` | `MemorySessionStore` (10,000 live, swept at the cap and by `Sweep`) | Redis, a table |
-| `Limiters{Session, Write, WriteAddr, View, Report, Admin}` (`passkey.Limiter`) | per-group request budgets, keyed by `ClientKey` (or the session); `Admin` counts failed authentications only | `passkey.RateLimiter` from the Config | a shared budget, a gateway; `passkey.Unlimited{}` |
+| `SessionStore` | live sessions, the global, per-client, per-network and per-wide-prefix caps and the reserve for new networks (`Create` takes `SessionCaps`), the one-document claim (`SetDoc` is a compare-and-set); optional `SessionReaper` | `MemorySessionStore` (10,000 live, expired ones dropped through an expiry heap on every create and by `Sweep`) | Redis, a table |
+| `Limiters{Session, Write, WriteAddr, View, Report, Admin, AdminNet, AdminGlobal}` (`passkey.Limiter`) | per-group request budgets, keyed by `ClientKey` (or the session; `AdminNet` by `NetKey`, `AdminGlobal` by one key); the admin ones count failed authentications only | `passkey.RateLimiter` from the Config | a shared budget, a gateway; `passkey.Unlimited{}` |
 | `Quota` (optional `QuotaRefunder`, `WindowQuota`) | bytes per client per day, charged before the body is read; `WindowQuota` also names the window so a late refund cannot credit the next one | `MemoryQuota` (fixed 24 h window per client, at most 100,000 clients, least recently used dropped) | Redis, a table |
 | `Options.ClientIP` | who the client is | remote address, or `passkey.TrustedProxies(cidrs...)` | your function |
 | `AdminGuard` | who may take down | `TokenAdmin` (constant-time compare; an empty token allows nobody) | operator sign-in, mTLS |
@@ -554,27 +649,40 @@ State plainly, before launch:
 5. A takedown by an ID that was never a document is silently tombstoned (202): the operator's
    typo is not an error.
 6. Upgrading: `_SESSIONS_PER_MINUTE` is gone (use `_SESSIONS_PER_HOUR`); `SessionStore.Create` takes
-   a `SessionCaps` (per client, per network, reserve) and `Session` a `Client` and a `Net`; `/docs`
+   a `SessionCaps` (per client, per network, per wide prefix, reserve) and `Session` a `Client`, a
+   `Net` and a `Wide`; a short admin token (under 16 characters) now stops the server (see item 18 for
+   the override); reports take a `category` and `_REPORT_PRIORITY_REASONS` is replaced by
+   `_REPORT_PRIORITY_CATEGORIES`; set `_REPORT_KEY` (or the directory key) so the reporter hashes survive
+   restarts; `docstore.ExpiringAdapter` has an `OnSave` hook the service uses; `/docs`
    is closed in public mode unless required ACLs with sign-in or `_ALLOW_OPEN_DOCS=true`;
    `Server.Hide` ignores case; `/public/health` is `{"ok":...}` only and the detail moved to
    `GET /admin/health`; with an admin token the server will not start with `_TRUSTED_PROXIES` unset
    (name the proxies, or `none`); IDs starting with `public/` or `report/` are reserved in all
    modes; `Quota` implementations may add `WindowQuota`.
 7. Limits that remain, stated plainly:
-   - **Floods from many networks.** The per-network cap and the reserve bound one /48 or /24, not a
-     botnet spread over thousands of them: each new network takes a place of the reserve, and the
-     reserve is spent when enough of them arrive. The real answer is a `Challenger` (item 5.3) when
-     the offer is busy; none ships.
-   - **Shared addresses.** Visitors behind one IPv4 /24 share the per-network cap and, above 80%
-     full, the reserve rule (item 6); a campus or carrier-grade NAT needs a higher
-     `_MAX_SESSIONS_PER_NET`.
-   - **Reports from many addresses.** Dedupe, reserved slots and the priority list make a report flood
-     cost one address per slot, but an attacker with many addresses still fills the ordinary slots of a
-     document and can send the priority words. A report whose reason is not one of the listed whole
-     strings is ordinary. The reporter hash holds across restarts only while `public/salt` stays in
-     the store (else the dedupe restarts with the process).
-   - **The admin token** is never held back by the limiter (that is what stops a lockout): its strength
-     is its length. `GET /admin/health` is as strong as that token.
+   - **Floods from many networks (botnets).** The per-network and per-wide-prefix caps and the
+     reserve bound one /48, /24, /32 or /16, not a botnet spread over thousands of them: each new
+     wide prefix is a newcomer and takes a place of the reserve, and the reserve is spent when enough
+     of them arrive. The same crowd can hold the global in-flight cap (item 19) for as long as it can
+     pay in addresses. The real answer is a `Challenger` (item 5.3) when the offer is busy; none ships.
+   - **Shared addresses.** Visitors behind one IPv4 /24 share the per-network cap, those behind one
+     /16 the per-wide cap, and above 80% full the reserve rule (item 6) judged at the /16 or /32; a
+     campus, an ISP or carrier-grade NAT needs higher `_MAX_SESSIONS_PER_NET` and
+     `_MAX_SESSIONS_PER_WIDE`, or a smaller reserve.
+   - **Reports from many addresses.** Dedupe, reserved slots, the category enum and the priority caps
+     make a report flood cost one address per slot, but an attacker with many addresses still fills
+     the ordinary slots of a document and can name a priority category (3 a day per address, half of a
+     document, and the burst flag only tells the operator). The reporter hash holds across restarts
+     only while the report key is kept and the same (item 17), and "the report holds no address"
+     holds only while that key stays out of the store.
+   - **The admin token** is never held back by the limiters (that is what stops a lockout): its
+     strength is its length (16 characters minimum unless overridden), because the limits cannot stop
+     a distributed guesser from trying; they slow it, cap its work and make it visible (item 18).
+     `GET /admin/health` is as strong as that token.
    - **Counter inexactness.** A write that lands while a sweep lists the store can be counted twice
-     until the next sweep (item 8): the budget errs towards refusing, never towards admitting.
+     until the next sweep (item 8): the budget errs towards refusing, never towards admitting. Version
+     snapshots are counted when written but cannot be refused, so the budget can be exceeded by the
+     snapshots written after it was reached (item 8).
+   - **The first reconcile** still fails closed for 15 seconds when the store really cannot be
+     listed; only a departing client no longer causes that.
    - **`MemoryQuota`** forgets the least recently used client when 100,000 are tracked (item 16).

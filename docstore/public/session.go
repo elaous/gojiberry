@@ -1,6 +1,7 @@
 package public
 
 import (
+	"container/heap"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -29,6 +30,9 @@ type Session struct {
 	// Net is the NetKey of that address (an IPv6 /48, an IPv4 /24): what the second-level cap and
 	// the reserve for newcomers count.
 	Net string
+	// Wide is the WideKey of that address (an IPv6 /32, an IPv4 /16): what the third-level cap
+	// counts and the reserve for newcomers looks at (the coarsest level).
+	Wide string
 	// Created is when the session was issued; it never extends the session beyond MaxAge.
 	Created time.Time
 	// Expires is the instant the session stops working.
@@ -49,6 +53,9 @@ var (
 	// ErrNetSessionsFull is returned by Create when the session's Net already holds its maximum
 	// of live sessions.
 	ErrNetSessionsFull = errors.New("public: too many live anonymous sessions for this network")
+	// ErrWideSessionsFull is returned by Create when the session's Wide already holds its
+	// maximum of live sessions.
+	ErrWideSessionsFull = errors.New("public: too many live anonymous sessions for this wide network")
 	// ErrNoSession is returned by the methods that need a session that is not there (or has expired).
 	ErrNoSession = errors.New("public: no such session")
 )
@@ -57,8 +64,9 @@ var (
 type SessionCaps struct {
 	PerClient int // live sessions per Client (<= 0: no cap)
 	PerNet    int // live sessions per Net (<= 0: no cap)
-	// ReservePercent is the share (0..100) of the global cap kept for sessions whose Net has no
-	// live session yet (<= 0: no reserve).
+	PerWide   int // live sessions per Wide (<= 0: no cap)
+	// ReservePercent is the share (0..100) of the global cap kept for sessions whose Wide (the
+	// coarsest level) has no live session yet (<= 0: no reserve).
 	ReservePercent int
 }
 
@@ -69,11 +77,13 @@ type SessionCaps struct {
 //
 // Create must refuse (ErrSessionsFull) when the live sessions are at the cap, counting without
 // the expired ones, (ErrClientSessionsFull) when the live sessions with the same Client already
-// number caps.PerClient and (ErrNetSessionsFull) when those with the same Net number caps.PerNet
-// (a figure <= 0 is no such cap), so that one address, or one attacker holding a whole /48, cannot
-// fill the global cap. Once the live sessions reach the cap minus caps.ReservePercent of it, Create
-// refuses (ErrSessionsFull) every session whose Net already has a live session: the reserve is for
-// visitors from networks that hold none. SetDoc must be atomic (a compare-and-set), since it is what makes "one
+// number caps.PerClient, (ErrNetSessionsFull) when those with the same Net number caps.PerNet and
+// (ErrWideSessionsFull) when those with the same Wide number caps.PerWide (a figure <= 0 is no such
+// cap), so that one address, or one attacker holding a whole /48 or /32, cannot fill the global cap.
+// Once the live sessions reach the cap minus caps.ReservePercent of it, Create refuses
+// (ErrSessionsFull) every session whose Wide already has a live session (a session with no Wide:
+// whose Net does): the reserve is for visitors from networks that hold none, judged at the
+// coarsest level so that moving between the /48s of one /32 does not make an attacker a newcomer. SetDoc must be atomic (a compare-and-set), since it is what makes "one
 // document per session" hold under concurrent requests.
 type SessionStore interface {
 	// Create stores a new session, or returns ErrSessionsFull, ErrClientSessionsFull or
@@ -113,17 +123,53 @@ func randomString(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// MemorySessionStore is the single-process SessionStore. Expired sessions are swept lazily when
-// the store is busy and by Create at the cap, so a flood of sessions that are never used again
-// cannot fill it for longer than their lifetime.
+// MemorySessionStore is the single-process SessionStore. Expired sessions are dropped through an
+// expiry heap (each Create and Reap pops what has expired, so the cost is that of the sessions that
+// expired, never a scan of all of them): a flood of sessions that are never used again cannot fill
+// it for longer than their lifetime, and a flood of refused Creates does not make each refusal walk
+// the whole store under the lock.
 type MemorySessionStore struct {
 	// Max is the cap on live sessions (0: DefaultMaxSessions).
 	Max int
 
 	mu       sync.Mutex
-	sessions map[string]Session
+	sessions map[string]*memSession
 	byClient map[string]int // live-or-unswept sessions per Client
 	byNet    map[string]int // live-or-unswept sessions per Net
+	byWide   map[string]int // live-or-unswept sessions per Wide
+	expiry   expiryHeap     // every session, earliest Expires first
+	popped   int            // sessions the heap has given up for expiry (for tests)
+}
+
+// memSession is a session and its place in the expiry heap.
+type memSession struct {
+	Session
+	key string
+	idx int
+}
+
+// expiryHeap is a container/heap of sessions ordered by Expires.
+type expiryHeap []*memSession
+
+func (h expiryHeap) Len() int           { return len(h) }
+func (h expiryHeap) Less(i, j int) bool { return h[i].Expires.Before(h[j].Expires) }
+func (h expiryHeap) Swap(i, j int) {
+	h[i], h[j] = h[j], h[i]
+	h[i].idx, h[j].idx = i, j
+}
+func (h *expiryHeap) Push(x any) {
+	m := x.(*memSession)
+	m.idx = len(*h)
+	*h = append(*h, m)
+}
+func (h *expiryHeap) Pop() any {
+	old := *h
+	n := len(old)
+	m := old[n-1]
+	old[n-1] = nil
+	*h = old[:n-1]
+	m.idx = -1
+	return m
 }
 
 // DefaultMaxSessions is the live-session cap when none is set.
@@ -131,7 +177,7 @@ const DefaultMaxSessions = 10000
 
 // NewMemorySessionStore makes a store holding at most max live sessions (0: DefaultMaxSessions).
 func NewMemorySessionStore(max int) *MemorySessionStore {
-	return &MemorySessionStore{Max: max, sessions: map[string]Session{}, byClient: map[string]int{}, byNet: map[string]int{}}
+	return &MemorySessionStore{Max: max}
 }
 
 func (m *MemorySessionStore) cap() int {
@@ -141,50 +187,9 @@ func (m *MemorySessionStore) cap() int {
 	return DefaultMaxSessions
 }
 
-// sweepLocked drops the expired sessions and returns how many.
-func (m *MemorySessionStore) sweepLocked(now time.Time) int {
-	n := 0
-	for k, s := range m.sessions {
-		if !now.Before(s.Expires) {
-			m.dropLocked(k)
-			n++
-		}
-	}
-	return n
-}
-
-// dropLocked removes one session and its count.
-func (m *MemorySessionStore) dropLocked(key string) {
-	s, ok := m.sessions[key]
-	if !ok {
-		return
-	}
-	delete(m.sessions, key)
-	if s.Client != "" {
-		if m.byClient[s.Client]--; m.byClient[s.Client] <= 0 {
-			delete(m.byClient, s.Client)
-		}
-	}
-	if s.Net != "" {
-		if m.byNet[s.Net]--; m.byNet[s.Net] <= 0 {
-			delete(m.byNet, s.Net)
-		}
-	}
-}
-
-// Reap implements SessionReaper.
-func (m *MemorySessionStore) Reap(_ context.Context, now time.Time) (int, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.sweepLocked(now), nil
-}
-
-// Create implements SessionStore.
-func (m *MemorySessionStore) Create(_ context.Context, key string, s Session, now time.Time, caps SessionCaps) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *MemorySessionStore) initLocked() {
 	if m.sessions == nil {
-		m.sessions = map[string]Session{}
+		m.sessions = map[string]*memSession{}
 	}
 	if m.byClient == nil {
 		m.byClient = map[string]int{}
@@ -192,45 +197,109 @@ func (m *MemorySessionStore) Create(_ context.Context, key string, s Session, no
 	if m.byNet == nil {
 		m.byNet = map[string]int{}
 	}
-	check := func() error {
+	if m.byWide == nil {
+		m.byWide = map[string]int{}
+	}
+}
+
+// reapLocked drops the expired sessions (the heap's head, until it is live) and returns how many.
+func (m *MemorySessionStore) reapLocked(now time.Time) int {
+	n := 0
+	for len(m.expiry) > 0 && !now.Before(m.expiry[0].Expires) {
+		m.dropLocked(m.expiry[0].key)
+		n++
+	}
+	m.popped += n
+	return n
+}
+
+func decr(counts map[string]int, k string) {
+	if k == "" {
+		return
+	}
+	if counts[k]--; counts[k] <= 0 {
+		delete(counts, k)
+	}
+}
+
+// dropLocked removes one session and its counts.
+func (m *MemorySessionStore) dropLocked(key string) {
+	s, ok := m.sessions[key]
+	if !ok {
+		return
+	}
+	delete(m.sessions, key)
+	if s.idx >= 0 {
+		heap.Remove(&m.expiry, s.idx)
+	}
+	decr(m.byClient, s.Client)
+	decr(m.byNet, s.Net)
+	decr(m.byWide, s.Wide)
+}
+
+// Reap implements SessionReaper.
+func (m *MemorySessionStore) Reap(_ context.Context, now time.Time) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.reapLocked(now), nil
+}
+
+// Create implements SessionStore.
+func (m *MemorySessionStore) Create(_ context.Context, key string, s Session, now time.Time, caps SessionCaps) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.initLocked()
+	m.reapLocked(now) // expired sessions do not count against anyone
+	// the coarsest level the session names is the one the reserve looks at
+	known := func() bool {
 		switch {
-		case len(m.sessions) >= m.cap():
-			return ErrSessionsFull
-		case caps.PerClient > 0 && s.Client != "" && m.byClient[s.Client] >= caps.PerClient:
-			return ErrClientSessionsFull
-		case caps.PerNet > 0 && s.Net != "" && m.byNet[s.Net] >= caps.PerNet:
-			return ErrNetSessionsFull
-		case caps.ReservePercent > 0 && s.Net != "" && m.byNet[s.Net] > 0 &&
-			len(m.sessions) >= m.cap()-m.cap()*min(caps.ReservePercent, 100)/100:
-			// In the reserve: only networks with no live session are let in.
-			return ErrSessionsFull
+		case s.Wide != "":
+			return m.byWide[s.Wide] > 0
+		case s.Net != "":
+			return m.byNet[s.Net] > 0
 		}
-		return nil
+		return false
 	}
-	if check() != nil {
-		m.sweepLocked(now) // expired sessions do not count against anyone
+	switch {
+	case len(m.sessions) >= m.cap():
+		return ErrSessionsFull
+	case caps.PerClient > 0 && s.Client != "" && m.byClient[s.Client] >= caps.PerClient:
+		return ErrClientSessionsFull
+	case caps.PerNet > 0 && s.Net != "" && m.byNet[s.Net] >= caps.PerNet:
+		return ErrNetSessionsFull
+	case caps.PerWide > 0 && s.Wide != "" && m.byWide[s.Wide] >= caps.PerWide:
+		return ErrWideSessionsFull
+	case caps.ReservePercent > 0 && known() &&
+		len(m.sessions) >= m.cap()-m.cap()*min(caps.ReservePercent, 100)/100:
+		// In the reserve: only networks with no live session are let in.
+		return ErrSessionsFull
 	}
-	if err := check(); err != nil {
-		return err
+	ms := &memSession{Session: s, key: key}
+	if old, ok := m.sessions[key]; ok { // the same key again (a custom caller): replace, do not double count
+		m.dropLocked(old.key)
 	}
-	m.sessions[key] = s
+	m.sessions[key] = ms
+	heap.Push(&m.expiry, ms)
 	if s.Client != "" {
 		m.byClient[s.Client]++
 	}
 	if s.Net != "" {
 		m.byNet[s.Net]++
 	}
+	if s.Wide != "" {
+		m.byWide[s.Wide]++
+	}
 	return nil
 }
 
-func (m *MemorySessionStore) live(key string, now time.Time) (Session, bool) {
+func (m *MemorySessionStore) live(key string, now time.Time) (*memSession, bool) {
 	s, ok := m.sessions[key]
 	if !ok {
-		return Session{}, false
+		return nil, false
 	}
 	if !now.Before(s.Expires) {
 		m.dropLocked(key)
-		return Session{}, false
+		return nil, false
 	}
 	return s, true
 }
@@ -240,7 +309,10 @@ func (m *MemorySessionStore) Get(_ context.Context, key string, now time.Time) (
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s, ok := m.live(key, now)
-	return s, ok, nil
+	if !ok {
+		return Session{}, false, nil
+	}
+	return s.Session, true, nil
 }
 
 // SetDoc implements SessionStore.
@@ -255,7 +327,6 @@ func (m *MemorySessionStore) SetDoc(_ context.Context, key, old, newDoc string, 
 		return false, nil
 	}
 	s.DocID = newDoc
-	m.sessions[key] = s
 	return true, nil
 }
 
@@ -269,7 +340,7 @@ func (m *MemorySessionStore) Extend(_ context.Context, key string, expires, now 
 	}
 	if expires.After(s.Expires) {
 		s.Expires = expires
-		m.sessions[key] = s
+		heap.Fix(&m.expiry, s.idx)
 	}
 	return nil
 }
@@ -282,7 +353,7 @@ func (m *MemorySessionStore) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-// Len is the number of sessions held, expired ones not yet swept included (for tests and metrics).
+// Len is the number of sessions held, expired ones not yet dropped included (for tests and metrics).
 func (m *MemorySessionStore) Len() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
