@@ -100,11 +100,14 @@ document shows its folder.
    weigh. The `open` format is special: `Saver.ExportOpen` writes a `.open` file that carries the
    document's versions (`Document.History`, oldest first), and saving such a document
    (`Saver.Save`, so also an import) stores the versions again at the times they were saved
-   and keeps the newest `MaxVersions`. A document in the store never holds a history inside
-   its own file.
+   and keeps the newest `MaxVersions` (the oldest versions, imported or not, go first).
+   Importing into an id the store already holds replaces that document: the file it
+   replaces stays as its previous copy (`prev`), and the imported revisions are added to
+   the versions it has. A document in the store never holds a history inside its own file.
 3. **Folder download** is `Saver.Archive`: a ZIP with the folders drawn as
    directories (they are virtual in the store), documents as saved, the trash
-   left out.
+   left out. A folder ZIP does not include version history; download a document as
+   `.open` for that.
 
 ## Migrate
 

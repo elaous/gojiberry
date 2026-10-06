@@ -236,6 +236,12 @@
   "opendl.current": "Version actuelle : %s.",
   "opendl.drop": "Supprimer l’historique des versions (ne télécharger que la version actuelle)",
   "opendl.total": "Le fichier fera environ %s.",
-  "opendl.title": "Télécharger %s au format .open"
+  "opendl.title": "Télécharger %s au format .open",
+  "download.group.documents": "Documents",
+  "download.group.web": "Web et texte",
+  "download.group.data": "Données",
+  "download.group.opendocs": "opendocs",
+  "download.group.more": "Autres",
+  "download.openWithHistory": "opendocs (.open), avec l’historique des versions"
  }
 }
