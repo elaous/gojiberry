@@ -566,7 +566,7 @@ func TestCollectOrphansRemovesOnlyOldLeftoverGenerations(t *testing.T) {
 	}
 }
 
-func TestRebuildDoesNotGiveADamagedFileANewChecksum(t *testing.T) {
+func TestRebuildPutsBackTheSaveTheOldCatalogVouchedFor(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
 	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
@@ -579,9 +579,29 @@ func TestRebuildDoesNotGiveADamagedFileANewChecksum(t *testing.T) {
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
 	}
+	// The earlier save, which the old catalog vouched for, is the document again.
 	d, rec, err := s.LoadChecked(ctx, "m", id)
-	if err != nil || !rec.FromPrevious || textOf(d) != "version one" {
-		t.Fatalf("the change is still found: %q %+v %v", textOf(d), rec, err)
+	if err != nil || rec.FromPrevious || textOf(d) != "version one" {
+		t.Fatalf("the rebuild put the vouched-for save back: %q %+v %v", textOf(d), rec, err)
+	}
+}
+
+// With no earlier copy to put back, a changed file is still found damaged after a rebuild.
+func TestRebuildKeepsAChangedOnlyCopyFlagged(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	e, err := s.Save(ctx, "m", docfile.JSON, docWithText("plan", "version one"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := mem.Load(ctx, e.Key)
+	_ = mem.Save(ctx, e.Key, []byte(strings.Replace(string(stored.Data), "version one", "version onX", 1)))
+	if err := s.Rebuild(ctx, "m"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Load(ctx, "m", e.ID); !errors.Is(err, ErrDamaged) {
+		t.Fatalf("%v", err)
 	}
 }
 

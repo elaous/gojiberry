@@ -10,6 +10,7 @@ import (
 
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/docstore"
 )
 
 // Session is the state behind the document components: the chosen target and
@@ -296,8 +297,26 @@ func (s *Session) after(ctx context.Context, msg string) error {
 	if err := s.Refresh(ctx); err != nil {
 		return err
 	}
+	if note := s.capacityNote(); note != "" {
+		msg += " " + note
+	}
 	s.say(msg)
 	return nil
+}
+
+// capacityNote is a sentence for the status line when the store is filling up, and ""
+// when it is not (or its size is not known).
+func (s *Session) capacityNote() string {
+	s.mu.Lock()
+	u := s.usage
+	s.mu.Unlock()
+	if !u.Known || u.Percent < components.CapacityWarnAt {
+		return ""
+	}
+	if u.Percent >= 95 {
+		return msg("saver.storageFull", "Storage is %.0f%% full: download your documents now, then delete old versions and the trash.", u.Percent)
+	}
+	return msg("saver.storageFilling", "Storage is %.0f%% full: download your documents, or delete old versions and the trash, before it fills.", u.Percent)
 }
 
 // current is the document to save, named and with the ID of the one being edited.
@@ -358,6 +377,9 @@ func (s *Session) save(ctx context.Context) (err error) {
 		return err
 	}
 	e, err := s.Saver.Save(ctx, target, c, doc)
+	if errors.Is(err, docstore.ErrStorageFull) {
+		return fmt.Errorf("%s: %w", msg("saver.notSavedFull", "Not saved: the storage is full. Download the document (Download as) so no work is lost, then delete old versions or the trash, or save somewhere else"), err)
+	}
 	if err != nil {
 		return err
 	}

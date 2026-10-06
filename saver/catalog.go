@@ -318,6 +318,9 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 	}
 	out := &catalog{Docs: map[string]catalogEntry{}, Folders: map[string]folderEntry{}}
 	modified := map[string]int64{} // each file's modification time, to break a tie
+	actual := map[string]string{}  // each file's checksum as it is now
+	// changed says a file is not what the catalog being replaced recorded for it.
+	changed := func(key string) bool { ks := knownSum[key]; return ks != "" && actual[key] != ks }
 	for _, m := range metas {
 		if id, ok := strings.CutPrefix(m.ID, t.folderPrefix()); ok && docfile.ValidID(id) {
 			if stored, err := t.Adapter.Load(ctx, m.ID); err == nil {
@@ -384,10 +387,20 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 		}
 		entry := catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: size, Updated: saved, Tags: doc.Tags(), Trashed: doc.Trashed(), Folder: doc.Folder(), Sum: sum}
 		modified[key] = m.UpdatedAt.UnixNano()
+		actual[key] = docstore.Digest(stored.Data)
 		if cur, ok := out.Docs[id]; ok {
 			older, newer := entry, cur
 			if cur.Updated < entry.Updated || cur.Updated == entry.Updated && modified[cur.Key] < modified[entry.Key] {
 				older, newer = cur, entry
+			}
+			// The newer file is not the one the old catalog vouched for, and the older is:
+			// the older is the document. (The changed file is left out; it is removed with
+			// the other leftovers once it is old enough, see CollectOrphans.)
+			if changed(newer.Key) && !changed(older.Key) {
+				out.Skipped = append(out.Skipped, newer.Key)
+				older.Prev, older.PrevSum = "", ""
+				out.Docs[id] = older
+				continue
 			}
 			if s.previousCopies() > 0 && newer.Prev == "" {
 				newer.Prev, newer.PrevSum = older.Key, older.Sum
