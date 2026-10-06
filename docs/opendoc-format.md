@@ -173,8 +173,8 @@ Open:
    only `docfile` and the standard library.
 2. **Done:** `Saver.ExportPack` (a folder or everything; folders by ID, tags, the trash flag,
    optionally each document's history; signed if given a key) and `Saver.ImportPack` (folders
-   recreated by ID under a chosen folder; a document already there is skipped, replaced or
-   copied; a bad document is reported and the rest come in; the signature is reported). The
+   recreated by ID under a chosen folder; a document already there is skipped, replaced (with the pack's folder, tags and trash flag) or
+   copied (the UI import always skips); a bad document is reported and the rest come in; the signature is reported). The
    UI: "As .opendoc" on a folder and "Import .opendoc" in the document list
    (`Session.DownloadPack`, `Session.Pick`), and "One .opendoc pack" in Migrate's format menu
    (`migrate.PackSink`).
