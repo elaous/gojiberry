@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -18,7 +19,28 @@ type Site struct {
 	URL string
 	dir string
 	srv *httptest.Server
+
+	mu       sync.Mutex
+	handlers []siteHandler
 }
+
+type siteHandler struct {
+	prefix string
+	h      http.Handler
+}
+
+// Handle makes the site's server answer requests whose path starts with prefix with h (a server's
+// API routes, next to the static files).
+func (s *Site) Handle(prefix string, h http.Handler) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.handlers = append(s.handlers, siteHandler{prefix, h})
+}
+
+// UseLocalhost makes the site's URL http://localhost:PORT instead of the loopback address: a page
+// that uses WebAuthn needs a domain name (an IP address is not a valid relying party ID), and
+// localhost is a secure context.
+func (s *Site) UseLocalhost() { s.URL = strings.Replace(s.URL, "127.0.0.1", "localhost", 1) }
 
 // NewSite builds the package in the current directory (the example's own
 // directory, which is what `go test` uses as the working directory) and serves
@@ -66,7 +88,17 @@ func NewSite(t testing.TB, extra ...string) *Site {
 		}
 	}
 	files := http.FileServer(http.Dir(dir))
+	site := &Site{dir: dir}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		site.mu.Lock()
+		handlers := append([]siteHandler(nil), site.handlers...)
+		site.mu.Unlock()
+		for _, h := range handlers {
+			if strings.HasPrefix(r.URL.Path, h.prefix) {
+				h.h.ServeHTTP(w, r)
+				return
+			}
+		}
 		if strings.HasPrefix(r.URL.Path, "/d/") || strings.HasPrefix(r.URL.Path, "/f/") {
 			http.ServeFile(w, r, filepath.Join(dir, "index.html"))
 			return
@@ -74,5 +106,6 @@ func NewSite(t testing.TB, extra ...string) *Site {
 		files.ServeHTTP(w, r)
 	}))
 	t.Cleanup(srv.Close)
-	return &Site{URL: srv.URL, dir: dir, srv: srv}
+	site.URL, site.srv = srv.URL, srv
+	return site
 }
