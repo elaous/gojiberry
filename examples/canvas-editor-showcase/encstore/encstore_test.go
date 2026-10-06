@@ -26,7 +26,7 @@ const target = "browser"
 // failFrom, every write from the nth on, which is a crash as far as the store can tell), the nth
 // write is silently truncated (a store that lies), and a byte quota like the browser's.
 type faultyRaw struct {
-	inner *docstore.MemoryAdapter
+	inner docstore.Adapter
 
 	mu       sync.Mutex
 	writes   int
@@ -82,7 +82,7 @@ func (f *faultyRaw) SaveIf(ctx context.Context, id string, data []byte, prev str
 	if err != nil {
 		return err
 	}
-	return f.inner.SaveIf(ctx, id, data, prev)
+	return f.inner.(docstore.ConditionalAdapter).SaveIf(ctx, id, data, prev)
 }
 
 func (f *faultyRaw) Delete(ctx context.Context, id string) error {
@@ -116,6 +116,8 @@ type rig struct {
 	st      *Store
 	saved   Config
 	persist int
+	// history is every Config that was persisted, in order (the first of a change is its journal).
+	history []Config
 	// failPersist, when set, is asked at each Persist (1 is the first since persist was reset).
 	failPersist func(n int) error
 	secret      []byte // the passkey's PRF output
@@ -123,9 +125,12 @@ type rig struct {
 	session     *saver.Session
 }
 
-func newRig(t *testing.T) *rig {
+func newRig(t *testing.T) *rig { return newRigOver(t, docstore.NewMemoryAdapter()) }
+
+// newRigOver is newRig over the given storage.
+func newRigOver(t *testing.T, inner docstore.Adapter) *rig {
 	t.Helper()
-	r := &rig{raw: &faultyRaw{inner: docstore.NewMemoryAdapter()}, secret: bytes.Repeat([]byte{5}, 32)}
+	r := &rig{raw: &faultyRaw{inner: inner}, secret: bytes.Repeat([]byte{5}, 32)}
 	r.open(t, Config{})
 	return r
 }
@@ -145,6 +150,7 @@ func (r *rig) open(t *testing.T, cfg Config) {
 			}
 		}
 		r.saved = c
+		r.history = append(r.history, c)
 		return nil
 	}
 	r.st = st

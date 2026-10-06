@@ -19,15 +19,22 @@
 // Limits (stated plainly; docs/encryption-and-passkeys.md section 5.7 has them in full):
 //
 //   - Config, with the owner signing keys, is kept next to the store. Anyone who can write this
-//     origin's storage can replace both. The seals in Config (bind.go) make a replacement
-//     detectable when a passkey, a recovery key or an SSH key that already has a seal unlocks
-//     the store (ErrConfigChanged); they cannot stop someone who also strips the seals and
-//     presents a config of the first generation, which is accepted once (trust on first
-//     use), nor restore a config that was deleted, nor tell an older valid config from the
-//     current one. Without a passkey or recovery key to anchor it (an SSH-only store before
-//     its first unlock) there is nothing to check against.
-//   - Another tab of the same page can write while a change runs: the store's own lock covers
-//     this page, the browser's web lock (where it has one) the rest.
+//     origin's storage can replace both. What catches that: the seals in Config (bind.go: a key
+//     that has a seal refuses a list its chain of links does not reach; a passkey or recovery key
+//     with no seal is refused, whatever Version says) and the anchor (anchor.go: the hash of the
+//     owner list is inside the signed frame of every document file, so a list that is not the one
+//     the files were sealed under is refused, which also catches an older valid config put back
+//     and a seal-less one for an SSH key). Both are ErrConfigChanged. What nothing here catches:
+//     a replacement of the files together with the config by an older consistent snapshot of
+//     both (a whole-store rollback), a store that holds no signed document file yet (an SSH-only
+//     store before its first save: its SSH key has nothing to check against), and an attacker who
+//     replaces every file as well as the config (the data is gone, and only what is saved
+//     afterwards is exposed). A deleted or unreadable config over encrypted files is not
+//     "encryption off": see Inspect (ErrConfigMissing, ErrConfigCorrupt).
+//   - Another tab of the same page can change the keys: the store's own lock covers this page and
+//     the browser's web lock (where it has one) serializes the tabs, but the lock does not detect
+//     a tab that is out of date. Before every write the stored config is read again and compared
+//     with the one this tab loaded (ErrStaleConfig); a tab that finds it changed locks itself.
 //   - Taking a key out stops it opening what is saved from now on; whoever held it keeps what
 //     they decrypted and any copy of old ciphertext.
 package encstore
@@ -36,6 +43,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -89,6 +97,18 @@ var ErrInterrupted = errors.New("an earlier change to the store's keys did not f
 // ErrConfigChanged is returned by an unlock when the key list on this device is not the one this
 // key last saw (see the seals in bind.go): it was replaced or edited by something else.
 var ErrConfigChanged = errors.New("the key configuration on this device was changed since this key last opened the store: not unlocking")
+
+// ErrStaleConfig is returned when the key configuration kept on the device is no longer the one this
+// tab loaded: another tab (or something else) changed it. The tab locks itself and refuses every
+// change until the page is reloaded. It is ErrConfigChanged for errors.Is.
+var ErrStaleConfig = fmt.Errorf("the key configuration was changed in another tab or window since this page loaded: this tab is locked, reload the page: %w", ErrConfigChanged)
+
+// ErrConfigMissing is returned by Inspect for a store whose key configuration is gone while
+// encrypted files are still there: not "encryption off".
+var ErrConfigMissing = errors.New("configuration missing: encrypted files found")
+
+// ErrConfigCorrupt is returned by Inspect for a key configuration that could not be read.
+var ErrConfigCorrupt = errors.New("the key configuration could not be read")
 
 // ErrSecretNotSaved is returned when a recovery key is to become an owner key before the person
 // has confirmed they saved its secret: a key whose secret was never seen would count as a way
@@ -149,9 +169,21 @@ type Owner struct {
 	Signer string `json:"signer"`
 }
 
+// Fingerprint is the key's fingerprint as the People tab shows it ("" for an owner that cannot be
+// parsed).
+func (o Owner) Fingerprint() string {
+	r, err := parseOwner(o)
+	if err != nil {
+		return ""
+	}
+	return r.Fingerprint
+}
+
 // Config is what is kept on the device about the store. It holds no secret: public keys, the
 // signatures that bind them (bind.go) and the journal of a change in progress.
 type Config struct {
+	// Version is advisory (what wrote it): nothing is accepted or refused because of it, since
+	// whoever writes the storage writes it too.
 	Version int     `json:"v"`
 	Owners  []Owner `json:"owners"`
 	// Pending is the journal of a change that was started and not finished.
@@ -169,15 +201,27 @@ const (
 	OpRemove  = "remove"
 	OpReplace = "replace"
 	OpDisable = "disable"
+	// OpRestore rebuilds the key configuration from a key that opens the files (Restore*).
+	OpRestore = "restore"
 )
 
 // Pending is the journal record of a change that is in progress or was cut short: what it is
-// and the owner list it is making current (empty for turning encryption off). Seals are
-// signatures of that list by the keys that made the change, checked before Recover finishes it.
+// and the owner list it is making current (empty for turning encryption off). Nothing in it is
+// trusted by itself: Recover authenticates it against the unlocking key's own seal chain (see
+// authJournal), never against the owners the journal or the config name.
+//
+//   - From is the digest of the committed owner list the change started from ("" when there was
+//     none: turning encryption on).
+//   - Seals are signatures of To by the keys held when the change started.
+//   - Link is the signature of From -> To by a key of the old list, made at journal time: what
+//     keeps the old keys able to open the store once the new list is current (it becomes a link
+//     of the finished Config), even if only a new key is unlocked when the change is finished.
 type Pending struct {
 	Op    string  `json:"op"`
 	To    []Owner `json:"to"`
+	From  string  `json:"from,omitempty"`
 	Seals []Seal  `json:"seals,omitempty"`
+	Link  *Link   `json:"link,omitempty"`
 }
 
 // NewKey is an owner key being added. Unlock, when set, is the private side, available now (the
@@ -222,9 +266,14 @@ type Store struct {
 	Target string
 	// Persist saves the Config after a change; an error stops the change. Nil keeps nothing.
 	Persist func(Config) error
-	// Capacity is how many bytes the storage may hold (0: not known, nothing is checked before a
+	// Capacity is how much the storage may hold, in the storage's own units: the characters of
+	// the strings localStorage keeps (a record is base64, so 4 characters for 3 bytes of file),
+	// which some browsers count as 2 bytes each (0: not known, nothing is checked before a
 	// change; a write that fails is still rolled back).
 	Capacity int64
+	// Reload reads the stored Config again (nil: not checked). Before every write the store
+	// compares it with the Config this tab loaded; a difference is ErrStaleConfig.
+	Reload func() (Config, error)
 
 	mu      sync.RWMutex
 	cfg     Config
@@ -237,6 +286,7 @@ type Store struct {
 	ad      *encrypt.Adapter // strict: refuses a stored file that is not encrypted
 	tol     *encrypt.Adapter // reads a file that is still in the clear: for an unfinished change
 	gate    sync.RWMutex     // writes through Adapter() hold it shared; a change holds it exclusively
+	stale   bool             // the stored Config was found changed by something else: refuse everything
 }
 
 // New makes the store over raw with the owner keys in cfg (none: encryption is off).
@@ -258,6 +308,7 @@ func (s *Store) rebuildAdapters() {
 	s.ad = encrypt.New(s.Raw, ring{s})
 	s.tol = encrypt.New(s.Raw, ring{s})
 	s.tol.AllowPlaintext = true
+	s.ad.OwnerSigners, s.tol.OwnerSigners = slices.Clone(s.signers), slices.Clone(s.signers)
 	if sg := s.signer(); sg != nil {
 		s.ad.Signer, s.tol.Signer = sg, sg
 	}
@@ -290,6 +341,7 @@ func (s *Store) install(cfg Config) error {
 	}
 	s.mu.Lock()
 	s.cfg, s.owners, s.signers = cloneConfig(cfg), owners, signers
+	s.rebuildAdapters()
 	s.mu.Unlock()
 	return nil
 }
@@ -299,6 +351,11 @@ func cloneConfig(c Config) Config {
 	if c.Pending != nil {
 		p := *c.Pending
 		p.To, p.Seals = slices.Clone(p.To), slices.Clone(p.Seals)
+		if p.Link != nil {
+			l := *p.Link
+			l.To = slices.Clone(l.To)
+			p.Link = &l
+		}
 		out.Pending = &p
 	}
 	return out
@@ -365,9 +422,8 @@ func (s *Store) PendingChange() *Pending {
 	if s.cfg.Pending == nil {
 		return nil
 	}
-	p := *s.cfg.Pending
-	p.To = slices.Clone(p.To)
-	return &p
+	c := cloneConfig(s.cfg)
+	return c.Pending
 }
 
 // Unlocked says whether a private key is held, so documents can be saved and opened.
@@ -396,6 +452,78 @@ func (s *Store) Recipients() []encrypt.Recipient {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return slices.Clone(s.owners)
+}
+
+// fresh compares the Config kept on the device now with the one this tab loaded. Another tab may
+// have changed the keys since (the lock serializes the tabs, it does not tell this one it is out of
+// date): a difference locks this tab for good (ErrStaleConfig). Nothing to compare with when Reload
+// is not set.
+func (s *Store) fresh() error {
+	s.mu.RLock()
+	stale, cur := s.stale, s.cfg
+	s.mu.RUnlock()
+	if stale {
+		return ErrStaleConfig
+	}
+	if s.Reload == nil {
+		return nil
+	}
+	now, err := s.Reload()
+	if err == nil && sameConfig(now, cur) {
+		return nil
+	}
+	s.markStale()
+	return ErrStaleConfig
+}
+
+// markStale locks the tab: the keys are forgotten and every later write is refused.
+func (s *Store) markStale() {
+	s.mu.Lock()
+	s.stale = true
+	s.ids, s.holders, s.sigs = nil, nil, nil
+	s.rebuildAdapters()
+	s.mu.Unlock()
+}
+
+// Stale says whether the stored Config was found changed by something else.
+func (s *Store) Stale() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.stale
+}
+
+// ConfigChangedElsewhere is for the page's storage event: the Config changed under this tab. The
+// store locks and refuses changes, unless the new stored Config is the one this tab has (a
+// write of its own that was echoed).
+func (s *Store) ConfigChangedElsewhere() {
+	if s.Reload != nil {
+		s.mu.RLock()
+		cur := s.cfg
+		s.mu.RUnlock()
+		if now, err := s.Reload(); err == nil && sameConfig(now, cur) {
+			return
+		}
+	}
+	s.markStale()
+}
+
+// sameConfig compares two Configs as they are stored (an empty list and none are the same).
+func sameConfig(a, b Config) bool {
+	norm := func(c Config) string {
+		c = cloneConfig(c)
+		if len(c.Owners) == 0 {
+			c.Owners = nil
+		}
+		if len(c.Seals) == 0 {
+			c.Seals = nil
+		}
+		if len(c.Links) == 0 {
+			c.Links = nil
+		}
+		out, _ := json.Marshal(c)
+		return string(out)
+	}
+	return norm(a) == norm(b)
 }
 
 // Lock forgets the private keys. What was saved stays saved; nothing can be opened or saved
@@ -438,26 +566,26 @@ func (s *Store) signer() *encrypt.Signer {
 // with no owner keys it is closed too: it is never used then.
 type ring struct{ s *Store }
 
-func (r ring) keyring() (encrypt.ConfidentialKeyring, error) {
+func (r ring) keyring() (anchored, error) {
 	s := r.s
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if len(s.owners) == 0 {
-		return encrypt.ConfidentialKeyring{}, ErrDisabled
+		return anchored{}, ErrDisabled
 	}
 	if len(s.ids) == 0 {
-		return encrypt.ConfidentialKeyring{}, ErrLocked
+		return anchored{}, ErrLocked
 	}
 	to := make([]age.Recipient, len(s.owners))
 	for i, o := range s.owners {
 		to[i] = o.Key
 	}
-	return encrypt.ConfidentialKeyring{
+	return anchored{ConfidentialKeyring: encrypt.ConfidentialKeyring{
 		People: encrypt.StoreKeyring{Store: s.Raw, Owners: to, Keys: slices.Clone(s.ids), OwnerSigners: slices.Clone(s.signers), SeqFloor: s.floor},
 		// There is no server here: what is not confidential is still encrypted at rest, to the
 		// owner's keys, so a stolen copy of the browser's storage holds no text.
 		AtRest: encrypt.Static{To: to, Keys: slices.Clone(s.ids)},
-	}, nil
+	}, anchor: ownersHash(s.cfg.Owners)}, nil
 }
 
 // Recipients implements encrypt.Keyring.
@@ -467,6 +595,26 @@ func (r ring) Recipients(ctx context.Context, id string) ([]age.Recipient, error
 		return nil, err
 	}
 	return k.Recipients(ctx, id)
+}
+
+// Bind implements encrypt.Binder: the adapter then writes each file's frame bound to the signed
+// record of its document (level, seq, recipients) and to the owner list (anchor.go), signed by
+// Adapter.Signer, and cross-checks what it reads or replaces against the record.
+func (r ring) Bind(ctx context.Context, id string) ([]age.Recipient, encrypt.Binding, error) {
+	k, err := r.keyring()
+	if err != nil {
+		return nil, encrypt.Binding{}, err
+	}
+	return k.Bind(ctx, id)
+}
+
+// Binding implements encrypt.Binder.
+func (r ring) Binding(ctx context.Context, id string) (encrypt.Binding, error) {
+	k, err := r.keyring()
+	if err != nil {
+		return encrypt.Binding{}, err
+	}
+	return k.Binding(ctx, id)
 }
 
 // Identities implements encrypt.Keyring. A locked store has none: opening says ErrNoKey.
@@ -480,6 +628,9 @@ func (r ring) Identities(ctx context.Context, id string) ([]age.Identity, error)
 type front struct{ s *Store }
 
 func (f front) writable() error {
+	if err := f.s.fresh(); err != nil {
+		return err
+	}
 	if f.s.Interrupted() {
 		return ErrInterrupted
 	}
@@ -705,13 +856,21 @@ func (s *Store) UnlockSSH(pem []byte) error {
 	return s.finishUnlock(match, Unlocked{Identity: id, Signer: signer})
 }
 
-// finishUnlock checks the key list against the key's seal, then holds the key.
+// finishUnlock checks the key list against the key's seal and against the files' anchor, then
+// holds the key. A tab whose Config is out of date does not unlock.
 func (s *Store) finishUnlock(o Owner, u Unlocked) error {
-	if err := s.checkSeal(o); err != nil {
+	if err := s.fresh(); err != nil {
+		return err
+	}
+	lists, err := s.checkSeal(o)
+	if err != nil {
+		return err
+	}
+	if err := s.checkAnchor(context.Background(), o, u, lists); err != nil {
 		return err
 	}
 	s.unlock(held{Unlocked: u, owner: o.Public})
-	s.sealOnUnlock(o, u.Signer) // first use, or the list moved on legitimately: bind it now
+	s.sealOnUnlock(o, u.Signer) // first use of an SSH key, or the list moved on legitimately: bind it now
 	return nil
 }
 

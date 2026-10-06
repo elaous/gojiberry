@@ -150,6 +150,12 @@ type Adapter struct {
 	// written or re-keyed by a signing client (Sharing.Repair of each document upgrades them): until
 	// then an unsigned frame can be minted by anyone who knows a recipient's public key.
 	RequireSigned bool
+	// TrustFrames makes the Adapter accept every frame as it is: no signature is checked (nor
+	// required, whatever RequireSigned says). It is for a host that rebuilds a store whose list of
+	// owner signing keys is lost and whose owner decided to take the files as theirs (the showcase's
+	// restore): every file is then written again with a signed frame of the owner's key. Never set
+	// it on an Adapter that serves reads.
+	TrustFrames bool
 
 	warnOnce sync.Once
 	// afterBind, when set, is called by Save and SaveIf between reading the record and checking
@@ -567,7 +573,7 @@ func (a *Adapter) frameVerifiers() []ed25519.PublicKey {
 // pass without the warning and whatever RequireSigned says, so it can be read and sealed again;
 // it never excuses a v3 frame whose signature is bad.
 func (a *Adapter) verifyFrame(id string, fi frameInfo, data []byte, full, acceptUnsigned bool) error {
-	if !a.binds(id) {
+	if !a.binds(id) || a.TrustFrames {
 		return nil
 	}
 	if fi.version < 3 {
@@ -683,6 +689,52 @@ func (a *Adapter) peekFrameWith(ctx context.Context, id string, stored []byte, a
 		err = a.verifyFrame(id, fi, nil, false, acceptUnsigned)
 	}
 	return fi, err
+}
+
+// FrameHeader is what a stored file's frame says, for a host that audits its store (the showcase's
+// key-list anchor): the version, and from v2 the level, the record seq and the recipient-list hash
+// the file was sealed under. Signed is set only for a v3 frame whose signature verifies against one
+// of the keys the Adapter knows (OwnerSigners, Signer, the keyring's owner signers): a frame that
+// anyone who knows a recipient's public key could have written is never Signed.
+type FrameHeader struct {
+	Version int
+	Level   string // "" (server) or ProtectionE2EE
+	Seq     uint64
+	Hash    [sha256.Size]byte
+	Signed  bool
+}
+
+// PeekFrame reads the frame header of a stored file of the document id: the age layer is opened
+// with the keyring's identities (ErrNoKey when none opens it, ErrNotEncrypted for a file in the
+// clear) and only the header is read. It checks nothing against a record.
+func (a *Adapter) PeekFrame(ctx context.Context, id string, stored []byte) (FrameHeader, error) {
+	r, enc, err := a.decrypt(ctx, id, stored)
+	if err != nil {
+		return FrameHeader{}, err
+	}
+	if !enc {
+		return FrameHeader{}, ErrNotEncrypted
+	}
+	buf := make([]byte, 1024)
+	n, err := io.ReadFull(r, buf)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return FrameHeader{}, fmt.Errorf("encrypt: %w", err)
+	}
+	_, fi, err := unframe(id, buf[:n])
+	if err != nil {
+		return FrameHeader{}, err
+	}
+	h := FrameHeader{Version: fi.version, Level: fi.b.Level, Seq: fi.b.Seq, Hash: fi.b.Hash}
+	if fi.version == 3 {
+		msg := frameSigMessage(id, levelByte(fi.b.Level), fi.b.Seq, fi.b.Hash, fi.content)
+		for _, k := range a.frameVerifiers() {
+			if len(k) == ed25519.PublicKeySize && ed25519.Verify(k, msg, fi.sig) {
+				h.Signed = true
+				break
+			}
+		}
+	}
+	return h, nil
 }
 
 // mainPrefix is the prefix of the stored files that carry a document's current content: the

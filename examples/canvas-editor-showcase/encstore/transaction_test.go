@@ -275,9 +275,10 @@ func TestACrashDuringEnableIsFinishedOrUndoneOnTheNextLoad(t *testing.T) {
 	}
 }
 
-// Sealing files that are still in the clear needs no private key: an SSH-only store whose enabling
-// was cut short is finished without unlocking anything.
-func TestAnInterruptedSSHOnlyEnableFinishesWithoutAKey(t *testing.T) {
+// Sealing files that are still in the clear needs no private key, but once some file is encrypted a
+// seal-less journal (nobody could sign it: SSH keys only) is finished only by a key that opens every
+// encrypted file, so it was sealed to it: an SSH-only enable cut short is finished with the SSH key.
+func TestAnInterruptedSSHOnlyEnableFinishesWithTheSSHKey(t *testing.T) {
 	ctx := context.Background()
 	r := plainRig(t)
 	pub, priv := sshKeyPair(t, "me@laptop")
@@ -292,6 +293,13 @@ func TestAnInterruptedSSHOnlyEnableFinishesWithoutAKey(t *testing.T) {
 	r.raw.heal()
 	r.failPersist = nil
 	r.open(t, r.saved)
+	// Some files are encrypted already: without the key nothing vouches for the journal.
+	if err := r.st.Recover(ctx, true); !errors.Is(err, ErrConfigChanged) {
+		t.Fatalf("finishing without a key: %v", err)
+	}
+	if err := r.st.UnlockSSH(bytes.Clone(priv)); err != nil {
+		t.Fatal(err)
+	}
 	if err := r.st.Recover(ctx, true); err != nil {
 		t.Fatal(err)
 	}
@@ -307,6 +315,28 @@ func TestAnInterruptedSSHOnlyEnableFinishesWithoutAKey(t *testing.T) {
 	}
 	if strings.Contains(r.stored(t), "text of gamma") {
 		t.Error("in the clear")
+	}
+}
+
+// A seal-less enable journal over files that are all still in the clear is finished without a key.
+func TestAnSSHOnlyEnableThatConvertedNothingFinishesWithoutAKey(t *testing.T) {
+	ctx := context.Background()
+	r := plainRig(t)
+	pub, priv := sshKeyPair(t, "me@laptop")
+	k, _ := NewSSHKey(pub)
+	r.crashAt(1)
+	if err := r.st.Enable(ctx, Options{}, k); !errors.Is(err, ErrRollbackFailed) {
+		t.Fatalf("%v", err)
+	}
+	r.raw.heal()
+	r.failPersist = nil
+	r.open(t, r.saved)
+	if err := r.st.Recover(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	r.open(t, r.saved)
+	if err := r.st.UnlockSSH(bytes.Clone(priv)); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -1003,25 +1033,6 @@ func TestAKeyAcceptsAListAnotherKeyChanged(t *testing.T) {
 	r.open(t, evil)
 	if err := r.st.UnlockSSH(bytes.Clone(priv)); !errors.Is(err, ErrConfigChanged) {
 		t.Fatalf("the ssh key after its first unlock: %v", err)
-	}
-}
-
-// A list made before seals existed is accepted once and sealed at that unlock.
-func TestAFirstGenerationKeyListIsSealedOnFirstUse(t *testing.T) {
-	r, rsecret := encryptedRig(t)
-	legacy := r.st.Config()
-	legacy.Version, legacy.Seals, legacy.Links = 1, nil, nil
-	r.open(t, legacy)
-	if err := r.st.UnlockPasskey(bytes.Clone(r.secret)); err != nil {
-		t.Fatal(err)
-	}
-	if len(r.saved.Seals) != 1 {
-		t.Fatalf("not sealed at first use: %+v", r.saved)
-	}
-	// The recovery key has no seal in the list yet, and a first-generation list says that is fine.
-	r.st.Lock()
-	if err := r.st.UnlockRecovery(rsecret); err != nil {
-		t.Fatalf("a legacy list: %v", err)
 	}
 }
 

@@ -27,9 +27,8 @@ import (
 //     signed by an owner of the list it leaves, leads from it to the current list. A forged
 //     link needs an owner's secret.
 //
-// What this does not do is in the package comment: it cannot detect a config that was put
-// back to an older valid state, a config presented without any seal when none was ever made
-// (trust on first use), or a deleted config.
+// What this does not do is in the package comment. The seals alone cannot detect a config that
+// was put back to an older valid state or a deleted one; the anchor (anchor.go) and Inspect do.
 
 const (
 	sealContext = "gojiberry/showcase/enc-config/seal/v1"
@@ -93,10 +92,12 @@ func hasOwnerKey(list []Owner, public string) bool {
 	return slices.ContainsFunc(list, func(o Owner) bool { return o.Public == public })
 }
 
-// bindingFor makes the seals and links of a change from list "from" to list "to", signed by the
+// bindingFor makes the seals and links of a change from list "old" to list "to", signed by the
 // keys that are unlocked now. The old seals of keys that stay owners are kept (they reach the new
-// list through the link).
-func bindingFor(old Config, to []Owner, signers []*encrypt.Signer) (seals []Seal, links []Link) {
+// list through the link). jl is the link the journal carries (the old list's signature over the
+// new one, made when the change started by a holder of an old key): it is kept when it verifies,
+// so the old keys still reach the new list when the change was finished with a new key alone.
+func bindingFor(old Config, to []Owner, signers []*encrypt.Signer, jl *Link) (seals []Seal, links []Link) {
 	toSigner := map[string]bool{}
 	for _, o := range to {
 		toSigner[o.Signer] = true
@@ -115,10 +116,17 @@ func bindingFor(old Config, to []Owner, signers []*encrypt.Signer) (seals []Seal
 		}
 	}
 	links = slices.Clone(old.Links)
-	if len(old.Owners) > 0 && ownersDigest(old.Owners) != ownersDigest(to) {
+	dst := ownersDigest(to)
+	reaches := func(from string) bool {
+		return slices.ContainsFunc(links, func(l Link) bool { return l.From == from && ownersDigest(l.To) == dst })
+	}
+	if jl != nil && jl.valid() && ownersDigest(jl.To) == dst && !reaches(jl.From) {
+		links = append(links, *jl)
+	}
+	if len(old.Owners) > 0 && ownersDigest(old.Owners) != dst && !reaches(ownersDigest(old.Owners)) {
 		for _, sg := range signers {
 			if hasSigner(old.Owners, hex.EncodeToString(sg.Public())) {
-				from, dst := ownersDigest(old.Owners), ownersDigest(to)
+				from := ownersDigest(old.Owners)
 				links = append(links, Link{From: from, To: slices.Clone(to), Signer: hex.EncodeToString(sg.Public()),
 					Sig: hex.EncodeToString(sg.Sign(linkMessage(from, dst)))})
 				break
@@ -131,6 +139,22 @@ func bindingFor(old Config, to []Owner, signers []*encrypt.Signer) (seals []Seal
 	return seals, links
 }
 
+// journalLink is the old list's signature over the new one, by a held key of the old list (nil when
+// no such key is held: turning encryption on, or a change started without one).
+func journalLink(old, to []Owner, signers []*encrypt.Signer) *Link {
+	if len(old) == 0 {
+		return nil
+	}
+	from, dst := ownersDigest(old), ownersDigest(to)
+	for _, sg := range signers {
+		pub := hex.EncodeToString(sg.Public())
+		if hasSigner(old, pub) {
+			return &Link{From: from, To: slices.Clone(to), Signer: pub, Sig: hex.EncodeToString(sg.Sign(linkMessage(from, dst)))}
+		}
+	}
+	return nil
+}
+
 // pendingSeals signs the owner list a change is making current, for the journal.
 func pendingSeals(to []Owner, signers []*encrypt.Signer) []Seal {
 	var out []Seal
@@ -140,58 +164,93 @@ func pendingSeals(to []Owner, signers []*encrypt.Signer) []Seal {
 	return out
 }
 
-// checkSeal is the check at unlock: the key's seal must lead to the current owner list. A key
-// that has no seal is accepted once when it is an SSH key (its secret was never available when
-// the list was made) or the list is of the first generation (Version 1: made before seals
-// existed, or by a change that could not seal every key; trust on first use); a seal that does
-// not lead here, or a missing one for a key that always has one in a Version 2 list, is
-// ErrConfigChanged.
-func (s *Store) checkSeal(o Owner) error {
-	s.mu.RLock()
-	cfg := s.cfg
-	s.mu.RUnlock()
-	if cfg.Pending != nil {
-		return nil // an unfinished change is checked when it is finished (Recover)
-	}
-	var seal *Seal
+// ownSeal is the key's own seal in cfg: signed by its signing key, listing the key itself.
+func ownSeal(cfg Config, o Owner) *Seal {
 	for i := range cfg.Seals {
-		if cfg.Seals[i].Signer == o.Signer {
-			seal = &cfg.Seals[i]
+		sl := &cfg.Seals[i]
+		if sl.Signer == o.Signer && sl.valid() && hasOwnerKey(sl.Owners, o.Public) {
+			return sl
 		}
 	}
-	if seal == nil {
-		if o.Kind == KindSSH || cfg.Version < 2 {
-			return nil
-		}
-		return ErrConfigChanged
-	}
-	if !seal.valid() || !hasOwnerKey(seal.Owners, o.Public) {
-		return ErrConfigChanged
-	}
-	cur := seal.Owners
-	target := ownersDigest(cfg.Owners)
+	return nil
+}
+
+// walk follows the links of cfg from the list start to the list whose digest is target, each link
+// signed by a key of the list it leaves. It returns every list on the way (start first) and
+// whether target was reached.
+func walk(cfg Config, start []Owner, target string) ([][]Owner, bool) {
+	cur := start
+	lists := [][]Owner{cur}
 	for steps := 0; ownersDigest(cur) != target; steps++ {
 		if steps > len(cfg.Links) {
-			return ErrConfigChanged
+			return lists, false
 		}
 		from := ownersDigest(cur)
 		var next *Link
 		for i := range cfg.Links {
-			if cfg.Links[i].From == from && hasSigner(cur, cfg.Links[i].Signer) {
-				pub, err1 := hex.DecodeString(cfg.Links[i].Signer)
-				sig, err2 := hex.DecodeString(cfg.Links[i].Sig)
-				if err1 == nil && err2 == nil && encrypt.VerifySigned(ed25519.PublicKey(pub), linkMessage(from, ownersDigest(cfg.Links[i].To)), sig) {
-					next = &cfg.Links[i]
-					break
-				}
+			if cfg.Links[i].From == from && hasSigner(cur, cfg.Links[i].Signer) && cfg.Links[i].valid() {
+				next = &cfg.Links[i]
+				break
 			}
 		}
 		if next == nil {
-			return ErrConfigChanged
+			return lists, false
 		}
 		cur = next.To
+		lists = append(lists, cur)
 	}
-	return nil
+	return lists, true
+}
+
+func (l Link) valid() bool {
+	pub, err1 := hex.DecodeString(l.Signer)
+	sig, err2 := hex.DecodeString(l.Sig)
+	return err1 == nil && err2 == nil && encrypt.VerifySigned(ed25519.PublicKey(pub), linkMessage(l.From, ownersDigest(l.To)), sig)
+}
+
+// reach says whether the key's own seal leads, through links signed by owners, to the list whose
+// digest is target, and returns the lists on the way (all of them vouched for by the key's own
+// signature and the owners'). This ignores any unfinished change.
+func reach(cfg Config, o Owner, target string) ([][]Owner, bool) {
+	seal := ownSeal(cfg, o)
+	if seal == nil {
+		return nil, false
+	}
+	return walk(cfg, seal.Owners, target)
+}
+
+// checkSeal is the check at unlock: the key's own seal must lead to the current owner list. A key
+// that has no seal is accepted once only when it is an SSH key (its secret was never available
+// when the list was made: trust on first use, which the anchor then backs, anchor.go); a passkey
+// or a recovery key always has one (every change is made with it in hand), so a list without its
+// seal is ErrConfigChanged, whatever Version says (Version is written by whoever writes the
+// storage). It returns the lists the seal vouches for (nil for a first-use SSH key).
+//
+// While a change is unfinished nothing is checked here: the store is read-only then, and Recover
+// authenticates the journal (authJournal).
+func (s *Store) checkSeal(o Owner) ([][]Owner, error) {
+	s.mu.RLock()
+	cfg := s.cfg
+	s.mu.RUnlock()
+	if cfg.Pending != nil {
+		return nil, nil
+	}
+	if ownSeal(cfg, o) == nil {
+		for _, sl := range cfg.Seals {
+			if sl.Signer == o.Signer {
+				return nil, ErrConfigChanged // a seal of this key that is not valid or not its own
+			}
+		}
+		if o.Kind == KindSSH {
+			return nil, nil
+		}
+		return nil, ErrConfigChanged
+	}
+	lists, ok := reach(cfg, o, ownersDigest(cfg.Owners))
+	if !ok {
+		return nil, ErrConfigChanged
+	}
+	return lists, nil
 }
 
 // sealOnUnlock makes the unlocked key's seal current: a first seal (trust on first use) or the

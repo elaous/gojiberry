@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"filippo.io/age"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/docstore/encrypt"
@@ -45,6 +46,13 @@ func (s *Store) lockAll(ctx context.Context) (func(), error) {
 		release = r
 	}
 	s.gate.Lock()
+	// The lock serializes this tab with the others; it does not tell this one that it is out of
+	// date. The stored Config is read again now, inside the lock, before anything is written.
+	if err := s.fresh(); err != nil {
+		s.gate.Unlock()
+		release()
+		return nil, err
+	}
 	return func() { s.gate.Unlock(); release() }, nil
 }
 
@@ -143,16 +151,29 @@ func (r *recorder) restore(ctx context.Context) error {
 }
 
 // Estimated sizes, in bytes, of what age adds: the header and footer of a file, a stanza for each
-// recipient, and the frame that binds the file to its id. Generous on purpose: a store that is
-// tight is better told so before anything is written.
+// recipient, and the frame that binds the file to its id (now with its signature and hashes).
+// Generous on purpose, and then doubled (roomMargin): a store that is tight is better told so
+// before anything is written.
 const (
 	ageFixed    = 160
 	ageStanza   = 150
-	frameBytes  = 100
+	frameBytes  = 200
 	configSlack = 8 << 10
+	roomMargin  = 2
+	// recordSlack is what a stored record costs besides its base64 body: the key and the JSON
+	// around it, in characters.
+	recordSlack = 100
 )
 
-// checkRoom refuses a change the storage cannot hold, before it writes anything.
+// storedUnits is what a file of n bytes takes in the browser's storage, counted in the units of
+// Store.Capacity: localStorage keeps strings, and a record is base64 (4 characters for 3 bytes)
+// plus its key and wrapper. (Some browsers count each character as 2 bytes: Capacity is the
+// number of characters the page may use, set with that in mind.)
+func storedUnits(n int64) int64 { return (n+2)/3*4 + recordSlack }
+
+// checkRoom refuses a change the storage cannot hold, before it writes anything. Everything is
+// counted in storage units (storedUnits), not in file bytes, and the growth age causes is counted
+// twice (roomMargin).
 func (s *Store) checkRoom(ctx context.Context, from, to []Owner) error {
 	if s.Capacity <= 0 || len(to) == 0 {
 		return nil
@@ -162,8 +183,11 @@ func (s *Store) checkRoom(ctx context.Context, from, to []Owner) error {
 		return err
 	}
 	var used, need int64
+	grow := func(size int, extra int64) {
+		need += roomMargin * (storedUnits(int64(size)+extra) - storedUnits(int64(size)))
+	}
 	for _, m := range metas {
-		used += int64(m.Size)
+		used += storedUnits(int64(m.Size))
 		if encrypt.DefaultSkip(m.ID) {
 			continue
 		}
@@ -173,9 +197,11 @@ func (s *Store) checkRoom(ctx context.Context, from, to []Owner) error {
 		}
 		switch {
 		case !encrypt.IsEncrypted(d.Data):
-			need += ageFixed + int64(len(to))*ageStanza + frameBytes
+			grow(m.Size, ageFixed+int64(len(to))*ageStanza+frameBytes)
 		case len(to) > len(from):
-			need += int64(len(to)-len(from)) * ageStanza
+			grow(m.Size, int64(len(to)-len(from))*ageStanza+frameBytes)
+		default:
+			grow(m.Size, frameBytes) // the frame is rewritten with its signature and the anchor
 		}
 	}
 	need += configSlack
@@ -219,7 +245,7 @@ func (s *Store) snapshot(ctx context.Context, ids []age.Identity) (map[string]st
 
 // sealPlain encrypts every file that is still in the clear to the owner list. It needs no private
 // key; a file that is already encrypted is left as it is.
-func (s *Store) sealPlain(ctx context.Context, view docstore.Adapter, to []Owner) error {
+func (s *Store) sealPlain(ctx context.Context, view docstore.Adapter, to []Owner, frames *encrypt.Signer) error {
 	recips, _, err := parseOwners(to)
 	if err != nil {
 		return err
@@ -228,7 +254,12 @@ func (s *Store) sealPlain(ctx context.Context, view docstore.Adapter, to []Owner
 	for i, r := range recips {
 		rs[i] = r.Key
 	}
-	mig := encrypt.New(view, encrypt.Static{To: rs})
+	mig := encrypt.New(view, anchored{ConfidentialKeyring: encrypt.ConfidentialKeyring{
+		People: encrypt.StoreKeyring{Store: view, Owners: rs},
+		AtRest: encrypt.Static{To: rs},
+	}, anchor: ownersHash(to)})
+	mig.AllowPlaintext = true // the document's other files may still be in the clear: they are not evidence
+	mig.Signer = frames
 	metas, err := view.List(ctx)
 	if err != nil {
 		return err
@@ -309,7 +340,7 @@ func dropLists(ctx context.Context, view docstore.Adapter) error {
 
 // rekeyAll encrypts every file again to the owner list, whatever recipients it has now (or none:
 // a file still in the clear is sealed), re-signing the lists first when resign is set.
-func (s *Store) rekeyAll(ctx context.Context, view docstore.Adapter, to []Owner, ids []age.Identity, verifiers []ed25519.PublicKey, resign, frames *encrypt.Signer) error {
+func (s *Store) rekeyAll(ctx context.Context, view docstore.Adapter, to []Owner, ids []age.Identity, verifiers []ed25519.PublicKey, resign, frames *encrypt.Signer, trust bool) error {
 	if len(ids) == 0 {
 		return ErrLocked
 	}
@@ -321,12 +352,14 @@ func (s *Store) rekeyAll(ctx context.Context, view docstore.Adapter, to []Owner,
 	for i, r := range recips {
 		rs[i] = r.Key
 	}
-	mig := encrypt.New(view, encrypt.ConfidentialKeyring{
+	mig := encrypt.New(view, anchored{ConfidentialKeyring: encrypt.ConfidentialKeyring{
 		People: encrypt.StoreKeyring{Store: view, Owners: rs, Keys: ids, OwnerSigners: verifiers},
 		AtRest: encrypt.Static{To: rs, Keys: ids},
-	})
+	}, anchor: ownersHash(to)})
 	mig.AllowPlaintext = true
 	mig.Signer = frames
+	mig.OwnerSigners = verifiers
+	mig.TrustFrames = trust
 	if resign != nil {
 		metas, err := view.List(ctx)
 		if err != nil {
@@ -350,15 +383,16 @@ func (s *Store) rekeyAll(ctx context.Context, view docstore.Adapter, to []Owner,
 
 // convert brings every stored file to the state of the owner list "to" (none: in the clear).
 // current says whether the store has owner keys now (what tells sealing the clear files, which
-// needs no private key, from re-keying).
-func (s *Store) convert(ctx context.Context, view docstore.Adapter, current, to []Owner, ids []age.Identity, verifiers []ed25519.PublicKey, resign, frames *encrypt.Signer) error {
+// needs no private key, from re-keying). rekey forces the re-key (a restore: the files are encrypted
+// already, to keys the lost config named).
+func (s *Store) convert(ctx context.Context, view docstore.Adapter, current, to []Owner, ids []age.Identity, verifiers []ed25519.PublicKey, resign, frames *encrypt.Signer, rekey bool) error {
 	switch {
 	case len(to) == 0:
 		return s.toPlain(ctx, view, ids)
-	case len(current) == 0:
-		return s.sealPlain(ctx, view, to)
+	case len(current) == 0 && !rekey:
+		return s.sealPlain(ctx, view, to, frames)
 	}
-	return s.rekeyAll(ctx, view, to, ids, verifiers, resign, frames)
+	return s.rekeyAll(ctx, view, to, ids, verifiers, resign, frames, rekey)
 }
 
 // verifyAll checks every stored file is in the state "to" says and, where private keys are held,
@@ -420,6 +454,8 @@ type change struct {
 	// resign says owner signing keys left the list: the signed lists of documents are signed
 	// again by a key that stays.
 	resign bool
+	// rekey says the files are encrypted already, to keys the change does not know (a restore).
+	rekey bool
 }
 
 // unlockedNow copies what is held: identities, signers and the owner each belongs to.
@@ -487,13 +523,20 @@ func (s *Store) run(ctx context.Context, c change) error {
 	if err := s.checkRoom(ctx, old.Owners, c.to); err != nil {
 		return err
 	}
+	convIDs := ids
+	if c.rekey {
+		convIDs = verifyIDs // a restore re-keys with the key that was given
+	}
 	before, err := s.snapshot(ctx, verifyIDs)
 	if err != nil {
 		return err
 	}
 	// The journal, before anything is written to a file.
 	jr := cloneConfig(old)
-	jr.Pending = &Pending{Op: c.op, To: slices.Clone(c.to), Seals: pendingSeals(c.to, allSigs)}
+	jr.Pending = &Pending{Op: c.op, To: slices.Clone(c.to), Seals: pendingSeals(c.to, allSigs), Link: journalLink(old.Owners, c.to, allSigs)}
+	if len(old.Owners) > 0 {
+		jr.Pending.From = ownersDigest(old.Owners)
+	}
 	if err := s.persist(jr); err != nil {
 		return err
 	}
@@ -510,7 +553,7 @@ func (s *Store) run(ctx context.Context, c change) error {
 		return cause
 	}
 	verifiers := append(signerPubs(old.Owners), signerPubs(c.to)...)
-	if err := s.convert(ctx, view, old.Owners, c.to, ids, verifiers, resign, frameSigner(c.to, allSigs)); err != nil {
+	if err := s.convert(ctx, view, old.Owners, c.to, convIDs, verifiers, resign, frameSigner(c.to, allSigs), c.rekey); err != nil {
 		return fail(err)
 	}
 	if len(c.to) == 0 {
@@ -523,7 +566,7 @@ func (s *Store) run(ctx context.Context, c change) error {
 	}
 	final := Config{Owners: slices.Clone(c.to)}
 	if len(c.to) > 0 {
-		final.Seals, final.Links = bindingFor(old, c.to, allSigs)
+		final.Seals, final.Links = bindingFor(old, c.to, allSigs, jr.Pending.Link)
 		final.Version = versionFor(final)
 	}
 	if err := s.persist(final); err != nil {
@@ -804,30 +847,31 @@ func (s *Store) Erase(ctx context.Context) error {
 
 // Recover finishes (finish true) or undoes (false) a change that was cut short, from its journal.
 // Finishing converts what is left to the journal's owner list and makes it current; undoing
-// converts it back to the list that is current. Both are safe to run again if they fail. Finishing
-// checks the journal's seals first (ErrConfigChanged when it was not made by this store's keys).
-// Re-keying needs a key unlocked; sealing files that are still in the clear does not.
+// converts it back to the list that is current. Both are safe to run again if they fail.
+//
+// Nothing in the journal or in the Config is believed by itself, since whoever writes the storage
+// writes both: authJournal asks that the key unlocked here vouch for it (see there), otherwise
+// ErrConfigChanged. Re-keying needs a key unlocked; sealing files that are still in the clear does
+// not.
 func (s *Store) Recover(ctx context.Context, finish bool) error {
-	p := s.PendingChange()
-	if p == nil {
-		return ErrNothingPending
-	}
-	cfg := s.Config()
-	if finish {
-		if err := checkJournal(cfg, p); err != nil {
-			return err
-		}
-	}
 	unlock, err := s.lockAll(ctx)
 	if err != nil {
 		return err
 	}
 	defer unlock()
+	p := s.PendingChange()
+	if p == nil {
+		return ErrNothingPending
+	}
+	cfg := s.Config()
+	ids, sigs, holders := s.unlockedNow()
+	if err := s.authJournal(ctx, cfg, p, finish, ids, sigs, holders); err != nil {
+		return err
+	}
 	target := cfg.Owners
 	if finish {
 		target = p.To
 	}
-	ids, sigs, holders := s.unlockedNow()
 	var resign *encrypt.Signer
 	if p.Op == OpRemove || p.Op == OpReplace {
 		if resign = keeper(target, sigs); resign == nil && len(ids) > 0 {
@@ -836,7 +880,7 @@ func (s *Store) Recover(ctx context.Context, finish bool) error {
 	}
 	verifiers := append(signerPubs(cfg.Owners), signerPubs(p.To)...)
 	view := newRecorder(bare{s.Raw})
-	if err := s.convert(ctx, view, cfg.Owners, target, ids, verifiers, resign, frameSigner(target, sigs)); err != nil {
+	if err := s.convert(ctx, view, cfg.Owners, target, ids, verifiers, resign, frameSigner(target, sigs), p.Op == OpRestore); err != nil {
 		return err
 	}
 	if len(target) == 0 {
@@ -852,7 +896,7 @@ func (s *Store) Recover(ctx context.Context, finish bool) error {
 	if finish {
 		final = Config{Owners: slices.Clone(p.To)}
 		if len(p.To) > 0 {
-			final.Seals, final.Links = bindingFor(cfg, p.To, sigs)
+			final.Seals, final.Links = bindingFor(cfg, p.To, sigs, p.Link)
 			final.Version = versionFor(final)
 		}
 	}
@@ -866,28 +910,204 @@ func (s *Store) Recover(ctx context.Context, finish bool) error {
 	return nil
 }
 
-// checkJournal checks the journal's seals before it is finished: a change of the key list that
-// was already there (add, remove, replace, turning off) must be signed by one of the keys that
-// were owners; a first enable by one of the keys it adds, when any could sign. A journal that is
-// not signed that way was not written by this store.
-func checkJournal(cfg Config, p *Pending) error {
-	valid := func(allowed []Owner) bool {
-		for _, sl := range p.Seals {
-			if sl.valid() && ownersDigest(sl.Owners) == ownersDigest(p.To) && hasSigner(allowed, sl.Signer) {
-				return true
+// validJournalSeal says whether sl is a seal of the journal's new list by one of keys.
+func validJournalSeal(sl Seal, to []Owner, allowed func(signer string) bool) bool {
+	return sl.valid() && ownersDigest(sl.Owners) == ownersDigest(to) && allowed(sl.Signer)
+}
+
+// authJournal decides whether the key unlocked here vouches for the journal. A journal is whatever
+// is in the storage, so its owner list, its seals and the Config's owners are all data an attacker
+// can write; what is not forgeable is a signature made with a key's secret, and the signed frames
+// of the files. So:
+//
+//   - A journal over a committed list (add, remove, replace, disable) is accepted when a held key
+//     has its own seal chain leading to the Config's owners (reach: the old list, vouched for by that
+//     key's own signature and by owners' links), the Config's owners are the list the journal says it
+//     started from (From), and the journal is signed, as a seal over its new list or as the Link
+//     From -> To, by a key of that old list. A forged journal has nobody of the old list to sign it.
+//   - Or, for finishing only, a key held that is in the new list vouches for it with its own seal
+//     over that list (made when it was in hand at the start: it is the person's new key), and the
+//     journal carries the Link from the old list, which is kept so the old keys still open the
+//     store afterwards. An attacker has neither that key's signature nor a link from the real
+//     old list.
+//   - Undoing needs the first kind: the list it goes back to must be vouched for by a held key.
+//   - A journal of turning encryption on (nothing before it) is accepted when a held key of the
+//     new list signed it; when no key could sign (an SSH-only list) only if no stored file is
+//     encrypted, or the held key opens every one that is (then they were sealed to it). The
+//     explicit confirmation in the interface is the check left for that case.
+//
+// And in each case the signed frames of the files must carry the hash of the old or the new list,
+// nothing else (anchor.go).
+func (s *Store) authJournal(ctx context.Context, cfg Config, p *Pending, finish bool, ids []age.Identity, sigs []*encrypt.Signer, holders []string) error {
+	heldOwner := func(h string) (Owner, bool) {
+		for _, o := range append(slices.Clone(cfg.Owners), p.To...) {
+			if o.Public == h {
+				return o, true
 			}
 		}
-		return false
+		return Owner{}, false
 	}
-	switch {
-	case len(cfg.Owners) > 0:
-		if !valid(cfg.Owners) {
+	heldSigner := func(signer string) bool {
+		return slices.ContainsFunc(sigs, func(sg *encrypt.Signer) bool { return hex.EncodeToString(sg.Public()) == signer })
+	}
+	verifiers := signersOf(cfg.Owners, p.To)
+	for _, sg := range sigs {
+		verifiers = append(verifiers, sg.Public())
+	}
+	toHash := ownersHash(p.To)
+	allowed := [][32]byte{toHash}
+	check := func(id age.Identity, vs []ed25519.PublicKey) error {
+		if id == nil {
+			return nil
+		}
+		if p.From != "" {
+			allowed = append(allowed, ownersHash(cfg.Owners))
+		}
+		return s.anchorMatches(ctx, id, vs, allowed...)
+	}
+	firstID := func() age.Identity {
+		if len(ids) > 0 {
+			return ids[0]
+		}
+		return nil
+	}
+
+	if len(cfg.Owners) > 0 && p.From == "" {
+		return ErrConfigChanged // a journal of turning encryption on over a store that has owners
+	}
+	if p.From == "" { // turning encryption on (or a restore): there is no committed list to vouch
+		consent := slices.ContainsFunc(p.Seals, func(sl Seal) bool { return validJournalSeal(sl, p.To, heldSigner) && hasSigner(p.To, sl.Signer) })
+		switch {
+		case consent:
+			return check(firstID(), verifiers)
+		case len(p.Seals) > 0:
+			return ErrConfigChanged // sealed by keys, none of which is held here: unlock one first
+		}
+		// No seal at all: nobody could sign (SSH keys only).
+		found, err := HasEncryptedFiles(ctx, s.Raw)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return nil
+		}
+		if len(ids) == 0 || !slices.ContainsFunc(holders, func(h string) bool { return hasOwnerKey(p.To, h) }) {
 			return ErrConfigChanged
 		}
-	case len(p.To) > 0 && len(p.Seals) > 0:
-		if !valid(p.To) {
+		if _, err := s.snapshot(ctx, ids); err != nil { // the held key opens every file: they were sealed to it
 			return ErrConfigChanged
 		}
+		return check(firstID(), verifiers)
 	}
-	return nil
+
+	// Over a committed list.
+	if ownersDigest(cfg.Owners) == p.From {
+		for i, h := range holders {
+			o, ok := heldOwner(h)
+			if !ok || !hasOwnerKey(cfg.Owners, h) {
+				continue
+			}
+			lists, reached := reach(cfg, o, p.From)
+			if !reached {
+				continue
+			}
+			from := lists[len(lists)-1] // the old list as the key's own seal vouches for it
+			signed := slices.ContainsFunc(p.Seals, func(sl Seal) bool {
+				return validJournalSeal(sl, p.To, func(sg string) bool { return hasSigner(from, sg) })
+			}) || (p.Link != nil && p.Link.valid() && p.Link.From == p.From && ownersDigest(p.Link.To) == ownersDigest(p.To) && hasSigner(from, p.Link.Signer))
+			if !signed && finish {
+				continue
+			}
+			return check(ids[i], append(signersOf(lists...), verifiers...))
+		}
+	}
+	if finish && p.Link != nil && p.Link.valid() && p.Link.From == p.From && ownersDigest(p.Link.To) == ownersDigest(p.To) {
+		for i, h := range holders {
+			if !hasOwnerKey(p.To, h) {
+				continue
+			}
+			o, _ := heldOwner(h)
+			if slices.ContainsFunc(p.Seals, func(sl Seal) bool {
+				return validJournalSeal(sl, p.To, func(sg string) bool { return sg == o.Signer && heldSigner(sg) })
+			}) {
+				return check(ids[i], verifiers)
+			}
+		}
+	}
+	return ErrConfigChanged
+}
+
+// Restore rebuilds the key configuration of a store whose configuration is gone (Inspect said
+// ErrConfigMissing) from a key that opens its files: the owner list becomes that key alone, every
+// file is encrypted again to it (so the anchor of the files and the new configuration agree), and
+// the store is left unlocked with it. It is the person's explicit act with a key they hold: it adds
+// nobody, and the keys that were owners before are not owners now (add them again afterwards).
+// Every stored file must open with the key (UnreadableError otherwise: nothing is changed); a
+// store whose files that key cannot open is Erase's. k carries its private side (NewPasskeyKey,
+// RecoveryKeyFromSecret, SSHKeyFromPrivate).
+func (s *Store) Restore(ctx context.Context, k NewKey) error {
+	if s.Enabled() {
+		return ErrAlreadyOn
+	}
+	if k.Unlock == nil {
+		return ErrNotAKey
+	}
+	k.SecretSaved = true // it is a key the person already holds
+	return s.run(ctx, change{op: OpRestore, to: []Owner{ownerOf(k)}, keys: []NewKey{k}, rekey: true})
+}
+
+// RecoveryKeyFromSecret makes the owner key of an existing recovery key from its secret
+// ("AGE-SECRET-KEY-1..."), for Restore.
+func RecoveryKeyFromSecret(label, secret string) (NewKey, error) {
+	ident, err := encrypt.ParseAgeIdentity(secret)
+	if err != nil {
+		return NewKey{}, err
+	}
+	xid, ok := ident.(*age.X25519Identity)
+	if !ok {
+		return NewKey{}, ErrNotAKey
+	}
+	r, err := encrypt.ParseAgeRecipient(xid.Recipient().String())
+	if err != nil {
+		return NewKey{}, err
+	}
+	r.Label = label
+	sg := encrypt.SignerFromAge(xid)
+	return NewKey{Kind: KindRecovery, Label: label, Recipient: r, SignerPub: sg.Public(), SecretSaved: true,
+		Unlock: &Unlocked{Identity: xid, Signer: sg}}, nil
+}
+
+// SSHKeyFromPrivate makes the owner key of an ed25519 SSH private key file (PEM, not passphrase
+// protected), for Restore. pem is not kept.
+func SSHKeyFromPrivate(pem []byte) (NewKey, error) {
+	raw, err := ssh.ParseRawPrivateKey(pem)
+	if err != nil {
+		return NewKey{}, err
+	}
+	var pub ssh.PublicKey
+	switch k := raw.(type) {
+	case *ed25519.PrivateKey:
+		pub, err = ssh.NewPublicKey(k.Public())
+	case ed25519.PrivateKey:
+		pub, err = ssh.NewPublicKey(k.Public())
+	default:
+		return NewKey{}, errors.New("encstore: only an ed25519 SSH key can be an owner")
+	}
+	if err != nil {
+		return NewKey{}, err
+	}
+	nk, err := NewSSHKey(string(ssh.MarshalAuthorizedKey(pub)))
+	if err != nil {
+		return NewKey{}, err
+	}
+	id, err := encrypt.ParseSSHIdentity(pem)
+	if err != nil {
+		return NewKey{}, err
+	}
+	sg, err := encrypt.SignerFromSSH(pem)
+	if err != nil {
+		return NewKey{}, err
+	}
+	nk.Unlock = &Unlocked{Identity: id, Signer: sg}
+	return nk, nil
 }
