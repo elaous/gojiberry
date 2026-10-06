@@ -1,8 +1,8 @@
-module github.com/elaous/gojiberry/xangogio
+module github.com/elaous/gojiberry/xango/gio
 
 go 1.26.0
 
-replace github.com/elaous/gojiberry => ..
+replace github.com/elaous/gojiberry => ../..
 
 require (
 	gioui.org v0.10.1

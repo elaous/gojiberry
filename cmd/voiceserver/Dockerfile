@@ -9,20 +9,20 @@
 # model files -- none of which this Dockerfile bundles, since which
 # voice/model an operator wants is very much their own choice, the
 # same "still runs, feature reports unavailable until configured"
-# posture translateserver takes with no DeepL key. Point
+# posture translate/server takes with no DeepL key. Point
 # GOJIBERRY_VOICESERVER_PIPER_BINARY/_WHISPER_BINARY at paths inside a
 # volume you mount in (or extend this image with your own COPY/RUN
 # steps to install them directly) -- see docs/README.md's own "Voice"
 # section for the full setup.
 #
-# No `ca-certificates` package here (unlike translateserver's own
+# No `ca-certificates` package here (unlike translate/server's own
 # image, which genuinely needs it for its own outbound HTTPS call to
 # DeepL) -- voiceserver makes no outbound network call of its own at
 # all, only execs a local subprocess and serves plain HTTP, so there's
 # no TLS handshake anywhere in this image to fail. Confirmed the hard
 # way, not just reasoned about: an earlier version of this Dockerfile
 # carried the same `apk add --no-cache ca-certificates` line
-# translateserver's does out of copy-paste habit, which real
+# translate/server's does out of copy-paste habit, which real
 # integration-test coverage (OnDesign's own `integration/
 # compose_test.go`, task #161) caught actually breaking the build in a
 # network-restricted sandbox that couldn't reach Alpine's own package
