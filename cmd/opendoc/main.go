@@ -3,7 +3,8 @@
 //
 //	opendoc pack    [-sign key] [-name N] out.opendoc  file-or-folder...
 //	opendoc convert [-sign key] [-name N] out.opendoc  file-or-folder...   (the same: .docx, .pdf, .md, .txt, .open, .json too)
-//	opendoc unpack  pack.opendoc  dir     (each document as a .open file, folders as directories)
+//	opendoc unpack  [--force] pack.opendoc  dir   (each document as a .open file, folders as directories; an existing file is kept
+//	                                              unless --force, and exit is 1 if any document was not written)
 //	opendoc list    pack.opendoc
 //	opendoc verify  [-pubkey hex] pack.opendoc  (reads every document; exit 1 if anything is wrong)
 //	opendoc sign    -key key pack.opendoc (signs, or signs again, in place)
@@ -34,6 +35,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docfile/pack"
@@ -348,14 +350,20 @@ func openPack(path string) (*os.File, *pack.Reader, error) {
 }
 
 func unpackCmd(args []string, out outWriter) error {
-	if len(args) != 2 {
-		return errors.New("usage: opendoc unpack pack.opendoc dir")
+	fl := flag.NewFlagSet("unpack", flag.ContinueOnError)
+	force := fl.Bool("force", false, "overwrite files that already exist")
+	if err := fl.Parse(args); err != nil {
+		return err
 	}
-	f, r, err := openPack(args[0])
+	if fl.NArg() != 2 {
+		return errors.New("usage: opendoc unpack [--force] pack.opendoc dir")
+	}
+	f, r, err := openPack(fl.Arg(0))
 	if err != nil {
 		return err
 	}
 	defer func() { _ = f.Close() }()
+	outDir := fl.Arg(1)
 	idx := r.Index()
 	folders := map[string]pack.Folder{}
 	for _, fo := range idx.Folders {
@@ -374,27 +382,58 @@ func unpackCmd(args []string, out outWriter) error {
 		return filepath.Join(parts...)
 	}
 	used := map[string]bool{}
+	written, failed := 0, 0
+	fail := func(e pack.Entry, err error) {
+		failed++
+		fmt.Fprintf(os.Stderr, "opendoc: %s (%s): %v\n", esc(e.Name), esc(e.ID), err)
+	}
 	for _, e := range idx.Entries {
 		data, err := r.ReadRaw(e.ID)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "opendoc: %s (%s): %v\n", esc(e.Name), esc(e.ID), err)
+			fail(e, err)
 			continue
 		}
-		dir := filepath.Join(args[1], dirOf(e.Folder))
+		dir := filepath.Join(outDir, dirOf(e.Folder))
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
+			fail(e, err)
+			continue
 		}
+		ext := docfile.Open.Ext()
 		name := safe(e.Name)
-		path := filepath.Join(dir, name+docfile.Open.Ext())
+		path := filepath.Join(dir, name+ext)
 		if used[strings.ToLower(path)] {
-			path = filepath.Join(dir, name+" ("+shortID(e.ID)+")"+docfile.Open.Ext())
+			suffix := " (" + shortID(e.ID) + ")"
+			path = filepath.Join(dir, truncate(name, maxName-len(suffix))+suffix+ext)
 		}
 		used[strings.ToLower(path)] = true
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			return err
+		flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+		if !*force {
+			flags = os.O_WRONLY | os.O_CREATE | os.O_EXCL
 		}
+		w, err := os.OpenFile(path, flags, 0o644)
+		if errors.Is(err, fs.ErrExist) {
+			fail(e, fmt.Errorf("%s exists (use --force to overwrite)", path))
+			continue
+		}
+		if err != nil {
+			fail(e, err)
+			continue
+		}
+		_, err = w.Write(data)
+		if cerr := w.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			_ = os.Remove(path)
+			fail(e, err)
+			continue
+		}
+		written++
 	}
-	say(out, "%d documents written to %s\n", len(idx.Entries), args[1])
+	say(out, "%d documents written to %s\n", written, outDir)
+	if failed > 0 {
+		return fmt.Errorf("%d of %d documents were not written", failed, len(idx.Entries))
+	}
 	return nil
 }
 
@@ -414,10 +453,27 @@ func safe(s string) string {
 		return r
 	}, s)
 	s = strings.Trim(strings.TrimSpace(s), ".")
+	s = strings.Trim(truncate(s, maxName), ". ")
 	if s == "" {
 		s = "document"
 	}
 	return s
+}
+
+// maxName is the most bytes safe leaves a name: with ".open" it stays within the 255 a
+// file name can have on common file systems, and leaves room for a " (id)" suffix to be
+// cut in by the caller.
+const maxName = 240
+
+// truncate cuts s to at most n bytes, on a rune boundary.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 func listCmd(args []string, out outWriter) error {
