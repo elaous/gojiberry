@@ -249,6 +249,9 @@ type DocListProps struct {
 	// Download hands a document over in a format picked from DownloadFormats
 	// (none: one Download button, "" for the format); DownloadFolder hands over
 	// a folder's documents together.
+	// OpenDownload, if set, shows the dialog that asks whether to keep the version
+	// history in an opendocs download.
+	OpenDownload    *OpenDownload
 	Download        func(ctx context.Context, id, format string) error
 	DownloadFolder  DocAction
 	DownloadFormats []DocChoice
@@ -338,6 +341,9 @@ func DocList(p DocListProps) xango.Node {
 		children = append(children, xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list")}, rows...))
 	}
 	children = append(children, pendingError(p.Pending)...)
+	if p.OpenDownload != nil {
+		children = append(children, OpenDownloadDialog(*p.OpenDownload))
+	}
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-doclist")}, children...)
 }
 

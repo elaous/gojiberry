@@ -515,3 +515,48 @@ func TestSaveStateAfterTheOpenDocumentIsDeletedOrTrashed(t *testing.T) {
 		t.Errorf("deleted: %q", s.SaveState())
 	}
 }
+
+func TestOpenDownloadAsksWhetherToKeepTheHistory(t *testing.T) {
+	ctx := context.Background()
+	s, _, _ := newSession(t)
+	var files []string
+	var sizes []int
+	s.Deliver = func(name, _ string, data []byte) { files = append(files, name); sizes = append(sizes, len(data)) }
+	s.SetName("report")
+	if err := s.Save(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveVersion(ctx); err != nil {
+		t.Fatal(err)
+	}
+	id := s.ID()
+	if err := s.Download(ctx, id, "open"); err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Fatal("it asks first")
+	}
+	od := s.Docs().OpenDownload
+	if od == nil || od.Versions != 1 || od.Current == 0 || od.History == 0 || od.Drop {
+		t.Fatalf("%+v", od)
+	}
+	od.OnDrop(true)
+	if !s.Docs().OpenDownload.Drop {
+		t.Fatal("the checkbox is kept")
+	}
+	s.Docs().OpenDownload.OnConfirm()
+	if len(files) != 1 || files[0] != "report.open" || int64(sizes[0]) != od.Current || s.Docs().OpenDownload != nil {
+		t.Fatalf("%v %v", files, sizes)
+	}
+	// Keeping the history makes the file bigger by what the dialog said.
+	_ = s.Download(ctx, id, "open")
+	s.Docs().OpenDownload.OnConfirm()
+	if int64(sizes[1]) != od.Current+od.History {
+		t.Errorf("%d against %d + %d", sizes[1], od.Current, od.History)
+	}
+	_ = s.Download(ctx, id, "open")
+	s.Docs().OpenDownload.OnCancel()
+	if s.Docs().OpenDownload != nil || len(files) != 2 {
+		t.Error("cancel closes the dialog and downloads nothing")
+	}
+}

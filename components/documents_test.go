@@ -294,3 +294,30 @@ func TestMigratePanel(t *testing.T) {
 	p.Error = "boom"
 	mustContain(t, render(t, Migrate(p)), `role="alert"`, "boom")
 }
+
+func TestSizeTextRoundsToTheNearestUnit(t *testing.T) {
+	for n, want := range map[int64]string{0: "0 bytes", 1: "1 byte", 999: "999 bytes", 1024: "1 KiB (1,024 bytes)", 1500: "1 KiB (1,500 bytes)", 1536: "2 KiB (1,536 bytes)",
+		348160: "340 KiB (348,160 bytes)", 5 << 20: "5 MiB (5,242,880 bytes)", 3<<30 + 1: "3 GiB (3,221,225,473 bytes)"} {
+		if got := SizeText(n); got != want {
+			t.Errorf("%d: %q, want %q", n, got, want)
+		}
+	}
+}
+
+func TestOpenDownloadDialogShowsTheSizes(t *testing.T) {
+	var dropped bool
+	d := OpenDownload{Name: "plan", Current: 12 << 10, History: 340 << 10, Versions: 3, OnDrop: func(b bool) { dropped = b }}
+	html := render(t, OpenDownloadDialog(d))
+	mustContain(t, html, "Download plan as .open", "Current version: 12 KiB (12,288 bytes)", "Version history: 3 versions, 340 KiB (348,160 bytes)", "Drop the version history", "The file will be about 352 KiB")
+	d.Drop = true
+	mustContain(t, render(t, OpenDownloadDialog(d)), "The file will be about 12 KiB", "checked")
+	for _, h := range findHandlers(OpenDownloadDialog(d), "change") {
+		h(xango.NewEvent("change", nil, true, nil, nil))
+	}
+	if !dropped {
+		t.Error("the checkbox reports")
+	}
+	none := render(t, OpenDownloadDialog(OpenDownload{Name: "x", Current: 100}))
+	mustContain(t, none, "No saved versions")
+	mustNotContain(t, none, "Drop the version history")
+}
