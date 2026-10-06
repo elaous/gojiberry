@@ -47,24 +47,6 @@ var ErrBadSignature = errors.New("encrypt: the recipient list's signature is not
 // ErrNoSigner is returned by Sharing operations that change a list when it has no Signer.
 var ErrNoSigner = errors.New("encrypt: sharing needs the owner's signing key")
 
-// DocID finds the document a stored item belongs to: the document file (the ID, a generation
-// suffix, an extension) and its versions ("versions/<ID>/..."); "" for anything else.
-func DocID(id string) string {
-	if rest, ok := strings.CutPrefix(id, "versions/"); ok {
-		if i := strings.IndexByte(rest, '/'); i > 0 {
-			rest = rest[:i]
-		}
-		if docfile.ValidID(rest) {
-			return rest
-		}
-		return ""
-	}
-	if len(id) >= 36 && docfile.ValidID(id[:36]) {
-		return id[:36]
-	}
-	return ""
-}
-
 // recordContext separates what the owner signs here from any other use of the key.
 const recordContext = "gojiberry/keys-record/v1"
 
@@ -265,6 +247,14 @@ func (k StoreKeyring) Identities(context.Context, string) ([]age.Identity, error
 // whose keyring is a StoreKeyring over the same Store. Signer is the owner's signing key, which
 // every change to a list needs; OwnerSigners are further owner keys whose lists are accepted
 // (Signer's own key always is).
+//
+// A change to a list is a read, a change and a write of the record. On a Store with
+// docstore.ConditionalAdapter (SaveIf) a change made by someone else in between is noticed
+// and the change is made again; on a Store without it, two changes to one document's list at
+// the same moment can lose one of them, so serialize them (one owner client, or a Store
+// Lock) there. A custom Adapter.Skip must keep the "keys:" prefix (KeysPrefix) readable, as
+// DefaultSkip does: the records are plain signed lists, and encrypting them would make the
+// keyring unable to read them.
 type Sharing struct {
 	Store        docstore.Adapter
 	Adapter      *Adapter
@@ -347,22 +337,47 @@ func (s *Sharing) Pending(ctx context.Context, docID string) (bool, error) {
 	return rec.Pending, err
 }
 
+// finishAttempts is how many times finish re-keys a document whose list changed while it
+// was being re-keyed.
+const finishAttempts = 5
+
 // finish encrypts every file of the document again to the current list (always: it is
 // idempotent), and once that worked clears the pending mark. It returns how many files were
-// written.
+// written (the last pass's).
+//
+// The mark is cleared only if the list is still the one the re-key started from (its seq is
+// unchanged): a Remove or Add that saved a newer list meanwhile set it pending for files this
+// pass may have sealed to the old one, so the document is re-keyed again.
 func (s *Sharing) finish(ctx context.Context, docID string) (int, error) {
-	n, err := s.Adapter.RekeyDocument(ctx, docID)
-	if err != nil {
-		return n, err
-	}
-	_, err = s.mutate(ctx, docID, func(rec *sharedRecord) (bool, error) {
-		if !rec.Pending {
-			return false, nil
+	var n int
+	for range finishAttempts {
+		rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers())
+		if err != nil {
+			return n, err
 		}
-		rec.Pending = false
-		return true, nil
-	})
-	return n, err
+		seq := rec.Seq
+		if n, err = s.Adapter.RekeyDocument(ctx, docID); err != nil {
+			return n, err
+		}
+		again := false
+		if _, err = s.mutate(ctx, docID, func(rec *sharedRecord) (bool, error) {
+			if !rec.Pending {
+				return false, nil
+			}
+			if rec.Seq != seq {
+				again = true
+				return false, nil
+			}
+			rec.Pending = false
+			return true, nil
+		}); err != nil {
+			return n, err
+		}
+		if !again {
+			return n, nil
+		}
+	}
+	return n, docstore.ErrConflict
 }
 
 // Add shares a document with a key. confirmed is the fingerprint the owner says they checked
@@ -449,23 +464,6 @@ func (s *Sharing) Repair(ctx context.Context, docID string) (int, error) {
 		return 0, err
 	}
 	return s.finish(ctx, docID)
-}
-
-// RekeyDocument encrypts every stored file of one document again, to the keyring's current
-// recipients for it (a new data key each): its current and previous copies and its versions.
-// The files are all opened first, and none is written if one cannot be (see RekeyIDs).
-func (a *Adapter) RekeyDocument(ctx context.Context, docID string) (int, error) {
-	metas, err := a.Inner.List(ctx)
-	if err != nil {
-		return 0, err
-	}
-	var ids []string
-	for _, m := range metas {
-		if !a.skip(m.ID) && DocID(m.ID) == docID {
-			ids = append(ids, m.ID)
-		}
-	}
-	return a.RekeyIDs(ctx, ids)
 }
 
 // Usage lists the documents (their IDs, sorted) that removing a key changes: the ones it is a
