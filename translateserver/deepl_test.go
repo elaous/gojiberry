@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDeeplClientSendsTheDocumentedRequest(t *testing.T) {
@@ -72,5 +73,40 @@ func TestDeeplClientErrorsAndEndpoints(t *testing.T) {
 	}
 	if pro, _ := newDeeplClient("abc"); pro.base != deeplProBase {
 		t.Errorf("%s", pro.base)
+	}
+}
+
+func TestDeeplClientEmptyReplyLongErrorAndCancellation(t *testing.T) {
+	mode := "empty"
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch mode {
+		case "empty":
+			_, _ = io.WriteString(w, `{"translations":[]}`)
+		case "long":
+			w.WriteHeader(456)
+			_, _ = io.WriteString(w, strings.Repeat("x", 5000))
+		case "slow":
+			_, _ = io.Copy(io.Discard, r.Body) // reading the body lets the server notice the client leaving
+			select {
+			case <-r.Context().Done():
+			case <-time.After(3 * time.Second):
+			}
+		}
+	}))
+	defer ts.Close()
+	c, _ := newDeeplClient("k")
+	c.base = ts.URL
+	if res, err := c.Translate(context.Background(), []string{"a"}, "FR", ""); err != nil || len(res) != 0 {
+		t.Errorf("an empty list is returned as is: %v %v", res, err)
+	}
+	mode = "long"
+	if _, err := c.Translate(context.Background(), []string{"a"}, "FR", ""); err == nil || len(err.Error()) > 400 || !strings.Contains(err.Error(), "456") {
+		t.Errorf("a long error body is cut: %v", err)
+	}
+	mode = "slow"
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := c.Translate(ctx, []string{"a"}, "FR", ""); err == nil {
+		t.Error("a cancelled context stops the call")
 	}
 }

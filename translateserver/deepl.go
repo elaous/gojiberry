@@ -75,6 +75,9 @@ func (c *deeplClient) Translate(ctx context.Context, texts []string, target, sou
 	}
 	if resp.StatusCode != http.StatusOK {
 		msg := strings.TrimSpace(string(data))
+		if len(msg) > 300 {
+			msg = msg[:300] + "…"
+		}
 		var e struct {
 			Message string `json:"message"`
 		}

@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"os"
 
@@ -120,7 +121,7 @@ type translateResponse struct {
 }
 
 // maxTranslateBody caps the request body DeepL itself would reject
-// past 128KiB (TranslateText's own doc comment) -- read that much
+// past 128KiB (DeepL's documented limit) -- read that much
 // plus a little slack rather than trusting a client-supplied
 // Content-Length.
 const maxTranslateBody = 200 * 1024
@@ -147,7 +148,8 @@ func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {
 
 	results, err := s.translator.Translate(r.Context(), []string{req.Text}, req.TargetLang, req.SourceLang)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		log.Printf("translateserver: %v", err)
+		http.Error(w, "the translation service failed", http.StatusBadGateway)
 		return
 	}
 	if len(results) == 0 {
