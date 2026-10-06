@@ -158,13 +158,9 @@ func Main() {
 	// write; everything below (passkeys, directory, the server) uses the wrapped store, whose
 	// policy leaves their own keyspaces alone. Documents that already exist get a full
 	// lifetime from the first sweep unless GOJIBERRY_DOCSTORE_EXPIRY_ADOPT=updated.
-	if cfg.ExpiryTTL > 0 {
-		ea := docstore.NewExpiringAdapter(adapter, docstore.FixedTTL(cfg.ExpiryTTL))
-		ea.AdoptUpdatedAt = cfg.ExpiryAdoptUpdated
-		go ea.Run(context.Background(), cfg.ExpirySweep)
-		adapter = ea
-		log.Printf("docstore: documents expire %s after their last write (sweep every %s)", cfg.ExpiryTTL, cfg.ExpirySweep)
-	}
+	// POST /docs/{id}/renew (a collaboration hub in another process, see collab/hub) works
+	// whenever the store expires.
+	adapter, _ = docstore.WithConfiguredExpiry(context.Background(), adapter, cfg)
 	authManager, err := docstore.NewAuthManager(context.Background(), cfg.Auth)
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
