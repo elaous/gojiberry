@@ -91,10 +91,34 @@ document shows its folder.
    With `DownloadFormats` a row gets a "Download as…" menu, without it one
    button. `Session.Deliver` hands the file to the person (`transfer.Download` in
    a browser), `Session.Export` converts (`transfer.Registry.Export` fits); with
-   no `Export` a document goes as saved.
-3. **Folder download** is `Saver.Archive`: a ZIP with the folders drawn as
+   no `Export` a document goes as saved. A choice with a `Group` is shown under that
+   heading (an `<optgroup>`); the showcase groups Documents (Word, PDF, RTF, EPUB), Web
+   and text, Data, and opendocs.
+   Choosing `open` first asks (`OpenDownload`, `Session.DownloadOpen`): the dialog shows the
+   size of the current version and of the whole history (the nearest KiB/MiB with the exact
+   bytes, `components.SizeText`), a checkbox to drop the history, and what the file will
+   weigh. The `open` format is special: `Saver.ExportOpen` writes a `.open` file that carries the
+   document's versions (`Document.History`, oldest first), and saving such a document
+   (`Saver.Save`, so also an import) stores the versions again at the times they were saved
+   and keeps the newest `MaxVersions` (the oldest versions, imported or not, go first).
+   Importing into an id the store already holds replaces that document: the file it
+   replaces stays as its previous copy (`prev`), and the imported revisions are added to
+   the versions it has. A document in the store never holds a history inside its own file.
+3. **Packs.** A folder row has "As .opendoc" (`DownloadPack`, `Saver.ExportPack`: folders by ID,
+   tags, the trash flag and each document's history in one `.opendoc` file) and the list has
+   "Import .opendoc" (`ImportPack`, from `Session.Pick`; `Saver.ImportPack` skips documents
+   already there (the UI import always uses Skip; Replace and Copy are for callers of
+   `ImportPack`, and Replace takes the pack's folder, tags and trash flag too) and reports what it skipped, what failed and whether the pack was signed).
+   A confidential (end-to-end) document goes into a pack only through `PackOptions.Seal`, as an
+   encrypted record (placeholder name, no tags in the index), and comes back through
+   `ImportOptions.Open`; without them the session's download leaves it out and says so, and an
+   import skips it with a needs-key warning.
+   Migrate's format menu has "One .opendoc pack": the documents are gathered into a pack and
+   downloaded, and nothing is saved in the store.
+4. **Folder download** is `Saver.Archive`: a ZIP with the folders drawn as
    directories (they are virtual in the store), documents as saved, the trash
-   left out.
+   left out. A folder ZIP does not include version history; download a document as
+   `.open` for that.
 
 ## Migrate
 

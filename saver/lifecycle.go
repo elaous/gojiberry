@@ -330,3 +330,97 @@ func (s *Saver) SetTags(ctx context.Context, target, id string, tags []string) e
 		return nil
 	})
 }
+
+// restoreHistory stores the revisions of an imported document as its versions, at the
+// times they were saved, and keeps the newest MaxVersions of all of them.
+func (s *Saver) restoreHistory(ctx context.Context, target, id string, c docfile.Codec, history []docfile.Revision) error {
+	t, err := s.Target(target)
+	if err != nil {
+		return err
+	}
+	for _, r := range history {
+		if r.Doc == nil {
+			continue
+		}
+		d := *r.Doc
+		d.History = nil
+		d.SetID(id)
+		data, err := c.Marshal(d)
+		if err != nil {
+			return err
+		}
+		if err := t.Adapter.Save(ctx, versionKey(id, c, time.Unix(0, r.Saved)), data); err != nil {
+			return err
+		}
+	}
+	if vs, err := s.Versions(ctx, target, id); err == nil && len(vs) > s.maxVersions() {
+		for _, old := range vs[s.maxVersions():] {
+			_ = t.Adapter.Delete(ctx, old.Key)
+		}
+	}
+	return nil
+}
+
+// ExportOpen writes a document as one .open file (docfile.Open), with its history when
+// history is set: the document and each of its versions, oldest first. Saving the file
+// somewhere else (Saver.Save) brings the versions back.
+func (s *Saver) ExportOpen(ctx context.Context, target, id string, history bool) ([]byte, error) {
+	data, _, err := s.exportOpen(ctx, target, id, history)
+	return data, err
+}
+
+func (s *Saver) exportOpen(ctx context.Context, target, id string, history bool) ([]byte, int, error) {
+	doc, n, err := s.loadWithHistory(ctx, target, id, history)
+	if err != nil {
+		return nil, 0, err
+	}
+	data, err := docfile.Open.Marshal(doc)
+	return data, n, err
+}
+
+// loadWithHistory loads a document, with its versions in Document.History (oldest first)
+// when history is set, and says how many there are.
+func (s *Saver) loadWithHistory(ctx context.Context, target, id string, history bool) (docfile.Document, int, error) {
+	doc, err := s.Load(ctx, target, id)
+	if err != nil {
+		return docfile.Document{}, 0, err
+	}
+	n := 0
+	if history {
+		vs, err := s.Versions(ctx, target, id)
+		if err != nil {
+			return docfile.Document{}, 0, err
+		}
+		for i := len(vs) - 1; i >= 0; i-- { // Versions is newest first
+			d, err := s.LoadVersion(ctx, target, vs[i].Key)
+			if err != nil {
+				return docfile.Document{}, 0, err
+			}
+			d.History = nil
+			doc.History = append(doc.History, docfile.Revision{Saved: vs[i].Time.UnixNano(), Doc: &d})
+			n++
+		}
+	}
+	return doc, n, nil
+}
+
+// OpenSizes says how big a .open file of a document would be, in bytes: Current is the
+// file with no history, History how much the versions add to it, and Versions how many
+// there are.
+type OpenSizes struct {
+	Current, History int64
+	Versions         int
+}
+
+// OpenSizes measures the .open file of a document, with and without its history.
+func (s *Saver) OpenSizes(ctx context.Context, target, id string) (OpenSizes, error) {
+	bare, _, err := s.exportOpen(ctx, target, id, false)
+	if err != nil {
+		return OpenSizes{}, err
+	}
+	full, n, err := s.exportOpen(ctx, target, id, true)
+	if err != nil {
+		return OpenSizes{}, err
+	}
+	return OpenSizes{Current: int64(len(bare)), History: int64(len(full) - len(bare)), Versions: n}, nil
+}

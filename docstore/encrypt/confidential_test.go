@@ -183,8 +183,8 @@ func TestPackSealedWithTheStoresKeys(t *testing.T) {
 		return got.Data, err
 	}
 	var buf bytes.Buffer
-	if rep, err := s.ExportPack(ctx, "m", &buf, saver.ExportOptions{Seal: seal}); err != nil || rep.Exported != 1 {
-		t.Fatalf("%+v %v", rep, err)
+	if n, err := s.ExportPack(ctx, "m", "", &buf, saver.PackOptions{Seal: seal}); err != nil || n != 1 {
+		t.Fatalf("%d %v", n, err)
 	}
 	if bytes.Contains(buf.Bytes(), []byte("payroll")) || bytes.Contains(buf.Bytes(), []byte("Payroll")) {
 		t.Fatal("the pack shows the document")
@@ -192,7 +192,7 @@ func TestPackSealedWithTheStoresKeys(t *testing.T) {
 	inner2 := docstore.NewMemoryAdapter()
 	dst := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: New(inner2, Static{To: []age.Recipient{ana.r.Key}, Keys: []age.Identity{ana.id}})}}}
 	rep, err := dst.ImportPack(ctx, "m", bytes.NewReader(buf.Bytes()), int64(buf.Len()), saver.ImportOptions{Open: open})
-	if err != nil || len(rep.Imported) != 1 {
+	if err != nil || rep.Documents != 1 || len(rep.NeedsKey) != 0 {
 		t.Fatalf("%+v %v", rep, err)
 	}
 	n, _, err := dst.Reveal(ctx, "m", e.ID)

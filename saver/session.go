@@ -1,6 +1,7 @@
 package saver
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -47,6 +48,9 @@ type Session struct {
 	// Deliver hands a file to the person (in a browser: transfer.Download); nil
 	// leaves the Download controls out.
 	Deliver func(file, mime string, data []byte)
+	// Pick asks the person for a file (in a browser: transfer.PickFile); with it the document
+	// list offers "Import .opendoc".
+	Pick func(accept string, done func(name string, data []byte, err error))
 	// Export turns a document into a file in a format (transfer.Registry.Export
 	// fits, with the registry's name for the format); nil makes Download send
 	// the document as saved. DownloadFormats lists the formats offered, in the
@@ -73,6 +77,7 @@ type Session struct {
 	tagFilter            string
 	usage                Usage
 	revealed             map[string]revealedMeta // confidential documents opened here, by ID: the real name and tags
+	openDlg              *openDialog             // the .open download being asked about
 	checked              map[string]bool         // targets already checked for leftovers of a crash
 	status               string
 	saveState            string // see SaveState
@@ -782,7 +787,25 @@ func (s *Session) Docs() components.DocListProps {
 	}
 	p.OpenFolder, p.NewFolder, p.RenameFolder, p.DeleteFolder, p.Move = s.OpenFolder, s.NewFolder, s.RenameFolder, s.DeleteFolder, s.MoveDocs
 	p.FolderDraft, p.OnFolderDraft = s.folderDraft, s.SetFolderDraft
+	if d := s.openDlg; d != nil {
+		p.OpenDownload = &components.OpenDownload{
+			Name: d.name, Current: d.sizes.Current, History: d.sizes.History, Versions: d.sizes.Versions, Drop: d.drop,
+			OnDrop: func(drop bool) {
+				s.set(func() {
+					if s.openDlg != nil {
+						s.openDlg.drop = drop
+					}
+				})
+			},
+			OnConfirm: func() { s.Pending.Run(s.DownloadOpen) },
+			OnCancel:  s.CancelOpenDownload,
+		}
+	}
+	if s.Pick != nil {
+		p.ImportPack = s.pickPack
+	}
 	if s.Deliver != nil {
+		p.DownloadPack = s.DownloadPack
 		p.Download, p.DownloadFolder, p.DownloadFormats = s.Download, s.DownloadFolder, s.downloadChoices()
 	}
 	if s.Link != nil {
@@ -872,6 +895,15 @@ func (s *Session) Download(ctx context.Context, id, format string) error {
 	if err != nil {
 		return err
 	}
+	if format == docfile.Open.Name() {
+		// Ask first whether to keep the history in the file, and say how big each part is.
+		sizes, err := s.Saver.OpenSizes(ctx, s.targetName(), id)
+		if err != nil {
+			return err
+		}
+		s.set(func() { s.openDlg = &openDialog{id: id, name: doc.Name(), sizes: sizes} })
+		return nil
+	}
 	if format == "" || s.Export == nil {
 		e, err := s.Saver.Get(ctx, s.targetName(), id)
 		if err != nil {
@@ -896,6 +928,128 @@ func (s *Session) Download(ctx context.Context, id, format string) error {
 	s.say(msg("saver.downloaded", "%s downloaded", doc.Name()))
 	return nil
 }
+
+// openDialog is the question asked before an .open download.
+type openDialog struct {
+	id, name string
+	sizes    OpenSizes
+	drop     bool
+}
+
+// DownloadOpen delivers the .open file the dialog asked about, with or without the history
+// (as the person chose), and closes the dialog.
+func (s *Session) DownloadOpen(ctx context.Context) error {
+	s.mu.Lock()
+	dlg := s.openDlg
+	s.mu.Unlock()
+	if dlg == nil {
+		return nil
+	}
+	if s.Deliver == nil {
+		return errors.New("saver: nowhere to deliver files")
+	}
+	data, err := s.Saver.ExportOpen(ctx, s.targetName(), dlg.id, !dlg.drop)
+	if err != nil {
+		return err
+	}
+	s.Deliver(safeName(dlg.name)+docfile.Open.Ext(), docfile.Open.MIME(), data)
+	s.set(func() { s.openDlg = nil })
+	s.say(msg("saver.downloaded", "%s downloaded", dlg.name))
+	return nil
+}
+
+// DownloadPack hands over a folder ("" for all the documents) as one .opendoc pack: folders,
+// tags, the trash flag and each document's history.
+func (s *Session) DownloadPack(ctx context.Context, folder string) error {
+	if s.Deliver == nil {
+		return errors.New("saver: nowhere to deliver files")
+	}
+	var buf bytes.Buffer
+	name := s.folderName(folder)
+	// The session holds no keys: confidential documents are left out, and the person is told.
+	left := 0
+	n, err := s.Saver.ExportPack(ctx, s.targetName(), folder, &buf, PackOptions{Name: name, History: true, Warn: func(PackIssue) { left++ }})
+	if err != nil {
+		return err
+	}
+	s.Deliver(safeName(name)+".opendoc", "application/vnd.opendocs.pack", buf.Bytes())
+	line := msg("saver.packDownloaded", "%s downloaded as a pack of %d documents", name, n)
+	if left > 0 {
+		line += " " + msg("saver.packLeftOut", "(%d confidential documents left out: they need a key)", left)
+	}
+	s.say(line)
+	return nil
+}
+
+func (s *Session) folderName(id string) string {
+	if id == "" {
+		return "documents"
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, f := range s.folders {
+		if f.ID == id {
+			return f.Name
+		}
+	}
+	return "documents"
+}
+
+// pickPack asks for a .opendoc file and imports it.
+func (s *Session) pickPack() {
+	s.Pick(".opendoc", func(name string, data []byte, err error) {
+		s.Pending.Run(func(ctx context.Context) error {
+			if err != nil {
+				return err
+			}
+			return s.ImportPackData(ctx, name, data)
+		})
+	})
+}
+
+// ImportPackData imports the .opendoc pack in data into the folder being shown, keeping what is
+// already there (a document with the same ID is always skipped: the UI offers no other policy), and says what came in, what was
+// skipped and what failed, and whether the pack was signed.
+func (s *Session) ImportPackData(ctx context.Context, name string, data []byte) error {
+	s.op.Lock()
+	defer s.op.Unlock()
+	target, folder := s.Where()
+	c, err := s.Saver.Codec(s.formatName())
+	if err != nil {
+		return err
+	}
+	rep, err := s.Saver.ImportPack(ctx, target, bytes.NewReader(data), int64(len(data)), ImportOptions{Into: folder, Format: c})
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	line := msg("saver.packImported", "%s: %d documents and %d folders imported", name, rep.Documents, rep.Folders)
+	if len(rep.Skipped) > 0 {
+		line += " " + msg("saver.packSkipped", "(%d already here, left as they are)", len(rep.Skipped))
+	}
+	if len(rep.Warnings) > 0 {
+		line += " " + msg("saver.packWarnings", "(%d warnings: %s)", len(rep.Warnings), strings.Join(rep.Warnings[:min(3, len(rep.Warnings))], "; "))
+	}
+	if len(rep.Failed) > 0 {
+		line += " " + msg("saver.packFailed", "(%d failed: %s)", len(rep.Failed), strings.Join(rep.Failed[:min(3, len(rep.Failed))], "; "))
+	}
+	if rep.Signed {
+		if rep.SignatureOK {
+			line += " " + msg("saver.packSigned", "(signed by key %x)", rep.Signer[:min(8, len(rep.Signer))])
+		} else {
+			line += " " + msg("saver.packBadSignature", "(WARNING: the signature does not match the pack)")
+		}
+	}
+	return s.after(ctx, line)
+}
+
+func (s *Session) formatName() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.format
+}
+
+// CancelOpenDownload closes the dialog without downloading.
+func (s *Session) CancelOpenDownload() { s.set(func() { s.openDlg = nil }) }
 
 // DownloadFolder hands over a ZIP of a folder's documents ("" for all of them).
 func (s *Session) DownloadFolder(ctx context.Context, id string) error {

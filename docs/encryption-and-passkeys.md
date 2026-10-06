@@ -42,7 +42,7 @@ not code: **encrypting documents to keys** and **signing in with a passkey**.
    `opendoc-format.md`). The index hashes are of the stored bytes, so a pack's integrity and
    signature are checked **without** any key; a document is decrypted only when opened. The
    pack and the saver import no cryptography: sealing and opening are functions the host
-   passes in (`ExportOptions.Seal`, `ImportOptions.Open`).
+   passes in (`PackOptions.Seal`, `ImportOptions.Open`).
 4. **Sharing.** The People tab's Add/Remove gains a key: adding someone takes their
    public key (pasted `ssh-ed25519 …`, a `.pub` file, or a passkey enrolled by them) and
    the owner confirms the fingerprint.
@@ -279,10 +279,17 @@ cannot be opened.
       placeholder, the old catalog's folder, trash flag and level kept if there was one, else
       the top level and not trashed (they live inside the file). `Verify` counts such documents
       as `Locked` and leaves them untouched.
-   4. `Saver.ExportPack` / `ImportPack` (the library part of `opendoc-format.md` §7.2): `Seal` and
-      `Open` are injected; a confidential document with no `Seal` is left out of the export, and
-      one with no working `Open` is left out of the import, each as a warning, never in the clear
-      and never aborting.
+   4. `Saver.ExportPack` / `ImportPack` (one API, `opendoc-format.md` §7.2, with its
+      `PackOptions`, `ImportOptions` and `ImportReport`): `PackOptions.Seal` and
+      `ImportOptions.Open` are injected. On export a confidential document is sealed into an
+      encrypted record (the index lists `ConfidentialName` and no tags; name and tags are inside
+      the envelope); with no `Seal` it is left out and reported to `PackOptions.Warn`, never
+      written in the clear, and a `Seal` that fails aborts the export. On import a record with
+      no working `Open` is skipped with a needs-key warning (`ImportReport.NeedsKey`,
+      `Warnings`) and the rest come in; one that is opened is saved confidential again, through
+      `Saver.ConfidentialCheck` (a refusal is that document's `Failed`), under any
+      `ConflictPolicy` (Replace turns a server document into a confidential one with
+      `SetProtection`).
 
    *Left:*
    1. The saver records the level but does not choose the keys: which recipients a confidential
@@ -295,5 +302,6 @@ cannot be opened.
       documents are.
    4. A saved document keeps its older copies readable to whoever had access to them: the
       switch changes the catalog and the document, not what was already stored (see 1).
-   5. The UI for packs ("Download as .opendoc", "Import .opendoc") and the key management for
-      `Seal`/`Open`.
+   5. Key management for `Seal`/`Open` in the pack UI ("As .opendoc", "Import .opendoc"): until
+      then `Session.DownloadPack` leaves confidential documents out and says how many, and
+      `Session.ImportPackData` reports the ones it could not open.

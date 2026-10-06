@@ -214,16 +214,25 @@ Open:
    that has an encrypted record). It uses only `docfile` and the standard library.
    Encrypted records: `Writer.AddEncrypted` / `Appender.AddEncrypted`, `Entry.Encrypted`,
    `ErrEncrypted`, `Reader.ReadWith`.
-2. **Done (library):** `Saver.ExportPack` / `Saver.ImportPack` (folders by ID, tags and trash
-   kept). A confidential document is written as an encrypted record through an injected
-   `Seal` and read through an injected `Open`; without them it is reported as needing a key
-   (a warning), never written in the clear and never an error that stops the import. *Left:*
-   the UI: "Download as .opendoc" for a folder, "Import .opendoc", "Convert to one .opendoc"
-   in Migrate.
+2. **Done:** `Saver.ExportPack` (a folder or everything; folders by ID, tags, the trash flag,
+   optionally each document's history; signed if given a key) and `Saver.ImportPack` (folders
+   recreated by ID under a chosen folder; a document already there is skipped, replaced (with
+   the pack's folder, tags and trash flag) or copied (the UI import always skips); a bad
+   document is reported and the rest come in; the signature is reported). A confidential
+   (end-to-end) document is written as an encrypted record through `PackOptions.Seal` and read
+   back through `ImportOptions.Open`: the index lists the placeholder name and no tags for it;
+   with no `Seal` it is left out and reported to `PackOptions.Warn` (never written in the
+   clear), a failing `Seal` stops the export; with no `Open`, or a failing one, the record is
+   skipped with a needs-key warning (`ImportReport.NeedsKey`, `Warnings`) and the rest come
+   in; an imported one is saved confidential again, subject to `Saver.ConfidentialCheck`. The
+   UI: "As .opendoc" on a folder and "Import .opendoc" in the document list
+   (`Session.DownloadPack`, `Session.Pick`), and "One .opendoc pack" in Migrate's format menu
+   (`migrate.PackSink`). *Left:* the UI has no keys yet, so it leaves confidential documents
+   out and says so.
 3. **Done:** `cmd/opendoc`: `pack` and `convert` (a file or a folder tree; `.docx`, `.pdf`,
    Markdown, text, `.open`, JSON and protobuf are read through the importers, subfolders
-   become folders), `unpack`, `list`, `verify`, `sign`, `recover`, `keygen`. A README that says
-   which `.docx` features are not carried over is *left*.
+   become folders), `unpack`, `list`, `verify`, `sign`, `recover`, `keygen`. Its
+   [README](../cmd/opendoc/README.md) says which `.docx` features are not carried over.
 4. **Done:** signing with Ed25519 (a key file of 64 hex characters, `opendoc keygen`);
    appending to a signed pack needs the key. Key handling beyond a file (hardware keys,
    passkeys) is part of encryption and passkeys.
