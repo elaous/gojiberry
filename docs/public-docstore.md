@@ -68,16 +68,34 @@ launch, not after:
      is needed from memory, local files, SQLite or the nested backends beyond the wrapper, and
      `SaveIf`, `Locker`, `PrefixLister` and the quota report pass through. Order: Save writes the
      record, then the document (a failed write puts the old record back, so failures do not
-     extend a life); `Sweep` deletes the document, its access list, shared-editing state and
-     `versions/` snapshots (`Related`, replaceable), and the record last, so a crash leaves only
-     an orphan record (dropped once past its deadline) and never an unswept document.
-     A document with no record (the store was wrapped late, or the policy did not cover it)
-     does not expire until the first `Sweep` gives it `UpdatedAt + TTL`.
+     extend a life); `Sweep` deletes the document, what belongs to it (`Related`, replaceable:
+     its `acl:`, `collab:` and `keys:` records and its `versions/` snapshots) and the record
+     last, so a crash leaves only an orphan record (dropped once past its deadline) and never an
+     unswept document. Related records are shared by documents with the same stem (`a.docx` and
+     `a.pdf`, or two saver generations `<id>~<gen>.ext`): they are deleted only when no other
+     live document has that stem, and version history is matched by direct children only
+     (`versions/a/` is not `versions/a/b/`). `Delete` of a live document removes the same records,
+     so a new document with the same id inherits neither an access list nor history.
+   - Only plain documents expire (`docstore.IsDocumentKey`, an allowlist; `FixedTTL` uses it).
+     Every system keyspace is exempt: `acl:`, `collab:`, `catalog:`, `versions/`, `directory/`,
+     `passkey/`, `keys:` (wrapped document keys: losing one makes an encrypted document
+     unreadable), `fonts/`, `expiry:`, and any `name:...` key. A test scans the repository for
+     keyspace constants, so a new one fails the build until it is listed.
+   - Listings read the deadlines from an in-memory copy (invalidated by this process's writes,
+     at most 5 seconds old; `DeadlineCacheTTL`), so a listing is not one read per record. Another
+     process's write shows in this process's listings after at most that bound; `Load`, `Save`,
+     `Delete` and `Sweep` always read the record. Deadlines are compared with each process's own
+     clock: keep clocks of processes sharing a store within seconds of each other (NTP).
    - `Run(ctx, interval)` sweeps in the background. `Server.WithExpiry(e)` serves the wrapper:
      reads and writes answer `X-Gojiberry-Expires` (RFC 3339), listings carry `expires`, `GET`
-     never renews and `DELETE` is unchanged. The `docstore` command turns it on with
+     never renews. The `docstore` command turns it on with
      `GOJIBERRY_DOCSTORE_EXPIRY_TTL` (e.g. `24h`) and `GOJIBERRY_DOCSTORE_EXPIRY_SWEEP`
      (default 5 minutes, at most the TTL). The `expiry:` keyspace is reserved from `/docs`.
+   - Enabling expiry on a store that already has documents: a document with no record is
+     adopted by the first `Sweep`. By default it gets a full grace period (deadline now + TTL),
+     so nothing is deleted for one TTL, and the number adopted is logged. Set
+     `GOJIBERRY_DOCSTORE_EXPIRY_ADOPT=updated` to use `UpdatedAt + TTL` instead: documents
+     older than the TTL are then deleted by that first sweep, so take a backup first.
    - Left in this item: edits through the collaboration hub (`collab:` writes) do not yet renew
      the document, so the hub must call the wrapper's `Save` of the document (or the policy must
      learn the pairing) before collaborators' edits count; two server processes on one store can

@@ -48,12 +48,16 @@ type Config struct {
 	// (see ExpiringAdapter); ExpirySweep is how often expired ones are deleted (they are
 	// invisible at once either way). ConfigFromEnv reads GOJIBERRY_DOCSTORE_EXPIRY_TTL and
 	// GOJIBERRY_DOCSTORE_EXPIRY_SWEEP.
-	ExpiryTTL     time.Duration
-	ExpirySweep   time.Duration
-	Addr          string
-	Backend       string
-	BackendConfig json.RawMessage
-	Auth          AuthConfig
+	ExpiryTTL   time.Duration
+	ExpirySweep time.Duration
+	// ExpiryAdoptUpdated (GOJIBERRY_DOCSTORE_EXPIRY_ADOPT=updated) gives documents that existed
+	// before expiry was switched on the deadline UpdatedAt + TTL, so old ones are deleted by the
+	// first sweep. The default is now + TTL, a full grace period.
+	ExpiryAdoptUpdated bool
+	Addr               string
+	Backend            string
+	BackendConfig      json.RawMessage
+	Auth               AuthConfig
 }
 
 // AuthConfig configures the optional Sign-in-with-OIDC endpoints
@@ -130,7 +134,23 @@ func ConfigFromEnv() Config {
 	if cfg.ExpiryTTL, cfg.ExpirySweep, err = ParseExpiryEnv(os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_TTL"), os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_SWEEP")); err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
+	if cfg.ExpiryAdoptUpdated, err = ParseExpiryAdopt(os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_ADOPT")); err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
 	return cfg
+}
+
+// ParseExpiryAdopt parses GOJIBERRY_DOCSTORE_EXPIRY_ADOPT: empty (or "grace") gives documents that
+// predate expiry a full lifetime from the first sweep; "updated" gives them UpdatedAt + TTL, which
+// deletes the old ones at once. It reports whether "updated" was asked for.
+func ParseExpiryAdopt(raw string) (updated bool, err error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "grace":
+		return false, nil
+	case "updated":
+		return true, nil
+	}
+	return false, fmt.Errorf("parsing GOJIBERRY_DOCSTORE_EXPIRY_ADOPT %q: want \"updated\" (or empty for a full grace period)", raw)
 }
 
 // DefaultExpirySweep is how often expired documents are deleted when only the TTL is set.

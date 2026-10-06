@@ -185,6 +185,7 @@ func TestExpiryCrashOrder(t *testing.T) {
 		_ = inner.Save(ctx, "acl:old", []byte("{}"))
 		_ = inner.Save(ctx, "passkey/u", []byte("{}"))
 		ea := NewExpiringAdapter(inner, FixedTTL(day))
+		ea.AdoptUpdatedAt = true
 		clk := &fakeClock{t: time.Now()}
 		ea.Now = clk.Now
 		// With no record it has no expiry yet.
@@ -213,6 +214,7 @@ func TestExpiryCrashOrder(t *testing.T) {
 		_ = inner.Save(ctx, "doc", []byte("x"))
 		up, _ := inner.Load(ctx, "doc")
 		ea := NewExpiringAdapter(inner, FixedTTL(time.Hour))
+		ea.AdoptUpdatedAt = true
 		if _, err := ea.Sweep(ctx); err != nil {
 			t.Fatal(err)
 		}
