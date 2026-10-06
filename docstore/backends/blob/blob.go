@@ -1,11 +1,12 @@
 //go:build !js
 
-package docstore
+package blob
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/elaous/gojiberry/docstore"
 	"io"
 
 	"gocloud.dev/blob"
@@ -14,7 +15,7 @@ import (
 	"gocloud.dev/gcerrors"
 )
 
-// BlobConfig is the "blob" backend's own config, decoded from
+// Config is the "blob" backend's own config, decoded from
 // Config.BackendConfig when Config.Backend == "blob". URL is a
 // gocloud.dev/blob bucket URL -- the scheme picks the driver
 // (blank-imported below for "file"/"mem"; a deployer wanting "s3"/
@@ -30,7 +31,7 @@ import (
 // MemoryAdapter already covers that case more directly, so "blob"
 // with a mem:// URL exists mainly for tests exercising this adapter
 // against a real *blob.Bucket without a real cloud credential).
-type BlobConfig struct {
+type Config struct {
 	URL string `json:"url"`
 	// Prefix is prepended to every document ID before it becomes a
 	// blob key, the same role S3Config.Prefix already plays for
@@ -40,8 +41,8 @@ type BlobConfig struct {
 }
 
 func init() {
-	RegisterAdapter("blob", func(ctx context.Context, raw json.RawMessage) (Adapter, error) {
-		var cfg BlobConfig
+	docstore.RegisterAdapter("blob", func(ctx context.Context, raw json.RawMessage) (docstore.Adapter, error) {
+		var cfg Config
 		if len(raw) > 0 {
 			if err := json.Unmarshal(raw, &cfg); err != nil {
 				return nil, err
@@ -54,11 +55,11 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		return NewBlobAdapter(bucket, cfg.Prefix), nil
+		return New(bucket, cfg.Prefix), nil
 	})
 }
 
-// BlobAdapter is docstore.Adapter implemented directly on top of a
+// Adapter is docstore.Adapter implemented directly on top of a
 // gocloud.dev/blob *blob.Bucket -- the "genuinely different kind of
 // tool" task #174's own roadmap entry settled on go-cloud for: unlike
 // this package's own S3Adapter (a hand-written wrapper around the AWS
@@ -71,45 +72,45 @@ func init() {
 // backends -- this is a new option alongside them, not a replacement,
 // since existing deployments configured for "s3"/"localfs" shouldn't
 // have to change anything.
-type BlobAdapter struct {
+type Adapter struct {
 	bucket *blob.Bucket
 	prefix string
 }
 
-// NewBlobAdapter wraps an already-opened *blob.Bucket. Opening it
+// New wraps an already-opened *blob.Bucket. Opening it
 // (parsing the URL, loading whichever driver its scheme selects) is
 // the caller's concern -- this type only ever calls the bucket's own
 // WriteAll/ReadAll/Delete/List operations.
-func NewBlobAdapter(bucket *blob.Bucket, prefix string) *BlobAdapter {
-	return &BlobAdapter{bucket: bucket, prefix: prefix}
+func New(bucket *blob.Bucket, prefix string) *Adapter {
+	return &Adapter{bucket: bucket, prefix: prefix}
 }
 
-func (a *BlobAdapter) key(id string) string {
+func (a *Adapter) key(id string) string {
 	return a.prefix + id
 }
 
-func (a *BlobAdapter) Save(ctx context.Context, id string, data []byte) error {
+func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 	return a.bucket.WriteAll(ctx, a.key(id), data, nil)
 }
 
-func (a *BlobAdapter) Load(ctx context.Context, id string) (Document, error) {
+func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error) {
 	reader, err := a.bucket.NewReader(ctx, a.key(id), nil)
 	if gcerrors.Code(err) == gcerrors.NotFound {
-		return Document{}, ErrNotFound
+		return docstore.Document{}, docstore.ErrNotFound
 	}
 	if err != nil {
-		return Document{}, err
+		return docstore.Document{}, err
 	}
 	defer func() { _ = reader.Close() }()
 	data, err := io.ReadAll(reader)
 	if err != nil {
-		return Document{}, err
+		return docstore.Document{}, err
 	}
-	return Document{ID: id, Data: data, UpdatedAt: reader.ModTime()}, nil
+	return docstore.Document{ID: id, Data: data, UpdatedAt: reader.ModTime()}, nil
 }
 
-func (a *BlobAdapter) List(ctx context.Context) ([]Meta, error) {
-	var metas []Meta
+func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
+	var metas []docstore.Meta
 	iter := a.bucket.List(&blob.ListOptions{Prefix: a.prefix})
 	for {
 		obj, err := iter.Next(ctx)
@@ -119,7 +120,7 @@ func (a *BlobAdapter) List(ctx context.Context) ([]Meta, error) {
 		if err != nil {
 			return nil, err
 		}
-		metas = append(metas, Meta{
+		metas = append(metas, docstore.Meta{
 			ID:        obj.Key[len(a.prefix):],
 			UpdatedAt: obj.ModTime,
 			Size:      int(obj.Size),
@@ -128,10 +129,10 @@ func (a *BlobAdapter) List(ctx context.Context) ([]Meta, error) {
 	return metas, nil
 }
 
-func (a *BlobAdapter) Delete(ctx context.Context, id string) error {
+func (a *Adapter) Delete(ctx context.Context, id string) error {
 	err := a.bucket.Delete(ctx, a.key(id))
 	if gcerrors.Code(err) == gcerrors.NotFound {
-		return ErrNotFound
+		return docstore.ErrNotFound
 	}
 	return err
 }

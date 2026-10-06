@@ -1,9 +1,10 @@
 //go:build !js
 
-package docstore
+package mongo
 
 import (
 	"context"
+	"github.com/elaous/gojiberry/docstore"
 	"os"
 	"testing"
 )
@@ -28,11 +29,28 @@ func TestMongoAdapterConformance(t *testing.T) {
 		db = "docstore_test"
 	}
 	ctx := context.Background()
-	testAdapterConformance(t, func() Adapter {
-		a, err := NewMongoAdapter(ctx, uri, db)
+	docstore.CheckAdapter(t, func() docstore.Adapter {
+		a, err := New(ctx, uri, db)
 		if err != nil {
-			t.Fatalf("NewMongoAdapter: %v", err)
+			t.Fatalf("New: %v", err)
 		}
+		return a
+	})
+}
+
+// The conditional save needs a real MongoDB as well (see above).
+func TestMongoAdapterSaveIf(t *testing.T) {
+	uri := os.Getenv("TEST_MONGO_URI")
+	if uri == "" {
+		t.Skip("TEST_MONGO_URI not set; skipping MongoDB integration test (no live MongoDB in this environment)")
+	}
+	ctx := context.Background()
+	docstore.CheckConditional(t, func() docstore.ConditionalAdapter {
+		a, err := New(ctx, uri, "docstore_test_conditional")
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		_ = a.coll.Drop(ctx)
 		return a
 	})
 }

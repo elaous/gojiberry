@@ -40,9 +40,9 @@ A target is a `docstore.Adapter`. The adapters:
 
 | target | adapter |
 |---|---|
-| Postgres | `docstore.PostgresAdapter` (`{"dsn": ...}`) |
+| Postgres | `postgres.Adapter` of `docstore/backends` (`{"dsn": ...}`) |
 | SQLite | `docstore.SQLiteAdapter` (`{"path": "docs.db"}`), pure Go, not for WASM |
-| S3 / MinIO / any bucket | `docstore.S3Adapter`, `BlobAdapter` |
+| S3 / MinIO / any bucket | `s3.Adapter`, `blob.Adapter` of `docstore/backends` |
 | files | `docstore.LocalFSAdapter` |
 | memory | `docstore.MemoryAdapter` |
 | a docstore server | `docstore.NewHTTPAdapter(url, client)` -- how a WASM app reaches any of the above |
