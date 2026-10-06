@@ -130,8 +130,14 @@ key** that wraps a key pair or the data key, so:
 
 ## D. Plan
 
-1. `docstore.EncryptedAdapter` + `Keyring` using `age`/`agessh`, with SSH key recipients,
-   tests (round trip, wrong key, tampered ciphertext, re-key on revoke).
+1. **Done:** `docstore/encrypt` (`encrypt.Adapter`, `Keyring`, `Static`) using `filippo.io/age`
+   and `agessh`: SSH (ed25519, RSA), age and recovery-key recipients, `Rekey` and `RekeyAll`,
+   `RequireEncrypted`, catalogs / folder records / ACL records / fonts left readable
+   (`DefaultSkip`), conditional catalog writes and the store lock passed through. Tests: round
+   trip, wrong key, tampered ciphertext, sharing and re-key on revoke, a recovery key, bad keys,
+   and the whole saver (folders, versions, `Verify`) on an encrypted store. It is its own
+   package, so a build that does not import it does not link `age` (about 3.8 MB of wasm when it
+   does).
 2. People tab: add a recipient by key, fingerprint confirmation, re-key on remove.
 3. `auth/passkey` and `components.Passkey`, with the virtual-authenticator e2e.
 4. Passkey as an encryption recipient through PRF, with detection and the
