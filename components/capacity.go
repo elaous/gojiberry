@@ -22,9 +22,13 @@ type CapacityProps struct {
 // Session's status line adds a note after a save.
 const CapacityWarnAt = 80
 
+// CapacityFullAt is the percentage from which a store counts as full or nearly: the
+// advice is the urgent one, and the warning is an alert.
+const CapacityFullAt = 95
+
 // CapacityAdvice is what to do when a store is filling up, in words for the person.
 func CapacityAdvice(pct float64) string {
-	if pct >= 95 {
+	if pct >= CapacityFullAt {
 		return tr("capacity.full", "This store is full or nearly: a save may be refused, and then the document is not saved. Right now, download your documents (Download as, or a folder as a ZIP), then make room by deleting old versions and emptying the trash, or save somewhere else.")
 	}
 	return tr("capacity.nearlyFull", "This store is filling up. So that no work is lost: download your documents now (Download as, or a folder as a ZIP), delete old versions and empty the trash, or save to another place before it is full.")
@@ -64,7 +68,7 @@ func Capacity(p CapacityProps) xango.Node {
 				xango.El("span", []xango.Attr{xango.A("class", "gj-capacity-left")}, xango.Text(trf("capacity.left", "%s left", byteSize64(left))))))
 		if pct >= CapacityWarnAt {
 			role := "status"
-			if pct >= 95 {
+			if pct >= CapacityFullAt {
 				role = "alert"
 			}
 			children = append(children, xango.El("p", []xango.Attr{xango.A("class", "gj-capacity-warning"), xango.A("role", role)}, xango.Text(CapacityAdvice(pct))))

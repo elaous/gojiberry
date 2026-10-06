@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -623,5 +624,79 @@ func TestVerifyForgetsABadPreviousCopy(t *testing.T) {
 	rep, _ = s.Verify(ctx, "m")
 	if len(rep.BackupsLost) != 0 {
 		t.Errorf("found again: %+v", rep)
+	}
+}
+
+// An older file the old catalog knows no checksum for is not vouched for: it does not
+// win over the newer file.
+func TestRebuildDoesNotPutBackAnUnvouchedOlderFile(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	e, err := s.Save(ctx, "m", docfile.JSON, docWithText("plan", "version two"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := mem.Load(ctx, e.Key)
+	// A leftover with the same ID, older by its own save time, that no catalog lists.
+	old := docWithText("plan", "version one")
+	old.SetID(e.ID)
+	old.Updated = 1
+	data, _ := docfile.JSON.Marshal(old)
+	_ = mem.Save(ctx, e.ID+"~aaaaaaaaaaaa.json", data)
+	// The newer file changes (still parses).
+	_ = mem.Save(ctx, e.Key, []byte(strings.Replace(string(stored.Data), "version two", "version twX", 1)))
+	if err := s.Rebuild(ctx, "m"); err != nil {
+		t.Fatal(err)
+	}
+	var cur catalogEntry
+	_ = s.view(ctx, "m", func(_ Target, c *catalog) error { cur = c.Docs[e.ID]; return nil })
+	if cur.Key != e.Key {
+		t.Fatalf("the unvouched leftover won: %+v", cur)
+	}
+	if _, err := mem.Load(ctx, e.Key); err != nil {
+		t.Errorf("the newer file was deleted: %v", err)
+	}
+}
+
+// Three files for one ID: the vouched-for one is the document, the changed one is
+// skipped, and only an old enough skipped file is deleted.
+func TestRebuildWithThreeFilesAndTheChangedOneIsCollectedOnlyWhenOld(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	id := twoSaves(t, s, docfile.JSON)
+	var cur catalogEntry
+	_ = s.view(ctx, "m", func(_ Target, c *catalog) error { cur = c.Docs[id]; return nil })
+	stored, _ := mem.Load(ctx, cur.Key)
+	_ = mem.Save(ctx, cur.Key, []byte(strings.Replace(string(stored.Data), "version two", "version twX", 1)))
+	extra := docWithText("plan", "stray")
+	extra.SetID(id)
+	extra.Updated = 1
+	data, _ := docfile.JSON.Marshal(extra)
+	_ = mem.Save(ctx, id+"~cccccccccccc.json", data)
+	if err := s.Rebuild(ctx, "m"); err != nil {
+		t.Fatal(err)
+	}
+	var skipped []string
+	var now catalogEntry
+	_ = s.view(ctx, "m", func(_ Target, c *catalog) error { skipped, now = c.Skipped, c.Docs[id]; return nil })
+	if now.Key == cur.Key || !slices.Contains(skipped, cur.Key) {
+		t.Fatalf("the changed file is skipped and not the document: %+v %v", now, skipped)
+	}
+	// Young: kept.
+	if n, _ := s.CollectOrphans(ctx, "m", time.Hour); n != 0 {
+		t.Errorf("a young skipped file was removed (%d)", n)
+	}
+	if _, err := mem.Load(ctx, cur.Key); err != nil {
+		t.Fatalf("kept: %v", err)
+	}
+	// Old: removed.
+	old := &Saver{Targets: []Target{{Name: "m", Adapter: aged{mem}}}}
+	if n, err := old.CollectOrphans(ctx, "m", time.Hour); err != nil || n == 0 {
+		t.Fatalf("removed %d: %v", n, err)
+	}
+	if _, err := mem.Load(ctx, cur.Key); !errors.Is(err, docstore.ErrNotFound) {
+		t.Errorf("the old changed file is gone: %v", err)
 	}
 }

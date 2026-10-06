@@ -300,6 +300,13 @@ func (s *Saver) rebuild(ctx context.Context, t Target, known *catalog) (*catalog
 // authority for the files it lists, so a file that no longer matches is not given a new,
 // matching checksum by the rebuild (a read of it still finds it damaged and falls back to
 // the previous copy). With no known catalog the files are taken as they are.
+//
+// Two files with one ID are the document and its previous copy: the newer is the
+// document. The exception is a newer file the old catalog has a checksum for that no
+// longer matches while the older file is vouched for (the old catalog has a non-empty
+// checksum for it and it matches): then the older is the document, and the changed file
+// is left in Skipped, to be removed by CollectOrphans once it is old enough. An older
+// file the old catalog knows nothing about is never put back over a newer one.
 func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, error) {
 	knownSum := map[string]string{}
 	if known != nil {
@@ -321,6 +328,22 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 	actual := map[string]string{}  // each file's checksum as it is now
 	// changed says a file is not what the catalog being replaced recorded for it.
 	changed := func(key string) bool { ks := knownSum[key]; return ks != "" && actual[key] != ks }
+	// vouched says the old catalog has a checksum for a file and the file still has it.
+	// A file it knows nothing about is not vouched for.
+	vouched := func(key string) bool {
+		ks := knownSum[key]
+		if ks == "" {
+			return false
+		}
+		if _, ok := actual[key]; !ok {
+			stored, err := t.Adapter.Load(ctx, key)
+			if err != nil {
+				return false
+			}
+			actual[key] = docstore.Digest(stored.Data)
+		}
+		return actual[key] == ks
+	}
 	for _, m := range metas {
 		if id, ok := strings.CutPrefix(m.ID, t.folderPrefix()); ok && docfile.ValidID(id) {
 			if stored, err := t.Adapter.Load(ctx, m.ID); err == nil {
@@ -393,12 +416,16 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 			if cur.Updated < entry.Updated || cur.Updated == entry.Updated && modified[cur.Key] < modified[entry.Key] {
 				older, newer = cur, entry
 			}
-			// The newer file is not the one the old catalog vouched for, and the older is:
-			// the older is the document. (The changed file is left out; it is removed with
-			// the other leftovers once it is old enough, see CollectOrphans.)
-			if changed(newer.Key) && !changed(older.Key) {
+			// The newer file is not the one the old catalog vouched for, and the older
+			// is (the old catalog has a checksum for it and it still matches): the older
+			// is the document. (The changed file is left out; it is removed with the other
+			// leftovers once it is old enough, see CollectOrphans.)
+			if changed(newer.Key) && vouched(older.Key) {
 				out.Skipped = append(out.Skipped, newer.Key)
-				older.Prev, older.PrevSum = "", ""
+				if older.Prev != "" && !vouched(older.Prev) {
+					out.Skipped = append(out.Skipped, older.Prev)
+					older.Prev, older.PrevSum = "", ""
+				}
 				out.Docs[id] = older
 				continue
 			}
