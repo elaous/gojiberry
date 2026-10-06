@@ -71,6 +71,7 @@ type Session struct {
 	selected             []string
 	tagFilter            string
 	usage                Usage
+	openDlg              *openDialog     // the .open download being asked about
 	checked              map[string]bool // targets already checked for leftovers of a crash
 	status               string
 	saveState            string // see SaveState
@@ -658,6 +659,14 @@ func (s *Session) Docs() components.DocListProps {
 	}
 	p.OpenFolder, p.NewFolder, p.RenameFolder, p.DeleteFolder, p.Move = s.OpenFolder, s.NewFolder, s.RenameFolder, s.DeleteFolder, s.MoveDocs
 	p.FolderDraft, p.OnFolderDraft = s.folderDraft, s.SetFolderDraft
+	if d := s.openDlg; d != nil {
+		p.OpenDownload = &components.OpenDownload{
+			Name: d.name, Current: d.sizes.Current, History: d.sizes.History, Versions: d.sizes.Versions, Drop: d.drop,
+			OnDrop:    func(drop bool) { s.set(func() { s.openDlg.drop = drop }) },
+			OnConfirm: func() { s.Pending.Run(s.DownloadOpen) },
+			OnCancel:  s.CancelOpenDownload,
+		}
+	}
 	if s.Deliver != nil {
 		p.Download, p.DownloadFolder, p.DownloadFormats = s.Download, s.DownloadFolder, s.downloadChoices()
 	}
@@ -749,13 +758,12 @@ func (s *Session) Download(ctx context.Context, id, format string) error {
 		return err
 	}
 	if format == docfile.Open.Name() {
-		// opendocs' own file carries the history too.
-		data, err := s.Saver.ExportOpen(ctx, s.targetName(), id)
+		// Ask first whether to keep the history in the file, and say how big each part is.
+		sizes, err := s.Saver.OpenSizes(ctx, s.targetName(), id)
 		if err != nil {
 			return err
 		}
-		s.Deliver(safeName(doc.Name())+docfile.Open.Ext(), docfile.Open.MIME(), data)
-		s.say(msg("saver.downloaded", "%s downloaded", doc.Name()))
+		s.set(func() { s.openDlg = &openDialog{id: id, name: doc.Name(), sizes: sizes} })
 		return nil
 	}
 	if format == "" || s.Export == nil {
@@ -782,6 +790,38 @@ func (s *Session) Download(ctx context.Context, id, format string) error {
 	s.say(msg("saver.downloaded", "%s downloaded", doc.Name()))
 	return nil
 }
+
+// openDialog is the question asked before an .open download.
+type openDialog struct {
+	id, name string
+	sizes    OpenSizes
+	drop     bool
+}
+
+// DownloadOpen delivers the .open file the dialog asked about, with or without the history
+// (as the person chose), and closes the dialog.
+func (s *Session) DownloadOpen(ctx context.Context) error {
+	s.mu.Lock()
+	dlg := s.openDlg
+	s.mu.Unlock()
+	if dlg == nil {
+		return nil
+	}
+	if s.Deliver == nil {
+		return errors.New("saver: nowhere to deliver files")
+	}
+	data, err := s.Saver.ExportOpen(ctx, s.targetName(), dlg.id, !dlg.drop)
+	if err != nil {
+		return err
+	}
+	s.Deliver(safeName(dlg.name)+docfile.Open.Ext(), docfile.Open.MIME(), data)
+	s.set(func() { s.openDlg = nil })
+	s.say(msg("saver.downloaded", "%s downloaded", dlg.name))
+	return nil
+}
+
+// CancelOpenDownload closes the dialog without downloading.
+func (s *Session) CancelOpenDownload() { s.set(func() { s.openDlg = nil }) }
 
 // DownloadFolder hands over a ZIP of a folder's documents ("" for all of them).
 func (s *Session) DownloadFolder(ctx context.Context, id string) error {

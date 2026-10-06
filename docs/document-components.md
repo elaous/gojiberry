@@ -94,7 +94,10 @@ document shows its folder.
    no `Export` a document goes as saved. A choice with a `Group` is shown under that
    heading (an `<optgroup>`); the showcase groups Documents (Word, PDF, RTF, EPUB), Web
    and text, Data, and opendocs.
-   The `open` format is special: `Saver.ExportOpen` writes a `.open` file that carries the
+   Choosing `open` first asks (`OpenDownload`, `Session.DownloadOpen`): the dialog shows the
+   size of the current version and of the whole history (the nearest KiB/MiB with the exact
+   bytes, `components.SizeText`), a checkbox to drop the history, and what the file will
+   weigh. The `open` format is special: `Saver.ExportOpen` writes a `.open` file that carries the
    document's versions (`Document.History`, oldest first), and saving such a document
    (`Saver.Save`, so also an import) stores the versions again at the times they were saved
    and keeps the newest `MaxVersions`. A document in the store never holds a history inside

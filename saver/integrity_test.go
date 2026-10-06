@@ -626,7 +626,7 @@ func TestOpenFileCarriesTheHistoryAndSavingItBringsItBack(t *testing.T) {
 	if _, err := src.SaveVersion(ctx, "m", docfile.JSON, d2); err != nil {
 		t.Fatal(err)
 	}
-	data, err := src.ExportOpen(ctx, "m", e.ID)
+	data, err := src.ExportOpen(ctx, "m", e.ID, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,5 +645,28 @@ func TestOpenFileCarriesTheHistoryAndSavingItBringsItBack(t *testing.T) {
 	}
 	if stored, err := dst.Load(ctx, "m", got.ID); err != nil || len(stored.History) != 0 {
 		t.Fatalf("the stored document has no history inside: %v", err)
+	}
+}
+
+func TestOpenSizesAndDownloadWithoutHistory(t *testing.T) {
+	ctx := context.Background()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: docstore.NewMemoryAdapter()}}}
+	e, _ := s.Save(ctx, "m", docfile.JSON, docWithText("plan", strings.Repeat("a", 3000)))
+	d := docWithText("plan", strings.Repeat("b", 2000))
+	d.SetID(e.ID)
+	_, _ = s.SaveVersion(ctx, "m", docfile.JSON, d)
+	_, _ = s.SaveVersion(ctx, "m", docfile.JSON, d)
+	sz, err := s.OpenSizes(ctx, "m", e.ID)
+	if err != nil || sz.Versions != 2 || sz.Current < 3000 || sz.History < 4000 {
+		t.Fatalf("%+v %v", sz, err)
+	}
+	with, _ := s.ExportOpen(ctx, "m", e.ID, true)
+	without, _ := s.ExportOpen(ctx, "m", e.ID, false)
+	if int64(len(without)) != sz.Current || int64(len(with)) != sz.Current+sz.History {
+		t.Errorf("sizes %d/%d against %+v", len(without), len(with), sz)
+	}
+	doc, _ := docfile.Open.Unmarshal(without)
+	if len(doc.History) != 0 {
+		t.Error("no history in the file without it")
 	}
 }

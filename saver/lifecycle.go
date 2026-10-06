@@ -357,25 +357,56 @@ func (s *Saver) restoreHistory(ctx context.Context, target, id string, c docfile
 	return nil
 }
 
-// ExportOpen writes a document with its history as one .open file (docfile.Open): the
-// document and each of its versions, oldest first. Saving the file somewhere else
-// (Saver.Save) brings the versions back.
-func (s *Saver) ExportOpen(ctx context.Context, target, id string) ([]byte, error) {
+// ExportOpen writes a document as one .open file (docfile.Open), with its history when
+// history is set: the document and each of its versions, oldest first. Saving the file
+// somewhere else (Saver.Save) brings the versions back.
+func (s *Saver) ExportOpen(ctx context.Context, target, id string, history bool) ([]byte, error) {
+	data, _, err := s.exportOpen(ctx, target, id, history)
+	return data, err
+}
+
+func (s *Saver) exportOpen(ctx context.Context, target, id string, history bool) ([]byte, int, error) {
 	doc, err := s.Load(ctx, target, id)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	vs, err := s.Versions(ctx, target, id)
-	if err != nil {
-		return nil, err
-	}
-	for i := len(vs) - 1; i >= 0; i-- { // Versions is newest first
-		d, err := s.LoadVersion(ctx, target, vs[i].Key)
+	n := 0
+	if history {
+		vs, err := s.Versions(ctx, target, id)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		d.History = nil
-		doc.History = append(doc.History, docfile.Revision{Saved: vs[i].Time.UnixNano(), Doc: &d})
+		for i := len(vs) - 1; i >= 0; i-- { // Versions is newest first
+			d, err := s.LoadVersion(ctx, target, vs[i].Key)
+			if err != nil {
+				return nil, 0, err
+			}
+			d.History = nil
+			doc.History = append(doc.History, docfile.Revision{Saved: vs[i].Time.UnixNano(), Doc: &d})
+			n++
+		}
 	}
-	return docfile.Open.Marshal(doc)
+	data, err := docfile.Open.Marshal(doc)
+	return data, n, err
+}
+
+// OpenSizes says how big a .open file of a document would be, in bytes: Current is the
+// file with no history, History how much the versions add to it, and Versions how many
+// there are.
+type OpenSizes struct {
+	Current, History int64
+	Versions         int
+}
+
+// OpenSizes measures the .open file of a document, with and without its history.
+func (s *Saver) OpenSizes(ctx context.Context, target, id string) (OpenSizes, error) {
+	bare, _, err := s.exportOpen(ctx, target, id, false)
+	if err != nil {
+		return OpenSizes{}, err
+	}
+	full, n, err := s.exportOpen(ctx, target, id, true)
+	if err != nil {
+		return OpenSizes{}, err
+	}
+	return OpenSizes{Current: int64(len(bare)), History: int64(len(full) - len(bare)), Versions: n}, nil
 }
