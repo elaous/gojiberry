@@ -15,10 +15,10 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /out/translate/server ./cmd/translateserver
+RUN CGO_ENABLED=0 go build -o /out/translateserver ./cmd/translateserver
 
 FROM scratch
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=build /out/translate/server /translate/server
+COPY --from=build /out/translateserver /translateserver
 EXPOSE 8083
-ENTRYPOINT ["/translate/server"]
+ENTRYPOINT ["/translateserver"]
