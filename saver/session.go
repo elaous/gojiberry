@@ -10,6 +10,7 @@ import (
 
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/docstore"
 )
 
 // Session is the state behind the document components: the chosen target and
@@ -296,8 +297,26 @@ func (s *Session) after(ctx context.Context, msg string) error {
 	if err := s.Refresh(ctx); err != nil {
 		return err
 	}
+	if note := s.capacityNote(); note != "" {
+		msg += " " + note
+	}
 	s.say(msg)
 	return nil
+}
+
+// capacityNote is a sentence for the status line when the store is filling up, and ""
+// when it is not (or its size is not known).
+func (s *Session) capacityNote() string {
+	s.mu.Lock()
+	u := s.usage
+	s.mu.Unlock()
+	if !u.Known || u.Percent < components.CapacityWarnAt {
+		return ""
+	}
+	if u.Percent >= components.CapacityFullAt {
+		return msg("saver.storageFull", "Storage is %.0f%% full: download your documents now, then delete old versions and the trash.", u.Percent)
+	}
+	return msg("saver.storageFilling", "Storage is %.0f%% full: download your documents, or delete old versions and the trash, before it fills.", u.Percent)
 }
 
 // current is the document to save, named and with the ID of the one being edited.
@@ -337,6 +356,15 @@ func (s *Session) Save(ctx context.Context) error {
 	return s.save(ctx)
 }
 
+// storageFull adds to an error from a write the advice for a full store, when that is
+// what it is, so every way of saving says the same.
+func storageFull(err error) error {
+	if errors.Is(err, docstore.ErrStorageFull) {
+		return fmt.Errorf("%s: %w", msg("saver.notSavedFull", "Not saved: the storage is full. Download the document (Download as) so no work is lost, then delete old versions or the trash, or save somewhere else"), err)
+	}
+	return err
+}
+
 func (s *Session) save(ctx context.Context) (err error) {
 	var edits int
 	stored := false // the document is saved, whatever happens after (the list refresh)
@@ -359,7 +387,7 @@ func (s *Session) save(ctx context.Context) (err error) {
 	}
 	e, err := s.Saver.Save(ctx, target, c, doc)
 	if err != nil {
-		return err
+		return storageFull(err)
 	}
 	stored = true
 	s.set(func() {
@@ -463,7 +491,7 @@ func (s *Session) SaveVersion(ctx context.Context) error {
 		return err
 	}
 	if _, err := s.Saver.SaveVersion(ctx, s.targetName(), c, doc); err != nil {
-		return err
+		return storageFull(err)
 	}
 	return s.after(ctx, msg("saver.versionSaved", "A version of %s saved", s.Name()))
 }
@@ -527,7 +555,7 @@ func (s *Session) Purge(ctx context.Context, ids ...string) error {
 func (s *Session) Duplicate(ctx context.Context, id string) error {
 	e, err := s.Saver.Duplicate(ctx, s.targetName(), id, "")
 	if err != nil {
-		return err
+		return storageFull(err)
 	}
 	return s.after(ctx, msg("saver.created", "%s created", e.Name))
 }
@@ -536,7 +564,7 @@ func (s *Session) Duplicate(ctx context.Context, id string) error {
 func (s *Session) SetTags(ctx context.Context, id string, tags []string) error {
 	name := s.names([]string{id})
 	if err := s.Saver.SetTags(ctx, s.targetName(), id, tags); err != nil {
-		return err
+		return storageFull(err)
 	}
 	return s.after(ctx, msg("saver.tagged", "Tags of %s updated", name))
 }
@@ -562,7 +590,7 @@ func (s *Session) NewFolder(ctx context.Context, name string) error {
 	parent := s.folder
 	s.mu.Unlock()
 	if _, err := s.Saver.CreateFolder(ctx, s.targetName(), parent, name); err != nil {
-		return err
+		return storageFull(err)
 	}
 	s.set(func() { s.folderDraft = "" })
 	return s.after(ctx, msg("saver.created", "%s created", name))
@@ -571,7 +599,7 @@ func (s *Session) NewFolder(ctx context.Context, name string) error {
 // RenameFolder renames a folder.
 func (s *Session) RenameFolder(ctx context.Context, id, name string) error {
 	if err := s.Saver.RenameFolder(ctx, s.targetName(), id, name); err != nil {
-		return err
+		return storageFull(err)
 	}
 	return s.after(ctx, msg("saver.renamed", "%s renamed", name))
 }
@@ -610,7 +638,7 @@ func (s *Session) DeleteFolder(ctx context.Context, id string) error {
 func (s *Session) MoveDocs(ctx context.Context, ids []string, folder string) error {
 	name := s.names(ids)
 	if err := s.Saver.Move(ctx, s.targetName(), folder, ids...); err != nil {
-		return err
+		return storageFull(err)
 	}
 	return s.after(ctx, msg("saver.moved", "%s moved", name))
 }

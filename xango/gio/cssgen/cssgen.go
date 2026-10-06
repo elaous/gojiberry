@@ -1,7 +1,7 @@
 // Package cssgen turns a bounded, real slice of CSS -- :root/body.dark
 // custom-property tokens and flat per-class rules -- into a real
-// map[string]xangogio.ClassStyle, for exactly a caller-given list of
-// class names. It is the build-time generator half of xangogio's own
+// map[string]gio.ClassStyle, for exactly a caller-given list of
+// class names. It is the build-time generator half of xango/gio's own
 // class-driven styling (see Renderer.Styles/ClassStyle's own doc
 // comments for the runtime half); this package produces the table,
 // it doesn't apply it.
@@ -41,7 +41,7 @@ import (
 
 	"gioui.org/unit"
 
-	"github.com/elaous/gojiberry/xangogio"
+	"github.com/elaous/gojiberry/xango/gio"
 )
 
 // Tokens is a resolved --custom-property table for one theme, keyed by
@@ -108,7 +108,7 @@ func ParseTokens(css string) (light, dark Tokens) {
 // Generate parses css for exactly the rules matching classNames (a
 // bare ".name" selector, see this package's own doc comment for
 // exactly what's supported), resolving var(--x) values against
-// tokens, and returns one xangogio.ClassStyle per class name that had at
+// tokens, and returns one gio.ClassStyle per class name that had at
 // least one recognized declaration, plus every Warning encountered
 // along the way (an unsupported selector shape, an unsupported
 // property, or a value this generator's own narrow parsers couldn't
@@ -116,14 +116,14 @@ func ParseTokens(css string) (light, dark Tokens) {
 // only rule contained nothing recognized, simply doesn't appear in the
 // returned map -- Renderer.Styles already treats a missing entry as a
 // no-op, so there's no need for an explicit zero-value placeholder.
-func Generate(css string, classNames []string, tokens Tokens) (map[string]xangogio.ClassStyle, []Warning) {
+func Generate(css string, classNames []string, tokens Tokens) (map[string]gio.ClassStyle, []Warning) {
 	css = stripComments(css)
 	wanted := make(map[string]bool, len(classNames))
 	for _, c := range classNames {
 		wanted[c] = true
 	}
 
-	styles := make(map[string]xangogio.ClassStyle)
+	styles := make(map[string]gio.ClassStyle)
 	var warnings []Warning
 
 	for _, r := range findRules(css) {
@@ -150,7 +150,7 @@ func Generate(css string, classNames []string, tokens Tokens) (map[string]xangog
 					warnings = append(warnings, warn)
 				}
 			}
-			if !had && style == (xangogio.ClassStyle{}) {
+			if !had && style == (gio.ClassStyle{}) {
 				// Every declaration in this rule was unrecognized; a
 				// zero ClassStyle is indistinguishable from "no rule
 				// at all" to Renderer.Styles, so leave it out of the
@@ -170,7 +170,7 @@ func Generate(css string, classNames []string, tokens Tokens) (map[string]xangog
 // a clean translation, or ok=true with a non-zero Warning for a
 // translation that's only an approximation (documented per case
 // below).
-func applyDecl(style *xangogio.ClassStyle, class, prop, val string, tokens Tokens) (ok bool, warn Warning) {
+func applyDecl(style *gio.ClassStyle, class, prop, val string, tokens Tokens) (ok bool, warn Warning) {
 	switch prop {
 	case "padding":
 		y, x, ok, approx := parsePadding(val)

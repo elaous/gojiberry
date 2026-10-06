@@ -235,6 +235,11 @@
   "folder.forget": "Ne plus utiliser ce dossier",
   "folder.reconnect": "Le navigateur a de nouveau besoin de votre autorisation pour écrire dans le dossier %s. Il n’est pas utilisé tant que vous ne l’avez pas reconnecté.",
   "folder.reconnectButton": "Reconnecter le dossier",
-  "folder.choose": "Choisir un dossier…"
+  "folder.choose": "Choisir un dossier…",
+  "capacity.nearlyFull": "Ce stockage se remplit. Pour ne rien perdre : téléchargez vos documents maintenant (Télécharger au format, ou un dossier en ZIP), supprimez les anciennes versions et videz la corbeille, ou enregistrez ailleurs avant qu’il soit plein.",
+  "capacity.full": "Ce stockage est plein ou presque : un enregistrement peut être refusé, et le document n’est alors pas enregistré. Téléchargez vos documents maintenant (Télécharger au format, ou un dossier en ZIP), puis faites de la place en supprimant les anciennes versions et en vidant la corbeille, ou enregistrez ailleurs.",
+  "saver.storageFull": "Stockage plein à %.0f%% : téléchargez vos documents maintenant, puis supprimez les anciennes versions et la corbeille.",
+  "saver.storageFilling": "Stockage plein à %.0f%% : téléchargez vos documents, ou supprimez les anciennes versions et la corbeille, avant qu’il soit plein.",
+  "saver.notSavedFull": "Non enregistré : le stockage est plein. Téléchargez le document (Télécharger au format) pour ne rien perdre, puis supprimez les anciennes versions ou la corbeille, ou enregistrez ailleurs"
  }
 }

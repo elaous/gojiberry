@@ -1,4 +1,4 @@
-// Package xangogio is a third xango.Node renderer, alongside xango.Render
+// Package gio is a third xango.Node renderer, alongside xango.Render
 // (server-side HTML, see xango/render.go) and domrt.Mount/Update
 // (client-side DOM patching, see ../../../domrt/domrt.go): it walks the
 // exact same renderer-agnostic tree onto a real Gio window
@@ -68,7 +68,7 @@
 // delegation pattern domrt itself is built on. On lets a caller
 // replicate that same wiring against a xango.Node tree it doesn't
 // control the construction of, with zero changes to the component.
-package xangogio
+package gio
 
 import (
 	"image"
@@ -747,7 +747,7 @@ func inputType(n xango.Node) string {
 
 // valueOf returns n's "value" attribute. Only used to seed a newly
 // created widget.Editor: unlike domrt (which owns a real, persistent DOM
-// node it can read back at any time), xangogio has nothing to read a live
+// node it can read back at any time), xango/gio has nothing to read a live
 // value from except the widget.Editor itself, so this is a one-time
 // initial value, not a live binding -- setting it on every Layout call
 // would stomp whatever the user just typed.
@@ -912,7 +912,7 @@ func selectedOption(n xango.Node) (value, label string, ok bool) {
 // layoutSelect lays out a `<select id=...>{<option value=...
 // [selected]>label</option>...}</select>` as a custom dropdown --
 // gioui.org/widget/material has no native equivalent, so unlike every
-// other tag xangogio handles, this isn't a thin wrapper around an
+// other tag xango/gio handles, this isn't a thin wrapper around an
 // existing material widget: a closed select is a material.Button
 // showing the selected option's own label; an open one is that same
 // button (now showing a "close" affordance) stacked above one more
@@ -921,8 +921,8 @@ func selectedOption(n xango.Node) (value, label string, ok bool) {
 //
 // Two things persist across frames here, both keyed by identity
 // (Node.Key if set, else the "id" attribute, matching every other
-// interactive tag xangogio handles): whether the dropdown is currently
-// open (r.selectOpen -- purely xangogio's own transient UI state, not
+// interactive tag xango/gio handles): whether the dropdown is currently
+// open (r.selectOpen -- purely xango/gio's own transient UI state, not
 // caller-controlled, since a real <select> doesn't expose "is the
 // dropdown open" as part of its own value either, so a plain
 // map[string]bool is the right shape, not a Gio widget type), and each
@@ -938,7 +938,7 @@ func selectedOption(n xango.Node) (value, label string, ok bool) {
 // different option marked selected once its own onChange handler
 // updates whatever state the selection represents -- the same
 // controlled-component contract domrt already holds every caller to,
-// not a new one xangogio invents.
+// not a new one xango/gio invents.
 func (r *Renderer) layoutSelect(gtx layout.Context, th *material.Theme, n xango.Node) layout.Dimensions {
 	id := n.Key
 	if id == "" {
