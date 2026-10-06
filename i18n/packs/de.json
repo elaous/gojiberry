@@ -239,6 +239,7 @@
   "recipients.parsed": "%s-Schlüssel für %s. Sein Fingerabdruck ist:",
   "recipients.checkHint": "Prüfen Sie diesen Fingerabdruck mit der Person, auf einem anderen Weg als dem, auf dem Sie den Schlüssel erhalten haben, und tippen Sie ihn dann hier ein, um den Schlüssel hinzuzufügen.",
   "recipients.confirm": "Fingerabdruck, zur Bestätigung eingetippt",
+  "recipients.removed": "Freigabe beendet. %d gespeicherte Dateien wurden ohne diesen Schlüssel neu verschlüsselt.",
   "recipients.add": "Schlüssel hinzufügen"
  }
 }

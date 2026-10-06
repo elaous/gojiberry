@@ -28,12 +28,24 @@ type RecipientsProps struct {
 	ParseError     string
 	OnDraft        func(key, confirm string)
 	// Add shares the document with the draft key, given the fingerprint confirmed; Remove takes a
-	// key out and encrypts the document again without it. A nil operation leaves its control out.
-	Add     func(ctx context.Context, key, confirm string) error
-	Remove  func(ctx context.Context, fingerprint string) error
+	// key out and encrypts the document again without it, and returns how many files it
+	// encrypted again (Sharing.Remove). A nil operation leaves its control out.
+	Add    func(ctx context.Context, key, confirm string) error
+	Remove func(ctx context.Context, fingerprint string) (int, error)
+	// OnRemoved is called after a Remove that worked, with the count Remove returned; the
+	// host can keep it and pass RemovedNotice(n) as Notice on the next render.
+	OnRemoved func(fingerprint string, files int)
+	// Notice is a status line shown under the list (for instance RemovedNotice).
+	Notice  string
 	Pending *Pending
 	// Ask, if set, is asked before a key is removed (see Asker.Ask).
 	Ask func(message string, do func())
+}
+
+// RemovedNotice is the line that says what a Remove did: how many stored files were encrypted
+// again without the key.
+func RemovedNotice(files int) string {
+	return trf("recipients.removed", "Stopped sharing. %d stored files were encrypted again without that key.", files)
 }
 
 // Recipients lists the keys a document is encrypted to and shares it with one more. Adding a
@@ -69,7 +81,15 @@ func Recipients(p RecipientsProps) xango.Node {
 			}
 			extra = append(extra, docButton("gj-recip-remove", tr("recipients.remove", "Remove"), busy,
 				confirmed(p.Ask, trf("recipients.confirmRemove", "Stop sharing with %s? The document is encrypted again without them, so they cannot open what is saved from now on. They keep anything they already opened or copied: that cannot be taken back.", name),
-					actOne(p.Pending, p.Remove, fp))))
+					func() {
+						p.Pending.Run(func(ctx context.Context) error {
+							n, err := p.Remove(ctx, fp)
+							if err == nil && p.OnRemoved != nil {
+								p.OnRemoved(fp, n)
+							}
+							return err
+						})
+					})))
 		}
 		rows = append(rows, row(r, "gj-recip-item", extra...))
 	}
@@ -77,6 +97,9 @@ func Recipients(p RecipientsProps) xango.Node {
 		xango.El("div", []xango.Attr{xango.A("class", "gj-doc-head")},
 			xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(tr("recipients.title", "Keys that can open this document")))),
 		xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list")}, rows...),
+	}
+	if p.Notice != "" {
+		children = append(children, xango.El("p", []xango.Attr{xango.A("class", "gj-recip-notice"), xango.A("role", "status")}, xango.Text(p.Notice)))
 	}
 	if p.Add != nil {
 		keyAttrs := []xango.Attr{xango.A("class", "gj-recip-key"), xango.A("rows", "3"), xango.A("value", p.Draft),
@@ -86,7 +109,9 @@ func Recipients(p RecipientsProps) xango.Node {
 		if p.OnDraft != nil {
 			keyAttrs = append(keyAttrs, xango.On("input", func(e xango.Event) { p.OnDraft(xango.EventValue[string](e), "") }))
 		}
-		form := []xango.Node{xango.El("textarea", keyAttrs)}
+		// The draft is both the value attribute (what the client patches as the control's value)
+		// and the child text (the only way a <textarea> has initial content in plain HTML).
+		form := []xango.Node{xango.El("textarea", keyAttrs, xango.Text(p.Draft))}
 		draft := p.Draft
 		ready := false
 		switch {

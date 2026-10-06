@@ -298,14 +298,16 @@ func TestMigratePanel(t *testing.T) {
 func TestRecipientsListAddWithAConfirmedFingerprintAndRemove(t *testing.T) {
 	var added, removed []string
 	var draft, confirm string
+	var removedCount int
 	p := RecipientsProps{
-		Owner:   []RecipientRow{{Label: "ana@opendocs.io", Type: "ssh-ed25519", Fingerprint: "SHA256:owner"}},
-		Shared:  []RecipientRow{{Label: "bo", Type: "ssh-ed25519", Fingerprint: "SHA256:bo"}},
-		Pending: &Pending{Inline: true},
-		OnDraft: func(k, c string) { draft, confirm = k, c },
-		Add:     func(_ context.Context, k, c string) error { added = append(added, k+"|"+c); return nil },
-		Remove:  func(_ context.Context, fp string) error { removed = append(removed, fp); return nil },
-		Ask:     func(msg string, do func()) { mustContain(t, msg, "Stop sharing with bo", "cannot be taken back"); do() },
+		Owner:     []RecipientRow{{Label: "ana@opendocs.io", Type: "ssh-ed25519", Fingerprint: "SHA256:owner"}},
+		Shared:    []RecipientRow{{Label: "bo", Type: "ssh-ed25519", Fingerprint: "SHA256:bo"}},
+		Pending:   &Pending{Inline: true},
+		OnDraft:   func(k, c string) { draft, confirm = k, c },
+		Add:       func(_ context.Context, k, c string) error { added = append(added, k+"|"+c); return nil },
+		Remove:    func(_ context.Context, fp string) (int, error) { removed = append(removed, fp); return 3, nil },
+		OnRemoved: func(fp string, n int) { removedCount = n },
+		Ask:       func(msg string, do func()) { mustContain(t, msg, "Stop sharing with bo", "cannot be taken back"); do() },
 	}
 	html := render(t, Recipients(p))
 	mustContain(t, html, "Keys that can open this document", "ana@opendocs.io", "owner", "SHA256:owner", "SHA256:bo", "gj-recip-remove", "gj-recip-key", "Add key")
@@ -345,6 +347,15 @@ func TestRecipientsListAddWithAConfirmedFingerprintAndRemove(t *testing.T) {
 	// Without Add and Remove there are no controls.
 	html = render(t, Recipients(RecipientsProps{Shared: p.Shared, Pending: p.Pending}))
 	mustNotContain(t, html, "gj-recip-remove", "gj-recip-form")
+	// The Remove result count is reported, and a notice can show it.
+	if removedCount != 3 {
+		t.Errorf("OnRemoved got %d", removedCount)
+	}
+	mustContain(t, render(t, Recipients(RecipientsProps{Notice: RemovedNotice(removedCount), Pending: p.Pending})),
+		`role="status"`, "3 stored files were encrypted again")
+	// The draft is the textarea's child text as well as its value.
+	p.Draft = "ssh-ed25519 AAAA <cy>"
+	mustContain(t, render(t, Recipients(p)), `rows="3"`, `ssh-ed25519 AAAA &lt;cy&gt;</textarea>`)
 }
 
 func disabledAdd(t *testing.T, p RecipientsProps) bool {
