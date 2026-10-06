@@ -39,7 +39,15 @@ import (
 
 // ErrNoKey is returned when a document is encrypted and none of the keyring's identities
 // can open it.
-var ErrNoKey = errors.New("encrypt: none of your keys opens this document")
+var ErrNoKey error = noKeyError{}
+
+// noKeyError is ErrNoKey, which is also docstore.ErrLocked (errors.Is), so code that does not
+// import this package (the saver's catalog rebuild) can tell a document it cannot open from a
+// store that failed.
+type noKeyError struct{}
+
+func (noKeyError) Error() string        { return "encrypt: none of your keys opens this document" }
+func (noKeyError) Is(target error) bool { return target == docstore.ErrLocked }
 
 // ErrNotEncrypted is returned by Load for a stored document that is not encrypted, unless
 // the Adapter has AllowPlaintext.
@@ -200,6 +208,9 @@ func (a *Adapter) open(ctx context.Context, id string, stored []byte) (plain []b
 	ids, err := a.Ring.Identities(ctx, id)
 	if err != nil {
 		return nil, true, err
+	}
+	if len(ids) == 0 {
+		return nil, true, ErrNoKey // a keyring with no private key opens nothing
 	}
 	r, err := age.Decrypt(bytes.NewReader(stored), ids...)
 	if err != nil {

@@ -42,6 +42,10 @@ const (
 	kindDocument  = 1
 	kindIndex     = 2
 	kindSignature = 3
+
+	// flagEncrypted is bit 0 of the record's flags byte (the first of the three bytes
+	// after the kind, which older writers leave zero): the data is an opaque envelope.
+	flagEncrypted = 1
 )
 
 var (
@@ -52,6 +56,9 @@ var (
 	ErrChecksum = errors.New("pack: checksum mismatch")
 	// ErrNotFound is returned for a document the index does not list.
 	ErrNotFound = errors.New("pack: no such document")
+	// ErrEncrypted is returned by Read for a document whose record is an envelope: open it
+	// with ReadWith and a function that decrypts.
+	ErrEncrypted = errors.New("pack: the document is encrypted")
 	// ErrNeedKey is returned when appending to a signed pack without the key to sign it
 	// again with.
 	ErrNeedKey = errors.New("pack: the pack is signed; give the key to sign it again, or drop the signature")
@@ -83,6 +90,10 @@ type Entry struct {
 	Length  uint64 // of the record's data
 	SHA256  [32]byte
 	Trashed bool
+	// Encrypted marks a record whose data is an envelope the pack cannot read (opaque
+	// bytes, hashed and signed as stored). Name and Tags are then whatever the writer
+	// chose to leave readable, typically a placeholder.
+	Encrypted bool
 }
 
 // Folder is a folder of the index. Folders are virtual: a document names its folder and
@@ -277,6 +288,9 @@ func (e Entry) marshal() []byte {
 	if e.Trashed {
 		b = appendInt(b, 9, 1)
 	}
+	if e.Encrypted {
+		b = appendInt(b, 10, 1)
+	}
 	return b
 }
 
@@ -314,6 +328,8 @@ func unmarshalEntry(b []byte) (e Entry, err error) {
 			copy(e.SHA256[:], f.bytes)
 		case f.wire == 0 && f.num == 9:
 			e.Trashed = f.varint != 0
+		case f.wire == 0 && f.num == 10:
+			e.Encrypted = f.varint != 0
 		}
 		return nil
 	})
@@ -443,11 +459,13 @@ func headerBytes(m Meta) []byte {
 	return append(b, make([]byte, pad8(int64(len(b))))...)
 }
 
-// frame is a record: length, kind, check of those, data, check of the data, padding.
-func frame(kind byte, data []byte) []byte {
+// frame is a record: length, kind, flags, check of those, data, check of the data, padding.
+func frame(kind byte, data []byte) []byte { return frameFlags(kind, 0, data) }
+
+func frameFlags(kind, flags byte, data []byte) []byte {
 	b := make([]byte, frameHead, frameHead+len(data)+4+7)
 	binary.LittleEndian.PutUint64(b, uint64(len(data)))
-	b[8] = kind
+	b[8], b[9] = kind, flags
 	binary.LittleEndian.PutUint32(b[12:], crc(b[:12]))
 	b = append(b, data...)
 	b = binary.LittleEndian.AppendUint32(b, crc(data))

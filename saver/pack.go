@@ -3,6 +3,7 @@ package saver
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -10,7 +11,24 @@ import (
 
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docfile/pack"
+	"github.com/elaous/gojiberry/docstore"
 )
+
+// PackReason says why a document was left out of an export or an import with a warning.
+type PackReason string
+
+// PackNeedsKey: an end-to-end (confidential) document and no function to seal (export) or
+// open (import) it, or the one given could not. The document is not lost: give the key and
+// run it again.
+const PackNeedsKey PackReason = "needs-key"
+
+// PackIssue is a document an export or import left out with a warning; these never stop the
+// operation.
+type PackIssue struct {
+	ID, Name string
+	Reason   PackReason
+	Err      error // why, when there is more to say (the error of a Seal or Open)
+}
 
 // PackOptions are the options of ExportPack.
 type PackOptions struct {
@@ -21,6 +39,17 @@ type PackOptions struct {
 	History bool
 	// Key signs the pack (Ed25519) when it is not nil.
 	Key ed25519.PrivateKey
+	// Seal encrypts an end-to-end (confidential) document for the pack: plain is its .open
+	// message (with its history, if History is set), the result an envelope the pack stores
+	// as it is, as an encrypted record. The pack's index lists ConfidentialName and no tags
+	// for it; the real name and tags travel inside the envelope. With no Seal such a
+	// document is left out and reported to Warn as PackNeedsKey, never written in the
+	// clear. A Seal that fails stops the export: a pack that quietly lacks the document
+	// would pass for a backup.
+	Seal func(ctx context.Context, docID string, plain []byte) ([]byte, error)
+	// Warn is told of each document left out (PackNeedsKey) when not nil. They are not
+	// counted in the number ExportPack returns.
+	Warn func(PackIssue)
 }
 
 // ExportPack writes the documents of a folder (and the folders under it), or of the whole
@@ -69,6 +98,11 @@ func (s *Saver) ExportPack(ctx context.Context, target, folder string, w io.Writ
 		name = "documents"
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].id < items[j].id })
+	warn := func(i PackIssue) {
+		if o.Warn != nil {
+			o.Warn(i)
+		}
+	}
 	pw, err := pack.NewWriter(w, pack.Meta{ID: docfile.NewID(), Name: name, Created: time.Now().UnixNano(), Producer: "gojiberry"})
 	if err != nil {
 		return 0, err
@@ -78,12 +112,25 @@ func (s *Saver) ExportPack(ctx context.Context, target, folder string, w io.Writ
 		if err := ctx.Err(); err != nil {
 			return n, err
 		}
+		secret := it.e.confidential()
+		if secret && o.Seal == nil {
+			warn(PackIssue{ID: it.id, Name: it.name, Reason: PackNeedsKey})
+			continue
+		}
 		doc, _, err := s.loadWithHistory(ctx, target, it.id, o.History)
 		if err != nil {
+			if secret && errors.Is(err, docstore.ErrLocked) {
+				warn(PackIssue{ID: it.id, Name: it.name, Reason: PackNeedsKey, Err: err}) // no key opens it here
+				continue
+			}
 			return n, fmt.Errorf("saver: %q: %w", it.name, err)
 		}
 		doc.SetTrashed(it.e.Trashed)
-		if err := pw.Add(doc); err != nil {
+		if secret {
+			if err := packSealed(ctx, pw, o.Seal, it.id, it.e, doc); err != nil {
+				return n, err
+			}
+		} else if err := pw.Add(doc); err != nil {
 			return n, fmt.Errorf("saver: %q: %w", it.name, err)
 		}
 		n++
@@ -94,6 +141,26 @@ func (s *Saver) ExportPack(ctx context.Context, target, folder string, w io.Writ
 		}
 	}
 	return n, pw.Close(o.Key)
+}
+
+// packSealed writes an end-to-end document as an encrypted record. The index shows the
+// placeholder name and no tags (the catalog holds none for it either); the folder, the times
+// and the trash flag are not secret.
+func packSealed(ctx context.Context, pw *pack.Writer, seal func(context.Context, string, []byte) ([]byte, error), id string, e catalogEntry, doc docfile.Document) error {
+	doc.SetID(id)
+	e.withCatalog(&doc) // marks it end to end, and the real name and tags are the file's
+	plain, err := docfile.Open.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	env, err := seal(ctx, id, plain)
+	if err != nil {
+		return fmt.Errorf("saver: sealing %s: %w", id, err)
+	}
+	if len(env) == 0 {
+		return fmt.Errorf("saver: sealing %s gave nothing", id)
+	}
+	return pw.AddEncrypted(pack.Entry{ID: id, Name: ConfidentialName, Folder: e.Folder, Updated: doc.Updated, Trashed: e.Trashed != 0}, env)
 }
 
 // ConflictPolicy says what ImportPack does with a document whose ID is already in the target.
@@ -118,6 +185,12 @@ type ImportOptions struct {
 	Format docfile.Codec
 	// Conflict is what to do with a document that is already there.
 	Conflict ConflictPolicy
+	// Open decrypts the envelope of an encrypted record (docID is the record's ID) and
+	// returns the .open message inside. With no Open, or when it fails, the record is left
+	// out and reported in ImportReport.NeedsKey: a warning, never an error that stops the
+	// import. A document that comes in this way is saved end to end again (the saver's
+	// ConfidentialCheck, if there is one, must allow it, else it is reported as Failed).
+	Open func(ctx context.Context, docID string, env []byte) ([]byte, error)
 }
 
 // ImportReport says what ImportPack did.
@@ -132,6 +205,9 @@ type ImportReport struct {
 	// Warnings are things that went wrong after a document was saved (it is counted in
 	// Documents): its trash flag, its folder or its tags could not be applied.
 	Warnings []string
+	// NeedsKey are the encrypted records left out for want of a working Open (also in
+	// Warnings, in words). The pack is unchanged: import it again with the key.
+	NeedsKey []PackIssue
 	// Signed and SignatureOK say whether the pack carried a signature and it checked out;
 	// Signer is the key. Whether to trust it is for the caller.
 	Signed, SignatureOK bool
@@ -213,10 +289,35 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 		if err := ctx.Err(); err != nil {
 			return rep, err
 		}
-		doc, err := rd.Read(e.ID)
-		if err != nil {
+		var openErr error
+		var open func([]byte) ([]byte, error)
+		if e.Encrypted && o.Open != nil {
+			open = func(env []byte) ([]byte, error) {
+				plain, err := o.Open(ctx, e.ID, env)
+				openErr = err
+				return plain, err
+			}
+		}
+		doc, err := rd.ReadWith(e.ID, open)
+		switch {
+		case errors.Is(err, pack.ErrEncrypted), openErr != nil:
+			if openErr != nil && ctx.Err() != nil {
+				return rep, ctx.Err()
+			}
+			rep.NeedsKey = append(rep.NeedsKey, PackIssue{ID: e.ID, Name: e.Name, Reason: PackNeedsKey, Err: openErr})
+			why := "a key is needed to open it"
+			if openErr != nil {
+				why += ": " + openErr.Error()
+			}
+			rep.Warnings = append(rep.Warnings, e.Name+": "+why)
+			continue
+		case err != nil:
 			rep.Failed = append(rep.Failed, e.Name+": "+err.Error())
 			continue
+		}
+		secret := e.Encrypted
+		if secret {
+			doc.SetProtection(ProtectionE2EE)
 		}
 		folder := o.Into
 		if e.Folder != "" {
@@ -237,12 +338,18 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 				continue
 			case ConflictCopy:
 				doc.SetID(docfile.NewID())
-				doc.SetName(e.Name + " (imported)")
+				name := e.Name
+				if secret {
+					name = doc.Name() // the index shows a placeholder; the real name is inside
+				}
+				doc.SetName(name + " (imported)")
 			case ConflictReplace:
 				replacing, prev = true, p
 			}
 		}
-		saved, err := s.Save(ctx, target, c, doc)
+		// A confidential document is written end to end in the one save (never as an
+		// ordinary document first); the ConfidentialCheck runs before anything is overwritten.
+		saved, err := s.save(ctx, target, c, doc, secret)
 		if err != nil {
 			rep.Failed = append(rep.Failed, e.Name+": "+err.Error())
 			continue
@@ -253,9 +360,12 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 		}
 		if replacing {
 			// Save keeps the tags, folder and trash flag of the document it replaces;
-			// the pack's are what was asked for.
-			if err := s.SetTags(ctx, target, saved.ID, tags); err != nil {
-				warn("tags", err)
+			// the pack's are what was asked for. An end-to-end document keeps its tags
+			// inside it and the catalog has none, so only an ordinary one is set here.
+			if !secret {
+				if err := s.SetTags(ctx, target, saved.ID, tags); err != nil {
+					warn("tags", err)
+				}
 			}
 			if prev.Folder != folder {
 				if err := s.Move(ctx, target, folder, saved.ID); err != nil {

@@ -25,30 +25,30 @@ type Reader struct {
 }
 
 // readFrame reads and checks the record at off, which must end before end.
-func readFrame(r io.ReaderAt, off, end int64) (kind byte, data []byte, err error) {
+func readFrame(r io.ReaderAt, off, end int64) (kind, flags byte, data []byte, err error) {
 	if off < 0 || off%8 != 0 || off+frameHead > end {
-		return 0, nil, fmt.Errorf("%w: a record outside the file", ErrFormat)
+		return 0, 0, nil, fmt.Errorf("%w: a record outside the file", ErrFormat)
 	}
 	head := make([]byte, frameHead)
 	if _, err := r.ReadAt(head, off); err != nil {
-		return 0, nil, fmt.Errorf("%w: %v", ErrFormat, err)
+		return 0, 0, nil, fmt.Errorf("%w: %v", ErrFormat, err)
 	}
 	if binary.LittleEndian.Uint32(head[12:]) != crc(head[:12]) {
-		return 0, nil, fmt.Errorf("%w: a record header that does not match its check", ErrChecksum)
+		return 0, 0, nil, fmt.Errorf("%w: a record header that does not match its check", ErrChecksum)
 	}
 	n := binary.LittleEndian.Uint64(head)
 	if n > MaxRecord || off+int64(recordSize(n)) > end {
-		return 0, nil, fmt.Errorf("%w: a record of %d bytes does not fit", ErrFormat, n)
+		return 0, 0, nil, fmt.Errorf("%w: a record of %d bytes does not fit", ErrFormat, n)
 	}
 	body := make([]byte, n+4)
 	if _, err := r.ReadAt(body, off+frameHead); err != nil {
-		return 0, nil, fmt.Errorf("%w: %v", ErrFormat, err)
+		return 0, 0, nil, fmt.Errorf("%w: %v", ErrFormat, err)
 	}
 	data = body[:n]
 	if binary.LittleEndian.Uint32(body[n:]) != crc(data) {
-		return 0, nil, fmt.Errorf("%w: a record's data does not match its check", ErrChecksum)
+		return 0, 0, nil, fmt.Errorf("%w: a record's data does not match its check", ErrChecksum)
 	}
-	return head[8], data, nil
+	return head[8], head[9], data, nil
 }
 
 // readHeader reads the header of a pack: its meta and where it ends.
@@ -107,7 +107,7 @@ func Open(r io.ReaderAt, size int64) (*Reader, error) {
 	if f.indexLen > MaxIndex || f.indexOffset < uint64(rd.headerEnd) || f.indexOffset > uint64(end) || int64(f.indexOffset)+int64(recordSize(f.indexLen)) > end {
 		return nil, fmt.Errorf("%w: the index is outside the file", ErrFormat)
 	}
-	kind, data, err := readFrame(r, int64(f.indexOffset), end)
+	kind, _, data, err := readFrame(r, int64(f.indexOffset), end)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func Open(r io.ReaderAt, size int64) (*Reader, error) {
 		if int64(f.sigOffset) < after || f.sigLen > MaxRecord || int64(f.sigOffset)+int64(recordSize(f.sigLen)) > end {
 			return nil, fmt.Errorf("%w: the signature is outside the file", ErrFormat)
 		}
-		kind, data, err := readFrame(r, int64(f.sigOffset), end)
+		kind, _, data, err := readFrame(r, int64(f.sigOffset), end)
 		if err != nil {
 			return nil, err
 		}
@@ -224,17 +224,24 @@ func (r *Reader) Signature() (sig *Signature, valid bool) {
 	return r.sig, r.sig.valid(r.header, r.foot.indexSum)
 }
 
-// ReadRaw returns the bytes of a document (a .open message), checked against its record's
-// checksums and the index's hash.
+// ReadRaw returns the stored bytes of a document, checked against its record's checksums
+// and the index's hash: a .open message, or for an Encrypted entry the envelope as stored
+// (no key is involved).
 func (r *Reader) ReadRaw(id string) ([]byte, error) {
 	i, ok := r.byID[id]
 	if !ok {
 		return nil, ErrNotFound
 	}
 	e := r.index.Entries[i]
-	kind, data, err := readFrame(r.r, int64(e.Offset), int64(r.foot.indexOffset))
+	kind, flags, data, err := readFrame(r.r, int64(e.Offset), int64(r.foot.indexOffset))
 	if err != nil {
 		return nil, err
+	}
+	if flags&^flagEncrypted != 0 {
+		return nil, fmt.Errorf("%w: the record of %q has flags %#x that are not understood", ErrFormat, id, flags)
+	}
+	if (flags&flagEncrypted != 0) != e.Encrypted {
+		return nil, fmt.Errorf("%w: the record of %q is not flagged as the index says", ErrFormat, id)
 	}
 	if kind != kindDocument || uint64(len(data)) != e.Length {
 		return nil, fmt.Errorf("%w: the record of %q is not what the index says", ErrFormat, id)
@@ -245,11 +252,28 @@ func (r *Reader) ReadRaw(id string) ([]byte, error) {
 	return data, nil
 }
 
-// Read returns a document.
+// Read returns a document, or ErrEncrypted for one whose record is an envelope.
 func (r *Reader) Read(id string) (docfile.Document, error) {
+	return r.ReadWith(id, nil)
+}
+
+// ReadWith returns a document, passing an encrypted record's envelope through open (which
+// decrypts it and returns the .open message). The pack holds no keys and imports no
+// cryptography: open is the caller's. With a nil open an encrypted record is ErrEncrypted.
+// An error from open is returned wrapped, and a record the pack's checks reject is an
+// error before open is called. A plain record never goes through open.
+func (r *Reader) ReadWith(id string, open func(envelope []byte) ([]byte, error)) (docfile.Document, error) {
 	data, err := r.ReadRaw(id)
 	if err != nil {
 		return docfile.Document{}, err
+	}
+	if r.index.Entries[r.byID[id]].Encrypted {
+		if open == nil {
+			return docfile.Document{}, ErrEncrypted
+		}
+		if data, err = open(data); err != nil {
+			return docfile.Document{}, fmt.Errorf("pack: opening %q: %w", id, err)
+		}
 	}
 	doc, err := docfile.Open.Unmarshal(data)
 	if err != nil {
@@ -312,7 +336,7 @@ func (r *Reader) Verify() Report {
 	}
 	off := r.headerEnd
 	for off < int64(r.foot.indexOffset) {
-		kind, data, err := readFrame(r.r, off, int64(r.foot.indexOffset))
+		kind, _, data, err := readFrame(r.r, off, int64(r.foot.indexOffset))
 		if err != nil {
 			rep.Gap = true
 			break

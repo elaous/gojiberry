@@ -4,12 +4,14 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/docstore"
 )
 
 func zipNames(t *testing.T, data []byte) []string {
@@ -89,5 +91,31 @@ func TestArchiveDrawsFoldersAsDirectories(t *testing.T) {
 		if _, _, err := s.Archive(ctx, tg.Name, docfile.NewID()); err == nil {
 			t.Errorf("%s: a folder that is not there", tg.Name)
 		}
+	}
+}
+
+func TestArchiveSkipsALockedConfidentialDocumentAndReportsIt(t *testing.T) {
+	ctx := context.Background()
+	s, mem, secret := confidentialSaver(t)
+	if _, err := s.Save(ctx, "m", docfile.JSON, named("plain")); err != nil {
+		t.Fatal(err)
+	}
+	// Open: it is in the archive under its real name.
+	data, _, skipped, err := s.ArchiveReport(ctx, "m", "")
+	if err != nil || len(skipped) != 0 || len(zipNames(t, data)) != 2 {
+		t.Fatalf("%v %v %v", zipNames(t, data), skipped, err)
+	}
+	// Locked: the others come, the locked one is skipped and reported.
+	mem.locked.Store(true)
+	mem.only = secret
+	data, _, skipped, err = s.ArchiveReport(ctx, "m", "")
+	if err != nil || len(skipped) != 1 || skipped[0].ID != secret || !errors.Is(skipped[0].Err, docstore.ErrLocked) {
+		t.Fatalf("%v %v", skipped, err)
+	}
+	if got := zipNames(t, data); len(got) != 1 || got[0] != "plain.json" {
+		t.Errorf("%v", got)
+	}
+	if _, _, err := s.Archive(ctx, "m", ""); err != nil {
+		t.Errorf("Archive: %v", err)
 	}
 }
