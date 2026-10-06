@@ -3,7 +3,7 @@
 // Guard chosen, checks the Origin of a request or a shared token.
 //
 // The servers (docstore, fontserver, syncserver, voiceserver,
-// translateserver, brailleserver, the collab hub) all take a Guard in their
+// translate/server, brailleserver, the collab hub) all take a Guard in their
 // Config. The choice is the operator's:
 //
 //	guard.Origins("https://app.example.com")   only pages from these origins

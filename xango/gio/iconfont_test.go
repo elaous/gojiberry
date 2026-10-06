@@ -1,4 +1,4 @@
-package xangogio
+package gio
 
 import (
 	"bytes"
@@ -25,7 +25,7 @@ import (
 // -- not just "something about the width changed by coincidence."
 // Translate maps to Typeface "" (Renderer's own default, the same face
 // th.Shaper already resolves everything else through) rather than a
-// real vendored icon font, since this proves xangogio's own substitution
+// real vendored icon font, since this proves xango/gio's own substitution
 // mechanism in isolation; OnDesign's own native module is responsible
 // for verifying its real Material Symbols asset separately.
 func TestIconFontTranslatesRecognizedSpanTextToASingleGlyph(t *testing.T) {
