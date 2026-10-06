@@ -15,6 +15,18 @@ type RecipientRow struct {
 	Label, Type, Fingerprint string
 	// Uses is how many documents the key can open (this one included); 0 means unknown.
 	Uses int
+	// Verified marks a key that the store's directory says was published by an account with a
+	// verified e-mail, while signed in (encrypt.PublishedKey.Verified). It proves the account
+	// and that the account published the key, not that the key is safe; without it the
+	// e-mail is only a label and the owner confirms the fingerprint.
+	Verified bool
+}
+
+// DirRow is a key found in the store's directory for an e-mail address (encrypt.PublishedKey),
+// as the picker lists it. Key is the public key text that fills the draft.
+type DirRow struct {
+	Label, Type, Fingerprint, Key string
+	Verified                      bool
 }
 
 // RecipientsProps configures Recipients.
@@ -45,6 +57,50 @@ type RecipientsProps struct {
 	Pending *Pending
 	// Ask, if set, is asked before a key is removed (see Asker.Ask).
 	Ask func(message string, do func())
+
+	// Directory looks up the keys published for an e-mail address (nil leaves the picker out).
+	// DirEmail is the address typed (OnDirEmail reports edits); after a lookup that worked,
+	// OnDirResults gets the address and rows, which the host keeps and passes back as
+	// DirResults with DirSearched true. Choosing a row calls OnPick; with no OnPick the row's
+	// key fills the draft (OnDraft). A host that handles OnPick sets Draft and Parsed, and
+	// Parsed.Verified from the row, never from what was pasted.
+	Directory    func(ctx context.Context, email string) ([]DirRow, error)
+	DirEmail     string
+	OnDirEmail   func(email string)
+	OnDirResults func(email string, rows []DirRow)
+	DirResults   []DirRow
+	DirSearched  bool
+	OnPick       func(row DirRow)
+	// TrustVerified lets a draft key that is Parsed.Verified be added without typing its
+	// fingerprint (it is still shown). Off by default: a verified mark proves the account, not
+	// the key's safety.
+	TrustVerified bool
+
+	// My passkey as a key. AddMyPasskey derives the owner's own passkey key (client.DeriveKey,
+	// encrypt.PRFRecipient) and adds it (Sharing.Add); nil leaves the control out. The owner is
+	// deriving their own key, so no fingerprint is typed; MyPasskeyAdded (set by the host after
+	// it worked) shows the fingerprint that was added. PasskeySupported false shows a note
+	// instead of the button.
+	AddMyPasskey     func(ctx context.Context) error
+	PasskeySupported bool
+	MyPasskeyAdded   *RecipientRow
+	// Confidential says the document is end to end encrypted. Then, when none of Owner's
+	// keys is something other than a passkey (every Owner row has Type "passkey-prf", or there
+	// are none), another passkey cannot be added (encrypt.CheckRecoverableOwner): the control shows SecondKeyMessage (encrypt.ErrNeedSecondRecipient's text; a default
+	// is used when empty) and offers a recovery key.
+	Confidential     bool
+	SecondKeyMessage string
+	// CreateRecoveryKey makes a recovery key (encrypt.GenerateRecoveryKey), adds its public part as
+	// an owner key and returns the secret. The component hands the secret to OnRecoveryKey and
+	// never keeps it; the host passes it back as RecoverySecret until the person has saved it
+	// and OnRecoveryDone is called, and must then drop it: it is shown once. Copy and Download
+	// (nil leaves the button out) are the host's clipboard and file save.
+	CreateRecoveryKey func(ctx context.Context) (secret string, err error)
+	OnRecoveryKey     func(secret string)
+	RecoverySecret    string
+	OnRecoveryDone    func()
+	Copy              func(text string)
+	Download          func(name, text string)
 }
 
 // RemovedNotice is the line that says what a Remove did: how many stored files were encrypted
@@ -68,6 +124,9 @@ func Recipients(p RecipientsProps) xango.Node {
 			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text(label)),
 			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-type")}, xango.Text(r.Type)),
 			xango.El("code", []xango.Attr{xango.A("class", "gj-recip-fingerprint")}, xango.Text(r.Fingerprint)),
+		}
+		if r.Verified {
+			cells = append(cells, verifiedMark(true))
 		}
 		cells = append(cells, extra...)
 		return xango.El("li", []xango.Attr{xango.A("class", class), xango.A("data-fingerprint", r.Fingerprint)}, cells...)
@@ -118,7 +177,9 @@ func Recipients(p RecipientsProps) xango.Node {
 	if p.Notice != "" {
 		children = append(children, xango.El("p", []xango.Attr{xango.A("class", "gj-recip-notice"), xango.A("role", "status")}, xango.Text(p.Notice)))
 	}
+	children = append(children, myKeyControl(p, busy)...)
 	if p.Add != nil {
+		children = append(children, directoryPicker(p, busy)...)
 		keyAttrs := []xango.Attr{xango.A("class", "gj-recip-key"), xango.A("rows", "3"), xango.A("value", p.Draft),
 			xango.A("placeholder", tr("recipients.keyPlaceholder", "Paste a public key: ssh-ed25519 AAAA… or age1…")),
 			xango.A("aria-label", tr("recipients.key", "Public key"))}
@@ -137,8 +198,16 @@ func Recipients(p RecipientsProps) xango.Node {
 				xango.El("p", []xango.Attr{xango.A("class", "gj-recip-parsed")},
 					xango.Text(trf("recipients.parsed", "%s key for %s. Its fingerprint is:", p.Parsed.Type, orNone(p.Parsed.Label)))),
 				xango.El("code", []xango.Attr{xango.A("class", "gj-recip-fingerprint gj-recip-parsed-fingerprint")}, xango.Text(p.Parsed.Fingerprint)),
-				xango.El("p", []xango.Attr{xango.A("class", "gj-recip-hint")},
-					xango.Text(tr("recipients.checkHint", "Check this fingerprint with the person, by another way than the one you got the key by, then type it here to add the key."))))
+				verifiedMark(p.Parsed.Verified))
+			if p.TrustVerified && p.Parsed.Verified {
+				// The account is verified and published this key: no typing, the fingerprint
+				// above is still shown. Add confirms with the fingerprint shown.
+				confirm = p.Parsed.Fingerprint
+				ready = true
+				break
+			}
+			form = append(form, xango.El("p", []xango.Attr{xango.A("class", "gj-recip-hint")},
+				xango.Text(tr("recipients.checkHint", "Check this fingerprint with the person, by another way than the one you got the key by, then type it here to add the key."))))
 			confAttrs := []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-recip-confirm"), xango.A("value", confirm),
 				xango.A("aria-label", tr("recipients.confirm", "Fingerprint, typed to confirm")), xango.A("placeholder", "SHA256:…")}
 			if p.OnDraft != nil {

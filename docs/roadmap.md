@@ -24,8 +24,10 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
       in the document list).
    2. A keyring that wraps a confidential document's files for people's keys only, and re-keys
       its older copies on the switch.
-   3. The People-tab control that adds "my passkey" as a key, and the verified-e-mail mark
-      (C.4).
+   3. **Done (components and library):** the People-tab "my passkey" control with the second-key rule and
+      the recovery key shown once, and the verified-e-mail mark with `encrypt.KeyDirectory` /
+      `AdapterDirectory` (C.4). Left: a host that wires them, and the server rule that only a session
+      of an address may publish under it.
    4. Hiding folder names of confidential folders.
 3. **Public docstore.** An anonymous offer: no account, one document per session, a link
    and a download always, deleted 24 hours after the last edit (viewing does not renew).

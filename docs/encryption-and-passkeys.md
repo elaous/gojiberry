@@ -228,7 +228,7 @@ cannot be opened.
    that parses a pasted key, shows its type, label and fingerprint, and keeps Add off until the
    fingerprint is typed. *Left:* wiring it into an application (the showcase has no encrypted store
    yet: it needs the key management of steps 3 and 4, where the owner's key lives and how it is
-   unlocked) and the "verified e-mail" mark of C.4.
+   unlocked) and the "verified e-mail" mark of C.4 (done, see step 4b).
 3. **Done:** `auth/passkey` (go-webauthn; discoverable credentials, user verification required,
    one-time challenges with a TTL, `Store` with `MemoryStore` and `AdapterStore`), the
    `components.Passkey` control, `Server.WithRoutes`/`Hide` on the docstore server (`cmd/docstore`
@@ -253,8 +253,36 @@ cannot be opened.
    (`WithExtensionPRFSupport`), and `client.DeriveKey` asks a passkey for the bytes (`ErrNoPRF` when the
    authenticator does not do PRF: passkeys made before this, some security keys and password managers;
    `ErrPRFLength` when it answers with the wrong size).
-   The e2e derives the same key twice in Chrome. *Left:* the People-tab control that adds "my passkey" as a
-   key (calling `CheckRecoverableOwner` when a document is made confidential is step 5).
+   The e2e derives the same key twice in Chrome.
+   **Done (component):** `components.Recipients` has the "Add my passkey as a key" control
+   (`AddMyPasskey func(ctx) error`: the host calls `client.DeriveKey`, `encrypt.PRFRecipient`, clears the
+   secret and calls `Sharing.Add`; `PasskeySupported` false shows a note instead of the button; the
+   owner's own key needs no typed fingerprint, and `MyPasskeyAdded` shows the fingerprint that was added).
+   For a `Confidential` document whose owner keys are all passkeys the button is off and the control shows
+   `SecondKeyMessage` (the host passes `encrypt.ErrNeedSecondRecipient.Error()`, the same rule as
+   `CheckRecoverableOwner`) with "Create a recovery key": `CreateRecoveryKey` generates one
+   (`encrypt.GenerateRecoveryKey`) and adds its public part, and the secret is shown **once**, copyable and
+   downloadable, with "keep it offline; we cannot recover it" until the person says they saved it; the
+   component never keeps it. *Left:* the host that supplies these callbacks (the showcase has none yet);
+   calling `CheckRecoverableOwner` when a document is made confidential is step 5.
+   4b. **Done (library and component): the verified e-mail mark of C.4.** `encrypt.KeyDirectory`
+   (`Lookup(ctx, email) ([]PublishedKey, error)`; a `PublishedKey` is the key text, type, fingerprint and
+   `Verified`) is injected; `encrypt.AdapterDirectory` is one over a `docstore.Adapter`. `Publish(ctx, user,
+   key)` writes `directory/<sha256 of the e-mail>/<fingerprint>` and refuses (`ErrNotPublishable`) unless
+   `user.Email` is set and the user came from a provider session (a `passkey:` user carries no e-mail, B.3);
+   `Lookup` recomputes type and fingerprint from the key text and sets `Verified` only for records that
+   `Publish` wrote for that address by a provider user. In the UI `RecipientRow.Verified` shows "verified
+   e-mail" and a draft that is not shows "label only: confirm the fingerprint"; `Recipients` can look an
+   address up (`Directory`, `OnDirResults`, `DirResults`), and picking a row fills the draft. The typed
+   fingerprint stays for label-only keys, and is skipped for a verified one only when the host sets
+   `TrustVerified` (the fingerprint is still shown). Verified e-mail proves the account, and that the
+   account published the key; it does not prove the key is safe. *Left:* the server rule that makes
+   `Lookup` trustworthy: only a session of an address may write under that address's `directory/` hash
+   (today whoever can write to the store can write a record claiming to be verified, and the hash is
+   unsalted); a prefix lister so `Lookup` does not list the whole store; a `Publish` route and a host
+   that wires `Directory` and `OnPick` (the picked row's `Verified` must go to `Parsed.Verified`, never a
+   pasted key's).
+
 5. **Done (library):** encrypted records in packs and placeholder catalog entries for confidential
    documents.
    1. `docfile/pack`: a record flag and an index field for an encrypted record, whose data is an
