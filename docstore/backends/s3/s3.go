@@ -1,12 +1,13 @@
 //go:build !js
 
-package docstore
+package s3
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/elaous/gojiberry/docstore"
 	"io"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
-// S3Config is the s3/minio backend's own config, decoded from
+// Config is the s3/minio backend's own config, decoded from
 // Config.BackendConfig when Config.Backend is "s3" or "minio".
 // Region and credentials still come from the AWS SDK's own standard
 // environment variables/config files (AWS_REGION, AWS_ACCESS_KEY_ID,
@@ -38,7 +39,7 @@ import (
 // -- see resolvePathStyle, which the "minio" backend registration
 // below uses to default this on unless a config explicitly turns it
 // off, while "s3" keeps defaulting it off unless explicitly turned on.
-type S3Config struct {
+type Config struct {
 	Bucket         string `json:"bucket"`
 	Prefix         string `json:"prefix"`
 	Endpoint       string `json:"endpoint"`
@@ -48,25 +49,25 @@ type S3Config struct {
 // resolvePathStyle is the one real decision newS3AdapterFactory makes
 // before handing off to the AWS SDK: cfg's own explicit choice always
 // wins; absent that, backendDefault applies (true for "minio", false
-// for "s3" -- see S3Config's own doc comment). Pulled out as a pure
+// for "s3" -- see Config's own doc comment). Pulled out as a pure
 // function so this one piece of actual logic has a plain native test,
 // rather than needing a real *s3.Client (or a live MinIO/AWS
 // endpoint) just to exercise a two-way branch.
-func resolvePathStyle(cfg S3Config, backendDefault bool) bool {
+func resolvePathStyle(cfg Config, backendDefault bool) bool {
 	if cfg.ForcePathStyle != nil {
 		return *cfg.ForcePathStyle
 	}
 	return backendDefault
 }
 
-// newS3AdapterFactory builds the AdapterFactory registered for both
+// newS3AdapterFactory builds the docstore.AdapterFactory registered for both
 // "s3" and "minio" -- identical in every way except which way
-// resolvePathStyle defaults, since both are just S3Adapter talking to
+// resolvePathStyle defaults, since both are just Adapter talking to
 // *s3.Client with different Options, not two different
 // implementations.
-func newS3AdapterFactory(backendPathStyleDefault bool) AdapterFactory {
-	return func(ctx context.Context, raw json.RawMessage) (Adapter, error) {
-		var cfg S3Config
+func newS3AdapterFactory(backendPathStyleDefault bool) docstore.AdapterFactory {
+	return func(ctx context.Context, raw json.RawMessage) (docstore.Adapter, error) {
+		var cfg Config
 		if len(raw) > 0 {
 			if err := json.Unmarshal(raw, &cfg); err != nil {
 				return nil, err
@@ -86,19 +87,19 @@ func newS3AdapterFactory(backendPathStyleDefault bool) AdapterFactory {
 			}
 			o.UsePathStyle = pathStyle
 		})
-		return NewS3Adapter(client, cfg.Bucket, cfg.Prefix), nil
+		return New(client, cfg.Bucket, cfg.Prefix), nil
 	}
 }
 
 func init() {
-	RegisterAdapter("s3", newS3AdapterFactory(false))
+	docstore.RegisterAdapter("s3", newS3AdapterFactory(false))
 	// "minio" is the exact same adapter/config shape as "s3" --
 	// registered separately only so a deployer pointing at a MinIO
 	// instance gets ForcePathStyle defaulting to what MinIO actually
-	// needs (see S3Config's own doc comment) without having to know
+	// needs (see Config's own doc comment) without having to know
 	// that MinIO-vs-AWS distinction exists at all, rather than having
 	// to spell out `"forcePathStyle": true` by hand every time.
-	RegisterAdapter("minio", newS3AdapterFactory(true))
+	docstore.RegisterAdapter("minio", newS3AdapterFactory(true))
 }
 
 // s3API is the slice of the AWS SDK's S3 client this package actually
@@ -111,32 +112,32 @@ type s3API interface {
 	ListObjectsV2(ctx context.Context, params *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
 }
 
-// S3Adapter stores each document as one object, keyed directly by
+// Adapter stores each document as one object, keyed directly by
 // document ID (optionally under Prefix), in a single S3 (or
 // S3-compatible: MinIO, R2, etc.) bucket.
-type S3Adapter struct {
+type Adapter struct {
 	client s3API
 	bucket string
 	prefix string
 }
 
-// NewS3Adapter wraps an already-configured *s3.Client. Building the
+// New wraps an already-configured *s3.Client. Building the
 // client (region, credentials, custom endpoint for S3-compatible
 // services) is the caller's concern -- this package only ever calls
 // the four operations in s3API.
-func NewS3Adapter(client *s3.Client, bucket, prefix string) *S3Adapter {
-	return newS3Adapter(client, bucket, prefix)
+func New(client *s3.Client, bucket, prefix string) *Adapter {
+	return newAdapter(client, bucket, prefix)
 }
 
-func newS3Adapter(client s3API, bucket, prefix string) *S3Adapter {
-	return &S3Adapter{client: client, bucket: bucket, prefix: prefix}
+func newAdapter(client s3API, bucket, prefix string) *Adapter {
+	return &Adapter{client: client, bucket: bucket, prefix: prefix}
 }
 
-func (a *S3Adapter) key(id string) string {
+func (a *Adapter) key(id string) string {
 	return a.prefix + id
 }
 
-func (a *S3Adapter) Save(ctx context.Context, id string, data []byte) error {
+func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 	_, err := a.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(a.bucket),
 		Key:    aws.String(a.key(id)),
@@ -145,31 +146,31 @@ func (a *S3Adapter) Save(ctx context.Context, id string, data []byte) error {
 	return err
 }
 
-func (a *S3Adapter) Load(ctx context.Context, id string) (Document, error) {
+func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error) {
 	out, err := a.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(a.bucket),
 		Key:    aws.String(a.key(id)),
 	})
 	if isS3NotFound(err) {
-		return Document{}, ErrNotFound
+		return docstore.Document{}, docstore.ErrNotFound
 	}
 	if err != nil {
-		return Document{}, err
+		return docstore.Document{}, err
 	}
 	defer out.Body.Close()
 	data, err := io.ReadAll(out.Body)
 	if err != nil {
-		return Document{}, err
+		return docstore.Document{}, err
 	}
 	updatedAt := time.Now()
 	if out.LastModified != nil {
 		updatedAt = *out.LastModified
 	}
-	return Document{ID: id, Data: data, UpdatedAt: updatedAt}, nil
+	return docstore.Document{ID: id, Data: data, UpdatedAt: updatedAt}, nil
 }
 
-func (a *S3Adapter) List(ctx context.Context) ([]Meta, error) {
-	var metas []Meta
+func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
+	var metas []docstore.Meta
 	var token *string
 	for {
 		out, err := a.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
@@ -182,7 +183,7 @@ func (a *S3Adapter) List(ctx context.Context) ([]Meta, error) {
 		}
 		for _, obj := range out.Contents {
 			id := (*obj.Key)[len(a.prefix):]
-			meta := Meta{ID: id, Size: int(aws.ToInt64(obj.Size))}
+			meta := docstore.Meta{ID: id, Size: int(aws.ToInt64(obj.Size))}
 			if obj.LastModified != nil {
 				meta.UpdatedAt = *obj.LastModified
 			}
@@ -196,7 +197,7 @@ func (a *S3Adapter) List(ctx context.Context) ([]Meta, error) {
 	return metas, nil
 }
 
-func (a *S3Adapter) Delete(ctx context.Context, id string) error {
+func (a *Adapter) Delete(ctx context.Context, id string) error {
 	if _, err := a.Load(ctx, id); err != nil {
 		return err
 	}

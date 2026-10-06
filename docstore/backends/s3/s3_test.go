@@ -1,11 +1,12 @@
 //go:build !js
 
-package docstore
+package s3
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/elaous/gojiberry/docstore"
 	"io"
 	"testing"
 	"time"
@@ -16,7 +17,7 @@ import (
 )
 
 // fakeS3 is a minimal in-memory stand-in for *s3.Client, implementing
-// just the s3API operations S3Adapter calls. It lets S3Adapter's
+// just the s3API operations Adapter calls. It lets Adapter's
 // logic (key prefixing, pagination, not-found translation) be tested
 // natively, with no live AWS/MinIO endpoint required.
 type fakeS3 struct {
@@ -68,14 +69,14 @@ func (f *fakeS3) ListObjectsV2(_ context.Context, in *s3.ListObjectsV2Input, _ .
 }
 
 func TestS3AdapterConformance(t *testing.T) {
-	testAdapterConformance(t, func() Adapter {
-		return newS3Adapter(newFakeS3(), "test-bucket", "docs/")
+	docstore.CheckAdapter(t, func() docstore.Adapter {
+		return newAdapter(newFakeS3(), "test-bucket", "docs/")
 	})
 }
 
 func TestS3AdapterUsesPrefixInKeyButNotInID(t *testing.T) {
 	fake := newFakeS3()
-	a := newS3Adapter(fake, "test-bucket", "docs/")
+	a := newAdapter(fake, "test-bucket", "docs/")
 	ctx := context.Background()
 	if err := a.Save(ctx, "myid", []byte("x")); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -95,25 +96,25 @@ func TestS3AdapterUsesPrefixInKeyButNotInID(t *testing.T) {
 func boolPtr(b bool) *bool { return &b }
 
 func TestResolvePathStyleDefaultsApplyWhenUnset(t *testing.T) {
-	if got := resolvePathStyle(S3Config{}, false); got != false {
+	if got := resolvePathStyle(Config{}, false); got != false {
 		t.Errorf("resolvePathStyle({}, false) = %v, want false (the \"s3\" backend's own default)", got)
 	}
-	if got := resolvePathStyle(S3Config{}, true); got != true {
+	if got := resolvePathStyle(Config{}, true); got != true {
 		t.Errorf("resolvePathStyle({}, true) = %v, want true (the \"minio\" backend's own default)", got)
 	}
 }
 
 func TestResolvePathStyleExplicitConfigWins(t *testing.T) {
-	if got := resolvePathStyle(S3Config{ForcePathStyle: boolPtr(false)}, true); got != false {
+	if got := resolvePathStyle(Config{ForcePathStyle: boolPtr(false)}, true); got != false {
 		t.Errorf("resolvePathStyle({forcePathStyle: false}, true) = %v, want false -- an explicit false must override the \"minio\" backend's own true default", got)
 	}
-	if got := resolvePathStyle(S3Config{ForcePathStyle: boolPtr(true)}, false); got != true {
+	if got := resolvePathStyle(Config{ForcePathStyle: boolPtr(true)}, false); got != true {
 		t.Errorf("resolvePathStyle({forcePathStyle: true}, false) = %v, want true -- an explicit true must override the \"s3\" backend's own false default", got)
 	}
 }
 
 func TestS3ConfigDecodesEndpointAndForcePathStyle(t *testing.T) {
-	var cfg S3Config
+	var cfg Config
 	raw := []byte(`{"bucket":"docs","endpoint":"http://localhost:9000","forcePathStyle":true}`)
 	if err := json.Unmarshal(raw, &cfg); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)

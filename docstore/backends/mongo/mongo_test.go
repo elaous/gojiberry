@@ -1,9 +1,10 @@
 //go:build !js
 
-package docstore
+package mongo
 
 import (
 	"context"
+	"github.com/elaous/gojiberry/docstore"
 	"os"
 	"testing"
 )
@@ -28,10 +29,10 @@ func TestMongoAdapterConformance(t *testing.T) {
 		db = "docstore_test"
 	}
 	ctx := context.Background()
-	testAdapterConformance(t, func() Adapter {
-		a, err := NewMongoAdapter(ctx, uri, db)
+	docstore.CheckAdapter(t, func() docstore.Adapter {
+		a, err := New(ctx, uri, db)
 		if err != nil {
-			t.Fatalf("NewMongoAdapter: %v", err)
+			t.Fatalf("New: %v", err)
 		}
 		return a
 	})

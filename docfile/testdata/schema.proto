@@ -1,0 +1,183 @@
+syntax = "proto3";
+
+package gojiberry.doc;
+
+message Format {
+  string font_family = 1;
+  double font_size = 2;
+  double scale = 3;
+  int64 font_weight = 4;
+  string font_style = 5;
+  string color = 6;
+  bool underline = 7;
+  bool strike = 8;
+  bool superscript = 9;
+  bool subscript = 10;
+  string background = 11;
+  int64 case = 12;
+  string style = 13;
+  string link = 14;
+  string comment = 15;
+  string bookmark = 16;
+  string index = 17;
+}
+
+message Chars {
+  string text = 1;
+  Format format = 2;
+}
+
+message Columns {
+  repeated double widths = 1;
+  int64 count = 2;
+  double gap = 3;
+}
+
+message Break {
+  int64 kind = 1;
+}
+
+message List {
+  int64 kind = 1;
+  int64 level = 2;
+  string marker = 3;
+  int64 number = 4;
+  int64 start = 5;
+  bool checked = 6;
+}
+
+message Para {
+  int64 align = 1;
+  double indent_left = 2;
+  double indent_right = 3;
+  double first_line = 4;
+  double space_before = 5;
+  double space_after = 6;
+  double line_spacing = 7;
+  List list = 8;
+  string quote_bar = 9;
+  string style = 10;
+  int64 drop_cap = 11;
+}
+
+message FootnoteMark {
+  string i_d = 1;
+}
+
+message Block {
+  string title = 1;
+}
+
+message RuleItem {
+  string color = 1;
+  double thickness = 2;
+}
+
+message TableRow {
+  repeated string cells = 1;
+}
+
+message TableMerge {
+  int64 row = 1;
+  int64 col = 2;
+  int64 rows = 3;
+  int64 cols = 4;
+}
+
+message TableCellStyle {
+  int64 row = 1;
+  int64 col = 2;
+  string background = 3;
+  string color = 4;
+  bool bold = 5;
+  bool italic = 6;
+  int64 align = 7;
+}
+
+message TableItem {
+  repeated TableRow rows = 1;
+  repeated TableMerge merges = 2;
+  repeated TableCellStyle styles = 3;
+}
+
+message ImageItem {
+  string u_r_l = 1;
+  double width = 2;
+  double height = 3;
+  double alpha = 4;
+  double clip_left = 5;
+  double clip_top = 6;
+  double clip_right = 7;
+  double clip_bottom = 8;
+}
+
+message Item {
+  Chars chars = 1;
+  Columns columns = 2;
+  Break break = 3;
+  Para para = 4;
+  FootnoteMark footnote = 5;
+  Block t_o_c = 6;
+  Block index = 7;
+  RuleItem rule = 8;
+  TableItem table = 9;
+  ImageItem image = 10;
+}
+
+message StyleDef {
+  string name = 1;
+  Format format = 2;
+  Para para = 3;
+  bool paragraph = 4;
+}
+
+message FontVariant {
+  int64 weight = 1;
+  bool italic = 2;
+  string style = 3;
+  string u_r_l = 4;
+  string key = 5;
+}
+
+message FontRef {
+  string family = 1;
+  string source = 2;
+  string category = 3;
+  repeated FontVariant variants = 4;
+}
+
+message MetaEntry {
+  string key = 1;
+  string value = 2;
+}
+
+message Reply {
+  string author = 1;
+  string text = 2;
+  int64 created = 3;
+}
+
+message Comment {
+  string i_d = 1;
+  string author = 2;
+  string text = 3;
+  int64 created = 4;
+  bool resolved = 5;
+  repeated Reply replies = 6;
+}
+
+message Footnote {
+  string i_d = 1;
+  string text = 2;
+}
+
+message Document {
+  string title = 1;
+  int64 updated = 2;
+  repeated Item content = 3;
+  repeated StyleDef styles = 4;
+  repeated FontRef fonts = 5;
+  repeated MetaEntry meta = 6;
+  repeated Comment comments = 7;
+  repeated Footnote footnotes = 8;
+}

@@ -1,11 +1,12 @@
 //go:build !js
 
-package docstore
+package postgres
 
 import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/elaous/gojiberry/docstore"
 	"regexp"
 	"testing"
 	"time"
@@ -16,7 +17,7 @@ import (
 // Postgres is exercised with sqlmock instead of a live database: this
 // sandbox has no Docker daemon available to run a real Postgres
 // container, but the adapter's query-building and error-translation
-// logic (ErrNotFound on a missing row, RowsAffected on delete) is
+// logic (docstore.ErrNotFound on a missing row, RowsAffected on delete) is
 // fully native and worth covering without one.
 
 func TestPostgresAdapterSaveInsertsWithUpsert(t *testing.T) {
@@ -25,7 +26,7 @@ func TestPostgresAdapterSaveInsertsWithUpsert(t *testing.T) {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
 	defer func() { _ = db.Close() }()
-	a := newPostgresAdapterFromDB(db)
+	a := newFromDB(db)
 
 	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO documents (id, data, updated_at)`)).
 		WithArgs("doc1", []byte("hello"), sqlmock.AnyArg()).
@@ -45,15 +46,15 @@ func TestPostgresAdapterLoadReturnsErrNotFoundOnNoRows(t *testing.T) {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
 	defer func() { _ = db.Close() }()
-	a := newPostgresAdapterFromDB(db)
+	a := newFromDB(db)
 
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT data, updated_at FROM documents WHERE id = $1`)).
 		WithArgs("missing").
 		WillReturnError(sql.ErrNoRows)
 
 	_, err = a.Load(context.Background(), "missing")
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("Load err = %v, want wrapping ErrNotFound", err)
+	if !errors.Is(err, docstore.ErrNotFound) {
+		t.Fatalf("Load err = %v, want wrapping docstore.ErrNotFound", err)
 	}
 }
 
@@ -63,7 +64,7 @@ func TestPostgresAdapterLoadScansRow(t *testing.T) {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
 	defer func() { _ = db.Close() }()
-	a := newPostgresAdapterFromDB(db)
+	a := newFromDB(db)
 
 	now := time.Now().Truncate(time.Second)
 	rows := sqlmock.NewRows([]string{"data", "updated_at"}).AddRow([]byte("payload"), now)
@@ -86,15 +87,15 @@ func TestPostgresAdapterDeleteReturnsErrNotFoundWhenNoRowsAffected(t *testing.T)
 		t.Fatalf("sqlmock.New: %v", err)
 	}
 	defer func() { _ = db.Close() }()
-	a := newPostgresAdapterFromDB(db)
+	a := newFromDB(db)
 
 	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM documents WHERE id = $1`)).
 		WithArgs("missing").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	err = a.Delete(context.Background(), "missing")
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("Delete err = %v, want ErrNotFound", err)
+	if !errors.Is(err, docstore.ErrNotFound) {
+		t.Fatalf("Delete err = %v, want docstore.ErrNotFound", err)
 	}
 }
 
@@ -104,7 +105,7 @@ func TestPostgresAdapterDeleteSucceedsWhenRowAffected(t *testing.T) {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
 	defer func() { _ = db.Close() }()
-	a := newPostgresAdapterFromDB(db)
+	a := newFromDB(db)
 
 	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM documents WHERE id = $1`)).
 		WithArgs("doc1").
@@ -121,7 +122,7 @@ func TestPostgresAdapterListScansAllRows(t *testing.T) {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
 	defer func() { _ = db.Close() }()
-	a := newPostgresAdapterFromDB(db)
+	a := newFromDB(db)
 
 	now := time.Now().Truncate(time.Second)
 	rows := sqlmock.NewRows([]string{"id", "length", "updated_at"}).

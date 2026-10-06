@@ -3,27 +3,57 @@ package docfile
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"unicode"
-
-	"google.golang.org/protobuf/reflect/protodesc"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/descriptorpb"
-	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-// The protobuf schema is derived from the model's Go types: a struct is
-// a message, its `pb:"N"` tags are the field numbers. That keeps one
-// definition (the Go types), and Schema prints it as .proto text.
+// The protobuf schema is derived from the model's Go types: a struct is a message, its
+// `pb:"N"` tags are the field numbers. That keeps one definition (the Go types), and
+// Schema prints it as .proto text. The wire and text formats are written here against
+// those types directly (wire.go, text.go), so no protobuf runtime is linked: a browser
+// build saves several megabytes by it.
 
 const protoPackage = "gojiberry.doc"
 
+type kind int
+
+const (
+	kString kind = iota
+	kBool
+	kFloat
+	kInt
+	kMsg
+)
+
+// protoName is the type name .proto text uses for a scalar kind.
+func (k kind) protoName() string {
+	return [...]string{"string", "bool", "double", "int64"}[k]
+}
+
+type field struct {
+	index    int
+	num      int32
+	name     string // snake_case, the .proto name
+	goName   string // the Go name, which text format also accepts (the JSON name)
+	kind     kind
+	repeated bool
+	pointer  bool     // a message held behind a pointer
+	msg      *message // for kMsg
+}
+
+type message struct {
+	typ    reflect.Type
+	name   string
+	fields []field // by number
+	byNum  map[int32]*field
+}
+
 var (
 	schemaOnce sync.Once
-	schemaFile protoreflect.FileDescriptor
-	schemaErr  error
-	schemaDesc *descriptorpb.FileDescriptorProto
+	schemaRoot *message
+	schemaList []*message // in the order Schema prints them
 )
 
 func snake(s string) string {
@@ -55,210 +85,83 @@ func elemStruct(t reflect.Type) (reflect.Type, bool) {
 	return t, t.Kind() == reflect.Struct
 }
 
-func scalarType(t reflect.Type) descriptorpb.FieldDescriptorProto_Type {
+func scalarKind(t reflect.Type) kind {
 	switch t.Kind() {
 	case reflect.String:
-		return descriptorpb.FieldDescriptorProto_TYPE_STRING
+		return kString
 	case reflect.Bool:
-		return descriptorpb.FieldDescriptorProto_TYPE_BOOL
+		return kBool
 	case reflect.Float64:
-		return descriptorpb.FieldDescriptorProto_TYPE_DOUBLE
+		return kFloat
 	case reflect.Int, reflect.Int64:
-		return descriptorpb.FieldDescriptorProto_TYPE_INT64
+		return kInt
 	}
 	panic("docfile: unsupported field type " + t.String())
 }
 
-func buildMessage(t reflect.Type, seen map[reflect.Type]bool, out *[]*descriptorpb.DescriptorProto) {
-	if seen[t] {
-		return
+// buildMessage describes the struct t and, first, the messages it holds. Messages are
+// listed children first, the way Schema has always printed them.
+func buildMessage(t reflect.Type, seen map[reflect.Type]*message, list *[]*message) *message {
+	if m, ok := seen[t]; ok {
+		return m
 	}
-	seen[t] = true
-	m := &descriptorpb.DescriptorProto{Name: new(t.Name())}
+	m := &message{typ: t, name: t.Name(), byNum: map[int32]*field{}}
+	seen[t] = m
 	for i := range t.NumField() {
-		f := t.Field(i)
-		fd := &descriptorpb.FieldDescriptorProto{
-			Name:     new(snake(f.Name)),
-			JsonName: new(f.Name),
-			Number:   new(fieldNumber(f)),
-			Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+		sf := t.Field(i)
+		if sf.Tag.Get("pb") == "" {
+			continue
 		}
-		if f.Type.Kind() == reflect.Slice {
-			fd.Label = descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()
-		}
-		if st, ok := elemStruct(f.Type); ok {
-			fd.Type = descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum()
-			fd.TypeName = new("." + protoPackage + "." + st.Name())
-			buildMessage(st, seen, out)
+		f := field{index: i, num: fieldNumber(sf), name: snake(sf.Name), goName: sf.Name, repeated: sf.Type.Kind() == reflect.Slice}
+		if st, ok := elemStruct(sf.Type); ok {
+			f.kind = kMsg
+			f.pointer = sf.Type.Kind() == reflect.Pointer
+			f.msg = buildMessage(st, seen, list)
 		} else {
-			et := f.Type
+			et := sf.Type
 			if et.Kind() == reflect.Slice {
 				et = et.Elem()
 			}
-			fd.Type = scalarType(et).Enum()
+			f.kind = scalarKind(et)
 		}
-		m.Field = append(m.Field, fd)
+		m.fields = append(m.fields, f)
 	}
-	*out = append(*out, m)
+	sort.Slice(m.fields, func(i, j int) bool { return m.fields[i].num < m.fields[j].num })
+	for i := range m.fields {
+		m.byNum[m.fields[i].num] = &m.fields[i]
+	}
+	*list = append(*list, m)
+	return m
 }
 
-func schema() (protoreflect.FileDescriptor, error) {
+func schema() *message {
 	schemaOnce.Do(func() {
-		var msgs []*descriptorpb.DescriptorProto
-		buildMessage(reflect.TypeFor[Document](), map[reflect.Type]bool{}, &msgs)
-		schemaDesc = &descriptorpb.FileDescriptorProto{
-			Name:        new("gojiberry/doc.proto"),
-			Package:     new(protoPackage),
-			Syntax:      new("proto3"),
-			MessageType: msgs,
-		}
-		schemaFile, schemaErr = protodesc.NewFile(schemaDesc, nil)
+		schemaRoot = buildMessage(reflect.TypeFor[Document](), map[reflect.Type]*message{}, &schemaList)
 	})
-	return schemaFile, schemaErr
+	return schemaRoot
 }
 
 // Schema returns the document's protobuf schema as .proto source.
 func Schema() string {
-	if _, err := schema(); err != nil {
-		return "// " + err.Error() + "\n"
-	}
+	schema()
 	var b strings.Builder
 	fmt.Fprintf(&b, "syntax = \"proto3\";\n\npackage %s;\n", protoPackage)
-	for _, m := range schemaDesc.MessageType {
-		fmt.Fprintf(&b, "\nmessage %s {\n", m.GetName())
-		for _, f := range m.Field {
-			typ := strings.ToLower(strings.TrimPrefix(f.GetType().String(), "TYPE_"))
-			if f.GetType() == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
-				typ = strings.TrimPrefix(f.GetTypeName(), "."+protoPackage+".")
+	for _, m := range schemaList {
+		fmt.Fprintf(&b, "\nmessage %s {\n", m.name)
+		for _, f := range m.fields {
+			name := ""
+			if f.kind == kMsg {
+				name = f.msg.name
+			} else {
+				name = f.kind.protoName()
 			}
 			label := ""
-			if f.GetLabel() == descriptorpb.FieldDescriptorProto_LABEL_REPEATED {
+			if f.repeated {
 				label = "repeated "
 			}
-			fmt.Fprintf(&b, "  %s%s %s = %d;\n", label, typ, f.GetName(), f.GetNumber())
+			fmt.Fprintf(&b, "  %s%s %s = %d;\n", label, name, f.name, f.num)
 		}
 		b.WriteString("}\n")
 	}
 	return b.String()
-}
-
-func messageDescriptor(t reflect.Type) (protoreflect.MessageDescriptor, error) {
-	file, err := schema()
-	if err != nil {
-		return nil, err
-	}
-	md := file.Messages().ByName(protoreflect.Name(t.Name()))
-	if md == nil {
-		return nil, fmt.Errorf("docfile: no message for %s", t)
-	}
-	return md, nil
-}
-
-// toMessage fills a dynamic message from the struct v.
-func toMessage(v reflect.Value) (*dynamicpb.Message, error) {
-	md, err := messageDescriptor(v.Type())
-	if err != nil {
-		return nil, err
-	}
-	msg := dynamicpb.NewMessage(md)
-	for i := range v.NumField() {
-		fv := v.Field(i)
-		fd := md.Fields().ByNumber(protoreflect.FieldNumber(fieldNumber(v.Type().Field(i))))
-		switch {
-		case fd.IsList():
-			if fv.Len() == 0 {
-				continue
-			}
-			list := msg.Mutable(fd).List()
-			for j := range fv.Len() {
-				if fd.Kind() == protoreflect.MessageKind {
-					sub, err := toMessage(fv.Index(j))
-					if err != nil {
-						return nil, err
-					}
-					list.Append(protoreflect.ValueOfMessage(sub))
-				} else {
-					list.Append(scalarValue(fd, fv.Index(j)))
-				}
-			}
-		case fd.Kind() == protoreflect.MessageKind:
-			if fv.Kind() == reflect.Pointer {
-				if fv.IsNil() {
-					continue
-				}
-				fv = fv.Elem()
-			} else if fv.IsZero() {
-				continue
-			}
-			sub, err := toMessage(fv)
-			if err != nil {
-				return nil, err
-			}
-			msg.Set(fd, protoreflect.ValueOfMessage(sub))
-		default:
-			if !fv.IsZero() {
-				msg.Set(fd, scalarValue(fd, fv))
-			}
-		}
-	}
-	return msg, nil
-}
-
-func scalarValue(fd protoreflect.FieldDescriptor, v reflect.Value) protoreflect.Value {
-	switch fd.Kind() {
-	case protoreflect.StringKind:
-		return protoreflect.ValueOfString(v.String())
-	case protoreflect.BoolKind:
-		return protoreflect.ValueOfBool(v.Bool())
-	case protoreflect.DoubleKind:
-		return protoreflect.ValueOfFloat64(v.Float())
-	default:
-		return protoreflect.ValueOfInt64(v.Int())
-	}
-}
-
-// fromMessage fills the struct dst (addressable) from msg.
-func fromMessage(dst reflect.Value, msg protoreflect.Message) {
-	md := msg.Descriptor()
-	for i := range dst.NumField() {
-		fv := dst.Field(i)
-		fd := md.Fields().ByNumber(protoreflect.FieldNumber(fieldNumber(dst.Type().Field(i))))
-		if !msg.Has(fd) {
-			continue
-		}
-		val := msg.Get(fd)
-		switch {
-		case fd.IsList():
-			list := val.List()
-			fv.Set(reflect.MakeSlice(fv.Type(), list.Len(), list.Len()))
-			for j := range list.Len() {
-				if fd.Kind() == protoreflect.MessageKind {
-					fromMessage(fv.Index(j), list.Get(j).Message())
-				} else {
-					setScalar(fv.Index(j), list.Get(j))
-				}
-			}
-		case fd.Kind() == protoreflect.MessageKind:
-			if fv.Kind() == reflect.Pointer {
-				fv.Set(reflect.New(fv.Type().Elem()))
-				fv = fv.Elem()
-			}
-			fromMessage(fv, val.Message())
-		default:
-			setScalar(fv, val)
-		}
-	}
-}
-
-func setScalar(dst reflect.Value, v protoreflect.Value) {
-	switch dst.Kind() {
-	case reflect.String:
-		dst.SetString(v.String())
-	case reflect.Bool:
-		dst.SetBool(v.Bool())
-	case reflect.Float64:
-		dst.SetFloat(v.Float())
-	default:
-		dst.SetInt(v.Int())
-	}
 }
