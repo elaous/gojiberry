@@ -258,6 +258,33 @@ same advice, so the person knows to download the document first. The percentages
 7. Memory and localStorage keep nothing across their own loss (clearing site data): the
    advice above, to download, is the protection.
 
+## A folder on this computer
+
+`docstore.FileSystemAdapter` (browser builds) saves documents as files in a folder the person
+chose, through the File System Access API (Chrome, Edge, Opera: `FileSystemSupported`). The page
+is served from any static host over HTTPS (or localhost); no server of ours is involved.
+
+1. `PickFolder` opens the browser's picker (from a click) and `Remember` keeps the handle in
+   IndexedDB, so `RestoreFolder` finds the same folder on the next visit.
+2. **Permission is the browser's.** After a restart it usually has to be asked for again, with a
+   click: `Permission` says `granted`, `prompt` or `denied`, and `Request` asks. The
+   `components.FolderPicker` shows "Reconnect folder" in that state, and the folder is not a
+   save target until then, so nothing is written to it by surprise. If permission is withdrawn
+   in the middle of a session, a save fails with a message that says to reconnect.
+3. Files are named as `LocalFSAdapter` names them (the ID, base64url), so the same folder can be
+   opened by the Go tools (`docsh -store files:DIR`) and by the docstore server. A file is
+   written through a writable stream that replaces the old one when closed, so a write is whole
+   or absent; the catalog is saved conditionally (a Web Lock plus a read-back, as the browser
+   store does).
+4. The browser does not say how much room the disk has, so a chosen folder has no capacity meter.
+   A quota error is `docstore.ErrStorageFull`.
+5. `OriginPrivate` is the same adapter on the browser's private file system: nothing to pick or
+   allow, in every current browser, but the person cannot browse it, so it is storage and not
+   "my folder".
+6. Where the picker is missing (Firefox, Safari) the control says so and points to the browser's
+   own storage and to downloads. The showcase's tests replace `showDirectoryPicker` with one that
+   returns an origin-private folder, because headless Chrome has no dialog.
+
 ## What a browser build links
 
 `docstore`'s server-side backends (the Go CDK blob adapter, S3, MongoDB and PostgreSQL, like
