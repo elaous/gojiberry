@@ -317,6 +317,8 @@
   "saver.notSavedFull": "Nicht gespeichert: Der Speicher ist voll. Laden Sie das Dokument herunter (Herunterladen als), damit keine Arbeit verloren geht, löschen Sie dann alte Versionen oder den Papierkorb, oder speichern Sie woanders",
   "saver.confidential": "%s ist jetzt vertraulich: Name und Tags werden im Dokument gespeichert",
   "saver.notConfidential": "%s ist nicht mehr vertraulich",
-  "saver.revealed": "%s ist lesbar: der Name wird angezeigt"
+  "saver.revealed": "%s ist lesbar: der Name wird angezeigt",
+  "saver.folderConfidential": "%s ist jetzt ein vertraulicher Ordner: Der Name wird in der Umhüllung gespeichert",
+  "saver.folderNotConfidential": "%s ist kein vertraulicher Ordner mehr"
  }
 }

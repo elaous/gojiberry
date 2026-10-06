@@ -109,10 +109,24 @@ document shows its folder.
    "Import .opendoc" (`ImportPack`, from `Session.Pick`; `Saver.ImportPack` skips documents
    already there (the UI import always uses Skip; Replace and Copy are for callers of
    `ImportPack`, and Replace takes the pack's folder, tags and trash flag too) and reports what it skipped, what failed and whether the pack was signed).
+   A pack folder literally named "Confidential folder" is imported as a confidential placeholder
+   folder (its name was hidden and not sent, and a plain one must not drop that silently); the rule
+   is for `ImportPack` only, `CreateFolder` and `RenameFolder` make a folder with that name as
+   asked. A document or folder ID is never shared: a document (a pack's, an `.open` file's or a
+   `Save` caller's) with the ID of an existing folder is refused by `Save` (`ErrFolderID`) before
+   the `ConfidentialCheck` and `Rekey` hooks run, and `ImportPack` gives it, or a folder whose ID
+   is a document's, a new ID.
    A confidential (end-to-end) document goes into a pack only through `PackOptions.Seal`, as an
    encrypted record (placeholder name, no tags in the index), and comes back through
    `ImportOptions.Open`; without them the session's download leaves it out and says so, and an
    import skips it with a needs-key warning.
+   A **confidential folder** (`Saver.SetFolderProtection`, `Session.SetFolderProtection`) keeps its
+   real name in an encrypted record (`folder-secret/<ID>`); every list, breadcrumb and the move menu
+   show "Confidential folder" (`DocFolder.Confidential` is set) until `Session.RevealFolder`, or the
+   person who made or renamed it here, shows the real name. The tree's shape, sizes and times stay
+   visible, and documents inside are not confidential unless made so (the `recursive` option does).
+   In a pack the folder's name travels sealed (`Seal`/`Open`) or, without `Seal`, as the placeholder;
+   the ZIP and the pack's file name use the placeholder.
    Migrate's format menu has "One .opendoc pack": the documents are gathered into a pack and
    downloaded, and nothing is saved in the store.
 4. **Folder download** is `Saver.Archive`: a ZIP with the folders drawn as
@@ -276,7 +290,7 @@ age file whose data key is wrapped for each recipient (the owner's SSH key, a re
 the document is shared with). The saver, folders, versions, `Verify` and packs work on it
 unchanged, because they see an `Adapter`; the catalog stays readable, as plaintext metadata (names, tags, folders,
 sizes), which is also why a confidential item's name needs the placeholder described in
-[encryption-and-passkeys.md](encryption-and-passkeys.md) (not built yet). Server-side features
+[encryption-and-passkeys.md](encryption-and-passkeys.md) (built for documents and folders: step 5 and 5.6). Server-side features
 (search, spelling, translation, the collaboration hub) cannot read ciphertext.
 
 ```go

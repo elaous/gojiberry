@@ -135,8 +135,24 @@ func (s *Saver) ExportPack(ctx context.Context, target, folder string, w io.Writ
 		}
 		n++
 	}
+	t, err := s.Target(target)
+	if err != nil {
+		return n, err
+	}
 	for _, f := range folders {
+		// A confidential folder is listed under the placeholder; its real name travels
+		// sealed (below), or not at all.
 		if err := pw.AddFolder(pack.Folder{ID: f.ID, Name: f.Name, Parent: f.Parent}); err != nil {
+			return n, err
+		}
+		if f.Protection != ProtectionE2EE {
+			continue
+		}
+		if o.Seal == nil {
+			warn(PackIssue{ID: f.ID, Name: f.Name, Reason: PackNeedsKey})
+			continue
+		}
+		if err := packSealedFolderName(ctx, pw, t, o, f, warn); err != nil {
 			return n, err
 		}
 	}
@@ -161,6 +177,45 @@ func packSealed(ctx context.Context, pw *pack.Writer, seal func(context.Context,
 		return fmt.Errorf("saver: sealing %s gave nothing", id)
 	}
 	return pw.AddEncrypted(pack.Entry{ID: id, Name: ConfidentialName, Folder: e.Folder, Updated: doc.Updated, Trashed: e.Trashed != 0}, env)
+}
+
+// packSealedFolderName writes a confidential folder's real name as an encrypted record whose
+// ID is the folder's: inside the envelope is a small .open message named with the real name.
+// The index shows ConfidentialFolderName. A folder whose name no key here opens is reported
+// (PackNeedsKey) and left under the placeholder; a Seal that fails stops the export.
+func packSealedFolderName(ctx context.Context, pw *pack.Writer, t Target, o PackOptions, f Folder, warn func(PackIssue)) error {
+	name, err := readFolderSecret(ctx, t, f.ID)
+	if errors.Is(err, docstore.ErrLocked) || errors.Is(err, docstore.ErrNotFound) {
+		// No key opens it here, or its record is gone: the folder travels under the placeholder.
+		warn(PackIssue{ID: f.ID, Name: f.Name, Reason: PackNeedsKey, Err: err})
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("saver: folder %s: %w", f.ID, err)
+	}
+	var doc docfile.Document
+	doc.SetID(f.ID)
+	doc.SetName(name)
+	doc.SetProtection(ProtectionE2EE)
+	plain, err := docfile.Open.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	env, err := o.Seal(ctx, f.ID, plain)
+	if err != nil {
+		return fmt.Errorf("saver: sealing folder %s: %w", f.ID, err)
+	}
+	if len(env) == 0 {
+		return fmt.Errorf("saver: sealing folder %s gave nothing", f.ID)
+	}
+	return pw.AddEncrypted(pack.Entry{ID: f.ID, Name: ConfidentialFolderName}, env)
+}
+
+// isFolderName says whether an index entry is the sealed name of a folder (see
+// packSealedFolderName) rather than a document.
+func isFolderName(e pack.Entry, folders map[string]pack.Folder) bool {
+	_, ok := folders[e.ID]
+	return ok && e.Encrypted && e.Name == ConfidentialFolderName
 }
 
 // ConflictPolicy says what ImportPack does with a document whose ID is already in the target.
@@ -247,6 +302,60 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 	for _, f := range idx.Folders {
 		byID[f.ID] = f
 	}
+	// The sealed names of confidential folders: opened first, so a folder is made
+	// confidential in one step. One that cannot be opened is made under the placeholder.
+	realName := map[string]string{}
+	sealed := map[string]bool{} // folders whose name was sealed but could not be read
+	for _, e := range idx.Entries {
+		if !isFolderName(e, byID) {
+			continue
+		}
+		var openErr error
+		var open func([]byte) ([]byte, error)
+		if o.Open != nil {
+			open = func(env []byte) ([]byte, error) {
+				plain, err := o.Open(ctx, e.ID, env)
+				openErr = err
+				return plain, err
+			}
+		}
+		doc, err := rd.ReadWith(e.ID, open)
+		if err != nil {
+			if openErr != nil && ctx.Err() != nil {
+				return rep, ctx.Err()
+			}
+			rep.NeedsKey = append(rep.NeedsKey, PackIssue{ID: e.ID, Name: e.Name, Reason: PackNeedsKey, Err: err})
+			rep.Warnings = append(rep.Warnings, e.Name+": a key is needed to read the folder's name; the folder is made confidential under the placeholder name (rename it to set one)")
+			sealed[e.ID] = true
+			continue
+		}
+		if ValidName(doc.Name()) {
+			realName[e.ID] = doc.Name()
+		} else {
+			sealed[e.ID] = true
+			rep.Warnings = append(rep.Warnings, e.Name+": the folder's name is not valid; the folder is made confidential under the placeholder name")
+		}
+	}
+	// A folder and a document must never share an ID: the key records "keys:<ID>" and
+	// "folder-secret/<ID>" would be one (encrypt.DocID), so a pack folder could take over
+	// a document's keys. Folder IDs that are documents (in the target, the trash included,
+	// or in the pack) get a fresh ID here, and so do documents whose ID is a folder's.
+	docIDs := map[string]bool{}
+	err = s.view(ctx, target, func(_ Target, cat *catalog) error {
+		for id := range cat.Docs {
+			docIDs[id] = true
+		}
+		return nil
+	})
+	if err != nil {
+		return rep, err
+	}
+	packDocs := map[string]bool{}
+	for _, e := range idx.Entries {
+		if !isFolderName(e, byID) {
+			packDocs[e.ID] = true
+		}
+	}
 	var order []pack.Folder
 	done := map[string]bool{}
 	var visit func(f pack.Folder, depth int)
@@ -271,11 +380,25 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 				parent = m
 			}
 		}
-		if have[f.ID] {
+		newID := f.ID
+		if docIDs[f.ID] || packDocs[f.ID] {
+			newID = docfile.NewID()
+			rep.Warnings = append(rep.Warnings, f.Name+": the folder's ID is a document's; it was given a new one")
+		} else if have[f.ID] {
 			mapped[f.ID] = f.ID
 			continue
 		}
-		made, err := s.createFolder(ctx, target, f.ID, parent, f.Name)
+		var made Folder
+		var err error
+		if name, ok := realName[f.ID]; ok {
+			made, err = s.createFolderLevel(ctx, target, newID, parent, name, true)
+		} else if sealed[f.ID] || f.Name == ConfidentialFolderName {
+			// Its name was hidden and not sent (or could not be opened): never a plain folder
+			// literally called that, which would drop its confidentiality silently.
+			made, err = s.createFolderLevel(ctx, target, newID, parent, ConfidentialFolderName, true)
+		} else {
+			made, err = s.createFolder(ctx, target, newID, parent, f.Name)
+		}
 		if err != nil {
 			rep.Failed = append(rep.Failed, f.Name+": "+err.Error())
 			mapped[f.ID] = parent // its documents go to the parent
@@ -288,6 +411,9 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 	for _, e := range idx.Entries {
 		if err := ctx.Err(); err != nil {
 			return rep, err
+		}
+		if isFolderName(e, byID) {
+			continue // a folder's sealed name, handled with the folders
 		}
 		var openErr error
 		var open func([]byte) ([]byte, error)
@@ -328,6 +454,9 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 		doc.SetFolder(folder)
 		tags := doc.Tags()
 		doc.SetTrashed(0) // the catalog and the file agree: Trash below sets it in both
+		if have[doc.ID()] {
+			doc.SetID(docfile.NewID()) // a folder's ID: never share it (see above)
+		}
 		id := doc.ID()
 		replacing := false
 		var prev Entry

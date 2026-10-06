@@ -21,6 +21,7 @@ func TestSystemPrefixesCoverExportedConstants(t *testing.T) {
 	keys := map[string]string{
 		"docstore.ExpiryPrefix":        docstore.ExpiryPrefix + "x",
 		"docstore.DirectoryPrefix":     docstore.DirectoryPrefix + "x",
+		"docstore.FolderSecretPrefix":  docstore.FolderSecretPrefix + "x",
 		"docstore.UserCatalogPrefix":   docstore.UserCatalogPrefix("u") + "index",
 		"encrypt.KeysPrefix":           encrypt.KeysPrefix + "doc",
 		"fonts.KeyPrefix":              fonts.KeyPrefix + "Inter/400.ttf",
