@@ -96,6 +96,9 @@ func newRenewHub(t *testing.T, cfg Config) (*Hub, edit) {
 	if cfg.Roles == nil {
 		cfg.Roles = roleByHeader
 	}
+	if cfg.GoneConfirmDelay == 0 {
+		cfg.GoneConfirmDelay = -1 // confirm at once; the default delay has a test of its own
+	}
 	h := New(cfg)
 	srv := httptest.NewServer(h.Handler())
 	t.Cleanup(srv.Close)

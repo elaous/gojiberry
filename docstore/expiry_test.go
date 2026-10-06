@@ -145,7 +145,7 @@ func TestExpirySweepDeletesDocumentVersionsAndRecords(t *testing.T) {
 		left = append(left, m.ID)
 	}
 	sort.Strings(left)
-	want := []string{"b.open", "catalog:x", "expiry:b.open", "versions/b/1.open"}
+	want := []string{"b.open", "catalog:x", "expiry-created:b.open", "expiry:b.open", "versions/b/1.open"}
 	if strings.Join(left, ",") != strings.Join(want, ",") {
 		t.Errorf("left %v, want %v", left, want)
 	}
@@ -231,7 +231,7 @@ type failingSave struct {
 }
 
 func (f *failingSave) Save(ctx context.Context, id string, data []byte) error {
-	if f.fail && !strings.HasPrefix(id, ExpiryPrefix) {
+	if f.fail && !isExpiryKey(id) {
 		return errors.New("disk full")
 	}
 	return f.Adapter.Save(ctx, id, data)

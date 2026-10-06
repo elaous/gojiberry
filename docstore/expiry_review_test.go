@@ -324,15 +324,15 @@ func TestRecordFormatBothWays(t *testing.T) {
 	if got := mustExpiry(t, ea, "doc"); !got.Equal(clk.Now().Add(time.Hour)) {
 		t.Fatalf("old record = %v", got)
 	}
-	// A new one has the creation time on a second line, and a bad one is an error.
+	// A new one keeps the creation time in a sibling record (the deadline record stays one line,
+	// see TestExpiryRecordsReadableByOldBuild), and a bad one reads as absent (never an error).
 	_ = ea.Save(ctx, "doc", []byte("y"))
-	rec, _ := inner.Load(ctx, "expiry:doc")
-	if !strings.Contains(string(rec.Data), "\n") {
-		t.Fatalf("record %q has no creation time", rec.Data)
+	if _, err := inner.Load(ctx, "expiry-created:doc"); err != nil {
+		t.Fatalf("no creation time record: %v", err)
 	}
 	_ = inner.Save(ctx, "expiry:doc", []byte("tomorrow\nnever"))
-	if _, _, err := ea.Expiry(ctx, "doc"); err == nil {
-		t.Fatal("a corrupt record was accepted")
+	if _, ok, err := ea.Expiry(ctx, "doc"); err != nil || ok {
+		t.Fatalf("a corrupt record: ok=%v err=%v", ok, err)
 	}
 }
 

@@ -114,9 +114,11 @@ type Config struct {
 	// carries the Authorization header of the edit that caused it (docstore.WithAuthorization;
 	// AuthFunc replaces it), so the docstore server checks the same write permission.
 	//
-	// Expired under an open room: once a renewal of a document has succeeded, a later "not found"
-	// means the document expired and was swept while a stale tab kept its room. The room is then
-	// closed: further operations get 410 Gone (and so does any request for the id for an hour), it
+	// Expired under an open room: once a renewal of a document has succeeded, a "not found" that
+	// is repeated after GoneConfirmDelay means the document expired and was swept while a stale tab
+	// kept its room (over HTTP, "not found" means only the docstore server's marked 404:
+	// docstore.HTTPAdapter.Renew, a proxy's or an older server's 404 is ErrRenewUnsupported and
+	// closes nothing). The room is then closed: further operations get 410 Gone (and so does any request for the id for an hour), it
 	// stops saving, "collab:<id>" is deleted and the room leaves the hub. The first edit that
 	// discovers it is still acknowledged, since renewals are asynchronous. A document that was
 	// never saved to the store (it lives only in the hub) is always "not found", is never closed
@@ -144,9 +146,18 @@ type Config struct {
 	// holder's current token (by session, user or cookie) so renewals outlive it. An empty result
 	// sends none.
 	AuthFunc func(r *http.Request) string
+	// GoneConfirmDelay is how long the hub waits, after a renewal says "document gone" for a room
+	// that had one success, before it asks once more: the room is closed (410 to its clients,
+	// "collab:<id>" deleted, the id refused for an hour) only if the second answer is "gone"
+	// too. A transient answer (a deploy, a failover, a document recreated) never kills a live
+	// room. 0 means 2 seconds; negative asks again at once.
+	GoneConfirmDelay time.Duration
 	// Now is the clock (time.Now when nil); tests inject a fake one.
 	Now func() time.Time
 }
+
+// DefaultGoneConfirmDelay is Config.GoneConfirmDelay's default.
+const DefaultGoneConfirmDelay = 2 * time.Second
 
 // Renewer is docstore.Renewer: what the hub calls to renew a document's expiry.
 type Renewer = docstore.Renewer
@@ -167,6 +178,11 @@ type Hub struct {
 	renewFailures atomic.Int64 // renewals that failed for a reason other than "no such document"
 	renewDenied   atomic.Int64 // of those, answered 401 or 403
 	deadRooms     atomic.Int64 // rooms closed because their document expired
+	hubOnlyRooms  atomic.Int64 // rooms whose document is not in the store (counted once per room)
+	revivedRooms  atomic.Int64 // closed rooms reopened because the document is live again
+
+	stop     chan struct{} // closed by Stop
+	stopOnce sync.Once
 
 	gone map[string]time.Time // ids whose room was closed as expired -> when that stops being remembered (h.mu)
 }
@@ -213,7 +229,7 @@ func New(cfg Config) *Hub {
 			cfg.RenewInterval = max
 		}
 	}
-	h := &Hub{cfg: cfg, rooms: map[string]*room{}, now: time.Now, gone: map[string]time.Time{}}
+	h := &Hub{cfg: cfg, rooms: map[string]*room{}, now: time.Now, gone: map[string]time.Time{}, stop: make(chan struct{})}
 	if cfg.Now != nil {
 		h.now = cfg.Now
 	}
@@ -250,6 +266,8 @@ type room struct {
 	renewedOnce bool      // a renewal of this document has succeeded: the store has it
 	dead        bool      // the document expired and was deleted: no more ops, no more saves
 	authWarned  bool      // the renewal was refused (401/403) and that has been logged
+	notFoundLog bool      // "not in the store" has been logged and counted for this room
+	failLogged  bool      // the first failure of another kind has been logged for this room
 
 	saveMu  sync.Mutex    // one save at a time, in order
 	loaded  chan struct{} // closed when the stored document has been read
@@ -288,17 +306,28 @@ const goneMsg = "this document has expired and been deleted; copy your content e
 
 // room finds or loads a document. The store is read outside the hub's lock,
 // so a slow load of one document does not hold up the others.
-func (h *Hub) room(ctx context.Context, id string) (*room, error) {
+//
+// A document whose room was closed as expired is refused (errGone) for goneMemory, unless the
+// store says it is live again (a deleted and re-created document, a late renewal): an editor's
+// request asks the Renewer, and a success clears the tombstone (see revived).
+func (h *Hub) room(r *http.Request, id string, role Role) (*room, error) {
+	ctx := r.Context()
 	h.mu.Lock()
 	rm, ok := h.rooms[id]
 	if !ok {
 		if until, was := h.gone[id]; was {
 			if h.now().Before(until) {
 				h.mu.Unlock()
-				return nil, errGone
+				if !role.CanEdit() || !h.revived(r, id) {
+					return nil, errGone
+				}
+				h.mu.Lock()
+				rm, ok = h.rooms[id]
 			}
 			delete(h.gone, id)
 		}
+	}
+	if !ok {
 		if len(h.rooms) >= h.cfg.MaxRooms {
 			h.mu.Unlock()
 			return nil, errTooManyRooms
@@ -436,17 +465,87 @@ func (h *Hub) renew(rm *room, r *http.Request) {
 				log.Printf("collab hub: renewing the expiry of %q panicked: %v", rm.id, p)
 			}
 		}()
-		auth := r.Header.Get("Authorization")
-		if h.cfg.AuthFunc != nil {
-			auth = h.cfg.AuthFunc(r)
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := h.renewCtx(r)
 		defer cancel()
-		if auth != "" {
-			ctx = docstore.WithAuthorization(ctx, auth)
+		err := h.cfg.Renewer.Renew(ctx, rm.id)
+		if errors.Is(err, docstore.ErrNotFound) && h.hadSuccess(rm) {
+			// One "gone" is not enough to kill a live room: a deploy, a failover or a
+			// recreated document can answer it once. Ask again after a short delay; only a
+			// second "gone" closes the room.
+			if !h.confirmWait() {
+				return
+			}
+			ctx2, cancel2 := h.renewCtx(r)
+			defer cancel2()
+			if err = h.cfg.Renewer.Renew(ctx2, rm.id); err == nil {
+				log.Printf("collab hub: %q was reported gone once by the store and is live again: the room stays open", rm.id)
+			}
 		}
-		h.renewResult(rm, h.cfg.Renewer.Renew(ctx, rm.id))
+		h.renewResult(rm, err)
 	}()
+}
+
+// renewCtx is the context of a renewal for the edit r: a deadline and the editor's
+// Authorization (AuthFunc's answer for it, if set).
+func (h *Hub) renewCtx(r *http.Request) (context.Context, context.CancelFunc) {
+	auth := r.Header.Get("Authorization")
+	if h.cfg.AuthFunc != nil {
+		auth = h.cfg.AuthFunc(r)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if auth != "" {
+		ctx = docstore.WithAuthorization(ctx, auth)
+	}
+	return ctx, cancel
+}
+
+func (h *Hub) hadSuccess(rm *room) bool {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	return rm.renewedOnce
+}
+
+// confirmWait waits GoneConfirmDelay; it is false if the hub is stopping meanwhile.
+func (h *Hub) confirmWait() bool {
+	d := h.cfg.GoneConfirmDelay
+	if d == 0 {
+		d = DefaultGoneConfirmDelay
+	}
+	if d < 0 {
+		return !h.closing.Load()
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-h.stop:
+		return false
+	}
+}
+
+// revived reports whether the document of a closed room is live in the store again, which
+// clears its tombstone: the Renewer, called with the editor's own credentials, succeeds only for
+// a live document it may write (a deleted and re-created document, a late renewal).
+func (h *Hub) revived(r *http.Request, id string) bool {
+	if h.cfg.Renewer == nil || h.closing.Load() {
+		return false
+	}
+	ctx, cancel := h.renewCtx(r)
+	defer cancel()
+	ok := func() (ok bool) {
+		defer func() {
+			if p := recover(); p != nil {
+				log.Printf("collab hub: checking whether %q is live again panicked: %v", id, p)
+			}
+		}()
+		return h.cfg.Renewer.Renew(ctx, id) == nil
+	}()
+	if ok {
+		h.revivedRooms.Add(1)
+		log.Printf("collab hub: %q is live in the store again: its room may be reopened", id)
+	}
+	return ok
 }
 
 // renewResult acts on the outcome of one renewal.
@@ -468,10 +567,19 @@ func (h *Hub) renewResult(rm *room, err error) {
 		was := rm.renewedOnce
 		rm.mu.Unlock()
 		if was {
-			log.Printf("collab hub: %q expired in the store while it was open: closing it", rm.id)
+			log.Printf("collab hub: %q expired in the store while it was open (confirmed twice): closing it", rm.id)
 			h.closeDead(rm)
-		} else {
-			log.Printf("collab hub: renewing the expiry of %q: %v", rm.id, err)
+			return
+		}
+		// A document that lives only in the hub: always "not found". Said once per room and
+		// counted once, then silence for as long as it is edited.
+		rm.mu.Lock()
+		first := !rm.notFoundLog
+		rm.notFoundLog = true
+		rm.mu.Unlock()
+		if first {
+			h.hubOnlyRooms.Add(1)
+			log.Printf("collab hub: %q is not in the store (it lives only in the hub): nothing to renew; said once for this room (Health.hubOnlyRooms)", rm.id)
 		}
 	default:
 		h.renewFailures.Add(1)
@@ -487,7 +595,13 @@ func (h *Hub) renewResult(rm *room, err error) {
 			}
 			return
 		}
-		log.Printf("collab hub: renewing the expiry of %q: %v", rm.id, err)
+		rm.mu.Lock()
+		first := !rm.failLogged
+		rm.failLogged = true
+		rm.mu.Unlock()
+		if first || !errors.Is(err, docstore.ErrRenewUnsupported) {
+			log.Printf("collab hub: renewing the expiry of %q: %v", rm.id, err)
+		}
 	}
 }
 
@@ -560,6 +674,8 @@ type Health struct {
 	RenewFailures int64 `json:"renewFailures"` // renewals that failed (a document that is simply not in the store does not count)
 	RenewDenied   int64 `json:"renewDenied"`   // of those, refused with 401 or 403: see Config.Renewer
 	ExpiredRooms  int64 `json:"expiredRooms"`  // rooms closed because their document expired
+	HubOnlyRooms  int64 `json:"hubOnlyRooms"`  // rooms whose document is not in the store, counted once each (nothing to renew)
+	RevivedRooms  int64 `json:"revivedRooms"`  // closed rooms reopened because the document is live again
 }
 
 // Health returns the hub's counters.
@@ -567,7 +683,7 @@ func (h *Hub) Health() Health {
 	h.mu.Lock()
 	n := len(h.rooms)
 	h.mu.Unlock()
-	return Health{OK: !h.closing.Load(), Rooms: n, RenewFailures: h.renewFailures.Load(), RenewDenied: h.renewDenied.Load(), ExpiredRooms: h.deadRooms.Load()}
+	return Health{OK: !h.closing.Load(), Rooms: n, RenewFailures: h.renewFailures.Load(), RenewDenied: h.renewDenied.Load(), ExpiredRooms: h.deadRooms.Load(), HubOnlyRooms: h.hubOnlyRooms.Load(), RevivedRooms: h.revivedRooms.Load()}
 }
 
 func (h *Hub) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -622,6 +738,7 @@ func (h *Hub) Flush() error {
 // on them and nothing is acknowledged after the final Close).
 func (h *Hub) Stop() {
 	h.closing.Store(true)
+	h.stopOnce.Do(func() { close(h.stop) })
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, rm := range h.rooms {
@@ -690,7 +807,7 @@ func (h *Hub) access(w http.ResponseWriter, r *http.Request) (*room, Role, bool)
 		denied(w, "you do not have access to this document")
 		return nil, "", false
 	}
-	rm, err := h.room(r.Context(), id)
+	rm, err := h.room(r, id, role)
 	switch {
 	case errors.Is(err, errTooManyRooms):
 		http.Error(w, "too many documents", http.StatusServiceUnavailable)

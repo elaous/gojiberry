@@ -415,7 +415,9 @@ func TestHTTPAdapterRenewForwardsTheCallersAuthorization(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth, gotTok, gotPath, gotMethod = r.Header.Get("Authorization"), r.Header.Get("X-Gojiberry-Token"), r.URL.Path, r.Method
 		if strings.Contains(r.URL.Path, "gone") {
-			http.Error(w, "not found", http.StatusNotFound)
+			w.Header().Set(GoneHeader, "1")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":"gone"}`))
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

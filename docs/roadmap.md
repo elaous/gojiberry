@@ -15,6 +15,24 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
   server. Rename it in the store before upgrading. The same holds for IDs starting with `public/`
   or `report/` (the public offer's records and reports, any case), and for a provider named
   `anon` in `GOJIBERRY_DOCSTORE_AUTH_PROVIDERS` (reserved for anonymous users, like `passkey`).
+- **Expiry records and rollback.** The deadline record `expiry:<id>` is one line holding only the
+  deadline (RFC 3339), the format every earlier build parses, so a rollback to an older build
+  keeps working. The creation time that `MaxAge` needs lives in a new system keyspace,
+  `expiry-created:<id>` (reserved from `/docs` like `expiry:`, never a document, deleted with the
+  deadline record). A build that predates it ignores those records, so after a rollback they
+  stay in the store (they appear in a raw listing of the backend and in an old build's `/docs`
+  listing; delete `expiry-created:*` by hand if that matters) and `MaxAge` is not enforced. A
+  record that no build can parse (damaged by hand) no longer stops anything: it is logged once,
+  skipped by `Load`, `Save` and `Sweep`, and replaced with a full lifetime by the next sweep (or
+  deleted when its document is gone). An id starting with `expiry-created:` is reserved too.
+- **Renewals: only a marked 404 means "gone".** `POST /docs/{id}/renew` answers a document that
+  is gone with `404`, `X-Gojiberry-Gone: 1` and `{"error":"gone"}`; `HTTPAdapter.Renew` returns
+  `ErrNotFound` only for that, and `ErrRenewUnsupported` for any other 404, 405 or 501. A
+  collaboration hub of this version needs a docstore of this version for rooms to be closed when
+  their document expires (with an older docstore the hub just logs that renewals are unsupported,
+  once, and never closes a room), and the hub closes a room only after two consecutive "gone"
+  answers (`hub.Config.GoneConfirmDelay`). In public mode the orphan sweep
+  (`GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS`) is on by default; `off` disables it.
 - **Public mode closes `/docs`.** With `GOJIBERRY_DOCSTORE_PUBLIC=true` the generic `/docs`, `/docs/<id>/acl`
   and `/quota` routes answer 404 unless sign-in with `GOJIBERRY_DOCSTORE_REQUIRE_ACL=true` protects them or
   `GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS=true` keeps them open. `Server.Hide` prefixes now match without

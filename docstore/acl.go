@@ -339,7 +339,7 @@ func isReservedDocID(id string) bool {
 	// Everything is compared without case, since a backend that folds case (a case-insensitive
 	// file system) would alias "Collab:x" and "collab:x".
 	lower := strings.ToLower(id)
-	return strings.HasPrefix(lower, aclKeyPrefix) || strings.HasPrefix(lower, "collab:") || strings.HasPrefix(lower, strings.ToLower(DirectoryPrefix)) || strings.HasPrefix(lower, ExpiryPrefix) ||
+	return strings.HasPrefix(lower, aclKeyPrefix) || strings.HasPrefix(lower, "collab:") || strings.HasPrefix(lower, strings.ToLower(DirectoryPrefix)) || strings.HasPrefix(lower, ExpiryPrefix) || strings.HasPrefix(lower, ExpiryCreatedPrefix) ||
 		strings.HasPrefix(lower, PublicPrefix) || strings.HasPrefix(lower, ReportPrefix)
 }
 

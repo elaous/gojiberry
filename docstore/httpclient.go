@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,6 +24,8 @@ type HTTPAdapter struct {
 	client *http.Client
 	// Header is added to every request (for example Authorization).
 	Header http.Header
+
+	renewWarn sync.Once // the first unsupported-renew answer is logged
 }
 
 // NewHTTPAdapter returns an adapter for the server at baseURL
@@ -203,7 +207,14 @@ var _ Renewer = (*HTTPAdapter)(nil)
 
 // Renew implements Renewer with POST /docs/{id}/renew: the server moves the document's
 // deadline if the caller may write it (see WithAuthorization) and the document is alive.
-// ErrNotFound means it does not exist or has expired.
+//
+// ErrNotFound means the server said the document is gone, and only that: a 404 carrying the
+// marker the docstore server's renew route sets (header X-Gojiberry-Gone: 1 and the JSON body
+// {"error":"gone"}, see GoneHeader). Any other 404, and 405 and 501, is ErrRenewUnsupported (also
+// a *StatusError): a reverse proxy that lost its route during a deploy, a base URL that changed,
+// a docstore older than the route or one that does not expire documents all look like that, and
+// none of them says anything about the document. The first such answer of this adapter is logged
+// with advice.
 func (a *HTTPAdapter) Renew(ctx context.Context, id string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.base+docPath(id)+"/renew", nil)
 	if err != nil {
@@ -229,10 +240,39 @@ func (a *HTTPAdapter) Renew(ctx context.Context, id string) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	switch {
-	case resp.StatusCode == http.StatusNotFound:
+	case resp.StatusCode == http.StatusNotFound && isGoneAnswer(resp):
 		return ErrNotFound
+	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotImplemented:
+		se := httpError(resp)
+		a.renewWarn.Do(func() {
+			log.Printf("docstore: the renew route answered %d without the document-gone marker (%s): renewals are not working, which is not taken as the document being gone. Check that the base URL %s points at a docstore server that has POST /docs/{id}/renew and expires documents (GOJIBERRY_DOCSTORE_EXPIRY_TTL), and that no proxy answers 404 for it; documents will expire under active editing until it does. Further answers are counted, not logged.", resp.StatusCode, strings.TrimSpace(se.(*StatusError).Body), RedactURL(a.base))
+		})
+		return fmt.Errorf("%w: %w", ErrRenewUnsupported, se)
 	case resp.StatusCode/100 != 2:
 		return httpError(resp)
 	}
 	return nil
+}
+
+// GoneHeader is set, with the value "1" and a JSON body {"error":"gone"}, on the 404 of the renew
+// route that means "this document does not exist or has expired", to tell it from every other
+// 404 (a proxy, a wrong base URL, an older server).
+const GoneHeader = "X-Gojiberry-Gone"
+
+// ErrRenewUnsupported is the error of a renewal the server could not take for the document: the
+// route is missing (404 without GoneHeader), refused the method (405) or not implemented (501).
+// It does not mean the document is gone.
+var ErrRenewUnsupported = errors.New("docstore: the server does not support renewals here")
+
+// isGoneAnswer reports whether a 404 is the renew route's "document gone": the marker header and
+// the JSON body.
+func isGoneAnswer(resp *http.Response) bool {
+	if resp.Header.Get(GoneHeader) != "1" {
+		return false
+	}
+	var body struct {
+		Error string `json:"error"`
+	}
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+	return json.Unmarshal(b, &body) == nil && body.Error == "gone"
 }
