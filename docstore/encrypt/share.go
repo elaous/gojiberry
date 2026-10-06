@@ -423,6 +423,37 @@ type Sharing struct {
 	// afterRead, when set, is called by mutate between reading the record and checking the
 	// files against it (tests).
 	afterRead func()
+	// beforeFlip, when set, is called by finishFiles after the files were re-keyed and before the
+	// record is changed to say they are signed (tests).
+	beforeFlip func()
+}
+
+// RepairOption changes what Repair and Recover accept.
+type RepairOption func(*repairOpts)
+
+type repairOpts struct{ acceptUnsigned bool }
+
+// AcceptUnsigned is the owner's confirmation that a file of the document whose frame is not
+// signed (v1, v2) is theirs, so that Repair (or Recover) seals it again with a signed frame
+// even though the record says every file is signed (or the Adapter has RequireSigned): the
+// state a client without the owner's signing key, or a build that wrote unsigned frames, leaves
+// behind once the record has been marked signed, where Save, Load and every re-key otherwise
+// refuse the file as forged (ErrForgedFrame). Without the option these refuse, naming the file.
+//
+// It launders nothing that carries a signature: a v3 frame whose signature is not an owner's, or
+// that does not match its content, is a forgery and is refused (ErrForgedFrame) with or without
+// it. It cannot tell an unsigned file the owner's own client wrote from one minted by someone
+// who knows a recipient's public key (an unsigned frame carries no proof): confirm that the
+// file is yours (its content, with Load through an Adapter that has no RequireSigned, if need
+// be) before using it. It needs the Adapter's Signer (ErrNoFrameSigner otherwise).
+func AcceptUnsigned() RepairOption { return func(o *repairOpts) { o.acceptUnsigned = true } }
+
+func repairOptions(opts []RepairOption) repairOpts {
+	var o repairOpts
+	for _, f := range opts {
+		f(&o)
+	}
+	return o
 }
 
 func (s *Sharing) verifiers() []ed25519.PublicKey {
@@ -665,13 +696,23 @@ const finishAttempts = 5
 // unchanged): a Remove or Add that saved a newer list meanwhile set it pending for files this
 // pass may have sealed to the old one, so the document is re-keyed again.
 func (s *Sharing) finish(ctx context.Context, docID string) (int, error) {
-	n, _, _, err := s.finishFiles(ctx, docID)
+	n, _, _, err := s.finishFiles(ctx, docID, repairOpts{})
 	return n, err
 }
 
 // finishFiles is finish that also says, when a pass failed, which files were left encrypted to
 // their old recipients (stale) and which of them could not be opened (unreadable).
-func (s *Sharing) finishFiles(ctx context.Context, docID string) (n int, stale, unreadable []string, err error) {
+//
+// A client without the Signer that read the record before it said Signed can save an unsigned
+// file at any moment up to the change of the record (Saves do not change the record, so the change
+// cannot be made conditional on them). So just before the record is changed to say Signed every
+// file is looked at again: one that is not signed is sealed again (another pass) first. The
+// window left is the few steps between that look and the write of the record; a file saved in it
+// is what Repair with AcceptUnsigned recovers.
+func (s *Sharing) finishFiles(ctx context.Context, docID string, ro repairOpts) (n int, stale, unreadable []string, err error) {
+	if ro.acceptUnsigned && (s.Adapter == nil || s.Adapter.Signer == nil) {
+		return 0, nil, nil, fmt.Errorf("%w: %s: AcceptUnsigned seals files again with the owner's signature", ErrNoFrameSigner, docID)
+	}
 	for range finishAttempts {
 		rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
 		if err != nil {
@@ -679,7 +720,7 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string) (n int, stale, 
 		}
 		seq := rec.Seq
 		var done []string
-		done, stale, unreadable, err = s.Adapter.RekeyDocumentReport(ctx, docID)
+		done, stale, unreadable, err = s.Adapter.rekeyDocumentReport(ctx, docID, rekeyOpts{acceptUnsigned: ro.acceptUnsigned})
 		if n = len(done); err != nil {
 			return n, stale, unreadable, err
 		}
@@ -687,6 +728,9 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string) (n int, stale, 
 		// A re-key by an adapter that signs leaves every file with a signed frame: the record
 		// then says so (Signed), which is what makes an unsigned frame in the document forged.
 		signs := s.Adapter != nil && s.Adapter.Signer != nil
+		if s.beforeFlip != nil {
+			s.beforeFlip()
+		}
 		if _, err = s.mutate(ctx, docID, func(rec *sharedRecord) (bool, error) {
 			if !rec.Pending && (rec.Signed || !signs) {
 				return false, nil
@@ -694,6 +738,19 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string) (n int, stale, 
 			if rec.Seq != seq {
 				again = true
 				return false, nil
+			}
+			if signs && !rec.Signed {
+				// Last look, as close to the write as it can be: an unsigned file that a
+				// client without the Signer saved since the re-key would be forged from the
+				// flip on. Seal it again (another pass) before saying every file is signed.
+				unsigned, err := s.Adapter.unsignedFiles(ctx, docID)
+				if err != nil {
+					return false, err
+				}
+				if len(unsigned) > 0 {
+					again = true
+					return false, nil
+				}
 			}
 			rec.Pending = false
 			rec.Signed = rec.Signed || signs
@@ -784,14 +841,19 @@ func (s *Sharing) Remove(ctx context.Context, docID, fingerprint string) (int, e
 
 // Repair encrypts every file of a document again to its current list and clears a pending
 // mark: the way to finish a share or removal that was cut short, whichever key it was for.
-func (s *Sharing) Repair(ctx context.Context, docID string) (int, error) {
+//
+// A file whose frame is not signed in a document whose record says every file is signed is
+// ErrForgedFrame (naming the file) and nothing is written, unless the owner confirms with the
+// AcceptUnsigned option; see there for what that does and does not accept.
+func (s *Sharing) Repair(ctx context.Context, docID string, opts ...RepairOption) (int, error) {
 	if !docfile.ValidID(docID) {
 		return 0, errors.New("encrypt: not a document ID")
 	}
 	if _, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor); err != nil {
 		return 0, err
 	}
-	return s.finish(ctx, docID)
+	n, _, _, err := s.finishFiles(ctx, docID, repairOptions(opts))
+	return n, err
 }
 
 // Usage lists the documents (their IDs, sorted) that removing a key changes: the ones it is a

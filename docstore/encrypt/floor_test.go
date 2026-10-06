@@ -340,3 +340,24 @@ func TestStorageSeqFloorReportsAFailingWrite(t *testing.T) {
 		t.Error("Err")
 	}
 }
+
+// A damaged stored value is written over with what this process knows, never with a lower number:
+// raising by a smaller seq must not lower a floor that was higher.
+func TestStorageSeqFloorRaiseOverADamagedValueNeverLowersIt(t *testing.T) {
+	ctx := context.Background()
+	kv := &mapKV{}
+	f := &StorageSeqFloor{Prefix: "floor:", Store: kv}
+	if err := f.Raise(ctx, "a", 10); err != nil {
+		t.Fatal(err)
+	}
+	kv.m["floor:a"] = "not a number"
+	if err := f.Raise(ctx, "a", 3); !errors.Is(err, ErrFloorDegraded) {
+		t.Fatalf("a damaged value is reported: %v", err)
+	}
+	if v := kv.m["floor:a"]; v != "10" {
+		t.Errorf("the stored floor is %q after Raise(3) over a damaged value, want 10", v)
+	}
+	if n, _ := f.Get(ctx, "a"); n != 10 {
+		t.Errorf("Get: %d", n)
+	}
+}

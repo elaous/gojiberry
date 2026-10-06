@@ -86,7 +86,9 @@ type Saver struct {
 	// PendingCheck, when set, is called by Verify and says which documents have a recipient
 	// re-key that was cut short (pending) and which of those for too long (stuck)
 	// (encrypt.PendingHook; the saver does not import it). The results are VerifyReport.Pending
-	// and PendingStuck. Nil means none are reported.
+	// and PendingStuck. Nil means none are reported. If it returns an error beside its results (one
+	// record that does not verify), Verify keeps the results and adds the error to
+	// VerifyReport.Warnings instead of failing.
 	PendingCheck func(ctx context.Context, target string) (pending, stuck []string, err error)
 
 	mu sync.Mutex   // one catalog update at a time

@@ -238,7 +238,8 @@ func (k ConfidentialKeyring) Identities(ctx context.Context, id string) ([]age.I
 // SetProtection again finishes the rest.
 //
 // Unreadable are the files, among Stale, that could not be opened: because one file cannot be
-// opened the re-key writes none (all or none), so a single lost file blocks the switch. It is
+// opened the re-key writes none (all or none), so a single lost file blocks the switch (and every
+// other re-key of the document, Add, Remove, Repair; not Save or Load when it is a snapshot). It is
 // never skipped silently. If it is a version snapshot the owner no longer needs, the caller
 // can confirm and drop it (saver.UnreadableKeys, saver.Saver.DropVersions) and run
 // SetProtection again; the current and previous copies of a document are not droppable.
@@ -327,7 +328,7 @@ func (s *Sharing) SetProtection(ctx context.Context, docID, protection string) (
 	if err := s.setIndex(ctx, docID, want, rec.Seq); err != nil {
 		return 0, err
 	}
-	n, stale, unreadable, err := s.finishFiles(ctx, docID)
+	n, stale, unreadable, err := s.finishFiles(ctx, docID, repairOpts{})
 	if err != nil && len(stale) > 0 {
 		err = &RekeyError{Doc: docID, Stale: stale, Unreadable: unreadable, Err: err}
 	}

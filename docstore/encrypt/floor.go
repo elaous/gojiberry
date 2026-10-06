@@ -184,17 +184,21 @@ func (f *StorageSeqFloor) Get(ctx context.Context, docID string) (uint64, error)
 // ErrFloorDegraded.
 func (f *StorageSeqFloor) Raise(ctx context.Context, docID string, seq uint64) error {
 	_ = f.mem.Raise(ctx, docID, seq)
+	// What is written is the highest this process knows (its memory holds every value it raised
+	// or read, and at least seq), so a damaged stored value, which cannot be compared, is never
+	// replaced by something lower than what this process has already seen.
+	target, _ := f.mem.Get(ctx, docID)
 	n, err := f.stored(docID)
 	if err != nil {
 		// Writing over a damaged value is the one way to repair it, so it is tried.
-		if serr := f.Store.Set(f.Prefix+docID, strconv.FormatUint(seq, 10)); serr != nil {
+		if serr := f.Store.Set(f.Prefix+docID, strconv.FormatUint(target, 10)); serr != nil {
 			return f.fail(errors.Join(err, serr))
 		}
 		return f.fail(err)
-	} else if n >= seq {
+	} else if n >= target {
 		return nil
 	}
-	if err := f.Store.Set(f.Prefix+docID, strconv.FormatUint(seq, 10)); err != nil {
+	if err := f.Store.Set(f.Prefix+docID, strconv.FormatUint(target, 10)); err != nil {
 		return f.fail(err)
 	}
 	return nil

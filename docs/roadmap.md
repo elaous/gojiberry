@@ -58,7 +58,14 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
   **Upgrade notes:** set `Adapter.Signer` (a confidential document is not saved without it,
   `ErrNoFrameSigner`) and list the signers in `StoreKeyring.OwnerSigners`; run `Sharing.Repair` per
   document to upgrade old files, after which the record says `signed` and unsigned frames in it are
-  forged (`Adapter.RequireSigned` refuses them everywhere). Older builds cannot read v2 or v3 files.
+  forged (`Adapter.RequireSigned` refuses them, for every document id the keyring binds). The
+  re-key looks at every file again just before saying `signed` and seals again one saved unsigned
+  meanwhile; what a save in the few steps left (or an older build that wrote unsigned frames) leaves
+  under a `signed` record is recovered by `Sharing.Repair`/`Recover` with the explicit
+  `encrypt.AcceptUnsigned()` option, which seals unsigned files again and never accepts a v3 frame
+  with a bad signature. A revoked owner signer stays trusted until it is removed from every
+  `OwnerSigners` list (the procedure is in encryption-and-passkeys.md); `saver.VerifyReport.Warnings`
+  carries a pending check that could not read one record. Older builds cannot read v2 or v3 files.
   The checks now look at every file of a document (an unreadable one that is not provably someone
   else's is `ErrUnreadable`, not skipped), `Sharing.PendingStatus`/`saver.VerifyReport.Pending`
   surface a re-key left pending, `FileSeqFloor` is cached and `RaiseMany` batches it, and a floor

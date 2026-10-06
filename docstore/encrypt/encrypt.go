@@ -143,8 +143,10 @@ type Adapter struct {
 	// OwnerSigners are further public signing keys whose frames are accepted, besides the ones
 	// the keyring lists (StoreKeyring.OwnerSigners) and Signer's own.
 	OwnerSigners []ed25519.PublicKey
-	// RequireSigned refuses a frame that is not signed (v1, v2) of a document that has a record
-	// (ErrForgedFrame), instead of reading it with a warning. Turn it on once every file was
+	// RequireSigned refuses a frame that is not signed (v1, v2) of any document id the keyring
+	// binds (a Binder keyring: every id DocID finds, whether or not a keys:<ID> record exists
+	// for it; the ids the keyring does not bind are not checked), as ErrForgedFrame, instead
+	// of reading it with a warning. Turn it on once every file was
 	// written or re-keyed by a signing client (Sharing.Repair of each document upgrades them): until
 	// then an unsigned frame can be minted by anyone who knows a recipient's public key.
 	RequireSigned bool
@@ -250,8 +252,9 @@ func downgrade(id, format string, args ...any) error {
 // record was lost or replaced (and the owner knows what it should say), Repair when the record is
 // right and some file was left wrapped below its level by a switch that was cut short.
 const (
-	recoverHint = " (if the record was restored on purpose, the owner can run Sharing.Recover to write a new one)"
-	repairHint  = " (if a switch of level was cut short, the owner can run Sharing.Repair to re-key the files; if the record was replaced on purpose, Sharing.Recover)"
+	recoverHint  = " (if the record was restored on purpose, the owner can run Sharing.Recover to write a new one)"
+	unsignedHint = " (if the owner knows this file is theirs, left by a client without the signing key or by an older build, Sharing.Repair with AcceptUnsigned seals it again, signed; a file that is not theirs must not be accepted: restore or delete it. Sharing.Recover keeps the record's claim and takes the same option)"
+	repairHint   = " (if a switch of level was cut short, the owner can run Sharing.Repair to re-key the files; if the record was replaced on purpose, Sharing.Recover)"
 )
 
 func levelByte(l string) byte {
@@ -407,7 +410,18 @@ var ErrNoFrameSigner = errors.New("encrypt: a confidential document is saved wit
 // header but is malformed, damaged, or opens with a key of ours and says something else. The
 // checks that compare a document's files with its record cannot tell such a file from one that
 // hides what the record should say, so the operation stops instead of skipping it: restore the
-// file, or delete it (a version snapshot: saver.Saver.DropVersions).
+// file, or delete it (a version snapshot: saver.Saver.DropVersions; a generation "<ID>~..." is
+// deleted in the store, there is no saver call for it).
+//
+// Which operations such a file blocks depends on where it is. A generation ("<ID>~<tag>.<ext>")
+// or a confidential folder's "folder-secret/<ID>" is scanned by Save, SaveIf and every change to
+// the list (Add, Remove, SetProtection: the check before the record is written), and by the
+// re-keys. A version snapshot ("versions/<ID>/...") is NOT scanned by Save, SaveIf, Load or the
+// check before a change to the list, but it IS opened by every re-key (all or none: Add, Remove,
+// SetProtection and Repair finish by re-keying, so they write the record and then stop, leaving
+// it pending) and by the scan for the highest seq (Recover). Load opens only the file it
+// returns. A file that is provably someone else's (ErrNoKey) is skipped by the scans, but a re-key
+// cannot seal it again and stops on it the same way.
 var ErrUnreadable = errors.New("encrypt: a stored file of this document cannot be opened")
 
 // crossCheck compares what a file says (f) with the record as read now (r). The rules, with
@@ -427,10 +441,11 @@ var ErrUnreadable = errors.New("encrypt: a stored file of this document cannot b
 //     document the record calls server) is the safe direction and accepted.
 //
 // A v1 frame has nothing to compare and passes, except in a document whose record says every
-// file is signed (Binding.Signed), where any unsigned frame is ErrForgedFrame.
+// file is signed (Binding.Signed), where any unsigned frame is ErrForgedFrame (the owner's way out is
+// Sharing.Repair with AcceptUnsigned).
 func crossCheck(id string, f frameInfo, r Binding, strict bool) error {
 	if r.Exists && r.Signed && f.version < 3 {
-		return forged(id, "its frame is not signed (v%d), but the document's record says every file of it is: it was not written by an owner"+recoverHint, f.version)
+		return forged(id, "its frame is not signed (v%d), but the document's record says every file of it is: it was not written by an owner"+unsignedHint, f.version)
 	}
 	if f.version < 2 {
 		return nil
@@ -547,11 +562,18 @@ func (a *Adapter) frameVerifiers() []ed25519.PublicKey {
 // whole content, not just what followed the header), carry the hash of that content; an
 // unsigned frame is read with a warning logged once, unless RequireSigned. Anything else is
 // ErrForgedFrame.
-func (a *Adapter) verifyFrame(id string, fi frameInfo, data []byte, full bool) error {
+//
+// acceptUnsigned (the owner's explicit Repair option, see AcceptUnsigned) lets an unsigned frame
+// pass without the warning and whatever RequireSigned says, so it can be read and sealed again;
+// it never excuses a v3 frame whose signature is bad.
+func (a *Adapter) verifyFrame(id string, fi frameInfo, data []byte, full, acceptUnsigned bool) error {
 	if !a.binds(id) {
 		return nil
 	}
 	if fi.version < 3 {
+		if acceptUnsigned {
+			return nil
+		}
 		if a.RequireSigned {
 			return forged(id, "the frame is not signed (v%d) and this adapter requires signed frames", fi.version)
 		}
@@ -608,6 +630,11 @@ func (a *Adapter) decrypt(ctx context.Context, id string, stored []byte) (r io.R
 // encrypted. It does not cross-check the frame with the record: the callers do, each with
 // the rule that suits it (crossCheck).
 func (a *Adapter) open(ctx context.Context, id string, stored []byte) (plain []byte, fi frameInfo, encrypted bool, err error) {
+	return a.openWith(ctx, id, stored, false)
+}
+
+// openWith is open, with acceptUnsigned as verifyFrame has it.
+func (a *Adapter) openWith(ctx context.Context, id string, stored []byte, acceptUnsigned bool) (plain []byte, fi frameInfo, encrypted bool, err error) {
 	r, enc, err := a.decrypt(ctx, id, stored)
 	if err != nil || !enc {
 		if err == nil {
@@ -621,7 +648,7 @@ func (a *Adapter) open(ctx context.Context, id string, stored []byte) (plain []b
 	}
 	plain, fi, err = unframe(id, framed)
 	if err == nil {
-		err = a.verifyFrame(id, fi, plain, true)
+		err = a.verifyFrame(id, fi, plain, true, acceptUnsigned)
 	}
 	if err != nil {
 		return nil, frameInfo{}, true, err
@@ -635,6 +662,10 @@ func (a *Adapter) open(ctx context.Context, id string, stored []byte) (plain []b
 // owner signed even if the file around it has been given other content, and the readers of the
 // content (open) check the hash.
 func (a *Adapter) peekFrame(ctx context.Context, id string, stored []byte) (frameInfo, error) {
+	return a.peekFrameWith(ctx, id, stored, false)
+}
+
+func (a *Adapter) peekFrameWith(ctx context.Context, id string, stored []byte, acceptUnsigned bool) (frameInfo, error) {
 	r, enc, err := a.decrypt(ctx, id, stored)
 	if err != nil {
 		return frameInfo{}, err
@@ -649,7 +680,7 @@ func (a *Adapter) peekFrame(ctx context.Context, id string, stored []byte) (fram
 	}
 	_, fi, err := unframe(id, buf[:n])
 	if err == nil {
-		err = a.verifyFrame(id, fi, nil, false)
+		err = a.verifyFrame(id, fi, nil, false, acceptUnsigned)
 	}
 	return fi, err
 }
@@ -923,12 +954,12 @@ type planned struct {
 // come from, so a re-key never seals a file under a record older than the one it was sealed
 // under (ErrDowngrade). A file below the record's level is exactly what a re-key repairs, so
 // that part of the rule is not applied.
-func (a *Adapter) plan(ctx context.Context, id string) (planned, error) {
+func (a *Adapter) plan(ctx context.Context, id string, rk rekeyOpts) (planned, error) {
 	d, err := a.Inner.Load(ctx, id)
 	if err != nil {
 		return planned{}, err
 	}
-	plain, fi, _, err := a.open(ctx, id, d.Data)
+	plain, fi, _, err := a.openWith(ctx, id, d.Data, rk.acceptUnsigned)
 	if err != nil {
 		return planned{}, err
 	}
@@ -940,7 +971,14 @@ func (a *Adapter) plan(ctx context.Context, id string) (planned, error) {
 		return planned{}, ErrNoRecipients
 	}
 	if a.binds(id) {
-		if err := crossCheck(id, fi, b, false); err != nil {
+		cb := b
+		if rk.acceptUnsigned && fi.version < 3 {
+			// The owner said to seal unsigned files again: the "every file is signed" claim of
+			// the record is what such a file contradicts, and sealing it again is what makes it
+			// true. Level, seq and recipients are still checked; a v3 frame is never excused.
+			cb.Signed = false
+		}
+		if err := crossCheck(id, fi, cb, false); err != nil {
 			return planned{}, err
 		}
 	}
@@ -950,9 +988,9 @@ func (a *Adapter) plan(ctx context.Context, id string) (planned, error) {
 // rekeyOne re-keys one file: read, open, seal to the current recipients, and write only if
 // the file is still the one that was read (a Save in between is not lost: the file is read
 // again). Without a conditional store the caller's lock is what serializes it.
-func (a *Adapter) rekeyOne(ctx context.Context, id string) error {
+func (a *Adapter) rekeyOne(ctx context.Context, id string, rk rekeyOpts) error {
 	for range rekeyAttempts {
-		p, err := a.plan(ctx, id)
+		p, err := a.plan(ctx, id, rk)
 		if err != nil {
 			return err
 		}
@@ -976,17 +1014,17 @@ func (a *Adapter) rekeyOne(ctx context.Context, id string) error {
 // its files cannot be opened). Write failures after that are collected, not stopping the
 // others. The caller holds the lock.
 func (a *Adapter) rekeyGroup(ctx context.Context, ids []string) (int, error) {
-	done, _, err := a.rekeyGroupFiles(ctx, ids)
+	done, _, err := a.rekeyGroupFiles(ctx, ids, rekeyOpts{})
 	return len(done), err
 }
 
 // rekeyGroupFiles is rekeyGroup that says which files it wrote and, when it wrote none because
 // some could not be opened, which those were (unreadable).
-func (a *Adapter) rekeyGroupFiles(ctx context.Context, ids []string) (written, unreadable []string, err error) {
+func (a *Adapter) rekeyGroupFiles(ctx context.Context, ids []string, rk rekeyOpts) (written, unreadable []string, err error) {
 	var errs []error
 	var present []string
 	for _, id := range ids {
-		_, err := a.plan(ctx, id)
+		_, err := a.plan(ctx, id, rk)
 		switch {
 		case errors.Is(err, docstore.ErrNotFound):
 			// Deleted since it was listed: nothing to re-key.
@@ -1004,7 +1042,7 @@ func (a *Adapter) rekeyGroupFiles(ctx context.Context, ids []string) (written, u
 	}
 	var done []string
 	for _, id := range present {
-		if err := a.rekeyOne(ctx, id); err != nil {
+		if err := a.rekeyOne(ctx, id, rk); err != nil {
 			if errors.Is(err, docstore.ErrNotFound) {
 				continue
 			}
@@ -1014,6 +1052,42 @@ func (a *Adapter) rekeyGroupFiles(ctx context.Context, ids []string) (written, u
 		done = append(done, id)
 	}
 	return done, nil, errors.Join(errs...)
+}
+
+// unsignedFiles lists the stored files of the document whose frame is not signed (v1, v2) or
+// that are stored in the clear (AllowPlaintext): the ones a re-key by a signing adapter has still
+// to seal. A file that cannot be opened (other than a foreign one, or one that is gone) is an
+// error: nothing can be said about it. A v3 file with a bad signature is ErrForgedFrame.
+func (a *Adapter) unsignedFiles(ctx context.Context, docID string) ([]string, error) {
+	ids, err := a.filesOf(ctx, docID)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, id := range ids {
+		d, err := a.Inner.Load(ctx, id)
+		if errors.Is(err, docstore.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		fi, err := a.peekFrameWith(ctx, id, d.Data, true)
+		switch {
+		case err == nil:
+			if fi.version < 3 {
+				out = append(out, id)
+			}
+		case errors.Is(err, ErrNoKey):
+		case errors.Is(err, ErrNotEncrypted) && a.AllowPlaintext:
+			out = append(out, id)
+		case errors.Is(err, ErrForgedFrame):
+			return nil, err
+		default:
+			return nil, fmt.Errorf("%w: %s: %w", ErrUnreadable, id, err)
+		}
+	}
+	return out, nil
 }
 
 // exclusive takes the store's Lock and then the adapter's own, which a Save of an encrypted
@@ -1142,6 +1216,18 @@ func (a *Adapter) RekeyDocumentFiles(ctx context.Context, docID string) (done, s
 // opened (unreadable, a subset of stale): the reason none was written. Nothing is dropped:
 // what to do with a file that cannot be opened is the caller's decision.
 func (a *Adapter) RekeyDocumentReport(ctx context.Context, docID string) (done, stale, unreadable []string, err error) {
+	return a.rekeyDocumentReport(ctx, docID, rekeyOpts{})
+}
+
+// rekeyOpts changes what a re-key accepts.
+type rekeyOpts struct {
+	// acceptUnsigned: an unsigned (v1, v2) file is opened and sealed again with a signed frame
+	// even where the record says every file is signed or the Adapter has RequireSigned (the
+	// owner's AcceptUnsigned). A v3 file with a bad signature is still refused.
+	acceptUnsigned bool
+}
+
+func (a *Adapter) rekeyDocumentReport(ctx context.Context, docID string, rk rekeyOpts) (done, stale, unreadable []string, err error) {
 	unlock, err := a.exclusive(ctx)
 	if err != nil {
 		return nil, nil, nil, err
@@ -1151,7 +1237,7 @@ func (a *Adapter) RekeyDocumentReport(ctx context.Context, docID string) (done, 
 	if err != nil {
 		return nil, ids, nil, err
 	}
-	done, unreadable, err = a.rekeyGroupFiles(ctx, ids)
+	done, unreadable, err = a.rekeyGroupFiles(ctx, ids, rk)
 	if err != nil {
 		in := map[string]bool{}
 		for _, d := range done {

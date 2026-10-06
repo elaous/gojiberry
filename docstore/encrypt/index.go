@@ -324,9 +324,11 @@ func (s *Sharing) highestSeq(ctx context.Context, docID string) (uint64, error) 
 // under and above the floor, marked pending, then re-keys every file of the document to it and
 // clears pending, as SetProtection does. The replayed or missing record is not consulted, so
 // nothing it listed survives unless it is in shared: a person the owner had removed and the
-// replay brought back is not carried over. It needs the Signer. Check what was lost with
+// replay brought back is not carried over. It needs the Signer. The record keeps its Signed
+// claim (a Recover does not make unsigned files acceptable): an unsigned file left in the document
+// stops the re-key, naming it, unless the owner confirms it with AcceptUnsigned (see there). Check what was lost with
 // Sharing.List before and after; what a person already opened cannot be taken back.
-func (s *Sharing) Recover(ctx context.Context, docID, protection string, shared []Recipient) (int, error) {
+func (s *Sharing) Recover(ctx context.Context, docID, protection string, shared []Recipient, opts ...RepairOption) (int, error) {
 	want, err := normalizeProtection(protection)
 	if err != nil {
 		return 0, err
@@ -366,7 +368,7 @@ func (s *Sharing) Recover(ctx context.Context, docID, protection string, shared 
 	if err := s.setIndex(ctx, docID, want, rec.Seq); err != nil {
 		return 0, err
 	}
-	n, stale, unreadable, err := s.finishFiles(ctx, docID)
+	n, stale, unreadable, err := s.finishFiles(ctx, docID, repairOptions(opts))
 	if err != nil && len(stale) > 0 {
 		err = &RekeyError{Doc: docID, Stale: stale, Unreadable: unreadable, Err: err}
 	}

@@ -247,7 +247,10 @@ func UnreadableKeys(err error) []string {
 
 // DropVersions deletes the given version snapshots of the document, which the person has
 // confirmed they give up (see UnreadableKeys): the way past a snapshot that cannot be opened
-// and so blocks SetProtection. Every key must be a snapshot of this document, else nothing is
+// and so blocks the re-keys (SetProtection, and the Add, Remove, Repair and Recover of
+// encrypt.Sharing, which end by re-keying every file). A snapshot that cannot be opened does not
+// block Save or Load of the document (they do not scan version snapshots); a generation or
+// previous copy that cannot be opened blocks those too and is not droppable here. Every key must be a snapshot of this document, else nothing is
 // deleted and ErrName is returned. A key that is already gone is not an error.
 func (s *Saver) DropVersions(ctx context.Context, target, id string, keys []string) error {
 	if !docfile.ValidID(id) {

@@ -289,6 +289,11 @@ type VerifyReport struct {
 	// checker's limit (30 minutes in encrypt.PendingHook): not a re-key in flight but one that
 	// was abandoned. Run encrypt.Sharing.Repair.
 	PendingStuck []string
+	// Warnings are findings that are not about one document of the catalog and did not stop
+	// the check: PendingCheck failed for some record (a record that does not verify), so
+	// Pending and PendingStuck hold what it could read and may be incomplete. Each entry names
+	// what failed.
+	Warnings []string
 }
 
 // Verify reads every document of the target and checks it against the checksum the
@@ -317,8 +322,14 @@ func (s *Saver) Verify(ctx context.Context, target string) (VerifyReport, error)
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].id < items[j].id })
 	if s.PendingCheck != nil {
-		if rep.Pending, rep.PendingStuck, err = s.PendingCheck(ctx, target); err != nil {
-			return rep, err
+		// The check returns what it found beside the error of a record it could not verify:
+		// that one bad record is a finding, not a reason to report nothing about the others.
+		rep.Pending, rep.PendingStuck, err = s.PendingCheck(ctx, target)
+		if err != nil {
+			if cerr := ctx.Err(); cerr != nil {
+				return rep, cerr
+			}
+			rep.Warnings = append(rep.Warnings, "pending check incomplete (the documents it could read are reported): "+err.Error())
 		}
 	}
 	type fix struct {

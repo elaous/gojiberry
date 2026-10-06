@@ -180,6 +180,22 @@ stored. Design:
   `SignerFromSSH` uses an ed25519 SSH key. Every owner key that may change lists has its public
   signing key in `StoreKeyring.OwnerSigners` (and `Sharing.OwnerSigners`) of whoever reads them.
   `Sharing` needs the `Signer` to Add or Remove (`ErrNoSigner` without it).
+  **Revoking an owner signer.** A signer stays trusted for as long as its public key is in a
+  reader's `OwnerSigners` (`StoreKeyring`, `Sharing`, `Adapter`): there is no revocation list, and
+  a key that is revoked in any other sense (lost, left the organization) can still write records
+  and frames that verify, everywhere it is still listed. Removal is removing it from every one of
+  those lists, on every client; nothing else switches it off. Frames carry no key id (a reader
+  tries each listed key), so there is nothing per file to change, and the procedure is by
+  re-signing first: (1) add the new signer to the `OwnerSigners` of every client, beside the
+  old; (2) with the new `Signer` set as `Sharing.Signer` and `Adapter.Signer`, run
+  `Sharing.Recover(doc, level, shared)` for each document (the level and the list from
+  `Sharing.List`/the index), which writes a new record signed by it and re-keys every file with
+  frames it signs, then `Sharing.VerifyIndex`; (3) remove the old key from the lists. After that
+  anything the old key signed and was not re-signed (a document missed in step 2, a stray old
+  file) is refused (`ErrBadSignature` for a record, `ErrForgedFrame` for a frame), which is also how
+  a missed one is found: run `Saver.Verify` and `Sharing.PendingDocs`. Until step 3 is done
+  everywhere, the old key's holder can still write; a replay of anything the old key signed before
+  step 3 is refused after it, not before.
 - `StoreKeyring.Recipients` (what every save asks) verifies the record and **fails closed**: an
   unsigned record (`ErrUnsignedRecord`), a record signed by a key that is not an owner's, or a
   changed or moved one (`ErrBadSignature`) makes the save fail, never a longer or shorter list.
@@ -246,12 +262,23 @@ Threat model, store write access only (no owner key):
        `AllowPlaintext`) is **`ErrUnreadable`**, naming the file, and stops the operation: it could be
        hiding what the record should say, and "decoy" files like this (three junk files that start
        with the age header, planted next to a deleted record) used to make a save succeed. Restore
-       the file or delete it (a version snapshot: `Saver.DropVersions`; `Sharing.Recover` does not
-       need the check);
+       the file or delete it (a version snapshot: `Saver.DropVersions`; a generation is deleted in
+       the store; `Sharing.Recover` does not need this check, but see below: it re-keys every file);
+       **which operation a junk or unreadable file blocks depends on where it is**:
+
+       | file | `Save`/`SaveIf` | change to the list (the check before the record is written) | re-keys (`Add`, `Remove`, `SetProtection`, `Repair`, `Recover` finish by one) | `highestSeq` (`Recover`) | `Load` |
+       |---|---|---|---|---|---|
+       | generation `<ID>~...`, or `folder-secret/<ID>` | blocks | blocks | blocks | skipped | only if it is the file read |
+       | version snapshot `versions/<ID>/...` | **not scanned** | **not scanned** | blocks (all or none) | skipped | only if it is the file read |
+       | provably foreign (`ErrNoKey`) | skipped | skipped | blocks (it cannot be sealed again) | skipped | only if it is the file read |
+
+       So a junk snapshot does not stop saving or loading the document, but it stops every re-key,
+       and an `Add`, `Remove` or `SetProtection` then has already written the record (pending) when
+       it stops: `Repair` after dropping the snapshot (`Saver.DropVersions`) finishes it;
      - a document none of whose files opens (none stored, or all provably foreign) has no evidence and
        passes: what the record says is all there is.
      The cost is one read and one first-chunk decryption per file of the document (generations, not
-     version snapshots) on each save.
+     version snapshots, which only the re-keys and the scan for the highest seq open) on each save.
      **A client that raced a switch is not told it saw a downgrade.** `Save` reads the record and
      then the files; if another client completed a switch in between, the files are sealed under a
      newer record than the one just read. A downgrade finding is therefore made again once with the
@@ -271,7 +298,10 @@ Threat model, store write access only (no owner key):
      document in `VerifyReport.Downgraded`.
      **A stuck `pending` flag.** While `pending` is set, a file wrapped below the document's level
      is tolerated on `Load` (it is where the re-key has not reached yet), so a flag that stays set
-     switches that one check off for the document. The record says since when (`pendingSince`);
+     switches that one check off for the document. The record says since when (`pendingSince`, the
+     clock of the client that wrote it: a client whose clock is behind or ahead of the one that
+     checks makes "since when" and "stuck" off by that skew, so a flag can look younger or older than
+     it is; `PendingWarnAfter` is a warning threshold, not a guarantee);
      `Sharing.PendingStatus` and `Sharing.PendingDocs` report it, and a flag older than
      `Sharing.PendingWarnAfter` (30 minutes by default) is *stuck*. `Saver.PendingCheck`
      (`encrypt.PendingHook`) puts them in `VerifyReport.Pending` and `PendingStuck`: the owner runs
@@ -285,8 +315,29 @@ Threat model, store write access only (no owner key):
      that has nothing pending, `Add`, `Remove`, `SetProtection` and `Recover` as they finish), the
      record says `signed`: from then on **every unsigned frame in that document is `ErrForgedFrame`**
      (so the forger cannot choose the older format), and whoever saves it must sign.
-     `Adapter.RequireSigned` makes an adapter refuse unsigned frames for every document that has a
-     record, for a deployment whose files were all upgraded.
+     `Adapter.RequireSigned` makes an adapter refuse unsigned frames for every document id the
+     keyring binds (every id `DocID` finds with a `Binder` keyring, whether or not its record
+     exists; ids it does not bind are not checked), for a deployment whose files were all upgraded.
+     **The window before `signed`, and the way out of it.** A re-key writes signed files and only
+     then changes the record to say `signed`. A client with no `Signer` that read the record before
+     that can save an unsigned (v2) file of a server-level document in between, and a plain `Save`
+     does not change the record's seq, so the change to `signed` cannot be made conditional on it.
+     Two things handle it. (a) Immediately before setting `signed`, the re-key looks at every file
+     again; if one is not v3 (it was saved meanwhile) it is sealed again (another pass) first.
+     That leaves only the few steps between that look and the write of the record. (b) What a save
+     in that remaining window (or an older build that wrote v1/v2 frames under a record that already
+     says `signed`) leaves is a document where `crossCheck` refuses the file as `ErrForgedFrame`
+     and `Save`, `Load`, `Repair` and `Recover` all refuse, so there is an explicit way out:
+     `Sharing.Repair(doc, encrypt.AcceptUnsigned())` (and `Sharing.Recover(..., encrypt.AcceptUnsigned())`)
+     opens the unsigned files, still checks their level, seq and recipients against the record, and
+     seals them again signed, with the owner's `Adapter.Signer` (`ErrNoFrameSigner` without it).
+     Without the option they refuse, with an error that names the file and the option. The option
+     is for **unsigned frames only**: a v3 frame whose signature is not an owner's or does not match
+     its content is a forgery and is `ErrForgedFrame` with or without it, never sealed again. It
+     cannot tell an unsigned file the owner's own client wrote from one minted by someone who
+     knows a recipient's public key (an unsigned frame carries no proof), so the owner uses it
+     after checking that the file is theirs (what it holds, who could have written it): accepting
+     it is the owner vouching for it, which is the limit of the old format and no more.
   2. **The owner-signed index** (`keys:index`, `encrypt.IndexKey`): `{seq, docs: {id: {level, seq}}}`,
      signed by the owner signer under its own context, listing the end-to-end documents and folders and
      the record seq when each was switched; `SetProtection` writes it after the record (and again on
