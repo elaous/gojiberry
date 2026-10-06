@@ -242,6 +242,7 @@
   "recipients.parsed": "Clave %s para %s. Su huella es:",
   "recipients.checkHint": "Compruebe esta huella con la persona, por otra vía distinta de la que recibió la clave, y escríbala aquí para añadir la clave.",
   "recipients.confirm": "Huella, escrita para confirmar",
+  "recipients.removed": "Se dejó de compartir. %d archivos guardados se cifraron de nuevo sin esa clave.",
   "recipients.add": "Añadir clave",
   "passkey.unsupported": "Este navegador o esta página no puede usar passkeys (necesitan HTTPS y un navegador reciente).",
   "passkey.signIn": "Iniciar sesión con una passkey",

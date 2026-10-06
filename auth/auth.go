@@ -202,6 +202,9 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 		if p.Name == "" || p.IssuerURL == "" || p.ClientID == "" {
 			return nil, fmt.Errorf("auth: provider %q is missing a required field (Name/IssuerURL/ClientID)", p.Name)
 		}
+		if p.Name == "passkey" {
+			return nil, errors.New(`auth: the provider name "passkey" is reserved for accounts made by passkeys (auth/passkey)`)
+		}
 		if _, exists := m.byName[p.Name]; exists {
 			return nil, fmt.Errorf("auth: duplicate provider name %q", p.Name)
 		}

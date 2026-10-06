@@ -242,6 +242,7 @@
   "recipients.parsed": "Clé %s pour %s. Son empreinte est :",
   "recipients.checkHint": "Vérifiez cette empreinte avec la personne, par un autre moyen que celui par lequel vous avez reçu la clé, puis saisissez-la ici pour ajouter la clé.",
   "recipients.confirm": "Empreinte, saisie pour confirmer",
+  "recipients.removed": "Partage arrêté. %d fichiers enregistrés ont été rechiffrés sans cette clé.",
   "recipients.add": "Ajouter la clé",
   "passkey.unsupported": "Ce navigateur ou cette page ne peut pas utiliser de passkeys (elles demandent HTTPS et un navigateur récent).",
   "passkey.signIn": "Se connecter avec une passkey",

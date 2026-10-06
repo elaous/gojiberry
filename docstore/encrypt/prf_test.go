@@ -78,8 +78,7 @@ func TestPasskeyKeyIsSharedAndOpensTheDocument(t *testing.T) {
 	ctx := context.Background()
 	ana := newPerson(t, "ana")
 	inner := docstore.NewMemoryAdapter()
-	ad := New(inner, StoreKeyring{Store: inner, Owners: []age.Recipient{ana.r.Key}, Keys: []age.Identity{ana.id}})
-	sh := &Sharing{Store: inner, Adapter: ad}
+	ad, sh := sharingSetup(t, inner, ana)
 	doc := "77777777-7777-4777-8777-777777777777"
 	id := doc + "~aaaaaaaaaaaa.json"
 	_ = ad.Save(ctx, id, []byte("secret"))

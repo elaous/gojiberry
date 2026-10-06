@@ -32,6 +32,9 @@ type Recipient struct {
 // are supported (the keys age can encrypt to).
 func ParseSSHRecipient(line string) (Recipient, error) {
 	line = strings.TrimSpace(line)
+	if strings.ContainsAny(line, "\r\n") {
+		return Recipient{}, errors.New("encrypt: an SSH public key is one line")
+	}
 	pub, comment, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
 	if err != nil {
 		return Recipient{}, fmt.Errorf("encrypt: not an SSH public key: %w", err)
@@ -45,7 +48,11 @@ func ParseSSHRecipient(line string) (Recipient, error) {
 
 // ParseAgeRecipient reads an age public key ("age1...").
 func ParseAgeRecipient(s string) (Recipient, error) {
-	r, err := age.ParseX25519Recipient(strings.TrimSpace(s))
+	s = strings.TrimSpace(s)
+	if strings.ContainsAny(s, "\r\n") {
+		return Recipient{}, errors.New("encrypt: an age public key is one line")
+	}
+	r, err := age.ParseX25519Recipient(s)
 	if err != nil {
 		return Recipient{}, fmt.Errorf("encrypt: %w", err)
 	}

@@ -43,8 +43,11 @@ func (c Credential) ID() string { return base64.RawURLEncoding.EncodeToString(c.
 // Connect user the passkey was linked to while signed in as them). Handle is the opaque user
 // handle the authenticator stores (random, never the ID or the e-mail).
 type Account struct {
-	ID          string       `json:"id"`
-	Handle      []byte       `json:"handle"`
+	ID     string `json:"id"`
+	Handle []byte `json:"handle"`
+	// Email is a label: what the person typed when making the account, shown to them and used
+	// to name the passkey in the browser. Nothing verifies it, so it is never the session's
+	// identity (see Service.Session).
 	Email       string       `json:"email,omitempty"`
 	Name        string       `json:"name,omitempty"`
 	Credentials []Credential `json:"credentials"`
@@ -205,10 +208,12 @@ func (s *AdapterStore) Put(ctx context.Context, a *Account) error {
 	if err != nil {
 		return err
 	}
-	if err := s.Adapter.Save(ctx, handleKey(a.Handle), []byte(a.ID)); err != nil {
+	// The account first, then the handle record that makes it findable: a failure between the
+	// two leaves an account no sign-in can reach, never a handle that names nothing.
+	if err := s.Adapter.Save(ctx, accountKey(a.ID), data); err != nil {
 		return err
 	}
-	return s.Adapter.Save(ctx, accountKey(a.ID), data)
+	return s.Adapter.Save(ctx, handleKey(a.Handle), []byte(a.ID))
 }
 
 // Delete implements Store.
