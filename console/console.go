@@ -265,6 +265,17 @@ func (sh *Shell) ask(question string) bool {
 	return line == "y" || line == "yes"
 }
 
+// declined is what a command returns when its question was not answered yes: interactively
+// the command is left alone and the session carries on; in a script it is an error, so the
+// script stops and the exit status says the command did not run.
+func (sh *Shell) declined() error {
+	if sh.Script {
+		return errors.New("not confirmed: nothing was changed (a script needs -y to answer yes)")
+	}
+	sh.printf("left alone\n")
+	return nil
+}
+
 // act does a change: with DryRun it only says what it would do.
 func (sh *Shell) act(desc string, do func() error) error {
 	if sh.DryRun {
@@ -915,8 +926,7 @@ func (sh *Shell) purge(ctx context.Context, args []string) error {
 		}
 	}
 	if !sh.DryRun && !sh.ask(fmt.Sprintf("Delete %d documents from the trash for good? This cannot be undone.", len(ids))) {
-		sh.printf("left alone\n")
-		return nil
+		return sh.declined()
 	}
 	return sh.act(desc, func() error { return sh.Saver.Purge(ctx, sh.Target, ids...) })
 }
@@ -991,6 +1001,9 @@ func (sh *Shell) importFiles(ctx context.Context, args []string) error {
 			}
 			doc, err := sh.registry().Import("", filepath.Base(m), data)
 			if err != nil {
+				if sh.Script {
+					return fmt.Errorf("console: cannot import %s: %w", m, err)
+				}
 				sh.warnf("skipped %s: %v\n", m, err)
 				continue
 			}
@@ -1195,6 +1208,20 @@ func (sh *Shell) unpack(ctx context.Context, args []string) error {
 		for _, x := range rep.Failed {
 			sh.warnf("failed: %s\n", x)
 		}
+		for _, x := range rep.Warnings {
+			sh.warnf("warning: %s\n", x)
+		}
+		switch {
+		case rep.Signed && rep.SignatureOK:
+			sh.printf("signed, the signature checks out (key %x)\n", rep.Signer)
+		case rep.Signed:
+			sh.warnf("the pack is signed but the signature does NOT check out\n")
+		default:
+			sh.printf("not signed\n")
+		}
+		if len(rep.Failed) > 0 {
+			return fmt.Errorf("console: %d documents failed to import", len(rep.Failed))
+		}
 		return nil
 	})
 }
@@ -1243,8 +1270,7 @@ func (sh *Shell) repair(ctx context.Context) error {
 
 func (sh *Shell) rebuild(ctx context.Context) error {
 	if !sh.DryRun && !sh.ask("Rebuild the catalog from the files? Folders keep their records; anything the catalog knew that is not in a file is forgotten.") {
-		sh.printf("left alone\n")
-		return nil
+		return sh.declined()
 	}
 	return sh.act("rebuild the catalog from the files", func() error { return sh.Saver.Rebuild(ctx, sh.Target) })
 }

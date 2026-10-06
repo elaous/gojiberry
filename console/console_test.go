@@ -3,6 +3,7 @@ package console
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -347,17 +348,18 @@ func TestScriptNeverReadsAnAnswerFromTheScript(t *testing.T) {
 	r.sh.Script = true
 	r.doc("x", "a", "")
 	r.must("rm x")
-	if err := r.sh.Interact(context.Background(), false); err != nil {
-		t.Fatal(err)
+	err := r.sh.Interact(context.Background(), false)
+	if err == nil || !strings.Contains(err.Error(), "line 1") || !strings.Contains(err.Error(), "not confirmed") {
+		t.Fatalf("a declined confirmation is an error in a script: %v", err)
+	}
+	if fs, _ := r.s.Folders(context.Background(), "m"); len(fs) != 0 {
+		t.Errorf("the script stopped: %+v", fs)
 	}
 	if tr, _ := r.s.Trashed(context.Background(), "m"); len(tr) != 1 {
 		t.Error("without -y a script's purge is answered no")
 	}
 	if !strings.Contains(r.out.String(), "needs -y") {
 		t.Errorf("it says so: %q", r.out.String())
-	}
-	if fs, _ := r.s.Folders(context.Background(), "m"); len(fs) != 1 {
-		t.Errorf("the next line still runs as a command: %+v", fs)
 	}
 	r2 := newRig(t, "purge x\n")
 	r2.sh.Script, r2.sh.Yes = true, true
@@ -518,4 +520,67 @@ func TestPackAndExportDoNotClobber(t *testing.T) {
 	if left, _ := filepath.Glob(filepath.Join(dir, ".docsh-*")); len(left) != 0 {
 		t.Errorf("leftover %v", left)
 	}
+}
+
+func TestScriptRebuildDeclinedIsAnError(t *testing.T) {
+	r := newRig(t, "rebuild\nmkdir After\n")
+	r.sh.Script = true
+	err := r.sh.Interact(context.Background(), false)
+	if err == nil || !strings.Contains(err.Error(), "not confirmed") {
+		t.Fatalf("%v", err)
+	}
+	if fs, _ := r.s.Folders(context.Background(), "m"); len(fs) != 0 {
+		t.Errorf("the script stopped: %+v", fs)
+	}
+}
+
+func TestScriptImportOfUnsupportedFileIsAnError(t *testing.T) {
+	bad := filepath.Join(t.TempDir(), "x.unknownext")
+	if err := os.WriteFile(bad, []byte{0, 1, 2, 3}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := newRig(t, "")
+	if err := r.run("import " + bad); err != nil {
+		t.Skipf("this file is importable here: %v", err)
+	}
+	if !strings.Contains(r.err.String(), "skipped") {
+		t.Errorf("interactively it is skipped with a warning: %q", r.err.String())
+	}
+	r.sh.Script = true
+	if err := r.run("import " + bad); err == nil {
+		t.Error("in a script an unsupported file is an error")
+	}
+}
+
+func TestUnpackReportsSignatureAndFailures(t *testing.T) {
+	r := newRig(t, "")
+	r.doc("a", "text", "")
+	pk := filepath.Join(t.TempDir(), "p.opendoc")
+	r.must("pack " + pk)
+	other := newRig(t, "")
+	out := other.must("unpack " + pk)
+	if !strings.Contains(out, "not signed") {
+		t.Errorf("it says whether the pack is signed: %q", out)
+	}
+	// A store that cannot save: every document fails, and that is an error.
+	broken := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: failingSave{docstore.NewMemoryAdapter()}}}}
+	b := &rig{t: t, out: &bytes.Buffer{}, err: &bytes.Buffer{}, s: broken}
+	b.sh = New(broken, "m", strings.NewReader(""), b.out, b.err)
+	b.sh.Script = true
+	if err := b.run("unpack " + pk); err == nil || !strings.Contains(err.Error(), "failed") {
+		t.Fatalf("a failed document is an error: %v", err)
+	}
+	if !strings.Contains(b.err.String(), "failed:") {
+		t.Errorf("and is listed: %q", b.err.String())
+	}
+}
+
+type failingSave struct{ docstore.Adapter }
+
+// Save fails for documents; the catalog (its index and folders) still saves.
+func (f failingSave) Save(ctx context.Context, id string, data []byte) error {
+	if strings.HasPrefix(id, "catalog:") {
+		return f.Adapter.Save(ctx, id, data)
+	}
+	return errors.New("disk full")
 }
