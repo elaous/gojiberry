@@ -1,6 +1,7 @@
 package pack
 
 import (
+	"crypto/sha256"
 	"io"
 
 	"github.com/elaous/gojiberry/docfile"
@@ -12,10 +13,21 @@ type Recovered struct {
 	// Docs are the documents whose records are intact, in file order of first appearance;
 	// a document whose ID appears in more than one record is the last of them.
 	Docs []docfile.Document
-	// Skipped counts intact records that were not documents that could be read.
+	// Sealed are encrypted records, kept as stored with the index's entry for each; they
+	// are only found when the index is intact, because without it nothing says whose they
+	// are (an encrypted record has no readable ID).
+	Sealed []Sealed
+	// Skipped counts intact records that were not documents that could be read, including
+	// encrypted ones that are not in Sealed.
 	Skipped int
 	// Complete says the walk ended exactly at a valid index: nothing was lost.
 	Complete bool
+}
+
+// Sealed is an encrypted record carried through recovery without being opened.
+type Sealed struct {
+	Entry    Entry
+	Envelope []byte
 }
 
 // Recover walks the records from the header, checking each frame and keeping every
@@ -38,6 +50,7 @@ func Recover(r io.ReaderAt, size int64) (Recovered, error) {
 	off := int64(len(hdr))
 	at := map[string]int{} // ID -> position in rec.Docs
 	var offs []int64       // record offset of each of rec.Docs
+	sealed := map[int64][]byte{}
 	for off+frameHead <= size {
 		head := make([]byte, 8)
 		if _, err := r.ReadAt(head, off); err != nil {
@@ -46,14 +59,18 @@ func Recover(r io.ReaderAt, size int64) (Recovered, error) {
 		if string(head) == footerMagic {
 			break // the footer: everything before it was read
 		}
-		kind, data, err := readFrame(r, off, size)
+		kind, flags, data, err := readFrame(r, off, size)
 		if err != nil {
 			break
 		}
 		next := off + int64(recordSize(uint64(len(data))))
 		switch kind {
 		case kindDocument:
-			if doc, err := docfile.Open.Unmarshal(data); err == nil && docfile.ValidID(doc.ID()) {
+			if flags&flagEncrypted != 0 {
+				// Opaque: only an intact index can say which document it is.
+				sealed[off] = data
+				rec.Skipped++
+			} else if doc, err := docfile.Open.Unmarshal(data); err == nil && docfile.ValidID(doc.ID()) {
 				if i, dup := at[doc.ID()]; dup {
 					rec.Docs[i], offs[i] = doc, off
 				} else {
@@ -73,6 +90,12 @@ func Recover(r io.ReaderAt, size int64) (Recovered, error) {
 		listed := map[int64]bool{}
 		for _, e := range rd.index.Entries {
 			listed[int64(e.Offset)] = true
+		}
+		for _, e := range rd.index.Entries {
+			if env, ok := sealed[int64(e.Offset)]; ok && e.Encrypted && uint64(len(env)) == e.Length && sha256.Sum256(env) == e.SHA256 {
+				rec.Sealed = append(rec.Sealed, Sealed{Entry: e, Envelope: env})
+				rec.Skipped--
+			}
 		}
 		docs := rec.Docs[:0]
 		for i, d := range rec.Docs {
@@ -112,6 +135,21 @@ func Repack(rec Recovered, dst io.Writer) error {
 			}
 		}
 		if err := w.Add(d); err != nil {
+			return err
+		}
+	}
+	for _, s := range rec.Sealed {
+		if s.Entry.Folder != "" {
+			if !docfile.ValidID(s.Entry.Folder) {
+				s.Entry.Folder = ""
+			} else if !seen[s.Entry.Folder] {
+				seen[s.Entry.Folder] = true
+				if err := w.AddFolder(Folder{ID: s.Entry.Folder, Name: "recovered-" + s.Entry.Folder[:8]}); err != nil {
+					return err
+				}
+			}
+		}
+		if err := w.AddEncrypted(s.Entry, s.Envelope); err != nil {
 			return err
 		}
 	}

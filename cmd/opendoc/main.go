@@ -388,6 +388,10 @@ func unpackCmd(args []string, out outWriter) error {
 		fmt.Fprintf(os.Stderr, "opendoc: %s (%s): %v\n", esc(e.Name), esc(e.ID), err)
 	}
 	for _, e := range idx.Entries {
+		if e.Encrypted {
+			fail(e, errors.New("encrypted: this tool has no key, so it is not unpacked"))
+			continue
+		}
 		data, err := r.ReadRaw(e.ID)
 		if err != nil {
 			fail(e, err)
@@ -501,6 +505,9 @@ func listCmd(args []string, out outWriter) error {
 		folder := esc(names[e.Folder])
 		if e.Trashed {
 			folder += " (trash)"
+		}
+		if e.Encrypted {
+			folder += " (encrypted)"
 		}
 		tags := make([]string, len(e.Tags))
 		for i, t := range e.Tags {
