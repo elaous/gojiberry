@@ -385,7 +385,7 @@ func (s *Session) Open(ctx context.Context, id string) error {
 	s.op.Lock()
 	defer s.op.Unlock()
 	target := s.targetName()
-	doc, err := s.Saver.Load(ctx, target, id)
+	doc, rec, err := s.Saver.LoadChecked(ctx, target, id)
 	if err != nil {
 		return err
 	}
@@ -402,8 +402,37 @@ func (s *Session) Open(ctx context.Context, id string) error {
 	if s.OnOpen != nil {
 		s.ui(func() { s.OnOpen(doc) })
 	}
-	s.set(func() { s.saveState = SaveSaved; s.edits++ })          // the editor holds what was saved
-	return s.after(ctx, msg("saver.opened", "%s opened", e.Name)) // the versions are those of the document just opened
+	s.set(func() { s.saveState = SaveSaved; s.edits++ }) // the editor holds what was saved
+	line := msg("saver.opened", "%s opened", e.Name)
+	if rec.FromPrevious {
+		// Say so: the text is an earlier save, and the person should know.
+		line = msg("saver.recovered", "%s was damaged: opened the copy saved %s (it is now the saved one)", e.Name, rec.Saved.Format("2006-01-02 15:04"))
+	}
+	return s.after(ctx, line) // the versions are those of the document just opened
+}
+
+// Check reads every saved document and compares it with its checksum, putting back from
+// its previous copy any that is missing or damaged (Saver.Verify), and says what it
+// found and did.
+func (s *Session) Check(ctx context.Context) error {
+	s.op.Lock()
+	defer s.op.Unlock()
+	rep, err := s.Saver.Verify(ctx, s.targetName())
+	if err != nil {
+		return err
+	}
+	line := msg("saver.checkedOK", "Checked %d documents: all fine", rep.Checked)
+	if len(rep.Restored) > 0 || len(rep.Lost) > 0 {
+		line = msg("saver.checkedProblems", "Checked %d documents: %d put back from an earlier copy (%s), %d damaged with no copy (%s)",
+			rep.Checked, len(rep.Restored), strings.Join(rep.Restored, ", "), len(rep.Lost), strings.Join(rep.Lost, ", "))
+	}
+	if len(rep.BackupsLost) > 0 {
+		line += " " + msg("saver.checkedBackups", "(%d had no good previous copy; the next save makes one)", len(rep.BackupsLost))
+	}
+	if rep.Orphans > 0 {
+		line += " " + msg("saver.checkedOrphans", "(%d leftover files removed)", rep.Orphans)
+	}
+	return s.after(ctx, line)
 }
 
 // Delete removes a saved document for good, with no trash in between.
@@ -611,6 +640,7 @@ func (s *Session) Docs() components.DocListProps {
 		Delete:    s.Delete,
 		Tag:       s.SetTags,
 		Refresh:   func() { s.Pending.Run(s.Refresh) },
+		Check:     s.Check,
 	}
 	for _, e := range s.entries {
 		if e.Folder == s.folder { // the folder being shown
