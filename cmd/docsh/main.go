@@ -4,7 +4,7 @@
 //	docsh -store files:./docs ls -l 'Report *'
 //	docsh -store sqlite:docs.db -n mv 'Report *' Archive/      (dry run)
 //	docsh -store http://localhost:8090 -token T            (an interactive session)
-//	docsh -store files:./docs -f script.txt
+//	docsh -store files:./docs -f script.txt                (stops at the first error, exits 1)
 //
 // A store is memory, files:DIR, sqlite:FILE.db or the URL of a docstore server.
 package main
@@ -80,6 +80,7 @@ func run(args []string) error {
 		}
 		defer func() { _ = f.Close() }()
 		sh.In = f
+		sh.Script = true // stops at the first error; a question needs -y
 		return sh.Interact(ctx, false)
 	case fl.NArg() > 0:
 		return sh.Exec(ctx, fl.Args())
