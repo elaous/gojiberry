@@ -20,6 +20,11 @@ type Recipient struct {
 	Type        string // "ssh-ed25519", "ssh-rsa" or "age-x25519"
 	Fingerprint string // "SHA256:..." for an SSH key, the key itself for an age key
 	Key         age.Recipient
+	// Text is the public key as it was read ("ssh-ed25519 AAAA..." or "age1..."), what is kept
+	// in a document's recipient list.
+	Text string
+	// Hint is, for a passkey key, the credential ID (base64url) to ask when opening.
+	Hint string
 }
 
 // ParseSSHRecipient reads an SSH public key as an authorized_keys or .pub file holds it
@@ -27,6 +32,9 @@ type Recipient struct {
 // are supported (the keys age can encrypt to).
 func ParseSSHRecipient(line string) (Recipient, error) {
 	line = strings.TrimSpace(line)
+	if strings.ContainsAny(line, "\r\n") {
+		return Recipient{}, errors.New("encrypt: an SSH public key is one line")
+	}
 	pub, comment, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
 	if err != nil {
 		return Recipient{}, fmt.Errorf("encrypt: not an SSH public key: %w", err)
@@ -35,17 +43,21 @@ func ParseSSHRecipient(line string) (Recipient, error) {
 	if err != nil {
 		return Recipient{}, fmt.Errorf("encrypt: %w", err)
 	}
-	return Recipient{Label: comment, Type: pub.Type(), Fingerprint: ssh.FingerprintSHA256(pub), Key: r}, nil
+	return Recipient{Label: comment, Type: pub.Type(), Fingerprint: ssh.FingerprintSHA256(pub), Key: r, Text: line}, nil
 }
 
 // ParseAgeRecipient reads an age public key ("age1...").
 func ParseAgeRecipient(s string) (Recipient, error) {
-	r, err := age.ParseX25519Recipient(strings.TrimSpace(s))
+	s = strings.TrimSpace(s)
+	if strings.ContainsAny(s, "\r\n") {
+		return Recipient{}, errors.New("encrypt: an age public key is one line")
+	}
+	r, err := age.ParseX25519Recipient(s)
 	if err != nil {
 		return Recipient{}, fmt.Errorf("encrypt: %w", err)
 	}
 	sum := sha256.Sum256([]byte(r.String()))
-	return Recipient{Type: "age-x25519", Fingerprint: "SHA256:" + base64.RawStdEncoding.EncodeToString(sum[:]), Key: r}, nil
+	return Recipient{Type: "age-x25519", Fingerprint: "SHA256:" + base64.RawStdEncoding.EncodeToString(sum[:]), Key: r, Text: r.String()}, nil
 }
 
 // ParseSSHIdentity reads an unencrypted SSH private key (the PEM of an ed25519 or RSA key).

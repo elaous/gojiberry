@@ -27,6 +27,7 @@ import (
 	"github.com/chromedp/cdproto/input"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/cdproto/webauthn"
 	"github.com/chromedp/chromedp"
 )
 
@@ -806,6 +807,39 @@ func (d *Tab) Screenshot(path string) {
 }
 
 func b64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
+
+// VirtualAuthenticator adds a software authenticator to the browser (Chrome's WebAuthn
+// virtual authenticator: CTAP2, internal transport, discoverable credentials, user verification
+// that succeeds), which answers navigator.credentials.create and .get with no dialog. It returns
+// the authenticator's ID, for RemoveVirtualAuthenticator.
+func (d *Tab) VirtualAuthenticator() string {
+	d.t.Helper()
+	var id webauthn.AuthenticatorID
+	d.must(chromedp.Tasks{
+		webauthn.Enable(),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			var err error
+			id, err = webauthn.AddVirtualAuthenticator(&webauthn.VirtualAuthenticatorOptions{
+				Protocol: webauthn.AuthenticatorProtocolCtap2, Transport: webauthn.AuthenticatorTransportInternal,
+				HasResidentKey: true, HasPrf: true, HasUserVerification: true, IsUserVerified: true, AutomaticPresenceSimulation: true,
+			}).Do(ctx)
+			return err
+		}),
+	})
+	return string(id)
+}
+
+// RemoveVirtualAuthenticator takes an authenticator out, with the passkeys it holds.
+func (d *Tab) RemoveVirtualAuthenticator(id string) {
+	d.t.Helper()
+	d.must(webauthn.RemoveVirtualAuthenticator(webauthn.AuthenticatorID(id)))
+}
+
+// ReloadPage reloads a page that is not a canvas example (it has no #state to wait for).
+func (d *Tab) ReloadPage() {
+	d.t.Helper()
+	d.must(chromedp.Reload())
+}
 
 // OnNewDocument runs a script at the start of every document the tab loads from now on (and
 // not in the current one): to replace a browser API before the page's own code looks at it.
