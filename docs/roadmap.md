@@ -11,11 +11,22 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Later
 
-1. **`.opendoc` packs: done** (`docfile/pack`, `cmd/opendoc`, `Saver.ImportPack`/`ExportPack`, the document-list buttons and Migrate's "One .opendoc pack"; spec in [opendoc-format.md](opendoc-format.md)).
+1. **`.opendoc` packs: done** (`docfile/pack`, `cmd/opendoc`, `Saver.ImportPack`/`ExportPack` with injected `Seal`/`Open` for confidential documents, the document-list buttons and Migrate's "One .opendoc pack"; spec in [opendoc-format.md](opendoc-format.md)).
 2. **Encryption and passkeys.** Encrypt documents to SSH keys and passkeys (envelope
    encryption, a wrapped data key per recipient, keys stay with the person) and sign in
    with a passkey (WebAuthn). Design and open decisions:
-   [encryption-and-passkeys.md](encryption-and-passkeys.md).
+   [encryption-and-passkeys.md](encryption-and-passkeys.md). Done (libraries): encrypted
+   documents with signed recipient lists, the passkey as a recipient and as a way in, and
+   (step 5) encrypted records in packs, confidential catalog entries (`saver` protection
+   level, placeholder name, `Reveal`, `SetProtection`, `encrypt.ConfidentialCheck`). Left:
+   1. The showcase wiring, which needs the key management UX (where the owner's key lives, how
+      it is unlocked, the "make confidential" switch, the recovery key shown once, a lock mark
+      in the document list).
+   2. A keyring that wraps a confidential document's files for people's keys only, and re-keys
+      its older copies on the switch.
+   3. The People-tab control that adds "my passkey" as a key, and the verified-e-mail mark
+      (C.4).
+   4. Hiding folder names of confidential folders.
 3. **Public docstore.** An anonymous offer: no account, one document per session, a link
    and a download always, deleted 24 hours after the last edit (viewing does not renew).
    Design, wording of the promise, and the abuse controls that must exist before launch:

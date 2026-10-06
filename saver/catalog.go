@@ -54,6 +54,9 @@ type catalogEntry struct {
 	Tags    []string `json:"tags,omitempty"`
 	Trashed int64    `json:"trashed,omitempty"`
 	Folder  string   `json:"folder,omitempty"` // the folder it is in; "" at the top level
+	// Protection is ProtectionE2EE for a confidential document, whose Name is then the
+	// placeholder and Tags empty (the real ones are in the document); "" is the server's.
+	Protection string `json:"protection,omitempty"`
 	// Sum is the SHA-256 (hex) of the current file's bytes, "" for a document saved
 	// before checksums (Verify gives it one). Prev is the file of the save before the
 	// current one, with its checksum, kept as a light redundancy: if the current file is
@@ -84,7 +87,7 @@ type catalog struct {
 func (c *catalog) entry(s *Saver, id string) Entry {
 	e := c.Docs[id]
 	codec, _ := s.Codec(e.Format)
-	out := Entry{ID: id, Key: e.Key, Name: e.Name, Format: codec, Size: e.Size, Updated: time.Unix(0, e.Updated), Tags: e.Tags, Folder: e.Folder}
+	out := Entry{ID: id, Key: e.Key, Name: e.Name, Format: codec, Size: e.Size, Updated: time.Unix(0, e.Updated), Tags: e.Tags, Folder: e.Folder, Protection: level(e.Protection)}
 	if e.Trashed != 0 {
 		out.Trashed = time.Unix(0, e.Trashed)
 	}
@@ -309,8 +312,10 @@ func (s *Saver) rebuild(ctx context.Context, t Target, known *catalog) (*catalog
 // file the old catalog knows nothing about is never put back over a newer one.
 func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, error) {
 	knownSum := map[string]string{}
+	knownEntry := map[string]catalogEntry{} // by file
 	if known != nil {
 		for _, e := range known.Docs {
+			knownEntry[e.Key], knownEntry[e.Prev] = e, e
 			if e.Sum != "" {
 				knownSum[e.Key] = e.Sum
 			}
@@ -362,6 +367,41 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 			continue
 		}
 		stored, err := t.Adapter.Load(ctx, m.ID)
+		if errors.Is(err, docstore.ErrLocked) {
+			// A file no key here opens (an end-to-end document, rebuilt without its key): it
+			// is listed without being read, as confidential unless the catalog being replaced
+			// says otherwise. Its folder and trash flag are in the file, so they are lost
+			// unless that catalog had them.
+			id := stem
+			if i := strings.IndexByte(m.ID, '~'); i >= 0 {
+				id = m.ID[:i]
+			}
+			if !docfile.ValidID(id) {
+				out.Skipped = append(out.Skipped, m.ID)
+				continue
+			}
+			entry := lockedEntry(m, knownEntry)
+			if ks := knownSum[m.ID]; ks != "" {
+				entry.Sum = ks
+			} else {
+				entry.Sum = ""
+			}
+			modified[m.ID] = m.UpdatedAt.UnixNano()
+			if cur, ok := out.Docs[id]; ok {
+				older, newer := entry, cur
+				if modified[cur.Key] < modified[entry.Key] {
+					older, newer = cur, entry
+				}
+				if s.previousCopies() > 0 && newer.Prev == "" {
+					newer.Prev, newer.PrevSum = older.Key, older.Sum
+				} else {
+					out.Skipped = append(out.Skipped, older.Key)
+				}
+				entry = newer
+			}
+			out.Docs[id] = entry
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -409,6 +449,11 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 			saved = m.UpdatedAt.UnixNano()
 		}
 		entry := catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: size, Updated: saved, Tags: doc.Tags(), Trashed: doc.Trashed(), Folder: doc.Folder(), Sum: sum}
+		// The document says it is confidential (or the catalog being replaced did): its real
+		// name and tags stay in it, and the catalog lists the placeholder.
+		if k, ok := knownEntry[m.ID]; doc.Protection() == ProtectionE2EE || ok && k.confidential() {
+			entry.conceal()
+		}
 		modified[key] = m.UpdatedAt.UnixNano()
 		actual[key] = docstore.Digest(stored.Data)
 		if cur, ok := out.Docs[id]; ok {
@@ -499,6 +544,7 @@ func (s *Saver) prepareTouch(ctx context.Context, t Target, cat *catalog, id str
 		*later = append(*later, func() { _ = t.Adapter.Delete(ctx, bad) })
 	}
 	f(&doc)
+	doc.SetProtection(e.Protection) // the file always says what the catalog says
 	data, err := c.Marshal(doc)
 	if err != nil {
 		return nil, err

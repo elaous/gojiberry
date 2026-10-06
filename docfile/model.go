@@ -742,6 +742,34 @@ func (d *Document) SetTrashed(ns int64) {
 	d.Set(TrashedKey, strconv.FormatInt(ns, 10))
 }
 
+// ProtectionKey is the Meta key holding a document's protection level, and ProtectionE2EE
+// the one level that is written: a confidential document, whose real name and tags live
+// here, inside the document, while a catalog lists a placeholder. A document with no such
+// key is protected by the server only.
+const (
+	ProtectionKey  = "protection"
+	ProtectionE2EE = "e2ee"
+)
+
+// Protection returns the document's protection level: ProtectionE2EE, or "" for the
+// default.
+func (d Document) Protection() string {
+	if v, _ := d.Get(ProtectionKey); v == ProtectionE2EE {
+		return v
+	}
+	return ""
+}
+
+// SetProtection records the protection level; anything but ProtectionE2EE takes the key
+// away.
+func (d *Document) SetProtection(level string) {
+	if level != ProtectionE2EE {
+		d.Meta = slices.DeleteFunc(slices.Clone(d.Meta), func(m MetaEntry) bool { return m.Key == ProtectionKey })
+		return
+	}
+	d.Set(ProtectionKey, level)
+}
+
 // FolderKey is the Meta key holding the ID of the folder a document is in; a
 // document at the top level has none.
 const FolderKey = "folder"

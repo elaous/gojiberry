@@ -9,8 +9,9 @@ reading everything** (list from the end of the file, read one document with a ra
 read), **append without rewriting**, **survive a crash**, and **one serialization**
 (protobuf, the same as the documents).
 
-Not goals in this version: compression, encryption, partial updates of a document
-in place.
+Not goals in this version: compression, partial updates of a document in place. Encryption
+is not done by the pack, which has no keys and no cryptography; it carries **encrypted
+records** (§2) whose bytes are an envelope someone else made.
 
 ## 1. Conventions
 
@@ -49,14 +50,23 @@ string producer = 4; string description = 5; }`.
 |---|---|
 | 8 | length of the data (n) |
 | 1 | kind: 1 document, 2 index, 3 signature; others are skipped |
-| 3 | zero |
+| 1 | flags: bit 0 = the data is an envelope (an encrypted record, below); other bits mean "do not read this record" |
+| 2 | zero |
 | 4 | CRC-32C of the 12 bytes above |
 | n | data |
 | 4 | CRC-32C of the data |
 | 0–7 | padding, so the next record starts on 8 |
 
 A document record's data is a `.open` message (a `docfile.Document` in protobuf wire
-format) and nothing else. Records are self-framing: a reader can walk the file from
+format) and nothing else, **or**, when the flags' bit 0 is set, an **encrypted record**: an
+opaque envelope (for the reference implementation an age file whose plaintext is that same
+`.open` message). The pack does not look inside it, so everything about the record that
+is computed is over the **stored** bytes: the data CRC, the index's SHA-256 and so the
+signature. A pack's integrity, signature, `Verify`, `Compact` and `Recover` therefore work
+**without any key**; only reading the document needs one. Packs with no encrypted record
+are byte for byte what they were (the flags byte was zero, `testdata/vector.opendoc`
+still passes), the header's flags stay 0, and an older reader that meets an encrypted
+record fails to parse it as a document, for that document only. Records are self-framing: a reader can walk the file from
 the header without the index, which is how a damaged tail is recovered (§5).
 
 ### Index record (kind 2)
@@ -76,9 +86,17 @@ message Entry {
   uint64 length = 7;    // length of the data
   bytes  sha256 = 8;    // of the data
   bool   trashed = 9;
+  bool   encrypted = 10; // the record is an encrypted record: its flags bit 0 is set too
 }
 message Folder { string id = 1; string name = 2; string parent = 3; }
 ```
+
+For an encrypted record the writer chooses what the index shows: the reference
+implementation lists a placeholder name ("Confidential document"), no tags, and the folder,
+the update time and the trash flag as they are (the real name and tags travel inside the
+envelope). `encrypted` in the index and the record's flag must agree; a reader that finds
+them different reports that document as damaged, and unknown flag bits do the same (the
+index is covered by the footer's hash and the signature, the flag by the frame's CRC).
 
 Folders are virtual, as in a store: a document names its folder, a folder names its
 parent. The index is what a store imports or lists; nothing is parsed from the
@@ -114,9 +132,14 @@ is the application's.
 2. **Open one document.** Range-read the record at `entry.offset`, check the frame
    and the data CRC, check SHA-256 equals `entry.sha256`. A mismatch is an error for
    that document; the others are still readable.
-3. **Verify all.** Do 2 for every entry, check no two records overlap and that every
+3. **Open an encrypted record.** Step 2 gives the envelope as stored. `Reader.Read` of such an
+   entry returns `ErrEncrypted`; `Reader.ReadWith(id, open)` passes the envelope through a
+   function the caller supplies (it decrypts and returns the `.open` message), then parses it
+   and checks the document's ID as for any record.
+4. **Verify all.** Do 2 for every entry, check no two records overlap and that every
    record in the file is in the index (a record not in the index is reported, not an
-   error: it is an append that did not finish). With a signature record, check it too.
+   error: it is an append that did not finish). With a signature record, check it too. None of
+   it needs a key, encrypted records included.
 
 Bounds, always: a length or offset is checked against the file size before anything
 is allocated or seeked to. Caps: one record 256 MiB, 1,000,000 entries, an index
@@ -145,7 +168,15 @@ checks that a document's own ID is the ID the index lists it under.
 If the footer or index fails its checks, walk the records from the header: each frame
 is checked by its CRCs, a document record whose data parses as a `Document` is kept,
 and the walk stops at the first bad frame. The result is a pack of the documents that
-are intact, with names taken from `Document` metadata (id, name, folder, tags). This
+are intact, with names taken from `Document` metadata (id, name, folder, tags). An encrypted
+record has no readable ID, so it is carried through only when the index is intact (with the
+index's entry, as `Recovered.Sealed`, and `Repack` writes it back as an encrypted record);
+without the index it is counted in `Skipped` and in `Recovered.SealedLost`, and not
+recovered. **`Repack` drops such records**: the recovered pack silently lacks those
+confidential documents (`opendoc recover` prints a loud warning when `SealedLost` is not
+zero). If you have a copy of the pack whose index is intact, recover from that copy first;
+the damaged one is better kept as it is than replaced by the repacked output. The walk
+cannot count records after the first bad frame. This
 loses the index's folders only if the documents' own `folder` metadata is also gone.
 A document whose ID appears in more than one record is recovered once, as the last of
 them. If the index is still intact, it decides which records are in the pack (a document
@@ -160,16 +191,21 @@ Decided for this draft:
 
 1. A hash per document **and** one optional signature over the whole pack (a hash alone
    does not catch someone who rewrites a record and its hash).
-2. **No compression** in version 1 (documents carry images as `data:` URLs, which
+2. **Encrypted records** are opaque to the pack (a flag bit and an index field): no key per
+   pack, no nonces in the format, nothing for a key to sign over. The envelope brings its
+   own authentication, and the pack's hashes and signature cover it as stored, so a record
+   cannot be swapped or altered without `Verify` noticing, keyless. Which keys open it is the
+   envelope's business (docs/encryption-and-passkeys.md).
+3. **No compression** in version 1 (documents carry images as `data:` URLs, which
    compress poorly); a flag bit and a record kind are reserved for it.
-3. The reference implementation is `docfile/pack`, depending on `docfile` and the
+4. The reference implementation is `docfile/pack`, depending on `docfile` and the
    standard library only, so it can be lifted out. The command line tool is
    `cmd/opendoc` in this repository for now.
 
 Open:
 
-1. Encryption of records (a key per pack, per-record nonces), and how it composes with
-   the signature.
+1. Hiding what the index shows about an encrypted record (its folder, size, update time and
+   trash flag stay readable, like a store's catalog).
 2. Moving large attachments out of documents into their own record kind.
 3. Whether the signature should allow several signers.
 4. A MIME type (`application/vnd.opendocs.pack`) and a magic entry for `file(1)`.
@@ -179,15 +215,25 @@ Open:
 1. **Done:** `docfile/pack` (`Writer`, `Appender`, `Reader` over `io.ReaderAt`, `Verify`,
    `Recover` and `Repack`, `Compact`), with a committed test vector
    (`testdata/vector.opendoc`, byte for byte), a test that cuts the file at every byte and
-   one that flips every bit, and a fuzz target (`go test -fuzz FuzzOpen`). It uses
-   only `docfile` and the standard library.
+   one that flips every bit, and a fuzz target (`go test -fuzz FuzzOpen`, seeded with a pack
+   that has an encrypted record). It uses only `docfile` and the standard library.
+   Encrypted records: `Writer.AddEncrypted` / `Appender.AddEncrypted`, `Entry.Encrypted`,
+   `ErrEncrypted`, `Reader.ReadWith`.
 2. **Done:** `Saver.ExportPack` (a folder or everything; folders by ID, tags, the trash flag,
    optionally each document's history; signed if given a key) and `Saver.ImportPack` (folders
-   recreated by ID under a chosen folder; a document already there is skipped, replaced (with the pack's folder, tags and trash flag) or
-   copied (the UI import always skips); a bad document is reported and the rest come in; the signature is reported). The
+   recreated by ID under a chosen folder; a document already there is skipped, replaced (with
+   the pack's folder, tags and trash flag) or copied (the UI import always skips); a bad
+   document is reported and the rest come in; the signature is reported). A confidential
+   (end-to-end) document is written as an encrypted record through `PackOptions.Seal` and read
+   back through `ImportOptions.Open`: the index lists the placeholder name and no tags for it;
+   with no `Seal` it is left out and reported to `PackOptions.Warn` (never written in the
+   clear), a failing `Seal` stops the export; with no `Open`, or a failing one, the record is
+   skipped with a needs-key warning (`ImportReport.NeedsKey`, `Warnings`) and the rest come
+   in; an imported one is saved confidential again, subject to `Saver.ConfidentialCheck`. The
    UI: "As .opendoc" on a folder and "Import .opendoc" in the document list
    (`Session.DownloadPack`, `Session.Pick`), and "One .opendoc pack" in Migrate's format menu
-   (`migrate.PackSink`).
+   (`migrate.PackSink`). *Left:* the UI has no keys yet, so it leaves confidential documents
+   out and says so.
 3. **Done:** `cmd/opendoc`: `pack` and `convert` (a file or a folder tree; `.docx`, `.pdf`,
    Markdown, text, `.open`, JSON and protobuf are read through the importers, subfolders
    become folders), `unpack`, `list`, `verify`, `sign`, `recover`, `keygen`. Its

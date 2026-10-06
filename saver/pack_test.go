@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -395,4 +396,359 @@ func TestPackTrashFailingAfterSaveIsAWarningNotAFailure(t *testing.T) {
 	if rep.Documents != 3 || len(rep.Failed) != 0 || len(rep.Warnings) != 1 || !strings.Contains(rep.Warnings[0], "trash") {
 		t.Fatalf("saved, so imported, with the trash failure as a warning: %+v", rep)
 	}
+}
+
+// The confidential documents of a pack: sealed with an injected function, the fake one here,
+// since the saver only carries the envelope (docstore/encrypt has the real one's tests).
+
+func fakeSeal(_ context.Context, id string, plain []byte) ([]byte, error) {
+	out := []byte("SEAL:" + id + ":")
+	for _, c := range plain {
+		out = append(out, c^0x5a)
+	}
+	return out, nil
+}
+
+func fakeOpen(_ context.Context, id string, env []byte) ([]byte, error) {
+	rest, ok := bytes.CutPrefix(env, []byte("SEAL:"+id+":"))
+	if !ok {
+		return nil, errors.New("not sealed for this document")
+	}
+	out := make([]byte, 0, len(rest))
+	for _, c := range rest {
+		out = append(out, c^0x5a)
+	}
+	return out, nil
+}
+
+// packSource is a store with a folder, an ordinary tagged document, one in the trash and a
+// confidential one in the folder.
+func packSource(t *testing.T) (s *Saver, folder Folder, plain, trashed, secret string) {
+	t.Helper()
+	ctx := context.Background()
+	s = &Saver{Targets: []Target{{Name: "src", Adapter: docstore.NewMemoryAdapter()}}}
+	folder, err := s.CreateFolder(ctx, "src", "", "Reports")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, _ := s.CreateFolder(ctx, "src", folder.ID, "2026")
+	d := docWithText("Budget opendocs.io", "budget text")
+	d.SetFolder(sub.ID)
+	e1, _ := s.Save(ctx, "src", docfile.Open, d)
+	_ = s.SetTags(ctx, "src", e1.ID, []string{"finance", "q3"})
+	e2, _ := s.Save(ctx, "src", docfile.Open, docWithText("Old draft", "draft text"))
+	_ = s.Trash(ctx, "src", e2.ID)
+	d = docWithText(secretName, "the secret text")
+	d.SetFolder(folder.ID)
+	e3, _ := s.Save(ctx, "src", docfile.Open, d)
+	_ = s.SetTags(ctx, "src", e3.ID, []string{secretTag})
+	if err := s.SetProtection(ctx, "src", e3.ID, ProtectionE2EE); err != nil {
+		t.Fatal(err)
+	}
+	return s, folder, e1.ID, e2.ID, e3.ID
+}
+
+func sealedPack(t *testing.T, o PackOptions) (data []byte, secret, plain, trashed string, folder Folder) {
+	t.Helper()
+	s, folder, plain, trashed, secret := packSource(t)
+	o.Seal = fakeSeal
+	var buf bytes.Buffer
+	if _, err := s.ExportPack(context.Background(), "src", "", &buf, o); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes(), secret, plain, trashed, folder
+}
+
+func newDst() *Saver {
+	return &Saver{Targets: []Target{{Name: "dst", Adapter: docstore.NewMemoryAdapter()}}}
+}
+
+func TestExportPackSealsConfidentialDocuments(t *testing.T) {
+	ctx := context.Background()
+	s, folder, plain, trashed, secret := packSource(t)
+	key := ed25519.NewKeyFromSeed([]byte("saver pack test seed 01234567890")[:32])
+	var buf bytes.Buffer
+	var warned []PackIssue
+	n, err := s.ExportPack(ctx, "src", "", &buf, PackOptions{Name: "Everything", History: true, Key: key, Seal: fakeSeal, Warn: func(i PackIssue) { warned = append(warned, i) }})
+	if err != nil || n != 3 || len(warned) != 0 {
+		t.Fatalf("%d %v %v", n, warned, err)
+	}
+	if b := buf.Bytes(); bytes.Contains(b, []byte(secretName)) || bytes.Contains(b, []byte("the secret text")) || bytes.Contains(b, []byte(secretTag)) {
+		t.Fatal("the pack holds the confidential document in the clear")
+	}
+	// Without a key: the pack lists, verifies and is signed.
+	r, err := pack.Open(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rp := r.Verify(); !rp.OK() || !rp.Signed || rp.Checked != 3 {
+		t.Fatalf("%+v", rp)
+	}
+	if r.Meta().Name != "Everything" || len(r.Index().Folders) != 2 {
+		t.Errorf("%+v", r.Meta())
+	}
+	byID := map[string]pack.Entry{}
+	for _, e := range r.Index().Entries {
+		byID[e.ID] = e
+	}
+	if e := byID[secret]; !e.Encrypted || e.Name != ConfidentialName || len(e.Tags) != 0 || e.Folder != folder.ID {
+		t.Errorf("%+v", e)
+	}
+	if e := byID[plain]; e.Encrypted || e.Name != "Budget opendocs.io" || !slices.Equal(e.Tags, []string{"finance", "q3"}) {
+		t.Errorf("%+v", e)
+	}
+	if e := byID[trashed]; !e.Trashed || e.Encrypted {
+		t.Errorf("%+v", e)
+	}
+	// The envelope holds the real name, tags and text.
+	got, err := r.ReadWith(secret, func(env []byte) ([]byte, error) { return fakeOpen(ctx, secret, env) })
+	if err != nil || got.Name() != secretName || !slices.Equal(got.Tags(), []string{secretTag}) || textOf(got) != "the secret text" {
+		t.Fatalf("%v %v", got.Name(), err)
+	}
+	if _, err := r.Read(secret); !errors.Is(err, pack.ErrEncrypted) {
+		t.Errorf("%v", err)
+	}
+}
+
+func TestExportPackWithoutASealLeavesConfidentialOnesOutNeverInTheClear(t *testing.T) {
+	ctx := context.Background()
+	s, _, _, _, secret := packSource(t)
+	var buf bytes.Buffer
+	var warned []PackIssue
+	n, err := s.ExportPack(ctx, "src", "", &buf, PackOptions{Warn: func(i PackIssue) { warned = append(warned, i) }})
+	if err != nil || n != 2 || len(warned) != 1 || warned[0].ID != secret || warned[0].Reason != PackNeedsKey {
+		t.Fatalf("%d %+v %v", n, warned, err)
+	}
+	if bytes.Contains(buf.Bytes(), []byte("secret text")) || bytes.Contains(buf.Bytes(), []byte(secretName)) {
+		t.Error("in the clear")
+	}
+	// No Warn is fine too.
+	if n, err := s.ExportPack(ctx, "src", "", &bytes.Buffer{}, PackOptions{}); err != nil || n != 2 {
+		t.Errorf("%d %v", n, err)
+	}
+	// A failing Seal stops the export: a pack that quietly lacks it would pass for a backup.
+	boom := errors.New("no recipients")
+	_, err = s.ExportPack(ctx, "src", "", &bytes.Buffer{}, PackOptions{Seal: func(context.Context, string, []byte) ([]byte, error) { return nil, boom }})
+	if !errors.Is(err, boom) {
+		t.Errorf("%v", err)
+	}
+	if _, err = s.ExportPack(ctx, "src", "", &bytes.Buffer{}, PackOptions{Seal: func(context.Context, string, []byte) ([]byte, error) { return nil, nil }}); err == nil {
+		t.Error("an empty envelope was written")
+	}
+}
+
+func TestImportPackOpensConfidentialDocumentsAndKeepsThemConfidential(t *testing.T) {
+	ctx := context.Background()
+	data, secret, plain, trashed, folder := sealedPack(t, PackOptions{History: true})
+	dst := newDst()
+	rep, err := dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen})
+	if err != nil || rep.Documents != 3 || rep.Folders != 2 || len(rep.Failed) != 0 || len(rep.NeedsKey) != 0 || len(rep.Warnings) != 0 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	e, err := dst.Get(ctx, "dst", plain)
+	if err != nil || e.Name != "Budget opendocs.io" || !slices.Equal(e.Tags, []string{"finance", "q3"}) || e.Folder == "" || e.Protection == ProtectionE2EE {
+		t.Fatalf("%+v %v", e, err)
+	}
+	if e, _ := dst.Get(ctx, "dst", trashed); e.Trashed.IsZero() {
+		t.Errorf("not in the trash: %+v", e)
+	}
+	e, err = dst.Get(ctx, "dst", secret)
+	if err != nil || e.Name != ConfidentialName || len(e.Tags) != 0 || e.Protection != ProtectionE2EE || e.Folder != folder.ID {
+		t.Fatalf("%+v %v", e, err)
+	}
+	if txt := catalogText(t, dst); strings.Contains(txt, secretName) || strings.Contains(txt, secretTag) {
+		t.Errorf("the catalog says what is hidden: %s", txt)
+	}
+	if n, tags, err := dst.Reveal(ctx, "dst", secret); err != nil || n != secretName || !slices.Equal(tags, []string{secretTag}) {
+		t.Errorf("%q %v %v", n, tags, err)
+	}
+	// Again: everything is there and skipped, nothing is touched.
+	rep, err = dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen})
+	if err != nil || rep.Documents != 0 || len(rep.Skipped) != 3 || rep.Folders != 0 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+}
+
+func TestImportPackWithoutAKeyWarnsAndImportsTheRest(t *testing.T) {
+	ctx := context.Background()
+	data, secret, plain, _, _ := sealedPack(t, PackOptions{})
+	dst := newDst()
+	rep, err := dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{})
+	if err != nil || rep.Documents != 2 || len(rep.NeedsKey) != 1 || rep.NeedsKey[0].ID != secret || rep.NeedsKey[0].Reason != PackNeedsKey || len(rep.Warnings) != 1 || len(rep.Failed) != 0 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	if _, err := dst.Get(ctx, "dst", secret); !errors.Is(err, ErrNotFound) {
+		t.Errorf("%v", err)
+	}
+	if _, err := dst.Get(ctx, "dst", plain); err != nil {
+		t.Error(err)
+	}
+	// An Open that cannot open it is the same warning, with the reason.
+	dst2 := newDst()
+	nokey := errors.New("wrong key")
+	rep, err = dst2.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: func(context.Context, string, []byte) ([]byte, error) { return nil, nokey }})
+	if err != nil || rep.Documents != 2 || len(rep.NeedsKey) != 1 || !errors.Is(rep.NeedsKey[0].Err, nokey) || !strings.Contains(rep.Warnings[0], "wrong key") {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	// Later, with the key, the one left behind comes in (the others are skipped as there).
+	rep, err = dst2.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen})
+	if err != nil || rep.Documents != 1 || len(rep.Skipped) != 2 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	if e, err := dst2.Get(ctx, "dst", secret); err != nil || e.Protection != ProtectionE2EE {
+		t.Errorf("%+v %v", e, err)
+	}
+}
+
+func TestImportPackRefusesConfidentialWhenTheCheckDoes(t *testing.T) {
+	ctx := context.Background()
+	data, secret, _, _, _ := sealedPack(t, PackOptions{})
+	dst := newDst()
+	need := errors.New("a passkey is the only key")
+	dst.ConfidentialCheck = func(context.Context, string, string) error { return need }
+	rep, err := dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen})
+	if err != nil || rep.Documents != 2 || len(rep.Failed) != 1 || !strings.Contains(rep.Failed[0], need.Error()) {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	if _, err := dst.Get(ctx, "dst", secret); !errors.Is(err, ErrNotFound) {
+		t.Errorf("%v", err)
+	}
+}
+
+func TestImportPackConflictPoliciesWithConfidentialDocuments(t *testing.T) {
+	ctx := context.Background()
+	data, secret, _, _, _ := sealedPack(t, PackOptions{})
+	dst := newDst()
+	if _, err := dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen}); err != nil {
+		t.Fatal(err)
+	}
+	// Copy: a new confidential document under a new ID, with its real name inside.
+	rep, err := dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen, Conflict: ConflictCopy})
+	if err != nil || rep.Documents != 3 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	l, _ := dst.List(ctx, "dst")
+	copies := 0
+	for _, e := range l {
+		if e.ID == secret || e.Protection != ProtectionE2EE {
+			continue
+		}
+		copies++
+		if n, _, err := dst.Reveal(ctx, "dst", e.ID); err != nil || n != secretName+" (imported)" {
+			t.Errorf("%q %v", n, err)
+		}
+	}
+	if copies != 1 {
+		t.Errorf("%d copies", copies)
+	}
+	// Replace puts a confidential document over an ordinary one with that ID: it is confidential after.
+	d := docWithText("Plain stand-in", "x")
+	d.SetID(secret)
+	dst2 := newDst()
+	if _, err := dst2.Save(ctx, "dst", docfile.Open, d); err != nil {
+		t.Fatal(err)
+	}
+	rep, err = dst2.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen, Conflict: ConflictReplace})
+	if err != nil || rep.Documents != 3 || len(rep.Warnings) != 0 || len(rep.Failed) != 0 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	e, _ := dst2.Get(ctx, "dst", secret)
+	if e.Protection != ProtectionE2EE || e.Name != ConfidentialName || len(e.Tags) != 0 {
+		t.Errorf("%+v", e)
+	}
+	if n, tags, err := dst2.Reveal(ctx, "dst", secret); err != nil || n != secretName || !slices.Equal(tags, []string{secretTag}) {
+		t.Errorf("%q %v %v", n, tags, err)
+	}
+}
+
+// standIn saves an ordinary (server-level) document with the ID of the pack's secret one.
+func standIn(t *testing.T, s *Saver, secret string) {
+	t.Helper()
+	d := docWithText("Plain stand-in", "stand-in text")
+	d.SetID(secret)
+	if _, err := s.Save(context.Background(), "dst", docfile.Open, d); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetTags(context.Background(), "dst", secret, []string{"standin"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestImportPackReplaceOverServerDocumentWithRefusingCheckLeavesItUntouched(t *testing.T) {
+	ctx := context.Background()
+	data, secret, _, _, _ := sealedPack(t, PackOptions{})
+	dst := newDst()
+	standIn(t, dst, secret)
+	need := errors.New("a passkey is the only key")
+	dst.ConfidentialCheck = func(context.Context, string, string) error { return need }
+	rep, err := dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen, Conflict: ConflictReplace})
+	if err != nil || len(rep.Failed) != 1 || !strings.Contains(rep.Failed[0], need.Error()) {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	e, _ := dst.Get(ctx, "dst", secret)
+	if e.Protection == ProtectionE2EE || e.Name != "Plain stand-in" || !slices.Equal(e.Tags, []string{"standin"}) {
+		t.Errorf("the existing document changed: %+v", e)
+	}
+	if txt := catalogText(t, dst); strings.Contains(txt, secretName) || strings.Contains(txt, secretTag) {
+		t.Errorf("the catalog leaks: %s", txt)
+	}
+	if d, err := dst.Load(ctx, "dst", secret); err != nil || textOf(d) != "stand-in text" {
+		t.Errorf("%v", err)
+	}
+}
+
+func TestImportPackReplaceOverServerDocumentWithPassingCheckIsE2EE(t *testing.T) {
+	ctx := context.Background()
+	data, secret, _, _, _ := sealedPack(t, PackOptions{})
+	dst := newDst()
+	standIn(t, dst, secret)
+	checked := 0
+	dst.ConfidentialCheck = func(context.Context, string, string) error { checked++; return nil }
+	rep, err := dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen, Conflict: ConflictReplace})
+	if err != nil || len(rep.Failed) != 0 || len(rep.Warnings) != 0 || checked == 0 {
+		t.Fatalf("%+v %v %d", rep, err, checked)
+	}
+	e, _ := dst.Get(ctx, "dst", secret)
+	if e.Protection != ProtectionE2EE || e.Name != ConfidentialName || len(e.Tags) != 0 {
+		t.Errorf("%+v", e)
+	}
+	if txt := catalogText(t, dst); strings.Contains(txt, secretName) || strings.Contains(txt, secretTag) || strings.Contains(txt, "standin") {
+		t.Errorf("the catalog leaks: %s", txt)
+	}
+	if n, tags, err := dst.Reveal(ctx, "dst", secret); err != nil || n != secretName || !slices.Equal(tags, []string{secretTag}) {
+		t.Errorf("%q %v %v", n, tags, err)
+	}
+}
+
+func TestImportPackReplaceOverServerDocumentWithFailingWriteKeepsItAndLeaksNothing(t *testing.T) {
+	ctx := context.Background()
+	data, secret, _, _, _ := sealedPack(t, PackOptions{})
+	fa := &toggleFail{Adapter: docstore.NewMemoryAdapter()}
+	dst := &Saver{Targets: []Target{{Name: "dst", Adapter: fa}}}
+	standIn(t, dst, secret)
+	fa.on = true
+	rep, err := dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen, Conflict: ConflictReplace})
+	if err != nil || len(rep.Failed) != 1 || !strings.Contains(rep.Failed[0], "disk on fire") {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	e, _ := dst.Get(ctx, "dst", secret)
+	if e.Protection == ProtectionE2EE || e.Name != "Plain stand-in" {
+		t.Errorf("%+v", e)
+	}
+	if txt := catalogText(t, dst); strings.Contains(txt, secretName) || strings.Contains(txt, secretTag) {
+		t.Errorf("the catalog leaks: %s", txt)
+	}
+}
+
+// toggleFail fails the write of the secret text once on.
+type toggleFail struct {
+	docstore.Adapter
+	on bool
+}
+
+func (f *toggleFail) Save(ctx context.Context, id string, data []byte) error {
+	if f.on && bytes.Contains(data, []byte("the secret text")) {
+		return errors.New("disk on fire")
+	}
+	return f.Adapter.Save(ctx, id, data)
 }

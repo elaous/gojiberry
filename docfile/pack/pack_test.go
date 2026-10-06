@@ -300,6 +300,7 @@ func TestHostileInput(t *testing.T) {
 			r.Verify()
 			for _, e := range r.Index().Entries {
 				_, _ = r.Read(e.ID)
+				_, _ = r.ReadWith(e.ID, unseal)
 			}
 		}
 		_, _ = Recover(bytes.NewReader(bad), int64(len(bad)))
@@ -364,6 +365,7 @@ func TestTestVector(t *testing.T) {
 
 func FuzzOpen(f *testing.F) {
 	f.Add([]byte("OPENDOC\x00"))
+	f.Add(buildMixed(f, nil))
 	if v, err := os.ReadFile(filepath.Join("testdata", "vector.opendoc")); err == nil {
 		f.Add(v)
 	}
@@ -373,6 +375,7 @@ func FuzzOpen(f *testing.F) {
 			r.Verify()
 			for _, e := range r.Index().Entries {
 				_, _ = r.Read(e.ID)
+				_, _ = r.ReadWith(e.ID, unseal)
 			}
 		}
 		_, _ = Recover(bytes.NewReader(b), int64(len(b)))

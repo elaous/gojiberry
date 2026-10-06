@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/docfile/pack"
 )
 
 func do(t *testing.T, args ...string) string {
@@ -270,5 +271,38 @@ func TestUnpackLongNamesCollisionsAndExistingFiles(t *testing.T) {
 	out.Reset()
 	if err := run([]string{"unpack", "--force", pk, un2}, &out); err == nil || !strings.Contains(out.String(), "1 documents written") {
 		t.Fatalf("%v %q", err, out.String())
+	}
+}
+
+func TestRecoverWarnsLoudlyAboutEncryptedRecordsItCannotAttribute(t *testing.T) {
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	w, err := pack.NewWriter(&buf, pack.Meta{ID: "p", Name: "Mixed", Created: 1700000000000000000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := docfile.Document{Title: "one", Updated: 1700000000000000000, Content: []docfile.Item{{Chars: &docfile.Chars{Text: "x"}}}}
+	d.SetID(docfile.NewID())
+	d.SetName("one")
+	if err := w.Add(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.AddEncrypted(pack.Entry{ID: docfile.NewID(), Name: "Confidential document"}, []byte("SEALED envelope bytes")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(nil); err != nil {
+		t.Fatal(err)
+	}
+	whole := filepath.Join(dir, "whole.opendoc")
+	_ = os.WriteFile(whole, buf.Bytes(), 0o644)
+	// Intact index: nothing lost, no warning.
+	if out := do(t, "recover", whole, filepath.Join(dir, "a.opendoc")); strings.Contains(out, "WARNING") {
+		t.Errorf("%s", out)
+	}
+	cut := filepath.Join(dir, "cut.opendoc")
+	_ = os.WriteFile(cut, buf.Bytes()[:buf.Len()-10], 0o644)
+	out := do(t, "recover", cut, filepath.Join(dir, "b.opendoc"))
+	if !strings.Contains(out, "WARNING: 1 encrypted") {
+		t.Errorf("no warning: %s", out)
 	}
 }

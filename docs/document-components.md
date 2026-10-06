@@ -109,12 +109,23 @@ document shows its folder.
    "Import .opendoc" (`ImportPack`, from `Session.Pick`; `Saver.ImportPack` skips documents
    already there (the UI import always uses Skip; Replace and Copy are for callers of
    `ImportPack`, and Replace takes the pack's folder, tags and trash flag too) and reports what it skipped, what failed and whether the pack was signed).
+   A confidential (end-to-end) document goes into a pack only through `PackOptions.Seal`, as an
+   encrypted record (placeholder name, no tags in the index), and comes back through
+   `ImportOptions.Open`; without them the session's download leaves it out and says so, and an
+   import skips it with a needs-key warning.
    Migrate's format menu has "One .opendoc pack": the documents are gathered into a pack and
    downloaded, and nothing is saved in the store.
 4. **Folder download** is `Saver.Archive`: a ZIP with the folders drawn as
    directories (they are virtual in the store), documents as saved, the trash
    left out. A folder ZIP does not include version history; download a document as
    `.open` for that.
+
+   **Confidential documents outside packs.** ZIP, `.open` and the document Download deliver a
+   confidential (end-to-end) document's plaintext, its real file name and its protection
+   marker: they are user-initiated exports of what the user can open, and only the pack path
+   (`PackOptions.Seal`) seals. A confidential document that no key opens here is skipped from
+   a ZIP with a warning (`Saver.ArchiveReport`, `ArchiveSkip`; the session says how many),
+   not an error that stops the archive.
 
 ## Migrate
 

@@ -181,6 +181,7 @@
   "docs.downloadAs": "Descargar como…",
   "docs.downloadOf": "Descargar %s como",
   "saver.downloaded": "%s descargado",
+  "saver.downloadedSkipped": "%s descargado sin %d documento(s) confidencial(es) bloqueado(s) aquí",
   "saver.linkCopied": "Enlace copiado: %s",
   "tab.page": "Página",
   "menu.pageSetup": "Configurar página…",
@@ -276,6 +277,7 @@
   "docs.importPack": "Importar .opendoc",
   "docs.downloadPack": "Como .opendoc",
   "saver.packDownloaded": "%s descargado como paquete de %d documentos",
+  "saver.packLeftOut": "(%d documentos confidenciales omitidos: necesitan una clave)",
   "saver.packImported": "%s: %d documentos y %d carpetas importados",
   "saver.packSkipped": "(%d ya estaban aquí, se dejaron como están)",
   "saver.packFailed": "(%d fallaron: %s)",
@@ -292,6 +294,9 @@
   "capacity.full": "Este almacenamiento está lleno o casi: un guardado puede ser rechazado y entonces el documento no queda guardado. Descargue sus documentos ahora (Descargar como, o una carpeta como ZIP), luego libere espacio eliminando versiones antiguas y vaciando la papelera, o guarde en otro lugar.",
   "saver.storageFull": "Almacenamiento al %.0f%%: descargue sus documentos ahora y luego elimine versiones antiguas y la papelera.",
   "saver.storageFilling": "Almacenamiento al %.0f%%: descargue sus documentos, o elimine versiones antiguas y la papelera, antes de que se llene.",
-  "saver.notSavedFull": "No guardado: el almacenamiento está lleno. Descargue el documento (Descargar como) para no perder trabajo, luego elimine versiones antiguas o la papelera, o guarde en otro lugar"
+  "saver.notSavedFull": "No guardado: el almacenamiento está lleno. Descargue el documento (Descargar como) para no perder trabajo, luego elimine versiones antiguas o la papelera, o guarde en otro lugar",
+  "saver.confidential": "%s es ahora confidencial: su nombre y etiquetas se guardan dentro del documento",
+  "saver.notConfidential": "%s ya no es confidencial",
+  "saver.revealed": "%s se puede leer: se muestra su nombre"
  }
 }

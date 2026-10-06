@@ -388,6 +388,10 @@ func unpackCmd(args []string, out outWriter) error {
 		fmt.Fprintf(os.Stderr, "opendoc: %s (%s): %v\n", esc(e.Name), esc(e.ID), err)
 	}
 	for _, e := range idx.Entries {
+		if e.Encrypted {
+			fail(e, errors.New("encrypted: this tool has no key, so it is not unpacked"))
+			continue
+		}
 		data, err := r.ReadRaw(e.ID)
 		if err != nil {
 			fail(e, err)
@@ -501,6 +505,9 @@ func listCmd(args []string, out outWriter) error {
 		folder := esc(names[e.Folder])
 		if e.Trashed {
 			folder += " (trash)"
+		}
+		if e.Encrypted {
+			folder += " (encrypted)"
 		}
 		tags := make([]string, len(e.Tags))
 		for i, t := range e.Tags {
@@ -621,5 +628,9 @@ func recoverCmd(args []string, out outWriter) error {
 		return err
 	}
 	say(out, "%d documents recovered into %s (complete: %v)\n", len(rec.Docs), args[1], rec.Complete)
+	if rec.SealedLost > 0 {
+		say(out, "WARNING: %d encrypted (confidential) record(s) could not be attributed because the index is damaged, and are NOT in %s. "+
+			"Recover from a copy of the pack whose index is intact first, if you have one.\n", rec.SealedLost, args[1])
+	}
 	return nil
 }
