@@ -13,6 +13,8 @@ type RecipientRow struct {
 	// trusted. Type is "ssh-ed25519", "ssh-rsa" or "age-x25519". Fingerprint is what the
 	// owner confirms.
 	Label, Type, Fingerprint string
+	// Uses is how many documents the key can open (this one included); 0 means unknown.
+	Uses int
 }
 
 // RecipientsProps configures Recipients.
@@ -35,6 +37,9 @@ type RecipientsProps struct {
 	// OnRemoved is called after a Remove that worked, with the count Remove returned; the
 	// host can keep it and pass RemovedNotice(n) as Notice on the next render.
 	OnRemoved func(fingerprint string, files int)
+	// RemoveEverywhere takes a key out of every document that uses it (each is decrypted and
+	// encrypted again without it). Offered next to Remove for a key with Uses above one.
+	RemoveEverywhere func(ctx context.Context, fingerprint string) error
 	// Notice is a status line shown under the list (for instance RemovedNotice).
 	Notice  string
 	Pending *Pending
@@ -90,6 +95,18 @@ func Recipients(p RecipientsProps) xango.Node {
 							return err
 						})
 					})))
+		}
+		if p.RemoveEverywhere != nil && r.Uses > 1 {
+			fp, name := r.Fingerprint, r.Label
+			if name == "" {
+				name = fp
+			}
+			extra = append(extra,
+				xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-uses")},
+					xango.Text(trf("recipients.uses", "opens %d documents", r.Uses))),
+				docButton("gj-recip-remove-all", trf("recipients.removeAll", "Remove from all %d documents", r.Uses), busy,
+					confirmed(p.Ask, trf("recipients.confirmRemoveAll", "%s can open %d documents. Removing this key decrypts every one of them and encrypts it again without it, so they cannot open what is saved from now on. They keep anything they already opened or copied: that cannot be taken back. Continue?", name, r.Uses),
+						actOne(p.Pending, p.RemoveEverywhere, fp))))
 		}
 		rows = append(rows, row(r, "gj-recip-item", extra...))
 	}

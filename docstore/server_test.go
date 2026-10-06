@@ -162,3 +162,34 @@ func TestServerQuotaMethodNotAllowed(t *testing.T) {
 		t.Fatalf("status = %d, want 405", rec.Code)
 	}
 }
+
+func TestServerHidesPrefixesAndMountsExtraRoutes(t *testing.T) {
+	mem := NewMemoryAdapter()
+	ctx := context.Background()
+	_ = mem.Save(ctx, "passkey/account/x", []byte("secret account"))
+	_ = mem.Save(ctx, "visible", []byte("hello"))
+	extra := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("extra")) })
+	h := NewServer(mem, "memory").WithRoutes("/auth/passkey/", extra).Hide("passkey/").Handler()
+	do := func(method, path string) (int, string) {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader("x")))
+		return rec.Code, rec.Body.String()
+	}
+	if code, body := do("GET", "/docs"); code != 200 || strings.Contains(body, "passkey") || !strings.Contains(body, "visible") {
+		t.Errorf("listing: %d %s", code, body)
+	}
+	for _, method := range []string{"GET", "PUT", "DELETE"} {
+		if code, _ := do(method, "/docs/passkey/account/x"); code != http.StatusBadRequest {
+			t.Errorf("%s of a hidden id: %d", method, code)
+		}
+	}
+	if d, _ := mem.Load(ctx, "passkey/account/x"); string(d.Data) != "secret account" {
+		t.Error("the hidden record is untouched")
+	}
+	if code, body := do("GET", "/auth/passkey/anything"); code != 200 || body != "extra" {
+		t.Errorf("the extra route: %d %q", code, body)
+	}
+	if code, body := do("GET", "/docs/visible"); code != 200 || body != "hello" {
+		t.Errorf("%d %q", code, body)
+	}
+}
