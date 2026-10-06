@@ -1,5 +1,5 @@
 // Package xango draws xango trees on a canvas.Stage (import path canvas/xango): the fourth
-// renderer after HTML (xango.Render), the DOM (domrt) and Gio (xangogio).
+// renderer after HTML (xango.Render), the DOM (domrt) and Gio (xango/gio).
 //
 // The elements here are constructors with the shape every xango component
 // has -- Name(NameProps) xango.Node -- so .xg files use them as tags:

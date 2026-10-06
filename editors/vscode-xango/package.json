@@ -3,6 +3,7 @@
   "displayName": "Xangô",
   "description": "Syntax highlighting for .xg files (Go with JSX-like tags, generic component tags, boolean attributes and resource imports such as _ \"module/path/styles.css\"), plus //language=-annotated embedded-language strings in any .go file",
   "version": "0.2.0",
+  "icon": "icon.png",
   "engines": {
     "vscode": "^1.80.0"
   },

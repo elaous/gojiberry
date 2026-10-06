@@ -13,11 +13,11 @@ import (
 
 	"github.com/elaous/gojiberry/examples/gio-counter-demo/shared"
 	"github.com/elaous/gojiberry/xango"
-	"github.com/elaous/gojiberry/xangogio"
+	"github.com/elaous/gojiberry/xango/gio"
 )
 
 // TestCounterRendersAndClicksThroughRealGio drives the exact same
-// shared.Counter component and xangogio.Renderer that main.go's run
+// shared.Counter component and gio.Renderer that main.go's run
 // mounts into a real desktop window, but through Gio's own headless
 // GPU backend (gioui.org/gpu/headless) instead of app.Window, so it
 // runs without a display server or compositor: each frame is a real
@@ -33,7 +33,7 @@ func TestCounterRendersAndClicksThroughRealGio(t *testing.T) {
 	defer w.Release()
 
 	th := material.NewTheme()
-	renderer := xangogio.New()
+	renderer := gio.New()
 	count := 0
 
 	frame := func() *image.RGBA {

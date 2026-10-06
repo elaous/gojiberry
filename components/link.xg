@@ -25,9 +25,7 @@ type LinkProps struct {
 // assistive tech the way a <button disabled> is.
 func Link(props LinkProps) xango.Node {
 	if props.Disabled {
-		return xango.El("span",
-			[]xango.Attr{xango.A("class", "gj-link gj-link-disabled"), xango.A("aria-disabled", "true")},
-			props.Children...)
+		return <span class="gj-link gj-link-disabled" aria-disabled="true">{props.Children}</span>
 	}
 	attrs := []xango.Attr{xango.A("class", "gj-link"), xango.A("href", props.Href)}
 	if props.Target != "" {

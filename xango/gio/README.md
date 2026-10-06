@@ -1,13 +1,13 @@
-# xangogio
+# xango/gio
 
 A third `xango.Node` renderer, alongside `xango.Render` (server-side HTML,
-see `../xango/render.go`) and `domrt.Mount`/`Update` (client-side DOM
-patching, see `../domrt/domrt.go`): it walks the exact same
+see `../render.go`) and `domrt.Mount`/`Update` (client-side DOM
+patching, see `../../domrt/domrt.go`): it walks the exact same
 renderer-agnostic tree onto a real [Gio](https://gioui.org)
 (`gioui.org`) window, so a native desktop/mobile target is a genuinely
 new consumer of `xango.Node` rather than a rewrite of it.
 
-It's a separate Go module (like `../examples/gio-counter-demo`, which
+It's a separate Go module (like `../../examples/gio-counter-demo`, which
 depends on this one rather than defining it locally), `replace`-ing
 `github.com/elaous/gojiberry` with the local checkout, so it can depend
 on `gioui.org` without adding it to the root module -- see gojiberry's
@@ -154,7 +154,7 @@ state:
 
 The `Counter`/click-driven integration test (proving the *whole
 pipeline* -- a real component, a real window, a real click firing a
-real handler -- works end to end) lives in `../examples/
+real handler -- works end to end) lives in `../../examples/
 gio-counter-demo`'s own `gio_test.go` instead, since it depends on
 that module's own `shared.Counter` component.
 
@@ -184,13 +184,13 @@ Add both a `require` and a `replace` pointing at this module, the same
 shape `examples/gio-counter-demo`'s own `go.mod` uses:
 
 ```
-require github.com/elaous/gojiberry/xangogio v0.0.0-00010101000000-000000000000
-replace github.com/elaous/gojiberry/xangogio => /path/to/gojiberry/xangogio
+require github.com/elaous/gojiberry/xango/gio v0.0.0-00010101000000-000000000000
+replace github.com/elaous/gojiberry/xango/gio => /path/to/gojiberry/xango/gio
 ```
 
 ## Not yet done
 
-`xangogio` covers every tag `ui/*.xg` structurally needs, and (as of
+`xango/gio` covers every tag `ui/*.xg` structurally needs, and (as of
 `Renderer.On`/`Renderer.Focus`) has a way to wire real interactivity
 -- including into a text field -- against an unmodified component too.
 `OnDesign/native` is now consuming all of it against real

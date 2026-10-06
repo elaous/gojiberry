@@ -257,6 +257,11 @@
   "passkey.note": "Ein Passkey sind zwei Faktoren in einem: Ihr Gerät und der Fingerabdruck, das Gesicht oder die PIN, die es entsperrt. Es gibt keinen separaten Code einzutippen.",
   "passkey.created": "hinzugefügt %s",
   "passkey.lastUsed": "zuletzt benutzt %s",
-  "passkey.synced": "auf Ihren Geräten synchronisiert"
+  "passkey.synced": "auf Ihren Geräten synchronisiert",
+  "capacity.nearlyFull": "Dieser Speicher füllt sich. Damit keine Arbeit verloren geht: Laden Sie Ihre Dokumente jetzt herunter (Herunterladen als, oder einen Ordner als ZIP), löschen Sie alte Versionen und leeren Sie den Papierkorb, oder speichern Sie woanders, bevor er voll ist.",
+  "capacity.full": "Dieser Speicher ist voll oder fast voll: Ein Speichern kann abgelehnt werden, und dann ist das Dokument nicht gespeichert. Laden Sie Ihre Dokumente jetzt herunter (Herunterladen als, oder einen Ordner als ZIP), schaffen Sie dann Platz, indem Sie alte Versionen löschen und den Papierkorb leeren, oder speichern Sie woanders.",
+  "saver.storageFull": "Speicher zu %.0f%% voll: Laden Sie Ihre Dokumente jetzt herunter, löschen Sie dann alte Versionen und den Papierkorb.",
+  "saver.storageFilling": "Speicher zu %.0f%% voll: Laden Sie Ihre Dokumente herunter oder löschen Sie alte Versionen und den Papierkorb, bevor er voll ist.",
+  "saver.notSavedFull": "Nicht gespeichert: Der Speicher ist voll. Laden Sie das Dokument herunter (Herunterladen als), damit keine Arbeit verloren geht, löschen Sie dann alte Versionen oder den Papierkorb, oder speichern Sie woanders"
  }
 }
