@@ -304,6 +304,21 @@ cannot swap in plaintext or another document's ciphertext). To migrate a store t
 `store.AllowPlaintext = true`, run `store.RekeyAll(ctx)`, and turn it off again. Rolling a file back
 to an older ciphertext of the same id is not detected by this layer.
 
+### Confidential marks and the switch in the list
+
+`DocList` marks a confidential document with a lock and the label "Confidential document" (`Doc.Confidential`;
+a folder has `DocFolder.Confidential`). `Doc.NameHidden` / `DocFolder.NameHidden` say the name shown is still
+the placeholder, and then the row offers **Reveal** (`DocListProps.Reveal`, `RevealFolder`). `SetProtection` and
+`SetFolderProtection` add **Make confidential** / **Make not confidential** to each row, with a question first
+that says what changes (the name and tags move inside; older copies are encrypted again; searching for the name
+stops working): the question is asked through `ConfirmAs` (`Asker.AskWith`, so the dialog's button says "Make
+confidential", not "Delete"), else `Confirm`, else the switch happens at once. A `saver.Session` plugs all of it
+in (`Session.ProtectionAvailable` says which targets can keep a secret; `Session.Forget` puts the placeholders
+back when the keys are forgotten; `Session.PackKeys` gives the pack buttons their `Seal` and `Open`, and the status
+line says how many confidential items were left out or need a key). A document that no unlocked key opens fails with
+a message that says to unlock the store (still an error that wraps `docstore.ErrLocked`).
+The showcase's "Encrypt this store" (`examples/canvas-editor-showcase`, `encstore`) is a host of all this.
+
 ## A folder on this computer
 
 `docstore.FileSystemAdapter` (browser builds) saves documents as files in a folder the person

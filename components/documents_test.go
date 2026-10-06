@@ -3,6 +3,8 @@ package components
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -555,4 +557,60 @@ func TestDocListMarksConfidentialFolders(t *testing.T) {
 		t.Fatalf("want one lock, got %d: %s", n, html)
 	}
 	mustContain(t, html, `aria-label="Confidential folder"`, "gj-doc-confidential")
+}
+
+func TestDocListMarksConfidentialDocumentsAndOffersTheSwitch(t *testing.T) {
+	var got []string
+	var asked []string
+	var labels []string
+	p := DocListProps{
+		Docs:    []Doc{{ID: "a", Name: "Plain"}, {ID: "b", Name: "Confidential document", Confidential: true, NameHidden: true}, {ID: "c", Name: "Budget", Confidential: true}},
+		Folders: []DocFolder{{ID: "f", Name: "Confidential folder", Confidential: true, NameHidden: true}, {ID: "g", Name: "Work"}},
+		Pending: &Pending{Inline: true},
+		SetProtection: func(_ context.Context, id string, on bool) error {
+			got = append(got, fmt.Sprintf("doc %s %v", id, on))
+			return nil
+		},
+		SetFolderProtection: func(_ context.Context, id string, on bool) error {
+			got = append(got, fmt.Sprintf("folder %s %v", id, on))
+			return nil
+		},
+		Reveal:       func(_ context.Context, id string) error { got = append(got, "reveal "+id); return nil },
+		RevealFolder: func(_ context.Context, id string) error { got = append(got, "revealfolder "+id); return nil },
+		Confirm:      func(m string, do func()) { asked = append(asked, m); do() },
+		ConfirmAs:    func(label, m string, do func()) { labels = append(labels, label); asked = append(asked, m); do() },
+	}
+	n := DocList(p)
+	html := render(t, n)
+	// A lock on each confidential document (two) and the folder (one), each with its label.
+	if c := strings.Count(html, "🔒"); c != 3 {
+		t.Fatalf("want three locks, got %d: %s", c, html)
+	}
+	mustContain(t, html, `aria-label="Confidential document"`, `aria-label="Confidential folder"`, "Make confidential", "Make not confidential")
+	// Reveal only where the name is hidden: one document and one folder.
+	if c := strings.Count(html, "gj-doclist-reveal"); c != 1 {
+		t.Errorf("document Reveal buttons: %d", c)
+	}
+	if c := strings.Count(html, "gj-doclist-folder-reveal"); c != 1 {
+		t.Errorf("folder Reveal buttons: %d", c)
+	}
+	// Each action asks first, with the confirm button saying what it does, and says what changes.
+	for _, h := range findHandlers(n, "click") {
+		h(xango.Event{})
+	}
+	want := []string{"doc a true", "doc b false", "doc c false", "folder f false", "folder g true", "reveal b", "revealfolder f"}
+	for _, w := range want {
+		if !slices.Contains(got, w) {
+			t.Errorf("%q was not run: %v", w, got)
+		}
+	}
+	all := strings.Join(asked, "\n")
+	mustContain(t, all, "name and tags move inside", "searching for its name stops working", "encrypted again", "move back into the list")
+	if !slices.Contains(labels, "Make confidential") || !slices.Contains(labels, "Make not confidential") {
+		t.Errorf("confirm labels %v", labels)
+	}
+	// With no operations nothing is drawn but the lock.
+	plain := render(t, DocList(DocListProps{Docs: p.Docs, Pending: &Pending{Inline: true}}))
+	mustNotContain(t, plain, "gj-doclist-protect", "gj-doclist-reveal")
+	mustContain(t, plain, "🔒")
 }

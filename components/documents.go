@@ -35,6 +35,11 @@ type Doc struct {
 	// Trashed is when the document was moved to the trash; zero if it is not there.
 	Trashed time.Time
 	Tags    []string
+	// Confidential marks a document protected end to end: its real name and tags are inside the
+	// envelope, so a UI draws a lock. NameHidden says the name shown is the placeholder (the
+	// document has not been opened or revealed here, so its real name is not known): the list
+	// offers Reveal for it.
+	Confidential, NameHidden bool
 }
 
 // DocFolder is a folder as the components list it: like a document, an ID and a
@@ -42,9 +47,12 @@ type Doc struct {
 //
 // Confidential marks a folder whose real name is kept inside the envelope: Name is then the
 // placeholder ("Confidential folder") until the host has revealed it, so a UI can draw a lock.
+//
+// NameHidden says the name is still the placeholder (not revealed here): the list offers Reveal.
 type DocFolder struct {
 	ID, Name, Parent string
 	Confidential     bool
+	NameHidden       bool
 }
 
 // DocVersion is a snapshot of a document.
@@ -170,6 +178,7 @@ var docIcons = map[string]string{
 	"gj-doclist-open": "description", "gj-doclist-duplicate": "content_copy", "gj-doclist-trash": "delete",
 	"gj-doclist-delete": "delete_forever", "gj-doclist-refresh": "refresh", "gj-doclist-check": "fact_check", "gj-doclist-download": "download",
 	"gj-doclist-folder-open": "folder_open", "gj-doclist-folder-delete": "delete_forever",
+	"gj-doclist-protect": "lock", "gj-doclist-reveal": "key", "gj-doclist-folder-protect": "lock", "gj-doclist-folder-reveal": "key",
 	"gj-doclist-folder-download": "download", "gj-doclist-folder-pack": "folder", "gj-doclist-import-pack": "upload_file", "gj-doclist-newfolder": "create_new_folder",
 	"gj-migrate-pick": "upload_file", "gj-migrate-start": "download",
 }
@@ -230,6 +239,10 @@ type DocListProps struct {
 	Pending *Pending
 	// Confirm, if set, is asked before Delete (see Asker.Ask); nil deletes at once.
 	Confirm func(message string, do func())
+	// ConfirmAs, if set, asks the same question with the words of the confirm button (an Asker's
+	// AskWith): the protection switches use it so the dialog says "Make confidential", not
+	// "Delete". Without it they use Confirm, or act at once.
+	ConfirmAs func(label, message string, do func())
 
 	// Folders are the folders inside the one being shown, and Path the folders from
 	// the top down to it (empty at the top level), drawn as a breadcrumb.
@@ -265,6 +278,17 @@ type DocListProps struct {
 	Download        func(ctx context.Context, id, format string) error
 	DownloadFolder  DocAction
 	DownloadFormats []DocChoice
+
+	// SetProtection makes a document confidential (true: its name and tags move inside the
+	// encrypted document) or not (false), and SetFolderProtection does the same for a folder's
+	// name. Each is offered as "Make confidential" / "Make not confidential" with a question
+	// first (Confirm) that says what changes; a nil operation leaves the control out. Reveal and
+	// RevealFolder read the real name of a confidential document or folder whose name is still
+	// hidden (Doc.NameHidden), which works once the host holds the key.
+	SetProtection       func(ctx context.Context, id string, confidential bool) error
+	SetFolderProtection func(ctx context.Context, id string, confidential bool) error
+	Reveal              DocAction
+	RevealFolder        DocAction
 }
 
 // DocChoice is a name and the label shown for it.
@@ -315,7 +339,7 @@ func DocList(p DocListProps) xango.Node {
 			class += " gj-doclist-current"
 		}
 		row := []xango.Node{
-			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text(d.Name)),
+			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name"+confidentialClass(d.Confidential))}, docNameNodes(d)...),
 			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta")}, xango.Text(docMeta(d))),
 		}
 		if p.Open != nil {
@@ -324,6 +348,7 @@ func DocList(p DocListProps) xango.Node {
 		if p.Duplicate != nil {
 			row = append(row, docButton("gj-doclist-duplicate", tr("docs.duplicate", "Duplicate"), busy, actOne(p.Pending, p.Duplicate, d.ID)))
 		}
+		row = append(row, protectionButtons(p, d, busy)...)
 		row = append(row, linkButton(p, p.Link, d.ID)...)
 		row = append(row, downloadControl(p, d, busy)...)
 		if p.Trash != nil {
@@ -466,7 +491,7 @@ func Trash(p TrashProps) xango.Node {
 				row = append(row, xango.El("input", cb))
 			}
 			row = append(row,
-				xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text(d.Name)),
+				xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name"+confidentialClass(d.Confidential))}, docNameNodes(d)...),
 				xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta")}, xango.Text(docMeta(d))))
 			if p.OnSelect == nil {
 				row = append(row,
@@ -641,6 +666,7 @@ func folderRows(p DocListProps, busy bool) []xango.Node {
 		if p.OpenFolder != nil {
 			row = append(row, docButton("gj-doclist-folder-open", tr("docs.openFolder", "Open"), busy, actOne(p.Pending, p.OpenFolder, id)))
 		}
+		row = append(row, folderProtectionButtons(p, f, busy)...)
 		if p.RenameFolder != nil {
 			row = append(row, xango.El("input", []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-doclist-folder-name"),
 				xango.A("aria-label", trf("docs.renameFolder", "Name of folder %s", f.Name)), xango.A("value", f.Name),
@@ -794,4 +820,57 @@ func confidentialClass(c bool) string {
 		return " gj-doc-confidential"
 	}
 	return ""
+}
+
+// docNameNodes is a document's name, and a lock with its label when it is confidential.
+func docNameNodes(d Doc) []xango.Node {
+	nodes := []xango.Node{xango.Text(d.Name)}
+	if d.Confidential {
+		nodes = append(nodes, xango.Text(" "), Icon(IconProps{Glyph: "🔒", Size: 14, Label: tr("docs.docConfidential", "Confidential document")}))
+	}
+	return nodes
+}
+
+// protectionButtons are a document's "Make confidential" / "Make not confidential" and, for one
+// whose name is hidden, "Reveal". The switch asks first (when the list has a Confirm) and says
+// what changes.
+func protectionButtons(p DocListProps, d Doc, busy bool) []xango.Node {
+	var out []xango.Node
+	if p.Reveal != nil && d.Confidential && d.NameHidden {
+		out = append(out, docButton("gj-doclist-reveal", tr("docs.reveal", "Reveal"), busy, actOne(p.Pending, p.Reveal, d.ID)))
+	}
+	if p.SetProtection == nil {
+		return out
+	}
+	id, to := d.ID, !d.Confidential
+	run := func() { p.Pending.Run(func(ctx context.Context) error { return p.SetProtection(ctx, id, to) }) }
+	if to {
+		out = append(out, docButton("gj-doclist-protect", tr("docs.makeConfidential", "Make confidential"), busy,
+			confirmedAs(p.ConfirmAs, p.Confirm, tr("docs.makeConfidential", "Make confidential"), trf("docs.confirmMakeConfidential", "Make %s confidential? Its name and tags move inside the encrypted document, where only your keys can read them: the list shows a placeholder until the store is unlocked, and searching for its name stops working. Older copies and versions are encrypted again for your keys only.", d.Name), run)))
+	} else {
+		out = append(out, docButton("gj-doclist-protect", tr("docs.makeNotConfidential", "Make not confidential"), busy,
+			confirmedAs(p.ConfirmAs, p.Confirm, tr("docs.makeNotConfidential", "Make not confidential"), trf("docs.confirmMakeNotConfidential", "Make %s not confidential? Its name and tags move back into the list, where anyone who can read the list sees them and search finds them. Older copies and versions are encrypted again at the store's usual level.", d.Name), run)))
+	}
+	return out
+}
+
+// folderProtectionButtons are protectionButtons for a folder, whose name is what moves.
+func folderProtectionButtons(p DocListProps, f DocFolder, busy bool) []xango.Node {
+	var out []xango.Node
+	if p.RevealFolder != nil && f.Confidential && f.NameHidden {
+		out = append(out, docButton("gj-doclist-folder-reveal", tr("docs.reveal", "Reveal"), busy, actOne(p.Pending, p.RevealFolder, f.ID)))
+	}
+	if p.SetFolderProtection == nil {
+		return out
+	}
+	id, to := f.ID, !f.Confidential
+	run := func() { p.Pending.Run(func(ctx context.Context) error { return p.SetFolderProtection(ctx, id, to) }) }
+	if to {
+		out = append(out, docButton("gj-doclist-folder-protect", tr("docs.makeFolderConfidential", "Make confidential"), busy,
+			confirmedAs(p.ConfirmAs, p.Confirm, tr("docs.makeFolderConfidential", "Make confidential"), trf("docs.confirmMakeFolderConfidential", "Make the folder %s confidential? Its name moves into an encrypted record, where only your keys can read it: the list shows \"Confidential folder\" until the store is unlocked, and searching for its name stops working. The documents inside keep their own protection.", f.Name), run)))
+	} else {
+		out = append(out, docButton("gj-doclist-folder-protect", tr("docs.makeFolderNotConfidential", "Make not confidential"), busy,
+			confirmedAs(p.ConfirmAs, p.Confirm, tr("docs.makeFolderNotConfidential", "Make not confidential"), trf("docs.confirmMakeFolderNotConfidential", "Make the folder %s not confidential? Its name moves back into the list, where anyone who can read the list sees it. The documents inside keep their own protection.", f.Name), run)))
+	}
+	return out
 }

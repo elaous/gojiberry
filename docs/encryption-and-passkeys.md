@@ -243,9 +243,8 @@ cannot be opened.
    (`Adapter.RekeyDocument`). `components.Recipients` is the People tab's control: the owner's keys,
    the shared keys with Remove (which says it cannot take back what was already opened), and a form
    that parses a pasted key, shows its type, label and fingerprint, and keeps Add off until the
-   fingerprint is typed. *Left:* wiring it into an application (the showcase has no encrypted store
-   yet: it needs the key management of steps 3 and 4, where the owner's key lives and how it is
-   unlocked) and the "verified e-mail" mark of C.4 (done, see step 4b).
+   fingerprint is typed. **Wired in the showcase** (5.7), whose encrypted store is where the owner's keys live
+   and are unlocked; the "verified e-mail" mark of C.4 is done (see step 4b).
 3. **Done:** `auth/passkey` (go-webauthn; discoverable credentials, user verification required,
    one-time challenges with a TTL, `Store` with `MemoryStore` and `AdapterStore`), the
    `components.Passkey` control, `Server.WithRoutes`/`Hide` on the docstore server (`cmd/docstore`
@@ -282,8 +281,8 @@ cannot be opened.
    downloadable, with "keep it offline; we cannot recover it" until the person says they saved it; the
    component keeps no copy and drops it from the DOM when done (the host holds it in memory while it is
    shown, and Go strings cannot be wiped). The button is left out when the host sets `CreateRecoveryKey`
-   without `OnRecoveryKey`. *Left:* the showcase does not supply these callbacks yet (`examples/people-keys-demo` does, see 4b);
-   calling `CheckRecoverableOwner` when a document is made confidential is step 5.
+   without `OnRecoveryKey`. The showcase supplies these callbacks (5.7), like `examples/people-keys-demo` (see 4b);
+   `CheckRecoverableOwner` is called when a document is made confidential (step 5, `ConfidentialCheck`).
    4b. **Done (library, server rule, component and a demo host): the verified e-mail mark of C.4.**
    `encrypt.KeyDirectory` (`Lookup(ctx, email) ([]PublishedKey, error)`; a `PublishedKey` is the key
    text, label, type, fingerprint and `Verified`) is injected; `encrypt.AdapterDirectory` is one over a
@@ -335,8 +334,8 @@ cannot be opened.
      answer for that fingerprint, never from a pasted key. Its e2e (headless Chrome, virtual authenticator
      with PRF) covers the second-key message, the recovery key shown once, add my passkey, and the
      verified mark from a lookup.
-   *Left:* the showcase and the real app do not wire these controls yet (they need the key-management
-   UX of step 5.1); no UI publishes the owner's keys (the route exists and the demo's test calls it); the
+   *Left:* the real app does not wire these controls yet, and the showcase wires the keys but not the directory
+   (it has no server; see 5.7); no UI publishes the owner's keys (the route exists and the demo's test calls it); the
    rate limits are per process (a gateway or a shared limiter for several replicas); the nested backends
    (postgres, mongo, s3, blob) and the browser adapters do not implement `PrefixLister` yet (they fall
    back to listing the store); revoking a published key (a `DELETE` route) and rotating the directory
@@ -480,15 +479,59 @@ cannot be opened.
         (`docstore/encrypt/confidential_folders_test.go`): no real name in the store, a stranger's rebuild,
         passkey PRF alone and recovery key alone, rename, move, delete, breadcrumbs, no leak in the lists.
 
+   7. **The showcase's encrypted store (done): `examples/canvas-editor-showcase`.**
+      Encryption is **off by default**. In the Save tab, "Encrypt this store" wraps the browser target
+      (`localStorage`) with `encrypt.Adapter` over a `ConfidentialKeyring`; the code is the `encstore` package (no
+      browser code, tested natively) and `encpanel.go`.
+      - **Owner keys, chosen at setup.** (a) a **passkey** through PRF, with no server: `client.CreateLocal` makes a
+        discoverable credential for the origin (a random challenge, the credential ID kept in `localStorage`, `ErrNoPRF`
+        when the authenticator cannot do PRF) and `client.DeriveLocal` asks it for the secret, which becomes an age key
+        (`PRFIdentity`) and, through `SignerFromAge`, the key that signs the recipient lists; (b) a pasted **SSH
+        public key** (ed25519 only: it also signs the lists, an RSA key cannot), unlocked later with the private key
+        file; (c) a generated **recovery key**, shown once (copy, download, "I have saved it") and never kept.
+        `CheckRecoverableOwner` applies where it always does: a passkey alone is allowed to turn encryption on, and
+        making a document confidential is then refused with `ErrNeedSecondRecipient`'s words, which the form
+        warns about and the People tab answers (it offers "Create a recovery key", which adds an owner key and
+        encrypts every file again for it).
+      - **What is kept where.** The owner keys' *public* halves and signing keys are in `localStorage`
+        (`showcase-enc:config`, outside the store's own prefix); the private side (the unlocked identity and
+        signer) is **in memory only**. **Lock** forgets it, and `Session.Forget` drops the revealed names, so the
+        list shows the placeholders again. A reload starts locked. Nothing secret is ever written: the e2e greps
+        the decoded storage for the recovery key, the document's name and its text.
+      - **Everything saved is encrypted, not only confidential documents.** There is no server, so the "at rest"
+        level is the owner's own keys (`ConfidentialKeyring.AtRest`); a document made confidential also hides its
+        name and tags and is wrapped for people's keys only, and can be shared with another key from the People tab.
+        A document saved before encryption was turned on is encrypted by one `RekeyAll` pass at that moment. Turning
+        encryption off decrypts everything back (and needs no confidential item left).
+      - **Locked** the store does not write: a save fails with "Unlock the store…" (an error that still wraps
+        `docstore.ErrLocked`), opening a confidential document does the same, and its list entry is the placeholder
+        with a Reveal button; unlocking shows the real names (auto-reveal), opening one reveals it too.
+      - **Lock marks and switches.** `components.DocList` draws a lock with the label "Confidential document" on
+        confidential documents (`Doc.Confidential`, `NameHidden`) and "Confidential folder" on folders, and each row
+        has "Make confidential" / "Make not confidential" with a question that says what changes (the name and tags
+        move inside, older copies are encrypted again, searching for the name stops working).
+        `Session.ProtectionAvailable` shows them only on the encrypted browser target.
+      - **Packs.** `encrypt.PackSealer(owners, identities)` returns `PackOptions.Seal` and `ImportOptions.Open` over a
+        scratch store per call; `Session.PackKeys` hands them out while unlocked. The pack is sealed for the owner keys
+        only. The e2e checks the exported bytes for the name and the text, then deletes the document and imports the
+        pack (locked: "needs a key", left out; unlocked: confidential again).
+      - **Left.** The owner signers (`OwnerSigners`) are trusted because they are on this device beside the store, so
+        someone who can write this origin's storage can replace both; a real application keeps them out of the
+        store's writers' reach (and a `SeqFloor` there, here it lasts the page). Lock does not clear the document
+        open in the editor, only what the saver and the session hold. One local passkey per origin, two prompts to
+        set it up (create, then derive). No removing or rotating an owner key, no directory lookup (no server), RSA
+        SSH keys cannot be owners, and a passphrase-protected SSH key must be opened by the person first.
+        The real app has none of this yet.
+
    *Left:*
-   1. The showcase wiring and the key management UX (where the owner's key lives, the "make
-      confidential" switch, the recovery key shown once, the lock mark in the document list).
-   2. ~~Folder names are not hidden~~ Done, see 5.6 below (confidential folders). Left there: the
-      UI switch, and the pack-count wording in `Session.DownloadPack`, which counts a folder whose
-      name could not be sealed with the documents left out.
+   1. ~~The showcase wiring and the key management UX~~ Done, see 5.7. Left there: the real app, and the points
+      listed under 5.7.
+   2. ~~Folder names are not hidden~~ Done, see 5.6 (confidential folders), and the switch and the pack-count
+      wording are done too (5.7: `Session.SetFolderProtection` through the list, and `Session.DownloadPack` counts
+      a folder name that could not be sealed apart from the documents left out).
    3. What someone already opened or copied before a switch cannot be taken back (as with any
       re-key); with the hook the stored copies themselves are re-keyed. A store writer who
       deleted the `keys:` record first is the weakness named in item 5.
-   4. Key management for `Seal`/`Open` in the pack UI ("As .opendoc", "Import .opendoc"): until
-      then `Session.DownloadPack` leaves confidential documents out and says how many, and
-      `Session.ImportPackData` reports the ones it could not open.
+   4. ~~Key management for `Seal`/`Open` in the pack UI~~ Done in the showcase (5.7): `Session.PackKeys` gives
+      the pack buttons `encrypt.PackSealer`'s functions while the store is unlocked; locked, the status says how
+      many confidential documents and folder names were left out, or how many items an import needs a key for.

@@ -37,18 +37,24 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
    documents with signed recipient lists, the passkey as a recipient and as a way in, and
    (step 5) encrypted records in packs, confidential catalog entries (`saver` protection
    level, placeholder name, `Reveal`, `SetProtection`, `encrypt.ConfidentialCheck`). Left:
-   1. The showcase wiring, which needs the key management UX (where the owner's key lives, how
-      it is unlocked, the "make confidential" switch, the recovery key shown once, a lock mark
-      in the document list).
-   2. A keyring that wraps a confidential document's files for people's keys only, and re-keys
-      its older copies on the switch.
+   1. **Done in the showcase** (`examples/canvas-editor-showcase`, `encstore`; encryption stays off unless
+      turned on): "Encrypt this store" in the Save tab (a local passkey through PRF, an SSH public key, a
+      recovery key shown once; unlock state in memory only, a Lock button), lock marks and "Make
+      (not) confidential" with a question for documents and folders, Reveal, sealed `.opendoc` packs
+      (`encrypt.PackSealer` through `Session.PackKeys`), and the People tab's keys control. Left: the real
+      app (the owner signers must live out of reach of the store's writers, a passkey from a server session
+      rather than a local one), forgetting the editor's open document on Lock, removing or rotating an
+      owner key, a UI to publish an owner key to the directory.
+   2. **Done:** a keyring that wraps a confidential document's files for people's keys only, and re-keys
+      its older copies on the switch (`ConfidentialKeyring`, `Sharing.SetProtection`, `RekeyHook`).
    3. **Done (components and library):** the People-tab "my passkey" control with the second-key rule and
       the recovery key shown once, and the verified-e-mail mark with `encrypt.KeyDirectory` /
       `AdapterDirectory` (C.4); the server rule (the `directory/` prefix is reserved from `/docs`, records
       are signed by a configured directory key and written only by `POST /directory/publish`, which needs a
-      provider session with a verified e-mail) and a demo host, `examples/people-keys-demo`. Left: wiring
-      it in the showcase/app, a publish button, `PrefixLister` in the nested backends, revoking a published key.
-   4. Hiding folder names of confidential folders.
+      provider session with a verified e-mail) and a demo host, `examples/people-keys-demo`; the showcase's People tab
+      now has the same key controls (without the directory: it has no server). Left: the directory in the
+      showcase/app, a publish button, `PrefixLister` in the nested backends, revoking a published key.
+   4. **Done:** hiding folder names of confidential folders (and the showcase's switch for them).
 3. **Public docstore.** An anonymous offer: no account, one document per session, a link
    and a download always, deleted 24 hours after the last edit (viewing does not renew).
    Design, wording of the promise, and the abuse controls that must exist before launch:
