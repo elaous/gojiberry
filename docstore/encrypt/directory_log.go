@@ -83,6 +83,16 @@ func (d *AdapterDirectory) LogAddressesFor(email string) []string {
 
 const logAddressDomain = "gojiberry-directory-log-address|"
 
+// SignLogEntry fills in an entry's Kid, Hash and Sig with the signer's current key: what the
+// directory does when it appends one, for tools that build or mirror a log (and for tests of an
+// auditor, which need a log with an entry the directory would not have written).
+func SignLogEntry(s DirectorySigner, e LogEntry) LogEntry {
+	e.Kid = s.KeyID()
+	e.Hash = logHash(e)
+	e.Sig = base64.StdEncoding.EncodeToString(s.Sign(logSigMessage(e.Hash)))
+	return e
+}
+
 // logHash is the hash of an entry's fields other than Hash and Sig.
 func logHash(e LogEntry) string {
 	b, _ := json.Marshal([]any{"gojiberry-directory-log-v2", e.Seq, e.Prev, e.At, e.Op, e.Address, e.Fingerprint, e.Kid,

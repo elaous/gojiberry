@@ -114,6 +114,12 @@ func verifyOwner(pub ed25519.PublicKey, op, email, fingerprint string, at int64,
 	return ed25519.Verify(pub, OwnerOpMessage(op, email, fingerprint, at, prev), b)
 }
 
+// VerifyOwnerOp says sig is the owner key pub's signature of the operation: it checks one entry or
+// request the way the server and AuditAddress do.
+func VerifyOwnerOp(pub ed25519.PublicKey, op, email, fingerprint string, at int64, prev, sig string) bool {
+	return verifyOwner(pub, op, email, fingerprint, at, prev, sig)
+}
+
 // VerifyOwnerEvidence checks, without the server's word, that a lookup row's owner signature is
 // valid for the address: the evidence's key signed the publication of the row's fingerprint.
 // Whether that key is the address's owner key is the client's to decide (pinned from an earlier

@@ -338,33 +338,51 @@ func (d *AdapterDirectory) signedBy(st stored, want string) bool {
 		rec.Provider != "" && rec.Provider != "passkey" && providerOf(rec.Publisher) == rec.Provider
 }
 
-// backedEntry finds the log entry a record stands on: the one its Seq names, which must be a
-// validly signed and hashed entry of this address (under any of the directory's keys), for this
-// fingerprint and for the operation the record is (publish, or revoke for a tombstone). A record
-// with no such entry (Seq 0, a number that is not that entry) was not made by the publish route.
-func (d *AdapterDirectory) backedEntry(ctx context.Context, st stored, want string) (LogEntry, bool, error) {
+// entryFor finds the log entry a record stands on: the one its Seq names, which must be a validly
+// signed and hashed entry for this fingerprint and for the operation the record is (publish, or
+// revoke for a tombstone). ok is false for a record with no such entry (Seq 0, a number that is
+// not that entry): it was not made by the publish route. signed says the entry's signature is
+// one of this directory's keys' (an entry made under a key since removed from the retired list
+// cannot be checked here, though a client with the key pinned can).
+func (d *AdapterDirectory) entryFor(ctx context.Context, st stored) (e LogEntry, ok, signed bool, err error) {
 	rec := st.rec
 	if rec.Seq <= 0 {
-		return LogEntry{}, false, nil
+		return LogEntry{}, false, false, nil
 	}
 	e, found, err := d.readEntry(ctx, rec.Seq)
 	if err != nil || !found {
-		return LogEntry{}, false, err
+		return LogEntry{}, false, false, err
 	}
 	op := OpPublish
 	if rec.Revoked > 0 {
 		op = OpRevoke
 	}
-	sig, _ := base64.StdEncoding.DecodeString(e.Sig)
-	if e.Op != op || e.Fingerprint != st.fp || e.Hash != logHash(e) || !d.Signer.Verify(e.Kid, logSigMessage(e.Hash), sig) {
-		return LogEntry{}, false, nil
+	if e.Op != op || e.Fingerprint != st.fp || e.Hash != logHash(e) {
+		return LogEntry{}, false, false, nil
 	}
+	sig, _ := base64.StdEncoding.DecodeString(e.Sig)
+	return e, true, d.Signer.Verify(e.Kid, logSigMessage(e.Hash), sig), nil
+}
+
+// entryIsFor says the entry is about this address: its pseudonym is the address's under one of
+// the keys the directory knows. After a retired key is removed from the list, entries made under
+// it can no longer be matched (their records must be republished to be backed again).
+func (d *AdapterDirectory) entryIsFor(e LogEntry, want string) bool {
 	for _, a := range d.LogAddressesFor(want) {
 		if e.Address == a {
-			return e, true, nil
+			return true
 		}
 	}
-	return LogEntry{}, false, nil
+	return false
+}
+
+// backedEntry is entryFor for an entry of this address.
+func (d *AdapterDirectory) backedEntry(ctx context.Context, st stored, want string) (LogEntry, bool, error) {
+	e, ok, signed, err := d.entryFor(ctx, st)
+	if err != nil || !ok || !signed || !d.entryIsFor(e, want) {
+		return LogEntry{}, false, err
+	}
+	return e, true, nil
 }
 
 // Publish records key as a key of user's e-mail address, with no proof of possession (it
@@ -583,21 +601,30 @@ func (d *AdapterDirectory) publishedKey(ctx context.Context, st stored, want str
 	rec := st.rec
 	k := PublishedKey{Label: rec.Label, Text: st.text, Type: st.typ, Fingerprint: st.fp, Kid: rec.Kid, Seq: rec.Seq}
 	verified := d.signedBy(st, want)
+	retired := rec.Kid != d.Signer.KeyID()
 	var entry LogEntry
-	if verified && (enr != nil || rec.Kid != d.Signer.KeyID()) {
-		e, backed, err := d.backedEntry(ctx, st, want)
-		if err != nil {
+	var haveEntry, addrOK bool
+	if verified && (enr != nil || retired) {
+		var signed bool
+		var err error
+		if entry, haveEntry, signed, err = d.entryFor(ctx, st); err != nil {
 			return PublishedKey{}, err
 		}
-		verified, entry = backed, e
+		addrOK = haveEntry && signed && d.entryIsFor(entry, want)
+		if retired && !addrOK {
+			verified = false
+		}
 	}
 	if enr != nil {
 		k.OwnerEnrolled, k.OwnerResetPending = true, enr.ResetSince > 0
 		if verified {
-			if ev, ok := ownerEvidence(enr, st, entry); ok {
+			// An owner signature binds the address itself (it names it), so the entry only has to
+			// be the publication's; without one, the record must predate the enrollment and be
+			// backed by an entry of this address.
+			if ev, ok := ownerEvidence(enr, st, entry, haveEntry); ok {
 				k.OwnerSigned, k.Owner = true, &ev
-			} else if len(enr.Keys) > 0 && rec.Seq > enr.Keys[0].Seq && rec.Revoked == 0 {
-				verified = false // published after the enrollment without the owner's signature
+			} else if rec.Revoked == 0 && (len(enr.Keys) == 0 || rec.Seq > enr.Keys[0].Seq || !addrOK) {
+				verified = false // after the enrollment without the owner's signature, or with nothing behind it
 			}
 		}
 	}
@@ -619,9 +646,9 @@ func (d *AdapterDirectory) publishedKey(ctx context.Context, st stored, want str
 
 // ownerEvidence says the record carries the signature of an owner key that was the address's
 // owner key at the time of its log entry, the same one the entry carries, and returns it.
-func ownerEvidence(enr *enrollRecord, st stored, entry LogEntry) (docstore.DirectoryOwnerEvidence, bool) {
+func ownerEvidence(enr *enrollRecord, st stored, entry LogEntry, haveEntry bool) (docstore.DirectoryOwnerEvidence, bool) {
 	rec := st.rec
-	if rec.V < 4 || rec.OwnerSig == "" || entry.OwnerSig != rec.OwnerSig || entry.OpTime != rec.OwnerTime || entry.OwnerPrev != rec.OwnerPrev {
+	if !haveEntry || rec.V < 4 || rec.OwnerSig == "" || entry.OwnerSig != rec.OwnerSig || entry.OpTime != rec.OwnerTime || entry.OwnerPrev != rec.OwnerPrev {
 		return docstore.DirectoryOwnerEvidence{}, false
 	}
 	op := OpPublish
@@ -954,3 +981,8 @@ func (s dirService) CancelReset(ctx context.Context, user auth.User, owner *docs
 
 // DirectoryHealth implements docstore.DirectoryHealther: the census of the last Startup.
 func (s dirService) DirectoryHealth() docstore.DirectoryHealth { return s.d.Health() }
+
+// ParsePublicKey reads a public key as the directory takes it: "age1..." (an age, recovery or
+// passkey key) or an "ssh-ed25519 ..."/"ssh-rsa ..." line. It is how a client gets the type and
+// the fingerprint a publish names.
+func ParsePublicKey(text string) (Recipient, error) { return parsePublic(text) }

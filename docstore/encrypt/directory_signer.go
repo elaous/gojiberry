@@ -19,7 +19,9 @@ const DirectoryKeyEnv = "GOJIBERRY_DOCSTORE_DIRECTORY_KEY"
 // comma separated list of seeds in hex. They are used to verify (and to find records named under
 // them), never to sign: records signed before the rotation stay valid until they are published
 // again or AdapterDirectory.Resign has moved them to the current key, after which the retired
-// key can be removed from the list.
+// key can be removed from the list. Resign moves only records that a log entry stands behind: if
+// the old key may have leaked, do not rotate through it, remove it from the list instead (what it
+// signed is then neither found nor believed) and republish what matters.
 const DirectoryKeyPrevEnv = "GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV"
 
 // DirectorySigner is the server secret behind the key directory: it signs the records the
