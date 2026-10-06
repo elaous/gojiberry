@@ -236,6 +236,15 @@
   "opendl.current": "Version actuelle : %s.",
   "opendl.drop": "Supprimer l’historique des versions (ne télécharger que la version actuelle)",
   "opendl.total": "Le fichier fera environ %s.",
-  "opendl.title": "Télécharger %s au format .open"
+  "opendl.title": "Télécharger %s au format .open",
+  "docs.importPack": "Importer .opendoc",
+  "docs.downloadPack": "En .opendoc",
+  "saver.packDownloaded": "%s téléchargé comme paquet de %d documents",
+  "saver.packImported": "%s : %d documents et %d dossiers importés",
+  "saver.packSkipped": "(%d déjà présents, laissés tels quels)",
+  "saver.packFailed": "(%d en échec : %s)",
+  "saver.packSigned": "(signé avec la clé %x)",
+  "saver.packBadSignature": "(ATTENTION : la signature ne correspond pas au paquet)",
+  "migrate.pack": "Un paquet .opendoc (téléchargé, non enregistré ici)"
  }
 }
