@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"filippo.io/age"
 	"golang.org/x/crypto/ssh"
@@ -556,7 +557,7 @@ func TestRekeyAllContinuesAndDoesNotHalfRekeyADocument(t *testing.T) {
 	inner := docstore.NewMemoryAdapter()
 	ring := &mutable{to: []age.Recipient{ana.r.Key}, keys: []age.Identity{ana.id}}
 	a := New(inner, ring)
-	const d1, d2, d3 = "doc1", "doc2", "doc3"
+	const d1, d2, d3 = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333"
 	for _, id := range []string{d1 + "~a.json", d1 + "~b.json", d2 + "~a.json", d3 + "~a.json"} {
 		_ = a.Save(ctx, id, []byte(id))
 	}
@@ -908,5 +909,142 @@ func TestRemoveEverywhereContinuesPastAFailureAndCanBeRerun(t *testing.T) {
 	}
 	if used, _ := sh.Usage(ctx, bo.r.Fingerprint); len(used) != 0 {
 		t.Errorf("%v", used)
+	}
+}
+
+func TestSaveIsNotLostToARekeyOnAStoreWithoutSaveIf(t *testing.T) {
+	ctx := context.Background()
+	ana, bo := newPerson(t, "ana"), newPerson(t, "bo")
+	inner := unconditional{docstore.NewMemoryAdapter()}
+	a := New(inner, Static{To: []age.Recipient{ana.r.Key, bo.r.Key}, Keys: []age.Identity{ana.id}})
+	const id = "44444444-4444-4444-8444-444444444444"
+	_ = a.Save(ctx, id, []byte("0"))
+	var wg sync.WaitGroup
+	wg.Add(3)
+	last := 0
+	go func() {
+		defer wg.Done()
+		for i := 1; i <= 100; i++ {
+			if err := a.Save(ctx, id, []byte(strconv.Itoa(i))); err != nil {
+				t.Error(err)
+			}
+			last = i
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 100 {
+			if err := a.Rekey(ctx, id); err != nil {
+				t.Error(err)
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 30 {
+			if _, err := a.RekeyAll(ctx); err != nil {
+				t.Error(err)
+			}
+		}
+	}()
+	wg.Wait()
+	d, err := a.Load(ctx, id)
+	if err != nil || string(d.Data) != strconv.Itoa(last) {
+		t.Fatalf("the last save was lost: %q %v", d.Data, err)
+	}
+}
+
+// ghost lists a file that is gone when it is read, as one deleted after the listing.
+type ghost struct{ docstore.Adapter }
+
+func (g ghost) List(ctx context.Context) ([]docstore.Meta, error) {
+	m, err := g.Adapter.List(ctx)
+	return append(m, docstore.Meta{ID: "55555555-5555-4555-8555-555555555555~a.json"}), err
+}
+
+func TestRekeyAllSkipsAFileThatVanished(t *testing.T) {
+	ctx := context.Background()
+	ana := newPerson(t, "ana")
+	a := New(ghost{docstore.NewMemoryAdapter()}, Static{To: []age.Recipient{ana.r.Key}, Keys: []age.Identity{ana.id}})
+	const id = "66666666-6666-4666-8666-666666666666"
+	_ = a.Save(ctx, id, []byte("x"))
+	if n, err := a.RekeyAll(ctx); err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+}
+
+func TestRekeyRekeyAllAndRekeyDocumentGroupTheSame(t *testing.T) {
+	ctx := context.Background()
+	ana, bo := newPerson(t, "ana"), newPerson(t, "bo")
+	inner := docstore.NewMemoryAdapter()
+	ring := &mutable{to: []age.Recipient{ana.r.Key}, keys: []age.Identity{ana.id}}
+	a := New(inner, ring)
+	const d = "77777777-7777-4777-8777-777777777777"
+	files := []string{d + ".json", d + "~prev.json", "versions/" + d + "/1.json"}
+	for _, f := range files {
+		_ = a.Save(ctx, f, []byte(f))
+	}
+	for _, f := range files {
+		if g := DocID(f); g != d || groupOf(f) != d {
+			t.Fatalf("%s groups as %q", f, g)
+		}
+	}
+	asBo := New(inner, Static{Keys: []age.Identity{bo.id}})
+	ring.to = []age.Recipient{ana.r.Key, bo.r.Key}
+	if err := a.Rekey(ctx, files[0]); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if _, err := asBo.Load(ctx, f); err != nil {
+			t.Errorf("Rekey of one file left %s: %v", f, err)
+		}
+	}
+}
+
+// onDocWrite runs fn before the first conditional write of a document file (not of a record).
+type onDocWrite struct {
+	docstore.Adapter
+	fn   func()
+	done bool
+}
+
+func (h *onDocWrite) SaveIf(ctx context.Context, id string, data []byte, prev string) error {
+	if !h.done && !strings.HasPrefix(id, KeysPrefix) {
+		h.done = true
+		h.fn()
+	}
+	return h.Adapter.(docstore.ConditionalAdapter).SaveIf(ctx, id, data, prev)
+}
+
+func TestFinishDoesNotClearPendingWhenTheListChangedDuringTheRekey(t *testing.T) {
+	ctx := context.Background()
+	ana, bo, cy := newPerson(t, "ana"), newPerson(t, "bo"), newPerson(t, "cy")
+	mem := docstore.NewMemoryAdapter()
+	h := &onDocWrite{Adapter: mem}
+	ad, sh := sharingSetup(t, h, ana)
+	f := docA + "~aaaaaaaaaaaa.json"
+	_ = ad.Save(ctx, f, []byte("x"))
+	// While Add(bo) re-keys, another client saves a list that has cy too, pending.
+	h.fn = func() {
+		_, err := sh.mutate(ctx, docA, func(rec *sharedRecord) (bool, error) {
+			p, _ := parseShared(sharedEntry{Type: cy.r.Type, Key: cy.r.Text, Label: "cy"})
+			rec.Recipients = append(rec.Recipients, sharedEntry{Label: "cy", Type: p.Type, Fingerprint: p.Fingerprint, Key: p.Text, Added: time.Now().Unix()})
+			rec.Pending = true
+			return true, nil
+		})
+		if err != nil {
+			t.Error(err)
+		}
+	}
+	if err := sh.Add(ctx, docA, bo.r, bo.r.Fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := sh.Pending(ctx, docA); p {
+		t.Error("nothing is pending after the second pass")
+	}
+	for name, p := range map[string]person{"bo": bo, "cy": cy} {
+		if _, err := New(mem, Static{Keys: []age.Identity{p.id}}).Load(ctx, f); err != nil {
+			t.Errorf("%s cannot open the file: %v", name, err)
+		}
 	}
 }
