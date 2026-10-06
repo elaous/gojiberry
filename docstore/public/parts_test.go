@@ -62,17 +62,17 @@ func TestMemorySessionStore(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	st := NewMemorySessionStore(2)
 	mk := func(exp time.Duration) Session { return Session{ID: "x", Created: now, Expires: now.Add(exp)} }
-	if err := st.Create(ctx, "a", mk(time.Hour), now, 0); err != nil {
+	if err := st.Create(ctx, "a", mk(time.Hour), now, SessionCaps{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Create(ctx, "b", mk(time.Minute), now, 0); err != nil {
+	if err := st.Create(ctx, "b", mk(time.Minute), now, SessionCaps{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Create(ctx, "c", mk(time.Hour), now, 0); err != ErrSessionsFull {
+	if err := st.Create(ctx, "c", mk(time.Hour), now, SessionCaps{}); err != ErrSessionsFull {
 		t.Fatalf("err = %v", err)
 	}
 	later := now.Add(2 * time.Minute) // b expired: room again
-	if err := st.Create(ctx, "c", mk(time.Hour), later, 0); err != nil {
+	if err := st.Create(ctx, "c", mk(time.Hour), later, SessionCaps{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok, _ := st.Get(ctx, "b", later); ok {

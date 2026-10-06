@@ -13,8 +13,20 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
   (like `acl:` and `collab:`): `docstore.Server` refuses to read, write, list or delete them
   through `/docs`, so an existing document with such an ID becomes unreachable through the
   server. Rename it in the store before upgrading. The same holds for IDs starting with `public/`
-  or `report/` (the public offer's records and reports, any case), and for a provider named
+  or `report/` (the public offer's records and reports) in any case (`Public/x`, `REPORT/x`), **in all
+  modes**, with the public offer on or off, and for a provider named
   `anon` in `GOJIBERRY_DOCSTORE_AUTH_PROVIDERS` (reserved for anonymous users, like `passkey`).
+- **Public docstore hardening (flood, accounting, reports, admin).** `GET /public/health` now answers
+  `{"ok":true}` (200) or `{"ok":false}` (503) only; the report with the problem names, storage figures and
+  last sweep is `GET /admin/health` (admin token). With `GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN` set, the server
+  **refuses to start** unless `GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES` names the reverse proxies or says
+  `none`. Failed admin authentications are rate limited per client address; a correct token never is.
+  New variables: `_MAX_SESSIONS_PER_NET` (100, per IPv6 /48 or IPv4 /24), `_SESSION_RESERVE_PERCENT` (20),
+  `_MAX_INFLIGHT_BYTES` (256 MiB, 503 above), `_REPORT_RESERVED_PER_DOC` (5), `_REPORT_RESERVE_PERCENT` (20) and
+  `_REPORT_PRIORITY_REASONS` (`csam,illegal`). Go API: `SessionStore.Create` takes a `public.SessionCaps`
+  (was the per-client integer) and `Session` has a `Net`; a `Quota` may implement `WindowQuota`; the
+  report record gains a salted reporter hash and a store key `public/salt`; reports are deduplicated per
+  (document, reporter, reason). Details: [public-docstore.md](public-docstore.md) sections 7.2 and 7.5.
 - **Public mode closes `/docs`.** With `GOJIBERRY_DOCSTORE_PUBLIC=true` the generic `/docs`, `/docs/<id>/acl`
   and `/quota` routes answer 404 unless sign-in with `GOJIBERRY_DOCSTORE_REQUIRE_ACL=true` protects them or
   `GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS=true` keeps them open. `Server.Hide` prefixes now match without
@@ -60,7 +72,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 3. **Public docstore.** An anonymous offer: no account, one document per session, a link
    and a download always, deleted 24 hours after the last edit (viewing does not renew).
    Design, wording of the promise, and the abuse controls that must exist before launch:
-   [public-docstore.md](public-docstore.md). Expiry in `docstore` is done (`ExpiringAdapter`: TTL policy, renewed by writes, sweeper, `X-Gojiberry-Expires`, `GOJIBERRY_DOCSTORE_EXPIRY_TTL`/`_SWEEP`/`_ADOPT`); **server side done** (`docstore/public`, `GOJIBERRY_DOCSTORE_PUBLIC=true`: anonymous sessions, one document per session, size/version/rate/daily-byte caps, view-only IDs, reports, takedown with tombstones, `Blocklist`/`Challenger`/`AdminGuard`/`SessionStore`/`Quota` hooks; see [public-docstore.md](public-docstore.md) section 7); hardened after review (per-client session cap with a 1 h idle TTL and an hourly issue rate, limits keyed by IPv6 /64, a global storage budget and report bound, `/docs` closed in public mode, request deadlines, charge-before-body with refunds, `/public/health`, takedown that bans after the records are swept; section 7.2 items 6-15); left: the legal terms text, real abuse operations (who reads reports), a captcha or proof of work behind `Challenger`, shared stores for replicas (the counters and limits are per process, section 7.5), the editor side (links, countdown, report link, creating the document within the idle hour), collaboration-hub edits renewing a document.
+   [public-docstore.md](public-docstore.md). Expiry in `docstore` is done (`ExpiringAdapter`: TTL policy, renewed by writes, sweeper, `X-Gojiberry-Expires`, `GOJIBERRY_DOCSTORE_EXPIRY_TTL`/`_SWEEP`/`_ADOPT`); **server side done** (`docstore/public`, `GOJIBERRY_DOCSTORE_PUBLIC=true`: anonymous sessions, one document per session, size/version/rate/daily-byte caps, view-only IDs, reports, takedown with tombstones, `Blocklist`/`Challenger`/`AdminGuard`/`SessionStore`/`Quota` hooks; see [public-docstore.md](public-docstore.md) section 7); hardened after review (per-client session cap with a 1 h idle TTL and an hourly issue rate, limits keyed by IPv6 /64, a global storage budget and report bound, `/docs` closed in public mode, request deadlines, charge-before-body with refunds, `/public/health`, takedown that bans after the records are swept; section 7.2 items 6-15); hardened again (a per-/48 and per-/24 session cap with a reserve for new networks, an exact byte ledger that fails closed, a minimal public health with the detail behind the admin guard, deduplicated and prioritised reports, failed-only admin rate limit, a global cap on bodies in flight; items 6, 8, 16-20); left: the legal terms text, real abuse operations (who reads reports), a captcha or proof of work behind `Challenger`, shared stores for replicas (the counters and limits are per process, section 7.5), the editor side (links, countdown, report link, creating the document within the idle hour), collaboration-hub edits renewing a document.
 4. **Console mode: done** (`console`, `cmd/docsh`, [console.md](console.md)); left: the editor panel that drives the same engine.
 5. **Terminal app demo: done** (`examples/terminal-demo`: a file manager and a line editor over `saver.Session`, with the console grammar).
 6. **Store backends with conditional saves: done** for PostgreSQL, MongoDB and S3/MinIO (`SaveIf` in `docstore/backends`; the PostgreSQL one is tested with sqlmock, S3 against a fake that enforces `If-Match`/`If-None-Match`, and MongoDB, which has no fake, runs when `TEST_MONGO_URI` is set, so it has not run against a live server yet).

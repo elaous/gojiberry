@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -348,9 +349,10 @@ func TestEditWithoutADeadlineRemovesTheDocumentAndRaisesTheAlarm(t *testing.T) {
 	if !strings.Contains(logs.String(), "ALARM") {
 		t.Fatalf("no alarm in the log: %q", logs.String())
 	}
-	r := e.want(e.do("GET", "/public/health", "", nil), 503)
+	e.want(e.do("GET", "/public/health", "", nil), 503)
+	r := e.want(e.do("GET", "/admin/health", "", nil, AdminHeader, adminToken), 503)
 	if !strings.Contains(string(r.body), ProblemNoDeadline) {
-		t.Fatalf("/public/health: %s", r.body)
+		t.Fatalf("/admin/health: %s", r.body)
 	}
 }
 
@@ -379,7 +381,8 @@ func TestHealthExpiryDisabledAtStartup(t *testing.T) {
 	if h.OK || !contains(h.Problems, ProblemExpiryDisabled) {
 		t.Fatalf("health %+v", h)
 	}
-	r := e.want(e.do("GET", "/public/health", "", nil), 503)
+	e.want(e.do("GET", "/public/health", "", nil), 503)
+	r := e.want(e.do("GET", "/admin/health", "", nil, AdminHeader, adminToken), 503)
 	if !strings.Contains(string(r.body), ProblemExpiryDisabled) || strings.Contains(string(r.body), adminToken) {
 		t.Fatalf("body %s", r.body)
 	}
@@ -439,13 +442,16 @@ func TestHealthSweeperStaleAndFailing(t *testing.T) {
 // ---- finding 10: reports are bounded as a whole
 
 func TestReportsAreBoundedGloballyOldestFirst(t *testing.T) {
-	e := newEnv(t, func(o *Options) { o.Config.MaxReports = 10 })
+	e := newEnv(t, func(o *Options) {
+		o.Config.MaxReports = 10
+		o.Config.TrustedProxies = []string{"127.0.0.1"}
+	})
 	var ids []string
 	for i := 0; i < 3; i++ {
 		tok, _ := e.session()
 		d := e.create(tok, "x")
 		for j := 0; j < 6; j++ {
-			r := e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"r"}`)), 202)
+			r := e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"r"}`), "X-Forwarded-For", fmt.Sprintf("203.0.113.%d", i*6+j+1)), 202)
 			var out map[string]string
 			_ = json.Unmarshal(r.body, &out)
 			ids = append(ids, out["reportId"])
@@ -470,7 +476,7 @@ func TestReportBytesAreBounded(t *testing.T) {
 	d := e.create(tok, "x")
 	reason := strings.Repeat("r", 300)
 	for i := 0; i < 15; i++ {
-		e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"`+reason+`"}`)), 202)
+		e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"`+reason+fmt.Sprint(i)+`"}`)), 202)
 	}
 	var total int
 	for _, k := range e.keys("report/") {

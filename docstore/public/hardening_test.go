@@ -255,21 +255,21 @@ func TestMemorySessionStorePerClientCap(t *testing.T) {
 		return Session{ID: "x", Client: client, Created: now, Expires: now.Add(d)}
 	}
 	for i, d := range []time.Duration{time.Hour, time.Minute} {
-		if err := st.Create(ctx, fmt.Sprint("a", i), mk("A", d), now, 2); err != nil {
+		if err := st.Create(ctx, fmt.Sprint("a", i), mk("A", d), now, SessionCaps{PerClient: 2}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := st.Create(ctx, "a2", mk("A", time.Hour), now, 2); err != ErrClientSessionsFull {
+	if err := st.Create(ctx, "a2", mk("A", time.Hour), now, SessionCaps{PerClient: 2}); err != ErrClientSessionsFull {
 		t.Fatalf("err = %v", err)
 	}
-	if err := st.Create(ctx, "b0", mk("B", time.Hour), now, 2); err != nil {
+	if err := st.Create(ctx, "b0", mk("B", time.Hour), now, SessionCaps{PerClient: 2}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Create(ctx, "a2", mk("A", time.Hour), now.Add(2*time.Minute), 2); err != nil { // a1 expired
+	if err := st.Create(ctx, "a2", mk("A", time.Hour), now.Add(2*time.Minute), SessionCaps{PerClient: 2}); err != nil { // a1 expired
 		t.Fatalf("an expired session still counts: %v", err)
 	}
 	_ = st.Delete(ctx, "a0")
-	if err := st.Create(ctx, "a3", mk("A", time.Hour), now.Add(2*time.Minute), 2); err != nil {
+	if err := st.Create(ctx, "a3", mk("A", time.Hour), now.Add(2*time.Minute), SessionCaps{PerClient: 2}); err != nil {
 		t.Fatalf("a deleted session still counts: %v", err)
 	}
 }

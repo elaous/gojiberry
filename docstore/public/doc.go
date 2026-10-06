@@ -7,14 +7,17 @@
 // replace is an interface with a single-process default, passed in Options:
 //
 //	Interface        What it does                                   Default                      Plug in
-//	SessionStore     live anonymous sessions, the global and the    MemorySessionStore           Redis, a table (SetDoc must be a
-//	                 per-client cap, the one-document claim                                      compare-and-set; Create takes the
-//	                 (SetDoc: atomic CAS); optional SessionReaper                                per-client figure)
+//	SessionStore     live anonymous sessions, the global, per-      MemorySessionStore           Redis, a table (SetDoc must be a
+//	                 client and per-network caps, the reserve for                                compare-and-set; Create takes
+//	                 new networks, the one-document claim                                        SessionCaps)
+//	                 (SetDoc: atomic CAS); optional SessionReaper
 //	Limiters         per-group request budgets (Session, Write,     passkey.RateLimiter per      a shared Redis budget, a gateway's
 //	                 WriteAddr, View, Report, Admin), keyed by      group from Config            decision; passkey.Unlimited{}
-//	                 ClientKey (IPv4, IPv6 /64); passkey.Limiter
+//	                 ClientKey (IPv4, IPv6 /64); passkey.Limiter;
+//	                 Admin counts failed authentications only
 //	Quota            bytes per client per day, charged before the   MemoryQuota (fixed 24 h      Redis INCRBY with expiry, a table
-//	                 body is read and refunded (QuotaRefunder)      window per client)
+//	                 body is read and refunded (QuotaRefunder,
+//	                 WindowQuota: into the window it was charged in)      window per client)
 //	                 for what is not stored
 //	Options.ClientIP who the client is, for the limits and quota    remote address, or           your own function
 //	                                                                passkey.TrustedProxies
@@ -39,9 +42,11 @@
 //	GET    /public/doc            download it (never renews)
 //	DELETE /public/doc            discard it, freeing the session
 //	GET    /public/view/<viewId>  the document, read-only; never renews; 410 once taken down
-//	GET    /public/health         whether the offer's promises hold (deadlines, sweeper, storage); 503 if not
+//	GET    /public/health         {"ok":true} (200) or {"ok":false} (503): nothing more
+//	GET    /admin/health          the detail (problems, storage, last sweep) for the operator (AdminGuard)
 //	POST   /public/report         {"id": "<view id or document id>", "reason": "..."} -> 202
-//	DELETE /admin/takedown/<id>   operator: delete, tombstone, 410 from then on (AdminGuard)
+//	DELETE /admin/takedown/<id>   operator: delete, tombstone, 410 from then on (AdminGuard; failed attempts
+//	                              are rate limited per client, a right token never is)
 //
 // The session token (Authorization: Bearer) is the edit capability; the view ID is a second,
 // separate unguessable ID derived one way from the document ID, so a view link reveals neither

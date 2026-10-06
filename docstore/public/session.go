@@ -26,6 +26,9 @@ type Session struct {
 	// Client is the ClientKey of the address that was given the session: what the per-address
 	// cap of live sessions counts.
 	Client string
+	// Net is the NetKey of that address (an IPv6 /48, an IPv4 /24): what the second-level cap and
+	// the reserve for newcomers count.
+	Net string
 	// Created is when the session was issued; it never extends the session beyond MaxAge.
 	Created time.Time
 	// Expires is the instant the session stops working.
@@ -43,9 +46,21 @@ var (
 	// ErrClientSessionsFull is returned by Create when the session's Client already holds its
 	// maximum of live sessions.
 	ErrClientSessionsFull = errors.New("public: too many live anonymous sessions for this address")
+	// ErrNetSessionsFull is returned by Create when the session's Net already holds its maximum
+	// of live sessions.
+	ErrNetSessionsFull = errors.New("public: too many live anonymous sessions for this network")
 	// ErrNoSession is returned by the methods that need a session that is not there (or has expired).
 	ErrNoSession = errors.New("public: no such session")
 )
+
+// SessionCaps are the figures a SessionStore applies in Create besides its own global cap.
+type SessionCaps struct {
+	PerClient int // live sessions per Client (<= 0: no cap)
+	PerNet    int // live sessions per Net (<= 0: no cap)
+	// ReservePercent is the share (0..100) of the global cap kept for sessions whose Net has no
+	// live session yet (<= 0: no reserve).
+	ReservePercent int
+}
 
 // SessionStore keeps the live anonymous sessions. The default is NewMemorySessionStore (one
 // process); replicas that must share sessions, or a global cap, plug in a store over Redis or a
@@ -53,13 +68,17 @@ var (
 // needs no clock of its own, and an expired session behaves as absent.
 //
 // Create must refuse (ErrSessionsFull) when the live sessions are at the cap, counting without
-// the expired ones, and (ErrClientSessionsFull) when the live sessions with the same Client
-// already number perClient (perClient <= 0: no per-client cap), so that one address cannot fill
-// the global cap; SetDoc must be atomic (a compare-and-set), since it is what makes "one
+// the expired ones, (ErrClientSessionsFull) when the live sessions with the same Client already
+// number caps.PerClient and (ErrNetSessionsFull) when those with the same Net number caps.PerNet
+// (a figure <= 0 is no such cap), so that one address, or one attacker holding a whole /48, cannot
+// fill the global cap. Once the live sessions reach the cap minus caps.ReservePercent of it, Create
+// refuses (ErrSessionsFull) every session whose Net already has a live session: the reserve is for
+// visitors from networks that hold none. SetDoc must be atomic (a compare-and-set), since it is what makes "one
 // document per session" hold under concurrent requests.
 type SessionStore interface {
-	// Create stores a new session, or returns ErrSessionsFull or ErrClientSessionsFull.
-	Create(ctx context.Context, key string, s Session, now time.Time, perClient int) error
+	// Create stores a new session, or returns ErrSessionsFull, ErrClientSessionsFull or
+	// ErrNetSessionsFull.
+	Create(ctx context.Context, key string, s Session, now time.Time, caps SessionCaps) error
 	// Get returns the live session.
 	Get(ctx context.Context, key string, now time.Time) (Session, bool, error)
 	// SetDoc sets the session's DocID to newDoc if it is currently old (use "" for the first),
@@ -104,6 +123,7 @@ type MemorySessionStore struct {
 	mu       sync.Mutex
 	sessions map[string]Session
 	byClient map[string]int // live-or-unswept sessions per Client
+	byNet    map[string]int // live-or-unswept sessions per Net
 }
 
 // DefaultMaxSessions is the live-session cap when none is set.
@@ -111,7 +131,7 @@ const DefaultMaxSessions = 10000
 
 // NewMemorySessionStore makes a store holding at most max live sessions (0: DefaultMaxSessions).
 func NewMemorySessionStore(max int) *MemorySessionStore {
-	return &MemorySessionStore{Max: max, sessions: map[string]Session{}, byClient: map[string]int{}}
+	return &MemorySessionStore{Max: max, sessions: map[string]Session{}, byClient: map[string]int{}, byNet: map[string]int{}}
 }
 
 func (m *MemorySessionStore) cap() int {
@@ -145,6 +165,11 @@ func (m *MemorySessionStore) dropLocked(key string) {
 			delete(m.byClient, s.Client)
 		}
 	}
+	if s.Net != "" {
+		if m.byNet[s.Net]--; m.byNet[s.Net] <= 0 {
+			delete(m.byNet, s.Net)
+		}
+	}
 }
 
 // Reap implements SessionReaper.
@@ -155,7 +180,7 @@ func (m *MemorySessionStore) Reap(_ context.Context, now time.Time) (int, error)
 }
 
 // Create implements SessionStore.
-func (m *MemorySessionStore) Create(_ context.Context, key string, s Session, now time.Time, perClient int) error {
+func (m *MemorySessionStore) Create(_ context.Context, key string, s Session, now time.Time, caps SessionCaps) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.sessions == nil {
@@ -164,18 +189,36 @@ func (m *MemorySessionStore) Create(_ context.Context, key string, s Session, no
 	if m.byClient == nil {
 		m.byClient = map[string]int{}
 	}
-	if len(m.sessions) >= m.cap() || (perClient > 0 && s.Client != "" && m.byClient[s.Client] >= perClient) {
-		m.sweepLocked(now)
+	if m.byNet == nil {
+		m.byNet = map[string]int{}
 	}
-	if len(m.sessions) >= m.cap() {
-		return ErrSessionsFull
+	check := func() error {
+		switch {
+		case len(m.sessions) >= m.cap():
+			return ErrSessionsFull
+		case caps.PerClient > 0 && s.Client != "" && m.byClient[s.Client] >= caps.PerClient:
+			return ErrClientSessionsFull
+		case caps.PerNet > 0 && s.Net != "" && m.byNet[s.Net] >= caps.PerNet:
+			return ErrNetSessionsFull
+		case caps.ReservePercent > 0 && s.Net != "" && m.byNet[s.Net] > 0 &&
+			len(m.sessions) >= m.cap()-m.cap()*min(caps.ReservePercent, 100)/100:
+			// In the reserve: only networks with no live session are let in.
+			return ErrSessionsFull
+		}
+		return nil
 	}
-	if perClient > 0 && s.Client != "" && m.byClient[s.Client] >= perClient {
-		return ErrClientSessionsFull
+	if check() != nil {
+		m.sweepLocked(now) // expired sessions do not count against anyone
+	}
+	if err := check(); err != nil {
+		return err
 	}
 	m.sessions[key] = s
 	if s.Client != "" {
 		m.byClient[s.Client]++
+	}
+	if s.Net != "" {
+		m.byNet[s.Net]++
 	}
 	return nil
 }

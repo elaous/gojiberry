@@ -2,6 +2,8 @@ package public
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -32,8 +34,9 @@ type Limiter = passkey.Limiter
 // Config's figures. Every "<client>" is the ClientKey of the address (an IPv4 address, an IPv6
 // /64). Keys: Session "session|<client>", Write "write|<session id>" and WriteAddr
 // "writeaddr|<client>" (a write must pass both, so rotating sessions buys no write budget),
-// View "view|<client>", Report "report|<client>", Admin "admin|<client>" (a generous default
-// of 20 a minute: it is what slows down guessing the admin token).
+// View "view|<client>", Report "report|<client>", Admin "admin|<client>": the budget of FAILED
+// admin authentications only (20 a minute by default), so a client that guesses wrong is slowed
+// down and one that presents the token is never counted (see adminAllowed).
 type Limiters struct {
 	Session, Write, WriteAddr, View, Report, Admin Limiter
 }
@@ -75,9 +78,14 @@ type Service struct {
 	terms     string
 	locks     [64]sync.Mutex // per document (by hash): serializes the read-modify-write of its record
 
-	bytes   budget      // live bytes of public documents (Config.MaxTotalBytes)
-	reports reportStats // stored abuse reports
-	recMu   sync.Mutex  // serializes reconcile
+	bytes    budget      // live bytes of public documents (Config.MaxTotalBytes)
+	reports  reportStats // stored abuse reports
+	flight   inflight    // bytes of request bodies being read (Config.MaxInflightBytes)
+	recMu    sync.Mutex  // serializes the first reconcile (ensureCounters)
+	recRetry time.Time   // no new first reconcile before this (writes are refused until then)
+
+	saltMu sync.Mutex
+	salt   []byte // keys the reporter hashes of reports (see reporterHash)
 
 	prefixOK bool // the store lists by prefix (else Sweep's listings are throttled)
 
@@ -89,6 +97,10 @@ type Service struct {
 	sweepEvery   time.Duration
 	noDeadline   atomic.Bool
 }
+
+// ErrAdminNeedsProxyConfig is returned by New when the admin route is enabled and nothing says how
+// clients are told apart.
+var ErrAdminNeedsProxyConfig = errors.New("public: the admin route is enabled but GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES is unset: behind a reverse proxy every caller would share the proxy's address, and wrong guesses of one would lock the operator out; name the proxy's CIDRs, or set it to \"none\" if the server is reached directly")
 
 // ErrExpiryRequired is returned by New for a store that does not expire documents.
 var ErrExpiryRequired = errors.New("public: the store must expire documents (the 24 hour promise): wrap it in docstore.ExpiringAdapter and set GOJIBERRY_DOCSTORE_EXPIRY_TTL")
@@ -106,6 +118,7 @@ const (
 	docRecordPrefix  = docstore.PublicPrefix + "doc/"  // docMeta of a document
 	viewRecordPrefix = docstore.PublicPrefix + "view/" // view id -> document
 	tombPrefix       = docstore.PublicPrefix + "tomb/" // tombstones of taken-down view ids
+	saltKey          = docstore.PublicPrefix + "salt"  // the salt of the reporter hashes
 	// TombstonePrefix is where takedown tombstones are kept: inside docstore.PublicPrefix, so
 	// they never expire with documents; the sweep deletes them after Config.TombstoneTTL.
 	TombstonePrefix = tombPrefix
@@ -124,11 +137,19 @@ func New(o Options) (*Service, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	// The admin route counts failed authentications per client address. Behind a proxy that is
+	// the proxy's address unless the proxy is named, and then one client's wrong guesses would
+	// lock the operator out: refuse to start the route that way, unless the operator says there is
+	// no proxy ("none") or supplies its own way to name a client.
+	if (cfg.AdminToken != "" || o.Admin != nil) && o.ClientIP == nil && len(cfg.TrustedProxies) == 0 && !cfg.NoProxy {
+		return nil, ErrAdminNeedsProxyConfig
+	}
 	s := &Service{
 		store: o.Store, cfg: cfg,
 		sessions: o.Sessions, lim: o.Limiters, quota: o.Quota, admin: o.Admin,
 		blocklist: o.Blocklist, challenge: o.Challenger, clientIP: o.ClientIP, now: o.Now,
 	}
+	s.flight.max = cfg.MaxInflightBytes
 	if cfg.TermsURL != "" {
 		u, err := url.Parse(cfg.TermsURL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || strings.ContainsAny(cfg.TermsURL, "<>\"\r\n ") {
@@ -198,6 +219,7 @@ func (s *Service) Mount(srv *docstore.Server) *docstore.Server {
 	srv.WithRoutes("/public/", s.Handler())
 	if t, isToken := s.admin.(TokenAdmin); !isToken || t != "" {
 		srv.WithRoutes("/admin/takedown/", s.AdminHandler())
+		srv.WithRoutes("/admin/health", s.AdminHandler())
 	}
 	return srv
 }
@@ -213,10 +235,11 @@ func (s *Service) Handler() http.Handler {
 	return s.headers(mux)
 }
 
-// AdminHandler serves DELETE /admin/takedown/<id>.
+// AdminHandler serves DELETE /admin/takedown/<id> and GET /admin/health.
 func (s *Service) AdminHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/admin/takedown/", s.handleTakedown)
+	mux.HandleFunc("/admin/health", s.handleAdminHealth)
 	return s.headers(mux)
 }
 
@@ -290,6 +313,19 @@ type docMeta struct {
 	Versions int       `json:"versions"`
 	Bytes    int       `json:"bytes"`
 	Reports  int       `json:"reports,omitempty"`
+	// ReportRefs are the reports stored for this document (at most maxReportsOfDoc), what the
+	// dedupe, the reserved slots and the priority eviction of handleReport work from.
+	ReportRefs []reportRef `json:"reportRefs,omitempty"`
+}
+
+// reportRef is the part of a stored report its document's record keeps.
+type reportRef struct {
+	ID       string    `json:"id"`
+	Reporter string    `json:"by"`  // the reporter's hash (reporterHash)
+	Key      string    `json:"key"` // hash of (reporter, normalized reason): the dedupe key
+	Priority bool      `json:"pri,omitempty"`
+	Size     int       `json:"size"`
+	At       time.Time `json:"at"`
 }
 
 type viewRecord struct {
@@ -309,6 +345,9 @@ type Report struct {
 	DocID  string    `json:"doc"`
 	Reason string    `json:"reason"`
 	At     time.Time `json:"at"`
+	// Reporter is a salted hash of the reporting client (never the address), so the same client's
+	// reports can be told from other clients' without holding an address.
+	Reporter string `json:"reporter,omitempty"`
 }
 
 func (s *Service) putJSON(ctx context.Context, key string, v any) error {
@@ -373,15 +412,6 @@ func (s *Service) live(ctx context.Context, docID string) (bool, error) {
 		return false, nil
 	}
 	return err == nil, err
-}
-
-// recordedBytes is the size the document's record says it has (0 if there is no record).
-func (s *Service) recordedBytes(ctx context.Context, docID string) int64 {
-	var meta docMeta
-	if found, err := s.getJSON(ctx, docRecordPrefix+docID, &meta); err != nil || !found {
-		return 0
-	}
-	return int64(meta.Bytes)
 }
 
 // dropRecords deletes the document's own records (not the document, not the tombstone).
@@ -503,11 +533,17 @@ func (s *Service) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 	now := s.now()
 	// A session that has not stored a document yet is short-lived: the first write extends it.
-	sess := Session{ID: id, Client: s.clientKey(r), Created: now, Expires: now.Add(s.cfg.SessionIdleTTL)}
-	switch err := s.sessions.Create(r.Context(), TokenKey(token), sess, now, s.cfg.MaxSessionsPerAddress); {
+	addr := s.clientIP(r)
+	sess := Session{ID: id, Client: ClientKey(addr), Net: NetKey(addr), Created: now, Expires: now.Add(s.cfg.SessionIdleTTL)}
+	caps := SessionCaps{PerClient: s.cfg.MaxSessionsPerAddress, PerNet: s.cfg.MaxSessionsPerNet, ReservePercent: max(0, s.cfg.SessionReservePercent)}
+	switch err := s.sessions.Create(r.Context(), TokenKey(token), sess, now, caps); {
 	case errors.Is(err, ErrClientSessionsFull):
 		w.Header().Set("Retry-After", "900")
 		http.Error(w, "too many live sessions from your address; finish or wait for the others to expire", http.StatusTooManyRequests)
+		return
+	case errors.Is(err, ErrNetSessionsFull):
+		w.Header().Set("Retry-After", "900")
+		http.Error(w, "too many live sessions from your network; finish or wait for the others to expire", http.StatusTooManyRequests)
 		return
 	case errors.Is(err, ErrSessionsFull):
 		w.Header().Set("Retry-After", "60")
@@ -690,21 +726,17 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	n := int64(len(data))
-	if !s.bytes.reserve(n, s.cfg.MaxTotalBytes) {
-		storeFull(w)
-		return
-	}
-	stored := false
-	defer func() {
-		if !stored {
-			s.bytes.add(-n)
-		}
-	}()
 	docID, err := randomString(16)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
+	res, fits := s.bytes.reserve(docID, n, n, s.cfg.MaxTotalBytes)
+	if !fits {
+		storeFull(w)
+		return
+	}
+	defer res.cancel() // a no-op once committed
 	switch claimed, err := s.sessions.SetDoc(ctx, key, old, docID, s.now()); {
 	case errors.Is(err, ErrNoSession):
 		http.Error(w, "the session ended", http.StatusUnauthorized)
@@ -727,6 +759,7 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 		bg := context.WithoutCancel(ctx)
 		_ = s.deleteKey(bg, docKey(docID))
 		_ = s.dropRecords(bg, docID)
+		s.bytes.release(docID) // a reconcile may have listed the document meanwhile
 		release()
 	}
 	if err := s.putJSON(ctx, docRecordPrefix+docID, meta); err != nil {
@@ -770,10 +803,11 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 		bg := context.WithoutCancel(ctx)
 		_ = s.deleteKey(bg, docKey(docID))
 		_ = s.dropRecords(bg, docID)
+		s.bytes.release(docID)
 		http.Error(w, "this document was removed", http.StatusGone)
 		return
 	}
-	stored = true
+	res.commit()
 	tk.keep()
 	s.renewSession(ctx, key, sess)
 	w.Header().Set("X-Gojiberry-Expires", exp.Format(time.RFC3339))
@@ -857,16 +891,12 @@ func (s *Service) editDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	delta := int64(len(data)) - int64(meta.Bytes)
-	if !s.bytes.reserve(delta, s.cfg.MaxTotalBytes) {
+	res, fits := s.bytes.reserve(docID, int64(len(data)), delta, s.cfg.MaxTotalBytes)
+	if !fits {
 		storeFull(w)
 		return
 	}
-	stored := false
-	defer func() {
-		if !stored {
-			s.bytes.add(-delta)
-		}
-	}()
+	defer res.cancel() // a no-op once committed
 	// The count goes up before the save and comes back down if the save fails: a crash between
 	// the two can only leave the count one too high (the safe side), never an uncounted edit.
 	next := meta
@@ -892,11 +922,12 @@ func (s *Service) editDoc(w http.ResponseWriter, r *http.Request) {
 		bg := context.WithoutCancel(ctx)
 		_ = s.deleteKey(bg, docKey(docID))
 		_ = s.dropRecords(bg, docID)
+		s.bytes.release(docID) // the document is gone: its bytes are not counted until the next sweep
 		s.alarmNoDeadline()
 		s.fail(w, errNoDeadline)
 		return
 	}
-	stored = true
+	res.commit()
 	tk.keep()
 	s.renewSession(ctx, key, sess)
 	w.Header().Set("X-Gojiberry-Expires", exp.Format(time.RFC3339))
@@ -940,7 +971,6 @@ func (s *Service) discardDoc(w http.ResponseWriter, r *http.Request) {
 	}
 	unlock := s.lock(docID)
 	defer unlock()
-	size := s.recordedBytes(ctx, docID)
 	if err := s.deleteKey(ctx, docKey(docID)); err != nil {
 		s.fail(w, err)
 		return
@@ -949,7 +979,7 @@ func (s *Service) discardDoc(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	s.bytes.add(-size)
+	s.bytes.release(docID)
 	if _, err := s.sessions.SetDoc(ctx, key, docID, "", s.now()); err != nil && !errors.Is(err, ErrNoSession) {
 		s.fail(w, err)
 		return
@@ -1085,6 +1115,7 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	reporter := s.reporterHash(ctx, s.clientKey(r))
 	reportID, err := randomString(16)
 	if err != nil {
 		s.fail(w, err)
@@ -1096,31 +1127,164 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 	if found, err := s.getJSON(ctx, docRecordPrefix+docID, &meta); err != nil {
 		s.fail(w, err)
 		return
-	} else if found && meta.Reports < maxReportsOfDoc {
-		rep := Report{ID: reportID, ViewID: view, DocID: docID, Reason: reason, At: s.now().UTC()}
-		raw, _ := json.Marshal(rep)
-		s.ensureCounters(ctx)
-		if err := s.store.Save(ctx, docstore.ReportPrefix+reportID, raw); err != nil {
+	} else if found {
+		s.ensureCounters(ctx) // the report counters are only for eviction: a report is taken even if they are unknown
+		id, _, err := s.storeReport(ctx, &meta, Report{ID: reportID, ViewID: view, DocID: docID, Reason: reason, At: s.now().UTC(), Reporter: reporter})
+		if err != nil {
 			s.fail(w, err)
 			return
 		}
-		s.reports.add(1, int64(len(raw)))
-		if s.reports.over(s.cfg.MaxReports, s.cfg.MaxReportBytes) {
-			// Over the global bound: the oldest reports go, the new one stays.
-			if metas, err := docstore.ListPrefix(ctx, s.store, docstore.ReportPrefix); err == nil {
-				s.evictReports(context.WithoutCancel(ctx), metas)
-			}
-		}
-		meta.Reports++
-		if err := s.putJSON(ctx, docRecordPrefix+docID, meta); err != nil {
-			s.fail(w, err)
-			return
+		if id != "" {
+			reportID = id
 		}
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"reportId": reportID})
 }
 
+// reportKey is the dedupe key of a report: the reporter and the reason as compared (trimmed,
+// lowercase, spaces collapsed), so the same client saying the same thing twice about a document
+// counts once.
+func reportKey(reporter, reason string) string {
+	h := sha256.Sum256([]byte(reporter + "\x00" + normalizeReason(reason)))
+	return base64.RawURLEncoding.EncodeToString(h[:9])
+}
+
+// reporterHash names a reporting client without holding its address: a hash keyed by a salt that
+// is kept in the store (public/salt), so it is the same across restarts and replicas. A store
+// that cannot keep it gets a salt for this process only (logged), which weakens the dedupe across
+// a restart and nothing else.
+func (s *Service) reporterHash(ctx context.Context, client string) string {
+	s.saltMu.Lock()
+	if s.salt == nil {
+		var rec struct {
+			Salt []byte `json:"salt"`
+		}
+		found, err := s.getJSON(ctx, saltKey, &rec)
+		if err == nil && (!found || len(rec.Salt) < 16) {
+			rec.Salt = make([]byte, 32)
+			if _, err = rand.Read(rec.Salt); err == nil {
+				err = s.putJSON(ctx, saltKey, rec)
+			}
+		}
+		if err != nil {
+			log.Printf("public docstore: keeping the reporter salt: %s (using one for this process only)", redact(err))
+			if len(rec.Salt) < 16 {
+				rec.Salt = make([]byte, 32)
+				_, _ = rand.Read(rec.Salt)
+			}
+		}
+		s.salt = rec.Salt
+	}
+	salt := s.salt
+	s.saltMu.Unlock()
+	m := hmac.New(sha256.New, salt)
+	_, _ = m.Write([]byte(client))
+	return base64.RawURLEncoding.EncodeToString(m.Sum(nil)[:12])
+}
+
+// storeReport decides whether rep is kept for the document whose record is meta (the caller holds
+// the document's lock) and keeps it. The rules, in order:
+//
+//   - the same reporter with the same reason again is a duplicate and counts once: nothing is
+//     stored, and the id of the first report is returned;
+//   - a document has at most maxReportsOfDoc reports; one whose reason is a priority one that
+//     finds the document full evicts the document's oldest ordinary report to make room (or is
+//     dropped if every report there is a priority one), any other is dropped;
+//   - the last Config.ReportReservedPerDoc slots of a document are for reporters with no report on
+//     it yet, and, once the stored reports pass the global bound minus Config.ReportReservePercent
+//     of it, reports are taken only from reporters with no stored report at all (priority reports
+//     are exempt from both reserves: they are not the flood the reserves keep out).
+//
+// A dropped report is answered 202 like a kept one, so a flooder learns nothing. id is the
+// report's id if it was stored or is a duplicate, "" if it was dropped.
+func (s *Service) storeReport(ctx context.Context, meta *docMeta, rep Report) (id string, stored bool, err error) {
+	key := reportKey(rep.Reporter, rep.Reason)
+	for _, ref := range meta.ReportRefs {
+		if ref.Key == key {
+			return ref.ID, false, nil
+		}
+	}
+	priority := s.isPriority(rep.Reason)
+	n := max(len(meta.ReportRefs), meta.Reports)
+	if n >= maxReportsOfDoc {
+		if !priority || !s.evictOrdinaryRef(ctx, meta) {
+			return "", false, nil
+		}
+	} else if !priority {
+		if reserved := s.cfg.ReportReservedPerDoc; reserved > 0 && n >= maxReportsOfDoc-reserved {
+			for _, ref := range meta.ReportRefs {
+				if ref.Reporter == rep.Reporter {
+					return "", false, nil // the slots left are for new reporters
+				}
+			}
+		}
+		if pct := s.cfg.ReportReservePercent; pct > 0 {
+			all, mine := s.reports.held(rep.Reporter)
+			if all >= s.cfg.MaxReports-s.cfg.MaxReports*pct/100 && mine > 0 {
+				return "", false, nil
+			}
+		}
+	}
+	raw, _ := json.Marshal(rep)
+	if err := s.store.Save(ctx, docstore.ReportPrefix+rep.ID, raw); err != nil {
+		return "", false, err
+	}
+	s.reports.add(1, int64(len(raw)), rep.Reporter)
+	if s.reports.over(s.cfg.MaxReports, s.cfg.MaxReportBytes) {
+		// Over the global bound: the oldest ordinary reports go, the new one stays.
+		if metas, info, err := s.listReports(ctx); err == nil {
+			s.evictReports(context.WithoutCancel(ctx), metas, info)
+		}
+	}
+	meta.ReportRefs = append(meta.ReportRefs, reportRef{ID: rep.ID, Reporter: rep.Reporter, Key: key, Priority: priority, Size: len(raw), At: rep.At})
+	meta.Reports = len(meta.ReportRefs)
+	if err := s.putJSON(ctx, docRecordPrefix+rep.DocID, *meta); err != nil {
+		return "", false, err
+	}
+	return rep.ID, true, nil
+}
+
+// evictOrdinaryRef deletes the oldest non-priority report of the document and reports whether
+// there was one.
+func (s *Service) evictOrdinaryRef(ctx context.Context, meta *docMeta) bool {
+	oldest := -1
+	for i, ref := range meta.ReportRefs {
+		if !ref.Priority && (oldest < 0 || ref.At.Before(meta.ReportRefs[oldest].At)) {
+			oldest = i
+		}
+	}
+	if oldest < 0 {
+		return false
+	}
+	ref := meta.ReportRefs[oldest]
+	if err := s.deleteKey(ctx, docstore.ReportPrefix+ref.ID); err != nil {
+		log.Printf("public docstore: evicting a report: %s", redact(err))
+		return false
+	}
+	s.reports.add(-1, -int64(ref.Size), ref.Reporter)
+	meta.ReportRefs = append(meta.ReportRefs[:oldest:oldest], meta.ReportRefs[oldest+1:]...)
+	meta.Reports = len(meta.ReportRefs)
+	return true
+}
+
 // ---- takedown
+
+// adminAllowed is the admin guard in front of the admin routes. The token is checked first (in
+// constant time); a request that passes is never counted, so wrong guesses from an address, or
+// from everyone behind one shared address, cannot lock the operator out. Only failures are
+// counted, per client, in Limiters.Admin; past that budget a failure answers 429 with Retry-After
+// instead of 403 (the right token still gets in: with a long random token guessing is hopeless
+// whatever the rate, and the limit only keeps the noise down).
+func (s *Service) adminAllowed(w http.ResponseWriter, r *http.Request) bool {
+	if s.admin != nil && s.admin.Allow(r) {
+		return true
+	}
+	if !s.allow(w, r, s.lim.Admin, "admin", "") {
+		return false
+	}
+	http.Error(w, "forbidden", http.StatusForbidden)
+	return false
+}
 
 // handleTakedown serves DELETE /admin/takedown/<id> (a view ID or a document ID): the document,
 // its view ID and its records are deleted and a tombstone is written, so the view ID answers 410
@@ -1131,12 +1295,7 @@ func (s *Service) handleTakedown(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, "DELETE")
 		return
 	}
-	// The budget is charged before the token is looked at, so guessing it is slow too.
-	if !s.allow(w, r, s.lim.Admin, "admin", "") {
-		return
-	}
-	if s.admin == nil || !s.admin.Allow(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+	if !s.adminAllowed(w, r) {
 		return
 	}
 	ctx := r.Context()
@@ -1199,7 +1358,6 @@ func (s *Service) handleTakedown(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	size := s.recordedBytes(ctx, docID)
 	if err := s.deleteKey(ctx, docKey(docID)); err != nil {
 		s.fail(w, err)
 		return
@@ -1208,7 +1366,7 @@ func (s *Service) handleTakedown(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	s.bytes.add(-size)
+	s.bytes.release(docID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1266,27 +1424,25 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 		}
 	}
 
-	s.recMu.Lock()
-	s.bytes.begin()
-	s.reports.begin()
-	s.recMu.Unlock()
-	liveMetas, err := docstore.ListPrefix(ctx, s.store, docKeyPrefix)
+	repWin := s.reports.begin()
+	repDone := false
+	defer func() {
+		if !repDone {
+			s.reports.abort(repWin)
+		}
+	}()
+	bytesWin := s.bytes.begin()
+	listed, err := s.listBudget(ctx)
 	if err != nil {
+		s.bytes.abort(bytesWin)
 		return 0, err
 	}
-	live := make(map[string]bool, len(liveMetas))
-	var liveBytes int64
-	for _, m := range liveMetas {
-		live[strings.TrimPrefix(m.ID, docKeyPrefix)] = true
-		liveBytes += int64(m.Size)
-	}
-	if vs, err := docstore.ListPrefix(ctx, s.store, versionsKeyPrefix); err != nil {
-		note(err)
-	} else {
-		for _, m := range vs {
-			liveBytes += int64(m.Size)
+	s.bytes.set(bytesWin, listed) // version snapshots count with their documents
+	live := make(map[string]bool, len(listed))
+	for id, e := range listed {
+		if e.doc > 0 {
+			live[id] = true
 		}
-		s.bytes.set(liveBytes) // version snapshots count with their documents
 	}
 	docs, err := docstore.ListPrefix(ctx, s.store, docRecordPrefix)
 	if err != nil {
@@ -1344,49 +1500,41 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 		}
 		del(m.ID)
 	}
-	s.sweepOld(ctx, tombPrefix, s.cfg.TombstoneTTL, func(raw []byte) (time.Time, bool) {
+	s.sweepOld(ctx, tombPrefix, s.cfg.TombstoneTTL, func(raw []byte) (time.Time, reportInfo, bool) {
 		var t tombstone
-		return t.At, json.Unmarshal(raw, &t) == nil
+		return t.At, reportInfo{}, json.Unmarshal(raw, &t) == nil
 	}, del, note)
-	kept := s.sweepOld(ctx, docstore.ReportPrefix, s.cfg.ReportTTL, func(raw []byte) (time.Time, bool) {
+	kept := s.sweepOld(ctx, docstore.ReportPrefix, s.cfg.ReportTTL, func(raw []byte) (time.Time, reportInfo, bool) {
 		var r Report
-		return r.At, json.Unmarshal(raw, &r) == nil
+		return r.At, reportInfo{reporter: r.Reporter, priority: s.isPriority(r.Reason)}, json.Unmarshal(raw, &r) == nil
 	}, del, note)
 	if kept != nil {
-		removed += s.evictReports(ctx, kept.metas)
+		removed += s.evictReports(ctx, kept.metas, kept.info)
 	}
-	s.recountReports(ctx, note)
+	if err := s.recountReportsIn(ctx, repWin); err != nil {
+		note(err)
+	}
+	repDone = true
 	return removed, first
 }
 
-// recountReports sets the report counters from a fresh listing.
-func (s *Service) recountReports(ctx context.Context, note func(error)) {
-	metas, err := docstore.ListPrefix(ctx, s.store, docstore.ReportPrefix)
-	if err != nil {
-		note(err)
-		return
-	}
-	var b int64
-	for _, m := range metas {
-		b += int64(m.Size)
-	}
-	s.reports.set(len(metas), b)
-}
-
 // swept is what sweepOld leaves.
-type swept struct{ metas []docstore.Meta }
+type swept struct {
+	metas []docstore.Meta
+	info  map[string]reportInfo
+}
 
 // sweepOld deletes the records under prefix whose own timestamp is older than ttl; one that
 // cannot be read as a record is deleted too once it is, by its adapter timestamp, that old. It
-// returns the records that stay (nil if the listing failed).
-func (s *Service) sweepOld(ctx context.Context, prefix string, ttl time.Duration, at func([]byte) (time.Time, bool), del func(string), note func(error)) *swept {
+// returns the records that stay, with what at read from them (nil if the listing failed).
+func (s *Service) sweepOld(ctx context.Context, prefix string, ttl time.Duration, at func([]byte) (time.Time, reportInfo, bool), del func(string), note func(error)) *swept {
 	metas, err := docstore.ListPrefix(ctx, s.store, prefix)
 	if err != nil {
 		note(err)
 		return nil
 	}
 	now := s.now()
-	out := &swept{}
+	out := &swept{info: map[string]reportInfo{}}
 	for _, m := range metas {
 		d, err := s.store.Load(ctx, m.ID)
 		if errors.Is(err, docstore.ErrNotFound) {
@@ -1397,7 +1545,7 @@ func (s *Service) sweepOld(ctx context.Context, prefix string, ttl time.Duration
 			out.metas = append(out.metas, m)
 			continue
 		}
-		t, ok := at(d.Data)
+		t, info, ok := at(d.Data)
 		if !ok {
 			t = d.UpdatedAt
 		}
@@ -1406,6 +1554,7 @@ func (s *Service) sweepOld(ctx context.Context, prefix string, ttl time.Duration
 			continue
 		}
 		out.metas = append(out.metas, m)
+		out.info[m.ID] = info
 	}
 	return out
 }

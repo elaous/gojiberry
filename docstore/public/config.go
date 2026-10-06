@@ -39,6 +39,16 @@ type Config struct {
 	// global cap.
 	MaxSessions           int
 	MaxSessionsPerAddress int
+	// MaxSessionsPerNet is the second-level cap: live sessions per network prefix (an IPv6 /48 or
+	// an IPv4 /24, see NetKey), 429 above it; default 100 (never below MaxSessionsPerAddress).
+	// Per-/64 caps alone leave one attacker holding a /48 (65,536 of them) able to fill the
+	// global cap.
+	MaxSessionsPerNet int
+	// SessionReservePercent is the part of MaxSessions kept for visitors whose network prefix has
+	// no live session yet: once the live sessions reach MaxSessions minus this share, only such
+	// newcomers are admitted, so a flood from prefixes that already hold sessions cannot starve
+	// legitimate new visitors. Default 20; negative: no reserve (the environment variable's 0).
+	SessionReservePercent int
 
 	// Per-client request budgets (a token bucket whose burst equals the figure, so 10 a minute
 	// means 10 at once and 10 a minute): writes per session and per address, reads of view links
@@ -59,6 +69,23 @@ type Config struct {
 	// the oldest reports are evicted. Defaults 5000 and 8 MiB.
 	MaxReports     int
 	MaxReportBytes int64
+
+	// MaxInflightBytes is the global cap on the bytes of request bodies being read at once (the
+	// declared length, or MaxDocBytes for a body of unknown length, is held from admission until
+	// the write ends); a write that would pass it is answered 503. Default 256 MiB; at least
+	// MaxDocBytes.
+	MaxInflightBytes int64
+
+	// ReportReservedPerDoc is how many of a document's 20 report slots are kept for reporters
+	// who have no report on it yet (default 5; negative: none), and ReportReservePercent the
+	// share of MaxReports kept for reporters with no stored report at all (default 20; negative:
+	// none). ReportPriorityReasons are the reasons (compared trimmed and without case, whole
+	// reason) whose reports are never evicted before others and may take a slot of a full
+	// document, evicting its oldest ordinary report; nil is the default list, "csam" and
+	// "illegal", and an empty non-nil slice means none.
+	ReportReservedPerDoc  int
+	ReportReservePercent  int
+	ReportPriorityReasons []string
 
 	// RequestTimeout bounds how long a client may take to send a request body (and to receive
 	// the answer, twice as long): a slow-body client is answered 408 and cut off. Default 30s.
@@ -107,6 +134,11 @@ const (
 	DefaultReportsPerMinute  = 5
 	DefaultRecordTTL         = 30 * 24 * time.Hour
 	DefaultMaxPerAddress     = 10
+	DefaultMaxPerNet         = 100
+	DefaultSessionReserve    = 20
+	DefaultMaxInflightBytes  = 256 << 20
+	DefaultReportReserved    = 5
+	DefaultReportReservePct  = 20
 	DefaultAddrWritesMinute  = 120
 	DefaultMaxTotalBytes     = 1 << 30
 	DefaultMaxReports        = 5000
@@ -153,6 +185,46 @@ func (c Config) withDefaults() Config {
 	if c.MaxSessionsPerAddress > c.MaxSessions {
 		c.MaxSessionsPerAddress = c.MaxSessions
 	}
+	if c.MaxSessionsPerNet <= 0 {
+		c.MaxSessionsPerNet = DefaultMaxPerNet
+	}
+	if c.MaxSessionsPerNet < c.MaxSessionsPerAddress {
+		c.MaxSessionsPerNet = c.MaxSessionsPerAddress
+	}
+	if c.MaxSessionsPerNet > c.MaxSessions {
+		c.MaxSessionsPerNet = c.MaxSessions
+	}
+	if c.SessionReservePercent == 0 {
+		c.SessionReservePercent = DefaultSessionReserve
+	}
+	if c.SessionReservePercent > 90 {
+		c.SessionReservePercent = 90
+	}
+	if c.MaxInflightBytes <= 0 {
+		c.MaxInflightBytes = DefaultMaxInflightBytes
+	}
+	if c.ReportReservedPerDoc == 0 {
+		c.ReportReservedPerDoc = DefaultReportReserved
+	}
+	if c.ReportReservedPerDoc >= maxReportsOfDoc {
+		c.ReportReservedPerDoc = maxReportsOfDoc - 1
+	}
+	if c.ReportReservePercent == 0 {
+		c.ReportReservePercent = DefaultReportReservePct
+	}
+	if c.ReportReservePercent > 90 {
+		c.ReportReservePercent = 90
+	}
+	if c.ReportPriorityReasons == nil {
+		c.ReportPriorityReasons = []string{"csam", "illegal"}
+	}
+	norm := make([]string, 0, len(c.ReportPriorityReasons))
+	for _, r := range c.ReportPriorityReasons {
+		if r = normalizeReason(r); r != "" {
+			norm = append(norm, r)
+		}
+	}
+	c.ReportPriorityReasons = norm
 	if c.SessionsPerHour <= 0 {
 		c.SessionsPerHour = DefaultSessionsPerHour
 	}
@@ -197,6 +269,9 @@ func (c Config) withDefaults() Config {
 // longest the session can live (SessionMaxAge) plus the 24 hours a document outlives its last
 // edit: a shorter TombstoneTTL would let the ban lapse while the session still works.
 func (c Config) Validate() error {
+	if c.MaxInflightBytes < c.MaxDocBytes {
+		return fmt.Errorf("public: MaxInflightBytes %d is smaller than MaxDocBytes %d: no document could ever be written", c.MaxInflightBytes, c.MaxDocBytes)
+	}
 	if min := c.SessionMaxAge + TombstoneMargin; c.TombstoneTTL < min {
 		return fmt.Errorf("public: TombstoneTTL %s is shorter than SessionMaxAge + 24h (%s): a takedown would stop banning its session while the session is alive", c.TombstoneTTL, min)
 	}
@@ -209,6 +284,9 @@ func (c Config) Warnings() []string {
 	var w []string
 	if len(c.TrustedProxies) == 0 && !c.NoProxy {
 		w = append(w, "GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES is empty: clients are told apart by the connection's remote address, so behind a reverse proxy every client shares the proxy's address and its limits (one client can lock everyone out). Set it to the proxy's CIDRs, or to \"none\" if this server is reached directly")
+	}
+	if c.AdminToken != "" && len(c.AdminToken) < 16 {
+		w = append(w, "GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN is shorter than 16 characters: a wrong guess is rate limited, but the right one is never held back, so use a long random token")
 	}
 	return w
 }
@@ -224,6 +302,11 @@ func (c Config) Warnings() []string {
 //	GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS       live anonymous sessions, all clients
 //	GOJIBERRY_DOCSTORE_PUBLIC_SESSION_IDLE_TTL   Go duration a session without a document lives
 //	GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS_PER_ADDRESS  live sessions per IPv4 address or IPv6 /64
+//	GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS_PER_NET  live sessions per IPv6 /48 or IPv4 /24
+//	GOJIBERRY_DOCSTORE_PUBLIC_SESSION_RESERVE_PERCENT  share of MAX_SESSIONS kept for prefixes with no session (0: none)
+//	GOJIBERRY_DOCSTORE_PUBLIC_MAX_INFLIGHT_BYTES  global cap on request bodies being read at once
+//	GOJIBERRY_DOCSTORE_PUBLIC_REPORT_RESERVED_PER_DOC, _REPORT_RESERVE_PERCENT  report slots kept for new reporters (0: none)
+//	GOJIBERRY_DOCSTORE_PUBLIC_REPORT_PRIORITY_REASONS  comma separated reasons never evicted first, or "none" (default csam,illegal)
 //	GOJIBERRY_DOCSTORE_PUBLIC_MAX_TOTAL_BYTES    global budget of live document bytes (503 above)
 //	GOJIBERRY_DOCSTORE_PUBLIC_MAX_REPORTS, _MAX_REPORT_BYTES  global bounds of stored reports
 //	GOJIBERRY_DOCSTORE_PUBLIC_REQUEST_TIMEOUT    Go duration to send a request body
@@ -281,10 +364,40 @@ func FromEnv(getenv func(string) string) (Config, error) {
 	i64("_IP_DAILY_BYTES", &c.IPDailyBytes)
 	i64("_MAX_TOTAL_BYTES", &c.MaxTotalBytes)
 	i64("_MAX_REPORT_BYTES", &c.MaxReportBytes)
-	var versions, sessions, perAddr, reports int64
+	i64("_MAX_INFLIGHT_BYTES", &c.MaxInflightBytes)
+	// share reads a percentage 0..90 where 0 means "none" (stored as -1; Config's 0 is the default).
+	share := func(name string, dst *int, top int) {
+		if v := get(name); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 || n > top {
+				errs = append(errs, fmt.Sprintf("GOJIBERRY_DOCSTORE_PUBLIC%s %q: want a whole number from 0 to %d", name, v, top))
+				return
+			}
+			if n == 0 {
+				n = -1
+			}
+			*dst = n
+		}
+	}
+	share("_SESSION_RESERVE_PERCENT", &c.SessionReservePercent, 90)
+	share("_REPORT_RESERVE_PERCENT", &c.ReportReservePercent, 90)
+	share("_REPORT_RESERVED_PER_DOC", &c.ReportReservedPerDoc, maxReportsOfDoc-1)
+	if v := get("_REPORT_PRIORITY_REASONS"); v != "" {
+		c.ReportPriorityReasons = []string{}
+		if !strings.EqualFold(v, "none") {
+			for _, r := range strings.Split(v, ",") {
+				if r = normalizeReason(r); r != "" {
+					c.ReportPriorityReasons = append(c.ReportPriorityReasons, r)
+				}
+			}
+		}
+	}
+	var versions, sessions, perAddr, perNet, reports int64
 	i64("_MAX_VERSIONS", &versions)
 	i64("_MAX_SESSIONS", &sessions)
 	i64("_MAX_SESSIONS_PER_ADDRESS", &perAddr)
+	i64("_MAX_SESSIONS_PER_NET", &perNet)
+	c.MaxSessionsPerNet = int(perNet)
 	i64("_MAX_REPORTS", &reports)
 	c.MaxVersions, c.MaxSessions, c.MaxSessionsPerAddress, c.MaxReports = int(versions), int(sessions), int(perAddr), int(reports)
 	dur("_SESSION_TTL", &c.SessionTTL)
@@ -358,4 +471,31 @@ func ClientKey(addr string) string {
 		return a.String()
 	}
 	return p.Masked().String()
+}
+
+// NetKey names the network prefix behind addr for the second-level session cap: an IPv4 address by
+// its /24, an IPv6 address by its /48 (the allocation a site or a subscriber usually holds, so an
+// attacker cannot multiply its cap by moving between the /64s inside it). Anything that is not an
+// address is treated as ClientKey treats it.
+func NetKey(addr string) string {
+	a, err := netip.ParseAddr(strings.TrimSpace(addr))
+	if err != nil {
+		return ClientKey(addr)
+	}
+	a = a.WithZone("").Unmap()
+	bits := 48
+	if a.Is4() {
+		bits = 24
+	}
+	p, err := a.Prefix(bits)
+	if err != nil {
+		return a.String()
+	}
+	return p.Masked().String()
+}
+
+// normalizeReason is a report reason as it is compared: trimmed, lowercased, inner whitespace
+// collapsed.
+func normalizeReason(r string) string {
+	return strings.ToLower(strings.Join(strings.Fields(r), " "))
 }

@@ -192,6 +192,39 @@ func TestPublicWarnsWhenTrustedProxiesIsEmpty(t *testing.T) {
 	}
 }
 
+// The admin route counts failed authentications per client address, so behind an unnamed proxy one
+// caller's wrong guesses would lock the operator out: with an admin token the server does not start
+// unless the proxies are named or "none" says there are none.
+func TestPublicRefusesAdminBehindUnsetTrustedProxies(t *testing.T) {
+	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC", "true")
+	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN", "a-long-random-admin-token")
+	a := expiring()
+	if _, err := withPublic(docstore.NewServer(a, "memory"), a, 24*time.Hour); err == nil || !strings.Contains(err.Error(), "TRUSTED_PROXIES") || !strings.Contains(err.Error(), "none") {
+		t.Fatalf("err = %v, want the refusal naming TRUSTED_PROXIES and none", err)
+	}
+	for _, v := range []string{"none", "10.0.0.0/8"} {
+		t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES", v)
+		a := expiring()
+		srv := docstore.NewServer(a, "memory")
+		svc, err := withPublic(srv, a, 24*time.Hour)
+		if err != nil || svc == nil {
+			t.Fatalf("TRUSTED_PROXIES=%s: %v", v, err)
+		}
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/admin/health", nil))
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("/admin/health without the token = %d, want 403", rec.Code)
+		}
+	}
+	// no admin token, no admin route, no demand
+	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN", "")
+	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES", "")
+	a = expiring()
+	if _, err := withPublic(docstore.NewServer(a, "memory"), a, 24*time.Hour); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // A tombstone shorter than the session lets a ban lapse: the server does not start.
 func TestPublicRefusesAShortTombstoneTTL(t *testing.T) {
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC", "true")
