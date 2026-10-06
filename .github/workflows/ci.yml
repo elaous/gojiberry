@@ -13,9 +13,12 @@
 # the check that failed, not buried in a longer combined run.
 name: CI
 
+# Manual for now: run it from the Actions tab ("Run workflow", pick a branch). The checks run
+# locally before code is pushed (targeted tests for the change) and the full suite runs once
+# every five merged PRs; see docs/testing-workflow.md. To turn the automatic runs back on,
+# restore `push:` and `pull_request:` under `on:`.
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   fast-checks:
@@ -93,7 +96,7 @@ jobs:
     # established yet) -- gated to the events that actually need it,
     # the same way OnDesign's own e2e job is, to keep this off every
     # incremental branch push and save free-tier minutes.
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
