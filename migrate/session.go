@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docfile"
@@ -31,6 +32,10 @@ type Session struct {
 	// Formats are the formats a migrated document can be converted to; Format is the
 	// chosen one (SetFormat), .open by default.
 	Formats []docfile.Codec
+	// Deliver hands a file to the person (in a browser: transfer.Download). With it the
+	// format menu has "One .opendoc pack": the documents are gathered into a pack and
+	// handed over, and not saved in the store.
+	Deliver func(file, mime string, data []byte)
 	// OnChange is called after any state change, possibly from another goroutine.
 	OnChange func()
 	// OnDone is called after a migration with its report (refresh the document
@@ -51,6 +56,7 @@ type Session struct {
 	total    int
 	current  string
 	report   *Report
+	partial  bool // a pack run failed or was cancelled, and the pack was not delivered
 }
 
 // NewSession makes a Session over the platforms.
@@ -228,20 +234,57 @@ func (s *Session) run(ctx context.Context, src Source, items []Item, tag string)
 		s.mu.Unlock()
 		return errors.New("migrate: a migration is already running")
 	}
-	s.running, s.report, s.done, s.total, s.current = true, nil, 0, 0, ""
+	s.running, s.report, s.done, s.total, s.current, s.partial = true, nil, 0, 0, "", false
 	s.mu.Unlock()
 	defer s.set(func() { s.running = false })
-	if s.Sink == nil {
-		return errors.New("migrate: nowhere to put the documents")
+	sink, finish, err := s.sinkFor()
+	if err != nil {
+		return err
 	}
-	rep, err := Run(ctx, src, items, s.Sink(s.codec()), Options{Tag: tag, OnProgress: func(done, total int, name string) {
+	rep, err := Run(ctx, src, items, sink, Options{Tag: tag, OnProgress: func(done, total int, name string) {
 		s.set(func() { s.done, s.total, s.current = done, total, name })
 	}})
+	if finish != nil {
+		// A run that failed or was cancelled is not delivered: a partial pack handed over
+		// as if it were the whole migration is worse than none. The report still says how
+		// far it got.
+		if err != nil {
+			s.set(func() { s.partial = true })
+		} else if ferr := finish(); ferr != nil {
+			err = ferr
+		}
+	}
 	s.set(func() { s.report = &rep })
 	if s.OnDone != nil {
 		s.OnDone(rep)
 	}
 	return err
+}
+
+// sinkFor makes the Sink of a run: the store's, or a pack to hand over when the format
+// chosen is PackFormat (then finish delivers it).
+func (s *Session) sinkFor() (Sink, func() error, error) {
+	s.mu.Lock()
+	pick := s.format
+	s.mu.Unlock()
+	if pick != PackFormat || s.Deliver == nil {
+		if s.Sink == nil {
+			return nil, nil, errors.New("migrate: nowhere to put the documents")
+		}
+		return s.Sink(s.codec()), nil, nil
+	}
+	ps, err := NewPackSink("migrated " + time.Now().Format("2006-01-02"))
+	if err != nil {
+		return nil, nil, err
+	}
+	return ps, func() error {
+		data, n, err := ps.Bytes(nil)
+		if err != nil || n == 0 {
+			return err
+		}
+		s.Deliver("migrated-"+time.Now().Format("2006-01-02")+".opendoc", "application/vnd.opendocs.pack", data)
+		return nil
+	}, nil
 }
 
 // Props returns the props for components.Migrate with the operations plugged in.
@@ -270,6 +313,9 @@ func (s *Session) Props(pickFiles func()) components.MigrateProps {
 	for _, c := range s.Formats {
 		p.Formats = append(p.Formats, components.DocChoice{Name: c.Name(), Label: c.Label()})
 	}
+	if s.Deliver != nil {
+		p.Formats = append(p.Formats, components.DocChoice{Name: PackFormat, Label: components.Translate("migrate.pack", "One .opendoc pack (downloaded, not saved here)")})
+	}
 	for _, c := range s.Sources {
 		p.Sources = append(p.Sources, components.DocChoice{Name: c.Name, Label: c.Label})
 	}
@@ -287,7 +333,7 @@ func (s *Session) Props(pickFiles func()) components.MigrateProps {
 		p.Items = append(p.Items, mi)
 	}
 	if r := s.report; r != nil {
-		p.Reported, p.Imported, p.Truncated = true, r.Imported, r.Truncated
+		p.Reported, p.Imported, p.Truncated, p.Partial = true, r.Imported, r.Truncated, s.partial
 		for _, f := range r.Failed {
 			p.Failed = append(p.Failed, components.MigrateFailure{Name: f.Name, Err: f.Err.Error()})
 		}
