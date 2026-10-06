@@ -7,8 +7,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"syscall/js"
+	"time"
 )
 
 // A passkey with no server. Registration and sign-in against a server (Client.Register, SignIn)
@@ -35,6 +35,19 @@ func LocalCredential(slot string) (id string) {
 	return v.String()
 }
 
+// SetLocalCredential makes id (a credential ID CreateLocal returned, or LocalCredential read
+// earlier) the one stored under slot: what a page does to put back the passkey it used before when
+// a new one was made for a change that then failed, so the new one is not asked for at the next
+// unlock. An empty id forgets the slot.
+func SetLocalCredential(slot, id string) {
+	if id == "" {
+		ForgetLocal(slot)
+		return
+	}
+	defer func() { _ = recover() }()
+	js.Global().Get("localStorage").Call("setItem", localPrefix+slot, id)
+}
+
 // ForgetLocal drops the credential ID stored under slot (the passkey itself stays in the
 // authenticator; it is the person's to delete there).
 func ForgetLocal(slot string) {
@@ -46,8 +59,10 @@ func ForgetLocal(slot string) {
 // keeps its credential ID in localStorage under slot. rpName and userName are what the
 // browser's prompt shows. It returns the credential ID (base64url). ErrNoPRF says the
 // authenticator made a passkey that cannot be used to encrypt (no PRF), in which case nothing
-// is stored; ErrCancelled that the person closed the prompt; ErrAlreadyRegistered that this
-// authenticator already holds the passkey the page asked for.
+// is stored (the passkey itself exists in the authenticator, though: the credential ID is still
+// returned with ErrNoPRF so the page can name it, and the person has to delete it there);
+// ErrCancelled (or its kinds ErrTimedOut, ErrNotVerified) that the prompt did not complete;
+// ErrAlreadyRegistered that this authenticator already holds the passkey the page asked for.
 //
 // A fresh random user handle is used each time, so making a second passkey never replaces the
 // first. Use DeriveLocal to get the secret.
@@ -92,23 +107,16 @@ func CreateLocal(ctx context.Context, slot, rpName, userName string) (string, er
 	pub.Set("extensions", ext)
 	opts := obj()
 	opts.Set("publicKey", pub)
+	pub.Set("timeout", promptTimeout.Milliseconds())
+	since := time.Now()
 	cred, err := await(ctx, js.Global().Get("navigator").Get("credentials").Call("create", opts))
 	if err != nil {
-		var je *jsErr
-		if errors.As(err, &je) {
-			switch je.name {
-			case "InvalidStateError":
-				return "", ErrAlreadyRegistered
-			case "NotAllowedError", "AbortError":
-				return "", fmt.Errorf("%w (%s)", ErrCancelled, je)
-			}
-		}
-		return "", err
-	}
-	if res := cred.Call("getClientExtensionResults").Get("prf"); !res.Truthy() || !res.Get("enabled").Truthy() {
-		return "", ErrNoPRF
+		return "", rejection(err, since)
 	}
 	id := base64.RawURLEncoding.EncodeToString(jsToBytes(cred.Get("rawId")))
+	if res := cred.Call("getClientExtensionResults").Get("prf"); !res.Truthy() || !res.Get("enabled").Truthy() {
+		return id, ErrNoPRF // made, but of no use as a key: the page tells the person which passkey to delete
+	}
 	func() {
 		defer func() { _ = recover() }() // storage blocked: the page can still use the ID it was given
 		js.Global().Get("localStorage").Call("setItem", localPrefix+slot, id)

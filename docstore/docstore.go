@@ -32,6 +32,12 @@ var ErrNotFound = errors.New("docstore: document not found")
 // available here. A catalog rebuild lists such a document without reading it.
 var ErrLocked = errors.New("docstore: the document is locked: no key here opens it")
 
+// ErrWrongKey is what a pack opener wraps when keys are held but none of them opens what was
+// sealed: it was sealed for other keys. It differs from ErrLocked (no key held at all, unlock
+// the store): the right message is "this was sealed for another key". A wrong-key error is also
+// ErrLocked, so code that only asks for a key still treats it as one it cannot open.
+var ErrWrongKey = errors.New("docstore: sealed for another key")
+
 // ErrStorageFull is wrapped in the error of a Save that failed because the store has no
 // room (a browser's quota, a full disk). A caller may free what it can do without and try
 // again.

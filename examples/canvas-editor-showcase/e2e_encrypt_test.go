@@ -67,12 +67,17 @@ func TestEncryptedStore(t *testing.T) {
 	d.WaitSelector("#enc-enable")
 	d.OK(d.Checked("#enc-opt-passkey input") && d.Checked("#enc-opt-recovery input"), "the form offers a passkey and a recovery key")
 	d.Click("#enc-enable")
-	d.WaitFor("encryption on and unlocked", `(document.getElementById('enc-status') || {}).textContent === 'Unlocked'`)
+	// The recovery key's secret comes first, before anything is committed.
 	d.WaitSelector("#enc-recovery-secret")
 	recovery := d.Value("#enc-recovery-secret")
 	d.OK(strings.HasPrefix(recovery, "AGE-SECRET-KEY-1"), "the recovery key is shown once: "+recovery[:20])
 	d.OK(d.Has("#enc-recovery-warning"), "with its warning")
-	d.Click("#enc-recovery-done")
+	d.OK(!d.Has("#enc-status") && !d.State().Bool("encryption.enabled") && !strings.Contains(storedText(d), "showcase-enc:config"), "nothing is committed while the secret is on screen")
+	d.OK(d.Disabled("#enc-recovery-commit"), "the key is added only after the person says they saved it")
+	d.SetChecked("#enc-recovery-ack input", true)
+	d.WaitFor("the commit button", `!document.querySelector('#enc-recovery-commit').disabled`)
+	d.Click("#enc-recovery-commit")
+	d.WaitFor("encryption on and unlocked", `(document.getElementById('enc-status') || {}).textContent === 'Unlocked'`)
 	d.WaitFor("the secret to be dropped", `!document.querySelector('#enc-recovery-secret')`)
 	d.OK(!strings.Contains(d.Str(`document.body.innerHTML`), recovery), "the recovery key is nowhere in the page once saved")
 	d.OK(!strings.Contains(storedText(d), recovery), "nor in the browser's storage")
@@ -156,12 +161,6 @@ func TestEncryptedStore(t *testing.T) {
 	d.Click(".gj-doclist-open")
 	d.WaitSelector(".gj-doc-error")
 	d.OK(strings.Contains(d.Text(".gj-doc-error"), "Unlock the store"), "open fails with a clear message after the reload")
-	// Saving while locked is refused too, not written.
-	d.Fill(".gj-saver-name", "while locked")
-	d.Click(".gj-saver-save")
-	d.WaitFor("the save refused", `(document.querySelector('.gj-doc-error') || {textContent: ''}).textContent.includes('Unlock the store')`)
-	d.OK(!strings.Contains(storedText(d), "while locked"), "nothing was written while locked")
-
 	// A wrong recovery key is refused; the right one unlocks.
 	d.Fill("#enc-recovery-input", "AGE-SECRET-KEY-1QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ")
 	d.WaitFor("the button", `!document.querySelector('#enc-unlock-recovery').disabled`)
@@ -192,7 +191,10 @@ func TestEncryptedStore(t *testing.T) {
 	d.WaitFor("the trash empty", "document.querySelectorAll('.gj-trash-item').length === 0")
 	d.Click(".gj-breadcrumb-link")
 	d.WaitFor("the top level", "!document.querySelector('.gj-breadcrumb-link')")
-	d.Click("#enc-lock")
+	// The document that was open was deleted: what the editor holds is stored nowhere, so Lock asks
+	// first; this test means to drop it.
+	d.OK(d.Has("#enc-lock-discard"), "locking with an unsaved document offers to discard it")
+	d.Click("#enc-lock-discard")
 	d.WaitFor("locked", `(document.getElementById('enc-status') || {}).textContent === 'Locked'`)
 	d.ChooseFile(func() { d.Click(".gj-doclist-import-pack") }, "Vault.opendoc", pack)
 	d.WaitFor("the key needed", `document.querySelector('.gj-saver-status').textContent.includes('need a key')`)
@@ -217,6 +219,16 @@ func TestEncryptedStore(t *testing.T) {
 	confirmDialog(d)
 	d.WaitFor("not confidential", `document.querySelectorAll('.gj-doclist-item .gj-doc-confidential').length === 0`)
 	d.OK(strings.Contains(storedText(d), secretDocName) && !strings.Contains(storedText(d), secretDocText), "the name is in the catalog again; the text is still encrypted")
+
+	// Locked, saving is refused and nothing is written.
+	d.Click("#enc-lock")
+	d.WaitFor("locked", `(document.getElementById('enc-status') || {}).textContent === 'Locked'`)
+	// Saving while locked is refused too, not written.
+	d.Fill(".gj-saver-name", "while locked")
+	d.Click(".gj-saver-save")
+	d.WaitFor("the save refused", `(document.querySelector('.gj-doc-error') || {textContent: ''}).textContent.includes('Unlock the store')`)
+	d.OK(!strings.Contains(storedText(d), "while locked"), "nothing was written while locked")
+
 	d.NoErrors()
 }
 
@@ -232,7 +244,10 @@ func TestEncryptedStorePasskeyNeedsASecondKey(t *testing.T) {
 	d.WaitSelector("#enc-enable")
 	d.SetChecked("#enc-opt-recovery input", false)
 	d.WaitSelector("#enc-second")
-	d.OK(strings.Contains(d.Text("#enc-second"), "a passkey cannot be the only key"), "the form warns before it is too late: "+d.Text("#enc-second"))
+	d.OK(strings.Contains(d.Text("#enc-second"), "A passkey alone is risky") && strings.Contains(d.Text("#enc-second"), "EVERY document"), "the form warns that all documents are at risk: "+d.Text("#enc-second"))
+	d.OK(d.Disabled("#enc-enable"), "a passkey alone needs an explicit acknowledgement")
+	d.SetChecked("#enc-passkey-ack input", true)
+	d.WaitFor("the button", `!document.querySelector('#enc-enable').disabled`)
 	d.Click("#enc-enable")
 	d.WaitFor("unlocked", `(document.getElementById('enc-status') || {}).textContent === 'Unlocked'`)
 
@@ -250,7 +265,10 @@ func TestEncryptedStorePasskeyNeedsASecondKey(t *testing.T) {
 	d.Click(".gj-recip-recovery")
 	d.WaitSelector(".gj-recip-secret")
 	d.OK(strings.HasPrefix(d.Value(".gj-recip-secret"), "AGE-SECRET-KEY-1"), "the recovery key is shown once")
-	d.Click(".gj-recip-recovery-done")
+	d.OK(d.Count(".gj-recip-owner") == 1 && d.Disabled(".gj-recip-recovery-commit"), "it is not an owner key until the secret is confirmed saved")
+	d.SetChecked(".gj-recip-recovery-ack input", true)
+	d.WaitFor("the commit button", `!document.querySelector('.gj-recip-recovery-commit').disabled`)
+	d.Click(".gj-recip-recovery-commit")
 	d.WaitFor("the secret to be dropped", `!document.querySelector('.gj-recip-secret')`)
 	d.WaitFor("two owner keys", `document.querySelectorAll('.gj-recip-owner').length === 2`)
 

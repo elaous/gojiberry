@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/elaous/gojiberry/i18n"
 	"github.com/elaous/gojiberry/xango"
 )
 
@@ -613,4 +615,55 @@ func TestDocListMarksConfidentialDocumentsAndOffersTheSwitch(t *testing.T) {
 	plain := render(t, DocList(DocListProps{Docs: p.Docs, Pending: &Pending{Inline: true}}))
 	mustNotContain(t, plain, "gj-doclist-protect", "gj-doclist-reveal")
 	mustContain(t, plain, "🔒")
+}
+
+// The placeholder of a hidden name is stored in English (saver.ConfidentialName, in catalogs and
+// packs) and drawn in the interface's language: the list, the trash, the folder rows and the
+// accessible names say it in es, fr and de, and what the host passed in Name is never shown.
+func TestHiddenNamesAreDrawnTranslatedNeverStoredTranslated(t *testing.T) {
+	defer func(old func(string, string) string) { Translate = old }(Translate)
+	cat := i18n.Default()
+	for _, tc := range []struct{ lang, doc, folder string }{
+		{"en", "Confidential document", "Confidential folder"},
+		{"es", "Documento confidencial", "Carpeta confidencial"},
+		{"fr", "Document confidentiel", "Dossier confidentiel"},
+		{"de", "Vertrauliches Dokument", "Vertraulicher Ordner"},
+	} {
+		lang := tc.lang
+		Translate = func(id, def string) string { return cat.Text(lang, id, def) }
+		docs := []Doc{
+			{ID: "11111111-0000-4000-8000-000000000001", Name: "Confidential document", Confidential: true, NameHidden: true},
+			{ID: "22222222-0000-4000-8000-000000000002", Name: "Confidential document", Confidential: true, NameHidden: true},
+			{ID: "33333333-0000-4000-8000-000000000003", Name: "Budget", Confidential: true},
+		}
+		folders := []DocFolder{{ID: "f1", Name: "Confidential folder", Confidential: true, NameHidden: true}, {ID: "f2", Name: "Work"}}
+		p := DocListProps{Docs: docs, Folders: folders, AllFolders: folders, Pending: &Pending{Inline: true},
+			SetProtection:       func(context.Context, string, bool) error { return nil },
+			SetFolderProtection: func(context.Context, string, bool) error { return nil },
+			Reveal:              func(context.Context, string) error { return nil },
+			RevealFolder:        func(context.Context, string) error { return nil }}
+		html := render(t, DocList(p))
+		mustContain(t, html, ">"+tc.doc, "📁 "+tc.folder)
+		if tc.lang != "en" {
+			// The English constant is not drawn as a name; it is only what is stored.
+			mustNotContain(t, html, ">Confidential document", "📁 Confidential folder")
+		}
+		trashHTML := render(t, Trash(TrashProps{Docs: []Doc{{ID: "x", Name: "Confidential document", Confidential: true, NameHidden: true}}, Pending: &Pending{Inline: true}}))
+		mustContain(t, trashHTML, tc.doc)
+		// The "Make confidential" buttons of the rows have names of their own: the two hidden
+		// documents are told apart by a short ID, the revealed one by its name.
+		labels := map[string]int{}
+		for _, m := range regexp.MustCompile(`class="gj-doclist-(?:protect|reveal)"[^>]*aria-label="([^"]*)"|aria-label="([^"]*)"[^>]*class="gj-doclist-(?:protect|reveal)"`).FindAllStringSubmatch(html, -1) {
+			labels[m[1]+m[2]]++
+		}
+		if len(labels) < 5 {
+			t.Fatalf("%s: accessible names of the row buttons: %v in %s", lang, labels, html)
+		}
+		for l, n := range labels {
+			if n != 1 {
+				t.Errorf("%s: the accessible name %q is on %d buttons", lang, l, n)
+			}
+		}
+		mustContain(t, html, "11111111", "22222222", "Budget")
+	}
 }

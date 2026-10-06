@@ -9,6 +9,21 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
+// ErrWrongPackKey is what open returns when it holds keys and none of them opens the envelope:
+// the pack was sealed for other keys. It is docstore.ErrWrongKey (so a caller can say "sealed
+// for another key" rather than "unlock the store") and, for compatibility, docstore.ErrLocked and
+// ErrNoKey.
+var ErrWrongPackKey error = wrongPackKeyError{}
+
+type wrongPackKeyError struct{}
+
+func (wrongPackKeyError) Error() string {
+	return "encrypt: this pack was sealed for another key: none of the keys unlocked here opens it"
+}
+func (wrongPackKeyError) Is(target error) bool {
+	return target == docstore.ErrWrongKey || target == docstore.ErrLocked || target == ErrNoKey
+}
+
 // PackSealer returns the two functions a .opendoc pack needs for confidential documents:
 // seal (saver.PackOptions.Seal) encrypts a document's .open message to the keys in to, and
 // open (saver.ImportOptions.Open) decrypts an envelope with keys. Both use this package's own
@@ -45,6 +60,9 @@ func PackSealer(to []age.Recipient, keys []age.Identity) (seal func(ctx context.
 			return nil, err
 		}
 		got, err := New(scratch, Static{Keys: keys}).Load(ctx, docID)
+		if errors.Is(err, ErrNoKey) {
+			return nil, ErrWrongPackKey // keys are held (checked above): they are the wrong ones
+		}
 		if err != nil {
 			return nil, err
 		}

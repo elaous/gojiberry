@@ -726,6 +726,20 @@ func (s *Session) Reveal(ctx context.Context, id string) error {
 	return s.after(ctx, msg("saver.revealed", "%s can be read: its name is shown", name))
 }
 
+// Clear forgets the document being edited and everything the session shows of it: the saved
+// document's ID and name, the tag filter, the selection, the revealed names and tags, the lists
+// and the status. The editor's own content is the host's to replace (Clear does not touch what Get
+// returns). Call it with Forget-like reasons: when the keys are forgotten and the document on
+// screen must go with them.
+func (s *Session) Clear() {
+	s.set(func() {
+		s.id, s.name, s.tagFilter, s.status, s.selected, s.folderDraft = "", "", "", "", nil, ""
+		s.revealed, s.revealedFolders, s.versions, s.openDlg = nil, nil, nil, nil
+		s.entries, s.trashed, s.folders = s.concealed(s.entries), s.concealed(s.trashed), s.concealedFolders(s.folders)
+		s.saveState = ""
+	})
+}
+
 // Forget drops the real names and tags of the confidential documents and folders that were
 // revealed here, so the lists show the placeholders again: call it when the keys are forgotten
 // (the store is locked). The saver's own state is not touched; a later Reveal, Open or Save
@@ -1192,6 +1206,17 @@ func (s *Session) folderName(id string) string {
 	return "documents"
 }
 
+// countWrongKey counts the pack items whose opener said they were sealed for another key.
+func countWrongKey(issues []PackIssue) int {
+	n := 0
+	for _, is := range issues {
+		if errors.Is(is.Err, docstore.ErrWrongKey) {
+			n++
+		}
+	}
+	return n
+}
+
 // pickPack asks for a .opendoc file and imports it.
 func (s *Session) pickPack() {
 	s.Pick(".opendoc", func(name string, data []byte, err error) {
@@ -1227,8 +1252,12 @@ func (s *Session) ImportPackData(ctx context.Context, name string, data []byte) 
 	if len(rep.Skipped) > 0 {
 		line += " " + msg("saver.packSkipped", "(%d already here, left as they are)", len(rep.Skipped))
 	}
-	if len(rep.NeedsKey) > 0 {
-		line += " " + msg("saver.packNeedsKey", "(%d confidential items need a key: unlock the store and import the pack again)", len(rep.NeedsKey))
+	if wrong := countWrongKey(rep.NeedsKey); wrong > 0 {
+		// Keys are unlocked here and none opens them: unlocking the store again would not help.
+		line += " " + msg("saver.packWrongKey", "(%d confidential items were sealed for another key: this pack was sealed for another key than the ones unlocked here)", wrong)
+	}
+	if need := len(rep.NeedsKey) - countWrongKey(rep.NeedsKey); need > 0 {
+		line += " " + msg("saver.packNeedsKey", "(%d confidential items need a key: unlock the store and import the pack again)", need)
 	}
 	if len(rep.Warnings) > 0 {
 		line += " " + msg("saver.packWarnings", "(%d warnings: %s)", len(rep.Warnings), strings.Join(rep.Warnings[:min(3, len(rep.Warnings))], "; "))

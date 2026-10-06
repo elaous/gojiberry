@@ -7,7 +7,9 @@ import (
 	"crypto/rand"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
@@ -20,18 +22,110 @@ import (
 
 const target = "browser"
 
+// faultyRaw is the storage under the store, with failures on demand: the nth write fails (or, with
+// failFrom, every write from the nth on, which is a crash as far as the store can tell), the nth
+// write is silently truncated (a store that lies), and a byte quota like the browser's.
+type faultyRaw struct {
+	inner *docstore.MemoryAdapter
+
+	mu       sync.Mutex
+	writes   int
+	failAt   int
+	failFrom bool
+	lieAt    int
+	limit    int
+	loadHook func(id string)
+}
+
+func (f *faultyRaw) used() int {
+	metas, _ := f.inner.List(context.Background())
+	n := 0
+	for _, m := range metas {
+		n += m.Size
+	}
+	return n
+}
+
+// write counts one write and says what to do with it: fail it, truncate it, or let it through.
+func (f *faultyRaw) write(id string, data []byte) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.writes++
+	if f.failAt > 0 && (f.writes == f.failAt || f.failFrom && f.writes > f.failAt) {
+		return nil, fmt.Errorf("injected failure at write %d (%s)", f.writes, id)
+	}
+	if f.lieAt > 0 && f.writes == f.lieAt && len(data) > 4 {
+		return data[:len(data)/2], nil
+	}
+	if f.limit > 0 {
+		cur := 0
+		if d, err := f.inner.Load(context.Background(), id); err == nil {
+			cur = len(d.Data)
+		}
+		if f.used()-cur+len(data) > f.limit {
+			return nil, fmt.Errorf("%w: quota", docstore.ErrStorageFull)
+		}
+	}
+	return data, nil
+}
+
+func (f *faultyRaw) Save(ctx context.Context, id string, data []byte) error {
+	data, err := f.write(id, data)
+	if err != nil {
+		return err
+	}
+	return f.inner.Save(ctx, id, data)
+}
+
+func (f *faultyRaw) SaveIf(ctx context.Context, id string, data []byte, prev string) error {
+	data, err := f.write(id, data)
+	if err != nil {
+		return err
+	}
+	return f.inner.SaveIf(ctx, id, data, prev)
+}
+
+func (f *faultyRaw) Delete(ctx context.Context, id string) error {
+	f.mu.Lock()
+	f.writes++
+	fail := f.failAt > 0 && (f.writes == f.failAt || f.failFrom && f.writes > f.failAt)
+	f.mu.Unlock()
+	if fail {
+		return fmt.Errorf("injected failure at delete %s", id)
+	}
+	return f.inner.Delete(ctx, id)
+}
+
+func (f *faultyRaw) Load(ctx context.Context, id string) (docstore.Document, error) {
+	if f.loadHook != nil {
+		f.loadHook(id)
+	}
+	return f.inner.Load(ctx, id)
+}
+
+func (f *faultyRaw) List(ctx context.Context) ([]docstore.Meta, error) { return f.inner.List(ctx) }
+
+func (f *faultyRaw) heal() {
+	f.mu.Lock()
+	f.failAt, f.failFrom, f.lieAt = 0, false, 0
+	f.mu.Unlock()
+}
+
 type rig struct {
-	raw     *docstore.MemoryAdapter
+	raw     *faultyRaw
 	st      *Store
 	saved   Config
-	secret  []byte // the passkey's PRF output
-	saver   *saver.Saver
-	session *saver.Session
+	persist int
+	// failPersist, when set, is asked at each Persist (1 is the first since persist was reset).
+	failPersist func(n int) error
+	secret      []byte // the passkey's PRF output
+	saver       *saver.Saver
+	session     *saver.Session
 }
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	r := &rig{raw: docstore.NewMemoryAdapter(), secret: bytes.Repeat([]byte{5}, 32)}
+	r := &rig{raw: &faultyRaw{inner: docstore.NewMemoryAdapter()}, secret: bytes.Repeat([]byte{5}, 32)}
 	r.open(t, Config{})
 	return r
 }
@@ -43,7 +137,16 @@ func (r *rig) open(t *testing.T, cfg Config) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st.Persist = func(c Config) error { r.saved = c; return nil }
+	st.Persist = func(c Config) error {
+		r.persist++
+		if r.failPersist != nil {
+			if err := r.failPersist(r.persist); err != nil {
+				return err
+			}
+		}
+		r.saved = c
+		return nil
+	}
 	r.st = st
 	adapter := docstore.Adapter(r.raw)
 	if st.Enabled() {
@@ -66,24 +169,76 @@ func doc(name, text string) docfile.Document {
 func (r *rig) stored(t *testing.T) string {
 	t.Helper()
 	var all strings.Builder
-	metas, _ := r.raw.List(context.Background())
-	for _, m := range metas {
-		d, err := r.raw.Load(context.Background(), m.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		all.Write(d.Data)
+	for _, b := range r.snapshot(t) {
+		all.WriteString(b)
 	}
 	return all.String()
 }
 
+// snapshot is every stored item, by id.
+func (r *rig) snapshot(t *testing.T) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	metas, _ := r.raw.inner.List(context.Background())
+	for _, m := range metas {
+		d, err := r.raw.inner.Load(context.Background(), m.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[m.ID] = string(d.Data)
+	}
+	return out
+}
+
+func sameSnapshot(t *testing.T, what string, got, want map[string]string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Errorf("%s: %d stored items, want %d", what, len(got), len(want))
+	}
+	for id, w := range want {
+		if g, ok := got[id]; !ok || g != w {
+			t.Errorf("%s: %s is not as it was (present %v)", what, id, ok)
+		}
+	}
+}
+
 func passkey(t *testing.T, r *rig) NewKey {
+	t.Helper()
 	k, err := NewPasskeyKey(r.secret, "My passkey")
 	if err != nil {
 		t.Fatal(err)
 	}
 	return k
 }
+
+func passkeyFrom(t *testing.T, secret []byte, label string) NewKey {
+	t.Helper()
+	k, err := NewPasskeyKey(secret, label)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return k
+}
+
+// recovery makes a recovery key whose secret was shown and saved, and that is not kept unlocked.
+func recovery(t *testing.T) (NewKey, string) {
+	t.Helper()
+	k, secret, err := NewRecoveryKey("Recovery key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	k.SecretSaved, k.Forget = true, true
+	return k, secret
+}
+
+func (r *rig) unlockPasskey(t *testing.T) {
+	t.Helper()
+	if err := r.st.UnlockPasskey(bytes.Clone(r.secret)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+var onlyPasskeys = Options{AcceptPasskeyOnly: true}
 
 func TestPasskeyAloneCannotMakeADocumentConfidentialARecoveryKeyCan(t *testing.T) {
 	ctx := context.Background()
@@ -96,13 +251,11 @@ func TestPasskeyAloneCannotMakeADocumentConfidentialARecoveryKeyCan(t *testing.T
 	if !strings.Contains(r.stored(t), "ancient clear text") {
 		t.Fatal("setup: the clear document should be readable in the store")
 	}
-	if err := r.st.Enable(ctx, passkey(t, r)); err != nil {
+	if err := r.st.Enable(ctx, onlyPasskeys, passkey(t, r)); err != nil {
 		t.Fatal(err)
 	}
 	r.open(t, r.saved) // the page now uses the encrypted adapter
-	if err := r.st.UnlockPasskey(r.secret); err != nil {
-		t.Fatal(err)
-	}
+	r.unlockPasskey(t)
 	if strings.Contains(r.stored(t), "ancient clear text") {
 		t.Fatal("what was saved before is still in the clear")
 	}
@@ -123,11 +276,7 @@ func TestPasskeyAloneCannotMakeADocumentConfidentialARecoveryKeyCan(t *testing.T
 		t.Fatalf("passkey alone: %v", err)
 	}
 	// A recovery key as a second owner key: allowed, and now every document opens with it alone.
-	rk, secret, err := NewRecoveryKey("Recovery key")
-	if err != nil {
-		t.Fatal(err)
-	}
-	rk.Unlock = nil
+	rk, secret := recovery(t)
 	if err := r.st.AddOwner(ctx, rk); err != nil {
 		t.Fatal(err)
 	}
@@ -163,8 +312,6 @@ func TestPasskeyAloneCannotMakeADocumentConfidentialARecoveryKeyCan(t *testing.T
 	if err := r.st.UnlockPasskey(bytes.Repeat([]byte{6}, 32)); !errors.Is(err, ErrNotAKey) {
 		t.Fatalf("another passkey: %v", err)
 	}
-	other, _, _ := NewRecoveryKey("x")
-	_ = other
 	if err := r.st.UnlockRecovery("AGE-SECRET-KEY-1QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ"); err == nil {
 		t.Fatal("a nonsense key unlocked it")
 	}
@@ -192,24 +339,20 @@ func TestSSHKeyOwnsAndUnlocksTheStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rk, _, err := NewRecoveryKey("Recovery key")
-	if err != nil {
-		t.Fatal(err)
-	}
-	rk.Unlock = nil
+	rk, _ := recovery(t)
 	// Only the recovery key and the SSH public key are known: nothing carries a private side, so
 	// the store starts locked, and the private key file unlocks it.
 	if _, err := r.saver.Save(ctx, target, docfile.Open, doc("Before", "text from before")); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.st.Enable(ctx, k, rk); err != nil {
+	if err := r.st.Enable(ctx, Options{}, k, rk); err != nil {
 		t.Fatal(err)
 	}
 	if !r.st.Enabled() || r.st.Unlocked() || strings.Contains(r.stored(t), "text from before") {
 		t.Fatalf("enabled %v unlocked %v", r.st.Enabled(), r.st.Unlocked())
 	}
 	r.open(t, r.saved)
-	if err := r.st.UnlockSSH(priv); err != nil {
+	if err := r.st.UnlockSSH(bytes.Clone(priv)); err != nil {
 		t.Fatal(err)
 	}
 	e, err := r.saver.Save(ctx, target, docfile.Open, doc("Contract", "contract text"))
@@ -225,7 +368,7 @@ func TestSSHKeyOwnsAndUnlocksTheStore(t *testing.T) {
 	if err := r.st.UnlockSSH(otherPriv); !errors.Is(err, ErrNotAKey) {
 		t.Fatalf("a stranger's key: %v", err)
 	}
-	if err := r.st.UnlockSSH(priv); err != nil {
+	if err := r.st.UnlockSSH(bytes.Clone(priv)); err != nil {
 		t.Fatal(err)
 	}
 	if n, _, err := r.saver.Reveal(ctx, target, e.ID); err != nil || n != "Contract" {
@@ -241,9 +384,8 @@ func TestPackSealedForTheOwnerKeysAndOpenedAgain(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t)
 	pk := passkey(t, r)
-	rk, secret, _ := NewRecoveryKey("Recovery key")
-	rk.Unlock = nil
-	if err := r.st.Enable(ctx, pk, rk); err != nil {
+	rk, secret := recovery(t)
+	if err := r.st.Enable(ctx, Options{}, pk, rk); err != nil {
 		t.Fatal(err)
 	}
 	r.open(t, r.saved)
@@ -293,7 +435,7 @@ func TestPackSealedForTheOwnerKeysAndOpenedAgain(t *testing.T) {
 	if err := r.session.ImportPackData(ctx, "p.opendoc", sealed); err != nil {
 		t.Fatal(err)
 	}
-	if st := r.session.Props().Status; !strings.Contains(st, "need a key") {
+	if st := r.session.Props().Status; !strings.Contains(st, "need a key") || strings.Contains(st, "another key") {
 		t.Fatalf("locked import: %q", st)
 	}
 	_ = r.st.UnlockRecovery(secret)
@@ -308,17 +450,54 @@ func TestPackSealedForTheOwnerKeysAndOpenedAgain(t *testing.T) {
 	}
 }
 
+// A pack sealed for another store's keys, imported while this store is unlocked, says it was
+// sealed for another key: unlocking again would not help, so the message must not say it would.
+func TestPackSealedForAnotherKeySaysSo(t *testing.T) {
+	ctx := context.Background()
+	mk := func(seed byte) (*rig, string) {
+		r := newRig(t)
+		r.secret = bytes.Repeat([]byte{seed}, 32)
+		rk, secret := recovery(t)
+		if err := r.st.Enable(ctx, Options{}, passkey(t, r), rk); err != nil {
+			t.Fatal(err)
+		}
+		r.open(t, r.saved)
+		if err := r.st.UnlockRecovery(secret); err != nil {
+			t.Fatal(err)
+		}
+		return r, secret
+	}
+	a, _ := mk(1)
+	e, _ := a.saver.Save(ctx, target, docfile.Open, doc("Other people's", "text"))
+	if err := a.saver.SetProtection(ctx, target, e.ID, saver.ProtectionE2EE); err != nil {
+		t.Fatal(err)
+	}
+	var file []byte
+	a.session.Deliver = func(_, _ string, b []byte) { file = b }
+	_ = a.session.SetTarget(ctx, target)
+	if err := a.session.DownloadPack(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := mk(2)
+	if err := b.session.ImportPackData(ctx, "p.opendoc", file); err != nil {
+		t.Fatal(err)
+	}
+	st := b.session.Props().Status
+	if !strings.Contains(st, "sealed for another key") || strings.Contains(st, "unlock the store") {
+		t.Fatalf("%q", st)
+	}
+}
+
 func TestDisableDecryptsEverythingBack(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t)
 	pk := passkey(t, r)
-	rk, _, _ := NewRecoveryKey("Recovery key")
-	rk.Unlock = nil
-	if err := r.st.Enable(ctx, pk, rk); err != nil {
+	rk, _ := recovery(t)
+	if err := r.st.Enable(ctx, Options{}, pk, rk); err != nil {
 		t.Fatal(err)
 	}
 	r.open(t, r.saved)
-	_ = r.st.UnlockPasskey(r.secret)
+	r.unlockPasskey(t)
 	e, _ := r.saver.Save(ctx, target, docfile.Open, doc("Plan", "plain after disable"))
 	if strings.Contains(r.stored(t), "plain after disable") {
 		t.Fatal("not encrypted")
@@ -337,9 +516,35 @@ func TestDisableDecryptsEverythingBack(t *testing.T) {
 	if !strings.Contains(r.stored(t), "plain after disable") {
 		t.Error("the document was not written back in the clear")
 	}
-	// Disabling a locked store is refused; a store with encryption off says so.
+	// A store with encryption off says so.
 	if err := r.st.Disable(ctx); !errors.Is(err, ErrDisabled) {
 		t.Fatalf("%v", err)
+	}
+}
+
+// Disable refuses while a document is still confidential (the doc says the caller checks; the
+// store enforces it too, so its error cannot be skipped by a caller that forgets).
+func TestDisableRefusesWhileSomethingIsConfidential(t *testing.T) {
+	ctx := context.Background()
+	r, secret := encryptedRig(t)
+	e, _ := r.saver.Save(ctx, target, docfile.Open, doc("Secret", "secret text"))
+	if err := r.saver.SetProtection(ctx, target, e.ID, saver.ProtectionE2EE); err != nil {
+		t.Fatal(err)
+	}
+	before := r.snapshot(t)
+	if err := r.st.Disable(ctx); !errors.Is(err, ErrConfidentialLeft) {
+		t.Fatalf("%v", err)
+	}
+	sameSnapshot(t, "after the refusal", r.snapshot(t), before)
+	if !r.st.Enabled() {
+		t.Fatal("encryption was turned off")
+	}
+	_ = secret
+	if err := r.saver.SetProtection(ctx, target, e.ID, saver.ProtectionServer); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.st.Disable(ctx); err != nil {
+		t.Fatalf("after making it not confidential: %v", err)
 	}
 }
 
@@ -347,7 +552,7 @@ func TestLockedAdapterRefusesToWrite(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t)
 	pk := passkey(t, r)
-	if err := r.st.Enable(ctx, pk); err != nil {
+	if err := r.st.Enable(ctx, onlyPasskeys, pk); err != nil {
 		t.Fatal(err)
 	}
 	r.st.Lock()
@@ -381,4 +586,36 @@ func sshKeyPair(t *testing.T, comment string) (pub string, priv []byte) {
 		t.Fatal(err)
 	}
 	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sp))) + " " + comment, pem.EncodeToMemory(blk)
+}
+
+// encryptedRig is a store that is on, with a passkey and a recovery key, unlocked with the passkey
+// (after a reload, as a page would be), and the recovery key's secret.
+func encryptedRig(t *testing.T) (*rig, string) {
+	t.Helper()
+	r := newRig(t)
+	rk, secret := recovery(t)
+	if err := r.st.Enable(context.Background(), Options{}, passkey(t, r), rk); err != nil {
+		t.Fatal(err)
+	}
+	r.open(t, r.saved)
+	r.unlockPasskey(t)
+	return r, secret
+}
+
+// withPlainDocs saves three documents in the clear (one in a folder's versions too) before
+// encryption.
+func withPlainDocs(t *testing.T, r *rig) {
+	t.Helper()
+	ctx := context.Background()
+	for _, n := range []string{"alpha", "beta", "gamma"} {
+		e, err := r.saver.Save(ctx, target, docfile.Open, doc("Doc "+n, "text of "+n))
+		if err != nil {
+			t.Fatal(err)
+		}
+		v := doc("Doc "+n, "version of "+n)
+		v.SetID(e.ID)
+		if _, err := r.saver.SaveVersion(ctx, target, docfile.Open, v); err != nil {
+			t.Fatal(err)
+		}
+	}
 }

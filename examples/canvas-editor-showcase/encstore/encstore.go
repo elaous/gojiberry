@@ -10,9 +10,26 @@
 // It has no browser code, so everything here is tested natively; the page supplies the passkey
 // ceremony, the file chooser and the persistence of Config.
 //
-// What it does not do (and a real application must): the owner signers in Config are trusted
-// because they are on this device, next to the store, so someone who can write this origin's
-// storage can replace both. A deployment keeps them somewhere the store's writers cannot reach.
+// Every change to the set of keys, or to whether encryption is on at all, is a transaction over
+// the stored files (see change in transaction.go): a journal record in Config first, each file
+// re-encrypted and read back, the originals kept until all are done, and only then the new key
+// list is made current; a failure puts everything back, and a crash leaves the journal for
+// Recover to finish or undo. What it cannot do is in the "Limits" below.
+//
+// Limits (stated plainly; docs/encryption-and-passkeys.md section 5.7 has them in full):
+//
+//   - Config, with the owner signing keys, is kept next to the store. Anyone who can write this
+//     origin's storage can replace both. The seals in Config (bind.go) make a replacement
+//     detectable when a passkey, a recovery key or an SSH key that already has a seal unlocks
+//     the store (ErrConfigChanged); they cannot stop someone who also strips the seals and
+//     presents a config of the first generation, which is accepted once (trust on first
+//     use), nor restore a config that was deleted, nor tell an older valid config from the
+//     current one. Without a passkey or recovery key to anchor it (an SSH-only store before
+//     its first unlock) there is nothing to check against.
+//   - Another tab of the same page can write while a change runs: the store's own lock covers
+//     this page, the browser's web lock (where it has one) the rest.
+//   - Taking a key out stops it opening what is saved from now on; whoever held it keeps what
+//     they decrypted and any copy of old ciphertext.
 package encstore
 
 import (
@@ -22,7 +39,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"sync"
 
 	"filippo.io/age"
@@ -53,9 +69,75 @@ var ErrNotAKey = errors.New("that is not one of this store's keys")
 // ErrDisabled is returned for what needs encryption to be on.
 var ErrDisabled = errors.New("encryption is not on for this store")
 
+// ErrAlreadyOn is returned by Enable for a store that is already encrypted.
+var ErrAlreadyOn = errors.New("encryption is already on")
+
+// ErrNoKeys is returned by Enable when no key was chosen.
+var ErrNoKeys = errors.New("choose at least one key")
+
+// ErrKeyTwice is returned when the same key is given twice, or is already an owner.
+var ErrKeyTwice = errors.New("that key is already one of the store's, or given twice")
+
 // ErrConfidentialLeft is returned by Disable while a document or folder is still confidential:
 // turning encryption off would leave names that need a key and files nothing could read.
 var ErrConfidentialLeft = errors.New("make the confidential documents and folders not confidential first")
+
+// ErrInterrupted is returned for what cannot run while a change to the keys is unfinished (a
+// journal is in Config): Recover finishes it or puts it back.
+var ErrInterrupted = errors.New("an earlier change to the store's keys did not finish: finish it or undo it first")
+
+// ErrConfigChanged is returned by an unlock when the key list on this device is not the one this
+// key last saw (see the seals in bind.go): it was replaced or edited by something else.
+var ErrConfigChanged = errors.New("the key configuration on this device was changed since this key last opened the store: not unlocking")
+
+// ErrSecretNotSaved is returned when a recovery key is to become an owner key before the person
+// has confirmed they saved its secret: a key whose secret was never seen would count as a way
+// back that does not exist.
+var ErrSecretNotSaved = errors.New("the recovery key's secret has not been saved: it must be shown and confirmed before the key is added")
+
+// ErrPasskeyOnly is returned by Enable for passkeys alone unless Options.AcceptPasskeyOnly: with
+// no key that is not a passkey, losing the passkey loses everything the store holds.
+var ErrPasskeyOnly = errors.New("only passkeys: losing them loses every document in this store")
+
+// ErrLastOwner is returned by RemoveOwner for the only key.
+var ErrLastOwner = errors.New("that is the store's only key")
+
+// ErrWouldLoseRecovery is returned when removing or replacing a key would leave only passkeys
+// where there was a way back that is not one.
+var ErrWouldLoseRecovery = errors.New("that would leave only passkeys: keep a recovery key or an SSH key")
+
+// ErrUseAnotherKey is returned by RemoveOwner when the store is unlocked with the key being
+// removed alone: another key's signing key is needed to carry the lists over.
+var ErrUseAnotherKey = errors.New("unlock the store with a different key to remove this one")
+
+// ErrNoSuchOwner is returned for a fingerprint that is not one of the owners.
+var ErrNoSuchOwner = errors.New("no such owner key")
+
+// ErrRollbackFailed is returned when a change failed and what it wrote could not be put back
+// either: the journal stays, and Recover (finish or undo) is how to get out.
+var ErrRollbackFailed = errors.New("the change failed and could not be undone completely: reload and finish it or undo it")
+
+// ErrNothingPending is returned by Recover when there is nothing to finish.
+var ErrNothingPending = errors.New("there is no unfinished change")
+
+// NoRoomError is returned before a change starts when the storage would not hold the files as
+// they will be (age adds a header to every file, and a key adds a stanza to each).
+type NoRoomError struct{ Need, Free int64 }
+
+func (e *NoRoomError) Error() string {
+	return fmt.Sprintf("not enough room in the browser's storage: about %d more bytes are needed and about %d are free", e.Need, e.Free)
+}
+
+// Is makes a NoRoomError a docstore.ErrStorageFull.
+func (e *NoRoomError) Is(t error) bool { return t == docstore.ErrStorageFull }
+
+// UnreadableError is returned before anything is written when stored files cannot be opened with
+// the keys held: they would be lost by the change, so it does not start.
+type UnreadableError struct{ IDs []string }
+
+func (e *UnreadableError) Error() string {
+	return fmt.Sprintf("%d stored files cannot be opened with the keys unlocked here: nothing was changed", len(e.IDs))
+}
 
 // Owner is an owner key as kept on the device: public information only.
 type Owner struct {
@@ -67,22 +149,54 @@ type Owner struct {
 	Signer string `json:"signer"`
 }
 
-// Config is what is kept on the device about the store. It holds no secret.
+// Config is what is kept on the device about the store. It holds no secret: public keys, the
+// signatures that bind them (bind.go) and the journal of a change in progress.
 type Config struct {
 	Version int     `json:"v"`
 	Owners  []Owner `json:"owners"`
+	// Pending is the journal of a change that was started and not finished.
+	Pending *Pending `json:"pending,omitempty"`
+	// Seals and Links are the signatures that let a key tell, at unlock, that this list is the one
+	// it saw or a descendant of it signed by owners it trusted.
+	Seals []Seal `json:"seals,omitempty"`
+	Links []Link `json:"links,omitempty"`
+}
+
+// The operations a Pending journal names.
+const (
+	OpEnable  = "enable"
+	OpAdd     = "add"
+	OpRemove  = "remove"
+	OpReplace = "replace"
+	OpDisable = "disable"
+)
+
+// Pending is the journal record of a change that is in progress or was cut short: what it is
+// and the owner list it is making current (empty for turning encryption off). Seals are
+// signatures of that list by the keys that made the change, checked before Recover finishes it.
+type Pending struct {
+	Op    string  `json:"op"`
+	To    []Owner `json:"to"`
+	Seals []Seal  `json:"seals,omitempty"`
 }
 
 // NewKey is an owner key being added. Unlock, when set, is the private side, available now (the
-// passkey just derived, a recovery key just made): the store is unlocked with it, so a caller
-// that wants a key not to stay in memory (a recovery key shown once and saved elsewhere) clears
-// it, as long as another key of the set carries its own.
+// passkey just derived, a recovery key just made): it signs the new key list and verifies what was
+// written, and the store is left unlocked with it unless Forget says it must not stay in memory
+// (a recovery key shown once and saved elsewhere), which needs another key of the set to carry
+// its own.
 type NewKey struct {
 	Kind      string
 	Label     string
 	Recipient encrypt.Recipient
 	SignerPub ed25519.PublicKey
 	Unlock    *Unlocked
+	// Forget drops Unlock once it has been used for the change.
+	Forget bool
+	// SecretSaved is set by the caller once the person has confirmed they saved a recovery key's
+	// secret (NewRecoveryKey returns the key with it unset); a recovery key without it is
+	// refused (ErrSecretNotSaved).
+	SecretSaved bool
 }
 
 // Unlocked is the private side of an owner key: what opens the store, and the signing key that
@@ -90,6 +204,13 @@ type NewKey struct {
 type Unlocked struct {
 	Identity age.Identity
 	Signer   *encrypt.Signer
+}
+
+// Options are the choices of Enable.
+type Options struct {
+	// AcceptPasskeyOnly is the person's explicit acknowledgement that the store has only
+	// passkeys and that losing them loses everything in it.
+	AcceptPasskeyOnly bool
 }
 
 // Store is the encrypted store of one page. Raw is the storage underneath (the browser's
@@ -101,46 +222,77 @@ type Store struct {
 	Target string
 	// Persist saves the Config after a change; an error stops the change. Nil keeps nothing.
 	Persist func(Config) error
+	// Capacity is how many bytes the storage may hold (0: not known, nothing is checked before a
+	// change; a write that fails is still rolled back).
+	Capacity int64
 
 	mu      sync.RWMutex
 	cfg     Config
 	owners  []encrypt.Recipient
 	signers []ed25519.PublicKey
 	ids     []age.Identity
-	signer  *encrypt.Signer
-	floor   encrypt.MemorySeqFloor
-	ad      *encrypt.Adapter
+	holders []string // the owner key (Owner.Public) each of ids belongs to
+	sigs    []*encrypt.Signer
+	floor   *encrypt.MemorySeqFloor
+	ad      *encrypt.Adapter // strict: refuses a stored file that is not encrypted
+	tol     *encrypt.Adapter // reads a file that is still in the clear: for an unfinished change
+	gate    sync.RWMutex     // writes through Adapter() hold it shared; a change holds it exclusively
 }
 
 // New makes the store over raw with the owner keys in cfg (none: encryption is off).
 func New(raw docstore.Adapter, target string, cfg Config) (*Store, error) {
-	s := &Store{Raw: raw, Target: target}
+	s := &Store{Raw: raw, Target: target, floor: &encrypt.MemorySeqFloor{}}
 	if err := s.install(cfg); err != nil {
 		return nil, err
 	}
 	s.ad = encrypt.New(raw, ring{s})
+	s.tol = encrypt.New(raw, ring{s})
+	s.tol.AllowPlaintext = true
 	return s, nil
 }
 
 // install parses cfg and makes it the current one.
 func (s *Store) install(cfg Config) error {
+	owners, signers, err := parseOwners(cfg.Owners)
+	if err != nil {
+		return err
+	}
+	if cfg.Pending != nil {
+		if _, _, err := parseOwners(cfg.Pending.To); err != nil {
+			return err
+		}
+	}
+	s.mu.Lock()
+	s.cfg, s.owners, s.signers = cloneConfig(cfg), owners, signers
+	s.mu.Unlock()
+	return nil
+}
+
+func cloneConfig(c Config) Config {
+	out := Config{Version: c.Version, Owners: slices.Clone(c.Owners), Seals: slices.Clone(c.Seals), Links: slices.Clone(c.Links)}
+	if c.Pending != nil {
+		p := *c.Pending
+		p.To, p.Seals = slices.Clone(p.To), slices.Clone(p.Seals)
+		out.Pending = &p
+	}
+	return out
+}
+
+func parseOwners(list []Owner) ([]encrypt.Recipient, []ed25519.PublicKey, error) {
 	var owners []encrypt.Recipient
 	var signers []ed25519.PublicKey
-	for _, o := range cfg.Owners {
+	for _, o := range list {
 		r, err := parseOwner(o)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		sg, err := hex.DecodeString(o.Signer)
 		if err != nil || len(sg) != ed25519.PublicKeySize {
-			return fmt.Errorf("encstore: the signing key of %q is not valid", o.Label)
+			return nil, nil, fmt.Errorf("encstore: the signing key of %q is not valid", o.Label)
 		}
 		owners, signers = append(owners, r), append(signers, ed25519.PublicKey(sg))
 	}
-	s.mu.Lock()
-	s.cfg, s.owners, s.signers = cfg, owners, signers
-	s.mu.Unlock()
-	return nil
+	return owners, signers, nil
 }
 
 func parseOwner(o Owner) (encrypt.Recipient, error) {
@@ -159,22 +311,44 @@ func parseOwner(o Owner) (encrypt.Recipient, error) {
 	return r, nil
 }
 
-// Adapter is the store as the saver uses it: every document encrypted, the catalog readable.
-// It is the same adapter whether the store is locked or not (it reads the state at each call).
-func (s *Store) Adapter() *encrypt.Adapter { return s.ad }
+// Adapter is the store as the saver uses it: every document encrypted, the catalog readable. It
+// is the same adapter whether the store is locked or not (it reads the state at each call). While
+// a change to the keys is unfinished it reads (a file still in the clear is read as it is) and
+// refuses every write (ErrInterrupted); while a change runs, calls wait for it to finish.
+func (s *Store) Adapter() docstore.Adapter { return front{s} }
 
-// Enabled says whether encryption is on (there are owner keys).
+// Enabled says whether encryption is on (there are owner keys), or is being turned on and the
+// change was cut short.
 func (s *Store) Enabled() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return len(s.owners) > 0
+	return len(s.owners) > 0 || s.cfg.Pending != nil
+}
+
+// Interrupted says whether a change to the keys was started and not finished (Config.Pending).
+func (s *Store) Interrupted() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.Pending != nil
+}
+
+// PendingChange is the journal of the unfinished change, nil when there is none.
+func (s *Store) PendingChange() *Pending {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.cfg.Pending == nil {
+		return nil
+	}
+	p := *s.cfg.Pending
+	p.To = slices.Clone(p.To)
+	return &p
 }
 
 // Unlocked says whether a private key is held, so documents can be saved and opened.
 func (s *Store) Unlocked() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return len(s.owners) > 0 && len(s.ids) > 0
+	return (len(s.owners) > 0 || s.cfg.Pending != nil) && len(s.ids) > 0
 }
 
 // Owners are the owner keys, public information.
@@ -188,7 +362,7 @@ func (s *Store) Owners() []Owner {
 func (s *Store) Config() Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return Config{Version: s.cfg.Version, Owners: slices.Clone(s.cfg.Owners)}
+	return cloneConfig(s.cfg)
 }
 
 // Recipients are the owner keys as the People tab lists them.
@@ -203,19 +377,32 @@ func (s *Store) Recipients() []encrypt.Recipient {
 func (s *Store) Lock() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.ids, s.signer = nil, nil
+	s.ids, s.holders, s.sigs = nil, nil, nil
 }
 
-func (s *Store) unlock(u ...Unlocked) {
+// held is one private key of an unlock, with the owner key it opens.
+type held struct {
+	Unlocked
+	owner string // Owner.Public
+}
+
+func (s *Store) unlock(u ...held) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.ids, s.signer = nil, nil
+	s.ids, s.holders, s.sigs = nil, nil, nil
 	for _, k := range u {
 		s.ids = append(s.ids, k.Identity)
-		if s.signer == nil {
-			s.signer = k.Signer
-		}
+		s.holders = append(s.holders, k.owner)
+		s.sigs = append(s.sigs, k.Signer)
 	}
+}
+
+// signer is the first unlocked key's signing key.
+func (s *Store) signer() *encrypt.Signer {
+	if len(s.sigs) == 0 {
+		return nil
+	}
+	return s.sigs[0]
 }
 
 // ring is the Keyring of the store: a ConfidentialKeyring over the owners' keys, rebuilt from the
@@ -238,7 +425,7 @@ func (r ring) keyring() (encrypt.ConfidentialKeyring, error) {
 		to[i] = o.Key
 	}
 	return encrypt.ConfidentialKeyring{
-		People: encrypt.StoreKeyring{Store: s.Raw, Owners: to, Keys: slices.Clone(s.ids), OwnerSigners: slices.Clone(s.signers), SeqFloor: &s.floor},
+		People: encrypt.StoreKeyring{Store: s.Raw, Owners: to, Keys: slices.Clone(s.ids), OwnerSigners: slices.Clone(s.signers), SeqFloor: s.floor},
 		// There is no server here: what is not confidential is still encrypted at rest, to the
 		// owner's keys, so a stolen copy of the browser's storage holds no text.
 		AtRest: encrypt.Static{To: to, Keys: slices.Clone(s.ids)},
@@ -256,32 +443,102 @@ func (r ring) Recipients(ctx context.Context, id string) ([]age.Recipient, error
 
 // Identities implements encrypt.Keyring. A locked store has none: opening says ErrNoKey.
 func (r ring) Identities(ctx context.Context, id string) ([]age.Identity, error) {
-	k, err := r.keyring()
-	if errors.Is(err, ErrLocked) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return k.Identities(ctx, id)
+	r.s.mu.RLock()
+	defer r.s.mu.RUnlock()
+	return slices.Clone(r.s.ids), nil
 }
+
+// front is the Adapter the saver sees: the store's adapter behind the gate a change holds.
+type front struct{ s *Store }
+
+func (f front) writable() error {
+	if f.s.Interrupted() {
+		return ErrInterrupted
+	}
+	return nil
+}
+
+func (f front) reader() *encrypt.Adapter {
+	if f.s.Interrupted() {
+		return f.s.tol
+	}
+	return f.s.ad
+}
+
+// Save implements docstore.Adapter.
+func (f front) Save(ctx context.Context, id string, data []byte) error {
+	f.s.gate.RLock()
+	defer f.s.gate.RUnlock()
+	if err := f.writable(); err != nil {
+		return err
+	}
+	return f.s.ad.Save(ctx, id, data)
+}
+
+// SaveIf implements docstore.ConditionalAdapter.
+func (f front) SaveIf(ctx context.Context, id string, data []byte, prev string) error {
+	f.s.gate.RLock()
+	defer f.s.gate.RUnlock()
+	if err := f.writable(); err != nil {
+		return err
+	}
+	return f.s.ad.SaveIf(ctx, id, data, prev)
+}
+
+// Load implements docstore.Adapter.
+func (f front) Load(ctx context.Context, id string) (docstore.Document, error) {
+	f.s.gate.RLock()
+	defer f.s.gate.RUnlock()
+	return f.reader().Load(ctx, id)
+}
+
+// List implements docstore.Adapter.
+func (f front) List(ctx context.Context) ([]docstore.Meta, error) {
+	f.s.gate.RLock()
+	defer f.s.gate.RUnlock()
+	return f.s.ad.List(ctx)
+}
+
+// ListPrefix implements docstore.PrefixLister.
+func (f front) ListPrefix(ctx context.Context, prefix string) ([]docstore.Meta, error) {
+	f.s.gate.RLock()
+	defer f.s.gate.RUnlock()
+	return f.s.ad.ListPrefix(ctx, prefix)
+}
+
+// Delete implements docstore.Adapter.
+func (f front) Delete(ctx context.Context, id string) error {
+	f.s.gate.RLock()
+	defer f.s.gate.RUnlock()
+	if err := f.writable(); err != nil {
+		return err
+	}
+	return f.s.ad.Delete(ctx, id)
+}
+
+// Lock implements docstore.Locker by the inner store's.
+func (f front) Lock(ctx context.Context) (func(), error) { return f.s.ad.Lock(ctx) }
 
 // Sharing is the control of who a document is shared with, for the unlocked store.
 func (s *Store) Sharing() (*encrypt.Sharing, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if s.cfg.Pending != nil {
+		return nil, ErrInterrupted
+	}
 	if len(s.owners) == 0 {
 		return nil, ErrDisabled
 	}
-	if s.signer == nil {
+	if s.signer() == nil {
 		return nil, ErrLocked
 	}
-	return &encrypt.Sharing{Store: s.Raw, Adapter: s.ad, Signer: s.signer, OwnerSigners: slices.Clone(s.signers), SeqFloor: &s.floor}, nil
+	return &encrypt.Sharing{Store: s.Raw, Adapter: s.ad, Signer: s.signer(), OwnerSigners: slices.Clone(s.signers), SeqFloor: s.floor}, nil
 }
 
 // Check is saver.Saver.ConfidentialCheck: a document is made confidential only on this store,
 // while it is unlocked, and only when one of the owner's keys is not a passkey
-// (encrypt.CheckRecoverableOwner), so losing the passkey does not lose the document.
+// (encrypt.CheckRecoverableOwner), so losing the passkey does not lose the document. Only keys
+// that are committed count: a key whose change did not finish is not an owner yet.
 func (s *Store) Check(ctx context.Context, target, id string) error {
 	if target != s.Target || !s.Enabled() {
 		return ErrNotThisStore
@@ -317,7 +574,7 @@ func (s *Store) Rekey(ctx context.Context, target, id, protection string) error 
 func (s *Store) PackKeys() (seal func(context.Context, string, []byte) ([]byte, error), open func(context.Context, string, []byte) ([]byte, error)) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if len(s.owners) == 0 || len(s.ids) == 0 {
+	if len(s.owners) == 0 || len(s.ids) == 0 || s.cfg.Pending != nil {
 		return nil, nil
 	}
 	to := make([]age.Recipient, len(s.owners))
@@ -325,53 +582,6 @@ func (s *Store) PackKeys() (seal func(context.Context, string, []byte) ([]byte, 
 		to[i] = o.Key
 	}
 	return encrypt.PackSealer(to, slices.Clone(s.ids))
-}
-
-// Enable turns encryption on with the given owner keys; what was saved in the clear before is
-// encrypted now. Keys that carry their private side (Unlock) leave the store unlocked; with none
-// (an SSH public key only) it starts locked and the private key file unlocks it. Keys are public
-// information and go to Persist; a failure there changes nothing.
-func (s *Store) Enable(ctx context.Context, keys ...NewKey) error {
-	if s.Enabled() {
-		return errors.New("encstore: encryption is already on")
-	}
-	if len(keys) == 0 {
-		return errors.New("encstore: choose at least one key")
-	}
-	cfg := Config{Version: 1}
-	var unlocked []Unlocked
-	seen := map[string]bool{}
-	for _, k := range keys {
-		if seen[k.Recipient.Fingerprint] {
-			return errors.New("encstore: the same key twice")
-		}
-		seen[k.Recipient.Fingerprint] = true
-		cfg.Owners = append(cfg.Owners, ownerOf(k))
-		if k.Unlock != nil {
-			unlocked = append(unlocked, *k.Unlock)
-		}
-	}
-	if err := s.persist(cfg); err != nil {
-		return err
-	}
-	if err := s.install(cfg); err != nil {
-		return err
-	}
-	s.unlock(unlocked...)
-	// What is already saved in the clear (documents from before) is encrypted now: one pass over an
-	// adapter that accepts plaintext, which the store's own adapter never does. There is no
-	// confidential document yet, so the owner keys are all the recipients, and no private key is
-	// needed to write.
-	to := make([]age.Recipient, len(cfg.Owners))
-	for i, r := range s.Recipients() {
-		to[i] = r.Key
-	}
-	mig := encrypt.New(s.Raw, encrypt.Static{To: to})
-	mig.AllowPlaintext = true
-	if _, err := mig.RekeyAll(ctx); err != nil {
-		return fmt.Errorf("encstore: encrypting what was already saved: %w", err)
-	}
-	return nil
 }
 
 func ownerOf(k NewKey) Owner {
@@ -382,59 +592,43 @@ func (s *Store) persist(cfg Config) error {
 	if s.Persist == nil {
 		return nil
 	}
-	return s.Persist(cfg)
+	return s.Persist(cloneConfig(cfg))
 }
 
-// AddOwner adds an owner key (a recovery key made later, a passkey) to an unlocked store: every
-// stored file is encrypted again so the new key opens it. A failure after the key is added is
-// the re-key's (Repair finishes it); the key stays added.
-func (s *Store) AddOwner(ctx context.Context, k NewKey) error {
-	if !s.Unlocked() {
-		if !s.Enabled() {
-			return ErrDisabled
+// ownersFor is every owner key an unlock may match: the current ones and, while a change is
+// unfinished, the ones it is making current.
+func (s *Store) ownersFor() []Owner {
+	out := slices.Clone(s.cfg.Owners)
+	if s.cfg.Pending != nil {
+		out = append(out, s.cfg.Pending.To...)
+	}
+	return out
+}
+
+func (s *Store) findOwner(kind, public string) (Owner, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, o := range s.ownersFor() {
+		if o.Kind == kind && o.Public == public {
+			return o, true
 		}
-		return ErrLocked
 	}
-	cfg := s.Config()
-	for _, o := range cfg.Owners {
-		if o.Public == k.Recipient.Text {
-			return errors.New("encstore: that key is already one of the store's")
-		}
-	}
-	cfg.Owners = append(cfg.Owners, ownerOf(k))
-	if err := s.persist(cfg); err != nil {
-		return err
-	}
-	if err := s.install(cfg); err != nil {
-		return err
-	}
-	return s.Repair(ctx)
+	return Owner{}, false
 }
 
-// Repair encrypts every stored file again to the current owner keys (and each document's own
-// list): the way to finish a re-key that was cut short.
-func (s *Store) Repair(ctx context.Context) error {
-	if !s.Unlocked() {
-		return ErrLocked
-	}
-	if _, err := s.ad.RekeyAll(ctx); err != nil {
-		return fmt.Errorf("encstore: encrypting the files again for the new key: %w", err)
-	}
-	return nil
-}
-
-// UnlockPasskey unlocks with the 32 bytes a passkey answered (client.DeriveLocal). The caller
-// clears secret.
+// UnlockPasskey unlocks with the 32 bytes a passkey answered (client.DeriveLocal). The secret is
+// cleared here on every path: the caller need not.
 func (s *Store) UnlockPasskey(secret []byte) error {
+	defer clear(secret)
 	id, err := encrypt.PRFIdentity(secret)
 	if err != nil {
 		return err
 	}
-	if !s.hasOwner(KindPasskey, id.Recipient().String()) {
+	o, ok := s.findOwner(KindPasskey, id.Recipient().String())
+	if !ok {
 		return ErrNotAKey
 	}
-	s.unlock(Unlocked{Identity: id, Signer: encrypt.SignerFromAge(id)})
-	return nil
+	return s.finishUnlock(o, Unlocked{Identity: id, Signer: encrypt.SignerFromAge(id)})
 }
 
 // UnlockRecovery unlocks with a recovery key's secret ("AGE-SECRET-KEY-1...").
@@ -444,16 +638,21 @@ func (s *Store) UnlockRecovery(secret string) error {
 		return err
 	}
 	id, ok := ident.(*age.X25519Identity)
-	if !ok || !s.hasOwner(KindRecovery, id.Recipient().String()) {
+	if !ok {
 		return ErrNotAKey
 	}
-	s.unlock(Unlocked{Identity: id, Signer: encrypt.SignerFromAge(id)})
-	return nil
+	o, ok := s.findOwner(KindRecovery, id.Recipient().String())
+	if !ok {
+		return ErrNotAKey
+	}
+	return s.finishUnlock(o, Unlocked{Identity: id, Signer: encrypt.SignerFromAge(id)})
 }
 
 // UnlockSSH unlocks with the private key file (PEM, not passphrase protected) of an ed25519
-// SSH key that is one of the owners.
+// SSH key that is one of the owners. pem is cleared here on every path (success, a file that is
+// not a key, a key that is not an owner): the caller need not.
 func (s *Store) UnlockSSH(pem []byte) error {
+	defer clear(pem)
 	id, err := encrypt.ParseSSHIdentity(pem)
 	if err != nil {
 		return err
@@ -462,95 +661,42 @@ func (s *Store) UnlockSSH(pem []byte) error {
 	if err != nil {
 		return err
 	}
-	pub := signer.Public()
+	pub := hex.EncodeToString(signer.Public())
 	s.mu.RLock()
-	match := false
-	for _, o := range s.cfg.Owners {
-		if o.Kind == KindSSH && o.Signer == hex.EncodeToString(pub) {
-			match = true
+	var match Owner
+	found := false
+	for _, o := range s.ownersFor() {
+		if o.Kind == KindSSH && o.Signer == pub {
+			match, found = o, true
 		}
 	}
 	s.mu.RUnlock()
-	if !match {
+	if !found {
 		return ErrNotAKey
 	}
-	s.unlock(Unlocked{Identity: id, Signer: signer})
-	return nil
+	return s.finishUnlock(match, Unlocked{Identity: id, Signer: signer})
 }
 
-func (s *Store) hasOwner(kind, public string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, o := range s.cfg.Owners {
-		if o.Kind == kind && o.Public == public {
-			return true
-		}
+// finishUnlock checks the key list against the key's seal, then holds the key.
+func (s *Store) finishUnlock(o Owner, u Unlocked) error {
+	if err := s.checkSeal(o); err != nil {
+		return err
 	}
-	return false
+	s.unlock(held{Unlocked: u, owner: o.Public})
+	s.sealOnUnlock(o, u.Signer) // first use, or the list moved on legitimately: bind it now
+	return nil
 }
 
 // HasKind says whether the store has an owner key of that kind (which unlock method to offer).
 func (s *Store) HasKind(kind string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, o := range s.cfg.Owners {
+	for _, o := range s.ownersFor() {
 		if o.Kind == kind {
 			return true
 		}
 	}
 	return false
-}
-
-// Disable turns encryption off: every file is decrypted back into the store as it was before,
-// the lists of who a document is shared with are removed, and the keys are forgotten. The store
-// must be unlocked, and no document or folder may still be confidential (confidential is the
-// caller's to check: it knows the catalog) because turning it off would leave their names and
-// files unreadable; on a failure part way the store is left on and Disable can be run again.
-func (s *Store) Disable(ctx context.Context) error {
-	if !s.Enabled() {
-		return ErrDisabled
-	}
-	if !s.Unlocked() {
-		return ErrLocked
-	}
-	metas, err := s.Raw.List(ctx)
-	if err != nil {
-		return err
-	}
-	for _, m := range metas {
-		if encrypt.DefaultSkip(m.ID) {
-			continue
-		}
-		raw, err := s.Raw.Load(ctx, m.ID)
-		if err != nil {
-			return err
-		}
-		if !encrypt.IsEncrypted(raw.Data) {
-			continue
-		}
-		plain, err := s.ad.Load(ctx, m.ID)
-		if err != nil {
-			return fmt.Errorf("encstore: %s: %w", m.ID, err)
-		}
-		if err := s.Raw.Save(ctx, m.ID, plain.Data); err != nil {
-			return err
-		}
-	}
-	for _, m := range metas {
-		if strings.HasPrefix(m.ID, encrypt.KeysPrefix) {
-			if err := s.Raw.Delete(ctx, m.ID); err != nil && !errors.Is(err, docstore.ErrNotFound) {
-				return err
-			}
-		}
-	}
-	if err := s.persist(Config{}); err != nil {
-		return err
-	}
-	if err := s.install(Config{}); err != nil {
-		return err
-	}
-	s.Lock()
-	return nil
 }
 
 // PublicOf is the SSH public key text's Ed25519 key, the signing key an ed25519 SSH owner has
@@ -587,7 +733,9 @@ func NewPasskeyKey(secret []byte, label string) (NewKey, error) {
 }
 
 // NewRecoveryKey makes a recovery key: the owner key (public half, with its signing key) and the
-// secret to be shown once and kept offline. The private side is not kept here.
+// secret to be shown once and kept offline. The private side is not kept here. The key is not
+// accepted as an owner until the caller sets SecretSaved, after the person confirmed they saved
+// the secret (ErrSecretNotSaved otherwise).
 func NewRecoveryKey(label string) (key NewKey, secret string, err error) {
 	pub, secret, err := encrypt.GenerateRecoveryKey()
 	if err != nil {

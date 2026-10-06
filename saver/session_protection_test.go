@@ -150,3 +150,34 @@ func TestSessionPackKeysSealAndOpen(t *testing.T) {
 		}
 	}
 }
+
+// Clear drops the open document from the session with the keys: its ID and name, the tag filter,
+// the revealed names and the status, and the lists show the placeholders.
+func TestSessionClearForgetsTheOpenDocument(t *testing.T) {
+	ctx := context.Background()
+	s, _, id := confidentialSaver(t)
+	ss := NewSession(s, func() docfile.Document { return docWithText("", "editor text") }, nil)
+	ss.Pending.Inline = true
+	if err := ss.SetTarget(ctx, "m"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ss.Open(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	ss.SetName(secretName)
+	ss.SetTagFilter("tax")
+	ss.MarkEdited()
+	if ss.ID() != id || ss.Name() == "" || ss.SaveState() == "" {
+		t.Fatalf("setup: id %q name %q state %q", ss.ID(), ss.Name(), ss.SaveState())
+	}
+	ss.Clear()
+	if ss.ID() != "" || ss.Name() != "" || ss.SaveState() != "" {
+		t.Fatalf("still there: id %q name %q state %q", ss.ID(), ss.Name(), ss.SaveState())
+	}
+	if p := ss.Props(); p.Name != "" || p.Status != "" || p.Docs.TagFilter != "" {
+		t.Fatalf("the props still carry the document: %+v", p)
+	}
+	if d := ss.Docs().Docs[0]; d.Name != ConfidentialName || !d.NameHidden {
+		t.Fatalf("the list shows the real name: %+v", d)
+	}
+}

@@ -87,6 +87,7 @@ type ui struct {
 	shareLink           string // the link the Share tab shows
 	people              *peopleState
 	enc                 *encUI // the encrypted browser store: off unless the person turns it on
+	clearEditor         func() // empties the editor and what is derived from its text (Lock uses it)
 	message             string // the Import/Export tab's last message
 }
 
@@ -187,6 +188,15 @@ func main() {
 		}
 		stage.ForgetFonts() // the opened text may use fonts the library has
 		renderCanvas()
+		renderUI()
+	}
+	u.clearEditor = func() {
+		// Locking closes the document that is open: the editor, and everything that was worked out
+		// from its text (find results, spelling, outline and statistics caches, comments).
+		openDoc(docfile.Document{})
+		u.title = ""
+		u.find, u.spell.spans, u.spell.words, u.spell.text = findState{}, nil, nil, ""
+		u.navSig, u.statsSig, u.a11ySig, u.a11yCache, u.shareLink = "", "", "", nil, ""
 		renderUI()
 	}
 	currentDoc := func() docfile.Document {
