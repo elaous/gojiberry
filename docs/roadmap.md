@@ -11,12 +11,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Later
 
-1. **`.opendoc` packs.** Many documents and their folders in one file: framed
-   protobuf records (the `.open` message), a footer index, a SHA-256 per document and
-   an optional signature; opens from the end of the file, appends in place, recovers
-   from a cut file. Spec: [opendoc-format.md](opendoc-format.md). Then `docfile/pack`,
-   `Saver.ImportPack` / `ExportPack`, and `cmd/opendoc` with a `.docx` converter, to
-   be offered as open source.
+1. **`.opendoc` packs: done** (`docfile/pack`, `cmd/opendoc`, `Saver.ImportPack`/`ExportPack`, the document-list buttons and Migrate's "One .opendoc pack"; spec in [opendoc-format.md](opendoc-format.md)).
 2. **Encryption and passkeys.** Encrypt documents to SSH keys and passkeys (envelope
    encryption, a wrapped data key per recipient, keys stay with the person) and sign in
    with a passkey (WebAuthn). Design and open decisions:
@@ -26,12 +21,10 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
    Design, wording of the promise, and the abuse controls that must exist before launch:
    [public-docstore.md](public-docstore.md). Needs expiry in `docstore` first.
 4. **Console mode: done** (`console`, `cmd/docsh`, [console.md](console.md)); left: the editor panel that drives the same engine.
-5. **Terminal app demo.** A text-mode demo of the same engine (a file manager and a
-   plain-text editor over `saver.Session`) to show the components are not tied to
-   the browser. It reuses the console grammar above.
+5. **Terminal app demo: done** (`examples/terminal-demo`: a file manager and a line editor over `saver.Session`, with the console grammar).
 6. **Store backends with conditional saves.** SQLite, local files, memory and the
    HTTP store now save the catalog conditionally; PostgreSQL, MongoDB and S3 (which
    has `If-Match` writes) still write unconditionally and keep the old limit that two
    processes can lose a catalog update.
-8. The rest of the [known limits plan](known-limits-plan.md): i18n breadth,
+7. The rest of the [known limits plan](known-limits-plan.md): i18n breadth,
    accessibility depth, right-to-left, Hunspell dictionaries on demand.
