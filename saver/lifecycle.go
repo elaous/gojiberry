@@ -366,28 +366,38 @@ func (s *Saver) ExportOpen(ctx context.Context, target, id string, history bool)
 }
 
 func (s *Saver) exportOpen(ctx context.Context, target, id string, history bool) ([]byte, int, error) {
-	doc, err := s.Load(ctx, target, id)
+	doc, n, err := s.loadWithHistory(ctx, target, id, history)
 	if err != nil {
 		return nil, 0, err
+	}
+	data, err := docfile.Open.Marshal(doc)
+	return data, n, err
+}
+
+// loadWithHistory loads a document, with its versions in Document.History (oldest first)
+// when history is set, and says how many there are.
+func (s *Saver) loadWithHistory(ctx context.Context, target, id string, history bool) (docfile.Document, int, error) {
+	doc, err := s.Load(ctx, target, id)
+	if err != nil {
+		return docfile.Document{}, 0, err
 	}
 	n := 0
 	if history {
 		vs, err := s.Versions(ctx, target, id)
 		if err != nil {
-			return nil, 0, err
+			return docfile.Document{}, 0, err
 		}
 		for i := len(vs) - 1; i >= 0; i-- { // Versions is newest first
 			d, err := s.LoadVersion(ctx, target, vs[i].Key)
 			if err != nil {
-				return nil, 0, err
+				return docfile.Document{}, 0, err
 			}
 			d.History = nil
 			doc.History = append(doc.History, docfile.Revision{Saved: vs[i].Time.UnixNano(), Doc: &d})
 			n++
 		}
 	}
-	data, err := docfile.Open.Marshal(doc)
-	return data, n, err
+	return doc, n, nil
 }
 
 // OpenSizes says how big a .open file of a document would be, in bytes: Current is the

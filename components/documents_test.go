@@ -321,3 +321,19 @@ func TestOpenDownloadDialogShowsTheSizes(t *testing.T) {
 	mustContain(t, none, "No saved versions")
 	mustNotContain(t, none, "Drop the version history")
 }
+
+func TestDocListPackButtons(t *testing.T) {
+	var got []string
+	p := DocListProps{Folders: []DocFolder{{ID: "f", Name: "Work"}}, AllFolders: []DocFolder{{ID: "f", Name: "Work"}}, Pending: &Pending{Inline: true},
+		DownloadPack: func(_ context.Context, id string) error { got = append(got, "pack:"+id); return nil },
+		ImportPack:   func() { got = append(got, "import") }}
+	html := render(t, DocList(p))
+	mustContain(t, html, "gj-doclist-folder-pack", "As .opendoc", "gj-doclist-import-pack", "Import .opendoc")
+	for _, h := range findHandlers(DocList(p), "click") {
+		h(xango.NewEvent("click", nil, false, nil, nil))
+	}
+	if len(got) < 2 {
+		t.Errorf("the buttons act: %v", got)
+	}
+	mustNotContain(t, render(t, DocList(DocListProps{Pending: &Pending{Inline: true}})), "gj-doclist-import-pack")
+}

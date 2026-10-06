@@ -560,3 +560,53 @@ func TestOpenDownloadAsksWhetherToKeepTheHistory(t *testing.T) {
 		t.Error("cancel closes the dialog and downloads nothing")
 	}
 }
+
+func TestSessionPackDownloadAndImport(t *testing.T) {
+	ctx := context.Background()
+	s, _, _ := newSession(t)
+	var file string
+	var data []byte
+	s.Deliver = func(name, _ string, d []byte) { file, data = name, d }
+	f, _ := s.Saver.CreateFolder(ctx, s.targetName(), "", "Work")
+	s.SetName("report")
+	if err := s.Save(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MoveDocs(ctx, []string{s.ID()}, f.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DownloadPack(ctx, f.ID); err != nil {
+		t.Fatal(err)
+	}
+	if file != "Work.opendoc" || len(data) < 100 || !strings.Contains(s.Props().Status, "a pack of 1 documents") {
+		t.Fatalf("%q %d %q", file, len(data), s.Props().Status)
+	}
+	other, _, _ := newSession(t)
+	if err := other.ImportPackData(ctx, "Work.opendoc", data); err != nil {
+		t.Fatal(err)
+	}
+	if st := other.Props().Status; !strings.Contains(st, "1 documents and 1 folders imported") {
+		t.Fatalf("%q", st)
+	}
+	if err := other.ImportPackData(ctx, "Work.opendoc", data); err != nil {
+		t.Fatal(err)
+	}
+	if st := other.Props().Status; !strings.Contains(st, "0 documents") || !strings.Contains(st, "1 already here") {
+		t.Fatalf("a second import skips: %q", st)
+	}
+	if err := other.ImportPackData(ctx, "bad.opendoc", data[:len(data)/2]); err == nil {
+		t.Error("a cut pack")
+	}
+	// The buttons: the list offers them only when the host can deliver and pick.
+	p := s.Docs()
+	if p.DownloadPack == nil || p.ImportPack != nil {
+		t.Error("download needs Deliver, import needs Pick")
+	}
+	s.Pick = func(string, func(string, []byte, error)) {}
+	if s.Docs().ImportPack == nil {
+		t.Error("Pick turns the import button on")
+	}
+}
