@@ -189,31 +189,82 @@ Threat model, store write access only (no owner key):
 - **Cannot** add themselves, or anyone, as a recipient of future saves: the record they write does
   not verify, and saves fail until the owner repairs it.
 - **Cannot** edit a signed list to drop a recipient or change a key.
-- **Can** delete a record (the document then reads as shared with no one besides the owner and, at
-  the confidential level, as server level: its later saves are wrapped for the server keyring).
-  Detecting this needs owner-held state (a signed index of which documents have records); not
-  built. `Sharing` keeps a record rather than deleting when the last key goes, and
-  `SetProtection` never deletes one, but a reader that has seen nothing before cannot tell a
-  deleted record from a document that never had one.
-- **Can** put back an older validly signed record (a replay: for example one that still lists a
-  person the owner removed, or one from before the document was made confidential, whose
-  `protection` is empty), and future saves then follow it. A signature cannot tell it from the
-  current record. What is done about it, in layers, none absolute:
-  1. `Saver.Save` of a document its catalog says is confidential calls `Saver.Rekey` (e2ee)
-     first, with one record read when settled: a record that says less is re-signed to e2ee and
-     the files re-keyed before a byte is written. The same call also covers a new confidential
-     document, and a document made confidential before this was in place. Files written by
-     someone else between the replay and the next save are not covered, and the replayed
-     recipient list itself is kept (it is re-signed with the old list).
-  2. `StoreKeyring.SeqFloor` / `Sharing.SeqFloor` (optional; `MemorySeqFloor` is the in-memory
-     one): the highest `seq` seen per document. A record below it is refused
-     (`ErrStaleRecord`), and so is a missing record where one was seen. It must be kept where
-     store writers cannot write (the client's memory or device storage); a fresh client has no
-     floor and a replay before its first read is not detected. A floor that is ahead of a
-     record the owner must restore needs a deliberate reset by the owner's client.
-  So a store writer cannot forge a level or a list, but is not stopped from replaying or deleting
-  a record where no floor is known; the saver's re-assertion limits the effect to the window
-  before the next save of the document by an owner client.
+- **Can** delete a record, or put back an older validly signed one (a replay: for example one that
+  still lists a person the owner removed, or one from before the document was made confidential,
+  whose `protection` is empty). A signature cannot tell either from the current record, and the
+  keyring on its own would then wrap later saves for the server (a deleted or replayed
+  server-level record) or for a removed person. What stops it, in layers (the first needs no state on
+  the client):
+  1. **The level and the record's seq are inside the encrypted frame.** Every file is framed
+     inside the encryption (the AEAD authenticates it, so only a holder of a recipient key can write
+     one): frame v2 is `GJE\x02`, the stored id, a level byte (server / e2ee), the `seq` of the signed
+     record the file was sealed under, and a hash of that record's recipient list, then the data.
+     The adapter (`encrypt.Adapter`, with a `Binder` keyring: `StoreKeyring` and
+     `ConfidentialKeyring`) cross-checks a file with the record read for the same operation, with
+     `Fs`/`Fl` the seq and level in the file and `Rs`/`Rl`/`Rp` the record's seq, level and pending flag:
+     - **no record** but the file says `Fs > 0` or e2ee: the record was deleted: `ErrDowngrade`;
+     - `Fs > Rs`: the record is older than one the file was sealed under, a replay: `ErrDowngrade`;
+     - `Fs == Rs`: level and recipient hash must agree, else `ErrDowngrade`;
+     - `Fs < Rs` is normal (the record's seq only rises, and clearing `pending` raises it again after
+       every file was sealed), except on **Load**, where data would be returned under the wrong
+       level: a file wrapped at a lower level than the record's with `Rp` false (an old server-level
+       ciphertext put back into an e2ee document) is `ErrDowngrade`. While `Rp` is set the files the
+       re-key has not reached are exactly such files, so it is tolerated: this is how a switch cut
+       short, and the saves and loads in its window, never read as a downgrade. A file wrapped
+       above the record's level (people only, in a document the record calls server) is the safe
+       direction and accepted.
+     Where it runs: `Adapter.Save` and `SaveIf` read the document's newest stored file (its
+     generations `<ID>~...`, or a confidential folder's `folder-secret/<ID>`; one prefix listing and
+     one read of that file, whose first chunk is all that is decrypted) and check it against the record
+     the recipients are about to come from **before sealing**: a deleted, replayed or older record
+     is `ErrDowngrade` and **nothing is written**. `Load` checks the file it returns (one extra
+     record read). Every re-key (`Rekey`, `RekeyDocument`, `RekeyAll`, `SetProtection`, `Repair`) checks
+     each file as it opens it, so a re-key never seals the document under a replayed or missing record;
+     and `Sharing` refuses to change a record (`Add`, `Remove`, `SetProtection`, the clearing of
+     `pending`) that is missing or older than its files say, so the owner's own client never signs over
+     a replay. `SetProtection` order is unchanged and is what makes the rules above hold: the record is
+     written first (seq N+1, pending), then the re-key writes frames at N+1, then `pending` is cleared
+     (N+2); a retry after a failure at any file finds the record pending and finishes. The message
+     says which case it was (deleted, older, wrong level).
+  2. **The owner-signed index** (`keys:index`, `encrypt.IndexKey`): `{seq, docs: {id: {level, seq}}}`,
+     signed by the owner signer under its own context, listing the end-to-end documents and folders and
+     the record seq when each was switched; `SetProtection` writes it after the record (and again on
+     a retry; removing the entry when a document goes back to server). `Sharing.VerifyIndex` compares it
+     with the records of every document it lists, **including ones never opened on this client**: a
+     missing record, one that does not verify, an older one, or one that disagrees at the same seq is a
+     finding (`ErrDowngrade`), and when a `SeqFloor` is set it is raised for every listed document, so a
+     fresh client has a floor for the documents that matter after one call (call it after sign-in). It
+     also covers files still in frame v1, which carry no level.
+  3. **`SeqFloor`** (optional, client state): the highest `seq` seen per document and for the index. A
+     record below it is refused (`ErrStaleRecord`), and so is a missing record where one was seen.
+     `MemorySeqFloor` (process lifetime), `FileSeqFloor` (a JSON file for a server or CLI, written
+     atomically, mode 0600, errors reported) and `LocalStorageSeqFloor` (the browser, js/wasm build,
+     one `localStorage` entry per document under a per-account prefix; it falls back to memory when
+     storage is blocked or full, `Err()` says so; every access runs inside a JavaScript try block,
+     because a thrown `localStorage` getter would otherwise end the Go program). Keep a floor where
+     store writers cannot write.
+  4. `Saver.Save` of a document its catalog says is confidential calls `Saver.Rekey` (e2ee) first,
+     which asserts the level on every save of a document whose files are still frame v1.
+  **Frame v1 and the upgrade.** Files written before frame v2 have no level or seq; they are read as
+  before (no check), and the first `Save` or re-key of a document writes v2 (`Sharing.Repair(doc)`
+  upgrades all of its files at once). Frame v1 cannot detect a downgrade: the first save after upgrading
+  pins the level, and a record deleted *before* that first save is seen by layers 2 and 3 but not by the
+  frame. Older builds cannot read v2 files.
+  **When the record was restored on purpose** (or after an attack, to carry on): `Sharing.Recover(doc,
+  level, sharedKeys)` writes a new signed record with exactly the level and shared keys the owner
+  gives (the replayed record's list is not carried over, so a person the owner had removed does not come
+  back), numbered above every seq any file was sealed under and above the floor, then re-keys the
+  files as `SetProtection` does and updates the index. It needs the owner's signer.
+  **What cannot be defended.** A store writer who can replace *all* of the store consistently, files,
+  records and index together, with an older snapshot of it, hands every client an older but internally
+  consistent past: the frames, the records and the index all agree, so nothing inside the store can
+  call it a downgrade. That is a rollback of data (the store can always return an older version of what
+  it held; the saver's checksums notice a file that does not match its catalog, not a catalog that was
+  rolled back with it), not a lowering of protection: a document that was e2ee in the snapshot is e2ee
+  in it. A client-side floor (layer 3) that outlives the rollback (`FileSeqFloor`,
+  `LocalStorageSeqFloor`) refuses records older than the client has seen, and so does notice it on a
+  client that has been here before; a fresh client cannot. Whoever holds an owner key can of course
+  change lists, and what someone already opened or copied cannot be taken back.
 - **Can** still delete or replace files (availability), and read the catalog and the recipient
   lists: fingerprints, labels and public keys are not secret.
 Someone who holds an owner key (it opens the documents anyway) can change lists.
@@ -229,7 +280,7 @@ cannot be opened.
 
 1. **Done:** `docstore/encrypt` (`encrypt.Adapter`, `Keyring`, `Static`) using `filippo.io/age`
    and `agessh`: SSH (ed25519, RSA), age and recovery-key recipients, `Rekey` and `RekeyAll`,
-   strict reads by default (a file without the age header is refused; `AllowPlaintext` is the opt-out for migrating a clear store), ciphertext bound to its id by a framed header (`ErrWrongDocument`), `SaveIf` on encrypted ids compared against the plaintext, serialized and conditional re-keys that continue past failures, catalogs / folder records / ACL records / fonts left readable
+   strict reads by default (a file without the age header is refused; `AllowPlaintext` is the opt-out for migrating a clear store), ciphertext bound to its id, and from frame v2 to its protection level and record seq, by a framed header inside the encryption (`ErrWrongDocument`, `ErrDowngrade`; C.5), `SaveIf` on encrypted ids compared against the plaintext, serialized and conditional re-keys that continue past failures, catalogs / folder records / ACL records / fonts left readable
    (`DefaultSkip`), conditional catalog writes and the store lock passed through. Tests: round
    trip, wrong key, tampered ciphertext, sharing and re-key on revoke, a recovery key, bad keys,
    and the whole saver (folders, versions, `Verify`) on an encrypted store. It is its own
@@ -383,7 +434,8 @@ cannot be opened.
       document's level, read from a signed `protection` field in the `keys:<ID>` record (C.5; the
       same signature and fail-closed rules: a store writer cannot forge it, and an unsigned or
       altered record fails the save instead of falling back to the server level; replaying an older
-      signed record or deleting it is not prevented by the signature, see C.5 for what is done). A confidential
+      signed record or deleting it is not prevented by the signature, but is caught from inside the
+      files, see C.5 and 5.7). A confidential
       document's files are wrapped **only** for people's keys (`People`: the owner's keys and the
       signed recipient list); `AtRest` (C.1) is never consulted for them, and `ServerRecipients`
       are removed from the list even if a deployment put the server key among the owners, an age
@@ -409,11 +461,11 @@ cannot be opened.
       if the document turns out confidential only inside the catalog lock (a concurrent delete or
       switch) the save starts over re-keyed, never writing it first.
       A document with `Saver.Rekey` set is therefore never left wrapped for the server key once
-      `SetProtection` has returned nil. Remaining weakness: deleting a document's `keys:` record
-      or replaying an older one (a store writer can) makes later saves server level until the next
-      save of that document by an owner client re-asserts e2ee (or at once, with a `SeqFloor`
-      that has seen the newer record, which refuses it); a signed index of documents with records
-      (C.5) would close the deletion case on a fresh client.
+      `SetProtection` has returned nil. A store writer who deletes a document's `keys:` record or
+      replays an older one no longer makes later saves server level: the files themselves prove the
+      level and seq the record had (5.7), `Save`, `Load` and the re-keys report `ErrDowngrade` and
+      write nothing, with no client state; the signed index and a persistent `SeqFloor` are the
+      belt and braces. Left: only the whole-store rollback described in C.5.
 
    Without a `Saver.Rekey` hook, `SetProtection(E2EE)` still does not erase the past: the previous
    generation and the version snapshots keep the wrapping they had until the store's keyring
@@ -480,6 +532,38 @@ cannot be opened.
         (`docstore/encrypt/confidential_folders_test.go`): no real name in the store, a stranger's rebuild,
         passkey PRF alone and recovery key alone, rename, move, delete, breadcrumbs, no leak in the lists.
 
+   7. **Downgrade and deleted-record detection from inside the envelope (done).** The design and the rules are
+      in C.5; what was built, in `docstore/encrypt` unless noted:
+      - `encrypt.go`: frame v2 (`GJE\x02`, id, level, record seq, recipient hash), `Binding`, the `Binder`
+        interface (`Bind`, `Binding`: one read of the record gives both the recipients and what the frame
+        carries), `crossCheck`, `ErrDowngrade` (= `docstore.ErrDowngrade`), checks in `Save`, `SaveIf`, `Load` and
+        every re-key's plan. `StoreKeyring` and `ConfidentialKeyring` are Binders; `Static` is not, and writes
+        frames with a zero binding that are never checked.
+      - `share.go`/`confidential.go`: `Sharing` checks the record against the files before it signs
+        (`mutate`), `SetProtection` refuses "settled at server" for a document whose files say a record
+        existed, and updates the index.
+      - `index.go`: the owner-signed `keys:index`, `Sharing.Index`, `Sharing.VerifyIndex`, and
+        `Sharing.Recover` (the owner's way forward, also for a confidential folder).
+      - `floor.go`, `floor_js.go`: `FileSeqFloor`, `StorageSeqFloor` over a `KV`, `LocalStorageSeqFloor`.
+      - `saver`: `VerifyReport.Downgraded`; Save, SetProtection, Reveal and the folder calls return the
+        error wrapped (nothing is written or re-asserted over it); a catalog rebuild fails on a
+        downgraded document instead of listing it as a server one.
+      - Behaviour changes (also in the roadmap's upgrade notes): a client with a Binder keyring now reads
+        the record on `Load` (so it needs `OwnerSigners` to read, as it did to save); `Save` costs one prefix
+        listing and one read of the document's newest file more; frame v2 is not readable by older builds.
+      - Tests with the real adapter and saver (`downgrade_test.go`, `floor_test.go`, `floor_js_test.go`;
+        each fails when its check is taken out): replayed record then save/load/re-key/change refused with
+        the store unchanged; deleted record at e2ee and at server-shared; legitimate switches both ways
+        cut short at a file and retried, with saves and loads in the window; a server-level file put
+        back into an e2ee document; v1 files read, upgraded by the first save or `Repair`, and the v1
+        limit stated; two clients, the second one fresh; the index finding deletions and replays of
+        documents never opened, and its own signature, deletion and replay; `Recover` after a replay and a
+        deletion; folder records; `Verify` and rebuild; file and `localStorage` floors (the wasm test runs
+        under node: `GOOS=js GOARCH=wasm go test -exec <wrapper> -run LocalStorage ./docstore/encrypt`,
+        where the wrapper clears the environment before calling `$(go env GOROOT)/lib/wasm/go_js_wasm_exec`
+        if node reports "total length of command line and environment variables exceeds limit"); and a race
+        test of saves, versions and loads against repeated switches that must never see `ErrDowngrade`.
+
    *Left:*
    1. The showcase wiring and the key management UX (where the owner's key lives, the "make
       confidential" switch, the recovery key shown once, the lock mark in the document list).
@@ -488,7 +572,7 @@ cannot be opened.
       name could not be sealed with the documents left out.
    3. What someone already opened or copied before a switch cannot be taken back (as with any
       re-key); with the hook the stored copies themselves are re-keyed. A store writer who
-      deleted the `keys:` record first is the weakness named in item 5.
+      deleted the `keys:` record first is caught from inside the files (5.7).
    4. Key management for `Seal`/`Open` in the pack UI ("As .opendoc", "Import .opendoc"): until
       then `Session.DownloadPack` leaves confidential documents out and says how many, and
       `Session.ImportPackData` reports the ones it could not open.

@@ -28,17 +28,26 @@ import (
 // the document is encrypted to, so it is never trusted unsigned: StoreKeyring.Recipients
 // verifies it against the owners' signing keys and fails closed. A person who can only
 // write the store cannot add themselves as a recipient, or change the list, without
-// being refused. What the signature does not stop is in docs/encryption-and-passkeys.md
-// C.5: a store writer can still delete a record, or put back an older validly signed one
-// (a replay), which no signature check can tell from the current one. The defences against a
-// replay are the optional SeqFloor (a record older than the highest seen is refused) and the
-// saver's re-assertion of a confidential document's level on each save (saver.Saver.Rekey).
+// being refused. What the signature does not stop (C.5): a store writer can still delete a
+// record, or put back an older validly signed one (a replay), which no signature check can
+// tell from the current one. Three layers answer that, none needing the client to remember
+// anything except the last:
+//
+//   - the frame inside every encrypted file carries the level and the record's seq (Binding),
+//     so Save, Load and the re-keys cross-check the file with the record and report
+//     ErrDowngrade for a record that is missing or older than the file was sealed under;
+//   - the owner-signed index (IndexKey, Sharing.VerifyIndex) lists the end-to-end documents,
+//     so a deleted or replaced record is found even for a document never opened here;
+//   - the optional SeqFloor (MemorySeqFloor, FileSeqFloor, StorageSeqFloor) refuses a record
+//     older than the highest seen on this client, and the saver re-asserts a confidential
+//     document's level on each save (saver.Saver.Rekey).
 const KeysPrefix = "keys:"
 
 // ErrStaleRecord is returned when a document's record is older than the highest sequence
 // number the SeqFloor has seen for it (an older signed record was put back), or is missing
 // where one was seen. It is not used, because it decides who a document is encrypted to and
-// at what level.
+// at what level. ErrDowngrade is the same finding made from the files themselves, with no
+// client state.
 var ErrStaleRecord = errors.New("encrypt: the recipient list is older than one already seen (a replayed record)")
 
 // SeqFloor remembers, per document, the highest record sequence number seen, so that an older
@@ -175,6 +184,32 @@ type sharedRecord struct {
 	Recipients []sharedEntry `json:"recipients"`
 }
 
+// binding is the Binding the record gives its document's files: level, seq, pending, and a
+// hash of the recipient list (the type and key of each entry, sorted: the entries' own order
+// and labels do not matter). exists says the record was found.
+func (r sharedRecord) binding(exists bool) Binding {
+	b := Binding{Exists: exists, Seq: r.Seq, Pending: r.Pending}
+	if r.Protection == ProtectionE2EE {
+		b.Level = ProtectionE2EE
+	}
+	if !exists {
+		return Binding{}
+	}
+	lines := make([]string, 0, len(r.Recipients))
+	for _, e := range r.Recipients {
+		lines = append(lines, e.Type+" "+e.Key)
+	}
+	sort.Strings(lines)
+	h := sha256.New()
+	h.Write([]byte("gojiberry/frame-recipients/v1\n"))
+	for _, l := range lines {
+		h.Write([]byte(l))
+		h.Write([]byte{'\n'})
+	}
+	copy(b.Hash[:], h.Sum(nil))
+	return b
+}
+
 // signedRecord is what is stored under keys:<ID>.
 type signedRecord struct {
 	Payload []byte `json:"payload"`
@@ -304,23 +339,43 @@ type StoreKeyring struct {
 // Recipients implements Keyring. A record that is missing its signature, or has a wrong
 // one, is an error, never a shorter or longer list.
 func (k StoreKeyring) Recipients(ctx context.Context, id string) ([]age.Recipient, error) {
+	rs, _, err := k.Bind(ctx, id)
+	return rs, err
+}
+
+// Bind implements Binder: the recipients (the owners' keys and the signed list's) and the
+// record's Binding, from one read.
+func (k StoreKeyring) Bind(ctx context.Context, id string) ([]age.Recipient, Binding, error) {
 	out := append([]age.Recipient(nil), k.Owners...)
 	doc := DocID(id)
 	if doc == "" {
-		return out, nil
+		return out, Binding{}, nil
 	}
-	rec, _, err := loadRecord(ctx, k.Store, doc, k.OwnerSigners, k.SeqFloor)
+	rec, digest, err := loadRecord(ctx, k.Store, doc, k.OwnerSigners, k.SeqFloor)
 	if err != nil {
-		return nil, err
+		return nil, Binding{}, err
 	}
 	for _, e := range rec.Recipients {
 		r, err := parseShared(e)
 		if err != nil {
-			return nil, fmt.Errorf("encrypt: a recipient of %s cannot be read: %w", doc, err)
+			return nil, Binding{}, fmt.Errorf("encrypt: a recipient of %s cannot be read: %w", doc, err)
 		}
 		out = append(out, r.Key)
 	}
-	return out, nil
+	return out, rec.binding(digest != ""), nil
+}
+
+// Binding implements Binder.
+func (k StoreKeyring) Binding(ctx context.Context, id string) (Binding, error) {
+	doc := DocID(id)
+	if doc == "" {
+		return Binding{}, nil
+	}
+	rec, digest, err := loadRecord(ctx, k.Store, doc, k.OwnerSigners, k.SeqFloor)
+	if err != nil {
+		return Binding{}, err
+	}
+	return rec.binding(digest != ""), nil
 }
 
 // Identities implements Keyring.
@@ -335,9 +390,13 @@ func (k StoreKeyring) Identities(context.Context, string) ([]age.Identity, error
 // docstore.ConditionalAdapter (SaveIf) a change made by someone else in between is noticed
 // and the change is made again; on a Store without it, two changes to one document's list at
 // the same moment can lose one of them, so serialize them (one owner client, or a Store
-// Lock) there. A custom Adapter.Skip must keep the "keys:" prefix (KeysPrefix) readable, as
-// DefaultSkip does: the records are plain signed lists, and encrypting them would make the
-// keyring unable to read them.
+// Lock) there. A custom Adapter.Skip must keep the "keys:" prefix (KeysPrefix, which includes
+// IndexKey) readable, as DefaultSkip does: the records are plain signed lists, and encrypting
+// them would make the keyring unable to read them.
+//
+// The Adapter must be the encrypting adapter over Store: a change to a list first checks the
+// record against the document's stored files (ErrDowngrade) so it never signs over a replayed
+// or deleted record, and re-keys through it.
 type Sharing struct {
 	Store        docstore.Adapter
 	Adapter      *Adapter
@@ -359,23 +418,54 @@ func (s *Sharing) verifiers() []ed25519.PublicKey {
 // mutateAttempts is how many times a change to a list is redone when it was changed meanwhile.
 const mutateAttempts = 5
 
+// mutateOpts changes how mutate reads and numbers a record.
+type mutateOpts struct {
+	// recover is Recover's: the record is read without the floor and without the check against
+	// the files' frames (it may be the replayed or missing one being replaced), and the new seq
+	// is above minSeq.
+	recover bool
+	minSeq  uint64
+}
+
 // mutate reads and verifies the list, lets fn change it, and writes it back signed, only if it
 // is still what was read (on a store that writes conditionally). It returns the list as it is
 // after fn, whether or not fn changed it.
+//
+// Before anything is written the record is cross-checked with what the document's newest
+// stored file says it was sealed under (Adapter.checkDocument): a record that is missing, or
+// older than that file, is ErrDowngrade, never signed over (signing the replayed record again
+// would make the replay the truth). Sharing.Recover is the way past it.
 func (s *Sharing) mutate(ctx context.Context, docID string, fn func(*sharedRecord) (changed bool, err error)) (sharedRecord, error) {
+	return s.mutateWith(ctx, docID, mutateOpts{}, fn)
+}
+
+func (s *Sharing) mutateWith(ctx context.Context, docID string, o mutateOpts, fn func(*sharedRecord) (changed bool, err error)) (sharedRecord, error) {
 	if s.Signer == nil {
 		return sharedRecord{}, ErrNoSigner
 	}
+	floor := s.SeqFloor
+	if o.recover {
+		floor = nil
+	}
 	for range mutateAttempts {
-		rec, digest, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
+		rec, digest, err := loadRecord(ctx, s.Store, docID, s.verifiers(), floor)
 		if err != nil {
 			return rec, err
 		}
+		before := rec.binding(digest != "") // fn changes rec: the check is of the record as read
 		changed, err := fn(&rec)
 		if err != nil || !changed {
 			return rec, err
 		}
+		if !o.recover && s.Adapter != nil {
+			if err := s.Adapter.checkDocumentByID(ctx, docID, before); err != nil {
+				return rec, err
+			}
+		}
 		rec.V, rec.Doc = 1, docID
+		if rec.Seq < o.minSeq {
+			rec.Seq = o.minSeq
+		}
 		rec.Seq++
 		payload, err := json.Marshal(rec)
 		if err != nil {
@@ -578,7 +668,7 @@ func (s *Sharing) Usage(ctx context.Context, fingerprint string) ([]string, erro
 	var errs []error
 	for _, m := range metas {
 		doc, ok := strings.CutPrefix(m.ID, KeysPrefix)
-		if !ok {
+		if !ok || m.ID == IndexKey {
 			continue
 		}
 		rec, _, err := loadRecord(ctx, s.Store, doc, s.verifiers(), s.SeqFloor)

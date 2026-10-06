@@ -107,6 +107,13 @@ func (s *Saver) Reveal(ctx context.Context, target, id string) (name string, tag
 //     people, and the re-key to the server's keys runs last. If it fails, the document is
 //     server level in the catalog but still wrapped for people only: nothing is exposed.
 //
+// A document whose protection was lowered behind the owner's back (its signed recipient record
+// deleted or an older one put back, which the encrypting adapter proves from inside the files:
+// docstore.ErrDowngrade) is neither switched nor saved: SetProtection and Save return that error,
+// wrapped, with nothing written, in either direction. The switch's own order below never
+// looks like one to the adapter: the record is written first and left pending until every file
+// was re-keyed, so a retry after a failure is always safe.
+//
 // SetProtection is idempotent and the way to retry: called again with the same level it runs
 // the hook again even if the catalog already says so (the hook does nothing when the level is
 // settled), which finishes a re-key that was cut short. Without Rekey, the store's keyring

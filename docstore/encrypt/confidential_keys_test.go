@@ -471,6 +471,10 @@ func (w *world) rawRecord(t *testing.T, id string) []byte {
 	return d.Data
 }
 
+// TestSaveOfAConfidentialDocumentHealsAReplayedServerLevelRecord is the saver's re-assertion,
+// the layer that is left for a document whose files are still in the v1 frame (written before
+// the frame carried the level): nothing in them proves the record was newer, so the replay
+// reads as the record and the next save asserts e2ee again and pins the level in a v2 frame.
 func TestSaveOfAConfidentialDocumentHealsAReplayedServerLevelRecord(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -482,6 +486,7 @@ func TestSaveOfAConfidentialDocumentHealsAReplayedServerLevelRecord(t *testing.T
 	if err := w.saver.SetProtection(ctx, "m", id, saver.ProtectionE2EE); err != nil {
 		t.Fatal(err)
 	}
+	w.legacyV1(t, id)
 	w.replay(t, id, old) // a store writer puts the older, validly signed record back
 	if c, _ := w.ring.IsConfidential(ctx, id); c {
 		t.Fatal("setup: the replay should read as server level")
@@ -498,6 +503,11 @@ func TestSaveOfAConfidentialDocumentHealsAReplayedServerLevelRecord(t *testing.T
 		t.Errorf("the record was not put back to e2ee: %v %v", c, err)
 	}
 	w.assertOnly(t, id, "after a save over a replay", []age.Identity{w.ana.id, w.bo.id}, []age.Identity{w.server})
+	for _, f := range w.files(t, id) {
+		if v := w.frameVersion(t, f); v != 2 {
+			t.Errorf("%s is still frame v%d after the heal", f, v)
+		}
+	}
 }
 
 func TestSeqFloorRefusesAReplayedRecord(t *testing.T) {
@@ -511,6 +521,10 @@ func TestSeqFloorRefusesAReplayedRecord(t *testing.T) {
 	if err := w.saver.SetProtection(ctx, "m", id, saver.ProtectionE2EE); err != nil {
 		t.Fatal(err)
 	}
+	saved, err := w.saver.Load(ctx, "m", id)
+	if err != nil {
+		t.Fatal(err)
+	}
 	w.replay(t, id, old)
 	if _, err := w.ring.IsConfidential(ctx, id); !errors.Is(err, ErrStaleRecord) {
 		t.Errorf("IsConfidential: %v", err)
@@ -518,8 +532,10 @@ func TestSeqFloorRefusesAReplayedRecord(t *testing.T) {
 	if _, err := w.ring.Recipients(ctx, id+"~aaaaaaaaaaaa.json"); !errors.Is(err, ErrStaleRecord) {
 		t.Errorf("Recipients: %v", err)
 	}
-	d, _ := w.saver.Load(ctx, "m", id)
-	if _, err := w.saver.Save(ctx, "m", docfile.Open, d); !errors.Is(err, ErrStaleRecord) {
+	if _, err := w.saver.Load(ctx, "m", id); !errors.Is(err, ErrStaleRecord) {
+		t.Errorf("Load: %v", err)
+	}
+	if _, err := w.saver.Save(ctx, "m", docfile.Open, saved); !errors.Is(err, ErrStaleRecord) {
 		t.Errorf("Save: %v", err)
 	}
 	// A deleted record where one was seen is refused as well, and no floor means no refusal.

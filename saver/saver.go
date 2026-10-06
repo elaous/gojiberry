@@ -72,6 +72,13 @@ type Saver struct {
 	// calls it before writing a confidential document, to assert its keys. It runs
 	// outside the saver's catalog lock (a re-key takes the store's). Nil means none: the
 	// store's keyring alone decides, and copies written before a switch keep their wrapping.
+	//
+	// An error from the hook that wraps docstore.ErrDowngrade (the encrypting adapter found the
+	// document's signed recipient record deleted or replaced by an older one) is returned by
+	// Save and SetProtection as it is, wrapped: nothing is written, and the saver does not
+	// retry or re-assert over it (that would sign the replay again). Load, Reveal and Verify
+	// report the same finding (VerifyReport.Downgraded); encrypt.Sharing.Recover is the owner's
+	// way forward.
 	Rekey func(ctx context.Context, target, id, protection string) error
 
 	mu sync.Mutex   // one catalog update at a time

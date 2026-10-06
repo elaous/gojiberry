@@ -83,18 +83,25 @@ func normalizeProtection(p string) (string, error) {
 // record say another level or other recipients. A store writer CAN still, because a record
 // is only signed, not bound to a point in time:
 //
-//   - delete the record, which makes the document's later saves server level, and
+//   - delete the record, which would make the document's later saves server level, and
 //   - put back an older validly signed record (a replay), for example one from before the
-//     document was made confidential, which does the same.
+//     document was made confidential, which would do the same.
 //
-// Against both, defence in depth, none of it absolute: (1) the saver, with Saver.Rekey set,
-// re-asserts the level its catalog says on every save of a confidential document, which
-// notices a record that says less (it is re-signed and the files re-keyed), so the damage is
-// limited to files written in between by others; (2) People.SeqFloor, when set and kept out
-// of the store writers' reach, refuses a record older than the highest seen
-// (ErrStaleRecord), and a missing one where one was seen. Without a floor, a reader that
-// has never seen the newer record cannot tell a replay from the truth, and nothing here can
-// tell a deleted record from a document that never had one. SetProtection never deletes one.
+// ConfidentialKeyring is a Binder, so the Adapter writes the level and the record's seq into
+// the frame inside each file's encryption (only holders of a recipient key can write that),
+// and cross-checks the files it reads, replaces or re-keys with the record it is about to use:
+// a record that is missing, or older than a file says it was sealed under, is ErrDowngrade,
+// with nothing written and no data returned, on a client that has never seen the record
+// before. Files still in the older v1 frame carry no level and cannot prove it; the first
+// save or re-key after upgrading writes v2. What remains for the other layers: the saver
+// re-asserts the level its catalog says on every save of a confidential document
+// (Saver.Rekey), the owner-signed index lists the end-to-end documents so a deleted record is
+// found without opening the document (Sharing.VerifyIndex), and People.SeqFloor, when set,
+// refuses a record older than the highest this client saw (ErrStaleRecord) and a missing one
+// where one was seen. What none of it can do is tell a whole-store rollback to an older
+// consistent snapshot (files, records and index together) from the truth: that is a rollback of
+// data, not a downgrade of protection, and only a client-side floor that outlives it notices.
+// SetProtection never deletes a record.
 type ConfidentialKeyring struct {
 	// People is the people's keyring: owner keys, the signed lists, the owner signers.
 	People StoreKeyring
@@ -113,31 +120,58 @@ func (k ConfidentialKeyring) IsConfidential(ctx context.Context, docID string) (
 
 // Recipients implements Keyring.
 func (k ConfidentialKeyring) Recipients(ctx context.Context, id string) ([]age.Recipient, error) {
+	rs, _, err := k.Bind(ctx, id)
+	return rs, err
+}
+
+// Binding implements Binder: the signed record's level, seq, pending flag and recipient hash.
+func (k ConfidentialKeyring) Binding(ctx context.Context, id string) (Binding, error) {
 	doc := DocID(id)
 	if doc == "" {
-		return k.AtRest.Recipients(ctx, id)
+		return Binding{}, nil
 	}
-	rec, _, err := loadRecord(ctx, k.People.Store, doc, k.People.OwnerSigners, k.People.SeqFloor)
+	rec, digest, err := loadRecord(ctx, k.People.Store, doc, k.People.OwnerSigners, k.People.SeqFloor)
 	if err != nil {
-		return nil, err
+		return Binding{}, err
 	}
+	return rec.binding(digest != ""), nil
+}
+
+// Bind implements Binder: Recipients, and the Binding of the record they were chosen by, from
+// one read of it.
+func (k ConfidentialKeyring) Bind(ctx context.Context, id string) ([]age.Recipient, Binding, error) {
+	doc := DocID(id)
+	if doc == "" {
+		rs, err := k.AtRest.Recipients(ctx, id)
+		return rs, Binding{}, err
+	}
+	rec, digest, err := loadRecord(ctx, k.People.Store, doc, k.People.OwnerSigners, k.People.SeqFloor)
+	if err != nil {
+		return nil, Binding{}, err
+	}
+	b := rec.binding(digest != "")
 	if rec.Protection != ProtectionE2EE {
-		return k.AtRest.Recipients(ctx, id)
+		rs, err := k.AtRest.Recipients(ctx, id)
+		return rs, b, err
 	}
-	all, err := k.People.Recipients(ctx, id) // verifies the record again; people only
-	if err != nil {
-		return nil, err
+	all := append([]age.Recipient(nil), k.People.Owners...)
+	for _, e := range rec.Recipients {
+		r, err := parseShared(e)
+		if err != nil {
+			return nil, Binding{}, fmt.Errorf("encrypt: a recipient of %s cannot be read: %w", doc, err)
+		}
+		all = append(all, r.Key)
 	}
 	server, err := k.serverIDs()
 	if err != nil {
-		return nil, err
+		return nil, Binding{}, err
 	}
 	out := all[:0:0]
 	for _, r := range all {
 		if len(server) > 0 {
 			rid, err := recipientID(r)
 			if err != nil {
-				return nil, err // fail closed: it cannot be told from a server key
+				return nil, Binding{}, err // fail closed: it cannot be told from a server key
 			}
 			if server[rid] {
 				continue
@@ -146,9 +180,9 @@ func (k ConfidentialKeyring) Recipients(ctx context.Context, id string) ([]age.R
 		out = append(out, r)
 	}
 	if len(out) == 0 {
-		return nil, ErrNoRecipients
+		return nil, Binding{}, ErrNoRecipients
 	}
-	return out, nil
+	return out, b, nil
 }
 
 func (k ConfidentialKeyring) serverIDs() (map[string]bool, error) {
@@ -241,6 +275,19 @@ func (e *RekeyError) UnreadableFiles() []string { return e.Unreadable }
 // finishes what is left. A failure is a *RekeyError naming the files still wrapped to the old
 // set, and the ones that could not be opened. Changing the level (or clearing pending) needs
 // the Signer.
+//
+// The frame check (ErrDowngrade) and this order. Each file is sealed with the record's seq in
+// its frame. The record is written first (seq N+1, pending), so a file the re-key has not
+// reached yet has seq N, which is below the record's: that is never a downgrade (a record's
+// seq only rises, and clearing pending raises it again after every file was sealed under
+// N+1), and Load accepts such a file because pending is set (a file wrapped below the
+// record's level with no switch in progress is refused, see crossCheck). A save in the window
+// seals under N+1 and replaces the old file. A failure at any file leaves pending set, so
+// every state in between reads as in flight, never as a downgrade, and the same call again
+// finishes. A record that is missing, or older than a file's seq, is refused before anything is
+// signed or written (ErrDowngrade; Recover is the owner's way forward). The owner-signed index
+// follows the record: listed (with the record's seq) for e2ee, removed for server, written
+// after the record and repeated on a retry.
 func (s *Sharing) SetProtection(ctx context.Context, docID, protection string) (int, error) {
 	want, err := normalizeProtection(protection)
 	if err != nil {
@@ -249,11 +296,18 @@ func (s *Sharing) SetProtection(ctx context.Context, docID, protection string) (
 	if !docfile.ValidID(docID) {
 		return 0, errors.New("encrypt: not a document ID")
 	}
-	cur, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
+	cur, digest, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
 	if err != nil {
 		return 0, err
 	}
 	if cur.Protection == want && !cur.Pending {
+		if digest == "" && s.Adapter != nil {
+			// No record to read, so "settled at server level" is only believed if no file
+			// of the document says a record once existed (it may have been deleted).
+			if err := s.Adapter.checkDocumentByID(ctx, docID, Binding{}); err != nil {
+				return 0, err
+			}
+		}
 		return 0, nil // settled: read only
 	}
 	rec, err := s.mutate(ctx, docID, func(rec *sharedRecord) (bool, error) {
@@ -268,6 +322,10 @@ func (s *Sharing) SetProtection(ctx context.Context, docID, protection string) (
 	}
 	if rec.Protection == want && !rec.Pending {
 		return 0, nil
+	}
+	// The owner-signed index follows the record (and is repeated on a retry: it is idempotent).
+	if err := s.setIndex(ctx, docID, want, rec.Seq); err != nil {
+		return 0, err
 	}
 	n, stale, unreadable, err := s.finishFiles(ctx, docID)
 	if err != nil && len(stale) > 0 {

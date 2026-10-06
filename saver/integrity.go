@@ -275,6 +275,11 @@ type VerifyReport struct {
 	// Locked counts documents that no key here opens (end-to-end documents of someone
 	// else's, or a missing key): they cannot be checked and are left exactly as they are.
 	Locked int
+	// Downgraded lists the IDs of documents whose file proves their protection was lowered
+	// behind the owner's back (an encrypting adapter reported docstore.ErrDowngrade: the signed
+	// record of who the document is encrypted to was deleted or an older one put back). They
+	// are not read, restored or touched; the owner decides (encrypt.Sharing.Recover).
+	Downgraded []string
 }
 
 // Verify reads every document of the target and checks it against the checksum the
@@ -318,6 +323,10 @@ func (s *Saver) Verify(ctx context.Context, target string) (VerifyReport, error)
 		doc, data, fromPrev, err := s.readEntry(ctx, t, it.e)
 		if errors.Is(err, docstore.ErrLocked) {
 			rep.Locked++
+			continue
+		}
+		if errors.Is(err, docstore.ErrDowngrade) {
+			rep.Downgraded = append(rep.Downgraded, it.id)
 			continue
 		}
 		rep.Checked++
