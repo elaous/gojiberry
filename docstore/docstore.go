@@ -29,11 +29,11 @@ var ErrNotFound = errors.New("docstore: document not found")
 // ErrStorageFull is wrapped in the error of a Save that failed because the store has no
 // room (a browser's quota, a full disk). A caller may free what it can do without and try
 // again.
+var ErrStorageFull = errors.New("docstore: storage full")
+
 // ErrPermission is returned (wrapped) when the store refuses access the person may be able to
 // give again, such as a folder whose browser permission has lapsed; test with errors.Is.
 var ErrPermission = errors.New("docstore: permission needed")
-
-var ErrStorageFull = errors.New("docstore: storage full")
 
 // Document is one stored unit: an opaque payload (OnDesign's own
 // marshaled document JSON, from the client's point of view) keyed by

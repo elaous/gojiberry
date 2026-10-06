@@ -98,13 +98,14 @@ func (u *ui) folderLapsed(a *docstore.FileSystemAdapter) {
 	u.folder.mu.Unlock()
 	// Not on the goroutine of the operation that failed, which holds the session's lock.
 	u.saver.Pending.Run(func(ctx context.Context) error {
+		// The folder stops being a target even if switching to the browser fails; the error
+		// is still surfaced.
+		var err error
 		if t, _ := u.saver.Where(); t == "folder" {
-			if err := u.saver.SetTarget(ctx, "browser"); err != nil {
-				return err
-			}
+			err = u.saver.SetTarget(ctx, "browser")
 		}
 		u.saver.Saver.RemoveTarget("folder")
-		return nil
+		return err
 	})
 }
 
@@ -238,17 +239,21 @@ func (u *ui) reconnectFolder() {
 func (u *ui) forgetFolder() {
 	u.folder.bump()
 	u.saver.Pending.Run(func(ctx context.Context) error {
+		// Forgetting goes ahead even if switching to the browser fails; the error is still
+		// surfaced.
+		var setErr error
 		if t, _ := u.saver.Where(); t == "folder" {
-			if err := u.saver.SetTarget(ctx, "browser"); err != nil {
-				return err
-			}
+			setErr = u.saver.SetTarget(ctx, "browser")
 		}
 		u.saver.Saver.RemoveTarget("folder")
 		_ = docstore.ForgetFolder(ctx, folderKey)
 		u.folder.mu.Lock()
 		u.folder.state, u.folder.name, u.folder.adapter = components.FolderNone, "", nil
 		u.folder.mu.Unlock()
-		return u.saver.Refresh(ctx)
+		if err := u.saver.Refresh(ctx); err != nil && setErr == nil {
+			return err
+		}
+		return setErr
 	})
 }
 
