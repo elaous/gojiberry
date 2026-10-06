@@ -164,7 +164,7 @@ var docIcons = map[string]string{
 	"gj-doclist-open": "description", "gj-doclist-duplicate": "content_copy", "gj-doclist-trash": "delete",
 	"gj-doclist-delete": "delete_forever", "gj-doclist-refresh": "refresh", "gj-doclist-check": "fact_check", "gj-doclist-download": "download",
 	"gj-doclist-folder-open": "folder_open", "gj-doclist-folder-delete": "delete_forever",
-	"gj-doclist-folder-download": "download", "gj-doclist-newfolder": "create_new_folder",
+	"gj-doclist-folder-download": "download", "gj-doclist-folder-pack": "folder", "gj-doclist-import-pack": "upload_file", "gj-doclist-newfolder": "create_new_folder",
 	"gj-migrate-pick": "upload_file", "gj-migrate-start": "download",
 }
 
@@ -251,7 +251,11 @@ type DocListProps struct {
 	// a folder's documents together.
 	// OpenDownload, if set, shows the dialog that asks whether to keep the version
 	// history in an opendocs download.
-	OpenDownload    *OpenDownload
+	OpenDownload *OpenDownload
+	// DownloadPack hands over a folder ("" for everything) as one .opendoc pack, and
+	// ImportPack asks for a .opendoc file to bring in. Each shows its button when set.
+	DownloadPack    func(ctx context.Context, id string) error
+	ImportPack      func()
 	Download        func(ctx context.Context, id, format string) error
 	DownloadFolder  DocAction
 	DownloadFormats []DocChoice
@@ -271,6 +275,9 @@ func DocList(p DocListProps) xango.Node {
 	head := []xango.Node{xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(title))}
 	if p.Refresh != nil {
 		head = append(head, docButton("gj-doclist-refresh", tr("docs.refresh", "Refresh"), busy, p.Refresh))
+	}
+	if p.ImportPack != nil {
+		head = append(head, docButton("gj-doclist-import-pack", tr("docs.importPack", "Import .opendoc"), busy, p.ImportPack))
 	}
 	if p.Check != nil {
 		check := p.Check
@@ -637,6 +644,9 @@ func folderRows(p DocListProps, busy bool) []xango.Node {
 		row = append(row, linkButton(p, p.FolderLink, id)...)
 		if p.DownloadFolder != nil {
 			row = append(row, docButton("gj-doclist-folder-download", tr("docs.download", "Download"), busy, actOne(p.Pending, p.DownloadFolder, id)))
+		}
+		if p.DownloadPack != nil {
+			row = append(row, docButton("gj-doclist-folder-pack", tr("docs.downloadPack", "As .opendoc"), busy, actOne(p.Pending, p.DownloadPack, id)))
 		}
 		if p.DeleteFolder != nil {
 			row = append(row, docButton("gj-doclist-folder-delete", tr("docs.deleteFolder", "Delete folder"), busy,
