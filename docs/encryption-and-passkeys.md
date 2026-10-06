@@ -220,10 +220,19 @@ cannot be opened.
 4. **Done (library, browser client, e2e):** a passkey as an encryption recipient through the WebAuthn PRF
    extension. `encrypt.PRFSalt`, `PRFIdentity` (HKDF of the 32 PRF bytes into an age X25519 identity),
    `PRFRecipient` (type `passkey-prf`, the credential ID kept as the `Hint` of which passkey to ask),
-   `CheckRecoverable` (`ErrNeedSecondRecipient` unless a key that is not a passkey is among the recipients;
-   two passkeys are not enough, they can be lost together). Registration asks for PRF
+   `CheckRecoverableOwner(owner, shared)` (`ErrNeedSecondRecipient` unless one of the **owner's** keys is
+   not a passkey: a recovery key must be one the owner controls, not someone else's; two passkeys are not
+   enough, they can be lost together; `CheckRecoverable(keys...)` counts whatever it is given, so prefer
+   the owner form). Known-answer tests pin the derivation (fixed PRF output to the exact
+   `AGE-SECRET-KEY-1...` and `age1...` strings, and the encoding checked against the age library and
+   `crypto/ecdh`), because changing it would lock people out. The secret is the root of the key: callers
+   `clear(secret)` after `PRFIdentity`/`PRFRecipient` (the demo does), and `DeriveKey` zeroes the browser's
+   buffer once copied. The credential ID kept as the `Hint` is readable in the signed recipient list: it
+   shows that a passkey is in use and which, and links documents that share it (leave it empty to avoid
+   that, at the cost of the browser asking which passkey). Registration asks for PRF
    (`WithExtensionPRFSupport`), and `client.DeriveKey` asks a passkey for the bytes (`ErrNoPRF` when the
-   authenticator does not do PRF: passkeys made before this, some security keys and password managers).
+   authenticator does not do PRF: passkeys made before this, some security keys and password managers;
+   `ErrPRFLength` when it answers with the wrong size).
    The e2e derives the same key twice in Chrome. *Left:* the People-tab control that adds "my passkey" as a
-   key, and calling `CheckRecoverable` when a document is made confidential (step 5).
+   key, and calling `CheckRecoverableOwner` when a document is made confidential (step 5).
 5. `.opendoc` encrypted records, and the placeholder catalog entries for confidential items.

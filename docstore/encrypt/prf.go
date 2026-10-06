@@ -28,20 +28,32 @@ var prfInfo = []byte("gojiberry/encrypt/passkey/age-x25519/v1")
 // a lost or reset passkey would lose the document.
 var ErrNeedSecondRecipient = errors.New("encrypt: a passkey cannot be the only key: add a recovery key or an SSH key too")
 
-// PRFIdentity derives the age identity from a passkey's PRF output (32 bytes).
+// PRFIdentity derives the age identity from a passkey's PRF output (32 bytes). The derived key
+// is the secret that opens the documents: the caller owns secret and must clear(secret) once
+// it has the identity (the intermediate seed is cleared here). The identity itself lives as
+// long as the caller keeps it; drop it when the unlocked state ends.
 func PRFIdentity(secret []byte) (*age.X25519Identity, error) {
 	if len(secret) != 32 {
 		return nil, fmt.Errorf("encrypt: a passkey PRF output is 32 bytes, got %d", len(secret))
 	}
 	seed := make([]byte, 32)
+	defer clear(seed)
 	if _, err := hkdf.New(sha256.New, secret, nil, prfInfo).Read(seed); err != nil {
 		return nil, err
 	}
-	return age.ParseX25519Identity(ageSecretKey(seed))
+	text := ageSecretKey(seed)
+	return age.ParseX25519Identity(text)
 }
 
 // PRFRecipient derives the recipient of a passkey from its PRF output. label says whose passkey
 // it is; credentialID (base64url) is kept as the hint of which credential to ask when opening.
+//
+// Privacy: the hint is stored in the document's recipient list, which is readable by whoever
+// can read the store (it is signed, not encrypted). The credential ID is not a secret and
+// cannot sign anything without the authenticator, but it tells an observer that a passkey is
+// in use, which credential, and links the documents that share it: leave credentialID empty to
+// keep it out, at the cost of the browser asking the person to pick the passkey. As with
+// PRFIdentity, the caller must clear(secret) afterwards.
 func PRFRecipient(secret []byte, label, credentialID string) (Recipient, error) {
 	id, err := PRFIdentity(secret)
 	if err != nil {
@@ -58,9 +70,11 @@ func PRFRecipient(secret []byte, label, credentialID string) (Recipient, error) 
 // IsPasskey says whether a recipient is a passkey-derived key.
 func (r Recipient) IsPasskey() bool { return r.Type == TypePasskey }
 
-// CheckRecoverable returns ErrNeedSecondRecipient unless the keys (the owner's and those a
-// document is shared with) include at least one that is not a passkey, so that losing every
-// passkey does not lose the document.
+// CheckRecoverable returns ErrNeedSecondRecipient unless the keys given include at least one
+// that is not a passkey, so that losing every passkey does not lose the document. It counts
+// whatever it is given: if the list includes keys of people a document is shared with, one of
+// theirs satisfies it, though the owner cannot recover with someone else's key (or count on it
+// staying listed). For the owner's own recovery use CheckRecoverableOwner.
 func CheckRecoverable(keys ...Recipient) error {
 	for _, k := range keys {
 		if !k.IsPasskey() {
@@ -70,10 +84,22 @@ func CheckRecoverable(keys ...Recipient) error {
 	return ErrNeedSecondRecipient
 }
 
+// CheckRecoverableOwner is CheckRecoverable for a document with an owner and people it is shared
+// with: only the owner's keys count, because a recovery key must be one the owner controls (a
+// recovery key kept offline, an SSH key), not the key of someone who may be removed or may
+// lose theirs. The shared keys are accepted so a caller can pass both lists, and are not
+// counted. Prefer it to CheckRecoverable.
+func CheckRecoverableOwner(owner, shared []Recipient) error {
+	_ = shared
+	return CheckRecoverable(owner...)
+}
+
 // ageSecretKey encodes 32 bytes as age's secret key text: Bech32, upper case, HRP AGE-SECRET-KEY-.
-func ageSecretKey(b []byte) string {
+func ageSecretKey(b []byte) string { return strings.ToUpper(bech32Encode("age-secret-key-", b)) }
+
+// bech32Encode is Bech32 (BIP 173) of data under the human-readable part hrp, lower case.
+func bech32Encode(hrp string, b []byte) string {
 	const charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
-	hrp := "age-secret-key-"
 	var data []byte
 	acc, bits := 0, 0
 	for _, v := range b {
@@ -117,5 +143,5 @@ func ageSecretKey(b []byte) string {
 	for i := 0; i < 6; i++ {
 		sb.WriteByte(charset[sum>>(5*(5-i))&31])
 	}
-	return strings.ToUpper(sb.String())
+	return sb.String()
 }

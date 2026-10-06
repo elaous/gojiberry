@@ -108,6 +108,7 @@ func main() {
 							return err
 						}
 						r, err := encrypt.PRFRecipient(secret, "", id)
+						clear(secret) // the secret is the root of the key: do not keep it around
 						if err != nil {
 							return err
 						}
