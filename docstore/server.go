@@ -23,8 +23,8 @@ import (
 // Backend selects which registered AdapterFactory BuildAdapter calls
 // ("memory" the zero-dependency default, or "localfs"/"postgres"/
 // "mongo"/"s3"/"minio" -- see each backend's own Config type, e.g.
-// PostgresConfig, for what BackendConfig needs to hold; "minio" is
-// S3Config too, just defaulted for a MinIO endpoint instead of real
+// postgres.Config (docstore/backends), for what BackendConfig needs to hold; "minio" is
+// s3.Config too, just defaulted for a MinIO endpoint instead of real
 // AWS, see s3.go's own doc comment). This package never hardcodes
 // that list itself -- each backend registers its own name via
 // RegisterAdapter, so BuildAdapter/Config never need a code change to

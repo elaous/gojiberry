@@ -1,0 +1,204 @@
+package docfile
+
+import (
+	"errors"
+	"fmt"
+	"math"
+	"reflect"
+	"unicode/utf8"
+
+	"google.golang.org/protobuf/encoding/protowire"
+)
+
+// The protobuf wire format of a Document, written against the model's types. It is the
+// format protobuf's own libraries write (fields in number order, zero values left out,
+// numbers in a list packed), and reads anything they write: lists packed or not, fields it
+// does not know skipped, a field met twice merged.
+
+// marshalWire writes the struct v as a message.
+func marshalWire(m *message, v reflect.Value) []byte {
+	var b []byte
+	for i := range m.fields {
+		f := &m.fields[i]
+		fv := v.Field(f.index)
+		if f.repeated {
+			b = appendList(b, f, fv)
+			continue
+		}
+		if f.kind == kMsg {
+			if f.pointer {
+				if fv.IsNil() {
+					continue
+				}
+				fv = fv.Elem()
+			} else if fv.IsZero() {
+				continue
+			}
+			b = protowire.AppendTag(b, protowire.Number(f.num), protowire.BytesType)
+			b = protowire.AppendBytes(b, marshalWire(f.msg, fv))
+			continue
+		}
+		if fv.IsZero() {
+			continue
+		}
+		b = protowire.AppendTag(b, protowire.Number(f.num), scalarWire(f.kind))
+		b = appendScalar(b, f.kind, fv)
+	}
+	return b
+}
+
+func scalarWire(k kind) protowire.Type {
+	switch k {
+	case kFloat:
+		return protowire.Fixed64Type
+	case kString, kMsg:
+		return protowire.BytesType
+	}
+	return protowire.VarintType
+}
+
+func appendScalar(b []byte, k kind, v reflect.Value) []byte {
+	switch k {
+	case kString:
+		return protowire.AppendString(b, v.String())
+	case kBool:
+		if v.Bool() {
+			return protowire.AppendVarint(b, 1)
+		}
+		return protowire.AppendVarint(b, 0)
+	case kFloat:
+		return protowire.AppendFixed64(b, math.Float64bits(v.Float()))
+	}
+	return protowire.AppendVarint(b, uint64(v.Int()))
+}
+
+func appendList(b []byte, f *field, fv reflect.Value) []byte {
+	n := fv.Len()
+	if n == 0 {
+		return b
+	}
+	switch f.kind {
+	case kMsg:
+		for i := range n {
+			e := fv.Index(i)
+			if e.Kind() == reflect.Pointer {
+				e = e.Elem()
+			}
+			b = protowire.AppendTag(b, protowire.Number(f.num), protowire.BytesType)
+			b = protowire.AppendBytes(b, marshalWire(f.msg, e))
+		}
+	case kString:
+		for i := range n {
+			b = protowire.AppendTag(b, protowire.Number(f.num), protowire.BytesType)
+			b = protowire.AppendString(b, fv.Index(i).String())
+		}
+	default: // numbers and bools are packed
+		var payload []byte
+		for i := range n {
+			payload = appendScalar(payload, f.kind, fv.Index(i))
+		}
+		b = protowire.AppendTag(b, protowire.Number(f.num), protowire.BytesType)
+		b = protowire.AppendBytes(b, payload)
+	}
+	return b
+}
+
+var errWire = errors.New("docfile: malformed protobuf data")
+
+// unmarshalWire reads the message in b into the addressable struct v.
+func unmarshalWire(m *message, b []byte, v reflect.Value) error {
+	for len(b) > 0 {
+		num, typ, n := protowire.ConsumeTag(b)
+		if n < 0 {
+			return fmt.Errorf("%w: %w", errWire, protowire.ParseError(n))
+		}
+		b = b[n:]
+		f := m.byNum[int32(num)]
+		var used int
+		var err error
+		switch {
+		case f == nil:
+			used = protowire.ConsumeFieldValue(num, typ, b)
+		case f.kind == kMsg && typ == protowire.BytesType:
+			var sub []byte
+			if sub, used = protowire.ConsumeBytes(b); used >= 0 {
+				err = readMessage(f, sub, v.Field(f.index))
+			}
+		case f.repeated && f.kind != kMsg && f.kind != kString && typ == protowire.BytesType:
+			var payload []byte
+			if payload, used = protowire.ConsumeBytes(b); used >= 0 {
+				for len(payload) > 0 {
+					c, e := readScalar(f.kind, scalarWire(f.kind), payload, v.Field(f.index), true)
+					if e != nil {
+						return e
+					}
+					payload = payload[c:]
+				}
+			}
+		case f.kind != kMsg && typ == scalarWire(f.kind):
+			used, err = readScalar(f.kind, typ, b, v.Field(f.index), f.repeated)
+		default: // a field of another type than the model's: left out, as an unknown one
+			used = protowire.ConsumeFieldValue(num, typ, b)
+		}
+		if err != nil {
+			return err
+		}
+		if used < 0 {
+			return fmt.Errorf("%w: %w", errWire, protowire.ParseError(used))
+		}
+		b = b[used:]
+	}
+	return nil
+}
+
+// readMessage reads one message value of the field f (an element of a list, or the field).
+func readMessage(f *field, sub []byte, fv reflect.Value) error {
+	if f.repeated {
+		fv.Set(reflect.Append(fv, reflect.New(fv.Type().Elem()).Elem()))
+		fv = fv.Index(fv.Len() - 1)
+	}
+	if fv.Kind() == reflect.Pointer {
+		if fv.IsNil() {
+			fv.Set(reflect.New(fv.Type().Elem()))
+		}
+		fv = fv.Elem()
+	}
+	return unmarshalWire(f.msg, sub, fv)
+}
+
+// readScalar reads one value at the start of b into fv (appending when it is a list) and
+// returns how many bytes it took.
+func readScalar(k kind, typ protowire.Type, b []byte, fv reflect.Value, list bool) (int, error) {
+	dst := fv
+	if list {
+		fv.Set(reflect.Append(fv, reflect.New(fv.Type().Elem()).Elem()))
+		dst = fv.Index(fv.Len() - 1)
+	}
+	var n int
+	switch k {
+	case kString:
+		var s string
+		s, n = protowire.ConsumeString(b)
+		if n >= 0 && !utf8.ValidString(s) {
+			return 0, fmt.Errorf("%w: a string that is not UTF-8", errWire)
+		}
+		dst.SetString(s)
+	case kBool:
+		var x uint64
+		x, n = protowire.ConsumeVarint(b)
+		dst.SetBool(x != 0)
+	case kFloat:
+		var x uint64
+		x, n = protowire.ConsumeFixed64(b)
+		dst.SetFloat(math.Float64frombits(x))
+	default:
+		var x uint64
+		x, n = protowire.ConsumeVarint(b)
+		dst.SetInt(int64(x))
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("%w: %w", errWire, protowire.ParseError(n))
+	}
+	_ = typ
+	return n, nil
+}

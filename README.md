@@ -473,32 +473,39 @@ expanded by the same recursive scan, with no extra grammar required.
   a store (any docstore backend) the first time the document uses them, then
   loaded from there. See [docs/saving.md](docs/saving.md#lazy-fonts).
 - **`docstore`** — a storage-agnostic document persistence server. The
+  backends that need a cloud or database client (Postgres, MongoDB, S3 and
+  MinIO, the Go CDK blob) live in the nested module
+  `docstore/backends` (`.../backends/postgres`, `mongo`, `s3`, `blob`, and
+  `.../backends/all` to register them all), so the main module, and every
+  browser build, link none of those SDKs; `docstore/backends/cmd/docstore`
+  is the server with all of them (the Docker image builds that one), while
+  `cmd/docstore` has memory, files and SQLite. The
   `Adapter` interface (`Save`/`Load`/`List`/`Delete`, keyed by document
   ID) is implemented six ways: `MemoryAdapter` (in-process, the
   zero-dependency default), `LocalFSAdapter` (one file per document,
-  base64url-encoded ID as the filename), `PostgresAdapter` (one
+  base64url-encoded ID as the filename), `postgres.Adapter` (one
   `documents` table, created on first connect if missing),
-  `MongoAdapter` (one `documents` collection, `_id` set directly to
-  the document ID), `S3Adapter` (one object per document, built
+  `mongo.Adapter` (one `documents` collection, `_id` set directly to
+  the document ID), `s3.Adapter` (one object per document, built
   against a narrow `s3API` interface so its key-prefixing and
   pagination logic has native tests against an in-memory fake with no
-  live bucket required), and `BlobAdapter` (task #174's own concrete
+  live bucket required), and `blob.Adapter` (task #174's own concrete
   deliverable: one blob per document, built directly on
   [go-cloud](https://gocloud.dev)'s `*blob.Bucket` -- a *portable
   client library*, not an infra-provisioning tool, opened by URL
   scheme (`"file:///..."`, `"s3://..."`, `"gs://..."`, `"mem://"` for
   tests, whichever driver package a given binary blank-imports) rather
-  than one hand-written adapter per cloud, the way `S3Adapter` itself
+  than one hand-written adapter per cloud, the way `s3.Adapter` itself
   is; registered as `"blob"`, alongside `"s3"`/`"minio"`, not in place
   of them, so an existing deployment configured for either keeps
   working unchanged). Each backend is a self-contained plugin, not
   a case in some central switch: it defines its own JSON-tagged config
-  type (`PostgresConfig{DSN}`, `MongoConfig{URI, DB}`,
-  `S3Config{Bucket, Prefix, Endpoint, ForcePathStyle}`,
-  `LocalFSConfig{Dir}`, `BlobConfig{URL, Prefix}`) and registers itself
+  type (`postgres.Config{DSN}`, `mongo.Config{URI, DB}`,
+  `s3.Config{Bucket, Prefix, Endpoint, ForcePathStyle}`,
+  `LocalFSConfig{Dir}`, `blob.Config{URL, Prefix}`) and registers itself
   under a name via `RegisterAdapter` (the same self-registration
   convention `database/sql.Register`/`image.RegisterFormat` use) from
-  its own `init()`. `S3Adapter` is registered under two names, `"s3"`
+  its own `init()`. `s3.Adapter` is registered under two names, `"s3"`
   and `"minio"` -- the identical adapter and config either way,
   `"minio"` only differing in which way `ForcePathStyle` defaults (on,
   since MinIO doesn't support AWS's own virtual-hosted-style addressing

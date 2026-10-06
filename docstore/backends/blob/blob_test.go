@@ -1,9 +1,10 @@
 //go:build !js
 
-package docstore
+package blob
 
 import (
 	"context"
+	"github.com/elaous/gojiberry/docstore"
 	"testing"
 
 	"gocloud.dev/blob"
@@ -26,14 +27,14 @@ func newTestBlobBucket(t *testing.T) *blob.Bucket {
 }
 
 func TestBlobAdapterConformance(t *testing.T) {
-	testAdapterConformance(t, func() Adapter {
-		return NewBlobAdapter(newTestBlobBucket(t), "docs/")
+	docstore.CheckAdapter(t, func() docstore.Adapter {
+		return New(newTestBlobBucket(t), "docs/")
 	})
 }
 
 func TestBlobAdapterUsesPrefixInKeyButNotInID(t *testing.T) {
 	bucket := newTestBlobBucket(t)
-	a := NewBlobAdapter(bucket, "docs/")
+	a := New(bucket, "docs/")
 	ctx := context.Background()
 	if err := a.Save(ctx, "myid", []byte("x")); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -56,7 +57,7 @@ func TestBlobAdapterUsesPrefixInKeyButNotInID(t *testing.T) {
 
 func TestBuildAdapterBlobBackend(t *testing.T) {
 	raw := []byte(`{"url":"mem://","prefix":"x/"}`)
-	a, err := BuildAdapter(context.Background(), Config{Backend: "blob", BackendConfig: raw})
+	a, err := docstore.BuildAdapter(context.Background(), docstore.Config{Backend: "blob", BackendConfig: raw})
 	if err != nil {
 		t.Fatalf("BuildAdapter: %v", err)
 	}
@@ -74,7 +75,7 @@ func TestBuildAdapterBlobBackend(t *testing.T) {
 }
 
 func TestBuildAdapterBlobBackendRequiresURL(t *testing.T) {
-	_, err := BuildAdapter(context.Background(), Config{Backend: "blob", BackendConfig: []byte(`{}`)})
+	_, err := docstore.BuildAdapter(context.Background(), docstore.Config{Backend: "blob", BackendConfig: []byte(`{}`)})
 	if err == nil {
 		t.Fatal("BuildAdapter with no url = nil error, want an error")
 	}
