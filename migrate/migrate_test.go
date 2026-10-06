@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/docfile/pack"
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/export"
 	"github.com/elaous/gojiberry/saver"
@@ -401,3 +403,38 @@ func (b *blocking) List(context.Context, string) ([]Item, error) {
 	return nil, nil
 }
 func (*blocking) Fetch(context.Context, Item) ([]byte, error) { return nil, nil }
+
+func TestSessionCanGatherTheMigrationIntoOnePack(t *testing.T) {
+	ctx := context.Background()
+	sink, under := newSink(t)
+	s := NewSession(nil, func(c docfile.Codec) Sink { sink.Codec = c; return sink })
+	s.Pending.Inline = true
+	if got := s.Props(nil).Formats; len(got) != 4 {
+		t.Fatalf("no pack choice without a way to hand the file over: %+v", got)
+	}
+	var file string
+	var data []byte
+	s.Deliver = func(name, _ string, d []byte) { file, data = name, d }
+	found := false
+	for _, f := range s.Props(nil).Formats {
+		found = found || f.Name == PackFormat
+	}
+	if !found {
+		t.Fatal("the menu offers the pack")
+	}
+	s.SetFormat(PackFormat)
+	files := Files{{"One.docx", wordFile(t, "one")}, {"Two.docx", wordFile(t, "two")}}
+	if err := s.ImportFiles(ctx, files); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(file, ".opendoc") || len(data) == 0 {
+		t.Fatalf("%q %d", file, len(data))
+	}
+	r, err := pack.Open(bytes.NewReader(data), int64(len(data)))
+	if err != nil || len(r.Index().Entries) != 2 || !r.Verify().OK() {
+		t.Fatalf("%v", err)
+	}
+	if live, _, _ := under.Lists(ctx, "mem"); len(live) != 0 {
+		t.Errorf("nothing was saved in the store: %d", len(live))
+	}
+}

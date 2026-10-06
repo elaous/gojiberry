@@ -171,13 +171,17 @@ Open:
    (`testdata/vector.opendoc`, byte for byte), a test that cuts the file at every byte and
    one that flips every bit, and a fuzz target (`go test -fuzz FuzzOpen`). It uses
    only `docfile` and the standard library.
-2. `Saver.ImportPack` / `Saver.ExportPack` (folders by ID, tags and trash kept) and the
-   UI: "Download as .opendoc" for a folder, "Import .opendoc", "Convert to one .opendoc" in
-   Migrate. *Left.*
+2. **Done:** `Saver.ExportPack` (a folder or everything; folders by ID, tags, the trash flag,
+   optionally each document's history; signed if given a key) and `Saver.ImportPack` (folders
+   recreated by ID under a chosen folder; a document already there is skipped, replaced or
+   copied; a bad document is reported and the rest come in; the signature is reported). The
+   UI: "As .opendoc" on a folder and "Import .opendoc" in the document list
+   (`Session.DownloadPack`, `Session.Pick`), and "One .opendoc pack" in Migrate's format menu
+   (`migrate.PackSink`).
 3. **Done:** `cmd/opendoc`: `pack` and `convert` (a file or a folder tree; `.docx`, `.pdf`,
    Markdown, text, `.open`, JSON and protobuf are read through the importers, subfolders
-   become folders), `unpack`, `list`, `verify`, `sign`, `recover`, `keygen`. A README that says
-   which `.docx` features are not carried over is *left*.
+   become folders), `unpack`, `list`, `verify`, `sign`, `recover`, `keygen`. Its
+   [README](../cmd/opendoc/README.md) says which `.docx` features are not carried over.
 4. **Done:** signing with Ed25519 (a key file of 64 hex characters, `opendoc keygen`);
    appending to a signed pack needs the key. Key handling beyond a file (hardware keys,
    passkeys) is part of encryption and passkeys.
