@@ -402,7 +402,7 @@ func TestRekeyAllContinuesAndDoesNotHalfRekeyADocument(t *testing.T) {
 	inner := docstore.NewMemoryAdapter()
 	ring := &mutable{to: []age.Recipient{ana.r.Key}, keys: []age.Identity{ana.id}}
 	a := New(inner, ring)
-	const d1, d2, d3 = "doc1", "doc2", "doc3"
+	const d1, d2, d3 = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333"
 	for _, id := range []string{d1 + "~a.json", d1 + "~b.json", d2 + "~a.json", d3 + "~a.json"} {
 		_ = a.Save(ctx, id, []byte(id))
 	}
@@ -468,5 +468,94 @@ func TestConcurrentSaveAndRekeyLoseNothing(t *testing.T) {
 	d, err := a.Load(ctx, "d")
 	if err != nil || string(d.Data) != strconv.Itoa(last) {
 		t.Fatalf("the last save won: %q %v", d.Data, err)
+	}
+}
+
+func TestSaveIsNotLostToARekeyOnAStoreWithoutSaveIf(t *testing.T) {
+	ctx := context.Background()
+	ana, bo := newPerson(t, "ana"), newPerson(t, "bo")
+	inner := unconditional{docstore.NewMemoryAdapter()}
+	a := New(inner, Static{To: []age.Recipient{ana.r.Key, bo.r.Key}, Keys: []age.Identity{ana.id}})
+	const id = "44444444-4444-4444-8444-444444444444"
+	_ = a.Save(ctx, id, []byte("0"))
+	var wg sync.WaitGroup
+	wg.Add(3)
+	last := 0
+	go func() {
+		defer wg.Done()
+		for i := 1; i <= 100; i++ {
+			if err := a.Save(ctx, id, []byte(strconv.Itoa(i))); err != nil {
+				t.Error(err)
+			}
+			last = i
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 100 {
+			if err := a.Rekey(ctx, id); err != nil {
+				t.Error(err)
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 30 {
+			if _, err := a.RekeyAll(ctx); err != nil {
+				t.Error(err)
+			}
+		}
+	}()
+	wg.Wait()
+	d, err := a.Load(ctx, id)
+	if err != nil || string(d.Data) != strconv.Itoa(last) {
+		t.Fatalf("the last save was lost: %q %v", d.Data, err)
+	}
+}
+
+// ghost lists a file that is gone when it is read, as one deleted after the listing.
+type ghost struct{ docstore.Adapter }
+
+func (g ghost) List(ctx context.Context) ([]docstore.Meta, error) {
+	m, err := g.Adapter.List(ctx)
+	return append(m, docstore.Meta{ID: "55555555-5555-4555-8555-555555555555~a.json"}), err
+}
+
+func TestRekeyAllSkipsAFileThatVanished(t *testing.T) {
+	ctx := context.Background()
+	ana := newPerson(t, "ana")
+	a := New(ghost{docstore.NewMemoryAdapter()}, Static{To: []age.Recipient{ana.r.Key}, Keys: []age.Identity{ana.id}})
+	const id = "66666666-6666-4666-8666-666666666666"
+	_ = a.Save(ctx, id, []byte("x"))
+	if n, err := a.RekeyAll(ctx); err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+}
+
+func TestRekeyRekeyAllAndRekeyDocumentGroupTheSame(t *testing.T) {
+	ctx := context.Background()
+	ana, bo := newPerson(t, "ana"), newPerson(t, "bo")
+	inner := docstore.NewMemoryAdapter()
+	ring := &mutable{to: []age.Recipient{ana.r.Key}, keys: []age.Identity{ana.id}}
+	a := New(inner, ring)
+	const d = "77777777-7777-4777-8777-777777777777"
+	files := []string{d + ".json", d + "~prev.json", "versions/" + d + "/1.json"}
+	for _, f := range files {
+		_ = a.Save(ctx, f, []byte(f))
+	}
+	for _, f := range files {
+		if g := DocID(f); g != d || groupOf(f) != d {
+			t.Fatalf("%s groups as %q", f, g)
+		}
+	}
+	asBo := New(inner, Static{Keys: []age.Identity{bo.id}})
+	ring.to = []age.Recipient{ana.r.Key, bo.r.Key}
+	if err := a.Rekey(ctx, files[0]); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if _, err := asBo.Load(ctx, f); err != nil {
+			t.Errorf("Rekey of one file left %s: %v", f, err)
+		}
 	}
 }
