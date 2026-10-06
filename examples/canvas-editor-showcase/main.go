@@ -201,7 +201,11 @@ func main() {
 		{Name: "browser", Label: "This browser (localStorage)", Adapter: docstore.NewBrowserAdapter("showcase:"), Capacity: 5 << 20},
 		{Name: "memory", Label: "Memory", Adapter: store, Capacity: 16 << 20},
 	}}, currentDoc, openDoc)
-	u.saver.OnChange = func() { renderUI() }
+	u.saver.OnChange = func() {
+		t, _ := u.saver.Where()
+		rememberTarget(t)
+		renderUI()
+	}
 	u.restoreFolder()
 	u.saver.Deliver = transfer.Download
 	u.saver.Export = u.transfer.Export

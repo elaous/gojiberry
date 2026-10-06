@@ -195,7 +195,9 @@ func ForgetFolder(ctx context.Context, key string) error {
 
 func fsName(id string) string { return base64.RawURLEncoding.EncodeToString([]byte(id)) }
 
-func fsWrap(err error) error {
+// fsWrap maps a browser error to the docstore errors. Reading and writing are told apart in
+// the words used for a refused permission; either one satisfies errors.Is(err, ErrPermission).
+func fsWrap(err error, writing bool) error {
 	var je *jsError
 	if errors.As(err, &je) {
 		switch je.Name {
@@ -204,10 +206,20 @@ func fsWrap(err error) error {
 		case "QuotaExceededError":
 			return fmt.Errorf("%w: %v", ErrStorageFull, err)
 		case "NotAllowedError", "SecurityError":
-			return fmt.Errorf("docstore: the browser has not allowed writing this folder (reconnect it with a click): %w", err)
+			if writing {
+				return fmt.Errorf("%w: the browser has not allowed writing this folder (reconnect it with a click): %v", ErrPermission, err)
+			}
+			return fmt.Errorf("%w: the browser has not allowed reading this folder (reconnect it with a click): %v", ErrPermission, err)
 		}
 	}
 	return err
+}
+
+// abortWritable gives up a writable stream, whatever state the caller's context is in.
+func abortWritable(w js.Value) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, _ = jsAwait(ctx, w, "abort")
 }
 
 func (a *FileSystemAdapter) write(ctx context.Context, id string, data []byte) error {
@@ -215,18 +227,21 @@ func (a *FileSystemAdapter) write(ctx context.Context, id string, data []byte) e
 	opts.Set("create", true)
 	fh, err := jsAwait(ctx, a.dir, "getFileHandle", fsName(id), opts)
 	if err != nil {
-		return fsWrap(err)
+		return fsWrap(err, true)
 	}
 	w, err := jsAwait(ctx, fh, "createWritable")
 	if err != nil {
-		return fsWrap(err)
+		return fsWrap(err, true)
 	}
 	if _, err := jsAwait(ctx, w, "write", jsUint8(data)); err != nil {
-		_, _ = jsAwait(ctx, w, "abort")
-		return fsWrap(err)
+		abortWritable(w)
+		return fsWrap(err, true)
 	}
-	_, err = jsAwait(ctx, w, "close") // the old file is replaced here, whole
-	return fsWrap(err)
+	if _, err := jsAwait(ctx, w, "close"); err != nil { // the old file is replaced here, whole
+		abortWritable(w) // a failed or cancelled close leaves no half-written swap file behind
+		return fsWrap(err, true)
+	}
+	return nil
 }
 
 // Save implements Adapter.
@@ -237,15 +252,15 @@ func (a *FileSystemAdapter) Save(ctx context.Context, id string, data []byte) er
 func (a *FileSystemAdapter) read(ctx context.Context, id string) ([]byte, time.Time, error) {
 	fh, err := jsAwait(ctx, a.dir, "getFileHandle", fsName(id))
 	if err != nil {
-		return nil, time.Time{}, fsWrap(err)
+		return nil, time.Time{}, fsWrap(err, false)
 	}
 	f, err := jsAwait(ctx, fh, "getFile")
 	if err != nil {
-		return nil, time.Time{}, fsWrap(err)
+		return nil, time.Time{}, fsWrap(err, false)
 	}
 	buf, err := jsAwait(ctx, f, "arrayBuffer")
 	if err != nil {
-		return nil, time.Time{}, fsWrap(err)
+		return nil, time.Time{}, fsWrap(err, false)
 	}
 	return jsBytes(buf), time.UnixMilli(int64(f.Get("lastModified").Float())), nil
 }
@@ -263,13 +278,13 @@ func (a *FileSystemAdapter) Load(ctx context.Context, id string) (Document, erro
 func (a *FileSystemAdapter) List(ctx context.Context) ([]Meta, error) {
 	it, err := jsCall(a.dir, "values")
 	if err != nil {
-		return nil, err
+		return nil, fsWrap(err, false)
 	}
 	var metas []Meta
 	for {
 		r, err := jsAwait(ctx, it, "next")
 		if err != nil {
-			return nil, fsWrap(err)
+			return nil, fsWrap(err, false)
 		}
 		if r.Get("done").Bool() {
 			return metas, nil
@@ -284,6 +299,9 @@ func (a *FileSystemAdapter) List(ctx context.Context) ([]Meta, error) {
 		}
 		f, err := jsAwait(ctx, h, "getFile")
 		if err != nil {
+			if werr := fsWrap(err, false); errors.Is(werr, ErrPermission) {
+				return nil, werr // not allowed is not "gone": do not report a shorter list
+			}
 			continue // gone since the listing
 		}
 		metas = append(metas, Meta{ID: string(raw), Size: f.Get("size").Int(), UpdatedAt: time.UnixMilli(int64(f.Get("lastModified").Float()))})
@@ -293,10 +311,10 @@ func (a *FileSystemAdapter) List(ctx context.Context) ([]Meta, error) {
 // Delete implements Adapter.
 func (a *FileSystemAdapter) Delete(ctx context.Context, id string) error {
 	if _, err := jsAwait(ctx, a.dir, "getFileHandle", fsName(id)); err != nil {
-		return fsWrap(err)
+		return fsWrap(err, true)
 	}
 	_, err := jsAwait(ctx, a.dir, "removeEntry", fsName(id))
-	return fsWrap(err)
+	return fsWrap(err, true)
 }
 
 // SaveIf implements ConditionalAdapter: the check and the write are made under a Web Lock shared
@@ -325,7 +343,13 @@ func (a *FileSystemAdapter) SaveIf(ctx context.Context, id string, data []byte, 
 	if err := a.write(ctx, id, data); err != nil {
 		return err
 	}
-	if back, _, err := a.read(ctx, id); err != nil || Digest(back) != Digest(data) {
+	back, _, err := a.read(ctx, id)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return ErrConflict // removed by someone else since the write
+	case err != nil:
+		return err // not allowed, or unreadable: not a conflict
+	case Digest(back) != Digest(data):
 		return ErrConflict
 	}
 	return nil

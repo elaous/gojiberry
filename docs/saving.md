@@ -47,7 +47,18 @@ A target is a `docstore.Adapter`. The adapters:
 | memory | `docstore.MemoryAdapter` |
 | a docstore server | `docstore.NewHTTPAdapter(url, client)` -- how a WASM app reaches any of the above |
 | this browser | `docstore.NewBrowserAdapter(prefix)` -- localStorage |
-| a folder you choose | `docstore.PickFolder` -- the File System Access API (Chrome, Edge, Opera) |
+| a folder you choose | `docstore.PickFolder` returns a `docstore.FileSystemAdapter` -- the File System Access API (Chrome, Edge, Opera) |
+
+A `FileSystemAdapter` names each file after its ID (base64url), so a document ID
+whose name exceeds 255 characters cannot be saved there: the browser refuses
+the file name and the save fails. The browser may withdraw the permission to
+write the folder, after a restart or in the middle of a session; operations then
+fail with an error satisfying `errors.Is(err, docstore.ErrPermission)`, and
+`Request` (from a click) asks for it back. In the canvas editor showcase the
+folder is remembered; on the next visit it is a target again, and it is selected
+automatically if it was the target in use when the page was closed (otherwise it
+is only offered in "Save to"). A folder that needs permission again shows
+"Reconnect folder" and is selected when reconnected.
 
 A browser cannot speak to a database, so in a WASM app Postgres, SQLite and
 S3 are used through a docstore server (`cmd/docstore`, backend chosen by

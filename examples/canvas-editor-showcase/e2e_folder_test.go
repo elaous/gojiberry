@@ -63,7 +63,8 @@ func TestSavingToAChosenFolder(t *testing.T) {
 	d.Eval(pickerShim, nil)
 	d.Click(`button[data-tab="save"]`)
 	d.WaitFor("the remembered folder", `(document.querySelector('.gj-folder-name') || {textContent: ''}).textContent === 'Saving to the folder picked'`)
-	d.Select(`.gj-saver-select[data-field="Save to"]`, "folder")
+	// The folder was the target when the page closed, so it is the target again.
+	d.WaitFor("the restored folder to be selected", `document.querySelector('.gj-saver-select[data-field="Save to"]').value === 'folder'`)
 	d.WaitFor("the document in the folder", `Array.from(document.querySelectorAll('.gj-doclist-item .gj-doc-name')).some((e) => e.textContent === 'plan')`)
 
 	// Stop using it: the target goes, the files stay.
@@ -100,4 +101,40 @@ func TestAFolderWhosePermissionLapsedNeedsAClick(t *testing.T) {
 	d.WaitFor("the folder back", `(document.querySelector('.gj-folder-name') || {textContent: ''}).textContent === 'Saving to the folder picked'`)
 	d.OK(d.Count(`.gj-saver-select[data-field="Save to"] option[value="folder"]`) == 1, "the folder is a target again")
 	d.NoErrors()
+}
+
+// When the browser withdraws the permission in the middle of a session, a save fails, the
+// folder stops being a target, the picker offers Reconnect folder, and after it a save works.
+func TestAFolderWhosePermissionLapsesDuringTheSession(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "")
+	resetFolder(d)
+	d.Eval(pickerShim, nil)
+	d.Click(`button[data-tab="save"]`)
+	d.Click(".gj-folder-choose")
+	d.WaitFor("the folder in use", "!!document.querySelector('.gj-folder-name')")
+	d.Fill(".gj-saver-name", "first")
+	d.WaitFor("the form to be ready", `!document.querySelector('.gj-saver-save').disabled`)
+	d.Click(".gj-saver-save")
+	d.WaitFor("the first document", "document.querySelectorAll('.gj-doclist-item').length === 1")
+
+	// The browser withdraws the permission: writing is refused until it is asked for again.
+	d.Eval(`(() => {
+		window.__orig = FileSystemFileHandle.prototype.createWritable;
+		FileSystemFileHandle.prototype.createWritable = async function () { throw new DOMException('permission lapsed', 'NotAllowedError') };
+		FileSystemDirectoryHandle.prototype.queryPermission = async () => 'prompt';
+		FileSystemDirectoryHandle.prototype.requestPermission = async () => { FileSystemFileHandle.prototype.createWritable = window.__orig; return 'granted' };
+	})(); 1`, nil)
+	d.Fill(".gj-saver-name", "second")
+	d.WaitFor("the form to be ready", `!document.querySelector('.gj-saver-save').disabled`)
+	d.Click(".gj-saver-save")
+	d.WaitFor("the reconnect state", "!!document.querySelector('.gj-folder-reconnect-button')")
+	d.WaitFor("the lapsed folder to leave the targets", `document.querySelectorAll('.gj-saver-select[data-field="Save to"] option[value="folder"]').length === 0`)
+	d.OK(d.Count(".gj-folder-name") == 0, "the picker no longer says it is saving to the folder")
+
+	d.Click(".gj-folder-reconnect-button")
+	d.WaitFor("the folder back", `(document.querySelector('.gj-folder-name') || {textContent: ''}).textContent === 'Saving to the folder picked'`)
+	d.WaitFor("the form to be ready", `!document.querySelector('.gj-saver-save').disabled`)
+	d.Fill(".gj-saver-name", "third")
+	d.Click(".gj-saver-save")
+	d.WaitFor("the saved document", `Array.from(document.querySelectorAll('.gj-doclist-item .gj-doc-name')).some((e) => e.textContent === 'third')`)
 }
