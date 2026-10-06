@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"unicode/utf8"
 
-	"google.golang.org/protobuf/encoding/protowire"
+	"github.com/elaous/gojiberry/docfile/internal/wire"
 )
 
 // The protobuf wire format of a Document, written against the model's types. It is the
@@ -34,42 +34,42 @@ func marshalWire(m *message, v reflect.Value) []byte {
 			} else if fv.IsZero() {
 				continue
 			}
-			b = protowire.AppendTag(b, protowire.Number(f.num), protowire.BytesType)
-			b = protowire.AppendBytes(b, marshalWire(f.msg, fv))
+			b = wire.AppendTag(b, wire.Number(f.num), wire.BytesType)
+			b = wire.AppendBytes(b, marshalWire(f.msg, fv))
 			continue
 		}
 		if fv.IsZero() {
 			continue
 		}
-		b = protowire.AppendTag(b, protowire.Number(f.num), scalarWire(f.kind))
+		b = wire.AppendTag(b, wire.Number(f.num), scalarWire(f.kind))
 		b = appendScalar(b, f.kind, fv)
 	}
 	return b
 }
 
-func scalarWire(k kind) protowire.Type {
+func scalarWire(k kind) wire.Type {
 	switch k {
 	case kFloat:
-		return protowire.Fixed64Type
+		return wire.Fixed64Type
 	case kString, kMsg:
-		return protowire.BytesType
+		return wire.BytesType
 	}
-	return protowire.VarintType
+	return wire.VarintType
 }
 
 func appendScalar(b []byte, k kind, v reflect.Value) []byte {
 	switch k {
 	case kString:
-		return protowire.AppendString(b, v.String())
+		return wire.AppendString(b, v.String())
 	case kBool:
 		if v.Bool() {
-			return protowire.AppendVarint(b, 1)
+			return wire.AppendVarint(b, 1)
 		}
-		return protowire.AppendVarint(b, 0)
+		return wire.AppendVarint(b, 0)
 	case kFloat:
-		return protowire.AppendFixed64(b, math.Float64bits(v.Float()))
+		return wire.AppendFixed64(b, math.Float64bits(v.Float()))
 	}
-	return protowire.AppendVarint(b, uint64(v.Int()))
+	return wire.AppendVarint(b, uint64(v.Int()))
 }
 
 func appendList(b []byte, f *field, fv reflect.Value) []byte {
@@ -84,21 +84,21 @@ func appendList(b []byte, f *field, fv reflect.Value) []byte {
 			if e.Kind() == reflect.Pointer {
 				e = e.Elem()
 			}
-			b = protowire.AppendTag(b, protowire.Number(f.num), protowire.BytesType)
-			b = protowire.AppendBytes(b, marshalWire(f.msg, e))
+			b = wire.AppendTag(b, wire.Number(f.num), wire.BytesType)
+			b = wire.AppendBytes(b, marshalWire(f.msg, e))
 		}
 	case kString:
 		for i := range n {
-			b = protowire.AppendTag(b, protowire.Number(f.num), protowire.BytesType)
-			b = protowire.AppendString(b, fv.Index(i).String())
+			b = wire.AppendTag(b, wire.Number(f.num), wire.BytesType)
+			b = wire.AppendString(b, fv.Index(i).String())
 		}
 	default: // numbers and bools are packed
 		var payload []byte
 		for i := range n {
 			payload = appendScalar(payload, f.kind, fv.Index(i))
 		}
-		b = protowire.AppendTag(b, protowire.Number(f.num), protowire.BytesType)
-		b = protowire.AppendBytes(b, payload)
+		b = wire.AppendTag(b, wire.Number(f.num), wire.BytesType)
+		b = wire.AppendBytes(b, payload)
 	}
 	return b
 }
@@ -108,9 +108,9 @@ var errWire = errors.New("docfile: malformed protobuf data")
 // unmarshalWire reads the message in b into the addressable struct v.
 func unmarshalWire(m *message, b []byte, v reflect.Value) error {
 	for len(b) > 0 {
-		num, typ, n := protowire.ConsumeTag(b)
+		num, typ, n := wire.ConsumeTag(b)
 		if n < 0 {
-			return fmt.Errorf("%w: %w", errWire, protowire.ParseError(n))
+			return fmt.Errorf("%w: %w", errWire, wire.ParseError(n))
 		}
 		b = b[n:]
 		f := m.byNum[int32(num)]
@@ -118,15 +118,15 @@ func unmarshalWire(m *message, b []byte, v reflect.Value) error {
 		var err error
 		switch {
 		case f == nil:
-			used = protowire.ConsumeFieldValue(num, typ, b)
-		case f.kind == kMsg && typ == protowire.BytesType:
+			used = wire.ConsumeFieldValue(num, typ, b)
+		case f.kind == kMsg && typ == wire.BytesType:
 			var sub []byte
-			if sub, used = protowire.ConsumeBytes(b); used >= 0 {
+			if sub, used = wire.ConsumeBytes(b); used >= 0 {
 				err = readMessage(f, sub, v.Field(f.index))
 			}
-		case f.repeated && f.kind != kMsg && f.kind != kString && typ == protowire.BytesType:
+		case f.repeated && f.kind != kMsg && f.kind != kString && typ == wire.BytesType:
 			var payload []byte
-			if payload, used = protowire.ConsumeBytes(b); used >= 0 {
+			if payload, used = wire.ConsumeBytes(b); used >= 0 {
 				for len(payload) > 0 {
 					c, e := readScalar(f.kind, scalarWire(f.kind), payload, v.Field(f.index), true)
 					if e != nil {
@@ -138,13 +138,13 @@ func unmarshalWire(m *message, b []byte, v reflect.Value) error {
 		case f.kind != kMsg && typ == scalarWire(f.kind):
 			used, err = readScalar(f.kind, typ, b, v.Field(f.index), f.repeated)
 		default: // a field of another type than the model's: left out, as an unknown one
-			used = protowire.ConsumeFieldValue(num, typ, b)
+			used = wire.ConsumeFieldValue(num, typ, b)
 		}
 		if err != nil {
 			return err
 		}
 		if used < 0 {
-			return fmt.Errorf("%w: %w", errWire, protowire.ParseError(used))
+			return fmt.Errorf("%w: %w", errWire, wire.ParseError(used))
 		}
 		b = b[used:]
 	}
@@ -168,7 +168,7 @@ func readMessage(f *field, sub []byte, fv reflect.Value) error {
 
 // readScalar reads one value at the start of b into fv (appending when it is a list) and
 // returns how many bytes it took.
-func readScalar(k kind, typ protowire.Type, b []byte, fv reflect.Value, list bool) (int, error) {
+func readScalar(k kind, typ wire.Type, b []byte, fv reflect.Value, list bool) (int, error) {
 	dst := fv
 	if list {
 		fv.Set(reflect.Append(fv, reflect.New(fv.Type().Elem()).Elem()))
@@ -178,26 +178,26 @@ func readScalar(k kind, typ protowire.Type, b []byte, fv reflect.Value, list boo
 	switch k {
 	case kString:
 		var s string
-		s, n = protowire.ConsumeString(b)
+		s, n = wire.ConsumeString(b)
 		if n >= 0 && !utf8.ValidString(s) {
 			return 0, fmt.Errorf("%w: a string that is not UTF-8", errWire)
 		}
 		dst.SetString(s)
 	case kBool:
 		var x uint64
-		x, n = protowire.ConsumeVarint(b)
+		x, n = wire.ConsumeVarint(b)
 		dst.SetBool(x != 0)
 	case kFloat:
 		var x uint64
-		x, n = protowire.ConsumeFixed64(b)
+		x, n = wire.ConsumeFixed64(b)
 		dst.SetFloat(math.Float64frombits(x))
 	default:
 		var x uint64
-		x, n = protowire.ConsumeVarint(b)
+		x, n = wire.ConsumeVarint(b)
 		dst.SetInt(int64(x))
 	}
 	if n < 0 {
-		return 0, fmt.Errorf("%w: %w", errWire, protowire.ParseError(n))
+		return 0, fmt.Errorf("%w: %w", errWire, wire.ParseError(n))
 	}
 	_ = typ
 	return n, nil

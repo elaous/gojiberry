@@ -12,8 +12,8 @@ import (
 // The protobuf schema is derived from the model's Go types: a struct is a message, its
 // `pb:"N"` tags are the field numbers. That keeps one definition (the Go types), and
 // Schema prints it as .proto text. The wire and text formats are written here against
-// those types directly (wire.go, text.go), so no protobuf runtime is linked: a browser
-// build saves several megabytes by it.
+// those types directly (wire.go, text.go) on top of the small internal/wire package, so
+// no protobuf module is a dependency at all: a browser build saves several megabytes by it.
 
 const protoPackage = "gojiberry.doc"
 
