@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -50,9 +51,34 @@ func (a *HTTPAdapter) do(ctx context.Context, method, path string, body []byte) 
 	return a.client.Do(req)
 }
 
+// StatusError is the error HTTPAdapter returns for a response the server answered with an
+// unexpected status; test with errors.As to act on Status (401 and 403 mean the credentials
+// were refused).
+type StatusError struct {
+	Status int    // the HTTP status code
+	Text   string // the status line, "403 Forbidden"
+	Body   string // the start of the response body
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("docstore: server said %s: %s", e.Text, e.Body)
+}
+
 func httpError(resp *http.Response) error {
 	msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-	return fmt.Errorf("docstore: server said %s: %s", resp.Status, strings.TrimSpace(string(msg)))
+	return &StatusError{Status: resp.StatusCode, Text: resp.Status, Body: strings.TrimSpace(string(msg))}
+}
+
+// RedactURL returns raw for a log line: the user name and password, the query and the fragment
+// (where a deployment may put a token) are removed. Text that is not a URL is returned as
+// "<invalid URL>".
+func RedactURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" && u.Host == "" {
+		return "<invalid URL>"
+	}
+	u.User, u.RawQuery, u.Fragment, u.RawFragment = nil, "", "", ""
+	return u.String()
 }
 
 func docPath(id string) string { return "/docs/" + url.PathEscape(id) }
@@ -193,6 +219,12 @@ func (a *HTTPAdapter) Renew(ctx context.Context, id string) error {
 	}
 	resp, err := a.client.Do(req)
 	if err != nil {
+		// The error carries the request URL, which may hold credentials: it ends up in the
+		// hub's log.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			ue.URL = RedactURL(ue.URL)
+		}
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()

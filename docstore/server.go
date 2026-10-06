@@ -54,10 +54,20 @@ type Config struct {
 	// before expiry was switched on the deadline UpdatedAt + TTL, so old ones are deleted by the
 	// first sweep. The default is now + TTL, a full grace period.
 	ExpiryAdoptUpdated bool
-	Addr               string
-	Backend            string
-	BackendConfig      json.RawMessage
-	Auth               AuthConfig
+	// ExpiryOrphans (GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=collab) makes the sweeper also delete the
+	// shared-editing state ("collab:<id>") of documents that do not exist, once it is older than
+	// the TTL plus ExpiryOrphanGrace (GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE, default 1h): without
+	// it a document that lives only in the collaboration hub is never swept. A public deployment
+	// must turn it on.
+	ExpiryOrphans     bool
+	ExpiryOrphanGrace time.Duration
+	// ExpiryMaxAge (GOJIBERRY_DOCSTORE_EXPIRY_MAX_AGE, default off) caps a document's life from
+	// its creation, however often it is edited (ExpiringAdapter.MaxAge).
+	ExpiryMaxAge  time.Duration
+	Addr          string
+	Backend       string
+	BackendConfig json.RawMessage
+	Auth          AuthConfig
 }
 
 // AuthConfig configures the optional Sign-in-with-OIDC endpoints
@@ -137,7 +147,39 @@ func ConfigFromEnv() Config {
 	if cfg.ExpiryAdoptUpdated, err = ParseExpiryAdopt(os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_ADOPT")); err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
+	if cfg.ExpiryOrphans, cfg.ExpiryOrphanGrace, err = ParseExpiryOrphans(os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS"), os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE")); err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
+	if raw := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_MAX_AGE")); raw != "" {
+		if cfg.ExpiryMaxAge, err = time.ParseDuration(raw); err != nil || cfg.ExpiryMaxAge <= 0 {
+			log.Fatalf("docstore: parsing GOJIBERRY_DOCSTORE_EXPIRY_MAX_AGE %q: want a positive duration such as 168h", raw)
+		}
+	}
 	return cfg
+}
+
+// ParseExpiryOrphans parses GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS ("collab" turns the sweep of
+// orphaned shared-editing state on; empty is off) and GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE (a Go
+// duration; empty is DefaultOrphanGrace). A grace without the policy is an error.
+func ParseExpiryOrphans(raw, graceRaw string) (on bool, grace time.Duration, err error) {
+	raw, graceRaw = strings.ToLower(strings.TrimSpace(raw)), strings.TrimSpace(graceRaw)
+	switch raw {
+	case "":
+		if graceRaw != "" {
+			return false, 0, errors.New("GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE needs GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=collab")
+		}
+		return false, 0, nil
+	case "collab":
+	default:
+		return false, 0, fmt.Errorf("parsing GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS %q: want \"collab\" (or empty for off)", raw)
+	}
+	if graceRaw == "" {
+		return true, DefaultOrphanGrace, nil
+	}
+	if grace, err = time.ParseDuration(graceRaw); err != nil || grace <= 0 {
+		return false, 0, fmt.Errorf("parsing GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE %q: want a positive duration such as 1h", graceRaw)
+	}
+	return true, grace, nil
 }
 
 // ParseExpiryAdopt parses GOJIBERRY_DOCSTORE_EXPIRY_ADOPT: empty (or "grace") gives documents that
@@ -447,6 +489,10 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
+	if idEndsInRoute(r) {
+		http.Error(w, "a document id may not end in /renew or /acl (those paths are routes)", http.StatusBadRequest)
+		return
+	}
 	path := strings.TrimPrefix(r.URL.Path, "/docs/")
 	if id, ok := strings.CutSuffix(path, "/renew"); ok {
 		s.handleRenew(w, r, id)
@@ -555,6 +601,17 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// idEndsInRoute reports whether the request names a document whose id ends in "/renew" or
+// "/acl" with the slash percent-encoded ("/docs/a%2Frenew", what HTTPAdapter sends for the id
+// "a/renew"). The router decodes the path, so such an id would be taken for the renew or ACL
+// route of document "a": PUT, POST and every other method on it are refused with 400 instead
+// (the same rule is what keeps such an id from being created: ids ending in these segments are
+// reserved, and a real route is always sent with its slash plain).
+func idEndsInRoute(r *http.Request) bool {
+	ep := strings.ToLower(r.URL.EscapedPath())
+	return strings.HasSuffix(ep, "%2frenew") || strings.HasSuffix(ep, "%2facl")
 }
 
 // handleRenew serves POST /docs/{id}/renew: the caller says document id was edited somewhere
