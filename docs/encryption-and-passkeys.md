@@ -172,7 +172,7 @@ The `keys:<ID>` record decides who a document is encrypted to, so it is authenti
 stored. Design:
 
 - Each record is `{payload, sig}`: the payload is JSON (`v`, the document ID, a growing `seq`, a
-  `pending` flag, the recipients), and `sig` is an **Ed25519 signature** over a fixed context, the
+  `pending` flag, the document's `protection` level, the recipients), and `sig` is an **Ed25519 signature** over a fixed context, the
   document ID and the payload bytes. The ID in the signed message means a valid record cannot be
   moved to another document.
 - The signing key is the owner's: `encrypt.SignerFromAge` derives it from an age identity (HMAC of a
@@ -189,14 +189,31 @@ Threat model, store write access only (no owner key):
 - **Cannot** add themselves, or anyone, as a recipient of future saves: the record they write does
   not verify, and saves fail until the owner repairs it.
 - **Cannot** edit a signed list to drop a recipient or change a key.
-- **Can** delete a record (the document then reads as shared with no one besides the owner: the
-  owner can still open everything, and the people it was shared with lose access to later saves,
-  silently). Detecting this needs owner-held state (a signed index of which documents have lists);
-  not built. `Sharing` keeps an empty signed record rather than deleting when the last key goes,
-  but a reader cannot tell a deleted record from a document that was never shared.
-- **Can** put back an older signed record (for example one that still lists a person the owner
-  removed), and future saves then go to them. `seq` is in the signed payload so a client that
-  remembers the highest it has seen per document can refuse a lower one; no client does yet.
+- **Can** delete a record (the document then reads as shared with no one besides the owner and, at
+  the confidential level, as server level: its later saves are wrapped for the server keyring).
+  Detecting this needs owner-held state (a signed index of which documents have records); not
+  built. `Sharing` keeps a record rather than deleting when the last key goes, and
+  `SetProtection` never deletes one, but a reader that has seen nothing before cannot tell a
+  deleted record from a document that never had one.
+- **Can** put back an older validly signed record (a replay: for example one that still lists a
+  person the owner removed, or one from before the document was made confidential, whose
+  `protection` is empty), and future saves then follow it. A signature cannot tell it from the
+  current record. What is done about it, in layers, none absolute:
+  1. `Saver.Save` of a document its catalog says is confidential calls `Saver.Rekey` (e2ee)
+     first, with one record read when settled: a record that says less is re-signed to e2ee and
+     the files re-keyed before a byte is written. The same call also covers a new confidential
+     document, and a document made confidential before this was in place. Files written by
+     someone else between the replay and the next save are not covered, and the replayed
+     recipient list itself is kept (it is re-signed with the old list).
+  2. `StoreKeyring.SeqFloor` / `Sharing.SeqFloor` (optional; `MemorySeqFloor` is the in-memory
+     one): the highest `seq` seen per document. A record below it is refused
+     (`ErrStaleRecord`), and so is a missing record where one was seen. It must be kept where
+     store writers cannot write (the client's memory or device storage); a fresh client has no
+     floor and a replay before its first read is not detected. A floor that is ahead of a
+     record the owner must restore needs a deliberate reset by the owner's client.
+  So a store writer cannot forge a level or a list, but is not stopped from replaying or deleting
+  a record where no floor is known; the saver's re-assertion limits the effect to the window
+  before the next save of the document by an owner client.
 - **Can** still delete or replace files (availability), and read the catalog and the recipient
   lists: fingerprints, labels and public keys are not secret.
 Someone who holds an owner key (it opens the documents anyway) can change lists.
@@ -292,25 +309,56 @@ cannot be opened.
       to end save: the check runs before anything is overwritten, a refusal leaves the
       existing document as it was and is that document's `Failed`).
 
-   **Warning: `SetProtection(E2EE)` does not erase the past.** The previous generation of the
-   document (`prev`) and its version snapshots still hold the pre-switch plaintext, with the
-   real name and tags, under the wrapping they had, until the store's keyring re-keys them
-   (`Sharing.Repair`). Until then, whoever could read those copies still can. `ImportPack`
-   with Replace writes the confidential document in one step (the check runs first, and the
-   record is never stored as an ordinary document), but the copies of the document it
-   replaced are the same case.
+   5. **Keys per protection level (done).** `encrypt.ConfidentialKeyring` chooses the recipients by the
+      document's level, read from a signed `protection` field in the `keys:<ID>` record (C.5; the
+      same signature and fail-closed rules: a store writer cannot forge it, and an unsigned or
+      altered record fails the save instead of falling back to the server level; replaying an older
+      signed record or deleting it is not prevented by the signature, see C.5 for what is done). A confidential
+      document's files are wrapped **only** for people's keys (`People`: the owner's keys and the
+      signed recipient list); `AtRest` (C.1) is never consulted for them, and `ServerRecipients`
+      are removed from the list even if a deployment put the server key among the owners, an age
+      key or an SSH key (compared by key, not identity; a recipient of a type that cannot be
+      compared is `ErrUncomparableRecipient`; none left: `ErrNoRecipients`, nothing is saved). Server-level documents and non-document
+      ids keep using `AtRest`. Identities are the union of both, for every document: opening is not
+      where the level is enforced, and a re-key between levels must open the old wrapping.
+      `Sharing.SetProtection(doc, level)` writes the record (level and `pending`) first, then
+      re-keys every stored file of the document (current copy, previous copy, every version
+      snapshot) and clears `pending` only when all are done; settled, it reads one record and writes
+      nothing (and needs no signer). A failure is an `*encrypt.RekeyError` naming the files still wrapped to the old set. The re-key
+      is all or none, so one file that cannot be opened blocks the switch; it is never skipped
+      silently: `RekeyError.Unreadable` names it, `saver.UnreadableKeys(err)` returns the ones that
+      are version snapshots, and after the person confirms, `Saver.DropVersions` deletes them and
+      `SetProtection` is run again (a current or previous copy is not droppable).
+      `encrypt.RekeyHook(sharing)` is the function for `Saver.Rekey`, which the saver calls (it
+      does not import encrypt): `SetProtection` to e2ee re-keys **first** and only then moves the
+      name and tags into the document, so no file holding them is ever wrapped for the server; back
+      to server it moves the name out first (still wrapped for people) and re-keys last, so a failure
+      exposes nothing. Calling `SetProtection` again with the same level retries (the hook runs even
+      when the catalog already says so). `Saver.Save` of a confidential document (new: an import, a
+      copy, a document marked so; or existing) runs the re-key before its first byte is written, and
+      if the document turns out confidential only inside the catalog lock (a concurrent delete or
+      switch) the save starts over re-keyed, never writing it first.
+      A document with `Saver.Rekey` set is therefore never left wrapped for the server key once
+      `SetProtection` has returned nil. Remaining weakness: deleting a document's `keys:` record
+      or replaying an older one (a store writer can) makes later saves server level until the next
+      save of that document by an owner client re-asserts e2ee (or at once, with a `SeqFloor`
+      that has seen the newer record, which refuses it); a signed index of documents with records
+      (C.5) would close the deletion case on a fresh client.
+
+   Without a `Saver.Rekey` hook, `SetProtection(E2EE)` still does not erase the past: the previous
+   generation and the version snapshots keep the wrapping they had until the store's keyring
+   re-keys them (`Sharing.Repair`). `ImportPack` with Replace writes the confidential document in
+   one step (the check and the re-key run first, and the record is never stored as an ordinary
+   document); the copies of the document it replaced are re-keyed by the same hook.
 
    *Left:*
-   1. The saver records the level but does not choose the keys: which recipients a confidential
-      document's files are wrapped for (people's keys only, not a server key) is the store's
-      keyring, and re-keying copies and versions written before the switch is `Sharing.Repair`.
-      A keyring that does this per protection level is not built.
-   2. The showcase wiring and the key management UX (where the owner's key lives, the "make
+   1. The showcase wiring and the key management UX (where the owner's key lives, the "make
       confidential" switch, the recovery key shown once, the lock mark in the document list).
-   3. Folder names are not hidden (they live in the catalog and the folder records); only
+   2. Folder names are not hidden (they live in the catalog and the folder records); only
       documents are.
-   4. A saved document keeps its older copies readable to whoever had access to them: the
-      switch changes the catalog and the document, not what was already stored (see 1).
-   5. Key management for `Seal`/`Open` in the pack UI ("As .opendoc", "Import .opendoc"): until
+   3. What someone already opened or copied before a switch cannot be taken back (as with any
+      re-key); with the hook the stored copies themselves are re-keyed. A store writer who
+      deleted the `keys:` record first is the weakness named in item 5.
+   4. Key management for `Seal`/`Open` in the pack UI ("As .opendoc", "Import .opendoc"): until
       then `Session.DownloadPack` leaves confidential documents out and says how many, and
       `Session.ImportPackData` reports the ones it could not open.

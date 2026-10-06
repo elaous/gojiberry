@@ -458,3 +458,223 @@ func TestSessionRevealNeedsAKey(t *testing.T) {
 		t.Errorf("%v %q", ss.Docs().Docs, ss.Name())
 	}
 }
+
+func TestRekeyHookOrderAndRetry(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	e, _ := s.Save(ctx, "m", docfile.Open, docWithText("plain doc", "x"))
+	// catalogLevel is what the catalog says at the moment the hook runs.
+	var calls []string
+	failing := true
+	s.Rekey = func(_ context.Context, _, id, to string) error {
+		got, _ := s.Get(ctx, "m", id)
+		calls = append(calls, to+" while catalog lists "+got.Name)
+		if failing {
+			return errors.New("file X still wrapped")
+		}
+		return nil
+	}
+	// To e2ee: re-key first; a failure changes nothing and is reported.
+	if err := s.SetProtection(ctx, "m", e.ID, ProtectionE2EE); err == nil || !strings.Contains(err.Error(), "file X still wrapped") {
+		t.Fatalf("%v", err)
+	}
+	if got, _ := s.Get(ctx, "m", e.ID); got.Protection != ProtectionServer || got.Name != "plain doc" {
+		t.Errorf("a failed re-key moved the name: %+v", got)
+	}
+	failing = false
+	if err := s.SetProtection(ctx, "m", e.ID, ProtectionE2EE); err != nil {
+		t.Fatal(err)
+	}
+	// Back: the catalog and file move first, the re-key to the server keys is last.
+	if err := s.SetProtection(ctx, "m", e.ID, ProtectionServer); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"e2ee while catalog lists plain doc", "e2ee while catalog lists plain doc", "server while catalog lists plain doc"}
+	if !slices.Equal(calls, want) {
+		t.Errorf("%q", calls)
+	}
+	// A failure on the way back leaves the catalog at server; the same call retries the hook.
+	if err := s.SetProtection(ctx, "m", e.ID, ProtectionE2EE); err != nil {
+		t.Fatal(err)
+	}
+	failing = true
+	if err := s.SetProtection(ctx, "m", e.ID, ProtectionServer); err == nil {
+		t.Fatal("want the re-key failure")
+	}
+	if got, _ := s.Get(ctx, "m", e.ID); got.Protection != ProtectionServer || got.Name != "plain doc" {
+		t.Errorf("%+v", got)
+	}
+	n := len(calls)
+	failing = false
+	if err := s.SetProtection(ctx, "m", e.ID, ProtectionServer); err != nil || len(calls) != n+1 {
+		t.Errorf("a retry at the settled catalog level runs the hook: %v %v", err, calls[n:])
+	}
+}
+
+func TestRekeyHookRunsBeforeANewConfidentialDocumentIsWritten(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	need := errors.New("no recovery key")
+	s.ConfidentialCheck = func(context.Context, string, string) error { return need }
+	var rekeyed int
+	s.Rekey = func(context.Context, string, string, string) error { rekeyed++; return nil }
+	d := docWithText("born confidential", "x")
+	d.SetProtection(ProtectionE2EE)
+	if _, err := s.Save(ctx, "m", docfile.Open, d); !errors.Is(err, need) || rekeyed != 0 {
+		t.Fatalf("a refused document is not re-keyed: %v %d", err, rekeyed)
+	}
+	s.ConfidentialCheck = func(context.Context, string, string) error { return nil }
+	if _, err := s.Save(ctx, "m", docfile.Open, d); err != nil || rekeyed != 1 {
+		t.Fatalf("%v %d", err, rekeyed)
+	}
+	// An ordinary save does not call it.
+	if _, err := s.Save(ctx, "m", docfile.Open, docWithText("plain", "x")); err != nil || rekeyed != 1 {
+		t.Fatalf("%v %d", err, rekeyed)
+	}
+}
+
+// catalogHook runs before: it is called with the number of this catalog load (1 is the first)
+// and can fail it or act before it returns.
+type catalogHook struct {
+	*docstore.MemoryAdapter
+	before func(n int) error
+	n      atomic.Int32
+	data   []string // the non-catalog keys saved, in order
+}
+
+func (h *catalogHook) Load(ctx context.Context, id string) (docstore.Document, error) {
+	if id == CatalogKey && h.before != nil {
+		if err := h.before(int(h.n.Add(1))); err != nil {
+			return docstore.Document{}, err
+		}
+	}
+	return h.MemoryAdapter.Load(ctx, id)
+}
+
+func (h *catalogHook) Save(ctx context.Context, id string, b []byte) error {
+	if id != CatalogKey {
+		h.data = append(h.data, id)
+	}
+	return h.MemoryAdapter.Save(ctx, id, b)
+}
+
+func TestSaveNeverWritesAConfidentialDocumentOnAGetFault(t *testing.T) {
+	ctx := context.Background()
+	h := &catalogHook{MemoryAdapter: docstore.NewMemoryAdapter()}
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: h}}}
+	var rekeyed int
+	s.Rekey = func(context.Context, string, string, string) error { rekeyed++; return nil }
+	d := docWithText("born confidential", "x")
+	d.SetProtection(ProtectionE2EE)
+	d.SetID(docfile.NewID())
+	// The first catalog read (the existence check) fails with something that is not "not
+	// found": that must not be read as "a new document".
+	h.before = func(n int) error {
+		if n == 1 {
+			return errors.New("transient")
+		}
+		return nil
+	}
+	if _, err := s.Save(ctx, "m", docfile.Open, d); err == nil || !strings.Contains(err.Error(), "transient") {
+		t.Fatalf("want the Get error: %v", err)
+	}
+	if len(h.data) != 0 {
+		t.Errorf("a document was written: %v", h.data)
+	}
+}
+
+func TestSaveRekeysWhenTheDocumentIsDeletedBetweenTheReadAndTheWrite(t *testing.T) {
+	ctx := context.Background()
+	h := &catalogHook{MemoryAdapter: docstore.NewMemoryAdapter()}
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: h}}}
+	other := &Saver{Targets: []Target{{Name: "m", Adapter: h.MemoryAdapter}}}
+	var order []string
+	s.Rekey = func(_ context.Context, _, _, to string) error { order = append(order, "rekey "+to); return nil }
+	e, err := s.Save(ctx, "m", docfile.Open, docWithText("plain", "x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.data = nil
+	d := docWithText("plain", "y")
+	d.SetID(e.ID)
+	d.SetProtection(ProtectionE2EE) // a copy of a confidential document, saved over the server one
+	// The existence check sees the (server) document; then it is deleted before the write.
+	h.n.Store(0)
+	h.before = func(n int) error {
+		if n == 2 {
+			return other.Delete(ctx, "m", e.ID)
+		}
+		return nil
+	}
+	if _, err := s.Save(ctx, "m", docfile.Open, d); err != nil {
+		t.Fatal(err)
+	}
+	if len(order) == 0 || order[len(order)-1] != "rekey e2ee" {
+		t.Fatalf("a confidential document was written without being re-keyed: %v", order)
+	}
+	if got, err := s.Get(ctx, "m", e.ID); err != nil || got.Protection != ProtectionE2EE {
+		t.Errorf("%+v %v", got, err)
+	}
+}
+
+func TestSaveOfAConfidentialDocumentAssertsItsKeys(t *testing.T) {
+	ctx := context.Background()
+	s, _, id := confidentialSaver(t)
+	var calls []string
+	s.Rekey = func(_ context.Context, _, _, to string) error { calls = append(calls, to); return nil }
+	d, err := s.Load(ctx, "m", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Save(ctx, "m", docfile.Open, d); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(calls, []string{ProtectionE2EE}) {
+		t.Errorf("a save of a confidential document re-asserts its level: %v", calls)
+	}
+	// A failed assertion stops the save before anything is written.
+	s.Rekey = func(context.Context, string, string, string) error { return errors.New("record unsigned") }
+	if _, err := s.Save(ctx, "m", docfile.Open, d); err == nil || !strings.Contains(err.Error(), "record unsigned") {
+		t.Errorf("%v", err)
+	}
+}
+
+type fakeUnreadable struct{ files []string }
+
+func (e fakeUnreadable) Error() string             { return "cannot open" }
+func (e fakeUnreadable) UnreadableFiles() []string { return e.files }
+
+func TestDropVersionsOnlyDropsSnapshotsOfTheDocument(t *testing.T) {
+	ctx := context.Background()
+	mem := docstore.NewMemoryAdapter()
+	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+	e, _ := s.Save(ctx, "m", docfile.Open, docWithText("a", "x"))
+	d := docWithText("a", "x")
+	d.SetID(e.ID)
+	v, err := s.SaveVersion(ctx, "m", docfile.Open, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := UnreadableKeys(fmt.Errorf("wrapped: %w", fakeUnreadable{[]string{v.Key, e.ID + ".json"}}))
+	if !slices.Equal(got, []string{v.Key}) {
+		t.Errorf("only snapshots are offered for dropping: %v", got)
+	}
+	if UnreadableKeys(errors.New("other")) != nil {
+		t.Error("not a re-key failure")
+	}
+	other := docfile.NewID()
+	if err := s.DropVersions(ctx, "m", e.ID, []string{v.Key, "versions/" + other + "/1.json"}); !errors.Is(err, ErrName) {
+		t.Errorf("a snapshot of another document: %v", err)
+	}
+	if vs, _ := s.Versions(ctx, "m", e.ID); len(vs) != 1 {
+		t.Errorf("nothing is dropped when one key is refused: %v", vs)
+	}
+	if err := s.DropVersions(ctx, "m", e.ID, []string{v.Key}); err != nil {
+		t.Fatal(err)
+	}
+	if vs, _ := s.Versions(ctx, "m", e.ID); len(vs) != 0 {
+		t.Errorf("%v", vs)
+	}
+}

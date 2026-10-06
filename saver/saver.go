@@ -63,6 +63,16 @@ type Saver struct {
 	// needs, such as a recovery key besides a passkey (encrypt.ConfidentialCheck). Nil means
 	// no check. The saver does not know about keys: it only asks.
 	ConfidentialCheck func(ctx context.Context, target, id string) error
+	// Rekey, when set, is what makes the files of a document follow its protection level: it
+	// is called with the level the document is moving to (ProtectionServer or ProtectionE2EE)
+	// and must leave every stored file of the document (current copy, previous copy, every
+	// version snapshot) encrypted to that level's recipients, or fail naming what is left
+	// (encrypt.RekeyHook; the saver does not import it). It must be idempotent and cheap when
+	// the level is already settled, because SetProtection calls it again on a retry, and Save
+	// calls it before writing a confidential document, to assert its keys. It runs
+	// outside the saver's catalog lock (a re-key takes the store's). Nil means none: the
+	// store's keyring alone decides, and copies written before a switch keep their wrapping.
+	Rekey func(ctx context.Context, target, id, protection string) error
 
 	mu sync.Mutex   // one catalog update at a time
 	tm sync.RWMutex // Targets, which AddTarget and RemoveTarget change
@@ -226,7 +236,68 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 	// not in the document file.
 	history := doc.History
 	doc.History = nil
+	// A document that is written end to end here (a new confidential one, an import, a copy,
+	// or a save of one that is already confidential) has its files switched to people's keys
+	// before the first byte of it is written: the gate runs first, the re-key second, and the
+	// in-lock gates below are then not repeated. The re-key runs for an existing confidential
+	// document too: the signed record is what the keyring trusts, and one put back from before
+	// the switch (a replay) says "server", so each save asserts the level the catalog says (one
+	// record read when it is settled).
 	var out Entry
+	forced := false // the in-lock read found a level the first read did not
+	for attempt := 0; ; attempt++ {
+		prechecked, rekeyed := false, false
+		if s.Rekey != nil {
+			want := e2ee || forced
+			known := false // the document is in the catalog, and as what
+			if doc.ID() != "" {
+				cur, gerr := s.Get(ctx, target, id)
+				switch {
+				case gerr == nil:
+					known = cur.Protection == ProtectionE2EE
+				case errors.Is(gerr, ErrNotFound):
+					// A new document takes its level from the file.
+					want = want || doc.Protection() == ProtectionE2EE
+				default:
+					// Never treated as "not there": the document may be, and be confidential.
+					return Entry{}, gerr
+				}
+			} else {
+				want = want || doc.Protection() == ProtectionE2EE
+			}
+			want = want || known
+			if want {
+				if !known && s.ConfidentialCheck != nil {
+					if err := s.ConfidentialCheck(ctx, target, id); err != nil {
+						return Entry{}, fmt.Errorf("saver: not saved as confidential: %w", err)
+					}
+				}
+				prechecked = true
+				if err := s.Rekey(ctx, target, id, ProtectionE2EE); err != nil {
+					return Entry{}, fmt.Errorf("saver: not saved as confidential: %w", err)
+				}
+				rekeyed = true
+			}
+		}
+		err := s.saveLocked(ctx, target, c, doc, history, id, e2ee, prechecked, rekeyed, &out)
+		if errors.Is(err, errNeedRekey) && attempt < 2 {
+			forced = true // the document's level changed since it was read: start over, re-keyed
+			continue
+		}
+		if errors.Is(err, errNeedRekey) {
+			return Entry{}, fmt.Errorf("saver: the document's protection changed while it was being saved, try again: %w", ErrBusy)
+		}
+		return out, err
+	}
+}
+
+// errNeedRekey is what the in-lock part of a save returns when the document ends up end to end
+// protected without the re-key having run: writing it then would wrap it with whatever keys the
+// store's record says, which may be the server's.
+var errNeedRekey = errors.New("saver: the document became confidential after it was read")
+
+// saveLocked is the catalog update of a save. doc is a copy: the caller can run it again.
+func (s *Saver) saveLocked(ctx context.Context, target string, c docfile.Codec, doc docfile.Document, history []docfile.Revision, id string, e2ee, prechecked, rekeyed bool, out *Entry) error {
 	err := s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		prev, existed := cat.Docs[id]
 		protection := prev.Protection
@@ -236,7 +307,7 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 			// the catalog has none: the saved document's own are kept.
 			if e2ee && !prev.confidential() {
 				// Becoming confidential by this save: the same gate as SetProtection's.
-				if s.ConfidentialCheck != nil {
+				if s.ConfidentialCheck != nil && !prechecked {
 					if err := s.ConfidentialCheck(ctx, target, id); err != nil {
 						return fmt.Errorf("saver: not saved as confidential: %w", err)
 					}
@@ -264,11 +335,16 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 			if protection = doc.Protection(); e2ee {
 				protection = ProtectionE2EE
 			}
-			if protection == ProtectionE2EE && s.ConfidentialCheck != nil {
+			if protection == ProtectionE2EE && s.ConfidentialCheck != nil && !prechecked {
 				if err := s.ConfidentialCheck(ctx, target, id); err != nil {
 					return fmt.Errorf("saver: not saved as confidential: %w", err)
 				}
 			}
+		}
+		if protection == ProtectionE2EE && s.Rekey != nil && !rekeyed {
+			// Confidential, and the keys were not asserted: the store's record may say
+			// "server" (a concurrent delete or switch, a replayed record). Not written.
+			return errNeedRekey
 		}
 		doc.SetProtection(protection)
 		doc.SetID(id)
@@ -313,13 +389,13 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 			e.conceal()
 		}
 		cat.Docs[id] = e
-		out = cat.entry(s, id)
+		*out = cat.entry(s, id)
 		return nil
 	})
 	if err == nil && len(history) > 0 {
 		err = s.restoreHistory(ctx, target, id, c, history)
 	}
-	return out, err
+	return err
 }
 
 // Load reads a document back by ID. A document whose file is missing or damaged is read
