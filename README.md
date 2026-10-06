@@ -601,8 +601,8 @@ expanded by the same recursive scan, with no extra grammar required.
   environment-configured, CORS-open, single-binary shape as
   `syncserver`/`fontserver`/`docstore` (`cmd/translateserver`). One
   route, `POST /translate` (`{"text","targetLang","sourceLang"}` →
-  `{"translatedText","detectedSourceLanguage"}`), forwards to DeepL via
-  [`cluttrdev/deepl-go`](https://github.com/cluttrdev/deepl-go) — the
+  `{"translatedText","detectedSourceLanguage"}`), forwards to DeepL's HTTP API
+  (a small client in `translateserver/deepl.go`, no SDK) — the
   API key (`GOJIBERRY_TRANSLATESERVER_DEEPL_KEY`) lives only in this
   server-to-DeepL request, never reaching the browser, the same reason
   `fontserver` proxies the Google Fonts API instead of handing its own
