@@ -126,6 +126,10 @@ func (s *Server) loadACL(ctx context.Context, id string) (ACL, error) {
 	return acl, nil
 }
 
+// methodRenew is checkPermission's name for POST /docs/{id}/renew: the permission of a write that
+// never bootstraps an access list.
+const methodRenew = "RENEW"
+
 // checkPermission enforces id's own ACL (if any) against r's caller
 // for the given HTTP method (GET/PUT/DELETE) -- the gate every
 // /docs/{id} handler in server.go runs its real work behind. Entirely
@@ -177,7 +181,7 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 		if acl.canRead(who) {
 			return true, 0
 		}
-	case http.MethodPut, http.MethodDelete:
+	case http.MethodPut, http.MethodDelete, methodRenew:
 		if acl.canWrite(who) {
 			return true, 0
 		}
@@ -331,10 +335,11 @@ func isReservedDocID(id string) bool {
 	// "directory/" is the key directory's keyspace (see Server.WithDirectory): its records
 	// are written only by the server's own publish route, so a signed-in session cannot forge
 	// one through the document API.
-	// "public/" and "report/" are the public offer's records and abuse reports (docstore/public);
-	// compared without case, since a backend that folds case would alias them.
+	// "public/" and "report/" are the public offer's records and abuse reports (docstore/public).
+	// Everything is compared without case, since a backend that folds case (a case-insensitive
+	// file system) would alias "Collab:x" and "collab:x".
 	lower := strings.ToLower(id)
-	return strings.HasPrefix(id, aclKeyPrefix) || strings.HasPrefix(id, "collab:") || strings.HasPrefix(id, DirectoryPrefix) || strings.HasPrefix(id, ExpiryPrefix) ||
+	return strings.HasPrefix(lower, aclKeyPrefix) || strings.HasPrefix(lower, "collab:") || strings.HasPrefix(lower, strings.ToLower(DirectoryPrefix)) || strings.HasPrefix(lower, ExpiryPrefix) || strings.HasPrefix(lower, ExpiryCreatedPrefix) ||
 		strings.HasPrefix(lower, PublicPrefix) || strings.HasPrefix(lower, ReportPrefix)
 }
 
