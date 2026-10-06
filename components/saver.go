@@ -2,7 +2,6 @@ package components
 
 import "github.com/elaous/gojiberry/xango"
 
-// SaverChoice is one option in a Saver's target or format menu.
 // SaverChoice is one choice of a list: its name, what to show, and optionally the group
 // it is shown under (a heading in a menu).
 type SaverChoice struct{ Name, Label, Group string }
