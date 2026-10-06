@@ -3,6 +3,10 @@
 What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 [known limits plan](known-limits-plan.md). Ordered by what is needed next.
 
+## Merges since the last full test run
+
+0 of 5 (full run on `main` after the 5th merge in a row; see [testing-workflow.md](testing-workflow.md)).
+
 ## Next
 
 1. **Migrate: done** (see [document-components.md](document-components.md)); left: skipping what an earlier run already brought (needs the source ID kept on the document), Google Docs comments and revision history.
