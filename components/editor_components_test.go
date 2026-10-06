@@ -374,8 +374,8 @@ func TestSaverRendersFormAndWiresCallbacks(t *testing.T) {
 	var log []string
 	pending := &Pending{Inline: true}
 	n := Saver(SaverProps{
-		Targets: []SaverChoice{{"pg", "Postgres"}, {"sqlite", "SQLite"}, {"s3", "S3"}},
-		Formats: []SaverChoice{{"json", "JSON"}, {"proto", "Protobuf (binary)"}},
+		Targets: []SaverChoice{{Name: "pg", Label: "Postgres"}, {Name: "sqlite", Label: "SQLite"}, {Name: "s3", Label: "S3"}},
+		Formats: []SaverChoice{{Name: "json", Label: "JSON"}, {Name: "proto", Label: "Protobuf (binary)"}},
 		Target:  "sqlite", Format: "proto", Name: "notes",
 		Docs: DocListProps{Pending: pending,
 			Docs: []Doc{{ID: "id-notes", Name: "notes", Format: "JSON", Size: 2500, Updated: time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC)},
@@ -421,8 +421,8 @@ func TestSaverEmptyBusyAndFailed(t *testing.T) {
 func TestTransferButtons(t *testing.T) {
 	var got []string
 	n := Transfer(TransferProps{
-		Imports:  []SaverChoice{{"markdown", "Markdown"}, {"json", "JSON"}},
-		Exports:  []SaverChoice{{"markdown", "Markdown"}},
+		Imports:  []SaverChoice{{Name: "markdown", Label: "Markdown"}, {Name: "json", Label: "JSON"}},
+		Exports:  []SaverChoice{{Name: "markdown", Label: "Markdown"}},
 		OnImport: func(f string) { got = append(got, "in:"+f) },
 		OnExport: func(f string) { got = append(got, "out:"+f) },
 	})
@@ -433,12 +433,12 @@ func TestTransferButtons(t *testing.T) {
 	if strings.Join(got, " ") != "in:markdown in:json out:markdown" {
 		t.Fatal(got)
 	}
-	off := Transfer(TransferProps{Imports: []SaverChoice{{"a", "A"}}, OnImport: func(string) {}, Disabled: true})
+	off := Transfer(TransferProps{Imports: []SaverChoice{{Name: "a", Label: "A"}}, OnImport: func(string) {}, Disabled: true})
 	if len(findHandlers(off, "click")) != 0 {
 		t.Fatal("disabled has no handlers")
 	}
 	mustContain(t, render(t, off), `disabled="disabled"`)
-	if len(findHandlers(Transfer(TransferProps{Exports: []SaverChoice{{"a", "A"}}}), "click")) != 0 {
+	if len(findHandlers(Transfer(TransferProps{Exports: []SaverChoice{{Name: "a", Label: "A"}}}), "click")) != 0 {
 		t.Fatal("no callback, no handler")
 	}
 }
