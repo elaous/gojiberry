@@ -82,8 +82,9 @@ func TestTokenStoreDelete(t *testing.T) {
 }
 
 func TestUserFromClaims(t *testing.T) {
-	u := userFromClaims("google", idTokenClaims{Subject: "123", Email: "a@example.com", Name: "A"})
-	want := User{ID: "google:123", Email: "a@example.com", Name: "A"}
+	yes := true
+	u := userFromClaims("google", idTokenClaims{Subject: "123", Email: "a@example.com", EmailVerified: &yes, Name: "A"}, false)
+	want := User{ID: "google:123", Email: "a@example.com", VerifiedEmail: true, Name: "A"}
 	if u != want {
 		t.Fatalf("userFromClaims = %+v; want %+v", u, want)
 	}
@@ -119,7 +120,7 @@ func TestNewManagerWithoutProvidersIsASessionOnlyManager(t *testing.T) {
 
 func TestUserFromClaimsKeepsUsernamePictureAndMakesAPerson(t *testing.T) {
 	yes := true
-	u := userFromClaims("google", idTokenClaims{Subject: "S1", Email: "ana@gojiberry.io", EmailVerified: &yes, Name: "Ana", PreferredUsername: "ana", Picture: "https://gojiberry.io/a.png"})
+	u := userFromClaims("google", idTokenClaims{Subject: "S1", Email: "ana@gojiberry.io", EmailVerified: &yes, Name: "Ana", PreferredUsername: "ana", Picture: "https://gojiberry.io/a.png"}, false)
 	if u.Username != "ana" || u.Picture != "https://gojiberry.io/a.png" || u.ID != "google:S1" {
 		t.Fatalf("%+v", u)
 	}
@@ -128,7 +129,7 @@ func TestUserFromClaimsKeepsUsernamePictureAndMakesAPerson(t *testing.T) {
 		t.Fatalf("%+v", p)
 	}
 	no := false
-	if v := userFromClaims("google", idTokenClaims{Subject: "S2", Email: "x@gojiberry.io", EmailVerified: &no}); v.Email != "" {
+	if v := userFromClaims("google", idTokenClaims{Subject: "S2", Email: "x@gojiberry.io", EmailVerified: &no}, false); v.Email != "" {
 		t.Error("an unverified address identifies no one")
 	}
 }

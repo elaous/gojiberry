@@ -328,7 +328,10 @@ func writeACLJSON(w http.ResponseWriter, acl ACL) {
 func isReservedDocID(id string) bool {
 	// "collab:" is the shared-editing hub's own keyspace; its access
 	// control is the hub's, so these keys must not be reachable here.
-	return strings.HasPrefix(id, aclKeyPrefix) || strings.HasPrefix(id, "collab:")
+	// "directory/" is the key directory's keyspace (see Server.WithDirectory): its records
+	// are written only by the server's own publish route, so a signed-in session cannot forge
+	// one through the document API.
+	return strings.HasPrefix(id, aclKeyPrefix) || strings.HasPrefix(id, "collab:") || strings.HasPrefix(id, DirectoryPrefix)
 }
 
 // Grant gives email a role on the document (changing it if they have one). The

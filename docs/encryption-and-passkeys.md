@@ -245,7 +245,7 @@ cannot be opened.
    that parses a pasted key, shows its type, label and fingerprint, and keeps Add off until the
    fingerprint is typed. *Left:* wiring it into an application (the showcase has no encrypted store
    yet: it needs the key management of steps 3 and 4, where the owner's key lives and how it is
-   unlocked) and the "verified e-mail" mark of C.4.
+   unlocked) and the "verified e-mail" mark of C.4 (done, see step 4b).
 3. **Done:** `auth/passkey` (go-webauthn; discoverable credentials, user verification required,
    one-time challenges with a TTL, `Store` with `MemoryStore` and `AdapterStore`), the
    `components.Passkey` control, `Server.WithRoutes`/`Hide` on the docstore server (`cmd/docstore`
@@ -270,8 +270,78 @@ cannot be opened.
    (`WithExtensionPRFSupport`), and `client.DeriveKey` asks a passkey for the bytes (`ErrNoPRF` when the
    authenticator does not do PRF: passkeys made before this, some security keys and password managers;
    `ErrPRFLength` when it answers with the wrong size).
-   The e2e derives the same key twice in Chrome. *Left:* the People-tab control that adds "my passkey" as a
-   key (calling `CheckRecoverableOwner` when a document is made confidential is step 5).
+   The e2e derives the same key twice in Chrome.
+   **Done (component):** `components.Recipients` has the "Add my passkey as a key" control
+   (`AddMyPasskey func(ctx) error`: the host calls `client.DeriveKey`, `encrypt.PRFRecipient`, clears the
+   secret and calls `Sharing.Add`; `PasskeySupported` false shows a note instead of the button; the
+   owner's own key needs no typed fingerprint, and `MyPasskeyAdded` shows the fingerprint that was added).
+   For a `Confidential` document whose owner keys are all passkeys the button is off and the control shows
+   `SecondKeyMessage` (the host passes `encrypt.ErrNeedSecondRecipient.Error()`, the same rule as
+   `CheckRecoverableOwner`) with "Create a recovery key": `CreateRecoveryKey` generates one
+   (`encrypt.GenerateRecoveryKey`) and adds its public part, and the secret is shown **once**, copyable and
+   downloadable, with "keep it offline; we cannot recover it" until the person says they saved it; the
+   component keeps no copy and drops it from the DOM when done (the host holds it in memory while it is
+   shown, and Go strings cannot be wiped). The button is left out when the host sets `CreateRecoveryKey`
+   without `OnRecoveryKey`. *Left:* the showcase does not supply these callbacks yet (`examples/people-keys-demo` does, see 4b);
+   calling `CheckRecoverableOwner` when a document is made confidential is step 5.
+   4b. **Done (library, server rule, component and a demo host): the verified e-mail mark of C.4.**
+   `encrypt.KeyDirectory` (`Lookup(ctx, email) ([]PublishedKey, error)`; a `PublishedKey` is the key
+   text, label, type, fingerprint and `Verified`) is injected; `encrypt.AdapterDirectory` is one over a
+   `docstore.Adapter`.
+   - **Records are signed.** `Publish(ctx, user, key)` refuses (`ErrNotPublishable`) unless
+     `user.VerifiedEmail` is set (and `user.Email` with it) and the user came from a provider session (a
+     `passkey:` user carries no e-mail, B.3), and
+     writes `directory/<HMAC of the e-mail>/<fingerprint>` holding the key, label, the publisher's ID and
+     provider, the address and the time, signed by the server's `encrypt.DirectorySigner` (Ed25519; the
+     signature covers the record's own ID, so a record copied to another name fails). `Lookup`
+     recomputes type and fingerprint from the key text and sets `Verified` only when the signature
+     verifies for that record and address and the publisher is a provider user; any other record is
+     returned unverified ("label only") and an unreadable one is skipped. The record's name is a keyed
+     hash, so addresses cannot be guessed or enumerated from the store's IDs. At most 20 keys per
+     address (`MaxKeys`). `Lookup` lists only the address's prefix (`docstore.PrefixLister`, which the
+     memory, localfs and sqlite adapters implement; `docstore.ListPrefix` falls back to `List` for an
+     adapter without it).
+   - **The key is configuration.** `GOJIBERRY_DOCSTORE_DIRECTORY_KEY` is a 32-byte seed in hex
+     (`DirectorySignerFromEnv`; also the HMAC key, derived with a separate label). Unset, the directory is
+     off: no routes are mounted, `Publish` returns `ErrDirectoryOff`. A key per process is not generated:
+     records must verify after a restart. Changing the key unverifies and hides every record.
+   - **The server rule.** The `directory/` prefix is reserved in `docstore.Server` like `acl:` and
+     `collab:`: it cannot be read, written, listed or deleted through `/docs`. Records are written only
+     by the publish route. With an `auth.Manager` and `Server.WithDirectory(encrypt.DirectoryService(dir))`
+     (the docstore server does it when the key is set) the server mounts `POST /directory/publish` (body
+     `{"key", "label"}`, at most 4 KB) and `GET /directory/lookup?email=`. Both need a signed-in
+     *provider* session: a passkey session is refused (403) on publish and on lookup. Publishing needs
+     an explicitly verified e-mail: `auth.User.VerifiedEmail`, set only when the provider's ID token
+     says `email_verified: true` (an absent claim is **not** verification; `auth` then leaves
+     `User.Email` empty too). A provider that really verifies every address but omits the claim can be
+     opted in with `auth.Provider.AssumeEmailVerified` (default false; in the
+     `GOJIBERRY_DOCSTORE_AUTH_PROVIDERS` JSON, `"assumeEmailVerified": true`); an explicit
+     `email_verified: false` still wins. Publishing is under that address only: a different `email` in
+     the body is refused (403). Each user is limited to 10 publishes and 60 lookups a minute, and a
+     client address to 120 lookups (429 with `Retry-After`). **Lookup reveals the published public
+     keys of any address to every signed-in provider user, by design** (a public key is public, and
+     finding it by address is the feature); it does not reveal whether an address has an account. The
+     20-key cap is a list-then-save, serialised per address inside one process (a keyed mutex); with
+     several server replicas on one store, route publishes through a gateway that serialises them per
+     address, or use a store with a conditional write, or the cap can be overshot.
+   - **UI.** `RecipientRow.Verified` shows "verified e-mail" and a draft that is not shows "label only:
+     confirm the fingerprint"; `Recipients` can look an address up (`Directory`, `OnDirResults`,
+     `DirResults`), and picking a row fills the draft. The typed fingerprint stays for label-only keys,
+     and is skipped for a verified one only when the host sets `TrustVerified`. Verified e-mail proves the
+     account, and that the account published the key; it does not prove the key is safe.
+   - **Host.** `examples/people-keys-demo` implements `AddMyPasskey` (`client.DeriveKey`,
+     `encrypt.PRFRecipient`, `Sharing.Add`, no typing), `CreateRecoveryKey` (shown once) and `Directory`
+     (`/directory/lookup`), and sets `Parsed.Verified` and the shared rows' mark from the directory's
+     answer for that fingerprint, never from a pasted key. Its e2e (headless Chrome, virtual authenticator
+     with PRF) covers the second-key message, the recovery key shown once, add my passkey, and the
+     verified mark from a lookup.
+   *Left:* the showcase and the real app do not wire these controls yet (they need the key-management
+   UX of step 5.1); no UI publishes the owner's keys (the route exists and the demo's test calls it); the
+   rate limits are per process (a gateway or a shared limiter for several replicas); the nested backends
+   (postgres, mongo, s3, blob) and the browser adapters do not implement `PrefixLister` yet (they fall
+   back to listing the store); revoking a published key (a `DELETE` route) and rotating the directory
+   key are not built; whoever holds the directory key can publish anything.
+
 5. **Done (library):** encrypted records in packs and placeholder catalog entries for confidential
    documents.
    1. `docfile/pack`: a record flag and an index field for an encrypted record, whose data is an

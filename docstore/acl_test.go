@@ -66,6 +66,7 @@ func (f *fakeOIDCProvider) handleToken(w http.ResponseWriter, r *http.Request) {
 		"exp": %d,
 		"iat": %d,
 		"email": %q,
+		"email_verified": true,
 		"name": "Test User",
 		"nonce": %q
 	}`, f.srv.URL, f.nextSub, time.Now().Add(time.Hour).Unix(), time.Now().Unix(), f.nextEmail, f.nonce)

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 )
@@ -146,6 +147,23 @@ func (a *LocalFSAdapter) List(_ context.Context) ([]Meta, error) {
 			return nil, err
 		}
 		metas = append(metas, Meta{ID: string(idBytes), UpdatedAt: info.ModTime(), Size: int(info.Size())})
+	}
+	return metas, nil
+}
+
+// ListPrefix implements PrefixLister. File names are encoded IDs, so a prefix cannot be
+// matched without decoding them: it reads the directory's names (no file is opened) and keeps
+// the matching ones.
+func (a *LocalFSAdapter) ListPrefix(ctx context.Context, prefix string) ([]Meta, error) {
+	all, err := a.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var metas []Meta
+	for _, m := range all {
+		if strings.HasPrefix(m.ID, prefix) {
+			metas = append(metas, m)
+		}
 	}
 	return metas, nil
 }

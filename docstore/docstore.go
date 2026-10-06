@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -95,6 +96,33 @@ type Quota struct {
 // answer a question some of them structurally can't.
 type QuotaReporter interface {
 	Usage(ctx context.Context) (Quota, error)
+}
+
+// PrefixLister is an optional capability of an Adapter: list only the documents whose ID starts
+// with a prefix, without reading the whole store's listing. A caller that needs a prefix
+// (the key directory's records of one address) uses ListPrefix, which falls back to List and a
+// filter for an adapter that does not have it.
+type PrefixLister interface {
+	ListPrefix(ctx context.Context, prefix string) ([]Meta, error)
+}
+
+// ListPrefix lists the documents of a whose ID starts with prefix: through PrefixLister when a
+// has it, else List filtered here.
+func ListPrefix(ctx context.Context, a Adapter, prefix string) ([]Meta, error) {
+	if pl, ok := a.(PrefixLister); ok {
+		return pl.ListPrefix(ctx, prefix)
+	}
+	all, err := a.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []Meta
+	for _, m := range all {
+		if strings.HasPrefix(m.ID, prefix) {
+			out = append(out, m)
+		}
+	}
+	return out, nil
 }
 
 // AdapterFactory builds an Adapter from that backend's own
