@@ -26,3 +26,13 @@ func (a *LocalFSAdapter) lockDir() (unlock func(), err error) {
 		_ = f.Close()
 	}, nil
 }
+
+// syncDir flushes a directory's entries to the disk, so a rename in it survives a power cut.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = d.Close() }()
+	return d.Sync()
+}

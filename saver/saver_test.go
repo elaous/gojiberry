@@ -54,7 +54,7 @@ func TestSaveLoadListDeleteEveryTargetAndFormat(t *testing.T) {
 		for _, c := range docfile.Formats() {
 			// One document per format, all with one name: as many IDs, as many files.
 			e, err := s.Save(ctx, tg.Name, c, named("notes"))
-			if err != nil || !docfile.ValidID(e.ID) || e.Key != e.ID+c.Ext() || e.Name != "notes" || e.Format != c {
+			if err != nil || !docfile.ValidID(e.ID) || !strings.HasPrefix(e.Key, e.ID+"~") || !strings.HasSuffix(e.Key, c.Ext()) || e.Name != "notes" || e.Format != c {
 				t.Fatalf("%s/%s: %+v %v", tg.Name, c.Name(), e, err)
 			}
 			got, err := s.Load(ctx, tg.Name, e.ID)
@@ -99,11 +99,21 @@ func TestSavingAgainReplacesTheSameDocumentEvenInAnotherFormat(t *testing.T) {
 	d := named("plan renamed")
 	d.SetID(e.ID)
 	e2, err := s.Save(ctx, "m", docfile.ProtoBinary, d)
-	if err != nil || e2.ID != e.ID || e2.Name != "plan renamed" || e2.Key != e.ID+".pb" {
+	if err != nil || e2.ID != e.ID || e2.Name != "plan renamed" || !strings.HasPrefix(e2.Key, e.ID+"~") || !strings.HasSuffix(e2.Key, ".pb") {
 		t.Fatalf("%+v %v", e2, err)
 	}
+	// The file of the old format is now the previous copy; the save after this one
+	// drops it.
+	if _, err := mem.Load(ctx, e.Key); err != nil {
+		t.Errorf("the old format's file is the previous copy: %v", err)
+	}
+	d3 := named("plan third")
+	d3.SetID(e.ID)
+	if _, err := s.Save(ctx, "m", docfile.ProtoBinary, d3); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := mem.Load(ctx, e.Key); !errors.Is(err, docstore.ErrNotFound) {
-		t.Error("the old format's file should be gone")
+		t.Error("two saves later the old format's file should be gone")
 	}
 	if list, _ := s.List(ctx, "m"); len(list) != 1 {
 		t.Fatalf("%v", list)
