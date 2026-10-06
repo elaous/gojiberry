@@ -11,6 +11,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"syscall/js"
@@ -23,36 +24,6 @@ func failure(r any) error {
 	}
 	return errors.New("e2e selector: unexpected failure")
 }
-
-// pseudoAt reads a `:has-text("...")` or `:text-is("...")` at the start of s: its kind,
-// its (unescaped) argument and its length, or length 0 if s does not start with one.
-func pseudoAt(s string) (kind, arg string, n int) {
-	for _, k := range []string{"has-text", "text-is"} {
-		head := ":" + k + `("`
-		if !strings.HasPrefix(s, head) {
-			continue
-		}
-		var b strings.Builder
-		for i := len(head); i < len(s); i++ {
-			switch c := s[i]; {
-			case c == '\\' && i+1 < len(s):
-				i++
-				b.WriteByte(s[i])
-			case c == '"':
-				if i+1 < len(s) && s[i+1] == ')' {
-					return k, b.String(), i + 2
-				}
-				return "", "", 0
-			default:
-				b.WriteByte(c)
-			}
-		}
-	}
-	return "", "", 0
-}
-
-// norm collapses runs of white space and trims, as the text of an element is compared.
-func norm(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // all returns the elements under root (the document if undefined) matching sel.
 func all(sel string, root js.Value) (out js.Value, err error) {
@@ -195,9 +166,15 @@ func centre(sel string) (res js.Value, err error) {
 }
 
 // wrap makes a JS function of f that returns a string for an error (the loader's shim
-// throws it: a Go function cannot throw into the page).
+// throws it: a Go function cannot throw into the page). A panic in f is returned the same
+// way, so it cannot take the Go runtime down with it.
 func wrap(f func(args []js.Value) (js.Value, error)) js.Func {
-	return js.FuncOf(func(_ js.Value, args []js.Value) any {
+	return js.FuncOf(func(_ js.Value, args []js.Value) (ret any) {
+		defer func() {
+			if r := recover(); r != nil {
+				ret = "e2e selector: " + fmt.Sprint(r)
+			}
+		}()
 		v, err := f(args)
 		if err != nil {
 			return err.Error()
@@ -221,8 +198,8 @@ func main() {
 	}))
 	g.Set("first", wrap(func(a []js.Value) (js.Value, error) { return first(a[0].String()) }))
 	g.Set("centre", wrap(func(a []js.Value) (js.Value, error) { return centre(a[0].String()) }))
-	g.Set("visible", js.FuncOf(func(_ js.Value, a []js.Value) any { return visible(a[0]) }))
-	g.Set("norm", js.FuncOf(func(_ js.Value, a []js.Value) any { return norm(a[0].String()) }))
+	g.Set("visible", wrap(func(a []js.Value) (js.Value, error) { return js.ValueOf(visible(a[0])), nil }))
+	g.Set("norm", wrap(func(a []js.Value) (js.Value, error) { return js.ValueOf(norm(a[0].String())), nil }))
 	js.Global().Set("__e2eGo", g)
 	select {}
 }

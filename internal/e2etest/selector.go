@@ -38,7 +38,10 @@ func buildSelectorScript() (string, error) {
 	if !ok {
 		return "", fmt.Errorf("e2etest: cannot find the source of the selector helper")
 	}
-	dir := filepath.Dir(file)
+	dir, err := selectorDir(file)
+	if err != nil {
+		return "", err
+	}
 	tmp, err := os.MkdirTemp("", "e2e-selector-")
 	if err != nil {
 		return "", err
@@ -65,4 +68,20 @@ func buildSelectorScript() (string, error) {
 	}
 	script := strings.Replace(selectorLoader, "/*WASM_EXEC*/", string(execJS), 1)
 	return strings.Replace(script, "/*WASM_B64*/", base64.StdEncoding.EncodeToString(wasm), 1), nil
+}
+
+// selectorDir is the directory of this package's sources. runtime.Caller reports the path
+// the file was compiled from, which under -trimpath is a module-relative path that is no
+// directory on disk; then the package directory is asked of the go command.
+func selectorDir(file string) (string, error) {
+	if dir := filepath.Dir(file); filepath.IsAbs(dir) {
+		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
+			return dir, nil
+		}
+	}
+	out, err := exec.Command("go", "list", "-f", "{{.Dir}}", "github.com/elaous/gojiberry/internal/e2etest").Output()
+	if err != nil {
+		return "", fmt.Errorf("e2etest: cannot find the source of the selector helper: %v", err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }

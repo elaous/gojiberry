@@ -6,6 +6,9 @@
 (() => {
   if (window.__e2e) return;
   const had = 'Go' in globalThis, prev = globalThis.Go;
+  // The WASM_EXEC marker below is replaced by the toolchain's own lib/wasm/wasm_exec.js
+  // (Go >= 1.24, where it lives under lib/wasm; see selector.go). Do not write the marker
+  // itself in a comment: only its first occurrence is replaced.
   /*WASM_EXEC*/
   const G = globalThis.Go;
   if (had) globalThis.Go = prev; else delete globalThis.Go;
