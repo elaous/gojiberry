@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"path"
 	"sort"
 	"strings"
@@ -21,7 +22,10 @@ import (
 // for the archive: the folder's, or "documents" for the top level.
 func (s *Saver) Archive(ctx context.Context, target, folder string) (data []byte, name string, err error) {
 	name = "documents"
-	type item struct{ id, key, name, dir string }
+	type item struct {
+		id, name, dir string
+		entry         catalogEntry
+	}
 	var items []item
 	var t Target
 	// Read the catalog under the saver's lock, then let go of it: loading every document
@@ -51,7 +55,7 @@ func (s *Saver) Archive(ctx context.Context, target, folder string) (data []byte
 		root := dir(folder)
 		for id, e := range cat.Docs {
 			if e.Trashed == 0 && (folder == "" || e.Folder == folder || cat.inside(e.Folder, folder)) {
-				items = append(items, item{id, e.Key, e.Name, strings.TrimPrefix(strings.TrimPrefix(dir(e.Folder), root), "/")})
+				items = append(items, item{id: id, name: e.Name, dir: strings.TrimPrefix(strings.TrimPrefix(dir(e.Folder), root), "/"), entry: e})
 			}
 		}
 		return nil
@@ -64,14 +68,19 @@ func (s *Saver) Archive(ctx context.Context, target, folder string) (data []byte
 	zw := zip.NewWriter(&buf)
 	used := map[string]bool{}
 	for _, it := range items {
-		stored, err := t.Adapter.Load(ctx, it.key)
+		_, data, _, err := s.readEntry(ctx, t, it.entry)
 		if errors.Is(err, docstore.ErrNotFound) {
 			continue // deleted since the catalog was read
+		}
+		if errors.Is(err, ErrUnreadable) {
+			// An archive is a backup: one that quietly lacks a document is worse than
+			// one that says so.
+			return nil, name, fmt.Errorf("saver: %q is damaged and has no good copy: %w", it.name, err)
 		}
 		if err != nil {
 			return nil, name, err
 		}
-		ext := path.Ext(it.key)
+		ext := path.Ext(it.entry.Key)
 		full := path.Join(it.dir, safeName(it.name)+ext)
 		if used[strings.ToLower(full)] {
 			full = path.Join(path.Dir(full), safeName(it.name)+" ("+it.id[:8]+")"+ext)
@@ -81,7 +90,7 @@ func (s *Saver) Archive(ctx context.Context, target, folder string) (data []byte
 		if err != nil {
 			return nil, name, err
 		}
-		if _, err := w.Write(stored.Data); err != nil {
+		if _, err := w.Write(data); err != nil {
 			return nil, name, err
 		}
 	}

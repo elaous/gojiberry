@@ -64,10 +64,10 @@ func main() {
 				// for the whole body, so it must not hold the answer back), and the clone is
 				// taken before the page starts reading it.
 				if req.Get("method").String() == "GET" && resp.Get("ok").Bool() {
-					copy := resp.Call("clone")
+					kept := resp.Call("clone")
 					go func() {
 						if cache, cerr := sw.CachesOpen(cacheName); cerr == nil {
-							_ = sw.CachePut(cache, req, copy)
+							_ = sw.CachePut(cache, req, kept)
 						}
 					}()
 				}

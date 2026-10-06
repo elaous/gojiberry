@@ -285,8 +285,25 @@ func TestDeleteFolderRemovesTrashedDocumentsWhoseFilesAreGone(t *testing.T) {
 		return e
 	}
 	good, missing, damaged := mk("good"), mk("missing"), mk("damaged")
-	_ = mem.Delete(ctx, missing.Key)
-	_ = mem.Save(ctx, damaged.Key, []byte("{ not json"))
+	// Trashing wrote a new file for each: the current one is what the catalog says now.
+	current := func(id string) Entry {
+		e, err := s.Get(ctx, "m", id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	// Both copies of these two are gone or wrong, or the previous one would stand in.
+	for _, e := range []Entry{missing, damaged} {
+		cur := current(e.ID)
+		_ = mem.Delete(ctx, e.Key) // the previous copy (the file that was current before the trashing)
+		if e.ID == missing.ID {
+			_ = mem.Delete(ctx, cur.Key)
+		} else {
+			_ = mem.Save(ctx, cur.Key, []byte("{ not json"))
+		}
+	}
+	damagedKey := current(damaged.ID).Key
 
 	purged, err := s.DeleteFolderReport(ctx, "m", f.ID)
 	if err != nil || len(purged) != 1 || purged[0] != "missing" {
@@ -297,7 +314,7 @@ func TestDeleteFolderRemovesTrashedDocumentsWhoseFilesAreGone(t *testing.T) {
 	if len(trash) != 2 || trash[0].ID != damaged.ID || trash[1].ID != good.ID || trash[0].Folder != "" || trash[1].Folder != "" {
 		t.Errorf("the readable one and the one that does not parse are at the top level of the trash: %+v", trash)
 	}
-	if stored, err := mem.Load(ctx, damaged.Key); err != nil || string(stored.Data) != "{ not json" {
+	if stored, err := mem.Load(ctx, damagedKey); err != nil || string(stored.Data) != "{ not json" {
 		t.Errorf("the file that does not parse is left exactly as it was: %v", err)
 	}
 	if folders, _ := s.Folders(ctx, "m"); len(folders) != 0 {
@@ -310,11 +327,12 @@ func TestDeleteFolderRemovesTrashedDocumentsWhoseFilesAreGone(t *testing.T) {
 	d.SetFolder(g.ID)
 	e, _ := s.Save(ctx, "m", docfile.JSON, d)
 	_ = s.Trash(ctx, "m", e.ID)
-	s2 := &Saver{Targets: []Target{{Name: "m", Adapter: failingLoads{mem, e.Key}}}}
+	cur, _ := s.Get(ctx, "m", e.ID)
+	s2 := &Saver{Targets: []Target{{Name: "m", Adapter: failingLoads{mem, cur.Key}}}}
 	if _, err := s2.DeleteFolderReport(ctx, "m", g.ID); err == nil || errors.Is(err, ErrUnreadable) {
 		t.Errorf("a transient failure is not a reason to delete anything: %v", err)
 	}
-	if _, err := mem.Load(ctx, e.Key); err != nil {
+	if _, err := mem.Load(ctx, cur.Key); err != nil {
 		t.Errorf("the document was deleted: %v", err)
 	}
 }

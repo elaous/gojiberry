@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
 )
 
 // SaveIf implements ConditionalAdapter. The directory lock (see lockDir) makes the
@@ -28,9 +27,5 @@ func (a *LocalFSAdapter) SaveIf(_ context.Context, id string, data []byte, prev 
 	case prev == "" || Digest(cur) != prev:
 		return ErrConflict
 	}
-	tmp := filepath.Clean(a.path(id) + ".tmp")
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, a.path(id))
+	return a.writeFile(id, data)
 }
