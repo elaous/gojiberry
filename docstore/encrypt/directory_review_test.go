@@ -761,12 +761,12 @@ func TestGlobalLookupBudgetCanBePerPolicyDomain(t *testing.T) {
 
 // --- D: a store without conditional writes -----------------------------------------------------
 
-// plainStore hides every optional capability of the store it wraps.
-type plainStore struct{ docstore.Adapter }
+// bareStore hides every optional capability of the store it wraps.
+type bareStore struct{ docstore.Adapter }
 
 func TestCheckStoreRefusesReplicasOnAStoreWithoutConditionalWrites(t *testing.T) {
 	ctx := context.Background()
-	plain := &AdapterDirectory{Store: plainStore{docstore.NewMemoryAdapter()}, Signer: testSigner(t, 1)}
+	plain := &AdapterDirectory{Store: bareStore{docstore.NewMemoryAdapter()}, Signer: testSigner(t, 1)}
 	if err := plain.CheckStore(ctx, 2); err == nil || !strings.Contains(err.Error(), "conditional") {
 		t.Errorf("two replicas on a plain store: %v", err)
 	}

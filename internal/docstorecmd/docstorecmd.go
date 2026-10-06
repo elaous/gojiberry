@@ -24,7 +24,7 @@ import (
 // withPublic turns on the public (anonymous) offer when GOJIBERRY_DOCSTORE_PUBLIC=true (limits and
 // secrets in GOJIBERRY_DOCSTORE_PUBLIC_*, see public.FromEnv): POST /public/session, the session's
 // one document under /public/doc, read-only /public/view/<id>, POST /public/report and, with
-// GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN, DELETE /admin/takedown/<id>. Unset, nothing is mounted.
+// GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN, DELETE /admin/takedown/<id> and GET /admin/health. Unset, nothing is mounted.
 //
 // The offer promises deletion 24 hours after the last edit, so it refuses to start unless
 // expiry is on (GOJIBERRY_DOCSTORE_EXPIRY_TTL, and the adapter is the expiring one).
@@ -35,7 +35,9 @@ import (
 // withPublic closes it (Server.CloseDocs: 404 for /docs, /docs/{id}, its /acl and /quota), unless the
 // operator sets GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS=true, which keeps it open and says so loudly
 // in the log. Behind a reverse proxy, GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES must name it ("none"
-// says there is none and silences the startup warning).
+// says there is none and silences the startup warning); with an admin token it is required: the
+// server does not start with it unset, since one caller's wrong admin guesses behind an unnamed
+// proxy would lock the operator out.
 //
 // limiters is where the offer's request budgets live (GOJIBERRY_DOCSTORE_LIMITER): with "store"
 // the replicas that share the store share them, as for the directory and the passkey routes.
@@ -236,13 +238,9 @@ func Main() {
 	// write; everything below (passkeys, directory, the server) uses the wrapped store, whose
 	// policy leaves their own keyspaces alone. Documents that already exist get a full
 	// lifetime from the first sweep unless GOJIBERRY_DOCSTORE_EXPIRY_ADOPT=updated.
-	if cfg.ExpiryTTL > 0 {
-		ea := docstore.NewExpiringAdapter(adapter, docstore.FixedTTL(cfg.ExpiryTTL))
-		ea.AdoptUpdatedAt = cfg.ExpiryAdoptUpdated
-		go ea.Run(context.Background(), cfg.ExpirySweep)
-		adapter = ea
-		log.Printf("docstore: documents expire %s after their last write (sweep every %s)", cfg.ExpiryTTL, cfg.ExpirySweep)
-	}
+	// POST /docs/{id}/renew (a collaboration hub in another process, see collab/hub) works
+	// whenever the store expires.
+	adapter, _ = docstore.WithConfiguredExpiry(context.Background(), adapter, cfg)
 	authManager, err := docstore.NewAuthManager(context.Background(), cfg.Auth)
 	if err != nil {
 		log.Fatalf("docstore: %v", err)

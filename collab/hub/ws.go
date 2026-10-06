@@ -144,7 +144,13 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case e, open := <-s.ch:
-			if !open || !write(e) {
+			if !open {
+				if h.isDead(rm) { // the document expired: say so (4410 is 410 Gone) instead of just hanging up
+					_ = c.Close(websocket.StatusCode(4410), goneMsg)
+				}
+				return
+			}
+			if !write(e) {
 				return
 			}
 		case e := <-out:

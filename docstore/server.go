@@ -59,7 +59,17 @@ type Config struct {
 	// "memory" (the default: a budget per process) or "store" (a budget shared through the
 	// store by every replica on it, see StoreLimiter). ConfigFromEnv reads
 	// GOJIBERRY_DOCSTORE_LIMITER.
-	Limiter       string
+	Limiter string
+	// ExpiryOrphans (GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=collab) makes the sweeper also delete the
+	// shared-editing state ("collab:<id>") of documents that do not exist, once it is older than
+	// the TTL plus ExpiryOrphanGrace (GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE, default 1h): without
+	// it a document that lives only in the collaboration hub is never swept. It is on by default
+	// when GOJIBERRY_DOCSTORE_PUBLIC is on (GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=off disables it).
+	ExpiryOrphans     bool
+	ExpiryOrphanGrace time.Duration
+	// ExpiryMaxAge (GOJIBERRY_DOCSTORE_EXPIRY_MAX_AGE, default off) caps a document's life from
+	// its creation, however often it is edited (ExpiringAdapter.MaxAge).
+	ExpiryMaxAge  time.Duration
 	Addr          string
 	Backend       string
 	BackendConfig json.RawMessage
@@ -146,7 +156,70 @@ func ConfigFromEnv() Config {
 	if cfg.Limiter, err = ParseLimiterMode(os.Getenv("GOJIBERRY_DOCSTORE_LIMITER")); err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
+	// In public mode the sweep of orphaned shared-editing state is on unless switched off with
+	// GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=off: the offer promises that nothing outlives its
+	// deadline, and hub state of a document that only ever lived in the hub has none of its own.
+	publicOn := publicOfferOn(os.Getenv("GOJIBERRY_DOCSTORE_PUBLIC"))
+	if cfg.ExpiryOrphans, cfg.ExpiryOrphanGrace, err = ParseExpiryOrphansDefault(os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS"), os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE"), publicOn); err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
+	if publicOn && !cfg.ExpiryOrphans {
+		log.Print("docstore: WARNING: public mode with GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=off: hub-only shared-editing state ('collab:<id>') of documents that never reached the store is never deleted, against the retention promise")
+	}
+	if raw := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_MAX_AGE")); raw != "" {
+		if cfg.ExpiryMaxAge, err = time.ParseDuration(raw); err != nil || cfg.ExpiryMaxAge <= 0 {
+			log.Fatalf("docstore: parsing GOJIBERRY_DOCSTORE_EXPIRY_MAX_AGE %q: want a positive duration such as 168h", raw)
+		}
+	}
 	return cfg
+}
+
+// ParseExpiryOrphans parses GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS ("collab" turns the sweep of
+// orphaned shared-editing state on; empty is off) and GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE (a Go
+// duration; empty is DefaultOrphanGrace). A grace without the policy is an error.
+func ParseExpiryOrphans(raw, graceRaw string) (on bool, grace time.Duration, err error) {
+	return ParseExpiryOrphansDefault(raw, graceRaw, false)
+}
+
+// ParseExpiryOrphansDefault is ParseExpiryOrphans with the answer for an empty setting: defaultOn
+// is what the public offer uses (the sweep is on unless GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=off).
+// "off" (or "none", "false") always turns it off; a grace beside it is an error.
+func ParseExpiryOrphansDefault(raw, graceRaw string, defaultOn bool) (on bool, grace time.Duration, err error) {
+	raw, graceRaw = strings.ToLower(strings.TrimSpace(raw)), strings.TrimSpace(graceRaw)
+	switch raw {
+	case "":
+		if !defaultOn {
+			if graceRaw != "" {
+				return false, 0, errors.New("GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE needs GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=collab")
+			}
+			return false, 0, nil
+		}
+	case "off", "none", "false":
+		if graceRaw != "" {
+			return false, 0, errors.New("GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE needs GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=collab")
+		}
+		return false, 0, nil
+	case "collab":
+	default:
+		return false, 0, fmt.Errorf("parsing GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS %q: want \"collab\" or \"off\" (or empty: off, on in public mode)", raw)
+	}
+	if graceRaw == "" {
+		return true, DefaultOrphanGrace, nil
+	}
+	if grace, err = time.ParseDuration(graceRaw); err != nil || grace <= 0 {
+		return false, 0, fmt.Errorf("parsing GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE %q: want a positive duration such as 1h", graceRaw)
+	}
+	return true, grace, nil
+}
+
+// publicOfferOn reports whether GOJIBERRY_DOCSTORE_PUBLIC turns the public offer on (the same
+// values public.FromEnv accepts; a test in internal/docstorecmd keeps the two together).
+func publicOfferOn(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "true", "1", "on":
+		return true
+	}
+	return false
 }
 
 // ParseExpiryAdopt parses GOJIBERRY_DOCSTORE_EXPIRY_ADOPT: empty (or "grace") gives documents that
@@ -213,6 +286,8 @@ func envOr(key, fallback string) string {
 //	GET    /docs           -- list metadata, as a JSON array of Meta (plus "expires" when the
 //	                          store expires documents, see WithExpiry; reads and writes then
 //	                          carry X-Gojiberry-Expires)
+//	POST   /docs/{id}/renew -- an edit kept elsewhere (the collaboration hub): move the deadline
+//	                          of a live document, needs write permission (see handleRenew)
 //	GET    /docs/{id}/acl  -- this document's own ACL (see acl.go), Owner-only
 //	PUT    /docs/{id}/acl  -- replace it (bootstraps ownership on first use)
 //	GET    /health         -- liveness + configured backend name
@@ -516,7 +591,15 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
+	if idEndsInRoute(r) {
+		http.Error(w, "a document id may not end in /renew or /acl (those paths are routes)", http.StatusBadRequest)
+		return
+	}
 	path := strings.TrimPrefix(r.URL.Path, "/docs/")
+	if id, ok := strings.CutSuffix(path, "/renew"); ok {
+		s.handleRenew(w, r, id)
+		return
+	}
 	if id, ok := strings.CutSuffix(path, "/acl"); ok {
 		if id == "" || s.reserved(id) {
 			http.Error(w, "missing or invalid document id", http.StatusBadRequest)
@@ -619,5 +702,58 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// idEndsInRoute reports whether the request names a document whose id ends in "/renew" or
+// "/acl" with the slash percent-encoded ("/docs/a%2Frenew", what HTTPAdapter sends for the id
+// "a/renew"). The router decodes the path, so such an id would be taken for the renew or ACL
+// route of document "a": PUT, POST and every other method on it are refused with 400 instead
+// (the same rule is what keeps such an id from being created: ids ending in these segments are
+// reserved, and a real route is always sent with its slash plain).
+func idEndsInRoute(r *http.Request) bool {
+	ep := strings.ToLower(r.URL.EscapedPath())
+	return strings.HasSuffix(ep, "%2frenew") || strings.HasSuffix(ep, "%2facl")
+}
+
+// handleRenew serves POST /docs/{id}/renew: the caller says document id was edited somewhere
+// else (the collaboration hub, which keeps its state apart from the document), and the store
+// moves its deadline to now + TTL without writing it. The permission is the one a PUT needs
+// (checkPermission): the owner or an editor, never a viewer, never an anonymous caller of a
+// document with an access list; a document nobody has shared is open, as for a PUT, and with
+// RequireACL it is closed (a renewal never creates the access list the way a first PUT does).
+// 204 with X-Gojiberry-Expires; 404 for a document that does not exist or has expired (it is
+// never revived), marked with GoneHeader and {"error":"gone"} so a client can tell it from any other 404; 501 when the store does not expire documents.
+func (s *Server) handleRenew(w http.ResponseWriter, r *http.Request, id string) {
+	if id == "" || s.reserved(id) {
+		http.Error(w, "missing or invalid document id", http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if allowed, status := s.checkPermission(r, id, methodRenew); !allowed {
+		writePermissionError(w, status)
+		return
+	}
+	rn, ok := s.adapter.(Renewer)
+	if !ok {
+		http.Error(w, "this store does not expire documents", http.StatusNotImplemented)
+		return
+	}
+	switch err := rn.Renew(r.Context(), id); {
+	case errors.Is(err, ErrNotFound):
+		// The marker tells a real "document gone" from any other 404 (a proxy, a wrong route,
+		// an older server): HTTPAdapter.Renew returns ErrNotFound only for this.
+		w.Header().Set(GoneHeader, "1")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"gone"}`))
+	case err != nil:
+		serverError(w, err)
+	default:
+		s.setExpires(w, r, id)
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

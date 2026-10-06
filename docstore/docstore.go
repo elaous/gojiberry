@@ -32,6 +32,14 @@ var ErrNotFound = errors.New("docstore: document not found")
 // available here. A catalog rebuild lists such a document without reading it.
 var ErrLocked = errors.New("docstore: the document is locked: no key here opens it")
 
+// ErrDowngrade is what an encrypting adapter wraps in the error of a Load, Save or re-key that
+// found a document's protection lower than the files themselves prove it was: its signed
+// recipient record was deleted, an older one was put back, or a file's frame is not the owner's
+// (encrypt.ErrForgedFrame, which is this error too) (see docstore/encrypt,
+// docs/encryption-and-passkeys.md C.5). Nothing is returned or written; the owner decides:
+// Sharing.Recover when the record was lost or replaced, Sharing.Repair after a cut-short switch.
+var ErrDowngrade = errors.New("docstore: the document's protection is lower than it was (its record was deleted or an older one put back, or a file was forged); the owner can restore it with Sharing.Recover, or finish a cut-short switch with Sharing.Repair")
+
 // ErrStorageFull is wrapped in the error of a Save that failed because the store has no
 // room (a browser's quota, a full disk). A caller may free what it can do without and try
 // again.

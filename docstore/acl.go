@@ -126,6 +126,10 @@ func (s *Server) loadACL(ctx context.Context, id string) (ACL, error) {
 	return acl, nil
 }
 
+// methodRenew is checkPermission's name for POST /docs/{id}/renew: the permission of a write that
+// never bootstraps an access list.
+const methodRenew = "RENEW"
+
 // checkPermission enforces id's own ACL (if any) against r's caller
 // for the given HTTP method (GET/PUT/DELETE) -- the gate every
 // /docs/{id} handler in server.go runs its real work behind. Entirely
@@ -177,7 +181,7 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 		if acl.canRead(who) {
 			return true, 0
 		}
-	case http.MethodPut, http.MethodDelete:
+	case http.MethodPut, http.MethodDelete, methodRenew:
 		if acl.canWrite(who) {
 			return true, 0
 		}
@@ -337,7 +341,7 @@ func isReservedDocID(id string) bool {
 	// Every reserved prefix is compared without case, since a backend that folds case would
 	// alias "DIRECTORY-ENROLL/x" with the real record, as IsDocumentKey does for expiry.
 	lower := strings.ToLower(id)
-	for _, p := range []string{aclKeyPrefix, "collab:", DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, ExpiryPrefix, PublicPrefix, ReportPrefix} {
+	for _, p := range []string{aclKeyPrefix, "collab:", DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, ExpiryPrefix, ExpiryCreatedPrefix, PublicPrefix, ReportPrefix} {
 		if strings.HasPrefix(lower, p) {
 			return true
 		}
