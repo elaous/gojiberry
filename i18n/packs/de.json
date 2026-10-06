@@ -228,6 +228,17 @@
   "saver.checkedProblems": "%d Dokumente geprüft: %d aus einer früheren Kopie wiederhergestellt (%s), %d beschädigt ohne Kopie (%s)",
   "saver.checkedBackups": "(%d ohne brauchbare frühere Kopie; die nächste Speicherung legt eine an)",
   "saver.checkedOrphans": "(%d übrig gebliebene Dateien entfernt)",
-  "docs.check": "Dokumente prüfen"
+  "docs.check": "Dokumente prüfen",
+  "recipients.title": "Schlüssel, die dieses Dokument öffnen können",
+  "recipients.unlabeled": "(ohne Bezeichnung)",
+  "recipients.owner": "Eigentümer",
+  "recipients.remove": "Entfernen",
+  "recipients.confirmRemove": "Nicht mehr mit %s teilen? Das Dokument wird ohne diesen Schlüssel neu verschlüsselt, sodass er nichts öffnen kann, was ab jetzt gespeichert wird. Was schon geöffnet oder kopiert wurde, bleibt dort: Das lässt sich nicht zurücknehmen.",
+  "recipients.keyPlaceholder": "Öffentlichen Schlüssel einfügen: ssh-ed25519 AAAA… oder age1…",
+  "recipients.key": "Öffentlicher Schlüssel",
+  "recipients.parsed": "%s-Schlüssel für %s. Sein Fingerabdruck ist:",
+  "recipients.checkHint": "Prüfen Sie diesen Fingerabdruck mit der Person, auf einem anderen Weg als dem, auf dem Sie den Schlüssel erhalten haben, und tippen Sie ihn dann hier ein, um den Schlüssel hinzuzufügen.",
+  "recipients.confirm": "Fingerabdruck, zur Bestätigung eingetippt",
+  "recipients.add": "Schlüssel hinzufügen"
  }
 }

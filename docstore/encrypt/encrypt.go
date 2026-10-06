@@ -39,9 +39,9 @@ var ErrNoRecipients = errors.New("encrypt: no recipients")
 type Keyring interface {
 	// Recipients are the keys the document id is encrypted to when saved (the owner, and
 	// everyone it is shared with).
-	Recipients(id string) ([]age.Recipient, error)
+	Recipients(ctx context.Context, id string) ([]age.Recipient, error)
 	// Identities are the private keys that may open it.
-	Identities(id string) ([]age.Identity, error)
+	Identities(ctx context.Context, id string) ([]age.Identity, error)
 }
 
 // Static is a Keyring with one set of keys for every document.
@@ -51,15 +51,15 @@ type Static struct {
 }
 
 // Recipients implements Keyring.
-func (s Static) Recipients(string) ([]age.Recipient, error) { return s.To, nil }
+func (s Static) Recipients(context.Context, string) ([]age.Recipient, error) { return s.To, nil }
 
 // Identities implements Keyring.
-func (s Static) Identities(string) ([]age.Identity, error) { return s.Keys, nil }
+func (s Static) Identities(context.Context, string) ([]age.Identity, error) { return s.Keys, nil }
 
 // DefaultSkip says which stored items stay readable: the catalogs, the folder records, the
 // ACL records and the fonts, which list or serve a store and hold no document text.
 func DefaultSkip(id string) bool {
-	return strings.HasPrefix(id, "catalog:") || strings.HasPrefix(id, "acl:") || strings.HasPrefix(id, "fonts/")
+	return strings.HasPrefix(id, "catalog:") || strings.HasPrefix(id, "acl:") || strings.HasPrefix(id, "fonts/") || strings.HasPrefix(id, KeysPrefix)
 }
 
 // Adapter is a docstore.Adapter that encrypts what it saves in Inner.
@@ -88,8 +88,8 @@ var header = []byte("age-encryption.org/v1\n")
 // IsEncrypted says whether stored bytes are an age file.
 func IsEncrypted(b []byte) bool { return bytes.HasPrefix(b, header) }
 
-func (a *Adapter) seal(id string, data []byte) ([]byte, error) {
-	rs, err := a.Ring.Recipients(id)
+func (a *Adapter) seal(ctx context.Context, id string, data []byte) ([]byte, error) {
+	rs, err := a.Ring.Recipients(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -110,14 +110,14 @@ func (a *Adapter) seal(id string, data []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (a *Adapter) open(id string, stored []byte) ([]byte, error) {
+func (a *Adapter) open(ctx context.Context, id string, stored []byte) ([]byte, error) {
 	if !IsEncrypted(stored) {
 		if a.RequireEncrypted {
 			return nil, ErrNotEncrypted
 		}
 		return stored, nil
 	}
-	ids, err := a.Ring.Identities(id)
+	ids, err := a.Ring.Identities(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 	if a.skip(id) {
 		return a.Inner.Save(ctx, id, data)
 	}
-	ct, err := a.seal(id, data)
+	ct, err := a.seal(ctx, id, data)
 	if err != nil {
 		return err
 	}
@@ -150,7 +150,7 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 	if err != nil || a.skip(id) {
 		return d, err
 	}
-	plain, err := a.open(id, d.Data)
+	plain, err := a.open(ctx, id, d.Data)
 	if err != nil {
 		return docstore.Document{}, err
 	}
@@ -174,7 +174,7 @@ func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest
 		return docstore.ErrConditionalUnsupported
 	}
 	if !a.skip(id) {
-		ct, err := a.seal(id, data)
+		ct, err := a.seal(ctx, id, data)
 		if err != nil {
 			return err
 		}

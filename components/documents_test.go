@@ -294,3 +294,66 @@ func TestMigratePanel(t *testing.T) {
 	p.Error = "boom"
 	mustContain(t, render(t, Migrate(p)), `role="alert"`, "boom")
 }
+
+func TestRecipientsListAddWithAConfirmedFingerprintAndRemove(t *testing.T) {
+	var added, removed []string
+	var draft, confirm string
+	p := RecipientsProps{
+		Owner:   []RecipientRow{{Label: "ana@opendocs.io", Type: "ssh-ed25519", Fingerprint: "SHA256:owner"}},
+		Shared:  []RecipientRow{{Label: "bo", Type: "ssh-ed25519", Fingerprint: "SHA256:bo"}},
+		Pending: &Pending{Inline: true},
+		OnDraft: func(k, c string) { draft, confirm = k, c },
+		Add:     func(_ context.Context, k, c string) error { added = append(added, k+"|"+c); return nil },
+		Remove:  func(_ context.Context, fp string) error { removed = append(removed, fp); return nil },
+		Ask:     func(msg string, do func()) { mustContain(t, msg, "Stop sharing with bo", "cannot be taken back"); do() },
+	}
+	html := render(t, Recipients(p))
+	mustContain(t, html, "Keys that can open this document", "ana@opendocs.io", "owner", "SHA256:owner", "SHA256:bo", "gj-recip-remove", "gj-recip-key", "Add key")
+	mustNotContain(t, html, "gj-recip-confirm") // nothing parsed yet
+
+	p.Draft, p.ParseError = "nonsense", "not an SSH public key"
+	mustContain(t, render(t, Recipients(p)), "gj-recip-error", `role="alert"`, "not an SSH public key")
+
+	// A parsed key asks for its fingerprint; Add is disabled until it is typed exactly.
+	p.Draft, p.ParseError = "ssh-ed25519 AAAA cy", ""
+	p.Parsed = &RecipientRow{Label: "cy", Type: "ssh-ed25519", Fingerprint: "SHA256:cy"}
+	html = render(t, Recipients(p))
+	mustContain(t, html, "ssh-ed25519 key for cy", "SHA256:cy", "Check this fingerprint with the person", "gj-recip-confirm")
+	if disabledAdd(t, p) != true {
+		t.Error("Add is off before the fingerprint is confirmed")
+	}
+	p.Confirm = "SHA256:other"
+	if disabledAdd(t, p) != true {
+		t.Error("a different fingerprint does not confirm")
+	}
+	p.Confirm = " SHA256:cy "
+	if disabledAdd(t, p) {
+		t.Error("the fingerprint typed confirms (spaces around it do not matter)")
+	}
+	for _, h := range findHandlers(Recipients(p), "click") {
+		h(xango.NewEvent("click", nil, false, nil, nil))
+	}
+	if len(added) != 1 || added[0] != "ssh-ed25519 AAAA cy| SHA256:cy " || len(removed) != 1 || removed[0] != "SHA256:bo" {
+		t.Errorf("%v %v", added, removed)
+	}
+	for _, h := range findHandlers(Recipients(p), "input") {
+		h(xango.NewEvent("input", "typed", false, nil, nil))
+	}
+	if draft == "" && confirm == "" {
+		t.Error("typing is reported")
+	}
+	// Without Add and Remove there are no controls.
+	html = render(t, Recipients(RecipientsProps{Shared: p.Shared, Pending: p.Pending}))
+	mustNotContain(t, html, "gj-recip-remove", "gj-recip-form")
+}
+
+func disabledAdd(t *testing.T, p RecipientsProps) bool {
+	t.Helper()
+	html := render(t, Recipients(p))
+	i := strings.Index(html, `class="gj-recip-add`)
+	if i < 0 {
+		t.Fatal("no Add button")
+	}
+	j := strings.Index(html[i:], ">")
+	return strings.Contains(html[i:i+j], "disabled")
+}

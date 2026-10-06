@@ -168,8 +168,8 @@ type mutable struct {
 	keys []age.Identity
 }
 
-func (m *mutable) Recipients(string) ([]age.Recipient, error) { return m.to, nil }
-func (m *mutable) Identities(string) ([]age.Identity, error)  { return m.keys, nil }
+func (m *mutable) Recipients(context.Context, string) ([]age.Recipient, error) { return m.to, nil }
+func (m *mutable) Identities(context.Context, string) ([]age.Identity, error)  { return m.keys, nil }
 
 func TestRecoveryKeyOpensWhatTheOwnerKeyCannot(t *testing.T) {
 	ctx := context.Background()
@@ -263,5 +263,112 @@ func TestTheSaverWorksOnAnEncryptedStore(t *testing.T) {
 	stranger := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: New(inner, Static{})}}}
 	if _, err := stranger.Load(ctx, "m", e.ID); err == nil {
 		t.Error("a store with no key opens nothing")
+	}
+}
+
+func TestDocIDFindsTheDocumentAFileBelongsTo(t *testing.T) {
+	id := "11111111-1111-4111-8111-111111111111"
+	for stored, want := range map[string]string{
+		id + "~0123456789ab.json": id,
+		id + ".json":              id,
+		"versions/" + id + "/00000000000000000042.json": id,
+		"catalog:index":        "",
+		"fonts/Serif/400.ttf":  "",
+		"versions/nope/1.json": "",
+		"short":                "",
+	} {
+		if got := DocID(stored); got != want {
+			t.Errorf("%q: %q, want %q", stored, got, want)
+		}
+	}
+}
+
+func TestSharingByKeyNeedsTheFingerprintAndRemovingIsAReKey(t *testing.T) {
+	ctx := context.Background()
+	ana, bo, cy := newPerson(t, "ana"), newPerson(t, "bo"), newPerson(t, "cy")
+	inner := docstore.NewMemoryAdapter()
+	ad := New(inner, StoreKeyring{Store: inner, Owners: []age.Recipient{ana.r.Key}, Keys: []age.Identity{ana.id}})
+	sh := &Sharing{Store: inner, Adapter: ad}
+	docID := "22222222-2222-4222-8222-222222222222"
+	cur, prev, ver := docID+"~aaaaaaaaaaaa.json", docID+"~bbbbbbbbbbbb.json", "versions/"+docID+"/00000000000000000007.json"
+	for _, id := range []string{cur, prev, ver} {
+		if err := ad.Save(ctx, id, []byte("text of "+id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	other := "33333333-3333-4333-8333-333333333333~cccccccccccc.json"
+	_ = ad.Save(ctx, other, []byte("someone else's"))
+	asBo := New(inner, Static{Keys: []age.Identity{bo.id}})
+	if _, err := asBo.Load(ctx, cur); !errors.Is(err, ErrNoKey) {
+		t.Fatal("not shared yet")
+	}
+
+	// The fingerprint has to be confirmed, and be this key's.
+	if err := sh.Add(ctx, docID, bo.r, ""); !errors.Is(err, ErrFingerprint) {
+		t.Fatalf("no confirmation: %v", err)
+	}
+	if err := sh.Add(ctx, docID, bo.r, cy.r.Fingerprint); !errors.Is(err, ErrFingerprint) {
+		t.Fatalf("someone else's fingerprint: %v", err)
+	}
+	if err := sh.Add(ctx, docID, bo.r, bo.r.Fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	if err := sh.Add(ctx, docID, bo.r, bo.r.Fingerprint); err != nil {
+		t.Fatal("adding twice changes nothing:", err)
+	}
+	list, _ := sh.List(ctx, docID)
+	if len(list) != 1 || list[0].Label != "bo" || list[0].Fingerprint != bo.r.Fingerprint || list[0].Type != "ssh-ed25519" {
+		t.Fatalf("%+v", list)
+	}
+	// Everything of the document opens for Bo: the copy, the previous copy and the version.
+	for _, id := range []string{cur, prev, ver} {
+		if d, err := asBo.Load(ctx, id); err != nil || string(d.Data) != "text of "+id {
+			t.Errorf("%s: %v", id, err)
+		}
+	}
+	if _, err := asBo.Load(ctx, other); !errors.Is(err, ErrNoKey) {
+		t.Error("another document is not shared")
+	}
+	// The record is readable by anyone with the store (public keys only).
+	if raw, err := inner.Load(ctx, KeysPrefix+docID); err != nil || IsEncrypted(raw.Data) || !bytes.Contains(raw.Data, []byte(bo.r.Fingerprint)) {
+		t.Errorf("the recipient list is plain: %v", err)
+	}
+	// A save made later goes to Bo too.
+	_ = ad.Save(ctx, cur, []byte("newer"))
+	if d, err := asBo.Load(ctx, cur); err != nil || string(d.Data) != "newer" {
+		t.Errorf("%v", err)
+	}
+
+	// Revoked: the files are encrypted again without Bo.
+	n, err := sh.Remove(ctx, docID, bo.r.Fingerprint)
+	if err != nil || n != 3 {
+		t.Fatalf("%d %v", n, err)
+	}
+	for _, id := range []string{cur, prev, ver} {
+		if _, err := asBo.Load(ctx, id); !errors.Is(err, ErrNoKey) {
+			t.Errorf("%s: Bo is out: %v", id, err)
+		}
+		if _, err := ad.Load(ctx, id); err != nil {
+			t.Errorf("%s: Ana still reads it: %v", id, err)
+		}
+	}
+	if list, _ := sh.List(ctx, docID); len(list) != 0 {
+		t.Errorf("%+v", list)
+	}
+	if _, err := inner.Load(ctx, KeysPrefix+docID); !errors.Is(err, docstore.ErrNotFound) {
+		t.Error("an empty list is not kept")
+	}
+	if _, err := sh.Remove(ctx, docID, "SHA256:nobody"); !errors.Is(err, docstore.ErrNotFound) {
+		t.Errorf("%v", err)
+	}
+	// An age (recovery) key shares the same way.
+	pub, secret, _ := GenerateRecoveryKey()
+	rec, _ := ParseAgeRecipient(pub)
+	if err := sh.Add(ctx, docID, rec, rec.Fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	recID, _ := ParseAgeIdentity(secret)
+	if d, err := New(inner, Static{Keys: []age.Identity{recID}}).Load(ctx, cur); err != nil || string(d.Data) != "newer" {
+		t.Errorf("%v", err)
 	}
 }
