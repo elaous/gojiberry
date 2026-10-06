@@ -17,7 +17,8 @@ func TestFromEnv(t *testing.T) {
 		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS":      "5",
 		"GOJIBERRY_DOCSTORE_PUBLIC_WRITES_PER_MINUTE": "2.5",
 		"GOJIBERRY_DOCSTORE_PUBLIC_TERMS_URL":         " https://x.example/t ",
-		"GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN":       "tok",
+		"GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN":       "a-token-of-16+chars",
+		"GOJIBERRY_DOCSTORE_PUBLIC_REPORT_KEY":        "a report key of some length",
 		"GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES":   "10.0.0.0/8, 127.0.0.1,",
 		"GOJIBERRY_DOCSTORE_PUBLIC_REPORT_TTL":        "48h",
 	}
@@ -26,7 +27,7 @@ func TestFromEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !c.Enabled || c.MaxDocBytes != 1000 || c.MaxVersions != 7 || c.IPDailyBytes != 99999 || c.SessionTTL != 2*time.Hour ||
-		c.MaxSessions != 5 || c.WritesPerMinute != 2.5 || c.TermsURL != "https://x.example/t" || c.AdminToken != "tok" ||
+		c.MaxSessions != 5 || c.WritesPerMinute != 2.5 || c.TermsURL != "https://x.example/t" || c.AdminToken != "a-token-of-16+chars" ||
 		len(c.TrustedProxies) != 2 || c.ReportTTL != 48*time.Hour {
 		t.Fatalf("config = %+v", c)
 	}
@@ -62,17 +63,17 @@ func TestMemorySessionStore(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	st := NewMemorySessionStore(2)
 	mk := func(exp time.Duration) Session { return Session{ID: "x", Created: now, Expires: now.Add(exp)} }
-	if err := st.Create(ctx, "a", mk(time.Hour), now, 0); err != nil {
+	if err := st.Create(ctx, "a", mk(time.Hour), now, SessionCaps{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Create(ctx, "b", mk(time.Minute), now, 0); err != nil {
+	if err := st.Create(ctx, "b", mk(time.Minute), now, SessionCaps{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Create(ctx, "c", mk(time.Hour), now, 0); err != ErrSessionsFull {
+	if err := st.Create(ctx, "c", mk(time.Hour), now, SessionCaps{}); err != ErrSessionsFull {
 		t.Fatalf("err = %v", err)
 	}
 	later := now.Add(2 * time.Minute) // b expired: room again
-	if err := st.Create(ctx, "c", mk(time.Hour), later, 0); err != nil {
+	if err := st.Create(ctx, "c", mk(time.Hour), later, SessionCaps{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok, _ := st.Get(ctx, "b", later); ok {

@@ -218,6 +218,11 @@ type ExpiringAdapter struct {
 	// A Save of a document that has reached MaxAge starts a new document (what an expired one
 	// would get): the old content, versions and access list are purged first.
 	MaxAge time.Duration
+	// OnSave, when set, is called after every successful Save and SaveIf with the id and the size
+	// of what was written (not for Touch). It must be quick and must not call back into the
+	// adapter. The public offer uses it to count version snapshots as they are written. Set it
+	// before the adapter is in use.
+	OnSave func(id string, size int)
 	// Orphans, when set, makes Sweep also delete the shared-editing state ("collab:<id>") of a
 	// document that does not exist in the store (see OrphanPolicy). Nil (the default) leaves
 	// such entries alone.
@@ -679,7 +684,17 @@ func (e *ExpiringAdapter) renewed(ctx context.Context, id string, write func() e
 
 // Save implements Adapter: it stores the document and renews its deadline.
 func (e *ExpiringAdapter) Save(ctx context.Context, id string, data []byte) error {
-	return e.renewed(ctx, id, func() error { return e.Inner.Save(ctx, id, data) })
+	if err := e.renewed(ctx, id, func() error { return e.Inner.Save(ctx, id, data) }); err != nil {
+		return err
+	}
+	e.saved(id, len(data))
+	return nil
+}
+
+func (e *ExpiringAdapter) saved(id string, size int) {
+	if f := e.OnSave; f != nil {
+		f(id, size)
+	}
 }
 
 // SaveIf implements ConditionalAdapter over an inner one; an expired document counts as absent.
@@ -688,7 +703,11 @@ func (e *ExpiringAdapter) SaveIf(ctx context.Context, id string, data []byte, pr
 	if !ok {
 		return ErrConditionalUnsupported
 	}
-	return e.renewed(ctx, id, func() error { return c.SaveIf(ctx, id, data, prev) })
+	if err := e.renewed(ctx, id, func() error { return c.SaveIf(ctx, id, data, prev) }); err != nil {
+		return err
+	}
+	e.saved(id, len(data))
+	return nil
 }
 
 // Renew implements Renewer; it is Touch.

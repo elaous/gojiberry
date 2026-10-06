@@ -13,8 +13,30 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
   (like `acl:` and `collab:`): `docstore.Server` refuses to read, write, list or delete them
   through `/docs`, so an existing document with such an ID becomes unreachable through the
   server. Rename it in the store before upgrading. The same holds for IDs starting with `public/`
-  or `report/` (the public offer's records and reports, any case), and for a provider named
+  or `report/` (the public offer's records and reports) in any case (`Public/x`, `REPORT/x`), **in all
+  modes**, with the public offer on or off, and for a provider named
   `anon` in `GOJIBERRY_DOCSTORE_AUTH_PROVIDERS` (reserved for anonymous users, like `passkey`).
+- **Public docstore hardening (flood, accounting, reports, admin).** `GET /public/health` now answers
+  `{"ok":true}` (200) or `{"ok":false}` (503) only; the report with the problem names, storage figures,
+  `priorityBursts` and last sweep is `GET /admin/health` (admin token). With `GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN`
+  set, the server **refuses to start** unless `GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES` names the reverse
+  proxies or says `none`, **and the token is at least 16 characters** (`_ALLOW_SHORT_ADMIN_TOKEN=true`
+  overrides, with a loud warning). Failed admin authentications are rate limited per client (/64), per
+  network (/48, /24) and in all (a 30 s cooldown for wrong tokens when the global budget is used up); a
+  correct token never is. New variables: `_MAX_SESSIONS_PER_NET` (100, per IPv6 /48 or IPv4 /24),
+  `_MAX_SESSIONS_PER_WIDE` (500, per IPv6 /32 or IPv4 /16; the reserve is judged at that level),
+  `_SESSION_RESERVE_PERCENT` (20), `_MAX_INFLIGHT_BYTES` (256 MiB, 503 above) with `_MAX_INFLIGHT_PER_CLIENT`
+  (cap/8) and `_MAX_INFLIGHT_PER_NET` (cap/4), both 429, `_MIN_UPLOAD_RATE` (32 KiB/s) and `_UPLOAD_GRACE`
+  (5s), `_REPORT_RESERVED_PER_DOC` (5), `_REPORT_RESERVE_PERCENT` (20), `_REPORT_PRIORITY_CATEGORIES`
+  (`csam,illegal`), `_REPORT_PRIORITY_PER_REPORTER` (3 a day), `_REPORT_PRIORITY_BURST` (10 documents an
+  hour), `_REPORT_KEY` (keys the reporter hash; else derived from `GOJIBERRY_DOCSTORE_DIRECTORY_KEY`, else per
+  process) and the three `_ADMIN_FAILURES_*_PER_MINUTE`. A 408 or an abandoned upload no longer refunds the daily
+  bytes. `POST /public/report` takes a `category` (`csam`, `illegal`, `spam`, `other`); only it, never the free text,
+  can make a report a priority one. Go API: `SessionStore.Create` takes a `public.SessionCaps` (was the per-client
+  integer) and `Session` has a `Net` and a `Wide`; a `Quota` may implement `WindowQuota`; `docstore.ExpiringAdapter` has an
+  `OnSave` hook; the report record gains a keyed reporter hash, a category and a priority flag, and a store key
+  `public/salt` (created with create-if-absent); reports are deduplicated per (document, reporter, category, reason).
+  Details: [public-docstore.md](public-docstore.md) sections 7.2 and 7.5.
 - **Expiry records and rollback.** The deadline record `expiry:<id>` is one line holding only the
   deadline (RFC 3339), the format every earlier build parses, so a rollback to an older build
   keeps working. The creation time that `MaxAge` needs lives in a new system keyspace,
@@ -120,7 +142,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 3. **Public docstore.** An anonymous offer: no account, one document per session, a link
    and a download always, deleted 24 hours after the last edit (viewing does not renew).
    Design, wording of the promise, and the abuse controls that must exist before launch:
-   [public-docstore.md](public-docstore.md). Expiry in `docstore` is done (`ExpiringAdapter`: TTL policy, renewed by writes, sweeper, `X-Gojiberry-Expires`, `GOJIBERRY_DOCSTORE_EXPIRY_TTL`/`_SWEEP`/`_ADOPT`); **server side done** (`docstore/public`, `GOJIBERRY_DOCSTORE_PUBLIC=true`: anonymous sessions, one document per session, size/version/rate/daily-byte caps, view-only IDs, reports, takedown with tombstones, `Blocklist`/`Challenger`/`AdminGuard`/`SessionStore`/`Quota` hooks; see [public-docstore.md](public-docstore.md) section 7); hardened after review (per-client session cap with a 1 h idle TTL and an hourly issue rate, limits keyed by IPv6 /64, a global storage budget and report bound, `/docs` closed in public mode, request deadlines, charge-before-body with refunds, `/public/health`, takedown that bans after the records are swept; section 7.2 items 6-15); left: the legal terms text, real abuse operations (who reads reports), a captcha or proof of work behind `Challenger`, shared stores for replicas (the counters and limits are per process, section 7.5), the editor side (links, countdown, report link, creating the document within the idle hour); collaboration-hub edits renew a document (`hub.Config.Renewer`, `ExpiringAdapter.Touch`, `POST /docs/{id}/renew`, never for public sessions), a room whose document expired is closed with 410 after a confirming check, hub-only state is swept (`GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=collab`, on by default in public mode) and `MaxAge` caps a document's life.
+   [public-docstore.md](public-docstore.md). Expiry in `docstore` is done (`ExpiringAdapter`: TTL policy, renewed by writes, sweeper, `X-Gojiberry-Expires`, `GOJIBERRY_DOCSTORE_EXPIRY_TTL`/`_SWEEP`/`_ADOPT`); **server side done** (`docstore/public`, `GOJIBERRY_DOCSTORE_PUBLIC=true`: anonymous sessions, one document per session, size/version/rate/daily-byte caps, view-only IDs, reports, takedown with tombstones, `Blocklist`/`Challenger`/`AdminGuard`/`SessionStore`/`Quota` hooks; see [public-docstore.md](public-docstore.md) section 7); hardened after review (per-client session cap with a 1 h idle TTL and an hourly issue rate, limits keyed by IPv6 /64, a global storage budget and report bound, `/docs` closed in public mode, request deadlines, charge-before-body with refunds, `/public/health`, takedown that bans after the records are swept; section 7.2 items 6-15); hardened again (a per-/48, per-/24, per-/32 and per-/16 session cap with a reserve for new wide networks, an exact byte ledger that fails closed and counts version snapshots when written, a minimal public health with the detail behind the admin guard, deduplicated reports with a category enum and capped priority, failed-only admin rate limit per /64, network and in all with a 16 character minimum token, caps on bodies in flight per client, per network and in all with a minimum upload rate, a keyed reporter hash; items 6, 8, 16-20); left: the legal terms text, real abuse operations (who reads reports), a captcha or proof of work behind `Challenger`, shared stores for replicas (the counters and limits are per process, section 7.5), the editor side (links, countdown, report link, creating the document within the idle hour); collaboration-hub edits renew a document (`hub.Config.Renewer`, `ExpiringAdapter.Touch`, `POST /docs/{id}/renew`, never for public sessions), a room whose document expired is closed with 410 after a confirming check, hub-only state is swept (`GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=collab`, on by default in public mode) and `MaxAge` caps a document's life.
 4. **Console mode: done** (`console`, `cmd/docsh`, [console.md](console.md)); left: the editor panel that drives the same engine.
 5. **Terminal app demo: done** (`examples/terminal-demo`: a file manager and a line editor over `saver.Session`, with the console grammar).
 6. **Store backends with conditional saves: done** for PostgreSQL, MongoDB and S3/MinIO (`SaveIf` in `docstore/backends`; the PostgreSQL one is tested with sqlmock, S3 against a fake that enforces `If-Match`/`If-None-Match`, and MongoDB, which has no fake, runs when `TEST_MONGO_URI` is set, so it has not run against a live server yet).
