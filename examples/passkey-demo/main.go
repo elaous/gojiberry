@@ -13,6 +13,7 @@ import (
 
 	"github.com/elaous/gojiberry/auth/passkey/client"
 	"github.com/elaous/gojiberry/components"
+	"github.com/elaous/gojiberry/docstore/encrypt"
 	"github.com/elaous/gojiberry/domrt"
 	"github.com/elaous/gojiberry/xango"
 )
@@ -25,6 +26,7 @@ func main() {
 		who          string
 		rows         []components.PasskeyRow
 		email, label string
+		derived      string
 	)
 	pending := components.NewPending(func() { render() })
 	asker := components.NewAsker(func() { render() })
@@ -95,6 +97,25 @@ func main() {
 				},
 				Pending: pending, Ask: asker.Ask,
 			}),
+			xango.El("div", nil,
+				xango.El("button", []xango.Attr{xango.A("id", "derive"), xango.A("type", "button"), xango.On("click", func(xango.Event) {
+					pending.Run(func(ctx context.Context) error {
+						id, secret, err := client.DeriveKey(ctx, "", encrypt.PRFSalt)
+						if errors.Is(err, client.ErrCancelled) {
+							return nil
+						}
+						if err != nil {
+							return err
+						}
+						r, err := encrypt.PRFRecipient(secret, "", id)
+						if err != nil {
+							return err
+						}
+						derived = r.Text
+						return nil
+					})
+				})}, xango.Text("Show my encryption key")),
+				xango.El("code", []xango.Attr{xango.A("id", "derived")}, xango.Text(derived))),
 			asker.Dialog())
 		container := js.Global().Get("document").Call("getElementById", "app")
 		if root == nil {

@@ -821,7 +821,7 @@ func (d *Tab) VirtualAuthenticator() string {
 			var err error
 			id, err = webauthn.AddVirtualAuthenticator(&webauthn.VirtualAuthenticatorOptions{
 				Protocol: webauthn.AuthenticatorProtocolCtap2, Transport: webauthn.AuthenticatorTransportInternal,
-				HasResidentKey: true, HasUserVerification: true, IsUserVerified: true, AutomaticPresenceSimulation: true,
+				HasResidentKey: true, HasPrf: true, HasUserVerification: true, IsUserVerified: true, AutomaticPresenceSimulation: true,
 			}).Do(ctx)
 			return err
 		}),

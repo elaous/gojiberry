@@ -165,6 +165,13 @@ key** that wraps a key pair or the data key, so:
    manager (a passkey-only deployment). `examples/passkey-demo` has the e2e against Chrome's virtual
    authenticator. Linking to an OIDC identity: a passkey registered while signed in uses that
    identity's ID, so both ways reach the same account.
-4. Passkey as an encryption recipient through PRF, with detection and the
-   second-recipient rule.
+4. **Done (library, browser client, e2e):** a passkey as an encryption recipient through the WebAuthn PRF
+   extension. `encrypt.PRFSalt`, `PRFIdentity` (HKDF of the 32 PRF bytes into an age X25519 identity),
+   `PRFRecipient` (type `passkey-prf`, the credential ID kept as the `Hint` of which passkey to ask),
+   `CheckRecoverable` (`ErrNeedSecondRecipient` unless a key that is not a passkey is among the recipients;
+   two passkeys are not enough, they can be lost together). Registration asks for PRF
+   (`WithExtensionPRFSupport`), and `client.DeriveKey` asks a passkey for the bytes (`ErrNoPRF` when the
+   authenticator does not do PRF: passkeys made before this, some security keys and password managers).
+   The e2e derives the same key twice in Chrome. *Left:* the People-tab control that adds "my passkey" as a
+   key, and calling `CheckRecoverable` when a document is made confidential (step 5).
 5. `.opendoc` encrypted records, and the placeholder catalog entries for confidential items.

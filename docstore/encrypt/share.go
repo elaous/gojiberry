@@ -48,6 +48,7 @@ type Shared struct {
 	Type        string
 	Fingerprint string
 	Key         string // the public key's text
+	Hint        string // for a passkey key, the credential to ask
 	Added       time.Time
 }
 
@@ -60,12 +61,18 @@ type sharedEntry struct {
 	Type        string `json:"type"`
 	Fingerprint string `json:"fingerprint"`
 	Key         string `json:"key"`
+	Hint        string `json:"hint,omitempty"`
 	Added       int64  `json:"added,omitempty"`
 }
 
 func parseShared(e sharedEntry) (Recipient, error) {
-	if e.Type == "age-x25519" {
+	switch e.Type {
+	case "age-x25519":
 		return ParseAgeRecipient(e.Key)
+	case TypePasskey:
+		r, err := ParseAgeRecipient(e.Key)
+		r.Type, r.Label, r.Hint = TypePasskey, e.Label, e.Hint
+		return r, err
 	}
 	r, err := ParseSSHRecipient(e.Key)
 	if err != nil {
@@ -141,7 +148,7 @@ func (s *Sharing) List(ctx context.Context, docID string) ([]Shared, error) {
 	}
 	out := make([]Shared, 0, len(rec.Recipients))
 	for _, e := range rec.Recipients {
-		out = append(out, Shared{Label: e.Label, Type: e.Type, Fingerprint: e.Fingerprint, Key: e.Key, Added: time.Unix(e.Added, 0)})
+		out = append(out, Shared{Label: e.Label, Type: e.Type, Fingerprint: e.Fingerprint, Key: e.Key, Hint: e.Hint, Added: time.Unix(e.Added, 0)})
 	}
 	return out, nil
 }
@@ -167,7 +174,7 @@ func (s *Sharing) Add(ctx context.Context, docID string, r Recipient, confirmed 
 			return nil
 		}
 	}
-	rec.Recipients = append(rec.Recipients, sharedEntry{Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint, Key: r.Text, Added: time.Now().Unix()})
+	rec.Recipients = append(rec.Recipients, sharedEntry{Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint, Key: r.Text, Hint: r.Hint, Added: time.Now().Unix()})
 	if err := saveRecord(ctx, s.Store, docID, rec); err != nil {
 		return err
 	}

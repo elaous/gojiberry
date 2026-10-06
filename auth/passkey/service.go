@@ -172,6 +172,9 @@ func (s *Service) RegistrationStart(ctx context.Context, accountID, email, name 
 			ResidentKey: protocol.ResidentKeyRequirementRequired, RequireResidentKey: protocol.ResidentKeyRequired(), UserVerification: s.uv,
 		}),
 		webauthn.WithExclusions(webauthn.Credentials(acct.WebAuthnCredentials()).CredentialDescriptors()),
+		// Ask for PRF support while the passkey is made: some authenticators only offer it to
+		// credentials created with it, and it lets a passkey later be an encryption key.
+		webauthn.WithExtensions(webauthn.WithExtensionPRFSupport()),
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("passkey: %w", err)
