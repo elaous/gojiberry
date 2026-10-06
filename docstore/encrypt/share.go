@@ -121,6 +121,7 @@ type Shared struct {
 	Type        string
 	Fingerprint string // computed from Key
 	Key         string // the public key's text
+	Hint        string // for a passkey key, the credential to ask
 	Added       time.Time
 }
 
@@ -150,18 +151,23 @@ type sharedEntry struct {
 	// Fingerprint is for people reading the record; it is recomputed from Key, never trusted.
 	Fingerprint string `json:"fingerprint,omitempty"`
 	Key         string `json:"key"`
+	Hint        string `json:"hint,omitempty"`
 	Added       int64  `json:"added,omitempty"`
 }
 
 // parseShared reads an entry's key and returns the Recipient, with the fingerprint and type
 // computed from the key itself.
 func parseShared(e sharedEntry) (Recipient, error) {
-	if e.Type == "age-x25519" {
+	switch e.Type {
+	case "age-x25519", TypePasskey:
 		r, err := ParseAgeRecipient(e.Key)
 		if err != nil {
 			return Recipient{}, err
 		}
 		r.Label = e.Label
+		if e.Type == TypePasskey {
+			r.Type, r.Hint = TypePasskey, e.Hint
+		}
 		return r, nil
 	}
 	r, err := ParseSSHRecipient(e.Key)
@@ -328,7 +334,7 @@ func (s *Sharing) List(ctx context.Context, docID string) ([]Shared, error) {
 		if err != nil {
 			return nil, fmt.Errorf("encrypt: a recipient of %s cannot be read: %w", docID, err)
 		}
-		out = append(out, Shared{Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint, Key: r.Text, Added: time.Unix(e.Added, 0)})
+		out = append(out, Shared{Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint, Key: r.Text, Hint: r.Hint, Added: time.Unix(e.Added, 0)})
 	}
 	return out, nil
 }
@@ -373,7 +379,7 @@ func (s *Sharing) Add(ctx context.Context, docID string, r Recipient, confirmed 
 	if r.Text == "" {
 		return errors.New("encrypt: the recipient has no key text")
 	}
-	parsed, err := parseShared(sharedEntry{Type: r.Type, Key: r.Text, Label: r.Label})
+	parsed, err := parseShared(sharedEntry{Type: r.Type, Key: r.Text, Label: r.Label, Hint: r.Hint})
 	if err != nil {
 		return err
 	}
@@ -390,7 +396,7 @@ func (s *Sharing) Add(ctx context.Context, docID string, r Recipient, confirmed 
 		if label == "" {
 			label = parsed.Label
 		}
-		rec.Recipients = append(rec.Recipients, sharedEntry{Label: label, Type: parsed.Type, Fingerprint: parsed.Fingerprint, Key: parsed.Text, Added: time.Now().Unix()})
+		rec.Recipients = append(rec.Recipients, sharedEntry{Label: label, Type: parsed.Type, Fingerprint: parsed.Fingerprint, Key: parsed.Text, Hint: parsed.Hint, Added: time.Now().Unix()})
 		rec.Pending = true
 		return true, nil
 	}); err != nil {

@@ -75,3 +75,39 @@ func TestPasskeysInARealBrowser(t *testing.T) {
 	d.OK(d.Count(".gj-passkey-item") == 1, "still one")
 	d.NoErrors()
 }
+
+// TestPasskeyAsAnEncryptionKey derives an age key from the passkey's PRF output in a real
+// browser: asking twice gives the same key. (Different passkeys give different keys on real
+// authenticators; Chrome's virtual one does not promise that, so it is covered by the unit tests.)
+func TestPasskeyAsAnEncryptionKey(t *testing.T) {
+	site := e2etest.NewSite(t, "../../components/base.css", "../../components/button.css", "../../components/documents.css")
+	site.UseLocalhost()
+	mgr, err := auth.NewManager(context.Background(), auth.Config{BaseURL: site.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := passkey.New(passkey.Config{RPID: "localhost", RPName: "demo", Origins: []string{site.URL}}, passkey.NewMemoryStore(), mgr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/auth/passkey/", svc.Handler())
+	mux.Handle("/auth/", mgr.Routes())
+	site.Handle("/auth/", mux)
+
+	d := site.OpenURL(t, "/index.html", e2etest.Options{ConsoleErrors: true})
+	d.VirtualAuthenticator()
+	d.WaitSelector(".gj-passkey")
+	d.Fill(".gj-passkey-email", "ana@opendocs.io")
+	d.WaitFor("the create button", `!document.querySelector('.gj-passkey-create').disabled`)
+	d.Click(".gj-passkey-create")
+	d.WaitFor("signed in", `document.getElementById('status').textContent === 'signed in'`)
+
+	d.Click("#derive")
+	d.WaitFor("a key", `document.getElementById('derived').textContent.startsWith('age1')`)
+	key := d.Text("#derived")
+	d.Eval(`document.getElementById('derived').textContent = ''`, nil)
+	d.Click("#derive")
+	d.WaitFor("the key again", `document.getElementById('derived').textContent.startsWith('age1')`)
+	d.OK(d.Text("#derived") == key, "the same passkey gives the same key: "+key+" / "+d.Text("#derived"))
+}
