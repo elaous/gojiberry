@@ -180,6 +180,22 @@ stored. Design:
   `SignerFromSSH` uses an ed25519 SSH key. Every owner key that may change lists has its public
   signing key in `StoreKeyring.OwnerSigners` (and `Sharing.OwnerSigners`) of whoever reads them.
   `Sharing` needs the `Signer` to Add or Remove (`ErrNoSigner` without it).
+  **Revoking an owner signer.** A signer stays trusted for as long as its public key is in a
+  reader's `OwnerSigners` (`StoreKeyring`, `Sharing`, `Adapter`): there is no revocation list, and
+  a key that is revoked in any other sense (lost, left the organization) can still write records
+  and frames that verify, everywhere it is still listed. Removal is removing it from every one of
+  those lists, on every client; nothing else switches it off. Frames carry no key id (a reader
+  tries each listed key), so there is nothing per file to change, and the procedure is by
+  re-signing first: (1) add the new signer to the `OwnerSigners` of every client, beside the
+  old; (2) with the new `Signer` set as `Sharing.Signer` and `Adapter.Signer`, run
+  `Sharing.Recover(doc, level, shared)` for each document (the level and the list from
+  `Sharing.List`/the index), which writes a new record signed by it and re-keys every file with
+  frames it signs, then `Sharing.VerifyIndex`; (3) remove the old key from the lists. After that
+  anything the old key signed and was not re-signed (a document missed in step 2, a stray old
+  file) is refused (`ErrBadSignature` for a record, `ErrForgedFrame` for a frame), which is also how
+  a missed one is found: run `Saver.Verify` and `Sharing.PendingDocs`. Until step 3 is done
+  everywhere, the old key's holder can still write; a replay of anything the old key signed before
+  step 3 is refused after it, not before.
 - `StoreKeyring.Recipients` (what every save asks) verifies the record and **fails closed**: an
   unsigned record (`ErrUnsignedRecord`), a record signed by a key that is not an owner's, or a
   changed or moved one (`ErrBadSignature`) makes the save fail, never a longer or shorter list.
@@ -189,31 +205,218 @@ Threat model, store write access only (no owner key):
 - **Cannot** add themselves, or anyone, as a recipient of future saves: the record they write does
   not verify, and saves fail until the owner repairs it.
 - **Cannot** edit a signed list to drop a recipient or change a key.
-- **Can** delete a record (the document then reads as shared with no one besides the owner and, at
-  the confidential level, as server level: its later saves are wrapped for the server keyring).
-  Detecting this needs owner-held state (a signed index of which documents have records); not
-  built. `Sharing` keeps a record rather than deleting when the last key goes, and
-  `SetProtection` never deletes one, but a reader that has seen nothing before cannot tell a
-  deleted record from a document that never had one.
-- **Can** put back an older validly signed record (a replay: for example one that still lists a
-  person the owner removed, or one from before the document was made confidential, whose
-  `protection` is empty), and future saves then follow it. A signature cannot tell it from the
-  current record. What is done about it, in layers, none absolute:
-  1. `Saver.Save` of a document its catalog says is confidential calls `Saver.Rekey` (e2ee)
-     first, with one record read when settled: a record that says less is re-signed to e2ee and
-     the files re-keyed before a byte is written. The same call also covers a new confidential
-     document, and a document made confidential before this was in place. Files written by
-     someone else between the replay and the next save are not covered, and the replayed
-     recipient list itself is kept (it is re-signed with the old list).
-  2. `StoreKeyring.SeqFloor` / `Sharing.SeqFloor` (optional; `MemorySeqFloor` is the in-memory
-     one): the highest `seq` seen per document. A record below it is refused
-     (`ErrStaleRecord`), and so is a missing record where one was seen. It must be kept where
-     store writers cannot write (the client's memory or device storage); a fresh client has no
-     floor and a replay before its first read is not detected. A floor that is ahead of a
-     record the owner must restore needs a deliberate reset by the owner's client.
-  So a store writer cannot forge a level or a list, but is not stopped from replaying or deleting
-  a record where no floor is known; the saver's re-assertion limits the effect to the window
-  before the next save of the document by an owner client.
+- **Can** delete a record, or put back an older validly signed one (a replay: for example one that
+  still lists a person the owner removed, or one from before the document was made confidential,
+  whose `protection` is empty). A signature cannot tell either from the current record, and the
+  keyring on its own would then wrap later saves for the server (a deleted or replayed
+  server-level record) or for a removed person. What stops it, in layers (the first keeps no state on
+  the client; it does need the client to be configured with the owners' public signing keys,
+  `OwnerSigners`, which is configuration and not something it remembers):
+  1. **The level and the record's seq are inside the encrypted frame, and the frame is signed.**
+     Every file is framed inside the encryption: frame v3 is `GJE\x03`, the stored id, a level byte
+     (server / e2ee), the `seq` of the signed record the file was sealed under, a hash of that
+     record's recipient list, the SHA-256 of the data, and an **Ed25519 signature by an owner signer
+     over all of that**, then the data (v2, `GJE\x02`, is the same without the hash and signature).
+     **age has no sender authentication.** Anyone who knows a recipient's *public* key (an SSH key
+     on a profile, the server's key) can mint a file that opens for that recipient, with any
+     content and any frame, so "the AEAD authenticates the frame" proves nothing about who wrote
+     it. The signature does: `Adapter.Signer` signs every file it writes for a document with a
+     record, the readers verify against `StoreKeyring.OwnerSigners` (plus `Adapter.OwnerSigners` and
+     the adapter's own signer), and a v3 frame whose signature is missing, is by no owner signer,
+     or does not match the content it came with (a genuine header put on other content: the
+     content hash is signed) is **`ErrForgedFrame`**, which is an `ErrDowngrade`-class failure
+     (`errors.Is(err, docstore.ErrDowngrade)`): no data is returned and nothing is written over it.
+     So a writer who knows only public keys can no longer forge a frame, a level, a seq or content
+     of a document an owner signer wrote. A confidential document is not saved without the signer
+     (`ErrNoFrameSigner`, also from the re-keys): `Adapter.Save` fails closed instead of writing an
+     unsigned frame. The header is signed (not just the content) so the checks that scan a document's
+     files verify it from the first chunk of each file without reading the rest.
+     The adapter (`encrypt.Adapter`, with a `Binder` keyring: `StoreKeyring` and
+     `ConfidentialKeyring`) cross-checks a file with the record read for the same operation, with
+     `Fs`/`Fl` the seq and level in the file and `Rs`/`Rl`/`Rp` the record's seq, level and pending flag:
+     - **no record** but the file says `Fs > 0` or e2ee: the record was deleted: `ErrDowngrade`;
+     - `Fs > Rs`: the record is older than one the file was sealed under, a replay: `ErrDowngrade`;
+     - `Fs == Rs`: level and recipient hash must agree, else `ErrDowngrade`;
+     - `Fs < Rs` is normal (the record's seq only rises, and clearing `pending` raises it again after
+       every file was sealed), except on **Load**, where data would be returned under the wrong
+       level: a file wrapped at a lower level than the record's with `Rp` false (an old server-level
+       ciphertext put back into an e2ee document) is `ErrDowngrade`. While `Rp` is set the files the
+       re-key has not reached are exactly such files, so it is tolerated: this is how a switch cut
+       short, and the saves and loads in its window, never read as a downgrade. A file wrapped
+       above the record's level (people only, in a document the record calls server) is the safe
+       direction and accepted.
+     Where it runs: `Adapter.Save` and `SaveIf` look at **every** stored file of the document (its
+     generations `<ID>~...`, or a confidential folder's `folder-secret/<ID>`; one prefix listing, and
+     for each file one read whose first chunk is all that is decrypted) and check each against the
+     record the recipients are about to come from **before sealing**: a deleted, replayed or older
+     record is `ErrDowngrade` and **nothing is written**. What counts as evidence and what stops the
+     operation is exact, because the store reports the times and order of its files and both are
+     the store writer's to choose:
+     - a file that opens and verifies is evidence, whatever its time: the check does not look at the
+       "newest" file, it checks all of them (so the highest seq among them is the one that counts);
+     - a file that is **provably someone else's** (a well-formed age file none of our keys matches,
+       `ErrNoKey`) or is gone is skipped: it says nothing, and it cannot hide the files that do;
+     - a file that is forged (`ErrForgedFrame`) fails the operation with that error;
+     - any other file that cannot be opened (the age header but malformed or damaged, a file that
+       opens with a key of ours and says something else, not an age file at all unless
+       `AllowPlaintext`) is **`ErrUnreadable`**, naming the file, and stops the operation: it could be
+       hiding what the record should say, and "decoy" files like this (three junk files that start
+       with the age header, planted next to a deleted record) used to make a save succeed. Restore
+       the file or delete it (a version snapshot: `Saver.DropVersions`; a generation is deleted in
+       the store; `Sharing.Recover` does not need this check, but see below: it re-keys every file);
+       **which operation a junk or unreadable file blocks depends on where it is**:
+
+       | file | `Save`/`SaveIf` | change to the list (the check before the record is written) | re-keys (`Add`, `Remove`, `SetProtection`, `Repair`, `Recover` finish by one) | `highestSeq` (`Recover`) | `Load` |
+       |---|---|---|---|---|---|
+       | generation `<ID>~...`, or `folder-secret/<ID>` | blocks | blocks | blocks | skipped | only if it is the file read |
+       | version snapshot `versions/<ID>/...` | **not scanned** | **not scanned** | blocks (all or none) | skipped | only if it is the file read |
+       | provably foreign (`ErrNoKey`) | skipped | skipped | blocks (it cannot be sealed again) | skipped | only if it is the file read |
+
+       So a junk snapshot does not stop saving or loading the document, but it stops every re-key,
+       and an `Add`, `Remove` or `SetProtection` then has already written the record (pending) when
+       it stops: `Repair` after dropping the snapshot (`Saver.DropVersions`) finishes it;
+     - a document none of whose files opens (none stored, or all provably foreign) has no evidence and
+       passes: what the record says is all there is.
+     The cost is one read and one first-chunk decryption per file of the document (generations, not
+     version snapshots, which only the re-keys and the scan for the highest seq open) on each save.
+     **A client that raced a switch is not told it saw a downgrade.** `Save` reads the record and
+     then the files; if another client completed a switch in between, the files are sealed under a
+     newer record than the one just read. A downgrade finding is therefore made again once with the
+     record (and for `Load` the file) read again; a record that is really missing or replaced is the
+     same the second time. `Sharing`'s changes do the same. `Load` checks the file it returns (one extra
+     record read). Every re-key (`Rekey`, `RekeyDocument`, `RekeyAll`, `SetProtection`, `Repair`) checks
+     each file as it opens it, so a re-key never seals the document under a replayed or missing record;
+     and `Sharing` refuses to change a record (`Add`, `Remove`, `SetProtection`, the clearing of
+     `pending`) that is missing or older than its files say, so the owner's own client never signs over
+     a replay. `SetProtection` order is unchanged and is what makes the rules above hold: the record is
+     written first (seq N+1, pending), then the re-key writes frames at N+1, then `pending` is cleared
+     (N+2); a retry after a failure at any file finds the record pending and finishes. The message
+     says which case it was (deleted, older, wrong level) and how to go on: `Sharing.Recover` when
+     the record was lost or replaced and the owner knows what it should say, `Sharing.Repair` when
+     a file was left wrapped below the document's level by a switch that was cut short; the saver
+     returns that text as it is (`Save`, `SetProtection`, `Load`, `Reveal`), and `Verify` lists the
+     document in `VerifyReport.Downgraded`.
+     **A stuck `pending` flag.** While `pending` is set, a file wrapped below the document's level
+     is tolerated on `Load` (it is where the re-key has not reached yet), so a flag that stays set
+     switches that one check off for the document. The record says since when (`pendingSince`, the
+     clock of the client that wrote it: a client whose clock is behind or ahead of the one that
+     checks makes "since when" and "stuck" off by that skew, so a flag can look younger or older than
+     it is; `PendingWarnAfter` is a warning threshold, not a guarantee);
+     `Sharing.PendingStatus` and `Sharing.PendingDocs` report it, and a flag older than
+     `Sharing.PendingWarnAfter` (30 minutes by default) is *stuck*. `Saver.PendingCheck`
+     (`encrypt.PendingHook`) puts them in `VerifyReport.Pending` and `PendingStuck`: the owner runs
+     `Sharing.Repair`. Once it is not pending the same file is refused with an error that names
+     `Repair`.
+     **Which files may be unsigned.** Files written before frame v3 are read as before (v1: no level,
+     no check; v2: level and seq, unsigned), with a warning logged once, and **until they are
+     upgraded they can be forged by anyone who knows a recipient's public key**: that is the one
+     place the claim above does not hold, stated plainly. The first save or re-key of a file writes
+     v3; when a re-key by a signing adapter finishes (`Sharing.Repair(doc)` does it for a document
+     that has nothing pending, `Add`, `Remove`, `SetProtection` and `Recover` as they finish), the
+     record says `signed`: from then on **every unsigned frame in that document is `ErrForgedFrame`**
+     (so the forger cannot choose the older format), and whoever saves it must sign.
+     `Adapter.RequireSigned` makes an adapter refuse unsigned frames for every document id the
+     keyring binds (every id `DocID` finds with a `Binder` keyring, whether or not its record
+     exists; ids it does not bind are not checked), for a deployment whose files were all upgraded.
+     **The window before `signed`, and the way out of it.** A re-key writes signed files and only
+     then changes the record to say `signed`. A client with no `Signer` that read the record before
+     that can save an unsigned (v2) file of a server-level document in between, and a plain `Save`
+     does not change the record's seq, so the change to `signed` cannot be made conditional on it.
+     Two things handle it. (a) Immediately before setting `signed`, the re-key looks at every file
+     again; if one is not v3 (it was saved meanwhile) it is sealed again (another pass) first.
+     That leaves only the few steps between that look and the write of the record. (b) What a save
+     in that remaining window (or an older build that wrote v1/v2 frames under a record that already
+     says `signed`) leaves is a document where `crossCheck` refuses the file as `ErrForgedFrame`
+     and `Save`, `Load`, `Repair` and `Recover` all refuse, so there is an explicit way out:
+     `Sharing.Repair(doc, encrypt.AcceptUnsigned())` (and `Sharing.Recover(..., encrypt.AcceptUnsigned())`)
+     opens the unsigned files, still checks their level, seq and recipients against the record, and
+     seals them again signed, with the owner's `Adapter.Signer` (`ErrNoFrameSigner` without it).
+     Without the option they refuse, with an error that names the file and the option. The option
+     is for **unsigned frames only**: a v3 frame whose signature is not an owner's or does not match
+     its content is a forgery and is `ErrForgedFrame` with or without it, never sealed again. It
+     cannot tell an unsigned file the owner's own client wrote from one minted by someone who
+     knows a recipient's public key (an unsigned frame carries no proof), so the owner uses it
+     after checking that the file is theirs (what it holds, who could have written it): accepting
+     it is the owner vouching for it, which is the limit of the old format and no more.
+  2. **The owner-signed index** (`keys:index`, `encrypt.IndexKey`): `{seq, docs: {id: {level, seq}}}`,
+     signed by the owner signer under its own context, listing the end-to-end documents and folders and
+     the record seq when each was switched; `SetProtection` writes it after the record (and again on
+     a retry; removing the entry when a document goes back to server). `Sharing.VerifyIndex` compares it
+     with the records of every document it lists, **including ones never opened on this client**: a
+     missing record, one that does not verify, an older one, or one that disagrees at the same seq is a
+     finding (`ErrDowngrade`), and when a `SeqFloor` is set it is raised for every listed document, so a
+     fresh client has a floor for the documents that matter after one call (call it after sign-in,
+     the floor is raised in one batch, `RaiseMany`). It also covers files still in frame v1, which
+     carry no level. The index can itself be deleted or replaced by an older one; when it lists nothing
+     and no floor has seen an index (no floor, or an empty one), `VerifyIndex` returns a finding with
+     `ErrIndexUnverifiable` (`Doc` is `IndexKey`; a warning, not a downgrade): a deleted index
+     cannot be told from none. On a store with compare-and-swap (`SaveIf`) concurrent changes to the
+     index retry; on one without, `Sharing` takes the store's `Lock` for the change if it has one, and
+     otherwise two clients changing the index at the same moment can lose an entry (serialize them: one
+     owner client at a time), which leaves a confidential document unlisted, not unprotected: the
+     frames and the record still protect it.
+  3. **`SeqFloor`** (optional, client state): the highest `seq` seen per document and for the index. A
+     record below it is refused (`ErrStaleRecord`), and so is a missing record where one was seen.
+     `MemorySeqFloor` (process lifetime), `FileSeqFloor` (a JSON file for a server or CLI, written
+     atomically, mode 0600, the file and its directory synced, errors reported; read once and kept in
+     memory, written through, re-read only if the file changed on disk, and `RaiseMany` writes any
+     number of documents at once, so `VerifyIndex` is one read and one or two writes, not one per
+     document) and `LocalStorageSeqFloor` (the browser, js/wasm build, one `localStorage` entry per
+     document under a per-account prefix; every access runs inside a JavaScript try block, because a
+     thrown `localStorage` getter would otherwise end the Go program). Keep a floor where store
+     writers cannot write.
+     **A floor that cannot be kept says so.** The browser's floor keeps working from memory when
+     storage is blocked or full (a private window), as availability is not traded for this layer, but
+     `Get` and `Raise` return the value together with an error wrapping `ErrFloorDegraded`; the
+     keyring and `Sharing` go on and report it through `SetFloorDegradedHandler` (logged when it
+     changes by default), and `StorageSeqFloor.Err()` keeps the last failure for a page that polls.
+     An application that offers this layer should show it (a banner that this browser is not
+     remembering what it saw); the showcase is not wired to the encrypting adapter yet, so when it is
+     it must set the handler or poll `Err()`.
+     **Runbook, a damaged floor file** (`FileSeqFloor` says "damaged" and names the file; nothing is
+     overwritten): move the file away or delete it, then run `Sharing.VerifyIndex`: the floor starts
+     empty and the index raises it for every listed end-to-end document. What only the lost file knew
+     (a document the index does not list) has no floor until its record is read again; that is the
+     protection a fresh client has.
+  4. `Saver.Save` of a document its catalog says is confidential calls `Saver.Rekey` (e2ee) first,
+     which asserts the level on every save of a document whose files are still frame v1.
+  **Frame v1, v2 and the upgrade.** Files written before frame v2 have no level or seq; they are read as
+  before (no check), and the first `Save` or re-key of a document writes a signed v3 (`Sharing.Repair(doc)`
+  upgrades all of its files at once). Frame v1 cannot detect a downgrade: the first save after upgrading
+  pins the level, and a record deleted *before* that first save is seen by layers 2 and 3 but not by the
+  frame. Frame v2 files (level and seq, unsigned) are read with the same limits as v1 for forgery until
+  they are re-keyed. Older builds cannot read v2 or v3 files.
+  **When the record was restored on purpose** (or after an attack, to carry on): `Sharing.Recover(doc,
+  level, sharedKeys)` writes a new signed record with exactly the level and shared keys the owner
+  gives (the replayed record's list is not carried over, so a person the owner had removed does not come
+  back), numbered above every seq any file was sealed under and above the floor, then re-keys the
+  files as `SetProtection` does and updates the index. It needs the owner's signer.
+  **What cannot be defended.** A store writer who can replace *all* of the store consistently, files,
+  records and index together, with an older snapshot of it, hands every client an older but internally
+  consistent past: the frames, the records and the index all agree, so nothing inside the store can
+  call it a downgrade. That is a rollback of data (the store can always return an older version of what
+  it held; the saver's checksums notice a file that does not match its catalog, not a catalog that was
+  rolled back with it), not a lowering of protection: a document that was e2ee in the snapshot is e2ee
+  in it. A client-side floor (layer 3) that outlives the rollback (`FileSeqFloor`,
+  `LocalStorageSeqFloor`) refuses records older than the client has seen, and so does notice it on a
+  client that has been here before; a fresh client cannot. Whoever holds an owner key can of course
+  change lists, and what someone already opened or copied cannot be taken back.
+  **What is and is not defended, after the signed frame** (a store writer who knows the recipients'
+  public keys but holds no owner key):
+  - *Defended:* forging a file (any content, level, seq or recipient hash) for a document whose
+    files an owner signer wrote and whose record says `signed`: `ErrForgedFrame`. Forging a *record*
+    or the *index*: signed, refused. Deleting a record, or putting an older one back, while the files
+    that were sealed under the newer one are in the store: `ErrDowngrade` on every read and write,
+    with decoy files and doctored times not changing that (any unreadable file stops the operation
+    instead of being skipped; the highest seq among all files counts).
+  - *Not defended, and no layer inside the store can:* (1) **rollback to a genuine older consistent
+    snapshot** (files, records and index together): every signature in it is genuine, so only a
+    client-side floor that outlives it notices, and a fresh client has none; (2) documents whose
+    files are still unsigned (v1, v2) and whose record does not yet say `signed`, which can be
+    forged until `Repair`; (3) deleting files (availability), including all of a document's files
+    together with its record, which leaves no evidence of the lost document except the index and a
+    floor; (4) a document with no record at the server level, which has no owner signature to
+    authenticate; (5) anything an owner key can do.
 - **Can** still delete or replace files (availability), and read the catalog and the recipient
   lists: fingerprints, labels and public keys are not secret.
 Someone who holds an owner key (it opens the documents anyway) can change lists.
@@ -229,7 +432,7 @@ cannot be opened.
 
 1. **Done:** `docstore/encrypt` (`encrypt.Adapter`, `Keyring`, `Static`) using `filippo.io/age`
    and `agessh`: SSH (ed25519, RSA), age and recovery-key recipients, `Rekey` and `RekeyAll`,
-   strict reads by default (a file without the age header is refused; `AllowPlaintext` is the opt-out for migrating a clear store), ciphertext bound to its id by a framed header (`ErrWrongDocument`), `SaveIf` on encrypted ids compared against the plaintext, serialized and conditional re-keys that continue past failures, catalogs / folder records / ACL records / fonts left readable
+   strict reads by default (a file without the age header is refused; `AllowPlaintext` is the opt-out for migrating a clear store), ciphertext bound to its id, and from frame v2 to its protection level and record seq, by a framed header inside the encryption (`ErrWrongDocument`, `ErrDowngrade`; C.5), `SaveIf` on encrypted ids compared against the plaintext, serialized and conditional re-keys that continue past failures, catalogs / folder records / ACL records / fonts left readable
    (`DefaultSkip`), conditional catalog writes and the store lock passed through. Tests: round
    trip, wrong key, tampered ciphertext, sharing and re-key on revoke, a recovery key, bad keys,
    and the whole saver (folders, versions, `Verify`) on an encrypted store. It is its own
@@ -383,7 +586,8 @@ cannot be opened.
       document's level, read from a signed `protection` field in the `keys:<ID>` record (C.5; the
       same signature and fail-closed rules: a store writer cannot forge it, and an unsigned or
       altered record fails the save instead of falling back to the server level; replaying an older
-      signed record or deleting it is not prevented by the signature, see C.5 for what is done). A confidential
+      signed record or deleting it is not prevented by the signature, but is caught from inside the
+      files, see C.5 and 5.7). A confidential
       document's files are wrapped **only** for people's keys (`People`: the owner's keys and the
       signed recipient list); `AtRest` (C.1) is never consulted for them, and `ServerRecipients`
       are removed from the list even if a deployment put the server key among the owners, an age
@@ -409,11 +613,15 @@ cannot be opened.
       if the document turns out confidential only inside the catalog lock (a concurrent delete or
       switch) the save starts over re-keyed, never writing it first.
       A document with `Saver.Rekey` set is therefore never left wrapped for the server key once
-      `SetProtection` has returned nil. Remaining weakness: deleting a document's `keys:` record
-      or replaying an older one (a store writer can) makes later saves server level until the next
-      save of that document by an owner client re-asserts e2ee (or at once, with a `SeqFloor`
-      that has seen the newer record, which refuses it); a signed index of documents with records
-      (C.5) would close the deletion case on a fresh client.
+      `SetProtection` has returned nil. A store writer who deletes a document's `keys:` record or
+      replays an older one no longer makes later saves server level: the files themselves prove the
+      level and seq the record had (5.7), `Save`, `Load` and the re-keys report `ErrDowngrade` and
+      write nothing, with no state kept on the client (it needs the owners' public signing keys as
+      configuration: the frame is signed, so that someone who only knows a public key cannot
+      forge one, `ErrForgedFrame`, and a confidential document is not saved without
+      `Adapter.Signer`); the signed index and a persistent `SeqFloor` are the belt and braces. Left:
+      the whole-store rollback to an older consistent snapshot described in C.5, which no layer
+      inside the store can tell from the truth, and unsigned (v1, v2) files until they are re-keyed.
 
    Without a `Saver.Rekey` hook, `SetProtection(E2EE)` still does not erase the past: the previous
    generation and the version snapshots keep the wrapping they had until the store's keyring
@@ -480,6 +688,54 @@ cannot be opened.
         (`docstore/encrypt/confidential_folders_test.go`): no real name in the store, a stranger's rebuild,
         passkey PRF alone and recovery key alone, rename, move, delete, breadcrumbs, no leak in the lists.
 
+   7. **Downgrade and deleted-record detection from inside the envelope (done).** The design and the rules are
+      in C.5; what was built, in `docstore/encrypt` unless noted:
+      - `encrypt.go`: frame v3 (`GJE\x03`: id, level, record seq, recipient hash, content hash and an owner
+        signature; v2 is the same unsigned, v1 has no level), `Adapter.Signer`, `ErrForgedFrame`,
+        `ErrNoFrameSigner`, `ErrUnreadable`, `Binding`, the `Binder`
+        interface (`Bind`, `Binding`: one read of the record gives both the recipients and what the frame
+        carries), `crossCheck`, `ErrDowngrade` (= `docstore.ErrDowngrade`), checks in `Save`, `SaveIf`, `Load` and
+        every re-key's plan. `StoreKeyring` and `ConfidentialKeyring` are Binders; `Static` is not, and writes
+        frames with a zero binding that are never checked. `checkFiles` scans every file of the
+        document (foreign ones skipped, unreadable ones `ErrUnreadable`), and a downgrade finding is
+        made again once with the record read again, in `Save`, `SaveIf`, `Load` and `Sharing`'s changes.
+      - `share.go`/`confidential.go`: `Sharing` checks the record against the files before it signs
+        (`mutate`), `SetProtection` refuses "settled at server" for a document whose files say a record
+        existed, and updates the index.
+      - `index.go`: the owner-signed `keys:index`, `Sharing.Index`, `Sharing.VerifyIndex`, and
+        `Sharing.Recover` (the owner's way forward, also for a confidential folder).
+      - `floor.go`, `floor_js.go`: `FileSeqFloor` (cached, `RaiseMany`, directory sync), `StorageSeqFloor`
+        over a `KV`, `LocalStorageSeqFloor`, `ErrFloorDegraded`, `SetFloorDegradedHandler`.
+      - `share.go`/`index.go`: `Sharing.PendingStatus`, `PendingDocs`, `PendingHook` (`saver.Saver.PendingCheck`,
+        `VerifyReport.Pending`/`PendingStuck`), the record's `signed` flag, `ErrIndexUnverifiable`.
+      - `saver`: `VerifyReport.Downgraded`; Save, SetProtection, Reveal and the folder calls return the
+        error wrapped (nothing is written or re-asserted over it); a catalog rebuild fails on a
+        downgraded document instead of listing it as a server one.
+      - Behaviour changes (also in the roadmap's upgrade notes): a client with a Binder keyring now reads
+        the record on `Load` (so it needs `OwnerSigners` to read, as it did to save); `Save` costs one prefix
+        listing and one read of the document's newest file more; frame v2 is not readable by older builds.
+      - Tests with the real adapter and saver (`downgrade_test.go`, `signed_frames_test.go`, `floor_test.go`,
+        `floor_js_test.go`;
+        each fails when its check is taken out): replayed record then save/load/re-key/change refused with
+        the store unchanged; deleted record at e2ee and at server-shared; legitimate switches both ways
+        cut short at a file and retried, with saves and loads in the window; a server-level file put
+        back into an e2ee document; v1 files read, upgraded by the first save or `Repair`, and the v1
+        limit stated; two clients, the second one fresh; the index finding deletions and replays of
+        documents never opened, and its own signature, deletion and replay; `Recover` after a replay and a
+        deletion; folder records; `Verify` and rebuild; file and `localStorage` floors (the wasm test runs
+        under node: `GOOS=js GOARCH=wasm go test -exec <wrapper> -run LocalStorage ./docstore/encrypt`,
+        where the wrapper clears the environment before calling `$(go env GOROOT)/lib/wasm/go_js_wasm_exec`
+        if node reports "total length of command line and environment variables exceeds limit"); and a race
+        test of saves, versions and loads against repeated switches that must never see `ErrDowngrade`.
+        `signed_frames_test.go`: decoy files (junk with the age header, well-formed foreign files, a restored old
+        file that is the newest by time) cannot hide a deleted or replayed record; forged frames (unsigned, wrong
+        signer, a genuine header on other content) are refused, and the unsigned limit before `Repair` is
+        stated by a test; a confidential save needs the signer; same-seq files that disagree with the record
+        (level, recipients); a switch completed between the reads of `Save`, `SaveIf`, `Load` and a `Sharing`
+        change (deterministic interleaving hooks); a stuck `pending` in `Verify`; the index warning and the
+        store lock; the floor's read-once, batch write and directory sync, its damaged-file runbook, and a
+        degraded floor reported through the keyring.
+
    *Left:*
    1. The showcase wiring and the key management UX (where the owner's key lives, the "make
       confidential" switch, the recovery key shown once, the lock mark in the document list).
@@ -488,7 +744,7 @@ cannot be opened.
       name could not be sealed with the documents left out.
    3. What someone already opened or copied before a switch cannot be taken back (as with any
       re-key); with the hook the stored copies themselves are re-keyed. A store writer who
-      deleted the `keys:` record first is the weakness named in item 5.
+      deleted the `keys:` record first is caught from inside the files (5.7).
    4. Key management for `Seal`/`Open` in the pack UI ("As .opendoc", "Import .opendoc"): until
       then `Session.DownloadPack` leaves confidential documents out and says how many, and
       `Session.ImportPackData` reports the ones it could not open.

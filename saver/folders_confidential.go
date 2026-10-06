@@ -123,6 +123,11 @@ func (s *Saver) RevealFolder(ctx context.Context, target, id string) (string, er
 // moves first and the hook runs last. Calling it again with the level the folder already
 // has runs the hook again, which finishes a re-key that was cut short.
 //
+// A folder's record is protected like a document's: docstore.ErrDowngrade from the adapter
+// means the folder's signed keys record was deleted or replaced by an older one, and the folder
+// is neither switched, renamed nor revealed until the owner recovers it
+// (encrypt.Sharing.Recover).
+//
 // recursive applies the level also to every folder below it and to every document in the
 // folder or below it (the trash included), each through SetFolderProtection or SetProtection.
 // Without it the documents keep the level they had: a confidential folder does not make its
