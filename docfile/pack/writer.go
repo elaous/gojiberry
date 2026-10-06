@@ -76,8 +76,8 @@ func (b *builder) add(doc docfile.Document) error {
 }
 
 func (b *builder) addFolder(f Folder) error {
-	if f.ID == "" || checkName(f.Name) != nil {
-		return errors.New("pack: a folder needs an ID and a name of at most 256 bytes")
+	if !docfile.ValidID(f.ID) || checkName(f.Name) != nil {
+		return errors.New("pack: a folder needs a document-style ID and a name of at most 256 bytes")
 	}
 	for _, x := range b.folders {
 		if x.ID == f.ID {

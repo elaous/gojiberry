@@ -204,7 +204,6 @@ func main() {
 	u.saver.Deliver = transfer.Download
 	u.saver.Pick = transfer.PickFile
 	u.saver.Export = u.transfer.Export
-	u.saver.DownloadFormats = downloadChoices(u.transfer.Exporters())
 	u.saver.Link = func(kind, id string) string {
 		if kind == "folder" {
 			return share.FolderPath(pageBase(), id)
@@ -233,6 +232,7 @@ func main() {
 
 	var domRoot *domrt.Root
 	renderUI = func() {
+		u.saver.DownloadFormats = downloadChoices(u.transfer.Exporters()) // the headings follow the language
 		mac := false
 		keymap := stage.EffectiveKeymap()
 		cmds := stage.Features.Commands()
@@ -994,10 +994,10 @@ func downloadChoices(exporters []transfer.Exporter) []components.SaverChoice {
 		title string
 		names []string
 	}{
-		{"Documents", []string{"docx", "pdf", "rtf", "epub"}},
-		{"Web and text", []string{"html", "markdown", "text"}},
-		{"Data", []string{"json", "proto-text", "proto"}},
-		{"opendocs", []string{"open"}},
+		{T("download.group.documents", "Documents"), []string{"docx", "pdf", "rtf", "epub"}},
+		{T("download.group.web", "Web and text"), []string{"html", "markdown", "text"}},
+		{T("download.group.data", "Data"), []string{"json", "proto-text", "proto"}},
+		{T("download.group.opendocs", "opendocs"), []string{"open"}},
 	}
 	byName := map[string]transfer.Format{}
 	for _, e := range exporters {
@@ -1012,7 +1012,7 @@ func downloadChoices(exporters []transfer.Exporter) []components.SaverChoice {
 			}
 			label := f.Label
 			if n == "open" {
-				label = "opendocs (.open), with version history"
+				label = T("download.openWithHistory", "opendocs (.open), with version history")
 			}
 			out = append(out, components.SaverChoice{Name: f.Name, Label: label, Group: g.title})
 			delete(byName, n)
@@ -1020,7 +1020,7 @@ func downloadChoices(exporters []transfer.Exporter) []components.SaverChoice {
 	}
 	for _, e := range exporters { // any other format a host added
 		if f, ok := byName[e.Format().Name]; ok {
-			out = append(out, components.SaverChoice{Name: f.Name, Label: f.Label, Group: "More"})
+			out = append(out, components.SaverChoice{Name: f.Name, Label: f.Label, Group: T("download.group.more", "More")})
 			delete(byName, f.Name)
 		}
 	}
