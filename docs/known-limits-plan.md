@@ -59,6 +59,13 @@ the e2e tests in CI (it has Chrome) once they are known stable there.
 2. **opendocs port plan. Done:** [opendocs-port-plan.md](opendocs-port-plan.md).
 3. **Refresh the two opendocs docs. Done.**
 
+## E. Damage detection and recovery (done, with limits)
+
+Checksums, copy-on-write generations, a previous copy, `Verify`, fsync, Web Locks and a
+warning when a store is filling up are done; what they do not cover is listed in
+[document-components.md](document-components.md#damaged-files-and-previous-copies)
+("Limits that remain").
+
 ## Order
 
 1. B1, B3, B8 (small), then C step 1.

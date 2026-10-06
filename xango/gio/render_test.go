@@ -1,4 +1,4 @@
-package xangogio
+package gio
 
 import (
 	"bytes"
@@ -387,7 +387,7 @@ func TestClassStyleAppliesBackgroundAndPadding(t *testing.T) {
 
 // TestSelectOpensAndFiresOnChangeOnRealClicks drives select/option
 // support -- the one tag Gio's own widget/material has no native
-// equivalent for, so xangogio has to build its own dropdown rather than
+// equivalent for, so xango/gio has to build its own dropdown rather than
 // wrap an existing widget -- through real clicks via Renderer.Click,
 // the same "simple programmatic click" mechanism (Gio's own
 // widget.Clickable.Click()) the original button test already

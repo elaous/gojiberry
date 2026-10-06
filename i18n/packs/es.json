@@ -242,6 +242,11 @@
   "download.group.data": "Datos",
   "download.group.opendocs": "opendocs",
   "download.group.more": "Más",
-  "download.openWithHistory": "opendocs (.open), con historial de versiones"
+  "download.openWithHistory": "opendocs (.open), con historial de versiones",
+  "capacity.nearlyFull": "Este almacenamiento se está llenando. Para no perder trabajo: descargue sus documentos ahora (Descargar como, o una carpeta como ZIP), elimine versiones antiguas y vacíe la papelera, o guarde en otro lugar antes de que se llene.",
+  "capacity.full": "Este almacenamiento está lleno o casi: un guardado puede ser rechazado y entonces el documento no queda guardado. Descargue sus documentos ahora (Descargar como, o una carpeta como ZIP), luego libere espacio eliminando versiones antiguas y vaciando la papelera, o guarde en otro lugar.",
+  "saver.storageFull": "Almacenamiento al %.0f%%: descargue sus documentos ahora y luego elimine versiones antiguas y la papelera.",
+  "saver.storageFilling": "Almacenamiento al %.0f%%: descargue sus documentos, o elimine versiones antiguas y la papelera, antes de que se llene.",
+  "saver.notSavedFull": "No guardado: el almacenamiento está lleno. Descargue el documento (Descargar como) para no perder trabajo, luego elimine versiones antiguas o la papelera, o guarde en otro lugar"
  }
 }

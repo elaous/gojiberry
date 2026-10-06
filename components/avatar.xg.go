@@ -30,7 +30,7 @@ func Avatar(props AvatarProps) xango.Node {
 	}
 	class := "gj-avatar gj-avatar-" + string(size)
 	if props.Src != "" {
-		return xango.El("img", []xango.Attr{xango.A("class", class), xango.A("src", props.Src), xango.A("alt", props.Alt)})
+		return xango.El("img", []xango.Attr{xango.A("class", xango.AttrVal(class)), xango.A("src", xango.AttrVal(props.Src)), xango.A("alt", xango.AttrVal(props.Alt))})
 	}
-	return xango.El("span", []xango.Attr{xango.A("class", class), xango.A("role", "img"), xango.A("aria-label", props.Alt)}, xango.Text(props.Initials))
+	return xango.El("span", []xango.Attr{xango.A("class", xango.AttrVal(class)), xango.A("role", "img"), xango.A("aria-label", xango.AttrVal(props.Alt))}, xango.Child(props.Initials))
 }
