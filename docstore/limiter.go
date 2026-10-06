@@ -1,6 +1,7 @@
 package docstore
 
 import (
+	"container/list"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -78,6 +79,17 @@ func LimiterFactoryFor(mode string, store Adapter) LimiterFactory {
 // RateLimiter is a token bucket per key: Burst requests at once, refilled at PerMinute per
 // minute. Idle keys are forgotten, so memory follows the number of active callers. State is in
 // this process only.
+//
+// The table holds at most maxBuckets keys, in order of last use: past that the least recently
+// used key is dropped, in constant time (a new key never triggers a scan of the table, so a flood
+// of distinct keys costs the limiter O(1) per request, not O(table) under its mutex). Idle keys,
+// those whose bucket has refilled completely, are also dropped from the least recently used end,
+// at most once every sweepEvery. The flood-reset effect: a caller who floods with more than
+// maxBuckets distinct keys (an attacker rotating IPv6 addresses, say) pushes the keys of busy
+// legitimate callers out of the table; a caller dropped that way returns with a full bucket. The
+// same holds for a StoreLimiter in its in-process fallback (store down, or no conditional writes).
+// Per-caller limits are therefore a fair-use control, not a defence against an attacker with
+// unlimited identities: that belongs to the gateway.
 type RateLimiter struct {
 	PerMinute float64
 	Burst     int
@@ -85,22 +97,27 @@ type RateLimiter struct {
 	Now func() time.Time
 
 	mu        sync.Mutex
-	buckets   map[string]*bucket
+	buckets   map[string]*list.Element // value: *bucket; the list is ordered by last use, newest first
+	order     *list.List
 	lastSweep time.Time
 }
 
 type bucket struct {
+	key    string
 	tokens float64
-	at     time.Time
+	at     time.Time // last use: the list is in this order
 }
 
 // NewRateLimiter makes a limiter allowing burst requests at once and perMinute on average.
 func NewRateLimiter(perMinute float64, burst int) *RateLimiter {
-	return &RateLimiter{PerMinute: perMinute, Burst: burst, buckets: map[string]*bucket{}}
+	return &RateLimiter{PerMinute: perMinute, Burst: burst, buckets: map[string]*list.Element{}, order: list.New()}
 }
 
-// maxBuckets bounds the keys remembered; past it the oldest idle ones are dropped first.
+// maxBuckets bounds the keys remembered; past it the least recently used one is dropped.
 const maxBuckets = 100000
+
+// sweepEvery is the shortest time between two sweeps of idle keys.
+const sweepEvery = time.Minute
 
 // refill is the token count after the time since at, capped at burst.
 func refill(tokens float64, since time.Duration, perMinute float64, burst int) float64 {
@@ -127,15 +144,26 @@ func (l *RateLimiter) Allow(_ context.Context, key string) (bool, time.Duration)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.buckets == nil {
-		l.buckets = map[string]*bucket{}
+		l.buckets = map[string]*list.Element{}
 	}
-	if len(l.buckets) >= maxBuckets || now.Sub(l.lastSweep) > time.Minute {
+	if l.order == nil {
+		l.order = list.New()
+	}
+	if now.Sub(l.lastSweep) >= sweepEvery {
 		l.sweepLocked(now)
 	}
-	b, ok := l.buckets[key]
-	if !ok {
-		b = &bucket{tokens: float64(l.Burst), at: now}
-		l.buckets[key] = b
+	var b *bucket
+	if el, ok := l.buckets[key]; ok {
+		b = el.Value.(*bucket)
+		l.order.MoveToFront(el)
+	} else {
+		for len(l.buckets) >= maxBuckets { // least recently used goes: O(1), no scan
+			old := l.order.Back()
+			delete(l.buckets, old.Value.(*bucket).key)
+			l.order.Remove(old)
+		}
+		b = &bucket{key: key, tokens: float64(l.Burst), at: now}
+		l.buckets[key] = l.order.PushFront(b)
 	}
 	b.tokens = refill(b.tokens, now.Sub(b.at), l.PerMinute, l.Burst)
 	b.at = now
@@ -146,19 +174,21 @@ func (l *RateLimiter) Allow(_ context.Context, key string) (bool, time.Duration)
 	return false, waitFor(b.tokens, l.PerMinute)
 }
 
-// sweepLocked forgets buckets that have refilled completely (idle callers).
+// sweepLocked forgets buckets that have refilled completely (idle callers), starting from the
+// least recently used end and stopping at the first one that has not: the cost is what it removes.
 func (l *RateLimiter) sweepLocked(now time.Time) {
 	l.lastSweep = now
-	for k, b := range l.buckets {
-		if b.tokens+now.Sub(b.at).Minutes()*l.PerMinute >= float64(l.Burst) {
-			delete(l.buckets, k)
+	for {
+		el := l.order.Back()
+		if el == nil {
+			return
 		}
-	}
-	for k := range l.buckets { // still too many: drop arbitrary ones (an attacker's keys are as likely as any)
-		if len(l.buckets) < maxBuckets {
-			break
+		b := el.Value.(*bucket)
+		if b.tokens+now.Sub(b.at).Minutes()*l.PerMinute < float64(l.Burst) {
+			return
 		}
-		delete(l.buckets, k)
+		delete(l.buckets, b.key)
+		l.order.Remove(el)
 	}
 }
 

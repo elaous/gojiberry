@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"hash/fnv"
 	"io"
 	"math"
 	"net"
@@ -135,10 +137,17 @@ type DirectoryChallenge struct {
 // (close to now) and Prev the log position the owner last saw ("<seq>:<entry hash>", from
 // GET /directory/log/head; "0:" + 64 zeros for an empty log). encrypt.OwnerOpMessage builds the
 // text.
+//
+// V is the version of the message: 0 or 1 is the one above; 2 (a publication) is
+// "directory-op-v2|<op>|<address>|<fingerprint>|<label hash>|<Time>|<Prev>", which also covers the
+// key's label (as the hash of the label the directory stores), so the server cannot change the
+// label of a key the owner signed. The directory requires 2 for a new publication and still
+// accepts 1 in the entries it already holds.
 type DirectoryOwnerSig struct {
 	Time int64  `json:"time"`
 	Prev string `json:"prev"`
 	Sig  string `json:"sig"`
+	V    int    `json:"v,omitempty"`
 }
 
 // DirectoryOwnerEvidence is what a lookup row carries so a client can check an owner signature
@@ -149,6 +158,8 @@ type DirectoryOwnerEvidence struct {
 	Time int64  `json:"time"`
 	Prev string `json:"prev"`
 	Sig  string `json:"sig"`
+	// V is the version of the signed message (see DirectoryOwnerSig); 2 covers the row's Label.
+	V int `json:"v,omitempty"`
 }
 
 // DirectoryPublish is a publish request. Owner is required when the address has an enrolled owner
@@ -251,8 +262,12 @@ type DirectoryLogEntry struct {
 	Seq  int64  `json:"seq"`
 	Prev string `json:"prev"` // Hash of entry Seq-1 (64 zeros for the first)
 	At   int64  `json:"at"`
-	// Op is "publish", "revoke", "enroll", "rotate", "reset-request", "reset", "reset-cancel" or
-	// "void" (the entry Ref did not take effect: its record could not be written).
+	// Op is "publish", "revoke", "enroll", "rotate", "reset-request", "reset", "reset-cancel",
+	// "operator-reset" (the operator removed the owner enrollment of the address, Ref being the
+	// enrollment entry it removed; it is signed by the directory key like every entry, and
+	// visible to the address's watchers) or "void" (the entry Ref did not take effect: its
+	// record could not be written; it must follow the entry it cancels, for the same address,
+	// within a short window, or, for an owner-state entry, a later reconciliation).
 	Op string `json:"op"`
 	// Address is a keyed hash (HMAC under the directory's key material, domain-separated) of the
 	// address: only the directory can compute it, and the owner asks for theirs
@@ -274,6 +289,10 @@ type DirectoryLogEntry struct {
 	ProofSig  string `json:"proof_sig,omitempty"`
 	OpTime    int64  `json:"op_time,omitempty"`
 	OwnerPrev string `json:"owner_prev,omitempty"`
+	// OwnerV is the version of the message the owner signed (2: it covers the key's label, whose
+	// hash is LabelHash); 0 for entries made before.
+	OwnerV    int    `json:"owner_v,omitempty"`
+	LabelHash string `json:"label_hash,omitempty"`
 	Hash      string `json:"hash"`
 	Sig       string `json:"sig"` // base64
 }
@@ -281,9 +300,34 @@ type DirectoryLogEntry struct {
 // DirectoryLog is what GET /directory/log answers: entries after the one asked for, and the
 // public keys (by key ID, base64) that verify them, as this server states them: an auditor pins
 // those out of band rather than trusting this field.
+//
+// Filtered says the answer holds only the entries about the caller's own address (the caller is
+// neither an administrator nor the owner of an enrolled address, see Server.WithDirectoryAdmin):
+// each entry's hash and signature can be checked, but the chain between them cannot, because the
+// entries of other addresses are left out. Next is the number scanned up to (ask again with
+// since=Next) and More says the scan stopped before the end of the log.
 type DirectoryLog struct {
-	Entries []DirectoryLogEntry `json:"entries"`
-	Keys    map[string]string   `json:"keys,omitempty"`
+	Entries  []DirectoryLogEntry `json:"entries"`
+	Keys     map[string]string   `json:"keys,omitempty"`
+	Filtered bool                `json:"filtered,omitempty"`
+	Next     int64               `json:"next,omitempty"`
+	More     bool                `json:"more,omitempty"`
+}
+
+// DirectoryLogFilterer is implemented by a DirectoryService that can read the log for some
+// addresses only (their pseudonyms): scanning at most scan entries after since and returning up
+// to limit of them. The log routes use it for callers who may not read the whole log; a service
+// without it shows those callers nothing (403).
+type DirectoryLogFilterer interface {
+	LogFor(ctx context.Context, addresses []string, since int64, scan, limit int) (DirectoryLog, error)
+}
+
+// DirectoryOperator is implemented by a DirectoryService that lets the operator recover an
+// address whose owner enrollment is stuck (a crash left it half written, or the key and its
+// reset are both lost): OperatorResetEnrollment removes the enrollment of the address with this
+// log pseudonym and logs an "operator-reset" entry, which everybody who watches the address sees.
+type DirectoryOperator interface {
+	OperatorResetEnrollment(ctx context.Context, addressPseudonym string) (DirectoryEnrollment, error)
 }
 
 // DirectoryService is the key directory the server fronts (encrypt.DirectoryService makes one
@@ -441,9 +485,30 @@ func (s *Server) WithDirectory(d DirectoryService) *Server {
 // WithDirectoryLimits chooses where the directory's rate limits live: MemoryLimiters (the
 // default, a budget per process) or StoreLimiters(store), which replicas sharing one store
 // share. The names are "dir-publish", "dir-challenge", "dir-lookup" and "dir-log" (per user),
-// "dir-lookup-ip" and "dir-lookup-all".
+// "dir-lookup-ip" and "dir-lookup-all-0" to "dir-lookup-all-15" (the whole-server budget, in shards).
 func (s *Server) WithDirectoryLimits(f LimiterFactory) *Server {
 	s.dirLimitFactory = f
+	return s
+}
+
+// WithDirectoryAdmin names who is the operator: allow is asked of a request on the admin routes
+// and on the log route. It does two things.
+//
+// The log. Without it, the whole log (GET /directory/log) is read only by the owner of an enrolled
+// address (a provider session whose verified e-mail has an owner key: they need the whole chain to
+// audit), and every other provider user gets only the entries about their own address
+// (Filtered), so that under a SameDomain policy a colleague cannot read everybody's activity (the
+// log names no address in the clear, but it shows who publishes, rotates and revokes, and when).
+// An operator (allow true) reads all of it. The signed head (log/head) stays open to every
+// provider session.
+//
+// The operator route POST /admin/directory/reset-enrollment/<address pseudonym> (see
+// DirectoryOperator), mounted only when allow is set. A request that fails allow counts against
+// a per-client budget of failures (10 a minute, "dir-admin"), past which it answers 429. allow
+// must compare a secret in constant time; docstorecmd's is the header X-Gojiberry-Admin-Token
+// against GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN.
+func (s *Server) WithDirectoryAdmin(allow func(*http.Request) bool) *Server {
+	s.dirAdmin = allow
 	return s
 }
 
@@ -473,10 +538,23 @@ const (
 	lookupsPerMinute   = 60
 	lookupsPerIP       = 120
 	lookupsInTotal     = 1200
+	// adminFailuresPerMinute is how many wrong admin credentials one client may try a minute.
+	adminFailuresPerMinute = 10
+	// maxLogScan is how many entries one filtered log read looks at.
+	maxLogScan = 500
 )
 
+// lookupShards is how many sub-budgets the whole-server lookup budget is split into. One shared
+// key would be one record every caller of every replica compare-and-sets (a StoreLimiter loses
+// the race under load and answers 429 to callers who are within every budget); sixteen keys,
+// chosen by the caller's user ID, cut that contention sixteen-fold. Each shard has the whole
+// budget divided by sixteen, so the total is unchanged, and a user (at most lookupsPerMinute a
+// minute, below one shard's budget) cannot spend more than their own shard.
+const lookupShards = 16
+
 type directoryLimits struct {
-	publish, challenge, lookup, lookupIP, lookupAll, logRead Limiter
+	publish, challenge, lookup, lookupIP, logRead, adminFail Limiter
+	lookupAll                                                [lookupShards]Limiter
 }
 
 func (s *Server) limits() *directoryLimits {
@@ -490,8 +568,11 @@ func (s *Server) limits() *directoryLimits {
 			challenge: f("dir-challenge", challengesPerMin, challengesPerMin),
 			lookup:    f("dir-lookup", lookupsPerMinute, lookupsPerMinute),
 			lookupIP:  f("dir-lookup-ip", lookupsPerIP, lookupsPerIP),
-			lookupAll: f("dir-lookup-all", lookupsInTotal, lookupsInTotal),
 			logRead:   f("dir-log", logReadsPerMinute, logReadsPerMinute),
+			adminFail: f("dir-admin", adminFailuresPerMinute, adminFailuresPerMinute),
+		}
+		for i := range s.dirLimits.lookupAll {
+			s.dirLimits.lookupAll[i] = f(fmt.Sprintf("dir-lookup-all-%d", i), lookupsInTotal/lookupShards, lookupsInTotal/lookupShards)
 		}
 	})
 	return s.dirLimits
@@ -744,13 +825,20 @@ func (s *Server) readBudget(w http.ResponseWriter, r *http.Request, u auth.User,
 	for _, c := range []struct {
 		l   Limiter
 		key string
-	}{{own, ownKey + u.ID}, {lim.lookupIP, "li:" + clientIP(r)}, {lim.lookupAll, all}} {
+	}{{own, ownKey + u.ID}, {lim.lookupIP, "li:" + clientIP(r)}, {lim.lookupAll[lookupShard(u.ID)], all}} {
 		if ok, wait := c.l.Allow(r.Context(), c.key); !ok {
 			tooMany(w, wait)
 			return false
 		}
 	}
 	return true
+}
+
+// lookupShard picks the sub-budget of the whole-server lookup budget a user spends from.
+func lookupShard(userID string) int {
+	h := fnv.New32a()
+	h.Write([]byte(userID))
+	return int(h.Sum32() % lookupShards)
 }
 
 func (s *Server) policy() DirectoryPolicy {
@@ -821,7 +909,8 @@ func (s *Server) logReader(w http.ResponseWriter, r *http.Request) (auth.User, b
 }
 
 // handleLog serves GET /directory/log?since=<seq>: the entries after seq since (at most 200;
-// ask again from the last number for more).
+// ask again from the last number for more). The whole log goes to the operator and to the owner
+// of an enrolled address; everybody else gets the entries about their own address only.
 func (s *Server) handleLog(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -836,7 +925,23 @@ func (s *Server) handleLog(w http.ResponseWriter, r *http.Request) {
 		}
 		since = n
 	}
-	if _, ok := s.logReader(w, r); !ok {
+	u, ok := s.logReader(w, r)
+	if !ok {
+		return
+	}
+	full := s.dirAdmin != nil && s.dirAdmin(r)
+	if !full && u.VerifiedEmail && ValidAddress(u.Email) && !strings.HasPrefix(u.ID, "passkey:") {
+		// Only a verified address can claim an enrollment (an unverified e-mail is whatever the
+		// provider's user typed).
+		enr, err := s.directory.Enrollment(r.Context(), u.Email)
+		if err != nil {
+			directoryError(w, err)
+			return
+		}
+		full = enr.Enrolled
+	}
+	if !full {
+		s.handleOwnLog(w, r, u, since)
 		return
 	}
 	l, err := s.directory.Log(r.Context(), since, maxLogEntries)
@@ -851,6 +956,68 @@ func (s *Server) handleLog(w http.ResponseWriter, r *http.Request) {
 		l.Entries = []DirectoryLogEntry{}
 	}
 	writeJSONStatus(w, http.StatusOK, l)
+}
+
+// handleOwnLog answers the log read of a caller who may see only their own address's entries.
+func (s *Server) handleOwnLog(w http.ResponseWriter, r *http.Request, u auth.User, since int64) {
+	f, ok := s.directory.(DirectoryLogFilterer)
+	if !ok {
+		http.Error(w, "this directory shows its whole log only to the owner of an enrolled address and to its operator", http.StatusForbidden)
+		return
+	}
+	a, err := s.directory.LogAddress(r.Context(), u)
+	if err != nil {
+		if errors.Is(err, ErrDirectoryRefused) {
+			http.Error(w, "this directory shows its whole log only to the owner of an enrolled address and to its operator", http.StatusForbidden)
+			return
+		}
+		directoryError(w, err)
+		return
+	}
+	l, err := f.LogFor(r.Context(), append([]string{a.Address}, a.Previous...), since, maxLogScan, maxLogEntries)
+	if err != nil {
+		directoryError(w, err)
+		return
+	}
+	l.Filtered = true
+	if l.Entries == nil {
+		l.Entries = []DirectoryLogEntry{}
+	}
+	writeJSONStatus(w, http.StatusOK, l)
+}
+
+// handleOperatorReset serves POST /admin/directory/reset-enrollment/<address pseudonym>.
+func (s *Server) handleOperatorReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	lim := s.limits().adminFail
+	key := "ad:" + clientIP(r)
+	if !s.dirAdmin(r) {
+		if ok, wait := lim.Allow(r.Context(), key); !ok {
+			tooMany(w, wait)
+			return
+		}
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	op, ok := s.directory.(DirectoryOperator)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	pseudonym := strings.TrimPrefix(r.URL.Path, "/admin/directory/reset-enrollment/")
+	if len(pseudonym) != 64 || strings.Trim(pseudonym, "0123456789abcdef") != "" {
+		http.Error(w, "the address pseudonym is 64 hex characters", http.StatusBadRequest)
+		return
+	}
+	e, err := op.OperatorResetEnrollment(r.Context(), pseudonym)
+	if err != nil {
+		directoryError(w, err)
+		return
+	}
+	writeJSONStatus(w, http.StatusOK, e)
 }
 
 // handleLogHead serves GET /directory/log/head: the signed head of the log.

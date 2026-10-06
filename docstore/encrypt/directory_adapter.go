@@ -92,6 +92,12 @@ type AdapterDirectory struct {
 	locks [64]sync.Mutex
 	// casMu serialises the transparency log's appends and the challenge claims in this process.
 	casMu sync.Mutex
+	// idx is the owner-state entries of the log by address (reconciliation, directory_recover.go).
+	idxMu sync.Mutex
+	idx   logIndex
+	// id is this process's registration name (Writers).
+	idMu sync.Mutex
+	id   string
 }
 
 func (d *AdapterDirectory) now() time.Time {
@@ -145,7 +151,9 @@ type directoryRecord struct {
 	OwnerSig  string `json:"owner_sig,omitempty"`
 	OwnerTime int64  `json:"owner_time,omitempty"`
 	OwnerPrev string `json:"owner_prev,omitempty"`
-	Sig       string `json:"sig"`
+	// OwnerV is the version of the owner's message (2: it covers the label) (V 5).
+	OwnerV int    `json:"owner_v,omitempty"`
+	Sig    string `json:"sig"`
 }
 
 func (rec directoryRecord) message(id string) []byte {
@@ -157,13 +165,17 @@ func (rec directoryRecord) message(id string) []byte {
 		b, _ := json.Marshal([]any{"gojiberry-directory-v3", id, rec.Kid, rec.Key, rec.Label, rec.Publisher, rec.Provider, rec.Email, rec.At, rec.Held, rec.Attest, rec.AttestAt, rec.Seq, rec.Revoked})
 		return b
 	}
-	b, _ := json.Marshal([]any{"gojiberry-directory-v4", id, rec.Kid, rec.Key, rec.Label, rec.Publisher, rec.Provider, rec.Email, rec.At, rec.Held, rec.Attest, rec.AttestAt, rec.Seq, rec.Revoked, rec.OwnerSig, rec.OwnerTime, rec.OwnerPrev})
+	if rec.V == 4 {
+		b, _ := json.Marshal([]any{"gojiberry-directory-v4", id, rec.Kid, rec.Key, rec.Label, rec.Publisher, rec.Provider, rec.Email, rec.At, rec.Held, rec.Attest, rec.AttestAt, rec.Seq, rec.Revoked, rec.OwnerSig, rec.OwnerTime, rec.OwnerPrev})
+		return b
+	}
+	b, _ := json.Marshal([]any{"gojiberry-directory-v5", id, rec.Kid, rec.Key, rec.Label, rec.Publisher, rec.Provider, rec.Email, rec.At, rec.Held, rec.Attest, rec.AttestAt, rec.Seq, rec.Revoked, rec.OwnerSig, rec.OwnerTime, rec.OwnerPrev, rec.OwnerV})
 	return b
 }
 
 // sign makes rec a current record: the current key's ID and signature for id.
 func (d *AdapterDirectory) sign(rec directoryRecord, id string) directoryRecord {
-	rec.V, rec.Kid = 4, d.Signer.KeyID()
+	rec.V, rec.Kid = 5, d.Signer.KeyID()
 	rec.Sig = base64.StdEncoding.EncodeToString(d.Signer.Sign(rec.message(id)))
 	return rec
 }
@@ -329,7 +341,7 @@ func (d *AdapterDirectory) readAddress(ctx context.Context, email string) (addrS
 // provider user (not a passkey one).
 func (d *AdapterDirectory) signedBy(st stored, want string) bool {
 	rec := st.rec
-	if rec.V != 2 && rec.V != 3 && rec.V != 4 {
+	if rec.V != 2 && rec.V != 3 && rec.V != 4 && rec.V != 5 {
 		return false
 	}
 	sig, _ := base64.StdEncoding.DecodeString(rec.Sig)
@@ -480,7 +492,8 @@ func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key 
 		if err != nil {
 			return PublishedKey{}, err
 		}
-		owner, err := d.checkOwner(ctx, enr, OpPublish, email, r.Fingerprint, opt.Owner, now)
+		label := cleanLabel(key.Label)
+		owner, err := d.checkOwner(ctx, enr, OpPublish, email, r.Fingerprint, LabelHash(label), opt.Owner, now)
 		if err != nil {
 			return PublishedKey{}, err
 		}
@@ -515,10 +528,10 @@ func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key 
 			claimed = true
 		}
 		in := logInput{Op: OpPublish, Email: email, Fingerprint: r.Fingerprint}
-		rec := directoryRecord{Key: r.Text, Label: cleanLabel(key.Label), Publisher: user.ID, Provider: providerOf(user.ID), Email: email, At: now.Unix(), Held: proven}
+		rec := directoryRecord{Key: r.Text, Label: label, Publisher: user.ID, Provider: providerOf(user.ID), Email: email, At: now.Unix(), Held: proven}
 		if owner != nil {
-			in.OwnerSig, in.OpTime, in.OwnerPrev = owner.Sig, owner.Time, owner.Prev
-			rec.OwnerSig, rec.OwnerTime, rec.OwnerPrev = owner.Sig, owner.Time, owner.Prev
+			in.OwnerSig, in.OpTime, in.OwnerPrev, in.OwnerV, in.LabelHash = owner.Sig, owner.Time, owner.Prev, owner.V, LabelHash(label)
+			rec.OwnerSig, rec.OwnerTime, rec.OwnerPrev, rec.OwnerV = owner.Sig, owner.Time, owner.Prev, owner.V
 		}
 		seq, err := d.appendLog(ctx, in, now)
 		if err != nil {
@@ -648,7 +661,7 @@ func (d *AdapterDirectory) publishedKey(ctx context.Context, st stored, want str
 // owner key at the time of its log entry, the same one the entry carries, and returns it.
 func ownerEvidence(enr *enrollRecord, st stored, entry LogEntry, haveEntry bool) (docstore.DirectoryOwnerEvidence, bool) {
 	rec := st.rec
-	if !haveEntry || rec.V < 4 || rec.OwnerSig == "" || entry.OwnerSig != rec.OwnerSig || entry.OpTime != rec.OwnerTime || entry.OwnerPrev != rec.OwnerPrev {
+	if !haveEntry || rec.V < 4 || rec.OwnerSig == "" || entry.OwnerSig != rec.OwnerSig || entry.OpTime != rec.OwnerTime || entry.OwnerPrev != rec.OwnerPrev || entry.OwnerV != rec.OwnerV {
 		return docstore.DirectoryOwnerEvidence{}, false
 	}
 	op := OpPublish
@@ -660,8 +673,8 @@ func ownerEvidence(enr *enrollRecord, st stored, entry LogEntry, haveEntry bool)
 			continue
 		}
 		pub, err := ParseOwnerPub(k.Pub)
-		if err == nil && verifyOwner(pub, op, rec.Email, st.fp, rec.OwnerTime, rec.OwnerPrev, rec.OwnerSig) {
-			return docstore.DirectoryOwnerEvidence{Pub: k.Pub, Time: rec.OwnerTime, Prev: rec.OwnerPrev, Sig: rec.OwnerSig}, true
+		if err == nil && verifyOwnerVersion(pub, rec.OwnerV, op, rec.Email, st.fp, LabelHash(rec.Label), rec.OwnerTime, rec.OwnerPrev, rec.OwnerSig) {
+			return docstore.DirectoryOwnerEvidence{Pub: k.Pub, Time: rec.OwnerTime, Prev: rec.OwnerPrev, Sig: rec.OwnerSig, V: rec.OwnerV}, true
 		}
 	}
 	return docstore.DirectoryOwnerEvidence{}, false
@@ -764,13 +777,13 @@ func (d *AdapterDirectory) Revoke(ctx context.Context, user auth.User, fingerpri
 		if err != nil {
 			return PublishedKey{}, err
 		}
-		o, err := d.checkOwner(ctx, enr, OpRevoke, email, st.fp, owner, now)
+		o, err := d.checkOwner(ctx, enr, OpRevoke, email, st.fp, "", owner, now)
 		if err != nil {
 			return PublishedKey{}, err
 		}
 		in := logInput{Op: OpRevoke, Email: email, Fingerprint: st.fp}
 		tomb := st.rec
-		tomb.OwnerSig, tomb.OwnerTime, tomb.OwnerPrev = "", 0, ""
+		tomb.OwnerSig, tomb.OwnerTime, tomb.OwnerPrev, tomb.OwnerV = "", 0, "", 0
 		if o != nil {
 			in.OwnerSig, in.OpTime, in.OwnerPrev = o.Sig, o.Time, o.Prev
 			tomb.OwnerSig, tomb.OwnerTime, tomb.OwnerPrev = o.Sig, o.Time, o.Prev
@@ -824,6 +837,7 @@ func (d *AdapterDirectory) Sweep(ctx context.Context) (int, error) {
 			return n, err
 		}
 		expired := false
+		email := ""
 		if strings.HasPrefix(m.ID, popPrefix) {
 			var u struct {
 				Exp int64 `json:"exp"`
@@ -832,12 +846,28 @@ func (d *AdapterDirectory) Sweep(ctx context.Context) (int, error) {
 		} else {
 			var rec directoryRecord
 			expired = json.Unmarshal(doc.Data, &rec) == nil && rec.Revoked > 0 && now.Sub(time.Unix(rec.Revoked, 0)) >= d.window()
+			email = rec.Email
 		}
-		if expired {
-			if err := d.Store.Delete(ctx, m.ID); err != nil && !errors.Is(err, docstore.ErrNotFound) {
-				return n, err
+		if !expired {
+			continue
+		}
+		// Delete only what was read: a republish since replaced the tombstone with a live record,
+		// and an unconditional delete would remove the key somebody just published. It is made
+		// under the address's lock, so in this process it cannot interleave with a publish, and
+		// across replicas the store's conditional delete decides.
+		err = func() error {
+			if docstore.ValidAddress(email) {
+				defer d.lockAddress(email)()
 			}
+			return d.deleteIf(ctx, m.ID, docstore.Digest(doc.Data))
+		}()
+		switch {
+		case err == nil:
 			n++
+		case errors.Is(err, docstore.ErrConflict), errors.Is(err, docstore.ErrNotFound):
+			// changed or gone since it was read: not ours to delete
+		default:
+			return n, err
 		}
 	}
 	return n, nil
@@ -939,6 +969,16 @@ func (s dirService) Lookup(ctx context.Context, email string, includeRevoked boo
 
 func (s dirService) Log(ctx context.Context, since int64, limit int) (docstore.DirectoryLog, error) {
 	return s.d.ReadLog(ctx, since, limit)
+}
+
+// LogFor implements docstore.DirectoryLogFilterer.
+func (s dirService) LogFor(ctx context.Context, addresses []string, since int64, scan, limit int) (docstore.DirectoryLog, error) {
+	return s.d.LogFor(ctx, addresses, since, scan, limit)
+}
+
+// OperatorResetEnrollment implements docstore.DirectoryOperator.
+func (s dirService) OperatorResetEnrollment(ctx context.Context, pseudonym string) (docstore.DirectoryEnrollment, error) {
+	return s.d.OperatorResetEnrollment(ctx, pseudonym)
 }
 
 func (s dirService) Head(ctx context.Context) (docstore.DirectoryHead, error) { return s.d.Head(ctx) }

@@ -226,7 +226,13 @@ func TestOwnerEnrollmentFlowThroughTheClient(t *testing.T) {
 	if err != nil || !k.OwnerSigned || !k.Held {
 		t.Fatalf("%+v %v", k, err)
 	}
-	// A viewer checks the owner signature itself, and pins the key it saw first.
+	// A viewer checks the owner signature itself; OwnerSigned needs the key to be pinned (here:
+	// confirmed out of band) or chained from the audited log, a first sight is only OwnerUnpinned.
+	if rows, err := viewer.Lookup(ctx, "ana@x.io"); err != nil || len(rows) != 1 || rows[0].OwnerSigned || !rows[0].OwnerUnpinned {
+		t.Fatalf("a key seen for the first time is not confirmed: %+v %v", rows, err)
+	}
+	viewer.Pins = MemoryPins{}
+	viewer.Pins.Set("ana@x.io", encrypt.FormatOwnerPub(owner.Public().(ed25519.PublicKey)))
 	rows, err := viewer.Lookup(ctx, "ana@x.io")
 	if err != nil || len(rows) != 1 || !rows[0].OwnerSigned || !rows[0].OwnerPinned || rows[0].OwnerChanged {
 		t.Fatalf("%+v %v", rows, err)
@@ -266,8 +272,8 @@ func TestOwnerEnrollmentFlowThroughTheClient(t *testing.T) {
 	rows, _ = viewer.Lookup(ctx, "ana@x.io")
 	changed := 0
 	for _, r := range rows {
-		if !r.OwnerSigned {
-			t.Errorf("%+v", r)
+		if r.OwnerChanged == r.OwnerSigned {
+			t.Errorf("a row is either signed by the pinned key or flagged as changed: %+v", r)
 		}
 		if r.OwnerChanged {
 			changed++
@@ -320,7 +326,9 @@ func TestPasskeyPRFKeyIsPublishedWithItsIdentityAndAttestedByTheOwner(t *testing
 	if err != nil || !k.Held || !k.OwnerSigned || k.Attested {
 		t.Fatalf("a passkey key cannot attest itself; the owner signature attests it: %+v %v", k, err)
 	}
-	rows, _ := e.client(bo).Lookup(ctx, "ana@x.io")
+	bob := e.client(bo)
+	bob.Pins.Set("ana@x.io", encrypt.FormatOwnerPub(owner.Public().(ed25519.PublicKey)))
+	rows, _ := bob.Lookup(ctx, "ana@x.io")
 	if len(rows) != 1 || !rows[0].OwnerSigned || rows[0].Attested {
 		t.Errorf("%+v", rows)
 	}
@@ -401,13 +409,20 @@ func TestWatchLogOnAnEnrolledAddressFlagsWhatTheOwnerDidNotSign(t *testing.T) {
 		t.Fatalf("%+v %v", rep, err)
 	}
 	// The state remembers the enrollment: the next run is audited from it.
-	if !st.Enrolled || len(st.OwnerKeys) != 1 {
+	// Entries newer than a void could still come for stay Pending (and are audited again from
+	// the state), so the enrollment is in the report and in Pending, not yet in OwnerKeys.
+	if len(st.Pending) == 0 || st.Reported != st.Seq {
 		t.Errorf("%+v", st)
 	}
 	data, _ := json.Marshal(st)
 	var restored WatchState
-	if json.Unmarshal(data, &restored) != nil || restored.Seq != st.Seq || !restored.Enrolled {
+	if json.Unmarshal(data, &restored) != nil || restored.Seq != st.Seq || restored.Reported != st.Reported || len(restored.Pending) != len(st.Pending) {
 		t.Errorf("the state does not round-trip: %s", data)
+	}
+	// The next run from the restored state audits the same chain and reports nothing twice.
+	rep, err = c.WatchLog(ctx, "ana@x.io", &restored, WatchOptions{Owner: owner})
+	if err != nil || !rep.Enrolled || len(rep.Foreign) != 0 || len(rep.Violations) != 0 {
+		t.Errorf("%+v %v", rep, err)
 	}
 }
 

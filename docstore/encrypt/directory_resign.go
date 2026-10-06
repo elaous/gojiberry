@@ -256,6 +256,13 @@ func (d *AdapterDirectory) Startup(ctx context.Context) (ResignReport, error) {
 	if err != nil {
 		return rep, err
 	}
+	// An owner-state entry a crash left without its record is completed now, not at the next
+	// owner operation (an address that is never touched again would show a violation for good).
+	if n, err := d.ReconcileEnrollments(ctx); err != nil {
+		return rep, err
+	} else if n > 0 {
+		log.Printf("encrypt: %d owner enrollments were behind the log and were completed from it", n)
+	}
 	h := docstore.DirectoryHealth{Records: rep.Records, Resigned: rep.Resigned, Skipped: rep.Skipped + rep.Unverified, UnknownKeys: rep.Unknown, CheckedAt: d.now().Unix()}
 	d.report.Store(&h)
 	return rep, nil

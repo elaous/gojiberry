@@ -77,9 +77,9 @@ func TestDirectoryRoutesChallengePublishRevokeLogAndLookup(t *testing.T) {
 	}
 
 	// The log, for a provider session (a passkey one is refused, see TestDirectoryLogRoutesNeedAProviderSession).
-	rec = e.do("GET", "/directory/log?since=0", e.token(auth.User{ID: "google:z", Email: "z@x.io", VerifiedEmail: true}), "")
+	rec = e.do("GET", "/directory/log?since=0", anaTok, "")
 	var lg docstore.DirectoryLog
-	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &lg) != nil || len(lg.Entries) != 1 || lg.Entries[0].Address != e.dir.LogAddressFor("ana@x.io") || len(lg.Keys) != 1 {
+	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &lg) != nil || len(lg.Entries) != 1 || lg.Entries[0].Address != e.dir.LogAddressFor("ana@x.io") || len(lg.Keys) != 1 || !lg.Filtered {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 	if rec := e.do("GET", "/directory/log?since=1", boTok, ""); !strings.Contains(rec.Body.String(), `"entries":[]`) {
@@ -139,7 +139,11 @@ func TestDirectoryRoutesChallengePublishRevokeLogAndLookup(t *testing.T) {
 	if rec := e.do("DELETE", "/directory/keys/"+docstore.DirectoryFingerprintSegment(other.Fingerprint), anaTok, ""); rec.Code != 200 {
 		t.Errorf("path form = %d %s", rec.Code, rec.Body)
 	}
-	lg2 := e.do("GET", "/directory/log", boTok, "")
+	// The log is filtered to the caller's own address (a stranger sees none of ana's entries).
+	if rec := e.do("GET", "/directory/log", boTok, ""); !strings.Contains(rec.Body.String(), `"entries":[]`) {
+		t.Errorf("another address's entries in the log: %s", rec.Body)
+	}
+	lg2 := e.do("GET", "/directory/log", anaTok, "")
 	_ = json.Unmarshal(lg2.Body.Bytes(), &lg)
 	var ops []string
 	for _, en := range lg.Entries {
@@ -263,16 +267,15 @@ func TestDirectoryRoutesShareLimitsThroughTheStore(t *testing.T) {
 func TestDirectoryLookupHasAGlobalBudget(t *testing.T) {
 	e := newDirEnvWith(t, nil, func(s *docstore.Server) {
 		s.WithDirectoryLimits(func(name string, perMinute float64, burst int) docstore.Limiter {
-			if name == "dir-lookup-all" {
-				return docstore.NewRateLimiter(1, 3)
+			if strings.HasPrefix(name, "dir-lookup-all-") {
+				return docstore.NewRateLimiter(1, 3) // every shard of the server-wide budget
 			}
 			return docstore.NewRateLimiter(perMinute, burst)
 		})
 	})
 	var codes []int
-	for i := range 5 { // five different users, one lookup each: the server-wide budget is 3
-		tok := e.token(auth.User{ID: "google:" + string(rune('a'+i)), Email: string(rune('a'+i)) + "@x.io", VerifiedEmail: true})
-		code, _ := e.lookup(tok, "bo@x.io")
+	for _, u := range usersInShardOf(ana, 5, "x.io") { // five different users of one shard, one lookup each: its budget is 3
+		code, _ := e.lookup(e.token(u), "bo@x.io")
 		codes = append(codes, code)
 	}
 	if codes[2] != 200 || codes[3] != 429 || codes[4] != 429 {

@@ -119,8 +119,21 @@ func (s Static) Identities(context.Context, string) ([]age.Identity, error) { re
 // encrypted like any document file and, once the folder's signed record says e2ee, wrapped
 // for people's keys only.
 func DefaultSkip(id string) bool {
-	return strings.HasPrefix(id, "catalog:") || strings.HasPrefix(id, "acl:") || strings.HasPrefix(id, "fonts/") || strings.HasPrefix(id, KeysPrefix) || strings.HasPrefix(id, directoryPrefix) || strings.HasPrefix(id, docstore.DirectoryLogPrefix) || strings.HasPrefix(id, docstore.DirectoryEnrollPrefix) || strings.HasPrefix(id, docstore.RateLimitPrefix)
+	// Compared without case, like docstore's reserved ids (isReservedDocID) and IsDocumentKey: on
+	// a backend that folds case "Directory/x" and "directory/x" are one record, and the one the
+	// directory wrote in the clear must stay readable under either spelling.
+	lower := strings.ToLower(id)
+	for _, p := range defaultSkipPrefixes {
+		if strings.HasPrefix(lower, p) {
+			return true
+		}
+	}
+	return false
 }
+
+// defaultSkipPrefixes are DefaultSkip's keyspaces, lower-cased.
+var defaultSkipPrefixes = []string{"catalog:", "acl:", "fonts/", strings.ToLower(KeysPrefix), strings.ToLower(directoryPrefix),
+	strings.ToLower(docstore.DirectoryLogPrefix), strings.ToLower(docstore.DirectoryEnrollPrefix), strings.ToLower(docstore.RateLimitPrefix)}
 
 // Adapter is a docstore.Adapter that encrypts what it saves in Inner.
 type Adapter struct {

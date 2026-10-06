@@ -333,6 +333,8 @@ type Server struct {
 	// dirDomainBudget makes the whole-server lookup budget one per e-mail domain
 	// (WithDirectoryGlobalPerDomain).
 	dirDomainBudget bool
+	// dirAdmin says a request comes from the operator (WithDirectoryAdmin).
+	dirAdmin func(*http.Request) bool
 }
 
 type extraRoute struct {
@@ -489,6 +491,9 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("/directory/log/address", s.handleLogAddress)
 		mux.HandleFunc("/directory/enroll", s.handleEnrollRoot)
 		mux.HandleFunc("/directory/enroll/", s.handleEnrollSub)
+		if s.dirAdmin != nil {
+			mux.HandleFunc("/admin/directory/reset-enrollment/", s.handleOperatorReset)
+		}
 	}
 	for _, e := range s.extra {
 		mux.Handle(e.pattern, e.h)

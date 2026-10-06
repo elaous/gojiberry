@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"hash/fnv"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -364,8 +366,9 @@ func TestPublishLeavesAVoidEntryWhenTheRecordCannotBeWritten(t *testing.T) {
 		t.Fatalf("log: %+v", ops)
 	}
 	audit := AuditAddress("ana@x.io", d.LogAddressesFor("ana@x.io"), ops, AuditOptions{})
-	if len(audit.Entries) != 0 {
-		t.Errorf("a voided entry took effect: %+v", audit.Entries)
+	// The voided entry stays visible, marked, and is not an error (its owner-less address has no rules).
+	if len(audit.Entries) != 1 || audit.Voided[1] != 2 || len(audit.Violations) != 0 {
+		t.Errorf("the voided entry must stay visible and marked: %+v %+v %+v", audit.Entries, audit.Voided, audit.Violations)
 	}
 	keys := logKeys(t, d)
 	if _, err := VerifyLog(ops, "", 0, keys); err != nil {
@@ -719,8 +722,14 @@ func TestLookupSpendsTheUsersOwnBudgetBeforeTheSharedOnes(t *testing.T) {
 	if n := len(calls["dir-lookup-ip"]); n != 1 {
 		t.Errorf("the shared IP budget was asked %d times, want 1 (only the lookup that was allowed)", n)
 	}
-	if n := len(calls["dir-lookup-all"]); n != 1 {
-		t.Errorf("the global budget was asked %d times, want 1", n)
+	global := 0
+	for name, c := range calls {
+		if strings.HasPrefix(name, "dir-lookup-all-") {
+			global += len(c)
+		}
+	}
+	if global != 1 {
+		t.Errorf("the global budget was asked %d times, want 1", global)
 	}
 	if n := len(calls["dir-lookup"]); n != 6 {
 		t.Errorf("the user's budget was asked %d times", n)
@@ -731,15 +740,16 @@ func TestGlobalLookupBudgetCanBePerPolicyDomain(t *testing.T) {
 	mk := func(perDomain bool) *dirEnv {
 		return newDirEnvWith(t, nil, func(s *docstore.Server) {
 			s.WithDirectoryGlobalPerDomain(perDomain).WithDirectoryLimits(func(name string, perMinute float64, burst int) docstore.Limiter {
-				if name == "dir-lookup-all" {
-					return docstore.NewRateLimiter(0.001, 1) // one lookup for the whole server (or domain)
+				if strings.HasPrefix(name, "dir-lookup-all-") {
+					return docstore.NewRateLimiter(0.001, 1) // one lookup for the whole server (or domain), per shard
 				}
 				return docstore.NewRateLimiter(perMinute, burst)
 			})
 		})
 	}
-	x := auth.User{ID: "google:x", Email: "u@x.io", VerifiedEmail: true}
-	y := auth.User{ID: "google:y", Email: "u@y.org", VerifiedEmail: true}
+	us := usersInShardOf(ana, 3, "x.io")
+	x, x2 := us[0], us[1]
+	y := usersInShardOf(ana, 1, "y.org")[0]
 	shared := mk(false)
 	if code, _ := shared.lookup(shared.token(x), "bo@x.io"); code != 200 {
 		t.Fatal(code)
@@ -754,7 +764,7 @@ func TestGlobalLookupBudgetCanBePerPolicyDomain(t *testing.T) {
 	if code, _ := per.lookup(per.token(y), "bo@x.io"); code != 200 {
 		t.Errorf("a budget per domain: another domain is not affected, got %d", code)
 	}
-	if code, _ := per.lookup(per.token(auth.User{ID: "google:x2", Email: "v@x.io", VerifiedEmail: true}), "bo@x.io"); code != 429 {
+	if code, _ := per.lookup(per.token(x2), "bo@x.io"); code != 429 {
 		t.Errorf("the same domain shares it: %d", code)
 	}
 }
@@ -860,4 +870,78 @@ func TestRevokeRacingAnotherRevokeDoesNotOverwriteIt(t *testing.T) {
 	if len(got) != 1 || !got[0].Revoked || got[0].Seq != 2 {
 		t.Errorf("the first tombstone stands: %+v", got)
 	}
+}
+
+// usersInShardOf makes n verified users at domain whose lookups spend the same shard of the
+// server-wide lookup budget as like's (the shard is chosen by the user ID).
+func usersInShardOf(like auth.User, n int, domain string) []auth.User {
+	shard := func(id string) uint32 {
+		h := fnv.New32a()
+		h.Write([]byte(id))
+		return h.Sum32() % 16
+	}
+	var out []auth.User
+	for i := 0; len(out) < n; i++ {
+		id := fmt.Sprintf("google:s%d", i)
+		if shard(id) == shard(like.ID) {
+			out = append(out, auth.User{ID: id, Email: fmt.Sprintf("s%d@%s", i, domain), VerifiedEmail: true})
+		}
+	}
+	return out
+}
+
+// The whole-server lookup budget is split into 16 sub-budgets (one record each under a
+// StoreLimiter), so callers do not all compare-and-set one key; the total is unchanged and users
+// are spread over the shards.
+func TestGlobalLookupBudgetIsSharded(t *testing.T) {
+	var mu sync.Mutex
+	figures := map[string]float64{}
+	used := map[string]bool{}
+	e := newDirEnvWith(t, nil, func(s *docstore.Server) {
+		s.WithDirectoryLimits(func(name string, perMinute float64, burst int) docstore.Limiter {
+			inner := docstore.NewRateLimiter(perMinute, burst)
+			if strings.HasPrefix(name, "dir-lookup-all") {
+				mu.Lock()
+				figures[name] = perMinute
+				mu.Unlock()
+				return namedLimiter{inner: inner, name: name, mu: &mu, used: used}
+			}
+			return inner
+		})
+	})
+	for i := range 60 {
+		u := auth.User{ID: fmt.Sprintf("google:u%d", i), Email: fmt.Sprintf("u%d@x.io", i), VerifiedEmail: true}
+		if code, _ := e.lookup(e.token(u), "bo@x.io"); code != 200 {
+			t.Fatalf("lookup %d = %d", i, code)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(figures) != 16 {
+		t.Fatalf("%d shards of the global budget, want 16: %v", len(figures), figures)
+	}
+	total := 0.0
+	for _, f := range figures {
+		total += f
+	}
+	if total != 1200 {
+		t.Errorf("the shards add up to %v a minute, want the 1200 of the one budget", total)
+	}
+	if len(used) < 8 {
+		t.Errorf("60 users spent only %d shards: %v", len(used), used)
+	}
+}
+
+type namedLimiter struct {
+	inner docstore.Limiter
+	name  string
+	mu    *sync.Mutex
+	used  map[string]bool
+}
+
+func (n namedLimiter) Allow(ctx context.Context, key string) (bool, time.Duration) {
+	n.mu.Lock()
+	n.used[n.name] = true
+	n.mu.Unlock()
+	return n.inner.Allow(ctx, key)
 }

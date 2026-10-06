@@ -5,6 +5,8 @@ package docstorecmd
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log"
@@ -141,12 +143,13 @@ func withDirectory(ctx context.Context, srv *docstore.Server, adapter docstore.A
 		dir.RevokeWindow = w
 	}
 	replicas := 1
+	replicasSet := false
 	if v := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_REPLICAS")); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 {
 			return fmt.Errorf("parsing GOJIBERRY_DOCSTORE_REPLICAS %q: want a positive whole number", v)
 		}
-		replicas = n
+		replicas, replicasSet = n, true
 	}
 	policy, err := docstore.ParseDirectoryLookupMode(os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_LOOKUP"))
 	if err != nil {
@@ -163,6 +166,7 @@ func withDirectory(ctx context.Context, srv *docstore.Server, adapter docstore.A
 	if err := dir.CheckStore(ctx, replicas); err != nil {
 		return err
 	}
+	checkWriters(ctx, dir, adapter, replicas, replicasSet)
 	// Before serving: a record a retired key signed moves to the current key now, under the same
 	// rules as a publish (the address lock and conditional writes), not while requests are in
 	// flight.
@@ -174,10 +178,49 @@ func withDirectory(ctx context.Context, srv *docstore.Server, adapter docstore.A
 	if rep.Unknown > 0 {
 		log.Printf("docstore: WARNING: %d directory records are named under unknown keys: check GOJIBERRY_DOCSTORE_DIRECTORY_KEY and GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV; those keys cannot be found by a lookup", rep.Unknown)
 	}
+	if tok := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN")); tok != "" {
+		if len(tok) < 16 {
+			return errors.New("GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN must be at least 16 characters")
+		}
+		srv.WithDirectoryAdmin(adminToken(tok))
+	}
 	srv.WithDirectory(encrypt.DirectoryService(dir)).WithDirectoryPolicy(policy).WithDirectoryLimits(limiters).WithDirectoryGlobalPerDomain(perDomain)
 	go dir.RunSweep(ctx, time.Hour)
+	go dir.RunWriterWatch(ctx, replicas)
 	log.Printf("docstore: key directory enabled (proof of possession required: %v)", dir.RequireProof)
 	return nil
+}
+
+// adminToken is the operator check of the directory routes: the header X-Gojiberry-Admin-Token
+// equals tok (compared in constant time).
+func adminToken(tok string) func(*http.Request) bool {
+	want := sha256.Sum256([]byte(tok))
+	return func(r *http.Request) bool {
+		got := sha256.Sum256([]byte(r.Header.Get("X-Gojiberry-Admin-Token")))
+		return subtle.ConstantTimeCompare(got[:], want[:]) == 1
+	}
+}
+
+// checkWriters is the start-up's look at the store for other processes writing the same
+// directory, against what GOJIBERRY_DOCSTORE_REPLICAS declares (see encrypt.AdapterDirectory.Writers).
+// It never refuses to start (a restart within the last minutes looks like another writer): it says,
+// loudly, what the store shows, and, when the variable is unset on a store that can carry several
+// writers, that the default of one is only a default.
+func checkWriters(ctx context.Context, dir *encrypt.AdapterDirectory, adapter docstore.Adapter, replicas int, replicasSet bool) {
+	n, err := dir.Writers(ctx)
+	if err != nil {
+		log.Printf("docstore: WARNING: could not look for other server processes writing the key directory: %v", err)
+	}
+	conditional := docstore.SupportsConditional(ctx, adapter)
+	switch {
+	case n > 0 && replicas <= 1:
+		log.Printf("docstore: ERROR: %d other server process(es) have written to this key directory in the last minutes, and GOJIBERRY_DOCSTORE_REPLICAS says %d (a restart within that time looks the same): if several processes share this store, set GOJIBERRY_DOCSTORE_REPLICAS to the real number%s", n, replicas,
+			map[bool]string{true: "", false: " and move to a store with conditional writes (the log and challenge claims are atomic within one process only on this one)"}[conditional])
+	case !replicasSet && conditional:
+		log.Print("docstore: WARNING: GOJIBERRY_DOCSTORE_REPLICAS is not set: assuming ONE server process on this store. The directory's log is safe across processes on a store with conditional writes, but the declaration is what lets the server refuse an unsafe setup elsewhere: set it to the number of processes that share this store")
+	case !replicasSet:
+		log.Print("docstore: WARNING: GOJIBERRY_DOCSTORE_REPLICAS is not set: assuming ONE server process on this store, which has no conditional writes: a second process could fork the directory's log")
+	}
 }
 
 // withPasskeys turns on sign-in with passkeys when GOJIBERRY_DOCSTORE_PASSKEY_RPID is set (with

@@ -693,3 +693,32 @@ func TestPublicRefusesAShortAdminTokenUnlessAllowed(t *testing.T) {
 		t.Fatalf("with the override: %v", err)
 	}
 }
+
+// An unset GOJIBERRY_DOCSTORE_REPLICAS is said out loud, and a store that shows another writer
+// contradicts a declared 1.
+func TestReplicasUnsetAndContradictedAreSaidLoudly(t *testing.T) {
+	ctx := context.Background()
+	mgr, err := auth.NewManager(ctx, auth.Config{BaseURL: "https://x.test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOJIBERRY_DOCSTORE_DIRECTORY_KEY", strings.Repeat("11", 32))
+	t.Setenv("GOJIBERRY_DOCSTORE_REPLICAS", "")
+	a := docstore.NewMemoryAdapter()
+	logs := captureLog(t)
+	if err := withDirectory(ctx, docstore.NewServer(a, "memory").WithAuth(mgr), a, docstore.MemoryLimiters()); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(logs.String(), "GOJIBERRY_DOCSTORE_REPLICAS is not set") {
+		t.Errorf("unset: %q", logs)
+	}
+	// Another process (a second start on the same store) is now registered: declared 1 is wrong.
+	t.Setenv("GOJIBERRY_DOCSTORE_REPLICAS", "1")
+	logs = captureLog(t)
+	if err := withDirectory(ctx, docstore.NewServer(a, "memory").WithAuth(mgr), a, docstore.MemoryLimiters()); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(logs.String(), "ERROR") || !strings.Contains(logs.String(), "other server process") {
+		t.Errorf("contradiction: %q", logs)
+	}
+}

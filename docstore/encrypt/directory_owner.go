@@ -60,6 +60,50 @@ func OwnerOpMessage(op, email, fingerprint string, at int64, prev string) []byte
 	return []byte("directory-op|" + op + "|" + normalizeEmail(email) + "|" + fingerprint + "|" + strconv.FormatInt(at, 10) + "|" + prev)
 }
 
+// OwnerPublishMessageV2 is what the owner key signs for a publication since the label was
+// covered: "directory-op-v2|publish|<address>|<fingerprint>|<label hash>|<unix seconds>|<prev>".
+// labelHash is LabelHash of the label as the directory stores it (CleanLabel). The "-v2" prefix
+// separates it from OwnerOpMessage's, so a signature of one is never valid for the other.
+func OwnerPublishMessageV2(email, fingerprint, labelHash string, at int64, prev string) []byte {
+	return []byte("directory-op-v2|" + OpPublish + "|" + normalizeEmail(email) + "|" + fingerprint + "|" + labelHash + "|" + strconv.FormatInt(at, 10) + "|" + prev)
+}
+
+// LabelHash is the hex SHA-256 of a key's (cleaned) label, what a version 2 owner signature and
+// its log entry carry instead of the label itself.
+func LabelHash(label string) string {
+	sum := sha256.Sum256([]byte(label))
+	return hex.EncodeToString(sum[:])
+}
+
+// CleanLabel is the label as the directory stores it (trimmed, control characters removed,
+// shortened): what an owner signs the hash of (SignOwnerPublish).
+func CleanLabel(s string) string { return cleanLabel(s) }
+
+// SignOwnerPublish signs a publication of the key with this fingerprint and label (version 2: the
+// signature covers the label, so the server cannot change it).
+func SignOwnerPublish(priv ed25519.PrivateKey, email, fingerprint, label string, at time.Time, prev string) docstore.DirectoryOwnerSig {
+	return docstore.DirectoryOwnerSig{Time: at.Unix(), Prev: prev, V: 2,
+		Sig: base64.StdEncoding.EncodeToString(ed25519.Sign(priv, OwnerPublishMessageV2(email, fingerprint, LabelHash(CleanLabel(label)), at.Unix(), prev)))}
+}
+
+// verifyOwnerPublishV2 checks a version 2 publication signature.
+func verifyOwnerPublishV2(pub ed25519.PublicKey, email, fingerprint, labelHash string, at int64, prev, sig string) bool {
+	b, err := base64.StdEncoding.DecodeString(sig)
+	if err != nil || len(b) != ed25519.SignatureSize || len(pub) != ed25519.PublicKeySize {
+		return false
+	}
+	return ed25519.Verify(pub, OwnerPublishMessageV2(email, fingerprint, labelHash, at, prev), b)
+}
+
+// verifyOwnerVersion checks the signature of an entry or record by its version: 2 (a
+// publication) covers the label hash, anything else is the original message.
+func verifyOwnerVersion(pub ed25519.PublicKey, v int, op, email, fingerprint, labelHash string, at int64, prev, sig string) bool {
+	if v == 2 {
+		return op == OpPublish && verifyOwnerPublishV2(pub, email, fingerprint, labelHash, at, prev, sig)
+	}
+	return verifyOwner(pub, op, email, fingerprint, at, prev, sig)
+}
+
 // OwnerFingerprint names an owner public key: "OWNER:" and the base64 SHA-256 of its 32 bytes.
 func OwnerFingerprint(pub ed25519.PublicKey) string {
 	sum := sha256.Sum256(pub)
@@ -120,10 +164,18 @@ func VerifyOwnerOp(pub ed25519.PublicKey, op, email, fingerprint string, at int6
 	return verifyOwner(pub, op, email, fingerprint, at, prev, sig)
 }
 
+// VerifyOwnerOpV is VerifyOwnerOp for a message of version v (see docstore.DirectoryOwnerSig): 2
+// is a publication whose signature covers the label, whose hash is labelHash.
+func VerifyOwnerOpV(pub ed25519.PublicKey, v int, op, email, fingerprint, labelHash string, at int64, prev, sig string) bool {
+	return verifyOwnerVersion(pub, v, op, email, fingerprint, labelHash, at, prev, sig)
+}
+
 // VerifyOwnerEvidence checks, without the server's word, that a lookup row's owner signature is
-// valid for the address: the evidence's key signed the publication of the row's fingerprint.
-// Whether that key is the address's owner key is the client's to decide (pinned from an earlier
-// lookup, or from the enrollment entry in the log: AuditAddress).
+// valid for the address: the evidence's key signed the publication of the row's fingerprint (and,
+// for a version 2 signature, its label). Whether that key is the address's owner key is the
+// client's to decide (pinned from an earlier lookup, or from the enrollment entry in the log:
+// AuditAddress): this checks the signature under the key the row itself carries, which the
+// server supplies, so on its own it proves nothing about the owner.
 func VerifyOwnerEvidence(email string, k docstore.DirectoryKey) bool {
 	if k.Owner == nil {
 		return false
@@ -132,7 +184,7 @@ func VerifyOwnerEvidence(email string, k docstore.DirectoryKey) bool {
 	if err != nil {
 		return false
 	}
-	return verifyOwner(pub, OpPublish, email, k.Fingerprint, k.Owner.Time, k.Owner.Prev, k.Owner.Sig)
+	return verifyOwnerVersion(pub, k.Owner.V, OpPublish, email, k.Fingerprint, LabelHash(k.Label), k.Owner.Time, k.Owner.Prev, k.Owner.Sig)
 }
 
 // enrollRecord is the stored enrollment of an address: the chain of owner keys and a pending
@@ -293,7 +345,7 @@ var (
 // checkOwner checks the owner signature an operation on an enrolled address needs: it must be
 // there, dated within ownerSkew of now, name a position that is in the log, and verify under the
 // current owner key. With no enrollment nothing is required (and a signature sent is ignored).
-func (d *AdapterDirectory) checkOwner(ctx context.Context, enr *enrollRecord, op, email, fingerprint string, o *docstore.DirectoryOwnerSig, now time.Time) (*docstore.DirectoryOwnerSig, error) {
+func (d *AdapterDirectory) checkOwner(ctx context.Context, enr *enrollRecord, op, email, fingerprint, labelHash string, o *docstore.DirectoryOwnerSig, now time.Time) (*docstore.DirectoryOwnerSig, error) {
 	if enr == nil {
 		return nil, nil
 	}
@@ -308,7 +360,16 @@ func (d *AdapterDirectory) checkOwner(ctx context.Context, enr *enrollRecord, op
 		return nil, fmt.Errorf("%w: no current owner key", ErrBadOwnerSig)
 	}
 	pub, err := ParseOwnerPub(cur.Pub)
-	if err != nil || !verifyOwner(pub, op, email, fingerprint, o.Time, o.Prev, o.Sig) {
+	if err != nil {
+		return nil, ErrBadOwnerSig
+	}
+	if op == OpPublish {
+		// A publication must be signed over its label too (version 2): a server that held a
+		// version 1 signature could otherwise put any label on the key.
+		if o.V != 2 || !verifyOwnerPublishV2(pub, email, fingerprint, labelHash, o.Time, o.Prev, o.Sig) {
+			return nil, fmt.Errorf("%w: a publication is signed with version 2 of the message, which covers the label", ErrBadOwnerSig)
+		}
+	} else if !verifyOwner(pub, op, email, fingerprint, o.Time, o.Prev, o.Sig) {
 		return nil, ErrBadOwnerSig
 	}
 	if err := d.checkLogPosition(ctx, o.Prev); err != nil {
@@ -444,6 +505,9 @@ func (d *AdapterDirectory) Enroll(ctx context.Context, user auth.User, req docst
 		return docstore.DirectoryEnrollment{}, fmt.Errorf("%w: mode is enroll, rotate or reset", ErrBadOwnerSig)
 	}
 	defer d.lockAddress(email)()
+	if err := d.reconcileLocked(ctx, email, now); err != nil {
+		return docstore.DirectoryEnrollment{}, err
+	}
 	claimed := false
 	for round := 0; round < maxCASRounds; round++ {
 		enr, digest, err := d.readEnrollment(ctx, email)
@@ -531,6 +595,9 @@ func (d *AdapterDirectory) RequestReset(ctx context.Context, user auth.User) (do
 	email := normalizeEmail(user.Email)
 	now := d.now()
 	defer d.lockAddress(email)()
+	if err := d.reconcileLocked(ctx, email, now); err != nil {
+		return docstore.DirectoryEnrollment{}, err
+	}
 	for round := 0; round < maxCASRounds; round++ {
 		enr, digest, err := d.readEnrollment(ctx, email)
 		if err != nil {
@@ -574,6 +641,9 @@ func (d *AdapterDirectory) CancelReset(ctx context.Context, user auth.User, owne
 	email := normalizeEmail(user.Email)
 	now := d.now()
 	defer d.lockAddress(email)()
+	if err := d.reconcileLocked(ctx, email, now); err != nil {
+		return docstore.DirectoryEnrollment{}, err
+	}
 	for round := 0; round < maxCASRounds; round++ {
 		enr, digest, err := d.readEnrollment(ctx, email)
 		if err != nil {
@@ -585,7 +655,7 @@ func (d *AdapterDirectory) CancelReset(ctx context.Context, user auth.User, owne
 		if enr.ResetSince == 0 {
 			return docstore.DirectoryEnrollment{}, ErrResetWait
 		}
-		o, err := d.checkOwner(ctx, enr, OpResetCancel, email, "", owner, now)
+		o, err := d.checkOwner(ctx, enr, OpResetCancel, email, "", "", owner, now)
 		if err != nil {
 			return docstore.DirectoryEnrollment{}, err
 		}
@@ -620,21 +690,35 @@ type AuditViolation struct {
 
 // AddressAudit is what AuditAddress found about one address in a run of the log.
 type AddressAudit struct {
-	// Entries are the entries about the address that took effect (void ones and the entries
-	// they cancelled are left out), in order.
+	// Entries are the entries about the address, in order: every one of them, including the ones
+	// a void entry cancelled (see Voided), so that nothing a server wrote about the address is
+	// hidden from its owner. The void entries themselves are not listed (Voided names them).
 	Entries []LogEntry
+	// Voided maps the number of each entry that a valid void entry cancelled to the void's
+	// number: such an entry did not take effect (its record could not be written). It stays in
+	// Entries, and is still checked against the rules: a void does not excuse a violation.
+	Voided map[int64]int64
+	// OperatorResets are the entries by which the operator removed the address's owner
+	// enrollment (OpOperatorReset), a legitimate but notable event.
+	OperatorResets []LogEntry
 	// Enrolled says the address has an owner key after the last entry; OwnerKeys is the chain
 	// (the last is current; Seq is the enrolling entry and Until the replacing one) and
 	// ResetSince the time (Unix seconds) of a reset request still pending, 0 if none.
 	Enrolled   bool
 	OwnerKeys  []docstore.DirectoryOwnerKey
 	ResetSince int64
+	// LastSeq is the number of the last entry that changed the owner state (enrolled, rotated,
+	// reset, requested or cancelled a reset, or an operator reset), 0 if none: what the
+	// enrollment record's Seq must be.
+	LastSeq int64
 	// Violations are the entries that break the rules: an operation on an enrolled address
 	// without a valid signature of the owner key then current, an enrollment on an enrolled
-	// address, a signature dated far from the entry, a reset that took effect before its
-	// waiting period was over or was never requested, a rotation or reset with no acceptance by
-	// the new key. A server alone cannot make an entry that passes; one that does not is proof
-	// that somebody with the directory key (not the owner) wrote it.
+	// address, a signature dated far from the entry, an entry dated before an earlier one or in
+	// the future, a reset that took effect before its waiting period was over or was never
+	// requested, a rotation or reset with no acceptance by the new key, a void that does not
+	// cancel an earlier entry of the same address of a kind that can fail. A server alone cannot
+	// make an entry that passes; one that does not is proof that somebody with the directory key
+	// (not the owner) wrote it.
 	Violations []AuditViolation
 }
 
@@ -647,6 +731,16 @@ type AuditOptions struct {
 	// Start is the state before the entries, when they continue a run already audited (the
 	// AddressAudit of the earlier run); nil for the start of the log.
 	Start *AddressAudit
+	// AtSkew is how far back an entry's time may be from the latest time earlier in the run
+	// (DefaultAtSkew when 0), the same rule as VerifyLog's.
+	AtSkew time.Duration
+	// Now, when set, is the auditor's clock: an entry of the address dated more than FutureSkew
+	// after it was written in the future, which a server does to make a wait look over (the
+	// wait is measured by the entries' times, which the server writes). The zero time turns the
+	// check off.
+	Now time.Time
+	// FutureSkew is the tolerance of that check (ownerSkew, 10 minutes, when 0).
+	FutureSkew time.Duration
 }
 
 // AuditAddress checks the entries of the log that are about one address (addresses are the
@@ -654,7 +748,23 @@ type AuditOptions struct {
 // gives the owner; email the address itself, which the owner signatures name) against the rules
 // of an owner-enrolled address: it replays the enrollment state and flags every entry that the
 // owner key then current did not sign. entries is a run of the log (all addresses; the entries
-// of other addresses are skipped), already checked for chain and signatures with VerifyLog.
+// of other addresses are skipped, but their times and numbers are used), already checked for
+// chain and signatures with VerifyLog.
+//
+// Times. The entries' times are written by the server, so the audit does not trust them alone:
+// an entry dated more than AtSkew before an earlier entry of the run is a violation, so is one
+// dated after the auditor's clock (Now), and the 24-hour wait of a reset is measured between the
+// times of its request and its taking effect, in chain order: a request cannot be back-dated
+// (the entries before it bound it from below) nor the reset forward-dated for long (the
+// auditor's clock bounds it from above). An auditor that was not looking during the wait cannot
+// tell a wait that was kept from one that was not.
+//
+// Voids. A "void" entry cancels the entry it names (Ref) only if that entry is earlier, about
+// the same address, of a kind that can fail (publish, revoke or an owner-state operation), not
+// already cancelled, and the void is dated within a short window of it (VoidWindow: it is the
+// compensation of a failed write, made in the same round). Any other void is a violation and
+// cancels nothing. A voided entry stays in Entries and in Voided, is checked like any other
+// (a voided entry that breaks the rules is a violation anyway) and changes no state.
 func AuditAddress(email string, addresses []string, entries []LogEntry, opt AuditOptions) AddressAudit {
 	mine := map[string]bool{}
 	for _, a := range addresses {
@@ -664,19 +774,51 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 	if wait <= 0 {
 		wait = DefaultResetWait
 	}
+	atSkew := opt.AtSkew
+	if atSkew <= 0 {
+		atSkew = DefaultAtSkew
+	}
+	future := opt.FutureSkew
+	if future <= 0 {
+		future = ownerSkew
+	}
 	var out AddressAudit
 	if opt.Start != nil {
 		out = *opt.Start
 		out.Entries = nil
 		out.Violations = nil
+		out.Voided = nil
+		out.OperatorResets = nil
 		out.OwnerKeys = append([]docstore.DirectoryOwnerKey(nil), opt.Start.OwnerKeys...)
 	}
+	out.Voided = map[int64]int64{}
 	bySeq := map[int64]LogEntry{}
-	voided := map[int64]bool{}
 	for _, e := range entries {
 		bySeq[e.Seq] = e
-		if e.Op == OpVoid && mine[e.Address] {
-			voided[e.Ref] = true
+	}
+	// Which voids are valid, decided before the entries are replayed (a void comes after the
+	// entry it cancels, whose effect it must prevent).
+	voidBad := map[int64]string{}
+	for _, e := range entries {
+		if e.Op != OpVoid || !mine[e.Address] {
+			continue
+		}
+		ref, found := bySeq[e.Ref]
+		switch {
+		case !found:
+			voidBad[e.Seq] = "a void of an entry the audit does not hold"
+		case e.Ref >= e.Seq:
+			voidBad[e.Seq] = "a void of an entry that is not before it"
+		case ref.Address != e.Address:
+			voidBad[e.Seq] = "a void of an entry about another address"
+		case !voidable(ref.Op):
+			voidBad[e.Seq] = "a void of an entry of a kind that cannot be cancelled (" + ref.Op + ")"
+		case out.Voided[e.Ref] != 0:
+			voidBad[e.Seq] = "a void of an entry that was cancelled already"
+		case e.At-ref.At > int64(VoidWindow/time.Second):
+			voidBad[e.Seq] = "a void written long after the entry it cancels"
+		default:
+			out.Voided[e.Ref] = e.Seq
 		}
 	}
 	bad := func(e LogEntry, why string) { out.Violations = append(out.Violations, AuditViolation{e.Seq, why}) }
@@ -705,11 +847,40 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 		}
 		return true
 	}
+	var maxAt int64
+	if opt.Start != nil {
+		maxAt = 0 // the run's own first entry is the baseline
+	}
 	for _, e := range entries {
-		if !mine[e.Address] || e.Op == OpVoid || voided[e.Seq] {
+		backdated := maxAt > 0 && e.At < maxAt-int64(atSkew/time.Second)
+		maxAt = max(maxAt, e.At)
+		if !mine[e.Address] {
+			continue
+		}
+		if e.Op == OpVoid {
+			if why := voidBad[e.Seq]; why != "" {
+				bad(e, why)
+			}
+			if backdated {
+				bad(e, "the entry is dated before an earlier entry of the log: the times of the chain went back")
+			}
 			continue
 		}
 		out.Entries = append(out.Entries, e)
+		if backdated {
+			bad(e, "the entry is dated before an earlier entry of the log: the times of the chain went back")
+		}
+		if !opt.Now.IsZero() && e.At > opt.Now.Unix()+int64(future/time.Second) {
+			bad(e, "the entry is dated in the future")
+		}
+		// A voided entry is checked like any other but changes nothing.
+		_, isVoided := out.Voided[e.Seq]
+		effect := func(f func()) {
+			if !isVoided {
+				f()
+				out.LastSeq = e.Seq
+			}
+		}
 		switch e.Op {
 		case OpPublish, OpRevoke:
 			if !out.Enrolled {
@@ -720,9 +891,16 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 			case !ok || e.OwnerSig == "":
 				bad(e, "no owner signature on an enrolled address")
 			case !timed(e):
-			case !verifyOwner(pub, e.Op, email, e.Fingerprint, e.OpTime, e.OwnerPrev, e.OwnerSig):
+			case !verifyOwnerVersion(pub, e.OwnerV, e.Op, email, e.Fingerprint, e.LabelHash, e.OpTime, e.OwnerPrev, e.OwnerSig):
 				bad(e, "the owner signature does not verify under the current owner key")
 			}
+			// A version 1 signature does not cover the label: accepted here (entries made before
+			// the label was signed exist), though the directory refuses a new one.
+		case OpOperatorReset:
+			out.OperatorResets = append(out.OperatorResets, e)
+			effect(func() {
+				out.Enrolled, out.OwnerKeys, out.ResetSince = false, nil, 0
+			})
 		case OpEnroll:
 			if out.Enrolled {
 				bad(e, "an enrollment on an address that already has an owner key")
@@ -740,9 +918,11 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 				bad(e, "the new key did not sign its enrollment")
 				continue
 			}
-			out.Enrolled = true
-			out.OwnerKeys = []docstore.DirectoryOwnerKey{{Pub: e.OwnerPub, Seq: e.Seq}}
-			out.ResetSince = 0
+			effect(func() {
+				out.Enrolled = true
+				out.OwnerKeys = []docstore.DirectoryOwnerKey{{Pub: e.OwnerPub, Seq: e.Seq}}
+				out.ResetSince = 0
+			})
 		case OpRotate, OpReset:
 			newPub, err := ParseOwnerPub(e.OwnerPub)
 			if err != nil || !out.Enrolled {
@@ -767,17 +947,21 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 				bad(e, "a reset that took effect before its waiting period was over, or was never requested")
 				continue
 			}
-			out.OwnerKeys[len(out.OwnerKeys)-1].Until = e.Seq
-			out.OwnerKeys = append(out.OwnerKeys, docstore.DirectoryOwnerKey{Pub: e.OwnerPub, Seq: e.Seq})
-			out.ResetSince = 0
+			effect(func() {
+				out.OwnerKeys[len(out.OwnerKeys)-1].Until = e.Seq
+				out.OwnerKeys = append(out.OwnerKeys, docstore.DirectoryOwnerKey{Pub: e.OwnerPub, Seq: e.Seq})
+				out.ResetSince = 0
+			})
 		case OpResetRequest:
 			if !out.Enrolled {
 				bad(e, "a reset requested for an address with no owner key")
 				continue
 			}
-			if out.ResetSince == 0 {
-				out.ResetSince = e.At
-			}
+			effect(func() {
+				if out.ResetSince == 0 {
+					out.ResetSince = e.At
+				}
+			})
 		case OpResetCancel:
 			pub, ok := cur()
 			switch {
@@ -787,7 +971,7 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 			case !verifyOwner(pub, OpResetCancel, email, "", e.OpTime, e.OwnerPrev, e.OwnerSig):
 				bad(e, "the cancellation is not signed by the current owner key")
 			default:
-				out.ResetSince = 0
+				effect(func() { out.ResetSince = 0 })
 			}
 		}
 	}

@@ -178,6 +178,28 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
       enroll, watch my address; e2e with the virtual authenticator). Left: wiring it in the showcase/app (the
       note in step 4b), trust on first use of the owner key and witnesses for the log (see the limits in
       step 4b).
+      **Round 3 of the directory review (behavior changes and upgrade notes):** the client's
+      `Key.OwnerSigned` is now true only when the row's owner signature verifies under a key the client
+      pinned (`Client.Pins`) or, for its own address, one in the chain `WatchLog` audited; a first sight is
+      `OwnerUnpinned`, a different key `OwnerChanged`. `WatchLog` pins the log pseudonym of the address with
+      the client's own entries (`ErrAddressMismatch`), keeps recent entries pending so a later void still
+      cancels them, and shows voided entries. Entry times (`At`) must not go back along the chain
+      (`VerifyLog`, `AuditAddress`; a replica never writes a time before its predecessor's). A publication's
+      owner signature (message version 2) covers the key's label; version 1 entries still verify. The log
+      route returns only the caller's own address unless the caller owns an enrolled address or is the
+      operator. An enrollment crash window (log entry written, record not) is completed from the log by the
+      next owner operation or at start-up, and `OperatorResetEnrollment`
+      (`POST /admin/directory/reset-enrollment/<pseudonym>`, `GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN`)
+      logs a signed `operator-reset` entry that watchers are told about. The tombstone sweep deletes only
+      the record it read. `encrypt.DefaultSkip` and the reserved-id check compare **without case**: a
+      document id such as `Directory/x` that an earlier version stored in the encrypted keyspace is now
+      treated as reserved (rename it before upgrading). `directoryclient` refuses a non-https `BaseURL`
+      except for localhost. Set `GOJIBERRY_DOCSTORE_REPLICAS` to the real number of processes: leaving it
+      unset, or declaring 1 while the store shows another writer, is logged loudly. The in-process rate
+      limiter keeps at most 100,000 keys in least-recently-used order: a caller flooding with more distinct
+      keys than that resets other callers' buckets, so per-caller limits are a fair-use control, not a
+      defence against unlimited identities (that belongs to the gateway); the whole-server directory lookup
+      budget is split in 16 shards by user.
    4. Hiding folder names of confidential folders.
    5. **Downgrade and deleted-record detection: done** (library; C.5 and step 5.7 of
       [encryption-and-passkeys.md](encryption-and-passkeys.md)). The level and the record's seq are

@@ -35,6 +35,10 @@ func (e *dirEnv) headPos(tok string) string {
 }
 
 func (e *dirEnv) ownerSig(tok string, priv ed25519.PrivateKey, op, email, fp string) *docstore.DirectoryOwnerSig {
+	if op == OpPublish { // version 2: covers the (empty) label
+		s := SignOwnerPublish(priv, email, fp, "", time.Now(), e.headPos(tok))
+		return &s
+	}
 	s := SignOwnerOp(priv, op, email, fp, time.Now(), e.headPos(tok))
 	return &s
 }

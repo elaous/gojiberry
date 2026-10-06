@@ -48,6 +48,10 @@ func (e *ownerEnv) pos() string {
 
 // sign is the owner's signature of an operation on ana's address, naming the log head now.
 func (e *ownerEnv) sign(priv ed25519.PrivateKey, op, fp string) *docstore.DirectoryOwnerSig {
+	if op == OpPublish { // a publication is signed over its label too (version 2); these keys have none
+		s := SignOwnerPublish(priv, "ana@x.io", fp, "", e.clk.Now(), e.pos())
+		return &s
+	}
 	s := SignOwnerOp(priv, op, "ana@x.io", fp, e.clk.Now(), e.pos())
 	return &s
 }
@@ -156,20 +160,20 @@ func TestOwnerEnrolledAddressNeedsTheOwnersSignatureAndLookupMarksIt(t *testing.
 	if _, err := e.d.PublishWith(ctx, ana, age1, PublishOptions{Owner: e.sign(priv, OpPublish, k2.Fingerprint)}); !errors.Is(err, ErrBadOwnerSig) {
 		t.Errorf("a signature for another key: %v", err)
 	}
-	forAddr := SignOwnerOp(priv, OpPublish, "bo@x.io", age1.Fingerprint, e.clk.Now(), e.pos())
+	forAddr := SignOwnerPublish(priv, "bo@x.io", age1.Fingerprint, "", e.clk.Now(), e.pos())
 	if _, err := e.d.PublishWith(ctx, ana, age1, PublishOptions{Owner: &forAddr}); !errors.Is(err, ErrBadOwnerSig) {
 		t.Errorf("a signature for another address: %v", err)
 	}
 	// Stale, future, and a log position that does not exist.
-	stale := SignOwnerOp(priv, OpPublish, "ana@x.io", age1.Fingerprint, e.clk.Now().Add(-11*time.Minute), e.pos())
+	stale := SignOwnerPublish(priv, "ana@x.io", age1.Fingerprint, "", e.clk.Now().Add(-11*time.Minute), e.pos())
 	if _, err := e.d.PublishWith(ctx, ana, age1, PublishOptions{Owner: &stale}); !errors.Is(err, ErrBadOwnerSig) {
 		t.Errorf("stale: %v", err)
 	}
-	future := SignOwnerOp(priv, OpPublish, "ana@x.io", age1.Fingerprint, e.clk.Now().Add(11*time.Minute), e.pos())
+	future := SignOwnerPublish(priv, "ana@x.io", age1.Fingerprint, "", e.clk.Now().Add(11*time.Minute), e.pos())
 	if _, err := e.d.PublishWith(ctx, ana, age1, PublishOptions{Owner: &future}); !errors.Is(err, ErrBadOwnerSig) {
 		t.Errorf("future: %v", err)
 	}
-	nowhere := SignOwnerOp(priv, OpPublish, "ana@x.io", age1.Fingerprint, e.clk.Now(), FormatLogPosition(99, strings.Repeat("a", 64)))
+	nowhere := SignOwnerPublish(priv, "ana@x.io", age1.Fingerprint, "", e.clk.Now(), FormatLogPosition(99, strings.Repeat("a", 64)))
 	if _, err := e.d.PublishWith(ctx, ana, age1, PublishOptions{Owner: &nowhere}); !errors.Is(err, ErrBadOwnerSig) {
 		t.Errorf("a position that is not in the log: %v", err)
 	}
@@ -659,7 +663,7 @@ func TestARetiredOwnerKeyCannotSignAfterItsRotation(t *testing.T) {
 	rogue := newRecovery(t)
 	now := e.clk.Now()
 	sig := e.sign(priv1, OpPublish, rogue.Fingerprint)
-	seq, err := e.d.appendLog(ctx, logInput{Op: OpPublish, Email: "ana@x.io", Fingerprint: rogue.Fingerprint, OwnerSig: sig.Sig, OpTime: sig.Time, OwnerPrev: sig.Prev}, now)
+	seq, err := e.d.appendLog(ctx, logInput{Op: OpPublish, Email: "ana@x.io", Fingerprint: rogue.Fingerprint, OwnerSig: sig.Sig, OpTime: sig.Time, OwnerPrev: sig.Prev, OwnerV: sig.V, LabelHash: LabelHash("")}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
