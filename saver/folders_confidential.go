@@ -80,6 +80,9 @@ func readFolderSecret(ctx context.Context, t Target, id string) (string, error) 
 func (s *Saver) folder(ctx context.Context, target, id string) (folderEntry, error) {
 	var out folderEntry
 	err := s.view(ctx, target, func(_ Target, cat *catalog) error {
+		if _, ok := cat.Docs[id]; ok {
+			return ErrFolderID // never act on a document's key record as a folder's
+		}
 		f, ok := cat.Folders[id]
 		if !ok {
 			return ErrFolder

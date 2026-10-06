@@ -1,9 +1,11 @@
 package saver
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
+	"path"
 	"slices"
 	"strings"
 	"testing"
@@ -344,8 +346,8 @@ func TestPackSealsConfidentialFolderNames(t *testing.T) {
 		t.Fatalf("%+v %v", rep, err)
 	}
 	fs, _ := dst.Folders(ctx, "dst")
-	if i := slices.IndexFunc(fs, func(f Folder) bool { return f.ID == sec }); fs[i].Name != ConfidentialFolderName || fs[i].Protection != ProtectionServer {
-		t.Errorf("an unsealed pack makes a plain folder with the placeholder name: %+v", fs[i])
+	if i := slices.IndexFunc(fs, func(f Folder) bool { return f.ID == sec }); fs[i].Name != ConfidentialFolderName || fs[i].Protection != ProtectionE2EE {
+		t.Errorf("an unsealed pack makes a confidential folder under the placeholder, never a plain one named so: %+v", fs[i])
 	}
 
 	// With Seal the name travels sealed and comes back confidential with Open.
@@ -376,6 +378,9 @@ func TestPackSealsConfidentialFolderNames(t *testing.T) {
 	}
 	if e, err := d2.Get(ctx, "dst", doc); err != nil || e.Folder != sec {
 		t.Errorf("%+v %v", e, err)
+	}
+	if fs, _ := d2.Folders(ctx, "dst"); !slices.ContainsFunc(fs, func(f Folder) bool { return f.ID == sec && f.Protection == ProtectionE2EE }) {
+		t.Errorf("a folder whose name cannot be opened stays confidential: %+v", fs)
 	}
 	// With Open: a confidential folder again, under its real name.
 	d3 := newDst()
@@ -513,5 +518,113 @@ func TestRebuildListsALockedFolderRecordUnderThePlaceholderInItsPlace(t *testing
 		if f.ID == kid.ID && f.Parent != top.ID {
 			t.Errorf("its place in the tree is kept from the old catalog: %+v", f)
 		}
+	}
+}
+
+// A crafted pack can give a folder the ID of an existing document; the folder must not share
+// the document's key record (encrypt.DocID maps "folder-secret/<ID>" to it).
+func TestImportPackFolderWithADocumentIDIsRemapped(t *testing.T) {
+	ctx := context.Background()
+	s, _, _, _, doc := folderWorld(t) // doc is a document in s
+	if err := s.Trash(ctx, "m", doc); err != nil {
+		t.Fatal(err) // in the trash too: still a document ID
+	}
+	var buf bytes.Buffer
+	pw, err := pack.NewWriter(&buf, pack.Meta{ID: docfile.NewID(), Name: "crafted"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pw.AddFolder(pack.Folder{ID: doc, Name: "Evil"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pw.Close(nil); err != nil {
+		t.Fatal(err)
+	}
+	var checked []string
+	s.ConfidentialCheck = func(_ context.Context, _, id string) error { checked = append(checked, id); return nil }
+	var rekeyed []string
+	s.Rekey = func(_ context.Context, _, id, _ string) error { rekeyed = append(rekeyed, id); return nil }
+	rep, err := s.ImportPack(ctx, "m", bytes.NewReader(buf.Bytes()), int64(buf.Len()), ImportOptions{})
+	if err != nil || rep.Folders != 1 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	fs, _ := s.Folders(ctx, "m")
+	for _, f := range fs {
+		if f.ID == doc {
+			t.Fatalf("the folder took the document's ID: %+v", f)
+		}
+	}
+	if slices.Contains(checked, doc) || slices.Contains(rekeyed, doc) {
+		t.Errorf("the hooks ran on the document: %v %v", checked, rekeyed)
+	}
+	// And the direct entry points refuse a document's ID.
+	if _, err := s.createFolderLevel(ctx, "m", doc, "", "x", true); !errors.Is(err, ErrFolderID) {
+		t.Errorf("%v", err)
+	}
+	for _, err := range []error{
+		s.RenameFolder(ctx, "m", doc, "x"),
+		s.SetFolderProtection(ctx, "m", doc, ProtectionE2EE, false),
+		s.SetFolderProtection(ctx, "m", doc, ProtectionServer, false),
+	} {
+		if !errors.Is(err, ErrFolderID) {
+			t.Errorf("%v", err)
+		}
+	}
+	if slices.Contains(checked, doc) || slices.Contains(rekeyed, doc) {
+		t.Errorf("the hooks ran on the document: %v %v", checked, rekeyed)
+	}
+}
+
+func TestExportPackSurvivesAMissingFolderSecret(t *testing.T) {
+	ctx := context.Background()
+	s, mem, _, sec, _ := folderWorld(t)
+	if err := s.SetFolderProtection(ctx, "m", sec, ProtectionE2EE, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := mem.Adapter.Delete(ctx, FolderSecretKey(sec)); err != nil {
+		t.Fatal(err)
+	}
+	var warned []PackIssue
+	var buf bytes.Buffer
+	n, err := s.ExportPack(ctx, "m", "", &buf, PackOptions{Seal: fakeSeal, Warn: func(i PackIssue) { warned = append(warned, i) }})
+	if err != nil || n != 1 || len(warned) != 1 || warned[0].ID != sec || !errors.Is(warned[0].Err, docstore.ErrNotFound) {
+		t.Fatalf("%d %v %v", n, warned, err)
+	}
+}
+
+func TestArchiveTellsConfidentialFoldersApart(t *testing.T) {
+	ctx := context.Background()
+	s, _, _, sec, _ := folderWorld(t)
+	other, err := s.CreateFolder(ctx, "m", "", "Other secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := s.Save(ctx, "m", docfile.Open, docWithText("Second", "x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Move(ctx, "m", other.ID, e.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{sec, other.ID} {
+		if err := s.SetFolderProtection(ctx, "m", id, ProtectionE2EE, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, _, err := s.Archive(ctx, "m", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dirs := map[string]bool{}
+	for _, f := range zr.File {
+		dirs[path.Dir(f.Name)] = true
+	}
+	if !slices.ContainsFunc(zr.File, func(f *zip.File) bool { return strings.Contains(f.Name, "("+sec[:8]+")") }) ||
+		!slices.ContainsFunc(zr.File, func(f *zip.File) bool { return strings.Contains(f.Name, "("+other.ID[:8]+")") }) {
+		t.Errorf("confidential folders need their own directories: %v", dirs)
 	}
 }

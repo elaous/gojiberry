@@ -438,7 +438,21 @@ cannot be opened.
         document's), so the folder's own signed `keys:<ID>` record and `ConfidentialKeyring` choose
         the recipients: people's keys only at the e2ee level, never the server's; `Sharing.SetProtection`
         works on a folder ID as on a document's. `saver.reserved` lists the prefix so it is never read
-        as a document. (Under `RequireACL` the key is an ordinary id: the first writer owns it.)
+        as a document. (Under `RequireACL` `folder-secret/<ID>` is an ordinary id with its own ACL: the
+        first writer owns it, and it is not tied to the folder's keys record.)
+      - **Folder and document IDs are disjoint, enforced by the catalog.** Both are UUIDs minted
+        separately, so nothing but the catalog stops a crafted pack from giving a folder a document's ID,
+        which would share `keys:<ID>` and make the Rekey hook act on the document. `createFolderLevel`,
+        `RenameFolder`, `SetFolderProtection` and `RevealFolder` refuse a document's ID (`ErrFolderID`),
+        and `ImportPack` gives such a folder (and a document that has a folder's ID) a fresh ID.
+      - **The plain folder record is not authenticated.** Its level and name are not signed (the same
+        trust model as documents: the `keys:<ID>` record is signed, the catalog is not). A store writer
+        can flip a plain record's level or rename it; that can make a confidential folder list as a
+        server one or the reverse, or hide/show it under another placeholder, but it cannot reveal the
+        real name (that stays in the encrypted `folder-secret/<ID>`) nor change who can open it (the
+        signed keys record decides).
+      - TODO: the docstore expiry (docs/public-docstore.md) must exempt `folder-secret/<ID>`: it lives as
+        long as the folder (removed by `DeleteFolder`), never on a TTL.
       - Rename of a confidential folder asserts the keys (the hook) and writes only the record: the
         catalog does not change. Move keeps the name hidden; delete removes the record.
       - **Documents inside are NOT made confidential by their folder**, and a folder does not become
@@ -454,9 +468,12 @@ cannot be opened.
         named with it, index name `ConfidentialFolderName`); without `Seal` it is exported with the
         placeholder and reported to `Warn` (`PackNeedsKey`). `ImportPack` with `Open` makes the folder
         confidential again (through `ConfidentialCheck`; a refusal is that folder's `Failed` and its
-        documents go to the parent); without it the folder comes in as an ordinary folder named with the
-        placeholder, and `NeedsKey` names it. ZIP archives draw a confidential folder as a directory
-        named with the placeholder.
+        documents go to the parent); without it (or when the name cannot be opened, or the pack lists the
+        folder under the placeholder with no sealed name) the folder is still made confidential, under the
+        placeholder (never a plain folder called that), `NeedsKey` names it and `RenameFolder` sets a name.
+        `ExportPack` treats a missing `folder-secret/<ID>` like a locked one: a warning, the placeholder.
+        ZIP archives draw a confidential folder as a directory named with the placeholder and the first
+        eight characters of its ID, so two of them never merge.
       - `Session`: `SetFolderProtection`, `RevealFolder`; unrevealed confidential folders show the
         placeholder in the list, breadcrumb and move menu (`components.DocFolder.Confidential` lets a UI
         draw a lock); the pack's file name is never the real one. Tests with the real adapter

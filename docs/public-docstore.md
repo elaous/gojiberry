@@ -61,6 +61,8 @@ launch, not after:
 1. **Expiry in the store.** `docstore` gets `ExpiresAt` per document and a sweeper;
    reads of an expired document answer 404 even before the sweeper runs. `Server.WithTTL`
    sets the lifetime and what counts as a renewal (a `PUT`, not a `GET`).
+   TODO: expiry must exempt `folder-secret/` (`docstore.FolderSecretPrefix`, a confidential
+   folder's real name): it lives as long as the folder, not 24 hours.
 2. **Anonymous sessions.** A signed, opaque session token (no user record); the server
    keeps `session → document` only as long as the document lives.
 3. **Links** are `/d/{id}` as now, with the capability in the ID (edit) and a derived

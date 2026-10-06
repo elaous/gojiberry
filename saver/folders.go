@@ -32,6 +32,12 @@ const MaxFolderDepth = 16
 // folder inside itself.
 var ErrFolder = errors.New("saver: no such folder, or it cannot go there")
 
+// ErrFolderID is returned when a folder's ID is (or would be) a document's. "keys:<ID>" is
+// the key record of both, and a confidential folder's secret maps onto it
+// (encrypt.DocID), so the two ID spaces must stay disjoint: the catalog is where that is
+// enforced (both are UUIDs, minted separately).
+var ErrFolderID = errors.New("saver: a folder cannot have a document's ID")
+
 func (c *catalog) depth(id string) int {
 	n := 0
 	for id != "" && n <= MaxFolderDepth+1 {
@@ -83,6 +89,15 @@ func (s *Saver) createFolderLevel(ctx context.Context, target, id, parent, name 
 	if !ValidName(name) {
 		return Folder{}, ErrName
 	}
+	// Checked before the Rekey hook, which would act on the document's keys.
+	if err := s.view(ctx, target, func(_ Target, cat *catalog) error {
+		if _, ok := cat.Docs[id]; ok {
+			return ErrFolderID
+		}
+		return nil
+	}); err != nil {
+		return Folder{}, err
+	}
 	if e2ee {
 		if s.ConfidentialCheck != nil {
 			if err := s.ConfidentialCheck(ctx, target, id); err != nil {
@@ -95,6 +110,9 @@ func (s *Saver) createFolderLevel(ctx context.Context, target, id, parent, name 
 	}
 	var out Folder
 	err := s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
+		if _, ok := cat.Docs[id]; ok {
+			return ErrFolderID
+		}
 		if _, ok := cat.Folders[parent]; parent != "" && !ok {
 			return ErrFolder
 		}
