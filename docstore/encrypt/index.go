@@ -122,6 +122,37 @@ func (s *Sharing) Index(ctx context.Context) (Index, error) {
 // server level. It is idempotent, so a SetProtection that failed after the record was written
 // repeats it.
 func (s *Sharing) setIndex(ctx context.Context, docID, level string, seq uint64) error {
+	return s.changeIndex(ctx, func(rec *indexRecord) bool {
+		cur, has := rec.Docs[docID]
+		switch {
+		case level == ProtectionE2EE && has && cur.Level == ProtectionE2EE && cur.Seq >= seq:
+			return false
+		case level != ProtectionE2EE && !has:
+			return false
+		}
+		if rec.Docs == nil {
+			rec.Docs = map[string]IndexEntry{}
+		}
+		if level == ProtectionE2EE {
+			rec.Docs[docID] = IndexEntry{Level: ProtectionE2EE, Seq: seq}
+		} else {
+			delete(rec.Docs, docID)
+		}
+		return true
+	})
+}
+
+// ResignIndex signs the owner-signed index again with Signer, its entries unchanged but for the
+// sequence number: what a store does, besides Resign of every list, when the owner key that
+// signed the index is taken out of OwnerSigners (it would no longer verify). OwnerSigners must
+// still hold the key that signed it now. A store with no index is left as it is.
+func (s *Sharing) ResignIndex(ctx context.Context) error {
+	return s.changeIndex(ctx, func(rec *indexRecord) bool { return rec.Seq > 0 || len(rec.Docs) > 0 })
+}
+
+// changeIndex reads and verifies the index, lets fn change it (false: nothing to write), and
+// writes it back signed with the next sequence number, only if it is still what was read.
+func (s *Sharing) changeIndex(ctx context.Context, fn func(rec *indexRecord) bool) error {
 	if s.Signer == nil {
 		return ErrNoSigner
 	}
@@ -143,20 +174,8 @@ func (s *Sharing) setIndex(ctx context.Context, docID, level string, seq uint64)
 		if err != nil {
 			return err
 		}
-		cur, has := rec.Docs[docID]
-		switch {
-		case level == ProtectionE2EE && has && cur.Level == ProtectionE2EE && cur.Seq >= seq:
+		if !fn(&rec) {
 			return nil
-		case level != ProtectionE2EE && !has:
-			return nil
-		}
-		if rec.Docs == nil {
-			rec.Docs = map[string]IndexEntry{}
-		}
-		if level == ProtectionE2EE {
-			rec.Docs[docID] = IndexEntry{Level: ProtectionE2EE, Seq: seq}
-		} else {
-			delete(rec.Docs, docID)
 		}
 		rec.V = 1
 		rec.Seq++

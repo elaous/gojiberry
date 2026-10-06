@@ -245,10 +245,36 @@ func New(raw docstore.Adapter, target string, cfg Config) (*Store, error) {
 	if err := s.install(cfg); err != nil {
 		return nil, err
 	}
-	s.ad = encrypt.New(raw, ring{s})
-	s.tol = encrypt.New(raw, ring{s})
-	s.tol.AllowPlaintext = true
+	s.mu.Lock()
+	s.rebuildAdapters()
+	s.mu.Unlock()
 	return s, nil
+}
+
+// rebuildAdapters makes the two encrypting adapters over Raw with the signing key of the first
+// unlocked owner key (Adapter.Signer: frame v3 is signed by an owner, and a confidential save
+// needs it). The caller holds s.mu. Called whenever the held keys change.
+func (s *Store) rebuildAdapters() {
+	s.ad = encrypt.New(s.Raw, ring{s})
+	s.tol = encrypt.New(s.Raw, ring{s})
+	s.tol.AllowPlaintext = true
+	if sg := s.signer(); sg != nil {
+		s.ad.Signer, s.tol.Signer = sg, sg
+	}
+}
+
+// strict is the adapter that refuses a stored file that is not encrypted.
+func (s *Store) strict() *encrypt.Adapter {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.ad
+}
+
+// tolerant is the adapter that also reads a file still in the clear (an unfinished change).
+func (s *Store) tolerant() *encrypt.Adapter {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.tol
 }
 
 // install parses cfg and makes it the current one.
@@ -378,6 +404,7 @@ func (s *Store) Lock() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ids, s.holders, s.sigs = nil, nil, nil
+	s.rebuildAdapters()
 }
 
 // held is one private key of an unlock, with the owner key it opens.
@@ -395,6 +422,7 @@ func (s *Store) unlock(u ...held) {
 		s.holders = append(s.holders, k.owner)
 		s.sigs = append(s.sigs, k.Signer)
 	}
+	s.rebuildAdapters()
 }
 
 // signer is the first unlocked key's signing key.
@@ -460,9 +488,9 @@ func (f front) writable() error {
 
 func (f front) reader() *encrypt.Adapter {
 	if f.s.Interrupted() {
-		return f.s.tol
+		return f.s.tolerant()
 	}
-	return f.s.ad
+	return f.s.strict()
 }
 
 // Save implements docstore.Adapter.
@@ -472,7 +500,7 @@ func (f front) Save(ctx context.Context, id string, data []byte) error {
 	if err := f.writable(); err != nil {
 		return err
 	}
-	return f.s.ad.Save(ctx, id, data)
+	return f.s.strict().Save(ctx, id, data)
 }
 
 // SaveIf implements docstore.ConditionalAdapter.
@@ -482,7 +510,7 @@ func (f front) SaveIf(ctx context.Context, id string, data []byte, prev string) 
 	if err := f.writable(); err != nil {
 		return err
 	}
-	return f.s.ad.SaveIf(ctx, id, data, prev)
+	return f.s.strict().SaveIf(ctx, id, data, prev)
 }
 
 // Load implements docstore.Adapter.
@@ -496,14 +524,14 @@ func (f front) Load(ctx context.Context, id string) (docstore.Document, error) {
 func (f front) List(ctx context.Context) ([]docstore.Meta, error) {
 	f.s.gate.RLock()
 	defer f.s.gate.RUnlock()
-	return f.s.ad.List(ctx)
+	return f.s.strict().List(ctx)
 }
 
 // ListPrefix implements docstore.PrefixLister.
 func (f front) ListPrefix(ctx context.Context, prefix string) ([]docstore.Meta, error) {
 	f.s.gate.RLock()
 	defer f.s.gate.RUnlock()
-	return f.s.ad.ListPrefix(ctx, prefix)
+	return f.s.strict().ListPrefix(ctx, prefix)
 }
 
 // Delete implements docstore.Adapter.
@@ -513,11 +541,11 @@ func (f front) Delete(ctx context.Context, id string) error {
 	if err := f.writable(); err != nil {
 		return err
 	}
-	return f.s.ad.Delete(ctx, id)
+	return f.s.strict().Delete(ctx, id)
 }
 
 // Lock implements docstore.Locker by the inner store's.
-func (f front) Lock(ctx context.Context) (func(), error) { return f.s.ad.Lock(ctx) }
+func (f front) Lock(ctx context.Context) (func(), error) { return f.s.strict().Lock(ctx) }
 
 // Sharing is the control of who a document is shared with, for the unlocked store.
 func (s *Store) Sharing() (*encrypt.Sharing, error) {

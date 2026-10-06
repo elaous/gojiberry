@@ -309,7 +309,7 @@ func dropLists(ctx context.Context, view docstore.Adapter) error {
 
 // rekeyAll encrypts every file again to the owner list, whatever recipients it has now (or none:
 // a file still in the clear is sealed), re-signing the lists first when resign is set.
-func (s *Store) rekeyAll(ctx context.Context, view docstore.Adapter, to []Owner, ids []age.Identity, verifiers []ed25519.PublicKey, resign *encrypt.Signer) error {
+func (s *Store) rekeyAll(ctx context.Context, view docstore.Adapter, to []Owner, ids []age.Identity, verifiers []ed25519.PublicKey, resign, frames *encrypt.Signer) error {
 	if len(ids) == 0 {
 		return ErrLocked
 	}
@@ -326,6 +326,7 @@ func (s *Store) rekeyAll(ctx context.Context, view docstore.Adapter, to []Owner,
 		AtRest: encrypt.Static{To: rs, Keys: ids},
 	})
 	mig.AllowPlaintext = true
+	mig.Signer = frames
 	if resign != nil {
 		metas, err := view.List(ctx)
 		if err != nil {
@@ -333,11 +334,14 @@ func (s *Store) rekeyAll(ctx context.Context, view docstore.Adapter, to []Owner,
 		}
 		sh := &encrypt.Sharing{Store: view, Adapter: mig, Signer: resign, OwnerSigners: verifiers}
 		for _, m := range metas {
-			if doc, ok := strings.CutPrefix(m.ID, encrypt.KeysPrefix); ok {
+			if doc, ok := strings.CutPrefix(m.ID, encrypt.KeysPrefix); ok && m.ID != encrypt.IndexKey {
 				if err := sh.Resign(ctx, doc); err != nil {
 					return fmt.Errorf("%s: %w", m.ID, err)
 				}
 			}
+		}
+		if err := sh.ResignIndex(ctx); err != nil {
+			return fmt.Errorf("%s: %w", encrypt.IndexKey, err)
 		}
 	}
 	_, err = mig.RekeyAll(ctx)
@@ -347,14 +351,14 @@ func (s *Store) rekeyAll(ctx context.Context, view docstore.Adapter, to []Owner,
 // convert brings every stored file to the state of the owner list "to" (none: in the clear).
 // current says whether the store has owner keys now (what tells sealing the clear files, which
 // needs no private key, from re-keying).
-func (s *Store) convert(ctx context.Context, view docstore.Adapter, current, to []Owner, ids []age.Identity, verifiers []ed25519.PublicKey, resign *encrypt.Signer) error {
+func (s *Store) convert(ctx context.Context, view docstore.Adapter, current, to []Owner, ids []age.Identity, verifiers []ed25519.PublicKey, resign, frames *encrypt.Signer) error {
 	switch {
 	case len(to) == 0:
 		return s.toPlain(ctx, view, ids)
 	case len(current) == 0:
 		return s.sealPlain(ctx, view, to)
 	}
-	return s.rekeyAll(ctx, view, to, ids, verifiers, resign)
+	return s.rekeyAll(ctx, view, to, ids, verifiers, resign, frames)
 }
 
 // verifyAll checks every stored file is in the state "to" says and, where private keys are held,
@@ -445,6 +449,19 @@ func keeper(to []Owner, sigs []*encrypt.Signer) *encrypt.Signer {
 	return nil
 }
 
+// frameSigner is the key that signs the frames a re-key writes: one held that stays an owner,
+// else any held (nil when none is: then only documents below the confidential level are
+// written, with the unsigned frame).
+func frameSigner(to []Owner, sigs []*encrypt.Signer) *encrypt.Signer {
+	if k := keeper(to, sigs); k != nil {
+		return k
+	}
+	if len(sigs) > 0 {
+		return sigs[0]
+	}
+	return nil
+}
+
 // run does the transaction c. The caller has checked what can be checked without the lock.
 func (s *Store) run(ctx context.Context, c change) error {
 	unlock, err := s.lockAll(ctx)
@@ -493,7 +510,7 @@ func (s *Store) run(ctx context.Context, c change) error {
 		return cause
 	}
 	verifiers := append(signerPubs(old.Owners), signerPubs(c.to)...)
-	if err := s.convert(ctx, view, old.Owners, c.to, ids, verifiers, resign); err != nil {
+	if err := s.convert(ctx, view, old.Owners, c.to, ids, verifiers, resign, frameSigner(c.to, allSigs)); err != nil {
 		return fail(err)
 	}
 	if len(c.to) == 0 {
@@ -713,7 +730,7 @@ func (s *Store) confidentialLeft(ctx context.Context) error {
 	}
 	for _, m := range metas {
 		doc, ok := strings.CutPrefix(m.ID, encrypt.KeysPrefix)
-		if !ok {
+		if !ok || m.ID == encrypt.IndexKey {
 			continue
 		}
 		conf, err := k.IsConfidential(ctx, doc)
@@ -819,7 +836,7 @@ func (s *Store) Recover(ctx context.Context, finish bool) error {
 	}
 	verifiers := append(signerPubs(cfg.Owners), signerPubs(p.To)...)
 	view := newRecorder(bare{s.Raw})
-	if err := s.convert(ctx, view, cfg.Owners, target, ids, verifiers, resign); err != nil {
+	if err := s.convert(ctx, view, cfg.Owners, target, ids, verifiers, resign, frameSigner(target, sigs)); err != nil {
 		return err
 	}
 	if len(target) == 0 {
