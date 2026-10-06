@@ -293,3 +293,96 @@ func TestSavingDoesNotBringBackRemovedTags(t *testing.T) {
 		t.Errorf("trash %v", tr)
 	}
 }
+
+func revision(title string, saved int64) docfile.Revision {
+	d := named("notes")
+	d.Title = title
+	return docfile.Revision{Saved: saved, Doc: &d}
+}
+
+func versionTitles(t *testing.T, s *Saver, target, id string) []string {
+	t.Helper()
+	vs, err := s.Versions(context.Background(), target, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, v := range vs { // newest first
+		d, err := s.LoadVersion(context.Background(), target, v.Key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, d.Title)
+	}
+	return out
+}
+
+func TestImportKeepsTheNewestMaxVersions(t *testing.T) {
+	ctx := context.Background()
+	for _, tg := range targets(t) {
+		s := &Saver{Targets: []Target{tg}, MaxVersions: 3}
+		d := named("notes")
+		d.SetID(docfile.NewID())
+		for i := range 5 { // oldest first
+			d.History = append(d.History, revision("r"+string(rune('0'+i)), int64(1000+i)*1e9))
+		}
+		e, err := s.Save(ctx, tg.Name, docfile.JSON, d)
+		if err != nil {
+			t.Fatalf("%s: %v", tg.Name, err)
+		}
+		if got := strings.Join(versionTitles(t, s, tg.Name, e.ID), " "); got != "r4 r3 r2" {
+			t.Errorf("%s: versions %q, want the newest three", tg.Name, got)
+		}
+		loaded, err := s.Load(ctx, tg.Name, e.ID)
+		if err != nil || len(loaded.History) != 0 {
+			t.Errorf("%s: the stored document holds no history: %v %v", tg.Name, len(loaded.History), err)
+		}
+	}
+}
+
+func TestImportIntoAnExistingIDAddsToTheVersions(t *testing.T) {
+	ctx := context.Background()
+	for _, tg := range targets(t) {
+		s := &Saver{Targets: []Target{tg}, MaxVersions: 10}
+		e := saved(t, s, tg.Name, "notes", docfile.JSON)
+		old := named("notes")
+		old.SetID(e.ID)
+		old.Title = "old"
+		if _, err := s.SaveVersion(ctx, tg.Name, docfile.JSON, old); err != nil {
+			t.Fatal(err)
+		}
+		in := named("notes")
+		in.SetID(e.ID)
+		in.Title = "imported"
+		in.History = []docfile.Revision{revision("h1", 1e18), revision("h2", 1.5e18)}
+		if _, err := s.Save(ctx, tg.Name, docfile.JSON, in); err != nil {
+			t.Fatalf("%s: %v", tg.Name, err)
+		}
+		cur, err := s.Load(ctx, tg.Name, e.ID)
+		if err != nil || cur.Title != "imported" || len(cur.History) != 0 {
+			t.Fatalf("%s: current %q %v", tg.Name, cur.Title, err)
+		}
+		// The version it had stays and the imported ones are added; the one saved just now
+		// is the newest, the imported ones carry their own (older) times.
+		if got := strings.Join(versionTitles(t, s, tg.Name, e.ID), " "); got != "old h2 h1" {
+			t.Errorf("%s: versions %q", tg.Name, got)
+		}
+	}
+}
+
+func TestImportSkipsARevisionWithNoDocument(t *testing.T) {
+	ctx := context.Background()
+	for _, tg := range targets(t) {
+		s := &Saver{Targets: []Target{tg}}
+		d := named("notes")
+		d.SetID(docfile.NewID())
+		d.History = []docfile.Revision{revision("keep1", 1e18), {Saved: 1.5e18}, revision("keep2", 2e18)}
+		e, err := s.Save(ctx, tg.Name, docfile.JSON, d)
+		if err != nil {
+			t.Fatalf("%s: %v", tg.Name, err)
+		}
+		if got := strings.Join(versionTitles(t, s, tg.Name, e.ID), " "); got != "keep2 keep1" {
+			t.Errorf("%s: versions %q", tg.Name, got)
+		}
+	}
+}

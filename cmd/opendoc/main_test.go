@@ -82,3 +82,128 @@ func TestPackListVerifyUnpackSignRecover(t *testing.T) {
 		t.Fatalf("%s", out)
 	}
 }
+
+func fails(t *testing.T, args ...string) error {
+	t.Helper()
+	var out bytes.Buffer
+	err := run(args, &out)
+	if err == nil {
+		t.Fatalf("opendoc %v succeeded:\n%s", args, out.String())
+	}
+	return err
+}
+
+func TestShortIDsAndHostilePacksDoNotPanic(t *testing.T) {
+	for _, id := range []string{"", "a", "abcdefgh", "abcdefghijkl", "../../etc/passwd"} {
+		if s := shortID(id); len(s) > 8 || strings.ContainsAny(s, `/\`) {
+			t.Errorf("shortID(%q) = %q", id, s)
+		}
+	}
+	dir := t.TempDir()
+	for name, data := range map[string][]byte{"empty": nil, "junk": bytes.Repeat([]byte{0xff}, 400)} {
+		p := filepath.Join(dir, name)
+		_ = os.WriteFile(p, data, 0o644)
+		for _, cmd := range []string{"unpack", "list", "verify", "recover"} {
+			args := []string{cmd, p}
+			if cmd == "unpack" || cmd == "recover" {
+				args = append(args, filepath.Join(dir, "o-"+name+cmd))
+			}
+			_ = run(args, &bytes.Buffer{}) // an error, not a panic
+		}
+		if _, err := os.Stat(filepath.Join(dir, "o-"+name+"recover")); err == nil {
+			t.Errorf("recover of %s left an output", name)
+		}
+	}
+}
+
+func TestRecoverNeverTruncatesTheSource(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "a.opendoc")
+	_ = os.WriteFile(filepath.Join(dir, "n.md"), []byte("hello"), 0o644)
+	do(t, "pack", src, filepath.Join(dir, "n.md"))
+	before, _ := os.ReadFile(src)
+	fails(t, "recover", src, src)
+	fails(t, "recover", src, filepath.Join(dir, ".", "a.opendoc"))
+	link := filepath.Join(dir, "link.opendoc")
+	if err := os.Symlink(src, link); err == nil {
+		fails(t, "recover", src, link)
+	}
+	if after, _ := os.ReadFile(src); !bytes.Equal(before, after) {
+		t.Fatal("the source changed")
+	}
+}
+
+func TestPackLeavesNoPartialOutputAndSkipsItself(t *testing.T) {
+	dir := t.TempDir()
+	// Nothing to pack from: an error, and no output file (nor a temporary one) is left.
+	out := filepath.Join(dir, "out.opendoc")
+	fails(t, "pack", out, filepath.Join(dir, "missing"))
+	if ents, _ := os.ReadDir(dir); len(ents) != 0 {
+		t.Errorf("left behind: %v", ents)
+	}
+	// The output inside the input folder is not packed into itself, even on a second run.
+	src := filepath.Join(dir, "src")
+	_ = os.MkdirAll(src, 0o755)
+	_ = os.WriteFile(filepath.Join(src, "n.md"), []byte("# n"), 0o644)
+	out = filepath.Join(src, "all.opendoc")
+	for i := 0; i < 2; i++ {
+		if got := do(t, "pack", out, src); !strings.Contains(got, "1 documents") || strings.Contains(got, "skipped") {
+			t.Fatalf("run %d: %s", i, got)
+		}
+	}
+	if ents, _ := os.ReadDir(src); len(ents) != 2 {
+		t.Errorf("left behind: %v", ents)
+	}
+}
+
+func TestKeygen(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "k")
+	got := do(t, "keygen", p)
+	if !strings.Contains(got, "public key") {
+		t.Fatal(got)
+	}
+	if st, err := os.Stat(p); err != nil || st.Mode().Perm() != 0o600 {
+		t.Errorf("%v %v", st, err)
+	}
+	if _, err := readKey(p); err != nil {
+		t.Error(err)
+	}
+	fails(t, "keygen", p) // never overwrites a key
+	if seed := strings.TrimSpace(do(t, "keygen")); len(seed) != 64 {
+		t.Errorf("%q", seed)
+	}
+}
+
+func TestListEscapesNamesAndVerifyPinsTheKey(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	_ = os.MkdirAll(src, 0o755)
+	_ = os.WriteFile(filepath.Join(src, "n.md"), []byte("# \x1b[31mred\x1b[0m title"), 0o644)
+	kp := filepath.Join(dir, "k")
+	pub := strings.TrimSpace(strings.TrimPrefix(do(t, "keygen", kp), kp+" written; public key"))
+	pk := filepath.Join(dir, "p.opendoc")
+	do(t, "pack", "-sign", kp, "-name", "evil\x1b[2J‮name", pk, src)
+	list := do(t, "list", pk)
+	if strings.ContainsAny(list, "\x1b‮") || !strings.Contains(list, `\u001b`) {
+		t.Errorf("unescaped:\n%q", list)
+	}
+	if got := do(t, "verify", "-pubkey", pub, pk); strings.Contains(got, "BAD") {
+		t.Error(got)
+	}
+	other := strings.Repeat("ab", 32)
+	fails(t, "verify", "-pubkey", other, pk)
+	fails(t, "verify", "-pubkey", "nothex", pk)
+	if got := do(t, "verify", pk); !strings.Contains(got, "not checked") {
+		t.Error(got)
+	}
+}
+
+func TestEsc(t *testing.T) {
+	if got := esc("a\n\x1b[0m‮b "); strings.ContainsAny(got, "\n\x1b‮ ") {
+		t.Errorf("%q", got)
+	}
+	if esc("plain ünïcode") != "plain ünïcode" {
+		t.Error("changed text that is fine")
+	}
+}

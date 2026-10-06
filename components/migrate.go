@@ -60,13 +60,15 @@ type MigrateProps struct {
 	// Busy is set while something runs. Done and Total, Current describe the file
 	// being migrated; Imported and Failed the outcome of the last run (Reported
 	// says there was one).
-	Busy           bool
-	Done, Total    int
-	Current        string
-	Reported       bool
-	Imported       int
-	Failed         []MigrateFailure
-	Truncated      bool
+	Busy        bool
+	Done, Total int
+	Current     string
+	Reported    bool
+	Imported    int
+	Failed      []MigrateFailure
+	Truncated   bool
+	// Partial says the run was a pack that failed or was cancelled, so no pack was handed over.
+	Partial        bool
 	Error          string
 	ConfirmedLabel string // optional heading override
 }
@@ -208,6 +210,9 @@ func Migrate(p MigrateProps) xango.Node {
 	if p.Reported && !p.Busy {
 		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-migrate-report"), xango.A("role", "status")},
 			xango.Text(trf("migrate.imported", "%d documents migrated", p.Imported))))
+		if p.Partial {
+			kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-doc-error")}, xango.Text(tr("migrate.partial", "The migration did not finish, so the pack is partial and was not downloaded."))))
+		}
 		if p.Truncated {
 			kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-doc-error")}, xango.Text(tr("migrate.truncated", "Too many files: only the first ones were migrated."))))
 		}
