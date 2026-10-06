@@ -228,6 +228,14 @@
   "saver.checkedProblems": "%d Dokumente geprüft: %d aus einer früheren Kopie wiederhergestellt (%s), %d beschädigt ohne Kopie (%s)",
   "saver.checkedBackups": "(%d ohne brauchbare frühere Kopie; die nächste Speicherung legt eine an)",
   "saver.checkedOrphans": "(%d übrig gebliebene Dateien entfernt)",
-  "docs.check": "Dokumente prüfen"
+  "docs.check": "Dokumente prüfen",
+  "size.bytes": "Bytes",
+  "size.byte": "Byte",
+  "opendl.noHistory": "Keine gespeicherten Versionen.",
+  "opendl.history": "Versionsverlauf: %d Versionen, %s.",
+  "opendl.current": "Aktuelle Version: %s.",
+  "opendl.drop": "Versionsverlauf weglassen (nur die aktuelle Version herunterladen)",
+  "opendl.total": "Die Datei wird etwa %s groß.",
+  "opendl.title": "%s als .open herunterladen"
  }
 }
