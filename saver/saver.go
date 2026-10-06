@@ -204,6 +204,10 @@ func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc do
 	} else if !docfile.ValidID(id) {
 		return Entry{}, ErrID
 	}
+	// A document that carries its history (an imported .open file) keeps it in versions,
+	// not in the document file.
+	history := doc.History
+	doc.History = nil
 	var out Entry
 	err := s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		prev, existed := cat.Docs[id]
@@ -258,6 +262,9 @@ func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc do
 		out = cat.entry(s, id)
 		return nil
 	})
+	if err == nil && len(history) > 0 {
+		err = s.restoreHistory(ctx, target, id, c, history)
+	}
 	return out, err
 }
 
