@@ -3,6 +3,7 @@ package console
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -326,5 +327,195 @@ func TestInteractiveSession(t *testing.T) {
 	fs, _ := r.s.Folders(context.Background(), "m")
 	if len(fs) != 1 {
 		t.Errorf("commands after exit are not run: %+v", fs)
+	}
+}
+
+func TestScriptStopsAtTheFirstError(t *testing.T) {
+	r := newRig(t, "mkdir A\nrm nothing\nmkdir B\n")
+	r.sh.Script = true
+	err := r.sh.Interact(context.Background(), false)
+	if err == nil || !strings.Contains(err.Error(), "line 2") || !strings.Contains(err.Error(), "nothing matches") {
+		t.Fatalf("the error is returned with its line: %v", err)
+	}
+	if fs, _ := r.s.Folders(context.Background(), "m"); len(fs) != 1 {
+		t.Errorf("nothing runs after the failure: %+v", fs)
+	}
+}
+
+func TestScriptNeverReadsAnAnswerFromTheScript(t *testing.T) {
+	r := newRig(t, "purge x\nmkdir After\n")
+	r.sh.Script = true
+	r.doc("x", "a", "")
+	r.must("rm x")
+	if err := r.sh.Interact(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if tr, _ := r.s.Trashed(context.Background(), "m"); len(tr) != 1 {
+		t.Error("without -y a script's purge is answered no")
+	}
+	if !strings.Contains(r.out.String(), "needs -y") {
+		t.Errorf("it says so: %q", r.out.String())
+	}
+	if fs, _ := r.s.Folders(context.Background(), "m"); len(fs) != 1 {
+		t.Errorf("the next line still runs as a command: %+v", fs)
+	}
+	r2 := newRig(t, "purge x\n")
+	r2.sh.Script, r2.sh.Yes = true, true
+	r2.doc("x", "a", "")
+	r2.must("rm x")
+	if err := r2.sh.Interact(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if tr, _ := r2.s.Trashed(context.Background(), "m"); len(tr) != 0 {
+		t.Error("-y purges")
+	}
+}
+
+func TestMoveToParentRootAndDot(t *testing.T) {
+	r := newRig(t, "")
+	r.must("mkdir Work")
+	r.must("mkdir Work/Sub")
+	r.doc("doc", "a", r.folderID("Sub"))
+	r.must("cd Work/Sub")
+	r.must("mv doc ..")
+	if got := r.names(r.folderID("Work")); len(got) != 1 || got[0] != "doc" {
+		t.Fatalf("doc moved to the parent, not renamed: %v", got)
+	}
+	r.must("cd ..")
+	r.must("mv doc /")
+	r.must("cd /")
+	if got := r.names(""); len(got) != 1 || got[0] != "doc" {
+		t.Fatalf("moved to the root: %v", got)
+	}
+	r.must("mv doc .")
+	if got := r.names(""); len(got) != 1 || got[0] != "doc" {
+		t.Fatalf("a move onto its own folder is not a rename: %v", got)
+	}
+	if err := r.run("mv doc nowhere/.."); err == nil {
+		t.Error("an unresolvable folder")
+	}
+	if err := r.run("mkdir .."); err == nil {
+		t.Error("'..' is not a folder name")
+	}
+}
+
+func TestRmdirDotLeavesCwdValid(t *testing.T) {
+	r := newRig(t, "")
+	r.must("mkdir Work")
+	r.must("mkdir Work/Empty")
+	r.must("cd Work/Empty")
+	r.must("rmdir .")
+	if out := r.must("pwd"); out != "/Work\n" {
+		t.Fatalf("cwd is the parent: %q", out)
+	}
+	r.must("mkdir Full")
+	r.doc("d", "x", r.folderID("Full"))
+	r.sh.DryRun = true
+	if err := r.run("rmdir Full"); err == nil {
+		t.Error("a dry run does not claim a non-empty folder can go")
+	}
+	if err := r.run("mkdir Missing/Child"); err == nil {
+		t.Error("a dry run does not claim a folder under a missing parent")
+	}
+}
+
+func TestRmWithFoldersAndOverlappingPatterns(t *testing.T) {
+	r := newRig(t, "n\n")
+	r.doc("a", "x", "")
+	r.doc("b", "y", "")
+	r.must("mkdir F")
+	r.must("rm '*'")
+	if got := r.names(""); len(got) != 0 {
+		t.Fatalf("the documents are trashed: %v", got)
+	}
+	if !strings.Contains(r.err.String(), "skipped F/") {
+		t.Errorf("the folder is skipped with a note: %q", r.err.String())
+	}
+	if err := r.run("rm F"); err == nil {
+		t.Error("only a folder matches")
+	}
+	out := r.must("purge a 'a*' b")
+	if !strings.Contains(out, "Delete 2 documents") || strings.Count(out, "  a\n") != 1 {
+		t.Errorf("the count is de-duplicated: %q", out)
+	}
+	for i := 0; i < 12; i++ {
+		r.doc(fmt.Sprintf("n%02d", i), "x", "")
+	}
+	r.must("rm 'n*'")
+	r.sh.In = strings.NewReader("")
+	r.sh.in = nil
+	out = r.must("purge 'n*'")
+	if !strings.Contains(out, "Delete 12 documents") || !strings.Contains(out, "... and 2 more") {
+		t.Errorf("up to ten names: %q", out)
+	}
+}
+
+func TestPatternCharactersAreLiteral(t *testing.T) {
+	r := newRig(t, "")
+	r.doc("a[1]", "x", "")
+	r.doc("a1", "x", "")
+	r.doc(`b\c`, "x", "")
+	if out := r.must("ls 'a[1]'"); out != "a[1]\n" {
+		t.Errorf("[ ] are literal: %q", out)
+	}
+	if out := r.must(`ls 'b\c'`); out != "b\\c\n" {
+		t.Errorf("a backslash in quotes is literal: %q", out)
+	}
+	if out := r.must("ls 'a?1*'"); out != "a[1]\n" {
+		t.Errorf("? and * still work: %q", out)
+	}
+}
+
+func TestSplitKeepsOtherBackslashes(t *testing.T) {
+	got, err := Split(`import C:\docs\a.md 'x\y' "q\"r" a\\b`)
+	want := []string{"import", `C:\docs\a.md`, `x\y`, `q"r`, `a\b`}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("%q %v", got, err)
+	}
+}
+
+func TestFlagsNeedValues(t *testing.T) {
+	r := newRig(t, "")
+	r.doc("a", "x", "")
+	for _, l := range []string{"import -d", "export a -o", "export a -f", "export -o"} {
+		if err := r.run(l); err == nil {
+			t.Errorf("%q should fail", l)
+		}
+	}
+}
+
+func TestPackAndExportDoNotClobber(t *testing.T) {
+	r := newRig(t, "")
+	dir := t.TempDir()
+	a := r.doc("Same", "one", "")
+	r.must("mkdir F")
+	b := r.doc("Same", "two", r.folderID("F"))
+	out := filepath.Join(dir, "out")
+	r.must("export -f markdown -o " + out + " Same F/Same")
+	files, _ := filepath.Glob(filepath.Join(out, "*.md"))
+	if len(files) != 2 {
+		t.Fatalf("two same-title documents give two files: %v (%s %s)", files, a, b)
+	}
+	if err := r.run("export -f markdown -o " + out + " Same"); err == nil {
+		t.Error("an existing file is not replaced without --force")
+	}
+	r.must("export -f markdown -o " + out + " --force Same")
+	pk := filepath.Join(dir, "p.opendoc")
+	r.must("pack " + pk)
+	before, _ := os.ReadFile(pk)
+	if err := r.run("pack " + pk); err == nil {
+		t.Error("pack does not replace a file")
+	}
+	if after, _ := os.ReadFile(pk); !bytes.Equal(before, after) {
+		t.Error("the file is untouched")
+	}
+	r.must("pack --force " + pk)
+	// A failure leaves no partial file and no temporary file.
+	bad := filepath.Join(dir, "nodir", "x.opendoc")
+	if err := r.run("pack " + bad); err == nil {
+		t.Error("an unwritable path")
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, ".docsh-*")); len(left) != 0 {
+		t.Errorf("leftover %v", left)
 	}
 }

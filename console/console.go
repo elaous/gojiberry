@@ -11,12 +11,13 @@
 //	rm pattern...               to the trash;  purge pattern...  deletes for good (asks)
 //	restore pattern...          out of the trash;  trash  lists it
 //	import [-d dir] file...     bring in files (.docx, .md, .txt, .open, ...)
-//	export [-f format] [-o dir] pattern...
-//	pack out.opendoc [folder]   one .opendoc pack;  unpack file.opendoc [dir]
+//	export [-f format] [-o dir] [--force] pattern...
+//	pack [--force] out.opendoc [folder]   one .opendoc pack;  unpack file.opendoc [dir]
 //	check | repair | rebuild    the integrity tools;  usage  how full the store is
 //
-// A pattern is a name with * and ? (any case), optionally under a folder path
-// ("Work/Reports/Q*"). With DryRun every command that would change something says what it
+// A pattern is a name with * (any run of characters) and ? (any one character), in any case,
+// optionally under a folder path ("Work/Reports/Q*"); every other character, [ ] and \
+// included, stands for itself. With DryRun every command that would change something says what it
 // would do and does nothing; a command that destroys (purge, rebuild) asks first unless Yes.
 package console
 
@@ -27,7 +28,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -48,6 +48,10 @@ type Shell struct {
 	Out, Err io.Writer
 	// DryRun says what would change and changes nothing; Yes answers every question yes.
 	DryRun, Yes bool
+	// Script says the commands come from a file: Interact stops at the first command that
+	// fails and returns its error, and a question is never read from the script (it is
+	// answered no unless Yes is set).
+	Script bool
 	// Registry reads and writes the files import and export handle; nil is the default set
 	// (JSON, protobuf, Markdown, text, .docx, .pdf, HTML, ...).
 	Registry *transfer.Registry
@@ -83,19 +87,29 @@ func (sh *Shell) printf(format string, a ...any) { _, _ = fmt.Fprintf(sh.Out, fo
 func (sh *Shell) warnf(format string, a ...any)  { _, _ = fmt.Fprintf(sh.Err, format, a...) }
 
 // Split breaks a command line into words: spaces separate them, single and double quotes
-// group, a backslash escapes the next character (outside single quotes).
+// group. A backslash outside single quotes escapes a space, a quote or another backslash;
+// before any other character it stays as it is (so C:\docs\a.md and a pattern with \ in it
+// pass through). A line cannot end in a lone backslash.
 func Split(line string) ([]string, error) {
 	var words []string
 	var cur strings.Builder
 	in, quote := false, rune(0)
-	esc := false
-	for _, r := range line {
+	rs := []rune(line)
+	for i := 0; i < len(rs); i++ {
+		r := rs[i]
 		switch {
-		case esc:
-			cur.WriteRune(r)
-			esc = false
 		case r == '\\' && quote != '\'':
-			esc, in = true, true
+			if i+1 == len(rs) {
+				return nil, errors.New("console: a line cannot end with a backslash")
+			}
+			n := rs[i+1]
+			if n == '\\' || n == '\'' || n == '"' || (quote == 0 && unicode.IsSpace(n)) {
+				cur.WriteRune(n)
+				i++
+			} else {
+				cur.WriteRune(r)
+			}
+			in = true
 		case quote != 0:
 			if r == quote {
 				quote = 0
@@ -117,9 +131,6 @@ func Split(line string) ([]string, error) {
 	}
 	if quote != 0 {
 		return nil, errors.New("console: a quote is not closed")
-	}
-	if esc {
-		return nil, errors.New("console: a line cannot end with a backslash")
 	}
 	if in {
 		words = append(words, cur.String())
@@ -191,16 +202,17 @@ func (sh *Shell) Exec(ctx context.Context, words []string) error {
 const helpText = `ls [-l] [pattern...]   cd path   pwd   mkdir path...   rmdir path...
 mv source... dest[/]   cp source dest[/]   tag [+tag|-tag]... pattern...
 rm pattern...   purge pattern...   restore pattern...   trash
-import [-d dir] file...   export [-f format] [-o dir] pattern...
-pack out.opendoc [folder]   unpack file.opendoc [dir]
+import [-d dir] file...   export [-f format] [-o dir] [--force] pattern...
+pack [--force] out.opendoc [folder]   unpack file.opendoc [dir]
 check   repair   rebuild   usage
 `
 
 // Interact reads commands from the Shell's In until it ends or "exit" is typed, printing a
-// prompt and each command's error.
+// prompt and each command's error. An interactive session carries on after an error; with
+// Script set it stops at the first one and returns it (with the line number).
 func (sh *Shell) Interact(ctx context.Context, prompt bool) error {
 	r := sh.reader()
-	for {
+	for n := 1; ; n++ {
 		if prompt {
 			sh.printf("%s> ", sh.pathOf(sh.cwd))
 		}
@@ -211,6 +223,9 @@ func (sh *Shell) Interact(ctx context.Context, prompt bool) error {
 		}
 		if line != "" {
 			if rerr := sh.Run(ctx, line); rerr != nil {
+				if sh.Script {
+					return fmt.Errorf("line %d (%s): %w", n, line, rerr)
+				}
 				sh.warnf("%v\n", rerr)
 			}
 		}
@@ -238,6 +253,11 @@ func (sh *Shell) reader() *bufio.Reader {
 func (sh *Shell) ask(question string) bool {
 	if sh.Yes {
 		return true
+	}
+	if sh.Script {
+		// The next script line is a command, not an answer: never read it.
+		sh.printf("%s\nnot confirmed: a script needs -y to answer yes\n", question)
+		return false
 	}
 	sh.printf("%s [y/N] ", question)
 	line, _ := sh.reader().ReadString('\n')
@@ -349,9 +369,40 @@ func splitPath(p string) (dir, last string) {
 	return p[:i+1], p[i+1:]
 }
 
+// globMatch matches name against pattern, ignoring case: * is any run of characters, ? any
+// one, and every other character (including [ ] and \) stands for itself.
 func globMatch(pattern, name string) bool {
-	ok, err := path.Match(strings.ToLower(pattern), strings.ToLower(name))
-	return err == nil && ok
+	return glob([]rune(strings.ToLower(pattern)), []rune(strings.ToLower(name)))
+}
+
+func glob(p, s []rune) bool {
+	for len(p) > 0 {
+		switch p[0] {
+		case '*':
+			for len(p) > 0 && p[0] == '*' {
+				p = p[1:]
+			}
+			if len(p) == 0 {
+				return true
+			}
+			for i := 0; i <= len(s); i++ {
+				if glob(p, s[i:]) {
+					return true
+				}
+			}
+			return false
+		case '?':
+			if len(s) == 0 {
+				return false
+			}
+		default:
+			if len(s) == 0 || s[0] != p[0] {
+				return false
+			}
+		}
+		p, s = p[1:], s[1:]
+	}
+	return len(s) == 0
 }
 
 type thing struct {
@@ -399,6 +450,7 @@ func (sh *Shell) match(ctx context.Context, t *tree, pattern string, trashed boo
 
 func (sh *Shell) matchAll(ctx context.Context, t *tree, patterns []string, trashed bool) ([]thing, error) {
 	var all []thing
+	seen := map[string]bool{}
 	for _, p := range patterns {
 		_, got, err := sh.match(ctx, t, p, trashed)
 		if err != nil {
@@ -407,7 +459,18 @@ func (sh *Shell) matchAll(ctx context.Context, t *tree, patterns []string, trash
 		if len(got) == 0 {
 			return nil, fmt.Errorf("console: nothing matches %q", p)
 		}
-		all = append(all, got...)
+		for _, th := range got {
+			key := "f:"
+			if th.folder != nil {
+				key += th.folder.ID
+			} else {
+				key = "d:" + th.doc.ID
+			}
+			if !seen[key] { // overlapping patterns name a thing once
+				seen[key] = true
+				all = append(all, th)
+			}
+		}
 	}
 	return all, nil
 }
@@ -417,6 +480,28 @@ func (th thing) label() string {
 		return th.name + "/"
 	}
 	return th.name
+}
+
+// Matches is the IDs of the documents the patterns name (folders are left out): in the trash
+// when trashed is set, otherwise out of it. A host uses it to guard a command before it runs.
+func (sh *Shell) Matches(ctx context.Context, trashed bool, patterns ...string) ([]string, error) {
+	t, err := sh.tree(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for _, p := range patterns {
+		_, got, err := sh.match(ctx, t, p, trashed)
+		if err != nil {
+			return nil, err
+		}
+		for _, th := range got {
+			if th.doc != nil {
+				ids = append(ids, th.doc.ID)
+			}
+		}
+	}
+	return ids, nil
 }
 
 func (sh *Shell) cd(ctx context.Context, args []string) error {
@@ -491,6 +576,9 @@ func (sh *Shell) mkdir(ctx context.Context, args []string) error {
 			return err
 		}
 		dir, name := splitPath(strings.TrimRight(a, "/"))
+		if name == "" || name == "." || name == ".." {
+			return fmt.Errorf("console: %q is not a name for a folder", a)
+		}
 		parent, err := sh.folder(t, dir)
 		if err != nil {
 			return err
@@ -521,8 +609,38 @@ func (sh *Shell) rmdir(ctx context.Context, args []string) error {
 		if err != nil || id == "" {
 			return fmt.Errorf("console: no folder %q", a)
 		}
-		if err := sh.act("remove folder "+a, func() error { return sh.Saver.DeleteFolder(ctx, sh.Target, id) }); err != nil {
+		if err := sh.folderEmpty(ctx, t, id, a); err != nil {
 			return err
+		}
+		if err := sh.act("remove folder "+a, func() error {
+			if err := sh.Saver.DeleteFolder(ctx, sh.Target, id); err != nil {
+				return err
+			}
+			if sh.cwd == id { // do not stay in a folder that is gone
+				sh.cwd = t.byID[id].Parent
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// folderEmpty is the cheap check that rmdir would succeed (the trash does not count).
+func (sh *Shell) folderEmpty(ctx context.Context, t *tree, id, label string) error {
+	for _, f := range t.folders {
+		if f.Parent == id {
+			return fmt.Errorf("console: %s has folders in it", label)
+		}
+	}
+	docs, err := sh.Saver.List(ctx, sh.Target)
+	if err != nil {
+		return err
+	}
+	for _, d := range docs {
+		if d.Folder == id {
+			return fmt.Errorf("console: %s has documents in it", label)
 		}
 	}
 	return nil
@@ -533,6 +651,9 @@ func (sh *Shell) mv(ctx context.Context, args []string) error {
 		return errors.New("usage: mv source... dest[/]")
 	}
 	src, dest := args[:len(args)-1], args[len(args)-1]
+	if dest == "" {
+		return errors.New("console: the destination is empty")
+	}
 	t, err := sh.tree(ctx)
 	if err != nil {
 		return err
@@ -552,6 +673,9 @@ func (sh *Shell) mv(ctx context.Context, args []string) error {
 	}
 	th := things[0]
 	dir, name := splitPath(dest)
+	if name == "." || name == ".." {
+		return fmt.Errorf("console: %q is not a name", name)
+	}
 	parent, err := sh.folder(t, dir)
 	if err != nil {
 		return err
@@ -587,9 +711,6 @@ func (sh *Shell) mv(ctx context.Context, args []string) error {
 
 // destIsFolder: a lone source moved to a name that is an existing folder goes into it.
 func destIsFolder(t *tree, id string, things []thing) bool {
-	if id == "" {
-		return false
-	}
 	for _, th := range things {
 		if th.folder != nil && th.folder.ID == id {
 			return false // a folder onto itself is not a move into it
@@ -757,10 +878,13 @@ func (sh *Shell) rm(ctx context.Context, args []string) error {
 	}
 	for _, th := range things {
 		if th.folder != nil {
-			return fmt.Errorf("console: %s is a folder (rmdir removes an empty one)", th.label())
+			sh.warnf("skipped %s: a folder (rmdir removes an empty one)\n", th.label())
 		}
 	}
 	ids, names := sh.docsOf(things)
+	if len(ids) == 0 {
+		return errors.New("console: only folders match; nothing to trash")
+	}
 	return sh.act("trash "+strings.Join(names, ", "), func() error { return sh.Saver.Trash(ctx, sh.Target, ids...) })
 }
 
@@ -778,6 +902,18 @@ func (sh *Shell) purge(ctx context.Context, args []string) error {
 	}
 	ids, names := sh.docsOf(things)
 	desc := "delete for good " + strings.Join(names, ", ")
+	if !sh.DryRun {
+		shown := names
+		if len(shown) > 10 {
+			shown = shown[:10]
+		}
+		for _, n := range shown {
+			sh.printf("  %s\n", n)
+		}
+		if len(names) > len(shown) {
+			sh.printf("  ... and %d more\n", len(names)-len(shown))
+		}
+	}
 	if !sh.DryRun && !sh.ask(fmt.Sprintf("Delete %d documents from the trash for good? This cannot be undone.", len(ids))) {
 		sh.printf("left alone\n")
 		return nil
@@ -818,7 +954,10 @@ func (sh *Shell) importFiles(ctx context.Context, args []string) error {
 	dest := ""
 	var files []string
 	for i := 0; i < len(args); i++ {
-		if args[i] == "-d" && i+1 < len(args) {
+		if args[i] == "-d" {
+			if i+1 >= len(args) {
+				return errors.New("console: -d needs a folder")
+			}
 			dest = args[i+1]
 			i++
 		} else {
@@ -871,22 +1010,28 @@ func (sh *Shell) importFiles(ctx context.Context, args []string) error {
 }
 
 func (sh *Shell) exportDocs(ctx context.Context, args []string) error {
-	format, out := "open", "."
+	format, out, force := "open", ".", false
 	var pats []string
 	for i := 0; i < len(args); i++ {
-		switch {
-		case args[i] == "-f" && i+1 < len(args):
-			format = args[i+1]
+		switch args[i] {
+		case "-f", "-o":
+			if i+1 >= len(args) {
+				return fmt.Errorf("console: %s needs a value", args[i])
+			}
+			if args[i] == "-f" {
+				format = args[i+1]
+			} else {
+				out = args[i+1]
+			}
 			i++
-		case args[i] == "-o" && i+1 < len(args):
-			out = args[i+1]
-			i++
+		case "--force":
+			force = true
 		default:
 			pats = append(pats, args[i])
 		}
 	}
 	if len(pats) == 0 {
-		return errors.New("usage: export [-f format] [-o dir] pattern [more]")
+		return errors.New("usage: export [-f format] [-o dir] [--force] pattern [more]")
 	}
 	t, err := sh.tree(ctx)
 	if err != nil {
@@ -896,6 +1041,7 @@ func (sh *Shell) exportDocs(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	used := map[string]bool{} // file names this command has taken, lower case
 	for _, th := range things {
 		if th.doc == nil {
 			continue
@@ -910,10 +1056,14 @@ func (sh *Shell) exportDocs(ctx context.Context, args []string) error {
 			if err != nil {
 				return err
 			}
+			file = uniqueFile(file, th.doc.ID, used)
 			if err := os.MkdirAll(out, 0o755); err != nil {
 				return err
 			}
-			return os.WriteFile(filepath.Join(out, file), data, 0o644)
+			return writeFile(filepath.Join(out, file), force, func(w io.Writer) error {
+				_, err := w.Write(data)
+				return err
+			})
 		}); err != nil {
 			return err
 		}
@@ -921,9 +1071,69 @@ func (sh *Shell) exportDocs(ctx context.Context, args []string) error {
 	return nil
 }
 
+// uniqueFile is name, or name with a short piece of the document's ID before the extension
+// when another document of this command already took it.
+func uniqueFile(name, id string, used map[string]bool) string {
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	try := name
+	for n := 6; used[strings.ToLower(try)]; n++ {
+		if n <= len(id) {
+			try = base + "-" + id[:n] + ext
+		} else {
+			try = fmt.Sprintf("%s-%s-%d%s", base, id, n-len(id), ext)
+		}
+	}
+	used[strings.ToLower(try)] = true
+	return try
+}
+
+// writeFile writes name through a temporary file next to it, so a failure leaves no partial
+// output (and no damaged older file); an existing file is replaced only with force.
+func writeFile(name string, force bool, write func(io.Writer) error) (err error) {
+	if !force {
+		if _, serr := os.Stat(name); serr == nil {
+			return fmt.Errorf("%s exists (use --force to replace it)", name)
+		}
+	}
+	f, err := os.CreateTemp(filepath.Dir(name), ".docsh-*")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = os.Remove(f.Name())
+		}
+	}()
+	if err = write(f); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	if err = os.Chmod(f.Name(), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), name)
+}
+
 func (sh *Shell) pack(ctx context.Context, args []string) error {
+	force := false
+	var rest []string
+	for _, a := range args {
+		if a == "-f" || a == "--force" {
+			force = true
+		} else {
+			rest = append(rest, a)
+		}
+	}
+	args = rest
 	if len(args) < 1 || len(args) > 2 {
-		return errors.New("usage: pack out.opendoc [folder]")
+		return errors.New("usage: pack [--force] out.opendoc [folder]")
+	}
+	if _, err := os.Stat(args[0]); err == nil && !force {
+		return fmt.Errorf("%s exists (use --force to replace it)", args[0])
 	}
 	t, err := sh.tree(ctx)
 	if err != nil {
@@ -936,16 +1146,12 @@ func (sh *Shell) pack(ctx context.Context, args []string) error {
 		}
 	}
 	return sh.act("pack "+sh.pathOf(folder)+" into "+args[0], func() error {
-		f, err := os.Create(args[0])
-		if err != nil {
+		var n int
+		err := writeFile(args[0], force, func(w io.Writer) (err error) {
+			n, err = sh.Saver.ExportPack(ctx, sh.Target, folder, w, saver.PackOptions{History: true})
 			return err
-		}
-		n, err := sh.Saver.ExportPack(ctx, sh.Target, folder, f, saver.PackOptions{History: true})
-		if cerr := f.Close(); err == nil {
-			err = cerr
-		}
+		})
 		if err != nil {
-			_ = os.Remove(args[0])
 			return err
 		}
 		sh.printf("%d documents\n", n)

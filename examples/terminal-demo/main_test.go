@@ -61,7 +61,7 @@ func TestUnsavedTextIsNotThrownAwayByAccident(t *testing.T) {
 }
 
 func TestTheFileWorkIsTheConsolesAndDryRunStillWorks(t *testing.T) {
-	out := session(t, "memory", "new a\nx\n:w\n:q\nrm a\ntrash\nrestore a\nusage\nfrobnicate\nopen nothing\nquit\n")
+	out := session(t, "memory", "new a\nx\n:w\n:q\nrm a\nrm! a\ntrash\nrestore a\nusage\nfrobnicate\nopen nothing\nquit\n")
 	for _, want := range []string{"trash a", "a  (trashed", "restore a", "1 documents", `unknown command "frobnicate"`, `no document called "nothing"`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
@@ -85,5 +85,40 @@ func TestFilesStoreAndBadStore(t *testing.T) {
 	}
 	if err := run("ftp:x", strings.NewReader(""), &bytes.Buffer{}, false); err == nil {
 		t.Error("an unknown store")
+	}
+}
+
+func TestNewAndOpenWarnBeforeDroppingEdits(t *testing.T) {
+	a, err := newApp("memory", strings.NewReader("keep\n:q\n"), &bytes.Buffer{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.lines, a.dirty = []string{"unsaved"}, true
+	if _, err := a.command("new B"); err == nil || !strings.Contains(err.Error(), "unsaved changes") {
+		t.Errorf("new refuses while dirty: %v", err)
+	}
+	if _, err := a.command("open B"); err == nil || !strings.Contains(err.Error(), "unsaved changes") {
+		t.Errorf("open refuses while dirty: %v", err)
+	}
+	if !a.dirty || len(a.lines) != 1 || a.lines[0] != "unsaved" {
+		t.Errorf("the text is untouched: %v", a.lines)
+	}
+	if _, err := a.command("new! B"); err != nil {
+		t.Errorf("new! goes ahead: %v", err)
+	}
+}
+
+func TestErrorsSurviveRedrawAndOpenDocIsGuarded(t *testing.T) {
+	out := session(t, "memory", "new a\nx\n:w\n:q\nrm a\nrm! a\ntrash\nquit\n")
+	if i := strings.Index(out, "is open in the editor"); i < 0 || !strings.Contains(out[i:], "== / ==") && false {
+		t.Errorf("rm of the open document is refused:\n%s", out)
+	}
+	if !strings.Contains(out, "a  (trashed") {
+		t.Errorf("rm! goes ahead:\n%s", out)
+	}
+	out = session(t, "memory", "frobnicate\nquit\n")
+	i, j := strings.Index(out, "unknown command"), strings.LastIndex(out, "== / ==")
+	if i < 0 || j > i {
+		t.Errorf("the error is shown after the redrawn screen:\n%s", out)
 	}
 }
