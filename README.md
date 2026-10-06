@@ -51,17 +51,17 @@ flowchart LR
     C -- "Component(props)" --> D(("xango.Node tree<br/>(renderer-agnostic)"))
     D -- "xango.Render / RenderString" --> E["HTML string<br/>net/http, Gin, Echo, Encore, ..."]
     D -- "domrt.Mount / Update<br/>GOOS=js GOARCH=wasm" --> F["real DOM<br/>diff/patch on every re-render"]
-    D -- "xangogio.Renderer.Layout" --> G["native Gio window<br/>desktop/mobile"]
+    D -- "gio.Renderer.Layout" --> G["native Gio window<br/>desktop/mobile"]
 ```
 
 The `xango.Node` tree itself never knows which of these it's headed for
-— `xango.Render`/`domrt.Mount`/a `xangogio.Renderer` are just three
+— `xango.Render`/`domrt.Mount`/a `gio.Renderer` are just three
 different functions that each walk the exact same tree shape and do
 something different with it (see `xango/render.go`, `domrt/domrt.go`, and
-`xangogio/render.go`, in that order, if you want to read the actual walk
-each one does — `xangogio` is its own separate Go module, like `domrt`'s
+`xango/gio/render.go`, in that order, if you want to read the actual walk
+each one does — `xango/gio` is its own separate Go module, like `domrt`'s
 sibling examples are, so it can depend on `gioui.org` without adding it
-to this one; see `xangogio/README.md`). Nothing about writing a component
+to this one; see `xango/gio/README.md`). Nothing about writing a component
 needs to know or care which renderer(s) will eventually consume it.
 
 ## Getting Started
@@ -597,7 +597,7 @@ expanded by the same recursive scan, with no extra grammar required.
   top of that identity is a separate layer, `docstore`'s own `acl.go`
   (OnDesign's task #140 — see that repo's `docs/CHANGELOG.md` for the
   full writeup).
-- **`translateserver`** — a small translation proxy, the same
+- **`translate/server`** — a small translation proxy, the same
   environment-configured, CORS-open, single-binary shape as
   `syncserver`/`fontserver`/`docstore` (`cmd/translateserver`). One
   route, `POST /translate` (`{"text","targetLang","sourceLang"}` →
@@ -617,8 +617,8 @@ expanded by the same recursive scan, with no extra grammar required.
   interface without touching the HTTP layer at all.
 - **`voiceserver`** — a small standalone speech proxy, the same
   environment-configured, CORS-open, single-binary shape as
-  `syncserver`/`fontserver`/`translateserver` (`cmd/voiceserver`), but
-  for a different reason than `translateserver`'s DeepL key: Piper
+  `syncserver`/`fontserver`/`translate/server` (`cmd/voiceserver`), but
+  for a different reason than `translate/server`'s DeepL key: Piper
   (text-to-speech) and a whisper.cpp-compatible CLI (speech-to-text)
   are both genuinely local, offline tools with no API key or network
   call involved at all — this package exists purely because neither
@@ -628,7 +628,7 @@ expanded by the same recursive scan, with no extra grammar required.
   writes an uploaded WAV to a temp file and reads back whatever a
   whisper.cpp-compatible `-otxt` run writes). `Server.speak`/
   `Server.transcribe` are swappable func fields, the same shape
-  `translateserver`'s own `translator` interface and `fontserver`'s
+  `translate/server`'s own `translator` interface and `fontserver`'s
   own `fetchGoogleFonts` field already established, so tests cover the
   full HTTP surface without needing real Piper/whisper installs.
   Either `GOJIBERRY_VOICESERVER_PIPER_BINARY`/`_WHISPER_BINARY` left
@@ -1781,7 +1781,7 @@ generated code.
 - `examples/gio-counter-demo` — the same stateful counter
   `examples/wasm-counter` mounts into a real browser DOM via `domrt`,
   mounted instead into a real native window via
-  [Gio](https://gioui.org) through `xangogio` (`../../xangogio`, its own
+  [Gio](https://gioui.org) through `xango/gio` (`../../xango/gio`, its own
   separate Go module -- see that module's own README for how the
   renderer works and what it covers): proof `xango.Node` is
   renderer-agnostic in the sense that actually matters, since a

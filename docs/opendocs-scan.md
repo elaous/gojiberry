@@ -12,7 +12,7 @@ opendocs does **not** use gojiberry's `canvas` package. Its editor is its own:
 `editor/model` (30k lines: a gap-buffer `Document`, `BlockMeta` per line,
 its own layout, columns and frames, tables, undo, sync) drawn on a canvas by
 `editor/*.go` (wasm-only). It imports from gojiberry only `xango`, `domrt`,
-`xangogio`, `components`, `crdt`, `buffer`, `fontserver` and `syncserver`.
+`xango/gio`, `components`, `crdt`, `buffer`, `fontserver` and `syncserver`.
 
 So "port to opendocs V1" is really a choice, and it should be made before
 copying features across:
@@ -31,7 +31,7 @@ The rest of this page lists the pieces that are worth having either way.
 |---|---|---|---|
 | `editor/export` (md, txt, html, rtf, epub, pdf, docx, brf) | `Exporter.Export(Snapshot) []byte` | The package deliberately knows nothing about the document; `Snapshot` is the seam. Needs one adapter, `canvas.TextFlow` items -> `export.Snapshot` | `transfer` has only Markdown and plain text today; this adds six formats |
 | `editor/docximport`, `editor/pdftext` | Word and PDF import | Standalone | `transfer` importers (needs the reverse adapter: result -> `canvas.Item`s) |
-| `editor/braille`, `translate`, `voice`, `featureserver`, `grammarllm`, `telemetry` | Small service clients | Standalone Go | gojiberry already has `brailleserver`, `translateserver`, `voiceserver`: reconcile the two sets, don't keep both |
+| `editor/braille`, `translate`, `voice`, `featureserver`, `grammarllm`, `telemetry` | Small service clients | Standalone Go | gojiberry already has `brailleserver`, `translate/server`, `voiceserver`: reconcile the two sets, don't keep both |
 | `model/spell.go`, `hunspell.go`, `langdetect.go`, `hyphenation*.go`, `dict/` | Spell check, language detection, hyphenation patterns (pure logic, no build tag) | Live in `package model` with the document, but the files are self-contained | A `canvas` feature (like `feature_text.go`): squiggles, suggestions in the context menu |
 | `model/i18n.go`, `editor/i18n.go`, `langpack.go` | UI strings and language packs | Independent of the editor | `components` currently has no i18n |
 | `storage` + `docmanager` (list, duplicate, tags, trash, versions) | Document lifecycle | gojiberry has `docstore` (adapters, ACL) and `saver`; opendocs adds versions, trash, tags, quota | Extend `saver`/`docstore` rather than add a second store |

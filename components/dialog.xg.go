@@ -17,17 +17,11 @@ type DialogProps struct {
 // Dialog is Modal with the common title/body/footer-actions shape.
 func Dialog(props DialogProps) xango.Node {
 	content := []xango.Node{
-		xango.El("h2", []xango.Attr{xango.A("class", "gj-dialog-title")}, xango.Text(props.Title)),
-		xango.El("div", []xango.Attr{xango.A("class", "gj-dialog-body")}, props.Body...),
+		xango.El("h2", []xango.Attr{xango.A("class", "gj-dialog-title")}, xango.Child(props.Title)),
+		xango.El("div", []xango.Attr{xango.A("class", "gj-dialog-body")}, xango.Child(props.Body)),
 	}
 	if len(props.Actions) > 0 {
-		content = append(content, xango.El("div", []xango.Attr{xango.A("class", "gj-dialog-actions")}, props.Actions...))
+		content = append(content, xango.El("div", []xango.Attr{xango.A("class", "gj-dialog-actions")}, xango.Child(props.Actions)))
 	}
-	return Modal(ModalProps{
-		Open:    props.Open,
-		Role:    props.Role,
-		Label:   props.Title,
-		Content: content,
-		OnClose: props.OnClose,
-	})
+	return Modal(ModalProps{Open: props.Open, Role: props.Role, Label: props.Title, Content: content, OnClose: props.OnClose})
 }

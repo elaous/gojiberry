@@ -30,9 +30,5 @@ func Loader(props LoaderProps) xango.Node {
 	if label == "" {
 		label = "Loading"
 	}
-	return xango.El("span", []xango.Attr{
-		xango.A("class", "gj-loader gj-loader-"+string(size)),
-		xango.A("role", "status"),
-		xango.A("aria-label", label),
-	})
+	return xango.El("span", []xango.Attr{xango.A("class", xango.AttrVal("gj-loader gj-loader-"+string(size))), xango.A("role", "status"), xango.A("aria-label", xango.AttrVal(label))})
 }

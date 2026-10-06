@@ -217,9 +217,12 @@ Copy-on-write and checksums are in the data, so they work with every store.
 A save that finds the store full (`docstore.ErrStorageFull`: a browser's quota, a full
 disk) first gives up the previous copy of that document, and if that is not enough writes
 over the current file, as before copies existed, so a save that fits is not refused. A
-rebuild keeps the checksums of the catalog it replaces, so a file that changed since and
-still parses is found damaged on the next read, not sealed as good; only with no readable
-catalog are files taken as they are. `Verify` also looks at the previous copies and forgets
+rebuild keeps the checksums of the catalog it replaces: when the newest file of a document
+is not the one that catalog vouched for and the earlier save is, the earlier save is the
+document again (the changed file is left out and removed with the other leftovers once it
+is an hour old); with no earlier save the changed file stays flagged and is found damaged
+on the next read, not sealed as good; only with no readable catalog are files taken as
+they are. `Verify` also looks at the previous copies and forgets
 one that is missing or damaged (the next save makes a new one), and removes leftover files
 (`Saver.CollectOrphans`: generation-named files nothing points to, older than an hour,
 what a crashed save leaves). A rename, tag or trash rewrites the current file but keeps
@@ -228,6 +231,30 @@ previous copy). A rename or tag in a store with no room for a second copy of the
 refused.
 
 `docstore.RequestPersistence` and `Persisted` ask the browser not to evict the storage.
+
+**A store that is filling up.** From 80% of a target's `Capacity` the Storage meter shows
+what to do (`components.CapacityAdvice`: download your documents, delete old versions and
+the trash, or save elsewhere; a stronger text from 95%), and the status line after a save
+adds one sentence. A save the store refuses says "Not saved: the storage is full" and the
+same advice, so the person knows to download the document first. The percentages are of
+`Target.Capacity` (the showcase's browser target is 5 MiB), or of what the adapter reports.
+
+**Limits that remain** (what the checks do not do):
+
+1. Only one previous copy is kept; two bad files in a row (the current and the previous) are
+   a lost document, which `Verify` and `Load` report and do not hide.
+2. A checksum protects what the catalog has seen. A catalog lost completely is rebuilt from
+   the files as they are, so damage that still parses is trusted from then.
+3. `Verify` reads every file: on a remote store that is every document over the network.
+4. Leftover files are removed after an hour, so a crash that is never followed by a
+   `Verify` leaves them (they cost space, not data).
+5. The cross-process lock of local files is `flock` (Unix); elsewhere the conditional write
+   alone protects the catalog. A browser without Web Locks relies on the read-back, which
+   catches most, not all, simultaneous saves from two tabs.
+6. In a store with no room for a second copy of a file, a rename, tag or trash is refused
+   (a save still goes through by overwriting in place, without the safety of a copy).
+7. Memory and localStorage keep nothing across their own loss (clearing site data): the
+   advice above, to download, is the protection.
 
 ## What a browser build links
 
