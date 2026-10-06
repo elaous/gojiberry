@@ -132,7 +132,7 @@ key** that wraps a key pair or the data key, so:
 
 1. **Done:** `docstore/encrypt` (`encrypt.Adapter`, `Keyring`, `Static`) using `filippo.io/age`
    and `agessh`: SSH (ed25519, RSA), age and recovery-key recipients, `Rekey` and `RekeyAll`,
-   `RequireEncrypted`, catalogs / folder records / ACL records / fonts left readable
+   strict reads by default (a file without the age header is refused; `AllowPlaintext` is the opt-out for migrating a clear store), ciphertext bound to its id by a framed header (`ErrWrongDocument`), `SaveIf` on encrypted ids compared against the plaintext, serialized and conditional re-keys that continue past failures, catalogs / folder records / ACL records / fonts left readable
    (`DefaultSkip`), conditional catalog writes and the store lock passed through. Tests: round
    trip, wrong key, tampered ciphertext, sharing and re-key on revoke, a recovery key, bad keys,
    and the whole saver (folders, versions, `Verify`) on an encrypted store. It is its own
