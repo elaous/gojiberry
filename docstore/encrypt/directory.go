@@ -14,8 +14,8 @@ type PublishedKey struct {
 	// Type and Fingerprint are computed from Text when the directory is read, not taken from
 	// what the publisher wrote.
 	Type, Fingerprint string
-	// Verified says the key was registered by an account whose e-mail is verified, while it was
-	// signed in. It proves the account and that the account published the key. It does not
+	// Verified says the key was registered by an account whose e-mail the identity provider
+	// explicitly marked verified (auth.User.VerifiedEmail), while it was signed in. It proves the account and that the account published the key. It does not
 	// prove the key is safe (the account's own key may be compromised), so a host that adds
 	// a key still shows the fingerprint; false means the e-mail is only a label and the owner
 	// must confirm the fingerprint with the person.

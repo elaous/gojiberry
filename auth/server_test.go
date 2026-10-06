@@ -83,6 +83,7 @@ func (f *fakeOIDCProvider) signIDToken(aud, sub, email, name string) string {
 		"exp": %d,
 		"iat": %d,
 		"email": %q,
+		"email_verified": true,
 		"name": %q,
 		"nonce": %q
 	}`, f.srv.URL, aud, sub, time.Now().Add(time.Hour).Unix(), time.Now().Unix(), email, name, f.nonce)
@@ -196,7 +197,7 @@ func TestCallbackFullFlow(t *testing.T) {
 	if err := json.Unmarshal(meW.Body.Bytes(), &user); err != nil {
 		t.Fatalf("decoding /auth/me response: %v", err)
 	}
-	wantUser := User{ID: "test:user-sub", Email: "user@example.com", Name: "Test User"}
+	wantUser := User{ID: "test:user-sub", Email: "user@example.com", VerifiedEmail: true, Name: "Test User"}
 	if user != wantUser {
 		t.Fatalf("/auth/me user = %+v; want %+v", user, wantUser)
 	}
@@ -372,14 +373,22 @@ func TestLoginUsesPKCEAndNonceAndChecksThem(t *testing.T) {
 
 func TestUnverifiedEmailIsDropped(t *testing.T) {
 	no, yes := false, true
-	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b", EmailVerified: &no}); u.Email != "" {
-		t.Fatalf("unverified email kept: %q", u.Email)
+	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b", EmailVerified: &no}, false); u.Email != "" || u.VerifiedEmail {
+		t.Fatalf("unverified email kept: %+v", u)
 	}
-	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b", EmailVerified: &yes}); u.Email != "a@b" {
-		t.Fatal("verified email lost")
+	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b", EmailVerified: &no}, true); u.Email != "" || u.VerifiedEmail {
+		t.Fatalf("an explicit false must win over AssumeEmailVerified: %+v", u)
 	}
-	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b"}); u.Email != "a@b" {
-		t.Fatal("an absent email_verified claim is not a refusal")
+	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b", EmailVerified: &yes}, false); u.Email != "a@b" || !u.VerifiedEmail {
+		t.Fatalf("verified email lost: %+v", u)
+	}
+	// An absent claim is not verification: no Email, no VerifiedEmail.
+	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b"}, false); u.Email != "" || u.VerifiedEmail {
+		t.Fatalf("an absent email_verified claim was treated as verified: %+v", u)
+	}
+	// Only the per-provider opt-in accepts an absent claim.
+	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b"}, true); u.Email != "a@b" || !u.VerifiedEmail {
+		t.Fatalf("AssumeEmailVerified ignored: %+v", u)
 	}
 }
 

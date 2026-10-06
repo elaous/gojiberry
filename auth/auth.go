@@ -57,9 +57,17 @@ type User struct {
 	// providers' subjects (which are only ever unique *within* one
 	// issuer) can never collide with each other once a document
 	// starts recording who owns/shares it.
-	ID    string
+	ID string
+	// Email is set only when the provider vouched for it: an explicit
+	// `email_verified: true` claim, or Provider.AssumeEmailVerified. An address the provider
+	// did not vouch for (claim false or absent) is left empty, so an access list never matches
+	// a self-asserted one.
 	Email string
-	Name  string
+	// VerifiedEmail is true only when the provider sent `email_verified: true` explicitly, or
+	// the provider is configured with AssumeEmailVerified. The key directory publishes only
+	// under an address with this set.
+	VerifiedEmail bool
+	Name          string
 	// Username is the provider's preferred_username, and Picture its picture (a
 	// URL), when it gives them; both are for display and for finding people.
 	Username, Picture string
@@ -87,6 +95,11 @@ type Provider struct {
 	IssuerURL    string
 	ClientID     string
 	ClientSecret string
+	// AssumeEmailVerified treats the provider's e-mail as verified even though its ID token has
+	// no `email_verified: true` claim. Default false: a token without the claim yields no
+	// User.Email and no VerifiedEmail. Set it only for a provider you know verifies every
+	// address it issues but omits the claim (an explicit `email_verified: false` still wins).
+	AssumeEmailVerified bool
 }
 
 // ProviderInfo is a Provider's own public-facing half -- what
@@ -254,8 +267,8 @@ func (m *Manager) Providers() []ProviderInfo {
 type idTokenClaims struct {
 	Subject string `json:"sub"`
 	Email   string `json:"email"`
-	// EmailVerified is a pointer: absent (some providers omit it) is not the
-	// same as false.
+	// EmailVerified is a pointer so absent can be told from false; neither counts as verified
+	// unless the provider sets AssumeEmailVerified (absent only).
 	EmailVerified     *bool  `json:"email_verified"`
 	Name              string `json:"name"`
 	PreferredUsername string `json:"preferred_username"`
@@ -398,10 +411,15 @@ func (s *tokenStore[T]) delete(token string) {
 // userFromClaims converts a verified ID token's own claims into this
 // package's minimal User -- the one place that mapping happens, so
 // handleCallback (and any future caller) never duplicates it.
-func userFromClaims(providerName string, c idTokenClaims) User {
-	email := c.Email
-	if c.EmailVerified != nil && !*c.EmailVerified {
-		email = "" // an address the provider has not verified identifies no one
+// assumeVerified is Provider.AssumeEmailVerified.
+func userFromClaims(providerName string, c idTokenClaims, assumeVerified bool) User {
+	verified := c.EmailVerified != nil && *c.EmailVerified
+	if c.EmailVerified == nil && assumeVerified {
+		verified = true
 	}
-	return User{ID: providerName + ":" + c.Subject, Email: email, Name: c.Name, Username: c.PreferredUsername, Picture: c.Picture}
+	email := c.Email
+	if !verified {
+		email = "" // an address the provider has not vouched for identifies no one
+	}
+	return User{ID: providerName + ":" + c.Subject, Email: email, VerifiedEmail: verified && email != "", Name: c.Name, Username: c.PreferredUsername, Picture: c.Picture}
 }

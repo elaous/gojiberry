@@ -40,7 +40,10 @@ const docID = "00000000-0000-4000-8000-000000000001"
 
 type page struct {
 	render func()
-	token  string // the passkey session, which is enough to look keys up
+	token  string // the passkey session
+	// dirToken is a provider session (demo only, /demo/provider-session): the directory's lookup
+	// is closed to passkey sessions.
+	dirToken string
 
 	store   docstore.Adapter
 	ring    *encrypt.StoreKeyring
@@ -172,9 +175,23 @@ func (p *page) lookup(ctx context.Context, email string) ([]components.DirRow, e
 	if err != nil {
 		return nil, err
 	}
-	if p.token != "" {
-		req.Header.Set("Authorization", "Bearer "+p.token)
+	if p.dirToken == "" {
+		pr, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/demo/provider-session", nil)
+		if err != nil {
+			return nil, err
+		}
+		pres, err := http.DefaultClient.Do(pr)
+		if err != nil {
+			return nil, err
+		}
+		tb, err := io.ReadAll(io.LimitReader(pres.Body, 1<<10))
+		pres.Body.Close()
+		if err != nil || pres.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("no provider session for the directory (%d)", pres.StatusCode)
+		}
+		p.dirToken = strings.TrimSpace(string(tb))
 	}
+	req.Header.Set("Authorization", "Bearer "+p.dirToken)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err

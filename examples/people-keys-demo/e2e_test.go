@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/docstore/encrypt"
 	"github.com/elaous/gojiberry/examples/people-keys-demo/demoserver"
 	"github.com/elaous/gojiberry/internal/e2etest"
@@ -25,6 +26,7 @@ func TestPeopleKeysInARealBrowser(t *testing.T) {
 	}
 	site.Handle("/auth/", srv.Mux)
 	site.Handle("/directory/", srv.Mux)
+	site.Handle("/demo/", srv.Mux)
 
 	// Bo, signed in with a provider that verified bo@example.com, publishes a key.
 	publish := func(email, key string) int {
@@ -45,6 +47,23 @@ func TestPeopleKeysInARealBrowser(t *testing.T) {
 	}
 	if code := publish("bo@example.com", boPub); code != http.StatusOK {
 		t.Fatalf("publish = %d", code)
+	}
+	// A passkey session cannot publish or look up, even with an address typed at registration.
+	pkTok, err := srv.Auth.StartSession(auth.User{ID: "passkey:x", Email: "bo@example.com", VerifiedEmail: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ method, path, body string }{
+		{"POST", "/directory/publish", `{"key":"` + boPub + `"}`},
+		{"GET", "/directory/lookup?email=bo@example.com", ""},
+	} {
+		req := httptest.NewRequest(c.method, c.path, strings.NewReader(c.body))
+		req.Header.Set("Authorization", "Bearer "+pkTok)
+		rec := httptest.NewRecorder()
+		srv.Mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("passkey session %s %s = %d, want 403", c.method, c.path, rec.Code)
+		}
 	}
 	strangerPub, _, err := encrypt.GenerateRecoveryKey()
 	if err != nil {

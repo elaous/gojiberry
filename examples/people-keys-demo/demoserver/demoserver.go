@@ -51,6 +51,18 @@ func New(origin string) (*Server, error) {
 	mux.Handle("/auth/", mgr.Routes())
 	mux.Handle("/directory/", docs.Handler())
 	s := &Server{Auth: mgr, Mux: mux}
+	// Demo only: the directory lookup is closed to passkey sessions, so the page asks for a session
+	// of a (pretend) identity provider that verified its address. A real host signs in through
+	// /auth/{provider}/login instead; never mount a route like this in a deployment.
+	mux.HandleFunc("/demo/provider-session", func(w http.ResponseWriter, r *http.Request) {
+		tok, err := s.Login("ana@example.com")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte(tok))
+	})
 	return s, nil
 }
 
@@ -58,5 +70,5 @@ func New(origin string) (*Server, error) {
 // "Sign in with Google" gives): demo and tests only, there is no route that hands one out.
 func (s *Server) Login(email string) (token string, err error) {
 	email = strings.ToLower(strings.TrimSpace(email))
-	return s.Auth.StartSession(auth.User{ID: "demo:" + email, Email: email})
+	return s.Auth.StartSession(auth.User{ID: "demo:" + email, Email: email, VerifiedEmail: true})
 }

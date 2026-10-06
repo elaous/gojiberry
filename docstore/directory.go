@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -52,10 +53,15 @@ type DirectoryService interface {
 //	POST /directory/publish        {"key": "<public key>", "label": "..."}  -> the key as published
 //	GET  /directory/lookup?email=  -> {"keys": [{key, type, fingerprint, verified}]}
 //
-// Both need a signed-in session. Publishing needs one from an identity provider whose e-mail
-// is verified (User.Email is only set when it is), never a passkey session, and publishes
+// Both need a signed-in identity-provider session (a passkey session gets 403 on both).
+// Lookup reveals the public keys published for any address to every signed-in provider user,
+// by design: a key is public, and finding a person's key by address is what the directory is
+// for. It is limited per user and per client IP (the connection's address: behind a proxy
+// every client shares it, so the real limiting belongs to the gateway).
+// Publishing needs an explicitly verified e-mail (User.VerifiedEmail: the provider sent
+// email_verified true, or is configured with auth.Provider.AssumeEmailVerified) and publishes
 // under that address only: an "email" in the body that is not the session's own is refused.
-// Bodies are small and the calls are limited per user.
+// Bodies are small.
 func (s *Server) WithDirectory(d DirectoryService) *Server {
 	s.directory = d
 	return s
@@ -66,6 +72,7 @@ const (
 	maxLookupKeys      = 50
 	publishesPerMinute = 10
 	lookupsPerMinute   = 60
+	lookupsPerIP       = 120
 )
 
 // windowLimiter is a fixed one-minute window per key. It is small on purpose: a gateway in
@@ -110,7 +117,7 @@ func (s *Server) handlePublish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Only a provider session with a verified e-mail can vouch for an address.
-	if strings.TrimSpace(u.Email) == "" || u.ID == "" || strings.HasPrefix(u.ID, "passkey:") {
+	if !u.VerifiedEmail || strings.TrimSpace(u.Email) == "" || u.ID == "" || strings.HasPrefix(u.ID, "passkey:") {
 		http.Error(w, "only a signed-in account with a verified e-mail can publish a key", http.StatusForbidden)
 		return
 	}
@@ -159,7 +166,17 @@ func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !s.limiter.allow("l:"+u.ID, lookupsPerMinute) {
+	// Only a provider session may look up: a passkey account's address was typed by whoever
+	// made it, and nothing vouches for the account, so it is not a directory reader.
+	if strings.HasPrefix(u.ID, "passkey:") {
+		http.Error(w, "only a signed-in provider account can look up keys", http.StatusForbidden)
+		return
+	}
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		ip = r.RemoteAddr
+	}
+	if !s.limiter.allow("li:"+ip, lookupsPerIP) || !s.limiter.allow("l:"+u.ID, lookupsPerMinute) {
 		w.Header().Set("Retry-After", "60")
 		http.Error(w, "too many requests", http.StatusTooManyRequests)
 		return

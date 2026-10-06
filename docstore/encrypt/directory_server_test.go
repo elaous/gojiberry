@@ -3,6 +3,7 @@ package encrypt
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -67,15 +68,19 @@ func (e *dirEnv) lookup(tok, email string) (int, []docstore.DirectoryKey) {
 
 func TestDirectoryRoutesPublishAndLookup(t *testing.T) {
 	e := newDirEnv(t)
-	ana := e.token(auth.User{ID: "google:1", Email: "Ana@X.io"})
+	ana := e.token(auth.User{ID: "google:1", Email: "Ana@X.io", VerifiedEmail: true})
 	key := newRecovery(t)
 	rec := e.publish(ana, map[string]string{"key": key.Text, "label": "laptop"})
 	if rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
-	// Anyone signed in finds it (a passkey session too: it is only reading).
+	// Any signed-in provider user finds it; a passkey session may not look up.
 	pk := e.token(auth.User{ID: "passkey:z"})
-	for _, tok := range []string{ana, pk} {
+	if code, _ := e.lookup(pk, "ana@x.io"); code != 403 {
+		t.Errorf("passkey lookup = %d, want 403", code)
+	}
+	bo := e.token(auth.User{ID: "google:2", Email: "bo@x.io", VerifiedEmail: true})
+	for _, tok := range []string{ana, bo} {
 		code, keys := e.lookup(tok, "ana@x.io")
 		if code != 200 || len(keys) != 1 || !keys[0].Verified || keys[0].Fingerprint != key.Fingerprint || keys[0].Label != "laptop" || keys[0].Key != key.Text {
 			t.Fatalf("%d %+v", code, keys)
@@ -121,14 +126,15 @@ func TestDirectoryPublishRefusals(t *testing.T) {
 	}
 	for name, u := range map[string]auth.User{
 		"no email":    {ID: "google:1"},
-		"passkey":     {ID: "passkey:1", Email: "ana@x.io"},
+		"unverified":  {ID: "google:1", Email: "ana@x.io"},
+		"passkey":     {ID: "passkey:1", Email: "ana@x.io", VerifiedEmail: true},
 		"blank email": {ID: "google:1", Email: " "},
 	} {
 		if rec := e.publish(e.token(u), body); rec.Code != 403 {
 			t.Errorf("%s = %d", name, rec.Code)
 		}
 	}
-	ana := e.token(auth.User{ID: "google:1", Email: "ana@x.io"})
+	ana := e.token(auth.User{ID: "google:1", Email: "ana@x.io", VerifiedEmail: true})
 	for name, b := range map[string]string{"not json": "{", "no key": `{"label":"x"}`, "bad key": `{"key":"garbage"}`} {
 		want := 400
 		if rec := e.do("POST", "/directory/publish", ana, b); rec.Code != want {
@@ -154,8 +160,8 @@ func TestDirectoryPublishRefusals(t *testing.T) {
 
 func TestDirectoryRoutesAreLimitedPerUser(t *testing.T) {
 	e := newDirEnv(t)
-	ana := e.token(auth.User{ID: "google:1", Email: "ana@x.io"})
-	bo := e.token(auth.User{ID: "google:2", Email: "bo@x.io"})
+	ana := e.token(auth.User{ID: "google:1", Email: "ana@x.io", VerifiedEmail: true})
+	bo := e.token(auth.User{ID: "google:2", Email: "bo@x.io", VerifiedEmail: true})
 	var last int
 	for i := 0; i < 11; i++ {
 		last = e.publish(ana, map[string]string{"key": newRecovery(t).Text}).Code
@@ -196,8 +202,47 @@ func TestDirectoryRoutesNeedSignInAndAService(t *testing.T) {
 
 func TestDirectoryServiceMapsRefusals(t *testing.T) {
 	svc := DirectoryService(&AdapterDirectory{Store: docstore.NewMemoryAdapter()}) // no signer: off
-	_, err := svc.Publish(context.Background(), auth.User{ID: "google:1", Email: "a@x.io"}, newRecovery(t).Text, "")
+	_, err := svc.Publish(context.Background(), auth.User{ID: "google:1", Email: "a@x.io", VerifiedEmail: true}, newRecovery(t).Text, "")
 	if err == nil || !strings.Contains(err.Error(), "refuses") {
 		t.Errorf("%v", err)
+	}
+}
+
+func TestDirectoryLookupIsLimitedPerIP(t *testing.T) {
+	e := newDirEnv(t)
+	// Three users, each well under the per-user limit, share one client address.
+	var toks []string
+	for i := 1; i <= 3; i++ {
+		toks = append(toks, e.token(auth.User{ID: fmt.Sprintf("google:%d", i), Email: fmt.Sprintf("u%d@x.io", i), VerifiedEmail: true}))
+	}
+	var last int
+	for i := 0; i < 121; i++ {
+		last, _ = e.lookup(toks[i%3], "bo@x.io")
+	}
+	if last != 429 {
+		t.Errorf("121st lookup from one address = %d, want 429", last)
+	}
+}
+
+// A record someone wrote straight into the store (no server signature) is shown label-only.
+func TestDirectoryRouteShowsAForgedRecordUnverified(t *testing.T) {
+	e := newDirEnv(t)
+	ana := e.token(auth.User{ID: "google:1", Email: "ana@x.io", VerifiedEmail: true})
+	d := &AdapterDirectory{Store: e.store, Signer: testSigner(t, 1)}
+	key := newRecovery(t)
+	id := d.directoryID("ana@x.io", key.Fingerprint)
+	forged, _ := json.Marshal(directoryRecord{V: 2, Key: key.Text, Label: "mallory", Publisher: "google:9", Provider: "google", Email: "ana@x.io", At: 1, Sig: "AAAA"})
+	if err := e.store.Save(context.Background(), id, forged); err != nil {
+		t.Fatal(err)
+	}
+	code, keys := e.lookup(ana, "ana@x.io")
+	if code != 200 || len(keys) != 1 || keys[0].Verified || keys[0].Label != "mallory" {
+		t.Fatalf("%d %+v: a forged record must come back unverified", code, keys)
+	}
+	// Unsigned altogether.
+	unsigned, _ := json.Marshal(directoryRecord{V: 2, Key: key.Text, Provider: "google", Publisher: "google:9", Email: "ana@x.io"})
+	_ = e.store.Save(context.Background(), id, unsigned)
+	if _, keys := e.lookup(ana, "ana@x.io"); len(keys) != 1 || keys[0].Verified {
+		t.Fatalf("%+v", keys)
 	}
 }

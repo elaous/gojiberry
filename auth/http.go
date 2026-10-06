@@ -136,7 +136,7 @@ func (m *Manager) handleCallbackFor(name string) http.HandlerFunc {
 			http.Error(w, "auth: id_token has no subject", http.StatusUnauthorized)
 			return
 		}
-		user := userFromClaims(name, claims)
+		user := userFromClaims(name, claims, p.AssumeEmailVerified)
 
 		sessionToken, err := m.sessions.put(user, time.Now().Add(m.sessionTTL))
 		if err != nil {

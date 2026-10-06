@@ -212,3 +212,21 @@ func TestVerifiedKeySkipsTypingOnlyWhenTheHostTrustsIt(t *testing.T) {
 		t.Error("label-only keys need the typed fingerprint")
 	}
 }
+
+func TestRecoveryKeyButtonNeedsAHostThatCanShowTheSecret(t *testing.T) {
+	p := RecipientsProps{
+		AddMyPasskey: func(context.Context) error { return nil }, PasskeySupported: true, Confidential: true,
+		Owner: []RecipientRow{{Type: "passkey-prf", Fingerprint: "SHA256:p1"}},
+		CreateRecoveryKey: func(context.Context) (string, error) {
+			t.Error("must not create a key nobody can see")
+			return "x", nil
+		},
+		Pending: &Pending{Inline: true},
+	}
+	n := Recipients(p)
+	mustNotContain(t, render(t, n), "Create a recovery key", "gj-recip-recovery\"")
+	clickAll(n)
+	p.OnRecoveryKey = func(string) {}
+	p.CreateRecoveryKey = func(context.Context) (string, error) { return "x", nil }
+	mustContain(t, render(t, Recipients(p)), "Create a recovery key")
+}

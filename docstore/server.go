@@ -79,7 +79,10 @@ type AuthConfig struct {
 // GOJIBERRY_DOCSTORE_AUTH_PROVIDERS, if set, is a JSON array of
 // auth.Provider (e.g. '[{"name":"google","issuerURL":"https://accounts.google.com","clientID":"...","clientSecret":"..."}]')
 // and turns on the /auth/* endpoints -- see AuthConfig. Leaving it
-// unset (the default) leaves auth off entirely.
+// unset (the default) leaves auth off entirely. A provider's e-mail counts
+// (User.Email, User.VerifiedEmail) only when its ID token says email_verified
+// true; add "assumeEmailVerified": true to a provider that verifies every
+// address but omits the claim.
 // GOJIBERRY_DOCSTORE_AUTH_BASE_URL is this server's own externally-
 // reachable base URL (see auth.Config.BaseURL); required when
 // AUTH_PROVIDERS is set. GOJIBERRY_DOCSTORE_AUTH_SESSION_TTL is a

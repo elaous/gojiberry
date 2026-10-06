@@ -91,9 +91,13 @@ type RecipientsProps struct {
 	Confidential     bool
 	SecondKeyMessage string
 	// CreateRecoveryKey makes a recovery key (encrypt.GenerateRecoveryKey), adds its public part as
-	// an owner key and returns the secret. The component hands the secret to OnRecoveryKey and
-	// never keeps it; the host passes it back as RecoverySecret until the person has saved it
-	// and OnRecoveryDone is called, and must then drop it: it is shown once. Copy and Download
+	// an owner key and returns the secret. The button is shown only when OnRecoveryKey is also
+	// set (a key whose secret cannot be shown must not become an owner key). The component hands
+	// the secret to OnRecoveryKey and keeps no copy; the host passes it back as RecoverySecret
+	// until the person has saved it and OnRecoveryDone is called, and must then drop it: it is
+	// shown once. What holds: the component does not keep the secret in the DOM after that
+	// ("I have saved it"); the host holds it in memory while it is shown. Go strings cannot be
+	// wiped, so a copy may stay in memory until it is collected. Copy and Download
 	// (nil leaves the button out) are the host's clipboard and file save.
 	CreateRecoveryKey func(ctx context.Context) (secret string, err error)
 	OnRecoveryKey     func(secret string)

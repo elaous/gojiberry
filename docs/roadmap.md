@@ -7,6 +7,20 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 0 of 5 (full run on `main` after the 5th merge in a row; see [testing-workflow.md](testing-workflow.md)).
 
+## Notes for upgraders
+
+- **Reserved document IDs.** IDs starting with `directory/` are reserved for the key directory
+  (like `acl:` and `collab:`): `docstore.Server` refuses to read, write, list or delete them
+  through `/docs`, so an existing document with such an ID becomes unreachable through the
+  server. Rename it in the store before upgrading.
+- **E-mail now needs an explicit `email_verified: true`.** `auth` used to treat an absent
+  `email_verified` claim as verified; it now leaves `User.Email` empty unless the provider sent
+  `true` (new `User.VerifiedEmail` says so). Access lists that match by e-mail stop matching users
+  of a provider that omits the claim. If such a provider does verify every address, set
+  `Provider.AssumeEmailVerified` (`"assumeEmailVerified": true` in
+  `GOJIBERRY_DOCSTORE_AUTH_PROVIDERS`). The key directory publishes only for `VerifiedEmail` users
+  and its lookup is closed to passkey sessions.
+
 ## Next
 
 1. **Migrate: done** (see [document-components.md](document-components.md)); left: skipping what an earlier run already brought (needs the source ID kept on the document), Google Docs comments and revision history.

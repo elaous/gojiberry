@@ -112,7 +112,9 @@ func myKeyControl(p RecipientsProps, busy bool) []xango.Node {
 		box = append(box,
 			xango.El("p", append(cls("gj-doc-error gj-recip-need-second"), xango.A("role", "alert")), xango.Text(msg)),
 			docButton("gj-recip-add-mine", tr("recipients.addMine", "Add my passkey as a key"), true, nil))
-		if p.CreateRecoveryKey != nil && p.RecoverySecret == "" {
+		// Without OnRecoveryKey the secret could not be shown, and the key it belongs to would
+		// already be an owner key: so the button is left out then.
+		if p.CreateRecoveryKey != nil && p.OnRecoveryKey != nil && p.RecoverySecret == "" {
 			box = append(box, docButton("gj-recip-recovery", tr("recipients.createRecovery", "Create a recovery key"), busy, func() {
 				p.Pending.Run(func(ctx context.Context) error {
 					secret, err := p.CreateRecoveryKey(ctx)

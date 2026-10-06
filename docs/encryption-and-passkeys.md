@@ -280,14 +280,17 @@ cannot be opened.
    `CheckRecoverableOwner`) with "Create a recovery key": `CreateRecoveryKey` generates one
    (`encrypt.GenerateRecoveryKey`) and adds its public part, and the secret is shown **once**, copyable and
    downloadable, with "keep it offline; we cannot recover it" until the person says they saved it; the
-   component never keeps it. *Left:* the showcase does not supply these callbacks yet (`examples/people-keys-demo` does, see 4b);
+   component keeps no copy and drops it from the DOM when done (the host holds it in memory while it is
+   shown, and Go strings cannot be wiped). The button is left out when the host sets `CreateRecoveryKey`
+   without `OnRecoveryKey`. *Left:* the showcase does not supply these callbacks yet (`examples/people-keys-demo` does, see 4b);
    calling `CheckRecoverableOwner` when a document is made confidential is step 5.
    4b. **Done (library, server rule, component and a demo host): the verified e-mail mark of C.4.**
    `encrypt.KeyDirectory` (`Lookup(ctx, email) ([]PublishedKey, error)`; a `PublishedKey` is the key
    text, label, type, fingerprint and `Verified`) is injected; `encrypt.AdapterDirectory` is one over a
    `docstore.Adapter`.
-   - **Records are signed.** `Publish(ctx, user, key)` refuses (`ErrNotPublishable`) unless `user.Email`
-     is set and the user came from a provider session (a `passkey:` user carries no e-mail, B.3), and
+   - **Records are signed.** `Publish(ctx, user, key)` refuses (`ErrNotPublishable`) unless
+     `user.VerifiedEmail` is set (and `user.Email` with it) and the user came from a provider session (a
+     `passkey:` user carries no e-mail, B.3), and
      writes `directory/<HMAC of the e-mail>/<fingerprint>` holding the key, label, the publisher's ID and
      provider, the address and the time, signed by the server's `encrypt.DirectorySigner` (Ed25519; the
      signature covers the record's own ID, so a record copied to another name fails). `Lookup`
@@ -306,11 +309,21 @@ cannot be opened.
      `collab:`: it cannot be read, written, listed or deleted through `/docs`. Records are written only
      by the publish route. With an `auth.Manager` and `Server.WithDirectory(encrypt.DirectoryService(dir))`
      (the docstore server does it when the key is set) the server mounts `POST /directory/publish` (body
-     `{"key", "label"}`, at most 4 KB) and `GET /directory/lookup?email=`. Both need a signed-in session;
-     publishing needs a provider session with a verified e-mail (`User.Email`, which auth leaves empty for
-     an unverified one) and publishes under that address only: a different `email` in the body is
-     refused (403), and a passkey session is refused. Each user is limited to 10 publishes and 60
-     lookups a minute (429 with `Retry-After`).
+     `{"key", "label"}`, at most 4 KB) and `GET /directory/lookup?email=`. Both need a signed-in
+     *provider* session: a passkey session is refused (403) on publish and on lookup. Publishing needs
+     an explicitly verified e-mail: `auth.User.VerifiedEmail`, set only when the provider's ID token
+     says `email_verified: true` (an absent claim is **not** verification; `auth` then leaves
+     `User.Email` empty too). A provider that really verifies every address but omits the claim can be
+     opted in with `auth.Provider.AssumeEmailVerified` (default false; in the
+     `GOJIBERRY_DOCSTORE_AUTH_PROVIDERS` JSON, `"assumeEmailVerified": true`); an explicit
+     `email_verified: false` still wins. Publishing is under that address only: a different `email` in
+     the body is refused (403). Each user is limited to 10 publishes and 60 lookups a minute, and a
+     client address to 120 lookups (429 with `Retry-After`). **Lookup reveals the published public
+     keys of any address to every signed-in provider user, by design** (a public key is public, and
+     finding it by address is the feature); it does not reveal whether an address has an account. The
+     20-key cap is a list-then-save, serialised per address inside one process (a keyed mutex); with
+     several server replicas on one store, route publishes through a gateway that serialises them per
+     address, or use a store with a conditional write, or the cap can be overshot.
    - **UI.** `RecipientRow.Verified` shows "verified e-mail" and a draft that is not shows "label only:
      confirm the fingerprint"; `Recipients` can look an address up (`Directory`, `OnDirResults`,
      `DirResults`), and picking a row fills the draft. The typed fingerprint stays for label-only keys,

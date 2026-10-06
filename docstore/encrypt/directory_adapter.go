@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"strings"
+	"sync"
 	"time"
+	"unicode"
 
 	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/docstore"
@@ -16,7 +19,7 @@ import (
 // ErrNotPublishable is returned by AdapterDirectory.Publish for a user whose e-mail cannot be
 // vouched for: no e-mail, or a session that did not come from an identity provider (a passkey
 // session carries no e-mail: the address typed at registration is a label nothing verified).
-var ErrNotPublishable = errors.New("encrypt: only a signed-in account with a verified e-mail can publish a key")
+var ErrNotPublishable = errors.New("encrypt: only a signed-in account with an explicitly verified e-mail can publish a key")
 
 const directoryPrefix = "directory/"
 
@@ -51,6 +54,22 @@ type AdapterDirectory struct {
 	MaxKeys int
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
+
+	// locks serialise Publish per address within this process (striped by the address's hash).
+	locks [64]sync.Mutex
+}
+
+// lockAddress takes the lock for an address and returns its unlock. The MaxKeys cap is a
+// list-then-save, so two concurrent publishes for one address could both pass it; this makes
+// them take turns in one process. It does not help across replicas: with several server
+// processes on one store, put a gateway in front that routes (or serialises) publishes per
+// address, or use a store with a conditional write.
+func (d *AdapterDirectory) lockAddress(email string) func() {
+	h := fnv.New32a()
+	h.Write([]byte(normalizeEmail(email)))
+	mu := &d.locks[h.Sum32()%uint32(len(d.locks))]
+	mu.Lock()
+	return mu.Unlock
 }
 
 // directoryRecord is the stored form. Sig signs signedBody (the other fields and the record's
@@ -96,11 +115,14 @@ func parsePublic(text string) (Recipient, error) {
 	return ParseSSHRecipient(text)
 }
 
-// cleanLabel keeps a label short and printable: control characters are dropped, 80 runes at most.
+// cleanLabel keeps a label short and printable: control characters and invisible formatting
+// ones (bidi overrides and isolates U+202A-202E and U+2066-2069, zero-width and mark characters
+// U+200B-200F, U+FEFF and every other Cf, the line and paragraph separators Zl and Zp) are
+// dropped, so a label cannot reorder or hide the text around it; 80 runes at most.
 func cleanLabel(s string) string {
 	var b []rune
 	for _, c := range strings.TrimSpace(s) {
-		if c < 0x20 || c == 0x7f {
+		if c < 0x20 || c == 0x7f || unicode.IsControl(c) || unicode.Is(unicode.Cf, c) || unicode.Is(unicode.Zl, c) || unicode.Is(unicode.Zp, c) {
 			continue
 		}
 		if b = append(b, c); len(b) == 80 {
@@ -120,14 +142,14 @@ func providerOf(userID string) string {
 }
 
 // Publish records key as a key of user's e-mail address. It refuses (ErrNotPublishable) unless
-// the user has an e-mail and came from a provider session: a passkey user ("passkey:...") has
-// none that is verified. The type and fingerprint are recomputed from key.Text. Publishing the
+// the user's e-mail is explicitly verified (auth.User.VerifiedEmail) and came from a provider
+// session: a passkey user ("passkey:...") has none that is verified. The type and fingerprint are recomputed from key.Text. Publishing the
 // same key again replaces the record. At most MaxKeys keys are kept for one address.
 func (d *AdapterDirectory) Publish(ctx context.Context, user auth.User, key Recipient) error {
 	if d.Signer == nil {
 		return ErrDirectoryOff
 	}
-	if normalizeEmail(user.Email) == "" || user.ID == "" || strings.HasPrefix(user.ID, passkeySessionPrefix) || providerOf(user.ID) == "" {
+	if !user.VerifiedEmail || normalizeEmail(user.Email) == "" || user.ID == "" || strings.HasPrefix(user.ID, passkeySessionPrefix) || providerOf(user.ID) == "" {
 		return ErrNotPublishable
 	}
 	r, err := parsePublic(key.Text)
@@ -138,6 +160,7 @@ func (d *AdapterDirectory) Publish(ctx context.Context, user auth.User, key Reci
 	if d.Now != nil {
 		now = d.Now
 	}
+	defer d.lockAddress(user.Email)()
 	id := d.directoryID(user.Email, r.Fingerprint)
 	existing, err := docstore.ListPrefix(ctx, d.Store, d.addressPrefix(user.Email))
 	if err != nil {

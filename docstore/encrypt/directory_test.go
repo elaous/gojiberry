@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/docstore"
@@ -44,9 +46,10 @@ func TestDirectoryPublishRefusesUsersWithoutAVerifiedProviderEmail(t *testing.T)
 	for name, u := range map[string]auth.User{
 		"no email":     {ID: "google:1"},
 		"blank email":  {ID: "google:1", Email: "  "},
-		"passkey user": {ID: "passkey:abc", Email: "ana@x.io"}, // an address typed at registration is a label
-		"no id":        {Email: "ana@x.io"},
-		"no provider":  {ID: "1", Email: "ana@x.io"},
+		"unverified":   {ID: "google:1", Email: "ana@x.io"},                         // VerifiedEmail not set: the provider never vouched
+		"passkey user": {ID: "passkey:abc", Email: "ana@x.io", VerifiedEmail: true}, // an address typed at registration is a label
+		"no id":        {Email: "ana@x.io", VerifiedEmail: true},
+		"no provider":  {ID: "1", Email: "ana@x.io", VerifiedEmail: true},
 	} {
 		if err := d.Publish(ctx, u, key); !errors.Is(err, ErrNotPublishable) {
 			t.Errorf("%s: %v", name, err)
@@ -55,7 +58,7 @@ func TestDirectoryPublishRefusesUsersWithoutAVerifiedProviderEmail(t *testing.T)
 	if metas, _ := store.List(ctx); len(metas) != 0 {
 		t.Errorf("nothing was written: %v", metas)
 	}
-	if err := d.Publish(ctx, auth.User{ID: "google:1", Email: "ana@x.io"}, Recipient{Text: "garbage"}); err == nil {
+	if err := d.Publish(ctx, auth.User{ID: "google:1", Email: "ana@x.io", VerifiedEmail: true}, Recipient{Text: "garbage"}); err == nil {
 		t.Error("a key that does not parse is refused")
 	}
 }
@@ -64,7 +67,7 @@ func TestDirectoryIsOffWithoutASigner(t *testing.T) {
 	ctx := context.Background()
 	store := docstore.NewMemoryAdapter()
 	d := &AdapterDirectory{Store: store}
-	if err := d.Publish(ctx, auth.User{ID: "google:1", Email: "ana@x.io"}, newRecovery(t)); !errors.Is(err, ErrDirectoryOff) {
+	if err := d.Publish(ctx, auth.User{ID: "google:1", Email: "ana@x.io", VerifiedEmail: true}, newRecovery(t)); !errors.Is(err, ErrDirectoryOff) {
 		t.Errorf("%v", err)
 	}
 	if got, err := d.Lookup(ctx, "ana@x.io"); err != nil || got != nil {
@@ -95,7 +98,7 @@ func TestDirectoryLookupMarksVerifiedOnlyForPublishedRecords(t *testing.T) {
 	d := &AdapterDirectory{Store: store, Signer: signer}
 	key := newRecovery(t)
 	key.Label = "Ana's laptop\n"
-	if err := d.Publish(ctx, auth.User{ID: "google:1", Email: " Ana@X.io "}, key); err != nil {
+	if err := d.Publish(ctx, auth.User{ID: "google:1", Email: " Ana@X.io ", VerifiedEmail: true}, key); err != nil {
 		t.Fatal(err)
 	}
 	got, err := d.Lookup(ctx, "ana@x.IO")
@@ -212,7 +215,7 @@ func TestDirectoryRecordNamesDoNotRevealAddresses(t *testing.T) {
 func TestDirectoryKeepsAtMostMaxKeysPerAddress(t *testing.T) {
 	ctx := context.Background()
 	d := &AdapterDirectory{Store: docstore.NewMemoryAdapter(), Signer: testSigner(t, 1), MaxKeys: 2}
-	u := auth.User{ID: "google:1", Email: "ana@x.io"}
+	u := auth.User{ID: "google:1", Email: "ana@x.io", VerifiedEmail: true}
 	k1, k2 := newRecovery(t), newRecovery(t)
 	for _, k := range []Recipient{k1, k2, k1} { // publishing k1 again replaces it
 		if err := d.Publish(ctx, u, k); err != nil {
@@ -223,7 +226,7 @@ func TestDirectoryKeepsAtMostMaxKeysPerAddress(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 	// Another address has its own room.
-	if err := d.Publish(ctx, auth.User{ID: "google:2", Email: "bo@x.io"}, newRecovery(t)); err != nil {
+	if err := d.Publish(ctx, auth.User{ID: "google:2", Email: "bo@x.io", VerifiedEmail: true}, newRecovery(t)); err != nil {
 		t.Error(err)
 	}
 }
@@ -248,7 +251,7 @@ func TestDirectoryLookupDoesNotListTheWholeStore(t *testing.T) {
 	ctx := context.Background()
 	cs := &countingStore{Adapter: docstore.NewMemoryAdapter()}
 	d := &AdapterDirectory{Store: cs, Signer: testSigner(t, 1)}
-	if err := d.Publish(ctx, auth.User{ID: "google:1", Email: "ana@x.io"}, newRecovery(t)); err != nil {
+	if err := d.Publish(ctx, auth.User{ID: "google:1", Email: "ana@x.io", VerifiedEmail: true}, newRecovery(t)); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := d.Lookup(ctx, "ana@x.io"); err != nil || len(got) != 1 {
@@ -256,5 +259,62 @@ func TestDirectoryLookupDoesNotListTheWholeStore(t *testing.T) {
 	}
 	if cs.lists != 0 || cs.prefixLists != 2 {
 		t.Errorf("lists=%d prefixLists=%d", cs.lists, cs.prefixLists)
+	}
+}
+
+// slowListStore makes the list-then-save window wide enough for racing publishes to collide.
+type slowListStore struct{ docstore.Adapter }
+
+func (s slowListStore) List(ctx context.Context) ([]docstore.Meta, error) {
+	time.Sleep(20 * time.Millisecond)
+	return s.Adapter.List(ctx)
+}
+
+func TestDirectoryConcurrentPublishesRespectTheCap(t *testing.T) {
+	ctx := context.Background()
+	store := docstore.NewMemoryAdapter()
+	d := &AdapterDirectory{Store: slowListStore{store}, Signer: testSigner(t, 1), MaxKeys: 3}
+	u := auth.User{ID: "google:1", Email: "ana@x.io", VerifiedEmail: true}
+	keys := make([]Recipient, 8)
+	for i := range keys {
+		keys[i] = newRecovery(t)
+	}
+	var wg sync.WaitGroup
+	for _, k := range keys {
+		wg.Add(1)
+		go func(k Recipient) {
+			defer wg.Done()
+			_ = d.Publish(ctx, u, k)
+		}(k)
+	}
+	wg.Wait()
+	metas, _ := store.List(ctx)
+	if len(metas) != 3 {
+		t.Fatalf("%d keys published for one address with a cap of 3", len(metas))
+	}
+}
+
+func TestCleanLabelDropsInvisibleFormatting(t *testing.T) {
+	for in, want := range map[string]string{
+		"laptop":                       "laptop",
+		"a\u202Eb\u202Cc":              "abc", // bidi override and pop
+		"x\u2066y\u2069z":              "xyz", // isolates
+		"zero\u200Bwidth\u200D\uFEFFj": "zerowidthj",
+		"l\u200Frtl":                   "lrtl",
+		"line\u2028sep\u2029para":      "lineseppara",
+		"tab\there\x7f":                "tabhere",
+		"\u00adsoft":                   "soft", // soft hyphen is Cf
+		"\u00fcn\u00ef\U0001F600":      "\u00fcn\u00ef\U0001F600",
+	} {
+		if got := cleanLabel(in); got != want {
+			t.Errorf("cleanLabel(%q) = %q, want %q", in, got, want)
+		}
+	}
+	long := strings.Repeat("é", 200)
+	if got := cleanLabel(long); len([]rune(got)) != 80 {
+		t.Errorf("%d runes, want 80", len([]rune(got)))
+	}
+	if got := cleanLabel(strings.Repeat("\u202E", 100) + strings.Repeat("a", 100)); len(got) != 80 {
+		t.Errorf("invisible characters must not use up the limit: %d", len(got))
 	}
 }
