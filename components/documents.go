@@ -249,13 +249,16 @@ type DocListProps struct {
 	// Download hands a document over in a format picked from DownloadFormats
 	// (none: one Download button, "" for the format); DownloadFolder hands over
 	// a folder's documents together.
+	// OpenDownload, if set, shows the dialog that asks whether to keep the version
+	// history in an opendocs download.
+	OpenDownload    *OpenDownload
 	Download        func(ctx context.Context, id, format string) error
 	DownloadFolder  DocAction
 	DownloadFormats []DocChoice
 }
 
 // DocChoice is a name and the label shown for it.
-type DocChoice struct{ Name, Label string }
+type DocChoice struct{ Name, Label, Group string }
 
 // DocList lists documents, each with the operations the host plugs in: Open,
 // Duplicate, Trash, Delete and a tag editor, and above them a filter by tag.
@@ -338,6 +341,9 @@ func DocList(p DocListProps) xango.Node {
 		children = append(children, xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list")}, rows...))
 	}
 	children = append(children, pendingError(p.Pending)...)
+	if p.OpenDownload != nil {
+		children = append(children, OpenDownloadDialog(*p.OpenDownload))
+	}
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-doclist")}, children...)
 }
 
@@ -732,8 +738,21 @@ func downloadControl(p DocListProps, d Doc, busy bool) []xango.Node {
 			func() { p.Pending.Run(func(ctx context.Context) error { return p.Download(ctx, id, "") }) })}
 	}
 	opts := []xango.Node{xango.El("option", []xango.Attr{xango.A("value", "-"), xango.A("selected", "selected")}, xango.Text(tr("docs.downloadAs", "Download as…")))}
+	// Choices with a Group are shown under a heading for it, in the order the groups first appear.
+	var groups []string
+	byGroup := map[string][]xango.Node{}
 	for _, f := range p.DownloadFormats {
-		opts = append(opts, xango.El("option", []xango.Attr{xango.A("value", "format:"+f.Name)}, xango.Text(f.Label)))
+		if _, ok := byGroup[f.Group]; !ok {
+			groups = append(groups, f.Group)
+		}
+		byGroup[f.Group] = append(byGroup[f.Group], xango.El("option", []xango.Attr{xango.A("value", "format:"+f.Name)}, xango.Text(f.Label)))
+	}
+	for _, g := range groups {
+		if g == "" {
+			opts = append(opts, byGroup[g]...)
+		} else {
+			opts = append(opts, xango.El("optgroup", []xango.Attr{xango.A("label", g)}, byGroup[g]...))
+		}
 	}
 	attrs := []xango.Attr{xango.A("class", "gj-doclist-download"), xango.A("aria-label", trf("docs.downloadOf", "Download %s as", d.Name))}
 	if busy {
