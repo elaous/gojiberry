@@ -29,9 +29,11 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
   `GOJIBERRY_DOCSTORE_AUTH_PROVIDERS`). The key directory publishes only for `VerifiedEmail` users
   and its lookup is closed to passkey sessions.
 
-- **Key directory (this release).** New reserved ID prefixes `directory-log/` (the transparency log) and
-  `ratelimit/` (shared rate limit budgets) join `directory/`: `docstore.Server` refuses them through `/docs`,
-  so a document with such an ID becomes unreachable; rename it before upgrading. Everything new is off by
+- **Key directory (this release).** New reserved ID prefixes `directory-log/` (the transparency log),
+  `directory-enroll/` (owner key enrollments) and `ratelimit/` (shared rate limit budgets) join `directory/`:
+  `docstore.Server` refuses them through `/docs`, so a document with such an ID becomes unreachable; rename it
+  before upgrading. **Every reserved prefix is now compared without case** (`ACL:x`, `Collab:x`, `DIRECTORY/x`
+  are refused like their lower-case forms; a backend that folds case would alias them). Everything new is off by
   default and nothing is required: `GOJIBERRY_DOCSTORE_LIMITER` (`memory`, the default, or `store`),
   `GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV` (retired keys for rotation), `..._DIRECTORY_REQUIRE_POP`,
   `..._DIRECTORY_LOOKUP` (`any` or `domain`) and `..._DIRECTORY_REVOKE_WINDOW`. Records published by the
@@ -44,7 +46,29 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
   `Unlimited` and `RateLimiter` are aliases of the `docstore` ones (code that used them compiles unchanged);
   the directory's rate limits are chosen with `Server.WithDirectoryLimits` and the lookup rule with
   `Server.WithDirectoryPolicy`. Nested module `docstore/backends`: the four backends implement
-  `PrefixLister` (no schema change).
+  `PrefixLister` (no schema change), and postgres and mongo implement the new `docstore.ConditionalDeleter`.
+  Review fixes in this release: the log routes (`/directory/log`, `/log/head`, `/log/address`) need a
+  **provider session** (a passkey session is refused), apply the lookup policy and have their own per-user
+  budget; the log's `address` is a **keyed** hash (`AdapterDirectory.LogAddressFor`; the unkeyed
+  `encrypt.LogAddress` is gone); a lookup spends the user's own budget before the shared IP and server ones
+  (`GOJIBERRY_DOCSTORE_DIRECTORY_GLOBAL_BUDGET=domain` makes the server budget one per e-mail domain); a
+  tombstone carries its revoke entry's number; malformed addresses (not exactly one `@`) are 400; challenge
+  tokens are honoured for the current directory key only; publish and revoke are conditional writes with void
+  log entries on a lost race and a 503 on a busy log; `Resign` (now run by `Startup` **before the server
+  listens**) moves only records that a log entry backs and returns a `ResignReport` (`Resign` used to return a
+  count), so rotate through a retired key only if it never leaked; the start-up census is logged and shown by
+  `/health` (`directory.unknown_keys`). **Owner-held identity:** an address can enroll an Ed25519 owner key
+  (`POST /directory/enroll`), after which every publish and revoke needs the owner's signature and lookups mark
+  keys `OwnerSigned`; `docstore.DirectoryService` gained `Head`, `LogAddress`, `Enrollment`, `EnrollChallenge`,
+  `Enroll`, `RequestReset` and `CancelReset` and `Revoke` takes the owner signature;
+  `docstore/directoryclient` is the Go and browser client. New settings: `GOJIBERRY_DOCSTORE_REPLICAS` (default
+  1: with more than one process on a store **without conditional writes** the directory refuses to start, with
+  one it warns) and `..._DIRECTORY_GLOBAL_BUDGET`. `StoreLimiter` re-dates a record from a clock more than 5
+  seconds ahead; `SweepRateLimits` skips what it cannot read, deletes conditionally and keeps at most 100,000
+  records (`SweepRateLimitsMax`). `public.Options.LimiterFactory` lets the public offer's budgets live in the
+  store (the docstore server passes `GOJIBERRY_DOCSTORE_LIMITER`'s factory). `components.RecipientRow` and
+  `DirRow` gained `OwnerSigned` and `OwnerEnrolled` (new strings `recipients.ownerSigned`, `ownerSignedHelp`,
+  `ownerUnsigned`, `ownerUnsignedHelp`, translated in fr, de and es).
 
 ## Next
 
@@ -74,11 +98,16 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
       provider session with a verified e-mail) and a demo host, `examples/people-keys-demo`. Also done:
       revoking (`DELETE /directory/keys/<fingerprint>`) and rotating the directory key (`KEY_PREV`, `Resign`),
       proof of possession and ssh-ed25519 attestation (`Held`/`Attested`, a stronger mark), a signed
-      transparency log (`GET /directory/log`), shared rate limits (`docstore.StoreLimiter`,
-      `GOJIBERRY_DOCSTORE_LIMITER=store`), lookup budgets and a lookup policy, and `PrefixLister` in the
-      postgres, mongo, s3 and blob backends. Left: wiring it in the showcase/app, UI to publish, revoke and
-      watch the log, a Go client for the routes, the owner-signed keyring that would close the substitution
-      by a server that holds the key (see the limits in step 4b), witnesses for the log.
+      transparency log (`GET /directory/log`, keyed addresses, signed head, truncation checks), shared rate
+      limits (`docstore.StoreLimiter`, `GOJIBERRY_DOCSTORE_LIMITER=store`, also for the public offer), lookup
+      budgets and a lookup policy, `PrefixLister` in the postgres, mongo, s3 and blob backends, and, after
+      review, atomic publish and revoke across replicas, `Resign` that does not launder forged records, and
+      **owner-held identity** (an enrolled owner key that must sign every publish and revoke, the
+      `OwnerSigned` mark, rotation and a 24 hour reset, `encrypt.AuditAddress`) with the Go and browser
+      client `docstore/directoryclient` and its wiring in `examples/people-keys-demo` (publish, revoke,
+      enroll, watch my address; e2e with the virtual authenticator). Left: wiring it in the showcase/app (the
+      note in step 4b), trust on first use of the owner key and witnesses for the log (see the limits in
+      step 4b).
    4. Hiding folder names of confidential folders.
 3. **Public docstore.** An anonymous offer: no account, one document per session, a link
    and a download always, deleted 24 hours after the last edit (viewing does not renew).
