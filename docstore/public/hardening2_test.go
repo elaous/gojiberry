@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -18,16 +19,19 @@ import (
 // ---- finding 4: the proxy warning, and finding 9: the tombstone must outlive the session
 
 func TestTrustedProxiesWarning(t *testing.T) {
-	if w := (Config{}).Warnings(); len(w) != 1 || !strings.Contains(w[0], "TRUSTED_PROXIES") {
+	if w := (Config{ReportKey: testReportKey}).Warnings(); len(w) != 1 || !strings.Contains(w[0], "TRUSTED_PROXIES") {
 		t.Fatalf("warnings = %v", w)
 	}
-	if w := (Config{TrustedProxies: []string{"10.0.0.0/8"}}).Warnings(); len(w) != 0 {
+	if w := (Config{TrustedProxies: []string{"10.0.0.0/8"}, ReportKey: testReportKey}).Warnings(); len(w) != 0 {
 		t.Fatalf("warnings = %v", w)
 	}
 	get := func(v string) func(string) string {
 		return func(k string) string {
-			if k == "GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES" {
+			switch k {
+			case "GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES":
 				return v
+			case "GOJIBERRY_DOCSTORE_PUBLIC_REPORT_KEY":
+				return "a report key of some length"
 			}
 			return ""
 		}
@@ -182,8 +186,6 @@ func TestChargeIsRefundedWhenTheWriteIsNotStored(t *testing.T) {
 		o.Blocklist = blocklistContains("bad")
 	})
 	tok, _ := e.session()
-	// refused content (422)
-	e.want(e.do("POST", "/public/doc", tok, append([]byte("bad"), bytes.Repeat([]byte("a"), 77)...)), 422)
 	// a store failure (rollback)
 	fail := true
 	hs.beforePub = func(context.Context, string, []byte) error {
@@ -197,11 +199,14 @@ func TestChargeIsRefundedWhenTheWriteIsNotStored(t *testing.T) {
 	// the budget (100) is whole: 80 fits
 	d := e.create(tok, strings.Repeat("a", 80))
 	_ = d
-	// a refused edit (422) and a failed edit give theirs back too: 20 bytes left in the day
-	e.want(e.do("PUT", "/public/doc", tok, append([]byte("bad"), bytes.Repeat([]byte("a"), 7)...)), 422)
+	// a failed edit gives its charge back too: 20 bytes left in the day
 	fail = true
 	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 10)), 500)
-	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 20)), 204)
+	// content refused for what it is (422) is NOT given back: it was sent, and a client that could
+	// send refused content for free could do it all day
+	e.want(e.do("PUT", "/public/doc", tok, append([]byte("bad"), bytes.Repeat([]byte("a"), 7)...)), 422)
+	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 11)), 429)
+	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 10)), 204)
 	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 1)), 429)
 }
 
@@ -348,9 +353,10 @@ func TestEditWithoutADeadlineRemovesTheDocumentAndRaisesTheAlarm(t *testing.T) {
 	if !strings.Contains(logs.String(), "ALARM") {
 		t.Fatalf("no alarm in the log: %q", logs.String())
 	}
-	r := e.want(e.do("GET", "/public/health", "", nil), 503)
+	e.want(e.do("GET", "/public/health", "", nil), 503)
+	r := e.want(e.do("GET", "/admin/health", "", nil, AdminHeader, adminToken), 503)
 	if !strings.Contains(string(r.body), ProblemNoDeadline) {
-		t.Fatalf("/public/health: %s", r.body)
+		t.Fatalf("/admin/health: %s", r.body)
 	}
 }
 
@@ -379,7 +385,8 @@ func TestHealthExpiryDisabledAtStartup(t *testing.T) {
 	if h.OK || !contains(h.Problems, ProblemExpiryDisabled) {
 		t.Fatalf("health %+v", h)
 	}
-	r := e.want(e.do("GET", "/public/health", "", nil), 503)
+	e.want(e.do("GET", "/public/health", "", nil), 503)
+	r := e.want(e.do("GET", "/admin/health", "", nil, AdminHeader, adminToken), 503)
 	if !strings.Contains(string(r.body), ProblemExpiryDisabled) || strings.Contains(string(r.body), adminToken) {
 		t.Fatalf("body %s", r.body)
 	}
@@ -439,13 +446,16 @@ func TestHealthSweeperStaleAndFailing(t *testing.T) {
 // ---- finding 10: reports are bounded as a whole
 
 func TestReportsAreBoundedGloballyOldestFirst(t *testing.T) {
-	e := newEnv(t, func(o *Options) { o.Config.MaxReports = 10 })
+	e := newEnv(t, func(o *Options) {
+		o.Config.MaxReports = 10
+		o.Config.TrustedProxies = []string{"127.0.0.1"}
+	})
 	var ids []string
 	for i := 0; i < 3; i++ {
 		tok, _ := e.session()
 		d := e.create(tok, "x")
 		for j := 0; j < 6; j++ {
-			r := e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"r"}`)), 202)
+			r := e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"r"}`), "X-Forwarded-For", fmt.Sprintf("203.0.113.%d", i*6+j+1)), 202)
 			var out map[string]string
 			_ = json.Unmarshal(r.body, &out)
 			ids = append(ids, out["reportId"])
@@ -470,7 +480,7 @@ func TestReportBytesAreBounded(t *testing.T) {
 	d := e.create(tok, "x")
 	reason := strings.Repeat("r", 300)
 	for i := 0; i < 15; i++ {
-		e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"`+reason+`"}`)), 202)
+		e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"`+reason+fmt.Sprint(i)+`"}`)), 202)
 	}
 	var total int
 	for _, k := range e.keys("report/") {

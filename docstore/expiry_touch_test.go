@@ -449,3 +449,29 @@ func TestWithConfiguredExpiry(t *testing.T) {
 	}
 	var _ Renewer = ea // what collabhub passes to the hub
 }
+
+func TestOnSaveSeesSavesAndConditionalSavesNotTouches(t *testing.T) {
+	ctx := context.Background()
+	ea := NewExpiringAdapter(NewMemoryAdapter(), FixedTTL(time.Hour))
+	type saved struct {
+		id   string
+		size int
+	}
+	var got []saved
+	ea.OnSave = func(id string, size int) { got = append(got, saved{id, size}) }
+	if err := ea.Save(ctx, "a", []byte("12345")); err != nil {
+		t.Fatal(err)
+	}
+	if err := ea.SaveIf(ctx, "b", []byte("123"), ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := ea.SaveIf(ctx, "b", []byte("1"), "wrong digest"); err == nil {
+		t.Fatal("conflict expected")
+	}
+	if err := ea.Touch(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != (saved{"a", 5}) || got[1] != (saved{"b", 3}) {
+		t.Fatalf("OnSave saw %v, want the two successful writes", got)
+	}
+}

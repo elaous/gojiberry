@@ -1,0 +1,1199 @@
+package public
+
+import (
+	"bytes"
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/elaous/gojiberry/docstore"
+)
+
+// ---- 1. the in-flight bytes have a share per client and per network, and slow uploads cost quota
+
+// holdUploadAs is holdUpload for a client behind the trusted proxy (X-Forwarded-For).
+func holdUploadAs(t *testing.T, e *env, token string, n int, ip string) net.Conn {
+	t.Helper()
+	conn, err := net.Dial("tcp", strings.TrimPrefix(e.srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	fmt.Fprintf(conn, "POST /public/doc HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer %s\r\nX-Forwarded-For: %s\r\nContent-Length: %d\r\n\r\nabc", token, ip, n)
+	return conn
+}
+
+func TestSlowWritersFromSeveralAddressesCannotUseUpTheInflightCap(t *testing.T) {
+	e := newEnv(t, func(o *Options) {
+		behindProxy(o)
+		o.Config.MaxDocBytes = 1000
+		o.Config.MaxInflightBytes = 8000 // defaults: 1000 per client (cap/8), 2000 per network (cap/4)
+		o.Config.RequestTimeout = time.Minute
+	})
+	if c := e.svc.cfg; c.MaxInflightPerClient != 1000 || c.MaxInflightPerNet != 2000 {
+		t.Fatalf("default shares %d and %d", c.MaxInflightPerClient, c.MaxInflightPerNet)
+	}
+	tokenFor := func(ip string) string {
+		tok, _ := e.session(xff(ip)...)
+		return tok
+	}
+	// six attackers, each in its own network, each slowly sending a declared 1000 bytes
+	attackers := []string{"203.0.113.1", "198.51.100.1", "192.0.2.1", "100.64.0.1", "100.65.0.1", "2001:db8:a::1"}
+	for _, ip := range attackers {
+		holdUploadAs(t, e, tokenFor(ip), 1000, ip)
+	}
+	waitFor(t, "the six uploads to be admitted", func() bool { return e.svc.flight.held() == 6000 })
+	// an attacker that opens a second connection finds its share used (429), not the global cap
+	r := e.want(e.do("POST", "/public/doc", tokenFor("203.0.113.1"), bytes.Repeat([]byte("x"), 1000), xff("203.0.113.1")...), 429)
+	if r.Header.Get("Retry-After") == "" {
+		t.Fatal("no Retry-After")
+	}
+	// a second address in the same /24 still has the network's share (2000) ...
+	holdUploadAs(t, e, tokenFor("203.0.113.2"), 1000, "203.0.113.2")
+	waitFor(t, "the seventh upload", func() bool { return e.svc.flight.held() == 7000 })
+	// ... a third does not (429): the network holds 2000
+	e.want(e.do("POST", "/public/doc", tokenFor("203.0.113.3"), bytes.Repeat([]byte("x"), 1000), xff("203.0.113.3")...), 429)
+	// and everybody else's writes still go through: the global cap was never used up
+	e.want(e.do("POST", "/public/doc", tokenFor("100.99.0.1"), bytes.Repeat([]byte("y"), 1000), xff("100.99.0.1")...), 201)
+	if got := e.svc.flight.held(); got != 7000 {
+		t.Fatalf("%d bytes in flight, want the attackers' 7000", got)
+	}
+}
+
+func TestInflightSharesAreBoundedByTheirDefaultsAndValidated(t *testing.T) {
+	c := Config{}.withDefaults()
+	if c.MaxInflightPerClient != DefaultMaxInflightBytes/8 || c.MaxInflightPerNet != DefaultMaxInflightBytes/4 {
+		t.Fatalf("defaults %d %d", c.MaxInflightPerClient, c.MaxInflightPerNet)
+	}
+	// never below one document
+	c = Config{MaxDocBytes: 100, MaxInflightBytes: 400}.withDefaults()
+	if c.MaxInflightPerClient != 100 || c.MaxInflightPerNet != 100 {
+		t.Fatalf("%d %d", c.MaxInflightPerClient, c.MaxInflightPerNet)
+	}
+	if err := (Config{MaxDocBytes: 100, MaxInflightBytes: 400, MaxInflightPerClient: 99}).withDefaults().Validate(); err == nil {
+		t.Fatal("a per-client share below the document cap accepted")
+	}
+	get := func(env map[string]string) (Config, error) { return FromEnv(func(k string) string { return env[k] }) }
+	got, err := get(map[string]string{
+		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_INFLIGHT_PER_CLIENT": "5000000",
+		"GOJIBERRY_DOCSTORE_PUBLIC_MAX_INFLIGHT_PER_NET":    "9000000",
+		"GOJIBERRY_DOCSTORE_PUBLIC_MIN_UPLOAD_RATE":         "50000",
+		"GOJIBERRY_DOCSTORE_PUBLIC_UPLOAD_GRACE":            "2s",
+	})
+	if err != nil || got.MaxInflightPerClient != 5000000 || got.MaxInflightPerNet != 9000000 || got.MinUploadRate != 50000 || got.UploadGrace != 2*time.Second {
+		t.Fatalf("%+v %v", got, err)
+	}
+	for _, k := range []string{"MAX_INFLIGHT_PER_CLIENT", "MAX_INFLIGHT_PER_NET", "MIN_UPLOAD_RATE", "UPLOAD_GRACE"} {
+		if _, err := get(map[string]string{"GOJIBERRY_DOCSTORE_PUBLIC_" + k: "-1"}); err == nil || !strings.Contains(err.Error(), k) {
+			t.Errorf("%s: %v", k, err)
+		}
+	}
+	var f inflight
+	f.max, f.perClient, f.perNet = 100, 30, 50
+	if f.acquire("a", "n", 30) != flightOK || f.acquire("a", "n", 1) != flightClient {
+		t.Fatal("per client")
+	}
+	if f.acquire("b", "n", 20) != flightOK || f.acquire("c", "n", 1) != flightNet {
+		t.Fatal("per net")
+	}
+	if f.acquire("d", "m", 60) != flightGlobal || f.acquire("d", "m", 31) != flightClient || f.acquire("d", "m", 30) != flightOK || f.acquire("e", "k", 20) != flightOK || f.acquire("e", "k", 1) != flightGlobal {
+		t.Fatal("mixed")
+	}
+	f.release("a", "n", 30)
+	if f.heldBy("a") != 0 {
+		t.Fatal("not released")
+	}
+}
+
+func TestATimedOutOrAbandonedUploadStaysChargedButServerFailuresAreRefunded(t *testing.T) {
+	e := newEnv(t, func(o *Options) {
+		o.Config.IPDailyBytes = 10000
+		o.Config.MaxDocBytes = 4000
+		o.Config.RequestTimeout = 300 * time.Millisecond
+	})
+	tok, _ := e.session()
+	// a body that stops arriving: 408, and the declared 1000 bytes were paid for
+	st, answered := rawRequest(t, e, "POST", "/public/doc", tok, 1000, "abc", 5*time.Second)
+	if !answered || !strings.Contains(st, "408") {
+		t.Fatalf("slow create: %q (answered %v)", st, answered)
+	}
+	if used := quotaUsed(e, "ip:127.0.0.1"); used != 1000 {
+		t.Fatalf("a timed-out upload left %d bytes charged, want the declared 1000", used)
+	}
+	waitFor(t, "the claim to end", func() bool { return e.svc.flight.held() == 0 })
+	// a client that goes away in the middle pays too
+	conn := holdUpload(t, e, tok, 2000)
+	waitFor(t, "the upload to be admitted", func() bool { return e.svc.flight.held() == 2000 })
+	conn.Close()
+	waitFor(t, "the claim to end", func() bool { return e.svc.flight.held() == 0 })
+	waitFor(t, "the charge", func() bool { return quotaUsed(e, "ip:127.0.0.1") == 3000 })
+	// a daily budget that is used up this way refuses the next upload up front
+	for i := 0; i < 7; i++ {
+		rawRequest(t, e, "POST", "/public/doc", tok, 1000, "abc", 5*time.Second)
+	}
+	e.want(e.do("POST", "/public/doc", tok, []byte("hello")), 429)
+}
+
+func TestSlowUploadsAreCutOffAtTheMinimumRate(t *testing.T) {
+	e := newEnv(t, func(o *Options) {
+		o.Config.MaxDocBytes = 1 << 20
+		o.Config.RequestTimeout = 20 * time.Second
+		o.Config.UploadGrace = 200 * time.Millisecond
+		o.Config.MinUploadRate = 1000000
+	})
+	tok, _ := e.session()
+	// a client that sends 3 bytes of a declared 100,000 and then nothing is answered 408 right
+	// after the grace, not after the request timeout
+	start := time.Now()
+	st, answered := rawRequest(t, e, "POST", "/public/doc", tok, 100000, "abc", 10*time.Second)
+	if !answered || !strings.Contains(st, "408") {
+		t.Fatalf("stalled upload: %q (answered %v)", st, answered)
+	}
+	if d := time.Since(start); d > 3*time.Second {
+		t.Fatalf("the stalled upload held its claim for %v", d)
+	}
+	if used := quotaUsed(e, "ip:127.0.0.1"); used != 100000 {
+		t.Fatalf("charged %d, want the declared 100000", used)
+	}
+	// a trickle (100 bytes every 50 ms) is far below 1 MB/s: cut off early too
+	conn, err := net.Dial("tcp", strings.TrimPrefix(e.srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	fmt.Fprintf(conn, "POST /public/doc HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer %s\r\nContent-Length: 100000\r\n\r\n", tok)
+	start = time.Now()
+	done := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 64)
+		n, _ := conn.Read(buf)
+		done <- string(buf[:n])
+	}()
+	tick := time.NewTicker(50 * time.Millisecond)
+	defer tick.Stop()
+loop:
+	for {
+		select {
+		case got := <-done:
+			if !strings.Contains(got, "408") {
+				t.Fatalf("trickle: %q", got)
+			}
+			break loop
+		case <-tick.C:
+			_, _ = conn.Write(bytes.Repeat([]byte("z"), 100))
+			if time.Since(start) > 5*time.Second {
+				t.Fatal("the trickle was not cut off")
+			}
+		}
+	}
+	// a client at speed is not affected, and small bodies are left to the request timeout
+	e.want(e.do("POST", "/public/doc", tok, bytes.Repeat([]byte("a"), 100000)), 201)
+	e.want(e.do("PUT", "/public/doc", tok, []byte("small")), 204)
+	// a negative rate turns the minimum off
+	e2 := newEnv(t, func(o *Options) { o.Config.MinUploadRate = -1 })
+	if e2.svc.cfg.MinUploadRate >= 0 {
+		t.Fatal("negative rate not kept")
+	}
+}
+
+// ---- 2. admin: a minimum token length, failures per network and in all, a cooldown, a burst log
+
+func TestAdminTokenMustBeLongEnoughUnlessExplicitlyAllowed(t *testing.T) {
+	mk := func(token string, allow bool) error {
+		_, err := New(Options{Store: docstore.NewExpiringAdapter(docstore.NewMemoryAdapter(), docstore.FixedTTL(24*hour)),
+			Config: Config{AdminToken: token, NoProxy: true, AllowShortAdminToken: allow, ReportKey: testReportKey}})
+		return err
+	}
+	if err := mk("fifteen-chars-xx", false); err != nil { // 16
+		t.Fatalf("16 characters refused: %v", err)
+	}
+	if err := mk(strings.Repeat("a", 15), false); !errors.Is(err, ErrAdminTokenTooShort) {
+		t.Fatalf("15 characters: %v", err)
+	}
+	if err := mk("short", true); err != nil {
+		t.Fatalf("explicit override refused: %v", err)
+	}
+	if err := mk("", false); err != nil {
+		t.Fatalf("no token, no route: %v", err)
+	}
+	get := func(env map[string]string) (Config, error) { return FromEnv(func(k string) string { return env[k] }) }
+	if _, err := get(map[string]string{"GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN": "short"}); err == nil || !strings.Contains(err.Error(), "ADMIN_TOKEN") || !strings.Contains(err.Error(), "ALLOW_SHORT_ADMIN_TOKEN") {
+		t.Fatalf("a short token from the environment: %v", err)
+	}
+	c, err := get(map[string]string{"GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN": "short", "GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_SHORT_ADMIN_TOKEN": "true"})
+	if err != nil || !c.AllowShortAdminToken {
+		t.Fatalf("override: %+v %v", c, err)
+	}
+	w := c.Warnings()
+	found := false
+	for _, x := range w {
+		found = found || (strings.Contains(x, "ALLOW_SHORT_ADMIN_TOKEN") && strings.Contains(x, "GUESSED ONLINE"))
+	}
+	if !found {
+		t.Fatalf("no loud warning: %v", w)
+	}
+	if _, err := get(map[string]string{"GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_SHORT_ADMIN_TOKEN": "maybe"}); err == nil {
+		t.Fatal("a bad boolean accepted")
+	}
+}
+
+func adminGuess(e *env, ip, token string) int {
+	e.t.Helper()
+	return e.do("DELETE", "/admin/takedown/"+strings.Repeat("C", 22), "", nil, append(xff(ip), AdminHeader, token)...).StatusCode
+}
+
+func TestAdminFailuresAreAlsoCountedPerNetwork(t *testing.T) {
+	e := newEnv(t, behindProxy)
+	// one attacker holds a /48 (65,536 /64s) and guesses once from each of 200 of them: no /64 is
+	// near its own 20, the /48 as a whole has 60
+	got := map[int]int{}
+	for i := 0; i < 200; i++ {
+		got[adminGuess(e, fmt.Sprintf("2001:db8:aaaa:%x::1", i), fmt.Sprint("guess", i))]++
+	}
+	if got[403] != 60 || got[429] != 140 {
+		t.Fatalf("the /48 got %v, want 60 failures and the rest limited", got)
+	}
+	// the operator is never held back, from that network or any other
+	e.want(e.do("DELETE", "/admin/takedown/"+strings.Repeat("D", 22), "", nil, append(xff("2001:db8:aaaa:ffff::1"), AdminHeader, adminToken)...), 202)
+	// another network has its own budget
+	if st := adminGuess(e, "2001:db8:bbbb::1", "nope"); st != 403 {
+		t.Fatalf("another network: %d", st)
+	}
+	// an IPv4 /24 is the same: 80 hosts, 60 failures
+	got = map[int]int{}
+	for i := 1; i <= 80; i++ {
+		got[adminGuess(e, fmt.Sprintf("198.51.100.%d", i), "nope")]++
+	}
+	if got[403] != 60 || got[429] != 20 {
+		t.Fatalf("the /24 got %v", got)
+	}
+}
+
+func TestAdminGlobalFailureBudgetPutsWrongTokensIntoACooldown(t *testing.T) {
+	logs := captureLog(t)
+	e := newEnv(t, behindProxy)
+	fresh := func(i int) string { return fmt.Sprintf("10.%d.%d.1", i/256, i%256) } // a network of its own each
+	for i := 0; i < 300; i++ {
+		if st := adminGuess(e, fresh(i), "guess"); st != 403 {
+			t.Fatalf("failure %d: %d", i, st)
+		}
+	}
+	// the 301st failure anywhere finds the global budget used up: cooldown
+	r := e.do("DELETE", "/admin/takedown/"+strings.Repeat("C", 22), "", nil, append(xff(fresh(300)), AdminHeader, "guess")...)
+	if r.StatusCode != 429 || r.Header.Get("Retry-After") == "" {
+		t.Fatalf("after the global budget: %d", r.StatusCode)
+	}
+	if !strings.Contains(logs.String(), "ALARM: failed admin authentications") {
+		t.Fatalf("no alarm in the log: %s", logs.String())
+	}
+	// during the cooldown every wrong token is 429, even from a network that never failed ...
+	if st := adminGuess(e, "172.16.5.5", "other guess"); st != 429 {
+		t.Fatalf("new network during the cooldown: %d", st)
+	}
+	// ... but a matching token is never throttled
+	e.want(e.do("DELETE", "/admin/takedown/"+strings.Repeat("E", 22), "", nil, append(xff("172.16.5.5"), AdminHeader, adminToken)...), 202)
+	e.want(e.do("GET", "/admin/health", "", nil, append(xff(fresh(1)), AdminHeader, adminToken)...), 200)
+	// the budget refills at 5 a second, but the cooldown holds for its 30 seconds
+	e.clk.Add(10 * time.Second)
+	if st := adminGuess(e, "172.16.7.7", "guess"); st != 429 {
+		t.Fatalf("10 seconds into the cooldown: %d", st)
+	}
+	// 30 seconds after it began the route answers wrong tokens 403 again
+	e.clk.Add(AdminCooldown)
+	if st := adminGuess(e, "172.16.9.9", "guess"); st != 403 {
+		t.Fatalf("after the cooldown: %d", st)
+	}
+}
+
+func TestAdminFailureBurstIsLogged(t *testing.T) {
+	logs := captureLog(t)
+	e := newEnv(t, behindProxy)
+	for i := 0; i < adminBurst-1; i++ {
+		adminGuess(e, fmt.Sprintf("10.1.%d.1", i), "nope")
+	}
+	if strings.Contains(logs.String(), "failed admin authentications within a minute") {
+		t.Fatal("logged before the burst")
+	}
+	adminGuess(e, "10.2.0.1", "nope")
+	adminGuess(e, "10.2.1.1", "nope")
+	if n := strings.Count(logs.String(), "failed admin authentications within a minute"); n != 1 {
+		t.Fatalf("burst logged %d times: %s", n, logs.String())
+	}
+	e.clk.Add(2 * time.Minute)
+	for i := 0; i < adminBurst; i++ {
+		adminGuess(e, fmt.Sprintf("10.3.%d.1", i), "nope")
+	}
+	if n := strings.Count(logs.String(), "failed admin authentications within a minute"); n != 2 {
+		t.Fatalf("second burst: logged %d times", n)
+	}
+}
+
+// ---- 3. a client that goes away must not fail the first reconcile for everybody
+
+func TestClientDisconnectDuringTheFirstReconcileDoesNotFailItForEveryone(t *testing.T) {
+	logs := captureLog(t)
+	e, hs := envWith(t, nil)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	hs.listHook = func(ctx context.Context) error {
+		once.Do(func() {
+			close(entered)
+			<-release
+			// a store that honours its context notices the client's departure a moment later
+			select {
+			case <-ctx.Done():
+			case <-time.After(300 * time.Millisecond):
+			}
+		})
+		return ctx.Err()
+	}
+	a, _ := e.session()
+	b, _ := e.session()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		req, _ := http.NewRequestWithContext(ctx, "POST", e.srv.URL+"/public/doc", strings.NewReader("hello"))
+		req.Header.Set("Authorization", "Bearer "+a)
+		if r, err := http.DefaultClient.Do(req); err == nil {
+			r.Body.Close()
+		}
+	}()
+	t.Cleanup(func() {
+		once.Do(func() {})
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	<-entered // the first write is reconciling the counters
+	cancel()  // and its client leaves
+	time.Sleep(100 * time.Millisecond)
+	close(release)
+	// the reconcile was not the departing client's: another client's write goes through at once
+	// (a reconcile that died with its client would have put everyone into a 15 second backoff)
+	e.want(e.do("POST", "/public/doc", b, []byte("hello")), 201)
+	if strings.Contains(logs.String(), "writes are refused") {
+		t.Fatalf("the first reconcile failed: %s", logs.String())
+	}
+}
+
+// The same through ensureCounters itself: the request that happens to start the reconcile is
+// cancelled (an HTTP/2 stream reset, or a body already read and the connection gone).
+func TestCancellingTheRequestThatStartedTheFirstReconcileDoesNotFailItForOthers(t *testing.T) {
+	logs := captureLog(t)
+	e, hs := envWith(t, nil)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	hs.listHook = func(ctx context.Context) error {
+		once.Do(func() {
+			close(entered)
+			<-release
+		})
+		return ctx.Err() // a store that honours its context
+	}
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	first := make(chan bool, 1)
+	go func() { first <- e.svc.ensureCounters(ctx) }()
+	<-entered
+	cancel() // the starter's client leaves while the store is being listed
+	close(release)
+	if ok := <-first; !ok {
+		t.Fatalf("the reconcile died with the request that started it: %s", logs.String())
+	}
+	if !e.svc.ensureCounters(context.Background()) {
+		t.Fatal("everybody else is in the backoff")
+	}
+}
+
+func TestWaitersOnTheFirstReconcileAreBoundedByTheirOwnContext(t *testing.T) {
+	e, hs := envWith(t, nil)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	hs.listHook = func(context.Context) error {
+		once.Do(func() { close(entered); <-release })
+		return nil
+	}
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	first := make(chan bool, 1)
+	go func() { first <- e.svc.ensureCounters(context.Background()) }()
+	<-entered
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	waited := make(chan bool, 1)
+	go func() { waited <- e.svc.ensureCounters(ctx) }()
+	select {
+	case ok := <-waited:
+		if ok {
+			t.Fatal("a waiter was told the counters are ready")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("a waiter stayed behind the reconcile past its own deadline")
+	}
+	close(release)
+	if ok := <-first; !ok {
+		t.Fatal("the reconcile failed")
+	}
+	if !e.svc.ensureCounters(context.Background()) {
+		t.Fatal("the counters are not ready after the reconcile")
+	}
+}
+
+// ---- 4. a third prefix level and a reserve judged at the coarsest
+
+func TestWideKey(t *testing.T) {
+	for in, want := range map[string]string{
+		"203.0.113.5":             "203.0.0.0/16",
+		"::ffff:203.0.113.77":     "203.0.0.0/16",
+		"2001:db8:1:2::1":         "2001:db8::/32",
+		"2001:DB8:ffff:1:2:3:4:5": "2001:db8::/32",
+		"Not An Address":          "not an address",
+	} {
+		if got := WideKey(in); got != want {
+			t.Errorf("WideKey(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestSlash32FloodCannotFillTheGlobalCap(t *testing.T) {
+	sessions := NewMemorySessionStore(200)
+	e := newEnv(t, func(o *Options) {
+		behindProxy(o)
+		o.Sessions = sessions
+		o.Config.MaxSessions = 200
+		o.Config.MaxSessionsPerAddress = 2
+		o.Config.MaxSessionsPerNet = 6
+		o.Config.MaxSessionsPerWide = 20
+	})
+	// an attacker holding 2001:db8::/32 starts a session from each of 100 different /48s: no /48
+	// is near its cap of 6, the /32 as a whole has 20
+	got := map[int]int{}
+	for i := 0; i < 100; i++ {
+		got[sessionStatus(e, fmt.Sprintf("2001:db8:%x::1", 0x100+i))]++
+	}
+	if got[201] != 20 || got[429] != 80 {
+		t.Fatalf("the /32 got %v, want 20 sessions and the rest 429", got)
+	}
+	// IPv4: one /16
+	got = map[int]int{}
+	for i := 0; i < 40; i++ {
+		got[sessionStatus(e, fmt.Sprintf("198.51.%d.1", i))]++
+	}
+	if got[201] != 20 || got[429] != 20 {
+		t.Fatalf("the /16 got %v", got)
+	}
+	// other wide networks are unaffected
+	for _, ip := range []string{"2001:db9::1", "192.0.2.1", "203.0.113.9"} {
+		if st := sessionStatus(e, ip); st != 201 {
+			t.Fatalf("%s: %d", ip, st)
+		}
+	}
+	if c := (Config{MaxSessions: 50, MaxSessionsPerNet: 20, MaxSessionsPerWide: 5}).withDefaults(); c.MaxSessionsPerWide != 20 {
+		t.Fatalf("wide cap %d below the net cap", c.MaxSessionsPerWide)
+	}
+	if c := (Config{MaxSessions: 50, MaxSessionsPerWide: 500}).withDefaults(); c.MaxSessionsPerWide != 50 {
+		t.Fatalf("wide cap %d above the global cap", c.MaxSessionsPerWide)
+	}
+	get2, err := FromEnv(func(k string) string {
+		if k == "GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS_PER_WIDE" {
+			return "77"
+		}
+		return ""
+	})
+	if err != nil || get2.MaxSessionsPerWide != 77 {
+		t.Fatalf("%+v %v", get2, err)
+	}
+}
+
+func TestTheReserveIsJudgedAtTheCoarsestLevel(t *testing.T) {
+	sessions := NewMemorySessionStore(50)
+	e := newEnv(t, func(o *Options) {
+		behindProxy(o)
+		o.Sessions = sessions
+		o.Config.MaxSessions = 50
+		o.Config.MaxSessionsPerAddress = 2
+		o.Config.MaxSessionsPerNet = 6
+		o.Config.MaxSessionsPerWide = 50 // no third-level cap in the way: the reserve alone is under test
+	})
+	// the open 40 are used by an attacker in 2001:db8::/32 across seven /48s
+	for p := 0; p < 7; p++ {
+		for i := 0; i < 6 && sessions.Len() < 40; i++ {
+			sessionStatus(e, fmt.Sprintf("2001:db8:%x:%x::1", 0x100+p, i))
+		}
+	}
+	if sessions.Len() != 40 {
+		t.Fatalf("%d sessions", sessions.Len())
+	}
+	// a /48 of its own, inside the same /32, is not a newcomer: the reserve is not for it
+	if st := sessionStatus(e, "2001:db8:ffff::1"); st != 503 {
+		t.Fatalf("a fresh /48 of a /32 that holds sessions got %d in the reserve, want 503", st)
+	}
+	// a visitor from another /32 (or another /16) is
+	for _, ip := range []string{"2001:dc9::1", "198.51.100.1", "203.0.113.1"} {
+		if st := sessionStatus(e, ip); st != 201 {
+			t.Fatalf("a newcomer from %s got %d", ip, st)
+		}
+	}
+	// the same at the store: a session with only a Net is judged by its Net
+	ctx := context.Background()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	st := NewMemorySessionStore(10)
+	caps := SessionCaps{PerWide: 8, ReservePercent: 20}
+	for i := 0; i < 8; i++ {
+		if err := st.Create(ctx, fmt.Sprint("a", i), Session{Net: fmt.Sprint("N", i), Wide: "W1", Expires: now.Add(time.Hour)}, now, SessionCaps{ReservePercent: 20}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.Create(ctx, "x", Session{Net: "N-new", Wide: "W1", Expires: now.Add(time.Hour)}, now, caps); err != ErrWideSessionsFull {
+		t.Fatalf("the wide cap: %v", err)
+	}
+	if err := st.Create(ctx, "y", Session{Net: "N-new", Wide: "W1", Expires: now.Add(time.Hour)}, now, SessionCaps{ReservePercent: 20}); err != ErrSessionsFull {
+		t.Fatalf("a new net in a known wide prefix inside the reserve: %v", err)
+	}
+	if err := st.Create(ctx, "z", Session{Net: "N-new", Wide: "W2", Expires: now.Add(time.Hour)}, now, SessionCaps{ReservePercent: 20}); err != nil {
+		t.Fatalf("a new wide prefix inside the reserve: %v", err)
+	}
+}
+
+// ---- 5. priority reports: a fixed category, caps, and a flag for the operator
+
+func (e *env) storedReport(id string) Report { return e.mustReport(id) }
+
+func reportID(t *testing.T, r resp) string {
+	t.Helper()
+	var m map[string]string
+	if err := json.Unmarshal(r.body, &m); err != nil {
+		t.Fatal(err)
+	}
+	return m["reportId"]
+}
+
+func TestOnlyTheCategoryMakesAReportAPriorityOne(t *testing.T) {
+	e := newEnv(t, behindProxy)
+	tok, _ := e.session()
+	d := e.create(tok, "x")
+	for i := 0; i < maxReportsOfDoc; i++ {
+		e.want(e.report(d.ViewID, "meh", fmt.Sprintf("203.0.113.%d", i+1)), 202)
+	}
+	// the word "csam" in the free text, with no category (or with another one), is not priority:
+	// the full document refuses it
+	e.want(e.report(d.ViewID, "csam", "198.51.100.1"), 202)
+	e.want(e.reportCat(d.ViewID, CategorySpam, "illegal csam", "198.51.100.2"), 202)
+	for _, r := range e.reportsOf(d.ID) {
+		if r.Priority || strings.Contains(strings.ToLower(r.Reason), "csam") {
+			t.Fatalf("free text made a priority report: %+v", r)
+		}
+	}
+	// the category does, and an unknown one is "other"
+	id := reportID(t, e.want(e.reportCat(d.ViewID, " CSAM", "see it", "198.51.100.3"), 202))
+	if r := e.storedReport(id); !r.Priority || r.Category != CategoryCSAM {
+		t.Fatalf("%+v", r)
+	}
+	e.want(e.reportCat(d.ViewID, "terrorism", "x", "198.51.100.4"), 202)
+	e.want(e.reportCat(d.ViewID, "{\"a\":1}", "y", "198.51.100.5"), 202)
+	for _, r := range e.reportsOf(d.ID) {
+		if !validCategory(r.Category) {
+			t.Fatalf("category %q stored", r.Category)
+		}
+	}
+	// a fresh document: an unknown category is stored as "other"
+	tok2, _ := e.session()
+	d2 := e.create(tok2, "y")
+	id = reportID(t, e.want(e.reportCat(d2.ViewID, "terrorism", "x", "198.51.100.6"), 202))
+	if r := e.storedReport(id); r.Category != CategoryOther || r.Priority {
+		t.Fatalf("%+v", r)
+	}
+	id = reportID(t, e.want(e.report(d2.ViewID, "no category at all", "198.51.100.7"), 202))
+	if r := e.storedReport(id); r.Category != CategoryOther {
+		t.Fatalf("%+v", r)
+	}
+	if got := fmt.Sprint(ReportCategories); got != "[csam illegal spam other]" {
+		t.Fatal(got)
+	}
+	// the category is part of the dedupe: the same reporter and text in another category is new
+	d3 := e.create(func() string { tk, _ := e.session(); return tk }(), "z")
+	a := reportID(t, e.want(e.reportCat(d3.ViewID, CategorySpam, "same words", "198.51.100.8"), 202))
+	b := reportID(t, e.want(e.reportCat(d3.ViewID, CategorySpam, "same words", "198.51.100.8"), 202))
+	c := reportID(t, e.want(e.reportCat(d3.ViewID, CategoryIllegal, "same words", "198.51.100.8"), 202))
+	if a != b || a == c {
+		t.Fatalf("dedupe over category: %s %s %s", a, b, c)
+	}
+	// the configuration accepts only known categories
+	if _, err := FromEnv(func(k string) string {
+		if k == "GOJIBERRY_DOCSTORE_PUBLIC_REPORT_PRIORITY_CATEGORIES" {
+			return "csam,telepathy"
+		}
+		return ""
+	}); err == nil || !strings.Contains(err.Error(), "REPORT_PRIORITY_CATEGORIES") {
+		t.Fatalf("an unknown priority category: %v", err)
+	}
+}
+
+func TestOneReporterHasADailyCapOnPriorityReports(t *testing.T) {
+	e := newEnv(t, behindProxy)
+	var docs []docResponse
+	for i := 0; i < 5; i++ {
+		tok, _ := e.session()
+		docs = append(docs, e.create(tok, "x"))
+	}
+	prio := func(d docResponse, ip string) bool {
+		return e.storedReport(reportID(t, e.want(e.reportCat(d.ViewID, CategoryCSAM, "this one", ip), 202))).Priority
+	}
+	got := []bool{}
+	for _, d := range docs[:4] {
+		got = append(got, prio(d, "203.0.113.50"))
+	}
+	if fmt.Sprint(got) != "[true true true false]" {
+		t.Fatalf("priority flags of one reporter's reports: %v, want three and then an ordinary one", got)
+	}
+	// the over-cap report is still stored, as an ordinary one
+	if n := len(e.reportsOf(docs[3].ID)); n != 1 {
+		t.Fatalf("%d reports", n)
+	}
+	// another reporter has its own allowance
+	if !prio(docs[4], "198.51.100.9") {
+		t.Fatal("another reporter's priority report was not priority")
+	}
+	// after a day the allowance is back (the clock moves; the stored reports tell the same after a recount)
+	e.clk.Add(23 * time.Hour)
+	tok, _ := e.session()
+	d := e.create(tok, "fresh")
+	e.clk.Add(2 * time.Hour)
+	if !prio(d, "203.0.113.50") {
+		t.Fatal("the daily allowance did not come back")
+	}
+	// a restart (a recount from the stored reports) does not give the allowance back either
+	tok2, _ := e.session()
+	d2 := e.create(tok2, "again")
+	for i := 0; i < 2; i++ {
+		tk, _ := e.session()
+		prio(e.create(tk, "n"), "192.0.2.77")
+	}
+	if _, err := e.svc.Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	e.svc.prio = prioTracker{} // as in a new process
+	if _, err := e.svc.Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !prio(d2, "192.0.2.77") {
+		t.Fatal("the third priority report of the day was not priority")
+	}
+	tk3, _ := e.session()
+	if prio(e.create(tk3, "n"), "192.0.2.77") {
+		t.Fatal("a fourth priority report in a day after a recount")
+	}
+}
+
+func TestPriorityBurstFromOneNetworkIsFlaggedForTheOperator(t *testing.T) {
+	logs := captureLog(t)
+	e := newEnv(t, func(o *Options) { behindProxy(o); o.Config.PriorityBurstDocs = 3 })
+	var docs []docResponse
+	for i := 0; i < 6; i++ {
+		tok, _ := e.session()
+		docs = append(docs, e.create(tok, "x"))
+	}
+	for i, d := range docs[:3] {
+		e.want(e.reportCat(d.ViewID, CategoryIllegal, "x", fmt.Sprintf("203.0.113.%d", i+1)), 202)
+	}
+	if e.svc.Health().PriorityBursts != 0 || strings.Contains(logs.String(), "priority reports for more than") {
+		t.Fatal("flagged at the limit")
+	}
+	// reports for other documents from the same /24 (different clients: the point is the network)
+	e.want(e.reportCat(docs[3].ViewID, CategoryCSAM, "x", "203.0.113.10"), 202)
+	e.want(e.reportCat(docs[4].ViewID, CategoryCSAM, "x", "203.0.113.11"), 202)
+	if h := e.svc.Health(); h.PriorityBursts != 1 || !h.OK {
+		t.Fatalf("health %+v: want one burst and no problem (public health stays 200)", h)
+	}
+	if n := strings.Count(logs.String(), "priority reports for more than 3 different documents"); n != 1 {
+		t.Fatalf("logged %d times: %s", n, logs.String())
+	}
+	if !strings.Contains(string(e.want(e.do("GET", "/admin/health", "", nil, AdminHeader, adminToken), 200).body), `"priorityBursts":1`) {
+		t.Fatal("not in /admin/health")
+	}
+	// ordinary reports and another network do not count
+	e.want(e.report(docs[5].ViewID, "meh", "198.51.100.1"), 202)
+	if e.svc.Health().PriorityBursts != 1 {
+		t.Fatal("an ordinary report counted")
+	}
+	e.clk.Add(61 * time.Minute)
+	if e.svc.Health().PriorityBursts != 0 {
+		t.Fatal("the flag did not age out")
+	}
+}
+
+// ---- 6. evicted reports leave the document's record
+
+// refsOf is the report ids in the document's record, and its report count.
+func refsOf(t *testing.T, e *env, docID string) (ids []string, count int) {
+	t.Helper()
+	d, err := e.inner.Load(context.Background(), docRecordPrefix+docID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m docMeta
+	if err := json.Unmarshal(d.Data, &m); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range m.ReportRefs {
+		ids = append(ids, r.ID)
+	}
+	return ids, m.Reports
+}
+
+func liveReportIDs(e *env, docID string) map[string]bool {
+	out := map[string]bool{}
+	for _, r := range e.reportsOf(docID) {
+		out[r.ID] = true
+	}
+	return out
+}
+
+func TestEvictedReportsLeaveTheDocumentsRecordAndDedupeNeverAnswersADeletedID(t *testing.T) {
+	e := newEnv(t, func(o *Options) {
+		behindProxy(o)
+		o.Config.MaxReports = 10
+		o.Config.ReportReservePercent = -1
+		o.Config.ReportReservedPerDoc = -1
+	})
+	tokA, _ := e.session()
+	tokB, _ := e.session()
+	a, b := e.create(tokA, "a"), e.create(tokB, "b")
+	first := reportID(t, e.want(e.report(a.ViewID, "spam", "203.0.113.1"), 202)) // the oldest report of all
+	e.clk.Add(time.Second)
+	for i := 2; i <= 8; i++ {
+		e.want(e.report(a.ViewID, fmt.Sprintf("a%d", i), fmt.Sprintf("203.0.113.%d", i)), 202)
+		e.clk.Add(time.Second)
+	}
+	for i := 1; i <= 8; i++ {
+		e.want(e.report(b.ViewID, fmt.Sprintf("b%d", i), fmt.Sprintf("198.51.100.%d", i)), 202)
+		e.clk.Add(time.Second)
+		time.Sleep(time.Millisecond)
+	}
+	if n := len(e.keys("report/")); n > 10 {
+		t.Fatalf("%d reports stored, bound 10", n)
+	}
+	// the oldest was evicted from the store ...
+	if contains(e.keys("report/"), "report/"+first) {
+		t.Fatal("the oldest report was not evicted; the test needs it to be")
+	}
+	// ... and from its document's record: no references to reports that are gone
+	for _, d := range []docResponse{a, b} {
+		ids, count := refsOf(t, e, d.ID)
+		live := liveReportIDs(e, d.ID)
+		for _, id := range ids {
+			if !live[id] {
+				t.Fatalf("document %s keeps a reference to the deleted report %s", d.ID[:4], id)
+			}
+		}
+		if count != len(live) || len(ids) != len(live) {
+			t.Fatalf("document record counts %d (%d refs), live reports %d", count, len(ids), len(live))
+		}
+	}
+	// the evicted reporter says the same thing again: a new report, not the deleted one's id
+	again := reportID(t, e.want(e.report(a.ViewID, "spam", "203.0.113.1"), 202))
+	if again == first {
+		t.Fatal("the duplicate check answered with the id of a deleted report")
+	}
+	if !contains(e.keys("report/"), "report/"+again) {
+		t.Fatal("the answered report id does not exist")
+	}
+}
+
+func TestGhostReferencesDoNotCountAgainstTheDocumentsSlots(t *testing.T) {
+	e := newEnv(t, behindProxy)
+	tok, _ := e.session()
+	d := e.create(tok, "x")
+	for i := 1; i <= maxReportsOfDoc; i++ {
+		e.want(e.report(d.ViewID, fmt.Sprintf("r%d", i), fmt.Sprintf("203.0.113.%d", i)), 202)
+	}
+	// the reports vanish without the record hearing of it (another replica's eviction, a crash)
+	for _, k := range e.keys("report/") {
+		if err := e.inner.Delete(context.Background(), k); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// the document's 20 slots are free again for what is actually stored
+	id := reportID(t, e.want(e.report(d.ViewID, "new", "198.51.100.1"), 202))
+	if !contains(e.keys("report/"), "report/"+id) {
+		t.Fatal("a document full of references to deleted reports refused a report")
+	}
+	ids, count := refsOf(t, e, d.ID)
+	if len(ids) != 1 || count != 1 {
+		t.Fatalf("record keeps %d refs, count %d, want 1 and 1", len(ids), count)
+	}
+}
+
+func TestDuplicateCheckIgnoresAReferenceToAReportThatIsGone(t *testing.T) {
+	e := newEnv(t, behindProxy)
+	tok, _ := e.session()
+	d := e.create(tok, "x")
+	old := reportID(t, e.want(e.report(d.ViewID, "spam", "203.0.113.1"), 202))
+	if err := e.inner.Delete(context.Background(), "report/"+old); err != nil { // gone behind the record's back
+		t.Fatal(err)
+	}
+	again := reportID(t, e.want(e.report(d.ViewID, "spam", "203.0.113.1"), 202))
+	if again == old || !contains(e.keys("report/"), "report/"+again) {
+		t.Fatalf("the duplicate check answered %s (the deleted report was %s)", again, old)
+	}
+	if ids, count := refsOf(t, e, d.ID); len(ids) != 1 || ids[0] != again || count != 1 {
+		t.Fatalf("record refs %v, count %d", ids, count)
+	}
+}
+
+func TestReportsPastTheirTTLLeaveTheDocumentsRecord(t *testing.T) {
+	e := newEnv(t, func(o *Options) { behindProxy(o); o.Config.ReportTTL = time.Hour })
+	tok, _ := e.session()
+	d := e.create(tok, "x")
+	for i := 1; i <= 4; i++ {
+		e.want(e.report(d.ViewID, fmt.Sprintf("r%d", i), fmt.Sprintf("203.0.113.%d", i)), 202)
+	}
+	e.clk.Add(2 * time.Hour)
+	if _, err := e.svc.Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(e.keys("report/")); n != 0 {
+		t.Fatalf("%d reports after the TTL", n)
+	}
+	ids, count := refsOf(t, e, d.ID)
+	if len(ids) != 0 || count != 0 {
+		t.Fatalf("the record keeps %d references after their reports were deleted (count %d)", len(ids), count)
+	}
+}
+
+// ---- 7. version snapshots are counted when they are written
+
+func TestVersionSnapshotsAreCountedAtWriteTime(t *testing.T) {
+	e := newEnv(t, func(o *Options) { o.Config.MaxTotalBytes = 100 })
+	a, _ := e.session()
+	d := e.create(a, strings.Repeat("a", 60))
+	// a snapshot of the document is saved through the store (as the saver does): no sweep follows
+	if err := e.store.Save(context.Background(), versionsKeyPrefix+d.ID+"/1.open", bytes.Repeat([]byte("v"), 40)); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.svc.Health().StorageBytes; got != 100 {
+		t.Fatalf("StorageBytes = %d right after the snapshot, want 100", got)
+	}
+	b, _ := e.session()
+	e.want(e.do("POST", "/public/doc", b, []byte("x")), 503) // the budget is used up, before any sweep
+	// a sweep that lists it agrees, and discarding the document takes its snapshots off the count
+	if _, err := e.svc.Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.svc.Health().StorageBytes; got != 100 {
+		t.Fatalf("after the sweep %d, want 100", got)
+	}
+	e.want(e.do("DELETE", "/public/doc", a, nil), 204)
+	if got := e.svc.Health().StorageBytes; got != 0 {
+		t.Fatalf("after the discard %d, want 0", got)
+	}
+	// keys that are not snapshots of a public document are ignored
+	e.svc.NoteVersionWrite("versions/other/xx", 50)
+	e.svc.NoteVersionWrite("pubdoc/"+d.ID, 50)
+	e.svc.NoteVersionWrite(versionsKeyPrefix+"not-an-id/1", 50)
+	if got := e.svc.Health().StorageBytes; got != 0 {
+		t.Fatalf("%d counted for keys that are no snapshots", got)
+	}
+}
+
+func TestSnapshotWrittenWhileAReconcileListsIsNotLost(t *testing.T) {
+	var b budget
+	r, _ := b.reserve("doc", 30, 30, 1000)
+	r.commit()
+	w := b.begin()
+	b.addExtra("doc", 40) // written while the listing runs; the listing predates it
+	b.addExtra("late", 5) // a snapshot of a document the ledger does not know
+	b.set(w, map[string]budgetEntry{"doc": {doc: 30}})
+	if used, _ := b.get(); used != 75 {
+		t.Fatalf("used %d, want 30 + 40 + 5", used)
+	}
+	w = b.begin()
+	b.release("doc") // a removal during the listing wins, snapshots included
+	b.set(w, map[string]budgetEntry{"doc": {doc: 30, extra: 40}, "late": {extra: 5}})
+	if used, _ := b.get(); used != 5 {
+		t.Fatalf("used %d after the removal, want 5", used)
+	}
+	b.addExtra("doc", 0)
+	b.addExtra("doc", -3)
+	if used, _ := b.get(); used != 5 {
+		t.Fatalf("used %d", used)
+	}
+}
+
+// ---- 8. the reporter salt and key
+
+// reporterOf is the construction documented in reporterHash.
+func reporterOf(key, salt []byte, client string) string {
+	m := hmac.New(sha256.New, key)
+	m.Write([]byte("gojiberry/public/reporter/v1\x00"))
+	m.Write(salt)
+	m.Write([]byte{0})
+	m.Write([]byte(client))
+	return base64.RawURLEncoding.EncodeToString(m.Sum(nil)[:12])
+}
+
+func storedSalt(t *testing.T, e *env) []byte {
+	t.Helper()
+	d, err := e.inner.Load(context.Background(), saltKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec struct {
+		Salt []byte `json:"salt"`
+	}
+	if err := json.Unmarshal(d.Data, &rec); err != nil || len(rec.Salt) < 16 {
+		t.Fatalf("salt record %q: %v", d.Data, err)
+	}
+	return rec.Salt
+}
+
+func TestASaltStoreErrorIsNotCachedAndFailsTheReportUntilTheSaltExists(t *testing.T) {
+	logs := captureLog(t)
+	e, hs := envWith(t, behindProxy)
+	tok, _ := e.session()
+	d := e.create(tok, "x")
+	hs.saltFail.Store(true)
+	r := e.want(e.report(d.ViewID, "spam", "203.0.113.1"), 503)
+	if r.Header.Get("Retry-After") == "" {
+		t.Fatal("no Retry-After")
+	}
+	if n := len(e.keys("report/")); n != 0 {
+		t.Fatalf("%d reports taken without a salt", n)
+	}
+	if !strings.Contains(logs.String(), "reporter salt cannot be read or created") {
+		t.Fatalf("log %q", logs.String())
+	}
+	// the store is back, but the backoff has not passed: no attempt, still refused
+	hs.saltFail.Store(false)
+	e.want(e.report(d.ViewID, "spam", "203.0.113.1"), 503)
+	e.clk.Add(2 * time.Second)
+	id := reportID(t, e.want(e.report(d.ViewID, "spam", "203.0.113.1"), 202))
+	// the salt that was made is the stored one (not a process-local one), and the report carries
+	// the hash made from it
+	salt := storedSalt(t, e)
+	if got := e.storedReport(id).Reporter; got != reporterOf(e.svc.reportKey, salt, ClientKey("203.0.113.1")) {
+		t.Fatalf("reporter %q is not the hash under the stored salt", got)
+	}
+	// a second service over the store agrees with it
+	svc2, err := New(Options{Store: e.store, Now: e.clk.Now, Config: Config{NoProxy: true, ReportKey: testReportKey}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h, err := svc2.reporterHash(context.Background(), ClientKey("203.0.113.1")); err != nil || h != e.storedReport(id).Reporter {
+		t.Fatalf("second service: %q %v", h, err)
+	}
+}
+
+func TestTheSaltIsCreatedIfAbsentSoReplicasConverge(t *testing.T) {
+	e, hs := envWith(t, behindProxy)
+	other := bytes.Repeat([]byte{7}, 32)
+	raced := false
+	hs.saltRace = func() {
+		if raced {
+			return
+		}
+		raced = true
+		// another replica creates the salt between our read and our write
+		raw, _ := json.Marshal(map[string][]byte{"salt": other})
+		if err := hs.Inner.Save(context.Background(), saltKey, raw); err != nil {
+			t.Error(err)
+		}
+	}
+	tok, _ := e.session()
+	d := e.create(tok, "x")
+	id := reportID(t, e.want(e.report(d.ViewID, "spam", "203.0.113.1"), 202))
+	if !raced {
+		t.Fatal("the race did not happen")
+	}
+	if got := storedSalt(t, e); !bytes.Equal(got, other) {
+		t.Fatal("the service overwrote the salt another replica had created")
+	}
+	if got := e.storedReport(id).Reporter; got != reporterOf(e.svc.reportKey, other, ClientKey("203.0.113.1")) {
+		t.Fatalf("the service used a salt of its own: %q", got)
+	}
+}
+
+func TestReporterHashNeedsTheKeyThatIsNotInTheStore(t *testing.T) {
+	e := newEnv(t, behindProxy)
+	tok, _ := e.session()
+	d := e.create(tok, "x")
+	id := reportID(t, e.want(e.report(d.ViewID, "spam", "203.0.113.1"), 202))
+	rep := e.storedReport(id).Reporter
+	salt := storedSalt(t, e) // all a dump of the store holds
+	// what a dump allows is a hash of the salt and a guessed address; none of the plain
+	// constructions an attacker would try matches
+	client := ClientKey("203.0.113.1")
+	for _, guess := range []string{
+		reporterOf(salt, salt, client), // keyed by the salt itself
+		reporterOf(nil, salt, client),
+		reporterOf([]byte{}, nil, client),
+	} {
+		if guess == rep {
+			t.Fatal("the reporter hash can be recomputed from the store alone")
+		}
+	}
+	m := hmac.New(sha256.New, salt)
+	m.Write([]byte(client))
+	if base64.RawURLEncoding.EncodeToString(m.Sum(nil)[:12]) == rep {
+		t.Fatal("the reporter hash is HMAC(salt, client): recoverable from a dump")
+	}
+	// the key decides: another key over the same store gives another hash for the same client
+	svc2, err := New(Options{Store: e.store, Now: e.clk.Now, Config: Config{NoProxy: true, ReportKey: deriveReportKey([]byte("another key entirely"))}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h, _ := svc2.reporterHash(context.Background(), client); h == rep {
+		t.Fatal("two keys gave the same reporter hash")
+	}
+	// a service with no key makes its own per process (and says so)
+	logs := captureLog(t)
+	svc3, err := New(Options{Store: e.store, Now: e.clk.Now, Config: Config{NoProxy: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(svc3.reportKey) != 32 || !strings.Contains(logs.String(), "no report key") {
+		t.Fatalf("key %d bytes, log %q", len(svc3.reportKey), logs.String())
+	}
+	if h, _ := svc3.reporterHash(context.Background(), client); h == rep {
+		t.Fatal("a process key gave the keyed hash")
+	}
+}
+
+func TestReportKeyFromTheEnvironment(t *testing.T) {
+	get := func(env map[string]string) (Config, error) { return FromEnv(func(k string) string { return env[k] }) }
+	a, err := get(map[string]string{"GOJIBERRY_DOCSTORE_PUBLIC_REPORT_KEY": "a secret of some length"})
+	if err != nil || len(a.ReportKey) != 32 {
+		t.Fatalf("%+v %v", a, err)
+	}
+	seed := strings.Repeat("ab", 32)
+	b, err := get(map[string]string{"GOJIBERRY_DOCSTORE_DIRECTORY_KEY": seed})
+	if err != nil || len(b.ReportKey) != 32 || bytes.Equal(a.ReportKey, b.ReportKey) {
+		t.Fatalf("directory seed: %+v %v", b, err)
+	}
+	// the explicit key wins over the directory's seed
+	c, err := get(map[string]string{"GOJIBERRY_DOCSTORE_PUBLIC_REPORT_KEY": "a secret of some length", "GOJIBERRY_DOCSTORE_DIRECTORY_KEY": seed})
+	if err != nil || !bytes.Equal(c.ReportKey, a.ReportKey) {
+		t.Fatalf("%+v %v", c, err)
+	}
+	// the derived key is not the seed
+	if raw, _ := hexDecode(seed); bytes.Equal(b.ReportKey, raw) {
+		t.Fatal("the report key is the directory seed itself")
+	}
+	if _, err := get(map[string]string{"GOJIBERRY_DOCSTORE_PUBLIC_REPORT_KEY": "short"}); err == nil || !strings.Contains(err.Error(), "REPORT_KEY") {
+		t.Fatalf("a short key: %v", err)
+	}
+	none, err := get(nil)
+	if err != nil || len(none.ReportKey) != 0 {
+		t.Fatalf("%+v %v", none, err)
+	}
+	found := false
+	for _, w := range none.Warnings() {
+		found = found || strings.Contains(w, "REPORT_KEY")
+	}
+	if !found {
+		t.Fatal("no warning that the key is per process")
+	}
+}
+
+func hexDecode(s string) ([]byte, error) {
+	out := make([]byte, len(s)/2)
+	for i := range out {
+		var b byte
+		if _, err := fmt.Sscanf(s[2*i:2*i+2], "%02x", &b); err != nil {
+			return nil, err
+		}
+		out[i] = b
+	}
+	return out, nil
+}
+
+// ---- 9. the session store does not scan under its lock on a refusal
+
+func TestRefusedCreatesDoNotScanTheSessionStore(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	const n = 20000
+	st := NewMemorySessionStore(n)
+	for i := 0; i < n; i++ {
+		if err := st.Create(ctx, fmt.Sprint("k", i), Session{Client: fmt.Sprint("c", i), Net: fmt.Sprint("n", i), Wide: fmt.Sprint("w", i), Expires: now.Add(time.Hour)}, now, SessionCaps{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	start := time.Now()
+	for i := 0; i < n; i++ { // a flood of refused creates at the cap
+		if err := st.Create(ctx, "x", Session{Client: "x", Expires: now.Add(time.Hour)}, now, SessionCaps{}); err != ErrSessionsFull {
+			t.Fatal(err)
+		}
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("%d refused creates over %d sessions took %v: each one walks the store", n, n, d)
+	}
+}
+
+func TestMemorySessionStoreExpiresThroughItsHeap(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	st := NewMemorySessionStore(10)
+	mk := func(k string, d time.Duration) {
+		t.Helper()
+		if err := st.Create(ctx, k, Session{Client: "c", Net: "n", Wide: "w", Expires: now.Add(d)}, now, SessionCaps{PerClient: 5}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mk("a", time.Minute)
+	mk("b", time.Hour)
+	mk("c", 2*time.Hour)
+	if err := st.Extend(ctx, "a", now.Add(3*time.Hour), now); err != nil { // a is the longest now
+		t.Fatal(err)
+	}
+	later := now.Add(90 * time.Minute)
+	if n, _ := st.Reap(ctx, later); n != 1 { // only b
+		t.Fatalf("reaped %d, want 1", n)
+	}
+	if _, ok, _ := st.Get(ctx, "a", later); !ok {
+		t.Fatal("the extended session was reaped")
+	}
+	if _, ok, _ := st.Get(ctx, "b", later); ok {
+		t.Fatal("an expired session is alive")
+	}
+	if n := st.Len(); n != 2 {
+		t.Fatalf("%d sessions", n)
+	}
+	// a create reaps what has expired, so expired sessions never count against the caps
+	if err := st.Create(ctx, "d", Session{Client: "c", Net: "n", Wide: "w", Expires: later.Add(time.Hour)}, now.Add(4*time.Hour), SessionCaps{PerClient: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if n := st.Len(); n != 1 {
+		t.Fatalf("%d sessions after everything else expired", n)
+	}
+	if n := func() int {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		return len(st.byWide) + len(st.byNet) + len(st.byClient) + len(st.expiry)
+	}(); n != 4 {
+		t.Fatalf("counters left behind: %d", n)
+	}
+}

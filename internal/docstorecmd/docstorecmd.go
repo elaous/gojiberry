@@ -22,7 +22,7 @@ import (
 // withPublic turns on the public (anonymous) offer when GOJIBERRY_DOCSTORE_PUBLIC=true (limits and
 // secrets in GOJIBERRY_DOCSTORE_PUBLIC_*, see public.FromEnv): POST /public/session, the session's
 // one document under /public/doc, read-only /public/view/<id>, POST /public/report and, with
-// GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN, DELETE /admin/takedown/<id>. Unset, nothing is mounted.
+// GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN, DELETE /admin/takedown/<id> and GET /admin/health. Unset, nothing is mounted.
 //
 // The offer promises deletion 24 hours after the last edit, so it refuses to start unless
 // expiry is on (GOJIBERRY_DOCSTORE_EXPIRY_TTL, and the adapter is the expiring one).
@@ -33,7 +33,9 @@ import (
 // withPublic closes it (Server.CloseDocs: 404 for /docs, /docs/{id}, its /acl and /quota), unless the
 // operator sets GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS=true, which keeps it open and says so loudly
 // in the log. Behind a reverse proxy, GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES must name it ("none"
-// says there is none and silences the startup warning).
+// says there is none and silences the startup warning); with an admin token it is required: the
+// server does not start with it unset, since one caller's wrong admin guesses behind an unnamed
+// proxy would lock the operator out.
 //
 // It returns the service so the caller can run its sweep.
 func withPublic(srv *docstore.Server, adapter docstore.Adapter, expiryTTL time.Duration) (*public.Service, error) {
