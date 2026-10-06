@@ -3,10 +3,12 @@ package saver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/elaous/gojiberry/canvas"
@@ -313,5 +315,62 @@ func (brokenAdapter) Load(context.Context, string) (docstore.Document, error) {
 func TestBlobsError(t *testing.T) {
 	if _, _, err := Blobs(brokenAdapter{docstore.NewMemoryAdapter()}).Get(context.Background(), "k"); err == nil {
 		t.Fatal("a store error is not 'not found'")
+	}
+}
+
+func TestAddRemoveTargetList(t *testing.T) {
+	s := &Saver{Targets: []Target{{Name: "a", Label: "A", Adapter: docstore.NewMemoryAdapter()}}}
+	s.AddTarget(Target{Name: "b", Label: "B", Adapter: docstore.NewMemoryAdapter()})
+	if got := names(s.TargetList()); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("after AddTarget: %v", got)
+	}
+	s.AddTarget(Target{Name: "a", Label: "A2", Adapter: docstore.NewMemoryAdapter()}) // replaces
+	if got := names(s.TargetList()); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("a target of the same name is replaced, not added: %v", got)
+	}
+	if tg, err := s.Target("a"); err != nil || tg.Label != "A2" {
+		t.Fatalf("replaced target: %+v %v", tg, err)
+	}
+	snap := s.TargetList()
+	s.RemoveTarget("a")
+	s.RemoveTarget("nope") // nothing happens
+	if got := names(s.TargetList()); !reflect.DeepEqual(got, []string{"b"}) {
+		t.Fatalf("after RemoveTarget: %v", got)
+	}
+	if len(snap) != 2 || snap[0].Name != "a" {
+		t.Fatalf("TargetList is a copy that later changes do not touch: %v", names(snap))
+	}
+	if _, err := s.Target("a"); err == nil {
+		t.Fatal("a removed target is still found")
+	}
+}
+
+func names(ts []Target) []string {
+	var n []string
+	for _, t := range ts {
+		n = append(n, t.Name)
+	}
+	return n
+}
+
+func TestTargetsConcurrently(t *testing.T) {
+	s := &Saver{Targets: []Target{{Name: "base", Adapter: docstore.NewMemoryAdapter()}}}
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			name := fmt.Sprintf("t%d", i%3)
+			for j := 0; j < 200; j++ {
+				s.AddTarget(Target{Name: name, Adapter: docstore.NewMemoryAdapter()})
+				_ = s.TargetList()
+				_, _ = s.Target("base")
+				s.RemoveTarget(name)
+			}
+		}(i)
+	}
+	wg.Wait()
+	if got := names(s.TargetList()); !reflect.DeepEqual(got, []string{"base"}) {
+		t.Fatalf("targets left: %v", got)
 	}
 }

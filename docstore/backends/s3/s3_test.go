@@ -1,57 +1,96 @@
 //go:build !js
 
-package docstore
+package s3
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/elaous/gojiberry/docstore"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 )
 
 // fakeS3 is a minimal in-memory stand-in for *s3.Client, implementing
-// just the s3API operations S3Adapter calls. It lets S3Adapter's
+// just the s3API operations Adapter calls. It lets Adapter's
 // logic (key prefixing, pagination, not-found translation) be tested
 // natively, with no live AWS/MinIO endpoint required.
 type fakeS3 struct {
+	mu      sync.Mutex
 	objects map[string][]byte
+	etags   map[string]string
+	n       int
 }
 
-func newFakeS3() *fakeS3 { return &fakeS3{objects: make(map[string][]byte)} }
+func newFakeS3() *fakeS3 {
+	return &fakeS3{objects: make(map[string][]byte), etags: make(map[string]string)}
+}
+
+// apiErr is an S3 error with a code, as the SDK's service errors have.
+type apiErr struct{ code string }
+
+func (e apiErr) Error() string                 { return e.code }
+func (e apiErr) ErrorCode() string             { return e.code }
+func (e apiErr) ErrorMessage() string          { return e.code }
+func (e apiErr) ErrorFault() smithy.ErrorFault { return smithy.FaultClient }
 
 func (f *fakeS3) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
 	data, err := io.ReadAll(in.Body)
 	if err != nil {
 		return nil, err
 	}
-	f.objects[*in.Key] = data
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := *in.Key
+	_, exists := f.objects[key]
+	if in.IfNoneMatch != nil && *in.IfNoneMatch == "*" && exists {
+		return nil, apiErr{"PreconditionFailed"}
+	}
+	if in.IfMatch != nil && (!exists || f.etags[key] != *in.IfMatch) {
+		return nil, apiErr{"PreconditionFailed"}
+	}
+	f.n++
+	f.objects[key] = data
+	f.etags[key] = fmt.Sprintf("\"etag-%d\"", f.n)
 	return &s3.PutObjectOutput{}, nil
 }
 
 func (f *fakeS3) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	data, ok := f.objects[*in.Key]
 	if !ok {
 		return nil, &types.NoSuchKey{}
 	}
 	now := time.Now()
+	etag := f.etags[*in.Key]
 	return &s3.GetObjectOutput{
 		Body:         io.NopCloser(bytes.NewReader(data)),
 		LastModified: &now,
+		ETag:         &etag,
 	}, nil
 }
 
 func (f *fakeS3) DeleteObject(_ context.Context, in *s3.DeleteObjectInput, _ ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	delete(f.objects, *in.Key)
+	delete(f.etags, *in.Key)
 	return &s3.DeleteObjectOutput{}, nil
 }
 
 func (f *fakeS3) ListObjectsV2(_ context.Context, in *s3.ListObjectsV2Input, _ ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	prefix := aws.ToString(in.Prefix)
 	var contents []types.Object
 	for key, data := range f.objects {
@@ -67,15 +106,50 @@ func (f *fakeS3) ListObjectsV2(_ context.Context, in *s3.ListObjectsV2Input, _ .
 	return &s3.ListObjectsV2Output{Contents: contents, IsTruncated: &falseVal}, nil
 }
 
+func TestS3AdapterSaveIf(t *testing.T) {
+	docstore.CheckConditional(t, func() docstore.ConditionalAdapter { return newAdapter(newFakeS3(), "test-bucket", "docs/") })
+}
+
+// A write another process makes between the read and the write is refused by S3 itself
+// (If-Match on the ETag read), not only by the digest compared before.
+func TestS3SaveIfRefusesAWriteThatLandedInBetween(t *testing.T) {
+	fake := newFakeS3()
+	a := newAdapter(fake, "b", "")
+	ctx := context.Background()
+	_ = a.SaveIf(ctx, "x", []byte("one"), "")
+	racer := &racingS3{fakeS3: fake, before: func() { _ = newAdapter(fake, "b", "").Save(ctx, "x", []byte("one")) }} // the same bytes, a new version
+	err := newAdapter(racer, "b", "").SaveIf(ctx, "x", []byte("two"), docstore.Digest([]byte("one")))
+	if !errors.Is(err, docstore.ErrConflict) {
+		t.Fatalf("%v", err)
+	}
+	if d, _ := a.Load(ctx, "x"); string(d.Data) != "one" {
+		t.Errorf("%q", d.Data)
+	}
+}
+
+// racingS3 runs a write just before the PutObject of a conditional save.
+type racingS3 struct {
+	*fakeS3
+	before func()
+}
+
+func (r *racingS3) PutObject(ctx context.Context, in *s3.PutObjectInput, o ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+	if in.IfMatch != nil && r.before != nil {
+		r.before()
+		r.before = nil
+	}
+	return r.fakeS3.PutObject(ctx, in, o...)
+}
+
 func TestS3AdapterConformance(t *testing.T) {
-	testAdapterConformance(t, func() Adapter {
-		return newS3Adapter(newFakeS3(), "test-bucket", "docs/")
+	docstore.CheckAdapter(t, func() docstore.Adapter {
+		return newAdapter(newFakeS3(), "test-bucket", "docs/")
 	})
 }
 
 func TestS3AdapterUsesPrefixInKeyButNotInID(t *testing.T) {
 	fake := newFakeS3()
-	a := newS3Adapter(fake, "test-bucket", "docs/")
+	a := newAdapter(fake, "test-bucket", "docs/")
 	ctx := context.Background()
 	if err := a.Save(ctx, "myid", []byte("x")); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -95,25 +169,25 @@ func TestS3AdapterUsesPrefixInKeyButNotInID(t *testing.T) {
 func boolPtr(b bool) *bool { return &b }
 
 func TestResolvePathStyleDefaultsApplyWhenUnset(t *testing.T) {
-	if got := resolvePathStyle(S3Config{}, false); got != false {
+	if got := resolvePathStyle(Config{}, false); got != false {
 		t.Errorf("resolvePathStyle({}, false) = %v, want false (the \"s3\" backend's own default)", got)
 	}
-	if got := resolvePathStyle(S3Config{}, true); got != true {
+	if got := resolvePathStyle(Config{}, true); got != true {
 		t.Errorf("resolvePathStyle({}, true) = %v, want true (the \"minio\" backend's own default)", got)
 	}
 }
 
 func TestResolvePathStyleExplicitConfigWins(t *testing.T) {
-	if got := resolvePathStyle(S3Config{ForcePathStyle: boolPtr(false)}, true); got != false {
+	if got := resolvePathStyle(Config{ForcePathStyle: boolPtr(false)}, true); got != false {
 		t.Errorf("resolvePathStyle({forcePathStyle: false}, true) = %v, want false -- an explicit false must override the \"minio\" backend's own true default", got)
 	}
-	if got := resolvePathStyle(S3Config{ForcePathStyle: boolPtr(true)}, false); got != true {
+	if got := resolvePathStyle(Config{ForcePathStyle: boolPtr(true)}, false); got != true {
 		t.Errorf("resolvePathStyle({forcePathStyle: true}, false) = %v, want true -- an explicit true must override the \"s3\" backend's own false default", got)
 	}
 }
 
 func TestS3ConfigDecodesEndpointAndForcePathStyle(t *testing.T) {
-	var cfg S3Config
+	var cfg Config
 	raw := []byte(`{"bucket":"docs","endpoint":"http://localhost:9000","forcePathStyle":true}`)
 	if err := json.Unmarshal(raw, &cfg); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)

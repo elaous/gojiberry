@@ -435,6 +435,29 @@ func TestRecipientsRemoveEverywhereWarnsAndCountsDocuments(t *testing.T) {
 	}
 }
 
+func TestFolderPickerStates(t *testing.T) {
+	var got []string
+	on := func(s string) func() { return func() { got = append(got, s) } }
+	p := FolderPickerProps{Supported: true, OnChoose: on("choose"), OnReconnect: on("reconnect"), OnForget: on("forget")}
+	mustContain(t, render(t, FolderPicker(p)), "gj-folder-choose", "Choose a folder")
+	p.State, p.Name = FolderReady, "Work"
+	html := render(t, FolderPicker(p))
+	mustContain(t, html, "Saving to the folder Work", "gj-folder-change", "gj-folder-forget")
+	mustNotContain(t, html, "gj-folder-choose", "gj-folder-reconnect")
+	p.State = FolderReconnect
+	html = render(t, FolderPicker(p))
+	mustContain(t, html, "needs your permission again", "Work", "gj-folder-reconnect-button", "Reconnect folder", `role="status"`)
+	for _, h := range findHandlers(FolderPicker(p), "click") {
+		h(xango.NewEvent("click", nil, false, nil, nil))
+	}
+	if len(got) != 2 || got[0] != "reconnect" || got[1] != "forget" {
+		t.Errorf("%v", got)
+	}
+	mustContain(t, render(t, FolderPicker(FolderPickerProps{})), "cannot save to a folder you choose")
+	p.Disabled = true
+	mustContain(t, render(t, FolderPicker(p)), "disabled")
+}
+
 func TestSizeTextRoundsToTheNearestUnit(t *testing.T) {
 	for n, want := range map[int64]string{0: "0 bytes", 1: "1 byte", 999: "999 bytes", 1024: "1 KiB (1,024 bytes)", 1500: "1 KiB (1,500 bytes)", 1536: "2 KiB (1,536 bytes)",
 		348160: "340 KiB (348,160 bytes)", 5 << 20: "5 MiB (5,242,880 bytes)", 3<<30 + 1: "3 GiB (3,221,225,473 bytes)"} {
