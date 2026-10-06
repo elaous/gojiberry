@@ -17,6 +17,11 @@ func (a *BrowserAdapter) Lock(ctx context.Context) (func(), error) {
 
 // lock takes the Web Lock called name.
 func (a *BrowserAdapter) lock(ctx context.Context, name string) (func(), error) {
+	return webLock(ctx, name)
+}
+
+// webLock takes the Web Lock called name (see BrowserAdapter.Lock), for any adapter of the page.
+func webLock(ctx context.Context, name string) (func(), error) {
 	locks := js.Global().Get("navigator").Get("locks")
 	if !locks.Truthy() {
 		return func() {}, nil

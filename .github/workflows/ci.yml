@@ -57,6 +57,9 @@ jobs:
       - name: make wasm-lint
         run: make wasm-lint
 
+      - name: make modules
+        run: make modules
+
       # Rewrites README.md's own coverage badge line (a static
       # img.shields.io URL, not a self-hosted SVG -- see
       # gen-coverage-badge.sh's own doc comment for why) from this
