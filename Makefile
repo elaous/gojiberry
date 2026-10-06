@@ -5,7 +5,7 @@
 # GOARCH=wasm (domrt and friends are js/wasm-only), and run the
 # vscode-xango grammar suite against every *.xg file in the repo.
 .PHONY: check
-check: generate fmt-check vet test wasm-vet lint wasm-lint grammar-test-setup grammar-test
+check: generate fmt-check vet test wasm-vet lint wasm-lint modules grammar-test-setup grammar-test
 
 .PHONY: generate
 generate:
@@ -34,6 +34,18 @@ test:
 wasm-vet:
 	GOOS=js GOARCH=wasm go build ./...
 	GOOS=js GOARCH=wasm go vet ./...
+
+# modules checks every nested Go module (each directory under the root with its own
+# go.mod): go.mod and go.sum are tidy, and it vets and tests. The Gio ones need
+# system libraries (wayland, xkbcommon) for a native build, so they are vetted as
+# GOOS=js GOARCH=wasm, which still type-checks everything but the window glue.
+.PHONY: modules
+modules:
+	@set -e; for mod in $$(git ls-files '*/go.mod' | xargs -n1 dirname); do \
+		echo "== $$mod"; \
+		(cd $$mod && go mod tidy -diff && \
+		case "$$mod" in *gio*) GOOS=js GOARCH=wasm go vet ./... ;; *) go vet ./... && go test ./... ;; esac); \
+	done
 
 # lint/wasm-lint run golangci-lint (tracked as a go.mod tool
 # dependency -- see go.mod's own `tool` line, added via `go get

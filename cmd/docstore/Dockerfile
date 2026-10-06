@@ -20,12 +20,16 @@ WORKDIR /src
 # `go mod download`, as long as go.mod/go.sum themselves haven't
 # changed.
 COPY go.mod go.sum ./
-RUN go mod download
+COPY docstore/backends/go.mod docstore/backends/go.sum ./docstore/backends/
+RUN go mod download && cd docstore/backends && go mod download
 COPY . .
 # CGO_ENABLED=0: a static binary with no libc dependency, so the
 # runtime stage below can be `scratch` (nothing at all, not even a
 # shell) rather than needing a real base image just to satisfy a
 # dynamic linker.
+# The server with every backend (Postgres, MongoDB, S3, blob) is in the nested module
+# docstore/backends; the plain ./cmd/docstore has memory, files and SQLite only.
+WORKDIR /src/docstore/backends
 RUN CGO_ENABLED=0 go build -o /out/docstore ./cmd/docstore
 
 FROM scratch
