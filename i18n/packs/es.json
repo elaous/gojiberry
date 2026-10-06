@@ -239,6 +239,20 @@
   "recipients.parsed": "Clave %s para %s. Su huella es:",
   "recipients.checkHint": "Compruebe esta huella con la persona, por otra vía distinta de la que recibió la clave, y escríbala aquí para añadir la clave.",
   "recipients.confirm": "Huella, escrita para confirmar",
-  "recipients.add": "Añadir clave"
+  "recipients.add": "Añadir clave",
+  "passkey.unsupported": "Este navegador o esta página no puede usar passkeys (necesitan HTTPS y un navegador reciente).",
+  "passkey.signIn": "Iniciar sesión con una passkey",
+  "passkey.email": "Correo electrónico",
+  "passkey.create": "Crear una cuenta con una passkey",
+  "passkey.remove": "Quitar",
+  "passkey.confirmRemove": "¿Quitar la passkey %s? Ya no podrá iniciar sesión con ella. Si es su única forma de iniciar sesión, se conserva.",
+  "passkey.title": "Sus passkeys",
+  "passkey.label": "Nombre de esta passkey",
+  "passkey.labelPlaceholder": "Portátil, teléfono…",
+  "passkey.add": "Añadir una passkey",
+  "passkey.note": "Una passkey son dos factores en uno: su dispositivo y la huella, el rostro o el PIN que lo desbloquea. No hay un código aparte que escribir.",
+  "passkey.created": "añadida %s",
+  "passkey.lastUsed": "usada por última vez %s",
+  "passkey.synced": "sincronizada entre sus dispositivos"
  }
 }

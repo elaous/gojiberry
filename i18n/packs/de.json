@@ -239,6 +239,20 @@
   "recipients.parsed": "%s-Schlüssel für %s. Sein Fingerabdruck ist:",
   "recipients.checkHint": "Prüfen Sie diesen Fingerabdruck mit der Person, auf einem anderen Weg als dem, auf dem Sie den Schlüssel erhalten haben, und tippen Sie ihn dann hier ein, um den Schlüssel hinzuzufügen.",
   "recipients.confirm": "Fingerabdruck, zur Bestätigung eingetippt",
-  "recipients.add": "Schlüssel hinzufügen"
+  "recipients.add": "Schlüssel hinzufügen",
+  "passkey.unsupported": "Dieser Browser oder diese Seite kann keine Passkeys verwenden (sie brauchen HTTPS und einen aktuellen Browser).",
+  "passkey.signIn": "Mit einem Passkey anmelden",
+  "passkey.email": "E-Mail-Adresse",
+  "passkey.create": "Konto mit einem Passkey erstellen",
+  "passkey.remove": "Entfernen",
+  "passkey.confirmRemove": "Passkey %s entfernen? Sie können sich damit nicht mehr anmelden. Wenn es Ihre einzige Möglichkeit ist, sich anzumelden, bleibt er erhalten.",
+  "passkey.title": "Ihre Passkeys",
+  "passkey.label": "Name für diesen Passkey",
+  "passkey.labelPlaceholder": "Laptop, Handy…",
+  "passkey.add": "Passkey hinzufügen",
+  "passkey.note": "Ein Passkey sind zwei Faktoren in einem: Ihr Gerät und der Fingerabdruck, das Gesicht oder die PIN, die es entsperrt. Es gibt keinen separaten Code einzutippen.",
+  "passkey.created": "hinzugefügt %s",
+  "passkey.lastUsed": "zuletzt benutzt %s",
+  "passkey.synced": "auf Ihren Geräten synchronisiert"
  }
 }

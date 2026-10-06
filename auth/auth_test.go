@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -95,10 +96,24 @@ func TestNewManagerRequiresBaseURL(t *testing.T) {
 	}
 }
 
-func TestNewManagerRequiresProviders(t *testing.T) {
-	_, err := NewManager(context.TODO(), Config{BaseURL: "https://example.com"})
-	if err == nil {
-		t.Fatal("NewManager with no providers should error")
+// A server that signs people in with passkeys only has no OpenID Connect provider but still
+// needs the Manager for its sessions.
+func TestNewManagerWithoutProvidersIsASessionOnlyManager(t *testing.T) {
+	m, err := NewManager(context.TODO(), Config{BaseURL: "https://example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Providers()) != 0 {
+		t.Errorf("%v", m.Providers())
+	}
+	tok, err := m.StartSession(User{ID: "passkey:1", Email: "a@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("GET", "/auth/me", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	if u, ok := m.CurrentUser(req); !ok || u.ID != "passkey:1" {
+		t.Errorf("%+v %v", u, ok)
 	}
 }
 

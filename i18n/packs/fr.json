@@ -239,6 +239,20 @@
   "recipients.parsed": "Clé %s pour %s. Son empreinte est :",
   "recipients.checkHint": "Vérifiez cette empreinte avec la personne, par un autre moyen que celui par lequel vous avez reçu la clé, puis saisissez-la ici pour ajouter la clé.",
   "recipients.confirm": "Empreinte, saisie pour confirmer",
-  "recipients.add": "Ajouter la clé"
+  "recipients.add": "Ajouter la clé",
+  "passkey.unsupported": "Ce navigateur ou cette page ne peut pas utiliser de passkeys (elles demandent HTTPS et un navigateur récent).",
+  "passkey.signIn": "Se connecter avec une passkey",
+  "passkey.email": "Adresse e-mail",
+  "passkey.create": "Créer un compte avec une passkey",
+  "passkey.remove": "Retirer",
+  "passkey.confirmRemove": "Retirer la passkey %s ? Vous ne pourrez plus vous connecter avec elle. Si c’est votre seul moyen de connexion, elle reste.",
+  "passkey.title": "Vos passkeys",
+  "passkey.label": "Nom de cette passkey",
+  "passkey.labelPlaceholder": "Ordinateur, téléphone…",
+  "passkey.add": "Ajouter une passkey",
+  "passkey.note": "Une passkey, ce sont deux facteurs en un : votre appareil, et l’empreinte, le visage ou le code PIN qui le déverrouille. Il n’y a pas de code à saisir en plus.",
+  "passkey.created": "ajoutée %s",
+  "passkey.lastUsed": "utilisée pour la dernière fois %s",
+  "passkey.synced": "synchronisée sur vos appareils"
  }
 }

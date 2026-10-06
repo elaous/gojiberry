@@ -128,6 +128,15 @@ key** that wraps a key pair or the data key, so:
    its fingerprint. Verified e-mail proves the account, and the key was published by it;
    it does not prove the key is not the account's compromised one.
 
+5. **MFA: no separate second factor.** A passkey with user verification (required by default) is
+   already two factors in one: the device and a PIN or biometric. We do not add TOTP or SMS codes
+   (weaker than the passkey they would guard). For OIDC sign-in, MFA is the provider's policy. Left,
+   and not built: an optional **step-up** (a fresh passkey assertion within a few minutes) before
+   sensitive actions: removing a key, purging, sharing.
+6. **Removing a key warns and re-encrypts.** The warning names how many documents use the key and
+   that anything already opened or copied cannot be taken back. Confirming decrypts and encrypts
+   again, without that key, every document that used it (`Sharing.RemoveEverywhere`).
+
 ## D. Plan
 
 1. **Done:** `docstore/encrypt` (`encrypt.Adapter`, `Keyring`, `Static`) using `filippo.io/age`
@@ -148,7 +157,14 @@ key** that wraps a key pair or the data key, so:
    fingerprint is typed. *Left:* wiring it into an application (the showcase has no encrypted store
    yet: it needs the key management of steps 3 and 4, where the owner's key lives and how it is
    unlocked) and the "verified e-mail" mark of C.4.
-3. `auth/passkey` and `components.Passkey`, with the virtual-authenticator e2e.
+3. **Done:** `auth/passkey` (go-webauthn; discoverable credentials, user verification required,
+   one-time challenges with a TTL, `Store` with `MemoryStore` and `AdapterStore`), the
+   `components.Passkey` control, `Server.WithRoutes`/`Hide` on the docstore server (`cmd/docstore`
+   mounts `/auth/passkey/` when `GOJIBERRY_DOCSTORE_PASSKEY_RPID`, `_ORIGINS` and `_NAME` are set and
+   hides the `passkey/` records from the API), `auth.Manager.StartSession` and a provider-less
+   manager (a passkey-only deployment). `examples/passkey-demo` has the e2e against Chrome's virtual
+   authenticator. Linking to an OIDC identity: a passkey registered while signed in uses that
+   identity's ID, so both ways reach the same account.
 4. Passkey as an encryption recipient through PRF, with detection and the
    second-recipient rule.
 5. `.opendoc` encrypted records, and the placeholder catalog entries for confidential items.
