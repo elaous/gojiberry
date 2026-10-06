@@ -45,6 +45,7 @@ import (
 
 // ui is the DOM side's state.
 type ui struct {
+	folder  folderState // the folder on this computer, a save target
 	title   string
 	menu    int    // open menu, or -1
 	tab     string // sidebar tab: format, symbols, keys
@@ -201,6 +202,7 @@ func main() {
 		{Name: "memory", Label: "Memory", Adapter: store, Capacity: 16 << 20},
 	}}, currentDoc, openDoc)
 	u.saver.OnChange = func() { renderUI() }
+	u.restoreFolder()
 	u.saver.Deliver = transfer.Download
 	u.saver.Export = u.transfer.Export
 	for _, e := range u.transfer.Exporters() {
@@ -378,7 +380,7 @@ func main() {
 				panel = sharePanel(u, flow, origin, renderUI)
 			}
 		case "save":
-			panel = components.Saver(u.saver.Props())
+			panel = xango.Frag(u.folderPanel(), components.Saver(u.saver.Props()))
 		case "transfer":
 			var imports, exports []components.SaverChoice
 			for _, i := range u.transfer.Importers() {

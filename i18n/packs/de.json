@@ -228,6 +228,13 @@
   "saver.checkedProblems": "%d Dokumente geprüft: %d aus einer früheren Kopie wiederhergestellt (%s), %d beschädigt ohne Kopie (%s)",
   "saver.checkedBackups": "(%d ohne brauchbare frühere Kopie; die nächste Speicherung legt eine an)",
   "saver.checkedOrphans": "(%d übrig gebliebene Dateien entfernt)",
-  "docs.check": "Dokumente prüfen"
+  "docs.check": "Dokumente prüfen",
+  "folder.unsupported": "Dieser Browser kann nicht in einen von Ihnen gewählten Ordner speichern (Chrome, Edge und Opera können es). Nutzen Sie den Speicher dieses Browsers oder laden Sie Ihre Dokumente herunter.",
+  "folder.saving": "Speichern im Ordner %s",
+  "folder.change": "Anderen Ordner wählen",
+  "folder.forget": "Diesen Ordner nicht mehr verwenden",
+  "folder.reconnect": "Der Browser braucht Ihre Erlaubnis erneut, um den Ordner %s zu beschreiben. Er wird erst verwendet, wenn Sie ihn wieder verbinden.",
+  "folder.reconnectButton": "Ordner wieder verbinden",
+  "folder.choose": "Ordner wählen…"
  }
 }

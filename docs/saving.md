@@ -47,6 +47,7 @@ A target is a `docstore.Adapter`. The adapters:
 | memory | `docstore.MemoryAdapter` |
 | a docstore server | `docstore.NewHTTPAdapter(url, client)` -- how a WASM app reaches any of the above |
 | this browser | `docstore.NewBrowserAdapter(prefix)` -- localStorage |
+| a folder you choose | `docstore.PickFolder` -- the File System Access API (Chrome, Edge, Opera) |
 
 A browser cannot speak to a database, so in a WASM app Postgres, SQLite and
 S3 are used through a docstore server (`cmd/docstore`, backend chosen by
