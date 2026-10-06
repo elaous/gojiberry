@@ -31,6 +31,10 @@ var ErrNotFound = errors.New("docstore: document not found")
 // again.
 var ErrStorageFull = errors.New("docstore: storage full")
 
+// ErrPermission is returned (wrapped) when the store refuses access the person may be able to
+// give again, such as a folder whose browser permission has lapsed; test with errors.Is.
+var ErrPermission = errors.New("docstore: permission needed")
+
 // Document is one stored unit: an opaque payload (OnDesign's own
 // marshaled document JSON, from the client's point of view) keyed by
 // ID, with server-tracked metadata. Adapters must round-trip Data
