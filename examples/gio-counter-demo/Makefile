@@ -10,7 +10,7 @@ run: generate
 generate:
 	cd ../.. && go run ./cmd/xgc examples/gio-counter-demo
 
-# test runs headless -- no display required (see xangogio's own doc
+# test runs headless -- no display required (see xango/gio's own doc
 # comment on the real Gio GPU backend it exercises). run needs a real
 # display; it's not part of test.
 .PHONY: test

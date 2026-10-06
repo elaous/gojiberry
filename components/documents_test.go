@@ -294,3 +294,12 @@ func TestMigratePanel(t *testing.T) {
 	p.Error = "boom"
 	mustContain(t, render(t, Migrate(p)), `role="alert"`, "boom")
 }
+
+func TestCapacityWarnsWhenFillingUp(t *testing.T) {
+	mustNotContain(t, render(t, Capacity(CapacityProps{Used: 79, Total: 100})), "gj-capacity-warning")
+	filling := render(t, Capacity(CapacityProps{Used: 85, Total: 100}))
+	mustContain(t, filling, "gj-capacity-warning", `role="status"`, "filling up", "download your documents", "delete old versions")
+	full := render(t, Capacity(CapacityProps{Used: 97, Total: 100}))
+	mustContain(t, full, "gj-capacity-warning", `role="alert"`, "full or nearly", "not saved")
+	mustNotContain(t, render(t, Capacity(CapacityProps{Used: 900})), "gj-capacity-warning") // size not known: no percentage
+}
