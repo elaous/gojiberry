@@ -43,11 +43,21 @@ type Config struct {
 	Guard guard.Guard
 	// RequireACL closes documents that have no ACL (see Server.WithRequireACL);
 	// ConfigFromEnv reads GOJIBERRY_DOCSTORE_REQUIRE_ACL=true.
-	RequireACL    bool
-	Addr          string
-	Backend       string
-	BackendConfig json.RawMessage
-	Auth          AuthConfig
+	RequireACL bool
+	// ExpiryTTL, when positive, makes every document expire that long after its last write
+	// (see ExpiringAdapter); ExpirySweep is how often expired ones are deleted (they are
+	// invisible at once either way). ConfigFromEnv reads GOJIBERRY_DOCSTORE_EXPIRY_TTL and
+	// GOJIBERRY_DOCSTORE_EXPIRY_SWEEP.
+	ExpiryTTL   time.Duration
+	ExpirySweep time.Duration
+	// ExpiryAdoptUpdated (GOJIBERRY_DOCSTORE_EXPIRY_ADOPT=updated) gives documents that existed
+	// before expiry was switched on the deadline UpdatedAt + TTL, so old ones are deleted by the
+	// first sweep. The default is now + TTL, a full grace period.
+	ExpiryAdoptUpdated bool
+	Addr               string
+	Backend            string
+	BackendConfig      json.RawMessage
+	Auth               AuthConfig
 }
 
 // AuthConfig configures the optional Sign-in-with-OIDC endpoints
@@ -120,7 +130,53 @@ func ConfigFromEnv() Config {
 			}
 		}
 	}
+	var err error
+	if cfg.ExpiryTTL, cfg.ExpirySweep, err = ParseExpiryEnv(os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_TTL"), os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_SWEEP")); err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
+	if cfg.ExpiryAdoptUpdated, err = ParseExpiryAdopt(os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_ADOPT")); err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
 	return cfg
+}
+
+// ParseExpiryAdopt parses GOJIBERRY_DOCSTORE_EXPIRY_ADOPT: empty (or "grace") gives documents that
+// predate expiry a full lifetime from the first sweep; "updated" gives them UpdatedAt + TTL, which
+// deletes the old ones at once. It reports whether "updated" was asked for.
+func ParseExpiryAdopt(raw string) (updated bool, err error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "grace":
+		return false, nil
+	case "updated":
+		return true, nil
+	}
+	return false, fmt.Errorf("parsing GOJIBERRY_DOCSTORE_EXPIRY_ADOPT %q: want \"updated\" (or empty for a full grace period)", raw)
+}
+
+// DefaultExpirySweep is how often expired documents are deleted when only the TTL is set.
+const DefaultExpirySweep = 5 * time.Minute
+
+// ParseExpiryEnv parses GOJIBERRY_DOCSTORE_EXPIRY_TTL and GOJIBERRY_DOCSTORE_EXPIRY_SWEEP, Go
+// durations such as "24h". Both empty means no expiry. A sweep interval without a TTL is an
+// error; with a TTL and no interval it is DefaultExpirySweep, or the TTL if that is shorter.
+func ParseExpiryEnv(ttlRaw, sweepRaw string) (ttl, sweep time.Duration, err error) {
+	ttlRaw, sweepRaw = strings.TrimSpace(ttlRaw), strings.TrimSpace(sweepRaw)
+	if ttlRaw == "" {
+		if sweepRaw != "" {
+			return 0, 0, errors.New("GOJIBERRY_DOCSTORE_EXPIRY_SWEEP needs GOJIBERRY_DOCSTORE_EXPIRY_TTL")
+		}
+		return 0, 0, nil
+	}
+	if ttl, err = time.ParseDuration(ttlRaw); err != nil || ttl <= 0 {
+		return 0, 0, fmt.Errorf("parsing GOJIBERRY_DOCSTORE_EXPIRY_TTL %q: want a positive duration such as 24h", ttlRaw)
+	}
+	if sweepRaw == "" {
+		return ttl, min(DefaultExpirySweep, ttl), nil
+	}
+	if sweep, err = time.ParseDuration(sweepRaw); err != nil || sweep <= 0 {
+		return 0, 0, fmt.Errorf("parsing GOJIBERRY_DOCSTORE_EXPIRY_SWEEP %q: want a positive duration such as 5m", sweepRaw)
+	}
+	return ttl, sweep, nil
 }
 
 // maxDocBytes is the largest document a PUT may carry.
@@ -145,7 +201,9 @@ func envOr(key, fallback string) string {
 //	PUT    /docs/{id}      -- save (request body is the raw document bytes)
 //	GET    /docs/{id}      -- load (response body is the raw document bytes)
 //	DELETE /docs/{id}      -- delete
-//	GET    /docs           -- list metadata, as a JSON array of Meta
+//	GET    /docs           -- list metadata, as a JSON array of Meta (plus "expires" when the
+//	                          store expires documents, see WithExpiry; reads and writes then
+//	                          carry X-Gojiberry-Expires)
 //	GET    /docs/{id}/acl  -- this document's own ACL (see acl.go), Owner-only
 //	PUT    /docs/{id}/acl  -- replace it (bootstraps ownership on first use)
 //	GET    /health         -- liveness + configured backend name
@@ -216,6 +274,30 @@ func (s *Server) WithGuard(g guard.Guard) *Server {
 func (s *Server) WithRequireACL(on bool) *Server {
 	s.requireACL = on
 	return s
+}
+
+// WithExpiry serves e (an ExpiringAdapter over the store) instead of the adapter the server was
+// made with, the same as passing e to NewServer: document reads then carry X-Gojiberry-Expires,
+// listings an "expires" field, and every write renews. Viewing (GET) never does. The caller
+// runs e.Run to delete what has expired.
+func (s *Server) WithExpiry(e *ExpiringAdapter) *Server {
+	s.adapter = e
+	return s
+}
+
+// setExpires adds the X-Gojiberry-Expires header (RFC 3339, UTC) if id has a deadline.
+func (s *Server) setExpires(w http.ResponseWriter, r *http.Request, id string) {
+	if x, ok := s.adapter.(Expirer); ok {
+		if t, has, err := x.Expiry(r.Context(), id); err == nil && has {
+			w.Header().Set("X-Gojiberry-Expires", t.UTC().Format(time.RFC3339))
+		}
+	}
+}
+
+// listItem is one entry of the GET /docs listing: a Meta, plus when it expires if it does.
+type listItem struct {
+	Meta
+	Expires *time.Time `json:"expires,omitempty"`
 }
 
 // WithRoutes mounts another handler on the server (the passkey routes of auth/passkey, say),
@@ -338,7 +420,11 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	// Filter out the reserved ACL keyspace (acl.go) -- each one is
 	// this package's own bookkeeping, not a real document, and should
 	// never appear in a document listing.
-	visible := make([]Meta, 0, len(metas))
+	var deadlines map[string]time.Time
+	if x, ok := s.adapter.(Expirer); ok {
+		deadlines, _ = x.Expiries(r.Context()) // best effort: a listing without deadlines still lists
+	}
+	visible := make([]listItem, 0, len(metas))
 	for _, m := range metas {
 		if s.reserved(m.ID) {
 			continue
@@ -347,7 +433,12 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		if allowed, _ := s.checkPermission(r, m.ID, http.MethodGet); !allowed {
 			continue
 		}
-		visible = append(visible, m)
+		item := listItem{Meta: m}
+		if t, ok := deadlines[m.ID]; ok {
+			t = t.UTC()
+			item.Expires = &t
+		}
+		visible = append(visible, item)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(visible) // a write failure here means the client disconnected -- nothing actionable to do about it
@@ -413,10 +504,15 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "the document changed", http.StatusPreconditionFailed)
 			return
 		}
+		if errors.Is(saveErr, ErrConditionalUnsupported) {
+			http.Error(w, "conditional save is not supported", http.StatusNotImplemented)
+			return
+		}
 		if saveErr != nil {
 			serverError(w, saveErr)
 			return
 		}
+		s.setExpires(w, r, id)
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodGet:
 		if allowed, status := s.checkPermission(r, id, http.MethodGet); !allowed {
@@ -433,6 +529,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
+		s.setExpires(w, r, id)
 		_, _ = w.Write(doc.Data) // a write failure here means the client disconnected -- nothing actionable to do about it
 	case http.MethodDelete:
 		if allowed, status := s.checkPermission(r, id, http.MethodDelete); !allowed {

@@ -451,8 +451,8 @@ cannot be opened.
         server one or the reverse, or hide/show it under another placeholder, but it cannot reveal the
         real name (that stays in the encrypted `folder-secret/<ID>`) nor change who can open it (the
         signed keys record decides).
-      - TODO: the docstore expiry (docs/public-docstore.md) must exempt `folder-secret/<ID>`: it lives as
-        long as the folder (removed by `DeleteFolder`), never on a TTL.
+      - The docstore expiry (docs/public-docstore.md) exempts `folder-secret/<ID>`: it lives as long
+        as the folder (removed by `DeleteFolder`), never on a TTL.
       - Rename of a confidential folder asserts the keys (the hook) and writes only the record: the
         catalog does not change. Move keeps the name hidden; delete removes the record.
       - **Documents inside are NOT made confidential by their folder**, and a folder does not become
