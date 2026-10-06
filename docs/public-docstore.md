@@ -58,9 +58,30 @@ launch, not after:
 
 ## 4. Implementation sketch
 
-1. **Expiry in the store.** `docstore` gets `ExpiresAt` per document and a sweeper;
-   reads of an expired document answer 404 even before the sweeper runs. `Server.WithTTL`
-   sets the lifetime and what counts as a renewal (a `PUT`, not a `GET`).
+1. **Expiry in the store: done** (`docstore.ExpiringAdapter`, generic over every `Adapter`).
+   - The lifetime is an injected `ExpiryPolicy{TTL(id, now)}` (`FixedTTL(24*time.Hour)` is the
+     public offer; per-tenant or per-size policies plug in the same way) and an injectable clock
+     (`Now`). `Save` and `SaveIf` renew; `Load` and `List` do not; an expired document is
+     invisible at once (404, left out of listings) before `Sweep` deletes it, and a delete of one
+     answers 404.
+   - The deadline is a side record `expiry:<id>` written through the same adapter, so nothing
+     is needed from memory, local files, SQLite or the nested backends beyond the wrapper, and
+     `SaveIf`, `Locker`, `PrefixLister` and the quota report pass through. Order: Save writes the
+     record, then the document (a failed write puts the old record back, so failures do not
+     extend a life); `Sweep` deletes the document, its access list, shared-editing state and
+     `versions/` snapshots (`Related`, replaceable), and the record last, so a crash leaves only
+     an orphan record (dropped once past its deadline) and never an unswept document.
+     A document with no record (the store was wrapped late, or the policy did not cover it)
+     does not expire until the first `Sweep` gives it `UpdatedAt + TTL`.
+   - `Run(ctx, interval)` sweeps in the background. `Server.WithExpiry(e)` serves the wrapper:
+     reads and writes answer `X-Gojiberry-Expires` (RFC 3339), listings carry `expires`, `GET`
+     never renews and `DELETE` is unchanged. The `docstore` command turns it on with
+     `GOJIBERRY_DOCSTORE_EXPIRY_TTL` (e.g. `24h`) and `GOJIBERRY_DOCSTORE_EXPIRY_SWEEP`
+     (default 5 minutes, at most the TTL). The `expiry:` keyspace is reserved from `/docs`.
+   - Left in this item: edits through the collaboration hub (`collab:` writes) do not yet renew
+     the document, so the hub must call the wrapper's `Save` of the document (or the policy must
+     learn the pairing) before collaborators' edits count; two server processes on one store can
+     race at the instant of expiry; backups of the store are outside this (see 2.2).
 2. **Anonymous sessions.** A signed, opaque session token (no user record); the server
    keeps `session → document` only as long as the document lives.
 3. **Links** are `/d/{id}` as now, with the capability in the ID (edit) and a derived
@@ -75,7 +96,17 @@ launch, not after:
 6. **Tests.** Time is injected (a fake clock): edit renews, view does not, expiry at
    24 h, the sweeper deletes, a download after expiry fails, limits hold.
 
-## 5. Open questions
+## 5. What the abuse controls still need
+
+Expiry is only the retention half. Before launch the section 3 items are all still to build:
+the size caps and the "only documents" check at `PUT`, per-session, per-IP-range and global
+limits (the passkey routes have a per-client limiter to reuse) with a challenge when busy,
+`noindex` and no listing for anonymous sessions (the `/docs` listing must not be open to them),
+the report link and a delete-by-ID takedown path, the anonymous session token and the
+`session -> document` record that lives and dies with the document, the view-only derived ID,
+and the legal read of the terms.
+
+## 6. Open questions
 
 1. Is the lifetime fixed at 24 hours or adjustable per deployment? (Configurable, 24 h
    in the public offer.)

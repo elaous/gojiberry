@@ -85,6 +85,15 @@ func Main() {
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
+	// With GOJIBERRY_DOCSTORE_EXPIRY_TTL set, every document expires that long after its last
+	// write; everything below (passkeys, directory, the server) uses the wrapped store, whose
+	// policy leaves their own keyspaces alone.
+	if cfg.ExpiryTTL > 0 {
+		ea := docstore.NewExpiringAdapter(adapter, docstore.FixedTTL(cfg.ExpiryTTL))
+		go ea.Run(context.Background(), cfg.ExpirySweep)
+		adapter = ea
+		log.Printf("docstore: documents expire %s after their last write (sweep every %s)", cfg.ExpiryTTL, cfg.ExpirySweep)
+	}
 	authManager, err := docstore.NewAuthManager(context.Background(), cfg.Auth)
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
