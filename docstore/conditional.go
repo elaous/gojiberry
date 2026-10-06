@@ -49,3 +49,13 @@ func (m *MemoryAdapter) SaveIf(_ context.Context, id string, data []byte, prev s
 	m.docs[id] = Document{ID: id, Data: cp, UpdatedAt: time.Now()}
 	return nil
 }
+
+// Locker is an optional capability of an Adapter: exclusive access to the store for
+// everything else that shares it (other tabs of the same browser, other processes), for
+// as long as the caller holds it. It is for a store that cannot write conditionally
+// (ConditionalAdapter): the saver takes the lock around a read-change-write of the
+// catalog, so two of them cannot interleave. Lock waits for its turn; the function it
+// returns gives the lock back and must be called exactly once.
+type Locker interface {
+	Lock(ctx context.Context) (unlock func(), err error)
+}
