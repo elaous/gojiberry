@@ -1,4 +1,4 @@
-package translateserver
+package server
 
 import (
 	"bytes"

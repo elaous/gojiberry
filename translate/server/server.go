@@ -1,4 +1,4 @@
-// Package translateserver is a small standalone translation proxy: it
+// Package server is a small standalone translation proxy: it
 // holds a DeepL API key server-side (a client-side WASM binary can't
 // keep a secret safe -- anyone could extract it from the downloaded
 // binary) and exposes one HTTP endpoint a browser can call with plain
@@ -14,7 +14,7 @@
 // behind, the same way fontserver's own fetchGoogleFonts field keeps
 // its network call swappable for tests without needing a second
 // provider yet either.
-package translateserver
+package server
 
 import (
 	"context"

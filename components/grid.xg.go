@@ -45,5 +45,5 @@ func Grid(props GridProps) xango.Node {
 	if props.Gap != "" {
 		style += "gap:" + props.Gap + ";"
 	}
-	return xango.El("div", []xango.Attr{xango.A("class", "gj-grid"), xango.A("style", style)}, props.Children...)
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-grid"), xango.A("style", xango.AttrVal(style))}, xango.Child(props.Children))
 }
