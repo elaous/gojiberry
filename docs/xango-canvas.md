@@ -95,7 +95,7 @@ renderer that understands canvas nodes.
 ## 3. A fourth renderer: `canvas/xango`
 
 `xango.Node` is already renderer-agnostic -- `xango.Render` makes HTML,
-`domrt` patches the DOM, `xangogio` draws with Gio. A `canvas/xango` renderer
+`domrt` patches the DOM, `xango/gio` draws with Gio. A `canvas/xango` renderer
 would turn a tree of *canvas* elements into a live `Stage`:
 
 ```xango
@@ -147,7 +147,7 @@ type Adapter interface {
 The hard part is not drawing, it is *identity*. A canvas component holds
 state the tree knows nothing about: the caret, the selection, an in-progress
 drag, an open menu. If every render built fresh components, a keystroke
-would reset all of it. `canvas/xango` should follow `domrt` and `xangogio`:
+would reset all of it. `canvas/xango` should follow `domrt` and `xango/gio`:
 
 - **Match by position and `Key`**, reusing the component when the tag
   matches, so `Update` runs on the existing object.

@@ -27,31 +27,18 @@ func Confirm(props ConfirmProps) xango.Node {
 	if cancelLabel == "" {
 		cancelLabel = "Cancel"
 	}
-	return Dialog(DialogProps{
-		Open:  props.Open,
-		Role:  "alertdialog",
-		Title: props.Title,
-		Body:  []xango.Node{xango.Text(props.Message)},
-		Actions: []xango.Node{
-			Button(ButtonProps{
-				Label:   cancelLabel,
-				Variant: ButtonSecondary,
-				OnClick: func(xango.Event) {
-					if props.OnCancel != nil {
-						props.OnCancel()
-					}
-				},
-			}),
-			Button(ButtonProps{
-				Label:   confirmLabel,
-				Variant: ButtonPrimary,
-				OnClick: func(xango.Event) {
-					if props.OnConfirm != nil {
-						props.OnConfirm()
-					}
-				},
-			}),
-		},
-		OnClose: props.OnCancel,
-	})
+	onCancel := func(xango.Event) {
+		if props.OnCancel != nil {
+			props.OnCancel()
+		}
+	}
+	onConfirm := func(xango.Event) {
+		if props.OnConfirm != nil {
+			props.OnConfirm()
+		}
+	}
+	return Dialog(DialogProps{Open: props.Open, Role: "alertdialog", Title: props.Title, Body: []xango.Node{xango.Text(props.Message)}, Actions: []xango.Node{
+		Button(ButtonProps{Label: cancelLabel, Variant: ButtonSecondary, OnClick: onCancel}),
+		Button(ButtonProps{Label: confirmLabel, Variant: ButtonPrimary, OnClick: onConfirm}),
+	}, OnClose: props.OnCancel})
 }

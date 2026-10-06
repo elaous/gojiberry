@@ -2,8 +2,8 @@
 
 The same stateful counter `examples/wasm-counter` mounts into a real
 browser DOM via `domrt`, mounted instead into a real native window via
-[Gio](https://gioui.org) (`gioui.org`) through `xangogio`
-(`../../xangogio`) -- proving `xango.Node` is renderer-agnostic in the
+[Gio](https://gioui.org) (`gioui.org`) through `xango/gio`
+(`../../xango/gio`) -- proving `xango.Node` is renderer-agnostic in the
 sense that actually matters: a completely different target platform (a
 desktop/mobile GPU window, not a browser) is a new consumer of the
 same tree, not a rewrite of it.
@@ -12,8 +12,8 @@ It's a separate Go module (like `examples/canvas-app` and
 `examples/collab-editor-app`), `replace`-ing `github.com/elaous/gojiberry`
 with the local checkout (so it can depend on `gioui.org`, and the cgo/
 EGL/Vulkan/X11/Wayland bindings that pulls in, without adding any of
-that to the root module) and `github.com/elaous/gojiberry/xangogio` with
-the sibling `../../xangogio` checkout (the actual renderer -- see that
+that to the root module) and `github.com/elaous/gojiberry/xango/gio` with
+the sibling `../../xango/gio` checkout (the actual renderer -- see that
 module's own README for how it works and what it's verified against;
 this demo doesn't define it locally).
 
@@ -22,11 +22,11 @@ this demo doesn't define it locally).
 - `shared/counter.xg` is `Counter`, unchanged in spirit from
   `wasm-counter`'s: it only calls `xango.El`/`xango.Text`/`xango.On`, with no
   `js`/`wasm` or Gio import at all. `data-axis="horizontal"` on the
-  outer `div` is the one layout hint `xangogio` understands (there's no
+  outer `div` is the one layout hint `xango/gio` understands (there's no
   CSS to carry a flex direction on a native target); `domrt` and
   `xango.Render` both ignore it as an inert attribute.
 - `main.go` is the real, interactive entry point: a standard
-  `app.Window` event loop that calls `xangogio.Renderer.Layout` on every
+  `app.Window` event loop that calls `gio.Renderer.Layout` on every
   `FrameEvent`. Run it on a machine with a display:
 
   ```
@@ -56,7 +56,7 @@ now, tracked as separate follow-up work.
 ## Verified
 
 `gio_test.go`'s `TestCounterRendersAndClicksThroughRealGio` drives the
-exact same `Counter`/`xangogio.Renderer` pair `main.go`'s `run` mounts
+exact same `Counter`/`gio.Renderer` pair `main.go`'s `run` mounts
 into a real desktop window, but through Gio's own headless GPU backend
 (`gioui.org/gpu/headless`) instead of `app.Window`, so it runs without
 a display server or compositor:
@@ -82,10 +82,10 @@ screenshots; three same-state frames in a row are confirmed
 pixel-identical, so this is a real, bounded one-frame latency in Gio's
 own glyph-atlas upload, not test flakiness.
 
-`xangogio.Renderer`'s own tag-by-tag coverage (`input` type=checkbox/
+`gio.Renderer`'s own tag-by-tag coverage (`input` type=checkbox/
 type=text, `select`/`option`, `Renderer.Styles`) is verified in that
-module's own `render_test.go` instead, alongside `xangogio/cssgen`'s own
-tests -- see `../../xangogio/README.md`'s own "Verified" section. This
+module's own `render_test.go` instead, alongside `xango/gio/cssgen`'s own
+tests -- see `../../xango/gio/README.md`'s own "Verified" section. This
 demo's own test is specifically the end-to-end integration proof: a
 real component, a real window, a real click firing a real handler,
 through the actual `main.go` entry point's own renderer setup.
