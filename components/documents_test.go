@@ -295,6 +295,70 @@ func TestMigratePanel(t *testing.T) {
 	mustContain(t, render(t, Migrate(p)), `role="alert"`, "boom")
 }
 
+func TestSizeTextRoundsToTheNearestUnit(t *testing.T) {
+	for n, want := range map[int64]string{0: "0 bytes", 1: "1 byte", 999: "999 bytes", 1024: "1 KiB (1,024 bytes)", 1500: "1 KiB (1,500 bytes)", 1536: "2 KiB (1,536 bytes)",
+		348160: "340 KiB (348,160 bytes)", 5 << 20: "5 MiB (5,242,880 bytes)", 3<<30 + 1: "3 GiB (3,221,225,473 bytes)"} {
+		if got := SizeText(n); got != want {
+			t.Errorf("%d: %q, want %q", n, got, want)
+		}
+	}
+}
+
+func TestOpenDownloadDialogShowsTheSizes(t *testing.T) {
+	var dropped bool
+	d := OpenDownload{Name: "plan", Current: 12 << 10, History: 340 << 10, Versions: 3, OnDrop: func(b bool) { dropped = b }}
+	html := render(t, OpenDownloadDialog(d))
+	mustContain(t, html, "Download plan as .open", "Current version: 12 KiB (12,288 bytes)", "Version history: 3 versions, 340 KiB (348,160 bytes)", "Drop the version history", "The file will be about 352 KiB")
+	d.Drop = true
+	mustContain(t, render(t, OpenDownloadDialog(d)), "The file will be about 12 KiB", "checked")
+	for _, h := range findHandlers(OpenDownloadDialog(d), "change") {
+		h(xango.NewEvent("change", nil, true, nil, nil))
+	}
+	if !dropped {
+		t.Error("the checkbox reports")
+	}
+	none := render(t, OpenDownloadDialog(OpenDownload{Name: "x", Current: 100}))
+	mustContain(t, none, "No saved versions")
+	mustNotContain(t, none, "Drop the version history")
+}
+
+// Choices with a Group go under a heading, the groups in the order they first appear;
+// a choice with none stays loose, after the headings when it comes after them.
+func TestDownloadFormatsAreGroupedInOrderOfAppearance(t *testing.T) {
+	p := DocListProps{
+		Docs:     []Doc{{ID: "x", Name: "X"}},
+		Download: func(context.Context, string, string) error { return nil },
+		DownloadFormats: []DocChoice{
+			{Name: "b1", Label: "B one", Group: "Beta"},
+			{Name: "a1", Label: "A one", Group: "Alpha"},
+			{Name: "b2", Label: "B two", Group: "Beta"},
+			{Name: "loose", Label: "Loose"},
+		},
+	}
+	html := render(t, DocList(p))
+	at := func(s string) int {
+		i := strings.Index(html, s)
+		if i < 0 {
+			t.Fatalf("%q missing: %s", s, html)
+		}
+		return i
+	}
+	order := []string{`label="Beta"`, ">B one<", ">B two<", `label="Alpha"`, ">A one<", ">Loose<"}
+	for i := 1; i < len(order); i++ {
+		if at(order[i-1]) >= at(order[i]) {
+			t.Errorf("%s should come before %s: %s", order[i-1], order[i], html)
+		}
+	}
+	// B two is inside the Beta group, not after Alpha.
+	if at(">B two<") > at(`label="Alpha"`) {
+		t.Error("grouped options stay together")
+	}
+	// The loose option is not inside a heading: the last optgroup closes before it.
+	if at(">Loose<") < strings.LastIndex(html, "</optgroup>") {
+		t.Error("an ungrouped option is not under a heading")
+	}
+}
+
 func TestCapacityWarnsWhenFillingUp(t *testing.T) {
 	mustNotContain(t, render(t, Capacity(CapacityProps{Used: 79, Total: 100})), "gj-capacity-warning")
 	filling := render(t, Capacity(CapacityProps{Used: 85, Total: 100}))

@@ -203,9 +203,6 @@ func main() {
 	u.saver.OnChange = func() { renderUI() }
 	u.saver.Deliver = transfer.Download
 	u.saver.Export = u.transfer.Export
-	for _, e := range u.transfer.Exporters() {
-		u.saver.DownloadFormats = append(u.saver.DownloadFormats, components.SaverChoice{Name: e.Format().Name, Label: e.Format().Label})
-	}
 	u.saver.Link = func(kind, id string) string {
 		if kind == "folder" {
 			return share.FolderPath(pageBase(), id)
@@ -234,6 +231,7 @@ func main() {
 
 	var domRoot *domrt.Root
 	renderUI = func() {
+		u.saver.DownloadFormats = downloadChoices(u.transfer.Exporters()) // the headings follow the language
 		mac := false
 		keymap := stage.EffectiveKeymap()
 		cmds := stage.Features.Commands()
@@ -985,4 +983,45 @@ func hubURL(param, origin string) string {
 		return u
 	}
 	return origin + "/collab"
+}
+
+// downloadChoices lists the formats of the "Download as" menu under headings: the
+// documents people send around first, then web and text formats, then the data formats,
+// and last opendocs' own file, which carries the history too.
+func downloadChoices(exporters []transfer.Exporter) []components.SaverChoice {
+	groups := []struct {
+		title string
+		names []string
+	}{
+		{T("download.group.documents", "Documents"), []string{"docx", "pdf", "rtf", "epub"}},
+		{T("download.group.web", "Web and text"), []string{"html", "markdown", "text"}},
+		{T("download.group.data", "Data"), []string{"json", "proto-text", "proto"}},
+		{T("download.group.opendocs", "opendocs"), []string{"open"}},
+	}
+	byName := map[string]transfer.Format{}
+	for _, e := range exporters {
+		byName[e.Format().Name] = e.Format()
+	}
+	var out []components.SaverChoice
+	for _, g := range groups {
+		for _, n := range g.names {
+			f, ok := byName[n]
+			if !ok {
+				continue
+			}
+			label := f.Label
+			if n == "open" {
+				label = T("download.openWithHistory", "opendocs (.open), with version history")
+			}
+			out = append(out, components.SaverChoice{Name: f.Name, Label: label, Group: g.title})
+			delete(byName, n)
+		}
+	}
+	for _, e := range exporters { // any other format a host added
+		if f, ok := byName[e.Format().Name]; ok {
+			out = append(out, components.SaverChoice{Name: f.Name, Label: f.Label, Group: T("download.group.more", "More")})
+			delete(byName, f.Name)
+		}
+	}
+	return out
 }
