@@ -172,7 +172,7 @@ The `keys:<ID>` record decides who a document is encrypted to, so it is authenti
 stored. Design:
 
 - Each record is `{payload, sig}`: the payload is JSON (`v`, the document ID, a growing `seq`, a
-  `pending` flag, the recipients), and `sig` is an **Ed25519 signature** over a fixed context, the
+  `pending` flag, the document's `protection` level, the recipients), and `sig` is an **Ed25519 signature** over a fixed context, the
   document ID and the payload bytes. The ID in the signed message means a valid record cannot be
   moved to another document.
 - The signing key is the owner's: `encrypt.SignerFromAge` derives it from an age identity (HMAC of a
@@ -292,25 +292,47 @@ cannot be opened.
       to end save: the check runs before anything is overwritten, a refusal leaves the
       existing document as it was and is that document's `Failed`).
 
-   **Warning: `SetProtection(E2EE)` does not erase the past.** The previous generation of the
-   document (`prev`) and its version snapshots still hold the pre-switch plaintext, with the
-   real name and tags, under the wrapping they had, until the store's keyring re-keys them
-   (`Sharing.Repair`). Until then, whoever could read those copies still can. `ImportPack`
-   with Replace writes the confidential document in one step (the check runs first, and the
-   record is never stored as an ordinary document), but the copies of the document it
-   replaced are the same case.
+   5. **Keys per protection level (done).** `encrypt.ConfidentialKeyring` chooses the recipients by the
+      document's level, read from a signed `protection` field in the `keys:<ID>` record (C.5; the
+      same signature and fail-closed rules, so a store writer cannot flip it, and an unsigned or
+      altered record fails the save instead of falling back to the server level). A confidential
+      document's files are wrapped **only** for people's keys (`People`: the owner's keys and the
+      signed recipient list); `AtRest` (C.1) is never consulted for them, and `ServerRecipients`
+      are removed from the list even if a deployment put the server key among the owners (no
+      recipient left: `ErrNoRecipients`, nothing is saved). Server-level documents and non-document
+      ids keep using `AtRest`. Identities are the union of both, for every document: opening is not
+      where the level is enforced, and a re-key between levels must open the old wrapping.
+      `Sharing.SetProtection(doc, level)` writes the record (level and `pending`) first, then
+      re-keys every stored file of the document (current copy, previous copy, every version
+      snapshot) and clears `pending` only when all are done; settled, it reads one record and writes
+      nothing. A failure is an `*encrypt.RekeyError` naming the files still wrapped to the old set.
+      `encrypt.RekeyHook(sharing)` is the function for `Saver.Rekey`, which the saver calls (it
+      does not import encrypt): `SetProtection` to e2ee re-keys **first** and only then moves the
+      name and tags into the document, so no file holding them is ever wrapped for the server; back
+      to server it moves the name out first (still wrapped for people) and re-keys last, so a failure
+      exposes nothing. Calling `SetProtection` again with the same level retries (the hook runs even
+      when the catalog already says so). `Saver.Save` of a new confidential document (an import, a
+      copy, a document marked so) runs the gate and the re-key before its first byte is written.
+      A document with `Saver.Rekey` set is therefore never left wrapped for the server key once
+      `SetProtection` has returned nil. Remaining weakness: deleting a document's `keys:` record
+      (a store writer can) makes its later saves server level, since nothing can tell a deleted
+      record from a document that never had one; `SetProtection` never deletes the record, and a
+      signed index of documents with records (C.5) would close it.
+
+   Without a `Saver.Rekey` hook, `SetProtection(E2EE)` still does not erase the past: the previous
+   generation and the version snapshots keep the wrapping they had until the store's keyring
+   re-keys them (`Sharing.Repair`). `ImportPack` with Replace writes the confidential document in
+   one step (the check and the re-key run first, and the record is never stored as an ordinary
+   document); the copies of the document it replaced are re-keyed by the same hook.
 
    *Left:*
-   1. The saver records the level but does not choose the keys: which recipients a confidential
-      document's files are wrapped for (people's keys only, not a server key) is the store's
-      keyring, and re-keying copies and versions written before the switch is `Sharing.Repair`.
-      A keyring that does this per protection level is not built.
-   2. The showcase wiring and the key management UX (where the owner's key lives, the "make
+   1. The showcase wiring and the key management UX (where the owner's key lives, the "make
       confidential" switch, the recovery key shown once, the lock mark in the document list).
-   3. Folder names are not hidden (they live in the catalog and the folder records); only
+   2. Folder names are not hidden (they live in the catalog and the folder records); only
       documents are.
-   4. A saved document keeps its older copies readable to whoever had access to them: the
-      switch changes the catalog and the document, not what was already stored (see 1).
-   5. Key management for `Seal`/`Open` in the pack UI ("As .opendoc", "Import .opendoc"): until
+   3. What someone already opened or copied before a switch cannot be taken back (as with any
+      re-key); with the hook the stored copies themselves are re-keyed. A store writer who
+      deleted the `keys:` record first is the weakness named in item 5.
+   4. Key management for `Seal`/`Open` in the pack UI ("As .opendoc", "Import .opendoc"): until
       then `Session.DownloadPack` leaves confidential documents out and says how many, and
       `Session.ImportPackData` reports the ones it could not open.

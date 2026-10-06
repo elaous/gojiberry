@@ -369,6 +369,12 @@ func (a *Adapter) rekeyOne(ctx context.Context, id string) error {
 // its files cannot be opened). Write failures after that are collected, not stopping the
 // others. The caller holds the lock.
 func (a *Adapter) rekeyGroup(ctx context.Context, ids []string) (int, error) {
+	done, err := a.rekeyGroupFiles(ctx, ids)
+	return len(done), err
+}
+
+// rekeyGroupFiles is rekeyGroup that says which files it wrote.
+func (a *Adapter) rekeyGroupFiles(ctx context.Context, ids []string) ([]string, error) {
 	var errs []error
 	var present []string
 	for _, id := range ids {
@@ -383,9 +389,9 @@ func (a *Adapter) rekeyGroup(ctx context.Context, ids []string) (int, error) {
 		}
 	}
 	if len(errs) > 0 {
-		return 0, errors.Join(errs...)
+		return nil, errors.Join(errs...)
 	}
-	n := 0
+	var done []string
 	for _, id := range present {
 		if err := a.rekeyOne(ctx, id); err != nil {
 			if errors.Is(err, docstore.ErrNotFound) {
@@ -394,9 +400,9 @@ func (a *Adapter) rekeyGroup(ctx context.Context, ids []string) (int, error) {
 			errs = append(errs, fmt.Errorf("%s: %w", id, err))
 			continue
 		}
-		n++
+		done = append(done, id)
 	}
-	return n, errors.Join(errs...)
+	return done, errors.Join(errs...)
 }
 
 // exclusive takes the store's Lock and then the adapter's own, which a Save of an encrypted
@@ -501,6 +507,34 @@ func (a *Adapter) RekeyDocument(ctx context.Context, docID string) (int, error) 
 		return 0, err
 	}
 	return a.rekeyGroup(ctx, ids)
+}
+
+// RekeyDocumentFiles is RekeyDocument that says which files it wrote (done) and which of the
+// document's files it listed and did not write (stale: they are still encrypted to whatever
+// recipients they had), so a caller can report what a failed re-key left behind.
+func (a *Adapter) RekeyDocumentFiles(ctx context.Context, docID string) (done, stale []string, err error) {
+	unlock, err := a.exclusive(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer unlock()
+	ids, err := a.filesOf(ctx, docID)
+	if err != nil {
+		return nil, ids, err
+	}
+	done, err = a.rekeyGroupFiles(ctx, ids)
+	if err != nil {
+		in := map[string]bool{}
+		for _, d := range done {
+			in[d] = true
+		}
+		for _, id := range ids {
+			if !in[id] {
+				stale = append(stale, id)
+			}
+		}
+	}
+	return done, stale, err
 }
 
 // RekeyIDs re-keys the given files as one unit (the files of one document): all are opened

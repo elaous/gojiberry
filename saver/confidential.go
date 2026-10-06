@@ -91,13 +91,30 @@ func (s *Saver) Reveal(ctx context.Context, target, id string) (name string, tag
 // protection the ConfidentialCheck hook, if there is one, must agree (a refusal is returned,
 // wrapped, and nothing changes).
 //
-// This changes what the catalog and the document say, not who the files are encrypted to:
-// afterwards the store's keyring (docstore/encrypt) is what decides that, and the copies
-// and versions written before keep the wrapping they had until they are re-keyed.
+// Keys. With Saver.Rekey set (encrypt.RekeyHook), every stored file of the document (the
+// current copy, the previous copy, each version snapshot) is encrypted again to the new level's
+// recipients, in an order that never leaves a confidential document wrapped for a server key
+// once SetProtection has returned nil:
 //
-// WARNING: the previous generation of the document and its version snapshots still hold the
-// pre-switch plaintext, real name and tags included, until the store's keyring re-keys them
-// (encrypt.Sharing.Repair). Switching does not make the past confidential.
+//   - to ProtectionE2EE the re-key runs first (the signed record flips, then every file is
+//     rewritten for people's keys only), and only then do the real name and tags move into
+//     the document, so no file that holds them is ever wrapped for the server. If the re-key
+//     fails, the error names the files still wrapped to the old set (encrypt.RekeyError),
+//     the catalog still says server, nothing was moved; later saves of the document already
+//     use the new keys.
+//   - to ProtectionServer the catalog and the document change first, still wrapped for
+//     people, and the re-key to the server's keys runs last. If it fails, the document is
+//     server level in the catalog but still wrapped for people only: nothing is exposed.
+//
+// SetProtection is idempotent and the way to retry: called again with the same level it runs
+// the hook again even if the catalog already says so (the hook does nothing when the level is
+// settled), which finishes a re-key that was cut short. Without Rekey, the store's keyring
+// alone decides who the files are encrypted to and the copies and versions written before
+// keep the wrapping they had until they are re-keyed (encrypt.Sharing.Repair).
+//
+// WARNING (no Rekey hook only): the previous generation of the document and its version
+// snapshots still hold the pre-switch plaintext, real name and tags included, until the
+// store's keyring re-keys them.
 func (s *Saver) SetProtection(ctx context.Context, target, id, to string) error {
 	if to != ProtectionServer && to != ProtectionE2EE {
 		return ErrProtection
@@ -108,13 +125,42 @@ func (s *Saver) SetProtection(ctx context.Context, target, id, to string) error 
 		return err
 	}
 	if cur.Protection == to {
-		return nil // already so: nothing to check or change
+		// Already so in the catalog: no check, nothing to move. The files may still be
+		// half way (an earlier re-key failed): finishing is the hook's idempotent job.
+		return s.rekey(ctx, target, id, to)
 	}
-	if to == ProtectionE2EE && s.ConfidentialCheck != nil {
-		if err := s.ConfidentialCheck(ctx, target, id); err != nil {
-			return fmt.Errorf("saver: not made confidential: %w", err)
+	if to == ProtectionE2EE {
+		if s.ConfidentialCheck != nil {
+			if err := s.ConfidentialCheck(ctx, target, id); err != nil {
+				return fmt.Errorf("saver: not made confidential: %w", err)
+			}
+		}
+		if err := s.rekey(ctx, target, id, to); err != nil {
+			return err
 		}
 	}
+	if err := s.setLevel(ctx, target, id, to); err != nil {
+		return err
+	}
+	if to == ProtectionServer {
+		return s.rekey(ctx, target, id, to)
+	}
+	return nil
+}
+
+// rekey runs the Rekey hook, if there is one.
+func (s *Saver) rekey(ctx context.Context, target, id, to string) error {
+	if s.Rekey == nil {
+		return nil
+	}
+	if err := s.Rekey(ctx, target, id, to); err != nil {
+		return fmt.Errorf("saver: protection %q: files not all re-keyed (run it again to finish): %w", to, err)
+	}
+	return nil
+}
+
+// setLevel moves the name and tags and the level in the catalog and the document.
+func (s *Saver) setLevel(ctx context.Context, target, id, to string) error {
 	return s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		e, ok := cat.Docs[id]
 		if !ok {

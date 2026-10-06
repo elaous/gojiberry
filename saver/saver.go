@@ -63,6 +63,15 @@ type Saver struct {
 	// needs, such as a recovery key besides a passkey (encrypt.ConfidentialCheck). Nil means
 	// no check. The saver does not know about keys: it only asks.
 	ConfidentialCheck func(ctx context.Context, target, id string) error
+	// Rekey, when set, is what makes the files of a document follow its protection level: it
+	// is called with the level the document is moving to (ProtectionServer or ProtectionE2EE)
+	// and must leave every stored file of the document (current copy, previous copy, every
+	// version snapshot) encrypted to that level's recipients, or fail naming what is left
+	// (encrypt.RekeyHook; the saver does not import it). It must be idempotent and cheap when
+	// the level is already settled, because SetProtection calls it again on a retry. It runs
+	// outside the saver's catalog lock (a re-key takes the store's). Nil means none: the
+	// store's keyring alone decides, and copies written before a switch keep their wrapping.
+	Rekey func(ctx context.Context, target, id, protection string) error
 
 	mu sync.Mutex   // one catalog update at a time
 	tm sync.RWMutex // Targets, which AddTarget and RemoveTarget change
@@ -226,6 +235,26 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 	// not in the document file.
 	history := doc.History
 	doc.History = nil
+	// A document that is written end to end here (a new confidential one, an import, a copy)
+	// has its files switched to people's keys before the first byte of it is written: the
+	// gate runs first, the re-key second, and the in-lock gates below are then not repeated.
+	prechecked := false
+	want := e2ee
+	if s.Rekey != nil && !want && doc.Protection() == ProtectionE2EE {
+		_, gerr := s.Get(ctx, target, id)
+		want = errors.Is(gerr, ErrNotFound) // only a new document takes its level from the file
+	}
+	if s.Rekey != nil && want {
+		if s.ConfidentialCheck != nil {
+			if err := s.ConfidentialCheck(ctx, target, id); err != nil {
+				return Entry{}, fmt.Errorf("saver: not saved as confidential: %w", err)
+			}
+		}
+		prechecked = true
+		if err := s.Rekey(ctx, target, id, ProtectionE2EE); err != nil {
+			return Entry{}, fmt.Errorf("saver: not saved as confidential: %w", err)
+		}
+	}
 	var out Entry
 	err := s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		prev, existed := cat.Docs[id]
@@ -236,7 +265,7 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 			// the catalog has none: the saved document's own are kept.
 			if e2ee && !prev.confidential() {
 				// Becoming confidential by this save: the same gate as SetProtection's.
-				if s.ConfidentialCheck != nil {
+				if s.ConfidentialCheck != nil && !prechecked {
 					if err := s.ConfidentialCheck(ctx, target, id); err != nil {
 						return fmt.Errorf("saver: not saved as confidential: %w", err)
 					}
@@ -264,7 +293,7 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 			if protection = doc.Protection(); e2ee {
 				protection = ProtectionE2EE
 			}
-			if protection == ProtectionE2EE && s.ConfidentialCheck != nil {
+			if protection == ProtectionE2EE && s.ConfidentialCheck != nil && !prechecked {
 				if err := s.ConfidentialCheck(ctx, target, id); err != nil {
 					return fmt.Errorf("saver: not saved as confidential: %w", err)
 				}

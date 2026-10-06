@@ -116,7 +116,12 @@ type sharedRecord struct {
 	Seq uint64 `json:"seq"`
 	// Pending means the files of the document may not all be encrypted to Recipients yet (a
 	// change was saved and its re-key did not finish): Remove, Add and Repair finish it.
-	Pending    bool          `json:"pending,omitempty"`
+	Pending bool `json:"pending,omitempty"`
+	// Protection is the document's protection level ("" for server, ProtectionE2EE for end to
+	// end), signed with the list: it is what ConfidentialKeyring trusts to know that a
+	// document's files must be wrapped for people's keys only. The catalog and the document
+	// say it too, but the keyring reads this one, which a store writer cannot change.
+	Protection string        `json:"protection,omitempty"`
 	Recipients []sharedEntry `json:"recipients"`
 }
 
@@ -349,15 +354,23 @@ const finishAttempts = 5
 // unchanged): a Remove or Add that saved a newer list meanwhile set it pending for files this
 // pass may have sealed to the old one, so the document is re-keyed again.
 func (s *Sharing) finish(ctx context.Context, docID string) (int, error) {
-	var n int
+	n, _, err := s.finishFiles(ctx, docID)
+	return n, err
+}
+
+// finishFiles is finish that also says, when a pass failed, which files were left encrypted to
+// their old recipients.
+func (s *Sharing) finishFiles(ctx context.Context, docID string) (n int, stale []string, err error) {
 	for range finishAttempts {
 		rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers())
 		if err != nil {
-			return n, err
+			return n, nil, err
 		}
 		seq := rec.Seq
-		if n, err = s.Adapter.RekeyDocument(ctx, docID); err != nil {
-			return n, err
+		var done []string
+		done, stale, err = s.Adapter.RekeyDocumentFiles(ctx, docID)
+		if n = len(done); err != nil {
+			return n, stale, err
 		}
 		again := false
 		if _, err = s.mutate(ctx, docID, func(rec *sharedRecord) (bool, error) {
@@ -371,13 +384,13 @@ func (s *Sharing) finish(ctx context.Context, docID string) (int, error) {
 			rec.Pending = false
 			return true, nil
 		}); err != nil {
-			return n, err
+			return n, nil, err
 		}
 		if !again {
-			return n, nil
+			return n, nil, nil
 		}
 	}
-	return n, docstore.ErrConflict
+	return n, nil, docstore.ErrConflict
 }
 
 // Add shares a document with a key. confirmed is the fingerprint the owner says they checked
