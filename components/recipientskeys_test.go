@@ -257,3 +257,37 @@ func TestAttestedKeysShowAStrongerMark(t *testing.T) {
 	p.Parsed = &RecipientRow{Type: "ssh-ed25519", Fingerprint: "SHA256:a", Verified: true, Attested: true}
 	mustContain(t, render(t, Recipients(p)), "gj-recip-parsed-fingerprint")
 }
+
+// The owner's own signature is the strongest mark, above the key's attestation and the verified
+// e-mail; a verified key of an address that has an owner key but was not signed by it says so; and
+// nothing shows an owner mark on a key that is not verified.
+func TestOwnerSignedKeysShowTheStrongestMark(t *testing.T) {
+	p := RecipientsProps{
+		Shared: []RecipientRow{
+			{Label: "bo@x.io", Type: "ssh-ed25519", Fingerprint: "SHA256:bo", Verified: true, Attested: true, OwnerSigned: true, OwnerEnrolled: true},
+			{Label: "cy", Type: "age-x25519", Fingerprint: "SHA256:cy", Verified: true, OwnerEnrolled: true},
+			{Label: "di", Type: "age-x25519", Fingerprint: "SHA256:di", Verified: true},
+		},
+		Pending: &Pending{Inline: true},
+		Add:     func(_ context.Context, k, c string) error { return nil },
+		Directory: func(context.Context, string) ([]DirRow, error) {
+			return nil, nil
+		},
+		DirSearched: true,
+		DirResults: []DirRow{
+			{Label: "a", Type: "age-x25519", Fingerprint: "SHA256:a", Key: "age1a", Verified: true, OwnerSigned: true, OwnerEnrolled: true},
+			{Label: "c", Type: "age-x25519", Fingerprint: "SHA256:c", Key: "age1c", OwnerSigned: true, OwnerEnrolled: true}, // not verified: no mark of trust at all
+		},
+	}
+	html := render(t, Recipients(p))
+	if n := strings.Count(html, "gj-recip-owner-signed"); n != 2 { // bo in the list, a in the picker
+		t.Errorf("owner-signed marks: %d in %s", n, html)
+	}
+	if n := strings.Count(html, "gj-recip-owner-unsigned"); n != 1 { // cy only
+		t.Errorf("unsigned notes: %d", n)
+	}
+	if strings.Contains(html, "gj-recip-attested") {
+		t.Error("the owner mark replaces the attested one")
+	}
+	mustContain(t, html, "verified e-mail, signed by its owner", "not even the server that runs the directory", "not signed by the owner key", "label only: confirm the fingerprint")
+}

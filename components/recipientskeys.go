@@ -25,19 +25,33 @@ func needsSecondKey(p RecipientsProps) bool {
 	return true
 }
 
-// verifiedMark is the mark next to a key: verified e-mail, the stronger "verified e-mail and the
-// key's own signature" when the key attested the binding, or a label only that needs its
-// fingerprint confirmed. None says the key is safe.
-func verifiedMark(verified, attested bool) xango.Node {
+// verifiedMark is the mark next to a key, strongest first: "verified e-mail, signed by its owner"
+// when the address's owner key signed the publication (ownerSigned: holds against the server that
+// runs the directory too), "verified e-mail, signed by the key" when the key attested the binding
+// itself, plain "verified e-mail", or a label only that needs its fingerprint confirmed. None
+// says the key is safe. With ownerEnrolled and no owner signature a verified key also carries a
+// note: the address has an owner key and this key was not signed by it.
+func verifiedMark(verified, attested, ownerSigned, ownerEnrolled bool) xango.Node {
+	if verified && ownerSigned {
+		return xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-mark gj-recip-verified gj-recip-owner-signed"),
+			xango.A("title", tr("recipients.ownerSignedHelp", "The owner of this address holds a signing key of their own and signed this key's publication, so not even the server that runs the directory could have added it. That does not prove the key is safe."))},
+			xango.Text(tr("recipients.ownerSigned", "verified e-mail, signed by its owner")))
+	}
 	if verified && attested {
 		return xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-mark gj-recip-verified gj-recip-attested"),
 			xango.A("title", tr("recipients.attestedHelp", "The key was published by an account whose e-mail is verified, and the key itself signed that it belongs to this address, so the server alone could not have made that up. That does not prove the key is safe."))},
 			xango.Text(tr("recipients.attested", "verified e-mail, signed by the key")))
 	}
 	if verified {
-		return xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-mark gj-recip-verified"),
+		mark := xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-mark gj-recip-verified"),
 			xango.A("title", tr("recipients.verifiedHelp", "The key was published by an account whose e-mail is verified. That proves the account, not that the key is safe."))},
 			xango.Text(tr("recipients.verified", "verified e-mail")))
+		if ownerEnrolled {
+			return xango.El("span", nil, mark, xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-mark gj-recip-owner-unsigned"),
+				xango.A("title", tr("recipients.ownerUnsignedHelp", "This address has an owner key, and the owner did not sign this key: it was published before the owner key was set up. Confirm the fingerprint with the person."))},
+				xango.Text(tr("recipients.ownerUnsigned", "not signed by the owner key"))))
+		}
+		return mark
 	}
 	return xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-mark gj-recip-label-only")},
 		xango.Text(tr("recipients.labelOnly", "label only: confirm the fingerprint")))
@@ -86,7 +100,7 @@ func directoryPicker(p RecipientsProps, busy bool) []xango.Node {
 				xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text(orNone(label))),
 				xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-type")}, xango.Text(r.Type)),
 				xango.El("code", []xango.Attr{xango.A("class", "gj-recip-fingerprint")}, xango.Text(r.Fingerprint)),
-				verifiedMark(r.Verified, r.Attested),
+				verifiedMark(r.Verified, r.Attested, r.OwnerSigned, r.OwnerEnrolled),
 				docButton("gj-recip-pick", tr("recipients.pick", "Use this key"), busy, pick)))
 		}
 		nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list gj-recip-dir-results")}, items...))
