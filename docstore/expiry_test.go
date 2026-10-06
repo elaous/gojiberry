@@ -563,3 +563,31 @@ func TestParseExpiryEnv(t *testing.T) {
 		t.Errorf("config = %v %v", cfg.ExpiryTTL, cfg.ExpirySweep)
 	}
 }
+
+// The public offer's keyspaces ("public/", "report/", any case) are not reachable or listed
+// through the generic document API, and the sweeper never adopts them.
+func TestPublicKeyspacesReservedFromDocs(t *testing.T) {
+	ea, _ := newExpiring(NewMemoryAdapter())
+	for _, k := range []string{"public/doc/x", "public/tomb/x", "report/x", "Public/doc/x", "REPORT/x"} {
+		if err := ea.Save(context.Background(), k, []byte("rec")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := NewServer(ea, "memory").Handler()
+	for _, k := range []string{"public/doc/x", "public/tomb/x", "report/x", "Public/doc/x", "REPORT/x"} {
+		for _, m := range []string{"GET", "PUT", "DELETE"} {
+			if rec := doRequest(h, m, "/docs/"+k, "x"); rec.Code != 400 {
+				t.Errorf("%s %s = %d, want 400", m, k, rec.Code)
+			}
+		}
+	}
+	if rec := doRequest(h, "GET", "/docs", ""); strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Errorf("listed: %s", rec.Body)
+	}
+	if _, err := ea.Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if exp, _ := ea.Expiries(context.Background()); len(exp) != 0 {
+		t.Errorf("the sweeper gave a deadline to %v", exp)
+	}
+}

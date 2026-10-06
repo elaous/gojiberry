@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -131,5 +132,24 @@ func TestUserFromClaimsKeepsUsernamePictureAndMakesAPerson(t *testing.T) {
 	no := false
 	if v := userFromClaims("google", idTokenClaims{Subject: "S2", Email: "x@gojiberry.io", EmailVerified: &no}, false); v.Email != "" {
 		t.Error("an unverified address identifies no one")
+	}
+}
+
+// "anon" is reserved for anonymous sessions: a provider by that name would make its subjects
+// look like them.
+func TestProviderNameAnonIsReserved(t *testing.T) {
+	_, err := NewManager(context.Background(), Config{BaseURL: "https://x.example", Providers: []Provider{{Name: AnonProvider, IssuerURL: "https://issuer.invalid", ClientID: "c"}}})
+	if err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("err = %v, want a reserved-name error", err)
+	}
+}
+
+func TestAnonymousUser(t *testing.T) {
+	u := AnonymousUser("abc")
+	if u.ID != "anon:abc" || !u.IsAnonymous() || u.Email != "" || u.VerifiedEmail {
+		t.Fatalf("anonymous user = %+v", u)
+	}
+	if (User{ID: "google:1"}).IsAnonymous() {
+		t.Fatal("a provider user counts as anonymous")
 	}
 }
