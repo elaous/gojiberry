@@ -113,6 +113,13 @@ document shows its folder.
    encrypted record (placeholder name, no tags in the index), and comes back through
    `ImportOptions.Open`; without them the session's download leaves it out and says so, and an
    import skips it with a needs-key warning.
+   A **confidential folder** (`Saver.SetFolderProtection`, `Session.SetFolderProtection`) keeps its
+   real name in an encrypted record (`folder-secret/<ID>`); every list, breadcrumb and the move menu
+   show "Confidential folder" (`DocFolder.Confidential` is set) until `Session.RevealFolder`, or the
+   person who made or renamed it here, shows the real name. The tree's shape, sizes and times stay
+   visible, and documents inside are not confidential unless made so (the `recursive` option does).
+   In a pack the folder's name travels sealed (`Seal`/`Open`) or, without `Seal`, as the placeholder;
+   the ZIP and the pack's file name use the placeholder.
    Migrate's format menu has "One .opendoc pack": the documents are gathered into a pack and
    downloaded, and nothing is saved in the store.
 4. **Folder download** is `Saver.Archive`: a ZIP with the folders drawn as
@@ -276,7 +283,7 @@ age file whose data key is wrapped for each recipient (the owner's SSH key, a re
 the document is shared with). The saver, folders, versions, `Verify` and packs work on it
 unchanged, because they see an `Adapter`; the catalog stays readable, as plaintext metadata (names, tags, folders,
 sizes), which is also why a confidential item's name needs the placeholder described in
-[encryption-and-passkeys.md](encryption-and-passkeys.md) (not built yet). Server-side features
+[encryption-and-passkeys.md](encryption-and-passkeys.md) (built for documents and folders: step 5 and 5.6). Server-side features
 (search, spelling, translation, the collaboration hub) cannot read ciphertext.
 
 ```go

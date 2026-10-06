@@ -421,11 +421,54 @@ cannot be opened.
    one step (the check and the re-key run first, and the record is never stored as an ordinary
    document); the copies of the document it replaced are re-keyed by the same hook.
 
+   6. **Confidential folders (done): C.2's "folder names inside the envelope".**
+      - `Saver.SetFolderProtection(ctx, target, id, level, recursive)`, with the same
+        `ConfidentialCheck` and `Rekey` hooks as documents and the same order (to e2ee: check,
+        re-key, then the name moves; back to server: the name moves out, then re-key; the same level
+        again retries the hook). A confidential folder lists `saver.ConfidentialFolderName`
+        ("Confidential folder") in the catalog, in `Folders`, `Overview`, breadcrumbs (`FolderPath`) and
+        the move menu; `Saver.RevealFolder` returns the real name (an error wrapping
+        `docstore.ErrLocked` when no key opens it).
+      - **Where the name lives.** In `folder-secret/<folder ID>` (`docstore.FolderSecretPrefix`,
+        `saver.FolderSecretKey`), JSON `{"name": ...}`, written through the adapter. The folder's
+        plain record (`catalog:folder/<ID>`) keeps the placeholder, the parent and the level, so the
+        tree's shape stays visible (C.2) and a rebuild needs no key to find the folder in its place.
+        The rule for the encrypt layer: `DefaultSkip` skips `catalog:` (the plain records) but NOT
+        `folder-secret/`; `encrypt.DocID("folder-secret/<ID>")` is the folder's ID (a UUID like a
+        document's), so the folder's own signed `keys:<ID>` record and `ConfidentialKeyring` choose
+        the recipients: people's keys only at the e2ee level, never the server's; `Sharing.SetProtection`
+        works on a folder ID as on a document's. `saver.reserved` lists the prefix so it is never read
+        as a document. (Under `RequireACL` the key is an ordinary id: the first writer owns it.)
+      - Rename of a confidential folder asserts the keys (the hook) and writes only the record: the
+        catalog does not change. Move keeps the name hidden; delete removes the record.
+      - **Documents inside are NOT made confidential by their folder**, and a folder does not become
+        confidential because its documents are. `recursive` applies the level to the folders below and to
+        every document in the subtree (the trash included), reporting the ones that failed together
+        (run again to finish).
+      - `Rebuild`/`Repair`/`Verify` with no key: the plain record is read as is, the folder is listed under
+        the placeholder, whatever name a record claims. A store whose folder records are themselves
+        encrypted and locked lists the folder as confidential under the placeholder, with its place in
+        the tree from the old catalog (the top level if there was none), like locked documents.
+      - Packs: a confidential folder is in the index under the placeholder; with `PackOptions.Seal` its
+        real name travels as an encrypted record whose ID is the folder's (a small `.open` message
+        named with it, index name `ConfidentialFolderName`); without `Seal` it is exported with the
+        placeholder and reported to `Warn` (`PackNeedsKey`). `ImportPack` with `Open` makes the folder
+        confidential again (through `ConfidentialCheck`; a refusal is that folder's `Failed` and its
+        documents go to the parent); without it the folder comes in as an ordinary folder named with the
+        placeholder, and `NeedsKey` names it. ZIP archives draw a confidential folder as a directory
+        named with the placeholder.
+      - `Session`: `SetFolderProtection`, `RevealFolder`; unrevealed confidential folders show the
+        placeholder in the list, breadcrumb and move menu (`components.DocFolder.Confidential` lets a UI
+        draw a lock); the pack's file name is never the real one. Tests with the real adapter
+        (`docstore/encrypt/confidential_folders_test.go`): no real name in the store, a stranger's rebuild,
+        passkey PRF alone and recovery key alone, rename, move, delete, breadcrumbs, no leak in the lists.
+
    *Left:*
    1. The showcase wiring and the key management UX (where the owner's key lives, the "make
       confidential" switch, the recovery key shown once, the lock mark in the document list).
-   2. Folder names are not hidden (they live in the catalog and the folder records); only
-      documents are.
+   2. ~~Folder names are not hidden~~ Done, see 5.6 below (confidential folders). Left there: the
+      UI switch, and the pack-count wording in `Session.DownloadPack`, which counts a folder whose
+      name could not be sealed with the documents left out.
    3. What someone already opened or copied before a switch cannot be taken back (as with any
       re-key); with the hook the stored copies themselves are re-keyed. A store writer who
       deleted the `keys:` record first is the weakness named in item 5.

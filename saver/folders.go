@@ -16,8 +16,13 @@ import (
 // and a name that need not be unique; Parent is the ID of the folder it is in, ""
 // at the top level. The catalog keeps the folders (and each is also written as a
 // record of its own, so a rebuilt catalog finds the empty ones).
+//
+// A folder is server level (Protection ProtectionServer, the default) or confidential
+// (ProtectionE2EE, see SetFolderProtection): then Name is ConfidentialFolderName in every
+// list, and the real name is read with RevealFolder. The place in the tree is never hidden.
 type Folder struct {
 	ID, Name, Parent string
+	Protection       string
 }
 
 // MaxFolderDepth is how deep folders nest.
@@ -68,8 +73,25 @@ func (s *Saver) CreateFolder(ctx context.Context, target, parent, name string) (
 
 // createFolder is CreateFolder with the folder's ID given (an import keeps the IDs of a pack).
 func (s *Saver) createFolder(ctx context.Context, target, id, parent, name string) (Folder, error) {
+	return s.createFolderLevel(ctx, target, id, parent, name, false)
+}
+
+// createFolderLevel is createFolder that can make the folder confidential from the start (an
+// import of a sealed folder name): the real name is never written outside the encrypted
+// record. The ConfidentialCheck and the Rekey hook run first, as in SetFolderProtection.
+func (s *Saver) createFolderLevel(ctx context.Context, target, id, parent, name string, e2ee bool) (Folder, error) {
 	if !ValidName(name) {
 		return Folder{}, ErrName
+	}
+	if e2ee {
+		if s.ConfidentialCheck != nil {
+			if err := s.ConfidentialCheck(ctx, target, id); err != nil {
+				return Folder{}, fmt.Errorf("saver: folder not made confidential: %w", err)
+			}
+		}
+		if err := s.rekey(ctx, target, id, ProtectionE2EE); err != nil {
+			return Folder{}, err
+		}
 	}
 	var out Folder
 	err := s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
@@ -80,11 +102,18 @@ func (s *Saver) createFolder(ctx context.Context, target, id, parent, name strin
 			return fmt.Errorf("saver: folders nest at most %d deep", MaxFolderDepth)
 		}
 		f := folderEntry{Name: name, Parent: parent}
+		if e2ee {
+			// The real name first, in its encrypted record; the plain one holds the placeholder.
+			if err := s.writeFolderSecret(ctx, t, cat, id, name); err != nil {
+				return err
+			}
+			f.Name, f.Protection = ConfidentialFolderName, ProtectionE2EE
+		}
 		if err := s.writeFolder(ctx, t, id, f); err != nil {
 			return err
 		}
 		cat.Folders[id] = f
-		out = Folder{ID: id, Name: name, Parent: parent}
+		out = Folder{ID: id, Name: f.Name, Parent: parent, Protection: level(f.Protection)}
 		return nil
 	})
 	return out, err
@@ -103,7 +132,11 @@ func (s *Saver) Folders(ctx context.Context, target string) ([]Folder, error) {
 func (c *catalog) folderList() []Folder {
 	out := make([]Folder, 0, len(c.Folders))
 	for id, f := range c.Folders {
-		out = append(out, Folder{ID: id, Name: f.Name, Parent: f.Parent})
+		name := f.Name
+		if f.Protection == ProtectionE2EE {
+			name = ConfidentialFolderName
+		}
+		out = append(out, Folder{ID: id, Name: name, Parent: f.Parent, Protection: level(f.Protection)})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		a, b := strings.ToLower(out[i].Name), strings.ToLower(out[j].Name)
@@ -115,23 +148,51 @@ func (c *catalog) folderList() []Folder {
 	return out
 }
 
-// RenameFolder gives a folder a new name.
+// RenameFolder gives a folder a new name. For a confidential folder the new name goes into
+// its encrypted record (written for people's keys only, the Rekey hook having asserted them
+// first) and the catalog keeps the placeholder.
 func (s *Saver) RenameFolder(ctx context.Context, target, id, name string) error {
 	if !ValidName(name) {
 		return ErrName
 	}
-	return s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
-		f, ok := cat.Folders[id]
-		if !ok {
-			return ErrFolder
-		}
-		f.Name = name
-		if err := s.writeFolder(ctx, t, id, f); err != nil {
+	rekeyed := false
+	for attempt := 0; ; attempt++ {
+		f, err := s.folder(ctx, target, id)
+		if err != nil {
 			return err
 		}
-		cat.Folders[id] = f
-		return nil
-	})
+		if f.Protection == ProtectionE2EE {
+			if err := s.rekey(ctx, target, id, ProtectionE2EE); err != nil {
+				return err
+			}
+			rekeyed = true
+		}
+		err = s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
+			f, ok := cat.Folders[id]
+			if !ok {
+				return ErrFolder
+			}
+			if f.Protection == ProtectionE2EE {
+				if !rekeyed {
+					return errNeedRekey // it became confidential after it was read
+				}
+				if err := s.writeFolderSecret(ctx, t, nil, id, name); err != nil {
+					return err
+				}
+				return nil // the plain record and the catalog keep the placeholder
+			}
+			f.Name = name
+			if err := s.writeFolder(ctx, t, id, f); err != nil {
+				return err
+			}
+			cat.Folders[id] = f
+			return nil
+		})
+		if errors.Is(err, errNeedRekey) && attempt < 2 {
+			continue
+		}
+		return err
+	}
 }
 
 // MoveFolder puts a folder in another ("" for the top level); not into itself
@@ -234,8 +295,14 @@ func (s *Saver) DeleteFolderReport(ctx context.Context, target, id string) (purg
 				return err
 			}
 		}
+		secret := cat.Folders[id].Protection == ProtectionE2EE
 		delete(cat.Folders, id)
-		*later = append(*later, func() { _ = t.Adapter.Delete(ctx, t.folderPrefix()+id) })
+		*later = append(*later, func() {
+			_ = t.Adapter.Delete(ctx, t.folderPrefix()+id)
+			if secret {
+				_ = t.Adapter.Delete(ctx, folderSecretKey(id))
+			}
+		})
 		return nil
 	})
 	if err != nil {

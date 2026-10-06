@@ -196,7 +196,7 @@ func ValidName(name string) bool {
 // version history).
 func reserved(key string) bool {
 	return strings.HasPrefix(key, "acl:") || strings.HasPrefix(key, "collab:") || strings.HasPrefix(key, "catalog:") ||
-		strings.HasPrefix(key, VersionPrefix)
+		strings.HasPrefix(key, VersionPrefix) || strings.HasPrefix(key, docstore.FolderSecretPrefix)
 }
 
 func (s *Saver) codecOf(key string) (docfile.Codec, string) {

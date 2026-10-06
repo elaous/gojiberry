@@ -77,6 +77,7 @@ type Session struct {
 	tagFilter            string
 	usage                Usage
 	revealed             map[string]revealedMeta // confidential documents opened here, by ID: the real name and tags
+	revealedFolders      map[string]string       // confidential folders opened here, by ID: the real name
 	openDlg              *openDialog             // the .open download being asked about
 	checked              map[string]bool         // targets already checked for leftovers of a crash
 	status               string
@@ -174,7 +175,7 @@ func (s *Session) MarkEdited() {
 func (s *Session) SetTarget(ctx context.Context, name string) error {
 	s.set(func() {
 		s.target, s.entries, s.trashed, s.versions, s.status, s.id = name, nil, nil, nil, "", ""
-		s.revealed = nil
+		s.revealed, s.revealedFolders = nil, nil
 		s.folder, s.folders, s.usage = "", nil, Usage{}
 		if s.saveState != "" {
 			s.saveState = SaveUnsaved // the document is not in the new target
@@ -240,7 +241,7 @@ func (s *Session) Refresh(ctx context.Context) error {
 		if s.target != target {
 			return
 		}
-		s.entries, s.trashed, s.versions, s.folders = s.reveal(list), s.reveal(trashed), versions, folders
+		s.entries, s.trashed, s.versions, s.folders = s.reveal(list), s.reveal(trashed), versions, s.revealFolders(folders)
 		if usageErr == nil {
 			s.usage = usage
 		}
@@ -277,6 +278,38 @@ func (s *Session) reveal(list []Entry) []Entry {
 		}
 	}
 	return out
+}
+
+// revealFolders puts the real names of the confidential folders opened in this session into a
+// list read from the catalog, which lists the placeholder; one not opened here keeps it. A
+// folder that is not confidential any more or is gone drops out of the memory (call with the
+// lock held).
+func (s *Session) revealFolders(list []Folder) []Folder {
+	out := make([]Folder, len(list))
+	seen := map[string]bool{}
+	for i, f := range list {
+		out[i] = f
+		if name, ok := s.revealedFolders[f.ID]; ok && f.Protection == ProtectionE2EE {
+			out[i].Name = name
+			seen[f.ID] = true
+		}
+	}
+	for id := range s.revealedFolders {
+		if !seen[id] {
+			delete(s.revealedFolders, id)
+		}
+	}
+	return out
+}
+
+// rememberFolder keeps the real name of a confidential folder for the list.
+func (s *Session) rememberFolder(id, name string) {
+	s.set(func() {
+		if s.revealedFolders == nil {
+			s.revealedFolders = map[string]string{}
+		}
+		s.revealedFolders[id] = name
+	})
 }
 
 // remember keeps the real name and tags of a confidential document for the list.
@@ -673,6 +706,41 @@ func (s *Session) Reveal(ctx context.Context, id string) error {
 // SetTagFilter narrows the list to the documents with the tag ("" for all).
 func (s *Session) SetTagFilter(tag string) { s.set(func() { s.tagFilter = tag }) }
 
+// SetFolderProtection makes a folder confidential (its name moves into an encrypted record,
+// the catalog lists the placeholder) or ProtectionServer again, and shows its real name in the
+// list while it is openable here. With recursive the folders and documents inside get the
+// same level; without it they keep theirs.
+func (s *Session) SetFolderProtection(ctx context.Context, id, to string, recursive bool) error {
+	s.op.Lock()
+	defer s.op.Unlock()
+	target := s.targetName()
+	name := s.names([]string{id})
+	if err := s.Saver.SetFolderProtection(ctx, target, id, to, recursive); err != nil {
+		return storageFull(err)
+	}
+	if to == ProtectionE2EE {
+		if n, err := s.Saver.RevealFolder(ctx, target, id); err == nil {
+			s.rememberFolder(id, n)
+			name = n
+		}
+		return s.after(ctx, msg("saver.folderConfidential", "%s is now a confidential folder: its name is kept inside the envelope", name))
+	}
+	return s.after(ctx, msg("saver.folderNotConfidential", "%s is no longer a confidential folder", name))
+}
+
+// RevealFolder shows the real name of a confidential folder in the list, if it can be opened
+// here.
+func (s *Session) RevealFolder(ctx context.Context, id string) error {
+	name, err := s.Saver.RevealFolder(ctx, s.targetName(), id)
+	if err != nil {
+		return err
+	}
+	if f, err := s.Saver.folder(ctx, s.targetName(), id); err == nil && f.Protection == ProtectionE2EE {
+		s.rememberFolder(id, name)
+	}
+	return s.after(ctx, msg("saver.revealed", "%s can be read: its name is shown", name))
+}
+
 // OpenFolder shows a folder ("" for the top level); a new document is saved in it.
 func (s *Session) OpenFolder(ctx context.Context, id string) error {
 	s.mu.Lock()
@@ -697,11 +765,17 @@ func (s *Session) NewFolder(ctx context.Context, name string) error {
 	return s.after(ctx, msg("saver.created", "%s created", name))
 }
 
-// RenameFolder renames a folder.
+// RenameFolder renames a folder. The new name of a confidential folder goes into its
+// encrypted record, and is shown here since the person just typed it.
 func (s *Session) RenameFolder(ctx context.Context, id, name string) error {
 	if err := s.Saver.RenameFolder(ctx, s.targetName(), id, name); err != nil {
 		return storageFull(err)
 	}
+	s.set(func() {
+		if _, ok := s.revealedFolders[id]; ok {
+			s.revealedFolders[id] = name
+		}
+	})
 	return s.after(ctx, msg("saver.renamed", "%s renamed", name))
 }
 
@@ -747,6 +821,10 @@ func (s *Session) MoveDocs(ctx context.Context, ids []string, folder string) err
 // SetFolderDraft keeps what is typed in the new-folder box.
 func (s *Session) SetFolderDraft(name string) { s.set(func() { s.folderDraft = name }) }
 
+func docFolderOf(f Folder) components.DocFolder {
+	return components.DocFolder{ID: f.ID, Name: f.Name, Parent: f.Parent, Confidential: f.Protection == ProtectionE2EE}
+}
+
 func docOf(e Entry) components.Doc {
 	d := components.Doc{ID: e.ID, Name: e.Name, Size: e.Size, Updated: e.Updated, Trashed: e.Trashed, Tags: e.Tags}
 	if e.Format != nil {
@@ -777,13 +855,13 @@ func (s *Session) Docs() components.DocListProps {
 		}
 	}
 	for _, f := range s.folders {
-		p.AllFolders = append(p.AllFolders, components.DocFolder{ID: f.ID, Name: f.Name, Parent: f.Parent})
+		p.AllFolders = append(p.AllFolders, docFolderOf(f))
 		if f.Parent == s.folder {
-			p.Folders = append(p.Folders, components.DocFolder{ID: f.ID, Name: f.Name, Parent: f.Parent})
+			p.Folders = append(p.Folders, docFolderOf(f))
 		}
 	}
 	for _, f := range FolderPath(s.folders, s.folder) {
-		p.Path = append(p.Path, components.DocFolder{ID: f.ID, Name: f.Name, Parent: f.Parent})
+		p.Path = append(p.Path, docFolderOf(f))
 	}
 	p.OpenFolder, p.NewFolder, p.RenameFolder, p.DeleteFolder, p.Move = s.OpenFolder, s.NewFolder, s.RenameFolder, s.DeleteFolder, s.MoveDocs
 	p.FolderDraft, p.OnFolderDraft = s.folderDraft, s.SetFolderDraft
@@ -989,6 +1067,9 @@ func (s *Session) folderName(id string) string {
 	defer s.mu.Unlock()
 	for _, f := range s.folders {
 		if f.ID == id {
+			if f.Protection == ProtectionE2EE {
+				return ConfidentialFolderName // the pack's name is in the clear: not the real one
+			}
 			return f.Name
 		}
 	}

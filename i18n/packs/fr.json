@@ -317,6 +317,8 @@
   "saver.notSavedFull": "Non enregistré : le stockage est plein. Téléchargez le document (Télécharger au format) pour ne rien perdre, puis supprimez les anciennes versions ou la corbeille, ou enregistrez ailleurs",
   "saver.confidential": "%s est désormais confidentiel : son nom et ses étiquettes sont conservés dans le document",
   "saver.notConfidential": "%s n'est plus confidentiel",
-  "saver.revealed": "%s est lisible : son nom est affiché"
+  "saver.revealed": "%s est lisible : son nom est affiché",
+  "saver.folderConfidential": "%s est désormais un dossier confidentiel : son nom est conservé dans l'enveloppe",
+  "saver.folderNotConfidential": "%s n'est plus un dossier confidentiel"
  }
 }

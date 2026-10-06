@@ -39,7 +39,13 @@ type Doc struct {
 
 // DocFolder is a folder as the components list it: like a document, an ID and a
 // name that need not be unique; Parent is the folder it is in, "" at the top.
-type DocFolder struct{ ID, Name, Parent string }
+//
+// Confidential marks a folder whose real name is kept inside the envelope: Name is then the
+// placeholder ("Confidential folder") until the host has revealed it, so a UI can draw a lock.
+type DocFolder struct {
+	ID, Name, Parent string
+	Confidential     bool
+}
 
 // DocVersion is a snapshot of a document.
 type DocVersion struct {
