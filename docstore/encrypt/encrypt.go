@@ -93,7 +93,7 @@ func (s Static) Identities(context.Context, string) ([]age.Identity, error) { re
 // DefaultSkip says which stored items stay readable: the catalogs, the folder records, the
 // ACL records and the fonts, which list or serve a store and hold no document text.
 func DefaultSkip(id string) bool {
-	return strings.HasPrefix(id, "catalog:") || strings.HasPrefix(id, "acl:") || strings.HasPrefix(id, "fonts/") || strings.HasPrefix(id, KeysPrefix)
+	return strings.HasPrefix(id, "catalog:") || strings.HasPrefix(id, "acl:") || strings.HasPrefix(id, "fonts/") || strings.HasPrefix(id, KeysPrefix) || strings.HasPrefix(id, directoryPrefix)
 }
 
 // Adapter is a docstore.Adapter that encrypts what it saves in Inner.
@@ -261,6 +261,11 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 
 // List implements docstore.Adapter. Sizes are of what is stored (the ciphertext).
 func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) { return a.Inner.List(ctx) }
+
+// ListPrefix implements docstore.PrefixLister over Inner (ids are stored as they are).
+func (a *Adapter) ListPrefix(ctx context.Context, prefix string) ([]docstore.Meta, error) {
+	return docstore.ListPrefix(ctx, a.Inner, prefix)
+}
 
 // Delete implements docstore.Adapter.
 func (a *Adapter) Delete(ctx context.Context, id string) error { return a.Inner.Delete(ctx, id) }

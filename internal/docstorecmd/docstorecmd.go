@@ -14,7 +14,25 @@ import (
 	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/auth/passkey"
 	"github.com/elaous/gojiberry/docstore"
+	"github.com/elaous/gojiberry/docstore/encrypt"
 )
+
+// withDirectory turns on the verified e-mail key directory (POST /directory/publish, GET
+// /directory/lookup) when GOJIBERRY_DOCSTORE_DIRECTORY_KEY holds a 32-byte seed in hex: it signs
+// the records and keys the hash that names them, so it must be kept and not changed. Unset, the
+// directory is off. "directory/" is reserved from the document API either way. The routes need
+// sign-in, so with no session manager they are not mounted.
+func withDirectory(srv *docstore.Server, adapter docstore.Adapter) {
+	signer, err := encrypt.DirectorySignerFromEnv()
+	if err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
+	if signer == nil {
+		return
+	}
+	srv.WithDirectory(encrypt.DirectoryService(&encrypt.AdapterDirectory{Store: adapter, Signer: signer}))
+	log.Print("docstore: key directory enabled")
+}
 
 // withPasskeys turns on sign-in with passkeys when GOJIBERRY_DOCSTORE_PASSKEY_RPID is set (with
 // GOJIBERRY_DOCSTORE_PASSKEY_ORIGINS, comma separated, GOJIBERRY_DOCSTORE_PASSKEY_NAME and, behind
@@ -76,6 +94,7 @@ func Main() {
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
+	withDirectory(srv, adapter)
 	srv = srv.WithAuth(authManager)
 	if authManager != nil {
 		log.Printf("docstore: sign-in enabled (%d provider(s))", len(cfg.Auth.Providers))
