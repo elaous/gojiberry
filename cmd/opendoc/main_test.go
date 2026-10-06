@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/elaous/gojiberry/docfile"
 )
@@ -205,5 +206,69 @@ func TestEsc(t *testing.T) {
 	}
 	if esc("plain ünïcode") != "plain ünïcode" {
 		t.Error("changed text that is fine")
+	}
+}
+
+func TestSafeKeepsNamesWithinFileNameLimits(t *testing.T) {
+	long := strings.Repeat("é", 300) // 600 bytes
+	got := safe(long)
+	if len(got)+len(".open") > 255 || len(got) > 240 || !utf8.ValidString(got) {
+		t.Fatalf("%d bytes, valid=%v", len(got), utf8.ValidString(got))
+	}
+	// A cut at the middle of a rune goes back to its start.
+	if got := safe(strings.Repeat("a", 239) + "日本"); got != strings.Repeat("a", 239) {
+		t.Errorf("%q", got)
+	}
+	if got := safe(strings.Repeat("a", 239) + ". x"); got != strings.Repeat("a", 239) {
+		t.Errorf("a name does not end with a dot or space: %q", got)
+	}
+}
+
+func TestUnpackLongNamesCollisionsAndExistingFiles(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	_ = os.MkdirAll(src, 0o755)
+	base := strings.Repeat("日", 82) // 246 bytes, over the 240 limit, and fine as a file name with .md
+	_ = os.WriteFile(filepath.Join(src, base+"A.md"), []byte("first"), 0o644)
+	_ = os.WriteFile(filepath.Join(src, base+"B.md"), []byte("second"), 0o644)
+	pk := filepath.Join(dir, "p.opendoc")
+	do(t, "pack", pk, src)
+	un := filepath.Join(dir, "un")
+	if out := do(t, "unpack", pk, un); !strings.Contains(out, "2 documents written") {
+		t.Fatalf("%s", out)
+	}
+	entries, err := os.ReadDir(un)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("%v %v", entries, err)
+	}
+	for _, e := range entries {
+		if len(e.Name()) > 255 || !utf8.ValidString(e.Name()) {
+			t.Errorf("file name of %d bytes", len(e.Name()))
+		}
+	}
+	// A second run does not overwrite anything, and says so with an error.
+	victim := filepath.Join(un, entries[0].Name())
+	_ = os.WriteFile(victim, []byte("mine"), 0o644)
+	var out bytes.Buffer
+	err = run([]string{"unpack", pk, un}, &out)
+	if err == nil || !strings.Contains(out.String(), "0 documents written") {
+		t.Fatalf("%v %q", err, out.String())
+	}
+	if got, _ := os.ReadFile(victim); string(got) != "mine" {
+		t.Errorf("an existing file was overwritten: %q", got)
+	}
+	// With --force it is replaced.
+	if out := do(t, "unpack", "--force", pk, un); !strings.Contains(out, "2 documents written") {
+		t.Fatalf("%s", out)
+	}
+	if got, _ := os.ReadFile(victim); string(got) == "mine" {
+		t.Errorf("--force did not overwrite")
+	}
+	// A directory in the way of a document is a failure for that document alone.
+	un2 := filepath.Join(dir, "un2")
+	_ = os.MkdirAll(filepath.Join(un2, entries[0].Name()), 0o755)
+	out.Reset()
+	if err := run([]string{"unpack", "--force", pk, un2}, &out); err == nil || !strings.Contains(out.String(), "1 documents written") {
+		t.Fatalf("%v %q", err, out.String())
 	}
 }
