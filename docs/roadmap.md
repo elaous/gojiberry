@@ -40,9 +40,6 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 6. **Terminal app demo.** A text-mode demo of the same engine (a file manager and a
    plain-text editor over `saver.Session`) to show the components are not tied to
    the browser. It reuses the console grammar above.
-7. **Store backends with conditional saves.** SQLite, local files, memory and the
-   HTTP store now save the catalog conditionally; PostgreSQL, MongoDB and S3 (which
-   has `If-Match` writes) still write unconditionally and keep the old limit that two
-   processes can lose a catalog update.
+7. **Store backends with conditional saves: done** for PostgreSQL, MongoDB and S3/MinIO (`SaveIf` in `docstore/backends`; the PostgreSQL one is tested with sqlmock, S3 against a fake that enforces `If-Match`/`If-None-Match`, and MongoDB, which has no fake, runs when `TEST_MONGO_URI` is set, so it has not run against a live server yet).
 8. The rest of the [known limits plan](known-limits-plan.md): i18n breadth,
    accessibility depth, right-to-left, Hunspell dictionaries on demand.

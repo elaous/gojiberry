@@ -15,6 +15,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 )
 
 // Config is the s3/minio backend's own config, decoded from
@@ -144,6 +145,54 @@ func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 		Body:   bytes.NewReader(data),
 	})
 	return err
+}
+
+// SaveIf implements docstore.ConditionalAdapter with S3's conditional writes: a new
+// document is written with If-None-Match: * (refused when the key exists), and a changed
+// one with If-Match: the ETag of the object whose bytes were just read and found to be
+// what prevDigest says, so the write only lands if nothing replaced it in between. A
+// refused condition (412 PreconditionFailed, or 409 ConditionalRequestConflict while
+// another write to the key is in flight) is docstore.ErrConflict.
+func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest string) error {
+	in := &s3.PutObjectInput{Bucket: aws.String(a.bucket), Key: aws.String(a.key(id)), Body: bytes.NewReader(data)}
+	if prevDigest == "" {
+		in.IfNoneMatch = aws.String("*")
+	} else {
+		out, err := a.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(a.bucket), Key: aws.String(a.key(id))})
+		if isS3NotFound(err) {
+			return docstore.ErrConflict
+		}
+		if err != nil {
+			return err
+		}
+		cur, err := io.ReadAll(out.Body)
+		_ = out.Body.Close()
+		if err != nil {
+			return err
+		}
+		if docstore.Digest(cur) != prevDigest || out.ETag == nil {
+			return docstore.ErrConflict
+		}
+		in.IfMatch = out.ETag
+	}
+	if _, err := a.client.PutObject(ctx, in); err != nil {
+		if isS3Conflict(err) {
+			return docstore.ErrConflict
+		}
+		return err
+	}
+	return nil
+}
+
+func isS3Conflict(err error) bool {
+	var api smithy.APIError
+	if errors.As(err, &api) {
+		switch api.ErrorCode() {
+		case "PreconditionFailed", "ConditionalRequestConflict":
+			return true
+		}
+	}
+	return false
 }
 
 func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error) {

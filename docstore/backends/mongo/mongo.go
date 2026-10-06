@@ -72,6 +72,40 @@ func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 	return err
 }
 
+// SaveIf implements docstore.ConditionalAdapter: a new document is inserted (a duplicate
+// key is a conflict), and a changed one is replaced with a filter on the bytes that were
+// read and found to be what prevDigest says, so nothing replaced it in between: a filter
+// that matches nothing is a conflict.
+func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest string) error {
+	doc := mongoDoc{ID: id, Data: data, UpdatedAt: time.Now()}
+	if prevDigest == "" {
+		_, err := a.coll.InsertOne(ctx, doc)
+		if mongo.IsDuplicateKeyError(err) {
+			return docstore.ErrConflict
+		}
+		return err
+	}
+	var cur mongoDoc
+	err := a.coll.FindOne(ctx, bson.M{"_id": id}).Decode(&cur)
+	if err == mongo.ErrNoDocuments {
+		return docstore.ErrConflict
+	}
+	if err != nil {
+		return err
+	}
+	if docstore.Digest(cur.Data) != prevDigest {
+		return docstore.ErrConflict
+	}
+	res, err := a.coll.ReplaceOne(ctx, bson.M{"_id": id, "data": cur.Data}, doc)
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return docstore.ErrConflict
+	}
+	return nil
+}
+
 func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error) {
 	var doc mongoDoc
 	err := a.coll.FindOne(ctx, bson.M{"_id": id}).Decode(&doc)

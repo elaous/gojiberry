@@ -139,3 +139,78 @@ func TestPostgresAdapterListScansAllRows(t *testing.T) {
 		t.Fatalf("List = %+v, want [a b]", metas)
 	}
 }
+
+func TestPostgresSaveIf(t *testing.T) {
+	sel := regexp.QuoteMeta(`SELECT data FROM documents WHERE id = $1 FOR UPDATE`)
+	ins := regexp.QuoteMeta(`INSERT INTO documents (id, data, updated_at) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`)
+	upd := regexp.QuoteMeta(`UPDATE documents SET data = $2, updated_at = $3 WHERE id = $1`)
+	ctx := context.Background()
+	newMock := func(t *testing.T) (*Adapter, sqlmock.Sqlmock) {
+		db, mock, err := sqlmock.New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		return newFromDB(db), mock
+	}
+	t.Run("a new document", func(t *testing.T) {
+		a, mock := newMock(t)
+		mock.ExpectBegin()
+		mock.ExpectQuery(sel).WithArgs("x").WillReturnError(sql.ErrNoRows)
+		mock.ExpectExec(ins).WithArgs("x", []byte("one"), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+		if err := a.SaveIf(ctx, "x", []byte("one"), ""); err != nil {
+			t.Fatal(err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("a new document someone else inserted first", func(t *testing.T) {
+		a, mock := newMock(t)
+		mock.ExpectBegin()
+		mock.ExpectQuery(sel).WithArgs("x").WillReturnError(sql.ErrNoRows)
+		mock.ExpectExec(ins).WithArgs("x", []byte("one"), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectRollback()
+		if err := a.SaveIf(ctx, "x", []byte("one"), ""); !errors.Is(err, docstore.ErrConflict) {
+			t.Fatalf("%v", err)
+		}
+	})
+	t.Run("creating what exists, a stale digest, a document that is gone", func(t *testing.T) {
+		a, mock := newMock(t)
+		mock.ExpectBegin()
+		mock.ExpectQuery(sel).WithArgs("x").WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow([]byte("one")))
+		mock.ExpectRollback()
+		if err := a.SaveIf(ctx, "x", []byte("again"), ""); !errors.Is(err, docstore.ErrConflict) {
+			t.Errorf("exists: %v", err)
+		}
+		mock.ExpectBegin()
+		mock.ExpectQuery(sel).WithArgs("x").WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow([]byte("two")))
+		mock.ExpectRollback()
+		if err := a.SaveIf(ctx, "x", []byte("three"), docstore.Digest([]byte("one"))); !errors.Is(err, docstore.ErrConflict) {
+			t.Errorf("stale: %v", err)
+		}
+		mock.ExpectBegin()
+		mock.ExpectQuery(sel).WithArgs("x").WillReturnError(sql.ErrNoRows)
+		mock.ExpectRollback()
+		if err := a.SaveIf(ctx, "x", []byte("v"), docstore.Digest([]byte("v"))); !errors.Is(err, docstore.ErrConflict) {
+			t.Errorf("gone: %v", err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("a changed document", func(t *testing.T) {
+		a, mock := newMock(t)
+		mock.ExpectBegin()
+		mock.ExpectQuery(sel).WithArgs("x").WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow([]byte("one")))
+		mock.ExpectExec(upd).WithArgs("x", []byte("two"), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+		if err := a.SaveIf(ctx, "x", []byte("two"), docstore.Digest([]byte("one"))); err != nil {
+			t.Fatal(err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+}

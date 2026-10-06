@@ -3,6 +3,7 @@ package docstore
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 )
 
@@ -122,6 +123,62 @@ func CheckAdapter(t *testing.T, newAdapter func() Adapter) {
 		}
 		if len(metas) != 0 {
 			t.Fatalf("List on empty store = %v, want empty", metas)
+		}
+	})
+}
+
+// CheckConditional runs the contract of ConditionalAdapter.SaveIf against an adapter that
+// starts empty: a new document needs prev "", a changed one the digest of what was read, a
+// stale or missing one is ErrConflict, and with several writers racing on one digest exactly
+// one wins.
+func CheckConditional(t *testing.T, newAdapter func() ConditionalAdapter) {
+	t.Helper()
+	ctx := context.Background()
+	t.Run("only what was read is saved", func(t *testing.T) {
+		a := newAdapter()
+		if err := a.SaveIf(ctx, "x", []byte("one"), ""); err != nil {
+			t.Fatal(err)
+		}
+		if err := a.SaveIf(ctx, "x", []byte("again"), ""); !errors.Is(err, ErrConflict) {
+			t.Errorf("creating what exists: %v", err)
+		}
+		if err := a.SaveIf(ctx, "x", []byte("two"), Digest([]byte("one"))); err != nil {
+			t.Fatal(err)
+		}
+		if err := a.SaveIf(ctx, "x", []byte("three"), Digest([]byte("one"))); !errors.Is(err, ErrConflict) {
+			t.Errorf("a stale save: %v", err)
+		}
+		if err := a.SaveIf(ctx, "missing", []byte("v"), Digest([]byte("v"))); !errors.Is(err, ErrConflict) {
+			t.Errorf("a document that is not there: %v", err)
+		}
+		if d, err := a.Load(ctx, "x"); err != nil || string(d.Data) != "two" {
+			t.Errorf("holds %q: %v", d.Data, err)
+		}
+	})
+	t.Run("one of several writers wins", func(t *testing.T) {
+		a := newAdapter()
+		_ = a.SaveIf(ctx, "c", []byte("0"), "")
+		var wg sync.WaitGroup
+		wins := make(chan int, 8)
+		for i := 1; i <= 8; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := a.SaveIf(ctx, "c", []byte{byte('0' + i)}, Digest([]byte("0"))); err == nil {
+					wins <- i
+				} else if !errors.Is(err, ErrConflict) {
+					t.Errorf("%v", err)
+				}
+			}()
+		}
+		wg.Wait()
+		close(wins)
+		n := 0
+		for range wins {
+			n++
+		}
+		if n != 1 {
+			t.Errorf("%d writers won, want 1", n)
 		}
 	})
 }

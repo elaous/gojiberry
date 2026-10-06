@@ -165,7 +165,9 @@ other store error still stops the operation.
 
 ## Two processes on one store
 
-Catalog updates are conditional (`docstore.ConditionalAdapter`): memory, SQLite (a busy
+Catalog updates are conditional (`docstore.ConditionalAdapter`): memory, PostgreSQL (a transaction that
+reads the row `FOR UPDATE`), MongoDB (a replace filtered on the bytes read), S3 and MinIO (`If-None-Match: *`
+to create and `If-Match` on the ETag read to replace; needs a store with conditional writes), SQLite (a busy
 timeout and an immediate write transaction), local files (an `flock` on the directory, on
 Unix) and the HTTP store (`If-Match`). `Repair` waits `RepairGrace` (2 s) and looks again
 before repairing, so it does not undo a delete another process is half way through, and

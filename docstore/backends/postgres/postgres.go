@@ -93,6 +93,45 @@ func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 	return err
 }
 
+// SaveIf implements docstore.ConditionalAdapter in one transaction: the row is read FOR
+// UPDATE, compared with prevDigest (its SHA-256, "" when it must not exist) and written; a
+// row inserted by someone else in the meantime makes the insert affect nothing, which is a
+// conflict.
+func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest string) error {
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var cur []byte
+	err = tx.QueryRowContext(ctx, `SELECT data FROM documents WHERE id = $1 FOR UPDATE`, id).Scan(&cur)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		if prevDigest != "" {
+			return docstore.ErrConflict
+		}
+		res, err := tx.ExecContext(ctx, `INSERT INTO documents (id, data, updated_at) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`, id, data, time.Now())
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return docstore.ErrConflict
+		}
+	case err != nil:
+		return err
+	default:
+		if prevDigest == "" || docstore.Digest(cur) != prevDigest {
+			return docstore.ErrConflict
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE documents SET data = $2, updated_at = $3 WHERE id = $1`, id, data, time.Now()); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error) {
 	var doc docstore.Document
 	doc.ID = id
