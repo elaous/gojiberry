@@ -700,3 +700,73 @@ func TestRebuildWithThreeFilesAndTheChangedOneIsCollectedOnlyWhenOld(t *testing.
 		t.Errorf("the old changed file is gone: %v", err)
 	}
 }
+
+// listOrdered lists the files in the given key order (any others after them).
+type listOrdered struct {
+	docstore.Adapter
+	order []string
+}
+
+func (l listOrdered) List(ctx context.Context) ([]docstore.Meta, error) {
+	ms, err := l.Adapter.List(ctx)
+	rank := func(m docstore.Meta) int {
+		if i := slices.Index(l.order, m.ID); i >= 0 {
+			return i
+		}
+		return len(l.order)
+	}
+	slices.SortStableFunc(ms, func(a, b docstore.Meta) int { return rank(a) - rank(b) })
+	return ms, err
+}
+
+// The outcome of a rebuild with a vouched-for save, a changed newer file and a stray does
+// not depend on the order of the listing (the stray first or last, and the changed file
+// before or after the vouched one), and the catalog it writes agrees with the store.
+func TestRebuildWithAStrayDoesNotDependOnListOrder(t *testing.T) {
+	ctx := context.Background()
+	for _, order := range []string{"S B A", "S A B", "B S A", "B A S", "A S B", "A B S"} {
+		mem := docstore.NewMemoryAdapter()
+		s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
+		id := twoSaves(t, s, docfile.JSON)
+		var cur catalogEntry
+		_ = s.view(ctx, "m", func(_ Target, c *catalog) error { cur = c.Docs[id]; return nil })
+		stored, _ := mem.Load(ctx, cur.Key)
+		_ = mem.Save(ctx, cur.Key, []byte(strings.Replace(string(stored.Data), "version two", "version twX", 1)))
+		stray := docWithText("plan", "stray")
+		stray.SetID(id)
+		stray.Updated = 1
+		data, _ := docfile.JSON.Marshal(stray)
+		strayKey := id + "~cccccccccccc.json"
+		_ = mem.Save(ctx, strayKey, data)
+		keys := map[string]string{"S": strayKey, "B": cur.Key, "A": cur.Prev}
+		var keyOrder []string
+		for _, k := range strings.Fields(order) {
+			keyOrder = append(keyOrder, keys[k])
+		}
+
+		s = &Saver{Targets: []Target{{Name: "m", Adapter: listOrdered{mem, keyOrder}}}}
+		if err := s.Rebuild(ctx, "m"); err != nil {
+			t.Fatal(err)
+		}
+		c := s.peekCatalog(ctx, s.Targets[0])
+		if c == nil {
+			t.Fatalf("%s: no catalog", order)
+		}
+		now := c.Docs[id]
+		if now.Key != cur.Prev || !slices.Contains(c.Skipped, cur.Key) {
+			t.Errorf("%s: the vouched file is the document, the changed one skipped: %+v %v", order, now, c.Skipped)
+		}
+		if now.Prev == cur.Key {
+			t.Errorf("%s: the changed file is not the previous copy: %+v", order, now)
+		}
+		if now.Prev == strayKey && slices.Contains(c.Skipped, strayKey) {
+			t.Errorf("%s: the stray is both previous copy and skipped: %+v %v", order, now, c.Skipped)
+		}
+		if bad, err := s.disagrees(ctx, s.Targets[0], c); err != nil || bad {
+			t.Errorf("%s: the rebuilt catalog disagrees with the store (%v): %+v %v", order, err, now, c.Skipped)
+		}
+		if d, _, err := s.LoadChecked(ctx, "m", id); err != nil || textOf(d) != "version one" {
+			t.Errorf("%s: %q %v", order, textOf(d), err)
+		}
+	}
+}

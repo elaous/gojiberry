@@ -422,6 +422,9 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 			// leftovers once it is old enough, see CollectOrphans.)
 			if changed(newer.Key) && vouched(older.Key) {
 				out.Skipped = append(out.Skipped, newer.Key)
+				if newer.Prev != "" && newer.Prev != older.Key { // a stray taken as its previous copy
+					out.Skipped = append(out.Skipped, newer.Prev)
+				}
 				if older.Prev != "" && !vouched(older.Prev) {
 					out.Skipped = append(out.Skipped, older.Prev)
 					older.Prev, older.PrevSum = "", ""
