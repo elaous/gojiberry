@@ -155,7 +155,9 @@ needs them (a conditional write), or two sign-ins can overwrite each other's cou
    people from the store's directory shows a verified mark and their registered keys; a
    pasted key for an address with no account stays "label only" and the owner confirms
    its fingerprint. Verified e-mail proves the account, and the key was published by it;
-   it does not prove the key is not the account's compromised one.
+   it does not prove the key is not the account's compromised one. Proof of possession, the
+   key's own attestation and the transparency log narrow what the server alone can claim; the
+   table of what is proven and what is not is in step 4b.
 
 5. **MFA: no separate second factor.** A passkey with user verification (required by default) is
    already two factors in one: the device and a PIN or biometric. We do not add TOTP or SMS codes
@@ -284,63 +286,202 @@ cannot be opened.
    shown, and Go strings cannot be wiped). The button is left out when the host sets `CreateRecoveryKey`
    without `OnRecoveryKey`. *Left:* the showcase does not supply these callbacks yet (`examples/people-keys-demo` does, see 4b);
    calling `CheckRecoverableOwner` when a document is made confidential is step 5.
-   4b. **Done (library, server rule, component and a demo host): the verified e-mail mark of C.4.**
-   `encrypt.KeyDirectory` (`Lookup(ctx, email) ([]PublishedKey, error)`; a `PublishedKey` is the key
-   text, label, type, fingerprint and `Verified`) is injected; `encrypt.AdapterDirectory` is one over a
-   `docstore.Adapter`.
-   - **Records are signed.** `Publish(ctx, user, key)` refuses (`ErrNotPublishable`) unless
-     `user.VerifiedEmail` is set (and `user.Email` with it) and the user came from a provider session (a
-     `passkey:` user carries no e-mail, B.3), and
-     writes `directory/<HMAC of the e-mail>/<fingerprint>` holding the key, label, the publisher's ID and
-     provider, the address and the time, signed by the server's `encrypt.DirectorySigner` (Ed25519; the
-     signature covers the record's own ID, so a record copied to another name fails). `Lookup`
-     recomputes type and fingerprint from the key text and sets `Verified` only when the signature
-     verifies for that record and address and the publisher is a provider user; any other record is
-     returned unverified ("label only") and an unreadable one is skipped. The record's name is a keyed
-     hash, so addresses cannot be guessed or enumerated from the store's IDs. At most 20 keys per
-     address (`MaxKeys`). `Lookup` lists only the address's prefix (`docstore.PrefixLister`, which the
-     memory, localfs and sqlite adapters implement; `docstore.ListPrefix` falls back to `List` for an
-     adapter without it).
-   - **The key is configuration.** `GOJIBERRY_DOCSTORE_DIRECTORY_KEY` is a 32-byte seed in hex
-     (`DirectorySignerFromEnv`; also the HMAC key, derived with a separate label). Unset, the directory is
-     off: no routes are mounted, `Publish` returns `ErrDirectoryOff`. A key per process is not generated:
-     records must verify after a restart. Changing the key unverifies and hides every record.
-   - **The server rule.** The `directory/` prefix is reserved in `docstore.Server` like `acl:` and
-     `collab:`: it cannot be read, written, listed or deleted through `/docs`. Records are written only
-     by the publish route. With an `auth.Manager` and `Server.WithDirectory(encrypt.DirectoryService(dir))`
-     (the docstore server does it when the key is set) the server mounts `POST /directory/publish` (body
-     `{"key", "label"}`, at most 4 KB) and `GET /directory/lookup?email=`. Both need a signed-in
-     *provider* session: a passkey session is refused (403) on publish and on lookup. Publishing needs
-     an explicitly verified e-mail: `auth.User.VerifiedEmail`, set only when the provider's ID token
-     says `email_verified: true` (an absent claim is **not** verification; `auth` then leaves
-     `User.Email` empty too). A provider that really verifies every address but omits the claim can be
-     opted in with `auth.Provider.AssumeEmailVerified` (default false; in the
-     `GOJIBERRY_DOCSTORE_AUTH_PROVIDERS` JSON, `"assumeEmailVerified": true`); an explicit
-     `email_verified: false` still wins. Publishing is under that address only: a different `email` in
-     the body is refused (403). Each user is limited to 10 publishes and 60 lookups a minute, and a
-     client address to 120 lookups (429 with `Retry-After`). **Lookup reveals the published public
-     keys of any address to every signed-in provider user, by design** (a public key is public, and
-     finding it by address is the feature); it does not reveal whether an address has an account. The
-     20-key cap is a list-then-save, serialised per address inside one process (a keyed mutex); with
-     several server replicas on one store, route publishes through a gateway that serialises them per
-     address, or use a store with a conditional write, or the cap can be overshot.
-   - **UI.** `RecipientRow.Verified` shows "verified e-mail" and a draft that is not shows "label only:
-     confirm the fingerprint"; `Recipients` can look an address up (`Directory`, `OnDirResults`,
-     `DirResults`), and picking a row fills the draft. The typed fingerprint stays for label-only keys,
-     and is skipped for a verified one only when the host sets `TrustVerified`. Verified e-mail proves the
-     account, and that the account published the key; it does not prove the key is safe.
+   4b. **Done (library, server routes, component and a demo host): the verified e-mail mark of C.4,
+   and the limits of the first version removed.**
+   `encrypt.KeyDirectory` (`Lookup(ctx, email) ([]PublishedKey, error)`) is injected; a `PublishedKey` is
+   the key text, label, type, fingerprint and the marks below. `encrypt.AdapterDirectory` is one over a
+   `docstore.Adapter`. The rule of the whole feature: **only the signed-in owner of an address can
+   publish, replace or revoke the keys of that address**, and only with a provider session whose e-mail
+   the provider verified.
+
+   *What the directory proves, and what it does not.* The directory proves exactly this: **"the provider
+   says this account's verified e-mail published this key, and (with the proof) held it at publish
+   time."** Each mark is a separate claim:
+
+   | Mark | Proven by | What it proves | What it does not prove |
+   |---|---|---|---|
+   | `Verified` | the server's Ed25519 signature on the record (ID, key ID, key, label, publisher, provider, address, time, proof, attestation, log number) | the server wrote the record for a provider account whose e-mail the provider called verified, and the address in it is the one asked for | that the key is safe; that the provider's claim is true; anything about a record the server's key did not sign |
+   | `Held` | a challenge, a random nonce encrypted to the key, was decrypted and returned once, within 2 minutes, by the same session user, for that key | whoever published could decrypt with the private key at that moment | that the key is still held, or held by the person the address names; `Held` is **the server's word** (it is inside the server's signature) |
+   | `Attested` | the key's own signature over `directory-binding\|address\|fingerprint\|time`, checked on every lookup (ssh-ed25519 keys only; age and passkey keys cannot attest) | the holder of that private key signed the binding to that address. The signature is in the row: a client checks it itself with `encrypt.VerifyAttestation`, without trusting the server | that the holder is the person the address names: whoever generates a key can attest it to any address (see the limits below). `Attested` is also false for a record without a valid `Verified` signature |
+   | `Seq` | the number of the record's entry in the transparency log (0: none) | the publication was appended to the log, where an auditor and the address's owner can see it | that the log everybody sees is the same one (there are no witnesses) |
+   | `Revoked` | a signed tombstone, shown only when asked for | the owner revoked the key at that time | anything about documents already encrypted to the key (remove it from their recipient lists) |
+
+   A server (or anyone) that holds the **directory key** can forge server signatures, so it can make
+   `Verified` true for any record, and set `Held` in it. What it **cannot** do without the private key is
+   produce an `Attested` binding (the key's own signature) for a key it does not hold, or decrypt a
+   challenge: so it cannot invent a binding for a key that exists elsewhere (a key on someone's laptop, a
+   public SSH key) to an address its holder never claimed. What it **can** do is publish a key *it* holds
+   (and self-attest it) under someone else's address: a client cannot tell that from the owner's own key
+   by the marks alone. That substitution is what the fingerprint confirmation (the owner checks it with
+   the person, another way), the log (the owner's client watches the entries for their own address,
+   `LogAddress`, and sees a key they never published) and `Seq` (a record that is not in the log is
+   suspect) are for, and none of them closes it alone (see the limits at the end of this step).
+
+   - **Records are signed.** `PublishWith(ctx, user, key, PublishOptions)` (and `Publish`, without a
+     proof) refuses (`ErrNotPublishable`) unless `user.VerifiedEmail` is set (and `user.Email` with it)
+     and the user came from a provider session (a `passkey:` user carries no e-mail, B.3). It writes
+     `directory/<HMAC of the e-mail>/<fingerprint>` holding the key, label, the publisher's ID and
+     provider, the address, the time, the signing key's ID (`kid`) and the proof flags, signed by the
+     server's `encrypt.DirectorySigner` (Ed25519; the signature covers the record's own ID, so a record
+     copied to another name fails). `Lookup` recomputes type and fingerprint from the key text and sets
+     the marks above; any other record is returned unverified ("label only") and an unreadable one is
+     skipped. The record's name is a keyed hash, so addresses cannot be guessed or enumerated from the
+     store's IDs. Records written by the first version (`v` 2, no key ID) still verify. At most 20 keys per
+     address (`MaxKeys`; keys revoked within the window count). `Lookup` lists only the address's prefix
+     (`docstore.PrefixLister`: memory, localfs, sqlite and, now, the nested postgres, mongo, s3 and blob
+     adapters, each natively: an escaped `LIKE`, an anchored quoted regular expression, the service's
+     `Prefix`; `docstore.ListPrefix` falls back to `List` for an adapter without it, and the browser
+     adapters still do).
+   - **Publishing again re-signs.** Publishing a key that is already there replaces its record, signed by
+     the current key and named under the current key's hash; that is how a record moves to a new key.
+   - **Proof of possession** (`AdapterDirectory.Challenge`, `OpenChallenge`; routes below).
+     `POST /directory/challenge {"key"}` answers `{token, encrypted, expires}`: a random nonce encrypted
+     to the key as an age file (age, SSH and passkey-derived keys alike), and a token the server signed
+     that holds the nonce's keyed hash (HMAC under the server secret, so the token does not reveal it),
+     the session's user ID and address, the key's fingerprint and an expiry 2 minutes out. The client
+     decrypts the nonce with the private key and publishes with `"proof": {"token", "nonce"}`. The server
+     checks the signature, expiry, user, address, fingerprint and nonce, then **uses the challenge up**:
+     it creates `directory/pop/<id>` (create-if-absent, atomic on a conditional store) so a second
+     publish with the same answer is refused (403). Nothing is stored until a challenge is answered, and
+     `Sweep` deletes used-challenge records a minute after they could no longer be answered.
+     `RequireProof` (env `GOJIBERRY_DOCSTORE_DIRECTORY_REQUIRE_POP=true`, **off by default**) makes a
+     publish without a proof 428; a proof that is sent is always checked, and recorded as `Held`.
+   - **Attestation.** An ssh-ed25519 key signs `directory-binding|<address>|<fingerprint>|<unix seconds>`
+     (`encrypt.AttestSSH` or `Attest` make it; the address lower-cased and trimmed) and sends it as
+     `"attestation": {"at", "sig"}`. The server verifies it (the key must be ssh-ed25519, the time within
+     10 minutes of now, the signature the key's) before it stores it; a bad one is refused (400). On every
+     lookup the row's `Attested` is recomputed, and `Attestation` carries the signature for a client that
+     wants to check it without the server (`encrypt.VerifyAttestation(key, email, attestation)`).
+   - **Revoking** (`DELETE /directory/keys/<fingerprint>`, `AdapterDirectory.Revoke`): the signed-in
+     owner of the address only (the record is found under the session's own address, so another user's
+     request finds nothing, 404). The record is replaced at once by a signed tombstone with the time, so
+     `Lookup` stops returning the key immediately; `GET /directory/lookup?email=&revoked=1` (or
+     `LookupWith(..., IncludeRevoked)`) returns it flagged `revoked`. The tombstone is kept for the
+     **revoke window** (24 hours; `RevokeWindow`, `GOJIBERRY_DOCSTORE_DIRECTORY_REVOKE_WINDOW`): within it
+     the same key cannot be published again (409), so a replayed publish request (a captured request, a
+     stolen session) cannot silently bring a revoked key back; after it the owner can publish the key
+     again, and the tombstone is pruned (by the next publish, or `Sweep`). The fingerprint in the path is
+     the one lookup shows, or its path form (`docstore.DirectoryFingerprintSegment`: `/`, `+` and `:`
+     become `_`, `-`, `-`), which avoids an encoded `/` in a URL. An unsigned tombstone (written by someone
+     with store access but not the key) is ignored.
+   - **The key is configuration, and it rotates.** `GOJIBERRY_DOCSTORE_DIRECTORY_KEY` is a 32-byte seed in
+     hex that signs (and, derived with a separate label, keys the HMAC that names records);
+     `GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV` is a comma separated list of retired seeds that **only
+     verify and name**. Each record carries the ID of its signing key (`kid`, the first 8 bytes of the
+     SHA-256 of the public key). To rotate: put the new seed in `..._KEY` and the old one in `..._KEY_PREV`;
+     records signed by the old key keep verifying and stay findable (a lookup lists the address's prefix
+     under each key); the docstore server then moves them to the new key at start-up
+     (`AdapterDirectory.Resign`: each record is verified by the retired key, written again under the
+     current key's name and signature, and the old copy deleted; the proof flags, attestation and log
+     number are copied, nothing is logged) and logs how many it moved. When it reports 0 the old seed can
+     be removed. Without the retired key in the list, the old records are neither found nor verified.
+     Unset, the directory is off. A key per process is not generated.
+   - **Transparency log** (`directory-log/`, `AdapterDirectory.ReadLog`, `GET /directory/log?since=<n>`,
+     any signed-in session, at most 200 entries). Every publish and revoke appends an entry
+     `{seq, prev, at, op, address, fingerprint, kid, hash, sig}`: `prev` is the hash of the entry before,
+     `hash` the SHA-256 of the entry's fields, `sig` the server key's signature of the hash; `address` is
+     `SHA-256("gojiberry-directory-log|" + address)` (`encrypt.LogAddress`), so the owner (or an auditor
+     with a list of addresses) finds the entries about an address, and the log does not list addresses.
+     The publication is logged first and its record carries the entry's number. Appends take turns across
+     replicas with create-if-absent on a conditional store (a head record is a hint that catches up after
+     a crash). `encrypt.VerifyLog(entries, prevHash, since, keys)` checks a run of entries against the
+     pinned public keys by key ID: numbering, chain, hashes and signatures, so a changed, removed,
+     reordered or forged entry is reported (`ErrLogBroken`). The response also lists the server's public
+     keys (`keys`), which an auditor pins out of band, not from this field. *What it is for:* an auditor
+     that keeps the last entry's number and hash detects any later change of what it has seen, and a person
+     who watches the entries for their own address sees every key published or revoked for it, including
+     one the server published on its own. *What it is not:* it does not stop a publication, it does not
+     cover lookups, and the server's key signs it, so a server can start a new history (the auditor sees
+     the break only if it kept the old head), or show different histories to different clients (a split
+     view; there are no witnesses or gossip). A record written straight into the store has no entry; `Seq`
+     0 says so.
+   - **The server rule.** The `directory/`, `directory-log/` and `ratelimit/` prefixes are reserved in
+     `docstore.Server` like `acl:` and `collab:`: they cannot be read, written, listed or deleted through
+     `/docs`; the expiry allowlist leaves them alone (they are system keyspaces, covered by the
+     prefix-scan test) and encryption skips them. With an `auth.Manager` and
+     `Server.WithDirectory(encrypt.DirectoryService(dir))` (the docstore server does it when the key is
+     set) the server mounts `POST /directory/challenge`, `POST /directory/publish` (body `{"key", "label",
+     "proof", "attestation"}`, at most 4 KB), `DELETE /directory/keys/<fingerprint>`,
+     `GET /directory/lookup?email=[&revoked=1]` and `GET /directory/log?since=`. All but the log need a
+     signed-in *provider* session; a passkey session is refused (403); the log needs any session.
+     Publishing, challenging and revoking need an explicitly verified e-mail: `auth.User.VerifiedEmail`,
+     set only when the provider's ID token says `email_verified: true` (an absent claim is **not**
+     verification; `auth` then leaves `User.Email` empty too). A provider that really verifies every
+     address but omits the claim can be opted in with `auth.Provider.AssumeEmailVerified` (default false;
+     in the `GOJIBERRY_DOCSTORE_AUTH_PROVIDERS` JSON, `"assumeEmailVerified": true`); an explicit
+     `email_verified: false` still wins. They act on that address only: a different `email` in the body
+     is refused (403). Errors: 401 signed out, 403 refused or bad proof, 400 bad key or attestation, 404
+     no such key, 409 revoked recently, 428 proof required, 429 over a budget (with `Retry-After`).
+   - **Limits on abuse, shared by replicas** (`docstore.Limiter`; the same interface as
+     `passkey.Limiter`, which is now an alias). Per minute on average and at once (a token bucket per
+     key): publish and revoke 10 per user; challenge 20 per user; lookup 60 per user, 120 per client IP
+     (the connection's address: behind a proxy every client shares it, so the real limiting belongs to
+     the gateway) and 1200 for the whole server (the log reads draw on the IP and global ones).
+     `GOJIBERRY_DOCSTORE_LIMITER=memory` (default) keeps the budgets in each process; `=store` keeps them
+     in the store (`docstore.StoreLimiter`), so replicas on one store share them: each budget is a record
+     `ratelimit/<name>/<hash of the caller's key>` changed with a compare-and-set loop over
+     `docstore.ConditionalAdapter.SaveIf` (read, refill, take a token, save with the digest read, start
+     over on a conflict; a denial writes nothing; the caller's address or user ID is not in the record's
+     name). With a store that is not conditional it falls back to the in-process limiter (same numbers,
+     per process); when the store errors, that one decision is made in process and the failure is logged;
+     a hot key that loses 64 rounds in a row is refused for a second. A background sweep
+     (`SweepRateLimits`, every 10 minutes) deletes the records of callers idle for over a minute (a full
+     bucket and no record mean the same). The passkey routes take the same factory
+     (`passkey.Config.Limiter`; `docstorecmd` passes `limiters("passkey", passkey.DefaultPerMinute,
+     passkey.DefaultBurst)`). Clocks: replicas use their own; a record from a replica whose clock is ahead
+     refills nothing until that time, so skew changes the refill, never the burst.
+   - **Bounded probing.** Besides the budgets above, `docstore.DirectoryPolicy{CanLookup(user, email)}`
+     decides who may look up an address: `AllowAllLookups` (default: any signed-in provider user, as
+     before), `SameDomain()` (the address's domain is the user's own verified domain;
+     `GOJIBERRY_DOCSTORE_DIRECTORY_LOOKUP=domain`), `Contacts(func(auth.User) []string)` and `AnyOf(...)`; a
+     refusal is 403 and does not depend on whether the address has keys, so it leaks nothing. The policy
+     is asked after the budgets, so probing a refused address costs budget too. **Lookup reveals the
+     published public keys of any address the policy allows to every signed-in provider user, by design**;
+     it does not reveal whether an address has an account.
+   - **The 20-key cap and the log across replicas.** The cap is a list-then-save, serialised per address
+     inside one process (a keyed mutex); the log's and the challenges' create-if-absent are atomic across
+     replicas only on a store that is a `docstore.ConditionalAdapter` (sqlite, localfs, postgres, mongo and
+     s3 are), and the cap can still be overshot by racing replicas: route publishes through a gateway that
+     serialises them per address, or accept a few keys over.
+   - **UI.** `RecipientRow.Verified` shows "verified e-mail", and a draft that is not shows "label only:
+     confirm the fingerprint"; **`Attested` (on `RecipientRow` and `DirRow`) shows a stronger mark**,
+     "verified e-mail, signed by the key". `Recipients` can look an address up (`Directory`,
+     `OnDirResults`, `DirResults`), and picking a row fills the draft. The typed fingerprint stays for
+     label-only keys, and is skipped for a verified one only when the host sets `TrustVerified`.
    - **Host.** `examples/people-keys-demo` implements `AddMyPasskey` (`client.DeriveKey`,
      `encrypt.PRFRecipient`, `Sharing.Add`, no typing), `CreateRecoveryKey` (shown once) and `Directory`
-     (`/directory/lookup`), and sets `Parsed.Verified` and the shared rows' mark from the directory's
-     answer for that fingerprint, never from a pasted key. Its e2e (headless Chrome, virtual authenticator
-     with PRF) covers the second-key message, the recovery key shown once, add my passkey, and the
-     verified mark from a lookup.
-   *Left:* the showcase and the real app do not wire these controls yet (they need the key-management
-   UX of step 5.1); no UI publishes the owner's keys (the route exists and the demo's test calls it); the
-   rate limits are per process (a gateway or a shared limiter for several replicas); the nested backends
-   (postgres, mongo, s3, blob) and the browser adapters do not implement `PrefixLister` yet (they fall
-   back to listing the store); revoking a published key (a `DELETE` route) and rotating the directory
-   key are not built; whoever holds the directory key can publish anything.
+     (`/directory/lookup`), and sets `Parsed.Verified`/`Attested` and the shared rows' marks from the
+     directory's answer for that fingerprint, never from a pasted key. Its e2e (headless Chrome, virtual
+     authenticator with PRF) covers the second-key message, the recovery key shown once, add my passkey,
+     and the verified mark from a lookup.
+
+   *Limits that remain, stated plainly.*
+   1. **A server that holds the directory key can still put a key it holds under someone else's
+      address**, signed, `Held` set and self-attested: `Verified`, `Held` and `Attested` do not tell it from
+      the owner's key. Detecting it relies on the owner watching the log for their address, on clients
+      that refuse a record with no log entry (`Seq` 0), and on the fingerprint check. The log has no
+      witnesses, so a server can show the owner a log without the entry. Closing this needs the owner's
+      own key to sign the *set* of their keys (a self-certifying keyring), which is not built.
+   2. The log's `address` field is an unkeyed hash: anyone who can read the log and guesses an address can
+      see whether it published, which is about what a lookup (open to every signed-in provider user)
+      shows. The log is open to any signed-in session, passkey ones included.
+   3. Attestation covers ssh-ed25519 keys only; age keys (recovery keys, passkey-derived keys) get proof of
+      possession (`Held`) and nothing more.
+   4. Proof of possession is optional on the wire unless `RequireProof` is on (off by default, because it
+      changes publishing); attestation cannot be required, only checked and shown.
+   5. The global lookup budget can be used up by a handful of accounts (a denial of service on lookups,
+      bounded by the per-user and per-IP budgets and by what an account costs); per-IP limits behind a
+      proxy are per proxy.
+   6. With a store that is not a `ConditionalAdapter` the shared limiter degrades to per process, and the
+      log and challenge claims are atomic within a process only. Two replicas can then fork the log (the
+      chain breaks, `VerifyLog` says where) or accept one challenge twice.
+   7. A revoked key can be published again after the window (24 hours by default), and revoking does not
+      touch documents already encrypted to it.
+   8. No UI publishes, revokes or attests the owner's keys, and there is no Go client for the routes (the
+      demo's test calls them): the pieces a client needs are `OpenChallenge`, `AttestSSH`,
+      `VerifyAttestation` and `VerifyLog`. The showcase and the real app do not wire these controls yet
+      (they need the key-management UX of step 5.1). The browser adapters do not implement
+      `PrefixLister` (they fall back to listing the store).
 
 5. **Done (library):** encrypted records in packs and placeholder catalog entries for confidential
    documents.

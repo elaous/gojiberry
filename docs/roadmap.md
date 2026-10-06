@@ -21,6 +21,23 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
   `GOJIBERRY_DOCSTORE_AUTH_PROVIDERS`). The key directory publishes only for `VerifiedEmail` users
   and its lookup is closed to passkey sessions.
 
+- **Key directory (this release).** New reserved ID prefixes `directory-log/` (the transparency log) and
+  `ratelimit/` (shared rate limit budgets) join `directory/`: `docstore.Server` refuses them through `/docs`,
+  so a document with such an ID becomes unreachable; rename it before upgrading. Everything new is off by
+  default and nothing is required: `GOJIBERRY_DOCSTORE_LIMITER` (`memory`, the default, or `store`),
+  `GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV` (retired keys for rotation), `..._DIRECTORY_REQUIRE_POP`,
+  `..._DIRECTORY_LOOKUP` (`any` or `domain`) and `..._DIRECTORY_REVOKE_WINDOW`. Records published by the
+  earlier version still verify (and move to the current key when published again). The directory's limits are
+  now token buckets (10 publishes and 60 lookups per user, 120 lookups per client IP and 1200 for the server,
+  a minute on average and at once) instead of a fixed window. Publishing writes a log entry first, so a store
+  that cannot take the extra records (a quota) fails publishes. For people embedding the library:
+  `docstore.DirectoryService` gained `Challenge`, `Revoke`, `Log` and a `Lookup(ctx, email, includeRevoked)`;
+  `encrypt.DirectorySigner` gained `KeyID`, `Pseudonyms` and `Verify(kid, ...)`; `passkey.Limiter`,
+  `Unlimited` and `RateLimiter` are aliases of the `docstore` ones (code that used them compiles unchanged);
+  the directory's rate limits are chosen with `Server.WithDirectoryLimits` and the lookup rule with
+  `Server.WithDirectoryPolicy`. Nested module `docstore/backends`: the four backends implement
+  `PrefixLister` (no schema change).
+
 ## Next
 
 1. **Migrate: done** (see [document-components.md](document-components.md)); left: skipping what an earlier run already brought (needs the source ID kept on the document), Google Docs comments and revision history.
@@ -46,8 +63,14 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
       the recovery key shown once, and the verified-e-mail mark with `encrypt.KeyDirectory` /
       `AdapterDirectory` (C.4); the server rule (the `directory/` prefix is reserved from `/docs`, records
       are signed by a configured directory key and written only by `POST /directory/publish`, which needs a
-      provider session with a verified e-mail) and a demo host, `examples/people-keys-demo`. Left: wiring
-      it in the showcase/app, a publish button, `PrefixLister` in the nested backends, revoking a published key.
+      provider session with a verified e-mail) and a demo host, `examples/people-keys-demo`. Also done:
+      revoking (`DELETE /directory/keys/<fingerprint>`) and rotating the directory key (`KEY_PREV`, `Resign`),
+      proof of possession and ssh-ed25519 attestation (`Held`/`Attested`, a stronger mark), a signed
+      transparency log (`GET /directory/log`), shared rate limits (`docstore.StoreLimiter`,
+      `GOJIBERRY_DOCSTORE_LIMITER=store`), lookup budgets and a lookup policy, and `PrefixLister` in the
+      postgres, mongo, s3 and blob backends. Left: wiring it in the showcase/app, UI to publish, revoke and
+      watch the log, a Go client for the routes, the owner-signed keyring that would close the substitution
+      by a server that holds the key (see the limits in step 4b), witnesses for the log.
    4. Hiding folder names of confidential folders.
 3. **Public docstore.** An anonymous offer: no account, one document per session, a link
    and a download always, deleted 24 hours after the last edit (viewing does not renew).
@@ -68,8 +91,10 @@ plug in its own once it exists, with no change to the library (see
 [encryption-and-passkeys.md](encryption-and-passkeys.md), "Extension points"). What ships is the
 single-process default of each. To build when a deployment needs it:
 
-1. **A shared rate limiter** (`passkey.Limiter`): Redis or a gateway's decision, so replicas share
-   one budget. Default today: a per-address token bucket in the process.
+1. **A shared rate limiter: done through the store** (`docstore.StoreLimiter`, `GOJIBERRY_DOCSTORE_LIMITER=store`,
+   injected as `passkey.Config.Limiter`: replicas on one conditional store share the budget). Left: Redis or a
+   gateway's decision behind the same `Limiter` interface, for a deployment that has one. Default: a per-address
+   token bucket in the process.
 2. **A shared challenge store** (`passkey.ChallengeStore`): Redis or a database, with an atomic
    Take, so a ceremony begun on one replica finishes on another. Default today: memory.
 3. **Account stores with a conditional write.** `AdapterStore` already does compare-and-set
