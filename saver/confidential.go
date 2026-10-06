@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docstore"
@@ -214,4 +215,46 @@ func lockedEntry(m docstore.Meta, known map[string]catalogEntry) catalogEntry {
 	e := catalogEntry{Key: m.ID, Size: m.Size, Updated: m.UpdatedAt.UnixNano()}
 	e.conceal()
 	return e
+}
+
+// UnreadableKeys returns, from the error of SetProtection (or of the Rekey hook), the version
+// snapshots of the document that could not be opened and so blocked the re-key (it is all or
+// none: one lost file stops the switch). It is empty when the failure was something else, or
+// when the files that could not be opened are not snapshots (the current and previous copies
+// of a document are never offered for dropping). Nothing is dropped by finding them: show
+// them to the person, and if they confirm, pass them to Saver.DropVersions and run
+// SetProtection again.
+func UnreadableKeys(err error) []string {
+	var u interface{ UnreadableFiles() []string }
+	if !errors.As(err, &u) {
+		return nil
+	}
+	var out []string
+	for _, k := range u.UnreadableFiles() {
+		if checkVersionKey(k) == nil {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// DropVersions deletes the given version snapshots of the document, which the person has
+// confirmed they give up (see UnreadableKeys): the way past a snapshot that cannot be opened
+// and so blocks SetProtection. Every key must be a snapshot of this document, else nothing is
+// deleted and ErrName is returned. A key that is already gone is not an error.
+func (s *Saver) DropVersions(ctx context.Context, target, id string, keys []string) error {
+	if !docfile.ValidID(id) {
+		return ErrID
+	}
+	for _, k := range keys {
+		if checkVersionKey(k) != nil || !strings.HasPrefix(k, VersionPrefix+id+"/") {
+			return fmt.Errorf("%w: %s", ErrName, k)
+		}
+	}
+	for _, k := range keys {
+		if err := s.DeleteVersion(ctx, target, k); err != nil && !errors.Is(err, ErrNotFound) {
+			return err
+		}
+	}
+	return nil
 }
