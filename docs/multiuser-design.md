@@ -243,6 +243,16 @@ Three small packages and a command:
     kind, order or deleted flag) and *new* `comment:`/`reply:` records, not
     changes or deletions of existing ones. A batch with any refused op is refused
     whole with a 403 and a message.
+  - **Expiry.** `Config.Renewer` (a `docstore.Renewer`) is told after each accepted edit
+    by an owner or editor, at most once a minute per document, so a store that expires
+    documents counts live edits as edits (`ExpiringAdapter.Touch`; across processes
+    `POST /docs/{id}/renew` on the docstore server). The `collab:<id>` state goes with its
+    document. A room whose document expired in the store (a renewal that was found, then is
+    not) is closed: 410 Gone, no more saves, its `collab:<id>` deleted. A document that lives only
+    in the hub is swept by the store's opt-in orphan policy. The hub's roles and the docstore's
+    access rule must agree (`GOJIBERRY_COLLAB_NO_ACL_ROLE` against `GOJIBERRY_DOCSTORE_REQUIRE_ACL`),
+    or renewals are refused; `GET /healthz` shows `renewFailures`. `Config.AuthFunc` refreshes the
+    token a long-lived WebSocket renews with. See [public-docstore.md](public-docstore.md).
   - `hub.ACLRoles(store, who)` takes roles from docstore's access lists (owner,
     editors, viewers; no list means open, as in docstore); `hub.AuthUser(manager)`
     names the caller from a bearer token.
@@ -260,7 +270,9 @@ Three small packages and a command:
   (as character ids) and `PeerCursors()` places everyone else's in your text.
 - **`cmd/collabhub`**: the server as a program, backed by the same docstore
   settings (`GOJIBERRY_DOCSTORE_BACKEND`, sign-in) and `GOJIBERRY_COLLAB_ADDR`
-  (default `:8081`), with a Dockerfile.
+  (default `:8081`), with a Dockerfile. With `GOJIBERRY_DOCSTORE_EXPIRY_TTL` it expires and renews in-process;
+  with `GOJIBERRY_COLLAB_RENEW_URL` (and `GOJIBERRY_COLLAB_RENEW_TOKEN`) it renews through a docstore server
+  (`GOJIBERRY_COLLAB_RENEW_INTERVAL`, and `GOJIBERRY_COLLAB_EXPIRY_TTL` for the remote case, tune it).
 
 Tests: the role table (every kind of op for every role, including a comment mark
 smuggling a block delete), ACL roles, every endpoint and its errors, the event
