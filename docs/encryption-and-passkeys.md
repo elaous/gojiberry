@@ -138,7 +138,16 @@ key** that wraps a key pair or the data key, so:
    and the whole saver (folders, versions, `Verify`) on an encrypted store. It is its own
    package, so a build that does not import it does not link `age` (about 3.8 MB of wasm when it
    does).
-2. People tab: add a recipient by key, fingerprint confirmation, re-key on remove.
+2. **Done (library and component):** `encrypt.Sharing` (`Add` needs the fingerprint the owner
+   confirmed, `Remove`, `List`) over `encrypt.StoreKeyring`, which keeps each document's
+   recipients in a readable `keys:<ID>` record (public keys only) beside the owner's keys; every
+   file of the document (its copies and versions) is encrypted again to the new list
+   (`Adapter.RekeyDocument`). `components.Recipients` is the People tab's control: the owner's keys,
+   the shared keys with Remove (which says it cannot take back what was already opened), and a form
+   that parses a pasted key, shows its type, label and fingerprint, and keeps Add off until the
+   fingerprint is typed. *Left:* wiring it into an application (the showcase has no encrypted store
+   yet: it needs the key management of steps 3 and 4, where the owner's key lives and how it is
+   unlocked) and the "verified e-mail" mark of C.4.
 3. `auth/passkey` and `components.Passkey`, with the virtual-authenticator e2e.
 4. Passkey as an encryption recipient through PRF, with detection and the
    second-recipient rule.
