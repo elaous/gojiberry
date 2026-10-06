@@ -202,6 +202,7 @@ func main() {
 	}}, currentDoc, openDoc)
 	u.saver.OnChange = func() { renderUI() }
 	u.saver.Deliver = transfer.Download
+	u.saver.Pick = transfer.PickFile
 	u.saver.Export = u.transfer.Export
 	u.saver.Link = func(kind, id string) string {
 		if kind == "folder" {
