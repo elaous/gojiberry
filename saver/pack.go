@@ -347,7 +347,9 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 				replacing, prev = true, p
 			}
 		}
-		saved, err := s.Save(ctx, target, c, doc)
+		// A confidential document is written end to end in the one save (never as an
+		// ordinary document first); the ConfidentialCheck runs before anything is overwritten.
+		saved, err := s.save(ctx, target, c, doc, secret)
 		if err != nil {
 			rep.Failed = append(rep.Failed, e.Name+": "+err.Error())
 			continue
@@ -358,18 +360,11 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 		}
 		if replacing {
 			// Save keeps the tags, folder and trash flag of the document it replaces;
-			// the pack's are what was asked for.
-			// An end-to-end document keeps its tags inside it (Save keeps them); the catalog
-			// has none. Over an ordinary document the tags go in the catalog first, and
-			// SetProtection then moves them inside with the name.
-			if !secret || prev.Protection != ProtectionE2EE {
+			// the pack's are what was asked for. An end-to-end document keeps its tags
+			// inside it and the catalog has none, so only an ordinary one is set here.
+			if !secret {
 				if err := s.SetTags(ctx, target, saved.ID, tags); err != nil {
 					warn("tags", err)
-				}
-			}
-			if secret && prev.Protection != ProtectionE2EE {
-				if err := s.SetProtection(ctx, target, saved.ID, ProtectionE2EE); err != nil {
-					warn("protection", err)
 				}
 			}
 			if prev.Folder != folder {

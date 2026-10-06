@@ -181,6 +181,7 @@
   "docs.downloadAs": "Descargar como…",
   "docs.downloadOf": "Descargar %s como",
   "saver.downloaded": "%s descargado",
+  "saver.downloadedSkipped": "%s descargado sin %d documento(s) confidencial(es) bloqueado(s) aquí",
   "saver.linkCopied": "Enlace copiado: %s",
   "tab.page": "Página",
   "menu.pageSetup": "Configurar página…",

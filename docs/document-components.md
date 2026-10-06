@@ -120,6 +120,13 @@ document shows its folder.
    left out. A folder ZIP does not include version history; download a document as
    `.open` for that.
 
+   **Confidential documents outside packs.** ZIP, `.open` and the document Download deliver a
+   confidential (end-to-end) document's plaintext, its real file name and its protection
+   marker: they are user-initiated exports of what the user can open, and only the pack path
+   (`PackOptions.Seal`) seals. A confidential document that no key opens here is skipped from
+   a ZIP with a warning (`Saver.ArchiveReport`, `ArchiveSkip`; the session says how many),
+   not an error that stops the archive.
+
 ## Migrate
 
 `migrate` moves documents in from other platforms; `components.Migrate` is its

@@ -181,6 +181,7 @@
   "docs.downloadAs": "Herunterladen als…",
   "docs.downloadOf": "%s herunterladen als",
   "saver.downloaded": "%s heruntergeladen",
+  "saver.downloadedSkipped": "%s heruntergeladen ohne %d hier gesperrte vertrauliche Dokument(e)",
   "saver.linkCopied": "Link kopiert: %s",
   "tab.page": "Seite",
   "menu.pageSetup": "Seite einrichten…",

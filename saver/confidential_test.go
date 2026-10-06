@@ -20,10 +20,11 @@ import (
 type lockable struct {
 	docstore.Adapter
 	locked atomic.Bool
+	only   string // when set, only the files of this document are locked
 }
 
 func (l *lockable) Load(ctx context.Context, id string) (docstore.Document, error) {
-	if l.locked.Load() && !reserved(id) && !strings.HasPrefix(id, FolderRecordPrefix) {
+	if l.locked.Load() && (l.only == "" || strings.Contains(id, l.only)) && !reserved(id) && !strings.HasPrefix(id, FolderRecordPrefix) {
 		return docstore.Document{}, fmt.Errorf("fake: %w", docstore.ErrLocked)
 	}
 	return l.Adapter.Load(ctx, id)

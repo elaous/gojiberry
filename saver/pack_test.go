@@ -660,3 +660,95 @@ func TestImportPackConflictPoliciesWithConfidentialDocuments(t *testing.T) {
 		t.Errorf("%q %v %v", n, tags, err)
 	}
 }
+
+// standIn saves an ordinary (server-level) document with the ID of the pack's secret one.
+func standIn(t *testing.T, s *Saver, secret string) {
+	t.Helper()
+	d := docWithText("Plain stand-in", "stand-in text")
+	d.SetID(secret)
+	if _, err := s.Save(context.Background(), "dst", docfile.Open, d); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetTags(context.Background(), "dst", secret, []string{"standin"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestImportPackReplaceOverServerDocumentWithRefusingCheckLeavesItUntouched(t *testing.T) {
+	ctx := context.Background()
+	data, secret, _, _, _ := sealedPack(t, PackOptions{})
+	dst := newDst()
+	standIn(t, dst, secret)
+	need := errors.New("a passkey is the only key")
+	dst.ConfidentialCheck = func(context.Context, string, string) error { return need }
+	rep, err := dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen, Conflict: ConflictReplace})
+	if err != nil || len(rep.Failed) != 1 || !strings.Contains(rep.Failed[0], need.Error()) {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	e, _ := dst.Get(ctx, "dst", secret)
+	if e.Protection == ProtectionE2EE || e.Name != "Plain stand-in" || !slices.Equal(e.Tags, []string{"standin"}) {
+		t.Errorf("the existing document changed: %+v", e)
+	}
+	if txt := catalogText(t, dst); strings.Contains(txt, secretName) || strings.Contains(txt, secretTag) {
+		t.Errorf("the catalog leaks: %s", txt)
+	}
+	if d, err := dst.Load(ctx, "dst", secret); err != nil || textOf(d) != "stand-in text" {
+		t.Errorf("%v", err)
+	}
+}
+
+func TestImportPackReplaceOverServerDocumentWithPassingCheckIsE2EE(t *testing.T) {
+	ctx := context.Background()
+	data, secret, _, _, _ := sealedPack(t, PackOptions{})
+	dst := newDst()
+	standIn(t, dst, secret)
+	checked := 0
+	dst.ConfidentialCheck = func(context.Context, string, string) error { checked++; return nil }
+	rep, err := dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen, Conflict: ConflictReplace})
+	if err != nil || len(rep.Failed) != 0 || len(rep.Warnings) != 0 || checked == 0 {
+		t.Fatalf("%+v %v %d", rep, err, checked)
+	}
+	e, _ := dst.Get(ctx, "dst", secret)
+	if e.Protection != ProtectionE2EE || e.Name != ConfidentialName || len(e.Tags) != 0 {
+		t.Errorf("%+v", e)
+	}
+	if txt := catalogText(t, dst); strings.Contains(txt, secretName) || strings.Contains(txt, secretTag) || strings.Contains(txt, "standin") {
+		t.Errorf("the catalog leaks: %s", txt)
+	}
+	if n, tags, err := dst.Reveal(ctx, "dst", secret); err != nil || n != secretName || !slices.Equal(tags, []string{secretTag}) {
+		t.Errorf("%q %v %v", n, tags, err)
+	}
+}
+
+func TestImportPackReplaceOverServerDocumentWithFailingWriteKeepsItAndLeaksNothing(t *testing.T) {
+	ctx := context.Background()
+	data, secret, _, _, _ := sealedPack(t, PackOptions{})
+	fa := &toggleFail{Adapter: docstore.NewMemoryAdapter()}
+	dst := &Saver{Targets: []Target{{Name: "dst", Adapter: fa}}}
+	standIn(t, dst, secret)
+	fa.on = true
+	rep, err := dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen, Conflict: ConflictReplace})
+	if err != nil || len(rep.Failed) != 1 || !strings.Contains(rep.Failed[0], "disk on fire") {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	e, _ := dst.Get(ctx, "dst", secret)
+	if e.Protection == ProtectionE2EE || e.Name != "Plain stand-in" {
+		t.Errorf("%+v", e)
+	}
+	if txt := catalogText(t, dst); strings.Contains(txt, secretName) || strings.Contains(txt, secretTag) {
+		t.Errorf("the catalog leaks: %s", txt)
+	}
+}
+
+// toggleFail fails the write of the secret text once on.
+type toggleFail struct {
+	docstore.Adapter
+	on bool
+}
+
+func (f *toggleFail) Save(ctx context.Context, id string, data []byte) error {
+	if f.on && bytes.Contains(data, []byte("the secret text")) {
+		return errors.New("disk on fire")
+	}
+	return f.Adapter.Save(ctx, id, data)
+}

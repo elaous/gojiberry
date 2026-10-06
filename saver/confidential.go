@@ -94,6 +94,10 @@ func (s *Saver) Reveal(ctx context.Context, target, id string) (name string, tag
 // This changes what the catalog and the document say, not who the files are encrypted to:
 // afterwards the store's keyring (docstore/encrypt) is what decides that, and the copies
 // and versions written before keep the wrapping they had until they are re-keyed.
+//
+// WARNING: the previous generation of the document and its version snapshots still hold the
+// pre-switch plaintext, real name and tags included, until the store's keyring re-keys them
+// (encrypt.Sharing.Repair). Switching does not make the past confidential.
 func (s *Saver) SetProtection(ctx context.Context, target, id, to string) error {
 	if to != ProtectionServer && to != ProtectionE2EE {
 		return ErrProtection

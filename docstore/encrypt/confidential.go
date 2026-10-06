@@ -9,7 +9,12 @@ import "context"
 // (StoreKeyring.Owners); the keys the document is shared with are read from sharing's signed
 // list and, as CheckRecoverableOwner says, do not count: a recovery key has to be one the
 // owner controls. A nil sharing means no one else's keys are listed; a list that does not
-// verify is an error (fail closed). The saver does not import this package: pass the result
+// verify is an error (fail closed).
+//
+// WARNING: this gate is about recovery, not about the past. After the saver switches a
+// document to end to end protection, its previous generation and version snapshots still
+// hold the pre-switch plaintext (real name and tags included) until this store's keyring
+// re-keys them (Sharing.Repair). The saver does not import this package: pass the result
 // as the hook.
 func ConfidentialCheck(sharing *Sharing, owners ...Recipient) func(ctx context.Context, target, id string) error {
 	return func(ctx context.Context, _, id string) error {

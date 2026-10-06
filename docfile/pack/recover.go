@@ -20,6 +20,12 @@ type Recovered struct {
 	// Skipped counts intact records that were not documents that could be read, including
 	// encrypted ones that are not in Sealed.
 	Skipped int
+	// SealedLost counts the encrypted records that were found but could not be attributed
+	// to a document, because the index that says whose they are is damaged (or does not
+	// match them). Repack does not write them: they are gone from the recovered pack. Recover
+	// from a copy of the pack whose index is intact first, if there is one. It cannot count
+	// the records after the first bad frame, which the walk never reaches.
+	SealedLost int
 	// Complete says the walk ended exactly at a valid index: nothing was lost.
 	Complete bool
 }
@@ -86,6 +92,9 @@ func Recover(r io.ReaderAt, size int64) (Recovered, error) {
 	}
 	rd, openErr := Open(r, size)
 	rec.Complete = openErr == nil
+	if rd == nil {
+		rec.SealedLost = len(sealed) // nothing says whose they are
+	}
 	if rd != nil {
 		listed := map[int64]bool{}
 		for _, e := range rd.index.Entries {
@@ -95,6 +104,8 @@ func Recover(r io.ReaderAt, size int64) (Recovered, error) {
 			if env, ok := sealed[int64(e.Offset)]; ok && e.Encrypted && uint64(len(env)) == e.Length && sha256.Sum256(env) == e.SHA256 {
 				rec.Sealed = append(rec.Sealed, Sealed{Entry: e, Envelope: env})
 				rec.Skipped--
+			} else if ok && e.Encrypted {
+				rec.SealedLost++ // listed, but not the record the index describes
 			}
 		}
 		docs := rec.Docs[:0]

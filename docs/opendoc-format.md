@@ -171,7 +171,12 @@ and the walk stops at the first bad frame. The result is a pack of the documents
 are intact, with names taken from `Document` metadata (id, name, folder, tags). An encrypted
 record has no readable ID, so it is carried through only when the index is intact (with the
 index's entry, as `Recovered.Sealed`, and `Repack` writes it back as an encrypted record);
-without the index it is counted in `Skipped` and not recovered. This
+without the index it is counted in `Skipped` and in `Recovered.SealedLost`, and not
+recovered. **`Repack` drops such records**: the recovered pack silently lacks those
+confidential documents (`opendoc recover` prints a loud warning when `SealedLost` is not
+zero). If you have a copy of the pack whose index is intact, recover from that copy first;
+the damaged one is better kept as it is than replaced by the repacked output. The walk
+cannot count records after the first bad frame. This
 loses the index's folders only if the documents' own `folder` metadata is also gone.
 A document whose ID appears in more than one record is recovered once, as the last of
 them. If the index is still intact, it decides which records are in the pack (a document

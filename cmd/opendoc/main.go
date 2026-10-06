@@ -628,5 +628,9 @@ func recoverCmd(args []string, out outWriter) error {
 		return err
 	}
 	say(out, "%d documents recovered into %s (complete: %v)\n", len(rec.Docs), args[1], rec.Complete)
+	if rec.SealedLost > 0 {
+		say(out, "WARNING: %d encrypted (confidential) record(s) could not be attributed because the index is damaged, and are NOT in %s. "+
+			"Recover from a copy of the pack whose index is intact first, if you have one.\n", rec.SealedLost, args[1])
+	}
 	return nil
 }

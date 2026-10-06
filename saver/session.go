@@ -1056,11 +1056,15 @@ func (s *Session) DownloadFolder(ctx context.Context, id string) error {
 	if s.Deliver == nil {
 		return errors.New("saver: nowhere to deliver files")
 	}
-	data, name, err := s.Saver.Archive(ctx, s.targetName(), id)
+	data, name, skipped, err := s.Saver.ArchiveReport(ctx, s.targetName(), id)
 	if err != nil {
 		return err
 	}
 	s.Deliver(safeName(name)+".zip", "application/zip", data)
+	if len(skipped) > 0 {
+		s.say(msg("saver.downloadedSkipped", "%s downloaded without %d confidential document(s) that are locked here", name, len(skipped)))
+		return nil
+	}
 	s.say(msg("saver.downloaded", "%s downloaded", name))
 	return nil
 }

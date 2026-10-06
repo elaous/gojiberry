@@ -133,12 +133,12 @@ func TestEncryptedWithoutAKey(t *testing.T) {
 	// Recover of a pack with a cut footer: without the index an encrypted record cannot be
 	// placed (no ID), so it is counted; with an intact index it is carried as Sealed.
 	rec, err := Recover(bytes.NewReader(data), int64(len(data)))
-	if err != nil || !rec.Complete || len(rec.Docs) != 1 || len(rec.Sealed) != 1 || rec.Skipped != 0 || rec.Sealed[0].Entry.ID != id2 {
+	if err != nil || !rec.Complete || len(rec.Docs) != 1 || len(rec.Sealed) != 1 || rec.Skipped != 0 || rec.SealedLost != 0 || rec.Sealed[0].Entry.ID != id2 {
 		t.Fatalf("%+v %v", rec, err)
 	}
 	cut := data[:r.Index().Entries[1].Offset+recordSize(r.Index().Entries[1].Length)]
 	rec, err = Recover(bytes.NewReader(cut), int64(len(cut)))
-	if err != nil || rec.Complete || len(rec.Docs) != 1 || len(rec.Sealed) != 0 || rec.Skipped != 1 {
+	if err != nil || rec.Complete || len(rec.Docs) != 1 || len(rec.Sealed) != 0 || rec.Skipped != 1 || rec.SealedLost != 1 {
 		t.Fatalf("cut: %+v %v", rec, err)
 	}
 	rec, _ = Recover(bytes.NewReader(data), int64(len(data)))

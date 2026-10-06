@@ -288,8 +288,17 @@ cannot be opened.
       no working `Open` is skipped with a needs-key warning (`ImportReport.NeedsKey`,
       `Warnings`) and the rest come in; one that is opened is saved confidential again, through
       `Saver.ConfidentialCheck` (a refusal is that document's `Failed`), under any
-      `ConflictPolicy` (Replace turns a server document into a confidential one with
-      `SetProtection`).
+      `ConflictPolicy` (Replace turns a server document into a confidential one in a single end
+      to end save: the check runs before anything is overwritten, a refusal leaves the
+      existing document as it was and is that document's `Failed`).
+
+   **Warning: `SetProtection(E2EE)` does not erase the past.** The previous generation of the
+   document (`prev`) and its version snapshots still hold the pre-switch plaintext, with the
+   real name and tags, under the wrapping they had, until the store's keyring re-keys them
+   (`Sharing.Repair`). Until then, whoever could read those copies still can. `ImportPack`
+   with Replace writes the confidential document in one step (the check runs first, and the
+   record is never stored as an ordinary document), but the copies of the document it
+   replaced are the same case.
 
    *Left:*
    1. The saver records the level but does not choose the keys: which recipients a confidential

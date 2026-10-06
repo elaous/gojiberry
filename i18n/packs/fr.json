@@ -181,6 +181,7 @@
   "docs.downloadAs": "Télécharger en…",
   "docs.downloadOf": "Télécharger %s en",
   "saver.downloaded": "%s téléchargé",
+  "saver.downloadedSkipped": "%s téléchargé sans %d document(s) confidentiel(s) verrouillé(s) ici",
   "saver.linkCopied": "Lien copié : %s",
   "tab.page": "Page",
   "menu.pageSetup": "Mise en page…",

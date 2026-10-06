@@ -20,7 +20,25 @@ import (
 // format, and documents in the trash are left out. Names that would repeat in a
 // directory get their ID's first eight characters. The second result is a name
 // for the archive: the folder's, or "documents" for the top level.
+//
+// A confidential document is in the archive as its open file, plaintext, under its real name
+// (the user asked for it). One that no key opens here is skipped, not an error; Archive does
+// not say which, ArchiveReport does.
 func (s *Saver) Archive(ctx context.Context, target, folder string) (data []byte, name string, err error) {
+	data, name, _, err = s.ArchiveReport(ctx, target, folder)
+	return data, name, err
+}
+
+// ArchiveSkip is a document left out of an archive: a confidential one that is locked here.
+type ArchiveSkip struct {
+	ID, Name string
+	Err      error
+}
+
+// ArchiveReport is Archive that also returns the documents it left out because they are
+// confidential and locked (no key here opens them: a warning to show, not a reason to give up
+// the whole archive). The name is the placeholder, the real one being inside.
+func (s *Saver) ArchiveReport(ctx context.Context, target, folder string) (data []byte, name string, skipped []ArchiveSkip, err error) {
 	name = "documents"
 	type item struct {
 		id, name, dir string
@@ -61,7 +79,7 @@ func (s *Saver) Archive(ctx context.Context, target, folder string) (data []byte
 		return nil
 	})
 	if err != nil {
-		return nil, name, err
+		return nil, name, nil, err
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].id < items[j].id })
 	var buf bytes.Buffer
@@ -72,13 +90,17 @@ func (s *Saver) Archive(ctx context.Context, target, folder string) (data []byte
 		if errors.Is(err, docstore.ErrNotFound) {
 			continue // deleted since the catalog was read
 		}
+		if it.entry.confidential() && errors.Is(err, docstore.ErrLocked) {
+			skipped = append(skipped, ArchiveSkip{ID: it.id, Name: it.name, Err: err})
+			continue // no key opens it here: left out, and reported
+		}
 		if errors.Is(err, ErrUnreadable) {
 			// An archive is a backup: one that quietly lacks a document is worse than
 			// one that says so.
-			return nil, name, fmt.Errorf("saver: %q is damaged and has no good copy: %w", it.name, err)
+			return nil, name, nil, fmt.Errorf("saver: %q is damaged and has no good copy: %w", it.name, err)
 		}
 		if err != nil {
-			return nil, name, err
+			return nil, name, nil, err
 		}
 		ext := path.Ext(it.entry.Key)
 		if it.entry.confidential() {
@@ -91,16 +113,16 @@ func (s *Saver) Archive(ctx context.Context, target, folder string) (data []byte
 		used[strings.ToLower(full)] = true
 		w, err := zw.Create(full)
 		if err != nil {
-			return nil, name, err
+			return nil, name, nil, err
 		}
 		if _, err := w.Write(data); err != nil {
-			return nil, name, err
+			return nil, name, nil, err
 		}
 	}
 	if err := zw.Close(); err != nil {
-		return nil, name, err
+		return nil, name, nil, err
 	}
-	return buf.Bytes(), name, nil
+	return buf.Bytes(), name, skipped, nil
 }
 
 // safeName is a name as one path element: no separators, nothing hidden.

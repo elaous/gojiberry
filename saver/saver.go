@@ -204,6 +204,15 @@ func (s *Saver) codecOf(key string) (docfile.Codec, string) {
 // with that ID. Saving does not change the document's tags if doc has none of its
 // own. It returns the entry as listed.
 func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc docfile.Document) (Entry, error) {
+	return s.save(ctx, target, c, doc, false)
+}
+
+// save is Save; with e2ee the document is written end to end protected in this one step,
+// whatever its previous level was: over an ordinary document the ConfidentialCheck, if
+// there is one, is consulted first (a refusal leaves the saved document untouched), and the
+// catalog and the file never hold the real name and tags as an ordinary document's. The
+// document's own tags are the ones kept (they are the new content's).
+func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc docfile.Document, e2ee bool) (Entry, error) {
 	if !ValidName(doc.Name()) {
 		return Entry{}, ErrName
 	}
@@ -225,7 +234,15 @@ func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc do
 			// The catalog is where tags are edited (SetTags); saving the document
 			// does not bring back what was removed there. For an end-to-end document
 			// the catalog has none: the saved document's own are kept.
-			if prev.confidential() {
+			if e2ee && !prev.confidential() {
+				// Becoming confidential by this save: the same gate as SetProtection's.
+				if s.ConfidentialCheck != nil {
+					if err := s.ConfidentialCheck(ctx, target, id); err != nil {
+						return fmt.Errorf("saver: not saved as confidential: %w", err)
+					}
+				}
+				protection = ProtectionE2EE
+			} else if prev.confidential() {
 				old, _, _, err := s.readEntry(ctx, t, prev)
 				switch {
 				case err == nil:
@@ -244,7 +261,10 @@ func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc do
 			}
 			// A new document marked confidential stays so (a copy or an import of one),
 			// if the check allows it.
-			if protection = doc.Protection(); protection == ProtectionE2EE && s.ConfidentialCheck != nil {
+			if protection = doc.Protection(); e2ee {
+				protection = ProtectionE2EE
+			}
+			if protection == ProtectionE2EE && s.ConfidentialCheck != nil {
 				if err := s.ConfidentialCheck(ctx, target, id); err != nil {
 					return fmt.Errorf("saver: not saved as confidential: %w", err)
 				}
