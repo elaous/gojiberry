@@ -109,6 +109,13 @@ document shows its folder.
    "Import .opendoc" (`ImportPack`, from `Session.Pick`; `Saver.ImportPack` skips documents
    already there (the UI import always uses Skip; Replace and Copy are for callers of
    `ImportPack`, and Replace takes the pack's folder, tags and trash flag too) and reports what it skipped, what failed and whether the pack was signed).
+   A pack folder literally named "Confidential folder" is imported as a confidential placeholder
+   folder (its name was hidden and not sent, and a plain one must not drop that silently); the rule
+   is for `ImportPack` only, `CreateFolder` and `RenameFolder` make a folder with that name as
+   asked. A document or folder ID is never shared: a document (a pack's, an `.open` file's or a
+   `Save` caller's) with the ID of an existing folder is refused by `Save` (`ErrFolderID`) before
+   the `ConfidentialCheck` and `Rekey` hooks run, and `ImportPack` gives it, or a folder whose ID
+   is a document's, a new ID.
    A confidential (end-to-end) document goes into a pack only through `PackOptions.Seal`, as an
    encrypted record (placeholder name, no tags in the index), and comes back through
    `ImportOptions.Open`; without them the session's download leaves it out and says so, and an

@@ -232,6 +232,20 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 	} else if !docfile.ValidID(id) {
 		return Entry{}, ErrID
 	}
+	// A folder's ID is never a document's ("keys:<ID>" and "folder-secret/<ID>" are one
+	// record each): refused before the ConfidentialCheck or the Rekey hook can act on it
+	// (saveLocked repeats the check under the lock; without hooks that one is enough, and no
+	// extra catalog read is made).
+	if s.Rekey == nil && s.ConfidentialCheck == nil {
+		// nothing to run first
+	} else if err := s.view(ctx, target, func(_ Target, cat *catalog) error {
+		if _, ok := cat.Folders[id]; ok {
+			return ErrFolderID
+		}
+		return nil
+	}); err != nil {
+		return Entry{}, err
+	}
 	// A document that carries its history (an imported .open file) keeps it in versions,
 	// not in the document file.
 	history := doc.History
@@ -327,6 +341,9 @@ func (s *Saver) saveLocked(ctx context.Context, target string, c docfile.Codec, 
 			doc.SetTrashed(prev.Trashed)
 			doc.SetFolder(prev.Folder) // moving is Move's job
 		} else {
+			if _, ok := cat.Folders[id]; ok {
+				return ErrFolderID // a folder was made with this ID since the first read
+			}
 			if _, ok := cat.Folders[doc.Folder()]; !ok {
 				doc.SetFolder("") // a new document in a folder that is not there goes to the top
 			}

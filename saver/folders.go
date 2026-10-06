@@ -186,6 +186,9 @@ func (s *Saver) RenameFolder(ctx context.Context, target, id, name string) error
 			rekeyed = true
 		}
 		err = s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
+			if _, ok := cat.Docs[id]; ok {
+				return ErrFolderID
+			}
 			f, ok := cat.Folders[id]
 			if !ok {
 				return ErrFolder
@@ -217,6 +220,9 @@ func (s *Saver) RenameFolder(ctx context.Context, target, id, name string) error
 // or one of its own subfolders.
 func (s *Saver) MoveFolder(ctx context.Context, target, id, parent string) error {
 	return s.update(ctx, target, func(t Target, cat *catalog, _ *[]func()) error {
+		if _, ok := cat.Docs[id]; ok {
+			return ErrFolderID
+		}
 		f, ok := cat.Folders[id]
 		if !ok {
 			return ErrFolder
@@ -258,6 +264,9 @@ func (s *Saver) DeleteFolder(ctx context.Context, target, id string) error {
 func (s *Saver) DeleteFolderReport(ctx context.Context, target, id string) (purged []string, err error) {
 	err = s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		purged = nil // update may run this again
+		if _, ok := cat.Docs[id]; ok {
+			return ErrFolderID
+		}
 		if _, ok := cat.Folders[id]; !ok {
 			return ErrFolder
 		}
