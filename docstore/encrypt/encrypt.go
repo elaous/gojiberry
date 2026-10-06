@@ -369,6 +369,13 @@ func (a *Adapter) rekeyOne(ctx context.Context, id string) error {
 // its files cannot be opened). Write failures after that are collected, not stopping the
 // others. The caller holds the lock.
 func (a *Adapter) rekeyGroup(ctx context.Context, ids []string) (int, error) {
+	done, _, err := a.rekeyGroupFiles(ctx, ids)
+	return len(done), err
+}
+
+// rekeyGroupFiles is rekeyGroup that says which files it wrote and, when it wrote none because
+// some could not be opened, which those were (unreadable).
+func (a *Adapter) rekeyGroupFiles(ctx context.Context, ids []string) (written, unreadable []string, err error) {
 	var errs []error
 	var present []string
 	for _, id := range ids {
@@ -378,14 +385,15 @@ func (a *Adapter) rekeyGroup(ctx context.Context, ids []string) (int, error) {
 			// Deleted since it was listed: nothing to re-key.
 		case err != nil:
 			errs = append(errs, fmt.Errorf("%s: %w", id, err))
+			unreadable = append(unreadable, id)
 		default:
 			present = append(present, id)
 		}
 	}
 	if len(errs) > 0 {
-		return 0, errors.Join(errs...)
+		return nil, unreadable, errors.Join(errs...)
 	}
-	n := 0
+	var done []string
 	for _, id := range present {
 		if err := a.rekeyOne(ctx, id); err != nil {
 			if errors.Is(err, docstore.ErrNotFound) {
@@ -394,9 +402,9 @@ func (a *Adapter) rekeyGroup(ctx context.Context, ids []string) (int, error) {
 			errs = append(errs, fmt.Errorf("%s: %w", id, err))
 			continue
 		}
-		n++
+		done = append(done, id)
 	}
-	return n, errors.Join(errs...)
+	return done, nil, errors.Join(errs...)
 }
 
 // exclusive takes the store's Lock and then the adapter's own, which a Save of an encrypted
@@ -501,6 +509,42 @@ func (a *Adapter) RekeyDocument(ctx context.Context, docID string) (int, error) 
 		return 0, err
 	}
 	return a.rekeyGroup(ctx, ids)
+}
+
+// RekeyDocumentFiles is RekeyDocument that says which files it wrote (done) and which of the
+// document's files it listed and did not write (stale: they are still encrypted to whatever
+// recipients they had), so a caller can report what a failed re-key left behind.
+func (a *Adapter) RekeyDocumentFiles(ctx context.Context, docID string) (done, stale []string, err error) {
+	done, stale, _, err = a.RekeyDocumentReport(ctx, docID)
+	return done, stale, err
+}
+
+// RekeyDocumentReport is RekeyDocumentFiles that also says which of the files could not be
+// opened (unreadable, a subset of stale): the reason none was written. Nothing is dropped:
+// what to do with a file that cannot be opened is the caller's decision.
+func (a *Adapter) RekeyDocumentReport(ctx context.Context, docID string) (done, stale, unreadable []string, err error) {
+	unlock, err := a.exclusive(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer unlock()
+	ids, err := a.filesOf(ctx, docID)
+	if err != nil {
+		return nil, ids, nil, err
+	}
+	done, unreadable, err = a.rekeyGroupFiles(ctx, ids)
+	if err != nil {
+		in := map[string]bool{}
+		for _, d := range done {
+			in[d] = true
+		}
+		for _, id := range ids {
+			if !in[id] {
+				stale = append(stale, id)
+			}
+		}
+	}
+	return done, stale, unreadable, err
 }
 
 // RekeyIDs re-keys the given files as one unit (the files of one document): all are opened

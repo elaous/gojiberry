@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"filippo.io/age"
@@ -28,8 +29,56 @@ import (
 // verifies it against the owners' signing keys and fails closed. A person who can only
 // write the store cannot add themselves as a recipient, or change the list, without
 // being refused. What the signature does not stop is in docs/encryption-and-passkeys.md
-// (a store writer can still delete a record, or put back an older signed one).
+// C.5: a store writer can still delete a record, or put back an older validly signed one
+// (a replay), which no signature check can tell from the current one. The defences against a
+// replay are the optional SeqFloor (a record older than the highest seen is refused) and the
+// saver's re-assertion of a confidential document's level on each save (saver.Saver.Rekey).
 const KeysPrefix = "keys:"
+
+// ErrStaleRecord is returned when a document's record is older than the highest sequence
+// number the SeqFloor has seen for it (an older signed record was put back), or is missing
+// where one was seen. It is not used, because it decides who a document is encrypted to and
+// at what level.
+var ErrStaleRecord = errors.New("encrypt: the recipient list is older than one already seen (a replayed record)")
+
+// SeqFloor remembers, per document, the highest record sequence number seen, so that an older
+// validly signed record that a store writer put back is refused (ErrStaleRecord). It is
+// optional (nil: none, a replay is then not detected on read) and must live somewhere the
+// store's writers cannot reach, or it defends nothing: memory of the client, or the owner's
+// own device storage, not the store itself.
+type SeqFloor interface {
+	// Get returns the highest sequence number raised for the document, 0 if none.
+	Get(ctx context.Context, docID string) (uint64, error)
+	// Raise records seq as seen; a lower value than the one held changes nothing.
+	Raise(ctx context.Context, docID string, seq uint64) error
+}
+
+// MemorySeqFloor is a SeqFloor in memory: it lasts as long as the process (or the page), so
+// it protects a long-lived client, and a fresh one starts with no floor.
+type MemorySeqFloor struct {
+	mu sync.Mutex
+	m  map[string]uint64
+}
+
+// Get implements SeqFloor.
+func (f *MemorySeqFloor) Get(_ context.Context, docID string) (uint64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.m[docID], nil
+}
+
+// Raise implements SeqFloor.
+func (f *MemorySeqFloor) Raise(_ context.Context, docID string, seq uint64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.m == nil {
+		f.m = map[string]uint64{}
+	}
+	if seq > f.m[docID] {
+		f.m[docID] = seq
+	}
+	return nil
+}
 
 // ErrFingerprint is returned by Share when the fingerprint the owner confirmed is not the key's:
 // adding a key is only done on the owner's word about whose it is.
@@ -116,7 +165,13 @@ type sharedRecord struct {
 	Seq uint64 `json:"seq"`
 	// Pending means the files of the document may not all be encrypted to Recipients yet (a
 	// change was saved and its re-key did not finish): Remove, Add and Repair finish it.
-	Pending    bool          `json:"pending,omitempty"`
+	Pending bool `json:"pending,omitempty"`
+	// Protection is the document's protection level ("" for server, ProtectionE2EE for end to
+	// end), signed with the list: it is what ConfidentialKeyring trusts to know that a
+	// document's files must be wrapped for people's keys only. The catalog and the document
+	// say it too, but the keyring reads this one, which a store writer cannot forge (it can
+	// still put back an older signed record: see SeqFloor and C.5).
+	Protection string        `json:"protection,omitempty"`
 	Recipients []sharedEntry `json:"recipients"`
 }
 
@@ -192,16 +247,41 @@ func verifyRecord(raw []byte, docID string, owners []ed25519.PublicKey) (sharedR
 
 // loadRecord reads and verifies a document's record. A document with no record has no
 // shared keys; one that has a record that does not verify is an error (fail closed).
-func loadRecord(ctx context.Context, store docstore.Adapter, docID string, owners []ed25519.PublicKey) (rec sharedRecord, digest string, err error) {
+//
+// With a floor, a record whose seq is below the highest seen for the document is refused
+// (ErrStaleRecord), and so is a missing one where a record was seen; a good one raises it.
+func loadRecord(ctx context.Context, store docstore.Adapter, docID string, owners []ed25519.PublicKey, floor SeqFloor) (rec sharedRecord, digest string, err error) {
 	d, err := store.Load(ctx, KeysPrefix+docID)
 	if errors.Is(err, docstore.ErrNotFound) {
+		if floor != nil {
+			if f, ferr := floor.Get(ctx, docID); ferr != nil {
+				return sharedRecord{}, "", ferr
+			} else if f > 0 {
+				return sharedRecord{}, "", fmt.Errorf("%s: %w", docID, ErrStaleRecord)
+			}
+		}
 		return sharedRecord{}, "", nil
 	}
 	if err != nil {
 		return sharedRecord{}, "", err
 	}
 	rec, err = verifyRecord(d.Data, docID, owners)
-	return rec, docstore.Digest(d.Data), err
+	if err != nil {
+		return rec, docstore.Digest(d.Data), err
+	}
+	if floor != nil {
+		f, ferr := floor.Get(ctx, docID)
+		if ferr != nil {
+			return sharedRecord{}, "", ferr
+		}
+		if rec.Seq < f {
+			return sharedRecord{}, docstore.Digest(d.Data), fmt.Errorf("%s: %w", docID, ErrStaleRecord)
+		}
+		if ferr := floor.Raise(ctx, docID, rec.Seq); ferr != nil {
+			return sharedRecord{}, "", ferr
+		}
+	}
+	return rec, docstore.Digest(d.Data), nil
 }
 
 // StoreKeyring is a Keyring whose recipients are the owner's keys and, for each document, the
@@ -216,6 +296,9 @@ type StoreKeyring struct {
 	// record is used only if one of them signed it. With none, a document that has a record
 	// cannot be saved (fail closed).
 	OwnerSigners []ed25519.PublicKey
+	// SeqFloor, when set, refuses a record older than the highest one seen for the document
+	// (ErrStaleRecord). Nil means none.
+	SeqFloor SeqFloor
 }
 
 // Recipients implements Keyring. A record that is missing its signature, or has a wrong
@@ -226,7 +309,7 @@ func (k StoreKeyring) Recipients(ctx context.Context, id string) ([]age.Recipien
 	if doc == "" {
 		return out, nil
 	}
-	rec, _, err := loadRecord(ctx, k.Store, doc, k.OwnerSigners)
+	rec, _, err := loadRecord(ctx, k.Store, doc, k.OwnerSigners, k.SeqFloor)
 	if err != nil {
 		return nil, err
 	}
@@ -260,6 +343,9 @@ type Sharing struct {
 	Adapter      *Adapter
 	Signer       *Signer
 	OwnerSigners []ed25519.PublicKey
+	// SeqFloor, when set, refuses a record older than the highest seen (ErrStaleRecord) and
+	// is raised by every record this Sharing writes. Share the one of the StoreKeyring.
+	SeqFloor SeqFloor
 }
 
 func (s *Sharing) verifiers() []ed25519.PublicKey {
@@ -281,7 +367,7 @@ func (s *Sharing) mutate(ctx context.Context, docID string, fn func(*sharedRecor
 		return sharedRecord{}, ErrNoSigner
 	}
 	for range mutateAttempts {
-		rec, digest, err := loadRecord(ctx, s.Store, docID, s.verifiers())
+		rec, digest, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
 		if err != nil {
 			return rec, err
 		}
@@ -304,9 +390,13 @@ func (s *Sharing) mutate(ctx context.Context, docID string, fn func(*sharedRecor
 			if errors.Is(err, docstore.ErrConflict) {
 				continue
 			}
-			return rec, err
+		} else {
+			err = s.Store.Save(ctx, KeysPrefix+docID, data)
 		}
-		return rec, s.Store.Save(ctx, KeysPrefix+docID, data)
+		if err == nil && s.SeqFloor != nil {
+			err = s.SeqFloor.Raise(ctx, docID, rec.Seq)
+		}
+		return rec, err
 	}
 	return sharedRecord{}, docstore.ErrConflict
 }
@@ -314,7 +404,7 @@ func (s *Sharing) mutate(ctx context.Context, docID string, fn func(*sharedRecor
 // List says who a document is shared with, besides the owner's own keys. A list whose
 // signature does not verify is an error.
 func (s *Sharing) List(ctx context.Context, docID string) ([]Shared, error) {
-	rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers())
+	rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +423,7 @@ func (s *Sharing) List(ctx context.Context, docID string) ([]Shared, error) {
 // files of the document may still be encrypted to the old list. Repair (or Remove or Add
 // again) finishes it.
 func (s *Sharing) Pending(ctx context.Context, docID string) (bool, error) {
-	rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers())
+	rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
 	return rec.Pending, err
 }
 
@@ -349,15 +439,23 @@ const finishAttempts = 5
 // unchanged): a Remove or Add that saved a newer list meanwhile set it pending for files this
 // pass may have sealed to the old one, so the document is re-keyed again.
 func (s *Sharing) finish(ctx context.Context, docID string) (int, error) {
-	var n int
+	n, _, _, err := s.finishFiles(ctx, docID)
+	return n, err
+}
+
+// finishFiles is finish that also says, when a pass failed, which files were left encrypted to
+// their old recipients (stale) and which of them could not be opened (unreadable).
+func (s *Sharing) finishFiles(ctx context.Context, docID string) (n int, stale, unreadable []string, err error) {
 	for range finishAttempts {
-		rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers())
+		rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
 		if err != nil {
-			return n, err
+			return n, nil, nil, err
 		}
 		seq := rec.Seq
-		if n, err = s.Adapter.RekeyDocument(ctx, docID); err != nil {
-			return n, err
+		var done []string
+		done, stale, unreadable, err = s.Adapter.RekeyDocumentReport(ctx, docID)
+		if n = len(done); err != nil {
+			return n, stale, unreadable, err
 		}
 		again := false
 		if _, err = s.mutate(ctx, docID, func(rec *sharedRecord) (bool, error) {
@@ -371,13 +469,13 @@ func (s *Sharing) finish(ctx context.Context, docID string) (int, error) {
 			rec.Pending = false
 			return true, nil
 		}); err != nil {
-			return n, err
+			return n, nil, nil, err
 		}
 		if !again {
-			return n, nil
+			return n, nil, nil, nil
 		}
 	}
-	return n, docstore.ErrConflict
+	return n, nil, nil, docstore.ErrConflict
 }
 
 // Add shares a document with a key. confirmed is the fingerprint the owner says they checked
@@ -460,7 +558,7 @@ func (s *Sharing) Repair(ctx context.Context, docID string) (int, error) {
 	if !docfile.ValidID(docID) {
 		return 0, errors.New("encrypt: not a document ID")
 	}
-	if _, _, err := loadRecord(ctx, s.Store, docID, s.verifiers()); err != nil {
+	if _, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor); err != nil {
 		return 0, err
 	}
 	return s.finish(ctx, docID)
@@ -483,7 +581,7 @@ func (s *Sharing) Usage(ctx context.Context, fingerprint string) ([]string, erro
 		if !ok {
 			continue
 		}
-		rec, _, err := loadRecord(ctx, s.Store, doc, s.verifiers())
+		rec, _, err := loadRecord(ctx, s.Store, doc, s.verifiers(), s.SeqFloor)
 		if err != nil {
 			errs = append(errs, err)
 			continue
