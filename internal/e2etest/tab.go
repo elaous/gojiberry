@@ -10,7 +10,6 @@ package e2etest
 
 import (
 	"context"
-	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -31,9 +30,6 @@ import (
 	"github.com/chromedp/cdproto/webauthn"
 	"github.com/chromedp/chromedp"
 )
-
-//go:embed selector.js
-var selectorJS string
 
 // Timeout is how long a wait or an action polls before the test fails.
 const Timeout = 15 * time.Second
@@ -156,6 +152,10 @@ func (s *Site) launch(t testing.TB, o Options) *Tab {
 		t.Fatalf("starting the browser: %v", err)
 	}
 	t.Cleanup(tab.Close)
+	selectorJS, err := selectorScript()
+	if err != nil {
+		t.Fatal(err)
+	}
 	tab.must(chromedp.Tasks{
 		chromedp.EmulateViewport(int64(o.Width), int64(o.Height)),
 		page.SetInterceptFileChooserDialog(true),
