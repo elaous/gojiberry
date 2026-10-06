@@ -257,6 +257,7 @@ func TestOwnerOpensAConfidentialFolderWithPasskeyAloneOrRecoveryAlone(t *testing
 		ServerRecipients: []age.Recipient{server.Recipient()},
 	}
 	ad := New(inner, ring)
+	ad.Signer = sg
 	sh := &Sharing{Store: inner, Adapter: ad, Signer: sg}
 	s := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: ad}}}
 	s.ConfidentialCheck = ConfidentialCheck(sh, pk, rec)
@@ -297,6 +298,7 @@ func TestOwnerOpensAConfidentialFolderWithPasskeyAloneOrRecoveryAlone(t *testing
 			OwnerSigners: []ed25519.PublicKey{sg.Public()}},
 		AtRest: Static{To: []age.Recipient{server.Recipient()}}, ServerRecipients: []age.Recipient{server.Recipient()},
 	})
+	recOnly.Signer = sg // the recovery key's own signing key, listed in OwnerSigners
 	rs := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: recOnly}}}
 	if err := rs.RenameFolder(ctx, "m", f.ID, "Renamed xango5"); err != nil {
 		t.Fatal(err)
