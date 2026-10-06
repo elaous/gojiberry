@@ -46,3 +46,5 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
    processes can lose a catalog update.
 8. The rest of the [known limits plan](known-limits-plan.md): i18n breadth,
    accessibility depth, right-to-left, Hunspell dictionaries on demand.
+
+- **Done:** TypeScript in the browser from Go. tsgo builds to wasm and transpiles; sizes and conclusions in [typescript-in-wasm.md](typescript-in-wasm.md).
