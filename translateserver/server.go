@@ -7,7 +7,7 @@
 // gojiberry/syncserver and gojiberry/fontserver -- see
 // cmd/translateserver for the entry point.
 //
-// DeepL only for now (via github.com/cluttrdev/deepl-go), matching
+// DeepL only for now (a small client of its HTTP API in deepl.go), matching
 // OnDesign's own roadmap recommendation for task #106; a second
 // provider (Google Translate, say) would slot in behind the same
 // translator interface this package already isolates the DeepL client
@@ -17,13 +17,13 @@
 package translateserver
 
 import (
+	"context"
 	"encoding/json"
-	"github.com/elaous/gojiberry/guard"
 	"io"
 	"net/http"
 	"os"
 
-	deepl "github.com/cluttrdev/deepl-go/deepl"
+	"github.com/elaous/gojiberry/guard"
 )
 
 // Config is loaded entirely from the environment, the same posture
@@ -57,12 +57,12 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-// translator is the subset of *deepl.Translator this package actually
-// calls, so tests can inject a fake instead of hitting the real DeepL
-// API (the same "swappable network call" reasoning fontserver's own
-// fetchGoogleFonts field documents).
+// translator is the one call this package makes to DeepL, so tests can
+// inject a fake instead of hitting the real API (the same "swappable
+// network call" reasoning fontserver's own fetchGoogleFonts field
+// documents). sourceLang may be "".
 type translator interface {
-	TranslateText(text []string, targetLang string, opts ...deepl.TranslateOption) ([]deepl.Translation, error)
+	Translate(ctx context.Context, text []string, targetLang, sourceLang string) ([]Translation, error)
 }
 
 // Server proxies translation requests to DeepL, never exposing the
@@ -80,7 +80,7 @@ type Server struct {
 func NewServer(cfg Config) (*Server, error) {
 	s := &Server{cfg: cfg}
 	if cfg.DeepLAPIKey != "" {
-		t, err := deepl.NewTranslator(cfg.DeepLAPIKey)
+		t, err := newDeeplClient(cfg.DeepLAPIKey)
 		if err != nil {
 			return nil, err
 		}
@@ -145,12 +145,7 @@ func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var opts []deepl.TranslateOption
-	if req.SourceLang != "" {
-		opts = append(opts, deepl.WithSourceLang(req.SourceLang))
-	}
-
-	results, err := s.translator.TranslateText([]string{req.Text}, req.TargetLang, opts...)
+	results, err := s.translator.Translate(r.Context(), []string{req.Text}, req.TargetLang, req.SourceLang)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
