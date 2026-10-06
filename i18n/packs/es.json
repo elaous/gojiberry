@@ -228,6 +228,17 @@
   "saver.checkedProblems": "Comprobados %d documentos: %d recuperados de una copia anterior (%s), %d dañados sin copia (%s)",
   "saver.checkedBackups": "(%d sin una copia anterior válida; el próximo guardado crea una)",
   "saver.checkedOrphans": "(%d archivos sobrantes eliminados)",
-  "docs.check": "Comprobar documentos"
+  "docs.check": "Comprobar documentos",
+  "recipients.title": "Claves que pueden abrir este documento",
+  "recipients.unlabeled": "(sin etiqueta)",
+  "recipients.owner": "propietario",
+  "recipients.remove": "Quitar",
+  "recipients.confirmRemove": "¿Dejar de compartir con %s? El documento se cifra de nuevo sin esa clave, así que no podrá abrir lo que se guarde desde ahora. Conserva lo que ya abrió o copió: eso no se puede deshacer.",
+  "recipients.keyPlaceholder": "Pegue una clave pública: ssh-ed25519 AAAA… o age1…",
+  "recipients.key": "Clave pública",
+  "recipients.parsed": "Clave %s para %s. Su huella es:",
+  "recipients.checkHint": "Compruebe esta huella con la persona, por otra vía distinta de la que recibió la clave, y escríbala aquí para añadir la clave.",
+  "recipients.confirm": "Huella, escrita para confirmar",
+  "recipients.add": "Añadir clave"
  }
 }

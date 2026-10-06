@@ -228,6 +228,17 @@
   "saver.checkedProblems": "%d documents vérifiés : %d rétablis depuis une copie précédente (%s), %d endommagés sans copie (%s)",
   "saver.checkedBackups": "(%d sans bonne copie précédente ; la prochaine sauvegarde en crée une)",
   "saver.checkedOrphans": "(%d fichiers résiduels supprimés)",
-  "docs.check": "Vérifier les documents"
+  "docs.check": "Vérifier les documents",
+  "recipients.title": "Clés qui peuvent ouvrir ce document",
+  "recipients.unlabeled": "(sans libellé)",
+  "recipients.owner": "propriétaire",
+  "recipients.remove": "Retirer",
+  "recipients.confirmRemove": "Ne plus partager avec %s ? Le document est rechiffré sans cette clé : elle ne pourra pas ouvrir ce qui est enregistré à partir de maintenant. Elle garde ce qu’elle a déjà ouvert ou copié : cela ne peut pas être annulé.",
+  "recipients.keyPlaceholder": "Collez une clé publique : ssh-ed25519 AAAA… ou age1…",
+  "recipients.key": "Clé publique",
+  "recipients.parsed": "Clé %s pour %s. Son empreinte est :",
+  "recipients.checkHint": "Vérifiez cette empreinte avec la personne, par un autre moyen que celui par lequel vous avez reçu la clé, puis saisissez-la ici pour ajouter la clé.",
+  "recipients.confirm": "Empreinte, saisie pour confirmer",
+  "recipients.add": "Ajouter la clé"
  }
 }

@@ -20,6 +20,9 @@ type Recipient struct {
 	Type        string // "ssh-ed25519", "ssh-rsa" or "age-x25519"
 	Fingerprint string // "SHA256:..." for an SSH key, the key itself for an age key
 	Key         age.Recipient
+	// Text is the public key as it was read ("ssh-ed25519 AAAA..." or "age1..."), what is kept
+	// in a document's recipient list.
+	Text string
 }
 
 // ParseSSHRecipient reads an SSH public key as an authorized_keys or .pub file holds it
@@ -35,7 +38,7 @@ func ParseSSHRecipient(line string) (Recipient, error) {
 	if err != nil {
 		return Recipient{}, fmt.Errorf("encrypt: %w", err)
 	}
-	return Recipient{Label: comment, Type: pub.Type(), Fingerprint: ssh.FingerprintSHA256(pub), Key: r}, nil
+	return Recipient{Label: comment, Type: pub.Type(), Fingerprint: ssh.FingerprintSHA256(pub), Key: r, Text: line}, nil
 }
 
 // ParseAgeRecipient reads an age public key ("age1...").
@@ -45,7 +48,7 @@ func ParseAgeRecipient(s string) (Recipient, error) {
 		return Recipient{}, fmt.Errorf("encrypt: %w", err)
 	}
 	sum := sha256.Sum256([]byte(r.String()))
-	return Recipient{Type: "age-x25519", Fingerprint: "SHA256:" + base64.RawStdEncoding.EncodeToString(sum[:]), Key: r}, nil
+	return Recipient{Type: "age-x25519", Fingerprint: "SHA256:" + base64.RawStdEncoding.EncodeToString(sum[:]), Key: r, Text: r.String()}, nil
 }
 
 // ParseSSHIdentity reads an unencrypted SSH private key (the PEM of an ed25519 or RSA key).
