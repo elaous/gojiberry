@@ -117,7 +117,7 @@ func (s *Saver) readCatalogRev(ctx context.Context, t Target) (*catalog, string,
 		} else if !errors.Is(err, docstore.ErrNotFound) {
 			return nil, "", err
 		}
-		c, err := s.build(ctx, t)
+		c, err := s.build(ctx, t, nil)
 		if err != nil {
 			return nil, "", err
 		}
@@ -186,11 +186,15 @@ func (s *Saver) update(ctx context.Context, target string, f func(t Target, c *c
 	defer s.mu.Unlock()
 	// A store that others share but that cannot write conditionally (a browser's
 	// localStorage) offers a lock instead: hold it across the read and the write.
-	unlock, err := lockTarget(ctx, t)
-	if err != nil {
-		return err
+	// (An adapter that writes conditionally needs no lock for the catalog: it detects
+	// the other writer and the update is made again.)
+	if _, conditional := t.Adapter.(docstore.ConditionalAdapter); !conditional {
+		unlock, err := lockTarget(ctx, t)
+		if err != nil {
+			return err
+		}
+		defer unlock()
 	}
-	defer unlock()
 	// With an adapter that can write conditionally, a catalog changed by another
 	// process since it was read is read again and f is run again on it, so f must
 	// be safe to repeat (it is: a file it wrote is listed in c.fresh, and removed).
@@ -272,14 +276,14 @@ func (s *Saver) Rebuild(ctx context.Context, target string) error {
 		return err
 	}
 	defer unlock()
-	_, err = s.rebuild(ctx, t)
+	_, err = s.rebuild(ctx, t, s.peekCatalog(ctx, t))
 	return err
 }
 
 // rebuild builds the catalog from the documents and writes it, over whatever is
 // there: for a repair, where the stored catalog is what is wrong.
-func (s *Saver) rebuild(ctx context.Context, t Target) (*catalog, error) {
-	out, err := s.build(ctx, t)
+func (s *Saver) rebuild(ctx context.Context, t Target, known *catalog) (*catalog, error) {
+	out, err := s.build(ctx, t, known)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +295,23 @@ func (s *Saver) rebuild(ctx context.Context, t Target) (*catalog, error) {
 
 // build reads the catalog the documents in the target add up to, writing nothing
 // but the files of documents that had no ID.
-func (s *Saver) build(ctx context.Context, t Target) (*catalog, error) {
+//
+// known is the catalog that was there, if it could be read: its checksums stay the
+// authority for the files it lists, so a file that no longer matches is not given a new,
+// matching checksum by the rebuild (a read of it still finds it damaged and falls back to
+// the previous copy). With no known catalog the files are taken as they are.
+func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, error) {
+	knownSum := map[string]string{}
+	if known != nil {
+		for _, e := range known.Docs {
+			if e.Sum != "" {
+				knownSum[e.Key] = e.Sum
+			}
+			if e.PrevSum != "" {
+				knownSum[e.Prev] = e.PrevSum
+			}
+		}
+	}
 	metas, err := t.Adapter.List(ctx)
 	if err != nil {
 		return nil, err
@@ -325,6 +345,9 @@ func (s *Saver) build(ctx context.Context, t Target) (*catalog, error) {
 			continue
 		}
 		key, size, sum := m.ID, m.Size, docstore.Digest(stored.Data)
+		if ks := knownSum[m.ID]; ks != "" {
+			sum = ks
+		}
 		id := doc.ID()
 		if !docfile.ValidID(id) {
 			// A document from before IDs, under its name: it gets an ID, and its file
@@ -534,7 +557,7 @@ func (s *Saver) Repair(ctx context.Context, target string) (repaired bool, err e
 				return false, err
 			}
 		}
-		built, err := s.build(ctx, t)
+		built, err := s.build(ctx, t, &c)
 		if err != nil {
 			return false, err
 		}
@@ -592,4 +615,17 @@ func (s *Saver) disagrees(ctx context.Context, t Target, c *catalog) (bool, erro
 		same = same && records[id]
 	}
 	return !same, nil
+}
+
+// peekCatalog reads the stored catalog if there is a readable one, and nil otherwise.
+func (s *Saver) peekCatalog(ctx context.Context, t Target) *catalog {
+	stored, err := t.Adapter.Load(ctx, t.catalogKey())
+	if err != nil {
+		return nil
+	}
+	var c catalog
+	if json.Unmarshal(stored.Data, &c) != nil || c.Docs == nil {
+		return nil
+	}
+	return &c
 }

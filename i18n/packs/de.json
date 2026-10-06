@@ -226,6 +226,8 @@
   "saver.purgedUnreadable": "(%d Dokumente im Papierkorb, deren Dateien fehlten, wurden entfernt: %s)",
   "saver.checkedOK": "%d Dokumente geprüft: alles in Ordnung",
   "saver.checkedProblems": "%d Dokumente geprüft: %d aus einer früheren Kopie wiederhergestellt (%s), %d beschädigt ohne Kopie (%s)",
+  "saver.checkedBackups": "(%d ohne brauchbare frühere Kopie; die nächste Speicherung legt eine an)",
+  "saver.checkedOrphans": "(%d übrig gebliebene Dateien entfernt)",
   "docs.check": "Dokumente prüfen"
  }
 }
