@@ -38,9 +38,11 @@ not code: **encrypting documents to keys** and **signing in with a passkey**.
    calls.
 2. **What stays readable.** The catalog (names, tags, folders, sizes) is what lists and
    searches a store, and stays readable except for confidential items (C.2).
-3. **`.opendoc` packs.** A record's data may be an envelope (a record flag). The index
-   hashes are of the stored bytes, so a pack's integrity and signature are checked
-   **without** any key; a document is decrypted only when opened.
+3. **`.opendoc` packs.** A record's data may be an envelope (a record flag, see
+   `opendoc-format.md`). The index hashes are of the stored bytes, so a pack's integrity and
+   signature are checked **without** any key; a document is decrypted only when opened. The
+   pack and the saver import no cryptography: sealing and opening are functions the host
+   passes in (`ExportOptions.Seal`, `ImportOptions.Open`).
 4. **Sharing.** The People tab's Add/Remove gains a key: adding someone takes their
    public key (pasted `ssh-ed25519 …`, a `.pub` file, or a passkey enrolled by them) and
    the owner confirms the fingerprint.
@@ -252,5 +254,46 @@ cannot be opened.
    authenticator does not do PRF: passkeys made before this, some security keys and password managers;
    `ErrPRFLength` when it answers with the wrong size).
    The e2e derives the same key twice in Chrome. *Left:* the People-tab control that adds "my passkey" as a
-   key, and calling `CheckRecoverableOwner` when a document is made confidential (step 5).
-5. `.opendoc` encrypted records, and the placeholder catalog entries for confidential items.
+   key (calling `CheckRecoverableOwner` when a document is made confidential is step 5).
+5. **Done (library):** encrypted records in packs and placeholder catalog entries for confidential
+   documents.
+   1. `docfile/pack`: a record flag and an index field for an encrypted record, whose data is an
+      opaque envelope (`Writer.AddEncrypted`, `Entry.Encrypted`, `Reader.Read` gives
+      `ErrEncrypted`, `Reader.ReadWith(id, open)`); hashes and signature are of the stored bytes,
+      so `Verify`, `Recover` and `Compact` need no key. Format backward compatible.
+   2. `saver`: a protection level on catalog entries (`server`, the default, or `e2ee`) and, for
+      the latter, `saver.ConfidentialName` as the name and no tags; the real ones are inside the
+      document (`docfile.Document.Protection`, the meta key `protection`, also marks it so that
+      a rebuild keeps the level). `Saver.Reveal` reads them (the document must be openable),
+      `Saver.SetProtection` moves name and tags in or out, calling the injected
+      `Saver.ConfidentialCheck` before enabling it; `encrypt.ConfidentialCheck(sharing,
+      owners...)` is the hook that refuses with `ErrNeedSecondRecipient` (C.3). `Session` shows
+      the placeholder, and the real name and tags only after a successful open, save or reveal
+      (so searches and tag filters over the list see nothing of an unopened document).
+      Trash, versions, folders, copies and archives keep working; a copy of a confidential
+      document is confidential.
+   3. A rebuild (`Rebuild`, `Repair`, a lost catalog) reads each document: one that carries the
+      mark, or that the old catalog listed as `e2ee`, is listed under the placeholder with no
+      tags. A file no key here opens (the adapter's error wraps `docstore.ErrLocked`;
+      `encrypt.ErrNoKey` does) is **not read**: it is listed as confidential under the
+      placeholder, the old catalog's folder, trash flag and level kept if there was one, else
+      the top level and not trashed (they live inside the file). `Verify` counts such documents
+      as `Locked` and leaves them untouched.
+   4. `Saver.ExportPack` / `ImportPack` (the library part of `opendoc-format.md` §7.2): `Seal` and
+      `Open` are injected; a confidential document with no `Seal` is left out of the export, and
+      one with no working `Open` is left out of the import, each as a warning, never in the clear
+      and never aborting.
+
+   *Left:*
+   1. The saver records the level but does not choose the keys: which recipients a confidential
+      document's files are wrapped for (people's keys only, not a server key) is the store's
+      keyring, and re-keying copies and versions written before the switch is `Sharing.Repair`.
+      A keyring that does this per protection level is not built.
+   2. The showcase wiring and the key management UX (where the owner's key lives, the "make
+      confidential" switch, the recovery key shown once, the lock mark in the document list).
+   3. Folder names are not hidden (they live in the catalog and the folder records); only
+      documents are.
+   4. A saved document keeps its older copies readable to whoever had access to them: the
+      switch changes the catalog and the document, not what was already stored (see 1).
+   5. The UI for packs ("Download as .opendoc", "Import .opendoc") and the key management for
+      `Seal`/`Open`.

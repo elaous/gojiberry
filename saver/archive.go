@@ -68,7 +68,7 @@ func (s *Saver) Archive(ctx context.Context, target, folder string) (data []byte
 	zw := zip.NewWriter(&buf)
 	used := map[string]bool{}
 	for _, it := range items {
-		_, data, _, err := s.readEntry(ctx, t, it.entry)
+		doc, data, _, err := s.readEntry(ctx, t, it.entry)
 		if errors.Is(err, docstore.ErrNotFound) {
 			continue // deleted since the catalog was read
 		}
@@ -81,6 +81,9 @@ func (s *Saver) Archive(ctx context.Context, target, folder string) (data []byte
 			return nil, name, err
 		}
 		ext := path.Ext(it.entry.Key)
+		if it.entry.confidential() {
+			it.name = doc.Name() // the file is open here: it is named after what it is
+		}
 		full := path.Join(it.dir, safeName(it.name)+ext)
 		if used[strings.ToLower(full)] {
 			full = path.Join(path.Dir(full), safeName(it.name)+" ("+it.id[:8]+")"+ext)

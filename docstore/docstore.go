@@ -26,6 +26,11 @@ import (
 // requested document ID has no stored document.
 var ErrNotFound = errors.New("docstore: document not found")
 
+// ErrLocked is what an adapter that holds a document it cannot open (an encrypting adapter
+// with no key that fits) wraps in its Load error: the document is there, its content is not
+// available here. A catalog rebuild lists such a document without reading it.
+var ErrLocked = errors.New("docstore: the document is locked: no key here opens it")
+
 // ErrStorageFull is wrapped in the error of a Save that failed because the store has no
 // room (a browser's quota, a full disk). A caller may free what it can do without and try
 // again.

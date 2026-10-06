@@ -57,6 +57,12 @@ type Saver struct {
 	// process may be half way through an operation. 0 means DefaultRepairGrace; a
 	// negative value means no wait (for tests).
 	RepairGrace time.Duration
+	// ConfidentialCheck, when set, is called before a document is made end to end
+	// protected (SetProtection, or saving a new document that is marked so), and a
+	// non-nil error refuses it. It is where a deployment says what a confidential document
+	// needs, such as a recovery key besides a passkey (encrypt.ConfidentialCheck). Nil means
+	// no check. The saver does not know about keys: it only asks.
+	ConfidentialCheck func(ctx context.Context, target, id string) error
 
 	mu sync.Mutex // one catalog update at a time
 }
@@ -74,6 +80,9 @@ type Entry struct {
 	Folder string
 	// Trashed is when it was moved to the trash; zero for a document that is not.
 	Trashed time.Time
+	// Protection is ProtectionServer or ProtectionE2EE. For an end-to-end document Name is
+	// ConfidentialName and Tags is empty: see Reveal.
+	Protection string
 }
 
 // FontPrefix starts the store keys of downloaded font files; they are not
@@ -171,15 +180,37 @@ func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc do
 	var out Entry
 	err := s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		prev, existed := cat.Docs[id]
+		protection := prev.Protection
 		if existed {
 			// The catalog is where tags are edited (SetTags); saving the document
-			// does not bring back what was removed there.
-			doc.SetTags(prev.Tags)
+			// does not bring back what was removed there. For an end-to-end document
+			// the catalog has none: the saved document's own are kept.
+			if prev.confidential() {
+				old, _, _, err := s.readEntry(ctx, t, prev)
+				switch {
+				case err == nil:
+					doc.SetTags(old.Tags())
+				case !errors.Is(err, ErrUnreadable):
+					return err // a locked document is not overwritten blind
+				}
+			} else {
+				doc.SetTags(prev.Tags)
+			}
 			doc.SetTrashed(prev.Trashed)
 			doc.SetFolder(prev.Folder) // moving is Move's job
-		} else if _, ok := cat.Folders[doc.Folder()]; !ok {
-			doc.SetFolder("") // a new document in a folder that is not there goes to the top
+		} else {
+			if _, ok := cat.Folders[doc.Folder()]; !ok {
+				doc.SetFolder("") // a new document in a folder that is not there goes to the top
+			}
+			// A new document marked confidential stays so (a copy or an import of one),
+			// if the check allows it.
+			if protection = doc.Protection(); protection == ProtectionE2EE && s.ConfidentialCheck != nil {
+				if err := s.ConfidentialCheck(ctx, target, id); err != nil {
+					return fmt.Errorf("saver: not saved as confidential: %w", err)
+				}
+			}
 		}
+		doc.SetProtection(protection)
 		doc.SetID(id)
 		doc.Updated = time.Now().UnixNano()
 		data, err := c.Marshal(doc)
@@ -217,7 +248,10 @@ func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc do
 		} else {
 			s.rotate(ctx, t, &e, key, data, later)
 		}
-		e.Name, e.Format, e.Updated, e.Tags, e.Trashed, e.Folder = doc.Name(), c.Name(), doc.Updated, doc.Tags(), prev.Trashed, doc.Folder()
+		e.Name, e.Format, e.Updated, e.Tags, e.Trashed, e.Folder, e.Protection = doc.Name(), c.Name(), doc.Updated, doc.Tags(), prev.Trashed, doc.Folder(), protection
+		if e.confidential() {
+			e.conceal()
+		}
 		cat.Docs[id] = e
 		out = cat.entry(s, id)
 		return nil

@@ -187,9 +187,7 @@ func (s *Saver) LoadChecked(ctx context.Context, target, id string) (docfile.Doc
 			_ = s.promotePrevious(ctx, target, id, e, doc) // best effort: the document is readable either way
 		}
 		doc.SetID(id)
-		doc.SetName(e.Name)
-		doc.SetTags(e.Tags)
-		doc.SetFolder(e.Folder)
+		e.withCatalog(&doc)
 		return doc, rec, nil
 	}
 }
@@ -218,9 +216,7 @@ func (s *Saver) promoteEntry(ctx context.Context, t Target, cat *catalog, id str
 		return errors.New("saver: unknown format")
 	}
 	doc.SetID(id)
-	doc.SetName(e.Name)
-	doc.SetTags(e.Tags)
-	doc.SetFolder(e.Folder)
+	e.withCatalog(&doc)
 	doc.SetTrashed(e.Trashed)
 	data, err := c.Marshal(doc)
 	if err != nil {
@@ -276,6 +272,9 @@ type VerifyReport struct {
 	// Sealed counts documents saved before checksums existed that were read, found
 	// fine, and given one.
 	Sealed int
+	// Locked counts documents that no key here opens (end-to-end documents of someone
+	// else's, or a missing key): they cannot be checked and are left exactly as they are.
+	Locked int
 }
 
 // Verify reads every document of the target and checks it against the checksum the
@@ -317,6 +316,10 @@ func (s *Saver) Verify(ctx context.Context, target string) (VerifyReport, error)
 			return rep, err
 		}
 		doc, data, fromPrev, err := s.readEntry(ctx, t, it.e)
+		if errors.Is(err, docstore.ErrLocked) {
+			rep.Locked++
+			continue
+		}
 		rep.Checked++
 		switch {
 		case err == nil && fromPrev:
