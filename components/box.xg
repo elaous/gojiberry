@@ -51,7 +51,7 @@ func Box(props BoxProps) xango.Node {
 
 	children := make([]xango.Node, len(props.Divisions))
 	for i, d := range props.Divisions {
-		children[i] = xango.El("div", []xango.Attr{xango.A("class", "gj-box-division")}, d.Content...)
+		children[i] = <div class="gj-box-division">{d.Content}</div>
 	}
-	return xango.El("div", []xango.Attr{xango.A("class", "gj-box"), xango.A("style", style)}, children...)
+	return <div class="gj-box" style={style}>{children}</div>
 }
