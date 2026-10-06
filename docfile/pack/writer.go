@@ -29,7 +29,7 @@ func (b *builder) emit(p []byte) error {
 }
 
 // addRaw writes data as a document record and lists it under e (whose Offset, Length and
-// SHA256 are filled in here).
+// SHA256 are filled in here). The record is flagged encrypted when e.Encrypted is set.
 func (b *builder) addRaw(e Entry, data []byte) error {
 	if b.closed {
 		return errors.New("pack: closed")
@@ -52,7 +52,11 @@ func (b *builder) addRaw(e Entry, data []byte) error {
 		return fmt.Errorf("pack: more than %d documents", MaxEntries)
 	}
 	e.Offset, e.Length, e.SHA256 = uint64(b.off), uint64(len(data)), sha256.Sum256(data)
-	if err := b.emit(frame(kindDocument, data)); err != nil {
+	var flags byte
+	if e.Encrypted {
+		flags = flagEncrypted
+	}
+	if err := b.emit(frameFlags(kindDocument, flags, data)); err != nil {
 		return err
 	}
 	b.entries = append(b.entries, e)
@@ -129,8 +133,19 @@ func NewWriter(w io.Writer, meta Meta) (*Writer, error) {
 // index from the document's own metadata.
 func (w *Writer) Add(doc docfile.Document) error { return w.b.add(doc) }
 
-// AddRaw writes the bytes of a document (a .open message) listed under e.
+// AddRaw writes the bytes of a document (a .open message, or an envelope when e.Encrypted
+// is set) listed under e.
 func (w *Writer) AddRaw(e Entry, data []byte) error { return w.b.addRaw(e, data) }
+
+// AddEncrypted writes env, an envelope the pack cannot read, as a document record flagged
+// encrypted and lists it under e (e.Encrypted is set here). e carries what the index shows
+// about it: the ID, and the name, tags, folder and times the writer chooses to leave
+// readable, typically a placeholder name and no tags. The pack never sees the plaintext, so
+// its checks and signature work without a key.
+func (w *Writer) AddEncrypted(e Entry, env []byte) error {
+	e.Encrypted = true
+	return w.b.addRaw(e, env)
+}
 
 // AddFolder lists a folder.
 func (w *Writer) AddFolder(f Folder) error { return w.b.addFolder(f) }
@@ -192,6 +207,13 @@ func (a *Appender) Add(doc docfile.Document) error { return a.b.add(doc) }
 
 // AddRaw appends the bytes of a document listed under e.
 func (a *Appender) AddRaw(e Entry, data []byte) error { return a.b.addRaw(e, data) }
+
+// AddEncrypted appends an envelope as an encrypted record listed under e (see
+// Writer.AddEncrypted).
+func (a *Appender) AddEncrypted(e Entry, env []byte) error {
+	e.Encrypted = true
+	return a.b.addRaw(e, env)
+}
 
 // AddFolder lists a folder.
 func (a *Appender) AddFolder(f Folder) error { return a.b.addFolder(f) }

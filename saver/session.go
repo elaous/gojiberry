@@ -76,11 +76,19 @@ type Session struct {
 	selected             []string
 	tagFilter            string
 	usage                Usage
-	openDlg              *openDialog     // the .open download being asked about
-	checked              map[string]bool // targets already checked for leftovers of a crash
+	revealed             map[string]revealedMeta // confidential documents opened here, by ID: the real name and tags
+	openDlg              *openDialog             // the .open download being asked about
+	checked              map[string]bool         // targets already checked for leftovers of a crash
 	status               string
 	saveState            string // see SaveState
 	edits                int    // MarkEdited calls, to tell whether the document changed during a save
+}
+
+// revealedMeta is what a confidential document's catalog entry hides, known here because the
+// document was opened (or saved) with its key.
+type revealedMeta struct {
+	name string
+	tags []string
 }
 
 // NewSession starts a session on the saver's first target, in JSON.
@@ -166,6 +174,7 @@ func (s *Session) MarkEdited() {
 func (s *Session) SetTarget(ctx context.Context, name string) error {
 	s.set(func() {
 		s.target, s.entries, s.trashed, s.versions, s.status, s.id = name, nil, nil, nil, "", ""
+		s.revealed = nil
 		s.folder, s.folders, s.usage = "", nil, Usage{}
 		if s.saveState != "" {
 			s.saveState = SaveUnsaved // the document is not in the new target
@@ -231,7 +240,7 @@ func (s *Session) Refresh(ctx context.Context) error {
 		if s.target != target {
 			return
 		}
-		s.entries, s.trashed, s.versions, s.folders = list, trashed, versions, folders
+		s.entries, s.trashed, s.versions, s.folders = s.reveal(list), s.reveal(trashed), versions, folders
 		if usageErr == nil {
 			s.usage = usage
 		}
@@ -246,6 +255,38 @@ func (s *Session) Refresh(ctx context.Context) error {
 		}
 	})
 	return nil
+}
+
+// reveal puts the real name and tags of the confidential documents opened in this session
+// into a list read from the catalog, which lists the placeholder and no tags, so an
+// unopened one shows (and filters, and searches by) nothing of what is hidden. An entry that
+// is not confidential any more drops out of the memory (call with the lock held).
+func (s *Session) reveal(list []Entry) []Entry {
+	out := make([]Entry, len(list))
+	seen := map[string]bool{}
+	for i, e := range list {
+		out[i] = e
+		if m, ok := s.revealed[e.ID]; ok && e.Protection == ProtectionE2EE {
+			out[i].Name, out[i].Tags = m.name, m.tags
+			seen[e.ID] = true
+		}
+	}
+	for id := range s.revealed {
+		if !seen[id] && slices.ContainsFunc(list, func(e Entry) bool { return e.ID == id }) {
+			delete(s.revealed, id)
+		}
+	}
+	return out
+}
+
+// remember keeps the real name and tags of a confidential document for the list.
+func (s *Session) remember(id, name string, tags []string) {
+	s.set(func() {
+		if s.revealed == nil {
+			s.revealed = map[string]revealedMeta{}
+		}
+		s.revealed[id] = revealedMeta{name, tags}
+	})
 }
 
 func allTags(entries []Entry) []string {
@@ -400,7 +441,15 @@ func (s *Session) save(ctx context.Context) (err error) {
 			s.id = e.ID
 		}
 	})
-	return s.after(ctx, msg("saver.saved", "%s saved", e.Name))
+	name := e.Name
+	if e.Protection == ProtectionE2EE {
+		// The catalog lists the placeholder; the person knows what they saved, and the
+		// list shows it from now on.
+		name = doc.Name()
+		_, tags, _ := s.Saver.Reveal(ctx, target, e.ID)
+		s.remember(e.ID, name, tags)
+	}
+	return s.after(ctx, msg("saver.saved", "%s saved", name))
 }
 
 // SaveAsNew saves the current document as a new document, with a new ID, leaving
@@ -426,8 +475,15 @@ func (s *Session) Open(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	name := e.Name
+	if e.Protection == ProtectionE2EE {
+		// Opened, so it can be read: the placeholder gives way to the real name, here and in
+		// the list.
+		name = doc.Name()
+		s.remember(id, name, doc.Tags())
+	}
 	s.set(func() {
-		s.id, s.name, s.folder = id, e.Name, e.Folder // show where it is
+		s.id, s.name, s.folder = id, name, e.Folder // show where it is
 		if e.Format != nil {
 			s.format = e.Format.Name()
 		}
@@ -436,10 +492,10 @@ func (s *Session) Open(ctx context.Context, id string) error {
 		s.ui(func() { s.OnOpen(doc) })
 	}
 	s.set(func() { s.saveState = SaveSaved; s.edits++ }) // the editor holds what was saved
-	line := msg("saver.opened", "%s opened", e.Name)
+	line := msg("saver.opened", "%s opened", name)
 	if rec.FromPrevious {
 		// Say so: the text is an earlier save, and the person should know.
-		line = msg("saver.recovered", "%s was damaged: opened the copy saved %s (it is now the saved one)", e.Name, rec.Saved.Format("2006-01-02 15:04"))
+		line = msg("saver.recovered", "%s was damaged: opened the copy saved %s (it is now the saved one)", name, rec.Saved.Format("2006-01-02 15:04"))
 	}
 	return s.after(ctx, line) // the versions are those of the document just opened
 }
@@ -571,7 +627,47 @@ func (s *Session) SetTags(ctx context.Context, id string, tags []string) error {
 	if err := s.Saver.SetTags(ctx, s.targetName(), id, tags); err != nil {
 		return storageFull(err)
 	}
+	s.set(func() {
+		if m, ok := s.revealed[id]; ok { // a confidential document: the new tags are in the document
+			var clean docfile.Document
+			clean.SetTags(tags)
+			s.revealed[id] = revealedMeta{m.name, clean.Tags()}
+		}
+	})
 	return s.after(ctx, msg("saver.tagged", "Tags of %s updated", name))
+}
+
+// SetProtection makes a saved document confidential (docfile.ProtectionE2EE: its name and
+// tags move into the document, the catalog lists a placeholder) or ProtectionServer again,
+// and shows its real name in the list while it is openable here.
+func (s *Session) SetProtection(ctx context.Context, id, to string) error {
+	s.op.Lock()
+	defer s.op.Unlock()
+	target := s.targetName()
+	name := s.names([]string{id})
+	if err := s.Saver.SetProtection(ctx, target, id, to); err != nil {
+		return storageFull(err)
+	}
+	if to == ProtectionE2EE {
+		if n, tags, err := s.Saver.Reveal(ctx, target, id); err == nil {
+			s.remember(id, n, tags)
+		}
+		return s.after(ctx, msg("saver.confidential", "%s is now confidential: its name and tags are kept inside the document", name))
+	}
+	return s.after(ctx, msg("saver.notConfidential", "%s is no longer confidential", name))
+}
+
+// Reveal shows the real name and tags of a confidential document in the list, if it can be
+// opened here; the document is not opened in the editor.
+func (s *Session) Reveal(ctx context.Context, id string) error {
+	name, tags, err := s.Saver.Reveal(ctx, s.targetName(), id)
+	if err != nil {
+		return err
+	}
+	if e, err := s.Saver.Get(ctx, s.targetName(), id); err == nil && e.Protection == ProtectionE2EE {
+		s.remember(id, name, tags)
+	}
+	return s.after(ctx, msg("saver.revealed", "%s can be read: its name is shown", name))
 }
 
 // SetTagFilter narrows the list to the documents with the tag ("" for all).
@@ -870,12 +966,18 @@ func (s *Session) DownloadPack(ctx context.Context, folder string) error {
 	}
 	var buf bytes.Buffer
 	name := s.folderName(folder)
-	n, err := s.Saver.ExportPack(ctx, s.targetName(), folder, &buf, PackOptions{Name: name, History: true})
+	// The session holds no keys: confidential documents are left out, and the person is told.
+	left := 0
+	n, err := s.Saver.ExportPack(ctx, s.targetName(), folder, &buf, PackOptions{Name: name, History: true, Warn: func(PackIssue) { left++ }})
 	if err != nil {
 		return err
 	}
 	s.Deliver(safeName(name)+".opendoc", "application/vnd.opendocs.pack", buf.Bytes())
-	s.say(msg("saver.packDownloaded", "%s downloaded as a pack of %d documents", name, n))
+	line := msg("saver.packDownloaded", "%s downloaded as a pack of %d documents", name, n)
+	if left > 0 {
+		line += " " + msg("saver.packLeftOut", "(%d confidential documents left out: they need a key)", left)
+	}
+	s.say(line)
 	return nil
 }
 
@@ -954,11 +1056,15 @@ func (s *Session) DownloadFolder(ctx context.Context, id string) error {
 	if s.Deliver == nil {
 		return errors.New("saver: nowhere to deliver files")
 	}
-	data, name, err := s.Saver.Archive(ctx, s.targetName(), id)
+	data, name, skipped, err := s.Saver.ArchiveReport(ctx, s.targetName(), id)
 	if err != nil {
 		return err
 	}
 	s.Deliver(safeName(name)+".zip", "application/zip", data)
+	if len(skipped) > 0 {
+		s.say(msg("saver.downloadedSkipped", "%s downloaded without %d confidential document(s) that are locked here", name, len(skipped)))
+		return nil
+	}
 	s.say(msg("saver.downloaded", "%s downloaded", name))
 	return nil
 }

@@ -181,6 +181,7 @@
   "docs.downloadAs": "Herunterladen als…",
   "docs.downloadOf": "%s herunterladen als",
   "saver.downloaded": "%s heruntergeladen",
+  "saver.downloadedSkipped": "%s heruntergeladen ohne %d hier gesperrte vertrauliche Dokument(e)",
   "saver.linkCopied": "Link kopiert: %s",
   "tab.page": "Seite",
   "menu.pageSetup": "Seite einrichten…",
@@ -276,6 +277,7 @@
   "docs.importPack": ".opendoc importieren",
   "docs.downloadPack": "Als .opendoc",
   "saver.packDownloaded": "%s als Paket mit %d Dokumenten heruntergeladen",
+  "saver.packLeftOut": "(%d vertrauliche Dokumente ausgelassen: Sie brauchen einen Schlüssel)",
   "saver.packImported": "%s: %d Dokumente und %d Ordner importiert",
   "saver.packSkipped": "(%d schon vorhanden, unverändert gelassen)",
   "saver.packFailed": "(%d fehlgeschlagen: %s)",
@@ -292,6 +294,9 @@
   "capacity.full": "Dieser Speicher ist voll oder fast voll: Ein Speichern kann abgelehnt werden, und dann ist das Dokument nicht gespeichert. Laden Sie Ihre Dokumente jetzt herunter (Herunterladen als, oder einen Ordner als ZIP), schaffen Sie dann Platz, indem Sie alte Versionen löschen und den Papierkorb leeren, oder speichern Sie woanders.",
   "saver.storageFull": "Speicher zu %.0f%% voll: Laden Sie Ihre Dokumente jetzt herunter, löschen Sie dann alte Versionen und den Papierkorb.",
   "saver.storageFilling": "Speicher zu %.0f%% voll: Laden Sie Ihre Dokumente herunter oder löschen Sie alte Versionen und den Papierkorb, bevor er voll ist.",
-  "saver.notSavedFull": "Nicht gespeichert: Der Speicher ist voll. Laden Sie das Dokument herunter (Herunterladen als), damit keine Arbeit verloren geht, löschen Sie dann alte Versionen oder den Papierkorb, oder speichern Sie woanders"
+  "saver.notSavedFull": "Nicht gespeichert: Der Speicher ist voll. Laden Sie das Dokument herunter (Herunterladen als), damit keine Arbeit verloren geht, löschen Sie dann alte Versionen oder den Papierkorb, oder speichern Sie woanders",
+  "saver.confidential": "%s ist jetzt vertraulich: Name und Tags werden im Dokument gespeichert",
+  "saver.notConfidential": "%s ist nicht mehr vertraulich",
+  "saver.revealed": "%s ist lesbar: der Name wird angezeigt"
  }
 }

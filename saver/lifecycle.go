@@ -302,7 +302,9 @@ func (s *Saver) Rename(ctx context.Context, target, id, name string) error {
 		if err := s.touch(ctx, t, cat, id, &e, later, func(d *docfile.Document) { d.SetName(name) }); err != nil {
 			return err
 		}
-		e.Name = name
+		if !e.confidential() { // the catalog lists the placeholder: the name is in the document
+			e.Name = name
+		}
 		cat.Docs[id] = e
 		return nil
 	})
@@ -321,7 +323,9 @@ func (s *Saver) SetTags(ctx context.Context, target, id string, tags []string) e
 		if err := s.touch(ctx, t, cat, id, &e, later, func(d *docfile.Document) { d.SetTags(clean.Tags()) }); err != nil {
 			return err
 		}
-		e.Tags = clean.Tags()
+		if !e.confidential() { // the tags are in the document, not the catalog
+			e.Tags = clean.Tags()
+		}
 		cat.Docs[id] = e
 		return nil
 	})
