@@ -279,29 +279,36 @@ func parseShared(e sharedEntry) (Recipient, error) {
 // verifyRecord checks a stored record's signature against the owners' signing keys and
 // returns its payload.
 func verifyRecord(raw []byte, docID string, owners []ed25519.PublicKey) (sharedRecord, error) {
+	rec, _, err := verifyRecordBy(raw, docID, owners)
+	return rec, err
+}
+
+// verifyRecordBy is verifyRecord that also says which of owners signed the record. The record's
+// own "signer" field is only a hint and is not used: the key is the one whose signature verifies.
+func verifyRecordBy(raw []byte, docID string, owners []ed25519.PublicKey) (sharedRecord, ed25519.PublicKey, error) {
 	var rec sharedRecord
 	var sr signedRecord
 	if err := json.Unmarshal(raw, &sr); err != nil {
-		return rec, fmt.Errorf("encrypt: the recipient list of %s is damaged: %w", docID, err)
+		return rec, nil, fmt.Errorf("encrypt: the recipient list of %s is damaged: %w", docID, err)
 	}
 	if len(sr.Sig) == 0 || len(sr.Payload) == 0 {
-		return rec, fmt.Errorf("%s: %w", docID, ErrUnsignedRecord)
+		return rec, nil, fmt.Errorf("%s: %w", docID, ErrUnsignedRecord)
 	}
 	msg := recordMessage(docID, sr.Payload)
-	ok := false
+	var by ed25519.PublicKey
 	for _, k := range owners {
 		if len(k) == ed25519.PublicKeySize && ed25519.Verify(k, msg, sr.Sig) {
-			ok = true
+			by = k
 			break
 		}
 	}
-	if !ok {
-		return rec, fmt.Errorf("%s: %w", docID, ErrBadSignature)
+	if by == nil {
+		return rec, nil, fmt.Errorf("%s: %w", docID, ErrBadSignature)
 	}
 	if err := json.Unmarshal(sr.Payload, &rec); err != nil || rec.V != 1 || rec.Doc != docID {
-		return sharedRecord{}, fmt.Errorf("%s: %w", docID, ErrBadSignature)
+		return sharedRecord{}, nil, fmt.Errorf("%s: %w", docID, ErrBadSignature)
 	}
-	return rec, nil
+	return rec, by, nil
 }
 
 // loadRecord reads and verifies a document's record. A document with no record has no
