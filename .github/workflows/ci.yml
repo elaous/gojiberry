@@ -15,7 +15,7 @@ name: CI
 
 # Manual for now: run it from the Actions tab ("Run workflow", pick a branch). The checks run
 # locally before code is pushed (targeted tests for the change) and the full suite runs once
-# every five merged PRs; see docs/testing-workflow.md. To turn the automatic runs back on,
+# every ten merged PRs; see docs/testing-workflow.md. To turn the automatic runs back on,
 # restore `push:` and `pull_request:` under `on:`.
 on:
   workflow_dispatch:

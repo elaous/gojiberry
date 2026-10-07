@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-0 of 5 since the last full run (full run on 40b6644 passed except this flake, which this PR fixes; see [testing-workflow.md](testing-workflow.md)).
+2 of 10 since the last full run (#88 and the PR that sets the tenth-merge rule; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
 
 ## Notes for upgraders
 
