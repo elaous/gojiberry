@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-3 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, and the `Sharing.RepairAll` PR; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
+4 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, and the no-signer window PR; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
 
 ## Notes for upgraders
 
@@ -304,11 +304,15 @@ a way to avoid hitting the limit meanwhile.
    for it: the docstore server holds no owner signer or identity, so it is a Go API for the owner's client (see
    [encryption-and-passkeys.md](encryption-and-passkeys.md), "Which files may be unsigned"). Was: only per-document
    `Repair`. Avoid: no longer needed.
-4. **The no-signer window is narrowed but not closed.** The remaining path is the few steps between the re-key's
-   last look at the files and its write of the `signed` record, and an older build that writes v1/v2 frames under
-   a record that already says `signed` (design, "The window before `signed`", lines ~323-331;
-   `Repair(..., AcceptUnsigned())` is the way out). Plan: close that path so nothing can write without an owner
-   signer. Avoid: always set `Adapter.Signer` and `Sharing.Signer`.
+4. **Done (reduced):** **the no-signer window is no longer silent; the part that can be closed is closed.** After the
+   re-key writes `signed` it looks at the files again and returns `ErrUnsignedAfterFlip` for an unsigned one; an
+   unsigned `Save`/`SaveIf` re-reads the record and returns `ErrNoFrameSigner` if it flipped under the writer; an
+   `Adapter` with `RequireSigned` and no `Signer` refuses to write an unsigned frame. Every file that enters the
+   window is therefore reported to the owner or to its writer, and `Repair(..., AcceptUnsigned())` remains the way out.
+   Inherent, so not closed: a client with no `Signer` and no `RequireSigned` can write an unsigned frame until the
+   record says `signed` (it cannot sign, and a plain save does not change the record, so the flip cannot be conditional
+   on it), and so can anyone who knows a recipient's public key (design, "The window before `signed`"). Avoid: set
+   `Adapter.Signer` (or `RequireSigned`) on every client that writes.
 5. **Revoked owner signer tooling.** Plan: a command that runs the three-step procedure of C.5 and reports
    documents it missed. Avoid: follow the manual steps in C.5.
 6. **SSH key-tag collision tightening.** The code is `recipientID` in `docstore/encrypt/confidential.go`, which
