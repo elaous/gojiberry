@@ -186,8 +186,20 @@ func TestHighestSeqOfAllFilesCountsNotTheNewestByTime(t *testing.T) {
 	}
 	w.replay(t, id, old) // validly signed, older, server level
 	// One old, genuine generation put back: it is now the newest the store lists.
-	f := w.mainFile(t, id)
-	time.Sleep(2 * time.Millisecond)
+	// The file must be one of the genuine generations captured above: SetProtection writes a new
+	// generation under a fresh name and drops the oldest, so the first generation listed now may
+	// have no captured bytes (the original test then overwrote it with an empty file, which
+	// rightly reads as unreadable). The product never orders files by the store's times, so no
+	// timing is needed: the old generation is simply the one put back last.
+	var f string
+	for _, g := range w.files(t, id) {
+		if _, ok := genuine[g]; ok && strings.HasPrefix(g, id+"~") && (f == "" || g < f) {
+			f = g
+		}
+	}
+	if f == "" {
+		t.Fatal("setup: no genuine generation survived the re-key")
+	}
 	if err := w.inner.Save(ctx, f, genuine[f]); err != nil {
 		t.Fatal(err)
 	}
