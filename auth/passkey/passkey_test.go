@@ -548,6 +548,36 @@ func (r *rig) begunBy(signedIn, email string) begun {
 // noCreator hides a Store's Creator, so the Service falls back to its own lock.
 type noCreator struct{ Store }
 
+// barrierPut holds every Put until n callers are inside Put (or a short time passes), so any
+// code that checked Get "not found" without excluding the others has all of them past the check
+// before the first write lands. With the Service's lock only one caller is ever in Put at a time
+// (the rest are turned away at the Get), so the wait just times out.
+type barrierPut struct {
+	Store
+	n       int
+	mu      sync.Mutex
+	in      int
+	release chan struct{}
+}
+
+func newBarrierPut(inner Store, n int) *barrierPut {
+	return &barrierPut{Store: inner, n: n, release: make(chan struct{})}
+}
+
+func (b *barrierPut) Put(ctx context.Context, a *Account) error {
+	b.mu.Lock()
+	b.in++
+	if b.in == b.n {
+		close(b.release)
+	}
+	b.mu.Unlock()
+	select {
+	case <-b.release:
+	case <-time.After(150 * time.Millisecond):
+	}
+	return b.Store.Put(ctx, a)
+}
+
 // Two tabs begin the first passkey of the same signed-in identity (an OpenID Connect user with no
 // passkey account yet) and both finish at once. Exactly one makes the account; the other gets
 // 409 account_exists (not the 410 of an expired or used challenge), writes nothing, and the
@@ -557,7 +587,7 @@ func TestTwoConcurrentFirstPasskeysOfOneIdentityMakeOneAccount(t *testing.T) {
 	shared := docstore.NewMemoryAdapter()
 	for name, store := range map[string]func() Store{
 		"memory":             func() Store { return NewMemoryStore() },
-		"memory, no Creator": func() Store { return noCreator{NewMemoryStore()} },
+		"memory, no Creator": func() Store { return newBarrierPut(noCreator{NewMemoryStore()}, 6) },
 		"adapter":            func() Store { return &AdapterStore{Adapter: adapter} },
 	} {
 		t.Run(name, func(t *testing.T) {
