@@ -32,6 +32,12 @@ var ErrNotFound = errors.New("docstore: document not found")
 // available here. A catalog rebuild lists such a document without reading it.
 var ErrLocked = errors.New("docstore: the document is locked: no key here opens it")
 
+// ErrWrongKey is what a pack opener wraps when keys are held but none of them opens what was
+// sealed: it was sealed for other keys. It differs from ErrLocked (no key held at all, unlock
+// the store): the right message is "this was sealed for another key". A wrong-key error is also
+// ErrLocked, so code that only asks for a key still treats it as one it cannot open.
+var ErrWrongKey = errors.New("docstore: sealed for another key")
+
 // ErrDowngrade is what an encrypting adapter wraps in the error of a Load, Save or re-key that
 // found a document's protection lower than the files themselves prove it was: its signed
 // recipient record was deleted, an older one was put back, or a file's frame is not the owner's

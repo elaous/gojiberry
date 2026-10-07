@@ -30,22 +30,24 @@ func needsSecondKey(p RecipientsProps) bool {
 // runs the directory too), "verified e-mail, signed by the key" when the key attested the binding
 // itself, plain "verified e-mail", or a label only that needs its fingerprint confirmed. None
 // says the key is safe. With ownerEnrolled and no owner signature a verified key also carries a
-// note: the address has an owner key and this key was not signed by it.
-func verifiedMark(verified, attested, ownerSigned, ownerEnrolled bool) xango.Node {
+// note: the address has an owner key and this key was not signed by it. With by (the host of
+// the directory that answered) a mark says whose word it is: "verified by host", and the stronger
+// marks end with "(host)".
+func verifiedMark(verified, attested, ownerSigned, ownerEnrolled bool, by string) xango.Node {
 	if verified && ownerSigned {
 		return xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-mark gj-recip-verified gj-recip-owner-signed"),
 			xango.A("title", tr("recipients.ownerSignedHelp", "The owner of this address holds a signing key of their own and signed this key's publication, so not even the server that runs the directory could have added it. That does not prove the key is safe."))},
-			xango.Text(tr("recipients.ownerSigned", "verified e-mail, signed by its owner")))
+			xango.Text(withHost(tr("recipients.ownerSigned", "verified e-mail, signed by its owner"), by)))
 	}
 	if verified && attested {
 		return xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-mark gj-recip-verified gj-recip-attested"),
 			xango.A("title", tr("recipients.attestedHelp", "The key was published by an account whose e-mail is verified, and the key itself signed that it belongs to this address, so the server alone could not have made that up. That does not prove the key is safe."))},
-			xango.Text(tr("recipients.attested", "verified e-mail, signed by the key")))
+			xango.Text(withHost(tr("recipients.attested", "verified e-mail, signed by the key"), by)))
 	}
 	if verified {
 		mark := xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-mark gj-recip-verified"),
 			xango.A("title", tr("recipients.verifiedHelp", "The key was published by an account whose e-mail is verified. That proves the account, not that the key is safe."))},
-			xango.Text(tr("recipients.verified", "verified e-mail")))
+			xango.Text(plainVerified(by)))
 		if ownerEnrolled {
 			return xango.El("span", nil, mark, xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-mark gj-recip-owner-unsigned"),
 				xango.A("title", tr("recipients.ownerUnsignedHelp", "This address has an owner key, and the owner did not sign this key: it was published before the owner key was set up. Confirm the fingerprint with the person."))},
@@ -100,7 +102,7 @@ func directoryPicker(p RecipientsProps, busy bool) []xango.Node {
 				xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text(orNone(label))),
 				xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-type")}, xango.Text(r.Type)),
 				xango.El("code", []xango.Attr{xango.A("class", "gj-recip-fingerprint")}, xango.Text(r.Fingerprint)),
-				verifiedMark(r.Verified, r.Attested, r.OwnerSigned, r.OwnerEnrolled),
+				verifiedMark(r.Verified, r.Attested, r.OwnerSigned, r.OwnerEnrolled, r.VerifiedBy),
 				docButton("gj-recip-pick", tr("recipients.pick", "Use this key"), busy, pick)))
 		}
 		nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list gj-recip-dir-results")}, items...))
@@ -152,6 +154,19 @@ func myKeyControl(p RecipientsProps, busy bool) []xango.Node {
 				p.Pending.Run(func(ctx context.Context) error { return p.AddMyPasskey(ctx) })
 			}))
 	}
+	if !needsSecondKey(p) && p.CreateRecoveryKey != nil && p.OnRecoveryKey != nil && p.RecoverySecret == "" {
+		// Not required as the second key, but offered: a store with a passkey and an SSH key may
+		// want a recovery key too (the host leaves CreateRecoveryKey out when it has one).
+		box = append(box, docButton("gj-recip-recovery", tr("recipients.createRecovery", "Create a recovery key"), busy, func() {
+			p.Pending.Run(func(ctx context.Context) error {
+				secret, err := p.CreateRecoveryKey(ctx)
+				if err == nil && p.OnRecoveryKey != nil {
+					p.OnRecoveryKey(secret)
+				}
+				return err
+			})
+		}))
+	}
 	if a := p.MyPasskeyAdded; a != nil {
 		box = append(box,
 			xango.El("p", append(cls("gj-recip-parsed gj-recip-my-added"), xango.A("role", "status")),
@@ -183,8 +198,80 @@ func recoveryKeyShown(p RecipientsProps) []xango.Node {
 	if p.Download != nil {
 		nodes = append(nodes, docButton("gj-recip-download", tr("recipients.download", "Download"), false, func() { p.Download("recovery-key.txt", secret+"\n") }))
 	}
-	if p.OnRecoveryDone != nil {
+	if p.CommitRecoveryKey != nil {
+		// The key is not an owner key yet: it becomes one only after the person says they saved the
+		// secret and confirms.
+		nodes = append(nodes,
+			xango.El("div", cls("gj-recip-recovery-ack"), Checkbox(CheckboxProps{Label: tr("recipients.recoveryAck", "I have saved this recovery key somewhere safe"),
+				Checked: p.RecoveryAcknowledged, OnChange: p.OnRecoveryAcknowledge})),
+			docButton("gj-recip-recovery-commit", tr("recipients.recoveryCommit", "Add this recovery key"), !p.RecoveryAcknowledged, func() {
+				p.Pending.Run(p.CommitRecoveryKey)
+			}))
+		if p.CancelRecoveryKey != nil {
+			nodes = append(nodes, docButton("gj-recip-recovery-cancel", tr("recipients.recoveryCancel", "Cancel: do not add it"), false, p.CancelRecoveryKey))
+		}
+	} else if p.OnRecoveryDone != nil {
 		nodes = append(nodes, docButton("gj-recip-recovery-done", tr("recipients.recoveryDone", "I have saved it"), false, p.OnRecoveryDone))
 	}
 	return []xango.Node{xango.El("div", cls("gj-recip-recovery-box"), nodes...)}
+}
+
+// ownerControls are the buttons of an owner key's row: replace (a passkey) and remove, each asking
+// first, with the reason when removing is not possible.
+func ownerControls(p RecipientsProps, r RecipientRow, busy bool) []xango.Node {
+	var out []xango.Node
+	name := r.Label
+	if name == "" {
+		name = r.Fingerprint
+	}
+	fp := r.Fingerprint
+	if p.ReplaceOwner != nil && r.Type == passkeyType {
+		out = append(out, docButtonAs("gj-recip-replace", tr("recipients.replace", "Replace this passkey"), trf("recipients.replaceOf", "Replace the passkey %s", name), busy,
+			confirmed(p.Ask, trf("recipients.confirmReplace", "Replace %s with a new passkey? You will be asked to confirm the new passkey; then everything saved in this store is encrypted again for it, and the old passkey stops opening what is saved from now on. It keeps working on any copy of old data someone holds, and it stays in your authenticator until you delete it there.", name),
+				func() { p.Pending.Run(func(ctx context.Context) error { return p.ReplaceOwner(ctx, fp) }) })))
+	}
+	if p.RemoveOwner != nil {
+		out = append(out, docButtonAs("gj-recip-remove-owner", tr("recipients.removeOwner", "Remove this key"), trf("recipients.removeOwnerOf", "Remove the key %s", name), busy || !r.CanRemove,
+			confirmed(p.Ask, trf("recipients.confirmRemoveOwner", "Remove %s as a key of this store? Everything saved here is encrypted again without it, so it can no longer open anything saved from now on. Whoever held it keeps what they already read or copied, and any copy of old data they hold: that cannot be taken back.", name),
+				func() { p.Pending.Run(func(ctx context.Context) error { return p.RemoveOwner(ctx, fp) }) })))
+		if !r.CanRemove && r.RemoveBlocked != "" {
+			out = append(out, xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-remove-blocked")}, xango.Text(r.RemoveBlocked)))
+		}
+	}
+	return out
+}
+
+// publishControl is "Publish my keys" and its notice: independent of any document, shown whenever
+// the host passes Publish (or a notice to say why it cannot).
+func publishControl(p RecipientsProps, busy bool) []xango.Node {
+	var nodes []xango.Node
+	if p.Publish != nil {
+		nodes = append(nodes, docButton("gj-recip-publish", tr("recipients.publish", "Publish my keys"), busy, func() {
+			p.Pending.Run(p.Publish)
+		}))
+	}
+	if p.PublishNotice != "" {
+		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("class", "gj-recip-hint gj-recip-publish-notice"), xango.A("role", "status")}, xango.Text(p.PublishNotice)))
+	}
+	if len(nodes) == 0 {
+		return nil
+	}
+	return []xango.Node{xango.El("div", []xango.Attr{xango.A("class", "gj-recip-publish-box")}, nodes...)}
+}
+
+// plainVerified is the text of the plain verified mark: "verified e-mail", or "verified by host"
+// when the host of the directory that said so is known.
+func plainVerified(by string) string {
+	if by != "" {
+		return trf("recipients.verifiedBy", "verified by %s", by)
+	}
+	return tr("recipients.verified", "verified e-mail")
+}
+
+// withHost names the directory after a stronger mark's text.
+func withHost(text, by string) string {
+	if by == "" {
+		return text
+	}
+	return text + " (" + by + ")"
 }
