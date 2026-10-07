@@ -415,6 +415,15 @@ func (forgedError) Error() string {
 }
 func (forgedError) Is(target error) bool { return target == docstore.ErrDowngrade }
 
+// errUnsignedFrame marks an ErrForgedFrame that is about an unsigned (v1, v2) frame, as opposed to
+// a v3 frame whose signature does not verify.
+var errUnsignedFrame = errors.New("unsigned frame")
+
+// forgedUnsigned is forged for an unsigned frame: it also matches errUnsignedFrame.
+func forgedUnsigned(id, format string, args ...any) error {
+	return fmt.Errorf("%w: %w", errUnsignedFrame, forged(id, format, args...))
+}
+
 func forged(id, format string, args ...any) error {
 	return fmt.Errorf("%w: %s: %s", ErrForgedFrame, id, fmt.Sprintf(format, args...))
 }
@@ -464,7 +473,7 @@ var ErrUnreadable = errors.New("encrypt: a stored file of this document cannot b
 // Sharing.Repair with AcceptUnsigned).
 func crossCheck(id string, f frameInfo, r Binding, strict bool) error {
 	if r.Exists && r.Signed && f.version < 3 {
-		return forged(id, "its frame is not signed (v%d), but the document's record says every file of it is: it was not written by an owner"+unsignedHint, f.version)
+		return forgedUnsigned(id, "its frame is not signed (v%d), but the document's record says every file of it is: it was not written by an owner"+unsignedHint, f.version)
 	}
 	if f.version < 2 {
 		return nil
@@ -616,7 +625,7 @@ func (a *Adapter) verifyFrame(id string, fi frameInfo, data []byte, full, accept
 			return nil
 		}
 		if a.RequireSigned {
-			return forged(id, "the frame is not signed (v%d) and this adapter requires signed frames", fi.version)
+			return forgedUnsigned(id, "the frame is not signed (v%d) and this adapter requires signed frames", fi.version)
 		}
 		a.warnOnce.Do(func() {
 			log.Printf("encrypt: %s has a frame without the owner's signature (v%d): anyone who knows a recipient's public key could have written it; saving or re-keying the document (Sharing.Repair) writes a signed one", id, fi.version)

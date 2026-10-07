@@ -450,11 +450,11 @@ type Sharing struct {
 }
 
 // ErrUnsignedAfterFlip is returned by the re-key (Repair, Add, Remove, SetProtection, Recover)
-// when, after it changed the record to say Signed, a file of the document is still unsigned: a
-// client with no Signer saved it in the few steps between the re-key's last look and the write
-// of the record. The record does say Signed and the file is refused as forged (it wraps
+// when, after it wrote the record (which says Signed, whether it was Signed before and only
+// Pending or is marked so now), a file of the document is still unsigned: a client with no
+// Signer saved it in the few steps between the re-key's last look and the write of the record. The record does say Signed and the file is refused as forged (it wraps
 // ErrForgedFrame); the owner checks it is theirs and runs Repair with AcceptUnsigned.
-var ErrUnsignedAfterFlip = errors.New("encrypt: a file was saved unsigned while the document was being marked signed")
+var ErrUnsignedAfterFlip = errors.New("encrypt: a file was saved unsigned while the re-key was finishing, and the record now says Signed")
 
 // RepairOption changes what Repair and Recover accept.
 type RepairOption func(*repairOpts)
@@ -802,14 +802,18 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string, ro repairOpts) 
 				// landed after this one is told by its own writer (Adapter.afterUnsignedWrite).
 				// Between them no such file goes unnoticed.
 				late, err := s.Adapter.unsignedFiles(ctx, docID)
-				if errors.Is(err, ErrForgedFrame) {
+				if errors.Is(err, errUnsignedFrame) {
 					return n, nil, nil, fmt.Errorf("%w: %w", ErrUnsignedAfterFlip, err)
+				}
+				if errors.Is(err, ErrForgedFrame) {
+					// A v3 file whose signature does not verify: not one saved unsigned.
+					return n, nil, nil, fmt.Errorf("encrypt: a file with a bad signature was found after the record was written: %w", err)
 				}
 				if err != nil {
 					return n, nil, nil, err
 				}
 				if len(late) > 0 {
-					return n, nil, nil, fmt.Errorf("%w: %w: %s: %s"+unsignedHint, ErrUnsignedAfterFlip, ErrForgedFrame, docID, strings.Join(late, ", "))
+					return n, nil, nil, fmt.Errorf("%w: %w: %s"+unsignedHint, ErrUnsignedAfterFlip, ErrForgedFrame, strings.Join(late, ", "))
 				}
 			}
 			return n, nil, nil, nil

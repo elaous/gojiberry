@@ -408,6 +408,7 @@ func TestRepairAllCoversItemsThatAreNotDocuments(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc := w.history(t)
+	docFiles := len(w.files(t, doc))
 	w.legacyV2(t, doc)
 
 	// Without a signer nothing is written and every unsigned item is reported.
@@ -441,6 +442,10 @@ func TestRepairAllCoversItemsThatAreNotDocuments(t *testing.T) {
 	}
 	if rep.Repaired != len(items)+1 || rep.Signed != 1 || len(rep.Skipped) != 1 || rep.Total != len(items)+3 || rep.Left() != 1 {
 		t.Fatalf("%+v", rep)
+	}
+	// Files counts each item's one file and all the files of the document.
+	if rep.Files != len(items)+docFiles {
+		t.Errorf("Files = %d, want %d", rep.Files, len(items)+docFiles)
 	}
 	for _, id := range append(items, signedItem) {
 		if v := w.frameVersion(t, id); v != 3 {
@@ -616,6 +621,97 @@ func TestRepairAllCreatesTheRecordOfADocumentWithoutOne(t *testing.T) {
 	for _, f := range w.files(t, doc) {
 		if v := w.frameVersion(t, f); v != 3 {
 			t.Errorf("%s v%d", f, v)
+		}
+	}
+}
+
+// delOnList deletes an id from the store when the n-th List call arrives (the first is RepairAll's
+// own listing, the next the one Rekey or Repair makes under its lock): an item deleted between the
+// scan and the write.
+type delOnList struct {
+	*flaky
+	id    string
+	n     int
+	calls atomic.Int64
+}
+
+func (d *delOnList) List(ctx context.Context) ([]docstore.Meta, error) {
+	if int(d.calls.Add(1)) == d.n {
+		if err := d.flaky.Delete(ctx, d.id); err != nil {
+			return nil, err
+		}
+	}
+	return d.flaky.List(ctx)
+}
+
+// An item deleted after the scan, before Rekey, is gone: it is neither repaired nor skipped (the
+// scan ignores a deletion the same way), and the other items are still repaired.
+func TestRepairAllIgnoresAnItemDeletedAfterTheScan(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	w.legacyItem(t, "expiry:gone", []byte("x"))
+	w.legacyItem(t, "expiry:kept", []byte("y"))
+	sh := w.over(&delOnList{flaky: w.inner, id: "expiry:gone", n: 2}, nil)
+	var outcomes []string
+	rep, err := sh.RepairAll(ctx, RepairAllOptions{Progress: func(p RepairProgress) { outcomes = append(outcomes, p.Doc+"="+p.Outcome) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Skipped) != 0 || rep.Left() != 0 || rep.Repaired != 1 || rep.Files != 1 || rep.Resigned != 0 {
+		t.Fatalf("%+v (%v)", rep, outcomes)
+	}
+	if v := w.frameVersion(t, "expiry:kept"); v != 3 {
+		t.Errorf("expiry:kept is v%d", v)
+	}
+	if _, err := w.inner.Load(ctx, "expiry:gone"); !errors.Is(err, docstore.ErrNotFound) {
+		t.Errorf("expiry:gone: %v", err)
+	}
+}
+
+// A Save of a non-document item (expiry:) while RepairAll runs is not lost, and the item ends
+// signed.
+func TestRepairAllWithConcurrentSaveOfAnItem(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	const item = "expiry:race"
+	w.legacyItem(t, item, []byte("old"))
+	others := []string{"expiry:a", "expiry:b", "collab:c"}
+	for _, o := range others {
+		w.legacyItem(t, o, []byte("o"))
+	}
+	const writes = 40
+	var wg sync.WaitGroup
+	werr := make(chan error, 1)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < writes; i++ {
+			if err := w.ad.Save(ctx, item, []byte(fmt.Sprintf("w-%d", i))); err != nil {
+				werr <- err
+				return
+			}
+		}
+	}()
+	rep, err := w.sharing.RepairAll(ctx, RepairAllOptions{})
+	wg.Wait()
+	select {
+	case err := <-werr:
+		t.Fatalf("a concurrent Save failed: %v", err)
+	default:
+	}
+	if err != nil || len(rep.Skipped) != 0 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	if rep2, err := w.sharing.RepairAll(ctx, RepairAllOptions{}); err != nil || rep2.Repaired != 0 || rep2.Left() != 0 {
+		t.Fatalf("%v %+v", err, rep2)
+	}
+	d, err := w.ad.Load(ctx, item)
+	if err != nil || string(d.Data) != fmt.Sprintf("w-%d", writes-1) {
+		t.Fatalf("the last concurrent Save was lost: %q %v", d.Data, err)
+	}
+	for _, id := range append(others, item) {
+		if v := w.frameVersion(t, id); v != 3 {
+			t.Errorf("%s is v%d", id, v)
 		}
 	}
 }
