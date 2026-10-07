@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -104,10 +105,21 @@ type RepairAllReport struct {
 	// ErrForgedFrame, SkipForged); an unsigned one is Repaired's business, not a signer's.
 	BySigner []SignerFrames
 	// OtherSigner lists, in id order, the documents (and items) that had a frame or a record signed
-	// by a key other than the Adapter's Signer and were left so, because Resign was not set (or
-	// in a DryRun, they are in Todo instead). A store with several legitimate owners has such
-	// documents on purpose. It is empty when the Adapter has no Signer.
+	// by a key other than the Adapter's Signer and were left so, because Resign was not set. In a
+	// DryRun they are in Todo only when Resign is set; with Resign false they are in Signed and
+	// OtherSigner, as in a real run. A store with several legitimate owners has such documents on
+	// purpose. It is empty when the Adapter has no Signer.
 	OtherSigner []string
+	// IndexBy is the owner signing key that signed the store's keys:index record as stored (nil
+	// when there is no index, it does not verify, or the Adapter has no Signer: nothing to
+	// compare with). IndexOther says it is not the current signer. RepairAll with Resign (and
+	// no DryRun) signs the index again with Sharing.ResignIndex, then IndexResigned is set; if
+	// that fails IndexErr says why and the old key must stay listed. Without Resign, IndexOther
+	// is the report: run Sharing.ResignIndex (or RepairAll with Resign) before removing the old
+	// key from OwnerSigners, or the index no longer verifies.
+	IndexBy                   ed25519.PublicKey
+	IndexOther, IndexResigned bool
+	IndexErr                  error
 	// Skipped were not repaired, with the reason. Most were not written at all; a document that
 	// failed or conflicted while being written (SkipError, SkipConflict) may be partly rewritten,
 	// which loses nothing and a rerun finishes.
@@ -143,8 +155,9 @@ type RepairAllOptions struct {
 	Limit int
 	// DryRun reports what would be repaired (Todo) and writes nothing.
 	DryRun bool
-	// Resign also seals again, with the Adapter's Signer (and signs the record with the Sharing's
-	// Signer), every document that has a v3 frame or a record signed by another owner signer:
+	// Resign also seals again, with the Adapter's Signer (and signs the record, and the keys:index
+	// record, with the Sharing's Signer, which must be the same key as the Adapter's: a document
+	// or the index that needs it is otherwise skipped, SkipNoSigner, or left, IndexErr), every document that has a v3 frame or a record signed by another owner signer:
 	// the step after rotating the owner signer, before removing the old key from every
 	// OwnerSigners list (C.5, "Revoking an owner signer"). The old key must still be listed
 	// while it runs, or its frames are refused (SkipForged). Use it only when the other signers
@@ -215,6 +228,18 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 	sort.Strings(docs)
 	rep.Total = len(docs)
 	signs := s.Adapter.Signer != nil
+	same := signs && s.Signer != nil && bytes.Equal(s.Signer.Public(), s.Adapter.Signer.Public())
+	if signs {
+		rep.IndexBy = s.indexSigner(ctx)
+		rep.IndexOther = rep.IndexBy != nil && !bytes.Equal(rep.IndexBy, s.Adapter.Signer.Public())
+		if rep.IndexOther && o.Resign && !o.DryRun {
+			if !same {
+				rep.IndexErr = fmt.Errorf("%w: the Sharing's Signer is not the Adapter's", ErrNoFrameSigner)
+			} else if rep.IndexErr = s.ResignIndex(ctx); rep.IndexErr == nil {
+				rep.IndexResigned = true
+			}
+		}
+	}
 	acted := 0
 	for i, doc := range docs {
 		if err := ctx.Err(); err != nil {
@@ -246,6 +271,10 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 			}
 		case !signs:
 			outcome = s.skip(&rep, doc, SkipNoSigner, sc.unsigned, fmt.Errorf("%w: %s", ErrNoFrameSigner, doc))
+		case resign && !same:
+			// The record is signed by the Sharing's Signer, the files by the Adapter's: unless they
+			// are one key the document would be counted Resigned on every run and never move.
+			outcome = s.skip(&rep, doc, SkipNoSigner, nil, fmt.Errorf("%w: Resign needs the Sharing's Signer to be the Adapter's: %s", ErrNoFrameSigner, doc))
 		case o.DryRun:
 			rep.Todo = append(rep.Todo, doc)
 			outcome = "todo"
@@ -253,7 +282,7 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 		default:
 			var n int
 			var err error
-			if resign && recKey != nil && s.Signer != nil && !bytes.Equal(recKey, s.Signer.Public()) {
+			if resign && recKey != nil && !bytes.Equal(recKey, s.Signer.Public()) {
 				// The record first: files sealed after it are at its seq or below, which is accepted,
 				// and the re-key that follows signs every file with the current key.
 				err = s.Resign(ctx, doc)
@@ -303,6 +332,25 @@ func (s *Sharing) recordSigner(ctx context.Context, doc string) ed25519.PublicKe
 		return nil
 	}
 	return by
+}
+
+// indexSigner is the owner signing key that signed the keys:index record as stored, or nil when
+// there is none or it does not verify.
+func (s *Sharing) indexSigner(ctx context.Context) ed25519.PublicKey {
+	d, err := s.Store.Load(ctx, IndexKey)
+	if err != nil {
+		return nil
+	}
+	var sr signedRecord
+	if json.Unmarshal(d.Data, &sr) != nil || len(sr.Sig) == 0 || len(sr.Payload) == 0 {
+		return nil
+	}
+	for _, k := range s.verifiers() {
+		if len(k) == ed25519.PublicKeySize && ed25519.Verify(k, indexMessage(sr.Payload), sr.Sig) {
+			return k
+		}
+	}
+	return nil
 }
 
 // tally adds one document's signers to the report and says whether any is not the current one

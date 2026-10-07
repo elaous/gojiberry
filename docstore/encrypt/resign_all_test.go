@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-
 )
 
 // Tests of RepairAllOptions.Resign and the BySigner report (docs/roadmap.md, backlog item 5): moving
@@ -325,4 +324,152 @@ func TestRepairAllResignStopsOnAFrameNoListedKeySigned(t *testing.T) {
 		t.Fatalf("%v %+v", err, rep)
 	}
 	sameStore(t, "an unlisted old key", before, w.snapshot(t))
+}
+
+func TestRepairAllResignNeedsTheSharingSignerToBeTheAdapters(t *testing.T) {
+	ctx := context.Background()
+	for name, mod := range map[string]func(r signerRotation) *Sharing{
+		"nil": func(r signerRotation) *Sharing {
+			return &Sharing{Store: r.w.inner, Adapter: r.ad, OwnerSigners: r.sharing.OwnerSigners}
+		},
+		"different": func(r signerRotation) *Sharing {
+			return &Sharing{Store: r.w.inner, Adapter: r.ad, Signer: r.w.signer, OwnerSigners: r.sharing.OwnerSigners}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := newWorld(t)
+			id := w.e2eeDoc(t)
+			r := w.rotate(t)
+			s := mod(r)
+			before := w.snapshot(t)
+			for i := 0; i < 2; i++ { // the same on every run, nothing counted Resigned, nothing moved
+				rep, err := s.RepairAll(ctx, RepairAllOptions{Resign: true})
+				if err != nil || rep.Resigned != 0 || skippedBy(rep)[id] != SkipNoSigner || rep.IndexResigned || rep.IndexErr == nil {
+					t.Fatalf("run %d: %v %+v", i, err, rep)
+				}
+				if dry, err := s.RepairAll(ctx, RepairAllOptions{Resign: true, DryRun: true}); err != nil || skippedBy(dry)[id] != SkipNoSigner || len(dry.Todo) != 0 {
+					t.Fatalf("dry run: %v %+v", err, dry)
+				}
+			}
+			sameStore(t, "a mismatched Sharing signer", before, w.snapshot(t))
+		})
+	}
+}
+
+// failAfterRecord fails the writes of one file, so a re-sign stops after the record was signed.
+func TestRepairAllResignCrashBetweenRecordAndFiles(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	id := w.e2eeDoc(t)
+	r := w.rotate(t)
+	oldFP, newFP := SignerFingerprint(w.signer.Public()), SignerFingerprint(r.newKey.Public())
+	f := w.mainFile(t, id)
+	w.inner.failOn.Store(f)
+	rep, err := r.sharing.RepairAll(ctx, RepairAllOptions{Resign: true})
+	if err != nil || skippedBy(rep)[id] != SkipError || rep.Resigned != 0 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	// The record moved, the file did not: with both keys listed everything still opens.
+	if got := r.recordBy(id); got != newFP {
+		t.Fatalf("the record is signed by %s, want the new key", got)
+	}
+	if got := r.signersOf(t, id)[f]; got != oldFP {
+		t.Fatalf("the file is signed by %s", got)
+	}
+	if _, err := r.ad.Load(ctx, f); err != nil {
+		t.Fatalf("both keys listed, after the crash: %v", err)
+	}
+	// The next run finishes it.
+	w.inner.failOn.Store("")
+	rep, err = r.sharing.RepairAll(ctx, RepairAllOptions{Resign: true})
+	if err != nil || rep.Left() != 0 || rep.Resigned != 1 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	r.allBy(t, id, newFP)
+	if _, err := r.onlyNew().Load(ctx, f); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRepairAllResignDryRunAndLimit(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	docs := []string{w.e2eeDoc(t), w.e2eeDoc(t), w.e2eeDoc(t)}
+	r := w.rotate(t)
+	newFP := SignerFingerprint(r.newKey.Public())
+	before := w.snapshot(t)
+
+	rep, err := r.sharing.RepairAll(ctx, RepairAllOptions{Resign: true, DryRun: true})
+	if err != nil || len(rep.Todo) != 3 || rep.Resigned != 0 || len(rep.OtherSigner) != 0 || rep.Left() != 3 || !rep.IndexOther || rep.IndexResigned {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	// Without Resign the same documents are Signed and OtherSigner, not Todo.
+	rep, err = r.sharing.RepairAll(ctx, RepairAllOptions{DryRun: true})
+	if err != nil || len(rep.Todo) != 0 || len(rep.OtherSigner) != 3 || rep.Signed != 3 || !rep.IndexOther {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	sameStore(t, "dry runs", before, w.snapshot(t))
+
+	rep, err = r.sharing.RepairAll(ctx, RepairAllOptions{Resign: true, Limit: 2})
+	if err != nil || rep.Resigned != 2 || rep.Remaining != 1 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	done := 0
+	for _, d := range docs {
+		if r.recordBy(d) == newFP {
+			done++
+		}
+	}
+	if done != 2 {
+		t.Fatalf("%d documents moved with Limit 2", done)
+	}
+	rep, err = r.sharing.RepairAll(ctx, RepairAllOptions{Resign: true})
+	if err != nil || rep.Resigned != 1 || rep.Left() != 0 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	for _, d := range docs {
+		r.allBy(t, d, newFP)
+	}
+}
+
+func TestRepairAllResignSignsTheIndexAndItLoadsStrict(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	id := w.e2eeDoc(t)
+	r := w.rotate(t)
+	newOnly := []ed25519.PublicKey{r.newKey.Public()}
+	if _, _, err := loadIndex(ctx, w.inner, newOnly, nil); !errors.Is(err, ErrBadSignature) {
+		t.Fatalf("the index before: %v", err)
+	}
+	// A run without Resign only reports it.
+	rep, err := r.sharing.RepairAll(ctx, RepairAllOptions{})
+	if err != nil || !rep.IndexOther || rep.IndexResigned || !bytes.Equal(rep.IndexBy, w.signer.Public()) {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	if _, _, err := loadIndex(ctx, w.inner, newOnly, nil); !errors.Is(err, ErrBadSignature) {
+		t.Fatalf("a report-only run changed the index: %v", err)
+	}
+	// Sharing.ResignIndex alone makes it load with only the new key, entries unchanged.
+	if err := r.sharing.ResignIndex(ctx); err != nil {
+		t.Fatal(err)
+	}
+	idx, _, err := loadIndex(ctx, w.inner, newOnly, nil)
+	if err != nil || idx.Docs[id].Level != ProtectionE2EE {
+		t.Fatalf("%v %+v", err, idx)
+	}
+	// RepairAll with Resign does it too, and a second run finds nothing to do.
+	w2 := newWorld(t)
+	w2.e2eeDoc(t)
+	r2 := w2.rotate(t)
+	rep, err = r2.sharing.RepairAll(ctx, RepairAllOptions{Resign: true})
+	if err != nil || !rep.IndexOther || !rep.IndexResigned || rep.IndexErr != nil {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	if _, _, err := loadIndex(ctx, w2.inner, []ed25519.PublicKey{r2.newKey.Public()}, nil); err != nil {
+		t.Fatalf("the index after RepairAll: %v", err)
+	}
+	rep, err = r2.sharing.RepairAll(ctx, RepairAllOptions{Resign: true})
+	if err != nil || rep.IndexOther || rep.IndexResigned || !bytes.Equal(rep.IndexBy, r2.newKey.Public()) {
+		t.Fatalf("second run: %v %+v", err, rep)
+	}
 }

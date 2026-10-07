@@ -321,7 +321,11 @@ a way to avoid hitting the limit meanwhile.
    (`Repair`/`Rekey`), so everything is signed by the current key (`Resigned` count, `resigned` progress
    outcome; `DryRun` lists them in `Todo`). It is step 2 of the C.5 procedure for a whole store, idempotent,
    restartable, concurrent-save safe like `Repair`; `OtherSigner` empty and `BySigner` showing only the current key
-   is the signal that step 3 (remove the old key from every `OwnerSigners`) loses nothing it could still read.
+   say that no document, frame or record is left that step 3 (remove the old key from every `OwnerSigners`)
+   would refuse. The signed `keys:index` is reported apart (`IndexBy`, `IndexOther`); `Resign` signs it again
+   with `Sharing.ResignIndex` (`IndexResigned`, `IndexErr`), and without `Resign` or in a `DryRun` it is only
+   reported, so run `Sharing.ResignIndex` before step 3. `Resign` needs the `Sharing`'s `Signer` to be the
+   `Adapter`'s key (else `SkipNoSigner`).
    **Not done, needs a format change (design follow-up):** refusing frames by a revoked signer written after a
    revocation point while older ones keep verifying. The data model cannot carry it: (a) a frame has no key id
    and no time, only the record seq, which is per document, so a global cut cannot be stated in it; (b) a
