@@ -114,12 +114,24 @@ default that works in one process. Pass your own in `passkey.Config` (or the sto
 | Interface | What it does | Default | Plug in |
 |---|---|---|---|
 | `Store` (+ optional `Updater`, `Creator`) | accounts and credentials; `Updater` changes one account atomically (the function may run again on a conflict), `Creator` makes one only if none exists | `MemoryStore`; `AdapterStore` (compare-and-set over a `docstore.ConditionalAdapter`, else this process's lock) | SQL tables, anything with a transaction or conditional write |
-| `ChallengeStore` | started ceremonies; `Take` must be atomic so a challenge is good once | `MemoryChallenges` (10,000 at most, swept every 5 s) | Redis `GETDEL`, a table with a delete-returning |
+| `ChallengeStore` | started ceremonies; `Take` must be atomic so a challenge is good once | `MemoryChallenges` (10,000 at most, swept every 5 s) | `StoreChallenges` (over a `docstore.ConditionalAdapter`: replicas on one store share ceremonies; `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store`), Redis `GETDEL`, a table with a delete-returning |
 | `Limiter` | per client and route group: allowed now, or wait this long | `RateLimiter` (token bucket per address and group: 20 at once, 30 a minute) | Redis, a gateway; `Unlimited{}` to switch off |
 | `Config.ClientIP` | who the client is for the limiter | the remote address; `TrustedProxies(cidrs...)` reads `X-Forwarded-For` only from your proxies | your own function |
 
 Over the limit the routes answer 429 with `Retry-After`. `cmd/docstore` reads
 `GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES` (comma separated CIDRs) for the last row.
+**Shared ceremonies.** `StoreChallenges` keeps each ceremony as a record `passkey/challenge/<hash of the token>`
+(the token is not in the name). `Put` is a conditional create. `Take` loads the record and consumes it with one
+conditional step on the digest it read, `DeleteIf` or, on a store with only `SaveIf`, a swap to a used marker
+(then deleted), so of any number of concurrent Takes, on one replica or many, exactly one succeeds; the rest, and
+a replay, get `ErrBadChallenge` (410). The deadline is the stored `Expires`, checked on every Take (a replica's own
+clock, so skew moves it by seconds), and `Sweep` (every minute in the server) deletes expired (after a minute of grace),
+used and long-unreadable records. At most 10,000 wait (`ErrBusy`, 503); a live one is never evicted, and each replica
+counts from its last listing, so replicas can overshoot by what they write between listings. With
+`GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store` on a store without conditional writes the server refuses to start.
+**This is not all that replicas need:** the bearer session a sign-in returns is held by that process's
+`auth.Manager` (as are OpenID Connect login states), so behind several replicas route by the bearer token or run
+one until the session store is pluggable (roadmap, backlog item 7).
 A store without `Updater`/`Creator` still works in one process; behind several replicas it
 needs them (a conditional write), or two sign-ins can overwrite each other's counter update.
 
