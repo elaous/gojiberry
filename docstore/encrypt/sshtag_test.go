@@ -1,6 +1,7 @@
 package encrypt
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -36,7 +37,9 @@ func collide(r Recipient, keyed bool) age.Recipient {
 // collidedKeyed forwards the fingerprint of the wrapped sshKeyed.
 type collidedKeyed struct{ collided }
 
-func (c collidedKeyed) keyFingerprint() string { return c.Recipient.(keyFingerprinter).keyFingerprint() }
+func (c collidedKeyed) keyFingerprint() string {
+	return c.Recipient.(keyFingerprinter).keyFingerprint()
+}
 
 func TestSSHKeyTagCollisionIsToldApartByFullKey(t *testing.T) {
 	ctx := context.Background()
@@ -100,5 +103,26 @@ func TestSSHKeyedRecipientStillWraps(t *testing.T) {
 	id, err := recipientID(p.r.Key)
 	if err != nil || id.fp != p.r.Fingerprint {
 		t.Fatalf("%+v %v", id, err)
+	}
+	// Wrapping through sshKeyed is the inner recipient's wrapping: same stanza type and tag. (The
+	// rest of a stanza is fresh each time: an ephemeral share, so only Type and Args[0] compare.)
+	k, ok := p.r.Key.(sshKeyed)
+	if !ok {
+		t.Fatalf("the key is %T, want sshKeyed", p.r.Key)
+	}
+	fk := bytes.Repeat([]byte{1}, 16)
+	got, err := k.Wrap(fk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := k.Recipient.Wrap(fk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || len(want) != 1 || len(got[0].Args) == 0 || len(want[0].Args) == 0 {
+		t.Fatalf("stanzas %+v, %+v", got, want)
+	}
+	if got[0].Type != want[0].Type || got[0].Args[0] != want[0].Args[0] {
+		t.Errorf("sshKeyed wraps as %s %s, its recipient as %s %s", got[0].Type, got[0].Args[0], want[0].Type, want[0].Args[0])
 	}
 }

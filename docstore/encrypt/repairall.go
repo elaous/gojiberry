@@ -133,15 +133,17 @@ type RepairAllReport struct {
 // Left is how many documents or items still have unsigned frames or could not be checked:
 // Skipped, Todo and Remaining. Zero means every encrypted file Skip does not leave readable was
 // in a signed frame when RepairAll looked: documents, and items that are not a document's too.
-// It says nothing of files stored in the clear that the adapter does not read (those are
-// SkipPlaintext, so not zero), of what was saved after the scan, or of a file Skip leaves readable.
+// A plaintext item outside DefaultSkip counts as SkipPlaintext, so Left is above zero until it
+// is skipped (Adapter.Skip) or encrypted (Adapter.RekeyAll). It also says nothing of what was
+// saved after the scan, or of a file Skip leaves readable.
 func (r RepairAllReport) Left() int { return len(r.Skipped) + len(r.Todo) + r.Remaining }
 
 // RepairProgress is passed to RepairAllOptions.Progress after each document.
 type RepairProgress struct {
 	Done, Total int
 	Doc         string
-	// Outcome is "signed", "repaired", "resigned", "todo" or the RepairSkipReason.
+	// Outcome is "signed", "repaired", "resigned", "todo", "gone" (deleted since the scan) or the
+	// RepairSkipReason.
 	Outcome string
 }
 
@@ -157,13 +159,14 @@ type RepairAllOptions struct {
 	DryRun bool
 	// Resign also seals again, with the Adapter's Signer (and signs the record, and the keys:index
 	// record, with the Sharing's Signer, which must be the same key as the Adapter's: a document
-	// or the index that needs it is otherwise skipped, SkipNoSigner, or left, IndexErr), every document that has a v3 frame or a record signed by another owner signer:
-	// the step after rotating the owner signer, before removing the old key from every
-	// OwnerSigners list (C.5, "Revoking an owner signer"). The old key must still be listed
-	// while it runs, or its frames are refused (SkipForged). Use it only when the other signers
-	// are retired: a store with several owners would be moved to this one's signature. It needs the
-	// Signer (SkipNoSigner without), is idempotent, and does not stop the old key from writing:
-	// that ends only when it is removed from the lists.
+	// or the index that needs it is otherwise skipped, SkipNoSigner, or left, IndexErr), every
+	// document that has a v3 frame or a record signed by another owner signer: the step after
+	// rotating the owner signer, before removing the old key from every OwnerSigners list (C.5,
+	// "Revoking an owner signer"). The old key must still be listed while it runs, or its frames
+	// are refused (SkipForged). Use it only when the other signers are retired: a store with
+	// several owners would be moved to this one's signature. It needs the Signer (SkipNoSigner
+	// without), is idempotent, and does not stop the old key from writing: that ends only when
+	// it is removed from the lists.
 	Resign bool
 }
 
@@ -236,7 +239,9 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 			if !same {
 				rep.IndexErr = fmt.Errorf("%w: the Sharing's Signer is not the Adapter's", ErrNoFrameSigner)
 			} else if rep.IndexErr = s.ResignIndex(ctx); rep.IndexErr == nil {
-				rep.IndexResigned = true
+				// ResignIndex does not say whether it wrote (an index with no entries and seq 0
+				// is left as it is), so look at who signed what is stored now.
+				rep.IndexResigned = bytes.Equal(s.indexSigner(ctx), s.Adapter.Signer.Public())
 			}
 		}
 	}
@@ -304,6 +309,10 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 			case ctx.Err() != nil:
 				rep.Remaining = len(docs) - i
 				return rep, ctx.Err()
+			case errors.Is(err, docstore.ErrNotFound):
+				// Deleted since the scan: gone, as the scan itself ignores a deleted file. Nothing
+				// to count.
+				outcome = "gone"
 			default:
 				reason, files := classifyRepairErr(err)
 				outcome = s.skip(&rep, doc, reason, files, err)
