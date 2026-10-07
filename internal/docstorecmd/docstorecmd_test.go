@@ -18,9 +18,11 @@ import (
 	"filippo.io/age"
 
 	"github.com/elaous/gojiberry/auth"
+	"github.com/elaous/gojiberry/auth/passkey"
 	"github.com/elaous/gojiberry/collab/hub"
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/docstore/public"
+	"github.com/elaous/gojiberry/internal/webauthntest"
 )
 
 func statusTok(h http.Handler, method, path, token string) int {
@@ -720,5 +722,78 @@ func TestReplicasUnsetAndContradictedAreSaidLoudly(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "ERROR") || !strings.Contains(logs.String(), "other server process") {
 		t.Errorf("contradiction: %q", logs)
+	}
+}
+
+func TestPasskeyChallengesModeSharesCeremoniesBetweenReplicas(t *testing.T) {
+	ctx := context.Background()
+	const rp, origin = "opendocs.io", "https://opendocs.io"
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_RPID", rp)
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_ORIGINS", origin)
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_NAME", "opendocs")
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES", "store")
+	mem := docstore.NewMemoryAdapter()
+	replica := func() http.Handler {
+		srv := docstore.NewServer(mem, "memory")
+		if _, err := withPasskeys(ctx, srv, mem, nil, docstore.MemoryLimiters()); err != nil {
+			t.Fatal(err)
+		}
+		return srv.Handler()
+	}
+	a, b := replica(), replica()
+	post := func(h http.Handler, path string, body []byte) (int, map[string]any) {
+		req := httptest.NewRequest("POST", path, bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var out map[string]any
+		_ = json.NewDecoder(rec.Body).Decode(&out)
+		return rec.Code, out
+	}
+	pk := func(begin map[string]any) []byte {
+		raw, _ := json.Marshal(map[string]any{"publicKey": begin["options"].(map[string]any)["publicKey"]})
+		return raw
+	}
+	user := webauthntest.New(rp)
+	code, begin := post(a, "/auth/passkey/register/begin", []byte(`{"email":"ana@opendocs.io"}`))
+	if code != 200 {
+		t.Fatalf("register begin: %d %v", code, begin)
+	}
+	if metas, _ := docstore.ListPrefix(ctx, mem, passkey.ChallengePrefix); len(metas) != 1 {
+		t.Fatalf("the ceremony is in the store: %+v", metas)
+	}
+	reg, err := user.Create(pk(begin), origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, out := post(b, "/auth/passkey/register/finish?token="+begin["token"].(string), reg); code != 200 {
+		t.Fatalf("register begun on A, finished on B: %d %v", code, out)
+	}
+	code, begin = post(b, "/auth/passkey/login/begin", nil)
+	if code != 200 {
+		t.Fatal(code)
+	}
+	ans, err := user.Get(pk(begin), origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, out := post(a, "/auth/passkey/login/finish?token="+begin["token"].(string), ans); code != 200 {
+		t.Fatalf("login begun on B, finished on A: %d %v", code, out)
+	}
+	if code, _ := post(b, "/auth/passkey/login/finish?token="+begin["token"].(string), ans); code != 410 {
+		t.Fatalf("replay on the other replica = %d, want 410", code)
+	}
+}
+
+func TestPasskeyChallengesModeIsCheckedAndNeedsConditionalWrites(t *testing.T) {
+	ctx := context.Background()
+	if c, err := passkeyChallenges(ctx, docstore.NewMemoryAdapter(), ""); c != nil || err != nil {
+		t.Fatalf("default is the per-process store: %v %v", c, err)
+	}
+	if _, err := passkeyChallenges(ctx, docstore.NewMemoryAdapter(), "redis"); err == nil {
+		t.Fatal("an unknown mode is an error")
+	}
+	_, err := passkeyChallenges(ctx, plainAdapter{docstore.NewMemoryAdapter()}, "store")
+	if err == nil || !strings.Contains(err.Error(), "conditional") {
+		t.Fatalf("store mode on a store without conditional writes must refuse, not fall back: %v", err)
 	}
 }
