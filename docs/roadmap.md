@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, and the no-signer window PR; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
+5 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, and #PRNUM `RepairAll` with `Resign`; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
 
 ## Notes for upgraders
 
@@ -313,8 +313,25 @@ a way to avoid hitting the limit meanwhile.
    record says `signed` (it cannot sign, and a plain save does not change the record, so the flip cannot be conditional
    on it), and so can anyone who knows a recipient's public key (design, "The window before `signed`"). Avoid: set
    `Adapter.Signer` (or `RequireSigned`) on every client that writes.
-5. **Revoked owner signer tooling.** Plan: a command that runs the three-step procedure of C.5 and reports
-   documents it missed. Avoid: follow the manual steps in C.5.
+5. **Done (reduced):** **revoked owner signer tooling: report and re-sign.** `Sharing.RepairAll` now reports
+   `BySigner` (per owner signing key: frames, documents and `keys:<ID>` records it signed; the key is found by
+   verifying, since frames carry no key id and the record's `signer` field is only a hint) and `OtherSigner`
+   (the documents that have a frame or record by a key other than the Adapter's `Signer`), and with
+   `RepairAllOptions{Resign: true}` seals those again: the record first (`Sharing.Resign`), then every file
+   (`Repair`/`Rekey`), so everything is signed by the current key (`Resigned` count, `resigned` progress
+   outcome; `DryRun` lists them in `Todo`). It is step 2 of the C.5 procedure for a whole store, idempotent,
+   restartable, concurrent-save safe like `Repair`; `OtherSigner` empty and `BySigner` showing only the current key
+   is the signal that step 3 (remove the old key from every `OwnerSigners`) loses nothing it could still read.
+   **Not done, needs a format change (design follow-up):** refusing frames by a revoked signer written after a
+   revocation point while older ones keep verifying. The data model cannot carry it: (a) a frame has no key id
+   and no time, only the record seq, which is per document, so a global cut cannot be stated in it; (b) a
+   revocation mark inside the signed `keys:<ID>` record is signed by an owner signer, so the revoked key
+   itself can write a newer record without the mark. Plan: frame v4 carrying a signer key id and a signing time;
+   a signer set (keys with `notAfter`) kept in a document signed by a root key that is never rotated through
+   `OwnerSigners` (or held by the host's config), checked by `verifyFrame` (`ErrForgedFrame` for a frame signed
+   after `notAfter`, which also needs a trusted time source or the record seq as the cut); `RepairAll` then
+   moves the frames signed before the cut. Avoid: the C.5 procedure, ending with removing the old key from
+   every list; until that step the old key's holder can still write.
 6. **SSH key-tag collision tightening.** The code is `recipientID` in `docstore/encrypt/confidential.go`, which
    keys an SSH recipient by `st.Args[0]`, the 4-byte age short key tag. A collision fails closed (the recipient
    is taken for a server key: `ErrUncomparableRecipient` or the server-key outcome), never open. `age.Recipient`
