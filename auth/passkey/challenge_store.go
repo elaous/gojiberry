@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,9 +33,17 @@ var ErrNotConditional = errors.New("passkey: a shared challenge store needs a st
 // (replicas' clocks differ; Take already refuses an expired one on its own clock).
 const storeChallengeGrace = time.Minute
 
-// minFullSweep is the shortest time between two sweeps forced by a full store, so a flood
-// of Puts at the cap costs one listing a second, not one each.
-const minFullSweep = time.Second
+// DefaultChallengeLife is the longest a ceremony is expected to live (the default ChallengeTTL).
+// The sweep does not read a record younger than Life plus the grace: the listing's UpdatedAt says
+// it cannot have expired yet.
+const DefaultChallengeLife = 5 * time.Minute
+
+// sweepYoungBudget is how many records younger than Life+grace one Sweep reads (oldest first).
+// Only a used marker left by a failed delete can be young and dead; this bounds what an attacker
+// parked at the cap costs (a pass reads at most this many young records, not all of them), while
+// markers still go within a pass or two in any normal case. Older records are all read, but each
+// one read is one deleted.
+const sweepYoungBudget = 100
 
 // StoreChallenges is a ChallengeStore kept in a docstore.Adapter, so replicas that share the
 // store share their ceremonies: a challenge begun on one finishes on another.
@@ -49,8 +58,10 @@ const minFullSweep = time.Second
 //   - Expiry is the Expires time stored in the record, checked on every Take, plus a sweep
 //     (Sweep, RunChallengeSweep) that deletes what has expired, what was consumed and what cannot
 //     be read.
-//   - The number waiting is bounded like MemoryChallenges: at Max (10,000 by default) Put sweeps,
-//     at most once a second, and returns ErrBusy if it is still full. The bound is per replica's
+//   - The number waiting is bounded like MemoryChallenges: at Max (10,000 by default) Put returns
+//     ErrBusy at once, without touching the store (no sweep in the request: that would be a read per
+//     waiting record for every caller while someone sits at the cap); room comes back with the
+//     background sweep (RunChallengeSweep, every minute in the server) or a Take. The bound is per replica's
 //     view of the store (each keeps a count from its last listing plus what it has written), so
 //     replicas may overshoot it by what they write between two listings, never grow without limit.
 //     A live challenge is never evicted to make room: that would let a flood cancel real
@@ -62,12 +73,15 @@ type StoreChallenges struct {
 	Store docstore.Adapter
 	// Max is how many ceremonies may wait (10,000 if not positive).
 	Max int
+	// Life is the longest a ceremony lives (DefaultChallengeLife if not positive), for the sweep:
+	// a record whose listing time is younger than Life plus a minute is not read unless it is
+	// within the sweep's budget for young records. Set it to the Service's ChallengeTTL if longer.
+	Life time.Duration
 	// Now is the clock (time.Now if nil), for tests.
 	Now func() time.Time
 
-	approx    atomic.Int64 // waiting records: the last listing's count plus this process's Puts less its Takes
-	sweeping  sync.Mutex
-	lastSweep atomic.Int64 // unix nanoseconds of the last sweep started
+	approx   atomic.Int64 // waiting records: the last listing's count plus this process's Puts less its Takes
+	sweeping sync.Mutex
 }
 
 // NewStoreChallenges makes a ChallengeStore over store, holding at most max ceremonies (10,000 if
@@ -121,15 +135,7 @@ func (s *StoreChallenges) Put(ctx context.Context, c Challenge) (string, error) 
 		return "", err
 	}
 	if s.approx.Load() >= int64(s.max()) {
-		// Full by our count: drop what has expired (at most once a second), then look again.
-		if now := s.clock().UnixNano(); now-s.lastSweep.Load() >= int64(minFullSweep) {
-			if _, err := s.Sweep(ctx); err != nil && ctx.Err() != nil {
-				return "", ctx.Err()
-			}
-		}
-		if s.approx.Load() >= int64(s.max()) {
-			return "", ErrBusy
-		}
+		return "", ErrBusy // the background sweep (or a Take) makes room; never a scan in the request
 	}
 	data, err := json.Marshal(storedChallenge{Challenge: c})
 	if err != nil {
@@ -224,22 +230,38 @@ func (s *StoreChallenges) dec() {
 // Sweep deletes the records that are expired (past a minute of grace), already used, or cannot be
 // read and are over an hour old, each with a conditional delete so a record that changed in
 // between is kept, and resets the count of what is waiting to what is left. It returns how many it
-// deleted. Several sweeps at once (replicas, or Put) are harmless; in one process they run one at
-// a time.
+// deleted. Several sweeps at once (replicas) are harmless; in one process they run one at a time.
+//
+// Cost: a record whose listing UpdatedAt is younger than Life plus the grace cannot have expired,
+// so it is counted without being read. Only a used marker can be young and dead, and the listing
+// cannot tell it from a live record, so each pass reads at most sweepYoungBudget young records,
+// oldest first; the rest wait for the next pass (and are swept as soon as they age out). Records
+// older than that are read, and nearly all of them are deleted.
 func (s *StoreChallenges) Sweep(ctx context.Context) (int, error) {
 	s.sweeping.Lock()
 	defer s.sweeping.Unlock()
 	now := s.clock()
-	s.lastSweep.Store(now.UnixNano())
 	metas, err := docstore.ListPrefix(ctx, s.Store, ChallengePrefix)
 	if err != nil {
 		return 0, err
 	}
-	n, left := 0, 0
+	life := s.Life
+	if life <= 0 {
+		life = DefaultChallengeLife
+	}
+	sort.Slice(metas, func(i, j int) bool { return metas[i].UpdatedAt.Before(metas[j].UpdatedAt) })
+	n, left, young := 0, 0, 0
 	var errs []error
 	for _, m := range metas {
 		if err := ctx.Err(); err != nil {
 			return n, err
+		}
+		if now.Sub(m.UpdatedAt) < life+storeChallengeGrace {
+			if young >= sweepYoungBudget {
+				left++
+				continue
+			}
+			young++
 		}
 		doc, err := s.Store.Load(ctx, m.ID)
 		if errors.Is(err, docstore.ErrNotFound) {

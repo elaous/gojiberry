@@ -941,8 +941,14 @@ cannot be opened.
    10. The real app does not wire these controls yet (the demo and the showcase do, the showcase without
        proof of possession, see 5.7; the follow-up for the real app is the note above). The browser adapters do not implement
        `PrefixLister` (they fall back to listing the store). `ConditionalDeleter` is not implemented by the
-       s3 and blob backends (the sweep claims the record with a conditional write first, which narrows the
-       race to a token at most).
+       s3 backend, and the blob backend has no conditional writes at all (`GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store`
+       refuses to start on it). On s3 the sweep claims the record with a conditional write first, which narrows the
+       race to a token at most.
+       Shared passkey ceremonies (`store` mode) keep records under `passkey/challenge/`. Under an encrypting
+       adapter they are age-encrypted (`DefaultSkip` does not exempt `passkey/`); on a plain store anyone who can
+       read the store sees the pending registration's email and name. `Put` at the cap (10,000) returns busy without
+       scanning; the background sweep (every minute) frees room and reads at most 100 records younger than the
+       ceremony lifetime per pass, so used markers that outlive a failed delete may stay up to that lifetime.
 
 5. **Done (library):** encrypted records in packs and placeholder catalog entries for confidential
    documents.

@@ -237,6 +237,9 @@ func checkWriters(ctx context.Context, dir *encrypt.AdapterDirectory, adapter do
 func withPasskeys(ctx context.Context, srv *docstore.Server, adapter docstore.Adapter, m *auth.Manager, limiters docstore.LimiterFactory) (*auth.Manager, error) {
 	rp := os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_RPID")
 	if rp == "" {
+		if v := os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES"); v != "" {
+			log.Printf("docstore: WARNING: GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=%q is ignored: passkeys are off because GOJIBERRY_DOCSTORE_PASSKEY_RPID is not set", v)
+		}
 		return m, nil
 	}
 	var origins []string

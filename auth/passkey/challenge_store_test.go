@@ -159,10 +159,17 @@ func TestStoreChallengesAreCappedAndSwept(t *testing.T) {
 	if _, err := sc.Put(ctx, Challenge{Expires: now.Add(time.Minute)}); !errors.Is(err, ErrBusy) {
 		t.Fatalf("full of live challenges: %v, want ErrBusy (a live one is never evicted)", err)
 	}
-	// Expired (past the grace) ones are dropped to make room, at most once a second.
-	now = now.Add(3 * time.Minute)
+	// Put never sweeps: it stays busy until the sweep runs (the server runs it every minute).
+	// Expired ones are only dropped once they are past the grace and Life.
+	now = now.Add(10 * time.Minute)
+	if _, err := sc.Put(ctx, Challenge{Expires: now.Add(time.Minute)}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("Put at the cap does not sweep inline: %v, want ErrBusy", err)
+	}
+	if n, err := sc.Sweep(ctx); err != nil || n != 3 {
+		t.Fatalf("Sweep = %d, %v, want the three expired gone", n, err)
+	}
 	if _, err := sc.Put(ctx, Challenge{Expires: now.Add(time.Minute)}); err != nil {
-		t.Fatalf("after expiry there is room: %v", err)
+		t.Fatalf("after the sweep there is room: %v", err)
 	}
 	if n := countRecords(t, sc); n != 1 {
 		t.Fatalf("%d records, the expired three are swept", n)
@@ -292,5 +299,71 @@ func TestWithoutASharedStoreAnotherReplicaDoesNotKnowTheCeremony(t *testing.T) {
 	answer, _ := a.user.Get(asJSON(t, map[string]any{"publicKey": begin["options"].(map[string]any)["publicKey"]}), origin)
 	if code, _ := b.do("POST", "/auth/passkey/login/finish?token="+tok, "", answer); code != 410 {
 		t.Fatalf("per-process challenges: other replica = %d, want 410", code)
+	}
+}
+
+// countingStore counts the Loads that reach the inner store.
+type countingStore struct {
+	docstore.ConditionalAdapter
+	loads atomic.Int64
+}
+
+func (c *countingStore) Load(ctx context.Context, id string) (docstore.Document, error) {
+	c.loads.Add(1)
+	return c.ConditionalAdapter.Load(ctx, id)
+}
+
+func TestFullStoreCostsNoLoadsInPutAndABoundedNumberInSweep(t *testing.T) {
+	mem := docstore.NewMemoryAdapter()
+	cs := &countingStore{ConditionalAdapter: mem}
+	const total = 1000
+	sc, _ := NewStoreChallenges(cs, total)
+	ctx := context.Background()
+	for i := 0; i < total; i++ {
+		if _, err := sc.Put(ctx, Challenge{Expires: time.Now().Add(time.Minute)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cs.loads.Store(0)
+	for i := 0; i < 50; i++ {
+		if _, err := sc.Put(ctx, Challenge{Expires: time.Now().Add(time.Minute)}); !errors.Is(err, ErrBusy) {
+			t.Fatalf("Put at the cap = %v, want ErrBusy", err)
+		}
+	}
+	if n := cs.loads.Load(); n != 0 {
+		t.Fatalf("%d Loads for Puts at the cap, want 0", n)
+	}
+	// A sweep reads at most the young budget, not one per record, and keeps them all.
+	if n, err := sc.Sweep(ctx); err != nil || n != 0 {
+		t.Fatalf("Sweep = %d, %v", n, err)
+	}
+	if n := cs.loads.Load(); n > sweepYoungBudget {
+		t.Fatalf("%d Loads for %d young records, want at most %d", n, total, sweepYoungBudget)
+	}
+	if got := countRecords(t, sc); got != total {
+		t.Fatalf("%d records, want %d (young ones are not swept)", got, total)
+	}
+	// Once they are old (past Life and the grace) they are read, and deleted.
+	sc.Now = func() time.Time { return time.Now().Add(DefaultChallengeLife + 2*storeChallengeGrace + time.Minute) }
+	if n, err := sc.Sweep(ctx); err != nil || n != total {
+		t.Fatalf("Sweep of old records = %d, %v, want %d", n, err, total)
+	}
+}
+
+// brokenChallenges fails Put like a store that is down.
+type brokenChallenges struct{ ChallengeStore }
+
+func (brokenChallenges) Put(context.Context, Challenge) (string, error) {
+	return "", errors.New("connection refused to db.internal:5432")
+}
+
+func TestChallengeStoreFailureIs500NotBadRequest(t *testing.T) {
+	r := newRigWith(t, &AdapterStore{Adapter: docstore.NewMemoryAdapter()}, Config{Challenges: brokenChallenges{NewMemoryChallenges(0)}})
+	code, out := r.do("POST", "/auth/passkey/login/begin", "", nil)
+	if code != 500 {
+		t.Fatalf("login begin with a failing store = %d %v, want 500", code, out)
+	}
+	if msg, _ := out["error"].(string); strings.Contains(msg, "db.internal") {
+		t.Fatalf("the store's error leaks to the client: %q", msg)
 	}
 }

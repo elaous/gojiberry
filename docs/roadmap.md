@@ -352,13 +352,14 @@ a way to avoid hitting the limit meanwhile.
    Records live under `passkey/challenge/<hash of the token>` (inside the reserved `passkey/` keyspace: hidden from
    `/docs`, no expiry deadline, not a document key). `Put` is a conditional create; `Take` reads, then consumes with
    one conditional step on the digest it read (`DeleteIf`, or `SaveIf` to a used marker on a store that has only
-   `SaveIf`, such as s3 and blob), so of any number of concurrent Takes on any replicas exactly one wins; expiry is the
+   `SaveIf`, such as s3), so of any number of concurrent Takes on any replicas exactly one wins; expiry is the
    stored `Expires` plus a sweep (`Sweep`, run every minute by the server); the count is bounded (10,000 by default,
    `ErrBusy` past it, a live challenge is never evicted; each replica counts from its last listing, so replicas may
    overshoot by what they write between listings). `store` on a store without working conditional writes stops the
    server at start instead of falling back. **Not done, by decision: Redis.** The repo has no Redis client and a
    RESP client with auth, TLS, timeouts and cluster behaviour is not small; the store-backed one works on every
-   backend that has conditional writes (localfs, sqlite, postgres, mongo, s3, blob), and the `ChallengeStore`
+   backend that has conditional writes (memory, localfs, sqlite, postgres, mongo, s3; the blob backend has none, so
+   `store` mode refuses to start on it), and the `ChallengeStore`
    interface is unchanged for an embedder who wants Redis `GETDEL`. **Found, not fixed (needs its own item):
    bearer sessions are per process.** `auth.Manager` keeps sessions (and OpenID Connect login states) in an
    in-memory `tokenStore`, so a token issued by replica A is unknown to replica B whatever `ChallengeStore` is
