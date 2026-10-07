@@ -173,7 +173,7 @@ func (k ConfidentialKeyring) Bind(ctx context.Context, id string) ([]age.Recipie
 			if err != nil {
 				return nil, Binding{}, err // fail closed: it cannot be told from a server key
 			}
-			if server[rid] {
+			if rid.isServer(server) {
 				continue
 			}
 		}
@@ -185,17 +185,17 @@ func (k ConfidentialKeyring) Bind(ctx context.Context, id string) ([]age.Recipie
 	return out, b, nil
 }
 
-func (k ConfidentialKeyring) serverIDs() (map[string]bool, error) {
-	var m map[string]bool
+func (k ConfidentialKeyring) serverIDs() (map[string][]string, error) {
+	var m map[string][]string
 	for _, s := range k.ServerRecipients {
 		id, err := recipientID(s)
 		if err != nil {
 			return nil, err
 		}
 		if m == nil {
-			m = map[string]bool{}
+			m = map[string][]string{}
 		}
-		m[id] = true
+		m[id.id] = append(m[id.id], id.fp)
 	}
 	return m, nil
 }
@@ -205,24 +205,47 @@ func (k ConfidentialKeyring) serverIDs() (map[string]bool, error) {
 // compared: it could be a server key in disguise, so nothing is encrypted to it.
 var ErrUncomparableRecipient = errors.New("encrypt: a recipient's key cannot be compared with the server's keys")
 
-// recipientID is a canonical string for the key of a recipient: the text of an age key, or,
-// for an SSH key (whose recipient type is a pointer with no accessor), the type and key tag
-// that the recipient puts in its stanza (a hash of the public key, which is what age itself
-// uses to pick the identity). Any other type is ErrUncomparableRecipient.
-func recipientID(r age.Recipient) (string, error) {
+// recipID identifies a recipient's key: id is the canonical string (the text of an age key; for
+// an SSH key the type and the stanza's 4-byte key tag), and fp, for an SSH key built from its
+// parsed public key, the SHA-256 fingerprint of the full key ("" when only the tag is known).
+type recipID struct{ id, fp string }
+
+// isServer says whether r is one of the server keys, whose fingerprints are by id. Two SSH keys
+// with the same tag are the same key only if their fingerprints are equal; when either side
+// has no fingerprint (a raw agessh recipient) a tag match counts as a match, which fails closed:
+// at worst a person's key is taken for the server's and dropped, never a server key admitted.
+func (r recipID) isServer(server map[string][]string) bool {
+	for _, fp := range server[r.id] {
+		if r.fp == "" || fp == "" || fp == r.fp {
+			return true
+		}
+	}
+	return false
+}
+
+// recipientID is the identity of the key of a recipient: the text of an age key, or, for an SSH
+// key (whose recipient type is a pointer with no accessor), the type and key tag that the
+// recipient puts in its stanza (a hash of the public key, which is what age itself uses to pick
+// the identity), plus the full key's fingerprint when the recipient carries it (ParseSSHRecipient
+// does). Any other type is ErrUncomparableRecipient.
+func recipientID(r age.Recipient) (recipID, error) {
 	if s, ok := r.(fmt.Stringer); ok {
-		return "text:" + s.String(), nil
+		return recipID{id: "text:" + s.String()}, nil
 	}
 	var fileKey [16]byte // any key: only the stanza's public header is read
 	stanzas, err := r.Wrap(fileKey[:])
 	if err == nil {
 		for _, st := range stanzas {
 			if (st.Type == "ssh-ed25519" || st.Type == "ssh-rsa") && len(st.Args) > 0 {
-				return "ssh:" + st.Type + ":" + st.Args[0], nil
+				id := recipID{id: "ssh:" + st.Type + ":" + st.Args[0]}
+				if kf, ok := r.(keyFingerprinter); ok {
+					id.fp = kf.keyFingerprint()
+				}
+				return id, nil
 			}
 		}
 	}
-	return "", fmt.Errorf("%w: %T", ErrUncomparableRecipient, r)
+	return recipID{}, fmt.Errorf("%w: %T", ErrUncomparableRecipient, r)
 }
 
 // Identities implements Keyring.
