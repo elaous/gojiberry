@@ -62,6 +62,17 @@ type Session struct {
 	// pasted (the clipboard); without it the link is shown in the status line.
 	Link func(kind, id string) string
 	Copy func(text string)
+	// PackKeys, when set, is asked each time a pack is exported or imported for the functions that
+	// seal confidential documents into it (PackOptions.Seal) and open them again
+	// (ImportOptions.Open): encrypt.PackSealer makes them from the keys the page has unlocked. Both
+	// are nil while there is no key (a locked store): the pack then leaves the confidential items
+	// out, or an import reports them as needing the key, and the status line says how many.
+	PackKeys func() (seal func(ctx context.Context, docID string, plain []byte) ([]byte, error), open func(ctx context.Context, docID string, env []byte) ([]byte, error))
+	// ProtectionAvailable, when set, says whether a target (the one being used) can keep a document
+	// confidential (its store encrypts to the person's keys). Only then do the document list's
+	// "Make confidential" controls appear; nil offers them everywhere, and the saver's
+	// ConfidentialCheck is what refuses where it cannot be.
+	ProtectionAvailable func(target string) bool
 
 	op                   sync.Mutex // one saving, opening or deleting at a time
 	mu                   sync.Mutex
@@ -435,9 +446,21 @@ func (s *Session) Save(ctx context.Context) error {
 	return s.save(ctx)
 }
 
+// lockedError is an error that wraps docstore.ErrLocked in words that say what to do about it.
+type lockedError struct {
+	text string
+	err  error
+}
+
+func (e *lockedError) Error() string { return e.text }
+func (e *lockedError) Unwrap() error { return e.err }
+
 // storageFull adds to an error from a write the advice for a full store, when that is
 // what it is, so every way of saving says the same.
 func storageFull(err error) error {
+	if errors.Is(err, docstore.ErrLocked) {
+		return &lockedError{msg("saver.locked", "This document is confidential or the store is locked, and no key that is unlocked here opens it. Unlock the store with one of your keys (Save tab), then try again."), err}
+	}
 	if errors.Is(err, docstore.ErrStorageFull) {
 		return fmt.Errorf("%s: %w", msg("saver.notSavedFull", "Not saved: the storage is full. Download the document (Download as) so no work is lost, then delete old versions or the trash, or save somewhere else"), err)
 	}
@@ -502,7 +525,7 @@ func (s *Session) Open(ctx context.Context, id string) error {
 	target := s.targetName()
 	doc, rec, err := s.Saver.LoadChecked(ctx, target, id)
 	if err != nil {
-		return err
+		return storageFull(err)
 	}
 	e, err := s.Saver.Get(ctx, target, id)
 	if err != nil {
@@ -695,12 +718,61 @@ func (s *Session) SetProtection(ctx context.Context, id, to string) error {
 func (s *Session) Reveal(ctx context.Context, id string) error {
 	name, tags, err := s.Saver.Reveal(ctx, s.targetName(), id)
 	if err != nil {
-		return err
+		return storageFull(err)
 	}
 	if e, err := s.Saver.Get(ctx, s.targetName(), id); err == nil && e.Protection == ProtectionE2EE {
 		s.remember(id, name, tags)
 	}
 	return s.after(ctx, msg("saver.revealed", "%s can be read: its name is shown", name))
+}
+
+// Clear forgets the document being edited and everything the session shows of it: the saved
+// document's ID and name, the tag filter, the selection, the revealed names and tags, the lists
+// and the status. The editor's own content is the host's to replace (Clear does not touch what Get
+// returns). Call it with Forget-like reasons: when the keys are forgotten and the document on
+// screen must go with them.
+func (s *Session) Clear() {
+	s.set(func() {
+		s.id, s.name, s.tagFilter, s.status, s.selected, s.folderDraft = "", "", "", "", nil, ""
+		s.revealed, s.revealedFolders, s.versions, s.openDlg = nil, nil, nil, nil
+		s.entries, s.trashed, s.folders = s.concealed(s.entries), s.concealed(s.trashed), s.concealedFolders(s.folders)
+		s.saveState = ""
+	})
+}
+
+// Forget drops the real names and tags of the confidential documents and folders that were
+// revealed here, so the lists show the placeholders again: call it when the keys are forgotten
+// (the store is locked). The saver's own state is not touched; a later Reveal, Open or Save
+// shows them again.
+func (s *Session) Forget() {
+	s.set(func() {
+		s.revealed, s.revealedFolders = nil, nil
+		s.entries, s.trashed, s.folders = s.concealed(s.entries), s.concealed(s.trashed), s.concealedFolders(s.folders)
+	})
+}
+
+// concealed puts the placeholder back in the confidential entries of a list (call with the lock
+// held).
+func (s *Session) concealed(list []Entry) []Entry {
+	out := make([]Entry, len(list))
+	for i, e := range list {
+		out[i] = e
+		if e.Protection == ProtectionE2EE {
+			out[i].Name, out[i].Tags = ConfidentialName, nil
+		}
+	}
+	return out
+}
+
+func (s *Session) concealedFolders(list []Folder) []Folder {
+	out := make([]Folder, len(list))
+	for i, f := range list {
+		out[i] = f
+		if f.Protection == ProtectionE2EE {
+			out[i].Name = ConfidentialFolderName
+		}
+	}
+	return out
 }
 
 // SetTagFilter narrows the list to the documents with the tag ("" for all).
@@ -733,7 +805,7 @@ func (s *Session) SetFolderProtection(ctx context.Context, id, to string, recurs
 func (s *Session) RevealFolder(ctx context.Context, id string) error {
 	name, err := s.Saver.RevealFolder(ctx, s.targetName(), id)
 	if err != nil {
-		return err
+		return storageFull(err)
 	}
 	if f, err := s.Saver.folder(ctx, s.targetName(), id); err == nil && f.Protection == ProtectionE2EE {
 		s.rememberFolder(id, name)
@@ -825,11 +897,30 @@ func docFolderOf(f Folder) components.DocFolder {
 	return components.DocFolder{ID: f.ID, Name: f.Name, Parent: f.Parent, Confidential: f.Protection == ProtectionE2EE}
 }
 
-func docOf(e Entry) components.Doc {
+// docOf is an entry as the components list it; revealed says whether the real name of a
+// confidential one is known here (the list shows the placeholder, and offers Reveal, if not).
+func docOf(e Entry, revealed bool) components.Doc {
 	d := components.Doc{ID: e.ID, Name: e.Name, Size: e.Size, Updated: e.Updated, Trashed: e.Trashed, Tags: e.Tags}
 	if e.Format != nil {
 		d.Format = e.Format.Label()
 	}
+	if e.Protection == ProtectionE2EE {
+		d.Confidential, d.NameHidden = true, !revealed
+	}
+	return d
+}
+
+// docEntry is docOf with what the session knows (call with the lock held).
+func (s *Session) docEntry(e Entry) components.Doc {
+	_, ok := s.revealed[e.ID]
+	return docOf(e, ok)
+}
+
+// docFolder is docFolderOf with what the session knows (call with the lock held).
+func (s *Session) docFolder(f Folder) components.DocFolder {
+	d := docFolderOf(f)
+	_, ok := s.revealedFolders[f.ID]
+	d.NameHidden = d.Confidential && !ok
 	return d
 }
 
@@ -848,20 +939,31 @@ func (s *Session) Docs() components.DocListProps {
 		Tag:       s.SetTags,
 		Refresh:   func() { s.Pending.Run(s.Refresh) },
 		Check:     s.Check,
+		Reveal:    s.Reveal, RevealFolder: s.RevealFolder,
+	}
+	if s.ProtectionAvailable == nil || s.ProtectionAvailable(s.target) {
+		p.SetProtection = func(ctx context.Context, id string, confidential bool) error {
+			return s.SetProtection(ctx, id, protectionLevel(confidential))
+		}
+		// A folder's level moves its own name only: what is inside keeps its protection, so each
+		// document is switched on its own row.
+		p.SetFolderProtection = func(ctx context.Context, id string, confidential bool) error {
+			return s.SetFolderProtection(ctx, id, protectionLevel(confidential), false)
+		}
 	}
 	for _, e := range s.entries {
 		if e.Folder == s.folder { // the folder being shown
-			p.Docs = append(p.Docs, docOf(e))
+			p.Docs = append(p.Docs, s.docEntry(e))
 		}
 	}
 	for _, f := range s.folders {
-		p.AllFolders = append(p.AllFolders, docFolderOf(f))
+		p.AllFolders = append(p.AllFolders, s.docFolder(f))
 		if f.Parent == s.folder {
-			p.Folders = append(p.Folders, docFolderOf(f))
+			p.Folders = append(p.Folders, s.docFolder(f))
 		}
 	}
 	for _, f := range FolderPath(s.folders, s.folder) {
-		p.Path = append(p.Path, docFolderOf(f))
+		p.Path = append(p.Path, s.docFolder(f))
 	}
 	p.OpenFolder, p.NewFolder, p.RenameFolder, p.DeleteFolder, p.Move = s.OpenFolder, s.NewFolder, s.RenameFolder, s.DeleteFolder, s.MoveDocs
 	p.FolderDraft, p.OnFolderDraft = s.folderDraft, s.SetFolderDraft
@@ -894,6 +996,13 @@ func (s *Session) Docs() components.DocListProps {
 	return p
 }
 
+func protectionLevel(confidential bool) string {
+	if confidential {
+		return ProtectionE2EE
+	}
+	return ProtectionServer
+}
+
 // Versions returns the props for components.Versions: the snapshots of the
 // document being edited.
 func (s *Session) Versions() components.VersionsProps {
@@ -917,7 +1026,7 @@ func (s *Session) Trash() components.TrashProps {
 	p := components.TrashProps{Pending: s.Pending, Selected: s.selected, OnSelect: func(ids []string) { s.set(func() { s.selected = ids }) }}
 	p = p.Use(s)
 	for _, e := range s.trashed {
-		p.Docs = append(p.Docs, docOf(e))
+		p.Docs = append(p.Docs, s.docEntry(e))
 	}
 	return p
 }
@@ -928,6 +1037,7 @@ func (s *Session) Props() components.SaverProps {
 	trash.OnSelect = nil // the form's trash is the simple one: a row, its buttons
 	// The form draws the question's dialog, so here deleting for good asks first.
 	docs.Confirm, trash.Confirm = s.Asker.Ask, s.Asker.Ask
+	docs.ConfirmAs = s.Asker.AskWith
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p := components.SaverProps{
@@ -1044,16 +1154,36 @@ func (s *Session) DownloadPack(ctx context.Context, folder string) error {
 	}
 	var buf bytes.Buffer
 	name := s.folderName(folder)
-	// The session holds no keys: confidential documents are left out, and the person is told.
-	left := 0
-	n, err := s.Saver.ExportPack(ctx, s.targetName(), folder, &buf, PackOptions{Name: name, History: true, Warn: func(PackIssue) { left++ }})
+	// With keys (PackKeys) confidential documents are sealed into the pack; without, they are left
+	// out and the person is told how many documents and folder names need a key.
+	var seal func(context.Context, string, []byte) ([]byte, error)
+	if s.PackKeys != nil {
+		seal, _ = s.PackKeys()
+	}
+	folderIDs := map[string]bool{}
+	s.mu.Lock()
+	for _, f := range s.folders {
+		folderIDs[f.ID] = true
+	}
+	s.mu.Unlock()
+	left, leftFolders := 0, 0
+	n, err := s.Saver.ExportPack(ctx, s.targetName(), folder, &buf, PackOptions{Name: name, History: true, Seal: seal, Warn: func(i PackIssue) {
+		if folderIDs[i.ID] {
+			leftFolders++
+		} else {
+			left++
+		}
+	}})
 	if err != nil {
-		return err
+		return storageFull(err)
 	}
 	s.Deliver(safeName(name)+".opendoc", "application/vnd.opendocs.pack", buf.Bytes())
 	line := msg("saver.packDownloaded", "%s downloaded as a pack of %d documents", name, n)
 	if left > 0 {
 		line += " " + msg("saver.packLeftOut", "(%d confidential documents left out: they need a key)", left)
+	}
+	if leftFolders > 0 {
+		line += " " + msg("saver.packFoldersLeftOut", "(%d confidential folder names left out: they need a key)", leftFolders)
 	}
 	s.say(line)
 	return nil
@@ -1074,6 +1204,17 @@ func (s *Session) folderName(id string) string {
 		}
 	}
 	return "documents"
+}
+
+// countWrongKey counts the pack items whose opener said they were sealed for another key.
+func countWrongKey(issues []PackIssue) int {
+	n := 0
+	for _, is := range issues {
+		if errors.Is(is.Err, docstore.ErrWrongKey) {
+			n++
+		}
+	}
+	return n
 }
 
 // pickPack asks for a .opendoc file and imports it.
@@ -1099,13 +1240,24 @@ func (s *Session) ImportPackData(ctx context.Context, name string, data []byte) 
 	if err != nil {
 		return err
 	}
-	rep, err := s.Saver.ImportPack(ctx, target, bytes.NewReader(data), int64(len(data)), ImportOptions{Into: folder, Format: c})
+	var open func(context.Context, string, []byte) ([]byte, error)
+	if s.PackKeys != nil {
+		_, open = s.PackKeys()
+	}
+	rep, err := s.Saver.ImportPack(ctx, target, bytes.NewReader(data), int64(len(data)), ImportOptions{Into: folder, Format: c, Open: open})
 	if err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	line := msg("saver.packImported", "%s: %d documents and %d folders imported", name, rep.Documents, rep.Folders)
 	if len(rep.Skipped) > 0 {
 		line += " " + msg("saver.packSkipped", "(%d already here, left as they are)", len(rep.Skipped))
+	}
+	if wrong := countWrongKey(rep.NeedsKey); wrong > 0 {
+		// Keys are unlocked here and none opens them: unlocking the store again would not help.
+		line += " " + msg("saver.packWrongKey", "(%d confidential items were sealed for another key: this pack was sealed for another key than the ones unlocked here)", wrong)
+	}
+	if need := len(rep.NeedsKey) - countWrongKey(rep.NeedsKey); need > 0 {
+		line += " " + msg("saver.packNeedsKey", "(%d confidential items need a key: unlock the store and import the pack again)", need)
 	}
 	if len(rep.Warnings) > 0 {
 		line += " " + msg("saver.packWarnings", "(%d warnings: %s)", len(rep.Warnings), strings.Join(rep.Warnings[:min(3, len(rep.Warnings))], "; "))

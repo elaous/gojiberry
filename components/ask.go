@@ -17,6 +17,7 @@ import (
 type Asker struct {
 	mu       sync.Mutex
 	message  string
+	label    string // the confirm button's words for this question; "" is ConfirmLabel
 	do       func()
 	onChange func()
 	// Title, ConfirmLabel and CancelLabel are the dialog's words; defaults are
@@ -30,9 +31,13 @@ func NewAsker(onChange func()) *Asker { return &Asker{onChange: onChange} }
 
 // Ask shows the question; do runs if the user confirms it. A question already
 // open is replaced.
-func (a *Asker) Ask(message string, do func()) {
+func (a *Asker) Ask(message string, do func()) { a.AskWith("", message, do) }
+
+// AskWith is Ask with the words of the confirm button for this question ("Make confidential"
+// rather than the default "Delete"); "" keeps the default.
+func (a *Asker) AskWith(label, message string, do func()) {
 	a.mu.Lock()
-	a.message, a.do = message, do
+	a.message, a.label, a.do = message, label, do
 	a.mu.Unlock()
 	a.notify()
 }
@@ -53,7 +58,7 @@ func (a *Asker) notify() {
 func (a *Asker) answer(yes bool) {
 	a.mu.Lock()
 	do := a.do
-	a.message, a.do = "", nil
+	a.message, a.label, a.do = "", "", nil
 	a.mu.Unlock()
 	if yes && do != nil {
 		do()
@@ -64,13 +69,16 @@ func (a *Asker) answer(yes bool) {
 // Dialog is the Confirm dialog for the open question, closed when there is none.
 func (a *Asker) Dialog() xango.Node {
 	a.mu.Lock()
-	message, open := a.message, a.do != nil
+	message, open, label := a.message, a.do != nil, a.label
 	a.mu.Unlock()
 	title := a.Title
 	if title == "" {
 		title = tr("confirm.title", "Are you sure?")
 	}
 	yes := a.ConfirmLabel
+	if label != "" {
+		yes = label
+	}
 	if yes == "" {
 		yes = tr("confirm.yes", "Delete")
 	}
@@ -98,4 +106,13 @@ func confirmed(ask func(message string, do func()), message string, do func()) f
 		}
 		ask(message, do)
 	}
+}
+
+// confirmedAs is confirmed for a question whose confirm button says label: with askAs (an
+// Asker's AskWith) the dialog uses that word, else the plain ask is used.
+func confirmedAs(askAs func(label, message string, do func()), ask func(message string, do func()), label, message string, do func()) func() {
+	if askAs == nil {
+		return confirmed(ask, message, do)
+	}
+	return func() { askAs(label, message, do) }
 }

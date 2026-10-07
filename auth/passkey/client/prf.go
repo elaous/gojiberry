@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"syscall/js"
+	"time"
 )
 
 // ErrNoPRF is returned when the passkey (or the browser) does not do the PRF extension, so it
@@ -75,7 +76,8 @@ func prfOutput(cred js.Value) ([]byte, error) {
 // (encrypt.PRFIdentity) and then clear(secret). The copy the browser handed over is zeroed here
 // once it has been copied. ErrNoPRF means the passkey or browser does not do PRF (or sent
 // nothing), ErrPRFLength that it answered with the wrong size; ErrCancelled that the person
-// closed the prompt.
+// closed the prompt (ErrTimedOut and ErrNotVerified are ErrCancelled too, for a prompt that timed
+// out or that the browser says could not verify the person).
 //
 // credentialID is a hint stored in clear in a document's recipient list (see
 // encrypt.PRFRecipient for what that reveals); passing "" avoids needing it, and the browser
@@ -107,13 +109,11 @@ func DeriveKey(ctx context.Context, credentialID string, salt []byte) (usedID st
 	pub.Set("extensions", ext)
 	opts := js.Global().Get("Object").New()
 	opts.Set("publicKey", pub)
+	pub.Set("timeout", promptTimeout.Milliseconds())
+	since := time.Now()
 	cred, err := await(ctx, js.Global().Get("navigator").Get("credentials").Call("get", opts))
 	if err != nil {
-		var je *jsErr
-		if errors.As(err, &je) && (je.name == "NotAllowedError" || je.name == "AbortError") {
-			return "", nil, fmt.Errorf("%w (%s)", ErrCancelled, je)
-		}
-		return "", nil, err
+		return "", nil, rejection(err, since)
 	}
 	secret, err = prfOutput(cred)
 	if err != nil {

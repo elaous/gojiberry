@@ -20,6 +20,10 @@ type RecipientRow struct {
 	// and that the account published the key, not that the key is safe; without it the
 	// e-mail is only a label and the owner confirms the fingerprint.
 	Verified bool
+	// VerifiedBy is the host of the directory that said so ("verified by dir.example"): the mark
+	// is that directory's word, and a page whose directory address came from a link must not let
+	// it pass for more. Empty shows the plain mark.
+	VerifiedBy string
 	// Attested marks a Verified key that also signed the binding to the address itself
 	// (encrypt.PublishedKey.Attested; ssh-ed25519 keys): shown as a stronger mark, because the
 	// server alone could not have invented that binding. Set it from the directory's answer
@@ -31,6 +35,11 @@ type RecipientRow struct {
 	// checked the evidence itself (directoryclient.Key.OwnerSigned). OwnerEnrolled says the
 	// address has an owner key: a Verified key that is not OwnerSigned then gets a note.
 	OwnerSigned, OwnerEnrolled bool
+	// CanRemove and RemoveBlocked are for an owner key when RecipientsProps.RemoveOwner is set:
+	// whether the host would let the key be taken out, and, when not, why in words (the last key,
+	// the only way back, the store unlocked with this key alone).
+	CanRemove     bool
+	RemoveBlocked string
 }
 
 // DirRow is a key found in the store's directory for an e-mail address (encrypt.PublishedKey),
@@ -38,6 +47,8 @@ type RecipientRow struct {
 type DirRow struct {
 	Label, Type, Fingerprint, Key string
 	Verified                      bool
+	// VerifiedBy is the host of the directory that answered (RecipientRow.VerifiedBy).
+	VerifiedBy string
 	// Attested: Verified, and the key signed the binding to the address itself (see
 	// RecipientRow.Attested); the picker shows the stronger mark.
 	Attested bool
@@ -121,6 +132,30 @@ type RecipientsProps struct {
 	OnRecoveryDone    func()
 	Copy              func(text string)
 	Download          func(name, text string)
+	// CommitRecoveryKey, when set, makes the recovery key transactional: CreateRecoveryKey only
+	// prepares the key (nothing is added to the store yet) and returns its secret, the secret is
+	// shown, and the key becomes an owner key only when the person acknowledges they saved it
+	// (RecoveryAcknowledged, set by the host from OnRecoveryAcknowledge) and presses the confirm
+	// button, which runs CommitRecoveryKey. A key whose secret was never seen is thereby never an
+	// owner key. CancelRecoveryKey (nil leaves the button out) drops the prepared key and secret
+	// without adding it. Without CommitRecoveryKey the key is already added when its secret is
+	// shown, and "I have saved it" only hides the secret (the older behavior).
+	CommitRecoveryKey     func(ctx context.Context) error
+	CancelRecoveryKey     func()
+	RecoveryAcknowledged  bool
+	OnRecoveryAcknowledge func(saved bool)
+
+	// RemoveOwner takes an owner key out of the store (each owner row gets "Remove this key",
+	// enabled by its row's CanRemove). ReplaceOwner swaps a passkey for a new one; it is offered
+	// on the rows of type "passkey-prf". Both ask first (Ask) and say what it does and does not do.
+	RemoveOwner  func(ctx context.Context, fingerprint string) error
+	ReplaceOwner func(ctx context.Context, fingerprint string) error
+
+	// Publish publishes the owner's keys in the store's key directory (the "Publish my keys"
+	// button, shown with the directory picker; nil leaves it out). PublishNotice is the line the
+	// host shows after it, or why it could not.
+	Publish       func(ctx context.Context) error
+	PublishNotice string
 }
 
 // RemovedNotice is the line that says what a Remove did: how many stored files were encrypted
@@ -146,15 +181,16 @@ func Recipients(p RecipientsProps) xango.Node {
 			xango.El("code", []xango.Attr{xango.A("class", "gj-recip-fingerprint")}, xango.Text(r.Fingerprint)),
 		}
 		if r.Verified {
-			cells = append(cells, verifiedMark(true, r.Attested, r.OwnerSigned, r.OwnerEnrolled))
+			cells = append(cells, verifiedMark(true, r.Attested, r.OwnerSigned, r.OwnerEnrolled, r.VerifiedBy))
 		}
 		cells = append(cells, extra...)
 		return xango.El("li", []xango.Attr{xango.A("class", class), xango.A("data-fingerprint", r.Fingerprint)}, cells...)
 	}
 	var rows []xango.Node
 	for _, r := range p.Owner {
-		rows = append(rows, row(r, "gj-recip-item gj-recip-owner",
-			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta")}, xango.Text(tr("recipients.owner", "owner")))))
+		extra := []xango.Node{xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta")}, xango.Text(tr("recipients.owner", "owner")))}
+		extra = append(extra, ownerControls(p, r, busy)...)
+		rows = append(rows, row(r, "gj-recip-item gj-recip-owner", extra...))
 	}
 	for _, r := range p.Shared {
 		var extra []xango.Node
@@ -198,6 +234,7 @@ func Recipients(p RecipientsProps) xango.Node {
 		children = append(children, xango.El("p", []xango.Attr{xango.A("class", "gj-recip-notice"), xango.A("role", "status")}, xango.Text(p.Notice)))
 	}
 	children = append(children, myKeyControl(p, busy)...)
+	children = append(children, publishControl(p, busy)...)
 	if p.Add != nil {
 		children = append(children, directoryPicker(p, busy)...)
 		keyAttrs := []xango.Attr{xango.A("class", "gj-recip-key"), xango.A("rows", "3"), xango.A("value", p.Draft),
@@ -218,7 +255,7 @@ func Recipients(p RecipientsProps) xango.Node {
 				xango.El("p", []xango.Attr{xango.A("class", "gj-recip-parsed")},
 					xango.Text(trf("recipients.parsed", "%s key for %s. Its fingerprint is:", p.Parsed.Type, orNone(p.Parsed.Label)))),
 				xango.El("code", []xango.Attr{xango.A("class", "gj-recip-fingerprint gj-recip-parsed-fingerprint")}, xango.Text(p.Parsed.Fingerprint)),
-				verifiedMark(p.Parsed.Verified, p.Parsed.Attested, p.Parsed.OwnerSigned, p.Parsed.OwnerEnrolled))
+				verifiedMark(p.Parsed.Verified, p.Parsed.Attested, p.Parsed.OwnerSigned, p.Parsed.OwnerEnrolled, p.Parsed.VerifiedBy))
 			if p.TrustVerified && p.Parsed.Verified {
 				// The account is verified and published this key: no typing, the fingerprint
 				// above is still shown. Add confirms with the fingerprint shown.

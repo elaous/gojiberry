@@ -86,6 +86,8 @@ type ui struct {
 	statsSig            string // the counts the status bar and Stats tab last showed
 	shareLink           string // the link the Share tab shows
 	people              *peopleState
+	enc                 *encUI // the encrypted browser store: off unless the person turns it on
+	clearEditor         func() // empties the editor and what is derived from its text (Lock uses it)
 	message             string // the Import/Export tab's last message
 }
 
@@ -188,6 +190,20 @@ func main() {
 		renderCanvas()
 		renderUI()
 	}
+	u.clearEditor = func() {
+		// Locking closes the document that is open: the editor, and everything that was worked out
+		// from its text (find results, spelling, outline and statistics caches, comments).
+		u.title = ""
+		openDoc(docfile.Document{})
+		u.find, u.spell.spans, u.spell.words, u.spell.text = findState{}, nil, nil, ""
+		// What was translated or found wrong in the text, and the replies typed to its comments, are
+		// the document's text too: not left on screen behind a lock.
+		u.lang.translated, u.lang.transText, u.lang.issues, u.lang.text = "", "", nil, ""
+		u.lang.selFrom, u.lang.selTo, u.lang.checked, u.lang.err = 0, 0, false, ""
+		u.drafts = map[string]string{}
+		u.navSig, u.statsSig, u.a11ySig, u.a11yCache, u.shareLink = "", "", "", nil, ""
+		renderUI()
+	}
 	currentDoc := func() docfile.Document {
 		d := docfile.FromFlow(u.title, flow)
 		d.Fonts = docfile.FromFonts(lib.Added())
@@ -197,10 +213,26 @@ func main() {
 	// tabs saving at the same moment can drop one catalog entry (Repair finds the
 	// orphaned file next time). The memory target, a local directory, SQLite and the HTTP
 	// store do write conditionally (docstore.ConditionalAdapter).
+	browserStore := docstore.NewBrowserAdapter("showcase:")
+	u.enc, err = newEnc(browserStore, func() { renderUI(); u.publishEncState() })
+	if err != nil {
+		// A key list that cannot be read is not guessed at: the page starts with encryption off
+		// and says why in the Save tab.
+		u.enc, _ = newEncOff(browserStore, func() { renderUI(); u.publishEncState() }, err)
+	}
 	u.saver = saver.NewSession(&saver.Saver{Targets: []saver.Target{
-		{Name: "browser", Label: "This browser (localStorage)", Adapter: docstore.NewBrowserAdapter("showcase:"), Capacity: 5 << 20},
+		u.enc.target(),
 		{Name: "memory", Label: "Memory", Adapter: store, Capacity: 16 << 20},
 	}}, currentDoc, openDoc)
+	// Encryption is the page's own: the saver asks it before a document is made confidential and
+	// to re-key a document's files when its level changes, and it seals confidential documents
+	// into packs for the owner's keys while unlocked.
+	u.saver.Saver.ConfidentialCheck, u.saver.Saver.Rekey = u.enc.store.Check, u.enc.store.Rekey
+	u.saver.PackKeys = u.enc.store.PackKeys
+	u.enc.swap = u.encSwap
+	u.enc.dir.ask = u.saver.Asker.AskWith
+	u.watchEncConfig()
+	u.saver.ProtectionAvailable = func(target string) bool { return target == "browser" && u.enc.store.Enabled() }
 	u.saver.OnChange = func() {
 		t, _ := u.saver.Where()
 		rememberTarget(t)
@@ -377,13 +409,13 @@ func main() {
 				panel = statsPanel(flow.Stats(), state.Pages)
 			}
 		case "people":
-			panel = xango.Frag(u.people.panel(u.saver.Asker.Ask), u.saver.Asker.Dialog())
+			panel = xango.Frag(u.people.panel(u.saver.Asker.Ask), u.encPeopleOrNone(), u.saver.Asker.Dialog())
 		case "share":
 			if flow != nil {
 				panel = sharePanel(u, flow, origin, renderUI)
 			}
 		case "save":
-			panel = xango.Frag(u.folderPanel(), components.Saver(u.saver.Props()))
+			panel = xango.Frag(u.encPanel(), u.folderPanel(), components.Saver(u.saver.Props()))
 		case "transfer":
 			var imports, exports []components.SaverChoice
 			for _, i := range u.transfer.Importers() {
@@ -653,7 +685,7 @@ func main() {
 		}
 		b, _ := json.Marshal(map[string]any{
 			"hyphenate": state.Hyphenate, "columns": columnCount, "columnConfig": columnCfg, "language": map[string]any{"translate": u.lang.translator != nil, "grammar": u.lang.grammar != nil, "issues": len(u.lang.issues), "translated": u.lang.translated, "error": u.lang.err, "busy": u.lang.busy},
-			"stats": statsState(stats), "share": u.shareLink, "people": u.people.list(), "spell": map[string]any{"enabled": u.spell.enabled, "checked": u.spell.text != "", "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
+			"stats": statsState(stats), "share": u.shareLink, "drafts": len(u.drafts), "people": u.people.list(), "encryption": u.enc.state(), "spell": map[string]any{"enabled": u.spell.enabled, "checked": u.spell.text != "", "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "persisted": u.persisted, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
@@ -1031,4 +1063,26 @@ func downloadChoices(exporters []transfer.Exporter) []components.SaverChoice {
 		}
 	}
 	return out
+}
+
+// publishEncState brings the "encryption" part of #state up to date. The rest of #state is written
+// when the canvas is drawn, which a change in the Save or People tab (unlock, restore, a directory
+// address confirmed) does not do.
+func (u *ui) publishEncState() {
+	el := js.Global().Get("document").Call("getElementById", "state")
+	if !el.Truthy() {
+		return
+	}
+	var m map[string]json.RawMessage
+	if json.Unmarshal([]byte(el.Get("textContent").String()), &m) != nil || m == nil {
+		return
+	}
+	b, err := json.Marshal(u.enc.state())
+	if err != nil {
+		return
+	}
+	m["encryption"] = b
+	if out, err := json.Marshal(m); err == nil {
+		el.Set("textContent", string(out))
+	}
 }
