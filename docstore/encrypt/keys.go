@@ -43,8 +43,22 @@ func ParseSSHRecipient(line string) (Recipient, error) {
 	if err != nil {
 		return Recipient{}, fmt.Errorf("encrypt: %w", err)
 	}
-	return Recipient{Label: comment, Type: pub.Type(), Fingerprint: ssh.FingerprintSHA256(pub), Key: r, Text: line}, nil
+	fp := ssh.FingerprintSHA256(pub)
+	return Recipient{Label: comment, Type: pub.Type(), Fingerprint: fp, Key: sshKeyed{Recipient: r, fp: fp}, Text: line}, nil
 }
+
+// sshKeyed is an SSH age recipient that remembers the SHA-256 fingerprint of its full public key.
+// agessh's recipient has no key accessor and puts only a 4-byte tag in its stanza, so two distinct
+// keys can share a tag; recipientID uses this to tell them apart. Wrapping is unchanged.
+type sshKeyed struct {
+	age.Recipient
+	fp string
+}
+
+func (s sshKeyed) keyFingerprint() string { return s.fp }
+
+// keyFingerprinter is implemented by a recipient that knows its full key's fingerprint.
+type keyFingerprinter interface{ keyFingerprint() string }
 
 // ParseAgeRecipient reads an age public key ("age1...").
 func ParseAgeRecipient(s string) (Recipient, error) {
