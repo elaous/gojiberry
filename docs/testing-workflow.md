@@ -11,7 +11,7 @@ remote check is wanted. The checks run here instead.
    (`make modules`).
 2. **Merge by squash**, one PR at a time. A stack is merged bottom-up, retargeting each PR to `main`
    after the one below it merges.
-3. **Every fifth merge in a row**, after squashing and merging the fifth PR, run the **full** suite on
+3. **Every tenth merge in a row**, after squashing and merging the tenth PR, run the **full** suite on
    `main` (`make check`, or `go build ./... && go vet ./... && GOOS=js GOARCH=wasm go vet ./... &&
    go test ./...` plus `make modules`), and fix what it finds on a branch of its own before anything
    else is merged. Then the count starts again from zero.
