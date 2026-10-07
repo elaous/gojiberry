@@ -544,6 +544,12 @@ func (a *Adapter) sealTo(id string, rs []age.Recipient, b Binding, data []byte) 
 	if a.Signer == nil && (b.Level == ProtectionE2EE || b.Signed) {
 		return nil, fmt.Errorf("%w: %s", ErrNoFrameSigner, id)
 	}
+	if a.Signer == nil && a.RequireSigned && a.binds(id) {
+		// This adapter refuses to read an unsigned frame of this document, so writing one would
+		// only make a file it cannot open, and one that could enter the window before the record
+		// says Signed. Fail closed: the host that set RequireSigned has the signer.
+		return nil, fmt.Errorf("%w: %s: this Adapter has RequireSigned and cannot sign, so it does not write an unsigned frame", ErrNoFrameSigner, id)
+	}
 	var buf bytes.Buffer
 	w, err := age.Encrypt(&buf, rs...)
 	if err != nil {
@@ -895,7 +901,30 @@ func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	return a.Inner.Save(ctx, id, ct)
+	if err := a.Inner.Save(ctx, id, ct); err != nil {
+		return err
+	}
+	return a.afterUnsignedWrite(ctx, id, b)
+}
+
+// afterUnsignedWrite closes the loop on an unsigned frame (an Adapter with no Signer) of a
+// document with a record that did not yet say Signed when the recipients were read: the record is
+// read again, and if it says Signed now, the owner flipped it between that read and this write, so
+// the file just written is one the record calls forged. The writer is told (ErrNoFrameSigner),
+// instead of finding out on the next Load. (The owner's re-key looks again after it flips, so a
+// save that this read misses is found there: see finishFiles.)
+func (a *Adapter) afterUnsignedWrite(ctx context.Context, id string, before Binding) error {
+	if a.Signer != nil || before.Signed || !a.binds(id) {
+		return nil
+	}
+	_, now, err := a.bind(ctx, id)
+	if err != nil {
+		return err
+	}
+	if now.Signed {
+		return fmt.Errorf("%w: %s: the document became signed while this client saved it, so the file it wrote is unsigned and refused as forged; the owner's Sharing.Repair with AcceptUnsigned keeps it, or a client with the Signer saves it again", ErrNoFrameSigner, id)
+	}
+	return nil
 }
 
 // Load implements docstore.Adapter: the document is decrypted with the keyring's identities,
@@ -1001,7 +1030,10 @@ func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest
 	if err != nil {
 		return err
 	}
-	return c.SaveIf(ctx, id, ct, rawPrev)
+	if err := c.SaveIf(ctx, id, ct, rawPrev); err != nil {
+		return err
+	}
+	return a.afterUnsignedWrite(ctx, id, b)
 }
 
 // Lock implements docstore.Locker by the inner store's, if it has one.

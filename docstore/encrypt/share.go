@@ -442,6 +442,13 @@ type Sharing struct {
 	beforeFlip func()
 }
 
+// ErrUnsignedAfterFlip is returned by the re-key (Repair, Add, Remove, SetProtection, Recover)
+// when, after it changed the record to say Signed, a file of the document is still unsigned: a
+// client with no Signer saved it in the few steps between the re-key's last look and the write
+// of the record. The record does say Signed and the file is refused as forged (it wraps
+// ErrForgedFrame); the owner checks it is theirs and runs Repair with AcceptUnsigned.
+var ErrUnsignedAfterFlip = errors.New("encrypt: a file was saved unsigned while the document was being marked signed")
+
 // RepairOption changes what Repair and Recover accept.
 type RepairOption func(*repairOpts)
 
@@ -746,7 +753,7 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string, ro repairOpts) 
 		if n = len(done); err != nil {
 			return n, stale, unreadable, err
 		}
-		again := false
+		again, flipped := false, false
 		// A re-key by an adapter that signs leaves every file with a signed frame: the record
 		// then says so (Signed), which is what makes an unsigned frame in the document forged.
 		signs := s.Adapter != nil && s.Adapter.Signer != nil
@@ -776,11 +783,28 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string, ro repairOpts) 
 			}
 			rec.Pending = false
 			rec.Signed = rec.Signed || signs
+			flipped = signs
 			return true, nil
 		}); err != nil {
 			return n, nil, nil, err
 		}
 		if !again {
+			if flipped {
+				// Look again, now that the record says Signed: a save by a client with no
+				// Signer that landed after the look above is found here, and a save that
+				// landed after this one is told by its own writer (Adapter.afterUnsignedWrite).
+				// Between them no such file goes unnoticed.
+				late, err := s.Adapter.unsignedFiles(ctx, docID)
+				if errors.Is(err, ErrForgedFrame) {
+					return n, nil, nil, fmt.Errorf("%w: %w", ErrUnsignedAfterFlip, err)
+				}
+				if err != nil {
+					return n, nil, nil, err
+				}
+				if len(late) > 0 {
+					return n, nil, nil, fmt.Errorf("%w: %w: %s: %s"+unsignedHint, ErrUnsignedAfterFlip, ErrForgedFrame, docID, strings.Join(late, ", "))
+				}
+			}
 			return n, nil, nil, nil
 		}
 	}
