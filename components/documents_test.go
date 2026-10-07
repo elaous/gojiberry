@@ -667,3 +667,32 @@ func TestHiddenNamesAreDrawnTranslatedNeverStoredTranslated(t *testing.T) {
 		mustContain(t, html, "11111111", "22222222", "Budget")
 	}
 }
+
+type codedErr struct{}
+
+func (codedErr) Error() string       { return "English from the server" }
+func (codedErr) PasskeyCode() string { return "account_exists" }
+
+// The answer "another tab already made the first passkey" is shown in the interface's language,
+// other failures as the server said them.
+func TestPasskeyShowsAlreadyCreatedInTheInterfaceLanguage(t *testing.T) {
+	old := Translate
+	defer func() { Translate = old }()
+	Translate = func(id, def string) string {
+		if id == "passkey.alreadyCreated" {
+			return "ERSTER PASSKEY SCHON DA"
+		}
+		return def
+	}
+	p := &Pending{Inline: true}
+	p.Run(func(context.Context) error { return fmt.Errorf("wrapped: %w", codedErr{}) })
+	html := render(t, Passkey(PasskeyProps{Supported: true, SignedIn: true, Pending: p}))
+	if !strings.Contains(html, "ERSTER PASSKEY SCHON DA") || strings.Contains(html, "English from the server") {
+		t.Errorf("%s", html)
+	}
+	q := &Pending{Inline: true}
+	q.Run(func(context.Context) error { return errors.New("plain failure") })
+	if html := render(t, Passkey(PasskeyProps{Supported: true, SignedIn: true, Pending: q})); !strings.Contains(html, "plain failure") {
+		t.Errorf("%s", html)
+	}
+}

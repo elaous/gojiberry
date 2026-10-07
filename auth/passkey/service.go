@@ -54,7 +54,13 @@ type Config struct {
 var (
 	ErrNeedEmail    = errors.New("passkey: an e-mail address is needed to make an account")
 	ErrBadChallenge = errors.New("passkey: the sign-in expired or was already used; start again")
-	ErrLastPasskey  = errors.New("passkey: this is the only way to sign in to the account; add another passkey or sign-in method first")
+	// ErrAlreadyCreated is returned by RegistrationFinish (HTTP 409, "code":"account_exists") when
+	// another ceremony for the same account's first passkey finished first (a second tab or device
+	// begun before the first finished). The account is not touched: the passkey this ceremony made
+	// is not saved, so the authenticator that made it holds a passkey the server does not know,
+	// which the person may delete there. It is not ErrBadChallenge: the challenge was good.
+	ErrAlreadyCreated = errors.New("passkey: the first passkey for this account was already made, in another tab or on another device; reload and add another passkey from your account if you want one (the passkey this device just made is not used and can be deleted)")
+	ErrLastPasskey    = errors.New("passkey: this is the only way to sign in to the account; add another passkey or sign-in method first")
 	// ErrCloneDetected is returned by LoginFinish when the credential's signature counter did
 	// not go up: the authenticator may have been copied. The sign-in is refused and the
 	// credential stays flagged (remove it and register again).
@@ -289,7 +295,9 @@ func (s *Service) RegistrationFinish(ctx context.Context, signedIn, token, label
 		c = add(acct)
 		if err := s.create(ctx, acct); err != nil {
 			if errors.Is(err, ErrExists) {
-				return nil, nil, false, ErrBadChallenge // made by someone else since: the challenge is stale
+				// Another ceremony for this account's first passkey won the conditional create
+				// (the second tab or device); nothing was written for this one.
+				return nil, nil, false, ErrAlreadyCreated
 			}
 			return nil, nil, false, err
 		}
@@ -490,6 +498,7 @@ func jsonOut(w http.ResponseWriter, status int, v any) {
 
 func fail(w http.ResponseWriter, err error) {
 	status := http.StatusBadRequest
+	code := ""
 	switch {
 	case errors.Is(err, ErrNotFound):
 		status = http.StatusNotFound
@@ -497,6 +506,9 @@ func fail(w http.ResponseWriter, err error) {
 		status = http.StatusGone
 	case errors.Is(err, ErrLastPasskey):
 		status = http.StatusConflict
+	case errors.Is(err, ErrAlreadyCreated):
+		status = http.StatusConflict
+		code = "account_exists"
 	case errors.Is(err, ErrSessionMismatch):
 		status = http.StatusForbidden
 	case errors.Is(err, ErrBusy):
@@ -509,7 +521,11 @@ func fail(w http.ResponseWriter, err error) {
 		log.Printf("passkey: %v", err)
 		msg = "passkey: internal error; try again shortly"
 	}
-	jsonOut(w, status, map[string]string{"error": msg})
+	out := map[string]string{"error": msg}
+	if code != "" {
+		out["code"] = code // for a client that tells this 409 from ErrLastPasskey's
+	}
+	jsonOut(w, status, out)
 }
 
 func (s *Service) handleRegisterBegin(w http.ResponseWriter, r *http.Request) {
