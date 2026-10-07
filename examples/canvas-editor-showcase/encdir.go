@@ -20,19 +20,34 @@ import (
 // The key directory of a docstore server, for the People tab: find a person by e-mail (the
 // verified or label-only mark comes from what the server answered) and "Publish my keys". The page
 // has no sign-in of its own, so the server and, if it needs one, a session token are settings kept
-// in this browser (localStorage). A page opened with ?docstore=https://host sets the server. The
-// calls go through dirclient.Directory, so they follow the API when it changes.
+// in this browser (localStorage). The calls go through dirclient.Directory, so they follow the API
+// when it changes.
+//
+// What the directory is given, and what it can say, makes its address a trust decision, so a link
+// does not make it: a page opened with ?docstore=https://host only OFFERS the address, and nothing
+// is sent to it until the person has confirmed it in a dialog that names the host. The address must
+// be https (http only for a host on this machine), it is confirmed again whenever it changes, a
+// session token belongs to one address and is dropped when the address changes (the token field is
+// a password field), and every "verified" mark says which host it is that vouches for it.
 
 const (
-	dirURLKey   = "showcase-enc:docstore"
-	dirTokenKey = "showcase-enc:docstoken"
+	dirURLKey      = "showcase-enc:docstore"
+	dirOKKey       = "showcase-enc:docstore-ok"   // the address the person confirmed
+	dirTokenKey    = "showcase-enc:docstoken"     // the session token
+	dirTokenURLKey = "showcase-enc:docstoken-for" // the address the token was given for
 )
 
 type dirUI struct {
-	url, token string
+	url, token string // the confirmed directory and its token: the only address anything is sent to
 	urlDraft   string
 	tokenDraft string
 	dir        dirclient.Directory
+	// offer is an address that was put forward (by a link, or found in storage without the
+	// person's confirmation) and waits for the person to confirm it; refused says why one was not
+	// even offered.
+	offer, refused string
+	// ask is the page's confirmation dialog (Asker.AskWith).
+	ask func(label, message string, do func())
 
 	email    string
 	rows     []components.DirRow
@@ -67,23 +82,109 @@ func lsSet(key, val string) {
 
 func newDirUI() dirUI {
 	d := dirUI{verified: map[string]bool{}, verifiedAdded: map[string]bool{}}
-	d.url, d.token = lsGet(dirURLKey), lsGet(dirTokenKey)
+	stored, ok := lsGet(dirURLKey), lsGet(dirOKKey)
+	if stored != "" {
+		switch clean, _, err := checkDirURL(stored); {
+		case err != nil:
+			d.refused = T("dir.refused", "The key directory address %q was not used: %s", stored, err.Error())
+			lsSet(dirURLKey, "")
+		case ok != clean:
+			d.offer = clean // saved, never confirmed here: asked about like a new one
+		default:
+			d.url = clean
+		}
+	}
+	// The token belongs to the address it was given for.
+	d.token = lsGet(dirTokenKey)
+	if d.token != "" && (d.url == "" || lsGet(dirTokenURLKey) != d.url) {
+		d.token = ""
+		lsSet(dirTokenKey, "")
+		lsSet(dirTokenURLKey, "")
+	}
 	if q := js.Global().Get("location").Get("search").String(); q != "" {
 		if v, err := url.ParseQuery(strings.TrimPrefix(q, "?")); err == nil {
 			if u := strings.TrimSpace(v.Get("docstore")); u != "" {
-				d.url = u
-				lsSet(dirURLKey, u)
+				// Never applied from a link: offered, and the person decides.
+				if clean, _, err := checkDirURL(u); err != nil {
+					d.refused = T("dir.refused", "The key directory address %q was not used: %s", u, err.Error())
+				} else if clean != d.url {
+					d.offer = clean
+				}
 			}
 		}
 	}
-	d.urlDraft, d.tokenDraft = d.url, d.token
+	d.urlDraft = d.url
 	d.connect()
 	return d
 }
 
+// host is the host of the confirmed directory, which every verified mark names.
+func (d *dirUI) host() string {
+	if _, h, err := checkDirURL(d.url); err == nil {
+		return h
+	}
+	return ""
+}
+
+// verifiedBy is the host to put on a verified mark (none for a mark that is not one).
+func (d *dirUI) verifiedBy(verified bool) string {
+	if verified {
+		return d.host()
+	}
+	return ""
+}
+
+// use makes clean the directory (the person confirmed it). A new address drops the session token:
+// it was given for the old one. The same address keeps it.
+func (d *dirUI) use(clean, token string) {
+	if clean != d.url {
+		d.token = ""
+	}
+	if token != "" {
+		d.token = token
+	}
+	d.url, d.offer, d.refused = clean, "", ""
+	d.urlDraft, d.tokenDraft = clean, ""
+	d.demoToken, d.rows, d.searched, d.notice = "", nil, false, ""
+	d.verified, d.verifiedAdded = map[string]bool{}, map[string]bool{}
+	lsSet(dirURLKey, clean)
+	lsSet(dirOKKey, clean)
+	lsSet(dirTokenKey, d.token)
+	if d.token != "" {
+		lsSet(dirTokenURLKey, clean)
+	} else {
+		lsSet(dirTokenURLKey, "")
+	}
+	d.connect()
+}
+
+// clear forgets the directory and its token.
+func (d *dirUI) clear() {
+	d.url, d.token, d.offer, d.refused = "", "", "", ""
+	d.urlDraft, d.tokenDraft, d.demoToken, d.rows, d.searched, d.notice = "", "", "", nil, false, ""
+	d.verified, d.verifiedAdded = map[string]bool{}, map[string]bool{}
+	for _, k := range []string{dirURLKey, dirOKKey, dirTokenKey, dirTokenURLKey} {
+		lsSet(k, "")
+	}
+	d.connect()
+}
+
+// confirm asks about an address before it is used: the dialog names the host, and says what the
+// directory is given.
+func (d *dirUI) confirm(clean, token string, e *encUI) {
+	_, host, _ := checkDirURL(clean)
+	do := func() { d.use(clean, token); e.render() }
+	if d.ask == nil {
+		return
+	}
+	d.ask(T("dir.useHost", "Use %s", host),
+		T("dir.confirmUse", "Use %s as the key directory? It is sent the e-mail addresses you look up and your session token, and the keys it answers with are shown as verified by it. Only use a server you trust: an address you were sent in a link is not a reason to.", host), do)
+	e.render()
+}
+
 func (d *dirUI) connect() {
 	d.dir = nil
-	if strings.TrimSpace(d.url) != "" {
+	if _, _, err := checkDirURL(d.url); err == nil {
 		d.dir = &dirclient.HTTP{Base: d.url, Token: d.sessionToken}
 	}
 }
@@ -147,7 +248,11 @@ func (d *dirUI) wire(props *components.RecipientsProps, e *encUI) {
 		}
 		rows := make([]components.DirRow, 0, len(keys))
 		for _, k := range keys {
-			rows = append(rows, components.DirRow{Label: k.Label, Type: k.Type, Fingerprint: k.Fingerprint, Key: k.Key, Verified: k.Verified})
+			by := ""
+			if k.Verified {
+				by = d.host()
+			}
+			rows = append(rows, components.DirRow{Label: k.Label, Type: k.Type, Fingerprint: k.Fingerprint, Key: k.Key, Verified: k.Verified, VerifiedBy: by})
 		}
 		return rows, nil
 	}
@@ -196,22 +301,66 @@ func (d *dirUI) settingsPanel(e *encUI) []xango.Node {
 	if d.dir != nil {
 		status = T("dir.using", "Key directory: %s", d.url)
 	}
-	input := func(id, label, value string, on func(string)) xango.Node {
-		return xango.El("input", []xango.Attr{xango.A("type", "text"), xango.A("id", id), xango.A("value", value), xango.A("aria-label", label), xango.A("placeholder", label),
+	input := func(id, typ, label, value string, on func(string)) xango.Node {
+		return xango.El("input", []xango.Attr{xango.A("type", typ), xango.A("id", id), xango.A("value", value), xango.A("aria-label", label), xango.A("placeholder", label),
 			xango.A("autocomplete", "off"), xango.A("style", "width:100%;box-sizing:border-box;font-size:12px;margin:2px 0"),
 			xango.On("input", func(ev xango.Event) { on(xango.EventValue[string](ev)) })})
 	}
-	return []xango.Node{xango.El("div", []xango.Attr{xango.A("id", "dir-settings"), xango.A("style", "margin-top:1em;border-top:1px solid #d1d5db;padding-top:8px")},
-		para("dir-status", status, false),
-		input("dir-url", T("dir.urlLabel", "Docstore server address (https://…)"), d.urlDraft, func(v string) { d.urlDraft = v }),
-		input("dir-token", T("dir.tokenLabel", "Session token, if the server needs one"), d.tokenDraft, func(v string) { d.tokenDraft = v }),
-		btn("dir-save", T("dir.save", "Use this key directory"), func() {
-			d.url, d.token = strings.TrimSpace(d.urlDraft), strings.TrimSpace(d.tokenDraft)
-			d.demoToken, d.rows, d.searched, d.notice = "", nil, false, ""
-			d.verified = map[string]bool{}
-			lsSet(dirURLKey, d.url)
-			lsSet(dirTokenKey, d.token)
-			d.connect()
-			e.render()
-		}, false))}
+	nodes := []xango.Node{para("dir-status", status, false)}
+	if d.refused != "" {
+		nodes = append(nodes, para("dir-refused", d.refused, true))
+	}
+	if d.offer != "" {
+		_, host, _ := checkDirURL(d.offer)
+		nodes = append(nodes, xango.El("div", []xango.Attr{xango.A("id", "dir-offer"), xango.A("style", "border:1px solid #d97706;border-radius:6px;padding:8px;margin:6px 0")},
+			para("dir-offer-text", T("dir.offer", "This page was opened with, or has saved, the key directory address %s. Nothing has been sent to it. Use it only if you trust %s.", d.offer, host), false),
+			xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px")},
+				btn("dir-offer-review", T("dir.offerReview", "Review and use %s…", host), func() { d.confirm(d.offer, "", e) }, false),
+				btn("dir-offer-ignore", T("dir.offerIgnore", "Ignore it"), func() {
+					d.offer = ""
+					if lsGet(dirURLKey) != "" && lsGet(dirOKKey) != lsGet(dirURLKey) {
+						lsSet(dirURLKey, "")
+					}
+					e.render()
+				}, false))))
+	}
+	nodes = append(nodes,
+		input("dir-url", "text", T("dir.urlLabel", "Docstore server address (https://…)"), d.urlDraft, func(v string) { d.urlDraft = v }),
+		input("dir-token", "password", tokenLabel(d), d.tokenDraft, func(v string) { d.tokenDraft = v }),
+		xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px")},
+			btn("dir-save", T("dir.save", "Use this key directory"), func() { d.save(e) }, false),
+			btn("dir-clear", T("dir.clear", "Stop using a key directory"), func() { d.clear(); e.render() }, d.url == "" && d.offer == "")))
+	return []xango.Node{xango.El("div", []xango.Attr{xango.A("id", "dir-settings"), xango.A("style", "margin-top:1em;border-top:1px solid #d1d5db;padding-top:8px")}, nodes...)}
+}
+
+func tokenLabel(d *dirUI) string {
+	if d.token != "" {
+		return T("dir.tokenSet", "A session token is set for this server (type a new one to replace it)")
+	}
+	return T("dir.tokenLabel", "Session token, if the server needs one")
+}
+
+// save applies what was typed: an unchanged address only changes the token; a new one is checked
+// and then confirmed in a dialog that names its host before anything uses it.
+func (d *dirUI) save(e *encUI) {
+	raw := strings.TrimSpace(d.urlDraft)
+	if raw == "" {
+		d.clear()
+		e.render()
+		return
+	}
+	clean, _, err := checkDirURL(raw)
+	if err != nil {
+		d.refused = T("dir.refused", "The key directory address %q was not used: %s", raw, err.Error())
+		e.render()
+		return
+	}
+	d.refused = ""
+	token := strings.TrimSpace(d.tokenDraft)
+	if clean == d.url {
+		d.use(clean, token)
+		e.render()
+		return
+	}
+	d.confirm(clean, "", e) // a token typed for another address is dropped: it is given once the address is confirmed
 }

@@ -20,6 +20,10 @@ type RecipientRow struct {
 	// and that the account published the key, not that the key is safe; without it the
 	// e-mail is only a label and the owner confirms the fingerprint.
 	Verified bool
+	// VerifiedBy is the host of the directory that said so ("verified by dir.example"): the mark
+	// is that directory's word, and a page whose directory address came from a link must not let
+	// it pass for more. Empty shows the plain mark.
+	VerifiedBy string
 	// CanRemove and RemoveBlocked are for an owner key when RecipientsProps.RemoveOwner is set:
 	// whether the host would let the key be taken out, and, when not, why in words (the last key,
 	// the only way back, the store unlocked with this key alone).
@@ -32,6 +36,8 @@ type RecipientRow struct {
 type DirRow struct {
 	Label, Type, Fingerprint, Key string
 	Verified                      bool
+	// VerifiedBy is the host of the directory that answered (RecipientRow.VerifiedBy).
+	VerifiedBy string
 }
 
 // RecipientsProps configures Recipients.
@@ -159,7 +165,7 @@ func Recipients(p RecipientsProps) xango.Node {
 			xango.El("code", []xango.Attr{xango.A("class", "gj-recip-fingerprint")}, xango.Text(r.Fingerprint)),
 		}
 		if r.Verified {
-			cells = append(cells, verifiedMark(true))
+			cells = append(cells, verifiedMark(true, r.VerifiedBy))
 		}
 		cells = append(cells, extra...)
 		return xango.El("li", []xango.Attr{xango.A("class", class), xango.A("data-fingerprint", r.Fingerprint)}, cells...)
@@ -233,7 +239,7 @@ func Recipients(p RecipientsProps) xango.Node {
 				xango.El("p", []xango.Attr{xango.A("class", "gj-recip-parsed")},
 					xango.Text(trf("recipients.parsed", "%s key for %s. Its fingerprint is:", p.Parsed.Type, orNone(p.Parsed.Label)))),
 				xango.El("code", []xango.Attr{xango.A("class", "gj-recip-fingerprint gj-recip-parsed-fingerprint")}, xango.Text(p.Parsed.Fingerprint)),
-				verifiedMark(p.Parsed.Verified))
+				verifiedMark(p.Parsed.Verified, p.Parsed.VerifiedBy))
 			if p.TrustVerified && p.Parsed.Verified {
 				// The account is verified and published this key: no typing, the fingerprint
 				// above is still shown. Add confirms with the fingerprint shown.

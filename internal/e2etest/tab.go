@@ -793,6 +793,14 @@ func (d *Tab) Reload() {
 	d.WaitFor("the page to start", "document.getElementById('state') && document.getElementById('state').textContent !== '(pending)'")
 }
 
+// Goto loads another address of the site in the same tab (the browser's profile, its
+// localStorage and its virtual authenticators stay) and waits for #state again: path is "/index.html?x=y".
+func (d *Tab) Goto(s *Site, path string) {
+	d.t.Helper()
+	d.must(chromedp.Navigate(s.URL + path))
+	d.WaitFor("the page to start", "document.getElementById('state') && document.getElementById('state').textContent !== '(pending)'")
+}
+
 // URL is the page's address.
 func (d *Tab) URL() string { d.t.Helper(); return d.Str(`location.href`) }
 

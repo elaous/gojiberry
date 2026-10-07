@@ -264,10 +264,28 @@ func TestAnInterruptedEnableIsFinishedAfterAReload(t *testing.T) {
 	d.WaitSelector("#enc-interrupted")
 	d.OK(strings.Contains(d.Text("#enc-interrupted-text"), "did not finish") && d.State().Bool("encryption.interrupted"), "the next load knows: "+d.Text("#enc-interrupted-text"))
 	d.OK(d.Has("#enc-finish") && d.Has("#enc-undo"), "finish and undo are offered")
-	d.Click("#enc-finish") // sealing what is still plain needs no key
+	d.OK(strings.Contains(d.Text("#enc-interrupted-text"), "SHA256:"), "the journal's keys are shown with their fingerprints: "+d.Text("#enc-interrupted-text"))
+	// Finishing asks first, naming the keys it would make the store's.
+	d.Click("#enc-finish")
+	d.WaitSelector(`[role="alertdialog"]`)
+	d.OK(strings.Contains(d.Text(`[role="alertdialog"]`), "SHA256:") && strings.Contains(d.Text(`[role="alertdialog"]`), "me@laptop"), "the question names the keys: "+d.Text(`[role="alertdialog"]`))
+	d.Click(`[role="alertdialog"] .gj-dialog-actions button:first-child`) // cancel
+	d.OK(d.Has("#enc-interrupted"), "cancelling leaves it as it was")
+	// Some files are encrypted already, and nothing signed the journal (an SSH key cannot sign at
+	// setup): without the key that opens them, nothing vouches for it.
+	d.Click("#enc-finish")
+	confirmDialog(d)
+	d.WaitSelector("#enc-error")
+	d.OK(strings.Contains(d.Text("#enc-error"), "not vouched for"), "refused without the key: "+d.Text("#enc-error"))
+	d.ChooseFile(func() { d.Click("#enc-unlock-ssh") }, "id_ed25519", priv)
+	d.WaitFor("unlocked", `(document.getElementById('enc-status') || {}).textContent === 'Unlocked'`)
+	d.Click("#enc-finish")
+	confirmDialog(d)
 	d.WaitFor("finished", `!document.querySelector('#enc-interrupted') && (document.getElementById('enc-message') || {textContent: ''}).textContent.includes('was finished')`)
 	d.OK(strings.Contains(storedText(d), "Third plain"), "the catalog still lists the document")
 	d.OK(!strings.Contains(storedText(d), "Everything on this canvas"), "no document text is left in the clear")
+	d.Reload()
+	d.Click(`button[data-tab="save"]`)
 	d.ChooseFile(func() { d.Click("#enc-unlock-ssh") }, "id_ed25519", priv)
 	d.WaitFor("unlocked", `(document.getElementById('enc-status') || {}).textContent === 'Unlocked'`)
 	d.Click(".gj-doclist-open")
@@ -352,14 +370,28 @@ func TestPeopleTabUsesTheKeyDirectory(t *testing.T) {
 	turnOn(t, d, "")
 	saveConfidential(d, "For Bo")
 	d.Click(`button[data-tab="people"]`)
+	// A link only OFFERS a directory: nothing is used, saved as confirmed or sent until the person
+	// confirms it in a dialog that names the host.
+	dirHost := strings.TrimPrefix(site.URL, "http://")
+	d.WaitSelector("#dir-offer")
+	d.OK(d.State().Str("encryption.dir.url") == "" && d.State().Str("encryption.dir.offer") == site.URL && !d.Has(".gj-recip-dir-email"), "a link sets no directory: "+d.Text("#dir-status"))
+	d.OK(d.Str(`localStorage.getItem('showcase-enc:docstore-ok') || ''`) == "", "and nothing is saved as confirmed")
+	d.Click("#dir-offer-review")
+	d.WaitSelector(`[role="alertdialog"]`)
+	d.OK(strings.Contains(d.Text(`[role="alertdialog"]`), dirHost), "the question names the host: "+d.Text(`[role="alertdialog"]`))
+	d.Click(`[role="alertdialog"] .gj-dialog-actions button:first-child`) // cancel
+	d.OK(d.State().Str("encryption.dir.url") == "" && !d.Has(".gj-recip-dir-email"), "cancelling uses nothing")
+	d.Click("#dir-offer-review")
+	confirmDialog(d)
 	d.WaitSelector(".gj-recip-dir-email")
-	d.OK(strings.Contains(d.Text("#dir-status"), site.URL), "the directory is the one in the address: "+d.Text("#dir-status"))
+	d.OK(strings.Contains(d.Text("#dir-status"), site.URL), "the directory is the one confirmed: "+d.Text("#dir-status"))
 
 	d.Fill(".gj-recip-dir-email", "bo@example.com")
 	d.WaitFor("the find button", `!document.querySelector('.gj-recip-dir-find').disabled`)
 	d.Click(".gj-recip-dir-find")
 	d.WaitSelector(".gj-recip-dir-row")
 	d.OK(d.Count(".gj-recip-dir-row") == 1 && d.Has(".gj-recip-dir-row .gj-recip-verified"), "Bo's key is listed with the verified mark")
+	d.OK(strings.Contains(d.Text(".gj-recip-dir-row .gj-recip-verified"), "verified by "+dirHost), "the mark names the directory: "+d.Text(".gj-recip-dir-row .gj-recip-verified"))
 	d.Click(".gj-recip-pick")
 	d.WaitFor("the draft", `document.querySelector('.gj-recip-parsed-fingerprint') && document.querySelector('.gj-recip-form .gj-recip-verified')`)
 	d.Fill(".gj-recip-confirm", d.Text(".gj-recip-parsed-fingerprint"))
@@ -380,6 +412,7 @@ func TestPeopleTabUsesTheKeyDirectory(t *testing.T) {
 	// A server with no key directory: a clear message, no crash.
 	d.Fill("#dir-url", site.URL+"/nodir")
 	d.Click("#dir-save")
+	confirmDialog(d) // a new address is confirmed again
 	d.WaitFor("the new directory", `document.querySelector('#dir-status').textContent.includes('/nodir')`)
 	d.Fill(".gj-recip-dir-email", "bo@example.com")
 	d.WaitFor("the find button", `!document.querySelector('.gj-recip-dir-find').disabled`)

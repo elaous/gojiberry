@@ -342,3 +342,32 @@ func TestRecoveryKeyIsOfferedBesidesAnSSHKeyToo(t *testing.T) {
 		t.Fatalf("%q", shown)
 	}
 }
+
+// A verified mark is the directory's word: when the host names the directory, the mark says which
+// ("verified by host"), in the list, in the parsed key and in the picker.
+func TestVerifiedMarkNamesTheDirectory(t *testing.T) {
+	p := RecipientsProps{
+		Owner:   []RecipientRow{{Label: "me", Type: "age-x25519", Fingerprint: "SHA256:me"}},
+		Shared:  []RecipientRow{{Label: "bo@x.io", Type: "age-x25519", Fingerprint: "SHA256:bo", Verified: true, VerifiedBy: "dir.example"}},
+		Parsed:  &RecipientRow{Label: "bo@x.io", Type: "age-x25519", Fingerprint: "SHA256:bo", Verified: true, VerifiedBy: "dir.example"},
+		Draft:   "age1bo",
+		Pending: &Pending{Inline: true},
+		Add:     func(context.Context, string, string) error { return nil },
+		Directory: func(context.Context, string) ([]DirRow, error) {
+			return nil, nil
+		},
+		DirResults: []DirRow{{Label: "bo@x.io", Type: "age-x25519", Fingerprint: "SHA256:bo", Key: "age1bo", Verified: true, VerifiedBy: "dir.example"}},
+	}
+	html := render(t, Recipients(p))
+	if got := strings.Count(html, "verified by dir.example"); got != 3 {
+		t.Errorf("want the directory named on all 3 marks, got %d: %s", got, html)
+	}
+	if strings.Contains(html, "verified e-mail<") {
+		t.Errorf("the plain mark is still shown: %s", html)
+	}
+	// Without the host, the plain mark.
+	p.Shared[0].VerifiedBy, p.Parsed.VerifiedBy, p.DirResults[0].VerifiedBy = "", "", ""
+	if html := render(t, Recipients(p)); strings.Contains(html, "verified by") || !strings.Contains(html, "verified e-mail") {
+		t.Errorf("%s", html)
+	}
+}

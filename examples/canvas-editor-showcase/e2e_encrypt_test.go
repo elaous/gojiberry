@@ -195,6 +195,12 @@ func TestEncryptedStore(t *testing.T) {
 	// first; this test means to drop it.
 	d.OK(d.Has("#enc-lock-discard"), "locking with an unsaved document offers to discard it")
 	d.Click("#enc-lock-discard")
+	d.WaitSelector(`[role="alertdialog"]`)
+	d.OK(strings.Contains(d.Text(`[role="alertdialog"]`), "cannot be brought back"), "discarding is asked about, saying it is lost")
+	d.Click(`[role="alertdialog"] .gj-dialog-actions button:first-child`) // cancel
+	d.OK(d.Str(`(document.getElementById('enc-status') || {}).textContent`) == "Unlocked", "cancelling keeps the store unlocked")
+	d.Click("#enc-lock-discard")
+	confirmDialog(d)
 	d.WaitFor("locked", `(document.getElementById('enc-status') || {}).textContent === 'Locked'`)
 	d.ChooseFile(func() { d.Click(".gj-doclist-import-pack") }, "Vault.opendoc", pack)
 	d.WaitFor("the key needed", `document.querySelector('.gj-saver-status').textContent.includes('need a key')`)

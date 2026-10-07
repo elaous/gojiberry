@@ -196,6 +196,11 @@ func main() {
 		u.title = ""
 		openDoc(docfile.Document{})
 		u.find, u.spell.spans, u.spell.words, u.spell.text = findState{}, nil, nil, ""
+		// What was translated or found wrong in the text, and the replies typed to its comments, are
+		// the document's text too: not left on screen behind a lock.
+		u.lang.translated, u.lang.transText, u.lang.issues, u.lang.text = "", "", nil, ""
+		u.lang.selFrom, u.lang.selTo, u.lang.checked, u.lang.err = 0, 0, false, ""
+		u.drafts = map[string]string{}
 		u.navSig, u.statsSig, u.a11ySig, u.a11yCache, u.shareLink = "", "", "", nil, ""
 		renderUI()
 	}
@@ -225,6 +230,8 @@ func main() {
 	u.saver.Saver.ConfidentialCheck, u.saver.Saver.Rekey = u.enc.store.Check, u.enc.store.Rekey
 	u.saver.PackKeys = u.enc.store.PackKeys
 	u.enc.swap = u.encSwap
+	u.enc.dir.ask = u.saver.Asker.AskWith
+	u.watchEncConfig()
 	u.saver.ProtectionAvailable = func(target string) bool { return target == "browser" && u.enc.store.Enabled() }
 	u.saver.OnChange = func() {
 		t, _ := u.saver.Where()
@@ -678,7 +685,7 @@ func main() {
 		}
 		b, _ := json.Marshal(map[string]any{
 			"hyphenate": state.Hyphenate, "columns": columnCount, "columnConfig": columnCfg, "language": map[string]any{"translate": u.lang.translator != nil, "grammar": u.lang.grammar != nil, "issues": len(u.lang.issues), "translated": u.lang.translated, "error": u.lang.err, "busy": u.lang.busy},
-			"stats": statsState(stats), "share": u.shareLink, "people": u.people.list(), "encryption": u.enc.state(), "spell": map[string]any{"enabled": u.spell.enabled, "checked": u.spell.text != "", "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
+			"stats": statsState(stats), "share": u.shareLink, "drafts": len(u.drafts), "people": u.people.list(), "encryption": u.enc.state(), "spell": map[string]any{"enabled": u.spell.enabled, "checked": u.spell.text != "", "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "persisted": u.persisted, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
