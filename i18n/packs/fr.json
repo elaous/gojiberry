@@ -285,6 +285,7 @@
   "passkey.created": "ajoutée %s",
   "passkey.lastUsed": "utilisée pour la dernière fois %s",
   "passkey.synced": "synchronisée sur vos appareils",
+  "passkey.alreadyCreated": "La première passkey de ce compte a déjà été créée, dans un autre onglet ou sur un autre appareil. Rechargez cette page et ajoutez une autre passkey depuis votre compte si vous le souhaitez. La passkey que cet appareil vient de créer n'est pas utilisée : vous pouvez la supprimer dans les paramètres de passkeys de votre navigateur ou de votre authentificateur.",
   "folder.unsupported": "Ce navigateur ne peut pas enregistrer dans un dossier de votre choix (Chrome, Edge et Opera le peuvent). Utilisez le stockage de ce navigateur ou téléchargez vos documents.",
   "folder.saving": "Enregistrement dans le dossier %s",
   "folder.change": "Choisir un autre dossier",

@@ -1,7 +1,9 @@
 package client
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -81,4 +83,34 @@ func classify(name, message string, elapsed time.Duration) error {
 
 func cancelled(name, message string) error {
 	return &kindError{"passkey: cancelled (" + name + ": " + message + ")", ErrCancelled}
+}
+
+// ErrAlreadyCreated is returned by Register when another tab or device finished the first passkey
+// of the same account first (the server's 409 "account_exists"). Nothing is wrong with this
+// ceremony except that it came second: tell the person to reload and add another passkey from the
+// account if they want one, and that the passkey this device just made is not used.
+var ErrAlreadyCreated error = &codedError{msg: "passkey: the first passkey for this account was already made in another tab or on another device; reload and add another passkey from your account if you want one", code: CodeAccountExists}
+
+// CodeAccountExists is the "code" of the server's ErrAlreadyCreated answer; an error carrying it
+// has the method PasskeyCode (the components package shows it in the interface's language).
+const CodeAccountExists = "account_exists"
+
+type codedError struct{ msg, code string }
+
+func (e *codedError) Error() string       { return e.msg }
+func (e *codedError) PasskeyCode() string { return e.code }
+func (e *codedError) Is(t error) bool {
+	c, ok := t.(*codedError)
+	return ok && c.code == e.code
+}
+
+func serverError(status int, body []byte) error {
+	var e struct{ Error, Code string }
+	if json.Unmarshal(body, &e) == nil && e.Error != "" {
+		if status == 409 && e.Code == CodeAccountExists {
+			return ErrAlreadyCreated
+		}
+		return errors.New(e.Error)
+	}
+	return fmt.Errorf("passkey: the server answered %d", status)
 }

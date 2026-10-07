@@ -2,6 +2,7 @@ package components
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/elaous/gojiberry/xango"
@@ -110,8 +111,20 @@ func Passkey(p PasskeyProps) xango.Node {
 	}
 	children = append(children, xango.El("p", []xango.Attr{xango.A("class", "gj-passkey-note")},
 		xango.Text(tr("passkey.note", "A passkey is two factors in one: your device, and the fingerprint, face or PIN that unlocks it. There is no separate code to type."))))
-	children = append(children, pendingError(p.Pending)...)
+	children = append(children, passkeyError(p.Pending)...)
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-passkey")}, children...)
+}
+
+// passkeyError is pendingError, except that the answer "another tab or device already made this
+// account's first passkey" (an error with PasskeyCode "account_exists", see auth/passkey/client)
+// is shown in the interface's language.
+func passkeyError(p *Pending) []xango.Node {
+	var coded interface{ PasskeyCode() string }
+	if err := p.Err(); err != nil && errors.As(err, &coded) && coded.PasskeyCode() == "account_exists" {
+		return []xango.Node{xango.El("p", []xango.Attr{xango.A("class", "gj-doc-error"), xango.A("role", "alert")},
+			xango.Text(tr("passkey.alreadyCreated", "The first passkey for this account was already made, in another tab or on another device. Reload this page and add another passkey from your account if you want one. The passkey this device just made is not used: you can delete it in your browser's or authenticator's passkey settings.")))}
+	}
+	return pendingError(p)
 }
 
 func passkeyMeta(r PasskeyRow) string {
