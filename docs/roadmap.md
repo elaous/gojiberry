@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, and #PRNUM `RepairAll` with `Resign`; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
+5 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, and #92 `RepairAll` with `Resign`; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
 
 ## Notes for upgraders
 
