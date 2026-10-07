@@ -132,8 +132,9 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
   The checks now look at every file of a document (an unreadable one that is not provably someone
   else's is `ErrUnreadable`, not skipped), `Sharing.PendingStatus`/`saver.VerifyReport.Pending`
   surface a re-key left pending, `FileSeqFloor` is cached and `RaiseMany` batches it, and a floor
-  whose storage fails reports `ErrFloorDegraded` (`encrypt.SetFloorDegradedHandler`; the showcase,
-  once it uses the encrypting adapter, must set it or poll `StorageSeqFloor.Err()`). A client that reads or saves with a `StoreKeyring` or
+  whose storage fails reports `ErrFloorDegraded` (`encrypt.SetFloorDegradedHandler`; the showcase
+  keeps an in-memory floor, which cannot degrade, so a host with a `LocalStorageSeqFloor` must set it or poll
+  `StorageSeqFloor.Err()`). A client that reads or saves with a `StoreKeyring` or
   `ConfidentialKeyring` now also reads the record on `Load` (it needs `OwnerSigners`, as saving
   already did); a key-only reader (`Static`) is unchanged. New errors: `docstore.ErrDowngrade`
   (`encrypt.ErrDowngrade`) from `Load`/`Save`/re-key/`SetProtection`, `saver.VerifyReport.Downgraded`;
@@ -156,16 +157,28 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
    documents with signed recipient lists, the passkey as a recipient and as a way in, and
    (step 5) encrypted records in packs, confidential catalog entries (`saver` protection
    level, placeholder name, `Reveal`, `SetProtection`, `encrypt.ConfidentialCheck`). Left:
-   1. The showcase wiring, which needs the key management UX (where the owner's key lives, how
-      it is unlocked, the "make confidential" switch, the recovery key shown once, a lock mark
-      in the document list).
-   2. A keyring that wraps a confidential document's files for people's keys only, and re-keys
-      its older copies on the switch.
+   1. **Done in the showcase** (`examples/canvas-editor-showcase`, `encstore`; encryption stays off unless
+      turned on; section 5.7 of the design): "Encrypt this store" in the Save tab (a local passkey through PRF, an
+      SSH public key, a recovery key shown before it is committed; unlock state in memory only, a Lock button that
+      closes the open document), lock marks and "Make (not) confidential" with a question for documents and
+      folders, Reveal, sealed `.opendoc` packs (`encrypt.PackSealer` through `Session.PackKeys`), and the People
+      tab's keys control. Also done there (PR #81 review): every change of the keys is a transaction with a
+      journal (a failure puts everything back, a crash is finished or undone on the next load, and finishing
+      needs the journal's signed link), a passkey alone needs an explicit acknowledgement, Erase the encrypted
+      store for lost keys, removing a key and replacing a passkey, seals, links and an anchor in the signed
+      frames that make a replaced key list detectable at unlock, passkey failures told apart, the directory
+      picker and "Publish my keys" behind `dirclient` (the address is confirmed by the person), and placeholders
+      drawn in the interface's language. Left: the real app (the owner signers must live out of reach of the
+      store's writers: the seals cannot stop a whole-store rollback, see section 5.7; a passkey from a server
+      session rather than a local one), and publishing with proof of possession (the showcase holds only the
+      owners' public keys, and a passkey would need another assertion per signature).
+   2. **Done:** a keyring that wraps a confidential document's files for people's keys only, and re-keys
+      its older copies on the switch (`ConfidentialKeyring`, `Sharing.SetProtection`, `RekeyHook`).
    3. **Done (components and library):** the People-tab "my passkey" control with the second-key rule and
       the recovery key shown once, and the verified-e-mail mark with `encrypt.KeyDirectory` /
       `AdapterDirectory` (C.4); the server rule (the `directory/` prefix is reserved from `/docs`, records
       are signed by a configured directory key and written only by `POST /directory/publish`, which needs a
-      provider session with a verified e-mail) and a demo host, `examples/people-keys-demo`. Also done:
+      provider session with a verified e-mail) and a demo host, `examples/people-keys-demo`; the showcase's People tab has the same key controls, with the directory picker and a publish button when a docstore server is configured (5.7). Also done:
       revoking (`DELETE /directory/keys/<fingerprint>`) and rotating the directory key (`KEY_PREV`, `Resign`),
       proof of possession and ssh-ed25519 attestation (`Held`/`Attested`, a stronger mark), a signed
       transparency log (`GET /directory/log`, keyed addresses, signed head, truncation checks), shared rate
@@ -175,8 +188,8 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
       **owner-held identity** (an enrolled owner key that must sign every publish and revoke, the
       `OwnerSigned` mark, rotation and a 24 hour reset, `encrypt.AuditAddress`) with the Go and browser
       client `docstore/directoryclient` and its wiring in `examples/people-keys-demo` (publish, revoke,
-      enroll, watch my address; e2e with the virtual authenticator). Left: wiring it in the showcase/app (the
-      note in step 4b), trust on first use of the owner key and witnesses for the log (see the limits in
+      enroll, watch my address; e2e with the virtual authenticator). Left: wiring it in the app, and the showcase's owner-signed publish (the
+      showcase has the directory picker and a plain publish, 5.7; the note in step 4b), trust on first use of the owner key and witnesses for the log (see the limits in
       step 4b).
       **Round 3 of the directory review (behavior changes and upgrade notes):** the client's
       `Key.OwnerSigned` is now true only when the row's owner signature verifies under a key the client
@@ -215,8 +228,8 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
       `GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES`) names the client for the per-IP lookup and failed-admin
       budgets. Documented limits: a clock-ahead replica, log reads sharing the lookup shards, and the
       per-address (not per-user) admin failure budget behind a proxy (step 4b).
-   4. Hiding folder names of confidential folders.
-   5. **Downgrade and deleted-record detection: done** (library; C.5 and step 5.7 of
+   4. **Done:** hiding folder names of confidential folders (and the showcase's switch for them).
+   5. **Downgrade and deleted-record detection: done** (library; C.5 and step 5.8 of
       [encryption-and-passkeys.md](encryption-and-passkeys.md)). The level and the record's seq are
       inside the encrypted frame, so a store writer who deletes or replays a `keys:<ID>` record is
       caught on `Save`, `Load` and every re-key with no client state (`ErrDowngrade`); an owner-signed
@@ -227,7 +240,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
       the truth by anything inside the store, and only a client-side floor that outlives it notices
       (a fresh client has none); files still in the unsigned v1/v2 frames are forgeable until their
       document is re-keyed (`Sharing.Repair`); wiring `VerifyIndex`, a floor and its degraded warning
-      into the showcase sign-in.
+      into the app's sign-in (the showcase has an in-memory floor and no sign-in).
 3. **Public docstore.** An anonymous offer: no account, one document per session, a link
    and a download always, deleted 24 hours after the last edit (viewing does not renew).
    Design, wording of the promise, and the abuse controls that must exist before launch:

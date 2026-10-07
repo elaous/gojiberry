@@ -3,6 +3,7 @@ package components
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -229,6 +230,146 @@ func TestRecoveryKeyButtonNeedsAHostThatCanShowTheSecret(t *testing.T) {
 	p.OnRecoveryKey = func(string) {}
 	p.CreateRecoveryKey = func(context.Context) (string, error) { return "x", nil }
 	mustContain(t, render(t, Recipients(p)), "Create a recovery key")
+}
+
+// A recovery key whose secret is shown before the store commits it: the key is not added until the
+// person says they saved the secret and confirms; cancelling adds nothing.
+func TestRecoveryKeyIsCommittedOnlyAfterTheSecretIsAcknowledged(t *testing.T) {
+	var committed, cancelled, acked int
+	p := RecipientsProps{
+		AddMyPasskey: func(context.Context) error { return nil }, PasskeySupported: true, Confidential: true,
+		Owner:                 []RecipientRow{{Type: "passkey-prf", Fingerprint: "SHA256:p1"}},
+		CreateRecoveryKey:     func(context.Context) (string, error) { return "x", nil },
+		RecoverySecret:        "AGE-SECRET-KEY-1ABC",
+		CommitRecoveryKey:     func(context.Context) error { committed++; return nil },
+		CancelRecoveryKey:     func() { cancelled++ },
+		OnRecoveryAcknowledge: func(bool) { acked++ },
+		OnRecoveryDone:        func() { t.Error("the older done button is shown with a commit step") },
+		Pending:               &Pending{Inline: true},
+	}
+	html := render(t, Recipients(p))
+	mustContain(t, html, "AGE-SECRET-KEY-1ABC", "I have saved this recovery key somewhere safe", "Add this recovery key", "Cancel: do not add it")
+	mustNotContain(t, html, "gj-recip-recovery-done")
+	if !strings.Contains(html, `class="gj-recip-recovery-commit" disabled="disabled"`) {
+		t.Fatalf("the commit button is on before the acknowledgement: %s", html)
+	}
+	n := Recipients(p)
+	for _, h := range findHandlers(n, "click") {
+		h(xango.NewEvent("click", nil, false, nil, nil))
+	}
+	if committed != 0 || cancelled != 1 {
+		t.Fatalf("committed %d cancelled %d: only Cancel may act before the acknowledgement", committed, cancelled)
+	}
+	for _, h := range findHandlers(n, "change") {
+		h(xango.NewEvent("change", nil, true, nil, nil))
+	}
+	if acked != 1 {
+		t.Fatalf("acknowledgement not reported: %d", acked)
+	}
+	p.RecoveryAcknowledged = true
+	n = Recipients(p)
+	if strings.Contains(render(t, n), `class="gj-recip-recovery-commit" disabled`) {
+		t.Fatal("the commit button stays off after the acknowledgement")
+	}
+	for _, h := range findHandlers(n, "click") {
+		h(xango.NewEvent("click", nil, false, nil, nil))
+	}
+	if committed != 1 {
+		t.Fatalf("committed %d", committed)
+	}
+}
+
+func TestOwnerKeysCanBeRemovedOrReplacedAfterAsking(t *testing.T) {
+	var removed, replaced, asked []string
+	p := RecipientsProps{
+		Owner: []RecipientRow{
+			{Label: "My passkey", Type: "passkey-prf", Fingerprint: "SHA256:p1", CanRemove: false, RemoveBlocked: "Keep a recovery key or an SSH key."},
+			{Label: "Recovery key", Type: "age-x25519", Fingerprint: "SHA256:r1", CanRemove: true},
+		},
+		RemoveOwner:  func(_ context.Context, fp string) error { removed = append(removed, fp); return nil },
+		ReplaceOwner: func(_ context.Context, fp string) error { replaced = append(replaced, fp); return nil },
+		Ask:          func(m string, do func()) { asked = append(asked, m); do() },
+		Pending:      &Pending{Inline: true},
+	}
+	n := Recipients(p)
+	html := render(t, n)
+	mustContain(t, html, "Remove this key", "Replace this passkey", "Keep a recovery key or an SSH key.", `aria-label="Remove the key Recovery key"`, `aria-label="Replace the passkey My passkey"`)
+	if c := strings.Count(html, "gj-recip-replace"); c != 1 {
+		t.Errorf("replace is for passkeys only: %d buttons", c)
+	}
+	clickAll(n)
+	if !slices.Equal(removed, []string{"SHA256:r1"}) || !slices.Equal(replaced, []string{"SHA256:p1"}) {
+		t.Fatalf("removed %v replaced %v (a blocked key must not be removable)", removed, replaced)
+	}
+	all := strings.Join(asked, "\n")
+	mustContain(t, all, "encrypted again without it", "keeps what they already read", "encrypted again for it", "stays in your authenticator")
+	// Without the operations no control is drawn.
+	p.RemoveOwner, p.ReplaceOwner = nil, nil
+	mustNotContain(t, render(t, Recipients(p)), "gj-recip-remove-owner", "gj-recip-replace")
+}
+
+func TestPublishMyKeysIsOfferedWithoutADocument(t *testing.T) {
+	published := 0
+	p := RecipientsProps{
+		Publish: func(context.Context) error { published++; return nil }, PublishNotice: "Your keys were published.",
+		Pending: &Pending{Inline: true},
+	}
+	n := Recipients(p)
+	mustContain(t, render(t, n), "Publish my keys", "Your keys were published.", `role="status"`)
+	clickAll(n)
+	if published != 1 {
+		t.Fatalf("published %d", published)
+	}
+	p.Publish = nil
+	mustNotContain(t, render(t, Recipients(p)), "gj-recip-publish\"")
+}
+
+func TestRecoveryKeyIsOfferedBesidesAnSSHKeyToo(t *testing.T) {
+	var shown string
+	p := RecipientsProps{
+		AddMyPasskey: func(context.Context) error { return nil }, PasskeySupported: true, Confidential: true,
+		Owner:             []RecipientRow{{Type: "passkey-prf", Fingerprint: "SHA256:p1"}, {Type: "ssh-ed25519", Fingerprint: "SHA256:s1"}},
+		CreateRecoveryKey: func(context.Context) (string, error) { return "AGE-SECRET-KEY-1ZZZ", nil },
+		OnRecoveryKey:     func(s string) { shown = s },
+		Pending:           &Pending{Inline: true},
+	}
+	n := Recipients(p)
+	mustContain(t, render(t, n), "Create a recovery key", "gj-recip-add-mine")
+	for _, h := range findHandlers(n, "click") {
+		h(xango.NewEvent("click", nil, false, nil, nil))
+	}
+	if shown != "AGE-SECRET-KEY-1ZZZ" {
+		t.Fatalf("%q", shown)
+	}
+}
+
+// A verified mark is the directory's word: when the host names the directory, the mark says which
+// ("verified by host"), in the list, in the parsed key and in the picker.
+func TestVerifiedMarkNamesTheDirectory(t *testing.T) {
+	p := RecipientsProps{
+		Owner:   []RecipientRow{{Label: "me", Type: "age-x25519", Fingerprint: "SHA256:me"}},
+		Shared:  []RecipientRow{{Label: "bo@x.io", Type: "age-x25519", Fingerprint: "SHA256:bo", Verified: true, VerifiedBy: "dir.example"}},
+		Parsed:  &RecipientRow{Label: "bo@x.io", Type: "age-x25519", Fingerprint: "SHA256:bo", Verified: true, VerifiedBy: "dir.example"},
+		Draft:   "age1bo",
+		Pending: &Pending{Inline: true},
+		Add:     func(context.Context, string, string) error { return nil },
+		Directory: func(context.Context, string) ([]DirRow, error) {
+			return nil, nil
+		},
+		DirResults: []DirRow{{Label: "bo@x.io", Type: "age-x25519", Fingerprint: "SHA256:bo", Key: "age1bo", Verified: true, VerifiedBy: "dir.example"}},
+	}
+	html := render(t, Recipients(p))
+	if got := strings.Count(html, "verified by dir.example"); got != 3 {
+		t.Errorf("want the directory named on all 3 marks, got %d: %s", got, html)
+	}
+	if strings.Contains(html, "verified e-mail<") {
+		t.Errorf("the plain mark is still shown: %s", html)
+	}
+	// Without the host, the plain mark.
+	p.Shared[0].VerifiedBy, p.Parsed.VerifiedBy, p.DirResults[0].VerifiedBy = "", "", ""
+	if html := render(t, Recipients(p)); strings.Contains(html, "verified by") || !strings.Contains(html, "verified e-mail") {
+		t.Errorf("%s", html)
+	}
 }
 
 // A key whose own signature binds it to the address shows a stronger mark than a verified one;

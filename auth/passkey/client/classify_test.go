@@ -1,0 +1,49 @@
+package client
+
+import (
+	"errors"
+	"testing"
+	"time"
+)
+
+// The browser calls a closed prompt, a timeout and a refusal all NotAllowedError; the page must not
+// treat them as one silent "nothing happened".
+func TestRejectionsAreToldApart(t *testing.T) {
+	short := 2 * time.Second
+	long := PromptTimeout
+	for _, tc := range []struct {
+		name, msg string
+		elapsed   time.Duration
+		want      error
+		not       []error
+	}{
+		{"InvalidStateError", "", short, ErrAlreadyRegistered, nil},
+		{"SecurityError", "The operation is insecure.", short, ErrInsecureContext, []error{ErrCancelled}},
+		{"NotSupportedError", "", short, ErrUnsupportedAuthenticator, []error{ErrCancelled}},
+		{"ConstraintError", "", short, ErrUnsupportedAuthenticator, nil},
+		{"NotAllowedError", "The operation either timed out or was not allowed.", long, ErrTimedOut, []error{ErrNotVerified}},
+		{"NotAllowedError", "User verification failed: wrong PIN", short, ErrNotVerified, []error{ErrTimedOut}},
+		{"NotAllowedError", "The operation either timed out or was not allowed.", short, ErrCancelled, []error{ErrTimedOut, ErrNotVerified}},
+		{"AbortError", "aborted", short, ErrCancelled, []error{ErrTimedOut}},
+	} {
+		got := classify(tc.name, tc.msg, tc.elapsed)
+		if !errors.Is(got, tc.want) {
+			t.Errorf("%s %q after %v: %v, want %v", tc.name, tc.msg, tc.elapsed, got, tc.want)
+		}
+		for _, n := range tc.not {
+			if errors.Is(got, n) {
+				t.Errorf("%s %q after %v: %v is also %v", tc.name, tc.msg, tc.elapsed, got, n)
+			}
+		}
+	}
+	// A timeout and a failed verification are still cancellations, for a caller that only knows that.
+	if !errors.Is(ErrTimedOut, ErrCancelled) || !errors.Is(ErrNotVerified, ErrCancelled) {
+		t.Error("the kinds are not ErrCancelled")
+	}
+	if errors.Is(ErrInsecureContext, ErrCancelled) || errors.Is(ErrAlreadyRegistered, ErrCancelled) {
+		t.Error("a refusal is not a cancellation")
+	}
+	if classify("TypeError", "x", short) != nil {
+		t.Error("an unknown failure was classified")
+	}
+}

@@ -15,13 +15,8 @@ import (
 	"net/url"
 	"strings"
 	"syscall/js"
+	"time"
 )
-
-// ErrAlreadyRegistered is returned when the authenticator already holds a passkey for the account.
-var ErrAlreadyRegistered = errors.New("this device already has a passkey for this account; use another device or another security key")
-
-// ErrCancelled is returned when the person closed the browser's passkey prompt.
-var ErrCancelled = errors.New("passkey: cancelled")
 
 // Supported says whether this browser can make and use passkeys here (a secure context with
 // WebAuthn and its JSON helpers).
@@ -46,6 +41,18 @@ type Client struct {
 	Base string
 	// Token returns the bearer token of the signed-in person, or "".
 	Token func() string
+}
+
+// rejection turns a rejected credentials.create or get into this package's error for it (see
+// classify), or returns it as it is.
+func rejection(err error, since time.Time) error {
+	var je *jsErr
+	if errors.As(err, &je) {
+		if c := classify(je.name, je.msg, time.Since(since)); c != nil {
+			return c
+		}
+	}
+	return err
 }
 
 type jsErr struct{ name, msg string }
@@ -162,6 +169,7 @@ func (c *Client) ceremony(ctx context.Context, begin string, beginBody []byte, f
 	jsonOpts := js.Global().Get("JSON").Call("parse", string(pub.PublicKey))
 	opts := js.Global().Get("Object").New()
 	var cred js.Value
+	since := time.Now()
 	if create {
 		opts.Set("publicKey", pk.Call("parseCreationOptionsFromJSON", jsonOpts))
 		cred, err = await(ctx, js.Global().Get("navigator").Get("credentials").Call("create", opts))
@@ -170,14 +178,7 @@ func (c *Client) ceremony(ctx context.Context, begin string, beginBody []byte, f
 		cred, err = await(ctx, js.Global().Get("navigator").Get("credentials").Call("get", opts))
 	}
 	if err != nil {
-		var je *jsErr
-		if errors.As(err, &je) && je.name == "InvalidStateError" {
-			return nil, ErrAlreadyRegistered
-		}
-		if errors.As(err, &je) && (je.name == "NotAllowedError" || je.name == "AbortError") {
-			return nil, fmt.Errorf("%w (%s)", ErrCancelled, je)
-		}
-		return nil, err
+		return nil, rejection(err, since)
 	}
 	answer := js.Global().Get("JSON").Call("stringify", cred.Call("toJSON")).String()
 	extra.Set("token", started.Token)

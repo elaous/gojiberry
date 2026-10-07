@@ -5,8 +5,8 @@
 //
 //   - AddMyPasskey: client.DeriveKey (the passkey's PRF output) -> encrypt.PRFRecipient ->
 //     encrypt.Sharing.Add. No fingerprint is typed: it is the owner's own key.
-//   - CreateRecoveryKey: encrypt.GenerateRecoveryKey; the public part becomes an owner key and
-//     the secret is shown once.
+//   - CreateRecoveryKey: encrypt.GenerateRecoveryKey; the secret is shown once, and the public part
+//     becomes an owner key only when the person confirms they saved it (CommitRecoveryKey).
 //   - Directory: directoryclient.Lookup on the docstore server. A row's marks come from what the
 //     server answered, and the owner mark only if the client re-checked the owner's signature: a
 //     pasted key is "label only" however it is worded.
@@ -78,6 +78,8 @@ type page struct {
 	dirStatus      string
 	dirAlerts      []string
 	recoverySecret string
+	recoveryKey    *encrypt.Recipient // made, its secret on screen, not an owner key yet
+	recoveryAcked  bool
 	myAdded        *components.RecipientRow
 	notice         string
 
@@ -197,6 +199,9 @@ func (p *page) addMyPasskey(ctx context.Context) error {
 	return p.refreshShared(ctx)
 }
 
+// createRecoveryKey makes a recovery key and returns its secret to be shown. The key is not an owner
+// key yet: commitRecoveryKey adds it once the person confirmed they saved the secret, so a key whose
+// secret was never seen can never count as a way back.
 func (p *page) createRecoveryKey(ctx context.Context) (string, error) {
 	pub, secret, err := encrypt.GenerateRecoveryKey()
 	if err != nil {
@@ -207,9 +212,19 @@ func (p *page) createRecoveryKey(ctx context.Context) (string, error) {
 		return "", err
 	}
 	r.Label = "Recovery key"
+	p.recoveryKey, p.recoveryAcked = &r, false
+	return secret, nil
+}
+
+func (p *page) commitRecoveryKey(ctx context.Context) error {
+	if p.recoveryKey == nil || !p.recoveryAcked {
+		return errors.New("confirm that you saved the recovery key first")
+	}
+	r := *p.recoveryKey
 	p.owner = append(p.owner, r)
 	p.ring.Owners = append(p.ring.Owners, r.Key) // an owner key opens everything, whatever the list says
-	return secret, nil
+	p.recoveryKey, p.recoverySecret, p.recoveryAcked = nil, "", false
+	return nil
 }
 
 // directory is the client of the server's key directory, signed in as the demo's provider account.
@@ -458,10 +473,13 @@ func (p *page) view() xango.Node {
 
 		AddMyPasskey: p.addMyPasskey, PasskeySupported: client.Supported(), MyPasskeyAdded: p.myAdded,
 		Confidential: true, SecondKeyMessage: encrypt.ErrNeedSecondRecipient.Error(),
-		CreateRecoveryKey: p.createRecoveryKey,
-		OnRecoveryKey:     func(s string) { p.recoverySecret = s; p.render() },
-		RecoverySecret:    p.recoverySecret,
-		OnRecoveryDone:    func() { p.recoverySecret = ""; p.render() },
+		CreateRecoveryKey:     p.createRecoveryKey,
+		OnRecoveryKey:         func(s string) { p.recoverySecret = s; p.render() },
+		RecoverySecret:        p.recoverySecret,
+		CommitRecoveryKey:     p.commitRecoveryKey,
+		CancelRecoveryKey:     func() { p.recoveryKey, p.recoverySecret, p.recoveryAcked = nil, "", false; p.render() },
+		RecoveryAcknowledged:  p.recoveryAcked,
+		OnRecoveryAcknowledge: func(on bool) { p.recoveryAcked = on; p.render() },
 		Copy: func(text string) {
 			js.Global().Get("navigator").Get("clipboard").Call("writeText", text)
 		},

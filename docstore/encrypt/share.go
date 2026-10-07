@@ -152,6 +152,20 @@ func SignerFromSSH(pem []byte) (*Signer, error) {
 // Public is the key that verifies this Signer's signatures: what goes in OwnerSigners.
 func (s *Signer) Public() ed25519.PublicKey { return s.key.Public().(ed25519.PublicKey) }
 
+// messageContext separates what Sign signs from the lists the owner signs for documents.
+const messageContext = "gojiberry/signed-message/v1"
+
+// Sign signs msg (a statement of the host's own, for instance "this is the owner list of my
+// store") under a context of its own, so a signature made here is never a signed recipient list.
+func (s *Signer) Sign(msg []byte) []byte {
+	return ed25519.Sign(s.key, append([]byte(messageContext+"\x00"), msg...))
+}
+
+// VerifySigned checks a signature made by Signer.Sign against its public key.
+func VerifySigned(pub ed25519.PublicKey, msg, sig []byte) bool {
+	return len(pub) == ed25519.PublicKeySize && ed25519.Verify(pub, append([]byte(messageContext+"\x00"), msg...), sig)
+}
+
 func recordMessage(docID string, payload []byte) []byte {
 	return append([]byte(recordContext+"\x00"+docID+"\x00"), payload...)
 }
@@ -558,6 +572,14 @@ func (s *Sharing) mutateWith(ctx context.Context, docID string, o mutateOpts, fn
 		return rec, err
 	}
 	return sharedRecord{}, docstore.ErrConflict
+}
+
+// Resign signs the document's list again with Signer, unchanged but for its sequence number: what
+// a store does for every list when the owner key that signed them is taken out of OwnerSigners
+// (it would no longer verify). OwnerSigners must still hold the key that signed it now.
+func (s *Sharing) Resign(ctx context.Context, docID string) error {
+	_, err := s.mutate(ctx, docID, func(*sharedRecord) (bool, error) { return true, nil })
+	return err
 }
 
 // List says who a document is shared with, besides the owner's own keys. A list whose
