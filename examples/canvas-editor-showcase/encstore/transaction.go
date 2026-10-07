@@ -929,9 +929,9 @@ func validJournalSeal(sl Seal, to []Owner, allowed func(signer string) bool) boo
 //     signature: it goes back to the Config's list.
 //   - Or, for finishing only, a key held that is in the new list vouches for it with its own seal
 //     over that list (made when it was in hand at the start: it is the person's new key), and the
-//     journal carries the Link from the old list (signed by a key of the Config's owners), which is kept so the old keys still open the
-//     store afterwards. An attacker has neither that key's signature nor a link from the real
-//     old list.
+//     journal carries the Link from the old list (signed by a key of the Config's owners), which is
+//     kept so the old keys still open the store afterwards. An attacker has neither that key's
+//     signature nor a link from the real old list.
 //   - Undoing needs the first kind: the list it goes back to must be vouched for by a held key.
 //   - A journal of turning encryption on (nothing before it) is accepted when a held key of the
 //     new list signed it; when no key could sign (an SSH-only list) only if no stored file is
@@ -940,6 +940,12 @@ func validJournalSeal(sl Seal, to []Owner, allowed func(signer string) bool) boo
 //
 // And in each case the signed frames of the files must carry the hash of the old or the new list,
 // nothing else (anchor.go).
+//
+// Replay: a Link is genuine for ever, so a copy of an old journal could be presented once the owner
+// list is content-identical to its From again (AddOwner X, then RemoveOwner X). A journal's Link
+// carries a signed random nonce, and one that Config.Links already records is refused for
+// finishing (ErrConfigChanged). What is left (links made before the nonce existed, and links older
+// than the last maxLinks) is the second residual limit in docs/encryption-and-passkeys.md.
 func (s *Store) authJournal(ctx context.Context, cfg Config, p *Pending, finish bool, ids []age.Identity, sigs []*encrypt.Signer, holders []string) error {
 	heldOwner := func(h string) (Owner, bool) {
 		for _, o := range append(slices.Clone(cfg.Owners), p.To...) {
@@ -1002,7 +1008,12 @@ func (s *Store) authJournal(ctx context.Context, cfg Config, p *Pending, finish 
 		return check(firstID(), verifiers)
 	}
 
-	// Over a committed list.
+	// Over a committed list. A link the Config already records was finished once: presented as a
+	// journal now it is a replay (the list may have come back to the same content since), not an
+	// interrupted change. Undoing needs no link, so it is not affected.
+	if finish && p.Link != nil && linkRecorded(cfg, *p.Link) {
+		return ErrConfigChanged
+	}
 	if ownersDigest(cfg.Owners) == p.From {
 		for i, h := range holders {
 			o, ok := heldOwner(h)

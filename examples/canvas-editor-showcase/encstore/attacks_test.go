@@ -689,3 +689,69 @@ func TestFinishingWithTheNewKeyNeedsTheRightLink(t *testing.T) {
 		})
 	}
 }
+
+// A genuine link made for an earlier change is not the journal of a new one. AddOwner(X) then
+// RemoveOwner(X) leaves the owner list as it was, so the old link from that list to the one with X
+// still verifies from the current list. Someone with an earlier copy of the storage plants that old
+// journal (its seal and its link); finishing it must not make X an owner again.
+func TestAnOldLinkIsNotReplayedAsAJournalOverALaterCopyOfTheList(t *testing.T) {
+	ctx := context.Background()
+	r, _ := anchoredRig(t)
+	x := passkeyFrom(t, bytes.Repeat([]byte{6}, 32), "Added then removed")
+	if err := r.st.AddOwner(ctx, x); err != nil {
+		t.Fatal(err)
+	}
+	old := r.history[0] // the journal of the addition, as it was stored
+	if old.Pending == nil || old.Pending.Link == nil {
+		t.Fatalf("setup: %+v", old.Pending)
+	}
+	if err := r.st.RemoveOwner(ctx, ownerOf(x).Fingerprint()); err != nil {
+		t.Fatal(err)
+	}
+	replay := cloneConfig(r.st.Config())
+	replay.Pending = old.Pending
+	r.open(t, replay)
+	r.unlockPasskey(t)
+	owners := len(r.st.Owners())
+	before := r.snapshot(t)
+	r.persist = 0
+	if err := r.st.Recover(ctx, true); !errors.Is(err, ErrConfigChanged) {
+		t.Fatalf("finish: %v", err)
+	}
+	sameSnapshot(t, "the files", r.snapshot(t), before)
+	if r.persist != 0 || len(r.st.Owners()) != owners {
+		t.Fatalf("the config was touched: %d persists, %d owners", r.persist, len(r.st.Owners()))
+	}
+}
+
+// The same change made again and cut short is a new journal, with a link of its own: it can be
+// finished although an earlier change from and to the same lists is in the Config's links.
+func TestTheSameChangeMadeAgainCanBeFinished(t *testing.T) {
+	ctx := context.Background()
+	r, _ := anchoredRig(t)
+	x := passkeyFrom(t, bytes.Repeat([]byte{6}, 32), "Added, removed, added")
+	if err := r.st.AddOwner(ctx, x); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.st.RemoveOwner(ctx, ownerOf(x).Fingerprint()); err != nil {
+		t.Fatal(err)
+	}
+	r.persist, r.raw.writes = 0, 0
+	r.crashAt(3)
+	if err := r.st.AddOwner(ctx, x); !errors.Is(err, ErrRollbackFailed) { // cut short after the journal
+		t.Fatalf("setup: %v", err)
+	}
+	r.raw.heal()
+	r.failPersist = nil
+	r.open(t, r.saved)
+	if !r.st.Interrupted() {
+		t.Fatal("setup: not interrupted")
+	}
+	r.unlockPasskey(t)
+	if err := r.st.Recover(ctx, true); err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+	if len(r.st.Owners()) != 3 {
+		t.Fatalf("%d owners", len(r.st.Owners()))
+	}
+}

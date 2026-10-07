@@ -2,6 +2,7 @@ package encstore
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -45,8 +46,9 @@ type Seal struct {
 
 // Link is a change of the owner list, signed by a key that was an owner before it.
 type Link struct {
-	From   string  `json:"from"` // digest of the list before
-	To     []Owner `json:"to"`   // the list after
+	From   string  `json:"from"`            // digest of the list before
+	To     []Owner `json:"to"`              // the list after
+	Nonce  string  `json:"nonce,omitempty"` // hex, signed with the lists; empty on links made before it existed
 	Signer string  `json:"signer"`
 	Sig    string  `json:"sig"`
 }
@@ -67,6 +69,26 @@ func ownersDigest(list []Owner) string {
 func sealMessage(digest string) []byte { return []byte(sealContext + "\x00" + digest) }
 
 func linkMessage(from, to string) []byte { return []byte(linkContext + "\x00" + from + "\x00" + to) }
+
+// linkMessageN is what a link signs: the two digests and, when there is one, the nonce. Without a
+// nonce it is linkMessage, so links made before the nonce existed still verify.
+func linkMessageN(from, to, nonce string) []byte {
+	if nonce == "" {
+		return linkMessage(from, to)
+	}
+	return append(linkMessage(from, to), []byte("\x00"+nonce)...)
+}
+
+// sameLink says whether two links are the same signed statement.
+func sameLink(a, b Link) bool {
+	return a.From == b.From && a.Signer == b.Signer && a.Sig == b.Sig && a.Nonce == b.Nonce && ownersDigest(a.To) == ownersDigest(b.To)
+}
+
+// linkRecorded says whether cfg's links already hold this very link: the change it signs was
+// finished once, so it is not an interrupted change now.
+func linkRecorded(cfg Config, l Link) bool {
+	return slices.ContainsFunc(cfg.Links, func(r Link) bool { return sameLink(r, l) })
+}
 
 func makeSeal(sg *encrypt.Signer, owners []Owner) Seal {
 	return Seal{Signer: hex.EncodeToString(sg.Public()), Owners: slices.Clone(owners), Sig: hex.EncodeToString(sg.Sign(sealMessage(ownersDigest(owners))))}
@@ -120,7 +142,9 @@ func bindingFor(old Config, to []Owner, signers []*encrypt.Signer, jl *Link) (se
 	reaches := func(from string) bool {
 		return slices.ContainsFunc(links, func(l Link) bool { return l.From == from && ownersDigest(l.To) == dst })
 	}
-	if jl != nil && jl.valid() && ownersDigest(jl.To) == dst && !reaches(jl.From) {
+	// A journal's link carries a nonce, so one for the same two lists as an earlier change is still
+	// recorded (the earlier one is not what a replay could present as this one).
+	if jl != nil && jl.valid() && ownersDigest(jl.To) == dst && !linkRecorded(Config{Links: links}, *jl) && (jl.Nonce != "" || !reaches(jl.From)) {
 		links = append(links, *jl)
 	}
 	if len(old.Owners) > 0 && ownersDigest(old.Owners) != dst && !reaches(ownersDigest(old.Owners)) {
@@ -146,10 +170,15 @@ func journalLink(old, to []Owner, signers []*encrypt.Signer) *Link {
 		return nil
 	}
 	from, dst := ownersDigest(old), ownersDigest(to)
+	nb := make([]byte, 16)
+	if _, err := rand.Read(nb); err != nil {
+		return nil
+	}
+	nonce := hex.EncodeToString(nb)
 	for _, sg := range signers {
 		pub := hex.EncodeToString(sg.Public())
 		if hasSigner(old, pub) {
-			return &Link{From: from, To: slices.Clone(to), Signer: pub, Sig: hex.EncodeToString(sg.Sign(linkMessage(from, dst)))}
+			return &Link{From: from, To: slices.Clone(to), Nonce: nonce, Signer: pub, Sig: hex.EncodeToString(sg.Sign(linkMessageN(from, dst, nonce)))}
 		}
 	}
 	return nil
@@ -205,7 +234,7 @@ func walk(cfg Config, start []Owner, target string) ([][]Owner, bool) {
 func (l Link) valid() bool {
 	pub, err1 := hex.DecodeString(l.Signer)
 	sig, err2 := hex.DecodeString(l.Sig)
-	return err1 == nil && err2 == nil && encrypt.VerifySigned(ed25519.PublicKey(pub), linkMessage(l.From, ownersDigest(l.To)), sig)
+	return err1 == nil && err2 == nil && encrypt.VerifySigned(ed25519.PublicKey(pub), linkMessageN(l.From, ownersDigest(l.To), l.Nonce), sig)
 }
 
 // reach says whether the key's own seal leads, through links signed by owners, to the list whose

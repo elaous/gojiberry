@@ -1111,11 +1111,15 @@ cannot be opened.
         (the change cut short after every file was converted) needs the same link, signed by an owner of the
         Config, and the new key's own seal over the new list; the link is kept so the old keys still open the store.
         Undoing goes back to the Config's own list and needs no signature.
+        A link already recorded in `Config.Links` is refused for finishing (it was completed once; the list may have
+        come back to the same content since, as after adding and removing a key).
         **Residual limits, stated plainly:** (1) a store with no signed document file yet (an SSH-only store before
         its first save) has nothing to anchor, so its first-generation list and an SSH key with no seal are trusted on
         first use; (2) a rollback of the files together with the config to an older consistent snapshot is not
-        detected, nor is a journal replayed over a list that came back to the same content (a link carries no
-        nonce); (3) an attacker who replaces every file as well as the config leaves nothing to protect, only what
+        detected, and a journal replay is refused only while the Config still records its link (a link carries a
+        signed random nonce, and a finished change keeps it in `Config.Links`, the last 32): a replay of a link
+        made before the nonce existed over a list that came back to the same content, or of one that has aged out
+        of those 32, still passes; (3) an attacker who replaces every file as well as the config leaves nothing to protect, only what
         is saved afterwards is exposed; (4) nothing here protects against code running in this origin. A real
         application keeps the signers and the list out of the reach of the store's writers.
         **Another tab** of the page can change the keys: before every write the stored config is compared with the one
