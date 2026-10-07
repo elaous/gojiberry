@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-9 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, #92 `RepairAll` with `Resign`, the SSH key-tag tightening, the shared passkey `ChallengeStore`, and the review-nits cleanup of #90 to #93, #95, and the double first-passkey 409; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
+10 of 10 since the last full run, including the second backlog review (docs only) (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, #92 `RepairAll` with `Resign`, the SSH key-tag tightening, the shared passkey `ChallengeStore`, and the review-nits cleanup of #90 to #93, #95, and the double first-passkey 409; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md); the full suite runs on main right after this merge).
 
 ## Notes for upgraders
 
@@ -428,3 +428,139 @@ a way to avoid hitting the limit meanwhile.
     50 MB, `examples/gin-ssr-demo/gin-ssr-demo` 21 MB, `examples/echo-ssr-demo/echo-ssr-demo` 10 MB,
     `translateserver` 9.7 MB, `examples/collab-editor-app/server` 8.9 MB. Plan: needs a user decision, since
     removing them means rewriting history. Avoid: nothing is lost by leaving them.
+
+### Queue, status and new entries (added by the second review pass)
+
+Numbers 1 to 26 above are kept as they are, because other documents link them (backlog items 3, 4, 5, 7, 9, 10 and 12).
+Items 1 to 8 are done and merged (1 and 2 earlier; 3 `RepairAll`, 4 the no-signer window, 5 revoked-signer tooling,
+6 the SSH key tag, 7 the shared `ChallengeStore`, 8 the double first-passkey 409). Items 9 to 26 are open (the sessions part of item 7 and the
+follow-ups in item 3 are taken over by the queued PRs below). New entries start at 27, in order of urgency. **Kind** says `fixable` or
+`inherent` (a real limit: it points to the [limits register](limits-register.md) and will not be fixed, only
+reduced or documented).
+
+**Queue order (the next PR starts only when the one before is merged):**
+
+1. **PR A: shared sign-in sessions.** `auth.Manager` session and OpenID Connect login-state store, store-backed, so a
+   token issued by replica A is valid on replica B (the "found, not fixed" part of item 7; also the last line of the
+   passkey infrastructure backlog above, item 2).
+2. **PR B: passkey challenge store.** A cap strategy that neither overshoots across replicas nor costs O(N): evaluate
+   sharded compare-and-set counters against per-client rate limiting through the existing store-backed limiter
+   (`docstore.StoreLimiter`). `store` mode on a store without conditional writes should print a prominent warning
+   with the fix and fall back to per-process challenges; a stricter value, `store-required`, keeps today's behaviour
+   and is fatal. Remove the young-record sweep budget by making used markers visible from the listing. Touches
+   `auth/passkey` (`StoreChallenges`, `Sweep`) and the server's start-up in item 7.
+3. **PR C: `RepairAll` follow-ups.** An optional header-only or `Range` read interface with a `Load` fallback, an
+   opt-in to encrypt plaintext items, and a persistent resume cursor (item 3 says "no saved cursor"). Code:
+   `docstore/encrypt/repairall.go`.
+
+**PRs A, B and C are PAUSED** until the git history rewrite (item 26, removal of the committed binaries, which the
+user has approved) is done. Nothing else in this list is blocked by it.
+
+New entries:
+
+27. **Lint has never run on main.** Kind: fixable. `golangci-lint` is built with go1.25 and the repo targets go1.26
+    (`go.mod`), so it refuses to start; `make lint` and `make wasm-lint` (both in `make check`) cannot have passed.
+    Why it matters: the whole style and bug check is off, silently. Plan: rebuild or pin the tool at a version built
+    with go1.26 (the `tool` line in `go.mod`), run it once on main, fix or baseline what it finds, and keep the
+    `make lint` target working. Priority: high. Where: `go.mod`, `Makefile` (target `lint`), `.golangci.yml`.
+    Avoid meanwhile: `go vet ./...` is the only static check that runs. Item 25 (protobuf through the tool) goes
+    with this.
+28. **Unmerged commits on `origin/ccr-f005be71-limits`.** Kind: fixable (housekeeping). Three commits not on main
+    (`742ec99`, `00bda50`, `082f9ee`): an older saver and rebuild change (vouched restore, storage-filling warning).
+    Why: they may hold a fix main lacks, or a conflicting older version of one it has. Plan: inspect each, then port
+    what is still wanted as its own PR, or delete the branch. Priority: medium. Where: the saver and rebuild code
+    those commits touch (`git log origin/main..origin/ccr-f005be71-limits`).
+29. **Leftover worktrees (`/home/user/gojiberry-*`, `/tmp/rr*`).** Kind: fixable (housekeeping). **In progress:**
+    being cleaned up now; this entry is marked done when the cleanup finishes. Why: stale worktrees pin branches and
+    disk. Plan: `git worktree list`, remove the merged ones, `git worktree prune`. Priority: low. Where: the
+    local checkout, not the repository.
+30. **Clock-ahead replica causes false "dated in the future" directory violations.** Kind: inherent in part (no shared
+    clock, [limits register item 11](limits-register.md#public-docstore-and-operations)), fixable in the report. Why: a replica whose clock is ahead writes entries a correct replica
+    then reads as dated in the future, and an auditor reports a violation that is skew. Plan: report a small skew as
+    a warning with the measured difference, not a violation, keep a hard violation past the 10 minute rule, and
+    document NTP in the operator notes. Priority: medium. Where: the log checks in `docstore/directoryclient` and
+    `docstore/encrypt` (`directory_adapter.go`), `docstore/limiter.go` for the 5 second re-dating.
+31. **Rate-limit flooding resets legitimate callers.** Kind: fixable, reduced by a cap. Why: `MaxRateLimitRecords`
+    (100,000 in `docstore/limiter.go`) keeps the newest budget records; a flood from many addresses fills it and
+    `SweepRateLimits` evicts the oldest, which are live, slow callers, whose budget is then reset to full. Plan:
+    evict records that have refilled first (they carry no information), then the least recently used, and count
+    the evictions of a live record in a metric. Priority: medium. Where: `docstore/limiter.go`
+    (`SweepRateLimits`, `MaxRateLimitRecords`). See also the botnet limit,
+    [limits register item 9](limits-register.md#public-docstore-and-operations).
+32. **`RepairAll` reports an item as "gone" when a custom `Keyring` returns `ErrNotFound` from `Recipients`.** Kind:
+    fixable. Why: the "gone" outcome means deleted since the scan, and is not counted; a keyring that says
+    "no such recipient list" with `docstore.ErrNotFound` makes a live, unsigned item look gone and `Left()` look
+    clean. Plan: tell a deleted item (the store's `Load`/`Save` returned `ErrNotFound`) from a keyring answer,
+    for example by checking the item again with `Load` before calling it gone, or document that a `Keyring` must
+    not return `docstore.ErrNotFound`. Priority: medium. Where: `docstore/encrypt/repairall.go` (the
+    `errors.Is(err, docstore.ErrNotFound)` case in the walk and the scan).
+33. **`WatchLog` filtered to full, cursor past the saved head: the link from the saved head to the first new entry is
+    unchecked.** Kind: inherent in the filtered cursor in part (item 1 anchored the saved head, but a filtered
+    read never held the entries between); to verify before the fix. Why: the entries between `st.Seq` and the
+    cursor were never fetched, so entry `Cursor+1` is checked against the cursor, not against the chain from the
+    saved head. Plan: when the answer was filtered, fetch the entries from `st.Seq` to the cursor and check the
+    chain, or document that a switch from filtered to full starts a new trust anchor. Priority: medium. Where:
+    `docstore/directoryclient/watch.go` (the "switch from a filtered saved state" block, `entryAt`).
+34. **Blob backend has neither `SaveIf` nor `DeleteIf`.** Kind: fixable if the service has preconditions, else
+    unsupported. Why: store-backed challenges (item 7), the limiter claim and conditional deletes (items 9 and
+    10) refuse it; `store` mode does not start on it. Item 9 covers `DeleteIf` for s3 and blob; this entry adds
+    `SaveIf`. Plan: use ETag or generation match preconditions (`If-Match`, `ifGenerationMatch`) if the service
+    allows, otherwise name the backend unsupported for the conditional features in its docs and error text.
+    Priority: medium. Where: `docstore/backends/blob/blob.go`, `docstore/conditional.go`.
+35. **Directory log reads share the lookup shard budgets.** Kind: fixable. Why: an auditor reading the log and a
+    client looking up an address draw from the same shard of the rate limit, so heavy auditing can slow lookups
+    and the reverse. Plan: a separate budget key for log reads. Priority: medium. Where: the directory
+    handlers and limiter keys in `docstore/directory.go` and `docstore/limiter.go`.
+36. **Sticky `FirstOwner`: after a legitimate owner key rotation, third-party lookups show "changed" permanently.**
+    Kind: fixable. Why: the first owner key a third party saw is kept; a rotation is indistinguishable from an
+    attack, so the warning never clears. Plan: a user action to confirm the new key (a signed rotation chain
+    from the owner, or a one-click acknowledgement that stores the new first key). Priority: medium. Where:
+    `docstore/directoryclient` (the lookup state and its `FirstOwner` field). Related to
+    [limits register item 7](limits-register.md#the-key-directory).
+37. **The showcase shows the raw `ErrUnsignedAfterFlip` text with the Go-API hint.** Kind: fixable. Why: a person in
+    the browser reads "use `Repair(AcceptUnsigned)`", which they cannot call. Plan: translate the error in the
+    showcase into a plain, actionable message (which files, what the owner can do, in de/fr/es too). Priority:
+    medium. Where: `examples/canvas-editor-showcase` (the error display).
+38. **Directory "Unmapped" addresses are only counted and logged.** Kind: fixable. Why: an enrollment entry with
+    neither an e-mail record nor a published key (`ReconcileReport.Unmapped`) cannot be matched, and the
+    operator has no list to act on. Plan: a report listing them (pseudonym and entry number) and a documented
+    operator procedure (re-enroll, or leave). Priority: low. Where: `docstore/encrypt/directory_recover.go`.
+39. **`Remove`-path `ErrUnsignedAfterFlip` leaves `PendingDocs` empty.** Kind: fixable (documentation first). Why:
+    only `Repair(AcceptUnsigned)` resolves it, as the error text says, and no pending list shows what is left.
+    Plan: fill `PendingDocs` on that path, or document that it stays empty and name the call. Priority: low.
+    Where: `docstore/encrypt` (the `Remove` path in `sharing`/`encrypt.go`).
+40. **Passkey challenge records show the pending registration e-mail and name on a plain store.** Kind: fixable
+    by configuration. Why: a person who can read the store reads them (see "Extension points" in
+    [encryption-and-passkeys.md](encryption-and-passkeys.md)). Plan: use an encrypting adapter for the
+    `passkey/` keyspace, say so in the `store` mode start-up line, and consider hashing the label. Priority:
+    low. Where: `auth/passkey` (`StoreChallenges`).
+41. **Signed-out same-e-mail passkey registration makes two accounts, by design.** Kind: inherent while the e-mail is
+    a label ([limits register item 6](limits-register.md#encryption-and-keys)). Why it matters for later work:
+    the e-mail verification work must not merge accounts on the bare label. Plan: none now; record it in the
+    verification design. Priority: low. Where: `auth/passkey`.
+42. **A revoked signer can keep writing new frames until it is removed from every list.** Kind: inherent without a
+    format change; the frame v4 plan is in item 5 above and in the
+    [limits register](limits-register.md#encryption-and-keys) (item 1). Priority: low until the format work is
+    scheduled. Where: `docstore/encrypt` (`verifyFrame`).
+43. **A link can be replayed past the 32-link window or when it was made before links carried a nonce.** Kind:
+    inherent (register entry already exists: [item 12](limits-register.md#clients-and-storage)). Plan: none beyond
+    a larger `Config.Links` for a store that changes keys often. Priority: low. Where:
+    `examples/canvas-editor-showcase/encstore` (`Config.Links`, `walk`).
+44. **An SSH-only store with no signed document file yet is undetected.** Kind: inherent, documented residual
+    ([limits register item 12](limits-register.md#clients-and-storage); the first owner list is trust on first
+    use). Priority: low.
+45. **Unenrolled-address entry numbering by a holder of the directory key.** Kind: inherent while the address is not
+    enrolled; enrolling an owner key closes it ([limits register item 7](limits-register.md#the-key-directory),
+    point (d)). Priority: low.
+46. **Mongo live tests skip without `TEST_MONGO_URI`.** Kind: fixable. Same as item 11, which holds the plan: run
+    in CI, or document how to run them locally (a one-line `docker run` and the variable). Priority: low.
+47. **Already listed, kept as they are (no duplicate entry):** item 15 (stale-tab renewal throttle), 16 (per-process
+    public counters), 17 (snapshot overshoot), 19 (report dedupe key, slow-upload rate floor, old env-var warning,
+    wide-cap migration note), 20 (showcase in-memory originals), 21 (showcase directory publish with proof of
+    possession and an owner-signed entry), 22 (`walk` first match), 23 (demo `WatchState` old `made` format;
+    clear on decode error, `examples/people-keys-demo/main.go`), 24 (`ErrFilteredEnrolled` and the audited
+    state), 25 (protobuf as an indirect dependency).
+
+**Urgency order of the open work:** the queue above (paused), then 27 (lint), 28, 32, 31, 30, 33, 34, 35, 36, 37,
+the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. Inherent entries: 41 to 45 and part of
+30 and 33.
