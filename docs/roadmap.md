@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, and #92 `RepairAll` with `Resign`; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
+6 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, #92 `RepairAll` with `Resign`, and the SSH key-tag tightening; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
 
 ## Notes for upgraders
 
@@ -336,11 +336,15 @@ a way to avoid hitting the limit meanwhile.
    after `notAfter`, which also needs a trusted time source or the record seq as the cut); `RepairAll` then
    moves the frames signed before the cut. Avoid: the C.5 procedure, ending with removing the old key from
    every list; until that step the old key's holder can still write.
-6. **SSH key-tag collision tightening.** The code is `recipientID` in `docstore/encrypt/confidential.go`, which
-   keys an SSH recipient by `st.Args[0]`, the 4-byte age short key tag. A collision fails closed (the recipient
-   is taken for a server key: `ErrUncomparableRecipient` or the server-key outcome), never open. `age.Recipient`
-   has no key accessor, so "compare the full key" means threading the key text through to where tags are matched.
-   Plan: do that. Avoid: do not add two SSH keys with the same tag to one list.
+6. **Done:** **SSH key-tag collision tightening.** `recipientID` (`docstore/encrypt/confidential.go`) was the only
+   place that identified an SSH recipient by the 4-byte age key tag (`st.Args[0]`); Sharing add/remove/list,
+   the record and its hash, and the directory match by the SHA-256 fingerprint of the full key, so they were
+   never affected. No wrong accept existed: a collision could only take a person's key for a server key, so it was
+   dropped from a confidential document's recipients (a refusal for that person, never a server key admitted). Now
+   `ParseSSHRecipient` returns a recipient that carries the full key's fingerprint, and `ConfidentialKeyring`
+   compares tag and fingerprint, so a person whose tag collides with a server key is kept. A raw recipient built
+   straight from `agessh` has only the tag, and a tag match with it still counts as the same key (fails closed). No
+   stored format changed. Was: tag only. Avoid: no longer needed; build recipients with `ParseSSHRecipient`.
 7. **Shared `ChallengeStore` and Redis implementations for replicas.** A store-backed limiter already ships
    (`docstore.StoreLimiter`, `GOJIBERRY_DOCSTORE_LIMITER=store`). Plan: a shared `ChallengeStore` and Redis
    implementations behind the existing interfaces. Avoid: run one replica, or sticky routing.
