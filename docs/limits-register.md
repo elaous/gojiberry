@@ -24,7 +24,7 @@ Sources: [encryption-and-passkeys.md](encryption-and-passkeys.md) (called "the d
       `ErrForgedFrame`, `ErrBadSignature`, `ErrNoFrameSigner`); a confidential save without the signer
       fails closed. See [C.5](encryption-and-passkeys.md#c5-who-may-change-a-recipient-list), layer 1.
    4. *Who:* the host keeps the owner signers out of the store writers' reach and lists them in
-      `OwnerSigners`; files still in unsigned v1/v2 frames stay forgeable until re-keyed; `Sharing.RepairAll` re-keys a whole store at once and reports what it could not (backlog item 3, done).
+      `OwnerSigners`; files still in unsigned v1/v2 frames stay forgeable until re-keyed; `Sharing.RepairAll` re-keys a whole store at once (documents, and the other encrypted items such as `expiry:` or `passkey/`) and reports what it could not; `Left()==0` covers the ids `Skip` does not leave readable, not files saved unsigned after the scan (backlog item 3, done).
 
 2. **A rollback of the whole store is undetectable without a client floor.**
    1. *What:* replacing files, records and index together with an older genuine snapshot.

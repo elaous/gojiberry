@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"filippo.io/age"
+
+	"github.com/elaous/gojiberry/docstore"
 )
 
 // Tests of Sharing.RepairAll (docs/roadmap.md, backlog item 3).
@@ -301,6 +305,317 @@ func TestRepairAllWithConcurrentSaves(t *testing.T) {
 			if v := w.frameVersion(t, g); v != 3 {
 				t.Errorf("%s is v%d", g, v)
 			}
+		}
+	}
+}
+
+// listCounter counts the List calls that reach the store (the scan's, the adapter's and Repair's).
+type listCounter struct {
+	*flaky
+	lists atomic.Int64
+	// saveErr, when set, is returned by a conditional write of an id that contains saveOn.
+	saveOn  string
+	saveErr error
+	// onSave, when set, runs before such a write.
+	onSave func()
+}
+
+func (c *listCounter) List(ctx context.Context) ([]docstore.Meta, error) {
+	c.lists.Add(1)
+	return c.flaky.List(ctx)
+}
+
+func (c *listCounter) SaveIf(ctx context.Context, id string, b []byte, prev string) error {
+	if c.saveOn != "" && strings.Contains(id, c.saveOn) {
+		if c.onSave != nil {
+			c.onSave()
+		}
+		return c.saveErr
+	}
+	return c.flaky.SaveIf(ctx, id, b, prev)
+}
+
+// over runs a RepairAll on the world's store through inner (a wrapper of it) and mod, a change of
+// the Adapter (Skip, ...). It returns the Sharing.
+func (w *world) over(inner docstore.Adapter, mod func(*Adapter)) *Sharing {
+	ad := New(inner, w.ring)
+	ad.Signer = w.signer
+	if mod != nil {
+		mod(ad)
+	}
+	return &Sharing{Store: w.inner, Adapter: ad, Signer: w.signer}
+}
+
+// legacyItem stores a non-document encrypted item in an unsigned v2 frame.
+func (w *world) legacyItem(t *testing.T, id string, data []byte) {
+	t.Helper()
+	rs, err := w.ring.Recipients(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.inner.Save(context.Background(), id, sealRaw(t, rs, frame(id, Binding{}, data, nil))); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The store is listed a constant number of times by the scan, however many documents there are:
+// once for the run, plus what Repair lists under its lock for a document it repairs.
+func TestRepairAllListsTheStoreOncePerRun(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	for i := 0; i < 12; i++ {
+		w.e2eeDoc(t) // signed already
+	}
+	old := []string{w.history(t), w.history(t)}
+	for _, id := range old {
+		w.legacyV2(t, id)
+	}
+	cnt := &listCounter{flaky: w.inner}
+	sh := w.over(cnt, nil)
+	rep, err := sh.RepairAll(ctx, RepairAllOptions{})
+	if err != nil || rep.Repaired != 2 || rep.Signed != 12 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	// 1 for the run, and Repair lists under its lock at most a few times per repaired document.
+	if n := cnt.lists.Load(); n > 1+3*int64(rep.Repaired) {
+		t.Errorf("%d List calls for 14 documents, 2 of them repaired", n)
+	}
+	// A run with nothing to repair lists once.
+	cnt.lists.Store(0)
+	if rep, err := sh.RepairAll(ctx, RepairAllOptions{}); err != nil || rep.Signed != 14 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	if n := cnt.lists.Load(); n != 1 {
+		t.Errorf("a run that repairs nothing listed the store %d times", n)
+	}
+}
+
+// An encrypted item that is not a document's (expiry:, collab:, passkey/, public/ ...) in an
+// unsigned frame is repaired too, and one that cannot be is reported, so Left is honest.
+func TestRepairAllCoversItemsThatAreNotDocuments(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	items := []string{"expiry:abc", "collab:def", "passkey/ghi", "public/jkl"}
+	for _, id := range items {
+		w.legacyItem(t, id, []byte("data of "+id))
+	}
+	signedItem := "expiry:signed"
+	if err := w.ad.Save(ctx, signedItem, []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	junk := "collab:junk"
+	if err := w.inner.Save(ctx, junk, ageHeaderJunk(3)); err != nil {
+		t.Fatal(err)
+	}
+	doc := w.history(t)
+	w.legacyV2(t, doc)
+
+	// Without a signer nothing is written and every unsigned item is reported.
+	before := w.snapshot(t)
+	nosign := &Sharing{Store: w.inner, Adapter: New(w.inner, w.ring), Signer: w.signer}
+	rep, err := nosign.RepairAll(ctx, RepairAllOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sk := skippedBy(rep)
+	for _, id := range items {
+		if sk[id] != SkipNoSigner {
+			t.Errorf("%s: %q", id, sk[id])
+		}
+	}
+	if sk[doc] != SkipNoSigner || sk[junk] != SkipUnreadable || rep.Left() != len(items)+2 {
+		t.Errorf("%v left %d", sk, rep.Left())
+	}
+	sameStore(t, "no signer", before, w.snapshot(t))
+
+	// A dry run lists them and writes nothing.
+	dry, err := w.sharing.RepairAll(ctx, RepairAllOptions{DryRun: true})
+	if err != nil || len(dry.Todo) != len(items)+1 {
+		t.Fatalf("%v %+v", err, dry)
+	}
+	sameStore(t, "dry run", before, w.snapshot(t))
+
+	rep, err = w.sharing.RepairAll(ctx, RepairAllOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Repaired != len(items)+1 || rep.Signed != 1 || len(rep.Skipped) != 1 || rep.Total != len(items)+3 || rep.Left() != 1 {
+		t.Fatalf("%+v", rep)
+	}
+	for _, id := range append(items, signedItem) {
+		if v := w.frameVersion(t, id); v != 3 {
+			t.Errorf("%s is v%d", id, v)
+		}
+		if _, err := w.ad.Load(ctx, id); err != nil {
+			t.Errorf("%s does not load: %v", id, err)
+		}
+	}
+	if d, err := w.ad.Load(ctx, "public/jkl"); err != nil || string(d.Data) != "data of public/jkl" {
+		t.Errorf("content changed: %q %v", d.Data, err)
+	}
+	settled := w.snapshot(t)
+	if rep, err := w.sharing.RepairAll(ctx, RepairAllOptions{}); err != nil || rep.Repaired != 0 || rep.Signed != len(items)+2 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	sameStore(t, "second run", settled, w.snapshot(t))
+}
+
+// Ids the Adapter leaves readable (a custom Skip, and DefaultSkip's keys:, catalog:, acl:) are not
+// looked at: they are not counted, reported or written.
+func TestRepairAllLeavesSkippedIdsAlone(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	doc := w.history(t)
+	w.legacyV2(t, doc)
+	plain := map[string][]byte{"open/readme": []byte("in the clear"), "catalog:x": []byte("{}"), "acl:y": []byte("{}"), "keys:zzz": []byte("{}")}
+	for id, d := range plain {
+		if err := w.inner.Save(ctx, id, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := w.snapshot(t)
+	sh := w.over(w.inner, func(a *Adapter) {
+		a.Skip = func(id string) bool { return DefaultSkip(id) || strings.HasPrefix(id, "open/") }
+	})
+	rep, err := sh.RepairAll(ctx, RepairAllOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Total != 1 || rep.Repaired != 1 || len(rep.Skipped) != 0 || rep.Left() != 0 {
+		t.Fatalf("%+v", rep)
+	}
+	after := w.snapshot(t)
+	for id := range plain {
+		if after[id] != before[id] {
+			t.Errorf("%s was written", id)
+		}
+	}
+	// The default Skip alone leaves open/readme in the report, as plaintext.
+	rep, err = w.sharing.RepairAll(ctx, RepairAllOptions{})
+	if err != nil || skippedBy(rep)["open/readme"] != SkipPlaintext || len(rep.Skipped) != 1 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+}
+
+func TestRepairAllReportsPlaintext(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	doc := "0b1c2d3e-0000-4000-8000-0000000000aa"
+	f := doc + "~deadbeef0003.open"
+	if err := w.inner.Save(ctx, f, []byte("never encrypted")); err != nil {
+		t.Fatal(err)
+	}
+	before := w.snapshot(t)
+	rep, err := w.sharing.RepairAll(ctx, RepairAllOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skippedBy(rep)[doc] != SkipPlaintext || rep.Left() != 1 || rep.Skipped[0].Files[0] != f {
+		t.Fatalf("%+v", rep)
+	}
+	sameStore(t, "plaintext", before, w.snapshot(t))
+}
+
+// The context ending while Repair runs (its error then is the context's) returns the context's
+// error with the document not counted as skipped.
+func TestRepairAllStopsWhenTheContextEndsInsideRepair(t *testing.T) {
+	w := newWorld(t)
+	doc := w.history(t)
+	w.legacyV2(t, doc)
+	ctx, cancel := context.WithCancel(context.Background())
+	cnt := &listCounter{flaky: w.inner, saveOn: doc, saveErr: context.Canceled, onSave: cancel}
+	rep, err := w.over(cnt, nil).RepairAll(ctx, RepairAllOptions{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err %v", err)
+	}
+	if len(rep.Skipped) != 0 || rep.Repaired != 0 || rep.Remaining != 1 || rep.Left() != 1 {
+		t.Fatalf("%+v", rep)
+	}
+}
+
+func TestRepairAllReportsConflictAndDowngrade(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	busy := w.history(t)
+	w.legacyV2(t, busy)
+	gone := w.e2eeDoc(t)
+	w.legacyV2(t, gone)
+	if err := w.inner.Delete(ctx, KeysPrefix+gone); err != nil { // the record is deleted
+		t.Fatal(err)
+	}
+	cnt := &listCounter{flaky: w.inner, saveOn: busy, saveErr: docstore.ErrConflict} // a writer that always wins
+	before := w.snapshot(t)
+	rep, err := w.over(cnt, nil).RepairAll(ctx, RepairAllOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sk := skippedBy(rep)
+	if sk[busy] != SkipConflict || sk[gone] != SkipDowngrade || rep.Repaired != 0 || rep.Left() != 2 {
+		t.Fatalf("%v %+v", sk, rep)
+	}
+	sameStore(t, "conflict and downgrade", before, w.snapshot(t))
+}
+
+func TestRepairAllDryRunWithLimit(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	for i := 0; i < 3; i++ {
+		w.legacyV2(t, w.history(t))
+	}
+	before := w.snapshot(t)
+	rep, err := w.sharing.RepairAll(ctx, RepairAllOptions{DryRun: true, Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Todo) != 2 || rep.Remaining != 1 || rep.Repaired != 0 || rep.Left() != 3 {
+		t.Fatalf("%+v", rep)
+	}
+	sameStore(t, "dry run with limit", before, w.snapshot(t))
+}
+
+// A document whose only file is the folder's real name ("folder-secret/<ID>") is a document.
+func TestRepairAllRepairsAFolderSecretOnlyDocument(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	folder := "0b1c2d3e-0000-4000-8000-0000000000fd"
+	id := docstore.FolderSecretPrefix + folder
+	w.legacyItem(t, id, []byte("Secret folder name"))
+	if v := w.frameVersion(t, id); v != 2 {
+		t.Fatalf("v%d", v)
+	}
+	rep, err := w.sharing.RepairAll(ctx, RepairAllOptions{})
+	if err != nil || rep.Total != 1 || rep.Repaired != 1 || rep.Files != 1 || rep.Left() != 0 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	if v := w.frameVersion(t, id); v != 3 {
+		t.Errorf("v%d", v)
+	}
+	if d, err := w.ad.Load(ctx, id); err != nil || string(d.Data) != "Secret folder name" {
+		t.Errorf("%q %v", d.Data, err)
+	}
+}
+
+// A document that was never shared (no keys: record) gets a signed record with Signed set when it
+// is repaired: from then on an unsigned frame in it is forged.
+func TestRepairAllCreatesTheRecordOfADocumentWithoutOne(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	doc := w.history(t)
+	w.legacyV2(t, doc)
+	if _, digest, err := loadRecord(ctx, w.inner, doc, w.ring.People.OwnerSigners, nil); err != nil || digest != "" {
+		t.Fatalf("the document has a record: %q %v", digest, err)
+	}
+	rep, err := w.sharing.RepairAll(ctx, RepairAllOptions{})
+	if err != nil || rep.Repaired != 1 || rep.Left() != 0 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	rec, digest, err := loadRecord(ctx, w.inner, doc, w.ring.People.OwnerSigners, nil)
+	if err != nil || digest == "" || !rec.Signed {
+		t.Fatalf("record %+v %q %v", rec, digest, err)
+	}
+	for _, f := range w.files(t, doc) {
+		if v := w.frameVersion(t, f); v != 3 {
+			t.Errorf("%s v%d", f, v)
 		}
 	}
 }

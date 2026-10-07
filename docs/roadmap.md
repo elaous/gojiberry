@@ -293,12 +293,14 @@ a way to avoid hitting the limit meanwhile.
    oldest, and the test took the first generation listed afterwards, which could be the new one it had no captured
    bytes for, and overwrote it with an empty file (rightly `ErrUnreadable`). The product never orders files by the
    store's times. The test now picks a captured generation that survived and has no sleep.
-3. **Done:** **files in unsigned v1/v2 frames: `Sharing.RepairAll(ctx, RepairAllOptions)`** walks every document in the store and
-   runs `Sharing.Repair` on each one that has an unsigned file (same lock, same checks against the record, same
+3. **Done:** **files in unsigned v1/v2 frames: `Sharing.RepairAll(ctx, RepairAllOptions)`** lists the store once and walks every document (and every other encrypted item: `expiry:`, `collab:`,
+   `passkey/`, `public/` ..., sealed again by `Adapter.Rekey`) and
+   runs `Sharing.Repair` on each document that has an unsigned file (same lock, same checks against the record, same
    conditional writes), then returns a `RepairAllReport` (`Total`, `Signed` already v3, `Repaired`, `Files`,
    `Skipped` with a reason each: no signer, no key held, unreadable, forged, downgrade, plaintext, conflict; `Todo`
    for `DryRun`; `Remaining` when cut short). It never downgrades, deletes or uses `AcceptUnsigned`, is idempotent and
-   resumable (run it again), and is bounded by the context, `Limit` and a `Progress` callback. There is no command
+   restartable (no saved cursor: run it again and it starts at the first id; a document that failed mid-write may be
+   partly rewritten and a rerun finishes it; `Left()` is zero only when every encrypted file `Skip` does not leave readable was signed), and is bounded by the context, `Limit` and a `Progress` callback. There is no command
    for it: the docstore server holds no owner signer or identity, so it is a Go API for the owner's client (see
    [encryption-and-passkeys.md](encryption-and-passkeys.md), "Which files may be unsigned"). Was: only per-document
    `Repair`. Avoid: no longer needed.
