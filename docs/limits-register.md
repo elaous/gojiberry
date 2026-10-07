@@ -92,7 +92,7 @@ Sources: [encryption-and-passkeys.md](encryption-and-passkeys.md) (called "the d
       remain" items 0 to 2.
    4. *Who:* the user enrolls early and watches the address; the operator keeps the directory key and
       the store separate from provider sessions it should not use; the host may add witnesses
-      (backlog item 11).
+      (backlog item 12).
 
 8. **Attestation exists only for ed25519 SSH keys.**
    1. *What:* only those keys can sign a binding to an address; age and passkey-derived keys get
@@ -109,33 +109,53 @@ Sources: [encryption-and-passkeys.md](encryption-and-passkeys.md) (called "the d
    1. *What:* (a) a flood spread over thousands of networks is a crowd of newcomers that can fill the
       reserve and hold the in-flight cap; (b) visitors behind one /24 or /16 (campus, ISP,
       carrier-grade NAT) share a cap; (c) a distributed guesser can try the admin token, which no limiter
-      holds back; (d) the terms text, who reads reports and who answers takedowns are not code.
+      holds back; (d) the terms text, who reads reports and who answers takedowns are not code; (e)
+      reports sent from many addresses each take their share of the reserved report slots, so the layers
+      make a flood cost one address per report slot without removing it; (f) without trusted proxies the
+      per-client address budgets (sessions, the directory's per-IP lookups, the failed-admin budget) key on
+      the connection's `RemoteAddr`, which behind a reverse proxy is the proxy's for everybody, so one
+      budget is shared and wrong admin tokens can lock the operator out for a minute at a time.
    2. *Why inherent:* an anonymous offer cannot tell a crowd from visitors by address alone; the
       limits can slow and make visible, not out-guess; the legal side is people.
    3. *Shipped:* per-client, per-network and per-wide caps with a reserve, an exact byte ledger that
       fails closed, a minimum upload rate, deduplicated reports with a category enum, failed-only admin
-      limits, a 16 character minimum for the token, the `Challenger` hook (no implementation ships).
-      See [section 7.5, item 7](public-docstore.md#75-what-is-left).
+      limits, a 16 character minimum for the token, the `Challenger` hook (no implementation ships), and
+      `..._TRUSTED_PROXIES` (the server will not start with it unset when an admin token is set) so
+      `X-Forwarded-For` is believed from named proxies only. See
+      [section 7.5, item 7](public-docstore.md#75-what-is-left) and the design's step 4b, "Limits that
+      remain" item 7 (the lookup budget, `RemoteAddr` behind a proxy).
    4. *Who:* the operator fronts the server with a gateway, sets higher net caps behind shared
-      addresses, uses a long random admin token, and adds a `Challenger` when the offer is busy; the
+      addresses, uses a long random admin token, names the trusted proxies, and adds a `Challenger` when the offer is busy; the
       operator or host owns the legal terms and the abuse process.
 
-10. **Races at the instant of expiry, and clock skew.**
+10. **Races at the instant of expiry.**
     1. *What:* two server processes on one store can race at the instant of a document's deadline (a
-       save in that second may be deleted); deadlines and the other time rules are compared with each
-       process's own clock; a replica whose clock is ahead dates directory-log entries late, which
-       hurts availability and makes owner signatures look far from their entry.
-    2. *Why inherent:* a lock serializes one process, not two, and there is no shared clock.
-    3. *Shipped:* locks inside a process, a conditional delete where the backend has one, a replica's
-       record dated more than 5 seconds ahead is re-dated for the rate limiter, owner signatures
-       accepted within 10 minutes. See [public-docstore.md](public-docstore.md) section 4 ("Residual
-       limits, stated plainly") and the design's step 4b, limit 7a.
+       save in that second may be deleted).
+    2. *Why inherent:* a lock serializes one process, not two. Partly an implementation gap, though:
+       `ExpiringAdapter.purgeLocked` and `Sweep` delete with an unconditional `Inner.Delete` under an
+       in-process lock, so on a store with conditional deletes the race could be closed with `DeleteIf` on
+       the digest that was read (backlog item 10, which depends on item 9 for s3 and blob). Until then
+       the limit holds on every store.
+    3. *Shipped:* a lock inside a process, and the sweep re-reads the deadline record under it before
+       deleting. Conditional deletes exist today only for the rate-limit sweep (`SweepRateLimits`), the
+       directory adapter and system-record `DeleteIf`, not for document expiry. See
+       [public-docstore.md](public-docstore.md) section 4 ("Residual limits, stated plainly").
+    4. *Who:* the operator runs one process per store, or accepts that a save in the deadline second may
+       be lost.
+
+11. **Clock skew between replicas.**
+    1. *What:* deadlines and the other time rules are compared with each process's own clock; a replica
+       whose clock is ahead dates directory-log entries late, which hurts availability and makes owner
+       signatures look far from their entry.
+    2. *Why inherent:* there is no shared clock.
+    3. *Shipped:* a replica's record dated more than 5 seconds ahead is re-dated for the rate limiter,
+       owner signatures are accepted within 10 minutes. See the design's step 4b, limit 7a.
     4. *Who:* the operator keeps clocks in step (NTP) and, for several replicas, uses a store with
        conditional writes.
 
 ## Clients and storage
 
-11. **A client-only store cannot resist a writer of its own storage; first unlock may be trust on first use.**
+12. **A client-only store cannot resist a writer of its own storage; first unlock may be trust on first use.**
     1. *What:* in the browser-only showcase, whoever can write the page's `localStorage` can replace
        files, config and signers together; beyond the signed frame anchor nothing stops it. A store with
        no signed document yet (an SSH-only first unlock) has nothing to anchor, so its first owner list is
@@ -148,7 +168,7 @@ Sources: [encryption-and-passkeys.md](encryption-and-passkeys.md) (called "the d
     4. *Who:* the host of a real application keeps signers and the list out of the store writers' reach;
        the user unlocks a new store with a passkey first where possible.
 
-12. **Browser folder permissions lapse.**
+13. **Browser folder permissions lapse.**
     1. *What:* the browser may withdraw write permission to a chosen folder, after a restart or mid
        session.
     2. *Why inherent:* the permission belongs to the browser, and `Request` needs a user gesture.
@@ -156,20 +176,22 @@ Sources: [encryption-and-passkeys.md](encryption-and-passkeys.md) (called "the d
        See [saving.md](saving.md) (the folder target).
     4. *Who:* the user reconnects; the host shows the error rather than a silent failure.
 
-13. **Pack signatures have no trust anchor beyond the optional `-pubkey`.**
+14. **Pack signatures have no trust anchor beyond the optional `-pubkey`.**
     1. *What:* a pack's signature record names a key; a reader reports it, but who that key belongs to is
        outside the file.
     2. *Why inherent:* a file cannot vouch for its own signer.
     3. *Shipped:* `opendoc verify -pubkey <hex>` requires a given Ed25519 key; hashes cover every
-       document. See [opendoc-format.md](opendoc-format.md#6-decisions-and-what-is-left-open).
+       document. See [opendoc-format.md](opendoc-format.md#6-decisions-and-what-is-left-open) and the
+       header comment of `cmd/opendoc/main.go` (anyone can sign a pack with a key of their own).
     4. *Who:* the user or host gets the public key by another route and passes it.
 
 ## Project infrastructure
 
-14. **CI is manual, and hosted runners can fail.**
+15. **CI is manual, and hosted runners can fail.**
     1. *What:* the workflow runs only from the Actions tab (`workflow_dispatch`); the free hosted runners
        are outside this repository's control and can fail or be unavailable.
-    2. *Why inherent:* a free-tier, third-party service.
+    2. *Why inherent:* a free-tier, third-party service (the header of `.github/workflows/ci.yml`: plain
+       GitHub-hosted `ubuntu-latest` runners only, no paid or self-hosted ones).
     3. *Shipped:* the local checks before each push and a full run on `main` after every fifth merge. See
        [testing-workflow.md](testing-workflow.md) and the merge counter in
        [roadmap.md](roadmap.md#merges-since-the-last-full-test-run).

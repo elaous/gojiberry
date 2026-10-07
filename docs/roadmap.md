@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-3 of 5 since the last full run (#85, #84, #81; full run on `main` after the 5th merge in a row; see [testing-workflow.md](testing-workflow.md)).
+4 of 5 since the last full run (#85, #84, #81, #86; full run on `main` after the 5th merge in a row; see [testing-workflow.md](testing-workflow.md)).
 
 ## Notes for upgraders
 
@@ -285,53 +285,81 @@ a way to avoid hitting the limit meanwhile.
 
 1. **Filtered to full read in `directoryclient` `WatchLog` is not anchored to the saved head.** Plan: when
    switching, require `entries[0].Prev == st.Hash` if `entries[0].Seq == st.Seq+1`, else the hash at `st.Seq`
-   must equal `st.Hash`. Avoid: do not mix filtered and full reads on one `WatchState` until fixed.
+   must equal `st.Hash`. A filtered saved state can have `Cursor` past `st.Seq`, so the check needs the entries
+   at or before `st.Seq` (read from `st.Seq-1`, or `entryAt`), not the cursor. Avoid: do not mix filtered and
+   full reads on one `WatchState` until fixed.
 2. **Flaky test `TestHighestSeqOfAllFilesCountsNotTheNewestByTime`** (`docstore/encrypt`; timing, a 2 ms sleep).
    Plan: make the order deterministic (set the times explicitly). Avoid: re-run a failure once before suspecting code.
 3. **Files in unsigned v1/v2 frames.** Plan: run `Sharing.Repair` over them, with a migration command and a report
    of what is left. Avoid: re-key (save) documents after upgrading.
-4. **The no-signer window is narrowed but not closed.** Plan: close the remaining path that can write without an
-   owner signer. Avoid: always set `Adapter.Signer` and `Sharing.Signer`.
+4. **The no-signer window is narrowed but not closed.** The remaining path is the few steps between the re-key's
+   last look at the files and its write of the `signed` record, and an older build that writes v1/v2 frames under
+   a record that already says `signed` (design, "The window before `signed`", lines ~323-331;
+   `Repair(..., AcceptUnsigned())` is the way out). Plan: close that path so nothing can write without an owner
+   signer. Avoid: always set `Adapter.Signer` and `Sharing.Signer`.
 5. **Revoked owner signer tooling.** Plan: a command that runs the three-step procedure of C.5 and reports
    documents it missed. Avoid: follow the manual steps in C.5.
-6. **SSH key-tag collision tightening.** Plan: compare the full key, not the short tag, where tags are matched.
-   Avoid: do not add two SSH keys with the same tag to one list.
-7. **Shared `ChallengeStore` and limiter implementations for replicas.** Plan: Redis or store-backed
+6. **SSH key-tag collision tightening.** The code is `recipientID` in `docstore/encrypt/confidential.go`, which
+   keys an SSH recipient by `st.Args[0]`, the 4-byte age short key tag. A collision fails closed (the recipient
+   is taken for a server key: `ErrUncomparableRecipient` or the server-key outcome), never open. `age.Recipient`
+   has no key accessor, so "compare the full key" means threading the key text through to where tags are matched.
+   Plan: do that. Avoid: do not add two SSH keys with the same tag to one list.
+7. **Shared `ChallengeStore` and Redis implementations for replicas.** A store-backed limiter already ships
+   (`docstore.StoreLimiter`, `GOJIBERRY_DOCSTORE_LIMITER=store`). Plan: a shared `ChallengeStore` and Redis
    implementations behind the existing interfaces. Avoid: run one replica, or sticky routing.
 8. **Concurrent double first-passkey UX (410).** Plan: tell the person the other tab won and offer to continue.
    Avoid: set up the first passkey in one tab.
-9. **s3/blob `DeleteIf`.** Plan: implement `ConditionalDeleter` for both. Avoid: the sweep's conditional claim
-   already narrows the race to a token.
-10. **MongoDB live tests.** Plan: run the backend tests against a live server in CI (`TEST_MONGO_URI`). Avoid:
-    run them locally against a server before relying on the backend.
-11. **Log witnesses (directory).** Plan: a witness protocol where independent parties co-sign heads. Avoid:
+9. **s3/blob `DeleteIf`.** Plan: implement `ConditionalDeleter` for both (postgres and mongo have it). Avoid: the
+   conditional claim in `SweepRateLimits` (`docstore/limiter.go`; the sweep that design step 4b, "Limits that
+   remain" item 10, means) already narrows the rate-limit race to a token; it does not cover document expiry.
+10. **Expiry delete on the digest read (depends on 9 for s3 and blob).** `ExpiringAdapter.purgeLocked` and `Sweep`
+    (`docstore/expiry.go`) delete unconditionally under an in-process lock. Plan: where the store is a
+    `ConditionalDeleter`, delete the document with `DeleteIf` on the digest read, and keep a changed document.
+    Avoid: one process per store.
+11. **MongoDB live tests.** Plan: run the backend tests against a live server in CI (`TEST_MONGO_URI`; see the
+    note on store backends above). Avoid: run them locally against a server before relying on the backend.
+12. **Log witnesses (directory).** Plan: a witness protocol where independent parties co-sign heads. Avoid:
     compare heads between two auditors by hand.
-12. **Directory key rotation versus the log pseudonym.** Plan: keep older entries matchable after the retired
+13. **Directory key rotation versus the log pseudonym.** Plan: keep older entries matchable after the retired
     key is removed. Avoid: do not remove the retired key until owners have fetched their older pseudonyms.
-13. **Dead-room tombstone in memory.** Plan: keep it in the store, not the process. Avoid: a restart is the
-    only time it is lost; restart during quiet hours.
-14. **Expiry-prefix test pin and stale-tab renewal throttle (#82 minors).** Plan: pin the prefix in a test and
+14. **Dead-room tombstone in memory.** The hub's `h.gone` entry lasts `goneMemory` (one hour) and is evicted at
+    `maxGone` (`collab/hub/hub.go`). Plan: keep it in the store, not the process. Avoid: it is lost after one hour,
+    on a restart, or by eviction at the cap; restart during quiet hours.
+15. **Expiry-prefix test pin and stale-tab renewal throttle (#82 minors).** Plan: pin the prefix in a test and
     throttle renewals from a stale tab. Avoid: close old tabs.
-15. **Public per-process counters.** Plan: shared `SessionStore` and `Quota` (see 7). Avoid: one replica.
-16. **Snapshot accounting lag.** Plan: refuse or reserve for version snapshots when written. Avoid: leave
+16. **Public per-process counters.** Plan: shared `SessionStore` and `Quota` (see
+    [public-docstore.md](public-docstore.md#75-what-is-left) 7.5 item 1 and the extension-points table in
+    [7.4](public-docstore.md#74-extension-points)). Avoid: one replica.
+17. **Snapshots cannot be refused (overshoot); a deleted snapshot is subtracted only at the next reconcile.**
+    Plan: the saver must ask the budget before writing a snapshot, so it can be refused or reserved. Avoid: leave
     headroom under the byte budget.
-17. **`OnSave` auto-wiring.** Plan: wire the hook where an expiring adapter is built. Avoid: set it by hand.
-18. **#85 minors:** report dedupe key (reporter and category only), old env-var warning, slow-upload rate
-    floor, wide-cap migration note. Plan: one small change each. Avoid: see the upgrade notes above.
-19. **Showcase: in-memory originals during a change.** Plan: keep the journal's originals on disk. Avoid:
+18. **`OnSave` auto-wiring, the real remainder.** `docstore/public/service.go` already wires
+    `ExpiringAdapter.OnSave` when the store is an `*ExpiringAdapter`. Left: a Service built after the adapter is
+    already in use (the hook is set at construction), and stores wrapped so they are not an `*ExpiringAdapter`.
+    Plan: build the Service first, or expose the hook through the wrapper. Avoid: call `NoteVersionWrite` by hand.
+19. **#85 minors:** report dedupe key (reporter and category only), old env-var warning, slow-upload rate
+    floor, wide-cap migration note. Plan: one small change each. Avoid: see the upgrade notes in
+    [public-docstore.md](public-docstore.md#75-what-is-left) 7.5 item 6.
+20. **Showcase: in-memory originals during a change.** Plan: keep the journal's originals on disk. Avoid:
     keep the tab open until a change finishes.
-20. **Directory publish with proof of possession and an owner-signed entry in the showcase.** Plan: the
-    showcase uses its own `dirclient`; move it to `directoryclient` and ask the person for a private key or
-    another passkey assertion per signature. Avoid: publish from `examples/people-keys-demo`.
-21. **Directory publish and pick UI follow-up.** Plan: finish the app-side controls. Avoid: use the demo.
-22. **`bindingFor` walk without a visited set (`encstore/bind.go`).** Plan: add a visited set so add and remove
-    cycles cannot hide a reachable link. Avoid: none known; report an unlock that fails after many key changes.
+21. **Directory publish in the showcase and the pick UI.** The showcase has its own `dirclient`, while the demo
+    (`examples/people-keys-demo`) has the controls. Plan: move the showcase to `directoryclient`, ask the person
+    for a private key or another passkey assertion per signature (proof of possession and an owner-signed entry),
+    and finish the app-side controls (publish and pick). Avoid: publish from `examples/people-keys-demo`.
+22. **`walk()` takes the first matching link, no branch search** (`examples/canvas-editor-showcase/encstore/bind.go`).
+    It takes the first link whose `From` matches and whose signer is in the list, with `break` and no
+    backtracking, bounded by `steps > len(cfg.Links)`; it does not loop forever, but a dead-end first match can
+    hide a reachable link. Plan: search all links from each list (BFS or DFS) with a visited set of digests.
+    Avoid: none known; report an unlock that fails after many key changes.
 23. **`directoryclient` `WatchState` in the old `made` format no longer loads** (the `people-keys-demo`
-    `localStorage`): an ignored decode error half-loads state. Plan: clear the state on a decode error.
-    Avoid: clear the demo's saved state by hand.
-24. **`ErrFilteredEnrolled` should also check `audit.Enrolled` after the audit.** Plan: add the check.
-    Avoid: use a full read for an address that may be enrolled.
+    `localStorage`): an ignored decode error half-loads state. Plan: fix it in the demo's load path
+    (`examples/people-keys-demo/main.go`, `newPage`): clear the state on a decode error. Avoid: clear the demo's
+    saved state by hand.
+24. **`ErrFilteredEnrolled` should also check `audit.Enrolled` after the audit.** Plan: add the check; it must not
+    fire for a legitimately filtered non-owner caller. Avoid: use a full read for an address that may be enrolled.
 25. **protobuf is still an indirect dependency through the lint tool.** Plan: update or replace the tool.
     Avoid: none needed at runtime.
-26. **The 9.7 MB `translateserver` binary in git history.** Plan: needs a user decision, since removing it
-    means rewriting history. Avoid: nothing is lost by leaving it.
+26. **Committed binaries in history.** The largest blobs reachable from `origin/main`: `docsh` 54 MB, `collabhub`
+    50 MB, `examples/gin-ssr-demo/gin-ssr-demo` 21 MB, `examples/echo-ssr-demo/echo-ssr-demo` 10 MB,
+    `translateserver` 9.7 MB, `examples/collab-editor-app/server` 8.9 MB. Plan: needs a user decision, since
+    removing them means rewriting history. Avoid: nothing is lost by leaving them.
