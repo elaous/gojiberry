@@ -119,8 +119,21 @@ func (s Static) Identities(context.Context, string) ([]age.Identity, error) { re
 // encrypted like any document file and, once the folder's signed record says e2ee, wrapped
 // for people's keys only.
 func DefaultSkip(id string) bool {
-	return strings.HasPrefix(id, "catalog:") || strings.HasPrefix(id, "acl:") || strings.HasPrefix(id, "fonts/") || strings.HasPrefix(id, KeysPrefix) || strings.HasPrefix(id, directoryPrefix)
+	// Compared without case, like docstore's reserved ids (isReservedDocID) and IsDocumentKey: on
+	// a backend that folds case "Directory/x" and "directory/x" are one record, and the one the
+	// directory wrote in the clear must stay readable under either spelling.
+	lower := strings.ToLower(id)
+	for _, p := range defaultSkipPrefixes {
+		if strings.HasPrefix(lower, p) {
+			return true
+		}
+	}
+	return false
 }
+
+// defaultSkipPrefixes are DefaultSkip's keyspaces, lower-cased.
+var defaultSkipPrefixes = []string{"catalog:", "acl:", "fonts/", strings.ToLower(KeysPrefix), strings.ToLower(directoryPrefix),
+	strings.ToLower(docstore.DirectoryLogPrefix), strings.ToLower(docstore.DirectoryEnrollPrefix), strings.ToLower(docstore.RateLimitPrefix)}
 
 // Adapter is a docstore.Adapter that encrypts what it saves in Inner.
 type Adapter struct {
@@ -881,6 +894,16 @@ func (a *Adapter) ListPrefix(ctx context.Context, prefix string) ([]docstore.Met
 
 // Delete implements docstore.Adapter.
 func (a *Adapter) Delete(ctx context.Context, id string) error { return a.Inner.Delete(ctx, id) }
+
+// DeleteIf implements docstore.ConditionalDeleter for the ids this adapter leaves in the clear
+// (see DefaultSkip); an encrypted id is docstore.ErrConditionalUnsupported.
+func (a *Adapter) DeleteIf(ctx context.Context, id string, prevDigest string) error {
+	c, ok := a.Inner.(docstore.ConditionalDeleter)
+	if !ok || !a.skip(id) {
+		return docstore.ErrConditionalUnsupported
+	}
+	return c.DeleteIf(ctx, id, prevDigest)
+}
 
 // SaveIf implements docstore.ConditionalAdapter. prevDigest is the Digest of what the caller
 // read through this adapter: for an encrypted id, the plaintext (what Load returned), and ""

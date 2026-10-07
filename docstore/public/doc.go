@@ -11,10 +11,10 @@
 //	                 client, per-network and per-/32 caps, the reserve for                                compare-and-set; Create takes
 //	                 new networks, the one-document claim                                        SessionCaps)
 //	                 (SetDoc: atomic CAS); optional SessionReaper
-//	Limiters         per-group request budgets (Session, Write,     passkey.RateLimiter per      a shared Redis budget, a gateway's
-//	                 WriteAddr, View, Report, Admin, AdminNet,      group from Config            decision; passkey.Unlimited{}
-//	                 AdminGlobal), keyed by ClientKey (IPv4,
-//	                 IPv6 /64); passkey.Limiter; the Admin ones
+//	Limiters         per-group request budgets (Session, Write,     passkey.RateLimiter per      docstore.StoreLimiters via Options.LimiterFactory
+//	                 WriteAddr, View, Report, Admin, AdminNet,      group from Config            (replicas share them through the store), a
+//	                 AdminGlobal), keyed by ClientKey (IPv4,                                     shared Redis budget, a gateway's decision;
+//	                 IPv6 /64); passkey.Limiter; the Admin ones                                  passkey.Unlimited{}
 //	                 count failed authentications only
 //	Quota            bytes per client per day, charged before the   MemoryQuota (fixed 24 h      Redis INCRBY with expiry, a table
 //	                 body is read and refunded (QuotaRefunder,

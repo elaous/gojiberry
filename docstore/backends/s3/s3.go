@@ -219,12 +219,18 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 }
 
 func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
+	return a.ListPrefix(ctx, "")
+}
+
+// ListPrefix implements docstore.PrefixLister: ListObjectsV2 with Prefix set to the adapter's
+// prefix followed by prefix, so the service filters (and pages) the keys.
+func (a *Adapter) ListPrefix(ctx context.Context, prefix string) ([]docstore.Meta, error) {
 	var metas []docstore.Meta
 	var token *string
 	for {
 		out, err := a.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 			Bucket:            aws.String(a.bucket),
-			Prefix:            aws.String(a.prefix),
+			Prefix:            aws.String(a.prefix + prefix),
 			ContinuationToken: token,
 		})
 		if err != nil {

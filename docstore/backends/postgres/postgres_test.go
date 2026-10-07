@@ -214,3 +214,80 @@ func TestPostgresSaveIf(t *testing.T) {
 		}
 	})
 }
+
+func TestPostgresDeleteIf(t *testing.T) {
+	sel := regexp.QuoteMeta(`SELECT data FROM documents WHERE id = $1 FOR UPDATE`)
+	del := regexp.QuoteMeta(`DELETE FROM documents WHERE id = $1`)
+	ctx := context.Background()
+	newMock := func(t *testing.T) (*Adapter, sqlmock.Sqlmock) {
+		db, mock, err := sqlmock.New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		return newFromDB(db), mock
+	}
+	var _ docstore.ConditionalDeleter = (*Adapter)(nil)
+	t.Run("the document that was read", func(t *testing.T) {
+		a, mock := newMock(t)
+		mock.ExpectBegin()
+		mock.ExpectQuery(sel).WithArgs("x").WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow([]byte("one")))
+		mock.ExpectExec(del).WithArgs("x").WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+		if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); err != nil {
+			t.Fatal(err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("a document that changed, and one that is gone", func(t *testing.T) {
+		a, mock := newMock(t)
+		mock.ExpectBegin()
+		mock.ExpectQuery(sel).WithArgs("x").WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow([]byte("two")))
+		mock.ExpectRollback()
+		if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); !errors.Is(err, docstore.ErrConflict) {
+			t.Errorf("changed: %v", err)
+		}
+		mock.ExpectBegin()
+		mock.ExpectQuery(sel).WithArgs("x").WillReturnError(sql.ErrNoRows)
+		mock.ExpectRollback()
+		if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); !errors.Is(err, docstore.ErrNotFound) {
+			t.Errorf("gone: %v", err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestPostgresListPrefixEscapesTheLikePattern(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	a := newFromDB(db)
+	var _ docstore.PrefixLister = a
+	now := time.Now()
+	for _, c := range []struct{ prefix, pattern string }{
+		{"directory/ab/", `directory/ab/%`},
+		{`a_b%c\d/`, `a\_b\%c\\d/%`}, // wildcards and the escape character are literal
+		{"", `%`},
+	} {
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, length(data), updated_at FROM documents WHERE id LIKE $1 ESCAPE '\'`)).
+			WithArgs(c.pattern).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "length", "updated_at"}).AddRow(c.prefix+"1", 3, now))
+		got, err := a.ListPrefix(context.Background(), c.prefix)
+		if err != nil || len(got) != 1 || got[0].ID != c.prefix+"1" || got[0].Size != 3 {
+			t.Fatalf("%q: %v %v", c.prefix, got, err)
+		}
+	}
+	mock.ExpectQuery(`SELECT id`).WillReturnError(errors.New("boom"))
+	if _, err := a.ListPrefix(context.Background(), "x/"); err == nil {
+		t.Error("a database error is returned")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

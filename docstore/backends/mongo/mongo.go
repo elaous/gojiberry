@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/elaous/gojiberry/docstore"
+	"regexp"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -106,6 +107,30 @@ func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest
 	return nil
 }
 
+// DeleteIf implements docstore.ConditionalDeleter: the delete filters on the bytes that were
+// read and found to be what prevDigest says, so nothing replaced them in between.
+func (a *Adapter) DeleteIf(ctx context.Context, id string, prevDigest string) error {
+	var cur mongoDoc
+	err := a.coll.FindOne(ctx, bson.M{"_id": id}).Decode(&cur)
+	if err == mongo.ErrNoDocuments {
+		return docstore.ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if prevDigest == "" || docstore.Digest(cur.Data) != prevDigest {
+		return docstore.ErrConflict
+	}
+	res, err := a.coll.DeleteOne(ctx, bson.M{"_id": id, "data": cur.Data})
+	if err != nil {
+		return err
+	}
+	if res.DeletedCount == 0 {
+		return docstore.ErrConflict
+	}
+	return nil
+}
+
 func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error) {
 	var doc mongoDoc
 	err := a.coll.FindOne(ctx, bson.M{"_id": id}).Decode(&doc)
@@ -119,7 +144,23 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 }
 
 func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
-	cur, err := a.coll.Find(ctx, bson.M{})
+	return a.list(ctx, bson.M{})
+}
+
+// prefixFilter matches the documents whose _id starts with prefix: a regular expression
+// anchored at the start with the prefix quoted, which MongoDB answers from the _id index as a
+// range scan (case-sensitive and anchored, so no full scan).
+func prefixFilter(prefix string) bson.M {
+	return bson.M{"_id": bson.M{"$regex": "^" + regexp.QuoteMeta(prefix)}}
+}
+
+// ListPrefix implements docstore.PrefixLister.
+func (a *Adapter) ListPrefix(ctx context.Context, prefix string) ([]docstore.Meta, error) {
+	return a.list(ctx, prefixFilter(prefix))
+}
+
+func (a *Adapter) list(ctx context.Context, filter bson.M) ([]docstore.Meta, error) {
+	cur, err := a.coll.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}

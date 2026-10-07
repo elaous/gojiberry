@@ -80,6 +80,7 @@ launch, not after:
      so a new document with the same id inherits neither an access list nor history.
    - Only plain documents expire (`docstore.IsDocumentKey`, an allowlist; `FixedTTL` uses it).
      Every system keyspace is exempt: `acl:`, `collab:`, `catalog:`, `versions/`, `directory/`,
+     `directory-log/` (the key directory's transparency log), `directory-enroll/` (owner enrollments), `ratelimit/` (shared rate limit budgets, `docstore.StoreLimiter`),
      `passkey/`, `public/` and `report/` (the public offer's records, tombstones and reports, section 7), `folder-secret/` (a confidential folder's real name: it lives as long as the folder), `keys:` (wrapped document keys: losing one makes an encrypted document
      unreadable), `fonts/`, `expiry:`, and any `name:...` key. A test scans the repository for
      keyspace constants, so a new one fails the build until it is listed.
@@ -262,9 +263,9 @@ a tombstone, a content `Blocklist` hook and a `Challenger` hook. Still to do bef
 4. **"Only documents"**: the content check is the `Blocklist` hook and the size cap; checking that a
    body is one of the editor's own formats (and has no executable content) is a codec question and
    is not done here.
-5. **Shared infrastructure for replicas**: `SessionStore`, `Limiter`, `Quota` have memory defaults
-   only. Behind several replicas, plug in shared ones (the extension table below), or the caps
-   are per replica. Two replicas also race at the instant of expiry (section 4.1).
+5. **Shared infrastructure for replicas**: `SessionStore` and `Quota` have memory defaults
+   only (the request limiters can live in the store, `Options.LimiterFactory`). Behind several
+   replicas, plug in shared ones (the extension table below), or the caps are per replica. Two replicas also race at the instant of expiry (section 4.1).
 6. The client side: the editor's session handling, the edit and view links, the countdown, "Keep
    this document", the report link on a shared view, `noindex` on the pages that serve it (the
    routes themselves send `X-Robots-Tag: noindex` and `Cache-Control: no-store`).
@@ -621,7 +622,7 @@ pattern as `auth/passkey`, see [encryption-and-passkeys.md](encryption-and-passk
 | Interface | What it does | Default | Plug in |
 |---|---|---|---|
 | `SessionStore` | live sessions, the global, per-client, per-network and per-wide-prefix caps and the reserve for new networks (`Create` takes `SessionCaps`), the one-document claim (`SetDoc` is a compare-and-set); optional `SessionReaper` | `MemorySessionStore` (10,000 live, expired ones dropped through an expiry heap on every create and by `Sweep`) | Redis, a table |
-| `Limiters{Session, Write, WriteAddr, View, Report, Admin, AdminNet, AdminGlobal}` (`passkey.Limiter`) | per-group request budgets, keyed by `ClientKey` (or the session; `AdminNet` by `NetKey`, `AdminGlobal` by one key); the admin ones count failed authentications only | `passkey.RateLimiter` from the Config | a shared budget, a gateway; `passkey.Unlimited{}` |
+| `Limiters{Session, Write, WriteAddr, View, Report, Admin, AdminNet, AdminGlobal}` (`passkey.Limiter`), or `Options.LimiterFactory` for all the ones left nil | per-group request budgets, keyed by `ClientKey` (or the session; `AdminNet` by `NetKey`, `AdminGlobal` by one key); the admin ones count failed authentications only | `passkey.RateLimiter` from the Config | `docstore.StoreLimiters(store)` (replicas on one conditional store share the budgets; the names are `public-session`, `public-write`, `public-writeaddr`, `public-view`, `public-report`, `public-admin`, `public-admin-net`, `public-admin-global`, records under `ratelimit/`), a shared Redis budget, a gateway; `passkey.Unlimited{}` |
 | `Quota` (optional `QuotaRefunder`, `WindowQuota`) | bytes per client per day, charged before the body is read; `WindowQuota` also names the window so a late refund cannot credit the next one | `MemoryQuota` (fixed 24 h window per client, at most 100,000 clients, least recently used dropped) | Redis, a table |
 | `Options.ClientIP` | who the client is | remote address, or `passkey.TrustedProxies(cidrs...)` | your function |
 | `AdminGuard` | who may take down | `TokenAdmin` (constant-time compare; an empty token allows nobody) | operator sign-in, mTLS |
@@ -635,11 +636,14 @@ Over a limit the routes answer 429 with `Retry-After`.
 
 State plainly, before launch:
 
-1. The byte budget, the session and per-client counts, the limiters and the report counters are per
+1. The byte budget, the session and per-client counts and the report counters are per
    process: behind several replicas each has its own (the budget is rebuilt from the shared store
    by each one's sweep, but between sweeps the replicas do not see each other's writes). Plug in
-   shared ones (`SessionStore`, `Limiter`, `Quota`) or run one replica. The in-flight cap
-   (`_MAX_INFLIGHT_BYTES`) is per process too, which is what it protects (the process's memory).
+   shared ones (`SessionStore`, `Quota`) or run one replica. The request limiters can be shared
+   through the store: the docstore server passes `GOJIBERRY_DOCSTORE_LIMITER=store`'s factory
+   (`docstore.StoreLimiters`) to `Options.LimiterFactory`, as it does for the key directory and the
+   passkey routes, on a store with conditional writes (otherwise they stay per process). The in-flight
+   cap (`_MAX_INFLIGHT_BYTES`) is per process too, which is what it protects (the process's memory).
 2. The budget counts bytes the service knows about; it does not read the backend's disk usage.
 3. `Sweep` still reads every tombstone and report record each cycle (their own timestamps), which
    is bounded by the report cap and the takedown rate but is not free.

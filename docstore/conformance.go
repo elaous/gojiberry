@@ -3,6 +3,8 @@ package docstore
 import (
 	"context"
 	"errors"
+	"sort"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -181,4 +183,52 @@ func CheckConditional(t *testing.T, newAdapter func() ConditionalAdapter) {
 			t.Errorf("%d writers won, want 1", n)
 		}
 	})
+}
+
+// CheckPrefixLister runs the contract of PrefixLister against an adapter that has it: only the
+// documents whose ID starts with the prefix come back (ids that merely resemble it, including
+// ones a SQL LIKE or a regular expression would match if the prefix were not escaped, do not),
+// with their sizes, and a prefix nobody has lists nothing. The adapter must be fresh.
+func CheckPrefixLister(t *testing.T, newAdapter func() Adapter) {
+	t.Helper()
+	ctx := context.Background()
+	a := newAdapter()
+	pl, ok := a.(PrefixLister)
+	if !ok {
+		t.Fatalf("%T is not a PrefixLister", a)
+	}
+	ids := []string{"directory/a/1", "directory/a/22", "directory/ab/1", "directory/b/1", "other", "directory",
+		"pct%/1", "pctX/1", "under_/1", "underX/1", "dot.x/1", "dotYx/1", "star*/1", "stars/1"}
+	for _, id := range ids {
+		if err := a.Save(ctx, id, []byte(id)); err != nil {
+			t.Fatalf("Save(%q): %v", id, err)
+		}
+	}
+	want := map[string][]string{
+		"directory/a/": {"directory/a/1", "directory/a/22"},
+		"pct%/":        {"pct%/1"},
+		"under_/":      {"under_/1"},
+		"dot.x/":       {"dot.x/1"},
+		"star*/":       {"star*/1"},
+		"directory/":   {"directory/a/1", "directory/a/22", "directory/ab/1", "directory/b/1"},
+		"nothing/":     nil,
+	}
+	for prefix, exp := range want {
+		got, err := pl.ListPrefix(ctx, prefix)
+		if err != nil {
+			t.Fatalf("ListPrefix(%q): %v", prefix, err)
+		}
+		var have []string
+		for _, m := range got {
+			have = append(have, m.ID)
+			if m.Size != len(m.ID) {
+				t.Errorf("ListPrefix(%q): size of %s = %d", prefix, m.ID, m.Size)
+			}
+		}
+		sort.Strings(have)
+		sort.Strings(exp)
+		if strings.Join(have, ",") != strings.Join(exp, ",") {
+			t.Errorf("ListPrefix(%q) = %v, want %v", prefix, have, exp)
+		}
+	}
 }
