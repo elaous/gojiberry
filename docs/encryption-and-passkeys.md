@@ -373,8 +373,8 @@ Threat model, store write access only (no owner key):
      keyring and `Sharing` go on and report it through `SetFloorDegradedHandler` (logged when it
      changes by default), and `StorageSeqFloor.Err()` keeps the last failure for a page that polls.
      An application that offers this layer should show it (a banner that this browser is not
-     remembering what it saw); the showcase is not wired to the encrypting adapter yet, so when it is
-     it must set the handler or poll `Err()`.
+     remembering what it saw); the showcase (5.7) keeps an in-memory floor, which cannot degrade, so it needs
+     neither; a host with a `LocalStorageSeqFloor` must set the handler or poll `Err()`.
      **Runbook, a damaged floor file** (`FileSeqFloor` says "damaged" and names the file; nothing is
      overwritten): move the file away or delete it, then run `Sharing.VerifyIndex`: the floor starts
      empty and the index raises it for every listed end-to-end document. What only the lost file knew
@@ -448,9 +448,8 @@ cannot be opened.
    (`Adapter.RekeyDocument`). `components.Recipients` is the People tab's control: the owner's keys,
    the shared keys with Remove (which says it cannot take back what was already opened), and a form
    that parses a pasted key, shows its type, label and fingerprint, and keeps Add off until the
-   fingerprint is typed. *Left:* wiring it into an application (the showcase has no encrypted store
-   yet: it needs the key management of steps 3 and 4, where the owner's key lives and how it is
-   unlocked) and the "verified e-mail" mark of C.4 (done, see step 4b).
+   fingerprint is typed. *Left:* wiring it into the real application (the showcase has it, 5.7: the owner's keys, how they
+   unlock, the People tab) and the "verified e-mail" mark of C.4 (done, see step 4b).
 3. **Done:** `auth/passkey` (go-webauthn; discoverable credentials, user verification required,
    one-time challenges with a TTL, `Store` with `MemoryStore` and `AdapterStore`), the
    `components.Passkey` control, `Server.WithRoutes`/`Hide` on the docstore server (`cmd/docstore`
@@ -814,10 +813,13 @@ cannot be opened.
      PRF) covers the second-key message, the recovery key shown once, add my passkey, the verified mark
      from a lookup, and the whole owner flow: publish, the foreign publication reported, enroll, the
      owner-signed mark, the session alone refused, a forged log entry reported, and revoke.
-     **For the showcase (another agent owns it):** the People wiring there needs a `directoryclient.Client`
-     with the signed-in provider session's token and the pinned log keys, `Lookup` as `Recipients.Directory`
-     (copy `DirRow.OwnerSigned` and `OwnerEnrolled` from the `Key` rows), the three buttons of the demo's
-     `myEntry` section, and a `WatchLog` on sign-in with its `WatchState` in storage.
+     **The showcase (5.7)** has the People tab with a directory picker and "Publish my keys" through its own
+     `dirclient` (plain, session-authenticated publish, no owner-signed mark). *Left:* wiring this section's
+     `directoryclient.Client` there (the signed-in provider session's token and the pinned log keys, `Lookup` with
+     `DirRow.OwnerSigned` and `OwnerEnrolled` copied from the `Key` rows, the three buttons of the demo's `myEntry`
+     section, a `WatchLog` on sign-in with its `WatchState` in storage); publishing with proof of possession needs
+     the owner's signing key, and the showcase holds only the owners' public keys (a passkey would need another
+     assertion for each signature).
 
    *Limits that remain, stated plainly.*
    0. **What the client can and cannot confirm.** `OwnerPinned`/`OwnerSigned` rest on a pin somebody
@@ -874,8 +876,8 @@ cannot be opened.
       be overshot by a key or two by racing replicas even on a conditional store.
    9. A revoked key can be published again after the window (24 hours by default), and revoking does not
       touch documents already encrypted to it.
-   10. The real app does not wire these controls yet (the demo and the showcase do; the follow-up is the
-       note above and the key-management UX of step 5.1). The browser adapters do not implement
+   10. The real app does not wire these controls yet (the demo and the showcase do, the showcase without
+       proof of possession, see 5.7; the follow-up for the real app is the note above). The browser adapters do not implement
        `PrefixLister` (they fall back to listing the store). `ConditionalDeleter` is not implemented by the
        s3 and blob backends (the sweep claims the record with a conditional write first, which narrows the
        race to a token at most).
@@ -922,7 +924,7 @@ cannot be opened.
       same signature and fail-closed rules: a store writer cannot forge it, and an unsigned or
       altered record fails the save instead of falling back to the server level; replaying an older
       signed record or deleting it is not prevented by the signature, but is caught from inside the
-      files, see C.5 and 5.7). A confidential
+      files, see C.5 and 5.8). A confidential
       document's files are wrapped **only** for people's keys (`People`: the owner's keys and the
       signed recipient list); `AtRest` (C.1) is never consulted for them, and `ServerRecipients`
       are removed from the list even if a deployment put the server key among the owners, an age
@@ -950,7 +952,7 @@ cannot be opened.
       A document with `Saver.Rekey` set is therefore never left wrapped for the server key once
       `SetProtection` has returned nil. A store writer who deletes a document's `keys:` record or
       replays an older one no longer makes later saves server level: the files themselves prove the
-      level and seq the record had (5.7), `Save`, `Load` and the re-keys report `ErrDowngrade` and
+      level and seq the record had (5.8), `Save`, `Load` and the re-keys report `ErrDowngrade` and
       write nothing, with no state kept on the client (it needs the owners' public signing keys as
       configuration: the frame is signed, so that someone who only knows a public key cannot
       forge one, `ErrForgedFrame`, and a confidential document is not saved without
@@ -1023,7 +1025,178 @@ cannot be opened.
         (`docstore/encrypt/confidential_folders_test.go`): no real name in the store, a stranger's rebuild,
         passkey PRF alone and recovery key alone, rename, move, delete, breadcrumbs, no leak in the lists.
 
-   7. **Downgrade and deleted-record detection from inside the envelope (done).** The design and the rules are
+   7. **The showcase's encrypted store (done): `examples/canvas-editor-showcase`.**
+      Encryption is **off by default**. In the Save tab, "Encrypt this store" wraps the browser target
+      (`localStorage`) with `encrypt.Adapter` over a `ConfidentialKeyring`; the code is the `encstore` package (no
+      browser code, tested natively: `encstore.go`, `transaction.go`, `bind.go`), `encpanel.go` (the screens),
+      `encdir.go` and `dirclient` (the key directory). The final state, in one place:
+      - **Owner keys, chosen at setup.** (a) a **passkey** through PRF, with no server: `client.CreateLocal` makes a
+        discoverable credential for the origin (a random challenge, the credential ID kept in `localStorage`, `ErrNoPRF`
+        when the authenticator cannot do PRF) and `client.DeriveKey` asks it for the secret, which becomes an age key
+        (`PRFIdentity`) and, through `SignerFromAge`, the key that signs the recipient lists; (b) a pasted **SSH
+        public key** (ed25519 only: it also signs the lists, an RSA key cannot), unlocked later with the private key
+        file; (c) a generated **recovery key**, shown once (copy, download) and never kept.
+      - **A passkey alone puts EVERYTHING at risk, and the form says so.** In this store every document is
+        encrypted to the owner keys (there is no server to hold another copy), not only the confidential ones, so
+        losing the only passkey loses the whole store. `Store.Enable` refuses passkeys alone
+        (`ErrPasskeyOnly`) unless the person ticks an explicit acknowledgement (`Options.AcceptPasskeyOnly`); the
+        form strongly recommends a recovery key. A *confidential* document additionally needs a key that is not a
+        passkey (`CheckRecoverableOwner`), which the People tab offers ("Create a recovery key").
+      - **Every change of the keys is a transaction** (`encstore.Store.run`): turning encryption on, adding a key,
+        removing one, replacing a passkey, turning encryption off. The order is: (1) check the room (age adds a
+        header to every file and a stanza per key: `NoRoomError`, before anything is written) and that every file
+        opens with the keys held (`UnreadableError`); (2) write a **journal record** into `Config.Pending` (the
+        operation and the owner list it is making current, signed by the keys that make the change); (3) convert each
+        file through a recorder that keeps the original of every file before it is written and **reads each write
+        back** (a store that says "written" and keeps something else is caught); (4) verify: every file is in the new
+        state and opens with the new keys to the content it had; (5) commit: only now is the new key list made
+        current in `Config`. Any failure in 3 to 5 puts the originals and the old `Config` back; a store is never
+        half on. The page holds the storage's own lock and a gate that `Adapter()` writes pass through while a
+        change runs, so a save made meanwhile waits (Disable: it then finds encryption off, and nothing is left as
+        ciphertext in a store that no longer reads it). Failure injection tests (`transaction_test.go`) fail each
+        write, each journal write, each commit, a lying store and a quota, in each operation.
+      - **A crash in the middle is recoverable on the next load.** If the page dies (or the rollback itself fails:
+        `ErrRollbackFailed`), the journal is what is left. The next load is *interrupted*: `Adapter()` reads (a file
+        still in the clear is read as it is: the plaintext-tolerant adapter) and refuses writes, nothing can be made
+        confidential, and the Save tab offers **Finish re-encrypting** (`Store.Recover(ctx, true)`) or **Undo the
+        change** (`Recover(ctx, false)`). Each step is safe to repeat. Sealing files that are still plain needs no key;
+        re-keying needs the store unlocked (a key of either list opens the files). Finishing checks the journal's
+        signature first (`ErrConfigChanged` for a journal that none of the store's keys signed).
+      - **A recovery key is shown BEFORE it is committed** (Enable and AddOwner alike). The page makes the key and
+        shows its secret (copy, download); it becomes an owner key only after the person ticks "I have saved this
+        recovery key" and presses the commit button. `encstore` enforces it: a recovery key without
+        `NewKey.SecretSaved` is refused (`ErrSecretNotSaved`), so a key whose secret nobody saw never counts as
+        recoverable (`CheckRecoverable`). A cancelled or failed commit leaves no trace in `Config`.
+      - **Passkey ceremony failures are told apart.** `client.classify` maps the browser's rejections:
+        `ErrTimedOut` and `ErrNotVerified` (both are also `ErrCancelled`, so old callers still work),
+        `ErrInsecureContext`, `ErrUnsupportedAuthenticator`; a generic `NotAllowedError` is `ErrCancelled` and the page
+        says "closed or refused" instead of staying silent. A passkey that was made and then not used (the derive
+        prompt closed) is remembered in memory (`pendingCred`): the page offers **Try the passkey again** (no
+        second passkey is made) or **Forget it**; an authenticator that makes a passkey with no PRF
+        (`ErrNoPRF`, which still returns the credential ID) gets an explicit message naming the passkey to delete.
+        The page cannot delete a passkey from the authenticator and says so. The WebAuthn timeout is set (60 s).
+      - **What is kept where.** The owner keys' *public* halves, their signing keys, the seals and the journal are in
+        `localStorage` (`showcase-enc:config`, outside the store's own prefix); the private side (the unlocked
+        identity and signer) is **in memory only**. `Config` holds no secret (a native test greps its JSON for
+        `AGE-SECRET-KEY`, the recovery secret, the PRF identity and the raw secret bytes). The secrets given to
+        `UnlockPasskey` and `UnlockSSH` are cleared by them on every path (success, not a key, not a key file); the page
+        clears the SSH file it was handed inside the asynchronous run.
+      - **Lock closes the open document.** Lock forgets the keys **and** clears the editor (the text, the title, the
+        document's comments and styles, find/spelling/outline/statistics caches) and the session (`Session.Clear`:
+        the saved document's ID and name, the tag filter, the selection, the revealed names, the status), and the lists
+        show the placeholders again. With changes that are not saved it asks first: **Save and lock**, or Cancel to keep
+        working; "Lock and discard unsaved changes" is the one deliberate way to drop them. The note beside the button
+        says exactly this. A reload starts locked.
+      - **Config trust: seals, links and the anchor.** The owner list sits next to the store, so anyone who can write
+        this origin's storage could replace it with one that adds their own key (and every later save would be
+        encrypted to them). Two things bind it. (1) *Seals and links* (`bind.go`): each key that was unlocked when a
+        list was made signs it (`Seal`: the list, signed with the key's own signing key: the one derived from the PRF
+        output, the recovery key, or the SSH key itself), and each change is a signed `Link` (the list before, the list
+        after, signed by a key that was an owner before). At unlock the key's seal must lead to the current list by a
+        chain of links signed by owners of the list each leaves; otherwise the unlock is refused with
+        `ErrConfigChanged` ("the key configuration on this device was changed ..."). A passkey or a recovery key always
+        has a seal, so a list without one is refused whatever `Version` says; an SSH key is sealed at its first unlock.
+        (2) *The anchor* (`anchor.go`): the store writes into the signed frame of every document file the hash of the
+        owner list it was sealed under (`Binding.Hash`), and at unlock every verifiable frame (the newest 300 files are
+        looked at) must carry the hash of the list in `Config` (or of the list a journal is moving from or to). That
+        makes stripped seals, a first-generation list, an older valid config put back and a replaced list visible
+        even to an SSH key with no seal yet. A deleted or unreadable config over encrypted files is not "encryption
+        off": `Inspect` says `ErrConfigMissing` or `ErrConfigCorrupt`, and `Store.Restore` rebuilds a configuration
+        from a key that opens every file.
+        **The journal is authenticated too** (`authJournal`): a journal is whatever is in the storage, so finishing
+        one (`Recover(ctx, true)`) needs a held key that is vouched for by its own seal chain, the Config's owners to
+        be the list the journal says it started from, and the `Link` from that list to the journal's new list, signed
+        by a key of the old list (its signature covers both lists, so a seal over an older list, or a link made for
+        another direction, cannot be replayed as the journal of going back to it). Finishing with only the new key
+        (the change cut short after every file was converted) needs the same link, signed by an owner of the
+        Config, and the new key's own seal over the new list; the link is kept so the old keys still open the store.
+        Undoing goes back to the Config's own list and needs no signature.
+        **Residual limits, stated plainly:** (1) a store with no signed document file yet (an SSH-only store before
+        its first save) has nothing to anchor, so its first-generation list and an SSH key with no seal are trusted on
+        first use; (2) a rollback of the files together with the config to an older consistent snapshot is not
+        detected, nor is a journal replayed over a list that came back to the same content (a link carries no
+        nonce); (3) an attacker who replaces every file as well as the config leaves nothing to protect, only what
+        is saved afterwards is exposed; (4) nothing here protects against code running in this origin. A real
+        application keeps the signers and the list out of the reach of the store's writers.
+        **Another tab** of the page can change the keys: before every write the stored config is compared with the one
+        this tab loaded (`ErrStaleConfig`), and a tab that finds it changed locks itself and, at unlock, says the page
+        is out of date.
+      - **Removing and replacing keys.** The People tab lists each owner key with **Remove this key** and, on the
+        passkey, **Replace this passkey**, each asking first (what it does, and that whoever held the key keeps what
+        they already read or copied and any copy of old ciphertext). `RemoveOwner` encrypts everything again to the
+        keys that remain and signs every document's list again with one of them (`Sharing.Resign`: the list a removed
+        signer signed would no longer verify), as one transaction. It is refused for the last key
+        (`ErrLastOwner`), when it would leave only passkeys where there was a way back that is not one
+        (`ErrWouldLoseRecovery`), and while the store is unlocked with the key being removed alone
+        (`ErrUseAnotherKey`: another key's signing key is needed); `CanRemoveOwner` says why, and the button shows the
+        reason. `ReplaceOwner` adds the new passkey and removes the old in a single transaction (the page restores the
+        slot that remembers which passkey to ask if the swap fails, `client.SetLocalCredential`).
+      - **Erase the encrypted store.** When every key is lost nothing can bring the documents back; the only way
+        out is to start again. "Erase the encrypted store..." in the Save tab explains that, asks a question, then asks
+        for the word typed (ERASE, in the interface's language), and only then deletes everything the browser store
+        holds (documents, versions, folders, the catalog, the lists) and forgets its keys. It touches no other target
+        (memory, a folder on this computer, a server) and nothing else in the browser's storage, needs no key, and
+        can be run again after a failure. It cannot be undone.
+      - **Everything saved is encrypted, not only confidential documents.** There is no server, so the "at rest"
+        level is the owner's own keys (`ConfidentialKeyring.AtRest`); a document made confidential also hides its
+        name and tags and is wrapped for people's keys only, and can be shared with another key from the People tab.
+        The catalog is NOT encrypted: the names, tags, sizes and times of ordinary documents stay readable to anyone who
+        can read this browser's storage (the hint says so). Turning encryption off decrypts everything back
+        (`ErrConfidentialLeft` is enforced by `Store.Disable` from the signed lists, as well as by the page).
+      - **Locked** the store does not write: a save fails with "Unlock the store..." (an error that still wraps
+        `docstore.ErrLocked`), opening a confidential document does the same, and its list entry is the placeholder
+        with a Reveal button; unlocking shows the real names (auto-reveal), opening one reveals it too.
+      - **Lock marks, switches and the placeholder's language.** `components.DocList` draws a lock with the label
+        "Confidential document" on confidential documents (`Doc.Confidential`, `NameHidden`) and "Confidential folder"
+        on folders, and each row has "Make confidential" / "Make not confidential" with a question that says what
+        changes. The buttons have accessible names of their own (`Make Budget confidential`; two hidden rows get a
+        short ID) and `#enc-status` is a polite live region. The placeholders `saver.ConfidentialName` /
+        `ConfidentialFolderName` are **stored in English** (catalogs, packs, other clients read them) and **drawn
+        translated**: the components render the placeholder through `tr()` whenever `NameHidden` is set (es, fr, de
+        tested), and never store a translated string. `encstore` and `client` errors are sentinels; the page puts them in
+        the interface's language (`tErr`, `passkeyFailed`), and the passkey prompt's relying party and user names
+        (`enc.passkeyRP`, `enc.passkeyUser`) are translated too.
+      - **Packs.** `encrypt.PackSealer(owners, identities)` returns `PackOptions.Seal` and `ImportOptions.Open` over a
+        scratch store per call; `Session.PackKeys` hands them out while unlocked. The pack is sealed for the owner keys
+        only. The e2e checks the exported bytes for the name and the text, then deletes the document and imports the
+        pack (locked: "needs a key", left out; unlocked: confidential again). A pack sealed for **another** store's key,
+        imported while this one is unlocked, says "sealed for another key" (`encrypt.ErrWrongPackKey`,
+        `docstore.ErrWrongKey`), not "unlock the store".
+      - **The key directory.** With `?docstore=https://host` on the page's address (or the settings field in the People
+        tab, kept in `localStorage`, with an optional session token) the People tab has a **directory picker**: it finds
+        people by e-mail through `components.Recipients`' `Directory` (`GET /directory/lookup`), marks a key verified only
+        as the server answered (and names the host that vouches), and offers **Publish my keys** (`POST
+        /directory/publish`: a passkey's and an SSH key's public keys, never the recovery key). The calls go through the
+        showcase's own `dirclient.Directory`, a small interface over the routes. **The address is a trust decision:** a
+        link only *offers* an address, nothing is sent to it until the person confirms it in a dialog that names the
+        host; it must be https (http only for a host on this machine), it is confirmed again whenever it changes, and
+        a session token belongs to one address and is dropped when the address changes (the token field is a password
+        field). A server without the routes gets a clear message (`dirclient.ErrNoDirectory`). Tested natively
+        against `examples/people-keys-demo/demoserver` (`dirclient_test.go`) and in a browser
+        (`TestPeopleTabUsesTheKeyDirectory`). The page has no sign-in: a server that needs a provider session needs its
+        token pasted (the demo server hands one out at `/demo/provider-session`, for demo servers only); the page must
+        be allowed to call the server (same origin, or CORS on the server).
+        *Left:* publishing **with proof of possession** and the owner-signed entry of the signed directory (#84:
+        `directoryclient.Client`, the owner key, `WatchLog`) are not wired in the showcase. It holds only the *public*
+        keys of its owners, and a passkey owner would need another WebAuthn assertion (PRF) for every signature, so
+        the showcase publishes through its own `dirclient` as the plain, session-authenticated route and shows no
+        "owner-signed" mark. The demo `examples/people-keys-demo` has the whole flow.
+      - **Left (residual limits).** The trust limits of the key list are above. A `SeqFloor` here lasts the page
+        (`encrypt.MemorySeqFloor`, which cannot degrade, so the showcase does not need `SetFloorDegradedHandler`: a
+        host that moves to `LocalStorageSeqFloor` must set it or poll `Err()`). One local passkey per origin, two
+        prompts to set it up (create, then derive). Another tab can write while a change runs: the store's own lock
+        covers this page, the browser's web lock (where it has one) the rest. The journal's originals are in memory:
+        after a crash the change can only be finished or undone from the state on disk (both are safe, neither can
+        recover a file the browser lost). **Quota and capacity:** the room check estimates what age adds and what the
+        storage can hold (`Store.Capacity`, in the storage's own units: `localStorage` keeps strings, base64 costs 4
+        characters for 3 bytes, some browsers count 2 bytes a character), and a browser's accounting is its own, so a
+        write can still fail (it is then rolled back); `NoRoomError` is raised before anything is written. The anchor
+        looks at the newest 300 files only. A file no unlocked key opens blocks a change (`UnreadableError`): the way
+        out is another key or Erase. RSA SSH keys cannot be owners, and a passphrase-protected SSH key must be opened
+        by the person first. Directory publishing with proof of possession is not wired (above). The real app has none
+        of this yet.
+
+   8. **Downgrade and deleted-record detection from inside the envelope (done).** The design and the rules are
       in C.5; what was built, in `docstore/encrypt` unless noted:
       - `encrypt.go`: frame v3 (`GJE\x03`: id, level, record seq, recipient hash, content hash and an owner
         signature; v2 is the same unsigned, v1 has no level), `Adapter.Signer`, `ErrForgedFrame`,
@@ -1072,14 +1245,16 @@ cannot be opened.
         degraded floor reported through the keyring.
 
    *Left:*
-   1. The showcase wiring and the key management UX (where the owner's key lives, the "make
-      confidential" switch, the recovery key shown once, the lock mark in the document list).
-   2. ~~Folder names are not hidden~~ Done, see 5.6 below (confidential folders). Left there: the
-      UI switch, and the pack-count wording in `Session.DownloadPack`, which counts a folder whose
+   1. ~~The showcase wiring and the key management UX~~ Done (5.7): the owner's keys, the "make
+      confidential" switch, the recovery key shown before it is committed, the lock mark in the document list.
+      Left there: the real application, and the points listed under 5.7's "Left".
+   2. ~~Folder names are not hidden~~ Done, see 5.6 below (confidential folders). The showcase has the
+      switch (5.7). Left there: the real app's switch, and the pack-count wording in `Session.DownloadPack`, which counts a folder whose
       name could not be sealed with the documents left out.
    3. What someone already opened or copied before a switch cannot be taken back (as with any
       re-key); with the hook the stored copies themselves are re-keyed. A store writer who
-      deleted the `keys:` record first is caught from inside the files (5.7).
-   4. Key management for `Seal`/`Open` in the pack UI ("As .opendoc", "Import .opendoc"): until
-      then `Session.DownloadPack` leaves confidential documents out and says how many, and
+      deleted the `keys:` record first is caught from inside the files (5.8).
+   4. ~~Key management for `Seal`/`Open` in the pack UI~~ Done in the showcase (5.7): `Session.PackKeys`
+      gives the pack the owner keys while unlocked. Left: the real app. Without it
+      `Session.DownloadPack` leaves confidential documents out and says how many, and
       `Session.ImportPackData` reports the ones it could not open.

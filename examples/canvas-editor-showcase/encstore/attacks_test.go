@@ -613,3 +613,79 @@ func TestRemovingTheKeyThatSignedTheIndexSignsItAgain(t *testing.T) {
 		t.Fatalf("the index after the removal: %+v %v", idx, err)
 	}
 }
+
+// A seal over an old owner list is not the journal of going back to it: someone with an earlier copy
+// of the storage writes the current Config and a journal From the current list To the old one (a
+// list with a key that was removed since), carrying the old seals and a link signed by the removed
+// key. The unlocking owner pressing Finish must not make the removed key an owner again.
+func TestAReplayedSealOverAnOldListIsNotFinished(t *testing.T) {
+	ctx := context.Background()
+	r, rsecret := anchoredRig(t)
+	rk, err := RecoveryKeyFromSecret("Recovery key", rsecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legit := r.st.Config()
+	xk, _ := recovery(t) // the key that was an owner once, and is removed
+	old := append(slicesClone(legit.Owners), ownerOf(xk))
+	replay := cloneConfig(legit)
+	replay.Pending = &Pending{Op: OpAdd, To: old, From: ownersDigest(legit.Owners),
+		Seals: []Seal{makeSeal(rk.Unlock.Signer, old)}, // an old seal of a key of the current list
+		Link:  linkBy(t, xk, legit.Owners, old)}        // self-signed by the removed key
+	r.open(t, replay)
+	r.unlockPasskey(t)
+	before := r.snapshot(t)
+	if err := r.st.Recover(ctx, true); !errors.Is(err, ErrConfigChanged) {
+		t.Fatalf("finish: %v", err)
+	}
+	sameSnapshot(t, "the files", r.snapshot(t), before)
+	if r.persist != 0 || len(r.st.Owners()) != len(legit.Owners) {
+		t.Fatalf("the config was touched: %d persists, %d owners", r.persist, len(r.st.Owners()))
+	}
+}
+
+// Finishing with only the new key: the journal's link must be From the journal's From, to its To,
+// and signed by a key of the Config's owners.
+func TestFinishingWithTheNewKeyNeedsTheRightLink(t *testing.T) {
+	ctx := context.Background()
+	cases := map[string]func(t *testing.T, j *Pending, cfg Config, rk, xk NewKey) *Link{
+		"from another list": func(t *testing.T, j *Pending, cfg Config, rk, xk NewKey) *Link {
+			other := []Owner{ownerOf(xk)}
+			return linkBy(t, rk, other, j.To) // validly signed by an owner, but not from this list
+		},
+		"to another list": func(t *testing.T, j *Pending, cfg Config, rk, xk NewKey) *Link {
+			return linkBy(t, rk, cfg.Owners, []Owner{ownerOf(xk)}) // from this list, but to a list that is not the journal's
+		},
+		"direction reversed": func(t *testing.T, j *Pending, cfg Config, rk, xk NewKey) *Link {
+			return linkBy(t, rk, j.To, cfg.Owners)
+		},
+		"signed by a stranger": func(t *testing.T, j *Pending, cfg Config, rk, xk NewKey) *Link {
+			return linkBy(t, xk, cfg.Owners, j.To)
+		},
+	}
+	for name, mk := range cases {
+		t.Run(name, func(t *testing.T) {
+			r, rsecret := anchoredRig(t)
+			rk, err := RecoveryKeyFromSecret("Recovery key", rsecret)
+			if err != nil {
+				t.Fatal(err)
+			}
+			secret2 := bytes.Repeat([]byte{6}, 32)
+			n := passkeyFrom(t, secret2, "New passkey")
+			cfg := r.st.Config()
+			if err := r.st.AddOwner(ctx, n); err != nil {
+				t.Fatal(err)
+			}
+			journal := r.history[0]
+			xk, _ := recovery(t)
+			journal.Pending.Link = mk(t, journal.Pending, cfg, rk, xk)
+			r.open(t, journal)
+			if err := r.st.UnlockPasskey(bytes.Clone(secret2)); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.st.Recover(ctx, true); !errors.Is(err, ErrConfigChanged) {
+				t.Fatalf("%v", err)
+			}
+		})
+	}
+}

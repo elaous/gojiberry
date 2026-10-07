@@ -923,11 +923,13 @@ func validJournalSeal(sl Seal, to []Owner, allowed func(signer string) bool) boo
 //   - A journal over a committed list (add, remove, replace, disable) is accepted when a held key
 //     has its own seal chain leading to the Config's owners (reach: the old list, vouched for by that
 //     key's own signature and by owners' links), the Config's owners are the list the journal says it
-//     started from (From), and the journal is signed, as a seal over its new list or as the Link
-//     From -> To, by a key of that old list. A forged journal has nobody of the old list to sign it.
+//     started from (From), and, to finish, the journal carries the Link From -> To signed by a key
+//     of that old list (the signature covers both lists, so it cannot be replayed for another
+//     direction). A forged journal has nobody of the old list to sign it. Undoing needs no
+//     signature: it goes back to the Config's list.
 //   - Or, for finishing only, a key held that is in the new list vouches for it with its own seal
 //     over that list (made when it was in hand at the start: it is the person's new key), and the
-//     journal carries the Link from the old list, which is kept so the old keys still open the
+//     journal carries the Link from the old list (signed by a key of the Config's owners), which is kept so the old keys still open the
 //     store afterwards. An attacker has neither that key's signature nor a link from the real
 //     old list.
 //   - Undoing needs the first kind: the list it goes back to must be vouched for by a held key.
@@ -1012,16 +1014,20 @@ func (s *Store) authJournal(ctx context.Context, cfg Config, p *Pending, finish 
 				continue
 			}
 			from := lists[len(lists)-1] // the old list as the key's own seal vouches for it
-			signed := slices.ContainsFunc(p.Seals, func(sl Seal) bool {
-				return validJournalSeal(sl, p.To, func(sg string) bool { return hasSigner(from, sg) })
-			}) || (p.Link != nil && p.Link.valid() && p.Link.From == p.From && ownersDigest(p.Link.To) == ownersDigest(p.To) && hasSigner(from, p.Link.Signer))
+			// Finishing needs the Link From -> To, signed by a key of the old list: its signature
+			// covers both digests, so it cannot be replayed for another From or To. A seal over To
+			// alone is not enough: it says nothing of the list the change started from, so a seal
+			// over an old list would pass as the journal of going back to it. Undoing needs no
+			// signature: it goes back to the list in the Config.
+			signed := p.Link != nil && p.Link.valid() && p.Link.From == p.From && ownersDigest(p.Link.To) == ownersDigest(p.To) && hasSigner(from, p.Link.Signer)
 			if !signed && finish {
 				continue
 			}
 			return check(ids[i], append(signersOf(lists...), verifiers...))
 		}
 	}
-	if finish && p.Link != nil && p.Link.valid() && p.Link.From == p.From && ownersDigest(p.Link.To) == ownersDigest(p.To) {
+	if finish && p.Link != nil && p.Link.valid() && p.Link.From == p.From && ownersDigest(cfg.Owners) == p.From &&
+		ownersDigest(p.Link.To) == ownersDigest(p.To) && hasSigner(cfg.Owners, p.Link.Signer) {
 		for i, h := range holders {
 			if !hasOwnerKey(p.To, h) {
 				continue
