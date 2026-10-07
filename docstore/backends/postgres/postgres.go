@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/elaous/gojiberry/docstore"
+	"strings"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -132,6 +133,30 @@ func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest
 	return tx.Commit()
 }
 
+// DeleteIf implements docstore.ConditionalDeleter in one transaction: the row is locked, compared
+// with prevDigest and deleted.
+func (a *Adapter) DeleteIf(ctx context.Context, id string, prevDigest string) error {
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var cur []byte
+	err = tx.QueryRowContext(ctx, `SELECT data FROM documents WHERE id = $1 FOR UPDATE`, id).Scan(&cur)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return docstore.ErrNotFound
+	case err != nil:
+		return err
+	case prevDigest == "" || docstore.Digest(cur) != prevDigest:
+		return docstore.ErrConflict
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM documents WHERE id = $1`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error) {
 	var doc docstore.Document
 	doc.ID = id
@@ -146,7 +171,20 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 }
 
 func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
-	rows, err := a.db.QueryContext(ctx, `SELECT id, length(data), updated_at FROM documents`)
+	return a.list(ctx, `SELECT id, length(data), updated_at FROM documents`)
+}
+
+// likeEscaper escapes what LIKE treats as a pattern (backslash is the escape character).
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// ListPrefix implements docstore.PrefixLister: the database filters, with a LIKE whose
+// pattern is the prefix with its wildcards escaped.
+func (a *Adapter) ListPrefix(ctx context.Context, prefix string) ([]docstore.Meta, error) {
+	return a.list(ctx, `SELECT id, length(data), updated_at FROM documents WHERE id LIKE $1 ESCAPE '\'`, likeEscaper.Replace(prefix)+"%")
+}
+
+func (a *Adapter) list(ctx context.Context, query string, args ...any) ([]docstore.Meta, error) {
+	rows, err := a.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

@@ -73,6 +73,7 @@
 .gj-recip-my-title { margin: 0; }
 .gj-recip-mark { font-size: 0.8em; }
 .gj-recip-verified { color: var(--gj-text); font-weight: 600; }
+.gj-recip-attested { text-decoration: underline double; text-underline-offset: 2px; }
 .gj-recip-dir { display: flex; gap: 0.4em; flex-wrap: wrap; }
 .gj-recip-dir-email { font: inherit; padding: 0.3em 0.5em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); flex: 1; min-width: 12em; }
 .gj-recip-recovery-warning { margin: 0; font-weight: 600; }

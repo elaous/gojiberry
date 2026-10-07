@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/elaous/gojiberry/auth"
@@ -54,6 +55,11 @@ type Config struct {
 	// before expiry was switched on the deadline UpdatedAt + TTL, so old ones are deleted by the
 	// first sweep. The default is now + TTL, a full grace period.
 	ExpiryAdoptUpdated bool
+	// Limiter chooses where rate limits (the directory's, and the passkey routes') are kept:
+	// "memory" (the default: a budget per process) or "store" (a budget shared through the
+	// store by every replica on it, see StoreLimiter). ConfigFromEnv reads
+	// GOJIBERRY_DOCSTORE_LIMITER.
+	Limiter string
 	// ExpiryOrphans (GOJIBERRY_DOCSTORE_EXPIRY_ORPHANS=collab) makes the sweeper also delete the
 	// shared-editing state ("collab:<id>") of documents that do not exist, once it is older than
 	// the TTL plus ExpiryOrphanGrace (GOJIBERRY_DOCSTORE_EXPIRY_ORPHAN_GRACE, default 1h): without
@@ -145,6 +151,9 @@ func ConfigFromEnv() Config {
 		log.Fatalf("docstore: %v", err)
 	}
 	if cfg.ExpiryAdoptUpdated, err = ParseExpiryAdopt(os.Getenv("GOJIBERRY_DOCSTORE_EXPIRY_ADOPT")); err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
+	if cfg.Limiter, err = ParseLimiterMode(os.Getenv("GOJIBERRY_DOCSTORE_LIMITER")); err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
 	// In public mode the sweep of orphaned shared-editing state is on unless switched off with
@@ -288,8 +297,9 @@ func envOr(key, fallback string) string {
 // /auth/{provider}/login, /auth/{provider}/callback, /auth/me,
 // /auth/logout.
 //
-// Plus, with WithDirectory and an auth.Manager, POST /directory/publish and
-// GET /directory/lookup (directory.go); the "directory/" ids are reserved from /docs.
+// Plus, with WithDirectory and an auth.Manager, the /directory/* routes (challenge, publish,
+// revoke, lookup, log, owner enrollment: see WithDirectory); the "directory/", "directory-log/", "directory-enroll/" and "ratelimit/"
+// ids are reserved from /docs.
 //
 // GET/PUT/DELETE on /docs/{id} enforce that document's own ACL, if any
 // (checkPermission, acl.go) -- a document nobody has ever shared via
@@ -312,9 +322,22 @@ type Server struct {
 	hidden []string // lowercased (Hide)
 	// docsClosed answers 404 to the generic API (see CloseDocs).
 	docsClosed bool
-	// directory is the key directory behind /directory/* (WithDirectory); limiter limits it.
-	directory DirectoryService
-	limiter   windowLimiter
+	// directory is the key directory behind /directory/* (WithDirectory); its routes are limited
+	// by the limiters the factory makes (WithDirectoryLimits) and its lookups narrowed by
+	// dirPolicy (WithDirectoryPolicy).
+	directory       DirectoryService
+	dirLimitFactory LimiterFactory
+	dirLimitOnce    sync.Once
+	dirLimits       *directoryLimits
+	dirPolicy       DirectoryPolicy
+	// dirDomainBudget makes the whole-server lookup budget one per e-mail domain
+	// (WithDirectoryGlobalPerDomain).
+	dirDomainBudget bool
+	// dirAdmin says a request comes from the operator (WithDirectoryAdmin).
+	dirAdmin func(*http.Request) bool
+	// dirClientIP names the client of a directory request for the per-client budgets
+	// (WithDirectoryClientIP); nil is the connection's remote address.
+	dirClientIP func(*http.Request) string
 }
 
 type extraRoute struct {
@@ -462,8 +485,18 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("/auth/", s.auth.Routes())
 	}
 	if s.auth != nil && s.directory != nil {
+		mux.HandleFunc("/directory/challenge", s.handleChallenge)
 		mux.HandleFunc("/directory/publish", s.handlePublish)
+		mux.HandleFunc("/directory/keys/", s.handleRevoke)
 		mux.HandleFunc("/directory/lookup", s.handleLookup)
+		mux.HandleFunc("/directory/log", s.handleLog)
+		mux.HandleFunc("/directory/log/head", s.handleLogHead)
+		mux.HandleFunc("/directory/log/address", s.handleLogAddress)
+		mux.HandleFunc("/directory/enroll", s.handleEnrollRoot)
+		mux.HandleFunc("/directory/enroll/", s.handleEnrollSub)
+		if s.dirAdmin != nil {
+			mux.HandleFunc("/admin/directory/reset-enrollment/", s.handleOperatorReset)
+		}
 	}
 	for _, e := range s.extra {
 		mux.Handle(e.pattern, e.h)
@@ -486,7 +519,11 @@ func exposeHeaders(next http.Handler) http.Handler {
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "backend": s.backend}) // a write failure here means the client disconnected -- nothing actionable to do about it
+	out := map[string]any{"status": "ok", "backend": s.backend}
+	if h, ok := s.directory.(DirectoryHealther); ok {
+		out["directory"] = h.DirectoryHealth()
+	}
+	_ = json.NewEncoder(w).Encode(out) // a write failure here means the client disconnected -- nothing actionable to do about it
 }
 
 // quotaResponse is handleQuota's own JSON shape -- Available false

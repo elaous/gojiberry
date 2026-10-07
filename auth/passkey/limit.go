@@ -1,107 +1,32 @@
 package passkey
 
 import (
-	"context"
 	"net"
 	"net/http"
 	"net/netip"
 	"strings"
-	"sync"
-	"time"
+
+	"github.com/elaous/gojiberry/docstore"
 )
 
-// Limiter decides whether a caller may start or finish a ceremony now. The default is
-// NewRateLimiter (a per-key token bucket in this process); replicas that must share a budget,
-// or a deployment with a gateway that already limits, inject their own as Config.Limiter
-// (Unlimited turns the check off).
+// Limiter decides whether a caller may start or finish a ceremony now. It is docstore.Limiter:
+// the default is NewRateLimiter (a per-key token bucket in this process); replicas that must
+// share a budget inject docstore.StoreLimiter (or any other) as Config.Limiter, a deployment
+// with a gateway that already limits can inject Unlimited (which turns the check off).
 //
 // key is "<route group>|<client>" where the client comes from Config.ClientIP (the IP address
 // by default). Allow returns ok=false and how long to wait when the caller is over its budget.
-type Limiter interface {
-	Allow(ctx context.Context, key string) (ok bool, retryAfter time.Duration)
-}
+type Limiter = docstore.Limiter
 
 // Unlimited is a Limiter that allows everything.
-type Unlimited struct{}
+type Unlimited = docstore.Unlimited
 
-// Allow implements Limiter.
-func (Unlimited) Allow(context.Context, string) (bool, time.Duration) { return true, 0 }
-
-// RateLimiter is a token bucket per key: Burst requests at once, refilled at PerMinute per
-// minute. Idle keys are forgotten, so memory follows the number of active callers.
-type RateLimiter struct {
-	PerMinute float64
-	Burst     int
-	// Now is the clock (time.Now if nil), for tests.
-	Now func() time.Time
-
-	mu        sync.Mutex
-	buckets   map[string]*bucket
-	lastSweep time.Time
-}
-
-type bucket struct {
-	tokens float64
-	at     time.Time
-}
+// RateLimiter is a token bucket per key held in this process (docstore.RateLimiter).
+type RateLimiter = docstore.RateLimiter
 
 // NewRateLimiter makes a limiter allowing burst requests at once and perMinute on average.
 func NewRateLimiter(perMinute float64, burst int) *RateLimiter {
-	return &RateLimiter{PerMinute: perMinute, Burst: burst, buckets: map[string]*bucket{}}
-}
-
-// maxBuckets bounds the keys remembered; past it the oldest idle ones are dropped first.
-const maxBuckets = 100000
-
-// Allow implements Limiter.
-func (l *RateLimiter) Allow(_ context.Context, key string) (bool, time.Duration) {
-	now := time.Now()
-	if l.Now != nil {
-		now = l.Now()
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.buckets == nil {
-		l.buckets = map[string]*bucket{}
-	}
-	if len(l.buckets) >= maxBuckets || now.Sub(l.lastSweep) > time.Minute {
-		l.sweepLocked(now)
-	}
-	b, ok := l.buckets[key]
-	if !ok {
-		b = &bucket{tokens: float64(l.Burst), at: now}
-		l.buckets[key] = b
-	}
-	b.tokens += now.Sub(b.at).Minutes() * l.PerMinute
-	if b.tokens > float64(l.Burst) {
-		b.tokens = float64(l.Burst)
-	}
-	b.at = now
-	if b.tokens >= 1 {
-		b.tokens--
-		return true, 0
-	}
-	if l.PerMinute <= 0 {
-		return false, time.Hour
-	}
-	wait := time.Duration((1 - b.tokens) / l.PerMinute * float64(time.Minute))
-	return false, wait
-}
-
-// sweepLocked forgets buckets that have refilled completely (idle callers).
-func (l *RateLimiter) sweepLocked(now time.Time) {
-	l.lastSweep = now
-	for k, b := range l.buckets {
-		if b.tokens+now.Sub(b.at).Minutes()*l.PerMinute >= float64(l.Burst) {
-			delete(l.buckets, k)
-		}
-	}
-	for k := range l.buckets { // still too many: drop arbitrary ones (an attacker's keys are as likely as any)
-		if len(l.buckets) < maxBuckets {
-			break
-		}
-		delete(l.buckets, k)
-	}
+	return docstore.NewRateLimiter(perMinute, burst)
 }
 
 // Defaults of the limiter a Service makes when Config.Limiter is nil: per client address and
@@ -109,6 +34,10 @@ func (l *RateLimiter) sweepLocked(now time.Time) {
 const (
 	defaultPerMinute = 30
 	defaultBurst     = 20
+	// DefaultPerMinute and DefaultBurst are those numbers, for a host that builds the Limiter
+	// itself (docstore.StoreLimiters) and wants the same budget.
+	DefaultPerMinute = defaultPerMinute
+	DefaultBurst     = defaultBurst
 )
 
 // ClientIP is the address of the client of r: the connection's remote address.

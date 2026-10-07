@@ -65,7 +65,7 @@ const (
 
 // systemPrefixes are the keyspaces that are not documents: they never expire by themselves (the
 // ones that belong to a document go with it, see DefaultRelated).
-var systemPrefixes = []string{ExpiryPrefix, ExpiryCreatedPrefix, aclKeyPrefix, collabPrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix, PublicPrefix, ReportPrefix}
+var systemPrefixes = []string{ExpiryPrefix, ExpiryCreatedPrefix, aclKeyPrefix, collabPrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix, PublicPrefix, ReportPrefix}
 
 // IsDocumentKey reports whether key is a plain document: what the saver writes ("<id>~<gen><ext>"
 // generation keys) or a client PUTs under a plain id. It is an allowlist of the document
@@ -831,6 +831,18 @@ func (e *ExpiringAdapter) touchLocked(ctx context.Context, key string, now time.
 		return e.writeRecord(ctx, key, rec)
 	}
 	return e.writeDeadline(ctx, key, rec.deadline)
+}
+
+// DeleteIf implements ConditionalDeleter for the keys that are not documents (system records
+// such as "ratelimit/", which have no deadline of their own to clean up) over an inner adapter
+// that has it; a document key is ErrConditionalUnsupported, since deleting one also removes its
+// deadline and related records.
+func (e *ExpiringAdapter) DeleteIf(ctx context.Context, id string, prev string) error {
+	c, ok := e.Inner.(ConditionalDeleter)
+	if !ok || IsDocumentKey(id) {
+		return ErrConditionalUnsupported
+	}
+	return c.DeleteIf(ctx, id, prev)
 }
 
 // Load implements Adapter. It does not renew; an expired document is ErrNotFound.

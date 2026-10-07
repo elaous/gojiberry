@@ -110,8 +110,14 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 }
 
 func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
+	return a.ListPrefix(ctx, "")
+}
+
+// ListPrefix implements docstore.PrefixLister: the bucket lists only the keys under the
+// adapter's prefix followed by prefix.
+func (a *Adapter) ListPrefix(ctx context.Context, prefix string) ([]docstore.Meta, error) {
 	var metas []docstore.Meta
-	iter := a.bucket.List(&blob.ListOptions{Prefix: a.prefix})
+	iter := a.bucket.List(&blob.ListOptions{Prefix: a.prefix + prefix})
 	for {
 		obj, err := iter.Next(ctx)
 		if errors.Is(err, io.EOF) {

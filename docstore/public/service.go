@@ -55,14 +55,20 @@ type Options struct {
 	Config Config
 
 	// The injectable pieces, each with a single-process default (see doc.go):
-	Sessions   SessionStore               // NewMemorySessionStore(Config.MaxSessions)
-	Limiters   Limiters                   // passkey.RateLimiter from the Config
-	Quota      Quota                      // NewMemoryQuota(Config.IPDailyBytes, 24h)
-	Admin      AdminGuard                 // TokenAdmin(Config.AdminToken)
-	Blocklist  Blocklist                  // NoBlocklist
-	Challenger Challenger                 // NoChallenge
-	ClientIP   func(*http.Request) string // passkey.TrustedProxies(Config.TrustedProxies...), else the remote address
-	Now        func() time.Time           // time.Now; use the clock of the ExpiringAdapter in tests
+	Sessions SessionStore // NewMemorySessionStore(Config.MaxSessions)
+	Limiters Limiters     // passkey.RateLimiter from the Config
+	// LimiterFactory, when set, makes the budgets that Limiters leaves nil: docstore.StoreLimiters
+	// (replicas on one store share them) or any factory, instead of a per-process RateLimiter.
+	// The names are "public-session", "public-write", "public-writeaddr", "public-view",
+	// "public-report" and "public-admin"; with docstore.StoreLimiters they are records under
+	// docstore.RateLimitPrefix, which the document API refuses and expiry leaves alone.
+	LimiterFactory docstore.LimiterFactory
+	Quota          Quota                      // NewMemoryQuota(Config.IPDailyBytes, 24h)
+	Admin          AdminGuard                 // TokenAdmin(Config.AdminToken)
+	Blocklist      Blocklist                  // NoBlocklist
+	Challenger     Challenger                 // NoChallenge
+	ClientIP       func(*http.Request) string // passkey.TrustedProxies(Config.TrustedProxies...), else the remote address
+	Now            func() time.Time           // time.Now; use the clock of the ExpiringAdapter in tests
 }
 
 // Service is the public (anonymous) offer: session, document, view link, report and takedown
@@ -188,22 +194,26 @@ func New(o Options) (*Service, error) {
 		s.sessions = NewMemorySessionStore(cfg.MaxSessions)
 	}
 	// rl makes a token bucket of burst `figure` refilled at figure per `per`.
-	rl := func(l Limiter, figure float64, per time.Duration) Limiter {
+	rl := func(l Limiter, name string, figure float64, per time.Duration) Limiter {
 		if l != nil {
 			return l
 		}
-		r := passkey.NewRateLimiter(figure*float64(time.Minute)/float64(per), burst(figure))
+		perMinute := figure * float64(time.Minute) / float64(per)
+		if o.LimiterFactory != nil {
+			return o.LimiterFactory(name, perMinute, burst(figure))
+		}
+		r := passkey.NewRateLimiter(perMinute, burst(figure))
 		r.Now = s.now
 		return r
 	}
-	s.lim.Session = rl(s.lim.Session, cfg.SessionsPerHour, time.Hour)
-	s.lim.Write = rl(s.lim.Write, cfg.WritesPerMinute, time.Minute)
-	s.lim.WriteAddr = rl(s.lim.WriteAddr, cfg.WritesPerMinutePerAddress, time.Minute)
-	s.lim.View = rl(s.lim.View, cfg.ViewsPerMinute, time.Minute)
-	s.lim.Report = rl(s.lim.Report, cfg.ReportsPerMinute, time.Minute)
-	s.lim.Admin = rl(s.lim.Admin, cfg.AdminFailuresPerMinute, time.Minute)
-	s.lim.AdminNet = rl(s.lim.AdminNet, cfg.AdminFailuresPerNetPerMinute, time.Minute)
-	s.lim.AdminGlobal = rl(s.lim.AdminGlobal, cfg.AdminFailuresGlobalPerMinute, time.Minute)
+	s.lim.Session = rl(s.lim.Session, "public-session", cfg.SessionsPerHour, time.Hour)
+	s.lim.Write = rl(s.lim.Write, "public-write", cfg.WritesPerMinute, time.Minute)
+	s.lim.WriteAddr = rl(s.lim.WriteAddr, "public-writeaddr", cfg.WritesPerMinutePerAddress, time.Minute)
+	s.lim.View = rl(s.lim.View, "public-view", cfg.ViewsPerMinute, time.Minute)
+	s.lim.Report = rl(s.lim.Report, "public-report", cfg.ReportsPerMinute, time.Minute)
+	s.lim.Admin = rl(s.lim.Admin, "public-admin", cfg.AdminFailuresPerMinute, time.Minute)
+	s.lim.AdminNet = rl(s.lim.AdminNet, "public-admin-net", cfg.AdminFailuresPerNetPerMinute, time.Minute)
+	s.lim.AdminGlobal = rl(s.lim.AdminGlobal, "public-admin-global", cfg.AdminFailuresGlobalPerMinute, time.Minute)
 	if s.quota == nil {
 		q := NewMemoryQuota(cfg.IPDailyBytes, 24*time.Hour)
 		q.Now = s.now
