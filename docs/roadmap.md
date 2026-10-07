@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-6 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, #92 `RepairAll` with `Resign`, and the SSH key-tag tightening; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
+7 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, #92 `RepairAll` with `Resign`, the SSH key-tag tightening, and the shared passkey `ChallengeStore`; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
 
 ## Notes for upgraders
 
@@ -74,7 +74,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
   `docstore.Server` refuses them through `/docs`, so a document with such an ID becomes unreachable; rename it
   before upgrading. **Every reserved prefix is now compared without case** (`ACL:x`, `Collab:x`, `DIRECTORY/x`
   are refused like their lower-case forms; a backend that folds case would alias them). Everything new is off by
-  default and nothing is required: `GOJIBERRY_DOCSTORE_LIMITER` (`memory`, the default, or `store`),
+  default and nothing is required: `GOJIBERRY_DOCSTORE_LIMITER` (`memory`, the default, or `store`), `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES` (`memory`, the default, or `store`; `passkey/challenge/` records),
   `GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV` (retired keys for rotation), `..._DIRECTORY_REQUIRE_POP`,
   `..._DIRECTORY_LOOKUP` (`any` or `domain`) and `..._DIRECTORY_REVOKE_WINDOW`. Records published by the
   earlier version still verify (and move to the current key when published again). The directory's limits are
@@ -264,8 +264,10 @@ single-process default of each. To build when a deployment needs it:
    injected as `passkey.Config.Limiter`: replicas on one conditional store share the budget). Left: Redis or a
    gateway's decision behind the same `Limiter` interface, for a deployment that has one. Default: a per-address
    token bucket in the process.
-2. **A shared challenge store** (`passkey.ChallengeStore`): Redis or a database, with an atomic
-   Take, so a ceremony begun on one replica finishes on another. Default today: memory.
+2. **A shared challenge store: done through the store** (`passkey.StoreChallenges`,
+   `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store`, atomic `Take` by `DeleteIf` or a conditional used marker). Left:
+   Redis behind the same interface, for a deployment that has one (no client ships); and the bearer sessions of
+   `auth.Manager`, which are per process (see backlog item 7). Default: memory.
 3. **Account stores with a conditional write.** `AdapterStore` already does compare-and-set
    (`Updater`, `Creator`) over any `docstore.ConditionalAdapter`; the S3, Mongo and Postgres
    adapters get it from #55. To check once #55 merges: run the passkey tests against each
@@ -345,9 +347,26 @@ a way to avoid hitting the limit meanwhile.
    compares tag and fingerprint, so a person whose tag collides with a server key is kept. A raw recipient built
    straight from `agessh` has only the tag, and a tag match with it still counts as the same key (fails closed). No
    stored format changed. Was: tag only. Avoid: no longer needed; build recipients with `ParseSSHRecipient`.
-7. **Shared `ChallengeStore` and Redis implementations for replicas.** A store-backed limiter already ships
-   (`docstore.StoreLimiter`, `GOJIBERRY_DOCSTORE_LIMITER=store`). Plan: a shared `ChallengeStore` and Redis
-   implementations behind the existing interfaces. Avoid: run one replica, or sticky routing.
+7. **Done (reduced):** **shared `ChallengeStore`: `passkey.StoreChallenges`, `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store`.**
+   A passkey ceremony begun on one replica now finishes on another (before: the token was unknown there, so 410).
+   Records live under `passkey/challenge/<hash of the token>` (inside the reserved `passkey/` keyspace: hidden from
+   `/docs`, no expiry deadline, not a document key). `Put` is a conditional create; `Take` reads, then consumes with
+   one conditional step on the digest it read (`DeleteIf`, or `SaveIf` to a used marker on a store that has only
+   `SaveIf`, such as s3), so of any number of concurrent Takes on any replicas exactly one wins; expiry is the
+   stored `Expires` plus a sweep (`Sweep`, run every minute by the server); the count is bounded (10,000 by default,
+   `ErrBusy` past it, a live challenge is never evicted; each replica counts from its last listing, so replicas may
+   overshoot by what they write between listings). `store` on a store without working conditional writes stops the
+   server at start instead of falling back. **Not done, by decision: Redis.** The repo has no Redis client and a
+   RESP client with auth, TLS, timeouts and cluster behaviour is not small; the store-backed one works on every
+   backend that has conditional writes (memory, localfs, sqlite, postgres, mongo, s3; the blob backend has none, so
+   `store` mode refuses to start on it), and the `ChallengeStore`
+   interface is unchanged for an embedder who wants Redis `GETDEL`. **Found, not fixed (needs its own item):
+   bearer sessions are per process.** `auth.Manager` keeps sessions (and OpenID Connect login states) in an
+   in-memory `tokenStore`, so a token issued by replica A is unknown to replica B whatever `ChallengeStore` is
+   used: a passkey sign-in finished on B only helps requests that reach B. Avoid: sticky routing by the bearer
+   token or one replica, until `auth.Manager` takes a pluggable session store (needs a `User` record, expiry and
+   logout through the shared store, and a bound on its size). Avoid for the rest: nothing; the account store
+   (`AdapterStore`) was already shareable.
 8. **Concurrent double first-passkey UX (410).** Plan: tell the person the other tab won and offer to continue.
    Avoid: set up the first passkey in one tab.
 9. **s3/blob `DeleteIf`.** Plan: implement `ConditionalDeleter` for both (postgres and mongo have it). Avoid: the
