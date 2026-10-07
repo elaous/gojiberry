@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-4 of 5 since the last full run (#85, #84, #81, #86; 5 with the watch-anchor PR, pending the full run on `main`, which comes after the 5th merge in a row; see [testing-workflow.md](testing-workflow.md)).
+0 of 5 since the last full run (full run on 40b6644 passed except this flake, which this PR fixes; see [testing-workflow.md](testing-workflow.md)).
 
 ## Notes for upgraders
 
@@ -288,8 +288,11 @@ a way to avoid hitting the limit meanwhile.
    must equal `st.Hash`. A filtered saved state can have `Cursor` past `st.Seq`, so the check needs the entries
    at or before `st.Seq` (read from `st.Seq-1`, or `entryAt`), not the cursor. Avoid: do not mix filtered and
    full reads on one `WatchState` until fixed (no longer needed).
-2. **Flaky test `TestHighestSeqOfAllFilesCountsNotTheNewestByTime`** (`docstore/encrypt`; timing, a 2 ms sleep).
-   Plan: make the order deterministic (set the times explicitly). Avoid: re-run a failure once before suspecting code.
+2. **Done:** **flaky test `TestHighestSeqOfAllFilesCountsNotTheNewestByTime`** (`docstore/encrypt`). The cause was
+   the test, not timing or the product: `SetProtection` writes a new generation under a fresh name and drops the
+   oldest, and the test took the first generation listed afterwards, which could be the new one it had no captured
+   bytes for, and overwrote it with an empty file (rightly `ErrUnreadable`). The product never orders files by the
+   store's times. The test now picks a captured generation that survived and has no sleep.
 3. **Files in unsigned v1/v2 frames.** Plan: run `Sharing.Repair` over them, with a migration command and a report
    of what is left. Avoid: re-key (save) documents after upgrading.
 4. **The no-signer window is narrowed but not closed.** The remaining path is the few steps between the re-key's
