@@ -320,6 +320,24 @@ Threat model, store write access only (no owner key):
      `Adapter.RequireSigned` makes an adapter refuse unsigned frames for every document id the
      keyring binds (every id `DocID` finds with a `Binder` keyring, whether or not its record
      exists; ids it does not bind are not checked), for a deployment whose files were all upgraded.
+     **Upgrading a whole store.** `Sharing.RepairAll(ctx, RepairAllOptions{Progress, Limit, DryRun})` is
+     `Repair` over every document: it lists the store once, groups the files by document, loads each file to read its
+     frame header (a read of the whole store per run), and for each document with a v1/v2 file calls `Repair`, so a
+     document is sealed again signed as a unit (and its record then says `signed`; a never-shared document with no
+     `keys:` record gets one, signed, with `Signed` set, so a later unsigned frame in it is forged). Any other encrypted
+     item (`expiry:`, `collab:`, `passkey/`, `public/` ...) is sealed again signed by `Adapter.Rekey`, one by one. A
+     document is repaired as a unit or not at all; one that fails or conflicts while being written may be left partly
+     rewritten (some files v3, the record not yet flipped), which loses nothing, and a rerun finishes it. It returns a report: `Total`, `Signed` (all v3 already), `Repaired`, `Files`, and `Skipped`
+     with a reason per document: `no-signer` (the Adapter has no `Signer`; nothing is written), `no-key` (a file is
+     encrypted to keys the keyring does not hold, for example a protected document of another owner),
+     `unreadable`, `forged` (a bad v3 signature, or an unsigned file under a record that already says `signed`),
+     `downgrade`, `plaintext`, `conflict`, `error`. It does not use `AcceptUnsigned`: vouching for a file stays a
+     per-document decision of the owner. It never downgrades or deletes, is idempotent (a second run repairs 0)
+     and restartable (documents go in id order and there is no saved cursor: a rerun starts at the first id and finds
+     the finished ones `Signed`; run it again after a cancel, `Limit`, or once the missing key or signer is available), and a Save by another writer meanwhile is safe for the reasons `Repair` is (the lock and
+     the conditional write). `DryRun` lists what it would do (`Todo`); `Report.Left()` is zero when every encrypted file that `Skip` does not leave readable (documents and the other
+     items above) was in a signed frame when it looked; files `Skip` leaves in the clear are not looked at. A file saved unsigned after the scan by a client with no `Signer` is found by the next run.
+     There is no command: the docstore server has no owner signer or identity, so the owner's client calls it.
      **The window before `signed`, and the way out of it.** A re-key writes signed files and only
      then changes the record to say `signed`. A client with no `Signer` that read the record before
      that can save an unsigned (v2) file of a server-level document in between, and a plain `Save`
@@ -384,7 +402,7 @@ Threat model, store write access only (no owner key):
      which asserts the level on every save of a document whose files are still frame v1.
   **Frame v1, v2 and the upgrade.** Files written before frame v2 have no level or seq; they are read as
   before (no check), and the first `Save` or re-key of a document writes a signed v3 (`Sharing.Repair(doc)`
-  upgrades all of its files at once). Frame v1 cannot detect a downgrade: the first save after upgrading
+  upgrades all of its files at once, `Sharing.RepairAll` every document of a store and reports what it could not). Frame v1 cannot detect a downgrade: the first save after upgrading
   pins the level, and a record deleted *before* that first save is seen by layers 2 and 3 but not by the
   frame. Frame v2 files (level and seq, unsigned) are read with the same limits as v1 for forgery until
   they are re-keyed. Older builds cannot read v2 or v3 files.
