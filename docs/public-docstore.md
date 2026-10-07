@@ -624,6 +624,7 @@ pattern as `auth/passkey`, see [encryption-and-passkeys.md](encryption-and-passk
 | `SessionStore` | live sessions, the global, per-client, per-network and per-wide-prefix caps and the reserve for new networks (`Create` takes `SessionCaps`), the one-document claim (`SetDoc` is a compare-and-set); optional `SessionReaper` | `MemorySessionStore` (10,000 live, expired ones dropped through an expiry heap on every create and by `Sweep`) | Redis, a table |
 | `Limiters{Session, Write, WriteAddr, View, Report, Admin, AdminNet, AdminGlobal}` (`passkey.Limiter`), or `Options.LimiterFactory` for all the ones left nil | per-group request budgets, keyed by `ClientKey` (or the session; `AdminNet` by `NetKey`, `AdminGlobal` by one key); the admin ones count failed authentications only | `passkey.RateLimiter` from the Config | `docstore.StoreLimiters(store)` (replicas on one conditional store share the budgets; the names are `public-session`, `public-write`, `public-writeaddr`, `public-view`, `public-report`, `public-admin`, `public-admin-net`, `public-admin-global`, records under `ratelimit/`), a shared Redis budget, a gateway; `passkey.Unlimited{}` |
 | `Quota` (optional `QuotaRefunder`, `WindowQuota`) | bytes per client per day, charged before the body is read; `WindowQuota` also names the window so a late refund cannot credit the next one | `MemoryQuota` (fixed 24 h window per client, at most 100,000 clients, least recently used dropped) | Redis, a table |
+| `passkey.ChallengeStore` (not a `public.Options` field; `passkey.Config.Challenges`) | passkey ceremonies of the sign-in routes on the same server | `passkey.MemoryChallenges` | `passkey.StoreChallenges` (`GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store`, records under `passkey/challenge/`), Redis |
 | `Options.ClientIP` | who the client is | remote address, or `passkey.TrustedProxies(cidrs...)` | your function |
 | `AdminGuard` | who may take down | `TokenAdmin` (constant-time compare; an empty token allows nobody) | operator sign-in, mTLS |
 | `Blocklist` | refuse content before it is stored (422; an error fails closed, 503) | `NoBlocklist`; `HashBlocklist` (SHA-256) | a hash-matching or scanning service |
@@ -644,6 +645,11 @@ State plainly, before launch:
    (`docstore.StoreLimiters`) to `Options.LimiterFactory`, as it does for the key directory and the
    passkey routes, on a store with conditional writes (otherwise they stay per process). The in-flight
    cap (`_MAX_INFLIGHT_BYTES`) is per process too, which is what it protects (the process's memory).
+   Passkey ceremonies (sign-in on the same server) can be shared the same way:
+   `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store` keeps them under `passkey/challenge/`
+   (`passkey.StoreChallenges`, see [encryption-and-passkeys.md](encryption-and-passkeys.md) B.1). The public
+   offer's own anonymous sessions (`SessionStore`) are a different thing and stay per process, as do the bearer
+   sessions of `auth.Manager`.
 2. The budget counts bytes the service knows about; it does not read the backend's disk usage.
 3. `Sweep` still reads every tombstone and report record each cycle (their own timestamps), which
    is bounded by the report cap and the takedown rate but is not free.

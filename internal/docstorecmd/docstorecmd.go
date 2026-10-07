@@ -237,6 +237,9 @@ func checkWriters(ctx context.Context, dir *encrypt.AdapterDirectory, adapter do
 func withPasskeys(ctx context.Context, srv *docstore.Server, adapter docstore.Adapter, m *auth.Manager, limiters docstore.LimiterFactory) (*auth.Manager, error) {
 	rp := os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_RPID")
 	if rp == "" {
+		if v := os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES"); v != "" {
+			log.Printf("docstore: WARNING: GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=%q is ignored: passkeys are off because GOJIBERRY_DOCSTORE_PASSKEY_RPID is not set", v)
+		}
 		return m, nil
 	}
 	var origins []string
@@ -263,6 +266,13 @@ func withPasskeys(ctx context.Context, srv *docstore.Server, adapter docstore.Ad
 	if px := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES")); px != "" {
 		cfg.ClientIP = passkey.TrustedProxies(strings.Split(px, ",")...)
 	}
+	// Started ceremonies live in this process, or (GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store)
+	// in the store, so that a ceremony begun on one replica finishes on another.
+	challenges, err := passkeyChallenges(ctx, adapter, os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES"))
+	if err != nil {
+		return nil, err
+	}
+	cfg.Challenges = challenges
 	svc, err := passkey.New(cfg,
 		&passkey.AdapterStore{Adapter: adapter}, m)
 	if err != nil {
@@ -274,6 +284,31 @@ func withPasskeys(ctx context.Context, srv *docstore.Server, adapter docstore.Ad
 	srv.WithRoutes("/auth/passkey/", svc.Handler()).Hide("passkey/")
 	log.Printf("docstore: sign-in with passkeys enabled (rp=%s)", rp)
 	return m, nil
+}
+
+// passkeyChallenges is the ChallengeStore GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES asks for: nil (the
+// per-process default) for "" or "memory", or a passkey.StoreChallenges over adapter for "store".
+// "store" on a store without working conditional writes is an error, not a silent fallback: the
+// operator asked for replicas to share ceremonies, and a per-process store would break them.
+// Expired and used records are swept in the background until ctx ends.
+func passkeyChallenges(ctx context.Context, adapter docstore.Adapter, raw string) (passkey.ChallengeStore, error) {
+	mode, err := passkey.ParseChallengeMode(raw)
+	if err != nil {
+		return nil, err
+	}
+	if mode != "store" {
+		return nil, nil
+	}
+	if !docstore.SupportsConditional(ctx, adapter) {
+		return nil, errors.New("GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store needs a store with conditional writes; this one has none (use the default, one replica, or a store that has them)")
+	}
+	sc, err := passkey.NewStoreChallenges(adapter, 0)
+	if err != nil {
+		return nil, err
+	}
+	go sc.RunChallengeSweep(ctx, time.Minute)
+	log.Print("docstore: passkey ceremonies are shared through the store")
+	return sc, nil
 }
 
 // Main runs the server configured from the environment and does not return.

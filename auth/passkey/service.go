@@ -65,6 +65,8 @@ var (
 	// ErrRateLimited is returned by the HTTP routes (429, with Retry-After) when a client is over
 	// the Limiter's budget.
 	ErrRateLimited = errors.New("passkey: too many requests; wait a moment and try again")
+	// errStore wraps a failure of the challenge store (HTTP 500).
+	errStore = errors.New("passkey: the challenge store failed")
 	// ErrBusy is returned when too many ceremonies are waiting to be finished.
 	ErrBusy = errors.New("passkey: too many sign-ins in progress; try again shortly")
 )
@@ -136,7 +138,12 @@ func New(cfg Config, store Store, sessions *auth.Manager) (*Service, error) {
 
 func (s *Service) put(ctx context.Context, p pending) (string, error) {
 	p.Expires = time.Now().Add(s.ttl)
-	return s.challenges.Put(ctx, p)
+	tok, err := s.challenges.Put(ctx, p)
+	if err != nil && !errors.Is(err, ErrBusy) && ctx.Err() == nil {
+		// A store failure is the server's, not a bad request (ErrBusy keeps its own 503).
+		return "", fmt.Errorf("%w: %w", errStore, err)
+	}
+	return tok, err
 }
 
 // take returns and removes a started ceremony: a challenge is good for one finish.
@@ -494,8 +501,15 @@ func fail(w http.ResponseWriter, err error) {
 		status = http.StatusForbidden
 	case errors.Is(err, ErrBusy):
 		status = http.StatusServiceUnavailable
+	case errors.Is(err, errStore):
+		status = http.StatusInternalServerError
 	}
-	jsonOut(w, status, map[string]string{"error": err.Error()})
+	msg := err.Error()
+	if status == http.StatusInternalServerError {
+		log.Printf("passkey: %v", err)
+		msg = "passkey: internal error; try again shortly"
+	}
+	jsonOut(w, status, map[string]string{"error": msg})
 }
 
 func (s *Service) handleRegisterBegin(w http.ResponseWriter, r *http.Request) {

@@ -34,11 +34,18 @@ type rig struct {
 
 func newRig(t *testing.T, store Store) *rig {
 	t.Helper()
+	return newRigWith(t, store, Config{})
+}
+
+// newRigWith is newRig with extra Config (Challenges, ChallengeTTL ...); RPID, RPName and Origins are set.
+func newRigWith(t *testing.T, store Store, cfg Config) *rig {
+	t.Helper()
 	mgr, err := auth.NewManager(context.Background(), auth.Config{BaseURL: origin})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := New(Config{RPID: rpID, RPName: "opendocs", Origins: []string{origin}}, store, mgr)
+	cfg.RPID, cfg.RPName, cfg.Origins = rpID, "opendocs", []string{origin}
+	svc, err := New(cfg, store, mgr)
 	if err != nil {
 		t.Fatal(err)
 	}
