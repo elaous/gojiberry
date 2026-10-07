@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-10 of 10 since the last full run, including the second backlog review (docs only) (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, #92 `RepairAll` with `Resign`, the SSH key-tag tightening, the shared passkey `ChallengeStore`, and the review-nits cleanup of #90 to #93, #95, and the double first-passkey 409; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md); the full suite runs on main right after this merge).
+10 of 10 since the last full run, including the second backlog review (docs only) (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, #92 `RepairAll` with `Resign`, the SSH key-tag tightening, the shared passkey `ChallengeStore`, and the review-nits cleanup of #90 to #93, #95, and the double first-passkey 409; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md); the full suite is NOT run right after this merge: it is deferred until after the git history rewrite (item 26) and runs on the rewritten main; the counter resets to 0 of 10 after that run).
 
 ## Notes for upgraders
 
@@ -426,8 +426,14 @@ a way to avoid hitting the limit meanwhile.
     Avoid: none needed at runtime.
 26. **Committed binaries in history.** The largest blobs reachable from `origin/main`: `docsh` 54 MB, `collabhub`
     50 MB, `examples/gin-ssr-demo/gin-ssr-demo` 21 MB, `examples/echo-ssr-demo/echo-ssr-demo` 10 MB,
-    `translateserver` 9.7 MB, `examples/collab-editor-app/server` 8.9 MB. Plan: needs a user decision, since
-    removing them means rewriting history. Avoid: nothing is lost by leaving them.
+    `translateserver` 9.7 MB, `examples/collab-editor-app/server` 8.9 MB. Plan: the history rewrite is approved by
+    the user and is the next step after the open PRs merge and the worktree cleanup (item 29). Steps: (a) a backup
+    bundle (`git bundle create`) and a tag of the current `main`; (b) filter the listed binaries out of all history
+    (for example `git filter-repo --invert-paths` with those paths); (c) verify (the tree at the new tip equals the
+    old tip minus those files, `go build ./...`, `go vet ./...`, the size of `.git`); (d) force-push with
+    `--force-with-lease`; (e) tell everyone to re-clone (old clones and open branches keep the old history and must
+    not be pushed back); (f) run the full suite on the rewritten `main` (it is deferred until then, see the counter at
+    the top; the counter resets to 0 of 10 after it). Avoid: nothing is lost by leaving them, but PRs A, B and C wait.
 
 ### Queue, status and new entries (added by the second review pass)
 
@@ -458,18 +464,40 @@ user has approved) is done. Nothing else in this list is blocked by it.
 
 New entries:
 
-27. **Lint has never run on main.** Kind: fixable. `golangci-lint` is built with go1.25 and the repo targets go1.26
-    (`go.mod`), so it refuses to start; `make lint` and `make wasm-lint` (both in `make check`) cannot have passed.
-    Why it matters: the whole style and bug check is off, silently. Plan: rebuild or pin the tool at a version built
-    with go1.26 (the `tool` line in `go.mod`), run it once on main, fix or baseline what it finds, and keep the
-    `make lint` target working. Priority: high. Where: `go.mod`, `Makefile` (target `lint`), `.golangci.yml`.
-    Avoid meanwhile: `go vet ./...` is the only static check that runs. Item 25 (protobuf through the tool) goes
-    with this.
-28. **Unmerged commits on `origin/ccr-f005be71-limits`.** Kind: fixable (housekeeping). Three commits not on main
-    (`742ec99`, `00bda50`, `082f9ee`): an older saver and rebuild change (vouched restore, storage-filling warning).
-    Why: they may hold a fix main lacks, or a conflicting older version of one it has. Plan: inspect each, then port
-    what is still wanted as its own PR, or delete the branch. Priority: medium. Where: the saver and rebuild code
-    those commits touch (`git log origin/main..origin/ccr-f005be71-limits`).
+27. **Lint fails on main with 36 findings (and 33 under `wasm-lint`); it is not a toolchain problem.** Kind: fixable.
+    Checked on 2026-10-07 with go1.26.0: `make lint` (which runs `go tool golangci-lint run ./...`, so the linter is
+    built by the repo's own go toolchain from the `tool` line in `go.mod`, golangci-lint v2.5.0) starts, runs for
+    about 100 s and exits 1 with 36 issues: errcheck 13, staticcheck 19 (for example QF1008 "could remove embedded
+    field" in `docstore/limiter_review_test.go:283` and `internal/webauthntest/webauthntest.go:99-100`), unused 4
+    (`docstore/encrypt/encrypt.go:530` `(*Adapter).seal`, `docstore/expiry.go:273` `(*ExpiringAdapter).related`, the
+    unused fields `recorded` in `docstore/encrypt/confidential_keys_test.go:60` and `readers` in
+    `docstore/encrypt/signed_frames_test.go:652`). `make wasm-lint` also exits 1 (33 issues: errcheck 13,
+    staticcheck 16, unused 4). The earlier claim "built with go1.25 vs repo go1.26" is wrong for the Makefile
+    targets: only the `golangci-lint` found on `PATH` (`/usr/local/bin`, v2.5.0 built with go1.25.1) is built with
+    go1.25, and `make` does not use it. Why it matters: `make check` (which includes `lint` and `wasm-lint`) cannot
+    pass, so either it is not run or its failure is ignored. Plan: fix the 36 findings (or, for a finding that is
+    intended, a `//nolint:<linter> // reason` or an entry in `.golangci.yml`), re-run both targets, and keep them
+    green. Priority: medium (nothing is off, but `make check` is red). Where: `Makefile:60-68` (targets `lint`,
+    `wasm-lint`), `go.mod:259` (the `tool` line), `.golangci.yml`. Not verified: whether CI runs `make lint`
+    (check `.github/workflows` for the `lint` or `check` target). Item 25 (protobuf through the tool) goes with this.
+28. **Unmerged commits on `origin/ccr-f005be71-limits`.** Kind: fixable (housekeeping). Three commits are not
+    ancestors of main (`742ec99`, `00bda50`, `082f9ee`, all 2026-10-06, branch point `af9dfce`; `git cherry` marks
+    them `+` because main reached the same content under other commit IDs and the branch's tree is an older
+    snapshot, so `git diff origin/main origin/ccr-f005be71-limits` is only noise). What they change: `saver` rebuild
+    restores the save the old catalog vouched for (`saver/catalog.go`, `saver/session.go`), the older file must be
+    vouched (a non-empty matching checksum) and its previous copy is skipped regardless of `List` order, the
+    storage-filling warning from `CapacityWarnAt` = 80% with `CapacityAdvice` and es/fr/de texts
+    (`components/capacity.go`, `i18n/packs/*.json`), `CapacityFullAt`, and docs. All of it is on main: `vouched` in
+    `saver/catalog.go:340`, `CapacityWarnAt`/`CapacityFullAt` in `components/capacity.go:21-27`, and all seven tests
+    the commits add exist on main (`TestRebuildPutsBackTheSaveTheOldCatalogVouchedFor`,
+    `TestRebuildKeepsAChangedOnlyCopyFlagged`, `TestRebuildDoesNotPutBackAnUnvouchedOlderFile`,
+    `TestRebuildWithAStrayDoesNotDependOnListOrder`, `TestRebuildWithThreeFilesAndTheChangedOneIsCollectedOnlyWhenOld`,
+    `TestCapacityWarnsWhenFillingUp`, `TestSessionWarnsWhenTheStoreIsFillingUpAndExplainsAFullOne`). Recommendation:
+    delete the remote branch (do not merge: it would revert main's newer work, for example the confidential-folder
+    handling in `saver/catalog.go`, and its tree still holds the old binary paths). Not verified: the wording of
+    `docs/known-limits-plan.md` and `docs/document-components.md` (the commits also touch them), so compare those two
+    files by eye before deleting. Priority: low. Where: remote branch only. The botnet limit is in
+    [limits register item 9](limits-register.md#public-docstore-and-operations).
 29. **Leftover worktrees (`/home/user/gojiberry-*`, `/tmp/rr*`).** Kind: fixable (housekeeping). **In progress:**
     being cleaned up now; this entry is marked done when the cleanup finishes. Why: stale worktrees pin branches and
     disk. Plan: `git worktree list`, remove the merged ones, `git worktree prune`. Priority: low. Where: the
@@ -488,29 +516,53 @@ New entries:
     (`SweepRateLimits`, `MaxRateLimitRecords`). See also the botnet limit,
     [limits register item 9](limits-register.md#public-docstore-and-operations).
 32. **`RepairAll` reports an item as "gone" when a custom `Keyring` returns `ErrNotFound` from `Recipients`.** Kind:
-    fixable. Why: the "gone" outcome means deleted since the scan, and is not counted; a keyring that says
-    "no such recipient list" with `docstore.ErrNotFound` makes a live, unsigned item look gone and `Left()` look
-    clean. Plan: tell a deleted item (the store's `Load`/`Save` returned `ErrNotFound`) from a keyring answer,
-    for example by checking the item again with `Load` before calling it gone, or document that a `Keyring` must
-    not return `docstore.ErrNotFound`. Priority: medium. Where: `docstore/encrypt/repairall.go` (the
-    `errors.Is(err, docstore.ErrNotFound)` case in the walk and the scan).
-33. **`WatchLog` filtered to full, cursor past the saved head: the link from the saved head to the first new entry is
-    unchecked.** Kind: inherent in the filtered cursor in part (item 1 anchored the saved head, but a filtered
-    read never held the entries between); to verify before the fix. Why: the entries between `st.Seq` and the
-    cursor were never fetched, so entry `Cursor+1` is checked against the cursor, not against the chain from the
-    saved head. Plan: when the answer was filtered, fetch the entries from `st.Seq` to the cursor and check the
-    chain, or document that a switch from filtered to full starts a new trust anchor. Priority: medium. Where:
-    `docstore/directoryclient/watch.go` (the "switch from a filtered saved state" block, `entryAt`).
-34. **Blob backend has neither `SaveIf` nor `DeleteIf`.** Kind: fixable if the service has preconditions, else
-    unsupported. Why: store-backed challenges (item 7), the limiter claim and conditional deletes (items 9 and
-    10) refuse it; `store` mode does not start on it. Item 9 covers `DeleteIf` for s3 and blob; this entry adds
-    `SaveIf`. Plan: use ETag or generation match preconditions (`If-Match`, `ifGenerationMatch`) if the service
-    allows, otherwise name the backend unsupported for the conditional features in its docs and error text.
-    Priority: medium. Where: `docstore/backends/blob/blob.go`, `docstore/conditional.go`.
-35. **Directory log reads share the lookup shard budgets.** Kind: fixable. Why: an auditor reading the log and a
-    client looking up an address draw from the same shard of the rate limit, so heavy auditing can slow lookups
-    and the reverse. Plan: a separate budget key for log reads. Priority: medium. Where: the directory
-    handlers and limiter keys in `docstore/directory.go` and `docstore/limiter.go`.
+    fixable. Confirmed. Cause: the `Keyring` interface (`docstore/encrypt/encrypt.go:94-100`) says nothing about
+    errors; the repair of a group reaches `Recipients` through `Adapter.bind` (`encrypt.go:521`), and the walk treats
+    any `errors.Is(err, docstore.ErrNotFound)` from the repair as "deleted since the scan" (`repairall.go:312-315`,
+    outcome "gone", not counted), as the scan does for a file it cannot load (`repairall.go:458`). The built-in
+    `StoreKeyring` can also return `ErrNotFound` wrapped from `loadRecord` (`share.go:321`), so this is not only a
+    custom-keyring case. Why: a live, unsigned item then looks gone and `Left()` looks clean. Plan: tell a deleted
+    item from a keyring answer, for example by calling `Load` on the item again before calling it gone, or document
+    that a `Keyring` must not return `docstore.ErrNotFound`. Priority: medium. Where:
+    `docstore/encrypt/repairall.go:312` and `:458`, `docstore/encrypt/encrypt.go:94`.
+33. **`WatchLog` filtered to full: when the cursor is past the saved head, the entries between the head and the cursor
+    are never chained.** Kind: fixable (narrow). Read of `docstore/directoryclient/watch.go` after #87: in filtered
+    mode the run saves `st.Seq, st.Hash` = the signed head and `st.Cursor = max(read.next, cursor)`
+    (`watch.go:552-554`). On the first full read the block "a switch from a filtered saved state" (`watch.go:380-409`)
+    ties the saved head to the log in two ways: if `entries[0].Seq == st.Seq+1` it checks `entries[0].Prev ==
+    st.Hash` (fully covered: cursor equal to the head); otherwise it finds entry `st.Seq` among the entries, or
+    fetches it with `entryAt` and compares its hash with `st.Hash` (covered when the cursor is below the head,
+    because the read starts at the cursor and the entries chain through `st.Seq`). The gap is only the case cursor
+    greater than `st.Seq`: then `entries[0].Seq == cursor+1`, `entryAt(st.Seq)` proves that one entry has the saved
+    hash, `VerifyLog` chains the entries from `cursor+1` on, but nothing links entry `st.Seq` to entry `cursor+1`
+    (entries `st.Seq+1` to `cursor` are never fetched), so a server could show a fork that is consistent from
+    `cursor+1` on. It needs `read.next` above the head, which can happen when the log grows between `c.Head`
+    (`watch.go:289`) and the filtered scan. Not verified by a test: write one (filtered run with the log growing
+    between the head and the scan, then a full run against a server that rewrites entries `st.Seq+1` to `cursor`).
+    Plan: in that case fetch `st.Seq` to `cursor+1` and check the chain, or save `Cursor = min(read.next, head.Seq)`
+    in filtered mode so the cursor never passes the saved head (simplest). Priority: low to medium. Where:
+    `docstore/directoryclient/watch.go:380-409` (the block) and `:552-554` (the saved cursor).
+34. **Blob backend has neither `SaveIf` nor `DeleteIf`.** Kind: fixable only in part. Confirmed:
+    `docstore/backends/blob/blob.go` implements `Save`, `Load`, `List`, `ListPrefix` and `Delete` only (lines 92-138);
+    the S3 backend has the conditional write (`docstore/backends/s3/s3.go:156`), as do postgres and mongo. The
+    service API: the blob backend sits on `gocloud.dev/blob` v0.46.0 (`docstore/backends/go.mod:16`), whose portable
+    `WriterOptions` has `IfNotExist` (create only, `PreconditionFailed` when the blob exists) and no `If-Match`, ETag
+    or generation match; `Attributes.ETag` can be read, but not sent as a precondition. So a create-only `SaveIf` with
+    an empty `prev` is possible, a replace or a delete guarded by content is not, without the driver-specific
+    `BeforeWrite`/`As` hook (for S3 the `PutObjectInput.IfMatch`). The ChallengeStore and limiter need the guarded
+    replace and delete, so `store` mode stays unsupported on this backend. Not verified: whether each driver
+    (fileblob, memblob, s3blob, gcsblob, azureblob) honours `IfNotExist`. Plan: name the backend unsupported for the
+    conditional features in its docs and in `ErrConditionalUnsupported`'s text now; item 9 covers `DeleteIf` for s3
+    and blob. Priority: medium. Where: `docstore/backends/blob/blob.go:92-138`, `docstore/conditional.go:12-47`
+    (the interfaces) and `:94` (`SupportsConditional`).
+35. **Directory log reads share the lookup budgets for client IP and whole server.** Kind: fixable. Confirmed in
+    `docstore/directory.go`: `readBudget` (`:846-855`) takes three tokens per read: the user's own limiter (separate:
+    `lookup` for lookups, `logRead` for the log), then `lookupIP` and `lookupAll[lookupShard(u.ID)]`, which both
+    lookups (`:896`) and log reads (`:928`) spend, as the comment at `:572-579` says. Why: a user who polls the log
+    hard uses their IP budget and their shard's whole-server budget, so lookups of everyone hashed to that shard (and
+    behind that IP) slow down, and the reverse. Plan: separate keys for log reads (for example `dir-log-ip` and
+    `dir-log-all-<n>`), or a larger budget for the log with its own shards. Priority: medium. Where:
+    `docstore/directory.go:572-605` (limiters), `:846-860` (`readBudget`), `:896` and `:928` (callers).
 36. **Sticky `FirstOwner`: after a legitimate owner key rotation, third-party lookups show "changed" permanently.**
     Kind: fixable. Why: the first owner key a third party saw is kept; a rotation is indistinguishable from an
     attack, so the warning never clears. Plan: a user action to confirm the new key (a signed rotation chain
@@ -521,19 +573,33 @@ New entries:
     the browser reads "use `Repair(AcceptUnsigned)`", which they cannot call. Plan: translate the error in the
     showcase into a plain, actionable message (which files, what the owner can do, in de/fr/es too). Priority:
     medium. Where: `examples/canvas-editor-showcase` (the error display).
-38. **Directory "Unmapped" addresses are only counted and logged.** Kind: fixable. Why: an enrollment entry with
-    neither an e-mail record nor a published key (`ReconcileReport.Unmapped`) cannot be matched, and the
-    operator has no list to act on. Plan: a report listing them (pseudonym and entry number) and a documented
-    operator procedure (re-enroll, or leave). Priority: low. Where: `docstore/encrypt/directory_recover.go`.
-39. **`Remove`-path `ErrUnsignedAfterFlip` leaves `PendingDocs` empty.** Kind: fixable (documentation first). Why:
-    only `Repair(AcceptUnsigned)` resolves it, as the error text says, and no pending list shows what is left.
-    Plan: fill `PendingDocs` on that path, or document that it stays empty and name the call. Priority: low.
-    Where: `docstore/encrypt` (the `Remove` path in `sharing`/`encrypt.go`).
+38. **Directory "Unmapped" addresses are only counted and logged.** Kind: fixable. Confirmed: the count is made in
+    `reconcileAll` (`docstore/encrypt/directory_recover.go:232-247`, `rep.Unmapped++`, a pseudonym with owner-state
+    entries that no known e-mail explains) and logged once as a number (`:248-249`); `ReconcileReport.Unmapped`
+    (`:182-185`) is dropped by both callers (`ReconcileEnrollments` at `:193` returns only `Completed`, the sweep at
+    `directory_adapter.go:944` reads only `Deferred`). Why: an enrollment entry with neither an e-mail record nor a
+    published key cannot be matched, and the operator has no list to act on. Plan: collect the pseudonyms and their
+    entry numbers (the data is in `d.idx.byAddr` at that point) into the report, log or expose them, and document an
+    operator procedure (re-enroll, or leave). Priority: low. Where:
+    `docstore/encrypt/directory_recover.go:182-249`.
+39. **`ErrUnsignedAfterFlip` leaves `PendingDocs` empty (the `Remove` path, and every other re-key path).** Kind:
+    fixable (documentation first). Confirmed in `docstore/encrypt/share.go`: the flip in `finishFiles` writes the
+    record with `rec.Pending = false` (`:791`), and only afterwards looks again and returns `ErrUnsignedAfterFlip`
+    (`:813`). `Remove` (`:870-893`) just returns that error from `finish`, and `PendingDocs` lists only records with
+    `rec.Pending` (`:683-705`). So the record says not pending and Signed, and the late unsigned file is found by
+    nothing but the error (and `Adapter.afterUnsignedWrite` for later writers). Why: only `Repair(AcceptUnsigned)`
+    resolves it, as the error text says (`:452-457`), and no list shows what is left. Plan: document that the list
+    stays empty and name the call, or record the document (for example keep `Pending` set until the late look
+    is clean). Priority: low. Where: `docstore/encrypt/share.go:764-815` and `:870-893`.
 40. **Passkey challenge records show the pending registration e-mail and name on a plain store.** Kind: fixable
-    by configuration. Why: a person who can read the store reads them (see "Extension points" in
-    [encryption-and-passkeys.md](encryption-and-passkeys.md)). Plan: use an encrypting adapter for the
-    `passkey/` keyspace, say so in the `store` mode start-up line, and consider hashing the label. Priority:
-    low. Where: `auth/passkey` (`StoreChallenges`).
+    by configuration. Confirmed: `StoreChallenges.Put` (`auth/passkey/challenge_store.go:132-146`) stores the whole
+    `Challenge` as JSON (`storedChallenge` embeds it, `:126-129`), and `Challenge` (`auth/passkey/challenge.go:14-22`)
+    holds `Email` and `Name` (for a new account) plus the WebAuthn session data, under the key
+    `ChallengePrefix` plus the SHA-256 of the token (`:120-122`). Why: a person who can read the store reads them (see
+    "Extension points" in [encryption-and-passkeys.md](encryption-and-passkeys.md#b1-extension-points)). Plan: use
+    an encrypting adapter for the `passkey/` keyspace, say so in the `store` mode start-up line, and consider
+    hashing the label. Priority: low. Where: `auth/passkey/challenge_store.go:126-146`,
+    `auth/passkey/challenge.go:14-22`.
 41. **Signed-out same-e-mail passkey registration makes two accounts, by design.** Kind: inherent while the e-mail is
     a label ([limits register item 6](limits-register.md#encryption-and-keys)). Why it matters for later work:
     the e-mail verification work must not merge accounts on the bare label. Plan: none now; record it in the
