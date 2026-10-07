@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-4 of 5 since the last full run (#85, #84, #81, #86; full run on `main` after the 5th merge in a row; see [testing-workflow.md](testing-workflow.md)).
+4 of 5 since the last full run (#85, #84, #81, #86; 5 with the watch-anchor PR, pending the full run on `main`, which comes after the 5th merge in a row; see [testing-workflow.md](testing-workflow.md)).
 
 ## Notes for upgraders
 
@@ -283,11 +283,11 @@ The actionable items left by the [limits register](limits-register.md), in prior
 **strictly one at a time**: the next starts only when the one before is merged. Each has a one-line plan and
 a way to avoid hitting the limit meanwhile.
 
-1. **Filtered to full read in `directoryclient` `WatchLog` is not anchored to the saved head.** Plan: when
+1. **Done:** **filtered to full read in `directoryclient` `WatchLog` is now anchored to the saved head** (a read that starts at `st.Seq+1` must have `Prev == st.Hash`; otherwise the hash at `st.Seq`, read with `entryAt` when the cursor is past it, must equal `st.Hash`; a mismatch is `ErrLogCut`). Was: not anchored. Plan: when
    switching, require `entries[0].Prev == st.Hash` if `entries[0].Seq == st.Seq+1`, else the hash at `st.Seq`
    must equal `st.Hash`. A filtered saved state can have `Cursor` past `st.Seq`, so the check needs the entries
    at or before `st.Seq` (read from `st.Seq-1`, or `entryAt`), not the cursor. Avoid: do not mix filtered and
-   full reads on one `WatchState` until fixed.
+   full reads on one `WatchState` until fixed (no longer needed).
 2. **Flaky test `TestHighestSeqOfAllFilesCountsNotTheNewestByTime`** (`docstore/encrypt`; timing, a 2 ms sleep).
    Plan: make the order deterministic (set the times explicitly). Avoid: re-run a failure once before suspecting code.
 3. **Files in unsigned v1/v2 frames.** Plan: run `Sharing.Repair` over them, with a migration command and a report
