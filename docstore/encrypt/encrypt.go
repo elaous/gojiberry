@@ -582,6 +582,22 @@ func (a *Adapter) frameVerifiers() []ed25519.PublicKey {
 	return out
 }
 
+// frameSigner is the public key, among the ones the Adapter knows (frameVerifiers), that signed
+// the v3 frame fi, or nil when none did (or the frame is not v3). A frame carries no key id, so
+// each listed key is tried.
+func (a *Adapter) frameSigner(id string, fi frameInfo) ed25519.PublicKey {
+	if fi.version != 3 {
+		return nil
+	}
+	msg := frameSigMessage(id, levelByte(fi.b.Level), fi.b.Seq, fi.b.Hash, fi.content)
+	for _, k := range a.frameVerifiers() {
+		if len(k) == ed25519.PublicKeySize && ed25519.Verify(k, msg, fi.sig) {
+			return k
+		}
+	}
+	return nil
+}
+
 // verifyFrame checks the signature of a frame of a document that has a record (a Binder keyring):
 // a v3 frame must verify against the owners' signing keys, and, when full is set (data is the
 // whole content, not just what followed the header), carry the hash of that content; an
@@ -607,15 +623,7 @@ func (a *Adapter) verifyFrame(id string, fi frameInfo, data []byte, full, accept
 		})
 		return nil
 	}
-	msg := frameSigMessage(id, levelByte(fi.b.Level), fi.b.Seq, fi.b.Hash, fi.content)
-	ok := false
-	for _, k := range a.frameVerifiers() {
-		if len(k) == ed25519.PublicKeySize && ed25519.Verify(k, msg, fi.sig) {
-			ok = true
-			break
-		}
-	}
-	if !ok {
+	if a.frameSigner(id, fi) == nil {
 		return forged(id, "its signature is not by any owner signing key")
 	}
 	if full && sha256.Sum256(data) != fi.content {
@@ -745,13 +753,7 @@ func (a *Adapter) PeekFrame(ctx context.Context, id string, stored []byte) (Fram
 	}
 	h := FrameHeader{Version: fi.version, Level: fi.b.Level, Seq: fi.b.Seq, Hash: fi.b.Hash}
 	if fi.version == 3 {
-		msg := frameSigMessage(id, levelByte(fi.b.Level), fi.b.Seq, fi.b.Hash, fi.content)
-		for _, k := range a.frameVerifiers() {
-			if len(k) == ed25519.PublicKeySize && ed25519.Verify(k, msg, fi.sig) {
-				h.Signed = true
-				break
-			}
-		}
+		h.Signed = a.frameSigner(id, fi) != nil
 	}
 	return h, nil
 }

@@ -198,6 +198,24 @@ stored. Design:
   a missed one is found: run `Saver.Verify` and `Sharing.PendingDocs`. Until step 3 is done
   everywhere, the old key's holder can still write; a replay of anything the old key signed before
   step 3 is refused after it, not before.
+  Step 2 for a whole store is `Sharing.RepairAll(ctx, RepairAllOptions{Resign: true})` (with the
+  new `Signer` on the `Adapter` and the `Sharing`, both keys listed): for every document, and every
+  other encrypted item, with a frame or a record signed by a key other than the `Signer`'s it signs
+  the record again (`Sharing.Resign`) and then seals every file again, so the new key signs all of
+  it; it is idempotent and restartable, and `DryRun` lists what it would do. The report says what each key signed
+  (`BySigner`: frames, documents, records per key, found by trying each listed key, as the record's own
+  `signer` field is only a hint) and which documents were not yet moved (`OtherSigner`, empty after a
+  `Resign` run): when it is empty and `BySigner` shows only the new key, no document, frame or
+  record is left that step 3 would refuse. The signed `keys:index` is not one of the documents: it is
+  reported apart (`IndexBy`, `IndexOther`) and `RepairAll` with `Resign` signs it again
+  (`Sharing.ResignIndex`, `IndexResigned`; `IndexErr` says if that failed), but a run without `Resign`, or
+  a `DryRun`, only reports it. So run `Sharing.ResignIndex` (or `RepairAll` with `Resign`) before step 3 and
+  check `IndexOther` is false: an index still signed by the old key stops verifying once that key is
+  removed, and the strict reads that use it fail. `Resign` needs the `Sharing`'s `Signer` to be the
+  same key as the `Adapter`'s (a document is otherwise skipped, `SkipNoSigner`). Do not use `Resign` in a store with several legitimate owners: it moves everything to the
+  one signature. What it does not do is refuse the old key's frames written after a revocation while
+  older ones still verify: a frame has no key id or time and a revocation mark in the record
+  could be rewritten by the revoked key, so that needs a format change (roadmap, backlog item 5).
 - `StoreKeyring.Recipients` (what every save asks) verifies the record and **fails closed**: an
   unsigned record (`ErrUnsignedRecord`), a record signed by a key that is not an owner's, or a
   changed or moved one (`ErrBadSignature`) makes the save fail, never a longer or shorter list.
