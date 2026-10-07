@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -353,6 +354,55 @@ func TestRepairAllResignNeedsTheSharingSignerToBeTheAdapters(t *testing.T) {
 			}
 			sameStore(t, "a mismatched Sharing signer", before, w.snapshot(t))
 		})
+	}
+}
+
+// A Sharing whose Signer is another *Signer built from the same private key as the Adapter's is
+// the same signer (the comparison is of public keys, not of pointers): the document is re-signed
+// as usual and not skipped.
+func TestRepairAllResignAcceptsADistinctSignerOfTheSameKey(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	id := w.e2eeDoc(t)
+	r := w.rotate(t)
+	twin, err := NewSigner(bytes.Repeat([]byte{7}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if twin == r.ad.Signer || !bytes.Equal(twin.Public(), r.ad.Signer.Public()) {
+		t.Fatal("setup: want a distinct Signer of the same key")
+	}
+	s := &Sharing{Store: w.inner, Adapter: r.ad, Signer: twin, OwnerSigners: r.sharing.OwnerSigners}
+	rep, err := s.RepairAll(ctx, RepairAllOptions{Resign: true})
+	if err != nil || rep.Resigned != 1 || len(rep.Skipped) != 0 || rep.IndexErr != nil || rep.Left() != 0 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	r.allBy(t, id, SignerFingerprint(r.newKey.Public()))
+}
+
+// An index with no entries and seq 0 signed by the old key is left as it is by ResignIndex (there
+// is nothing to sign), so RepairAll must not report it as IndexResigned.
+func TestRepairAllResignDoesNotReportAnIndexItDidNotWrite(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	r := w.rotate(t)
+	payload, err := json.Marshal(indexRecord{V: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(signedRecord{Payload: payload, Sig: ed25519.Sign(w.signer.key, indexMessage(payload)), Signer: w.signer.Public()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.inner.Save(ctx, IndexKey, data); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := r.sharing.RepairAll(ctx, RepairAllOptions{Resign: true})
+	if err != nil || !rep.IndexOther || rep.IndexResigned || rep.IndexErr != nil {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	if d, err := w.inner.Load(ctx, IndexKey); err != nil || !bytes.Equal(d.Data, data) {
+		t.Errorf("the empty index was rewritten: %v", err)
 	}
 }
 
