@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-0 of 5 (full run on `main` after the 5th merge in a row; see [testing-workflow.md](testing-workflow.md)).
+3 of 5 since the last full run (#85, #84, #81; full run on `main` after the 5th merge in a row; see [testing-workflow.md](testing-workflow.md)).
 
 ## Notes for upgraders
 
@@ -276,3 +276,62 @@ single-process default of each. To build when a deployment needs it:
 5. **The same pattern for the rest of the encryption stack**: `Sharing` and `Adapter` take the
    store and signer as interfaces already; a shared lock (`docstore.Locker`) for stores without
    conditional writes is the open piece.
+
+## Backlog from the limits review
+
+The actionable items left by the [limits register](limits-register.md), in priority order. Work them
+**strictly one at a time**: the next starts only when the one before is merged. Each has a one-line plan and
+a way to avoid hitting the limit meanwhile.
+
+1. **Filtered to full read in `directoryclient` `WatchLog` is not anchored to the saved head.** Plan: when
+   switching, require `entries[0].Prev == st.Hash` if `entries[0].Seq == st.Seq+1`, else the hash at `st.Seq`
+   must equal `st.Hash`. Avoid: do not mix filtered and full reads on one `WatchState` until fixed.
+2. **Flaky test `TestHighestSeqOfAllFilesCountsNotTheNewestByTime`** (`docstore/encrypt`; timing, a 2 ms sleep).
+   Plan: make the order deterministic (set the times explicitly). Avoid: re-run a failure once before suspecting code.
+3. **Files in unsigned v1/v2 frames.** Plan: run `Sharing.Repair` over them, with a migration command and a report
+   of what is left. Avoid: re-key (save) documents after upgrading.
+4. **The no-signer window is narrowed but not closed.** Plan: close the remaining path that can write without an
+   owner signer. Avoid: always set `Adapter.Signer` and `Sharing.Signer`.
+5. **Revoked owner signer tooling.** Plan: a command that runs the three-step procedure of C.5 and reports
+   documents it missed. Avoid: follow the manual steps in C.5.
+6. **SSH key-tag collision tightening.** Plan: compare the full key, not the short tag, where tags are matched.
+   Avoid: do not add two SSH keys with the same tag to one list.
+7. **Shared `ChallengeStore` and limiter implementations for replicas.** Plan: Redis or store-backed
+   implementations behind the existing interfaces. Avoid: run one replica, or sticky routing.
+8. **Concurrent double first-passkey UX (410).** Plan: tell the person the other tab won and offer to continue.
+   Avoid: set up the first passkey in one tab.
+9. **s3/blob `DeleteIf`.** Plan: implement `ConditionalDeleter` for both. Avoid: the sweep's conditional claim
+   already narrows the race to a token.
+10. **MongoDB live tests.** Plan: run the backend tests against a live server in CI (`TEST_MONGO_URI`). Avoid:
+    run them locally against a server before relying on the backend.
+11. **Log witnesses (directory).** Plan: a witness protocol where independent parties co-sign heads. Avoid:
+    compare heads between two auditors by hand.
+12. **Directory key rotation versus the log pseudonym.** Plan: keep older entries matchable after the retired
+    key is removed. Avoid: do not remove the retired key until owners have fetched their older pseudonyms.
+13. **Dead-room tombstone in memory.** Plan: keep it in the store, not the process. Avoid: a restart is the
+    only time it is lost; restart during quiet hours.
+14. **Expiry-prefix test pin and stale-tab renewal throttle (#82 minors).** Plan: pin the prefix in a test and
+    throttle renewals from a stale tab. Avoid: close old tabs.
+15. **Public per-process counters.** Plan: shared `SessionStore` and `Quota` (see 7). Avoid: one replica.
+16. **Snapshot accounting lag.** Plan: refuse or reserve for version snapshots when written. Avoid: leave
+    headroom under the byte budget.
+17. **`OnSave` auto-wiring.** Plan: wire the hook where an expiring adapter is built. Avoid: set it by hand.
+18. **#85 minors:** report dedupe key (reporter and category only), old env-var warning, slow-upload rate
+    floor, wide-cap migration note. Plan: one small change each. Avoid: see the upgrade notes above.
+19. **Showcase: in-memory originals during a change.** Plan: keep the journal's originals on disk. Avoid:
+    keep the tab open until a change finishes.
+20. **Directory publish with proof of possession and an owner-signed entry in the showcase.** Plan: the
+    showcase uses its own `dirclient`; move it to `directoryclient` and ask the person for a private key or
+    another passkey assertion per signature. Avoid: publish from `examples/people-keys-demo`.
+21. **Directory publish and pick UI follow-up.** Plan: finish the app-side controls. Avoid: use the demo.
+22. **`bindingFor` walk without a visited set (`encstore/bind.go`).** Plan: add a visited set so add and remove
+    cycles cannot hide a reachable link. Avoid: none known; report an unlock that fails after many key changes.
+23. **`directoryclient` `WatchState` in the old `made` format no longer loads** (the `people-keys-demo`
+    `localStorage`): an ignored decode error half-loads state. Plan: clear the state on a decode error.
+    Avoid: clear the demo's saved state by hand.
+24. **`ErrFilteredEnrolled` should also check `audit.Enrolled` after the audit.** Plan: add the check.
+    Avoid: use a full read for an address that may be enrolled.
+25. **protobuf is still an indirect dependency through the lint tool.** Plan: update or replace the tool.
+    Avoid: none needed at runtime.
+26. **The 9.7 MB `translateserver` binary in git history.** Plan: needs a user decision, since removing it
+    means rewriting history. Avoid: nothing is lost by leaving it.
