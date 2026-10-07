@@ -91,8 +91,10 @@ func lockedDocument(t *testing.T, w *world, kind string) (id, f string) {
 			t.Error(err)
 		}
 	}
-	if _, err := w.sharing.Repair(ctx, id); err != nil {
-		t.Fatal(err)
+	// The re-key's second look, after it flipped, finds the file saved in the window: the owner
+	// is told (the record does say Signed).
+	if _, err := w.sharing.Repair(ctx, id); !errors.Is(err, ErrUnsignedAfterFlip) || !errors.Is(err, ErrForgedFrame) {
+		t.Fatalf("setup: Repair = %v, want ErrUnsignedAfterFlip wrapping ErrForgedFrame", err)
 	}
 	if !w.binding(t, f).Signed {
 		t.Fatal("setup: the record says Signed")

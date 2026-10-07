@@ -344,7 +344,21 @@ Threat model, store write access only (no owner key):
      does not change the record's seq, so the change to `signed` cannot be made conditional on it.
      Two things handle it. (a) Immediately before setting `signed`, the re-key looks at every file
      again; if one is not v3 (it was saved meanwhile) it is sealed again (another pass) first.
-     That leaves only the few steps between that look and the write of the record. (b) What a save
+     That leaves only the few steps between that look and the write of the record. (a2) Nothing
+     in that window is silent. After it writes `signed` the re-key looks at the files once more:
+     one still unsigned makes `Repair` (and `Add`, `Remove`, `SetProtection`, `Recover`) return
+     `ErrUnsignedAfterFlip` (wrapping `ErrForgedFrame`, naming the files). A client with no `Signer`
+     that wrote its file and then finds the record says `signed` gets `ErrNoFrameSigner` from its own
+     `Save`/`SaveIf` (it re-reads the record after an unsigned write). Any such file is after the
+     owner's last look and before the flip (found by the second look) or before the writer's re-read
+     (reported to the writer), so one of the two is told. With `Adapter.RequireSigned` a client
+     that cannot sign does not write an unsigned frame at all (`ErrNoFrameSigner`), which closes the
+     path for every client the host runs that way. What stays inherent: a client with no `Signer` and
+     no `RequireSigned` can still write an unsigned frame until the record says `signed` (it cannot
+     sign, and a plain `Save` does not change the record, so the flip cannot be conditional on it),
+     and anyone who knows a recipient's public key can write one in that window; it is reported,
+     not prevented, and the owner resolves it with `AcceptUnsigned` or by deleting the file.
+     (b) What a save
      in that remaining window (or an older build that wrote v1/v2 frames under a record that already
      says `signed`) leaves is a document where `crossCheck` refuses the file as `ErrForgedFrame`
      and `Save`, `Load`, `Repair` and `Recover` all refuse, so there is an explicit way out:
