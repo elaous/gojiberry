@@ -979,7 +979,7 @@ cannot be opened.
       signed recipient list); `AtRest` (C.1) is never consulted for them, and `ServerRecipients`
       are removed from the list even if a deployment put the server key among the owners, an age
       key or an SSH key (compared by key, not identity; a recipient of a type that cannot be
-      compared is `ErrUncomparableRecipient`; none left: `ErrNoRecipients`, nothing is saved). Server-level documents and non-document
+      compared is `ErrUncomparableRecipient`. An SSH key is matched by its 4-byte age key tag plus, when the recipient came from `ParseSSHRecipient`, the SHA-256 fingerprint of the full key, so two distinct keys with the same tag are not taken for one; a raw recipient has only the tag, and a tag match then counts as the same key, which only ever drops a key, never admits a server key; none left: `ErrNoRecipients`, nothing is saved). Server-level documents and non-document
       ids keep using `AtRest`. Identities are the union of both, for every document: opening is not
       where the level is enforced, and a re-key between levels must open the old wrapping.
       `Sharing.SetProtection(doc, level)` writes the record (level and `pending`) first, then
