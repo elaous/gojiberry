@@ -3,6 +3,8 @@ package encrypt
 import (
 	"context"
 	"strings"
+
+	"github.com/elaous/gojiberry/docstore"
 )
 
 // PublishedKey is a public key found in a key directory for an e-mail address.
@@ -20,6 +22,28 @@ type PublishedKey struct {
 	// a key still shows the fingerprint; false means the e-mail is only a label and the owner
 	// must confirm the fingerprint with the person.
 	Verified bool
+	// Held says whoever published the key decrypted a challenge sent to it first: it was held
+	// at publish time (proof of possession). Attested says Verified, and the key's own
+	// signature binds it to the address (ssh-ed25519 keys; age and passkey keys cannot attest);
+	// Attestation is that signature, which VerifyAttestation checks without the server's word.
+	Held        bool
+	Attested    bool
+	Attestation *docstore.DirectoryAttestation
+	// OwnerEnrolled: the address has an owner signing key. OwnerSigned: Verified, and the
+	// owner signed this publication under that key (the strongest mark: it holds against the
+	// directory's server too; Owner is the evidence, VerifyOwnerEvidence checks it without the
+	// server's word). OwnerResetPending: a reset of the owner key is waiting out its delay.
+	OwnerEnrolled, OwnerSigned, OwnerResetPending bool
+	Owner                                         *docstore.DirectoryOwnerEvidence
+	// Seq is the number of the transparency log entry of the publication (0: none: a record
+	// written before the log, or by someone without the log's key), Kid the ID of the server key
+	// that signed the record.
+	Seq int64
+	Kid string
+	// Revoked and RevokedAt (Unix seconds) are set only for a key found by a lookup that asked
+	// for revoked keys (AdapterDirectory.LookupWith).
+	Revoked   bool
+	RevokedAt int64
 }
 
 // KeyDirectory is where the keys people published for their e-mail address are looked up. It is

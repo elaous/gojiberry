@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/elaous/gojiberry/docstore"
 	"io"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -197,5 +198,48 @@ func TestS3ConfigDecodesEndpointAndForcePathStyle(t *testing.T) {
 	}
 	if cfg.ForcePathStyle == nil || !*cfg.ForcePathStyle {
 		t.Errorf("ForcePathStyle = %v, want a pointer to true", cfg.ForcePathStyle)
+	}
+}
+
+func TestS3AdapterListPrefix(t *testing.T) {
+	docstore.CheckPrefixLister(t, func() docstore.Adapter { return newAdapter(newFakeS3(), "test-bucket", "docs/") })
+	docstore.CheckPrefixLister(t, func() docstore.Adapter { return newAdapter(newFakeS3(), "test-bucket", "") })
+}
+
+// ListPrefix asks the service to filter: the request carries the adapter's prefix followed by
+// the caller's, and a truncated listing is followed to its end.
+type pagingS3 struct {
+	*fakeS3
+	prefixes []string
+}
+
+func (p *pagingS3) ListObjectsV2(ctx context.Context, in *s3.ListObjectsV2Input, o ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
+	p.prefixes = append(p.prefixes, aws.ToString(in.Prefix))
+	out, err := p.fakeS3.ListObjectsV2(ctx, in, o...)
+	if err != nil || len(out.Contents) < 2 {
+		return out, err
+	}
+	sort.Slice(out.Contents, func(i, j int) bool { return *out.Contents[i].Key < *out.Contents[j].Key })
+	if in.ContinuationToken == nil { // first page: one object and a token for the rest
+		tok, truncated := "t", true
+		return &s3.ListObjectsV2Output{Contents: out.Contents[:1], IsTruncated: &truncated, NextContinuationToken: &tok}, nil
+	}
+	return &s3.ListObjectsV2Output{Contents: out.Contents[1:]}, nil
+}
+
+func TestS3ListPrefixSendsThePrefixAndFollowsPages(t *testing.T) {
+	fake := newFakeS3()
+	p := &pagingS3{fakeS3: fake}
+	a := newAdapter(p, "b", "docs/")
+	ctx := context.Background()
+	for _, id := range []string{"directory/a/1", "directory/a/2", "directory/b/1"} {
+		_ = a.Save(ctx, id, []byte(id))
+	}
+	got, err := a.ListPrefix(ctx, "directory/a/")
+	if err != nil || len(got) != 2 {
+		t.Fatalf("%v %v", got, err)
+	}
+	if len(p.prefixes) != 2 || p.prefixes[0] != "docs/directory/a/" || p.prefixes[1] != "docs/directory/a/" {
+		t.Errorf("prefixes sent: %v", p.prefixes)
 	}
 }

@@ -18,9 +18,13 @@ type dirEnv struct {
 	store docstore.Adapter
 	h     http.Handler
 	mgr   *auth.Manager
+	dir   *AdapterDirectory
 }
 
-func newDirEnv(t *testing.T) *dirEnv {
+func newDirEnv(t *testing.T) *dirEnv { return newDirEnvWith(t, nil, nil) }
+
+// newDirEnvWith is newDirEnv with a say in the directory and the server before it is mounted.
+func newDirEnvWith(t *testing.T, dir func(*AdapterDirectory), srvOpt func(*docstore.Server)) *dirEnv {
 	t.Helper()
 	mgr, err := auth.NewManager(context.Background(), auth.Config{BaseURL: "https://x.test"})
 	if err != nil {
@@ -28,8 +32,14 @@ func newDirEnv(t *testing.T) *dirEnv {
 	}
 	store := docstore.NewMemoryAdapter()
 	d := &AdapterDirectory{Store: store, Signer: testSigner(t, 1)}
+	if dir != nil {
+		dir(d)
+	}
 	srv := docstore.NewServer(store, "memory").WithAuth(mgr).WithDirectory(DirectoryService(d))
-	return &dirEnv{t: t, store: store, h: srv.Handler(), mgr: mgr}
+	if srvOpt != nil {
+		srvOpt(srv)
+	}
+	return &dirEnv{t: t, store: store, h: srv.Handler(), mgr: mgr, dir: d}
 }
 
 func (e *dirEnv) token(u auth.User) string {
@@ -102,8 +112,8 @@ func TestDirectoryRoutesPublishAndLookup(t *testing.T) {
 		t.Errorf("%d", rec.Code)
 	}
 	// The record is not reachable through the document API, by name or in the listing.
-	metas, _ := e.store.List(context.Background())
-	if len(metas) != 1 || !strings.HasPrefix(metas[0].ID, "directory/") {
+	metas, _ := docstore.ListPrefix(context.Background(), e.store, "directory/")
+	if len(metas) != 1 {
 		t.Fatalf("%v", metas)
 	}
 	if rec := e.do("GET", "/docs/"+metas[0].ID, ana, ""); rec.Code != 400 {
@@ -202,7 +212,7 @@ func TestDirectoryRoutesNeedSignInAndAService(t *testing.T) {
 
 func TestDirectoryServiceMapsRefusals(t *testing.T) {
 	svc := DirectoryService(&AdapterDirectory{Store: docstore.NewMemoryAdapter()}) // no signer: off
-	_, err := svc.Publish(context.Background(), auth.User{ID: "google:1", Email: "a@x.io", VerifiedEmail: true}, newRecovery(t).Text, "")
+	_, err := svc.Publish(context.Background(), auth.User{ID: "google:1", Email: "a@x.io", VerifiedEmail: true}, docstore.DirectoryPublish{Key: newRecovery(t).Text})
 	if err == nil || !strings.Contains(err.Error(), "refuses") {
 		t.Errorf("%v", err)
 	}
