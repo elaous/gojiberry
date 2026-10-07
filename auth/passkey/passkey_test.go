@@ -524,3 +524,167 @@ func TestHasOtherWayMatchesProviderNamesExactly(t *testing.T) {
 		t.Errorf("the name passkey is reserved: %v", err)
 	}
 }
+
+// begun is a registration started and answered by its own authenticator, not yet finished.
+type begun struct {
+	token  string
+	answer []byte
+}
+
+func (r *rig) begunBy(signedIn, email string) begun {
+	r.t.Helper()
+	code, b := r.do("POST", "/auth/passkey/register/begin", signedIn, asJSON(r.t, map[string]string{"email": email}))
+	if code != 200 {
+		r.t.Fatalf("begin: %d %v", code, b)
+	}
+	au := webauthntest.New(rpID)
+	ans, err := au.Create(asJSON(r.t, map[string]any{"publicKey": b["options"].(map[string]any)["publicKey"]}), origin)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	return begun{token: b["token"].(string), answer: ans}
+}
+
+// noCreator hides a Store's Creator, so the Service falls back to its own lock.
+type noCreator struct{ Store }
+
+// barrierPut holds every Put until n callers are inside Put (or a short time passes), so any
+// code that checked Get "not found" without excluding the others has all of them past the check
+// before the first write lands. With the Service's lock only one caller is ever in Put at a time
+// (the rest are turned away at the Get), so the wait just times out.
+type barrierPut struct {
+	Store
+	n       int
+	mu      sync.Mutex
+	in      int
+	release chan struct{}
+}
+
+func newBarrierPut(inner Store, n int) *barrierPut {
+	return &barrierPut{Store: inner, n: n, release: make(chan struct{})}
+}
+
+func (b *barrierPut) Put(ctx context.Context, a *Account) error {
+	b.mu.Lock()
+	b.in++
+	if b.in == b.n {
+		close(b.release)
+	}
+	b.mu.Unlock()
+	select {
+	case <-b.release:
+	case <-time.After(150 * time.Millisecond):
+	}
+	return b.Store.Put(ctx, a)
+}
+
+// Two tabs begin the first passkey of the same signed-in identity (an OpenID Connect user with no
+// passkey account yet) and both finish at once. Exactly one makes the account; the other gets
+// 409 account_exists (not the 410 of an expired or used challenge), writes nothing, and the
+// account keeps the winner's single credential and handle.
+func TestTwoConcurrentFirstPasskeysOfOneIdentityMakeOneAccount(t *testing.T) {
+	adapter := docstore.NewMemoryAdapter()
+	shared := docstore.NewMemoryAdapter()
+	for name, store := range map[string]func() Store{
+		"memory":             func() Store { return NewMemoryStore() },
+		"memory, no Creator": func() Store { return newBarrierPut(noCreator{NewMemoryStore()}, 6) },
+		"adapter":            func() Store { return &AdapterStore{Adapter: adapter} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			st := store()
+			cfg := Config{}
+			if name == "adapter" { // the shared challenge store too (replicas on one store)
+				ch, err := NewStoreChallenges(shared, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				cfg.Challenges = ch
+			}
+			r := newRigWith(t, st, cfg)
+			oidc, _ := r.mgr.StartSession(auth.User{ID: "google:" + strings.ReplaceAll(name, " ", ""), Email: "ana@gmail.com", Name: "Ana"})
+			const n = 6
+			tabs := make([]begun, n)
+			for i := range tabs {
+				tabs[i] = r.begunBy(oidc, "")
+			}
+			codes := make([]int, n)
+			bodies := make([]map[string]any, n)
+			var wg sync.WaitGroup
+			start := make(chan struct{})
+			for i := range tabs {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					<-start
+					codes[i], bodies[i] = r.do("POST", "/auth/passkey/register/finish?label=Tab&token="+tabs[i].token, oidc, tabs[i].answer)
+				}()
+			}
+			close(start)
+			wg.Wait()
+			ok, conflict := 0, 0
+			for i, c := range codes {
+				switch c {
+				case 200:
+					ok++
+				case http.StatusConflict:
+					conflict++
+					if bodies[i]["code"] != "account_exists" || !strings.Contains(bodies[i]["error"].(string), "already made") {
+						t.Errorf("tab %d: %v", i, bodies[i])
+					}
+				default:
+					t.Errorf("tab %d: %d %v (only 200 and 409 are expected)", i, c, bodies[i])
+				}
+			}
+			if ok != 1 || conflict != n-1 {
+				t.Fatalf("%d succeeded, %d got 409 of %d tabs", ok, conflict, n)
+			}
+			a, err := st.Get(context.Background(), "google:"+strings.ReplaceAll(name, " ", ""))
+			if err != nil || len(a.Credentials) != 1 {
+				t.Fatalf("account: %v %+v", err, a)
+			}
+			// The handle the winner's authenticator holds is the stored one: a sign-in finds the account.
+			if got, err := st.ByHandle(context.Background(), a.Handle); err != nil || got.ID != a.ID {
+				t.Errorf("handle: %v %v", got, err)
+			}
+			// A replay of a finished ceremony is still the 410 of a used challenge.
+			for i := range tabs {
+				if code, _ := r.do("POST", "/auth/passkey/register/finish?token="+tabs[i].token, oidc, tabs[i].answer); code != http.StatusGone {
+					t.Errorf("replay of tab %d = %d, want 410", i, code)
+				}
+			}
+		})
+	}
+}
+
+// Signed out, every begin makes its own random account ID and handle, so two ceremonies for the
+// same e-mail never collide: two accounts, each with its own passkey, none overwritten. The e-mail
+// is an unverified label (see Service.Session), not a key.
+func TestTwoConcurrentSignedOutRegistrationsOfOneEmailMakeTwoAccounts(t *testing.T) {
+	st := NewMemoryStore()
+	r := newRig(t, st)
+	tabs := []begun{r.begunBy("", "ana@opendocs.io"), r.begunBy("", "ana@opendocs.io")}
+	codes := make([]int, 2)
+	bodies := make([]map[string]any, 2)
+	var wg sync.WaitGroup
+	for i := range tabs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			codes[i], bodies[i] = r.do("POST", "/auth/passkey/register/finish?token="+tabs[i].token, "", tabs[i].answer)
+		}()
+	}
+	wg.Wait()
+	if codes[0] != 200 || codes[1] != 200 || bodies[0]["auth_token"] == bodies[1]["auth_token"] {
+		t.Fatalf("%v %v", codes, bodies)
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if len(st.accounts) != 2 {
+		t.Fatalf("%d accounts", len(st.accounts))
+	}
+	for id, a := range st.accounts {
+		if len(a.Credentials) != 1 {
+			t.Errorf("%s has %d credentials", id, len(a.Credentials))
+		}
+	}
+}
