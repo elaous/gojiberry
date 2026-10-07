@@ -473,8 +473,9 @@ func addressDomain(email string) string {
 // address in the clear). Every route is limited (WithDirectoryLimits): publishes and revokes per
 // user, lookups and log reads per user first and then per client IP and for the whole server (a
 // user over their own limit does not spend the shared tokens). The IP is the connection's
-// address: behind a proxy every client shares it, so the real per-client limiting, and any
-// limiting of unauthenticated floods, belongs to the gateway in front of the server; the shared
+// address unless WithDirectoryClientIP says otherwise: behind a proxy every client shares the
+// proxy's, so the real per-client limiting, and any limiting of unauthenticated floods, belongs
+// to the gateway in front of the server; the shared
 // budgets only keep one tenant from draining the service. WithDirectoryGlobalPerDomain makes
 // the whole-server lookup budget one per e-mail domain of the caller. Bodies are small.
 func (s *Server) WithDirectory(d DirectoryService) *Server {
@@ -504,12 +505,35 @@ func (s *Server) WithDirectoryLimits(f LimiterFactory) *Server {
 //
 // The operator route POST /admin/directory/reset-enrollment/<address pseudonym> (see
 // DirectoryOperator), mounted only when allow is set. A request that fails allow counts against
-// a per-client budget of failures (10 a minute, "dir-admin"), past which it answers 429. allow
-// must compare a secret in constant time; docstorecmd's is the header X-Gojiberry-Admin-Token
-// against GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN.
+// a per-client budget of failures (10 a minute, "dir-admin"), past which it answers 429. The
+// client is the connection's remote address unless WithDirectoryClientIP says otherwise: behind a
+// reverse proxy that is the proxy's address for everybody, so one budget is then shared by every
+// caller (an attacker's failures lock the operator out of the route too, for a minute at a time)
+// until the proxy's addresses are given to WithDirectoryClientIP (docstorecmd does it from
+// GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES). allow must compare a secret in constant time;
+// docstorecmd's is the header X-Gojiberry-Admin-Token against
+// GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN.
 func (s *Server) WithDirectoryAdmin(allow func(*http.Request) bool) *Server {
 	s.dirAdmin = allow
 	return s
+}
+
+// WithDirectoryClientIP chooses how the directory names the client of a request for its
+// per-client budgets (the lookup budget per address and the failed-admin budget): f returns the
+// client's address, for instance passkey.TrustedProxies(...) behind a reverse proxy, which reads
+// X-Forwarded-For only from the proxies it is given. nil (the default) is the connection's
+// remote address, which behind a proxy is the proxy's.
+func (s *Server) WithDirectoryClientIP(f func(*http.Request) string) *Server {
+	s.dirClientIP = f
+	return s
+}
+
+// clientAddr is the client of r for the per-client budgets.
+func (s *Server) clientAddr(r *http.Request) string {
+	if s.dirClientIP != nil {
+		return s.dirClientIP(r)
+	}
+	return clientIP(r)
 }
 
 // WithDirectoryGlobalPerDomain makes the whole-server lookup budget one per e-mail domain of the
@@ -549,7 +573,10 @@ const (
 // the race under load and answers 429 to callers who are within every budget); sixteen keys,
 // chosen by the caller's user ID, cut that contention sixteen-fold. Each shard has the whole
 // budget divided by sixteen, so the total is unchanged, and a user (at most lookupsPerMinute a
-// minute, below one shard's budget) cannot spend more than their own shard.
+// minute, below one shard's budget) cannot spend more than their own shard. Reads of the log
+// (GET /directory/log) spend the same per-address and whole-server shard budgets as lookups (their
+// own per-user budget is separate), so a user who polls the log hard also uses up their shard's
+// lookups, and those of every other user that hashes to it.
 const lookupShards = 16
 
 type directoryLimits struct {
@@ -825,7 +852,7 @@ func (s *Server) readBudget(w http.ResponseWriter, r *http.Request, u auth.User,
 	for _, c := range []struct {
 		l   Limiter
 		key string
-	}{{own, ownKey + u.ID}, {lim.lookupIP, "li:" + clientIP(r)}, {lim.lookupAll[lookupShard(u.ID)], all}} {
+	}{{own, ownKey + u.ID}, {lim.lookupIP, "li:" + s.clientAddr(r)}, {lim.lookupAll[lookupShard(u.ID)], all}} {
 		if ok, wait := c.l.Allow(r.Context(), c.key); !ok {
 			tooMany(w, wait)
 			return false
@@ -993,7 +1020,7 @@ func (s *Server) handleOperatorReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lim := s.limits().adminFail
-	key := "ad:" + clientIP(r)
+	key := "ad:" + s.clientAddr(r)
 	if !s.dirAdmin(r) {
 		if ok, wait := lim.Allow(r.Context(), key); !ok {
 			tooMany(w, wait)

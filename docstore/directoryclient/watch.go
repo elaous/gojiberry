@@ -31,8 +31,10 @@ type WatchState struct {
 	Filtered bool `json:"filtered,omitempty"`
 	// Email is the address watched.
 	Email string `json:"email,omitempty"`
-	// Made are the log numbers of operations this client made since the last WatchLog.
-	Made []int64 `json:"made,omitempty"`
+	// Made are the operations this client made since the last WatchLog, as the server numbered
+	// them (NoteMade): the number is the server's word, so WatchLog holds the entry at that
+	// number to what the client did (its operation, fingerprint and owner signature).
+	Made []MadeEntry `json:"made,omitempty"`
 	// Addresses are the log pseudonyms of the watcher's address that WatchLog confirmed: the
 	// Address of an entry this client made itself (NoteMade) is the first, and from then on the
 	// pseudonym the server reports must agree with them (an entry of the watcher's own that is
@@ -59,22 +61,53 @@ type WatchState struct {
 }
 
 // SeenAddress is what a Lookup saw for an address: the fingerprints whose rows carried an owner
-// signature that verified, and whether the address showed an owner key at all.
+// signature that verified, whether the address showed an owner key at all, and the first owner key
+// it showed (trust on first use: remembered, not confirmed, see Key.OwnerFirstSeen).
 type SeenAddress struct {
-	Signed   []string `json:"signed,omitempty"`
-	Enrolled bool     `json:"enrolled,omitempty"`
+	Signed     []string `json:"signed,omitempty"`
+	Enrolled   bool     `json:"enrolled,omitempty"`
+	FirstOwner string   `json:"first_owner,omitempty"`
 }
 
-// NoteMade records that the entry with this number was made by this client.
-func (s *WatchState) NoteMade(seq int64) { s.Made = append(s.Made, seq) }
+// MadeEntry is an operation this client made, with what the client knows of it independently of
+// the server: the log number is the server's word, so WatchLog checks the entry at that number
+// against the rest. A mismatch is a violation and the entry is not taken as the client's own.
+type MadeEntry struct {
+	// Seq is the log number the server gave the operation.
+	Seq int64 `json:"seq"`
+	// Op is the operation (encrypt.OpPublish, OpRevoke, OpEnroll, OpRotate, OpReset,
+	// OpResetRequest or OpResetCancel).
+	Op string `json:"op,omitempty"`
+	// Fingerprint is the key's (for an owner operation, the new owner key's) fingerprint as the
+	// client computed it; "" where the operation names none.
+	Fingerprint string `json:"fingerprint,omitempty"`
+	// OwnerSig is the signature the client sent with the operation (the owner's, or the new key's
+	// acceptance for a reset); "" when it sent none.
+	OwnerSig string `json:"owner_sig,omitempty"`
+}
 
-func (s *WatchState) made(seq int64) bool {
-	for _, m := range s.Made {
-		if m == seq {
-			return true
+// NoteMade records an operation of this client, as the server numbered it.
+func (s *WatchState) NoteMade(m MadeEntry) { s.Made = append(s.Made, m) }
+
+// madeMismatch says in words how the log entry differs from what the client did ("" if it does
+// not).
+func madeMismatch(m MadeEntry, e docstore.DirectoryLogEntry) string {
+	switch {
+	case m.Op != "" && e.Op != m.Op:
+		return "the entry the server numbered as this client's " + m.Op + " is a " + e.Op
+	case m.Fingerprint != "" && docstore.DirectoryFingerprintSegment(e.Fingerprint) != docstore.DirectoryFingerprintSegment(m.Fingerprint):
+		return "the entry the server numbered as this client's " + m.Op + " is about another key"
+	}
+	if m.OwnerSig != "" {
+		got := e.OwnerSig
+		if m.Op == encrypt.OpReset {
+			got = e.ProofSig
+		}
+		if got != m.OwnerSig {
+			return "the entry the server numbered as this client's " + m.Op + " does not carry the signature the client sent"
 		}
 	}
-	return false
+	return ""
 }
 
 // Foreign is an entry of the log about the watcher's address that the watcher did not make.
@@ -96,6 +129,10 @@ type WatchReport struct {
 	Entries []docstore.DirectoryLogEntry
 	// Voided maps the number of each of the Entries that was cancelled to the void entry's number.
 	Voided map[int64]int64
+	// LateVoided maps entries that an earlier run already reported to the void entry that cancelled
+	// them since (a void that comes in a later run than the entry): what was reported did not take
+	// effect.
+	LateVoided map[int64]int64
 	// Foreign are the new entries about the address that the watcher did not make: not noted by
 	// this client and, when the address is enrolled, not signed by the watcher's owner key. A
 	// publication for an enrolled address that the owner key did not sign cannot come from the
@@ -139,6 +176,14 @@ var ErrLogCut = encrypt.ErrLogTruncated
 // pseudonym the server reported for the address (or one pinned from an earlier entry): the server
 // is pointing the watcher at the wrong address, so that it would see nothing.
 var ErrAddressMismatch = errors.New("directoryclient: an entry this client made is not under the address pseudonym the server reported")
+
+// ErrFilteredEnrolled is returned by WatchLog when the audited state says the address is enrolled
+// and the server nevertheless shows only the entries about the address: an enrolled address's
+// owner is shown the whole log, so the server is withholding it.
+var ErrFilteredEnrolled = errors.New("directoryclient: the address is enrolled but the server shows a filtered log")
+
+// zeroPrev is the Prev of the first entry of a log.
+var zeroPrev = strings.Repeat("0", 64)
 
 // ErrOwnEntryMissing is returned by WatchLog when an entry this client made is not in the log.
 var ErrOwnEntryMissing = errors.New("directoryclient: an entry this client made is not in the log")
@@ -272,7 +317,20 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	}
 	keys, entries, filtered := read.keys, read.entries, read.filtered
 	rep.Filtered = filtered
+	// An address the audited state says is enrolled gets the whole log (its owner reads it all):
+	// a filtered answer is the server withholding the chain from the one who audits it.
+	if filtered && st.Enrolled {
+		return rep, ErrFilteredEnrolled
+	}
 	chained := !filtered && !st.Filtered
+	// Where the read started: with no saved position (a first run, or a switch from the filtered
+	// read) the log is not anchored to an entry seen before, so it must begin right where the read
+	// asked: a server that starts the answer later withholds the start of the log.
+	anchored := chained && st.Seq > 0
+	from := cursor
+	if anchored {
+		from = st.Seq - 1
+	}
 	var lastSeq int64
 	var lastHash string
 	if n := len(entries); n > 0 {
@@ -292,6 +350,14 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 			}
 		}
 		if len(entries) > 0 {
+			if !anchored {
+				if entries[0].Seq != from+1 {
+					return rep, fmt.Errorf("%w: the log was asked for from entry %d and starts at entry %d", ErrLogCut, from+1, entries[0].Seq)
+				}
+				if from == 0 && entries[0].Prev != zeroPrev {
+					return rep, fmt.Errorf("%w: the first entry does not follow the start of the log", ErrLogCut)
+				}
+			}
 			if _, err := encrypt.VerifyLog(entries, entries[0].Prev, entries[0].Seq-1, keys); err != nil {
 				return rep, err
 			}
@@ -326,7 +392,9 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 		}
 	}
 	pinned := append([]string(nil), st.Addresses...)
-	for _, seq := range st.Made {
+	own := map[int64]bool{} // the entries of st.Made that the log confirms as the client's
+	for _, m := range st.Made {
+		seq := m.Seq
 		var e docstore.DirectoryLogEntry
 		found := false
 		for _, x := range entries {
@@ -339,12 +407,20 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 				return rep, err
 			}
 		}
-		switch {
-		case !found:
+		if !found {
 			return rep, fmt.Errorf("%w: entry %d", ErrOwnEntryMissing, seq)
-		case !known[e.Address]:
+		}
+		// The number is the server's word: the entry there must be what the client did, or it is
+		// not the client's (and its pseudonym is not pinned: a server-chosen number must not pick
+		// the address the watcher is held to).
+		if why := madeMismatch(m, e); why != "" {
+			rep.Violations = append(rep.Violations, encrypt.AuditViolation{Seq: seq, Why: why})
+			continue
+		}
+		if !known[e.Address] {
 			return rep, fmt.Errorf("%w: entry %d is under %s", ErrAddressMismatch, seq, e.Address)
 		}
+		own[seq] = true
 		have := false
 		for _, p := range pinned {
 			have = have || p == e.Address
@@ -399,12 +475,16 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 		}
 	}
 	rep.Voided = map[int64]int64{}
+	rep.LateVoided = map[int64]int64{}
 	for _, e := range audit.Entries {
 		if e.Seq > st.Reported {
 			rep.Entries = append(rep.Entries, e)
 			if v, ok := audit.Voided[e.Seq]; ok {
 				rep.Voided[e.Seq] = v
 			}
+		} else if v, ok := audit.Voided[e.Seq]; ok && v > st.Reported {
+			// Reported before, cancelled since (the void came in a later run).
+			rep.LateVoided[e.Seq] = v
 		}
 	}
 
@@ -414,7 +494,7 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	}
 	for _, e := range rep.Entries {
 		_, voided := audit.Voided[e.Seq]
-		if e.Op != encrypt.OpOperatorReset && (st.made(e.Seq) || (ownerPub != "" && signedByOwner(email, e, ownerPub))) {
+		if e.Op != encrypt.OpOperatorReset && (own[e.Seq] || (ownerPub != "" && signedByOwner(email, e, ownerPub))) {
 			continue
 		}
 		rep.Foreign = append(rep.Foreign, Foreign{Entry: e, Message: foreignMessage(e), Voided: voided})
@@ -456,6 +536,9 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	}
 	for _, v := range audit.Violations {
 		st.Reported = max(st.Reported, v.Seq)
+	}
+	for _, v := range audit.Voided {
+		st.Reported = max(st.Reported, v) // a void is reported with its entry, once
 	}
 	return rep, nil
 }

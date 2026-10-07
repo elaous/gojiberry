@@ -83,6 +83,11 @@ type AdapterDirectory struct {
 	// request and its taking effect (DefaultResetWait, 24 hours, when 0). Do not shorten it in a
 	// deployment: auditors hold the server to 24 hours (AuditOptions.ResetWait).
 	ResetWait time.Duration
+	// ReconcileGrace is how old an owner-state log entry without its enrollment record must be
+	// before it is taken to be left behind by a crash and the record is completed from the log
+	// (2 minutes when 0; see directory_recover.go). Younger, the operation is refused with
+	// ErrDirectoryBusy: the write may be in flight on another replica.
+	ReconcileGrace time.Duration
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
 
@@ -477,6 +482,11 @@ func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key 
 	}
 
 	defer d.lockAddress(user.Email)()
+	// A crash may have left an enrollment in the log without its record: the address would look
+	// un-enrolled here (no owner signature asked) while the log says otherwise.
+	if err := d.reconcileLocked(ctx, email, now); err != nil {
+		return PublishedKey{}, err
+	}
 	maxKeys := d.MaxKeys
 	if maxKeys <= 0 {
 		maxKeys = 20
@@ -552,7 +562,7 @@ func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key 
 			d.dropOtherNames(ctx, email, r.Fingerprint, id)
 			for _, st := range stale {
 				if st.fp != r.Fingerprint {
-					_ = d.deleteIf(ctx, st.id, st.digest) // best effort: a tombstone left behind is pruned next time
+					_ = d.pruneTombstone(ctx, email, st.rec, st.id, st.digest) // best effort: a tombstone left behind is pruned next time
 				}
 			}
 			st := stored{id: id, rec: rec, fp: r.Fingerprint, typ: r.Type, text: r.Text}
@@ -575,6 +585,40 @@ func (d *AdapterDirectory) dropOtherNames(ctx context.Context, email, fp, id str
 			_ = d.Store.Delete(ctx, other) // not found is the usual case
 		}
 	}
+}
+
+// pruneTombstone removes a tombstone past its window together with what the revoked key left
+// under the other names of the address (a retired directory key's): a live copy there, older than
+// the revocation, would otherwise become the newest record of the fingerprint the moment the
+// tombstone is gone, and bring the revoked key back. The copies go first; a newer live copy (a
+// later publication) is kept, and if any delete fails the tombstone stays for the next run.
+// docstore.ErrConflict: something changed since it was read (not ours to delete).
+func (d *AdapterDirectory) pruneTombstone(ctx context.Context, email string, tomb directoryRecord, id, digest string) error {
+	if r, err := parsePublic(tomb.Key); err == nil {
+		seg := fingerprintSegment(r.Fingerprint)
+		when := max(tomb.At, tomb.Revoked)
+		for _, prefix := range d.names(email) {
+			other := prefix + seg
+			if other == id {
+				continue
+			}
+			doc, err := d.Store.Load(ctx, other)
+			if errors.Is(err, docstore.ErrNotFound) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			var o directoryRecord
+			if json.Unmarshal(doc.Data, &o) != nil || (o.Revoked == 0 && o.At > when) {
+				continue // unreadable (never found by a lookup), or published again after the revocation
+			}
+			if err := d.deleteIf(ctx, other, docstore.Digest(doc.Data)); err != nil && !errors.Is(err, docstore.ErrNotFound) {
+				return err
+			}
+		}
+	}
+	return d.deleteIf(ctx, id, digest)
 }
 
 // deleteIf deletes the record id only if it still has digest prev: with the store's conditional
@@ -758,6 +802,9 @@ func (d *AdapterDirectory) Revoke(ctx context.Context, user auth.User, fingerpri
 	seg := fingerprintSegment(strings.TrimSpace(fingerprint))
 	defer d.lockAddress(user.Email)()
 	now := d.now()
+	if err := d.reconcileLocked(ctx, email, now); err != nil {
+		return PublishedKey{}, err
+	}
 	for round := 0; round < maxCASRounds; round++ {
 		state, err := d.readAddress(ctx, email)
 		if err != nil {
@@ -838,15 +885,17 @@ func (d *AdapterDirectory) Sweep(ctx context.Context) (int, error) {
 		}
 		expired := false
 		email := ""
+		var rec directoryRecord
+		tombstone := false
 		if strings.HasPrefix(m.ID, popPrefix) {
 			var u struct {
 				Exp int64 `json:"exp"`
 			}
 			expired = json.Unmarshal(doc.Data, &u) != nil || now.Unix() > u.Exp+int64(popGrace/time.Second)
 		} else {
-			var rec directoryRecord
 			expired = json.Unmarshal(doc.Data, &rec) == nil && rec.Revoked > 0 && now.Sub(time.Unix(rec.Revoked, 0)) >= d.window()
 			email = rec.Email
+			tombstone = expired
 		}
 		if !expired {
 			continue
@@ -858,6 +907,10 @@ func (d *AdapterDirectory) Sweep(ctx context.Context) (int, error) {
 		err = func() error {
 			if docstore.ValidAddress(email) {
 				defer d.lockAddress(email)()
+				if tombstone {
+					// What the revoked key left under a retired name goes with the tombstone.
+					return d.pruneTombstone(ctx, email, rec, m.ID, docstore.Digest(doc.Data))
+				}
 			}
 			return d.deleteIf(ctx, m.ID, docstore.Digest(doc.Data))
 		}()
@@ -873,22 +926,40 @@ func (d *AdapterDirectory) Sweep(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// RunSweep calls Sweep every interval (an hour when not positive) until ctx ends; errors are
-// logged.
+// RunSweep calls Sweep and then ReconcileEnrollments every interval (an hour when not positive)
+// until ctx ends; errors are logged. The reconciliation also runs once the reconcile grace is
+// over after the start, and again after any pass that found an entry too young to judge: a
+// restart (whose start-up reconcile cannot complete an entry younger than the grace) does not
+// leave a record behind the log until the next interval.
 func (d *AdapterDirectory) RunSweep(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = time.Hour
 	}
 	t := time.NewTicker(interval)
 	defer t.Stop()
+	retryAfter := d.grace() + d.grace()/10 + time.Millisecond
+	retry := time.NewTimer(retryAfter)
+	defer retry.Stop()
+	reconcile := func() {
+		rep, err := d.reconcileAll(ctx)
+		if err != nil && ctx.Err() == nil {
+			log.Printf("encrypt: reconciling the owner enrollments: %v", err)
+		}
+		if rep.Deferred > 0 {
+			retry.Reset(retryAfter)
+		}
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-retry.C:
+			reconcile()
 		case <-t.C:
 			if _, err := d.Sweep(ctx); err != nil && ctx.Err() == nil {
 				log.Printf("encrypt: sweeping the key directory: %v", err)
 			}
+			reconcile()
 		}
 	}
 }

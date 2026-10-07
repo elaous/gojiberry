@@ -586,6 +586,17 @@ cannot be opened.
      to a contended log retries with backoff and jitter, up to 16 lost rounds, then answers **503** with
      `Retry-After` (`docstore.ErrDirectoryBusy`). On a store with no conditional write all of this holds only
      inside one process: see *Replicas and non-conditional stores*.
+   - **A crash between an owner-state log entry and its record is mended from the log.** Enroll, rotate and
+     the reset calls append the entry first and write the enrollment record second. Before every publish,
+     revoke and owner operation, and from `ReconcileEnrollments` (start-up, then `RunSweep` hourly, and again
+     once `ReconcileGrace` (2 minutes) has passed after a pass that found an entry too young to judge, so a
+     restart inside the grace does not leave the mismatch standing), the directory replays the address's
+     entries with `AuditAddress` and completes the record when it is behind (younger entries answer 503:
+     they may be in flight on another replica). The log names addresses by pseudonym and the owner
+     signatures name the e-mail, so the pass finds the addresses to replay from every e-mail the store
+     holds a record for, an enrollment record **or a published key**; an address with entries and neither
+     (a first enrollment that crashed for an address with no key) is counted and logged as *unmapped* and is
+     mended when somebody operates on it, or by the operator reset.
    - **Publishing again re-signs.** Publishing a key that is already there replaces its record, signed by
      the current key and named under the current key's hash; that is how a record moves to a new key.
    - **Proof of possession** (`AdapterDirectory.Challenge`, `OpenChallenge`; routes below).
@@ -639,7 +650,10 @@ cannot be opened.
      **revoke window** (24 hours; `RevokeWindow`, `GOJIBERRY_DOCSTORE_DIRECTORY_REVOKE_WINDOW`): within it
      the same key cannot be published again (409), so a replayed publish request (a captured request, a
      stolen session) cannot silently bring a revoked key back; after it the owner can publish the key
-     again, and the tombstone is pruned. The fingerprint in the path is the one lookup shows, or its path
+     again, and the tombstone is pruned (by `Sweep` and by a later publication) **together with the copies
+     the revoked key left under a retired directory key's name**, unless one was published again after the
+     revocation: an older live copy there would otherwise become the newest record the moment the tombstone
+     went, and bring the revoked key back. The fingerprint in the path is the one lookup shows, or its path
      form (`docstore.DirectoryFingerprintSegment`). An unsigned tombstone (written by someone with store
      access but not the key) is ignored.
    - **The key is configuration, and it rotates.** `GOJIBERRY_DOCSTORE_DIRECTORY_KEY` is a 32-byte seed in
@@ -769,14 +783,29 @@ cannot be opened.
      "not signed by the owner key" (`OwnerEnrolled`). `Recipients` can look an address up (`Directory`,
      `OnDirResults`, `DirResults`), and picking a row fills the draft. The typed fingerprint stays for
      label-only keys, and is skipped for a verified one only when the host sets `TrustVerified`.
-   - **Client.** `docstore/directoryclient` (native and js/wasm, net/http, age and Ed25519 only):
+   - **Client.** `docstore/directoryclient` (native and js/wasm; net/http, age and Ed25519, plus the
+     `docstore` and `docstore/encrypt` packages for the wire types, formats and audit, so it is not a
+     minimal standalone client; `GOOS=js GOARCH=wasm go vet` covers it):
      `Publish` (challenge, decrypts the nonce with the caller's identity, attests an ssh-ed25519 key, signs
-     as owner when enrolled), `Revoke`, `Lookup` (re-checks attestations and owner signatures itself, pins
-     the first owner key seen for an address, flags a different one), `Enroll`, `Rotate`, `RequestReset`,
+     as owner when enrolled), `Revoke`, `Lookup` (re-checks attestations and owner signatures itself; `OwnerSigned`/`OwnerPinned` only for a key
+     somebody confirmed: pinned in `Client.Pins` by the host or user, enrolled by this client itself, or in the
+     audited chain of its own address; the first key seen for an address is remembered in `WatchState.Seen`
+     and shown `OwnerUnpinned`, and the same key on later lookups `OwnerFirstSeen`, which is consistent
+     but **not** confirmed: a server that showed the wrong key the first time shows it every time; a different
+     key, also a second one in one answer, is `OwnerChanged`), `Enroll`, `Rotate`, `RequestReset`,
      `CompleteReset`, `CancelReset`, `Enrollment`, `LogAddress`, `Head` and `WatchLog` (fetches the log
      since the last position kept in a `WatchState`, checks the head's signature against pinned keys, the
      head against what it remembers, the chain and every signature, audits the entries of the address and
-     reports those it did not make). Tested against the server with `httptest`.
+     reports those it did not make). With no saved position (a first run, or after a filtered read) the
+     answer must begin at the entry asked for, and at the zero hash when that is the start of the log, or
+     it is `ErrLogCut` (the start was withheld). An entry the client made (`WatchState.Made`: the server's
+     number plus the operation, fingerprint and signature the client sent) is held to what the client did:
+     another operation or key at that number is a violation and the entry is not taken as the client's own
+     (its pseudonym is not pinned), so the server cannot choose the address the watcher is held to by
+     choosing a number. A filtered answer for an address the audited state says is enrolled is
+     `ErrFilteredEnrolled` (the owner of an enrolled address is shown the whole log). A void that arrives in a
+     later run than the entry it cancels is shown (`WatchReport.LateVoided`). `Enroll`, `Rotate` and
+     `CompleteReset` pin the key the client made, never the one in the server's answer. Tested against the server with `httptest`.
    - **Host.** `examples/people-keys-demo` uses it: `AddMyPasskey`, `CreateRecoveryKey` (shown once) and
      `Directory` (`directoryclient.Lookup`, so the marks are the client's own), plus a "my directory entry"
      section: publish my passkey's key (proof of possession with the passkey's own PRF identity), revoke
@@ -791,6 +820,15 @@ cannot be opened.
      `myEntry` section, and a `WatchLog` on sign-in with its `WatchState` in storage.
 
    *Limits that remain, stated plainly.*
+   0. **What the client can and cannot confirm.** `OwnerPinned`/`OwnerSigned` rest on a pin somebody
+      confirmed (out of band, or by the client's own enrollment) or on the owner's own audit; trust on first
+      use (`OwnerFirstSeen`) only shows that the answer has not changed since the first lookup. A client with
+      no `WatchState` has no memory at all (every lookup is a first sight). An entry the client made is
+      matched to the log by the number the server gave, the operation, the key and the signature; for an
+      address that is not enrolled the signature is absent, so a server holding the directory key could still
+      answer with the number of another address's entry for the *same* public key (it can publish any public
+      key under any address), which pins that entry's pseudonym: enroll an owner key (its signature is
+      checked too) to close it.
    1. **Trust on first use.** The first owner key for an address is accepted on the provider session and
       the new key's signature, nothing more. Whoever is signed in as the address first can enroll first
       (including a server with a provider session of its own) and then locks the rightful owner out of
@@ -816,8 +854,21 @@ cannot be opened.
       not enrolled.
    7. The global lookup budget can be used up by a handful of accounts (a denial of service on lookups,
       bounded by the per-user and per-IP budgets and by what an account costs; `GLOBAL_BUDGET=domain`
-      narrows it to a domain); per-IP limits behind a proxy are per proxy, and unauthenticated floods are
-      the gateway's to stop.
+      narrows it to a domain); reads of the log spend the same per-IP and whole-server shard budgets as
+      lookups (only their per-user budget is separate), so heavy log polling also spends the lookups of
+      everybody hashed to the same shard. The per-IP lookup budget and the **failed-admin budget of the
+      operator route are per client address**: the connection's address (`RemoteAddr`) by default, which
+      behind a reverse proxy is the proxy's for everybody, so one budget is shared and an attacker's wrong
+      admin tokens can lock the operator out for a minute at a time. Set
+      `GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES` (the same list the passkey routes use; embedders call
+      `Server.WithDirectoryClientIP(passkey.TrustedProxies(...))`) to have `X-Forwarded-For` believed from
+      those proxies only. Unauthenticated floods are the gateway's to stop.
+   7a. **A replica whose clock is ahead hurts availability.** Entry times never go back along the chain, so
+      one entry written by a replica whose clock is ahead (by more than the 10-minute owner-signature skew)
+      dates every later entry at least that late, whichever replica writes it: owner signatures made with
+      the right time then look "dated far from the entry" to an auditor, entries read as "dated in the
+      future" until real time catches up, and resets measure from the late times. Keep the replicas' clocks
+      in step (NTP); a replica whose clock is behind is harmless (it writes the predecessor's time).
    8. A store without conditional writes carries the directory for **one** process only (the directory
       refuses to start with `GOJIBERRY_DOCSTORE_REPLICAS>1` there, and warns with one). The cap of 20 keys can
       be overshot by a key or two by racing replicas even on a conditional store.

@@ -78,8 +78,10 @@ const (
 const DefaultAtSkew = 5 * time.Minute
 
 // VoidWindow is how long after the entry it cancels a "void" entry may be written: a void is the
-// compensation of a failed write, made in the same round (seconds); AuditAddress accepts later
-// ones only for the owner-state operations (see lateVoidable).
+// compensation of a failed write, made in the same round (seconds). AuditAddress accepts no later
+// one, for any operation: it is a violation and cancels nothing. (A crash that leaves an owner-state
+// entry without its record is not mended by a void but by completing the record from the log:
+// see directory_recover.go.)
 const VoidWindow = 2 * time.Minute
 
 // voidable says an entry of this kind may be cancelled by a void: a publication, revocation or
@@ -88,17 +90,6 @@ const VoidWindow = 2 * time.Minute
 func voidable(op string) bool {
 	switch op {
 	case OpPublish, OpRevoke, OpEnroll, OpRotate, OpResetRequest, OpReset, OpResetCancel:
-		return true
-	}
-	return false
-}
-
-// lateVoidable says a void may come after VoidWindow: the entries that change the owner state
-// (the state is checkable against the directory's enrollment record, AuditAddress's caller
-// compares it), voided by the reconciliation of an entry a crash left without a record.
-func lateVoidable(op string) bool {
-	switch op {
-	case OpEnroll, OpRotate, OpResetRequest, OpReset, OpResetCancel:
 		return true
 	}
 	return false

@@ -200,6 +200,21 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
       keys than that resets other callers' buckets, so per-caller limits are a fair-use control, not a
       defence against unlimited identities (that belongs to the gateway); the whole-server directory lookup
       budget is split in 16 shards by user.
+      **Round 4 of the directory review (behavior changes):** `WatchLog` with no saved position requires the
+      log to start where it asked (entry 1 at the zero hash for a first run), a filtered answer for an
+      address the audited state says is enrolled is `ErrFilteredEnrolled`, and `WatchState.Made` is now a list
+      of `MadeEntry` (the server's number plus the operation, fingerprint and signature the client sent,
+      checked against the log entry; **a stored state with the old list of bare numbers no longer decodes**:
+      drop it, the next run starts from the log); `Client.Enroll/Rotate/CompleteReset` pin the key the client
+      made, not the one in the answer. `Client.Pins` now holds only confirmed keys: trust on first use is kept
+      in `WatchState.Seen` and marks rows `OwnerFirstSeen` (not `OwnerSigned`/`OwnerPinned`); a second owner
+      key in one answer is `OwnerChanged`. Enrollment reconciliation also runs before every publish and
+      revoke, finds addresses through published keys, and is repeated by `RunSweep` (and after the grace
+      following a restart); `AdapterDirectory.ReconcileGrace` sets the grace. Pruning a tombstone removes the
+      retired-name copies of the key with it. `Server.WithDirectoryClientIP` (wired from
+      `GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES`) names the client for the per-IP lookup and failed-admin
+      budgets. Documented limits: a clock-ahead replica, log reads sharing the lookup shards, and the
+      per-address (not per-user) admin failure budget behind a proxy (step 4b).
    4. Hiding folder names of confidential folders.
    5. **Downgrade and deleted-record detection: done** (library; C.5 and step 5.7 of
       [encryption-and-passkeys.md](encryption-and-passkeys.md)). The level and the record's seq are

@@ -335,6 +335,9 @@ type Server struct {
 	dirDomainBudget bool
 	// dirAdmin says a request comes from the operator (WithDirectoryAdmin).
 	dirAdmin func(*http.Request) bool
+	// dirClientIP names the client of a directory request for the per-client budgets
+	// (WithDirectoryClientIP); nil is the connection's remote address.
+	dirClientIP func(*http.Request) string
 }
 
 type extraRoute struct {

@@ -43,7 +43,7 @@ func TestWatchLogPinsThePseudonymWithTheClientsOwnEntries(t *testing.T) {
 		return []byte(`{"address":"` + strings.Repeat("ab", 32) + `"}`)
 	})}
 	before := *c.State
-	before.Made = append([]int64(nil), c.State.Made...)
+	before.Made = append([]MadeEntry(nil), c.State.Made...)
 	if _, err := liar.WatchLog(ctx, "ana@x.io", c.State, WatchOptions{}); !errors.Is(err, ErrAddressMismatch) {
 		t.Fatalf("a pseudonym that does not hold the client's own entry: %v", err)
 	}

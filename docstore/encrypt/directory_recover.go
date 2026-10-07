@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/elaous/gojiberry/docstore"
@@ -20,13 +21,22 @@ import (
 // then says the address is enrolled, or has a pending reset, and the directory says otherwise,
 // which a watcher reads as a violation for good. Two things end that.
 //
-//   - Reconciliation (reconcileLocked): before an owner operation on an address, and at start-up
-//     for every address that has a record (ReconcileEnrollments), the directory replays the
-//     address's owner-state entries with AuditAddress and, when the record is behind the log
-//     (the last entry that took effect is newer than the record's Seq), completes it: the record
-//     is written from the log. The log is the proof and the record only its state, so completing
-//     is what the entry already said. An entry younger than reconcileGrace may still be in flight
-//     on another replica: the operation is refused for the moment (ErrDirectoryBusy, 503).
+//   - Reconciliation (reconcileLocked): before every operation on an address that writes (a
+//     publication, a revocation and the owner operations), and from ReconcileEnrollments (start-up,
+//     and RunSweep from then on), the directory replays the address's owner-state entries with
+//     AuditAddress and, when the record is behind the log (the last entry that took effect is
+//     newer than the record's Seq), completes it: the record is written from the log. The log is
+//     the proof and the record only its state, so completing is what the entry already said. An
+//     entry younger than the grace (ReconcileGrace) may still be in flight on another replica: the
+//     operation is refused for the moment (ErrDirectoryBusy, 503), and a start-up that finds one
+//     leaves it to the next run, which RunSweep makes once the grace is over (a restart inside the
+//     grace does not leave the mismatch standing).
+//     The log names an address only by its pseudonym, and the owner signatures name the e-mail, so
+//     ReconcileEnrollments finds the addresses to replay from every e-mail the store holds a record
+//     for: an enrollment record, or a published key (so the first enrollment of an address, which
+//     has no enrollment record yet, is found when the address has a key). An address with entries
+//     and neither is found when somebody operates on it, or reset by the operator (it is counted
+//     and logged: ReconcileReport.Unmapped).
 //   - The operator's reset (OperatorResetEnrollment), for what reconciliation cannot mend (an
 //     address with no record whose email nobody asks about, a key and its reset both lost): it
 //     removes the enrollment and logs an operator-reset entry, which the audit accepts as
@@ -35,8 +45,16 @@ import (
 //     buys is that the act is visible, not that it is impossible.
 
 // reconcileGrace is how long an owner-state entry may be without its record before it is taken to
-// be dangling (a write in flight on another replica takes milliseconds).
+// be dangling (a write in flight on another replica takes milliseconds); the default of
+// AdapterDirectory.ReconcileGrace.
 const reconcileGrace = 2 * time.Minute
+
+func (d *AdapterDirectory) grace() time.Duration {
+	if d.ReconcileGrace > 0 {
+		return d.ReconcileGrace
+	}
+	return reconcileGrace
+}
 
 // stateEntry says an entry is of the owner-state kind the reconciliation replays (or a void, which
 // may cancel one).
@@ -118,7 +136,7 @@ func (d *AdapterDirectory) reconcileLocked(ctx context.Context, email string, no
 	if !audit.Enrolled && enr == nil {
 		return nil // nothing to hold: an operator reset (or a void) left it un-enrolled
 	}
-	if now.Unix()-last.At < int64(reconcileGrace/time.Second) {
+	if now.Sub(time.Unix(last.At, 0)) < d.grace() {
 		return docstore.ErrDirectoryBusy
 	}
 	switch {
@@ -153,45 +171,123 @@ func (d *AdapterDirectory) deleteEnrollment(ctx context.Context, email string) e
 	return nil
 }
 
-// ReconcileEnrollments reconciles every address that has an enrollment record (Startup runs it).
-// It returns how many records it completed. An address whose entry is too young to judge is left
-// for the next run, an unreadable record is skipped.
+// ReconcileReport is what one reconciliation pass found.
+type ReconcileReport struct {
+	// Completed is how many records it completed from the log (or removed, for an enrollment the
+	// log shows ended).
+	Completed int
+	// Deferred is how many addresses had an entry too young to judge (see ReconcileGrace): they are
+	// left for the next pass.
+	Deferred int
+	// Unmapped is how many pseudonyms have owner-state entries in the log and no e-mail the store
+	// knows (no enrollment record and no published key): the pass cannot replay them. They are
+	// found when somebody operates on the address, or reset by the operator.
+	Unmapped int
+}
+
+// ReconcileEnrollments reconciles every address the store holds a record for (an enrollment, or a
+// published key: the first enrollment of an address has no enrollment record yet) against the
+// log (Startup runs it, and RunSweep again). It returns how many records it completed. An address
+// whose entry is too young to judge is left for the next run, an unreadable record is skipped.
 func (d *AdapterDirectory) ReconcileEnrollments(ctx context.Context) (int, error) {
+	rep, err := d.reconcileAll(ctx)
+	return rep.Completed, err
+}
+
+// reconcileAll is ReconcileEnrollments with the whole report.
+func (d *AdapterDirectory) reconcileAll(ctx context.Context) (ReconcileReport, error) {
+	var rep ReconcileReport
 	if d.Signer == nil {
-		return 0, ErrDirectoryOff
+		return rep, ErrDirectoryOff
 	}
-	metas, err := docstore.ListPrefix(ctx, d.Store, docstore.DirectoryEnrollPrefix)
+	emails, err := d.knownEmails(ctx)
 	if err != nil {
-		return 0, err
+		return rep, err
 	}
-	n := 0
-	for _, m := range metas {
-		doc, err := d.Store.Load(ctx, m.ID)
-		if errors.Is(err, docstore.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return n, err
-		}
-		var rec enrollRecord
-		if json.Unmarshal(doc.Data, &rec) != nil || !docstore.ValidAddress(rec.Email) {
-			continue
+	if _, err := d.stateEntries(ctx, nil); err != nil { // bring the index up to the end of the log
+		return rep, err
+	}
+	covered := map[string]bool{}
+	for _, email := range emails {
+		for _, a := range d.LogAddressesFor(email) {
+			covered[a] = true
 		}
 		func() {
-			defer d.lockAddress(rec.Email)()
-			before := rec.Seq
-			if err := d.reconcileLocked(ctx, rec.Email, d.now()); err != nil {
-				if !errors.Is(err, docstore.ErrDirectoryBusy) {
+			defer d.lockAddress(email)()
+			before, _, _ := d.readEnrollment(ctx, email)
+			var beforeSeq int64 = -1
+			if before != nil {
+				beforeSeq = before.Seq
+			}
+			if err := d.reconcileLocked(ctx, email, d.now()); err != nil {
+				if errors.Is(err, docstore.ErrDirectoryBusy) {
+					rep.Deferred++
+				} else {
 					log.Printf("encrypt: reconciling an owner enrollment: %v", err)
 				}
 				return
 			}
-			if cur, _, err := d.readEnrollment(ctx, rec.Email); err != nil || cur == nil || cur.Seq != before {
-				n++
+			if cur, _, err := d.readEnrollment(ctx, email); err != nil || (cur == nil) != (before == nil) || (cur != nil && cur.Seq != beforeSeq) {
+				rep.Completed++
 			}
 		}()
 	}
-	return n, nil
+	// Pseudonyms with owner-state entries that none of those e-mails explains.
+	d.idxMu.Lock()
+	for a := range d.idx.byAddr {
+		if !covered[a] {
+			for _, e := range d.idx.byAddr[a] {
+				if e.Op != OpVoid && e.Op != OpOperatorReset {
+					rep.Unmapped++
+					break
+				}
+			}
+		}
+	}
+	d.idxMu.Unlock()
+	if rep.Unmapped > 0 {
+		log.Printf("encrypt: %d address pseudonyms have owner-state entries in the log and no record or key the directory can name them by; they are reconciled when somebody operates on the address (or reset by the operator)", rep.Unmapped)
+	}
+	return rep, nil
+}
+
+// knownEmails lists the e-mail addresses the store holds a record for: enrollment records and
+// published keys (tombstones too). Records that cannot be read are skipped.
+func (d *AdapterDirectory) knownEmails(ctx context.Context) ([]string, error) {
+	seen := map[string]bool{}
+	var out []string
+	add := func(email string) {
+		email = normalizeEmail(email)
+		if email != "" && docstore.ValidAddress(email) && !seen[email] {
+			seen[email] = true
+			out = append(out, email)
+		}
+	}
+	for _, prefix := range []string{docstore.DirectoryEnrollPrefix, directoryPrefix} {
+		metas, err := docstore.ListPrefix(ctx, d.Store, prefix)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range metas {
+			if prefix == directoryPrefix && (strings.HasPrefix(m.ID, popPrefix) || strings.HasPrefix(m.ID, docstore.DirectoryEnrollPrefix)) {
+				continue
+			}
+			doc, err := d.Store.Load(ctx, m.ID)
+			if errors.Is(err, docstore.ErrNotFound) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			var rec struct {
+				Email string `json:"email"`
+			}
+			if json.Unmarshal(doc.Data, &rec) == nil {
+				add(rec.Email)
+			}
+		}
+	}
+	return out, nil
 }
 
 // OperatorResetEnrollment removes the owner enrollment of the address whose log pseudonym is

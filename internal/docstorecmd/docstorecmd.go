@@ -184,6 +184,12 @@ func withDirectory(ctx context.Context, srv *docstore.Server, adapter docstore.A
 		}
 		srv.WithDirectoryAdmin(adminToken(tok))
 	}
+	// Behind a reverse proxy the per-client budgets (lookups per address, wrong admin tokens) need
+	// the proxy's addresses, so that X-Forwarded-For is believed from it and from nobody else;
+	// without them one budget is shared by everybody behind the proxy.
+	if px := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES")); px != "" {
+		srv.WithDirectoryClientIP(passkey.TrustedProxies(strings.Split(px, ",")...))
+	}
 	srv.WithDirectory(encrypt.DirectoryService(dir)).WithDirectoryPolicy(policy).WithDirectoryLimits(limiters).WithDirectoryGlobalPerDomain(perDomain)
 	go dir.RunSweep(ctx, time.Hour)
 	go dir.RunWriterWatch(ctx, replicas)
