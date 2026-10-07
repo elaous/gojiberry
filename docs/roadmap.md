@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (#88 and the PR that sets the tenth-merge rule; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
+3 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, and the `Sharing.RepairAll` PR; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
 
 ## Notes for upgraders
 
@@ -293,8 +293,15 @@ a way to avoid hitting the limit meanwhile.
    oldest, and the test took the first generation listed afterwards, which could be the new one it had no captured
    bytes for, and overwrote it with an empty file (rightly `ErrUnreadable`). The product never orders files by the
    store's times. The test now picks a captured generation that survived and has no sleep.
-3. **Files in unsigned v1/v2 frames.** Plan: run `Sharing.Repair` over them, with a migration command and a report
-   of what is left. Avoid: re-key (save) documents after upgrading.
+3. **Done:** **files in unsigned v1/v2 frames: `Sharing.RepairAll(ctx, RepairAllOptions)`** walks every document in the store and
+   runs `Sharing.Repair` on each one that has an unsigned file (same lock, same checks against the record, same
+   conditional writes), then returns a `RepairAllReport` (`Total`, `Signed` already v3, `Repaired`, `Files`,
+   `Skipped` with a reason each: no signer, no key held, unreadable, forged, downgrade, plaintext, conflict; `Todo`
+   for `DryRun`; `Remaining` when cut short). It never downgrades, deletes or uses `AcceptUnsigned`, is idempotent and
+   resumable (run it again), and is bounded by the context, `Limit` and a `Progress` callback. There is no command
+   for it: the docstore server holds no owner signer or identity, so it is a Go API for the owner's client (see
+   [encryption-and-passkeys.md](encryption-and-passkeys.md), "Which files may be unsigned"). Was: only per-document
+   `Repair`. Avoid: no longer needed.
 4. **The no-signer window is narrowed but not closed.** The remaining path is the few steps between the re-key's
    last look at the files and its write of the `signed` record, and an older build that writes v1/v2 frames under
    a record that already says `signed` (design, "The window before `signed`", lines ~323-331;
