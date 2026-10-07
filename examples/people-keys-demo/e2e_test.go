@@ -193,7 +193,9 @@ func TestMyDirectoryEntryInARealBrowser(t *testing.T) {
 	// A passkey cannot be the only key: a recovery key first, then my passkey.
 	d.Click(".gj-recip-recovery")
 	d.WaitSelector(".gj-recip-secret")
-	d.Click(".gj-recip-recovery-done")
+	d.SetChecked(".gj-recip-recovery-ack input", true)
+	d.WaitFor("the commit button", `!document.querySelector('.gj-recip-recovery-commit').disabled`)
+	d.Click(".gj-recip-recovery-commit")
 	d.WaitFor("the secret to be dropped", `!document.querySelector('.gj-recip-secret')`)
 	d.Click(".gj-recip-add-mine")
 	d.WaitSelector(".gj-recip-my-fingerprint")
