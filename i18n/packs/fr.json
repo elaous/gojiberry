@@ -393,6 +393,7 @@
   "enc.err.unreadable": "%d fichiers enregistrés ne peuvent pas être ouverts avec les clés déverrouillées ici : le changement les perdrait. Rien n'a été modifié. Déverrouillez avec une autre clé, ou effacez le stockage si ses clés sont perdues.",
   "enc.err.locked": "Le stockage est verrouillé. Déverrouillez-le d'abord avec l'une de ses clés.",
   "enc.err.notAKey": "Ce n'est pas l'une des clés de ce stockage.",
+  "enc.err.stale": "Les clés de ce stockage ont été modifiées dans un autre onglet ou une autre fenêtre depuis le chargement de cette page : cet onglet ne fait donc rien avec elles. Rechargez la page.",
   "enc.err.configChanged": "La configuration des clés de cet appareil a changé depuis la dernière ouverture du stockage avec cette clé : il n'a pas été déverrouillé. Si ce n'est pas vous, c'est quelqu'un qui peut écrire dans le stockage de ce site : n'utilisez pas le stockage ici.",
   "enc.err.interrupted": "Un changement précédent des clés de ce stockage n'a pas abouti. Terminez-le ou annulez-le d'abord.",
   "enc.err.secretNotSaved": "Le secret de la clé de récupération n'a pas été enregistré : confirmez d'abord que vous l'avez conservé.",

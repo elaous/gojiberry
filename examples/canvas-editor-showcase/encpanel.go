@@ -263,6 +263,8 @@ func tErr(err error) error {
 		msg = T("enc.err.locked", "The store is locked. Unlock it with one of its keys first.")
 	case errors.Is(err, encstore.ErrNotAKey):
 		msg = T("enc.err.notAKey", "That is not one of this store's keys.")
+	case errors.Is(err, encstore.ErrStaleConfig):
+		msg = T("enc.err.stale", "The keys of this store were changed in another tab or window since this page loaded, so this tab does nothing with them. Reload the page.")
 	case errors.Is(err, encstore.ErrConfigChanged):
 		msg = T("enc.err.configChanged", "The key configuration on this device was changed since this key last opened the store, so it was not unlocked. If you did not change it, someone who can write this site's storage did: do not use the store here.")
 	case errors.Is(err, encstore.ErrInterrupted):

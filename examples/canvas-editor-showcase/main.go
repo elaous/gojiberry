@@ -214,11 +214,11 @@ func main() {
 	// orphaned file next time). The memory target, a local directory, SQLite and the HTTP
 	// store do write conditionally (docstore.ConditionalAdapter).
 	browserStore := docstore.NewBrowserAdapter("showcase:")
-	u.enc, err = newEnc(browserStore, func() { renderUI() })
+	u.enc, err = newEnc(browserStore, func() { renderUI(); u.publishEncState() })
 	if err != nil {
 		// A key list that cannot be read is not guessed at: the page starts with encryption off
 		// and says why in the Save tab.
-		u.enc, _ = newEncOff(browserStore, func() { renderUI() }, err)
+		u.enc, _ = newEncOff(browserStore, func() { renderUI(); u.publishEncState() }, err)
 	}
 	u.saver = saver.NewSession(&saver.Saver{Targets: []saver.Target{
 		u.enc.target(),
@@ -1063,4 +1063,26 @@ func downloadChoices(exporters []transfer.Exporter) []components.SaverChoice {
 		}
 	}
 	return out
+}
+
+// publishEncState brings the "encryption" part of #state up to date. The rest of #state is written
+// when the canvas is drawn, which a change in the Save or People tab (unlock, restore, a directory
+// address confirmed) does not do.
+func (u *ui) publishEncState() {
+	el := js.Global().Get("document").Call("getElementById", "state")
+	if !el.Truthy() {
+		return
+	}
+	var m map[string]json.RawMessage
+	if json.Unmarshal([]byte(el.Get("textContent").String()), &m) != nil || m == nil {
+		return
+	}
+	b, err := json.Marshal(u.enc.state())
+	if err != nil {
+		return
+	}
+	m["encryption"] = b
+	if out, err := json.Marshal(m); err == nil {
+		el.Set("textContent", string(out))
+	}
 }

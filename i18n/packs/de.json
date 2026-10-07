@@ -393,6 +393,7 @@
   "enc.err.unreadable": "%d gespeicherte Dateien lassen sich mit den hier entsperrten Schlüsseln nicht öffnen, die Änderung würde sie also verlieren. Es wurde nichts geändert. Entsperren Sie mit einem anderen Schlüssel oder löschen Sie den Speicher, wenn seine Schlüssel verloren sind.",
   "enc.err.locked": "Der Speicher ist gesperrt. Entsperren Sie ihn zuerst mit einem seiner Schlüssel.",
   "enc.err.notAKey": "Das ist keiner der Schlüssel dieses Speichers.",
+  "enc.err.stale": "Die Schlüssel dieses Speichers wurden in einem anderen Tab oder Fenster geändert, seit diese Seite geladen wurde; dieser Tab tut daher nichts mit ihnen. Laden Sie die Seite neu.",
   "enc.err.configChanged": "Die Schlüsselkonfiguration auf diesem Gerät wurde geändert, seit dieser Schlüssel den Speicher zuletzt geöffnet hat, daher wurde nicht entsperrt. Wenn Sie sie nicht geändert haben, war es jemand mit Schreibzugriff auf den Speicher dieser Website: Verwenden Sie den Speicher hier nicht.",
   "enc.err.interrupted": "Eine frühere Änderung der Schlüssel dieses Speichers wurde nicht abgeschlossen. Schließen Sie sie zuerst ab oder machen Sie sie rückgängig.",
   "enc.err.secretNotSaved": "Das Geheimnis des Wiederherstellungsschlüssels wurde nicht gesichert: Bestätigen Sie zuerst, dass Sie es gespeichert haben.",

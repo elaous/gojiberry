@@ -28,6 +28,12 @@ func editConfig(d *e2etest.Tab, body string) {
 	})()`, nil)
 }
 
+// docsText is what the page stored for its documents (not the key configuration, which a forged
+// journal is written into).
+func docsText(d *e2etest.Tab) string {
+	return d.Str(`Object.keys(localStorage).filter(k => !k.startsWith('showcase-enc:')).sort().map(k => k + '\n' + localStorage.getItem(k)).join('\n')`)
+}
+
 func reloadToSave(d *e2etest.Tab) {
 	d.Reload()
 	d.Click(`button[data-tab="save"]`)
@@ -83,13 +89,20 @@ func TestAnOlderGenuineConfigPutBackIsRefusedInThePage(t *testing.T) {
 	d.WaitFor("saved", "document.querySelectorAll('.gj-doclist-item').length >= 1")
 	older := d.Str(`localStorage.getItem('showcase-enc:config')`)
 	// The owner replaces the passkey: every file is sealed under the new list, which becomes the config.
+	// (A passkey is replaced from another key: lock, unlock with the recovery key.)
+	d.Click(`button[data-tab="save"]`)
+	d.Click("#enc-lock")
+	d.WaitFor("locked", `(document.getElementById('enc-status') || {}).textContent === 'Locked'`)
+	d.Fill("#enc-recovery-input", recovery)
+	d.WaitFor("the button", `!document.querySelector('#enc-unlock-recovery').disabled`)
+	d.Click("#enc-unlock-recovery")
+	d.WaitFor("unlocked", `(document.getElementById('enc-status') || {}).textContent === 'Unlocked'`)
 	d.Click(`button[data-tab="people"]`)
 	d.WaitSelector(".gj-recip-replace")
 	d.Click(".gj-recip-replace")
 	confirmDialog(d)
-	d.Sleep(1500)
-	t.Log("DEBUG", d.Text("#enc-people"))
-	d.WaitFor("replaced", `(document.querySelector('.gj-recip-notice') || {textContent: ''}).textContent.includes('was replaced')`)
+	d.WaitFor("replaced", `localStorage.getItem('showcase-enc:config') !== `+e2etest.J(older)+` && !JSON.parse(localStorage.getItem('showcase-enc:config')).pending`)
+	d.Sleep(500)
 	d.OK(d.Str(`localStorage.getItem('showcase-enc:config')`) != older, "the list changed")
 	// Someone puts the older, genuine configuration back.
 	d.Eval(`localStorage.setItem('showcase-enc:config', `+e2etest.J(older)+`); 1`, nil)
@@ -134,6 +147,7 @@ func TestADeletedOrCorruptConfigIsNotEncryptionOff(t *testing.T) {
 	d.WaitFor("the button", `!document.querySelector('#enc-restore-recovery').disabled`)
 	d.Click("#enc-restore-recovery")
 	d.WaitFor("restored", `document.querySelector('#enc-status') && !document.querySelector('#enc-broken')`)
+	d.Wait("s.encryption.enabled && s.encryption.unlocked && s.encryption.broken === ''")
 	d.OK(d.State().Bool("encryption.enabled") && d.State().Bool("encryption.unlocked") && d.State().Str("encryption.broken") == "", "the store is on and unlocked again")
 	d.WaitFor("the document is listed", "document.querySelectorAll('.gj-doclist-item').length >= 1")
 	d.Click(".gj-doclist-open")
@@ -162,7 +176,9 @@ func TestADeletedOrCorruptConfigIsNotEncryptionOff(t *testing.T) {
 	d.Click("#enc-erase-go")
 	d.WaitFor("erased", `!document.querySelector('#enc-broken') && document.querySelector('#enc-switch-box')`)
 	d.OK(d.State().Str("encryption.broken") == "" && !d.State().Bool("encryption.enabled"), "the store is plain again")
-	d.OK(d.Str(`Object.keys(localStorage).filter(k => k.startsWith('showcase')).join(',')`) == "", "nothing is left in storage: "+d.Str(`Object.keys(localStorage).join(',')`))
+	// What the page itself writes again after the erase (the chosen target, an empty catalog) is not data.
+	d.OK(d.Str(`Object.keys(localStorage).filter(k => k.startsWith('showcase') && k !== 'showcase:last-target' && k !== 'showcase:catalog:index').join(',')`) == "", "nothing is left in storage: "+d.Str(`Object.keys(localStorage).join(',')`))
+	d.OK(!strings.Contains(storedText(d), "Kept in ciphertext") && d.Count(".gj-doclist-item") == 0, "no document is left")
 	d.NoErrors()
 }
 
@@ -182,7 +198,7 @@ func TestAForgedJournalIsRefusedInThePage(t *testing.T) {
 	d.Click(".gj-saver-save")
 	d.WaitFor("saved", "document.querySelectorAll('.gj-doclist-item').length >= 1")
 	reloadToSave(d)
-	before := storedText(d)
+	before := docsText(d)
 	editConfig(d, `
 		const mine = c.owners.slice();
 		const evil = Object.assign({}, c.owners[1], {public: '`+attacker+`', label: 'helpful backup'});
@@ -201,7 +217,7 @@ func TestAForgedJournalIsRefusedInThePage(t *testing.T) {
 	confirmDialog(d)
 	d.WaitSelector("#enc-error")
 	d.OK(strings.Contains(d.Text("#enc-error"), "not vouched for") && d.State().Bool("encryption.interrupted"), "undoing is refused too: "+d.Text("#enc-error"))
-	d.OK(storedText(d) == before || !strings.Contains(storedText(d), attacker), "nothing was re-encrypted to the attacker")
+	d.OK(docsText(d) == before, "nothing was re-encrypted to the attacker")
 	d.NoErrors()
 }
 
@@ -297,6 +313,7 @@ func TestLockClearsTranslationsIssuesAndReplyDrafts(t *testing.T) {
 		d.Click("#enc-lock")
 	}
 	d.WaitFor("locked", `(document.getElementById('enc-status') || {}).textContent === 'Locked'`)
+	d.Wait("s.language.translated === '' && s.language.issues === 0 && s.drafts === 0")
 	d.OK(d.State().Str("language.translated") == "" && d.State().Int("language.issues") == 0 && d.State().Int("drafts") == 0,
 		"Lock cleared the translation, the issues and the reply drafts")
 	d.NoErrors()
@@ -333,7 +350,8 @@ func TestTheKeyDirectoryFromALinkIsNeverAppliedUnasked(t *testing.T) {
 	d.OK(d.State().Str("encryption.dir.url") == "" && d.State().Str("encryption.dir.offer") == "https://dir.example" && !d.Has(".gj-recip-dir-email"), "offered, not used")
 	d.OK(d.Str(`localStorage.getItem('showcase-enc:docstore-ok') || ''`) == "", "and not saved as confirmed")
 	d.Click("#dir-offer-ignore")
-	d.OK(d.State().Str("encryption.dir.offer") == "", "ignored")
+	d.WaitFor("the offer to go", `!document.querySelector('#dir-offer')`)
+	d.OK(!d.Has("#dir-offer") && d.Str(`localStorage.getItem('showcase-enc:docstore') || ''`) == "", "ignored")
 
 	// An address written into storage directly (never confirmed) is only offered too.
 	d.Eval(`localStorage.setItem('showcase-enc:docstore', 'https://planted.example'); localStorage.setItem('showcase-enc:docstoken', 'stolen'); 1`, nil)
@@ -345,6 +363,7 @@ func TestTheKeyDirectoryFromALinkIsNeverAppliedUnasked(t *testing.T) {
 	d.OK(d.State().Str("encryption.dir.url") == "" && d.State().Str("encryption.dir.offer") == "https://planted.example" && !d.State().Bool("encryption.dir.tokenSet"), "a planted address is not used and its token is dropped")
 	d.OK(d.Str(`localStorage.getItem('showcase-enc:docstoken') || ''`) == "", "the planted token is gone from storage")
 	d.Click("#dir-offer-ignore")
+	d.WaitFor("the offer to go", `!document.querySelector('#dir-offer')`)
 
 	// The token is a password field, tied to its address, and dropped when the address changes.
 	d.OK(d.Attr("#dir-token", "type") == "password", "the token field is a password field")

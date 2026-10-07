@@ -393,6 +393,7 @@
   "enc.err.unreadable": "%d archivos guardados no se pueden abrir con las claves desbloqueadas aquí, así que el cambio los perdería. No se cambió nada. Desbloquea con otra clave, o borra el almacén si sus claves se perdieron.",
   "enc.err.locked": "El almacén está bloqueado. Desbloquéalo antes con una de sus claves.",
   "enc.err.notAKey": "Esa no es una de las claves de este almacén.",
+  "enc.err.stale": "Las claves de este almacén se cambiaron en otra pestaña o ventana desde que se cargó esta página, así que esta pestaña no hace nada con ellas. Recarga la página.",
   "enc.err.configChanged": "La configuración de claves de este dispositivo cambió desde la última vez que esta clave abrió el almacén, así que no se desbloqueó. Si no la cambiaste tú, lo hizo alguien que puede escribir en el almacenamiento de este sitio: no uses aquí el almacén.",
   "enc.err.interrupted": "Un cambio anterior en las claves de este almacén no terminó. Termínalo o deshazlo primero.",
   "enc.err.secretNotSaved": "El secreto de la clave de recuperación no se ha guardado: confirma antes que lo guardaste.",
