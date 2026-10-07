@@ -428,3 +428,60 @@ func TestWatchLogRefusesAFirstEntryThatFollowsSomething(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// A saved filtered state's signed head must be compared with the chain when the read turns full:
+// whether the full read starts right after it, overlaps it, or starts past it.
+func TestWatchLogAnchorsAFilteredToFullSwitchToTheSavedHead(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	c := e.client(ana)
+	owner, _ := GenerateOwnerKey() // an enrolled address reads the whole log
+	if _, err := c.Enroll(ctx, "ana@x.io", owner); err != nil {
+		t.Fatal(err)
+	}
+	publishOwn := func(n int) {
+		for range n {
+			p, _, id := ageKey(t)
+			if _, err := c.Publish(ctx, PublishRequest{Email: "ana@x.io", Key: p, Identity: id, Owner: owner}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	publishOwn(2)
+	st := &WatchState{}
+	if _, err := c.WatchLog(ctx, "ana@x.io", st, WatchOptions{}); err != nil || st.Filtered {
+		t.Fatalf("%v %+v", err, st)
+	}
+	saved := *st // honest: the head the watcher saw (entry 3)
+	publishOwn(2)
+	head, err := c.Head(ctx)
+	if err != nil || head.Seq != saved.Seq+2 {
+		t.Fatalf("%v %+v %+v", err, head, saved)
+	}
+
+	// Legitimate switches: the saved hash is the chain's, whatever the cursor.
+	for _, cursor := range []int64{saved.Seq - 1, saved.Seq, saved.Seq + 1} {
+		sw := saved
+		sw.Filtered, sw.Cursor = true, cursor
+		if _, err := c.WatchLog(ctx, "ana@x.io", &sw, WatchOptions{}); err != nil || sw.Filtered || sw.Seq != head.Seq {
+			t.Errorf("honest switch with cursor %d: %v %+v", cursor, err, sw)
+		}
+	}
+
+	// A saved head that is not on the chain: the full read starts after it (cursor = Seq) or overlaps
+	// it (cursor < Seq), or starts past it (cursor > Seq).
+	for _, tc := range []struct{ seq, cursor int64 }{
+		{head.Seq - 1, head.Seq - 1},
+		{head.Seq - 1, head.Seq - 2},
+		{head.Seq - 2, head.Seq - 1},
+	} {
+		sw := WatchState{Seq: tc.seq, Hash: "00ff", Cursor: tc.cursor, Filtered: true}
+		before := sw
+		if _, err := c.WatchLog(ctx, "ana@x.io", &sw, WatchOptions{}); !errors.Is(err, ErrLogCut) {
+			t.Errorf("saved head %d with a wrong hash, cursor %d: %v", tc.seq, tc.cursor, err)
+		}
+		if sw.Seq != before.Seq || sw.Hash != before.Hash || !sw.Filtered {
+			t.Errorf("the state changed on an error: %+v", sw)
+		}
+	}
+}
