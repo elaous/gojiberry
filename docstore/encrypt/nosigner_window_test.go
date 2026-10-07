@@ -232,3 +232,28 @@ func TestSharingSignerWithAdapterWithoutOneDoesNotFlip(t *testing.T) {
 		t.Error("the record was marked Signed by a Sharing whose Adapter cannot sign")
 	}
 }
+
+// A legacy unsigned (v2) file that lands after the record was written reaches the second look
+// as an error of the cross-check (the record says Signed): it is told as saved unsigned, not as
+// a bad signature, and wraps ErrForgedFrame.
+func TestSecondLookReportsAnUnsignedFrameAsSavedUnsigned(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	id := w.signedPending(t)
+	f := id + "~dddddddddddd.open"
+	st := &afterRecordWrite{flaky: w.inner, hook: func() {
+		b := w.frameOf(t, w.mainFile(t, id)).b
+		fr := frame(f, Binding{Level: b.Level, Seq: b.Seq, Hash: b.Hash}, []byte("legacy"), nil)
+		if err := w.inner.Save(ctx, f, sealRaw(t, w.publicRecipients(), fr)); err != nil {
+			t.Fatal(err)
+		}
+	}}
+	sh := &Sharing{Store: st, Adapter: w.ad, Signer: w.signer}
+	_, err := sh.Repair(ctx, id)
+	if !errors.Is(err, ErrUnsignedAfterFlip) || !errors.Is(err, ErrForgedFrame) {
+		t.Fatalf("Repair = %v, want ErrUnsignedAfterFlip wrapping ErrForgedFrame", err)
+	}
+	if !strings.Contains(err.Error(), "saved unsigned") || !strings.Contains(err.Error(), f) {
+		t.Errorf("message %q", err)
+	}
+}
