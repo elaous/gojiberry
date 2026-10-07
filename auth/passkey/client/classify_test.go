@@ -47,3 +47,14 @@ func TestRejectionsAreToldApart(t *testing.T) {
 		t.Error("an unknown failure was classified")
 	}
 }
+
+// The server's 409 "account_exists" is told from ErrLastPasskey's 409, and from a plain failure.
+func TestServerErrorTellsAlreadyCreatedApart(t *testing.T) {
+	e := serverError(409, []byte(`{"error":"x","code":"account_exists"}`))
+	if !errors.Is(e, ErrAlreadyCreated) {
+		t.Errorf("%v", e)
+	}
+	if errors.Is(serverError(409, []byte(`{"error":"the only way"}`)), ErrAlreadyCreated) || errors.Is(serverError(410, []byte(`{"error":"x","code":"account_exists"}`)), ErrAlreadyCreated) {
+		t.Error("another failure was taken for it")
+	}
+}

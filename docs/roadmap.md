@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-8 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, #92 `RepairAll` with `Resign`, the SSH key-tag tightening, the shared passkey `ChallengeStore`, and the review-nits cleanup of #90 to #93; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
+9 of 10 since the last full run (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, #92 `RepairAll` with `Resign`, the SSH key-tag tightening, the shared passkey `ChallengeStore`, and the review-nits cleanup of #90 to #93, #95, and the double first-passkey 409; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md)).
 
 ## Notes for upgraders
 
@@ -367,8 +367,13 @@ a way to avoid hitting the limit meanwhile.
    token or one replica, until `auth.Manager` takes a pluggable session store (needs a `User` record, expiry and
    logout through the shared store, and a bound on its size). Avoid for the rest: nothing; the account store
    (`AdapterStore`) was already shareable.
-8. **Concurrent double first-passkey UX (410).** Plan: tell the person the other tab won and offer to continue.
-   Avoid: set up the first passkey in one tab.
+8. **Done:** **concurrent double first-passkey UX.** Was: two tabs of a signed-in identity with no passkey account
+   begin its first passkey; the account is created by a conditional create, so exactly one won and nothing was
+   overwritten or duplicated, but the other got the `410` of an expired challenge. Now it gets `409`
+   `account_exists` (`passkey.ErrAlreadyCreated`, `client.ErrAlreadyCreated`) and `components.Passkey` says, in
+   de/fr/es too, that another tab or device made the first passkey, to reload and add another, and that the passkey
+   the second device made is not used (delete it there). `410` stays for expired, used and unknown challenges.
+   Signed-out registrations never collide (random account per begin; the e-mail is a label). Avoid: no longer needed.
 9. **s3/blob `DeleteIf`.** Plan: implement `ConditionalDeleter` for both (postgres and mongo have it). Avoid: the
    conditional claim in `SweepRateLimits` (`docstore/limiter.go`; the sweep that design step 4b, "Limits that
    remain" item 10, means) already narrows the rate-limit race to a token; it does not cover document expiry.

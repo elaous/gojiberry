@@ -118,6 +118,17 @@ default that works in one process. Pass your own in `passkey.Config` (or the sto
 | `Limiter` | per client and route group: allowed now, or wait this long | `RateLimiter` (token bucket per address and group: 20 at once, 30 a minute) | Redis, a gateway; `Unlimited{}` to switch off |
 | `Config.ClientIP` | who the client is for the limiter | the remote address; `TrustedProxies(cidrs...)` reads `X-Forwarded-For` only from your proxies | your own function |
 
+**Two tabs, one first passkey.** A passkey made while signed in (an OpenID Connect user with no passkey account yet)
+makes the account `Create`d under the identity's own ID, so two ceremonies begun before either finished (two tabs or
+devices) name the same account. `Creator.Create` is a conditional create (`SaveIf` with no digest on an `AdapterStore`
+over a `ConditionalAdapter`; the `MemoryStore` lock; without a `Creator` the `Service`'s own lock, one process
+only), so exactly one wins and nothing is overwritten: the loser's credential is not attached to the account (its
+authenticator holds a user handle the server never stored, so it could not sign in anyway). The loser gets `409`
+`{"code":"account_exists"}` (`passkey.ErrAlreadyCreated`, `client.ErrAlreadyCreated`), no longer the `410` of an
+expired, used or unknown challenge, which stays `410`. `components.Passkey` shows it in the interface's language
+(`passkey.alreadyCreated`: reload and add another passkey from the account; the passkey the second device made is not
+used and can be deleted there). Signed out, every begin draws its own random account ID and handle, so two
+ceremonies for one e-mail make two accounts (the address is an unverified label, not a key); nothing collides.
 Over the limit the routes answer 429 with `Retry-After`. `cmd/docstore` reads
 `GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES` (comma separated CIDRs) for the last row.
 **Shared ceremonies.** `StoreChallenges` keeps each ceremony as a record `passkey/challenge/<hash of the token>`

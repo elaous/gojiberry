@@ -11,7 +11,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/url"
 	"strings"
 	"syscall/js"
@@ -131,14 +130,6 @@ func (c *Client) token() string {
 		return ""
 	}
 	return c.Token()
-}
-
-func serverError(status int, body []byte) error {
-	var e struct{ Error string }
-	if json.Unmarshal(body, &e) == nil && e.Error != "" {
-		return errors.New(e.Error)
-	}
-	return fmt.Errorf("passkey: the server answered %d", status)
 }
 
 // ceremony runs one begin/answer/finish exchange: begin is the route that starts it, answer
