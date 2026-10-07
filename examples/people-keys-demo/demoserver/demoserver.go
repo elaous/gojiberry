@@ -6,6 +6,8 @@ package demoserver
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -15,11 +17,17 @@ import (
 	"github.com/elaous/gojiberry/docstore/encrypt"
 )
 
+// Dir is the directory the demo serves, so a test can read and write it behind the routes' back
+// (what a server that holds the directory key could do).
+//
 // Server holds what the demo's routes share, so a test can act as an identity provider's
 // signed-in user (Login) without a real provider.
 type Server struct {
 	Auth *auth.Manager
 	Mux  *http.ServeMux
+	// Dir and Store are the directory and the store behind it.
+	Dir   *encrypt.AdapterDirectory
+	Store docstore.Adapter
 }
 
 // New builds the routes for a page served from origin (RP ID "localhost"). The directory key is
@@ -45,12 +53,15 @@ func New(origin string) (*Server, error) {
 	}
 	store := docstore.NewMemoryAdapter()
 	dir := &encrypt.AdapterDirectory{Store: store, Signer: signer}
-	docs := docstore.NewServer(store, "memory").WithAuth(mgr).WithDirectory(encrypt.DirectoryService(dir))
+	docs := docstore.NewServer(store, "memory").WithAuth(mgr).WithDirectory(encrypt.DirectoryService(dir)).
+		WithDirectoryLimits(func(_ string, perMinute float64, burst int) docstore.Limiter { // the demo is clicked through quickly
+			return docstore.NewRateLimiter(perMinute*20, burst*20)
+		})
 	mux := http.NewServeMux()
 	mux.Handle("/auth/passkey/", svc.Handler())
 	mux.Handle("/auth/", mgr.Routes())
 	mux.Handle("/directory/", docs.Handler())
-	s := &Server{Auth: mgr, Mux: mux}
+	s := &Server{Auth: mgr, Mux: mux, Dir: dir, Store: store}
 	// Demo only: the directory lookup is closed to passkey sessions, so the page asks for a session
 	// of a (pretend) identity provider that verified its address. A real host signs in through
 	// /auth/{provider}/login instead; never mount a route like this in a deployment.
@@ -62,6 +73,17 @@ func New(origin string) (*Server, error) {
 		}
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte(tok))
+	})
+	// Demo only: the directory's log public keys, which the page pins when it loads. A real client
+	// pins them out of band (shipped with the app, or from a source other than the server it
+	// audits); fetching them from the server being watched would prove only that it is consistent.
+	mux.HandleFunc("/demo/log-keys", func(w http.ResponseWriter, r *http.Request) {
+		keys := map[string]string{}
+		for kid, k := range signer.(encrypt.PublicKeyer).PublicKeys() {
+			keys[kid] = base64.StdEncoding.EncodeToString(k)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(keys)
 	})
 	return s, nil
 }

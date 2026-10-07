@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -48,6 +49,10 @@ type env struct {
 
 const adminToken = "s3cret-admin-token"
 
+// testReportKey keys the reporter hashes of the test services, so that two of them over one store
+// agree (a service without a key makes one of its own).
+var testReportKey = deriveReportKey([]byte("test report key material"))
+
 func newEnv(t *testing.T, mod func(*Options)) *env {
 	t.Helper()
 	clk := newClock()
@@ -57,7 +62,7 @@ func newEnv(t *testing.T, mod func(*Options)) *env {
 	o := Options{
 		Store: ea, Now: clk.Now,
 		Config: Config{
-			AdminToken: adminToken, TermsURL: "https://example.org/terms",
+			AdminToken: adminToken, TermsURL: "https://example.org/terms", NoProxy: true, ReportKey: testReportKey,
 			SessionTTL: 48 * hour, SessionMaxAge: 96 * hour,
 			// roomy rate limits unless a test narrows them
 			SessionsPerHour: 100000, MaxSessionsPerAddress: 100000, WritesPerMinute: 1000, WritesPerMinutePerAddress: 100000, ViewsPerMinute: 1000, ReportsPerMinute: 1000,
@@ -267,7 +272,8 @@ func TestFlow(t *testing.T) {
 	if _, err := e.svc.Sweep(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if k := e.keys("public/"); len(k) != 0 {
+	// (the reporter salt is the one record that stays: it keys the reporter hashes of reports)
+	if k := e.keys("public/"); len(k) != 1 || k[0] != "public/salt" {
 		t.Fatalf("records left after expiry: %v", k)
 	}
 	if k := e.keys("pubdoc/"); len(k) != 0 {
@@ -660,11 +666,11 @@ func TestHeadOnView(t *testing.T) {
 }
 
 func TestReportCapPerDocument(t *testing.T) {
-	e := newEnv(t, nil)
+	e := newEnv(t, func(o *Options) { o.Config.TrustedProxies = []string{"127.0.0.1"} })
 	tok, _ := e.session()
 	d := e.create(tok, "x")
 	for i := 0; i < maxReportsOfDoc+5; i++ {
-		e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"r"}`)), 202)
+		e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"r"}`), "X-Forwarded-For", fmt.Sprintf("203.0.113.%d", i+1)), 202)
 	}
 	if n := len(e.keys("report/")); n != maxReportsOfDoc {
 		t.Fatalf("stored reports: %d, want %d", n, maxReportsOfDoc)
@@ -685,15 +691,23 @@ func TestReportCapPerDocument(t *testing.T) {
 	e.want(e.do("POST", "/public/report", "", bytes.Repeat([]byte("a"), maxReportBody+1)), 413)
 }
 
-func TestAdminRateLimitedBeforeTokenCheck(t *testing.T) {
+func TestFailedAdminAuthIsRateLimitedAndSuccessBypassesTheLimiter(t *testing.T) {
 	e := newEnv(t, func(o *Options) {
 		n := limitN(2)
 		o.Limiters.Admin = &n
 	})
+	id := strings.Repeat("A", 22)
 	for i := 0; i < 2; i++ {
-		e.want(e.do("DELETE", "/admin/takedown/"+strings.Repeat("A", 22), "", nil, AdminHeader, "guess"), 403)
+		e.want(e.do("DELETE", "/admin/takedown/"+id, "", nil, AdminHeader, "guess"), 403)
 	}
-	e.want(e.do("DELETE", "/admin/takedown/"+strings.Repeat("A", 22), "", nil, AdminHeader, adminToken), 429)
+	// the failures have used the budget up: more wrong guesses are 429 ...
+	e.want(e.do("DELETE", "/admin/takedown/"+id, "", nil, AdminHeader, "guess"), 429)
+	e.want(e.do("DELETE", "/admin/takedown/"+id, "", nil, AdminHeader, ""), 429)
+	// ... but the operator, with the token, is not counted and gets in
+	e.want(e.do("DELETE", "/admin/takedown/"+id, "", nil, AdminHeader, adminToken), 202)
+	for i := 0; i < 5; i++ { // idempotent: 204 from then on
+		e.want(e.do("DELETE", "/admin/takedown/"+id, "", nil, AdminHeader, adminToken), 204)
+	}
 }
 
 type limitN int

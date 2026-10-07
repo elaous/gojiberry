@@ -5,10 +5,14 @@ package docstorecmd
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,7 +26,7 @@ import (
 // withPublic turns on the public (anonymous) offer when GOJIBERRY_DOCSTORE_PUBLIC=true (limits and
 // secrets in GOJIBERRY_DOCSTORE_PUBLIC_*, see public.FromEnv): POST /public/session, the session's
 // one document under /public/doc, read-only /public/view/<id>, POST /public/report and, with
-// GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN, DELETE /admin/takedown/<id>. Unset, nothing is mounted.
+// GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN, DELETE /admin/takedown/<id> and GET /admin/health. Unset, nothing is mounted.
 //
 // The offer promises deletion 24 hours after the last edit, so it refuses to start unless
 // expiry is on (GOJIBERRY_DOCSTORE_EXPIRY_TTL, and the adapter is the expiring one).
@@ -33,10 +37,15 @@ import (
 // withPublic closes it (Server.CloseDocs: 404 for /docs, /docs/{id}, its /acl and /quota), unless the
 // operator sets GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS=true, which keeps it open and says so loudly
 // in the log. Behind a reverse proxy, GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES must name it ("none"
-// says there is none and silences the startup warning).
+// says there is none and silences the startup warning); with an admin token it is required: the
+// server does not start with it unset, since one caller's wrong admin guesses behind an unnamed
+// proxy would lock the operator out.
+//
+// limiters is where the offer's request budgets live (GOJIBERRY_DOCSTORE_LIMITER): with "store"
+// the replicas that share the store share them, as for the directory and the passkey routes.
 //
 // It returns the service so the caller can run its sweep.
-func withPublic(srv *docstore.Server, adapter docstore.Adapter, expiryTTL time.Duration) (*public.Service, error) {
+func withPublic(srv *docstore.Server, adapter docstore.Adapter, expiryTTL time.Duration, limiters docstore.LimiterFactory) (*public.Service, error) {
 	cfg, err := public.FromEnv(os.Getenv)
 	if err != nil {
 		return nil, err
@@ -47,7 +56,7 @@ func withPublic(srv *docstore.Server, adapter docstore.Adapter, expiryTTL time.D
 	if expiryTTL <= 0 {
 		return nil, errors.New("GOJIBERRY_DOCSTORE_PUBLIC needs GOJIBERRY_DOCSTORE_EXPIRY_TTL: the public offer promises that documents are deleted after the last edit")
 	}
-	svc, err := public.New(public.Options{Store: adapter, Config: cfg})
+	svc, err := public.New(public.Options{Store: adapter, Config: cfg, LimiterFactory: limiters})
 	if err != nil {
 		return nil, err
 	}
@@ -86,21 +95,138 @@ func newHTTPServer(addr string, h http.Handler) *http.Server {
 	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: readHeaderTimeout, ReadTimeout: readTimeout, IdleTimeout: idleTimeout}
 }
 
-// withDirectory turns on the verified e-mail key directory (POST /directory/publish, GET
-// /directory/lookup) when GOJIBERRY_DOCSTORE_DIRECTORY_KEY holds a 32-byte seed in hex: it signs
-// the records and keys the hash that names them, so it must be kept and not changed. Unset, the
-// directory is off. "directory/" is reserved from the document API either way. The routes need
-// sign-in, so with no session manager they are not mounted.
-func withDirectory(srv *docstore.Server, adapter docstore.Adapter) {
+// withDirectory turns on the verified e-mail key directory (POST /directory/challenge and
+// /directory/publish, DELETE /directory/keys/<fingerprint>, GET /directory/lookup, /directory/log,
+// /directory/log/head and /directory/log/address, and the owner key routes under
+// /directory/enroll) when GOJIBERRY_DOCSTORE_DIRECTORY_KEY holds a 32-byte seed in hex: it signs
+// the records and keys the hashes that name them and the log's addresses, so it must be kept. To
+// rotate it, put the new seed there and the old one (a comma separated list) in
+// GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV: the old records keep verifying, and at start-up, before
+// the server listens, those that a log entry stands behind are moved to the new key
+// (AdapterDirectory.Startup), after which the old seed can be removed. If the old key leaked, do
+// not rotate through it: remove it from the list instead. Unset, the directory is off. Options,
+// all off by default:
+//
+//   - GOJIBERRY_DOCSTORE_DIRECTORY_REQUIRE_POP=true: a key can be published only with proof of
+//     possession (answer to POST /directory/challenge);
+//   - GOJIBERRY_DOCSTORE_DIRECTORY_LOOKUP=domain: a user can look up only addresses of their own
+//     verified e-mail domain (default "any");
+//   - GOJIBERRY_DOCSTORE_DIRECTORY_REVOKE_WINDOW=48h: how long a revoked key is remembered
+//     (default 24h);
+//   - GOJIBERRY_DOCSTORE_DIRECTORY_GLOBAL_BUDGET=domain: the whole-server lookup budget is one per
+//     e-mail domain of the caller (default one for everybody).
+//
+// GOJIBERRY_DOCSTORE_REPLICAS (default 1) says how many server processes share the store. The
+// directory's log and challenge claims are atomic across processes only on a store with
+// conditional writes: with more than one replica on a store without them withDirectory refuses to
+// enable the directory (an error), and with one it logs a warning.
+//
+// "directory/", "directory-log/" and "directory-enroll/" are reserved from the document API either
+// way. The routes need sign-in, so with no session manager they are not mounted. limiters is where
+// the routes' rate limits live (GOJIBERRY_DOCSTORE_LIMITER). The start-up census (records moved,
+// skipped, and named under unknown keys) is logged and shown by /health.
+func withDirectory(ctx context.Context, srv *docstore.Server, adapter docstore.Adapter, limiters docstore.LimiterFactory) error {
 	signer, err := encrypt.DirectorySignerFromEnv()
 	if err != nil {
-		log.Fatalf("docstore: %v", err)
+		return err
 	}
 	if signer == nil {
-		return
+		return nil
 	}
-	srv.WithDirectory(encrypt.DirectoryService(&encrypt.AdapterDirectory{Store: adapter, Signer: signer}))
-	log.Print("docstore: key directory enabled")
+	dir := &encrypt.AdapterDirectory{Store: adapter, Signer: signer}
+	dir.RequireProof = os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_REQUIRE_POP") == "true"
+	if v := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_REVOKE_WINDOW")); v != "" {
+		w, err := time.ParseDuration(v)
+		if err != nil || w <= 0 {
+			return fmt.Errorf("parsing GOJIBERRY_DOCSTORE_DIRECTORY_REVOKE_WINDOW %q: want a positive duration such as \"48h\"", v)
+		}
+		dir.RevokeWindow = w
+	}
+	replicas := 1
+	replicasSet := false
+	if v := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_REPLICAS")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return fmt.Errorf("parsing GOJIBERRY_DOCSTORE_REPLICAS %q: want a positive whole number", v)
+		}
+		replicas, replicasSet = n, true
+	}
+	policy, err := docstore.ParseDirectoryLookupMode(os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_LOOKUP"))
+	if err != nil {
+		return err
+	}
+	perDomain := false
+	switch m := strings.ToLower(strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_GLOBAL_BUDGET"))); m {
+	case "", "all":
+	case "domain":
+		perDomain = true
+	default:
+		return fmt.Errorf("parsing GOJIBERRY_DOCSTORE_DIRECTORY_GLOBAL_BUDGET %q: want \"all\" or \"domain\"", m)
+	}
+	if err := dir.CheckStore(ctx, replicas); err != nil {
+		return err
+	}
+	checkWriters(ctx, dir, adapter, replicas, replicasSet)
+	// Before serving: a record a retired key signed moves to the current key now, under the same
+	// rules as a publish (the address lock and conditional writes), not while requests are in
+	// flight.
+	rep, err := dir.Startup(ctx)
+	if err != nil {
+		return fmt.Errorf("key directory start-up check: %w", err)
+	}
+	log.Printf("docstore: key directory: %s", rep.Summary())
+	if rep.Unknown > 0 {
+		log.Printf("docstore: WARNING: %d directory records are named under unknown keys: check GOJIBERRY_DOCSTORE_DIRECTORY_KEY and GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV; those keys cannot be found by a lookup", rep.Unknown)
+	}
+	if tok := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN")); tok != "" {
+		if len(tok) < 16 {
+			return errors.New("GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN must be at least 16 characters")
+		}
+		srv.WithDirectoryAdmin(adminToken(tok))
+	}
+	// Behind a reverse proxy the per-client budgets (lookups per address, wrong admin tokens) need
+	// the proxy's addresses, so that X-Forwarded-For is believed from it and from nobody else;
+	// without them one budget is shared by everybody behind the proxy.
+	if px := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES")); px != "" {
+		srv.WithDirectoryClientIP(passkey.TrustedProxies(strings.Split(px, ",")...))
+	}
+	srv.WithDirectory(encrypt.DirectoryService(dir)).WithDirectoryPolicy(policy).WithDirectoryLimits(limiters).WithDirectoryGlobalPerDomain(perDomain)
+	go dir.RunSweep(ctx, time.Hour)
+	go dir.RunWriterWatch(ctx, replicas)
+	log.Printf("docstore: key directory enabled (proof of possession required: %v)", dir.RequireProof)
+	return nil
+}
+
+// adminToken is the operator check of the directory routes: the header X-Gojiberry-Admin-Token
+// equals tok (compared in constant time).
+func adminToken(tok string) func(*http.Request) bool {
+	want := sha256.Sum256([]byte(tok))
+	return func(r *http.Request) bool {
+		got := sha256.Sum256([]byte(r.Header.Get("X-Gojiberry-Admin-Token")))
+		return subtle.ConstantTimeCompare(got[:], want[:]) == 1
+	}
+}
+
+// checkWriters is the start-up's look at the store for other processes writing the same
+// directory, against what GOJIBERRY_DOCSTORE_REPLICAS declares (see encrypt.AdapterDirectory.Writers).
+// It never refuses to start (a restart within the last minutes looks like another writer): it says,
+// loudly, what the store shows, and, when the variable is unset on a store that can carry several
+// writers, that the default of one is only a default.
+func checkWriters(ctx context.Context, dir *encrypt.AdapterDirectory, adapter docstore.Adapter, replicas int, replicasSet bool) {
+	n, err := dir.Writers(ctx)
+	if err != nil {
+		log.Printf("docstore: WARNING: could not look for other server processes writing the key directory: %v", err)
+	}
+	conditional := docstore.SupportsConditional(ctx, adapter)
+	switch {
+	case n > 0 && replicas <= 1:
+		log.Printf("docstore: ERROR: %d other server process(es) have written to this key directory in the last minutes, and GOJIBERRY_DOCSTORE_REPLICAS says %d (a restart within that time looks the same): if several processes share this store, set GOJIBERRY_DOCSTORE_REPLICAS to the real number%s", n, replicas,
+			map[bool]string{true: "", false: " and move to a store with conditional writes (the log and challenge claims are atomic within one process only on this one)"}[conditional])
+	case !replicasSet && conditional:
+		log.Print("docstore: WARNING: GOJIBERRY_DOCSTORE_REPLICAS is not set: assuming ONE server process on this store. The directory's log is safe across processes on a store with conditional writes, but the declaration is what lets the server refuse an unsafe setup elsewhere: set it to the number of processes that share this store")
+	case !replicasSet:
+		log.Print("docstore: WARNING: GOJIBERRY_DOCSTORE_REPLICAS is not set: assuming ONE server process on this store, which has no conditional writes: a second process could fork the directory's log")
+	}
 }
 
 // withPasskeys turns on sign-in with passkeys when GOJIBERRY_DOCSTORE_PASSKEY_RPID is set (with
@@ -108,7 +234,7 @@ func withDirectory(srv *docstore.Server, adapter docstore.Adapter) {
 // a reverse proxy, GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES, comma separated CIDRs): the
 // accounts are kept in the same store under "passkey/", which the server hides from its own
 // HTTP routes. With no OpenID Connect provider the session manager is made for passkeys alone.
-func withPasskeys(ctx context.Context, srv *docstore.Server, adapter docstore.Adapter, m *auth.Manager) (*auth.Manager, error) {
+func withPasskeys(ctx context.Context, srv *docstore.Server, adapter docstore.Adapter, m *auth.Manager, limiters docstore.LimiterFactory) (*auth.Manager, error) {
 	rp := os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_RPID")
 	if rp == "" {
 		return m, nil
@@ -128,7 +254,10 @@ func withPasskeys(ctx context.Context, srv *docstore.Server, adapter docstore.Ad
 			return nil, err
 		}
 	}
-	cfg := passkey.Config{RPID: rp, RPName: os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_NAME"), Origins: origins}
+	// The routes' rate limit lives where GOJIBERRY_DOCSTORE_LIMITER says (a budget per process, or
+	// one shared through the store).
+	cfg := passkey.Config{RPID: rp, RPName: os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_NAME"), Origins: origins,
+		Limiter: limiters("passkey", passkey.DefaultPerMinute, passkey.DefaultBurst)}
 	// Behind a reverse proxy the per-client rate limit needs the proxy's addresses, so that
 	// X-Forwarded-For is believed from it and from nobody else.
 	if px := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES")); px != "" {
@@ -166,15 +295,25 @@ func Main() {
 		log.Fatalf("docstore: %v", err)
 	}
 	srv := docstore.NewServer(adapter, cfg.Backend).WithGuard(cfg.Guard).WithRequireACL(cfg.RequireACL)
-	authManager, err = withPasskeys(context.Background(), srv, adapter, authManager)
+	// Rate limits (the directory's and the passkey routes'): per process by default, or kept in
+	// the store so replicas share them (GOJIBERRY_DOCSTORE_LIMITER=store). Stale budget records
+	// are deleted in the background.
+	limiters := docstore.LimiterFactoryFor(cfg.Limiter, adapter)
+	if cfg.Limiter == "store" {
+		go docstore.RunRateLimitSweep(context.Background(), adapter, 10*time.Minute)
+		log.Print("docstore: rate limits are shared through the store")
+	}
+	authManager, err = withPasskeys(context.Background(), srv, adapter, authManager, limiters)
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
 	// The manager is attached before the public offer is wired: whether /docs counts as closed
 	// depends on it (WithRequireACL with sign-in).
 	srv = srv.WithAuth(authManager)
-	withDirectory(srv, adapter)
-	publicSvc, err := withPublic(srv, adapter, cfg.ExpiryTTL)
+	if err := withDirectory(context.Background(), srv, adapter, limiters); err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
+	publicSvc, err := withPublic(srv, adapter, cfg.ExpiryTTL, limiters)
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
 	}

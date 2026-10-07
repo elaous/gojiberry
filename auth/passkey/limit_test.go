@@ -35,15 +35,7 @@ func TestRateLimiterBurstRefillAndForgetting(t *testing.T) {
 	if ok, _ := l.Allow(ctx, "a"); ok {
 		t.Error("only one token came back")
 	}
-	// Idle keys are forgotten by a later sweep.
-	now = now.Add(10 * time.Minute)
-	l.Allow(ctx, "c")
-	l.mu.Lock()
-	n := len(l.buckets)
-	l.mu.Unlock()
-	if n != 1 {
-		t.Errorf("refilled buckets are swept, %d left", n)
-	}
+	// (Forgetting idle keys is tested with the limiter itself, in docstore.)
 	if ok, wait := (&RateLimiter{}).Allow(ctx, "z"); ok || wait <= 0 {
 		t.Error("a zero budget refuses")
 	}
@@ -240,5 +232,28 @@ func TestServiceFallsBackToItsOwnLockForAPlainStore(t *testing.T) {
 	}
 	if a, _ := r.svc.store.Get(ctx, "x"); a.Name != "y" {
 		t.Error("the change was stored")
+	}
+}
+
+// A shared (store) limiter is a passkey Limiter: two services over one store share the budget.
+func TestStoreLimiterCanBeInjectedAsTheServiceLimiter(t *testing.T) {
+	store := docstore.NewMemoryAdapter()
+	var a, b Limiter = docstore.NewStoreLimiter(store, "passkey", DefaultPerMinute, 2), docstore.NewStoreLimiter(store, "passkey", DefaultPerMinute, 2)
+	ctx := context.Background()
+	got := 0
+	for i := range 4 {
+		l := a
+		if i%2 == 1 {
+			l = b
+		}
+		if ok, _ := l.Allow(ctx, "register|203.0.113.9"); ok {
+			got++
+		}
+	}
+	if got != 2 {
+		t.Errorf("two replicas allowed %d, want the shared 2", got)
+	}
+	if DefaultBurst != 20 || DefaultPerMinute != 30 {
+		t.Error("the exported defaults are the documented ones")
 	}
 }

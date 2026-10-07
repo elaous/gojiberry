@@ -334,13 +334,19 @@ func isReservedDocID(id string) bool {
 	// control is the hub's, so these keys must not be reachable here.
 	// "directory/" is the key directory's keyspace (see Server.WithDirectory): its records
 	// are written only by the server's own publish route, so a signed-in session cannot forge
-	// one through the document API.
+	// one through the document API. "directory-log/" (the key directory's transparency log),
+	// "directory-enroll/" (owner enrollments) and "ratelimit/" (shared rate limit budgets) are
+	// likewise written only by the server itself.
 	// "public/" and "report/" are the public offer's records and abuse reports (docstore/public).
-	// Everything is compared without case, since a backend that folds case (a case-insensitive
-	// file system) would alias "Collab:x" and "collab:x".
+	// Every reserved prefix is compared without case, since a backend that folds case would
+	// alias "DIRECTORY-ENROLL/x" with the real record, as IsDocumentKey does for expiry.
 	lower := strings.ToLower(id)
-	return strings.HasPrefix(lower, aclKeyPrefix) || strings.HasPrefix(lower, "collab:") || strings.HasPrefix(lower, strings.ToLower(DirectoryPrefix)) || strings.HasPrefix(lower, ExpiryPrefix) || strings.HasPrefix(lower, ExpiryCreatedPrefix) ||
-		strings.HasPrefix(lower, PublicPrefix) || strings.HasPrefix(lower, ReportPrefix)
+	for _, p := range []string{aclKeyPrefix, "collab:", DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, ExpiryPrefix, ExpiryCreatedPrefix, PublicPrefix, ReportPrefix} {
+		if strings.HasPrefix(lower, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // Grant gives email a role on the document (changing it if they have one). The

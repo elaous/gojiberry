@@ -24,6 +24,17 @@ type RecipientRow struct {
 	// is that directory's word, and a page whose directory address came from a link must not let
 	// it pass for more. Empty shows the plain mark.
 	VerifiedBy string
+	// Attested marks a Verified key that also signed the binding to the address itself
+	// (encrypt.PublishedKey.Attested; ssh-ed25519 keys): shown as a stronger mark, because the
+	// server alone could not have invented that binding. Set it from the directory's answer
+	// (and, to rest on nothing the server says, from encrypt.VerifyAttestation).
+	Attested bool
+	// OwnerSigned marks a Verified key that the owner of the address signed with the owner key
+	// they hold themselves (encrypt.PublishedKey.OwnerSigned): the strongest mark, because not even
+	// the server that runs the directory could have added the key. Set it from a client that
+	// checked the evidence itself (directoryclient.Key.OwnerSigned). OwnerEnrolled says the
+	// address has an owner key: a Verified key that is not OwnerSigned then gets a note.
+	OwnerSigned, OwnerEnrolled bool
 	// CanRemove and RemoveBlocked are for an owner key when RecipientsProps.RemoveOwner is set:
 	// whether the host would let the key be taken out, and, when not, why in words (the last key,
 	// the only way back, the store unlocked with this key alone).
@@ -38,6 +49,11 @@ type DirRow struct {
 	Verified                      bool
 	// VerifiedBy is the host of the directory that answered (RecipientRow.VerifiedBy).
 	VerifiedBy string
+	// Attested: Verified, and the key signed the binding to the address itself (see
+	// RecipientRow.Attested); the picker shows the stronger mark.
+	Attested bool
+	// OwnerSigned and OwnerEnrolled: see RecipientRow; the strongest mark.
+	OwnerSigned, OwnerEnrolled bool
 }
 
 // RecipientsProps configures Recipients.
@@ -165,7 +181,7 @@ func Recipients(p RecipientsProps) xango.Node {
 			xango.El("code", []xango.Attr{xango.A("class", "gj-recip-fingerprint")}, xango.Text(r.Fingerprint)),
 		}
 		if r.Verified {
-			cells = append(cells, verifiedMark(true, r.VerifiedBy))
+			cells = append(cells, verifiedMark(true, r.Attested, r.OwnerSigned, r.OwnerEnrolled, r.VerifiedBy))
 		}
 		cells = append(cells, extra...)
 		return xango.El("li", []xango.Attr{xango.A("class", class), xango.A("data-fingerprint", r.Fingerprint)}, cells...)
@@ -239,7 +255,7 @@ func Recipients(p RecipientsProps) xango.Node {
 				xango.El("p", []xango.Attr{xango.A("class", "gj-recip-parsed")},
 					xango.Text(trf("recipients.parsed", "%s key for %s. Its fingerprint is:", p.Parsed.Type, orNone(p.Parsed.Label)))),
 				xango.El("code", []xango.Attr{xango.A("class", "gj-recip-fingerprint gj-recip-parsed-fingerprint")}, xango.Text(p.Parsed.Fingerprint)),
-				verifiedMark(p.Parsed.Verified, p.Parsed.VerifiedBy))
+				verifiedMark(p.Parsed.Verified, p.Parsed.Attested, p.Parsed.OwnerSigned, p.Parsed.OwnerEnrolled, p.Parsed.VerifiedBy))
 			if p.TrustVerified && p.Parsed.Verified {
 				// The account is verified and published this key: no typing, the fingerprint
 				// above is still shown. Add confirms with the fingerprint shown.
