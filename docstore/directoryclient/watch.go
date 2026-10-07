@@ -377,6 +377,36 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 				return rep, fmt.Errorf("%w: entry %d is not the one the signed head names", ErrLogCut, head.Seq)
 			}
 		}
+		// A switch from a filtered saved state: the saved signed head (st.Seq, st.Hash) was never
+		// compared with the chain, so do it now. The read starts at the cursor, which may be right
+		// after, at or before the head, or past it.
+		if st.Filtered && st.Seq > 0 {
+			if len(entries) > 0 && entries[0].Seq == st.Seq+1 {
+				if entries[0].Prev != st.Hash {
+					return rep, fmt.Errorf("%w: entry %d does not follow the saved head (entry %d)", ErrLogCut, entries[0].Seq, st.Seq)
+				}
+			} else {
+				var at *docstore.DirectoryLogEntry
+				for i := range entries {
+					if entries[i].Seq == st.Seq {
+						at = &entries[i]
+					}
+				}
+				if at == nil {
+					e, ok, err := c.entryAt(ctx, st.Seq, keys)
+					if err != nil {
+						return rep, err
+					}
+					if !ok {
+						return rep, fmt.Errorf("%w: entry %d, the saved head, is not in the log", ErrLogCut, st.Seq)
+					}
+					at = &e
+				}
+				if at.Hash != st.Hash {
+					return rep, fmt.Errorf("%w: entry %d is not the saved head", ErrLogCut, st.Seq)
+				}
+			}
+		}
 		if chained && st.Seq > 0 && len(entries) > 0 {
 			fresh = entries[1:] // the first is the one seen
 		}
