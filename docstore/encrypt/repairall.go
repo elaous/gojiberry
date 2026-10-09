@@ -378,12 +378,17 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 			case ctx.Err() != nil:
 				rep.Remaining = len(docs) - i
 				return rep, ctx.Err()
-			case errors.Is(err, docstore.ErrNotFound):
+			case errors.Is(err, docstore.ErrNotFound) && s.allGone(ctx, groups[doc]):
 				// Deleted since the scan: gone, as the scan itself ignores a deleted file. Nothing
-				// to count.
+				// to count. Only when the files are really missing now: an ErrNotFound that came
+				// from anywhere else (a keyring) leaves them stored, and is a skip below.
 				outcome = "gone"
 			default:
 				reason, files := classifyRepairErr(err)
+				if errors.Is(err, docstore.ErrNotFound) {
+					// Some of the files went, the others are stored: not a keyring problem.
+					err = fmt.Errorf("some files of this item are gone, rerun to settle: %w", err)
+				}
 				outcome = s.skip(&rep, doc, reason, files, err)
 			}
 		}
@@ -478,6 +483,17 @@ func (s *Sharing) repairGroup(ctx context.Context, group string, ids []string) (
 		n++
 	}
 	return n, nil
+}
+
+// allGone says whether none of ids is stored any more. Any other answer (a file is there, or
+// the store fails) is false: the item is then reported, never called gone.
+func (s *Sharing) allGone(ctx context.Context, ids []string) bool {
+	for _, id := range ids {
+		if _, _, err := docstore.LoadHead(ctx, s.Adapter.Inner, id, 1); !errors.Is(err, docstore.ErrNotFound) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Sharing) skip(rep *RepairAllReport, doc string, reason RepairSkipReason, files []string, err error) string {
