@@ -870,6 +870,27 @@ func (e *ExpiringAdapter) Load(ctx context.Context, id string) (Document, error)
 	return e.Inner.Load(ctx, id)
 }
 
+// LoadHead implements HeadReader with the rules of Load: a deadline record is not found, an
+// expired document is not found (the deadline is read first), and only then the inner store is
+// asked for the first n bytes (by its own LoadHead, or by Load and a cut).
+func (e *ExpiringAdapter) LoadHead(ctx context.Context, id string, n int) ([]byte, error) {
+	if isExpiryKey(id) {
+		return nil, ErrNotFound
+	}
+	t, ok, err := e.readRecord(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if ok && e.expired(t) {
+		return nil, ErrNotFound
+	}
+	head, _, err := LoadHead(ctx, e.Inner, id, n)
+	if err == nil && len(head) > n && n > 0 {
+		head = head[:n]
+	}
+	return head, err
+}
+
 // visible drops the deadline records and the expired documents from metas.
 func (e *ExpiringAdapter) visible(ctx context.Context, metas []Meta) ([]Meta, error) {
 	deadlines, err := e.deadlines(ctx)

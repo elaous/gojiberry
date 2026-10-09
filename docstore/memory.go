@@ -50,6 +50,20 @@ func (m *MemoryAdapter) Load(_ context.Context, id string) (Document, error) {
 	return doc, nil
 }
 
+// LoadHead implements HeadReader.
+func (m *MemoryAdapter) LoadHead(_ context.Context, id string, n int) ([]byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	doc, ok := m.docs[id]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	if n > len(doc.Data) {
+		n = len(doc.Data)
+	}
+	return append([]byte(nil), doc.Data[:max(n, 0)]...), nil
+}
+
 func (m *MemoryAdapter) List(_ context.Context) ([]Meta, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

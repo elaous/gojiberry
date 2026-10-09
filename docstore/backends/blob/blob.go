@@ -109,6 +109,34 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 	return docstore.Document{ID: id, Data: data, UpdatedAt: reader.ModTime()}, nil
 }
 
+// LoadHead implements docstore.HeadReader: a ranged read of the first n bytes. An empty object
+// has no byte range to ask for: S3 and GCS answer a Range of bytes=0-(n-1) with 416 InvalidRange,
+// which gocloud does not classify. So when the range read fails with anything but NotFound (and
+// the context is still live), the object is read whole and cut to n, which is free for an empty
+// object; a real failure (permission, network) fails the same way again there, and a NotFound
+// stays ErrNotFound.
+func (a *Adapter) LoadHead(ctx context.Context, id string, n int) ([]byte, error) {
+	if n <= 0 {
+		return []byte{}, nil
+	}
+	reader, err := a.bucket.NewRangeReader(ctx, a.key(id), 0, int64(n), nil)
+	if gcerrors.Code(err) == gcerrors.NotFound {
+		return nil, docstore.ErrNotFound
+	}
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, err
+		}
+		d, lerr := a.Load(ctx, id)
+		if lerr != nil {
+			return nil, lerr
+		}
+		return d.Data[:min(n, len(d.Data))], nil
+	}
+	defer func() { _ = reader.Close() }()
+	return io.ReadAll(io.LimitReader(reader, int64(n)))
+}
+
 func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
 	return a.ListPrefix(ctx, "")
 }

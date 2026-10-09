@@ -40,7 +40,8 @@ const (
 	// a file below the record's level or seq). Nothing is written; Sharing.Recover is the way out.
 	SkipDowngrade RepairSkipReason = "downgrade"
 	// SkipPlaintext: a file of the document is stored in the clear. RepairAll upgrades frames; it
-	// does not encrypt what was never encrypted (Adapter.RekeyAll does).
+	// encrypts what was never encrypted only with RepairAllOptions.EncryptPlaintext (or
+	// Adapter.RekeyAll does).
 	SkipPlaintext RepairSkipReason = "plaintext"
 	// SkipConflict: a writer kept changing the document while it was being repaired (Repair gave
 	// up after its attempts). The document may be partly rewritten (some files already signed,
@@ -82,22 +83,27 @@ type SignerFrames struct {
 }
 
 // RepairAllReport is what RepairAll did. Every document or item it looked at is in exactly one of
-// Signed, Repaired, Resigned, Skipped, or (in a DryRun) Todo, or is Remaining: Total is their sum.
+// Signed, Repaired, Encrypted, Resigned, Skipped, or (in a DryRun) Todo, or is Remaining: Total
+// is their sum (a document that was deleted after the scan is counted by none).
 type RepairAllReport struct {
-	// Total is the number of units in the store that Skip does not leave readable: the documents
-	// (ids DocID finds, with their versions) and every other encrypted item (expiry:, collab:,
-	// passkey/, public/ ... each one alone, as RekeyAll groups them).
+	// Total is the number of units this run covers that Skip does not leave readable: the
+	// documents (ids DocID finds, with their versions) and every other encrypted item (expiry:,
+	// collab:, passkey/, public/ ... each one alone, as RekeyAll groups them), after
+	// RepairAllOptions.After when it is set.
 	Total int
 	// Signed had every file in a signed v3 frame already and was not touched (in a run without
 	// Resign this includes the documents in OtherSigner).
 	Signed int
 	// Repaired had unsigned files and was sealed again, signed, by Sharing.Repair.
 	Repaired int
+	// Encrypted (RepairAllOptions.EncryptPlaintext) had a file stored in the clear and was
+	// encrypted, signed (a document with unsigned files too: all its files are sealed again).
+	Encrypted int
 	// Resigned (RepairAllOptions.Resign) had every file signed already, but a frame or the record
 	// by a signer other than the Adapter's, and was sealed again with the current one.
 	Resigned int
-	// Files is how many files Repaired and Resigned documents had written (all their files, as
-	// Repair re-keys a document as a unit).
+	// Files is how many files Repaired, Resigned and Encrypted documents had written (all their
+	// files, as Repair re-keys a document as a unit).
 	Files int
 	// BySigner says, for every owner signing key found (the documents that could be read, in the
 	// state the scan saw before anything was written), how many frames and records it signed, sorted
@@ -126,16 +132,29 @@ type RepairAllReport struct {
 	Skipped []RepairSkip
 	// Todo lists, in a DryRun, the documents a real run would repair.
 	Todo []string
-	// Remaining were not looked at because the context ended or Limit was reached; run it again.
+	// Remaining were not looked at because the context ended or Limit was reached; run it again
+	// with After set to Next.
 	Remaining int
+	// Next is the cursor to give RepairAllOptions.After to carry on: the id of the last group
+	// (document or item) this run went through, in id order; After itself when it went through
+	// none (so a run cut short before its first group, with After "", has Next "" too: look at
+	// Finished or Remaining, not at Next alone). It is "" and Finished is set when the run
+	// reached the end of the store, so a caller that persists Next and loops until Finished
+	// walks the store exactly once. "Next == "" and Remaining == 0" also means finished.
+	Next string
+	// Finished says the run went through every group after After to the end of the store, with
+	// no error and nothing left (Remaining is 0). It is false when the context ended or Limit was
+	// reached, even if Next is "".
+	Finished bool
 }
 
 // Left is how many documents or items still have unsigned frames or could not be checked:
 // Skipped, Todo and Remaining. Zero means every encrypted file Skip does not leave readable was
 // in a signed frame when RepairAll looked: documents, and items that are not a document's too.
 // A plaintext item outside DefaultSkip counts as SkipPlaintext, so Left is above zero until it
-// is skipped (Adapter.Skip) or encrypted (Adapter.RekeyAll). It also says nothing of what was
-// saved after the scan, or of a file Skip leaves readable.
+// is skipped (Adapter.Skip) or encrypted (RepairAllOptions.EncryptPlaintext, or
+// Adapter.RekeyAll). It covers only the groups after RepairAllOptions.After, and says nothing of
+// what was saved after the scan, or of a file Skip leaves readable.
 func (r RepairAllReport) Left() int { return len(r.Skipped) + len(r.Todo) + r.Remaining }
 
 // RepairProgress is passed to RepairAllOptions.Progress after each document.
@@ -152,9 +171,15 @@ type RepairAllOptions struct {
 	// Progress, when set, is called after each document (in id order), from the calling goroutine.
 	Progress func(RepairProgress)
 	// Limit, when positive, stops after that many documents were repaired (or, in a DryRun, found
-	// to need it): the rest, in id order, is Remaining. There is no cursor: a second run starts
-	// at the first id again, finds the repaired ones Signed (one scan each) and carries on.
+	// to need it): the rest, in id order, is Remaining and Next says where to carry on.
 	Limit int
+	// After, when set, starts the run after that group: only the documents and items whose id
+	// (as a group, ids in byte order) is greater are looked at. Give it the Next of the previous
+	// run to walk a large store in slices (Limit) without scanning the finished part again. An
+	// id of a file of a document counts as the document's, so any id stored in the group will
+	// do; one beyond the end finishes at once. A rerun with After "" starts at the first id and
+	// finds the repaired ones Signed (one scan each), as before.
+	After string
 	// DryRun reports what would be repaired (Todo) and writes nothing.
 	DryRun bool
 	// Resign also seals again, with the Adapter's Signer (and signs the record, and the keys:index
@@ -168,6 +193,21 @@ type RepairAllOptions struct {
 	// without), is idempotent, and does not stop the old key from writing: that ends only when
 	// it is removed from the lists.
 	Resign bool
+	// EncryptPlaintext also encrypts the items stored in the clear that Skip does not leave
+	// readable (otherwise SkipPlaintext): each such document or item is sealed with its keyring's
+	// recipients and the Adapter's Signer, in a signed v3 frame, by the same Repair and Rekey
+	// paths (same locks, same conditional writes, a document is all or none, never an id Skip
+	// leaves readable). It needs Adapter.AllowPlaintext (the explicit opt-in to opening clear
+	// files) and a Signer, or RepairAll returns an error before doing anything. It is
+	// idempotent: once encrypted, an item is Signed. In a DryRun they are in Todo.
+	//
+	// It changes the stored bytes of documents that other readers (a tool, another service, an
+	// older release) may expect in the clear, and nothing afterwards reads them without the
+	// keys. In particular a host that reads passkey/, auth/, public/ or collab: records raw from
+	// the same backend would break: those are encrypted too (they are not in DefaultSkip), and
+	// Skip is the control that keeps an id out of it. Anything that does not start with the age header counts as clear, a damaged or
+	// foreign non-age file too. Run it with DryRun first and read Todo.
+	EncryptPlaintext bool
 }
 
 // RepairAll moves a whole store off the unsigned v1/v2 frames: it lists the store once, groups
@@ -194,21 +234,40 @@ type RepairAllOptions struct {
 // looks again under the lock, so a Save that signs a file meanwhile is harmless, and one that
 // writes an unsigned file after the scan is caught by the next run.
 //
-// Cost: the store is listed once, then each document is scanned by loading every one of its
-// files (the Adapter interface has no header-only read, so a large store costs a read of all
-// of it per run, whether or not anything is repaired), and each repaired document is listed
-// again, under the lock, by Repair.
+// Cost: the store is listed once, then each document is scanned by reading the head of every
+// one of its files (docstore.HeadReader: a ranged or substring read on localfs, sqlite, postgres,
+// s3 and blob, and on the memory store; at most repairHeadBytes, 128 KiB, per file, because the
+// age layer must be opened to see the frame inside it). The saving is only for files larger than
+// 128 KiB: a smaller file is read whole either way. A store whose adapter has no head read
+// (MongoDB, or one wrapped in something that hides it) is read in full, as before, so a large
+// store then costs a read of all of it per run, whether or not anything is repaired. Each
+// repaired document is listed again, under the lock, by Repair and read in full there.
 //
 // It is idempotent (a second run finds every repaired document Signed and writes nothing) and
-// restartable (a run that is cut short, by the context, Limit, a crash or a failed document, is
-// finished by running it again: there is no saved cursor, so it starts at the first id in id
-// order and finds the finished ones Signed). It is safe next to other writers for the reason
-// Repair is. When the context ends it returns the report so far and the context's error; a
-// store that cannot be listed returns that error. A skipped document is not an error: see Left.
+// restartable. A run that is cut short, by the context, Limit, a crash or a failed document, is
+// finished by running it again, from the first id (the finished ones are found Signed, one scan
+// each) or, to skip them, from the cursor: RepairAllReport.Next is the last group it went
+// through, and RepairAllOptions.After starts after it, so Limit and After walk a huge store in
+// slices. The cursor only moves forward: a group that sorts before it is not looked at again, so a
+// file saved there after it passed is missed until a run from the start (After ""); Left covers
+// only the groups after After. It is safe next to other writers for the reason Repair is. When the context ends it
+// returns the report so far and the context's error; a store that cannot be listed returns that
+// error. A skipped document is not an error: see Left.
+//
+// With RepairAllOptions.EncryptPlaintext it also encrypts what is stored in the clear (see
+// there for the risk); otherwise such an item is skipped as SkipPlaintext.
 func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllReport, error) {
 	var rep RepairAllReport
 	if s.Adapter == nil {
 		return rep, errors.New("encrypt: RepairAll needs the Sharing's Adapter")
+	}
+	if o.EncryptPlaintext {
+		if !s.Adapter.AllowPlaintext {
+			return rep, errors.New("encrypt: RepairAllOptions.EncryptPlaintext needs Adapter.AllowPlaintext, the opt-in to touching files stored in the clear")
+		}
+		if s.Adapter.Signer == nil {
+			return rep, fmt.Errorf("%w: EncryptPlaintext needs the Adapter's Signer", ErrNoFrameSigner)
+		}
 	}
 	metas, err := s.Adapter.Inner.List(ctx)
 	if err != nil {
@@ -229,7 +288,13 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 		groups[g] = append(groups[g], m.ID)
 	}
 	sort.Strings(docs)
+	if o.After != "" {
+		// The groups after the cursor; a file id of a group is that group's cursor.
+		after := groupOf(o.After)
+		docs = docs[sort.Search(len(docs), func(i int) bool { return docs[i] > after }):]
+	}
 	rep.Total = len(docs)
+	rep.Next = o.After
 	signs := s.Adapter.Signer != nil
 	same := signs && s.Signer != nil && bytes.Equal(s.Signer.Public(), s.Adapter.Signer.Public())
 	if signs {
@@ -256,7 +321,7 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 			return rep, nil
 		}
 		outcome := "signed"
-		sc := s.Adapter.scanFrames(ctx, groups[doc])
+		sc := s.Adapter.scanFrames(ctx, groups[doc], o.EncryptPlaintext)
 		recKey := s.recordSigner(ctx, doc)
 		var other bool
 		if sc.err == nil && ctx.Err() == nil {
@@ -269,7 +334,7 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 			return rep, ctx.Err()
 		case sc.err != nil:
 			outcome = s.skip(&rep, doc, sc.reason, sc.files, sc.err)
-		case len(sc.unsigned) == 0 && !resign:
+		case len(sc.unsigned) == 0 && len(sc.plain) == 0 && !resign:
 			rep.Signed++
 			if other {
 				rep.OtherSigner = append(rep.OtherSigner, doc)
@@ -298,10 +363,14 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 			switch {
 			case err == nil:
 				outcome = "repaired"
-				if len(sc.unsigned) == 0 {
+				switch {
+				case len(sc.plain) > 0:
+					rep.Encrypted++
+					outcome = "encrypted"
+				case len(sc.unsigned) == 0:
 					rep.Resigned++
 					outcome = "resigned"
-				} else {
+				default:
 					rep.Repaired++
 				}
 				rep.Files += n
@@ -321,7 +390,10 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 		if o.Progress != nil {
 			o.Progress(RepairProgress{Done: i + 1, Total: len(docs), Doc: doc, Outcome: outcome})
 		}
+		rep.Next = doc
 	}
+	rep.Next = ""
+	rep.Finished = true
 	sort.Slice(rep.BySigner, func(i, j int) bool { return rep.BySigner[i].Fingerprint < rep.BySigner[j].Fingerprint })
 	return rep, nil
 }
@@ -434,18 +506,33 @@ func classifyRepairErr(err error) (RepairSkipReason, []string) {
 // frameScan is what scanFrames found in one document's files.
 type frameScan struct {
 	unsigned []string            // v1, v2 frames
+	plain    []string            // files stored in the clear (only with encryptPlain)
 	signers  []ed25519.PublicKey // the key of each v3 frame, one per file
 	files    []string            // the files behind err
 	reason   RepairSkipReason
 	err      error // set when the document cannot be judged
 }
 
+// repairHeadBytes is how much of each file the scan asks the store for when it can read a head
+// (docstore.HeadReader). A frame header is under 100 bytes, but it sits inside the age stream:
+// the age header (about 100 bytes per recipient), the stream nonce and then the first payload
+// chunk, which age authenticates whole (64 KiB and a 16 byte tag) before it releases a byte. So
+// the least that can be read is a chunk and a header, and 128 KiB leaves room for the headers of
+// some 450 recipients (an X25519 stanza is 130 to 150 bytes). A file whose head is cut inside what is needed (more recipients than
+// that) is read in full instead; a file shorter than this is read in full anyway.
+var repairHeadBytes = 128 << 10
+
 // scanFrames reads the frame header of every one of ids, the files of a document or the one
 // item of a group (listed by the caller, once for the whole run; no lock: a hint that Repair
-// checks again under the lock), by loading the whole file, and sorts them into unsigned ones and the reason, if any, that the
-// document cannot be repaired. A file that cannot be judged settles the document: it is not
-// repaired even if other files are unsigned, as a re-key is all or none.
-func (a *Adapter) scanFrames(ctx context.Context, ids []string) frameScan {
+// checks again under the lock), and sorts them into unsigned ones and the reason, if any, that
+// the document cannot be repaired. It asks the store for the head of each file only
+// (repairHeadBytes), and for the whole file when the head does not settle it: a head that was cut
+// short (the file is longer) and does not open to a frame is judged again from the whole file,
+// except for a file that is plainly in the clear or encrypted to keys not held (both are known
+// from the age header at the start). A file that cannot be judged settles the document: it is
+// not repaired even if other files are unsigned, as a re-key is all or none. With encryptPlain a
+// file in the clear is listed in plain instead of settling the document.
+func (a *Adapter) scanFrames(ctx context.Context, ids []string, encryptPlain bool) frameScan {
 	var sc frameScan
 	fail := func(id string, reason RepairSkipReason, err error) {
 		if sc.err == nil || reason == SkipForged { // a forgery is the most important thing to say
@@ -454,7 +541,7 @@ func (a *Adapter) scanFrames(ctx context.Context, ids []string) frameScan {
 		sc.files = append(sc.files, id)
 	}
 	for _, id := range ids {
-		d, err := a.Inner.Load(ctx, id)
+		data, whole, err := docstore.LoadHead(ctx, a.Inner, id, repairHeadBytes)
 		if errors.Is(err, docstore.ErrNotFound) {
 			continue // deleted since it was listed
 		}
@@ -462,7 +549,24 @@ func (a *Adapter) scanFrames(ctx context.Context, ids []string) frameScan {
 			fail(id, SkipError, err)
 			continue
 		}
-		fi, err := a.peekFrameWith(ctx, id, d.Data, true)
+		fi, err := a.peekFrameWith(ctx, id, data, true)
+		// A cut head settles a file only when it says so by the start of the age file: clear (the
+		// head is longer than the age magic and is not it) or encrypted to keys not held (the age
+		// header was read whole to find that out).
+		settled := whole || errors.Is(err, ErrNoKey) || (errors.Is(err, ErrNotEncrypted) && len(data) >= len(header))
+		if err != nil && !settled {
+			// Cut short: the head may not hold the age header and the first chunk. Judge the file
+			// from all of it.
+			d, lerr := a.Inner.Load(ctx, id)
+			if errors.Is(lerr, docstore.ErrNotFound) {
+				continue
+			}
+			if lerr != nil {
+				fail(id, SkipError, lerr)
+				continue
+			}
+			fi, err = a.peekFrameWith(ctx, id, d.Data, true)
+		}
 		switch {
 		case err == nil:
 			if fi.version < 3 {
@@ -473,7 +577,11 @@ func (a *Adapter) scanFrames(ctx context.Context, ids []string) frameScan {
 		case errors.Is(err, ErrNoKey):
 			fail(id, SkipNoKey, err)
 		case errors.Is(err, ErrNotEncrypted):
-			fail(id, SkipPlaintext, err)
+			if encryptPlain {
+				sc.plain = append(sc.plain, id)
+			} else {
+				fail(id, SkipPlaintext, err)
+			}
 		case errors.Is(err, ErrForgedFrame):
 			fail(id, SkipForged, err)
 		default:

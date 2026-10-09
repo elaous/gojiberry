@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,6 +125,21 @@ func (a *LocalFSAdapter) Load(_ context.Context, id string) (Document, error) {
 		return Document{}, err
 	}
 	return Document{ID: id, Data: data, UpdatedAt: info.ModTime()}, nil
+}
+
+// LoadHead implements HeadReader: it opens the file and reads its first n bytes.
+func (a *LocalFSAdapter) LoadHead(_ context.Context, id string, n int) ([]byte, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	f, err := os.Open(a.path(id))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	return io.ReadAll(io.LimitReader(f, int64(max(n, 0))))
 }
 
 func (a *LocalFSAdapter) List(_ context.Context) ([]Meta, error) {

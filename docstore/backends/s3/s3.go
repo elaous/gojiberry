@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/elaous/gojiberry/docstore"
 	"io"
 	"time"
@@ -216,6 +217,36 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 		updatedAt = *out.LastModified
 	}
 	return docstore.Document{ID: id, Data: data, UpdatedAt: updatedAt}, nil
+}
+
+// LoadHead implements docstore.HeadReader: a ranged GET of the first n bytes. An empty object
+// has no byte range to ask for (the service answers InvalidRange), so it is read whole, which is
+// free.
+func (a *Adapter) LoadHead(ctx context.Context, id string, n int) ([]byte, error) {
+	if n <= 0 {
+		return []byte{}, nil
+	}
+	out, err := a.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(a.bucket),
+		Key:    aws.String(a.key(id)),
+		Range:  aws.String(fmt.Sprintf("bytes=0-%d", n-1)),
+	})
+	if isS3NotFound(err) {
+		return nil, docstore.ErrNotFound
+	}
+	var api smithy.APIError
+	if errors.As(err, &api) && api.ErrorCode() == "InvalidRange" {
+		d, lerr := a.Load(ctx, id)
+		if lerr != nil {
+			return nil, lerr
+		}
+		return d.Data[:min(n, len(d.Data))], nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer out.Body.Close()
+	return io.ReadAll(io.LimitReader(out.Body, int64(n)))
 }
 
 func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {

@@ -120,3 +120,12 @@ func TestMongoAdapterDeleteIf(t *testing.T) {
 		t.Errorf("a document that is gone: %v", err)
 	}
 }
+
+// MongoDB has no cheap way to read a prefix of a binary field, so it does not claim to be a
+// HeadReader: callers fall back to Load rather than getting a slow "head read".
+func TestMongoAdapterIsNotAHeadReader(t *testing.T) {
+	var a docstore.Adapter = &Adapter{}
+	if _, ok := a.(docstore.HeadReader); ok {
+		t.Fatal("mongo must not implement HeadReader")
+	}
+}
