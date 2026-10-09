@@ -496,6 +496,7 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("/directory/enroll/", s.handleEnrollSub)
 		if s.dirAdmin != nil {
 			mux.HandleFunc("/admin/directory/reset-enrollment/", s.handleOperatorReset)
+			mux.HandleFunc("/admin/directory/unmapped", s.handleUnmapped)
 		}
 	}
 	for _, e := range s.extra {

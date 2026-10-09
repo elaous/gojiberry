@@ -5,8 +5,8 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-10 of 10 since the last full run (#98 ... #106, this PR); the full suite runs on main right after this merge and the
-counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
+1 of 10 since the last full run (the full suite passed on main 1ab7677; this PR); the full suite runs on main after the
+10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
 
@@ -608,15 +608,14 @@ New entries:
     the browser reads "use `Repair(AcceptUnsigned)`", which they cannot call. Plan: translate the error in the
     showcase into a plain, actionable message (which files, what the owner can do, in de/fr/es too). Priority:
     medium. Where: `examples/canvas-editor-showcase` (the error display).
-38. **Directory "Unmapped" addresses are only counted and logged.** Kind: fixable. Confirmed: the count is made in
-    `reconcileAll` (`docstore/encrypt/directory_recover.go:232-247`, `rep.Unmapped++`, a pseudonym with owner-state
-    entries that no known e-mail explains) and logged once as a number (`:248-249`); `ReconcileReport.Unmapped`
-    (`:182-185`) is dropped by both callers (`ReconcileEnrollments` at `:193` returns only `Completed`, the sweep at
-    `directory_adapter.go:944` reads only `Deferred`). Why: an enrollment entry with neither an e-mail record nor a
-    published key cannot be matched, and the operator has no list to act on. Plan: collect the pseudonyms and their
-    entry numbers (the data is in `d.idx.byAddr` at that point) into the report, log or expose them, and document an
-    operator procedure (re-enroll, or leave). Priority: low. Where:
-    `docstore/encrypt/directory_recover.go:182-249`.
+38. **Done:** **directory "Unmapped" addresses are listed, warned about once per change, and have a documented
+    procedure.** Was: counted and logged as a number, `ReconcileReport.Unmapped` dropped by both callers. Now
+    `AdapterDirectory.UnmappedAddresses` returns the count, a capped list (`UnmappedCap`, 100 by default; pseudonyms
+    only, first and last entry number and time, age) and the time it was computed; `GET /admin/directory/unmapped`
+    serves it with the operator reset's credential and failure budget; the sweep and start-up log one warning per
+    change of the count (with the pointer to the fix), not one per tick. An address whose last word is an operator
+    reset is no longer counted. Procedure: [encryption-and-passkeys.md](encryption-and-passkeys.md#unmapped-addresses).
+    Where: `docstore/encrypt/directory_recover.go`, `docstore/directory.go` (`handleUnmapped`).
 39. **`ErrUnsignedAfterFlip` leaves `PendingDocs` empty (the `Remove` path, and every other re-key path).** Kind:
     fixable (documentation first). Confirmed in `docstore/encrypt/share.go`: the flip in `finishFiles` writes the
     record with `rec.Pending = false` (`:791`), and only afterwards looks again and returns `ErrUnsignedAfterFlip`

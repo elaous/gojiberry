@@ -330,6 +330,35 @@ type DirectoryOperator interface {
 	OperatorResetEnrollment(ctx context.Context, addressPseudonym string) (DirectoryEnrollment, error)
 }
 
+// DirectoryUnmappedAddress is one log pseudonym with owner-state entries and no e-mail the store
+// knows it by (no enrollment record, no published key). Only the pseudonym (a hash) is held: no
+// e-mail, no key.
+type DirectoryUnmappedAddress struct {
+	Address  string `json:"address"`
+	FirstSeq int64  `json:"first_seq"`
+	LastSeq  int64  `json:"last_seq"`
+	FirstAt  int64  `json:"first_at"`
+	LastAt   int64  `json:"last_at"`
+	// AgeSeconds is how long ago the first of its entries was written, at ComputedAt.
+	AgeSeconds int64 `json:"age_seconds"`
+}
+
+// DirectoryUnmapped is what GET /admin/directory/unmapped answers: Count addresses, the first
+// len(Addresses) of them by first entry number (Truncated says the list was capped), and when it
+// was computed (Unix seconds).
+type DirectoryUnmapped struct {
+	Count      int                        `json:"count"`
+	Addresses  []DirectoryUnmappedAddress `json:"addresses"`
+	Truncated  bool                       `json:"truncated,omitempty"`
+	ComputedAt int64                      `json:"computed_at"`
+}
+
+// DirectoryUnmappedLister is implemented by a DirectoryService that can list the addresses the
+// reconciliation cannot name (see DirectoryOperator for the reset that clears one).
+type DirectoryUnmappedLister interface {
+	UnmappedAddresses(ctx context.Context) (DirectoryUnmapped, error)
+}
+
 // DirectoryService is the key directory the server fronts (encrypt.DirectoryService makes one
 // over an adapter; it lives in docstore/encrypt, which imports this package). All of them are
 // called only after the routes checked the session (and limited the caller).
@@ -458,6 +487,7 @@ func addressDomain(email string) string {
 //	GET    /directory/enroll?email= -> the owner enrollment of an address
 //	POST   /directory/enroll/challenge, POST /directory/enroll, POST /directory/enroll/reset,
 //	POST   /directory/enroll/cancel -> owner key enrollment, rotation and reset (see DirectoryEnroll)
+//	GET    /admin/directory/unmapped -> the log pseudonyms no record or key names (operator only, with the reset route)
 //
 // Every route needs a signed-in identity-provider session (a passkey session gets 403). Publishing
 // and revoking, and the owner routes, need an explicitly verified e-mail (User.VerifiedEmail: the
@@ -1045,6 +1075,38 @@ func (s *Server) handleOperatorReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSONStatus(w, http.StatusOK, e)
+}
+
+// handleUnmapped serves GET /admin/directory/unmapped: the log pseudonyms the reconciliation
+// cannot name, for the operator (same credential and failure budget as the operator reset).
+func (s *Server) handleUnmapped(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.dirAdmin(r) {
+		if ok, wait := s.limits().adminFail.Allow(r.Context(), "ad:"+s.clientAddr(r)); !ok {
+			tooMany(w, wait)
+			return
+		}
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	l, ok := s.directory.(DirectoryUnmappedLister)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	u, err := l.UnmappedAddresses(r.Context())
+	if err != nil {
+		directoryError(w, err)
+		return
+	}
+	if u.Addresses == nil {
+		u.Addresses = []DirectoryUnmappedAddress{}
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSONStatus(w, http.StatusOK, u)
 }
 
 // handleLogHead serves GET /directory/log/head: the signed head of the log.
