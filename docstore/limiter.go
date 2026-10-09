@@ -376,9 +376,11 @@ func (l *StoreLimiter) read(ctx context.Context, a Adapter, id string) (limitSta
 const rateLimitGrace = time.Minute
 
 // MaxRateLimitRecords is how many budget records SweepRateLimits leaves in the store: past it the
-// ones written longest ago are deleted, even if their bucket is not yet full again (their callers
-// get a fresh bucket, which is the cost of bounding what a flood of different callers, say
-// unauthenticated clients behind rotating addresses, can make the store hold).
+// cheapest to lose are deleted first (see SweepRateLimitsStats): records whose bucket is already full again
+// carry no information, then the ones with the least spent budget. A record whose bucket is not yet full is
+// a caller who gets a fresh bucket when it goes, which is the cost of bounding what a flood of different
+// callers, say unauthenticated clients behind rotating addresses, can make the store hold; the sweep counts
+// those evictions so an operator can see a flood reaching live callers.
 const MaxRateLimitRecords = 100000
 
 // SweepRateLimits deletes the budget records in store of callers that have been idle: whose
@@ -399,19 +401,40 @@ func SweepRateLimits(ctx context.Context, store Adapter, now time.Time) (int, er
 // SweepRateLimitsMax is SweepRateLimits with the number of records to keep chosen by the caller
 // (zero or less: MaxRateLimitRecords).
 func SweepRateLimitsMax(ctx context.Context, store Adapter, now time.Time, maxRecords int) (int, error) {
+	st, err := SweepRateLimitsStats(ctx, store, now, maxRecords)
+	return st.Deleted, err
+}
+
+// RateLimitSweep is what one sweep did.
+type RateLimitSweep struct {
+	Deleted     int // records deleted in all (idle ones, unreadable ones, and evictions)
+	Evicted     int // of those, deleted only to get under the cap
+	EvictedLive int // of the evicted, records whose bucket was not full yet: their callers got a fresh bucket
+	Kept        int // records left
+}
+
+// SweepRateLimitsStats is SweepRateLimitsMax that also says what it did. Over the cap it deletes the records
+// that are cheapest to lose first: the ones whose bucket is already full (nothing is lost), then the ones
+// that will be full soonest (the least spent budget), so a flood of one-off callers evicts other idle or
+// nearly idle records before it evicts a slow, live caller. Records that cannot be read go last.
+func SweepRateLimitsStats(ctx context.Context, store Adapter, now time.Time, maxRecords int) (RateLimitSweep, error) {
+	var out RateLimitSweep
 	if maxRecords <= 0 {
 		maxRecords = MaxRateLimitRecords
 	}
 	metas, err := ListPrefix(ctx, store, RateLimitPrefix)
 	if err != nil {
-		return 0, err
+		return out, err
 	}
-	n := 0
 	var errs []error
-	kept := make([]Meta, 0, len(metas))
+	type keptRec struct {
+		meta Meta
+		full int64 // when its bucket is full again (unix nanoseconds); the largest value if unknown
+	}
+	kept := make([]keptRec, 0, len(metas))
 	for _, m := range metas {
 		if err := ctx.Err(); err != nil {
-			return n, err
+			return out, err
 		}
 		doc, err := store.Load(ctx, m.ID)
 		if errors.Is(err, ErrNotFound) {
@@ -419,33 +442,40 @@ func SweepRateLimitsMax(ctx context.Context, store Adapter, now time.Time, maxRe
 		}
 		if err != nil {
 			errs = append(errs, err)
-			kept = append(kept, m)
+			kept = append(kept, keptRec{m, math.MaxInt64})
 			continue
 		}
 		var st limitState
 		stale := false
+		full := int64(math.MaxInt64)
 		if json.Unmarshal(doc.Data, &st) != nil || st.At == 0 {
 			stale = now.Sub(doc.UpdatedAt) > time.Hour
 		} else {
 			stale = now.UnixNano()-st.Full > int64(rateLimitGrace)
+			full = st.Full
 		}
 		if !stale {
 			m.UpdatedAt = doc.UpdatedAt
-			kept = append(kept, m)
+			kept = append(kept, keptRec{m, full})
 			continue
 		}
 		switch gone, err := deleteRateLimit(ctx, store, m.ID, doc.Data); {
 		case err != nil:
 			errs = append(errs, err)
-			kept = append(kept, m)
+			kept = append(kept, keptRec{m, full})
 		case gone:
-			n++
+			out.Deleted++
 		}
 	}
 	if over := len(kept) - maxRecords; over > 0 {
-		sort.Slice(kept, func(i, j int) bool { return kept[i].UpdatedAt.Before(kept[j].UpdatedAt) })
-		for _, m := range kept[:over] {
-			doc, err := store.Load(ctx, m.ID)
+		sort.SliceStable(kept, func(i, j int) bool {
+			if kept[i].full != kept[j].full {
+				return kept[i].full < kept[j].full
+			}
+			return kept[i].meta.UpdatedAt.Before(kept[j].meta.UpdatedAt)
+		})
+		for _, k := range kept[:over] {
+			doc, err := store.Load(ctx, k.meta.ID)
 			if errors.Is(err, ErrNotFound) {
 				continue
 			}
@@ -453,15 +483,20 @@ func SweepRateLimitsMax(ctx context.Context, store Adapter, now time.Time, maxRe
 				errs = append(errs, err)
 				continue
 			}
-			switch gone, err := deleteRateLimit(ctx, store, m.ID, doc.Data); {
+			switch gone, err := deleteRateLimit(ctx, store, k.meta.ID, doc.Data); {
 			case err != nil:
 				errs = append(errs, err)
 			case gone:
-				n++
+				out.Deleted++
+				out.Evicted++
+				if k.full > now.UnixNano() {
+					out.EvictedLive++
+				}
 			}
 		}
 	}
-	return n, errors.Join(errs...)
+	out.Kept = len(kept) - out.Evicted
+	return out, errors.Join(errs...)
 }
 
 // deleteRateLimit deletes the record id if it still holds data (a conditional delete when the
@@ -509,8 +544,12 @@ func RunRateLimitSweep(ctx context.Context, store Adapter, interval time.Duratio
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if _, err := SweepRateLimits(ctx, store, time.Now()); err != nil && ctx.Err() == nil {
+			st, err := SweepRateLimitsStats(ctx, store, time.Now(), MaxRateLimitRecords)
+			if err != nil && ctx.Err() == nil {
 				log.Printf("docstore: sweeping rate limit records: %v", err)
+			}
+			if st.EvictedLive > 0 {
+				log.Printf("docstore: the rate limit records hit their cap (%d): %d callers with budget still spent got a fresh bucket (a flood of different callers?)", MaxRateLimitRecords, st.EvictedLive)
 			}
 		}
 	}

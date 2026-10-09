@@ -931,8 +931,10 @@ cannot be opened.
      skipped and the sweep goes on (the errors are reported at the end); the delete is conditional on the
      record being the one read (`docstore.ConditionalDeleter`: memory, sqlite, localfs, postgres and
      mongo; elsewhere a conditional write claims the record first), so a caller who came back in between
-     keeps their update; and at most `MaxRateLimitRecords` (100,000) are kept, the oldest evicted first,
-     so a flood of different IP-keyed callers cannot grow the keyspace without bound between sweeps.
+     keeps their update; and at most `MaxRateLimitRecords` (100,000) are kept, the cheapest to lose evicted first (buckets that are
+     full again, then the least spent budget, never a slow live caller just for being written first), so a flood of
+     different IP-keyed callers cannot grow the keyspace without bound between sweeps; the sweep logs how many
+     live callers got a fresh bucket when that happens.
    - **Bounded probing.** Besides the budgets above, `docstore.DirectoryPolicy{CanLookup(user, email)}`
      decides who may look up an address: `AllowAllLookups` (default: any signed-in provider user),
      `SameDomain()` (the address's domain is the user's own verified domain;

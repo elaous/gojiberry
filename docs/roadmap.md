@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-9 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, #111, #112, #113, #114, #115, this PR); the full suite runs on main after the
+10 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, #111, #112, #113, #114, #115, #116, this PR); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -544,13 +544,13 @@ New entries:
     a warning with the measured difference, not a violation, keep a hard violation past the 10 minute rule, and
     document NTP in the operator notes. Priority: medium. Where: the log checks in `docstore/directoryclient` and
     `docstore/encrypt` (`directory_adapter.go`), `docstore/limiter.go` for the 5 second re-dating.
-31. **Rate-limit flooding resets legitimate callers.** Kind: fixable, reduced by a cap. Why: `MaxRateLimitRecords`
-    (100,000 in `docstore/limiter.go`) keeps the newest budget records; a flood from many addresses fills it and
-    `SweepRateLimits` evicts the oldest, which are live, slow callers, whose budget is then reset to full. Plan:
-    evict records that have refilled first (they carry no information), then the least recently used, and count
-    the evictions of a live record in a metric. Priority: medium. Where: `docstore/limiter.go`
-    (`SweepRateLimits`, `MaxRateLimitRecords`). See also the botnet limit,
-    [limits register item 9](limits-register.md#public-docstore-and-operations).
+31. **Done (this PR): over the cap the sweep evicts the cheapest records first.** Was: `SweepRateLimits` deleted the
+    oldest-written records past `MaxRateLimitRecords`, which under a flood are the slow, live callers, whose budget
+    was then reset to full. Now `SweepRateLimitsStats` evicts buckets that are already full again first (they carry no
+    information), then the ones that will be full soonest (least spent budget), and counts the evictions of a bucket
+    that was not yet full (`EvictedLive`); `RunRateLimitSweep` logs that count. `docstore/limiter.go`. A flood from many
+    addresses can still make live callers lose a spent budget once the cap is full of live buckets; that is the
+    botnet limit, [limits register item 9](limits-register.md#public-docstore-and-operations).
 32. **Done (#106): `RepairAll` no longer reports an item as "gone" for a keyring `ErrNotFound`.** Kind: fixable. Was: the
     walk read any `errors.Is(err, docstore.ErrNotFound)` from the repair as "deleted since the scan" (outcome "gone",
     not counted), so a custom `Keyring` returning `ErrNotFound` from `Recipients`, or the built-in `StoreKeyring`
