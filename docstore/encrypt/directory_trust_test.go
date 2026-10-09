@@ -459,7 +459,7 @@ func TestDirectoryProofIsBoundToUserKeyAndTime(t *testing.T) {
 	}
 	pl, _, _ := strings.Cut(proof.Token, ".")
 	for name, tok := range map[string]string{"empty": "", "no dot": "abc", "bad base64": "!!.!!", "unsigned": pl + ".", "other signature": pl + "." + base64.RawURLEncoding.EncodeToString(make([]byte, 64))} {
-		if err := publish(ana, key, docstore.DirectoryProof{Token: tok, Nonce: proof.Nonce}); !errors.Is(err, ErrBadProof) && !(tok == "" && err == nil) {
+		if err := publish(ana, key, docstore.DirectoryProof{Token: tok, Nonce: proof.Nonce}); !errors.Is(err, ErrBadProof) && (tok != "" || err != nil) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}

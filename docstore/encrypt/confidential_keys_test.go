@@ -49,15 +49,14 @@ func (f *flaky) SaveIf(ctx context.Context, id string, b []byte, prev string) er
 }
 
 type world struct {
-	inner    *flaky
-	server   *age.X25519Identity
-	ana, bo  person
-	signer   *Signer
-	ad       *Adapter
-	sharing  *Sharing
-	saver    *saver.Saver
-	ring     ConfidentialKeyring
-	recorded []string
+	inner   *flaky
+	server  *age.X25519Identity
+	ana, bo person
+	signer  *Signer
+	ad      *Adapter
+	sharing *Sharing
+	saver   *saver.Saver
+	ring    ConfidentialKeyring
 }
 
 func newWorld(t *testing.T) *world { return newWorldFloor(t, nil) }

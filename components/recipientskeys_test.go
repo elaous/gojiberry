@@ -151,9 +151,7 @@ func TestVerifiedMarkAndDirectoryPicker(t *testing.T) {
 	html = render(t, n)
 	mustContain(t, html, "gj-recip-dir-results", "verified e-mail", "label only: confirm the fingerprint", "Use this key")
 	var picks []xango.EventHandler
-	for _, h := range findHandlers(n, "click") {
-		picks = append(picks, h)
-	}
+	picks = append(picks, findHandlers(n, "click")...)
 	picks[len(picks)-1](xango.NewEvent("click", nil, false, nil, nil)) // second row's Use this key
 	if picked.Fingerprint != "SHA256:l" {
 		t.Errorf("picked %+v", picked)

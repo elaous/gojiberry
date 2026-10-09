@@ -452,8 +452,8 @@ func TestSweepDeletesOnlyExpiredByNameWithoutLoads(t *testing.T) {
 			}
 			// Records of the earlier layout and foreign names are left alone.
 			old := ChallengePrefix + strings.Repeat("a", 64)
-			_ = c.MemoryAdapter.Save(ctx, old, []byte(`{"expires":"2000-01-01T00:00:00Z"}`))
-			_ = c.MemoryAdapter.Save(ctx, ChallengePrefix+"x/y", []byte(`junk`))
+			_ = c.Save(ctx, old, []byte(`{"expires":"2000-01-01T00:00:00Z"}`))
+			_ = c.Save(ctx, ChallengePrefix+"x/y", []byte(`junk`))
 			now = now.Add(5 * time.Minute) // past the dead bucket and the grace, before the live ones
 			c.loads.Store(0)
 			c.saveIfs.Store(0)
@@ -703,7 +703,7 @@ func TestSweepDeletesOldFormatRecordsAfterADayAndNothingForeign(t *testing.T) {
 	sc.Now = func() time.Time { return now }
 	hash := func(c string) string { return strings.Repeat(c, 64) }
 	put := func(name string, age time.Duration) string {
-		_ = a.MemoryAdapter.Save(ctx, name, []byte(`{"expires":"2099-01-01T00:00:00Z"}`))
+		_ = a.Save(ctx, name, []byte(`{"expires":"2099-01-01T00:00:00Z"}`))
 		a.times[name] = now.Add(-age)
 		return name
 	}
@@ -727,11 +727,11 @@ func TestSweepDeletesOldFormatRecordsAfterADayAndNothingForeign(t *testing.T) {
 	if err != nil || n != 1 {
 		t.Fatalf("Sweep = %d, %v, want only the 25h old record", n, err)
 	}
-	if _, err := a.MemoryAdapter.Load(ctx, oldDead); !errors.Is(err, docstore.ErrNotFound) {
+	if _, err := a.Load(ctx, oldDead); !errors.Is(err, docstore.ErrNotFound) {
 		t.Fatalf("an old-format record over a day old is still there: %v", err)
 	}
 	for _, name := range append(foreign, oldFresh) {
-		if _, err := a.MemoryAdapter.Load(ctx, name); err != nil {
+		if _, err := a.Load(ctx, name); err != nil {
 			t.Fatalf("%q must be kept: %v", name, err)
 		}
 	}
@@ -758,7 +758,7 @@ func TestSweepOldFormatWithoutModificationTimeReadsOnce(t *testing.T) {
 	sc.Now = func() time.Time { return now }
 	save := func(c string, body string) string {
 		name := ChallengePrefix + strings.Repeat(c, 64)
-		_ = a.MemoryAdapter.Save(ctx, name, []byte(body))
+		_ = a.Save(ctx, name, []byte(body))
 		return name
 	}
 	expired := save("a", `{"expires":"`+now.Add(-2*time.Minute).UTC().Format(time.RFC3339)+`"}`)
@@ -766,7 +766,7 @@ func TestSweepOldFormatWithoutModificationTimeReadsOnce(t *testing.T) {
 	live := save("c", `{"expires":"`+now.Add(3*time.Minute).UTC().Format(time.RFC3339)+`"}`)
 	garbage := save("d", `not json`)
 	foreign := ChallengePrefix + "x/y"
-	_ = a.MemoryAdapter.Save(ctx, foreign, []byte(`junk`))
+	_ = a.Save(ctx, foreign, []byte(`junk`))
 	n, err := sc.Sweep(ctx)
 	if err != nil || n != 2 {
 		t.Fatalf("Sweep = %d, %v, want the expired and the garbage one", n, err)
@@ -775,12 +775,12 @@ func TestSweepOldFormatWithoutModificationTimeReadsOnce(t *testing.T) {
 		t.Fatalf("loads = %d, want one per old-format record and none for the foreign name", got)
 	}
 	for _, gone := range []string{expired, garbage} {
-		if _, err := a.MemoryAdapter.Load(ctx, gone); !errors.Is(err, docstore.ErrNotFound) {
+		if _, err := a.Load(ctx, gone); !errors.Is(err, docstore.ErrNotFound) {
 			t.Fatalf("%q must be deleted: %v", gone, err)
 		}
 	}
 	for _, kept := range []string{inGrace, live, foreign} {
-		if _, err := a.MemoryAdapter.Load(ctx, kept); err != nil {
+		if _, err := a.Load(ctx, kept); err != nil {
 			t.Fatalf("%q must be kept: %v", kept, err)
 		}
 	}

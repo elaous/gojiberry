@@ -230,13 +230,6 @@ func (m *Manager) allowLogin(r *http.Request) (bool, int) {
 	return false, secs
 }
 
-// loginState is what a login's own random state parameter maps to
-// server-side -- CSRF protection for the OAuth redirect (the callback
-// only ever accepts a state it minted itself) plus ReturnTo, the page
-// LoginURL's own caller wants the browser sent back to once login
-// finishes.
-type loginState = LoginState
-
 const (
 	defaultSessionTTL = 30 * 24 * time.Hour
 	stateTTL          = 10 * time.Minute
@@ -392,7 +385,7 @@ func randomToken() (string, error) {
 
 // tokenStore is a generic in-memory, expiry-aware map from a random
 // token to a value of type T -- session tokens map to a User, login-
-// state tokens map to a loginState, and both need identical
+// state tokens map to a LoginState, and both need identical
 // "generate a random key, store a value with an expiry, look it up
 // (and for state, consume it once) later" behavior. Lazily prunes
 // expired entries on read/write rather than running a background

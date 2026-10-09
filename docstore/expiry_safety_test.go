@@ -325,7 +325,7 @@ func TestExpiryPurgeDeletesRecordLastAndRetriesAfterFailure(t *testing.T) {
 		if err == nil {
 			t.Fatalf("failure at step %d not reported", n)
 		}
-		_, recErr := st.Adapter.Load(ctx, "expiry:d.open")
+		_, recErr := st.Load(ctx, "expiry:d.open")
 		if recErr != nil {
 			t.Fatalf("step %d failed but the record is gone: the sweeper can no longer find the leftovers", n)
 		}
@@ -333,7 +333,7 @@ func TestExpiryPurgeDeletesRecordLastAndRetriesAfterFailure(t *testing.T) {
 		if cnt, err := ea.Sweep(ctx); err != nil {
 			t.Fatalf("retry after step %d: %d %v", n, cnt, err)
 		}
-		left, _ := st.Adapter.List(ctx)
+		left, _ := st.List(ctx)
 		var ids []string
 		for _, m := range left {
 			ids = append(ids, m.ID)

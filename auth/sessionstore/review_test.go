@@ -152,7 +152,7 @@ func TestConcurrentTakeHasOneWinnerOnAStoreWhosePlainDeleteNeverFails(t *testing
 					t.Fatalf("round %d: %d plain deletes, want %d", round, got, want)
 				}
 			}
-			if metas, _ := l.MemoryAdapter.List(ctx); len(metas) != 0 {
+			if metas, _ := l.List(ctx); len(metas) != 0 {
 				t.Fatalf("left: %+v", metas)
 			}
 		})

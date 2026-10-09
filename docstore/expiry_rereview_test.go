@@ -47,7 +47,7 @@ func TestHTTPAdapterRenewOnlyTheMarked404IsGone(t *testing.T) {
 		},
 		"405": func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(405) },
 		"501": func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "this store does not expire documents", 501)
+			http.Error(w, "this store does not expire documents", http.StatusNotImplemented)
 		},
 		"marker on a non-404": func(w http.ResponseWriter, _ *http.Request) { w.Header().Set(GoneHeader, "1"); w.WriteHeader(500) },
 	} {

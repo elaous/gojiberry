@@ -77,7 +77,7 @@ func TestSweepRateLimitsSkipsARecordItCannotReadAndGoesOn(t *testing.T) {
 	for i := range 4 {
 		l.Allow(ctx, fmt.Sprint("idle", i))
 	}
-	_ = store.MemoryAdapter.Save(ctx, RateLimitPrefix+"s/zzbad", []byte(`{"t":0,"a":1,"f":1}`))
+	_ = store.Save(ctx, RateLimitPrefix+"s/zzbad", []byte(`{"t":0,"a":1,"f":1}`))
 	clk.Add(10 * time.Minute)
 	n, err := SweepRateLimits(ctx, store, clk.Now())
 	if err == nil || !strings.Contains(err.Error(), "disk on fire") {
@@ -141,7 +141,7 @@ func TestSweepRateLimitsWithoutAConditionalDelete(t *testing.T) {
 		if sid == id && !fired {
 			fired = true
 			// The caller's change lands between the sweeper's read and its claiming write.
-			_ = inner.MemoryAdapter.Save(ctx, id, []byte(`{"t":1,"a":1,"f":`+fmt.Sprint(clk.Now().UnixNano()+int64(time.Hour))+`}`))
+			_ = inner.Save(ctx, id, []byte(`{"t":1,"a":1,"f":`+fmt.Sprint(clk.Now().UnixNano()+int64(time.Hour))+`}`))
 		}
 	}
 	n, err := SweepRateLimits(ctx, store, clk.Now())
@@ -280,7 +280,7 @@ func (refuses) SaveIf(context.Context, string, []byte, string) error {
 type fakeConditional struct{ *MemoryAdapter }
 
 func (f fakeConditional) SaveIf(ctx context.Context, id string, data []byte, _ string) error {
-	return f.MemoryAdapter.Save(ctx, id, data)
+	return f.Save(ctx, id, data)
 }
 
 func TestSupportsConditionalIsNotFooledByASaveIfThatIgnoresItsCondition(t *testing.T) {

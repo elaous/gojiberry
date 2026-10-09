@@ -756,7 +756,7 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string, ro repairOpts) 
 		}
 		seq := rec.Seq
 		var done []string
-		done, stale, unreadable, err = s.Adapter.rekeyDocumentReport(ctx, docID, rekeyOpts{acceptUnsigned: ro.acceptUnsigned})
+		done, stale, unreadable, err = s.Adapter.rekeyDocumentReport(ctx, docID, rekeyOpts(ro))
 		if n = len(done); err != nil {
 			return n, stale, unreadable, err
 		}

@@ -274,7 +274,7 @@ func TestRebuildKeepsLevelAndPlaceholder(t *testing.T) {
 	d, _ := docfile.Open.Unmarshal(stored.Data)
 	d.SetProtection("")
 	unmarked, _ := docfile.Open.Marshal(d)
-	_ = mem.Adapter.Save(ctx, cur.Key, unmarked)
+	_ = mem.Save(ctx, cur.Key, unmarked)
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +307,7 @@ func TestRebuildWithoutTheKeyListsAnUnreadableFileAsConfidential(t *testing.T) {
 
 	// 2. With no catalog at all: nothing says what the file is but that it cannot be opened,
 	// so it is listed under the placeholder as confidential; its folder is unknown.
-	_ = mem.Adapter.Delete(ctx, CatalogKey)
+	_ = mem.Delete(ctx, CatalogKey)
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
 	}
