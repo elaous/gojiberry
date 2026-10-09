@@ -129,8 +129,10 @@ func rawRequest(t *testing.T, e *env, method, path, token string, contentLength 
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
-	fmt.Fprintf(conn, "%s %s HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer %s\r\nContent-Length: %d\r\n\r\n%s", method, path, token, contentLength, sent)
+	defer func() { _ = conn.Close() }() // best-effort cleanup of a test connection
+	if _, err := fmt.Fprintf(conn, "%s %s HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer %s\r\nContent-Length: %d\r\n\r\n%s", method, path, token, contentLength, sent); err != nil {
+		t.Fatal(err)
+	}
 	_ = conn.SetReadDeadline(time.Now().Add(wait))
 	line, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {

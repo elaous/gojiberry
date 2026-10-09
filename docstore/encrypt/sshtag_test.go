@@ -115,7 +115,7 @@ func TestSSHKeyedRecipientStillWraps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := k.Recipient.Wrap(fk)
+	want, err := k.Wrap(fk)
 	if err != nil {
 		t.Fatal(err)
 	}

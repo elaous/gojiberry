@@ -96,8 +96,8 @@ func (a *Authenticator) authData(attested bool) []byte {
 	d = binary.BigEndian.AppendUint16(d, uint16(len(a.credID)))
 	d = append(d, a.credID...)
 	x, y := make([]byte, 32), make([]byte, 32)
-	a.key.PublicKey.X.FillBytes(x)
-	a.key.PublicKey.Y.FillBytes(y)
+	a.key.X.FillBytes(x)
+	a.key.Y.FillBytes(y)
 	cose, _ := cbor.Marshal(map[int]any{1: 2, 3: -7, -1: 1, -2: x, -3: y})
 	return append(d, cose...)
 }

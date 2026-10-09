@@ -28,8 +28,10 @@ func holdUploadAs(t *testing.T, e *env, token string, n int, ip string) net.Conn
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
-	fmt.Fprintf(conn, "POST /public/doc HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer %s\r\nX-Forwarded-For: %s\r\nContent-Length: %d\r\n\r\nabc", token, ip, n)
+	t.Cleanup(func() { _ = conn.Close() }) // best-effort cleanup of a test connection
+	if _, err := fmt.Fprintf(conn, "POST /public/doc HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer %s\r\nX-Forwarded-For: %s\r\nContent-Length: %d\r\n\r\nabc", token, ip, n); err != nil {
+		t.Fatal(err)
+	}
 	return conn
 }
 
@@ -134,7 +136,7 @@ func TestATimedOutOrAbandonedUploadStaysChargedButServerFailuresAreRefunded(t *t
 	// a client that goes away in the middle pays too
 	conn := holdUpload(t, e, tok, 2000)
 	waitFor(t, "the upload to be admitted", func() bool { return e.svc.flight.held() == 2000 })
-	conn.Close()
+	_ = conn.Close() // the point of the test: the client goes away
 	waitFor(t, "the claim to end", func() bool { return e.svc.flight.held() == 0 })
 	waitFor(t, "the charge", func() bool { return quotaUsed(e, "ip:127.0.0.1") == 3000 })
 	// a daily budget that is used up this way refuses the next upload up front
@@ -170,8 +172,10 @@ func TestSlowUploadsAreCutOffAtTheMinimumRate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
-	fmt.Fprintf(conn, "POST /public/doc HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer %s\r\nContent-Length: 100000\r\n\r\n", tok)
+	defer func() { _ = conn.Close() }() // best-effort cleanup of a test connection
+	if _, err := fmt.Fprintf(conn, "POST /public/doc HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer %s\r\nContent-Length: 100000\r\n\r\n", tok); err != nil {
+		t.Fatal(err)
+	}
 	start = time.Now()
 	done := make(chan string, 1)
 	go func() {

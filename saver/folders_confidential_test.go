@@ -581,7 +581,7 @@ func TestExportPackSurvivesAMissingFolderSecret(t *testing.T) {
 	if err := s.SetFolderProtection(ctx, "m", sec, ProtectionE2EE, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := mem.Adapter.Delete(ctx, FolderSecretKey(sec)); err != nil {
+	if err := mem.Delete(ctx, FolderSecretKey(sec)); err != nil {
 		t.Fatal(err)
 	}
 	var warned []PackIssue

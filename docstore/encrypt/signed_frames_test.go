@@ -287,7 +287,7 @@ func TestUnsignedFramesAreAcceptedUntilRepairThenForgedAndRequireSigned(t *testi
 		t.Errorf("RequireSigned: %v", err)
 	}
 	// A re-key (the owner's Repair) upgrades every file and pins it in the record.
-	w.inner.Delete(ctx, f) // the forged file is not something to re-key
+	_ = w.inner.Delete(ctx, f) // the forged file is not something to re-key (a missing file is fine)
 	if _, err := w.sharing.Repair(ctx, id); err != nil {
 		t.Fatal(err)
 	}
@@ -649,7 +649,6 @@ type plainStore struct {
 	m        *docstore.MemoryAdapter
 	lock     sync.Mutex
 	mu       sync.Mutex
-	readers  int
 	arrivals int
 }
 

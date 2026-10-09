@@ -280,13 +280,6 @@ func (e *ExpiringAdapter) now() time.Time {
 	return time.Now()
 }
 
-func (e *ExpiringAdapter) related(id string) ([]string, []string) {
-	if e.Related != nil {
-		return e.Related(id)
-	}
-	return DefaultRelated(id)
-}
-
 func isExpiryKey(id string) bool {
 	return strings.HasPrefix(id, ExpiryPrefix) || strings.HasPrefix(id, ExpiryCreatedPrefix)
 }
@@ -1164,7 +1157,7 @@ func (e *ExpiringAdapter) hasLiveDocument(ctx context.Context, id string) (bool,
 		return false, err
 	}
 	for _, m := range metas {
-		if isExpiryKey(m.ID) || !(m.ID == id || (IsDocumentKey(m.ID) && logicalID(m.ID) == id)) {
+		if isExpiryKey(m.ID) || (m.ID != id && (!IsDocumentKey(m.ID) || logicalID(m.ID) != id)) {
 			continue
 		}
 		t, ok, err := e.readRecord(ctx, m.ID)
