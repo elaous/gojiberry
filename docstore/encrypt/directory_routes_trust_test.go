@@ -285,9 +285,9 @@ func TestDirectoryLookupHasAGlobalBudget(t *testing.T) {
 	if rec.Header().Get("Retry-After") == "" || rec.Code != 429 {
 		t.Errorf("%d %v", rec.Code, rec.Header())
 	}
-	// The log reads draw on it too.
-	if rec := e.do("GET", "/directory/log", e.token(ana), ""); rec.Code != 429 {
-		t.Errorf("log = %d", rec.Code)
+	// The log reads have budgets of their own (dir-log-ip, dir-log-all-N): lookups do not use them up.
+	if rec := e.do("GET", "/directory/log", e.token(ana), ""); rec.Code != 200 {
+		t.Errorf("log = %d, want 200: it does not draw on the lookups' budget", rec.Code)
 	}
 }
 

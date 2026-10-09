@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-8 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, #111, #112, #113, #114, this PR); the full suite runs on main after the
+9 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, #111, #112, #113, #114, #115, this PR); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -586,14 +586,11 @@ New entries:
     backend supports, what each feature needs, and what to use instead (S3 backend, PostgreSQL, MongoDB); the blob
     backend's `Config` comment says so. A provider-specific write hook (S3 `If-Match`, GCS generation, Azure ETag) is
     left until a provider is needed and can be tested against it. Item 9 still covers `DeleteIf` for S3.
-35. **Directory log reads share the lookup budgets for client IP and whole server.** Kind: fixable. Confirmed in
-    `docstore/directory.go`: `readBudget` (`:846-855`) takes three tokens per read: the user's own limiter (separate:
-    `lookup` for lookups, `logRead` for the log), then `lookupIP` and `lookupAll[lookupShard(u.ID)]`, which both
-    lookups (`:896`) and log reads (`:928`) spend, as the comment at `:572-579` says. Why: a user who polls the log
-    hard uses their IP budget and their shard's whole-server budget, so lookups of everyone hashed to that shard (and
-    behind that IP) slow down, and the reverse. Plan: separate keys for log reads (for example `dir-log-ip` and
-    `dir-log-all-<n>`), or a larger budget for the log with its own shards. Priority: medium. Where:
-    `docstore/directory.go:572-605` (limiters), `:846-860` (`readBudget`), `:896` and `:928` (callers).
+35. **Done (this PR): directory log reads have budgets of their own.** Was: `readBudget` took the per-IP and the
+    whole-server shard tokens from the lookups' limiters for log reads too, so a client that polled the log hard slowed
+    the lookups of everyone behind its address and in its shard, and the reverse. Now a log read spends `dir-log`
+    (per user, as before), `dir-log-ip` (120 a minute) and `dir-log-all-N` (1200 a minute over 16 shards), the same
+    numbers as lookups but separate keys. `docstore/directory.go` (`readBudget`, `readKind`, `directoryLimits`).
 36. **Sticky `FirstOwner`: after a legitimate owner key rotation, third-party lookups show "changed" permanently.**
     Kind: fixable. Why: the first owner key a third party saw is kept; a rotation is indistinguishable from an
     attack, so the warning never clears. Plan: a user action to confirm the new key (a signed rotation chain
