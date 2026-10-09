@@ -159,3 +159,38 @@ jobs:
             echo "a Postgres-backed test was skipped"
             exit 1
           fi
+
+  # The MongoDB backend tests need a real MongoDB and skip without one (a skip prints "ok"). Run them against a
+  # service container and fail on any skip.
+  mongo-backend:
+    name: docstore MongoDB backend tests
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' || mongo --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      TEST_MONGO_URI: mongodb://127.0.0.1:27017
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run the tests and fail on a skip
+        working-directory: docstore/backends
+        run: |
+          go test -count=1 -race -v ./mongo/ | tee test.log
+          if grep -q -- '--- SKIP' test.log; then
+            echo "a MongoDB test was skipped"
+            exit 1
+          fi
