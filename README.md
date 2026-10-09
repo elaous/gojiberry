@@ -546,10 +546,10 @@ expanded by the same recursive scan, with no extra grammar required.
   client's own choice of storage adapter only ever needs to know
   whether it's talking to `LocalStorage`, `IndexedDB`, or this one HTTP
   API, never which concrete backend the server operator picked behind
-  it. Postgres is tested with `sqlmock` and MongoDB's conformance suite
-  is gated behind `TEST_MONGO_URI` (both skip cleanly in an environment
-  with no live service, e.g. this repo's own CI sandbox, which has no
-  Docker daemon available to start either one) — every other adapter,
+  it. Postgres is tested with `sqlmock` and MongoDB's tests run against a
+  live server when `TEST_MONGO_URI` is set (they skip loudly without it;
+  CI has a MongoDB service container and fails on a skip, and
+  `docs/testing-workflow.md` has a no-Docker recipe); every other adapter,
   and the HTTP server itself, is exercised with real, no-live-service-
   required native tests. Optionally mounts `auth`'s own `/auth/*`
   Sign-in-with-OIDC routes alongside `/docs/*` — see `auth` below;
