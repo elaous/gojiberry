@@ -105,6 +105,19 @@ func (a *SQLiteAdapter) Load(ctx context.Context, id string) (Document, error) {
 	return doc, nil
 }
 
+// LoadHead implements HeadReader: substr(data, 1, n) is cut in the database.
+func (a *SQLiteAdapter) LoadHead(ctx context.Context, id string, n int) ([]byte, error) {
+	var head []byte
+	err := a.db.QueryRowContext(ctx, `SELECT substr(data, 1, ?) FROM documents WHERE id = ?`, max(n, 0), id).Scan(&head)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return head, nil
+}
+
 // List implements Adapter.
 func (a *SQLiteAdapter) List(ctx context.Context) ([]Meta, error) {
 	rows, err := a.db.QueryContext(ctx, `SELECT id, length(data), updated_at FROM documents`)

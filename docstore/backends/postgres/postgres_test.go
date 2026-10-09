@@ -291,3 +291,31 @@ func TestPostgresListPrefixEscapesTheLikePattern(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPostgresLoadHeadCutsInTheDatabase(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	a := newFromDB(db)
+	var _ docstore.HeadReader = a
+	q := regexp.QuoteMeta(`SELECT substr(data, 1, $2) FROM documents WHERE id = $1`)
+	mock.ExpectQuery(q).WithArgs("doc1", 4).
+		WillReturnRows(sqlmock.NewRows([]string{"substr"}).AddRow([]byte("head")))
+	got, err := a.LoadHead(context.Background(), "doc1", 4)
+	if err != nil || string(got) != "head" {
+		t.Fatalf("%q %v", got, err)
+	}
+	mock.ExpectQuery(q).WithArgs("nope", 4).WillReturnRows(sqlmock.NewRows([]string{"substr"}))
+	if _, err := a.LoadHead(context.Background(), "nope", 4); !errors.Is(err, docstore.ErrNotFound) {
+		t.Fatalf("missing: %v", err)
+	}
+	mock.ExpectQuery(q).WillReturnError(errors.New("boom"))
+	if _, err := a.LoadHead(context.Background(), "x", 4); err == nil {
+		t.Error("a database error is returned")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
