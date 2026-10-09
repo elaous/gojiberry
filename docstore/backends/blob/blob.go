@@ -31,6 +31,14 @@ import (
 // MemoryAdapter already covers that case more directly, so "blob"
 // with a mem:// URL exists mainly for tests exercising this adapter
 // against a real *blob.Bucket without a real cloud credential).
+//
+// The adapter has no conditional writes: no SaveIf and no DeleteIf. gocloud.dev/blob's portable
+// WriterOptions can create only if the blob does not exist (IfNotExist); it has no If-Match, ETag or
+// generation precondition, and a replace or delete guarded by content needs a driver-specific hook. So
+// everything that needs one (the shared passkey challenge store, shared sign-in sessions, the store-backed
+// rate limiter, the key directory without races, conditional saves over HTTP) is unavailable on this backend
+// and warns or refuses; see "Which backend supports what" in docs/public-docstore.md. For S3-compatible
+// storage use the s3 backend, which has SaveIf; for shared state use postgres or mongo.
 type Config struct {
 	URL string `json:"url"`
 	// Prefix is prepended to every document ID before it becomes a
