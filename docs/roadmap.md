@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (the full suite passed on main 1ab7677; #108, this PR); the full suite runs on main after the
+3 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, this PR); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -997,7 +997,7 @@ unless stated.
     reason. In `canvas-app`'s end-to-end test the database now closes in `t.Cleanup` after the `DELETE FROM documents`
     cleanup, which previously ran after a deferred `Close` and so could never succeed. staticcheck (13, SA1019):
     `collab-editor-app` moved from the deprecated `nhooyr.io/websocket` to its successor `github.com/coder/websocket`
-    (same API). unused (18, native pass only): one test helper with no caller was deleted; the rest are used only by
+    v1.8.15 (same API; the same module and version as the root `go.mod` and `collab/hub`). unused (18, native pass only): one test helper with no caller was deleted; the rest are used only by
     the js/wasm entry points, so they moved into js/wasm-only files (`canvas-editor-app/model_browser.go`,
     `canvas-editor-showcase/sample_wasm.go`, `canvas-xango-demo/lorem_wasm.go`) with no change to their code. A
     planted unchecked error in a root-module and a nested example makes `make lint` and `make lint-modules` fail.

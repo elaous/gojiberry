@@ -1750,7 +1750,8 @@ generated code.
   (edit/view/delete/share/comment) determined by its own role. It's a
   separate Go module (like `examples/canvas-app`), `replace`-ing
   `github.com/elaous/gojiberry` with the local checkout so it can
-  depend on [`nhooyr.io/websocket`](https://nhooyr.io/websocket)
+  depend on [`github.com/coder/websocket`](https://github.com/coder/websocket)
+  (v1.8.15, the same module the root `go.mod` and `collab/hub` use)
   without pulling that into the root module. `cmd/server` is a plain
   `net/http` server: it serves `static/` and handles `/ws` — a small
   in-memory hub that relays every edit to every *other* connected
