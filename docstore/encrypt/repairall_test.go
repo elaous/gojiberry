@@ -834,4 +834,49 @@ func TestRepairAllNotFoundWithTheFilesStoredIsNotGone(t *testing.T) {
 	if len(rep.Skipped) != 1 || rep.Skipped[0].Reason != SkipError || rep.Left() != 1 || len(outcomes) != 1 || outcomes[0] != "expiry:live=error" {
 		t.Fatalf("%+v (%v)", rep, outcomes)
 	}
+	if !strings.Contains(rep.Skipped[0].Err.Error(), "some files of this item are gone, rerun to settle") {
+		t.Errorf("message %q", rep.Skipped[0].Err)
+	}
+}
+
+// idRing is a Keyring whose Identities fails for one id with a fixed error.
+type idRing struct {
+	Keyring
+	id  string
+	err error
+}
+
+func (r idRing) Identities(ctx context.Context, id string) ([]age.Identity, error) {
+	if id == r.id {
+		return nil, r.err
+	}
+	return r.Keyring.Identities(ctx, id)
+}
+
+// Identities is a keyring call like Recipients: an ErrNotFound from it, over an item that is
+// still stored, is a real error for RekeyAll and a skip for RepairAll, never "gone" and never
+// swallowed.
+func TestKeyringIdentitiesNotFoundIsNotGone(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	w.legacyItem(t, "expiry:live", []byte("x"))
+	kerr := fmt.Errorf("keyring has no identities: %w", docstore.ErrNotFound)
+	sh := w.over(w.inner, func(a *Adapter) { a.Ring = idRing{Keyring: w.ring, id: "expiry:live", err: kerr} })
+
+	n, err := sh.Adapter.RekeyAll(ctx)
+	if err == nil || errors.Is(err, docstore.ErrNotFound) || n != 0 || !strings.Contains(err.Error(), kerr.Error()) {
+		t.Fatalf("RekeyAll: %d %v", n, err)
+	}
+
+	rep, err := sh.RepairAll(ctx, RepairAllOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Skipped) != 1 || rep.Skipped[0].Doc != "expiry:live" || rep.Skipped[0].Reason != SkipUnreadable ||
+		errors.Is(rep.Skipped[0].Err, docstore.ErrNotFound) || !strings.Contains(rep.Skipped[0].Err.Error(), kerr.Error()) || rep.Left() != 1 || rep.Repaired != 0 {
+		t.Fatalf("RepairAll: %+v", rep)
+	}
+	if v := w.frameVersion(t, "expiry:live"); v == 3 {
+		t.Error("the item was rewritten")
+	}
 }

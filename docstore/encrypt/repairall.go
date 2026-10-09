@@ -385,6 +385,10 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 				outcome = "gone"
 			default:
 				reason, files := classifyRepairErr(err)
+				if errors.Is(err, docstore.ErrNotFound) {
+					// Some of the files went, the others are stored: not a keyring problem.
+					err = fmt.Errorf("some files of this item are gone, rerun to settle: %w", err)
+				}
 				outcome = s.skip(&rep, doc, reason, files, err)
 			}
 		}
