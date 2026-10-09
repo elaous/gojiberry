@@ -741,7 +741,8 @@ cannot be opened.
      operates on it, or by the operator reset.
    - **Unmapped addresses (operator procedure).** The warning in the log reads `N address pseudonyms have
      owner-state entries in the log and no record or key the directory can name them by`; it is logged at
-     start-up and again only when N changes. List them, with the credential of the operator reset
+     start-up and again only when N changes (the start-up counts as a change from none, so a first count of
+     0 is silent and a first count above 0 warns; later, going back to 0 logs a one-line all-clear). List them, with the credential of the operator reset
      (`GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN`, sent as the header `X-Gojiberry-Admin-Token`; a wrong one
      counts against the same failure budget, 10 a minute per client, then 429):
      `curl -H "X-Gojiberry-Admin-Token: $TOKEN" https://HOST/admin/directory/unmapped` answers

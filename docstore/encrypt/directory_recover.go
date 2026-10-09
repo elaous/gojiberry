@@ -244,8 +244,9 @@ func (d *AdapterDirectory) reconcileAll(ctx context.Context) (ReconcileReport, e
 const DefaultUnmappedCap = 100
 
 // findUnmapped returns the pseudonyms of the index with owner-state entries that covered does not
-// name, by first entry number. An address whose last word is an operator reset, or that holds only
-// voids, is settled and not listed.
+// name, by first entry number. Entries that an operator reset ended or that a void cancelled have
+// no effect, as AuditAddress reads them: an address left with none (last word an operator reset,
+// or only voids and the entries they cancel) is settled and not listed.
 func (d *AdapterDirectory) findUnmapped(covered map[string]bool) []docstore.DirectoryUnmappedAddress {
 	d.idxMu.Lock()
 	defer d.idxMu.Unlock()
@@ -254,13 +255,19 @@ func (d *AdapterDirectory) findUnmapped(covered map[string]bool) []docstore.Dire
 		if covered[a] {
 			continue
 		}
+		voided := map[int64]bool{} // entry numbers that a void of this address cancels
+		for _, e := range ents {
+			if e.Op == OpVoid {
+				voided[e.Ref] = true
+			}
+		}
 		var u docstore.DirectoryUnmappedAddress
 		for _, e := range ents {
-			switch e.Op {
-			case OpOperatorReset:
+			switch {
+			case e.Op == OpOperatorReset:
 				u = docstore.DirectoryUnmappedAddress{} // everything before it is ended
 				continue
-			case OpVoid:
+			case e.Op == OpVoid, voided[e.Seq]:
 				continue
 			}
 			if u.FirstSeq == 0 {

@@ -135,18 +135,18 @@ func TestUnmappedRouteIsOperatorOnly(t *testing.T) {
 	}
 	var got docstore.DirectoryUnmapped
 	rec := get(true)
-	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &got) != nil || got.Count != 1 || got.Addresses[0].FirstSeq != 4 {
+	if rec.Code != 200 || rec.Header().Get("Cache-Control") != "no-store" || json.Unmarshal(rec.Body.Bytes(), &got) != nil || got.Count != 1 || got.Addresses[0].FirstSeq != 4 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
-	if rec := e.do("POST", "/admin/directory/unmapped", "", ""); rec.Code != 403 && rec.Code != 405 {
-		t.Errorf("POST: %d", rec.Code)
+	if rec := e.do("POST", "/admin/directory/unmapped", "", ""); rec.Code != 405 || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("POST: %d %q", rec.Code, rec.Header().Get("Cache-Control"))
 	}
 	for range 10 {
-		if c := get(false).Code; c != 403 {
-			t.Fatalf("a failure inside the budget: %d", c)
+		if r := get(false); r.Code != 403 || r.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("a failure inside the budget: %d %q", r.Code, r.Header().Get("Cache-Control"))
 		}
 	}
-	if c := get(false).Code; c != 429 {
-		t.Errorf("the failure budget applies: %d", c)
+	if r := get(false); r.Code != 429 || r.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("the failure budget applies: %d %q", r.Code, r.Header().Get("Cache-Control"))
 	}
 }

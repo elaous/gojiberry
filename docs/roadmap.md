@@ -614,7 +614,7 @@ New entries:
     only, first and last entry number and time, age) and the time it was computed; `GET /admin/directory/unmapped`
     serves it with the operator reset's credential and failure budget; the sweep and start-up log one warning per
     change of the count (with the pointer to the fix), not one per tick. An address whose last word is an operator
-    reset is no longer counted. Procedure: [encryption-and-passkeys.md](encryption-and-passkeys.md#unmapped-addresses).
+    reset, or whose entries are all voided, is no longer counted. Procedure: [encryption-and-passkeys.md](encryption-and-passkeys.md) ("Unmapped addresses (operator procedure)").
     Where: `docstore/encrypt/directory_recover.go`, `docstore/directory.go` (`handleUnmapped`).
 39. **`ErrUnsignedAfterFlip` leaves `PendingDocs` empty (the `Remove` path, and every other re-key path).** Kind:
     fixable (documentation first). Confirmed in `docstore/encrypt/share.go`: the flip in `finishFiles` writes the

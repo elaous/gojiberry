@@ -1080,6 +1080,7 @@ func (s *Server) handleOperatorReset(w http.ResponseWriter, r *http.Request) {
 // handleUnmapped serves GET /admin/directory/unmapped: the log pseudonyms the reconciliation
 // cannot name, for the operator (same credential and failure budget as the operator reset).
 func (s *Server) handleUnmapped(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store") // on every answer, errors too
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -1105,7 +1106,6 @@ func (s *Server) handleUnmapped(w http.ResponseWriter, r *http.Request) {
 	if u.Addresses == nil {
 		u.Addresses = []DirectoryUnmappedAddress{}
 	}
-	w.Header().Set("Cache-Control", "no-store")
 	writeJSONStatus(w, http.StatusOK, u)
 }
 
