@@ -468,6 +468,12 @@ Threat model, store write access only (no owner key):
      sign, and a plain `Save` does not change the record, so the flip cannot be conditional on it),
      and anyone who knows a recipient's public key can write one in that window; it is reported,
      not prevented, and the owner resolves it with `AcceptUnsigned` or by deleting the file.
+     The second look also writes the file ids into the signed record (`unsignedLate`, with a time; the record stays
+     `signed` and is not pending), so `Sharing.UnsignedDocs` lists the document for any client and after a restart
+     (`PendingDocs` does not: nothing is pending). `RepairAll` skips it as forged, naming the same document. `Repair`
+     or `Recover` with `AcceptUnsigned` clears the mark once no file is unsigned. The field is covered by the record's
+     signature, so a store writer cannot add or clear it; older builds ignore it when they read and drop it when they
+     write the record, which loses the listing but not the refusal of the file.
      (b) What a save
      in that remaining window (or an older build that wrote v1/v2 frames under a record that already
      says `signed`) leaves is a document where `crossCheck` refuses the file as `ErrForgedFrame`

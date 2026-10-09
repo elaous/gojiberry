@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-3 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, this PR); the full suite runs on main after the
+4 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, this PR); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -616,15 +616,17 @@ New entries:
     change of the count (with the pointer to the fix), not one per tick. An address whose last word is an operator
     reset, or whose entries are all voided, is no longer counted. Procedure: [encryption-and-passkeys.md](encryption-and-passkeys.md) ("Unmapped addresses (operator procedure)").
     Where: `docstore/encrypt/directory_recover.go`, `docstore/directory.go` (`handleUnmapped`).
-39. **`ErrUnsignedAfterFlip` leaves `PendingDocs` empty (the `Remove` path, and every other re-key path).** Kind:
-    fixable (documentation first). Confirmed in `docstore/encrypt/share.go`: the flip in `finishFiles` writes the
-    record with `rec.Pending = false` (`:791`), and only afterwards looks again and returns `ErrUnsignedAfterFlip`
-    (`:813`). `Remove` (`:870-893`) just returns that error from `finish`, and `PendingDocs` lists only records with
-    `rec.Pending` (`:683-705`). So the record says not pending and Signed, and the late unsigned file is found by
-    nothing but the error (and `Adapter.afterUnsignedWrite` for later writers). Why: only `Repair(AcceptUnsigned)`
-    resolves it, as the error text says (`:452-457`), and no list shows what is left. Plan: document that the list
-    stays empty and name the call, or record the document (for example keep `Pending` set until the late look
-    is clean). Priority: low. Where: `docstore/encrypt/share.go:764-815` and `:870-893`.
+39. **Done:** **a document that ends in `ErrUnsignedAfterFlip` is listed.** Was: `finishFiles` cleared `Pending`
+    before its second look, so after the error `PendingDocs` (pending records only) and every "what is left to do"
+    list omitted a document that may hold a late unsigned file, and only the error text named
+    `Repair(AcceptUnsigned())`. Now the second look writes the files it found into the signed `keys:<ID>`
+    record (`unsignedLate`, `unsignedLateSince`; the record stays `Signed` and not pending), and
+    `Sharing.UnsignedDocs` lists those documents with the file ids, the time and the next step, from any client and
+    after a restart. `Repair` or `Recover` with `AcceptUnsigned` clears the mark once no file is unsigned. `RepairAll`
+    still skips such a document as `SkipForged`, and the list names the same document. `PendingDocs` is unchanged
+    (re-keys in flight). Older builds ignore the new fields when they read the record and drop them when they write
+    it (the files stay refused; only the listing is lost). Where: `docstore/encrypt/share.go`
+    (`finishFiles`, `markUnsignedLate`, `clearUnsignedLate`, `UnsignedDocs`).
 40. **Passkey challenge records show the pending registration e-mail and name on a plain store.** Kind: fixable
     by configuration. Confirmed: `StoreChallenges.Put` (`auth/passkey/challenge_store.go:132-146`) stores the whole
     `Challenge` as JSON (`storedChallenge` embeds it, `:126-129`), and `Challenge` (`auth/passkey/challenge.go:14-22`)
