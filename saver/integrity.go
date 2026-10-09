@@ -289,9 +289,14 @@ type VerifyReport struct {
 	// checker's limit (30 minutes in encrypt.PendingHook): not a re-key in flight but one that
 	// was abandoned. Run encrypt.Sharing.Repair.
 	PendingStuck []string
+	// Unsigned lists the documents whose re-key ended in ErrUnsignedAfterFlip (Saver.UnsignedCheck):
+	// a file was saved unsigned while the record was being changed to Signed and is refused as
+	// forged. They are not Pending. The owner checks the files and runs encrypt.Sharing.Repair
+	// with AcceptUnsigned.
+	Unsigned []string
 	// Warnings are findings that are not about one document of the catalog and did not stop
-	// the check: PendingCheck failed for some record (a record that does not verify), so
-	// Pending and PendingStuck hold what it could read and may be incomplete. Each entry names
+	// the check: PendingCheck or UnsignedCheck failed for some record (a record that does not verify), so
+	// Pending, PendingStuck and Unsigned hold what they could read and may be incomplete. Each entry names
 	// what failed.
 	Warnings []string
 }
@@ -330,6 +335,15 @@ func (s *Saver) Verify(ctx context.Context, target string) (VerifyReport, error)
 				return rep, cerr
 			}
 			rep.Warnings = append(rep.Warnings, "pending check incomplete (the documents it could read are reported): "+err.Error())
+		}
+	}
+	if s.UnsignedCheck != nil {
+		rep.Unsigned, err = s.UnsignedCheck(ctx, target)
+		if err != nil {
+			if cerr := ctx.Err(); cerr != nil {
+				return rep, cerr
+			}
+			rep.Warnings = append(rep.Warnings, "unsigned check incomplete (the documents it could read are reported): "+err.Error())
 		}
 	}
 	type fix struct {

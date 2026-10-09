@@ -90,6 +90,11 @@ type Saver struct {
 	// record that does not verify), Verify keeps the results and adds the error to
 	// VerifyReport.Warnings instead of failing.
 	PendingCheck func(ctx context.Context, target string) (pending, stuck []string, err error)
+	// UnsignedCheck, when set, is called by Verify and says which documents a re-key left with a
+	// file saved unsigned after the record said Signed (encrypt.UnsignedHook; the saver does not
+	// import it): VerifyReport.Unsigned. Like PendingCheck it is a full scan of the keys: records,
+	// so Verify is the rare caller. An error beside its results goes to VerifyReport.Warnings.
+	UnsignedCheck func(ctx context.Context, target string) (docs []string, err error)
 
 	mu sync.Mutex   // one catalog update at a time
 	tm sync.RWMutex // Targets, which AddTarget and RemoveTarget change
