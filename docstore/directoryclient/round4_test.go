@@ -672,3 +672,136 @@ func TestWatchLogFilteredToFullSwitchWithNoNewEntries(t *testing.T) {
 		t.Fatalf("filtered to full with no new entries: %v %+v", err, st)
 	}
 }
+
+// ownedAna enrolls ana with an owner key and returns a func that publishes n more entries signed
+// by it, so that the address is read in full.
+func ownedAna(t *testing.T, c *Client) (OwnerKey, func(n int)) {
+	t.Helper()
+	ctx := context.Background()
+	owner, _ := GenerateOwnerKey()
+	if _, err := c.Enroll(ctx, "ana@x.io", owner); err != nil {
+		t.Fatal(err)
+	}
+	return owner, func(n int) {
+		for range n {
+			p, _, id := ageKey(t)
+			if _, err := c.Publish(ctx, PublishRequest{Email: "ana@x.io", Key: p, Identity: id, Owner: owner}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+// The audit must see the pending entries and the newly read ones in the order of the log, whatever
+// order they were gathered in: pending {1, 4} with a saved cursor of 2, and a full read that adds 3.
+func TestWatchLogAuditsPendingAndNewEntriesInLogOrder(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	c := e.client(ana)
+	owner, publishOwn := ownedAna(t, c)
+	publishOwn(3) // entries 1 (enroll), 2, 3, 4
+	first := &WatchState{}
+	if _, err := c.WatchLog(ctx, "ana@x.io", first, WatchOptions{Owner: owner}); err != nil || first.Filtered || len(first.Pending) != 4 {
+		t.Fatalf("%v %+v", err, first)
+	}
+	p := first.Pending
+	st := &WatchState{
+		Email: first.Email, Addresses: first.Addresses, Filtered: true,
+		Seq: p[3].Seq, Hash: p[3].Hash, Cursor: 2,
+		Pending: []docstore.DirectoryLogEntry{p[0], p[3]},
+	}
+	rep, err := c.WatchLog(ctx, "ana@x.io", st, WatchOptions{Owner: owner})
+	if err != nil || st.Filtered || len(rep.Violations) != 0 {
+		t.Fatalf("%v %+v %+v", err, rep, st)
+	}
+	var got []int64
+	for _, en := range rep.Entries {
+		got = append(got, en.Seq)
+	}
+	if fmt.Sprint(got) != "[1 3 4]" {
+		t.Fatalf("the entries are audited out of the log's order: %v", got)
+	}
+}
+
+// The log grows past the head while the cursor sits at the head: a non-empty read from the head
+// reaches the entry fetch. Honest entries pass; a different entry served at the head's number is
+// a cut; the first entry read must follow the saved head.
+func TestWatchLogGrowthPastTheHeadAtTheCursor(t *testing.T) {
+	ctx := context.Background()
+	run := func(t *testing.T, grow func(e *env, publishOwn func(int), st *WatchState), serve func(e *env, since string, m map[string]any)) (*WatchState, error) {
+		e := newEnv(t)
+		c := e.client(ana)
+		owner, publishOwn := ownedAna(t, c)
+		publishOwn(2) // entries 1 to 3: the head is entry 3
+		st := &WatchState{}
+		if _, err := c.WatchLog(ctx, "ana@x.io", st, WatchOptions{Owner: owner}); err != nil || st.Filtered || st.Seq != 3 {
+			t.Fatalf("%v %+v", err, st)
+		}
+		st.Filtered, st.Cursor = true, st.Seq // the cursor sits at the head
+		grown := false
+		c.HTTP = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			res, err := http.DefaultTransport.RoundTrip(r)
+			if err != nil {
+				return res, err
+			}
+			switch {
+			case r.URL.Path == "/directory/log/head" && !grown:
+				grown = true
+				grow(e, publishOwn, st) // the log grows after the head was signed
+			case r.URL.Path == "/directory/log" && serve != nil:
+				return rewriteBody(res, func(b []byte) []byte {
+					var m map[string]any
+					if json.Unmarshal(b, &m) != nil {
+						return b
+					}
+					serve(e, r.URL.Query().Get("since"), m)
+					out, _ := json.Marshal(m)
+					return out
+				}), nil
+			}
+			return res, err
+		})}
+		_, err := c.WatchLog(ctx, "ana@x.io", st, WatchOptions{Owner: owner})
+		return st, err
+	}
+	honest := func(e *env, publishOwn func(int), st *WatchState) { publishOwn(1) }
+
+	t.Run("honest", func(t *testing.T) {
+		st, err := run(t, honest, nil)
+		if err != nil || st.Filtered || st.Seq != 4 {
+			t.Fatalf("%v %+v", err, st)
+		}
+	})
+	t.Run("another entry at the head", func(t *testing.T) {
+		st, err := run(t, honest, func(e *env, since string, m map[string]any) {
+			if since != "2" { // the fetch of the entry at the head, not the read from it
+				return
+			}
+			es, _ := m["entries"].([]any)
+			for i, x := range es {
+				raw, _ := json.Marshal(x)
+				var le encrypt.LogEntry
+				if json.Unmarshal(raw, &le) != nil || le.Seq != 3 {
+					continue
+				}
+				forged := encrypt.SignLogEntry(e.dir.Signer, encrypt.LogEntry{Seq: 3, Prev: le.Prev, At: le.At, Address: le.Address, Op: encrypt.OpPublish, Fingerprint: "SHA256:forged"})
+				fb, _ := json.Marshal(forged)
+				var fm any
+				_ = json.Unmarshal(fb, &fm)
+				es[i] = fm
+			}
+		})
+		if !errors.Is(err, ErrLogCut) || !st.Filtered || st.Seq != 3 {
+			t.Fatalf("an entry at the head that is not the signed one: %v %+v", err, st)
+		}
+	})
+	t.Run("the first entry read does not follow the saved head", func(t *testing.T) {
+		fork := func(e *env, publishOwn func(int), st *WatchState) {
+			storeEntry(t, e, encrypt.LogEntry{Seq: 4, Prev: strings.Repeat("ab", 32), Op: encrypt.OpPublish, Fingerprint: "SHA256:fork"})
+		}
+		st, err := run(t, fork, nil)
+		if !errors.Is(err, ErrLogCut) || !st.Filtered || st.Seq != 3 {
+			t.Fatalf("an entry that does not follow the saved head: %v %+v", err, st)
+		}
+	})
+}
