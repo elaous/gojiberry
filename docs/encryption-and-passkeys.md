@@ -470,7 +470,14 @@ Threat model, store write access only (no owner key):
      not prevented, and the owner resolves it with `AcceptUnsigned` or by deleting the file.
      The second look also writes the file ids into the signed record (`unsignedLate`, with a time; the record stays
      `signed` and is not pending), so `Sharing.UnsignedDocs` lists the document for any client and after a restart
-     (`PendingDocs` does not: nothing is pending). `RepairAll` skips it as forged, naming the same document. `Repair`
+     (`PendingDocs` does not: nothing is pending; `Saver.UnsignedCheck`, `encrypt.UnsignedHook`, puts the ids in
+     `VerifyReport.Unsigned`). Like `PendingDocs` it is a full scan: it loads and verifies every `keys:` record, so
+     run it rarely (Verify, an admin page), not per request. The record keeps at most 64 file ids (the first by id)
+     and the total (`UnsignedDoc.Count`); the error text names the same 64 and "... and K more". A later mark
+     replaces the earlier one and keeps its time. The mark is written only onto the record the re-key just wrote: if
+     another record is there by then (an older one put back, or a concurrent change) it is refused, the error says the
+     document "could not be marked", and the replayed record is not signed again. Clearing the mark is best effort: if the
+     files cannot be read when the re-key ends, the mark stays and the re-key still succeeds. `RepairAll` skips it as forged, naming the same document. `Repair`
      or `Recover` with `AcceptUnsigned` clears the mark once no file is unsigned. The field is covered by the record's
      signature, so a store writer cannot add or clear it; older builds ignore it when they read and drop it when they
      write the record, which loses the listing but not the refusal of the file.

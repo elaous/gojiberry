@@ -626,7 +626,10 @@ New entries:
     still skips such a document as `SkipForged`, and the list names the same document. `PendingDocs` is unchanged
     (re-keys in flight). Older builds ignore the new fields when they read the record and drop them when they write
     it (the files stay refused; only the listing is lost). Where: `docstore/encrypt/share.go`
-    (`finishFiles`, `markUnsignedLate`, `clearUnsignedLate`, `UnsignedDocs`).
+    (`finishFiles`, `markUnsignedLate`, `clearUnsignedLate`, `UnsignedDocs`). The mark keeps at most 64 ids and a count,
+    is written only onto the record the re-key just wrote (a replayed older record is not signed again), and its
+    clearing never fails a re-key. `UnsignedDocs` is a full scan like `PendingDocs`; `Saver.UnsignedCheck`
+    (`encrypt.UnsignedHook`) puts it in `VerifyReport.Unsigned`.
 40. **Passkey challenge records show the pending registration e-mail and name on a plain store.** Kind: fixable
     by configuration. Confirmed: `StoreChallenges.Put` (`auth/passkey/challenge_store.go:132-146`) stores the whole
     `Challenge` as JSON (`storedChallenge` embeds it, `:126-129`), and `Challenge` (`auth/passkey/challenge.go:14-22`)
