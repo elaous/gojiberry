@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -204,8 +206,21 @@ type sharedRecord struct {
 	Signed bool `json:"signed,omitempty"`
 	// PendingSince is when Pending was set (Unix seconds), so a re-key that never finished can be
 	// told from one in progress (Sharing.PendingStatus).
-	PendingSince int64         `json:"pendingSince,omitempty"`
-	Recipients   []sharedEntry `json:"recipients"`
+	PendingSince int64 `json:"pendingSince,omitempty"`
+	// UnsignedLate names the files the re-key's second look found unsigned after it wrote the
+	// record (ErrUnsignedAfterFlip), and UnsignedLateSince is when (Unix seconds). The record
+	// is not Pending then, so this is what keeps the document in Sharing.UnsignedDocs until
+	// the owner settles it (Repair or Recover with AcceptUnsigned, which clears it). Older
+	// builds ignore the fields when they read the record, and drop them when they write it:
+	// the files are refused as forged either way, so only the listing is lost.
+	//
+	// The ids are capped (unsignedLateCap, the first ones by id) because they come from the
+	// store's listing, which a store writer can grow: UnsignedLateCount is how many files there
+	// were in all. Each mark replaces the one before and keeps its UnsignedLateSince.
+	UnsignedLate      []string      `json:"unsignedLate,omitempty"`
+	UnsignedLateCount int           `json:"unsignedLateCount,omitempty"`
+	UnsignedLateSince int64         `json:"unsignedLateSince,omitempty"`
+	Recipients        []sharedEntry `json:"recipients"`
 }
 
 // binding is the Binding the record gives its document's files: level, seq, pending, and a
@@ -502,6 +517,9 @@ type mutateOpts struct {
 	// is above minSeq.
 	recover bool
 	minSeq  uint64
+	// noCheck skips the cross-check with the files' frames (not the floor): for a write that
+	// only records that a file is unsigned, which the check would refuse for that very file.
+	noCheck bool
 }
 
 // mutate reads and verifies the list, lets fn change it, and writes it back signed, only if it
@@ -538,7 +556,7 @@ func (s *Sharing) mutateWith(ctx context.Context, docID string, o mutateOpts, fn
 		if s.afterRead != nil {
 			s.afterRead()
 		}
-		if !o.recover && s.Adapter != nil {
+		if !o.recover && !o.noCheck && s.Adapter != nil {
 			if err := s.Adapter.checkDocumentByID(ctx, docID, before); err != nil {
 				if !raced && errors.Is(err, ErrDowngrade) && !errors.Is(err, ErrForgedFrame) {
 					// A client that completed a switch between the read of the record and the
@@ -720,6 +738,19 @@ func PendingHook(sharing *Sharing) func(ctx context.Context, target string) (pen
 	}
 }
 
+// UnsignedHook returns the function to set as saver.Saver.UnsignedCheck: the IDs of the documents
+// UnsignedDocs lists (a re-key left a file saved unsigned). It is a full scan of the keys: records.
+func UnsignedHook(sharing *Sharing) func(ctx context.Context, target string) ([]string, error) {
+	return func(ctx context.Context, _ string) ([]string, error) {
+		docs, err := sharing.UnsignedDocs(ctx)
+		var out []string
+		for _, d := range docs {
+			out = append(out, d.Doc)
+		}
+		return out, err
+	}
+}
+
 // finishAttempts is how many times finish re-keys a document whose list changed while it
 // was being re-keyed.
 const finishAttempts = 5
@@ -767,7 +798,8 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string, ro repairOpts) 
 		if s.beforeFlip != nil {
 			s.beforeFlip()
 		}
-		if _, err = s.mutate(ctx, docID, func(rec *sharedRecord) (bool, error) {
+		var flipSeq uint64
+		if flipRec, merr := s.mutate(ctx, docID, func(rec *sharedRecord) (bool, error) {
 			if !rec.Pending && (rec.Signed || !signs) {
 				return false, nil
 			}
@@ -792,8 +824,10 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string, ro repairOpts) 
 			rec.Signed = rec.Signed || signs
 			flipped = signs
 			return true, nil
-		}); err != nil {
-			return n, nil, nil, err
+		}); merr != nil {
+			return n, nil, nil, merr
+		} else {
+			flipSeq = flipRec.Seq
 		}
 		if !again {
 			if flipped {
@@ -810,13 +844,149 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string, ro repairOpts) 
 					return n, nil, nil, err
 				}
 				if len(late) > 0 {
-					return n, nil, nil, fmt.Errorf("%w: %w: %s"+unsignedHint, ErrUnsignedAfterFlip, ErrForgedFrame, strings.Join(late, ", "))
+					sort.Strings(late)
+					named := listCapped(late)
+					if merr := s.markUnsignedLate(ctx, docID, late, flipSeq); merr != nil {
+						return n, nil, nil, fmt.Errorf("%w: %w: %s"+unsignedHint+" (the document could not be marked for UnsignedDocs: %w)", ErrUnsignedAfterFlip, ErrForgedFrame, named, merr)
+					}
+					return n, nil, nil, fmt.Errorf("%w: %w: %s"+unsignedHint, ErrUnsignedAfterFlip, ErrForgedFrame, named)
 				}
+			}
+			// Tidying the mark never fails a re-key that worked: if the files cannot be looked
+			// at, the mark stays (UnsignedDocs keeps listing the document) and the next re-key
+			// or Repair tries again.
+			if err := s.clearUnsignedLate(ctx, docID); err != nil {
+				log.Printf("encrypt: %s: the unsigned-late mark could not be checked and was kept: %v", docID, err)
 			}
 			return n, nil, nil, nil
 		}
 	}
 	return n, nil, nil, docstore.ErrConflict
+}
+
+// unsignedLateCap is how many file ids the signed record and the error text keep when the second
+// look finds unsigned files: the ids come from the store's listing, so a store writer could
+// otherwise grow the record, and the error, without bound.
+const unsignedLateCap = 64
+
+// listCapped joins the ids (sorted) with commas, at most unsignedLateCap of them, and says how
+// many more there were.
+func listCapped(files []string) string {
+	if len(files) <= unsignedLateCap {
+		return strings.Join(files, ", ")
+	}
+	return fmt.Sprintf("%s ... and %d more", strings.Join(files[:unsignedLateCap], ", "), len(files)-unsignedLateCap)
+}
+
+// markUnsignedLate records in the signed record (still Signed, not Pending) the files the second
+// look found unsigned, so UnsignedDocs lists the document from any client until it is settled.
+// It keeps the first unsignedLateCap ids (by id) and the total count. A new mark replaces the
+// one before and keeps its Since.
+//
+// The write skips the cross-check with the files (it would refuse the very file it records), so
+// it applies only to the record the flip just wrote: wantSeq is that record's seq, and a
+// different one (a store writer put back an older signed record, or a client changed the list)
+// is refused rather than signed again, which would make the replay the truth. The refusal wraps
+// ErrDowngrade because a replayed record and a concurrent legitimate seq bump are indistinguishable
+// at that point, so a caller seeing ErrDowngrade together with ErrUnsignedAfterFlip should rerun
+// the finishing operation or Repair before treating it as an attack.
+func (s *Sharing) markUnsignedLate(ctx context.Context, docID string, files []string, wantSeq uint64) error {
+	files = slices.Clone(files)
+	sort.Strings(files)
+	count := len(files)
+	if count > unsignedLateCap {
+		files = files[:unsignedLateCap]
+	}
+	_, err := s.mutateWith(ctx, docID, mutateOpts{noCheck: true}, func(rec *sharedRecord) (bool, error) {
+		if rec.Seq != wantSeq {
+			return false, fmt.Errorf("encrypt: the record is no longer the one the re-key wrote (seq %d, want %d): %w", rec.Seq, wantSeq, ErrDowngrade)
+		}
+		if !rec.Signed {
+			return false, nil
+		}
+		if slices.Equal(rec.UnsignedLate, files) && rec.UnsignedLateCount == count {
+			return false, nil
+		}
+		rec.UnsignedLate, rec.UnsignedLateCount = files, count
+		if rec.UnsignedLateSince == 0 {
+			rec.UnsignedLateSince = s.clock().Unix()
+		}
+		return true, nil
+	})
+	if err != nil {
+		return fmt.Errorf("encrypt: marking %s for UnsignedDocs: %w", docID, err)
+	}
+	return nil
+}
+
+// clearUnsignedLate drops the mark once no file of the document is unsigned (the owner sealed
+// them again with AcceptUnsigned, or they were replaced or deleted). It reads the files only
+// when the record carries the mark.
+func (s *Sharing) clearUnsignedLate(ctx context.Context, docID string) error {
+	rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
+	if err != nil || len(rec.UnsignedLate) == 0 {
+		return err
+	}
+	left, err := s.Adapter.unsignedFiles(ctx, docID)
+	if err != nil || len(left) > 0 {
+		return err
+	}
+	_, err = s.mutate(ctx, docID, func(rec *sharedRecord) (bool, error) {
+		if len(rec.UnsignedLate) == 0 {
+			return false, nil
+		}
+		rec.UnsignedLate, rec.UnsignedLateCount, rec.UnsignedLateSince = nil, 0, 0
+		return true, nil
+	})
+	return err
+}
+
+// UnsignedDoc is a document whose re-key ended in ErrUnsignedAfterFlip: the record says Signed
+// and is not pending, but Files were saved unsigned in the last steps and are refused as forged.
+type UnsignedDoc struct {
+	Doc string
+	// Files are the ids of the files that were found unsigned: at most 64 (the first by id),
+	// Count is how many there were in all.
+	Files []string
+	Count int
+	// Since is when the re-key found them.
+	Since time.Time
+	// Reason says what to do.
+	Reason string
+}
+
+// UnsignedDocs lists the documents (sorted by ID) the re-key left with a late unsigned file (the
+// error ErrUnsignedAfterFlip): the ones PendingDocs does not list, because their record is
+// not pending, and RepairAll skips as SkipForged. The owner checks the files are theirs and runs
+// Repair with AcceptUnsigned, which empties the entry. It reads each record, as PendingDocs does;
+// a record that does not verify is skipped and reported in the error, joined.
+func (s *Sharing) UnsignedDocs(ctx context.Context) ([]UnsignedDoc, error) {
+	metas, err := s.Store.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []UnsignedDoc
+	var errs []error
+	for _, m := range metas {
+		doc, ok := strings.CutPrefix(m.ID, KeysPrefix)
+		if !ok || m.ID == IndexKey || !docfile.ValidID(doc) {
+			continue
+		}
+		rec, _, err := loadRecord(ctx, s.Store, doc, s.verifiers(), s.SeqFloor)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if len(rec.UnsignedLate) > 0 {
+			d := UnsignedDoc{Doc: doc, Files: slices.Clone(rec.UnsignedLate), Count: max(rec.UnsignedLateCount, len(rec.UnsignedLate)), Reason: "a file was saved unsigned while the re-key was finishing and is refused as forged: if it is yours, run Repair with AcceptUnsigned"}
+			if rec.UnsignedLateSince > 0 {
+				d.Since = time.Unix(rec.UnsignedLateSince, 0)
+			}
+			out = append(out, d)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Doc < out[j].Doc })
+	return out, errors.Join(errs...)
 }
 
 // Add shares a document with a key. confirmed is the fingerprint the owner says they checked
