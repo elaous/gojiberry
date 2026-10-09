@@ -886,7 +886,10 @@ func listCapped(files []string) string {
 // The write skips the cross-check with the files (it would refuse the very file it records), so
 // it applies only to the record the flip just wrote: wantSeq is that record's seq, and a
 // different one (a store writer put back an older signed record, or a client changed the list)
-// is refused rather than signed again, which would make the replay the truth.
+// is refused rather than signed again, which would make the replay the truth. The refusal wraps
+// ErrDowngrade because a replayed record and a concurrent legitimate seq bump are indistinguishable
+// at that point, so a caller seeing ErrDowngrade together with ErrUnsignedAfterFlip should rerun
+// the finishing operation or Repair before treating it as an attack.
 func (s *Sharing) markUnsignedLate(ctx context.Context, docID string, files []string, wantSeq uint64) error {
 	files = slices.Clone(files)
 	sort.Strings(files)

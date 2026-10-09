@@ -106,6 +106,59 @@ func TestClearUnsignedLateKeepsTheMarkWhileAFileIsUnsigned(t *testing.T) {
 	}
 }
 
+// With more unsigned files than the record lists, settling the listed ones is not enough: a file
+// outside the listed ids is still unsigned, so the mark stays until every file is settled.
+func TestClearUnsignedLateLooksPastTheListedIDs(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	id := w.signedPending(t)
+	const total = unsignedLateCap + 36
+	files := make([]string, total)
+	st := &afterRecordWrite{flaky: w.inner, hook: func() {
+		for i := range total {
+			files[i] = w.legacyFile(t, id, fmt.Sprintf("%012x", i+1))
+		}
+	}}
+	sh := &Sharing{Store: st, Adapter: w.ad, Signer: w.signer}
+	if _, err := sh.Repair(ctx, id); !errors.Is(err, ErrUnsignedAfterFlip) {
+		t.Fatalf("Repair = %v", err)
+	}
+	rec, _, err := loadRecord(ctx, w.inner, id, w.ring.People.OwnerSigners, nil)
+	if err != nil || len(rec.UnsignedLate) != unsignedLateCap || rec.UnsignedLateCount != total {
+		t.Fatalf("record: %d ids, count %d, %v", len(rec.UnsignedLate), rec.UnsignedLateCount, err)
+	}
+	for _, f := range rec.UnsignedLate {
+		if err := w.inner.Delete(ctx, f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.sharing.clearUnsignedLate(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	rec, _, err = loadRecord(ctx, w.inner, id, w.ring.People.OwnerSigners, nil)
+	if err != nil || rec.UnsignedLateCount == 0 {
+		t.Fatalf("the mark was cleared with files outside the listed ids unsigned: %+v, %v", rec, err)
+	}
+	if docs, err := w.sharing.UnsignedDocs(ctx); err != nil || len(docs) != 1 || docs[0].Doc != id {
+		t.Fatalf("UnsignedDocs = %+v, %v", docs, err)
+	}
+	for _, f := range files {
+		if err := w.inner.Delete(ctx, f); err != nil && !errors.Is(err, docstore.ErrNotFound) {
+			t.Fatal(err)
+		}
+	}
+	if err := w.sharing.clearUnsignedLate(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	rec, _, err = loadRecord(ctx, w.inner, id, w.ring.People.OwnerSigners, nil)
+	if err != nil || rec.UnsignedLateCount != 0 || len(rec.UnsignedLate) != 0 {
+		t.Fatalf("the mark stays after every file was settled: %+v, %v", rec, err)
+	}
+	if docs, _ := w.sharing.UnsignedDocs(ctx); len(docs) != 0 {
+		t.Fatalf("UnsignedDocs = %+v", docs)
+	}
+}
+
 // loadFailsAfterSave makes the reads of one file fail once it was written: the re-key worked,
 // the look afterwards cannot read it.
 type loadFailsAfterSave struct {

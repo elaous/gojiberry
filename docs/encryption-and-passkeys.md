@@ -476,7 +476,7 @@ Threat model, store write access only (no owner key):
      and the total (`UnsignedDoc.Count`); the error text names the same 64 and "... and K more". A later mark
      replaces the earlier one and keeps its time. The mark is written only onto the record the re-key just wrote: if
      another record is there by then (an older one put back, or a concurrent change) it is refused, the error says the
-     document "could not be marked", and the replayed record is not signed again. Clearing the mark is best effort: if the
+     document "could not be marked", and the replayed record is not signed again. The refusal wraps `ErrDowngrade` because a replayed record and a concurrent legitimate seq bump are indistinguishable at that point, so a caller seeing `ErrDowngrade` together with `ErrUnsignedAfterFlip` should rerun the finishing operation or `Repair` before treating it as an attack. Clearing the mark is best effort: if the
      files cannot be read when the re-key ends, the mark stays and the re-key still succeeds. `RepairAll` skips it as forged, naming the same document. `Repair`
      or `Recover` with `AcceptUnsigned` clears the mark once no file is unsigned. The field is covered by the record's
      signature, so a store writer cannot add or clear it; older builds ignore it when they read and drop it when they
