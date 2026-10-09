@@ -12,21 +12,28 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// mongoURI is the server the live tests run against. Without TEST_MONGO_URI they skip, and a plain go test
+// still prints ok, so the message says loudly that nothing was tested (a skip once hid a stale test elsewhere
+// in this repo). docs/testing-workflow.md has a no-Docker recipe; CI runs these against a service container
+// and fails on a skip.
+func mongoURI(t *testing.T) string {
+	t.Helper()
+	uri := os.Getenv("TEST_MONGO_URI")
+	if uri == "" {
+		t.Skip("SKIPPED, NOT TESTED: set TEST_MONGO_URI (for example mongodb://127.0.0.1:27017) to a MongoDB server to run the MongoDB backend tests; see docs/testing-workflow.md")
+	}
+	return uri
+}
+
 // TestMongoAdapterConformance only runs against a real MongoDB
 // instance, since the driver has no small operation-level interface
 // to fake the way s3API does for S3 -- FindOne/Find/ReplaceOne return
 // concrete *mongo.SingleResult/*mongo.Cursor types that construct
 // their own internal state from a live connection. Set
 // TEST_MONGO_URI (and optionally TEST_MONGO_DB) to run this in an
-// environment with MongoDB reachable; this sandbox has no Docker
-// daemon available to start one, so it is skipped here. The adapter
-// is still compile-checked by every `go build`/`go vet` in this
-// package.
+// environment with MongoDB reachable. It has run green against MongoDB 7.0.14 under -race.
 func TestMongoAdapterConformance(t *testing.T) {
-	uri := os.Getenv("TEST_MONGO_URI")
-	if uri == "" {
-		t.Skip("TEST_MONGO_URI not set; skipping MongoDB integration test (no live MongoDB in this environment)")
-	}
+	uri := mongoURI(t)
 	db := os.Getenv("TEST_MONGO_DB")
 	if db == "" {
 		db = "docstore_test"
@@ -37,16 +44,18 @@ func TestMongoAdapterConformance(t *testing.T) {
 		if err != nil {
 			t.Fatalf("New: %v", err)
 		}
+		// Every subtest starts from an empty store: CheckAdapter calls the factory once per subtest and a
+		// collection left over from the one before would break "empty store lists as empty".
+		if err := a.coll.Drop(ctx); err != nil {
+			t.Fatalf("Drop: %v", err)
+		}
 		return a
 	})
 }
 
 // The conditional save needs a real MongoDB as well (see above).
 func TestMongoAdapterSaveIf(t *testing.T) {
-	uri := os.Getenv("TEST_MONGO_URI")
-	if uri == "" {
-		t.Skip("TEST_MONGO_URI not set; skipping MongoDB integration test (no live MongoDB in this environment)")
-	}
+	uri := mongoURI(t)
 	ctx := context.Background()
 	docstore.CheckConditional(t, func() docstore.ConditionalAdapter {
 		a, err := New(ctx, uri, "docstore_test_conditional")
@@ -79,10 +88,7 @@ func TestMongoPrefixFilterQuotesThePrefix(t *testing.T) {
 
 // ListPrefix against a real MongoDB (see above).
 func TestMongoAdapterListPrefix(t *testing.T) {
-	uri := os.Getenv("TEST_MONGO_URI")
-	if uri == "" {
-		t.Skip("TEST_MONGO_URI not set; skipping MongoDB integration test (no live MongoDB in this environment)")
-	}
+	uri := mongoURI(t)
 	ctx := context.Background()
 	docstore.CheckPrefixLister(t, func() docstore.Adapter {
 		a, err := New(ctx, uri, "docstore_test_prefix")
@@ -96,10 +102,7 @@ func TestMongoAdapterListPrefix(t *testing.T) {
 
 // The conditional delete needs a real MongoDB too (see above).
 func TestMongoAdapterDeleteIf(t *testing.T) {
-	uri := os.Getenv("TEST_MONGO_URI")
-	if uri == "" {
-		t.Skip("TEST_MONGO_URI not set; skipping MongoDB integration test (no live MongoDB in this environment)")
-	}
+	uri := mongoURI(t)
 	ctx := context.Background()
 	a, err := New(ctx, uri, "docstore_test_conditional")
 	if err != nil {

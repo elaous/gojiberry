@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-6 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, #111, #112, this PR); the full suite runs on main after the
+7 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, #111, #112, #113, this PR); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -421,8 +421,10 @@ a way to avoid hitting the limit meanwhile.
     (`docstore/expiry.go`) delete unconditionally under an in-process lock. Plan: where the store is a
     `ConditionalDeleter`, delete the document with `DeleteIf` on the digest read, and keep a changed document.
     Avoid: one process per store.
-11. **MongoDB live tests.** Plan: run the backend tests against a live server in CI (`TEST_MONGO_URI`; see the
-    note on store backends above). Avoid: run them locally against a server before relying on the backend.
+11. **Done (this PR): MongoDB live tests.** They now run in CI against a `mongo:7` service container (`mongo-backend`
+    job, which fails on a skip), skip loudly with `SKIPPED, NOT TESTED`, and `docs/testing-workflow.md` has a Docker and a
+    no-Docker recipe. They passed against MongoDB 7.0.14 under `-race`; the first real run exposed a test setup bug (the
+    conformance factory did not empty its collection between subtests), fixed here. The adapter itself passed.
 12. **Log witnesses (directory).** Plan: a witness protocol where independent parties co-sign heads. Avoid:
     compare heads between two auditors by hand.
 13. **Directory key rotation versus the log pseudonym.** Plan: keep older entries matchable after the retired
@@ -665,8 +667,7 @@ New entries:
 45. **Unenrolled-address entry numbering by a holder of the directory key.** Kind: inherent while the address is not
     enrolled; enrolling an owner key closes it ([limits register item 7](limits-register.md#the-key-directory),
     point (d)). Priority: low.
-46. **Mongo live tests skip without `TEST_MONGO_URI`.** Kind: fixable. Same as item 11, which holds the plan: run
-    in CI, or document how to run them locally (a one-line `docker run` and the variable). Priority: low.
+46. **Done (this PR): see item 11.**
 47. **Already listed, kept as they are (no duplicate entry):** item 15 (stale-tab renewal throttle), 16 (per-process
     public counters), 17 (snapshot overshoot), 19 (report dedupe key, slow-upload rate floor, old env-var warning,
     wide-cap migration note), 20 (showcase in-memory originals), 21 (showcase directory publish with proof of

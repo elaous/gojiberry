@@ -47,13 +47,42 @@ applies the migrations with Atlas and runs the tests (`make test` passes the Com
 it used to set only `DATABASE_URL`, which the tests ignore, so they skipped against port 5432). CI runs the same tests in the `canvas-app-postgres` job
 (`.github/workflows/ci.yml`) against a Postgres service container and fails if they skip.
 
+## MongoDB-backed tests
+
+The tests in `docstore/backends/mongo` (conformance, `SaveIf`, `DeleteIf`, `ListPrefix`, the prefix filter and the
+head-reader check) need a real MongoDB; the driver has nothing small enough to fake. They **skip** without
+`TEST_MONGO_URI`, and a plain `go test` still prints `ok`, so each skip message starts with `SKIPPED, NOT TESTED`.
+They passed against MongoDB 7.0.14 with `-race`; the first real run found that the conformance factory did not
+empty its collection between subtests (a test setup bug, not an adapter bug), which the skip had been hiding.
+
+With Docker:
+
+```
+docker run -d --name mongotest -p 27017:27017 mongo:7
+(cd docstore/backends && TEST_MONGO_URI=mongodb://127.0.0.1:27017 go test -count=1 -race -v ./mongo/)
+docker rm -f mongotest
+```
+
+Without Docker, a throwaway server from the official tarball (Linux x86-64; pick the build that matches your
+distribution from the MongoDB download page):
+
+```
+D=$(mktemp -d)
+curl -sS -o $D/m.tgz https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu2204-7.0.14.tgz
+tar xzf $D/m.tgz -C $D && mkdir $D/data
+$D/mongodb-linux-x86_64-ubuntu2204-7.0.14/bin/mongod --dbpath $D/data --port 27018 --bind_ip 127.0.0.1 \
+    --fork --logpath $D/log.txt
+(cd docstore/backends && TEST_MONGO_URI=mongodb://127.0.0.1:27018 go test -count=1 -race -v ./mongo/)
+kill $(pgrep -f "mongod --dbpath $D/data"); rm -rf $D
+```
+
 ## Other tests that skip without an external service or tool
 
 None of these change behaviour; they only skip. Run each with `-v` and check that it did not skip.
 
 | Test | Needs | How to run |
 | --- | --- | --- |
-| `docstore/backends/mongo`: `TestMongoAdapterConformance`, `TestMongoAdapterSaveIf` and two more | A MongoDB server, `TEST_MONGO_URI` (optional `TEST_MONGO_DB`, default `docstore_test`) | `docker run -d --name mongotest -p 27017:27017 mongo:7`, then `cd docstore/backends && TEST_MONGO_URI=mongodb://127.0.0.1:27017 go test -count=1 -v ./mongo/`, then `docker rm -f mongotest`. Not in CI yet: [roadmap](roadmap.md) item 11. |
+| `docstore/backends/mongo`: `TestMongoAdapterConformance`, `TestMongoAdapterSaveIf` and four more | A MongoDB server, `TEST_MONGO_URI` (optional `TEST_MONGO_DB`, default `docstore_test`) | See "MongoDB-backed tests" above. CI runs them in the `mongo-backend` job and fails on a skip. |
 | `internal/e2etest` browser tests (used by `examples/canvas-*-demo`, `domrt-bench` and others) | A Chromium or Chrome binary: `CHROMIUM` or `PLAYWRIGHT_CHROMIUM`, `/opt/pw-browsers/chromium`, or `chromium`/`google-chrome` on `PATH` | `CHROMIUM=/path/to/chromium go test -count=1 -v ./...` in the example's directory. |
 | `examples/wasm-components-demo`: `TestScreenshot` | Opt-in, not a service: `OUT_FILE` and a Chromium | `make screenshot` in that directory (it sets `OUT_FILE`). |
 
