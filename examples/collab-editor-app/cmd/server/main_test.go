@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 // Only a page served by this server may open the socket: another site in the same

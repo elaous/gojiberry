@@ -76,9 +76,9 @@ wasm-lint:
 # module boundaries and `lint`/`wasm-lint` therefore never see them. The binary is called by
 # absolute path from inside each module directory so that module's own go.mod is used, with
 # the root .golangci.yml via an absolute --config. The Gio modules are linted as
-# GOOS=js GOARCH=wasm, mirroring `modules`. Note the root config excludes the `examples`
-# path, so the examples/* modules currently pass without being analysed; only
-# docstore/backends and xango/gio are checked in depth until that exclusion is lifted.
+# GOOS=js GOARCH=wasm, mirroring `modules`. The examples are linted like the library
+# (the root config has no path exclusions): the root-module ones by lint/wasm-lint, the
+# nested ones (examples/*/go.mod) here.
 .PHONY: lint-modules
 lint-modules:
 	@set -e; bin="$$(mktemp -d)/golangci-lint"; trap 'rm -rf "$$(dirname "$$bin")"' EXIT; \

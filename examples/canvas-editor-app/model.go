@@ -17,7 +17,6 @@
 package main
 
 import (
-	"encoding/json"
 	"sort"
 	"unicode"
 	"unicode/utf8"
@@ -80,9 +79,6 @@ func (d *document) Len() int { return d.buf.Len() }
 
 // runeAt returns the rune at index i (0 <= i < Len()).
 func (d *document) runeAt(i int) rune { return d.buf.At(i).Rune }
-
-// isNewline reports whether character i is a line break.
-func (d *document) isNewline(i int) bool { return i >= 0 && i < d.Len() && d.runeAt(i) == '\n' }
 
 // fmtAt returns the format at index i (0 <= i < Len()).
 func (d *document) fmtAt(i int) charFormat { return d.buf.At(i).Fmt }
@@ -188,22 +184,6 @@ func (d *document) selectAll() {
 	d.hist.typingAt = 0 // moving the caret ends the step that typing was
 	d.Anchor, d.Cursor = 0, d.Len()
 	d.ExtraCursors = nil
-}
-
-// moveCursor sets the *primary* cursor to idx (clamped in range),
-// extending its selection instead of collapsing it when extend is
-// true. Used only for mouse-drag selection, which can only ever
-// follow one pointer path and so only ever extends the primary
-// regardless of how many other cursors are active -- everywhere else
-// (arrow keys, word jumps, Home/End) uses moveCursors instead, to move
-// every live cursor at once.
-func (d *document) moveCursor(idx int, extend bool) {
-	d.hist.typingAt = 0 // moving the caret ends the step that typing was
-	idx = clamp(idx, 0, d.Len())
-	d.Cursor = idx
-	if !extend {
-		d.Anchor = idx
-	}
 }
 
 // moveCursors moves every live cursor to newPos(currentPos), extending
@@ -464,61 +444,4 @@ func (d *document) transformCaseNow(upper bool) {
 		}
 		d.transformCaseRange(lo, hi, upper)
 	}
-}
-
-// run is a maximal span of consecutive characters sharing the same
-// format -- the unit a document (de)serializes to/from, and the unit
-// layout.go measures/draws in one font-switch instead of
-// per-character.
-type run struct {
-	Text   string `json:"text"`
-	Bold   bool   `json:"bold"`
-	Italic bool   `json:"italic"`
-}
-
-// runs merges d's per-character format into the fewest runs that
-// reproduce it exactly.
-func (d *document) runs() []run {
-	var out []run
-	n := d.Len()
-	for i := 0; i < n; i++ {
-		c := d.buf.At(i)
-		if m := len(out); m > 0 && out[m-1].Bold == c.Fmt.Bold && out[m-1].Italic == c.Fmt.Italic {
-			out[m-1].Text += string(c.Rune)
-			continue
-		}
-		out = append(out, run{Text: string(c.Rune), Bold: c.Fmt.Bold, Italic: c.Fmt.Italic})
-	}
-	return out
-}
-
-// marshalDocument serializes d to JSON via its run-length encoding
-// (compact, and a natural fit for a future real rich-text format;
-// unchanged by the move to a GapBuffer, so a document saved before
-// that change still loads correctly). Cursors (beyond the primary,
-// which the caller resets on load anyway -- see loadDocument) aren't
-// persisted; a reload always starts back at a single cursor.
-func marshalDocument(d *document) (string, error) {
-	b, err := json.Marshal(d.runs())
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
-}
-
-// unmarshalDocument rebuilds a document from marshalDocument's output.
-func unmarshalDocument(data string) (*document, error) {
-	var runs []run
-	if err := json.Unmarshal([]byte(data), &runs); err != nil {
-		return nil, err
-	}
-	var items []char
-	for _, r := range runs {
-		for _, ch := range r.Text {
-			items = append(items, char{Rune: ch, Fmt: charFormat{Bold: r.Bold, Italic: r.Italic}})
-		}
-	}
-	d := &document{}
-	d.buf.InsertAt(0, items...)
-	return d, nil
 }

@@ -8,7 +8,7 @@ its own role.
 
 It's a separate Go module (like `examples/canvas-app`), `replace`-ing
 `github.com/elaous/gojiberry` with the local checkout, so it depends on
-[`nhooyr.io/websocket`](https://nhooyr.io/websocket) without pulling
+[`github.com/coder/websocket`](https://github.com/coder/websocket) without pulling
 that into the root module.
 
 ## How it works

@@ -43,7 +43,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("opening database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Println("closing the database:", err)
+		}
+	}()
 	if err := db.Ping(); err != nil {
 		log.Fatalf("pinging database: %v", err)
 	}
@@ -146,7 +150,9 @@ func newMux(store *canvas.Store, reloader *devreload.Reloader) *http.ServeMux {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+		if err := json.NewEncoder(w).Encode(map[string]bool{"ok": true}); err != nil {
+			log.Println("writing the save response:", err)
+		}
 	})
 
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
