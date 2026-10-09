@@ -115,6 +115,7 @@ default that works in one process. Pass your own in `passkey.Config` (or the sto
 |---|---|---|---|
 | `Store` (+ optional `Updater`, `Creator`) | accounts and credentials; `Updater` changes one account atomically (the function may run again on a conflict), `Creator` makes one only if none exists | `MemoryStore`; `AdapterStore` (compare-and-set over a `docstore.ConditionalAdapter`, else this process's lock) | SQL tables, anything with a transaction or conditional write |
 | `ChallengeStore` | started ceremonies; `Take` must be atomic so a challenge is good once | `MemoryChallenges` (10,000 at most, swept every 5 s) | `StoreChallenges` (over a `docstore.ConditionalAdapter`: replicas on one store share ceremonies; `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store`), Redis `GETDEL`, a table with a delete-returning |
+| `auth.SessionStore` (`auth.Config.Sessions`, `Manager.SetSessionStore`) | the bearer sessions and OpenID Connect login states of the session manager that passkey sign-in also mints its sessions through; `TakeState` is single use | `auth.MemorySessionStore` (100,000 of each, in the process) | `sessionstore.Store` (over a `docstore.ConditionalAdapter`: replicas on one store share sessions; `GOJIBERRY_DOCSTORE_SESSIONS=store`), Redis |
 | `Limiter` | per client and route group: allowed now, or wait this long | `RateLimiter` (token bucket per address and group: 20 at once, 30 a minute) | Redis, a gateway; `Unlimited{}` to switch off |
 | `Config.ClientIP` | who the client is for the limiter | the remote address; `TrustedProxies(cidrs...)` reads `X-Forwarded-For` only from your proxies | your own function |
 
@@ -142,9 +143,27 @@ clock, so skew moves it by seconds), and `Sweep` (every minute in the server) de
 used and long-unreadable records. At most 10,000 wait (`ErrBusy`, 503); a live one is never evicted, and each replica
 counts from its last listing, so replicas can overshoot by what they write between listings. With
 `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store` on a store without conditional writes the server refuses to start.
-**This is not all that replicas need:** the bearer session a sign-in returns is held by that process's
-`auth.Manager` (as are OpenID Connect login states), so behind several replicas route by the bearer token or run
-one until the session store is pluggable (roadmap, backlog item 7).
+**Shared sessions.** The bearer session a sign-in returns (a passkey one, minted through `Manager.StartSession`, or
+an OpenID Connect one) is held by the `auth.Manager`'s `SessionStore`. By default that is in the process, so behind
+several replicas a token is known only to the replica that issued it. With `GOJIBERRY_DOCSTORE_SESSIONS=store`
+(`auth/sessionstore`) the records are in the store: `auth/session/<expiry hour>/<sha256 of the token>` holds the
+user (ID, name, username, picture, verified e-mail and its flag), the issue time and the expiry; the token is never
+stored, so someone who reads the store cannot sign in with it. A request reads its record (no cache: a logout on
+any replica is seen by the next request on every other; a cache would keep a logged-out token alive for as long
+as it lives). Expiry is the stored `Expires` checked on every read and does not slide (as in memory), so
+`SessionTTL` is also the absolute age. `auth/state/<expiry minute>/<hash>` holds a login state (provider, return
+URL, PKCE verifier, nonce), consumed once by `DeleteIf` or, where that is missing (an encrypting adapter has none
+for an encrypted id), by a conditional swap to a used marker, so a replayed `state` fails on every replica and of
+any number of concurrent callbacks exactly one wins. The sweep (every minute) deletes by the expiry number in the
+record name without reading anything; used markers go the same way. At most 100,000 sessions and 10,000 pending
+logins wait (`auth.ErrStoreFull`, 503); a live record is never evicted, and each replica counts from its last
+sweep, so replicas can overshoot by what they write between sweeps. A store that cannot answer signs nobody in
+(401), and a logout it cannot do is a 503, never a silent success. The records are not in `encrypt.DefaultSkip`
+(they hold names and e-mail addresses and the PKCE verifier): under an encrypting adapter they are encrypted like
+any file (`passkey/` and `auth/` are not skipped), `RepairAll` treats each as an item of its own, and the document
+API refuses both prefixes in every mode. `store` on a store without conditional writes prints a warning that
+names the fix and keeps sessions in memory; `store-required` refuses to start. Clock skew moves expiry by the
+skew (limits register item 11). What remains per process is listed in the roadmap, backlog item 55.
 A store without `Updater`/`Creator` still works in one process; behind several replicas it
 needs them (a conditional write), or two sign-ins can overwrite each other's counter update.
 

@@ -797,3 +797,110 @@ func TestPasskeyChallengesModeIsCheckedAndNeedsConditionalWrites(t *testing.T) {
 		t.Fatalf("store mode on a store without conditional writes must refuse, not fall back: %v", err)
 	}
 }
+
+func TestSessionsModeSharesPasskeySessionsBetweenReplicas(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	const rp, origin = "opendocs.io", "https://opendocs.io"
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_RPID", rp)
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_ORIGINS", origin)
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES", "store")
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_NAME", "opendocs")
+	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "store")
+	mem := docstore.NewMemoryAdapter()
+	replica := func() http.Handler {
+		srv := docstore.NewServer(mem, "memory")
+		m, err := withPasskeys(ctx, srv, mem, nil, docstore.MemoryLimiters())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := withSessions(ctx, mem, m); err != nil {
+			t.Fatal(err)
+		}
+		return srv.WithAuth(m).Handler()
+	}
+	a, b := replica(), replica()
+	do := func(h http.Handler, method, path, token string, body []byte) (int, map[string]any) {
+		req := httptest.NewRequest(method, path, bytes.NewReader(body))
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var out map[string]any
+		_ = json.NewDecoder(rec.Body).Decode(&out)
+		return rec.Code, out
+	}
+	code, begin := do(a, "POST", "/auth/passkey/register/begin", "", []byte(`{"email":"ana@opendocs.io"}`))
+	if code != 200 {
+		t.Fatalf("begin: %d %v", code, begin)
+	}
+	raw, _ := json.Marshal(map[string]any{"publicKey": begin["options"].(map[string]any)["publicKey"]})
+	reg, err := webauthntest.New(rp).Create(raw, origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, out := do(b, "POST", "/auth/passkey/register/finish?token="+begin["token"].(string), "", reg)
+	if code != 200 || out["auth_token"] == nil {
+		t.Fatalf("finish on B: %d %v", code, out)
+	}
+	tok := out["auth_token"].(string)
+	if code, _ := do(a, "GET", "/auth/me", tok, nil); code != 200 {
+		t.Fatalf("a session made on B is unknown to A: %d", code)
+	}
+	if metas, _ := docstore.ListPrefix(ctx, mem, docstore.SessionPrefix); len(metas) != 1 {
+		t.Fatalf("session records: %+v", metas)
+	}
+	if code, _ := do(a, "POST", "/auth/logout", tok, nil); code != http.StatusNoContent {
+		t.Fatal(code)
+	}
+	if code, _ := do(b, "GET", "/auth/me", tok, nil); code != http.StatusUnauthorized {
+		t.Fatalf("logout on A, then B: %d", code)
+	}
+}
+
+func TestSessionsModeIsCheckedAndFallsBackOrRefusesWithoutConditionalWrites(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m, err := auth.NewManager(ctx, auth.Config{BaseURL: "https://opendocs.io"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := plainAdapter{docstore.NewMemoryAdapter()}
+
+	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "redis")
+	if err := withSessions(ctx, plain, m); err == nil {
+		t.Fatal("an unknown mode is an error")
+	}
+	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "store")
+	logs := captureLog(t)
+	if err := withSessions(ctx, plain, m); err != nil {
+		t.Fatalf("store falls back, it does not stop: %v", err)
+	}
+	if !strings.Contains(logs.String(), "WARNING") || !strings.Contains(logs.String(), "conditional writes") || !strings.Contains(logs.String(), "store-required") {
+		t.Errorf("the warning names the problem and the fix: %q", logs)
+	}
+	tok, _ := m.StartSession(auth.User{ID: "passkey:1"})
+	req := httptest.NewRequest("GET", "/auth/me", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	if _, ok := m.CurrentUser(req); !ok {
+		t.Error("the fallback keeps working sessions in memory")
+	}
+	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "store-required")
+	if err := withSessions(ctx, plain, m); err == nil || !strings.Contains(err.Error(), "conditional") {
+		t.Fatalf("store-required on such a store must refuse: %v", err)
+	}
+	// Memory with several replicas declared says what that means.
+	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "")
+	t.Setenv("GOJIBERRY_DOCSTORE_REPLICAS", "3")
+	logs = captureLog(t)
+	if err := withSessions(ctx, plain, m); err != nil || !strings.Contains(logs.String(), "unknown to the others") {
+		t.Errorf("%v %q", err, logs)
+	}
+	// No sign-in at all: a set variable is reported, not obeyed.
+	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "store")
+	logs = captureLog(t)
+	if err := withSessions(ctx, docstore.NewMemoryAdapter(), nil); err != nil || !strings.Contains(logs.String(), "ignored") {
+		t.Errorf("%v %q", err, logs)
+	}
+}

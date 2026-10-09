@@ -5,10 +5,20 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-0 of 10 since the last full run (full run on the rewritten main, 82d6cad). PRs A, B and C are no longer paused.
+2 of 10 since the last full run (#98, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are no longer paused.
 
 ## Notes for upgraders
 
+- **Shared sign-in sessions (`GOJIBERRY_DOCSTORE_SESSIONS`).** New, default `memory`: nothing changes for a
+  single process. IDs starting with `auth/session/` or `auth/state/` (any case) are now reserved from `/docs` in
+  every mode, like `ratelimit/`: an existing document with such an ID becomes unreachable through the server, so
+  rename it in the store before upgrading. With `store` the sessions and OpenID Connect login states of the session
+  manager live in the store under those prefixes (a session signed in before the switch is not in the store: people
+  sign in again once; switching back to `memory` likewise ends the stored sessions). `store` needs conditional
+  writes: on a store without them the server prints a warning that names the fix and keeps sessions in memory;
+  `store-required` refuses to start instead. Go API: `auth.Config.Sessions`, `Manager.SetSessionStore`, the
+  `auth.SessionStore` interface (`MemorySessionStore` is the default) and the package `auth/sessionstore`; `auth`
+  exports `LoginState` and `ErrStoreFull`. Details: [encryption-and-passkeys.md](encryption-and-passkeys.md) B.1.
 - **Reserved document IDs.** IDs starting with `directory/` are reserved for the key directory
   (like `acl:` and `collab:`): `docstore.Server` refuses to read, write, list or delete them
   through `/docs`, so an existing document with such an ID becomes unreachable through the
@@ -266,8 +276,8 @@ single-process default of each. To build when a deployment needs it:
    token bucket in the process.
 2. **A shared challenge store: done through the store** (`passkey.StoreChallenges`,
    `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store`, atomic `Take` by `DeleteIf` or a conditional used marker). Left:
-   Redis behind the same interface, for a deployment that has one (no client ships); and the bearer sessions of
-   `auth.Manager`, which are per process (see backlog item 7). Default: memory.
+   Redis behind the same interface, for a deployment that has one (no client ships). The bearer sessions of
+   `auth.Manager` are shared too now (`GOJIBERRY_DOCSTORE_SESSIONS=store`, backlog item 7 follow-up). Default: memory.
 3. **Account stores with a conditional write.** `AdapterStore` already does compare-and-set
    (`Updater`, `Creator`) over any `docstore.ConditionalAdapter`; the S3, Mongo and Postgres
    adapters get it from #55. To check once #55 merges: run the passkey tests against each
@@ -360,13 +370,21 @@ a way to avoid hitting the limit meanwhile.
    RESP client with auth, TLS, timeouts and cluster behaviour is not small; the store-backed one works on every
    backend that has conditional writes (memory, localfs, sqlite, postgres, mongo, s3; the blob backend has none, so
    `store` mode refuses to start on it), and the `ChallengeStore`
-   interface is unchanged for an embedder who wants Redis `GETDEL`. **Found, not fixed (needs its own item):
-   bearer sessions are per process.** `auth.Manager` keeps sessions (and OpenID Connect login states) in an
+   interface is unchanged for an embedder who wants Redis `GETDEL`. **Found then, fixed by PR A below (done):
+   bearer sessions were per process.** `auth.Manager` keeps sessions (and OpenID Connect login states) in an
    in-memory `tokenStore`, so a token issued by replica A is unknown to replica B whatever `ChallengeStore` is
-   used: a passkey sign-in finished on B only helps requests that reach B. Avoid: sticky routing by the bearer
-   token or one replica, until `auth.Manager` takes a pluggable session store (needs a `User` record, expiry and
-   logout through the shared store, and a bound on its size). Avoid for the rest: nothing; the account store
-   (`AdapterStore`) was already shareable.
+   used: a passkey sign-in finished on B only helps requests that reach B. Was: sticky routing by the bearer
+   token or one replica. **Done (PR A, `auth/sessionstore`, `GOJIBERRY_DOCSTORE_SESSIONS=memory|store|store-required`):**
+   `auth.Manager` takes a `SessionStore` (default `MemorySessionStore`, behaviour unchanged). The store-backed one
+   keeps `auth/session/<expiry hour>/<sha256 of the token>` (the user, issued-at and expiry; the token is never
+   stored) and `auth/state/<expiry minute>/<hash>` (OpenID Connect login states, nonce and PKCE verifier included,
+   single use by `DeleteIf` or a conditional used marker). No cache: every request is one read, so a logout is seen
+   on every replica at once. No sliding expiry (the in-memory one does not slide either): `SessionTTL` is the
+   absolute age. Bounded (100,000 sessions, 10,000 pending logins, `ErrStoreFull`/503, a live record is never
+   evicted; counts per replica as for challenges). The sweep deletes by record name alone, reading nothing, which
+   also removes used markers whatever the listing shows. Records are encrypted under an encrypting adapter
+   (they hold names and e-mail addresses, so they are not in `encrypt.DefaultSkip`). Left, listed as items 53 to 55
+   below. The account store (`AdapterStore`) was already shareable.
 8. **Done:** **concurrent double first-passkey UX.** Was: two tabs of a signed-in identity with no passkey account
    begin its first passkey; the account is created by a conditional create, so exactly one won and nothing was
    overwritten or duplicated, but the other got the `410` of an expired challenge. Now it gets `409`
@@ -431,14 +449,14 @@ a way to avoid hitting the limit meanwhile.
 
 Numbers 1 to 26 above are kept as they are, because other documents link them (backlog items 3, 4, 5, 7, 9, 10 and 12).
 Items 1 to 8 are done and merged (1 and 2 earlier; 3 `RepairAll`, 4 the no-signer window, 5 revoked-signer tooling,
-6 the SSH key tag, 7 the shared `ChallengeStore`, 8 the double first-passkey 409). Items 9 to 26 are open (the sessions part of item 7 and the
+6 the SSH key tag, 7 the shared `ChallengeStore`, 8 the double first-passkey 409). Items 9 to 26 are open (the sessions part of item 7 is done by PR A; the
 follow-ups in item 3 are taken over by the queued PRs below). New entries start at 27, in order of urgency. **Kind** says `fixable` or
 `inherent` (a real limit: it points to the [limits register](limits-register.md) and will not be fixed, only
 reduced or documented).
 
 **Queue order (the next PR starts only when the one before is merged):**
 
-1. **PR A: shared sign-in sessions.** `auth.Manager` session and OpenID Connect login-state store, store-backed, so a
+1. **PR A: shared sign-in sessions. Done (this PR).** `auth.Manager` session and OpenID Connect login-state store, store-backed, so a
    token issued by replica A is valid on replica B (the "found, not fixed" part of item 7; also the last line of the
    passkey infrastructure backlog above, item 2).
 2. **PR B: passkey challenge store.** A cap strategy that neither overshoots across replicas nor costs O(N): evaluate
@@ -638,3 +656,21 @@ Suggested order of the accessibility group: 48, 51, 49, 50, 52.
 **Urgency order of the open work:** the queue above, then 27 (lint), 28, 32, 31, 30, 33, 34, 35, 36, 37,
 the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. Inherent entries: 41 to 45 and part of
 30 and 33.
+
+53. **Session store reads once per authenticated request.** Kind: inherent to correct logout across replicas. What:
+    `sessionstore.Store.GetSession` has no cache, so each request with a bearer token is one `Load` of the shared
+    store (on a remote backend, a network round trip). Why: a positive cache would keep a logged-out token working
+    on other replicas for as long as it lives. Plan: if the cost matters, add an optional per-process cache with a
+    stated maximum staleness (for example 5 seconds) behind an explicit option; off by default. Priority: low.
+    Where: `auth/sessionstore`.
+54. **Login routes write to the store without a rate limit.** Kind: fixable. What: `GET /auth/<provider>/login` is
+    unauthenticated and, in `store` mode, creates a record (bounded at 10,000 pending logins, then 503, so a flood can
+    keep real logins out for up to the 10 minute state life plus the sweep). Plan: put the existing `Limiter`
+    (`docstore.StoreLimiter`, `GOJIBERRY_DOCSTORE_LIMITER`) in front of the login routes, keyed by client address with
+    `TrustedProxies`. Priority: medium. Where: `auth/http.go`, `internal/docstorecmd`.
+55. **Per-process auth state that remains.** Kind: fixable. Checked: there are no CSRF tokens or cookies in `auth`
+    (the bearer header is the only credential, the OIDC state is the redirect's CSRF check and is now shared). What is
+    still per process: (a) the public offer's anonymous sessions (`public.SessionStore`, item 16); (b) the default
+    `MemoryChallenges` and per-process rate limiters when their `store` modes are off; (c) the session and state
+    counts used for the bound, which each replica refreshes from its own sweep. Priority: low. Where: `docstore/public`,
+    `auth/sessionstore`.

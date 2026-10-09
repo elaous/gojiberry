@@ -3,9 +3,9 @@ package auth
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -64,8 +64,8 @@ func (m *Manager) handleLoginFor(name string) http.HandlerFunc {
 			return
 		}
 		verifier := oauth2.GenerateVerifier()
-		state, err := m.states.put(loginState{Provider: name, ReturnTo: returnTo, Verifier: verifier, Nonce: nonce}, time.Now().Add(stateTTL))
-		if errors.Is(err, errStoreFull) {
+		state, err := m.store.PutState(r.Context(), LoginState{Provider: name, ReturnTo: returnTo, Verifier: verifier, Nonce: nonce}, stateTTL)
+		if errors.Is(err, ErrStoreFull) {
 			http.Error(w, "too many logins in progress", http.StatusServiceUnavailable)
 			return
 		}
@@ -96,7 +96,12 @@ func (m *Manager) handleCallbackFor(name string) http.HandlerFunc {
 			return
 		}
 		stateToken := r.URL.Query().Get("state")
-		state, ok := m.states.take(stateToken)
+		state, ok, err := m.store.TakeState(r.Context(), stateToken)
+		if err != nil {
+			log.Printf("auth: taking the login state: %v", err)
+			http.Error(w, "auth: session store unavailable", http.StatusServiceUnavailable)
+			return
+		}
 		if !ok || state.Provider != name {
 			http.Error(w, "auth: missing or expired state (CSRF check failed)", http.StatusBadRequest)
 			return
@@ -138,7 +143,11 @@ func (m *Manager) handleCallbackFor(name string) http.HandlerFunc {
 		}
 		user := userFromClaims(name, claims, p.AssumeEmailVerified)
 
-		sessionToken, err := m.sessions.put(user, time.Now().Add(m.sessionTTL))
+		sessionToken, err := m.store.PutSession(ctx, user, m.sessionTTL)
+		if errors.Is(err, ErrStoreFull) {
+			http.Error(w, "too many sessions", http.StatusServiceUnavailable)
+			return
+		}
 		if err != nil {
 			http.Error(w, "auth: creating session: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -175,7 +184,12 @@ func (m *Manager) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if token, ok := bearerToken(r); ok {
-		m.sessions.delete(token)
+		// A failed delete leaves the session valid: say so, so the client tries again.
+		if err := m.store.DeleteSession(r.Context(), token); err != nil {
+			log.Printf("auth: deleting a session: %v", err)
+			http.Error(w, "auth: session store unavailable", http.StatusServiceUnavailable)
+			return
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -189,7 +203,13 @@ func (m *Manager) CurrentUser(r *http.Request) (User, bool) {
 	if !ok {
 		return User{}, false
 	}
-	return m.sessions.get(token)
+	u, ok, err := m.store.GetSession(r.Context(), token)
+	if err != nil {
+		// Fail closed: a store that cannot answer signs nobody in.
+		log.Printf("auth: reading a session: %v", err)
+		return User{}, false
+	}
+	return u, ok
 }
 
 func bearerToken(r *http.Request) (string, bool) {

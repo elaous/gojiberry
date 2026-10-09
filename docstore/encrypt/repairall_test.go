@@ -395,7 +395,7 @@ func TestRepairAllListsTheStoreOncePerRun(t *testing.T) {
 func TestRepairAllCoversItemsThatAreNotDocuments(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
-	items := []string{"expiry:abc", "collab:def", "passkey/ghi", "public/jkl"}
+	items := []string{"expiry:abc", "collab:def", "passkey/ghi", "public/jkl", docstore.SessionPrefix + "491234/abc", docstore.LoginStatePrefix + "29000000/def"}
 	for _, id := range items {
 		w.legacyItem(t, id, []byte("data of "+id))
 	}

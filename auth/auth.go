@@ -145,6 +145,10 @@ type Config struct {
 	// return_to anywhere else is ignored: the session token travels in the
 	// redirect, so an unchecked target would hand it to any site.
 	ReturnOrigins []string
+	// Sessions keeps the bearer sessions and the OpenID Connect login states. Nil is
+	// NewMemorySessionStore: they live in this process, so a token issued by one replica is unknown
+	// to another. Pass a shared store (auth/sessionstore) for replicas that serve the same people.
+	Sessions SessionStore
 }
 
 // resolvedProvider is a Provider plus everything OIDC discovery
@@ -170,8 +174,7 @@ func (p resolvedProvider) displayName() string {
 type Manager struct {
 	baseURL    string
 	byName     map[string]*resolvedProvider
-	sessions   *tokenStore[User]
-	states     *tokenStore[loginState]
+	store      SessionStore // sessions and login states: in this process by default, see Config.Sessions
 	sessionTTL time.Duration
 	order      []string            // provider names, as configured
 	origins    map[string]struct{} // origins a login may return to
@@ -182,12 +185,7 @@ type Manager struct {
 // only ever accepts a state it minted itself) plus ReturnTo, the page
 // LoginURL's own caller wants the browser sent back to once login
 // finishes.
-type loginState struct {
-	Provider string
-	ReturnTo string
-	Verifier string // PKCE code verifier
-	Nonce    string // bound into the ID token
-}
+type loginState = LoginState
 
 const (
 	defaultSessionTTL = 30 * 24 * time.Hour
@@ -210,11 +208,13 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 		ttl = defaultSessionTTL
 	}
 
+	if cfg.Sessions == nil {
+		cfg.Sessions = NewMemorySessionStore()
+	}
 	m := &Manager{
 		baseURL:    cfg.BaseURL,
 		byName:     make(map[string]*resolvedProvider, len(cfg.Providers)),
-		sessions:   newTokenStore[User](),
-		states:     newTokenStore[loginState](),
+		store:      cfg.Sessions,
 		sessionTTL: ttl,
 		origins:    map[string]struct{}{},
 	}
@@ -260,8 +260,22 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 // finished OIDC login does: how another way of signing in (a passkey, auth/passkey) gives the
 // person the one session format every handler already understands.
 func (m *Manager) StartSession(u User) (string, error) {
-	return m.sessions.put(u, time.Now().Add(m.sessionTTL))
+	ctx, cancel := context.WithTimeout(context.Background(), sessionStoreTimeout)
+	defer cancel()
+	return m.store.PutSession(ctx, u, m.sessionTTL)
 }
+
+// SetSessionStore replaces the store of sessions and login states (see Config.Sessions) for a
+// Manager built elsewhere (docstore.NewAuthManager). Call it before the Manager serves: sessions
+// already issued stay in the store they were issued in.
+func (m *Manager) SetSessionStore(s SessionStore) {
+	if s != nil {
+		m.store = s
+	}
+}
+
+// sessionStoreTimeout bounds one call to the session store made without a request (StartSession).
+const sessionStoreTimeout = 10 * time.Second
 
 // Providers lists every configured provider's own public info, in
 // the order Config.Providers listed them -- /auth/providers' own
@@ -387,7 +401,11 @@ const (
 	maxEntries = 100000
 )
 
-var errStoreFull = errors.New("auth: too many pending logins or sessions")
+// ErrStoreFull is returned by a SessionStore that holds its maximum of sessions or pending logins
+// (the HTTP routes answer 503). A live record is never evicted to make room.
+var ErrStoreFull = errors.New("auth: too many pending logins or sessions")
+
+var errStoreFull = ErrStoreFull
 
 // get returns token's own value if present and not yet expired.
 func (s *tokenStore[T]) get(token string) (T, bool) {
