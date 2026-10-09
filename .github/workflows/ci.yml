@@ -60,6 +60,9 @@ jobs:
       - name: make wasm-lint
         run: make wasm-lint
 
+      - name: make lint-modules
+        run: make lint-modules
+
       - name: make modules
         run: make modules
 

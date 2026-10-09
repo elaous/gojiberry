@@ -5,7 +5,7 @@
 # GOARCH=wasm (domrt and friends are js/wasm-only), and run the
 # vscode-xango grammar suite against every *.xg file in the repo.
 .PHONY: check
-check: generate fmt-check vet test wasm-vet lint wasm-lint modules grammar-test-setup grammar-test
+check: generate fmt-check vet test wasm-vet lint wasm-lint modules lint-modules grammar-test-setup grammar-test
 
 .PHONY: generate
 generate:
@@ -35,13 +35,17 @@ wasm-vet:
 	GOOS=js GOARCH=wasm go build ./...
 	GOOS=js GOARCH=wasm go vet ./...
 
+# NESTED_MODULES is every directory under the root with its own go.mod; modules and
+# lint-modules both walk it, so the list is kept in one place.
+NESTED_MODULES := $(shell git ls-files '*/go.mod' | xargs -n1 dirname)
+
 # modules checks every nested Go module (each directory under the root with its own
 # go.mod): go.mod and go.sum are tidy, and it vets and tests. The Gio ones need
 # system libraries (wayland, xkbcommon) for a native build, so they are vetted as
 # GOOS=js GOARCH=wasm, which still type-checks everything but the window glue.
 .PHONY: modules
 modules:
-	@set -e; for mod in $$(git ls-files '*/go.mod' | xargs -n1 dirname); do \
+	@set -e; for mod in $(NESTED_MODULES); do \
 		echo "== $$mod"; \
 		(cd $$mod && go mod tidy -diff && \
 		case "$$mod" in *gio*) GOOS=js GOARCH=wasm go vet ./... ;; *) go vet ./... && go test ./... ;; esac); \
@@ -66,6 +70,23 @@ wasm-lint:
 	go build -o /tmp/gojiberry-golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	GOOS=js GOARCH=wasm /tmp/gojiberry-golangci-lint run ./...
 	rm -f /tmp/gojiberry-golangci-lint
+
+# lint-modules runs the same pinned golangci-lint (built once from the root go.mod tool
+# line, as wasm-lint does) inside each nested module, since golangci-lint does not cross
+# module boundaries and `lint`/`wasm-lint` therefore never see them. The binary is called by
+# absolute path from inside each module directory so that module's own go.mod is used, with
+# the root .golangci.yml via an absolute --config. The Gio modules are linted as
+# GOOS=js GOARCH=wasm, mirroring `modules`. Note the root config excludes the `examples`
+# path, so the examples/* modules currently pass without being analysed; only
+# docstore/backends and xango/gio are checked in depth until that exclusion is lifted.
+.PHONY: lint-modules
+lint-modules:
+	@set -e; bin="$$(mktemp -d)/golangci-lint"; trap 'rm -rf "$$(dirname "$$bin")"' EXIT; \
+	go build -o "$$bin" github.com/golangci/golangci-lint/v2/cmd/golangci-lint; \
+	for mod in $(NESTED_MODULES); do \
+		echo "== $$mod"; \
+		(cd $$mod && case "$$mod" in *gio*) GOOS=js GOARCH=wasm "$$bin" run --config "$(CURDIR)/.golangci.yml" ./... ;; *) "$$bin" run --config "$(CURDIR)/.golangci.yml" ./... ;; esac); \
+	done
 
 # coverage runs the native (non-wasm) test suite with a coverage
 # profile and prints the per-function summary -- js/wasm-only packages
