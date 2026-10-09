@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-10 of 10 since the last full run, including the second backlog review (docs only) (#88, #89 which sets the tenth-merge rule, #90 `Sharing.RepairAll`, #91 the no-signer window, #92 `RepairAll` with `Resign`, the SSH key-tag tightening, the shared passkey `ChallengeStore`, and the review-nits cleanup of #90 to #93, #95, and the double first-passkey 409; the full run on 40b6644 passed except the flake that #88 fixed; the full run is now every tenth merge, see [testing-workflow.md](testing-workflow.md); the full suite is NOT run right after this merge: it is deferred until after the git history rewrite (item 26) and runs on the rewritten main; the counter resets to 0 of 10 after that run).
+0 of 10 since the last full run (full run on the rewritten main, 82d6cad). PRs A, B and C are no longer paused.
 
 ## Notes for upgraders
 
@@ -424,16 +424,8 @@ a way to avoid hitting the limit meanwhile.
     fire for a legitimately filtered non-owner caller. Avoid: use a full read for an address that may be enrolled.
 25. **protobuf is still an indirect dependency through the lint tool.** Plan: update or replace the tool.
     Avoid: none needed at runtime.
-26. **Committed binaries in history.** The largest blobs reachable from `origin/main`: `docsh` 54 MB, `collabhub`
-    50 MB, `examples/gin-ssr-demo/gin-ssr-demo` 21 MB, `examples/echo-ssr-demo/echo-ssr-demo` 10 MB,
-    `translateserver` 9.7 MB, `examples/collab-editor-app/server` 8.9 MB. Plan: the history rewrite is approved by
-    the user and is the next step after the open PRs merge and the worktree cleanup (item 29). Steps: (a) a backup
-    bundle (`git bundle create`) and a tag of the current `main`; (b) filter the listed binaries out of all history
-    (for example `git filter-repo --invert-paths` with those paths); (c) verify (the tree at the new tip equals the
-    old tip minus those files, `go build ./...`, `go vet ./...`, the size of `.git`); (d) force-push with
-    `--force-with-lease`; (e) tell everyone to re-clone (old clones and open branches keep the old history and must
-    not be pushed back); (f) run the full suite on the rewritten `main` (it is deferred until then, see the counter at
-    the top; the counter resets to 0 of 10 after it). Avoid: nothing is lost by leaving them, but PRs A, B and C wait.
+26. **Done: committed binaries in history.** The git history was rewritten in 2026-10 and the seven binaries are gone
+    (see [history-rewrite.md](history-rewrite.md)). `.gitignore` now blocks them from coming back. Priority: done.
 
 ### Queue, status and new entries (added by the second review pass)
 
@@ -459,8 +451,7 @@ reduced or documented).
    opt-in to encrypt plaintext items, and a persistent resume cursor (item 3 says "no saved cursor"). Code:
    `docstore/encrypt/repairall.go`.
 
-**PRs A, B and C are PAUSED** until the git history rewrite (item 26, removal of the committed binaries, which the
-user has approved) is done. Nothing else in this list is blocked by it.
+**PRs A, B and C are no longer paused:** the git history rewrite (item 26) is done, so the queue continues one PR at a time.
 
 New entries:
 
@@ -480,28 +471,11 @@ New entries:
     green. Priority: medium (nothing is off, but `make check` is red). Where: `Makefile:60-68` (targets `lint`,
     `wasm-lint`), `go.mod:259` (the `tool` line), `.golangci.yml`. Not verified: whether CI runs `make lint`
     (check `.github/workflows` for the `lint` or `check` target). Item 25 (protobuf through the tool) goes with this.
-28. **Unmerged commits on `origin/ccr-f005be71-limits`.** Kind: fixable (housekeeping). Three commits are not
-    ancestors of main (`742ec99`, `00bda50`, `082f9ee`, all 2026-10-06, branch point `af9dfce`; `git cherry` marks
-    them `+` because main reached the same content under other commit IDs and the branch's tree is an older
-    snapshot, so `git diff origin/main origin/ccr-f005be71-limits` is only noise). What they change: `saver` rebuild
-    restores the save the old catalog vouched for (`saver/catalog.go`, `saver/session.go`), the older file must be
-    vouched (a non-empty matching checksum) and its previous copy is skipped regardless of `List` order, the
-    storage-filling warning from `CapacityWarnAt` = 80% with `CapacityAdvice` and es/fr/de texts
-    (`components/capacity.go`, `i18n/packs/*.json`), `CapacityFullAt`, and docs. All of it is on main: `vouched` in
-    `saver/catalog.go:340`, `CapacityWarnAt`/`CapacityFullAt` in `components/capacity.go:21-27`, and all seven tests
-    the commits add exist on main (`TestRebuildPutsBackTheSaveTheOldCatalogVouchedFor`,
-    `TestRebuildKeepsAChangedOnlyCopyFlagged`, `TestRebuildDoesNotPutBackAnUnvouchedOlderFile`,
-    `TestRebuildWithAStrayDoesNotDependOnListOrder`, `TestRebuildWithThreeFilesAndTheChangedOneIsCollectedOnlyWhenOld`,
-    `TestCapacityWarnsWhenFillingUp`, `TestSessionWarnsWhenTheStoreIsFillingUpAndExplainsAFullOne`). Recommendation:
-    delete the remote branch (do not merge: it would revert main's newer work, for example the confidential-folder
-    handling in `saver/catalog.go`, and its tree still holds the old binary paths). Not verified: the wording of
-    `docs/known-limits-plan.md` and `docs/document-components.md` (the commits also touch them), so compare those two
-    files by eye before deleting. Priority: low. Where: remote branch only. The botnet limit is in
-    [limits register item 9](limits-register.md#public-docstore-and-operations).
-29. **Leftover worktrees (`/home/user/gojiberry-*`, `/tmp/rr*`).** Kind: fixable (housekeeping). **In progress:**
-    being cleaned up now; this entry is marked done when the cleanup finishes. Why: stale worktrees pin branches and
-    disk. Plan: `git worktree list`, remove the merged ones, `git worktree prune`. Priority: low. Where: the
-    local checkout, not the repository.
+28. **Done: unmerged commits on `origin/ccr-f005be71-limits`.** Kind: fixable (housekeeping). The branch no longer exists
+    (it was deleted with the other old branches in the history rewrite, see [history-rewrite.md](history-rewrite.md)); its
+    content was already on main. Priority: done.
+29. **Done: leftover worktrees (`/home/user/gojiberry-*`, `/tmp/rr*`).** Kind: fixable (housekeeping). The stale worktrees
+    were removed and pruned. Priority: done.
 30. **Clock-ahead replica causes false "dated in the future" directory violations.** Kind: inherent in part (no shared
     clock, [limits register item 11](limits-register.md#public-docstore-and-operations)), fixable in the report. Why: a replica whose clock is ahead writes entries a correct replica
     then reads as dated in the future, and an auditor reports a violation that is skew. Plan: report a small skew as
@@ -627,6 +601,40 @@ New entries:
     clear on decode error, `examples/people-keys-demo/main.go`), 24 (`ErrFilteredEnrolled` and the audited
     state), 25 (protobuf as an indirect dependency).
 
-**Urgency order of the open work:** the queue above (paused), then 27 (lint), 28, 32, 31, 30, 33, 34, 35, 36, 37,
+48. **ARIA attributes across the canvas editor and components.** Kind: fixable. What: roles, accessible names and
+    labels, live regions, a sensible focus order, and keyboard operation of every control (toolbar, menus, dialogs,
+    pickers, the canvas itself). Why it matters: people who use assistive technology cannot use controls that have no
+    role, name or keyboard path, and it is a legal requirement in many places. Plan: (1) write an audit checklist per
+    component; (2) fix the gaps found; (3) add automated checks (for example axe-core) to the browser e2e so a
+    regression fails the build. Priority: high (first of the accessibility group).
+    Where: `components`, `examples/canvas-editor-showcase`, the browser e2e.
+49. **Screen-reader output while typing (voice-over).** Kind: fixable in part (the canvas is not DOM text). What: an
+    accessible text mirror of the canvas (a hidden DOM or an ARIA live region) that announces typed characters, caret
+    moves, selection and formatting changes. Why it matters: a canvas gives a screen reader nothing to read, so a blind
+    person cannot write in the editor. Plan: build the mirror; throttle announcements and add verbosity settings (off,
+    words, characters, formatting); verify with NVDA, JAWS and VoiceOver and record the results. Priority: high.
+    Where: the canvas editor input layer and `components`.
+50. **More accessibility tools and configs.** Kind: fixable. What: respect high contrast and reduced motion; font size
+    and line spacing; a dyslexia-friendly font option; caret and selection visibility; a shortcuts help and key
+    remapping; zoom; color-blind safe palettes; clear focus indicators. Why it matters: needs differ by person, and a
+    single default fits few. Plan: expose each as a setting with a safe default, honor the matching media queries, and
+    test each in the e2e. Priority: medium. Where: `components`, the canvas editor, `i18n`.
+51. **Preference menu.** Kind: fixable. What: one settings panel for the accessibility options above plus language,
+    theme and editor behavior; keyboard accessible, searchable, with reset to defaults and import and export. Why it
+    matters: settings scattered over the UI are hard to find, especially with a screen reader. Plan: define a
+    preference schema, build the panel on it (it needs item 48 first), store locally, then item 52 syncs it.
+    Priority: high. Where: `components`, the showcase.
+52. **Save preferences, styles, templates, fonts and other configs in a central server.** Kind: fixable. What: a
+    per-user config store (docstore documents under a system prefix, authenticated, encrypted with the owner keys by
+    default, versioned, with conflict handling across devices and a quota); a local fallback that works offline; fonts
+    as stored assets with size limits and a licensing note; shareable templates and styles. Why it matters: assistive
+    settings follow the person across devices, and they are sensitive (they can reveal a disability), so they must be
+    encrypted and never logged. Plan: key layout and schema, encryption by default, version and merge rules, quota,
+    offline queue, asset limits, sharing. Depends on PR A (shared sign-in sessions). Priority: medium. Where:
+    `docstore`, `auth`, `components`.
+
+Suggested order of the accessibility group: 48, 51, 49, 50, 52.
+
+**Urgency order of the open work:** the queue above, then 27 (lint), 28, 32, 31, 30, 33, 34, 35, 36, 37,
 the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. Inherent entries: 41 to 45 and part of
 30 and 33.
