@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +23,8 @@ import (
 type WatchState struct {
 	// Seq and Hash are the last log entry the watcher saw (or, while the server shows it only its
 	// own address's entries, the last signed head); Cursor is how far it has read (the number
-	// of the last entry it processed; Seq when it reads the whole log).
+	// of the last entry it processed; Seq when it reads the whole log). While Filtered it is
+	// never past Seq, the signed head (a cursor an older run saved past it is read again from Seq).
 	Seq    int64  `json:"seq"`
 	Hash   string `json:"hash"`
 	Cursor int64  `json:"cursor,omitempty"`
@@ -297,7 +299,10 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	// whether it shows the whole log; if that is not what the last run saw, read again from where
 	// the other mode continues.
 	cursor := st.Cursor
-	if cursor == 0 {
+	if cursor == 0 || (st.Filtered && cursor > st.Seq) {
+		// A filtered cursor never passes the saved head (it is saved as the lesser of the two);
+		// one that does, saved by an older run, is read again from the head, so that the entries
+		// between the head and the cursor are chained when the read turns full.
 		cursor = st.Seq
 	}
 	fromSeen := func(filtered bool) int64 {
@@ -363,7 +368,11 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 			}
 		}
 		// The log may have grown since the head was signed, but it must contain the head's entry.
-		if lastSeq < head.Seq {
+		// A read that starts at or after the head (a switch from a filtered state whose cursor is
+		// the head) does not carry it: the entry is fetched and compared, and an empty answer is
+		// the whole log when nothing follows the head.
+		inRead := lastSeq >= head.Seq
+		if !inRead && (anchored || len(entries) > 0 || head.Seq > from) {
 			return rep, fmt.Errorf("%w: the log reaches entry %d, the signed head is entry %d", ErrLogCut, lastSeq, head.Seq)
 		}
 		if head.Seq > 0 {
@@ -371,6 +380,15 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 			for i := range entries {
 				if entries[i].Seq == head.Seq {
 					atHead = &entries[i]
+				}
+			}
+			if atHead == nil && !anchored && head.Seq <= from {
+				e, ok, err := c.entryAt(ctx, head.Seq, keys)
+				if err != nil {
+					return rep, err
+				}
+				if ok {
+					atHead = &e
 				}
 			}
 			if atHead == nil || atHead.Hash != head.Hash {
@@ -471,16 +489,31 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	for _, a := range addrs {
 		mine[a] = true
 	}
+	// An entry read again that is pending already must be the very entry remembered: the same
+	// number with another hash is the server telling two stories.
+	pendingHash := map[int64]string{}
+	for _, e := range st.Pending {
+		pendingHash[e.Seq] = e.Hash
+	}
 	todo := append([]docstore.DirectoryLogEntry(nil), st.Pending...)
+	var news []docstore.DirectoryLogEntry // the entries read that are not pending already
 	for _, e := range fresh {
+		if h, ok := pendingHash[e.Seq]; ok {
+			if h != e.Hash {
+				return rep, fmt.Errorf("%w: entry %d is not the one seen before", ErrLogCut, e.Seq)
+			}
+			continue // read again: neither pending twice nor audited twice
+		}
+		news = append(news, e)
 		if mine[e.Address] {
 			todo = append(todo, e)
 		}
 	}
 	// The entries before them give the audit the times and numbers it measures by.
-	auditEntries := fresh
+	auditEntries := news
 	if len(st.Pending) > 0 {
-		auditEntries = append(append([]docstore.DirectoryLogEntry(nil), st.Pending...), fresh...)
+		auditEntries = append(append([]docstore.DirectoryLogEntry(nil), st.Pending...), news...)
+		sort.SliceStable(auditEntries, func(i, j int) bool { return auditEntries[i].Seq < auditEntries[j].Seq })
 	}
 	aopt := encrypt.AuditOptions{Start: start, ResetWait: opt.ResetWait, Now: c.now()}
 	audit := encrypt.AuditAddress(email, addrs, auditEntries, aopt)
@@ -551,7 +584,9 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	// Everything verified: remember it.
 	if filtered {
 		st.Seq, st.Hash = head.Seq, head.Hash
-		st.Cursor = max(read.next, cursor)
+		// Never past the signed head: the entries after it are read again next run, and a switch
+		// to the full read then chains them to the saved head.
+		st.Cursor = min(max(read.next, cursor), head.Seq)
 	} else if lastSeq > 0 {
 		st.Seq, st.Hash, st.Cursor = lastSeq, lastHash, lastSeq
 	}
