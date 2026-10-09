@@ -8,7 +8,7 @@ remote check is wanted. The checks run here instead.
    (about two minutes each, whole root module), and `go test` on those packages
    (`-race` for concurrency-sensitive ones such as `saver` and `docstore/encrypt`; a short browser
    test only when the change touches a page). Nested modules (`docstore/backends`, the Gio ones, the
-   examples with their own `go.mod`) are checked when their files or their dependencies change
+   examples with their own `go.mod`; the examples are linted like the library, there is no path exclusion) are checked when their files or their dependencies change
    (`make modules` and `make lint-modules`).
 2. **Merge by squash**, one PR at a time. A stack is merged bottom-up, retargeting each PR to `main`
    after the one below it merges.

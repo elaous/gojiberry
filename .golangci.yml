@@ -1,6 +1,6 @@
 version: "2"
 
-# domrt (and examples/) carry substantial js/wasm-only code -- linting
+# domrt (and examples/, which are linted like the library) carry substantial js/wasm-only code -- linting
 # this repo properly means running golangci-lint twice, once natively
 # and once with GOOS=js GOARCH=wasm set, the same "two build configs,
 # two passes" split Makefile's wasm-vet target already established for
@@ -20,12 +20,3 @@ linters:
       # concrete Close() this repo calls, not just one type.
       exclude-functions:
         - (io.Closer).Close
-  exclusions:
-    paths:
-      # examples/ is tutorial code, not the library -- its own lint
-      # baseline (mostly wasm-only "unused" false positives in older
-      # demo apps, the same shape editor/'s own dual-build split
-      # already explains) is tracked separately rather than gating the
-      # library's own clean baseline on sweeping every example up
-      # front.
-      - examples

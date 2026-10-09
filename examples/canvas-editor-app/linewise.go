@@ -9,8 +9,6 @@
 // makes).
 package main
 
-import "unicode"
-
 // lineRange is one logical line's character span in document: [Start,
 // End), not including its own trailing '\n' (there is none for the
 // last line).
@@ -72,21 +70,6 @@ func (d *document) moveLineUpNow() {
 	d.swapLines(lines[li-1], lines[li])
 }
 
-// moveLineDown is moveLineUp's mirror (VSCode's Alt+Down). No-op on
-// the last line. See moveLineUp's doc comment for why this collapses
-// to the primary cursor first.
-func (d *document) moveLineDown() { d.edit(d.moveLineDownNow) }
-
-func (d *document) moveLineDownNow() {
-	d.collapseCursors()
-	lines := d.logicalLines()
-	li := lineContaining(lines, d.Cursor)
-	if li >= len(lines)-1 {
-		return
-	}
-	d.swapLines(lines[li], lines[li+1])
-}
-
 // swapLines exchanges two adjacent lineRanges (a immediately above b)
 // in place, moving the cursor along with whichever line it was on.
 func (d *document) swapLines(a, b lineRange) {
@@ -114,62 +97,4 @@ func (d *document) swapLines(a, b lineRange) {
 		d.Cursor = a.Start + col
 	}
 	d.Anchor = d.Cursor
-}
-
-// duplicateLine inserts a copy of the logical line containing the
-// primary cursor directly below itself (VSCode's Shift+Alt+Down),
-// leaving the cursor at the same column in the new copy. See
-// moveLineUp's doc comment for why this collapses to the primary
-// cursor first.
-func (d *document) duplicateLine() { d.edit(d.duplicateLineNow) }
-
-func (d *document) duplicateLineNow() {
-	d.collapseCursors()
-	lines := d.logicalLines()
-	li := lineContaining(lines, d.Cursor)
-	l := lines[li]
-	col := d.Cursor - l.Start
-
-	lineChars := d.buf.Slice(l.Start, l.End)
-	insert := make([]char, 0, len(lineChars)+1)
-	insert = append(insert, char{Rune: '\n'})
-	insert = append(insert, lineChars...)
-	d.buf.InsertAt(l.End, insert...)
-
-	d.Cursor = l.End + 1 + col
-	d.Anchor = d.Cursor
-}
-
-// isWordChar reports whether r counts as part of a "word" for
-// word-boundary movement/selection -- letters, digits, and
-// underscore, the same class \w matches in most regex flavors.
-func isWordChar(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
-}
-
-// wordBoundaryForward returns the index just past the end of the next
-// word in d after idx (skipping any non-word run first) -- Ctrl+
-// Right's target.
-func wordBoundaryForward(d *document, idx int) int {
-	n := d.Len()
-	i := idx
-	for i < n && !isWordChar(d.runeAt(i)) {
-		i++
-	}
-	for i < n && isWordChar(d.runeAt(i)) {
-		i++
-	}
-	return i
-}
-
-// wordBoundaryBackward is wordBoundaryForward's mirror for Ctrl+Left.
-func wordBoundaryBackward(d *document, idx int) int {
-	i := idx
-	for i > 0 && !isWordChar(d.runeAt(i-1)) {
-		i--
-	}
-	for i > 0 && isWordChar(d.runeAt(i-1)) {
-		i--
-	}
-	return i
 }

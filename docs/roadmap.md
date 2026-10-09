@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-1 of 10 since the last full run (the full suite passed on main 1ab7677; this PR); the full suite runs on main after the
+2 of 10 since the last full run (the full suite passed on main 1ab7677; #108, this PR); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -988,17 +988,19 @@ unless stated.
     need real translations. Plan: (1) message catalogue format with plural rules; (2) a check that finds missing and
     stale keys; (3) locale-aware formatting through one helper; (4) a short contributor guide; (5) right-to-left
     packs once 64 lands. Where: `i18n`, `docs`. Priority: low. Dependencies: 64 for RTL.
-84. **Lint the examples.** Kind: fixable. What: the root `.golangci.yml` excludes the path `examples`, which hides
-    every example from `make lint` (the root-module examples such as `examples/canvas-editor-showcase`, not measured)
-    and from `make lint-modules` (the nested modules `examples/echo-ssr-demo`, `gin-ssr-demo`, `gio-counter-demo`,
-    `canvas-app` and `collab-editor-app`). With the exclusion lifted: `canvas-app` has 7 errcheck findings,
-    `collab-editor-app` 13 (1 errcheck, 12 staticcheck), and `echo-ssr-demo`, `gin-ssr-demo` and `gio-counter-demo`
-    are clean. Why it matters: code that is shown to newcomers should pass the same checks as the rest. Plan:
-    1. Decide with the maintainer: keep the exclusion and document it, or lift it and fix. Default: lift and fix.
-    2. Lift the `examples` exclusion; measure the root-module examples too.
-    3. Fix the 20 findings the way entry 27 did (check the error, or an explicit `_ =` with a reason; no `nolint`).
-    4. Run `make lint` and `make lint-modules` clean.
-    Where: `.golangci.yml`, `examples/canvas-app`, `examples/collab-editor-app`. Priority: low. Decision pending
-    with the maintainer. Dependencies: none.
+84. **Done (this PR): lint the examples.** Kind: fixable. The root `.golangci.yml` excluded the path `examples`, which
+    hid every example from `make lint` and `make lint-modules`. The exclusion is removed (no path exclusions remain)
+    and every finding is fixed with no `nolint`: 40 in all, found by running all three targets natively and as
+    js/wasm with `--max-issues-per-linter=0 --max-same-issues=0`. errcheck (9): `rows.Close`, `db.Close`,
+    `Encoder.Encode`, `db.Exec` and `h.Close` are checked (logged, or `t.Errorf` in tests), and the best-effort
+    `os.Remove` of a scratch binary and `conn.CloseNow` on a connection that is going away are an explicit `_ =` with a
+    reason. In `canvas-app`'s end-to-end test the database now closes in `t.Cleanup` after the `DELETE FROM documents`
+    cleanup, which previously ran after a deferred `Close` and so could never succeed. staticcheck (13, SA1019):
+    `collab-editor-app` moved from the deprecated `nhooyr.io/websocket` to its successor `github.com/coder/websocket`
+    (same API). unused (18, native pass only): one test helper with no caller was deleted; the rest are used only by
+    the js/wasm entry points, so they moved into js/wasm-only files (`canvas-editor-app/model_browser.go`,
+    `canvas-editor-showcase/sample_wasm.go`, `canvas-xango-demo/lorem_wasm.go`) with no change to their code. A
+    planted unchecked error in a root-module and a nested example makes `make lint` and `make lint-modules` fail.
+    Where: `.golangci.yml`, `Makefile`, `examples`. Dependencies: none.
 
 **Order for 59 to 84:** 60, 59, 61 and 62, 79 (first slice), 72, 70, 76, then the rest.
