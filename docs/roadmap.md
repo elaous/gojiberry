@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-6 of 10 since the last full run (#98, #99, #100, #101, #102, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are done (#99, #100, #101).
+7 of 10 since the last full run (#98, #99, #100, #101, #102, #103, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
 
@@ -527,7 +527,8 @@ New entries:
     (`.github/workflows/ci.yml`, steps `make lint` and `make wasm-lint`), `make check` includes both, and
     [testing-workflow.md](testing-workflow.md) lists them. The earlier claim "built with go1.25 vs repo go1.26" is
     only true of the `golangci-lint` found on `PATH` (`/usr/local/bin`, v2.5.0 built with go1.25.1), which `make`
-    does not use. Item 25 (protobuf through the tool) is left as it is. Priority: done.
+    does not use. Item 25 (protobuf through the tool) is left as it is. The nested modules are now linted too, by
+    `make lint-modules` (in `make check` and CI). Priority: done.
 28. **Done: unmerged commits on `origin/ccr-f005be71-limits`.** Kind: fixable (housekeeping). The branch no longer exists
     (it was deleted with the other old branches in the history rewrite, see [history-rewrite.md](history-rewrite.md)); its
     content was already on main. Priority: done.
