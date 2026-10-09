@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-7 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, #111, #112, #113, this PR); the full suite runs on main after the
+8 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, #111, #112, #113, #114, this PR); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -580,19 +580,12 @@ New entries:
     `ErrLogCut` (the head's entry is fetched when the read starts at or after it). A
     filtered state an older run saved with `Cursor > Seq` is clamped to `Seq` on load, so it stays valid and is
     checked. `WatchState` JSON is unchanged. Where: `docstore/directoryclient/watch.go`.
-34. **Blob backend has neither `SaveIf` nor `DeleteIf`.** Kind: fixable only in part. Confirmed:
-    `docstore/backends/blob/blob.go` implements `Save`, `Load`, `List`, `ListPrefix` and `Delete` only (lines 92-138);
-    the S3 backend has the conditional write (`docstore/backends/s3/s3.go:156`), as do postgres and mongo. The
-    service API: the blob backend sits on `gocloud.dev/blob` v0.46.0 (`docstore/backends/go.mod:16`), whose portable
-    `WriterOptions` has `IfNotExist` (create only, `PreconditionFailed` when the blob exists) and no `If-Match`, ETag
-    or generation match; `Attributes.ETag` can be read, but not sent as a precondition. So a create-only `SaveIf` with
-    an empty `prev` is possible, a replace or a delete guarded by content is not, without the driver-specific
-    `BeforeWrite`/`As` hook (for S3 the `PutObjectInput.IfMatch`). The ChallengeStore and limiter need the guarded
-    replace and delete, so `store` mode stays unsupported on this backend. Not verified: whether each driver
-    (fileblob, memblob, s3blob, gcsblob, azureblob) honours `IfNotExist`. Plan: name the backend unsupported for the
-    conditional features in its docs and in `ErrConditionalUnsupported`'s text now; item 9 covers `DeleteIf` for s3
-    and blob. Priority: medium. Where: `docstore/backends/blob/blob.go:92-138`, `docstore/conditional.go:12-47`
-    (the interfaces) and `:94` (`SupportsConditional`).
+34. **Done (this PR): the blob backend is named unsupported for the conditional features.** It has neither `SaveIf` nor
+    `DeleteIf`, and cannot be given them portably: `gocloud.dev/blob` can create only if the blob does not exist
+    (`IfNotExist`) and has no ETag or generation match to send. `docs/public-docstore.md` 7.4a has a table of what each
+    backend supports, what each feature needs, and what to use instead (S3 backend, PostgreSQL, MongoDB); the blob
+    backend's `Config` comment says so. A provider-specific write hook (S3 `If-Match`, GCS generation, Azure ETag) is
+    left until a provider is needed and can be tested against it. Item 9 still covers `DeleteIf` for S3.
 35. **Directory log reads share the lookup budgets for client IP and whole server.** Kind: fixable. Confirmed in
     `docstore/directory.go`: `readBudget` (`:846-855`) takes three tokens per read: the user's own limiter (separate:
     `lookup` for lookups, `logRead` for the log), then `lookupIP` and `lookupAll[lookupShard(u.ID)]`, which both

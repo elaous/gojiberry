@@ -634,6 +634,44 @@ pattern as `auth/passkey`, see [encryption-and-passkeys.md](encryption-and-passk
 
 Over a limit the routes answer 429 with `Retry-After`.
 
+### 7.4a Which backend supports what
+
+Several features need more than save and load. The extra operations are optional interfaces, and a feature that
+needs one warns, falls back or refuses at start-up when its backend lacks it. Read from the code:
+
+| Backend | `ListPrefix` | `LoadHead` | `SaveIf` | `DeleteIf` |
+| --- | --- | --- | --- | --- |
+| Memory (`docstore.MemoryAdapter`) | yes | yes | yes | yes |
+| Local files (`LocalFSAdapter`, one host) | yes | yes | yes | yes |
+| SQLite (`SQLiteAdapter`, one host) | yes | yes | yes | yes |
+| PostgreSQL (`docstore/backends/postgres`) | yes | yes | yes | yes |
+| MongoDB (`docstore/backends/mongo`) | yes | no | yes | yes |
+| S3 and compatible (`docstore/backends/s3`) | yes | yes | yes | no |
+| gocloud blob (`docstore/backends/blob`) | yes | yes | no | no |
+| Browser storage, browser file system, HTTP client (`BrowserAdapter`, `FileSystemAdapter`, `HTTPAdapter`) | no | no | yes | no |
+| `ExpiringAdapter` | yes | yes | yes | yes |
+
+`ExpiringAdapter` offers each operation when the adapter it wraps does; the encrypting adapter does not offer
+`LoadHead` (it would hand out ciphertext).
+
+1. `SaveIf` (a save that applies only if the stored bytes are the ones the writer read, or the document is new)
+   is what the shared passkey challenge store, the shared sign-in sessions, the store-backed rate limiter,
+   conditional saves over HTTP, and the race-free parts of the key directory (the key cap and the log) need.
+   Without it, `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store` and `GOJIBERRY_DOCSTORE_SESSIONS=store` warn and fall
+   back to per-process state (`store-required` makes that fatal), and `GOJIBERRY_DOCSTORE_LIMITER=store` limits per
+   replica.
+2. `DeleteIf` (a delete that applies only if the stored bytes are the ones read) is optional for those features:
+   single-use records fall back to a conditional "used" marker written with `SaveIf`. It is what the document
+   expiry sweep would need to close its last race (roadmap item 10, which also covers S3).
+3. `LoadHead` (the first bytes of a document) only makes `RepairAll` cheaper on large files; every other feature
+   works without it.
+4. **The gocloud blob backend cannot be given conditional writes in general.** The portable API can create a blob
+   only if it does not exist; there is no ETag or generation match to send, and each provider has its own
+   (S3 `If-Match`, Google Cloud Storage generation match, Azure ETag). A create-only `SaveIf` would break the
+   contract, which also covers replacing, so the backend does not claim one. For object storage use the S3
+   backend; for state shared between replicas use PostgreSQL or MongoDB. A provider-specific write hook is
+   possible, but only worth building for a provider someone needs, and it must be tested against that provider.
+
 ### 7.5 What is left
 
 State plainly, before launch:
