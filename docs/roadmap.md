@@ -5,7 +5,8 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-9 of 10 since the last full run (#98, #99, #100, #101, #102, #103, #104, #105, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are done (#99, #100, #101).
+10 of 10 since the last full run (#98 ... #106, this PR); the full suite runs on main right after this merge and the
+counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
 
@@ -515,7 +516,7 @@ reduced or documented).
 
 New entries:
 
-27. **Done: lint failed on main with 37 findings (and as many under `wasm-lint`); it was not a toolchain problem.** Kind: fixable.
+27. **Done (#103): lint failed on main with 37 findings (and as many under `wasm-lint`); it was not a toolchain problem.** Kind: fixable.
     Checked on 2026-10-07 with go1.26.0: `make lint` (which runs `go tool golangci-lint run ./...`, so the linter is
     built by the repo's own go toolchain from the `tool` line in `go.mod`, golangci-lint v2.5.0) started and exited 1.
     Fixed, with no `nolint` and no config change: errcheck (13) by checking the error in tests (`t.Fatal` on a failed
@@ -547,7 +548,7 @@ New entries:
     the evictions of a live record in a metric. Priority: medium. Where: `docstore/limiter.go`
     (`SweepRateLimits`, `MaxRateLimitRecords`). See also the botnet limit,
     [limits register item 9](limits-register.md#public-docstore-and-operations).
-32. **Done: `RepairAll` no longer reports an item as "gone" for a keyring `ErrNotFound`.** Kind: fixable. Was: the
+32. **Done (#106): `RepairAll` no longer reports an item as "gone" for a keyring `ErrNotFound`.** Kind: fixable. Was: the
     walk read any `errors.Is(err, docstore.ErrNotFound)` from the repair as "deleted since the scan" (outcome "gone",
     not counted), so a custom `Keyring` returning `ErrNotFound` from `Recipients`, or the built-in `StoreKeyring`
     through its record lookup, made a live, unsigned item look deleted and `Left()` look clean; the re-key itself
@@ -561,7 +562,7 @@ New entries:
     `ErrNotFound` unless it means a missing record, and what is done with it. A real deletion is unchanged
     (`TestRepairAllIgnoresAnItemDeletedAfterTheScan`). Where: `docstore/encrypt/encrypt.go` (`bind`, `Keyring`),
     `docstore/encrypt/repairall.go`.
-33. **Done: `WatchLog` filtered to full: the cursor no longer passes the saved head.** Kind: fixable (narrow). Was: in
+33. **Done (#105): `WatchLog` filtered to full: the cursor no longer passes the saved head.** Kind: fixable (narrow). Was: in
     filtered mode the run saved `st.Seq, st.Hash` = the signed head and `st.Cursor = max(read.next, cursor)`, and
     `read.next` can pass the head when the log grows between `c.Head` and the filtered scan. On the switch to the
     full read, entry `st.Seq` was proved to carry the saved hash, but nothing linked it to entry `cursor+1`
@@ -799,3 +800,206 @@ the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. 
        Connect provider (harmless, no login route is mounted). Note it or skip it.
     7. Per-/64 IPv6 budgets for the login routes (each address is its own key, as on the passkey routes): reuse the
        /64 grouping if the public store has one.
+
+## Backlog: accessibility, documents and operations (59 to 84)
+
+Entries 59 to 84 continue the numbering after 58; nothing above is renumbered. Cross-references: 48 is ARIA, 49 is the
+screen-reader text output, 51 the preference menu, 52 the central config store, 57 telemetry. **Kind** is `fixable`
+unless stated.
+
+59. **Keyboard-only completeness.** Kind: fixable. What: every action and every dialog reachable and operable with the
+    keyboard alone; no focus traps; visible focus rings; skip links; a shortcut cheat sheet with remapping. Why it
+    matters: people who cannot use a pointer must be able to do everything others can. Plan:
+    1. Inventory every action and dialog and mark its keyboard path; list the gaps.
+    2. Fix focus order, add focus return after dialogs close, and remove traps (a test tabs through each dialog).
+    3. Add visible focus rings that meet contrast rules, and skip links (to the canvas, the toolbar, the comments).
+    4. Build the cheat sheet from the one shortcut table, with remapping stored in the preferences (51, 52).
+    5. An e2e that drives the whole editor without a pointer.
+    Where: `components`, `examples/canvas-editor-showcase`, the browser e2e. Priority: high. Dependencies: 48; remapping
+    needs 51.
+60. **Accessible text mirror of the canvas.** Kind: fixable in part (the canvas is not DOM text). What: a hidden DOM or
+    a live region kept in sync with the canvas model, covering paragraphs, tables, lists, images, links, comments,
+    tracked changes, structure, alt text, heading levels, table headers and the document outline. Why it matters:
+    without it a screen reader reads nothing, so the editor is closed to blind people; this is the base for 61 to 69
+    and 79. Highest priority of the group. Plan:
+    1. Define the mirror as a pure function of the canvas model (one source of truth, never edited by hand).
+    2. Render real elements (`h1`..`h6`, `p`, `ul/ol/li`, `table` with `th scope`, `img alt`, `a`) so the browser
+       exposes the structure.
+    3. Keep it in sync on every model change with a diff, not a rebuild; keep the caret and selection mapped both
+       ways; announce changes through a polite live region with the verbosity levels of 49.
+    4. Expose the outline as a navigable landmark list; mark comments and tracked changes with text a reader says.
+    5. Tests: model-to-DOM unit tests, e2e with axe-style checks, manual NVDA, JAWS and VoiceOver runs (69).
+    Where: the canvas editor input layer and `components`. Priority: highest. Dependencies: extends 48 and 49.
+61. **Alt text, image descriptions and structure checks.** Kind: fixable. What: alt text required or prompted when an
+    image is inserted; a checker for missing alt text; optional on-device suggestions (no network); checks for reading
+    order, heading level skips, empty headings and low colour contrast. Why it matters: an image without a
+    description is a hole in the document for a blind reader. Plan:
+    1. An insert prompt with "decorative" as an explicit choice; store alt text in the model.
+    2. Checker functions over the model, each returning a finding with a location and a fix.
+    3. Optional local suggestion hook behind a setting, off by default, with no data sent anywhere.
+    4. Contrast check using the document's own colours; heading and reading-order checks.
+    Where: the model, `components`, the showcase image insert. Priority: high. Dependencies: 60; feeds 62.
+62. **Document accessibility checker panel.** Kind: fixable. What: a panel that lists findings from 61 and others,
+    jumps to each, offers a fix, and can gate export (warn or block, set by the user or the operator). Why it matters:
+    people need to learn about a problem before they send the document. Plan: (1) a finding schema (rule, severity,
+    location, fix); (2) the panel, keyboard and screen-reader accessible; (3) one-click fixes where safe; (4) an export
+    gate with an explicit override; (5) tests per rule. Where: `components`, the showcase. Priority: high.
+    Dependencies: 60, 61.
+63. **Accessible exports.** Kind: fixable. What: tagged PDF with language, title, reading order and structure tags;
+    semantic HTML with landmarks, headings, table headers and alt text. Why it matters: an accessible editor that
+    exports an inaccessible file defeats the purpose. Plan: (1) map the model to PDF tags and to semantic HTML in one
+    place; (2) set document language and title; (3) validate with a PDF/UA and an HTML checker in CI; (4) report
+    unmapped elements in the fidelity report of 72. Where: the export code, `docfile`. Priority: high.
+    Dependencies: 60, 62, 72.
+64. **Language and direction.** Kind: fixable. What: per-run language tagging so a screen reader switches voice;
+    right-to-left and bidirectional text; vertical text; IME and composition input. Why it matters: mixed-language and
+    RTL documents are common, and composition input must not break the caret or the mirror. Plan:
+    1. Add a language attribute per run and a document default; surface it as `lang` in the mirror (60).
+    2. Verify canvas rendering of bidi, RTL and vertical text; fix caret movement and selection across direction
+       changes.
+    3. Test IME composition (preedit shown, no mirror announcement until commit, no autocomplete popup, see 79).
+    4. Browser e2e with scripted composition events plus a manual check with real IMEs.
+    Where: the canvas editor text layout and input layer. Priority: medium. Dependencies: 60.
+65. **Cognitive and motor options.** Kind: fixable. What: distraction-free mode; plain-language labels; forgiving
+    undo (long history, undo of the last save); adjustable timeouts; dwell or switch access; large-target mode. Why it
+    matters: needs differ, and short timeouts or small targets lock people out. Plan: (1) list every timeout and
+    remove or make it adjustable; (2) a large-target mode with a size scale; (3) a single-switch scanning mode and
+    dwell click as an experiment; (4) a plain-language label set in `i18n`; (5) settings in the preference menu.
+    Where: `components`, `i18n`, the canvas editor. Priority: medium. Dependencies: 50, 51.
+66. **Collaboration accessibility.** Kind: fixable. What: announcements for remote cursors, joins and leaves, new
+    comments, and conflicts, through a polite live region, with a setting for how much is said. Why it matters:
+    collaboration cues are visual (coloured cursors); without text a blind collaborator cannot tell anyone is there.
+    Plan: (1) an event-to-message table with throttling and grouping; (2) a presence list that is real DOM; (3) tests
+    with two sessions. Where: `collab`, `components`. Priority: medium. Dependencies: 60, 71.
+67. **Text-to-speech read-aloud.** Kind: fixable. What: read the selection or the whole document aloud with the
+    browser speech API (on-device voices where the browser offers them), with pause, speed and a highlighted current
+    sentence. Why it matters: it helps people with low vision or reading difficulty and needs no assistive software.
+    Plan: (1) read from the mirror text so the order matches 60; (2) per-run language voices (64); (3) controls with
+    keyboard access; (4) no text sent to a network service unless the browser does so, and say so in the UI.
+    Where: `components`. Priority: low. Dependencies: 60, 64.
+68. **Captions and transcripts.** Kind: fixable, only if media embedding exists or is planned. What: captions and a
+    transcript field for embedded audio and video, a caption track editor, and a checker rule. Why it matters: media
+    without text excludes deaf readers. Plan: (1) decide whether media embedding is in scope; (2) if so, require a
+    caption or transcript link on insert; (3) add the checker rule to 62. Where: the model, `components`. Priority:
+    low. Dependencies: 61, 62.
+69. **Accessibility testing as a release gate.** Kind: fixable. What: axe-style checks in the browser e2e tests plus a
+    manual NVDA, JAWS and VoiceOver script run before each release. Why it matters: accessibility regresses silently
+    unless a test fails. Plan: (1) add axe-core to the e2e for the editor, dialogs and the mirror; (2) fail the build
+    on new violations, with a reviewed baseline; (3) write the manual script (open, type, navigate by heading and
+    table, comments, dialogs, autocomplete, export) and a results table per release; (4) make the release checklist
+    require it. Where: the browser e2e, `docs`. Priority: high. Dependencies: 48, 60.
+70. **Version history UI.** Kind: fixable. What: a timeline of versions, named versions, a diff between two versions,
+    restore, and who changed what, on top of the existing snapshots. Why it matters: people want to see and undo
+    changes without asking an operator. Plan: (1) list snapshots with author and time from the store; (2) name and pin a
+    version; (3) a text and structure diff view (also readable by a screen reader); (4) restore as a new version, never
+    destructive; (5) respect permissions and encryption. Where: `docstore`, `saver`, `components`, the showcase.
+    Priority: high. Dependencies: existing snapshots; diff output reuses 60.
+71. **Comments, suggestions and tracked changes.** Kind: fixable. What: comment threads, mentions, resolve and reopen,
+    suggestion mode and tracked changes with accept and reject. Why it matters: review is the core of shared writing.
+    Plan: (1) model for ranges, threads and changes that survive concurrent edits; (2) UI with keyboard paths; (3)
+    mentions without leaking addresses to people who lack access; (4) import and export in 72; (5) mirror support
+    (60). Where: the model, `collab`, `components`. Priority: high. Dependencies: 60; used by 66, 72.
+72. **Import and export fidelity.** Kind: fixable in part (formats differ). What: DOCX, ODT, Markdown, HTML and PDF in
+    both directions, with a fidelity report that lists what was lost or changed. Why it matters: high value for
+    adoption; people leave only if their files come over intact, and they need to know what did not. Plan:
+    1. Pick a corpus of real documents per format and record a baseline.
+    2. Write each importer and exporter against the model; every unsupported feature adds a line to the report.
+    3. Show the report in the UI before and after, and keep it with the document.
+    4. Round-trip tests on the corpus; fail on a new loss.
+    5. Keep accessibility data (alt text, language, headings) across formats (63).
+    Where: `docfile`, `docfile/pack`, the Migrate flow, [document-components.md](document-components.md). Priority:
+    high. Dependencies: model coverage of 71, 78 for full fidelity; extends the `.opendoc` format.
+73. **Search and replace across the document and the store.** Kind: fixable. What: find and replace in a document and
+    across documents, with a client-side encrypted index for the encrypted store. Why it matters: search is expected,
+    and a server-side index would leak contents. Plan: (1) in-document search with case, word and regular expression
+    options, announced to screen readers; (2) a local index built after decrypt, stored encrypted with a key derived
+    from the owner keys, never sent in clear; (3) update on save; (4) replace across documents with a preview and
+    undo. Where: `docstore/encrypt`, `components`. Priority: medium. Dependencies: 60 for announcements.
+74. **Offline-first with conflict visibility.** Kind: fixable. What: a visible sync state, the queue of pending
+    changes, and what will merge or conflict. Why it matters: people lose trust when they cannot tell whether their
+    work is saved. Plan: (1) a status model (saved, saving, offline, conflict) exposed in the UI and to screen readers;
+    (2) a durable local queue with retry; (3) a pre-merge view of the remote changes; (4) tests for offline edits and
+    reconnect. Where: `saver`, `collab`, `components`. Priority: medium. Dependencies: 66.
+75. **Sharing UX.** Kind: fixable. What: link sharing, per-person permissions, expiring links, view-only versus
+    comment-only, and a plain explanation of what encryption protects and what it does not. Why it matters: people
+    share wrongly when the options are unclear. Plan: (1) a permission model with roles view, comment, edit; (2)
+    expiring links using the existing expiry support; (3) a sharing dialog with a plain-language summary of who can
+    see what; (4) wording reviewed for non-experts; (5) accessibility checks. Where: `docstore/encrypt`, `auth`,
+    `components`. Priority: medium. Dependencies: 71 for comment-only.
+76. **Key and recovery UX.** Kind: inherent in part (lost passkey plus lost recovery key means lost data; see the
+    [limits register](limits-register.md)); the guided flows are fixable. What: recovery-key printing, a periodic
+    recovery check, a nudge when there is only one key, device management, and a revoke and re-key walk-through. Why it
+    matters: the limit cannot be removed, only made hard to hit by accident. Plan:
+    1. A printable recovery sheet and a "test my recovery key" step without exposing the key.
+    2. A periodic reminder to run the check, and a nudge while only one key is enrolled.
+    3. A device list with last use and a revoke action.
+    4. A guided re-key after revoke, with progress (builds on `RepairAll`).
+    5. Wording that states the limit plainly; all steps keyboard and screen-reader accessible.
+    Where: `docstore/encrypt`, `auth/passkey`, `components`, the showcase. Priority: high. Dependencies: none hard.
+77. **Templates, styles and a design-token system.** Kind: fixable. What: document templates, named styles, and a
+    token set (colours, type scale, spacing) that themes the editor and the exports. Why it matters: consistent
+    documents and accessible contrast defaults. Plan: (1) a token schema; (2) style and template documents stored in
+    the central config store; (3) apply tokens to the canvas and to exports; (4) contrast validation on edit. Where:
+    `components`, `docfile`, `docstore`. Priority: medium. Dependencies: ties to the central config store (52); 50.
+78. **Equations, diagrams, code blocks and footnotes.** Kind: fixable. What: these elements with accessible output:
+    MathML for equations, text alternatives for diagrams, readable code blocks with a language, and footnotes that
+    link both ways. Why it matters: technical documents are common and these elements are usually the least
+    accessible. Plan: (1) model elements; (2) mirror output (60); (3) export to MathML and semantic HTML (63); (4)
+    checker rules for a missing diagram alternative (62). Where: the model, `components`. Priority: low.
+    Dependencies: 60, 63.
+79. **Autocomplete word picker list.** Kind: fixable. What: keep Tab accepting the inline suggestion and its ghost
+    text for the top candidate; add a suggestion popup at the caret with the top N candidates (default 5), opened after
+    a short delay or on demand (Ctrl+Space), and closed on Esc, click-away or the caret leaving the word. Keys: Up and
+    Down move, Tab or Enter accept the highlighted word, Esc dismisses, number keys 1 to 9 optional; a row can be
+    clicked or tapped. Why it matters: one guess is often wrong, and a list is faster; it must work for screen-reader
+    and keyboard users from the start. Plan:
+    1. Accessibility: the WAI-ARIA combobox and listbox pattern (`role=combobox` on the accessible mirror or the
+       focused editable, `aria-expanded`, `aria-controls`, `aria-activedescendant`, `role=option` with
+       `aria-selected`, `aria-setsize` and `aria-posinset`); a polite live region announces the number of suggestions
+       and the highlighted word; the popup never takes focus.
+    2. Sources: the editor word list plus words already in the document (recency weighted), per-language dictionaries
+       through the `spell` package (`spell/dict`), and the user dictionary in the encrypted preference store.
+    3. Privacy: no network calls, no telemetry.
+    4. No popup during IME composition (64).
+    5. Performance: a prefix index, a cap on candidates, a debounce and no layout thrash.
+    6. A provider interface for custom sources (snippets, mentions).
+    7. Tests: unit tests for ranking, e2e for the keyboard model and the ARIA attributes, and a screen-reader script
+       (69).
+    First slice (popup plus keyboard model) can ship earlier if ARIA is built in. Where: the canvas editor input layer,
+    `spell`, `components`. Priority: high. Dependencies: ARIA 48, mirror 60, preference menu 51.
+80. **Print layout.** Kind: fixable. What: pagination, headers and footers, page numbers and a table of contents.
+    Why it matters: documents are still printed and exported to paged formats. Plan: (1) a page model with size and
+    margins; (2) layout with page breaks, widow and orphan control; (3) headers, footers and fields; (4) a table of
+    contents from the heading outline with links; (5) use the same layout for PDF export (63). Where: the canvas
+    editor layout, export code. Priority: medium. Dependencies: 60 for the outline, 72, 77.
+81. **Admin side.** Kind: fixable. What: a PII-free operator audit log, docstore backup and restore, quota dashboards
+    and health pages. Why it matters: operators need to run and recover a store without seeing user data. Plan: (1) an
+    audit event schema with an allowlist (no names, addresses, document ids or contents); (2) backup and restore of
+    the encrypted store as opaque blobs, with a restore test; (3) quota and usage pages from counters (ties to the
+    telemetry rules of 57); (4) health and readiness routes. Where: `docstore`, `internal/docstorecmd`, `docs`.
+    Priority: medium. Dependencies: 57 for the privacy rules.
+82. **Performance and size.** Kind: fixable. What: the showcase wasm is about 21.7 MB; streaming compile, code
+    splitting, caching and a low-memory mode. Why it matters: slow first load excludes people on slow links and weak
+    devices. Plan: (1) measure size and load per build and record a budget; (2) `WebAssembly.compileStreaming` with
+    correct headers and compression; (3) split rarely used parts; (4) service-worker caching with versioned keys; (5)
+    a low-memory mode that limits history and caches. Where: `examples/canvas-editor-showcase`, the build, `domrt`.
+    Priority: medium. Dependencies: none.
+83. **i18n depth.** Kind: fixable. What: only de, fr and es packs exist; add a translation workflow, pluralisation,
+    locale-aware dates and numbers, and a contribution path. Why it matters: reach, and plain-language labels (65)
+    need real translations. Plan: (1) message catalogue format with plural rules; (2) a check that finds missing and
+    stale keys; (3) locale-aware formatting through one helper; (4) a short contributor guide; (5) right-to-left
+    packs once 64 lands. Where: `i18n`, `docs`. Priority: low. Dependencies: 64 for RTL.
+84. **Lint the examples.** Kind: fixable. What: the root `.golangci.yml` excludes the path `examples`, which hides
+    every example from `make lint` (the root-module examples such as `examples/canvas-editor-showcase`, not measured)
+    and from `make lint-modules` (the nested modules `examples/echo-ssr-demo`, `gin-ssr-demo`, `gio-counter-demo`,
+    `canvas-app` and `collab-editor-app`). With the exclusion lifted: `canvas-app` has 7 errcheck findings,
+    `collab-editor-app` 13 (1 errcheck, 12 staticcheck), and `echo-ssr-demo`, `gin-ssr-demo` and `gio-counter-demo`
+    are clean. Why it matters: code that is shown to newcomers should pass the same checks as the rest. Plan:
+    1. Decide with the maintainer: keep the exclusion and document it, or lift it and fix. Default: lift and fix.
+    2. Lift the `examples` exclusion; measure the root-module examples too.
+    3. Fix the 20 findings the way entry 27 did (check the error, or an explicit `_ =` with a reason; no `nolint`).
+    4. Run `make lint` and `make lint-modules` clean.
+    Where: `.golangci.yml`, `examples/canvas-app`, `examples/collab-editor-app`. Priority: low. Decision pending
+    with the maintainer. Dependencies: none.
+
+**Order for 59 to 84:** 60, 59, 61 and 62, 79 (first slice), 72, 70, 76, then the rest.
