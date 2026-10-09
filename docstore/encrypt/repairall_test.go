@@ -715,3 +715,168 @@ func TestRepairAllWithConcurrentSaveOfAnItem(t *testing.T) {
 		}
 	}
 }
+
+// errRing is a Keyring whose Recipients fails for one id with a fixed error.
+type errRing struct {
+	Keyring
+	id  string
+	err error
+}
+
+func (r errRing) Recipients(ctx context.Context, id string) ([]age.Recipient, error) {
+	if id == r.id {
+		return nil, r.err
+	}
+	return r.Keyring.Recipients(ctx, id)
+}
+
+// A keyring answer is never "gone" (docs/roadmap.md, backlog item 32): a Keyring that returns
+// docstore.ErrNotFound from Recipients, for an item that is still stored, is a skip with the
+// keyring's error, and Left counts it.
+func TestRepairAllKeyringNotFoundIsNotGone(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	w.legacyItem(t, "expiry:live", []byte("x"))
+	kerr := fmt.Errorf("keyring has no record: %w", docstore.ErrNotFound)
+	sh := w.over(w.inner, func(a *Adapter) { a.Ring = errRing{Keyring: w.ring, id: "expiry:live", err: kerr} })
+	var outcomes []string
+	rep, err := sh.RepairAll(ctx, RepairAllOptions{Progress: func(p RepairProgress) { outcomes = append(outcomes, p.Doc+"="+p.Outcome) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Skipped) != 1 || rep.Skipped[0].Doc != "expiry:live" || rep.Skipped[0].Reason != SkipError ||
+		errors.Is(rep.Skipped[0].Err, docstore.ErrNotFound) || !strings.Contains(rep.Skipped[0].Err.Error(), kerr.Error()) || rep.Left() != 1 || rep.Repaired != 0 {
+		t.Fatalf("%+v (%v)", rep, outcomes)
+	}
+	if len(outcomes) != 1 || outcomes[0] != "expiry:live=error" {
+		t.Errorf("outcomes %v", outcomes)
+	}
+	if v := w.frameVersion(t, "expiry:live"); v == 3 {
+		t.Error("the item was rewritten")
+	}
+}
+
+type notFoundFloor struct{}
+
+func (notFoundFloor) Get(context.Context, string) (uint64, error) {
+	return 0, fmt.Errorf("floor: %w", docstore.ErrNotFound)
+}
+func (notFoundFloor) Raise(context.Context, string, uint64) error { return nil }
+
+// hideKeys makes the record of every document look missing to whoever reads through it.
+type hideKeys struct{ docstore.Adapter }
+
+func (h hideKeys) Load(ctx context.Context, id string) (docstore.Document, error) {
+	if strings.HasPrefix(id, KeysPrefix) {
+		return docstore.Document{}, docstore.ErrNotFound
+	}
+	return h.Adapter.Load(ctx, id)
+}
+
+// The built-in StoreKeyring can answer ErrNotFound too (its record lookup, here through a floor
+// that reports it): the document still exists, so it is a skip, not "gone".
+func TestRepairAllStoreKeyringNotFoundIsNotGone(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	doc := w.history(t)
+	w.legacyV2(t, doc)
+	ring := w.ring
+	ring.People.Store = hideKeys{w.inner}
+	ring.People.SeqFloor = notFoundFloor{}
+	sh := w.over(w.inner, func(a *Adapter) { a.Ring = ring })
+	var outcomes []string
+	rep, err := sh.RepairAll(ctx, RepairAllOptions{Progress: func(p RepairProgress) { outcomes = append(outcomes, p.Doc+"="+p.Outcome) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Skipped) != 1 || rep.Skipped[0].Doc != doc || rep.Skipped[0].Reason != SkipError ||
+		errors.Is(rep.Skipped[0].Err, docstore.ErrNotFound) || !strings.Contains(rep.Skipped[0].Err.Error(), "floor") || rep.Left() != 1 {
+		t.Fatalf("%+v (%v)", rep, outcomes)
+	}
+	if len(outcomes) != 1 || outcomes[0] != doc+"=error" {
+		t.Errorf("outcomes %v", outcomes)
+	}
+}
+
+// hideOnList omits one id from the listings after the first, though it stays stored.
+type hideOnList struct {
+	*flaky
+	id    string
+	calls atomic.Int64
+}
+
+func (h *hideOnList) List(ctx context.Context) ([]docstore.Meta, error) {
+	ms, err := h.flaky.List(ctx)
+	if err != nil || h.calls.Add(1) < 2 {
+		return ms, err
+	}
+	out := ms[:0:0]
+	for _, m := range ms {
+		if m.ID != h.id {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+// An ErrNotFound that does not come from a missing file (here a listing that no longer shows an
+// item that is still stored) leaves the file stored, so RepairAll does not call it gone.
+func TestRepairAllNotFoundWithTheFilesStoredIsNotGone(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	w.legacyItem(t, "expiry:live", []byte("x"))
+	sh := w.over(&hideOnList{flaky: w.inner, id: "expiry:live"}, nil)
+	var outcomes []string
+	rep, err := sh.RepairAll(ctx, RepairAllOptions{Progress: func(p RepairProgress) { outcomes = append(outcomes, p.Doc+"="+p.Outcome) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Skipped) != 1 || rep.Skipped[0].Reason != SkipError || rep.Left() != 1 || len(outcomes) != 1 || outcomes[0] != "expiry:live=error" {
+		t.Fatalf("%+v (%v)", rep, outcomes)
+	}
+	if !strings.Contains(rep.Skipped[0].Err.Error(), "some files of this item are gone, rerun to settle") {
+		t.Errorf("message %q", rep.Skipped[0].Err)
+	}
+}
+
+// idRing is a Keyring whose Identities fails for one id with a fixed error.
+type idRing struct {
+	Keyring
+	id  string
+	err error
+}
+
+func (r idRing) Identities(ctx context.Context, id string) ([]age.Identity, error) {
+	if id == r.id {
+		return nil, r.err
+	}
+	return r.Keyring.Identities(ctx, id)
+}
+
+// Identities is a keyring call like Recipients: an ErrNotFound from it, over an item that is
+// still stored, is a real error for RekeyAll and a skip for RepairAll, never "gone" and never
+// swallowed.
+func TestKeyringIdentitiesNotFoundIsNotGone(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	w.legacyItem(t, "expiry:live", []byte("x"))
+	kerr := fmt.Errorf("keyring has no identities: %w", docstore.ErrNotFound)
+	sh := w.over(w.inner, func(a *Adapter) { a.Ring = idRing{Keyring: w.ring, id: "expiry:live", err: kerr} })
+
+	n, err := sh.Adapter.RekeyAll(ctx)
+	if err == nil || errors.Is(err, docstore.ErrNotFound) || n != 0 || !strings.Contains(err.Error(), kerr.Error()) {
+		t.Fatalf("RekeyAll: %d %v", n, err)
+	}
+
+	rep, err := sh.RepairAll(ctx, RepairAllOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Skipped) != 1 || rep.Skipped[0].Doc != "expiry:live" || rep.Skipped[0].Reason != SkipUnreadable ||
+		errors.Is(rep.Skipped[0].Err, docstore.ErrNotFound) || !strings.Contains(rep.Skipped[0].Err.Error(), kerr.Error()) || rep.Left() != 1 || rep.Repaired != 0 {
+		t.Fatalf("RepairAll: %+v", rep)
+	}
+	if v := w.frameVersion(t, "expiry:live"); v == 3 {
+		t.Error("the item was rewritten")
+	}
+}

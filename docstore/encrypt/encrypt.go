@@ -93,7 +93,14 @@ var ErrNoRecipients = errors.New("encrypt: no recipients")
 // Keyring says who a document is encrypted to and which keys can open it.
 type Keyring interface {
 	// Recipients are the keys the document id is encrypted to when saved (the owner, and
-	// everyone it is shared with).
+	// everyone it is shared with). A keyring with no record for id yet returns nil or empty
+	// (a save then fails with ErrNoRecipients), not an error.
+	//
+	// docstore.ErrNotFound (or an error wrapping it) from any method of the keyring (Recipients,
+	// Identities, and Bind and Binding of a Binder) is never read as "the stored file is gone":
+	// the adapter turns it into an ordinary keyring error (the text kept, the chain cut), so a
+	// re-key fails with it and RepairAll skips the item (SkipError) and counts it in Left. Only
+	// a stored file that is really missing is "gone".
 	Recipients(ctx context.Context, id string) ([]age.Recipient, error)
 	// Identities are the private keys that may open it.
 	Identities(ctx context.Context, id string) ([]age.Identity, error)
@@ -514,12 +521,32 @@ func IsEncrypted(b []byte) bool { return bytes.HasPrefix(b, header) }
 
 // bind returns the recipients of id and the Binding their record has. A keyring that is not a
 // Binder, or an id that belongs to no document, has the zero Binding.
+//
+// An error from the keyring is never docstore.ErrNotFound to the callers (see keyringNotFound):
+// the re-key and RepairAll read that as "the file is gone". The other keyring calls (Identities
+// in decrypt, Binding in Load) apply the same conversion at their own call sites.
 func (a *Adapter) bind(ctx context.Context, id string) ([]age.Recipient, Binding, error) {
 	if b, ok := a.Ring.(Binder); ok && DocID(id) != "" {
-		return b.Bind(ctx, id)
+		rs, bd, err := b.Bind(ctx, id)
+		return rs, bd, keyringNotFound(err)
 	}
 	rs, err := a.Ring.Recipients(ctx, id)
-	return rs, Binding{}, err
+	return rs, Binding{}, keyringNotFound(err)
+}
+
+// keyringErr is a keyring's docstore.ErrNotFound with the chain cut: it says what the keyring
+// said, but errors.Is(err, docstore.ErrNotFound) is false, as that means "the stored file is
+// gone" to a re-key and to RepairAll, and a missing keyring record is not that.
+type keyringErr struct{ msg string }
+
+func (e keyringErr) Error() string { return e.msg }
+
+// keyringNotFound returns err, or, when it is (or wraps) docstore.ErrNotFound, a keyringErr.
+func keyringNotFound(err error) error {
+	if errors.Is(err, docstore.ErrNotFound) {
+		return keyringErr{"encrypt: keyring: " + err.Error()}
+	}
+	return err
 }
 
 func (a *Adapter) binds(id string) bool {
@@ -635,7 +662,7 @@ func (a *Adapter) decrypt(ctx context.Context, id string, stored []byte) (r io.R
 	}
 	ids, err := a.Ring.Identities(ctx, id)
 	if err != nil {
-		return nil, true, err
+		return nil, true, keyringNotFound(err)
 	}
 	if len(ids) == 0 {
 		return nil, true, ErrNoKey // a keyring with no private key opens nothing
@@ -942,7 +969,7 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 			}
 			r, err := a.Ring.(Binder).Binding(ctx, id)
 			if err != nil {
-				return docstore.Document{}, err
+				return docstore.Document{}, keyringNotFound(err)
 			}
 			if err := crossCheck(id, fi, r, true); err != nil {
 				// A switch completed between the read of the file and the record leaves the
