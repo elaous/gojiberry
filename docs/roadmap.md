@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-10 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, #111, #112, #113, #114, #115, #116, this PR); the full suite runs on main after the
+1 of 10 since the last full run (the full run on main 7eb8691 found the passkey error regression from #112, fixed by this PR); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders

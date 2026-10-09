@@ -110,7 +110,15 @@ func serverError(status int, body []byte) error {
 		if status == 409 && e.Code == CodeAccountExists {
 			return ErrAlreadyCreated
 		}
-		return errors.New(e.Error)
+		return &serverMessage{e.Error}
 	}
 	return fmt.Errorf("passkey: the server answered %d", status)
 }
+
+// serverMessage is an answer of the server that carries its own sentence for a person (a 4xx with an error
+// text, for example "that e-mail address is taken"). It has UserMessage, so components.ExplainError shows the
+// sentence as the message instead of a generic one; the text is the server's, in its language.
+type serverMessage struct{ text string }
+
+func (e *serverMessage) Error() string       { return e.text }
+func (e *serverMessage) UserMessage() string { return e.text }
