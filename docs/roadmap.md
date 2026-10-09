@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (#98, #99, #100, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are no longer paused.
+5 of 10 since the last full run (#98, #99, #100, #101, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
 
@@ -471,7 +471,7 @@ a way to avoid hitting the limit meanwhile.
 Numbers 1 to 26 above are kept as they are, because other documents link them (backlog items 3, 4, 5, 7, 9, 10 and 12).
 Items 1 to 8 are done and merged (1 and 2 earlier; 3 `RepairAll`, 4 the no-signer window, 5 revoked-signer tooling,
 6 the SSH key tag, 7 the shared `ChallengeStore`, 8 the double first-passkey 409). Items 9 to 26 are open (the sessions part of item 7 is done by PR A; the
-follow-ups in item 3 are taken over by the queued PRs below). New entries start at 27, in order of urgency. **Kind** says `fixable` or
+follow-ups in item 3 are taken over by the PRs below, all done). New entries start at 27, in order of urgency. **Kind** says `fixable` or
 `inherent` (a real limit: it points to the [limits register](limits-register.md) and will not be fixed, only
 reduced or documented).
 
@@ -494,7 +494,7 @@ reduced or documented).
       challenges; `store-required` is fatal (same helper and message shape as `GOJIBERRY_DOCSTORE_SESSIONS`). Also
       warned: `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES` set with `GOJIBERRY_DOCSTORE_PASSKEY_RPID` unset (ignored), and
       memory mode with `GOJIBERRY_DOCSTORE_REPLICAS` above 1.
-3. **PR C: `RepairAll` follow-ups. Done (this PR).** Code: `docstore/encrypt/repairall.go`, `docstore/docstore.go`.
+3. **PR C: `RepairAll` follow-ups. Done (#101).** Code: `docstore/encrypt/repairall.go`, `docstore/docstore.go`.
    1. Header reads: the optional `docstore.HeadReader` (`LoadHead(ctx, id, n)`, first n bytes) and the helper
       `docstore.LoadHead`, which falls back to `Load` for an adapter without it. Implemented by the memory, localfs,
       sqlite, postgres (`substr`), s3 (ranged GET) and blob (`NewRangeReader`) adapters and by `ExpiringAdapter`
@@ -511,7 +511,7 @@ reduced or documented).
    3. Resume cursor: `RepairAllOptions.After` and `RepairAllReport.Next`. Limit and After walk a huge store in slices;
       `Next` is `""` and `Finished` set when the end was reached (a run cancelled before its first group with `After` `""` has `Next` `""` but not `Finished`). Groups before the cursor are not revisited. The caller persists it; `RepairAll` itself saves nothing.
 
-**PRs A, B and C are no longer paused:** the git history rewrite (item 26) is done, so the queue continues one PR at a time.
+**PRs A, B and C are done (#99, #100, #101):** the git history rewrite (item 26) was done first, so the queue ran one PR at a time.
 
 New entries:
 
@@ -725,3 +725,77 @@ the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. 
     `MemoryChallenges` and per-process rate limiters when their `store` modes are off; (c) the session and state
     counts used for the bound, which each replica refreshes from its own sweep. Priority: low. Where: `docstore/public`,
     `auth/sessionstore`.
+
+56. **Opt-in atypical-speech support in voice to text (Project Relate / Euphonia style).** Kind: fixable in part
+    (depends on what exists outside the project). What: let people whose speech standard recognisers handle badly
+    dictate into the editor with a recogniser that fits them. **Feasibility finding, to verify at the spike:**
+    Project Relate is a consumer Android app (a personal model trained from many recorded phrases; Listen, Repeat and
+    Assistant features), and no public developer API or SDK was found. Project Euphonia is a Google Research effort
+    that publishes open-source tooling to train personalised speech models for research; its dataset is not available
+    externally, Google points to the Speech Accessibility Project (University of Illinois, English) for shared data,
+    and no hosted Euphonia API exists. Why it matters: dictation is an access route for people who cannot type, and
+    the usual recognisers fail on exactly these users. Plan:
+    1. A provider-neutral voice-input interface (start and stop, interim and final transcripts, language, errors) with
+       providers: the browser Web Speech API, an on-device model, an optional server recognizer, and an adapter slot
+       for a personalised model.
+    2. Opt-in and consent: off by default, consent text saying where audio goes, nothing recorded or stored without
+       consent, the setting kept in the preference store (sensitive, encrypted).
+    3. Research spike: confirm the current availability and licence of Relate and Euphonia output (any API,
+       import or export of a personal model, partner programme), and whether a user can bring a model trained with
+       Euphonia's open-source tools or a Speech Accessibility Project based model.
+    4. If no integration path exists: a bring-your-own recogniser endpoint (user-supplied URL and key) and OS-level
+       dictation passthrough (Android keyboard dictation types into the editor through normal input events, so the
+       editor must handle IME and composition input well and expose the live transcript to the screen-reader
+       mirror).
+    5. Privacy and security: no audio leaves the device by default, TLS and short retention for any server path,
+       never log audio or transcripts, rate limits.
+    6. Testing with users with atypical speech.
+    7. Docs of what is and is not supported.
+    Depends on the preference menu (51) and the central config store (52); ties to the voice-over item (49).
+    Priority: medium, research spike first. Where: `components`, `docs`.
+57. **Privacy-first telemetry with no personal data.** Kind: fixable. What: a minimal, aggregate-only usage and
+    health signal for the operator, designed so that no personal data can be collected. Why it matters: the project
+    needs to know which features and browsers matter and where it is slow, without tracking anyone. Plan:
+    1. Policy doc first: collect the minimum, aggregate only, no personal data by construction (no user ids, e-mail,
+       IPs, document ids, names or contents, keys, free text, file paths, raw error messages or stack traces with
+       data), no cross-session or cross-device linking, no fingerprinting, no third-party trackers, no telemetry
+       cookies.
+    2. Opt-in, default off (alternative to decide with the maintainer: anonymous counters on with a clear notice and
+       a one-click opt-out). The setting lives in the preference menu (51) with a plain-language description and a
+       "show exactly what would be sent" preview; an operator kill switch (env var); Do Not Track and Global Privacy
+       Control respected.
+    3. The event schema is an allowlist enforced in code: fixed event names and enumerated values (feature used,
+       action counts, error codes, performance buckets such as load time and wasm size class, browser family and
+       major version, locale), coarse buckets, nothing finer than a day, no sequence reconstruction. A schema test
+       fails if a field outside the allowlist is emitted.
+    4. Transport: batched TLS to the operator's own server, a write-only reserved route under a system prefix, rate
+       limited with the existing `Limiter`, no IP logging (the server discards the source address), a retention
+       limit, aggregation on write, a k-anonymity threshold before any count is reported (optionally noise).
+    5. Client-side sampling, and a local-only debug log the user can export themselves for support.
+    6. Security: no auth tokens in telemetry requests, separate from sessions, the route cannot probe the store,
+       abuse limits against flooding and poisoning.
+    7. A crash and error reporting variant that scrubs on the client (error code and component only), separately
+       opt-in.
+    8. Docs: a table of what is collected, generated from the allowlist, with why, retention, how to turn it off and
+       how to self-host; legal notes (GDPR: aggregated anonymous data, still document the lawful basis and the
+       opt-in text); a consent UI accessible to screen readers (ties to ARIA item 48).
+    Depends on the preference menu (51) and the config store (52). Priority: medium, policy doc and allowlist before
+    any code. Where: `docs`, `docstore`, `components`.
+58. **Small leftovers from the PR #99 and #100 reviews.** Kind: fixable. Why it matters: none is urgent, but each
+    is a small trap for the next reader. Priority: low. Where: `auth`, `auth/passkey`, `internal/docstorecmd`.
+    1. `auth/passkey/challenge_store.go` `StartChallengeSweep`: the retry limit 4 is hard-coded twice (the "of 4" log
+       and the `attempt==4` check). Use a named constant.
+    2. The `NewStoreChallenges` doc still says to run `RunChallengeSweep`: point it to `StartChallengeSweep`, and
+       decide whether `RunChallengeSweep` stays exported.
+    3. `StartChallengeSweep` retries the whole sweep when the listing worked but a Delete failed, which adds up to
+       3.5 s of startup delay on every start if one record can never be deleted. Retry only when the listing failed.
+    4. Net-delta counting has off-by-one races (a Put or Take straddling the before and after reads; a Put between
+       `net.Load` and `approx.Store`). The count drifts by at most the operations in the window and the next listing
+       repairs it. Document it as a known, bounded drift.
+    5. Auth login limiter: with a custom `clientIP` that returns "", all clients share one key `login|` (the comment
+       says `clientIP` must be correct). Add a guard that falls back to the `RemoteAddr` host when `clientIP`
+       returns empty.
+    6. `internal/docstorecmd`: the login limiter is installed even when the manager has only passkeys and no OpenID
+       Connect provider (harmless, no login route is mounted). Note it or skip it.
+    7. Per-/64 IPv6 budgets for the login routes (each address is its own key, as on the passkey routes): reuse the
+       /64 grouping if the public store has one.
