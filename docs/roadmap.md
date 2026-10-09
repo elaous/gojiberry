@@ -566,7 +566,10 @@ New entries:
     `TestWatchLogFilteredCursorStaysWithinTheSavedHead`). Now: a filtered run saves `Cursor = min(max(read.next,
     cursor), head.Seq)`, so a filtered cursor is never past the signed head and the existing anchoring (`Prev ==
     st.Hash` when the read starts at `st.Seq+1`) covers the switch; the entries past the head are read again by the
-    next run (not reported twice: `Reported`; not audited twice: pending entries are deduplicated by number). A
+    next run (not reported twice: `Reported`; not audited twice: an entry read again is dropped from the
+    pending and audited lists when its number and hash match the pending one, and is `ErrLogCut` when the hash
+    differs). The switch from a filtered state at the head with nothing past it no longer gives a false
+    `ErrLogCut` (the head's entry is fetched when the read starts at or after it). A
     filtered state an older run saved with `Cursor > Seq` is clamped to `Seq` on load, so it stays valid and is
     checked. `WatchState` JSON is unchanged. Where: `docstore/directoryclient/watch.go`.
 34. **Blob backend has neither `SaveIf` nor `DeleteIf`.** Kind: fixable only in part. Confirmed:

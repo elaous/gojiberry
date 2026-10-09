@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -367,7 +368,11 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 			}
 		}
 		// The log may have grown since the head was signed, but it must contain the head's entry.
-		if lastSeq < head.Seq {
+		// A read that starts at or after the head (a switch from a filtered state whose cursor is
+		// the head) does not carry it: the entry is fetched and compared, and an empty answer is
+		// the whole log when nothing follows the head.
+		inRead := lastSeq >= head.Seq
+		if !inRead && (anchored || len(entries) > 0 || head.Seq > from) {
 			return rep, fmt.Errorf("%w: the log reaches entry %d, the signed head is entry %d", ErrLogCut, lastSeq, head.Seq)
 		}
 		if head.Seq > 0 {
@@ -375,6 +380,15 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 			for i := range entries {
 				if entries[i].Seq == head.Seq {
 					atHead = &entries[i]
+				}
+			}
+			if atHead == nil && !anchored && head.Seq <= from {
+				e, ok, err := c.entryAt(ctx, head.Seq, keys)
+				if err != nil {
+					return rep, err
+				}
+				if ok {
+					atHead = &e
 				}
 			}
 			if atHead == nil || atHead.Hash != head.Hash {
@@ -475,20 +489,31 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	for _, a := range addrs {
 		mine[a] = true
 	}
-	todo := append([]docstore.DirectoryLogEntry(nil), st.Pending...)
-	inTodo := map[int64]bool{}
-	for _, e := range todo {
-		inTodo[e.Seq] = true
+	// An entry read again that is pending already must be the very entry remembered: the same
+	// number with another hash is the server telling two stories.
+	pendingHash := map[int64]string{}
+	for _, e := range st.Pending {
+		pendingHash[e.Seq] = e.Hash
 	}
+	todo := append([]docstore.DirectoryLogEntry(nil), st.Pending...)
+	var news []docstore.DirectoryLogEntry // the entries read that are not pending already
 	for _, e := range fresh {
-		if mine[e.Address] && !inTodo[e.Seq] { // an entry read again is not audited twice
+		if h, ok := pendingHash[e.Seq]; ok {
+			if h != e.Hash {
+				return rep, fmt.Errorf("%w: entry %d is not the one seen before", ErrLogCut, e.Seq)
+			}
+			continue // read again: neither pending twice nor audited twice
+		}
+		news = append(news, e)
+		if mine[e.Address] {
 			todo = append(todo, e)
 		}
 	}
 	// The entries before them give the audit the times and numbers it measures by.
-	auditEntries := fresh
+	auditEntries := news
 	if len(st.Pending) > 0 {
-		auditEntries = append(append([]docstore.DirectoryLogEntry(nil), st.Pending...), fresh...)
+		auditEntries = append(append([]docstore.DirectoryLogEntry(nil), st.Pending...), news...)
+		sort.SliceStable(auditEntries, func(i, j int) bool { return auditEntries[i].Seq < auditEntries[j].Seq })
 	}
 	aopt := encrypt.AuditOptions{Start: start, ResetWait: opt.ResetWait, Now: c.now()}
 	audit := encrypt.AuditAddress(email, addrs, auditEntries, aopt)

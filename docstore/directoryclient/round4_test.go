@@ -570,11 +570,105 @@ func TestWatchLogFilteredCursorStaysWithinTheSavedHead(t *testing.T) {
 	if err != nil || len(rep.Entries) != 0 || st.Seq != 4 || st.Cursor != 4 {
 		t.Fatalf("%v %+v %+v", err, rep.Entries, st)
 	}
+	if len(st.Pending) != 4 {
+		t.Fatalf("an entry read again is pending once: %d pending, want 4", len(st.Pending))
+	}
 	owner, _ := GenerateOwnerKey()
 	if _, err := c.Enroll(ctx, "ana@x.io", owner); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.WatchLog(ctx, "ana@x.io", st, WatchOptions{Owner: owner}); err != nil || st.Filtered {
 		t.Fatalf("filtered to full: %v %+v", err, st)
+	}
+}
+
+// growingFilteredRun saves a filtered state whose pending entries (1 to 4) include two past the
+// signed head, the way the test above does.
+func growingFilteredRun(t *testing.T) (*env, *Client, *WatchState) {
+	t.Helper()
+	e := newEnv(t)
+	c := e.client(ana)
+	publishN(t, c, 2)
+	grown := false
+	hc := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		res, err := http.DefaultTransport.RoundTrip(r)
+		if err == nil && r.URL.Path == "/directory/log/head" && !grown {
+			grown = true
+			publishN(t, e.client(ana), 2)
+		}
+		return res, err
+	})}
+	c.HTTP = hc
+	st := &WatchState{}
+	if _, err := c.WatchLog(context.Background(), "ana@x.io", st, WatchOptions{}); err != nil || !st.Filtered || len(st.Pending) != 4 {
+		t.Fatalf("%v %+v", err, st)
+	}
+	return e, c, st
+}
+
+// A re-read entry whose number is pending but whose hash is not the one remembered is the server
+// telling two stories: ErrLogCut, state unchanged (the same entry again is simply deduplicated).
+func TestWatchLogRefusesAPendingEntryRewrittenBetweenRuns(t *testing.T) {
+	ctx := context.Background()
+	e, c, st := growingFilteredRun(t)
+	if st.Pending[3].Seq != 4 || st.Pending[2].Seq != 3 {
+		t.Fatalf("%+v", st.Pending)
+	}
+	before, _ := json.Marshal(st)
+	storeEntry(t, e, encrypt.LogEntry{Seq: 4, Prev: st.Pending[2].Hash, Op: encrypt.OpPublish, Fingerprint: "SHA256:rewritten"})
+	if _, err := c.WatchLog(ctx, "ana@x.io", st, WatchOptions{}); !errors.Is(err, ErrLogCut) {
+		t.Fatalf("a pending entry rewritten: %v", err)
+	}
+	after, _ := json.Marshal(st)
+	if string(before) != string(after) {
+		t.Fatalf("the state changed on an error:\n%s\n%s", before, after)
+	}
+}
+
+// The audit sees each entry once, whether it is pending or read again.
+func TestWatchLogAuditsAReReadEntryOnce(t *testing.T) {
+	ctx := context.Background()
+	_, c, st := growingFilteredRun(t)
+	st.Reported = 0 // so that the audit reports whatever it sees
+	rep, err := c.WatchLog(ctx, "ana@x.io", st, WatchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[int64]int{}
+	for _, en := range rep.Entries {
+		seen[en.Seq]++
+	}
+	if len(rep.Entries) != 4 {
+		t.Fatalf("want entries 1 to 4 once each: %+v", rep.Entries)
+	}
+	for seq, n := range seen {
+		if n != 1 {
+			t.Fatalf("entry %d audited %d times", seq, n)
+		}
+	}
+}
+
+// A filtered state at the head, then a full read with nothing past the head: not a cut.
+func TestWatchLogFilteredToFullSwitchWithNoNewEntries(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	c := e.client(ana)
+	owner, _ := GenerateOwnerKey() // an enrolled address reads the whole log
+	if _, err := c.Enroll(ctx, "ana@x.io", owner); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		p, _, id := ageKey(t)
+		if _, err := c.Publish(ctx, PublishRequest{Email: "ana@x.io", Key: p, Identity: id, Owner: owner}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st := &WatchState{}
+	if _, err := c.WatchLog(ctx, "ana@x.io", st, WatchOptions{}); err != nil || st.Filtered || st.Seq != 3 {
+		t.Fatalf("%v %+v", err, st)
+	}
+	st.Filtered, st.Cursor = true, st.Seq // cursor == Seq == the head, nothing past it
+	if _, err := c.WatchLog(ctx, "ana@x.io", st, WatchOptions{}); err != nil || st.Filtered || st.Seq != 3 {
+		t.Fatalf("filtered to full with no new entries: %v %+v", err, st)
 	}
 }
