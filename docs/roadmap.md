@@ -5,10 +5,20 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (#98, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are no longer paused.
+3 of 10 since the last full run (#98, #99, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are no longer paused.
 
 ## Notes for upgraders
 
+- **Passkey challenge store (`GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES`).** Default `memory`: nothing changes. In
+  `store` mode the record names and the token format changed (`passkey/challenge/<expiry minute>/<hash>`, token
+  `<random>.<expiry minute>`): a ceremony begun before the upgrade fails once (410; the person starts again, a
+  ceremony lives about five minutes). Records of the old layout (`passkey/challenge/<hash>`, no minute) are no longer used: the sweep deletes them once
+  they are more than 24 hours old (by the store's modification time; if a store gives none, after one read shows
+  them unparseable or expired) and never counts them, so nothing needs deleting by hand (only names that are exactly
+  the prefix and 64 lowercase hex characters are touched; any other name under `passkey/challenge/` is left alone).
+  `store` on a store without
+  conditional writes no longer stops the server: it prints a multi-line warning and keeps ceremonies in memory;
+  set `store-required` to keep the old refusal. Details: [encryption-and-passkeys.md](encryption-and-passkeys.md) B.1.
 - **Shared sign-in sessions (`GOJIBERRY_DOCSTORE_SESSIONS`).** New, default `memory`: nothing changes for a
   single process. IDs starting with `auth/session/` or `auth/state/` (any case) are now reserved from `/docs` in
   every mode, like `ratelimit/`: an existing document with such an ID becomes unreachable through the server, so
@@ -92,7 +102,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
   `docstore.Server` refuses them through `/docs`, so a document with such an ID becomes unreachable; rename it
   before upgrading. **Every reserved prefix is now compared without case** (`ACL:x`, `Collab:x`, `DIRECTORY/x`
   are refused like their lower-case forms; a backend that folds case would alias them). Everything new is off by
-  default and nothing is required: `GOJIBERRY_DOCSTORE_LIMITER` (`memory`, the default, or `store`), `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES` (`memory`, the default, or `store`; `passkey/challenge/` records),
+  default and nothing is required: `GOJIBERRY_DOCSTORE_LIMITER` (`memory`, the default, or `store`), `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES` (`memory`, the default, `store` or `store-required`; `passkey/challenge/` records),
   `GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV` (retired keys for rotation), `..._DIRECTORY_REQUIRE_POP`,
   `..._DIRECTORY_LOOKUP` (`any` or `domain`) and `..._DIRECTORY_REVOKE_WINDOW`. Records published by the
   earlier version still verify (and move to the current key when published again). The directory's limits are
@@ -373,8 +383,8 @@ a way to avoid hitting the limit meanwhile.
    `SaveIf`, such as s3), so of any number of concurrent Takes on any replicas exactly one wins; expiry is the
    stored `Expires` plus a sweep (`Sweep`, run every minute by the server); the count is bounded (10,000 by default,
    `ErrBusy` past it, a live challenge is never evicted; each replica counts from its last listing, so replicas may
-   overshoot by what they write between listings). `store` on a store without working conditional writes stops the
-   server at start instead of falling back. **Not done, by decision: Redis.** The repo has no Redis client and a
+   overshoot by what they write between listings). (Changed by PR B: `store` on a store without conditional writes now warns and falls back to memory, `store-required` stops the server; records are named `passkey/challenge/<expiry minute>/<hash>` and the sweep reads nothing, so the young-record budget and the per-listing cap were replaced, see the queue below.) `store` on a store without working conditional writes stopped the
+   server at start in the first version. **Not done, by decision: Redis.** The repo has no Redis client and a
    RESP client with auth, TLS, timeouts and cluster behaviour is not small; the store-backed one works on every
    backend that has conditional writes (memory, localfs, sqlite, postgres, mongo, s3; the blob backend has none, so
    `store` mode refuses to start on it), and the `ChallengeStore`
@@ -467,15 +477,23 @@ reduced or documented).
 
 **Queue order (the next PR starts only when the one before is merged):**
 
-1. **PR A: shared sign-in sessions. Done (this PR).** `auth.Manager` session and OpenID Connect login-state store, store-backed, so a
+1. **PR A: shared sign-in sessions. Done (#99).** `auth.Manager` session and OpenID Connect login-state store, store-backed, so a
    token issued by replica A is valid on replica B (the "found, not fixed" part of item 7; also the last line of the
    passkey infrastructure backlog above, item 2).
-2. **PR B: passkey challenge store.** A cap strategy that neither overshoots across replicas nor costs O(N): evaluate
-   sharded compare-and-set counters against per-client rate limiting through the existing store-backed limiter
-   (`docstore.StoreLimiter`). `store` mode on a store without conditional writes should print a prominent warning
-   with the fix and fall back to per-process challenges; a stricter value, `store-required`, keeps today's behaviour
-   and is fatal. Remove the young-record sweep budget by making used markers visible from the listing. Touches
-   `auth/passkey` (`StoreChallenges`, `Sweep`) and the server's start-up in item 7.
+2. **PR B: passkey challenge store. Done (this PR).**
+   1. The sweep no longer reads anything: records are named `passkey/challenge/<expiry minute>/<hash>`, the token is
+      `<random>.<expiry minute>` (validated like a session token; a malformed one never reaches the store), and the
+      sweep deletes by name after the minute and a minute of grace. Used markers keep the name of their ceremony, so
+      the sweep finds them with no `Load`. The young-record budget (100 Loads a pass) is gone.
+   2. The cap across replicas: sharded compare-and-set counters were weighed and rejected (a hot record written on
+      every Begin and Take, leaks on a crash); the bound is the per-client `Limiter` on the Begin routes, with the
+      cap as a backstop counted from the sweep's name listing. Worst-case overshoot: per-client rate x clients x
+      sweep interval, never more than (replicas - 1) x cap. At the cap `Put` answers `ErrBusy` (503) with no sweep and
+      no `Load`; a live challenge is never evicted.
+   3. `store` mode on a store without conditional writes prints a multi-line warning and falls back to per-process
+      challenges; `store-required` is fatal (same helper and message shape as `GOJIBERRY_DOCSTORE_SESSIONS`). Also
+      warned: `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES` set with `GOJIBERRY_DOCSTORE_PASSKEY_RPID` unset (ignored), and
+      memory mode with `GOJIBERRY_DOCSTORE_REPLICAS` above 1.
 3. **PR C: `RepairAll` follow-ups.** An optional header-only or `Range` read interface with a `Load` fallback, an
    opt-in to encrypt plaintext items, and a persistent resume cursor (item 3 says "no saved cursor"). Code:
    `docstore/encrypt/repairall.go`.

@@ -785,17 +785,94 @@ func TestPasskeyChallengesModeSharesCeremoniesBetweenReplicas(t *testing.T) {
 	}
 }
 
-func TestPasskeyChallengesModeIsCheckedAndNeedsConditionalWrites(t *testing.T) {
-	ctx := context.Background()
+func TestPasskeyChallengesModeIsCheckedAndFallsBackOrRefusesWithoutConditionalWrites(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	t.Setenv("GOJIBERRY_DOCSTORE_REPLICAS", "")
 	if c, err := passkeyChallenges(ctx, docstore.NewMemoryAdapter(), ""); c != nil || err != nil {
 		t.Fatalf("default is the per-process store: %v %v", c, err)
 	}
 	if _, err := passkeyChallenges(ctx, docstore.NewMemoryAdapter(), "redis"); err == nil {
 		t.Fatal("an unknown mode is an error")
 	}
-	_, err := passkeyChallenges(ctx, plainAdapter{docstore.NewMemoryAdapter()}, "store")
-	if err == nil || !strings.Contains(err.Error(), "conditional") {
-		t.Fatalf("store mode on a store without conditional writes must refuse, not fall back: %v", err)
+	// store on a store that has conditional writes: shared, quietly.
+	logs := captureLog(t)
+	for _, mode := range []string{"store", "store-required"} {
+		c, err := passkeyChallenges(ctx, docstore.NewMemoryAdapter(), mode)
+		if _, ok := c.(*passkey.StoreChallenges); !ok || err != nil {
+			t.Fatalf("%s on a conditional store = %T, %v", mode, c, err)
+		}
+	}
+	if strings.Contains(logs.String(), "WARNING") {
+		t.Errorf("no warning when it works: %q", logs)
+	}
+	// store on one without: the server keeps running on per-process ceremonies and says so loudly.
+	plain := plainAdapter{docstore.NewMemoryAdapter()}
+	logs = captureLog(t)
+	c, err := passkeyChallenges(ctx, plain, "store")
+	if c != nil || err != nil {
+		t.Fatalf("store must fall back (nil = per-process), not stop: %v %v", c, err)
+	}
+	for _, want := range []string{"WARNING", "NOT SHARED", "conditional writes", "GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store-required", "fix:", "cause:"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("the warning lacks %q: %q", want, logs)
+		}
+	}
+	if strings.Count(logs.String(), "\n") < 4 {
+		t.Errorf("the warning is several lines: %q", logs)
+	}
+	// store-required on one without: fatal (an error to Main).
+	if _, err := passkeyChallenges(ctx, plain, "store-required"); err == nil || !strings.Contains(err.Error(), "conditional") {
+		t.Fatalf("store-required must refuse: %v", err)
+	}
+	// memory with several replicas declared: ceremonies are not shared, said once per start.
+	t.Setenv("GOJIBERRY_DOCSTORE_REPLICAS", "3")
+	logs = captureLog(t)
+	if c, err := passkeyChallenges(ctx, plain, "memory"); c != nil || err != nil || !strings.Contains(logs.String(), "kept in each process") {
+		t.Fatalf("memory with replicas: %v %v %q", c, err, logs)
+	}
+	t.Setenv("GOJIBERRY_DOCSTORE_REPLICAS", "1")
+	logs = captureLog(t)
+	_, _ = passkeyChallenges(ctx, plain, "memory")
+	if strings.Contains(logs.String(), "WARNING") {
+		t.Errorf("one replica needs no warning: %q", logs)
+	}
+}
+
+// The two shared-store modes print the same kind of warning and fail the same way.
+func TestSharedStoreWarningIsTheSameForSessionsAndChallenges(t *testing.T) {
+	ctx := context.Background()
+	plain := plainAdapter{docstore.NewMemoryAdapter()}
+	logs := captureLog(t)
+	for _, tc := range []struct{ env, what string }{
+		{"GOJIBERRY_DOCSTORE_SESSIONS", "sign-in sessions"},
+		{"GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES", "passkey ceremonies"},
+	} {
+		logs.Reset()
+		if ok, err := sharedStoreOrFallback(ctx, plain, tc.env, "store", tc.what, "x"); ok || err != nil {
+			t.Fatalf("%s: %v %v", tc.env, ok, err)
+		}
+		for _, want := range []string{tc.env + "=store-required", tc.env + "=store needs a store with conditional writes", "cause:", "fix:"} {
+			if !strings.Contains(logs.String(), want) {
+				t.Errorf("%s: lacks %q: %q", tc.env, want, logs)
+			}
+		}
+		if _, err := sharedStoreOrFallback(ctx, plain, tc.env, "store-required", tc.what, "x"); err == nil || !strings.Contains(err.Error(), tc.env) {
+			t.Errorf("%s: store-required = %v", tc.env, err)
+		}
+	}
+}
+
+func TestPasskeysWarnsWhenChallengesIsSetWithoutRPID(t *testing.T) {
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_RPID", "")
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES", "store")
+	logs := captureLog(t)
+	a := docstore.NewMemoryAdapter()
+	if _, err := withPasskeys(context.Background(), docstore.NewServer(a, "memory"), a, nil, docstore.MemoryLimiters()); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(logs.String(), "PASSKEY_RPID is not set") {
+		t.Errorf("%q", logs)
 	}
 }
 
