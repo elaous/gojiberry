@@ -153,3 +153,42 @@ func TestAnonymousUser(t *testing.T) {
 		t.Fatal("a provider user counts as anonymous")
 	}
 }
+
+func TestMemorySessionStoreIsTheDefaultAndKeepsItsBehaviour(t *testing.T) {
+	m, err := NewManager(context.Background(), Config{BaseURL: "https://gojiberry.io"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m.store.(*MemorySessionStore); !ok {
+		t.Fatalf("default store = %T", m.store)
+	}
+	ctx := context.Background()
+	s := NewMemorySessionStore()
+	tok, err := s.PutSession(ctx, User{ID: "x:1"}, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u, ok, err := s.GetSession(ctx, tok); err != nil || !ok || u.ID != "x:1" {
+		t.Fatalf("%+v %v %v", u, ok, err)
+	}
+	_ = s.DeleteSession(ctx, tok)
+	if _, ok, _ := s.GetSession(ctx, tok); ok {
+		t.Fatal("deleted")
+	}
+	short, _ := s.PutSession(ctx, User{ID: "x:2"}, time.Nanosecond)
+	time.Sleep(2 * time.Millisecond)
+	if _, ok, _ := s.GetSession(ctx, short); ok {
+		t.Fatal("expired")
+	}
+	st, _ := s.PutState(ctx, LoginState{Provider: "p"}, time.Minute)
+	if _, ok, _ := s.TakeState(ctx, st); !ok {
+		t.Fatal("take")
+	}
+	if _, ok, _ := s.TakeState(ctx, st); ok {
+		t.Fatal("take twice")
+	}
+	m.SetSessionStore(nil) // nil keeps the store
+	if m.store == nil {
+		t.Fatal("SetSessionStore(nil) removed the store")
+	}
+}

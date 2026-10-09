@@ -63,9 +63,19 @@ const (
 	ReportPrefix = "report/" // abuse reports about public documents
 )
 
+// The keyspaces of the shared sign-in sessions (auth/sessionstore). They hold the signed-in user of
+// each session and the OpenID Connect login states, under "<prefix><bucket>/<hash of the token>".
+// Reserved from the /docs API in every mode (a client that could write one could forge a session),
+// no expiry deadline (the store sweeps its own), not documents. Not in encrypt.DefaultSkip: they
+// carry names and e-mail addresses, so an encrypting adapter encrypts them.
+const (
+	SessionPrefix    = "auth/session/" // bearer sessions, "auth/session/<expiry hour>/<hash>"
+	LoginStatePrefix = "auth/state/"   // OpenID Connect login states, "auth/state/<expiry minute>/<hash>"
+)
+
 // systemPrefixes are the keyspaces that are not documents: they never expire by themselves (the
 // ones that belong to a document go with it, see DefaultRelated).
-var systemPrefixes = []string{ExpiryPrefix, ExpiryCreatedPrefix, aclKeyPrefix, collabPrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix, PublicPrefix, ReportPrefix}
+var systemPrefixes = []string{ExpiryPrefix, ExpiryCreatedPrefix, aclKeyPrefix, collabPrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, SessionPrefix, LoginStatePrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix, PublicPrefix, ReportPrefix}
 
 // IsDocumentKey reports whether key is a plain document: what the saver writes ("<id>~<gen><ext>"
 // generation keys) or a client PUTs under a plain id. It is an allowlist of the document

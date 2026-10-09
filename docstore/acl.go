@@ -335,13 +335,13 @@ func isReservedDocID(id string) bool {
 	// "directory/" is the key directory's keyspace (see Server.WithDirectory): its records
 	// are written only by the server's own publish route, so a signed-in session cannot forge
 	// one through the document API. "directory-log/" (the key directory's transparency log),
-	// "directory-enroll/" (owner enrollments) and "ratelimit/" (shared rate limit budgets) are
-	// likewise written only by the server itself.
+	// "directory-enroll/" (owner enrollments) and "ratelimit/" (shared rate limit budgets), "auth/session/" and "auth/state/" (shared
+	// sign-in sessions: a writer could forge a session) are likewise written only by the server itself.
 	// "public/" and "report/" are the public offer's records and abuse reports (docstore/public).
 	// Every reserved prefix is compared without case, since a backend that folds case would
 	// alias "DIRECTORY-ENROLL/x" with the real record, as IsDocumentKey does for expiry.
 	lower := strings.ToLower(id)
-	for _, p := range []string{aclKeyPrefix, "collab:", DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, ExpiryPrefix, ExpiryCreatedPrefix, PublicPrefix, ReportPrefix} {
+	for _, p := range []string{aclKeyPrefix, "collab:", DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, SessionPrefix, LoginStatePrefix, ExpiryPrefix, ExpiryCreatedPrefix, PublicPrefix, ReportPrefix} {
 		if strings.HasPrefix(lower, p) {
 			return true
 		}

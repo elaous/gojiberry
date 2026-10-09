@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"filippo.io/age"
+	"github.com/coreos/go-oidc/v3/oidc/oidctest"
 
 	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/auth/passkey"
@@ -795,5 +796,189 @@ func TestPasskeyChallengesModeIsCheckedAndNeedsConditionalWrites(t *testing.T) {
 	_, err := passkeyChallenges(ctx, plainAdapter{docstore.NewMemoryAdapter()}, "store")
 	if err == nil || !strings.Contains(err.Error(), "conditional") {
 		t.Fatalf("store mode on a store without conditional writes must refuse, not fall back: %v", err)
+	}
+}
+
+func TestSessionsModeSharesPasskeySessionsBetweenReplicas(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	const rp, origin = "opendocs.io", "https://opendocs.io"
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_RPID", rp)
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_ORIGINS", origin)
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES", "store")
+	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_NAME", "opendocs")
+	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "store")
+	mem := docstore.NewMemoryAdapter()
+	replica := func() http.Handler {
+		srv := docstore.NewServer(mem, "memory")
+		m, err := withPasskeys(ctx, srv, mem, nil, docstore.MemoryLimiters())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := withSessions(ctx, mem, m, docstore.MemoryLimiters()); err != nil {
+			t.Fatal(err)
+		}
+		return srv.WithAuth(m).Handler()
+	}
+	a, b := replica(), replica()
+	do := func(h http.Handler, method, path, token string, body []byte) (int, map[string]any) {
+		req := httptest.NewRequest(method, path, bytes.NewReader(body))
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var out map[string]any
+		_ = json.NewDecoder(rec.Body).Decode(&out)
+		return rec.Code, out
+	}
+	code, begin := do(a, "POST", "/auth/passkey/register/begin", "", []byte(`{"email":"ana@opendocs.io"}`))
+	if code != 200 {
+		t.Fatalf("begin: %d %v", code, begin)
+	}
+	raw, _ := json.Marshal(map[string]any{"publicKey": begin["options"].(map[string]any)["publicKey"]})
+	reg, err := webauthntest.New(rp).Create(raw, origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, out := do(b, "POST", "/auth/passkey/register/finish?token="+begin["token"].(string), "", reg)
+	if code != 200 || out["auth_token"] == nil {
+		t.Fatalf("finish on B: %d %v", code, out)
+	}
+	tok := out["auth_token"].(string)
+	if code, _ := do(a, "GET", "/auth/me", tok, nil); code != 200 {
+		t.Fatalf("a session made on B is unknown to A: %d", code)
+	}
+	if metas, _ := docstore.ListPrefix(ctx, mem, docstore.SessionPrefix); len(metas) != 1 {
+		t.Fatalf("session records: %+v", metas)
+	}
+	if code, _ := do(a, "POST", "/auth/logout", tok, nil); code != http.StatusNoContent {
+		t.Fatal(code)
+	}
+	if code, _ := do(b, "GET", "/auth/me", tok, nil); code != http.StatusUnauthorized {
+		t.Fatalf("logout on A, then B: %d", code)
+	}
+}
+
+func TestSessionsModeIsCheckedAndFallsBackOrRefusesWithoutConditionalWrites(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m, err := auth.NewManager(ctx, auth.Config{BaseURL: "https://opendocs.io"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := plainAdapter{docstore.NewMemoryAdapter()}
+
+	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "redis")
+	if err := withSessions(ctx, plain, m, docstore.MemoryLimiters()); err == nil {
+		t.Fatal("an unknown mode is an error")
+	}
+	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "store")
+	logs := captureLog(t)
+	if err := withSessions(ctx, plain, m, docstore.MemoryLimiters()); err != nil {
+		t.Fatalf("store falls back, it does not stop: %v", err)
+	}
+	if !strings.Contains(logs.String(), "WARNING") || !strings.Contains(logs.String(), "conditional writes") || !strings.Contains(logs.String(), "store-required") {
+		t.Errorf("the warning names the problem and the fix: %q", logs)
+	}
+	tok, _ := m.StartSession(auth.User{ID: "passkey:1"})
+	req := httptest.NewRequest("GET", "/auth/me", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	if _, ok := m.CurrentUser(req); !ok {
+		t.Error("the fallback keeps working sessions in memory")
+	}
+	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "store-required")
+	if err := withSessions(ctx, plain, m, docstore.MemoryLimiters()); err == nil || !strings.Contains(err.Error(), "conditional") {
+		t.Fatalf("store-required on such a store must refuse: %v", err)
+	}
+	// Memory with several replicas declared says what that means.
+	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "")
+	t.Setenv("GOJIBERRY_DOCSTORE_REPLICAS", "3")
+	logs = captureLog(t)
+	if err := withSessions(ctx, plain, m, docstore.MemoryLimiters()); err != nil || !strings.Contains(logs.String(), "unknown to the others") {
+		t.Errorf("%v %q", err, logs)
+	}
+	// No sign-in at all: a set variable is reported, not obeyed.
+	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "store")
+	logs = captureLog(t)
+	if err := withSessions(ctx, docstore.NewMemoryAdapter(), nil, docstore.MemoryLimiters()); err != nil || !strings.Contains(logs.String(), "ignored") {
+		t.Errorf("%v %q", err, logs)
+	}
+}
+
+// The OpenID Connect login route writes a state record without a sign-in, so withSessions gives it
+// a budget per client address in every mode (memory, store, and the fallback to memory).
+func TestWithSessionsLimitsLoginsPerClientInEveryMode(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	oidcSrv := &oidctest.Server{}
+	ts := httptest.NewServer(oidcSrv)
+	defer ts.Close()
+	oidcSrv.SetIssuer(ts.URL)
+
+	for _, tc := range []struct {
+		name, mode string
+		adapter    docstore.Adapter
+	}{
+		{"memory", "", docstore.NewMemoryAdapter()},
+		{"store", "store", docstore.NewMemoryAdapter()},
+		{"fallback", "store", plainAdapter{docstore.NewMemoryAdapter()}},
+	} {
+		for _, proxies := range []string{"", "10.0.0.0/8"} {
+			t.Run(tc.name+"/proxies="+proxies, func(t *testing.T) {
+				t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", tc.mode)
+				t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES", proxies)
+				logs := captureLog(t)
+				m, err := auth.NewManager(ctx, auth.Config{BaseURL: "https://opendocs.io",
+					Providers: []auth.Provider{{Name: "test", IssuerURL: ts.URL, ClientID: "c", ClientSecret: "s"}}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := withSessions(ctx, tc.adapter, m, docstore.MemoryLimiters()); err != nil {
+					t.Fatal(err)
+				}
+				if warned := strings.Contains(logs.String(), "TRUSTED_PROXIES is not set"); warned != (proxies == "") {
+					t.Errorf("proxy warning = %v with proxies %q: %q", warned, proxies, logs)
+				}
+				h := m.Routes()
+				login := func(remote, xff string) *httptest.ResponseRecorder {
+					req := httptest.NewRequest("GET", "/auth/test/login", nil)
+					req.RemoteAddr = remote
+					if xff != "" {
+						req.Header.Set("X-Forwarded-For", xff)
+					}
+					rec := httptest.NewRecorder()
+					h.ServeHTTP(rec, req)
+					return rec
+				}
+				for i := 0; i < passkey.DefaultBurst; i++ {
+					if rec := login("198.51.100.1:1000", ""); rec.Code != http.StatusFound {
+						t.Fatalf("login %d: %d", i+1, rec.Code)
+					}
+				}
+				// An untrusted peer cannot pick its own key with the header.
+				rec := login("198.51.100.1:1001", "203.0.113.7")
+				if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
+					t.Fatalf("over budget: %d, Retry-After %q", rec.Code, rec.Header().Get("Retry-After"))
+				}
+				if rec := login("198.51.100.2:1000", ""); rec.Code != http.StatusFound {
+					t.Fatalf("another address: %d", rec.Code)
+				}
+				if proxies != "" {
+					// A trusted proxy's header names the client; the proxy's own budget is not spent.
+					for i := 0; i < passkey.DefaultBurst; i++ {
+						if rec := login("10.1.1.1:1000", "203.0.113.50"); rec.Code != http.StatusFound {
+							t.Fatalf("via proxy, login %d: %d", i+1, rec.Code)
+						}
+					}
+					if rec := login("10.1.1.1:1000", "203.0.113.50"); rec.Code != http.StatusTooManyRequests {
+						t.Fatalf("via proxy, over budget: %d", rec.Code)
+					}
+					if rec := login("10.1.1.1:1000", "203.0.113.51"); rec.Code != http.StatusFound {
+						t.Fatalf("via proxy, another client: %d", rec.Code)
+					}
+				}
+			})
+		}
 	}
 }
