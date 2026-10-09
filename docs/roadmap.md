@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-7 of 10 since the last full run (#98, #99, #100, #101, #102, #103, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are done (#99, #100, #101).
+8 of 10 since the last full run (#98, #99, #100, #101, #102, #103, #104, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
 
@@ -557,23 +557,21 @@ New entries:
     item from a keyring answer, for example by calling `Load` on the item again before calling it gone, or document
     that a `Keyring` must not return `docstore.ErrNotFound`. Priority: medium. Where:
     `docstore/encrypt/repairall.go:312` and `:458`, `docstore/encrypt/encrypt.go:94`.
-33. **`WatchLog` filtered to full: when the cursor is past the saved head, the entries between the head and the cursor
-    are never chained.** Kind: fixable (narrow). Read of `docstore/directoryclient/watch.go` after #87: in filtered
-    mode the run saves `st.Seq, st.Hash` = the signed head and `st.Cursor = max(read.next, cursor)`
-    (`watch.go:552-554`). On the first full read the block "a switch from a filtered saved state" (`watch.go:380-409`)
-    ties the saved head to the log in two ways: if `entries[0].Seq == st.Seq+1` it checks `entries[0].Prev ==
-    st.Hash` (fully covered: cursor equal to the head); otherwise it finds entry `st.Seq` among the entries, or
-    fetches it with `entryAt` and compares its hash with `st.Hash` (covered when the cursor is below the head,
-    because the read starts at the cursor and the entries chain through `st.Seq`). The gap is only the case cursor
-    greater than `st.Seq`: then `entries[0].Seq == cursor+1`, `entryAt(st.Seq)` proves that one entry has the saved
-    hash, `VerifyLog` chains the entries from `cursor+1` on, but nothing links entry `st.Seq` to entry `cursor+1`
-    (entries `st.Seq+1` to `cursor` are never fetched), so a server could show a fork that is consistent from
-    `cursor+1` on. It needs `read.next` above the head, which can happen when the log grows between `c.Head`
-    (`watch.go:289`) and the filtered scan. Not verified by a test: write one (filtered run with the log growing
-    between the head and the scan, then a full run against a server that rewrites entries `st.Seq+1` to `cursor`).
-    Plan: in that case fetch `st.Seq` to `cursor+1` and check the chain, or save `Cursor = min(read.next, head.Seq)`
-    in filtered mode so the cursor never passes the saved head (simplest). Priority: low to medium. Where:
-    `docstore/directoryclient/watch.go:380-409` (the block) and `:552-554` (the saved cursor).
+33. **Done: `WatchLog` filtered to full: the cursor no longer passes the saved head.** Kind: fixable (narrow). Was: in
+    filtered mode the run saved `st.Seq, st.Hash` = the signed head and `st.Cursor = max(read.next, cursor)`, and
+    `read.next` can pass the head when the log grows between `c.Head` and the filtered scan. On the switch to the
+    full read, entry `st.Seq` was proved to carry the saved hash, but nothing linked it to entry `cursor+1`
+    (entries `st.Seq+1` to `cursor` were never fetched), so a server could show a fork consistent from `cursor+1`
+    on. Reproduced by a test before the fix (`TestWatchLogDetectsARewriteBetweenTheSavedHeadAndAFilteredCursor`,
+    `TestWatchLogFilteredCursorStaysWithinTheSavedHead`). Now: a filtered run saves `Cursor = min(max(read.next,
+    cursor), head.Seq)`, so a filtered cursor is never past the signed head and the existing anchoring (`Prev ==
+    st.Hash` when the read starts at `st.Seq+1`) covers the switch; the entries past the head are read again by the
+    next run (not reported twice: `Reported`; not audited twice: an entry read again is dropped from the
+    pending and audited lists when its number and hash match the pending one, and is `ErrLogCut` when the hash
+    differs). The switch from a filtered state at the head with nothing past it no longer gives a false
+    `ErrLogCut` (the head's entry is fetched when the read starts at or after it). A
+    filtered state an older run saved with `Cursor > Seq` is clamped to `Seq` on load, so it stays valid and is
+    checked. `WatchState` JSON is unchanged. Where: `docstore/directoryclient/watch.go`.
 34. **Blob backend has neither `SaveIf` nor `DeleteIf`.** Kind: fixable only in part. Confirmed:
     `docstore/backends/blob/blob.go` implements `Save`, `Load`, `List`, `ListPrefix` and `Delete` only (lines 92-138);
     the S3 backend has the conditional write (`docstore/backends/s3/s3.go:156`), as do postgres and mongo. The
@@ -693,9 +691,9 @@ New entries:
 
 Suggested order of the accessibility group: 48, 51, 49, 50, 52.
 
-**Urgency order of the open work:** the queue above, then 27 (lint), 28, 32, 31, 30, 33, 34, 35, 36, 37,
+**Urgency order of the open work:** the queue above, then 27 (lint), 28, 32, 31, 30, 34, 35, 36, 37,
 the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. Inherent entries: 41 to 45 and part of
-30 and 33.
+30.
 
 53. **Session store reads once per authenticated request.** Kind: inherent to correct logout across replicas. What:
     `sessionstore.Store.GetSession` has no cache, so each authenticated request is one `Load` of the shared store
