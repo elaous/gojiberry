@@ -139,6 +139,40 @@ func ListPrefix(ctx context.Context, a Adapter, prefix string) ([]Meta, error) {
 	return out, nil
 }
 
+// HeadReader is an optional capability of an Adapter: read only the first n bytes of a stored
+// document, without transferring the rest. LoadHead returns at most n bytes (fewer when the
+// document is shorter, and then they are the whole document) and ErrNotFound when id does not
+// exist. A backend implements it only when that is cheap (a file, a ranged object read, a SQL
+// substring); one that cannot do better than a full read (MongoDB) does not, and the helper
+// LoadHead below falls back to Load for it. A wrapper that changes what Load returns or
+// whether a document is visible (a deadline, a hidden prefix, a limit) must give LoadHead the
+// same semantics as its Load, or not implement it: the helper then reaches the inner adapter
+// only through the wrapper's Load.
+type HeadReader interface {
+	LoadHead(ctx context.Context, id string, n int) ([]byte, error)
+}
+
+// LoadHead reads the first n bytes of the document id of a: through HeadReader when a has it,
+// else by Load and a cut. whole says the bytes are the whole document (it is not longer than n,
+// or a had to be loaded in full anyway). With n <= 0 the document is loaded in full.
+func LoadHead(ctx context.Context, a Adapter, id string, n int) (head []byte, whole bool, err error) {
+	if hr, ok := a.(HeadReader); ok && n > 0 {
+		head, err = hr.LoadHead(ctx, id, n)
+		if err != nil {
+			return nil, false, err
+		}
+		if len(head) > n {
+			head = head[:n]
+		}
+		return head, len(head) < n, nil
+	}
+	d, err := a.Load(ctx, id)
+	if err != nil {
+		return nil, false, err
+	}
+	return d.Data, true, nil
+}
+
 // AdapterFactory builds an Adapter from that backend's own
 // JSON-encoded config (raw is nil/empty when nothing was configured).
 // Each backend defines its own config shape and unmarshals raw into

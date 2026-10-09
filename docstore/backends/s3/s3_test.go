@@ -30,6 +30,7 @@ type fakeS3 struct {
 	objects map[string][]byte
 	etags   map[string]string
 	n       int
+	ranges  []string // the Range of every GetObject, "" for none
 }
 
 func newFakeS3() *fakeS3 {
@@ -74,6 +75,19 @@ func (f *fakeS3) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*
 	}
 	now := time.Now()
 	etag := f.etags[*in.Key]
+	f.ranges = append(f.ranges, aws.ToString(in.Range))
+	if in.Range != nil {
+		var last int
+		if _, err := fmt.Sscanf(*in.Range, "bytes=0-%d", &last); err != nil {
+			return nil, apiErr{"InvalidArgument"}
+		}
+		if len(data) == 0 {
+			return nil, apiErr{"InvalidRange"} // what S3 answers for a range of an empty object
+		}
+		if last+1 < len(data) {
+			data = data[:last+1]
+		}
+	}
 	return &s3.GetObjectOutput{
 		Body:         io.NopCloser(bytes.NewReader(data)),
 		LastModified: &now,
@@ -241,5 +255,25 @@ func TestS3ListPrefixSendsThePrefixAndFollowsPages(t *testing.T) {
 	}
 	if len(p.prefixes) != 2 || p.prefixes[0] != "docs/directory/a/" || p.prefixes[1] != "docs/directory/a/" {
 		t.Errorf("prefixes sent: %v", p.prefixes)
+	}
+}
+
+func TestS3AdapterHeadReader(t *testing.T) {
+	docstore.CheckHeadReader(t, func() docstore.Adapter { return newAdapter(newFakeS3(), "test-bucket", "docs/") })
+	docstore.CheckHeadReader(t, func() docstore.Adapter { return newAdapter(newFakeS3(), "test-bucket", "") })
+}
+
+// LoadHead asks the service for a byte range, not the object.
+func TestS3LoadHeadSendsARange(t *testing.T) {
+	fake := newFakeS3()
+	a := newAdapter(fake, "b", "docs/")
+	ctx := context.Background()
+	_ = a.Save(ctx, "d", make([]byte, 1000))
+	got, err := a.LoadHead(ctx, "d", 100)
+	if err != nil || len(got) != 100 {
+		t.Fatalf("%d %v", len(got), err)
+	}
+	if len(fake.ranges) != 1 || fake.ranges[0] != "bytes=0-99" {
+		t.Errorf("ranges sent: %q", fake.ranges)
 	}
 }

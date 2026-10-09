@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-3 of 10 since the last full run (#98, #99, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are no longer paused.
+4 of 10 since the last full run (#98, #99, #100, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are no longer paused.
 
 ## Notes for upgraders
 
@@ -326,10 +326,10 @@ a way to avoid hitting the limit meanwhile.
 3. **Done:** **files in unsigned v1/v2 frames: `Sharing.RepairAll(ctx, RepairAllOptions)`** lists the store once and walks every document (and every other encrypted item: `expiry:`, `collab:`,
    `passkey/`, `public/` ..., sealed again by `Adapter.Rekey`) and
    runs `Sharing.Repair` on each document that has an unsigned file (same lock, same checks against the record, same
-   conditional writes), then returns a `RepairAllReport` (`Total`, `Signed` already v3, `Repaired`, `Files`,
+   conditional writes), then returns a `RepairAllReport` (`Total`, `Signed` already v3, `Repaired`, `Encrypted`, `Files`, `Next`,
    `Skipped` with a reason each: no signer, no key held, unreadable, forged, downgrade, plaintext, conflict; `Todo`
    for `DryRun`; `Remaining` when cut short). It never downgrades, deletes or uses `AcceptUnsigned`, is idempotent and
-   restartable (no saved cursor: run it again and it starts at the first id; a document that failed mid-write may be
+   restartable (a rerun starts at the first id, or after `RepairAllReport.Next` given as `RepairAllOptions.After`; a document that failed mid-write may be
    partly rewritten and a rerun finishes it; `Left()` is zero only when every encrypted file `Skip` does not leave readable was signed), and is bounded by the context, `Limit` and a `Progress` callback. There is no command
    for it: the docstore server holds no owner signer or identity, so it is a Go API for the owner's client (see
    [encryption-and-passkeys.md](encryption-and-passkeys.md), "Which files may be unsigned"). Was: only per-document
@@ -480,7 +480,7 @@ reduced or documented).
 1. **PR A: shared sign-in sessions. Done (#99).** `auth.Manager` session and OpenID Connect login-state store, store-backed, so a
    token issued by replica A is valid on replica B (the "found, not fixed" part of item 7; also the last line of the
    passkey infrastructure backlog above, item 2).
-2. **PR B: passkey challenge store. Done (this PR).**
+2. **PR B: passkey challenge store. Done (#100).**
    1. The sweep no longer reads anything: records are named `passkey/challenge/<expiry minute>/<hash>`, the token is
       `<random>.<expiry minute>` (validated like a session token; a malformed one never reaches the store), and the
       sweep deletes by name after the minute and a minute of grace. Used markers keep the name of their ceremony, so
@@ -494,9 +494,22 @@ reduced or documented).
       challenges; `store-required` is fatal (same helper and message shape as `GOJIBERRY_DOCSTORE_SESSIONS`). Also
       warned: `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES` set with `GOJIBERRY_DOCSTORE_PASSKEY_RPID` unset (ignored), and
       memory mode with `GOJIBERRY_DOCSTORE_REPLICAS` above 1.
-3. **PR C: `RepairAll` follow-ups.** An optional header-only or `Range` read interface with a `Load` fallback, an
-   opt-in to encrypt plaintext items, and a persistent resume cursor (item 3 says "no saved cursor"). Code:
-   `docstore/encrypt/repairall.go`.
+3. **PR C: `RepairAll` follow-ups. Done (this PR).** Code: `docstore/encrypt/repairall.go`, `docstore/docstore.go`.
+   1. Header reads: the optional `docstore.HeadReader` (`LoadHead(ctx, id, n)`, first n bytes) and the helper
+      `docstore.LoadHead`, which falls back to `Load` for an adapter without it. Implemented by the memory, localfs,
+      sqlite, postgres (`substr`), s3 (ranged GET) and blob (`NewRangeReader`) adapters and by `ExpiringAdapter`
+      (same deadline rules as its `Load`, then the inner head). Not by MongoDB (no cheap partial read of a binary
+      field), not by the encrypting `Adapter` (it would hand out ciphertext) and not by any wrapper that has not
+      thought it through; those are read in full as before. The scan asks for 128 KiB per file: the frame header is
+      inside the age stream, and age authenticates the first 64 KiB chunk whole before releasing a byte, so that is
+      the least a file can be judged from. A head that does not settle a file (more recipients than fit) is
+      followed by a full read of that file.
+   2. `RepairAllOptions.EncryptPlaintext` (default off): items stored in the clear that `Skip` does not leave
+      readable are encrypted and signed by the Repair and Rekey paths (needs `AllowPlaintext` and a `Signer`; `Encrypted`
+      in the report; `DryRun` lists them in `Todo`). It changes stored bytes that other readers may expect in the
+      clear: run `DryRun` first.
+   3. Resume cursor: `RepairAllOptions.After` and `RepairAllReport.Next`. Limit and After walk a huge store in slices;
+      `Next` is `""` when the end was reached. The caller persists it; `RepairAll` itself saves nothing.
 
 **PRs A, B and C are no longer paused:** the git history rewrite (item 26) is done, so the queue continues one PR at a time.
 

@@ -413,9 +413,12 @@ Threat model, store write access only (no owner key):
      `Adapter.RequireSigned` makes an adapter refuse unsigned frames for every document id the
      keyring binds (every id `DocID` finds with a `Binder` keyring, whether or not its record
      exists; ids it does not bind are not checked), for a deployment whose files were all upgraded.
-     **Upgrading a whole store.** `Sharing.RepairAll(ctx, RepairAllOptions{Progress, Limit, DryRun})` is
-     `Repair` over every document: it lists the store once, groups the files by document, loads each file to read its
-     frame header (a read of the whole store per run), and for each document with a v1/v2 file calls `Repair`, so a
+     **Upgrading a whole store.** `Sharing.RepairAll(ctx, RepairAllOptions{Progress, Limit, After, DryRun, Resign, EncryptPlaintext})` is
+     `Repair` over every document: it lists the store once, groups the files by document, reads the head of each file
+     (up to 128 KiB, through the optional `docstore.HeadReader` that the memory, localfs, sqlite, postgres, s3 and blob
+     adapters and `ExpiringAdapter` implement; a store without it, such as MongoDB, is read in full, a read of the whole
+     store per run; the frame header is inside the age stream, so the first 64 KiB chunk is the least that can be read,
+     and a file whose head does not settle it is read in full), and for each document with a v1/v2 file calls `Repair`, so a
      document is sealed again signed as a unit (and its record then says `signed`; a never-shared document with no
      `keys:` record gets one, signed, with `Signed` set, so a later unsigned frame in it is forged). Any other encrypted
      item (`expiry:`, `collab:`, `passkey/`, `public/` ...) is sealed again signed by `Adapter.Rekey`, one by one. A
@@ -426,10 +429,19 @@ Threat model, store write access only (no owner key):
      `unreadable`, `forged` (a bad v3 signature, or an unsigned file under a record that already says `signed`),
      `downgrade`, `plaintext`, `conflict`, `error`. It does not use `AcceptUnsigned`: vouching for a file stays a
      per-document decision of the owner. It never downgrades or deletes, is idempotent (a second run repairs 0)
-     and restartable (documents go in id order and there is no saved cursor: a rerun starts at the first id and finds
-     the finished ones `Signed`; run it again after a cancel, `Limit`, or once the missing key or signer is available), and a Save by another writer meanwhile is safe for the reasons `Repair` is (the lock and
+     and restartable (documents go in id order: a rerun starts at the first id and finds
+     the finished ones `Signed`, or carries on after the cursor: the report's `Next` is the last group it went through,
+     `""` once it reached the end, and `RepairAllOptions.After` starts after it, so `Limit` and `After` walk a huge store
+     in slices; the caller keeps the cursor, nothing is saved; run it again after a cancel, `Limit`, or once the missing key or signer is available), and a Save by another writer meanwhile is safe for the reasons `Repair` is (the lock and
      the conditional write). `DryRun` lists what it would do (`Todo`); `Report.Left()` is zero when every encrypted file that `Skip` does not leave readable (documents and the other
      items above) was in a signed frame when it looked; files `Skip` leaves in the clear are not looked at. A file saved unsigned after the scan by a client with no `Signer` is found by the next run.
+     **Files stored in the clear.** By default they are reported (`plaintext`) and left alone. With
+     `EncryptPlaintext` (which needs `Adapter.AllowPlaintext` and a `Signer`) the same run encrypts them, signed, by the
+     same Repair and Rekey paths (same lock, conditional writes, all or none per document; ids `Skip` leaves readable are
+     never touched; `DryRun` lists them in `Todo`; the report counts them in `Encrypted`; a second run finds them `Signed`).
+     This changes the stored bytes of documents that another reader (a tool, another service, an older release) may
+     expect in the clear, and nothing reads them afterwards without the keys; anything that does not start with the age
+     header counts as clear, including a damaged file that is not age. Run it with `DryRun` first and read `Todo`.
      There is no command: the docstore server has no owner signer or identity, so the owner's client calls it.
      **The window before `signed`, and the way out of it.** A re-key writes signed files and only
      then changes the record to say `signed`. A client with no `Signer` that read the record before

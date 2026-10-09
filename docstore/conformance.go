@@ -1,6 +1,7 @@
 package docstore
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"sort"
@@ -230,5 +231,59 @@ func CheckPrefixLister(t *testing.T, newAdapter func() Adapter) {
 		if strings.Join(have, ",") != strings.Join(exp, ",") {
 			t.Errorf("ListPrefix(%q) = %v, want %v", prefix, have, exp)
 		}
+	}
+}
+
+// CheckHeadReader runs the contract of HeadReader against an adapter that has it: the first n
+// bytes of a document come back (all of it when it is shorter, an empty document gives nothing,
+// bytes are not interpreted), a missing document is ErrNotFound, and the LoadHead helper agrees
+// with Load on whether the bytes are the whole document. The adapter must be fresh.
+func CheckHeadReader(t *testing.T, newAdapter func() Adapter) {
+	t.Helper()
+	ctx := context.Background()
+	a := newAdapter()
+	hr, ok := a.(HeadReader)
+	if !ok {
+		t.Fatalf("%T is not a HeadReader", a)
+	}
+	big := make([]byte, 5000)
+	for i := range big {
+		big[i] = byte(i * 7) // every byte value, zeros and high bytes included
+	}
+	for id, data := range map[string][]byte{"big": big, "small": []byte("abc"), "empty": {}} {
+		if err := a.Save(ctx, id, data); err != nil {
+			t.Fatalf("Save(%q): %v", id, err)
+		}
+	}
+	if _, err := hr.LoadHead(ctx, "missing", 10); !errors.Is(err, ErrNotFound) {
+		t.Errorf("LoadHead(missing) err = %v, want ErrNotFound", err)
+	}
+	for _, c := range []struct {
+		id   string
+		n    int
+		want []byte
+	}{
+		{"big", 1, big[:1]}, {"big", 100, big[:100]}, {"big", 4999, big[:4999]}, {"big", 5000, big},
+		{"big", 5001, big}, {"big", 1 << 20, big},
+		{"small", 2, []byte("ab")}, {"small", 3, []byte("abc")}, {"small", 10, []byte("abc")},
+		{"empty", 10, nil},
+	} {
+		got, err := hr.LoadHead(ctx, c.id, c.n)
+		if err != nil {
+			t.Errorf("LoadHead(%q, %d): %v", c.id, c.n, err)
+			continue
+		}
+		if !bytes.Equal(got, c.want) {
+			t.Errorf("LoadHead(%q, %d) = %d bytes, want %d", c.id, c.n, len(got), len(c.want))
+		}
+		head, whole, err := LoadHead(ctx, a, c.id, c.n)
+		if err != nil || !bytes.Equal(head, c.want) || whole != (len(c.want) < c.n) {
+			t.Errorf("helper LoadHead(%q, %d) = %d bytes, whole %v, %v", c.id, c.n, len(head), whole, err)
+		}
+	}
+	// A non-HeadReader goes through Load and is whole.
+	head, whole, err := LoadHead(ctx, struct{ Adapter }{a}, "big", 10)
+	if err != nil || len(head) != len(big) || !whole {
+		t.Errorf("helper without HeadReader = %d bytes, whole %v, %v", len(head), whole, err)
 	}
 }

@@ -95,3 +95,8 @@ func TestBlobAdapterListPrefix(t *testing.T) {
 		t.Fatalf("%v %v", got, err)
 	}
 }
+
+func TestBlobAdapterHeadReader(t *testing.T) {
+	docstore.CheckHeadReader(t, func() docstore.Adapter { return New(newTestBlobBucket(t), "docs/") })
+	docstore.CheckHeadReader(t, func() docstore.Adapter { return New(newTestBlobBucket(t), "") })
+}

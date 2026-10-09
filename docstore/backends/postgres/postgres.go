@@ -170,6 +170,20 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 	return doc, nil
 }
 
+// LoadHead implements docstore.HeadReader: substr(data, 1, n) is cut in the database, so only
+// the head crosses the wire.
+func (a *Adapter) LoadHead(ctx context.Context, id string, n int) ([]byte, error) {
+	var head []byte
+	err := a.db.QueryRowContext(ctx, `SELECT substr(data, 1, $2) FROM documents WHERE id = $1`, id, max(n, 0)).Scan(&head)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, docstore.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return head, nil
+}
+
 func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
 	return a.list(ctx, `SELECT id, length(data), updated_at FROM documents`)
 }

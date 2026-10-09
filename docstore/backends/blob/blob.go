@@ -109,6 +109,22 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 	return docstore.Document{ID: id, Data: data, UpdatedAt: reader.ModTime()}, nil
 }
 
+// LoadHead implements docstore.HeadReader: a ranged read of the first n bytes.
+func (a *Adapter) LoadHead(ctx context.Context, id string, n int) ([]byte, error) {
+	if n <= 0 {
+		return []byte{}, nil
+	}
+	reader, err := a.bucket.NewRangeReader(ctx, a.key(id), 0, int64(n), nil)
+	if gcerrors.Code(err) == gcerrors.NotFound {
+		return nil, docstore.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = reader.Close() }()
+	return io.ReadAll(io.LimitReader(reader, int64(n)))
+}
+
 func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
 	return a.ListPrefix(ctx, "")
 }
