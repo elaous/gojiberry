@@ -117,3 +117,45 @@ jobs:
 
       - name: make grammar-test
         run: make grammar-test
+
+  # The canvas-app dev server tests need a real PostgreSQL and skip without one (a skip prints "ok" and
+  # hid a stale assertion once). A service container is cheap, so run them here and fail on any skip.
+  canvas-app-postgres:
+    name: canvas-app tests against PostgreSQL
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: canvas
+          POSTGRES_PASSWORD: canvas
+          POSTGRES_DB: canvas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U canvas"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://canvas:canvas@127.0.0.1:5432/canvas?sslmode=disable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Apply the migrations
+        run: psql "$TEST_DATABASE_URL" -f examples/canvas-app/canvas/migrations/1_create_documents.up.sql
+
+      - name: Run the tests and fail on a skip
+        working-directory: examples/canvas-app
+        run: |
+          go test -count=1 -v ./... | tee test.log
+          if grep -q -- '--- SKIP' test.log; then
+            echo "a Postgres-backed test was skipped"
+            exit 1
+          fi

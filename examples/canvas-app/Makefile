@@ -58,7 +58,7 @@ db-status:
 
 .PHONY: test
 test: generate
-	DATABASE_URL="$(DATABASE_URL)" go test ./...
+	DATABASE_URL="$(DATABASE_URL)" TEST_DATABASE_URL="$(DATABASE_URL)" go test ./...
 
 .PHONY: clean
 clean:

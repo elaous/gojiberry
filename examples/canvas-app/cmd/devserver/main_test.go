@@ -16,10 +16,18 @@ import (
 	"github.com/elaous/gojiberry/examples/canvas-app/canvas"
 )
 
-// TestDevserverEndToEnd exercises the whole create -> view -> save ->
-// reload -> list flow against a real Postgres (started directly on
-// this machine; see the README for why not a Docker container).
-func TestDevserverEndToEnd(t *testing.T) {
+// openTestDB opens the Postgres the tests run against: TEST_DATABASE_URL, or the local default below.
+// The database needs the documents table (canvas/migrations/1_create_documents.up.sql).
+//
+// With no reachable server the test is skipped, and a skip is easy to miss, so the message says what
+// to set and how to start one (docs/testing-workflow.md has the full commands):
+//
+//	initdb -D "$PGDATA" -A trust -U postgres && pg_ctl -D "$PGDATA" -l "$PGDATA/log" -w start
+//	createuser -U postgres canvas && createdb -U postgres -O canvas canvas
+//	psql -U canvas canvas -f canvas/migrations/1_create_documents.up.sql
+//	TEST_DATABASE_URL=postgres://canvas:canvas@127.0.0.1:5432/canvas?sslmode=disable go test ./...
+func openTestDB(t *testing.T) *sql.DB {
+	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
 		dsn = "postgres://canvas:canvas@127.0.0.1:5432/canvas?sslmode=disable"
@@ -34,8 +42,17 @@ func TestDevserverEndToEnd(t *testing.T) {
 		}
 	})
 	if err := db.Ping(); err != nil {
-		t.Skipf("no reachable postgres at %s: %v", dsn, err)
+		t.Skipf("SKIPPED, NOT TESTED: no reachable postgres at %s (%v). Set TEST_DATABASE_URL to a Postgres that has the documents table "+
+			"(canvas/migrations/1_create_documents.up.sql); see \"Postgres-backed tests\" in docs/testing-workflow.md for how to start one locally", dsn, err)
 	}
+	return db
+}
+
+// TestDevserverEndToEnd exercises the whole create -> view -> save ->
+// reload -> list flow against a real Postgres (started directly on
+// this machine; see the README for why not a Docker container).
+func TestDevserverEndToEnd(t *testing.T) {
+	db := openTestDB(t)
 	// Registered after the Close cleanup above, so it runs first (cleanups are LIFO), while the pool is still open.
 	t.Cleanup(func() {
 		if _, err := db.Exec(`DELETE FROM documents`); err != nil {
@@ -110,7 +127,9 @@ func TestDevserverEndToEnd(t *testing.T) {
 		t.Fatalf("expected home page to list the document's preview, got: %s", body)
 	}
 
-	// Saving to a document that doesn't exist should fail.
+	// Saving to a document that doesn't exist is a 404, not a server error: canvas.Store.SaveDocument
+	// wraps canvas.ErrNotFound and the PUT handler maps that to http.StatusNotFound (an ID that is not
+	// a UUID is the same case; see canvas/store_notfound_test.go).
 	badReq, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/documents/does-not-exist",
 		strings.NewReader(`{"content":"x"}`))
 	badReq.Header.Set("Content-Type", "application/json")
@@ -119,8 +138,8 @@ func TestDevserverEndToEnd(t *testing.T) {
 		t.Fatalf("PUT to missing document: %v", err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected an error saving a nonexistent document, got status %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 saving a nonexistent document, got status %d", resp.StatusCode)
 	}
 }
 
@@ -129,22 +148,7 @@ func TestDevserverEndToEnd(t *testing.T) {
 // a script polling /__dev/version, and that route should exist; with
 // it off (the default), neither should be present.
 func TestDevModeInjectsLiveReloadScript(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		dsn = "postgres://canvas:canvas@127.0.0.1:5432/canvas?sslmode=disable"
-	}
-	db, err := sql.Open("pgx", dsn)
-	if err != nil {
-		t.Fatalf("opening database: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := db.Close(); err != nil {
-			t.Errorf("closing the database: %v", err)
-		}
-	})
-	if err := db.Ping(); err != nil {
-		t.Skipf("no reachable postgres at %s: %v", dsn, err)
-	}
+	db := openTestDB(t)
 	store := canvas.NewStore(db)
 
 	devSrv := httptest.NewServer(newMux(store, devreload.New()))
