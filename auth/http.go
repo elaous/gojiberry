@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -14,7 +15,8 @@ import (
 // Routes returns an http.Handler serving:
 //
 //	GET  /auth/providers          -- []ProviderInfo, every configured provider
-//	GET  /auth/{provider}/login   -- redirects to that provider's own consent screen
+//	GET  /auth/{provider}/login   -- redirects to that provider's own consent screen (429 with
+//	                                 Retry-After over the per-client budget of SetLoginLimiter, if set)
 //	GET  /auth/{provider}/callback -- the provider's own redirect_uri target
 //	GET  /auth/me                 -- the signed-in User for this request's own bearer token, or 401
 //	POST /auth/logout             -- invalidates this request's own bearer token
@@ -54,6 +56,11 @@ func (m *Manager) handleLoginFor(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if ok, secs := m.allowLogin(r); !ok {
+			w.Header().Set("Retry-After", strconv.Itoa(secs))
+			http.Error(w, "too many login attempts", http.StatusTooManyRequests)
 			return
 		}
 		p := m.byName[name]

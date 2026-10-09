@@ -37,6 +37,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/elaous/gojiberry/user"
+	"math"
+	"net"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -178,6 +181,53 @@ type Manager struct {
 	sessionTTL time.Duration
 	order      []string            // provider names, as configured
 	origins    map[string]struct{} // origins a login may return to
+
+	loginLimiter Limiter                    // nil: /auth/{provider}/login is not limited
+	clientIP     func(*http.Request) string // the client's address for loginLimiter (nil: the remote address)
+}
+
+// Limiter is a request budget per key: Allow reports whether the caller of key may go on now and,
+// if not, how long to wait. docstore.Limiter (and so docstore.RateLimiter and docstore.StoreLimiter)
+// satisfies it; the interface is declared here because this package cannot import docstore.
+type Limiter interface {
+	Allow(ctx context.Context, key string) (bool, time.Duration)
+}
+
+// SetLoginLimiter limits /auth/{provider}/login, which anyone can call without signing in and
+// which writes a login state to the session store: without a budget per client, a flood of logins
+// fills the store's bound on pending logins and every real login is refused until the sweep
+// clears it. Each request spends from l under the key "login|<client>", where clientIP gives the
+// client's address (nil: the host part of the connection's remote address). Over budget the route
+// answers 429 with Retry-After and writes nothing. A nil l (the default) turns the limit off.
+// Behind a reverse proxy clientIP must read the forwarded address from the proxy only
+// (passkey.TrustedProxies), or every client shares one budget. Call it before the Manager serves.
+func (m *Manager) SetLoginLimiter(l Limiter, clientIP func(*http.Request) string) {
+	m.loginLimiter, m.clientIP = l, clientIP
+}
+
+// allowLogin spends one login from the client's budget and reports whether it may go on and, if
+// not, the whole seconds (at least 1) it should wait.
+func (m *Manager) allowLogin(r *http.Request) (bool, int) {
+	if m.loginLimiter == nil {
+		return true, 0
+	}
+	var ip string
+	if m.clientIP != nil {
+		ip = m.clientIP(r)
+	} else if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		ip = host
+	} else {
+		ip = r.RemoteAddr
+	}
+	ok, wait := m.loginLimiter.Allow(r.Context(), "login|"+ip)
+	if ok {
+		return true, 0
+	}
+	secs := int(math.Ceil(wait.Seconds()))
+	if secs < 1 {
+		secs = 1
+	}
+	return false, secs
 }
 
 // loginState is what a login's own random state parameter maps to

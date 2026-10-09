@@ -325,7 +325,14 @@ func passkeyChallenges(ctx context.Context, adapter docstore.Adapter, raw string
 //
 // Expired records are swept in the background until ctx ends. With no session manager (no
 // provider and no passkeys) there is nothing to configure and a set variable is reported as ignored.
-func withSessions(ctx context.Context, adapter docstore.Adapter, m *auth.Manager) error {
+//
+// In every mode (the in-process default included) the OpenID Connect login routes get a request
+// budget per client address, from limiters ("login", the passkey routes' numbers): a login writes
+// a state record from a route that needs no sign-in, so without a budget a flood of logins fills
+// the bound on pending logins and every real login is refused until the sweep clears it. The
+// client is the connection's remote address, or, with GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES
+// (the list the passkey routes use), the forwarded address from those proxies.
+func withSessions(ctx context.Context, adapter docstore.Adapter, m *auth.Manager, limiters docstore.LimiterFactory) error {
 	raw := os.Getenv("GOJIBERRY_DOCSTORE_SESSIONS")
 	mode, err := sessionstore.ParseMode(raw)
 	if err != nil {
@@ -337,6 +344,13 @@ func withSessions(ctx context.Context, adapter docstore.Adapter, m *auth.Manager
 		}
 		return nil
 	}
+	clientIP := passkey.ClientIP
+	if px := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES")); px != "" {
+		clientIP = passkey.TrustedProxies(strings.Split(px, ",")...)
+	} else {
+		log.Print("docstore: WARNING: GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES is not set: the sign-in (login) rate limit tells clients apart by the connection's remote address, so behind a reverse proxy every client shares one budget and a few people signing in at once are refused with 429. Set it to the proxy's CIDRs (X-Forwarded-For is then believed from those proxies only)")
+	}
+	m.SetLoginLimiter(limiters("login", passkey.DefaultPerMinute, passkey.DefaultBurst), clientIP)
 	if mode == "memory" {
 		if n, _ := strconv.Atoi(strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_REPLICAS"))); n > 1 {
 			log.Printf("docstore: WARNING: GOJIBERRY_DOCSTORE_REPLICAS=%d but sign-in sessions are kept in each process: a token issued by one replica is unknown to the others. Set GOJIBERRY_DOCSTORE_SESSIONS=store (needs a store with conditional writes) or route each client to one replica", n)
@@ -392,7 +406,7 @@ func Main() {
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
-	if err := withSessions(context.Background(), adapter, authManager); err != nil {
+	if err := withSessions(context.Background(), adapter, authManager, limiters); err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
 	// The manager is attached before the public offer is wired: whether /docs counts as closed

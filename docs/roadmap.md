@@ -19,6 +19,14 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
   `store-required` refuses to start instead. Go API: `auth.Config.Sessions`, `Manager.SetSessionStore`, the
   `auth.SessionStore` interface (`MemorySessionStore` is the default) and the package `auth/sessionstore`; `auth`
   exports `LoginState` and `ErrStoreFull`. Details: [encryption-and-passkeys.md](encryption-and-passkeys.md) B.1.
+  **The OpenID Connect login routes now have a request budget per client address** (20 at once, 30 a minute, the
+  passkey routes' numbers; key `login|<address>`; over it `GET /auth/<provider>/login` answers `429` with
+  `Retry-After` and writes nothing), in every `GOJIBERRY_DOCSTORE_SESSIONS` mode. It lives where
+  `GOJIBERRY_DOCSTORE_LIMITER` says (per process, or shared through the store). **Behind a reverse proxy set
+  `GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES`** (the proxy's CIDRs; it names the client for the passkey routes
+  too): without it every client shares the proxy's address and one budget, and the server logs a warning at start.
+  Go API: `auth.Limiter`, `Manager.SetLoginLimiter`; the default (nil) is no limit, so an embedder that does not
+  call it is unchanged.
 - **Reserved document IDs.** IDs starting with `directory/` are reserved for the key directory
   (like `acl:` and `collab:`): `docstore.Server` refuses to read, write, list or delete them
   through `/docs`, so an existing document with such an ID becomes unreachable through the
@@ -378,11 +386,14 @@ a way to avoid hitting the limit meanwhile.
    `auth.Manager` takes a `SessionStore` (default `MemorySessionStore`, behaviour unchanged). The store-backed one
    keeps `auth/session/<expiry hour>/<sha256 of the token>` (the user, issued-at and expiry; the token is never
    stored) and `auth/state/<expiry minute>/<hash>` (OpenID Connect login states, nonce and PKCE verifier included,
-   single use by `DeleteIf` or a conditional used marker). No cache: every request is one read, so a logout is seen
-   on every replica at once. No sliding expiry (the in-memory one does not slide either): `SessionTTL` is the
+   single use by `DeleteIf` or a conditional used marker). No cache: every authenticated request is one read of the
+   store (two under `GOJIBERRY_DOCSTORE_EXPIRY_TTL`, where `ExpiringAdapter` reads the deadline record too), so a
+   logout is seen on every replica at once. No sliding expiry (the in-memory one does not slide either): `SessionTTL` is the
    absolute age. Bounded (100,000 sessions, 10,000 pending logins, `ErrStoreFull`/503, a live record is never
    evicted; counts per replica as for challenges). The sweep deletes by record name alone, reading nothing, which
-   also removes used markers whatever the listing shows. Records are encrypted under an encrypting adapter
+   also removes used markers whatever the listing shows; it lists the login states every minute and the sessions
+   (whose buckets are an hour wide) at the first sweep, when the hour changes and at least every 10 minutes, to
+   keep the LIST calls of many replicas down. Records are encrypted under an encrypting adapter
    (they hold names and e-mail addresses, so they are not in `encrypt.DefaultSkip`). Left, listed as items 53 to 55
    below. The account store (`AdapterStore`) was already shareable.
 8. **Done:** **concurrent double first-passkey UX.** Was: two tabs of a signed-in identity with no passkey account
@@ -658,16 +669,25 @@ the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. 
 30 and 33.
 
 53. **Session store reads once per authenticated request.** Kind: inherent to correct logout across replicas. What:
-    `sessionstore.Store.GetSession` has no cache, so each request with a bearer token is one `Load` of the shared
-    store (on a remote backend, a network round trip). Why: a positive cache would keep a logged-out token working
+    `sessionstore.Store.GetSession` has no cache, so each authenticated request is one `Load` of the shared store
+    (on a remote backend, a network round trip), and two under `GOJIBERRY_DOCSTORE_EXPIRY_TTL` (`ExpiringAdapter`
+    reads the deadline record too). A well-formed random bearer token always reaches the store (one `Load` per
+    `/docs` request that carries an `Authorization` header, found or not), and that is not covered by the login
+    limiter, which limits only `GET /auth/<provider>/login`. Why: a positive cache would keep a logged-out token working
     on other replicas for as long as it lives. Plan: if the cost matters, add an optional per-process cache with a
     stated maximum staleness (for example 5 seconds) behind an explicit option; off by default. Priority: low.
     Where: `auth/sessionstore`.
-54. **Login routes write to the store without a rate limit.** Kind: fixable. What: `GET /auth/<provider>/login` is
-    unauthenticated and, in `store` mode, creates a record (bounded at 10,000 pending logins, then 503, so a flood can
-    keep real logins out for up to the 10 minute state life plus the sweep). Plan: put the existing `Limiter`
-    (`docstore.StoreLimiter`, `GOJIBERRY_DOCSTORE_LIMITER`) in front of the login routes, keyed by client address with
-    `TrustedProxies`. Priority: medium. Where: `auth/http.go`, `internal/docstorecmd`.
+54. **Done:** **login routes wrote to the store without a rate limit.** Was: `GET /auth/<provider>/login` is
+    unauthenticated and, in `store` mode, creates a record (bounded at 10,000 pending logins, then 503), so about 17
+    requests a second filled the bound in 10 minutes and kept real logins out until the sweep cleared it (about 10 to
+    12 minutes); the in-memory store had the same flaw at 100,000. Now: `Manager.SetLoginLimiter` puts a `Limiter`
+    in front of the route, keyed `login|<client address>`, before anything is written; `cmd/docstore` sets it in every
+    sessions mode from `GOJIBERRY_DOCSTORE_LIMITER` (the passkey routes' 20 at once and 30 a minute) with the client from
+    `GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES` (`passkey.TrustedProxies`) or the remote address. Over budget:
+    `429` with `Retry-After`, no state written. **Residual limit:** a flood spread over many addresses can still fill
+    the 10,000 states (one address spends only its own budget), and then logins get 503 until the states expire and
+    the sweep clears them, up to about 12 minutes. Without `..._TRUSTED_PROXIES` behind a proxy all clients share
+    one budget. Where: `auth/auth.go`, `auth/http.go`, `internal/docstorecmd`.
 55. **Per-process auth state that remains.** Kind: fixable. Checked: there are no CSRF tokens or cookies in `auth`
     (the bearer header is the only credential, the OIDC state is the redirect's CSRF check and is now shared). What is
     still per process: (a) the public offer's anonymous sessions (`public.SessionStore`, item 16); (b) the default

@@ -117,10 +117,16 @@ default that works in one process. Pass your own in `passkey.Config` (or the sto
 | `ChallengeStore` | started ceremonies; `Take` must be atomic so a challenge is good once | `MemoryChallenges` (10,000 at most, swept every 5 s) | `StoreChallenges` (over a `docstore.ConditionalAdapter`: replicas on one store share ceremonies; `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store`), Redis `GETDEL`, a table with a delete-returning |
 | `auth.SessionStore` (`auth.Config.Sessions`, `Manager.SetSessionStore`) | the bearer sessions and OpenID Connect login states of the session manager that passkey sign-in also mints its sessions through; `TakeState` is single use | `auth.MemorySessionStore` (100,000 of each, in the process) | `sessionstore.Store` (over a `docstore.ConditionalAdapter`: replicas on one store share sessions; `GOJIBERRY_DOCSTORE_SESSIONS=store`), Redis |
 | `Limiter` | per client and route group: allowed now, or wait this long | `RateLimiter` (token bucket per address and group: 20 at once, 30 a minute) | Redis, a gateway; `Unlimited{}` to switch off |
+| `auth.Limiter` (`Manager.SetLoginLimiter`) | a budget per client address in front of `GET /auth/<provider>/login` (key `login|<address>`), which writes a login state without a sign-in; over it 429 with `Retry-After` and nothing is written | none for an embedder; `cmd/docstore` sets one in every `GOJIBERRY_DOCSTORE_SESSIONS` mode (the passkey routes' 20 at once, 30 a minute) | any `docstore.Limiter` (`docstore.StoreLimiter` shares it between replicas), a gateway |
 | `Config.ClientIP` | who the client is for the limiter | the remote address; `TrustedProxies(cidrs...)` reads `X-Forwarded-For` only from your proxies | your own function |
 
 Over the limit the routes answer 429 with `Retry-After`. `cmd/docstore` reads
-`GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES` (comma separated CIDRs) for the last row.
+`GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES` (comma separated CIDRs) for the last row, and the same list names the
+client for the login limiter: **behind a reverse proxy it must be set, or every client shares the proxy's address and
+one login budget** (the server logs a warning at start). The login budget lives where `GOJIBERRY_DOCSTORE_LIMITER`
+says. It exists because a flood of unauthenticated logins would otherwise fill the 10,000 pending-login bound and
+keep real logins out (503) until the sweep clears it; a flood from many addresses can still do that, for up to
+about 12 minutes.
 **Two tabs, one first passkey.** A passkey made while signed in (an OpenID Connect user with no passkey account yet)
 makes the account `Create`d under the identity's own ID, so two ceremonies begun before either finished (two tabs or
 devices) name the same account. `Creator.Create` is a conditional create (`SaveIf` with no digest on an `AdapterStore`
@@ -150,15 +156,19 @@ several replicas a token is known only to the replica that issued it. With `GOJI
 user (ID, name, username, picture, verified e-mail and its flag), the issue time and the expiry; the token is never
 stored, so someone who reads the store cannot sign in with it. A request reads its record (no cache: a logout on
 any replica is seen by the next request on every other; a cache would keep a logged-out token alive for as long
-as it lives). Expiry is the stored `Expires` checked on every read and does not slide (as in memory), so
+as it lives): one store read per authenticated request, two under `GOJIBERRY_DOCSTORE_EXPIRY_TTL` (the
+`ExpiringAdapter` reads the deadline record too). A well-formed random bearer token always reaches the store (one
+read per `/docs` request that carries an `Authorization` header); the login limiter does not cover that. Expiry is the stored `Expires` checked on every read and does not slide (as in memory), so
 `SessionTTL` is also the absolute age. `auth/state/<expiry minute>/<hash>` holds a login state (provider, return
 URL, PKCE verifier, nonce), consumed once by `DeleteIf` or, where that is missing (an encrypting adapter has none
 for an encrypted id), by a conditional swap to a used marker, so a replayed `state` fails on every replica and of
-any number of concurrent callbacks exactly one wins. The sweep (every minute) deletes by the expiry number in the
-record name without reading anything; used markers go the same way. At most 100,000 sessions and 10,000 pending
+any number of concurrent callbacks exactly one wins. The sweep deletes by the expiry number in the
+record name without reading anything; used markers go the same way. It lists the login states every minute and the
+sessions (hour-wide buckets) at the first sweep, when the hour changes and at least every 10 minutes, so many
+replicas make few LIST calls on an object store. At most 100,000 sessions and 10,000 pending
 logins wait (`auth.ErrStoreFull`, 503); a live record is never evicted, and each replica counts from its last
 sweep, so replicas can overshoot by what they write between sweeps. A store that cannot answer signs nobody in
-(401), and a logout it cannot do is a 503, never a silent success. The records are not in `encrypt.DefaultSkip`
+(401), and a logout it cannot do is a 503, never a silent success. **Limit:** the PKCE verifier and the nonce sit in the state record, so anyone who can read the store (or decrypt it, in encrypted mode) can complete a stolen authorization code until the state is consumed or expires (10 minutes); the store is already inside the trust boundary for session records, which name the user. The records are not in `encrypt.DefaultSkip`
 (they hold names and e-mail addresses and the PKCE verifier): under an encrypting adapter they are encrypted like
 any file (`passkey/` and `auth/` are not skipped), `RepairAll` treats each as an item of its own, and the document
 API refuses both prefixes in every mode. `store` on a store without conditional writes prints a warning that
@@ -836,7 +846,8 @@ cannot be opened.
      policy domain, so one company cannot spend another's). **The IP is the connection's address: behind a
      proxy every client shares it, so real per-client limiting, and any limiting of unauthenticated
      floods, belongs to the gateway in front of the server**; the budgets here only keep one tenant from
-     draining the service. `GOJIBERRY_DOCSTORE_LIMITER=memory` (default) keeps the budgets in each process;
+     draining the service. (The OpenID Connect login routes' budget, `login|<address>`, is one of these and uses the
+     same variable.) `GOJIBERRY_DOCSTORE_LIMITER=memory` (default) keeps the budgets in each process;
      `=store` keeps them in the store (`docstore.StoreLimiter`), so replicas on one store share them (the
      public offer's request budgets too: `public.Options.LimiterFactory`). Each budget is a record
      `ratelimit/<name>/<hash of the caller's key>` changed with a compare-and-set loop over

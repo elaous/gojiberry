@@ -50,6 +50,17 @@ const (
 	sweepGrace = time.Minute
 
 	recordVersion = 1
+
+	// maxTTL caps how far ahead a record may expire (a hundred years). Bucket numbers are seconds
+	// since the epoch divided by the bucket width, so a huge SessionTTL can neither overflow them
+	// nor make a token that is issued but never validates.
+	maxTTL = 100 * 365 * 24 * time.Hour
+	// maxUnix is the largest second a bucket may stand for (year 36812), far beyond maxTTL: a name
+	// with a bigger number is not one this store made.
+	maxUnix = 1 << 40
+
+	// sessionListEvery is how often RunSweep lists the sessions when the hour has not changed.
+	sessionListEvery = 10 * time.Minute
 )
 
 // Store is an auth.SessionStore over a docstore.Adapter.
@@ -159,13 +170,29 @@ func dec(c *atomic.Int64) {
 
 // bucketOf is the number of the bucket in which expires falls, rounded up: the record is certain
 // to have expired at bucketEnd(bucket).
+// It counts in seconds (nanoseconds overflow int64 past the year 2262).
 func (k kind) bucketOf(expires time.Time) int64 {
-	b := int64(k.bucket)
-	n := expires.UnixNano()
+	b := int64(k.bucket / time.Second)
+	n := expires.Unix()
+	if expires.Nanosecond() > 0 {
+		n++
+	}
 	return (n + b - 1) / b
 }
 
-func (k kind) bucketEnd(bucket int64) time.Time { return time.Unix(0, bucket*int64(k.bucket)) }
+func (k kind) bucketEnd(bucket int64) time.Time {
+	return time.Unix(bucket*int64(k.bucket/time.Second), 0)
+}
+
+// validBucket reports whether n is a bucket number this store could have made.
+func (k kind) validBucket(n int64) bool {
+	return n >= 0 && n <= maxUnix/int64(k.bucket/time.Second)
+}
+
+// expiry is when a record made now with ttl ends, with ttl kept within [0, maxTTL].
+func (s *Store) expiry(now time.Time, ttl time.Duration) time.Time {
+	return now.Add(min(max(ttl, 0), maxTTL))
+}
 
 // newToken is "<256 random bits>.<bucket>". The bucket is only a hint where the record is (and,
 // for the sweep, when it is surely dead): the authority on expiry is the record's Expires.
@@ -180,11 +207,12 @@ func (k kind) newToken(bucket int64) (string, error) {
 // id is the record name of token, or "" if token is not one this store could have made.
 func (k kind) id(token string) string {
 	i := strings.LastIndexByte(token, '.')
-	if i <= 0 || i == len(token)-1 || len(token) > 128 {
+	// The secret is base64url, which has no ".": a second dot is not a token of ours.
+	if i <= 0 || i == len(token)-1 || len(token) > 128 || strings.IndexByte(token, '.') != i {
 		return ""
 	}
 	bucket := token[i+1:]
-	if n, err := strconv.ParseInt(bucket, 10, 64); err != nil || n < 0 || strconv.FormatInt(n, 10) != bucket {
+	if n, err := strconv.ParseInt(bucket, 10, 64); err != nil || !k.validBucket(n) || strconv.FormatInt(n, 10) != bucket {
 		return ""
 	}
 	sum := sha256.Sum256([]byte(token))
@@ -202,7 +230,7 @@ func (k kind) idBucket(id string) (int64, bool) {
 		return 0, false
 	}
 	n, err := strconv.ParseInt(b, 10, 64)
-	return n, err == nil && n >= 0
+	return n, err == nil && k.validBucket(n)
 }
 
 // sessionRecord is what a session record holds: the user and when the session was made and ends.
@@ -259,7 +287,7 @@ func (s *Store) put(ctx context.Context, k kind, expires time.Time, body func() 
 // PutSession implements auth.SessionStore.
 func (s *Store) PutSession(ctx context.Context, u auth.User, ttl time.Duration) (string, error) {
 	now := s.clock()
-	expires := now.Add(ttl)
+	expires := s.expiry(now, ttl)
 	return s.put(ctx, sessionKind, expires, func() ([]byte, error) {
 		return json.Marshal(sessionRecord{V: recordVersion, User: u, IssuedAt: now, Expires: expires})
 	})
@@ -307,7 +335,7 @@ func (s *Store) DeleteSession(ctx context.Context, token string) error {
 
 // PutState implements auth.SessionStore.
 func (s *Store) PutState(ctx context.Context, st auth.LoginState, ttl time.Duration) (string, error) {
-	expires := s.clock().Add(ttl)
+	expires := s.expiry(s.clock(), ttl)
 	return s.put(ctx, stateKind, expires, func() ([]byte, error) {
 		return json.Marshal(stateRecord{V: recordVersion, State: st, Expires: expires})
 	})
@@ -383,12 +411,22 @@ func (s *Store) consume(ctx context.Context, cas docstore.ConditionalAdapter, id
 // left alone. It returns how many it deleted. Several sweeps at once (replicas) are harmless; in
 // one process they run one at a time.
 func (s *Store) Sweep(ctx context.Context) (int, error) {
+	n, _, err := s.sweep(ctx, true)
+	return n, err
+}
+
+// sweep is Sweep, listing the sessions only if sessions is true. It reports whether the sessions
+// were listed without an error.
+func (s *Store) sweep(ctx context.Context, sessions bool) (total int, sessionsListed bool, err error) {
 	s.sweeping.Lock()
 	defer s.sweeping.Unlock()
 	now := s.clock()
-	total := 0
+	kinds := []kind{stateKind}
+	if sessions {
+		kinds = []kind{sessionKind, stateKind}
+	}
 	var errs []error
-	for _, k := range []kind{sessionKind, stateKind} {
+	for _, k := range kinds {
 		metas, err := docstore.ListPrefix(ctx, s.Store, k.prefix)
 		if err != nil {
 			errs = append(errs, err)
@@ -397,7 +435,7 @@ func (s *Store) Sweep(ctx context.Context) (int, error) {
 		left := 0
 		for _, m := range metas {
 			if err := ctx.Err(); err != nil {
-				return total, err
+				return total, false, err
 			}
 			b, ok := k.idBucket(m.ID)
 			if !ok || now.Before(k.bucketEnd(b).Add(sweepGrace)) {
@@ -413,22 +451,55 @@ func (s *Store) Sweep(ctx context.Context) (int, error) {
 			}
 		}
 		s.count(k).Store(int64(left))
+		if k.prefix == SessionPrefix {
+			sessionsListed = true
+		}
 	}
-	return total, errors.Join(errs...)
+	return total, sessionsListed, errors.Join(errs...)
 }
 
-// RunSweep calls Sweep at once and then every interval (a minute when not positive) until ctx
-// ends; errors are logged. The first sweep is what sets the counts from the store at start-up.
+// sweepSchedule decides when the sessions are listed. Their buckets are an hour wide and their
+// records are only ever deleted by name once the bucket is over, so listing the whole keyspace
+// every minute (up to a hundred LIST calls a minute on an object store, on every replica) buys
+// nothing: they are listed at the first sweep, when the hour has changed since the last listing,
+// and at least every sessionListEvery. The login states (a minute wide, and the bound on them is
+// what an unauthenticated flood presses on) are listed at every sweep.
+type sweepSchedule struct {
+	listed bool
+	hour   int64
+	at     time.Time
+}
+
+func (c *sweepSchedule) sessionsDue(now time.Time) bool {
+	return !c.listed || now.Unix()/int64(sessionBucket/time.Second) != c.hour || now.Sub(c.at) >= sessionListEvery || now.Before(c.at)
+}
+
+func (c *sweepSchedule) sessionsListed(now time.Time) {
+	c.listed, c.hour, c.at = true, now.Unix()/int64(sessionBucket/time.Second), now
+}
+
+// step is one tick of RunSweep: a sweep that lists the sessions only when c says so.
+func (s *Store) step(ctx context.Context, c *sweepSchedule) {
+	now := s.clock()
+	_, listed, err := s.sweep(ctx, c.sessionsDue(now))
+	if listed {
+		c.sessionsListed(now)
+	}
+	if err != nil && ctx.Err() == nil {
+		log.Printf("sessionstore: sweeping shared sessions: %v", err)
+	}
+}
+
+// RunSweep sweeps at once and then every interval (a minute when not positive) until ctx ends;
+// errors are logged. The login states are listed at every sweep; the sessions at the first, when
+// the hour changes and at least every ten minutes (see sweepSchedule). The first sweep is what
+// sets the counts from the store at start-up.
 func (s *Store) RunSweep(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = time.Minute
 	}
-	sweep := func() {
-		if _, err := s.Sweep(ctx); err != nil && ctx.Err() == nil {
-			log.Printf("sessionstore: sweeping shared sessions: %v", err)
-		}
-	}
-	sweep()
+	var sched sweepSchedule
+	s.step(ctx, &sched)
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
@@ -436,7 +507,7 @@ func (s *Store) RunSweep(ctx context.Context, interval time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			sweep()
+			s.step(ctx, &sched)
 		}
 	}
 }
