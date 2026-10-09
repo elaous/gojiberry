@@ -592,6 +592,10 @@ const (
 	lookupsPerMinute   = 60
 	lookupsPerIP       = 120
 	lookupsInTotal     = 1200
+	// Reads of the log have budgets of their own, with the same numbers as lookups, so a client that polls the
+	// log hard cannot use up the lookups of everyone behind its address or in its shard, nor the reverse.
+	logsPerIP   = 120
+	logsInTotal = 1200
 	// adminFailuresPerMinute is how many wrong admin credentials one client may try a minute.
 	adminFailuresPerMinute = 10
 	// maxLogScan is how many entries one filtered log read looks at.
@@ -604,14 +608,13 @@ const (
 // chosen by the caller's user ID, cut that contention sixteen-fold. Each shard has the whole
 // budget divided by sixteen, so the total is unchanged, and a user (at most lookupsPerMinute a
 // minute, below one shard's budget) cannot spend more than their own shard. Reads of the log
-// (GET /directory/log) spend the same per-address and whole-server shard budgets as lookups (their
-// own per-user budget is separate), so a user who polls the log hard also uses up their shard's
-// lookups, and those of every other user that hashes to it.
+// (GET /directory/log) have their own per-user, per-address and whole-server shard budgets (dir-log,
+// dir-log-ip, dir-log-all-N), so polling the log never uses up lookups.
 const lookupShards = 16
 
 type directoryLimits struct {
-	publish, challenge, lookup, lookupIP, logRead, adminFail Limiter
-	lookupAll                                                [lookupShards]Limiter
+	publish, challenge, lookup, lookupIP, logRead, logIP, adminFail Limiter
+	lookupAll, logAll                                               [lookupShards]Limiter
 }
 
 func (s *Server) limits() *directoryLimits {
@@ -626,10 +629,12 @@ func (s *Server) limits() *directoryLimits {
 			lookup:    f("dir-lookup", lookupsPerMinute, lookupsPerMinute),
 			lookupIP:  f("dir-lookup-ip", lookupsPerIP, lookupsPerIP),
 			logRead:   f("dir-log", logReadsPerMinute, logReadsPerMinute),
+			logIP:     f("dir-log-ip", logsPerIP, logsPerIP),
 			adminFail: f("dir-admin", adminFailuresPerMinute, adminFailuresPerMinute),
 		}
 		for i := range s.dirLimits.lookupAll {
 			s.dirLimits.lookupAll[i] = f(fmt.Sprintf("dir-lookup-all-%d", i), lookupsInTotal/lookupShards, lookupsInTotal/lookupShards)
+			s.dirLimits.logAll[i] = f(fmt.Sprintf("dir-log-all-%d", i), logsInTotal/lookupShards, logsInTotal/lookupShards)
 		}
 	})
 	return s.dirLimits
@@ -868,21 +873,33 @@ func clientIP(r *http.Request) string {
 	return ip
 }
 
-// readBudget spends the budgets of a read of the directory (a lookup, the log): the user's own
+// readKind says which family of budgets a read of the directory spends.
+type readKind int
+
+const (
+	readLookup readKind = iota // a lookup of an address
+	readLog                    // a read of the log
+)
+
+// readBudget spends the budgets of a read of the directory (a lookup, or the log): the user's own
 // first, and only then the shared ones (per client IP, and for the whole server or, with
 // WithDirectoryGlobalPerDomain, the caller's e-mail domain), so a user who is over their own
-// limit is refused without taking a token from the budget everybody shares. own is the user's
-// limiter. It answers 429 itself and returns false when a budget is spent.
-func (s *Server) readBudget(w http.ResponseWriter, r *http.Request, u auth.User, own Limiter, ownKey string) bool {
+// limit is refused without taking a token from the budget everybody shares. The log has budgets of its own,
+// apart from the lookups'. It answers 429 itself and returns false when a budget is spent.
+func (s *Server) readBudget(w http.ResponseWriter, r *http.Request, u auth.User, kind readKind) bool {
 	lim := s.limits()
 	all := "all"
 	if s.dirDomainBudget {
 		all = "all:" + addressDomain(u.Email)
 	}
+	own, ownKey, ip, ipKey, shared := lim.lookup, "l:", lim.lookupIP, "li:", lim.lookupAll[lookupShard(u.ID)]
+	if kind == readLog {
+		own, ownKey, ip, ipKey, shared = lim.logRead, "g:", lim.logIP, "gi:", lim.logAll[lookupShard(u.ID)]
+	}
 	for _, c := range []struct {
 		l   Limiter
 		key string
-	}{{own, ownKey + u.ID}, {lim.lookupIP, "li:" + s.clientAddr(r)}, {lim.lookupAll[lookupShard(u.ID)], all}} {
+	}{{own, ownKey + u.ID}, {ip, ipKey + s.clientAddr(r)}, {shared, all}} {
 		if ok, wait := c.l.Allow(r.Context(), c.key); !ok {
 			tooMany(w, wait)
 			return false
@@ -923,7 +940,7 @@ func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not an e-mail address", http.StatusBadRequest)
 		return
 	}
-	if !s.readBudget(w, r, u, s.limits().lookup, "l:") {
+	if !s.readBudget(w, r, u, readLookup) {
 		return
 	}
 	// The policy is asked after the budgets, so that probing a refused address costs budget too.
@@ -955,7 +972,7 @@ func (s *Server) logReader(w http.ResponseWriter, r *http.Request) (auth.User, b
 	if !ok {
 		return auth.User{}, false
 	}
-	if !s.readBudget(w, r, u, s.limits().logRead, "g:") {
+	if !s.readBudget(w, r, u, readLog) {
 		return auth.User{}, false
 	}
 	if !s.policy().CanLookup(u, u.Email) {

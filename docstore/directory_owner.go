@@ -22,7 +22,7 @@ func (s *Server) handleEnrollment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not an e-mail address", http.StatusBadRequest)
 		return
 	}
-	if !s.readBudget(w, r, u, s.limits().lookup, "l:") {
+	if !s.readBudget(w, r, u, readLookup) {
 		return
 	}
 	if !s.policy().CanLookup(u, email) {
