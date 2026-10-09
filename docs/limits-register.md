@@ -151,7 +151,10 @@ Sources: [encryption-and-passkeys.md](encryption-and-passkeys.md) (called "the d
     3. *Shipped:* a replica's record dated more than 5 seconds ahead is re-dated for the rate limiter,
        owner signatures are accepted within 10 minutes. See the design's step 4b, limit 7a.
     4. *Who:* the operator keeps clocks in step (NTP) and, for several replicas, uses a store with
-       conditional writes.
+       conditional writes. The same holds for shared sign-in sessions and login states
+       (`GOJIBERRY_DOCSTORE_SESSIONS=store`): each replica compares the stored expiry with its own clock, so a
+       skewed replica ends a session early or late by the skew; the sweep waits a minute past the record's
+       expiry hour before deleting.
 
 ## Clients and storage
 

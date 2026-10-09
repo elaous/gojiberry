@@ -26,6 +26,8 @@ func TestSystemPrefixesCoverExportedConstants(t *testing.T) {
 		"docstore.DirectoryLogPrefix":    docstore.DirectoryLogPrefix + "e/1",
 		"docstore.DirectoryEnrollPrefix": docstore.DirectoryEnrollPrefix + "abc",
 		"docstore.RateLimitPrefix":       docstore.RateLimitPrefix + "ip/abc",
+		"docstore.SessionPrefix":         docstore.SessionPrefix + "491234/abc",
+		"docstore.LoginStatePrefix":      docstore.LoginStatePrefix + "29000000/abc",
 		"docstore.FolderSecretPrefix":    docstore.FolderSecretPrefix + "x",
 		"docstore.PublicPrefix":          docstore.PublicPrefix + "doc/x",
 		"docstore.ReportPrefix":          docstore.ReportPrefix + "x",

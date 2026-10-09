@@ -717,3 +717,19 @@ func TestCatalogKeyTricksAreRefused(t *testing.T) {
 		t.Errorf("another person's catalog after touching its ACL route: %d", c)
 	}
 }
+
+// A client that could write a record under the session keyspace could forge a sign-in.
+func TestSessionKeyspaceIsReservedFromTheDocumentAPI(t *testing.T) {
+	provider := newFakeOIDCProvider(t)
+	srv := newTestServerWithAuth(t, provider.srv.URL)
+	handler := srv.Handler()
+	for _, id := range []string{"auth/session/491234/abc", "AUTH/Session/491234/abc", "auth/state/29000000/abc", "Auth/State/1/x"} {
+		for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(method, "/docs/"+id, strings.NewReader(`{"user":{"ID":"google:1"}}`)))
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("%s %s = %d, want 400", method, id, rec.Code)
+			}
+		}
+	}
+}
