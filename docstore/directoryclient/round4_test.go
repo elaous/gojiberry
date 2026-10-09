@@ -805,3 +805,33 @@ func TestWatchLogGrowthPastTheHeadAtTheCursor(t *testing.T) {
 		}
 	})
 }
+
+func TestParseWatchState(t *testing.T) {
+	// First run: nothing saved.
+	if st, err := ParseWatchState(""); err != nil || st.Seq != 0 || len(st.Pending) != 0 {
+		t.Fatalf("empty: %+v %v", st, err)
+	}
+	// A state this version wrote round-trips.
+	want := WatchState{Seq: 7, Hash: "abc", Cursor: 5, Reported: 6}
+	b, _ := json.Marshal(want)
+	got, err := ParseWatchState(string(b))
+	if err != nil || got.Seq != 7 || got.Hash != "abc" || got.Cursor != 5 || got.Reported != 6 {
+		t.Fatalf("round trip: %+v %v", got, err)
+	}
+	// State saved before "made" became records ("made":[5]) and plain damage are refused whole, with the
+	// zero state: not half of it.
+	for name, raw := range map[string]string{
+		"old made format": `{"seq":7,"hash":"abc","cursor":5,"made":[5]}`,
+		"truncated":       `{"seq":7,"hash":"ab`,
+		"wrong type":      `{"seq":"seven"}`,
+		"not an object":   `[1,2,3]`,
+	} {
+		st, err := ParseWatchState(raw)
+		if !errors.Is(err, ErrBadWatchState) {
+			t.Errorf("%s: err %v, want ErrBadWatchState", name, err)
+		}
+		if st.Seq != 0 || st.Hash != "" || st.Cursor != 0 {
+			t.Errorf("%s: kept half a state: %+v", name, st)
+		}
+	}
+}

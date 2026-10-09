@@ -121,8 +121,13 @@ func newPage() (*page, error) {
 	if k, err := directoryclient.ImportOwnerKey(load("gj-owner-key")); err == nil {
 		p.ownerSigning = k
 	}
-	if raw := load("gj-watch-state"); raw != "" {
-		_ = json.Unmarshal([]byte(raw), &p.watch)
+	if st, err := directoryclient.ParseWatchState(load("gj-watch-state")); err != nil {
+		// Damaged, or saved by an older version: never use half of it. Forget it and say the next look is
+		// a first look.
+		store("gj-watch-state", "")
+		p.dirAlerts = append(p.dirAlerts, "The saved record of what this device has seen of the key directory could not be read, so the next check starts from scratch.")
+	} else {
+		p.watch = st
 	}
 	p.pending = components.NewPending(func() { p.render() })
 	p.asker = components.NewAsker(func() { p.render() })
