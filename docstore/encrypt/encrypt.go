@@ -94,6 +94,12 @@ var ErrNoRecipients = errors.New("encrypt: no recipients")
 type Keyring interface {
 	// Recipients are the keys the document id is encrypted to when saved (the owner, and
 	// everyone it is shared with).
+	//
+	// Recipients must not return docstore.ErrNotFound (or an error wrapping it) unless it
+	// means that the keyring has no record for id and nothing else. The adapter never treats a
+	// keyring's ErrNotFound as "the stored file is gone": it is turned into an ordinary error
+	// (the text kept, the chain cut), so a re-key fails with it and RepairAll skips the item
+	// (SkipError) and counts it in Left; only a stored file that is really missing is "gone".
 	Recipients(ctx context.Context, id string) ([]age.Recipient, error)
 	// Identities are the private keys that may open it.
 	Identities(ctx context.Context, id string) ([]age.Identity, error)
@@ -514,12 +520,31 @@ func IsEncrypted(b []byte) bool { return bytes.HasPrefix(b, header) }
 
 // bind returns the recipients of id and the Binding their record has. A keyring that is not a
 // Binder, or an id that belongs to no document, has the zero Binding.
+//
+// An error from the keyring is never docstore.ErrNotFound to the callers (see keyringNotFound):
+// the re-key and RepairAll read that as "the file is gone".
 func (a *Adapter) bind(ctx context.Context, id string) ([]age.Recipient, Binding, error) {
 	if b, ok := a.Ring.(Binder); ok && DocID(id) != "" {
-		return b.Bind(ctx, id)
+		rs, bd, err := b.Bind(ctx, id)
+		return rs, bd, keyringNotFound(err)
 	}
 	rs, err := a.Ring.Recipients(ctx, id)
-	return rs, Binding{}, err
+	return rs, Binding{}, keyringNotFound(err)
+}
+
+// keyringErr is a keyring's docstore.ErrNotFound with the chain cut: it says what the keyring
+// said, but errors.Is(err, docstore.ErrNotFound) is false, as that means "the stored file is
+// gone" to a re-key and to RepairAll, and a missing keyring record is not that.
+type keyringErr struct{ msg string }
+
+func (e keyringErr) Error() string { return e.msg }
+
+// keyringNotFound returns err, or, when it is (or wraps) docstore.ErrNotFound, a keyringErr.
+func keyringNotFound(err error) error {
+	if errors.Is(err, docstore.ErrNotFound) {
+		return keyringErr{"encrypt: keyring: " + err.Error()}
+	}
+	return err
 }
 
 func (a *Adapter) binds(id string) bool {

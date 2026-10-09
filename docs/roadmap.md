@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-8 of 10 since the last full run (#98, #99, #100, #101, #102, #103, #104, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are done (#99, #100, #101).
+9 of 10 since the last full run (#98, #99, #100, #101, #102, #103, #104, #105, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
 
@@ -547,16 +547,20 @@ New entries:
     the evictions of a live record in a metric. Priority: medium. Where: `docstore/limiter.go`
     (`SweepRateLimits`, `MaxRateLimitRecords`). See also the botnet limit,
     [limits register item 9](limits-register.md#public-docstore-and-operations).
-32. **`RepairAll` reports an item as "gone" when a custom `Keyring` returns `ErrNotFound` from `Recipients`.** Kind:
-    fixable. Confirmed. Cause: the `Keyring` interface (`docstore/encrypt/encrypt.go:94-100`) says nothing about
-    errors; the repair of a group reaches `Recipients` through `Adapter.bind` (`encrypt.go:521`), and the walk treats
-    any `errors.Is(err, docstore.ErrNotFound)` from the repair as "deleted since the scan" (`repairall.go:312-315`,
-    outcome "gone", not counted), as the scan does for a file it cannot load (`repairall.go:458`). The built-in
-    `StoreKeyring` can also return `ErrNotFound` wrapped from `loadRecord` (`share.go:321`), so this is not only a
-    custom-keyring case. Why: a live, unsigned item then looks gone and `Left()` looks clean. Plan: tell a deleted
-    item from a keyring answer, for example by calling `Load` on the item again before calling it gone, or document
-    that a `Keyring` must not return `docstore.ErrNotFound`. Priority: medium. Where:
-    `docstore/encrypt/repairall.go:312` and `:458`, `docstore/encrypt/encrypt.go:94`.
+32. **Done: `RepairAll` no longer reports an item as "gone" for a keyring `ErrNotFound`.** Kind: fixable. Was: the
+    walk read any `errors.Is(err, docstore.ErrNotFound)` from the repair as "deleted since the scan" (outcome "gone",
+    not counted), so a custom `Keyring` returning `ErrNotFound` from `Recipients`, or the built-in `StoreKeyring`
+    through its record lookup, made a live, unsigned item look deleted and `Left()` look clean; the re-key itself
+    (`rekeyGroupFiles`) also swallowed such an error as "deleted since it was listed", so the item was even counted
+    repaired. Reproduced by tests before the fix (`TestRepairAllKeyringNotFoundIsNotGone`,
+    `TestRepairAllStoreKeyringNotFoundIsNotGone`). Now: `Adapter.bind`, the one place the adapter calls the keyring,
+    cuts the `ErrNotFound` chain of a keyring error (the text is kept), so only a stored file that is really missing
+    is `ErrNotFound` to a re-key; and `RepairAll` calls an item gone only if an `ErrNotFound` is followed by none of
+    its files being stored any more (a head read of each), otherwise it is a `SkipError` and counted in `Left()`
+    (`TestRepairAllNotFoundWithTheFilesStoredIsNotGone`). The `Keyring` comment says `Recipients` must not return
+    `ErrNotFound` unless it means a missing record, and what is done with it. A real deletion is unchanged
+    (`TestRepairAllIgnoresAnItemDeletedAfterTheScan`). Where: `docstore/encrypt/encrypt.go` (`bind`, `Keyring`),
+    `docstore/encrypt/repairall.go`.
 33. **Done: `WatchLog` filtered to full: the cursor no longer passes the saved head.** Kind: fixable (narrow). Was: in
     filtered mode the run saved `st.Seq, st.Hash` = the signed head and `st.Cursor = max(read.next, cursor)`, and
     `read.next` can pass the head when the log grows between `c.Head` and the filtered scan. On the switch to the
