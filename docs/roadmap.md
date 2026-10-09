@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, this PR); the full suite runs on main after the
+5 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, #111, this PR); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -604,10 +604,17 @@ New entries:
     from the owner, or a one-click acknowledgement that stores the new first key). Priority: medium. Where:
     `docstore/directoryclient` (the lookup state and its `FirstOwner` field). Related to
     [limits register item 7](limits-register.md#the-key-directory).
-37. **The showcase shows the raw `ErrUnsignedAfterFlip` text with the Go-API hint.** Kind: fixable. Why: a person in
-    the browser reads "use `Repair(AcceptUnsigned)`", which they cannot call. Plan: translate the error in the
-    showcase into a plain, actionable message (which files, what the owner can do, in de/fr/es too). Priority:
-    medium. Where: `examples/canvas-editor-showcase` (the error display).
+37. **Done (this PR): the showcase explains encrypt errors in words.** Was: a person in the browser read the raw
+    Go text, for example "use `Repair(AcceptUnsigned)`", which they cannot call. Now `components.ExplainError` sorts an
+    error with `errors.Is` into a group (unsigned file after a key change, file not written by an owner, no signer,
+    older state or replayed list, unreadable file, no key opens it, locked, changed elsewhere, safety record not kept,
+    storage full, recovery key needed, offline) and gives a translated message that says what happened and what to do,
+    with no Go name or API call. The raw text stays behind a native Details disclosure with a Copy button
+    (`components.CopyText`); the message is the only `role="alert"`. An error nobody classified gets a generic
+    message plus Details; the showcase's own messages (`tErr`, `enc.err.*`) pass through as they were, with the
+    wrapped error as the detail. Keys `err.*` in en (the default text), de, fr and es. Where: `components/errors.go`
+    (every component's error line and the showcase's key panel), `components/encerr` (the encrypt sentinels; it is a
+    package of its own because `docstore/encrypt` cannot be imported by `components`).
 38. **Done:** **directory "Unmapped" addresses are listed, warned about once per change, and have a documented
     procedure.** Was: counted and logged as a number, `ReconcileReport.Unmapped` dropped by both callers. Now
     `AdapterDirectory.UnmappedAddresses` returns the count, a capped list (`UnmappedCap`, 100 by default; pseudonyms
