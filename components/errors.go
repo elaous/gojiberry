@@ -41,6 +41,8 @@ const (
 	ErrKindStorageFull ErrorKind = "storagefull"
 	// ErrKindRecovery is a key set that needs a recovery key or an SSH key too.
 	ErrKindRecovery ErrorKind = "recovery"
+	// ErrKindPasskey is a passkey ceremony that did not finish for a reason the person can act on.
+	ErrKindPasskey ErrorKind = "passkey"
 	// ErrKindOffline is a request that did not reach its server.
 	ErrKindOffline ErrorKind = "offline"
 	// ErrKindUnknown is everything else.

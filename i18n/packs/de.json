@@ -489,6 +489,12 @@
   "recipients.recoveryCommit": "Diesen Wiederherstellungsschlüssel hinzufügen",
   "recipients.recoveryCancel": "Abbrechen: nicht hinzufügen",
   "recipients.publish": "Meine Schlüssel veröffentlichen",
-  "enc.lockDiscard": "Sperren und ungespeicherte Änderungen verwerfen"
+  "enc.lockDiscard": "Sperren und ungespeicherte Änderungen verwerfen",
+  "err.passkey.timedOut": "Die Passkey-Anfrage ist abgelaufen. Bitte versuche es erneut.",
+  "err.passkey.notVerified": "Die Passkey-Prüfung ist fehlgeschlagen. Bitte versuche es erneut.",
+  "err.passkey.cancelled": "Die Passkey-Anfrage wurde abgebrochen.",
+  "err.passkey.already": "Dieses Gerät hat bereits einen Passkey für dieses Konto. Nutze ein anderes Gerät oder einen anderen Sicherheitsschlüssel.",
+  "err.passkey.insecure": "Passkeys funktionieren nur über eine sichere Verbindung (HTTPS).",
+  "err.passkey.unsupported": "Dieser Authenticator wird nicht unterstützt."
  }
 }

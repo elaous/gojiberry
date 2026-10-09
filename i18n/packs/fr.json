@@ -489,6 +489,12 @@
   "recipients.recoveryCommit": "Ajouter cette clé de récupération",
   "recipients.recoveryCancel": "Annuler : ne pas l'ajouter",
   "recipients.publish": "Publier mes clés",
-  "enc.lockDiscard": "Verrouiller et abandonner les modifications non enregistrées"
+  "enc.lockDiscard": "Verrouiller et abandonner les modifications non enregistrées",
+  "err.passkey.timedOut": "La demande de clé d'accès a expiré. Réessayez.",
+  "err.passkey.notVerified": "La vérification de la clé d'accès a échoué. Réessayez.",
+  "err.passkey.cancelled": "La demande de clé d'accès a été annulée.",
+  "err.passkey.already": "Cet appareil possède déjà une clé d'accès pour ce compte. Utilisez un autre appareil ou une autre clé de sécurité.",
+  "err.passkey.insecure": "Les clés d'accès ne fonctionnent que sur une connexion sécurisée (HTTPS).",
+  "err.passkey.unsupported": "Cet authentificateur n'est pas pris en charge."
  }
 }
