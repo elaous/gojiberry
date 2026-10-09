@@ -58,3 +58,22 @@ func TestServerErrorTellsAlreadyCreatedApart(t *testing.T) {
 		t.Error("another failure was taken for it")
 	}
 }
+
+// An answer of the server that carries its own sentence is shown as it is (UserMessage), not as "something went
+// wrong"; the account_exists answer is still ErrAlreadyCreated.
+func TestServerErrorKeepsTheServersSentenceForAPerson(t *testing.T) {
+	err := serverError(400, []byte(`{"error":"that e-mail address is taken"}`))
+	var um interface{ UserMessage() string }
+	if !errors.As(err, &um) || um.UserMessage() != "that e-mail address is taken" {
+		t.Fatalf("%v: no user message", err)
+	}
+	if err.Error() != "that e-mail address is taken" {
+		t.Errorf("Error() = %q", err.Error())
+	}
+	if got := serverError(409, []byte(`{"error":"x","code":"account_exists"}`)); !errors.Is(got, ErrAlreadyCreated) {
+		t.Errorf("account_exists = %v", got)
+	}
+	if got := serverError(502, []byte(`<html>bad gateway</html>`)); errors.As(got, &um) {
+		t.Errorf("an answer without a sentence must not claim to be one: %v", got)
+	}
+}

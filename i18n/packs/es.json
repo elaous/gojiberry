@@ -489,6 +489,12 @@
   "recipients.recoveryCommit": "Añadir esta clave de recuperación",
   "recipients.recoveryCancel": "Cancelar: no añadirla",
   "recipients.publish": "Publicar mis claves",
-  "enc.lockDiscard": "Bloquear y descartar los cambios sin guardar"
+  "enc.lockDiscard": "Bloquear y descartar los cambios sin guardar",
+  "err.passkey.timedOut": "La solicitud de passkey ha caducado. Inténtalo de nuevo.",
+  "err.passkey.notVerified": "No se pudo verificar la passkey. Inténtalo de nuevo.",
+  "err.passkey.cancelled": "Se canceló la solicitud de passkey.",
+  "err.passkey.already": "Este dispositivo ya tiene una passkey para esta cuenta. Usa otro dispositivo u otra llave de seguridad.",
+  "err.passkey.insecure": "Las passkeys solo funcionan con una conexión segura (HTTPS).",
+  "err.passkey.unsupported": "Este autenticador no es compatible."
  }
 }
