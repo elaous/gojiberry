@@ -945,7 +945,7 @@ cannot be opened.
      another operation or key at that number is a violation and the entry is not taken as the client's own
      (its pseudonym is not pinned), so the server cannot choose the address the watcher is held to by
      choosing a number. A filtered answer for an address the audited state says is enrolled is
-     `ErrFilteredEnrolled` (the owner of an enrolled address is shown the whole log). A void that arrives in a
+     `ErrFilteredEnrolled` (the owner of an enrolled address is shown the whole log). A filtered run never saves a cursor past the signed head, so the switch to the full read chains every entry after the saved head. A void that arrives in a
      later run than the entry it cancels is shown (`WatchReport.LateVoided`). `Enroll`, `Rotate` and
      `CompleteReset` pin the key the client made, never the one in the server's answer. Tested against the server with `httptest`.
    - **Host.** `examples/people-keys-demo` uses it: `AddMyPasskey`, `CreateRecoveryKey` (shown once) and

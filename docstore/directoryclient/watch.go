@@ -22,7 +22,8 @@ import (
 type WatchState struct {
 	// Seq and Hash are the last log entry the watcher saw (or, while the server shows it only its
 	// own address's entries, the last signed head); Cursor is how far it has read (the number
-	// of the last entry it processed; Seq when it reads the whole log).
+	// of the last entry it processed; Seq when it reads the whole log). While Filtered it is
+	// never past Seq, the signed head (a cursor an older run saved past it is read again from Seq).
 	Seq    int64  `json:"seq"`
 	Hash   string `json:"hash"`
 	Cursor int64  `json:"cursor,omitempty"`
@@ -297,7 +298,10 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	// whether it shows the whole log; if that is not what the last run saw, read again from where
 	// the other mode continues.
 	cursor := st.Cursor
-	if cursor == 0 {
+	if cursor == 0 || (st.Filtered && cursor > st.Seq) {
+		// A filtered cursor never passes the saved head (it is saved as the lesser of the two);
+		// one that does, saved by an older run, is read again from the head, so that the entries
+		// between the head and the cursor are chained when the read turns full.
 		cursor = st.Seq
 	}
 	fromSeen := func(filtered bool) int64 {
@@ -472,8 +476,12 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 		mine[a] = true
 	}
 	todo := append([]docstore.DirectoryLogEntry(nil), st.Pending...)
+	inTodo := map[int64]bool{}
+	for _, e := range todo {
+		inTodo[e.Seq] = true
+	}
 	for _, e := range fresh {
-		if mine[e.Address] {
+		if mine[e.Address] && !inTodo[e.Seq] { // an entry read again is not audited twice
 			todo = append(todo, e)
 		}
 	}
@@ -551,7 +559,9 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	// Everything verified: remember it.
 	if filtered {
 		st.Seq, st.Hash = head.Seq, head.Hash
-		st.Cursor = max(read.next, cursor)
+		// Never past the signed head: the entries after it are read again next run, and a switch
+		// to the full read then chains them to the saved head.
+		st.Cursor = min(max(read.next, cursor), head.Seq)
 	} else if lastSeq > 0 {
 		st.Seq, st.Hash, st.Cursor = lastSeq, lastHash, lastSeq
 	}

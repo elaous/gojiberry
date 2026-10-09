@@ -485,3 +485,96 @@ func TestWatchLogAnchorsAFilteredToFullSwitchToTheSavedHead(t *testing.T) {
 		}
 	}
 }
+
+// storeEntry writes a signed entry straight into the server's store (a rogue server's rewrite).
+func storeEntry(t *testing.T, e *env, in encrypt.LogEntry) encrypt.LogEntry {
+	t.Helper()
+	in.At = time.Now().Unix()
+	in.Address = e.dir.LogAddressFor("ana@x.io")
+	entry := encrypt.SignLogEntry(e.dir.Signer, in)
+	data, _ := json.Marshal(entry)
+	if err := e.store.Save(context.Background(), fmt.Sprintf("directory-log/e/%012d", entry.Seq), data); err != nil {
+		t.Fatal(err)
+	}
+	return entry
+}
+
+// A filtered state whose cursor is past the saved head (older runs saved it so) must not let a
+// server rewrite the entries between the head and the cursor when the read turns full: the entries
+// after the cursor chain among themselves, and nothing else links them to the saved head.
+func TestWatchLogDetectsARewriteBetweenTheSavedHeadAndAFilteredCursor(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	c := e.client(ana)
+	owner, _ := GenerateOwnerKey() // an enrolled address reads the whole log
+	if _, err := c.Enroll(ctx, "ana@x.io", owner); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		p, _, id := ageKey(t)
+		if _, err := c.Publish(ctx, PublishRequest{Email: "ana@x.io", Key: p, Identity: id, Owner: owner}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	saved := &WatchState{}
+	if _, err := c.WatchLog(ctx, "ana@x.io", saved, WatchOptions{}); err != nil || saved.Filtered {
+		t.Fatalf("%v %+v", err, saved)
+	}
+	// The server's history after the saved head is a fork: entry head+1 does not follow the head.
+	f1 := storeEntry(t, e, encrypt.LogEntry{Seq: saved.Seq + 1, Prev: strings.Repeat("ab", 32), Op: encrypt.OpPublish, Fingerprint: "SHA256:fork1"})
+	f2 := storeEntry(t, e, encrypt.LogEntry{Seq: saved.Seq + 2, Prev: f1.Hash, Op: encrypt.OpPublish, Fingerprint: "SHA256:fork2"})
+	forgeEntry(t, e, encrypt.LogEntry{Op: encrypt.OpPublish, Fingerprint: "SHA256:fork3"})
+	_ = f2
+
+	// A state an older run saved: filtered, the cursor two past the head.
+	sw := *saved
+	sw.Filtered, sw.Cursor = true, saved.Seq+2
+	before := sw
+	if _, err := c.WatchLog(ctx, "ana@x.io", &sw, WatchOptions{}); !errors.Is(err, ErrLogCut) {
+		t.Fatalf("a fork between the saved head and the cursor went unnoticed: %v", err)
+	}
+	if sw.Seq != before.Seq || sw.Cursor != before.Cursor || !sw.Filtered {
+		t.Errorf("the state changed on an error: %+v", sw)
+	}
+}
+
+// A filtered run whose scan passes the head (the log grew after the head was read) saves a cursor
+// that never passes the saved head, and the next run, filtered or full, goes on from there.
+func TestWatchLogFilteredCursorStaysWithinTheSavedHead(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	c := e.client(ana)
+	publishN(t, c, 2)
+	grown := false
+	c.HTTP = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		res, err := http.DefaultTransport.RoundTrip(r)
+		if err == nil && r.URL.Path == "/directory/log/head" && !grown {
+			grown = true
+			publishN(t, e.client(ana), 2) // the log grows between the head and the scan
+		}
+		return res, err
+	})}
+	st := &WatchState{}
+	rep, err := c.WatchLog(ctx, "ana@x.io", st, WatchOptions{})
+	if err != nil || !st.Filtered || !rep.Filtered {
+		t.Fatalf("%v %+v", err, st)
+	}
+	if st.Cursor > st.Seq {
+		t.Fatalf("the cursor %d is past the saved head %d", st.Cursor, st.Seq)
+	}
+	if len(rep.Entries) != 4 {
+		t.Fatalf("the entries past the head are reported with the run that read them: %+v", rep.Entries)
+	}
+	// The entries past the head are read again next time (not reported twice), and the head moves on.
+	rep, err = c.WatchLog(ctx, "ana@x.io", st, WatchOptions{})
+	if err != nil || len(rep.Entries) != 0 || st.Seq != 4 || st.Cursor != 4 {
+		t.Fatalf("%v %+v %+v", err, rep.Entries, st)
+	}
+	owner, _ := GenerateOwnerKey()
+	if _, err := c.Enroll(ctx, "ana@x.io", owner); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.WatchLog(ctx, "ana@x.io", st, WatchOptions{Owner: owner}); err != nil || st.Filtered {
+		t.Fatalf("filtered to full: %v %+v", err, st)
+	}
+}
