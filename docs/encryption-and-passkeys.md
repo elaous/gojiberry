@@ -144,11 +144,25 @@ sessions carry no e-mail, and two signed-out registrations with one address make
 (the token is not in the name). `Put` is a conditional create. `Take` loads the record and consumes it with one
 conditional step on the digest it read, `DeleteIf` or, on a store with only `SaveIf`, a swap to a used marker
 (then deleted), so of any number of concurrent Takes, on one replica or many, exactly one succeeds; the rest, and
-a replay, get `ErrBadChallenge` (410). The deadline is the stored `Expires`, checked on every Take (a replica's own
-clock, so skew moves it by seconds), and `Sweep` (every minute in the server) deletes expired (after a minute of grace),
-used and long-unreadable records. At most 10,000 wait (`ErrBusy`, 503); a live one is never evicted, and each replica
-counts from its last listing, so replicas can overshoot by what they write between listings. With
-`GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store` on a store without conditional writes the server refuses to start.
+a replay, get `ErrBadChallenge` (410). Records are named `passkey/challenge/<expiry minute>/<hash>` and the token is
+`<random>.<expiry minute>`; a token that is not exactly that (canonical digits, one dot, at most 128 bytes, a minute in
+range) never reaches the store. The deadline is the stored `Expires`, checked on every Take (a replica's own
+clock, so skew moves it by seconds). `Sweep` (every minute in the server, and once at start) lists the prefix and
+deletes by name what is a minute past its bucket, used markers included (they keep their ceremony's name), reading
+nothing; names of the earlier layout are left alone and not counted.
+   The cap (10,000 by default) and replicas. Three strategies were weighed: (a) count names from the listing the
+sweep already makes; (b) sharded counters moved by compare-and-set, rejected: a hot record written on every Begin
+and Take, retries under load, and a crashed replica leaks its increments; (c) the per-client `Limiter` on the Begin
+routes as the real bound. The server uses (c) with (a) as the backstop: each replica counts from its last listing
+plus its own writes, so at the cap `Put` answers `ErrBusy` (503) with no sweep and no `Load`, and a live challenge is
+never evicted. **Worst-case overshoot** of the cap = the ceremonies all replicas can write between two listings =
+(per-client rate per minute) x (distinct clients) x (sweep interval in minutes), and never more than
+(replicas - 1) x cap; with the default budget (30 a minute per client and route group) and the one-minute sweep that is
+30 records per client above the cap, and the next listing stops it on every replica.
+   `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store` on a store without conditional writes prints a multi-line warning
+(cause, effect, fix) and keeps ceremonies in each process; `store-required` makes the server refuse to start instead,
+like `GOJIBERRY_DOCSTORE_SESSIONS`. Memory mode with `GOJIBERRY_DOCSTORE_REPLICAS` above 1 warns that ceremonies are
+not shared.
 **Shared sessions.** The bearer session a sign-in returns (a passkey one, minted through `Manager.StartSession`, or
 an OpenID Connect one) is held by the `auth.Manager`'s `SessionStore`. By default that is in the process, so behind
 several replicas a token is known only to the replica that issued it. With `GOJIBERRY_DOCSTORE_SESSIONS=store`
@@ -987,13 +1001,14 @@ cannot be opened.
        proof of possession, see 5.7; the follow-up for the real app is the note above). The browser adapters do not implement
        `PrefixLister` (they fall back to listing the store). `ConditionalDeleter` is not implemented by the
        s3 backend, and the blob backend has no conditional writes at all (`GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store`
-       refuses to start on it). On s3 the sweep claims the record with a conditional write first, which narrows the
-       race to a token at most.
+       warns and falls back to per-process ceremonies on it; `store-required` refuses to start). On s3 `Take`
+       consumes through the used marker, and the sweep deletes by name.
        Shared passkey ceremonies (`store` mode) keep records under `passkey/challenge/`. Under an encrypting
        adapter they are age-encrypted (`DefaultSkip` does not exempt `passkey/`); on a plain store anyone who can
        read the store sees the pending registration's email and name. `Put` at the cap (10,000) returns busy without
-       scanning; the background sweep (every minute) frees room and reads at most 100 records younger than the
-       ceremony lifetime per pass, so used markers that outlive a failed delete may stay up to that lifetime.
+       scanning or reading; the background sweep (every minute) frees room by name and reads nothing, so a used marker
+       that outlives a failed delete goes with its bucket. Across replicas the cap can be exceeded by at most the
+       writes of one sweep interval (see B.1); the per-client limiter is the real bound.
 
 5. **Done (library):** encrypted records in packs and placeholder catalog entries for confidential
    documents.

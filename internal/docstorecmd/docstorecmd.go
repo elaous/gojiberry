@@ -288,20 +288,25 @@ func withPasskeys(ctx context.Context, srv *docstore.Server, adapter docstore.Ad
 }
 
 // passkeyChallenges is the ChallengeStore GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES asks for: nil (the
-// per-process default) for "" or "memory", or a passkey.StoreChallenges over adapter for "store".
-// "store" on a store without working conditional writes is an error, not a silent fallback: the
-// operator asked for replicas to share ceremonies, and a per-process store would break them.
-// Expired and used records are swept in the background until ctx ends.
+// per-process default) for "" or "memory", or a passkey.StoreChallenges over adapter for "store"
+// and "store-required". On a store without working conditional writes "store" prints a prominent
+// warning and falls back to the per-process store (the server keeps running; ceremonies are not
+// shared), and "store-required" is an error. Expired records are swept in the background until ctx
+// ends. The memory mode with GOJIBERRY_DOCSTORE_REPLICAS above 1 says that ceremonies are not shared.
 func passkeyChallenges(ctx context.Context, adapter docstore.Adapter, raw string) (passkey.ChallengeStore, error) {
 	mode, err := passkey.ParseChallengeMode(raw)
 	if err != nil {
 		return nil, err
 	}
-	if mode != "store" {
+	if mode == "memory" {
+		if n := declaredReplicas(); n > 1 {
+			log.Printf("docstore: WARNING: GOJIBERRY_DOCSTORE_REPLICAS=%d but passkey ceremonies are kept in each process: a sign-in or registration begun on one replica fails on another (410). Set GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store (needs a store with conditional writes) or route each client to one replica", n)
+		}
 		return nil, nil
 	}
-	if !docstore.SupportsConditional(ctx, adapter) {
-		return nil, errors.New("GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store needs a store with conditional writes; this one has none (use the default, one replica, or a store that has them)")
+	if ok, err := sharedStoreOrFallback(ctx, adapter, "GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES", mode, "passkey ceremonies",
+		"a sign-in or registration begun on one replica fails on another (410)"); err != nil || !ok {
+		return nil, err
 	}
 	sc, err := passkey.NewStoreChallenges(adapter, 0)
 	if err != nil {
@@ -310,6 +315,36 @@ func passkeyChallenges(ctx context.Context, adapter docstore.Adapter, raw string
 	go sc.RunChallengeSweep(ctx, time.Minute)
 	log.Print("docstore: passkey ceremonies are shared through the store")
 	return sc, nil
+}
+
+// declaredReplicas is GOJIBERRY_DOCSTORE_REPLICAS as a number (0 if unset or not a number; the
+// directory's own check reports a malformed value).
+func declaredReplicas() int {
+	n, _ := strconv.Atoi(strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_REPLICAS")))
+	return n
+}
+
+// sharedStoreOrFallback is the check shared by the "store" and "store-required" modes of
+// GOJIBERRY_DOCSTORE_SESSIONS and GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES. It reports whether adapter
+// has working conditional writes. If not, "store-required" is an error, and "store" prints a
+// multi-line warning that names the cause, what is lost (what, consequence) and the fix, and
+// returns false so the caller keeps the state in each process.
+func sharedStoreOrFallback(ctx context.Context, adapter docstore.Adapter, env, mode, what, consequence string) (bool, error) {
+	if docstore.SupportsConditional(ctx, adapter) {
+		return true, nil
+	}
+	cause := env + "=store needs a store with conditional writes (memory, localfs, sqlite, postgres, mongo or s3, not the blob backend)"
+	if mode == "store-required" {
+		return false, errors.New(cause + "; this one has none: move to a store that has them, or set " + env + "=store to fall back to per-process " + what)
+	}
+	log.Printf("docstore: WARNING: ================================================================\n"+
+		"docstore: WARNING: %s ARE NOT SHARED BY REPLICAS\n"+
+		"docstore: WARNING: cause: %s; this one has none, so %s stay in each process.\n"+
+		"docstore: WARNING: effect: %s.\n"+
+		"docstore: WARNING: fix: use a store with conditional writes, or run one replica / route each client to one replica.\n"+
+		"docstore: WARNING: set %s=store-required to refuse to start instead of falling back.\n"+
+		"docstore: WARNING: ================================================================", strings.ToUpper(what), cause, what, consequence, env)
+	return false, nil
 }
 
 // withSessions chooses where the session manager keeps its bearer sessions and OpenID Connect login
@@ -352,18 +387,14 @@ func withSessions(ctx context.Context, adapter docstore.Adapter, m *auth.Manager
 	}
 	m.SetLoginLimiter(limiters("login", passkey.DefaultPerMinute, passkey.DefaultBurst), clientIP)
 	if mode == "memory" {
-		if n, _ := strconv.Atoi(strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_REPLICAS"))); n > 1 {
+		if n := declaredReplicas(); n > 1 {
 			log.Printf("docstore: WARNING: GOJIBERRY_DOCSTORE_REPLICAS=%d but sign-in sessions are kept in each process: a token issued by one replica is unknown to the others. Set GOJIBERRY_DOCSTORE_SESSIONS=store (needs a store with conditional writes) or route each client to one replica", n)
 		}
 		return nil
 	}
-	if !docstore.SupportsConditional(ctx, adapter) {
-		const fix = "GOJIBERRY_DOCSTORE_SESSIONS=store needs a store with conditional writes (memory, localfs, sqlite, postgres, mongo or s3, not the blob backend)"
-		if mode == "store-required" {
-			return errors.New(fix + "; this one has none: move to a store that has them, or set GOJIBERRY_DOCSTORE_SESSIONS=store to fall back to per-process sessions")
-		}
-		log.Printf("docstore: WARNING: %s; this one has none, so sign-in sessions stay in each process and are NOT shared by replicas (a token issued by one replica is unknown to the others). Fix: use a store with conditional writes, or route each client to one replica. Set GOJIBERRY_DOCSTORE_SESSIONS=store-required to refuse to start instead", fix)
-		return nil
+	if ok, err := sharedStoreOrFallback(ctx, adapter, "GOJIBERRY_DOCSTORE_SESSIONS", mode, "sign-in sessions",
+		"a token issued by one replica is unknown to the others"); err != nil || !ok {
+		return err
 	}
 	ss, err := sessionstore.New(adapter)
 	if err != nil {
