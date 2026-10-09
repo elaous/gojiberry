@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -201,10 +202,11 @@ func TestRepairAllScanWithMoreRecipientsThanTheHeadHolds(t *testing.T) {
 		rs = append(rs, x.Recipient())
 	}
 	rs = append(rs, w.server.Recipient())
-	if err := w.inner.Save(ctx, id, sealRaw(t, rs, frame(id, Binding{}, []byte("x"), w.signer))); err != nil {
+	if err := w.inner.Save(ctx, id, sealRaw(t, rs, frame(id, Binding{}, randomBytes(t, 100<<10), w.signer))); err != nil {
 		t.Fatal(err)
 	}
-	// 40 recipients take over 4 KiB of age header; the stream behind it is 66 KiB.
+	// 40 recipients take over 4 KiB of age header; the payload is two chunks, so the stream is
+	// longer than the head and the scan must fall back to a whole read.
 	old := repairHeadBytes
 	repairHeadBytes = 66 << 10
 	defer func() { repairHeadBytes = old }()
@@ -212,6 +214,9 @@ func TestRepairAllScanWithMoreRecipientsThanTheHeadHolds(t *testing.T) {
 	rep, err := w.over(cnt, nil).RepairAll(ctx, RepairAllOptions{DryRun: true})
 	if err != nil || rep.Signed != 1 || rep.Left() != 0 {
 		t.Fatalf("%v %s", err, scanDigest(rep))
+	}
+	if cnt.perLoad[id] == 0 {
+		t.Errorf("the file was judged from its head alone: head %d, load %d", cnt.perHead[id], cnt.perLoad[id])
 	}
 }
 
@@ -435,6 +440,9 @@ func TestRepairAllCursorWalksTheStoreInSlices(t *testing.T) {
 		if rep.Total != rep.Signed+rep.Repaired+len(rep.Skipped)+rep.Remaining {
 			t.Errorf("slice %d does not add up: %s", slices, scanDigest(rep))
 		}
+		if rep.Finished != (rep.Next == "") {
+			t.Errorf("finished %v with next %q", rep.Finished, rep.Next)
+		}
 		if rep.Next == "" {
 			if rep.Remaining != 0 {
 				t.Errorf("finished with %d remaining", rep.Remaining)
@@ -537,8 +545,20 @@ func TestRepairAllCursorEdges(t *testing.T) {
 			cancel()
 		}
 	}})
-	if err == nil || rep.Next != groups[1] || rep.Remaining != len(groups)-2 {
-		t.Errorf("cut short: %v next %q remaining %d", err, rep.Next, rep.Remaining)
+	if err == nil || rep.Next != groups[1] || rep.Remaining != len(groups)-2 || rep.Finished {
+		t.Errorf("cut short: %v next %q remaining %d finished %v", err, rep.Next, rep.Remaining, rep.Finished)
+	}
+	// Cut short before the first group: Next is After unchanged ("" here) but the run is not
+	// finished, and Remaining says so.
+	dead, stop := context.WithCancel(ctx)
+	stop()
+	early, err := w.sharing.RepairAll(dead, RepairAllOptions{DryRun: true})
+	if !errors.Is(err, context.Canceled) || early.Next != "" || early.Finished || early.Remaining != len(groups) || early.Left() == 0 {
+		t.Errorf("cancelled first: %v next %q finished %v remaining %d", err, early.Next, early.Finished, early.Remaining)
+	}
+	early, err = w.sharing.RepairAll(dead, RepairAllOptions{DryRun: true, After: groups[1]})
+	if !errors.Is(err, context.Canceled) || early.Next != groups[1] || early.Finished || early.Remaining != len(groups)-2 {
+		t.Errorf("cancelled first after a cursor: %v next %q finished %v remaining %d", err, early.Next, early.Finished, early.Remaining)
 	}
 	rest, seen := run(rep.Next)
 	if strings.Join(seen, ",") != strings.Join(groups[2:], ",") || rest.Next != "" {
@@ -547,7 +567,7 @@ func TestRepairAllCursorEdges(t *testing.T) {
 	// Limit that ends exactly at the end is finished.
 	sh := w.sharing
 	last, err := sh.RepairAll(ctx, RepairAllOptions{DryRun: true, Limit: len(groups)})
-	if err != nil || last.Next != "" || last.Remaining != 0 {
-		t.Errorf("%v next %q remaining %d", err, last.Next, last.Remaining)
+	if err != nil || last.Next != "" || last.Remaining != 0 || !last.Finished {
+		t.Errorf("%v next %q remaining %d finished %v", err, last.Next, last.Remaining, last.Finished)
 	}
 }

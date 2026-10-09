@@ -415,7 +415,7 @@ Threat model, store write access only (no owner key):
      exists; ids it does not bind are not checked), for a deployment whose files were all upgraded.
      **Upgrading a whole store.** `Sharing.RepairAll(ctx, RepairAllOptions{Progress, Limit, After, DryRun, Resign, EncryptPlaintext})` is
      `Repair` over every document: it lists the store once, groups the files by document, reads the head of each file
-     (up to 128 KiB, through the optional `docstore.HeadReader` that the memory, localfs, sqlite, postgres, s3 and blob
+     (up to 128 KiB, which saves reads only for files larger than that: a smaller file is read whole either way; through the optional `docstore.HeadReader` that the memory, localfs, sqlite, postgres, s3 and blob
      adapters and `ExpiringAdapter` implement; a store without it, such as MongoDB, is read in full, a read of the whole
      store per run; the frame header is inside the age stream, so the first 64 KiB chunk is the least that can be read,
      and a file whose head does not settle it is read in full), and for each document with a v1/v2 file calls `Repair`, so a
@@ -430,9 +430,12 @@ Threat model, store write access only (no owner key):
      `downgrade`, `plaintext`, `conflict`, `error`. It does not use `AcceptUnsigned`: vouching for a file stays a
      per-document decision of the owner. It never downgrades or deletes, is idempotent (a second run repairs 0)
      and restartable (documents go in id order: a rerun starts at the first id and finds
-     the finished ones `Signed`, or carries on after the cursor: the report's `Next` is the last group it went through,
-     `""` once it reached the end, and `RepairAllOptions.After` starts after it, so `Limit` and `After` walk a huge store
-     in slices; the caller keeps the cursor, nothing is saved; run it again after a cancel, `Limit`, or once the missing key or signer is available), and a Save by another writer meanwhile is safe for the reasons `Repair` is (the lock and
+     the finished ones `Signed`, or carries on after the cursor: the report's `Next` is the last group it went through
+     (`After` itself when it went through none, so a run cancelled before its first group with `After` `""` also has
+     `Next` `""`: `Finished` is true only when the end was reached, and `Next == ""` with `Remaining == 0` means finished),
+     and `RepairAllOptions.After` starts after it, so `Limit` and `After` walk a huge store
+     in slices (groups sorting before the cursor are not revisited, so a file saved there afterwards is missed until a run
+     from the start; `Left` covers only the groups after `After`); the caller keeps the cursor, nothing is saved; run it again after a cancel, `Limit`, or once the missing key or signer is available), and a Save by another writer meanwhile is safe for the reasons `Repair` is (the lock and
      the conditional write). `DryRun` lists what it would do (`Todo`); `Report.Left()` is zero when every encrypted file that `Skip` does not leave readable (documents and the other
      items above) was in a signed frame when it looked; files `Skip` leaves in the clear are not looked at. A file saved unsigned after the scan by a client with no `Signer` is found by the next run.
      **Files stored in the clear.** By default they are reported (`plaintext`) and left alone. With
@@ -441,7 +444,9 @@ Threat model, store write access only (no owner key):
      never touched; `DryRun` lists them in `Todo`; the report counts them in `Encrypted`; a second run finds them `Signed`).
      This changes the stored bytes of documents that another reader (a tool, another service, an older release) may
      expect in the clear, and nothing reads them afterwards without the keys; anything that does not start with the age
-     header counts as clear, including a damaged file that is not age. Run it with `DryRun` first and read `Todo`.
+     header counts as clear, including a damaged file that is not age. A host that reads `passkey/`, `auth/`, `public/` or
+     `collab:` records raw from the same backend would break, because those are encrypted too (they are not in
+     `DefaultSkip`); `Skip` is the control that keeps an id out. Run it with `DryRun` first and read `Todo`.
      There is no command: the docstore server has no owner signer or identity, so the owner's client calls it.
      **The window before `signed`, and the way out of it.** A re-key writes signed files and only
      then changes the record to say `signed`. A client with no `Signer` that read the record before

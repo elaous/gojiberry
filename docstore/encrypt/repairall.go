@@ -137,9 +137,15 @@ type RepairAllReport struct {
 	Remaining int
 	// Next is the cursor to give RepairAllOptions.After to carry on: the id of the last group
 	// (document or item) this run went through, in id order; After itself when it went through
-	// none. It is "" when the run reached the end of the store, so a caller that persists it
-	// and loops until it is "" walks the store exactly once.
+	// none (so a run cut short before its first group, with After "", has Next "" too: look at
+	// Finished or Remaining, not at Next alone). It is "" and Finished is set when the run
+	// reached the end of the store, so a caller that persists Next and loops until Finished
+	// walks the store exactly once. "Next == "" and Remaining == 0" also means finished.
 	Next string
+	// Finished says the run went through every group after After to the end of the store, with
+	// no error and nothing left (Remaining is 0). It is false when the context ended or Limit was
+	// reached, even if Next is "".
+	Finished bool
 }
 
 // Left is how many documents or items still have unsigned frames or could not be checked:
@@ -197,7 +203,9 @@ type RepairAllOptions struct {
 	//
 	// It changes the stored bytes of documents that other readers (a tool, another service, an
 	// older release) may expect in the clear, and nothing afterwards reads them without the
-	// keys. Anything that does not start with the age header counts as clear, a damaged or
+	// keys. In particular a host that reads passkey/, auth/, public/ or collab: records raw from
+	// the same backend would break: those are encrypted too (they are not in DefaultSkip), and
+	// Skip is the control that keeps an id out of it. Anything that does not start with the age header counts as clear, a damaged or
 	// foreign non-age file too. Run it with DryRun first and read Todo.
 	EncryptPlaintext bool
 }
@@ -229,7 +237,8 @@ type RepairAllOptions struct {
 // Cost: the store is listed once, then each document is scanned by reading the head of every
 // one of its files (docstore.HeadReader: a ranged or substring read on localfs, sqlite, postgres,
 // s3 and blob, and on the memory store; at most repairHeadBytes, 128 KiB, per file, because the
-// age layer must be opened to see the frame inside it). A store whose adapter has no head read
+// age layer must be opened to see the frame inside it). The saving is only for files larger than
+// 128 KiB: a smaller file is read whole either way. A store whose adapter has no head read
 // (MongoDB, or one wrapped in something that hides it) is read in full, as before, so a large
 // store then costs a read of all of it per run, whether or not anything is repaired. Each
 // repaired document is listed again, under the lock, by Repair and read in full there.
@@ -239,7 +248,9 @@ type RepairAllOptions struct {
 // finished by running it again, from the first id (the finished ones are found Signed, one scan
 // each) or, to skip them, from the cursor: RepairAllReport.Next is the last group it went
 // through, and RepairAllOptions.After starts after it, so Limit and After walk a huge store in
-// slices. It is safe next to other writers for the reason Repair is. When the context ends it
+// slices. The cursor only moves forward: a group that sorts before it is not looked at again, so a
+// file saved there after it passed is missed until a run from the start (After ""); Left covers
+// only the groups after After. It is safe next to other writers for the reason Repair is. When the context ends it
 // returns the report so far and the context's error; a store that cannot be listed returns that
 // error. A skipped document is not an error: see Left.
 //
@@ -382,6 +393,7 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 		rep.Next = doc
 	}
 	rep.Next = ""
+	rep.Finished = true
 	sort.Slice(rep.BySigner, func(i, j int) bool { return rep.BySigner[i].Fingerprint < rep.BySigner[j].Fingerprint })
 	return rep, nil
 }
@@ -506,7 +518,7 @@ type frameScan struct {
 // the age header (about 100 bytes per recipient), the stream nonce and then the first payload
 // chunk, which age authenticates whole (64 KiB and a 16 byte tag) before it releases a byte. So
 // the least that can be read is a chunk and a header, and 128 KiB leaves room for the headers of
-// some 600 recipients. A file whose head is cut inside what is needed (more recipients than
+// some 450 recipients (an X25519 stanza is 130 to 150 bytes). A file whose head is cut inside what is needed (more recipients than
 // that) is read in full instead; a file shorter than this is read in full anyway.
 var repairHeadBytes = 128 << 10
 

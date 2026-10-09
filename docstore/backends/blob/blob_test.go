@@ -3,12 +3,18 @@
 package blob
 
 import (
+	"bytes"
 	"context"
-	"github.com/elaous/gojiberry/docstore"
+	"errors"
+	"os"
 	"testing"
 
+	"github.com/elaous/gojiberry/docstore"
+
 	"gocloud.dev/blob"
+	"gocloud.dev/blob/driver"
 	_ "gocloud.dev/blob/memblob"
+	"gocloud.dev/gcerrors"
 )
 
 // newTestBlobBucket opens a fresh, isolated in-memory *blob.Bucket --
@@ -99,4 +105,77 @@ func TestBlobAdapterListPrefix(t *testing.T) {
 func TestBlobAdapterHeadReader(t *testing.T) {
 	docstore.CheckHeadReader(t, func() docstore.Adapter { return New(newTestBlobBucket(t), "docs/") })
 	docstore.CheckHeadReader(t, func() docstore.Adapter { return New(newTestBlobBucket(t), "") })
+}
+
+// rangeDriver is a blob driver holding a few objects whose ranged reads of an empty object fail
+// the way S3 and GCS do (416 InvalidRange, which gocloud leaves as an unclassified error).
+type rangeDriver struct {
+	driver.Bucket
+	objs map[string][]byte
+}
+
+type rangeReader struct{ r *bytes.Reader }
+
+func (r rangeReader) Read(p []byte) (int, error) { return r.r.Read(p) }
+func (rangeReader) Close() error                 { return nil }
+func (rangeReader) As(any) bool                  { return false }
+func (r rangeReader) Attributes() *driver.ReaderAttributes {
+	return &driver.ReaderAttributes{Size: r.r.Size()}
+}
+
+var errInvalidRange = errors.New("InvalidRange: the requested range is not satisfiable")
+
+func (d rangeDriver) ErrorCode(err error) gcerrors.ErrorCode {
+	if errors.Is(err, os.ErrNotExist) {
+		return gcerrors.NotFound
+	}
+	return gcerrors.Unknown
+}
+
+func (d rangeDriver) NewRangeReader(ctx context.Context, key string, offset, length int64, _ *driver.ReaderOptions) (driver.Reader, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	data, ok := d.objs[key]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	if length >= 0 && len(data) == 0 {
+		return nil, errInvalidRange
+	}
+	if length < 0 || offset+length > int64(len(data)) {
+		length = int64(len(data)) - offset
+	}
+	return rangeReader{bytes.NewReader(data[offset : offset+length])}, nil
+}
+
+func (d rangeDriver) Close() error { return nil }
+
+func TestBlobAdapterLoadHeadEmptyObjectOnInvalidRange(t *testing.T) {
+	ctx := context.Background()
+	drv := rangeDriver{objs: map[string][]byte{"p/empty": {}, "p/long": []byte("0123456789")}}
+	a := New(blob.NewBucket(drv), "p/")
+
+	head, err := a.LoadHead(ctx, "empty", 8)
+	if err != nil || len(head) != 0 {
+		t.Fatalf("empty object: %q, %v", head, err)
+	}
+	// Through the helper the empty head is the whole document.
+	head, whole, err := docstore.LoadHead(ctx, a, "empty", 8)
+	if err != nil || len(head) != 0 || !whole {
+		t.Fatalf("docstore.LoadHead empty: %q whole=%v err=%v", head, whole, err)
+	}
+	head, whole, err = docstore.LoadHead(ctx, a, "long", 4)
+	if err != nil || string(head) != "0123" || whole {
+		t.Fatalf("long: %q whole=%v err=%v", head, whole, err)
+	}
+	if _, err := a.LoadHead(ctx, "missing", 8); !errors.Is(err, docstore.ErrNotFound) {
+		t.Fatalf("missing: %v, want ErrNotFound", err)
+	}
+	// A cancelled context stays a context error and is not retried as a whole read.
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := a.LoadHead(cctx, "long", 4); err == nil {
+		t.Fatal("cancelled context: no error")
+	}
 }

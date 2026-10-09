@@ -500,7 +500,7 @@ reduced or documented).
       sqlite, postgres (`substr`), s3 (ranged GET) and blob (`NewRangeReader`) adapters and by `ExpiringAdapter`
       (same deadline rules as its `Load`, then the inner head). Not by MongoDB (no cheap partial read of a binary
       field), not by the encrypting `Adapter` (it would hand out ciphertext) and not by any wrapper that has not
-      thought it through; those are read in full as before. The scan asks for 128 KiB per file: the frame header is
+      thought it through; those are read in full as before. The scan asks for 128 KiB per file (the saving applies only to files larger than that; smaller ones are read whole either way): the frame header is
       inside the age stream, and age authenticates the first 64 KiB chunk whole before releasing a byte, so that is
       the least a file can be judged from. A head that does not settle a file (more recipients than fit) is
       followed by a full read of that file.
@@ -509,7 +509,7 @@ reduced or documented).
       in the report; `DryRun` lists them in `Todo`). It changes stored bytes that other readers may expect in the
       clear: run `DryRun` first.
    3. Resume cursor: `RepairAllOptions.After` and `RepairAllReport.Next`. Limit and After walk a huge store in slices;
-      `Next` is `""` when the end was reached. The caller persists it; `RepairAll` itself saves nothing.
+      `Next` is `""` and `Finished` set when the end was reached (a run cancelled before its first group with `After` `""` has `Next` `""` but not `Finished`). Groups before the cursor are not revisited. The caller persists it; `RepairAll` itself saves nothing.
 
 **PRs A, B and C are no longer paused:** the git history rewrite (item 26) is done, so the queue continues one PR at a time.
 
