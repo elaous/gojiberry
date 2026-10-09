@@ -88,6 +88,9 @@ type AdapterDirectory struct {
 	// (2 minutes when 0; see directory_recover.go). Younger, the operation is refused with
 	// ErrDirectoryBusy: the write may be in flight on another replica.
 	ReconcileGrace time.Duration
+	// UnmappedCap is how many unmapped addresses UnmappedAddresses lists (DefaultUnmappedCap when
+	// not positive); the count is always whole.
+	UnmappedCap int
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
 
@@ -100,6 +103,10 @@ type AdapterDirectory struct {
 	// idx is the owner-state entries of the log by address (reconciliation, directory_recover.go).
 	idxMu sync.Mutex
 	idx   logIndex
+	// unmappedWarned is the count the last warning named (unmappedMu), so a sweep that finds the
+	// same addresses again does not log again.
+	unmappedMu     sync.Mutex
+	unmappedWarned int
 	// id is this process's registration name (Writers).
 	idMu sync.Mutex
 	id   string
@@ -1050,6 +1057,11 @@ func (s dirService) LogFor(ctx context.Context, addresses []string, since int64,
 // OperatorResetEnrollment implements docstore.DirectoryOperator.
 func (s dirService) OperatorResetEnrollment(ctx context.Context, pseudonym string) (docstore.DirectoryEnrollment, error) {
 	return s.d.OperatorResetEnrollment(ctx, pseudonym)
+}
+
+// UnmappedAddresses implements docstore.DirectoryUnmappedLister.
+func (s dirService) UnmappedAddresses(ctx context.Context) (docstore.DirectoryUnmapped, error) {
+	return s.d.UnmappedAddresses(ctx)
 }
 
 func (s dirService) Head(ctx context.Context) (docstore.DirectoryHead, error) { return s.d.Head(ctx) }

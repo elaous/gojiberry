@@ -36,7 +36,7 @@ import (
 //     for: an enrollment record, or a published key (so the first enrollment of an address, which
 //     has no enrollment record yet, is found when the address has a key). An address with entries
 //     and neither is found when somebody operates on it, or reset by the operator (it is counted
-//     and logged: ReconcileReport.Unmapped).
+//     listed, with a warning once per change: UnmappedAddresses, ReconcileReport.Unmapped).
 //   - The operator's reset (OperatorResetEnrollment), for what reconciliation cannot mend (an
 //     address with no record whose email nobody asks about, a key and its reset both lost): it
 //     removes the enrollment and logs an operator-reset entry, which the audit accepts as
@@ -181,7 +181,8 @@ type ReconcileReport struct {
 	Deferred int
 	// Unmapped is how many pseudonyms have owner-state entries in the log and no e-mail the store
 	// knows (no enrollment record and no published key): the pass cannot replay them. They are
-	// found when somebody operates on the address, or reset by the operator.
+	// found when somebody operates on the address, or reset by the operator. The adapter lists
+	// them (UnmappedAddresses, GET /admin/directory/unmapped) and warns once per change.
 	Unmapped int
 }
 
@@ -233,22 +234,108 @@ func (d *AdapterDirectory) reconcileAll(ctx context.Context) (ReconcileReport, e
 		}()
 	}
 	// Pseudonyms with owner-state entries that none of those e-mails explains.
+	un := d.findUnmapped(covered)
+	rep.Unmapped = len(un)
+	d.warnUnmapped(rep.Unmapped)
+	return rep, nil
+}
+
+// DefaultUnmappedCap is how many unmapped addresses UnmappedAddresses lists.
+const DefaultUnmappedCap = 100
+
+// findUnmapped returns the pseudonyms of the index with owner-state entries that covered does not
+// name, by first entry number. Entries that an operator reset ended or that a void cancelled have
+// no effect, as AuditAddress reads them: an address left with none (last word an operator reset,
+// or only voids and the entries they cancel) is settled and not listed.
+func (d *AdapterDirectory) findUnmapped(covered map[string]bool) []docstore.DirectoryUnmappedAddress {
 	d.idxMu.Lock()
-	for a := range d.idx.byAddr {
-		if !covered[a] {
-			for _, e := range d.idx.byAddr[a] {
-				if e.Op != OpVoid && e.Op != OpOperatorReset {
-					rep.Unmapped++
-					break
-				}
+	defer d.idxMu.Unlock()
+	var out []docstore.DirectoryUnmappedAddress
+	for a, ents := range d.idx.byAddr {
+		if covered[a] {
+			continue
+		}
+		voided := map[int64]bool{} // entry numbers that a void of this address cancels
+		for _, e := range ents {
+			if e.Op == OpVoid {
+				voided[e.Ref] = true
 			}
 		}
+		var u docstore.DirectoryUnmappedAddress
+		for _, e := range ents {
+			switch {
+			case e.Op == OpOperatorReset:
+				u = docstore.DirectoryUnmappedAddress{} // everything before it is ended
+				continue
+			case e.Op == OpVoid, voided[e.Seq]:
+				continue
+			}
+			if u.FirstSeq == 0 {
+				u.Address, u.FirstSeq, u.FirstAt = a, e.Seq, e.At
+			}
+			u.LastSeq, u.LastAt = e.Seq, e.At
+		}
+		if u.FirstSeq != 0 {
+			out = append(out, u)
+		}
 	}
-	d.idxMu.Unlock()
-	if rep.Unmapped > 0 {
-		log.Printf("encrypt: %d address pseudonyms have owner-state entries in the log and no record or key the directory can name them by; they are reconciled when somebody operates on the address (or reset by the operator)", rep.Unmapped)
+	sort.Slice(out, func(i, j int) bool { return out[i].FirstSeq < out[j].FirstSeq })
+	return out
+}
+
+// UnmappedAddresses lists the log pseudonyms with owner-state entries that no e-mail the store
+// knows explains (see ReconcileReport.Unmapped), computed now: the count, the first
+// UnmappedCap of them (pseudonyms only, never an e-mail), and the time. An address leaves the
+// list when its owner operates on it (Enroll, RequestReset, CancelReset mend it) or the operator
+// resets it (OperatorResetEnrollment).
+func (d *AdapterDirectory) UnmappedAddresses(ctx context.Context) (docstore.DirectoryUnmapped, error) {
+	if d.Signer == nil {
+		return docstore.DirectoryUnmapped{}, ErrDirectoryOff
 	}
-	return rep, nil
+	emails, err := d.knownEmails(ctx)
+	if err != nil {
+		return docstore.DirectoryUnmapped{}, err
+	}
+	if _, err := d.stateEntries(ctx, nil); err != nil {
+		return docstore.DirectoryUnmapped{}, err
+	}
+	covered := map[string]bool{}
+	for _, email := range emails {
+		for _, a := range d.LogAddressesFor(email) {
+			covered[a] = true
+		}
+	}
+	all := d.findUnmapped(covered)
+	now := d.now()
+	out := docstore.DirectoryUnmapped{Count: len(all), Addresses: []docstore.DirectoryUnmappedAddress{}, ComputedAt: now.Unix()}
+	limit := d.UnmappedCap
+	if limit <= 0 {
+		limit = DefaultUnmappedCap
+	}
+	if len(all) > limit {
+		all, out.Truncated = all[:limit], true
+	}
+	for _, u := range all {
+		u.AgeSeconds = max(now.Unix()-u.FirstAt, 0)
+		out.Addresses = append(out.Addresses, u)
+	}
+	return out, nil
+}
+
+// warnUnmapped logs the unmapped count when it differs from the one last logged (start-up counts
+// as a change from none), so a sweep that finds the same addresses every hour is silent.
+func (d *AdapterDirectory) warnUnmapped(n int) {
+	d.unmappedMu.Lock()
+	changed := n != d.unmappedWarned
+	d.unmappedWarned = n
+	d.unmappedMu.Unlock()
+	switch {
+	case !changed:
+	case n > 0:
+		log.Printf("encrypt: WARNING: %d address pseudonyms have owner-state entries in the log and no record or key the directory can name them by; list them with GET /admin/directory/unmapped (header X-Gojiberry-Admin-Token); the address owner mends one by operating on it (enroll, request or cancel a reset), or the operator resets it with POST /admin/directory/reset-enrollment/<address> (docs/encryption-and-passkeys.md, unmapped addresses)", n)
+	default:
+		log.Printf("encrypt: no unmapped address pseudonyms remain in the directory log")
+	}
 }
 
 // knownEmails lists the e-mail addresses the store holds a record for: enrollment records and

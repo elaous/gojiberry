@@ -736,8 +736,28 @@ cannot be opened.
      they may be in flight on another replica). The log names addresses by pseudonym and the owner
      signatures name the e-mail, so the pass finds the addresses to replay from every e-mail the store
      holds a record for, an enrollment record **or a published key**; an address with entries and neither
-     (a first enrollment that crashed for an address with no key) is counted and logged as *unmapped* and is
-     mended when somebody operates on it, or by the operator reset.
+     (a first enrollment that crashed for an address with no key) is *unmapped*: it is listed (see
+     *Unmapped addresses* below), warned about once per change of the count, and mended when somebody
+     operates on it, or by the operator reset.
+   - **Unmapped addresses (operator procedure).** The warning in the log reads `N address pseudonyms have
+     owner-state entries in the log and no record or key the directory can name them by`; it is logged at
+     start-up and again only when N changes (the start-up counts as a change from none, so a first count of
+     0 is silent and a first count above 0 warns; later, going back to 0 logs a one-line all-clear). List them, with the credential of the operator reset
+     (`GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN`, sent as the header `X-Gojiberry-Admin-Token`; a wrong one
+     counts against the same failure budget, 10 a minute per client, then 429):
+     `curl -H "X-Gojiberry-Admin-Token: $TOKEN" https://HOST/admin/directory/unmapped` answers
+     `{"count", "addresses": [{"address", "first_seq", "last_seq", "first_at", "last_at", "age_seconds"}],
+     "truncated", "computed_at"}`. The list is computed on each call from the log and the store, holds at
+     most 100 addresses (`AdapterDirectory.UnmappedCap`; `count` is whole and `truncated` says it was cut),
+     oldest first, and holds only the pseudonymous hash, never an e-mail. In Go: `AdapterDirectory.UnmappedAddresses`.
+     To resolve an address, either (1) the owner operates on it: any of Enroll, RequestReset or CancelReset
+     (`POST /directory/enroll/challenge` then `/directory/enroll`, `/directory/enroll/reset`, `/directory/enroll/cancel` for the signed-in
+     owner) first completes the record from the log, after which the address drops off the list; or (2)
+     the operator, who cannot know the owner, resets it by its hash:
+     `curl -X POST -H "X-Gojiberry-Admin-Token: $TOKEN" https://HOST/admin/directory/reset-enrollment/<address>`
+     with `<address>` the 64 hex characters from the list. That logs a signed `operator-reset` entry that
+     watchers are told about, and the address then counts as settled. Leaving it is safe: nothing breaks, the
+     audit of that address keeps showing the enrollment the log recorded, and the owner's next operation mends it.
    - **Publishing again re-signs.** Publishing a key that is already there replaces its record, signed by
      the current key and named under the current key's hash; that is how a record moves to a new key.
    - **Proof of possession** (`AdapterDirectory.Challenge`, `OpenChallenge`; routes below).
