@@ -30,6 +30,7 @@ import (
 	"github.com/elaous/gojiberry/collab/ws"
 	collabxango "github.com/elaous/gojiberry/collab/xango"
 	"github.com/elaous/gojiberry/components"
+	"github.com/elaous/gojiberry/components/encerr"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/domrt"
@@ -253,6 +254,8 @@ func main() {
 			nav.Get("clipboard").Call("writeText", text)
 		}
 	}
+	encerr.Install()                   // encrypt errors in words
+	components.CopyText = u.saver.Copy // the "Copy details" button of an error
 	u.migrate = newMigrate(u, func() { renderUI() })
 	u.people = newPeople("you@example.com", func() { renderUI() })
 

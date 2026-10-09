@@ -327,6 +327,15 @@ drops the open document from the session (ID, name, tag filter, selection, revea
 forgotten and the host empties the editor.
 The showcase's "Encrypt this store" (`examples/canvas-editor-showcase`, `encstore`) is a host of all this.
 
+**Errors in words.** (The encrypt errors are taught by `components/encerr`: a host calls `encerr.Install()` once.) A component's error line (`Pending.Err`) is drawn by `ErrorView`, which asks
+`ExplainError` for a group and a translated message (`err.*` ids): unsigned file after a key change, a file no owner
+wrote, no signer, older state, unreadable file, no key opens it, locked, changed elsewhere, safety record not kept,
+storage full, recovery key needed, offline. The message says what happened and what to do and names no Go value or
+API call; it is the only `role="alert"`. The raw error text sits in a native `<details>` ("Details") and, when the
+host sets `components.CopyText`, a Copy button, so support can have it. An unclassified error gets a generic message
+plus Details. A host that already has words for an error gives it a `UserMessage() string` method (the showcase's
+`tErr` does): that text is shown and the wrapped error becomes the detail.
+
 ### Keys in the People tab: `Recipients`
 
 `Recipients` lists the keys a document is encrypted to and shares it with one more (type the fingerprint to

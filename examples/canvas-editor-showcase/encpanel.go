@@ -239,7 +239,12 @@ type shownError struct {
 func (s *shownError) Error() string { return s.msg }
 func (s *shownError) Unwrap() error { return s.err }
 
-// tErr puts the errors this page knows into the interface's language; others pass as they are.
+// UserMessage says the text is already in words for a person: components.ExplainError shows it and keeps the
+// original error's text behind "Details".
+func (s *shownError) UserMessage() string { return s.msg }
+
+// tErr puts the errors this page knows into the interface's language; others pass as they are, and
+// components.ExplainError gives them a generic message with the text behind "Details".
 func tErr(err error) error {
 	if err == nil || errors.Is(err, errHandled) {
 		return err
@@ -739,7 +744,7 @@ func (u *ui) encPanel() xango.Node {
 		kids = append(kids, u.encErasePanel()...)
 	}
 	if err := e.pending.Err(); err != nil {
-		kids = append(kids, para("enc-error", err.Error(), true))
+		kids = append(kids, components.ErrorView("enc-error", err))
 	} else if e.notice != "" {
 		kids = append(kids, xango.El("p", []xango.Attr{xango.A("id", "enc-message"), xango.A("role", "status"), xango.A("style", "font-size:13px")}, xango.Text(e.notice)))
 	}
@@ -847,7 +852,7 @@ func (u *ui) encBrokenPanel() xango.Node {
 		}, e.pending.Busy()))
 	kids = append(kids, u.encErasePanel()...)
 	if err := e.pending.Err(); err != nil {
-		kids = append(kids, para("enc-error", err.Error(), true))
+		kids = append(kids, components.ErrorView("enc-error", err))
 	} else if e.notice != "" {
 		kids = append(kids, xango.El("p", []xango.Attr{xango.A("id", "enc-message"), xango.A("role", "status"), xango.A("style", "font-size:13px")}, xango.Text(e.notice)))
 	}
