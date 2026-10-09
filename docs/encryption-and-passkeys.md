@@ -149,7 +149,10 @@ a replay, get `ErrBadChallenge` (410). Records are named `passkey/challenge/<exp
 range) never reaches the store. The deadline is the stored `Expires`, checked on every Take (a replica's own
 clock, so skew moves it by seconds). `Sweep` (every minute in the server, and once at start) lists the prefix and
 deletes by name what is a minute past its bucket, used markers included (they keep their ceremony's name), reading
-nothing; names of the earlier layout are left alone and not counted.
+nothing (the server makes the first sweep before it serves, retrying a failed listing a few times). Only names that
+are exactly `<prefix><minute>/<64 lowercase hex>` are swept this way; a record of the earlier layout
+(`passkey/challenge/<64 hex>`) is deleted once the store says it is over 24 hours old (or, if the store gives no time,
+once a read shows it unparseable or expired) and is not counted; every other name is foreign and never touched.
    The cap (10,000 by default) and replicas. Three strategies were weighed: (a) count names from the listing the
 sweep already makes; (b) sharded counters moved by compare-and-set, rejected: a hot record written on every Begin
 and Take, retries under load, and a crashed replica leaks its increments; (c) the per-client `Limiter` on the Begin
@@ -157,8 +160,10 @@ routes as the real bound. The server uses (c) with (a) as the backstop: each rep
 plus its own writes, so at the cap `Put` answers `ErrBusy` (503) with no sweep and no `Load`, and a live challenge is
 never evicted. **Worst-case overshoot** of the cap = the ceremonies all replicas can write between two listings =
 (per-client rate per minute) x (distinct clients) x (sweep interval in minutes), and never more than
-(replicas - 1) x cap; with the default budget (30 a minute per client and route group) and the one-minute sweep that is
-30 records per client above the cap, and the next listing stops it on every replica.
+(replicas - 1) x cap; with the default budget (30 a minute on average per client and route group, burst 20) and the
+one-minute sweep a client can write about 50 records in the first interval and 30 in each later one above the cap
+(per replica when the limiter is per process, `GOJIBERRY_DOCSTORE_LIMITER=memory`), and the next listing stops it on
+every replica. The count a sweep stores keeps the Puts and Takes of its own process that happened while it listed.
    `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store` on a store without conditional writes prints a multi-line warning
 (cause, effect, fix) and keeps ceremonies in each process; `store-required` makes the server refuse to start instead,
 like `GOJIBERRY_DOCSTORE_SESSIONS`. Memory mode with `GOJIBERRY_DOCSTORE_REPLICAS` above 1 warns that ceremonies are

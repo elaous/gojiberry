@@ -26,8 +26,10 @@ import (
 // since the epoch divided by 60, rounded up) at which the ceremony is certain to have expired, so the
 // sweep deletes by name alone, without reading a record, as auth/sessionstore does.
 //
-// Records of the earlier layout, "passkey/challenge/<hash>" with no minute, are not recognised: the
-// sweep leaves them alone and does not count them (see the upgrade note in docs/roadmap.md).
+// Records of the earlier layout, "passkey/challenge/<hash>" (no minute, the hash 64 lowercase hex
+// characters), are not used any more: the sweep removes them once they are older than a day
+// (oldChallengeAge), without counting them (see the upgrade note in docs/roadmap.md). Any other name
+// under the prefix is foreign and is never touched.
 const ChallengePrefix = "passkey/challenge/"
 
 // ErrNotConditional is returned by NewStoreChallenges for a store that cannot write conditionally:
@@ -47,6 +49,9 @@ const (
 	maxChallengeUnix = 1 << 40
 	// maxTokenLen bounds a token before it is hashed or parsed (ours are about 40 bytes).
 	maxTokenLen = 128
+	// oldChallengeAge is how old (by the store's modification time) a record of the earlier layout
+	// must be before the sweep deletes it; a ceremony lives about five minutes, so a day is certain.
+	oldChallengeAge = 24 * time.Hour
 )
 
 // StoreChallenges is a ChallengeStore kept in a docstore.Adapter, so replicas that share the
@@ -89,8 +94,10 @@ const (
 // This store implements (3) plus (1). The worst-case overshoot of Max is the number of ceremonies
 // all replicas can write in one refresh interval: (Limiter rate per client per minute) x (distinct
 // clients) x (sweep interval in minutes), and never more than (replicas - 1) x Max. With the default
-// limiter (30 a minute per client and route group) and the one-minute sweep that is 30 records per
-// client per minute, over the cap; the growth stops at the next listing, because every replica then
+// limiter (30 a minute on average per client and route group, burst 20) and the one-minute sweep a
+// client can write about 50 records in the first interval and 30 in each later one, over the cap;
+// with a per-process limiter (GOJIBERRY_DOCSTORE_LIMITER=memory) every replica gives a client its own
+// budget, so that is per replica. The growth stops at the next listing, because every replica then
 // sees the true count and answers ErrBusy. Records that expire still go on their own: the store
 // never holds more than the writes of the last ceremony life (about five minutes) plus the sweep
 // lag, whatever happens.
@@ -105,6 +112,7 @@ type StoreChallenges struct {
 	Now func() time.Time
 
 	approx   atomic.Int64 // waiting records: the last listing's count plus this process's Puts less its Takes
+	net      atomic.Int64 // Puts less Takes of this process, never reset: Sweep keeps what moved during its listing
 	sweeping sync.Mutex
 }
 
@@ -184,18 +192,38 @@ func challengeID(token string) string {
 	return ChallengePrefix + bucket + "/" + hex.EncodeToString(sum[:])
 }
 
-// idBucket is the bucket in a record name made by challengeID, or false.
+// isHash reports whether s is exactly 64 lowercase hex characters (a SHA-256 as challengeID writes it).
+func isHash(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// idBucket is the bucket in a record name made by challengeID, or false: the name must be exactly
+// "<prefix><canonical bucket>/<64 lowercase hex>", anything else is not ours.
 func idBucket(id string) (int64, bool) {
 	rest, ok := strings.CutPrefix(id, ChallengePrefix)
 	if !ok {
 		return 0, false
 	}
-	b, _, ok := strings.Cut(rest, "/")
-	if !ok {
+	b, hash, ok := strings.Cut(rest, "/")
+	if !ok || !isHash(hash) {
 		return 0, false
 	}
 	n, err := strconv.ParseInt(b, 10, 64)
-	return n, err == nil && validBucket(n)
+	return n, err == nil && validBucket(n) && strconv.FormatInt(n, 10) == b
+}
+
+// isOldID reports whether id is a record of the earlier layout: the prefix and exactly a hash.
+func isOldID(id string) bool {
+	rest, ok := strings.CutPrefix(id, ChallengePrefix)
+	return ok && isHash(rest)
 }
 
 // storedChallenge is a record: the ceremony, or, once consumed by a store without DeleteIf, a
@@ -233,6 +261,7 @@ func (s *StoreChallenges) Put(ctx context.Context, c Challenge) (string, error) 
 		}
 		switch err := cas.SaveIf(ctx, challengeID(token), data, ""); {
 		case err == nil:
+			s.net.Add(1)
 			s.approx.Add(1)
 			return token, nil
 		case errors.Is(err, docstore.ErrConflict):
@@ -309,59 +338,123 @@ func (s *StoreChallenges) consume(ctx context.Context, cas docstore.ConditionalA
 }
 
 func (s *StoreChallenges) dec() {
+	s.net.Add(-1)
 	if s.approx.Add(-1) < 0 {
 		s.approx.Store(0)
 	}
 }
 
 // Sweep deletes by name the records whose expiry minute ended more than a minute ago (expired
-// ceremonies and used markers alike), and sets the count of what is waiting to what is left. It
-// lists the keyspace and reads no record; a name that is not one this store made (the earlier
-// layout) is left alone and not counted. It returns how many it deleted. Several sweeps at once
-// (replicas) are harmless; in one process they run one at a time.
+// ceremonies and used markers alike), and sets the count of what is waiting to what is left (plus
+// the Puts and Takes of this process that happened while it was listing). It lists the keyspace and
+// reads no record of the current layout. A record of the earlier layout ("passkey/challenge/<64 hex>")
+// is deleted when the store says it was last modified more than a day ago, or, if the store gives no
+// modification time, when one Load shows it unparseable or expired; it is never counted. Any other
+// name is foreign and left alone. It returns how many it deleted. Several sweeps at once (replicas)
+// are harmless; in one process they run one at a time.
 func (s *StoreChallenges) Sweep(ctx context.Context) (int, error) {
 	s.sweeping.Lock()
 	defer s.sweeping.Unlock()
 	now := s.clock()
+	before := s.net.Load()
 	metas, err := docstore.ListPrefix(ctx, s.Store, ChallengePrefix)
 	if err != nil {
 		return 0, err
 	}
 	n, left := 0, 0
 	var errs []error
+	del := func(id string) bool {
+		switch err := s.Store.Delete(ctx, id); {
+		case err == nil || errors.Is(err, docstore.ErrNotFound):
+			n++
+			return true
+		default:
+			errs = append(errs, err)
+			return false
+		}
+	}
 	for _, m := range metas {
 		if err := ctx.Err(); err != nil {
 			return n, err
 		}
 		b, ok := idBucket(m.ID)
 		if !ok {
+			if isOldID(m.ID) && s.oldIsDead(ctx, m, now) {
+				del(m.ID)
+			}
 			continue
 		}
 		if now.Before(bucketEnd(b).Add(storeChallengeGrace)) {
 			left++
 			continue
 		}
-		switch err := s.Store.Delete(ctx, m.ID); {
-		case err == nil || errors.Is(err, docstore.ErrNotFound):
-			n++
-		default:
-			errs = append(errs, err)
+		if !del(m.ID) {
 			left++
 		}
 	}
-	s.approx.Store(int64(left))
+	// Keep what this process put or took while the listing ran: the listing may predate it.
+	cur := int64(left) + s.net.Load() - before
+	if cur < 0 {
+		cur = 0
+	}
+	s.approx.Store(cur)
 	return n, errors.Join(errs...)
+}
+
+// oldIsDead reports whether the record m of the earlier layout can be deleted: older than a day by
+// the store's time, or, when the store gives none, unparseable or past its Expires and the grace.
+func (s *StoreChallenges) oldIsDead(ctx context.Context, m docstore.Meta, now time.Time) bool {
+	if !m.UpdatedAt.IsZero() {
+		return now.Sub(m.UpdatedAt) > oldChallengeAge
+	}
+	doc, err := s.Store.Load(ctx, m.ID)
+	if err != nil {
+		return false // gone already, or unreadable now: the next sweep decides
+	}
+	var sc storedChallenge
+	if json.Unmarshal(doc.Data, &sc) != nil {
+		return true
+	}
+	return now.After(sc.Expires.Add(storeChallengeGrace))
 }
 
 // RunChallengeSweep calls Sweep at once (which sets the count from the store at start-up) and then
 // every interval (a minute when not positive) until ctx ends; errors are logged. The interval is
 // the refresh interval of the cap (see StoreChallenges).
 func (s *StoreChallenges) RunChallengeSweep(ctx context.Context, interval time.Duration) {
-	if interval <= 0 {
-		interval = time.Minute
-	}
 	if _, err := s.Sweep(ctx); err != nil && ctx.Err() == nil {
 		log.Printf("passkey: sweeping shared challenges: %v", err)
+	}
+	s.sweepEvery(ctx, interval)
+}
+
+// StartChallengeSweep makes the first sweep before it returns, so the count is right before the
+// server answers a Begin (a failed listing is retried a few times with a short backoff and logged,
+// after which the count stays at what Puts add until a later sweep succeeds), then runs the sweep
+// every interval in a goroutine until ctx ends.
+func (s *StoreChallenges) StartChallengeSweep(ctx context.Context, interval time.Duration) {
+	backoff := 500 * time.Millisecond
+	for attempt := 1; ; attempt++ {
+		_, err := s.Sweep(ctx)
+		if err == nil || ctx.Err() != nil {
+			break
+		}
+		log.Printf("passkey: sweeping shared challenges at start (attempt %d of 4): %v", attempt, err)
+		if attempt == 4 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+	}
+	go s.sweepEvery(ctx, interval)
+}
+
+func (s *StoreChallenges) sweepEvery(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = time.Minute
 	}
 	t := time.NewTicker(interval)
 	defer t.Stop()

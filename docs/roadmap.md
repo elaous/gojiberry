@@ -12,9 +12,11 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 - **Passkey challenge store (`GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES`).** Default `memory`: nothing changes. In
   `store` mode the record names and the token format changed (`passkey/challenge/<expiry minute>/<hash>`, token
   `<random>.<expiry minute>`): a ceremony begun before the upgrade fails once (410; the person starts again, a
-  ceremony lives about five minutes). Records of the old layout (`passkey/challenge/<hash>`, no minute) are not
-  recognised: the sweep leaves them alone and does not count them, so delete them once by hand after the upgrade
-  (list `passkey/challenge/` and remove the names that have no `/` after the prefix). `store` on a store without
+  ceremony lives about five minutes). Records of the old layout (`passkey/challenge/<hash>`, no minute) are no longer used: the sweep deletes them once
+  they are more than 24 hours old (by the store's modification time; if a store gives none, after one read shows
+  them unparseable or expired) and never counts them, so nothing needs deleting by hand (only names that are exactly
+  the prefix and 64 lowercase hex characters are touched; any other name under `passkey/challenge/` is left alone).
+  `store` on a store without
   conditional writes no longer stops the server: it prints a multi-line warning and keeps ceremonies in memory;
   set `store-required` to keep the old refusal. Details: [encryption-and-passkeys.md](encryption-and-passkeys.md) B.1.
 - **Shared sign-in sessions (`GOJIBERRY_DOCSTORE_SESSIONS`).** New, default `memory`: nothing changes for a

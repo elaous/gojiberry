@@ -312,7 +312,7 @@ func passkeyChallenges(ctx context.Context, adapter docstore.Adapter, raw string
 	if err != nil {
 		return nil, err
 	}
-	go sc.RunChallengeSweep(ctx, time.Minute)
+	sc.StartChallengeSweep(ctx, time.Minute) // counts the store before the first Begin
 	log.Print("docstore: passkey ceremonies are shared through the store")
 	return sc, nil
 }

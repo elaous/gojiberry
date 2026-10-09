@@ -670,3 +670,188 @@ func TestChallengeStoreFailureIs500NotBadRequest(t *testing.T) {
 		t.Fatalf("the store's error leaks to the client: %q", msg)
 	}
 }
+
+// aged reports the modification times in times (zero for a name not in the map, when zeroOthers) in
+// listings, and runs hook after each listing is taken (a Put during a sweep).
+type aged struct {
+	*docstore.MemoryAdapter
+	times map[string]time.Time
+	zero  bool
+	hook  func()
+}
+
+func (a *aged) ListPrefix(ctx context.Context, prefix string) ([]docstore.Meta, error) {
+	metas, err := a.MemoryAdapter.ListPrefix(ctx, prefix)
+	for i := range metas {
+		if a.zero {
+			metas[i].UpdatedAt = time.Time{}
+		} else if t, ok := a.times[metas[i].ID]; ok {
+			metas[i].UpdatedAt = t
+		}
+	}
+	if a.hook != nil {
+		a.hook()
+	}
+	return metas, err
+}
+
+func TestSweepDeletesOldFormatRecordsAfterADayAndNothingForeign(t *testing.T) {
+	ctx := context.Background()
+	a := &aged{MemoryAdapter: docstore.NewMemoryAdapter(), times: map[string]time.Time{}}
+	sc, _ := NewStoreChallenges(a, 0)
+	now := time.Unix(1_700_000_000, 0)
+	sc.Now = func() time.Time { return now }
+	hash := func(c string) string { return strings.Repeat(c, 64) }
+	put := func(name string, age time.Duration) string {
+		_ = a.MemoryAdapter.Save(ctx, name, []byte(`{"expires":"2099-01-01T00:00:00Z"}`))
+		a.times[name] = now.Add(-age)
+		return name
+	}
+	oldDead := put(ChallengePrefix+hash("a"), 25*time.Hour)
+	oldFresh := put(ChallengePrefix+hash("b"), time.Minute)
+	foreign := []string{
+		put(ChallengePrefix+strings.Repeat("a", 63), 48*time.Hour),         // wrong length
+		put(ChallengePrefix+strings.Repeat("a", 65), 48*time.Hour),         // wrong length
+		put(ChallengePrefix+strings.Repeat("A", 64), 48*time.Hour),         // uppercase hex
+		put(ChallengePrefix+"x/"+hash("a"), 48*time.Hour),                  // extra segment
+		put(ChallengePrefix+hash("a")+"/more", 48*time.Hour),               // extra segment
+		put(ChallengePrefix+"1/2/"+hash("a"), 48*time.Hour),                // extra segment
+		put(ChallengePrefix+"5/"+strings.Repeat("g", 64), 48*time.Hour),    // bucket 5 is long dead, hash is not hex
+		put(ChallengePrefix+"5/"+strings.Repeat("a", 10), 48*time.Hour),    // bucket 5 is long dead, not a hash
+		put(ChallengePrefix+"05/"+hash("a"), 48*time.Hour),                 // non-canonical bucket
+		put(ChallengePrefix+"5/"+strings.ToUpper(hash("a")), 48*time.Hour), // uppercase hash
+		put(ChallengePrefix, 48*time.Hour),                                 // the prefix alone
+		put(ChallengePrefix+hash("c")+" ", 48*time.Hour),                   // trailing byte
+	}
+	n, err := sc.Sweep(ctx)
+	if err != nil || n != 1 {
+		t.Fatalf("Sweep = %d, %v, want only the 25h old record", n, err)
+	}
+	if _, err := a.MemoryAdapter.Load(ctx, oldDead); !errors.Is(err, docstore.ErrNotFound) {
+		t.Fatalf("an old-format record over a day old is still there: %v", err)
+	}
+	for _, name := range append(foreign, oldFresh) {
+		if _, err := a.MemoryAdapter.Load(ctx, name); err != nil {
+			t.Fatalf("%q must be kept: %v", name, err)
+		}
+	}
+	if got := sc.approx.Load(); got != 0 {
+		t.Fatalf("count = %d, old-format and foreign names are not counted", got)
+	}
+	// A minute short of a day stays, a minute past goes.
+	a.times[oldFresh] = now.Add(-oldChallengeAge)
+	if n, _ := sc.Sweep(ctx); n != 0 {
+		t.Fatalf("exactly a day old must stay, deleted %d", n)
+	}
+	a.times[oldFresh] = now.Add(-oldChallengeAge - time.Second)
+	if n, _ := sc.Sweep(ctx); n != 1 {
+		t.Fatalf("over a day old must go, deleted %d", n)
+	}
+}
+
+func TestSweepOldFormatWithoutModificationTimeReadsOnce(t *testing.T) {
+	ctx := context.Background()
+	c := &counting{MemoryAdapter: docstore.NewMemoryAdapter()}
+	a := &aged{MemoryAdapter: c.MemoryAdapter, zero: true}
+	sc, _ := NewStoreChallenges(&agedCounting{aged: a, c: c}, 0)
+	now := time.Unix(1_700_000_000, 0)
+	sc.Now = func() time.Time { return now }
+	save := func(c string, body string) string {
+		name := ChallengePrefix + strings.Repeat(c, 64)
+		_ = a.MemoryAdapter.Save(ctx, name, []byte(body))
+		return name
+	}
+	expired := save("a", `{"expires":"`+now.Add(-2*time.Minute).UTC().Format(time.RFC3339)+`"}`)
+	inGrace := save("b", `{"expires":"`+now.Add(-30*time.Second).UTC().Format(time.RFC3339)+`"}`)
+	live := save("c", `{"expires":"`+now.Add(3*time.Minute).UTC().Format(time.RFC3339)+`"}`)
+	garbage := save("d", `not json`)
+	foreign := ChallengePrefix + "x/y"
+	_ = a.MemoryAdapter.Save(ctx, foreign, []byte(`junk`))
+	n, err := sc.Sweep(ctx)
+	if err != nil || n != 2 {
+		t.Fatalf("Sweep = %d, %v, want the expired and the garbage one", n, err)
+	}
+	if got := c.loads.Load(); got != 4 {
+		t.Fatalf("loads = %d, want one per old-format record and none for the foreign name", got)
+	}
+	for _, gone := range []string{expired, garbage} {
+		if _, err := a.MemoryAdapter.Load(ctx, gone); !errors.Is(err, docstore.ErrNotFound) {
+			t.Fatalf("%q must be deleted: %v", gone, err)
+		}
+	}
+	for _, kept := range []string{inGrace, live, foreign} {
+		if _, err := a.MemoryAdapter.Load(ctx, kept); err != nil {
+			t.Fatalf("%q must be kept: %v", kept, err)
+		}
+	}
+	if sc.approx.Load() != 0 {
+		t.Fatalf("count = %d, want 0", sc.approx.Load())
+	}
+}
+
+// agedCounting lists through aged and counts Loads.
+type agedCounting struct {
+	*aged
+	c *counting
+}
+
+func (a *agedCounting) Load(ctx context.Context, id string) (docstore.Document, error) {
+	return a.c.Load(ctx, id)
+}
+
+func TestSweepKeepsARecordInItsGraceMinute(t *testing.T) {
+	ctx := context.Background()
+	mem, sc := newShared(t)
+	now := time.Unix(1_700_000_040, 0)
+	sc.Now = func() time.Time { return now }
+	tok, err := sc.Put(ctx, Challenge{Expires: now.Add(time.Minute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	end := bucketEnd(bucketOf(now.Add(time.Minute)))
+	for _, tc := range []struct {
+		at   time.Duration
+		gone bool
+	}{{-time.Second, false}, {0, false}, {30 * time.Second, false}, {time.Minute - time.Second, false}, {time.Minute + time.Second, true}} {
+		now = end.Add(tc.at)
+		n, err := sc.Sweep(ctx)
+		_, lerr := mem.Load(ctx, challengeID(tok))
+		if gone := errors.Is(lerr, docstore.ErrNotFound); gone != tc.gone || (n == 1) != tc.gone || err != nil {
+			t.Fatalf("at bucket end %+v: deleted %d, gone %v, err %v", tc.at, n, gone, err)
+		}
+		if want := int64(1); !tc.gone && sc.approx.Load() != want {
+			t.Fatalf("at %+v the record is left and counted: count %d", tc.at, sc.approx.Load())
+		}
+	}
+	if sc.approx.Load() != 0 {
+		t.Fatalf("count after deletion = %d", sc.approx.Load())
+	}
+}
+
+func TestSweepCountKeepsPutsMadeWhileListing(t *testing.T) {
+	ctx := context.Background()
+	a := &aged{MemoryAdapter: docstore.NewMemoryAdapter()}
+	sc, _ := NewStoreChallenges(a, 0)
+	now := time.Now()
+	sc.Now = func() time.Time { return now }
+	exp := Challenge{Expires: now.Add(time.Hour)}
+	for i := 0; i < 3; i++ {
+		if _, err := sc.Put(ctx, exp); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.hook = func() { // two ceremonies begin after the listing was taken
+		a.hook = nil
+		for i := 0; i < 2; i++ {
+			if _, err := sc.Put(ctx, exp); err != nil {
+				t.Error(err)
+			}
+		}
+	}
+	if _, err := sc.Sweep(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := sc.approx.Load(); got != 5 {
+		t.Fatalf("count = %d, want 3 listed + 2 put during the listing", got)
+	}
+}
