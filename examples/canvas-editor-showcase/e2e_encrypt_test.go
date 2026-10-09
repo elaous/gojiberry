@@ -232,7 +232,7 @@ func TestEncryptedStore(t *testing.T) {
 	// Saving while locked is refused too, not written.
 	d.Fill(".gj-saver-name", "while locked")
 	d.Click(".gj-saver-save")
-	d.WaitFor("the save refused", `(document.querySelector('.gj-doc-error') || {textContent: ''}).textContent.includes('Unlock the store')`)
+	d.WaitFor("the save refused", `(document.querySelector('.gj-doc-error') || {textContent: ''}).textContent.includes('The store is locked')`)
 	d.OK(!strings.Contains(storedText(d), "while locked"), "nothing was written while locked")
 
 	d.NoErrors()
@@ -262,7 +262,7 @@ func TestEncryptedStorePasskeyNeedsASecondKey(t *testing.T) {
 	d.WaitFor("the document", "document.querySelectorAll('.gj-doclist-item').length === 1")
 	d.Click(".gj-doclist-protect")
 	confirmDialog(d)
-	d.WaitFor("the refusal", `(document.querySelector('.gj-doclist .gj-doc-error') || {textContent: ''}).textContent.includes('a passkey cannot be the only key')`)
+	d.WaitFor("the refusal", `(document.querySelector('.gj-doclist .gj-doc-error') || {textContent: ''}).textContent.includes('cannot be the only key')`)
 	d.OK(!d.Has(".gj-doclist-item .gj-doc-confidential") && strings.Contains(d.Text(".gj-doclist-item .gj-doc-name"), "Solo"), "it stays an ordinary document, with its name")
 
 	d.Click(`button[data-tab="people"]`)

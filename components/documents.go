@@ -214,7 +214,7 @@ var docIcons = map[string]string{
 // pendingError is the line under a component saying what went wrong.
 func pendingError(p *Pending) []xango.Node {
 	if err := p.Err(); err != nil {
-		return []xango.Node{xango.El("p", []xango.Attr{xango.A("class", "gj-doc-error"), xango.A("role", "alert")}, xango.Text(err.Error()))}
+		return []xango.Node{ErrorView("", err)}
 	}
 	return nil
 }

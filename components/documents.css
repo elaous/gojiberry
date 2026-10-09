@@ -11,6 +11,10 @@
 .gj-doc-name { font-weight: 500; }
 .gj-doc-meta { flex: 1; font-size: 0.8em; color: var(--gj-muted); }
 .gj-doc-empty { margin: 0.3em 0 0; font-size: 0.85em; color: var(--gj-muted); }
+.gj-doc-error-box { margin: 0.3em 0; }
+.gj-doc-error-details { font-size: 0.8em; margin-top: 0.3em; }
+.gj-doc-error-details summary { cursor: pointer; }
+.gj-doc-error-text { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; margin: 0.3em 0; }
 .gj-doc-error { margin: 0; font-size: 0.85em; color: var(--gj-danger, #c01c28); }
 .gj-doclist button, .gj-trash button, .gj-versions button { padding: 0.35em 0.8em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); cursor: pointer; font: inherit; }
 .gj-doclist button:hover:not(:disabled), .gj-trash button:hover:not(:disabled), .gj-versions button:hover:not(:disabled) { background: var(--gj-bg-muted); }
