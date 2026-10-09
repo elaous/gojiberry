@@ -124,11 +124,11 @@ func TestRecoverNeverTruncatesTheSource(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, "n.md"), []byte("hello"), 0o644)
 	do(t, "pack", src, filepath.Join(dir, "n.md"))
 	before, _ := os.ReadFile(src)
-	fails(t, "recover", src, src)
-	fails(t, "recover", src, filepath.Join(dir, ".", "a.opendoc"))
+	_ = fails(t, "recover", src, src)
+	_ = fails(t, "recover", src, filepath.Join(dir, ".", "a.opendoc"))
 	link := filepath.Join(dir, "link.opendoc")
 	if err := os.Symlink(src, link); err == nil {
-		fails(t, "recover", src, link)
+		_ = fails(t, "recover", src, link)
 	}
 	if after, _ := os.ReadFile(src); !bytes.Equal(before, after) {
 		t.Fatal("the source changed")
@@ -139,7 +139,7 @@ func TestPackLeavesNoPartialOutputAndSkipsItself(t *testing.T) {
 	dir := t.TempDir()
 	// Nothing to pack from: an error, and no output file (nor a temporary one) is left.
 	out := filepath.Join(dir, "out.opendoc")
-	fails(t, "pack", out, filepath.Join(dir, "missing"))
+	_ = fails(t, "pack", out, filepath.Join(dir, "missing"))
 	if ents, _ := os.ReadDir(dir); len(ents) != 0 {
 		t.Errorf("left behind: %v", ents)
 	}
@@ -171,7 +171,7 @@ func TestKeygen(t *testing.T) {
 	if _, err := readKey(p); err != nil {
 		t.Error(err)
 	}
-	fails(t, "keygen", p) // never overwrites a key
+	_ = fails(t, "keygen", p) // never overwrites a key
 	if seed := strings.TrimSpace(do(t, "keygen")); len(seed) != 64 {
 		t.Errorf("%q", seed)
 	}
@@ -185,24 +185,24 @@ func TestListEscapesNamesAndVerifyPinsTheKey(t *testing.T) {
 	kp := filepath.Join(dir, "k")
 	pub := strings.TrimSpace(strings.TrimPrefix(do(t, "keygen", kp), kp+" written; public key"))
 	pk := filepath.Join(dir, "p.opendoc")
-	do(t, "pack", "-sign", kp, "-name", "evil\x1b[2J‮name", pk, src)
+	do(t, "pack", "-sign", kp, "-name", "evil\x1b[2J\u202ename", pk, src)
 	list := do(t, "list", pk)
-	if strings.ContainsAny(list, "\x1b‮") || !strings.Contains(list, `\u001b`) {
+	if strings.ContainsAny(list, "\x1b\u202e") || !strings.Contains(list, `\u001b`) {
 		t.Errorf("unescaped:\n%q", list)
 	}
 	if got := do(t, "verify", "-pubkey", pub, pk); strings.Contains(got, "BAD") {
 		t.Error(got)
 	}
 	other := strings.Repeat("ab", 32)
-	fails(t, "verify", "-pubkey", other, pk)
-	fails(t, "verify", "-pubkey", "nothex", pk)
+	_ = fails(t, "verify", "-pubkey", other, pk)
+	_ = fails(t, "verify", "-pubkey", "nothex", pk)
 	if got := do(t, "verify", pk); !strings.Contains(got, "not checked") {
 		t.Error(got)
 	}
 }
 
 func TestEsc(t *testing.T) {
-	if got := esc("a\n\x1b[0m‮b "); strings.ContainsAny(got, "\n\x1b‮ ") {
+	if got := esc("a\n\x1b[0m\u202eb "); strings.ContainsAny(got, "\n\x1b\u202e ") {
 		t.Errorf("%q", got)
 	}
 	if esc("plain ünïcode") != "plain ünïcode" {

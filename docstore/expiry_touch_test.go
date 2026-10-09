@@ -54,7 +54,7 @@ func TestTouchMovesTheDeadlineAndLeavesTheDocumentAlone(t *testing.T) {
 	if err := ea.Save(ctx, "doc", []byte("v1")); err != nil {
 		t.Fatal(err)
 	}
-	before, _ := inner.Adapter.Load(ctx, "doc")
+	before, _ := inner.Load(ctx, "doc")
 	clk.Add(23 * time.Hour)
 	inner.reset()
 	if err := ea.Touch(ctx, "doc"); err != nil {
@@ -66,7 +66,7 @@ func TestTouchMovesTheDeadlineAndLeavesTheDocumentAlone(t *testing.T) {
 	if got := inner.log(); len(got) != 1 || got[0] != "expiry:doc" {
 		t.Fatalf("Touch wrote %v, want only the record", got)
 	}
-	after, _ := inner.Adapter.Load(ctx, "doc")
+	after, _ := inner.Load(ctx, "doc")
 	if string(after.Data) != "v1" || !after.UpdatedAt.Equal(before.UpdatedAt) {
 		t.Fatalf("the document was modified: %q %v -> %q %v", before.Data, before.UpdatedAt, after.Data, after.UpdatedAt)
 	}

@@ -527,14 +527,6 @@ func (a *Adapter) binds(id string) bool {
 	return ok && DocID(id) != ""
 }
 
-func (a *Adapter) seal(ctx context.Context, id string, data []byte) ([]byte, error) {
-	rs, b, err := a.bind(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return a.sealTo(id, rs, b, data)
-}
-
 // sealTo encrypts data to rs under the frame for binding b: signed when the adapter has a Signer.
 // A confidential document is never sealed without one.
 func (a *Adapter) sealTo(id string, rs []age.Recipient, b Binding, data []byte) ([]byte, error) {

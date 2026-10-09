@@ -637,7 +637,7 @@ type delOnList struct {
 
 func (d *delOnList) List(ctx context.Context) ([]docstore.Meta, error) {
 	if int(d.calls.Add(1)) == d.n {
-		if err := d.flaky.Delete(ctx, d.id); err != nil {
+		if err := d.Delete(ctx, d.id); err != nil {
 			return nil, err
 		}
 	}

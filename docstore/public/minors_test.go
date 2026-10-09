@@ -877,8 +877,10 @@ func holdUpload(t *testing.T, e *env, token string, n int) net.Conn {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
-	fmt.Fprintf(conn, "POST /public/doc HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer %s\r\nContent-Length: %d\r\n\r\nabc", token, n)
+	t.Cleanup(func() { _ = conn.Close() }) // best-effort cleanup of a test connection
+	if _, err := fmt.Fprintf(conn, "POST /public/doc HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer %s\r\nContent-Length: %d\r\n\r\nabc", token, n); err != nil {
+		t.Fatal(err)
+	}
 	return conn
 }
 
@@ -918,7 +920,7 @@ func TestInflightBytesAreCappedGlobally(t *testing.T) {
 	e.want(e.chunked("POST", "/public/doc", c, "chunked"), 503)
 	waitFor(t, "the finished uploads to give theirs back", func() bool { return e.svc.flight.held() == 600 })
 	// when the slow client goes, its bytes are released and others go through
-	conn.Close()
+	_ = conn.Close() // the point of the test: the client goes away
 	waitFor(t, "the held upload to end", func() bool { return e.svc.flight.held() == 0 })
 	e.want(e.chunked("POST", "/public/doc", c, "chunked"), 201)
 	waitFor(t, "nothing in flight at rest", func() bool { return e.svc.flight.held() == 0 })
@@ -1037,11 +1039,11 @@ func TestQuotaDropsExpiredKeysBeforeLiveOnes(t *testing.T) {
 	q := NewMemoryQuota(100, time.Hour)
 	q.Now = func() time.Time { return now }
 	q.maxKeys = 2
-	q.Take(ctx, "old", 90)
+	_, _, _ = q.Take(ctx, "old", 90)
 	now = now.Add(30 * time.Minute)
-	q.Take(ctx, "live", 90)
+	_, _, _ = q.Take(ctx, "live", 90)
 	now = now.Add(45 * time.Minute) // old has ended, live has not
-	q.Take(ctx, "new", 10)
+	_, _, _ = q.Take(ctx, "new", 10)
 	if ok, _, _ := q.Take(ctx, "live", 50); ok {
 		t.Fatal("a live window was dropped while an expired one could go")
 	}

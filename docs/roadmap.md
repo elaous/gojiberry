@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (#98, #99, #100, #101, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are done (#99, #100, #101).
+6 of 10 since the last full run (#98, #99, #100, #101, #102, this PR; full run on the rewritten main, 82d6cad). PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
 
@@ -515,22 +515,19 @@ reduced or documented).
 
 New entries:
 
-27. **Lint fails on main with 36 findings (and 33 under `wasm-lint`); it is not a toolchain problem.** Kind: fixable.
+27. **Done: lint failed on main with 37 findings (and as many under `wasm-lint`); it was not a toolchain problem.** Kind: fixable.
     Checked on 2026-10-07 with go1.26.0: `make lint` (which runs `go tool golangci-lint run ./...`, so the linter is
-    built by the repo's own go toolchain from the `tool` line in `go.mod`, golangci-lint v2.5.0) starts, runs for
-    about 100 s and exits 1 with 36 issues: errcheck 13, staticcheck 19 (for example QF1008 "could remove embedded
-    field" in `docstore/limiter_review_test.go:283` and `internal/webauthntest/webauthntest.go:99-100`), unused 4
-    (`docstore/encrypt/encrypt.go:530` `(*Adapter).seal`, `docstore/expiry.go:273` `(*ExpiringAdapter).related`, the
-    unused fields `recorded` in `docstore/encrypt/confidential_keys_test.go:60` and `readers` in
-    `docstore/encrypt/signed_frames_test.go:652`). `make wasm-lint` also exits 1 (33 issues: errcheck 13,
-    staticcheck 16, unused 4). The earlier claim "built with go1.25 vs repo go1.26" is wrong for the Makefile
-    targets: only the `golangci-lint` found on `PATH` (`/usr/local/bin`, v2.5.0 built with go1.25.1) is built with
-    go1.25, and `make` does not use it. Why it matters: `make check` (which includes `lint` and `wasm-lint`) cannot
-    pass, so either it is not run or its failure is ignored. Plan: fix the 36 findings (or, for a finding that is
-    intended, a `//nolint:<linter> // reason` or an entry in `.golangci.yml`), re-run both targets, and keep them
-    green. Priority: medium (nothing is off, but `make check` is red). Where: `Makefile:60-68` (targets `lint`,
-    `wasm-lint`), `go.mod:259` (the `tool` line), `.golangci.yml`. Not verified: whether CI runs `make lint`
-    (check `.github/workflows` for the `lint` or `check` target). Item 25 (protobuf through the tool) goes with this.
+    built by the repo's own go toolchain from the `tool` line in `go.mod`, golangci-lint v2.5.0) started and exited 1.
+    Fixed, with no `nolint` and no config change: errcheck (13) by checking the error in tests (`t.Fatal` on a failed
+    write) or an explicit `_ =` with a reason for best-effort cleanup; staticcheck (19, plus more hidden by the default
+    per-linter cap, so run with `--max-issues-per-linter=0 --max-same-issues=0` to see every one) per its advice
+    (QF1008 embedded selectors, QF1001 De Morgan, S1016, S1011, ST1013, ST1018); unused (5) by deleting code with no
+    caller on any platform: `auth.loginState`, `(*encrypt.Adapter).seal`, `(*ExpiringAdapter).related` and two unused
+    test struct fields. `make lint` and `make wasm-lint` now report 0 issues. CI already runs both
+    (`.github/workflows/ci.yml`, steps `make lint` and `make wasm-lint`), `make check` includes both, and
+    [testing-workflow.md](testing-workflow.md) lists them. The earlier claim "built with go1.25 vs repo go1.26" is
+    only true of the `golangci-lint` found on `PATH` (`/usr/local/bin`, v2.5.0 built with go1.25.1), which `make`
+    does not use. Item 25 (protobuf through the tool) is left as it is. Priority: done.
 28. **Done: unmerged commits on `origin/ccr-f005be71-limits`.** Kind: fixable (housekeeping). The branch no longer exists
     (it was deleted with the other old branches in the history rewrite, see [history-rewrite.md](history-rewrite.md)); its
     content was already on main. Priority: done.

@@ -429,7 +429,7 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 		if k.Attestation != nil && k.Verified {
 			row.AttestationVerified = encrypt.VerifyAttestation(k.Key, email, *k.Attestation)
 		}
-		row.DirectoryKey.Attested = row.AttestationVerified
+		row.Attested = row.AttestationVerified
 		evidence := k.OwnerSigned && k.Verified && !k.Revoked && encrypt.VerifyOwnerEvidence(email, k)
 		if evidence {
 			anyEvidence = true
