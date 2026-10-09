@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, #111, this PR); the full suite runs on main after the
+6 of 10 since the last full run (the full suite passed on main 1ab7677; #108, #109, #110, #111, #112, this PR); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -456,10 +456,11 @@ a way to avoid hitting the limit meanwhile.
     backtracking, bounded by `steps > len(cfg.Links)`; it does not loop forever, but a dead-end first match can
     hide a reachable link. Plan: search all links from each list (BFS or DFS) with a visited set of digests.
     Avoid: none known; report an unlock that fails after many key changes.
-23. **`directoryclient` `WatchState` in the old `made` format no longer loads** (the `people-keys-demo`
-    `localStorage`): an ignored decode error half-loads state. Plan: fix it in the demo's load path
-    (`examples/people-keys-demo/main.go`, `newPage`): clear the state on a decode error. Avoid: clear the demo's
-    saved state by hand.
+23. **Done (this PR): a `WatchState` in the old `made` format, or damaged, is refused whole.** Was: the
+    `people-keys-demo` ignored the decode error, so `localStorage` state saved before `made` became records half-loaded
+    and the half that loaded hid what the other half would have caught. Now `directoryclient.ParseWatchState` returns
+    the zero state and `ErrBadWatchState` for anything that does not decode, and the demo forgets the stored value and
+    says the next check starts from scratch. Any host that keeps `WatchState` should load it with `ParseWatchState`.
 24. **`ErrFilteredEnrolled` should also check `audit.Enrolled` after the audit.** Plan: add the check; it must not
     fire for a legitimately filtered non-owner caller. Avoid: use a full read for an address that may be enrolled.
 25. **protobuf is still an indirect dependency through the lint tool.** Plan: update or replace the tool.
