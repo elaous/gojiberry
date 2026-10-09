@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -60,6 +61,27 @@ type WatchState struct {
 	// Seen is what Lookup saw for each address looked up: whether each key's row carried an owner
 	// signature, so that a row that loses it later is noticed (Key.OwnerDowngraded).
 	Seen map[string]SeenAddress `json:"seen,omitempty"`
+}
+
+// ErrBadWatchState is returned by ParseWatchState for saved state that cannot be read: damaged, or saved by a
+// version whose format this one does not understand (the numbers of the entries a client made, "made",
+// became records).
+var ErrBadWatchState = errors.New("directoryclient: the saved watch state cannot be read")
+
+// ParseWatchState reads state a host kept between runs. Empty text is a first run: the zero state, no error.
+// Anything that does not decode is ErrBadWatchState together with the zero state, and the host should drop
+// what it stored and say that the next look is a first look, with nothing to compare it with. Reading it
+// piece by piece (what json.Unmarshal leaves behind after an error) is never right: half a state hides what
+// the other half would have caught.
+func ParseWatchState(raw string) (WatchState, error) {
+	if raw == "" {
+		return WatchState{}, nil
+	}
+	var st WatchState
+	if err := json.Unmarshal([]byte(raw), &st); err != nil {
+		return WatchState{}, fmt.Errorf("%w: %v", ErrBadWatchState, err)
+	}
+	return st, nil
 }
 
 // SeenAddress is what a Lookup saw for an address: the fingerprints whose rows carried an owner
