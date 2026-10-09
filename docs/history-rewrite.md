@@ -7,7 +7,7 @@ changed and what you must do.
    `examples/echo-ssr-demo/echo-ssr-demo` (10 MB), `translateserver` (9.7 MB), `examples/collab-editor-app/server`
    (8.9 MB), and the root `canvas-editor-showcase` binary (3 MB).
 2. **Result.** `.git` went from 115 MB to 5 MB. Every commit hash changed. The tree of `main` is identical, because no
-   binary was tracked at HEAD. The rewritten `main` starts at `82d6cad`.
+   binary was tracked at HEAD. The rewritten `main` was first published at `82d6cad`.
 3. **Existing clones and worktrees.** Re-clone. For a clean checkout you can instead run
    `git fetch origin && git reset --hard origin/main`. Do not push an old branch back: it would bring the old history
    with it.
