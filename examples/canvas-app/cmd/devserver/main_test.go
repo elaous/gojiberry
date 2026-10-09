@@ -28,11 +28,20 @@ func TestDevserverEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("opening database: %v", err)
 	}
-	defer db.Close()
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("closing the database: %v", err)
+		}
+	})
 	if err := db.Ping(); err != nil {
 		t.Skipf("no reachable postgres at %s: %v", dsn, err)
 	}
-	t.Cleanup(func() { db.Exec(`DELETE FROM documents`) })
+	// Registered after the Close cleanup above, so it runs first (cleanups are LIFO), while the pool is still open.
+	t.Cleanup(func() {
+		if _, err := db.Exec(`DELETE FROM documents`); err != nil {
+			t.Errorf("emptying documents: %v", err)
+		}
+	})
 
 	store := canvas.NewStore(db)
 	srv := httptest.NewServer(newMux(store, nil))
@@ -128,7 +137,11 @@ func TestDevModeInjectsLiveReloadScript(t *testing.T) {
 	if err != nil {
 		t.Fatalf("opening database: %v", err)
 	}
-	defer db.Close()
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("closing the database: %v", err)
+		}
+	})
 	if err := db.Ping(); err != nil {
 		t.Skipf("no reachable postgres at %s: %v", dsn, err)
 	}

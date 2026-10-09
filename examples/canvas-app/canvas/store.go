@@ -121,7 +121,7 @@ func (s *Store) ListDocuments(ctx context.Context) ([]DocumentSummary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("canvas: listing documents: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() // read-only cursor, fully consumed (rows.Err is checked below); a close failure is not actionable
 
 	var out []DocumentSummary
 	for rows.Next() {

@@ -92,9 +92,6 @@ func sameSnapshot(a, b snapshot) bool {
 	return true
 }
 
-// clearHistory forgets every step (the document's starting text is not undoable).
-func (d *document) clearHistory() { d.hist = history{} }
-
 // Undo goes back one step, and reports whether there was one.
 func (d *document) Undo() bool {
 	if len(d.hist.undo) == 0 {

@@ -46,10 +46,6 @@ func saveConfidential(d *e2etest.Tab, name string) {
 	d.WaitFor("confidential", "document.querySelector('.gj-doclist-item .gj-doc-confidential')")
 }
 
-func locked(d *e2etest.Tab) bool {
-	return d.Text("#enc-status") == "Locked"
-}
-
 // Lock closes the document that is open: it is cleared from the editor with its name, the status
 // line and the revealed names; with changes that are not saved it asks first (Save and lock), and
 // the answer Save keeps them.

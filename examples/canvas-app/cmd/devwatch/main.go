@@ -64,7 +64,7 @@ func rebuild() bool {
 }
 
 func main() {
-	defer os.Remove(devserverBin)
+	defer func() { _ = os.Remove(devserverBin) }() // best-effort removal of the scratch binary; it may not exist
 
 	err := devwatch.Run(devwatch.Config{
 		Root: ".",

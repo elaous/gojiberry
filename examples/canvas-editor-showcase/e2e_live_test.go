@@ -29,7 +29,11 @@ func TestLiveEndToEnd(t *testing.T) {
 			}})
 			srv := httptest.NewServer(h.Handler())
 			defer srv.Close()
-			defer h.Close()
+			defer func() {
+				if err := h.Close(); err != nil {
+					t.Errorf("closing the hub: %v", err)
+				}
+			}()
 			liveEndToEnd(t, srv.URL, transport, flow)
 		})
 	}

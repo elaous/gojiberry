@@ -6,7 +6,7 @@
 #
 # Separate Go module (like ../canvas-app): replace-ing
 # github.com/elaous/gojiberry with the local checkout so it can depend
-# on nhooyr.io/websocket without adding that to the root module.
+# on github.com/coder/websocket without adding that to the root module.
 .PHONY: run
 run: generate wasm
 	go run ./cmd/server

@@ -27,7 +27,7 @@ import (
 	"sync"
 	"time"
 
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 // hub tracks every connected client and the document's last known
@@ -73,7 +73,7 @@ func (h *hub) handleWS(w http.ResponseWriter, r *http.Request) {
 		log.Println("websocket accept:", err)
 		return
 	}
-	defer conn.CloseNow()
+	defer func() { _ = conn.CloseNow() }() // the connection is going away either way; nothing to do on a failed teardown
 
 	ctx := r.Context()
 
