@@ -154,3 +154,81 @@ func TestOwnerKeyEnrollmentAndSignedPublish(t *testing.T) {
 		t.Fatalf("second enroll: %v", err)
 	}
 }
+
+// Watching my address: the log keys pinned on first use, the position kept between runs (and
+// restored from its text), what I did myself not reported, what somebody else did reported, and a
+// log that is not checked without keys.
+func TestWatchMyAddress(t *testing.T) {
+	ctx := context.Background()
+	var srv *demoserver.Server
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { srv.Mux.ServeHTTP(w, r) }))
+	ts.Start()
+	defer ts.Close()
+	var err error
+	srv, err = demoserver.New(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	login := func(email string) *Client {
+		tok, err := srv.Login(email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &Client{Base: ts.URL, Token: func(context.Context) (string, error) { return tok, nil }}
+	}
+	me, other := login("di@example.com"), login("di@example.com") // two sessions of the same account
+	if _, err := me.Watch(ctx, "di@example.com", nil); !errors.Is(err, ErrNoLogKeys) {
+		t.Fatalf("without keys: %v", err)
+	}
+	keys, err := me.ServerLogKeys(ctx)
+	if err != nil || len(keys) == 0 {
+		t.Fatalf("server keys: %v %v", keys, err)
+	}
+	if err := me.SetLogKeys(map[string]string{"x": "not base64!"}); err == nil {
+		t.Fatal("a bad key was accepted")
+	}
+	if err := me.SetLogKeys(keys); err != nil {
+		t.Fatal(err)
+	}
+	var saved []string
+	me.OnState = func(s string) { saved = append(saved, s) }
+	pub, secret, _ := encrypt.GenerateRecoveryKey()
+	id, _ := encrypt.ParseAgeIdentity(secret)
+	if _, err := me.Publish(ctx, PublishRequest{Key: pub, Identity: id}); err != nil {
+		t.Fatal(err)
+	}
+	if len(saved) == 0 {
+		t.Fatal("the state was not handed to OnState after a publish")
+	}
+	rep, err := me.Watch(ctx, "di@example.com", nil)
+	if err != nil || len(rep.Alerts) != 0 || rep.HeadSeq == 0 {
+		t.Fatalf("my own entry: %+v %v", rep, err)
+	}
+	// somebody (another session of the account) publishes a key: reported
+	pub2, secret2, _ := encrypt.GenerateRecoveryKey()
+	id2, _ := encrypt.ParseAgeIdentity(secret2)
+	if _, err := other.Publish(ctx, PublishRequest{Key: pub2, Identity: id2}); err != nil {
+		t.Fatal(err)
+	}
+	rep, err = me.Watch(ctx, "di@example.com", nil)
+	if err != nil || len(rep.Alerts) != 1 || rep.New != 1 {
+		t.Fatalf("the other session's entry: %+v %v", rep, err)
+	}
+	// not reported twice, also after the state is stored and loaded again
+	st := me.State()
+	again := login("di@example.com")
+	if err := again.SetLogKeys(keys); err != nil {
+		t.Fatal(err)
+	}
+	if err := again.LoadState(st); err != nil {
+		t.Fatal(err)
+	}
+	rep, err = again.Watch(ctx, "di@example.com", nil)
+	if err != nil || len(rep.Alerts) != 0 {
+		t.Fatalf("after reload: %+v %v", rep, err)
+	}
+	// damaged state is dropped, and said
+	if err := again.LoadState("{not json"); !errors.Is(err, ErrBadState) {
+		t.Fatalf("damaged state: %v", err)
+	}
+}
