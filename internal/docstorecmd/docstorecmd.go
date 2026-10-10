@@ -313,7 +313,7 @@ func passkeyChallenges(ctx context.Context, adapter docstore.Adapter, raw string
 		return nil, err
 	}
 	sc.StartChallengeSweep(ctx, time.Minute) // counts the store before the first Begin
-	log.Print("docstore: passkey ceremonies are shared through the store (records under passkey/challenge/ hold the e-mail and name of a registration in progress for up to two minutes, readable by anyone who can read the store: put an encrypting adapter under that keyspace if that matters)")
+	log.Print("docstore: passkey ceremonies are shared through the store (records under passkey/challenge/ hold the e-mail and name of a registration in progress for the ceremony's lifetime (5 minutes by default, and about 2 minutes more until the sweep removes them), readable by anyone who can read the store: put an encrypting adapter under that keyspace if that matters)")
 	return sc, nil
 }
 

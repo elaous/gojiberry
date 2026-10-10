@@ -489,7 +489,7 @@ func SweepRateLimitsStats(ctx context.Context, store Adapter, now time.Time, max
 			case gone:
 				out.Deleted++
 				out.Evicted++
-				if k.full > now.UnixNano() {
+				if k.full != math.MaxInt64 && k.full > now.UnixNano() { // an unreadable record's date is unknown: not counted
 					out.EvictedLive++
 				}
 			}
