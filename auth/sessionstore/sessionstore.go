@@ -101,6 +101,8 @@ type Store struct {
 	Now func() time.Time
 
 	sessions, states atomic.Int64 // records: the last listing's count plus this process's Puts less its removals
+	sessionsNet      atomic.Int64 // Puts less removals of this process, never reset: Sweep keeps what moved during its listing
+	statesNet        atomic.Int64
 	sweeping         sync.Mutex
 }
 
@@ -160,6 +162,13 @@ func (s *Store) max(k kind) int64 {
 		return int64(s.MaxStates)
 	}
 	return DefaultMaxStates
+}
+
+func (s *Store) net(k kind) *atomic.Int64 {
+	if k.prefix == SessionPrefix {
+		return &s.sessionsNet
+	}
+	return &s.statesNet
 }
 
 func dec(c *atomic.Int64) {
@@ -225,12 +234,12 @@ func (k kind) idBucket(id string) (int64, bool) {
 	if !ok {
 		return 0, false
 	}
-	b, _, ok := strings.Cut(rest, "/")
-	if !ok {
+	b, hash, ok := strings.Cut(rest, "/")
+	if !ok || !isHash(hash) {
 		return 0, false
 	}
 	n, err := strconv.ParseInt(b, 10, 64)
-	return n, err == nil && k.validBucket(n)
+	return n, err == nil && k.validBucket(n) && strconv.FormatInt(n, 10) == b
 }
 
 // sessionRecord is what a session record holds: the user and when the session was made and ends.
@@ -274,6 +283,7 @@ func (s *Store) put(ctx context.Context, k kind, expires time.Time, body func() 
 		switch err := cas.SaveIf(ctx, k.id(token), data, ""); {
 		case err == nil:
 			c.Add(1)
+			s.net(k).Add(1)
 			return token, nil
 		case errors.Is(err, docstore.ErrConflict):
 			continue
@@ -325,6 +335,7 @@ func (s *Store) DeleteSession(ctx context.Context, token string) error {
 	switch err := s.Store.Delete(ctx, id); {
 	case err == nil:
 		dec(&s.sessions)
+		s.sessionsNet.Add(-1)
 		return nil
 	case errors.Is(err, docstore.ErrNotFound):
 		return nil
@@ -381,6 +392,7 @@ func (s *Store) consume(ctx context.Context, cas docstore.ConditionalAdapter, id
 		switch err := d.DeleteIf(ctx, id, prev); {
 		case err == nil:
 			dec(&s.states)
+			s.statesNet.Add(-1)
 			return true, nil
 		case errors.Is(err, docstore.ErrNotFound), errors.Is(err, docstore.ErrConflict):
 			return false, nil
@@ -399,6 +411,7 @@ func (s *Store) consume(ctx context.Context, cas docstore.ConditionalAdapter, id
 		return false, err
 	}
 	dec(&s.states)
+	s.statesNet.Add(-1)
 	// Only the winner gets here, and nobody else writes a marker: a plain delete is safe. If it
 	// fails the marker stays refusing, and the sweep deletes it by its name.
 	_ = s.Store.Delete(ctx, id)
@@ -433,6 +446,7 @@ func (s *Store) sweep(ctx context.Context, sessions bool) (total int, sessionsLi
 			continue
 		}
 		left := 0
+		before := s.net(k).Load()
 		for _, m := range metas {
 			if err := ctx.Err(); err != nil {
 				return total, false, err
@@ -450,7 +464,8 @@ func (s *Store) sweep(ctx context.Context, sessions bool) (total int, sessionsLi
 				left++
 			}
 		}
-		s.count(k).Store(int64(left))
+		// Keep what this process put or removed while the listing ran: the listing may predate it.
+		s.count(k).Store(max(int64(left)+s.net(k).Load()-before, 0))
 		if k.prefix == SessionPrefix {
 			sessionsListed = true
 		}
@@ -524,4 +539,17 @@ func ParseMode(raw string) (string, error) {
 		return m, nil
 	}
 	return "", errors.New("parsing GOJIBERRY_DOCSTORE_SESSIONS \"" + raw + "\": want \"memory\", \"store\" or \"store-required\"")
+}
+
+// isHash says s is a lowercase hex SHA-256: the end of every name this store makes.
+func isHash(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }

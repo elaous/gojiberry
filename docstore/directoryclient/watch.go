@@ -81,6 +81,13 @@ func ParseWatchState(raw string) (WatchState, error) {
 	if err := json.Unmarshal([]byte(raw), &st); err != nil {
 		return WatchState{}, fmt.Errorf("%w: %v", ErrBadWatchState, err)
 	}
+	// "null" decodes into nothing, without an error, and is not a state a client wrote.
+	if strings.TrimSpace(raw) == "null" {
+		return WatchState{}, fmt.Errorf("%w: null", ErrBadWatchState)
+	}
+	if st.Seq < 0 || st.Cursor < 0 || st.Reported < 0 {
+		return WatchState{}, fmt.Errorf("%w: a negative position", ErrBadWatchState)
+	}
 	return st, nil
 }
 
@@ -168,6 +175,9 @@ type WatchReport struct {
 	// (encrypt.AuditAddress): proof that somebody with the directory key, not the owner, wrote
 	// them.
 	Violations []encrypt.AuditViolation
+	// Notes are entries dated a little ahead of the watcher's clock (encrypt.AuditNote): a fast
+	// clock on a replica, not a violation. Each has the measured difference.
+	Notes []encrypt.AuditNote
 	// Enrolled, OwnerKeys and ResetPending describe the address after the last entry.
 	Enrolled     bool
 	OwnerKeys    []docstore.DirectoryOwnerKey
@@ -545,6 +555,11 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	for _, v := range audit.Violations {
 		if v.Seq > st.Reported {
 			rep.Violations = append(rep.Violations, v)
+		}
+	}
+	for _, n := range audit.Notes {
+		if n.Seq > st.Reported {
+			rep.Notes = append(rep.Notes, n)
 		}
 	}
 	// What the server says about the enrollment must be what the log shows: a record that was

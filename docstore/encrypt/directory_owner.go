@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -891,12 +892,14 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 			bad(e, "the entry is dated before an earlier entry of the log: the times of the chain went back")
 		}
 		if !opt.Now.IsZero() {
-			ahead := time.Duration(e.At-opt.Now.Unix()) * time.Second
+			// Compared in seconds: a Duration of a huge gap would overflow and wrap to a small or
+			// negative number, which would hide a date far in the future.
+			gap := e.At - opt.Now.Unix()
 			switch {
-			case ahead > future:
-				bad(e, fmt.Sprintf("the entry is dated in the future (%s ahead of the auditor's clock)", ahead))
-			case ahead > note:
-				out.Notes = append(out.Notes, AuditNote{Seq: e.Seq, Ahead: ahead,
+			case gap > int64(future/time.Second):
+				bad(e, fmt.Sprintf("the entry is dated in the future (%s ahead of the auditor's clock)", aheadText(gap)))
+			case gap > int64(note/time.Second):
+				out.Notes = append(out.Notes, AuditNote{Seq: e.Seq, Ahead: time.Duration(gap) * time.Second,
 					Why: "the entry is dated ahead of the auditor's clock: a fast clock on a replica, or the auditor's own"})
 			}
 		}
@@ -1003,4 +1006,12 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 		}
 	}
 	return out
+}
+
+// aheadText writes a gap in seconds, which may be far beyond what a time.Duration holds.
+func aheadText(secs int64) string {
+	if secs > int64(math.MaxInt64/int64(time.Second)) {
+		return "more than 290 years"
+	}
+	return (time.Duration(secs) * time.Second).String()
 }

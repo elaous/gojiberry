@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (#118, #119, #120, #121, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
+7 of 10 since the last full run (#118, #119, #120, #121, #122, #123, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -637,7 +637,7 @@ New entries:
     (`encrypt.UnsignedHook`) puts it in `VerifyReport.Unsigned`.
 40. **Done (this PR): the store mode says what the challenge records hold.** Was: nothing told the operator that
     `StoreChallenges` keeps the pending registration e-mail and name in clear (`auth/passkey/challenge_store.go`),
-    for up to the challenge lifetime (two minutes), under `passkey/challenge/<expiry minute>/<hash of the token>`.
+    for the challenge lifetime (5 minutes by default, plus about 2 until the sweep removes it), under `passkey/challenge/<expiry minute>/<hash of the token>`.
     Now the start-up line of `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store` says it and names the remedy (an
     encrypting adapter under that keyspace; see "Extension points" in
     [encryption-and-passkeys.md](encryption-and-passkeys.md#b1-extension-points)). The record is not changed: the e-mail
@@ -1012,3 +1012,17 @@ unless stated.
     Where: `.golangci.yml`, `Makefile`, `examples`. Dependencies: none.
 
 **Order for 59 to 84:** 60, 59, 61 and 62, 79 (first slice), 72, 70, 76, then the rest.
+85. **Done (this PR): the findings of an outside review of main (#90 to #123).** A fresh reviewer read the merged
+    work and ran its tests with `-race`: no races, no silent skips, and these were wrong, all fixed here.
+    1. `AuditAddress` computed the gap to a far-future entry as a `time.Duration`, which overflows past about 290
+       years and hid the "dated in the future" violation (a hostile directory could also push the settle boundary
+       forward); the gap is now compared in seconds. 2. `WatchReport` dropped `AuditAddress` notes, so entry 30's
+       fast-clock note never reached a watcher; `WatchReport.Notes` now carries them. 3. The start-up line of entry 40
+       said "two minutes"; the default ceremony lifetime is 5 minutes plus the sweep's grace, and the line and the
+       entry say so. 4. `sessionstore.Sweep` treated any name under its prefixes as its own (a short hash or a
+       non-canonical number was deleted and counted toward the cap); it now takes only
+       `<prefix><canonical bucket>/<64 hex>`, as the passkey store does, and keeps the Puts and removals that
+       happened during its listing, as that store does. 5. Unreadable rate-limit records no longer count as
+       evicted "live" callers. 6. `ParseWatchState` refuses `null` and negative positions. Not deeply re-audited by
+       that review, for lack of budget: the filtered/full chaining of `WatchLog` (#105) and the signed-frame
+       verification internals (their tests pass); a second pass over them is worth a later review.

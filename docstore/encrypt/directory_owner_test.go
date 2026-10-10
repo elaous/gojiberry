@@ -702,3 +702,14 @@ func TestAuditNotesASmallClockSkewAndFlagsALargeOne(t *testing.T) {
 		t.Errorf("large skew: %+v", got)
 	}
 }
+
+// A date so far ahead that its gap would overflow a time.Duration is still a violation.
+func TestAuditFlagsADateBeyondWhatADurationHolds(t *testing.T) {
+	e := newOwnerEnv(t)
+	_, priv := ownerKey(t)
+	e.mustEnroll(priv)
+	got := e.audit(AuditOptions{Now: time.Unix(e.clk.Now().Unix()-(1<<62), 0)})
+	if len(got.Violations) != 1 || !strings.Contains(got.Violations[0].Why, "in the future") {
+		t.Fatalf("%+v", got)
+	}
+}
