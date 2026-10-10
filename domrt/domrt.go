@@ -87,6 +87,9 @@ type renderedNode struct {
 	attrs     []xango.Attr
 	text      string
 	listeners map[string]*eventBinding
+	// opener is, for a modal (an element with data-gj-modal), what had the focus when it was created:
+	// the focus goes back to it when the modal is taken away.
+	opener js.Value
 }
 
 type eventBinding struct {
@@ -156,6 +159,9 @@ func createInner(n xango.Node) *renderedNode {
 				el.Call("appendChild", dn)
 			}
 		}
+		if hasAttr(n.Attrs, "data-gj-modal") {
+			takeFocus(rn)
+		}
 		return rn
 	default:
 		panic("domrt: unknown node kind")
@@ -214,6 +220,76 @@ func applyAttr(rn *renderedNode, a xango.Attr) {
 		})
 		js.Global().Call("requestAnimationFrame", focus)
 	}
+}
+
+func hasAttr(attrs []xango.Attr, name string) bool {
+	for _, a := range attrs {
+		if a.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// takeFocus is for a modal that has just been created: it notes what has the focus now, and moves the
+// focus into the modal once it is in the document (unless something inside it, an autofocus
+// field, has taken it already). Only creation does this, never a later render of the same modal, so
+// typing in a field inside it is not interrupted.
+func takeFocus(rn *renderedNode) {
+	if active := document().Get("activeElement"); !active.IsNull() && !active.IsUndefined() && !active.Equal(document().Get("body")) {
+		rn.opener = active
+	}
+	el := rn.dom
+	var focus js.Func
+	focus = js.FuncOf(func(js.Value, []js.Value) any {
+		defer focus.Release()
+		if el.Get("isConnected").Bool() && !el.Call("contains", document().Get("activeElement")).Bool() {
+			el.Call("focus")
+		}
+		return nil
+	})
+	js.Global().Call("requestAnimationFrame", focus)
+}
+
+// giveBackFocus is for a node that has just been taken out of the document: a modal inside it
+// returns the focus to what had it before the modal opened, if that is still in the page and the focus
+// was lost with the modal (it is on nothing, or on the page's body). It waits for the end of the
+// render (one frame): the same render may still move the opener within its parent, and moving a
+// node drops its focus.
+func giveBackFocus(rn *renderedNode) {
+	var openers []js.Value
+	var collect func(*renderedNode)
+	collect = func(n *renderedNode) {
+		if n == nil {
+			return
+		}
+		if !n.opener.IsUndefined() && !n.opener.IsNull() {
+			openers = append(openers, n.opener)
+		}
+		for _, c := range n.children {
+			collect(c)
+		}
+	}
+	collect(rn)
+	if len(openers) == 0 {
+		return
+	}
+	var restore js.Func
+	restore = js.FuncOf(func(js.Value, []js.Value) any {
+		defer restore.Release()
+		active := document().Get("activeElement")
+		if !active.IsNull() && !active.IsUndefined() && !active.Equal(document().Get("body")) {
+			return nil // the focus is somewhere on purpose
+		}
+		for _, o := range openers {
+			if o.Get("isConnected").Bool() {
+				o.Call("focus")
+				return nil
+			}
+		}
+		return nil
+	})
+	js.Global().Call("requestAnimationFrame", restore)
 }
 
 func removeAttr(rn *renderedNode, a xango.Attr) {
@@ -403,6 +479,7 @@ func replace(parent js.Value, old *renderedNode, next xango.Node) *renderedNode 
 		for _, n := range oldNodes {
 			parent.Call("removeChild", n)
 		}
+		giveBackFocus(old)
 	} else {
 		for _, n := range rn.ownedNodes() {
 			parent.Call("appendChild", n)
@@ -479,6 +556,7 @@ func patchChildren(parent js.Value, endAnchor js.Value, old []*renderedNode, nex
 			for _, dn := range o.ownedNodes() {
 				parent.Call("removeChild", dn)
 			}
+			giveBackFocus(o)
 		}
 	}
 

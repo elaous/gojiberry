@@ -3,6 +3,7 @@
 package main
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
@@ -137,4 +138,34 @@ func TestSidePanelTabsAreOperatedWithTheArrowKeys(t *testing.T) {
 	d.Press("Home")
 	d.OK(tabOf() == "format" && selected() == "format", "Home: "+tabOf())
 	d.OK(d.Int(`document.querySelectorAll('[role="tablist"] [role="tab"][tabindex="0"]').length`) == 1, "still only one in the Tab order")
+}
+
+// A dialog works from the keyboard: it takes the focus, Tab and Shift+Tab stay inside it, Escape closes it
+// and the focus goes back to what opened it.
+func TestDialogFocusIsTrappedAndReturned(t *testing.T) {
+	site := e2etest.NewSite(t)
+	site.UseLocalhost()
+	d := site.OpenURL(t, "/index.html?docstore="+url.QueryEscape(site.URL))
+	d.VirtualAuthenticator()
+	turnOn(t, d, "")
+	d.Click(`button[data-tab="people"]`)
+	d.WaitSelector("#dir-offer-review")
+	inDialog := func() bool {
+		return d.Bool(`!!document.activeElement.closest('[role="alertdialog"]')`)
+	}
+	d.Focus("#dir-offer-review")
+	d.Press("Enter")
+	d.WaitSelector(`[role="alertdialog"]`)
+	d.WaitFor("the focus in the dialog", `!!document.activeElement.closest('[role="alertdialog"]')`)
+	for i := 0; i < 6; i++ { // more presses than the dialog has buttons: it wraps
+		d.Press("Tab")
+		d.OK(inDialog(), "Tab stays inside the dialog")
+	}
+	for i := 0; i < 4; i++ {
+		d.Press("Shift+Tab")
+		d.OK(inDialog(), "Shift+Tab stays inside the dialog")
+	}
+	d.Press("Escape")
+	d.OK(!d.Has(`[role="alertdialog"]`), "Escape closes the dialog")
+	d.WaitFor("the focus back", `document.activeElement && document.activeElement.id === 'dir-offer-review'`)
 }

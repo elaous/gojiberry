@@ -34,7 +34,12 @@ func Modal(props ModalProps) xango.Node {
 		backdropAttrs = append(backdropAttrs, xango.On("click", func(xango.Event) { props.OnClose() }))
 	}
 
-	boxAttrs := []xango.Attr{xango.A("class", "gj-modal"), xango.A("role", role), xango.A("aria-modal", "true")}
+	// The box takes the focus when it opens (tabindex -1: it can have it, the Tab key does not stop
+	// on it), and gives it back to what had it when it closes (data-gj-modal, handled by domrt). Tab and
+	// Shift+Tab go round the focusable things inside it and never out, and Escape closes it as a
+	// click on the backdrop does.
+	boxAttrs := []xango.Attr{xango.A("class", "gj-modal"), xango.A("role", role), xango.A("aria-modal", "true"),
+		xango.A("tabindex", "-1"), xango.A("data-gj-modal", "true"), ModalKeys(props.OnClose)}
 	if props.Label != "" {
 		boxAttrs = append(boxAttrs, xango.A("aria-label", props.Label))
 	}

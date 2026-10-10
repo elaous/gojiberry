@@ -886,3 +886,48 @@ func TestTabsKeyboard(t *testing.T) {
 		t.Errorf("another key acted")
 	}
 }
+
+// A modal takes the focus, keeps it inside (Tab and Shift+Tab go round) and closes on Escape.
+func TestModalKeyboard(t *testing.T) {
+	closed := 0
+	m := Modal(ModalProps{Open: true, Label: "Sure?", Content: []xango.Node{xango.Text("x")}, OnClose: func() { closed++ }})
+	html := render(t, m)
+	if !strings.Contains(html, `tabindex="-1"`) || !strings.Contains(html, `data-gj-modal="true"`) || !strings.Contains(html, `aria-modal="true"`) {
+		t.Errorf("the box takes the focus and gives it back: %s", html)
+	}
+	keys := findHandlers(m, "keydown")
+	if len(keys) != 1 {
+		t.Fatalf("keydown handlers = %d, want 1", len(keys))
+	}
+	press := func(k xango.KeyData) (steps []xango.FocusStep, prevented bool) {
+		keys[0](xango.NewEvent("keydown", k, false, func() { prevented = true }, nil).
+			WithFocus(func(root, items string, step xango.FocusStep) bool {
+				if root != ".gj-modal" || !strings.Contains(items, "button:not([disabled])") {
+					t.Errorf("focus asked in %q for %q", root, items)
+				}
+				steps = append(steps, step)
+				return true
+			}))
+		return
+	}
+	if steps, prevented := press(xango.KeyData{Key: "Tab"}); len(steps) != 1 || steps[0] != xango.FocusNext || !prevented {
+		t.Errorf("Tab: %v %v", steps, prevented)
+	}
+	if steps, prevented := press(xango.KeyData{Key: "Tab", Shift: true}); len(steps) != 1 || steps[0] != xango.FocusPrev || !prevented {
+		t.Errorf("Shift+Tab: %v %v", steps, prevented)
+	}
+	if _, prevented := press(xango.KeyData{Key: "Escape"}); closed != 1 || !prevented {
+		t.Errorf("Escape: closed %d prevented %v", closed, prevented)
+	}
+	if steps, prevented := press(xango.KeyData{Key: "Tab", Ctrl: true}); len(steps) != 0 || prevented {
+		t.Errorf("Ctrl+Tab belongs to the browser: %v %v", steps, prevented)
+	}
+	press(xango.KeyData{Key: "a"})
+	// a modal with nothing to call on Escape leaves the key alone
+	none := findHandlers(Modal(ModalProps{Open: true, Content: []xango.Node{xango.Text("x")}}), "keydown")
+	prevented := false
+	none[0](xango.NewEvent("keydown", xango.KeyData{Key: "Escape"}, false, func() { prevented = true }, nil))
+	if prevented {
+		t.Error("Escape was taken from a modal that cannot close")
+	}
+}
