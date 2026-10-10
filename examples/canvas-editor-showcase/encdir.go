@@ -185,7 +185,7 @@ func (d *dirUI) confirm(clean, token string, e *encUI) {
 func (d *dirUI) connect() {
 	d.dir = nil
 	if _, _, err := checkDirURL(d.url); err == nil {
-		d.dir = &dirclient.HTTP{Base: d.url, Token: d.sessionToken}
+		d.dir = &dirclient.Client{Base: d.url, Token: d.sessionToken}
 	}
 }
 
@@ -228,6 +228,12 @@ func dirErr(err error) error {
 		msg = T("dir.err.signIn", "The key directory needs a signed-in account: set a session token below.")
 	case errors.Is(err, dirclient.ErrNotAllowed):
 		msg = T("dir.err.notAllowed", "This account may not do that: the directory needs an account with a verified e-mail from an identity provider (a passkey account cannot look up or publish).")
+	case errors.Is(err, dirclient.ErrProofRequired):
+		msg = T("dir.err.proof", "The directory wants proof that you hold this key, and it is locked: unlock it (with its passkey or key file) and publish again.")
+	case errors.Is(err, dirclient.ErrBadProof):
+		msg = T("dir.err.badProof", "The directory did not accept the proof that you hold this key.")
+	case errors.Is(err, dirclient.ErrOwnerRequired):
+		msg = T("dir.err.owner", "This address has an owner key, so the directory only takes entries signed by it. Signing with an owner key is not available here yet.")
 	case errors.Is(err, dirclient.ErrRateLimited):
 		msg = T("dir.err.rate", "The key directory is rate limited: try again in a minute.")
 	default:
@@ -282,7 +288,9 @@ func (d *dirUI) publish(ctx context.Context, e *encUI) error {
 		if o.Kind == encstore.KindRecovery {
 			continue
 		}
-		if _, err := d.dir.Publish(ctx, o.Public, o.Label); err != nil {
+		// the proof of possession needs the private side, which is held only while that key is unlocked
+		id, _ := e.store.IdentityFor(o.Public)
+		if _, err := d.dir.Publish(ctx, dirclient.PublishRequest{Key: o.Public, Label: o.Label, Identity: id}); err != nil {
 			return dirErr(err)
 		}
 		n++

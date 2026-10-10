@@ -440,6 +440,19 @@ func (s *Store) Owners() []Owner {
 	return slices.Clone(s.cfg.Owners)
 }
 
+// IdentityFor is the unlocked private side of the owner key whose public text is public, to open a
+// challenge with (proof that its holder publishes it). False while that key is locked.
+func (s *Store) IdentityFor(public string) (age.Identity, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for i, h := range s.holders {
+		if h == public && i < len(s.ids) {
+			return s.ids[i], true
+		}
+	}
+	return nil, false
+}
+
 // Config is the configuration as it stands.
 func (s *Store) Config() Config {
 	s.mu.RLock()
