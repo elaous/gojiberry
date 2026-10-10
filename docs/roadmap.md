@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (#118, #119, #120, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
+5 of 10 since the last full run (#118, #119, #120, #121, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -453,11 +453,11 @@ a way to avoid hitting the limit meanwhile.
     (`examples/people-keys-demo`) has the controls. Plan: move the showcase to `directoryclient`, ask the person
     for a private key or another passkey assertion per signature (proof of possession and an owner-signed entry),
     and finish the app-side controls (publish and pick). Avoid: publish from `examples/people-keys-demo`.
-22. **`walk()` takes the first matching link, no branch search** (`examples/canvas-editor-showcase/encstore/bind.go`).
-    It takes the first link whose `From` matches and whose signer is in the list, with `break` and no
-    backtracking, bounded by `steps > len(cfg.Links)`; it does not loop forever, but a dead-end first match can
-    hide a reachable link. Plan: search all links from each list (BFS or DFS) with a visited set of digests.
-    Avoid: none known; report an unlock that fails after many key changes.
+22. **Done (this PR): `walk()` searches every link.** Was: it took the first link whose `From` matched and whose
+    signer was in the list, with no backtracking, so a dead-end first match could hide a reachable link and an
+    unlock could fail after many key changes. Now it searches depth first over all links out of each list with a
+    visited set of digests (a circle ends), and returns the path to the target.
+    `examples/canvas-editor-showcase/encstore/bind.go`.
 23. **Done (this PR): a `WatchState` in the old `made` format, or damaged, is refused whole.** Was: the
     `people-keys-demo` ignored the decode error, so `localStorage` state saved before `made` became records half-loaded
     and the half that loaded hid what the other half would have caught. Now `directoryclient.ParseWatchState` returns
