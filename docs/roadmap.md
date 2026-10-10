@@ -5,8 +5,8 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-10 of 10 since the last full run (#129 to #137, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
-10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
+0 of 10 since the last full run. The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
 
