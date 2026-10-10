@@ -88,3 +88,18 @@ func TestHost(t *testing.T) {
 		t.Fatal("RenderString of a host node should fail")
 	}
 }
+
+func TestMoveFocusIsAHookTheBrowserFills(t *testing.T) {
+	// no hook (a test, the server): nothing happens
+	if NewEvent("keydown", nil, false, nil, nil).MoveFocus(".w", "li", FocusNext) {
+		t.Error("MoveFocus without a hook reported success")
+	}
+	var got [3]any
+	e := NewEvent("keydown", nil, false, nil, nil).WithFocus(func(root, items string, step FocusStep) bool {
+		got = [3]any{root, items, step}
+		return true
+	})
+	if !e.MoveFocus(".w", ":scope > li", FocusLast) || got != [3]any{".w", ":scope > li", FocusLast} {
+		t.Errorf("hook got %v", got)
+	}
+}

@@ -64,3 +64,53 @@ func TestMenuEntryChosenWithTheKeyboard(t *testing.T) {
 	d.WaitSelector(".gj-pagesetup-title")
 	d.OK(!d.Has(".gj-menubar-panel"), "choosing closes the menu")
 }
+
+// The arrow keys move through the menus: along the bar (taking an open menu along), into a menu and
+// among its entries, into a submenu and back out, and Escape puts the focus back on the menu's button.
+func TestMenusAreOperatedWithTheArrowKeys(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	active := func() string {
+		return d.Str(`(document.activeElement.textContent || '').trim().split('\n')[0].replace(/\s+/g, ' ').slice(0, 40)`)
+	}
+	// Down on a closed menu button opens the menu and lands on its first entry
+	d.Focus(`button.gj-menubar-button:has-text("File")`)
+	d.Press("ArrowDown")
+	d.WaitSelector(".gj-menubar-panel")
+	d.WaitFor("the first entry", `document.activeElement.classList.contains('gj-menu-item')`)
+	first := active()
+	d.Press("ArrowDown")
+	d.OK(active() != first && d.Bool(`document.activeElement.classList.contains('gj-menu-item')`), "Down moves to the next entry: "+active())
+	d.Press("ArrowUp")
+	d.OK(active() == first, "Up moves back: "+active())
+	d.Press("ArrowUp")
+	last := active()
+	d.OK(last != first, "Up from the first wraps to the last: "+last)
+	d.Press("Home")
+	d.OK(active() == first, "Home: "+active())
+	d.Press("End")
+	d.OK(active() == last, "End: "+active())
+
+	// Escape closes the menu and puts the focus back on its button
+	d.Press("Escape")
+	d.OK(!d.Has(".gj-menubar-panel") && active() == "File", "Escape returns to the File button: "+active())
+
+	// Right and Left move along the bar; with a menu open they take it along
+	d.Press("ArrowDown")
+	d.WaitSelector(".gj-menubar-panel")
+	d.Focus(`button.gj-menubar-button:has-text("File")`)
+	d.Press("ArrowRight")
+	d.WaitFor("Edit open", `document.querySelector('.gj-menubar-entry-open > .gj-menubar-button').textContent.trim() === 'Edit'`)
+	d.OK(active() == "Edit", "Right moves to the next button: "+active())
+	d.Press("ArrowLeft")
+	d.WaitFor("File open", `document.querySelector('.gj-menubar-entry-open > .gj-menubar-button').textContent.trim() === 'File'`)
+	d.Press("Escape")
+
+	// a submenu: Right goes in, Left comes back out
+	d.Click(`button.gj-menubar-button:has-text("View")`)
+	d.WaitSelector(".gj-menubar-panel")
+	d.Focus(`.gj-menubar-panel li.gj-menu-item-sub:has(.gj-menu-label:text-is("Interface language"))`)
+	d.Press("ArrowRight")
+	d.OK(d.Bool(`!!document.activeElement.closest('.gj-menu-item-sub > .gj-menu')`), "Right goes into the submenu: "+active())
+	d.Press("ArrowLeft")
+	d.OK(strings.HasPrefix(active(), "Interface language"), "Left comes back to the entry: "+active())
+}

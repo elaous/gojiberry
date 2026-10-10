@@ -288,7 +288,65 @@ func domEventToXangoEvent(ev js.Value) xango.Event {
 	}
 	preventDefault := func() { ev.Call("preventDefault") }
 	stopProp := func() { ev.Call("stopPropagation") }
-	return xango.NewEvent(typ, value, checked, preventDefault, stopProp)
+	return xango.NewEvent(typ, value, checked, preventDefault, stopProp).WithFocus(func(root, items string, step xango.FocusStep) bool {
+		return moveFocus(ev, root, items, step)
+	})
+}
+
+// moveFocus implements xango.Event.MoveFocus over the DOM event ev.
+func moveFocus(ev js.Value, root, items string, step xango.FocusStep) bool {
+	target := ev.Get("target")
+	if target.IsUndefined() || target.IsNull() || target.Get("closest").IsUndefined() {
+		return false
+	}
+	rootEl := target.Call("closest", root)
+	if rootEl.IsNull() || rootEl.IsUndefined() {
+		return false
+	}
+	// ":scope" alone names the widget element itself (querySelectorAll only finds descendants).
+	var all []js.Value
+	if strings.TrimSpace(items) == ":scope" {
+		all = append(all, rootEl)
+	} else {
+		list := rootEl.Call("querySelectorAll", items)
+		for i := 0; i < list.Length(); i++ {
+			all = append(all, list.Index(i))
+		}
+	}
+	active := js.Global().Get("document").Get("activeElement")
+	var cands []js.Value
+	cur := -1
+	for _, el := range all {
+		if el.Get("disabled").Truthy() || el.Call("getAttribute", "aria-disabled").String() == "true" {
+			continue
+		}
+		if el.Get("offsetParent").IsNull() && el.Get("getClientRects").Invoke().Length() == 0 {
+			continue // not shown
+		}
+		if el.Equal(active) {
+			cur = len(cands)
+		}
+		cands = append(cands, el)
+	}
+	if len(cands) == 0 {
+		return false
+	}
+	var next int
+	switch step {
+	case xango.FocusFirst:
+		next = 0
+	case xango.FocusLast:
+		next = len(cands) - 1
+	case xango.FocusPrev:
+		next = (cur - 1 + len(cands)) % len(cands)
+		if cur < 0 {
+			next = len(cands) - 1
+		}
+	default:
+		next = (cur + 1) % len(cands)
+	}
+	cands[next].Call("focus")
+	return true
 }
 
 // patch diffs newNode against the tree rooted at old (whose last

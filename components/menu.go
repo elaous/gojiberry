@@ -53,6 +53,49 @@ func Menu(props MenuProps) xango.Node {
 	return xango.El("ul", attrs, items...)
 }
 
+// menuEntries selects the entries of the menu a key press happened in (its own, not a submenu's).
+const menuEntries = ":scope > li.gj-menu-item[tabindex]"
+
+// menuItemKey is the keyboard model of a menu entry. Up and Down move among the entries of the
+// menu (wrapping), Home and End go to the ends, Right opens the submenu of an entry that has one and
+// goes into it, Left goes back out to the entry that opened the submenu, and Enter or Space
+// chooses the entry (choose is nil for an entry that only opens a submenu). A key with a
+// modifier is left alone.
+func menuItemKey(e xango.Event, choose func()) {
+	k, ok := e.Value.(xango.KeyData)
+	if !ok || k.Ctrl || k.Alt || k.Meta {
+		return
+	}
+	move := func(step xango.FocusStep) {
+		e.PreventDefault()
+		e.MoveFocus(".gj-menu", menuEntries, step)
+	}
+	switch k.Key {
+	case "ArrowDown":
+		move(xango.FocusNext)
+	case "ArrowUp":
+		move(xango.FocusPrev)
+	case "Home":
+		move(xango.FocusFirst)
+	case "End":
+		move(xango.FocusLast)
+	case "ArrowRight":
+		// into the submenu of the focused entry, if it has one
+		if e.MoveFocus(".gj-menu-item-sub", ":scope > .gj-menu > li.gj-menu-item[tabindex]", xango.FocusFirst) {
+			e.PreventDefault()
+		}
+	case "ArrowLeft":
+		// out of a submenu, to the entry that opened it
+		e.PreventDefault()
+		e.MoveFocus(".gj-menu-item-sub", ":scope", xango.FocusFirst)
+	case "Enter", " ":
+		if choose != nil {
+			e.PreventDefault()
+			choose()
+		}
+	}
+}
+
 func menuItem(it MenuItem, onClose func()) xango.Node {
 	if it.Separator {
 		return xango.El("li", []xango.Attr{xango.A("class", "gj-menu-separator"), xango.A("role", "separator")})
@@ -65,7 +108,8 @@ func menuItem(it MenuItem, onClose func()) xango.Node {
 	}
 	if len(it.Items) > 0 {
 		class += " gj-menu-item-sub"
-		attrs = append(attrs, xango.A("aria-haspopup", "menu"), xango.A("tabindex", "0"))
+		attrs = append(attrs, xango.A("aria-haspopup", "menu"), xango.A("tabindex", "0"),
+			xango.On("keydown", func(e xango.Event) { menuItemKey(e, nil) }))
 	} else if !it.Disabled && it.OnSelect != nil {
 		sel := it.OnSelect
 		choose := func() {
@@ -77,12 +121,7 @@ func menuItem(it MenuItem, onClose func()) xango.Node {
 		attrs = append(attrs, xango.A("tabindex", "0"), xango.On("click", func(xango.Event) { choose() }),
 			// Enter and Space choose the focused entry, as a click does (a menu entry is not a
 			// button, so the browser does not do it).
-			xango.On("keydown", func(e xango.Event) {
-				if k, ok := e.Value.(xango.KeyData); ok && (k.Key == "Enter" || k.Key == " ") && !k.Ctrl && !k.Alt && !k.Meta {
-					e.PreventDefault()
-					choose()
-				}
-			}))
+			xango.On("keydown", func(e xango.Event) { menuItemKey(e, choose) }))
 	}
 	if it.Checked {
 		attrs = append(attrs, xango.A("aria-checked", "true"))
@@ -148,6 +187,38 @@ func MenuBar(props MenuBarProps) xango.Node {
 					props.OnOpen(i)
 				}
 			}),
+			// Left and Right move along the bar (taking an open menu along); Down, and Up, open
+			// the menu and go into it, at its first and last entry.
+			xango.On("keydown", func(e xango.Event) {
+				k, ok := e.Value.(xango.KeyData)
+				if !ok || k.Ctrl || k.Alt || k.Meta || props.OnOpen == nil {
+					return
+				}
+				n := len(props.Entries)
+				switch k.Key {
+				case "ArrowRight", "ArrowLeft":
+					e.PreventDefault()
+					to := (i + 1) % n
+					step := xango.FocusNext
+					if k.Key == "ArrowLeft" {
+						to, step = (i-1+n)%n, xango.FocusPrev
+					}
+					e.MoveFocus(".gj-menubar", ".gj-menubar-button", step)
+					if props.Open >= 0 {
+						props.OnOpen(to)
+					}
+				case "ArrowDown", "ArrowUp":
+					e.PreventDefault()
+					if !open {
+						props.OnOpen(i)
+					}
+					step := xango.FocusFirst
+					if k.Key == "ArrowUp" {
+						step = xango.FocusLast
+					}
+					e.MoveFocus(".gj-menubar-entry", ".gj-menubar-panel > .gj-menu > li.gj-menu-item[tabindex]", step)
+				}
+			}),
 		}, xango.Text(e.Label))
 		children := []xango.Node{btn}
 		if open {
@@ -164,6 +235,8 @@ func MenuBar(props MenuBarProps) xango.Node {
 	escape := xango.On("keydown", func(e xango.Event) {
 		if k, ok := e.Value.(xango.KeyData); ok && k.Key == "Escape" && props.Open >= 0 && props.OnOpen != nil {
 			e.PreventDefault()
+			// the focus goes back to the button of the menu that closes, not to the page
+			e.MoveFocus(".gj-menubar", ".gj-menubar-entry-open > .gj-menubar-button", xango.FocusFirst)
 			props.OnOpen(-1)
 		}
 	})

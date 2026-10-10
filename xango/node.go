@@ -54,6 +54,37 @@ type Event struct {
 	Checked        bool // convenience accessor for checkbox target.checked
 	preventDefault func()
 	stopProp       func()
+	moveFocus      func(root, items string, step FocusStep) bool
+}
+
+// FocusStep says where MoveFocus goes among the candidates.
+type FocusStep int
+
+const (
+	FocusNext FocusStep = iota
+	FocusPrev
+	FocusFirst
+	FocusLast
+)
+
+// MoveFocus moves the keyboard focus within a widget while the event is being handled: root is
+// a CSS selector for the widget, found from the event's target outward (the target itself
+// counts); items selects the candidates inside it (written for the widget, so ":scope > li" is
+// the widget's own children, and ":scope" alone is the widget element itself); step picks one relative to the element that has the focus, wrapping
+// around, or the first or last. Candidates that are disabled, aria-disabled or not shown are
+// skipped. It reports whether something was focused; with no browser behind the event (a test,
+// the server) it does nothing and reports false.
+func (e Event) MoveFocus(root, items string, step FocusStep) bool {
+	if e.moveFocus == nil {
+		return false
+	}
+	return e.moveFocus(root, items, step)
+}
+
+// WithFocus returns e with the function MoveFocus calls; used by domrt (and tests).
+func (e Event) WithFocus(f func(root, items string, step FocusStep) bool) Event {
+	e.moveFocus = f
+	return e
 }
 
 // EventValue reads e.Value as T, returning the zero value of T if the
