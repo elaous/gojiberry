@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-9 of 10 since the last full run (#118 to #125, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
+10 of 10 since the last full run (#118 to #126, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -453,9 +453,16 @@ a way to avoid hitting the limit meanwhile.
     the default; a store without conditional writes warns and falls back, as for the other shared stores).
     Still per process, now entry 86: the anonymous `SessionStore` counts, the byte budget and the report counters.
     `docstore/public/storequota.go`, `internal/docstorecmd/docstorecmd.go`.
-17. **Snapshots cannot be refused (overshoot); a deleted snapshot is subtracted only at the next reconcile.**
-    Plan: the saver must ask the budget before writing a snapshot, so it can be refused or reserved. Avoid: leave
-    headroom under the byte budget.
+17. **Done (this PR): a snapshot over the byte budget is refused, and a deleted one is subtracted at once.** Was:
+    version snapshots were written by the saver, which does not ask the public offer's budget, so the budget could be
+    exceeded by the snapshots written after it was reached, and a deleted snapshot came off the count only at the next
+    reconcile. Now the public service puts a `Guard` on the `ExpiringAdapter` (asked before every Save and SaveIf,
+    nothing is renewed or written if it refuses): a snapshot of a public document that would pass `MaxTotalBytes`
+    is refused with `docstore.ErrStorageFull` (the saver reports the error; the document itself is untouched), a
+    claim covers the bytes while the write runs, and a stored one is counted. `OnDelete` subtracts a deleted snapshot
+    when `Delete` succeeds. Still inexact, by design: a snapshot written or deleted by a path that does not go through
+    this `ExpiringAdapter` (`NoteVersionWrite` after the fact, a delete inside a document purge) is counted or
+    subtracted by the next reconcile. `docstore/expiry.go`, `docstore/public/service.go`, `guardrails.go`.
 18. **`OnSave` auto-wiring, the real remainder.** `docstore/public/service.go` already wires
     `ExpiringAdapter.OnSave` when the store is an `*ExpiringAdapter`. Left: a Service built after the adapter is
     already in use (the hook is set at construction), and stores wrapped so they are not an `*ExpiringAdapter`.
