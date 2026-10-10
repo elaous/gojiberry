@@ -68,12 +68,21 @@ func menuItem(it MenuItem, onClose func()) xango.Node {
 		attrs = append(attrs, xango.A("aria-haspopup", "menu"), xango.A("tabindex", "0"))
 	} else if !it.Disabled && it.OnSelect != nil {
 		sel := it.OnSelect
-		attrs = append(attrs, xango.A("tabindex", "0"), xango.On("click", func(xango.Event) {
+		choose := func() {
 			sel()
 			if onClose != nil {
 				onClose()
 			}
-		}))
+		}
+		attrs = append(attrs, xango.A("tabindex", "0"), xango.On("click", func(xango.Event) { choose() }),
+			// Enter and Space choose the focused entry, as a click does (a menu entry is not a
+			// button, so the browser does not do it).
+			xango.On("keydown", func(e xango.Event) {
+				if k, ok := e.Value.(xango.KeyData); ok && (k.Key == "Enter" || k.Key == " ") && !k.Ctrl && !k.Alt && !k.Meta {
+					e.PreventDefault()
+					choose()
+				}
+			}))
 	}
 	if it.Checked {
 		attrs = append(attrs, xango.A("aria-checked", "true"))
@@ -151,16 +160,26 @@ func MenuBar(props MenuBarProps) xango.Node {
 		}
 		entries = append(entries, xango.El("div", []xango.Attr{xango.A("class", class)}, children...))
 	}
-	nodes := []xango.Node{xango.El("nav", []xango.Attr{xango.A("class", "gj-menubar"), xango.A("role", "menubar")}, entries...)}
+	// Escape closes the open menu from wherever the focus is inside it (keydown bubbles up to the bar).
+	escape := xango.On("keydown", func(e xango.Event) {
+		if k, ok := e.Value.(xango.KeyData); ok && k.Key == "Escape" && props.Open >= 0 && props.OnOpen != nil {
+			e.PreventDefault()
+			props.OnOpen(-1)
+		}
+	})
+	nodes := []xango.Node{xango.El("nav", []xango.Attr{xango.A("class", "gj-menubar"), xango.A("role", "menubar"), escape}, entries...)}
 	if props.Open >= 0 {
-		nodes = append([]xango.Node{xango.El("div", []xango.Attr{
+		// After the bar, not before it: the bar keeps its place among its siblings when a menu
+		// opens, so the browser keeps the focus on the button that was pressed (the bar is above the
+		// backdrop by z-index either way).
+		nodes = append(nodes, xango.El("div", []xango.Attr{
 			xango.A("class", "gj-menubar-backdrop"),
 			xango.On("click", func(xango.Event) {
 				if props.OnOpen != nil {
 					props.OnOpen(-1)
 				}
 			}),
-		})}, nodes...)
+		}))
 	}
 	return xango.Frag(nodes...)
 }
