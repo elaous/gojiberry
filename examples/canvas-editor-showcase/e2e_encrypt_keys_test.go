@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/elaous/gojiberry/docstore/encrypt"
+	"github.com/elaous/gojiberry/examples/canvas-editor-showcase/dirclient"
 	"github.com/elaous/gojiberry/examples/people-keys-demo/demoserver"
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
@@ -490,5 +491,67 @@ func TestHiddenNamesAreDrawnTranslatedAndStoredInEnglish(t *testing.T) {
 	d.OK(!strings.Contains(storedText(d), "Documento confidencial"), "a translated string is never stored")
 	labels := d.Strs(`Array.from(document.querySelectorAll('.gj-doclist-protect, .gj-doclist-reveal')).map((b) => b.getAttribute('aria-label'))`)
 	d.OK(len(labels) == 2 && labels[0] != labels[1] && strings.Contains(strings.Join(labels, "|"), "Documento confidencial"), fmt.Sprintf("the row buttons have names of their own, in Spanish: %v", labels))
+	d.NoErrors()
+}
+
+// The owner key of my address: made and enrolled from the People tab, kept in this browser, backed
+// up; with it "Publish my keys" is signed; without it the directory refuses and the page says how
+// to get it back; a backup restores it, and a stranger's key is not accepted.
+func TestOwnerKeyForMyDirectoryEntry(t *testing.T) {
+	site := e2etest.NewSite(t)
+	site.UseLocalhost()
+	srv, err := demoserver.New(site.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	site.Handle("/auth/", srv.Mux)
+	site.Handle("/directory/", srv.Mux)
+	site.Handle("/demo/", srv.Mux)
+
+	d := site.OpenURL(t, "/index.html?docstore="+url.QueryEscape(site.URL))
+	d.VirtualAuthenticator()
+	turnOn(t, d, "")
+	d.Click(`button[data-tab="people"]`)
+	d.WaitSelector("#dir-offer")
+	d.Click("#dir-offer-review")
+	confirmDialog(d)
+	d.WaitSelector("#dir-owner-check")
+
+	d.Click("#dir-owner-check")
+	d.WaitFor("the state", `(document.querySelector('#dir-owner-state') || {textContent: ''}).textContent.includes('has no owner key')`)
+	d.Click("#dir-owner-enroll")
+	d.WaitFor("enrolled", `(document.querySelector('#dir-owner-state') || {textContent: ''}).textContent.includes('this browser holds it')`)
+	d.WaitSelector("#dir-owner-backup-box")
+	secret := d.Str(`document.querySelector('#dir-owner-secret').value`)
+	d.OK(secret != "" && d.Has("#dir-owner-backup-warning"), "the new key is shown for a backup, with its warning")
+	d.OK(d.Str(`localStorage.getItem('showcase-enc:owner:' + '`+site.URL+`') || ''`) != "", "and kept for this directory")
+
+	// signed publish works
+	d.Click(".gj-recip-publish")
+	d.WaitFor("published", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
+
+	// forget it: the directory now refuses, and the message says what to do
+	d.Click("#dir-owner-forget")
+	confirmDialog(d)
+	d.WaitSelector("#dir-owner-restore-open")
+	d.Click(".gj-recip-publish")
+	d.WaitFor("the refusal", `(document.querySelector('.gj-recip .gj-doc-error') || {textContent: ''}).textContent.includes('owner key')`)
+
+	// a stranger's key is not accepted as the address's
+	d.Click("#dir-owner-restore-open")
+	d.WaitSelector("#dir-owner-restore")
+	other, err := dirclient.GenerateOwnerKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Fill("#dir-owner-restore", dirclient.ExportOwnerKey(other))
+	d.Click("#dir-owner-restore-go")
+	d.WaitFor("not an owner key", `(document.querySelector('#dir-owner-msg') || {textContent: ''}).textContent.includes('not an owner key of')`)
+	// the backup restores it
+	d.Fill("#dir-owner-restore", secret)
+	d.Click("#dir-owner-restore-go")
+	d.WaitFor("restored", `(document.querySelector('#dir-owner-state') || {textContent: ''}).textContent.includes('this browser holds it')`)
+	d.Click(".gj-recip-publish")
+	d.WaitFor("published again", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
 	d.NoErrors()
 }
