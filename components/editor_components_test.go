@@ -79,10 +79,10 @@ func TestMenuBarOpensOneMenuAtATime(t *testing.T) {
 		!strings.Contains(html, "gj-menubar-backdrop") || !strings.Contains(html, `aria-expanded="true"`) {
 		t.Errorf("File open: %s", html)
 	}
-	hs := findHandlers(bar, "click") // backdrop, File, New (an item), Edit
-	hs[0](xango.Event{})             // the backdrop closes
-	hs[1](xango.Event{})             // File again toggles it closed
-	hs[2](xango.Event{})             // choosing an item closes
+	hs := findHandlers(bar, "click") // File, New (an item), Edit, then the backdrop (after the bar, so the bar keeps its place and the focus)
+	hs[len(hs)-1](xango.Event{})     // the backdrop closes
+	hs[0](xango.Event{})             // File again toggles it closed
+	hs[1](xango.Event{})             // choosing an item closes
 	if len(opened) != 3 || opened[0] != -1 || opened[1] != -1 || opened[2] != -1 {
 		t.Errorf("close calls = %v", opened)
 	}
@@ -701,5 +701,48 @@ func TestTranslateHookChangesTheComponentsWords(t *testing.T) {
 	html := render(t, FindReplace(FindReplaceProps{Query: "x", Count: 4, Current: 2}))
 	if !strings.Contains(html, "Tout remplacer") || !strings.Contains(html, "2 sur 4") || !strings.Contains(html, "Replace the current match") {
 		t.Errorf("translated:\n%s", html)
+	}
+}
+
+// A menu is operable from the keyboard: Escape closes the open menu, Enter and Space choose the
+// focused entry, and other keys do nothing.
+func TestMenuKeyboardEscapeEnterAndSpace(t *testing.T) {
+	var opened []int
+	var picked []string
+	entries := []MenuBarEntry{{Label: "File", Items: []MenuItem{{Label: "New", OnSelect: func() { picked = append(picked, "new") }}}}}
+	bar := MenuBar(MenuBarProps{Entries: entries, Open: 0, OnOpen: func(i int) { opened = append(opened, i) }})
+	keys := findHandlers(bar, "keydown") // the bar (Escape) and the entry New
+	if len(keys) != 2 {
+		t.Fatalf("keydown handlers = %d, want 2", len(keys))
+	}
+	press := func(h func(xango.Event), k xango.KeyData) {
+		prevented := false
+		h(xango.NewEvent("keydown", k, false, func() { prevented = true }, nil))
+		_ = prevented
+	}
+	press(keys[0], xango.KeyData{Key: "a"})
+	if len(opened) != 0 {
+		t.Errorf("another key closed the menu: %v", opened)
+	}
+	press(keys[0], xango.KeyData{Key: "Escape"})
+	if len(opened) != 1 || opened[0] != -1 {
+		t.Errorf("Escape: %v", opened)
+	}
+	press(keys[1], xango.KeyData{Key: "Enter"})
+	press(keys[1], xango.KeyData{Key: " "})
+	press(keys[1], xango.KeyData{Key: "x"})
+	press(keys[1], xango.KeyData{Key: "Enter", Ctrl: true}) // a chord is not a choice
+	if len(picked) != 2 {
+		t.Errorf("Enter and Space choose, nothing else does: %v", picked)
+	}
+	if len(opened) != 3 { // Escape, then each choice closes
+		t.Errorf("closing: %v", opened)
+	}
+	// With nothing open, Escape is not taken from the page.
+	closedBar := MenuBar(MenuBarProps{Entries: entries, Open: -1, OnOpen: func(i int) { opened = append(opened, i) }})
+	before := len(opened)
+	press(findHandlers(closedBar, "keydown")[0], xango.KeyData{Key: "Escape"})
+	if len(opened) != before {
+		t.Errorf("Escape with no menu open acted: %v", opened)
 	}
 }
