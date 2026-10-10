@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-10 of 10 since the last full run (#118 to #126, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
+0 of 10 since the last full run (the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
