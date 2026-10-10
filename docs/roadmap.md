@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-9 of 10 since the last full run (#140 to #147, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+10 of 10 since the last full run (#140 to #148, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -755,7 +755,7 @@ New entries:
     clear on decode error, `examples/people-keys-demo/main.go`), 24 (`ErrFilteredEnrolled` and the audited
     state), 25 (protobuf as an indirect dependency).
 
-48. **ARIA attributes across the canvas editor and components. Slices 1 to 3 done; the rest open.** Kind:
+48. **ARIA attributes across the canvas editor and components. Slices 1 to 4 done; the rest open.** Kind:
     fixable. What: roles, accessible names and labels, live regions, a sensible focus order, and keyboard operation
     of every control (toolbar, menus, dialogs, pickers, the canvas itself). Why it matters: people who use assistive
     technology cannot use controls that have no role, name or keyboard path, and it is a legal requirement in many
@@ -779,8 +779,14 @@ New entries:
     Home and End move the focus along the row, wrapping, and open the tab they reach (`TabKeys`, `components/tablist.go`);
     the sixteen side tabs were sixteen tab stops. The toolbar is now inside a labelled `region` landmark (axe found
     the labelled tablist outside any landmark). Tests: `TestTabsKeyboard`, `TestSidePanelTabsAreOperatedWithTheArrowKeys`.
-    **Open:** (1) the audit checklist per component, which axe cannot replace: the same arrow-key model for the colour
-    picker, dropdowns and the other pickers, and dialogs (focus trap and return); (2) **heading levels**: the components' panel titles are `h4` under a page whose
+    **Slice 4 (this PR):** dialogs. `Modal` (so `Dialog`, `Confirm`, `Alert` and the Asker's questions) takes the
+    focus when it opens (the box has `tabindex=-1`; a field with `autofocus` inside it keeps it), keeps Tab and
+    Shift+Tab going round what is inside it (`ModalKeys`, `components/modalkeys.go`), closes on Escape as a click on the
+    backdrop does, and gives the focus back to what opened it when it closes. The giving back is `domrt`'s: an element
+    with `data-gj-modal` notes the focused element when it is created and, when it is removed, returns the focus there
+    one frame after the render (moving a node in the same render would drop it again; found by a test). Tests:
+    `TestModalKeyboard` and `TestDialogFocusIsTrappedAndReturned`. **Open:** (1) the audit checklist per component,
+    which axe cannot replace: the same arrow-key model for the colour picker, dropdowns and the other pickers; (2) **heading levels**: the components' panel titles are `h4` under a page whose
     headings are in the screen-reader copy, so `heading-order` is disabled in the test (`axeDisabled`) until the
     levels are decided; (3) axe over the other examples and the states it cannot reach by clicking (dialogs, the
     colour picker, a table cell menu); (4) the canvas itself with a screen reader (item 49). Priority: high (first of
