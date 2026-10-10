@@ -429,9 +429,13 @@ a way to avoid hitting the limit meanwhile.
     compare heads between two auditors by hand.
 13. **Directory key rotation versus the log pseudonym.** Plan: keep older entries matchable after the retired
     key is removed. Avoid: do not remove the retired key until owners have fetched their older pseudonyms.
-14. **Dead-room tombstone in memory.** The hub's `h.gone` entry lasts `goneMemory` (one hour) and is evicted at
-    `maxGone` (`collab/hub/hub.go`). Plan: keep it in the store, not the process. Avoid: it is lost after one hour,
-    on a restart, or by eviction at the cap; restart during quiet hours.
+14. **Done (this PR): the dead-room tombstone is also kept in the store.** Was: the hub's `h.gone` entry lived in the
+    process for `goneMemory` (one hour), so a restart, eviction at `maxGone` or another replica let a stale tab open
+    a new room and write the content back. Now `closeDead` also saves `collab-gone:<id>` (`{"until": ...}`) in the
+    hub's store; `load` refuses the id with 410 while it has not lapsed, and an editor whose `Renewer` says the
+    document is live again clears it. Left over, by design: a mark nobody asks about again stays in the store (about
+    40 bytes; it is deleted when asked about after it lapsed), and a hub without a `Store` keeps only the process
+    table. `collab/hub/hub.go`.
 15. **Expiry-prefix test pin and stale-tab renewal throttle (#82 minors).** Plan: pin the prefix in a test and
     throttle renewals from a stale tab. Avoid: close old tabs.
 16. **Public per-process counters.** Plan: shared `SessionStore` and `Quota` (see
