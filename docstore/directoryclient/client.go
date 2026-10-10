@@ -39,6 +39,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -413,6 +414,10 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 	if c.State != nil && c.State.Seen != nil {
 		seen = c.State.Seen[addr]
 	}
+	accepted := map[string]bool{}
+	for _, pub := range seen.Accepted {
+		accepted[pub] = true
+	}
 	wasSigned := map[string]bool{}
 	for _, fp := range seen.Signed {
 		wasSigned[fp] = true
@@ -444,6 +449,8 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 			case ref == "":
 				ref = k.Owner.Pub // first sight: remembered below, nothing confirms it
 				row.OwnerUnpinned = true
+			case ref != k.Owner.Pub && accepted[k.Owner.Pub]:
+				row.OwnerFirstSeen = true // a key the user accepted after a rotation: remembered, not confirmed
 			case ref != k.Owner.Pub:
 				row.OwnerChanged = true // another key than the first one seen (earlier, or in this answer)
 			case refRemembered:
@@ -617,3 +624,29 @@ func (m MemoryPins) Get(email string) (string, bool) {
 
 // Set implements OwnerPins.
 func (m MemoryPins) Set(email, pub string) { m[strings.ToLower(strings.TrimSpace(email))] = pub }
+
+// AcceptOwner is the user's answer to "this address shows another owner key than the first one I
+// saw" (Key.OwnerChanged): after the user has checked the new key with its owner by another way, it
+// is remembered as accepted, and rows signed by it stop being flagged as changed. The first key
+// seen stays accepted too (an owner who rotated still has rows of the old key). It changes only
+// what this client remembers: a key somebody pinned (Pins) or the audited chain of the client's own
+// address is not touched. It is an error when the client keeps no State or the address was never
+// looked up.
+func (c *Client) AcceptOwner(email, ownerPub string) error {
+	addr := strings.ToLower(strings.TrimSpace(email))
+	if c.State == nil {
+		return errors.New("directoryclient: AcceptOwner needs a State to remember the key in")
+	}
+	seen, ok := c.State.Seen[addr]
+	if !ok {
+		return fmt.Errorf("directoryclient: %s was never looked up", email)
+	}
+	if ownerPub == "" {
+		return errors.New("directoryclient: AcceptOwner needs the owner key to accept")
+	}
+	if !slices.Contains(seen.Accepted, ownerPub) {
+		seen.Accepted = append(seen.Accepted, ownerPub)
+	}
+	c.State.Seen[addr] = seen
+	return nil
+}

@@ -91,6 +91,8 @@ type SeenAddress struct {
 	Signed     []string `json:"signed,omitempty"`
 	Enrolled   bool     `json:"enrolled,omitempty"`
 	FirstOwner string   `json:"first_owner,omitempty"`
+	// Accepted are the further owner keys the user accepted (AcceptOwner), after a rotation.
+	Accepted []string `json:"accepted_owners,omitempty"`
 }
 
 // MadeEntry is an operation this client made, with what the client knows of it independently of
