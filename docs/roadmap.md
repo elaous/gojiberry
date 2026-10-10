@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-7 of 10 since the last full run (#129, #130, #131, #132, #133, #134, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
+8 of 10 since the last full run (#129, #130, #131, #132, #133, #134, #135, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -509,7 +509,7 @@ a way to avoid hitting the limit meanwhile.
     compare it with its owner another way before pinning it; the pins are kept per directory and the lookup is
     redone, so the row earns the mark. Tests: `TestOwnerMarksOfOtherPeoplesRows` natively and
     `TestConfirmAnotherPersonsOwnerKey` in the browser. **Item 21 is done.** Left, small: rotating and resetting
-    the owner key from the page (`Rotate`, `RequestReset`), and the component's note for an unconfirmed row
+    the owner key from the page (now item 87), and the component's note for an unconfirmed row
     ("not signed by the owner key") is worded for a key published before the owner key existed, which is not the
     reason here.
 22. **Done (this PR): `walk()` searches every link.** Was: it took the first link whose `From` matched and whose
@@ -1088,3 +1088,22 @@ unless stated.
     as `auth/sessionstore` does), a byte budget rebuilt from the store on each sweep with a conditional counter, and
     report counters kept in the report records. Priority: medium for several replicas, none for one. Where:
     `docstore/public` (`session.go`, `guardrails.go`, `reportwatch.go`). Avoid: one replica.
+87. **Showcase: rotate and reset the owner key from the page.** Kind: fixable. Why: the owner key of the person's
+    directory entry (item 21) can be made, backed up, restored and forgotten, but not replaced. A person who thinks the
+    key was copied, or who lost both the key and its backup, has no way to recover from the page: the address keeps
+    refusing entries without the old key. `directoryclient` already has the calls. Plan: (1) **Rotate** while the key
+    is held (`Client.Rotate`: the new key is signed in by the current one): make the new key, rotate, keep the new
+    key, show its backup at once, and say the old backup no longer works. (2) **Reset** when the key and its backup
+    are lost (`RequestReset`, then `CompleteReset` after the waiting period of 24 hours, during which the old key can
+    still `CancelReset`): start it from the signed-in session, show the time it takes effect, keep the new key
+    ready, and let "Watch my address" report the reset as an entry the person did or did not make (a reset the person
+    did not ask for is exactly the alert to raise). (3) Offer **Cancel a pending reset** when the held key is the
+    current one. (4) Add the dirclient methods (`Rotate`, `RequestReset`, `CompleteReset`, `CancelReset`) and an
+    enrollment state that includes `ResetSince`/`ResetDue`, so the panel can say "a reset is pending, it takes effect
+    at ...". (5) Rotating changes the pin for the person's own address (`Pin`) and the stored key per directory
+    (`encowner.go`). Tests: native against the demo server for each call and the refusals (rotate with the wrong
+    current key, complete before the wait, cancel without the key), and a browser test of rotate, then of a reset
+    with a clock moved past the wait if the demo server allows it. Priority: low to medium; it is the recovery path
+    for the one secret the page keeps. Where: `examples/canvas-editor-showcase` (`dirclient`, `encowner.go`),
+    `docs/encryption-and-passkeys.md` (5.7). Avoid: forgetting the key and enrolling again (the address refuses a
+    second enrollment).
