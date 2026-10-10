@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-0 of 10 since the last full run. The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+1 of 10 since the last full run (this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -414,10 +414,15 @@ a way to avoid hitting the limit meanwhile.
    de/fr/es too, that another tab or device made the first passkey, to reload and add another, and that the passkey
    the second device made is not used (delete it there). `410` stays for expired, used and unknown challenges.
    Signed-out registrations never collide (random account per begin; the e-mail is a label). Avoid: no longer needed.
-9. **s3/blob `DeleteIf`.** Plan: implement `ConditionalDeleter` for both (postgres and mongo have it). Avoid: the
-   conditional claim in `SweepRateLimits` (`docstore/limiter.go`; the sweep that design step 4b, "Limits that
-   remain" item 10, means) already narrows the rate-limit race to a token; it does not cover document expiry.
-10. **Expiry delete on the digest read (depends on 9 for s3 and blob).** `ExpiringAdapter.purgeLocked` and `Sweep`
+9. **Done in part (this PR): s3 `DeleteIf`; blob cannot have one.** The S3 backend implements
+   `docstore.ConditionalDeleter` with `If-Match` on `DeleteObject` (read, compare the digest, delete on the ETag
+   read; 412 is `ErrConflict`, a missing object `ErrNotFound`), tested against the fake S3 including a version
+   swapped in between the read and the delete. The gocloud blob backend stays without: the portable API only has a
+   create-only write (`IfNotExist`) and no conditional delete, as for `SaveIf` (public-docstore.md 7.x item 4); for
+   object storage use S3. A compatible service that ignores `If-Match` on delete would delete whatever is there;
+   the doc comment says so. Avoid: the conditional claim in `SweepRateLimits` (`docstore/limiter.go`) already
+   narrows the rate-limit race to a token; it does not cover document expiry (item 10).
+10. **Expiry delete on the digest read (s3 now qualifies; blob cannot).** `ExpiringAdapter.purgeLocked` and `Sweep`
     (`docstore/expiry.go`) delete unconditionally under an in-process lock. Plan: where the store is a
     `ConditionalDeleter`, delete the document with `DeleteIf` on the digest read, and keep a changed document.
     Avoid: one process per store.
