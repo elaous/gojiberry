@@ -134,7 +134,7 @@ Sources: [encryption-and-passkeys.md](encryption-and-passkeys.md) (called "the d
     2. *Why inherent:* a lock serializes one process, not two. Partly an implementation gap, though:
        `ExpiringAdapter.purgeLocked` and `Sweep` delete with an unconditional `Inner.Delete` under an
        in-process lock, so on a store with conditional deletes the race could be closed with `DeleteIf` on
-       the digest that was read (backlog item 10, which depends on item 9 for s3 and blob). Until then
+       the digest that was read (backlog item 10; s3 now has `DeleteIf`, blob cannot). Until then
        the limit holds on every store.
     3. *Shipped:* a lock inside a process, and the sweep re-reads the deadline record under it before
        deleting. Conditional deletes exist today only for the rate-limit sweep (`SweepRateLimits`), the

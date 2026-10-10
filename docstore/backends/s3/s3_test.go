@@ -98,6 +98,14 @@ func (f *fakeS3) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*
 func (f *fakeS3) DeleteObject(_ context.Context, in *s3.DeleteObjectInput, _ ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if in.IfMatch != nil {
+		if _, ok := f.objects[*in.Key]; !ok {
+			return nil, apiErr{"NoSuchKey"}
+		}
+		if f.etags[*in.Key] != *in.IfMatch {
+			return nil, apiErr{"PreconditionFailed"}
+		}
+	}
 	delete(f.objects, *in.Key)
 	delete(f.etags, *in.Key)
 	return &s3.DeleteObjectOutput{}, nil
@@ -140,6 +148,57 @@ func TestS3SaveIfRefusesAWriteThatLandedInBetween(t *testing.T) {
 	if d, _ := a.Load(ctx, "x"); string(d.Data) != "one" {
 		t.Errorf("%q", d.Data)
 	}
+}
+
+// DeleteIf removes what was read and refuses what changed, what is gone and a version swapped in
+// between the read and the delete (If-Match on the ETag, not only the digest compared before).
+func TestS3DeleteIf(t *testing.T) {
+	fake := newFakeS3()
+	a := newAdapter(fake, "b", "p/")
+	ctx := context.Background()
+	var _ docstore.ConditionalDeleter = a
+	_ = a.Save(ctx, "x", []byte("one"))
+	if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("other"))); !errors.Is(err, docstore.ErrConflict) {
+		t.Fatalf("a changed document: %v", err)
+	}
+	if err := a.DeleteIf(ctx, "x", ""); !errors.Is(err, docstore.ErrConflict) {
+		t.Fatalf("no digest: %v", err)
+	}
+	if _, err := a.Load(ctx, "x"); err != nil {
+		t.Fatalf("a refused delete removed it: %v", err)
+	}
+	if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Load(ctx, "x"); !errors.Is(err, docstore.ErrNotFound) {
+		t.Fatalf("still there: %v", err)
+	}
+	if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); !errors.Is(err, docstore.ErrNotFound) {
+		t.Fatalf("a document that is gone: %v", err)
+	}
+	// the same bytes written again between the read and the delete is a new version: kept
+	_ = a.Save(ctx, "y", []byte("one"))
+	racer := &racingDelete{fakeS3: fake, before: func() { _ = newAdapter(fake, "b", "p/").Save(ctx, "y", []byte("one")) }}
+	if err := newAdapter(racer, "b", "p/").DeleteIf(ctx, "y", docstore.Digest([]byte("one"))); !errors.Is(err, docstore.ErrConflict) {
+		t.Fatalf("a version swapped in: %v", err)
+	}
+	if _, err := a.Load(ctx, "y"); err != nil {
+		t.Fatalf("the newer version was deleted: %v", err)
+	}
+}
+
+// racingDelete runs a write just before the conditional DeleteObject.
+type racingDelete struct {
+	*fakeS3
+	before func()
+}
+
+func (r *racingDelete) DeleteObject(ctx context.Context, in *s3.DeleteObjectInput, o ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
+	if in.IfMatch != nil && r.before != nil {
+		r.before()
+		r.before = nil
+	}
+	return r.fakeS3.DeleteObject(ctx, in, o...)
 }
 
 // racingS3 runs a write just before the PutObject of a conditional save.
