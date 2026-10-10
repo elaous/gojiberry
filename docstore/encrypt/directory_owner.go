@@ -688,6 +688,14 @@ type AuditViolation struct {
 	Why string
 }
 
+// AuditNote is an entry that is odd but within the tolerance of the rules: not a violation.
+type AuditNote struct {
+	Seq int64
+	// Ahead is how far the entry is dated after the auditor's clock.
+	Ahead time.Duration
+	Why   string
+}
+
 // AddressAudit is what AuditAddress found about one address in a run of the log.
 type AddressAudit struct {
 	// Entries are the entries about the address, in order: every one of them, including the ones
@@ -711,6 +719,10 @@ type AddressAudit struct {
 	// reset, requested or cancelled a reset, or an operator reset), 0 if none: what the
 	// enrollment record's Seq must be.
 	LastSeq int64
+	// Notes are entries dated ahead of the auditor's clock by more than NoteSkew but within
+	// FutureSkew: a replica with a fast clock, which is skew and not an attack. Each carries the
+	// measured difference. Notes are advice, never a violation.
+	Notes []AuditNote
 	// Violations are the entries that break the rules: an operation on an enrolled address
 	// without a valid signature of the owner key then current, an enrollment on an enrolled
 	// address, a signature dated far from the entry, an entry dated before an earlier one or in
@@ -741,6 +753,9 @@ type AuditOptions struct {
 	Now time.Time
 	// FutureSkew is the tolerance of that check (ownerSkew, 10 minutes, when 0).
 	FutureSkew time.Duration
+	// NoteSkew is how far ahead of Now an entry may be dated before it is noted (a minute
+	// when 0). It only matters when Now is set.
+	NoteSkew time.Duration
 }
 
 // AuditAddress checks the entries of the log that are about one address (addresses are the
@@ -782,9 +797,14 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 	if future <= 0 {
 		future = ownerSkew
 	}
+	note := opt.NoteSkew
+	if note <= 0 {
+		note = time.Minute
+	}
 	var out AddressAudit
 	if opt.Start != nil {
 		out = *opt.Start
+		out.Notes = nil
 		out.Entries = nil
 		out.Violations = nil
 		out.Voided = nil
@@ -870,8 +890,15 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 		if backdated {
 			bad(e, "the entry is dated before an earlier entry of the log: the times of the chain went back")
 		}
-		if !opt.Now.IsZero() && e.At > opt.Now.Unix()+int64(future/time.Second) {
-			bad(e, "the entry is dated in the future")
+		if !opt.Now.IsZero() {
+			ahead := time.Duration(e.At-opt.Now.Unix()) * time.Second
+			switch {
+			case ahead > future:
+				bad(e, fmt.Sprintf("the entry is dated in the future (%s ahead of the auditor's clock)", ahead))
+			case ahead > note:
+				out.Notes = append(out.Notes, AuditNote{Seq: e.Seq, Ahead: ahead,
+					Why: "the entry is dated ahead of the auditor's clock: a fast clock on a replica, or the auditor's own"})
+			}
 		}
 		// A voided entry is checked like any other but changes nothing.
 		_, isVoided := out.Voided[e.Seq]

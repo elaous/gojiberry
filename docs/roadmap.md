@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-1 of 10 since the last full run (the full run on main 7eb8691 found the passkey error regression from #112, fixed by this PR); the full suite runs on main after the
+2 of 10 since the last full run (#118, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -538,12 +538,12 @@ New entries:
     content was already on main. Priority: done.
 29. **Done: leftover worktrees (`/home/user/gojiberry-*`, `/tmp/rr*`).** Kind: fixable (housekeeping). The stale worktrees
     were removed and pruned. Priority: done.
-30. **Clock-ahead replica causes false "dated in the future" directory violations.** Kind: inherent in part (no shared
-    clock, [limits register item 11](limits-register.md#public-docstore-and-operations)), fixable in the report. Why: a replica whose clock is ahead writes entries a correct replica
-    then reads as dated in the future, and an auditor reports a violation that is skew. Plan: report a small skew as
-    a warning with the measured difference, not a violation, keep a hard violation past the 10 minute rule, and
-    document NTP in the operator notes. Priority: medium. Where: the log checks in `docstore/directoryclient` and
-    `docstore/encrypt` (`directory_adapter.go`), `docstore/limiter.go` for the 5 second re-dating.
+30. **Done (this PR): a fast clock is a note, not a violation.** Was: an auditor read an entry dated ahead of its own
+    clock only as "dated in the future" once past the 10 minute rule, with no difference shown, and nothing below it.
+    Now `AuditAddress` with `AuditOptions.Now` reports entries more than `NoteSkew` (a minute) ahead but within
+    `FutureSkew` as `AddressAudit.Notes` (with the measured `Ahead`), and the violation past 10 minutes names the
+    difference. Still inherent: there is no shared clock ([limits register item 11](limits-register.md#public-docstore-and-operations)),
+    so run NTP on every replica and on the auditor. `docstore/encrypt/directory_owner.go`.
 31. **Done (this PR): over the cap the sweep evicts the cheapest records first.** Was: `SweepRateLimits` deleted the
     oldest-written records past `MaxRateLimitRecords`, which under a flood are the slow, live callers, whose budget
     was then reset to full. Now `SweepRateLimitsStats` evicts buckets that are already full again first (they carry no
