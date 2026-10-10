@@ -576,9 +576,13 @@ func TestDuplicateReportsCountOnce(t *testing.T) {
 	if n := len(e.reportsOf(d.ID)); n != 1 {
 		t.Fatalf("%d reports stored for one reporter and one reason, want 1", n)
 	}
-	// another reason from the same reporter, and the same reason from another reporter, are new
-	e.want(e.report(d.ViewID, "malware", "203.0.113.1"), 202)
-	e.want(e.report(d.ViewID, "spam", "203.0.113.2"), 202)
+	// rewording the reason in the same category is still a duplicate (the key is reporter and category)
+	if n := len(e.reportsOf(d.ID)); n != 1 {
+		t.Fatalf("%d reports", n)
+	}
+	e.want(e.report(d.ViewID, "a different wording", "203.0.113.1"), 202)               // other again: duplicate
+	e.want(e.reportCat(d.ViewID, CategorySpam, "another category", "203.0.113.1"), 202) // a new category: new
+	e.want(e.report(d.ViewID, "spam", "203.0.113.2"), 202)                              // another reporter: new
 	if n := len(e.reportsOf(d.ID)); n != 3 {
 		t.Fatalf("%d reports, want 3", n)
 	}
@@ -601,10 +605,12 @@ func TestReportSlotsAreReservedForOtherAddresses(t *testing.T) {
 	e := newEnv(t, behindProxy)
 	tok, _ := e.session()
 	d := e.create(tok, "x")
-	// the holder of the view link varies its text to get past the dedupe: it can have 15 of the
-	// 20 slots, no more
-	for i := 0; i < 40; i++ {
-		e.want(e.report(d.ViewID, fmt.Sprintf("reason number %d", i), "203.0.113.66"), 202)
+	// holders of the view link (eight addresses, two categories each: the dedupe is per reporter and
+	// category) can have 15 of the 20 slots, no more
+	for _, cat := range []string{CategorySpam, CategoryOther} {
+		for a := 1; a <= 8; a++ {
+			e.want(e.reportCat(d.ViewID, cat, "x", fmt.Sprintf("203.0.113.%d", a)), 202)
+		}
 	}
 	if n := len(e.reportsOf(d.ID)); n != maxReportsOfDoc-5 {
 		t.Fatalf("one address stored %d reports, want %d", n, maxReportsOfDoc-5)
@@ -741,13 +747,14 @@ func TestGlobalReportReserveIsForNewReporters(t *testing.T) {
 	e := newEnv(t, func(o *Options) { behindProxy(o); o.Config.MaxReports = 10 })
 	tok, _ := e.session()
 	d := e.create(tok, "x")
-	// one address with 12 different texts: 8 are stored (10 minus the reserve of 20%), then it
-	// is held to what it has
-	for i := 0; i < 12; i++ {
-		e.want(e.report(d.ViewID, fmt.Sprintf("flood %d", i), "203.0.113.50"), 202)
+	// four addresses, two categories each: 8 are stored (10 minus the reserve of 20%)
+	for _, cat := range []string{CategorySpam, CategoryOther} {
+		for a := 50; a < 54; a++ {
+			e.want(e.reportCat(d.ViewID, cat, "x", fmt.Sprintf("203.0.113.%d", a)), 202)
+		}
 	}
 	if n := len(e.keys("report/")); n != 8 {
-		t.Fatalf("one address holds %d of the 10 reports, want 8", n)
+		t.Fatalf("four addresses hold %d of the 10 reports, want 8", n)
 	}
 	// new reporters still get the last two places
 	e.want(e.report(d.ViewID, "real one", "198.51.100.1"), 202)
@@ -764,11 +771,13 @@ func TestGlobalReportReserveIsForNewReporters(t *testing.T) {
 	})
 	tok2, _ := e2.session()
 	d2 := e2.create(tok2, "x")
-	for i := 0; i < 12; i++ {
-		e2.want(e2.report(d2.ViewID, fmt.Sprintf("flood %d", i), "203.0.113.50"), 202)
+	for _, cat := range []string{CategorySpam, CategoryOther} {
+		for a := 50; a < 56; a++ {
+			e2.want(e2.reportCat(d2.ViewID, cat, "x", fmt.Sprintf("203.0.113.%d", a)), 202)
+		}
 	}
-	if n := len(e2.keys("report/")); n < 10 {
-		t.Fatalf("without a reserve one address holds %d, want it to fill the 10", n)
+	if n := len(e2.keys("report/")); n != 10 {
+		t.Fatalf("without a reserve the reports stop at %d, want them to fill the 10", n)
 	}
 }
 
@@ -1101,5 +1110,56 @@ func TestFromEnvMinorsVariables(t *testing.T) {
 	d = Config{MaxSessions: 50, MaxSessionsPerNet: 500}.withDefaults()
 	if d.MaxSessionsPerNet != 50 {
 		t.Fatalf("net cap %d", d.MaxSessionsPerNet)
+	}
+}
+
+func TestConfigWarnsAboutLegacyFloorAndWideCap(t *testing.T) {
+	has := func(ws []string, sub string) bool {
+		for _, w := range ws {
+			if strings.Contains(w, sub) {
+				return true
+			}
+		}
+		return false
+	}
+	base := Config{NoProxy: true, ReportKey: testReportKey}
+	// a variable that is no longer read
+	c, err := FromEnv(func(k string) string {
+		if k == "GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS_PER_MINUTE" {
+			return "30"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.NoProxy, c.ReportKey = true, testReportKey
+	if !has(c.Warnings(), "SESSIONS_PER_MINUTE is no longer read") {
+		t.Fatalf("no warning for the old variable: %v", c.Warnings())
+	}
+	// a minimum rate under the floor is raised and said so
+	low := base
+	low.MinUploadRate = 5
+	if !has(low.Warnings(), "below the floor") || low.withDefaults().MinUploadRate != MinUploadRateFloor {
+		t.Fatalf("rate %d, warnings %v", low.withDefaults().MinUploadRate, low.Warnings())
+	}
+	off := base
+	off.MinUploadRate = -1
+	if has(off.Warnings(), "floor") || off.withDefaults().MinUploadRate != -1 {
+		t.Fatal("a negative rate (no minimum) must be left alone")
+	}
+	// a wide cap under the net cap is changed, and an unset one moved by the net cap is said
+	w := base
+	w.MaxSessionsPerNet, w.MaxSessionsPerWide = 400, 200
+	if !has(w.Warnings(), "MAX_SESSIONS_PER_WIDE 200") {
+		t.Fatalf("no warning for a clamped wide cap: %v", w.Warnings())
+	}
+	moved := base
+	moved.MaxSessionsPerNet = 900
+	if !has(moved.Warnings(), "MAX_SESSIONS_PER_WIDE is not set") {
+		t.Fatalf("no warning for a wide cap moved by the net cap: %v", moved.Warnings())
+	}
+	if len(base.Warnings()) != 0 {
+		t.Fatalf("defaults warn: %v", base.Warnings())
 	}
 }

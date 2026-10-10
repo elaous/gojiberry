@@ -401,7 +401,7 @@ type docMeta struct {
 type reportRef struct {
 	ID       string    `json:"id"`
 	Reporter string    `json:"by"`  // the reporter's hash (reporterHash)
-	Key      string    `json:"key"` // hash of (reporter, normalized reason): the dedupe key
+	Key      string    `json:"key"` // hash of (reporter, category): the dedupe key
 	Priority bool      `json:"pri,omitempty"`
 	Size     int       `json:"size"`
 	At       time.Time `json:"at"`
@@ -1306,11 +1306,11 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"reportId": reportID})
 }
 
-// reportKey is the dedupe key of a report: the reporter, the category and the reason as compared
-// (trimmed, lowercase, spaces collapsed), so the same client saying the same thing twice about a
-// document counts once.
-func reportKey(reporter, category, reason string) string {
-	h := sha256.Sum256([]byte(reporter + "\x00" + categoryOf(category) + "\x00" + normalizeReason(reason)))
+// reportKey is the dedupe key of a report: the reporter and the category, so one client reporting a
+// document under the same category counts once, however it words the reason (rewording must not
+// buy more slots). The reason is kept in the report, not in the key.
+func reportKey(reporter, category string) string {
+	h := sha256.Sum256([]byte(reporter + "\x00" + categoryOf(category)))
 	return base64.RawURLEncoding.EncodeToString(h[:9])
 }
 
@@ -1497,7 +1497,7 @@ func (s *Service) storeReport(ctx context.Context, meta *docMeta, rep Report) (i
 			}
 		}
 	}()
-	key := reportKey(rep.Reporter, rep.Category, rep.Reason)
+	key := reportKey(rep.Reporter, rep.Category)
 	for i, ref := range meta.ReportRefs {
 		if ref.Key == key {
 			live, err := s.refLive(ctx, ref)
