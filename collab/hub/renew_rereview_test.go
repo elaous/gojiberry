@@ -257,3 +257,13 @@ func TestClosedDocumentStaysRefusedAcrossARestart(t *testing.T) {
 		t.Error("the mark was not cleared")
 	}
 }
+
+// The hub's keys are not documents: they are not listed as one and never get an expiry deadline of
+// their own. docstore lists the prefixes; this pins the hub's two to that list.
+func TestHubKeysAreSystemKeysNotDocuments(t *testing.T) {
+	for _, k := range []string{StoreKey("doc"), goneKey("doc"), StoreKey("a b"), goneKey("a/b")} {
+		if docstore.IsDocumentKey(k) {
+			t.Errorf("%q would be listed and expired as a document", k)
+		}
+	}
+}
