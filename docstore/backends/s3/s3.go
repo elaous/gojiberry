@@ -185,6 +185,41 @@ func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest
 	return nil
 }
 
+// DeleteIf implements docstore.ConditionalDeleter with S3's conditional delete: the object is read,
+// found to be what prevDigest says, and deleted with If-Match: the ETag of the bytes just read, so the
+// delete only lands if nothing replaced the object in between (412 PreconditionFailed is
+// docstore.ErrConflict). An object that is not there is docstore.ErrNotFound. A store that ignores
+// If-Match on DeleteObject would delete whatever is there: the S3 service and MinIO honor it, and
+// an S3-compatible service that does not should not be used for a document expiry that must keep a
+// changed document.
+func (a *Adapter) DeleteIf(ctx context.Context, id string, prevDigest string) error {
+	out, err := a.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(a.bucket), Key: aws.String(a.key(id))})
+	if isS3NotFound(err) {
+		return docstore.ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	cur, err := io.ReadAll(out.Body)
+	_ = out.Body.Close()
+	if err != nil {
+		return err
+	}
+	if prevDigest == "" || docstore.Digest(cur) != prevDigest || out.ETag == nil {
+		return docstore.ErrConflict
+	}
+	if _, err := a.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(a.bucket), Key: aws.String(a.key(id)), IfMatch: out.ETag}); err != nil {
+		switch {
+		case isS3Conflict(err):
+			return docstore.ErrConflict
+		case isS3NotFound(err):
+			return docstore.ErrNotFound
+		}
+		return err
+	}
+	return nil
+}
+
 func isS3Conflict(err error) bool {
 	var api smithy.APIError
 	if errors.As(err, &api) {
