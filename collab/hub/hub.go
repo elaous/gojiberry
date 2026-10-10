@@ -194,6 +194,42 @@ const goneMemory = time.Hour
 // maxGone bounds the table of closed documents.
 const maxGone = 4096
 
+// goneKey is the docstore key of the mark that outlives the in-process table: a document whose
+// room was closed as expired stays refused for goneMemory after a restart, after the table evicted
+// it at maxGone, and on the other replicas of a shared store. The value is {"until": unix seconds}.
+// A mark nobody asks about again is left behind (about 40 bytes); it is deleted when it is asked
+// about after it lapsed.
+func goneKey(id string) string { return "collab-gone:" + id }
+
+// storeTombstone says whether the store holds a mark that has not lapsed. A lapsed one is deleted.
+// A store that cannot be read answers false: the mark is a second line of defence.
+func (h *Hub) storeTombstone(ctx context.Context, id string) bool {
+	if h.cfg.Store == nil {
+		return false
+	}
+	doc, err := h.cfg.Store.Load(ctx, goneKey(id))
+	if err != nil {
+		return false
+	}
+	var m struct {
+		Until int64 `json:"until"`
+	}
+	if json.Unmarshal(doc.Data, &m) == nil && h.now().Unix() < m.Until {
+		return true
+	}
+	_ = h.cfg.Store.Delete(context.WithoutCancel(ctx), goneKey(id))
+	return false
+}
+
+func (h *Hub) clearStoreTombstone(id string) {
+	if h.cfg.Store == nil {
+		return
+	}
+	if err := h.cfg.Store.Delete(context.Background(), goneKey(id)); err != nil && !errors.Is(err, docstore.ErrNotFound) {
+		log.Printf("collab hub: clearing the mark of %q: %v", id, err)
+	}
+}
+
 // New creates a hub.
 func New(cfg Config) *Hub {
 	if cfg.SaveDelay == 0 {
@@ -311,6 +347,17 @@ const goneMsg = "this document has expired and been deleted; copy your content e
 // store says it is live again (a deleted and re-created document, a late renewal): an editor's
 // request asks the Renewer, and a success clears the tombstone (see revived).
 func (h *Hub) room(r *http.Request, id string, role Role) (*room, error) {
+	rm, err := h.openRoom(r, id, role)
+	// The store remembers a closed document across restarts and replicas (see goneKey): an editor
+	// of a document that is live again clears that mark, once, and tries again.
+	if errors.Is(err, errGone) && role.CanEdit() && h.storeTombstone(r.Context(), id) && h.revived(r, id) {
+		h.clearStoreTombstone(id)
+		return h.openRoom(r, id, role)
+	}
+	return rm, err
+}
+
+func (h *Hub) openRoom(r *http.Request, id string, role Role) (*room, error) {
 	ctx := r.Context()
 	h.mu.Lock()
 	rm, ok := h.rooms[id]
@@ -321,6 +368,7 @@ func (h *Hub) room(r *http.Request, id string, role Role) (*room, error) {
 				if !role.CanEdit() || !h.revived(r, id) {
 					return nil, errGone
 				}
+				h.clearStoreTombstone(id)
 				h.mu.Lock()
 				rm, ok = h.rooms[id]
 			}
@@ -363,6 +411,9 @@ func (h *Hub) room(r *http.Request, id string, role Role) (*room, error) {
 func (h *Hub) load(ctx context.Context, rm *room) error {
 	if h.cfg.Store == nil {
 		return nil
+	}
+	if h.storeTombstone(ctx, rm.id) {
+		return errGone
 	}
 	stored, err := h.cfg.Store.Load(ctx, StoreKey(rm.id))
 	switch {
@@ -653,6 +704,12 @@ func (h *Hub) closeDead(rm *room) {
 	}
 	h.gone[rm.id] = h.now().Add(goneMemory)
 	h.mu.Unlock()
+	if h.cfg.Store != nil {
+		mark, _ := json.Marshal(map[string]int64{"until": h.now().Add(goneMemory).Unix()})
+		if err := h.cfg.Store.Save(context.Background(), goneKey(rm.id), mark); err != nil {
+			log.Printf("collab hub: saving the mark of the expired %q: %v", rm.id, err)
+		}
+	}
 
 	if h.cfg.Store != nil {
 		if err := h.cfg.Store.Delete(context.Background(), StoreKey(rm.id)); err != nil && !errors.Is(err, docstore.ErrNotFound) {
