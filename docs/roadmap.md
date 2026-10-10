@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (#129, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
+3 of 10 since the last full run (#129, #130, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -477,8 +477,16 @@ a way to avoid hitting the limit meanwhile.
     positive value is raised to it, with a warning; negative still means no minimum. (4) A `MAX_SESSIONS_PER_WIDE`
     that was clamped by the per-net or global cap, or left unset and moved by them, is warned about with the value in
     force. `docstore/public/config.go`, `service.go`.
-20. **Showcase: in-memory originals during a change.** Plan: keep the journal's originals on disk. Avoid:
-    keep the tab open until a change finishes.
+20. **Closed, not built (this PR): showcase originals stay in memory.** The plan was to keep the journal's originals
+    "on disk". In the showcase the only disk is the same `localStorage` the files live in, which is capacity
+    limited: a second copy of every file would double what a change needs (the room check would have to count it,
+    and a store that fits today would be refused), and it would leave plaintext or old-key copies behind if the
+    tab died before cleaning them. What the memory copy buys is the rollback of a failure while the tab is alive;
+    after a crash `Recover` already finishes or undoes the change from the state in storage (every step is safe to
+    repeat). What neither can do is bring back a file the browser lost, and a second copy in the same storage
+    would not survive that either. Revisit if the showcase moves to a store with room to spare (IndexedDB or OPFS):
+    then spill the recorder's originals to an `encstore-undo/` area there, counted in `checkRoom`, deleted on
+    commit and on `Recover`. The residual limit stays documented in `encryption-and-passkeys.md`.
 21. **Directory publish in the showcase and the pick UI.** The showcase has its own `dirclient`, while the demo
     (`examples/people-keys-demo`) has the controls. Plan: move the showcase to `directoryclient`, ask the person
     for a private key or another passkey assertion per signature (proof of possession and an owner-signed entry),
@@ -690,7 +698,7 @@ New entries:
 46. **Done (this PR): see item 11.**
 47. **Already listed, kept as they are (no duplicate entry):** item 15 (stale-tab renewal throttle), 16 (per-process
     public counters), 17 (snapshot overshoot), 19 (report dedupe key, slow-upload rate floor, old env-var warning,
-    wide-cap migration note), 20 (showcase in-memory originals), 21 (showcase directory publish with proof of
+    wide-cap migration note), 20 (closed, see its entry), 21 (showcase directory publish with proof of
     possession and an owner-signed entry), 22 (`walk` first match), 23 (demo `WatchState` old `made` format;
     clear on decode error, `examples/people-keys-demo/main.go`), 24 (`ErrFilteredEnrolled` and the audited
     state), 25 (protobuf as an indirect dependency).
