@@ -9,8 +9,10 @@ package dirclient
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -42,6 +44,31 @@ func ImportOwnerKey(s string) (OwnerKey, error) {
 func OwnerFingerprint(k OwnerKey) string {
 	return encrypt.OwnerFingerprint(k.Public().(ed25519.PublicKey))
 }
+
+// WatchResult is what a run of Watch found.
+type WatchResult struct {
+	// HeadSeq is the number of the log entry the run was checked up to; New how many entries about
+	// the address it read.
+	HeadSeq int64
+	New     int
+	// Alerts are, in words, what the person did not do: entries made by somebody else, entries that
+	// break the owner rules, and entries dated ahead of this device's clock.
+	Alerts []string
+	// Filtered: the server showed only the entries about the address (enroll an owner key to read
+	// the whole log). AddressUnconfirmed: no entry of this device confirms the log name of the
+	// address yet; publish or enroll, then watch again.
+	Filtered, AddressUnconfirmed bool
+}
+
+// ErrBadState: the saved watch state could not be read and was dropped.
+var ErrBadState = errors.New("the saved log position could not be read: the next look is a first look")
+
+// ErrNoLogKeys: no log keys are pinned, so the log cannot be checked.
+var ErrNoLogKeys = errors.New("no log keys are pinned for this directory")
+
+// ErrLogRewritten: the log is shorter than what was seen, or has a different entry where one was
+// seen: the server cut it back or rewrote it.
+var ErrLogRewritten = errors.New("the log was cut back or rewritten since the last look")
 
 // Enrollment is what the server says of an address's owner keys.
 type Enrollment struct {
@@ -77,6 +104,19 @@ type Directory interface {
 	Enrollment(ctx context.Context, email string) (Enrollment, error)
 	// Enroll registers owner as the owner key of the signed-in account's address.
 	Enroll(ctx context.Context, email string, owner OwnerKey) error
+	// ServerLogKeys is the log public keys the server states for itself (key ID to base64 key):
+	// what a first use pins. They prove only that the server is consistent with itself.
+	ServerLogKeys(ctx context.Context) (map[string]string, error)
+	// SetLogKeys sets the log keys that signed heads and entries are checked against (pinned out
+	// of band, or on first use).
+	SetLogKeys(keys map[string]string) error
+	// Watch reads the log since the last run, checks it against the pinned keys and the saved
+	// position, and reports what happened to the address that the person did not do.
+	Watch(ctx context.Context, email string, owner OwnerKey) (WatchResult, error)
+	// State is the position and memory kept between runs as text to store; LoadState restores
+	// it. A state that cannot be read is dropped (ErrBadState) and the next run is a first look.
+	State() string
+	LoadState(raw string) error
 	// Pin tells the client that owner is the key somebody confirmed for the address (it enrolled
 	// it, or the person restored it from a backup), so rows signed by it can be told from rows
 	// signed by another.
@@ -130,10 +170,16 @@ type Client struct {
 	// HTTP is the HTTP client; nil is http.DefaultClient.
 	HTTP *http.Client
 
-	mu   sync.Mutex
-	tok  string
-	dc   *directoryclient.Client
-	pins directoryclient.MemoryPins
+	// OnState is called with the new State text after anything that changes it, so the page can
+	// keep it.
+	OnState func(string)
+
+	mu      sync.Mutex
+	tok     string
+	dc      *directoryclient.Client
+	pins    directoryclient.MemoryPins
+	logKeys map[string]ed25519.PublicKey
+	state   directoryclient.WatchState
 }
 
 // client is the directoryclient.Client for this call, its token set from Token. One is kept, so
@@ -151,7 +197,7 @@ func (c *Client) client(ctx context.Context) (*directoryclient.Client, error) {
 	defer c.mu.Unlock()
 	c.tok = tok
 	if c.dc == nil {
-		c.dc = &directoryclient.Client{BaseURL: c.Base, HTTP: c.HTTP, Pins: c.pinsLocked(), Token: func() string {
+		c.dc = &directoryclient.Client{BaseURL: c.Base, HTTP: c.HTTP, Pins: c.pinsLocked(), State: &c.state, LogKeys: c.logKeys, Token: func() string {
 			c.mu.Lock()
 			defer c.mu.Unlock()
 			return c.tok
@@ -165,6 +211,131 @@ func (c *Client) pinsLocked() directoryclient.MemoryPins {
 		c.pins = directoryclient.MemoryPins{}
 	}
 	return c.pins
+}
+
+// saved passes the state to OnState.
+func (c *Client) saved() {
+	if c.OnState != nil {
+		c.OnState(c.State())
+	}
+}
+
+// State implements Directory.
+func (c *Client) State() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	b, _ := json.Marshal(c.state)
+	return string(b)
+}
+
+// LoadState implements Directory.
+func (c *Client) LoadState(raw string) error {
+	st, err := directoryclient.ParseWatchState(raw)
+	c.mu.Lock()
+	c.state = st // the zero state when raw could not be read
+	c.mu.Unlock()
+	if err != nil {
+		return ErrBadState
+	}
+	return nil
+}
+
+// SetLogKeys implements Directory.
+func (c *Client) SetLogKeys(keys map[string]string) error {
+	parsed := map[string]ed25519.PublicKey{}
+	for kid, k := range keys {
+		b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(k))
+		if err != nil || len(b) != ed25519.PublicKeySize {
+			return fmt.Errorf("the log key %q is not an Ed25519 public key", kid)
+		}
+		parsed[kid] = b
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.logKeys = parsed
+	if len(parsed) == 0 {
+		c.logKeys = nil
+	}
+	if c.dc != nil {
+		c.dc.LogKeys = c.logKeys
+	}
+	return nil
+}
+
+// ServerLogKeys implements Directory: the keys the log route states (GET /directory/log).
+func (c *Client) ServerLogKeys(ctx context.Context) (map[string]string, error) {
+	tok := ""
+	if c.Token != nil {
+		t, err := c.Token(ctx)
+		if err != nil {
+			return nil, err
+		}
+		tok = t
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.Base, "/")+"/directory/log?since=0", nil)
+	if err != nil {
+		return nil, err
+	}
+	if tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
+	hc := c.HTTP
+	if hc == nil {
+		hc = http.DefaultClient
+	}
+	res, err := hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = res.Body.Close() }()
+	switch res.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound, http.StatusMethodNotAllowed:
+		return nil, ErrNoDirectory
+	case http.StatusUnauthorized:
+		return nil, ErrSignInRequired
+	case http.StatusForbidden:
+		return nil, ErrNotAllowed
+	case http.StatusTooManyRequests:
+		return nil, ErrRateLimited
+	default:
+		return nil, fmt.Errorf("the log route answered %d", res.StatusCode)
+	}
+	var page docstore.DirectoryLog
+	if err := json.NewDecoder(io.LimitReader(res.Body, 4<<20)).Decode(&page); err != nil {
+		return nil, err
+	}
+	return page.Keys, nil
+}
+
+// Watch implements Directory.
+func (c *Client) Watch(ctx context.Context, email string, owner OwnerKey) (WatchResult, error) {
+	dc, err := c.client(ctx)
+	if err != nil {
+		return WatchResult{}, err
+	}
+	c.mu.Lock()
+	have := len(c.logKeys) > 0
+	c.mu.Unlock()
+	if !have {
+		return WatchResult{}, ErrNoLogKeys
+	}
+	defer c.saved()
+	rep, err := dc.WatchLog(ctx, email, &c.state, directoryclient.WatchOptions{Owner: owner})
+	if err != nil {
+		if errors.Is(err, directoryclient.ErrLogCut) {
+			return WatchResult{}, errors.Join(ErrLogRewritten, err)
+		}
+		return WatchResult{}, failure(err)
+	}
+	out := WatchResult{HeadSeq: rep.Head.Seq, New: len(rep.Entries), Filtered: rep.Filtered, AddressUnconfirmed: rep.AddressUnconfirmed}
+	for _, f := range rep.Foreign {
+		out.Alerts = append(out.Alerts, fmt.Sprintf("%s (log entry %d)", f.Message, f.Entry.Seq))
+	}
+	for _, v := range rep.Violations {
+		out.Alerts = append(out.Alerts, fmt.Sprintf("log entry %d breaks the owner rules: %s", v.Seq, v.Why))
+	}
+	return out, nil
 }
 
 // Pin implements Directory.
@@ -244,6 +415,7 @@ func (c *Client) Enroll(ctx context.Context, email string, owner OwnerKey) error
 	if err != nil {
 		return err
 	}
+	defer c.saved()
 	if _, err := dc.Enroll(ctx, email, owner); err != nil {
 		return failure(err)
 	}
@@ -286,6 +458,7 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 		return nil, err
 	}
 	rows, err := dc.Lookup(ctx, email)
+	defer c.saved()
 	if err != nil {
 		return nil, failure(err)
 	}
@@ -302,6 +475,7 @@ func (c *Client) Publish(ctx context.Context, r PublishRequest) (Key, error) {
 	if err != nil {
 		return Key{}, err
 	}
+	defer c.saved()
 	k, err := dc.Publish(ctx, directoryclient.PublishRequest{Email: r.Email, Key: r.Key, Label: r.Label, Identity: r.Identity, Owner: r.Owner})
 	if err != nil {
 		return Key{}, failure(err)

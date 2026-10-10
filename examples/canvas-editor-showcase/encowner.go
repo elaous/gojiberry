@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/elaous/gojiberry/examples/canvas-editor-showcase/dirclient"
 	"github.com/elaous/gojiberry/transfer"
@@ -21,7 +22,12 @@ import (
 // kept and treated like a password. (Wrapping it with the passkey is a later step: it costs a prompt
 // for every signature.)
 
-const ownerKeyPrefix = "showcase-enc:owner:" // + the directory address
+const (
+	ownerKeyPrefix = "showcase-enc:owner:"   // + the directory address
+	watchStateKey  = "showcase-enc:watch:"   // the log position and what lookups saw
+	logKeysKey     = "showcase-enc:logkeys:" // the pinned log keys
+	alertsKey      = "showcase-enc:alerts:"  // what the watch found and was not dismissed
+)
 
 // ownerRecord is what is kept for one directory: the address the key is enrolled for and the key.
 type ownerRecord struct {
@@ -40,6 +46,110 @@ type ownerUI struct {
 	backup   bool   // the backup is shown
 	restore  string // the draft of a backup being restored
 	restoreO bool   // the restore field is open
+
+	logKeys  map[string]string // the pinned log keys (key ID to base64), none until pinned
+	alerts   []string          // what watching found, until dismissed
+	watchMsg string
+}
+
+// loadWatch restores what is kept for the current directory: the log position, the pinned log keys
+// and the alerts not yet dismissed. A position that cannot be read is dropped, and said.
+func (d *dirUI) loadWatch() {
+	d.owner.logKeys, d.owner.alerts, d.owner.watchMsg = nil, nil, ""
+	if d.dir == nil {
+		return
+	}
+	if err := d.dir.LoadState(lsGet(watchStateKey + d.url)); err != nil {
+		lsSet(watchStateKey+d.url, "")
+		d.owner.watchMsg = err.Error()
+	}
+	if raw := lsGet(logKeysKey + d.url); raw != "" {
+		var keys map[string]string
+		if json.Unmarshal([]byte(raw), &keys) == nil && d.dir.SetLogKeys(keys) == nil {
+			d.owner.logKeys = keys
+		}
+	}
+	if raw := lsGet(alertsKey + d.url); raw != "" {
+		_ = json.Unmarshal([]byte(raw), &d.owner.alerts)
+	}
+}
+
+func (d *dirUI) keepAlerts() {
+	if len(d.owner.alerts) == 0 {
+		lsSet(alertsKey+d.url, "")
+		return
+	}
+	b, _ := json.Marshal(d.owner.alerts)
+	lsSet(alertsKey+d.url, string(b))
+}
+
+// pinLogKeys takes the keys the server states for its log and keeps them as the ones to check
+// against. This is trust on first use: it proves the server is consistent with itself from now on,
+// not that it is the server meant, which is why the person is asked first.
+func (d *dirUI) pinLogKeys(ctx context.Context) error {
+	keys, err := d.dir.ServerLogKeys(ctx)
+	if err != nil {
+		d.say(dirErr(err).Error(), true)
+		return nil
+	}
+	if len(keys) == 0 {
+		d.say(T("dir.log.noKeys", "The server did not state any log keys."), true)
+		return nil
+	}
+	if err := d.dir.SetLogKeys(keys); err != nil {
+		d.say(err.Error(), true)
+		return nil
+	}
+	b, _ := json.Marshal(keys)
+	lsSet(logKeysKey+d.url, string(b))
+	d.owner.logKeys = keys
+	d.say(T("dir.log.pinned", "The log keys are pinned: later looks at the log are checked against them."), false)
+	return nil
+}
+
+func (d *dirUI) forgetLogKeys() {
+	_ = d.dir.SetLogKeys(nil)
+	lsSet(logKeysKey+d.url, "")
+	d.owner.logKeys = nil
+}
+
+// watchMine reads the log since the last look and says what somebody else did to my address.
+func (d *dirUI) watchMine(ctx context.Context) error {
+	me, err := d.dir.Me(ctx)
+	if err != nil {
+		d.say(dirErr(err).Error(), true)
+		return nil
+	}
+	var owner dirclient.OwnerKey
+	if d.owner.email == me {
+		owner = d.owner.key
+	}
+	rep, err := d.dir.Watch(ctx, me, owner)
+	switch {
+	case errors.Is(err, dirclient.ErrNoLogKeys):
+		d.say(T("dir.log.needKeys", "Pin the server's log keys first."), true)
+		return nil
+	case errors.Is(err, dirclient.ErrLogRewritten):
+		d.owner.alerts = append(d.owner.alerts, T("dir.log.rewritten", "The directory's log was cut back or rewritten since the last look. Do not trust this directory until you know why."))
+		d.keepAlerts()
+		d.say("", false)
+		return nil
+	case err != nil:
+		d.say(dirErr(err).Error(), true)
+		return nil
+	}
+	d.owner.alerts = append(d.owner.alerts, rep.Alerts...)
+	d.keepAlerts()
+	msg := T("dir.log.checked", "The log was checked up to entry %d: %d new for your address, %d of them not yours.", rep.HeadSeq, rep.New, len(rep.Alerts))
+	if rep.AddressUnconfirmed {
+		msg += " " + T("dir.log.unconfirmed", "No entry of yours confirms the log name of your address yet: publish a key, then watch again.")
+	}
+	if rep.Filtered {
+		msg += " " + T("dir.log.filtered", "The server showed only the entries about your address; enroll an owner key to read the whole log.")
+	}
+	d.owner.watchMsg = msg
+	d.say("", false)
+	return nil
 }
 
 // loadOwner reads the owner key kept for the current directory and tells the client it is pinned.
@@ -222,6 +332,52 @@ func (d *dirUI) ownerPanel(e *encUI) []xango.Node {
 			textarea("dir-owner-restore", T("dir.owner.restoreLabel", "Owner key backup"), d.owner.restore, T("dir.owner.restorePlaceholder", "Paste the backup text"), "2", func(v string) { d.owner.restore = v }),
 			xango.El("div", []xango.Attr{xango.A("style", "margin-top:6px")},
 				btn("dir-owner-restore-go", T("dir.owner.restore", "Restore"), func() { e.run(d.restoreOwner) }, busy))))
+	}
+	return append(nodes, d.watchPanel(e)...)
+}
+
+// watchPanel pins the server's log keys and watches the address.
+func (d *dirUI) watchPanel(e *encUI) []xango.Node {
+	busy := e.pending.Busy()
+	nodes := []xango.Node{
+		xango.El("h4", []xango.Attr{xango.A("style", "margin:0.8em 0 0.2em;font-size:13px")}, xango.Text(T("dir.log.title", "Who changed my entry"))),
+	}
+	var row []xango.Node
+	if len(d.owner.logKeys) == 0 {
+		nodes = append(nodes, para("dir-log-state", T("dir.log.none", "The directory's log keys are not pinned, so its log cannot be checked."), false))
+		row = append(row, btn("dir-log-pin", T("dir.log.pin", "Pin the server's log keys…"), func() {
+			if d.ask == nil {
+				return
+			}
+			d.ask(T("dir.log.pin", "Pin the server's log keys"),
+				T("dir.log.confirmPin", "Take the log keys this server states and check its log against them from now on? That shows the server stays consistent with itself, not that it is the server you meant. If you can, compare the key IDs with ones you got from another source."),
+				func() { e.run(d.pinLogKeys) })
+			e.render()
+		}, busy))
+	} else {
+		kids := make([]string, 0, len(d.owner.logKeys))
+		for kid := range d.owner.logKeys {
+			kids = append(kids, kid)
+		}
+		slices.Sort(kids)
+		nodes = append(nodes, para("dir-log-state", T("dir.log.pinnedState", "Pinned log keys: %s.", strings.Join(kids, ", ")), false))
+		row = append(row,
+			btn("dir-log-watch", T("dir.log.watch", "Watch my address"), func() { e.run(d.watchMine) }, busy),
+			btn("dir-log-unpin", T("dir.log.unpin", "Forget the pinned keys"), func() { d.forgetLogKeys(); e.render() }, busy))
+	}
+	if len(d.owner.alerts) > 0 {
+		row = append(row, btn("dir-log-clear", T("dir.log.clear", "Dismiss the alerts"), func() { d.owner.alerts = nil; d.keepAlerts(); e.render() }, false))
+	}
+	nodes = append(nodes, xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px;flex-wrap:wrap")}, row...))
+	if d.owner.watchMsg != "" {
+		nodes = append(nodes, para("dir-log-msg", d.owner.watchMsg, false))
+	}
+	if len(d.owner.alerts) > 0 {
+		var items []xango.Node
+		for _, a := range d.owner.alerts {
+			items = append(items, xango.El("li", nil, xango.Text(a)))
+		}
+		nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("id", "dir-log-alerts"), xango.A("role", "alert"), xango.A("class", "gj-doc-error"), xango.A("style", "font-size:13px")}, items...))
 	}
 	return nodes
 }

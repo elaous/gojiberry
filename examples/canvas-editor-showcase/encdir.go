@@ -187,9 +187,12 @@ func (d *dirUI) confirm(clean, token string, e *encUI) {
 func (d *dirUI) connect() {
 	d.dir = nil
 	if _, _, err := checkDirURL(d.url); err == nil {
-		d.dir = &dirclient.Client{Base: d.url, Token: d.sessionToken}
+		c := &dirclient.Client{Base: d.url, Token: d.sessionToken}
+		c.OnState = func(st string) { lsSet(watchStateKey+d.url, st) }
+		d.dir = c
 	}
 	d.loadOwner()
+	d.loadWatch()
 }
 
 // sessionToken is the token the person set, or, for the demo server (it hands one out at
