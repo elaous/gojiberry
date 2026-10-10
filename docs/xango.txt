@@ -15,9 +15,32 @@ func EventValue[T any](e Event) T
     EventValue reads e.Value as T, returning the zero value of T if the event
     didn't carry a T (e.g. a click event has no string payload).
 
+func RegisterStyle(id, css string)
+    RegisterStyle adds a stylesheet to the program's set. xgc generates a call
+    to it from a blank CSS import,
+
+        import _ "github.com/me/app/components/button.css"
+
+    the way a blank import of a Go package runs its init: whoever imports the
+    package gets its styles. Registering an ID twice is a no-op, so a sheet
+    imported by several files appears once. Sheets keep their registration
+    order, which is package initialisation order: a package's dependencies come
+    before it.
+
 func Render(w io.Writer, n Node) error
     Render writes n as HTML to w. Text content and attribute values are escaped
     automatically; use Raw to inject pre-trusted HTML deliberately.
+
+func RenderIndented(n Node) (string, error)
+    RenderIndented is Render's pretty-printing counterpart. It always recurses
+    into every element/fragment's own children (so nesting depth alone never
+    blocks formatting), but only ever inserts a newline+indentation at a sibling
+    boundary where canBreakBoundary says it's safe, and only ever descends into
+    a node's children at all when none of them is a Text or Raw node directly
+    (an element mixing in real inline text -- an icon span glued to a text run
+    inside one <button>, say -- is rendered whole, byte-for-byte identical
+    to Render's own single-line output for that entire subtree, exactly like
+    today).
 
 func RenderString(n Node) (string, error)
     RenderString is a convenience wrapper around Render for tests and callers
@@ -43,12 +66,22 @@ type Document struct {
 	Title string
 	Head  []Node
 	Body  Node
+	// NoStyles leaves the registered stylesheets out.
+	NoStyles bool
+	// Styles, if not nil, limits the registered stylesheets to these: an
+	// entry is a sheet's full ID or the end of it ("components/button.css",
+	// "button.css"). An empty, non-nil slice means none -- the per-page
+	// choice (see the @styles page annotation).
+	Styles []string
 }
     Document is the <html><head>...</head><body>...</body></html> wrapper
     almost every top-level page needs, so individual pages don't each hand-roll
     that boilerplate. Head holds extra <head> children (e.g. a Style-injected
     stylesheet, <meta>, <link>); Body is the single node rendered inside <body>
     -- use Frag to group multiple top-level children there.
+
+    The stylesheets registered by CSS imports (see RegisterStyle) go in the head
+    first, ahead of Head, so a page's own styles can override them.
 
 func (d Document) Render() Node
     Render assembles the document into a single <html> Node tree.
@@ -65,13 +98,24 @@ type Event struct {
 
     Value carries whatever data the event has attached (a string for
     input/change events, a float64 for a range slider, a custom type for an
-    application-defined event), erased to any so a single, non-generic Event
-    can be stored in a plain xango.Attr and mixed into a homogeneous []xango.Attr.
+    application-defined event), erased to any so a single, non-generic Event can
+    be stored in a plain xango.Attr and mixed into a homogeneous []xango.Attr.
     Use EventValue[T] for a type-safe read.
 
 func NewEvent(typ string, value any, checked bool, preventDefault, stopProp func()) Event
     NewEvent constructs an Event; used by domrt (and tests) to populate the
     callback hooks that PreventDefault/StopPropagation invoke.
+
+func (e Event) MoveFocus(root, items string, step FocusStep) bool
+    MoveFocus moves the keyboard focus within a widget while the event is being
+    handled: root is a CSS selector for the widget, found from the event's
+    target outward (the target itself counts); items selects the candidates
+    inside it (written for the widget, so ":scope > li" is the widget's own
+    children, and ":scope" alone is the widget element itself); step picks one
+    relative to the element that has the focus, wrapping around, or the first or
+    last. Candidates that are disabled, aria-disabled or not shown are skipped.
+    It reports whether something was focused; with no browser behind the event
+    (a test, the server) it does nothing and reports false.
 
 func (e Event) PreventDefault()
     PreventDefault calls the underlying event's preventDefault, if any.
@@ -79,10 +123,31 @@ func (e Event) PreventDefault()
 func (e Event) StopPropagation()
     StopPropagation calls the underlying event's stopPropagation, if any.
 
+func (e Event) WithFocus(f func(root, items string, step FocusStep) bool) Event
+    WithFocus returns e with the function MoveFocus calls; used by domrt (and
+    tests).
+
 type EventHandler func(Event)
     EventHandler is a callback bound to a DOM event via an Attr built with On.
     It is inert during server-side rendering; domrt wires it to real DOM events
     on the client.
+
+type FocusStep int
+    FocusStep says where MoveFocus goes among the candidates.
+
+const (
+	FocusNext FocusStep = iota
+	FocusPrev
+	FocusFirst
+	FocusLast
+)
+type KeyData struct {
+	Key, Code              string
+	Ctrl, Shift, Alt, Meta bool
+}
+    KeyData is the Event.Value of a keyboard event (keydown, keyup, keypress):
+    which key, and which modifiers were held. Key is the DOM KeyboardEvent.key
+    ("a", "Enter", "ArrowUp"), Code the physical key ("KeyA", "Digit8").
 
 type Kind int
     Kind discriminates the variants of Node.
@@ -92,6 +157,8 @@ const (
 	KindText
 	KindFragment
 	KindRaw
+	// KindHost is a node for a renderer-specific component (see Host).
+	KindHost
 )
 type Node struct {
 	Kind     Kind
@@ -100,6 +167,7 @@ type Node struct {
 	Attrs    []Attr
 	Children []Node
 	Text     string // content, when Kind == KindText
+	Props    any    // typed props, when Kind == KindHost
 }
     Node is a single node in a UI tree: an element, a text run, or a fragment (a
     childless-tag grouping with no wrapper element).
@@ -117,6 +185,14 @@ func Frag(children ...Node) Node
     Frag groups children with no wrapper element, e.g. for a component that
     returns multiple siblings.
 
+func Host(tag string, props any, children ...Node) Node
+    Host constructs a node for a renderer-specific component: tag names it (for
+    example "canvas.TextFlow"), props is its typed props value (any Go type
+    -- slices, structs, functions), and children are its child nodes. Only a
+    renderer that knows the tag can draw it (canvas/xango draws the canvas
+    components); the HTML renderer reports an error, and domrt and xango/gio
+    draw nothing.
+
 func Raw(html string) Node
     Raw constructs a text node whose content is emitted verbatim, without
     HTML-escaping. Callers are responsible for ensuring the content is safe;
@@ -124,8 +200,15 @@ func Raw(html string) Node
 
 func Style(css string) Node
     Style returns a <style> element injecting css verbatim -- e.g. the string
-    an xango CSS resource import binds -- for use in a Document's Head. css is
-    trusted, unescaped content, same caveat as Raw.
+    an xango CSS resource import binds -- for use in a Document's Head.
+    css is trusted content, but a "</style" inside it (in a string or a comment)
+    cannot end the element early: it is written as the equivalent CSS escape
+    "<\/style".
+
+func Styles() Node
+    Styles returns one <style> element per registered stylesheet (each tagged
+    data-xango-style with its ID), for a page's <head>; Document puts them there
+    itself. It is a Fragment with no children when nothing was registered.
 
 func Text(s string) Node
     Text constructs a text node. Content is HTML-escaped at render time.
@@ -133,4 +216,15 @@ func Text(s string) Node
 func (n Node) WithKey(key string) Node
     Key returns a copy of n with its reconciliation key set, for use in keyed
     lists: xango.El("li", nil, xango.Text(item)).WithKey(item.ID).
+
+type StyleSheet struct {
+	// ID identifies the sheet: the import path of the .css file
+	// ("github.com/me/app/components/button.css").
+	ID  string
+	CSS string
+}
+    StyleSheet is a stylesheet registered with RegisterStyle.
+
+func RegisteredStyles() []StyleSheet
+    RegisteredStyles returns the registered stylesheets in order.
 
