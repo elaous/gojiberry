@@ -108,9 +108,22 @@ func (d *AdapterDirectory) Challenge(_ context.Context, user auth.User, keyText 
 	return docstore.DirectoryChallenge{Token: token, Encrypted: base64.StdEncoding.EncodeToString(enc.Bytes()), Expires: exp}, nil
 }
 
+// nonceLen is the length of a challenge's nonce: 16 random bytes in hex.
+const nonceLen = 32
+
+// ErrNotAChallenge is returned by OpenChallenge for a "challenge" whose plaintext is not a nonce.
+var ErrNotAChallenge = errors.New("encrypt: this is not a directory challenge: it decrypts to something other than a nonce, so nothing was sent back")
+
 // OpenChallenge is the client's half: it decrypts the challenge's nonce with the identity of the
 // key being published (an age identity, an SSH identity from ParseSSHIdentity, or a passkey's)
 // and returns the proof to send with the publish request.
+//
+// What it opens is chosen by the server, and what it returns goes back to the server, so it must
+// not be a way to have the server's ciphertext decrypted: a directory (or anything that can speak
+// for one) could present, as a "challenge", an envelope made for this very key, such as a stored
+// document, and read the answer. So the plaintext is read only up to a nonce's length, and unless
+// it is exactly a nonce (hex, as Challenge makes it) ErrNotAChallenge is returned and no part of it
+// leaves the client.
 func OpenChallenge(c docstore.DirectoryChallenge, id age.Identity) (docstore.DirectoryProof, error) {
 	b, err := base64.StdEncoding.DecodeString(c.Encrypted)
 	if err != nil {
@@ -120,9 +133,12 @@ func OpenChallenge(c docstore.DirectoryChallenge, id age.Identity) (docstore.Dir
 	if err != nil {
 		return docstore.DirectoryProof{}, fmt.Errorf("encrypt: this key cannot open the challenge: %w", err)
 	}
-	nonce, err := io.ReadAll(io.LimitReader(r, 1<<10))
+	nonce, err := io.ReadAll(io.LimitReader(r, nonceLen+1))
 	if err != nil {
 		return docstore.DirectoryProof{}, err
+	}
+	if len(nonce) != nonceLen || strings.Trim(string(nonce), "0123456789abcdef") != "" {
+		return docstore.DirectoryProof{}, ErrNotAChallenge
 	}
 	return docstore.DirectoryProof{Token: c.Token, Nonce: string(nonce)}, nil
 }
