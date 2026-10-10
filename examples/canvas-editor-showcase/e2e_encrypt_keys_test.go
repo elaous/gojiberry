@@ -555,3 +555,73 @@ func TestOwnerKeyForMyDirectoryEntry(t *testing.T) {
 	d.WaitFor("published again", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
 	d.NoErrors()
 }
+
+// Watching my address: the server's log keys are pinned after the person agrees, the log position
+// and the pins survive a reload, and an entry somebody else made for the address is reported and
+// stays reported until dismissed.
+func TestWatchMyDirectoryEntry(t *testing.T) {
+	site := e2etest.NewSite(t)
+	site.UseLocalhost()
+	srv, err := demoserver.New(site.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	site.Handle("/auth/", srv.Mux)
+	site.Handle("/directory/", srv.Mux)
+	site.Handle("/demo/", srv.Mux)
+
+	d := site.OpenURL(t, "/index.html?docstore="+url.QueryEscape(site.URL))
+	d.VirtualAuthenticator()
+	turnOn(t, d, "")
+	d.Click(`button[data-tab="people"]`)
+	d.WaitSelector("#dir-offer")
+	d.Click("#dir-offer-review")
+	confirmDialog(d)
+	d.WaitSelector("#dir-log-pin")
+
+	// without pinned keys the log is not read
+	d.OK(!d.Has("#dir-log-watch"), "no watch button before the keys are pinned")
+	d.Click("#dir-log-pin")
+	confirmDialog(d)
+	d.WaitSelector("#dir-log-watch")
+	d.OK(strings.Contains(d.Text("#dir-log-state"), "Pinned log keys"), "the pinned key IDs are shown: "+d.Text("#dir-log-state"))
+
+	// my own entry confirms the log name of my address and is not reported
+	d.Click(".gj-recip-publish")
+	d.WaitFor("published", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
+	d.Click("#dir-log-watch")
+	d.WaitFor("checked", `(document.querySelector('#dir-log-msg') || {textContent: ''}).textContent.includes('checked up to entry')`)
+	d.OK(!d.Has("#dir-log-alerts"), "my own entries are not alerts")
+
+	// somebody else, signed in as the same address, publishes a key
+	other, _, err := encrypt.GenerateRecoveryKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := srv.Login("ana@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("POST", "/directory/publish", strings.NewReader(`{"key":"`+other+`","label":"not me"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rec := httptest.NewRecorder()
+	srv.Mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("publish = %d", rec.Code)
+	}
+	d.Click("#dir-log-watch")
+	d.WaitSelector("#dir-log-alerts")
+	d.OK(d.Count("#dir-log-alerts li") == 1, "one entry that is not mine: "+d.Text("#dir-log-alerts"))
+
+	// after a reload the pins, the position and the alert are still there
+	d.Reload()
+	d.Click(`button[data-tab="people"]`)
+	d.WaitSelector("#dir-log-state")
+	d.OK(d.Has("#dir-log-watch") && d.Has("#dir-log-alerts"), "the pins and the alert survive a reload")
+	d.Click("#dir-log-watch")
+	d.WaitFor("checked again", `(document.querySelector('#dir-log-msg') || {textContent: ''}).textContent.includes('0 new for your address')`)
+	d.OK(d.Count("#dir-log-alerts li") == 1, "and it is not reported twice")
+	d.Click("#dir-log-clear")
+	d.OK(!d.Has("#dir-log-alerts"), "dismissed")
+	d.NoErrors()
+}

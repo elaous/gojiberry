@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (#129, #130, #131, #132, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
+6 of 10 since the last full run (#129, #130, #131, #132, #133, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -487,7 +487,7 @@ a way to avoid hitting the limit meanwhile.
     would not survive that either. Revisit if the showcase moves to a store with room to spare (IndexedDB or OPFS):
     then spill the recorder's originals to an `encstore-undo/` area there, counted in `checkRoom`, deleted on
     commit and on `Recover`. The residual limit stays documented in `encryption-and-passkeys.md`.
-21. **Directory publish in the showcase and the pick UI. Slices 1 and 2 done; 3 and 4 open.** Slice 1 (#132): the
+21. **Directory publish in the showcase and the pick UI. Slices 1 to 3 done; 4 open.** Slice 1 (#132): the
     showcase's `dirclient` is a thin view over `directoryclient`, and "Publish my keys" proves possession by opening
     the server's challenge with the unlocked key's identity (`encstore.Store.IdentityFor`). Slice 2 (this PR): the
     owner key. The People tab's directory settings can check the address (`GET /auth/me` for who the server knows
@@ -497,10 +497,15 @@ a way to avoid hitting the limit meanwhile.
     wrapping it with the passkey costs a prompt per signature and is left as an option. "Publish my keys" signs with
     it when it is held, and an address that has an owner key but is not held here gets a message that says to
     restore it. Tests: `dirclient` natively (`TestOwnerKeyEnrollmentAndSignedPublish`) and
-    `TestOwnerKeyForMyDirectoryEntry` in the browser. Open: (3) the watch state and the directory's log keys, kept
-    across reloads, so `WatchLog` runs and the marks `OwnerSigned`, `OwnerUnpinned` and `OwnerFirstSeen` mean
-    something (the pin of my own key is already set from the held key); (4) the pick UI's marks for other people's
-    rows, then rotating the owner key. Avoid: publish from `examples/people-keys-demo`.
+    `TestOwnerKeyForMyDirectoryEntry` in the browser. Slice 3 (this PR): watching the address. The person pins the log keys the server states (after a
+    confirmation that says what that does and does not prove: trust on first use, consistency and not identity),
+    and "Watch my address" reads the log through `WatchLog`, keeps the position and what lookups saw across reloads
+    (`localStorage`, per directory), and lists entries made by somebody else or breaking the owner rules; the list
+    stays until dismissed, a log that was cut back or rewritten is said in words, and a damaged saved position is
+    dropped and said. Tests: `TestWatchMyAddress` natively and `TestWatchMyDirectoryEntry` in the browser. Open:
+    (4) the marks for other people's rows in the picker (`OwnerSigned`, `OwnerUnpinned`, `OwnerFirstSeen`, with a
+    way to pin someone's owner key after comparing it out of band), then rotating and resetting the owner key.
+    Avoid: publish from `examples/people-keys-demo`.
 22. **Done (this PR): `walk()` searches every link.** Was: it took the first link whose `From` matched and whose
     signer was in the list, with no backtracking, so a dead-end first match could hide a reachable link and an
     unlock could fail after many key changes. Now it searches depth first over all links out of each list with a
