@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/elaous/gojiberry/auth"
@@ -284,5 +285,24 @@ func TestOwnerMarksOfOtherPeoplesRows(t *testing.T) {
 	rows, err = fresh.Lookup(ctx, "bo@example.com")
 	if err != nil || rows[0].Owner != OwnerPinned || !rows[0].OwnerSigned || rows[0].Owner.NeedsConfirming() {
 		t.Fatalf("after confirming: %+v %v", rows, err)
+	}
+}
+
+func TestLogKeyFingerprintsAreComparable(t *testing.T) {
+	pub := "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=" // 32 bytes
+	fp := LogKeyFingerprint(pub)
+	if len(fp) != 19 || strings.Count(fp, " ") != 3 {
+		t.Fatalf("fingerprint %q", fp)
+	}
+	if LogKeyFingerprint("not base64!") != "" || LogKeyFingerprint("AAEC") != "" {
+		t.Error("a non-key has a fingerprint")
+	}
+	// the way people copy one: upper case, with colons or dashes
+	typed := strings.ToUpper(strings.ReplaceAll(fp, " ", ":"))
+	if NormalizeFingerprint(typed) != NormalizeFingerprint(fp) || NormalizeFingerprint(" "+fp+"\n") != NormalizeFingerprint(fp) {
+		t.Errorf("%q is not %q", NormalizeFingerprint(typed), NormalizeFingerprint(fp))
+	}
+	if NormalizeFingerprint("aaaa bbbb") == NormalizeFingerprint(fp) {
+		t.Error("different fingerprints compare equal")
 	}
 }

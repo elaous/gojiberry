@@ -9,7 +9,9 @@ package dirclient
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -73,6 +75,30 @@ var ErrNoLogKeys = errors.New("no log keys are pinned for this directory")
 // ErrLogRewritten: the log is shorter than what was seen, or has a different entry where one was
 // seen: the server cut it back or rewrote it.
 var ErrLogRewritten = errors.New("the log was cut back or rewritten since the last look")
+
+// LogKeyFingerprint is how a log key (base64, as ServerLogKeys states it) is shown to be compared:
+// the first 16 hex characters of its SHA-256 in groups of four, "" if it is not an Ed25519 key.
+func LogKeyFingerprint(b64 string) string {
+	b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(b64))
+	if err != nil || len(b) != ed25519.PublicKeySize {
+		return ""
+	}
+	sum := sha256.Sum256(b)
+	h := hex.EncodeToString(sum[:8])
+	return h[0:4] + " " + h[4:8] + " " + h[8:12] + " " + h[12:16]
+}
+
+// NormalizeFingerprint makes a fingerprint typed or pasted by a person comparable: lower case, with
+// spaces, colons and dashes removed.
+func NormalizeFingerprint(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case ' ', ':', '-', '\t', '\n', '\r':
+			return -1
+		}
+		return r
+	}, strings.ToLower(s))
+}
 
 // OwnerPubFingerprint is the fingerprint of an owner public key as shown in Key.OwnerPub, "" if it
 // cannot be read.
