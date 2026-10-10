@@ -252,6 +252,14 @@ func (d *AdapterDirectory) resignEnrollments(ctx context.Context, rep *ResignRep
 // not have: a wrong GOJIBERRY_DOCSTORE_DIRECTORY_KEY, or a retired key missing from
 // GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV, leaves every such record unfindable.
 func (d *AdapterDirectory) Startup(ctx context.Context) (ResignReport, error) {
+	// The pseudonyms under keys that were retired and removed come first (loadAliases), and the
+	// ones of the keys still listed are recorded before they can be removed (recordAliases).
+	if err := d.loadAliases(ctx); err != nil {
+		return ResignReport{}, err
+	}
+	if err := d.recordAliases(ctx); err != nil {
+		return ResignReport{}, err
+	}
 	rep, err := d.Resign(ctx)
 	if err != nil {
 		return rep, err

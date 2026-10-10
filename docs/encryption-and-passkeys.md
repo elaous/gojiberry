@@ -1026,10 +1026,17 @@ cannot be opened.
       a leaked one is the owner's own key leaking: rotate it. Records that predate the enrollment stay
       `Verified` but not `OwnerSigned` (and say so) until republished. An auditor needs the address to check
       the owner signatures (they name it); the log itself shows only pseudonyms.
-   4. **Rotating the directory key**: a log pseudonym changes with it (the owner gets the older ones from
-      `/directory/log/address` while the retired key is listed); after the old key is removed, entries made
-      under it can no longer be matched or checked by the server. If the old key leaked, remove it from
-      `..._KEY_PREV` and republish, do not rotate through it.
+   4. **Rotating the directory key**: a log pseudonym changes with it. While the retired key is listed, every
+      start-up records, for each address the store holds a record or key for, a signed **alias** record
+      (`directory-log/alias/<current pseudonym>`, pseudonyms only, no e-mail) from the current pseudonym to the
+      older ones, and carries the aliases of earlier keys forward; so after the old key is removed from
+      `..._KEY_PREV` the older entries still match their address, the owner still gets the older pseudonyms
+      from `/directory/log/address`, and the entries do not show up as unmapped. Start the server once with
+      the retired key still listed before removing it (a replica started later reads the aliases at its own
+      start-up). An alias record that does not verify (altered, or signed by a key no longer listed) is
+      ignored and counted in a start-up log line. An address the store holds no record or key for cannot be
+      aliased and stays unmapped. If the old key leaked, remove it from `..._KEY_PREV` and republish, do not
+      rotate through it.
    5. Attestation covers ssh-ed25519 keys only; age keys (recovery keys, passkey-derived keys) get proof of
       possession (`Held`, the server's word) and, for an enrolled address, the owner signature.
    6. Proof of possession is optional on the wire unless `RequireProof` is on (off by default, because it
