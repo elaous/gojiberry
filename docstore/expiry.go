@@ -45,12 +45,13 @@ func (f ExpiryPolicyFunc) TTL(id string, now time.Time) (time.Duration, bool) { 
 // TestSystemPrefixesCoverEveryPrefixConstant keeps it complete (every Prefix constant in the
 // repository must be listed here or be declared irrelevant there).
 const (
-	collabPrefix   = "collab:"   // shared-editing hub state (collab/hub.StoreKey)
-	catalogPrefix  = "catalog:"  // catalogs and folder records (saver)
-	versionsPrefix = "versions/" // version history (saver.VersionPrefix)
-	passkeyPrefix  = "passkey/"  // passkey accounts and handles (auth/passkey)
-	keysPrefix     = "keys:"     // per-document wrapped keys (encrypt.KeysPrefix); losing one makes the document unreadable
-	fontsPrefix    = "fonts/"    // the font library (fonts.KeyPrefix, saver.FontPrefix)
+	collabPrefix     = "collab:"      // shared-editing hub state (collab/hub.StoreKey)
+	collabGonePrefix = "collab-gone:" // the hub's marks of documents closed as expired (collab/hub)
+	catalogPrefix    = "catalog:"     // catalogs and folder records (saver)
+	versionsPrefix   = "versions/"    // version history (saver.VersionPrefix)
+	passkeyPrefix    = "passkey/"     // passkey accounts and handles (auth/passkey)
+	keysPrefix       = "keys:"        // per-document wrapped keys (encrypt.KeysPrefix); losing one makes the document unreadable
+	fontsPrefix      = "fonts/"       // the font library (fonts.KeyPrefix, saver.FontPrefix)
 )
 
 // The keyspaces of the public (anonymous) offer, see package docstore/public. Neither expires by
@@ -75,7 +76,7 @@ const (
 
 // systemPrefixes are the keyspaces that are not documents: they never expire by themselves (the
 // ones that belong to a document go with it, see DefaultRelated).
-var systemPrefixes = []string{ExpiryPrefix, ExpiryCreatedPrefix, aclKeyPrefix, collabPrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, SessionPrefix, LoginStatePrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix, PublicPrefix, ReportPrefix}
+var systemPrefixes = []string{ExpiryPrefix, ExpiryCreatedPrefix, aclKeyPrefix, collabPrefix, collabGonePrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, SessionPrefix, LoginStatePrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix, PublicPrefix, ReportPrefix}
 
 // IsDocumentKey reports whether key is a plain document: what the saver writes ("<id>~<gen><ext>"
 // generation keys) or a client PUTs under a plain id. It is an allowlist of the document

@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-7 of 10 since the last full run (#118, #119, #120, #121, #122, #123, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
+8 of 10 since the last full run (#118 to #124, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -436,8 +436,14 @@ a way to avoid hitting the limit meanwhile.
     document is live again clears it. Left over, by design: a mark nobody asks about again stays in the store (about
     40 bytes; it is deleted when asked about after it lapsed), and a hub without a `Store` keeps only the process
     table. `collab/hub/hub.go`.
-15. **Expiry-prefix test pin and stale-tab renewal throttle (#82 minors).** Plan: pin the prefix in a test and
-    throttle renewals from a stale tab. Avoid: close old tabs.
+15. **Done (this PR): the hub's keys are pinned as system keys; the renewal throttle was already there.** Was: nothing
+    tested that the hub's keyspaces stay out of the document rules. Pinning it caught a real miss from #123: its
+    new `collab-gone:<id>` mark was not in `docstore`'s system prefixes, so it would have been listed and expired as a
+    document. It is now (`collabGonePrefix`), and `TestHubKeysAreSystemKeysNotDocuments` checks
+    `StoreKey` and `goneKey` against `IsDocumentKey`. The renewal throttle needed no code: the hub renews a document at
+    most once per `RenewInterval` (a minute, at most a quarter of the lifetime) however many tabs edit it, and only on
+    an accepted edit, so a stale tab cannot renew faster than that. It still keeps a document alive while it edits,
+    by design. `docstore/expiry.go`, `collab/hub/renew_rereview_test.go`.
 16. **Public per-process counters.** Plan: shared `SessionStore` and `Quota` (see
     [public-docstore.md](public-docstore.md#75-what-is-left) 7.5 item 1 and the extension-points table in
     [7.4](public-docstore.md#74-extension-points)). Avoid: one replica.
