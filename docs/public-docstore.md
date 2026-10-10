@@ -662,7 +662,7 @@ needs one warns, falls back or refuses at start-up when its backend lacks it. Re
    replica.
 2. `DeleteIf` (a delete that applies only if the stored bytes are the ones read) is optional for those features:
    single-use records fall back to a conditional "used" marker written with `SaveIf`. It is what the document
-   expiry sweep would need to close its last race (roadmap item 10). The S3 backend has it through `If-Match` on `DeleteObject` (the service and MinIO honor it; a compatible service that ignores the header would delete whatever is there). The gocloud blob backend cannot: the portable API has no conditional delete.
+   expiry sweep uses to close its last race: the document is deleted on the content that was read, so a save by another process in the deadline instant is kept (roadmap item 10, limits register 10). The S3 backend has it through `If-Match` on `DeleteObject` (the service and MinIO honor it; a compatible service that ignores the header would delete whatever is there). The gocloud blob backend cannot: the portable API has no conditional delete.
 3. `LoadHead` (the first bytes of a document) only makes `RepairAll` cheaper on large files; every other feature
    works without it.
 4. **The gocloud blob backend cannot be given conditional writes in general.** The portable API can create a blob

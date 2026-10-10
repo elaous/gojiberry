@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-1 of 10 since the last full run (this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+2 of 10 since the last full run (#140, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -422,10 +422,15 @@ a way to avoid hitting the limit meanwhile.
    object storage use S3. A compatible service that ignores `If-Match` on delete would delete whatever is there;
    the doc comment says so. Avoid: the conditional claim in `SweepRateLimits` (`docstore/limiter.go`) already
    narrows the rate-limit race to a token; it does not cover document expiry (item 10).
-10. **Expiry delete on the digest read (s3 now qualifies; blob cannot).** `ExpiringAdapter.purgeLocked` and `Sweep`
-    (`docstore/expiry.go`) delete unconditionally under an in-process lock. Plan: where the store is a
-    `ConditionalDeleter`, delete the document with `DeleteIf` on the digest read, and keep a changed document.
-    Avoid: one process per store.
+10. **Done (this PR): expiry deletes on the digest read.** Was: `ExpiringAdapter.purgeLocked` and `Sweep` deleted
+    unconditionally under an in-process lock, so a save by another process in the deadline instant could be
+    deleted. Now, where the store is a `ConditionalDeleter`, an expired document is loaded, the deadline record is
+    read again, and `DeleteIf` applies to the digest loaded (`deleteExpired`); a changed document is kept
+    (`errRenewed`: nothing else is deleted, the sweep counts nothing and reports no error, a save that was clearing
+    it carries on over the live one). A user's own delete stays unconditional. Tests: a second process saves
+    between the read and the delete (`TestSweepKeepsADocumentAnotherProcessSavedAtItsDeadline`, which fails
+    without the change) and the save path; a store without `DeleteIf` expires as before. Not closed: a save with
+    the very same bytes, and stores without `DeleteIf` (blob, encrypted ids). `docstore/expiry.go`.
 11. **Done (this PR): MongoDB live tests.** They now run in CI against a `mongo:7` service container (`mongo-backend`
     job, which fails on a skip), skip loudly with `SKIPPED, NOT TESTED`, and `docs/testing-workflow.md` has a Docker and a
     no-Docker recipe. They passed against MongoDB 7.0.14 under `-race`; the first real run exposed a test setup bug (the
