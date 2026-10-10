@@ -232,3 +232,57 @@ func TestWatchMyAddress(t *testing.T) {
 		t.Fatalf("damaged state: %v", err)
 	}
 }
+
+// Other people's rows: an owner-signed row is not trusted as owner-signed until somebody confirmed
+// the owner key; confirming it (and keeping the pin) turns the mark on.
+func TestOwnerMarksOfOtherPeoplesRows(t *testing.T) {
+	ctx := context.Background()
+	var srv *demoserver.Server
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { srv.Mux.ServeHTTP(w, r) }))
+	ts.Start()
+	defer ts.Close()
+	var err error
+	srv, err = demoserver.New(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	login := func(email string) *Client {
+		tok, err := srv.Login(email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &Client{Base: ts.URL, Token: func(context.Context) (string, error) { return tok, nil }}
+	}
+	bo := login("bo@example.com")
+	owner, _ := GenerateOwnerKey()
+	if err := bo.Enroll(ctx, "bo@example.com", owner); err != nil {
+		t.Fatal(err)
+	}
+	pub, secret, _ := encrypt.GenerateRecoveryKey()
+	id, _ := encrypt.ParseAgeIdentity(secret)
+	if _, err := bo.Publish(ctx, PublishRequest{Email: "bo@example.com", Key: pub, Identity: id, Owner: owner}); err != nil {
+		t.Fatal(err)
+	}
+	ana := login("ana@example.com")
+	rows, err := ana.Lookup(ctx, "bo@example.com")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("%v %v", rows, err)
+	}
+	r := rows[0]
+	if !r.OwnerEnrolled || r.OwnerSigned || !r.Owner.NeedsConfirming() || r.OwnerPub == "" {
+		t.Fatalf("a row signed by a key nobody confirmed: %+v", r)
+	}
+	// the second look shows the same key: first seen, still not confirmed
+	if rows, _ = ana.Lookup(ctx, "bo@example.com"); rows[0].Owner != OwnerFirstSeen || rows[0].OwnerSigned {
+		t.Fatalf("second look: %+v", rows[0])
+	}
+	// confirmed (after comparing the fingerprint another way), kept, and restored in a new client
+	ana.PinOwner("bo@example.com", r.OwnerPub)
+	saved := ana.Pins()
+	fresh := login("ana@example.com")
+	fresh.LoadPins(saved)
+	rows, err = fresh.Lookup(ctx, "bo@example.com")
+	if err != nil || rows[0].Owner != OwnerPinned || !rows[0].OwnerSigned || rows[0].Owner.NeedsConfirming() {
+		t.Fatalf("after confirming: %+v %v", rows, err)
+	}
+}

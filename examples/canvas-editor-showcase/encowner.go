@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -27,6 +28,7 @@ const (
 	watchStateKey  = "showcase-enc:watch:"   // the log position and what lookups saw
 	logKeysKey     = "showcase-enc:logkeys:" // the pinned log keys
 	alertsKey      = "showcase-enc:alerts:"  // what the watch found and was not dismissed
+	pinsKey        = "showcase-enc:pins:"    // owner keys the person confirmed for other addresses
 )
 
 // ownerRecord is what is kept for one directory: the address the key is enrolled for and the key.
@@ -62,6 +64,12 @@ func (d *dirUI) loadWatch() {
 	if err := d.dir.LoadState(lsGet(watchStateKey + d.url)); err != nil {
 		lsSet(watchStateKey+d.url, "")
 		d.owner.watchMsg = err.Error()
+	}
+	if raw := lsGet(pinsKey + d.url); raw != "" {
+		var pins map[string]string
+		if json.Unmarshal([]byte(raw), &pins) == nil {
+			d.dir.LoadPins(pins)
+		}
 	}
 	if raw := lsGet(logKeysKey + d.url); raw != "" {
 		var keys map[string]string
@@ -334,6 +342,74 @@ func (d *dirUI) ownerPanel(e *encUI) []xango.Node {
 				btn("dir-owner-restore-go", T("dir.owner.restore", "Restore"), func() { e.run(d.restoreOwner) }, busy))))
 	}
 	return append(nodes, d.watchPanel(e)...)
+}
+
+// confirmPanel lists the owner keys behind the last lookup that nothing held confirms. A row signed by
+// an owner key the server alone vouches for is not shown as owner-signed; the person can compare the
+// key's fingerprint with its owner another way (a call, a message) and confirm it here, which keeps
+// the pin for this directory and shows the strongest mark from then on.
+func (d *dirUI) confirmPanel(e *encUI) []xango.Node {
+	type pending struct {
+		pub   string
+		state dirclient.OwnerState
+	}
+	var todo []pending
+	for _, k := range d.keys {
+		if k.Owner.NeedsConfirming() && k.OwnerPub != "" && !slices.ContainsFunc(todo, func(p pending) bool { return p.pub == k.OwnerPub }) {
+			todo = append(todo, pending{k.OwnerPub, k.Owner})
+		}
+	}
+	if len(todo) == 0 {
+		return nil
+	}
+	nodes := []xango.Node{xango.El("h4", []xango.Attr{xango.A("style", "margin:0.8em 0 0.2em;font-size:13px")}, xango.Text(T("dir.pin.title", "Owner keys to confirm")))}
+	for i, p := range todo {
+		fp := dirclient.OwnerPubFingerprint(p.pub)
+		var why string
+		switch p.state {
+		case dirclient.OwnerChanged:
+			why = T("dir.pin.changed", "A different owner key than before signed these entries. Check with %s that they changed it.", d.keysEmail)
+		case dirclient.OwnerFirstSeen:
+			why = T("dir.pin.firstSeen", "The same owner key has signed these entries each time you looked, but nobody has confirmed it is %s's.", d.keysEmail)
+		default:
+			why = T("dir.pin.unpinned", "The directory says %s's entries are signed by this owner key, and you have no other way yet to know it is theirs.", d.keysEmail)
+		}
+		pub := p.pub
+		nodes = append(nodes,
+			para(fmt.Sprintf("dir-pin-%d", i), why+" "+T("dir.pin.fingerprint", "Owner key: %s", fp), false),
+			btn(fmt.Sprintf("dir-pin-confirm-%d", i), T("dir.pin.confirm", "I compared it with them: confirm this owner key"), func() {
+				if d.ask == nil {
+					return
+				}
+				d.ask(T("dir.pin.confirm", "Confirm this owner key"),
+					T("dir.pin.confirmAsk", "Confirm that %s is the owner key of %s? Only do this after you compared the whole fingerprint with them another way, not from this page.", fp, d.keysEmail),
+					func() { e.run(func(ctx context.Context) error { return d.confirmOwnerKey(ctx, d.keysEmail, pub) }) })
+				e.render()
+			}, e.pending.Busy()))
+	}
+	return nodes
+}
+
+// confirmOwnerKey pins pub for email, keeps the pins and looks the address up again so the rows are
+// marked by what is now confirmed.
+func (d *dirUI) confirmOwnerKey(ctx context.Context, email, pub string) error {
+	d.dir.PinOwner(email, pub)
+	b, _ := json.Marshal(d.dir.Pins())
+	lsSet(pinsKey+d.url, string(b))
+	keys, err := d.dir.Lookup(ctx, email)
+	if err != nil {
+		return dirErr(err)
+	}
+	d.keys, d.keysEmail = keys, email
+	d.rows = d.dirRows(keys)
+	d.verified, d.marks = map[string]bool{}, map[string]dirMarks{}
+	for _, r := range d.rows {
+		if r.Verified {
+			d.verified[r.Fingerprint] = true
+		}
+		d.marks[r.Fingerprint] = dirMarks{Attested: r.Attested, OwnerSigned: r.OwnerSigned, OwnerEnrolled: r.OwnerEnrolled}
+	}
+	return nil
 }
 
 // watchPanel pins the server's log keys and watches the address.

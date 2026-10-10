@@ -56,7 +56,12 @@ type dirUI struct {
 	// the keys that were added from a verified row. Never set from what was pasted.
 	verified      map[string]bool
 	verifiedAdded map[string]bool
-	notice        string
+	// marks and marksAdded are the stronger marks of the same fingerprints (attested, owner-signed).
+	marks, marksAdded map[string]dirMarks
+	// keys is the last lookup as the client saw it, for the owner keys the person may confirm.
+	keys      []dirclient.Key
+	keysEmail string
+	notice    string
 
 	owner ownerUI // the owner key of my address (encowner.go)
 
@@ -83,7 +88,7 @@ func lsSet(key, val string) {
 }
 
 func newDirUI() dirUI {
-	d := dirUI{verified: map[string]bool{}, verifiedAdded: map[string]bool{}}
+	d := dirUI{verified: map[string]bool{}, verifiedAdded: map[string]bool{}, marks: map[string]dirMarks{}, marksAdded: map[string]dirMarks{}}
 	stored, ok := lsGet(dirURLKey), lsGet(dirOKKey)
 	if stored != "" {
 		switch clean, _, err := checkDirURL(stored); {
@@ -149,6 +154,7 @@ func (d *dirUI) use(clean, token string) {
 	d.urlDraft, d.tokenDraft = clean, ""
 	d.demoToken, d.rows, d.searched, d.notice = "", nil, false, ""
 	d.verified, d.verifiedAdded = map[string]bool{}, map[string]bool{}
+	d.marks, d.marksAdded, d.keys = map[string]dirMarks{}, map[string]dirMarks{}, nil
 	lsSet(dirURLKey, clean)
 	lsSet(dirOKKey, clean)
 	lsSet(dirTokenKey, d.token)
@@ -165,6 +171,7 @@ func (d *dirUI) clear() {
 	d.url, d.token, d.offer, d.refused = "", "", "", ""
 	d.urlDraft, d.tokenDraft, d.demoToken, d.rows, d.searched, d.notice = "", "", "", nil, false, ""
 	d.verified, d.verifiedAdded = map[string]bool{}, map[string]bool{}
+	d.marks, d.marksAdded, d.keys = map[string]dirMarks{}, map[string]dirMarks{}, nil
 	for _, k := range []string{dirURLKey, dirOKKey, dirTokenKey, dirTokenURLKey} {
 		lsSet(k, "")
 	}
@@ -248,6 +255,31 @@ func dirErr(err error) error {
 	return &shownError{msg: msg, err: err}
 }
 
+// dirMarks are the marks beyond "verified" that a row earned: what this client checked itself.
+type dirMarks struct{ Attested, OwnerSigned, OwnerEnrolled bool }
+
+// dirRows turns a lookup into the picker's rows. The marks are what the client proved (the key's own
+// attestation, an owner signature by a key somebody confirmed), never the server's word alone.
+func (d *dirUI) dirRows(keys []dirclient.Key) []components.DirRow {
+	rows := make([]components.DirRow, 0, len(keys))
+	for _, k := range keys {
+		rows = append(rows, components.DirRow{Label: k.Label, Type: k.Type, Fingerprint: k.Fingerprint, Key: k.Key, Verified: k.Verified,
+			VerifiedBy: d.verifiedBy(k.Verified), Attested: k.Attested, OwnerSigned: k.OwnerSigned, OwnerEnrolled: k.OwnerEnrolled})
+	}
+	return rows
+}
+
+// decorate gives a recipient row the marks the directory earned for its fingerprint (added: the
+// ones it had when the key was added).
+func (d *dirUI) decorate(r *components.RecipientRow, added bool) {
+	v, m := d.verified[r.Fingerprint], d.marks[r.Fingerprint]
+	if added {
+		v, m = d.verifiedAdded[r.Fingerprint], d.marksAdded[r.Fingerprint]
+	}
+	r.Verified, r.VerifiedBy = v, d.verifiedBy(v)
+	r.Attested, r.OwnerSigned, r.OwnerEnrolled = v && m.Attested, v && m.OwnerSigned, v && m.OwnerEnrolled
+}
+
 // wire plugs the directory into the Recipients props: the picker, and Publish.
 func (d *dirUI) wire(props *components.RecipientsProps, e *encUI) {
 	if d.dir == nil {
@@ -258,25 +290,19 @@ func (d *dirUI) wire(props *components.RecipientsProps, e *encUI) {
 		if err != nil {
 			return nil, dirErr(err)
 		}
-		rows := make([]components.DirRow, 0, len(keys))
-		for _, k := range keys {
-			by := ""
-			if k.Verified {
-				by = d.host()
-			}
-			rows = append(rows, components.DirRow{Label: k.Label, Type: k.Type, Fingerprint: k.Fingerprint, Key: k.Key, Verified: k.Verified, VerifiedBy: by})
-		}
-		return rows, nil
+		d.keys, d.keysEmail = keys, email
+		return d.dirRows(keys), nil
 	}
 	props.DirEmail = d.email
 	props.OnDirEmail = func(v string) { d.email = v; e.render() }
 	props.OnDirResults = func(email string, rows []components.DirRow) {
 		d.rows, d.searched = rows, true
-		d.verified = map[string]bool{}
+		d.verified, d.marks = map[string]bool{}, map[string]dirMarks{}
 		for _, r := range rows {
 			if r.Verified {
 				d.verified[r.Fingerprint] = true
 			}
+			d.marks[r.Fingerprint] = dirMarks{Attested: r.Attested, OwnerSigned: r.OwnerSigned, OwnerEnrolled: r.OwnerEnrolled}
 		}
 	}
 	props.DirResults, props.DirSearched = d.rows, d.searched
@@ -345,6 +371,7 @@ func (d *dirUI) settingsPanel(e *encUI) []xango.Node {
 		xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px")},
 			btn("dir-save", T("dir.save", "Use this key directory"), func() { d.save(e) }, false),
 			btn("dir-clear", T("dir.clear", "Stop using a key directory"), func() { d.clear(); e.render() }, d.url == "" && d.offer == "")))
+	nodes = append(nodes, d.confirmPanel(e)...)
 	nodes = append(nodes, d.ownerPanel(e)...)
 	return []xango.Node{xango.El("div", []xango.Attr{xango.A("id", "dir-settings"), xango.A("style", "margin-top:1em;border-top:1px solid #d1d5db;padding-top:8px")}, nodes...)}
 }

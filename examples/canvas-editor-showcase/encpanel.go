@@ -1099,8 +1099,9 @@ func (u *ui) refreshShared() {
 				if list, err := sh.List(ctx, id); err == nil {
 					for _, s := range list {
 						if !own[s.Fingerprint] {
-							v := e.dir.verifiedAdded[s.Fingerprint]
-							rows = append(rows, components.RecipientRow{Label: s.Label, Type: s.Type, Fingerprint: s.Fingerprint, Verified: v, VerifiedBy: e.dir.verifiedBy(v)})
+							row := components.RecipientRow{Label: s.Label, Type: s.Type, Fingerprint: s.Fingerprint}
+							e.dir.decorate(&row, true)
+							rows = append(rows, row)
 						}
 					}
 				}
@@ -1167,7 +1168,8 @@ func (u *ui) encPeople() xango.Node {
 			props.Draft, props.Confirm = e.draft, e.confirm
 			if strings.TrimSpace(e.draft) != "" {
 				if r, err := parseRecipient(e.draft); err == nil {
-					props.Parsed = &components.RecipientRow{Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint, Verified: e.dir.verified[r.Fingerprint], VerifiedBy: e.dir.verifiedBy(e.dir.verified[r.Fingerprint])}
+					props.Parsed = &components.RecipientRow{Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint}
+					e.dir.decorate(props.Parsed, false)
 				} else {
 					props.ParseError = err.Error()
 				}
@@ -1187,6 +1189,7 @@ func (u *ui) encPeople() xango.Node {
 						return err
 					}
 					e.dir.verifiedAdded[r.Fingerprint] = e.dir.verified[r.Fingerprint]
+					e.dir.marksAdded[r.Fingerprint] = e.dir.marks[r.Fingerprint]
 					e.draft, e.confirm, e.sharedFor = "", "", ""
 					return nil
 				})(ctx)

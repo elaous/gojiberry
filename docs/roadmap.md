@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-6 of 10 since the last full run (#129, #130, #131, #132, #133, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
+7 of 10 since the last full run (#129, #130, #131, #132, #133, #134, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -487,7 +487,7 @@ a way to avoid hitting the limit meanwhile.
     would not survive that either. Revisit if the showcase moves to a store with room to spare (IndexedDB or OPFS):
     then spill the recorder's originals to an `encstore-undo/` area there, counted in `checkRoom`, deleted on
     commit and on `Recover`. The residual limit stays documented in `encryption-and-passkeys.md`.
-21. **Directory publish in the showcase and the pick UI. Slices 1 to 3 done; 4 open.** Slice 1 (#132): the
+21. **Directory publish in the showcase and the pick UI. Done (4 slices: #132, #133, #134, this PR).** Slice 1 (#132): the
     showcase's `dirclient` is a thin view over `directoryclient`, and "Publish my keys" proves possession by opening
     the server's challenge with the unlocked key's identity (`encstore.Store.IdentityFor`). Slice 2 (this PR): the
     owner key. The People tab's directory settings can check the address (`GET /auth/me` for who the server knows
@@ -502,10 +502,16 @@ a way to avoid hitting the limit meanwhile.
     and "Watch my address" reads the log through `WatchLog`, keeps the position and what lookups saw across reloads
     (`localStorage`, per directory), and lists entries made by somebody else or breaking the owner rules; the list
     stays until dismissed, a log that was cut back or rewritten is said in words, and a damaged saved position is
-    dropped and said. Tests: `TestWatchMyAddress` natively and `TestWatchMyDirectoryEntry` in the browser. Open:
-    (4) the marks for other people's rows in the picker (`OwnerSigned`, `OwnerUnpinned`, `OwnerFirstSeen`, with a
-    way to pin someone's owner key after comparing it out of band), then rotating and resetting the owner key.
-    Avoid: publish from `examples/people-keys-demo`.
+    dropped and said. Tests: `TestWatchMyAddress` natively and `TestWatchMyDirectoryEntry` in the browser. Slice 4 (this PR): other people's rows. The picker now carries the marks the client proved itself (the
+    key's own attestation; "signed by its owner" only when the owner key is one the person confirmed), never the
+    directory's word alone. When a row is signed by an owner key nobody confirmed (first seen, seen again, or
+    changed), "Owner keys to confirm" shows the key's fingerprint and why, and a button that asks the person to
+    compare it with its owner another way before pinning it; the pins are kept per directory and the lookup is
+    redone, so the row earns the mark. Tests: `TestOwnerMarksOfOtherPeoplesRows` natively and
+    `TestConfirmAnotherPersonsOwnerKey` in the browser. **Item 21 is done.** Left, small: rotating and resetting
+    the owner key from the page (`Rotate`, `RequestReset`), and the component's note for an unconfirmed row
+    ("not signed by the owner key") is worded for a key published before the owner key existed, which is not the
+    reason here.
 22. **Done (this PR): `walk()` searches every link.** Was: it took the first link whose `From` matched and whose
     signer was in the list, with no backtracking, so a dead-end first match could hide a reachable link and an
     unlock could fail after many key changes. Now it searches depth first over all links out of each list with a

@@ -1375,8 +1375,10 @@ cannot be opened.
         a backup, restorable from one (checked against the enrolled keys) and forgettable, and "Publish my keys" signs
         with it. **Watching:** the person pins the log keys the server states (trust on first use: it shows the server
         stays consistent with itself, not that it is the one meant), and "Watch my address" runs `WatchLog`, keeps the
-        position across reloads and lists what somebody else did to the address until dismissed. *Left:* the marks for
-        other people's rows (`OwnerSigned`, `OwnerUnpinned`), and rotating the key. The demo `examples/people-keys-demo` has the whole flow.
+        position across reloads and lists what somebody else did to the address until dismissed. **Other people's rows** carry
+        the marks the client proved itself; one signed by an owner key nobody confirmed is listed under "Owner keys to
+        confirm" with the key's fingerprint, and the person can pin it after comparing it another way (kept per
+        directory). *Left:* rotating and resetting the owner key from the page. The demo `examples/people-keys-demo` has the whole flow.
       - **Left (residual limits).** The trust limits of the key list are above. A `SeqFloor` here lasts the page
         (`encrypt.MemorySeqFloor`, which cannot degrade, so the showcase does not need `SetFloorDegradedHandler`: a
         host that moves to `LocalStorageSeqFloor` must set it or poll `Err()`). One local passkey per origin, two

@@ -70,6 +70,16 @@ var ErrNoLogKeys = errors.New("no log keys are pinned for this directory")
 // seen: the server cut it back or rewrote it.
 var ErrLogRewritten = errors.New("the log was cut back or rewritten since the last look")
 
+// OwnerPubFingerprint is the fingerprint of an owner public key as shown in Key.OwnerPub, "" if it
+// cannot be read.
+func OwnerPubFingerprint(pub string) string {
+	k, err := encrypt.ParseOwnerPub(pub)
+	if err != nil {
+		return ""
+	}
+	return encrypt.OwnerFingerprint(k)
+}
+
 // Enrollment is what the server says of an address's owner keys.
 type Enrollment struct {
 	// Enrolled: the address has an owner key.
@@ -89,6 +99,39 @@ type Key struct {
 	Verified bool `json:"verified"`
 	// Held: whoever published the key opened a challenge sent to it (proof of possession).
 	Held bool `json:"held"`
+	// Attested: the key's own signature binds it to the address, checked here.
+	Attested bool `json:"-"`
+	// OwnerEnrolled: the address has an owner key. OwnerSigned: this client checked that the
+	// owner key signed this row AND that key is one it holds for the address from before (never
+	// the server's word alone). Owner says, for a row that carries owner evidence, what is known of
+	// the key that signed it; OwnerPub is that key.
+	OwnerEnrolled, OwnerSigned bool `json:"-"`
+	Owner                      OwnerState
+	OwnerPub                   string `json:"-"`
+}
+
+// OwnerState says what this client knows of the owner key that signed a row.
+type OwnerState string
+
+const (
+	// OwnerNone: the row carries no owner evidence.
+	OwnerNone OwnerState = ""
+	// OwnerPinned: the key is one somebody confirmed for the address (OwnerSigned).
+	OwnerPinned OwnerState = "pinned"
+	// OwnerUnpinned: the signature verifies under the key in the row, but nothing held before ties
+	// that key to the address's owner: the server's word.
+	OwnerUnpinned OwnerState = "unpinned"
+	// OwnerFirstSeen: the same key an earlier lookup showed first: consistent, not confirmed.
+	OwnerFirstSeen OwnerState = "first-seen"
+	// OwnerChanged: another key than the pinned (or first seen) one signed the row.
+	OwnerChanged OwnerState = "changed"
+	// OwnerDowngraded: the row lost the owner evidence it carried before.
+	OwnerDowngraded OwnerState = "downgraded"
+)
+
+// NeedsConfirming says the person should compare OwnerPub with its owner and confirm it.
+func (s OwnerState) NeedsConfirming() bool {
+	return s == OwnerUnpinned || s == OwnerFirstSeen || s == OwnerChanged
 }
 
 // Directory is what the page needs of a key directory.
@@ -117,6 +160,12 @@ type Directory interface {
 	// it. A state that cannot be read is dropped (ErrBadState) and the next run is a first look.
 	State() string
 	LoadState(raw string) error
+	// PinOwner remembers ownerPub (as shown in Key.OwnerPub) as the owner key of email, after the
+	// person compared its fingerprint with its owner another way. Pins returns all pins, and
+	// LoadPins restores them (for the page to keep).
+	PinOwner(email, ownerPub string)
+	Pins() map[string]string
+	LoadPins(map[string]string)
 	// Pin tells the client that owner is the key somebody confirmed for the address (it enrolled
 	// it, or the person restored it from a backup), so rows signed by it can be told from rows
 	// signed by another.
@@ -338,6 +387,34 @@ func (c *Client) Watch(ctx context.Context, email string, owner OwnerKey) (Watch
 	return out, nil
 }
 
+// PinOwner implements Directory.
+func (c *Client) PinOwner(email, ownerPub string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pinsLocked().Set(email, ownerPub)
+}
+
+// Pins implements Directory.
+func (c *Client) Pins() map[string]string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make(map[string]string, len(c.pins))
+	for k, v := range c.pins {
+		out[k] = v
+	}
+	return out
+}
+
+// LoadPins implements Directory.
+func (c *Client) LoadPins(m map[string]string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pins = directoryclient.MemoryPins{}
+	for k, v := range m {
+		c.pins.Set(k, v)
+	}
+}
+
 // Pin implements Directory.
 func (c *Client) Pin(email string, owner OwnerKey) {
 	c.mu.Lock()
@@ -464,7 +541,24 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 	}
 	out := make([]Key, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, Key{Key: r.Key, Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint, Verified: r.Verified, Held: r.Held})
+		k := Key{Key: r.Key, Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint, Verified: r.Verified, Held: r.Held,
+			Attested: r.AttestationVerified, OwnerEnrolled: r.OwnerEnrolled, OwnerSigned: r.OwnerSigned}
+		if r.Owner != nil {
+			k.OwnerPub = r.Owner.Pub
+			switch {
+			case r.OwnerChanged:
+				k.Owner = OwnerChanged
+			case r.OwnerPinned:
+				k.Owner = OwnerPinned
+			case r.OwnerFirstSeen:
+				k.Owner = OwnerFirstSeen
+			case r.OwnerUnpinned:
+				k.Owner = OwnerUnpinned
+			}
+		} else if r.OwnerDowngraded {
+			k.Owner = OwnerDowngraded
+		}
+		out = append(out, k)
 	}
 	return out, nil
 }
