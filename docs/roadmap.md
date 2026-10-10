@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-6 of 10 since the last full run (#140 to #144, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+7 of 10 since the last full run (#140 to #145, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -513,8 +513,8 @@ a way to avoid hitting the limit meanwhile.
     owner key. The People tab's directory settings can check the address (`GET /auth/me` for who the server knows
     the account as, then the enrollment), make and enroll an owner key, show it for a backup (shown and downloadable,
     with a warning), restore from a backup (checked against the address's enrolled keys, so a stranger's key is
-    refused), and forget it in this browser. It is kept per directory in `localStorage` (the demo does the same);
-    wrapping it with the passkey costs a prompt per signature and is left as an option. "Publish my keys" signs with
+    refused), and forget it in this browser. It was first kept per directory in `localStorage` (the demo does the same); since item 89 it is
+    a non-extractable browser key in IndexedDB where the browser can (see there). "Publish my keys" signs with
     it when it is held, and an address that has an owner key but is not held here gets a message that says to
     restore it. Tests: `dirclient` natively (`TestOwnerKeyEnrollmentAndSignedPublish`) and
     `TestOwnerKeyForMyDirectoryEntry` in the browser. Slice 3 (this PR): watching the address. The person pins the log keys the server states (after a
@@ -1168,10 +1168,14 @@ unless stated.
     unlocked key and returned up to 1 KiB of it to the directory, so a malicious or compromised directory could have
     read the start of any envelope made for that key (a stored document's, say) by presenting it as a challenge. It
     now reads only a nonce's length and refuses anything that is not exactly a nonce (`ErrNotAChallenge`), sending
-    nothing back (`TestOpenChallengeIsNotADecryptionOracle`). **Open:** (1) the showcase's owner key and the
-    directory session token sit in `localStorage`, readable by any script on the origin (XSS, an extension): keep the
-    owner key as a non-extractable WebCrypto key in IndexedDB (it can still sign while the page lives but cannot be
-    copied out) or wrap it with the passkey; (2) the log keys are pinned on first use, so a hostile server on the first
+    nothing back (`TestOpenChallengeIsNotADecryptionOracle`). **Open:** (1) ~~the showcase's owner key in `localStorage`~~ **fixed (this PR)**: it is now a
+    non-extractable WebCrypto Ed25519 key in IndexedDB (the directory client signs through a `crypto.Signer`, so it
+    never needs the key's bytes: `encrypt.SignOwnerOpWith`, `SignOwnerPublishWith`, `directoryclient.OwnerSigner`), so
+    a script in the page can ask it to sign while the page is open but cannot copy it away. Its backup is shown once,
+    when it is made; a key an earlier page kept as text is moved on the next visit; a browser without Ed25519 in
+    WebCrypto falls back to text and the panel says so. Still in `localStorage`: the directory session token typed
+    into the page (it belongs to the provider session, which the person can end), and a signature is still possible
+    for as long as a hostile script runs in the page; (2) the log keys are pinned on first use, so a hostile server on the first
     visit is trusted: show the key IDs and ask the person to compare them out of band, or accept pasted keys; (3) the
     expiry race is closed to the content, not to a save with identical bytes; (4) an S3-compatible service that
     ignores `If-Match` on delete would delete a changed document (the doc says so; there is no live endpoint here

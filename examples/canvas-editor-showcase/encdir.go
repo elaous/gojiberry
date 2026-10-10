@@ -48,6 +48,8 @@ type dirUI struct {
 	offer, refused string
 	// ask is the page's confirmation dialog (Asker.AskWith).
 	ask func(label, message string, do func())
+	// render draws the page again (set by the page); the owner key is loaded in the background.
+	render func()
 
 	email    string
 	rows     []components.DirRow

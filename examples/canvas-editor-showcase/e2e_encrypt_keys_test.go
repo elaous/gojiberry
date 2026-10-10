@@ -525,11 +525,20 @@ func TestOwnerKeyForMyDirectoryEntry(t *testing.T) {
 	d.WaitSelector("#dir-owner-backup-box")
 	secret := d.Str(`document.querySelector('#dir-owner-secret').value`)
 	d.OK(secret != "" && d.Has("#dir-owner-backup-warning"), "the new key is shown for a backup, with its warning")
-	d.OK(d.Str(`localStorage.getItem('showcase-enc:owner:' + '`+site.URL+`') || ''`) != "", "and kept for this directory")
+	// kept as a key the page cannot copy out: no text in localStorage, and the stored key refuses to be exported
+	d.OK(d.Str(`localStorage.getItem('showcase-enc:owner:' + '`+site.URL+`') || ''`) == "", "no copy of the owner key as text")
+	d.OK(strings.Contains(d.Text("#dir-owner-storage"), "cannot be copied"), "and the panel says so: "+d.Text("#dir-owner-storage"))
+	d.OK(d.Str(storedOwnerKeyProbe(site.URL)) == "non-extractable, export refused", "the stored key is non-extractable: "+d.Str(storedOwnerKeyProbe(site.URL)))
 
-	// signed publish works
+	// signed publish works (the browser signs with the key it will not hand over)
 	d.Click(".gj-recip-publish")
 	d.WaitFor("published", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
+
+	// the backup is shown once: hiding it asks, and then it cannot be shown again
+	d.Click("#dir-owner-hide")
+	confirmDialog(d)
+	d.WaitFor("hidden", `!document.querySelector('#dir-owner-backup-box')`)
+	d.OK(d.Bool(`document.querySelector('#dir-owner-backup').disabled`) && d.Has("#dir-owner-nobackup"), "the backup cannot be shown again, and the panel says why")
 
 	// forget it: the directory now refuses, and the message says what to do
 	d.Click("#dir-owner-forget")
@@ -554,6 +563,18 @@ func TestOwnerKeyForMyDirectoryEntry(t *testing.T) {
 	d.WaitFor("restored", `(document.querySelector('#dir-owner-state') || {textContent: ''}).textContent.includes('this browser holds it')`)
 	d.Click(".gj-recip-publish")
 	d.WaitFor("published again", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
+
+	// the restored key is also kept out of reach, and is there after a reload (from IndexedDB)
+	d.OK(d.Str(storedOwnerKeyProbe(site.URL)) == "non-extractable, export refused", "the restored key is non-extractable")
+	d.Reload()
+	d.Click(`button[data-tab="people"]`)
+	d.WaitFor("the key loaded after a reload", `(document.querySelector('#dir-owner-storage') || {textContent: ''}).textContent.includes('cannot be copied')`)
+	d.OK(d.Str(`localStorage.getItem('showcase-enc:owner:' + '`+site.URL+`') || ''`) == "", "with no text in localStorage")
+	// forgetting removes it
+	d.Click("#dir-owner-forget")
+	confirmDialog(d)
+	d.WaitSelector("#dir-owner-restore-open")
+	d.OK(d.Str(storedOwnerKeyProbe(site.URL)) == "none", "forgetting removes the stored key: "+d.Str(storedOwnerKeyProbe(site.URL)))
 	d.NoErrors()
 }
 
@@ -761,4 +782,87 @@ func TestNoAccessibilityViolationsAxeInTheKeyDirectory(t *testing.T) {
 	d.Click("#dir-log-watch")
 	d.WaitFor("checked", `(document.querySelector('#dir-log-msg') || {textContent: ''}).textContent.includes('checked up to entry')`)
 	check("after watching")
+}
+
+// storedOwnerKeyProbe is a JavaScript expression (it awaits) that says what is stored for the owner key
+// of the directory at url: "none", "extractable", or "non-extractable, export refused".
+func storedOwnerKeyProbe(url string) string {
+	return `new Promise(resolve => {
+		const open = indexedDB.open('gojiberry-showcase-owner', 1);
+		open.onupgradeneeded = () => open.result.createObjectStore('keys', {keyPath: 'id'});
+		open.onerror = () => resolve('no database');
+		open.onsuccess = () => {
+			const get = open.result.transaction('keys', 'readonly').objectStore('keys').get(` + "`" + url + "`" + `);
+			get.onerror = () => resolve('read failed');
+			get.onsuccess = async () => {
+				const rec = get.result;
+				if (!rec) { resolve('none'); return; }
+				if (rec.key.extractable) { resolve('extractable'); return; }
+				try { await crypto.subtle.exportKey('pkcs8', rec.key); resolve('exported'); }
+				catch (e) { resolve('non-extractable, export refused'); }
+			};
+		};
+	})`
+}
+
+// Where the browser cannot sign with Ed25519 through WebCrypto the owner key is kept as text, and the
+// panel says what that means; a backup can then be shown at any time, and the key still signs.
+func TestOwnerKeyFallsBackToTextWhereWebCryptoHasNoEd25519(t *testing.T) {
+	site := e2etest.NewSite(t)
+	site.UseLocalhost()
+	srv, err := demoserver.New(site.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	site.Handle("/auth/", srv.Mux)
+	site.Handle("/directory/", srv.Mux)
+	site.Handle("/demo/", srv.Mux)
+
+	d := site.OpenURL(t, "/index.html?docstore="+url.QueryEscape(site.URL))
+	d.VirtualAuthenticator()
+	// a browser without Ed25519: importing the key is refused
+	d.Eval(`(crypto.subtle.importKey = () => Promise.reject(new DOMException('no Ed25519', 'NotSupportedError')), 1)`, nil)
+	turnOn(t, d, "")
+	d.Click(`button[data-tab="people"]`)
+	d.WaitSelector("#dir-offer")
+	d.Click("#dir-offer-review")
+	confirmDialog(d)
+	d.WaitSelector("#dir-owner-enroll")
+	d.Click("#dir-owner-enroll")
+	d.WaitFor("enrolled", `(document.querySelector('#dir-owner-state') || {textContent: ''}).textContent.includes('this browser holds it')`)
+	d.OK(d.Str(`localStorage.getItem('showcase-enc:owner:' + '`+site.URL+`') || ''`) != "", "kept as text")
+	d.OK(strings.Contains(d.Text("#dir-owner-storage"), "cannot keep the owner key out of reach"), "and the panel says so: "+d.Text("#dir-owner-storage"))
+	d.OK(d.Str(storedOwnerKeyProbe(site.URL)) == "none", "nothing in IndexedDB")
+	// the backup can be hidden and shown again
+	d.Click("#dir-owner-hide")
+	d.WaitFor("hidden", `!document.querySelector('#dir-owner-backup-box')`)
+	d.Click("#dir-owner-backup")
+	d.WaitSelector("#dir-owner-secret")
+	// and the key signs
+	d.Click(".gj-recip-publish")
+	d.WaitFor("published", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
+	d.NoErrors()
+}
+
+// An owner key an earlier version of the page kept as text is moved, on the next visit, to a key the
+// page cannot copy out, and the text is removed.
+func TestOwnerKeyKeptAsTextIsMovedOutOfReach(t *testing.T) {
+	site := e2etest.NewSite(t)
+	site.UseLocalhost()
+	d := site.OpenURL(t, "/index.html")
+	k, err := dirclient.GenerateOwnerKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := `{"email":"ana@example.com","key":"` + dirclient.ExportOwnerKey(k) + `"}`
+	d.Eval(`(() => {
+		localStorage.setItem('showcase-enc:docstore', `+"`"+site.URL+"`"+`);
+		localStorage.setItem('showcase-enc:docstore-ok', `+"`"+site.URL+"`"+`);
+		localStorage.setItem('showcase-enc:owner:' + `+"`"+site.URL+"`"+`, `+"`"+rec+"`"+`);
+		return 1;
+	})()`, nil)
+	d.Reload()
+	d.WaitFor("the key moved", `localStorage.getItem('showcase-enc:owner:' + `+"`"+site.URL+"`"+`) === null`)
+	d.OK(d.Str(storedOwnerKeyProbe(site.URL)) == "non-extractable, export refused", "now kept out of reach: "+d.Str(storedOwnerKeyProbe(site.URL)))
+	d.NoErrors()
 }

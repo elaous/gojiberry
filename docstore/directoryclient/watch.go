@@ -198,7 +198,7 @@ type WatchReport struct {
 type WatchOptions struct {
 	// Owner is the watcher's owner key, if the address is enrolled: entries it signed are the
 	// watcher's own (made on another device, say).
-	Owner OwnerKey
+	Owner OwnerSigner
 	// ResetWait is the shortest wait the audit accepts between a reset request and its taking
 	// effect (24 hours when 0).
 	ResetWait time.Duration
@@ -583,7 +583,7 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 		// being withheld. Without the owner key, or when the directory itself says the address
 		// is not enrolled (reported as a violation above), a filtered answer is what any other
 		// caller gets. Nothing is remembered from a run that ends here.
-		if filtered && audit.Enrolled && enr.Enrolled && opt.Owner != nil {
+		if filtered && audit.Enrolled && enr.Enrolled && ownerSet(opt.Owner) {
 			pub := encrypt.FormatOwnerPub(opt.Owner.Public().(ed25519.PublicKey))
 			for _, k := range audit.OwnerKeys {
 				if k.Pub == pub {
@@ -607,7 +607,7 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	}
 
 	var ownerPub string
-	if opt.Owner != nil {
+	if ownerSet(opt.Owner) {
 		ownerPub = encrypt.FormatOwnerPub(opt.Owner.Public().(ed25519.PublicKey))
 	}
 	for _, e := range rep.Entries {

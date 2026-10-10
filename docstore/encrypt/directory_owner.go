@@ -2,6 +2,7 @@ package encrypt
 
 import (
 	"context"
+	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -87,6 +88,17 @@ func SignOwnerPublish(priv ed25519.PrivateKey, email, fingerprint, label string,
 		Sig: base64.StdEncoding.EncodeToString(ed25519.Sign(priv, OwnerPublishMessageV2(email, fingerprint, LabelHash(CleanLabel(label)), at.Unix(), prev)))}
 }
 
+// SignOwnerPublishWith is SignOwnerPublish for an owner key that cannot be handed over as bytes: any
+// crypto.Signer whose Public is an ed25519.PublicKey, such as a non-extractable browser key. Its
+// Sign is called with the message and crypto.Hash(0), as ed25519 requires.
+func SignOwnerPublishWith(signer crypto.Signer, email, fingerprint, label string, at time.Time, prev string) (docstore.DirectoryOwnerSig, error) {
+	sig, err := signer.Sign(nil, OwnerPublishMessageV2(email, fingerprint, LabelHash(CleanLabel(label)), at.Unix(), prev), crypto.Hash(0))
+	if err != nil {
+		return docstore.DirectoryOwnerSig{}, fmt.Errorf("encrypt: signing with the owner key: %w", err)
+	}
+	return docstore.DirectoryOwnerSig{Time: at.Unix(), Prev: prev, V: 2, Sig: base64.StdEncoding.EncodeToString(sig)}, nil
+}
+
 // verifyOwnerPublishV2 checks a version 2 publication signature.
 func verifyOwnerPublishV2(pub ed25519.PublicKey, email, fingerprint, labelHash string, at int64, prev, sig string) bool {
 	b, err := base64.StdEncoding.DecodeString(sig)
@@ -149,6 +161,15 @@ func ParseLogPosition(s string) (seq int64, hash string, err error) {
 func SignOwnerOp(priv ed25519.PrivateKey, op, email, fingerprint string, at time.Time, prev string) docstore.DirectoryOwnerSig {
 	return docstore.DirectoryOwnerSig{Time: at.Unix(), Prev: prev,
 		Sig: base64.StdEncoding.EncodeToString(ed25519.Sign(priv, OwnerOpMessage(op, email, fingerprint, at.Unix(), prev)))}
+}
+
+// SignOwnerOpWith is SignOwnerOp for any crypto.Signer (see SignOwnerPublishWith).
+func SignOwnerOpWith(signer crypto.Signer, op, email, fingerprint string, at time.Time, prev string) (docstore.DirectoryOwnerSig, error) {
+	sig, err := signer.Sign(nil, OwnerOpMessage(op, email, fingerprint, at.Unix(), prev), crypto.Hash(0))
+	if err != nil {
+		return docstore.DirectoryOwnerSig{}, fmt.Errorf("encrypt: signing with the owner key: %w", err)
+	}
+	return docstore.DirectoryOwnerSig{Time: at.Unix(), Prev: prev, Sig: base64.StdEncoding.EncodeToString(sig)}, nil
 }
 
 func verifyOwner(pub ed25519.PublicKey, op, email, fingerprint string, at int64, prev, sig string) bool {
