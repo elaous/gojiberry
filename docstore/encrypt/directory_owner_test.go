@@ -681,3 +681,24 @@ func TestARetiredOwnerKeyCannotSignAfterItsRotation(t *testing.T) {
 		t.Errorf("%+v", a.Violations)
 	}
 }
+
+func TestAuditNotesASmallClockSkewAndFlagsALargeOne(t *testing.T) {
+	e := newOwnerEnv(t)
+	_, priv := ownerKey(t)
+	e.mustEnroll(priv)
+	at := e.clk.Now()
+
+	// The entry is 3 minutes ahead of the auditor: a note with the measured difference, no violation.
+	got := e.audit(AuditOptions{Now: at.Add(-3 * time.Minute)})
+	if len(got.Violations) != 0 || len(got.Notes) != 1 || got.Notes[0].Ahead < 2*time.Minute || got.Notes[0].Ahead > 4*time.Minute {
+		t.Fatalf("small skew: %+v", got)
+	}
+	// Within the minute nothing is said; past the tolerance it is a violation that names the difference.
+	if got := e.audit(AuditOptions{Now: at.Add(-30 * time.Second)}); len(got.Notes) != 0 || len(got.Violations) != 0 {
+		t.Errorf("within a minute: %+v", got)
+	}
+	got = e.audit(AuditOptions{Now: at.Add(-15 * time.Minute)})
+	if len(got.Violations) != 1 || !strings.Contains(got.Violations[0].Why, "ahead of the auditor") {
+		t.Errorf("large skew: %+v", got)
+	}
+}
