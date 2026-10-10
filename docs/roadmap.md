@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-0 of 10 since the last full run (the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
+1 of 10 since the last full run (this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -463,10 +463,13 @@ a way to avoid hitting the limit meanwhile.
     when `Delete` succeeds. Still inexact, by design: a snapshot written or deleted by a path that does not go through
     this `ExpiringAdapter` (`NoteVersionWrite` after the fact, a delete inside a document purge) is counted or
     subtracted by the next reconcile. `docstore/expiry.go`, `docstore/public/service.go`, `guardrails.go`.
-18. **`OnSave` auto-wiring, the real remainder.** `docstore/public/service.go` already wires
-    `ExpiringAdapter.OnSave` when the store is an `*ExpiringAdapter`. Left: a Service built after the adapter is
-    already in use (the hook is set at construction), and stores wrapped so they are not an `*ExpiringAdapter`.
-    Plan: build the Service first, or expose the hook through the wrapper. Avoid: call `NoteVersionWrite` by hand.
+18. **Done (this PR): a store that wraps the `ExpiringAdapter` can name it.** Was: the public service put its
+    snapshot hooks only on a bare `*docstore.ExpiringAdapter`; `New` accepts any `docstore.Expirer`, so a wrapper
+    got no hooks and its snapshots were neither refused over the budget nor counted until a sweep, silently.
+    Now a wrapper implements `public.ExpiringHolder` (`Expiring() *docstore.ExpiringAdapter`) and gets them; a
+    store that is neither logs a line saying so. Still true, and documented on the hooks: they are plain fields
+    set when the `Service` is built, so build the `Service` before the adapter serves requests (setting them under
+    load would race). `docstore/public/service.go`.
 19. **#85 minors:** report dedupe key (reporter and category only), old env-var warning, slow-upload rate
     floor, wide-cap migration note. Plan: one small change each. Avoid: see the upgrade notes in
     [public-docstore.md](public-docstore.md#75-what-is-left) 7.5 item 6.

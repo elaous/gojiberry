@@ -1238,3 +1238,27 @@ func TestVersionSnapshotIsRefusedOverTheBudgetAndSubtractedWhenDeleted(t *testin
 		t.Fatalf("after the delete: %v", err)
 	}
 }
+
+// A store that wraps the ExpiringAdapter and names it (ExpiringHolder) gets the snapshot hooks too.
+type holder struct{ *docstore.ExpiringAdapter }
+
+func (h holder) Expiring() *docstore.ExpiringAdapter { return h.ExpiringAdapter }
+
+func TestAWrappedExpiringAdapterGetsTheSnapshotHooksThroughExpiringHolder(t *testing.T) {
+	e := newEnv(t, func(o *Options) {
+		o.Config.MaxTotalBytes = 100
+		o.Store = holder{o.Store.(*docstore.ExpiringAdapter)}
+	})
+	a, _ := e.session()
+	d := e.create(a, strings.Repeat("a", 60))
+	err := e.store.Save(context.Background(), versionsKeyPrefix+d.ID+"/1.open", bytes.Repeat([]byte("v"), 50))
+	if !errors.Is(err, docstore.ErrStorageFull) {
+		t.Fatalf("a snapshot over the budget through a wrapped store: %v", err)
+	}
+	if err := e.store.Save(context.Background(), versionsKeyPrefix+d.ID+"/2.open", bytes.Repeat([]byte("v"), 40)); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.svc.Health().StorageBytes; got != 100 {
+		t.Fatalf("StorageBytes = %d, want 100", got)
+	}
+}
