@@ -1370,9 +1370,11 @@ cannot be opened.
         be allowed to call the server (same origin, or CORS on the server).
         **Proof of possession** is wired: "Publish my keys" opens the server's challenge with the private side of each
         unlocked key (`encstore.Store.IdentityFor`), so the entry says the key was held; a locked key, or a server that
-        wants an owner-signed entry, gets a message that says so. *Left:* the owner-signed entry of the signed
-        directory (#84: the owner key, pins, `WatchLog`), which the showcase does not do yet; it shows no
-        "owner-signed" mark. The demo `examples/people-keys-demo` has the whole flow.
+        wants an owner-signed entry, gets a message that says so. The **owner key** of the person's address can be made
+        and enrolled from the directory settings (`encowner.go`): it is kept per directory in `localStorage`, shown for
+        a backup, restorable from one (checked against the enrolled keys) and forgettable, and "Publish my keys" signs
+        with it. *Left:* the watch state and log keys across reloads (`WatchLog`), the marks for other people's rows
+        (`OwnerSigned`, `OwnerUnpinned`), and rotating the key. The demo `examples/people-keys-demo` has the whole flow.
       - **Left (residual limits).** The trust limits of the key list are above. A `SeqFloor` here lasts the page
         (`encrypt.MemorySeqFloor`, which cannot degrade, so the showcase does not need `SetFloorDegradedHandler`: a
         host that moves to `LocalStorageSeqFloor` must set it or poll `Err()`). One local passkey per origin, two

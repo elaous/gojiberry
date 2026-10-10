@@ -90,3 +90,67 @@ func TestDirectoryClientAgainstTheDemoServer(t *testing.T) {
 	}
 	var _ Directory = nd
 }
+
+// The owner key: who the server says I am, enrolling, an address that then wants its signature,
+// an entry signed by it, and a second enrollment refused.
+func TestOwnerKeyEnrollmentAndSignedPublish(t *testing.T) {
+	ctx := context.Background()
+	var srv *demoserver.Server
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { srv.Mux.ServeHTTP(w, r) }))
+	ts.Start()
+	defer ts.Close()
+	var err error
+	srv, err = demoserver.New(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := srv.Login("Cy@Example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &Client{Base: ts.URL, Token: func(context.Context) (string, error) { return tok, nil }}
+	me, err := c.Me(ctx)
+	if err != nil || me != "cy@example.com" {
+		t.Fatalf("me = %q, %v", me, err)
+	}
+	if _, err := (&Client{Base: ts.URL}).Me(ctx); !errors.Is(err, ErrSignInRequired) {
+		t.Fatalf("anonymous me: %v", err)
+	}
+	if e, err := c.Enrollment(ctx, me); err != nil || e.Enrolled {
+		t.Fatalf("before: %+v %v", e, err)
+	}
+	owner, err := GenerateOwnerKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Enroll(ctx, me, owner); err != nil {
+		t.Fatal(err)
+	}
+	e, err := c.Enrollment(ctx, me)
+	if err != nil || !e.Enrolled || len(e.Fingerprints) != 1 || e.Fingerprints[0] != OwnerFingerprint(owner) {
+		t.Fatalf("after: %+v %v", e, err)
+	}
+	// the backup text restores the same key
+	back, err := ImportOwnerKey("  " + ExportOwnerKey(owner) + "\n")
+	if err != nil || OwnerFingerprint(back) != OwnerFingerprint(owner) {
+		t.Fatalf("backup: %v", err)
+	}
+	if _, err := ImportOwnerKey("not a key"); err == nil {
+		t.Fatal("garbage read as an owner key")
+	}
+	// the address wants the signature now; with it the entry goes in
+	pub, secret, _ := encrypt.GenerateRecoveryKey()
+	id, _ := encrypt.ParseAgeIdentity(secret)
+	if _, err := c.Publish(ctx, PublishRequest{Email: me, Key: pub, Identity: id}); !errors.Is(err, ErrOwnerRequired) {
+		t.Fatalf("unsigned publish on an enrolled address: %v", err)
+	}
+	k, err := c.Publish(ctx, PublishRequest{Email: me, Key: pub, Label: "Cy", Identity: id, Owner: back})
+	if err != nil || !k.Verified || !k.Held {
+		t.Fatalf("signed publish: %+v %v", k, err)
+	}
+	// a second owner key cannot be enrolled over the first
+	other, _ := GenerateOwnerKey()
+	if err := c.Enroll(ctx, me, other); !errors.Is(err, ErrAlreadyEnrolled) {
+		t.Fatalf("second enroll: %v", err)
+	}
+}
