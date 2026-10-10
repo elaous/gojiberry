@@ -14,7 +14,7 @@ type Tab struct {
 type TabsProps struct {
 	Tabs     []Tab
 	Active   int             // index into Tabs of the currently shown tab
-	OnSelect func(index int) // called when a tab button is clicked
+	OnSelect func(index int) // called when a tab is clicked, or reached with the arrow keys, Home or End
 }
 
 // Tabs renders a tab strip plus the active tab's content. The caller
@@ -34,10 +34,11 @@ func Tabs(props TabsProps) xango.Node {
 			xango.A("type", "button"),
 			xango.A("role", "tab"),
 			xango.A("aria-selected", boolAttr(active)),
+			TabIndex(active),
 		}
 		if props.OnSelect != nil {
 			index := i
-			attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnSelect(index) }))
+			attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnSelect(index) }), TabKeys(index, len(props.Tabs), props.OnSelect))
 		}
 		buttons = append(buttons, xango.El("button", attrs, xango.Text(t.Label)))
 	}
