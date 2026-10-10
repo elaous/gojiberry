@@ -118,6 +118,31 @@ func TestWatchLogRefusesAFilteredAnswerForAnEnrolledAddress(t *testing.T) {
 	}
 }
 
+// Item 24: the audit of this run's own entries also counts. A first run (nothing saved) over a
+// filtered answer that holds the address's enrollment is refused, and nothing is remembered; an
+// address that is not enrolled is still read filtered.
+func TestWatchLogRefusesAFilteredAnswerWhenTheAuditFindsTheEnrollment(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	c := e.client(ana)
+	owner, _ := GenerateOwnerKey()
+	if _, err := c.Enroll(ctx, "ana@x.io", owner); err != nil {
+		t.Fatal(err)
+	}
+	filt := &Client{BaseURL: c.BaseURL, Token: c.Token, LogKeys: c.LogKeys, HTTP: logRewriter(func(m map[string]any) { m["filtered"] = true })}
+	var st WatchState
+	if _, err := filt.WatchLog(ctx, "ana@x.io", &st, WatchOptions{Owner: owner}); !errors.Is(err, ErrFilteredEnrolled) {
+		t.Fatalf("a first filtered run over an enrollment: %v", err)
+	}
+	if st.Seq != 0 || st.Enrolled || len(st.Pending) != 0 {
+		t.Fatalf("the refused run remembered something: %+v", st)
+	}
+	// the honest, whole read of the same log is fine
+	if _, err := c.WatchLog(ctx, "ana@x.io", &WatchState{}, WatchOptions{Owner: owner}); err != nil {
+		t.Fatalf("the whole log: %v", err)
+	}
+}
+
 // S2: the number of an operation is the server's word. The entry there must be what the client did,
 // or it is not the client's, and its pseudonym is not pinned.
 func TestWatchLogHoldsMadeEntriesToWhatTheClientDid(t *testing.T) {

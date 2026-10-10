@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-8 of 10 since the last full run (#129, #130, #131, #132, #133, #134, #135, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
+9 of 10 since the last full run (#129, #130, #131, #132, #133, #134, #135, #136, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -522,8 +522,14 @@ a way to avoid hitting the limit meanwhile.
     and the half that loaded hid what the other half would have caught. Now `directoryclient.ParseWatchState` returns
     the zero state and `ErrBadWatchState` for anything that does not decode, and the demo forgets the stored value and
     says the next check starts from scratch. Any host that keeps `WatchState` should load it with `ParseWatchState`.
-24. **`ErrFilteredEnrolled` should also check `audit.Enrolled` after the audit.** Plan: add the check; it must not
-    fire for a legitimately filtered non-owner caller. Avoid: use a full read for an address that may be enrolled.
+24. **Done (this PR): `ErrFilteredEnrolled` also counts the enrollment this run's audit finds.** Was: `WatchLog`
+    refused a filtered answer only when the saved state already said the address was enrolled, so a first run (or a run
+    whose new entries held the enrollment) accepted a log that an enrolled address's owner should never be shown
+    filtered. Now, after the audit and the cross-check with the directory's own enrollment record, a filtered answer
+    is refused when the audit finds the address enrolled, the directory agrees, and the watcher holds one of the
+    address's owner keys (`WatchOptions.Owner`); nothing is remembered from that run. It does not fire for a caller
+    without the owner key (a filtered log is what anybody else gets), nor when the directory says the address is not
+    enrolled (that is the existing violation). `docstore/directoryclient/watch.go`.
 25. **protobuf is still an indirect dependency through the lint tool.** Plan: update or replace the tool.
     Avoid: none needed at runtime.
 26. **Done: committed binaries in history.** The git history was rewritten in 2026-10 and the seven binaries are gone
