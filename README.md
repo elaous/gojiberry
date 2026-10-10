@@ -1929,11 +1929,12 @@ commands that example's own section above documents -- read the
 `Makefile` itself if you want to see precisely what a shortcut expands
 to, or run the commands by hand if you'd rather not use `make` at all.
 
-`make lint`/`make wasm-lint` run `golangci-lint` (tracked as a
-`go.mod` tool dependency -- `tool
-github.com/golangci/golangci-lint/v2/cmd/golangci-lint`, added via `go
-get -tool` rather than a separate global install every contributor has
-to remember) the same native-then-`GOOS=js GOARCH=wasm` way
+`make lint`/`make wasm-lint` run `golangci-lint` (pinned as the tool
+dependency of its own module, `tools/go.mod`, so the linter's large
+dependency tree -- protobuf and prometheus among it -- stays out of the
+library's module graph; the Makefile builds the binary from `tools/`
+and runs it from the repository root, so nobody needs a separate global
+install) the same native-then-`GOOS=js GOARCH=wasm` way
 `vet`/`wasm-vet` already do, both wired into `make check`. `domrt` and
 friends are `js`/`wasm`-only, invisible to a native-only pass, so
 `wasm-lint` covers what `lint` alone can't see; see `.golangci.yml`'s

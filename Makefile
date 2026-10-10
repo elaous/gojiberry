@@ -47,6 +47,8 @@ wasm-vet:
 # NESTED_MODULES is every directory under the root with its own go.mod; modules and
 # lint-modules both walk it, so the list is kept in one place.
 NESTED_MODULES := $(shell git ls-files '*/go.mod' | xargs -n1 dirname)
+# tools holds the linter's pin and no Go code of its own: tidy-checked by `modules`, not linted.
+LINT_MODULES := $(filter-out tools,$(NESTED_MODULES))
 
 # modules checks every nested Go module (each directory under the root with its own
 # go.mod): go.mod and go.sum are tidy, and it vets and tests. The Gio ones need
@@ -57,31 +59,34 @@ modules:
 	@set -e; for mod in $(NESTED_MODULES); do \
 		echo "== $$mod"; \
 		(cd $$mod && go mod tidy -diff && \
-		case "$$mod" in *gio*) GOOS=js GOARCH=wasm go vet ./... ;; *) go vet ./... && go test ./... ;; esac); \
+		case "$$mod" in tools) ;; *gio*) GOOS=js GOARCH=wasm go vet ./... ;; *) go vet ./... && go test ./... ;; esac); \
 	done
 
-# lint/wasm-lint run golangci-lint (tracked as a go.mod tool
-# dependency -- see go.mod's own `tool` line, added via `go get
-# -tool`) the same "native, then GOOS=js GOARCH=wasm" way vet/wasm-vet
+# lint/wasm-lint run golangci-lint (pinned as a tool dependency of its
+# own module, tools/go.mod, so its large dependency tree stays out of
+# the library's module graph) the same "native, then GOOS=js GOARCH=wasm" way vet/wasm-vet
 # already do -- see .golangci.yml's own doc comment for why one pass
 # alone can't see both (domrt and friends are js/wasm-only, invisible
 # to a plain native-build type-check). The wasm pass needs a host-
 # native golangci-lint binary with GOOS/GOARCH set in its own
 # environment, not `go tool` directly -- `go tool` would try to
 # cross-compile the linter itself into wasm and then fail to execute
-# it (wasm isn't directly runnable on the host OS).
+# it (wasm isn't directly runnable on the host OS). The binary is
+# built from tools/ and run from the repository root.
+LINT_PKG = github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+
 .PHONY: lint
 lint:
-	go tool golangci-lint run ./...
+	@bin="$$(mktemp -d)/golangci-lint"; trap 'rm -rf "$$(dirname "$$bin")"' EXIT; \
+	(cd tools && go build -o "$$bin" $(LINT_PKG)) && "$$bin" run ./...
 
 .PHONY: wasm-lint
 wasm-lint:
-	go build -o /tmp/gojiberry-golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint
-	GOOS=js GOARCH=wasm /tmp/gojiberry-golangci-lint run ./...
-	rm -f /tmp/gojiberry-golangci-lint
+	@bin="$$(mktemp -d)/golangci-lint"; trap 'rm -rf "$$(dirname "$$bin")"' EXIT; \
+	(cd tools && go build -o "$$bin" $(LINT_PKG)) && GOOS=js GOARCH=wasm "$$bin" run ./...
 
-# lint-modules runs the same pinned golangci-lint (built once from the root go.mod tool
-# line, as wasm-lint does) inside each nested module, since golangci-lint does not cross
+# lint-modules runs the same pinned golangci-lint (built once from tools/go.mod,
+# as lint and wasm-lint do) inside each nested module, since golangci-lint does not cross
 # module boundaries and `lint`/`wasm-lint` therefore never see them. The binary is called by
 # absolute path from inside each module directory so that module's own go.mod is used, with
 # the root .golangci.yml via an absolute --config. The Gio modules are linted as
@@ -91,8 +96,8 @@ wasm-lint:
 .PHONY: lint-modules
 lint-modules:
 	@set -e; bin="$$(mktemp -d)/golangci-lint"; trap 'rm -rf "$$(dirname "$$bin")"' EXIT; \
-	go build -o "$$bin" github.com/golangci/golangci-lint/v2/cmd/golangci-lint; \
-	for mod in $(NESTED_MODULES); do \
+	(cd tools && go build -o "$$bin" $(LINT_PKG)); \
+	for mod in $(LINT_MODULES); do \
 		echo "== $$mod"; \
 		(cd $$mod && case "$$mod" in *gio*) GOOS=js GOARCH=wasm "$$bin" run --config "$(CURDIR)/.golangci.yml" ./... ;; *) "$$bin" run --config "$(CURDIR)/.golangci.yml" ./... ;; esac); \
 	done

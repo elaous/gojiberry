@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-9 of 10 since the last full run (#129, #130, #131, #132, #133, #134, #135, #136, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
+10 of 10 since the last full run (#129 to #137, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -530,8 +530,13 @@ a way to avoid hitting the limit meanwhile.
     address's owner keys (`WatchOptions.Owner`); nothing is remembered from that run. It does not fire for a caller
     without the owner key (a filtered log is what anybody else gets), nor when the directory says the address is not
     enrolled (that is the existing violation). `docstore/directoryclient/watch.go`.
-25. **protobuf is still an indirect dependency through the lint tool.** Plan: update or replace the tool.
-    Avoid: none needed at runtime.
+25. **Done (this PR): the lint tool no longer drags protobuf into the library's module.** Was: `golangci-lint` was a
+    `tool` line in the root `go.mod`, so its whole tree (protobuf and prometheus through `promlinter`, about 200
+    `go.mod` lines and 950 `go.sum` lines) was in the module graph every user of the library resolves. Updating the
+    tool would not have helped: the dependency is the linter's own. Now it is pinned in `tools/go.mod` (a module
+    with only a `tool` line); `make lint`, `make wasm-lint` and `make lint-modules` build the binary from `tools/`
+    and run it from the root, `make modules` checks that `tools/` is tidy, and the root `go.mod` and three example
+    modules were tidied (`go mod tidy`). `google.golang.org/protobuf` is gone from the root `go.mod`.
 26. **Done: committed binaries in history.** The git history was rewritten in 2026-10 and the seven binaries are gone
     (see [history-rewrite.md](history-rewrite.md)). `.gitignore` now blocks them from coming back. Priority: done.
 
