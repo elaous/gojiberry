@@ -131,17 +131,22 @@ Sources: [encryption-and-passkeys.md](encryption-and-passkeys.md) (called "the d
 10. **Races at the instant of expiry.**
     1. *What:* two server processes on one store can race at the instant of a document's deadline (a
        save in that second may be deleted).
-    2. *Why inherent:* a lock serializes one process, not two. Partly an implementation gap, though:
-       `ExpiringAdapter.purgeLocked` and `Sweep` delete with an unconditional `Inner.Delete` under an
-       in-process lock, so on a store with conditional deletes the race could be closed with `DeleteIf` on
-       the digest that was read (backlog item 10; s3 now has `DeleteIf`, blob cannot). Until then
-       the limit holds on every store.
-    3. *Shipped:* a lock inside a process, and the sweep re-reads the deadline record under it before
-       deleting. Conditional deletes exist today only for the rate-limit sweep (`SweepRateLimits`), the
-       directory adapter and system-record `DeleteIf`, not for document expiry. See
-       [public-docstore.md](public-docstore.md) section 4 ("Residual limits, stated plainly").
-    4. *Who:* the operator runs one process per store, or accepts that a save in the deadline second may
-       be lost.
+    2. *Why inherent:* a lock serializes one process, not two. On a store **without** conditional deletes
+       the limit holds: `ExpiringAdapter` deletes with `Inner.Delete`. On a store **with** `DeleteIf`
+       (memory, files, SQLite, PostgreSQL, MongoDB, S3) it is closed to the content: the expiry (the
+       sweep, and the clearing of an expired document by a save) loads the document, checks the
+       deadline record again, and deletes only the content it loaded (`DeleteIf` on its digest); a
+       document another process saved in between is kept, with its fresh deadline, and the sweep
+       counts nothing deleted. Not closed: a save that writes exactly the same bytes as the expired
+       document (the digest cannot tell it from the old one), and the blob backend, which has no
+       conditional delete.
+    3. *Shipped:* a lock inside a process, the sweep re-reading the deadline record under it, and the
+       conditional delete above (`ExpiringAdapter.deleteExpired`). A user's own delete is
+       unconditional on purpose. See [public-docstore.md](public-docstore.md) section 4 ("Residual limits,
+       stated plainly").
+    4. *Who:* on a store without `DeleteIf` (blob, or an encrypting adapter over a store, which has none for
+       an encrypted id) the operator runs one process per store, or accepts that a save in the deadline
+       second may be lost.
 
 11. **Clock skew between replicas.**
     1. *What:* deadlines and the other time rules are compared with each process's own clock; a replica

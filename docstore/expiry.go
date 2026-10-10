@@ -606,15 +606,69 @@ func (e *ExpiringAdapter) relatedFor(ctx context.Context, id string) (exact, pre
 	return append(own, group...), append(ownP, groupP...), nil
 }
 
+// errRenewed is purgeLocked's answer when another process renewed or changed the document while it
+// was being expired: nothing else was deleted, and the document and its record are as that process
+// left them.
+var errRenewed = errors.New("docstore: the document was renewed while it was being expired")
+
+// deleteExpired deletes the expired document id. On a store with conditional deletes it deletes what
+// it read: the content is loaded, the deadline record is read again (a process that renewed the
+// document before the load shows here), and the delete applies only to the digest loaded, so a
+// save by another process after that is kept (errRenewed). The in-process lock cannot do that:
+// it serializes one process, not two. A store without DeleteIf deletes unconditionally, as before.
+func (e *ExpiringAdapter) deleteExpired(ctx context.Context, id string) (found bool, err error) {
+	cd, ok := e.Inner.(ConditionalDeleter)
+	if !ok {
+		if err := e.Inner.Delete(ctx, id); errors.Is(err, ErrNotFound) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	doc, err := e.Inner.Load(ctx, id)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if t, has, err := e.readRecord(ctx, id); err != nil {
+		return false, err
+	} else if has && !e.expired(t) {
+		return false, errRenewed
+	}
+	switch err := cd.DeleteIf(ctx, id, Digest(doc.Data)); {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, ErrNotFound):
+		return false, nil
+	case errors.Is(err, ErrConflict):
+		return false, errRenewed
+	default:
+		return false, err
+	}
+}
+
 // purgeLocked deletes document id, what Related names and, last, its record. e.mu is held.
 // It reports whether the document itself was there. The record goes last on purpose: a crash or
-// failure anywhere before it leaves the record, so the next Sweep finishes the job.
-func (e *ExpiringAdapter) purgeLocked(ctx context.Context, id string) (bool, error) {
-	found := true
-	if err := e.Inner.Delete(ctx, id); errors.Is(err, ErrNotFound) {
-		found = false
-	} else if err != nil {
-		return false, err
+// failure anywhere before it leaves the record, so the next Sweep finishes the job. With expired
+// set the document is known to be past its deadline and is deleted on the content that was read
+// (deleteExpired): if another process changed it meanwhile, errRenewed, and nothing else is touched.
+func (e *ExpiringAdapter) purgeLocked(ctx context.Context, id string, expired bool) (bool, error) {
+	var found bool
+	if expired {
+		var err error
+		if found, err = e.deleteExpired(ctx, id); err != nil {
+			return false, err
+		}
+	} else {
+		found = true
+		if err := e.Inner.Delete(ctx, id); errors.Is(err, ErrNotFound) {
+			found = false
+		} else if err != nil {
+			return false, err
+		}
 	}
 	if IsDocumentKey(id) || e.Related != nil {
 		exact, prefixes, err := e.relatedFor(ctx, id)
@@ -659,10 +713,18 @@ func (e *ExpiringAdapter) renewed(ctx context.Context, id string, write func() e
 		return err
 	}
 	if had && !now.Before(e.effective(prev)) {
-		if _, err := e.purgeLocked(ctx, id); err != nil {
+		switch _, err := e.purgeLocked(ctx, id, true); {
+		case errors.Is(err, errRenewed):
+			// another process renewed it while this one was clearing it: it is live now, so this
+			// write extends it like any other
+			if prev, had, err = e.readRecordFull(ctx, id); err != nil {
+				return err
+			}
+		case err != nil:
 			return err
+		default:
+			had, prev = false, expiryRecord{}
 		}
-		had, prev = false, expiryRecord{}
 	}
 	ttl, ok := e.Policy.TTL(id, now)
 	if !ok {
@@ -983,7 +1045,7 @@ func (e *ExpiringAdapter) Delete(ctx context.Context, id string) error {
 			size = len(doc.Data)
 		}
 	}
-	found, err := e.purgeLocked(ctx, id)
+	found, err := e.purgeLocked(ctx, id, false)
 	if err != nil {
 		return err
 	}
@@ -1105,8 +1167,10 @@ func (e *ExpiringAdapter) Sweep(ctx context.Context) (deleted int, err error) {
 		cur, ok, rerr := e.readRecord(ctx, id)
 		if rerr == nil && ok && e.expired(cur) {
 			var found bool
-			found, rerr = e.purgeLocked(ctx, id)
-			if rerr == nil && found {
+			found, rerr = e.purgeLocked(ctx, id, true)
+			if errors.Is(rerr, errRenewed) {
+				rerr = nil // another process renewed it: it is live, not an error
+			} else if rerr == nil && found {
 				deleted++
 			}
 		}
