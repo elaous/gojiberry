@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-1 of 10 since the last full run (this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
+2 of 10 since the last full run (#129, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -470,9 +470,13 @@ a way to avoid hitting the limit meanwhile.
     store that is neither logs a line saying so. Still true, and documented on the hooks: they are plain fields
     set when the `Service` is built, so build the `Service` before the adapter serves requests (setting them under
     load would race). `docstore/public/service.go`.
-19. **#85 minors:** report dedupe key (reporter and category only), old env-var warning, slow-upload rate
-    floor, wide-cap migration note. Plan: one small change each. Avoid: see the upgrade notes in
-    [public-docstore.md](public-docstore.md#75-what-is-left) 7.5 item 6.
+19. **Done (this PR): the #85 minors.** (1) The report dedupe key is the reporter and the category, not the
+    wording: rewording a report no longer buys another slot, so one address holds at most one report per category
+    in a document. (2) `GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS_PER_MINUTE`, gone since the per-hour limit, is warned about at
+    startup if still set (`Config.Warnings`). (3) `MinUploadRate` has a floor of 1 KiB/s (`MinUploadRateFloor`): a lower
+    positive value is raised to it, with a warning; negative still means no minimum. (4) A `MAX_SESSIONS_PER_WIDE`
+    that was clamped by the per-net or global cap, or left unset and moved by them, is warned about with the value in
+    force. `docstore/public/config.go`, `service.go`.
 20. **Showcase: in-memory originals during a change.** Plan: keep the journal's originals on disk. Avoid:
     keep the tab open until a change finishes.
 21. **Directory publish in the showcase and the pick UI.** The showcase has its own `dirclient`, while the demo
