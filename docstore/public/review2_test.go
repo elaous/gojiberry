@@ -1201,3 +1201,40 @@ func TestMemorySessionStoreExpiresThroughItsHeap(t *testing.T) {
 		t.Fatalf("counters left behind: %d", n)
 	}
 }
+
+// A snapshot that would pass the byte budget is refused, one that fits is counted, and a deleted
+// one comes off the count at once (no reconcile needed).
+func TestVersionSnapshotIsRefusedOverTheBudgetAndSubtractedWhenDeleted(t *testing.T) {
+	e := newEnv(t, func(o *Options) { o.Config.MaxTotalBytes = 100 })
+	a, _ := e.session()
+	d := e.create(a, strings.Repeat("a", 60))
+	ctx := context.Background()
+	key := func(n string) string { return versionsKeyPrefix + d.ID + "/" + n + ".open" }
+
+	err := e.store.Save(ctx, key("big"), bytes.Repeat([]byte("v"), 50))
+	if !errors.Is(err, docstore.ErrStorageFull) {
+		t.Fatalf("a snapshot over the budget: %v, want ErrStorageFull", err)
+	}
+	if _, err := e.store.Load(ctx, key("big")); !errors.Is(err, docstore.ErrNotFound) {
+		t.Fatalf("the refused snapshot was stored: %v", err)
+	}
+	if got := e.svc.Health().StorageBytes; got != 60 {
+		t.Fatalf("StorageBytes = %d after a refused snapshot, want 60", got)
+	}
+	if err := e.store.Save(ctx, key("fits"), bytes.Repeat([]byte("v"), 40)); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.svc.Health().StorageBytes; got != 100 {
+		t.Fatalf("StorageBytes = %d, want 100", got)
+	}
+	if err := e.store.Delete(ctx, key("fits")); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.svc.Health().StorageBytes; got != 60 {
+		t.Fatalf("StorageBytes = %d right after the delete, want 60", got)
+	}
+	// the room is usable again
+	if err := e.store.Save(ctx, key("again"), bytes.Repeat([]byte("v"), 40)); err != nil {
+		t.Fatalf("after the delete: %v", err)
+	}
+}

@@ -55,10 +55,12 @@ type budgetTouch struct {
 //
 // Version snapshots (the saver's "versions/pubdoc/<id>/...", written by something other than this
 // service) are added to their document's entry when they are written (addExtra, fed by the
-// ExpiringAdapter's OnSave hook or Service.NoteVersionWrite), not only when a reconcile lists
-// them, so the budget stops admitting new documents as soon as they fill it. Nothing here can
-// refuse a snapshot (the writer is not asking), so the budget can be exceeded by the snapshots
-// written after it was reached; a snapshot that is deleted is subtracted by the next reconcile.
+// ExpiringAdapter's Guard hook or Service.NoteVersionWrite), not only when a reconcile lists
+// them, so the budget stops admitting new documents as soon as they fill it. Through an
+// ExpiringAdapter a snapshot that would pass the budget is refused (docstore.ErrStorageFull)
+// and a deleted one is subtracted at once (OnDelete). A snapshot written some other way
+// (NoteVersionWrite after the fact) cannot be refused, and one deleted some other way is
+// subtracted by the next reconcile.
 type budget struct {
 	mu         sync.Mutex
 	ledger     map[string]budgetEntry
@@ -177,6 +179,52 @@ func (b *budget) addExtra(doc string, n int64) {
 		t := w[doc]
 		t.removed = false
 		t.extra += n
+		w[doc] = t
+	}
+}
+
+// holdExtra claims n bytes of a version snapshot that is about to be written, if they fit under
+// limit; releaseExtra gives the claim back (the write ended, stored or not: a stored one is then
+// counted by addExtra).
+func (b *budget) holdExtra(n, limit int64) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.total+b.pending+n > limit {
+		return false
+	}
+	b.pending += n
+	return true
+}
+
+func (b *budget) releaseExtra(n int64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.unholdLocked(n)
+}
+
+// subExtra takes n bytes of a deleted version snapshot of document doc off the count (never more
+// than the document's entry holds as snapshots).
+func (b *budget) subExtra(doc string, n int64) {
+	if n <= 0 {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	e, ok := b.ledger[doc]
+	if !ok {
+		return
+	}
+	n = min(n, e.extra)
+	if n == 0 {
+		return
+	}
+	e.extra -= n
+	b.ledger[doc] = e
+	b.total -= n
+	for _, w := range b.windows {
+		t := w[doc]
+		t.removed = false
+		t.extra -= n // a listing that predates the delete counted it
 		w[doc] = t
 	}
 }

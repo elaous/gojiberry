@@ -234,15 +234,49 @@ func New(o Options) (*Service, error) {
 			s.clientIP = passkey.TrustedProxies(cfg.TrustedProxies...)
 		}
 	}
-	// Version snapshots written through the store (the saver's layout) are counted when they are
-	// written. This sets a hook on the caller's adapter: build the Service before serving.
+	// Version snapshots written through the store (the saver's layout) are asked for before they
+	// are written (refused with docstore.ErrStorageFull when they would pass the byte budget) and
+	// counted when they are stored, and subtracted when they are deleted. This sets hooks on the
+	// caller's adapter: build the Service before serving.
 	if ea, ok := o.Store.(*docstore.ExpiringAdapter); ok {
-		prev := ea.OnSave
-		ea.OnSave = func(id string, size int) {
+		prev := ea.Guard
+		ea.Guard = func(id string, size int) (func(bool), error) {
+			var prevDone func(bool)
 			if prev != nil {
-				prev(id, size)
+				d, err := prev(id, size)
+				if err != nil {
+					return nil, err
+				}
+				prevDone = d
 			}
-			s.NoteVersionWrite(id, int64(size))
+			doc, isVersion := versionDoc(id)
+			if !isVersion {
+				return prevDone, nil
+			}
+			if !s.bytes.holdExtra(int64(size), s.cfg.MaxTotalBytes) {
+				if prevDone != nil {
+					prevDone(false)
+				}
+				return nil, fmt.Errorf("%w: the public offer's byte budget is full, a version snapshot is refused", docstore.ErrStorageFull)
+			}
+			return func(stored bool) {
+				s.bytes.releaseExtra(int64(size))
+				if stored {
+					s.bytes.addExtra(doc, int64(size))
+				}
+				if prevDone != nil {
+					prevDone(stored)
+				}
+			}, nil
+		}
+		prevDel := ea.OnDelete
+		ea.OnDelete = func(id string, size int) {
+			if prevDel != nil {
+				prevDel(id, size)
+			}
+			if doc, ok := versionDoc(id); ok {
+				s.bytes.subExtra(doc, int64(size))
+			}
 		}
 	}
 	if s.expiryDisabled() {
@@ -1712,14 +1746,19 @@ func (s *Service) handleTakedown(w http.ResponseWriter, r *http.Request) {
 // a deployment whose snapshots are written some other way calls it from there. Without it the
 // snapshots are counted only when Sweep lists the store.
 func (s *Service) NoteVersionWrite(key string, size int64) {
-	rest, ok := strings.CutPrefix(key, versionsKeyPrefix)
-	if !ok {
-		return
-	}
-	id, _, _ := strings.Cut(rest, "/")
-	if validID(id) {
+	if id, ok := versionDoc(key); ok {
 		s.bytes.addExtra(id, size)
 	}
+}
+
+// versionDoc is the public document a version snapshot key belongs to ("versions/pubdoc/<id>/..."), or false.
+func versionDoc(key string) (string, bool) {
+	rest, ok := strings.CutPrefix(key, versionsKeyPrefix)
+	if !ok {
+		return "", false
+	}
+	id, _, _ := strings.Cut(rest, "/")
+	return id, validID(id)
 }
 
 // ---- sweep
