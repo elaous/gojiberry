@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (#140 to #143, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+6 of 10 since the last full run (#140 to #144, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1162,3 +1162,19 @@ unless stated.
     about 1,900), so the dumps no longer show the real public API. Plan: regenerate them in one docs-only PR, and
     make `make check` fail when a dump is stale (as `generate-check` does for `*.xg.go`) or drop the dumps from the
     repository if nobody reads them. Priority: low. Where: `docs/*.txt`, `Makefile`.
+89. **Security review of the keys, ceremonies and directory: what was fixed and what is open.** Kind: mixed. A
+    read-through of the code (not an external audit, which should come before anyone relies on this for secrets).
+    **Fixed (this PR):** `encrypt.OpenChallenge` decrypted whatever the directory sent as a "challenge" with the
+    unlocked key and returned up to 1 KiB of it to the directory, so a malicious or compromised directory could have
+    read the start of any envelope made for that key (a stored document's, say) by presenting it as a challenge. It
+    now reads only a nonce's length and refuses anything that is not exactly a nonce (`ErrNotAChallenge`), sending
+    nothing back (`TestOpenChallengeIsNotADecryptionOracle`). **Open:** (1) the showcase's owner key and the
+    directory session token sit in `localStorage`, readable by any script on the origin (XSS, an extension): keep the
+    owner key as a non-extractable WebCrypto key in IndexedDB (it can still sign while the page lives but cannot be
+    copied out) or wrap it with the passkey; (2) the log keys are pinned on first use, so a hostile server on the first
+    visit is trusted: show the key IDs and ask the person to compare them out of band, or accept pasted keys; (3) the
+    expiry race is closed to the content, not to a save with identical bytes; (4) an S3-compatible service that
+    ignores `If-Match` on delete would delete a changed document (the doc says so; there is no live endpoint here
+    to test the real services); (5) the passkey PRF path, the age and SSH usage and the signed-frame format have
+    tests but no independent review. Priority: (1) medium, the rest low. Where: `examples/canvas-editor-showcase`
+    (`encowner.go`, `encdir.go`), `docstore/directoryclient`, `docs/encryption-and-passkeys.md`.

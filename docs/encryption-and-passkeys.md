@@ -1375,7 +1375,7 @@ cannot be opened.
         (`TestPeopleTabUsesTheKeyDirectory`). The page has no sign-in: a server that needs a provider session needs its
         token pasted (the demo server hands one out at `/demo/provider-session`, for demo servers only); the page must
         be allowed to call the server (same origin, or CORS on the server).
-        **Proof of possession** is wired: "Publish my keys" opens the server's challenge with the private side of each
+        **Proof of possession** is wired (the client opens the challenge only if it is exactly a nonce, so a directory cannot use it to have a ciphertext made for the key decrypted): "Publish my keys" opens the server's challenge with the private side of each
         unlocked key (`encstore.Store.IdentityFor`), so the entry says the key was held; a locked key, or a server that
         wants an owner-signed entry, gets a message that says so. The **owner key** of the person's address can be made
         and enrolled from the directory settings (`encowner.go`): it is kept per directory in `localStorage`, shown for
