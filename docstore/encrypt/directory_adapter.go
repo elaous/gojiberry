@@ -107,6 +107,10 @@ type AdapterDirectory struct {
 	// same addresses again does not log again.
 	unmappedMu     sync.Mutex
 	unmappedWarned int
+	// aliases are the log pseudonyms of an address under directory keys since removed from the
+	// retired list, by the address's current pseudonym (directory_alias.go).
+	aliasMu sync.RWMutex
+	aliases map[string][]string
 	// id is this process's registration name (Writers).
 	idMu sync.Mutex
 	id   string
