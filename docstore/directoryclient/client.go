@@ -31,6 +31,7 @@ package directoryclient
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
@@ -242,6 +243,31 @@ func (c *Client) note(seq int64, op, fingerprint, ownerSig string) {
 // Revoke and the enrollment calls.
 type OwnerKey = ed25519.PrivateKey
 
+// OwnerSigner is what signs for an owner key: an OwnerKey, or anything else that is a crypto.Signer
+// with an ed25519.PublicKey, such as a browser key that cannot be copied out. The client never needs
+// the key's bytes, only its signatures.
+type OwnerSigner = crypto.Signer
+
+// ownerSet says an OwnerSigner was given: not nil, and not an empty OwnerKey held in an interface.
+func ownerSet(s OwnerSigner) bool {
+	if s == nil {
+		return false
+	}
+	if k, ok := s.(ed25519.PrivateKey); ok {
+		return len(k) > 0
+	}
+	return true
+}
+
+// publicOf is the public half of s.
+func publicOf(s OwnerSigner) (ed25519.PublicKey, error) {
+	pub, ok := s.Public().(ed25519.PublicKey)
+	if !ok || len(pub) != ed25519.PublicKeySize {
+		return nil, errors.New("directoryclient: the owner key is not an Ed25519 key")
+	}
+	return pub, nil
+}
+
 // GenerateOwnerKey makes an owner signing key.
 func GenerateOwnerKey() (OwnerKey, error) {
 	_, priv, err := encrypt.GenerateOwnerKey()
@@ -276,7 +302,7 @@ type PublishRequest struct {
 	SSHPrivateKey []byte
 	// Owner signs the operation when the address has an owner key (nil: the server refuses with
 	// 428 if it does).
-	Owner OwnerKey
+	Owner OwnerSigner
 }
 
 // Publish publishes a key for the signed-in account's address and returns the server's row.
@@ -313,12 +339,15 @@ func (c *Client) Publish(ctx context.Context, r PublishRequest) (docstore.Direct
 		req.Proof = &proof
 	}
 	ownerSig := ""
-	if r.Owner != nil {
+	if ownerSet(r.Owner) {
 		pos, err := c.position(ctx)
 		if err != nil {
 			return docstore.DirectoryKey{}, err
 		}
-		s := encrypt.SignOwnerPublish(r.Owner, r.Email, key.Fingerprint, r.Label, c.now(), pos)
+		s, err := encrypt.SignOwnerPublishWith(r.Owner, r.Email, key.Fingerprint, r.Label, c.now(), pos)
+		if err != nil {
+			return docstore.DirectoryKey{}, err
+		}
 		req.Owner = &s
 		ownerSig = s.Sig
 	}
@@ -332,15 +361,18 @@ func (c *Client) Publish(ctx context.Context, r PublishRequest) (docstore.Direct
 
 // Revoke removes a key (by fingerprint) from the signed-in account's address. owner signs it when
 // the address has an owner key.
-func (c *Client) Revoke(ctx context.Context, email, fingerprint string, owner OwnerKey) (docstore.DirectoryKey, error) {
+func (c *Client) Revoke(ctx context.Context, email, fingerprint string, owner OwnerSigner) (docstore.DirectoryKey, error) {
 	var in *docstore.DirectoryRevoke
 	ownerSig := ""
-	if owner != nil {
+	if ownerSet(owner) {
 		pos, err := c.position(ctx)
 		if err != nil {
 			return docstore.DirectoryKey{}, err
 		}
-		s := encrypt.SignOwnerOp(owner, encrypt.OpRevoke, email, fingerprint, c.now(), pos)
+		s, err := encrypt.SignOwnerOpWith(owner, encrypt.OpRevoke, email, fingerprint, c.now(), pos)
+		if err != nil {
+			return docstore.DirectoryKey{}, err
+		}
 		in = &docstore.DirectoryRevoke{Owner: &s}
 		ownerSig = s.Sig
 	}
@@ -509,28 +541,43 @@ func (c *Client) Enrollment(ctx context.Context, email string) (docstore.Directo
 
 // enrollRequest builds the request and returns the signature the log entry will carry (the new
 // key's enrollment, the authorizer's rotation, or the new key's acceptance for a reset).
-func (c *Client) enrollRequest(ctx context.Context, email, mode string, owner, authorizer OwnerKey) (docstore.DirectoryEnroll, error) {
+func (c *Client) enrollRequest(ctx context.Context, email, mode string, owner, authorizer OwnerSigner) (docstore.DirectoryEnroll, error) {
 	var ch docstore.DirectoryEnrollChallenge
 	if err := c.do(ctx, http.MethodPost, "/directory/enroll/challenge", struct{}{}, &ch); err != nil {
 		return docstore.DirectoryEnroll{}, err
 	}
-	pub := owner.Public().(ed25519.PublicKey)
+	pub, err := publicOf(owner)
+	if err != nil {
+		return docstore.DirectoryEnroll{}, err
+	}
 	fp := encrypt.OwnerFingerprint(pub)
 	at := time.Unix(ch.Time, 0)
 	req := docstore.DirectoryEnroll{Mode: mode, OwnerPub: encrypt.FormatOwnerPub(pub), Token: ch.Token, Time: ch.Time, Prev: ch.Prev}
+	sign := func(by OwnerSigner, op string) (string, error) {
+		s, err := encrypt.SignOwnerOpWith(by, op, email, fp, at, ch.Prev)
+		return s.Sig, err
+	}
 	switch mode {
 	case encrypt.OpEnroll:
-		req.Sig = encrypt.SignOwnerOp(owner, encrypt.OpEnroll, email, fp, at, ch.Prev).Sig
+		if req.Sig, err = sign(owner, encrypt.OpEnroll); err != nil {
+			return docstore.DirectoryEnroll{}, err
+		}
 	case encrypt.OpRotate:
-		req.Sig = encrypt.SignOwnerOp(authorizer, encrypt.OpRotate, email, fp, at, ch.Prev).Sig
-		req.Proof = encrypt.SignOwnerOp(owner, "accept", email, fp, at, ch.Prev).Sig
+		if req.Sig, err = sign(authorizer, encrypt.OpRotate); err != nil {
+			return docstore.DirectoryEnroll{}, err
+		}
+		if req.Proof, err = sign(owner, "accept"); err != nil {
+			return docstore.DirectoryEnroll{}, err
+		}
 	case encrypt.OpReset:
-		req.Proof = encrypt.SignOwnerOp(owner, "accept", email, fp, at, ch.Prev).Sig
+		if req.Proof, err = sign(owner, "accept"); err != nil {
+			return docstore.DirectoryEnroll{}, err
+		}
 	}
 	return req, nil
 }
 
-func (c *Client) enroll(ctx context.Context, email, mode string, owner, authorizer OwnerKey) (docstore.DirectoryEnrollment, error) {
+func (c *Client) enroll(ctx context.Context, email, mode string, owner, authorizer OwnerSigner) (docstore.DirectoryEnrollment, error) {
 	req, err := c.enrollRequest(ctx, email, mode, owner, authorizer)
 	if err != nil {
 		return docstore.DirectoryEnrollment{}, err
@@ -543,12 +590,15 @@ func (c *Client) enroll(ctx context.Context, email, mode string, owner, authoriz
 	if mode == encrypt.OpReset {
 		sig = req.Proof
 	}
-	ownerPub := owner.Public().(ed25519.PublicKey)
-	c.note(e.Seq, mode, encrypt.OwnerFingerprint(ownerPub), sig)
+	pub, err := publicOf(owner)
+	if err != nil {
+		return e, err
+	}
+	c.note(e.Seq, mode, encrypt.OwnerFingerprint(pub), sig)
 	// Pin the key this client made and sent, never the one in the server's answer (which is the
 	// server's word and could name another).
 	if c.Pins != nil {
-		c.Pins.Set(email, encrypt.FormatOwnerPub(ownerPub))
+		c.Pins.Set(email, encrypt.FormatOwnerPub(pub))
 	}
 	return e, nil
 }
@@ -557,12 +607,12 @@ func (c *Client) enroll(ctx context.Context, email, mode string, owner, authoriz
 // the provider session and the new key's own signature over its challenge. This is trust on first
 // use: whoever is signed in as the address first can enroll first, and the log shows it to
 // everybody who watches the address.
-func (c *Client) Enroll(ctx context.Context, email string, owner OwnerKey) (docstore.DirectoryEnrollment, error) {
+func (c *Client) Enroll(ctx context.Context, email string, owner OwnerSigner) (docstore.DirectoryEnrollment, error) {
 	return c.enroll(ctx, email, encrypt.OpEnroll, owner, nil)
 }
 
 // Rotate replaces the owner key: the new key is signed in by the current one.
-func (c *Client) Rotate(ctx context.Context, email string, current, next OwnerKey) (docstore.DirectoryEnrollment, error) {
+func (c *Client) Rotate(ctx context.Context, email string, current, next OwnerSigner) (docstore.DirectoryEnrollment, error) {
 	return c.enroll(ctx, email, encrypt.OpRotate, next, current)
 }
 
@@ -579,17 +629,20 @@ func (c *Client) RequestReset(ctx context.Context) (docstore.DirectoryEnrollment
 }
 
 // CompleteReset installs next as the owner key once the waiting period of RequestReset is over.
-func (c *Client) CompleteReset(ctx context.Context, email string, next OwnerKey) (docstore.DirectoryEnrollment, error) {
+func (c *Client) CompleteReset(ctx context.Context, email string, next OwnerSigner) (docstore.DirectoryEnrollment, error) {
 	return c.enroll(ctx, email, encrypt.OpReset, next, nil)
 }
 
 // CancelReset ends a pending reset, signed by the current owner key.
-func (c *Client) CancelReset(ctx context.Context, email string, owner OwnerKey) (docstore.DirectoryEnrollment, error) {
+func (c *Client) CancelReset(ctx context.Context, email string, owner OwnerSigner) (docstore.DirectoryEnrollment, error) {
 	pos, err := c.position(ctx)
 	if err != nil {
 		return docstore.DirectoryEnrollment{}, err
 	}
-	s := encrypt.SignOwnerOp(owner, encrypt.OpResetCancel, email, "", c.now(), pos)
+	s, err := encrypt.SignOwnerOpWith(owner, encrypt.OpResetCancel, email, "", c.now(), pos)
+	if err != nil {
+		return docstore.DirectoryEnrollment{}, err
+	}
 	var e docstore.DirectoryEnrollment
 	if err := c.do(ctx, http.MethodPost, "/directory/enroll/cancel", docstore.DirectoryRevoke{Owner: &s}, &e); err != nil {
 		return e, err

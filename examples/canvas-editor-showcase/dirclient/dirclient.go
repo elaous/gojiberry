@@ -29,6 +29,10 @@ import (
 // it can publish and revoke for the address, so it is kept and backed up like a password.
 type OwnerKey = directoryclient.OwnerKey
 
+// OwnerSigner signs for an owner key: an OwnerKey, or a key the page cannot copy out (a crypto.Signer
+// over an Ed25519 public key).
+type OwnerSigner = directoryclient.OwnerSigner
+
 // GenerateOwnerKey makes a new owner key.
 func GenerateOwnerKey() (OwnerKey, error) { return directoryclient.GenerateOwnerKey() }
 
@@ -41,7 +45,7 @@ func ImportOwnerKey(s string) (OwnerKey, error) {
 }
 
 // OwnerFingerprint is the short name of an owner key, what the person compares.
-func OwnerFingerprint(k OwnerKey) string {
+func OwnerFingerprint(k OwnerSigner) string {
 	return encrypt.OwnerFingerprint(k.Public().(ed25519.PublicKey))
 }
 
@@ -146,7 +150,7 @@ type Directory interface {
 	// Enrollment says whether the address has an owner key.
 	Enrollment(ctx context.Context, email string) (Enrollment, error)
 	// Enroll registers owner as the owner key of the signed-in account's address.
-	Enroll(ctx context.Context, email string, owner OwnerKey) error
+	Enroll(ctx context.Context, email string, owner OwnerSigner) error
 	// ServerLogKeys is the log public keys the server states for itself (key ID to base64 key):
 	// what a first use pins. They prove only that the server is consistent with itself.
 	ServerLogKeys(ctx context.Context) (map[string]string, error)
@@ -155,7 +159,7 @@ type Directory interface {
 	SetLogKeys(keys map[string]string) error
 	// Watch reads the log since the last run, checks it against the pinned keys and the saved
 	// position, and reports what happened to the address that the person did not do.
-	Watch(ctx context.Context, email string, owner OwnerKey) (WatchResult, error)
+	Watch(ctx context.Context, email string, owner OwnerSigner) (WatchResult, error)
 	// State is the position and memory kept between runs as text to store; LoadState restores
 	// it. A state that cannot be read is dropped (ErrBadState) and the next run is a first look.
 	State() string
@@ -169,7 +173,7 @@ type Directory interface {
 	// Pin tells the client that owner is the key somebody confirmed for the address (it enrolled
 	// it, or the person restored it from a backup), so rows signed by it can be told from rows
 	// signed by another.
-	Pin(email string, owner OwnerKey)
+	Pin(email string, owner OwnerSigner)
 }
 
 // PublishRequest is a key to publish.
@@ -182,7 +186,7 @@ type PublishRequest struct {
 	// Email and Owner sign the entry with the address's owner key. An address that has one
 	// refuses an entry without it (ErrOwnerRequired). Owner nil: no signature.
 	Email string
-	Owner OwnerKey
+	Owner OwnerSigner
 }
 
 // The failures a page tells the person about.
@@ -358,7 +362,7 @@ func (c *Client) ServerLogKeys(ctx context.Context) (map[string]string, error) {
 }
 
 // Watch implements Directory.
-func (c *Client) Watch(ctx context.Context, email string, owner OwnerKey) (WatchResult, error) {
+func (c *Client) Watch(ctx context.Context, email string, owner OwnerSigner) (WatchResult, error) {
 	dc, err := c.client(ctx)
 	if err != nil {
 		return WatchResult{}, err
@@ -416,7 +420,7 @@ func (c *Client) LoadPins(m map[string]string) {
 }
 
 // Pin implements Directory.
-func (c *Client) Pin(email string, owner OwnerKey) {
+func (c *Client) Pin(email string, owner OwnerSigner) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.pinsLocked().Set(email, encrypt.FormatOwnerPub(owner.Public().(ed25519.PublicKey)))
@@ -487,7 +491,7 @@ func (c *Client) Enrollment(ctx context.Context, email string) (Enrollment, erro
 }
 
 // Enroll implements Directory.
-func (c *Client) Enroll(ctx context.Context, email string, owner OwnerKey) error {
+func (c *Client) Enroll(ctx context.Context, email string, owner OwnerSigner) error {
 	dc, err := c.client(ctx)
 	if err != nil {
 		return err
