@@ -113,8 +113,7 @@ func AccessibleText(p AccessibleTextProps) xango.Node {
 		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-a11y-selection")},
 			xango.Text(trf("a11y.selected", "Selected: %s", p.Selection))))
 	}
-	return xango.El("div", []xango.Attr{xango.A("id", id), xango.A("class", "gj-sr-only"), xango.A("role", "document"), xango.A("aria-label", label),
-		xango.A("aria-readonly", "true")}, kids...)
+	return xango.El("div", []xango.Attr{xango.A("id", id), xango.A("class", "gj-sr-only"), xango.A("role", "document"), xango.A("aria-label", label)}, kids...)
 }
 
 // Announcer is a live region: when its message changes, a screen reader says it

@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-3 of 10 since the last full run (#140, #141, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+4 of 10 since the last full run (#140, #141, #142, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -755,13 +755,28 @@ New entries:
     clear on decode error, `examples/people-keys-demo/main.go`), 24 (`ErrFilteredEnrolled` and the audited
     state), 25 (protobuf as an indirect dependency).
 
-48. **ARIA attributes across the canvas editor and components.** Kind: fixable. What: roles, accessible names and
-    labels, live regions, a sensible focus order, and keyboard operation of every control (toolbar, menus, dialogs,
-    pickers, the canvas itself). Why it matters: people who use assistive technology cannot use controls that have no
-    role, name or keyboard path, and it is a legal requirement in many places. Plan: (1) write an audit checklist per
-    component; (2) fix the gaps found; (3) add automated checks (for example axe-core) to the browser e2e so a
-    regression fails the build. Priority: high (first of the accessibility group).
-    Where: `components`, `examples/canvas-editor-showcase`, the browser e2e.
+48. **ARIA attributes across the canvas editor and components. Slice 1 done (this PR); the rest open.** Kind:
+    fixable. What: roles, accessible names and labels, live regions, a sensible focus order, and keyboard operation
+    of every control (toolbar, menus, dialogs, pickers, the canvas itself). Why it matters: people who use assistive
+    technology cannot use controls that have no role, name or keyboard path, and it is a legal requirement in many
+    places. **Done:** (3 of the plan, first) axe-core 4.10.2 is vendored (`internal/e2etest/axe`, MPL-2.0, unmodified)
+    behind `Tab.Axe`, and `TestNoAccessibilityViolationsAxe` runs it over the showcase's document, every side tab and
+    every menu open, with the find bar, and `TestNoAccessibilityViolationsAxeInTheKeyDirectory` over the encryption
+    panels and the key directory (owner key, backup, pinned log keys, owner keys to confirm); a new violation fails
+    the build. Found and fixed: (a) `aria-readonly` on the `role="document"` copy of the text (not allowed on that
+    role); (b) **a menu lost the keyboard focus when it opened** (the bar was re-created because the backdrop was
+    inserted before it), so a keyboard user's next key went to the page: the backdrop now follows the bar; (c)
+    **Escape did not close a menu** and **Enter and Space did not choose an entry** (entries were focusable and
+    click-only): `MenuBar` closes on Escape from anywhere inside it and an entry is chosen with Enter or Space
+    (`components/menu.go`, with unit tests and `TestMenuEntryChosenWithTheKeyboard`). **Open:** (1) the audit
+    checklist per component, which axe cannot replace: roving focus and the arrow keys inside menus and the menu bar
+    (Down opens, Up and Down move, Left and Right switch and open submenus, Home and End), which needs a focus
+    primitive in `xango` or `domrt` that does not exist yet; the same for tabs, the colour picker, dropdowns and
+    dialogs (focus trap and return); (2) **heading levels**: the components' panel titles are `h4` under a page whose
+    headings are in the screen-reader copy, so `heading-order` is disabled in the test (`axeDisabled`) until the
+    levels are decided; (3) axe over the other examples and the states it cannot reach by clicking (dialogs, the
+    colour picker, a table cell menu); (4) the canvas itself with a screen reader (item 49). Priority: high (first of
+    the accessibility group). Where: `components`, `examples/canvas-editor-showcase`, the browser e2e.
 49. **Screen-reader output while typing (voice-over).** Kind: fixable in part (the canvas is not DOM text). What: an
     accessible text mirror of the canvas (a hidden DOM or an ARIA live region) that announces typed characters, caret
     moves, selection and formatting changes. Why it matters: a canvas gives a screen reader nothing to read, so a blind

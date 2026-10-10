@@ -694,3 +694,71 @@ func TestConfirmAnotherPersonsOwnerKey(t *testing.T) {
 	d.OK(d.Has(".gj-recip-dir-row .gj-recip-owner-signed") && !d.Has("#dir-pin-0"), "and it still counts on the next lookup")
 	d.NoErrors()
 }
+
+// axe-core over the encryption panels and the key directory: the owner key, its backup, the pinned
+// log keys and the list of owner keys to confirm.
+func TestNoAccessibilityViolationsAxeInTheKeyDirectory(t *testing.T) {
+	site := e2etest.NewSite(t)
+	site.UseLocalhost()
+	srv, err := demoserver.New(site.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	site.Handle("/auth/", srv.Mux)
+	site.Handle("/directory/", srv.Mux)
+	site.Handle("/demo/", srv.Mux)
+	// Bo's entries are signed by an owner key nobody here confirmed, so "Owner keys to confirm" shows.
+	boTok, err := srv.Login("bo@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bo := &dirclient.Client{Base: site.URL, Token: func(context.Context) (string, error) { return boTok, nil }}
+	owner, _ := dirclient.GenerateOwnerKey()
+	ctx := context.Background()
+	if err := bo.Enroll(ctx, "bo@example.com", owner); err != nil {
+		t.Fatal(err)
+	}
+	pub, secret, _ := encrypt.GenerateRecoveryKey()
+	id, _ := encrypt.ParseAgeIdentity(secret)
+	if _, err := bo.Publish(ctx, dirclient.PublishRequest{Email: "bo@example.com", Key: pub, Label: "Bo", Identity: id, Owner: owner}); err != nil {
+		t.Fatal(err)
+	}
+
+	d := site.OpenURL(t, "/index.html?docstore="+url.QueryEscape(site.URL))
+	d.VirtualAuthenticator()
+	d.WaitFor("the page to start", `document.documentElement.lang !== '' && !!document.getElementById('input').getAttribute('aria-label')`)
+	check := func(state string) {
+		t.Helper()
+		for _, v := range d.Axe("", axeDisabled...) {
+			t.Errorf("%s: %s", state, v)
+		}
+	}
+	check("before encryption is on")
+	turnOn(t, d, "")
+	saveConfidential(d, "For Bo")
+	check("encryption on")
+	d.Click(`button[data-tab="people"]`)
+	d.WaitSelector("#dir-offer")
+	check("a directory offered")
+	d.Click("#dir-offer-review")
+	confirmDialog(d)
+	d.WaitSelector(".gj-recip-dir-email")
+	check("the key directory")
+	d.Fill(".gj-recip-dir-email", "bo@example.com")
+	d.WaitFor("the find button", `!document.querySelector('.gj-recip-dir-find').disabled`)
+	d.Click(".gj-recip-dir-find")
+	d.WaitSelector("#dir-pin-0")
+	check("owner keys to confirm")
+	d.Click("#dir-owner-enroll")
+	d.WaitSelector("#dir-owner-backup-box")
+	check("the owner key and its backup")
+	d.Click("#dir-log-pin")
+	confirmDialog(d)
+	d.WaitSelector("#dir-log-watch")
+	check("the log keys pinned")
+	d.Click(".gj-recip-publish")
+	d.WaitFor("published", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
+	d.Click("#dir-log-watch")
+	d.WaitFor("checked", `(document.querySelector('#dir-log-msg') || {textContent: ''}).textContent.includes('checked up to entry')`)
+	check("after watching")
+}
