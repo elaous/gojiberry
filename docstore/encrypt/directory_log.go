@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	mrand "math/rand/v2"
+	"slices"
 	"strings"
 	"time"
 
@@ -110,9 +111,19 @@ func (d *AdapterDirectory) LogAddressFor(email string) string {
 	return d.Signer.Pseudonym(logAddressDomain + normalizeEmail(email))
 }
 
-// LogAddressesFor is LogAddressFor under every key the signer knows, the current one first.
+// LogAddressesFor is LogAddressFor under every key the signer knows, the current one first, then
+// the pseudonyms recorded for the address under keys since removed from the retired list (aliases,
+// directory_alias.go).
 func (d *AdapterDirectory) LogAddressesFor(email string) []string {
-	return d.Signer.Pseudonyms(logAddressDomain + normalizeEmail(email))
+	all := d.Signer.Pseudonyms(logAddressDomain + normalizeEmail(email))
+	d.aliasMu.RLock()
+	defer d.aliasMu.RUnlock()
+	for _, a := range d.aliases[all[0]] {
+		if !slices.Contains(all, a) {
+			all = append(all, a)
+		}
+	}
+	return all
 }
 
 const logAddressDomain = "gojiberry-directory-log-address|"

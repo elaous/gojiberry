@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (#140, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+3 of 10 since the last full run (#140, #141, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -437,8 +437,18 @@ a way to avoid hitting the limit meanwhile.
     conformance factory did not empty its collection between subtests), fixed here. The adapter itself passed.
 12. **Log witnesses (directory).** Plan: a witness protocol where independent parties co-sign heads. Avoid:
     compare heads between two auditors by hand.
-13. **Directory key rotation versus the log pseudonym.** Plan: keep older entries matchable after the retired
-    key is removed. Avoid: do not remove the retired key until owners have fetched their older pseudonyms.
+13. **Done (this PR): older log pseudonyms survive removing the retired directory key.** Was: a log entry names its
+    address by a pseudonym keyed by the directory key that made it, so once the retired key left
+    `..._DIRECTORY_KEY_PREV` the directory could no longer compute the old pseudonym of an address: the older entries
+    stopped matching their address (records needed republishing, owners could not read them, and the entries
+    showed up as unmapped). Now every start-up records, while the retired keys are still listed, a signed alias
+    record per known address (`directory-log/alias/<current pseudonym>`, pseudonyms only), carries earlier aliases
+    forward through later rotations, and `LogAddressesFor` returns them (so `/directory/log/address`, the audit,
+    reconciliation and the unmapped count all see them). A record that does not verify is ignored and counted.
+    Tests: `TestRemovedDirectoryKeysPseudonymsAreKept` (one and two rotations, the owner's `Previous`, the unmapped
+    count) and `TestAnAlteredAliasRecordIsIgnored`. Still true: start the server once with the retired key listed
+    before removing it; an address with log entries and no record or key cannot be aliased; a replica started
+    earlier reads new aliases only at its next start-up. `docstore/encrypt/directory_alias.go`.
 14. **Done (this PR): the dead-room tombstone is also kept in the store.** Was: the hub's `h.gone` entry lived in the
     process for `goneMemory` (one hour), so a restart, eviction at `maxGone` or another replica let a stale tab open
     a new room and write the content back. Now `closeDead` also saves `collab-gone:<id>` (`{"until": ...}`) in the
