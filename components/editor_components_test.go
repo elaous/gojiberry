@@ -834,3 +834,55 @@ func TestMenuArrowKeysMoveTheFocus(t *testing.T) {
 	}
 	keys[2](xango.NewEvent("keydown", xango.KeyData{Key: "ArrowDown"}, false, nil, nil)) // no focus hook: must not panic
 }
+
+// Tabs follow the tabs pattern: only the selected tab is in the Tab order, and the arrow keys, Home
+// and End move the focus along the row and select the tab that gets it.
+func TestTabsKeyboard(t *testing.T) {
+	var picked []int
+	tabs := Tabs(TabsProps{Tabs: []Tab{{Label: "A"}, {Label: "B"}, {Label: "C"}}, Active: 1, OnSelect: func(i int) { picked = append(picked, i) }})
+	html := render(t, tabs)
+	if strings.Count(html, `tabindex="0"`) != 1 || strings.Count(html, `tabindex="-1"`) != 2 {
+		t.Errorf("roving tabindex: %s", html)
+	}
+	keys := findHandlers(tabs, "keydown")
+	if len(keys) != 3 {
+		t.Fatalf("keydown handlers = %d, want 3", len(keys))
+	}
+	press := func(h xango.EventHandler, k xango.KeyData) (steps []xango.FocusStep, prevented bool) {
+		h(xango.NewEvent("keydown", k, false, func() { prevented = true }, nil).
+			WithFocus(func(root, items string, step xango.FocusStep) bool {
+				if root != `[role="tablist"]` || items != `[role="tab"]` {
+					t.Errorf("focus asked in %q for %q", root, items)
+				}
+				steps = append(steps, step)
+				return true
+			}))
+		return
+	}
+	for key, want := range map[string]struct {
+		step xango.FocusStep
+		pick int
+	}{
+		"ArrowRight": {xango.FocusNext, 2}, "ArrowLeft": {xango.FocusPrev, 0}, "Home": {xango.FocusFirst, 0}, "End": {xango.FocusLast, 2},
+	} {
+		picked = nil
+		steps, prevented := press(keys[1], xango.KeyData{Key: key})
+		if len(steps) != 1 || steps[0] != want.step || len(picked) != 1 || picked[0] != want.pick || !prevented {
+			t.Errorf("%s on B: steps %v picked %v prevented %v", key, steps, picked, prevented)
+		}
+	}
+	picked = nil
+	if steps, _ := press(keys[2], xango.KeyData{Key: "ArrowRight"}); len(steps) != 1 || len(picked) != 1 || picked[0] != 0 {
+		t.Errorf("Right from the last wraps to the first: %v", picked)
+	}
+	if steps, _ := press(keys[0], xango.KeyData{Key: "ArrowLeft"}); len(steps) != 1 || picked[len(picked)-1] != 2 {
+		t.Errorf("Left from the first wraps to the last: %v", picked)
+	}
+	picked = nil
+	if steps, prevented := press(keys[1], xango.KeyData{Key: "ArrowRight", Ctrl: true}); len(steps) != 0 || prevented || len(picked) != 0 {
+		t.Errorf("a chord acted: %v %v", steps, picked)
+	}
+	if steps, _ := press(keys[1], xango.KeyData{Key: "a"}); len(steps) != 0 {
+		t.Errorf("another key acted")
+	}
+}

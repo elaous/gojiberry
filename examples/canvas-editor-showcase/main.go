@@ -333,10 +333,13 @@ func main() {
 		toolbar := xango.Frag(
 			xango.El("button", []xango.Attr{xango.A("id", "mode"), xango.A("type", "button"), xango.A("class", "gj-keybindings-button"),
 				xango.On("click", func(xango.Event) { toggleMode() })}, xango.Text("Mode: "+state.Mode.String()+" (click to switch)")),
-			tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
-			tabButton(u, "comments", "Comments", renderUI), tabButton(u, "outline", "Outline", renderUI),
-			tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
-			tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI),
+			// the tabs of the side panel: one row for the keyboard (Tab enters it once, the arrow keys move
+			// along it), laid out as before (display:contents)
+			xango.El("div", []xango.Attr{xango.A("role", "tablist"), xango.A("aria-label", components.Translate("tab.list", "Side panel")), xango.A("style", "display:contents")},
+				tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
+				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "outline", "Outline", renderUI),
+				tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
+				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI)),
 		)
 
 		roleButtons := []xango.Node{xango.El("span", []xango.Attr{xango.A("style", "font-size:12px;color:#6b7280")}, xango.Text("Role:"))}
@@ -863,18 +866,25 @@ var tabIcons = map[string]string{
 	"migrate": "upload_file", "page": "margin", "save": "description", "transfer": "input",
 }
 
+// sideTabs is the order of the side panel's tabs, which the arrow keys follow.
+var sideTabs = []string{"format", "styles", "symbols", "keys", "comments", "outline", "find", "spell", "language", "stats", "share", "people", "migrate", "page", "save", "transfer"}
+
 func tabButton(u *ui, tab, label string, rerender func()) xango.Node {
 	class := "gj-keybindings-button"
+	selected := u.tab == tab || (u.tab == "" && tab == "format") // Format is the tab shown first
 	if u.tab == tab {
 		class += " gj-materialpicker-chip-on"
 	}
+	index := slices.Index(sideTabs, tab)
 	kids := []xango.Node{xango.Text(components.Translate("tab."+tab, label))}
 	if icon := tabIcons[tab]; icon != "" {
 		kids = append([]xango.Node{components.Material(icon)}, kids...)
 	}
 	return xango.El("button", []xango.Attr{
 		xango.A("type", "button"), xango.A("class", class), xango.A("data-tab", tab),
+		xango.A("role", "tab"), xango.A("aria-selected", map[bool]string{true: "true", false: "false"}[selected]), components.TabIndex(selected),
 		xango.On("click", func(xango.Event) { u.tab = tab; rerender() }),
+		components.TabKeys(index, len(sideTabs), func(i int) { u.tab = sideTabs[i]; rerender() }),
 	}, kids...)
 }
 

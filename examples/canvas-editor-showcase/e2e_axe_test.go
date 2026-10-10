@@ -114,3 +114,27 @@ func TestMenusAreOperatedWithTheArrowKeys(t *testing.T) {
 	d.Press("ArrowLeft")
 	d.OK(strings.HasPrefix(active(), "Interface language"), "Left comes back to the entry: "+active())
 }
+
+// The side panel's tabs are a row for the keyboard: Tab enters it once (on the selected tab), the arrow
+// keys, Home and End move along it and open the tab they reach.
+func TestSidePanelTabsAreOperatedWithTheArrowKeys(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	tabOf := func() string { return d.Str(`document.activeElement.getAttribute('data-tab') || ''`) }
+	selected := func() string {
+		return d.Str(`Array.from(document.querySelectorAll('[role="tab"][aria-selected="true"]')).map(b => b.getAttribute('data-tab')).join(',')`)
+	}
+	d.OK(d.Int(`document.querySelectorAll('[role="tablist"] [role="tab"][tabindex="0"]').length`) == 1, "only one tab is in the Tab order")
+	d.OK(selected() == "format", "Format is the tab shown first: "+selected())
+	d.Focus(`button[data-tab="format"]`)
+	d.Press("ArrowRight")
+	d.OK(tabOf() == "styles" && selected() == "styles", "Right opens the next tab: "+tabOf()+" "+selected())
+	d.Press("End")
+	d.OK(tabOf() == "transfer" && selected() == "transfer", "End: "+tabOf())
+	d.Press("ArrowRight")
+	d.OK(tabOf() == "format" && selected() == "format", "Right from the last wraps to the first: "+tabOf())
+	d.Press("ArrowLeft")
+	d.OK(tabOf() == "transfer", "Left from the first wraps to the last: "+tabOf())
+	d.Press("Home")
+	d.OK(tabOf() == "format" && selected() == "format", "Home: "+tabOf())
+	d.OK(d.Int(`document.querySelectorAll('[role="tablist"] [role="tab"][tabindex="0"]').length`) == 1, "still only one in the Tab order")
+}
