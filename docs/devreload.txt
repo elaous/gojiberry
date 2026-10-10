@@ -1,11 +1,12 @@
 package devreload // import "github.com/elaous/gojiberry/devreload"
 
-Package devreload lets an xango SSR server opt into a live-reload dev loop with two
-calls: wrap rendered HTML with (*Reloader).Wrap and mount (*Reloader).Handler
-wherever the injected script polls. A browser tab reloads itself once that
-endpoint reports a different version than the one the page was rendered with --
-i.e. once the process serving it has been rebuilt and restarted, the other half
-of the loop devwatch (see the sibling devwatch package) drives.
+Package devreload lets an xango SSR server opt into a live-reload dev
+loop with two calls: wrap rendered HTML with (*Reloader).Wrap and mount
+(*Reloader).Handler wherever the injected script polls. A browser tab reloads
+itself once that endpoint reports a different version than the one the page
+was rendered with -- i.e. once the process serving it has been rebuilt and
+restarted, the other half of the loop devwatch (see the sibling devwatch
+package) drives.
 
 This began as examples/canvas-app's own hand-rolled devVersion/ devReloadScript
 pair, wired into that app's net/http mux by hand; this package is that same

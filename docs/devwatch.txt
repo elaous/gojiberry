@@ -21,12 +21,14 @@ FUNCTIONS
 
 func DefaultIgnore(path string) bool
     DefaultIgnore reports whether path should never trigger a rebuild regardless
-    of project: VCS metadata (.git) and xgc's own generated *.xg.go files
-    (edit the .xg source instead -- watching the file xgc itself just wrote
-    would create a feedback loop). A project's own build-output directories
-    (a WASM static/ dir, a temp binary path, ...) are not covered here since
-    there's no universal convention for them; combine with Config.Ignore for
-    those.
+    of project: VCS metadata (.git) and xgc's own generated *.xg.go files (edit
+    the .xg source instead -- watching the file xgc itself just wrote would
+    create a feedback loop). A project's own build-output directories (a WASM
+    static/ dir, a temp binary path, ...) are not covered here since there's
+    no universal convention for them; combine with Config.Ignore for those.
+    (A rebuild that writes files under Root -- generated code, a bundle --
+    triggers another rebuild unless Ignore covers them.) Editors' scratch files
+    are ignored too.
 
 func Run(cfg Config) error
     Run performs cfg.Rebuild once, starts the managed process, then watches

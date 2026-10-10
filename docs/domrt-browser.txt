@@ -118,12 +118,56 @@ type FetchOptions struct {
 	Body      string
 	BodyValue js.Value
 	Headers   map[string]string
+	Timeout   time.Duration
 }
     FetchOptions configures a FetchOpts call. Method defaults to "GET" if empty.
     Body, if non-empty, is sent as the request body. BodyValue takes precedence
     over Body when set -- pass a FormData.Value here for a multipart upload
     (including files); the browser sets Content-Type with the right boundary
     automatically, so don't set it yourself in Headers.
+
+    Timeout, if non-zero, aborts the request (via a real window.AbortController,
+    not just abandoning the wait on this end) once it elapses, returning an
+    error instead of blocking forever -- zero (the default) preserves this
+    package's original behavior, an unbounded wait, so every caller written
+    before Timeout existed is unaffected. Worth setting on any call to a backend
+    this app doesn't control and isn't prepared to wait on indefinitely:
+    without it, a backend that hangs rather than erroring (no response,
+    connection never drops) leaves the calling goroutine blocked in domrt.Await
+    forever, and with it any application-level "request in flight" guard (e.g.
+    this repo's own tryBeginAsync/endAsync convention) that goroutine was
+    supposed to eventually clear.
+
+type FetchTransport struct{}
+    FetchTransport implements http.RoundTripper by translating a real
+    *http.Request into a browser fetch() call and the resulting Response back
+    into a real *http.Response -- task #107's own mobile-backend groundwork (see
+    OnDesign's docs/ROADMAP.md, "genuine native mobile backend"): the point is
+    that application code written against plain *http.Client/*http.Request never
+    has to know or care whether it's running in a browser or as a real native
+    binary. On native/mobile, http.DefaultTransport already does real TCP/TLS
+    via the OS -- no wrapper needed there at all, that's the whole win. On web,
+    wire this in instead:
+
+        client := &http.Client{Transport: browser.FetchTransport{}}
+        resp, err := client.Get("https://example.com")
+
+    Deliberately not a replacement for Fetch/FetchOpts/FetchTimeout above: those
+    already have real callers across this repo and OnDesign, migrating them
+    is its own separate, mechanical task (see the ROADMAP entry's own "third
+    bucket"), not attempted here. This is new infrastructure for code written
+    from here on, or migrated deliberately -- both can coexist indefinitely,
+    they just reach the same browser fetch() through two different Go-level
+    shapes.
+
+func (FetchTransport) RoundTrip(req *http.Request) (*http.Response, error)
+    RoundTrip implements http.RoundTripper. The request body (if any) is read
+    fully into memory before the call -- fetch() has no streaming request-body
+    support worth relying on across browsers -- and so is the response body,
+    the same "read the whole thing, no true streaming" tradeoff Response.Bytes()
+    above already makes for the same reason. Cancellation (req.Context()
+    being done, including a deadline) aborts the underlying fetch via a real
+    AbortController, mirroring doFetch's own timeout-driven abort above.
 
 type File struct {
 	Value js.Value
@@ -236,6 +280,12 @@ func (s *ObjectStore) Get(key any) (js.Value, error)
     completes. The result is JS `undefined` if key doesn't exist -- check with
     .IsUndefined().
 
+func (s *ObjectStore) GetAll() (js.Value, error)
+    GetAll returns every record currently in the store, as a JS array of
+    whatever values Put stored (each still carrying its own keyPath field) --
+    for a caller that needs to list a whole store's contents rather than look up
+    one key at a time.
+
 func (s *ObjectStore) Put(value any) error
     Put inserts or updates value, blocking until the request completes.
 
@@ -255,25 +305,48 @@ func CurrentPosition() (Position, error)
 type Response struct {
 	Status int
 	OK     bool
+
 	// Has unexported fields.
 }
     Response is the result of Fetch.
 
 func Fetch(url string) (*Response, error)
     Fetch wraps window.fetch(url) with a plain GET, blocking until the response
-    headers arrive (not the body -- call Text or JSON to read it). For anything
-    else (POST/PUT with a body, custom headers), use FetchOpts.
+    headers arrive (not the body -- call Text or JSON to read it), with no
+    timeout of its own -- the same unbounded wait this function has always done.
+    For anything else (POST/PUT with a body, custom headers, or a bounded wait),
+    use FetchOpts.
 
 func FetchOpts(url string, opts FetchOptions) (*Response, error)
     FetchOpts wraps window.fetch(url, init) for requests Fetch's plain GET can't
-    express: POST/PUT/PATCH/DELETE with a body, or custom headers. A common use
-    is PUT-ing a JSON body:
+    express: POST/PUT/PATCH/DELETE with a body, custom headers, or a bounded
+    wait (FetchOptions.Timeout). A common use is PUT-ing a JSON body:
 
         resp, err := browser.FetchOpts(url, browser.FetchOptions{
         	Method:  "PUT",
         	Body:    string(jsonBytes),
         	Headers: map[string]string{"Content-Type": "application/json"},
         })
+
+func FetchTimeout(url string, timeout time.Duration) (*Response, error)
+    FetchTimeout is Fetch's own bounded-wait counterpart: a plain GET that
+    aborts once timeout elapses, for a caller that wants Fetch's simplicity but
+    not its unbounded wait -- equivalent to FetchOpts(url, FetchOptions{Timeout:
+    timeout}).
+
+func (r *Response) Bytes() ([]byte, error)
+    Bytes reads the full response body as raw bytes -- the binary
+    counterpart to Text/JSON, for a body that isn't valid UTF-8 text (a
+    gzip-compressed file, an image, ...): decoding it as text first,
+    the way Text() does, would corrupt it (invalid byte sequences get
+    replaced with U+FFFD on the JS side before Go ever sees them).
+    Same arrayBuffer()-then-Uint8Array-then-CopyBytesToGo shape
+    File.ReadAsArrayBuffer (fileapi.go) already uses for the same binary-safety
+    reason.
+
+func (r *Response) Close()
+    Close releases what a bounded fetch holds. Text, JSON and Bytes do it
+    themselves; call Close when the body is not read.
 
 func (r *Response) JSON(v any) error
     JSON reads the full response body and decodes it as JSON into v.
@@ -340,6 +413,23 @@ func (s *Socket) OnMessage(fn func(data string))
 
 func (s *Socket) Send(data string)
     Send writes a text frame.
+
+type StorageEstimate struct {
+	Usage int64
+	Quota int64
+}
+    StorageEstimate is navigator.storage.estimate()'s own {usage, quota} result,
+    in bytes -- a browser's own best estimate of how much of this origin's
+    storage quota (LocalStorage + IndexedDB + Cache Storage combined, everything
+    StorageManager covers) is used versus available, not an exact accounting.
+
+func EstimateStorage() (StorageEstimate, error)
+    EstimateStorage wraps navigator.storage.estimate(), blocking until the
+    browser responds. Returns an error on older browsers with no StorageManager
+    API at all (navigator.storage itself undefined) -- checked directly rather
+    than letting a bare .Call on an undefined value panic, since unlike most of
+    this package's own browser APIs, this one has real gaps in the wild worth
+    degrading from gracefully.
 
 type Transaction struct {
 	Value js.Value
