@@ -213,7 +213,8 @@ var ErrLogCut = encrypt.ErrLogTruncated
 // is pointing the watcher at the wrong address, so that it would see nothing.
 var ErrAddressMismatch = errors.New("directoryclient: an entry this client made is not under the address pseudonym the server reported")
 
-// ErrFilteredEnrolled is returned by WatchLog when the audited state says the address is enrolled
+// ErrFilteredEnrolled is returned by WatchLog when the audited state (the saved one, or the one this
+// run's audit derives) says the address is enrolled
 // and the server nevertheless shows only the entries about the address: an enrolled address's
 // owner is shown the whole log, so the server is withholding it.
 var ErrFilteredEnrolled = errors.New("directoryclient: the address is enrolled but the server shows a filtered log")
@@ -574,6 +575,21 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 			rep.Violations = append(rep.Violations, encrypt.AuditViolation{Why: "the directory says the address has an owner key but the log shows none"})
 		case audit.Enrolled && lastOwnerKey(enr.Keys) != cur:
 			rep.Violations = append(rep.Violations, encrypt.AuditViolation{Why: "the directory names another current owner key than the log does"})
+		}
+		// The same rule as the one above, for an enrollment this very run learned of (a first run,
+		// or the enrollment is among the new entries): the audit finds the address enrolled, the
+		// directory says so too, the watcher holds one of its owner keys, and still the answer
+		// was filtered. The owner of an enrolled address is shown the whole log, so the chain is
+		// being withheld. Without the owner key, or when the directory itself says the address
+		// is not enrolled (reported as a violation above), a filtered answer is what any other
+		// caller gets. Nothing is remembered from a run that ends here.
+		if filtered && audit.Enrolled && enr.Enrolled && opt.Owner != nil {
+			pub := encrypt.FormatOwnerPub(opt.Owner.Public().(ed25519.PublicKey))
+			for _, k := range audit.OwnerKeys {
+				if k.Pub == pub {
+					return rep, ErrFilteredEnrolled
+				}
+			}
 		}
 	}
 	rep.Voided = map[int64]int64{}
