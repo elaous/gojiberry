@@ -58,9 +58,11 @@ type ownerUI struct {
 	restore  string // the draft of a backup being restored
 	restoreO bool   // the restore field is open
 
-	logKeys  map[string]string // the pinned log keys (key ID to base64), none until pinned
-	alerts   []string          // what watching found, until dismissed
-	watchMsg string
+	logKeys   map[string]string // the pinned log keys (key ID to base64), none until pinned
+	candidate map[string]string // the keys the server states, shown to be compared before they are pinned
+	expected  string            // a fingerprint the person got from the operator, to hold the candidate to
+	alerts    []string          // what watching found, until dismissed
+	watchMsg  string
 }
 
 // loadWatch restores what is kept for the current directory: the log position, the pinned log keys
@@ -100,10 +102,9 @@ func (d *dirUI) keepAlerts() {
 	lsSet(alertsKey+d.url, string(b))
 }
 
-// pinLogKeys takes the keys the server states for its log and keeps them as the ones to check
-// against. This is trust on first use: it proves the server is consistent with itself from now on,
-// not that it is the server meant, which is why the person is asked first.
-func (d *dirUI) pinLogKeys(ctx context.Context) error {
+// lookAtLogKeys fetches the keys the server states for its log and shows them, with their
+// fingerprints, to be compared before anything is pinned.
+func (d *dirUI) lookAtLogKeys(ctx context.Context) error {
 	keys, err := d.dir.ServerLogKeys(ctx)
 	if err != nil {
 		d.say(dirErr(err).Error(), true)
@@ -113,15 +114,35 @@ func (d *dirUI) pinLogKeys(ctx context.Context) error {
 		d.say(T("dir.log.noKeys", "The server did not state any log keys."), true)
 		return nil
 	}
+	d.owner.candidate, d.owner.expected = keys, ""
+	d.say("", false)
+	return nil
+}
+
+// pinLogKeys keeps the candidate keys as the ones the log is checked against. This is trust on
+// first use unless the person holds a fingerprint from another source (a call, the operator's
+// page): then at least one of the keys must match it, or nothing is pinned. Pinned or not, it proves
+// the server stays consistent with itself from now on, not that it is the server meant.
+func (d *dirUI) pinLogKeys() {
+	keys := d.owner.candidate
+	if want := dirclient.NormalizeFingerprint(d.owner.expected); want != "" {
+		match := false
+		for _, k := range keys {
+			match = match || dirclient.NormalizeFingerprint(dirclient.LogKeyFingerprint(k)) == want
+		}
+		if !match {
+			d.say(T("dir.log.mismatch", "None of the keys this server states has that fingerprint. Nothing was pinned: this may not be the server you meant."), true)
+			return
+		}
+	}
 	if err := d.dir.SetLogKeys(keys); err != nil {
 		d.say(err.Error(), true)
-		return nil
+		return
 	}
 	b, _ := json.Marshal(keys)
 	lsSet(logKeysKey+d.url, string(b))
-	d.owner.logKeys = keys
+	d.owner.logKeys, d.owner.candidate, d.owner.expected = keys, nil, ""
 	d.say(T("dir.log.pinned", "The log keys are pinned: later looks at the log are checked against them."), false)
-	return nil
 }
 
 func (d *dirUI) forgetLogKeys() {
@@ -514,15 +535,29 @@ func (d *dirUI) watchPanel(e *encUI) []xango.Node {
 	var row []xango.Node
 	if len(d.owner.logKeys) == 0 {
 		nodes = append(nodes, para("dir-log-state", T("dir.log.none", "The directory's log keys are not pinned, so its log cannot be checked."), false))
-		row = append(row, btn("dir-log-pin", T("dir.log.pin", "Pin the server's log keys…"), func() {
-			if d.ask == nil {
-				return
+		if d.owner.candidate == nil {
+			row = append(row, btn("dir-log-pin", T("dir.log.pin", "Look at the server's log keys…"), func() { e.run(d.lookAtLogKeys) }, busy))
+		} else {
+			kids := make([]string, 0, len(d.owner.candidate))
+			for kid := range d.owner.candidate {
+				kids = append(kids, kid)
 			}
-			d.ask(T("dir.log.pin", "Pin the server's log keys"),
-				T("dir.log.confirmPin", "Take the log keys this server states and check its log against them from now on? That shows the server stays consistent with itself, not that it is the server you meant. If you can, compare the key IDs with ones you got from another source."),
-				func() { e.run(d.pinLogKeys) })
-			e.render()
-		}, busy))
+			slices.Sort(kids)
+			var lines []xango.Node
+			for _, kid := range kids {
+				lines = append(lines, xango.El("li", nil, xango.Text(kid+": "+dirclient.LogKeyFingerprint(d.owner.candidate[kid]))))
+			}
+			nodes = append(nodes,
+				para("dir-log-compare", T("dir.log.compare", "This server states these log keys. Pinning them makes later looks at its log check against them; that shows the server stays consistent with itself, not that it is the server you meant. If you have a fingerprint from another source (the operator's page, a call), type it below and the keys are pinned only if one of them matches."), false),
+				xango.El("ul", []xango.Attr{xango.A("id", "dir-log-candidates"), xango.A("style", "font-family:monospace;font-size:12px")}, lines...),
+				xango.El("input", []xango.Attr{xango.A("type", "text"), xango.A("id", "dir-log-expected"), xango.A("value", d.owner.expected), xango.A("autocomplete", "off"),
+					xango.A("aria-label", T("dir.log.expected", "Fingerprint to hold the keys to (optional)")), xango.A("placeholder", T("dir.log.expected", "Fingerprint to hold the keys to (optional)")),
+					xango.A("style", "width:100%;box-sizing:border-box;font-size:12px;margin:2px 0"),
+					xango.On("input", func(ev xango.Event) { d.owner.expected = xango.EventValue[string](ev) })}))
+			row = append(row,
+				btn("dir-log-pin-confirm", T("dir.log.pinThese", "Pin these keys"), func() { d.pinLogKeys(); e.render() }, busy),
+				btn("dir-log-pin-cancel", T("dir.log.pinCancel", "Cancel"), func() { d.owner.candidate, d.owner.expected = nil, ""; e.render() }, busy))
+		}
 	} else {
 		kids := make([]string, 0, len(d.owner.logKeys))
 		for kid := range d.owner.logKeys {
