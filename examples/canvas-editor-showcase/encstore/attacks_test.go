@@ -755,3 +755,26 @@ func TestTheSameChangeMadeAgainCanBeFinished(t *testing.T) {
 		t.Fatalf("%d owners", len(r.st.Owners()))
 	}
 }
+
+// A first link that leads nowhere (or in a circle) does not hide another that reaches the target.
+func TestWalkSearchesPastADeadEndAndEndsInACircle(t *testing.T) {
+	a, _ := recovery(t)
+	b, _ := recovery(t)
+	c, _ := recovery(t)
+	d, _ := recovery(t)
+	A, B, C, D := []Owner{ownerOf(a)}, []Owner{ownerOf(b)}, []Owner{ownerOf(c)}, []Owner{ownerOf(d)}
+	cfg := Config{Links: []Link{
+		*linkBy(t, a, A, B), // first match out of A: B has no way on
+		*linkBy(t, b, B, A), // and back again: a circle
+		*linkBy(t, a, A, C),
+		*linkBy(t, c, C, D),
+	}}
+	lists, ok := walk(cfg, A, ownersDigest(D))
+	if !ok || len(lists) != 3 || ownersDigest(lists[1]) != ownersDigest(C) {
+		t.Fatalf("%v %d", ok, len(lists))
+	}
+	e, _ := recovery(t)
+	if _, ok := walk(cfg, A, ownersDigest([]Owner{ownerOf(e)})); ok {
+		t.Error("reached a list no link leads to")
+	}
+}

@@ -205,30 +205,36 @@ func ownSeal(cfg Config, o Owner) *Seal {
 }
 
 // walk follows the links of cfg from the list start to the list whose digest is target, each link
-// signed by a key of the list it leaves. It returns every list on the way (start first) and
-// whether target was reached.
+// signed by a key of the list it leaves. It searches every link out of each list (depth first, a
+// list is visited once), so that a first match that leads nowhere cannot hide another that does.
+// It returns every list on the way (start first) and whether target was reached.
 func walk(cfg Config, start []Owner, target string) ([][]Owner, bool) {
-	cur := start
-	lists := [][]Owner{cur}
-	for steps := 0; ownersDigest(cur) != target; steps++ {
-		if steps > len(cfg.Links) {
-			return lists, false
+	visited := map[string]bool{}
+	var dfs func(cur []Owner, path [][]Owner) ([][]Owner, bool)
+	dfs = func(cur []Owner, path [][]Owner) ([][]Owner, bool) {
+		d := ownersDigest(cur)
+		if d == target {
+			return path, true
 		}
-		from := ownersDigest(cur)
-		var next *Link
+		if visited[d] {
+			return nil, false
+		}
+		visited[d] = true
 		for i := range cfg.Links {
-			if cfg.Links[i].From == from && hasSigner(cur, cfg.Links[i].Signer) && cfg.Links[i].valid() {
-				next = &cfg.Links[i]
-				break
+			l := &cfg.Links[i]
+			if l.From != d || !hasSigner(cur, l.Signer) || !l.valid() {
+				continue
+			}
+			if got, ok := dfs(l.To, append(path[:len(path):len(path)], l.To)); ok {
+				return got, true
 			}
 		}
-		if next == nil {
-			return lists, false
-		}
-		cur = next.To
-		lists = append(lists, cur)
+		return nil, false
 	}
-	return lists, true
+	if got, ok := dfs(start, [][]Owner{start}); ok {
+		return got, true
+	}
+	return [][]Owner{start}, false
 }
 
 func (l Link) valid() bool {
