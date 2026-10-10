@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -623,5 +624,73 @@ func TestWatchMyDirectoryEntry(t *testing.T) {
 	d.OK(d.Count("#dir-log-alerts li") == 1, "and it is not reported twice")
 	d.Click("#dir-log-clear")
 	d.OK(!d.Has("#dir-log-alerts"), "dismissed")
+	d.NoErrors()
+}
+
+// Another person's entries signed by an owner key: the picker does not show the strongest mark on
+// the directory's word; after the person confirms the owner key's fingerprint (a dialog says to
+// compare it another way) the row earns it, and the pin survives a reload.
+func TestConfirmAnotherPersonsOwnerKey(t *testing.T) {
+	site := e2etest.NewSite(t)
+	site.UseLocalhost()
+	srv, err := demoserver.New(site.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	site.Handle("/auth/", srv.Mux)
+	site.Handle("/directory/", srv.Mux)
+	site.Handle("/demo/", srv.Mux)
+	// Bo enrolls an owner key and publishes a key signed by it.
+	boTok, err := srv.Login("bo@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bo := &dirclient.Client{Base: site.URL, Token: func(context.Context) (string, error) { return boTok, nil }}
+	owner, err := dirclient.GenerateOwnerKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := bo.Enroll(ctx, "bo@example.com", owner); err != nil {
+		t.Fatal(err)
+	}
+	pub, secret, _ := encrypt.GenerateRecoveryKey()
+	id, _ := encrypt.ParseAgeIdentity(secret)
+	if _, err := bo.Publish(ctx, dirclient.PublishRequest{Email: "bo@example.com", Key: pub, Label: "Bo", Identity: id, Owner: owner}); err != nil {
+		t.Fatal(err)
+	}
+
+	d := site.OpenURL(t, "/index.html?docstore="+url.QueryEscape(site.URL))
+	d.VirtualAuthenticator()
+	turnOn(t, d, "")
+	saveConfidential(d, "For Bo")
+	d.Click(`button[data-tab="people"]`)
+	d.WaitSelector("#dir-offer")
+	d.Click("#dir-offer-review")
+	confirmDialog(d)
+	d.WaitSelector(".gj-recip-dir-email")
+	find := func() {
+		d.Fill(".gj-recip-dir-email", "bo@example.com")
+		d.WaitFor("the find button", `!document.querySelector('.gj-recip-dir-find').disabled`)
+		d.Click(".gj-recip-dir-find")
+		d.WaitSelector(".gj-recip-dir-row")
+	}
+	find()
+	d.OK(!d.Has(".gj-recip-dir-row .gj-recip-owner-signed"), "the directory's word alone does not earn the owner-signed mark")
+	d.WaitSelector("#dir-pin-0")
+	fp := dirclient.OwnerFingerprint(owner)
+	d.OK(strings.Contains(d.Text("#dir-pin-0"), fp), "the owner key's fingerprint is shown to compare: "+d.Text("#dir-pin-0"))
+	d.Click("#dir-pin-confirm-0")
+	d.WaitSelector(`[role="alertdialog"]`)
+	d.OK(strings.Contains(d.Text(`[role="alertdialog"]`), "another way"), "the question says to compare it elsewhere: "+d.Text(`[role="alertdialog"]`))
+	confirmDialog(d)
+	d.WaitSelector(".gj-recip-dir-row .gj-recip-owner-signed")
+	d.OK(!d.Has("#dir-pin-0"), "nothing is left to confirm")
+
+	// the pin is kept in this browser for this directory, to be restored on the next visit
+	d.OK(strings.Contains(d.Str(`localStorage.getItem('showcase-enc:pins:' + '`+site.URL+`') || ''`), "bo@example.com"), "the confirmed owner key is kept")
+	// looking again shows the mark on the first look, without asking
+	find()
+	d.OK(d.Has(".gj-recip-dir-row .gj-recip-owner-signed") && !d.Has("#dir-pin-0"), "and it still counts on the next lookup")
 	d.NoErrors()
 }
