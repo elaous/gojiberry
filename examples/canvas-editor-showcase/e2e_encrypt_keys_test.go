@@ -404,6 +404,12 @@ func TestPeopleTabUsesTheKeyDirectory(t *testing.T) {
 	d.Click(".gj-recip-dir-find")
 	d.WaitFor("my own key found", `document.querySelectorAll('.gj-recip-dir-row').length === 1`)
 	d.OK(d.Has(".gj-recip-dir-row .gj-recip-verified"), "what I published is listed as verified")
+	// the page opened the server's challenge with the passkey's key: the entry says it was held
+	lookup := httptest.NewRequest("GET", "/directory/lookup?email=ana@example.com", nil)
+	lookup.Header.Set("Authorization", "Bearer "+tok)
+	lrec := httptest.NewRecorder()
+	srv.Mux.ServeHTTP(lrec, lookup)
+	d.OK(lrec.Code == http.StatusOK && strings.Contains(lrec.Body.String(), `"held":true`), "the published key carries the proof of possession: "+lrec.Body.String())
 
 	// A server with no key directory: a clear message, no crash.
 	d.Fill("#dir-url", site.URL+"/nodir")
