@@ -58,6 +58,8 @@ type dirUI struct {
 	verifiedAdded map[string]bool
 	notice        string
 
+	owner ownerUI // the owner key of my address (encowner.go)
+
 	demoToken string // from the server's /demo/provider-session, for the demo server only
 }
 
@@ -187,6 +189,7 @@ func (d *dirUI) connect() {
 	if _, _, err := checkDirURL(d.url); err == nil {
 		d.dir = &dirclient.Client{Base: d.url, Token: d.sessionToken}
 	}
+	d.loadOwner()
 }
 
 // sessionToken is the token the person set, or, for the demo server (it hands one out at
@@ -233,7 +236,7 @@ func dirErr(err error) error {
 	case errors.Is(err, dirclient.ErrBadProof):
 		msg = T("dir.err.badProof", "The directory did not accept the proof that you hold this key.")
 	case errors.Is(err, dirclient.ErrOwnerRequired):
-		msg = T("dir.err.owner", "This address has an owner key, so the directory only takes entries signed by it. Signing with an owner key is not available here yet.")
+		msg = T("dir.err.owner", "This address has an owner key, so the directory only takes entries signed by it. Make or restore its owner key in the settings below.")
 	case errors.Is(err, dirclient.ErrRateLimited):
 		msg = T("dir.err.rate", "The key directory is rate limited: try again in a minute.")
 	default:
@@ -290,7 +293,8 @@ func (d *dirUI) publish(ctx context.Context, e *encUI) error {
 		}
 		// the proof of possession needs the private side, which is held only while that key is unlocked
 		id, _ := e.store.IdentityFor(o.Public)
-		if _, err := d.dir.Publish(ctx, dirclient.PublishRequest{Key: o.Public, Label: o.Label, Identity: id}); err != nil {
+		req := dirclient.PublishRequest{Key: o.Public, Label: o.Label, Identity: id, Email: d.owner.email, Owner: d.owner.key}
+		if _, err := d.dir.Publish(ctx, req); err != nil {
 			return dirErr(err)
 		}
 		n++
@@ -338,6 +342,7 @@ func (d *dirUI) settingsPanel(e *encUI) []xango.Node {
 		xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px")},
 			btn("dir-save", T("dir.save", "Use this key directory"), func() { d.save(e) }, false),
 			btn("dir-clear", T("dir.clear", "Stop using a key directory"), func() { d.clear(); e.render() }, d.url == "" && d.offer == "")))
+	nodes = append(nodes, d.ownerPanel(e)...)
 	return []xango.Node{xango.El("div", []xango.Attr{xango.A("id", "dir-settings"), xango.A("style", "margin-top:1em;border-top:1px solid #d1d5db;padding-top:8px")}, nodes...)}
 }
 
