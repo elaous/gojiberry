@@ -234,6 +234,16 @@ type ExpiringAdapter struct {
 	// adapter. The public offer uses it to count version snapshots as they are written. Set it
 	// before the adapter is in use.
 	OnSave func(id string, size int)
+	// Guard, when set, is asked before every Save and SaveIf (nothing is renewed or written if it
+	// refuses): a non-nil error refuses the write and is returned as it is. A non-nil done is called
+	// when the write ended, with whether it was stored. It must be quick and must not call back
+	// into the adapter. The public offer uses it to refuse a version snapshot that would pass its
+	// byte budget, and to count the ones it lets through. Set it before the adapter is in use.
+	Guard func(id string, size int) (done func(stored bool), err error)
+	// OnDelete, when set, is called after a version snapshot ("versions/...") was deleted by Delete,
+	// with its id and the size it had (0 if the store could not say). It must be quick and must not
+	// call back into the adapter. The public offer uses it to subtract the snapshot at once.
+	OnDelete func(id string, size int)
 	// Orphans, when set, makes Sweep also delete the shared-editing state ("collab:<id>") of a
 	// document that does not exist in the store (see OrphanPolicy). Nil (the default) leaves
 	// such entries alone.
@@ -688,11 +698,32 @@ func (e *ExpiringAdapter) renewed(ctx context.Context, id string, write func() e
 
 // Save implements Adapter: it stores the document and renews its deadline.
 func (e *ExpiringAdapter) Save(ctx context.Context, id string, data []byte) error {
-	if err := e.renewed(ctx, id, func() error { return e.Inner.Save(ctx, id, data) }); err != nil {
+	done, err := e.guard(id, len(data))
+	if err != nil {
 		return err
 	}
+	if err := e.renewed(ctx, id, func() error { return e.Inner.Save(ctx, id, data) }); err != nil {
+		done(false)
+		return err
+	}
+	done(true)
 	e.saved(id, len(data))
 	return nil
+}
+
+// guard asks Guard; the done it returns is never nil.
+func (e *ExpiringAdapter) guard(id string, size int) (func(bool), error) {
+	if e.Guard == nil {
+		return func(bool) {}, nil
+	}
+	done, err := e.Guard(id, size)
+	if err != nil {
+		return nil, err
+	}
+	if done == nil {
+		done = func(bool) {}
+	}
+	return done, nil
 }
 
 func (e *ExpiringAdapter) saved(id string, size int) {
@@ -707,9 +738,15 @@ func (e *ExpiringAdapter) SaveIf(ctx context.Context, id string, data []byte, pr
 	if !ok {
 		return ErrConditionalUnsupported
 	}
-	if err := e.renewed(ctx, id, func() error { return c.SaveIf(ctx, id, data, prev) }); err != nil {
+	done, err := e.guard(id, len(data))
+	if err != nil {
 		return err
 	}
+	if err := e.renewed(ctx, id, func() error { return c.SaveIf(ctx, id, data, prev) }); err != nil {
+		done(false)
+		return err
+	}
+	done(true)
 	e.saved(id, len(data))
 	return nil
 }
@@ -940,12 +977,21 @@ func (e *ExpiringAdapter) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	expired := ok && e.expired(t)
+	size := 0
+	if e.OnDelete != nil && strings.HasPrefix(id, versionsPrefix) {
+		if doc, err := e.Inner.Load(ctx, id); err == nil {
+			size = len(doc.Data)
+		}
+	}
 	found, err := e.purgeLocked(ctx, id)
 	if err != nil {
 		return err
 	}
 	if expired || !found {
 		return ErrNotFound
+	}
+	if e.OnDelete != nil && strings.HasPrefix(id, versionsPrefix) {
+		e.OnDelete(id, size)
 	}
 	return nil
 }
