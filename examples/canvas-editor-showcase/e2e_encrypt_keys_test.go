@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -604,7 +605,17 @@ func TestWatchMyDirectoryEntry(t *testing.T) {
 	// without pinned keys the log is not read
 	d.OK(!d.Has("#dir-log-watch"), "no watch button before the keys are pinned")
 	d.Click("#dir-log-pin")
-	confirmDialog(d)
+	d.WaitSelector("#dir-log-candidates li")
+	// the keys are shown with fingerprints to compare; a fingerprint that is not theirs pins nothing
+	d.OK(regexp.MustCompile(`: [0-9a-f]{4} [0-9a-f]{4} [0-9a-f]{4} [0-9a-f]{4}$`).MatchString(d.Text("#dir-log-candidates li")), "each key has a fingerprint: "+d.Text("#dir-log-candidates li"))
+	d.Fill("#dir-log-expected", "dead beef dead beef")
+	d.Click("#dir-log-pin-confirm")
+	d.WaitFor("the refusal", `(document.querySelector('#dir-owner-msg') || {textContent: ''}).textContent.includes('Nothing was pinned')`)
+	d.OK(!d.Has("#dir-log-watch"), "nothing was pinned")
+	// the real one, typed the way a person copies it (upper case, colons), pins
+	fp := strings.ToUpper(strings.ReplaceAll(strings.SplitN(d.Text("#dir-log-candidates li"), ": ", 2)[1], " ", ":"))
+	d.Fill("#dir-log-expected", fp)
+	d.Click("#dir-log-pin-confirm")
 	d.WaitSelector("#dir-log-watch")
 	d.OK(strings.Contains(d.Text("#dir-log-state"), "Pinned log keys"), "the pinned key IDs are shown: "+d.Text("#dir-log-state"))
 
@@ -774,7 +785,9 @@ func TestNoAccessibilityViolationsAxeInTheKeyDirectory(t *testing.T) {
 	d.WaitSelector("#dir-owner-backup-box")
 	check("the owner key and its backup")
 	d.Click("#dir-log-pin")
-	confirmDialog(d)
+	d.WaitSelector("#dir-log-candidates li")
+	check("the log keys to compare")
+	d.Click("#dir-log-pin-confirm")
 	d.WaitSelector("#dir-log-watch")
 	check("the log keys pinned")
 	d.Click(".gj-recip-publish")

@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-7 of 10 since the last full run (#140 to #145, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+8 of 10 since the last full run (#140 to #146, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1175,8 +1175,9 @@ unless stated.
     when it is made; a key an earlier page kept as text is moved on the next visit; a browser without Ed25519 in
     WebCrypto falls back to text and the panel says so. Still in `localStorage`: the directory session token typed
     into the page (it belongs to the provider session, which the person can end), and a signature is still possible
-    for as long as a hostile script runs in the page; (2) the log keys are pinned on first use, so a hostile server on the first
-    visit is trusted: show the key IDs and ask the person to compare them out of band, or accept pasted keys; (3) the
+    for as long as a hostile script runs in the page; (2) ~~the log keys are pinned on first use~~ **improved (this PR)**: the keys are shown with
+    fingerprints, and a fingerprint typed from another source (the operator's page, a call) must match one of them or
+    nothing is pinned; without one it is still trust on first use, and the panel says so; (3) the
     expiry race is closed to the content, not to a save with identical bytes; (4) an S3-compatible service that
     ignores `If-Match` on delete would delete a changed document (the doc says so; there is no live endpoint here
     to test the real services); (5) the passkey PRF path, the age and SSH usage and the signed-frame format have
