@@ -238,7 +238,7 @@ func New(o Options) (*Service, error) {
 	// are written (refused with docstore.ErrStorageFull when they would pass the byte budget) and
 	// counted when they are stored, and subtracted when they are deleted. This sets hooks on the
 	// caller's adapter: build the Service before serving.
-	if ea, ok := o.Store.(*docstore.ExpiringAdapter); ok {
+	if ea := expiringOf(o.Store); ea != nil {
 		prev := ea.Guard
 		ea.Guard = func(id string, size int) (func(bool), error) {
 			var prevDone func(bool)
@@ -1738,6 +1738,29 @@ func (s *Service) handleTakedown(w http.ResponseWriter, r *http.Request) {
 	}
 	s.bytes.release(docID)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ExpiringHolder is implemented by a store that wraps an *docstore.ExpiringAdapter (to count, log or
+// encrypt around it): the public service puts its snapshot hooks (Guard, OnDelete) on the adapter it
+// returns, as it does on a bare *docstore.ExpiringAdapter. Without it a wrapper gets no hooks, and the
+// service logs that snapshots are then counted only when Sweep lists the store.
+type ExpiringHolder interface {
+	Expiring() *docstore.ExpiringAdapter
+}
+
+// expiringOf finds the ExpiringAdapter behind a store: the store itself or the one an ExpiringHolder
+// names; nil if there is none, which is logged.
+func expiringOf(store docstore.Adapter) *docstore.ExpiringAdapter {
+	switch v := store.(type) {
+	case *docstore.ExpiringAdapter:
+		return v
+	case ExpiringHolder:
+		if ea := v.Expiring(); ea != nil {
+			return ea
+		}
+	}
+	log.Printf("public docstore: the store is not an *docstore.ExpiringAdapter and names none (public.ExpiringHolder): version snapshots are not refused over the byte budget and are counted only when Sweep lists the store")
+	return nil
 }
 
 // NoteVersionWrite tells the byte budget that a version snapshot of a public document was written:
