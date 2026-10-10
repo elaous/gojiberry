@@ -218,3 +218,42 @@ func TestHubCannotAddressPublicDocuments(t *testing.T) {
 		t.Fatal("a renewal was made for a slash id")
 	}
 }
+
+// The mark of a closed document is in the store: a new process (a restart, another replica) refuses
+// the id too, and an editor of a document that is live again clears it.
+func TestClosedDocumentStaysRefusedAcrossARestart(t *testing.T) {
+	store := docstore.NewMemoryAdapter()
+	var calls atomic.Int32
+	h1, e1 := newRenewHub(t, Config{Store: store, RenewInterval: -1, Renewer: rf(func(context.Context, string) error {
+		if calls.Add(1) == 1 {
+			return nil
+		}
+		return docstore.ErrNotFound
+	})})
+	editOK(t, h1, e1, "d", "c1")
+	editOK(t, h1, e1, "d", "c2") // gone, confirmed: the room is closed
+	if !exists(t, store, goneKey("d")) {
+		t.Fatal("no mark in the store")
+	}
+
+	live := false
+	_, e2 := newRenewHub(t, Config{Store: store, RenewInterval: -1, Renewer: rf(func(context.Context, string) error {
+		if live {
+			return nil
+		}
+		return docstore.ErrNotFound
+	})})
+	if s := e2.post(t, "d", "editor", "", "r", textOps(t, "c3", "x")); s != http.StatusGone {
+		t.Fatalf("a new process took the closed document: %d, want 410", s)
+	}
+	if s := e2.get(t, "/docs/d/snapshot", "viewer"); s != http.StatusGone {
+		t.Fatalf("a viewer of the closed document: %d, want 410", s)
+	}
+	live = true
+	if s := e2.post(t, "d", "editor", "", "r", textOps(t, "c4", "y")); s >= 300 {
+		t.Fatalf("an editor of a document that is live again: %d", s)
+	}
+	if exists(t, store, goneKey("d")) {
+		t.Error("the mark was not cleared")
+	}
+}
