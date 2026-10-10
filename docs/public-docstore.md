@@ -269,7 +269,7 @@ a tombstone, a content `Blocklist` hook and a `Challenger` hook. Still to do bef
 6. The client side: the editor's session handling, the edit and view links, the countdown, "Keep
    this document", the report link on a shared view, `noindex` on the pages that serve it (the
    routes themselves send `X-Robots-Tag: noindex` and `Cache-Control: no-store`).
-7. Reports are bounded per document (20), deduplicated per (document, reporter, reason), rate-limited
+7. Reports are bounded per document (20), deduplicated per (document, reporter, category), rate-limited
    per address, bounded as a whole (`_MAX_REPORTS`, `_MAX_REPORT_BYTES`), with slots reserved for new
    reporters and a priority list of report *categories* (`csam`, `illegal`) that is evicted last, with its own caps (section 7.2, items 12 and 17).
 

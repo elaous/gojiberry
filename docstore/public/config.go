@@ -16,6 +16,9 @@ import (
 // Config holds the limits and switches of the public offer. A zero field takes its default.
 // FromEnv reads the GOJIBERRY_DOCSTORE_PUBLIC_* variables.
 type Config struct {
+	// legacyEnv names variables FromEnv found that are no longer read (Warnings says so).
+	legacyEnv []string
+
 	// Enabled is GOJIBERRY_DOCSTORE_PUBLIC=true: whether the public routes are mounted. Off
 	// (the default) the server behaves exactly as without this package.
 	Enabled bool
@@ -177,21 +180,25 @@ type Config struct {
 
 // Defaults of Config.
 const (
-	DefaultMaxDocBytes       = 4 << 20
-	DefaultMaxVersions       = 2000
-	DefaultIPDailyBytes      = 50 << 20
-	DefaultSessionTTL        = 24 * time.Hour
-	DefaultSessionMaxAge     = 72 * time.Hour
-	DefaultSessionIdleTTL    = time.Hour
-	DefaultSessionsPerHour   = 6
-	DefaultWritesPerMinute   = 30
-	DefaultViewsPerMinute    = 120
-	DefaultReportsPerMinute  = 5
-	DefaultRecordTTL         = 30 * 24 * time.Hour
-	DefaultMaxPerAddress     = 10
-	DefaultMaxPerNet         = 100
-	DefaultMaxPerWide        = 500
-	DefaultMinUploadRate     = 32 << 10
+	DefaultMaxDocBytes      = 4 << 20
+	DefaultMaxVersions      = 2000
+	DefaultIPDailyBytes     = 50 << 20
+	DefaultSessionTTL       = 24 * time.Hour
+	DefaultSessionMaxAge    = 72 * time.Hour
+	DefaultSessionIdleTTL   = time.Hour
+	DefaultSessionsPerHour  = 6
+	DefaultWritesPerMinute  = 30
+	DefaultViewsPerMinute   = 120
+	DefaultReportsPerMinute = 5
+	DefaultRecordTTL        = 30 * 24 * time.Hour
+	DefaultMaxPerAddress    = 10
+	DefaultMaxPerNet        = 100
+	DefaultMaxPerWide       = 500
+	DefaultMinUploadRate    = 32 << 10
+	// MinUploadRateFloor is the lowest minimum rate that is honored: a lower positive MinUploadRate
+	// is raised to it (a rate of a few bytes a second would let a client hold a slot for the whole
+	// RequestTimeout, which is the thing the minimum exists to prevent; Warnings says so).
+	MinUploadRateFloor       = 1 << 10
 	DefaultUploadGrace       = 5 * time.Second
 	DefaultPriorityPerDay    = 3
 	DefaultPriorityBurst     = 10
@@ -299,6 +306,9 @@ func (c Config) withDefaults() Config {
 	}
 	if c.MinUploadRate == 0 {
 		c.MinUploadRate = DefaultMinUploadRate
+	}
+	if c.MinUploadRate > 0 && c.MinUploadRate < MinUploadRateFloor {
+		c.MinUploadRate = MinUploadRateFloor
 	}
 	if c.UploadGrace <= 0 {
 		c.UploadGrace = DefaultUploadGrace
@@ -415,6 +425,18 @@ func (c Config) Warnings() []string {
 	if len(c.ReportKey) == 0 {
 		w = append(w, "GOJIBERRY_DOCSTORE_PUBLIC_REPORT_KEY (or GOJIBERRY_DOCSTORE_DIRECTORY_KEY) is not set: the reporter hashes of abuse reports are keyed with a key made for this process, so the detection of duplicate reports starts afresh at every restart. Set a secret that is kept out of the store the documents are in")
 	}
+	if c.MinUploadRate > 0 && c.MinUploadRate < MinUploadRateFloor {
+		w = append(w, fmt.Sprintf("GOJIBERRY_DOCSTORE_PUBLIC_MIN_UPLOAD_RATE %d is below the floor of %d bytes per second and is raised to it (a slower minimum lets a trickling client hold a slot for the whole request timeout); use a negative value to turn the minimum off", c.MinUploadRate, MinUploadRateFloor))
+	}
+	d := c.withDefaults()
+	if c.MaxSessionsPerWide > 0 && d.MaxSessionsPerWide != c.MaxSessionsPerWide {
+		w = append(w, fmt.Sprintf("GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS_PER_WIDE %d is not usable next to the other session caps and is changed to %d (it is at least _MAX_SESSIONS_PER_NET and at most _MAX_SESSIONS)", c.MaxSessionsPerWide, d.MaxSessionsPerWide))
+	} else if c.MaxSessionsPerWide <= 0 && d.MaxSessionsPerWide != DefaultMaxPerWide {
+		w = append(w, fmt.Sprintf("GOJIBERRY_DOCSTORE_PUBLIC_MAX_SESSIONS_PER_WIDE is not set and is %d, not the default %d, because _MAX_SESSIONS_PER_NET or _MAX_SESSIONS moved it; set it to say what is meant (the per-wide cap was added after the per-network one, so a configuration written before it has none)", d.MaxSessionsPerWide, DefaultMaxPerWide))
+	}
+	for _, name := range c.legacyEnv {
+		w = append(w, name+" is no longer read; use GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS_PER_HOUR (a rate per hour, not per minute)")
+	}
 	return w
 }
 
@@ -457,6 +479,11 @@ func (c Config) Warnings() []string {
 func FromEnv(getenv func(string) string) (Config, error) {
 	var c Config
 	var errs []string
+	for _, old := range []string{"GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS_PER_MINUTE"} {
+		if strings.TrimSpace(getenv(old)) != "" {
+			c.legacyEnv = append(c.legacyEnv, old)
+		}
+	}
 	get := func(name string) string { return strings.TrimSpace(getenv("GOJIBERRY_DOCSTORE_PUBLIC" + name)) }
 	i64 := func(name string, dst *int64) {
 		if v := get(name); v != "" {
@@ -728,10 +755,4 @@ func deriveReportKey(material []byte) []byte {
 	m := hmac.New(sha256.New, material)
 	_, _ = m.Write([]byte("gojiberry/public/report-key/v1"))
 	return m.Sum(nil)
-}
-
-// normalizeReason is a report reason as it is compared: trimmed, lowercased, inner whitespace
-// collapsed.
-func normalizeReason(r string) string {
-	return strings.ToLower(strings.Join(strings.Fields(r), " "))
 }
