@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-0 of 10 since the last full run. The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+1 of 10 since the last full run (#150 is not counted; this PR is the first). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1167,11 +1167,11 @@ unless stated.
     for the one secret the page keeps. Where: `examples/canvas-editor-showcase` (`dirclient`, `encowner.go`),
     `docs/encryption-and-passkeys.md` (5.7). Avoid: forgetting the key and enrolling again (the address refuses a
     second enrollment).
-88. **The API dumps under `docs/*.txt` are stale.** Kind: fixable (housekeeping). Why: `make docs` (`go doc -all`) was
-    last run long ago: running it now changes eight dumps by about 2,200 lines (the `components` dump alone gains
-    about 1,900), so the dumps no longer show the real public API. Plan: regenerate them in one docs-only PR, and
-    make `make check` fail when a dump is stale (as `generate-check` does for `*.xg.go`) or drop the dumps from the
-    repository if nobody reads them. Priority: low. Where: `docs/*.txt`, `Makefile`.
+88. **Done (this PR): the API dumps under `docs/*.txt` are regenerated, and `make check` fails when they go stale.**
+    Was: `make docs` (`go doc -all`) had not been run for a long time (about 2,200 lines of difference across eight
+    dumps, the `components` dump alone about 1,900), so the dumps did not show the real public API. Now they are
+    regenerated, and `make check` runs `make docs` and a new `docs-check` (as `generate-check` does for `*.xg.go`)
+    that fails when a tracked dump changed. `Makefile`, `docs/*.txt`.
 89. **Security review of the keys, ceremonies and directory: what was fixed and what is open.** Kind: mixed. A
     read-through of the code (not an external audit, which should come before anyone relies on this for secrets).
     **Fixed (this PR):** `encrypt.OpenChallenge` decrypted whatever the directory sent as a "challenge" with the

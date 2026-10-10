@@ -50,6 +50,64 @@ func (b *ButtonElement) SetType(t string)
 func (b *ButtonElement) Type() string
     Type returns the button's type ("submit", "reset", or "button").
 
+type Canvas2D interface {
+	SetFillStyle(style string)
+	SetStrokeStyle(style string)
+	SetLineWidth(width float64)
+	SetFont(font string)
+	SetTextAlign(align string)
+	SetTextBaseline(baseline string)
+
+	ClearRect(x, y, w, h float64)
+	FillRect(x, y, w, h float64)
+	StrokeRect(x, y, w, h float64)
+
+	BeginPath()
+	MoveTo(x, y float64)
+	LineTo(x, y float64)
+	Arc(x, y, radius, startAngle, endAngle float64, counterclockwise bool)
+	Rect(x, y, w, h float64)
+	Fill()
+	Stroke()
+	Clip()
+
+	FillText(text string, x, y float64)
+	MeasureTextWidth(text string) float64
+
+	DrawImage(image js.Value, dx, dy float64)
+	DrawImageScaled(image js.Value, dx, dy, dw, dh float64)
+	DrawImageClipped(image js.Value, sx, sy, sw, sh, dx, dy, dw, dh float64)
+	GetImageData(x, y, w, h int) ImageData
+
+	Save()
+	Restore()
+	Translate(x, y float64)
+	Rotate(angle float64)
+	Transform(a, b, cc, d, e, f float64)
+	SetTransform(a, b, cc, d, e, f float64)
+}
+    Canvas2D is the subset of *Context2D's own method set a real consumer
+    (OnDesign's own layout.go/main.xg rendering, audited directly rather than
+    guessed at) actually calls -- task #107's own mobile-backend groundwork
+    (see OnDesign's docs/ROADMAP.md, "genuine native mobile backend"):
+    the seam a second, non-browser implementation (a Gio-backed one,
+    spiked separately and found to work for exactly this method shape) needs
+    to exist at all before any backend-swapping is possible, since *Context2D
+    wrapping js.Value directly has none today. Deliberately the narrower,
+    need-driven set this task's own roadmap entry called for, not every
+    method *Context2D happens to have (ArcTo/BezierCurveTo/QuadraticCurveTo/
+    StrokeText/the property *getters*/GlobalAlpha/
+    GlobalCompositeOperation/LineCap/LineJoin/Scale/ResetTransform are real,
+    but unused by the one real consumer this was audited against) -- a narrower
+    interface is both easier for a second implementation to satisfy honestly and
+    easier to keep both implementations consistent against. Add a method here
+    only once something real needs it, the same way this list was built by grep,
+    not by copying *Context2D's own full surface speculatively.
+
+    *Context2D already satisfies this (var _ Canvas2D = (*Context2D)(nil) below)
+    -- this commit changes no behavior at all, it only names a seam that was
+    previously implicit.
+
 type CanvasElement struct{ Element }
     CanvasElement is an Element known to be a <canvas>. See
     CanvasElement.GetContext2D/GetContext3D (in canvas2d.go/canvas3d.go) for its
@@ -361,6 +419,13 @@ func (c *Context3D) DYNAMIC_DRAW() int
     DYNAMIC_DRAW hints that a buffer's contents are changed often and used many
     times.
 
+func (c *Context3D) DeleteProgram(program js.Value)
+    DeleteProgram frees a program.
+
+func (c *Context3D) DeleteShader(shader js.Value)
+    DeleteShader flags a shader for deletion (it is freed once no program uses
+    it).
+
 func (c *Context3D) Disable(cap int)
     Disable turns off a WebGL capability.
 
@@ -608,7 +673,8 @@ func (d *Document) Get(name string) js.Value
     (e.g. Get("title"), Get("readyState")).
 
 func (d *Document) GetElementByID(id string) *Element
-    GetElementByID returns the element with the given id.
+    GetElementByID returns the element with the given id, or nil when there is
+    none (as QuerySelector does).
 
 func (d *Document) GetElementsByClassName(class string) []Element
     GetElementsByClassName returns every element with the given class.
@@ -802,7 +868,9 @@ func (e *Element) Get(name string) js.Value
     Get("dataset"), Get("style"), Get("checked")).
 
 func (e *Element) GetAttribute(name string) string
-    GetAttribute returns the named HTML attribute's value.
+    GetAttribute returns the named HTML attribute's value, or "" when the
+    element has no such attribute (use HasAttribute to tell it from an empty
+    one).
 
 func (e *Element) GetClassName() string
     GetClassName returns e's class attribute. On an SVG element this is
@@ -830,6 +898,9 @@ func (e *Element) GetTitle() string
 func (e *Element) GetValue() string
     GetValue returns a form element's current value (e.g. an
     <input>/<textarea>).
+
+func (e *Element) HasAttribute(name string) bool
+    HasAttribute reports whether the element has the named attribute.
 
 func (e *Element) Hidden() bool
     Hidden returns whether e is hidden (the hidden attribute/property).
@@ -1215,16 +1286,12 @@ type MouseEvent struct {
     relative to the viewport (clientX/clientY), which button (0 = left/primary,
     1 = middle, 2 = right, matching the DOM's own MouseEvent.button --
     mousedown/mouseup fire for every button, not just the primary one, so check
-    this before treating one as a plain click), the browser's own click count
-    (Detail, the DOM's UIEvent.detail: 1 = single, 2 = double, 3 = triple,
-    ... -- already computed using the OS/browser's own multi-click timing and
-    movement thresholds, so consumers that care about double/triple-click
-    should read this rather than hand-rolling their own click-timer state
-    machine) and modifier keys -- xango.Event carries neither at all (see its
-    doc comment), so, like DragEvent and KeyEvent, this is a typed escape
-    hatch for building anything that needs a real click/drag position or a
-    modifier-qualified click: canvas hit-testing, custom selection, image
-    cropping, Alt+Click to add a multi-cursor caret, and so on.
+    this before treating one as a plain click) and modifier keys -- xango.Event
+    carries neither at all (see its doc comment), so, like DragEvent and
+    KeyEvent, this is a typed escape hatch for building anything that needs a
+    real click/drag position or a modifier-qualified click: canvas hit-testing,
+    custom selection, image cropping, Alt+Click to add a multi-cursor caret,
+    and so on.
 
 func (e MouseEvent) PreventDefault()
     PreventDefault suppresses the browser's default handling of the event. This
@@ -1368,13 +1435,19 @@ func (w *Window) Call(method string, args ...any) js.Value
     Call invokes a method not covered by a typed wrapper above.
 
 func (w *Window) ClearAnimationFrame(id int)
-    ClearAnimationFrame cancels a pending callback from RequestAnimationFrame.
+    ClearAnimationFrame cancels a pending callback from RequestAnimationFrame
+    and releases its own underlying js.Func -- the same "cancelled before it
+    fired" half ClearTimeout's own doc comment describes.
 
 func (w *Window) ClearInterval(id int)
-    ClearInterval cancels a repeating timer from SetInterval.
+    ClearInterval cancels a repeating timer from SetInterval and releases its
+    own underlying js.Func.
 
 func (w *Window) ClearTimeout(id int)
-    ClearTimeout cancels a pending timer from SetTimeout.
+    ClearTimeout cancels a pending timer from SetTimeout and releases its own
+    underlying js.Func -- a timer that's allowed to fire normally instead
+    releases itself (see SetTimeout's own doc comment); this is the other half,
+    for one cancelled before it ever fires.
 
 func (w *Window) Close()
     Close closes the window (only effective for windows opened via Open).
@@ -1447,7 +1520,11 @@ func (w *Window) ReplaceState(url string)
 
 func (w *Window) RequestAnimationFrame(fn func()) int
     RequestAnimationFrame schedules fn before the next repaint and returns the
-    id ClearAnimationFrame needs to cancel it.
+    id ClearAnimationFrame needs to cancel it. Its own js.Func releases itself
+    right after fn runs, the same one-shot reasoning SetTimeout's own doc
+    comment gives -- rescheduling another frame (as an animation loop's own fn
+    typically does, by calling RequestAnimationFrame again from inside itself)
+    is a fresh call with a fresh Func, not a reuse of this one.
 
 func (w *Window) ScrollBy(dx, dy int, smooth bool)
     ScrollBy scrolls the page by a relative offset, smoothly if smooth is true
@@ -1464,13 +1541,19 @@ func (w *Window) ScrollY() float64
     ScrollY returns how far the page is scrolled from the top, in pixels.
 
 func (w *Window) SetInterval(fn func(), delay int) int
-    SetInterval schedules fn to run every delay milliseconds and returns the id
-    ClearInterval needs to stop it.
+    SetInterval schedules fn to run every delay milliseconds and returns the
+    id ClearInterval needs to stop it. Unlike SetTimeout, its own js.Func can't
+    release itself on fire (it's meant to fire again) -- ClearInterval releases
+    it once the caller actually stops the repeating timer.
 
 func (w *Window) SetLocation(url string)
     SetLocation navigates the window to url.
 
 func (w *Window) SetTimeout(fn func(), delay int) int
-    SetTimeout schedules fn to run once after delay milliseconds and returns the
-    id ClearTimeout needs to cancel it.
+    SetTimeout schedules fn to run once after delay milliseconds and returns
+    the id ClearTimeout needs to cancel it. The underlying js.Func releases
+    itself right after fn runs -- a one-shot timer's own closure is never needed
+    again once it's fired, so callers that let it fire normally need do nothing
+    further; ClearTimeout releases it instead for a timer that's cancelled
+    before it ever fires.
 

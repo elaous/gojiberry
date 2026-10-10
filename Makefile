@@ -5,7 +5,7 @@
 # GOARCH=wasm (domrt and friends are js/wasm-only), and run the
 # vscode-xango grammar suite against every *.xg file in the repo.
 .PHONY: check
-check: generate generate-check fmt-check vet test wasm-vet lint wasm-lint modules lint-modules grammar-test-setup grammar-test
+check: generate generate-check docs docs-check fmt-check vet test wasm-vet lint wasm-lint modules lint-modules grammar-test-setup grammar-test
 
 .PHONY: generate
 generate:
@@ -18,6 +18,15 @@ generate-check:
 	@out="$$(git status --porcelain -- '*.xg.go')"; \
 	if [ -n "$$out" ]; then \
 		echo "generated files are stale (run make generate and commit):"; echo "$$out"; exit 1; \
+	fi
+
+# docs-check fails when regenerating the API dumps (`make docs`) changed a tracked docs/*.txt: a dump
+# was committed stale, so it no longer shows the real public API. Run `make docs` and commit.
+.PHONY: docs-check
+docs-check:
+	@out="$$(git status --porcelain -- 'docs/*.txt')"; \
+	if [ -n "$$out" ]; then \
+		echo "API dumps are stale (run make docs and commit):"; echo "$$out"; exit 1; \
 	fi
 
 .PHONY: fmt-check
