@@ -835,3 +835,61 @@ func TestParseWatchState(t *testing.T) {
 		}
 	}
 }
+
+// A user who checked the new owner key with its owner accepts it: the warning clears for that key.
+func TestAcceptOwnerClearsTheChangedWarningForThatKey(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	c := e.client(ana)
+	owner, _ := GenerateOwnerKey()
+	if _, err := c.Enroll(ctx, "ana@x.io", owner); err != nil {
+		t.Fatal(err)
+	}
+	p1, _, id1 := ageKey(t)
+	if _, err := c.Publish(ctx, PublishRequest{Email: "ana@x.io", Key: p1, Identity: id1, Owner: owner}); err != nil {
+		t.Fatal(err)
+	}
+	// Bo sees the first owner key.
+	b := e.client(bo)
+	if _, err := b.Lookup(ctx, "ana@x.io"); err != nil {
+		t.Fatal(err)
+	}
+	next, _ := GenerateOwnerKey()
+	if _, err := c.Rotate(ctx, "ana@x.io", owner, next); err != nil {
+		t.Fatal(err)
+	}
+	p2, _, id2 := ageKey(t)
+	if _, err := c.Publish(ctx, PublishRequest{Email: "ana@x.io", Key: p2, Identity: id2, Owner: next}); err != nil {
+		t.Fatal(err)
+	}
+	changed := func() (n int, pub string) {
+		rows, err := b.Lookup(ctx, "ana@x.io")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range rows {
+			if r.OwnerChanged {
+				n++
+				pub = r.Owner.Pub
+			}
+		}
+		return n, pub
+	}
+	n, pub := changed()
+	if n == 0 || pub == "" {
+		t.Fatalf("the rotated key is not flagged: %d", n)
+	}
+	if err := b.AcceptOwner("ana@x.io", pub); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := changed(); n != 0 {
+		t.Errorf("still flagged after the user accepted it: %d", n)
+	}
+	if err := b.AcceptOwner("nobody@x.io", pub); err == nil {
+		t.Error("an address never looked up was accepted")
+	}
+	b.State = nil
+	if err := b.AcceptOwner("ana@x.io", pub); err == nil {
+		t.Error("accepted with nowhere to remember it")
+	}
+}

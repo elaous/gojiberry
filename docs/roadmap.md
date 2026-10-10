@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (#118, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
+3 of 10 since the last full run (#118, #119, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -591,12 +591,13 @@ New entries:
     the lookups of everyone behind its address and in its shard, and the reverse. Now a log read spends `dir-log`
     (per user, as before), `dir-log-ip` (120 a minute) and `dir-log-all-N` (1200 a minute over 16 shards), the same
     numbers as lookups but separate keys. `docstore/directory.go` (`readBudget`, `readKind`, `directoryLimits`).
-36. **Sticky `FirstOwner`: after a legitimate owner key rotation, third-party lookups show "changed" permanently.**
-    Kind: fixable. Why: the first owner key a third party saw is kept; a rotation is indistinguishable from an
-    attack, so the warning never clears. Plan: a user action to confirm the new key (a signed rotation chain
-    from the owner, or a one-click acknowledgement that stores the new first key). Priority: medium. Where:
-    `docstore/directoryclient` (the lookup state and its `FirstOwner` field). Related to
-    [limits register item 7](limits-register.md#the-key-directory).
+36. **Done (this PR): the user can accept a rotated owner key.** Was: the first owner key a third party saw was kept for
+    good, so after a legitimate rotation the lookups of that address showed "changed" forever. Now
+    `Client.AcceptOwner(email, ownerPub)` remembers the key the user checked with its owner
+    (`SeenAddress.Accepted`); rows signed by it, and by the first key, show as first-seen (remembered, not confirmed)
+    instead of changed. A pinned key and the audited chain are untouched. Still to do: a button for it in the
+    showcase People tab and a signed rotation chain a third party could follow without asking (entry 13 related).
+    `docstore/directoryclient`.
 37. **Done (this PR): the showcase explains encrypt errors in words.** Was: a person in the browser read the raw
     Go text, for example "use `Repair(AcceptUnsigned)`", which they cannot call. Now `components.ExplainError` sorts an
     error with `errors.Is` into a group (unsigned file after a key change, file not written by an owner, no signer,
