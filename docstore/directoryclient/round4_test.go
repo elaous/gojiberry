@@ -893,3 +893,14 @@ func TestAcceptOwnerClearsTheChangedWarningForThatKey(t *testing.T) {
 		t.Error("accepted with nowhere to remember it")
 	}
 }
+
+func TestParseWatchStateRefusesNullAndNegativePositions(t *testing.T) {
+	for _, raw := range []string{"null", " null ", `{"seq":-1}`, `{"cursor":-5}`, `{"reported":-2}`} {
+		if st, err := ParseWatchState(raw); !errors.Is(err, ErrBadWatchState) || st.Seq != 0 {
+			t.Errorf("%q: %+v %v", raw, st, err)
+		}
+	}
+	if _, err := ParseWatchState(`{"seq":3}`); err != nil {
+		t.Error(err)
+	}
+}

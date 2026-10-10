@@ -322,7 +322,10 @@ func TestSweepDeletesOnlyTheExpired(t *testing.T) {
 		deadState, _ := s.PutState(ctx, auth.LoginState{Provider: "p"}, time.Second)
 		// A used marker whose delete failed, and records that are not ours.
 		marker, _ := jsonMarshal(stateRecord{V: 1, Used: true, Expires: now})
+		_ = mem.Save(ctx, LoginStatePrefix+"1/"+strings.Repeat("ab", 32), marker)
+		// Names that look like ours but are not (a short hash, a non-canonical number) are left alone.
 		_ = mem.Save(ctx, LoginStatePrefix+"1/abc", marker)
+		_ = mem.Save(ctx, LoginStatePrefix+"01/"+strings.Repeat("ab", 32), marker)
 		_ = mem.Save(ctx, SessionPrefix+"junk", []byte("x"))
 		_ = mem.Save(ctx, "doc1", []byte("a document"))
 
@@ -353,8 +356,8 @@ func TestSweepDeletesOnlyTheExpired(t *testing.T) {
 		for _, m := range left {
 			ids[m.ID] = true
 		}
-		if len(ids) != 3 || !ids["doc1"] || !ids[SessionPrefix+"junk"] {
-			t.Fatalf("left = %v: the live session, a document and a foreign name must stay", ids)
+		if len(ids) != 5 || !ids["doc1"] || !ids[SessionPrefix+"junk"] || !ids[LoginStatePrefix+"1/abc"] {
+			t.Fatalf("left = %v: the live session, a document and the foreign names must stay", ids)
 		}
 	})
 }
