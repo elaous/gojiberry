@@ -380,6 +380,20 @@ func TestSSHKeyOwnsAndUnlocksTheStore(t *testing.T) {
 	if n, _, err := r.saver.Reveal(ctx, target, e.ID); err != nil || n != "Contract" {
 		t.Fatalf("%q %v", n, err)
 	}
+	// The unlocked key's private side opens a challenge (proof of possession); locked, none is given.
+	if id, ok := r.st.IdentityFor(k.Recipient.Text); !ok || id == nil {
+		t.Fatal("the unlocked SSH key has no identity")
+	}
+	if _, ok := r.st.IdentityFor(rk.Recipient.Text); ok {
+		t.Fatal("an identity for the recovery key, which is not held")
+	}
+	r.st.Lock()
+	if _, ok := r.st.IdentityFor(k.Recipient.Text); ok {
+		t.Fatal("an identity while locked")
+	}
+	if err := r.st.UnlockSSH(bytes.Clone(priv)); err != nil {
+		t.Fatal(err)
+	}
 	// An RSA public key cannot be an owner here (it cannot sign the lists).
 	if _, err := NewSSHKey("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7 x"); err == nil {
 		t.Fatal("an unparsable key was accepted")

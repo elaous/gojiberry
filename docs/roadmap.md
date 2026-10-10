@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-3 of 10 since the last full run (#129, #130, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
+4 of 10 since the last full run (#129, #130, #131, this PR; the full run on main fd01c6e after #127 found a stale `components/styles.xg.go` and an untidy `examples/collab-editor-app` go.mod, fixed by this PR, which is not counted; everything else passed); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -487,10 +487,17 @@ a way to avoid hitting the limit meanwhile.
     would not survive that either. Revisit if the showcase moves to a store with room to spare (IndexedDB or OPFS):
     then spill the recorder's originals to an `encstore-undo/` area there, counted in `checkRoom`, deleted on
     commit and on `Recover`. The residual limit stays documented in `encryption-and-passkeys.md`.
-21. **Directory publish in the showcase and the pick UI.** The showcase has its own `dirclient`, while the demo
-    (`examples/people-keys-demo`) has the controls. Plan: move the showcase to `directoryclient`, ask the person
-    for a private key or another passkey assertion per signature (proof of possession and an owner-signed entry),
-    and finish the app-side controls (publish and pick). Avoid: publish from `examples/people-keys-demo`.
+21. **Directory publish in the showcase and the pick UI. Slice 1 done (this PR); slices 2 to 4 open.** Done: the
+    showcase's `dirclient` is now a thin view over `directoryclient` (lookup and publish go through it), and
+    "Publish my keys" proves possession by opening the server's challenge with the unlocked key's identity
+    (`encstore.Store.IdentityFor`); a locked key, a bad proof and an address that needs an owner-signed entry each
+    get a message in words. Tested natively against the demo server and in the browser
+    (`TestPeopleTabUsesTheKeyDirectory` checks the published entry says `held`). Open: (2) the owner key: enroll,
+    keep it in this browser, show the person its fingerprint and the way to back it up; (3) pins and the watch
+    state, kept across reloads, so the marks `OwnerSigned`, `OwnerUnpinned` and `OwnerFirstSeen` mean something;
+    (4) the owner-signed publish and the pick UI's marks, then `WatchLog`. A passkey owner needs another assertion
+    for every signature, so ask for it once per publish, not per key. Avoid: publish from
+    `examples/people-keys-demo`.
 22. **Done (this PR): `walk()` searches every link.** Was: it took the first link whose `From` matched and whose
     signer was in the list, with no backtracking, so a dead-end first match could hide a reachable link and an
     unlock could fail after many key changes. Now it searches depth first over all links out of each list with a

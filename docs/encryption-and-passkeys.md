@@ -995,8 +995,8 @@ cannot be opened.
      from a lookup, and the whole owner flow: publish, the foreign publication reported, enroll, the
      owner-signed mark, the session alone refused, a forged log entry reported, and revoke.
      **The showcase (5.7)** has the People tab with a directory picker and "Publish my keys" through its own
-     `dirclient` (plain, session-authenticated publish, no owner-signed mark). *Left:* wiring this section's
-     `directoryclient.Client` there (the signed-in provider session's token and the pinned log keys, `Lookup` with
+     `dirclient` (session-authenticated publish with proof of possession, through `directoryclient`; no
+     owner-signed mark yet). *Left:* the rest of this section's `directoryclient.Client` there (the signed-in provider session's token and the pinned log keys, `Lookup` with
      `DirRow.OwnerSigned` and `OwnerEnrolled` copied from the `Key` rows, the three buttons of the demo's `myEntry`
      section, a `WatchLog` on sign-in with its `WatchState` in storage); publishing with proof of possession needs
      the owner's signing key, and the showcase holds only the owners' public keys (a passkey would need another
@@ -1359,7 +1359,7 @@ cannot be opened.
         people by e-mail through `components.Recipients`' `Directory` (`GET /directory/lookup`), marks a key verified only
         as the server answered (and names the host that vouches), and offers **Publish my keys** (`POST
         /directory/publish`: a passkey's and an SSH key's public keys, never the recovery key). The calls go through the
-        showcase's own `dirclient.Directory`, a small interface over the routes. **The address is a trust decision:** a
+        showcase's `dirclient.Directory`, a small interface over `directoryclient`. **The address is a trust decision:** a
         link only *offers* an address, nothing is sent to it until the person confirms it in a dialog that names the
         host; it must be https (http only for a host on this machine), it is confirmed again whenever it changes, and
         a session token belongs to one address and is dropped when the address changes (the token field is a password
@@ -1368,10 +1368,10 @@ cannot be opened.
         (`TestPeopleTabUsesTheKeyDirectory`). The page has no sign-in: a server that needs a provider session needs its
         token pasted (the demo server hands one out at `/demo/provider-session`, for demo servers only); the page must
         be allowed to call the server (same origin, or CORS on the server).
-        *Left:* publishing **with proof of possession** and the owner-signed entry of the signed directory (#84:
-        `directoryclient.Client`, the owner key, `WatchLog`) are not wired in the showcase. It holds only the *public*
-        keys of its owners, and a passkey owner would need another WebAuthn assertion (PRF) for every signature, so
-        the showcase publishes through its own `dirclient` as the plain, session-authenticated route and shows no
+        **Proof of possession** is wired: "Publish my keys" opens the server's challenge with the private side of each
+        unlocked key (`encstore.Store.IdentityFor`), so the entry says the key was held; a locked key, or a server that
+        wants an owner-signed entry, gets a message that says so. *Left:* the owner-signed entry of the signed
+        directory (#84: the owner key, pins, `WatchLog`), which the showcase does not do yet; it shows no
         "owner-signed" mark. The demo `examples/people-keys-demo` has the whole flow.
       - **Left (residual limits).** The trust limits of the key list are above. A `SeqFloor` here lasts the page
         (`encrypt.MemorySeqFloor`, which cannot degrade, so the showcase does not need `SetFloorDegradedHandler`: a
