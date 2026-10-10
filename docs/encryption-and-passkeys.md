@@ -989,7 +989,7 @@ cannot be opened.
    - **Host.** `examples/people-keys-demo` uses it: `AddMyPasskey`, `CreateRecoveryKey` (shown once) and
      `Directory` (`directoryclient.Lookup`, so the marks are the client's own), plus a "my directory entry"
      section: publish my passkey's key (proof of possession with the passkey's own PRF identity), revoke
-     it, enroll an owner key (made in the browser and kept in `localStorage`), and watch my address
+     it, enroll an owner key (made in the browser and kept out of reach as a non-extractable key where the browser can), and watch my address
      ("someone published a key for your address"). Its e2e (headless Chrome, virtual authenticator with
      PRF) covers the second-key message, the recovery key shown once, add my passkey, the verified mark
      from a lookup, and the whole owner flow: publish, the foreign publication reported, enroll, the
@@ -1378,8 +1378,11 @@ cannot be opened.
         **Proof of possession** is wired (the client opens the challenge only if it is exactly a nonce, so a directory cannot use it to have a ciphertext made for the key decrypted): "Publish my keys" opens the server's challenge with the private side of each
         unlocked key (`encstore.Store.IdentityFor`), so the entry says the key was held; a locked key, or a server that
         wants an owner-signed entry, gets a message that says so. The **owner key** of the person's address can be made
-        and enrolled from the directory settings (`encowner.go`): it is kept per directory in `localStorage`, shown for
-        a backup, restorable from one (checked against the enrolled keys) and forgettable, and "Publish my keys" signs
+        and enrolled from the directory settings (`encowner.go`): it is kept per directory as a **non-extractable WebCrypto
+        Ed25519 key in IndexedDB** (a script in the page can ask it to sign but cannot copy it away; where the browser has
+        no Ed25519 it falls back to text in `localStorage`, and the panel says so), its backup is shown once when it is
+        made (as text in `localStorage` it can be shown at any time), restorable from the backup (checked against the
+        enrolled keys; an older text copy is moved out of reach on the next visit) and forgettable, and "Publish my keys" signs
         with it. **Watching:** the person pins the log keys the server states (trust on first use: it shows the server
         stays consistent with itself, not that it is the one meant), and "Watch my address" runs `WatchLog`, keeps the
         position across reloads and lists what somebody else did to the address until dismissed. **Other people's rows** carry

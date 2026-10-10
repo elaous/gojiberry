@@ -18,10 +18,15 @@ import (
 // The owner key of the person's address in the key directory. Once an address has one, the
 // directory only takes entries signed by it, so a stolen session token alone cannot publish or
 // revoke keys for the address. The key is made here, enrolled with the server, and kept in this
-// browser (localStorage, for the directory it was enrolled with). Whoever can read this browser's
-// storage can sign as the owner, which is why the panel offers a backup and a way to forget it: it is
-// kept and treated like a password. (Wrapping it with the passkey is a later step: it costs a prompt
-// for every signature.)
+// browser for the directory it was enrolled with.
+//
+// Where the browser can sign with Ed25519 through WebCrypto (encowner_webkey.go) the key is kept as
+// a non-extractable CryptoKey in IndexedDB: a script in the page can ask it to sign while the page
+// is open but cannot copy it away. Its backup (the seed) is therefore shown once, when the key is
+// made, and is not kept: "Back up" shows it only until it is hidden or the page is left. Where the
+// browser cannot (older ones), the key is kept as text in localStorage, readable by any script on
+// the origin, and the panel says so; a backup can then be shown at any time. Either way the key is
+// treated like a password: it has a backup and a way to forget it.
 
 const (
 	ownerKeyPrefix = "showcase-enc:owner:"   // + the directory address
@@ -39,8 +44,12 @@ type ownerRecord struct {
 
 // ownerUI is the state of the owner key panel.
 type ownerUI struct {
-	key   dirclient.OwnerKey // held in this browser, nil if none
-	email string             // the address the held key was enrolled for
+	key   dirclient.OwnerSigner // held in this browser, nil if none: a webKey, or an OwnerKey kept as text
+	plain bool                  // the key is kept as text in localStorage (no Ed25519 in this browser's WebCrypto)
+	email string                // the address the held key was enrolled for
+	// secret is the backup text of a key that is kept non-extractable: known only from the moment it
+	// was made until it is hidden or the page is left.
+	secret string
 	// state is what the server last said about the address, shown as text.
 	state    string
 	msg      string
@@ -128,7 +137,7 @@ func (d *dirUI) watchMine(ctx context.Context) error {
 		d.say(dirErr(err).Error(), true)
 		return nil
 	}
-	var owner dirclient.OwnerKey
+	var owner dirclient.OwnerSigner
 	if d.owner.email == me {
 		owner = d.owner.key
 	}
@@ -160,42 +169,104 @@ func (d *dirUI) watchMine(ctx context.Context) error {
 	return nil
 }
 
-// loadOwner reads the owner key kept for the current directory and tells the client it is pinned.
+// loadOwner reads the owner key kept for the current directory: the non-extractable one from
+// IndexedDB (in the background: the panel is drawn again when it is there), or one kept as text in
+// localStorage, which is moved to a non-extractable key when the browser can.
 func (d *dirUI) loadOwner() {
-	d.owner = ownerUI{}
-	if d.url == "" {
+	// only the owner key's own fields: the page calls this again once it is wired, after loadWatch
+	d.owner.key, d.owner.plain, d.owner.email, d.owner.secret = nil, false, "", ""
+	d.owner.state, d.owner.msg, d.owner.isErr, d.owner.backup = "", "", false, false
+	d.owner.restore, d.owner.restoreO = "", false
+	url := d.url
+	if url == "" {
 		return
 	}
-	raw := lsGet(ownerKeyPrefix + d.url)
-	if raw == "" {
+	if raw := lsGet(ownerKeyPrefix + url); raw != "" {
+		var rec ownerRecord
+		if json.Unmarshal([]byte(raw), &rec) == nil && rec.Email != "" {
+			if k, err := dirclient.ImportOwnerKey(rec.Key); err == nil {
+				d.owner.key, d.owner.email, d.owner.plain = k, rec.Email, true
+				if d.dir != nil {
+					d.dir.Pin(rec.Email, k)
+				}
+			}
+		}
+	}
+	// The background part holds the address of d, so it starts only once the page has put d where
+	// it will stay (newDirUI returns it by value): the page calls loadOwner again then.
+	if d.render == nil {
 		return
 	}
-	var rec ownerRecord
-	if json.Unmarshal([]byte(raw), &rec) != nil || rec.Email == "" {
-		return
+	go func() {
+		current := func() bool { return d.url == url }
+		if email, w, ok, err := webOwnerLoad(url); err == nil && ok && current() {
+			d.owner.key, d.owner.email, d.owner.plain = w, email, false
+			lsSet(ownerKeyPrefix+url, "") // a copy as text left from before is not needed any more
+			if d.dir != nil {
+				d.dir.Pin(email, w)
+			}
+		} else if d.owner.plain && current() {
+			// kept as text by an earlier version of this page: move it where it cannot be copied out
+			if k, ok := d.owner.key.(dirclient.OwnerKey); ok {
+				if w, err := webOwnerImport(k); err == nil && webOwnerSave(url, d.owner.email, w) == nil {
+					d.owner.key, d.owner.plain = w, false
+					lsSet(ownerKeyPrefix+url, "")
+					clear(k)
+					d.dir.Pin(d.owner.email, w)
+				}
+			}
+		}
+		if d.render != nil {
+			d.render()
+		}
+	}()
+}
+
+// signerFor makes the signer of a new or restored owner key k: a non-extractable browser key where
+// the browser can, else k itself (kept as text). It does not keep it yet.
+func signerFor(k dirclient.OwnerKey) (signer dirclient.OwnerSigner, plain bool) {
+	if w, err := webOwnerImport(k); err == nil {
+		return w, false
 	}
-	k, err := dirclient.ImportOwnerKey(rec.Key)
-	if err != nil {
-		return
+	return k, true
+}
+
+// keepOwner keeps signer for the current directory and address. made says the key was just made
+// (its backup text is then shown once); k is the key's bytes, which a non-extractable key does not
+// keep: they are cleared here.
+func (d *dirUI) keepOwner(email string, signer dirclient.OwnerSigner, plain bool, k dirclient.OwnerKey, made bool) {
+	if !plain {
+		if w, ok := signer.(*webKey); ok && webOwnerSave(d.url, email, w) != nil {
+			signer, plain = k, true // IndexedDB refused (a private window, no room): keep it as text
+		}
 	}
-	d.owner.key, d.owner.email = k, rec.Email
+	if plain {
+		b, _ := json.Marshal(ownerRecord{Email: email, Key: dirclient.ExportOwnerKey(k)})
+		lsSet(ownerKeyPrefix+d.url, string(b))
+	} else {
+		lsSet(ownerKeyPrefix+d.url, "")
+		if made {
+			d.owner.secret = dirclient.ExportOwnerKey(k)
+		}
+		clear(k)
+	}
+	d.owner.key, d.owner.email, d.owner.plain = signer, email, plain
 	if d.dir != nil {
-		d.dir.Pin(rec.Email, k)
+		d.dir.Pin(email, signer)
 	}
 }
 
-// keepOwner keeps k for the current directory and address.
-func (d *dirUI) keepOwner(email string, k dirclient.OwnerKey) {
-	b, _ := json.Marshal(ownerRecord{Email: email, Key: dirclient.ExportOwnerKey(k)})
-	lsSet(ownerKeyPrefix+d.url, string(b))
-	d.owner.key, d.owner.email = k, email
-	if d.dir != nil {
-		d.dir.Pin(email, k)
+// backupText is the owner key's backup, or "" when it cannot be shown any more.
+func (d *dirUI) backupText() string {
+	if k, ok := d.owner.key.(dirclient.OwnerKey); ok && d.owner.plain {
+		return dirclient.ExportOwnerKey(k)
 	}
+	return d.owner.secret
 }
 
 // forgetOwner drops the key held in this browser. The address keeps its owner key on the server.
 func (d *dirUI) forgetOwner() {
+	_ = webOwnerDelete(d.url)
 	lsSet(ownerKeyPrefix+d.url, "")
 	d.owner = ownerUI{}
 }
@@ -250,7 +321,9 @@ func (d *dirUI) enrollOwner(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := d.dir.Enroll(ctx, me, k); err != nil {
+	signer, plain := signerFor(k)
+	if err := d.dir.Enroll(ctx, me, signer); err != nil {
+		clear(k)
 		if errors.Is(err, dirclient.ErrAlreadyEnrolled) {
 			d.say(T("dir.owner.already", "%s already has an owner key. If it is yours, restore it from its backup. If it is not, somebody enrolled before you: the directory's log shows when.", me), true)
 			return nil
@@ -258,7 +331,7 @@ func (d *dirUI) enrollOwner(ctx context.Context) error {
 		d.say(dirErr(err).Error(), true)
 		return nil
 	}
-	d.keepOwner(me, k)
+	d.keepOwner(me, signer, plain, k, true)
 	d.owner.backup = true // the first thing to do with a new key is back it up
 	d.say(T("dir.owner.enrolled", "Owner key enrolled for %s. Back it up now: if this browser's storage is cleared, only the backup can publish for this address again.", me), false)
 	return d.checkOwner(ctx)
@@ -282,10 +355,12 @@ func (d *dirUI) restoreOwner(ctx context.Context) error {
 		return nil
 	}
 	if !slices.Contains(en.Fingerprints, dirclient.OwnerFingerprint(k)) {
+		clear(k)
 		d.say(T("dir.owner.notOwner", "That key is not an owner key of %s.", me), true)
 		return nil
 	}
-	d.keepOwner(me, k)
+	signer, plain := signerFor(k)
+	d.keepOwner(me, signer, plain, k, false)
 	d.owner.restore, d.owner.restoreO = "", false
 	d.say(T("dir.owner.restored", "Owner key restored for %s.", me), false)
 	return d.checkOwner(ctx)
@@ -301,6 +376,12 @@ func (d *dirUI) ownerPanel(e *encUI) []xango.Node {
 		xango.El("h4", []xango.Attr{xango.A("style", "margin:0.8em 0 0.2em;font-size:13px")}, xango.Text(T("dir.owner.title", "Owner key for your address"))),
 		para("dir-owner-explain", T("dir.owner.explain", "An owner key makes the directory take entries for your address only when this key signed them, so a stolen session cannot publish or revoke for you."), false),
 	}
+	switch {
+	case d.owner.key != nil && !d.owner.plain:
+		nodes = append(nodes, para("dir-owner-storage", T("dir.owner.storageWeb", "This browser keeps the owner key so that it cannot be copied out of it. Its backup is shown once, when the key is made."), false))
+	case d.owner.key != nil:
+		nodes = append(nodes, para("dir-owner-storage", T("dir.owner.storagePlain", "This browser cannot keep the owner key out of reach, so it is kept as text in this site's storage, where any script of the page could read it. Treat the page like a password manager: only use it on a device and a site you trust."), true))
+	}
 	if d.owner.state != "" {
 		nodes = append(nodes, para("dir-owner-state", d.owner.state, false))
 	}
@@ -314,26 +395,38 @@ func (d *dirUI) ownerPanel(e *encUI) []xango.Node {
 			btn("dir-owner-restore-open", T("dir.owner.restoreOpen", "Restore from a backup…"), func() { d.owner.restoreO = !d.owner.restoreO; e.render() }, false))
 	} else {
 		row = append(row,
-			btn("dir-owner-backup", T("dir.owner.backup", "Back up the owner key"), func() { d.owner.backup = !d.owner.backup; e.render() }, false),
+			btn("dir-owner-backup", T("dir.owner.backup", "Back up the owner key"), func() { d.owner.backup = !d.owner.backup; e.render() }, d.backupText() == ""),
 			btn("dir-owner-forget", T("dir.owner.forget", "Forget it in this browser"), func() {
 				if d.ask == nil {
 					return
 				}
 				d.ask(T("dir.owner.forget", "Forget it in this browser"),
 					T("dir.owner.confirmForget", "Forget the owner key in this browser? The address keeps its owner key on the server and will refuse entries without it. You can restore the key only from its backup."),
-					func() { d.forgetOwner(); e.render() })
+					func() { e.run(func(context.Context) error { d.forgetOwner(); return nil }) })
 				e.render()
 			}, busy))
 	}
 	nodes = append(nodes, xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px;flex-wrap:wrap")}, row...))
-	if d.owner.key != nil && d.owner.backup {
-		secret := dirclient.ExportOwnerKey(d.owner.key)
+	if d.owner.key != nil && !d.owner.plain && d.owner.secret == "" {
+		nodes = append(nodes, para("dir-owner-nobackup", T("dir.owner.noBackup", "The backup of this owner key was shown when it was made and is not kept. If you did not save it, make a new owner key; the address needs its reset to replace this one."), false))
+	}
+	if secret := d.backupText(); d.owner.key != nil && d.owner.backup && secret != "" {
 		nodes = append(nodes, xango.El("div", []xango.Attr{xango.A("id", "dir-owner-backup-box"), xango.A("style", "border:1px solid #d97706;border-radius:6px;padding:8px;margin:8px 0")},
 			para("dir-owner-backup-warning", T("dir.owner.backupWarning", "This is the owner key. Whoever has it can publish and revoke keys for your address. Keep it offline, like a password."), true),
 			textarea("dir-owner-secret", T("dir.owner.secret", "Owner key (secret)"), secret, "", "2", func(string) {}),
 			xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px;margin-top:6px")},
 				btn("dir-owner-download", T("enc.download", "Download"), func() { transfer.Download("owner-key.txt", "text/plain", []byte(secret+"\n")) }, false),
-				btn("dir-owner-hide", T("dir.owner.hide", "Hide it"), func() { d.owner.backup = false; e.render() }, false))))
+				btn("dir-owner-hide", T("dir.owner.hide", "Hide it"), func() {
+					if d.owner.plain || d.ask == nil {
+						d.owner.backup = false
+						e.render()
+						return
+					}
+					d.ask(T("dir.owner.hide", "Hide it"),
+						T("dir.owner.confirmHide", "Hide the backup? It will not be shown again: this browser keeps the owner key where it cannot be copied out. Have you saved it?"),
+						func() { d.owner.backup, d.owner.secret = false, ""; e.render() })
+					e.render()
+				}, false))))
 	}
 	if d.owner.key == nil && d.owner.restoreO {
 		nodes = append(nodes, xango.El("div", []xango.Attr{xango.A("id", "dir-owner-restore-box"), xango.A("style", "margin:8px 0")},
