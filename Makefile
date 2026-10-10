@@ -5,11 +5,20 @@
 # GOARCH=wasm (domrt and friends are js/wasm-only), and run the
 # vscode-xango grammar suite against every *.xg file in the repo.
 .PHONY: check
-check: generate fmt-check vet test wasm-vet lint wasm-lint modules lint-modules grammar-test-setup grammar-test
+check: generate generate-check fmt-check vet test wasm-vet lint wasm-lint modules lint-modules grammar-test-setup grammar-test
 
 .PHONY: generate
 generate:
 	go generate ./...
+
+# generate-check fails when `generate` changed a tracked file: a generated file was committed stale
+# (a .css or .xg changed and its .xg.go was not regenerated).
+.PHONY: generate-check
+generate-check:
+	@out="$$(git status --porcelain -- '*.xg.go')"; \
+	if [ -n "$$out" ]; then \
+		echo "generated files are stale (run make generate and commit):"; echo "$$out"; exit 1; \
+	fi
 
 .PHONY: fmt-check
 fmt-check:
