@@ -1059,3 +1059,17 @@ func TestWithSessionsLimitsLoginsPerClientInEveryMode(t *testing.T) {
 		}
 	}
 }
+
+func TestPublicQuotaModes(t *testing.T) {
+	ctx := context.Background()
+	store := docstore.NewMemoryAdapter()
+	if q, err := publicQuota(ctx, store, 100, ""); err != nil || q != nil {
+		t.Errorf("default: %v %v", q, err)
+	}
+	if q, err := publicQuota(ctx, store, 100, "store"); err != nil || q == nil {
+		t.Errorf("store: %v %v", q, err)
+	}
+	if _, err := publicQuota(ctx, store, 100, "everywhere"); err == nil {
+		t.Error("a bad mode was accepted")
+	}
+}

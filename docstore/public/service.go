@@ -1760,6 +1760,14 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 		return true
 	}
 	now := s.now()
+	if sq, ok := s.quota.(interface {
+		Sweep(context.Context) (int, error)
+	}); ok {
+		// The counters of a shared quota: the windows that ended.
+		if _, err := sq.Sweep(ctx); err != nil {
+			note(err)
+		}
+	}
 	if r, ok := s.sessions.(SessionReaper); ok {
 		if _, err := r.Reap(ctx, now); err != nil {
 			note(err)

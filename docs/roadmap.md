@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-8 of 10 since the last full run (#118 to #124, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
+9 of 10 since the last full run (#118 to #125, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -444,9 +444,15 @@ a way to avoid hitting the limit meanwhile.
     most once per `RenewInterval` (a minute, at most a quarter of the lifetime) however many tabs edit it, and only on
     an accepted edit, so a stale tab cannot renew faster than that. It still keeps a document alive while it edits,
     by design. `docstore/expiry.go`, `collab/hub/renew_rereview_test.go`.
-16. **Public per-process counters.** Plan: shared `SessionStore` and `Quota` (see
-    [public-docstore.md](public-docstore.md#75-what-is-left) 7.5 item 1 and the extension-points table in
-    [7.4](public-docstore.md#74-extension-points)). Avoid: one replica.
+16. **Done in part (this PR): the per-address daily byte budget is shared through the store.** Was: the budget, the
+    sessions and the report counters of the public offer were per process, so behind replicas an address could spend
+    its budget once per replica. Now `public.StoreQuota` (a `Quota` with refunds and windows, over a store with
+    conditional writes) keeps one counter per address per UTC day under `public/quota/<day>/<hash of the address>`,
+    charges with a compare-and-set loop and never lets through more than the limit (tested under races); the
+    service's sweep drops ended days. `GOJIBERRY_DOCSTORE_PUBLIC_QUOTA=store|store-required` turns it on (`memory` is
+    the default; a store without conditional writes warns and falls back, as for the other shared stores).
+    Still per process, now entry 86: the anonymous `SessionStore` counts, the byte budget and the report counters.
+    `docstore/public/storequota.go`, `internal/docstorecmd/docstorecmd.go`.
 17. **Snapshots cannot be refused (overshoot); a deleted snapshot is subtracted only at the next reconcile.**
     Plan: the saver must ask the budget before writing a snapshot, so it can be refused or reserved. Avoid: leave
     headroom under the byte budget.
@@ -1032,3 +1038,10 @@ unless stated.
        evicted "live" callers. 6. `ParseWatchState` refuses `null` and negative positions. Not deeply re-audited by
        that review, for lack of budget: the filtered/full chaining of `WatchLog` (#105) and the signed-frame
        verification internals (their tests pass); a second pass over them is worth a later review.
+86. **Public offer: the anonymous sessions and their counts, the byte budget and the report counters are still per
+    process.** Kind: fixable. Why: behind replicas each process counts its own live sessions (global and per client),
+    the bytes it knows of and the reports it has seen, so each cap can be reached once per replica; the daily budget
+    per address is shared since entry 16. Plan: a store-backed `SessionStore` (record per session, counted by listing,
+    as `auth/sessionstore` does), a byte budget rebuilt from the store on each sweep with a conditional counter, and
+    report counters kept in the report records. Priority: medium for several replicas, none for one. Where:
+    `docstore/public` (`session.go`, `guardrails.go`, `reportwatch.go`). Avoid: one replica.

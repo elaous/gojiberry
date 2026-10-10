@@ -677,7 +677,9 @@ needs one warns, falls back or refuses at start-up when its backend lacks it. Re
 State plainly, before launch:
 
 1. The byte budget, the session and per-client counts and the report counters are per
-   process: behind several replicas each has its own (the budget is rebuilt from the shared store
+   process (the per-address daily byte budget is the exception: `GOJIBERRY_DOCSTORE_PUBLIC_QUOTA=store` shares it
+   through the store with `public.StoreQuota`, fixed UTC days, counters under `public/quota/`; a store without
+   conditional writes warns and falls back to memory, `store-required` refuses to start): behind several replicas each has its own (the budget is rebuilt from the shared store
    by each one's sweep, but between sweeps the replicas do not see each other's writes). Plug in
    shared ones (`SessionStore`, `Quota`) or run one replica. The request limiters can be shared
    through the store: the docstore server passes `GOJIBERRY_DOCSTORE_LIMITER=store`'s factory
