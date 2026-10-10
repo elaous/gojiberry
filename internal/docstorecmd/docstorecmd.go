@@ -57,7 +57,11 @@ func withPublic(srv *docstore.Server, adapter docstore.Adapter, expiryTTL time.D
 	if expiryTTL <= 0 {
 		return nil, errors.New("GOJIBERRY_DOCSTORE_PUBLIC needs GOJIBERRY_DOCSTORE_EXPIRY_TTL: the public offer promises that documents are deleted after the last edit")
 	}
-	svc, err := public.New(public.Options{Store: adapter, Config: cfg, LimiterFactory: limiters})
+	quota, err := publicQuota(context.Background(), adapter, cfg.IPDailyBytes, os.Getenv("GOJIBERRY_DOCSTORE_PUBLIC_QUOTA"))
+	if err != nil {
+		return nil, err
+	}
+	svc, err := public.New(public.Options{Store: adapter, Config: cfg, LimiterFactory: limiters, Quota: quota})
 	if err != nil {
 		return nil, err
 	}
@@ -315,6 +319,34 @@ func passkeyChallenges(ctx context.Context, adapter docstore.Adapter, raw string
 	sc.StartChallengeSweep(ctx, time.Minute) // counts the store before the first Begin
 	log.Print("docstore: passkey ceremonies are shared through the store (records under passkey/challenge/ hold the e-mail and name of a registration in progress for the ceremony's lifetime (5 minutes by default, and about 2 minutes more until the sweep removes them), readable by anyone who can read the store: put an encrypting adapter under that keyspace if that matters)")
 	return sc, nil
+}
+
+// publicQuota is the per-address daily byte budget GOJIBERRY_DOCSTORE_PUBLIC_QUOTA asks for: nil (the
+// per-process default) for "" or "memory", or a public.StoreQuota for "store" and "store-required",
+// which replicas on one store share. On a store without conditional writes "store" warns and falls
+// back to the per-process quota, and "store-required" is an error.
+func publicQuota(ctx context.Context, adapter docstore.Adapter, limit int64, raw string) (public.Quota, error) {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	switch mode {
+	case "", "memory":
+		if n := declaredReplicas(); n > 1 {
+			log.Printf("docstore: WARNING: GOJIBERRY_DOCSTORE_REPLICAS=%d but the public offer's daily byte budget per address is kept in each process: an address can spend it once per replica. Set GOJIBERRY_DOCSTORE_PUBLIC_QUOTA=store (needs a store with conditional writes)", n)
+		}
+		return nil, nil
+	case "store", "store-required":
+	default:
+		return nil, errors.New("parsing GOJIBERRY_DOCSTORE_PUBLIC_QUOTA \"" + raw + "\": want \"memory\", \"store\" or \"store-required\"")
+	}
+	if ok, err := sharedStoreOrFallback(ctx, adapter, "GOJIBERRY_DOCSTORE_PUBLIC_QUOTA", mode, "daily byte budgets",
+		"an address can spend its budget once per replica"); err != nil || !ok {
+		return nil, err
+	}
+	q, err := public.NewStoreQuota(adapter, limit, 24*time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	log.Print("docstore: the public offer's daily byte budget per address is shared through the store (fixed calendar days, UTC)")
+	return q, nil
 }
 
 // declaredReplicas is GOJIBERRY_DOCSTORE_REPLICAS as a number (0 if unset or not a number; the
