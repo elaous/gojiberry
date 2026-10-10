@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (#140, #141, #142, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+5 of 10 since the last full run (#140 to #143, this PR). The full run on main d57468e (after #138, the 10th merge since fd01c6e) passed everything: build, vet, tests, lint and wasm checks, the nested modules and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -755,7 +755,7 @@ New entries:
     clear on decode error, `examples/people-keys-demo/main.go`), 24 (`ErrFilteredEnrolled` and the audited
     state), 25 (protobuf as an indirect dependency).
 
-48. **ARIA attributes across the canvas editor and components. Slice 1 done (this PR); the rest open.** Kind:
+48. **ARIA attributes across the canvas editor and components. Slices 1 and 2 done; the rest open.** Kind:
     fixable. What: roles, accessible names and labels, live regions, a sensible focus order, and keyboard operation
     of every control (toolbar, menus, dialogs, pickers, the canvas itself). Why it matters: people who use assistive
     technology cannot use controls that have no role, name or keyboard path, and it is a legal requirement in many
@@ -768,11 +768,15 @@ New entries:
     inserted before it), so a keyboard user's next key went to the page: the backdrop now follows the bar; (c)
     **Escape did not close a menu** and **Enter and Space did not choose an entry** (entries were focusable and
     click-only): `MenuBar` closes on Escape from anywhere inside it and an entry is chosen with Enter or Space
-    (`components/menu.go`, with unit tests and `TestMenuEntryChosenWithTheKeyboard`). **Open:** (1) the audit
-    checklist per component, which axe cannot replace: roving focus and the arrow keys inside menus and the menu bar
-    (Down opens, Up and Down move, Left and Right switch and open submenus, Home and End), which needs a focus
-    primitive in `xango` or `domrt` that does not exist yet; the same for tabs, the colour picker, dropdowns and
-    dialogs (focus trap and return); (2) **heading levels**: the components' panel titles are `h4` under a page whose
+    (`components/menu.go`, with unit tests and `TestMenuEntryChosenWithTheKeyboard`). **Slice 2 (this PR):** the
+    focus primitive and the arrow keys. `xango.Event.MoveFocus(root, items, step)` moves the keyboard focus within a
+    widget while an event is handled (`domrt` fills it in; a test or the server gets a no-op), and menus use it: Up,
+    Down, Home and End among the entries of a menu (wrapping), Right into a submenu and Left back out, Left and Right
+    along the bar (taking an open menu along), Down and Up on a button open its menu at the first or last entry, and
+    Escape puts the focus back on the menu's button. Unit tests for every key and `TestMenusAreOperatedWithTheArrowKeys`
+    in the browser. **Open:** (1) the audit checklist per component, which axe cannot replace: the same arrow-key
+    model for tabs, the colour picker, dropdowns and the other pickers, and dialogs (focus trap and return), now
+    that `MoveFocus` exists; (2) **heading levels**: the components' panel titles are `h4` under a page whose
     headings are in the screen-reader copy, so `heading-order` is disabled in the test (`axeDisabled`) until the
     levels are decided; (3) axe over the other examples and the states it cannot reach by clicking (dialogs, the
     colour picker, a table cell menu); (4) the canvas itself with a screen reader (item 49). Priority: high (first of
@@ -1153,3 +1157,8 @@ unless stated.
     for the one secret the page keeps. Where: `examples/canvas-editor-showcase` (`dirclient`, `encowner.go`),
     `docs/encryption-and-passkeys.md` (5.7). Avoid: forgetting the key and enrolling again (the address refuses a
     second enrollment).
+88. **The API dumps under `docs/*.txt` are stale.** Kind: fixable (housekeeping). Why: `make docs` (`go doc -all`) was
+    last run long ago: running it now changes eight dumps by about 2,200 lines (the `components` dump alone gains
+    about 1,900), so the dumps no longer show the real public API. Plan: regenerate them in one docs-only PR, and
+    make `make check` fail when a dump is stale (as `generate-check` does for `*.xg.go`) or drop the dumps from the
+    repository if nobody reads them. Priority: low. Where: `docs/*.txt`, `Makefile`.

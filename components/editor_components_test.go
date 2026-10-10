@@ -711,10 +711,11 @@ func TestMenuKeyboardEscapeEnterAndSpace(t *testing.T) {
 	var picked []string
 	entries := []MenuBarEntry{{Label: "File", Items: []MenuItem{{Label: "New", OnSelect: func() { picked = append(picked, "new") }}}}}
 	bar := MenuBar(MenuBarProps{Entries: entries, Open: 0, OnOpen: func(i int) { opened = append(opened, i) }})
-	keys := findHandlers(bar, "keydown") // the bar (Escape) and the entry New
-	if len(keys) != 2 {
-		t.Fatalf("keydown handlers = %d, want 2", len(keys))
+	keys := findHandlers(bar, "keydown") // the bar (Escape), the File button and the entry New
+	if len(keys) != 3 {
+		t.Fatalf("keydown handlers = %d, want 3", len(keys))
 	}
+	keys = []xango.EventHandler{keys[0], keys[2]}
 	press := func(h func(xango.Event), k xango.KeyData) {
 		prevented := false
 		h(xango.NewEvent("keydown", k, false, func() { prevented = true }, nil))
@@ -745,4 +746,91 @@ func TestMenuKeyboardEscapeEnterAndSpace(t *testing.T) {
 	if len(opened) != before {
 		t.Errorf("Escape with no menu open acted: %v", opened)
 	}
+}
+
+// focusCall is a MoveFocus the widget asked for.
+type focusCall struct {
+	root, items string
+	step        xango.FocusStep
+}
+
+// keyEvent is a key press that records the focus moves it asks for and whether it was prevented.
+func keyEvent(key string, calls *[]focusCall, prevented *bool) xango.Event {
+	return xango.NewEvent("keydown", xango.KeyData{Key: key}, false, func() { *prevented = true }, nil).
+		WithFocus(func(root, items string, step xango.FocusStep) bool {
+			*calls = append(*calls, focusCall{root, items, step})
+			return true
+		})
+}
+
+// The arrow keys move the focus through a menu, into and out of a submenu, and along the menu bar.
+func TestMenuArrowKeysMoveTheFocus(t *testing.T) {
+	var opened []int
+	entries := []MenuBarEntry{
+		{Label: "File", Items: []MenuItem{{Label: "New", OnSelect: func() {}}, {Label: "More", Items: []MenuItem{{Label: "Deep", OnSelect: func() {}}}}}},
+		{Label: "Edit", Items: []MenuItem{{Label: "Undo", OnSelect: func() {}}}},
+		{Label: "View", Items: []MenuItem{{Label: "Zoom", OnSelect: func() {}}}},
+	}
+	bar := MenuBar(MenuBarProps{Entries: entries, Open: 0, OnOpen: func(i int) { opened = append(opened, i) }})
+	keys := findHandlers(bar, "keydown") // in tree order: nav, File, New, More, Deep, Edit, View
+	if len(keys) != 7 {
+		t.Fatalf("keydown handlers = %d, want 7", len(keys))
+	}
+	press := func(h func(xango.Event), key string) ([]focusCall, bool) {
+		var calls []focusCall
+		prevented := false
+		h(keyEvent(key, &calls, &prevented))
+		return calls, prevented
+	}
+	// in a menu: Down, Up, Home and End among its entries
+	for key, want := range map[string]xango.FocusStep{"ArrowDown": xango.FocusNext, "ArrowUp": xango.FocusPrev, "Home": xango.FocusFirst, "End": xango.FocusLast} {
+		calls, prevented := press(keys[2], key)
+		if len(calls) != 1 || calls[0].step != want || calls[0].root != ".gj-menu" || !strings.Contains(calls[0].items, "li.gj-menu-item") || !prevented {
+			t.Errorf("%s in a menu: %+v prevented %v", key, calls, prevented)
+		}
+	}
+	// Right on an entry with a submenu goes in; Left from inside goes back out
+	if calls, _ := press(keys[3], "ArrowRight"); len(calls) != 1 || calls[0].root != ".gj-menu-item-sub" || calls[0].step != xango.FocusFirst || !strings.Contains(calls[0].items, "> .gj-menu >") {
+		t.Errorf("Right into the submenu: %+v", calls)
+	}
+	if calls, _ := press(keys[4], "ArrowLeft"); len(calls) != 1 || calls[0].root != ".gj-menu-item-sub" || calls[0].items != ":scope" {
+		t.Errorf("Left out of the submenu: %+v", calls)
+	}
+	// on the bar: Right and Left move along it and, with a menu open, take the menu along
+	if calls, _ := press(keys[1], "ArrowRight"); len(calls) != 1 || calls[0].step != xango.FocusNext || len(opened) != 1 || opened[0] != 1 {
+		t.Errorf("Right from File with its menu open: %+v %v", calls, opened)
+	}
+	opened = nil
+	if calls, _ := press(keys[1], "ArrowLeft"); len(calls) != 1 || calls[0].step != xango.FocusPrev || len(opened) != 1 || opened[0] != 2 {
+		t.Errorf("Left from File wraps to View: %+v %v", calls, opened)
+	}
+	// Down on the open File button goes into its menu at the first entry, Up at the last
+	opened = nil
+	if calls, _ := press(keys[1], "ArrowDown"); len(calls) != 1 || calls[0].step != xango.FocusFirst || len(opened) != 0 {
+		t.Errorf("Down on the open button: %+v %v", calls, opened)
+	}
+	if calls, _ := press(keys[1], "ArrowUp"); len(calls) != 1 || calls[0].step != xango.FocusLast {
+		t.Errorf("Up on the open button: %+v", calls)
+	}
+	// Down on a closed entry's button opens it first
+	if calls, _ := press(keys[5], "ArrowDown"); len(opened) != 1 || opened[0] != 1 || len(calls) != 1 {
+		t.Errorf("Down on a closed button: %+v %v", calls, opened)
+	}
+	// Escape returns the focus to the button of the menu that closes
+	opened = nil
+	if calls, _ := press(keys[0], "Escape"); len(calls) != 1 || !strings.Contains(calls[0].items, "gj-menubar-entry-open") || len(opened) != 1 || opened[0] != -1 {
+		t.Errorf("Escape: %+v %v", calls, opened)
+	}
+	// a chord is not a menu key, and with no browser behind the event nothing happens
+	var calls []focusCall
+	prevented := false
+	keys[2](xango.NewEvent("keydown", xango.KeyData{Key: "ArrowDown", Ctrl: true}, false, func() { prevented = true }, nil).
+		WithFocus(func(root, items string, step xango.FocusStep) bool {
+			calls = append(calls, focusCall{root, items, step})
+			return true
+		}))
+	if len(calls) != 0 || prevented {
+		t.Errorf("Ctrl+Down acted: %+v", calls)
+	}
+	keys[2](xango.NewEvent("keydown", xango.KeyData{Key: "ArrowDown"}, false, nil, nil)) // no focus hook: must not panic
 }
