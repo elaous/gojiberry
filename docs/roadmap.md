@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-3 of 10 since the last full run (#118, #119, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
+4 of 10 since the last full run (#118, #119, #120, this PR; the full run on main 7eb8691 found the #112 regression, fixed by #118); the full suite runs on main after the
 10th merge and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -631,15 +631,14 @@ New entries:
     is written only onto the record the re-key just wrote (a replayed older record is not signed again), and its
     clearing never fails a re-key. `UnsignedDocs` is a full scan like `PendingDocs`; `Saver.UnsignedCheck`
     (`encrypt.UnsignedHook`) puts it in `VerifyReport.Unsigned`.
-40. **Passkey challenge records show the pending registration e-mail and name on a plain store.** Kind: fixable
-    by configuration. Confirmed: `StoreChallenges.Put` (`auth/passkey/challenge_store.go:132-146`) stores the whole
-    `Challenge` as JSON (`storedChallenge` embeds it, `:126-129`), and `Challenge` (`auth/passkey/challenge.go:14-22`)
-    holds `Email` and `Name` (for a new account) plus the WebAuthn session data, under the key
-    `ChallengePrefix` plus the SHA-256 of the token (`:120-122`). Why: a person who can read the store reads them (see
-    "Extension points" in [encryption-and-passkeys.md](encryption-and-passkeys.md#b1-extension-points)). Plan: use
-    an encrypting adapter for the `passkey/` keyspace, say so in the `store` mode start-up line, and consider
-    hashing the label. Priority: low. Where: `auth/passkey/challenge_store.go:126-146`,
-    `auth/passkey/challenge.go:14-22`.
+40. **Done (this PR): the store mode says what the challenge records hold.** Was: nothing told the operator that
+    `StoreChallenges` keeps the pending registration e-mail and name in clear (`auth/passkey/challenge_store.go`),
+    for up to the challenge lifetime (two minutes), under `passkey/challenge/<expiry minute>/<hash of the token>`.
+    Now the start-up line of `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store` says it and names the remedy (an
+    encrypting adapter under that keyspace; see "Extension points" in
+    [encryption-and-passkeys.md](encryption-and-passkeys.md#b1-extension-points)). The record is not changed: the e-mail
+    is needed to finish the registration on another replica, and the key is already the hash of the token.
+    `internal/docstorecmd/docstorecmd.go`.
 41. **Signed-out same-e-mail passkey registration makes two accounts, by design.** Kind: inherent while the e-mail is
     a label ([limits register item 6](limits-register.md#encryption-and-keys)). Why it matters for later work:
     the e-mail verification work must not merge accounts on the bare label. Plan: none now; record it in the
