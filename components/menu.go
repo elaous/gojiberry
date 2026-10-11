@@ -101,7 +101,12 @@ func menuItem(it MenuItem, onClose func()) xango.Node {
 		return xango.El("li", []xango.Attr{xango.A("class", "gj-menu-separator"), xango.A("role", "separator")})
 	}
 	class := "gj-menu-item"
-	attrs := []xango.Attr{xango.A("role", "menuitem")}
+	// aria-checked is allowed on a checkable menu item only.
+	role := "menuitem"
+	if it.Checked {
+		role = "menuitemcheckbox"
+	}
+	attrs := []xango.Attr{xango.A("role", role)}
 	if it.Disabled {
 		class += " gj-menu-item-disabled"
 		attrs = append(attrs, xango.A("aria-disabled", "true"))

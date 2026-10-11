@@ -98,7 +98,17 @@ func liveEndToEnd(t *testing.T, hubURL, transport, flow string) {
 	c.Wait("s.live.status === 'online' && s.live.role === 'viewer'")
 	c.Wait("s.text.length > 100")
 	c.OK(c.Text("#presence .gj-presence-badge") == "View only", "a viewer sees the View only badge")
+	// The viewer joins while the others' last edits are still arriving: take the text for the
+	// comparison once it has stopped changing.
 	before := c.State().Str("text")
+	for i := 0; i < 20; i++ {
+		time.Sleep(150 * time.Millisecond)
+		now := c.State().Str("text")
+		if now == before {
+			break
+		}
+		before = now
+	}
 	c.ToggleMode()
 	c.OK(c.State().Str("mode") == "view", "a viewer cannot switch to edit mode")
 	c.CanvasClick(240, 164)

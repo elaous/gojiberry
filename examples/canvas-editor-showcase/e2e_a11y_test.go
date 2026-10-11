@@ -189,6 +189,7 @@ func TestSelectionLanguageReachesTheReadingCopy(t *testing.T) {
 // is named as lacking it rather than passed over.
 func TestImageDescriptionIsInTheReadingCopy(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.WaitFor("the picture in the reading copy", `document.getElementById('a11y-text').textContent.includes('Image: ')`)
 	d.OK(strings.Contains(d.Text("#a11y-text"), "Image: A sample picture used to try text wrapping"), "the description is read: "+d.Text("#a11y-text"))
 	d.NoErrors()
 }
