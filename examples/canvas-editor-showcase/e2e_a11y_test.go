@@ -137,3 +137,11 @@ func TestSelectionLanguageReachesTheReadingCopy(t *testing.T) {
 	d.WaitFor("the tag gone", `document.querySelectorAll('#a11y-text [lang]').length === 0`)
 	d.NoErrors()
 }
+
+// The picture on the page has a description, and the reading copy says it; an image without one
+// is named as lacking it rather than passed over.
+func TestImageDescriptionIsInTheReadingCopy(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.OK(strings.Contains(d.Text("#a11y-text"), "Image: A sample picture used to try text wrapping"), "the description is read: "+d.Text("#a11y-text"))
+	d.NoErrors()
+}

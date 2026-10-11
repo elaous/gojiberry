@@ -26,6 +26,8 @@ func (PlainText) Export(snap Snapshot) ([]byte, error) {
 		case Image:
 			if b.ImageCaption != "" {
 				sb.WriteString("[Image] " + b.ImageCaption + "\n\n")
+			} else if b.ImageAlt != "" {
+				sb.WriteString("[Image: " + b.ImageAlt + "]\n\n")
 			} else {
 				sb.WriteString("[Image]\n\n")
 			}

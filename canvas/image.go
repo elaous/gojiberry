@@ -111,6 +111,13 @@ type Image struct {
 	ChromeStyle ImageStyle
 	Painter     ImagePainter
 
+	// Alt describes the image for a person who cannot see it. Decorative says
+	// the image carries nothing a description would add (a rule, a flourish):
+	// it is then left out of the reading copy and exported with an empty alt.
+	// An image with neither is a gap in the document (see package a11ycheck).
+	Alt        string
+	Decorative bool
+
 	// OnChange is called after any change made by dragging or the toolbar.
 	OnChange func(*Image)
 

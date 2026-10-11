@@ -78,6 +78,10 @@ type Block struct {
 	ImageW       float64
 	ImageH       float64
 	ImageCaption string
+	// ImageAlt describes the image; ImageDecorative says it needs no description
+	// (written as an empty alt, left out of the reading copy).
+	ImageAlt        string
+	ImageDecorative bool
 	// TableRow/TableCol are this cell's own zero-based grid position;
 	// TableRows/TableCols are the whole table's own shape, carried on
 	// every cell (mirroring model.BlockMeta's own reasoning, see that

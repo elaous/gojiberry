@@ -216,6 +216,10 @@ type ImageProps struct {
 	Opacity  float64
 	Clip     canvas.Insets
 	OnChange func(*canvas.Image)
+	// Alt describes the picture for a person who cannot see it; Decorative says it needs no
+	// description (see canvas.Image).
+	Alt        string
+	Decorative bool
 }
 
 // Image is a floating or inline picture.

@@ -43,7 +43,7 @@ func picture(state State) xango.Node {
 	if state.Image == nil {
 		return xango.Frag()
 	}
-	return canvas.Image(canvas.ImageProps{Source: state.Image, Width: 120, Height: 80, Anchor: &cv.Anchor{Page: 1, X: 330, Y: 40}, Wrap: true})
+	return canvas.Image(canvas.ImageProps{Source: state.Image, Width: 120, Height: 80, Anchor: &cv.Anchor{Page: 1, X: 330, Y: 40}, Wrap: true, Alt: "A sample picture used to try text wrapping"})
 }
 
 // shared makes the document multi-user when the page was opened on one: the

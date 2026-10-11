@@ -87,6 +87,11 @@ func renderHTMLDocument(snap Snapshot, xhtml bool) string {
 				// caption, so an uncaptioned image's own markup is
 				// unchanged from before task #158.
 				alt := escapeHTMLAttr(b.ImageCaption)
+				if b.ImageAlt != "" {
+					alt = escapeHTMLAttr(b.ImageAlt) // a description of its own is better than the caption
+				} else if b.ImageDecorative && b.ImageCaption == "" {
+					alt = ""
+				}
 				img := "<img src=\"" + escapeHTMLAttr(b.ImageSrc) + "\" alt=\"" + alt + "\"" + imgSelfClose + "\n"
 				if b.ImageCaption == "" {
 					body.WriteString(img)
