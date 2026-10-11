@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-10 of 10 since the last full run (#216: `devwatch` 79% to 84%; the full run on main, with the coverage score and the badge, is due next; #215: `internal/transpile/experimental` 67% to 88% with fake protoc/capnp tools; #214: sync status for shared documents; #213: completion while suggesting; #212: Word tracked changes imported as suggestions; #211: suggestions in exports, the reading copy and collab; #209: suggestion mode in the model (roadmap 71); #210: its panel and keys; #207: name and keep a version; #208: restore keeps the current text; full run on main 7ec9fea after #205, the 10th merge since 098ac89, with the fixes in this PR). It passed everything in the end: build, vet, tests, lint and wasm checks, the generated files and API dumps, the nested modules and the grammar tests (the run was split in two after the first fixes: the root steps passed in one, the nested-module and grammar steps in the next). It found three things, all from the version-diff work: a stale `components/styles.xg.go` (CSS added without `make generate`), and the go.mod/go.sum of `docstore/backends` and `examples/collab-editor-app`, which needed `go mod tidy` for the new `docdiff` dependency (x/image through `export`). Coverage score of that run (`make coverage`): **88.9% of statements** (the README badge); the packages raised since the last run are `cmd/collabhub` 83%, `voice/*` 86-94%, `docstore` 84%, `cmd/docsh` 85%, `braille/server` 88%, `collab/ws` 84%, `export` 86% and `pdftext` 90%. The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+0 of 10 since the last full run (full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1149,6 +1149,8 @@ unless stated.
     says nothing when there is nothing to offer. Also done (#193): with spell check on, the dictionary's words and the user's own fill the list after the
     document's own (`spell.Checker.CompleteMany`, `Dictionary.WithPrefix`). Left: the inline ghost-text suggestion (which this document's first sentence assumed existed; it does not yet), dictionaries for other languages, and the screen-reader
     script.
+    Overlap to resolve: `TextFlow` already has its own completion popup (`Complete`, `Completer`, `Vocabulary`); the
+    showcase list and that one should merge into a single implementation.
 80. **Print layout.** Kind: fixable. What: pagination, headers and footers, page numbers and a table of contents.
     Why it matters: documents are still printed and exported to paged formats. Plan: (1) a page model with size and
     margins; (2) layout with page breaks, widow and orphan control; (3) headers, footers and fields; (4) a table of
