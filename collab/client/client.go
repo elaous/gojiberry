@@ -98,6 +98,19 @@ type Options struct {
 	PresenceInterval time.Duration
 	// OnError, if set, hears about connection errors.
 	OnError func(error)
+	// Queue, if set, keeps the ops that have not reached the server, so
+	// that they survive closing the tab or a crash: Dial sends what Load
+	// returns, and every change to the waiting ops is passed to Save.
+	Queue Queue
+}
+
+// Queue is a durable place for the ops waiting to be sent (browser
+// storage, a file). Save gets the whole list each time, which is empty
+// once everything was accepted; a resend after a crash is harmless as the
+// crdt ignores ops it has seen.
+type Queue interface {
+	Load() []crdt.Op
+	Save([]crdt.Op)
 }
 
 // Conn is a live connection to one document.
@@ -138,6 +151,12 @@ func Dial(opts Options) *Conn {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Conn{opts: opts, client: cl, events: make(chan Event), ctx: ctx, cancel: cancel, kick: make(chan struct{}, 1), wake: make(chan struct{}, 1)}
+	if opts.Queue != nil {
+		c.pending = append(c.pending, opts.Queue.Load()...)
+		if len(c.pending) > 0 {
+			c.kick <- struct{}{}
+		}
+	}
 	c.done.Add(3)
 	go func() { defer c.done.Done(); c.pump() }()
 	go func() { defer c.done.Done(); c.stream() }()
@@ -255,6 +274,7 @@ func (c *Conn) Send(ops []crdt.Op) {
 	}
 	c.mu.Lock()
 	c.pending = append(c.pending, ops...)
+	c.persistLocked()
 	c.mu.Unlock()
 	select {
 	case c.kick <- struct{}{}:
@@ -371,7 +391,15 @@ func (c *Conn) sender() {
 func (c *Conn) dropSent(n int) {
 	c.mu.Lock()
 	c.pending = c.pending[min(n, len(c.pending)):]
+	c.persistLocked()
 	c.mu.Unlock()
+}
+
+// persistLocked saves the waiting ops to the Queue; c.mu is held.
+func (c *Conn) persistLocked() {
+	if c.opts.Queue != nil {
+		c.opts.Queue.Save(append([]crdt.Op(nil), c.pending...))
+	}
 }
 
 type rejection struct{ msg string }
