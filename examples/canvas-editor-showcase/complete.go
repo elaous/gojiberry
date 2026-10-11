@@ -66,6 +66,11 @@ func (u *ui) refreshSuggestions(flow *canvas.TextFlow) bool {
 	var ix complete.Index
 	ix.AddText(string(text[:from]))
 	ix.AddText(string(text[complete.WordEnd(text, caret):])) // the words around the one being typed
+	if c := u.spell.checker; c != nil && u.spell.enabled {
+		// With the spelling dictionary on, its words (and the person's own) fill the list after the words
+		// of the document; nothing else is loaded for this.
+		ix.AddVocabulary(c.CompleteMany(prefix, 20), 1)
+	}
 	var words []string
 	for _, s := range ix.Suggest(prefix, complete.Options{Max: 7}) {
 		words = append(words, s.Word)

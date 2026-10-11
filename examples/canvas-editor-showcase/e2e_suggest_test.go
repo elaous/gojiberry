@@ -69,3 +69,22 @@ func TestWordSuggestionsOpenByThemselves(t *testing.T) {
 	d.WaitFor("closing", `!document.getElementById('suggestions')`)
 	d.NoErrors()
 }
+
+// With spell check on, the dictionary's words fill the list after the document's own.
+func TestWordSuggestionsUseTheDictionary(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.ToggleMode()
+	d.Click(`button[data-tab="spell"]`)
+	d.SetChecked(".gj-spell-enable", true)
+	d.Wait("s.spell.enabled")
+	d.CanvasClick(240, 164)
+	d.Focus("#input")
+	d.Press("Home")
+	d.Type("xylo ")
+	d.Press("ArrowLeft")
+	d.Press("Control+Space")
+	d.WaitSelector(`#suggestions [role="option"]`)
+	got := strings.Join(d.Texts(`#suggestions [role="option"]`), ",")
+	d.OK(strings.Contains(got, "xylophone"), "a word the document does not have comes from the dictionary: "+got)
+	d.NoErrors()
+}

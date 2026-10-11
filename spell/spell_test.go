@@ -117,3 +117,19 @@ func TestWordListAndGunzip(t *testing.T) {
 	}
 	_ = strings.ToLower
 }
+
+func TestCompleteMany(t *testing.T) {
+	c := NewChecker(New("plan", "planet", "planning", "plant", "plank", "other"))
+	c.Add("Planetarium")
+	got := c.CompleteMany("Pla", 4)
+	if len(got) != 4 || got[0] != "planetarium" {
+		t.Fatalf("own words first: %v", got)
+	}
+	// then the dictionary's, shortest first: plan, then plank and plant
+	if got[1] != "plan" || got[2] != "plank" || got[3] != "plant" {
+		t.Fatalf("dictionary order: %v", got)
+	}
+	if len(c.CompleteMany("zz", 5)) != 0 {
+		t.Fatal("nothing for an unknown prefix")
+	}
+}
