@@ -275,6 +275,13 @@ type Store struct {
 	// Reload reads the stored Config again (nil: not checked). Before every write the store
 	// compares it with the Config this tab loaded; a difference is ErrStaleConfig.
 	Reload func() (Config, error)
+	// ConfirmFirstUse makes the first unlock with an SSH key of a list that no key of this device has
+	// sealed (an SSH-only store has nothing to anchor its first owner list to) stop with a
+	// *FirstUseError, until the host passes the list's Digest to TrustList: a known-hosts file for
+	// stores. Off, that first use is trusted silently, as before.
+	ConfirmFirstUse bool
+	// OnTrust, if set, is told each digest added to the trusted lists, so the host can keep them.
+	OnTrust func(digest string)
 	// OnUnlock, if set, is called after a key unlocked the store, with that key (to record that it
 	// was used here).
 	OnUnlock func(Owner)
@@ -294,6 +301,7 @@ type Store struct {
 	tol     *encrypt.Adapter // reads a file that is still in the clear: for an unfinished change
 	gate    sync.RWMutex     // writes through Adapter() hold it shared; a change holds it exclusively
 	stale   bool             // the stored Config was found changed by something else: refuse everything
+	trusted map[string]bool  // digests of owner lists the person confirmed at a first use
 }
 
 // New makes the store over raw with the owner keys in cfg (none: encryption is off).
@@ -886,11 +894,22 @@ func (s *Store) finishUnlock(o Owner, u Unlocked) error {
 	if err != nil {
 		return err
 	}
+	if err := s.checkFirstUse(o); err != nil {
+		return err
+	}
 	if err := s.checkAnchor(context.Background(), o, u, lists); err != nil {
 		return err
 	}
 	s.unlock(held{Unlocked: u, owner: o.Public})
 	s.sealOnUnlock(o, u.Signer) // first use of an SSH key, or the list moved on legitimately: bind it now
+	if o.Kind != KindSSH && s.ConfirmFirstUse {
+		// a passkey or recovery key opened the list through the chain of seals: it is not an
+		// attacker's list, so an SSH key of it needs no confirmation here
+		s.mu.RLock()
+		d := ownersDigest(s.cfg.Owners)
+		s.mu.RUnlock()
+		s.TrustList(d)
+	}
 	if s.OnUnlock != nil {
 		s.OnUnlock(o)
 	}
@@ -1006,4 +1025,74 @@ func (s *Store) CheckRecoveryKey(secret string) error {
 		}
 	}
 	return ErrNotAKey
+}
+
+// ErrFirstUse is wrapped by *FirstUseError.
+var ErrFirstUse = errors.New("this store's key list is new to this device: check its fingerprint before the first unlock")
+
+// FirstUseError is returned by an unlock that would trust the key list on first use while
+// ConfirmFirstUse is set. Digest is what TrustList takes; Fingerprint is the list's short form to show
+// (and to compare with what another device or the person who made the store shows).
+type FirstUseError struct {
+	Digest, Fingerprint string
+}
+
+func (e *FirstUseError) Error() string { return ErrFirstUse.Error() + " (" + e.Fingerprint + ")" }
+func (e *FirstUseError) Unwrap() error { return ErrFirstUse }
+
+// ListFingerprint is the fingerprint of the current key list: the first 128 bits of its digest in groups
+// of four hexadecimal digits.
+func ListFingerprint(digest string) string {
+	if len(digest) > 32 {
+		digest = digest[:32]
+	}
+	var parts []string
+	for i := 0; i < len(digest); i += 4 {
+		parts = append(parts, digest[i:min(i+4, len(digest))])
+	}
+	return strings.Join(parts, " ")
+}
+
+// ListFingerprint is the fingerprint of the store's current key list, to show where the store is made
+// and to compare at a first unlock on another device ("" while encryption is off).
+func (s *Store) ListFingerprint() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.cfg.Owners) == 0 {
+		return ""
+	}
+	return ListFingerprint(ownersDigest(s.cfg.Owners))
+}
+
+// TrustList records that the person confirmed the key list with this digest, so the first unlock with an
+// SSH key of it goes through. The host keeps the digests it passes here between visits.
+func (s *Store) TrustList(digest string) {
+	s.mu.Lock()
+	if s.trusted == nil {
+		s.trusted = map[string]bool{}
+	}
+	fresh := !s.trusted[digest]
+	s.trusted[digest] = true
+	s.mu.Unlock()
+	if fresh && s.OnTrust != nil {
+		s.OnTrust(digest)
+	}
+}
+
+// checkFirstUse stops the first use of an unsealed SSH key of a list nobody confirmed (ConfirmFirstUse).
+func (s *Store) checkFirstUse(o Owner) error {
+	if !s.ConfirmFirstUse || o.Kind != KindSSH {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	cfg := s.cfg
+	if cfg.Pending != nil || ownSeal(cfg, o) != nil {
+		return nil
+	}
+	d := ownersDigest(cfg.Owners)
+	if s.trusted[d] {
+		return nil
+	}
+	return &FirstUseError{Digest: d, Fingerprint: ListFingerprint(d)}
 }
