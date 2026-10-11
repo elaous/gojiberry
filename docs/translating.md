@@ -11,7 +11,9 @@ languages are the packs in [`i18n/packs`](../i18n/packs): `de.json`, `es.json`, 
 2. Add the id to every pack. `go test ./i18n` fails with the id and the file that asks for it if a pack
    lacks it (`TestEveryMessageInTheSourcesIsInThePacks`), and if one pack has an id another lacks or a
    different number of verbs (`TestShippedPacksAreComplete`).
-3. Ids built at run time (`"tab."+name`, `"check.sev."+severity`) are not seen by that test: add them to the
+3. A pack id that no source asks for any more fails `TestNoStaleMessagesInThePacks`: delete it from the packs
+   when you remove the feature.
+4. Ids built at run time (`"tab."+name`, `"check.sev."+severity`) are not seen by that test: add them to the
    packs by hand, next to the code that builds them.
 
 ## Messages that depend on a number
@@ -38,5 +40,5 @@ check of the page in that direction.
 
 ## What is not done
 
-Relative times, time zones, plural rules for fractions, and a check for stale ids are in
+Relative times, time zones and plural rules for fractions are in
 [roadmap item 83](roadmap.md). The messages written before plural forms existed still use neutral wording.

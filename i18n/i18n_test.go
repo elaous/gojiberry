@@ -179,3 +179,74 @@ func TestEveryMessageInTheSourcesIsInThePacks(t *testing.T) {
 		t.Errorf("%q is asked for in the sources but is in no pack (%s): add it to i18n/packs/*.json", id, missing[id])
 	}
 }
+
+// A pack message the sources no longer ask for is stale: it is translated for nothing and hides that a
+// feature was removed. An id counts as used when its text is a string literal in the sources, or begins
+// with one that ends in "." or "-" (an id built at run time, as "tab."+name), or is the "#form" of a plural id
+// that is used.
+func TestNoStaleMessagesInThePacks(t *testing.T) {
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	literals := map[string]bool{}
+	fset := token.NewFileSet()
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "node_modules", "testdata", "vendor":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(p, ".go") {
+			return nil
+		}
+		f, err := parser.ParseFile(fset, p, nil, 0)
+		if err != nil {
+			return nil
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			if b, ok := n.(*ast.BasicLit); ok && b.Kind == token.STRING {
+				if s, err := strconv.Unquote(b.Value); err == nil && len(s) < 80 {
+					literals[s] = true
+				}
+			}
+			return true
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var prefixes []string
+	for l := range literals {
+		if strings.HasSuffix(l, ".") || strings.HasSuffix(l, "-") {
+			prefixes = append(prefixes, l)
+		}
+	}
+	var stale []string
+	for id := range Default().msgs["es"] {
+		base, _, _ := strings.Cut(id, "#")
+		if literals[base] {
+			continue
+		}
+		dynamic := false
+		for _, p := range prefixes {
+			if strings.HasPrefix(base, p) {
+				dynamic = true
+				break
+			}
+		}
+		if !dynamic {
+			stale = append(stale, id)
+		}
+	}
+	sort.Strings(stale)
+	for _, id := range stale {
+		t.Errorf("%q is in the packs but no source asks for it: remove it from i18n/packs/*.json (or, if it is built at run time, make the prefix a literal ending in \".\")", id)
+	}
+}
