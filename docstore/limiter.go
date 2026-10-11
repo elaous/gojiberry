@@ -23,6 +23,11 @@ import (
 // it alone. SweepRateLimits deletes the records of callers that have been idle.
 const RateLimitPrefix = "ratelimit/"
 
+// ConfigPrefix is the keyspace of per-user configuration (package userconfig): preferences, styles,
+// templates. The document API refuses it and expiry leaves it alone; it is not in the encrypting
+// adapter's skip list, so it is encrypted with the owner's keys like any document.
+const ConfigPrefix = "config/"
+
 // Limiter decides whether a caller may do something now (start a ceremony, publish a key, look
 // one up). key names the caller ("<route group>|<client>", "u:<user id>"); Allow returns
 // ok=false and how long to wait when the caller is over its budget. Implementations are safe

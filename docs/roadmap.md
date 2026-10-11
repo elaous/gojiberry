@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (#234: HTML export with a design-token theme; #233: `tokens`, design tokens with contrast validation (roadmap 77); #232: `wasmserve`, a static handler with wasm type, compression and caching (roadmap 82); #231: `docstore backup` and `restore` commands with audit lines; #230: wasm size budget (roadmap 82); full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+6 of 10 since the last full run (#235: `userconfig`, the per-user config store (roadmap 52); #234: HTML export with a design-token theme; #233: `tokens`, design tokens with contrast validation (roadmap 77); #232: `wasmserve`, a static handler with wasm type, compression and caching (roadmap 82); #231: `docstore backup` and `restore` commands with audit lines; #230: wasm size budget (roadmap 82); full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -824,6 +824,15 @@ New entries:
     encrypted and never logged. Plan: key layout and schema, encryption by default, version and merge rules, quota,
     offline queue, asset limits, sharing. Depends on PR A (shared sign-in sessions). Priority: medium. Where:
     `docstore`, `auth`, `components`.
+    Done in part (#235): the new `userconfig` package, the store's core. A `Store{A, User}` keeps named items under
+    `config/<hash of the user>/<name>` (the new `docstore.ConfigPrefix`: refused by the document API in any case,
+    never given a lifetime by expiry, and not in the encrypting adapter's skip list, so the owner's keys encrypt every
+    item; a test shows the raw store holds no readable setting and no address in the keys). Each item has a revision
+    inside the stored bytes: `Put` with a stale revision returns `ErrConflict` and the current item, `Update` reads,
+    merges and retries up to five times (a race of three writers keeps every change), writes are conditional where the
+    adapter supports `SaveIf`. Limits per item (256 KiB) and per user (2 MiB), names `a-z0-9._-`, `DeleteAll` for the
+    right to be forgotten; nothing logs a name or a value. Left: the HTTP route and the sign-in tie (who is `User`),
+    the local offline fallback and queue, fonts as assets, sharing templates and styles.
 
 Suggested order of the accessibility group: 48, 51, 49, 50, 52.
 
