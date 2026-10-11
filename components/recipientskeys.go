@@ -103,6 +103,7 @@ func directoryPicker(p RecipientsProps, busy bool) []xango.Node {
 				xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-type")}, xango.Text(r.Type)),
 				xango.El("code", []xango.Attr{xango.A("class", "gj-recip-fingerprint")}, xango.Text(r.Fingerprint)),
 				verifiedMark(r.Verified, r.Attested, r.OwnerSigned, r.OwnerEnrolled, r.VerifiedBy),
+				dirNote(r.Note),
 				docButton("gj-recip-pick", tr("recipients.pick", "Use this key"), busy, pick)))
 		}
 		nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list gj-recip-dir-results")}, items...))
@@ -274,4 +275,12 @@ func withHost(text, by string) string {
 		return text
 	}
 	return text + " (" + by + ")"
+}
+
+// dirNote is a row's note, or nothing.
+func dirNote(note string) xango.Node {
+	if note == "" {
+		return xango.Frag()
+	}
+	return xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-note"), xango.A("role", "note")}, xango.Text(note))
 }
