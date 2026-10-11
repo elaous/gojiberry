@@ -146,6 +146,10 @@ var defaultSkipPrefixes = []string{"catalog:", "acl:", "fonts/", strings.ToLower
 type Adapter struct {
 	Inner docstore.Adapter
 	Ring  Keyring
+	// RekeyProgress, if set, is called by RekeyAll after each document (its files together) with how
+	// many documents are done and how many there are, so a caller can show progress. It runs in the
+	// goroutine of RekeyAll, under its lock: it must not call back into the Adapter.
+	RekeyProgress func(done, total int)
 	// Skip says which ids are stored as they are; nil is DefaultSkip.
 	Skip func(id string) bool
 	// AllowPlaintext lets Load return a document that is stored in the clear, for migrating
@@ -1426,11 +1430,14 @@ func (a *Adapter) RekeyAll(ctx context.Context) (int, error) {
 	}
 	n := 0
 	var errs []error
-	for _, g := range order {
+	for i, g := range order {
 		k, err := a.rekeyGroup(ctx, groups[g])
 		n += k
 		if err != nil {
 			errs = append(errs, err)
+		}
+		if a.RekeyProgress != nil {
+			a.RekeyProgress(i+1, len(order))
 		}
 	}
 	return n, errors.Join(errs...)

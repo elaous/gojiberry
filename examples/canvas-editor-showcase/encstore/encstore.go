@@ -275,6 +275,12 @@ type Store struct {
 	// Reload reads the stored Config again (nil: not checked). Before every write the store
 	// compares it with the Config this tab loaded; a difference is ErrStaleConfig.
 	Reload func() (Config, error)
+	// OnUnlock, if set, is called after a key unlocked the store, with that key (to record that it
+	// was used here).
+	OnUnlock func(Owner)
+	// Progress, if set, is called while a change re-encrypts the store, after each document, with how
+	// many are done and how many there are.
+	Progress func(done, total int)
 
 	mu      sync.RWMutex
 	cfg     Config
@@ -885,6 +891,9 @@ func (s *Store) finishUnlock(o Owner, u Unlocked) error {
 	}
 	s.unlock(held{Unlocked: u, owner: o.Public})
 	s.sealOnUnlock(o, u.Signer) // first use of an SSH key, or the list moved on legitimately: bind it now
+	if s.OnUnlock != nil {
+		s.OnUnlock(o)
+	}
 	return nil
 }
 

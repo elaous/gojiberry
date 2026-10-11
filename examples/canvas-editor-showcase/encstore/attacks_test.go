@@ -778,3 +778,32 @@ func TestWalkSearchesPastADeadEndAndEndsInACircle(t *testing.T) {
 		t.Error("reached a list no link leads to")
 	}
 }
+
+// OnUnlock names the key that unlocked, and a change that re-encrypts the store reports its progress,
+// ending at all documents done.
+func TestHooksNameTheUnlockingKeyAndReportProgress(t *testing.T) {
+	ctx := context.Background()
+	r, rsecret, _ := confidentialRig(t)
+	var unlocked []string
+	r.st.OnUnlock = func(o Owner) { unlocked = append(unlocked, o.Kind) }
+	if err := r.st.UnlockRecovery(rsecret); err != nil {
+		t.Fatal(err)
+	}
+	if len(unlocked) != 1 || unlocked[0] != KindRecovery {
+		t.Errorf("OnUnlock calls: %v", unlocked)
+	}
+	var steps [][2]int
+	r.st.Progress = func(done, total int) { steps = append(steps, [2]int{done, total}) }
+	passkeyFP := ""
+	for _, o := range r.st.Recipients() {
+		if o.Type == "passkey-prf" {
+			passkeyFP = o.Fingerprint
+		}
+	}
+	if err := r.st.RemoveOwner(ctx, passkeyFP); err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) == 0 || steps[len(steps)-1][0] != steps[len(steps)-1][1] {
+		t.Errorf("progress: %v, want it to end with all documents done", steps)
+	}
+}
