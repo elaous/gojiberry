@@ -140,6 +140,13 @@ used and can be deleted there). Signed out, every begin draws its own random acc
 ceremonies for one e-mail make two accounts (the address is an unverified label, not a key); nothing collides.
 When e-mail verification arrives it must not merge or link passkey accounts on the bare e-mail label: passkey
 sessions carry no e-mail, and two signed-out registrations with one address make two accounts by design.
+**The rule for e-mail verification (roadmap item 41).** An account is never merged, linked or taken over because
+an e-mail label matches, and a passkey session never acquires an e-mail, whatever is later verified. A verified
+address may *link* two accounts only through a ceremony both take part in: the person proves each (a passkey of
+each), chooses which to keep, and the other account's documents are shared to it, not moved silently. Until that
+exists, `TestOneEmailLabelNeverMergesTwoPasskeyAccounts` (with the concurrent and unverified-label tests beside it)
+fails on any change that makes two registrations of one address one identity, gives a passkey session an e-mail,
+or lets a grant to the label reach the other account.
 **Shared ceremonies.** `StoreChallenges` keeps each ceremony as a record `passkey/challenge/<hash of the token>`
 (the token is not in the name). `Put` is a conditional create. `Take` loads the record and consumes it with one
 conditional step on the digest it read, `DeleteIf` or, on a store with only `SaveIf`, a swap to a used marker
