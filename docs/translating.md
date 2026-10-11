@@ -14,6 +14,16 @@ languages are the packs in [`i18n/packs`](../i18n/packs): `de.json`, `es.json`, 
 3. Ids built at run time (`"tab."+name`, `"check.sev."+severity`) are not seen by that test: add them to the
    packs by hand, next to the code that builds them.
 
+## Messages that depend on a number
+
+Do not glue "1 document" and "2 documents" from fragments. Ask for the plural form with `Tn` (the showcase) or
+`trn` (components): `Tn("doc.count", "%d document", "%d documents", n)`. The packs hold one text per plural
+category of the language, under the id with `#category` added: `"doc.count#one"` and `"doc.count#other"` for
+English, German, Spanish and French; Russian needs `#one`, `#few` and `#many`; Arabic has six categories;
+Japanese only `#other`. The category rules are in `i18n.PluralCategory` (CLDR cardinal rules for whole
+numbers). The shipped packs must have `#other` for every plural id (the test checks it); a language that lacks
+a category falls back to `#other`, then to the English in the code. Each text takes the number as its `%d`.
+
 ## Adding a language
 
 Copy `es.json`, change the top-level key to the language tag (`"pt"`, `"pt-BR"`), translate the values and
@@ -24,6 +34,5 @@ check of the page in that direction.
 
 ## What is not done
 
-Plural forms (`1 document`, `2 documents`) are written with a neutral form today; a catalogue with plural
-rules, locale-aware dates and numbers through one helper, and a check for stale ids are in
-[roadmap item 83](roadmap.md).
+Locale-aware dates and numbers through one helper, plural rules for fractions, and a check for stale ids are in
+[roadmap item 83](roadmap.md). The messages written before plural forms existed still use neutral wording.

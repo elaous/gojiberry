@@ -69,6 +69,20 @@ var Translate = func(id, def string) string { return def }
 
         components.Translate = func(id, def string) string { return cat.Text(lang, id, def) }
 
+var TranslatePlural = func(id, one, other string, n int) string {
+	m := other
+	if n == 1 {
+		m = one
+	}
+	return fmt.Sprintf(m, n)
+}
+    TranslatePlural is how the components say a message that depends on a
+    number: the text for the id in the plural form of n, with n put in. one and
+    other are the English the component has. It is English's rule until an app
+    sets it (package i18n has Catalog.Plural):
+
+        components.TranslatePlural = func(id, one, other string, n int) string { return cat.Plural(lang, id, one, other, n) }
+
 
 FUNCTIONS
 

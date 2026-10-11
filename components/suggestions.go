@@ -92,10 +92,7 @@ func (s *SuggestState) Announcement(moved bool) string {
 	if moved {
 		return pos
 	}
-	if len(s.Words) == 1 {
-		return tr("suggest.one", "1 suggestion.") + " " + pos
-	}
-	return trf("suggest.many", "%d suggestions.", len(s.Words)) + " " + pos
+	return trn("suggest.count", "%d suggestion.", "%d suggestions.", len(s.Words)) + " " + pos
 }
 
 // SuggestionsControl is the attributes the editing element carries while it has the popup: role
