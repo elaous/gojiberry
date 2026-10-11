@@ -37,8 +37,8 @@ func TestChangesWaitingSurviveAReload(t *testing.T) {
 	a.Focus("#input")
 	a.Press("End")
 
+	_ = srv.Listener.Close() // the hub is gone: no new connections, and the open ones are cut
 	srv.CloseClientConnections()
-	srv.Close() // the hub is gone
 	a.Type(" KEPT")
 	a.WaitFor("the changes are stored in the browser", `Object.keys(localStorage).some(k => k.startsWith('showcase-queue:queue1:Ana'))`)
 
@@ -50,6 +50,7 @@ func TestChangesWaitingSurviveAReload(t *testing.T) {
 	back.Listener = ln
 	back.Start()
 	defer back.Close()
+	defer func() { go srv.Close() }() // waits for the cut streams to end; never hold the test for it
 
 	a.Reload() // as if the tab had been closed with changes waiting
 	a.Wait("s.live.status === 'online'")
