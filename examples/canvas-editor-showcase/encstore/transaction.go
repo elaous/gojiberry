@@ -598,7 +598,11 @@ func (s *Store) afterCommit(added []NewKey, to []Owner, ids []age.Identity, sigs
 	s.unlock(hs...)
 	s.mu.Lock()
 	s.floor = &encrypt.MemorySeqFloor{}
+	digest := ownersDigest(s.cfg.Owners)
 	s.mu.Unlock()
+	if s.ConfirmFirstUse {
+		s.TrustList(digest) // made or changed on this device by the person: the list is their own
+	}
 }
 
 func recoverable(list []Owner) bool {
