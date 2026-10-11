@@ -18,14 +18,14 @@ type CollabAnnouncer struct {
 	// said together at the next Update after it.
 	Every time.Duration
 
-	started, wasOnline  bool
-	people              map[string]int // names present, by how many have that name
-	online              bool
-	problem             string
-	joined, left        []string
-	becameOnline, cause string // a held connection sentence: "online", "offline" or ""
-	problemSaid         string
-	last                time.Time
+	started, wasOnline bool
+	people             map[string]int // names present, by how many have that name
+	online             bool
+	problem            string
+	joined, left       []string
+	cause              string // a held connection sentence: "online", "offline" or ""
+	problemSaid        string
+	last               time.Time
 }
 
 // The levels of CollabAnnouncer.Level.
