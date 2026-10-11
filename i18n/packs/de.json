@@ -694,6 +694,22 @@
   "prefs.collabAll": "Gemeinsames Bearbeiten: alles ansagen",
   "prefs.collabImportant": "Gemeinsames Bearbeiten: nur die Verbindung ansagen",
   "prefs.collabOff": "Gemeinsames Bearbeiten: nichts ansagen",
-  "dir.seqChanged": "Das Verzeichnis nennt für diesen Schlüssel jetzt einen anderen Protokolleintrag als zuvor. Bei einer Adresse ohne Eigentümerschlüssel signiert nichts diese Nummer: Es kann eine erneute Veröffentlichung sein oder der Server nennt einen anderen Eintrag."
+  "dir.seqChanged": "Das Verzeichnis nennt für diesen Schlüssel jetzt einen anderen Protokolleintrag als zuvor. Bei einer Adresse ohne Eigentümerschlüssel signiert nichts diese Nummer: Es kann eine erneute Veröffentlichung sein oder der Server nennt einen anderen Eintrag.",
+  "menu.read": "Vorlesen",
+  "read.bar": "Vorlesen",
+  "read.document": "Dokument vorlesen",
+  "read.selection": "Auswahl vorlesen",
+  "read.fast": "Lesegeschwindigkeit: schnell",
+  "read.normal": "Lesegeschwindigkeit: normal",
+  "read.slow": "Lesegeschwindigkeit: langsam",
+  "read.next": "Nächster Satz",
+  "read.prev": "Vorheriger Satz",
+  "read.pause": "Pause",
+  "read.resume": "Fortsetzen",
+  "read.stop": "Vorlesen beenden",
+  "read.stopped": "Vorlesen beendet",
+  "read.started": "Vorlesen gestartet",
+  "read.note": "Es werden nur Stimmen gewählt, die auf diesem Gerät laufen",
+  "read.unsupported": "Dieser Browser bietet kein Vorlesen an"
  }
 }

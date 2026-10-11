@@ -694,6 +694,22 @@
   "prefs.collabAll": "Édition partagée : tout annoncer",
   "prefs.collabImportant": "Édition partagée : n'annoncer que la connexion",
   "prefs.collabOff": "Édition partagée : ne rien annoncer",
-  "dir.seqChanged": "L'annuaire désigne maintenant pour cette clé une autre entrée du journal qu'avant. Rien ne signe ce numéro pour une adresse sans clé de propriétaire : ce peut être une nouvelle publication, ou le serveur qui désigne une autre entrée."
+  "dir.seqChanged": "L'annuaire désigne maintenant pour cette clé une autre entrée du journal qu'avant. Rien ne signe ce numéro pour une adresse sans clé de propriétaire : ce peut être une nouvelle publication, ou le serveur qui désigne une autre entrée.",
+  "menu.read": "Lecture à voix haute",
+  "read.bar": "Lecture à voix haute",
+  "read.document": "Lire le document à voix haute",
+  "read.selection": "Lire la sélection à voix haute",
+  "read.fast": "Vitesse de lecture : rapide",
+  "read.normal": "Vitesse de lecture : normale",
+  "read.slow": "Vitesse de lecture : lente",
+  "read.next": "Phrase suivante",
+  "read.prev": "Phrase précédente",
+  "read.pause": "Pause",
+  "read.resume": "Reprendre",
+  "read.stop": "Arrêter la lecture",
+  "read.stopped": "Lecture arrêtée",
+  "read.started": "Lecture commencée",
+  "read.note": "Seules les voix qui fonctionnent sur cet appareil sont choisies",
+  "read.unsupported": "Ce navigateur ne propose pas la lecture à voix haute"
  }
 }

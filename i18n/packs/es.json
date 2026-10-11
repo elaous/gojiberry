@@ -694,6 +694,22 @@
   "prefs.collabAll": "Edición compartida: anunciar todo",
   "prefs.collabImportant": "Edición compartida: anunciar solo la conexión",
   "prefs.collabOff": "Edición compartida: no anunciar nada",
-  "dir.seqChanged": "El directorio nombra ahora para esta clave otra entrada del registro distinta de antes. Nada firma ese número en una dirección sin clave de propietario: puede ser una nueva publicación, o el servidor nombrando otra entrada."
+  "dir.seqChanged": "El directorio nombra ahora para esta clave otra entrada del registro distinta de antes. Nada firma ese número en una dirección sin clave de propietario: puede ser una nueva publicación, o el servidor nombrando otra entrada.",
+  "menu.read": "Leer en voz alta",
+  "read.bar": "Lectura en voz alta",
+  "read.document": "Leer el documento en voz alta",
+  "read.selection": "Leer la selección en voz alta",
+  "read.fast": "Velocidad de lectura: rápida",
+  "read.normal": "Velocidad de lectura: normal",
+  "read.slow": "Velocidad de lectura: lenta",
+  "read.next": "Frase siguiente",
+  "read.prev": "Frase anterior",
+  "read.pause": "Pausa",
+  "read.resume": "Reanudar",
+  "read.stop": "Detener la lectura",
+  "read.stopped": "Lectura detenida",
+  "read.started": "Lectura iniciada",
+  "read.note": "Solo se eligen voces que funcionan en este dispositivo",
+  "read.unsupported": "Este navegador no ofrece la lectura en voz alta"
  }
 }
