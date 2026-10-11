@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (#151, #152, #153, #154, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+6 of 10 since the last full run (#151, #152, #153, #154, #155, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -940,7 +940,7 @@ unless stated.
     4. Build the cheat sheet from the one shortcut table, with remapping stored in the preferences (51, 52).
     5. An e2e that drives the whole editor without a pointer.
     Where: `components`, `examples/canvas-editor-showcase`, the browser e2e. Priority: high. Dependencies: 48; remapping
-    needs 51.
+    needs 51. Done in part (this PR): the option lists have a keyboard model (`components/listboxkeys.go`): Down or Up on the button of a `Dropdown` or `FontSelector` opens the list and goes to an option (the search field first, for fonts), the arrows, Home and End move among the options, Enter or Space chooses with the focus back on the button, Escape closes with the focus back, Tab closes and leaves; the options are focusable but out of the Tab order. Tests: `TestDropdownKeyboard`, `TestFontSelectorKeyboard`. The colour and date pickers are native inputs, so the browser already gives them the keyboard. Left: the inventory of every action (step 1), skip links, the cheat sheet and remapping, and the pointer-free end-to-end run (step 5).
 60. **Accessible text mirror of the canvas.** Kind: fixable in part (the canvas is not DOM text). What: a hidden DOM or
     a live region kept in sync with the canvas model, covering paragraphs, tables, lists, images, links, comments,
     tracked changes, structure, alt text, heading levels, table headers and the document outline. Why it matters:
