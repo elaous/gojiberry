@@ -731,6 +731,11 @@ const (
 type A11yRun struct {
 	Text string
 	Lang string
+	// Change is "ins" for text suggested to be added and "del" for text suggested to be removed, "" for
+	// text as it is; Author is who suggested it. A reader hears them as insertions and deletions, with the
+	// words "Suggested addition by Ana:" / "Suggested removal by Ana:" before.
+	Change string
+	Author string
 }
     A11yRun is a piece of a block's text; Lang is its language tag, "" for the
     document's own.

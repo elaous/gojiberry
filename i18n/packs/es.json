@@ -787,6 +787,8 @@
   "proposals.someone": "Alguien",
   "proposals.replaced": "%s reemplazó «%s» por «%s»",
   "proposals.removed": "%s eliminó «%s»",
-  "proposals.added": "%s añadió «%s»"
+  "proposals.added": "%s añadió «%s»",
+  "a11y.suggestedAdd": "Adición sugerida por %s: ",
+  "a11y.suggestedRemove": "Eliminación sugerida por %s: "
  }
 }

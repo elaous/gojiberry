@@ -12,10 +12,16 @@ import (
 type formatExporter struct {
 	format transfer.Format
 	e      Exporter
+	// tracked says the format can show suggested changes (as insertions and deletions); the others
+	// write the document as it would be with every suggestion accepted.
+	tracked bool
 }
 
 func (f formatExporter) Format() transfer.Format { return f.format }
 func (f formatExporter) Export(d docfile.Document) ([]byte, error) {
+	if f.tracked {
+		return f.e.Export(FromDocumentTracked(d))
+	}
 	return f.e.Export(FromDocument(d))
 }
 
@@ -39,11 +45,11 @@ func (pdfImporter) Import(b []byte) (docfile.Document, error) { return pdftext.I
 // text are in transfer.Default; for braille see package braille.)
 func Register(r *transfer.Registry) {
 	for _, f := range []formatExporter{
-		{transfer.Format{Name: "html", Label: "Web page (HTML)", Exts: []string{".html"}, MIME: "text/html"}, HTML{}},
-		{transfer.Format{Name: "rtf", Label: "Rich Text Format", Exts: []string{".rtf"}, MIME: "application/rtf"}, RTF{}},
-		{transfer.Format{Name: "epub", Label: "E-book (EPUB)", Exts: []string{".epub"}, MIME: "application/epub+zip"}, EPUB{}},
-		{transfer.Format{Name: "pdf", Label: "PDF", Exts: []string{".pdf"}, MIME: "application/pdf"}, PDF{}},
-		{transfer.Format{Name: "docx", Label: "Word (.docx)", Exts: []string{".docx"}, MIME: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}, DOCX{}},
+		{transfer.Format{Name: "html", Label: "Web page (HTML)", Exts: []string{".html"}, MIME: "text/html"}, HTML{}, true},
+		{transfer.Format{Name: "rtf", Label: "Rich Text Format", Exts: []string{".rtf"}, MIME: "application/rtf"}, RTF{}, false},
+		{transfer.Format{Name: "epub", Label: "E-book (EPUB)", Exts: []string{".epub"}, MIME: "application/epub+zip"}, EPUB{}, true},
+		{transfer.Format{Name: "pdf", Label: "PDF", Exts: []string{".pdf"}, MIME: "application/pdf"}, PDF{}, false},
+		{transfer.Format{Name: "docx", Label: "Word (.docx)", Exts: []string{".docx"}, MIME: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}, DOCX{}, true},
 	} {
 		r.AddExporter(f)
 	}

@@ -45,6 +45,11 @@ type A11yBlock struct {
 type A11yRun struct {
 	Text string
 	Lang string
+	// Change is "ins" for text suggested to be added and "del" for text suggested to be removed, "" for
+	// text as it is; Author is who suggested it. A reader hears them as insertions and deletions, with the
+	// words "Suggested addition by Ana:" / "Suggested removal by Ana:" before.
+	Change string
+	Author string
 }
 
 // AccessibleTextProps configures AccessibleText.
@@ -149,11 +154,23 @@ func a11yInline(b A11yBlock) []xango.Node {
 	}
 	var out []xango.Node
 	for _, r := range b.Runs {
-		if r.Lang == "" {
-			out = append(out, xango.Text(r.Text))
-			continue
+		n := xango.Text(r.Text)
+		if r.Lang != "" {
+			n = xango.El("span", []xango.Attr{xango.A("lang", r.Lang)}, xango.Text(r.Text))
 		}
-		out = append(out, xango.El("span", []xango.Attr{xango.A("lang", r.Lang)}, xango.Text(r.Text)))
+		if r.Change != "" {
+			who := r.Author
+			if who == "" {
+				who = tr("proposals.someone", "Someone")
+			}
+			lead := trf("a11y.suggestedAdd", "Suggested addition by %s: ", who)
+			tag := "ins"
+			if r.Change == "del" {
+				lead, tag = trf("a11y.suggestedRemove", "Suggested removal by %s: ", who), "del"
+			}
+			n = xango.El(tag, nil, xango.El("span", []xango.Attr{xango.A("class", "gj-sr-only")}, xango.Text(lead)), n)
+		}
+		out = append(out, n)
 	}
 	return out
 }

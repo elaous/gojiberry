@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // DOCX renders a Snapshot to a Word document. It writes the OOXML package
@@ -37,6 +38,7 @@ type docxBuilder struct {
 	links   map[string]string
 	imgs    int
 	docPr   int
+	revs    int // tracked changes written so far (their ids)
 }
 
 func (b *docxBuilder) rel(typ, target string, external bool) string {
@@ -260,7 +262,24 @@ func (b *docxBuilder) inline(segs []Segment) string {
 		if rpr.Len() > 0 {
 			run += `<w:rPr>` + rpr.String() + `</w:rPr>`
 		}
-		run += `<w:t xml:space="preserve">` + esc(s.Text) + `</w:t></w:r>`
+		if f.Change == Deleted {
+			run += `<w:delText xml:space="preserve">` + esc(s.Text) + `</w:delText></w:r>`
+		} else {
+			run += `<w:t xml:space="preserve">` + esc(s.Text) + `</w:t></w:r>`
+		}
+		if f.Change != NoChange {
+			// a tracked change: Word shows it as a revision by its author, to accept or reject there
+			tag := "w:ins"
+			if f.Change == Deleted {
+				tag = "w:del"
+			}
+			author := f.Author
+			if author == "" {
+				author = "Unknown"
+			}
+			b.revs++
+			run = `<` + tag + ` w:id="` + strconv.Itoa(b.revs) + `" w:author="` + esc(author) + `" w:date="` + time.Unix(f.Time, 0).UTC().Format("2006-01-02T15:04:05Z") + `">` + run + `</` + tag + `>`
+		}
 		if f.Href != "" {
 			id, ok := b.links[f.Href]
 			if !ok {

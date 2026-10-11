@@ -1016,3 +1016,13 @@ func TestCheckPanelFixButtonsAndTheExportGate(t *testing.T) {
 		t.Error("the gate is shown without a handler")
 	}
 }
+
+func TestAccessibleTextHearsSuggestedChanges(t *testing.T) {
+	html := render(t, AccessibleText(AccessibleTextProps{Blocks: []A11yBlock{{Kind: A11yParagraph, Text: "the red fox", Runs: []A11yRun{
+		{Text: "the "}, {Text: "brown", Change: "del", Author: "Ana"}, {Text: "red", Change: "ins", Author: "Ana"}, {Text: " fox", Lang: "fr"}, {Text: "!", Change: "ins"}}}}}))
+	for _, want := range []string{"<del><span class=\"gj-sr-only\">Suggested removal by Ana: </span>brown</del>", "<ins><span class=\"gj-sr-only\">Suggested addition by Ana: </span>red</ins>", `<span lang="fr"> fox</span>`, "Suggested addition by Someone: "} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in\n%s", want, html)
+		}
+	}
+}

@@ -43,12 +43,25 @@ func Chunks(blocks []components.A11yBlock, docLang string) []Chunk {
 			runs = []components.A11yRun{{Text: b.Text}}
 		}
 		start := len(out)
+		// the runs that are read (not the text suggested to be removed), neighbours in one language joined,
+		// so that a suggested change does not cut a sentence in two
+		var spoken []components.A11yRun
 		for _, r := range runs {
+			if r.Change == "del" {
+				continue
+			}
 			lang := r.Lang
 			if lang == "" {
 				lang = docLang
 			}
-			out = appendSentences(out, r.Text, lang, i)
+			if n := len(spoken); n > 0 && spoken[n-1].Lang == lang {
+				spoken[n-1].Text += r.Text
+			} else {
+				spoken = append(spoken, components.A11yRun{Text: r.Text, Lang: lang})
+			}
+		}
+		for _, r := range spoken {
+			out = appendSentences(out, r.Text, r.Lang, i)
 		}
 		// A heading, a list item and a code line have no full stop of their own: the engine
 		// would run them into the next block without a pause.
