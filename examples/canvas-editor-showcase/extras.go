@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net/url"
+	"slices"
 	"strings"
 	"syscall/js"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/export"
 	"github.com/elaous/gojiberry/i18n"
+	"github.com/elaous/gojiberry/lang"
 	"github.com/elaous/gojiberry/share"
 	"github.com/elaous/gojiberry/xango"
 )
@@ -278,13 +280,14 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 				text += s.Text
 			}
 		}
+		runs := a11yRuns(b.Segments)
 		switch b.Kind {
 		case export.Heading1, export.Heading2, export.Heading3:
-			out = append(out, components.A11yBlock{Kind: components.A11yHeading, Level: b.Level, Text: text})
+			out = append(out, components.A11yBlock{Kind: components.A11yHeading, Level: b.Level, Text: text, Runs: runs})
 		case export.BulletItem, export.NumberedItem:
-			out = append(out, components.A11yBlock{Kind: components.A11yListItem, Level: b.Level, Ordered: b.Kind == export.NumberedItem, Text: text})
+			out = append(out, components.A11yBlock{Kind: components.A11yListItem, Level: b.Level, Ordered: b.Kind == export.NumberedItem, Text: text, Runs: runs})
 		case export.Quote:
-			out = append(out, components.A11yBlock{Kind: components.A11yQuote, Text: text})
+			out = append(out, components.A11yBlock{Kind: components.A11yQuote, Text: text, Runs: runs})
 		case export.Code:
 			out = append(out, components.A11yBlock{Kind: components.A11yCode, Text: text})
 		case export.Image:
@@ -303,7 +306,7 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 			}
 		default:
 			if text != "" {
-				out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: text})
+				out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: text, Runs: runs})
 			}
 		}
 	}
@@ -381,4 +384,58 @@ func pageEndpoint(raw string) string {
 		return ""
 	}
 	return got
+}
+
+// a11yRuns are a block's segments as pieces with a language each (neighbours with the same language
+// joined), or nil when none of the text has a language of its own.
+func a11yRuns(segs []export.Segment) []components.A11yRun {
+	tagged := false
+	for _, s := range segs {
+		tagged = tagged || s.Format.Lang != ""
+	}
+	if !tagged {
+		return nil
+	}
+	var out []components.A11yRun
+	for _, s := range segs {
+		text, tag := s.Text, s.Format.Lang
+		if s.SoftBreak {
+			text = " "
+			if n := len(out); n > 0 {
+				tag = out[n-1].Lang // a break stays with the text before it
+			}
+		}
+		if n := len(out); n > 0 && out[n-1].Lang == tag {
+			out[n-1].Text += text
+		} else {
+			out = append(out, components.A11yRun{Text: text, Lang: tag})
+		}
+	}
+	return out
+}
+
+// selectionLanguageMenu tags the selected text (or the text typed next) with its language, so that a
+// screen reader switches voice for it; the first entry returns it to the document's own.
+func selectionLanguageMenu(u *ui, flow func() *canvas.TextFlow, redraw, refocus, renderUI func()) []components.MenuItem {
+	set := func(tag, name string) func() {
+		return func() {
+			if fl := flow(); fl != nil && fl.SetLanguage(tag) {
+				u.announce(T("a11y.selLang", "Language of the selection: %s", name))
+				redraw()
+				refocus()
+				renderUI()
+			}
+		}
+	}
+	doc := T("menu.docLang", "Document language")
+	items := []components.MenuItem{{Label: doc, OnSelect: set("", doc)}, {Separator: true}}
+	codes := make([]string, 0, len(lang.Names))
+	for c := range lang.Names {
+		codes = append(codes, c)
+	}
+	slices.Sort(codes)
+	for _, c := range codes {
+		items = append(items, components.MenuItem{Label: lang.Names[c], OnSelect: set(c, lang.Names[c])})
+	}
+	return items
 }

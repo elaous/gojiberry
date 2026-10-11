@@ -176,6 +176,7 @@ type Format struct {
 	Comment     string  `json:"comment,omitempty" pb:"15"`
 	Bookmark    string  `json:"bookmark,omitempty" pb:"16"`
 	Index       string  `json:"index,omitempty" pb:"17"`
+	Lang        string  `json:"lang,omitempty" pb:"18"`
 }
 
 // List mirrors canvas.ListStyle.

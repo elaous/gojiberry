@@ -33,6 +33,8 @@ const (
 type Format struct {
 	Bold, Italic, Underline, Strikethrough, Superscript, Subscript bool
 	Href                                                           string
+	// Lang is the run's language tag, "" for the document's own.
+	Lang string
 }
 
 // Segment is one contiguous run of a block's own text sharing one

@@ -32,9 +32,19 @@ type A11yBlock struct {
 	Level   int
 	Ordered bool
 	Text    string
+	// Runs, when set, are the text again as pieces with their own language: a piece with a Lang is
+	// written as a span with a lang attribute, so a screen reader switches voice for it. Their
+	// texts, joined, are Text.
+	Runs []A11yRun
 	// Cells are a table row's cells (Kind A11yTableRow); a table is the
 	// consecutive rows, the first of them the header.
 	Cells []string
+}
+
+// A11yRun is a piece of a block's text; Lang is its language tag, "" for the document's own.
+type A11yRun struct {
+	Text string
+	Lang string
 }
 
 // AccessibleTextProps configures AccessibleText.
@@ -65,7 +75,7 @@ func AccessibleText(p AccessibleTextProps) xango.Node {
 		b := p.Blocks[i]
 		switch b.Kind {
 		case A11yHeading:
-			kids = append(kids, xango.El("h"+strconv.Itoa(min(max(b.Level, 1), 6)), nil, xango.Text(b.Text)))
+			kids = append(kids, xango.El("h"+strconv.Itoa(min(max(b.Level, 1), 6)), nil, a11yInline(b)...))
 		case A11yListItem:
 			// Consecutive items of one kind make one list.
 			j := i
@@ -78,12 +88,12 @@ func AccessibleText(p AccessibleTextProps) xango.Node {
 			}
 			var items []xango.Node
 			for _, it := range p.Blocks[i:j] {
-				items = append(items, xango.El("li", []xango.Attr{xango.A("aria-level", strconv.Itoa(it.Level+1))}, xango.Text(it.Text)))
+				items = append(items, xango.El("li", []xango.Attr{xango.A("aria-level", strconv.Itoa(it.Level+1))}, a11yInline(it)...))
 			}
 			kids = append(kids, xango.El(tag, nil, items...))
 			i = j - 1
 		case A11yQuote:
-			kids = append(kids, xango.El("blockquote", nil, xango.El("p", nil, xango.Text(b.Text))))
+			kids = append(kids, xango.El("blockquote", nil, xango.El("p", nil, a11yInline(b)...)))
 		case A11yCode:
 			kids = append(kids, xango.El("pre", nil, xango.El("code", nil, xango.Text(b.Text))))
 		case A11yTableRow:
@@ -106,7 +116,7 @@ func AccessibleText(p AccessibleTextProps) xango.Node {
 			kids = append(kids, xango.El("table", nil, xango.El("tbody", nil, rows...)))
 			i = j - 1
 		default:
-			kids = append(kids, xango.El("p", nil, xango.Text(b.Text)))
+			kids = append(kids, xango.El("p", nil, a11yInline(b)...))
 		}
 	}
 	if p.Selection != "" {
@@ -122,4 +132,21 @@ func AccessibleText(p AccessibleTextProps) xango.Node {
 func Announcer(message string) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-sr-only gj-announcer"), xango.A("role", "status"), xango.A("aria-live", "polite"), xango.A("aria-atomic", "true")},
 		xango.Text(message))
+}
+
+// a11yInline is a block's text as nodes: plain text, or with Runs a span with a lang attribute for each
+// piece that has a language of its own.
+func a11yInline(b A11yBlock) []xango.Node {
+	if len(b.Runs) == 0 {
+		return []xango.Node{xango.Text(b.Text)}
+	}
+	var out []xango.Node
+	for _, r := range b.Runs {
+		if r.Lang == "" {
+			out = append(out, xango.Text(r.Text))
+			continue
+		}
+		out = append(out, xango.El("span", []xango.Attr{xango.A("lang", r.Lang)}, xango.Text(r.Text)))
+	}
+	return out
 }

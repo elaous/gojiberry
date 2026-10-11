@@ -20,6 +20,7 @@ message Format {
   string comment = 15;
   string bookmark = 16;
   string index = 17;
+  string lang = 18;
 }
 
 message Chars {
