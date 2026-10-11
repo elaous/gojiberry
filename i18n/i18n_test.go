@@ -1,6 +1,13 @@
 package i18n
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
+	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -92,5 +99,78 @@ func TestShippedPacksAreComplete(t *testing.T) {
 	}
 	if got := c.Text("de", "find.nOfM", "%d of %d", 1, 4); got != "1 von 4" {
 		t.Errorf("de: %q", got)
+	}
+}
+
+// Every message the code asks for by id, with its English text, is in the shipped packs. A new T("id", "text")
+// (or tr, trf, Translate) in the sources without a translation fails here, so a language is never left behind
+// by a feature. Ids built at run time ("tab."+name) are not seen by this check; add them by hand.
+func TestEveryMessageInTheSourcesIsInThePacks(t *testing.T) {
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := Default().msgs["es"]
+	callers := map[string]bool{"T": true, "tr": true, "trf": true, "Translate": true}
+	fset := token.NewFileSet()
+	missing := map[string]string{}
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "node_modules", "testdata", "vendor":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
+			return nil
+		}
+		f, err := parser.ParseFile(fset, p, nil, 0)
+		if err != nil {
+			return nil
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			c, ok := n.(*ast.CallExpr)
+			if !ok || len(c.Args) < 2 {
+				return true
+			}
+			var name string
+			switch fn := c.Fun.(type) {
+			case *ast.Ident:
+				name = fn.Name
+			case *ast.SelectorExpr:
+				name = fn.Sel.Name
+			}
+			if !callers[name] {
+				return true
+			}
+			a, ok1 := c.Args[0].(*ast.BasicLit)
+			b, ok2 := c.Args[1].(*ast.BasicLit)
+			if !ok1 || !ok2 || a.Kind != token.STRING || b.Kind != token.STRING {
+				return true
+			}
+			id, _ := strconv.Unquote(a.Value)
+			text, _ := strconv.Unquote(b.Value)
+			if _, ok := ref[id]; !ok {
+				rel, _ := filepath.Rel(root, p)
+				missing[id] = rel + ": " + text
+			}
+			return true
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for id := range missing {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		t.Errorf("%q is asked for in the sources but is in no pack (%s): add it to i18n/packs/*.json", id, missing[id])
 	}
 }
