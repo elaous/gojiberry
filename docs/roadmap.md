@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-1 of 10 since the last full run (#230: wasm size budget (roadmap 82); full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+2 of 10 since the last full run (#231: `docstore backup` and `restore` commands with audit lines; #230: wasm size budget (roadmap 82); full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1195,8 +1195,11 @@ unless stated.
     manifest of ids, sizes and SHA-256) and `docstore.Restore` checks the whole archive against the manifest before it
     writes anything, then saves each document; a damaged, cut or foreign archive writes nothing (`ErrBadBackup`). Give
     them the adapter under the encrypting one: the test `TestBackupOfAnEncryptedStoreIsOpaqueAndRestoresReadable` shows
-    the archive holds only ciphertext, needs no key, and the owner reads the restored documents. Left: a command for the
-    operator (`docstore backup`/`restore`) and an audit event for each (`audit.BackupMade`, `BackupRestored`).
+    the archive holds only ciphertext, needs no key, and the owner reads the restored documents. Also done (#231): the commands
+    `docstore backup <file>` and `docstore restore [-force] <file>` (the file is written beside its final name and
+    renamed, mode 0600; a store that already has documents is restored into only with -force), each writing one `audit`
+    event (`BackupMade`, `BackupRestored`) to stderr, without any id. Left: scheduling and rotation of backups, and
+    calling `audit` from the other places that change a store.
     Also done (#227), step 3 in part: `GET /admin/usage` (only when the operator guard `WithDirectoryAdmin` is set;
     a failed guard is rate limited like the other admin routes) reports `documents`, `records` (the access-list
     bookkeeping), total and largest `bytes`, and the backend quota, computed from the listing's sizes alone: it reads no

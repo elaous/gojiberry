@@ -536,6 +536,11 @@ func Main() {
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
+	// `docstore backup <file>` and `docstore restore <file>` work on the store itself, as it is
+	// (before any expiry wrapper), and exit.
+	if handled, code := runOperatorCommand(context.Background(), adapter, os.Args[1:], os.Stdout, os.Stderr); handled {
+		os.Exit(code)
+	}
 	// With GOJIBERRY_DOCSTORE_EXPIRY_TTL set, every document expires that long after its last
 	// write; everything below (passkeys, directory, the server) uses the wrapped store, whose
 	// policy leaves their own keyspaces alone. Documents that already exist get a full
