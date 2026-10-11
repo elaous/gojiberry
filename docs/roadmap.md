@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-8 of 10 since the last full run (#151, #152, #153, #154, #155, #156, #157, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+9 of 10 since the last full run (#151, #152, #153, #154, #155, #156, #157, #158, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -851,13 +851,20 @@ the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. 
     the 10,000 states (one address spends only its own budget), and then logins get 503 until the states expire and
     the sweep clears them, up to about 12 minutes. Without `..._TRUSTED_PROXIES` behind a proxy all clients share
     one budget. Where: `auth/auth.go`, `auth/http.go`, `internal/docstorecmd`.
-55. **Per-process auth state that remains.** Kind: fixable. Checked: there are no CSRF tokens or cookies in `auth`
-    (the bearer header is the only credential, the OIDC state is the redirect's CSRF check and is now shared). What is
-    still per process: (a) the public offer's anonymous sessions (`public.SessionStore`, item 16); (b) the default
-    `MemoryChallenges` and per-process rate limiters when their `store` modes are off; (c) the session and state
-    counts used for the bound, which each replica refreshes from its own sweep. Priority: low. Where: `docstore/public`,
-    `auth/sessionstore`.
-
+55. **Done in part (this PR): the public offer's anonymous sessions can be shared through the store.** Checked: there are no
+    CSRF tokens or cookies in `auth` (the bearer header is the only credential, the OIDC state is the redirect's CSRF
+    check and is shared). Was: (a) the public offer's anonymous sessions (`public.SessionStore`, item 16), (b) the
+    default `MemoryChallenges` and per-process rate limiters when their `store` modes are off, (c) the session and
+    state counts used for the bound. Now (a) and the session counts of (c) are `public.StoreSessions`
+    (`docstore/public/storesession.go`; `GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS=store|store-required`): one record per session
+    named by the hash of its token, `SetDoc` and `Extend` as compare-and-sets (exactly one of any number of replicas
+    sets the one document), the caps and the reserve applied to counts rebuilt from the store at most every 30 seconds
+    and kept current by the replica's own writes (so replicas can overshoot a cap by what they create between two
+    recounts, never grow without limit), and `Reap` (the service's sweep) deleting the expired. Tests: the lifecycle
+    over two replicas, a race on `SetDoc`, each cap and the reserve, the overshoot, and two services over one store.
+    Still per process: (b) when their `store` modes are off (a choice, with a warning at start-up), and the
+    in-flight byte count (which protects the process's memory). The byte budget is shared since item 16; the report
+    counters are item 86. Priority: low. Where: `docstore/public`, `auth/sessionstore`.
 56. **Opt-in atypical-speech support in voice to text (Project Relate / Euphonia style).** Kind: fixable in part
     (depends on what exists outside the project). What: let people whose speech standard recognisers handle badly
     dictate into the editor with a recogniser that fits them. **Feasibility finding, to verify at the spike:**
@@ -1143,13 +1150,11 @@ unless stated.
        evicted "live" callers. 6. `ParseWatchState` refuses `null` and negative positions. Not deeply re-audited by
        that review, for lack of budget: the filtered/full chaining of `WatchLog` (#105) and the signed-frame
        verification internals (their tests pass); a second pass over them is worth a later review.
-86. **Public offer: the anonymous sessions and their counts, the byte budget and the report counters are still per
-    process.** Kind: fixable. Why: behind replicas each process counts its own live sessions (global and per client),
-    the bytes it knows of and the reports it has seen, so each cap can be reached once per replica; the daily budget
-    per address is shared since entry 16. Plan: a store-backed `SessionStore` (record per session, counted by listing,
-    as `auth/sessionstore` does), a byte budget rebuilt from the store on each sweep with a conditional counter, and
-    report counters kept in the report records. Priority: medium for several replicas, none for one. Where:
-    `docstore/public` (`session.go`, `guardrails.go`, `reportwatch.go`). Avoid: one replica.
+86. **Public offer: the report counters are still per process (the sessions and their counts are shared since item
+    55).** Kind: fixable. Why: behind replicas each process counts the reports it has seen, so each cap can be reached
+    once per replica; the daily budget per address is shared since entry 16 and the sessions since entry 55. Plan:
+    report counters kept in the report records. Priority: low to medium for several replicas, none for one. Where:
+    `docstore/public` (`reportwatch.go`). Avoid: one replica.
 87. **Done (this PR): the showcase page rotates and resets the owner key.** Was: the owner key could be made, backed up,
     restored and forgotten, but not replaced, so a copied key or a lost key and backup left the address refusing
     entries. Now `dirclient.Client` has `Rotate`, `RequestReset`, `CompleteReset` and `CancelReset`, and `Enrollment`
