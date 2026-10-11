@@ -1101,3 +1101,22 @@ func TestPublicPriorityQuotaModes(t *testing.T) {
 		t.Error("a bad mode was accepted")
 	}
 }
+
+func TestAdminToken(t *testing.T) {
+	check := adminToken("op-secret")
+	req := func(h string) *http.Request {
+		r := httptest.NewRequest("POST", "/admin/directory/unmapped", nil)
+		if h != "" {
+			r.Header.Set("X-Gojiberry-Admin-Token", h)
+		}
+		return r
+	}
+	if !check(req("op-secret")) {
+		t.Error("the right token")
+	}
+	for _, bad := range []string{"", "op-secret ", "OP-SECRET", "op-secre", "other"} {
+		if check(req(bad)) {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}
