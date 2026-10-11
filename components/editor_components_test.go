@@ -979,3 +979,40 @@ func TestCheckPanelListsFindingsWithWordsAndAGoButton(t *testing.T) {
 		t.Errorf("a clean check: %s", h)
 	}
 }
+
+func TestCheckPanelFixButtonsAndTheExportGate(t *testing.T) {
+	var fixed []int
+	var gate []string
+	overrides := 0
+	props := CheckPanelProps{
+		Checked:  true,
+		Findings: []CheckFinding{{Rule: "heading-skip", Severity: "warning", Message: "m", Fix: "f", FixLabel: "Make it level 2"}, {Rule: "contrast", Severity: "warning", Message: "n", Fix: "g"}},
+		OnFix:    func(i int) { fixed = append(fixed, i) },
+		Gate:     "block", OnGate: func(m string) { gate = append(gate, m) },
+		OnOverride: func() { overrides++ },
+	}
+	html := render(t, CheckPanel(props))
+	if strings.Count(html, "gj-check-fix-button") != 1 || !strings.Contains(html, "Make it level 2") {
+		t.Errorf("only a finding with a fix has a button:\n%s", html)
+	}
+	for _, want := range []string{`data-gate="block" aria-pressed="true"`, `data-gate="warn" aria-pressed="false"`, `aria-label="Before exporting"`, `id="gj-check-override"`, "Allow the next export anyway"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in\n%s", want, html)
+		}
+	}
+	clicks := findHandlers(CheckPanel(props), "click")
+	// order: Check, three gates, override, then per finding: Go (none: OnGo nil), fix button of the first
+	if len(clicks) != 6 {
+		t.Fatalf("click handlers: %d", len(clicks))
+	}
+	ev := xango.NewEvent("click", nil, false, nil, nil)
+	clicks[2](ev) // the warn button
+	clicks[4](ev) // override
+	clicks[5](ev) // the fix of finding 0
+	if len(gate) != 1 || gate[0] != "warn" || overrides != 1 || len(fixed) != 1 || fixed[0] != 0 {
+		t.Errorf("gate %v overrides %d fixed %v", gate, overrides, fixed)
+	}
+	if h := render(t, CheckPanel(CheckPanelProps{Checked: true})); strings.Contains(h, "gj-check-gate") {
+		t.Error("the gate is shown without a handler")
+	}
+}

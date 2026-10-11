@@ -129,3 +129,48 @@ func TestFindingsCarryTheirPositionInTheTextStream(t *testing.T) {
 		t.Fatalf("heading findings: %+v", fs)
 	}
 }
+
+func TestGateDecides(t *testing.T) {
+	errF := Finding{Severity: Error}
+	warnF := Finding{Severity: Warning}
+	for _, c := range []struct {
+		mode     GateMode
+		fs       []Finding
+		override bool
+		allow    bool
+		errs     int
+	}{
+		{GateAllow, []Finding{errF}, false, true, 1},
+		{GateWarn, []Finding{errF, warnF}, false, true, 1},
+		{GateBlock, []Finding{errF}, false, false, 1},
+		{GateBlock, []Finding{errF}, true, true, 1},
+		{GateBlock, []Finding{warnF}, false, true, 0},
+		{GateBlock, nil, false, true, 0},
+	} {
+		if allow, errs := c.mode.Decide(c.fs, c.override); allow != c.allow || errs != c.errs {
+			t.Errorf("%q %d findings override %v: allow %v errors %d, want %v %d", c.mode, len(c.fs), c.override, allow, errs, c.allow, c.errs)
+		}
+	}
+}
+
+func TestFindingsNameTheirOneClickAction(t *testing.T) {
+	doc := docfile.Document{Content: []docfile.Item{
+		{Para: &docfile.Para{Style: "Heading 1"}}, chars("Title\n", docfile.Format{}),
+		{Para: &docfile.Para{Style: "Heading 3"}}, chars("Deep\n", docfile.Format{}),
+		chars("faint", docfile.Format{Color: "#cccccc"}),
+		{Image: &docfile.ImageItem{URL: "a.png"}},
+	}}
+	got := map[string]Finding{}
+	for _, f := range Check(doc, Options{}) {
+		got[f.Rule] = f
+	}
+	if f := got[RuleHeadingSkip]; f.Action != ActionHeadingLevel || f.Arg != 2 {
+		t.Errorf("heading: %+v", f)
+	}
+	if f := got[RuleContrast]; f.Action != ActionDefaultColour || f.Length != 5 {
+		t.Errorf("contrast: %+v", f)
+	}
+	if f := got[RuleImageAlt]; f.Action != ActionDescribe {
+		t.Errorf("image: %+v", f)
+	}
+}

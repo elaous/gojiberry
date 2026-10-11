@@ -63,6 +63,53 @@ func TestAccessibilityAndTranslation(t *testing.T) {
 	d.NoErrors()
 }
 
+// Export can be gated on the check: with "block" an export of a document with errors is refused in words
+// until the person allows that one export; "warn" exports and says so.
+func TestExportGate(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Click(`button[data-tab="images"]`)
+	d.ChooseFile(func() { d.Click("#img-insert") }, "bar.png", pngBytes(t)) // a picture with no description: an error
+	d.WaitSelector("#img-alt-0")
+	export := func() {
+		d.Click(`button[data-tab="transfer"]`)
+		d.Click(`.gj-transfer-button[data-kind="export"][data-format="html"]`)
+	}
+	// default: no gate
+	name, _ := d.Download(export)
+	d.OK(strings.HasSuffix(name, ".html"), "by default the export goes ahead: "+name)
+
+	d.Click(`button[data-tab="check"]`)
+	d.Click(`.gj-check-gate[data-gate="block"]`)
+	d.OK(d.Attr(`.gj-check-gate[data-gate="block"]`, "aria-pressed") == "true", "the choice is shown as pressed")
+	export()
+	d.WaitFor("refused", `(document.getElementById('transfer-message') || {textContent: ''}).textContent.includes('Not exported: the document has 1 accessibility errors')`)
+
+	// allow this one export
+	d.Click(`button[data-tab="check"]`)
+	d.Click("#gj-check-override")
+	name, _ = d.Download(export)
+	d.OK(strings.HasSuffix(name, ".html"), "the allowed export goes ahead: "+name)
+	export()
+	d.WaitFor("and the next is refused again", `document.getElementById('transfer-message').textContent.includes('Not exported')`)
+
+	// warn: exports and says how many errors
+	d.Click(`button[data-tab="check"]`)
+	d.Click(`.gj-check-gate[data-gate="warn"]`)
+	name, _ = d.Download(export)
+	d.OK(strings.HasSuffix(name, ".html") && d.Text(".gj-announcer") == "Exported with 1 accessibility errors", "warn exports and says so: "+d.Text(".gj-announcer"))
+
+	// describing the picture satisfies the block
+	d.Click(`button[data-tab="check"]`)
+	d.Click(`.gj-check-gate[data-gate="block"]`)
+	d.Click(`button[data-tab="images"]`)
+	d.Fill("#img-alt-0", "A bar chart")
+	name, _ = d.Download(export)
+	d.OK(strings.HasSuffix(name, ".html"), "no errors: not blocked: "+name)
+	d.NoErrors()
+}
+
 // The screen-reader copy follows the structure, not only the text: turning a
 // paragraph into a heading changes it with the text unchanged.
 func TestScreenReaderCopyFollowsStructure(t *testing.T) {
@@ -171,7 +218,11 @@ func TestCheckTabListsFindingsAndGoesToThem(t *testing.T) {
 	for _, v := range d.Axe("", axeDisabled...) {
 		t.Errorf("the Check tab with a finding: %s", v)
 	}
+	d.OK(d.Has(".gj-check-fix-button") && strings.Contains(d.Text(".gj-check-fix-button"), "level 2"), "the heading has a one-click fix: "+d.Text(".gj-check-fix-button"))
 	d.Click(".gj-check-go")
 	d.WaitFor("the caret at the heading", `(() => { const s = JSON.parse(document.getElementById('state').textContent); return s.cursors && s.cursors[0].Caret === s.text.indexOf('Deep heading') })()`)
+	// the fix makes it a level 2 heading, and the check run again finds nothing
+	d.Click(".gj-check-fix-button")
+	d.WaitFor("fixed", `document.getElementById('gj-check-summary').textContent.includes('Nothing found')`)
 	d.NoErrors()
 }
