@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/elaous/gojiberry/docstore/encrypt"
 	"github.com/elaous/gojiberry/examples/canvas-editor-showcase/dirclient"
@@ -877,5 +878,73 @@ func TestOwnerKeyKeptAsTextIsMovedOutOfReach(t *testing.T) {
 	d.Reload()
 	d.WaitFor("the key moved", `localStorage.getItem('showcase-enc:owner:' + `+"`"+site.URL+"`"+`) === null`)
 	d.OK(d.Str(storedOwnerKeyProbe(site.URL)) == "non-extractable, export refused", "now kept out of reach: "+d.Str(storedOwnerKeyProbe(site.URL)))
+	d.NoErrors()
+}
+
+// Replacing the owner key from the page: the holder rotates it (the old key stops publishing), and a
+// person without the key asks for a reset, which the directory completes only after its wait.
+func TestRotateAndResetTheOwnerKeyFromThePage(t *testing.T) {
+	site := e2etest.NewSite(t)
+	site.UseLocalhost()
+	srv, err := demoserver.New(site.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	site.Handle("/auth/", srv.Mux)
+	site.Handle("/directory/", srv.Mux)
+	site.Handle("/demo/", srv.Mux)
+	state := func(sub string) string {
+		return `(document.querySelector('#dir-owner-state') || {textContent: ''}).textContent.includes('` + sub + `')`
+	}
+
+	d := site.OpenURL(t, "/index.html?docstore="+url.QueryEscape(site.URL))
+	d.VirtualAuthenticator()
+	turnOn(t, d, "")
+	d.Click(`button[data-tab="people"]`)
+	d.WaitSelector("#dir-offer")
+	d.Click("#dir-offer-review")
+	confirmDialog(d)
+	d.WaitSelector("#dir-owner-enroll")
+	d.Click("#dir-owner-enroll")
+	d.WaitFor("enrolled", state("this browser holds it"))
+	first := d.Str(`document.querySelector('#dir-owner-secret').value`)
+
+	// rotate: a new key, signed in by the old; the new one publishes
+	d.Click("#dir-owner-rotate")
+	confirmDialog(d)
+	d.WaitFor("rotated", `(document.querySelector('#dir-owner-msg') || {textContent: ''}).textContent.includes('Owner key replaced')`)
+	second := d.Str(`document.querySelector('#dir-owner-secret').value`)
+	d.OK(second != "" && second != first, "the new key has its own backup")
+	d.Click(".gj-recip-publish")
+	d.WaitFor("published", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
+
+	// the first key's backup is no longer an owner key of the address
+	d.Click("#dir-owner-forget")
+	confirmDialog(d)
+	d.WaitSelector("#dir-owner-restore-open")
+	d.Click("#dir-owner-restore-open")
+	d.WaitSelector("#dir-owner-restore")
+	d.Fill("#dir-owner-restore", first)
+	d.Click("#dir-owner-restore-go")
+	d.WaitFor("refused", `(document.querySelector('#dir-owner-msg') || {textContent: ''}).textContent.includes('not an owner key of')`)
+
+	// lost the key: ask for a reset, which waits
+	d.Click("#dir-owner-reset-request")
+	confirmDialog(d)
+	d.WaitSelector("#dir-owner-pending-box")
+	third := d.Str(`document.querySelector('#dir-owner-pending-secret').value`)
+	d.OK(third != "" && third != second, "the key for the reset is shown to be saved")
+	d.WaitFor("the pending state", state("reset waiting"))
+	d.Click("#dir-owner-reset-complete")
+	d.WaitFor("the wait", `(document.querySelector('#dir-owner-msg') || {textContent: ''}).textContent.toLowerCase().includes('wait')`)
+	d.OK(!d.Has("#dir-owner-backup"), "the page still holds no owner key")
+
+	// after the directory's wait the reset completes and the new key publishes
+	srv.Dir.Now = func() time.Time { return time.Now().Add(25 * time.Hour) }
+	d.Click("#dir-owner-reset-complete")
+	d.WaitFor("completed", state("this browser holds it"))
+	d.OK(!d.Has("#dir-owner-pending-box"), "the pending key is gone")
+	d.Click(".gj-recip-publish")
+	d.WaitFor("published with the reset key", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
 	d.NoErrors()
 }

@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (#151, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+3 of 10 since the last full run (#151, #152, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1141,25 +1141,19 @@ unless stated.
     as `auth/sessionstore` does), a byte budget rebuilt from the store on each sweep with a conditional counter, and
     report counters kept in the report records. Priority: medium for several replicas, none for one. Where:
     `docstore/public` (`session.go`, `guardrails.go`, `reportwatch.go`). Avoid: one replica.
-87. **Showcase: rotate and reset the owner key from the page.** Kind: fixable. Why: the owner key of the person's
-    directory entry (item 21) can be made, backed up, restored and forgotten, but not replaced. A person who thinks the
-    key was copied, or who lost both the key and its backup, has no way to recover from the page: the address keeps
-    refusing entries without the old key. `directoryclient` already has the calls. Plan: (1) **Rotate** while the key
-    is held (`Client.Rotate`: the new key is signed in by the current one): make the new key, rotate, keep the new
-    key, show its backup at once, and say the old backup no longer works. (2) **Reset** when the key and its backup
-    are lost (`RequestReset`, then `CompleteReset` after the waiting period of 24 hours, during which the old key can
-    still `CancelReset`): start it from the signed-in session, show the time it takes effect, keep the new key
-    ready, and let "Watch my address" report the reset as an entry the person did or did not make (a reset the person
-    did not ask for is exactly the alert to raise). (3) Offer **Cancel a pending reset** when the held key is the
-    current one. (4) Add the dirclient methods (`Rotate`, `RequestReset`, `CompleteReset`, `CancelReset`) and an
-    enrollment state that includes `ResetSince`/`ResetDue`, so the panel can say "a reset is pending, it takes effect
-    at ...". (5) Rotating changes the pin for the person's own address (`Pin`) and the stored key per directory
-    (`encowner.go`). Tests: native against the demo server for each call and the refusals (rotate with the wrong
-    current key, complete before the wait, cancel without the key), and a browser test of rotate, then of a reset
-    with a clock moved past the wait if the demo server allows it. Priority: low to medium; it is the recovery path
-    for the one secret the page keeps. Where: `examples/canvas-editor-showcase` (`dirclient`, `encowner.go`),
-    `docs/encryption-and-passkeys.md` (5.7). Avoid: forgetting the key and enrolling again (the address refuses a
-    second enrollment).
+87. **Done (this PR): the showcase page rotates and resets the owner key.** Was: the owner key could be made, backed up,
+    restored and forgotten, but not replaced, so a copied key or a lost key and backup left the address refusing
+    entries. Now `dirclient.Client` has `Rotate`, `RequestReset`, `CompleteReset` and `CancelReset`, and `Enrollment`
+    says whether a reset waits (`ResetSince`, `ResetDue`) and which key is current. The panel (`encowner_reset.go`):
+    **Replace the owner key** while it is held (a new key signed in by the old one, its backup shown at once, the old
+    backup refused from then on); **I lost my owner key** asks for a reset, makes the new key at once and keeps it
+    apart (`<url>#reset`, non-extractable where the browser can) with its backup shown, and **Complete the reset**
+    works once the directory's 24 hours are over (before, the directory's refusal is shown); **Cancel the reset** with
+    the held key, and **Give up the reset here** to drop the new key. A waiting reset is stated in the address's
+    state line. Tests: native (`TestRotateAndResetTheOwnerKey`: wrong current key, early completion, cancel, old key
+    refused afterwards) and a browser test (`TestRotateAndResetTheOwnerKeyFromThePage`). Left: "Watch my address"
+    does not yet name a reset as its own kind of alert (it lists the log entry); the demo server's clock is moved in
+    the test, not by the page.
 88. **Done (this PR): the API dumps under `docs/*.txt` are regenerated, and `make check` fails when they go stale.**
     Was: `make docs` (`go doc -all`) had not been run for a long time (about 2,200 lines of difference across eight
     dumps, the `components` dump alone about 1,900), so the dumps did not show the real public API. Now they are

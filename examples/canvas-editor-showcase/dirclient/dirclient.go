@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"filippo.io/age"
 
@@ -112,10 +113,17 @@ func OwnerPubFingerprint(pub string) string {
 
 // Enrollment is what the server says of an address's owner keys.
 type Enrollment struct {
+	// ResetPending: somebody asked to replace the owner key through the provider session and the
+	// waiting period is running; ResetSince is when it was asked and ResetDue when it can be
+	// completed (the zero time when none). The owner key can still cancel it until then.
+	ResetPending         bool
+	ResetSince, ResetDue time.Time
 	// Enrolled: the address has an owner key.
 	Enrolled bool
-	// Fingerprints are the fingerprints of its owner keys.
+	// Fingerprints are the fingerprints of its owner keys as the server lists them (the ones it
+	// kept, oldest first); Current is the one that signs now, "" when none.
 	Fingerprints []string
+	Current      string
 }
 
 // Key is a key the directory lists for an address, as the People tab's picker shows it.
@@ -196,6 +204,15 @@ type Directory interface {
 	PinOwner(email, ownerPub string)
 	Pins() map[string]string
 	LoadPins(map[string]string)
+	// Rotate replaces the owner key: next is signed in by the current one.
+	Rotate(ctx context.Context, email string, current, next OwnerSigner) error
+	// RequestReset asks to replace a lost owner key through the signed-in session; it takes effect
+	// after a waiting period (24 hours) during which the owner key can cancel it.
+	RequestReset(ctx context.Context) (Enrollment, error)
+	// CompleteReset installs next as the owner key once the waiting period is over.
+	CompleteReset(ctx context.Context, email string, next OwnerSigner) error
+	// CancelReset ends a pending reset, signed by the current owner key.
+	CancelReset(ctx context.Context, email string, owner OwnerSigner) error
 	// Pin tells the client that owner is the key somebody confirmed for the address (it enrolled
 	// it, or the person restored it from a backup), so rows signed by it can be told from rows
 	// signed by another.
@@ -235,6 +252,10 @@ var (
 	// ErrAlreadyEnrolled: the address already has an owner key. If it is yours, restore it from its
 	// backup; if not, somebody enrolled before you did (the log shows who and when).
 	ErrAlreadyEnrolled = errors.New("this address already has an owner key")
+	// ErrResetWait: the reset cannot be completed yet; the waiting period is still running.
+	ErrResetWait = errors.New("the waiting period of the reset is not over")
+	// ErrNotEnrolled: the address has no owner key to rotate, reset or cancel.
+	ErrNotEnrolled = errors.New("this address has no owner key")
 	// ErrBadProof: the proof of possession did not verify.
 	ErrBadProof = errors.New("the directory did not accept the proof that you hold this key")
 )
@@ -248,6 +269,9 @@ type Client struct {
 	Token func(ctx context.Context) (string, error)
 	// HTTP is the HTTP client; nil is http.DefaultClient.
 	HTTP *http.Client
+	// Now is the clock the owner signatures are dated by (time.Now when nil); a test moves it with the
+	// server's.
+	Now func() time.Time
 
 	// OnState is called with the new State text after anything that changes it, so the page can
 	// keep it.
@@ -276,7 +300,7 @@ func (c *Client) client(ctx context.Context) (*directoryclient.Client, error) {
 	defer c.mu.Unlock()
 	c.tok = tok
 	if c.dc == nil {
-		c.dc = &directoryclient.Client{BaseURL: c.Base, HTTP: c.HTTP, Pins: c.pinsLocked(), State: &c.state, LogKeys: c.logKeys, Token: func() string {
+		c.dc = &directoryclient.Client{BaseURL: c.Base, HTTP: c.HTTP, Now: c.Now, Pins: c.pinsLocked(), State: &c.state, LogKeys: c.logKeys, Token: func() string {
 			c.mu.Lock()
 			defer c.mu.Unlock()
 			return c.tok
@@ -507,13 +531,84 @@ func (c *Client) Enrollment(ctx context.Context, email string) (Enrollment, erro
 	if err != nil {
 		return Enrollment{}, failure(err)
 	}
-	out := Enrollment{Enrolled: e.Enrolled}
+	out := enrollmentOf(e)
 	for _, k := range e.Keys {
 		if pub, err := encrypt.ParseOwnerPub(k.Pub); err == nil {
-			out.Fingerprints = append(out.Fingerprints, encrypt.OwnerFingerprint(pub))
+			fp := encrypt.OwnerFingerprint(pub)
+			out.Fingerprints = append(out.Fingerprints, fp)
+			if k.Until == 0 { // still valid: the one that signs now
+				out.Current = fp
+			}
 		}
 	}
+	if out.Current == "" && len(out.Fingerprints) > 0 {
+		out.Current = out.Fingerprints[len(out.Fingerprints)-1]
+	}
 	return out, nil
+}
+
+func enrollmentOf(e docstore.DirectoryEnrollment) Enrollment {
+	out := Enrollment{Enrolled: e.Enrolled, ResetPending: e.ResetSince != 0}
+	if e.ResetSince != 0 {
+		out.ResetSince = time.Unix(e.ResetSince, 0)
+	}
+	if e.ResetDue != 0 {
+		out.ResetDue = time.Unix(e.ResetDue, 0)
+	}
+	return out
+}
+
+// Rotate implements Directory.
+func (c *Client) Rotate(ctx context.Context, email string, current, next OwnerSigner) error {
+	dc, err := c.client(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.saved()
+	if _, err := dc.Rotate(ctx, email, current, next); err != nil {
+		return failure(err)
+	}
+	return nil
+}
+
+// RequestReset implements Directory.
+func (c *Client) RequestReset(ctx context.Context) (Enrollment, error) {
+	dc, err := c.client(ctx)
+	if err != nil {
+		return Enrollment{}, err
+	}
+	defer c.saved()
+	e, err := dc.RequestReset(ctx)
+	if err != nil {
+		return Enrollment{}, failure(err)
+	}
+	return enrollmentOf(e), nil
+}
+
+// CompleteReset implements Directory.
+func (c *Client) CompleteReset(ctx context.Context, email string, next OwnerSigner) error {
+	dc, err := c.client(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.saved()
+	if _, err := dc.CompleteReset(ctx, email, next); err != nil {
+		return failure(err)
+	}
+	return nil
+}
+
+// CancelReset implements Directory.
+func (c *Client) CancelReset(ctx context.Context, email string, owner OwnerSigner) error {
+	dc, err := c.client(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.saved()
+	if _, err := dc.CancelReset(ctx, email, owner); err != nil {
+		return failure(err)
+	}
+	return nil
 }
 
 // Enroll implements Directory.
@@ -544,6 +639,10 @@ func failure(err error) error {
 		return ErrBadProof
 	case errors.Is(err, docstore.ErrDirectoryEnrolled):
 		return ErrAlreadyEnrolled
+	case errors.Is(err, docstore.ErrDirectoryResetWait):
+		return ErrResetWait
+	case errors.Is(err, docstore.ErrDirectoryNotEnrolled):
+		return ErrNotEnrolled
 	}
 	switch de.Status {
 	case http.StatusNotFound, http.StatusMethodNotAllowed:

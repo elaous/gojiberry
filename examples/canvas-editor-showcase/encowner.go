@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/elaous/gojiberry/examples/canvas-editor-showcase/dirclient"
 	"github.com/elaous/gojiberry/transfer"
@@ -57,6 +58,14 @@ type ownerUI struct {
 	backup   bool   // the backup is shown
 	restore  string // the draft of a backup being restored
 	restoreO bool   // the restore field is open
+
+	// pending is the key made when a reset was requested, held until the reset is completed; resetSince
+	// and resetDue are what the server said about the reset (zero if none).
+	pending     dirclient.OwnerSigner
+	pendingText bool // pending is kept as text
+	pendingSec  string
+	resetSince  time.Time
+	resetDue    time.Time
 
 	logKeys   map[string]string // the pinned log keys (key ID to base64), none until pinned
 	candidate map[string]string // the keys the server states, shown to be compared before they are pinned
@@ -198,6 +207,7 @@ func (d *dirUI) loadOwner() {
 	d.owner.key, d.owner.plain, d.owner.email, d.owner.secret = nil, false, "", ""
 	d.owner.state, d.owner.msg, d.owner.isErr, d.owner.backup = "", "", false, false
 	d.owner.restore, d.owner.restoreO = "", false
+	d.loadPending()
 	url := d.url
 	if url == "" {
 		return
@@ -307,14 +317,20 @@ func (d *dirUI) checkOwner(ctx context.Context) error {
 		return nil
 	}
 	d.owner.state = d.ownerState(me, en)
+	d.owner.resetSince, d.owner.resetDue = en.ResetSince, en.ResetDue
+	if !en.ResetPending {
+		d.dropPending()
+	}
 	d.say("", false)
 	return nil
 }
 
 // ownerState says in words what the address has and whether this browser holds it.
 func (d *dirUI) ownerState(me string, en dirclient.Enrollment) string {
-	held := d.owner.key != nil && d.owner.email == me && slices.Contains(en.Fingerprints, dirclient.OwnerFingerprint(d.owner.key))
+	held := d.owner.key != nil && d.owner.email == me && en.Current == dirclient.OwnerFingerprint(d.owner.key)
 	switch {
+	case en.ResetPending:
+		return T("dir.owner.resetPending", "%s has an owner key reset waiting since %s: it can be completed from %s. Until then the old key still publishes, and its holder can cancel the reset.", me, en.ResetSince.UTC().Format("2006-01-02 15:04 UTC"), en.ResetDue.UTC().Format("2006-01-02 15:04 UTC"))
 	case !en.Enrolled:
 		return T("dir.owner.none", "%s has no owner key: anyone who signs in as this address can publish keys for it.", me)
 	case held:
@@ -375,7 +391,7 @@ func (d *dirUI) restoreOwner(ctx context.Context) error {
 		d.say(dirErr(err).Error(), true)
 		return nil
 	}
-	if !slices.Contains(en.Fingerprints, dirclient.OwnerFingerprint(k)) {
+	if en.Current != dirclient.OwnerFingerprint(k) {
 		clear(k)
 		d.say(T("dir.owner.notOwner", "That key is not an owner key of %s.", me), true)
 		return nil
@@ -427,7 +443,10 @@ func (d *dirUI) ownerPanel(e *encUI) []xango.Node {
 				e.render()
 			}, busy))
 	}
+	more, notes := d.replacePanel(e, busy)
+	row = append(row, more...)
 	nodes = append(nodes, xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px;flex-wrap:wrap")}, row...))
+	nodes = append(nodes, notes...)
 	if d.owner.key != nil && !d.owner.plain && d.owner.secret == "" {
 		nodes = append(nodes, para("dir-owner-nobackup", T("dir.owner.noBackup", "The backup of this owner key was shown when it was made and is not kept. If you did not save it, make a new owner key; the address needs its reset to replace this one."), false))
 	}
