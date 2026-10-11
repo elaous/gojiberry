@@ -278,15 +278,18 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 	if u.a11ySig == sig && u.a11yCache != nil {
 		return u.a11yCache
 	}
-	snap := export.FromDocument(doc)
+	snap := export.FromDocumentTracked(doc)
 	var out []components.A11yBlock
 	for i := 0; i < len(snap.Blocks); i++ {
 		b := snap.Blocks[i]
 		text := ""
 		for _, s := range b.Segments {
-			if s.SoftBreak {
+			switch {
+			case s.Format.Change == export.Deleted:
+				// text suggested to be removed is in Runs, not in the block's text
+			case s.SoftBreak:
 				text += " "
-			} else {
+			default:
 				text += s.Text
 			}
 		}
@@ -315,7 +318,9 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 				for c := 0; c < b.TableCols && i+c < len(snap.Blocks); c++ {
 					var cell string
 					for _, s := range snap.Blocks[i+c].Segments {
-						cell += s.Text
+						if s.Format.Change != export.Deleted {
+							cell += s.Text
+						}
 					}
 					row.Cells = append(row.Cells, cell)
 				}
@@ -417,7 +422,7 @@ func pageEndpoint(raw string) string {
 func a11yRuns(segs []export.Segment) []components.A11yRun {
 	tagged := false
 	for _, s := range segs {
-		tagged = tagged || s.Format.Lang != ""
+		tagged = tagged || s.Format.Lang != "" || s.Format.Change != export.NoChange
 	}
 	if !tagged {
 		return nil
@@ -425,16 +430,23 @@ func a11yRuns(segs []export.Segment) []components.A11yRun {
 	var out []components.A11yRun
 	for _, s := range segs {
 		text, tag := s.Text, s.Format.Lang
+		change, author := "", ""
+		switch s.Format.Change {
+		case export.Inserted:
+			change, author = "ins", s.Format.Author
+		case export.Deleted:
+			change, author = "del", s.Format.Author
+		}
 		if s.SoftBreak {
 			text = " "
 			if n := len(out); n > 0 {
-				tag = out[n-1].Lang // a break stays with the text before it
+				tag, change, author = out[n-1].Lang, out[n-1].Change, out[n-1].Author // a break stays with the text before it
 			}
 		}
-		if n := len(out); n > 0 && out[n-1].Lang == tag {
+		if n := len(out); n > 0 && out[n-1].Lang == tag && out[n-1].Change == change && out[n-1].Author == author {
 			out[n-1].Text += text
 		} else {
-			out = append(out, components.A11yRun{Text: text, Lang: tag})
+			out = append(out, components.A11yRun{Text: text, Lang: tag, Change: change, Author: author})
 		}
 	}
 	return out

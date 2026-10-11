@@ -35,7 +35,22 @@ type Format struct {
 	Href                                                           string
 	// Lang is the run's language tag, "" for the document's own.
 	Lang string
+	// Change says the run is a suggested change not yet accepted or rejected (see FromDocumentTracked): text
+	// proposed to be added or proposed to be removed, by Author at Time (unix seconds). A Snapshot
+	// from FromDocument never has it: it shows the document as it would be if every suggestion were accepted.
+	Change ChangeKind
+	Author string
+	Time   int64
 }
+
+// ChangeKind says whether a run is part of a suggested change.
+type ChangeKind int
+
+const (
+	NoChange ChangeKind = iota
+	Inserted            // text proposed to be added
+	Deleted             // text proposed to be removed (still in the document)
+)
 
 // Segment is one contiguous run of a block's own text sharing one
 // Format, or a single soft line break standing in place of one

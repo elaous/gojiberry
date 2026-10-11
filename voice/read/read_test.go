@@ -50,3 +50,14 @@ func TestChunksLongTextAndTables(t *testing.T) {
 		t.Fatalf("empty text gave %d pieces", n)
 	}
 }
+
+func TestReadingSkipsTextSuggestedToBeRemoved(t *testing.T) {
+	got := Chunks([]components.A11yBlock{{Kind: components.A11yParagraph, Text: "the red fox", Runs: []components.A11yRun{
+		{Text: "the "}, {Text: "brown ", Change: "del", Author: "Ana"}, {Text: "red ", Change: "ins", Author: "Ana"}, {Text: "fox."}}}}, "en")
+	if g := chunkTexts(got); g != "the red fox." {
+		t.Fatalf("%q", g)
+	}
+	if strings.Contains(chunkTexts(got), "brown") {
+		t.Error("struck text is not read")
+	}
+}

@@ -3,6 +3,7 @@ package export
 import (
 	"strconv"
 	"strings"
+	"time"
 )
 
 // HTML renders a Snapshot to a standalone HTML document. Unlike
@@ -221,6 +222,21 @@ func wrapHTMLRun(text string, f Format) string {
 	if text == "" {
 		return text
 	}
+	if f.Change != NoChange {
+		tag := "ins"
+		if f.Change == Deleted {
+			tag = "del"
+		}
+		attrs := ""
+		if f.Author != "" {
+			attrs += " data-author=\"" + escapeHTMLAttr(f.Author) + "\""
+		}
+		if f.Time != 0 {
+			attrs += " datetime=\"" + time.Unix(f.Time, 0).UTC().Format(time.RFC3339) + "\""
+		}
+		inner := wrapHTMLRun(text, Format{Bold: f.Bold, Italic: f.Italic, Underline: f.Underline, Strikethrough: f.Strikethrough, Superscript: f.Superscript, Subscript: f.Subscript, Href: f.Href, Lang: f.Lang})
+		return "<" + tag + attrs + ">" + inner + "</" + tag + ">"
+	}
 	if f.Lang != "" {
 		text = "<span lang=\"" + escapeHTMLAttr(f.Lang) + "\">" + text + "</span>"
 	}
@@ -276,6 +292,8 @@ func escapeHTMLText(s string) string {
 // as markup, only ever terminated early by an unescaped '"'.
 func escapeHTMLAttr(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;") // not allowed in an XML attribute (EPUB's XHTML)
+	s = strings.ReplaceAll(s, ">", "&gt;")
 	return strings.ReplaceAll(s, "\"", "&quot;")
 }
 

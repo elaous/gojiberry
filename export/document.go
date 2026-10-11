@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"strings"
 
+	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/docfile"
 )
 
@@ -30,7 +31,46 @@ type line struct {
 // FromDocument turns a saved document into the format-agnostic Snapshot the
 // exporters read: one Block per paragraph (heading, list item, quote, code),
 // table cell or image, with character formatting as Segments.
-func FromDocument(d docfile.Document) Snapshot {
+func FromDocument(d docfile.Document) Snapshot { return fromDocument(acceptedView(d)) }
+
+// FromDocumentTracked is FromDocument that keeps the suggested changes: a run proposed to be added has
+// Format.Change Inserted and one proposed to be removed has Deleted (with who and when), for a format that
+// can show them (HTML, EPUB and Word write them as insertions and deletions). FromDocument shows the
+// document as it would be with every suggestion accepted, which is what a format that cannot show
+// them (plain text, Markdown, PDF, RTF) writes, so struck text never reaches a file that cannot strike it.
+func FromDocumentTracked(d docfile.Document) Snapshot { return fromDocument(d) }
+
+// acceptedView is the document with every suggestion accepted: text proposed to be removed is gone and text
+// proposed to be added is ordinary text.
+func acceptedView(d docfile.Document) docfile.Document {
+	has := false
+	for _, it := range d.Content {
+		if it.Chars != nil && it.Chars.Format.Proposal != "" {
+			has = true
+			break
+		}
+	}
+	if !has {
+		return d
+	}
+	out := d
+	out.Content = make([]docfile.Item, 0, len(d.Content))
+	for _, it := range d.Content {
+		if it.Chars != nil && it.Chars.Format.Proposal != "" {
+			m, ok := canvas.ParseProposalMark(it.Chars.Format.Proposal)
+			if ok && m.Kind == canvas.ProposalDelete {
+				continue
+			}
+			c := *it.Chars
+			c.Format.Proposal = ""
+			it.Chars = &c
+		}
+		out.Content = append(out.Content, it)
+	}
+	return out
+}
+
+func fromDocument(d docfile.Document) Snapshot {
 	snap := Snapshot{
 		Title:     d.Title,
 		PageWidth: defaultPageWidth, PageHeight: defaultPageHeight,
@@ -264,6 +304,12 @@ func segmentsOf(runs []docfile.Chars) []Segment {
 			Bold: r.Format.FontWeight >= 600, Italic: r.Format.FontStyle == "italic" || r.Format.FontStyle == "oblique",
 			Underline: r.Format.Underline, Strikethrough: r.Format.Strike,
 			Superscript: r.Format.Superscript, Subscript: r.Format.Subscript, Href: r.Format.Link, Lang: r.Format.Lang,
+		}
+		if m, ok := canvas.ParseProposalMark(r.Format.Proposal); ok {
+			f.Change, f.Author, f.Time = Inserted, m.Author, m.Time.Unix()
+			if m.Kind == canvas.ProposalDelete {
+				f.Change = Deleted
+			}
 		}
 		parts := strings.Split(r.Text, " ")
 		for i, p := range parts {

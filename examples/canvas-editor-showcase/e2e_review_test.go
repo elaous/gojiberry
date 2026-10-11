@@ -28,6 +28,9 @@ func TestSuggestionMode(t *testing.T) {
 	d.OK(strings.Contains(d.Text(".gj-proposal-text"), "added 'ZED '"), "the change is a sentence: "+d.Text(".gj-proposal-text"))
 	d.OK(strings.Contains(d.Text(".gj-proposals-count"), "1 suggested change"), "and counted: "+d.Text(".gj-proposals-count"))
 
+	// the reading copy tells a screen reader about it
+	d.OK(d.Count("#a11y-text ins") == 1 && strings.Contains(d.Text("#a11y-text ins"), "Suggested addition by"), "the reading copy: "+d.Text("#a11y-text ins"))
+
 	// reject it: the text is as it was
 	d.Click(".gj-proposal-reject")
 	d.Wait("s.text === " + e2etest.J(original))
