@@ -938,7 +938,9 @@ func TestRotateAndResetTheOwnerKeyFromThePage(t *testing.T) {
 	d.OK(third != "" && third != second, "the key for the reset is shown to be saved")
 	d.WaitFor("the pending state", state("reset waiting"))
 	d.Click("#dir-owner-reset-complete")
-	d.WaitFor("the wait", `(document.querySelector('#dir-owner-msg') || {textContent: ''}).textContent.toLowerCase().includes('wait')`)
+	// The message of the request itself also mentions the wait ("once the wait is over"): only the refusal of
+	// this early attempt counts, or the clock below could move before the attempt was answered.
+	d.WaitFor("the wait", `(t => t.includes('wait') && !t.includes('reset requested'))((document.querySelector('#dir-owner-msg') || {textContent: ''}).textContent.toLowerCase())`)
 	d.OK(!d.Has("#dir-owner-backup"), "the page still holds no owner key")
 
 	// after the directory's wait the reset completes and the new key publishes
