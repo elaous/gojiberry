@@ -66,6 +66,10 @@ jobs:
       - name: make modules
         run: make modules
 
+      # The size gate: the showcase wasm against the budget in docs/wasm-budget.txt (roadmap 82).
+      - name: make wasm-size
+        run: make wasm-size
+
       # The accessibility gate: axe-core and the keyboard tests in a real browser (the runner's
       # Chrome). It fails, rather than skips, if no browser is found.
       - name: make a11y-test
