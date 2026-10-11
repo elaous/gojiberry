@@ -187,8 +187,8 @@ func TestSuggestionsFromTheTextByFrequency(t *testing.T) {
 		t.Fatal("one letter is too short to complete")
 	}
 	typeText(ft, "a")
-	if got := ft.Suggestions(); !reflect.DeepEqual(got, []string{"banana", "band", "bandana"}) {
-		t.Fatalf("suggestions = %v (most frequent first, then alphabetical)", got)
+	if got := ft.Suggestions(); !reflect.DeepEqual(got, []string{"banana", "bandana", "band"}) {
+		t.Fatalf("suggestions = %v (most frequent first, then most recent)", got)
 	}
 	typeText(ft, "nd")
 	if got := ft.Suggestions(); !reflect.DeepEqual(got, []string{"bandana"}) {
@@ -219,7 +219,7 @@ func TestAcceptingASuggestion(t *testing.T) {
 func TestSuggestionNavigationAndDismiss(t *testing.T) {
 	ft := editing(t, "alpha alpine alps ")
 	typeText(ft, "al")
-	if !reflect.DeepEqual(ft.Suggestions(), []string{"alpha", "alpine", "alps"}) || ft.sugg.Hover() != 0 {
+	if !reflect.DeepEqual(ft.Suggestions(), []string{"alps", "alpine", "alpha"}) || ft.sugg.Hover() != 0 {
 		t.Fatalf("%v hover=%d", ft.Suggestions(), ft.sugg.Hover())
 	}
 	ft.HandleKey("ArrowDown", false)
@@ -236,7 +236,7 @@ func TestSuggestionNavigationAndDismiss(t *testing.T) {
 		t.Fatal("wraps the other way")
 	}
 	ft.HandleKey("Tab", false)
-	if ft.Text() != "alpha alpine alps alps" {
+	if ft.Text() != "alpha alpine alps alpha" {
 		t.Fatalf("accepted the highlighted one: %q", ft.Text())
 	}
 	typeText(ft, " al")
@@ -262,7 +262,7 @@ func TestBackspaceUpdatesSuggestions(t *testing.T) {
 	}
 	ft.HandleKey("Backspace", false)
 	ft.HandleKey("Backspace", false)
-	if got := ft.Suggestions(); !reflect.DeepEqual(got, []string{"cat", "catalog"}) {
+	if got := ft.Suggestions(); !reflect.DeepEqual(got, []string{"catalog", "cat"}) {
 		t.Fatalf("after backspacing to 'ca': %v", got)
 	}
 	ft.HandleKey("Backspace", false)

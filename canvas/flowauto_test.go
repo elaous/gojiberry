@@ -78,7 +78,7 @@ func TestTextFlowCompletion(t *testing.T) {
 	f.Vocabulary = []string{"almond"}
 	f.SetCursors([]Cursor{At(18)})
 	typeFlow(f, "al")
-	if got := f.Suggestions(); !reflect.DeepEqual(got, []string{"almond", "alpha", "alpine", "alps"}) {
+	if got := f.Suggestions(); !reflect.DeepEqual(got, []string{"alps", "alpine", "alpha", "almond"}) {
 		t.Fatalf("suggestions: %v", got)
 	}
 	f.HandleKey("ArrowDown", false)
@@ -93,7 +93,7 @@ func TestTextFlowCompletion(t *testing.T) {
 		t.Fatalf("hover wraps: %d", f.sugg.Hover())
 	}
 	f.HandleKey("Tab", false)
-	if flowText(f) != "alpha alpine alps\nalps" || f.Cursors()[0] != At(22) || len(f.Suggestions()) != 0 {
+	if flowText(f) != "alpha alpine alps\nalmond" || f.Cursors()[0] != At(24) || len(f.Suggestions()) != 0 {
 		t.Fatalf("accepted: %q %v", flowText(f), f.Cursors())
 	}
 	// Backspace re-offers, Escape dismisses, other keys close.

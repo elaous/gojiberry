@@ -276,10 +276,10 @@ func TestCompletionWhileSuggestingIsAProposal(t *testing.T) {
 	}
 	f.HandleKey("Tab", false)
 	// the typed letters were themselves proposed additions, which the completion replaces for real
-	if flowText(f) != "alpha alps\nalpha" {
+	if flowText(f) != "alpha alps\nalps" {
 		t.Fatalf("%q / %q", marked(f), flowText(f))
 	}
-	if ps := f.Proposals(); len(ps) != 1 || ps[0].Inserted != "alpha" || ps[0].Author != "gil" {
+	if ps := f.Proposals(); len(ps) != 1 || ps[0].Inserted != "alps" || ps[0].Author != "gil" {
 		t.Fatalf("one proposal, the whole word: %+v (%q)", ps, marked(f))
 	}
 	f.Suggesting = false
