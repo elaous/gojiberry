@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-0 of 10 since the last full run (full run on main 83955fc after #182, the 10th merge since 67a6c28, with the fixes in this PR). It passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. It found a stale components API dump, an invalid `aria-checked` on plain menu items (checked items are now `menuitemcheckbox`), and two start-up races in e2e tests, all fixed here. The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+1 of 10 since the last full run (#185, this PR; full run on main 83955fc after #182, the 10th merge since 67a6c28, with the fixes in this PR). It passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. It found a stale components API dump, an invalid `aria-checked` on plain menu items (checked items are now `menuitemcheckbox`), and two start-up races in e2e tests, all fixed here. The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1103,6 +1103,11 @@ unless stated.
        (69).
     First slice (popup plus keyboard model) can ship earlier if ARIA is built in. Where: the canvas editor input layer,
     `spell`, `components`. Priority: high. Dependencies: ARIA 48, mirror 60, preference menu 51.
+    Done in part (#185), plan steps 2, 3, 5 and 6: the new `complete` package is a pure in-memory index (no network, no
+    telemetry) with a sorted prefix index, a cap, recency- and count-weighted words from the text, a vocabulary with
+    weights (for a dictionary or the user dictionary), custom `Provider`s, the typed capital kept ("Hel" gives
+    "Help"), and `PrefixAt`/`WordEnd` for the caret. Left: the popup, the ARIA combobox and the keyboard model
+    (steps 1, 4 and 7) and the Ctrl+Space command, as the next slices.
 80. **Print layout.** Kind: fixable. What: pagination, headers and footers, page numbers and a table of contents.
     Why it matters: documents are still printed and exported to paged formats. Plan: (1) a page model with size and
     margins; (2) layout with page breaks, widow and orphan control; (3) headers, footers and fields; (4) a table of
