@@ -65,7 +65,11 @@ func withPublic(srv *docstore.Server, adapter docstore.Adapter, expiryTTL time.D
 	if err != nil {
 		return nil, err
 	}
-	svc, err := public.New(public.Options{Store: adapter, Config: cfg, LimiterFactory: limiters, Quota: quota, Sessions: sessions})
+	prio, err := publicPriorityQuota(context.Background(), adapter, cfg.MaxPriorityReportsPerReporter, os.Getenv("GOJIBERRY_DOCSTORE_PUBLIC_REPORT_COUNTERS"))
+	if err != nil {
+		return nil, err
+	}
+	svc, err := public.New(public.Options{Store: adapter, Config: cfg, LimiterFactory: limiters, Quota: quota, Sessions: sessions, PriorityQuota: prio})
 	if err != nil {
 		return nil, err
 	}
@@ -385,6 +389,37 @@ func publicSessions(ctx context.Context, adapter docstore.Adapter, max int, raw 
 	}
 	log.Print("docstore: the public offer's anonymous sessions are shared through the store (records under public/session/ hold a session's random id, its document id and the hashed address keys; the caps count what the last recount saw plus this replica's own writes)")
 	return s, nil
+}
+
+// publicPriorityQuota is the allowance of priority abuse reports per reporter GOJIBERRY_DOCSTORE_PUBLIC_REPORT_COUNTERS
+// asks for: nil (counted in each process) for "" or "memory", or a public.StoreQuota for "store" and
+// "store-required", so replicas on one store share the day's allowance of each reporter. The total number of
+// reports and the burst watch stay per process.
+func publicPriorityQuota(ctx context.Context, adapter docstore.Adapter, limit int, raw string) (public.Quota, error) {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	switch mode {
+	case "", "memory":
+		if n := declaredReplicas(); n > 1 {
+			log.Printf("docstore: WARNING: GOJIBERRY_DOCSTORE_REPLICAS=%d but the public offer counts each reporter's priority abuse reports in each process: a reporter can use the allowance once per replica. Set GOJIBERRY_DOCSTORE_PUBLIC_REPORT_COUNTERS=store (needs a store with conditional writes)", n)
+		}
+		return nil, nil
+	case "store", "store-required":
+	default:
+		return nil, errors.New("parsing GOJIBERRY_DOCSTORE_PUBLIC_REPORT_COUNTERS \"" + raw + "\": want \"memory\", \"store\" or \"store-required\"")
+	}
+	if limit <= 0 { // a negative limit is no limit; zero is the default and is filled in by the service
+		limit = public.DefaultPriorityPerDay
+	}
+	if ok, err := sharedStoreOrFallback(ctx, adapter, "GOJIBERRY_DOCSTORE_PUBLIC_REPORT_COUNTERS", mode, "priority report allowances",
+		"a reporter can use the allowance once per replica"); err != nil || !ok {
+		return nil, err
+	}
+	q, err := public.NewStoreQuota(adapter, int64(limit), 24*time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	log.Print("docstore: the public offer's priority-report allowance per reporter is shared through the store (fixed calendar days, UTC)")
+	return q, nil
 }
 
 // declaredReplicas is GOJIBERRY_DOCSTORE_REPLICAS as a number (0 if unset or not a number; the

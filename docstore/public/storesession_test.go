@@ -257,3 +257,44 @@ func TestTwoServicesShareAnonymousSessionsThroughTheStore(t *testing.T) {
 		t.Errorf("a second document on the same session was accepted: %d %s", r.StatusCode, r.body)
 	}
 }
+
+// With a PriorityQuota two services over one store share each reporter's allowance of priority reports; the
+// per-process count lets each use it.
+func TestPriorityAllowanceIsSharedByReplicasThroughTheStore(t *testing.T) {
+	ctx := context.Background()
+	var a *Service
+	e := newEnv(t, func(o *Options) {
+		o.Config.MaxPriorityReportsPerReporter = 2
+		q, err := NewStoreQuota(o.Store, 2, 24*time.Hour)
+		if err != nil {
+			t.Fatal(err)
+		}
+		q.Now = o.Now
+		o.PriorityQuota = q
+	})
+	a = e.svc
+	q2, _ := NewStoreQuota(e.store, 2, 24*time.Hour)
+	q2.Now = e.clk.Now
+	b, err := New(Options{Store: e.store, Now: e.clk.Now, Config: e.svc.cfg, PriorityQuota: q2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !a.allowPriority(ctx, "rep1") || !b.allowPriority(ctx, "rep1") {
+		t.Fatal("the first two are allowed, one on each replica")
+	}
+	if a.allowPriority(ctx, "rep1") || b.allowPriority(ctx, "rep1") {
+		t.Error("a third was allowed: the replicas do not share the count")
+	}
+	if !a.allowPriority(ctx, "rep2") {
+		t.Error("another reporter has an allowance of its own")
+	}
+	// without it each process counts for itself
+	c, d := &Service{cfg: Config{MaxPriorityReportsPerReporter: 1}, now: e.clk.Now}, &Service{cfg: Config{MaxPriorityReportsPerReporter: 1}, now: e.clk.Now}
+	if !c.allowPriority(ctx, "rep1") || !d.allowPriority(ctx, "rep1") {
+		t.Error("per-process counts are independent")
+	}
+	c.prio.record("rep1", e.clk.Now())
+	if c.allowPriority(ctx, "rep1") {
+		t.Error("a recorded report counts in its own process")
+	}
+}
