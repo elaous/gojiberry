@@ -721,6 +721,7 @@
   "collab.commented": "%s ha comentado.",
   "collab.newComments#one": "%d comentario nuevo.",
   "collab.newComments#other": "%d comentarios nuevos.",
-  "collab.someone": "Alguien"
+  "collab.someone": "Alguien",
+  "prefs.suggestAuto": "Sugerir palabras al escribir"
  }
 }

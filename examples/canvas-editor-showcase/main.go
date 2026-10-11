@@ -769,7 +769,8 @@ func main() {
 		},
 	}
 	u.stateRef = &state
-	state.CompleteFeature = canvas.CompleteFeature{OnOpen: func() { u.openSuggestions(flow, stage, canvasEl.Element, renderUI) }}
+	state.CompleteFeature = canvas.CompleteFeature{OnOpen: func() { u.openSuggestions(flow, stage, canvasEl.Element, false, renderUI) }}
+	u.sugg.reopen = func(quiet bool) { u.openSuggestions(flow, stage, canvasEl.Element, quiet, renderUI) }
 	u.watchSuggestionKeys(inputEl.Element, func() *canvas.TextFlow { return flow }, redraw, renderUI)
 	state.Live = liveProps(u, &state, origin, renderCanvas, renderUI)
 	renderCanvas()

@@ -5,6 +5,7 @@ package main
 import (
 	"strconv"
 	"syscall/js"
+	"time"
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/complete"
@@ -24,6 +25,9 @@ type suggestState struct {
 	from int // where the word being completed starts
 	x, y float64
 	flow func() *canvas.TextFlow
+	// reopen opens the list at the caret (set in main); quiet says nothing when there is nothing to offer.
+	reopen func(quiet bool)
+	timer  bool // a delayed automatic open is waiting
 }
 
 func (u *ui) suggestionsNode(renderUI func()) xango.Node {
@@ -36,10 +40,12 @@ func (u *ui) suggestionsNode(renderUI func()) xango.Node {
 }
 
 // openSuggestions builds the list for the word before the caret and shows it there.
-func (u *ui) openSuggestions(flow *canvas.TextFlow, stage *canvas.Stage, canvasEl js.Value, renderUI func()) {
+func (u *ui) openSuggestions(flow *canvas.TextFlow, stage *canvas.Stage, canvasEl js.Value, quiet bool, renderUI func()) {
 	if flow == nil || !u.refreshSuggestions(flow) {
-		u.announce(T("suggest.none", "No suggestions"))
-		renderUI()
+		if !quiet { // asked for with the keyboard: say there is nothing; opened by itself: say nothing
+			u.announce(T("suggest.none", "No suggestions"))
+			renderUI()
+		}
 		return
 	}
 	if x, y, h, ok := stage.CaretBox(); ok {
@@ -152,9 +158,19 @@ func (u *ui) watchSuggestionKeys(in js.Value, flow func() *canvas.TextFlow, redr
 		renderUI()
 		return nil
 	}), true)
-	// After the key has been applied: a longer prefix narrows the list, leaving the word closes it.
+	// After the key has been applied: a longer prefix narrows the list, leaving the word closes it; with
+	// the "suggest as I type" preference the list opens by itself after a short pause in typing.
 	in.Call("addEventListener", "keyup", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if !u.sugg.list.Open {
+			if curPrefs.Suggest == "auto" && u.sugg.reopen != nil && !u.sugg.timer && len(args[0].Get("key").String()) == 1 && !args[0].Get("isComposing").Truthy() {
+				u.sugg.timer = true
+				time.AfterFunc(600*time.Millisecond, func() {
+					u.sugg.timer = false
+					if !u.sugg.list.Open && curPrefs.Suggest == "auto" {
+						u.sugg.reopen(true)
+					}
+				})
+			}
 			return nil
 		}
 		switch args[0].Get("key").String() {
