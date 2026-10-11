@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/docstore/encrypt"
@@ -304,5 +305,88 @@ func TestLogKeyFingerprintsAreComparable(t *testing.T) {
 	}
 	if NormalizeFingerprint("aaaa bbbb") == NormalizeFingerprint(fp) {
 		t.Error("different fingerprints compare equal")
+	}
+}
+
+// Rotating the owner key while it is held, and replacing a lost one through the provider session: the
+// request, the waiting period (a fake clock on the server), a cancel by the current key, and the
+// completion.
+func TestRotateAndResetTheOwnerKey(t *testing.T) {
+	ctx := context.Background()
+	var srv *demoserver.Server
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { srv.Mux.ServeHTTP(w, r) }))
+	ts.Start()
+	defer ts.Close()
+	var err error
+	srv, err = demoserver.New(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	srv.Dir.Now = func() time.Time { return now }
+	tok, err := srv.Login("ed@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &Client{Base: ts.URL, Token: func(context.Context) (string, error) { return tok, nil }, Now: func() time.Time { return now }}
+	const me = "ed@example.com"
+	k1, _ := GenerateOwnerKey()
+	k2, _ := GenerateOwnerKey()
+	k3, _ := GenerateOwnerKey()
+	if err := c.Rotate(ctx, me, k1, k2); !errors.Is(err, ErrNotEnrolled) {
+		t.Fatalf("rotate before any key: %v", err)
+	}
+	if err := c.Enroll(ctx, me, k1); err != nil {
+		t.Fatal(err)
+	}
+	// rotate: only the current key can, and then only the new one signs
+	stranger, _ := GenerateOwnerKey()
+	if err := c.Rotate(ctx, me, stranger, k2); err == nil {
+		t.Fatal("a key that is not the owner's rotated it")
+	}
+	if err := c.Rotate(ctx, me, k1, k2); err != nil {
+		t.Fatal(err)
+	}
+	if e, err := c.Enrollment(ctx, me); err != nil || e.Current != OwnerFingerprint(k2) {
+		t.Fatalf("after rotating: %+v %v", e, err)
+	}
+	pub, _, _ := encrypt.GenerateRecoveryKey()
+	if _, err := c.Publish(ctx, PublishRequest{Email: me, Key: pub, Owner: k1}); err == nil {
+		t.Fatal("the old key still signs")
+	}
+	if _, err := c.Publish(ctx, PublishRequest{Email: me, Key: pub, Owner: k2}); err != nil {
+		t.Fatalf("the new key: %v", err)
+	}
+	// reset: asked through the session, due after the wait
+	en, err := c.RequestReset(ctx)
+	if err != nil || !en.ResetPending || !en.ResetDue.After(now.Add(23*time.Hour)) {
+		t.Fatalf("request: %+v %v", en, err)
+	}
+	if err := c.CompleteReset(ctx, me, k3); !errors.Is(err, ErrResetWait) {
+		t.Fatalf("completing before the wait: %v", err)
+	}
+	// the current key cancels it
+	if err := c.CancelReset(ctx, me, k2); err != nil {
+		t.Fatal(err)
+	}
+	if e, _ := c.Enrollment(ctx, me); e.ResetPending {
+		t.Fatalf("still pending after the cancel: %+v", e)
+	}
+	// asked again, and the wait passes
+	if _, err := c.RequestReset(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(25 * time.Hour)
+	if err := c.CompleteReset(ctx, me, k3); err != nil {
+		t.Fatalf("completing after the wait: %v", err)
+	}
+	if e, err := c.Enrollment(ctx, me); err != nil || e.ResetPending || e.Current != OwnerFingerprint(k3) {
+		t.Fatalf("after the reset: %+v %v", e, err)
+	}
+	if _, err := c.Publish(ctx, PublishRequest{Email: me, Key: pub, Label: "x", Owner: k3}); err != nil {
+		t.Fatalf("the reset key: %v", err)
+	}
+	if _, err := c.Publish(ctx, PublishRequest{Email: me, Key: pub, Label: "y", Owner: k2}); err == nil {
+		t.Fatal("the key before the reset still signs")
 	}
 }

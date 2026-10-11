@@ -1389,7 +1389,7 @@ cannot be opened.
         position across reloads and lists what somebody else did to the address until dismissed. **Other people's rows** carry
         the marks the client proved itself; one signed by an owner key nobody confirmed is listed under "Owner keys to
         confirm" with the key's fingerprint, and the person can pin it after comparing it another way (kept per
-        directory). *Left:* rotating and resetting the owner key from the page (roadmap item 87). The demo `examples/people-keys-demo` has the whole flow.
+        directory). **Replacing the owner key** is on the page: the holder rotates it (the old key signs the new one in), and a person who lost it asks for a reset, which the directory completes after 24 hours and the old key's holder can cancel; the new key is made at the request and kept apart until then (roadmap item 87). The demo `examples/people-keys-demo` has the whole flow.
       - **Left (residual limits).** The trust limits of the key list are above. A `SeqFloor` here lasts the page
         (`encrypt.MemorySeqFloor`, which cannot degrade, so the showcase does not need `SetFloorDegradedHandler`: a
         host that moves to `LocalStorageSeqFloor` must set it or poll `Err()`). One local passkey per origin, two
