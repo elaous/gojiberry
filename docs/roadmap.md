@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (#219: one completion ranking, one list in the showcase; #218: a durable queue for the sync client (roadmap 74); full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+3 of 10 since the last full run (#220: the waiting changes of a shared document survive a reload; #219: one completion ranking, one list in the showcase; #218: a durable queue for the sync client (roadmap 74); full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1087,8 +1087,11 @@ unless stated.
     saved/saving/unsaved/failed), a pre-merge view of
     what others changed while offline (3), and an e2e that goes offline (the e2e harness cannot cut an open stream yet).
     Also done, step 2 in the client: `client.Options.Queue` (a `Queue` with `Load` and `Save`) keeps the ops waiting to be
-    sent, `Dial` sends what it loads, and a unit test restarts a connection with the server down. Left: a browser
-    storage `Queue` for the showcase and an e2e that reloads the page with changes waiting.
+    sent, `Dial` sends what it loads, and a unit test restarts a connection with the server down. Also done: the WebSocket
+    connection takes the same `Queue`, and the showcase keeps the waiting changes of a shared document in localStorage
+    (`showcase-queue:<doc>:<name>`); the e2e cuts the hub, types, reloads the page, brings the hub back and checks that a
+    second browser gets the text. Left: the pre-merge view (3), the same for a document saved to a store, and an e2e
+    with a real network cut (the hub is stopped here).
 75. **Sharing UX.** Kind: fixable. What: link sharing, per-person permissions, expiring links, view-only versus
     comment-only, and a plain explanation of what encryption protects and what it does not. Why it matters: people
     share wrongly when the options are unclear. Plan: (1) a permission model with roles view, comment, edit; (2)

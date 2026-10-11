@@ -49,7 +49,7 @@ func TestChangesWaitingSurviveAReload(t *testing.T) {
 	back := httptest.NewUnstartedServer(h.Handler())
 	back.Listener = ln
 	back.Start()
-	defer back.Close()
+	defer func() { back.CloseClientConnections(); go back.Close() }() // the browsers' streams would hold Close
 	defer func() { go srv.Close() }() // waits for the cut streams to end; never hold the test for it
 
 	a.Reload() // as if the tab had been closed with changes waiting
