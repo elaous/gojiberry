@@ -13,6 +13,9 @@ type RecipientRow struct {
 	// trusted. Type is "ssh-ed25519", "ssh-rsa" or "age-x25519". Fingerprint is what the
 	// owner confirms.
 	Label, Type, Fingerprint string
+	// Detail is one more line about the key, shown after its fingerprint ("Last used in this
+	// browser: 2030-05-01"); empty for none.
+	Detail string
 	// Uses is how many documents the key can open (this one included); 0 means unknown.
 	Uses int
 	// Verified marks a key that the store's directory says was published by an account with a
@@ -179,6 +182,9 @@ func Recipients(p RecipientsProps) xango.Node {
 			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text(label)),
 			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-type")}, xango.Text(r.Type)),
 			xango.El("code", []xango.Attr{xango.A("class", "gj-recip-fingerprint")}, xango.Text(r.Fingerprint)),
+		}
+		if r.Detail != "" {
+			cells = append(cells, xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-detail")}, xango.Text(r.Detail)))
 		}
 		if r.Verified {
 			cells = append(cells, verifiedMark(true, r.Attested, r.OwnerSigned, r.OwnerEnrolled, r.VerifiedBy))

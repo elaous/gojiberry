@@ -76,11 +76,12 @@ type encUI struct {
 	// broken is why the key configuration cannot be trusted (encstore.ErrConfigMissing: it is gone
 	// over encrypted files; encstore.ErrConfigCorrupt: it cannot be read): the store is read-only
 	// and the panel offers a restore or Erase, never "encryption off".
-	broken         error
-	restoreRecover string // the recovery key typed to restore with
-	checkRecovery  string // the recovery key typed to be checked (never kept past the check)
-	checkMsg       string // the answer to the last check
-	checkOK        bool
+	broken                error
+	restoreRecover        string // the recovery key typed to restore with
+	rekeyDone, rekeyTotal int    // while a change re-encrypts the store: documents done and to do (0 total: none)
+	checkRecovery         string // the recovery key typed to be checked (never kept past the check)
+	checkMsg              string // the answer to the last check
+	checkOK               bool
 
 	// the People tab: the current document's keys
 	sharedFor       string
@@ -168,6 +169,7 @@ func newEncOff(browser *docstore.BrowserAdapter, render func(), why error) (*enc
 		return nil, err
 	}
 	e := &encUI{store: st, browser: browser, render: render, notice: T("enc.err.keyListRead", "The saved key list could not be read: ") + why.Error()}
+	e.hookStore()
 	e.pending = components.NewPending(render)
 	e.dir = newDirUI()
 	return e, nil
@@ -187,6 +189,7 @@ func newEnc(browser *docstore.BrowserAdapter, render func()) (*encUI, error) {
 		return nil, err
 	}
 	e := &encUI{store: st, browser: browser, render: render, wantPasskey: client.Supported(), wantRecover: true, broken: why}
+	e.hookStore()
 	e.pending = components.NewPending(render)
 	e.dir = newDirUI()
 	return e, nil
@@ -975,6 +978,7 @@ func (u *ui) encStatus(unlocked bool) []xango.Node {
 		kinds = append(kinds, o.Label+" ("+o.Kind+")")
 	}
 	rows = append(rows, para("enc-owners", T("enc.keys", "Keys")+": "+strings.Join(kinds, ", "), false))
+	rows = append(rows, e.rekeyProgress()...)
 	rows = append(rows, u.recoveryAdvice()...)
 	if p := e.store.PendingChange(); p != nil {
 		rows = append(rows, u.interruptedPanel(p)...)
@@ -1070,7 +1074,13 @@ func parseRecipient(text string) (encrypt.Recipient, error) {
 // ownerRows are the store's keys with whether each can be removed and why not.
 func (e *encUI) ownerRows() []components.RecipientRow {
 	rows := recipientRows(e.store.Recipients())
+	used := lastUsedHere()
 	for i := range rows {
+		if t, ok := used[rows[i].Fingerprint]; ok {
+			rows[i].Detail = T("enc.lastUsedHere", "Last used in this browser: %s", t.Format("2006-01-02"))
+		} else {
+			rows[i].Detail = T("enc.neverUsedHere", "Not used in this browser")
+		}
 		err := e.store.CanRemoveOwner(rows[i].Fingerprint)
 		rows[i].CanRemove = err == nil
 		if err != nil {
@@ -1215,6 +1225,7 @@ func (u *ui) encPeople() xango.Node {
 		e.dir.wire(&props, e)
 	}
 	nodes := []xango.Node{components.Recipients(props)}
+	nodes = append(nodes, e.rekeyProgress()...)
 	nodes = append(nodes, e.dir.settingsPanel(e)...)
 	if note != "" {
 		nodes = append([]xango.Node{para("enc-people-note", note, false)}, nodes...)
@@ -1386,4 +1397,55 @@ func recoveryCheckDue() (due, never bool) {
 	}
 	last := at(recoveryCheckedKey)
 	return encstore.CheckDue(time.Now(), last, at(recoverySnoozeKey), encstore.ReminderEvery), last.IsZero()
+}
+
+// keysUsedKey is where the time each key last unlocked the store in this browser is kept: a map from a
+// key's fingerprint to an RFC 3339 time. It says what this browser saw, not what happened elsewhere.
+const keysUsedKey = "showcase-enc:keys-used"
+
+func lastUsedHere() map[string]time.Time {
+	out := map[string]time.Time{}
+	var raw map[string]string
+	if json.Unmarshal([]byte(lsGet(keysUsedKey)), &raw) != nil {
+		return out
+	}
+	for fp, v := range raw {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			out[fp] = t
+		}
+	}
+	return out
+}
+
+// hookStore connects the store's hooks to the page: a key that unlocks is noted as used here, and a
+// change that re-encrypts the store reports its progress.
+func (e *encUI) hookStore() {
+	e.store.OnUnlock = func(o encstore.Owner) {
+		fp := o.Fingerprint()
+		if fp == "" {
+			return
+		}
+		raw := map[string]string{}
+		_ = json.Unmarshal([]byte(lsGet(keysUsedKey)), &raw)
+		raw[fp] = time.Now().UTC().Format(time.RFC3339)
+		b, _ := json.Marshal(raw)
+		lsSet(keysUsedKey, string(b))
+	}
+	e.store.Progress = func(done, total int) {
+		e.rekeyDone, e.rekeyTotal = done, total
+		if done >= total {
+			e.rekeyDone, e.rekeyTotal = 0, 0
+		}
+		e.render()
+	}
+}
+
+// rekeyProgress is the status line while the store is being encrypted again: "Encrypting again: 3 of 12
+// documents".
+func (e *encUI) rekeyProgress() []xango.Node {
+	if e.rekeyTotal == 0 {
+		return nil
+	}
+	return []xango.Node{xango.El("p", []xango.Attr{xango.A("id", "enc-progress"), xango.A("role", "status")},
+		xango.Text(T("enc.progress", "Encrypting again: %d of %d documents", e.rekeyDone, e.rekeyTotal)))}
 }

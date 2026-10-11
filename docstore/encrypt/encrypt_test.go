@@ -1052,3 +1052,22 @@ func TestFinishDoesNotClearPendingWhenTheListChangedDuringTheRekey(t *testing.T)
 		}
 	}
 }
+
+// RekeyProgress is told after each document (its files together) how far the re-key is.
+func TestRekeyAllReportsProgress(t *testing.T) {
+	ctx := context.Background()
+	ana := newPerson(t, "ana")
+	inner := docstore.NewMemoryAdapter()
+	a := New(inner, Static{To: []age.Recipient{ana.r.Key}, Keys: []age.Identity{ana.id}})
+	for _, id := range []string{"11111111-1111-4111-8111-111111111111~a.json", "11111111-1111-4111-8111-111111111111~b.json", "22222222-2222-4222-8222-222222222222~a.json", "33333333-3333-4333-8333-333333333333~a.json"} {
+		_ = a.Save(ctx, id, []byte(id))
+	}
+	var steps [][2]int
+	a.RekeyProgress = func(done, total int) { steps = append(steps, [2]int{done, total}) }
+	if _, err := a.RekeyAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 3 || steps[0] != [2]int{1, 3} || steps[2] != [2]int{3, 3} {
+		t.Errorf("progress: %v, want one step per document: 1/3 2/3 3/3", steps)
+	}
+}
