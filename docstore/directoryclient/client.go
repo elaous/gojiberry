@@ -38,6 +38,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -428,6 +429,12 @@ type Key struct {
 	// showing what it showed. A key published before the owner enrolled shows it too, until it is
 	// published again with the owner's signature.
 	OwnerDowngraded bool
+	// SeqChanged: the row is not owner-signed and the log number of its entry is not the one an earlier
+	// lookup showed for the same key. Nothing signs that number on an address without an owner key, so a
+	// server can name another entry (another address's, for the same public key); it is also what a
+	// republication after a revocation looks like. Enroll an owner key to close it; until then, treat the
+	// row as the server's word.
+	SeqChanged bool
 	// AttestationVerified: the key's own attestation verifies here.
 	AttestationVerified bool
 }
@@ -462,6 +469,7 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 		wasSigned[fp] = true
 	}
 	out := make([]Key, 0, len(res.Keys))
+	newSeqs := map[string]int64{}
 	var nowSigned []string
 	anyEvidence := false
 	// ref is the owner key the rows are compared with when none is confirmed: the first one seen
@@ -502,6 +510,13 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 			row.OwnerDowngraded = true
 		}
 		row.DirectoryKey.OwnerSigned = row.OwnerSigned
+		if !row.OwnerSigned && !k.Revoked && k.Seq > 0 {
+			if first, ok := seen.Seqs[k.Fingerprint]; ok {
+				row.SeqChanged = first != k.Seq
+			} else if _, noted := newSeqs[k.Fingerprint]; !noted {
+				newSeqs[k.Fingerprint] = k.Seq
+			}
+		}
 		out = append(out, row)
 	}
 	if c.State != nil {
@@ -518,6 +533,15 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 		for _, fp := range nowSigned {
 			if !wasSigned[fp] {
 				merged.Signed = append(merged.Signed, fp)
+			}
+		}
+		if len(newSeqs) > 0 { // the first number shown for a key stays the reference
+			merged.Seqs = maps.Clone(merged.Seqs)
+			if merged.Seqs == nil {
+				merged.Seqs = map[string]int64{}
+			}
+			for fp, n := range newSeqs {
+				merged.Seqs[fp] = n
 			}
 		}
 		c.State.Seen[addr] = merged

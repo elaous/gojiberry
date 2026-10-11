@@ -100,6 +100,10 @@ type SeenAddress struct {
 	FirstOwner string   `json:"first_owner,omitempty"`
 	// Accepted are the further owner keys the user accepted (AcceptOwner), after a rotation.
 	Accepted []string `json:"accepted_owners,omitempty"`
+	// Seqs are the log numbers (DirectoryKey.Seq) the rows of this address first showed, by fingerprint:
+	// on an address without an owner key nothing signs a number, so a later lookup that shows another
+	// number for the same key is flagged (Key.SeqChanged).
+	Seqs map[string]int64 `json:"seqs,omitempty"`
 }
 
 // MadeEntry is an operation this client made, with what the client knows of it independently of

@@ -146,6 +146,8 @@ type Key struct {
 	OwnerEnrolled, OwnerSigned bool `json:"-"`
 	Owner                      OwnerState
 	OwnerPub                   string `json:"-"`
+	// SeqChanged: the row is not owner-signed and its log number is not the one an earlier look showed.
+	SeqChanged bool `json:"-"`
 }
 
 // OwnerState says what this client knows of the owner key that signed a row.
@@ -671,7 +673,7 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 	out := make([]Key, 0, len(rows))
 	for _, r := range rows {
 		k := Key{Key: r.Key, Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint, Verified: r.Verified, Held: r.Held,
-			Attested: r.AttestationVerified, OwnerEnrolled: r.OwnerEnrolled, OwnerSigned: r.OwnerSigned}
+			Attested: r.AttestationVerified, OwnerEnrolled: r.OwnerEnrolled, OwnerSigned: r.OwnerSigned, SeqChanged: r.SeqChanged}
 		if r.Owner != nil {
 			k.OwnerPub = r.Owner.Pub
 			switch {

@@ -693,6 +693,7 @@
   "collab.leftMany": "Se han ido %d personas: %s.",
   "prefs.collabAll": "Edición compartida: anunciar todo",
   "prefs.collabImportant": "Edición compartida: anunciar solo la conexión",
-  "prefs.collabOff": "Edición compartida: no anunciar nada"
+  "prefs.collabOff": "Edición compartida: no anunciar nada",
+  "dir.seqChanged": "El directorio nombra ahora para esta clave otra entrada del registro distinta de antes. Nada firma ese número en una dirección sin clave de propietario: puede ser una nueva publicación, o el servidor nombrando otra entrada."
  }
 }

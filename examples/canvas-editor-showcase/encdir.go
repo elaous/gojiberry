@@ -266,7 +266,7 @@ func (d *dirUI) dirRows(keys []dirclient.Key) []components.DirRow {
 	rows := make([]components.DirRow, 0, len(keys))
 	for _, k := range keys {
 		rows = append(rows, components.DirRow{Label: k.Label, Type: k.Type, Fingerprint: k.Fingerprint, Key: k.Key, Verified: k.Verified,
-			VerifiedBy: d.verifiedBy(k.Verified), Attested: k.Attested, OwnerSigned: k.OwnerSigned, OwnerEnrolled: k.OwnerEnrolled})
+			VerifiedBy: d.verifiedBy(k.Verified), Attested: k.Attested, OwnerSigned: k.OwnerSigned, OwnerEnrolled: k.OwnerEnrolled, Note: seqNote(k)})
 	}
 	return rows
 }
@@ -408,4 +408,12 @@ func (d *dirUI) save(e *encUI) {
 		return
 	}
 	d.confirm(clean, "", e) // a token typed for another address is dropped: it is given once the address is confirmed
+}
+
+// seqNote warns when the log number of an unsigned row is not the one the first look showed.
+func seqNote(k dirclient.Key) string {
+	if !k.SeqChanged {
+		return ""
+	}
+	return T("dir.seqChanged", "The directory now names another log entry for this key than before. Nothing signs that number for an address without an owner key: it may be a republication, or the server naming another entry.")
 }
