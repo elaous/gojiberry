@@ -35,23 +35,24 @@ most `CacheFor`; with the option off, behaviour is byte-for-byte today's.
 
 ## 42. A revoked signer can keep writing new frames until it is removed from every list
 
-*What stays:* whoever can write the store can write bytes; the store cannot refuse them.
+*What stays:* whoever can write the store can write bytes; the store cannot refuse them, and a holder of a
+removed key can delete or roll back records at any time.
 
-*What can change:* a reader can refuse the bytes a revoked signer wrote *after* its revocation, and say so.
+*What can change:* the window in which the removed key's frames still verify, and whether what is written in it
+is noticed. **The first draft of this section (a frame v4 with a revocation sequence number) was wrong** and is
+withdrawn: a time in a frame is the signer's own claim, the sequence number is per document, and a mark in a
+record the removed key can still sign proves nothing. The reasons and the design that replaces it are in
+[frame-revocation-design.md](frame-revocation-design.md). Steps, in order:
 
-1. **Frame v4 (L).** The frame names the signer's key id and the frame's sequence number (already
-   anchored), and a revocation record names the signer and the sequence number at which it took effect.
-   Readers reject a frame whose signer is revoked and whose sequence number is above that point
-   (`ErrRevokedSigner`), and accept the frames from before (they were valid when written). This needs no
-   trusted clock: the sequence number is the clock.
-2. **Migration (M).** Readers accept v3 and v4; writers move to v4 on the next save; a store that has
-   only v3 behaves as today. A test opens every old golden file.
-3. **Tell the owner (S).** When a reader sees a rejected frame, `RepairAll` reports it, and the
-   showcase says "a removed device tried to write at <time>".
+1. **`Sharing.RevokeSigner` (M).** Re-sign everything with the current signer, write the new list of owner
+   signers without the key, and scan again, as one resumable operation with a journal; the window is the
+   duration of the operation.
+2. **A manifest of the old key's frames (S to M, optional).** Signed by a key that stays, at the start; frames
+   of the old key that are not in it are reported as written after the removal began.
+3. **State the window plainly (S)** in the limits register and in the showcase's removal dialog.
 
-Done when: a revoked signer's later frame is rejected by a reader that has the revocation, accepted by
-none, and the old golden files still open. Risk: this is a format change; do it once, with the plan in
-[encryption-and-passkeys.md](encryption-and-passkeys.md) item 5, and bump the version only then.
+Done when: the tests in the design page pass (writes during the run are reported, a crash at any step resumes,
+the old golden files still open). No format change.
 
 ## 76. Key and recovery UX (lost passkey plus lost recovery key means lost data)
 
