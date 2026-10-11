@@ -184,6 +184,11 @@ type Manager struct {
 
 	loginLimiter Limiter                    // nil: /auth/{provider}/login is not limited
 	clientIP     func(*http.Request) string // the client's address for loginLimiter (nil: the remote address)
+
+	missLimiter Limiter                    // nil: a token that is not a session is not counted
+	missIP      func(*http.Request) string // the client's address for missLimiter
+	missMu      sync.Mutex
+	missBlocked map[string]time.Time // client address to when its budget of misses is back
 }
 
 // Limiter is a request budget per key: Allow reports whether the caller of key may go on now and,
@@ -203,6 +208,64 @@ type Limiter interface {
 // (passkey.TrustedProxies), or every client shares one budget. Call it before the Manager serves.
 func (m *Manager) SetLoginLimiter(l Limiter, clientIP func(*http.Request) string) {
 	m.loginLimiter, m.clientIP = l, clientIP
+}
+
+// maxMissBlocked bounds the map of clients that are over their budget of misses.
+const maxMissBlocked = 4096
+
+// SetMissLimiter limits the requests that carry a bearer token that is not a session: each such
+// request spends from l under the key "miss|<client>". A client that runs out is not looked up in the
+// session store at all until its budget is back (its requests are unauthenticated meanwhile), so a flood
+// of random tokens costs the store one read per request only until the budget is spent. The limit
+// applies per client address: clients behind one shared address (a NAT, a proxy that does not forward
+// the real one) share the budget, and while one of them floods, the others are signed out of requests
+// too; turn it on only where clientIP (passkey.TrustedProxies behind a proxy) tells clients apart. A nil
+// l (the default) turns the limit off. Call it before the Manager serves.
+func (m *Manager) SetMissLimiter(l Limiter, clientIP func(*http.Request) string) {
+	m.missLimiter, m.missIP = l, clientIP
+}
+
+func (m *Manager) missKey(r *http.Request) string {
+	ip := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		ip = host
+	}
+	if m.missIP != nil {
+		if v := m.missIP(r); v != "" {
+			ip = v
+		}
+	}
+	return ip
+}
+
+// missBlockedNow reports whether the client is over its budget of misses.
+func (m *Manager) missBlockedNow(ip string) bool {
+	m.missMu.Lock()
+	defer m.missMu.Unlock()
+	until, ok := m.missBlocked[ip]
+	if !ok {
+		return false
+	}
+	if time.Now().After(until) {
+		delete(m.missBlocked, ip)
+		return false
+	}
+	return true
+}
+
+// countMiss spends one miss from the client's budget; over it, the client is blocked until the limiter
+// says it may go on.
+func (m *Manager) countMiss(ctx context.Context, ip string) {
+	ok, wait := m.missLimiter.Allow(ctx, "miss|"+ip)
+	if ok {
+		return
+	}
+	m.missMu.Lock()
+	defer m.missMu.Unlock()
+	if m.missBlocked == nil || len(m.missBlocked) >= maxMissBlocked {
+		m.missBlocked = map[string]time.Time{}
+	}
+	m.missBlocked[ip] = time.Now().Add(max(wait, time.Second))
 }
 
 // allowLogin spends one login from the client's budget and reports whether it may go on and, if

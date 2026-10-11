@@ -210,11 +210,21 @@ func (m *Manager) CurrentUser(r *http.Request) (User, bool) {
 	if !ok {
 		return User{}, false
 	}
+	var ip string
+	if m.missLimiter != nil {
+		ip = m.missKey(r)
+		if m.missBlockedNow(ip) {
+			return User{}, false // over the budget of misses: no read of the store
+		}
+	}
 	u, ok, err := m.store.GetSession(r.Context(), token)
 	if err != nil {
 		// Fail closed: a store that cannot answer signs nobody in.
 		log.Printf("auth: reading a session: %v", err)
 		return User{}, false
+	}
+	if !ok && m.missLimiter != nil {
+		m.countMiss(r.Context(), ip)
 	}
 	return u, ok
 }
