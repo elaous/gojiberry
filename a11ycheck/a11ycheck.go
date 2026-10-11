@@ -53,6 +53,39 @@ type Finding struct {
 	// Item the index in Document.Content. Text is a few words of the text it concerns.
 	Offset, Item int
 	Text         string
+	// Action names what a host can do for the person in one click ("" for nothing that is safe to do
+	// for them): ActionHeadingLevel (set the paragraph at Offset to heading level Arg), ActionDefaultColour
+	// (return the Length runes at Offset to the default text colour), ActionDescribe (go and write the
+	// description; nothing is invented).
+	Action      string
+	Arg, Length int
+}
+
+// The one-click actions of a Finding.
+const (
+	ActionHeadingLevel  = "heading-level"
+	ActionDefaultColour = "default-colour"
+	ActionDescribe      = "describe"
+)
+
+// GateMode says what an export does about the errors a document has.
+type GateMode string
+
+const (
+	GateAllow GateMode = ""      // no check before exporting (the default)
+	GateWarn  GateMode = "warn"  // export, and say how many errors it has
+	GateBlock GateMode = "block" // refuse, unless the person allowed this one export
+)
+
+// Decide says whether an export may go on, given the findings, and how many of them are errors.
+// override is the person's explicit "export anyway" for this one export.
+func (m GateMode) Decide(findings []Finding, override bool) (allow bool, errors int) {
+	for _, f := range findings {
+		if f.Severity == Error {
+			errors++
+		}
+	}
+	return m != GateBlock || errors == 0 || override, errors
 }
 
 // Options tune the checks.
@@ -98,7 +131,8 @@ func checkStructure(doc docfile.Document) []Finding {
 			if prev > 0 && level > prev+1 {
 				out = append(out, Finding{Rule: RuleHeadingSkip, Severity: Warning, Offset: paraStart, Item: paraItem, Text: excerpt(text.String()),
 					Message: fmt.Sprintf("The heading %q is level %d after a level %d: a level is skipped.", excerpt(text.String()), level, prev),
-					Fix:     fmt.Sprintf("Make it a level %d heading, or add the missing level above it.", prev+1)})
+					Fix:     fmt.Sprintf("Make it a level %d heading, or add the missing level above it.", prev+1),
+					Action:  ActionHeadingLevel, Arg: prev + 1})
 			}
 			prev = level
 		}
@@ -127,7 +161,8 @@ func checkStructure(doc docfile.Document) []Finding {
 			if it.Image.Alt == "" && !it.Image.Decorative {
 				out = append(out, Finding{Rule: RuleImageAlt, Severity: Error, Offset: offset, Item: i, Text: it.Image.URL,
 					Message: "An image has no description, so a reader who cannot see it misses it.",
-					Fix:     "Describe the image, or mark it decorative if it carries nothing."})
+					Fix:     "Describe the image, or mark it decorative if it carries nothing.",
+					Action:  ActionDescribe})
 			}
 			offset++
 		case it.Footnote != nil, it.TOC != nil, it.Index != nil, it.Rule != nil, it.Table != nil:

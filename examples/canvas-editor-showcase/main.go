@@ -248,7 +248,7 @@ func main() {
 	u.restoreFolder()
 	u.saver.Deliver = transfer.Download
 	u.saver.Pick = transfer.PickFile
-	u.saver.Export = u.transfer.Export
+	u.saver.Export = u.gatedExport
 	u.saver.Link = func(kind, id string) string {
 		if kind == "folder" {
 			return share.FolderPath(pageBase(), id)
@@ -447,7 +447,7 @@ func main() {
 				components.Transfer(components.TransferProps{
 					Imports: imports, Exports: exports,
 					OnExport: func(name string) {
-						file, data, mime, err := u.transfer.Export(name, currentDoc())
+						file, data, mime, err := u.gatedExport(name, currentDoc())
 						if err != nil {
 							u.message = err.Error()
 						} else {
