@@ -613,3 +613,60 @@ func TestWatchLogFlagsAnEnrollmentTheServerDeletedOrChanged(t *testing.T) {
 		t.Errorf("%+v %v", got, err)
 	}
 }
+
+// With RequireOwner a lookup on an address without an owner key reports ErrUnenrolled together with the
+// rows, and one on an enrolled address does not.
+func TestRequireOwnerRefusesToRelyOnAnUnenrolledAddress(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	c := e.client(ana)
+	viewer := e.client(bo)
+	viewer.RequireOwner = true
+
+	pub, _, id := ageKey(t)
+	if _, err := c.Publish(ctx, PublishRequest{Email: "ana@x.io", Key: pub, Identity: id}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := viewer.Lookup(ctx, "ana@x.io")
+	if !errors.Is(err, ErrUnenrolled) || len(rows) != 1 {
+		t.Fatalf("an unenrolled address: %d rows, err %v", len(rows), err)
+	}
+	// an address with no keys has nothing to rely on, and nothing to refuse
+	if rows, err := viewer.Lookup(ctx, "nobody@x.io"); err != nil || len(rows) != 0 {
+		t.Errorf("no keys: %v %v", rows, err)
+	}
+	// without the option the same lookup is fine
+	viewer.RequireOwner = false
+	if _, err := viewer.Lookup(ctx, "ana@x.io"); err != nil {
+		t.Errorf("without the option: %v", err)
+	}
+	// enrolled and signed: the option is satisfied
+	owner, err := GenerateOwnerKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Enroll(ctx, "ana@x.io", owner); err != nil {
+		t.Fatal(err)
+	}
+	pub2, _, id2 := ageKey(t)
+	if _, err := c.Publish(ctx, PublishRequest{Email: "ana@x.io", Key: pub2, Identity: id2, Owner: owner}); err != nil {
+		t.Fatal(err)
+	}
+	viewer.RequireOwner = true
+	rows, err = viewer.Lookup(ctx, "ana@x.io")
+	for _, r := range rows {
+		if r.Fingerprint != "" && !r.OwnerEnrolled {
+			t.Errorf("a row of an enrolled address is not marked enrolled: %+v", r)
+		}
+	}
+	if err != nil {
+		t.Errorf("an enrolled address: %v", err)
+	}
+	// the server option reaches the client as a typed error
+	e.dir.RequireEnrollment = true
+	other := e.client(auth.User{ID: "google:9", Email: "cy@x.io", VerifiedEmail: true})
+	pub3, _, id3 := ageKey(t)
+	if _, err := other.Publish(ctx, PublishRequest{Email: "cy@x.io", Key: pub3, Identity: id3}); !errors.Is(err, docstore.ErrDirectoryEnrollmentRequired) {
+		t.Errorf("server RequireEnrollment: %v", err)
+	}
+}

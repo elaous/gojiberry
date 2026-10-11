@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (#162, #163, #164, this PR). The full run on main 10ae2107 (after #160, the 10th merge since 9e11519) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+5 of 10 since the last full run (#162, #163, #164, #165, this PR). The full run on main 10ae2107 (after #160, the 10th merge since 9e11519) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -746,7 +746,7 @@ New entries:
     use). Priority: low. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#44-an-ssh-only-store-with-no-signed-document-file-yet-is-undetected).
 45. **Unenrolled-address entry numbering by a holder of the directory key.** Kind: inherent while the address is not
     enrolled; enrolling an owner key closes it ([limits register item 7](limits-register.md#the-key-directory),
-    point (d)). Priority: low. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#45-unenrolled-address-entry-numbering-by-a-holder-of-the-directory-key).
+    point (d)). Priority: low. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#45-unenrolled-address-entry-numbering-by-a-holder-of-the-directory-key). Done in part (this PR), plan steps 1 to 3: the showcase shows a standing notice while the signed-in address has no owner key; `directoryclient.Client.RequireOwner` makes `Lookup` return `ErrUnenrolled` together with the rows for an address without one (the host then asks the person to confirm the fingerprint another way); `AdapterDirectory.RequireEnrollment` (`GOJIBERRY_DOCSTORE_DIRECTORY_REQUIRE_ENROLLMENT=true`) refuses a publication for an unenrolled address with `ErrDirectoryEnrollmentRequired` (428), while enrolling itself stays open on the session. Tests: `TestRequireEnrollmentRefusesPublicationsForAnUnenrolledAddress`, `TestRequireOwnerRefusesToRelyOnAnUnenrolledAddress`, the notice in `TestOwnerKeyForMyDirectoryEntry`. Left: step 4 (`WatchLog` reporting an entry made for an unenrolled address the watcher uses) and the showcase setting `RequireOwner`.
 46. **Done (this PR): see item 11.**
 47. **Already listed, kept as they are (no duplicate entry):** item 15 (stale-tab renewal throttle), 16 (per-process
     public counters), 17 (snapshot overshoot), 19 (report dedupe key, slow-upload rate floor, old env-var warning,

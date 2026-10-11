@@ -522,8 +522,10 @@ func TestOwnerKeyForMyDirectoryEntry(t *testing.T) {
 
 	d.Click("#dir-owner-check")
 	d.WaitFor("the state", `(document.querySelector('#dir-owner-state') || {textContent: ''}).textContent.includes('has no owner key')`)
+	d.OK(strings.Contains(d.Text("#dir-owner-nudge"), "only the directory server's word"), "an address without an owner key gets a standing notice: "+d.Text("#dir-owner-nudge"))
 	d.Click("#dir-owner-enroll")
 	d.WaitFor("enrolled", `(document.querySelector('#dir-owner-state') || {textContent: ''}).textContent.includes('this browser holds it')`)
+	d.OK(!d.Has("#dir-owner-nudge"), "and the notice goes once it has one")
 	d.WaitSelector("#dir-owner-backup-box")
 	secret := d.Str(`document.querySelector('#dir-owner-secret').value`)
 	d.OK(secret != "" && d.Has("#dir-owner-backup-warning"), "the new key is shown for a backup, with its warning")

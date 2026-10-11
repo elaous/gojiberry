@@ -52,12 +52,13 @@ type ownerUI struct {
 	// was made until it is hidden or the page is left.
 	secret string
 	// state is what the server last said about the address, shown as text.
-	state    string
-	msg      string
-	isErr    bool
-	backup   bool   // the backup is shown
-	restore  string // the draft of a backup being restored
-	restoreO bool   // the restore field is open
+	state      string
+	unenrolled bool // the server said the address has no owner key
+	msg        string
+	isErr      bool
+	backup     bool   // the backup is shown
+	restore    string // the draft of a backup being restored
+	restoreO   bool   // the restore field is open
 
 	// pending is the key made when a reset was requested, held until the reset is completed; resetSince
 	// and resetDue are what the server said about the reset (zero if none).
@@ -317,6 +318,7 @@ func (d *dirUI) checkOwner(ctx context.Context) error {
 		return nil
 	}
 	d.owner.state = d.ownerState(me, en)
+	d.owner.unenrolled = !en.Enrolled
 	d.owner.resetSince, d.owner.resetDue = en.ResetSince, en.ResetDue
 	if !en.ResetPending {
 		d.dropPending()
@@ -421,6 +423,9 @@ func (d *dirUI) ownerPanel(e *encUI) []xango.Node {
 	}
 	if d.owner.state != "" {
 		nodes = append(nodes, para("dir-owner-state", d.owner.state, false))
+	}
+	if d.owner.unenrolled {
+		nodes = append(nodes, para("dir-owner-nudge", T("dir.owner.nudge", "Until you make an owner key, only the directory server's word ties the keys published for this address to you: a server that holds its own key could number entries for it as it likes, and anyone who signs in as the address can publish. Make an owner key now."), true))
 	}
 	if d.owner.msg != "" {
 		nodes = append(nodes, para("dir-owner-msg", d.owner.msg, d.owner.isErr))
