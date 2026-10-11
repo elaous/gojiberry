@@ -16,6 +16,7 @@ import (
 	"github.com/elaous/gojiberry/a11ycheck"
 	"github.com/elaous/gojiberry/canvas"
 	cxango "github.com/elaous/gojiberry/canvas/xango"
+	"github.com/elaous/gojiberry/collab/client"
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/export"
@@ -592,4 +593,34 @@ func documentLanguageMenu(u *ui, renderUI func()) []components.MenuItem {
 		items = append(items, components.MenuItem{Label: lang.Names[c], Checked: u.docLang == c, OnSelect: set(c, lang.Names[c])})
 	}
 	return items
+}
+
+// noteCollab announces what changed in the shared session (who joined or left, the connection, a problem),
+// grouped and spaced by components.CollabAnnouncer and as much as the person chose in the preferences. What
+// is held back is said a little later.
+func (u *ui) noteCollab(renderUI func()) {
+	s := u.live
+	if s == nil {
+		return
+	}
+	u.collab.Level = curPrefs.Collab
+	names := make([]string, 0, len(s.Peers))
+	for _, p := range s.Peers {
+		names = append(names, p.Name)
+	}
+	problem := ""
+	if s.Err != nil {
+		problem = s.Err.Error()
+	}
+	if msg := u.collab.Update(time.Now(), s.Status == client.Online, names, problem); msg != "" {
+		u.announce(msg)
+	}
+	if u.collab.Pending() && !u.collabTimer {
+		u.collabTimer = true
+		time.AfterFunc(2100*time.Millisecond, func() {
+			u.collabTimer = false
+			u.noteCollab(renderUI)
+			renderUI()
+		})
+	}
 }

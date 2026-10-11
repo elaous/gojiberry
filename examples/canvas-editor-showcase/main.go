@@ -46,12 +46,14 @@ import (
 
 // ui is the DOM side's state.
 type ui struct {
-	folder  folderState // the folder on this computer, a save target
-	title   string
-	menu    int    // open menu, or -1
-	tab     string // sidebar tab: format, symbols, keys
-	check   checkState
-	docLang string // the document's language (a BCP 47 tag), "" for none
+	folder      folderState // the folder on this computer, a save target
+	title       string
+	menu        int    // open menu, or -1
+	tab         string // sidebar tab: format, symbols, keys
+	check       checkState
+	collab      components.CollabAnnouncer
+	collabTimer bool
+	docLang     string // the document's language (a BCP 47 tag), "" for none
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
 	imageMsg   string
 	imageFocus bool
@@ -812,6 +814,7 @@ func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()
 		Color:     u.liveColor,
 		OnState: func(st collabxango.State) {
 			u.live = &st
+			u.noteCollab(renderUI)
 			if role := canvas.ParseRole(string(st.Role)); st.Role != "" && role != state.Role {
 				state.Role = role
 				if !role.CanEdit() {

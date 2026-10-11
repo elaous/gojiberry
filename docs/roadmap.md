@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (#173 to #176, this PR). The full run on main 67a6c28 (after #171, the 10th merge since 10ae2107) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+6 of 10 since the last full run (#173 to #177, this PR). The full run on main 67a6c28 (after #171, the 10th merge since 10ae2107) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1001,7 +1001,7 @@ unless stated.
     comments, and conflicts, through a polite live region, with a setting for how much is said. Why it matters:
     collaboration cues are visual (coloured cursors); without text a blind collaborator cannot tell anyone is there.
     Plan: (1) an event-to-message table with throttling and grouping; (2) a presence list that is real DOM; (3) tests
-    with two sessions. Where: `collab`, `components`. Priority: medium. Dependencies: 60, 71.
+    with two sessions. Where: `collab`, `components`. Priority: medium. Dependencies: 60, 71. Done in part (this PR): step 1: `components.CollabAnnouncer` turns changes of a shared session into short sentences for the live region: people joining and leaving (grouped: "2 people joined: Cy, Di."; someone who comes and goes before anything is said is not announced), the connection lost and back (the first connection is not news), a sharing problem and its end; at most one sentence per two seconds, what comes sooner is held and said together. How much is said is a preference (everything, the connection only, nothing) in View > Display preferences. Step 2 was there: the presence list is real DOM (`components.Presence`). Step 3: unit test of the announcer and the two-browser live test checks that Ana hears "Bo joined.". Left: announcements for remote comments and for conflicts, and a per-person setting for remote cursors.
 67. **Text-to-speech read-aloud.** Kind: fixable. What: read the selection or the whole document aloud with the
     browser speech API (on-device voices where the browser offers them), with pause, speed and a highlighted current
     sentence. Why it matters: it helps people with low vision or reading difficulty and needs no assistive software.
