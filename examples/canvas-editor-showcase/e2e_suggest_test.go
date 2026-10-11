@@ -47,3 +47,25 @@ func TestWordSuggestions(t *testing.T) {
 	d.WaitFor("the list closing", `!document.getElementById('suggestions')`)
 	d.NoErrors()
 }
+
+// With "Suggest words as I type" on, the list opens by itself after a pause in typing, and says
+// nothing when there is nothing to offer.
+func TestWordSuggestionsOpenByThemselves(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.Eval(`localStorage.setItem('showcase:a11y', JSON.stringify({suggest: 'auto'}))`, nil)
+	d.Reload()
+	d.WaitSelector("canvas")
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Focus("#input")
+	d.Press("Home")
+	d.Type("zebra zebra zeppelin ze ")
+	d.Press("ArrowLeft")
+	d.OK(d.Count("#suggestions") == 0, "the list is not open before the pause")
+	d.Type("p")
+	d.WaitSelector(`#suggestions[role="listbox"]`)
+	d.OK(d.Count(`#suggestions [role="option"]`) == 1, "it opens by itself, narrowed to 'zep'")
+	d.Press("Escape")
+	d.WaitFor("closing", `!document.getElementById('suggestions')`)
+	d.NoErrors()
+}
