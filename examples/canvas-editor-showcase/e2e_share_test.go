@@ -23,8 +23,8 @@ func TestShareAndStats(t *testing.T) {
 	d.OK(s.Num("stats.words") > 50 && s.Num("stats.characters") > s.Num("stats.words") && s.Num("stats.charactersNoSpaces") < s.Num("stats.characters") && s.Num("stats.paragraphs") >= 4, "counts: "+string(stats))
 	d.OK(d.Is("s.stats.words === s.text.split(/\\s+/).filter(Boolean).length"), "the word count agrees with the text")
 	d.OK(regexp.MustCompile(`^\d+ of 3 pages$`).MatchString(d.Text(`.gj-status-item[data-item="pages"]`)) &&
-		regexp.MustCompile(`^\d+ words$`).MatchString(d.Text(`.gj-status-item[data-item="words"]`)) &&
-		regexp.MustCompile(`^\d+ characters$`).MatchString(d.Text(`.gj-status-item[data-item="characters"]`)), "the status bar shows pages, words and characters")
+		regexp.MustCompile(`^[\d,]+ words$`).MatchString(d.Text(`.gj-status-item[data-item="words"]`)) &&
+		regexp.MustCompile(`^[\d,]+ characters$`).MatchString(d.Text(`.gj-status-item[data-item="characters"]`)), "the status bar shows pages, words and characters")
 	d.OK(!s.Bool("stats.hasSelection"), "nothing is selected at first")
 
 	d.Click(`button[data-tab="stats"]`)
