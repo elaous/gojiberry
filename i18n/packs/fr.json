@@ -710,6 +710,10 @@
   "read.stopped": "Lecture arrêtée",
   "read.started": "Lecture commencée",
   "read.note": "Seules les voix qui fonctionnent sur cet appareil sont choisies",
-  "read.unsupported": "Ce navigateur ne propose pas la lecture à voix haute"
+  "read.unsupported": "Ce navigateur ne propose pas la lecture à voix haute",
+  "suggest.position": "%s, %d sur %d",
+  "suggest.one": "1 suggestion.",
+  "suggest.many": "%d suggestions.",
+  "suggest.label": "Suggestions"
  }
 }

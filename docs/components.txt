@@ -572,6 +572,14 @@ func StylePicker(props StylePickerProps) xango.Node
     the pick (see canvas.Styles for the commands, or TextFlow.ApplyParagraph /
     ApplyFormat with a Style).
 
+func Suggestions(p SuggestionsProps) xango.Node
+    Suggestions renders the popup list; nothing when the state is closed.
+
+func SuggestionsControl(id string, s SuggestState) []xango.Attr
+    SuggestionsControl is the attributes the editing element carries while it
+    has the popup: role combobox, expanded, controlling the list, and naming the
+    highlighted option.
+
 func Switch(props SwitchProps) xango.Node
     Switch renders a toggle switch: a native checkbox (visually hidden but still
     keyboard/screen-reader accessible) styled as a sliding track and thumb via
@@ -2560,6 +2568,55 @@ type StylePickerProps struct {
 	OnPick func(name string, paragraph bool)
 }
     StylePickerProps configures StylePicker.
+
+type SuggestAction int
+    SuggestAction is what a key did to the list.
+
+const (
+	SuggestNone    SuggestAction = iota // the key is not for the list; let it through
+	SuggestMoved                        // the highlight moved
+	SuggestAccept                       // accept the highlighted word (Index)
+	SuggestDismiss                      // close the list
+)
+type SuggestState struct {
+	Words   []string
+	Active  int
+	Open    bool
+	Numbers bool // the digits 1 to 9 accept a row
+}
+    SuggestState is the list and its highlight.
+
+func (s *SuggestState) Announcement(moved bool) string
+    Announcement is what a polite live region says when the list opens or the
+    highlight moves.
+
+func (s *SuggestState) Close()
+    Close closes the list.
+
+func (s *SuggestState) Key(key string) SuggestAction
+    Key applies a key (as KeyboardEvent.key) and says what happened;
+    for SuggestAccept the word is Words[Active] (or the numbered row, which Key
+    moves the highlight to).
+
+func (s *SuggestState) Selected() string
+    Selected is the highlighted word, "" when the list is closed.
+
+func (s *SuggestState) Show(words []string)
+    Show opens the list with words, the first highlighted; no words closes it.
+
+type SuggestionsProps struct {
+	// ID is the list's id (the editing element's aria-controls); "suggestions" when empty.
+	ID string
+	// Label names the list; "Suggestions" translated when empty.
+	Label string
+	State SuggestState
+	// X and Y are the page position of the list's top left corner (fixed positioning), where the
+	// caret is.
+	X, Y float64
+	// OnPick is called with the index of the row clicked or tapped.
+	OnPick func(i int)
+}
+    SuggestionsProps configures Suggestions.
 
 type SwitchProps struct {
 	Label    string

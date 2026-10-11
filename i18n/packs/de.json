@@ -710,6 +710,10 @@
   "read.stopped": "Vorlesen beendet",
   "read.started": "Vorlesen gestartet",
   "read.note": "Es werden nur Stimmen gewählt, die auf diesem Gerät laufen",
-  "read.unsupported": "Dieser Browser bietet kein Vorlesen an"
+  "read.unsupported": "Dieser Browser bietet kein Vorlesen an",
+  "suggest.position": "%s, %d von %d",
+  "suggest.one": "1 Vorschlag.",
+  "suggest.many": "%d Vorschläge.",
+  "suggest.label": "Vorschläge"
  }
 }
