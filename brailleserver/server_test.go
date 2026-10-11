@@ -6,6 +6,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -136,5 +140,33 @@ func TestTranslateRejectsUnsafeTableNames(t *testing.T) {
 		if w.Code != http.StatusBadRequest || called {
 			t.Errorf("table %q: status %d, translator called: %v", table, w.Code, called)
 		}
+	}
+}
+
+func TestExecLouTranslateRunsTheBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs a POSIX shell")
+	}
+	dir := t.TempDir()
+	// a stand-in for lou_translate: the table (if any) is the first argument, the text comes on stdin
+	bin := filepath.Join(dir, "lou_translate")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nprintf '[%s]%s' \"$1\" \"$(cat)\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := execLouTranslate(bin, "en-ueb-g2.ctb", "hello"); err != nil || got != "[en-ueb-g2.ctb]hello" {
+		t.Fatalf("with a table: %q, %v", got, err)
+	}
+	if got, err := execLouTranslate(bin, "", "hi"); err != nil || got != "[]hi" {
+		t.Fatalf("no table: %q, %v", got, err)
+	}
+	failing := filepath.Join(dir, "failing")
+	if err := os.WriteFile(failing, []byte("#!/bin/sh\necho 'no such table' >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := execLouTranslate(failing, "x", "hi"); err == nil || !strings.Contains(err.Error(), "no such table") {
+		t.Fatalf("a failing lou_translate: %v", err)
+	}
+	if _, err := execLouTranslate(filepath.Join(dir, "absent"), "x", "hi"); err == nil {
+		t.Fatal("a missing binary is an error")
 	}
 }

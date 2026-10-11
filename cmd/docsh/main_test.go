@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -52,5 +56,43 @@ func TestScriptFailureExitsNonZeroAndStops(t *testing.T) {
 	}
 	if err := run([]string{"-store", store, "cd", "B"}); err == nil {
 		t.Error("nothing runs after the error")
+	}
+}
+
+func TestOpenStoreEveryKind(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	for spec, label := range map[string]string{"": "Memory", "memory": "Memory", "files:" + dir: "Files", "sqlite:" + filepath.Join(dir, "d.db"): "SQLite", "https://docs.example": "Server"} {
+		tg, err := openStore(ctx, spec, "")
+		if err != nil || tg.Label != label || tg.Adapter == nil {
+			t.Errorf("%q: %+v, %v", spec, tg, err)
+		}
+	}
+	if _, err := openStore(ctx, "ftp://nope", ""); err == nil || !strings.Contains(err.Error(), "ftp://nope") {
+		t.Errorf("an unknown store is refused and named: %v", err)
+	}
+}
+
+// With a token, a server store sends it as a bearer token on every request.
+func TestOpenStoreSendsTheToken(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	tg, err := openStore(context.Background(), srv.URL, "s3cret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = tg.Adapter.Load(context.Background(), "x") // the answer does not matter, the header does
+	if len(got) == 0 || got[0] != "Bearer s3cret" {
+		t.Fatalf("authorization: %v", got)
+	}
+	got = nil
+	tg, _ = openStore(context.Background(), srv.URL, "")
+	_, _ = tg.Adapter.Load(context.Background(), "x")
+	if len(got) == 0 || got[0] != "" {
+		t.Fatalf("no token, no header: %v", got)
 	}
 }
