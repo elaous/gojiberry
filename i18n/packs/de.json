@@ -729,6 +729,26 @@
   "time.ago.hours#one": "vor %d Stunde",
   "time.ago.hours#other": "vor %d Stunden",
   "time.ago.days#one": "vor %d Tag",
-  "time.ago.days#other": "vor %d Tagen"
+  "time.ago.days#other": "vor %d Tagen",
+  "diff.label": "Änderungen zwischen den beiden Versionen",
+  "diff.same": "Die beiden Versionen sind gleich.",
+  "diff.parts": "%d eingefügt, %d gelöscht, %d bearbeitet",
+  "diff.inserted": "Eingefügt",
+  "diff.deleted": "Gelöscht",
+  "diff.edited": "Bearbeitet",
+  "diff.heading1": "Überschrift 1",
+  "diff.heading2": "Überschrift 2",
+  "diff.heading3": "Überschrift 3",
+  "diff.bullet": "Aufzählungspunkt",
+  "diff.numbered": "nummerierter Punkt",
+  "diff.quote": "Zitat",
+  "diff.code": "Codeblock",
+  "diff.picture": "Bild",
+  "diff.cell": "Tabellenzelle",
+  "diff.paragraph": "Absatz",
+  "diff.count#one": "%d Änderung",
+  "diff.count#other": "%d Änderungen",
+  "diff.unchanged#one": "%d Block unverändert",
+  "diff.unchanged#other": "%d Blöcke unverändert"
  }
 }
