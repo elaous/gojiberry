@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-6 of 10 since the last full run (#223: replace across documents with preview and undo, as a library; #222: `docsearch.Refresh` and `FromDocfile`; #221: `docsearch`, a sealed local index for search across documents (roadmap 73); #220: the waiting changes of a shared document survive a reload; #219: one completion ranking, one list in the showcase; #218: a durable queue for the sync client (roadmap 74); full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+7 of 10 since the last full run (#224: `audit`, a PII-free audit event schema (roadmap 81); #223: replace across documents with preview and undo, as a library; #222: `docsearch.Refresh` and `FromDocfile`; #221: `docsearch`, a sealed local index for search across documents (roadmap 73); #220: the waiting changes of a shared document survive a reload; #219: one completion ranking, one list in the showcase; #218: a durable queue for the sync client (roadmap 74); full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1183,6 +1183,11 @@ unless stated.
     the encrypted store as opaque blobs, with a restore test; (3) quota and usage pages from counters (ties to the
     telemetry rules of 57); (4) health and readiness routes. Where: `docstore`, `internal/docstorecmd`, `docs`.
     Priority: medium. Dependencies: 57 for the privacy rules.
+    Done in part (#224), step 1: the new `audit` package. An `Event` has no free text: a time, a count and five fields
+    that are members of closed sets (kind, outcome, actor class, reason code, and a `Ref` pseudonym that is a keyed
+    HMAC of the subject, 16 hex characters). `Logger.Log` writes one JSON line, or refuses a value off the allowlist and
+    counts it (`Rejected`) instead of writing it; a test fails when anyone adds a free `string` field to `Event`. Left:
+    calling it from the stores and servers (a reviewed change per call site), steps 2 to 4.
 82. **Performance and size.** Kind: fixable. What: the showcase wasm is about 21.7 MB; streaming compile, code
     splitting, caching and a low-memory mode. Why it matters: slow first load excludes people on slow links and weak
     devices. Plan: (1) measure size and load per build and record a budget; (2) `WebAssembly.compileStreaming` with
