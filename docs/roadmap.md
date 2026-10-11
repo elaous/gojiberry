@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-0 of 10 since the last full run (full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+1 of 10 since the last full run (#230: wasm size budget (roadmap 82); full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1202,11 +1202,14 @@ unless stated.
     bookkeeping), total and largest `bytes`, and the backend quota, computed from the listing's sizes alone: it reads no
     document and names none (a test checks that the report holds none of the ids). Left: usage over time (counters kept
     by the telemetry rules of 57) and a page that shows it.
-82. **Performance and size.** Kind: fixable. What: the showcase wasm is about 21.7 MB; streaming compile, code
+82. **Performance and size.** Kind: fixable. What: the showcase wasm is about 26.7 MB (6.7 MB gzipped; the 21.7 MB first written here was out of date); streaming compile, code
     splitting, caching and a low-memory mode. Why it matters: slow first load excludes people on slow links and weak
     devices. Plan: (1) measure size and load per build and record a budget; (2) `WebAssembly.compileStreaming` with
     correct headers and compression; (3) split rarely used parts; (4) service-worker caching with versioned keys; (5)
     a low-memory mode that limits history and caches. Where: `examples/canvas-editor-showcase`, the build, `domrt`.
+    Done in part (#230), step 1: `make wasm-size` (`.github/scripts/wasm-size.sh`, a CI step) builds the showcase and
+    fails when its raw or gzip size is over the budget in `docs/wasm-budget.txt` (now 28,000,000 and 7,200,000 bytes,
+    about 5% above today's 26.7 MB and 6.7 MB); raising a number is a deliberate edit. Left: steps 2 to 5.
     Priority: medium. Dependencies: none.
 83. **i18n depth.** Kind: fixable. What: only de, fr and es packs exist; add a translation workflow, pluralisation,
     locale-aware dates and numbers, and a contribution path. Why it matters: reach, and plain-language labels (65)

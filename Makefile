@@ -162,6 +162,13 @@ coverage-html: coverage
 coverage-badge: coverage
 	.github/scripts/gen-coverage-badge.sh coverage.out README.md
 
+# wasm-size builds the showcase wasm and fails when its raw or gzip size is over the budget in
+# docs/wasm-budget.txt (roadmap 82). It is not part of `make check` (a build of the showcase on
+# its own, a few seconds); CI runs it as its own step.
+.PHONY: wasm-size
+wasm-size:
+	.github/scripts/wasm-size.sh examples/canvas-editor-showcase docs/wasm-budget.txt
+
 # bench runs every Go benchmark in the module: buffer's own
 # GapBuffer-vs-naive-slice benchmarks (fast, native, no extra setup)
 # and examples/domrt-bench's own patch/patchChildren benchmarks (drives
