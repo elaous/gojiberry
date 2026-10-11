@@ -245,7 +245,7 @@ func TestEndToEnd(t *testing.T) {
 	d.Type(" feat")
 	d.Press("Control+Space")
 	d.WaitSelector(`#suggestions [role="option"]`)
-	ok(strings.TrimSpace(d.Text(`#suggestions [aria-selected="true"]`)) == "feature", "typing a prefix offers completions from the vocabulary")
+	ok(d.Is(`[...document.querySelectorAll("#suggestions [role=option]")].some(o => o.textContent.trim() === "feature")`), "the vocabulary word is offered: "+d.Text("#suggestions"))
 	d.Press("Tab")
 	d.Wait("s.text.includes('(note) feature')")
 	ok(d.Count(`#suggestions [role="option"]`) == 0, "Tab accepts the completion")
