@@ -573,6 +573,8 @@ type VersionsProps struct {
 	// Rename gives a snapshot a name and Pin keeps it (or lets it go); each may be nil.
 	Rename func(ctx context.Context, key, name string) error
 	Pin    func(ctx context.Context, key string, pinned bool) error
+	// Restore goes back to a snapshot, keeping the current text as a version first; may be nil.
+	Restore DocAction
 }
 
 // Versions lists a document's snapshots, newest first, to open or delete, with a
@@ -624,6 +626,9 @@ func Versions(p VersionsProps) xango.Node {
 		}
 		if p.Compare != nil {
 			row = append(row, docButtonAs("gj-versions-compare", tr("docs.compare", "Compare"), trf("docs.compareWith", "Compare %s with the current document", v.Time.Format("2006-01-02 15:04:05")), busy, actOne(p.Pending, p.Compare, v.Key)))
+		}
+		if p.Restore != nil {
+			row = append(row, docButtonAs("gj-versions-restore", tr("docs.restore", "Restore"), trf("docs.restoreVersion", "Restore the version of %s (what you have now is kept as a version first)", when), busy, actOne(p.Pending, p.Restore, v.Key)))
 		}
 		if p.Open != nil {
 			row = append(row, docButton("gj-versions-open", tr("docs.open", "Open"), busy, actOne(p.Pending, p.Open, v.Key)))
