@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-1 of 10 since the last full run (#218: a durable queue for the sync client (roadmap 74); full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+2 of 10 since the last full run (#219: one completion ranking, one list in the showcase; #218: a durable queue for the sync client (roadmap 74); full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1152,8 +1152,10 @@ unless stated.
     says nothing when there is nothing to offer. Also done (#193): with spell check on, the dictionary's words and the user's own fill the list after the
     document's own (`spell.Checker.CompleteMany`, `Dictionary.WithPrefix`). Left: the inline ghost-text suggestion (which this document's first sentence assumed existed; it does not yet), dictionaries for other languages, and the screen-reader
     script.
-    Overlap to resolve: `TextFlow` already has its own completion popup (`Complete`, `Completer`, `Vocabulary`); the
-    showcase list and that one should merge into a single implementation.
+    The two completion lists are merged (#219): `canvas`'s popups (`TextFlow`, `FloatingText`) rank with package
+    `complete` (count, then recency, then the vocabulary), and the showcase has only the accessible list (its text flow
+    no longer sets `Vocabulary`; the words go into the list's index). The canvas-drawn popup stays for apps without an
+    accessible mirror.
 80. **Print layout.** Kind: fixable. What: pagination, headers and footers, page numbers and a table of contents.
     Why it matters: documents are still printed and exported to paged formats. Plan: (1) a page model with size and
     margins; (2) layout with page breaks, widow and orphan control; (3) headers, footers and fields; (4) a table of

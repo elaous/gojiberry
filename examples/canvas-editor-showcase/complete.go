@@ -20,6 +20,10 @@ import (
 // the list. Typing goes on and narrows the list; leaving the word closes it. Nothing is sent
 // anywhere, and nothing opens while an input method is composing.
 
+// suggestVocabulary is offered besides the document's own words. The text flow has no completion popup
+// of its own here (its canvas-drawn one is not reachable by a screen reader): this list is the only one.
+var suggestVocabulary = []string{"Gojiberry", "canvas", "feature", "paragraph"}
+
 type suggestState struct {
 	list components.SuggestState
 	from int // where the word being completed starts
@@ -64,6 +68,7 @@ func (u *ui) refreshSuggestions(flow *canvas.TextFlow) bool {
 	caret := flow.Cursors()[0].Caret
 	prefix, from := complete.PrefixAt(text, caret)
 	var ix complete.Index
+	ix.AddVocabulary(suggestVocabulary, 1)
 	ix.AddText(string(text[:from]))
 	ix.AddText(string(text[complete.WordEnd(text, caret):])) // the words around the one being typed
 	if c := u.spell.checker; c != nil && u.spell.enabled {

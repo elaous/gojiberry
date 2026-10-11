@@ -1,10 +1,5 @@
 package canvas
 
-import (
-	"sort"
-	"strings"
-)
-
 // Auto-closing pairs and word completion for the TextFlow, like the
 // FloatingText's, but working at every cursor (pairs) and at the primary
 // one (the completion popup).
@@ -89,43 +84,10 @@ func (f *TextFlow) wordBeforeCaret() (string, int) {
 }
 
 // defaultComplete suggests the longer words in the text and Vocabulary
-// that start with prefix (case-insensitively), most frequent first.
+// that start with prefix: the ranking of package complete, shared with the
+// apps' own suggestion lists.
 func (f *TextFlow) defaultComplete(prefix string) []string {
-	lower := strings.ToLower(prefix)
-	counts := map[string]int{}
-	var word []rune
-	flush := func() {
-		if len(word) > len([]rune(prefix)) {
-			if w := string(word); strings.HasPrefix(strings.ToLower(w), lower) {
-				counts[w]++
-			}
-		}
-		word = word[:0]
-	}
-	for _, r := range textRunes(f) {
-		if isIdentRune(r) {
-			word = append(word, r)
-		} else {
-			flush()
-		}
-	}
-	flush()
-	for _, w := range f.Vocabulary {
-		if len([]rune(w)) > len([]rune(prefix)) && strings.HasPrefix(strings.ToLower(w), lower) {
-			counts[w]++
-		}
-	}
-	out := make([]string, 0, len(counts))
-	for w := range counts {
-		out = append(out, w)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if counts[out[i]] != counts[out[j]] {
-			return counts[out[i]] > counts[out[j]]
-		}
-		return out[i] < out[j]
-	})
-	return out[:min(len(out), maxSuggestions)]
+	return completeWords(string(textRunes(f)), f.Vocabulary, prefix)
 }
 
 func (f *TextFlow) suggestMenu() *Menu {

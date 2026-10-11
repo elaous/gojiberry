@@ -640,7 +640,6 @@ func main() {
 		footnotes, indexTerms := []string{}, []string{}
 		tocRows := -1
 		headers, watermarks := []string{}, []string{}
-		suggestions := []string{}
 		spread := false
 		if ps, ok := root.Find(cxango.TagPage, 0).(*canvas.PageSet); ok {
 			spread = ps.Spread
@@ -657,7 +656,6 @@ func main() {
 		}
 		if flow != nil {
 			cursors, editing = flow.Cursors(), flow.Editing()
-			suggestions = append(suggestions, flow.Suggestions()...)
 			text = flow.EditText()
 			sv := root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView)
 			scrollY = sv.ScrollY
@@ -732,7 +730,7 @@ func main() {
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "persisted": u.persisted, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
-			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "suggestions": suggestions, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "live": liveState(u, flow), "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
+			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "live": liveState(u, flow), "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))

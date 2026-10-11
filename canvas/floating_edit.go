@@ -2,8 +2,9 @@ package canvas
 
 import (
 	"slices"
-	"sort"
 	"strings"
+
+	"github.com/elaous/gojiberry/complete"
 )
 
 // --- auto-closing pairs ------------------------------------------------
@@ -148,43 +149,27 @@ func (ft *FloatingText) wordBeforeCaret() (string, int) {
 }
 
 // defaultComplete suggests the longer words in the text and Vocabulary
-// that start with prefix (case-insensitively), most frequent first.
+// that start with prefix (see completeWords).
 func (ft *FloatingText) defaultComplete(prefix string) []string {
-	lower := strings.ToLower(prefix)
-	counts := map[string]int{}
-	var word []rune
-	flush := func() {
-		if len(word) > len(prefix) {
-			if w := string(word); strings.HasPrefix(strings.ToLower(w), lower) {
-				counts[w]++
-			}
-		}
-		word = word[:0]
+	rs := make([]rune, len(ft.runes))
+	for i, fr := range ft.runes {
+		rs[i] = fr.r
 	}
-	for _, fr := range ft.runes {
-		if isIdentRune(fr.r) {
-			word = append(word, fr.r)
-		} else {
-			flush()
-		}
+	return completeWords(string(rs), ft.Vocabulary, prefix)
+}
+
+// completeWords is the one ranking behind every completion popup in the
+// canvas: package complete's index of the text's own words (most used and
+// most recent first) and the vocabulary, capped at maxSuggestions.
+func completeWords(text string, vocabulary []string, prefix string) []string {
+	var ix complete.Index
+	ix.AddText(text)
+	ix.AddVocabulary(vocabulary, 1)
+	var out []string
+	for _, s := range ix.Suggest(prefix, complete.Options{Max: maxSuggestions, MinPrefix: minCompletePrefix}) {
+		out = append(out, s.Word)
 	}
-	flush()
-	for _, w := range ft.Vocabulary {
-		if len([]rune(w)) > len([]rune(prefix)) && strings.HasPrefix(strings.ToLower(w), lower) {
-			counts[w]++
-		}
-	}
-	out := make([]string, 0, len(counts))
-	for w := range counts {
-		out = append(out, w)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if counts[out[i]] != counts[out[j]] {
-			return counts[out[i]] > counts[out[j]]
-		}
-		return out[i] < out[j]
-	})
-	return out[:min(len(out), maxSuggestions)]
+	return out
 }
 
 func (ft *FloatingText) suggestMenu() *Menu {

@@ -243,9 +243,12 @@ func TestEndToEnd(t *testing.T) {
 	d.Type(")")
 	ok(strings.Contains(S().Str("text"), "(note)") && !strings.Contains(S().Str("text"), "(note))"), "typing ) steps over the closer")
 	d.Type(" feat")
-	ok(d.Is("s.suggestions && s.suggestions.includes('feature')"), fmt.Sprint("typing a prefix offers completions: ", S().Get("suggestions")))
+	d.Press("Control+Space")
+	d.WaitSelector(`#suggestions [role="option"]`)
+	ok(strings.TrimSpace(d.Text(`#suggestions [aria-selected="true"]`)) == "feature", "typing a prefix offers completions from the vocabulary")
 	d.Press("Tab")
-	ok(strings.Contains(S().Str("text"), "(note) feature") && d.Is("s.suggestions.length === 0"), "Tab accepts the completion")
+	d.Wait("s.text.includes('(note) feature')")
+	ok(d.Count(`#suggestions [role="option"]`) == 0, "Tab accepts the completion")
 
 	// Outline and bookmarks: the headings are a list that jumps; a bookmark is a named place.
 	d.Click(`button[data-tab="outline"]`)
