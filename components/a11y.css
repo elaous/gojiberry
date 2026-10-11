@@ -84,3 +84,13 @@
 .gj-suggest-option:hover { background: var(--gj-border); }
 .gj-suggest-active { background: var(--gj-accent); color: #fff; }
 .gj-suggest-num { display: inline-block; width: 1.4em; opacity: 0.7; }
+
+/* Version diff: added words and removed words, with more than colour (underline and strike-through). */
+.gj-diff-list { list-style: none; margin: 0.4em 0; padding: 0; }
+.gj-diff-item { padding: 0.25em 0.5em; margin: 0.2em 0; border-left: 4px solid var(--gj-border); }
+.gj-diff-inserted { border-left-color: #1a7f37; }
+.gj-diff-deleted { border-left-color: #cf222e; }
+.gj-diff-edited { border-left-color: #9a6700; }
+.gj-diff ins { background: #d1f2d9; color: #0b3d1a; text-decoration: underline; }
+.gj-diff del { background: #ffd8d3; color: #5a0d0a; text-decoration: line-through; }
+.gj-diff-same { color: var(--gj-muted); font-style: italic; padding: 0.15em 0.5em; }

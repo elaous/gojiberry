@@ -672,6 +672,14 @@ func Trash(p TrashProps) xango.Node
     and Empty trash to delete them all; Children (the live list) come first.
     With nothing in the trash only the Children are drawn.
 
+func VersionDiff(p VersionDiffProps) xango.Node
+    VersionDiff shows the difference between two versions of a document
+    as a list, one item per changed block. It is not coloured text alone:
+    each item starts with words a screen reader says ("Inserted paragraph",
+    "Deleted heading 2", "Edited paragraph"), added words are <ins> and removed
+    words are <del>, and the list opens with a count ("3 changes: 1 inserted,
+    1 deleted, 1 edited").
+
 func Versions(p VersionsProps) xango.Node
     Versions lists a document's snapshots, newest first, to open or delete,
     with a button to save a new one.
@@ -2792,6 +2800,18 @@ type UserMessager interface{ UserMessage() string }
     UserMessager is implemented by an error whose text is already the words to
     show a person (in their language). ExplainError shows that text and keeps
     the error's own text as the details.
+
+type VersionDiffProps struct {
+	// ID is the list's id; "version-diff" when empty.
+	ID string
+	// Label names the list; "Changes between the two versions" (translated) when empty.
+	Label   string
+	Changes []docdiff.Change
+	// ShowUnchanged lists the blocks that did not change too (as context); by default a run of them is
+	// one line saying how many there are.
+	ShowUnchanged bool
+}
+    VersionDiffProps configures VersionDiff.
 
 type VersionsProps struct {
 	// Name is the document the versions are of, for the heading.
