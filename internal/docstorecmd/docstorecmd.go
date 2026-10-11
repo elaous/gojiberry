@@ -417,6 +417,8 @@ func withSessions(ctx context.Context, adapter docstore.Adapter, m *auth.Manager
 	} else {
 		log.Print("docstore: WARNING: GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES is not set: the sign-in (login) rate limit tells clients apart by the connection's remote address, so behind a reverse proxy every client shares one budget and a few people signing in at once are refused with 429. Set it to the proxy's CIDRs (X-Forwarded-For is then believed from those proxies only)")
 	}
+	// (A manager with passkeys only and no OpenID Connect provider mounts no login route, so the limiter
+	// is installed and unused there: harmless, and not worth a second code path.)
 	m.SetLoginLimiter(limiters("login", passkey.DefaultPerMinute, passkey.DefaultBurst), clientIP)
 	if mode == "memory" {
 		if n := declaredReplicas(); n > 1 {
