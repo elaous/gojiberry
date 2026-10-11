@@ -1029,3 +1029,26 @@ func TestRecoverySheetAndReminder(t *testing.T) {
 	d.WaitFor("checked", `!document.querySelector('#enc-check-due') && !!document.querySelector('#enc-check-result')`)
 	d.NoErrors()
 }
+
+// The keys list says when each key last unlocked the store in this browser, and that one never has.
+func TestKeyListShowsWhenEachKeyWasLastUsedHere(t *testing.T) {
+	site := e2etest.NewSite(t)
+	site.UseLocalhost()
+	d := site.Open(t, "")
+	d.VirtualAuthenticator()
+	secret := turnOn(t, d, "")
+	detail := func(typ string) string {
+		return d.Str(`(() => { const r = Array.from(document.querySelectorAll('.gj-recip-owner')).find((li) => li.querySelector('.gj-recip-type').textContent === '` + typ + `'); return r ? r.querySelector('.gj-recip-detail').textContent : ''; })()`)
+	}
+	d.Click("#enc-lock")
+	d.WaitFor("locked", `!document.querySelector('#enc-lock')`)
+	d.Fill("#enc-recovery-input", secret)
+	d.Click("#enc-unlock-recovery")
+	d.WaitSelector("#enc-lock")
+	d.Click(`button[data-tab="people"]`)
+	d.WaitFor("two keys", `document.querySelectorAll('.gj-recip-owner').length === 2`)
+	today := time.Now().UTC().Format("2006-01-02")
+	d.OK(detail("age-x25519") == "Last used in this browser: "+today, "the recovery key was just used: "+detail("age-x25519"))
+	d.OK(detail("passkey-prf") == "Not used in this browser", "the passkey was not: "+detail("passkey-prf"))
+	d.NoErrors()
+}

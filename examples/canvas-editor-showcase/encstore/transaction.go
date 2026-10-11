@@ -357,6 +357,7 @@ func (s *Store) rekeyAll(ctx context.Context, view docstore.Adapter, to []Owner,
 		AtRest: encrypt.Static{To: rs, Keys: ids},
 	}, anchor: ownersHash(to)})
 	mig.AllowPlaintext = true
+	mig.RekeyProgress = s.Progress
 	mig.Signer = frames
 	mig.OwnerSigners = verifiers
 	mig.TrustFrames = trust
