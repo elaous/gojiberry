@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-3 of 10 since the last full run (#173, #174, this PR). The full run on main 67a6c28 (after #171, the 10th merge since 10ae2107) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+4 of 10 since the last full run (#173 to #175, this PR). The full run on main 67a6c28 (after #171, the 10th merge since 10ae2107) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -981,7 +981,7 @@ unless stated.
     exports an inaccessible file defeats the purpose. Plan: (1) map the model to PDF tags and to semantic HTML in one
     place; (2) set document language and title; (3) validate with a PDF/UA and an HTML checker in CI; (4) report
     unmapped elements in the fidelity report of 72. Where: the export code, `docfile`. Priority: high.
-    Dependencies: 60, 62, 72.
+    Dependencies: 60, 62, 72. Done in part (this PR), plan step 2: the document has a language (`docfile.Document.Language`/`SetLanguage`, kept in Meta under `lang`, validated as a BCP 47 tag) and `export.Snapshot.Lang` carries it to HTML (`<html lang>`), XHTML and the EPUB (`dc:language`, `xml:lang` on its pages), Word (the default run language `w:lang` and the core properties) and puts the title in the PDF information; the showcase sets it in Format > Language of the document and tags the reading copy with it. Tests: `TestExportsCarryTheDocumentLanguageAndTitle`, `TestDocumentLanguageIsInTheReadingCopyAndTheExport`. Left: tagged PDF (structure tags and `/Lang`, which the PDF library cannot write), table header cells and landmarks in the HTML, validators in CI (step 3), the fidelity report (step 4).
 64. **Language and direction.** Kind: fixable. What: per-run language tagging so a screen reader switches voice;
     right-to-left and bidirectional text; vertical text; IME and composition input. Why it matters: mixed-language and
     RTL documents are common, and composition input must not break the caret or the mirror. Plan:

@@ -105,6 +105,9 @@ func (PDF) Export(snap Snapshot) ([]byte, error) {
 	if err := registerPDFFonts(&pdf); err != nil {
 		return nil, err
 	}
+	if snap.Title != "" {
+		pdf.SetInfo(gopdf.PdfInfo{Title: snap.Title}) // a reader shows and announces the title, not the file name
+	}
 	pdf.SetMargins(pxToPt(snap.MarginLeft), pxToPt(snap.MarginTop), pxToPt(snap.MarginRight), pxToPt(snap.MarginBottom))
 	pdf.AddPage()
 

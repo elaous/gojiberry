@@ -54,6 +54,9 @@ type AccessibleTextProps struct {
 	// Label names the region ("Document text" if empty, translated).
 	Label  string
 	Blocks []A11yBlock
+	// Lang is the language of the document's text as a BCP 47 tag, "" for the page's own: the region is
+	// tagged with it, so a screen reader reads the text in that voice.
+	Lang string
 	// Selection is the selected text, "" for none, announced as part of the
 	// region so a reader finds what is selected.
 	Selection string
@@ -123,7 +126,11 @@ func AccessibleText(p AccessibleTextProps) xango.Node {
 		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-a11y-selection")},
 			xango.Text(trf("a11y.selected", "Selected: %s", p.Selection))))
 	}
-	return xango.El("div", []xango.Attr{xango.A("id", id), xango.A("class", "gj-sr-only"), xango.A("role", "document"), xango.A("aria-label", label)}, kids...)
+	attrs := []xango.Attr{xango.A("id", id), xango.A("class", "gj-sr-only"), xango.A("role", "document"), xango.A("aria-label", label)}
+	if p.Lang != "" {
+		attrs = append(attrs, xango.A("lang", p.Lang))
+	}
+	return xango.El("div", attrs, kids...)
 }
 
 // Announcer is a live region: when its message changes, a screen reader says it

@@ -36,6 +36,7 @@ func FromDocument(d docfile.Document) Snapshot {
 		PageWidth: defaultPageWidth, PageHeight: defaultPageHeight,
 		MarginLeft: defaultMargin, MarginTop: defaultMargin, MarginRight: defaultMargin, MarginBottom: defaultMargin,
 	}
+	snap.Lang = d.Language()
 	sum := sha1.Sum([]byte(d.Title))
 	snap.ID = hex.EncodeToString(sum[:8])
 

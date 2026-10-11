@@ -180,7 +180,7 @@ func TestSelectionLanguageReachesTheReadingCopy(t *testing.T) {
 	d.WaitFor("the lang attribute", `document.querySelectorAll('#a11y-text span[lang="fr"]').length === 1`)
 	d.OK(d.Text(".gj-announcer") == "Language of the selection: Français", "the change is announced: "+d.Text(".gj-announcer"))
 	d.OK(strings.TrimSpace(d.Text(`#a11y-text span[lang="fr"]`)) != "", "the span holds the selected words")
-	pick("Document language")
+	pick("Same as the document")
 	d.WaitFor("the tag gone", `document.querySelectorAll('#a11y-text [lang]').length === 0`)
 	d.NoErrors()
 }
@@ -224,5 +224,21 @@ func TestCheckTabListsFindingsAndGoesToThem(t *testing.T) {
 	// the fix makes it a level 2 heading, and the check run again finds nothing
 	d.Click(".gj-check-fix-button")
 	d.WaitFor("fixed", `document.getElementById('gj-check-summary').textContent.includes('Nothing found')`)
+	d.NoErrors()
+}
+
+// The language of the document is chosen in the Format menu: the reading copy is tagged with it, it is
+// kept with the document, and an HTML export says it.
+func TestDocumentLanguageIsInTheReadingCopyAndTheExport(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.OK(d.Attr("#a11y-text", "lang") == "", "no document language at first")
+	d.Click(`button.gj-menubar-button:has-text("Format")`)
+	d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Language of the document")`)
+	d.Click(`.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("Français")`)
+	d.WaitFor("tagged", `document.getElementById('a11y-text').getAttribute('lang') === 'fr'`)
+	d.OK(d.Text(".gj-announcer") == "Language of the document: Français", "announced: "+d.Text(".gj-announcer"))
+	d.Click(`button[data-tab="transfer"]`)
+	_, data := d.Download(func() { d.Click(`.gj-transfer-button[data-kind="export"][data-format="html"]`) })
+	d.OK(strings.Contains(string(data), `<html lang="fr">`), "the export says it: "+string(data)[:min(len(data), 120)])
 	d.NoErrors()
 }
