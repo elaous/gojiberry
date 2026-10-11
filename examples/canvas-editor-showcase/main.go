@@ -846,7 +846,7 @@ func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()
 	return &collabxango.CollabProps{
 		Transport: transport,
 		Flow:      collabxango.Flow(get("flow", "")),
-		Client:    client.Options{BaseURL: hubURL(get("hub", ""), origin), Doc: doc, Header: hdr, Retry: 300 * time.Millisecond, MaxRetry: 2 * time.Second},
+		Client:    client.Options{BaseURL: hubURL(get("hub", ""), origin), Doc: doc, Header: hdr, Retry: 300 * time.Millisecond, MaxRetry: 2 * time.Second, Queue: newLocalQueue(doc, name)},
 		Replica:   fmt.Sprintf("%s-%d", name, int(js.Global().Get("Math").Call("random").Float()*1e9)),
 		Name:      name,
 		Color:     u.liveColor,
