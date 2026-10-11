@@ -37,7 +37,7 @@ func TestEndToEnd(t *testing.T) {
 	s := S()
 	ok(s.Str("error") == "", "renders without error: "+s.Str("error"))
 	ok(s.Str("mode") == "view" && s.Int("pages") == 3, "starts in view mode with three pages")
-	ok(jsonIs("features", []string{"history", "multi-cursor", "line-ops", "markdown-clipboard", "breaks", "paragraphs", "text-case", "links", "styles", "comments", "bookmarks", "notes", "page-furniture", "find", "complete", "columns"}), fmt.Sprint("features registered: ", s.Get("features")))
+	ok(jsonIs("features", []string{"history", "multi-cursor", "line-ops", "markdown-clipboard", "breaks", "paragraphs", "text-case", "links", "styles", "comments", "bookmarks", "notes", "page-furniture", "find", "complete", "review", "columns"}), fmt.Sprint("features registered: ", s.Get("features")))
 	for _, tag := range []string{"canvas.TextFlow", "canvas.Image", "canvas.FloatingText", "canvas.Table", "canvas.ScrollView"} {
 		ok(d.Is("s.elements.includes("+e2etest.J(tag)+")"), tag+" is a registered element")
 	}
@@ -48,7 +48,7 @@ func TestEndToEnd(t *testing.T) {
 	// The menu bar is built from the registered commands: one submenu per feature.
 	d.Click(`button.gj-menubar-button:has-text("Edit")`)
 	subs := d.Count(".gj-menubar-panel > .gj-menu > .gj-menu-item-sub")
-	ok(subs == 16, fmt.Sprint("Edit has a submenu per feature: ", subs))
+	ok(subs == 17, fmt.Sprint("Edit has a submenu per feature: ", subs))
 	shortcut := d.Text(`.gj-menubar-panel li:has-text("Move line up") .gj-menu-shortcut`)
 	ok(shortcut == "Alt+↑", "a command shows its shortcut: "+shortcut)
 	d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Paragraphs")`)
