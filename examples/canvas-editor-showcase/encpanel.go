@@ -692,7 +692,8 @@ func (u *ui) secretBox(prefix string, p *prepared, commitLabel string, commit, c
 		textarea(prefix+"-secret", T("enc.recoverySecret", "Recovery key (secret)"), p.secret, "", "2", func(string) {}),
 		xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px;margin-top:6px")},
 			btn(prefix+"-copy", T("enc.copy", "Copy"), func() { u.saver.Copy(p.secret) }, false),
-			btn(prefix+"-download", T("enc.download", "Download"), func() { transfer.Download("recovery-key.txt", "text/plain", []byte(p.secret+"\n")) }, false)),
+			btn(prefix+"-download", T("enc.download", "Download"), func() { transfer.Download("recovery-key.txt", "text/plain", []byte(p.secret+"\n")) }, false),
+			btn(prefix+"-print", T("enc.printSheet", "Print a sheet"), func() { printRecoverySheet(T("enc.recoveryLabel", "Recovery key"), p.secret) }, false)),
 		para(prefix+"-notyet", T("enc.notYet", "Nothing has been changed yet: the key is added only when you confirm below."), false),
 		xango.El("div", []xango.Attr{xango.A("id", prefix+"-ack")}, components.Checkbox(components.CheckboxProps{
 			Label: T("enc.ackSaved", "I have saved this recovery key somewhere safe"), Checked: p.acked,
@@ -1324,6 +1325,17 @@ func (u *ui) recoveryAdvice() []xango.Node {
 		rows = append(rows,
 			textarea("enc-check-input", T("enc.checkRecoveryInput", "Check your recovery key"), e.checkRecovery, "AGE-SECRET-KEY-1…", "2", func(v string) { e.checkRecovery = v; e.checkMsg = ""; e.render() }),
 			btn("enc-check-recovery", T("enc.checkRecovery", "Check that this is my recovery key"), u.encCheckRecovery, strings.TrimSpace(e.checkRecovery) == ""))
+		if due, never := recoveryCheckDue(); due {
+			text := T("enc.checkDue", "You last checked your recovery key more than 90 days ago. Check that you still have it.")
+			if never {
+				text = T("enc.checkNever", "You have not checked your recovery key in this browser. Check that you still have it.")
+			}
+			rows = append(rows, para("enc-check-due", text, false),
+				btn("enc-check-later", T("enc.checkLater", "Remind me in a week"), func() {
+					lsSet(recoverySnoozeKey, time.Now().UTC().Add(encstore.SnoozeFor).Format(time.RFC3339))
+					u.rerender()
+				}, false))
+		}
 		if e.checkMsg != "" {
 			rows = append(rows, xango.El("p", []xango.Attr{xango.A("id", "enc-check-result"), xango.A("role", "status"), xango.A("style", checkStyle(e.checkOK))}, xango.Text(e.checkMsg)))
 		}
@@ -1361,3 +1373,17 @@ func (u *ui) encCheckRecovery() {
 
 // recoveryCheckedKey is where the time of the last successful check is kept in this browser.
 const recoveryCheckedKey = "showcase-enc:recovery-checked"
+
+// recoverySnoozeKey is where "remind me in a week" is kept in this browser.
+const recoverySnoozeKey = "showcase-enc:recovery-snooze"
+
+// recoveryCheckDue says whether to remind the person to check their recovery key, and whether they
+// never have in this browser.
+func recoveryCheckDue() (due, never bool) {
+	at := func(key string) time.Time {
+		t, _ := time.Parse(time.RFC3339, lsGet(key))
+		return t
+	}
+	last := at(recoveryCheckedKey)
+	return encstore.CheckDue(time.Now(), last, at(recoverySnoozeKey), encstore.ReminderEvery), last.IsZero()
+}

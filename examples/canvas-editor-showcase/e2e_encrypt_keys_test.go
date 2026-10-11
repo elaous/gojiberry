@@ -984,3 +984,48 @@ func TestCheckTheRecoveryKeyWithoutUsingIt(t *testing.T) {
 	d.OK(d.Str(`localStorage.getItem('showcase-enc:recovery-checked') || ''`) != "", "the time of the check is kept")
 	d.NoErrors()
 }
+
+// A printable sheet of the recovery key is offered while its secret is on screen, and the person is
+// reminded to check the key until they have, and can put the reminder off.
+func TestRecoverySheetAndReminder(t *testing.T) {
+	site := e2etest.NewSite(t)
+	site.UseLocalhost()
+	d := site.Open(t, "")
+	d.VirtualAuthenticator()
+	d.Click(`button[data-tab="save"]`)
+	d.WaitSelector("#enc-panel")
+	d.Click("#enc-switch-box .gj-switch-track")
+	d.WaitSelector("#enc-enable")
+	d.Click("#enc-enable")
+	d.WaitSelector("#enc-recovery-secret")
+	secret := d.Value("#enc-recovery-secret")
+
+	// Print opens a page built in the browser; capture it instead of opening a window
+	d.Eval(`window.__sheet = ''; window.open = (u) => { const x = new XMLHttpRequest(); x.open('GET', u, false); x.send(); window.__sheet = x.responseText; }`, nil)
+	d.Click("#enc-recovery-print")
+	d.WaitFor("the sheet", `window.__sheet.length > 0`)
+	sheet := d.Str(`window.__sheet`)
+	for _, want := range []string{secret, "Fingerprint", "nobody can open the documents", "window.print()"} {
+		d.OK(strings.Contains(sheet, want), "the sheet has "+want)
+	}
+	d.OK(!strings.Contains(sheet, "http://") && !strings.Contains(sheet, "https://"), "and refers to nothing outside itself")
+
+	d.SetChecked("#enc-recovery-ack input", true)
+	d.WaitFor("the commit button", `!document.querySelector('#enc-recovery-commit').disabled`)
+	d.Click("#enc-recovery-commit")
+	d.WaitSelector("#enc-lock")
+
+	// never checked: reminded; put off for a week: quiet; checked: no reminder after the snooze either
+	d.WaitSelector("#enc-check-due")
+	d.OK(strings.Contains(d.Text("#enc-check-due"), "have not checked"), "reminded: "+d.Text("#enc-check-due"))
+	d.Click("#enc-check-later")
+	d.WaitFor("quiet", `!document.querySelector('#enc-check-due')`)
+	d.Eval(`localStorage.removeItem('showcase-enc:recovery-snooze')`, nil)
+	d.Reload()
+	d.Click(`button[data-tab="save"]`)
+	d.WaitSelector("#enc-check-due")
+	d.Fill("#enc-check-input", secret)
+	d.Click("#enc-check-recovery")
+	d.WaitFor("checked", `!document.querySelector('#enc-check-due') && !!document.querySelector('#enc-check-result')`)
+	d.NoErrors()
+}
