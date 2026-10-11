@@ -749,6 +749,10 @@
   "diff.count#one": "%d modification",
   "diff.count#other": "%d modifications",
   "diff.unchanged#one": "%d bloc inchangé",
-  "diff.unchanged#other": "%d blocs inchangés"
+  "diff.unchanged#other": "%d blocs inchangés",
+  "docs.compare": "Comparer",
+  "docs.compareWith": "Comparer %s avec le document actuel",
+  "docs.compareHeading": "Modifications depuis cette version",
+  "saver.versionCompared": "Comparé avec le document actuel"
  }
 }

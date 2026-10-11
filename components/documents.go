@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/elaous/gojiberry/docdiff"
 	"github.com/elaous/gojiberry/xango"
 )
 
@@ -559,6 +560,11 @@ type VersionsProps struct {
 	Open    DocAction
 	Delete  DocAction
 	Pending *Pending
+	// Compare shows what changed between a snapshot and the document being edited; Diff is that
+	// comparison (nil before one was asked for) and DiffKey the snapshot it is for.
+	Compare DocAction
+	Diff    []docdiff.Change
+	DiffKey string
 }
 
 // Versions lists a document's snapshots, newest first, to open or delete, with a
@@ -576,6 +582,9 @@ func Versions(p VersionsProps) xango.Node {
 		row := []xango.Node{
 			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text(v.Time.Format("2006-01-02 15:04:05"))),
 			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta")}, xango.Text(byteSize(v.Size)))}
+		if p.Compare != nil {
+			row = append(row, docButtonAs("gj-versions-compare", tr("docs.compare", "Compare"), trf("docs.compareWith", "Compare %s with the current document", v.Time.Format("2006-01-02 15:04:05")), busy, actOne(p.Pending, p.Compare, v.Key)))
+		}
 		if p.Open != nil {
 			row = append(row, docButton("gj-versions-open", tr("docs.open", "Open"), busy, actOne(p.Pending, p.Open, v.Key)))
 		}
@@ -588,6 +597,10 @@ func Versions(p VersionsProps) xango.Node {
 		children = append(children, xango.El("p", []xango.Attr{xango.A("class", "gj-doc-empty")}, xango.Text(tr("docs.noVersions", "No versions yet."))))
 	} else {
 		children = append(children, xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list")}, rows...))
+	}
+	if p.DiffKey != "" {
+		children = append(children, xango.El("h5", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(tr("docs.compareHeading", "Changes since this version"))),
+			VersionDiff(VersionDiffProps{Changes: p.Diff}))
 	}
 	children = append(children, pendingError(p.Pending)...)
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-versions")}, children...)

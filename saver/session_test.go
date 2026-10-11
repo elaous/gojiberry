@@ -10,6 +10,7 @@ import (
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/components"
+	"github.com/elaous/gojiberry/docdiff"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docstore"
 )
@@ -636,5 +637,55 @@ func TestSessionWarnsWhenTheStoreIsFillingUpAndExplainsAFullOne(t *testing.T) {
 	err := full.Save(ctx)
 	if err == nil || !strings.Contains(err.Error(), "Not saved") || !strings.Contains(err.Error(), "Download the document") || !errors.Is(err, docstore.ErrStorageFull) {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestCompareVersionShowsWhatChangedSinceASnapshot(t *testing.T) {
+	ctx := context.Background()
+	text := "First paragraph\nSecond paragraph\n"
+	s := NewSession(&Saver{Targets: targets(t)}, func() docfile.Document {
+		return docfile.FromFlow("", &canvas.TextFlow{Items: []canvas.Item{canvas.Chars{Text: text}}})
+	}, func(docfile.Document) {})
+	s.Pending.Inline = true
+	s.SetName("report")
+	if err := s.Save(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveVersion(ctx); err != nil {
+		t.Fatal(err)
+	}
+	vs := s.Versions()
+	if len(vs.Versions) != 1 || vs.Compare == nil || vs.Diff != nil || vs.DiffKey != "" {
+		t.Fatalf("before comparing: %+v", vs)
+	}
+	key := vs.Versions[0].Key
+	// the same text: a comparison with nothing changed
+	if err := s.CompareVersion(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	if v := s.Versions(); v.DiffKey != key || docdiff.Summarize(v.Diff).Changed() {
+		t.Fatalf("unchanged: %+v", v)
+	}
+	// edit, and compare again
+	text = "First paragraph\nA new second paragraph\nThird\n"
+	if err := s.CompareVersion(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	sum := docdiff.Summarize(s.Versions().Diff)
+	if !sum.Changed() || sum.Inserted+sum.Edited == 0 {
+		t.Fatalf("after editing: %+v", sum)
+	}
+	if err := s.CompareVersion(ctx, "versions/"+s.ID()+"/nope"); err == nil {
+		t.Error("a snapshot that is not there is an error")
+	}
+	if err := s.CompareVersion(ctx, "../etc/passwd"); err == nil {
+		t.Error("a key that is not a version's is refused")
+	}
+	// deleting the snapshot that was compared clears the comparison
+	if err := s.DeleteVersion(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	if v := s.Versions(); v.DiffKey != "" || v.Diff != nil {
+		t.Errorf("after deleting: %+v", v)
 	}
 }
