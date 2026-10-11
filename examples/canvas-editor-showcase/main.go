@@ -46,11 +46,12 @@ import (
 
 // ui is the DOM side's state.
 type ui struct {
-	folder folderState // the folder on this computer, a save target
-	title  string
-	menu   int    // open menu, or -1
-	tab    string // sidebar tab: format, symbols, keys
-	check  checkState
+	folder  folderState // the folder on this computer, a save target
+	title   string
+	menu    int    // open menu, or -1
+	tab     string // sidebar tab: format, symbols, keys
+	check   checkState
+	docLang string // the document's language (a BCP 47 tag), "" for none
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
 	imageMsg   string
 	imageFocus bool
@@ -191,6 +192,7 @@ func main() {
 		if d.Title != "" {
 			u.title = d.Title
 		}
+		u.docLang = d.Language()
 		stage.ForgetFonts() // the opened text may use fonts the library has
 		renderCanvas()
 		renderUI()
@@ -212,6 +214,7 @@ func main() {
 	currentDoc := func() docfile.Document {
 		d := docfile.FromFlow(u.title, flow)
 		d.Fonts = docfile.FromFonts(lib.Added())
+		d.SetLanguage(u.docLang)
 		return d
 	}
 	// The browser target (localStorage) cannot write the catalog conditionally, so two
@@ -327,6 +330,7 @@ func main() {
 				{Label: "Bold", Shortcut: components.FormatChord("Mod+B", mac), OnSelect: func() { run(canvas.CmdBold) }},
 				{Label: "Italic", Shortcut: components.FormatChord("Mod+I", mac), OnSelect: func() { run(canvas.CmdItalic) }},
 				{Label: "Underline", Shortcut: components.FormatChord("Mod+U", mac), OnSelect: func() { run(canvas.CmdUnderline) }},
+				{Label: T("menu.docLangSet", "Language of the document"), Items: documentLanguageMenu(u, renderUI)},
 				{Label: T("menu.selLang", "Language of the selection"), Items: selectionLanguageMenu(u, func() *canvas.TextFlow { return flow }, redraw, refocus, renderUI)},
 				{Separator: true},
 				{Label: "Style editor", OnSelect: func() { u.tab = "format"; renderUI() }},
@@ -571,7 +575,7 @@ func main() {
 			MenuBar: menubar, Toolbar: toolbar,
 			Canvas: xango.Frag(
 				xango.El("div", []xango.Attr{xango.A("id", "canvas-host")}),
-				components.AccessibleText(components.AccessibleTextProps{Blocks: append(u.a11yBlocks(flow, u.title), a11yObjects(root)...), Selection: selectedText(flow)}),
+				components.AccessibleText(components.AccessibleTextProps{Blocks: append(u.a11yBlocks(flow, u.title), a11yObjects(root)...), Selection: selectedText(flow), Lang: u.docLang}),
 				components.Announcer(u.announcement)),
 			Sidebar: &side, StatusBar: &bar,
 		})

@@ -445,7 +445,7 @@ func selectionLanguageMenu(u *ui, flow func() *canvas.TextFlow, redraw, refocus,
 			}
 		}
 	}
-	doc := T("menu.docLang", "Document language")
+	doc := T("menu.sameLang", "Same as the document")
 	items := []components.MenuItem{{Label: doc, OnSelect: set("", doc)}, {Separator: true}}
 	codes := make([]string, 0, len(lang.Names))
 	for c := range lang.Names {
@@ -569,4 +569,27 @@ func fixLabel(f a11ycheck.Finding) string {
 		return T("check.fixDescribe", "Describe it")
 	}
 	return ""
+}
+
+// documentLanguageMenu sets the language of the whole document, which exports carry (HTML, EPUB, Word) and
+// the reading copy is tagged with; the first entry says there is none.
+func documentLanguageMenu(u *ui, renderUI func()) []components.MenuItem {
+	set := func(tag, name string) func() {
+		return func() {
+			u.docLang = tag
+			u.announce(T("a11y.docLang", "Language of the document: %s", name))
+			renderUI()
+		}
+	}
+	none := T("menu.noLang", "Not set")
+	items := []components.MenuItem{{Label: none, Checked: u.docLang == "", OnSelect: set("", none)}, {Separator: true}}
+	codes := make([]string, 0, len(lang.Names))
+	for c := range lang.Names {
+		codes = append(codes, c)
+	}
+	slices.Sort(codes)
+	for _, c := range codes {
+		items = append(items, components.MenuItem{Label: lang.Names[c], Checked: u.docLang == c, OnSelect: set(c, lang.Names[c])})
+	}
+	return items
 }

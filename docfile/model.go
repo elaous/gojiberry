@@ -791,3 +791,26 @@ func (d *Document) SetFolder(id string) {
 	}
 	d.Set(FolderKey, id)
 }
+
+// LangKey is the Meta key a document's language is kept under, as a BCP 47 tag ("fr", "pt-BR").
+const LangKey = "lang"
+
+// Language is the document's language, or "" when none is set (or what is set is not a language tag).
+func (d Document) Language() string {
+	if v, _ := d.Get(LangKey); v != "" && canvas.ValidLang(v) {
+		return v
+	}
+	return ""
+}
+
+// SetLanguage sets the document's language; "" removes it. A tag that is not valid is ignored.
+func (d *Document) SetLanguage(tag string) {
+	if !canvas.ValidLang(tag) {
+		return
+	}
+	if tag == "" {
+		d.Meta = slices.DeleteFunc(slices.Clone(d.Meta), func(m MetaEntry) bool { return m.Key == LangKey })
+		return
+	}
+	d.Set(LangKey, tag)
+}

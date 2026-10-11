@@ -693,6 +693,9 @@ type AccessibleTextProps struct {
 	// Label names the region ("Document text" if empty, translated).
 	Label  string
 	Blocks []A11yBlock
+	// Lang is the language of the document's text as a BCP 47 tag, "" for the page's own: the region is
+	// tagged with it, so a screen reader reads the text in that voice.
+	Lang string
 	// Selection is the selected text, "" for none, announced as part of the
 	// region so a reader finds what is selected.
 	Selection string

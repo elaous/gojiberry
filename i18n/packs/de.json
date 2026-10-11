@@ -676,6 +676,10 @@
   "recipients.verifiedBy": "bestätigt von %s",
   "tab.check": "Prüfen",
   "tab.images": "Bilder",
-  "tab.list": "Seitenleiste"
+  "tab.list": "Seitenleiste",
+  "menu.sameLang": "Wie das Dokument",
+  "menu.docLangSet": "Sprache des Dokuments",
+  "menu.noLang": "Nicht festgelegt",
+  "a11y.docLang": "Sprache des Dokuments: %s"
  }
 }
