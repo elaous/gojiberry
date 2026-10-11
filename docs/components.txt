@@ -984,6 +984,10 @@ type CollabAnnouncer struct {
     Bo joined") and spaced (at most one sentence per Every), so a busy session
     does not talk over the person.
 
+func (a *CollabAnnouncer) NoteComment(author string)
+    NoteComment records that someone else added a comment; it is said, with the
+    next sentence, at level CollabAll ("Bo commented." or "3 new comments.").
+
 func (a *CollabAnnouncer) Pending() bool
     Pending reports whether something has changed that has not been said yet
     (held by the spacing), so a host can call Update again a little later.

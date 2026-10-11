@@ -119,6 +119,7 @@ func liveEndToEnd(t *testing.T, hubURL, transport, flow string) {
 	c.AnswerDialog("A viewer's comment")
 	c.Click(`[data-action="add-comment"]`)
 	a.Wait("s.comments === 1")
+	a.WaitFor("the other person's comment announced", `document.querySelector('.gj-announcer').textContent.includes('commented')`)
 	c.OK(c.State().Str("live.error") == "", "the server accepted the viewer's comment")
 	a.OK(a.State().Str("text") == c.State().Str("text"), "and commenting changed no text")
 	a.Click(`button[data-tab="comments"]`)

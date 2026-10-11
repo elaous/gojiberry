@@ -64,3 +64,27 @@ func TestCollabAnnouncerGroupsSpacesAndFilters(t *testing.T) {
 		t.Errorf("off: %q", got)
 	}
 }
+
+func TestCollabAnnouncerSaysOthersComments(t *testing.T) {
+	a := CollabAnnouncer{Every: time.Second}
+	t0 := time.Unix(1000, 0)
+	a.Update(t0, true, []string{"Ana"}, "")
+	a.NoteComment("Bo")
+	if got := a.Update(t0.Add(2*time.Second), true, []string{"Ana"}, ""); got != "Bo commented." {
+		t.Fatalf("one: %q", got)
+	}
+	a.NoteComment("Bo")
+	a.NoteComment("Cy")
+	a.NoteComment("Bo")
+	if !a.Pending() {
+		t.Fatal("held comments are pending")
+	}
+	if got := a.Update(t0.Add(5*time.Second), true, []string{"Ana"}, ""); got != "3 new comments." {
+		t.Fatalf("many: %q", got)
+	}
+	a.Level = CollabImportant
+	a.NoteComment("Bo")
+	if a.Pending() {
+		t.Fatal("not said below the all level")
+	}
+}
