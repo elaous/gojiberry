@@ -48,6 +48,16 @@ vet:
 test:
 	go test ./...
 
+# a11y-test is the accessibility gate: axe-core over the page in every state a person meets it (the
+# document, each tab, each menu, the find bar, the key directory), and the keyboard and reading-copy
+# tests. It needs a Chromium and fails without one rather than skipping (GOJIBERRY_REQUIRE_BROWSER).
+# A new axe violation fails it; the reviewed exceptions are listed, each with a roadmap entry, in
+# examples/canvas-editor-showcase/e2e_axe_test.go (axeDisabled). Run it before a release, with the
+# manual screen-reader script: docs/accessibility-testing.md.
+.PHONY: a11y-test
+a11y-test:
+	GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -run 'Axe|Accessib|ScreenReader|ReadingCopy|Keyboard|ArrowKeys|DialogFocus|DisplayPreferences' ./examples/canvas-editor-showcase/
+
 .PHONY: wasm-vet
 wasm-vet:
 	GOOS=js GOARCH=wasm go build ./...
