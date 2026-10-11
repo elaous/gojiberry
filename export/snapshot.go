@@ -124,8 +124,11 @@ type Block struct {
 // rather than making Snapshot's own shape depend on which Exporter
 // the caller happens to want.
 type Snapshot struct {
-	Title  string
-	ID     string
+	Title string
+	ID    string
+	// Lang is the document's language as a BCP 47 tag, "" when it has none: the exporters that can
+	// say so (HTML, EPUB, Word) write it, so a reader or a search engine knows how to read the text.
+	Lang   string
 	Blocks []Block
 
 	PageWidth, PageHeight                            float64

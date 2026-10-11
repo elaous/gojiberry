@@ -250,3 +250,58 @@ func TestImageAltTextIsExported(t *testing.T) {
 		t.Errorf("snapshot: %+v", snap.Blocks)
 	}
 }
+
+// The document's language is written where the format can say so: <html lang>, the EPUB's dc:language and
+// its pages, Word's default run language and core properties; and the title is in the PDF's information.
+func TestExportsCarryTheDocumentLanguageAndTitle(t *testing.T) {
+	doc := docfile.Document{Title: "Rapport"}
+	doc.Content = []docfile.Item{{Chars: &docfile.Chars{Text: "Bonjour"}}}
+	doc.SetLanguage("fr-CA")
+	if doc.Language() != "fr-CA" {
+		t.Fatalf("language %q", doc.Language())
+	}
+	snap := FromDocument(doc)
+	if snap.Lang != "fr-CA" {
+		t.Fatalf("snapshot language %q", snap.Lang)
+	}
+	html, _ := HTML{}.Export(snap)
+	if !strings.Contains(string(html), `<html lang="fr-CA">`) {
+		t.Errorf("html:\n%s", html)
+	}
+	epub, err := EPUB{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	part := func(data []byte, name string) string { return string(unzipEntry(t, data, name)) }
+	if !strings.Contains(part(epub, "OEBPS/content.opf"), "<dc:language>fr-CA</dc:language>") || !strings.Contains(part(epub, "OEBPS/content.xhtml"), `lang="fr-CA" xml:lang="fr-CA"`) || !strings.Contains(part(epub, "OEBPS/nav.xhtml"), `xml:lang="fr-CA"`) {
+		t.Errorf("epub lacks the language: opf %v content %v nav %v", strings.Contains(part(epub, "OEBPS/content.opf"), "fr-CA"), strings.Contains(part(epub, "OEBPS/content.xhtml"), "fr-CA"), strings.Contains(part(epub, "OEBPS/nav.xhtml"), "fr-CA"))
+	}
+	docx, err := DOCX{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(part(docx, "word/styles.xml"), `<w:lang w:val="fr-CA"/>`) || !strings.Contains(part(docx, "docProps/core.xml"), "<dc:language>fr-CA</dc:language>") {
+		t.Errorf("docx styles/core lack the language")
+	}
+	pdf, err := PDF{}.Export(snap)
+	if err != nil || !strings.Contains(string(pdf), "/Title <FEFF0052006100700070006F00720074>") { // "Rapport" in UTF-16
+		t.Errorf("the PDF information has no title: %v", err)
+	}
+	// none set: as before
+	plain := FromDocument(docfile.Document{Title: "T"})
+	if h, _ := (HTML{}).Export(plain); strings.Contains(string(h), "lang=") {
+		t.Errorf("a document with no language gained one:\n%s", h)
+	}
+	if e, _ := (EPUB{}).Export(plain); !strings.Contains(part(e, "OEBPS/content.opf"), "<dc:language>en</dc:language>") {
+		t.Error("the EPUB default language changed")
+	}
+	// an invalid tag is not kept
+	doc.SetLanguage("not a tag")
+	if doc.Language() != "fr-CA" {
+		t.Errorf("an invalid tag replaced the language: %q", doc.Language())
+	}
+	doc.SetLanguage("")
+	if doc.Language() != "" {
+		t.Errorf("not cleared: %q", doc.Language())
+	}
+}

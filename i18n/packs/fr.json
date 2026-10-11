@@ -676,6 +676,10 @@
   "recipients.verifiedBy": "vérifié par %s",
   "tab.check": "Vérifier",
   "tab.images": "Images",
-  "tab.list": "Panneau latéral"
+  "tab.list": "Panneau latéral",
+  "menu.sameLang": "Comme le document",
+  "menu.docLangSet": "Langue du document",
+  "menu.noLang": "Non définie",
+  "a11y.docLang": "Langue du document : %s"
  }
 }

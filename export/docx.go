@@ -105,9 +105,9 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
 </Relationships>`},
-		{"docProps/core.xml", header + `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>` + esc(snap.Title) + `</dc:title></cp:coreProperties>`},
+		{"docProps/core.xml", header + `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>` + esc(snap.Title) + `</dc:title>` + docxCoreLanguage(snap.Lang) + `</cp:coreProperties>`},
 		{"word/document.xml", header + `<w:document ` + docxNS + `><w:body>` + b.body.String() + docxSection(snap) + `</w:body></w:document>`},
-		{"word/styles.xml", header + docxStyles},
+		{"word/styles.xml", header + docxStylesFor(snap.Lang)},
 		{"word/numbering.xml", header + b.numbering()},
 		{"word/_rels/document.xml.rels", header + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
@@ -390,4 +390,21 @@ func hexFill(c string) (string, bool) {
 		}
 	}
 	return strings.ToLower(c), true
+}
+
+// docxCoreLanguage is the dc:language of the document properties, or "".
+func docxCoreLanguage(lang string) string {
+	if lang == "" {
+		return ""
+	}
+	return "<dc:language>" + esc(lang) + "</dc:language>"
+}
+
+// docxStylesFor is docxStyles with the document's language as the default of every run (w:lang), so
+// Word's proofing and a screen reader use it for text that names no other.
+func docxStylesFor(lang string) string {
+	if lang == "" {
+		return docxStyles
+	}
+	return strings.Replace(docxStyles, `<w:sz w:val="22"/></w:rPr></w:rPrDefault>`, `<w:sz w:val="22"/><w:lang w:val="`+esc(lang)+`"/></w:rPr></w:rPrDefault>`, 1)
 }

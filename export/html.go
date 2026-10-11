@@ -189,11 +189,11 @@ func renderHTMLDocument(snap Snapshot, xhtml bool) string {
 	if xhtml {
 		return `<?xml version="1.0" encoding="UTF-8"?>` + "\n" +
 			`<!DOCTYPE html>` + "\n" +
-			`<html xmlns="http://www.w3.org/1999/xhtml">` + "\n" +
+			`<html xmlns="http://www.w3.org/1999/xhtml"` + langAttrs(snap.Lang, true) + `>` + "\n" +
 			"<head><meta charset=\"utf-8\"/><title>" + escapeHTMLText(snap.Title) + "</title></head>\n<body>\n" +
 			body.String() + "</body>\n</html>\n"
 	}
-	return "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>" +
+	return "<!doctype html>\n<html" + langAttrs(snap.Lang, false) + ">\n<head>\n<meta charset=\"utf-8\">\n<title>" +
 		escapeHTMLText(snap.Title) + "</title>\n</head>\n<body>\n" +
 		body.String() + "</body>\n</html>\n"
 }
@@ -277,4 +277,16 @@ func escapeHTMLText(s string) string {
 func escapeHTMLAttr(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")
 	return strings.ReplaceAll(s, "\"", "&quot;")
+}
+
+// langAttrs is the lang attribute of an <html> element for a document language (xml:lang too for XHTML), or "".
+func langAttrs(lang string, xhtml bool) string {
+	if lang == "" {
+		return ""
+	}
+	a := ` lang="` + escapeHTMLAttr(lang) + `"`
+	if xhtml {
+		a += ` xml:lang="` + escapeHTMLAttr(lang) + `"`
+	}
+	return a
 }

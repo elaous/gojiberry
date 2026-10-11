@@ -39,7 +39,7 @@ func (EPUB) Export(snap Snapshot) ([]byte, error) {
 	files := []struct{ name, content string }{
 		{"META-INF/container.xml", epubContainerXML},
 		{"OEBPS/content.opf", epubContentOPF(snap)},
-		{"OEBPS/nav.xhtml", epubNavXHTML(snap.Title)},
+		{"OEBPS/nav.xhtml", epubNavXHTML(snap.Title, snap.Lang)},
 		{"OEBPS/content.xhtml", renderHTMLDocument(snap, true)},
 	}
 	for _, f := range files {
@@ -85,7 +85,7 @@ func epubContentOPF(snap Snapshot) string {
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="book-id">urn:gojiberry:` + escapeHTMLText(snap.ID) + `</dc:identifier>
     <dc:title>` + escapeHTMLText(snap.Title) + `</dc:title>
-    <dc:language>en</dc:language>
+    <dc:language>` + epubLanguage(snap.Lang) + `</dc:language>
     <meta property="dcterms:modified">` + time.Now().UTC().Format("2006-01-02T15:04:05Z") + `</meta>
   </metadata>
   <manifest>
@@ -102,11 +102,11 @@ func epubContentOPF(snap Snapshot) string {
 // epubNavXHTML renders EPUB3's required nav document -- the table of
 // contents every reader's own UI is built from. A single-chapter book
 // only ever needs a single entry, pointing at content.xhtml.
-func epubNavXHTML(title string) string {
+func epubNavXHTML(title, lang string) string {
 	escaped := escapeHTMLText(title)
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"` + langAttrs(lang, true) + `>
 <head><title>` + escaped + `</title></head>
 <body>
 <nav epub:type="toc" id="toc">
@@ -118,4 +118,12 @@ func epubNavXHTML(title string) string {
 </body>
 </html>
 `
+}
+
+// epubLanguage is the dc:language of the package: the document's, else English as before.
+func epubLanguage(lang string) string {
+	if lang == "" {
+		return "en"
+	}
+	return escapeHTMLText(lang)
 }
