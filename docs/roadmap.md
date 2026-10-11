@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (#221: `docsearch`, a sealed local index for search across documents (roadmap 73); #220: the waiting changes of a shared document survive a reload; #219: one completion ranking, one list in the showcase; #218: a durable queue for the sync client (roadmap 74); full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+5 of 10 since the last full run (#222: `docsearch.Refresh` and `FromDocfile`; #221: `docsearch`, a sealed local index for search across documents (roadmap 73); #220: the waiting changes of a shared document survive a reload; #219: one completion ranking, one list in the showcase; #218: a durable queue for the sync client (roadmap 74); full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1077,8 +1077,12 @@ unless stated.
     Done in part (#221), step 2 as a library: the new `docsearch` package is a local index of many documents (every
     query word must match, the last may be a start, title words count more, snippets around the match) that is
     stored only sealed (AES-256-GCM under `DeriveKey`, an HKDF of a secret the person holds), with `Open` refusing a
-    tampered or foreign-key index so it is rebuilt. Left: building it from the store after decrypt, keeping it up to
-    date on save (3), the search box across documents, and replace across documents with a preview and undo (4).
+    tampered or foreign-key index so it is rebuilt. Also done (#222), step 3 as a library:
+    `docsearch.Refresh` brings the index in line with a `docstore.Adapter` (pass the decrypting one) reading only the
+    documents that are new or newer, dropping deleted ones and skipping what cannot be read, and `FromDocfile` extracts
+    title, text and table cells from any docfile format. Left: calling it in the showcase (after unlock and after a
+    save) with the sealed index kept in browser storage, the search box across documents, and replace across documents
+    with a preview and undo (4).
 74. **Offline-first with conflict visibility.** Kind: fixable. What: a visible sync state, the queue of pending
     changes, and what will merge or conflict. Why it matters: people lose trust when they cannot tell whether their
     work is saved. Plan: (1) a status model (saved, saving, offline, conflict) exposed in the UI and to screen readers;

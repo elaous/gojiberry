@@ -24,10 +24,12 @@ type Index struct {
 }
 
 type doc struct {
-	Title string   `json:"title"`
-	Text  string   `json:"text"`
-	words []string // lower-case words of the text, rebuilt on load
-	twds  []string // and of the title
+	Title string `json:"title"`
+	Text  string `json:"text"`
+	// Updated is the UnixNano of the stored version this was built from (see Refresh).
+	Updated int64    `json:"updated,omitempty"`
+	words   []string // lower-case words of the text, rebuilt on load
+	twds    []string // and of the title
 }
 
 // Hit is one document that matches a query.
@@ -210,7 +212,9 @@ func Open(key, sealed []byte) (*Index, error) {
 	ix := &Index{docs: map[string]*doc{}}
 	for id, d := range docs {
 		if d != nil {
-			ix.docs[id] = newDoc(d.Title, d.Text)
+			nd := newDoc(d.Title, d.Text)
+			nd.Updated = d.Updated
+			ix.docs[id] = nd
 		}
 	}
 	return ix, nil
