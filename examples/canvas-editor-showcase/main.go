@@ -56,6 +56,7 @@ type ui struct {
 	docLang     string // the document's language (a BCP 47 tag), "" for none
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
 	imageMsg   string
+	sugg       suggestState
 	imageFocus bool
 	format     canvas.Format
 	catalog    []fonts.Font
@@ -579,6 +580,7 @@ func main() {
 			Canvas: xango.Frag(
 				readBar(u, renderUI),
 				xango.El("div", []xango.Attr{xango.A("id", "canvas-host")}),
+				u.suggestionsNode(renderUI),
 				components.AccessibleText(components.AccessibleTextProps{Blocks: append(u.a11yBlocks(flow, u.title), a11yObjects(root)...), Selection: selectedText(flow), Lang: u.docLang}),
 				components.Announcer(u.announcement)),
 			Sidebar: &side, StatusBar: &bar,
@@ -755,6 +757,8 @@ func main() {
 			renderUI()
 		},
 	}
+	state.CompleteFeature = canvas.CompleteFeature{OnOpen: func() { u.openSuggestions(flow, stage, canvasEl.Element, renderUI) }}
+	u.watchSuggestionKeys(inputEl.Element, func() *canvas.TextFlow { return flow }, redraw, renderUI)
 	state.Live = liveProps(u, &state, origin, renderCanvas, renderUI)
 	renderCanvas()
 	renderUI()

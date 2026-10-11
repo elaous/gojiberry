@@ -60,7 +60,9 @@ func Chord(key string, ctrl, shift, alt, meta bool) string {
 	if shift {
 		parts = append(parts, "Shift")
 	}
-	if r := []rune(key); len(r) == 1 {
+	if key == " " {
+		key = "Space"
+	} else if r := []rune(key); len(r) == 1 {
 		key = string(unicode.ToUpper(r[0]))
 	}
 	return strings.Join(append(parts, key), "+")
