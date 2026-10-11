@@ -704,6 +704,7 @@ func main() {
 	}
 
 	initLocale()
+	applyPrefs(loadPrefs())
 	u.setupLanguage(func(k string) string {
 		q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 		if q.Call("has", k).Bool() {
