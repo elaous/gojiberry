@@ -54,6 +54,8 @@ func liveEndToEnd(t *testing.T, hubURL, transport, flow string) {
 	a := site.Open(t, q("Ana", "owner", "#e11d48"))
 	a.Wait("s.live.status === 'online' && s.live.role === 'owner'")
 	a.OK(a.State().Str("role") == "owner", "the owner is an owner")
+	a.WaitFor("the sharing status", `(document.querySelector('.gj-status-item[data-item="sync"]') || {textContent: ''}).textContent === 'All changes shared'`)
+	a.OK(a.Attr(`.gj-status-item[data-item="sync"]`, "data-state") == "synced", "and says so in the status bar")
 	a.Sleep(400) // her content reaches the hub
 
 	b := site.Open(t, q("Bo", "editor", "#2563eb"))
