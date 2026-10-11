@@ -73,3 +73,7 @@
 :root[data-gj-targets="large"] input[type="checkbox"],
 :root[data-gj-targets="large"] input[type="radio"] { width: 24px; height: 24px; margin: 10px; }
 :root[data-gj-targets="large"] .gj-menu-item { padding-block: 0.6em; }
+
+/* Read aloud: the controls and the sentence being spoken, above the document. */
+.gj-readbar { position: fixed; left: 0; right: 0; bottom: 2em; z-index: 30; background: var(--gj-bg); color: var(--gj-text); display: flex; flex-wrap: wrap; gap: 0.4em; align-items: center; padding: 0.4em 0.6em; border-bottom: 1px solid currentColor; }
+.gj-readbar-now { flex: 1 1 20em; padding: 0.1em 0.3em; background: Mark; color: MarkText; }
