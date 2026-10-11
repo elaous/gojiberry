@@ -12,6 +12,7 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/elaous/gojiberry/a11ycheck"
 	"github.com/elaous/gojiberry/canvas"
 	cxango "github.com/elaous/gojiberry/canvas/xango"
 	"github.com/elaous/gojiberry/components"
@@ -454,4 +455,46 @@ func selectionLanguageMenu(u *ui, flow func() *canvas.TextFlow, redraw, refocus,
 		items = append(items, components.MenuItem{Label: lang.Names[c], OnSelect: set(c, lang.Names[c])})
 	}
 	return items
+}
+
+// checkState is the Check tab: whether a check has run on this page and what it found.
+type checkState struct {
+	ran      bool
+	findings []a11ycheck.Finding
+}
+
+// checkPanel is the Check tab: it runs the document's accessibility check (package a11ycheck) and lists
+// the findings, each with a button that moves the caret to it.
+func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, redraw, renderUI func()) xango.Node {
+	props := components.CheckPanelProps{Checked: u.check.ran}
+	for _, f := range u.check.findings {
+		props.Findings = append(props.Findings, components.CheckFinding{
+			Rule: f.Rule, Severity: f.Severity.String(), Message: f.Message, Fix: f.Fix, Text: f.Text})
+	}
+	props.OnCheck = func() {
+		fl := flow()
+		if fl == nil {
+			return
+		}
+		u.check.findings = a11ycheck.Check(docfile.FromFlow(u.title, fl), a11ycheck.Options{})
+		u.check.ran = true
+		switch n := len(u.check.findings); n {
+		case 0:
+			u.announce(T("check.announceNone", "Accessibility check: nothing found"))
+		default:
+			u.announce(T("check.announce", "Accessibility check: %d findings", n))
+		}
+		renderUI()
+	}
+	props.OnGo = func(i int) {
+		fl := flow()
+		if fl == nil || i < 0 || i >= len(u.check.findings) {
+			return
+		}
+		fl.GotoOffset(u.check.findings[i].Offset)
+		scroller().RevealPending()
+		redraw()
+		renderUI()
+	}
+	return components.CheckPanel(props)
 }

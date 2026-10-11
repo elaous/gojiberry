@@ -145,3 +145,33 @@ func TestImageDescriptionIsInTheReadingCopy(t *testing.T) {
 	d.OK(strings.Contains(d.Text("#a11y-text"), "Image: A sample picture used to try text wrapping"), "the description is read: "+d.Text("#a11y-text"))
 	d.NoErrors()
 }
+
+// The Check tab runs the accessibility check over the document, announces the result, lists what it
+// found with a fix for each, and takes the caret to a finding.
+func TestCheckTabListsFindingsAndGoesToThem(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.Click(`button[data-tab="check"]`)
+	d.WaitSelector("#gj-check-run")
+	d.OK(strings.Contains(d.Text("#gj-check-summary"), "Not checked yet"), "before a check: "+d.Text("#gj-check-summary"))
+	d.Click("#gj-check-run")
+	d.WaitFor("a result", `!document.getElementById('gj-check-summary').textContent.includes('Not checked yet')`)
+	d.OK(strings.Contains(d.Text("#gj-check-summary"), "Nothing found"), "the sample document is clean: "+d.Text("#gj-check-summary"))
+	d.OK(d.Text(".gj-announcer") == "Accessibility check: nothing found", "and it is announced: "+d.Text(".gj-announcer"))
+
+	// A document that skips a heading level.
+	d.Click(`button[data-tab="transfer"]`)
+	d.ChooseFile(func() { d.Click(`.gj-transfer-button[data-kind="import"][data-format="markdown"]`) }, "doc.md", []byte("# Title\n\nSome words here.\n\n### Deep heading\n\nMore words."))
+	d.Wait("s.text.includes('More words')")
+	d.Click(`button[data-tab="check"]`)
+	d.Click("#gj-check-run")
+	d.WaitFor("a finding", `document.querySelectorAll('.gj-check-item').length === 1`)
+	d.OK(strings.Contains(d.Text("#gj-check-summary"), "1 findings: 0 errors, 1 warnings"), d.Text("#gj-check-summary"))
+	d.OK(strings.Contains(d.Text(".gj-check-item"), "warning: ") && strings.Contains(d.Text(".gj-check-item"), "Deep heading") && strings.Contains(d.Text(".gj-check-fix"), "level 2"), "it says what and how to fix: "+d.Text(".gj-check-item"))
+	d.OK(d.Text(".gj-announcer") == "Accessibility check: 1 findings", "announced: "+d.Text(".gj-announcer"))
+	for _, v := range d.Axe("", axeDisabled...) {
+		t.Errorf("the Check tab with a finding: %s", v)
+	}
+	d.Click(".gj-check-go")
+	d.WaitFor("the caret at the heading", `(() => { const s = JSON.parse(document.getElementById('state').textContent); return s.cursors && s.cursors[0].Caret === s.text.indexOf('Deep heading') })()`)
+	d.NoErrors()
+}

@@ -212,6 +212,11 @@ func blocksFrom(lines []line) []Block {
 
 // headingLevel is 1-5 when the line is a heading: its paragraph style is
 // "Title" or "Heading n", or every run has a heading's scale.
+// HeadingLevel is the level (1 to 6) of a paragraph made of these runs with this paragraph style, or 0
+// if it is not a heading: the style "Title" or "Heading N", else every run at a heading's scale. It is
+// what FromDocument uses (which folds the levels above 3 into Heading3), for a caller that needs the real level.
+func HeadingLevel(runs []docfile.Chars, style string) int { return headingLevel(runs, style) }
+
 func headingLevel(runs []docfile.Chars, style string) int {
 	if strings.EqualFold(style, "title") {
 		return 1
