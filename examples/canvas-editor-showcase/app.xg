@@ -35,7 +35,6 @@ func Doc(state State, cb Callbacks) xango.Node {
 				styles={state.Styles}
 				autoClose={cv.DefaultAutoClose()}
 				hyphenator={state.Hyphenator()}
-				vocabulary={[]string{"Gojiberry", "canvas", "feature", "paragraph"}}
 				margins={state.Setup.MarginList()}
 				onChange={cb.OnFlow}
 				onHoverLink={cb.OnHoverLink}
