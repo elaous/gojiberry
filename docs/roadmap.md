@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-9 of 10 since the last full run (#151, #152, #153, #154, #155, #156, #157, #158, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+10 of 10 since the last full run (#151 to #159 and this PR): the full run on main is due next. The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -960,7 +960,7 @@ unless stated.
        ways; announce changes through a polite live region with the verbosity levels of 49.
     4. Expose the outline as a navigable landmark list; mark comments and tracked changes with text a reader says.
     5. Tests: model-to-DOM unit tests, e2e with axe-style checks, manual NVDA, JAWS and VoiceOver runs (69).
-    Where: the canvas editor input layer and `components`. Priority: highest. Dependencies: extends 48 and 49.
+    Where: the canvas editor input layer and `components`. Priority: highest. Dependencies: extends 48 and 49. Status (this batch): the mirror exists (`components.AccessibleText`: headings, lists, quotes, code, tables with `th`, the selection, a live region), now with the language of a run (item 64) and the description of an image (item 61); the e2e checks it with axe-core (item 69). Left: links, comments and tracked changes in the mirror, table header scope, the outline as landmarks, caret mapping, and the manual runs.
 61. **Alt text, image descriptions and structure checks.** Kind: fixable. What: alt text required or prompted when an
     image is inserted; a checker for missing alt text; optional on-device suggestions (no network); checks for reading
     order, heading level skips, empty headings and low colour contrast. Why it matters: an image without a
@@ -975,7 +975,7 @@ unless stated.
     people need to learn about a problem before they send the document. Plan: (1) a finding schema (rule, severity,
     location, fix); (2) the panel, keyboard and screen-reader accessible; (3) one-click fixes where safe; (4) an export
     gate with an explicit override; (5) tests per rule. Where: `components`, the showcase. Priority: high.
-    Dependencies: 60, 61.
+    Dependencies: 60, 61. Status: the findings and the first rules exist as the package `a11ycheck` (item 61: `Finding` has rule, severity, message, fix, location); the panel, the fixes and the export gate are not built.
 63. **Accessible exports.** Kind: fixable. What: tagged PDF with language, title, reading order and structure tags;
     semantic HTML with landmarks, headings, table headers and alt text. Why it matters: an accessible editor that
     exports an inaccessible file defeats the purpose. Plan: (1) map the model to PDF tags and to semantic HTML in one
@@ -1018,7 +1018,7 @@ unless stated.
     unless a test fails. Plan: (1) add axe-core to the e2e for the editor, dialogs and the mirror; (2) fail the build
     on new violations, with a reviewed baseline; (3) write the manual script (open, type, navigate by heading and
     table, comments, dialogs, autocomplete, export) and a results table per release; (4) make the release checklist
-    require it. Where: the browser e2e, `docs`. Priority: high. Dependencies: 48, 60.
+    require it. Where: the browser e2e, `docs`. Priority: high. Dependencies: 48, 60. Done in part (this PR): steps 1 to 4. `make a11y-test` runs the axe-core tests (document, every tab, every menu, the find bar, the key directory) and the keyboard and reading-copy tests, and fails without a browser instead of skipping (`GOJIBERRY_REQUIRE_BROWSER`); CI runs it on every push and pull request; a new violation fails it, the reviewed exceptions are `axeDisabled` (each with its roadmap entry); `docs/accessibility-testing.md` has the manual NVDA, JAWS and VoiceOver script with a results table, and `docs/release-checklist.md` requires both before a release. Left: the other examples are not under the gate, no one has run the manual script yet (the first results are for the first release), and the CI step has not run on a hosted runner yet (it relies on the runner's Chrome).
 70. **Version history UI.** Kind: fixable. What: a timeline of versions, named versions, a diff between two versions,
     restore, and who changed what, on top of the existing snapshots. Why it matters: people want to see and undo
     changes without asking an operator. Plan: (1) list snapshots with author and time from the store; (2) name and pin a

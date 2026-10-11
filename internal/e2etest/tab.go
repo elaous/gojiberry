@@ -67,7 +67,8 @@ type route struct {
 }
 
 // chromiumPath is the browser executable: $CHROMIUM or $PLAYWRIGHT_CHROMIUM, else the
-// first Chromium or Chrome found.
+// first Chromium or Chrome found. With none, a test is skipped, or fails when
+// GOJIBERRY_REQUIRE_BROWSER is set (the accessibility gate, make a11y-test).
 func chromiumPath(t testing.TB) string {
 	for _, env := range []string{"CHROMIUM", "PLAYWRIGHT_CHROMIUM"} {
 		if p := os.Getenv(env); p != "" {
@@ -81,6 +82,10 @@ func chromiumPath(t testing.TB) string {
 		if p, err := exec.LookPath(name); err == nil {
 			return p
 		}
+	}
+	if os.Getenv("GOJIBERRY_REQUIRE_BROWSER") != "" {
+		// a gate (make a11y-test) must not pass by skipping
+		t.Fatal("no Chromium found (set CHROMIUM), and GOJIBERRY_REQUIRE_BROWSER is set")
 	}
 	t.Skip("no Chromium found (set CHROMIUM)")
 	return ""

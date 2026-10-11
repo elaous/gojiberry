@@ -66,6 +66,11 @@ jobs:
       - name: make modules
         run: make modules
 
+      # The accessibility gate: axe-core and the keyboard tests in a real browser (the runner's
+      # Chrome). It fails, rather than skips, if no browser is found.
+      - name: make a11y-test
+        run: make a11y-test
+
       # Rewrites README.md's own coverage badge line (a static
       # img.shields.io URL, not a self-hosted SVG -- see
       # gen-coverage-badge.sh's own doc comment for why) from this
