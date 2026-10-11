@@ -1054,3 +1054,48 @@ func TestKeyListShowsWhenEachKeyWasLastUsedHere(t *testing.T) {
 	d.OK(detail("passkey-prf") == "Not used in this browser", "the passkey was not: "+detail("passkey-prf"))
 	d.NoErrors()
 }
+
+// On a browser that has never seen the store's key list, the first unlock with an SSH key shows the
+// list's fingerprint and waits for the person to say it matches; the fingerprint is the one shown where
+// the store was made, and the question is not asked again.
+func TestFirstSSHUnlockOnANewBrowserAsksForTheListFingerprint(t *testing.T) {
+	pub, priv := sshKeyPair(t, "me@laptop")
+	site := e2etest.NewSite(t)
+	d := site.Open(t, "")
+	d.Click(`button[data-tab="save"]`)
+	d.Click("#enc-switch-box .gj-switch-track")
+	d.WaitSelector("#enc-enable")
+	d.SetChecked("#enc-opt-passkey input", false)
+	d.SetChecked("#enc-opt-recovery input", false)
+	d.Fill("#enc-ssh", pub)
+	d.Click("#enc-enable")
+	d.WaitFor("locked", `(document.getElementById('enc-status') || {}).textContent === 'Locked'`)
+	shown := strings.TrimPrefix(d.Text("#enc-list-fingerprint"), "Key list fingerprint: ")
+	d.OK(strings.Count(shown, " ") == 7, "the maker sees the list's fingerprint: "+shown)
+
+	// a browser that has not seen this list (the key has not sealed it either): nothing remembered
+	d.Eval(`localStorage.removeItem('showcase-enc:trusted-lists')`, nil)
+	d.Reload()
+	d.Click(`button[data-tab="save"]`)
+	d.WaitSelector("#enc-unlock-ssh")
+	d.ChooseFile(func() { d.Click("#enc-unlock-ssh") }, "id_ed25519", priv)
+	d.WaitSelector("#enc-first-use")
+	d.OK(d.Text("#enc-first-use-fingerprint") == shown, "it shows the same fingerprint: "+d.Text("#enc-first-use-fingerprint"))
+	d.OK(d.Text("#enc-status") == "Locked", "nothing unlocked yet")
+	d.Click("#enc-first-use-cancel")
+	d.WaitFor("gone", `!document.querySelector('#enc-first-use')`)
+	d.ChooseFile(func() { d.Click("#enc-unlock-ssh") }, "id_ed25519", priv)
+	d.WaitSelector("#enc-first-use")
+	d.ChooseFile(func() { d.Click("#enc-first-use-ok") }, "id_ed25519", priv)
+	d.WaitFor("unlocked", `(document.getElementById('enc-status') || {}).textContent === 'Unlocked'`)
+
+	// and it is not asked again
+	d.Click("#enc-lock")
+	d.WaitFor("locked", `(document.getElementById('enc-status') || {}).textContent === 'Locked'`)
+	d.Reload()
+	d.Click(`button[data-tab="save"]`)
+	d.WaitSelector("#enc-unlock-ssh")
+	d.ChooseFile(func() { d.Click("#enc-unlock-ssh") }, "id_ed25519", priv)
+	d.WaitFor("unlocked without a question", `(document.getElementById('enc-status') || {}).textContent === 'Unlocked'`)
+	d.NoErrors()
+}

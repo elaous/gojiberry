@@ -666,3 +666,71 @@ func TestCheckRecoveryKey(t *testing.T) {
 		}
 	}
 }
+
+// With ConfirmFirstUse the first unlock with an SSH key of a list nothing on this device sealed stops and
+// shows the list's fingerprint; once the person confirmed it (TrustList) the unlock goes through, and a
+// different list is a different fingerprint. A key that opened the list through the chain of seals needs
+// no confirmation for the SSH key afterwards.
+func TestFirstUnlockWithAnSSHKeyAsksForTheListsFingerprint(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t)
+	pub, priv := sshKeyPair(t, "me@laptop")
+	k, _ := NewSSHKey(pub)
+	rk, rsecret := recovery(t)
+	if err := r.st.Enable(ctx, Options{}, k, rk); err != nil {
+		t.Fatal(err)
+	}
+	r.open(t, r.saved) // a page load on another device: nothing sealed here
+	r.st.ConfirmFirstUse = true
+	var kept []string
+	r.st.OnTrust = func(d string) { kept = append(kept, d) }
+
+	err := r.st.UnlockSSH(bytes.Clone(priv))
+	var fu *FirstUseError
+	if !errors.As(err, &fu) || !errors.Is(err, ErrFirstUse) || fu.Fingerprint == "" || strings.Count(fu.Fingerprint, " ") != 7 {
+		t.Fatalf("first use: %v", err)
+	}
+	if r.st.Unlocked() {
+		t.Fatal("the store unlocked before the list was confirmed")
+	}
+	r.st.TrustList(fu.Digest)
+	if len(kept) != 1 || kept[0] != fu.Digest {
+		t.Errorf("OnTrust: %v", kept)
+	}
+	if err := r.st.UnlockSSH(bytes.Clone(priv)); err != nil {
+		t.Fatalf("after confirming: %v", err)
+	}
+	// the key is sealed now: no question again, even on a fresh page load
+	r.open(t, r.saved)
+	r.st.ConfirmFirstUse = true
+	if err := r.st.UnlockSSH(bytes.Clone(priv)); err != nil {
+		t.Errorf("a sealed key is not asked again: %v", err)
+	}
+
+	// unlocking with the recovery key (which proves the list through the seals) trusts the list for the
+	// SSH key too
+	r2 := newRig(t)
+	pub2, priv2 := sshKeyPair(t, "me@desk")
+	k2, _ := NewSSHKey(pub2)
+	rk2, rsecret2 := recovery(t)
+	if err := r2.st.Enable(ctx, Options{}, k2, rk2); err != nil {
+		t.Fatal(err)
+	}
+	r2.open(t, r2.saved)
+	r2.st.ConfirmFirstUse = true
+	if err := r2.st.UnlockRecovery(rsecret2); err != nil {
+		t.Fatal(err)
+	}
+	r2.st.Lock()
+	if err := r2.st.UnlockSSH(bytes.Clone(priv2)); err != nil {
+		t.Errorf("the recovery key vouched for the list: %v", err)
+	}
+	_ = rsecret
+}
+
+func TestListFingerprintGroupsTheDigest(t *testing.T) {
+	d := strings.Repeat("0123456789abcdef", 4)
+	if got := ListFingerprint(d); got != "0123 4567 89ab cdef 0123 4567 89ab cdef" {
+		t.Errorf("fingerprint %q", got)
+	}
+}

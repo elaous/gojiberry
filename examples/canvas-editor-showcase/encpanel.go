@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"syscall/js"
 	"time"
@@ -77,10 +78,11 @@ type encUI struct {
 	// over encrypted files; encstore.ErrConfigCorrupt: it cannot be read): the store is read-only
 	// and the panel offers a restore or Erase, never "encryption off".
 	broken                error
-	restoreRecover        string // the recovery key typed to restore with
-	rekeyDone, rekeyTotal int    // while a change re-encrypts the store: documents done and to do (0 total: none)
-	checkRecovery         string // the recovery key typed to be checked (never kept past the check)
-	checkMsg              string // the answer to the last check
+	restoreRecover        string                  // the recovery key typed to restore with
+	firstUse              *encstore.FirstUseError // an SSH unlock that waits for the person to confirm the key list's fingerprint
+	rekeyDone, rekeyTotal int                     // while a change re-encrypts the store: documents done and to do (0 total: none)
+	checkRecovery         string                  // the recovery key typed to be checked (never kept past the check)
+	checkMsg              string                  // the answer to the last check
 	checkOK               bool
 
 	// the People tab: the current document's keys
@@ -519,8 +521,14 @@ func (u *ui) encUnlockSSH() {
 				return err
 			}
 			if err := e.store.UnlockSSH(data); err != nil {
+				var fu *encstore.FirstUseError
+				if errors.As(err, &fu) {
+					e.firstUse = fu // nothing is unlocked: the person is asked to check the list first
+					return nil
+				}
 				return err
 			}
+			e.firstUse = nil
 			return u.afterUnlock(ctx)
 		})
 	})
@@ -617,6 +625,7 @@ func (u *ui) encDisable() {
 			return err
 		}
 		client.ForgetLocal(encSlot)
+		forgetStoreMemory()
 		u.encSwap()
 		u.saver.Forget()
 		e.prep, e.peopleKey, e.sharedFor, e.shared, e.myAdded = nil, nil, "", nil, nil
@@ -632,6 +641,7 @@ func (u *ui) encErase() {
 			return err
 		}
 		client.ForgetLocal(encSlot)
+		forgetStoreMemory()
 		e.eraseTyping, e.eraseWord, e.setup, e.broken = false, "", false, nil
 		e.prep, e.peopleKey, e.pendingCred, e.noPRF = nil, nil, "", false
 		u.encSwap()
@@ -979,6 +989,9 @@ func (u *ui) encStatus(unlocked bool) []xango.Node {
 	}
 	rows = append(rows, para("enc-owners", T("enc.keys", "Keys")+": "+strings.Join(kinds, ", "), false))
 	rows = append(rows, e.rekeyProgress()...)
+	if len(e.store.Owners()) > 0 {
+		rows = append(rows, para("enc-list-fingerprint", T("enc.listFingerprint", "Key list fingerprint: %s", e.store.ListFingerprint()), false))
+	}
 	rows = append(rows, u.recoveryAdvice()...)
 	if p := e.store.PendingChange(); p != nil {
 		rows = append(rows, u.interruptedPanel(p)...)
@@ -997,6 +1010,14 @@ func (u *ui) encStatus(unlocked bool) []xango.Node {
 		}
 		if e.store.HasKind(encstore.KindSSH) {
 			rows = append(rows, btn("enc-unlock-ssh", T("enc.unlockSSH", "Unlock with an SSH private key file…"), u.encUnlockSSH, e.pending.Busy()))
+			if fu := e.firstUse; fu != nil {
+				rows = append(rows, xango.El("div", []xango.Attr{xango.A("id", "enc-first-use"), xango.A("style", "border:1px solid #d97706;border-radius:6px;padding:8px;margin:8px 0")},
+					para("enc-first-use-text", T("enc.firstUse", "This store's key list is new to this browser, and an SSH key has nothing older to check it against. Its fingerprint is below. Compare it with the one shown where you made the store (or on another device) before you go on: if it differs, someone changed the list."), true),
+					xango.El("code", []xango.Attr{xango.A("id", "enc-first-use-fingerprint")}, xango.Text(fu.Fingerprint)),
+					xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px;margin-top:6px")},
+						btn("enc-first-use-ok", T("enc.firstUseOK", "It matches: continue"), func() { e.store.TrustList(fu.Digest); e.firstUse = nil; u.encUnlockSSH() }, e.pending.Busy()),
+						btn("enc-first-use-cancel", T("enc.firstUseCancel", "Cancel"), func() { e.firstUse = nil; u.rerender() }, false))))
+			}
 		}
 	}
 	rows = append(rows, para("enc-trust", T("enc.trustNote", "The list of this store's keys is kept on this device next to the store. The keys sign it, so a list that someone changed is refused when you unlock (an SSH-only store checks nothing until its key has unlocked it once). Someone who can write this site's storage can still delete the list or put back an older one: do not rely on this on a computer you do not control."), false))
@@ -1399,6 +1420,10 @@ func recoveryCheckDue() (due, never bool) {
 	return encstore.CheckDue(time.Now(), last, at(recoverySnoozeKey), encstore.ReminderEvery), last.IsZero()
 }
 
+// trustedListsKey is where the digests of the key lists the person confirmed (or that a passkey or a
+// recovery key opened) are kept in this browser: a known-hosts file for stores.
+const trustedListsKey = "showcase-enc:trusted-lists"
+
 // keysUsedKey is where the time each key last unlocked the store in this browser is kept: a map from a
 // key's fingerprint to an RFC 3339 time. It says what this browser saw, not what happened elsewhere.
 const keysUsedKey = "showcase-enc:keys-used"
@@ -1420,6 +1445,21 @@ func lastUsedHere() map[string]time.Time {
 // hookStore connects the store's hooks to the page: a key that unlocks is noted as used here, and a
 // change that re-encrypts the store reports its progress.
 func (e *encUI) hookStore() {
+	e.store.ConfirmFirstUse = true
+	var known []string
+	if json.Unmarshal([]byte(lsGet(trustedListsKey)), &known) == nil {
+		for _, d := range known {
+			e.store.TrustList(d)
+		}
+	}
+	e.store.OnTrust = func(d string) {
+		var k []string
+		_ = json.Unmarshal([]byte(lsGet(trustedListsKey)), &k)
+		if !slices.Contains(k, d) {
+			b, _ := json.Marshal(append(k, d))
+			lsSet(trustedListsKey, string(b))
+		}
+	}
 	e.store.OnUnlock = func(o encstore.Owner) {
 		fp := o.Fingerprint()
 		if fp == "" {
@@ -1448,4 +1488,12 @@ func (e *encUI) rekeyProgress() []xango.Node {
 	}
 	return []xango.Node{xango.El("p", []xango.Attr{xango.A("id", "enc-progress"), xango.A("role", "status")},
 		xango.Text(T("enc.progress", "Encrypting again: %d of %d documents", e.rekeyDone, e.rekeyTotal)))}
+}
+
+// forgetStoreMemory drops what this browser remembers about a store that is gone: the key lists the
+// person confirmed, when each key was used and when the recovery key was checked.
+func forgetStoreMemory() {
+	for _, k := range []string{trustedListsKey, keysUsedKey, recoveryCheckedKey, recoverySnoozeKey} {
+		lsSet(k, "")
+	}
 }
