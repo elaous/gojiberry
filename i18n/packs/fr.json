@@ -92,8 +92,6 @@
   "tab.save": "Enregistrer",
   "tab.transfer": "Fichiers",
   "status.pages": "%d sur %d pages",
-  "status.words": "%d mots",
-  "status.characters": "%d caractères",
   "status.selection": "Sélection : %d mots, %d caractères",
   "status.mode.view": "mode lecture",
   "status.mode.edit": "mode édition",
@@ -717,6 +715,10 @@
   "suggest.inserted": "%s inséré",
   "suggest.closed": "Suggestions fermées",
   "suggest.count#one": "%d suggestion.",
-  "suggest.count#other": "%d suggestions."
+  "suggest.count#other": "%d suggestions.",
+  "status.words#one": "%d mot",
+  "status.words#other": "%d mots",
+  "status.characters#one": "%d caractère",
+  "status.characters#other": "%d caractères"
  }
 }

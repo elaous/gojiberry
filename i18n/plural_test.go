@@ -37,6 +37,9 @@ func TestCatalogPlural(t *testing.T) {
 			t.Errorf("%s %d: %q, want %q", tc.lang, tc.n, got, tc.want)
 		}
 	}
+	if got := c.Plural("de", "f", "%d file", "%d files", 12345); got != "12.345 Dateien" {
+		t.Errorf("grouped: %q", got)
+	}
 	// a language that lacks the category falls back to "other", then to the English
 	c.Add("fr", map[string]string{"g#other": "%d fichiers"})
 	if got := c.Plural("fr", "g", "%d fichier", "%d fichiers", 1); got != "1 fichiers" {

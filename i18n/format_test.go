@@ -1,0 +1,55 @@
+package i18n
+
+import (
+	"testing"
+	"time"
+)
+
+func TestNumber(t *testing.T) {
+	for _, c := range []struct {
+		lang string
+		n    float64
+		dec  int
+		want string
+	}{
+		{"en", 1234567.891, 2, "1,234,567.89"}, {"en", 999, 0, "999"}, {"en", 1000, 0, "1,000"},
+		{"de", 1234567.891, 2, "1.234.567,89"}, {"fr", 1234.5, 1, "1 234,5"}, {"es", 1234, 0, "1234"}, {"es", 12345, 0, "12.345"},
+		{"en", -1234.5, 1, "-1,234.5"}, {"en", -0.001, 2, "0.00"}, {"pt-BR", 1000, 0, "1,000"}, {"de-AT", 0.5, 1, "0,5"},
+	} {
+		if got := Number(c.lang, c.n, c.dec); got != c.want {
+			t.Errorf("%s %v: %q, want %q", c.lang, c.n, got, c.want)
+		}
+	}
+	if got := Percent("fr", 0.256); got != "26 %" {
+		t.Errorf("percent fr %q", got)
+	}
+	if got := Percent("en", 0.5); got != "50%" {
+		t.Errorf("percent en %q", got)
+	}
+}
+
+func TestDateAndTime(t *testing.T) {
+	d := time.Date(2026, time.December, 31, 15, 4, 0, 0, time.UTC)
+	for _, c := range []struct {
+		lang  string
+		style DateStyle
+		want  string
+	}{
+		{"en", DateShort, "12/31/2026"}, {"en-GB", DateShort, "31/12/2026"}, {"en-GB", DateMedium, "31 Dec 2026"}, {"en", DateMedium, "Dec 31, 2026"}, {"en", DateLong, "December 31, 2026"},
+		{"de", DateShort, "31.12.2026"}, {"de", DateLong, "31. Dezember 2026"}, {"fr", DateLong, "31 décembre 2026"}, {"fr", DateShort, "31/12/2026"},
+		{"es", DateLong, "31 de diciembre de 2026"}, {"es", DateMedium, "31 dic 2026"}, {"ja", DateShort, "12/31/2026"},
+	} {
+		if got := Date(c.lang, d, c.style); got != c.want {
+			t.Errorf("%s %d: %q, want %q", c.lang, c.style, got, c.want)
+		}
+	}
+	if got := Time("en", d); got != "3:04 PM" {
+		t.Errorf("en time %q", got)
+	}
+	if got := Time("en", time.Date(2026, 1, 1, 0, 5, 0, 0, time.UTC)); got != "12:05 AM" {
+		t.Errorf("midnight %q", got)
+	}
+	if got := Time("de", d); got != "15:04" {
+		t.Errorf("de time %q", got)
+	}
+}

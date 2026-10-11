@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -98,4 +99,14 @@ func TestLanguageTab(t *testing.T) {
 	d.Wait("s.text.includes('canvases')")
 	d.OK(d.Count(".gj-lang-issue") == 0, "applying it changes the text and clears the issue")
 	d.NoErrors()
+}
+
+// Counts in the status bar take the plural form and the number format of the interface language.
+func TestStatusCountsFollowTheLanguage(t *testing.T) {
+	for lang, want := range map[string]string{"en": `^[\d,]+ words$`, "de": `^[\d.]+ Wörter$`, "fr": `^[\d\x{202f}]+ mots$`, "es": `^[\d.]+ palabras$`} {
+		d := e2etest.NewSite(t).Open(t, "?lang="+lang)
+		got := strings.TrimSpace(d.Text(`.gj-status-item[data-item="words"]`))
+		d.OK(regexp.MustCompile(want).MatchString(got), lang+" word count: "+got)
+		d.NoErrors()
+	}
 }
