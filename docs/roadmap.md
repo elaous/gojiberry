@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-6 of 10 since the last full run (#162 to #166, this PR). The full run on main 10ae2107 (after #160, the 10th merge since 9e11519) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+7 of 10 since the last full run (#162 to #167, this PR). The full run on main 10ae2107 (after #160, the 10th merge since 9e11519) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -736,7 +736,7 @@ New entries:
 42. **A revoked signer can keep writing new frames until it is removed from every list.** Kind: inherent without a
     format change; the frame v4 plan is in item 5 above and in the
     [limits register](limits-register.md#encryption-and-keys) (item 1). Priority: low until the format work is
-    scheduled. Where: `docstore/encrypt` (`verifyFrame`). Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#42-a-revoked-signer-can-keep-writing-new-frames-until-it-is-removed-from-every-list).
+    scheduled. Where: `docstore/encrypt` (`verifyFrame`). Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#42-a-revoked-signer-can-keep-writing-new-frames-until-it-is-removed-from-every-list). **Design corrected (this PR):** the frame v4 plan named here and in item 5 does not work (a signer-claimed time can be backdated, the sequence number is per document, a revocation mark in a record the removed key can still sign proves nothing); [frame-revocation-design.md](frame-revocation-design.md) replaces it with one resumable `Sharing.RevokeSigner` operation, an optional signed manifest of the old key's frames that makes writes during the window visible, and plain wording about the window. No format change. Not built yet.
 43. **A link can be replayed past the 32-link window or when it was made before links carried a nonce.** Kind:
     inherent (register entry already exists: [item 12](limits-register.md#clients-and-storage)). Plan: none beyond
     a larger `Config.Links` for a store that changes keys often. Priority: low. Where:
