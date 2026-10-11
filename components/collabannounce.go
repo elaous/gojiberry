@@ -23,7 +23,8 @@ type CollabAnnouncer struct {
 	online             bool
 	problem            string
 	joined, left       []string
-	cause              string // a held connection sentence: "online", "offline" or ""
+	comments           []string // authors of comments others added, not yet said
+	cause              string   // a held connection sentence: "online", "offline" or ""
 	problemSaid        string
 	last               time.Time
 }
@@ -34,6 +35,14 @@ const (
 	CollabImportant = "important"
 	CollabOff       = "off"
 )
+
+// NoteComment records that someone else added a comment; it is said, with the next sentence, at level
+// CollabAll ("Bo commented." or "3 new comments.").
+func (a *CollabAnnouncer) NoteComment(author string) {
+	if a.Level == CollabAll {
+		a.comments = append(a.comments, author)
+	}
+}
 
 // Update takes the session as it is now (online or not, the names of the other people, the problem if
 // sharing is not working) and returns the sentence to say now, or "". The first call only remembers the state.
@@ -73,7 +82,7 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 		a.problem = problem
 	}
 	if a.Level == CollabOff {
-		a.joined, a.left, a.cause = nil, nil, ""
+		a.joined, a.left, a.cause, a.comments = nil, nil, "", nil
 		a.problemSaid = problem
 		return ""
 	}
@@ -115,7 +124,14 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 			parts = append(parts, peopleSentence(a.left, "collab.left", "%s left.", "collab.leftMany", "%d people left: %s."))
 		}
 	}
-	a.joined, a.left, a.cause = nil, nil, ""
+	if a.Level == CollabAll && len(a.comments) > 0 {
+		if len(a.comments) == 1 {
+			parts = append(parts, trf("collab.commented", "%s commented.", a.comments[0]))
+		} else {
+			parts = append(parts, trn("collab.newComments", "%d new comment.", "%d new comments.", len(a.comments)))
+		}
+	}
+	a.joined, a.left, a.cause, a.comments = nil, nil, "", nil
 	if len(parts) == 0 {
 		return ""
 	}
@@ -126,7 +142,7 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 // Pending reports whether something has changed that has not been said yet (held by the spacing), so a
 // host can call Update again a little later.
 func (a *CollabAnnouncer) Pending() bool {
-	return a.Level != CollabOff && (a.cause != "" || a.problem != a.problemSaid || (a.Level == CollabAll && len(a.joined)+len(a.left) > 0))
+	return a.Level != CollabOff && (a.cause != "" || a.problem != a.problemSaid || (a.Level == CollabAll && len(a.joined)+len(a.left)+len(a.comments) > 0))
 }
 
 // peopleSentence names up to three people, and counts more.

@@ -717,6 +717,10 @@
   "status.words#one": "%d palabra",
   "status.words#other": "%d palabras",
   "status.characters#one": "%d carácter",
-  "status.characters#other": "%d caracteres"
+  "status.characters#other": "%d caracteres",
+  "collab.commented": "%s ha comentado.",
+  "collab.newComments#one": "%d comentario nuevo.",
+  "collab.newComments#other": "%d comentarios nuevos.",
+  "collab.someone": "Alguien"
  }
 }

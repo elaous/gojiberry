@@ -619,6 +619,7 @@ func (u *ui) noteCollab(renderUI func()) {
 	if s.Err != nil {
 		problem = s.Err.Error()
 	}
+	u.noteComments()
 	if msg := u.collab.Update(time.Now(), s.Status == client.Online, names, problem); msg != "" {
 		u.announce(msg)
 	}
@@ -630,4 +631,26 @@ func (u *ui) noteCollab(renderUI func()) {
 			renderUI()
 		})
 	}
+}
+
+// noteComments tells the announcer about comments that appeared in the shared document and are not
+// the local person's own (those were announced by the action that made them).
+func (u *ui) noteComments() {
+	if u.stateRef == nil || u.stateRef.Comments == nil {
+		return
+	}
+	seen := map[string]bool{}
+	prefix := u.stateRef.Comments.IDPrefix // a shared session gives each copy of the document its own
+	for _, c := range u.stateRef.Comments.List() {
+		seen[c.ID] = true
+		mine := prefix != "" && strings.HasPrefix(c.ID, prefix)
+		if u.commentsSeen != nil && !u.commentsSeen[c.ID] && !mine {
+			who := c.Author
+			if who == "" {
+				who = T("collab.someone", "Someone")
+			}
+			u.collab.NoteComment(who)
+		}
+	}
+	u.commentsSeen = seen
 }
