@@ -56,10 +56,3 @@ func applyPrefs(p prefs) {
 		}
 	}
 }
-
-// setPrefs applies the preferences and keeps them in this browser.
-func setPrefs(p prefs) {
-	applyPrefs(p)
-	b, _ := json.Marshal(p)
-	lsSet(prefsKey, string(b))
-}
