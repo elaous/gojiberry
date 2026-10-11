@@ -36,11 +36,13 @@ type DropdownProps struct {
 }
 
 // Dropdown renders a closed control button and, when Open, a listbox
-// of options below it. This is a basic implementation of the ARIA
-// listbox pattern (role/aria-* attributes only) -- it doesn't
-// implement its own keyboard navigation, so pair it with native
-// <button>/focus behavior for accessible keyboard use.
+// of options below it (the ARIA listbox pattern). Keyboard: Down or Up on
+// the button opens the list and goes to its first or last option; Up, Down,
+// Home and End move among the options, Enter or Space chooses one, Escape
+// closes the list with the focus back on the button, Tab closes it and
+// leaves (see listboxkeys.go).
 func Dropdown(props DropdownProps) xango.Node {
+	lb := listbox{root: ".gj-dropdown", control: ":scope > .gj-dropdown-control", options: ":scope > .gj-dropdown-list > .gj-dropdown-option"}
 	selected := make(map[string]bool, len(props.Selected))
 	for _, v := range props.Selected {
 		selected[v] = true
@@ -67,7 +69,9 @@ func Dropdown(props DropdownProps) xango.Node {
 	}
 	if props.OnToggleOpen != nil {
 		open := props.Open
-		controlAttrs = append(controlAttrs, xango.On("click", func(xango.Event) { props.OnToggleOpen(!open) }))
+		controlAttrs = append(controlAttrs,
+			xango.On("click", func(xango.Event) { props.OnToggleOpen(!open) }),
+			lb.controlKey(open, props.OnToggleOpen))
 	}
 	control := xango.El("button", controlAttrs,
 		xango.El("span", []xango.Attr{xango.A("class", "gj-dropdown-label")}, xango.Text(label)),
@@ -87,11 +91,15 @@ func Dropdown(props DropdownProps) xango.Node {
 				xango.A("class", class),
 				xango.A("role", "option"),
 				xango.A("aria-selected", boolAttr(isSelected)),
+				xango.A("tabindex", "-1"),
 			}
+			value := opt.Value
+			var choose func()
 			if props.OnSelect != nil {
-				value := opt.Value
+				choose = func() { props.OnSelect(value) }
 				itemAttrs = append(itemAttrs, xango.On("click", func(xango.Event) { props.OnSelect(value) }))
 			}
+			itemAttrs = append(itemAttrs, lb.optionKey(choose, !props.Multiple, props.OnToggleOpen))
 			var itemChildren []xango.Node
 			if props.Multiple {
 				checkboxAttrs := []xango.Attr{xango.A("type", "checkbox"), xango.A("class", "gj-dropdown-checkbox"), xango.A("tabindex", "-1")}

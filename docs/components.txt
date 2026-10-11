@@ -246,10 +246,11 @@ func DocumentView(props DocumentViewProps) xango.Node
 
 func Dropdown(props DropdownProps) xango.Node
     Dropdown renders a closed control button and, when Open, a listbox of
-    options below it. This is a basic implementation of the ARIA listbox pattern
-    (role/aria-* attributes only) -- it doesn't implement its own keyboard
-    navigation, so pair it with native <button>/focus behavior for accessible
-    keyboard use.
+    options below it (the ARIA listbox pattern). Keyboard: Down or Up on the
+    button opens the list and goes to its first or last option; Up, Down,
+    Home and End move among the options, Enter or Space chooses one, Escape
+    closes the list with the focus back on the button, Tab closes it and leaves
+    (see listboxkeys.go).
 
 func ErrorView(id string, err error) xango.Node
     ErrorView draws err for a person: the message (an alert, so a screen reader

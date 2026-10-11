@@ -1050,8 +1050,9 @@ components.RadioGroup(components.RadioGroupProps{
 `<input type="date"/"color"/"range">` — the browser does the actual
 picker UI and locale/keyboard handling. `Dropdown` is a fully custom
 widget instead, since no native `<select>` can render per-option icons;
-it implements the ARIA listbox pattern's roles/attributes but not its
-own keyboard navigation. `FileUploader` renders a `<label>` wrapping a
+it implements the ARIA listbox pattern's roles/attributes and its
+keyboard model (Down/Up open it, arrows/Home/End move, Enter/Space
+choose, Escape closes). `FileUploader` renders a `<label>` wrapping a
 visually-hidden `<input type="file">`, so click-to-browse works with
 zero JS (a label natively opens its associated control), but since
 `xango.Event` carries no file/`DataTransfer` payload, reading the actual
