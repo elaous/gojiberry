@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-10 of 10 since the last full run (#151 to #159 and this PR): the full run on main is due next. The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+0 of 10 since the last full run. The full run on main 10ae2107 (after #160, the 10th merge since 9e11519) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -732,21 +732,21 @@ New entries:
 41. **Signed-out same-e-mail passkey registration makes two accounts, by design.** Kind: inherent while the e-mail is
     a label ([limits register item 6](limits-register.md#encryption-and-keys)). Why it matters for later work:
     the e-mail verification work must not merge accounts on the bare label. Plan: none now; record it in the
-    verification design. Priority: low. Where: `auth/passkey`.
+    verification design. Priority: low. Where: `auth/passkey`. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#41-signed-out-same-e-mail-passkey-registration-makes-two-accounts).
 42. **A revoked signer can keep writing new frames until it is removed from every list.** Kind: inherent without a
     format change; the frame v4 plan is in item 5 above and in the
     [limits register](limits-register.md#encryption-and-keys) (item 1). Priority: low until the format work is
-    scheduled. Where: `docstore/encrypt` (`verifyFrame`).
+    scheduled. Where: `docstore/encrypt` (`verifyFrame`). Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#42-a-revoked-signer-can-keep-writing-new-frames-until-it-is-removed-from-every-list).
 43. **A link can be replayed past the 32-link window or when it was made before links carried a nonce.** Kind:
     inherent (register entry already exists: [item 12](limits-register.md#clients-and-storage)). Plan: none beyond
     a larger `Config.Links` for a store that changes keys often. Priority: low. Where:
     `examples/canvas-editor-showcase/encstore` (`Config.Links`, `walk`).
 44. **An SSH-only store with no signed document file yet is undetected.** Kind: inherent, documented residual
     ([limits register item 12](limits-register.md#clients-and-storage); the first owner list is trust on first
-    use). Priority: low.
+    use). Priority: low. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#44-an-ssh-only-store-with-no-signed-document-file-yet-is-undetected).
 45. **Unenrolled-address entry numbering by a holder of the directory key.** Kind: inherent while the address is not
     enrolled; enrolling an owner key closes it ([limits register item 7](limits-register.md#the-key-directory),
-    point (d)). Priority: low.
+    point (d)). Priority: low. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#45-unenrolled-address-entry-numbering-by-a-holder-of-the-directory-key).
 46. **Done (this PR): see item 11.**
 47. **Already listed, kept as they are (no duplicate entry):** item 15 (stale-tab renewal throttle), 16 (per-process
     public counters), 17 (snapshot overshoot), 19 (report dedupe key, slow-upload rate floor, old env-var warning,
@@ -839,7 +839,7 @@ the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. 
     limiter, which limits only `GET /auth/<provider>/login`. Why: a positive cache would keep a logged-out token working
     on other replicas for as long as it lives. Plan: if the cost matters, add an optional per-process cache with a
     stated maximum staleness (for example 5 seconds) behind an explicit option; off by default. Priority: low.
-    Where: `auth/sessionstore`.
+    Where: `auth/sessionstore`. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#53-the-session-store-is-read-once-per-authenticated-request).
 54. **Done:** **login routes wrote to the store without a rate limit.** Was: `GET /auth/<provider>/login` is
     unauthenticated and, in `store` mode, creates a record (bounded at 10,000 pending logins, then 503), so about 17
     requests a second filled the bound in 10 minutes and kept real logins out until the sweep cleared it (about 10 to
@@ -1066,7 +1066,7 @@ unless stated.
     3. A device list with last use and a revoke action.
     4. A guided re-key after revoke, with progress (builds on `RepairAll`).
     5. Wording that states the limit plainly; all steps keyboard and screen-reader accessible.
-    Where: `docstore/encrypt`, `auth/passkey`, `components`, the showcase. Priority: high. Dependencies: none hard.
+    Where: `docstore/encrypt`, `auth/passkey`, `components`, the showcase. Priority: high. Dependencies: none hard. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#76-key-and-recovery-ux-lost-passkey-plus-lost-recovery-key-means-lost-data).
 77. **Templates, styles and a design-token system.** Kind: fixable. What: document templates, named styles, and a
     token set (colours, type scale, spacing) that themes the editor and the exports. Why it matters: consistent
     documents and accessible contrast defaults. Plan: (1) a token schema; (2) style and template documents stored in
