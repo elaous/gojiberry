@@ -124,3 +124,19 @@ func TestLoginUnlimitedByDefault(t *testing.T) {
 		}
 	}
 }
+
+// A clientIP that cannot tell (it answers "") must not put every client in one budget: the
+// connection's address is used then.
+func TestLoginLimiterFallsBackToTheRemoteAddressWhenClientIPAnswersNothing(t *testing.T) {
+	f := newFakeOIDCProvider(t)
+	m := newTestManager(t, f.srv.URL)
+	m.SetSessionStore(NewMemorySessionStore())
+	lim := &budgetLimiter{n: 100}
+	m.SetLoginLimiter(lim, func(*http.Request) string { return "" })
+	h := m.Routes()
+	loginFrom(h, "198.51.100.1:40000", nil)
+	loginFrom(h, "198.51.100.2:40000", nil)
+	if len(lim.keys) != 2 || lim.keys[0] != "login|198.51.100.1" || lim.keys[1] != "login|198.51.100.2" {
+		t.Fatalf("keys %v: clients with no forwarded address share one budget", lim.keys)
+	}
+}

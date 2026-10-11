@@ -69,7 +69,7 @@ const (
 //     a conflict or a missing record and report ok=false. The marker is deleted right after, and by
 //     the sweep if that fails.
 //   - Expiry is the Expires time stored in the record, checked on every Take, plus a sweep (Sweep,
-//     RunChallengeSweep) that lists the keyspace and deletes by name what is past its minute and a
+//     StartChallengeSweep) that lists the keyspace and deletes by name what is past its minute and a
 //     minute of grace: expired ceremonies, used markers and junk alike, reading none of them.
 //   - The number waiting is bounded: at Max (10,000 by default) Put returns ErrBusy at once, without
 //     touching the store (no sweep and no Load in the request); room comes back with the background
@@ -111,15 +111,19 @@ type StoreChallenges struct {
 	// Now is the clock (time.Now if nil), for tests.
 	Now func() time.Time
 
-	approx   atomic.Int64 // waiting records: the last listing's count plus this process's Puts less its Takes
+	// approx is the waiting records: the last listing's count plus this process's Puts less its Takes. It
+	// is a bound, not an exact count: a Put or Take that straddles the reads Sweep makes before and after
+	// its listing, or a Put between net.Load and approx.Store, is counted once too many or too few. The
+	// drift is at most the operations in that window, and the next listing repairs it.
+	approx   atomic.Int64
 	net      atomic.Int64 // Puts less Takes of this process, never reset: Sweep keeps what moved during its listing
 	sweeping sync.Mutex
 }
 
 // NewStoreChallenges makes a ChallengeStore over store, holding at most max ceremonies (10,000 if
 // max <= 0). store must be a docstore.ConditionalAdapter (ErrNotConditional otherwise); use
-// docstore.SupportsConditional first to know the store really honours it. Run RunChallengeSweep
-// for the expired records and the count.
+// docstore.SupportsConditional first to know the store really honours it. Run StartChallengeSweep
+// (or RunChallengeSweep, which blocks and does not retry) for the expired records and the count.
 func NewStoreChallenges(store docstore.Adapter, max int) (*StoreChallenges, error) {
 	if _, ok := store.(docstore.ConditionalAdapter); !ok {
 		return nil, ErrNotConditional
@@ -359,7 +363,7 @@ func (s *StoreChallenges) Sweep(ctx context.Context) (int, error) {
 	before := s.net.Load()
 	metas, err := docstore.ListPrefix(ctx, s.Store, ChallengePrefix)
 	if err != nil {
-		return 0, err
+		return 0, &sweepListError{err}
 	}
 	n, left := 0, 0
 	var errs []error
@@ -418,6 +422,17 @@ func (s *StoreChallenges) oldIsDead(ctx context.Context, m docstore.Meta, now ti
 	return now.After(sc.Expires.Add(storeChallengeGrace))
 }
 
+// sweepListError is the error of a sweep that could not list the keyspace: nothing was counted, so
+// the count is not right yet. A sweep that listed but could not delete a record returns another
+// error, and its count is right.
+type sweepListError struct{ err error }
+
+func (e *sweepListError) Error() string { return e.err.Error() }
+func (e *sweepListError) Unwrap() error { return e.err }
+
+// startSweepAttempts is how many times StartChallengeSweep tries the first sweep when the listing fails.
+const startSweepAttempts = 4
+
 // RunChallengeSweep calls Sweep at once (which sets the count from the store at start-up) and then
 // every interval (a minute when not positive) until ctx ends; errors are logged. The interval is
 // the refresh interval of the cap (see StoreChallenges).
@@ -430,8 +445,9 @@ func (s *StoreChallenges) RunChallengeSweep(ctx context.Context, interval time.D
 
 // StartChallengeSweep makes the first sweep before it returns, so the count is right before the
 // server answers a Begin (a failed listing is retried a few times with a short backoff and logged,
-// after which the count stays at what Puts add until a later sweep succeeds), then runs the sweep
-// every interval in a goroutine until ctx ends.
+// after which the count stays at what Puts add until a later sweep succeeds; a record that cannot be
+// deleted is logged but not retried, since the count is right and a retry would only delay the start),
+// then runs the sweep every interval in a goroutine until ctx ends.
 func (s *StoreChallenges) StartChallengeSweep(ctx context.Context, interval time.Duration) {
 	backoff := 500 * time.Millisecond
 	for attempt := 1; ; attempt++ {
@@ -439,8 +455,13 @@ func (s *StoreChallenges) StartChallengeSweep(ctx context.Context, interval time
 		if err == nil || ctx.Err() != nil {
 			break
 		}
-		log.Printf("passkey: sweeping shared challenges at start (attempt %d of 4): %v", attempt, err)
-		if attempt == 4 {
+		var le *sweepListError
+		if !errors.As(err, &le) {
+			log.Printf("passkey: sweeping shared challenges at start: %v", err)
+			break
+		}
+		log.Printf("passkey: sweeping shared challenges at start (attempt %d of %d): %v", attempt, startSweepAttempts, err)
+		if attempt == startSweepAttempts {
 			break
 		}
 		select {

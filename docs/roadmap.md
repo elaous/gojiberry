@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-1 of 10 since the last full run (#150 is not counted; this PR is the first). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+2 of 10 since the last full run (#151, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -904,24 +904,17 @@ the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. 
        opt-in text); a consent UI accessible to screen readers (ties to ARIA item 48).
     Depends on the preference menu (51) and the config store (52). Priority: medium, policy doc and allowlist before
     any code. Where: `docs`, `docstore`, `components`.
-58. **Small leftovers from the PR #99 and #100 reviews.** Kind: fixable. Why it matters: none is urgent, but each
-    is a small trap for the next reader. Priority: low. Where: `auth`, `auth/passkey`, `internal/docstorecmd`.
-    1. `auth/passkey/challenge_store.go` `StartChallengeSweep`: the retry limit 4 is hard-coded twice (the "of 4" log
-       and the `attempt==4` check). Use a named constant.
-    2. The `NewStoreChallenges` doc still says to run `RunChallengeSweep`: point it to `StartChallengeSweep`, and
-       decide whether `RunChallengeSweep` stays exported.
-    3. `StartChallengeSweep` retries the whole sweep when the listing worked but a Delete failed, which adds up to
-       3.5 s of startup delay on every start if one record can never be deleted. Retry only when the listing failed.
-    4. Net-delta counting has off-by-one races (a Put or Take straddling the before and after reads; a Put between
-       `net.Load` and `approx.Store`). The count drifts by at most the operations in the window and the next listing
-       repairs it. Document it as a known, bounded drift.
-    5. Auth login limiter: with a custom `clientIP` that returns "", all clients share one key `login|` (the comment
-       says `clientIP` must be correct). Add a guard that falls back to the `RemoteAddr` host when `clientIP`
-       returns empty.
-    6. `internal/docstorecmd`: the login limiter is installed even when the manager has only passkeys and no OpenID
-       Connect provider (harmless, no login route is mounted). Note it or skip it.
-    7. Per-/64 IPv6 budgets for the login routes (each address is its own key, as on the passkey routes): reuse the
-       /64 grouping if the public store has one.
+58. **Done in part (this PR): small leftovers from the PR #99 and #100 reviews; only the last remains.** (1) the retry
+    limit of `StartChallengeSweep` is a named constant (`startSweepAttempts`); (2) the `NewStoreChallenges` and sweep
+    docs point to `StartChallengeSweep` (`RunChallengeSweep` stays exported, documented as the variant that blocks and
+    does not retry); (3) `StartChallengeSweep` retries only when the listing failed (a `sweepListError`), so a record
+    that can never be deleted no longer adds 3.5 s to every start; (4) the net-delta counting drift is documented as
+    a known, bounded one on `approx`; (5) a login `clientIP` that answers "" falls back to the connection's address
+    instead of putting every client in one budget; (6) the unused login limiter of a passkeys-only manager is
+    noted in `withSessions`. Tests: `TestStartChallengeSweepRetriesOnlyAFailedListing`,
+    `TestLoginLimiterFallsBackToTheRemoteAddressWhenClientIPAnswersNothing`. **Open:** (7) per-/64 IPv6 budgets for the
+    login routes (each address is its own key, as on the passkey routes): reuse the /64 grouping if the public store
+    has one. Priority: low. Where: `auth`, `auth/passkey`, `internal/docstorecmd`.
 
 ## Backlog: accessibility, documents and operations (59 to 84)
 
