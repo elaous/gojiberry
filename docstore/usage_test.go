@@ -63,3 +63,13 @@ func TestAdminUsageCountsAndNamesNothing(t *testing.T) {
 		t.Fatalf("a failing store: %d", rec.Code)
 	}
 }
+
+func TestUserKeyNeedsASignedInPerson(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	if _, ok := NewServer(NewMemoryAdapter(), "memory").UserKey(req); ok {
+		t.Fatal("a server without sign-in knows nobody")
+	}
+	if _, ok := NewServer(NewMemoryAdapter(), "memory").WithAuth(newTestAuthManager(t)).UserKey(req); ok {
+		t.Fatal("a request without a session is nobody")
+	}
+}

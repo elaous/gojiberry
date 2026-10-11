@@ -360,6 +360,20 @@ func (s *Server) WithAuth(m *auth.Manager) *Server {
 	return s
 }
 
+// UserKey identifies the signed-in person of a request for the parts of the program that keep
+// things per person (package userconfig): the address when the provider gave one, else the
+// provider's id. ok is false when nobody is signed in or the server has no sign-in.
+func (s *Server) UserKey(r *http.Request) (key string, ok bool) {
+	if s.auth == nil {
+		return "", false
+	}
+	me, signedIn := s.auth.CurrentUser(r)
+	if !signedIn || ownerKey(me) == "" {
+		return "", false
+	}
+	return NormalizeAddress(ownerKey(me)), true
+}
+
 // WithGuard sets the access policy (CORS, origin or token checks; see package
 // guard). Without one the server is open to every origin.
 func (s *Server) WithGuard(g guard.Guard) *Server {

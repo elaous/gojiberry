@@ -22,6 +22,7 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/docstore/encrypt"
 	"github.com/elaous/gojiberry/docstore/public"
+	"github.com/elaous/gojiberry/userconfig"
 )
 
 // withPublic turns on the public (anonymous) offer when GOJIBERRY_DOCSTORE_PUBLIC=true (limits and
@@ -571,6 +572,11 @@ func Main() {
 	// The manager is attached before the public offer is wired: whether /docs counts as closed
 	// depends on it (WithRequireACL with sign-in).
 	srv = srv.WithAuth(authManager)
+	if authManager != nil {
+		// per-person settings (roadmap 52); the server stores the bytes the signed-in client sends
+		cfg := &userconfig.Service{A: adapter, Who: srv.UserKey}
+		srv.WithRoutes("/me/config", cfg).WithRoutes("/me/config/", cfg)
+	}
 	if err := withDirectory(context.Background(), srv, adapter, limiters); err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
