@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docdiff"
@@ -649,6 +651,45 @@ func (s *Session) CompareVersion(ctx context.Context, key string) error {
 	return nil
 }
 
+// RestoreVersion goes back to a snapshot without losing what is being edited: the current text is saved
+// as a new version first (named "Before restoring ..."), and then the snapshot is opened in the editor.
+// Nothing is deleted, and the restore can itself be undone by restoring that version.
+func (s *Session) RestoreVersion(ctx context.Context, key string) error {
+	if s.ID() == "" {
+		return errors.New("save the document before restoring a version of it")
+	}
+	older, err := s.Saver.LoadVersion(ctx, s.targetName(), key)
+	if err != nil {
+		return err
+	}
+	doc, c, err := s.current()
+	if err != nil {
+		return err
+	}
+	v, err := s.Saver.SaveVersionBy(ctx, s.targetName(), c, doc, s.Author)
+	if err != nil {
+		return storageFull(err)
+	}
+	label := "Before restoring " + versionLabel(key)
+	if err := s.Saver.RenameVersion(ctx, s.targetName(), v.Key, label); err != nil {
+		return err
+	}
+	if s.OnOpen != nil {
+		s.ui(func() { s.OnOpen(older) })
+	}
+	return s.after(ctx, msg("saver.versionRestored", "Version restored; what you had is kept as a version"))
+}
+
+// versionLabel is the time of a version key as text ("2026-03-04 05:06:07").
+func versionLabel(key string) string {
+	rest := key[strings.LastIndex(key, "/")+1:]
+	stamp, _, _ := strings.Cut(rest, ".")
+	if ns, err := strconv.ParseInt(stamp, 10, 64); err == nil {
+		return time.Unix(0, ns).Format("2006-01-02 15:04:05")
+	}
+	return rest
+}
+
 // RenameVersion gives a snapshot a name ("" removes it).
 func (s *Session) RenameVersion(ctx context.Context, key, name string) error {
 	if err := s.Saver.RenameVersion(ctx, s.targetName(), key, name); err != nil {
@@ -1054,7 +1095,7 @@ func protectionLevel(confidential bool) string {
 func (s *Session) Versions() components.VersionsProps {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p := components.VersionsProps{Pending: s.Pending, Save: s.SaveVersion, Open: s.OpenVersion, Delete: s.DeleteVersion, Compare: s.CompareVersion, Diff: s.diff, DiffKey: s.diffKey, Rename: s.RenameVersion, Pin: s.PinVersion}
+	p := components.VersionsProps{Pending: s.Pending, Save: s.SaveVersion, Open: s.OpenVersion, Delete: s.DeleteVersion, Compare: s.CompareVersion, Diff: s.diff, DiffKey: s.diffKey, Rename: s.RenameVersion, Pin: s.PinVersion, Restore: s.RestoreVersion}
 	if s.id != "" {
 		p.Name = s.name
 	}

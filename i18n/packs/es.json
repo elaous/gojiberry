@@ -761,6 +761,8 @@
   "docs.versionKeepLabel": "Conservar",
   "saver.versionRenamed": "Versión renombrada",
   "saver.versionPinned": "Versión conservada",
-  "saver.versionUnpinned": "Versión ya no conservada"
+  "saver.versionUnpinned": "Versión ya no conservada",
+  "docs.restoreVersion": "Restaurar la versión del %s (lo que tiene ahora se conserva antes como versión)",
+  "saver.versionRestored": "Versión restaurada; lo anterior se conserva como versión"
  }
 }

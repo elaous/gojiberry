@@ -2836,6 +2836,8 @@ type VersionsProps struct {
 	// Rename gives a snapshot a name and Pin keeps it (or lets it go); each may be nil.
 	Rename func(ctx context.Context, key, name string) error
 	Pin    func(ctx context.Context, key string, pinned bool) error
+	// Restore goes back to a snapshot, keeping the current text as a version first; may be nil.
+	Restore DocAction
 }
     VersionsProps configures Versions.
 
