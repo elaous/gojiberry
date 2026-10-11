@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-3 of 10 since the last full run (#232: `wasmserve`, a static handler with wasm type, compression and caching (roadmap 82); #231: `docstore backup` and `restore` commands with audit lines; #230: wasm size budget (roadmap 82); full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+4 of 10 since the last full run (#233: `tokens`, design tokens with contrast validation (roadmap 77); #232: `wasmserve`, a static handler with wasm type, compression and caching (roadmap 82); #231: `docstore backup` and `restore` commands with audit lines; #230: wasm size budget (roadmap 82); full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1126,6 +1126,14 @@ unless stated.
     documents and accessible contrast defaults. Plan: (1) a token schema; (2) style and template documents stored in
     the central config store; (3) apply tokens to the canvas and to exports; (4) contrast validation on edit. Where:
     `components`, `docfile`, `docstore`. Priority: medium. Dependencies: ties to the central config store (52); 50.
+    Done in part (#233), steps 1 and 4 as a library: the new `tokens` package. A `Set` has named colours (text,
+    background, muted-text, link, accent, accent-text, danger and any others), a type scale and a spacing scale.
+    `Validate` lists problems in plain words: a colour that is missing or cannot be read, a text pair under the WCAG 2
+    contrast of 4.5:1 (text, muted text, link and danger on the page, accent text on the accent), a body size under
+    16px, a scale that does not grow. `CSS` writes a valid set as `--gj-color-*`, `--gj-font-*` and `--gj-space-*` custom
+    properties and refuses an invalid one; names and values from a stored file cannot break out of the declaration.
+    `a11ycheck.Contrast` is exported for it. Left: storing sets in the central config store (2), applying them to the
+    canvas and the exports (3), and a theme editor that shows the problems as they are typed.
 78. **Equations, diagrams, code blocks and footnotes.** Kind: fixable. What: these elements with accessible output:
     MathML for equations, text alternatives for diagrams, readable code blocks with a language, and footnotes that
     link both ways. Why it matters: technical documents are common and these elements are usually the least

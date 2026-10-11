@@ -127,3 +127,14 @@ func parseColor(s string) (rgb, bool) {
 	}
 	return rgb{}, false
 }
+
+// Contrast is the WCAG 2 contrast ratio (1 to 21) of two CSS colours given as text ("#rgb", "#rrggbb",
+// "rgb(r, g, b)" or a basic name). ok is false when either one is not understood.
+func Contrast(fg, bg string) (ratio float64, ok bool) {
+	a, ok1 := parseColor(fg)
+	b, ok2 := parseColor(bg)
+	if !ok1 || !ok2 {
+		return 0, false
+	}
+	return contrast(a, b), true
+}
