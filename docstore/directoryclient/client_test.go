@@ -670,3 +670,57 @@ func TestRequireOwnerRefusesToRelyOnAnUnenrolledAddress(t *testing.T) {
 		t.Errorf("server RequireEnrollment: %v", err)
 	}
 }
+
+// On an address without an owner key nothing signs a row's log number: a lookup that shows another number
+// for a key than the first one did is flagged; the unchanged rows and a signed row are not.
+func TestLookupFlagsAChangedLogNumberOnAnUnenrolledAddress(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	c := e.client(ana)
+	viewer := e.client(bo)
+	pub, _, id := ageKey(t)
+	k, err := c.Publish(ctx, PublishRequest{Email: "ana@x.io", Key: pub, Identity: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := viewer.Lookup(ctx, "ana@x.io")
+	if err != nil || len(rows) != 1 || rows[0].SeqChanged {
+		t.Fatalf("first look: %+v %v", rows, err)
+	}
+	if again, _ := viewer.Lookup(ctx, "ana@x.io"); again[0].SeqChanged {
+		t.Error("the same number again was flagged")
+	}
+	// the server names another entry for the same key
+	liar := &Client{BaseURL: e.srv.URL, Token: viewer.Token, State: viewer.State, Pins: viewer.Pins, HTTP: mutatingClient(func(body []byte) []byte {
+		var m map[string]any
+		_ = json.Unmarshal(body, &m)
+		for _, r := range m["keys"].([]any) {
+			r.(map[string]any)["seq"] = float64(k.Seq + 40)
+		}
+		b, _ := json.Marshal(m)
+		return b
+	})}
+	rows, err = liar.Lookup(ctx, "ana@x.io")
+	if err != nil || len(rows) != 1 || !rows[0].SeqChanged {
+		t.Fatalf("another number must be flagged: %+v %v", rows, err)
+	}
+	// the reference is the first number, so the honest server is not flagged afterwards
+	if back, _ := viewer.Lookup(ctx, "ana@x.io"); back[0].SeqChanged {
+		t.Error("the first number is the reference")
+	}
+	// once the address has an owner key and the row is signed, the number is covered by the signature
+	owner, _ := GenerateOwnerKey()
+	if _, err := c.Enroll(ctx, "ana@x.io", owner); err != nil {
+		t.Fatal(err)
+	}
+	pub2, _, id2 := ageKey(t)
+	if _, err := c.Publish(ctx, PublishRequest{Email: "ana@x.io", Key: pub2, Identity: id2, Owner: owner}); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ = liar.Lookup(ctx, "ana@x.io")
+	for _, r := range rows {
+		if r.OwnerSigned && r.SeqChanged {
+			t.Errorf("a signed row was flagged: %+v", r)
+		}
+	}
+}

@@ -57,6 +57,8 @@ type DirRow struct {
 	Attested bool
 	// OwnerSigned and OwnerEnrolled: see RecipientRow; the strongest mark.
 	OwnerSigned, OwnerEnrolled bool
+	// Note is one more line about the row, shown after its marks ("the log number changed"); empty for none.
+	Note string
 }
 
 // RecipientsProps configures Recipients.

@@ -1307,6 +1307,8 @@ type DirRow struct {
 	Attested bool
 	// OwnerSigned and OwnerEnrolled: see RecipientRow; the strongest mark.
 	OwnerSigned, OwnerEnrolled bool
+	// Note is one more line about the row, shown after its marks ("the log number changed"); empty for none.
+	Note string
 }
     DirRow is a key found in the store's directory for an e-mail address
     (encrypt.PublishedKey), as the picker lists it. Key is the public key text

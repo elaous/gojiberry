@@ -693,6 +693,7 @@
   "collab.leftMany": "%d Personen haben das Dokument verlassen: %s.",
   "prefs.collabAll": "Gemeinsames Bearbeiten: alles ansagen",
   "prefs.collabImportant": "Gemeinsames Bearbeiten: nur die Verbindung ansagen",
-  "prefs.collabOff": "Gemeinsames Bearbeiten: nichts ansagen"
+  "prefs.collabOff": "Gemeinsames Bearbeiten: nichts ansagen",
+  "dir.seqChanged": "Das Verzeichnis nennt für diesen Schlüssel jetzt einen anderen Protokolleintrag als zuvor. Bei einer Adresse ohne Eigentümerschlüssel signiert nichts diese Nummer: Es kann eine erneute Veröffentlichung sein oder der Server nennt einen anderen Eintrag."
  }
 }
