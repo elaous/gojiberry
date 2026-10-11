@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (#173 to #175, this PR). The full run on main 67a6c28 (after #171, the 10th merge since 10ae2107) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+5 of 10 since the last full run (#173 to #176, this PR). The full run on main 67a6c28 (after #171, the 10th merge since 10ae2107) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -996,7 +996,7 @@ unless stated.
     matters: needs differ, and short timeouts or small targets lock people out. Plan: (1) list every timeout and
     remove or make it adjustable; (2) a large-target mode with a size scale; (3) a single-switch scanning mode and
     dwell click as an experiment; (4) a plain-language label set in `i18n`; (5) settings in the preference menu.
-    Where: `components`, `i18n`, the canvas editor. Priority: medium. Dependencies: 50, 51.
+    Where: `components`, `i18n`, the canvas editor. Priority: medium. Dependencies: 50, 51. Done in part (this PR): step 1, the audit: the pages and components have no time limit on what a person must do (no auto-dismissed message, no countdown); the timers in the code are network and storage timeouts (`domrt/browser`, `saver`) that the person does not race. The limits that exist are lifetimes, all stated where they are set: a sign-in session 30 days, a passkey ceremony 5 minutes (the authenticator's own prompt waits on the person), the owner key reset 24 hours (a safety delay, not a deadline), a public-offer session 48 hours idle. Steps 2 and 5: View > Display preferences has "Large targets" (every button, tab, menu entry, field and select at least 44 by 44 pixels, check boxes 24) and "Distraction-free mode" (the toolbar, side panel and status bar are hidden; the menus stay and bring them back), both kept in this browser and set as `data-gj-targets` and `data-gj-focus` on the root (`components/a11y.css`). Test: `TestLargeTargetsAndDistractionFreeMode`. Left: a size scale beyond one step (step 2), switch scanning and dwell click (step 3), the plain-language label set (step 4), a longer history and undo of the last save.
 66. **Collaboration accessibility.** Kind: fixable. What: announcements for remote cursors, joins and leaves, new
     comments, and conflicts, through a polite live region, with a setting for how much is said. Why it matters:
     collaboration cues are visual (coloured cursors); without text a blind collaborator cannot tell anyone is there.

@@ -53,3 +53,23 @@
 @media (forced-colors: active) {
   button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline: 3px solid Highlight; }
 }
+
+/* Distraction-free (data-gj-focus="on" on the root element): the toolbar, the side panel and the status
+   bar are hidden and only the title bar, the menus and the document remain; the menus (View > Display
+   preferences) bring the rest back. */
+:root[data-gj-focus="on"] .gj-docview-toolbar,
+:root[data-gj-focus="on"] .gj-docview-sidebar,
+:root[data-gj-focus="on"] .gj-docview-status { display: none; }
+
+/* Large targets (data-gj-targets="large"): everything that can be pressed is at least 44 by 44 pixels
+   (WCAG 2.5.5), with room between. */
+:root[data-gj-targets="large"] button,
+:root[data-gj-targets="large"] [role="tab"],
+:root[data-gj-targets="large"] [role="menuitem"],
+:root[data-gj-targets="large"] .gj-menu-item,
+:root[data-gj-targets="large"] select,
+:root[data-gj-targets="large"] input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+:root[data-gj-targets="large"] textarea { min-height: 44px; min-width: 44px; }
+:root[data-gj-targets="large"] input[type="checkbox"],
+:root[data-gj-targets="large"] input[type="radio"] { width: 24px; height: 24px; margin: 10px; }
+:root[data-gj-targets="large"] .gj-menu-item { padding-block: 0.6em; }

@@ -680,6 +680,8 @@
   "menu.sameLang": "Igual que el documento",
   "menu.docLangSet": "Idioma del documento",
   "menu.noLang": "Sin definir",
-  "a11y.docLang": "Idioma del documento: %s"
+  "a11y.docLang": "Idioma del documento: %s",
+  "prefs.targets": "Objetivos grandes",
+  "prefs.focus": "Modo sin distracciones"
  }
 }
