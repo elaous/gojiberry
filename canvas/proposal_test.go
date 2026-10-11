@@ -261,3 +261,30 @@ func TestReviewCommands(t *testing.T) {
 		t.Error("with no proposal there is nothing to accept")
 	}
 }
+
+// Accepting a completion while suggesting is a proposal too: one proposal holding the whole word.
+func TestCompletionWhileSuggestingIsAProposal(t *testing.T) {
+	fixedProposals(t)
+	f, _ := editFlow(t, 0, Chars{Text: "alpha alps\n"})
+	f.Author = "gil"
+	f.Complete = true
+	f.SetCursors([]Cursor{At(11)})
+	f.Suggesting = true
+	typeFlow(f, "al")
+	if len(f.Suggestions()) == 0 {
+		t.Fatal("completions are offered")
+	}
+	f.HandleKey("Tab", false)
+	// the typed letters were themselves proposed additions, which the completion replaces for real
+	if flowText(f) != "alpha alps\nalpha" {
+		t.Fatalf("%q / %q", marked(f), flowText(f))
+	}
+	if ps := f.Proposals(); len(ps) != 1 || ps[0].Inserted != "alpha" || ps[0].Author != "gil" {
+		t.Fatalf("one proposal, the whole word: %+v (%q)", ps, marked(f))
+	}
+	f.Suggesting = false
+	f.RejectAllProposals()
+	if flowText(f) != "alpha alps\n" {
+		t.Fatalf("rejecting leaves the text as it was: %q", flowText(f))
+	}
+}
