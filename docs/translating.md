@@ -24,6 +24,10 @@ Japanese only `#other`. The category rules are in `i18n.PluralCategory` (CLDR ca
 numbers). The shipped packs must have `#other` for every plural id (the test checks it); a language that lacks
 a category falls back to `#other`, then to the English in the code. Each text takes the number as its `%d`.
 
+Numbers and dates: `i18n.Number(lang, n, decimals)`, `i18n.Percent`, `i18n.Date(lang, t, style)` and
+`i18n.Time` write them the way the language does (separators, month names, order); the number in a plural
+message is written that way too.
+
 ## Adding a language
 
 Copy `es.json`, change the top-level key to the language tag (`"pt"`, `"pt-BR"`), translate the values and
@@ -34,5 +38,5 @@ check of the page in that direction.
 
 ## What is not done
 
-Locale-aware dates and numbers through one helper, plural rules for fractions, and a check for stale ids are in
+Relative times, time zones, plural rules for fractions, and a check for stale ids are in
 [roadmap item 83](roadmap.md). The messages written before plural forms existed still use neutral wording.

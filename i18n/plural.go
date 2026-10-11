@@ -105,8 +105,10 @@ func (c *Catalog) Plural(lang, id, one, other string, n int, args ...any) string
 			m = one
 		}
 	}
-	if strings.ContainsRune(m, '%') {
-		return fmt.Sprintf(m, append([]any{n}, args...)...)
+	if strings.Contains(m, "%d") {
+		// the number is written the way the language writes numbers (1,234 / 1.234 / 1 234)
+		m = strings.Replace(m, "%d", "%s", 1)
+		return fmt.Sprintf(m, append([]any{Number(lang, float64(n), 0)}, args...)...)
 	}
 	return m
 }

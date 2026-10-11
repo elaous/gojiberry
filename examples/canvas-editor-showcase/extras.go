@@ -50,8 +50,8 @@ func statusBar(flow *canvas.TextFlow, st canvas.FlowStats, sheets int, mode canv
 		}
 	}
 	return components.StatusBarProps{Items: append(items,
-		components.StatusItem{ID: "words", Text: T("status.words", "%d words", st.Text.Words)},
-		components.StatusItem{ID: "characters", Text: T("status.characters", "%d characters", st.Text.Characters)},
+		components.StatusItem{ID: "words", Text: Tn("status.words", "%d word", "%d words", st.Text.Words)},
+		components.StatusItem{ID: "characters", Text: Tn("status.characters", "%d character", "%d characters", st.Text.Characters)},
 		components.StatusItem{ID: "mode", Text: T("status.mode."+mode.String(), mode.String()+" mode")})}
 }
 
