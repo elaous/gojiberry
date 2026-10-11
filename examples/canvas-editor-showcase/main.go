@@ -337,6 +337,7 @@ func main() {
 				{Separator: true},
 				{Label: "Style editor", OnSelect: func() { u.tab = "format"; renderUI() }},
 			}},
+			{Label: T("menu.read", "Read aloud"), Items: readMenu(u, flow, renderUI)},
 			{Label: "Help", Items: []components.MenuItem{
 				{Label: "Keyboard shortcuts", OnSelect: func() { u.tab = "keys"; renderUI() }},
 			}},
@@ -576,6 +577,7 @@ func main() {
 			Title: u.title, OnTitle: func(t string) { u.title = t; renderUI() },
 			MenuBar: menubar, Toolbar: toolbar,
 			Canvas: xango.Frag(
+				readBar(u, renderUI),
 				xango.El("div", []xango.Attr{xango.A("id", "canvas-host")}),
 				components.AccessibleText(components.AccessibleTextProps{Blocks: append(u.a11yBlocks(flow, u.title), a11yObjects(root)...), Selection: selectedText(flow), Lang: u.docLang}),
 				components.Announcer(u.announcement)),

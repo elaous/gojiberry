@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-9 of 10 since the last full run (#173 to #180, this PR). The full run on main 67a6c28 (after #171, the 10th merge since 10ae2107) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+10 of 10 since the last full run (#173 to #181, this PR): the full run on main is due next. The full run on main 67a6c28 (after #171, the 10th merge since 10ae2107) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1002,11 +1002,16 @@ unless stated.
     collaboration cues are visual (coloured cursors); without text a blind collaborator cannot tell anyone is there.
     Plan: (1) an event-to-message table with throttling and grouping; (2) a presence list that is real DOM; (3) tests
     with two sessions. Where: `collab`, `components`. Priority: medium. Dependencies: 60, 71. Done in part (this PR): step 1: `components.CollabAnnouncer` turns changes of a shared session into short sentences for the live region: people joining and leaving (grouped: "2 people joined: Cy, Di."; someone who comes and goes before anything is said is not announced), the connection lost and back (the first connection is not news), a sharing problem and its end; at most one sentence per two seconds, what comes sooner is held and said together. How much is said is a preference (everything, the connection only, nothing) in View > Display preferences. Step 2 was there: the presence list is real DOM (`components.Presence`). Step 3: unit test of the announcer and the two-browser live test checks that Ana hears "Bo joined.". Left: announcements for remote comments and for conflicts, and a per-person setting for remote cursors.
-67. **Text-to-speech read-aloud.** Kind: fixable. What: read the selection or the whole document aloud with the
-    browser speech API (on-device voices where the browser offers them), with pause, speed and a highlighted current
-    sentence. Why it matters: it helps people with low vision or reading difficulty and needs no assistive software.
-    Plan: (1) read from the mirror text so the order matches 60; (2) per-run language voices (64); (3) controls with
-    keyboard access; (4) no text sent to a network service unless the browser does so, and say so in the UI.
+67. **Done (#182, reading aloud in the showcase): read the selection or the document aloud.** Kind: fixable.
+    Was: read the selection or the whole document aloud with the browser speech API, with pause, speed and a
+    highlighted current sentence. Now: `components.SpeechChunks` turns the screen-reader blocks (the same order and
+    wording as 60, with per-run languages from 64) into sentences of at most 200 characters, each with its language;
+    the showcase "Read aloud" menu speaks the selection or the document through `speechSynthesis`, a bar shows the
+    sentence being spoken with previous, pause or resume, next and stop (keyboard reachable), and the speed (slow,
+    normal, fast) is a kept preference. Only voices that run on the device (`localService`) are picked, and the menu
+    says so; with none for a language the browser's default voice for it is used, which is the browser's own choice
+    and may use a network service. Open: choosing a network voice on purpose, highlighting the sentence in the
+    canvas (not only in the bar), and word-level highlighting from the boundary events. Priority: low.
     Where: `components`. Priority: low. Dependencies: 60, 64.
 68. **Captions and transcripts.** Kind: fixable, only if media embedding exists or is planned. What: captions and a
     transcript field for embedded audio and video, a caption track editor, and a checker rule. Why it matters: media

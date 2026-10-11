@@ -107,3 +107,47 @@ func TestLargeTargetsAndDistractionFreeMode(t *testing.T) {
 	d.WaitFor("back", `!document.documentElement.hasAttribute('data-gj-focus') && getComputedStyle(document.querySelector('.gj-docview-sidebar')).display !== 'none'`)
 	d.NoErrors()
 }
+
+// Reading aloud: the document is handed to the browser's speech engine a sentence at a time, the
+// sentence being spoken is shown with its controls, next/pause/stop work, and the speed is a kept
+// preference. The speech engine is replaced by a recorder (a headless browser has no voice).
+func TestReadAloud(t *testing.T) {
+	site := e2etest.NewSite(t)
+	d := site.OpenURL(t, "/index.html")
+	d.WaitSelector("canvas")
+	d.Eval(`(() => {
+		const spoken = [];
+		window.__spoken = spoken;
+		window.__ctl = [];
+		window.SpeechSynthesisUtterance = function (text) { this.text = text; };
+		Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
+			speak(u) { spoken.push({text: u.text, lang: u.lang || '', rate: u.rate}); },
+			cancel() { window.__ctl.push('cancel'); }, pause() { window.__ctl.push('pause'); }, resume() { window.__ctl.push('resume'); },
+			getVoices() { return []; } } });
+	})()`, nil)
+	pick := func(item string) {
+		d.Click(`button.gj-menubar-button:has-text("Read aloud")`)
+		d.Click(`.gj-menubar-panel li.gj-menu-item:has-text("` + item + `")`)
+	}
+
+	pick("Read the document aloud")
+	d.WaitFor("the first sentence", `window.__spoken.length === 1`)
+	d.WaitSelector("#read-bar")
+	first := d.Str(`window.__spoken[0].text`)
+	d.OK(first != "" && d.Str(`document.getElementById('read-now').textContent`) == first, "the sentence being spoken is shown")
+	d.OK(d.Bool(`window.__spoken[0].rate === 1`), "normal speed by default")
+
+	d.Click(`#read-bar button:has-text("Next sentence")`)
+	d.WaitFor("the next sentence", `window.__spoken.length === 2 && window.__spoken[1].text !== window.__spoken[0].text`)
+	d.Click(`#read-bar button:has-text("Pause")`)
+	d.WaitFor("pause", `window.__ctl.includes('pause')`)
+	d.WaitSelector(`#read-bar button:has-text("Resume")`)
+	d.Click(`#read-bar button:has-text("Stop reading")`)
+	d.WaitFor("the bar goes", `!document.getElementById('read-bar')`)
+
+	pick("Reading speed: fast")
+	d.OK(d.Str(`localStorage.getItem('showcase:a11y')`) != "" && d.Bool(`JSON.parse(localStorage.getItem('showcase:a11y')).speed === 'fast'`), "the speed is kept")
+	pick("Read the document aloud")
+	d.WaitFor("fast speech", `window.__spoken[window.__spoken.length - 1].rate === 1.5`)
+	d.NoErrors()
+}

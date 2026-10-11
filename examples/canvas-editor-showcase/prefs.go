@@ -23,6 +23,7 @@ type prefs struct {
 	Spacing  string `json:"spacing,omitempty"`  // "wide"
 	Focus    string `json:"focus,omitempty"`    // "on": distraction-free
 	Targets  string `json:"targets,omitempty"`  // "large"
+	Speed    string `json:"speed,omitempty"`    // reading aloud: "slow", "fast"
 	Collab   string `json:"collab,omitempty"`   // what is announced of a shared session: "" everything, "important", "off"
 }
 
@@ -52,6 +53,9 @@ func loadPrefs() prefs {
 	}
 	if p.Targets != "large" {
 		p.Targets = ""
+	}
+	if p.Speed != "slow" && p.Speed != "fast" {
+		p.Speed = ""
 	}
 	if p.Collab != components.CollabImportant && p.Collab != components.CollabOff {
 		p.Collab = ""
