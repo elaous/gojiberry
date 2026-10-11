@@ -563,3 +563,71 @@ func TestSimultaneousSeedingOfDifferentContentKeepsBoth(t *testing.T) {
 		t.Fatalf("both contents must survive whole, got %q", got)
 	}
 }
+
+// Two people suggesting changes at the same time, in different places and in the same place: the copies
+// converge, every proposal is there with its own author, and accepting or rejecting one on one side
+// settles it on the other.
+func TestSuggestionsFromTwoPeopleConverge(t *testing.T) {
+	a, b := pair(t, canvas.Chars{Text: "the brown fox runs fast"})
+	a.Flow.Author, b.Flow.Author = "ana", "bo"
+	a.Flow.Suggesting, b.Flow.Suggesting = true, true
+
+	// ana replaces "brown" with "red"; bo, meanwhile, strikes "fast" and, in the same place as ana, types "big "
+	a.Flow.SetCursors([]canvas.Cursor{{Anchor: 4, Caret: 9}})
+	a.Flow.InsertText("red")
+	b.Flow.SetCursors([]canvas.Cursor{{Anchor: 19, Caret: 23}})
+	b.Flow.InsertText("")
+	b.Flow.HandleKey("Delete", false)
+	click(b.Flow, 4)
+	b.Flow.InsertText("big ")
+	exchange(a, b)
+
+	if normalized(a.Flow) != normalized(b.Flow) {
+		t.Fatalf("the copies differ:\n a %s\n b %s", normalized(a.Flow), normalized(b.Flow))
+	}
+	byAuthor := map[string]canvas.Proposal{}
+	for _, p := range a.Flow.Proposals() {
+		byAuthor[p.Author+":"+p.Inserted+"/"+p.Deleted] = p
+	}
+	if _, ok := byAuthor["ana:red/brown"]; !ok {
+		t.Fatalf("ana's replacement is one proposal: %+v", a.Flow.Proposals())
+	}
+	if _, ok := byAuthor["bo:big /"]; !ok {
+		t.Fatalf("bo's addition: %+v", a.Flow.Proposals())
+	}
+	var struck canvas.Proposal
+	for _, p := range b.Flow.Proposals() {
+		if p.Author == "bo" && p.Deleted != "" {
+			struck = p
+		}
+	}
+	if struck.ID == "" {
+		t.Fatalf("bo's removal: %+v", b.Flow.Proposals())
+	}
+	if len(a.Flow.Proposals()) != len(b.Flow.Proposals()) {
+		t.Fatalf("both see the same number: %d vs %d", len(a.Flow.Proposals()), len(b.Flow.Proposals()))
+	}
+
+	// ana accepts bo's removal; bo rejects ana's replacement: both settle on both sides
+	a.Flow.Suggesting, b.Flow.Suggesting = false, false
+	if !a.Flow.AcceptProposal(struck.ID) {
+		t.Fatal("accept")
+	}
+	ana := byAuthor["ana:red/brown"]
+	if !b.Flow.RejectProposal(ana.ID) {
+		t.Fatal("reject")
+	}
+	exchange(a, b)
+	exchange(a, b)
+	if normalized(a.Flow) != normalized(b.Flow) {
+		t.Fatalf("after settling:\n a %s\n b %s", normalized(a.Flow), normalized(b.Flow))
+	}
+	got := text(a.Flow)
+	if strings.Contains(got, "fast") || !strings.Contains(got, "brown") || strings.Contains(got, "red") {
+		t.Fatalf("accepted removal gone, rejected replacement undone: %q", got)
+	}
+	ps := a.Flow.Proposals()
+	if len(ps) != 1 || ps[0].Author != "bo" || ps[0].Inserted != "big " {
+		t.Fatalf("only bo's addition is left: %+v", ps)
+	}
+}
