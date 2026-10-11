@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-9 of 10 since the last full run (#226: backup and restore of a store as opaque blobs; #225: `/ready` on the docstore server; #224: `audit`, a PII-free audit event schema (roadmap 81); #223: replace across documents with preview and undo, as a library; #222: `docsearch.Refresh` and `FromDocfile`; #221: `docsearch`, a sealed local index for search across documents (roadmap 73); #220: the waiting changes of a shared document survive a reload; #219: one completion ranking, one list in the showcase; #218: a durable queue for the sync client (roadmap 74); full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+10 of 10 since the last full run (#227: `/admin/usage` without identifiers; the full run on main, with the coverage score and the badge, is due next; #226: backup and restore of a store as opaque blobs; #225: `/ready` on the docstore server; #224: `audit`, a PII-free audit event schema (roadmap 81); #223: replace across documents with preview and undo, as a library; #222: `docsearch.Refresh` and `FromDocfile`; #221: `docsearch`, a sealed local index for search across documents (roadmap 73); #220: the waiting changes of a shared document survive a reload; #219: one completion ranking, one list in the showcase; #218: a durable queue for the sync client (roadmap 74); full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1197,6 +1197,11 @@ unless stated.
     them the adapter under the encrypting one: the test `TestBackupOfAnEncryptedStoreIsOpaqueAndRestoresReadable` shows
     the archive holds only ciphertext, needs no key, and the owner reads the restored documents. Left: a command for the
     operator (`docstore backup`/`restore`) and an audit event for each (`audit.BackupMade`, `BackupRestored`).
+    Also done (#227), step 3 in part: `GET /admin/usage` (only when the operator guard `WithDirectoryAdmin` is set;
+    a failed guard is rate limited like the other admin routes) reports `documents`, `records` (the access-list
+    bookkeeping), total and largest `bytes`, and the backend quota, computed from the listing's sizes alone: it reads no
+    document and names none (a test checks that the report holds none of the ids). Left: usage over time (counters kept
+    by the telemetry rules of 57) and a page that shows it.
 82. **Performance and size.** Kind: fixable. What: the showcase wasm is about 21.7 MB; streaming compile, code
     splitting, caching and a low-memory mode. Why it matters: slow first load excludes people on slow links and weak
     devices. Plan: (1) measure size and load per build and record a budget; (2) `WebAssembly.compileStreaming` with

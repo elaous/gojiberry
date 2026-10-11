@@ -482,6 +482,9 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("/docs", s.handleList)
 		mux.HandleFunc("/docs/", s.handleDoc)
 	}
+	if s.dirAdmin != nil {
+		mux.HandleFunc("/admin/usage", s.handleUsage)
+	}
 	if s.auth != nil {
 		mux.Handle("/auth/", s.auth.Routes())
 	}
@@ -553,6 +556,58 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ready": ready})
+}
+
+// usageResponse is what GET /admin/usage reports: counts and sizes, never an id, a name or a
+// content. Records is the stored items that are bookkeeping rather than documents (access lists).
+type usageResponse struct {
+	Documents int           `json:"documents"`
+	Records   int           `json:"records"`
+	Bytes     int64         `json:"bytes"`
+	Largest   int           `json:"largest"`
+	Quota     quotaResponse `json:"quota"`
+}
+
+// handleUsage serves GET /admin/usage to the operator (the guard set by WithDirectoryAdmin): how many
+// documents and records the store holds, their total and largest size, and the backend's quota. It
+// is computed from the listing's sizes alone, so it reads no document and shows no identifier.
+func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.dirAdmin(r) {
+		lim := s.limits().adminFail
+		if ok, wait := lim.Allow(r.Context(), "ad:"+s.clientAddr(r)); !ok {
+			tooMany(w, wait)
+			return
+		}
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	metas, err := s.adapter.List(r.Context())
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	var out usageResponse
+	for _, m := range metas {
+		if isReservedDocID(m.ID) {
+			out.Records++
+		} else {
+			out.Documents++
+		}
+		out.Bytes += int64(m.Size)
+		out.Largest = max(out.Largest, m.Size)
+	}
+	if reporter, ok := s.adapter.(QuotaReporter); ok {
+		if q, err := reporter.Usage(r.Context()); err == nil {
+			out.Quota = quotaResponse{Available: true, Used: q.Used, Total: q.Total}
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // quotaResponse is handleQuota's own JSON shape -- Available false
