@@ -99,6 +99,22 @@ type Store struct {
 	MaxSessions, MaxStates int
 	// Now is the clock (time.Now if nil), for tests.
 	Now func() time.Time
+	// MissFor is how long a token the store did not know is remembered as unknown by this
+	// process (DefaultMissFor if 0; a negative value turns it off). A flood of random bearer tokens
+	// then costs one read per token per MissFor instead of one per request. A session made on another
+	// replica is therefore seen here at most MissFor after it was made; a session made by this
+	// process is seen at once.
+	MissFor time.Duration
+	// CacheFor, if positive, is how long this process remembers that a token is a live session
+	// (off by default: every request reads the store). A logout on this process takes effect here at
+	// once, on another replica up to CacheFor later: set it only where that is acceptable, and say so
+	// to the people who run the service.
+	CacheFor time.Duration
+
+	cacheMu                    sync.Mutex
+	hits                       map[string]cachedSession // live sessions seen, by record name (CacheFor)
+	misses                     map[string]time.Time     // unknown tokens, by record name, until when (MissFor)
+	reads, cacheHits, missHits atomic.Int64
 
 	sessions, states atomic.Int64 // records: the last listing's count plus this process's Puts less its removals
 	sessionsNet      atomic.Int64 // Puts less removals of this process, never reset: Sweep keeps what moved during its listing
@@ -298,9 +314,86 @@ func (s *Store) put(ctx context.Context, k kind, expires time.Time, body func() 
 func (s *Store) PutSession(ctx context.Context, u auth.User, ttl time.Duration) (string, error) {
 	now := s.clock()
 	expires := s.expiry(now, ttl)
-	return s.put(ctx, sessionKind, expires, func() ([]byte, error) {
+	token, err := s.put(ctx, sessionKind, expires, func() ([]byte, error) {
 		return json.Marshal(sessionRecord{V: recordVersion, User: u, IssuedAt: now, Expires: expires})
 	})
+	if err == nil {
+		s.forget(sessionKind.id(token)) // a session made here is seen here at once
+	}
+	return token, err
+}
+
+// DefaultMissFor is how long an unknown token is remembered when MissFor is 0.
+const DefaultMissFor = time.Second
+
+// maxCached bounds each of the two in-process maps; at the bound the map is emptied (a flood costs
+// reads, never memory).
+const maxCached = 4096
+
+type cachedSession struct {
+	user    auth.User
+	expires time.Time // the session's own expiry
+	until   time.Time // when this entry stops being used
+}
+
+// Stats are the reads this process made of the store for GetSession and what the two caches saved.
+type Stats struct{ Reads, CacheHits, MissHits int64 }
+
+// Stats returns the counters, for the operator to judge whether the cost matters.
+func (s *Store) Stats() Stats {
+	return Stats{Reads: s.reads.Load(), CacheHits: s.cacheHits.Load(), MissHits: s.missHits.Load()}
+}
+
+func (s *Store) missFor() time.Duration {
+	switch {
+	case s.MissFor < 0:
+		return 0
+	case s.MissFor == 0:
+		return DefaultMissFor
+	}
+	return s.MissFor
+}
+
+// cached reports what this process remembers of the token: a live session, or that it is unknown.
+func (s *Store) cached(id string, now time.Time) (user auth.User, live, unknown bool) {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if c, ok := s.hits[id]; ok {
+		if now.Before(c.until) && now.Before(c.expires) {
+			return c.user, true, false
+		}
+		delete(s.hits, id)
+	}
+	if until, ok := s.misses[id]; ok {
+		if now.Before(until) {
+			return auth.User{}, false, true
+		}
+		delete(s.misses, id)
+	}
+	return auth.User{}, false, false
+}
+
+func (s *Store) remember(id string, c *cachedSession, missUntil time.Time) {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if c != nil {
+		if s.hits == nil || len(s.hits) >= maxCached {
+			s.hits = map[string]cachedSession{}
+		}
+		s.hits[id] = *c
+		return
+	}
+	if s.misses == nil || len(s.misses) >= maxCached {
+		s.misses = map[string]time.Time{}
+	}
+	s.misses[id] = missUntil
+}
+
+func (s *Store) forget(id string) {
+	s.cacheMu.Lock()
+	delete(s.hits, id)
+	delete(s.misses, id)
+	s.cacheMu.Unlock()
 }
 
 // GetSession implements auth.SessionStore.
@@ -309,8 +402,23 @@ func (s *Store) GetSession(ctx context.Context, token string) (auth.User, bool, 
 	if id == "" {
 		return auth.User{}, false, nil
 	}
+	now := s.clock()
+	if s.CacheFor > 0 || s.missFor() > 0 {
+		switch user, live, unknown := s.cached(id, now); {
+		case live:
+			s.cacheHits.Add(1)
+			return user, true, nil
+		case unknown:
+			s.missHits.Add(1)
+			return auth.User{}, false, nil
+		}
+	}
+	s.reads.Add(1)
 	doc, err := s.Store.Load(ctx, id)
 	if errors.Is(err, docstore.ErrNotFound) {
+		if m := s.missFor(); m > 0 {
+			s.remember(id, nil, now.Add(m))
+		}
 		return auth.User{}, false, nil
 	}
 	if err != nil {
@@ -320,8 +428,11 @@ func (s *Store) GetSession(ctx context.Context, token string) (auth.User, bool, 
 	if json.Unmarshal(doc.Data, &rec) != nil || rec.V != recordVersion || rec.User.ID == "" {
 		return auth.User{}, false, nil // not ours: the sweep removes it
 	}
-	if !s.clock().Before(rec.Expires) {
+	if !now.Before(rec.Expires) {
 		return auth.User{}, false, nil // expired; the sweep deletes it
+	}
+	if s.CacheFor > 0 {
+		s.remember(id, &cachedSession{user: rec.User, expires: rec.Expires, until: now.Add(s.CacheFor)}, time.Time{})
 	}
 	return rec.User, true, nil
 }
@@ -332,6 +443,7 @@ func (s *Store) DeleteSession(ctx context.Context, token string) error {
 	if id == "" {
 		return nil
 	}
+	s.forget(id) // a logout takes effect here at once, whatever CacheFor says
 	switch err := s.Store.Delete(ctx, id); {
 	case err == nil:
 		dec(&s.sessions)
