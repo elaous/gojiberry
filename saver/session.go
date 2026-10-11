@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/elaous/gojiberry/components"
+	"github.com/elaous/gojiberry/docdiff"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docstore"
 )
@@ -83,6 +84,8 @@ type Session struct {
 	folders              []Folder // every folder
 	folderDraft          string
 	versions             []Version
+	diff                 []docdiff.Change // the last comparison of a snapshot with the document being edited
+	diffKey              string           // the snapshot it was for
 	trashed              []Entry
 	selected             []string
 	tagFilter            string
@@ -627,11 +630,33 @@ func (s *Session) OpenVersion(ctx context.Context, key string) error {
 	return nil
 }
 
+// CompareVersion compares a snapshot with the document as it is being edited now, and keeps the
+// comparison for Versions to show (docdiff: by block, and by word inside an edited block).
+func (s *Session) CompareVersion(ctx context.Context, key string) error {
+	older, err := s.Saver.LoadVersion(ctx, s.targetName(), key)
+	if err != nil {
+		return err
+	}
+	newer, _, err := s.current()
+	if err != nil {
+		return err
+	}
+	changes := docdiff.Compare(older, newer)
+	s.set(func() { s.diff, s.diffKey = changes, key })
+	s.say(msg("saver.versionCompared", "Compared with the current document"))
+	return nil
+}
+
 // DeleteVersion removes one snapshot.
 func (s *Session) DeleteVersion(ctx context.Context, key string) error {
 	if err := s.Saver.DeleteVersion(ctx, s.targetName(), key); err != nil {
 		return err
 	}
+	s.set(func() {
+		if s.diffKey == key {
+			s.diff, s.diffKey = nil, ""
+		}
+	})
 	return s.after(ctx, msg("saver.versionDeleted", "Version deleted"))
 }
 
@@ -1008,7 +1033,7 @@ func protectionLevel(confidential bool) string {
 func (s *Session) Versions() components.VersionsProps {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p := components.VersionsProps{Pending: s.Pending, Save: s.SaveVersion, Open: s.OpenVersion, Delete: s.DeleteVersion}
+	p := components.VersionsProps{Pending: s.Pending, Save: s.SaveVersion, Open: s.OpenVersion, Delete: s.DeleteVersion, Compare: s.CompareVersion, Diff: s.diff, DiffKey: s.diffKey}
 	if s.id != "" {
 		p.Name = s.name
 	}

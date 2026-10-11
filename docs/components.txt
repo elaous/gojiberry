@@ -2823,6 +2823,11 @@ type VersionsProps struct {
 	Open    DocAction
 	Delete  DocAction
 	Pending *Pending
+	// Compare shows what changed between a snapshot and the document being edited; Diff is that
+	// comparison (nil before one was asked for) and DiffKey the snapshot it is for.
+	Compare DocAction
+	Diff    []docdiff.Change
+	DiffKey string
 }
     VersionsProps configures Versions.
 
