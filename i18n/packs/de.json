@@ -682,6 +682,17 @@
   "menu.noLang": "Nicht festgelegt",
   "a11y.docLang": "Sprache des Dokuments: %s",
   "prefs.targets": "Große Schaltflächen",
-  "prefs.focus": "Ablenkungsfreier Modus"
+  "prefs.focus": "Ablenkungsfreier Modus",
+  "collab.online": "Wieder verbunden.",
+  "collab.offline": "Die Verbindung zum gemeinsamen Dokument wurde unterbrochen.",
+  "collab.problem": "Problem bei der Zusammenarbeit: %s",
+  "collab.problemGone": "Die Zusammenarbeit funktioniert wieder.",
+  "collab.joined": "%s ist beigetreten.",
+  "collab.joinedMany": "%d Personen sind beigetreten: %s.",
+  "collab.left": "%s hat das Dokument verlassen.",
+  "collab.leftMany": "%d Personen haben das Dokument verlassen: %s.",
+  "prefs.collabAll": "Gemeinsames Bearbeiten: alles ansagen",
+  "prefs.collabImportant": "Gemeinsames Bearbeiten: nur die Verbindung ansagen",
+  "prefs.collabOff": "Gemeinsames Bearbeiten: nichts ansagen"
  }
 }

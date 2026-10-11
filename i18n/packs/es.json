@@ -682,6 +682,17 @@
   "menu.noLang": "Sin definir",
   "a11y.docLang": "Idioma del documento: %s",
   "prefs.targets": "Objetivos grandes",
-  "prefs.focus": "Modo sin distracciones"
+  "prefs.focus": "Modo sin distracciones",
+  "collab.online": "Conectado de nuevo.",
+  "collab.offline": "Se perdió la conexión con el documento compartido.",
+  "collab.problem": "Problema al compartir: %s",
+  "collab.problemGone": "Compartir vuelve a funcionar.",
+  "collab.joined": "%s se ha unido.",
+  "collab.joinedMany": "Se han unido %d personas: %s.",
+  "collab.left": "%s se ha ido.",
+  "collab.leftMany": "Se han ido %d personas: %s.",
+  "prefs.collabAll": "Edición compartida: anunciar todo",
+  "prefs.collabImportant": "Edición compartida: anunciar solo la conexión",
+  "prefs.collabOff": "Edición compartida: no anunciar nada"
  }
 }

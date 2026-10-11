@@ -23,6 +23,7 @@ type prefs struct {
 	Spacing  string `json:"spacing,omitempty"`  // "wide"
 	Focus    string `json:"focus,omitempty"`    // "on": distraction-free
 	Targets  string `json:"targets,omitempty"`  // "large"
+	Collab   string `json:"collab,omitempty"`   // what is announced of a shared session: "" everything, "important", "off"
 }
 
 // attrs are the values the root element carries.
@@ -51,6 +52,9 @@ func loadPrefs() prefs {
 	}
 	if p.Targets != "large" {
 		p.Targets = ""
+	}
+	if p.Collab != components.CollabImportant && p.Collab != components.CollabOff {
+		p.Collab = ""
 	}
 	return p
 }
@@ -94,6 +98,10 @@ func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
 		return components.MenuItem{Label: label, Checked: curPrefs.Text == value,
 			OnSelect: change(T("a11y.textSize", "Text size: %s", label), func(p *prefs) { p.Text = value })}
 	}
+	collab := func(label, level string) components.MenuItem {
+		return components.MenuItem{Label: label, Checked: curPrefs.Collab == level,
+			OnSelect: change(label, func(p *prefs) { p.Collab = level })}
+	}
 	toggle := func(label string, on bool, set func(*prefs, bool)) components.MenuItem {
 		return components.MenuItem{Label: label, Checked: on, OnSelect: func() {
 			state := T("a11y.off", "off")
@@ -112,6 +120,11 @@ func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
 		toggle(T("prefs.spacing", "Wide text spacing"), curPrefs.Spacing == "wide", func(p *prefs, on bool) { p.Spacing = map[bool]string{true: "wide"}[on] }),
 		toggle(T("prefs.contrast", "More contrast"), curPrefs.Contrast == "more", func(p *prefs, on bool) { p.Contrast = map[bool]string{true: "more"}[on] }),
 		toggle(T("prefs.motion", "Reduce motion"), curPrefs.Motion == "reduce", func(p *prefs, on bool) { p.Motion = map[bool]string{true: "reduce"}[on] }),
+		{Separator: true},
+		collab(T("prefs.collabAll", "Shared editing: announce everything"), components.CollabAll),
+		collab(T("prefs.collabImportant", "Shared editing: announce only the connection"), components.CollabImportant),
+		collab(T("prefs.collabOff", "Shared editing: announce nothing"), components.CollabOff),
+		{Separator: true},
 		toggle(T("prefs.targets", "Large targets"), curPrefs.Targets == "large", func(p *prefs, on bool) { p.Targets = map[bool]string{true: "large"}[on] }),
 		toggle(T("prefs.focus", "Distraction-free mode"), curPrefs.Focus == "on", func(p *prefs, on bool) { p.Focus = map[bool]string{true: "on"}[on] }),
 		{Separator: true},

@@ -62,6 +62,9 @@ func liveEndToEnd(t *testing.T, hubURL, transport, flow string) {
 	b.Wait("s.text.length > 100")
 	b.OK(b.State().Str("text") == aText, "the second browser receives the first one's document")
 
+	// Ana hears, through the live region, that Bo joined.
+	a.WaitFor("Bo's arrival is announced", `(document.querySelector('.gj-announcer') || {textContent: ''}).textContent.includes('Bo joined.')`)
+
 	// Both go into edit mode; Ana types at the end of a line, Bo on another line.
 	a.ToggleMode()
 	b.ToggleMode()
