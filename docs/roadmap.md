@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-0 of 10 since the last full run (full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+1 of 10 since the last full run (#218: a durable queue for the sync client (roadmap 74); full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1084,8 +1084,11 @@ unless stated.
     document…", "Offline: 2 changes waiting to be sent", "Not shared: <reason>"), with a `data-state` for tests; only
     offline and problem are announced as they happen (sending and shared come and go with every keystroke); de/fr/es
     with plural forms; e2e checks the shared state. Left: the same for a document saved to a store (that already has
-    saved/saving/unsaved/failed), a durable local queue that survives closing the tab (step 2), a pre-merge view of
+    saved/saving/unsaved/failed), a pre-merge view of
     what others changed while offline (3), and an e2e that goes offline (the e2e harness cannot cut an open stream yet).
+    Also done, step 2 in the client: `client.Options.Queue` (a `Queue` with `Load` and `Save`) keeps the ops waiting to be
+    sent, `Dial` sends what it loads, and a unit test restarts a connection with the server down. Left: a browser
+    storage `Queue` for the showcase and an e2e that reloads the page with changes waiting.
 75. **Sharing UX.** Kind: fixable. What: link sharing, per-person permissions, expiring links, view-only versus
     comment-only, and a plain explanation of what encryption protects and what it does not. Why it matters: people
     share wrongly when the options are unclear. Plan: (1) a permission model with roles view, comment, edit; (2)
