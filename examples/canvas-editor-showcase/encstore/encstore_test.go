@@ -639,3 +639,30 @@ func withPlainDocs(t *testing.T, r *rig) {
 		}
 	}
 }
+
+// CheckRecoveryKey tells the right recovery key from another key and from rubbish, without unlocking
+// the store or keeping the secret.
+func TestCheckRecoveryKey(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t)
+	rk, secret := recovery(t)
+	if err := r.st.Enable(ctx, onlyPasskeys, passkey(t, r), rk); err != nil {
+		t.Fatal(err)
+	}
+	r.st.Lock()
+	if err := r.st.CheckRecoveryKey("  " + secret + "\n"); err != nil {
+		t.Errorf("the right key: %v", err)
+	}
+	if r.st.Unlocked() {
+		t.Error("checking a key unlocked the store")
+	}
+	_, other, _ := NewRecoveryKey("another")
+	if err := r.st.CheckRecoveryKey(other); !errors.Is(err, ErrNotAKey) {
+		t.Errorf("another recovery key: %v", err)
+	}
+	for _, bad := range []string{"", "hello", "AGE-SECRET-KEY-1NOPE"} {
+		if err := r.st.CheckRecoveryKey(bad); err == nil || errors.Is(err, ErrNotAKey) {
+			t.Errorf("%q: %v, want a parse error", bad, err)
+		}
+	}
+}
