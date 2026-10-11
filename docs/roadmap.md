@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-10 of 10 since the last full run (#173 to #181, this PR): the full run on main is due next. The full run on main 67a6c28 (after #171, the 10th merge since 10ae2107) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+0 of 10 since the last full run (full run on main 83955fc after #182, the 10th merge since 67a6c28, with the fixes in this PR). It passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. It found a stale components API dump, an invalid `aria-checked` on plain menu items (checked items are now `menuitemcheckbox`), and two start-up races in e2e tests, all fixed here. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
