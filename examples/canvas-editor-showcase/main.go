@@ -50,6 +50,7 @@ type ui struct {
 	title   string
 	menu    int    // open menu, or -1
 	tab     string // sidebar tab: format, symbols, keys
+	check   checkState
 	format  canvas.Format
 	catalog []fonts.Font
 	open    bool
@@ -339,7 +340,7 @@ func main() {
 			// along it), laid out as before (display:contents)
 			xango.El("div", []xango.Attr{xango.A("role", "tablist"), xango.A("aria-label", components.Translate("tab.list", "Side panel")), xango.A("style", "display:contents")},
 				tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
-				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "outline", "Outline", renderUI),
+				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI),
 				tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
 				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI)),
 		)
@@ -368,6 +369,8 @@ func main() {
 		switch u.tab {
 		case "outline":
 			panel = outlinePanel(&state, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, run, redraw, refocus, renderUI)
+		case "check":
+			panel = checkPanel(u, &state, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
 		case "comments":
 			panel = commentsPanel(u, &state, func() *canvas.TextFlow { return flow }, run, redraw, refocus, renderUI)
 		case "styles":
@@ -864,13 +867,13 @@ func resetBinding(stage *canvas.Stage, defaults canvas.Keymap, cmd canvas.Comman
 
 // tabIcons are the icons of the sidebar tabs (Material Symbols names, as in opendocs).
 var tabIcons = map[string]string{
-	"format": "tune", "styles": "style", "symbols": "functions", "keys": "keyboard", "comments": "comment", "outline": "toc",
+	"format": "tune", "styles": "style", "symbols": "functions", "keys": "keyboard", "comments": "comment", "outline": "toc", "check": "task_alt",
 	"find": "search", "spell": "spellcheck", "language": "language", "stats": "numbers", "share": "ios_share", "people": "account_circle",
 	"migrate": "upload_file", "page": "margin", "save": "description", "transfer": "input",
 }
 
 // sideTabs is the order of the side panel's tabs, which the arrow keys follow.
-var sideTabs = []string{"format", "styles", "symbols", "keys", "comments", "outline", "find", "spell", "language", "stats", "share", "people", "migrate", "page", "save", "transfer"}
+var sideTabs = []string{"format", "styles", "symbols", "keys", "comments", "outline", "check", "find", "spell", "language", "stats", "share", "people", "migrate", "page", "save", "transfer"}
 
 func tabButton(u *ui, tab, label string, rerender func()) xango.Node {
 	class := "gj-keybindings-button"

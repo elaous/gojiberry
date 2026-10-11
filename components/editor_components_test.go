@@ -944,3 +944,38 @@ func TestModalKeyboard(t *testing.T) {
 		t.Error("Escape was taken from a modal that cannot close")
 	}
 }
+
+func TestCheckPanelListsFindingsWithWordsAndAGoButton(t *testing.T) {
+	var went []int
+	checked := false
+	props := CheckPanelProps{
+		Checked: true,
+		Findings: []CheckFinding{
+			{Rule: "image-alt", Severity: "error", Message: "An image has no description.", Fix: "Describe it."},
+			{Rule: "contrast", Severity: "warning", Message: "Faint text.", Fix: "Darken it."},
+		},
+		OnCheck: func() { checked = true },
+		OnGo:    func(i int) { went = append(went, i) },
+	}
+	html := render(t, CheckPanel(props))
+	for _, want := range []string{`id="gj-check-run"`, "2 findings: 1 errors, 1 warnings.", `role="status"`, "error: ", "warning: ", "An image has no description.", "Describe it.", `aria-label="Go to finding 2: Faint text."`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in\n%s", want, html)
+		}
+	}
+	gos := findHandlers(CheckPanel(props), "click")
+	if len(gos) != 3 { // Check, then one per finding
+		t.Fatalf("click handlers: %d", len(gos))
+	}
+	gos[0](xango.NewEvent("click", nil, false, nil, nil))
+	gos[2](xango.NewEvent("click", nil, false, nil, nil))
+	if !checked || len(went) != 1 || went[0] != 1 {
+		t.Errorf("checked %v, went %v", checked, went)
+	}
+	if h := render(t, CheckPanel(CheckPanelProps{})); !strings.Contains(h, "Not checked yet.") || strings.Contains(h, "<ul") {
+		t.Errorf("before a check: %s", h)
+	}
+	if h := render(t, CheckPanel(CheckPanelProps{Checked: true})); !strings.Contains(h, "Nothing found.") {
+		t.Errorf("a clean check: %s", h)
+	}
+}
