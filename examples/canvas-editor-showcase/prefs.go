@@ -21,11 +21,13 @@ type prefs struct {
 	Contrast string `json:"contrast,omitempty"` // "more"
 	Text     string `json:"text,omitempty"`     // "large", "larger", "largest"
 	Spacing  string `json:"spacing,omitempty"`  // "wide"
+	Focus    string `json:"focus,omitempty"`    // "on": distraction-free
+	Targets  string `json:"targets,omitempty"`  // "large"
 }
 
 // attrs are the values the root element carries.
 func (p prefs) attrs() map[string]string {
-	return map[string]string{"data-gj-motion": p.Motion, "data-gj-contrast": p.Contrast, "data-gj-text": p.Text, "data-gj-spacing": p.Spacing}
+	return map[string]string{"data-gj-motion": p.Motion, "data-gj-contrast": p.Contrast, "data-gj-text": p.Text, "data-gj-spacing": p.Spacing, "data-gj-focus": p.Focus, "data-gj-targets": p.Targets}
 }
 
 // loadPrefs reads the kept preferences; unknown or unreadable ones are as if unset.
@@ -43,6 +45,12 @@ func loadPrefs() prefs {
 	}
 	if p.Spacing != "wide" {
 		p.Spacing = ""
+	}
+	if p.Focus != "on" {
+		p.Focus = ""
+	}
+	if p.Targets != "large" {
+		p.Targets = ""
 	}
 	return p
 }
@@ -104,6 +112,8 @@ func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
 		toggle(T("prefs.spacing", "Wide text spacing"), curPrefs.Spacing == "wide", func(p *prefs, on bool) { p.Spacing = map[bool]string{true: "wide"}[on] }),
 		toggle(T("prefs.contrast", "More contrast"), curPrefs.Contrast == "more", func(p *prefs, on bool) { p.Contrast = map[bool]string{true: "more"}[on] }),
 		toggle(T("prefs.motion", "Reduce motion"), curPrefs.Motion == "reduce", func(p *prefs, on bool) { p.Motion = map[bool]string{true: "reduce"}[on] }),
+		toggle(T("prefs.targets", "Large targets"), curPrefs.Targets == "large", func(p *prefs, on bool) { p.Targets = map[bool]string{true: "large"}[on] }),
+		toggle(T("prefs.focus", "Distraction-free mode"), curPrefs.Focus == "on", func(p *prefs, on bool) { p.Focus = map[bool]string{true: "on"}[on] }),
 		{Separator: true},
 		{Label: T("prefs.reset", "Reset to defaults"), OnSelect: change(T("a11y.prefsReset", "Display preferences reset"), func(p *prefs) { *p = prefs{} })},
 	}

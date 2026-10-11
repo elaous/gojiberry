@@ -680,6 +680,8 @@
   "menu.sameLang": "Wie das Dokument",
   "menu.docLangSet": "Sprache des Dokuments",
   "menu.noLang": "Nicht festgelegt",
-  "a11y.docLang": "Sprache des Dokuments: %s"
+  "a11y.docLang": "Sprache des Dokuments: %s",
+  "prefs.targets": "Große Schaltflächen",
+  "prefs.focus": "Ablenkungsfreier Modus"
  }
 }
