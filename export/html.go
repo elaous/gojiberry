@@ -1,6 +1,7 @@
 package export
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -14,10 +15,43 @@ import (
 // entry per nesting depth -- instead of Markdown's simple per-line
 // prefix: openList/closeList/closeItem below are the standard
 // flat-leveled-items-to-nested-list machinery.
-type HTML struct{}
+type HTML struct {
+	// Theme is design-token CSS (the output of tokens.Set.CSS: a :root rule of --gj-color-*,
+	// --gj-font-* and --gj-space-* custom properties). When it is set the document carries it in a
+	// <style> and its text, page and links use the tokens, so the exported file looks like the
+	// editor's theme. It is checked for anything that could end the style element or open a rule
+	// of its own, and the export fails rather than write it.
+	Theme string
+}
 
-func (HTML) Export(snap Snapshot) ([]byte, error) {
-	return []byte(renderHTMLDocument(snap, false)), nil
+func (h HTML) Export(snap Snapshot) ([]byte, error) {
+	if h.Theme != "" && !safeThemeCSS(h.Theme) {
+		return nil, errors.New("export: the HTML theme is not a plain :root block of custom properties")
+	}
+	return []byte(renderHTMLDocument(snap, false, h.Theme)), nil
+}
+
+// themeRules use the tokens with a fallback each, so a theme that leaves one out still renders.
+const themeRules = "body{color:var(--gj-color-text,#1a1a1a);background:var(--gj-color-background,#fff);font-size:var(--gj-font-1,16px)}" +
+	"a{color:var(--gj-color-link,#0b5cad)}"
+
+// safeThemeCSS accepts one ":root{...}" block of "--name:value;" declarations and nothing else.
+func safeThemeCSS(css string) bool {
+	body, ok := strings.CutPrefix(css, ":root{")
+	if !ok {
+		return false
+	}
+	body, ok = strings.CutSuffix(body, "}")
+	if !ok || strings.ContainsAny(body, "{}<>\\@\"'\n\r") {
+		return false
+	}
+	for _, decl := range strings.Split(strings.TrimSuffix(body, ";"), ";") {
+		name, _, found := strings.Cut(decl, ":")
+		if !found || !strings.HasPrefix(name, "--") {
+			return false
+		}
+	}
+	return true
 }
 
 // renderHTMLDocument is HTML.Export's own body, shared with EPUB's
@@ -25,7 +59,7 @@ func (HTML) Export(snap Snapshot) ([]byte, error) {
 // the XHTML-namespaced root <html>, EPUB3's own strict-XML
 // requirement) rather than duplicating the block-walking loop for a
 // difference of only two element spellings.
-func renderHTMLDocument(snap Snapshot, xhtml bool) string {
+func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 	var body strings.Builder
 	var stack []BlockKind // stack[i] = the list kind (Bullet/Numbered) open at nesting depth i
 
@@ -195,8 +229,16 @@ func renderHTMLDocument(snap Snapshot, xhtml bool) string {
 			body.String() + "</body>\n</html>\n"
 	}
 	return "<!doctype html>\n<html" + langAttrs(snap.Lang, false) + ">\n<head>\n<meta charset=\"utf-8\">\n<title>" +
-		escapeHTMLText(snap.Title) + "</title>\n</head>\n<body>\n" +
+		escapeHTMLText(snap.Title) + "</title>\n" + themeStyle(theme) + "</head>\n<body>\n" +
 		body.String() + "</body>\n</html>\n"
+}
+
+// themeStyle is the <style> element of a theme, or nothing.
+func themeStyle(theme string) string {
+	if theme == "" {
+		return ""
+	}
+	return "<style>" + theme + themeRules + "</style>\n"
 }
 
 // htmlInline renders segs as HTML inline content, wrapping each run
