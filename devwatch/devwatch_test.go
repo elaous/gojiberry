@@ -1,6 +1,7 @@
 package devwatch
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -164,5 +165,55 @@ func TestAddRecursiveSkipsHeavyDirsAndSurvivesUnreadableOnes(t *testing.T) {
 	}
 	if len(w.WatchList()) != 3 { // root, src, src/pkg
 		t.Errorf("watch list %v", w.WatchList())
+	}
+}
+
+func TestRunStopsAtOnceWhenTheFirstBuildFails(t *testing.T) {
+	err := Run(Config{Root: t.TempDir(), Rebuild: func() bool { return false }, Command: "sh", Args: []string{"-c", "exit 0"}})
+	if err == nil || !strings.Contains(err.Error(), "initial build failed") {
+		t.Fatalf("got %v", err)
+	}
+	var be *buildError
+	if !errors.As(err, &be) {
+		t.Errorf("the error is a build error: %T", err)
+	}
+}
+
+func TestRunReportsAProcessThatCannotStart(t *testing.T) {
+	err := Run(Config{Root: t.TempDir(), Rebuild: func() bool { return true }, Command: filepath.Join(t.TempDir(), "no-such-binary")})
+	if err == nil {
+		t.Fatal("a command that does not exist is an error")
+	}
+}
+
+func TestARebuildThatFailsKeepsTheRunningProcess(t *testing.T) {
+	dir := t.TempDir()
+	pidFile := filepath.Join(t.TempDir(), "server.pid")
+	var rebuilds atomic.Int32
+	rebuild := func() bool { return rebuilds.Add(1) == 1 } // the first build works, later ones fail
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(Config{Root: dir, Rebuild: rebuild, Command: "sh", Args: []string{"-c", "echo $$ > " + pidFile + "; exec sleep 100"}})
+	}()
+	pollUntil(t, 2*time.Second, func() bool { return readPID(pidFile) != 0 })
+	pid := readPID(pidFile)
+	if err := os.WriteFile(filepath.Join(dir, "broken.go"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pollUntil(t, 3*time.Second, func() bool { return rebuilds.Load() >= 2 })
+	time.Sleep(300 * time.Millisecond) // time for a restart, had there been one
+	if readPID(pidFile) != pid {
+		t.Error("the process was restarted after a failed build")
+	}
+	if err := syscall.Kill(syscall.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run after shutdown: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run did not return after SIGTERM")
 	}
 }
