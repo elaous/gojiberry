@@ -753,6 +753,14 @@
   "docs.compare": "Comparar",
   "docs.compareWith": "Comparar %s con el documento actual",
   "docs.compareHeading": "Cambios desde esta versión",
-  "saver.versionCompared": "Comparado con el documento actual"
+  "saver.versionCompared": "Comparado con el documento actual",
+  "docs.versionBy": "por %s",
+  "docs.versionNamePlaceholder": "nombrar esta versión",
+  "docs.versionNameOf": "Nombre de la versión del %s",
+  "docs.versionKeep": "Conservar la versión del %s",
+  "docs.versionKeepLabel": "Conservar",
+  "saver.versionRenamed": "Versión renombrada",
+  "saver.versionPinned": "Versión conservada",
+  "saver.versionUnpinned": "Versión ya no conservada"
  }
 }

@@ -2,6 +2,7 @@ package saver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -36,6 +37,107 @@ type Version struct {
 	ID   string // the document's ID
 	Time time.Time
 	Size int
+	// Name, Pinned and Author come from the version's notes (see SetVersionMeta): a name the person gave
+	// it, whether it is kept when older snapshots are dropped, and who saved it.
+	Name   string
+	Pinned bool
+	Author string
+}
+
+// VersionMeta is what is known of a snapshot besides its time: kept next to the snapshots, in one small
+// record per document (versions/<id>/meta.json), so the snapshots themselves stay as they were saved.
+type VersionMeta struct {
+	Name   string `json:"name,omitempty"`
+	Pinned bool   `json:"pinned,omitempty"`
+	Author string `json:"author,omitempty"`
+}
+
+// ErrPinned is returned when a pinned version is asked to be deleted: unpin it first.
+var ErrPinned = errors.New("saver: this version is pinned: unpin it before deleting it")
+
+// maxVersionName is the longest name of a version, in bytes.
+const maxVersionName = 120
+
+func metaKey(id string) string { return VersionPrefix + id + "/meta.json" }
+
+// versionDoc is the document ID a version key belongs to.
+func versionDoc(key string) string {
+	rest := strings.TrimPrefix(key, VersionPrefix)
+	id, _, _ := strings.Cut(rest, "/")
+	return id
+}
+
+func (s *Saver) loadMeta(ctx context.Context, t Target, id string) (map[string]VersionMeta, error) {
+	stored, err := t.Adapter.Load(ctx, metaKey(id))
+	if errors.Is(err, docstore.ErrNotFound) {
+		return map[string]VersionMeta{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]VersionMeta{}
+	if json.Unmarshal(stored.Data, &m) != nil {
+		return map[string]VersionMeta{}, nil // an unreadable note is no note: the snapshots stay usable
+	}
+	return m, nil
+}
+
+func (s *Saver) saveMeta(ctx context.Context, t Target, id string, m map[string]VersionMeta) error {
+	if len(m) == 0 {
+		err := t.Adapter.Delete(ctx, metaKey(id))
+		if errors.Is(err, docstore.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	data, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	return t.Adapter.Save(ctx, metaKey(id), data)
+}
+
+// SetVersionMeta changes the notes of a snapshot: edit receives the current ones. The name is trimmed
+// and cut to 120 bytes. Two people changing notes of the same document at the same moment can lose
+// one of the changes (the last write wins); the snapshots are never affected.
+func (s *Saver) SetVersionMeta(ctx context.Context, target, key string, edit func(*VersionMeta)) error {
+	if err := checkVersionKey(key); err != nil {
+		return err
+	}
+	t, err := s.Target(target)
+	if err != nil {
+		return err
+	}
+	if _, err := t.Adapter.Load(ctx, key); err != nil {
+		return err
+	}
+	id := versionDoc(key)
+	m, err := s.loadMeta(ctx, t, id)
+	if err != nil {
+		return err
+	}
+	v := m[key]
+	edit(&v)
+	v.Name = strings.TrimSpace(v.Name)
+	if len(v.Name) > maxVersionName {
+		v.Name = strings.ToValidUTF8(v.Name[:maxVersionName], "")
+	}
+	if v == (VersionMeta{}) {
+		delete(m, key)
+	} else {
+		m[key] = v
+	}
+	return s.saveMeta(ctx, t, id, m)
+}
+
+// RenameVersion gives a snapshot a name ("" removes it).
+func (s *Saver) RenameVersion(ctx context.Context, target, key, name string) error {
+	return s.SetVersionMeta(ctx, target, key, func(v *VersionMeta) { v.Name = name })
+}
+
+// PinVersion keeps a snapshot when older ones are dropped (see Saver.MaxVersions), or lets it go again.
+func (s *Saver) PinVersion(ctx context.Context, target, key string, pinned bool) error {
+	return s.SetVersionMeta(ctx, target, key, func(v *VersionMeta) { v.Pinned = pinned })
 }
 
 func (s *Saver) maxVersions() int {
@@ -53,6 +155,11 @@ func versionKey(id string, c docfile.Codec, t time.Time) string {
 // belongs to (doc.ID(), which must be set: save the document first), and drops
 // the oldest snapshots beyond Saver.MaxVersions.
 func (s *Saver) SaveVersion(ctx context.Context, target string, c docfile.Codec, doc docfile.Document) (Version, error) {
+	return s.SaveVersionBy(ctx, target, c, doc, "")
+}
+
+// SaveVersionBy is SaveVersion that also records who saved the snapshot (author "" records nobody).
+func (s *Saver) SaveVersionBy(ctx context.Context, target string, c docfile.Codec, doc docfile.Document, author string) (Version, error) {
 	t, err := s.Target(target)
 	if err != nil {
 		return Version{}, err
@@ -84,12 +191,26 @@ func (s *Saver) SaveVersion(ctx context.Context, target string, c docfile.Codec,
 	if err := t.Adapter.Save(ctx, key, data); err != nil {
 		return Version{}, err
 	}
-	if vs, err := s.Versions(ctx, target, id); err == nil && len(vs) > s.maxVersions() {
-		for _, old := range vs[s.maxVersions():] {
-			_ = t.Adapter.Delete(ctx, old.Key)
+	if author = strings.TrimSpace(author); author != "" {
+		_ = s.SetVersionMeta(ctx, target, key, func(v *VersionMeta) { v.Author = author }) // a lost note is not a lost snapshot
+	}
+	if vs, err := s.Versions(ctx, target, id); err == nil {
+		kept := 0
+		meta, _ := s.loadMeta(ctx, t, id)
+		for _, v := range vs { // newest first; a pinned snapshot is never dropped and does not count
+			if v.Pinned {
+				continue
+			}
+			if kept++; kept > s.maxVersions() {
+				_ = t.Adapter.Delete(ctx, v.Key)
+				delete(meta, v.Key)
+			}
+		}
+		if kept > s.maxVersions() {
+			_ = s.saveMeta(ctx, t, id, meta)
 		}
 	}
-	return Version{Key: key, ID: id, Time: now, Size: len(data)}, nil
+	return Version{Key: key, ID: id, Time: now, Size: len(data), Author: author}, nil
 }
 
 // Versions lists the snapshots of the document, newest first.
@@ -106,6 +227,7 @@ func (s *Saver) Versions(ctx context.Context, target, id string) ([]Version, err
 		return nil, err
 	}
 	prefix := VersionPrefix + id + "/"
+	notes, _ := s.loadMeta(ctx, t, id)
 	var out []Version
 	for _, m := range metas {
 		rest, ok := strings.CutPrefix(m.ID, prefix)
@@ -120,7 +242,8 @@ func (s *Saver) Versions(ctx context.Context, target, id string) ([]Version, err
 		if err != nil {
 			continue
 		}
-		out = append(out, Version{Key: m.ID, ID: id, Time: time.Unix(0, ns), Size: m.Size})
+		n := notes[m.ID]
+		out = append(out, Version{Key: m.ID, ID: id, Time: time.Unix(0, ns), Size: m.Size, Name: n.Name, Pinned: n.Pinned, Author: n.Author})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key > out[j].Key })
 	return out, nil
@@ -162,7 +285,19 @@ func (s *Saver) DeleteVersion(ctx context.Context, target, key string) error {
 	if err != nil {
 		return err
 	}
-	return t.Adapter.Delete(ctx, key)
+	id := versionDoc(key)
+	notes, _ := s.loadMeta(ctx, t, id)
+	if notes[key].Pinned {
+		return ErrPinned
+	}
+	if err := t.Adapter.Delete(ctx, key); err != nil {
+		return err
+	}
+	if _, had := notes[key]; had {
+		delete(notes, key)
+		_ = s.saveMeta(ctx, t, id, notes)
+	}
+	return nil
 }
 
 func (s *Saver) dropVersions(ctx context.Context, t Target, id string) {
