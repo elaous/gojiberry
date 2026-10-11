@@ -458,6 +458,12 @@ func withSessions(ctx context.Context, adapter docstore.Adapter, m *auth.Manager
 	// (A manager with passkeys only and no OpenID Connect provider mounts no login route, so the limiter
 	// is installed and unused there: harmless, and not worth a second code path.)
 	m.SetLoginLimiter(limiters("login", passkey.DefaultPerMinute, passkey.DefaultBurst), clientIP)
+	if os.Getenv("GOJIBERRY_DOCSTORE_AUTH_MISS_LIMIT") == "true" {
+		// a client that keeps sending bearer tokens that are not sessions is not looked up in the store
+		// for a while; clients behind one shared address share the budget, hence off by default
+		m.SetMissLimiter(limiters("auth-miss", passkey.DefaultPerMinute, passkey.DefaultBurst), clientIP)
+		log.Print("docstore: requests with a bearer token that is not a session are limited per client address (GOJIBERRY_DOCSTORE_AUTH_MISS_LIMIT=true)")
+	}
 	if mode == "memory" {
 		if n := declaredReplicas(); n > 1 {
 			log.Printf("docstore: WARNING: GOJIBERRY_DOCSTORE_REPLICAS=%d but sign-in sessions are kept in each process: a token issued by one replica is unknown to the others. Set GOJIBERRY_DOCSTORE_SESSIONS=store (needs a store with conditional writes) or route each client to one replica", n)
