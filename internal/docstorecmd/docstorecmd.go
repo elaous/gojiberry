@@ -118,6 +118,9 @@ func newHTTPServer(addr string, h http.Handler) *http.Server {
 //
 //   - GOJIBERRY_DOCSTORE_DIRECTORY_REQUIRE_POP=true: a key can be published only with proof of
 //     possession (answer to POST /directory/challenge);
+//   - GOJIBERRY_DOCSTORE_DIRECTORY_REQUIRE_ENROLLMENT=true: a key can be published only for an
+//     address that has enrolled an owner key (enrolling itself stays open on the provider
+//     session), so every publication carries the owner's signature;
 //   - GOJIBERRY_DOCSTORE_DIRECTORY_LOOKUP=domain: a user can look up only addresses of their own
 //     verified e-mail domain (default "any");
 //   - GOJIBERRY_DOCSTORE_DIRECTORY_REVOKE_WINDOW=48h: how long a revoked key is remembered
@@ -144,6 +147,7 @@ func withDirectory(ctx context.Context, srv *docstore.Server, adapter docstore.A
 	}
 	dir := &encrypt.AdapterDirectory{Store: adapter, Signer: signer}
 	dir.RequireProof = os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_REQUIRE_POP") == "true"
+	dir.RequireEnrollment = os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_REQUIRE_ENROLLMENT") == "true"
 	if v := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_REVOKE_WINDOW")); v != "" {
 		w, err := time.ParseDuration(v)
 		if err != nil || w <= 0 {
@@ -202,7 +206,7 @@ func withDirectory(ctx context.Context, srv *docstore.Server, adapter docstore.A
 	srv.WithDirectory(encrypt.DirectoryService(dir)).WithDirectoryPolicy(policy).WithDirectoryLimits(limiters).WithDirectoryGlobalPerDomain(perDomain)
 	go dir.RunSweep(ctx, time.Hour)
 	go dir.RunWriterWatch(ctx, replicas)
-	log.Printf("docstore: key directory enabled (proof of possession required: %v)", dir.RequireProof)
+	log.Printf("docstore: key directory enabled (proof of possession required: %v, owner key required: %v)", dir.RequireProof, dir.RequireEnrollment)
 	return nil
 }
 

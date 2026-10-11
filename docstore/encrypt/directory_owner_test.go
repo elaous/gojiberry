@@ -713,3 +713,36 @@ func TestAuditFlagsADateBeyondWhatADurationHolds(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// With RequireEnrollment an address publishes only after it enrolled an owner key; enrolling itself
+// is still open on the session, and a publication after it carries the owner's signature as ever.
+func TestRequireEnrollmentRefusesPublicationsForAnUnenrolledAddress(t *testing.T) {
+	e := newOwnerEnv(t)
+	e.d.RequireEnrollment = true
+	age1, _ := ageKey(t)
+	if _, err := e.publish(nil, age1); !errors.Is(err, ErrEnrollmentRequired) {
+		t.Fatalf("an unenrolled address published: %v", err)
+	}
+	if k, _ := e.d.Lookup(context.Background(), "ana@x.io"); len(k) != 0 {
+		t.Errorf("a refused publication left keys: %+v", k)
+	}
+	_, priv := ownerKey(t)
+	if view, err := e.enroll(OpEnroll, priv, nil); err != nil || !view.Enrolled {
+		t.Fatalf("enrolling must stay open: %+v %v", view, err)
+	}
+	if _, err := e.publish(nil, age1); !errors.Is(err, ErrOwnerRequired) {
+		t.Errorf("enrolled but unsigned: %v, want the owner's signature asked for", err)
+	}
+	if _, err := e.publish(priv, age1); err != nil {
+		t.Errorf("enrolled and signed: %v", err)
+	}
+	// another address is unenrolled: refused with the option, as before without it
+	bo := auth.User{ID: "google:2", Email: "bo@x.io", VerifiedEmail: true}
+	if err := e.d.Publish(context.Background(), bo, age1); !errors.Is(err, ErrEnrollmentRequired) {
+		t.Errorf("another unenrolled address: %v", err)
+	}
+	e.d.RequireEnrollment = false
+	if err := e.d.Publish(context.Background(), bo, age1); err != nil {
+		t.Errorf("without the option an unenrolled address publishes as before: %v", err)
+	}
+}

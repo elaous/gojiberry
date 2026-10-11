@@ -75,6 +75,12 @@ type AdapterDirectory struct {
 	// (ErrProofRequired). Off by default: a proof is checked when it is sent, and recorded
 	// (Held), but not demanded.
 	RequireProof bool
+	// RequireEnrollment makes Publish refuse (ErrEnrollmentRequired) a key for an address that has
+	// not enrolled an owner key. Enrolling itself is still allowed on the provider session, as ever;
+	// from then on every publication carries the owner's signature, which is what closes the gap an
+	// unenrolled address leaves (a server that holds the directory key can number entries for it as
+	// it likes). Off by default: it makes a first publication a two-step affair.
+	RequireEnrollment bool
 	// RevokeWindow is how long a revoked key stays remembered: during it the key cannot be
 	// published again (ErrRevoked), so a replayed request cannot silently bring it back, and a
 	// lookup that asks for revoked keys shows it. DefaultRevokeWindow when 0.
@@ -270,11 +276,13 @@ type PublishOptions struct {
 // Errors of Publish and Revoke besides ErrNotPublishable, ErrTooManyKeys and ErrDirectoryOff.
 // They are the docstore errors, so the routes map them to statuses.
 var (
-	ErrProofRequired  = docstore.ErrDirectoryProofRequired
-	ErrBadProof       = docstore.ErrDirectoryBadProof
-	ErrBadAttestation = docstore.ErrDirectoryBadAttestation
-	ErrKeyNotFound    = docstore.ErrDirectoryNotFound
-	ErrRevoked        = docstore.ErrDirectoryRevoked
+	ErrProofRequired = docstore.ErrDirectoryProofRequired
+	// ErrEnrollmentRequired: RequireEnrollment is set and the address has no owner key.
+	ErrEnrollmentRequired = docstore.ErrDirectoryEnrollmentRequired
+	ErrBadProof           = docstore.ErrDirectoryBadProof
+	ErrBadAttestation     = docstore.ErrDirectoryBadAttestation
+	ErrKeyNotFound        = docstore.ErrDirectoryNotFound
+	ErrRevoked            = docstore.ErrDirectoryRevoked
 )
 
 // publishable says user may publish and revoke: a provider session with a verified e-mail.
@@ -512,6 +520,9 @@ func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key 
 		enr, _, err := d.readEnrollment(ctx, email)
 		if err != nil {
 			return PublishedKey{}, err
+		}
+		if d.RequireEnrollment && enr == nil {
+			return PublishedKey{}, ErrEnrollmentRequired
 		}
 		label := cleanLabel(key.Label)
 		owner, err := d.checkOwner(ctx, enr, OpPublish, email, r.Fingerprint, LabelHash(label), opt.Owner, now)
