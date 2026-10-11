@@ -82,3 +82,33 @@ func TestScreenReaderCopyFollowsStructure(t *testing.T) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// The font selector works with the keyboard alone: Down on its button opens the list with the focus in
+// the search field, Down again goes to the first option, Enter picks it and the focus returns to the
+// button; Escape closes the list and gives the focus back too.
+func TestFontSelectorKeyboard(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.Click(`button[data-tab="format"]`)
+	active := func() string {
+		return d.Str(`(document.activeElement.className || '') + '|' + (document.activeElement.getAttribute('data-family') || '')`)
+	}
+	d.Focus(".gj-fontselector-control")
+	d.Press("ArrowDown")
+	d.WaitFor("the search field", `document.activeElement.classList.contains('gj-fontselector-search')`)
+	d.Press("ArrowDown")
+	d.WaitFor("the first option", `document.activeElement.classList.contains('gj-fontselector-option')`)
+	d.Press("ArrowDown")
+	d.OK(strings.Contains(active(), "gj-fontselector-option"), "the focus moves among the options: "+active())
+	family := d.Str(`document.activeElement.getAttribute('data-family')`)
+	d.Press("Enter")
+	d.WaitFor("the list closed", `!document.querySelector('.gj-fontselector-panel')`)
+	d.OK(strings.Contains(active(), "gj-fontselector-control"), "the focus is back on the button: "+active())
+	d.OK(strings.Contains(d.Text(".gj-fontselector-control"), family), "and it shows the choice "+family+": "+d.Text(".gj-fontselector-control"))
+
+	d.Press("ArrowDown")
+	d.WaitFor("open again", `!!document.querySelector('.gj-fontselector-panel')`)
+	d.Press("Escape")
+	d.WaitFor("closed by Escape", `!document.querySelector('.gj-fontselector-panel')`)
+	d.OK(strings.Contains(active(), "gj-fontselector-control"), "Escape returns the focus to the button: "+active())
+	d.NoErrors()
+}

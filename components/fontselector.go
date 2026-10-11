@@ -61,6 +61,7 @@ func FontSelector(props FontSelectorProps) xango.Node {
 			labelAttrs = append(labelAttrs, xango.A("style", "font-family:"+fonts.CSSFamily(fonts.Font{Family: props.Selected})))
 		}
 	}
+	lb := fontListbox
 	controlAttrs := []xango.Attr{
 		xango.A("class", "gj-fontselector-control"),
 		xango.A("type", "button"),
@@ -71,7 +72,9 @@ func FontSelector(props FontSelectorProps) xango.Node {
 		controlAttrs = append(controlAttrs, xango.A("disabled", "disabled"))
 	} else if props.OnToggleOpen != nil {
 		open := props.Open
-		controlAttrs = append(controlAttrs, xango.On("click", func(xango.Event) { props.OnToggleOpen(!open) }))
+		controlAttrs = append(controlAttrs,
+			xango.On("click", func(xango.Event) { props.OnToggleOpen(!open) }),
+			lb.controlKey(open, props.OnToggleOpen))
 	}
 	children := []xango.Node{xango.El("button", controlAttrs,
 		xango.El("span", labelAttrs, xango.Text(label)),
@@ -82,6 +85,9 @@ func FontSelector(props FontSelectorProps) xango.Node {
 	}
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-fontselector")}, children...)
 }
+
+// fontListbox: the focus goes first to the search field, and Down from there to the options.
+var fontListbox = listbox{root: ".gj-fontselector", control: ":scope > .gj-fontselector-control", options: ":scope .gj-fontselector-option", first: ":scope .gj-fontselector-search"}
 
 func fontSelectorPanel(props FontSelectorProps) xango.Node {
 	limit := props.Limit
@@ -99,6 +105,7 @@ func fontSelectorPanel(props FontSelectorProps) xango.Node {
 		xango.A("value", props.Query),
 		xango.A("placeholder", "Search fonts"),
 		xango.A("aria-label", "Search fonts"),
+		fontListbox.searchKey(props.OnToggleOpen),
 	}
 	if props.OnQuery != nil {
 		searchAttrs = append(searchAttrs, xango.On("input", func(e xango.Event) { props.OnQuery(xango.EventValue[string](e)) }))
@@ -138,11 +145,15 @@ func fontSelectorPanel(props FontSelectorProps) xango.Node {
 			xango.A("role", "option"),
 			xango.A("aria-selected", boolAttr(selected)),
 			xango.A("data-family", f.Family),
+			xango.A("tabindex", "-1"),
 		}
+		var choose func()
 		if props.OnSelect != nil {
 			font := f
+			choose = func() { props.OnSelect(font) }
 			attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnSelect(font) }))
 		}
+		attrs = append(attrs, fontListbox.optionKey(choose, true, props.OnToggleOpen))
 		return xango.El("div", attrs,
 			xango.El("span", []xango.Attr{xango.A("class", "gj-fontselector-name")}, xango.Text(f.Family)),
 			xango.El("span", []xango.Attr{xango.A("class", "gj-fontselector-preview"), xango.A("style", "font-family:"+fonts.CSSFamily(f))}, xango.Text(preview)),
