@@ -36,7 +36,7 @@ func (pdfImporter) Import(b []byte) (docfile.Document, error) { return pdftext.I
 
 // Register adds the formats this package handles to r. It writes HTML, RTF,
 // EPUB, PDF and Word (.docx), and reads Word and PDF text. (Markdown and plain
-// text are in transfer.Default; for braille see Braille.)
+// text are in transfer.Default; for braille see package braille.)
 func Register(r *transfer.Registry) {
 	for _, f := range []formatExporter{
 		{transfer.Format{Name: "html", Label: "Web page (HTML)", Exts: []string{".html"}, MIME: "text/html"}, HTML{}},

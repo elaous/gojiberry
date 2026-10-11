@@ -1,4 +1,4 @@
-// Package voiceserver is a small standalone speech proxy: text-to-
+// Package server is a small standalone speech proxy: text-to-
 // speech via a local Piper (github.com/OHF-Voice/piper1-gpl, formerly
 // rhasspy/piper) install, and speech-to-text via a local whisper.cpp-
 // compatible install (github.com/mutablelogic/go-whisper embeds
@@ -16,21 +16,18 @@
 // binary shape as gojiberry/syncserver, gojiberry/fontserver, and
 // gojiberry/translate/server -- see cmd/voiceserver for the entry
 // point.
-package voiceserver
+package server
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
-	"github.com/elaous/gojiberry/guard"
 	"io"
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
-	"time"
+
+	"github.com/elaous/gojiberry/guard"
+	"github.com/elaous/gojiberry/voice/listen"
+	"github.com/elaous/gojiberry/voice/speak"
 )
 
 // Config is loaded entirely from the environment, the same posture
@@ -101,7 +98,7 @@ type Server struct {
 // handleGoogleFonts take with no key configured, rather than refusing
 // to start at all.
 func NewServer(cfg Config) *Server {
-	return &Server{cfg: cfg, speak: execPiper, transcribe: execWhisper, speakSlots: make(chan struct{}, 2), transcribeSlots: make(chan struct{}, 2)}
+	return &Server{cfg: cfg, speak: speak.Piper, transcribe: listen.Whisper, speakSlots: make(chan struct{}, 2), transcribeSlots: make(chan struct{}, 2)}
 }
 
 // Handler returns the HTTP routes:
@@ -209,16 +206,6 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"text": text})
 }
 
-// execPiper is speak's real implementation: pipes text into piper's
-// own stdin and reads the WAV it writes to a temp --output_file, the
-// well-established Piper CLI invocation shape (unchanged across the
-// rhasspy/piper -> OHF-Voice/piper1-gpl rename) -- `echo "text" | piper
-// --model voice.onnx --output_file out.wav`.
-const (
-	speakTimeout      = time.Minute
-	transcribeTimeout = 5 * time.Minute
-)
-
 // acquire takes a slot from sem (nil: no limit) or answers 429. Synthesis and
 // transcription have their own, so a long transcription does not turn every
 // /speak request away.
@@ -239,71 +226,6 @@ func release(sem chan struct{}) {
 	if sem != nil {
 		<-sem
 	}
-}
-
-func execPiper(binary, model, text string) ([]byte, error) {
-	out, err := os.CreateTemp("", "voiceserver-speak-*.wav")
-	if err != nil {
-		return nil, err
-	}
-	outPath := out.Name()
-	_ = out.Close()
-	defer func() { _ = os.Remove(outPath) }()
-
-	args := []string{"--output_file", outPath}
-	if model != "" {
-		args = append(args, "--model", model)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), speakTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Stdin = strings.NewReader(text)
-	if combined, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("piper: %w: %s", err, combined)
-	}
-
-	return os.ReadFile(outPath)
-}
-
-// execWhisper is transcribe's real implementation: writes the given
-// WAV to a temp file and runs it through whisper.cpp's own well-
-// established CLI shape (`whisper-cli -m model.bin -f in.wav -otxt -of
-// outbase -nt` -- plain text output, no timestamps, predates and
-// underlies go-whisper's own CLI too), then reads back the .txt file
-// it writes.
-func execWhisper(binary, model string, wav []byte) (string, error) {
-	in, err := os.CreateTemp("", "voiceserver-transcribe-*.wav")
-	if err != nil {
-		return "", err
-	}
-	inPath := in.Name()
-	defer func() { _ = os.Remove(inPath) }()
-	if _, err := in.Write(wav); err != nil {
-		_ = in.Close()
-		return "", err
-	}
-	_ = in.Close()
-
-	outBase := inPath[:len(inPath)-len(filepath.Ext(inPath))]
-	outPath := outBase + ".txt"
-	defer func() { _ = os.Remove(outPath) }()
-
-	args := []string{"-f", inPath, "-otxt", "-of", outBase, "-nt"}
-	if model != "" {
-		args = append(args, "-m", model)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), transcribeTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, binary, args...)
-	if combined, err := cmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("whisper: %w: %s", err, combined)
-	}
-
-	text, err := os.ReadFile(outPath)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(text)), nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

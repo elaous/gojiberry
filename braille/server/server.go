@@ -1,4 +1,4 @@
-// Package brailleserver is a small standalone braille-transcription
+// Package server is a small standalone braille-transcription
 // proxy: real contracted (Grade 2) or uncontracted (Grade 1) braille
 // output via a local liblouis (https://liblouis.io) install, the
 // standard, actively-maintained open-source braille translation
@@ -7,15 +7,15 @@
 // own contraction rules is language-dependent, standardized, non-
 // trivial logic no one should hand-roll here. liblouis is a C library
 // with no native Go binding in this stack; it ships its own
-// `lou_translate` CLI, so -- the exact shape gojiberry/voiceserver
+// `lou_translate` CLI, so -- the exact shape gojiberry/voice/server
 // already establishes for exec'd, optionally-configured external
 // tooling (PiperBinary/WhisperBinary) -- this package execs it as a
 // subprocess per request rather than embedding a WASM/cgo binding.
 // Same environment-configured, CORS-open, single-binary shape as
 // gojiberry/syncserver, gojiberry/fontserver, gojiberry/translate/server,
-// and gojiberry/voiceserver -- see cmd/brailleserver for the entry
+// and gojiberry/voice/server -- see cmd/brailleserver for the entry
 // point.
-package brailleserver
+package server
 
 import (
 	"bytes"

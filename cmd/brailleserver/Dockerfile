@@ -2,7 +2,7 @@
 # module root (`docker build -f cmd/brailleserver/Dockerfile .`).
 #
 # Same shape as cmd/voiceserver/Dockerfile: this execs a lou_translate
-# binary as a subprocess per request (brailleserver/server.go's own
+# binary as a subprocess per request (braille/server/server.go's own
 # execLouTranslate), so the base image needs a real shell/libc for
 # that to run against, plus liblouis itself and its translation
 # tables -- none of which this Dockerfile bundles, since which

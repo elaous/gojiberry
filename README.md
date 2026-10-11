@@ -624,7 +624,7 @@ expanded by the same recursive scan, with no extra grammar required.
   `fontserver`'s own `fetchGoogleFonts` field already established.
   DeepL only for now; a second provider would slot in behind that same
   interface without touching the HTTP layer at all.
-- **`voiceserver`** — a small standalone speech proxy, the same
+- **`voice/server`** — a small standalone speech proxy, the same
   environment-configured, CORS-open, single-binary shape as
   `syncserver`/`fontserver`/`translate/server` (`cmd/voiceserver`), but
   for a different reason than `translate/server`'s DeepL key: Piper
@@ -644,8 +644,8 @@ expanded by the same recursive scan, with no extra grammar required.
   unset reports `503` on its own route rather than refusing to start
   at all, the same graceful-degradation posture every server here
   takes with something unconfigured.
-- **`brailleserver`** — the same environment-configured, CORS-open,
-  single-binary shape as `voiceserver` (`cmd/brailleserver`), and for
+- **`braille/server`** — the same environment-configured, CORS-open,
+  single-binary shape as `voice/server` (`cmd/brailleserver`), and for
   the same underlying reason: [liblouis](https://liblouis.io), the
   standard open-source engine for real contracted (Grade 2) or
   uncontracted (Grade 1) braille transcription, is a C library that
@@ -655,7 +655,7 @@ expanded by the same recursive scan, with no extra grammar required.
   writes to stdout — liblouis's own default output encoding, and
   already BRF's own on-the-wire representation, so no further
   re-encoding is needed downstream). `Server.translate` is a
-  swappable func field, the same shape `voiceserver`'s own
+  swappable func field, the same shape `voice/server`'s own
   `speak`/`transcribe` fields establish, so tests cover the full HTTP
   surface without needing a real liblouis install.
   `GOJIBERRY_BRAILLESERVER_LOU_TRANSLATE_BINARY` left unset reports

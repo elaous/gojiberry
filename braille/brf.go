@@ -1,4 +1,6 @@
-package export
+package braille
+
+import "github.com/elaous/gojiberry/export"
 
 // BRF renders Braille Ready Format output (task #180) -- plain ASCII
 // braille text, the standard, embosser/braille-display-consumable
@@ -23,6 +25,6 @@ type BRF struct {
 // snap is unused (present only to satisfy the Exporter interface):
 // the real transcription work already happened by the time this is
 // called.
-func (b BRF) Export(snap Snapshot) ([]byte, error) {
+func (b BRF) Export(snap export.Snapshot) ([]byte, error) {
 	return []byte(b.Braille), nil
 }

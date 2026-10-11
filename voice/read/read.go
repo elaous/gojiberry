@@ -1,19 +1,21 @@
-package components
+package read
 
 import (
 	"strings"
 	"unicode"
+
+	"github.com/elaous/gojiberry/components"
 )
 
-// Read aloud. SpeechChunks turns the document, as the blocks a screen reader is given, into the
+// Package read decides what to say when a document is read aloud. Chunks turns the document, as the blocks a screen reader is given, into the
 // pieces a speech engine is handed one after the other: a sentence at a time (so the one being
 // spoken can be shown and announced, and pause and skip work at sentence borders), each with the
 // language its text is in. The order and the wording are those of the accessible copy, so what is
 // read aloud is what a screen reader would read. Speaking itself is the browser's (the Web Speech
 // API); this is the part that decides what to say.
 
-// SpeechChunk is one piece to speak.
-type SpeechChunk struct {
+// Chunk is one piece to speak.
+type Chunk struct {
 	Text string
 	// Lang is the BCP 47 tag of the text, "" for the page's own.
 	Lang string
@@ -21,24 +23,24 @@ type SpeechChunk struct {
 	Block int
 }
 
-// MaxSpeechChunk is the longest a piece is (in runes): engines cut off a long utterance.
-const MaxSpeechChunk = 200
+// MaxChunk is the longest a piece is (in runes): engines cut off a long utterance.
+const MaxChunk = 200
 
 const sentenceMarks = ".!?…。！？"
 const closers = `"')]”’»`
 
-// SpeechChunks is the blocks as pieces to speak, in order. docLang is the document's language, used
+// Chunks is the blocks as pieces to speak, in order. docLang is the document's language, used
 // for text that has none of its own.
-func SpeechChunks(blocks []A11yBlock, docLang string) []SpeechChunk {
-	var out []SpeechChunk
+func Chunks(blocks []components.A11yBlock, docLang string) []Chunk {
+	var out []Chunk
 	for i, b := range blocks {
-		if b.Kind == A11yTableRow {
+		if b.Kind == components.A11yTableRow {
 			out = appendSentences(out, strings.Join(nonEmpty(b.Cells), ", "), docLang, i)
 			continue
 		}
 		runs := b.Runs
 		if len(runs) == 0 {
-			runs = []A11yRun{{Text: b.Text}}
+			runs = []components.A11yRun{{Text: b.Text}}
 		}
 		start := len(out)
 		for _, r := range runs {
@@ -50,15 +52,15 @@ func SpeechChunks(blocks []A11yBlock, docLang string) []SpeechChunk {
 		}
 		// A heading, a list item and a code line have no full stop of their own: the engine
 		// would run them into the next block without a pause.
-		if len(out) > start && b.Kind != A11yParagraph && !endsSentence(out[len(out)-1].Text) {
+		if len(out) > start && b.Kind != components.A11yParagraph && !endsSentence(out[len(out)-1].Text) {
 			out[len(out)-1].Text += "."
 		}
 	}
 	return out
 }
 
-// SpeechChunksOfText is a text (a selection) as pieces to speak, all in lang.
-func SpeechChunksOfText(text, lang string) []SpeechChunk {
+// OfText is a text (a selection) as pieces to speak, all in lang.
+func OfText(text, lang string) []Chunk {
 	return appendSentences(nil, text, lang, -1)
 }
 
@@ -78,15 +80,15 @@ func endsSentence(s string) bool {
 }
 
 // appendSentences splits text into sentences (after . ! ? followed by a space or the end) and those
-// longer than MaxSpeechChunk at word borders, and appends them.
-func appendSentences(out []SpeechChunk, text, lang string, block int) []SpeechChunk {
+// longer than MaxChunk at word borders, and appends them.
+func appendSentences(out []Chunk, text, lang string, block int) []Chunk {
 	rs := []rune(strings.Join(strings.Fields(text), " "))
 	start := 0
 	flush := func(end int) {
 		piece := strings.TrimSpace(string(rs[start:end]))
 		start = end
-		for _, p := range splitLong(piece, MaxSpeechChunk) {
-			out = append(out, SpeechChunk{Text: p, Lang: lang, Block: block})
+		for _, p := range splitLong(piece, MaxChunk) {
+			out = append(out, Chunk{Text: p, Lang: lang, Block: block})
 		}
 	}
 	for i, r := range rs {
