@@ -23,6 +23,7 @@ type prefs struct {
 	Spacing  string `json:"spacing,omitempty"`  // "wide"
 	Focus    string `json:"focus,omitempty"`    // "on": distraction-free
 	Targets  string `json:"targets,omitempty"`  // "large"
+	Suggest  string `json:"suggest,omitempty"`  // word suggestions: "auto" opens the list while typing
 	Speed    string `json:"speed,omitempty"`    // reading aloud: "slow", "fast"
 	Collab   string `json:"collab,omitempty"`   // what is announced of a shared session: "" everything, "important", "off"
 }
@@ -53,6 +54,9 @@ func loadPrefs() prefs {
 	}
 	if p.Targets != "large" {
 		p.Targets = ""
+	}
+	if p.Suggest != "auto" {
+		p.Suggest = ""
 	}
 	if p.Speed != "slow" && p.Speed != "fast" {
 		p.Speed = ""
@@ -129,6 +133,7 @@ func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
 		collab(T("prefs.collabImportant", "Shared editing: announce only the connection"), components.CollabImportant),
 		collab(T("prefs.collabOff", "Shared editing: announce nothing"), components.CollabOff),
 		{Separator: true},
+		toggle(T("prefs.suggestAuto", "Suggest words as I type"), curPrefs.Suggest == "auto", func(p *prefs, on bool) { p.Suggest = map[bool]string{true: "auto"}[on] }),
 		toggle(T("prefs.targets", "Large targets"), curPrefs.Targets == "large", func(p *prefs, on bool) { p.Targets = map[bool]string{true: "large"}[on] }),
 		toggle(T("prefs.focus", "Distraction-free mode"), curPrefs.Focus == "on", func(p *prefs, on bool) { p.Focus = map[bool]string{true: "on"}[on] }),
 		{Separator: true},

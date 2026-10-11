@@ -721,6 +721,7 @@
   "collab.commented": "%s hat kommentiert.",
   "collab.newComments#one": "%d neuer Kommentar.",
   "collab.newComments#other": "%d neue Kommentare.",
-  "collab.someone": "Jemand"
+  "collab.someone": "Jemand",
+  "prefs.suggestAuto": "Wörter beim Tippen vorschlagen"
  }
 }
