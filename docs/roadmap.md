@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (#222: `docsearch.Refresh` and `FromDocfile`; #221: `docsearch`, a sealed local index for search across documents (roadmap 73); #220: the waiting changes of a shared document survive a reload; #219: one completion ranking, one list in the showcase; #218: a durable queue for the sync client (roadmap 74); full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+6 of 10 since the last full run (#223: replace across documents with preview and undo, as a library; #222: `docsearch.Refresh` and `FromDocfile`; #221: `docsearch`, a sealed local index for search across documents (roadmap 73); #220: the waiting changes of a shared document survive a reload; #219: one completion ranking, one list in the showcase; #218: a durable queue for the sync client (roadmap 74); full run on main cc020a5 after #216, the 10th merge since 7ec9fea: it passed everything in one run; coverage score 89.1%, README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1081,8 +1081,12 @@ unless stated.
     `docsearch.Refresh` brings the index in line with a `docstore.Adapter` (pass the decrypting one) reading only the
     documents that are new or newer, dropping deleted ones and skipping what cannot be read, and `FromDocfile` extracts
     title, text and table cells from any docfile format. Left: calling it in the showcase (after unlock and after a
-    save) with the sealed index kept in browser storage, the search box across documents, and replace across documents
-    with a preview and undo (4).
+    save) with the sealed index kept in browser storage, and the search box across documents. Also done (#223), step 4
+    as a library: `docsearch.PlanReplace` previews a replace across documents (count and a before/after of the first
+    match per document, nothing written), `Plan.Apply` writes exactly the previewed bytes (optionally only the ticked
+    documents; one saved since the plan is skipped, never overwritten), and `Applied.Undo` puts the old text back unless
+    the document was saved again. It replaces in the flowing text like the editor's Replace all (a table cell is not
+    touched). Left: the panel in the showcase.
 74. **Offline-first with conflict visibility.** Kind: fixable. What: a visible sync state, the queue of pending
     changes, and what will merge or conflict. Why it matters: people lose trust when they cannot tell whether their
     work is saved. Plan: (1) a status model (saved, saving, offline, conflict) exposed in the UI and to screen readers;
