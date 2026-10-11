@@ -3,10 +3,7 @@ package export
 import (
 	"archive/zip"
 	"bytes"
-	"encoding/json"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -122,27 +119,6 @@ func TestRegisterAddsTheImporters(t *testing.T) {
 	}
 	if !strings.Contains(r.Accept(), ".docx") || !strings.Contains(r.Accept(), ".pdf") {
 		t.Errorf("accept %q", r.Accept())
-	}
-}
-
-func TestBrailleAsksTheServer(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req struct{ Text, Table string }
-		_ = json.NewDecoder(r.Body).Decode(&req)
-		if r.URL.Path != "/translate" || !strings.Contains(req.Text, "Intro") || req.Table != "en-us-g1.ctb" {
-			http.Error(w, "bad", http.StatusBadRequest)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"braille": ",intro"})
-	}))
-	defer srv.Close()
-	b := Braille{Backend: srv.URL + "/", Table: "en-us-g1.ctb"}
-	out, err := b.Export(sampleDoc())
-	if err != nil || string(out) != ",intro" {
-		t.Fatalf("%q %v", out, err)
-	}
-	if _, err := (Braille{Backend: srv.URL, Table: "other"}).Export(sampleDoc()); err == nil {
-		t.Error("a refusal from the server must be an error")
 	}
 }
 

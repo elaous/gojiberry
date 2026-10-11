@@ -1,4 +1,4 @@
-package brailleserver
+package server
 
 import (
 	"bytes"

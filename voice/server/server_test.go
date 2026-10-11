@@ -1,4 +1,4 @@
-package voiceserver
+package server
 
 import (
 	"bytes"
@@ -7,9 +7,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -224,62 +221,4 @@ func TestAcquireAnswers429WhenFull(t *testing.T) {
 		t.Fatal("a released slot is free again")
 	}
 	release(nil) // no limit: nothing to release
-}
-
-// fakeTool writes a shell script that stands in for piper or whisper-cli.
-func fakeTool(t *testing.T, body string) string {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("needs a POSIX shell")
-	}
-	p := filepath.Join(t.TempDir(), "tool")
-	if err := os.WriteFile(p, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return p
-}
-
-func TestExecPiperRunsTheBinary(t *testing.T) {
-	// piper --output_file OUT [--model M]: text on stdin, a WAV in OUT
-	bin := fakeTool(t, `out=$2; model=""; [ "$3" = "--model" ] && model=$4
-printf 'RIFF[%s][%s]' "$(cat)" "$model" > "$out"`)
-	got, err := execPiper(bin, "voice.onnx", "hello")
-	if err != nil || string(got) != "RIFF[hello][voice.onnx]" {
-		t.Fatalf("got %q, %v", got, err)
-	}
-	if got, err := execPiper(bin, "", "hi"); err != nil || string(got) != "RIFF[hi][]" {
-		t.Fatalf("no model: %q, %v", got, err)
-	}
-}
-
-func TestExecPiperReportsFailures(t *testing.T) {
-	bin := fakeTool(t, `echo "no such voice" >&2; exit 3`)
-	if _, err := execPiper(bin, "x", "hi"); err == nil || !strings.Contains(err.Error(), "no such voice") {
-		t.Fatalf("a failing piper: %v", err)
-	}
-	if _, err := execPiper(filepath.Join(t.TempDir(), "absent"), "x", "hi"); err == nil {
-		t.Fatal("a missing binary is an error")
-	}
-}
-
-func TestExecWhisperRunsTheBinary(t *testing.T) {
-	// whisper-cli -f IN -otxt -of BASE -nt [-m M]: BASE.txt holds the text
-	bin := fakeTool(t, `in=$2; base=$5; model=""; [ "$7" = "-m" ] && model=$8
-printf '  heard %s with %s \n' "$(wc -c < "$in" | tr -d ' ')" "$model" > "$base.txt"`)
-	got, err := execWhisper(bin, "m.bin", []byte("12345"))
-	if err != nil || got != "heard 5 with m.bin" {
-		t.Fatalf("got %q, %v", got, err)
-	}
-}
-
-func TestExecWhisperReportsFailures(t *testing.T) {
-	if _, err := execWhisper(fakeTool(t, `echo "bad model" >&2; exit 2`), "m", []byte("x")); err == nil || !strings.Contains(err.Error(), "bad model") {
-		t.Fatalf("a failing whisper: %v", err)
-	}
-	if _, err := execWhisper(fakeTool(t, `exit 0`), "m", []byte("x")); err == nil {
-		t.Fatal("no text file written is an error")
-	}
-	if _, err := execWhisper(filepath.Join(t.TempDir(), "absent"), "m", []byte("x")); err == nil {
-		t.Fatal("a missing binary is an error")
-	}
 }

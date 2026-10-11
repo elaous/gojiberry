@@ -8,6 +8,7 @@ import (
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/components"
+	"github.com/elaous/gojiberry/voice/read"
 	"github.com/elaous/gojiberry/xango"
 )
 
@@ -17,7 +18,7 @@ import (
 // menu says so).
 
 type readState struct {
-	chunks  []components.SpeechChunk
+	chunks  []read.Chunk
 	pos     int
 	playing bool
 	paused  bool
@@ -94,7 +95,7 @@ func stopReading() {
 }
 
 // startReading speaks the chunks from the first.
-func startReading(chunks []components.SpeechChunk, renderUI func()) {
+func startReading(chunks []read.Chunk, renderUI func()) {
 	stopReading()
 	if len(chunks) == 0 || !speechSupported() {
 		return
@@ -177,12 +178,12 @@ func readMenu(u *ui, flow *canvas.TextFlow, renderUI func()) []components.MenuIt
 	}
 	return []components.MenuItem{
 		{Label: T("read.selection", "Read the selection aloud"), Disabled: flow == nil || !flow.HasSelection(), OnSelect: func() {
-			chunks := components.SpeechChunksOfText(flow.SelectedText(), u.docLang)
+			chunks := read.OfText(flow.SelectedText(), u.docLang)
 			u.announce(T("read.started", "Reading aloud"))
 			startReading(chunks, renderUI)
 		}},
 		{Label: T("read.document", "Read the document aloud"), OnSelect: func() {
-			chunks := components.SpeechChunks(u.a11yBlocks(flow, u.title), u.docLang)
+			chunks := read.Chunks(u.a11yBlocks(flow, u.title), u.docLang)
 			u.announce(T("read.started", "Reading aloud"))
 			startReading(chunks, renderUI)
 		}},
