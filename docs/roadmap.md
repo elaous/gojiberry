@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-6 of 10 since the last full run (#173 to #177, this PR). The full run on main 67a6c28 (after #171, the 10th merge since 10ae2107) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+7 of 10 since the last full run (#173 to #178, this PR). The full run on main 67a6c28 (after #171, the 10th merge since 10ae2107) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1154,7 +1154,7 @@ unless stated.
     55).** Kind: fixable. Why: behind replicas each process counts the reports it has seen, so each cap can be reached
     once per replica; the daily budget per address is shared since entry 16 and the sessions since entry 55. Plan:
     report counters kept in the report records. Priority: low to medium for several replicas, none for one. Where:
-    `docstore/public` (`reportwatch.go`). Avoid: one replica.
+    `docstore/public` (`reportwatch.go`). Avoid: one replica. **Done in part (this PR):** each reporter's allowance of priority reports can be shared: `Options.PriorityQuota` (a `StoreQuota` of `MaxPriorityReportsPerReporter` a day; `GOJIBERRY_DOCSTORE_PUBLIC_REPORT_COUNTERS=store|store-required`) is charged one unit per priority report under `prio|<reporter>`, refunded if the report is not stored, with the fixed UTC days of a `StoreQuota`. Tests: `TestPriorityAllowanceIsSharedByReplicasThroughTheStore`, `TestPublicPriorityQuotaModes`. Still per process: the total number and bytes of reports (the global cap) and the burst watch over networks, which are bounds on the process's own memory and an operator alarm rather than a per-person allowance.
 87. **Done (this PR): the showcase page rotates and resets the owner key.** Was: the owner key could be made, backed up,
     restored and forgotten, but not replaced, so a copied key or a lost key and backup left the address refusing
     entries. Now `dirclient.Client` has `Rotate`, `RequestReset`, `CompleteReset` and `CancelReset`, and `Enrollment`

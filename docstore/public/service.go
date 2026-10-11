@@ -63,12 +63,17 @@ type Options struct {
 	// "public-report" and "public-admin"; with docstore.StoreLimiters they are records under
 	// docstore.RateLimitPrefix, which the document API refuses and expiry leaves alone.
 	LimiterFactory docstore.LimiterFactory
-	Quota          Quota                      // NewMemoryQuota(Config.IPDailyBytes, 24h)
-	Admin          AdminGuard                 // TokenAdmin(Config.AdminToken)
-	Blocklist      Blocklist                  // NoBlocklist
-	Challenger     Challenger                 // NoChallenge
-	ClientIP       func(*http.Request) string // passkey.TrustedProxies(Config.TrustedProxies...), else the remote address
-	Now            func() time.Time           // time.Now; use the clock of the ExpiringAdapter in tests
+	Quota          Quota // NewMemoryQuota(Config.IPDailyBytes, 24h)
+	// PriorityQuota, when set, counts each reporter's priority reports (Config.MaxPriorityReportsPerReporter
+	// a day) instead of the per-process count, so replicas on one store share the allowance: give it a
+	// NewStoreQuota(store, int64(Config.MaxPriorityReportsPerReporter), 24*time.Hour). It is charged one unit
+	// per priority report, under the key "prio|<reporter>", with the fixed calendar days of a StoreQuota.
+	PriorityQuota Quota
+	Admin         AdminGuard                 // TokenAdmin(Config.AdminToken)
+	Blocklist     Blocklist                  // NoBlocklist
+	Challenger    Challenger                 // NoChallenge
+	ClientIP      func(*http.Request) string // passkey.TrustedProxies(Config.TrustedProxies...), else the remote address
+	Now           func() time.Time           // time.Now; use the clock of the ExpiringAdapter in tests
 }
 
 // Service is the public (anonymous) offer: session, document, view link, report and takedown
@@ -80,6 +85,7 @@ type Service struct {
 	sessions  SessionStore
 	lim       Limiters
 	quota     Quota
+	prioQuota Quota // shared allowance of priority reports, or nil: the per-process count (prio)
 	admin     AdminGuard
 	blocklist Blocklist
 	challenge Challenger
@@ -165,7 +171,7 @@ func New(o Options) (*Service, error) {
 	}
 	s := &Service{
 		store: o.Store, cfg: cfg,
-		sessions: o.Sessions, lim: o.Limiters, quota: o.Quota, admin: o.Admin,
+		sessions: o.Sessions, lim: o.Limiters, quota: o.Quota, prioQuota: o.PriorityQuota, admin: o.Admin,
 		blocklist: o.Blocklist, challenge: o.Challenger, clientIP: o.ClientIP, now: o.Now,
 	}
 	s.flight.max, s.flight.perClient, s.flight.perNet = cfg.MaxInflightBytes, cfg.MaxInflightPerClient, cfg.MaxInflightPerNet
@@ -1528,7 +1534,7 @@ func (s *Service) storeReport(ctx context.Context, meta *docMeta, rep Report) (i
 				held++
 			}
 		}
-		priority = held < maxPriorityOfDoc && s.prio.allow(rep.Reporter, s.now(), s.cfg.MaxPriorityReportsPerReporter)
+		priority = held < maxPriorityOfDoc && s.allowPriority(ctx, rep.Reporter)
 	}
 	rep.Priority = priority
 	n := max(len(meta.ReportRefs), meta.Reports)
@@ -1554,10 +1560,15 @@ func (s *Service) storeReport(ctx context.Context, meta *docMeta, rep Report) (i
 	}
 	raw, _ := json.Marshal(rep)
 	if err := s.store.Save(ctx, docstore.ReportPrefix+rep.ID, raw); err != nil {
+		if priority && s.prioQuota != nil {
+			if r, ok := s.prioQuota.(QuotaRefunder); ok {
+				r.Refund(ctx, "prio|"+rep.Reporter, 1) // the report was not kept: the allowance is given back
+			}
+		}
 		return "", false, false, err
 	}
 	s.reports.add(1, int64(len(raw)), rep.Reporter)
-	if priority {
+	if priority && s.prioQuota == nil {
 		s.prio.record(rep.Reporter, s.now())
 	}
 	over = s.reports.over(s.cfg.MaxReports, s.cfg.MaxReportBytes)
@@ -1830,6 +1841,13 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 			note(err)
 		}
 	}
+	if sq, ok := s.prioQuota.(interface {
+		Sweep(context.Context) (int, error)
+	}); ok {
+		if _, err := sq.Sweep(ctx); err != nil {
+			note(err)
+		}
+	}
 	if r, ok := s.sessions.(SessionReaper); ok {
 		if _, err := r.Reap(ctx, now); err != nil {
 			note(err)
@@ -2011,4 +2029,18 @@ func (s *Service) Run(ctx context.Context, interval time.Duration) {
 		case <-t.C:
 		}
 	}
+}
+
+// allowPriority spends one of the reporter's priority reports for the day: from the shared quota when there is
+// one (an error there is a refusal: the report is then kept as an ordinary one), else from the per-process count.
+func (s *Service) allowPriority(ctx context.Context, reporter string) bool {
+	limit := s.cfg.MaxPriorityReportsPerReporter
+	if limit < 0 {
+		return true
+	}
+	if s.prioQuota != nil {
+		ok, _, err := s.prioQuota.Take(ctx, "prio|"+reporter, 1)
+		return ok && err == nil
+	}
+	return s.prio.allow(reporter, s.now(), limit)
 }
