@@ -112,6 +112,8 @@ func TestEveryMessageInTheSourcesIsInThePacks(t *testing.T) {
 	}
 	ref := Default().msgs["es"]
 	callers := map[string]bool{"T": true, "tr": true, "trf": true, "Translate": true}
+	// plural callers take (id, one, other, n): the pack must hold id#other
+	plurals := map[string]bool{"Tn": true, "trn": true, "TranslatePlural": true}
 	fset := token.NewFileSet()
 	missing := map[string]string{}
 	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
@@ -144,7 +146,10 @@ func TestEveryMessageInTheSourcesIsInThePacks(t *testing.T) {
 			case *ast.SelectorExpr:
 				name = fn.Sel.Name
 			}
-			if !callers[name] {
+			suffix := ""
+			if plurals[name] {
+				suffix = "#other"
+			} else if !callers[name] {
 				return true
 			}
 			a, ok1 := c.Args[0].(*ast.BasicLit)
@@ -154,9 +159,9 @@ func TestEveryMessageInTheSourcesIsInThePacks(t *testing.T) {
 			}
 			id, _ := strconv.Unquote(a.Value)
 			text, _ := strconv.Unquote(b.Value)
-			if _, ok := ref[id]; !ok {
+			if _, ok := ref[id+suffix]; !ok {
 				rel, _ := filepath.Rel(root, p)
-				missing[id] = rel + ": " + text
+				missing[id+suffix] = rel + ": " + text
 			}
 			return true
 		})

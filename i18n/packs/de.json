@@ -712,11 +712,11 @@
   "read.note": "Es werden nur Stimmen gewählt, die auf diesem Gerät laufen",
   "read.unsupported": "Dieser Browser bietet kein Vorlesen an",
   "suggest.position": "%s, %d von %d",
-  "suggest.one": "1 Vorschlag.",
-  "suggest.many": "%d Vorschläge.",
   "suggest.label": "Vorschläge",
   "suggest.none": "Keine Vorschläge",
   "suggest.inserted": "%s eingefügt",
-  "suggest.closed": "Vorschläge geschlossen"
+  "suggest.closed": "Vorschläge geschlossen",
+  "suggest.count#one": "%d Vorschlag.",
+  "suggest.count#other": "%d Vorschläge."
  }
 }
