@@ -31,7 +31,7 @@ func TestNoAccessibilityViolationsAxe(t *testing.T) {
 		}
 	}
 	check("the document")
-	for _, tab := range []string{"find", "save", "people", "language", "check"} {
+	for _, tab := range []string{"find", "save", "people", "language", "check", "images"} {
 		if d.Has(`button[data-tab="` + tab + `"]`) {
 			d.Click(`button[data-tab="` + tab + `"]`)
 			check("the " + tab + " tab")
