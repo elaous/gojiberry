@@ -205,6 +205,12 @@ var (
 // T is the text for a message id in the interface language, or def (English).
 func T(id, def string, args ...any) string { return catalog.Text(locale, id, def, args...) }
 
+// Tn is the text for a message that depends on the number n, in the plural form of the interface
+// language; the texts take n as their %d.
+func Tn(id, one, other string, n int, args ...any) string {
+	return catalog.Plural(locale, id, one, other, n, args...)
+}
+
 // languageNames are the interface languages on offer, by their own names.
 var languageNames = map[string]string{"en": "English", "es": "Español", "fr": "Français", "de": "Deutsch"}
 
@@ -213,6 +219,7 @@ var languageNames = map[string]string{"en": "English", "es": "Español", "fr": "
 func setLocale(code string) {
 	locale = code
 	components.Translate = func(id, def string) string { return catalog.Text(locale, id, def) }
+	components.TranslatePlural = func(id, one, other string, n int) string { return catalog.Plural(locale, id, one, other, n) }
 	root := js.Global().Get("document").Get("documentElement")
 	root.Call("setAttribute", "lang", code)
 	root.Call("setAttribute", "dir", i18n.Direction(code))

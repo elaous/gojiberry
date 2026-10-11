@@ -712,11 +712,11 @@
   "read.note": "Seules les voix qui fonctionnent sur cet appareil sont choisies",
   "read.unsupported": "Ce navigateur ne propose pas la lecture à voix haute",
   "suggest.position": "%s, %d sur %d",
-  "suggest.one": "1 suggestion.",
-  "suggest.many": "%d suggestions.",
   "suggest.label": "Suggestions",
   "suggest.none": "Aucune suggestion",
   "suggest.inserted": "%s inséré",
-  "suggest.closed": "Suggestions fermées"
+  "suggest.closed": "Suggestions fermées",
+  "suggest.count#one": "%d suggestion.",
+  "suggest.count#other": "%d suggestions."
  }
 }
