@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (#151, #152, #153, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+5 of 10 since the last full run (#151, #152, #153, #154, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -811,7 +811,11 @@ New entries:
     theme and editor behavior; keyboard accessible, searchable, with reset to defaults and import and export. Why it
     matters: settings scattered over the UI are hard to find, especially with a screen reader. Plan: define a
     preference schema, build the panel on it (it needs item 48 first), store locally, then item 52 syncs it.
-    Priority: high. Where: `components`, the showcase.
+    Priority: high. Where: `components`, the showcase. Done in part (this PR): View > Display preferences in the showcase
+    (`prefs.go`): text size (default, 125%, 150%, 200%), wide text spacing, more contrast and reduce motion, ticked when
+    set, kept in this browser, announced to screen readers, with "Reset to defaults"; keyboard use is the menu bar's own.
+    Test: `TestDisplayPreferencesMenu`. Left: language, theme and editor behaviour in the same schema, search, import and
+    export, a panel instead of a menu, and a reusable `components` preference schema.
 52. **Save preferences, styles, templates, fonts and other configs in a central server.** Kind: fixable. What: a
     per-user config store (docstore documents under a system prefix, authenticated, encrypted with the owner keys by
     default, versioned, with conflict handling across devices and a quota); a local fallback that works offline; fonts

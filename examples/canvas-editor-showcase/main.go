@@ -293,6 +293,7 @@ func main() {
 				{Label: "Edit mode", Checked: state.Mode == canvas.ModeEdit, OnSelect: toggleMode},
 				{Label: "Hyphenate long words", Checked: state.Hyphenate, OnSelect: func() { state.Hyphenate = !state.Hyphenate; renderCanvas(); renderUI() }},
 				{Label: T("menu.language", "Interface language"), Items: languageMenu(u, renderUI)},
+				{Label: T("menu.prefs", "Display preferences"), Items: prefsMenu(u, renderUI)},
 				{Label: "Two-page spread", Checked: state.Spread, OnSelect: func() { state.Spread = !state.Spread; renderCanvas(); renderUI() }},
 			}},
 			{Label: T("menu.file", "File"), Items: []components.MenuItem{
@@ -704,7 +705,7 @@ func main() {
 	}
 
 	initLocale()
-	applyPrefs(loadPrefs())
+	applyPrefs(curPrefs)
 	u.setupLanguage(func(k string) string {
 		q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 		if q.Call("has", k).Bool() {
