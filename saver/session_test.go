@@ -689,3 +689,59 @@ func TestCompareVersionShowsWhatChangedSinceASnapshot(t *testing.T) {
 		t.Errorf("after deleting: %+v", v)
 	}
 }
+
+func TestRestoreVersionKeepsWhatWasBeingEdited(t *testing.T) {
+	ctx := context.Background()
+	text := "original text\n"
+	var opened []docfile.Document
+	s := NewSession(&Saver{Targets: targets(t)}, func() docfile.Document {
+		return docfile.FromFlow("", &canvas.TextFlow{Items: []canvas.Item{canvas.Chars{Text: text}}})
+	}, func(d docfile.Document) { opened = append(opened, d) })
+	s.Pending.Inline = true
+	s.Author = "ana@example.com"
+	if err := s.RestoreVersion(ctx, "versions/x/1.json"); err == nil || !strings.Contains(err.Error(), "save the document") {
+		t.Fatalf("an unsaved document: %v", err)
+	}
+	s.SetName("report")
+	if err := s.Save(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveVersion(ctx); err != nil {
+		t.Fatal(err)
+	}
+	old := s.Versions().Versions[0]
+	text = "edited text that is not saved anywhere\n"
+	if err := s.RestoreVersion(ctx, old.Key); err != nil {
+		t.Fatal(err)
+	}
+	if len(opened) != 1 {
+		t.Fatalf("the snapshot is opened once: %d", len(opened))
+	}
+	vs := s.Versions().Versions
+	if len(vs) != 2 {
+		t.Fatalf("the edited text is kept as a version: %d versions", len(vs))
+	}
+	kept := vs[0] // newest first
+	if kept.Key == old.Key || !strings.HasPrefix(kept.Name, "Before restoring ") || kept.Author != "ana@example.com" {
+		t.Errorf("the kept version: %+v", kept)
+	}
+	doc, err := s.Saver.LoadVersion(ctx, s.targetName(), kept.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got strings.Builder
+	for _, it := range doc.Content {
+		if it.Chars != nil {
+			got.WriteString(it.Chars.Text)
+		}
+	}
+	if !strings.Contains(got.String(), "edited text") {
+		t.Errorf("the kept version holds the edited text: %q", got.String())
+	}
+	if err := s.RestoreVersion(ctx, "versions/"+s.ID()+"/00000000000000000001.json"); err == nil {
+		t.Error("a snapshot that is not there is an error")
+	}
+	if n := len(s.Versions().Versions); n != 2 {
+		t.Errorf("a failed restore keeps nothing extra: %d versions", n)
+	}
+}

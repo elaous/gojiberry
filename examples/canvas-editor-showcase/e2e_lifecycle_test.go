@@ -175,3 +175,32 @@ func TestNameAndKeepAVersion(t *testing.T) {
 	d.WaitFor("deleted", `document.querySelectorAll('.gj-versions-item').length === 0`)
 	d.NoErrors()
 }
+
+// Restore goes back to a version and keeps what was being edited as a version of its own.
+func TestRestoreAVersionKeepsTheCurrentText(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.Click(`button[data-tab="save"]`)
+	d.Select(`.gj-saver-select[data-field="Save to"]`, "memory")
+	d.Fill(".gj-saver-name", "plan")
+	d.Click(".gj-saver-save")
+	d.WaitSelector(".gj-doclist-item")
+	original := d.State().Str("text")
+	d.Click(".gj-versions-save")
+	d.WaitSelector(".gj-versions-item")
+
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Focus("#input")
+	d.Press("End")
+	d.Type(" CHANGED")
+	d.Wait("s.text.includes('CHANGED')")
+	d.Click(`button[data-tab="save"]`)
+	d.Click(".gj-versions-item .gj-versions-restore")
+	d.Wait("s.text === " + e2etest.J(original))
+	d.WaitFor("two versions", `document.querySelectorAll('.gj-versions-item').length === 2`)
+	d.OK(d.Bool(`Array.from(document.querySelectorAll('.gj-versions-name')).filter(e => e.value.startsWith('Before restoring')).length === 1`), "the edited text is kept as a named version")
+	// restoring that one brings the edit back
+	d.Eval(`Array.from(document.querySelectorAll('.gj-versions-item')).find(li => li.querySelector('.gj-versions-name').value.startsWith('Before restoring')).querySelector('.gj-versions-restore').click()`, nil)
+	d.Wait("s.text.includes('CHANGED')")
+	d.NoErrors()
+}
