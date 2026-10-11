@@ -77,3 +77,10 @@
 /* Read aloud: the controls and the sentence being spoken, above the document. */
 .gj-readbar { position: fixed; left: 0; right: 0; bottom: 2em; z-index: 30; background: var(--gj-bg); color: var(--gj-text); display: flex; flex-wrap: wrap; gap: 0.4em; align-items: center; padding: 0.4em 0.6em; border-bottom: 1px solid currentColor; }
 .gj-readbar-now { flex: 1 1 20em; padding: 0.1em 0.3em; background: Mark; color: MarkText; }
+
+/* Suggestions: the word list at the caret (a listbox the editing element controls). */
+.gj-suggest { position: fixed; z-index: 40; margin: 0; padding: 0.2em 0; list-style: none; min-width: 8em; max-height: 14em; overflow: auto; background: var(--gj-bg); color: var(--gj-text); border: 1px solid var(--gj-border); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.gj-suggest-option { padding: 0.25em 0.7em; cursor: pointer; white-space: nowrap; }
+.gj-suggest-option:hover { background: var(--gj-border); }
+.gj-suggest-active { background: var(--gj-accent); color: #fff; }
+.gj-suggest-num { display: inline-block; width: 1.4em; opacity: 0.7; }
