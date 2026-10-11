@@ -23,8 +23,10 @@ package main
 
 import (
 	"context"
-	"github.com/elaous/gojiberry/guard"
+	"errors"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -34,13 +36,51 @@ import (
 
 	"github.com/elaous/gojiberry/collab/hub"
 	"github.com/elaous/gojiberry/docstore"
+	"github.com/elaous/gojiberry/guard"
 )
 
 func main() {
-	cfg := docstore.ConfigFromEnv()
-	adapter, err := docstore.BuildAdapter(context.Background(), cfg)
-	if err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx, nil); err != nil {
 		log.Fatalf("collabhub: %v", err)
+	}
+}
+
+// noACLRole is what everyone may do on a document that has no ACL (GOJIBERRY_COLLAB_NO_ACL_ROLE): owner
+// (the default: anyone can start a document), editor, viewer, or none (only shared documents open).
+func noACLRole(v string) hub.Role {
+	switch strings.ToLower(v) {
+	case "editor":
+		return hub.Editor
+	case "viewer":
+		return hub.Viewer
+	case "none":
+		return ""
+	}
+	return hub.Owner
+}
+
+// durationEnv reads a duration setting; ok is false when it is not set. A value that does not parse, or
+// is not positive when positive is set, is an error that names the setting.
+func durationEnv(name, want string, positive bool) (d time.Duration, ok bool, err error) {
+	v := os.Getenv(name)
+	if v == "" {
+		return 0, false, nil
+	}
+	d, err = time.ParseDuration(v)
+	if err != nil || (positive && d <= 0) {
+		return 0, false, fmt.Errorf("%s %q: want %s", name, v, want)
+	}
+	return d, true, nil
+}
+
+// buildHub makes the hub from the environment.
+func buildHub(ctx context.Context) (*hub.Hub, docstore.Config, error) {
+	cfg := docstore.ConfigFromEnv()
+	adapter, err := docstore.BuildAdapter(ctx, cfg)
+	if err != nil {
+		return nil, cfg, err
 	}
 	// Expiry. With GOJIBERRY_DOCSTORE_EXPIRY_TTL set, this process wraps the store (and sweeps it)
 	// exactly as the docstore server does, and the hub renews a document in-process when
@@ -48,21 +88,20 @@ func main() {
 	// docstore server that owns the expiry of this store), each renewal is a POST
 	// /docs/{id}/renew there, carrying the Authorization of the editor and, if set,
 	// GOJIBERRY_COLLAB_RENEW_TOKEN as X-Gojiberry-Token (the docstore server's guard token).
-	adapter, expiring := docstore.WithConfiguredExpiry(context.Background(), adapter, cfg)
+	adapter, expiring := docstore.WithConfiguredExpiry(ctx, adapter, cfg)
 	var renewer docstore.Renewer
 	if renewURL := os.Getenv("GOJIBERRY_COLLAB_RENEW_URL"); renewURL != "" {
 		if expiring != nil {
-			log.Fatal("collabhub: GOJIBERRY_COLLAB_RENEW_URL and GOJIBERRY_DOCSTORE_EXPIRY_TTL are both set: this process either owns the expiry or asks the docstore server to")
+			return nil, cfg, errors.New("GOJIBERRY_COLLAB_RENEW_URL and GOJIBERRY_DOCSTORE_EXPIRY_TTL are both set: this process either owns the expiry or asks the docstore server to")
 		}
-		remote := remoteRenewer(renewURL, os.Getenv("GOJIBERRY_COLLAB_RENEW_TOKEN"))
-		renewer = remote
+		renewer = remoteRenewer(renewURL, os.Getenv("GOJIBERRY_COLLAB_RENEW_TOKEN"))
 		log.Print(renewStartupMessage(renewURL))
 	} else if expiring != nil {
 		renewer = expiring
 	}
-	authManager, err := docstore.NewAuthManager(context.Background(), cfg.Auth)
+	authManager, err := docstore.NewAuthManager(ctx, cfg.Auth)
 	if err != nil {
-		log.Fatalf("collabhub: %v", err)
+		return nil, cfg, err
 	}
 	// GOJIBERRY_COLLAB_ALLOW_ORIGINS and GOJIBERRY_COLLAB_TOKEN (sent as
 	// X-Gojiberry-Token: Authorization carries the sign-in session) choose who
@@ -71,74 +110,71 @@ func main() {
 	if authManager != nil {
 		who := hub.AuthUser(authManager)
 		hc.User = who
-		// What everyone may do on a document that has no ACL:
-		// GOJIBERRY_COLLAB_NO_ACL_ROLE = owner (the default: anyone can start
-		// a document), editor, viewer, or none (only shared documents open).
-		noACL := hub.Owner
-		switch strings.ToLower(os.Getenv("GOJIBERRY_COLLAB_NO_ACL_ROLE")) {
-		case "editor":
-			noACL = hub.Editor
-		case "viewer":
-			noACL = hub.Viewer
-		case "none":
-			noACL = ""
-		}
-		hc.Roles = hub.ACLRolesWith(adapter, who, noACL)
+		hc.Roles = hub.ACLRolesWith(adapter, who, noACLRole(os.Getenv("GOJIBERRY_COLLAB_NO_ACL_ROLE")))
 		log.Printf("collabhub: sign-in enabled (%d provider(s))", len(cfg.Auth.Providers))
 	}
-	if v := os.Getenv("GOJIBERRY_COLLAB_PRESENCE_INTERVAL"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			log.Fatalf("collabhub: GOJIBERRY_COLLAB_PRESENCE_INTERVAL: %v", err)
-		}
+	if d, ok, err := durationEnv("GOJIBERRY_COLLAB_PRESENCE_INTERVAL", "a duration such as 5s", false); err != nil {
+		return nil, cfg, err
+	} else if ok {
 		hc.PresenceInterval = d
 	}
 	// GOJIBERRY_COLLAB_RENEW_INTERVAL is the least time between two renewals of a document (default
 	// one minute; lowered to a quarter of the TTL when it is known). With GOJIBERRY_COLLAB_RENEW_URL
 	// the hub cannot see the docstore server's lifetime: GOJIBERRY_COLLAB_EXPIRY_TTL says what it is,
 	// for that clamp and for the warning about an interval longer than it.
-	if v := os.Getenv("GOJIBERRY_COLLAB_RENEW_INTERVAL"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil || d == 0 {
-			log.Fatalf("collabhub: GOJIBERRY_COLLAB_RENEW_INTERVAL %q: want a duration such as 1m", v)
-		}
+	if d, ok, err := durationEnv("GOJIBERRY_COLLAB_RENEW_INTERVAL", "a duration such as 1m", true); err != nil {
+		return nil, cfg, err
+	} else if ok {
 		hc.RenewInterval = d
 	}
-	if v := os.Getenv("GOJIBERRY_COLLAB_EXPIRY_TTL"); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil || d <= 0 {
-			log.Fatalf("collabhub: GOJIBERRY_COLLAB_EXPIRY_TTL %q: want a positive duration such as 24h", v)
-		}
+	if d, ok, err := durationEnv("GOJIBERRY_COLLAB_EXPIRY_TTL", "a positive duration such as 24h", true); err != nil {
+		return nil, cfg, err
+	} else if ok {
 		hc.ExpiryTTL = d
 	}
-	h := hub.New(hc)
+	return hub.New(hc), cfg, nil
+}
+
+// run serves the hub until ctx ends, then stops it cleanly. onListen, when set, is told the address
+// once the port is open (for tests that listen on port 0).
+func run(ctx context.Context, onListen func(net.Addr)) error {
+	h, cfg, err := buildHub(ctx)
+	if err != nil {
+		return err
+	}
 	addr := os.Getenv("GOJIBERRY_COLLAB_ADDR")
 	if addr == "" {
 		addr = ":8081"
 	}
-	srv := &http.Server{Addr: addr, Handler: h.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	if onListen != nil {
+		onListen(ln.Addr())
+	}
+	srv := &http.Server{Handler: h.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		stop := make(chan os.Signal, 1)
-		signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-		<-stop
+		<-ctx.Done()
 		// Refuse writes and end the event streams first (Shutdown would wait
 		// for them forever), let the requests in flight finish, and only then
 		// save: nothing can be acknowledged after the final save.
 		h.Stop()
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_ = srv.Shutdown(ctx)
+		_ = srv.Shutdown(sctx)
 		if err := h.Close(); err != nil {
 			log.Printf("collabhub: saving on exit: %v", err)
 		}
 	}()
-	log.Printf("collabhub: listening on %s (backend=%s)", addr, cfg.Backend)
-	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatal(err)
+	log.Printf("collabhub: listening on %s (backend=%s)", ln.Addr(), cfg.Backend)
+	if err := srv.Serve(ln); err != http.ErrServerClosed {
+		return err
 	}
 	<-done // the final save has finished
+	return nil
 }
 
 // remoteRenewer is the docstore.Renewer that renews through the docstore server at baseURL; token,
