@@ -1,6 +1,6 @@
 # Design: refusing the frames of a revoked signer (roadmap item 42)
 
-Status: **design, no code.** The first plan (in `inherent-limits-plan.md` and in roadmap item 5) was a
+Status: **step 1 built** (`Sharing.RevokeSigner`, this design's item 1 with the dry-run checks; the signed manifest of item 2 and the wording of item 3 are not). The first plan (in `inherent-limits-plan.md` and in roadmap item 5) was a
 frame v4 with a signer key id and a "revoked at sequence N" cut. Looking at it against the code it does not
 work, so this page records why and what to build instead. Nothing here is shipped.
 

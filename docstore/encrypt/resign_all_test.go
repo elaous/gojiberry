@@ -523,3 +523,126 @@ func TestRepairAllResignSignsTheIndexAndItLoadsStrict(t *testing.T) {
 		t.Fatalf("second run: %v %+v", err, rep)
 	}
 }
+
+// RevokeSigner signs everything again with the key that stays, runs again if the old key wrote meanwhile, takes
+// the old key out of the lists, and reports what it wrote after the last check.
+func TestRevokeSignerReplacesTheKeyAndReportsWhatItWroteInTheWindow(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	a, b := w.e2eeDoc(t), w.e2eeDoc(t)
+	r := w.rotate(t)
+	oldKey := w.signer.Public()
+
+	// a holder of the old key writes frames straight into the store, signed by it, with no record to check
+	oldWriter := New(w.inner, Static{To: w.ring.People.Owners, Keys: w.ring.People.Keys})
+	oldWriter.Signer = w.signer
+	passes, removed := 0, 0
+	late := w.mainFile(t, b)
+	o := RevokeSignerOptions{
+		Progress: func(p RepairProgress) {
+			// the old key keeps writing during the first pass: the document just moved gets a new frame signed by it
+			if passes == 0 {
+				passes = 1
+				if err := oldWriter.Save(ctx, w.mainFile(t, p.Doc), []byte("written by the old key during the run")); err != nil {
+					t.Error(err)
+				}
+			}
+		},
+		Remove: func(context.Context) error {
+			removed++
+			// and once more, right before it is removed: this one cannot be signed again in time
+			if err := oldWriter.Save(ctx, late, []byte("the last word of the old key")); err != nil {
+				t.Error(err)
+			}
+			r.sharing.Adapter = r.onlyNew()
+			r.sharing.OwnerSigners = []ed25519.PublicKey{r.newKey.Public()}
+			return nil
+		},
+	}
+	rep, err := r.sharing.RevokeSigner(ctx, oldKey, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.Removed || removed != 1 || rep.Passes < 2 {
+		t.Errorf("removed %v (%d calls), passes %d: a write during the first pass needs a second", rep.Removed, removed, rep.Passes)
+	}
+	if len(rep.Late) != 1 || rep.Late[0] != b {
+		t.Errorf("late: %v, want the document the old key wrote last: %s", rep.Late, b)
+	}
+	// document a is the new key's, record and files
+	onlyNew := signerRotation{w: w, newKey: r.newKey, ad: r.sharing.Adapter, sharing: r.sharing}
+	onlyNew.allBy(t, a, SignerFingerprint(r.newKey.Public()))
+	// the old key's frame in b is refused from now on
+	if _, err := r.sharing.Adapter.Load(ctx, late); !errors.Is(err, ErrForgedFrame) {
+		t.Errorf("the old key's late frame loads: %v", err)
+	}
+}
+
+func TestRevokeSignerRefusesWhenItCannotMoveEverythingOrWouldRevokeItself(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	w.e2eeDoc(t)
+	r := w.rotate(t)
+	oldKey := w.signer.Public()
+	called := false
+	remove := func(context.Context) error { called = true; return nil }
+
+	if _, err := r.sharing.RevokeSigner(ctx, r.newKey.Public(), RevokeSignerOptions{Remove: remove}); !errors.Is(err, ErrRevokeCurrentSigner) {
+		t.Errorf("revoking the signer in use: %v", err)
+	}
+	if _, err := r.sharing.RevokeSigner(ctx, oldKey, RevokeSignerOptions{}); !errors.Is(err, ErrRevokeNeedsSigner) {
+		t.Errorf("no Remove: %v", err)
+	}
+	// a document that cannot be opened cannot be signed again: the key is kept
+	files := w.files(t, w.e2eeDoc(t))
+	if err := w.inner.Save(ctx, files[0], []byte("damaged")); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := r.sharing.RevokeSigner(ctx, oldKey, RevokeSignerOptions{Remove: remove})
+	if !errors.Is(err, ErrRevokeCannotResign) || called || rep.Removed || len(rep.Skipped) == 0 {
+		t.Errorf("a damaged document: err %v removed-called %v report %+v", err, called, rep)
+	}
+	// a key that keeps writing stops it after MaxPasses
+	w2 := newWorld(t)
+	doc := w2.e2eeDoc(t)
+	r2 := w2.rotate(t)
+	keepWriting := New(w2.inner, Static{To: w2.ring.People.Owners, Keys: w2.ring.People.Keys})
+	keepWriting.Signer = w2.signer
+	rep, err = r2.sharing.RevokeSigner(ctx, w2.signer.Public(), RevokeSignerOptions{
+		MaxPasses: 2,
+		Progress: func(RepairProgress) {
+			_ = keepWriting.Save(ctx, w2.mainFile(t, doc), []byte(fmt.Sprint("again ", rep.Passes)))
+		},
+		Remove: remove,
+	})
+	if !errors.Is(err, ErrRevokeStillWriting) || rep.Removed {
+		t.Errorf("a key that keeps writing: %v %+v", err, rep)
+	}
+}
+
+// A run whose Remove fails is finished by running it again: the signing is found done, and the key goes.
+func TestRevokeSignerIsRestartable(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	doc := w.e2eeDoc(t)
+	r := w.rotate(t)
+	failing := true
+	remove := func(context.Context) error {
+		if failing {
+			return errors.New("the config could not be written")
+		}
+		r.sharing.Adapter = r.onlyNew()
+		r.sharing.OwnerSigners = []ed25519.PublicKey{r.newKey.Public()}
+		return nil
+	}
+	rep, err := r.sharing.RevokeSigner(ctx, w.signer.Public(), RevokeSignerOptions{Remove: remove})
+	if err == nil || rep.Removed || rep.Resigned != 1 {
+		t.Fatalf("first run: %v %+v", err, rep)
+	}
+	failing = false
+	rep, err = r.sharing.RevokeSigner(ctx, w.signer.Public(), RevokeSignerOptions{Remove: remove})
+	if err != nil || !rep.Removed || rep.Resigned != 0 || len(rep.Late) != 0 {
+		t.Fatalf("second run: %v %+v", err, rep)
+	}
+	signerRotation{w: w, newKey: r.newKey, ad: r.sharing.Adapter, sharing: r.sharing}.allBy(t, doc, SignerFingerprint(r.newKey.Public()))
+}
