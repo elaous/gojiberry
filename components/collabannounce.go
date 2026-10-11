@@ -24,7 +24,7 @@ type CollabAnnouncer struct {
 	problem            string
 	joined, left       []string
 	comments           []string // authors of comments others added, not yet said
-	cause              string // a held connection sentence: "online", "offline" or ""
+	cause              string   // a held connection sentence: "online", "offline" or ""
 	problemSaid        string
 	last               time.Time
 }
