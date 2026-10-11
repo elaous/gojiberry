@@ -116,3 +116,34 @@ func TestCapacityMeter(t *testing.T) {
 	d.WaitSelector(".gj-capacity")
 	d.OK(strings.Contains(d.Text(".gj-capacity"), "%"), "the meter shows a percentage: "+d.Text(".gj-capacity"))
 }
+
+// A saved version can be compared with the document as it is now: the Save tab lists what was added,
+// removed and reworded, in words a screen reader can read.
+func TestCompareAVersionWithTheDocument(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.Click(`button[data-tab="save"]`)
+	d.Select(`.gj-saver-select[data-field="Save to"]`, "memory")
+	d.Fill(".gj-saver-name", "plan")
+	d.Click(".gj-saver-save")
+	d.WaitSelector(".gj-doclist-item")
+	d.Click(".gj-versions-save")
+	d.WaitSelector(".gj-versions-item")
+
+	d.Click(".gj-versions-item .gj-versions-compare")
+	d.WaitSelector(".gj-diff-none")
+	d.OK(strings.Contains(d.Text(".gj-diff-none"), "The two versions are the same"), "nothing changed yet: "+d.Text(".gj-diff-none"))
+
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Focus("#input")
+	d.Press("End")
+	d.Type(" CHANGED")
+	d.Wait("s.text.includes('CHANGED')")
+	d.Click(`button[data-tab="save"]`)
+	d.Click(".gj-versions-item .gj-versions-compare")
+	d.WaitFor("the changes", `document.querySelector('.gj-diff-item')`)
+	d.OK(strings.Contains(d.Text(".gj-diff-summary"), "change"), "the count: "+d.Text(".gj-diff-summary"))
+	d.OK(d.Count(".gj-diff ins") >= 1, "the added words are marked")
+	d.OK(strings.Contains(d.Text(".gj-diff-item .gj-sr-only"), "Edited"), "and said in words: "+d.Text(".gj-diff-item .gj-sr-only"))
+	d.NoErrors()
+}

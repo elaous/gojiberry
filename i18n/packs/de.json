@@ -749,6 +749,10 @@
   "diff.count#one": "%d Änderung",
   "diff.count#other": "%d Änderungen",
   "diff.unchanged#one": "%d Block unverändert",
-  "diff.unchanged#other": "%d Blöcke unverändert"
+  "diff.unchanged#other": "%d Blöcke unverändert",
+  "docs.compare": "Vergleichen",
+  "docs.compareWith": "%s mit dem aktuellen Dokument vergleichen",
+  "docs.compareHeading": "Änderungen seit dieser Version",
+  "saver.versionCompared": "Mit dem aktuellen Dokument verglichen"
  }
 }
