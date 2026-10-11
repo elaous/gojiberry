@@ -45,7 +45,19 @@ func run(t *testing.T, limit int64, batch []crdt.Op) (pending int, rejected bool
 		case <-time.After(5 * time.Millisecond):
 		}
 		if conn.Pending() == 0 {
-			return 0, false
+			// A refused operation leaves the queue before its Rejected event is handed over: look for
+			// the event a moment longer before deciding that everything was accepted.
+			settle := time.After(200 * time.Millisecond)
+			for {
+				select {
+				case e := <-conn.Events():
+					if e.Kind == client.Rejected {
+						return 0, true
+					}
+				case <-settle:
+					return 0, false
+				}
+			}
 		}
 	}
 	return conn.Pending(), false
