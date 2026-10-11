@@ -28,7 +28,7 @@ a category falls back to `#other`, then to the English in the code. Each text ta
 
 Numbers and dates: `i18n.Number(lang, n, decimals)`, `i18n.Percent`, `i18n.Date(lang, t, style)` and
 `i18n.Time` write them the way the language does (separators, month names, order); the number in a plural
-message is written that way too.
+message is written that way too. `Catalog.Ago(lang, d)` says how long ago something was ("5 minutes ago").
 
 ## Adding a language
 
@@ -40,5 +40,5 @@ check of the page in that direction.
 
 ## What is not done
 
-Relative times, time zones and plural rules for fractions are in
+Time zones and plural rules for fractions are in
 [roadmap item 83](roadmap.md). The messages written before plural forms existed still use neutral wording.
