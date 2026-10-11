@@ -211,13 +211,17 @@ func (m *Manager) allowLogin(r *http.Request) (bool, int) {
 	if m.loginLimiter == nil {
 		return true, 0
 	}
-	var ip string
+	remote := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		remote = host
+	}
+	ip := remote
 	if m.clientIP != nil {
-		ip = m.clientIP(r)
-	} else if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		ip = host
-	} else {
-		ip = r.RemoteAddr
+		// A clientIP that cannot tell (it answers "") must not put every client in one budget: the
+		// connection's address is used then.
+		if v := m.clientIP(r); v != "" {
+			ip = v
+		}
 	}
 	ok, wait := m.loginLimiter.Allow(r.Context(), "login|"+ip)
 	if ok {
