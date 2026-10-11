@@ -3,7 +3,7 @@
 #
 # Unlike cmd/translateserver/Dockerfile (FROM scratch: it only ever
 # makes outbound HTTPS calls to DeepL), this one execs a Piper/whisper
-# binary as a subprocess per request (voiceserver/server.go's own
+# binary as a subprocess per request (voice/speak/piper.go's own
 # execPiper/execWhisper), so the base image needs a real shell/libc
 # for those to run against, plus the binaries themselves and their
 # model files -- none of which this Dockerfile bundles, since which

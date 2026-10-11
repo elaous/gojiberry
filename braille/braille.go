@@ -1,4 +1,7 @@
-package export
+// Package braille writes Braille Ready Format (.brf, ASCII braille). Transcription needs liblouis, a C library
+// with no Go binding in this stack, so the exporter sends the text to a running braille server (braille/server,
+// cmd/brailleserver) and the BRF type holds what it answered. The server is in braille/server.
+package braille
 
 import (
 	"bytes"
@@ -11,6 +14,7 @@ import (
 	"time"
 
 	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/export"
 	"github.com/elaous/gojiberry/transfer"
 )
 
@@ -31,7 +35,7 @@ func (Braille) Format() transfer.Format {
 
 // Export implements transfer.Exporter.
 func (b Braille) Export(d docfile.Document) ([]byte, error) {
-	text, err := PlainText{}.Export(FromDocument(d))
+	text, err := export.PlainText{}.Export(export.FromDocument(d))
 	if err != nil {
 		return nil, err
 	}
@@ -56,11 +60,11 @@ func (b Braille) Export(d docfile.Document) ([]byte, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("export: the braille server answered %d", resp.StatusCode)
+		return nil, fmt.Errorf("braille: the braille server answered %d", resp.StatusCode)
 	}
 	var out struct{ Braille string }
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 32<<20)).Decode(&out); err != nil {
 		return nil, err
 	}
-	return BRF{Braille: out.Braille}.Export(Snapshot{})
+	return BRF{Braille: out.Braille}.Export(export.Snapshot{})
 }

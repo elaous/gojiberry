@@ -3,7 +3,7 @@
 // Piper), GOJIBERRY_VOICESERVER_WHISPER_BINARY/_WHISPER_MODEL enable
 // /transcribe (local whisper.cpp-compatible install). Either pair
 // left empty still starts the server -- that route just reports 503
-// until configured. See gojiberry/voiceserver for the HTTP API.
+// until configured. See gojiberry/voice/server for the HTTP API.
 package main
 
 import (
@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/elaous/gojiberry/voiceserver"
+	voiceserver "github.com/elaous/gojiberry/voice/server"
 )
 
 func main() {
