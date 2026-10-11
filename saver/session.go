@@ -31,6 +31,8 @@ type Session struct {
 	Get func() docfile.Document
 	// OnOpen receives a document the user opened.
 	OnOpen func(docfile.Document)
+	// Author, when set, is recorded as who saved each version ("" records nobody).
+	Author string
 	// OnChange is called after any state change, possibly from another
 	// goroutine.
 	OnChange func()
@@ -610,7 +612,7 @@ func (s *Session) SaveVersion(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := s.Saver.SaveVersion(ctx, s.targetName(), c, doc); err != nil {
+	if _, err := s.Saver.SaveVersionBy(ctx, s.targetName(), c, doc, s.Author); err != nil {
 		return storageFull(err)
 	}
 	return s.after(ctx, msg("saver.versionSaved", "A version of %s saved", s.Name()))
@@ -645,6 +647,25 @@ func (s *Session) CompareVersion(ctx context.Context, key string) error {
 	s.set(func() { s.diff, s.diffKey = changes, key })
 	s.say(msg("saver.versionCompared", "Compared with the current document"))
 	return nil
+}
+
+// RenameVersion gives a snapshot a name ("" removes it).
+func (s *Session) RenameVersion(ctx context.Context, key, name string) error {
+	if err := s.Saver.RenameVersion(ctx, s.targetName(), key, name); err != nil {
+		return err
+	}
+	return s.after(ctx, msg("saver.versionRenamed", "Version renamed"))
+}
+
+// PinVersion keeps a snapshot when older ones are dropped, or lets it go.
+func (s *Session) PinVersion(ctx context.Context, key string, pinned bool) error {
+	if err := s.Saver.PinVersion(ctx, s.targetName(), key, pinned); err != nil {
+		return err
+	}
+	if pinned {
+		return s.after(ctx, msg("saver.versionPinned", "Version kept"))
+	}
+	return s.after(ctx, msg("saver.versionUnpinned", "Version no longer kept"))
 }
 
 // DeleteVersion removes one snapshot.
@@ -1033,12 +1054,12 @@ func protectionLevel(confidential bool) string {
 func (s *Session) Versions() components.VersionsProps {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p := components.VersionsProps{Pending: s.Pending, Save: s.SaveVersion, Open: s.OpenVersion, Delete: s.DeleteVersion, Compare: s.CompareVersion, Diff: s.diff, DiffKey: s.diffKey}
+	p := components.VersionsProps{Pending: s.Pending, Save: s.SaveVersion, Open: s.OpenVersion, Delete: s.DeleteVersion, Compare: s.CompareVersion, Diff: s.diff, DiffKey: s.diffKey, Rename: s.RenameVersion, Pin: s.PinVersion}
 	if s.id != "" {
 		p.Name = s.name
 	}
 	for _, v := range s.versions {
-		p.Versions = append(p.Versions, components.DocVersion{Key: v.Key, Time: v.Time, Size: v.Size})
+		p.Versions = append(p.Versions, components.DocVersion{Key: v.Key, Time: v.Time, Size: v.Size, Name: v.Name, Pinned: v.Pinned, Author: v.Author})
 	}
 	return p
 }

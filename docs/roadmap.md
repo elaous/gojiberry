@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-0 of 10 since the last full run (full run on main 7ec9fea after #205, the 10th merge since 098ac89, with the fixes in this PR). It passed everything in the end: build, vet, tests, lint and wasm checks, the generated files and API dumps, the nested modules and the grammar tests (the run was split in two after the first fixes: the root steps passed in one, the nested-module and grammar steps in the next). It found three things, all from the version-diff work: a stale `components/styles.xg.go` (CSS added without `make generate`), and the go.mod/go.sum of `docstore/backends` and `examples/collab-editor-app`, which needed `go mod tidy` for the new `docdiff` dependency (x/image through `export`). Coverage score of that run (`make coverage`): **88.9% of statements** (the README badge); the packages raised since the last run are `cmd/collabhub` 83%, `voice/*` 86-94%, `docstore` 84%, `cmd/docsh` 85%, `braille/server` 88%, `collab/ws` 84%, `export` 86% and `pdftext` 90%. The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+1 of 10 since the last full run (#207: name and keep a version; full run on main 7ec9fea after #205, the 10th merge since 098ac89, with the fixes in this PR). It passed everything in the end: build, vet, tests, lint and wasm checks, the generated files and API dumps, the nested modules and the grammar tests (the run was split in two after the first fixes: the root steps passed in one, the nested-module and grammar steps in the next). It found three things, all from the version-diff work: a stale `components/styles.xg.go` (CSS added without `make generate`), and the go.mod/go.sum of `docstore/backends` and `examples/collab-editor-app`, which needed `go mod tidy` for the new `docdiff` dependency (x/image through `export`). Coverage score of that run (`make coverage`): **88.9% of statements** (the README badge); the packages raised since the last run are `cmd/collabhub` 83%, `voice/*` 86-94%, `docstore` 84%, `cmd/docsh` 85%, `braille/server` 88%, `collab/ws` 84%, `export` 86% and `pdftext` 90%. The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1035,9 +1035,13 @@ unless stated.
     block, by word; a heading that became a paragraph is a change; `Describe` says a change in words; very large
     middles fall back to delete and insert. `components.VersionDiff` shows it as a list a screen reader can read
     ("Inserted heading 2:", `<ins>` and `<del>` underlined and struck through, a count line, unchanged runs
-    collapsed), with de/fr/es texts and plural forms. Also done (#204), step 1 in part: a Compare button per snapshot in the Save tab's version list shows the diff against the document being edited (`Session.CompareVersion`, `VersionsProps.Compare/Diff`), e2e `TestCompareAVersionWithTheDocument`. Left: the author of a snapshot (the store keeps only the time),
-    naming and pinning a version (the store keeps no name today), restore as a new version, and the permissions and
-    encryption checks (steps 1, 2, 4, 5).
+    collapsed), with de/fr/es texts and plural forms. Also done (#204), step 1 in part: a Compare button per snapshot in the Save tab's version list shows the diff against the document being edited (`Session.CompareVersion`, `VersionsProps.Compare/Diff`), e2e `TestCompareAVersionWithTheDocument`. Also done (#207), step 2 and the author of step 1: a snapshot can be named and kept
+    (`Saver.RenameVersion`, `PinVersion`, `SaveVersionBy`; the notes are one small record per document next to the snapshots,
+    `versions/<id>/meta.json`, so the snapshots are as saved and go with the document when it is purged); a kept version is
+    not dropped when older ones are, does not count toward `MaxVersions`, and cannot be deleted until let go (`ErrPinned`);
+    the Save tab's version list shows the author, a name field and a Keep box. Two people changing notes at the same
+    moment can lose one change (last write wins). Left: restore as a new version, a different author per person in a
+    live session (the showcase records its placeholder address), and the permission and encryption checks (steps 4, 5).
 71. **Comments, suggestions and tracked changes.** Kind: fixable. What: comment threads, mentions, resolve and reopen,
     suggestion mode and tracked changes with accept and reject. Why it matters: review is the core of shared writing.
     Plan: (1) model for ranges, threads and changes that survive concurrent edits; (2) UI with keyboard paths; (3)

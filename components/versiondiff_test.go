@@ -1,8 +1,10 @@
 package components
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/elaous/gojiberry/docdiff"
 	"github.com/elaous/gojiberry/export"
@@ -44,5 +46,26 @@ func TestVersionDiffOfTwoEqualVersions(t *testing.T) {
 	one := render(t, VersionDiff(VersionDiffProps{Changes: []docdiff.Change{{Op: docdiff.Insert, Text: "x"}}}))
 	if !strings.Contains(one, "1 change: 1 inserted") {
 		t.Errorf("singular: %s", one)
+	}
+}
+
+func TestVersionsListShowsNamesPinsAndAuthors(t *testing.T) {
+	when := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
+	noop := func(context.Context, string, string) error { return nil }
+	html := render(t, Versions(VersionsProps{Name: "plan", Pending: &Pending{},
+		Versions: []DocVersion{{Key: "versions/x/1.json", Time: when, Size: 10, Name: "Sent out", Pinned: true, Author: "ana@example.com"}, {Key: "versions/x/2.json", Time: when.Add(-time.Hour), Size: 9}},
+		Rename:   noop, Pin: func(context.Context, string, bool) error { return nil }, Delete: func(context.Context, string) error { return nil }}))
+	for _, want := range []string{`value="Sent out"`, "by ana@example.com", `class="gj-versions-pin"`, `checked="checked"`, `aria-label="Keep the version of Sent out (2026-03-04 05:06:07)"`, `aria-label="Name of the version of 2026-03-04 05:06:07"`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in\n%s", want, html)
+		}
+	}
+	// the pinned one cannot be deleted; the other can
+	if strings.Count(html, `disabled="disabled"`) != 1 {
+		t.Errorf("one delete button is disabled (the pinned version's): %d", strings.Count(html, `disabled="disabled"`))
+	}
+	plain := render(t, Versions(VersionsProps{Name: "plan", Pending: &Pending{}, Versions: []DocVersion{{Key: "k", Time: when, Name: "Just text"}}}))
+	if !strings.Contains(plain, `gj-versions-name-text">Just text`) || strings.Contains(plain, "<input") {
+		t.Errorf("without Rename the name is text: %s", plain)
 	}
 }

@@ -147,3 +147,31 @@ func TestCompareAVersionWithTheDocument(t *testing.T) {
 	d.OK(strings.Contains(d.Text(".gj-diff-item .gj-sr-only"), "Edited"), "and said in words: "+d.Text(".gj-diff-item .gj-sr-only"))
 	d.NoErrors()
 }
+
+// A version can be named and kept: the name stays in the list, who saved it is shown, and a kept version
+// cannot be deleted until it is let go.
+func TestNameAndKeepAVersion(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.Click(`button[data-tab="save"]`)
+	d.Select(`.gj-saver-select[data-field="Save to"]`, "memory")
+	d.Fill(".gj-saver-name", "plan")
+	d.Click(".gj-saver-save")
+	d.WaitSelector(".gj-doclist-item")
+	d.Click(".gj-versions-save")
+	d.WaitSelector(".gj-versions-item")
+	d.OK(strings.Contains(d.Text(".gj-versions-author"), "by you@example.com"), "who saved it: "+d.Text(".gj-versions-item"))
+
+	d.Fill(".gj-versions-name", "Sent to the printer")
+	d.Dispatch(".gj-versions-name", "change")
+	d.WaitFor("the name saved", `document.querySelector('.gj-status-item, .gj-saver-status, [role="status"]') && document.body.textContent.includes('Version renamed')`)
+	d.SetChecked(".gj-versions-pin", true)
+	d.WaitFor("the version kept", `document.querySelector('.gj-versions-pin') && document.querySelector('.gj-versions-pin').checked && document.querySelector('.gj-versions-delete').disabled`)
+	d.OK(d.Disabled(".gj-versions-delete"), "a kept version cannot be deleted")
+	d.OK(d.Str(`document.querySelector('.gj-versions-name').value`) == "Sent to the printer", "and keeps its name")
+
+	d.SetChecked(".gj-versions-pin", false)
+	d.WaitFor("let go", `!document.querySelector('.gj-versions-delete').disabled`)
+	d.Click(".gj-versions-delete")
+	d.WaitFor("deleted", `document.querySelectorAll('.gj-versions-item').length === 0`)
+	d.NoErrors()
+}

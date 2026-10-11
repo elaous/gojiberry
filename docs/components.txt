@@ -1473,6 +1473,11 @@ type DocVersion struct {
 	Key  string // what the version operations take
 	Time time.Time
 	Size int
+	// Name is the name the person gave the version, Pinned says it is kept when older ones are dropped, and
+	// Author is who saved it.
+	Name   string
+	Pinned bool
+	Author string
 }
     DocVersion is a snapshot of a document.
 
@@ -2828,6 +2833,9 @@ type VersionsProps struct {
 	Compare DocAction
 	Diff    []docdiff.Change
 	DiffKey string
+	// Rename gives a snapshot a name and Pin keeps it (or lets it go); each may be nil.
+	Rename func(ctx context.Context, key, name string) error
+	Pin    func(ctx context.Context, key string, pinned bool) error
 }
     VersionsProps configures Versions.
 

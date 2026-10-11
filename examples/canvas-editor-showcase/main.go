@@ -242,6 +242,7 @@ func main() {
 	// to re-key a document's files when its level changes, and it seals confidential documents
 	// into packs for the owner's keys while unlocked.
 	u.saver.Saver.ConfidentialCheck, u.saver.Saver.Rekey = u.enc.store.Check, u.enc.store.Rekey
+	u.saver.Author = state.Author // recorded as who saved each version
 	u.saver.PackKeys = u.enc.store.PackKeys
 	u.enc.swap = u.encSwap
 	u.enc.dir.ask = u.saver.Asker.AskWith
