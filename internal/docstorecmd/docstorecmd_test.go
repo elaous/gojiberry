@@ -1087,3 +1087,17 @@ func TestPublicSessionsModes(t *testing.T) {
 		t.Error("a bad mode was accepted")
 	}
 }
+
+func TestPublicPriorityQuotaModes(t *testing.T) {
+	ctx := context.Background()
+	store := docstore.NewMemoryAdapter()
+	if q, err := publicPriorityQuota(ctx, store, 5, ""); err != nil || q != nil {
+		t.Errorf("default: %v %v", q, err)
+	}
+	if q, err := publicPriorityQuota(ctx, store, 5, "store"); err != nil || q == nil {
+		t.Errorf("store: %v %v", q, err)
+	}
+	if _, err := publicPriorityQuota(ctx, store, 5, "everywhere"); err == nil {
+		t.Error("a bad mode was accepted")
+	}
+}
