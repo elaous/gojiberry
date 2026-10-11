@@ -39,6 +39,8 @@ type State struct {
 	FindFeature canvas.FindFeature
 	// CompleteFeature is the command that opens the word suggestions.
 	CompleteFeature canvas.CompleteFeature
+	// Review is the suggestion-mode commands (turn it on, accept, reject).
+	Review canvas.Review
 	// Hyphenate breaks long words at their hyphenation points.
 	Hyphenate bool
 }
@@ -46,7 +48,7 @@ type State struct {
 // Features is what the canvas registers: the defaults, find and replace and
 // columns.
 func (s State) Features() []canvas.Feature {
-	return append(canvas.DefaultFeatures(), s.FindFeature, s.CompleteFeature, canvas.Columns{})
+	return append(canvas.DefaultFeatures(), s.FindFeature, s.CompleteFeature, s.Review, canvas.Columns{})
 }
 
 // Transform is the Markdown transform for Source, or none when the

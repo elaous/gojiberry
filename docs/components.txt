@@ -518,6 +518,17 @@ func Progress(props ProgressProps) xango.Node
     mounted (server-rendered HTML wouldn't show the bug -- the browser's HTML
     parser switches namespace for a parsed <svg> tag on its own).
 
+func ProposalPanel(p ProposalPanelProps) xango.Node
+    ProposalPanel lists the suggested changes of a document with buttons to
+    accept or reject each (and all), and a switch for suggestion mode. Each
+    suggestion is a sentence ("Ana replaced 'brown' with 'red'"), so the list
+    reads well without colors, and each button names the suggestion it is for.
+
+func ProposalSentence(p canvas.Proposal) string
+    ProposalSentence says a suggested change in a sentence: "Ana replaced
+    'brown' with 'red'", "Ana added 'X'" or "Ana removed 'brown'". Long text is
+    cut short.
+
 func RadioGroup(props RadioGroupProps) xango.Node
     RadioGroup renders a set of mutually exclusive radio buttons.
 
@@ -2276,6 +2287,19 @@ const (
 	ProgressLinear ProgressVariant = "linear"
 	ProgressCircle ProgressVariant = "circle"
 )
+type ProposalPanelProps struct {
+	// ID is the list's id; "proposals" when empty.
+	ID        string
+	Proposals []canvas.Proposal
+	// Suggesting says whether suggestion mode is on; OnMode turns it on or off.
+	Suggesting bool
+	OnMode     func(on bool)
+	// OnAccept and OnReject settle one suggestion; OnAcceptAll and OnRejectAll settle all of them.
+	OnAccept, OnReject       func(id string)
+	OnAcceptAll, OnRejectAll func()
+}
+    ProposalPanelProps configures ProposalPanel.
+
 type RadioGroupProps struct {
 	Name     string // shared "name" so the browser only allows one checked at a time
 	Options  []RadioOption
