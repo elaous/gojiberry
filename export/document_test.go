@@ -220,3 +220,33 @@ func TestHTMLWritesTheLanguageOfARun(t *testing.T) {
 		t.Errorf("got %s", got)
 	}
 }
+
+// An image's description is its alt text in HTML and Markdown; one marked decorative has an empty alt.
+func TestImageAltTextIsExported(t *testing.T) {
+	doc := docfile.Document{Content: []docfile.Item{
+		{Image: &docfile.ImageItem{URL: "a.png", Alt: `A "graph" of sales`}},
+		{Image: &docfile.ImageItem{URL: "b.png", Decorative: true}},
+		{Image: &docfile.ImageItem{URL: "c.png"}},
+	}}
+	snap := FromDocument(doc)
+	html, err := HTML{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`src="a.png" alt="A &#34;graph&#34; of sales"`, `src="b.png" alt=""`, `src="c.png" alt=""`} {
+		if !strings.Contains(string(html), want) && !strings.Contains(strings.ReplaceAll(string(html), "&quot;", "&#34;"), want) {
+			t.Errorf("html lacks %s:\n%s", want, html)
+		}
+	}
+	md, _ := Markdown{}.Export(snap)
+	if !strings.Contains(string(md), "![A \"graph\" of sales](a.png)") && !strings.Contains(string(md), `![A "graph" of sales]`) {
+		t.Errorf("markdown:\n%s", md)
+	}
+	txt, _ := PlainText{}.Export(snap)
+	if !strings.Contains(string(txt), `[Image: A "graph" of sales]`) {
+		t.Errorf("text:\n%s", txt)
+	}
+	if !snap.Blocks[1].ImageDecorative || snap.Blocks[0].ImageAlt == "" {
+		t.Errorf("snapshot: %+v", snap.Blocks)
+	}
+}

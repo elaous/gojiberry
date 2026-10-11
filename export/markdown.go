@@ -31,7 +31,11 @@ func (Markdown) Export(snap Snapshot) ([]byte, error) {
 			// renderers) never actually displays alt text, only a
 			// tooltip/accessibility attribute, so an alt-only caption
 			// would be invisible to a reader of the rendered document.
-			sb.WriteString("![" + escapeMarkdownText(b.ImageCaption) + "](" + b.ImageSrc + ")\n\n")
+			alt := b.ImageCaption
+			if b.ImageAlt != "" {
+				alt = b.ImageAlt
+			}
+			sb.WriteString("![" + escapeMarkdownText(alt) + "](" + b.ImageSrc + ")\n\n")
 			if b.ImageCaption != "" {
 				sb.WriteString("*" + escapeMarkdownText(b.ImageCaption) + "*\n\n")
 			}

@@ -110,6 +110,8 @@ message ImageItem {
   double clip_top = 6;
   double clip_right = 7;
   double clip_bottom = 8;
+  string alt = 9;
+  bool decorative = 10;
 }
 
 message Item {

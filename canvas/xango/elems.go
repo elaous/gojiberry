@@ -200,6 +200,10 @@ func (e *imageElem) Update(c *Context, props any, _ []xango.Node) (bool, error) 
 		im.Clip = p.Clip
 		changed = true
 	}
+	if first || p.Alt != old.Alt || p.Decorative != old.Decorative {
+		im.Alt, im.Decorative = p.Alt, p.Decorative
+		changed = true
+	}
 	if im.Flow() != c.Flow {
 		im.SetFlow(c.Flow)
 		changed = true

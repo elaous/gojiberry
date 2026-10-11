@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-7 of 10 since the last full run (#151, #152, #153, #154, #155, #156, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+8 of 10 since the last full run (#151, #152, #153, #154, #155, #156, #157, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -962,7 +962,7 @@ unless stated.
     2. Checker functions over the model, each returning a finding with a location and a fix.
     3. Optional local suggestion hook behind a setting, off by default, with no data sent anywhere.
     4. Contrast check using the document's own colours; heading and reading-order checks.
-    Where: the model, `components`, the showcase image insert. Priority: high. Dependencies: 60; feeds 62.
+    Where: the model, `components`, the showcase image insert. Priority: high. Dependencies: 60; feeds 62. Done in part (this PR): steps 1 (model only), 2 and 4 (heading and contrast). An image now carries `Alt` and `Decorative` (`canvas.Image`, `docfile.ImageItem` fields 9 and 10, `canvas/xango` `alt`/`decorative` props), exported as the `alt` of HTML (empty for a decorative image), the alt of Markdown and `[Image: ...]` in plain text, and read in the reading copy ("Image: ..."; a decorative one is left out, one without a description is named as such). The new package `a11ycheck` has `Check(doc, Options) []Finding` (rule, severity, message, fix, block or item, text) with the rules `image-alt`, `heading-skip`, `heading-empty` and `contrast` (WCAG 4.5:1, 3:1 for large text, against the run's background or the page). Tests: `a11ycheck` (per rule), `TestImageAltTextIsExported`, `TestImageDescriptionIsInTheReadingCopy`. Left: the insert prompt with "decorative" as a choice (the showcase has no way to insert an image yet, and the Alt of the sample picture is set in code), an editor for an existing image's description, on-device suggestions (step 3), reading-order checks, heading levels beyond 3 (the export folds them to 3), colour names beyond the basic ones, and the translations of the new messages.
 62. **Document accessibility checker panel.** Kind: fixable. What: a panel that lists findings from 61 and others,
     jumps to each, offers a fix, and can gate export (warn or block, set by the user or the operator). Why it matters:
     people need to learn about a problem before they send the document. Plan: (1) a finding schema (rule, severity,

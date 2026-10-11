@@ -79,6 +79,9 @@ type ImageItem struct {
 	ClipTop    float64 `json:"clipTop,omitempty" pb:"6"`
 	ClipRight  float64 `json:"clipRight,omitempty" pb:"7"`
 	ClipBottom float64 `json:"clipBottom,omitempty" pb:"8"`
+	// Alt describes the image; Decorative says it needs no description.
+	Alt        string `json:"alt,omitempty" pb:"9"`
+	Decorative bool   `json:"decorative,omitempty" pb:"10"`
 }
 
 // RuleItem mirrors canvas.Rule.
@@ -361,7 +364,8 @@ func FromItems(items []canvas.Item) []Item {
 			case *canvas.Image:
 				if src, ok := o.Src.(canvas.URLSource); ok && src.URL() != "" {
 					out = append(out, Item{Image: &ImageItem{URL: src.URL(), Width: o.W, Height: o.H, Alpha: o.Alpha,
-						ClipLeft: o.Clip.Left, ClipTop: o.Clip.Top, ClipRight: o.Clip.Right, ClipBottom: o.Clip.Bottom}})
+						ClipLeft: o.Clip.Left, ClipTop: o.Clip.Top, ClipRight: o.Clip.Right, ClipBottom: o.Clip.Bottom,
+						Alt: o.Alt, Decorative: o.Decorative}})
 				}
 			case *ImagePlaceholder:
 				c := o.Item
@@ -597,6 +601,7 @@ func imageObject(it ImageItem) canvas.InlineObject {
 				img.Alpha = it.Alpha
 			}
 			img.Clip = canvas.Insets{Left: it.ClipLeft, Top: it.ClipTop, Right: it.ClipRight, Bottom: it.ClipBottom}
+			img.Alt, img.Decorative = it.Alt, it.Decorative
 			return img
 		}
 	}

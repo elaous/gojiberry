@@ -291,7 +291,14 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 		case export.Code:
 			out = append(out, components.A11yBlock{Kind: components.A11yCode, Text: text})
 		case export.Image:
-			out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.image", "Image")})
+			switch {
+			case b.ImageDecorative && b.ImageAlt == "":
+				// nothing a reader needs
+			case b.ImageAlt != "":
+				out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.imageAlt", "Image: %s", b.ImageAlt)})
+			default:
+				out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.imageNoAlt", "Image without a description")})
+			}
 		case export.TableCell:
 			if b.TableCol == 0 {
 				row := components.A11yBlock{Kind: components.A11yTableRow}
@@ -366,6 +373,15 @@ func a11yObjects(root *cxango.Root) []components.A11yBlock {
 		}
 	}
 	for n := 0; root.Find(cxango.TagImage, n) != nil; n++ {
+		if im, ok := root.Find(cxango.TagImage, n).(*canvas.Image); ok {
+			switch {
+			case im.Decorative && im.Alt == "":
+				continue // nothing a reader needs
+			case im.Alt != "":
+				out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.imageAlt", "Image: %s", im.Alt)})
+				continue
+			}
+		}
 		out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.image", "Image")})
 	}
 	return out
