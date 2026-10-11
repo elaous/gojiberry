@@ -13,6 +13,7 @@ import (
 	"compress/gzip"
 	_ "embed"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -41,7 +42,11 @@ var commonContractions = []string{
 
 // Dictionary is a set of known words (lower case). It does not change once
 // built, so one can be shared.
-type Dictionary struct{ words map[string]struct{} }
+type Dictionary struct {
+	words  map[string]struct{}
+	once   sync.Once
+	sorted []string // the words in order, built when first needed for completion
+}
 
 // New returns a dictionary of words (lower-cased).
 func New(words ...string) *Dictionary {
@@ -112,6 +117,30 @@ func (d *Dictionary) Len() int { return len(d.words) }
 func (d *Dictionary) Has(lower string) bool {
 	_, ok := d.words[lower]
 	return ok
+}
+
+// WithPrefix returns up to max known words that start with the lower-case prefix and are longer than it,
+// the shortest first (a short completion is the likelier), then alphabetically.
+func (d *Dictionary) WithPrefix(prefix string, max int) []string {
+	d.once.Do(func() {
+		d.sorted = make([]string, 0, len(d.words))
+		for w := range d.words {
+			d.sorted = append(d.sorted, w)
+		}
+		sort.Strings(d.sorted)
+	})
+	i := sort.SearchStrings(d.sorted, prefix)
+	var out []string
+	for ; i < len(d.sorted) && strings.HasPrefix(d.sorted[i], prefix); i++ {
+		if len(d.sorted[i]) > len(prefix) {
+			out = append(out, d.sorted[i])
+		}
+	}
+	sort.SliceStable(out, func(a, b int) bool { return len(out[a]) < len(out[b]) })
+	if max > 0 && len(out) > max {
+		out = out[:max]
+	}
+	return out
 }
 
 // Checker checks text against a dictionary and the user's own words.
@@ -357,6 +386,30 @@ func WordBefore(text []rune, pos int) (start int, word string, ok bool) {
 		i--
 	}
 	return i, string(text[i:pos]), true
+}
+
+// CompleteMany returns up to max words that start with prefix (without regard to case): the user's own
+// words first, then the dictionary's, shortest first.
+func (c *Checker) CompleteMany(prefix string, max int) []string {
+	lower := strings.ToLower(prefix)
+	var out []string
+	for w := range c.Custom {
+		if len(w) > len(lower) && strings.HasPrefix(w, lower) {
+			out = append(out, w)
+		}
+	}
+	sort.Strings(out)
+	if c.Dict != nil {
+		for _, w := range c.Dict.WithPrefix(lower, max) {
+			if !slices.Contains(out, w) {
+				out = append(out, w)
+			}
+		}
+	}
+	if max > 0 && len(out) > max {
+		out = out[:max]
+	}
+	return out
 }
 
 // Complete returns the alphabetically first known word that starts with prefix
