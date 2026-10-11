@@ -633,6 +633,45 @@ func (f *TextFlow) SetTextColor(css string) bool {
 	return f.ApplyFormat(func(fm *Format) { fm.Color = css })
 }
 
+// ValidLang reports whether s can be a language tag: letters and digits in groups of up to eight
+// separated by hyphens ("fr", "pt-BR", "zh-Hant-TW"), at most 35 characters. The empty string is
+// valid: it means the document's own language.
+func ValidLang(s string) bool {
+	if s == "" {
+		return true
+	}
+	if len(s) > 35 || s[0] == '-' || s[len(s)-1] == '-' {
+		return false
+	}
+	group := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '-':
+			if group == 0 {
+				return false
+			}
+			group = 0
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+			if group++; group > 8 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// SetLanguage tags the selected text (or the text typed next) as written in the language with this
+// tag; "" returns it to the document's own. A tag that is not valid is refused.
+func (f *TextFlow) SetLanguage(tag string) bool {
+	if !ValidLang(tag) {
+		return false
+	}
+	return f.ApplyFormat(func(fm *Format) { fm.Lang = tag })
+}
+
 // SetHighlight highlights the selected text; "" removes the highlight.
 func (f *TextFlow) SetHighlight(css string) bool {
 	return f.ApplyFormat(func(fm *Format) { fm.Background = css })

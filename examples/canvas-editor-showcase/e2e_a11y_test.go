@@ -112,3 +112,28 @@ func TestFontSelectorKeyboard(t *testing.T) {
 	d.OK(strings.Contains(active(), "gj-fontselector-control"), "Escape returns the focus to the button: "+active())
 	d.NoErrors()
 }
+
+// A stretch of text can be tagged with its language: the screen-reader copy writes it as a span with a
+// lang attribute (so a reader switches voice), the tag is chosen from the Format menu and can be taken
+// off again.
+func TestSelectionLanguageReachesTheReadingCopy(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Focus("#input")
+	d.CanvasDblClick(240, 164)
+	d.WaitFor("the selection", "document.querySelector('.gj-a11y-selection')")
+	pick := func(item string) {
+		d.Click(`button.gj-menubar-button:has-text("Format")`)
+		d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Language of the selection")`)
+		d.Click(`.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("` + item + `")`)
+	}
+	d.OK(d.Count(`#a11y-text [lang]`) == 0, "no text has a language of its own at first")
+	pick("Français")
+	d.WaitFor("the lang attribute", `document.querySelectorAll('#a11y-text span[lang="fr"]').length === 1`)
+	d.OK(d.Text(".gj-announcer") == "Language of the selection: Français", "the change is announced: "+d.Text(".gj-announcer"))
+	d.OK(strings.TrimSpace(d.Text(`#a11y-text span[lang="fr"]`)) != "", "the span holds the selected words")
+	pick("Document language")
+	d.WaitFor("the tag gone", `document.querySelectorAll('#a11y-text [lang]').length === 0`)
+	d.NoErrors()
+}

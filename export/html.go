@@ -216,6 +216,9 @@ func wrapHTMLRun(text string, f Format) string {
 	if text == "" {
 		return text
 	}
+	if f.Lang != "" {
+		text = "<span lang=\"" + escapeHTMLAttr(f.Lang) + "\">" + text + "</span>"
+	}
 	if f.Href != "" && safeHref(f.Href) {
 		text = "<a href=\"" + escapeHTMLAttr(f.Href) + "\">" + text + "</a>"
 	}

@@ -209,3 +209,14 @@ func unzipEntry(t *testing.T, data []byte, name string) []byte {
 	t.Fatalf("no %s in the file", name)
 	return nil
 }
+
+// A run with a language is written in HTML as a span with a lang attribute.
+func TestHTMLWritesTheLanguageOfARun(t *testing.T) {
+	got := wrapHTMLRun("monde", Format{Lang: `fr"x`})
+	if got != `<span lang="fr&#34;x">monde</span>` && got != `<span lang="fr&quot;x">monde</span>` {
+		t.Errorf("got %s", got)
+	}
+	if got := wrapHTMLRun("monde", Format{Lang: "fr"}); got != `<span lang="fr">monde</span>` {
+		t.Errorf("got %s", got)
+	}
+}

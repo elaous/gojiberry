@@ -37,6 +37,11 @@ type Format struct {
 	// Index marks this text as an entry of the alphabetical index, under
 	// this term (see IndexObject).
 	Index string
+	// Lang is the language of this text as a BCP 47 tag ("fr", "pt-BR"), "" for the
+	// document's own. It is what a screen reader switches voice by (the
+	// reading copy carries it as a lang attribute) and what an HTML export
+	// writes; it does not change how the text is drawn.
+	Lang string
 }
 
 // CaseKind is how letters are displayed; see Format.Case.
