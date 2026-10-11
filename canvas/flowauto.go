@@ -186,7 +186,16 @@ func (f *TextFlow) acceptSuggestion(word string) {
 	d := f.flatten()
 	format := f.typeFormat(d, f.suggFrom)
 	caret := f.sel.caret
-	f.Replace([]Edit{{From: f.suggFrom, To: caret, Items: []Item{Chars{Text: word, Format: format}}}})
+	items := []Item{Chars{Text: word, Format: format}}
+	if f.proposalsOn() {
+		// while suggesting, the completion is a proposal like any other typing: the typed letters are
+		// struck and the whole word follows them
+		repl, at := f.proposalRewrite(d, Cursor{Anchor: caret, Caret: caret}, f.suggFrom, caret, items)
+		f.Replace([]Edit{{From: f.suggFrom, To: caret, Items: repl}})
+		f.SetCursors([]Cursor{At(f.suggFrom + at)})
+		return
+	}
+	f.Replace([]Edit{{From: f.suggFrom, To: caret, Items: items}})
 	f.SetCursors([]Cursor{At(f.suggFrom + len([]rune(word)))})
 }
 
