@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-7 of 10 since the last full run (#162 to #167, this PR). The full run on main 10ae2107 (after #160, the 10th merge since 9e11519) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+8 of 10 since the last full run (#162 to #168, this PR). The full run on main 10ae2107 (after #160, the 10th merge since 9e11519) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -732,7 +732,7 @@ New entries:
 41. **Signed-out same-e-mail passkey registration makes two accounts, by design.** Kind: inherent while the e-mail is
     a label ([limits register item 6](limits-register.md#encryption-and-keys)). Why it matters for later work:
     the e-mail verification work must not merge accounts on the bare label. Plan: none now; record it in the
-    verification design. Priority: low. Where: `auth/passkey`. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#41-signed-out-same-e-mail-passkey-registration-makes-two-accounts).
+    verification design. Priority: low. Where: `auth/passkey`. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#41-signed-out-same-e-mail-passkey-registration-makes-two-accounts). Done in part (this PR), plan steps 1 and 4: the rule is written in `encryption-and-passkeys.md` (A.3, "The rule for e-mail verification") and `TestOneEmailLabelNeverMergesTwoPasskeyAccounts` fails on a merge, a link or a grant by label. Left: step 2 (showing "another account uses this address") and step 3 (the link ceremony), which wait for e-mail verification.
 42. **A revoked signer can keep writing new frames until it is removed from every list.** Kind: inherent without a
     format change; the frame v4 plan is in item 5 above and in the
     [limits register](limits-register.md#encryption-and-keys) (item 1). Priority: low until the format work is
