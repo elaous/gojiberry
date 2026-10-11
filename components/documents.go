@@ -80,6 +80,11 @@ type DocVersion struct {
 	Key  string // what the version operations take
 	Time time.Time
 	Size int
+	// Name is the name the person gave the version, Pinned says it is kept when older ones are dropped, and
+	// Author is who saved it.
+	Name   string
+	Pinned bool
+	Author string
 }
 
 // DocsAction is an operation on documents by ID, like Delete, Restore or Trash.
@@ -565,6 +570,9 @@ type VersionsProps struct {
 	Compare DocAction
 	Diff    []docdiff.Change
 	DiffKey string
+	// Rename gives a snapshot a name and Pin keeps it (or lets it go); each may be nil.
+	Rename func(ctx context.Context, key, name string) error
+	Pin    func(ctx context.Context, key string, pinned bool) error
 }
 
 // Versions lists a document's snapshots, newest first, to open or delete, with a
@@ -579,9 +587,41 @@ func Versions(p VersionsProps) xango.Node {
 	children := []xango.Node{xango.El("div", []xango.Attr{xango.A("class", "gj-doc-head")}, head...)}
 	var rows []xango.Node
 	for _, v := range p.Versions {
+		when := v.Time.Format("2006-01-02 15:04:05")
+		title := when
+		if v.Name != "" {
+			title = v.Name + " (" + when + ")"
+		}
 		row := []xango.Node{
-			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text(v.Time.Format("2006-01-02 15:04:05"))),
+			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name")}, xango.Text(when)),
 			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta")}, xango.Text(byteSize(v.Size)))}
+		if v.Author != "" {
+			row = append(row, xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-versions-author")}, xango.Text(trf("docs.versionBy", "by %s", v.Author))))
+		}
+		if p.Rename != nil {
+			key := v.Key
+			row = append(row, xango.El("input", []xango.Attr{xango.A("type", "text"), xango.A("class", "gj-versions-name"), xango.A("maxlength", "120"),
+				xango.A("placeholder", tr("docs.versionNamePlaceholder", "name this version")),
+				xango.A("aria-label", trf("docs.versionNameOf", "Name of the version of %s", when)), xango.A("value", v.Name),
+				xango.On("change", func(ev xango.Event) {
+					name := xango.EventValue[string](ev)
+					p.Pending.Run(func(ctx context.Context) error { return p.Rename(ctx, key, name) })
+				})}))
+		} else if v.Name != "" {
+			row = append(row, xango.El("span", []xango.Attr{xango.A("class", "gj-versions-name-text")}, xango.Text(v.Name)))
+		}
+		if p.Pin != nil {
+			key, pinned := v.Key, v.Pinned
+			cb := []xango.Attr{xango.A("type", "checkbox"), xango.A("class", "gj-versions-pin"),
+				xango.A("aria-label", trf("docs.versionKeep", "Keep the version of %s", title))}
+			if pinned {
+				cb = append(cb, xango.A("checked", "checked"))
+			}
+			cb = append(cb, xango.On("change", func(xango.Event) {
+				p.Pending.Run(func(ctx context.Context) error { return p.Pin(ctx, key, !pinned) })
+			}))
+			row = append(row, xango.El("label", []xango.Attr{xango.A("class", "gj-versions-keep")}, xango.El("input", cb), xango.Text(tr("docs.versionKeepLabel", "Keep"))))
+		}
 		if p.Compare != nil {
 			row = append(row, docButtonAs("gj-versions-compare", tr("docs.compare", "Compare"), trf("docs.compareWith", "Compare %s with the current document", v.Time.Format("2006-01-02 15:04:05")), busy, actOne(p.Pending, p.Compare, v.Key)))
 		}
@@ -589,7 +629,8 @@ func Versions(p VersionsProps) xango.Node {
 			row = append(row, docButton("gj-versions-open", tr("docs.open", "Open"), busy, actOne(p.Pending, p.Open, v.Key)))
 		}
 		if p.Delete != nil {
-			row = append(row, docButton("gj-versions-delete", tr("docs.delete", "Delete"), busy, actOne(p.Pending, p.Delete, v.Key)))
+			// a kept version is not deleted until it is let go
+			row = append(row, docButton("gj-versions-delete", tr("docs.delete", "Delete"), busy || v.Pinned, actOne(p.Pending, p.Delete, v.Key)))
 		}
 		rows = append(rows, xango.El("li", []xango.Attr{xango.A("class", "gj-versions-item"), xango.A("data-key", v.Key)}, row...))
 	}

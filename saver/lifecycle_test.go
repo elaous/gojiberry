@@ -152,6 +152,9 @@ func TestTrashRestorePurge(t *testing.T) {
 		if err := s.Trash(ctx, tg.Name, e.ID, other.ID); err != nil {
 			t.Fatal(err)
 		}
+		if err := s.Trash(ctx, tg.Name, e.ID); err != nil {
+			t.Fatalf("%s: %v", tg.Name, err)
+		}
 		if err := s.Purge(ctx, tg.Name, e.ID); err != nil {
 			t.Fatal(err)
 		}
@@ -383,6 +386,101 @@ func TestImportSkipsARevisionWithNoDocument(t *testing.T) {
 		}
 		if got := strings.Join(versionTitles(t, s, tg.Name, e.ID), " "); got != "keep2 keep1" {
 			t.Errorf("%s: versions %q", tg.Name, got)
+		}
+	}
+}
+
+func TestVersionNamesPinsAndAuthors(t *testing.T) {
+	ctx := context.Background()
+	for _, tg := range targets(t) {
+		s := &Saver{Targets: []Target{tg}, MaxVersions: 2}
+		e := saved(t, s, tg.Name, "notes", docfile.JSON)
+		save := func(title, author string) Version {
+			d := named("notes")
+			d.SetID(e.ID)
+			d.Title = title
+			v, err := s.SaveVersionBy(ctx, tg.Name, docfile.JSON, d, author)
+			if err != nil {
+				t.Fatalf("%s: %v", tg.Name, err)
+			}
+			return v
+		}
+		first := save("one", "ana@example.com")
+		if first.Author != "ana@example.com" {
+			t.Fatalf("%s: author %q", tg.Name, first.Author)
+		}
+		// name it, and pin it: it survives the pruning that follows
+		if err := s.RenameVersion(ctx, tg.Name, first.Key, "  Sent to the printer  "); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.PinVersion(ctx, tg.Name, first.Key, true); err != nil {
+			t.Fatal(err)
+		}
+		save("two", "")
+		save("three", "bo@example.com")
+		save("four", "")
+		vs, err := s.Versions(ctx, tg.Name, e.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// two unpinned (the newest) and the pinned one
+		if len(vs) != 3 {
+			t.Fatalf("%s: %d versions, want 2 unpinned + 1 pinned", tg.Name, len(vs))
+		}
+		last := vs[len(vs)-1]
+		if last.Key != first.Key || last.Name != "Sent to the printer" || !last.Pinned || last.Author != "ana@example.com" {
+			t.Errorf("%s: the pinned one: %+v", tg.Name, last)
+		}
+		if vs[0].Author != "" || vs[0].Pinned || vs[0].Name != "" {
+			t.Errorf("%s: an ordinary snapshot has no notes: %+v", tg.Name, vs[0])
+		}
+		// a pinned version is not deleted until unpinned
+		if err := s.DeleteVersion(ctx, tg.Name, first.Key); !errors.Is(err, ErrPinned) {
+			t.Errorf("%s: deleting a pinned version: %v", tg.Name, err)
+		}
+		if err := s.PinVersion(ctx, tg.Name, first.Key, false); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.DeleteVersion(ctx, tg.Name, first.Key); err != nil {
+			t.Fatalf("%s: %v", tg.Name, err)
+		}
+		vs, _ = s.Versions(ctx, tg.Name, e.ID)
+		if len(vs) != 2 {
+			t.Errorf("%s: %d versions after deleting", tg.Name, len(vs))
+		}
+		// the notes of a deleted version are gone; names are cut to length; clearing a name clears the note
+		if err := s.RenameVersion(ctx, tg.Name, vs[0].Key, strings.Repeat("é", 200)); err != nil {
+			t.Fatal(err)
+		}
+		vs, _ = s.Versions(ctx, tg.Name, e.ID)
+		if len(vs[0].Name) > maxVersionName || vs[0].Name == "" || !strings.HasPrefix(vs[0].Name, "é") {
+			t.Errorf("%s: long name %d bytes", tg.Name, len(vs[0].Name))
+		}
+		if err := s.RenameVersion(ctx, tg.Name, vs[0].Key, ""); err != nil {
+			t.Fatal(err)
+		}
+		// a version that is not there cannot be given notes, and neither can a key that is not a version's
+		if err := s.RenameVersion(ctx, tg.Name, VersionPrefix+e.ID+"/00000000000000000001.json", "x"); !errors.Is(err, ErrNotFound) {
+			t.Errorf("%s: a missing version: %v", tg.Name, err)
+		}
+		if err := s.PinVersion(ctx, tg.Name, "notes/x", true); !errors.Is(err, ErrName) {
+			t.Errorf("%s: a key that is not a version's: %v", tg.Name, err)
+		}
+		// deleting the document takes the notes with it
+		if err := s.RenameVersion(ctx, tg.Name, vs[0].Key, "keep me"); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Trash(ctx, tg.Name, e.ID); err != nil {
+			t.Fatalf("%s: %v", tg.Name, err)
+		}
+		if err := s.Purge(ctx, tg.Name, e.ID); err != nil {
+			t.Fatalf("%s: %v", tg.Name, err)
+		}
+		metas, _ := tg.Adapter.List(ctx)
+		for _, m := range metas {
+			if strings.HasPrefix(m.ID, VersionPrefix+e.ID) {
+				t.Errorf("%s: %s is left behind", tg.Name, m.ID)
+			}
 		}
 	}
 }
