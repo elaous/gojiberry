@@ -55,15 +55,18 @@ type ui struct {
 	collabTimer bool
 	docLang     string // the document's language (a BCP 47 tag), "" for none
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
-	imageMsg   string
-	sugg       suggestState
-	imageFocus bool
-	format     canvas.Format
-	catalog    []fonts.Font
-	open       bool
-	query      string
-	source     string
-	recent     []string
+	imageMsg     string
+	sugg         suggestState
+	stateRef     *State // the document state, for what the announcer needs of it
+	commentCount int
+	commentsSeen map[string]bool // ids of the comments already known, to find those others add
+	imageFocus   bool
+	format       canvas.Format
+	catalog      []fonts.Font
+	open         bool
+	query        string
+	source       string
+	recent       []string
 
 	symQuery, symCat string
 	symRecent        []string
@@ -699,6 +702,14 @@ func main() {
 			u.navSig = sig
 			renderUI()
 		}
+		if u.live != nil && state.Comments != nil {
+			// comments others add arrive with the document, not with the session's state
+			if n := state.Comments.Len(); n != u.commentCount {
+				u.commentCount = n
+				u.noteCollab(renderUI)
+				renderUI()
+			}
+		}
 		var stats canvas.FlowStats
 		columnCount := 0
 		columnCfg := map[string]any{}
@@ -757,6 +768,7 @@ func main() {
 			renderUI()
 		},
 	}
+	u.stateRef = &state
 	state.CompleteFeature = canvas.CompleteFeature{OnOpen: func() { u.openSuggestions(flow, stage, canvasEl.Element, renderUI) }}
 	u.watchSuggestionKeys(inputEl.Element, func() *canvas.TextFlow { return flow }, redraw, renderUI)
 	state.Live = liveProps(u, &state, origin, renderCanvas, renderUI)
