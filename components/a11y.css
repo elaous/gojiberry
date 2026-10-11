@@ -17,6 +17,39 @@
   outline-offset: 2px;
 }
 
+/* Reduced motion: the operating system's setting, or the page's own
+   (data-gj-motion="reduce" on the root element). */
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}
+:root[data-gj-motion="reduce"] * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
+
+/* Text size and spacing, set on the root element by the page's preferences:
+   data-gj-text="large" | "larger" | "largest" (125%, 150%, 200% of the
+   browser's own size, so a size chosen in the browser still counts) and
+   data-gj-spacing="wide" (WCAG 1.4.12: line height 1.5, letter spacing
+   0.12em, word spacing 0.16em, paragraph spacing 2em). Component text is in
+   em, so it follows. */
+:root[data-gj-text="large"] { font-size: 125%; }
+:root[data-gj-text="larger"] { font-size: 150%; }
+:root[data-gj-text="largest"] { font-size: 200%; }
+:root[data-gj-spacing="wide"] body { line-height: 1.5; letter-spacing: 0.12em; word-spacing: 0.16em; }
+:root[data-gj-spacing="wide"] p { margin-bottom: 2em; }
+
+/* More contrast: the operating system's setting (prefers-contrast: more), or
+   the page's own (data-gj-contrast="more"): darker text and borders, a
+   thicker focus ring. */
+@media (prefers-contrast: more) {
+  :root, .gj-theme-light { --gj-text: #000000; --gj-muted: #374151; --gj-border: #4b5563; --gj-accent: #1d4ed8; }
+  .gj-theme-dark { --gj-text: #ffffff; --gj-muted: #d1d5db; --gj-border: #9ca3af; --gj-accent: #93c5fd; }
+  button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline-width: 3px; }
+}
+:root[data-gj-contrast="more"], :root[data-gj-contrast="more"] .gj-theme-light { --gj-text: #000000; --gj-muted: #374151; --gj-border: #4b5563; --gj-accent: #1d4ed8; }
+:root[data-gj-contrast="more"] .gj-theme-dark { --gj-text: #ffffff; --gj-muted: #d1d5db; --gj-border: #9ca3af; --gj-accent: #93c5fd; }
+:root[data-gj-contrast="more"] button:focus-visible, :root[data-gj-contrast="more"] input:focus-visible, :root[data-gj-contrast="more"] select:focus-visible, :root[data-gj-contrast="more"] [tabindex]:focus-visible { outline-width: 3px; }
+
+/* Forced colors (Windows high contrast): the focus ring uses the system's
+   own highlight colour. */
+@media (forced-colors: active) {
+  button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline: 3px solid Highlight; }
 }
