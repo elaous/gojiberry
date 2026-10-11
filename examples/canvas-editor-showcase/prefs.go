@@ -5,6 +5,8 @@ package main
 import (
 	"encoding/json"
 	"syscall/js"
+
+	"github.com/elaous/gojiberry/components"
 )
 
 // Display preferences. They are kept in this browser (localStorage) and set as data-gj-* attributes
@@ -54,5 +56,55 @@ func applyPrefs(p prefs) {
 		} else {
 			root.Call("setAttribute", k, v)
 		}
+	}
+}
+
+// curPrefs are the preferences in force.
+var curPrefs = loadPrefs()
+
+// setPrefs applies the preferences and keeps them in this browser.
+func setPrefs(p prefs) {
+	curPrefs = p
+	applyPrefs(p)
+	b, _ := json.Marshal(p)
+	lsSet(prefsKey, string(b))
+}
+
+// prefsMenu is the display preferences: text size, spacing, contrast and motion, each ticked when
+// set by the person (when not, the system's own setting applies), and a reset.
+func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
+	change := func(msg string, f func(*prefs)) func() {
+		return func() {
+			p := curPrefs
+			f(&p)
+			setPrefs(p)
+			u.announce(msg)
+			renderUI()
+		}
+	}
+	size := func(label, value string) components.MenuItem {
+		return components.MenuItem{Label: label, Checked: curPrefs.Text == value,
+			OnSelect: change(T("a11y.textSize", "Text size: %s", label), func(p *prefs) { p.Text = value })}
+	}
+	toggle := func(label string, on bool, set func(*prefs, bool)) components.MenuItem {
+		return components.MenuItem{Label: label, Checked: on, OnSelect: func() {
+			state := T("a11y.off", "off")
+			if !on {
+				state = T("a11y.on", "on")
+			}
+			change(label+": "+state, func(p *prefs) { set(p, !on) })()
+		}}
+	}
+	return []components.MenuItem{
+		size(T("prefs.textDefault", "Text size: default"), ""),
+		size(T("prefs.textLarge", "Text size: 125%"), "large"),
+		size(T("prefs.textLarger", "Text size: 150%"), "larger"),
+		size(T("prefs.textLargest", "Text size: 200%"), "largest"),
+		{Separator: true},
+		toggle(T("prefs.spacing", "Wide text spacing"), curPrefs.Spacing == "wide", func(p *prefs, on bool) { p.Spacing = map[bool]string{true: "wide"}[on] }),
+		toggle(T("prefs.contrast", "More contrast"), curPrefs.Contrast == "more", func(p *prefs, on bool) { p.Contrast = map[bool]string{true: "more"}[on] }),
+		toggle(T("prefs.motion", "Reduce motion"), curPrefs.Motion == "reduce", func(p *prefs, on bool) { p.Motion = map[bool]string{true: "reduce"}[on] }),
+		{Separator: true},
+		{Label: T("prefs.reset", "Reset to defaults"), OnSelect: change(T("a11y.prefsReset", "Display preferences reset"), func(p *prefs) { *p = prefs{} })},
 	}
 }
