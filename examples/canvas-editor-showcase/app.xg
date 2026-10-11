@@ -92,6 +92,7 @@ func picture(state State) xango.Node {
 		width={120} height={80}
 		anchor={&cv.Anchor{Page: 1, X: 330, Y: 40}}
 		wrap
+		alt="A sample picture used to try text wrapping"
 	/>
 }
 

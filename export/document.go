@@ -82,7 +82,7 @@ func FromDocument(d docfile.Document) Snapshot {
 			flush()
 		case it.Image != nil:
 			pending()
-			lines = append(lines, line{after: []Block{{Kind: Image, ImageSrc: it.Image.URL, ImageW: it.Image.Width, ImageH: it.Image.Height}}})
+			lines = append(lines, line{after: []Block{{Kind: Image, ImageSrc: it.Image.URL, ImageW: it.Image.Width, ImageH: it.Image.Height, ImageAlt: it.Image.Alt, ImageDecorative: it.Image.Decorative}}})
 		case it.Table != nil:
 			pending()
 			lines = append(lines, tableLines(it.Table)...)
