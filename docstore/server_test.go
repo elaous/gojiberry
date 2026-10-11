@@ -2,6 +2,7 @@ package docstore
 
 import (
 	"context"
+	"errors"
 	"github.com/elaous/gojiberry/auth"
 	"net/http"
 	"net/http/httptest"
@@ -23,6 +24,36 @@ func TestServerHealthReportsBackend(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"backend":"memory"`) {
 		t.Fatalf("body = %q, want it to mention backend=memory", rec.Body.String())
+	}
+}
+
+type brokenStore struct{ Adapter }
+
+func (brokenStore) List(context.Context) ([]Meta, error) {
+	return nil, errors.New("dial tcp 10.1.2.3:5432: connection refused")
+}
+
+func TestServerReadyFollowsTheStore(t *testing.T) {
+	rec := serve(newTestServer().Handler(), "GET", "/ready", "")
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"ready":true}` {
+		t.Fatalf("%d %q", rec.Code, rec.Body.String())
+	}
+	if serve(newTestServer().Handler(), "HEAD", "/ready", "").Code != http.StatusOK {
+		t.Fatal("HEAD is allowed for probes")
+	}
+	if serve(newTestServer().Handler(), "POST", "/ready", "").Code != http.StatusMethodNotAllowed {
+		t.Fatal("only GET and HEAD")
+	}
+	bad := NewServer(brokenStore{NewMemoryAdapter()}, "broken")
+	rec = serve(bad.Handler(), "GET", "/ready", "")
+	if rec.Code != http.StatusServiceUnavailable || strings.TrimSpace(rec.Body.String()) != `{"ready":false}` {
+		t.Fatalf("%d %q", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "10.1.2.3") {
+		t.Fatal("the store's error must not reach the caller")
+	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("a probe answer must not be cached")
 	}
 }
 
@@ -234,6 +265,9 @@ func TestCloseDocsClosesTheGenericAPI(t *testing.T) {
 	}
 	if rec := serve(h, "GET", "/health", ""); rec.Code != 200 {
 		t.Fatalf("/health = %d", rec.Code)
+	}
+	if rec := serve(h, "GET", "/ready", ""); rec.Code != 200 {
+		t.Fatalf("/ready = %d", rec.Code)
 	}
 	if !NewServer(mem, "memory").WithRequireACL(true).WithAuth(newTestAuthManager(t)).DocsClosed() {
 		t.Fatal("required ACLs with sign-in do not count as closed")

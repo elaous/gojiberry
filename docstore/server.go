@@ -471,6 +471,7 @@ func NewAuthManager(ctx context.Context, cfg AuthConfig) (*auth.Manager, error) 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/ready", s.handleReady)
 	if s.docsClosed {
 		closed := http.NotFoundHandler()
 		mux.Handle("/quota", closed)
@@ -525,6 +526,33 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		out["directory"] = h.DirectoryHealth()
 	}
 	_ = json.NewEncoder(w).Encode(out) // a write failure here means the client disconnected -- nothing actionable to do about it
+}
+
+// readyTimeout is how long /ready waits for the store before saying it is not ready.
+const readyTimeout = 3 * time.Second
+
+// handleReady answers whether this server can do its work now: the store behind it answers a
+// listing. 200 {"ready":true}, or 503 {"ready":false} and nothing else (no error text: a load
+// balancer needs a status, and a store's error may name a host or a path). /health says the process
+// is up; /ready is for deciding whether to send it traffic.
+func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), readyTimeout)
+	defer cancel()
+	ready := true
+	if _, err := s.adapter.List(ctx); err != nil {
+		log.Printf("docstore: not ready: %v", err)
+		ready = false
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	if !ready {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+	_ = json.NewEncoder(w).Encode(map[string]bool{"ready": ready})
 }
 
 // quotaResponse is handleQuota's own JSON shape -- Available false
