@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (#185 and #186, this PR; full run on main 83955fc after #182, the 10th merge since 67a6c28, with the fixes in this PR). It passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. It found a stale components API dump, an invalid `aria-checked` on plain menu items (checked items are now `menuitemcheckbox`), and two start-up races in e2e tests, all fixed here. The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+3 of 10 since the last full run (#185 to #187, this PR; full run on main 83955fc after #182, the 10th merge since 67a6c28, with the fixes in this PR). It passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. It found a stale components API dump, an invalid `aria-checked` on plain menu items (checked items are now `menuitemcheckbox`), and two start-up races in e2e tests, all fixed here. The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1110,9 +1110,14 @@ unless stated.
     `components.Suggestions` (a `role=listbox` popup with `aria-selected`, `aria-setsize`, `aria-posinset`; pressing a row
     does not move the focus), `SuggestionsControl` (the combobox attributes with `aria-activedescendant` for the editing
     element), and `SuggestState` (Up/Down wrap, Home/End, Tab or Enter accept, Escape closes, digits 1 to 9 optional, a
-    polite announcement of the count and the highlighted word), unit tested, with de/fr/es texts. Left: the Ctrl+Space
-    command and the showcase wiring (the caret position, the key capture, no popup during IME composition), the e2e and
-    the screen-reader script.
+    polite announcement of the count and the highlighted word), unit tested, with de/fr/es texts. Also done (#187): the `canvas.CompleteFeature` command
+    (Ctrl/Cmd+Space; `Chord` now names the space bar "Space"), and the showcase wiring: the list is built from the
+    document's own words around the caret, opens at the caret, keeps the focus in the input element (marked as the
+    combobox with `aria-activedescendant`), takes Up, Down, Home, End, Tab, Enter and Escape while open, narrows as
+    typing goes on, closes on leaving the word, and never opens during IME composition; e2e `TestWordSuggestions`.
+    Left: the inline ghost-text suggestion (which this document's first sentence assumed existed; it does not yet), the
+    automatic open after a delay, the vocabulary from `spell/dict` and the user dictionary, and the screen-reader
+    script.
 80. **Print layout.** Kind: fixable. What: pagination, headers and footers, page numbers and a table of contents.
     Why it matters: documents are still printed and exported to paged formats. Plan: (1) a page model with size and
     margins; (2) layout with page breaks, widow and orphan control; (3) headers, footers and fields; (4) a table of

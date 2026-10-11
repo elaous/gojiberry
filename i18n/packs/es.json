@@ -714,6 +714,9 @@
   "suggest.position": "%s, %d de %d",
   "suggest.one": "1 sugerencia.",
   "suggest.many": "%d sugerencias.",
-  "suggest.label": "Sugerencias"
+  "suggest.label": "Sugerencias",
+  "suggest.none": "Sin sugerencias",
+  "suggest.inserted": "%s insertado",
+  "suggest.closed": "Sugerencias cerradas"
  }
 }
