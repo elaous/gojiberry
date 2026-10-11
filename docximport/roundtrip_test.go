@@ -4,7 +4,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docximport"
 	"github.com/elaous/gojiberry/export"
@@ -146,5 +148,48 @@ func TestDocxRoundTripKeepsCellStyles(t *testing.T) {
 	html, _ := export.HTML{}.Export(export.FromDocument(in))
 	if !strings.Contains(string(html), `background:#fff3b0;text-align:center;`) || !strings.Contains(string(html), `text-align:right;`) {
 		t.Errorf("html: %s", html)
+	}
+}
+
+// Suggestions leave as Word tracked changes and come back as suggestions: the replacement is still one,
+// the struck text is still there to accept or reject, and who and when are kept.
+func TestTrackedChangesRoundTrip(t *testing.T) {
+	at := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
+	mark := func(kind canvas.ProposalKind, id, author string) string {
+		return canvas.ProposalMark{Kind: kind, ID: id, Author: author, Time: at}.String()
+	}
+	c := func(text, proposal string) docfile.Item {
+		return docfile.Item{Chars: &docfile.Chars{Text: text, Format: docfile.Format{Proposal: proposal}}}
+	}
+	in := docfile.Document{Content: []docfile.Item{
+		c("the ", ""), c("brown", mark(canvas.ProposalDelete, "p1", "ana@example.com")), c("red", mark(canvas.ProposalInsert, "p1", "ana@example.com")),
+		c(" fox ", ""), c("runs", mark(canvas.ProposalDelete, "p2", "bo")), c(" and ", ""), c("hides", mark(canvas.ProposalInsert, "p3", "cy")), c("\n", ""),
+	}}
+	data, err := export.DOCX{}.Export(export.FromDocumentTracked(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := docximport.Import(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &canvas.TextFlow{}
+	out.Apply(f)
+	ps := f.Proposals()
+	if len(ps) != 3 {
+		t.Fatalf("%d proposals: %+v", len(ps), ps)
+	}
+	if ps[0].Author != "ana@example.com" || ps[0].Deleted != "brown" || ps[0].Inserted != "red" || !ps[0].Time.Equal(at) {
+		t.Errorf("the replacement is one proposal: %+v", ps[0])
+	}
+	if ps[1].Author != "bo" || ps[1].Deleted != "runs" || ps[1].Inserted != "" {
+		t.Errorf("a removal: %+v", ps[1])
+	}
+	if ps[2].Author != "cy" || ps[2].Inserted != "hides" || ps[2].Deleted != "" {
+		t.Errorf("an addition: %+v", ps[2])
+	}
+	f.AcceptAllProposals()
+	if got := strings.TrimSpace(f.EditText()); got != "the red fox  and hides" {
+		t.Errorf("accepted: %q", got)
 	}
 }

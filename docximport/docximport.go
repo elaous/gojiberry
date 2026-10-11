@@ -29,7 +29,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/docfile"
 )
 
@@ -597,8 +599,37 @@ func (r *reader) paragraph(p *node) {
 // runs converts a paragraph's children (runs, hyperlinks) with the format
 // they inherit.
 func (r *reader) runs(kids []*node, inherit docfile.Format, info paraInfo) {
+	var lastDel *canvas.ProposalMark // a deletion just read, which an insertion right after it by the same person completes
 	for _, k := range kids {
+		if k.name != "del" && k.name != "ins" {
+			lastDel = nil
+		}
 		switch k.name {
+		case "del", "ins":
+			// A tracked change: the text becomes a suggestion (Word's revision by its author) to accept or reject.
+			// A deletion followed at once by an insertion of the same author and time is one replacement.
+			kind := canvas.ProposalInsert
+			if k.name == "del" {
+				kind = canvas.ProposalDelete
+			}
+			t := time.Unix(0, 0)
+			if d, err := time.Parse(time.RFC3339, k.attr("date")); err == nil {
+				t = d
+			}
+			m := canvas.ProposalMark{Kind: kind, ID: "w" + k.attr("id"), Author: k.attr("author"), Time: t}
+			if kind == canvas.ProposalInsert && lastDel != nil && lastDel.Author == m.Author && lastDel.Time.Equal(m.Time) {
+				m.ID = lastDel.ID
+			}
+			f := inherit
+			f.Proposal = m.String()
+			r.runs(k.kids, f, info)
+			if kind == canvas.ProposalDelete {
+				mm := m
+				lastDel = &mm
+			} else {
+				lastDel = nil
+			}
+			continue
 		case "r":
 			r.run(k, inherit, info)
 		case "hyperlink":
@@ -609,7 +640,7 @@ func (r *reader) runs(kids []*node, inherit docfile.Format, info paraInfo) {
 				f.Link = "#" + a
 			}
 			r.runs(k.kids, f, info)
-		case "ins", "smartTag", "sdt", "sdtContent", "fldSimple":
+		case "smartTag", "sdt", "sdtContent", "fldSimple":
 			r.runs(k.kids, inherit, info)
 		}
 	}
@@ -696,7 +727,7 @@ func (r *reader) run(run *node, inherit docfile.Format, info paraInfo) {
 	}
 	for _, k := range run.kids {
 		switch k.name {
-		case "t":
+		case "t", "delText":
 			sb.WriteString(k.text)
 		case "tab":
 			sb.WriteByte('\t')
