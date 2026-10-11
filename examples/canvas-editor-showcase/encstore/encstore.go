@@ -47,6 +47,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"filippo.io/age"
@@ -975,4 +976,25 @@ func NewSSHKey(publicKey string) (NewKey, error) {
 	}
 	r.Label = label
 	return NewKey{Kind: KindSSH, Label: label, Recipient: r, SignerPub: pub}, nil
+}
+
+// CheckRecoveryKey says whether secret ("AGE-SECRET-KEY-1...") is the secret of one of this store's recovery
+// keys, without unlocking anything, writing anything or keeping the secret: it parses it, derives the public
+// key and compares that with the store's list. ErrNotAKey if it is a key but none of this store's.
+func (s *Store) CheckRecoveryKey(secret string) error {
+	ident, err := encrypt.ParseAgeIdentity(strings.TrimSpace(secret))
+	if err != nil {
+		return err
+	}
+	xid, ok := ident.(*age.X25519Identity)
+	if !ok {
+		return ErrNotAKey
+	}
+	pub := xid.Recipient().String()
+	for _, o := range s.Owners() {
+		if o.Kind == KindRecovery && o.Public == pub {
+			return nil
+		}
+	}
+	return ErrNotAKey
 }

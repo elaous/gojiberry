@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-1 of 10 since the last full run (this PR). The full run on main 10ae2107 (after #160, the 10th merge since 9e11519) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+2 of 10 since the last full run (#162, this PR). The full run on main 10ae2107 (after #160, the 10th merge since 9e11519) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1066,7 +1066,7 @@ unless stated.
     3. A device list with last use and a revoke action.
     4. A guided re-key after revoke, with progress (builds on `RepairAll`).
     5. Wording that states the limit plainly; all steps keyboard and screen-reader accessible.
-    Where: `docstore/encrypt`, `auth/passkey`, `components`, the showcase. Priority: high. Dependencies: none hard. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#76-key-and-recovery-ux-lost-passkey-plus-lost-recovery-key-means-lost-data).
+    Where: `docstore/encrypt`, `auth/passkey`, `components`, the showcase. Priority: high. Dependencies: none hard. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#76-key-and-recovery-ux-lost-passkey-plus-lost-recovery-key-means-lost-data). Done in part (this PR), plan steps 1 and 2 (steps are those of [inherent-limits-plan.md](inherent-limits-plan.md#key-and-recovery-ux-lost-passkey-plus-lost-recovery-key-means-lost-data)): the keys panel states the limit plainly ("nobody can open its documents, including us"), warns while the store has one key, and "Check your recovery key" tells the right recovery key from another key and from rubbish with `encstore.Store.CheckRecoveryKey` (nothing unlocked, nothing written, the typed secret cleared), keeping the time of the last good check in this browser. Tests: `TestCheckRecoveryKey`, `TestCheckTheRecoveryKeyWithoutUsingIt`. Left: the printable sheet and the reminder (steps 3 and 4), the device list, revoke and guided re-key (step 5).
 77. **Templates, styles and a design-token system.** Kind: fixable. What: document templates, named styles, and a
     token set (colours, type scale, spacing) that themes the editor and the exports. Why it matters: consistent
     documents and accessible contrast defaults. Plan: (1) a token schema; (2) style and template documents stored in

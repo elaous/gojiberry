@@ -948,3 +948,39 @@ func TestRotateAndResetTheOwnerKeyFromThePage(t *testing.T) {
 	d.WaitFor("published with the reset key", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
 	d.NoErrors()
 }
+
+// The panel states the limit in plain words and lets the person check a recovery key without using it:
+// the right key is accepted, another key and rubbish are told apart, the typed secret is cleared, and
+// nothing is unlocked.
+func TestCheckTheRecoveryKeyWithoutUsingIt(t *testing.T) {
+	site := e2etest.NewSite(t)
+	site.UseLocalhost()
+	d := site.Open(t, "")
+	d.VirtualAuthenticator()
+	secret := turnOn(t, d, "")
+	d.OK(strings.Contains(d.Text("#enc-limit"), "nobody can open its documents, including us"), "the limit is stated plainly: "+d.Text("#enc-limit"))
+	d.OK(!d.Has("#enc-one-key"), "two keys: no nudge")
+
+	d.Click("#enc-lock")
+	d.WaitFor("locked", `!document.querySelector('#enc-lock')`)
+	result := func() string { return d.Text("#enc-check-result") }
+	check := func(v string) {
+		d.Fill("#enc-check-input", v)
+		d.Click("#enc-check-recovery")
+		d.WaitSelector("#enc-check-result")
+	}
+	_, otherSecret, err := encrypt.GenerateRecoveryKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(otherSecret)
+	d.OK(strings.Contains(result(), "not one of this store's recovery keys"), "another key: "+result())
+	check("rubbish")
+	d.OK(strings.Contains(result(), "not a recovery key"), "rubbish: "+result())
+	check(secret)
+	d.OK(strings.HasPrefix(result(), "Yes"), "the right key: "+result())
+	d.OK(d.Value("#enc-check-input") == "", "the typed secret is cleared")
+	d.OK(d.Has("#enc-unlock-recovery") && !d.Has("#enc-lock"), "checking did not unlock the store")
+	d.OK(d.Str(`localStorage.getItem('showcase-enc:recovery-checked') || ''`) != "", "the time of the check is kept")
+	d.NoErrors()
+}
