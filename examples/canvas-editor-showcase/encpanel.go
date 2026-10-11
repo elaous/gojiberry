@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"syscall/js"
+	"time"
 
 	"github.com/elaous/gojiberry/auth/passkey/client"
 	"github.com/elaous/gojiberry/components"
@@ -77,6 +78,9 @@ type encUI struct {
 	// and the panel offers a restore or Erase, never "encryption off".
 	broken         error
 	restoreRecover string // the recovery key typed to restore with
+	checkRecovery  string // the recovery key typed to be checked (never kept past the check)
+	checkMsg       string // the answer to the last check
+	checkOK        bool
 
 	// the People tab: the current document's keys
 	sharedFor       string
@@ -970,6 +974,7 @@ func (u *ui) encStatus(unlocked bool) []xango.Node {
 		kinds = append(kinds, o.Label+" ("+o.Kind+")")
 	}
 	rows = append(rows, para("enc-owners", T("enc.keys", "Keys")+": "+strings.Join(kinds, ", "), false))
+	rows = append(rows, u.recoveryAdvice()...)
 	if p := e.store.PendingChange(); p != nil {
 		rows = append(rows, u.interruptedPanel(p)...)
 	}
@@ -1305,3 +1310,54 @@ func (e *encUI) commitRecoveryKey(ctx context.Context) error {
 	e.sharedFor = ""
 	return nil
 }
+
+// recoveryAdvice is what the panel says about losing the keys: the limit in plain words, a nudge while
+// only one key is enrolled, and a way to check that a recovery key still works without using it to unlock
+// anything.
+func (u *ui) recoveryAdvice() []xango.Node {
+	e := u.enc
+	rows := []xango.Node{para("enc-limit", T("enc.limitPlain", "If you lose every key of this store, nobody can open its documents, including us. There is no way back."), false)}
+	if len(e.store.Owners()) == 1 {
+		rows = append(rows, para("enc-one-key", T("enc.oneKey", "This store has only one key. If you lose it, its documents are lost for good. Add a second key (a recovery key kept offline, or an SSH key) now."), true))
+	}
+	if e.store.HasKind(encstore.KindRecovery) {
+		rows = append(rows,
+			textarea("enc-check-input", T("enc.checkRecoveryInput", "Check your recovery key"), e.checkRecovery, "AGE-SECRET-KEY-1…", "2", func(v string) { e.checkRecovery = v; e.checkMsg = ""; e.render() }),
+			btn("enc-check-recovery", T("enc.checkRecovery", "Check that this is my recovery key"), u.encCheckRecovery, strings.TrimSpace(e.checkRecovery) == ""))
+		if e.checkMsg != "" {
+			rows = append(rows, xango.El("p", []xango.Attr{xango.A("id", "enc-check-result"), xango.A("role", "status"), xango.A("style", checkStyle(e.checkOK))}, xango.Text(e.checkMsg)))
+		}
+	}
+	return rows
+}
+
+func checkStyle(ok bool) string {
+	if ok {
+		return "margin:4px 0"
+	}
+	return "margin:4px 0;color:var(--gj-danger)"
+}
+
+// encCheckRecovery checks the typed recovery key against the store's list. Nothing is unlocked or written, and
+// the typed secret is cleared at once.
+func (u *ui) encCheckRecovery() {
+	e := u.enc
+	err := e.store.CheckRecoveryKey(e.checkRecovery)
+	e.checkRecovery = ""
+	switch {
+	case err == nil:
+		e.checkOK = true
+		e.checkMsg = T("enc.checkOK", "Yes: this is a recovery key of this store. It would unlock it.")
+		lsSet(recoveryCheckedKey, time.Now().UTC().Format(time.RFC3339))
+	case errors.Is(err, encstore.ErrNotAKey):
+		e.checkOK = false
+		e.checkMsg = T("enc.checkNo", "No: this is a key, but not one of this store's recovery keys.")
+	default:
+		e.checkOK = false
+		e.checkMsg = T("enc.checkBad", "That is not a recovery key.")
+	}
+	u.rerender()
+}
+
+// recoveryCheckedKey is where the time of the last successful check is kept in this browser.
+const recoveryCheckedKey = "showcase-enc:recovery-checked"
