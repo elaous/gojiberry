@@ -274,6 +274,12 @@ func (f *TextFlow) opAt(o int) int {
 // typeFormat is the format text typed at offset o takes: the pending one
 // if set, else that of the character before (or after, at the start).
 func (f *TextFlow) typeFormat(d *flowData, o int) Format {
+	fm := f.typeFormatRaw(d, o)
+	fm.Proposal = "" // new text is not part of a suggestion unless suggesting says so
+	return fm
+}
+
+func (f *TextFlow) typeFormatRaw(d *flowData, o int) Format {
 	if !f.pending.IsZero() {
 		return f.pending
 	}
@@ -740,9 +746,9 @@ func (f *TextFlow) ToggleSubscript() bool {
 func (f *TextFlow) PasteFormat(fm Format) bool {
 	return f.ApplyFormat(func(x *Format) {
 		// The target keeps its own comment, bookmark and index marks.
-		comment, bookmark, index := x.Comment, x.Bookmark, x.Index
+		comment, bookmark, index, proposal := x.Comment, x.Bookmark, x.Index, x.Proposal
 		*x = fm
-		x.Comment, x.Bookmark, x.Index = comment, bookmark, index
+		x.Comment, x.Bookmark, x.Index, x.Proposal = comment, bookmark, index, proposal
 	})
 }
 

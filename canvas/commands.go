@@ -117,7 +117,7 @@ func CommonFormat(fs ...Format) Format {
 	c := fs[0]
 	// Comments, bookmarks and index entries mark places in the text; they
 	// are not formatting, and copying one onto other text would duplicate it.
-	c.Comment, c.Bookmark, c.Index = "", "", ""
+	c.Comment, c.Bookmark, c.Index, c.Proposal = "", "", "", ""
 	for _, f := range fs[1:] {
 		if f.FontFamily != c.FontFamily {
 			c.FontFamily = ""
