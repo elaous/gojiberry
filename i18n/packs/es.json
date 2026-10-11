@@ -789,6 +789,15 @@
   "proposals.removed": "%s eliminó «%s»",
   "proposals.added": "%s añadió «%s»",
   "a11y.suggestedAdd": "Adición sugerida por %s: ",
-  "a11y.suggestedRemove": "Eliminación sugerida por %s: "
+  "a11y.suggestedRemove": "Eliminación sugerida por %s: ",
+  "sync.title": "Estado de lo compartido",
+  "sync.problem": "No compartido: %s",
+  "sync.sending#one": "Enviando %d cambio…",
+  "sync.sending#other": "Enviando %d cambios…",
+  "sync.synced": "Todos los cambios compartidos",
+  "sync.connecting": "Conectando con el documento compartido…",
+  "sync.offlinePending#one": "Sin conexión: %d cambio esperando enviarse",
+  "sync.offlinePending#other": "Sin conexión: %d cambios esperando enviarse",
+  "sync.offline": "Sin conexión: sus cambios se compartirán cuando vuelva la conexión"
  }
 }

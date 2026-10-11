@@ -789,6 +789,15 @@
   "proposals.removed": "%s hat „%s“ entfernt",
   "proposals.added": "%s hat „%s“ hinzugefügt",
   "a11y.suggestedAdd": "Vorgeschlagene Ergänzung von %s: ",
-  "a11y.suggestedRemove": "Vorgeschlagene Entfernung von %s: "
+  "a11y.suggestedRemove": "Vorgeschlagene Entfernung von %s: ",
+  "sync.title": "Status der Freigabe",
+  "sync.problem": "Nicht geteilt: %s",
+  "sync.sending#one": "%d Änderung wird gesendet …",
+  "sync.sending#other": "%d Änderungen werden gesendet …",
+  "sync.synced": "Alle Änderungen geteilt",
+  "sync.connecting": "Verbindung zum gemeinsamen Dokument wird hergestellt …",
+  "sync.offlinePending#one": "Offline: %d Änderung wartet auf das Senden",
+  "sync.offlinePending#other": "Offline: %d Änderungen warten auf das Senden",
+  "sync.offline": "Offline: Ihre Änderungen werden geteilt, sobald die Verbindung zurück ist"
  }
 }
