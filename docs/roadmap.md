@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-0 of 10 since the last full run. The full run on main 10ae2107 (after #160, the 10th merge since 9e11519) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+1 of 10 since the last full run (this PR). The full run on main 10ae2107 (after #160, the 10th merge since 9e11519) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -839,7 +839,7 @@ the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. 
     limiter, which limits only `GET /auth/<provider>/login`. Why: a positive cache would keep a logged-out token working
     on other replicas for as long as it lives. Plan: if the cost matters, add an optional per-process cache with a
     stated maximum staleness (for example 5 seconds) behind an explicit option; off by default. Priority: low.
-    Where: `auth/sessionstore`. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#53-the-session-store-is-read-once-per-authenticated-request).
+    Where: `auth/sessionstore`. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#53-the-session-store-is-read-once-per-authenticated-request). Done in part (this PR), plan steps 1, 3 and 4: an unknown token is remembered as unknown for `MissFor` (one second by default, bounded at 4096 entries per process), so a flood of random tokens costs one read per token per second; `CacheFor` (off by default; `GOJIBERRY_DOCSTORE_SESSION_CACHE=5s`, at most one minute) keeps a live session in the process, a logout on the process that handles it takes effect at once and on another replica within `CacheFor`, and the cache never outlives the session; `Store.Stats()` counts reads and hits. Tests: `cache_test.go`. Left: step 2, a limiter budget for clients that send tokens never found.
 54. **Done:** **login routes wrote to the store without a rate limit.** Was: `GET /auth/<provider>/login` is
     unauthenticated and, in `store` mode, creates a record (bounded at 10,000 pending logins, then 503), so about 17
     requests a second filled the bound in 10 minutes and kept real logins out until the sweep cleared it (about 10 to

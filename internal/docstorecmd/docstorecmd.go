@@ -468,6 +468,16 @@ func withSessions(ctx context.Context, adapter docstore.Adapter, m *auth.Manager
 	if err != nil {
 		return err
 	}
+	if raw := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_SESSION_CACHE")); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d < 0 || d > time.Minute {
+			return errors.New("parsing GOJIBERRY_DOCSTORE_SESSION_CACHE \"" + raw + "\": want a duration from 0 to 1m, such as \"5s\"")
+		}
+		ss.CacheFor = d
+		if d > 0 {
+			log.Printf("docstore: sign-in sessions are cached in each process for up to %s: a logout on one replica can take that long to reach the others", d)
+		}
+	}
 	m.SetSessionStore(ss)
 	go ss.RunSweep(ctx, time.Minute)
 	log.Print("docstore: sign-in sessions are shared through the store")
