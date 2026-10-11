@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (#173, this PR). The full run on main 67a6c28 (after #171, the 10th merge since 10ae2107) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+3 of 10 since the last full run (#173, #174, this PR). The full run on main 67a6c28 (after #171, the 10th merge since 10ae2107) passed everything: build, vet, tests, lint and wasm checks, the nested modules, the generated files and API dumps, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1119,7 +1119,7 @@ unless stated.
     locale-aware dates and numbers, and a contribution path. Why it matters: reach, and plain-language labels (65)
     need real translations. Plan: (1) message catalogue format with plural rules; (2) a check that finds missing and
     stale keys; (3) locale-aware formatting through one helper; (4) a short contributor guide; (5) right-to-left
-    packs once 64 lands. Where: `i18n`, `docs`. Priority: low. Dependencies: 64 for RTL.
+    packs once 64 lands. Where: `i18n`, `docs`. Priority: low. Dependencies: 64 for RTL. Done in part (this PR), plan steps 2 and 4: the 177 messages added since the packs were last filled are translated into de, fr and es; `TestEveryMessageInTheSourcesIsInThePacks` fails on any `T`, `tr`, `trf` or `Translate` call whose id is in no pack (so a feature cannot leave a language behind), and [translating.md](translating.md) is the contributor guide. Left: plural rules (step 1), locale-aware dates and numbers (step 3), RTL packs, a check for stale ids, and the ids built at run time, which the test cannot see.
 84. **Done (this PR): lint the examples.** Kind: fixable. The root `.golangci.yml` excluded the path `examples`, which
     hid every example from `make lint` and `make lint-modules`. The exclusion is removed (no path exclusions remain)
     and every finding is fixed with no `nolint`: 40 in all, found by running all three targets natively and as

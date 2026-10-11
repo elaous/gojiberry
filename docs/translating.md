@@ -1,0 +1,29 @@
+# Translating the interface
+
+Messages are asked for by id with their English text: `T("check.run", "Check this document")` in an
+application, `tr("check.run", "...")` in `components`. English is the text in the code. The other
+languages are the packs in [`i18n/packs`](../i18n/packs): `de.json`, `es.json`, `fr.json`, each a map from id to text.
+
+## Adding a message
+
+1. Write the call with the English text. Keep the `%s`, `%d` verbs, and give the person a full sentence
+   rather than fragments that are glued together (word order differs).
+2. Add the id to every pack. `go test ./i18n` fails with the id and the file that asks for it if a pack
+   lacks it (`TestEveryMessageInTheSourcesIsInThePacks`), and if one pack has an id another lacks or a
+   different number of verbs (`TestShippedPacksAreComplete`).
+3. Ids built at run time (`"tab."+name`, `"check.sev."+severity`) are not seen by that test: add them to the
+   packs by hand, next to the code that builds them.
+
+## Adding a language
+
+Copy `es.json`, change the top-level key to the language tag (`"pt"`, `"pt-BR"`), translate the values and
+keep the verbs in the same number (order may change where the language needs it only if you use indexed verbs
+such as `%[2]s`). Add the language's own name to `languageNames` in the showcase's `extras.go`. A right-to-left
+language needs `i18n.Direction` to know it (it does for Arabic, Hebrew, Persian, Urdu and a few more) and a
+check of the page in that direction.
+
+## What is not done
+
+Plural forms (`1 document`, `2 documents`) are written with a neutral form today; a catalogue with plural
+rules, locale-aware dates and numbers through one helper, and a check for stale ids are in
+[roadmap item 83](roadmap.md).
