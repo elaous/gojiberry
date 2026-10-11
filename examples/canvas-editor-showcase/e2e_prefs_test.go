@@ -73,3 +73,37 @@ func TestDisplayPreferencesMenu(t *testing.T) {
 	d.WaitFor("reset", `!document.documentElement.hasAttribute('data-gj-text') && !document.documentElement.hasAttribute('data-gj-contrast') && !document.documentElement.hasAttribute('data-gj-motion')`)
 	d.NoErrors()
 }
+
+// Large targets make what can be pressed at least 44 pixels each way, and the distraction-free mode hides
+// the toolbar, the side panel and the status bar; the menus stay, and turning either off brings it back.
+func TestLargeTargetsAndDistractionFreeMode(t *testing.T) {
+	site := e2etest.NewSite(t)
+	d := site.OpenURL(t, "/index.html")
+	d.WaitSelector(".gj-docview-sidebar button")
+	small := func() float64 {
+		var f float64
+		d.Eval(`Math.min(...Array.from(document.querySelectorAll('.gj-docview-sidebar button')).map((b) => b.getBoundingClientRect().height))`, &f)
+		return f
+	}
+	before := small()
+	d.OK(before > 0 && before < 44, "buttons are small by default")
+	d.Eval(`localStorage.setItem('showcase:a11y', JSON.stringify({targets: 'large'}))`, nil)
+	d.Reload()
+	d.WaitSelector(".gj-docview-sidebar button")
+	d.OK(small() >= 44, "large targets: the smallest side-panel button is now "+d.Str(`String(Math.min(...Array.from(document.querySelectorAll('.gj-docview-sidebar button')).map((b) => b.getBoundingClientRect().height)))`))
+
+	d.Eval(`localStorage.setItem('showcase:a11y', JSON.stringify({focus: 'on'}))`, nil)
+	d.Reload()
+	d.WaitSelector(".gj-docview-sidebar button")
+	for _, sel := range []string{".gj-docview-toolbar", ".gj-docview-sidebar", ".gj-docview-status"} {
+		d.OK(d.Str(`getComputedStyle(document.querySelector('`+sel+`')).display`) == "none", sel+" is hidden")
+	}
+	d.OK(d.Has(`button.gj-menubar-button:has-text("View")`), "the menus stay")
+	// and the menu brings it back
+	d.Click(`button.gj-menubar-button:has-text("View")`)
+	d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Display preferences")`)
+	d.OK(d.Has(`.gj-menubar-panel li.gj-menu-item[aria-checked="true"]:has-text("Distraction-free mode")`), "the menu shows it is on")
+	d.Click(`.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("Distraction-free mode")`)
+	d.WaitFor("back", `!document.documentElement.hasAttribute('data-gj-focus') && getComputedStyle(document.querySelector('.gj-docview-sidebar')).display !== 'none'`)
+	d.NoErrors()
+}
