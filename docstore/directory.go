@@ -41,6 +41,9 @@ var (
 	// ErrDirectoryProofRequired: the directory wants proof of possession and the request has
 	// none (see DirectoryService.Challenge). Answered 428.
 	ErrDirectoryProofRequired = errors.New("docstore: proof of possession of the key is required")
+	// ErrDirectoryEnrollmentRequired: the directory takes keys only for an address that has
+	// enrolled an owner key, and this address has not (see DirectoryService.Enroll). Answered 428.
+	ErrDirectoryEnrollmentRequired = errors.New("docstore: the address must enroll an owner key before it publishes keys")
 	// ErrDirectoryBadProof: the proof of possession is wrong, expired, for another user or key,
 	// or already used. Answered 403.
 	ErrDirectoryBadProof = errors.New("docstore: the proof of possession is not valid")
@@ -680,6 +683,8 @@ func directoryError(w http.ResponseWriter, err error) {
 		http.Error(w, "not an e-mail address", http.StatusBadRequest)
 	case errors.Is(err, ErrDirectoryProofRequired):
 		http.Error(w, "proof of possession required: POST /directory/challenge first", http.StatusPreconditionRequired)
+	case errors.Is(err, ErrDirectoryEnrollmentRequired):
+		http.Error(w, "enroll an owner key for this address first", http.StatusPreconditionRequired)
 	case errors.Is(err, ErrDirectoryBadProof):
 		http.Error(w, "the proof of possession is not valid", http.StatusForbidden)
 	case errors.Is(err, ErrDirectoryBadAttestation):

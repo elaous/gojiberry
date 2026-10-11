@@ -75,6 +75,11 @@ type Client struct {
 	// State, if set, is told the log numbers of the operations this client makes, so WatchLog
 	// does not report them as somebody else's.
 	State *WatchState
+	// RequireOwner makes Lookup report ErrUnenrolled (with the rows, for display) when the address
+	// has no owner key: such an address has nothing to compare an entry's number or a key's origin
+	// with, so a host that needs more than the server's word must not encrypt to it without the
+	// person confirming the key's fingerprint another way.
+	RequireOwner bool
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
 }
@@ -105,6 +110,8 @@ func (e *Error) Is(target error) bool {
 	switch target {
 	case docstore.ErrDirectoryOwnerRequired:
 		return e.Status == http.StatusPreconditionRequired && strings.Contains(b, "owner")
+	case docstore.ErrDirectoryEnrollmentRequired:
+		return e.Status == http.StatusPreconditionRequired && strings.Contains(b, "enroll an owner key")
 	case docstore.ErrDirectoryProofRequired:
 		return e.Status == http.StatusPreconditionRequired && strings.Contains(b, "proof")
 	case docstore.ErrDirectoryBadOwnerSig:
@@ -515,8 +522,19 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 		}
 		c.State.Seen[addr] = merged
 	}
+	if c.RequireOwner {
+		for _, k := range out {
+			if !k.Revoked && !k.OwnerEnrolled {
+				return out, ErrUnenrolled
+			}
+		}
+	}
 	return out, nil
 }
+
+// ErrUnenrolled is returned by Lookup, with the rows, when Client.RequireOwner is set and the address
+// has not enrolled an owner key.
+var ErrUnenrolled = errors.New("directoryclient: the address has no owner key, so nothing but the server's word ties these keys to it")
 
 // auditedOwnerKeys is the set of owner keys of the client's own address that WatchLog derived
 // from the log (State.OwnerKeys), when email is that address: keys the client holds from the
