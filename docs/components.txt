@@ -40,6 +40,10 @@ const CapacityWarnAt = 80
     CapacityWarnAt is the percentage of a store from which Capacity warns,
     and the Session's status line adds a note after a save.
 
+const MaxSpeechChunk = 200
+    MaxSpeechChunk is the longest a piece is (in runes): engines cut off a long
+    utterance.
+
 
 VARIABLES
 
@@ -2459,6 +2463,22 @@ type SliderProps struct {
 	OnChange        func(value float64) // called continuously while dragging
 }
     SliderProps configures Slider.
+
+type SpeechChunk struct {
+	Text string
+	// Lang is the BCP 47 tag of the text, "" for the page's own.
+	Lang string
+	// Block is the index of the block the piece is from (-1 for text that is not from the blocks).
+	Block int
+}
+    SpeechChunk is one piece to speak.
+
+func SpeechChunks(blocks []A11yBlock, docLang string) []SpeechChunk
+    SpeechChunks is the blocks as pieces to speak, in order. docLang is the
+    document's language, used for text that has none of its own.
+
+func SpeechChunksOfText(text, lang string) []SpeechChunk
+    SpeechChunksOfText is a text (a selection) as pieces to speak, all in lang.
 
 type SpellItem struct {
 	Word string
