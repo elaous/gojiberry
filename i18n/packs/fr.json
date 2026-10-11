@@ -722,6 +722,13 @@
   "collab.newComments#one": "%d nouveau commentaire.",
   "collab.newComments#other": "%d nouveaux commentaires.",
   "collab.someone": "Quelqu’un",
-  "prefs.suggestAuto": "Suggérer des mots pendant la frappe"
+  "prefs.suggestAuto": "Suggérer des mots pendant la frappe",
+  "time.ago.now": "à l’instant",
+  "time.ago.minutes#one": "il y a %d minute",
+  "time.ago.minutes#other": "il y a %d minutes",
+  "time.ago.hours#one": "il y a %d heure",
+  "time.ago.hours#other": "il y a %d heures",
+  "time.ago.days#one": "il y a %d jour",
+  "time.ago.days#other": "il y a %d jours"
  }
 }

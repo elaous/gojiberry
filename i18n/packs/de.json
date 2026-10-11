@@ -722,6 +722,13 @@
   "collab.newComments#one": "%d neuer Kommentar.",
   "collab.newComments#other": "%d neue Kommentare.",
   "collab.someone": "Jemand",
-  "prefs.suggestAuto": "Wörter beim Tippen vorschlagen"
+  "prefs.suggestAuto": "Wörter beim Tippen vorschlagen",
+  "time.ago.now": "gerade eben",
+  "time.ago.minutes#one": "vor %d Minute",
+  "time.ago.minutes#other": "vor %d Minuten",
+  "time.ago.hours#one": "vor %d Stunde",
+  "time.ago.hours#other": "vor %d Stunden",
+  "time.ago.days#one": "vor %d Tag",
+  "time.ago.days#other": "vor %d Tagen"
  }
 }

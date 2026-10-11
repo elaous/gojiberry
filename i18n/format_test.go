@@ -53,3 +53,22 @@ func TestDateAndTime(t *testing.T) {
 		t.Errorf("de time %q", got)
 	}
 }
+
+func TestAgo(t *testing.T) {
+	c := Default()
+	for _, tc := range []struct {
+		lang string
+		d    time.Duration
+		want string
+	}{
+		{"en", 10 * time.Second, "just now"}, {"en", 60 * time.Second, "1 minute ago"}, {"en", 5 * time.Minute, "5 minutes ago"},
+		{"en", 59 * time.Minute, "59 minutes ago"}, {"en", 61 * time.Minute, "1 hour ago"}, {"en", 5 * time.Hour, "5 hours ago"},
+		{"en", 36 * time.Hour, "2 days ago"}, {"en", 48 * time.Hour, "2 days ago"}, {"en", -time.Minute, "just now"},
+		{"de", 5 * time.Minute, "vor 5 Minuten"}, {"de", 25 * time.Hour, "vor 1 Tag"}, {"fr", 2 * time.Hour, "il y a 2 heures"},
+		{"fr", 100 * time.Hour, "il y a 4 jours"}, {"es", 90 * time.Second, "hace 2 minutos"}, {"es", 0, "ahora mismo"},
+	} {
+		if got := c.Ago(tc.lang, tc.d); got != tc.want {
+			t.Errorf("%s %v: %q, want %q", tc.lang, tc.d, got, tc.want)
+		}
+	}
+}
