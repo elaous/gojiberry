@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-3 of 10 since the last full run (#151, #152, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+4 of 10 since the last full run (#151, #152, #153, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -800,8 +800,13 @@ New entries:
 50. **More accessibility tools and configs.** Kind: fixable. What: respect high contrast and reduced motion; font size
     and line spacing; a dyslexia-friendly font option; caret and selection visibility; a shortcuts help and key
     remapping; zoom; color-blind safe palettes; clear focus indicators. Why it matters: needs differ by person, and a
-    single default fits few. Plan: expose each as a setting with a safe default, honor the matching media queries, and
-    test each in the e2e. Priority: medium. Where: `components`, the canvas editor, `i18n`.
+    single default fits few. Plan: expose each as a setting with a safe default, honor the matching media queries, and test each in the e2e. Done in part (this PR):
+    `components/a11y.css` honours `prefers-reduced-motion`, `prefers-contrast: more` and `forced-colors`, and the same through
+    root attributes the page sets (`data-gj-motion="reduce"`, `data-gj-contrast="more"`, `data-gj-text="large|larger|largest"`,
+    `data-gj-spacing="wide"`: WCAG 1.4.12 spacing); the showcase applies the kept choice at start (`prefs.go`, key
+    `showcase:a11y`; test `TestDisplayPreferencesAreApplied`). Left: the menu that sets them (item 51), a dyslexia-friendly
+    font (needs a font asset), caret and selection visibility on the canvas, key remapping, colour-blind palettes, and
+    the canvas itself following the text size. Priority: medium. Where: `components`, the canvas editor, `i18n`.
 51. **Preference menu.** Kind: fixable. What: one settings panel for the accessibility options above plus language,
     theme and editor behavior; keyboard accessible, searchable, with reset to defaults and import and export. Why it
     matters: settings scattered over the UI are hard to find, especially with a screen reader. Plan: define a
