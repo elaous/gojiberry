@@ -7,7 +7,8 @@
 // replace is an interface with a single-process default, passed in Options:
 //
 //	Interface        What it does                                   Default                      Plug in
-//	SessionStore     live anonymous sessions, the global, per-      MemorySessionStore           Redis, a table (SetDoc must be a
+//	SessionStore     live anonymous sessions, the global, per-      MemorySessionStore           StoreSessions (replicas share them through the store,
+//	                 (see GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS)                                    caps counted from a periodic recount), Redis, a table (SetDoc must be a
 //	                 client, per-network and per-/32 caps, the reserve for                                compare-and-set; Create takes
 //	                 new networks, the one-document claim                                        SessionCaps)
 //	                 (SetDoc: atomic CAS); optional SessionReaper

@@ -61,7 +61,11 @@ func withPublic(srv *docstore.Server, adapter docstore.Adapter, expiryTTL time.D
 	if err != nil {
 		return nil, err
 	}
-	svc, err := public.New(public.Options{Store: adapter, Config: cfg, LimiterFactory: limiters, Quota: quota})
+	sessions, err := publicSessions(context.Background(), adapter, cfg.MaxSessions, os.Getenv("GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS"))
+	if err != nil {
+		return nil, err
+	}
+	svc, err := public.New(public.Options{Store: adapter, Config: cfg, LimiterFactory: limiters, Quota: quota, Sessions: sessions})
 	if err != nil {
 		return nil, err
 	}
@@ -347,6 +351,36 @@ func publicQuota(ctx context.Context, adapter docstore.Adapter, limit int64, raw
 	}
 	log.Print("docstore: the public offer's daily byte budget per address is shared through the store (fixed calendar days, UTC)")
 	return q, nil
+}
+
+// publicSessions is where the public offer keeps its anonymous sessions, from
+// GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS: nil (the per-process default) for "" or "memory", or a
+// public.StoreSessions for "store" and "store-required", which replicas on one store share (a session
+// begun on one is valid on the others, and the caps are applied to counts rebuilt from the store). On a
+// store without conditional writes "store" warns and falls back to memory, and "store-required" is an
+// error.
+func publicSessions(ctx context.Context, adapter docstore.Adapter, max int, raw string) (public.SessionStore, error) {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	switch mode {
+	case "", "memory":
+		if n := declaredReplicas(); n > 1 {
+			log.Printf("docstore: WARNING: GOJIBERRY_DOCSTORE_REPLICAS=%d but the public offer's anonymous sessions are kept in each process: a visitor's session is unknown to the other replicas, and each replica applies its own caps. Set GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS=store (needs a store with conditional writes)", n)
+		}
+		return nil, nil
+	case "store", "store-required":
+	default:
+		return nil, errors.New("parsing GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS \"" + raw + "\": want \"memory\", \"store\" or \"store-required\"")
+	}
+	if ok, err := sharedStoreOrFallback(ctx, adapter, "GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS", mode, "anonymous sessions of the public offer",
+		"a visitor's session is unknown to the other replicas and each replica applies its own caps"); err != nil || !ok {
+		return nil, err
+	}
+	s, err := public.NewStoreSessions(adapter, max)
+	if err != nil {
+		return nil, err
+	}
+	log.Print("docstore: the public offer's anonymous sessions are shared through the store (records under public/session/ hold a session's random id, its document id and the hashed address keys; the caps count what the last recount saw plus this replica's own writes)")
+	return s, nil
 }
 
 // declaredReplicas is GOJIBERRY_DOCSTORE_REPLICAS as a number (0 if unset or not a number; the

@@ -676,8 +676,14 @@ needs one warns, falls back or refuses at start-up when its backend lacks it. Re
 
 State plainly, before launch:
 
-1. The byte budget, the session and per-client counts and the report counters are per
-   process (the per-address daily byte budget is the exception: `GOJIBERRY_DOCSTORE_PUBLIC_QUOTA=store` shares it
+1. The in-flight byte count and the report counters are per process, and so are the anonymous sessions
+   unless `GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS=store` keeps them in the store with `public.StoreSessions` (one
+   record per session under `public/session/<hash of the token>`; `SetDoc` is a compare-and-set, so the one
+   document per session holds across replicas; the global, per-address, per-network and per-wide-network caps and
+   the reserve for newcomers apply to counts each replica rebuilds from the store at most every 30 seconds
+   and keeps current with its own writes, so replicas can overshoot a cap by what they create between two
+   recounts; a recount reads every live session once; a store without conditional writes warns and falls
+   back to memory, `store-required` refuses to start) (the per-address daily byte budget is shared too: `GOJIBERRY_DOCSTORE_PUBLIC_QUOTA=store` shares it
    through the store with `public.StoreQuota`, fixed UTC days, counters under `public/quota/`; a store without
    conditional writes warns and falls back to memory, `store-required` refuses to start): behind several replicas each has its own (the budget is rebuilt from the shared store
    by each one's sweep, but between sweeps the replicas do not see each other's writes). Plug in
