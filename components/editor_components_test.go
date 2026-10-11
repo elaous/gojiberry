@@ -687,6 +687,19 @@ func TestAccessibleTextKeepsTheDocumentsStructure(t *testing.T) {
 	}
 }
 
+// A block with runs writes the pieces that have a language as spans with a lang attribute.
+func TestAccessibleTextMarksTheLanguageOfRuns(t *testing.T) {
+	html := render(t, AccessibleText(AccessibleTextProps{Blocks: []A11yBlock{
+		{Kind: A11yParagraph, Text: "He said bonjour twice.", Runs: []A11yRun{{Text: "He said "}, {Text: "bonjour", Lang: "fr"}, {Text: " twice."}}},
+		{Kind: A11yHeading, Level: 2, Text: "Plain", Runs: nil},
+	}}))
+	for _, want := range []string{`<p>He said <span lang="fr">bonjour</span> twice.</p>`, "<h2>Plain</h2>"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in\n%s", want, html)
+		}
+	}
+}
+
 func TestTranslateHookChangesTheComponentsWords(t *testing.T) {
 	defer func(old func(string, string) string) { Translate = old }(Translate)
 	Translate = func(id, def string) string {

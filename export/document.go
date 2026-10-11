@@ -257,7 +257,7 @@ func segmentsOf(runs []docfile.Chars) []Segment {
 		f := Format{
 			Bold: r.Format.FontWeight >= 600, Italic: r.Format.FontStyle == "italic" || r.Format.FontStyle == "oblique",
 			Underline: r.Format.Underline, Strikethrough: r.Format.Strike,
-			Superscript: r.Format.Superscript, Subscript: r.Format.Subscript, Href: r.Format.Link,
+			Superscript: r.Format.Superscript, Subscript: r.Format.Subscript, Href: r.Format.Link, Lang: r.Format.Lang,
 		}
 		parts := strings.Split(r.Text, " ")
 		for i, p := range parts {

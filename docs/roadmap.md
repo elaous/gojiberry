@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-6 of 10 since the last full run (#151, #152, #153, #154, #155, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
+7 of 10 since the last full run (#151, #152, #153, #154, #155, #156, this PR). The full run on main 9e11519 (after #149, the 10th merge since d57468e) passed everything: build, vet, tests, lint and wasm checks, the nested modules including the new `tools/` module, and the grammar tests, with a clean tree afterwards. The full suite runs on main after the
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -983,7 +983,7 @@ unless stated.
        changes.
     3. Test IME composition (preedit shown, no mirror announcement until commit, no autocomplete popup, see 79).
     4. Browser e2e with scripted composition events plus a manual check with real IMEs.
-    Where: the canvas editor text layout and input layer. Priority: medium. Dependencies: 60.
+    Where: the canvas editor text layout and input layer. Priority: medium. Dependencies: 60. Done in part (this PR), step 1: `canvas.Format.Lang` (a BCP 47 tag, checked by `ValidLang`; `TextFlow.SetLanguage` tags the selection or the text typed next), saved in `docfile` (field 18), written by the HTML export as `<span lang>`, and carried into the screen-reader copy (`A11yBlock.Runs`, `A11yRun`: a span with `lang` for each tagged stretch, so a reader switches voice); the showcase has Format > Language of the selection. Tests: `TestValidLang`, `TestSetLanguageTagsTheSelection`, `TestAccessibleTextMarksTheLanguageOfRuns`, `TestHTMLWritesTheLanguageOfARun`, `TestSelectionLanguageReachesTheReadingCopy`. Left: a document default language of its own (the page language is used), setting the language from detection, bidi/RTL/vertical layout checks (step 2), IME composition (steps 3 and 4).
 65. **Cognitive and motor options.** Kind: fixable. What: distraction-free mode; plain-language labels; forgiving
     undo (long history, undo of the last save); adjustable timeouts; dwell or switch access; large-target mode. Why it
     matters: needs differ, and short timeouts or small targets lock people out. Plan: (1) list every timeout and

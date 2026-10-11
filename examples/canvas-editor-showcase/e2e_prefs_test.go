@@ -14,7 +14,11 @@ func TestDisplayPreferencesAreApplied(t *testing.T) {
 	site := e2etest.NewSite(t)
 	d := site.OpenURL(t, "/index.html")
 	d.WaitSelector("canvas")
-	size := func() float64 { var f float64; d.Eval(`parseFloat(getComputedStyle(document.documentElement).fontSize)`, &f); return f }
+	size := func() float64 {
+		var f float64
+		d.Eval(`parseFloat(getComputedStyle(document.documentElement).fontSize)`, &f)
+		return f
+	}
 	base := size()
 	d.OK(!d.Bool(`document.documentElement.hasAttribute('data-gj-text')`), "no preference: no attribute")
 

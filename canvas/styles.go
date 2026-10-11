@@ -83,6 +83,9 @@ func mergeFormat(under, over Format) Format {
 	if over.Index != "" {
 		out.Index = over.Index
 	}
+	if over.Lang != "" {
+		out.Lang = over.Lang
+	}
 	out.Underline = out.Underline || over.Underline
 	out.Strike = out.Strike || over.Strike
 	out.Superscript = out.Superscript || over.Superscript

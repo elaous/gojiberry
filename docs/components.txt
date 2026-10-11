@@ -654,6 +654,10 @@ type A11yBlock struct {
 	Level   int
 	Ordered bool
 	Text    string
+	// Runs, when set, are the text again as pieces with their own language: a piece with a Lang is
+	// written as a span with a lang attribute, so a screen reader switches voice for it. Their
+	// texts, joined, are Text.
+	Runs []A11yRun
 	// Cells are a table row's cells (Kind A11yTableRow); a table is the
 	// consecutive rows, the first of them the header.
 	Cells []string
@@ -671,6 +675,13 @@ const (
 	A11yCode
 	A11yTableRow // Cells
 )
+type A11yRun struct {
+	Text string
+	Lang string
+}
+    A11yRun is a piece of a block's text; Lang is its language tag, "" for the
+    document's own.
+
 type AccessibleTextProps struct {
 	// ID is the element's id, for aria-describedby ("a11y-text" if empty).
 	ID string
