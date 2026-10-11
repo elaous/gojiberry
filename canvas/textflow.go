@@ -222,6 +222,10 @@ type TextFlow struct {
 	// OnHoverComment is called with the ID of the comment the pointer
 	// moves onto ("" when it leaves).
 	OnHoverComment func(id string)
+	// Suggesting makes typing, pasting and deleting propose changes instead of making them: new text
+	// is marked as a suggested insertion and deleted text is kept, struck through, as a suggested
+	// deletion, by Author, until someone accepts or rejects it (see Suggestions).
+	Suggesting bool
 
 	derived    []Item
 	derivedSrc string
@@ -459,6 +463,9 @@ func (f *TextFlow) flatten() *flowData {
 			id = len(d.styles)
 			styleID[k] = id
 			st := f.expand(paraBase, fm).resolve(f.Style)
+			if fm.Proposal != "" {
+				proposalStyle(&st, fm.Proposal)
+			}
 			if small { // a small capital: the lower-case letter's capital at 0.8 size
 				if st.FontSize <= 0 {
 					st.FontSize = 16

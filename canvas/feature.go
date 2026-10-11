@@ -289,6 +289,11 @@ func holdsObjects(t EditTarget) bool {
 // to put there; afterwards each cursor is a plain one after its
 // insertion.
 func editCursors(t EditTarget, gen func(c Cursor, rs []rune) (from, to int, ins []Item)) {
+	// In suggestion mode an edit proposes the change instead of making it.
+	if f, ok := t.(*TextFlow); ok && f.proposalsOn() {
+		f.proposalEdits(gen)
+		return
+	}
 	rs := textRunes(t)
 	var edits []Edit
 	var out []Cursor

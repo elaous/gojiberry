@@ -42,6 +42,10 @@ type Format struct {
 	// reading copy carries it as a lang attribute) and what an HTML export
 	// writes; it does not change how the text is drawn.
 	Lang string
+	// Proposal marks this text as part of a suggested change (see ProposalMark): text a person
+	// proposed to add, or proposed to remove, until someone accepts or rejects it. It is not
+	// formatting, and is kept when formatting is applied or copied.
+	Proposal string
 }
 
 // CaseKind is how letters are displayed; see Format.Case.

@@ -180,6 +180,7 @@ type Format struct {
 	Bookmark    string  `json:"bookmark,omitempty" pb:"16"`
 	Index       string  `json:"index,omitempty" pb:"17"`
 	Lang        string  `json:"lang,omitempty" pb:"18"`
+	Proposal    string  `json:"proposal,omitempty" pb:"19"`
 }
 
 // List mirrors canvas.ListStyle.

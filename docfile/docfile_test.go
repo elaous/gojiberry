@@ -178,6 +178,31 @@ func TestCommentsRoundTripThroughFlow(t *testing.T) {
 	}
 }
 
+// A proposed change (suggestion mode) is part of the text and survives every saved form.
+func TestProposalMarksRoundTrip(t *testing.T) {
+	mark := canvas.ProposalMark{Kind: canvas.ProposalDelete, ID: "ab12", Author: "ana@example.com", Time: time.Unix(1_700_000_000, 0)}.String()
+	f := &canvas.TextFlow{Items: []canvas.Item{
+		canvas.Chars{Text: "keep "}, canvas.Chars{Text: "struck", Format: canvas.Format{Proposal: mark}},
+		canvas.Chars{Text: " added", Format: canvas.Format{Proposal: canvas.ProposalMark{Kind: canvas.ProposalInsert, ID: "ab12", Author: "ana@example.com", Time: time.Unix(1_700_000_000, 0)}.String()}},
+	}}
+	for _, c := range Formats() {
+		data, err := c.Marshal(FromFlow("T", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := c.Unmarshal(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g := &canvas.TextFlow{}
+		d.Apply(g)
+		ps := g.Proposals()
+		if len(ps) != 1 || ps[0].Deleted != "struck" || ps[0].Inserted != " added" || ps[0].Author != "ana@example.com" || ps[0].ID != "ab12" {
+			t.Fatalf("%s: %+v", c.Name(), ps)
+		}
+	}
+}
+
 func TestNotesRoundTrip(t *testing.T) {
 	f := &canvas.TextFlow{Items: []canvas.Item{
 		canvas.Inline{Object: &canvas.TOCObject{Title: "Contents"}, Block: true}, canvas.Chars{Text: "\n"},

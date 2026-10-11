@@ -21,6 +21,7 @@ message Format {
   string bookmark = 16;
   string index = 17;
   string lang = 18;
+  string proposal = 19;
 }
 
 message Chars {

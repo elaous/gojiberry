@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (#207: name and keep a version; #208: restore keeps the current text; full run on main 7ec9fea after #205, the 10th merge since 098ac89, with the fixes in this PR). It passed everything in the end: build, vet, tests, lint and wasm checks, the generated files and API dumps, the nested modules and the grammar tests (the run was split in two after the first fixes: the root steps passed in one, the nested-module and grammar steps in the next). It found three things, all from the version-diff work: a stale `components/styles.xg.go` (CSS added without `make generate`), and the go.mod/go.sum of `docstore/backends` and `examples/collab-editor-app`, which needed `go mod tidy` for the new `docdiff` dependency (x/image through `export`). Coverage score of that run (`make coverage`): **88.9% of statements** (the README badge); the packages raised since the last run are `cmd/collabhub` 83%, `voice/*` 86-94%, `docstore` 84%, `cmd/docsh` 85%, `braille/server` 88%, `collab/ws` 84%, `export` 86% and `pdftext` 90%. The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+3 of 10 since the last full run (#209: suggestion mode in the model (roadmap 71); #207: name and keep a version; #208: restore keeps the current text; full run on main 7ec9fea after #205, the 10th merge since 098ac89, with the fixes in this PR). It passed everything in the end: build, vet, tests, lint and wasm checks, the generated files and API dumps, the nested modules and the grammar tests (the run was split in two after the first fixes: the root steps passed in one, the nested-module and grammar steps in the next). It found three things, all from the version-diff work: a stale `components/styles.xg.go` (CSS added without `make generate`), and the go.mod/go.sum of `docstore/backends` and `examples/collab-editor-app`, which needed `go mod tidy` for the new `docdiff` dependency (x/image through `export`). Coverage score of that run (`make coverage`): **88.9% of statements** (the README badge); the packages raised since the last run are `cmd/collabhub` 83%, `voice/*` 86-94%, `docstore` 84%, `cmd/docsh` 85%, `braille/server` 88%, `collab/ws` 84%, `export` 86% and `pdftext` 90%. The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1047,6 +1047,17 @@ unless stated.
     Plan: (1) model for ranges, threads and changes that survive concurrent edits; (2) UI with keyboard paths; (3)
     mentions without leaking addresses to people who lack access; (4) import and export in 72; (5) mirror support
     (60). Where: the model, `collab`, `components`. Priority: high. Dependencies: 60; used by 66, 72.
+    Done in part (#209), steps 1 (the model and the core): a suggested change is carried by the characters it concerns, in
+    `Format.Proposal` (`i:<id>:<unix>:<author>` for text proposed to be added, `d:...` for text proposed to be removed and
+    still there, struck through), so it survives concurrent edits, copies and saving like any other attribute (saved as
+    docfile field 19). `TextFlow.Suggesting` makes typing, pasting, cutting and deleting propose instead of change: removed
+    text stays struck, replaced text is one proposal (struck and added text share an id), text typed after one's own
+    proposal continues it, deleting one's proposed addition removes it for real. `Proposals`, `AcceptProposal`,
+    `RejectProposal`, `AcceptAllProposals`, `RejectAllProposals` (one undo step each); drawn in a color per author,
+    underlined for additions and struck through for removals. (The names say Proposal because Suggestion was taken by the
+    autocomplete list.) Left: the panel with keyboard paths and a mode toggle (step 2), comment-style mentions that do not
+    leak addresses (3), export and import as tracked changes in DOCX and the reading copy (4, 5), and checking
+    two people proposing in the same place in a live session.
 72. **Import and export fidelity.** Kind: fixable in part (formats differ). What: DOCX, ODT, Markdown, HTML and PDF in
     both directions, with a fidelity report that lists what was lost or changed. Why it matters: high value for
     adoption; people leave only if their files come over intact, and they need to know what did not. Plan:
