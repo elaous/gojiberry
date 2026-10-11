@@ -118,6 +118,11 @@ func Carousel(props CarouselProps) xango.Node
     aria-hidden) so this works before any client-side hydration runs, with CSS
     choosing which one shows.
 
+func CheckPanel(p CheckPanelProps) xango.Node
+    CheckPanel lists the findings of a document accessibility check, each
+    with its fix and a button that goes to it. The summary is a live status,
+    so a reader hears the result of pressing Check.
+
 func Checkbox(props CheckboxProps) xango.Node
     Checkbox renders a single labeled checkbox, the label wrapping the input so
     clicking the text toggles it too (same zero-JS trick FileUploader's dropzone
@@ -865,6 +870,25 @@ type CarouselProps struct {
 	OnSelect func(index int) // called when a dot is clicked
 }
     CarouselProps configures Carousel.
+
+type CheckFinding struct {
+	// Rule names the check ("image-alt"); Severity is "error" or "warning" and is written as a word,
+	// not only shown by colour.
+	Rule, Severity string
+	// Message says what is wrong, Fix what to do; Text is a few words of what it concerns.
+	Message, Fix, Text string
+}
+    CheckFinding is one problem a document check found, as the panel lists it.
+
+type CheckPanelProps struct {
+	Findings []CheckFinding
+	// Checked says a check has run (an empty list then means "nothing found", not "not run").
+	Checked bool
+	// OnCheck runs the check; OnGo moves to finding i in the document.
+	OnCheck func()
+	OnGo    func(i int)
+}
+    CheckPanelProps configures CheckPanel.
 
 type CheckboxGroupProps struct {
 	Options  []CheckboxOption

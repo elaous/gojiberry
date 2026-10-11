@@ -23,6 +23,7 @@ func checkContrast(doc docfile.Document, opt Options) []Finding {
 		page = rgb{255, 255, 255}
 	}
 	var out []Finding
+	offsets := itemOffsets(doc)
 	for i, it := range doc.Content {
 		c := it.Chars
 		if c == nil || strings.TrimSpace(c.Text) == "" || c.Format.Color == "" {
@@ -50,7 +51,7 @@ func checkContrast(doc docfile.Document, opt Options) []Finding {
 			need = minRatioLarge
 		}
 		if ratio := contrast(fg, bg); ratio < need {
-			out = append(out, Finding{Rule: RuleContrast, Severity: Warning, Block: -1, Item: i, Text: excerpt(c.Text),
+			out = append(out, Finding{Rule: RuleContrast, Severity: Warning, Offset: offsets[i], Item: i, Text: excerpt(c.Text),
 				Message: fmt.Sprintf("The text %q has a contrast of %.1f:1 against its background; %.1f:1 is needed to read it comfortably.", excerpt(c.Text), ratio, need),
 				Fix:     "Use a darker text colour or a lighter background."})
 		}

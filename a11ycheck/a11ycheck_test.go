@@ -30,7 +30,7 @@ func TestImageNeedsADescriptionOrToBeDecorative(t *testing.T) {
 		{Image: &docfile.ImageItem{URL: "c.png", Decorative: true}},
 	}}
 	fs := Check(doc, Options{})
-	if len(fs) != 1 || fs[0].Rule != RuleImageAlt || fs[0].Severity != Error || fs[0].Text != "a.png" || fs[0].Block != 0 || fs[0].Fix == "" {
+	if len(fs) != 1 || fs[0].Rule != RuleImageAlt || fs[0].Severity != Error || fs[0].Text != "a.png" || fs[0].Offset != 0 || fs[0].Item != 0 || fs[0].Fix == "" {
 		t.Fatalf("findings: %+v", fs)
 	}
 }
@@ -65,7 +65,7 @@ func TestLowContrastIsFoundAgainstTheBackgroundOrThePage(t *testing.T) {
 	}}
 	var got []string
 	for _, f := range Check(doc, Options{}) {
-		if f.Rule != RuleContrast || f.Block != -1 {
+		if f.Rule != RuleContrast || f.Item < 0 {
 			t.Errorf("unexpected finding %+v", f)
 		}
 		got = append(got, f.Text)
@@ -100,5 +100,32 @@ func TestACleanDocumentHasNoFindings(t *testing.T) {
 	doc := docfile.Document{Content: []docfile.Item{heading(1, "Title"), chars("\n", docfile.Format{}), chars("Body.", docfile.Format{Color: "#111827"})}}
 	if fs := Check(doc, Options{}); len(fs) != 0 {
 		t.Errorf("findings: %+v", fs)
+	}
+}
+
+// A finding says where it is, as a caret position: text counts its runes, an object (an image, a table)
+// counts one, and the levels above 3 are seen as they are.
+func TestFindingsCarryTheirPositionInTheTextStream(t *testing.T) {
+	doc := docfile.Document{Content: []docfile.Item{
+		chars("Intro\n", docfile.Format{}),                                            // offsets 0 to 5, the newline is 5
+		{Table: &docfile.TableItem{Rows: []docfile.TableRow{{Cells: []string{"a"}}}}}, // one object at 6
+		{Image: &docfile.ImageItem{URL: "a.png"}},                                     // at 7
+		chars("\n", docfile.Format{}),                                                 // 8
+		{Para: &docfile.Para{Style: "Heading 5"}},
+		chars("Deep\n", docfile.Format{}), // a level 5 heading after nothing: no skip, but starts at 9
+		{Para: &docfile.Para{Style: "Heading 2"}},
+		chars("Up", docfile.Format{}),
+	}}
+	fs := Check(doc, Options{})
+	if len(fs) != 1 || fs[0].Rule != RuleImageAlt || fs[0].Offset != 7 || fs[0].Item != 2 {
+		t.Fatalf("image findings: %+v", fs)
+	}
+	doc2 := docfile.Document{Content: []docfile.Item{
+		{Para: &docfile.Para{Style: "Heading 1"}}, chars("Title\n", docfile.Format{}),
+		{Para: &docfile.Para{Style: "Heading 5"}}, chars("Deep\n", docfile.Format{}), // 6 is where this paragraph starts
+	}}
+	fs = Check(doc2, Options{})
+	if len(fs) != 1 || fs[0].Rule != RuleHeadingSkip || fs[0].Offset != 6 || !strings.Contains(fs[0].Message, "level 5 after a level 1") {
+		t.Fatalf("heading findings: %+v", fs)
 	}
 }
