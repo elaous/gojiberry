@@ -251,3 +251,42 @@ func TestConnectsWhenTheServerComesUp(t *testing.T) {
 		}
 	}
 }
+
+type memQueue struct {
+	mu  sync.Mutex
+	ops []crdt.Op
+}
+
+func (q *memQueue) Load() []crdt.Op  { q.mu.Lock(); defer q.mu.Unlock(); return q.ops }
+func (q *memQueue) Save(o []crdt.Op) { q.mu.Lock(); q.ops = o; q.mu.Unlock() }
+func (q *memQueue) len() int         { q.mu.Lock(); defer q.mu.Unlock(); return len(q.ops) }
+
+// Ops sent with no server are kept in the Queue; a later connection (a reloaded page) delivers them.
+func TestQueueSurvivesARestart(t *testing.T) {
+	q := &memQueue{}
+	dead := ws.Dial(client.Options{BaseURL: "http://127.0.0.1:1", Doc: "d", Replica: "r1", Retry: 5 * time.Millisecond, MaxRetry: 20 * time.Millisecond, Queue: q})
+	go func() {
+		for range dead.Events() {
+		}
+	}()
+	dead.Send(ops(t, 3, 4))
+	dead.Close()
+	if q.len() != 3 {
+		t.Fatalf("queue holds %d ops, want 3", q.len())
+	}
+	srv := newHub(t)
+	conn := ws.Dial(client.Options{BaseURL: srv.URL, Doc: "d", Replica: "r1", Retry: 10 * time.Millisecond, MaxRetry: 50 * time.Millisecond, Queue: q})
+	defer conn.Close()
+	go func() {
+		for range conn.Events() {
+		}
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if q.len() == 0 && conn.Pending() == 0 {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("not delivered: queue %d, pending %d", q.len(), conn.Pending())
+}

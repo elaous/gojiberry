@@ -83,6 +83,12 @@ func Dial(opts client.Options) *Conn {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Conn{opts: opts, ctx: ctx, cancel: cancel, events: make(chan client.Event),
 		wake: make(chan struct{}, 1), kick: make(chan struct{}, 1), pkick: make(chan struct{}, 1)}
+	if opts.Queue != nil {
+		c.pending = append(c.pending, opts.Queue.Load()...)
+		if len(c.pending) > 0 {
+			c.kick <- struct{}{}
+		}
+	}
 	c.done.Add(2)
 	go func() { defer c.done.Done(); c.pump() }()
 	go func() { defer c.done.Done(); c.run() }()
@@ -99,6 +105,13 @@ func (c *Conn) Status() client.Status {
 	return c.status
 }
 
+// persistLocked saves the waiting ops to the Queue option; c.mu is held.
+func (c *Conn) persistLocked() {
+	if c.opts.Queue != nil {
+		c.opts.Queue.Save(append([]crdt.Op(nil), c.pending...))
+	}
+}
+
 // Pending implements collab.Conn.
 func (c *Conn) Pending() int {
 	c.mu.Lock()
@@ -113,6 +126,7 @@ func (c *Conn) Send(ops []crdt.Op) {
 	}
 	c.mu.Lock()
 	c.pending = append(c.pending, ops...)
+	c.persistLocked()
 	c.mu.Unlock()
 	signal(c.kick)
 }
@@ -327,6 +341,7 @@ func (c *Conn) session() (retErr error) {
 		if len(batch) == 1 && size > maxOp {
 			c.mu.Lock()
 			c.pending = c.pending[1:]
+			c.persistLocked()
 			c.mu.Unlock()
 			c.emit(client.Event{Kind: client.Rejected, Ops: batch, Err: errors.New("collab: an operation is too large to send")})
 			return nil // the session repairs itself; what is left goes after
@@ -342,6 +357,7 @@ func (c *Conn) session() (retErr error) {
 	settle := func() { // the in-flight batch is no longer waiting
 		c.mu.Lock()
 		c.pending = c.pending[min(len(inflight), len(c.pending)):]
+		c.persistLocked()
 		c.mu.Unlock()
 		inflight = nil
 	}
