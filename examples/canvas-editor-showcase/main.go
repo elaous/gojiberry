@@ -579,7 +579,7 @@ func main() {
 		if flow != nil {
 			stats = flow.Stats()
 		}
-		bar := components.StatusBar(statusBar(flow, stats, state.Pages, state.Mode, state.Setup, u.saver.SaveState()))
+		bar := components.StatusBar(statusBar(flow, stats, state.Pages, state.Mode, state.Setup, u.saver.SaveState(), u.syncItem()))
 		node := components.DocumentView(components.DocumentViewProps{
 			Title: u.title, OnTitle: func(t string) { u.title = t; renderUI() },
 			MenuBar: menubar, Toolbar: toolbar,

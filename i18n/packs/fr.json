@@ -789,6 +789,15 @@
   "proposals.removed": "%s a supprimé « %s »",
   "proposals.added": "%s a ajouté « %s »",
   "a11y.suggestedAdd": "Ajout suggéré par %s : ",
-  "a11y.suggestedRemove": "Suppression suggérée par %s : "
+  "a11y.suggestedRemove": "Suppression suggérée par %s : ",
+  "sync.title": "État du partage",
+  "sync.problem": "Non partagé : %s",
+  "sync.sending#one": "Envoi de %d modification…",
+  "sync.sending#other": "Envoi de %d modifications…",
+  "sync.synced": "Toutes les modifications sont partagées",
+  "sync.connecting": "Connexion au document partagé…",
+  "sync.offlinePending#one": "Hors ligne : %d modification en attente d’envoi",
+  "sync.offlinePending#other": "Hors ligne : %d modifications en attente d’envoi",
+  "sync.offline": "Hors ligne : vos modifications seront partagées au retour de la connexion"
  }
 }

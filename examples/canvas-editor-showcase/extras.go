@@ -32,7 +32,7 @@ var saveLabels = map[string]string{"saved": "Saved", "saving": "Saving…", "uns
 // statusBar is the status bar: a selection's counts when there is one, the page
 // setup, the pages the text reaches, where saving stands, the heading the caret
 // is under, the counts and the mode.
-func statusBar(flow *canvas.TextFlow, st canvas.FlowStats, sheets int, mode canvas.Mode, setup components.PageSetup, save string) components.StatusBarProps {
+func statusBar(flow *canvas.TextFlow, st canvas.FlowStats, sheets int, mode canvas.Mode, setup components.PageSetup, save string, sync *components.StatusItem) components.StatusBarProps {
 	var items []components.StatusItem
 	if st.HasSelection {
 		items = append(items, components.StatusItem{ID: "selection", Text: T("status.selection", "Selection: %d words, %d characters", st.Selection.Words, st.Selection.Characters)})
@@ -43,6 +43,9 @@ func statusBar(flow *canvas.TextFlow, st canvas.FlowStats, sheets int, mode canv
 	)
 	if save != "" {
 		items = append(items, components.StatusItem{ID: "save", Live: true, State: save, Text: T("status.save."+save, saveLabels[save])})
+	}
+	if sync != nil { // a shared document: where its changes stand
+		items = append(items, *sync)
 	}
 	if flow != nil {
 		if cs := flow.Cursors(); len(cs) > 0 {
@@ -665,4 +668,18 @@ func (u *ui) noteComments() {
 		}
 	}
 	u.commentsSeen = seen
+}
+
+// syncItem is the status bar item of a shared document (nil for one that is not shared).
+func (u *ui) syncItem() *components.StatusItem {
+	s := u.live
+	if s == nil {
+		return nil
+	}
+	problem := ""
+	if s.Err != nil {
+		problem = s.Err.Error()
+	}
+	it := components.SyncStatus(s.Status == client.Online, s.Status == client.Connecting, s.Pending, problem)
+	return &it
 }
