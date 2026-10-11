@@ -688,3 +688,60 @@ func TestTwoConcurrentSignedOutRegistrationsOfOneEmailMakeTwoAccounts(t *testing
 		}
 	}
 }
+
+// Roadmap item 41: an e-mail is a label. Two registrations that type one address are two accounts whose
+// sessions differ, whose identities carry no e-mail, and neither of which can act on what the other
+// owns, whether the account is looked up by the label, signed in again, or granted by the address. A later
+// feature that links or merges accounts on the bare label fails here.
+func TestOneEmailLabelNeverMergesTwoPasskeyAccounts(t *testing.T) {
+	st := NewMemoryStore()
+	r := newRig(t, st)
+	a := r.begunBy("", "ana@opendocs.io")
+	b := r.begunBy("", "ana@opendocs.io")
+	var ids [2]string
+	var toks [2]string
+	for i, p := range []begun{a, b} {
+		code, fin := r.do("POST", "/auth/passkey/register/finish?token="+p.token, "", p.answer)
+		if code != 200 {
+			t.Fatalf("finish %d: %d %v", i, code, fin)
+		}
+		toks[i], _ = fin["auth_token"].(string)
+		_, me := r.do("GET", "/auth/me", toks[i], nil)
+		ids[i], _ = me["ID"].(string)
+		if me["Email"] != "" {
+			t.Errorf("account %d carries the label as an e-mail: %v", i, me)
+		}
+	}
+	if ids[0] == "" || ids[0] == ids[1] || toks[0] == toks[1] {
+		t.Fatalf("one label made one identity: %v %v", ids, toks)
+	}
+	// each account is its own record, with the same label
+	for _, id := range ids {
+		acct, _ := st.Get(context.Background(), id)
+		if acct == nil || acct.Email != "ana@opendocs.io" || len(acct.Credentials) != 1 {
+			t.Errorf("%s: %+v", id, acct)
+		}
+	}
+	// what one owns, the other has no role on, by ID or by the label
+	u0 := user.Person{ID: ids[0]}
+	acl := docstore.ACL{Owner: ids[0], Grants: map[string]docstore.Role{"ana@opendocs.io": docstore.RoleEditor}}
+	if role := acl.RoleOfPerson(u0); role != user.Owner {
+		t.Errorf("the owner's own role: %q", role)
+	}
+	other, _ := r.mgr.CurrentUser(func() *http.Request {
+		req, _ := http.NewRequest("GET", "/", nil)
+		req.Header.Set("Authorization", "Bearer "+toks[1])
+		return req
+	}())
+	if role := acl.RoleOfPerson(other.Person("")); role != "" {
+		t.Errorf("the other account has the role %q on the first one's document through the label", role)
+	}
+	// registering a third time while signed in as the first adds a passkey to the first, not a new account
+	r.register("ana@opendocs.io", toks[0])
+	st.mu.Lock()
+	n := len(st.accounts)
+	st.mu.Unlock()
+	if n != 2 {
+		t.Errorf("%d accounts after adding a passkey while signed in, want 2", n)
+	}
+}
