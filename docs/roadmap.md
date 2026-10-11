@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (#233: `tokens`, design tokens with contrast validation (roadmap 77); #232: `wasmserve`, a static handler with wasm type, compression and caching (roadmap 82); #231: `docstore backup` and `restore` commands with audit lines; #230: wasm size budget (roadmap 82); full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+5 of 10 since the last full run (#234: HTML export with a design-token theme; #233: `tokens`, design tokens with contrast validation (roadmap 77); #232: `wasmserve`, a static handler with wasm type, compression and caching (roadmap 82); #231: `docstore backup` and `restore` commands with audit lines; #230: wasm size budget (roadmap 82); full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1132,8 +1132,12 @@ unless stated.
     contrast of 4.5:1 (text, muted text, link and danger on the page, accent text on the accent), a body size under
     16px, a scale that does not grow. `CSS` writes a valid set as `--gj-color-*`, `--gj-font-*` and `--gj-space-*` custom
     properties and refuses an invalid one; names and values from a stored file cannot break out of the declaration.
-    `a11ycheck.Contrast` is exported for it. Left: storing sets in the central config store (2), applying them to the
-    canvas and the exports (3), and a theme editor that shows the problems as they are typed.
+    `a11ycheck.Contrast` is exported for it. Also done (#234), step 3 for HTML: `export.HTML{Theme: css}` writes the
+    tokens' CSS in a `<style>` in the head, with body, page and link rules that use the tokens (each with a fallback); it
+    accepts only one `:root{--name:value;...}` block and fails on anything that could close the style or open another
+    rule. (`export` cannot import `tokens`, which depends on it through `a11ycheck`, so the CSS is passed as text.) Left:
+    storing sets in the central config store (2), applying them to the canvas, the other exports and the showcase (3),
+    and a theme editor that shows the problems as they are typed.
 78. **Equations, diagrams, code blocks and footnotes.** Kind: fixable. What: these elements with accessible output:
     MathML for equations, text alternatives for diagrams, readable code blocks with a language, and footnotes that
     link both ways. Why it matters: technical documents are common and these elements are usually the least
