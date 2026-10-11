@@ -877,6 +877,9 @@ type CheckFinding struct {
 	Rule, Severity string
 	// Message says what is wrong, Fix what to do; Text is a few words of what it concerns.
 	Message, Fix, Text string
+	// FixLabel, if set, is the text of a button that does the fix for the person ("Make it level 2");
+	// "" shows no button, because nothing is safe to do for them.
+	FixLabel string
 }
     CheckFinding is one problem a document check found, as the panel lists it.
 
@@ -887,6 +890,15 @@ type CheckPanelProps struct {
 	// OnCheck runs the check; OnGo moves to finding i in the document.
 	OnCheck func()
 	OnGo    func(i int)
+	// OnFix does the fix of finding i; the host checks again afterwards.
+	OnFix func(i int)
+	// Gate is what exporting does about errors: "" (nothing), "warn" or "block"; OnGate sets it. Gate is
+	// shown only when OnGate is set. Overridden says the next export is allowed anyway, and OnOverride
+	// allows it (shown while Gate is "block").
+	Gate       string
+	OnGate     func(mode string)
+	Overridden bool
+	OnOverride func()
 }
     CheckPanelProps configures CheckPanel.
 

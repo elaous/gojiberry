@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"net/url"
@@ -461,6 +462,36 @@ func selectionLanguageMenu(u *ui, flow func() *canvas.TextFlow, redraw, refocus,
 type checkState struct {
 	ran      bool
 	findings []a11ycheck.Finding
+	override bool // the next export is allowed whatever the gate says
+}
+
+// exportGateKey is where the person's choice of what exporting does about errors is kept.
+const exportGateKey = "showcase:export-gate"
+
+func exportGate() a11ycheck.GateMode {
+	switch m := a11ycheck.GateMode(lsGet(exportGateKey)); m {
+	case a11ycheck.GateWarn, a11ycheck.GateBlock:
+		return m
+	}
+	return a11ycheck.GateAllow
+}
+
+// gatedExport is the export of the page: the document is checked first when the gate asks for it, an
+// export with errors is refused unless the person allowed this one, or is done with a warning.
+func (u *ui) gatedExport(format string, doc docfile.Document) (string, []byte, string, error) {
+	mode := exportGate()
+	if mode != a11ycheck.GateAllow {
+		findings := a11ycheck.Check(doc, a11ycheck.Options{})
+		allow, errs := mode.Decide(findings, u.check.override)
+		if !allow {
+			return "", nil, "", errors.New(T("check.blocked", "Not exported: the document has %d accessibility errors. Fix them in the Check tab, or allow this export there.", errs))
+		}
+		u.check.override = false
+		if errs > 0 {
+			u.announce(T("check.exportedWith", "Exported with %d accessibility errors", errs))
+		}
+	}
+	return u.transfer.Export(format, doc)
 }
 
 // checkPanel is the Check tab: it runs the document's accessibility check (package a11ycheck) and lists
@@ -469,9 +500,12 @@ func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func
 	props := components.CheckPanelProps{Checked: u.check.ran}
 	for _, f := range u.check.findings {
 		props.Findings = append(props.Findings, components.CheckFinding{
-			Rule: f.Rule, Severity: f.Severity.String(), Message: f.Message, Fix: f.Fix, Text: f.Text})
+			Rule: f.Rule, Severity: f.Severity.String(), Message: f.Message, Fix: f.Fix, Text: f.Text, FixLabel: fixLabel(f)})
 	}
-	props.OnCheck = func() {
+	props.Gate, props.Overridden = string(exportGate()), u.check.override
+	props.OnGate = func(mode string) { lsSet(exportGateKey, mode); u.check.override = false; renderUI() }
+	props.OnOverride = func() { u.check.override = !u.check.override; renderUI() }
+	run := func() {
 		fl := flow()
 		if fl == nil {
 			return
@@ -486,6 +520,31 @@ func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func
 		}
 		renderUI()
 	}
+	props.OnCheck = run
+	props.OnFix = func(i int) {
+		fl := flow()
+		if fl == nil || i < 0 || i >= len(u.check.findings) || !state.Role.CanEdit() {
+			return
+		}
+		f := u.check.findings[i]
+		switch f.Action {
+		case a11ycheck.ActionHeadingLevel:
+			fl.SetCursors([]canvas.Cursor{canvas.At(f.Offset)})
+			fl.ApplyParagraph(func(p *canvas.ParaFormat) { p.Style = fmt.Sprintf("Heading %d", f.Arg) })
+		case a11ycheck.ActionDefaultColour:
+			fl.SetCursors([]canvas.Cursor{{Anchor: f.Offset, Caret: f.Offset + f.Length}})
+			fl.SetTextColor("")
+		case a11ycheck.ActionDescribe:
+			u.tab = "images"
+			fl.GotoOffset(f.Offset)
+			scroller().RevealPending()
+			redraw()
+			renderUI()
+			return
+		}
+		redraw()
+		run() // check again: the fix may show the next problem, or none
+	}
 	props.OnGo = func(i int) {
 		fl := flow()
 		if fl == nil || i < 0 || i >= len(u.check.findings) {
@@ -497,4 +556,17 @@ func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func
 		renderUI()
 	}
 	return components.CheckPanel(props)
+}
+
+// fixLabel is the text of the one-click fix of a finding, or "" if there is none.
+func fixLabel(f a11ycheck.Finding) string {
+	switch f.Action {
+	case a11ycheck.ActionHeadingLevel:
+		return T("check.fixHeading", "Make it a level %d heading", f.Arg)
+	case a11ycheck.ActionDefaultColour:
+		return T("check.fixColour", "Use the default text colour")
+	case a11ycheck.ActionDescribe:
+		return T("check.fixDescribe", "Describe it")
+	}
+	return ""
 }
