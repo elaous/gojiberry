@@ -94,3 +94,9 @@
 .gj-diff ins { background: #d1f2d9; color: #0b3d1a; text-decoration: underline; }
 .gj-diff del { background: #ffd8d3; color: #5a0d0a; text-decoration: line-through; }
 .gj-diff-same { color: var(--gj-muted); font-style: italic; padding: 0.15em 0.5em; }
+
+/* Suggested changes: a sentence per change with the author's color at its edge. */
+.gj-proposals-list { list-style: none; margin: 0.4em 0; padding: 0; }
+.gj-proposal { display: flex; flex-wrap: wrap; gap: 0.3em 0.6em; align-items: center; padding: 0.3em 0; border-bottom: 1px solid var(--gj-border); }
+.gj-proposal-text { flex: 1 1 14em; border-left: 4px solid currentColor; padding-left: 0.5em; }
+.gj-proposals-bulk { display: flex; gap: 0.5em; margin: 0.3em 0; }

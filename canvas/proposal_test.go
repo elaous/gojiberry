@@ -220,3 +220,44 @@ func TestProposalsAreDrawnInTheirAuthorsColor(t *testing.T) {
 		t.Errorf("a removed word is struck through in the author's color: %+v", struck)
 	}
 }
+
+func TestReviewCommands(t *testing.T) {
+	fixedProposals(t)
+	f, st := editFlow(t, 0, Chars{Text: "the brown fox runs"})
+	f.Author = "fay"
+	var modes []bool
+	var settled []string
+	st.Features = NewRegistry()
+	Review{OnMode: func(on bool) { modes = append(modes, on) },
+		OnSettle: func(accepted bool, p Proposal) { settled = append(settled, fmt.Sprint(accepted, ":", p.Inserted)) }}.Install(st.Features)
+	if !st.HandleChord("Mod+Alt+S") || !f.Suggesting || !st.HandleChord("Mod+Alt+S") || f.Suggesting {
+		t.Fatalf("the same key turns the mode on and off: %v", modes)
+	}
+	if fmt.Sprint(modes) != "[true false]" {
+		t.Errorf("the host is told: %v", modes)
+	}
+	st.HandleChord("Mod+Alt+S")
+	f.SetSelection(4, 9)
+	st.InsertText("red")
+	end := len([]rune(f.EditText()))
+	f.SetSelection(end, end)
+	st.InsertText("X") // a second proposal at the end of the text
+	f.Suggesting = false
+	if len(f.Proposals()) != 2 {
+		t.Fatalf("%q", marked(f))
+	}
+	f.SetSelection(0, 0) // before both: the next one is the first
+	if !st.HandleChord("Mod+Alt+Y") || flowText(f) != "the red fox runsX" {
+		t.Fatalf("accept the next: %q / %q", flowText(f), marked(f))
+	}
+	f.SetSelection(0, 0)
+	if !st.HandleChord("Mod+Alt+D") || len(f.Proposals()) != 0 {
+		t.Fatalf("reject the last one: %q", marked(f))
+	}
+	if fmt.Sprint(settled) != "[true:red false:X]" {
+		t.Errorf("the host is told: %v", settled)
+	}
+	if st.HandleChord("Mod+Alt+Y") {
+		t.Error("with no proposal there is nothing to accept")
+	}
+}

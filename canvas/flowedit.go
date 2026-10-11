@@ -304,8 +304,8 @@ func (f *TextFlow) InsertText(s string) bool {
 	if rs := []rune(s); len(rs) == 1 && rs[0] != '\n' && !f.HasSelection() {
 		f.histKind = "type"
 	}
-	if rs := []rune(s); len(rs) == 1 && rs[0] != '\n' && f.AutoClose != nil {
-		f.typePaired(d, rs[0])
+	if rs := []rune(s); len(rs) == 1 && rs[0] != '\n' && f.AutoClose != nil && !f.proposalsOn() {
+		f.typePaired(d, rs[0]) // (not while suggesting: a proposal does not close brackets by itself)
 	} else {
 		editCursors(f, func(c Cursor, _ []rune) (int, int, []Item) {
 			from, to := c.Range()
