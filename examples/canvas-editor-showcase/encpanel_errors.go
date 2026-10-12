@@ -61,6 +61,8 @@ func tErr(err error) error {
 		msg = T("enc.err.configChanged", "The key configuration on this device was changed since this key last opened the store, so it was not unlocked. If you did not change it, someone who can write this site's storage did: do not use the store here.")
 	case errors.Is(err, encstore.ErrInterrupted):
 		msg = T("enc.err.interrupted", "An earlier change to this store's keys did not finish. Finish it or undo it first.")
+	case errors.Is(err, encstore.ErrStopped):
+		msg = T("enc.err.stopped", "Stopped. Nothing was changed: the keys are as they were.")
 	case errors.Is(err, encstore.ErrSecretNotSaved):
 		msg = T("enc.err.secretNotSaved", "The recovery key's secret has not been saved: confirm that you saved it first.")
 	case errors.Is(err, encstore.ErrPasskeyOnly):

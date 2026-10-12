@@ -9,6 +9,7 @@ import (
 	"github.com/elaous/gojiberry/docstore/encrypt"
 	"golang.org/x/crypto/ssh"
 	"strings"
+	"time"
 )
 
 // UnlockPasskey unlocks with the 32 bytes a passkey answered (client.DeriveLocal). The secret is
@@ -284,4 +285,41 @@ func (s *Store) checkFirstUse(o Owner) error {
 		return nil
 	}
 	return &FirstUseError{Digest: d, Fingerprint: ListFingerprint(d)}
+}
+
+// RecordUse writes into the store that the key o unlocked it just now, from the device the person
+// named device (see encrypt.DeviceUse): other devices that share the store can then say when each key
+// was last used. It is written encrypted to the store's keys, so it needs the store unlocked; an
+// error leaves nothing changed and need not stop the unlock.
+func (s *Store) RecordUse(ctx context.Context, o Owner, device string, now time.Time) error {
+	fp := o.Fingerprint()
+	if fp == "" {
+		return nil
+	}
+	if !s.Unlocked() {
+		return ErrLocked
+	}
+	return s.strict().RecordDeviceUse(ctx, fp, device, now)
+}
+
+// DeviceUses reads when each key last unlocked the store and from which device, from every device that
+// recorded it (RecordUse). Keys that are no longer owners are left out.
+func (s *Store) DeviceUses(ctx context.Context) ([]encrypt.DeviceUse, error) {
+	if !s.Unlocked() {
+		return nil, ErrLocked
+	}
+	all, err := s.strict().DeviceUses(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []encrypt.DeviceUse
+	for _, u := range all {
+		for _, r := range s.Recipients() {
+			if r.Fingerprint == u.Fingerprint {
+				out = append(out, u)
+				break
+			}
+		}
+	}
+	return out, nil
 }
