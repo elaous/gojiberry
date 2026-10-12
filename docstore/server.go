@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/elaous/gojiberry/auth"
+	"github.com/elaous/gojiberry/telemetry"
 )
 
 // Config is loaded entirely from the environment, mirroring
@@ -320,6 +321,8 @@ type Server struct {
 	// prefixes of ids the server keeps for itself (Hide).
 	extra  []extraRoute
 	hidden []string // lowercased (Hide)
+	// telemetry holds the totals of the usage receiver (WithTelemetry).
+	telemetry *telemetry.Counters
 	// docsClosed answers 404 to the generic API (see CloseDocs).
 	docsClosed bool
 	// directory is the key directory behind /directory/* (WithDirectory); its routes are limited
@@ -498,6 +501,9 @@ func (s *Server) Handler() http.Handler {
 	}
 	if s.dirAdmin != nil {
 		mux.HandleFunc("/admin/usage", s.handleUsage)
+		if s.telemetry != nil {
+			mux.HandleFunc("/admin/telemetry", s.handleTelemetryReport)
+		}
 	}
 	if s.auth != nil {
 		mux.Handle("/auth/", s.auth.Routes())
@@ -580,6 +586,8 @@ type usageResponse struct {
 	Bytes     int64         `json:"bytes"`
 	Largest   int           `json:"largest"`
 	Quota     quotaResponse `json:"quota"`
+	// Telemetry is how many usage batches the receiver took and refused (WithTelemetry); absent when it is off.
+	Telemetry *telemetry.Totals `json:"telemetry,omitempty"`
 }
 
 // handleUsage serves GET /admin/usage to the operator (the guard set by WithDirectoryAdmin): how many
@@ -613,6 +621,10 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 		}
 		out.Bytes += int64(m.Size)
 		out.Largest = max(out.Largest, m.Size)
+	}
+	if s.telemetry != nil {
+		t := s.telemetry.Totals()
+		out.Telemetry = &t
 	}
 	if reporter, ok := s.adapter.(QuotaReporter); ok {
 		if q, err := reporter.Usage(r.Context()); err == nil {

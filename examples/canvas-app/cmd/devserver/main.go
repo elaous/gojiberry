@@ -18,6 +18,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/elaous/gojiberry/devreload"
 	"github.com/elaous/gojiberry/examples/canvas-app/canvas"
+	"github.com/elaous/gojiberry/wasmserve"
 	"github.com/elaous/gojiberry/xango"
 )
 
@@ -155,7 +157,9 @@ func newMux(store *canvas.Store, reloader *devreload.Reloader) *http.ServeMux {
 		}
 	})
 
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	// wasmserve sends main.wasm as application/wasm (streaming compile) and gzipped, with an ETag so a
+	// reload is a 304; the fast gzip level keeps a rebuilt wasm from costing seconds on its first request.
+	mux.Handle("/static/", http.StripPrefix("/static/", wasmserve.Handler(os.DirFS("static"), wasmserve.Options{GzipLevel: gzip.BestSpeed})))
 
 	// Handler on a nil reloader serves 404, so this is safe to mount
 	// unconditionally rather than gating it on dev mode too.

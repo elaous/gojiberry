@@ -19,6 +19,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
 	"log"
 	"net/http"
@@ -28,6 +29,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/elaous/gojiberry/wasmserve"
 )
 
 // hub tracks every connected client and the document's last known
@@ -120,7 +122,9 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", h.handleWS)
-	mux.Handle("/", http.FileServer(http.Dir("static")))
+	// wasmserve sends main.wasm as application/wasm (streaming compile) and gzipped, with an ETag so a
+	// reload is a 304; the fast gzip level keeps a rebuilt wasm from costing seconds on its first request.
+	mux.Handle("/", wasmserve.Handler(os.DirFS("static"), wasmserve.Options{GzipLevel: gzip.BestSpeed}))
 
 	// Loopback by default: the demo has no sign-in, so it is not offered to the network.
 	// Set ADDR (":8096") to listen on every interface.

@@ -93,6 +93,7 @@ type ui struct {
 	statsSig            string // the counts the status bar and Stats tab last showed
 	shareLink           string // the link the Share tab shows
 	people              *peopleState
+	usage               *privacyUI // the Privacy tab: anonymous usage counts, off unless the person opts in
 	sa                  searchAll
 	enc                 *encUI // the encrypted browser store: off unless the person turns it on
 	clearEditor         func() // empties the editor and what is derived from its text (Lock uses it)
@@ -285,6 +286,9 @@ func main() {
 	components.CopyText = u.saver.Copy // the "Copy details" button of an error
 	u.migrate = newMigrate(u, func() { renderUI() })
 	u.people = newPeople("you@example.com", func() { renderUI() })
+	u.usage = newPrivacy(u.tab, &u.enc.dir)
+	u.usage.render = func() { renderUI(); redraw() } // redraw refreshes #state
+	go u.usage.run()
 
 	setMode := func(m canvas.Mode) {
 		state.Mode = state.Role.Mode(m)
@@ -300,6 +304,7 @@ func main() {
 
 	var domRoot *domrt.Root
 	renderUI = func() {
+		u.usage.noteTab(u.tab)
 		u.saver.DownloadFormats = downloadChoices(u.transfer.Exporters()) // the headings follow the language
 		mac := false
 		keymap := stage.EffectiveKeymap()
@@ -331,6 +336,7 @@ func main() {
 			{Label: T("menu.insert", "Insert"), Items: []components.MenuItem{
 				{Label: "Word count…", OnSelect: func() { u.tab = "stats"; renderUI() }},
 				{Label: "Share selection…", OnSelect: func() { u.tab = "share"; renderUI() }},
+				{Label: T("menu.privacy", "Usage statistics…"), OnSelect: func() { u.tab = "privacy"; renderUI() }},
 				{Label: "Symbol…", OnSelect: func() { u.tab = "symbols"; renderUI() }},
 				{Label: "Comment…", Shortcut: components.FormatChord("Mod+Alt+N", mac), OnSelect: func() { run(canvas.CmdCommentAdd); u.tab = "comments"; renderUI() }},
 				{Label: "Bookmark…", Shortcut: components.FormatChord("Mod+Alt+B", mac), OnSelect: func() { run(canvas.CmdBookmarkAdd); u.tab = "outline"; renderUI() }},
@@ -369,7 +375,7 @@ func main() {
 				tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "review", "Review", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI), tabButton(u, "images", "Pictures", renderUI),
 				tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
-				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI)),
+				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "privacy", "Privacy", renderUI)),
 		)
 
 		roleButtons := []xango.Node{xango.El("span", []xango.Attr{xango.A("style", "font-size:12px;color:#6b7280")}, xango.Text("Role:"))}
@@ -454,6 +460,8 @@ func main() {
 			}
 		case "people":
 			panel = xango.Frag(u.people.panel(u.saver.Asker.Ask), u.encPeopleOrNone(), u.saver.Asker.Dialog())
+		case "privacy":
+			panel = u.usage.panel(u)
 		case "share":
 			if flow != nil {
 				panel = sharePanel(u, flow, origin, renderUI)
@@ -737,7 +745,7 @@ func main() {
 		}
 		b, _ := json.Marshal(map[string]any{
 			"hyphenate": state.Hyphenate, "columns": columnCount, "columnConfig": columnCfg, "language": map[string]any{"translate": u.lang.translator != nil, "grammar": u.lang.grammar != nil, "issues": len(u.lang.issues), "translated": u.lang.translated, "error": u.lang.err, "busy": u.lang.busy},
-			"stats": statsState(stats), "share": u.shareLink, "drafts": len(u.drafts), "people": u.people.list(), "encryption": u.enc.state(), "spell": map[string]any{"enabled": u.spell.enabled, "checked": u.spell.text != "", "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
+			"stats": statsState(stats), "share": u.shareLink, "drafts": len(u.drafts), "people": u.people.list(), "usage": u.usage.state(), "encryption": u.enc.state(), "spell": map[string]any{"enabled": u.spell.enabled, "checked": u.spell.text != "", "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "persisted": u.persisted, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,

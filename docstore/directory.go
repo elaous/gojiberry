@@ -612,8 +612,8 @@ const (
 const lookupShards = 16
 
 type directoryLimits struct {
-	publish, challenge, lookup, lookupIP, logRead, logIP, adminFail Limiter
-	lookupAll, logAll                                               [lookupShards]Limiter
+	publish, challenge, lookup, lookupIP, logRead, logIP, adminFail, telemetry Limiter
+	lookupAll, logAll                                                          [lookupShards]Limiter
 }
 
 func (s *Server) limits() *directoryLimits {
@@ -630,6 +630,7 @@ func (s *Server) limits() *directoryLimits {
 			logRead:   f("dir-log", logReadsPerMinute, logReadsPerMinute),
 			logIP:     f("dir-log-ip", logsPerIP, logsPerIP),
 			adminFail: f("dir-admin", adminFailuresPerMinute, adminFailuresPerMinute),
+			telemetry: f("telemetry", telemetryPerMinute, telemetryPerMinute),
 		}
 		for i := range s.dirLimits.lookupAll {
 			s.dirLimits.lookupAll[i] = f(fmt.Sprintf("dir-lookup-all-%d", i), lookupsInTotal/lookupShards, lookupsInTotal/lookupShards)

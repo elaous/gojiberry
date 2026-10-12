@@ -1,0 +1,403 @@
+//go:build !(js && wasm)
+
+package main
+
+import (
+	"bytes"
+	"context"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/elaous/gojiberry/canvas"
+	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/docsearch"
+	"github.com/elaous/gojiberry/docstore"
+	"github.com/elaous/gojiberry/saver"
+)
+
+// memVault is the sealedVault of the tests: what the browser's IndexedDB would hold.
+type memVault struct {
+	mu   sync.Mutex
+	data map[string][]byte
+}
+
+func newVault() *memVault { return &memVault{data: map[string][]byte{}} }
+
+func (v *memVault) Get(name string) ([]byte, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return bytes.Clone(v.data[name]), nil
+}
+func (v *memVault) Put(name string, b []byte) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.data[name] = bytes.Clone(b)
+	return nil
+}
+func (v *memVault) Delete(name string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	delete(v.data, name)
+	return nil
+}
+
+// countingAdapter counts the documents read.
+type countingAdapter struct {
+	docstore.Adapter
+	loads int
+}
+
+func (c *countingAdapter) Load(ctx context.Context, id string) (docstore.Document, error) {
+	if id != saver.CatalogKey { // the saver's own bookkeeping is not a document
+		c.loads++
+	}
+	return c.Adapter.Load(ctx, id)
+}
+
+type rig struct {
+	t      *testing.T
+	mem    *countingAdapter
+	saver  *saver.Saver
+	target string
+}
+
+func newSearchRig(t *testing.T) *rig {
+	t.Helper()
+	mem := &countingAdapter{Adapter: docstore.NewMemoryAdapter()}
+	return &rig{t: t, mem: mem, saver: &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: mem}}}, target: "m"}
+}
+
+func (r *rig) save(name, text string) saver.Entry {
+	r.t.Helper()
+	d := docfile.Document{Title: name, Content: []docfile.Item{{Chars: &docfile.Chars{Text: text}}}}
+	d.SetName(name)
+	e, err := r.saver.Save(context.Background(), r.target, docfile.JSON, d)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	return e
+}
+
+// resave saves the document id again with new text.
+func (r *rig) resave(id, name, text string) {
+	r.t.Helper()
+	d := docfile.Document{Title: name, Content: []docfile.Item{{Chars: &docfile.Chars{Text: text}}}}
+	d.SetName(name)
+	d.SetID(id)
+	if _, err := r.saver.Save(context.Background(), r.target, docfile.JSON, d); err != nil {
+		r.t.Fatal(err)
+	}
+}
+
+// view is the documents' own keys, as syncSearchAll lists them.
+func (r *rig) view() (docstore.Adapter, map[string]string) {
+	r.t.Helper()
+	entries, err := r.saver.List(context.Background(), r.target)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	var keys []string
+	ids := map[string]string{}
+	for _, e := range entries {
+		keys = append(keys, e.Key)
+		ids[e.Key] = e.ID
+	}
+	return docsearch.Subset(r.mem, keys), ids
+}
+
+func (r *rig) text(id string) string {
+	r.t.Helper()
+	d, err := r.saver.Load(context.Background(), r.target, id)
+	if err != nil {
+		r.t.Fatalf("the document cannot be opened: %v", err)
+	}
+	var b strings.Builder
+	for _, it := range d.Content {
+		if it.Chars != nil {
+			b.WriteString(it.Chars.Text)
+		}
+	}
+	return b.String()
+}
+
+func testKey(b byte) []byte {
+	k, err := searchKey(bytes.Repeat([]byte{b}, 32), "m")
+	if err != nil {
+		panic(err)
+	}
+	return k
+}
+
+func refresh(t *testing.T, c *indexCache, v sealedVault, key []byte, r *rig) (docsearch.Result, bool) {
+	t.Helper()
+	view, _ := r.view()
+	res, loaded, err := c.refresh(context.Background(), v, "m", key, view)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res, loaded
+}
+
+// The sealed index kept at one visit is used at the next: nothing is read again but the documents that
+// changed, were added or removed, and the search finds the same words.
+func TestKeptIndexMeansOnlyChangedDocumentsAreRead(t *testing.T) {
+	r := newSearchRig(t)
+	vault, key := newVault(), testKey(1)
+	a := r.save("alpha", "the quick brown fox")
+	r.save("beta", "jumps over the lazy dog")
+	r.save("gamma", "pack my box with five dozen liquor jugs")
+
+	var first indexCache
+	res, loaded := refresh(t, &first, vault, key, r)
+	if loaded || res.Added != 3 {
+		t.Fatalf("first visit: loaded %v, %+v", loaded, res)
+	}
+	if len(vault.data) != 1 {
+		t.Fatalf("the index was not kept: %d entries", len(vault.data))
+	}
+
+	// A new visit: a fresh page state, the same storage.
+	r.mem.loads = 0
+	var second indexCache
+	res, loaded = refresh(t, &second, vault, key, r)
+	if !loaded || res.Added+res.Updated+res.Removed != 0 || res.Unchanged != 3 || r.mem.loads != 0 {
+		t.Fatalf("second visit: loaded %v, %+v, %d documents read", loaded, res, r.mem.loads)
+	}
+	if hits := second.ix.Search("lazy dog", 5); len(hits) != 1 || hits[0].Title != "beta" {
+		t.Fatalf("the kept index does not find the word: %+v", hits)
+	}
+
+	// One document is saved, one added, one removed between visits.
+	r.resave(a.ID, "alpha", "the quick brown cat")
+	r.save("delta", "sphinx of black quartz")
+	e, _ := r.saver.List(context.Background(), r.target)
+	for _, x := range e {
+		if x.Name == "gamma" {
+			if err := r.saver.Delete(context.Background(), r.target, x.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	r.mem.loads = 0
+	var third indexCache
+	res, loaded = refresh(t, &third, vault, key, r)
+	if !loaded || res.Added != 2 || res.Removed != 2 || r.mem.loads != 2 {
+		// the saver gives a saved document a new file, so a re-save is an add and a remove
+		t.Fatalf("third visit: loaded %v, %+v, %d documents read", loaded, res, r.mem.loads)
+	}
+	if len(third.ix.Search("fox", 5)) != 0 || len(third.ix.Search("cat", 5)) != 1 || len(third.ix.Search("quartz", 5)) != 1 || len(third.ix.Search("liquor", 5)) != 0 {
+		t.Fatal("the refreshed index is not in line with the documents")
+	}
+	// ...and what was kept after that is the refreshed index.
+	var fourth indexCache
+	if res, loaded := refresh(t, &fourth, vault, key, r); !loaded || res.Added+res.Updated+res.Removed != 0 {
+		t.Fatalf("the refreshed index was not kept: loaded %v, %+v", loaded, res)
+	}
+}
+
+// What is kept holds none of the words and no title, and an index that was changed, or sealed under
+// another key, is dropped and built again from the documents.
+func TestKeptIndexIsSealedAndATamperedOrForeignOneIsRebuilt(t *testing.T) {
+	r := newSearchRig(t)
+	vault, key := newVault(), testKey(1)
+	r.save("Confidential plans", "the zeppelin schedule")
+	var c indexCache
+	refresh(t, &c, vault, key, r)
+	kept := vault.data[keptName("m")]
+	if len(kept) == 0 {
+		t.Fatal("nothing kept")
+	}
+	for _, secret := range []string{"zeppelin", "schedule", "Confidential", "plans"} {
+		if bytes.Contains(kept, []byte(secret)) {
+			t.Fatalf("the kept index shows %q", secret)
+		}
+	}
+
+	// Changed: one byte flipped.
+	tampered := bytes.Clone(kept)
+	tampered[len(tampered)/2] ^= 0x01
+	vault.data[keptName("m")] = tampered
+	var d indexCache
+	res, loaded := refresh(t, &d, vault, key, r)
+	if loaded || res.Added != 1 || len(d.ix.Search("zeppelin", 3)) != 1 {
+		t.Fatalf("a tampered index: loaded %v, %+v", loaded, res)
+	}
+	if bytes.Equal(vault.data[keptName("m")], tampered) {
+		t.Fatal("the tampered index was left in place")
+	}
+
+	// Another key (another owner list, another device): it cannot be opened.
+	var e indexCache
+	res, loaded = refresh(t, &e, vault, testKey(2), r)
+	if loaded || res.Added != 1 {
+		t.Fatalf("a foreign index: loaded %v, %+v", loaded, res)
+	}
+	// ...and it is kept for the new key now, not the old.
+	var f indexCache
+	if _, loaded := refresh(t, &f, vault, testKey(2), r); !loaded {
+		t.Fatal("the rebuilt index was not kept under the new key")
+	}
+	var g indexCache
+	if _, loaded := refresh(t, &g, vault, key, r); loaded {
+		t.Fatal("the old key opened an index sealed under another")
+	}
+
+	// Rubbish and truncation.
+	for _, junk := range [][]byte{{}, []byte("GJSI1"), []byte("not an index at all")} {
+		vault.data[keptName("m")] = junk
+		var h indexCache
+		if res, loaded := refresh(t, &h, vault, key, r); loaded || res.Added != 1 {
+			t.Fatalf("junk %q: loaded %v, %+v", junk, loaded, res)
+		}
+	}
+}
+
+// Without a key (a locked encrypted store, a browser without a device key) nothing is read from or written
+// to the storage, and an index built under a key is not served any more.
+func TestNoKeyMeansNothingIsKeptOrKeptIndexServed(t *testing.T) {
+	r := newSearchRig(t)
+	vault, key := newVault(), testKey(1)
+	r.save("alpha", "the quick brown fox")
+	var c indexCache
+	refresh(t, &c, vault, key, r)
+	before := bytes.Clone(vault.data[keptName("m")])
+
+	r.save("beta", "a second document")
+	if res, loaded := refresh(t, &c, vault, nil, r); loaded || res.Added != 2 {
+		t.Fatalf("keyless: loaded %v, %+v: the kept index must not be used", loaded, res)
+	}
+	if !bytes.Equal(vault.data[keptName("m")], before) {
+		t.Fatal("a keyless search wrote the kept index")
+	}
+	empty := newVault()
+	var d indexCache
+	refresh(t, &d, empty, nil, r)
+	if len(empty.data) != 0 {
+		t.Fatal("a keyless search kept an index")
+	}
+	// Locking the store (key gone) drops the in-memory index of the encrypted store too.
+	var e indexCache
+	refresh(t, &e, vault, key, r)
+	if e.ix.Len() == 0 {
+		t.Fatal("no index")
+	}
+	view := docsearch.Subset(r.mem, nil) // every document gone, as seen without the key
+	if _, _, err := e.refresh(context.Background(), vault, "m", nil, view); err != nil {
+		t.Fatal(err)
+	}
+	if e.ix.Len() != 0 {
+		t.Fatal("the index built under a key is still served without it")
+	}
+}
+
+// The key of a place depends on the place and on the secret, and an empty secret makes none.
+func TestSearchKeyIsPerPlaceAndSecret(t *testing.T) {
+	s := bytes.Repeat([]byte{7}, 32)
+	a, _ := searchKey(s, "browser")
+	b, _ := searchKey(s, "server")
+	c, _ := searchKey(bytes.Repeat([]byte{8}, 32), "browser")
+	if len(a) != 32 || bytes.Equal(a, b) || bytes.Equal(a, c) {
+		t.Fatal("keys are not separated by place and secret")
+	}
+	if _, err := searchKey(nil, "browser"); err == nil {
+		t.Fatal("a key from no secret")
+	}
+	if keyTag(a) == keyTag(b) || strings.Contains(keyTag(a), string(a[:2])) {
+		t.Fatal("the key tag does not tell keys apart")
+	}
+}
+
+func plan(t *testing.T, r *rig, query, repl string) (*docsearch.Plan, map[string]string) {
+	t.Helper()
+	view, ids := r.view()
+	p, err := docsearch.PlanReplace(context.Background(), view, canvas.FindOptions{Query: query}, repl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p, ids
+}
+
+func keysOf(p *docsearch.Plan) []string {
+	var k []string
+	for _, c := range p.Changes {
+		k = append(k, c.ID)
+	}
+	return k
+}
+
+// A replacement across documents is written through the saver: the document opens with the new text
+// (its checksum is the saver's own), the history keeps the old text as a named version, and Undo puts the
+// old text back.
+func TestReplaceAcrossDocumentsKeepsTheOldTextAsAVersion(t *testing.T) {
+	ctx := context.Background()
+	r := newSearchRig(t)
+	a := r.save("alpha", "send it to Acme today")
+	b := r.save("beta", "Acme again")
+	r.save("gamma", "nothing to see")
+	p, ids := plan(t, r, "acme", "Globex")
+	if len(p.Changes) != 2 {
+		t.Fatalf("%d changes", len(p.Changes))
+	}
+	done, conflicts, err := applyReplace(ctx, r.saver, r.target, "Sam", "Before replace", p, ids, keysOf(p))
+	if err != nil || len(done) != 2 || len(conflicts) != 0 {
+		t.Fatalf("%v %d %v", err, len(done), conflicts)
+	}
+	if got := r.text(a.ID); got != "send it to Globex today" {
+		t.Fatalf("alpha opens with %q", got)
+	}
+	if got := r.text(b.ID); got != "Globex again" {
+		t.Fatalf("beta opens with %q", got)
+	}
+	vs, err := r.saver.Versions(ctx, r.target, a.ID)
+	if err != nil || len(vs) != 1 {
+		t.Fatalf("versions %v %v", vs, err)
+	}
+	if vs[0].Name != "Before replace" || vs[0].Author != "Sam" {
+		t.Fatalf("the version is %+v", vs[0])
+	}
+	old, err := r.saver.LoadVersion(ctx, r.target, vs[0].Key)
+	if err != nil || old.Content[0].Chars.Text != "send it to Acme today" {
+		t.Fatalf("the version does not keep the old text: %v %+v", err, old.Content)
+	}
+	if rep, err := r.saver.Verify(ctx, r.target); err != nil || len(rep.Lost) != 0 || len(rep.Restored) != 0 {
+		t.Fatalf("the saver finds the store damaged: %v %+v", err, rep)
+	}
+
+	restored, kept, err := undoReplace(ctx, r.saver, r.target, done)
+	if err != nil || restored != 2 || kept != 0 {
+		t.Fatalf("undo: %v %d %d", err, restored, kept)
+	}
+	if got := r.text(a.ID); got != "send it to Acme today" {
+		t.Fatalf("alpha after undo: %q", got)
+	}
+}
+
+// A document saved after the preview is not overwritten, and one saved after the replacement is not
+// reverted by Undo.
+func TestReplaceAndUndoNeverOverwriteALaterSave(t *testing.T) {
+	ctx := context.Background()
+	r := newSearchRig(t)
+	a := r.save("alpha", "Acme one")
+	b := r.save("beta", "Acme two")
+	p, ids := plan(t, r, "acme", "Globex")
+	r.resave(a.ID, "alpha", "Acme one, edited meanwhile")
+	done, conflicts, err := applyReplace(ctx, r.saver, r.target, "", "Before replace", p, ids, keysOf(p))
+	if err != nil || len(done) != 1 || len(conflicts) != 1 {
+		t.Fatalf("%v %d %v", err, len(done), conflicts)
+	}
+	if got := r.text(a.ID); got != "Acme one, edited meanwhile" {
+		t.Fatalf("a document saved since the preview was overwritten: %q", got)
+	}
+	if vs, _ := r.saver.Versions(ctx, r.target, a.ID); len(vs) != 0 {
+		t.Fatal("a version was written for a document that was not replaced")
+	}
+	r.resave(b.ID, "beta", "Globex two, then typed on")
+	restored, kept, err := undoReplace(ctx, r.saver, r.target, done)
+	if err != nil || restored != 0 || kept != 1 {
+		t.Fatalf("undo: %v %d %d", err, restored, kept)
+	}
+	if got := r.text(b.ID); got != "Globex two, then typed on" {
+		t.Fatalf("undo threw away a later save: %q", got)
+	}
+}
