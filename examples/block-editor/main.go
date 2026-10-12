@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/elaous/gojiberry/crdt"
@@ -9,6 +10,14 @@ import (
 )
 
 func main() {
+	if err := run(os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+// run plays the two-replica scenario and writes both replicas' views to out.
+func run(out io.Writer) error {
 	phone := crdt.NewDoc("ana-phone")
 	desktop := crdt.NewDoc("ana-desktop")
 
@@ -30,14 +39,14 @@ func main() {
 	desktop.Apply(phoneOps...)
 
 	for _, doc := range []*crdt.Doc{phone, desktop} {
-		if err := render(doc); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+		if err := render(out, doc); err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
-func render(doc *crdt.Doc) error {
+func render(out io.Writer, doc *crdt.Doc) error {
 	blocks := doc.Blocks()
 
 	editorHTML, err := xango.RenderString(Editor(EditorProps{Blocks: blocks}))
@@ -49,9 +58,15 @@ func render(doc *crdt.Doc) error {
 		return fmt.Errorf("output render error: %w", err)
 	}
 
-	fmt.Println("--- editor (thumb-friendly data entry) ---")
-	fmt.Println(editorHTML)
-	fmt.Println("--- output (clean final document) ---")
-	fmt.Println(outputHTML)
-	return nil
+	_, err = fmt.Fprintln(out, "--- editor (thumb-friendly data entry) ---")
+	if err == nil {
+		_, err = fmt.Fprintln(out, editorHTML)
+	}
+	if err == nil {
+		_, err = fmt.Fprintln(out, "--- output (clean final document) ---")
+	}
+	if err == nil {
+		_, err = fmt.Fprintln(out, outputHTML)
+	}
+	return err
 }
