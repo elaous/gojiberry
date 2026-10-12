@@ -115,6 +115,17 @@ message ImageItem {
   bool decorative = 10;
 }
 
+message MediaItem {
+  string u_r_l = 1;
+  string kind = 2;
+  string title = 3;
+  string captions = 4;
+  string captions_u_r_l = 5;
+  string transcript = 6;
+  double width = 7;
+  double height = 8;
+}
+
 message Item {
   Chars chars = 1;
   Columns columns = 2;
@@ -126,6 +137,7 @@ message Item {
   RuleItem rule = 8;
   TableItem table = 9;
   ImageItem image = 10;
+  MediaItem media = 11;
 }
 
 message StyleDef {
