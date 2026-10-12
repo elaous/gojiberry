@@ -33,6 +33,9 @@ func (u *ui) serverStore() (saver.Target, bool) {
 // applyServerTarget makes the server a save target while a server is confirmed, and removes it when the
 // person forgets the server. It draws nothing (the page is not drawn yet when it first runs).
 func (u *ui) applyServerTarget() {
+	if encTarget == "server" {
+		return // the encrypted store on the server is the server target
+	}
 	if t, ok := u.serverStore(); ok {
 		u.saver.Saver.AddTarget(t)
 		return
@@ -43,6 +46,10 @@ func (u *ui) applyServerTarget() {
 // syncServerTarget follows a change of the confirmed server: the target comes or goes, and when the
 // saver was on the server it goes back to the browser (a document saved there stays there).
 func (u *ui) syncServerTarget() {
+	if encTarget == "server" {
+		u.enc.render()
+		return // the encrypted store's own target stays; changing the server takes effect at the next load
+	}
 	if _, ok := u.serverStore(); !ok {
 		if where, _ := u.saver.Where(); where == serverTarget {
 			u.saver.Pending.Run(func(ctx context.Context) error {

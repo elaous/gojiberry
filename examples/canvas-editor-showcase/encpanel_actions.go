@@ -97,10 +97,10 @@ func (e *encUI) forgetPasskey() {
 // afterUnlock shows the real names of the confidential documents and folders now that they can
 // be read, on the target in use.
 func (u *ui) afterUnlock(ctx context.Context) error {
-	if t, _ := u.saver.Where(); t != "browser" {
+	if t, _ := u.saver.Where(); t != encTarget {
 		return nil
 	}
-	list, trashed, folders, err := u.saver.Saver.Overview(ctx, "browser")
+	list, trashed, folders, err := u.saver.Saver.Overview(ctx, encTarget)
 	if err != nil {
 		return err
 	}
@@ -300,7 +300,7 @@ func (u *ui) encDisable() {
 		if !e.store.Unlocked() {
 			return errors.New(T("enc.unlockFirst", "Unlock the store first: turning encryption off decrypts what is saved."))
 		}
-		list, trashed, folders, err := u.saver.Saver.Overview(ctx, "browser")
+		list, trashed, folders, err := u.saver.Saver.Overview(ctx, encTarget)
 		if err != nil {
 			return err
 		}
