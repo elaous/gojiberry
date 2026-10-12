@@ -23,3 +23,5 @@ Hand-written notes:
 
 - `xango-canvas.md` -- how xango (function props, generic components, a
   possible `canvas/xango` renderer) can drive the canvas components.
+- `deploy.md` -- deploying a wasm app: precompressed `.gz`/`.br`, the `application/wasm` type,
+  cache headers, and nginx, Caddy and Go server settings (`make showcase-dist`).
