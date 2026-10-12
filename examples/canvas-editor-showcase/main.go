@@ -241,6 +241,8 @@ func main() {
 	u.enc.swap = u.encSwap
 	u.enc.dir.ask = u.saver.Asker.AskWith
 	u.enc.dir.render = u.enc.render
+	u.enc.dir.changed = u.syncServerTarget
+	u.applyServerTarget() // a server confirmed on an earlier visit is a target from the start
 	u.enc.dir.loadOwner() // now that the page can be drawn again, the owner key kept out of reach can be loaded
 	u.watchEncConfig()
 	u.saver.ProtectionAvailable = func(target string) bool { return target == "browser" && u.enc.store.Enabled() }

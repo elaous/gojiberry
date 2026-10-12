@@ -22,7 +22,9 @@ import (
 // encPeopleOrNone is encPeople, or nothing while encryption is off.
 func (u *ui) encPeopleOrNone() xango.Node {
 	if !u.enc.store.Enabled() {
-		return xango.Frag()
+		// Without encryption there are no keys to show, but the server is still set here: it is also
+		// where documents can be saved to (Save tab, "Save to").
+		return xango.Frag(u.enc.dir.settingsPanel(u.enc)...)
 	}
 	return u.encPeople()
 }
