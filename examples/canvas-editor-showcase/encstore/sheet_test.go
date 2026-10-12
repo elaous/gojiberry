@@ -1,9 +1,13 @@
 package encstore
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	"rsc.io/qr"
 )
 
 func TestRecoverySheetHoldsTheKeyAsPlainEscapedText(t *testing.T) {
@@ -49,6 +53,91 @@ func TestCheckDue(t *testing.T) {
 	} {
 		if got := CheckDue(now, c.checked, c.snz, ReminderEvery); got != c.due {
 			t.Errorf("%s: %v, want %v", c.name, got, c.due)
+		}
+	}
+}
+
+// gridOf reads the squares of RecoveryQR's SVG back into a grid, so the drawing is checked against the code.
+func gridOf(t *testing.T, svg string, size int) [][]bool {
+	t.Helper()
+	i := strings.Index(svg, `<path d="`)
+	if i < 0 {
+		t.Fatal("no path")
+	}
+	d := svg[i+len(`<path d="`):]
+	d = d[:strings.Index(d, `"`)]
+	grid := make([][]bool, size)
+	for y := range grid {
+		grid[y] = make([]bool, size)
+	}
+	for _, seg := range strings.Split(d, "z") {
+		if seg == "" {
+			continue
+		}
+		var x, y, w, w2 int
+		if n, err := fmt.Sscanf(seg, "M%d %dh%dv1h-%d", &x, &y, &w, &w2); n != 4 || err != nil || w != w2 {
+			t.Fatalf("segment %q: %v", seg, err)
+		}
+		for k := range w {
+			grid[y-4][x-4+k] = true
+		}
+	}
+	return grid
+}
+
+func TestRecoveryQRDrawsTheCodeOfTheKeyAndNothingElse(t *testing.T) {
+	_, secret, err := NewRecoveryKey("Recovery key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svg, err := RecoveryQR(secret, `QR <code> of "the" key`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, _ := qr.Encode(secret, qr.M)
+	grid := gridOf(t, svg, code.Size)
+	for y := range code.Size {
+		for x := range code.Size {
+			if grid[y][x] != code.Black(x, y) {
+				t.Fatalf("module (%d,%d) differs from the code", x, y)
+			}
+		}
+	}
+	n := code.Size + 8 // four modules of quiet zone on every side
+	for _, want := range []string{fmt.Sprintf(`viewBox="0 0 %d %d"`, n, n), `role="img"`, `aria-label="QR &lt;code&gt; of &#34;the&#34; key"`, `<title>QR &lt;code&gt; of &#34;the&#34; key</title>`, `fill="#fff"`} {
+		if !strings.Contains(svg, want) {
+			t.Errorf("lacks %q in %.200s", want, svg)
+		}
+	}
+	for _, bad := range []string{"http://", "https://", "href", "<script", "<image", "url("} {
+		if strings.Contains(svg, bad) {
+			t.Errorf("refers outside itself: %q", bad)
+		}
+	}
+	if _, err := RecoveryQR("  ", "x"); !errors.Is(err, ErrNotAKey) {
+		t.Fatalf("%v", err)
+	}
+	if _, err := RecoveryQR(strings.Repeat("x", 5000), "x"); err == nil {
+		t.Fatal("a key too long for a QR code is an error, not a broken picture")
+	}
+}
+
+func TestRecoverySheetHasTheQRCodeOnlyWhenAsked(t *testing.T) {
+	_, secret, _ := NewRecoveryKey("Recovery key")
+	fp, _ := RecoveryFingerprint(secret)
+	text := SheetText{Title: "T", Intro: "i", KeyLabel: "Key", Finger: "F", Keep: "k", Lost: "l", Print: "p"}
+	without := string(RecoverySheet(text, "", secret, fp))
+	if strings.Contains(without, "<svg") {
+		t.Fatal("no QR text, no code")
+	}
+	text.QRAlt = "QR code of the key"
+	with := string(RecoverySheet(text, "", secret, fp))
+	if !strings.Contains(with, "<svg") || !strings.Contains(with, secret) {
+		t.Fatal("the code is added and the key stays as text")
+	}
+	for _, bad := range []string{"http://", "https://", "src=", "href=", "@import", "url("} {
+		if strings.Contains(with, bad) {
+			t.Errorf("the sheet refers outside itself: %q", bad)
 		}
 	}
 }

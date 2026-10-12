@@ -798,6 +798,7 @@
   "sync.connecting": "Conectando con el documento compartido…",
   "sync.offlinePending#one": "Sin conexión: %d cambio esperando enviarse",
   "sync.offlinePending#other": "Sin conexión: %d cambios esperando enviarse",
-  "sync.offline": "Sin conexión: sus cambios se compartirán cuando vuelva la conexión"
+  "sync.offline": "Sin conexión: sus cambios se compartirán cuando vuelva la conexión",
+  "enc.sheetQR": "Código QR de la clave de recuperación. La misma clave está escrita arriba; al escanearlo se pasa a otro dispositivo."
  }
 }
