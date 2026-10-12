@@ -1,6 +1,7 @@
 package export
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -82,8 +83,55 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 		}
 		body.WriteString(pre + rtfInline(b.Segments) + `\par}` + "\n")
 	}
+	// The sheet and margins, and the running header and footer (the page number a PAGE field and the
+	// page count a NUMPAGES field).
+	layout := ""
+	if snap.PageWidth > 0 && snap.PageHeight > 0 {
+		layout = fmt.Sprintf(`\paperw%d\paperh%d\margl%d\margr%d\margt%d\margb%d`+"\n",
+			rtfPxToTwips(snap.PageWidth), rtfPxToTwips(snap.PageHeight), rtfPxToTwips(snap.MarginLeft), rtfPxToTwips(snap.MarginRight), rtfPxToTwips(snap.MarginTop), rtfPxToTwips(snap.MarginBottom))
+	}
+	if snap.Header != "" {
+		layout += rtfDecor("header", snap.Header, snap.Title, contentWidthTwips) + "\n"
+	}
+	if snap.Footer != "" {
+		layout += rtfDecor("footer", snap.Footer, snap.Title, contentWidthTwips) + "\n"
+	}
 	return []byte(`{\rtf1\ansi\deff0{\fonttbl{\f0 Helvetica;}{\f1 Courier New;}}\fs24` + "\n" +
-		body.String() + "}\n"), nil
+		layout + body.String() + "}\n"), nil
+}
+
+// rtfDecor is a header or footer group ("header" or "footer") for a header text with fields: the left,
+// centre and right parts sit on tab stops at the middle and the right edge of the text.
+func rtfDecor(group, text, title string, width int) string {
+	l, c, r := decorParts(text)
+	part := func(s string) string {
+		var sb strings.Builder
+		for rest := s; rest != ""; {
+			i := strings.IndexByte(rest, '{')
+			if i < 0 {
+				sb.WriteString(escapeRTFText(rest))
+				break
+			}
+			sb.WriteString(escapeRTFText(rest[:i]))
+			rest = rest[i:]
+			switch {
+			case strings.HasPrefix(rest, fieldPage):
+				sb.WriteString(`{\field{\*\fldinst PAGE}{\fldrslt 1}}`)
+				rest = rest[len(fieldPage):]
+			case strings.HasPrefix(rest, fieldPages):
+				sb.WriteString(`{\field{\*\fldinst NUMPAGES}{\fldrslt 1}}`)
+				rest = rest[len(fieldPages):]
+			case strings.HasPrefix(rest, fieldTitle):
+				sb.WriteString(escapeRTFText(title))
+				rest = rest[len(fieldTitle):]
+			default:
+				sb.WriteString(escapeRTFText("{"))
+				rest = rest[1:]
+			}
+		}
+		return sb.String()
+	}
+	return fmt.Sprintf(`{\%s\pard\tqc\tx%d\tqr\tx%d\fs18 `, group, width/2, width) + part(l) + `\tab ` + part(c) + `\tab ` + part(r) + `\par}`
 }
 
 // rtfPxToTwips converts one of Snapshot's own CSS-px geometry values
