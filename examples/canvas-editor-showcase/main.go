@@ -87,6 +87,8 @@ type ui struct {
 	find                findState
 	a11ySig             string
 	a11yCache           []components.A11yBlock
+	mirrorWriting       bool   // the copy is being given a selection by the page (not by a reader)
+	mirrorSig, mirrorAt string // where the caret was in the copy when last drawn, and the key of the caret last followed
 	announcement        string
 	spell               spellState
 	lang                langState
@@ -606,7 +608,10 @@ func main() {
 				readBar(u, renderUI),
 				xango.El("div", []xango.Attr{xango.A("id", "canvas-host")}),
 				u.suggestionsNode(renderUI),
-				components.AccessibleText(components.AccessibleTextProps{Blocks: append(u.a11yBlocks(flow, u.title), a11yObjects(root)...), Selection: selectedText(flow), Lang: u.docLang}),
+				components.AccessibleText(components.AccessibleTextProps{
+					Blocks: u.mirrorBlocks(flow, root), Comments: mirrorComments(flow), Selection: selectedText(flow), Lang: u.docLang,
+					OnGoto: goToHeading(func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw),
+				}),
 				components.Announcer(u.announcement)),
 			Sidebar: &side, StatusBar: &bar,
 		})
@@ -730,6 +735,16 @@ func main() {
 				renderUI()
 			}
 		}
+		if sig := u.mirrorSignature(flow); sig != u.mirrorSig {
+			u.mirrorSig = sig // the caret is in another block, or the selection or the comments changed
+			renderUI()
+		}
+		if flow != nil {
+			if cs := flow.Cursors()[0]; fmt.Sprint(cs.Anchor, cs.Caret) != u.mirrorAt {
+				u.mirrorAt = fmt.Sprint(cs.Anchor, cs.Caret)
+				u.followCaret(flow, u.a11yCache)
+			}
+		}
 		var stats canvas.FlowStats
 		columnCount := 0
 		columnCfg := map[string]any{}
@@ -809,6 +824,7 @@ func main() {
 		},
 	}
 	u.sugg.reopen = func(quiet bool) { u.openSuggestions(flow, stage, canvasEl.Element, quiet, renderUI) }
+	u.watchMirrorSelection(func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
 	u.watchSuggestionKeys(inputEl.Element, func() *canvas.TextFlow { return flow }, redraw, renderUI)
 	state.Live = liveProps(u, &state, origin, renderCanvas, renderUI)
 	renderCanvas()

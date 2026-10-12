@@ -33,6 +33,8 @@ const (
 type Format struct {
 	Bold, Italic, Underline, Strikethrough, Superscript, Subscript bool
 	Href                                                           string
+	// Comment is the IDs (comma separated) of the comments on the run, "" for none.
+	Comment string
 	// NoteRef is the number of the footnote this run is the mark of (0 for none): the exports that can
 	// link the mark to its note, and the note back to the mark, do so.
 	NoteRef int
@@ -90,6 +92,14 @@ type Segment struct {
 // otherwise, mirroring BlockMeta's own "fields only some kinds use"
 // shape.
 type Block struct {
+	// Start is where the block's first rune falls in the editor's text stream (canvas.TextFlow.EditText,
+	// counted in runes; an inline object such as a picture, a rule, a table or a footnote mark is one
+	// rune), -1 for a block the exporter made up (the notes at the end), and of a table cell the place of
+	// the table. It is that of the document passed in, so with FromDocument (suggested removals left
+	// out) it counts what the stream no longer has. Lead is how many runes at the start of the first
+	// segment are not in the stream (the box of a check-list item). The accessible copy uses them to
+	// map the caret to its text and back.
+	Start, Lead  int
 	Kind         BlockKind
 	Level        int
 	ImageSrc     string
