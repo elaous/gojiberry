@@ -68,3 +68,13 @@ Copy this table into the release notes (or the release issue) for each release.
 | | | NVDA + Firefox | | | |
 | | | JAWS + Chrome | | | |
 | | | VoiceOver + Safari | | | |
+
+## 3. The test screen reader: `internal/screenreader`
+
+`internal/screenreader` reads a page the way a screen reader's browse mode does, from the browser's
+accessibility tree (the same tree NVDA, JAWS and VoiceOver consume), through chromedp. A test can
+move by heading, landmark, link, button, table or form field, read the whole page, press Tab and hear
+what gets focus, and watch live regions. Each stop is a phrase such as `Name, edit text, Ana, required`.
+It also reports unlabelled controls and skipped heading levels. It finds missing names, wrong roles and
+bad reading order early; it does not replace the manual run in section 2, since real screen readers
+differ in what they say.
