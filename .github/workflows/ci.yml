@@ -19,9 +19,23 @@ name: CI
 # restore `push:` and `pull_request:` under `on:`.
 on:
   workflow_dispatch:
+    inputs:
+      run:
+        description: "What to run"
+        type: choice
+        default: all
+        options:
+          - all
+          - fast-checks
+          - a11y
+          - mailpit
+          - grammar
+          - postgres
+          - mongodb
 
 jobs:
   fast-checks:
+    if: ${{ inputs.run == 'all' || inputs.run == 'fast-checks' }}
     name: Build, vet, gofmt, test, lint (native + wasm)
     runs-on: ubuntu-latest
     # contents: write only matters for the "Update coverage badge" step
@@ -70,11 +84,6 @@ jobs:
       - name: make wasm-size
         run: make wasm-size
 
-      # The accessibility gate: axe-core and the keyboard tests in a real browser (the runner's
-      # Chrome). It fails, rather than skips, if no browser is found.
-      - name: make a11y-test
-        run: make a11y-test
-
       # Rewrites README.md's own coverage badge line (a static
       # img.shields.io URL, not a self-hosted SVG -- see
       # gen-coverage-badge.sh's own doc comment for why) from this
@@ -100,6 +109,33 @@ jobs:
           git commit -m "ci: update coverage badge [skip ci]"
           git push
 
+  # The accessibility gate: axe-core over the page in every state, and the keyboard and reading-copy
+  # tests, in the runner's Chrome (ubuntu-latest has google-chrome). It fails, rather than skips, if no
+  # browser is found. Also runnable on this machine: `make a11y-test`, `make ci-local STEPS=a11y-test`.
+  a11y:
+    if: ${{ inputs.run == 'all' || inputs.run == 'a11y' }}
+    name: Accessibility gate (axe-core and keyboard tests in Chrome)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Which browser
+        run: |
+          for b in chromium chromium-browser google-chrome google-chrome-stable; do
+            if command -v "$b" >/dev/null; then echo "using $b"; "$b" --version; exit 0; fi
+          done
+          echo "no Chrome or Chromium on this runner"
+          exit 1
+
+      - name: make a11y-test
+        run: make a11y-test
+
   grammar-test:
     name: vscode-xango grammar suite
     runs-on: ubuntu-latest
@@ -108,7 +144,7 @@ jobs:
     # established yet) -- gated to the events that actually need it,
     # the same way OnDesign's own e2e job is, to keep this off every
     # incremental branch push and save free-tier minutes.
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: ${{ inputs.run == 'all' || inputs.run == 'grammar' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -127,9 +163,11 @@ jobs:
       - name: make grammar-test
         run: make grammar-test
 
-  # The SMTP sender is tested against real Mailpit servers (the axllent/mailpit image, started by the
-  # script on the runner's Docker); the script fails on a skipped test.
+  # The SMTP sender is tested against real Mailpit servers: the axllent/mailpit Docker image, started
+  # twice by .github/scripts/mailpit-test.sh on the runner's Docker (STARTTLS with sign-in, and plain on
+  # loopback). The script fails on a skipped test. MAILPIT_IMAGE can pin another tag of the image.
   mail-mailpit:
+    if: ${{ inputs.run == 'all' || inputs.run == 'mailpit' }}
     name: mail tests against Mailpit
     runs-on: ubuntu-latest
     steps:
@@ -147,6 +185,7 @@ jobs:
   # The canvas-app dev server tests need a real PostgreSQL and skip without one (a skip prints "ok" and
   # hid a stale assertion once). A service container is cheap, so run them here and fail on any skip.
   canvas-app-postgres:
+    if: ${{ inputs.run == 'all' || inputs.run == 'postgres' }}
     name: canvas-app tests against PostgreSQL
     runs-on: ubuntu-latest
     services:
@@ -189,6 +228,7 @@ jobs:
   # The MongoDB backend tests need a real MongoDB and skip without one (a skip prints "ok"). Run them against a
   # service container and fail on any skip.
   mongo-backend:
+    if: ${{ inputs.run == 'all' || inputs.run == 'mongodb' }}
     name: docstore MongoDB backend tests
     runs-on: ubuntu-latest
     services:
