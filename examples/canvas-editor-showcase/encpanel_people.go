@@ -60,8 +60,19 @@ func parseRecipient(text string) (encrypt.Recipient, error) {
 func (e *encUI) ownerRows() []components.RecipientRow {
 	rows := recipientRows(e.store.Recipients())
 	used := lastUsedHere()
+	if encTarget == "server" && e.store.Unlocked() && !e.usesLoaded {
+		e.usesLoaded = true
+		go e.refreshDeviceUses(context.Background())
+	}
 	for i := range rows {
-		if t, ok := used[rows[i].Fingerprint]; ok {
+		if u, ok := e.deviceUses[rows[i].Fingerprint]; ok && encTarget == "server" {
+			// A record in the store says it for every device that shares it.
+			device := u.Device
+			if device == "" {
+				device = T("enc.anotherDevice", "a device without a name")
+			}
+			rows[i].Detail = T("enc.lastUsedOn", "Last used on %s: %s", device, u.At.Local().Format("2006-01-02 15:04"))
+		} else if t, ok := used[rows[i].Fingerprint]; ok {
 			rows[i].Detail = T("enc.lastUsedHere", "Last used in this browser: %s", t.Format("2006-01-02"))
 		} else {
 			rows[i].Detail = T("enc.neverUsedHere", "Not used in this browser")
@@ -73,6 +84,34 @@ func (e *encUI) ownerRows() []components.RecipientRow {
 		}
 	}
 	return rows
+}
+
+// refreshDeviceUses reads the records of when each key last unlocked the store, from every device
+// that shares it, and draws the list again.
+func (e *encUI) refreshDeviceUses(ctx context.Context) {
+	uses, err := e.store.DeviceUses(ctx)
+	if err != nil {
+		return
+	}
+	m := make(map[string]encrypt.DeviceUse, len(uses))
+	for _, u := range uses {
+		m[u.Fingerprint] = u
+	}
+	e.deviceUses = m
+	e.render()
+}
+
+// deviceLabelNodes is the field that names this device in the records other devices read (only for a
+// store on a server, where there are other devices).
+func (e *encUI) deviceLabelNodes() []xango.Node {
+	if encTarget != "server" {
+		return nil
+	}
+	return []xango.Node{xango.El("label", []xango.Attr{xango.A("style", "display:block;font-size:12px;margin:6px 0")},
+		xango.Text(T("enc.deviceLabel", "Name this device (your other devices see it next to the keys it used)")),
+		xango.El("input", []xango.Attr{xango.A("type", "text"), xango.A("id", "enc-device-label"), xango.A("maxlength", "60"), xango.A("value", lsGet(deviceLabelKey)),
+			xango.A("autocomplete", "off"), xango.A("style", "width:100%;box-sizing:border-box"),
+			xango.On("input", func(ev xango.Event) { lsSet(deviceLabelKey, xango.EventValue[string](ev)) })}))}
 }
 
 // refreshShared reads the current document's list of keys (and whether it is confidential) in the
@@ -89,7 +128,7 @@ func (u *ui) refreshShared() {
 		ctx := context.Background()
 		conf, rows := false, []components.RecipientRow(nil)
 		if id != "" {
-			if en, err := u.saver.Saver.Get(ctx, "browser", id); err == nil {
+			if en, err := u.saver.Saver.Get(ctx, encTarget, id); err == nil {
 				conf = en.Protection == saver.ProtectionE2EE
 			}
 			if sh, err := e.store.Sharing(); err == nil && conf {
@@ -211,6 +250,8 @@ func (u *ui) encPeople() xango.Node {
 	}
 	nodes := []xango.Node{components.Recipients(props)}
 	nodes = append(nodes, e.rekeyProgress()...)
+	nodes = append(nodes, e.deviceLabelNodes()...)
+	nodes = append(nodes, u.keyListNodes()...)
 	nodes = append(nodes, e.dir.settingsPanel(e)...)
 	if note != "" {
 		nodes = append([]xango.Node{para("enc-people-note", note, false)}, nodes...)
@@ -310,11 +351,9 @@ func (e *encUI) commitRecoveryKey(ctx context.Context) error {
 
 // trustedListsKey is where the digests of the key lists the person confirmed (or that a passkey or a
 // recovery key opened) are kept in this browser: a known-hosts file for stores.
-const trustedListsKey = "showcase-enc:trusted-lists"
 
 // keysUsedKey is where the time each key last unlocked the store in this browser is kept: a map from a
 // key's fingerprint to an RFC 3339 time. It says what this browser saw, not what happened elsewhere.
-const keysUsedKey = "showcase-enc:keys-used"
 
 func lastUsedHere() map[string]time.Time {
 	out := map[string]time.Time{}
@@ -358,6 +397,16 @@ func (e *encUI) hookStore() {
 		raw[fp] = time.Now().UTC().Format(time.RFC3339)
 		b, _ := json.Marshal(raw)
 		lsSet(keysUsedKey, string(b))
+		if encTarget == "server" {
+			// The store is on a server that other devices use too: leave a record of this use in it (encrypted
+			// to the store's keys), so each device can say when the others last used each key.
+			go func() {
+				ctx := context.Background()
+				if err := e.store.RecordUse(ctx, o, lsGet(deviceLabelKey), time.Now()); err == nil {
+					e.refreshDeviceUses(ctx)
+				}
+			}()
+		}
 	}
 	e.store.Progress = func(done, total int) {
 		e.rekeyDone, e.rekeyTotal = done, total
