@@ -119,7 +119,7 @@ type AuthConfig struct {
 // (besides AUTH_BASE_URL's own).
 func ConfigFromEnv() Config {
 	cfg := Config{
-		Guard:         guard.FromEnvWith("GOJIBERRY_DOCSTORE", guard.Options{Public: []string{"/health"}, TokenHeader: "X-Gojiberry-Token"}),
+		Guard:         guard.FromEnvWith("GOJIBERRY_DOCSTORE", guard.Options{Public: []string{"/health"}, TokenHeader: "X-Gojiberry-Token", Headers: "Content-Type, Authorization, " + ShareHeader}),
 		Addr:          envOr("GOJIBERRY_DOCSTORE_ADDR", ":8090"),
 		Backend:       envOr("GOJIBERRY_DOCSTORE_BACKEND", "memory"),
 		BackendConfig: json.RawMessage(os.Getenv("GOJIBERRY_DOCSTORE_BACKEND_CONFIG")),
@@ -321,6 +321,10 @@ type Server struct {
 	// prefixes of ids the server keeps for itself (Hide).
 	extra  []extraRoute
 	hidden []string // lowercased (Hide)
+	// now is the clock of share link deadlines (time.Now if nil; WithClock); aclMu serializes the
+	// changes of share links, which read an access list and write it back.
+	now   func() time.Time
+	aclMu sync.Mutex
 	// telemetry holds the totals of the usage receiver (WithTelemetry).
 	telemetry *telemetry.Counters
 	// usage is the bounded series of the usage counters (usageseries.go); usageClock replaces
