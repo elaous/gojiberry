@@ -8,8 +8,10 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"unicode/utf16"
 
+	"github.com/elaous/gojiberry/lang"
 	"github.com/signintech/gopdf"
 )
 
@@ -26,8 +28,17 @@ import (
 //     streams, plus the structure objects, a new cross-reference section and trailer. The original bytes
 //     are not moved.
 //
-// Not covered: link annotations are not in the tree (a checker such as veraPDF reports them), and lists
-// are not nested (a nested item is a sibling item). pdfua.Check shows what is there.
+// Links, languages and nesting:
+//
+//   - A link run is its own marked piece (a Link element); the link annotation gopdf adds is found in
+//     the page's /Annots in the same order, gets a /StructParent key and a /Contents, and the Link
+//     element holds the text and an /OBJR to the annotation, so the annotation is in the tree.
+//   - A run whose Format.Lang differs from the document's is a Span element (a Link element for a link)
+//     with its own /Lang; the document's language stays on the catalog. Table cells do not yet split
+//     their text into language spans.
+//   - A list item at a deeper Block.Level puts its L inside the LI of the item before it.
+//
+// pdfua.Check shows what is there; a full audit with veraPDF or PAC has not been run.
 
 const (
 	markBegin    = 7777
@@ -48,17 +59,20 @@ const (
 	tagCaption
 	tagTH
 	tagTD
+	tagLink // a = the run's language (index+1 in pdfRunLangs, 0 for none)
+	tagSpan // a = the same
 )
 
 var tagNames = map[int]string{
 	tagP: "P", tagH1: "H1", tagH2: "H2", tagH3: "H3", tagQuote: "BlockQuote", tagLbl: "Lbl", tagLBody: "LBody",
-	tagFigure: "Figure", tagCaption: "Caption", tagTH: "TH", tagTD: "TD",
+	tagFigure: "Figure", tagCaption: "Caption", tagTH: "TH", tagTD: "TD", tagLink: "Link", tagSpan: "Span",
 }
 
 // pdfTag says what the next marked piece of content is. id names the structure element (all the pieces
 // with the same kind and id belong to one element); a and b carry what the kind needs: for a list item
-// a is 1 when numbered, for a table cell a is the table (the index of its first cell) and b the
-// row*65536+column.
+// a is 1 when numbered and b the nesting level, for a table cell a is the table (the index of its first
+// cell) and b the row*65536+column. A Link or Span piece belongs to the block piece opened before it
+// and has no id.
 type pdfTag struct{ kind, id, a, b int }
 
 func pdfMarkBegin(pdf *gopdf.GoPdf, t pdfTag) {
@@ -76,9 +90,21 @@ var markRE = regexp.MustCompile(`\[(7777|7778|7779)\.00((?: \d+\.00){0,4})\] 0\.
 // piece is one marked stretch of content: which element it belongs to and where it is.
 type piece struct{ page, mcid int }
 
+// kid is one child of an element in reading order: a piece of marked content or an inner element (a
+// Link or Span inside a paragraph).
+type kid struct {
+	p     piece
+	child *elem
+}
+
 type elem struct {
 	tag    pdfTag
 	pieces []piece
+	kids   []kid
+	node   *node
+	// For a Link: the annotation object, its /StructParent key and its /URI as a PDF string.
+	annot, key int
+	href       string
 }
 
 type node struct {
@@ -110,6 +136,8 @@ var (
 	contentsRE = regexp.MustCompile(`/Contents\s+(\d+) 0 R`)
 	sizeRE     = regexp.MustCompile(`/Size (\d+)`)
 	startRE    = regexp.MustCompile(`startxref\n(\d+)\n`)
+	annotsRE   = regexp.MustCompile(`/Annots\s*\[([^\]]*)\]`)
+	uriRE      = regexp.MustCompile(`/URI\s*(\((?:\\.|[^\\)])*\))`)
 )
 
 // streamOf returns the data of a stream object and the dictionary text before it.
@@ -175,6 +203,9 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 	}
 	size, _ := strconv.Atoi(string(sm[1]))
 	next := size
+	langs := pdfRunLangs(snap)
+	nextKey := len(pageObjs) // /StructParent keys of annotations follow the pages' keys
+	var linkElems []*elem
 
 	var elems []*elem
 	byKey := map[[2]int]*elem{}
@@ -209,7 +240,8 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 		mcid := 0
 		var out bytes.Buffer
 		last := 0
-		var current *elem
+		var current, outer *elem
+		var pageLinks []*elem
 		for _, loc := range markRE.FindAllSubmatchIndex(content, -1) {
 			out.Write(content[last:loc[0]])
 			last = loc[1]
@@ -235,14 +267,27 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 				if !known {
 					return nil, fmt.Errorf("export: tagging the PDF: unknown marker kind %d", t.kind)
 				}
-				key := [2]int{t.kind, t.id}
-				current = byKey[key]
-				if current == nil {
+				if t.kind == tagLink || t.kind == tagSpan {
+					if outer == nil {
+						return nil, fmt.Errorf("export: tagging the PDF: a %s outside any block", name)
+					}
 					current = &elem{tag: t}
-					byKey[key] = current
-					elems = append(elems, current)
+					outer.kids = append(outer.kids, kid{child: current})
+					if t.kind == tagLink {
+						pageLinks = append(pageLinks, current)
+					}
+				} else {
+					key := [2]int{t.kind, t.id}
+					current = byKey[key]
+					if current == nil {
+						current = &elem{tag: t}
+						byKey[key] = current
+						elems = append(elems, current)
+					}
+					outer = current
 				}
 				current.pieces = append(current.pieces, piece{pi, mcid})
+				current.kids = append(current.kids, kid{p: piece{pi, mcid}})
 				fmt.Fprintf(&out, "/%s <</MCID %d>> BDC\n", name, mcid)
 				mcid++
 			}
@@ -261,6 +306,38 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 		}
 		page := append(append([]byte{}, pageTrim[:len(pageTrim)-2]...), []byte(fmt.Sprintf("  /StructParents %d\n>>", pi))...)
 		updates = append(updates, update{pn, page})
+
+		// The link annotations gopdf added to this page, in the order the links were drawn.
+		if len(pageLinks) > 0 {
+			am := annotsRE.FindStringSubmatch(pageText)
+			var annots []int
+			if am != nil {
+				for _, m := range refRE.FindAllStringSubmatch(am[1], -1) {
+					n, _ := strconv.Atoi(m[1])
+					if at, ok := objectText(raw, n); ok && strings.Contains(at, "/Subtype /Link") {
+						annots = append(annots, n)
+					}
+				}
+			}
+			if len(annots) != len(pageLinks) {
+				return nil, fmt.Errorf("export: tagging the PDF: page %d has %d link annotations for %d links", pi, len(annots), len(pageLinks))
+			}
+			for i, l := range pageLinks {
+				at, _ := objectText(raw, annots[i])
+				atTrim := bytes.TrimRight([]byte(at), " \n\t")
+				if !bytes.HasSuffix(atTrim, []byte(">>")) {
+					return nil, fmt.Errorf("export: tagging the PDF: annotation %d has an unexpected shape", annots[i])
+				}
+				l.annot, l.key, l.href = annots[i], nextKey, "()"
+				nextKey++
+				if um := uriRE.FindStringSubmatch(at); um != nil {
+					l.href = um[1]
+				}
+				body := append(append([]byte{}, atTrim[:len(atTrim)-2]...), []byte(fmt.Sprintf(" /F 4 /StructParent %d /Contents %s>>", l.key, l.href))...)
+				updates = append(updates, update{annots[i], body})
+				linkElems = append(linkElems, l)
+			}
+		}
 	}
 	if len(elems) == 0 {
 		return raw, nil // nothing was drawn that needs a tag
@@ -268,28 +345,58 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 
 	// The tree.
 	doc := &node{typ: "Document"}
-	var list, table, row *node
-	var itemID = -1
-	var rowIdx, tableID = -1, -1
+	var mk func(typ string, e *elem, parent *node) *node
+	mk = func(typ string, e *elem, parent *node) *node {
+		n := &node{typ: typ, elem: e, parent: parent}
+		e.node = n
+		for _, k := range e.kids {
+			if k.child != nil {
+				n.children = append(n.children, mk(tagNames[k.child.tag.kind], k.child, n))
+			}
+		}
+		return n
+	}
+	// Open lists, outermost first: a deeper item goes into the item before it.
+	type openList struct {
+		l        *node
+		level    int
+		numbered int
+		item     *node
+	}
+	var lists []*openList
+	var table, row *node
+	itemID := -1
+	rowIdx, tableID := -1, -1
 	for _, e := range elems {
 		t := e.tag
 		switch t.kind {
 		case tagLbl, tagLBody:
 			table, row, tableID, rowIdx = nil, nil, -1, -1
-			if list == nil || (t.kind == tagLbl && list.elem != nil && (list.elem.tag.a != t.a)) {
-				list = &node{typ: "L", parent: doc, elem: &elem{tag: pdfTag{a: t.a}}}
-				doc.children = append(doc.children, list)
-				itemID = -1
-			}
 			if t.id != itemID {
-				li := &node{typ: "LI", parent: list}
-				list.children = append(list.children, li)
 				itemID = t.id
+				for len(lists) > 0 && lists[len(lists)-1].level > t.b {
+					lists = lists[:len(lists)-1]
+				}
+				if n := len(lists); n > 0 && lists[n-1].level == t.b && lists[n-1].numbered != t.a {
+					lists = lists[:n-1] // a bulleted list followed by a numbered one at the same level
+				}
+				if n := len(lists); n == 0 || lists[n-1].level < t.b {
+					parent := doc
+					if n > 0 {
+						parent = lists[n-1].item
+					}
+					l := &node{typ: "L", parent: parent}
+					parent.children = append(parent.children, l)
+					lists = append(lists, &openList{l: l, level: t.b, numbered: t.a})
+				}
+				top := lists[len(lists)-1]
+				top.item = &node{typ: "LI", parent: top.l}
+				top.l.children = append(top.l.children, top.item)
 			}
-			li := list.children[len(list.children)-1]
-			li.children = append(li.children, &node{typ: tagNames[t.kind], elem: e, parent: li})
+			li := lists[len(lists)-1].item
+			li.children = append(li.children, mk(tagNames[t.kind], e, li))
 		case tagTH, tagTD:
-			list, itemID = nil, -1
+			lists, itemID = nil, -1
 			if table == nil || tableID != t.a {
 				table = &node{typ: "Table", parent: doc}
 				doc.children = append(doc.children, table)
@@ -300,10 +407,10 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 				table.children = append(table.children, row)
 				rowIdx = r
 			}
-			row.children = append(row.children, &node{typ: tagNames[t.kind], elem: e, parent: row})
+			row.children = append(row.children, mk(tagNames[t.kind], e, row))
 		default:
-			list, itemID, table, row, tableID, rowIdx = nil, -1, nil, nil, -1, -1
-			doc.children = append(doc.children, &node{typ: tagNames[t.kind], elem: e, parent: doc})
+			lists, itemID, table, row, tableID, rowIdx = nil, -1, nil, nil, -1, -1
+			doc.children = append(doc.children, mk(tagNames[t.kind], e, doc))
 		}
 	}
 
@@ -324,7 +431,7 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 	// Which element holds each marked piece, for the parent tree.
 	parents := make([][]int, len(pageObjs))
 	for _, n := range all {
-		if n.elem == nil || len(n.children) > 0 {
+		if n.elem == nil {
 			continue
 		}
 		for _, p := range n.elem.pieces {
@@ -342,16 +449,30 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 			parent = n.parent.obj
 		}
 		fmt.Fprintf(&b, "<< /Type /StructElem /S /%s /P %d 0 R", n.typ, parent)
-		if len(n.children) > 0 {
+		if n.elem != nil && (n.elem.tag.kind == tagLink || n.elem.tag.kind == tagSpan) && n.elem.tag.a > 0 && n.elem.tag.a <= len(langs) {
+			fmt.Fprintf(&b, " /Lang %s", pdfTextString(langs[n.elem.tag.a-1]))
+		}
+		if n.elem != nil && len(n.elem.pieces) > 0 {
+			// Its own content and inner elements, in reading order.
+			fmt.Fprintf(&b, " /Pg %d 0 R /K [", pageObjs[n.elem.pieces[0].page])
+			for _, k := range n.elem.kids {
+				if k.child != nil {
+					fmt.Fprintf(&b, " %d 0 R", k.child.node.obj)
+				} else {
+					fmt.Fprintf(&b, " << /Type /MCR /Pg %d 0 R /MCID %d >>", pageObjs[k.p.page], k.p.mcid)
+				}
+			}
+			if n.elem.annot != 0 {
+				fmt.Fprintf(&b, " << /Type /OBJR /Obj %d 0 R /Pg %d 0 R >>", n.elem.annot, pageObjs[n.elem.pieces[0].page])
+			}
+			b.WriteString(" ]")
+			if n.elem.annot != 0 {
+				fmt.Fprintf(&b, " /Alt %s", n.elem.href)
+			}
+		} else if len(n.children) > 0 {
 			b.WriteString(" /K [")
 			for _, c := range n.children {
 				fmt.Fprintf(&b, " %d 0 R", c.obj)
-			}
-			b.WriteString(" ]")
-		} else if n.elem != nil && len(n.elem.pieces) > 0 {
-			fmt.Fprintf(&b, " /Pg %d 0 R /K [", pageObjs[n.elem.pieces[0].page])
-			for _, p := range n.elem.pieces {
-				fmt.Fprintf(&b, " << /Type /MCR /Pg %d 0 R /MCID %d >>", pageObjs[p.page], p.mcid)
 			}
 			b.WriteString(" ]")
 		}
@@ -374,7 +495,10 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 		}
 		root.WriteString(" ]")
 	}
-	fmt.Fprintf(&root, " ] >> /ParentTreeNextKey %d >>", len(pageObjs))
+	for _, l := range linkElems {
+		fmt.Fprintf(&root, " %d %d 0 R", l.key, l.node.obj)
+	}
+	fmt.Fprintf(&root, " ] >> /ParentTreeNextKey %d >>", nextKey)
 	updates = append(updates, update{rootObj, root.Bytes()})
 
 	// The catalog says the file is tagged.
@@ -389,7 +513,7 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 	var nc bytes.Buffer
 	nc.Write(catTrim[:len(catTrim)-2])
 	fmt.Fprintf(&nc, "  /MarkInfo << /Marked true >>\n  /StructTreeRoot %d 0 R\n  /ViewerPreferences << /DisplayDocTitle true >>\n", rootObj)
-	if snap.Lang != "" {
+	if snap.Lang != "" && lang.ValidTag(snap.Lang) {
 		fmt.Fprintf(&nc, "  /Lang %s\n", pdfTextString(snap.Lang))
 	}
 	nc.WriteString(">>")
