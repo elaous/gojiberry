@@ -142,6 +142,12 @@ func survives(f Feature, d docfile.Document) bool {
 		return len(d.History) > 0
 	case FeatMedia, FeatMediaCaptions:
 		return hasItem(d, func(it docfile.Item) bool { return it.Media != nil })
+	case FeatEquation:
+		return hasItem(d, func(it docfile.Item) bool { return it.Equation != nil })
+	case FeatCodeLanguage:
+		return hasPara(d, func(p docfile.Para) bool { return p.CodeLang != "" })
+	case FeatImageLongDesc:
+		return image != nil && image.LongDesc != ""
 	case FeatPageHeader:
 		l := d.PageLayout()
 		return l.Header != "" || l.Footer != ""
@@ -170,6 +176,7 @@ var notReadBack = map[string]map[Feature]string{
 		FeatPageHeader: "headers and footers are not read (docximport.Inspect counts them)",
 		FeatPageTOC:    "a generated table of contents is read as the text it shows, not as a setting",
 		FeatPageSize:   "the page size and margins are not read",
+		FeatFootnote:   "a footnote's mark and note are read back as a number and the numbered list at the end, not as a footnote",
 	},
 }
 

@@ -188,6 +188,18 @@ func featurePairs() map[Feature]pair {
 		with:    docOf(plain("one\n"), docfile.Item{Media: &captioned}, plain("two\n")),
 		without: docOf(plain("one\n"), docfile.Item{Media: &talk}, plain("two\n")),
 	}
+	m[FeatEquation] = pair{
+		with:    docOf(plain("one\n"), docfile.Item{Equation: &docfile.EquationItem{Formula: "x^2+y^2=z^2", Alt: "x squared plus y squared equals z squared"}}, plain("two\n")),
+		without: docOf(plain("one\n"), plain("two\n")),
+	}
+	codeBlock := func(lang string) docfile.Document {
+		return docOf(paraItem(docfile.Para{Style: "Code", CodeLang: lang}), plain("x := 1\n"), plain("body\n"))
+	}
+	m[FeatCodeLanguage] = pair{with: codeBlock("go"), without: codeBlock("")}
+	m[FeatImageLongDesc] = pair{
+		with:    docOf(plain("one\n"), docfile.Item{Image: &docfile.ImageItem{URL: tinyPNG, Width: 40, Height: 40, Alt: "Flow chart", LongDesc: "The chart has three boxes: input, process and output, joined by arrows."}}, plain("two\n")),
+		without: docOf(plain("one\n"), docfile.Item{Image: &docfile.ImageItem{URL: tinyPNG, Width: 40, Height: 40, Alt: "Flow chart"}}, plain("two\n")),
+	}
 	layout := func(l docfile.PageLayout) pair {
 		with := docOf(ch("Heading", docfile.Format{Scale: 1.6}), plain("\n"), plain("body\n"))
 		with.SetPageLayout(l)
