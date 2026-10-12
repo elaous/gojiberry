@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# local-ci.sh runs the CI job's `make` steps on this machine, in the workflow's own order, so the
+# local-ci.sh runs the CI jobs' `make` steps on this machine, in the workflow's own order, so the
 # gate can be run where there are no hosted runners (or no minutes left). It reads the steps from
-# .github/workflows/ci.yml (every `run: make <target>` of the first job, "fast-checks"), so it cannot
+# .github/workflows/ci.yml (every `run: make <target>` line of every job, each target once), so it cannot
 # drift from the workflow: add a step there and it runs here.
 #
 #   .github/scripts/local-ci.sh              all steps, stop at the first failure
@@ -21,12 +21,9 @@ if [ "${1:-}" = "-k" ]; then keep_going=1; shift; fi
 only=("$@")
 skip=" ${LOCAL_CI_SKIP-coverage-badge} "
 
-# the steps of the first job: lines "run: make <target>" before the next job begins
+# every `run: make <target>` line of every job, in file order, each target once (generate runs in two jobs)
 mapfile -t targets < <(awk '
-	/^jobs:/ { injobs=1; next }
-	injobs && /^  [a-z0-9_-]+:[ ]*$/ { jobs++ }
-	jobs > 1 { exit }
-	injobs && /^[ ]+run: make / { sub(/^[ ]+run: make /, ""); print }
+	/^[ ]+run: make / { sub(/^[ ]+run: make /, ""); if (!seen[$0]++) print }
 ' "$workflow")
 
 if [ "${#targets[@]}" -eq 0 ]; then
