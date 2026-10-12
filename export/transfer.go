@@ -40,10 +40,23 @@ func (pdfImporter) Format() transfer.Format {
 }
 func (pdfImporter) Import(b []byte) (docfile.Document, error) { return pdftext.Import(b) }
 
+// acceptedExporter writes the document as it would be with every suggestion accepted, for the exporters that
+// have no way to show a suggestion: text proposed to be removed must not reach a file that cannot strike it.
+type acceptedExporter struct{ transfer.Exporter }
+
+func (a acceptedExporter) Export(d docfile.Document) ([]byte, error) {
+	return a.Exporter.Export(acceptedView(d))
+}
+
 // Register adds the formats this package handles to r. It writes HTML, RTF,
 // EPUB, PDF and Word (.docx), and reads Word and PDF text. (Markdown and plain
 // text are in transfer.Default; for braille see package braille.)
 func Register(r *transfer.Registry) {
+	for _, e := range r.Exporters() { // Markdown and plain text of transfer.Default read the text as it is
+		if n := e.Format().Name; n == "markdown" || n == "text" {
+			r.AddExporter(acceptedExporter{e})
+		}
+	}
 	for _, f := range []formatExporter{
 		{transfer.Format{Name: "html", Label: "Web page (HTML)", Exts: []string{".html"}, MIME: "text/html"}, HTML{}, true},
 		{transfer.Format{Name: "rtf", Label: "Rich Text Format", Exts: []string{".rtf"}, MIME: "application/rtf"}, RTF{}, false},

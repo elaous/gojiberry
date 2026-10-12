@@ -549,6 +549,7 @@ func exportGate() a11ycheck.GateMode {
 // export with errors is refused unless the person allowed this one, or is done with a warning.
 func (u *ui) gatedExport(format string, doc docfile.Document) (string, []byte, string, error) {
 	mode := exportGate()
+	gateSaid := false // the gate has already announced the export, and one announcement is heard at a time
 	if mode != a11ycheck.GateAllow {
 		findings := a11ycheck.Check(doc, a11ycheck.Options{})
 		floor := operatorGateFloor()
@@ -562,9 +563,17 @@ func (u *ui) gatedExport(format string, doc docfile.Document) (string, []byte, s
 		u.check.override = false
 		if errs > 0 {
 			u.announce(T("check.exportedWith", "Exported with %d accessibility errors", errs))
+			gateSaid = true
 		}
 	}
-	return u.transfer.Export(format, doc)
+	file, data, mime, err := u.transfer.Export(format, doc)
+	if err == nil {
+		// Whatever the way to export, the person hears what the format left out (the Files tab lists it).
+		if n := len(export.Fidelity(format, doc).Losses); n > 0 && !gateSaid {
+			u.announce(Tn("fidelity.announce", "Exported: %d thing left out or simplified in the %s file. The Files tab lists them.", "Exported: %d things left out or simplified in the %s file. The Files tab lists them.", n, format))
+		}
+	}
+	return file, data, mime, err
 }
 
 // checkPanel is the Check tab: it runs the document's accessibility check (package a11ycheck) and lists
