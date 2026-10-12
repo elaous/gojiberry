@@ -26,6 +26,7 @@ type prefs struct {
 	Suggest  string `json:"suggest,omitempty"`  // word suggestions: "auto" opens the list while typing
 	Speed    string `json:"speed,omitempty"`    // reading aloud: "slow", "fast"
 	Collab   string `json:"collab,omitempty"`   // what is announced of a shared session: "" everything, "important", "off"
+	Where    string `json:"where,omitempty"`    // "on": the presence list has a "Where is <name>?" button for each collaborator
 }
 
 // attrs are the values the root element carries.
@@ -63,6 +64,9 @@ func loadPrefs() prefs {
 	}
 	if p.Collab != components.CollabImportant && p.Collab != components.CollabOff {
 		p.Collab = ""
+	}
+	if p.Where != "on" {
+		p.Where = ""
 	}
 	return p
 }
@@ -132,6 +136,7 @@ func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
 		collab(T("prefs.collabAll", "Shared editing: announce everything"), components.CollabAll),
 		collab(T("prefs.collabImportant", "Shared editing: announce only the connection"), components.CollabImportant),
 		collab(T("prefs.collabOff", "Shared editing: announce nothing"), components.CollabOff),
+		toggle(T("prefs.collabWhere", "Shared editing: a \"Where is\" button for each person"), curPrefs.Where == "on", func(p *prefs, on bool) { p.Where = map[bool]string{true: "on"}[on] }),
 		{Separator: true},
 		toggle(T("prefs.suggestAuto", "Suggest words as I type"), curPrefs.Suggest == "auto", func(p *prefs, on bool) { p.Suggest = map[bool]string{true: "auto"}[on] }),
 		toggle(T("prefs.targets", "Large targets"), curPrefs.Targets == "large", func(p *prefs, on bool) { p.Targets = map[bool]string{true: "large"}[on] }),

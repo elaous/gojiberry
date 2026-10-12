@@ -87,6 +87,9 @@ type State struct {
 	Peers   []wire.Presence // the other people, by name
 	Pending int             // operations the server has not accepted yet
 	Repairs int             // times the session had to be rebuilt
+	// Merged counts the changes made while offline that have met the shared document since the session
+	// began; Rejected the changes the server refused (see collab.Session). Both only grow.
+	Merged, Rejected int
 	// Err is why sharing is not working: the flow is not supported, or has
 	// content that cannot be shared, or the server refused something and
 	// the session has not yet repaired itself.

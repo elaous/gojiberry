@@ -27,6 +27,10 @@ type PresenceProps struct {
 	Pending int
 	// Role is your own role, shown as a badge ("View only" for a viewer).
 	Role string
+	// OnWhere, if set, adds a "Where is <name>?" button for each of the other people; it is called with
+	// that person, and the host says where they are (WhereSentence) in the live region. The cursors are
+	// never announced as they move: the position is given only on request.
+	OnWhere func(PresencePeer)
 }
 
 func initials(name string) string {
@@ -72,6 +76,16 @@ func Presence(props PresenceProps) xango.Node {
 		people = append(people, avatar(p, false))
 	}
 	kids := []xango.Node{xango.El("span", []xango.Attr{xango.A("class", "gj-presence-people"), xango.A("role", "list"), xango.A("aria-label", "People here")}, people...)}
+	if props.OnWhere != nil && len(props.Peers) > 0 {
+		var asks []xango.Node
+		for _, p := range props.Peers {
+			peer := p
+			asks = append(asks, xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-presence-where"), xango.A("data-name", peer.Name),
+				xango.On("click", func(xango.Event) { props.OnWhere(peer) })},
+				xango.Text(trf("presence.where", "Where is %s?", orString(peer.Name, peer.User)))))
+		}
+		kids = append(kids, xango.El("span", []xango.Attr{xango.A("class", "gj-presence-asks"), xango.A("role", "group"), xango.A("aria-label", tr("presence.whereGroup", "Where are the others"))}, asks...))
+	}
 	if props.Status != "" {
 		label := map[string]string{"online": "Online", "connecting": "Connecting…", "offline": "Offline"}[props.Status]
 		if label == "" {

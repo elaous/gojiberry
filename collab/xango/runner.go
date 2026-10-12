@@ -105,7 +105,7 @@ func (r *runner) loop() {
 // state summarises the session for OnState.
 func (r *runner) state() State {
 	s := r.sess
-	st := State{Status: s.Status, Role: s.Role, Pending: s.Pending(), Repairs: s.Repairs, Err: s.Err}
+	st := State{Status: s.Status, Role: s.Role, Pending: s.Pending(), Repairs: s.Repairs, Merged: s.Merged, Rejected: s.Rejected, Err: s.Err}
 	if err := s.Bridge.Err(); err != nil && st.Err == nil {
 		st.Err = err
 	}
