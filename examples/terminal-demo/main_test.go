@@ -110,7 +110,7 @@ func TestNewAndOpenWarnBeforeDroppingEdits(t *testing.T) {
 
 func TestErrorsSurviveRedrawAndOpenDocIsGuarded(t *testing.T) {
 	out := session(t, "memory", "new a\nx\n:w\n:q\nrm a\nrm! a\ntrash\nquit\n")
-	if i := strings.Index(out, "is open in the editor"); i < 0 || !strings.Contains(out[i:], "== / ==") && false {
+	if !strings.Contains(out, "is open in the editor") {
 		t.Errorf("rm of the open document is refused:\n%s", out)
 	}
 	if !strings.Contains(out, "a  (trashed") {
