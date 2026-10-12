@@ -39,7 +39,7 @@ func (p *peopleState) peoplePanel(confirm func(string, func())) xango.Node {
 		Draft: p.draft, DraftRole: p.role,
 		OnDraft: func(id, role string) { p.draft, p.role = id, role; p.rerender() },
 		Invite: func(_ context.Context, id, role string) error {
-			if err := p.acl.Grant(id, docstore.Role(role)); err != nil {
+			if err := p.acl.GrantFor(id, docstore.Role(role), p.links.now(), p.links.personDuration()); err != nil {
 				return err
 			}
 			p.draft = ""
@@ -50,4 +50,4 @@ func (p *peopleState) peoplePanel(confirm func(string, func())) xango.Node {
 	})
 }
 
-func (p *peopleState) list() []user.Person { return p.acl.People() }
+func (p *peopleState) list() []user.Person { return p.acl.Active(p.links.now()).People() }
