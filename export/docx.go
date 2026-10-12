@@ -39,6 +39,10 @@ type docxBuilder struct {
 	imgs    int
 	docPr   int
 	revs    int // tracked changes written so far (their ids)
+	// cur is the index of the block being written; marks names the bookmark of each heading the table
+	// of contents points to (by block index).
+	cur   int
+	marks map[int]string
 }
 
 func (b *docxBuilder) rel(typ, target string, external bool) string {
@@ -59,9 +63,11 @@ func esc(s string) string {
 }
 
 func (DOCX) Export(snap Snapshot) ([]byte, error) {
-	b := &docxBuilder{media: map[string][]byte{}, links: map[string]string{}}
+	b := &docxBuilder{media: map[string][]byte{}, links: map[string]string{}, marks: map[int]string{}}
+	b.tableOfContents(snap)
 	for i := 0; i < len(snap.Blocks); i++ {
 		blk := snap.Blocks[i]
+		b.cur = i
 		if blk.Kind == TableCell {
 			if blk.TableRow == 0 && blk.TableCol == 0 {
 				n := blk.TableRows * blk.TableCols
@@ -93,6 +99,18 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 		return err
 	}
 	const header = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` + "\n"
+	var hfRels [2]string // the header's and the footer's relationship ids
+	var hfTypes string
+	var hfParts []struct{ name, content string }
+	for i, hf := range []struct{ kind, text string }{{"header", snap.Header}, {"footer", snap.Footer}} {
+		if hf.text == "" {
+			continue
+		}
+		part := hf.kind + "1.xml"
+		hfRels[i] = b.rel(hf.kind, part, false)
+		hfTypes += `<Override PartName="/word/` + part + `" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.` + hf.kind + `+xml"/>`
+		hfParts = append(hfParts, struct{ name, content string }{"word/" + part, header + docxHeaderFooter(snap, hf.kind, hf.text)})
+	}
 	files := []struct{ name, content string }{
 		{"[Content_Types].xml", header + `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -101,20 +119,21 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
 <Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
-<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>` + hfTypes + `
 </Types>`},
 		{"_rels/.rels", header + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
 </Relationships>`},
 		{"docProps/core.xml", header + `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>` + esc(snap.Title) + `</dc:title>` + docxCoreLanguage(snap.Lang) + `</cp:coreProperties>`},
-		{"word/document.xml", header + `<w:document ` + docxNS + `><w:body>` + b.body.String() + docxSection(snap) + `</w:body></w:document>`},
+		{"word/document.xml", header + `<w:document ` + docxNS + `><w:body>` + b.body.String() + docxSection(snap, hfRels) + `</w:body></w:document>`},
 		{"word/styles.xml", header + docxStylesFor(snap.Lang)},
 		{"word/numbering.xml", header + b.numbering()},
 		{"word/_rels/document.xml.rels", header + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>` + strings.Join(b.rels, "") + `</Relationships>`},
 	}
+	files = append(files, hfParts...)
 	for _, f := range files {
 		if err := add(f.name, f.content); err != nil {
 			return nil, err
@@ -141,10 +160,107 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func docxSection(snap Snapshot) string {
+// docxSection is the section properties; hf holds the relationship ids of the header and the footer part
+// ("" for none), which the section names first.
+func docxSection(snap Snapshot, hf [2]string) string {
 	px := func(v float64) int { return int(v * 15) } // twips
-	return fmt.Sprintf(`<w:sectPr><w:pgSz w:w="%d" w:h="%d"/><w:pgMar w:top="%d" w:right="%d" w:bottom="%d" w:left="%d" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`,
-		px(snap.PageWidth), px(snap.PageHeight), px(snap.MarginTop), px(snap.MarginRight), px(snap.MarginBottom), px(snap.MarginLeft))
+	refs := ""
+	if hf[0] != "" {
+		refs += `<w:headerReference w:type="default" r:id="` + hf[0] + `"/>`
+	}
+	if hf[1] != "" {
+		refs += `<w:footerReference w:type="default" r:id="` + hf[1] + `"/>`
+	}
+	return fmt.Sprintf(`<w:sectPr>%s<w:pgSz w:w="%d" w:h="%d"/><w:pgMar w:top="%d" w:right="%d" w:bottom="%d" w:left="%d" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`,
+		refs, px(snap.PageWidth), px(snap.PageHeight), px(snap.MarginTop), px(snap.MarginRight), px(snap.MarginBottom), px(snap.MarginLeft))
+}
+
+// docxField is a Word field (PAGE, NUMPAGES) as a complex field with a cached value, which Word replaces
+// when it lays the page out.
+func docxField(instr, cached string) string {
+	return `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ` + instr + ` </w:instrText></w:r>` +
+		`<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>` + cached + `</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`
+}
+
+// docxDecorRuns writes a header or footer part's text as runs, the fields as Word fields.
+func docxDecorRuns(text, title string) string {
+	var sb strings.Builder
+	lit := func(s string) {
+		if s != "" {
+			sb.WriteString(`<w:r><w:t xml:space="preserve">` + esc(s) + `</w:t></w:r>`)
+		}
+	}
+	for rest := text; rest != ""; {
+		i := strings.IndexByte(rest, '{')
+		if i < 0 {
+			lit(rest)
+			break
+		}
+		lit(rest[:i])
+		rest = rest[i:]
+		switch {
+		case strings.HasPrefix(rest, fieldPage):
+			sb.WriteString(docxField("PAGE", "1"))
+			rest = rest[len(fieldPage):]
+		case strings.HasPrefix(rest, fieldPages):
+			sb.WriteString(docxField("NUMPAGES", "1"))
+			rest = rest[len(fieldPages):]
+		case strings.HasPrefix(rest, fieldTitle):
+			lit(title)
+			rest = rest[len(fieldTitle):]
+		default:
+			lit("{")
+			rest = rest[1:]
+		}
+	}
+	return sb.String()
+}
+
+// docxHeaderFooter is the XML of a header or footer part: one paragraph whose left, centre and right
+// parts are set apart by tab stops at the middle and the right edge of the text.
+func docxHeaderFooter(snap Snapshot, kind, text string) string {
+	width := int((snap.PageWidth - snap.MarginLeft - snap.MarginRight) * 15)
+	l, c, r := decorParts(text)
+	runs := docxDecorRuns(l, snap.Title) + `<w:r><w:tab/></w:r>` + docxDecorRuns(c, snap.Title) + `<w:r><w:tab/></w:r>` + docxDecorRuns(r, snap.Title)
+	root := "hdr"
+	if kind == "footer" {
+		root = "ftr"
+	}
+	return `<w:` + root + ` ` + docxNS + `><w:p><w:pPr><w:tabs><w:tab w:val="clear" w:pos="4513"/><w:tab w:val="clear" w:pos="9026"/>` +
+		fmt.Sprintf(`<w:tab w:val="center" w:pos="%d"/><w:tab w:val="right" w:pos="%d"/>`, width/2, width) +
+		`</w:tabs><w:spacing w:after="0"/></w:pPr>` + runs + `</w:p></w:` + root + `>`
+}
+
+// tableOfContents writes the table of contents at the start of the body: a TOC field whose entries link
+// to a bookmark on each heading and carry a PAGEREF field. Word knows the page of each heading and fills
+// the numbers in when it lays the document out (the field is marked dirty so it does so on opening); the
+// cached numbers are placeholders. It also records the bookmark names in b.marks.
+func (b *docxBuilder) tableOfContents(snap Snapshot) {
+	if !snap.TOC {
+		return
+	}
+	entries := snap.Outline()
+	if len(entries) == 0 {
+		return
+	}
+	width := int((snap.PageWidth - snap.MarginLeft - snap.MarginRight) * 15)
+	w := &b.body
+	w.WriteString(`<w:p><w:pPr><w:keepNext/><w:spacing w:before="0" w:after="240"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="40"/></w:rPr><w:t>` + esc(snap.tocTitle()) + `</w:t></w:r></w:p>`)
+	for i, e := range entries {
+		name := "_Toc" + strconv.Itoa(100000+e.Block)
+		b.marks[e.Block] = name
+		w.WriteString(`<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="` + strconv.Itoa(width) + `"/></w:tabs><w:spacing w:after="60"/><w:ind w:left="` + strconv.Itoa((e.Level-1)*360) + `"/></w:pPr>`)
+		if i == 0 {
+			w.WriteString(`<w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \o "1-3" \h \z \u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`)
+		}
+		w.WriteString(`<w:hyperlink w:anchor="` + name + `" w:history="1"><w:r><w:t xml:space="preserve">` + esc(e.Text) + `</w:t></w:r><w:r><w:tab/></w:r>` +
+			docxField(`PAGEREF `+name+` \h`, "–") + `</w:hyperlink>`)
+		if i == len(entries)-1 {
+			w.WriteString(`<w:r><w:fldChar w:fldCharType="end"/></w:r>`)
+		}
+		w.WriteString(`</w:p>`)
+	}
+	w.WriteString(`<w:p><w:r><w:br w:type="page"/></w:r></w:p>`)
 }
 
 // numbering is numbering.xml: abstract 0 is bullets, abstract 1 numbers
@@ -223,7 +339,11 @@ func (b *docxBuilder) block(blk Block) {
 	if ppr != "" {
 		w.WriteString(`<w:pPr>` + ppr + `</w:pPr>`)
 	}
-	w.WriteString(b.inline(blk.Segments))
+	inner := b.inline(blk.Segments)
+	if name, ok := b.marks[b.cur]; ok {
+		inner = `<w:bookmarkStart w:id="` + strconv.Itoa(b.cur) + `" w:name="` + name + `"/>` + inner + `<w:bookmarkEnd w:id="` + strconv.Itoa(b.cur) + `"/>`
+	}
+	w.WriteString(inner)
 	w.WriteString(`</w:p>`)
 }
 

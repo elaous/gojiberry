@@ -7,9 +7,12 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"maps"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/elaous/gojiberry/lang"
 	"github.com/signintech/gopdf"
@@ -101,22 +104,62 @@ func pxToPt(px float64) float64 {
 type PDF struct{}
 
 func (PDF) Export(snap Snapshot) ([]byte, error) {
+	var outline []OutlineEntry
+	if snap.TOC {
+		outline = snap.Outline()
+	}
+	// A table of contents needs the page of each heading, which is known only once the document is laid
+	// out, and the contents themselves take pages. So the document is drawn with placeholder numbers, the
+	// pages of the headings are read off, and it is drawn again with them: every entry is one line either
+	// way, so the pages do not move (a third pass settles the rare case where they do).
+	var pages map[int]int
+	for pass := 0; ; pass++ {
+		out, got, err := renderPDF(snap, outline, pages)
+		if err != nil {
+			return nil, err
+		}
+		if len(outline) == 0 || (pages != nil && maps.Equal(pages, got)) || pass >= 3 {
+			return out, nil
+		}
+		pages = got
+	}
+}
+
+// renderPDF draws the document once. outline is the table of contents (none if empty) and tocPages the
+// page of each heading by block index from the pass before (placeholders when nil); the pages the
+// headings are on in this pass are returned.
+func renderPDF(snap Snapshot, outline []OutlineEntry, tocPages map[int]int) ([]byte, map[int]int, error) {
+	headingPages := map[int]int{}
 	w, h := snap.PageWidth, snap.PageHeight
 	var pdf gopdf.GoPdf
 	pdf.Start(gopdf.Config{PageSize: gopdf.Rect{W: pxToPt(w), H: pxToPt(h)}})
 	if err := registerPDFFonts(&pdf); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if snap.Title != "" {
 		pdf.SetInfo(gopdf.PdfInfo{Title: snap.Title}) // a reader shows and announces the title, not the file name
 	}
+	flow := &pdfFlowState{pageH: pxToPt(h)}
+	pdfFlows.Store(&pdf, flow)
+	defer pdfFlows.Delete(&pdf)
 	pdf.SetMargins(pxToPt(snap.MarginLeft), pxToPt(snap.MarginTop), pxToPt(snap.MarginRight), pxToPt(snap.MarginBottom))
 	pdf.AddPage()
 
 	contentWidth := pxToPt(w) - pxToPt(snap.MarginLeft) - pxToPt(snap.MarginRight)
 
+	if len(outline) > 0 {
+		if err := drawPDFContents(&pdf, snap, outline, tocPages, contentWidth); err != nil {
+			return nil, nil, err
+		}
+	}
+
 	for i := 0; i < len(snap.Blocks); i++ {
 		b := snap.Blocks[i]
+		if b.Kind >= Heading1 && b.Kind <= Heading3 {
+			// The heading's page is the one its first line lands on, which may be the next page.
+			pdf.SetNewY(pdf.GetY(), pdfHeading1Size*pdfLineHeightMult)
+			headingPages[i] = pdf.GetNumberOfPages()
+		}
 		if b.Kind == TableCell {
 			// See Markdown's own TableCell case (markdown.go) for the
 			// same "read the whole table out of snap.Blocks[i:i+n] the
@@ -130,32 +173,205 @@ func (PDF) Export(snap Snapshot) ([]byte, error) {
 				n := b.TableRows * b.TableCols
 				if n > 0 && i+n <= len(snap.Blocks) {
 					if err := renderPDFTable(&pdf, snap.Blocks[i:i+n], i, contentWidth, pxToPt(snap.MarginLeft)); err != nil {
-						return nil, err
+						return nil, nil, err
 					}
 					i += n - 1
 				} else {
 					tokens := []pdfToken{{text: "[Table]", format: Format{Italic: true}}}
 					wrapped, err := wrapPDFTokens(&pdf, tokens, contentWidth, false, false, true, pdfBaseFontSize)
 					if err != nil {
-						return nil, err
+						return nil, nil, err
 					}
 					if err := drawPDFWrappedBlock(&pdf, nil, wrapped, pxToPt(snap.MarginLeft), pdfBaseFontSize, false, false, true, "", 0, pdfTag{kind: tagP, id: i}); err != nil {
-						return nil, err
+						return nil, nil, err
 					}
 				}
 			}
 			continue
 		}
-		if err := renderPDFBlock(&pdf, snap, b, i, contentWidth); err != nil {
-			return nil, err
+		// A heading's page is recorded before it is drawn, so it is never moved by the widow rule.
+		flow.noWidow = b.Kind >= Heading1 && b.Kind <= Heading3
+		err := renderPDFBlock(&pdf, snap, b, i, contentWidth)
+		flow.noWidow = false
+		if err != nil {
+			return nil, nil, err
 		}
+	}
+
+	if err := drawPDFHeadersAndFooters(&pdf, snap); err != nil {
+		return nil, nil, err
 	}
 
 	var buf bytes.Buffer
 	if _, err := pdf.WriteTo(&buf); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return tagPDF(buf.Bytes(), snap)
+	out, err := tagPDF(buf.Bytes(), snap)
+	return out, headingPages, err
+}
+
+// drawPDFContents draws the table of contents: its title, then one line per heading with a dotted leader
+// to the page number, indented by level, and a page break after it. The entries are tagged as paragraphs
+// (their ids come after those of the blocks). An entry too long for its line is cut with an ellipsis.
+func drawPDFContents(pdf *gopdf.GoPdf, snap Snapshot, outline []OutlineEntry, pages map[int]int, contentWidth float64) error {
+	x0 := pxToPt(snap.MarginLeft)
+	right := x0 + contentWidth
+	const titleSize = 18.0
+	id := len(snap.Blocks) + 1
+	if err := pdf.SetFont(pdfFontFamily, "B", titleSize); err != nil {
+		return err
+	}
+	lh := titleSize * pdfLineHeightMult
+	pdf.SetNewY(pdf.GetY(), lh)
+	y := pdf.GetY()
+	pdf.SetXY(x0, y)
+	pdfMarkBegin(pdf, pdfTag{kind: tagP, id: id})
+	if err := pdf.Cell(&gopdf.Rect{W: contentWidth, H: lh}, snap.tocTitle()); err != nil {
+		return err
+	}
+	pdfMarkEnd(pdf)
+	pdf.SetY(y + lh*1.3)
+
+	lh = pdfBaseFontSize * pdfLineHeightMult
+	for _, e := range outline {
+		id++
+		num := "0"
+		if p, ok := pages[e.Block]; ok {
+			num = strconv.Itoa(p)
+		}
+		style := ""
+		if e.Level == 1 {
+			style = "B"
+		}
+		if err := pdf.SetFont(pdfFontFamily, style, pdfBaseFontSize); err != nil {
+			return err
+		}
+		nw, err := pdf.MeasureTextWidth(num)
+		if err != nil {
+			return err
+		}
+		indent := float64(e.Level-1) * pdfListIndentPerLevel
+		avail := contentWidth - indent - nw - 12
+		text, err := fitPDFText(pdf, e.Text, avail)
+		if err != nil {
+			return err
+		}
+		tw, err := pdf.MeasureTextWidth(text)
+		if err != nil {
+			return err
+		}
+		pdf.SetNewY(pdf.GetY(), lh)
+		y := pdf.GetY()
+		pdf.SetXY(x0+indent, y)
+		pdfMarkBegin(pdf, pdfTag{kind: tagP, id: id})
+		if err := pdf.Cell(&gopdf.Rect{W: tw, H: lh}, text); err != nil {
+			return err
+		}
+		// The leader: dots from the end of the text to the page number, drawn from the right so they
+		// line up from one entry to the next.
+		if err := pdf.SetFont(pdfFontFamily, "", pdfBaseFontSize); err != nil {
+			return err
+		}
+		dw, err := pdf.MeasureTextWidth(". ")
+		if err != nil {
+			return err
+		}
+		if n := int((right - nw - 6 - (x0 + indent + tw + 6)) / dw); n > 0 {
+			pdf.SetXY(right-nw-6-float64(n)*dw, y)
+			if err := pdf.Cell(&gopdf.Rect{W: float64(n) * dw, H: lh}, strings.Repeat(". ", n)); err != nil {
+				return err
+			}
+		}
+		pdf.SetXY(right-nw, y)
+		if err := pdf.Cell(&gopdf.Rect{W: nw, H: lh}, num); err != nil {
+			return err
+		}
+		pdfMarkEnd(pdf)
+		pdf.SetY(y + lh)
+	}
+	// The document starts on a page of its own after the contents.
+	pdf.AddPage()
+	return nil
+}
+
+// fitPDFText cuts s with an ellipsis until it is no wider than width in the current font.
+func fitPDFText(pdf *gopdf.GoPdf, s string, width float64) (string, error) {
+	r := []rune(s)
+	for len(r) > 0 {
+		cand := string(r)
+		if len(r) < len([]rune(s)) {
+			cand += "…"
+		}
+		w, err := pdf.MeasureTextWidth(cand)
+		if err != nil {
+			return "", err
+		}
+		if w <= width {
+			return cand, nil
+		}
+		r = r[:len(r)-1]
+	}
+	return "", nil
+}
+
+// drawPDFHeadersAndFooters draws the running header in the top margin and the footer in the bottom
+// margin of every page, once the page count is known. Both are artifacts (not part of the content a
+// reader announces), in 9 point type: the left, centre and right parts of the text (tab separated) sit at
+// the left edge, the middle and the right edge of the text area, and the fields {page}, {pages} and
+// {title} are filled in for each page.
+func drawPDFHeadersAndFooters(pdf *gopdf.GoPdf, snap Snapshot) error {
+	if snap.Header == "" && snap.Footer == "" {
+		return nil
+	}
+	const size = 9.0
+	lh := size * pdfLineHeightMult
+	left, right := pxToPt(snap.MarginLeft), pxToPt(snap.PageWidth)-pxToPt(snap.MarginRight)
+	pageH := pxToPt(snap.PageHeight)
+	n := pdf.GetNumberOfPages()
+	for p := 1; p <= n; p++ {
+		if err := pdf.SetPage(p); err != nil {
+			return err
+		}
+		for _, side := range []struct {
+			text string
+			y    float64
+		}{
+			{snap.Header, math.Max(4, (pxToPt(snap.MarginTop)-lh)/2)},
+			{snap.Footer, math.Min(pageH-lh-4, pageH-pxToPt(snap.MarginBottom)+(pxToPt(snap.MarginBottom)-lh)/2)},
+		} {
+			if side.text == "" {
+				continue
+			}
+			l, c, r := decorParts(side.text)
+			if err := pdf.SetFont(pdfFontFamily, "", size); err != nil {
+				return err
+			}
+			pdfMarkArtifact(pdf)
+			for i, part := range []string{l, c, r} {
+				part = FillFields(part, p, n, snap.Title)
+				if part == "" {
+					continue
+				}
+				w, err := pdf.MeasureTextWidth(part)
+				if err != nil {
+					return err
+				}
+				x := left
+				switch i {
+				case 1:
+					x = (left+right)/2 - w/2
+				case 2:
+					x = right - w
+				}
+				pdf.SetXY(x, side.y)
+				if err := pdf.Cell(&gopdf.Rect{W: w, H: lh}, part); err != nil {
+					return err
+				}
+			}
+			pdfMarkEnd(pdf)
+		}
+	}
+	return nil
 }
 
 // registerPDFFonts loads the Go font family's four style variants
@@ -371,7 +587,12 @@ func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWi
 // top coordinate, no font-ascent estimate needed.
 func drawPDFWrappedBlock(pdf *gopdf.GoPdf, langs []string, tokenLines [][]pdfToken, x0, fontSize float64, mono, forceBold, forceItalic bool, prefix string, hang float64, tag pdfTag) error {
 	lineHeight := fontSize * pdfLineHeightMult
+	breakAt := pdfWidowBreak(pdf, len(tokenLines), lineHeight)
 	for li, tokens := range tokenLines {
+		if li == breakAt {
+			// Widow and orphan control: the page ends here so that no page holds a lone first or last line.
+			pdf.SetNewY(pdf.GetY(), pdfPageHeight(pdf))
+		}
 		pdf.SetNewY(pdf.GetY(), lineHeight)
 		y := pdf.GetY()
 
@@ -705,4 +926,51 @@ func (r *pdfRun) finish() {
 		pdfMarkEnd(r.pdf)
 		r.state = 3
 	}
+}
+
+// pdfFlowState is what a render knows about the sheet that gopdf does not expose: its height, which the
+// widow and orphan control needs to count the lines left on a page.
+type pdfFlowState struct {
+	pageH   float64
+	noWidow bool
+}
+
+// pdfFlows maps the document being drawn to its state; renderPDF adds and removes its entry.
+var pdfFlows sync.Map
+
+func pdfPageHeight(pdf *gopdf.GoPdf) float64 {
+	if v, ok := pdfFlows.Load(pdf); ok {
+		return v.(*pdfFlowState).pageH
+	}
+	return 0
+}
+
+// pdfWidowBreak says before which line of a paragraph of n lines the page must end so that neither
+// page holds a single line of it, or -1 when it need not. A paragraph with fewer than four lines that
+// would split moves whole to the next page; a longer one leaves at least two lines on each page.
+func pdfWidowBreak(pdf *gopdf.GoPdf, n int, lineHeight float64) int {
+	v, ok := pdfFlows.Load(pdf)
+	if !ok || n < 2 {
+		return -1
+	}
+	st := v.(*pdfFlowState)
+	if st.noWidow {
+		return -1
+	}
+	room := st.pageH - pdf.MarginBottom() - pdf.GetY()
+	fit := int(room/lineHeight + 1e-9)
+	if fit >= n {
+		return -1
+	}
+	brk := fit
+	if n-brk < 2 {
+		brk = n - 2
+	}
+	if brk < 2 {
+		brk = 0
+	}
+	if brk == 0 && pdf.GetY() <= pdf.MarginTop()+0.5 {
+		return -1 // already at the top of a page: nothing to gain by moving
+	}
+	return brk
 }

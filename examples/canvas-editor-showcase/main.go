@@ -47,7 +47,8 @@ type ui struct {
 	check       checkState
 	collab      components.CollabAnnouncer
 	collabTimer bool
-	docLang     string // the document's language (a BCP 47 tag), "" for none
+	docLang     string             // the document's language (a BCP 47 tag), "" for none
+	layout      docfile.PageLayout // the header, footer and table of contents of the print layout
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
 	imageMsg     string
 	sugg         suggestState
@@ -195,6 +196,8 @@ func main() {
 			u.title = d.Title
 		}
 		u.docLang = d.Language()
+		u.layout = d.PageLayout()
+		u.layout.Width, u.layout.Height, u.layout.Margins = 0, 0, [4]float64{}
 		stage.ForgetFonts() // the opened text may use fonts the library has
 		renderCanvas()
 		renderUI()
@@ -217,6 +220,7 @@ func main() {
 		d := docfile.FromFlow(u.title, flow)
 		d.Fonts = docfile.FromFonts(lib.Added())
 		d.SetLanguage(u.docLang)
+		u.applyLayout(&d, state.PageWidth(), state.PageHeight(), state.Setup.Margins)
 		return d
 	}
 	// The browser target (localStorage) cannot write the catalog conditionally, so two
@@ -445,11 +449,11 @@ func main() {
 		case "migrate":
 			panel = components.Migrate(u.migrate.Props(func() { pickWordFiles(u) }))
 		case "page":
-			panel = components.PageSetupPanel(components.PageSetupProps{Setup: state.Setup, OnChange: func(p components.PageSetup) {
+			panel = xango.Frag(components.PageSetupPanel(components.PageSetupProps{Setup: state.Setup, OnChange: func(p components.PageSetup) {
 				state.Setup = p
 				renderCanvas()
 				renderUI()
-			}})
+			}}), printPanel(u, renderUI))
 		case "stats":
 			if flow != nil {
 				panel = statsPanel(flow.Stats(), state.Pages)

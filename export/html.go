@@ -95,16 +95,20 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 		imgSelfClose = "/>"
 	}
 
-	for _, b := range snap.Blocks {
+	for bi, b := range snap.Blocks {
+		id := ""
+		if snap.TOC && !xhtml {
+			id = " id=\"" + tocAnchor(bi) + "\""
+		}
 		if b.Kind != BulletItem && b.Kind != NumberedItem {
 			closeAllLists()
 			switch b.Kind {
 			case Heading1:
-				body.WriteString("<h1>" + htmlInline(b.Segments, br) + "</h1>\n")
+				body.WriteString("<h1" + id + ">" + htmlInline(b.Segments, br) + "</h1>\n")
 			case Heading2:
-				body.WriteString("<h2>" + htmlInline(b.Segments, br) + "</h2>\n")
+				body.WriteString("<h2" + id + ">" + htmlInline(b.Segments, br) + "</h2>\n")
 			case Heading3:
-				body.WriteString("<h3>" + htmlInline(b.Segments, br) + "</h3>\n")
+				body.WriteString("<h3" + id + ">" + htmlInline(b.Segments, br) + "</h3>\n")
 			case Quote:
 				body.WriteString("<blockquote><p>" + htmlInline(b.Segments, br) + "</p></blockquote>\n")
 			case Code:
@@ -229,8 +233,8 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 			body.String() + "</body>\n</html>\n"
 	}
 	return "<!doctype html>\n<html" + langAttrs(snap.Lang, false) + ">\n<head>\n<meta charset=\"utf-8\">\n<title>" +
-		escapeHTMLText(snap.Title) + "</title>\n" + themeStyle(theme) + "</head>\n<body>\n" +
-		body.String() + "</body>\n</html>\n"
+		escapeHTMLText(snap.Title) + "</title>\n" + themeStyle(theme) + htmlPrintStyle(snap) + "</head>\n<body>\n" +
+		htmlTOC(snap) + body.String() + "</body>\n</html>\n"
 }
 
 // themeStyle is the <style> element of a theme, or nothing.
