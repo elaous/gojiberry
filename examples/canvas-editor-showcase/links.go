@@ -4,6 +4,7 @@ package main
 
 import (
 	"strings"
+	"syscall/js"
 	"time"
 
 	"github.com/elaous/gojiberry/docstore"
@@ -27,6 +28,17 @@ var linkLives = []struct {
 	{"30d", 30 * 24 * time.Hour},
 }
 
+// personLives are the ends the person can give to someone they add by name; the first is no end.
+var personLives = []struct {
+	key  string
+	life time.Duration
+}{
+	{"never", 0},
+	{"1d", 24 * time.Hour},
+	{"7d", 7 * 24 * time.Hour},
+	{"30d", 30 * 24 * time.Hour},
+}
+
 // linksUI is the state of the share links section.
 type linksUI struct {
 	people *peopleState
@@ -38,10 +50,81 @@ type linksUI struct {
 	tried, result string
 	err           string // why a link could not be made
 	now           func() time.Time
+	// personLife is a key of personLives: how long the people added next keep their access.
+	personLife string
+	// incoming is a share token found in the address when the page opened (#share=). It is offered to the
+	// person and used only when they choose; use applies it and says what happened, stop takes it back.
+	incoming     string
+	use          func(token string) string
+	stop         func()
+	inUse        bool
+	incomingNote string
 }
 
 func newLinks(p *peopleState) *linksUI {
-	return &linksUI{people: p, role: docstore.RoleViewer, life: "7d", now: time.Now}
+	return &linksUI{people: p, role: docstore.RoleViewer, life: "7d", personLife: "never", now: time.Now}
+}
+
+// takeFragment reads a share token from the address (#share=<token>) and removes the fragment from the
+// address bar, so the secret does not stay in the history, a screenshot or a copied address. It returns ""
+// when there is none. Nothing is applied: the token is only offered (see offer).
+func takeFragment() string {
+	loc := js.Global().Get("location")
+	hash := loc.Get("hash").String()
+	token, ok := strings.CutPrefix(hash, "#share=")
+	if !ok || strings.TrimSpace(token) == "" {
+		return ""
+	}
+	if h := js.Global().Get("history"); !h.IsUndefined() {
+		h.Call("replaceState", js.Null(), "", loc.Get("pathname").String()+loc.Get("search").String())
+	}
+	return strings.TrimSpace(token)
+}
+
+func (l *linksUI) personDuration() time.Duration {
+	for _, c := range personLives {
+		if c.key == l.personLife {
+			return c.life
+		}
+	}
+	return 0
+}
+
+func personLifeLabel(key string) string {
+	switch key {
+	case "1d":
+		return T("links.life.1d", "1 day")
+	case "7d":
+		return T("links.life.7d", "7 days")
+	case "30d":
+		return T("links.life.30d", "30 days")
+	}
+	return T("links.personNever", "Until I remove them")
+}
+
+// offer is the notice for a share link that came with the address. It asks; it changes nothing by itself.
+func (l *linksUI) offer() xango.Node {
+	if l.incoming == "" && !l.inUse && l.incomingNote == "" {
+		return xango.Frag()
+	}
+	nodes := []xango.Node{xango.El("h4", []xango.Attr{xango.A("id", "incoming-heading")}, xango.Text(T("links.incoming.title", "This address has a share link")))}
+	switch {
+	case l.inUse:
+		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "incoming-text")}, xango.Text(T("links.incoming.inUse", "The link is in use in this tab. It opens what it allows and nothing more."))),
+			btn("incoming-stop", T("links.incoming.stop", "Stop using it"), l.stop, false))
+	case l.incoming != "":
+		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "incoming-text")}, xango.Text(T("links.incoming.ask", "Someone sent you a link to a document. Use it to open that document from your server? Nothing happens until you choose."))),
+			btn("incoming-use", T("links.incoming.use", "Use this link"), func() {
+				l.incomingNote = l.use(l.incoming)
+				l.incoming = ""
+				l.people.rerender()
+			}, false),
+			btn("incoming-ignore", T("links.incoming.ignore", "Ignore it"), func() { l.incoming = ""; l.people.rerender() }, false))
+	}
+	if l.incomingNote != "" {
+		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "incoming-note"), xango.A("role", "status")}, xango.Text(l.incomingNote)))
+	}
+	return xango.El("section", []xango.Attr{xango.A("id", "incoming"), xango.A("aria-labelledby", "incoming-heading")}, nodes...)
 }
 
 func (l *linksUI) lifetime() time.Duration {
@@ -107,11 +190,19 @@ func (l *linksUI) check() {
 	case token == "":
 		l.result = ""
 	case role == "":
-		l.result = T("links.refused", "This link does not work: it has expired, it was revoked, or it is not a link to this document.")
+		l.result = T("links.refused", "This link does not work. It has ended, it was revoked, or it is for another document.")
 	default:
 		l.result = T("links.works", "This link works: %s, until %s.", roleLabel(string(role)), when(l.people.acl.Links[docstore.LinkID(token)].Expires))
 	}
 	l.people.rerender()
+}
+
+func personLifeOptions() [][2]string {
+	var out [][2]string
+	for _, c := range personLives {
+		out = append(out, [2]string{c.key, personLifeLabel(c.key)})
+	}
+	return out
 }
 
 func selectOf(id, label string, current string, values [][2]string, on func(string)) xango.Node {
@@ -138,7 +229,11 @@ func (l *linksUI) panel() xango.Node {
 	}
 	nodes := []xango.Node{
 		xango.El("h4", []xango.Attr{xango.A("id", "links-heading")}, xango.Text(T("links.heading", "Share with a link"))),
-		xango.El("p", []xango.Attr{xango.A("id", "links-intro"), xango.A("style", "font-size:13px")}, xango.Text(T("links.intro", "Anyone who has the link gets the access you choose, until it ends or you revoke it. A link can never change who has access, and never deletes the document. Commenting on selected text is part of Can view; a separate comment-only role is not built yet."))),
+		xango.El("p", []xango.Attr{xango.A("id", "links-intro"), xango.A("style", "font-size:13px")}, xango.Text(T("links.intro", "Anyone who has the link gets the access you choose. It ends on its own, or when you revoke it. A link cannot change who has access. It cannot delete the document."))),
+		xango.El("p", []xango.Attr{xango.A("id", "links-comment-note"), xango.A("style", "font-size:13px")}, xango.Text(T("links.commentNote", "There is no comment-only role. Comments are stored inside the document, so a server cannot tell a comment from an edit. Can view lets this editor comment, but the server only lets a viewer read."))),
+		xango.El("h4", []xango.Attr{xango.A("id", "links-enc-heading")}, xango.Text(T("links.encHeading", "What encryption protects"))),
+		xango.El("p", []xango.Attr{xango.A("id", "links-enc-protects"), xango.A("style", "font-size:13px")}, xango.Text(T("links.encProtects", "In the encrypted store the server keeps scrambled text. It cannot read your documents. A link or a grant alone does not give a key."))),
+		xango.El("p", []xango.Attr{xango.A("id", "links-enc-not"), xango.A("style", "font-size:13px")}, xango.Text(T("links.encNot", "Encryption does not hide a document from someone you let in. They can read it, copy it and pass it on. It does not hide that the document exists, or when it changed, or how big it is. A link works for anyone who holds it."))),
 		xango.El("fieldset", []xango.Attr{xango.A("id", "links-new"), xango.A("style", "border:0;padding:0;margin:6px 0")},
 			xango.El("legend", nil, xango.Text(T("links.new", "New link"))),
 			selectOf("link-role", T("links.accessLabel", "Access"), string(l.role), [][2]string{
@@ -153,13 +248,15 @@ func (l *linksUI) panel() xango.Node {
 	}
 	if l.created != "" {
 		nodes = append(nodes, xango.El("div", []xango.Attr{xango.A("id", "link-new-box"), xango.A("role", "status")},
-			xango.El("label", []xango.Attr{xango.A("for", "link-new-url")}, xango.Text(T("links.once", "Your new link. It is shown only now; copy it before you leave."))),
+			xango.El("label", []xango.Attr{xango.A("for", "link-new-url")}, xango.Text(T("links.once", "Your new link. It is shown only now. Copy it before you leave."))),
 			xango.El("input", []xango.Attr{xango.A("id", "link-new-url"), xango.A("readonly", "readonly"), xango.A("style", "width:100%"), xango.A("value", l.created)}),
 			btn("link-dismiss", T("links.done", "Done"), func() { l.created = ""; l.people.rerender() }, false)))
 	}
 	nodes = append(nodes,
+		xango.El("h4", []xango.Attr{xango.A("id", "person-life-heading")}, xango.Text(T("links.personHeading", "People you add by name"))),
+		selectOf("person-life", T("links.personLifeLabel", "They keep access"), l.personLife, personLifeOptions(), func(v string) { l.personLife = v }),
 		xango.El("h4", []xango.Attr{xango.A("id", "link-check-heading")}, xango.Text(T("links.checkHeading", "Check a link"))),
-		xango.El("label", []xango.Attr{xango.A("for", "link-try"), xango.A("style", "display:block;font-size:13px")}, xango.Text(T("links.tryLabel", "Paste a link to see what it gives right now"))),
+		xango.El("label", []xango.Attr{xango.A("for", "link-try"), xango.A("style", "display:block;font-size:13px")}, xango.Text(T("links.tryLabel", "Paste a link to see what it allows now"))),
 		xango.El("input", []xango.Attr{xango.A("id", "link-try"), xango.A("style", "width:100%"), xango.A("value", l.tried),
 			xango.On("input", func(e xango.Event) { l.tried = xango.EventValue[string](e) })}),
 		btn("link-check", T("links.check", "Check"), l.check, false),
@@ -183,15 +280,18 @@ func (l *linksUI) panel() xango.Node {
 			text = v.ID + ": " + roleLabel("owner")
 		default:
 			text = v.ID + ": " + roleLabel(v.Role)
+			if !v.Expires.IsZero() {
+				text = T("links.personUntil", "%s: %s, until %s", v.ID, roleLabel(v.Role), when(v.Expires))
+			}
 		}
 		attrs := []xango.Attr{xango.A("data-kind", v.Kind), xango.A("data-role", v.Role)}
-		if v.Kind == "link" {
+		if !v.Expires.IsZero() {
 			attrs = append(attrs, xango.A("data-expires", v.Expires.UTC().Format(time.RFC3339)))
 		}
 		items = append(items, xango.El("li", attrs, append([]xango.Node{xango.Text(text + " ")}, extra...)...))
 	}
 	nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("id", "who-list"), xango.A("aria-labelledby", "who-heading"), xango.A("style", "font-size:13px")}, items...))
-	return xango.El("section", []xango.Attr{xango.A("id", "links"), xango.A("aria-labelledby", "links-heading")}, nodes...)
+	return xango.Frag(l.offer(), xango.El("section", []xango.Attr{xango.A("id", "links"), xango.A("aria-labelledby", "links-heading")}, nodes...))
 }
 
 // state is what #state shows of the links, for the tests.
@@ -202,5 +302,5 @@ func (l *linksUI) state() map[string]any {
 			out = append(out, map[string]any{"role": v.Role, "expires": v.Expires.UTC().Format(time.RFC3339)})
 		}
 	}
-	return map[string]any{"links": out}
+	return map[string]any{"links": out, "incoming": l.incoming != "", "inUse": l.inUse}
 }
