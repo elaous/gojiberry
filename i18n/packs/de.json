@@ -798,6 +798,7 @@
   "sync.connecting": "Verbindung zum gemeinsamen Dokument wird hergestellt …",
   "sync.offlinePending#one": "Offline: %d Änderung wartet auf das Senden",
   "sync.offlinePending#other": "Offline: %d Änderungen warten auf das Senden",
-  "sync.offline": "Offline: Ihre Änderungen werden geteilt, sobald die Verbindung zurück ist"
+  "sync.offline": "Offline: Ihre Änderungen werden geteilt, sobald die Verbindung zurück ist",
+  "enc.sheetQR": "QR-Code des Wiederherstellungsschlüssels. Derselbe Schlüssel steht oben als Text; das Scannen überträgt ihn auf ein anderes Gerät."
  }
 }
