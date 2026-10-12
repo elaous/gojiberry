@@ -283,8 +283,18 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 	}
 	snap := export.FromDocumentTracked(doc)
 	var out []components.A11yBlock
+	var cur export.Block
+	// add puts a block in the copy, mapped to where the document block starts in the editor's text stream.
+	add := func(blk components.A11yBlock) {
+		if cur.Start >= 0 {
+			blk.Mapped, blk.Start, blk.Lead = true, cur.Start, cur.Lead
+			blk.Object = cur.Kind == export.Image || cur.Kind == export.TableCell
+		}
+		out = append(out, blk)
+	}
 	for i := 0; i < len(snap.Blocks); i++ {
 		b := snap.Blocks[i]
+		cur = b
 		text := ""
 		for _, s := range b.Segments {
 			switch {
@@ -299,21 +309,21 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 		runs := a11yRuns(b.Segments)
 		switch b.Kind {
 		case export.Heading1, export.Heading2, export.Heading3:
-			out = append(out, components.A11yBlock{Kind: components.A11yHeading, Level: b.Level, Text: text, Runs: runs})
+			add(components.A11yBlock{Kind: components.A11yHeading, Level: b.Level, Text: text, Runs: runs})
 		case export.BulletItem, export.NumberedItem:
-			out = append(out, components.A11yBlock{Kind: components.A11yListItem, Level: b.Level, Ordered: b.Kind == export.NumberedItem, Text: text, Runs: runs})
+			add(components.A11yBlock{Kind: components.A11yListItem, Level: b.Level, Ordered: b.Kind == export.NumberedItem, Text: text, Runs: runs})
 		case export.Quote:
-			out = append(out, components.A11yBlock{Kind: components.A11yQuote, Text: text, Runs: runs})
+			add(components.A11yBlock{Kind: components.A11yQuote, Text: text, Runs: runs})
 		case export.Code:
-			out = append(out, components.A11yBlock{Kind: components.A11yCode, Text: text})
+			add(components.A11yBlock{Kind: components.A11yCode, Text: text})
 		case export.Image:
 			switch {
 			case b.ImageDecorative && b.ImageAlt == "":
 				// nothing a reader needs
 			case b.ImageAlt != "":
-				out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.imageAlt", "Image: %s", b.ImageAlt)})
+				add(components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.imageAlt", "Image: %s", b.ImageAlt)})
 			default:
-				out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.imageNoAlt", "Image without a description")})
+				add(components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.imageNoAlt", "Image without a description")})
 			}
 		case export.TableCell:
 			if b.TableCol == 0 {
@@ -327,11 +337,11 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 					}
 					row.Cells = append(row.Cells, cell)
 				}
-				out = append(out, row)
+				add(row)
 			}
 		default:
 			if text != "" {
-				out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: text, Runs: runs})
+				add(components.A11yBlock{Kind: components.A11yParagraph, Text: text, Runs: runs})
 			}
 		}
 	}
@@ -420,39 +430,45 @@ func pageEndpoint(raw string) string {
 	return got
 }
 
-// a11yRuns are a block's segments as pieces with a language each (neighbours with the same language
-// joined), or nil when none of the text has a language of its own.
+// a11yRuns are a block's segments as pieces with a language, a link, comments and a suggested change each
+// (neighbours with the same of all of them joined), or nil when none of the text has any of these.
 func a11yRuns(segs []export.Segment) []components.A11yRun {
 	tagged := false
 	for _, s := range segs {
-		tagged = tagged || s.Format.Lang != "" || s.Format.Change != export.NoChange
+		tagged = tagged || s.Format.Lang != "" || s.Format.Change != export.NoChange || s.Format.Href != "" || s.Format.Comment != ""
 	}
 	if !tagged {
 		return nil
 	}
 	var out []components.A11yRun
 	for _, s := range segs {
-		text, tag := s.Text, s.Format.Lang
-		change, author := "", ""
+		r := components.A11yRun{Text: s.Text, Lang: s.Format.Lang, Href: s.Format.Href, Comments: s.Format.Comment}
 		switch s.Format.Change {
 		case export.Inserted:
-			change, author = "ins", s.Format.Author
+			r.Change, r.Author = "ins", s.Format.Author
 		case export.Deleted:
-			change, author = "del", s.Format.Author
+			r.Change, r.Author = "del", s.Format.Author
 		}
 		if s.SoftBreak {
-			text = " "
+			r.Text = " "
 			if n := len(out); n > 0 {
-				tag, change, author = out[n-1].Lang, out[n-1].Change, out[n-1].Author // a break stays with the text before it
+				r = out[n-1] // a break stays with the text before it
+				r.Text = " "
 			}
 		}
-		if n := len(out); n > 0 && out[n-1].Lang == tag && out[n-1].Change == change && out[n-1].Author == author {
-			out[n-1].Text += text
+		if n := len(out); n > 0 && sameRunKind(out[n-1], r) {
+			out[n-1].Text += r.Text
 		} else {
-			out = append(out, components.A11yRun{Text: text, Lang: tag, Change: change, Author: author})
+			out = append(out, r)
 		}
 	}
 	return out
+}
+
+// sameRunKind reports whether two pieces are alike in everything but their text.
+func sameRunKind(a, b components.A11yRun) bool {
+	a.Text, b.Text = "", ""
+	return a == b
 }
 
 // selectionLanguageMenu tags the selected text (or the text typed next) with its language, so that a
@@ -533,6 +549,7 @@ func exportGate() a11ycheck.GateMode {
 // export with errors is refused unless the person allowed this one, or is done with a warning.
 func (u *ui) gatedExport(format string, doc docfile.Document) (string, []byte, string, error) {
 	mode := exportGate()
+	gateSaid := false // the gate has already announced the export, and one announcement is heard at a time
 	if mode != a11ycheck.GateAllow {
 		findings := a11ycheck.Check(doc, a11ycheck.Options{})
 		floor := operatorGateFloor()
@@ -546,9 +563,17 @@ func (u *ui) gatedExport(format string, doc docfile.Document) (string, []byte, s
 		u.check.override = false
 		if errs > 0 {
 			u.announce(T("check.exportedWith", "Exported with %d accessibility errors", errs))
+			gateSaid = true
 		}
 	}
-	return u.transfer.Export(format, doc)
+	file, data, mime, err := u.transfer.Export(format, doc)
+	if err == nil {
+		// Whatever the way to export, the person hears what the format left out (the Files tab lists it).
+		if n := len(export.Fidelity(format, doc).Losses); n > 0 && !gateSaid {
+			u.announce(Tn("fidelity.announce", "Exported: %d thing left out or simplified in the %s file. The Files tab lists them.", "Exported: %d things left out or simplified in the %s file. The Files tab lists them.", n, format))
+		}
+	}
+	return file, data, mime, err
 }
 
 // checkPanel is the Check tab: it runs the document's accessibility check (package a11ycheck) and lists

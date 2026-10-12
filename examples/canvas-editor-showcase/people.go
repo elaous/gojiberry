@@ -19,13 +19,20 @@ type peopleState struct {
 	draft, role string
 	pending     *components.Pending
 	rerender    func()
+	links       *linksUI // share links (links.go)
 }
 
 func newPeople(owner string, rerender func()) *peopleState {
-	return &peopleState{acl: docstore.ACL{Owner: owner}, pending: components.NewPending(rerender), rerender: rerender}
+	p := &peopleState{acl: docstore.ACL{Owner: owner}, pending: components.NewPending(rerender), rerender: rerender}
+	p.links = newLinks(p)
+	return p
 }
 
 func (p *peopleState) panel(confirm func(string, func())) xango.Node {
+	return xango.Frag(p.peoplePanel(confirm), p.links.panel())
+}
+
+func (p *peopleState) peoplePanel(confirm func(string, func())) xango.Node {
 	return components.People(components.PeopleProps{
 		Confirm: confirm,
 		People:  p.list(), Self: p.acl.Owner, Pending: p.pending,
