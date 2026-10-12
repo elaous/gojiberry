@@ -104,6 +104,7 @@ type ui struct {
 	statsSig            string // the counts the status bar and Stats tab last showed
 	shareLink           string // the link the Share tab shows
 	people              *peopleState
+	shareToken          string     // a share link the person chose to use (#share=); sent with every request to the server
 	usage               *privacyUI // the Privacy tab: anonymous usage counts, off unless the person opts in
 	sa                  searchAll
 	enc                 *encUI // the encrypted browser store: off unless the person turns it on
@@ -297,6 +298,10 @@ func main() {
 	components.CopyText = u.saver.Copy // the "Copy details" button of an error
 	u.migrate = newMigrate(u, func() { renderUI() })
 	u.people = newPeople("you@example.com", func() { renderUI() })
+	u.people.links.use, u.people.links.stop = u.useShareLink, u.stopShareLink
+	if tok := takeFragment(); tok != "" { // a share link in the address is offered in the People tab, never applied by itself
+		u.people.links.incoming, u.tab = tok, "people"
+	}
 	u.usage = newPrivacy(u.tab, &u.enc.dir)
 	u.usage.render = func() { renderUI(); redraw() } // redraw refreshes #state
 	go u.usage.run()

@@ -122,20 +122,25 @@ type Viewer struct {
 	// ID is the address of a person, or the id of a link (to revoke it by).
 	ID   string `json:"id"`
 	Role string `json:"role"`
-	// Expires is when a link ends; zero for the owner and for people.
+	// Expires is when a link or a person's access ends; zero for the owner and for people without an end.
 	Expires time.Time `json:"expires,omitzero"`
 }
 
 // WhoCanSee lists everyone and everything that can open the document at now: the owner, the people
 // granted a role, and the links still alive (an expired link is not listed: it opens nothing).
 func (a ACL) WhoCanSee(now time.Time) []Viewer {
+	a = a.Active(now) // a person whose access ended is not listed either
 	var out []Viewer
 	for _, p := range a.People() {
 		kind := "person"
 		if p.Role == "owner" {
 			kind = "owner"
 		}
-		out = append(out, Viewer{Kind: kind, ID: p.ID, Role: p.Role})
+		v := Viewer{Kind: kind, ID: p.ID, Role: p.Role}
+		if end, ok := a.Until[NormalizeAddress(p.ID)]; ok && kind == "person" {
+			v.Expires = end
+		}
+		out = append(out, v)
 	}
 	var links []Viewer
 	for id, l := range a.Links {

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/user"
@@ -39,6 +40,9 @@ const (
 type ACL struct {
 	Owner  string          `json:"owner"`
 	Grants map[string]Role `json:"grants,omitempty"`
+	// Until is when a named person's access ends (by the same normalised identifier as Grants). A grant with
+	// no entry here has no end. The server reads the list through Active, so an ended grant opens nothing.
+	Until map[string]time.Time `json:"until,omitempty"`
 	// Links are the share links of the document by the hash of their token (sharelinks.go).
 	Links map[string]Link `json:"links,omitempty"`
 }
@@ -125,7 +129,14 @@ func (s *Server) loadACL(ctx context.Context, id string) (ACL, error) {
 			acl.Grants[n] = v
 		}
 	}
-	return acl, nil
+	for k, v := range acl.Until {
+		if n := NormalizeAddress(k); n != k {
+			delete(acl.Until, k)
+			acl.Until[n] = v
+		}
+	}
+	// A grant that has ended opens nothing, whoever asks (the owner's list shows it gone).
+	return acl.Active(s.clock()), nil
 }
 
 // methodRenew is checkPermission's name for POST /docs/{id}/renew: the permission of a write that
@@ -274,6 +285,7 @@ func (s *Server) handleACL(w http.ResponseWriter, r *http.Request, id string) {
 			body.Owner = existing.Owner // the owner stays the owner
 		}
 		body.Grants = normalizedGrants(body.Grants)
+		body.Until = normalizedUntil(body.Until, body.Grants, s.clock())
 		body.Links = nil // links are made and revoked by POST and DELETE; replacing the list keeps the ones it has
 		if err == nil {
 			body.Links = existing.Links
@@ -389,6 +401,61 @@ func (a *ACL) Grant(email string, role Role) error {
 	return nil
 }
 
+// MaxGrantLife is the longest a person's access may be given for.
+const MaxGrantLife = 365 * 24 * time.Hour
+
+// GrantFor gives email a role that ends life after now (no end when life is zero). A life must be between
+// MinLinkLife and MaxGrantLife. Giving a role again without a life (Grant) keeps the end already set;
+// GrantFor with a zero life removes it.
+func (a *ACL) GrantFor(email string, role Role, now time.Time, life time.Duration) error {
+	if life != 0 && (life < MinLinkLife || life > MaxGrantLife) {
+		return errors.New("docstore: access can be given for between a minute and a year")
+	}
+	if err := a.Grant(email, role); err != nil {
+		return err
+	}
+	email = NormalizeAddress(email)
+	if life == 0 {
+		delete(a.Until, email)
+		return nil
+	}
+	if a.Until == nil {
+		a.Until = map[string]time.Time{}
+	}
+	a.Until[email] = now.Add(life).UTC().Truncate(time.Second)
+	return nil
+}
+
+// GrantEnds is when email's access ends; ok is false when it has no end.
+func (a ACL) GrantEnds(email string) (t time.Time, ok bool) {
+	t, ok = a.Until[NormalizeAddress(email)]
+	return t, ok
+}
+
+// Active is the list as it stands at now: the grants whose end has passed are gone. It works on a copy.
+// A grant is good strictly before its end, as a link is.
+func (a ACL) Active(now time.Time) ACL {
+	if len(a.Until) == 0 {
+		return a
+	}
+	out := a
+	out.Grants = make(map[string]Role, len(a.Grants))
+	out.Until = make(map[string]time.Time, len(a.Until))
+	for k, v := range a.Grants {
+		if end, ok := a.Until[k]; ok && !now.Before(end) {
+			continue
+		}
+		out.Grants[k] = v
+		if end, ok := a.Until[k]; ok {
+			out.Until[k] = end
+		}
+	}
+	if len(out.Until) == 0 {
+		out.Until = nil
+	}
+	return out
+}
+
 // Revoke takes away what email was given; the owner cannot be removed.
 func (a *ACL) Revoke(email string) error {
 	email = NormalizeAddress(email)
@@ -396,6 +463,7 @@ func (a *ACL) Revoke(email string) error {
 		return errors.New("docstore: the owner cannot be removed")
 	}
 	delete(a.Grants, email)
+	delete(a.Until, email)
 	return nil
 }
 
@@ -427,6 +495,26 @@ func normalizedGrants(in map[string]Role) map[string]Role {
 		if n := NormalizeAddress(k); n != "" && (v == RoleEditor || v == RoleViewer) {
 			out[n] = v
 		}
+	}
+	return out
+}
+
+// normalizedUntil keeps the ends that belong to a grant that is kept, written with Normalize; an end
+// further than MaxGrantLife away is cut to it.
+func normalizedUntil(in map[string]time.Time, grants map[string]Role, now time.Time) map[string]time.Time {
+	var out map[string]time.Time
+	for k, v := range in {
+		n := NormalizeAddress(k)
+		if _, ok := grants[n]; !ok || v.IsZero() {
+			continue
+		}
+		if limit := now.Add(MaxGrantLife); v.After(limit) {
+			v = limit
+		}
+		if out == nil {
+			out = map[string]time.Time{}
+		}
+		out[n] = v.UTC().Truncate(time.Second)
 	}
 	return out
 }
