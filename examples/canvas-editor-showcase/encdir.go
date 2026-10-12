@@ -402,7 +402,10 @@ func (d *dirUI) settingsPanel(e *encUI) []xango.Node {
 		OnChange: func(on bool) { d.setRequireOwner(on, e) },
 	}))
 	if d.dir != nil {
-		nodes = append(nodes, para("dir-server-store", T("dir.serverStore", "Documents can also be saved to this server (Save tab, Save to). The server can read them."), false))
+		if encTarget != "server" {
+			nodes = append(nodes, para("dir-server-store", T("dir.serverStore", "Documents can also be saved to this server (Save tab, Save to). The server can read them."), false))
+		}
+		nodes = append(nodes, d.locationNodes(e)...)
 	}
 	if d.refused != "" {
 		nodes = append(nodes, para("dir-refused", d.refused, true))

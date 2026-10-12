@@ -33,15 +33,7 @@ import (
 // acknowledgement, a change that was cut short is finished or undone from the panel, and a store
 // whose keys are all lost can be erased.
 
-const (
-	encSlot      = "showcase"            // where client.CreateLocal keeps the passkey's credential ID
-	encConfigKey = "showcase-enc:config" // the owner keys' public halves; not under the store's own prefix
-	// encSealedKey marks a store that was turned on here. It is only a hint (whoever can write the
-	// storage can delete it too): a missing configuration is shown as missing, not as "off", when
-	// it is set or when encrypted files are found.
-	encSealedKey = "showcase-enc:sealed"
-	browserLabel = "This browser (localStorage)"
-)
+const browserLabel = "This browser (localStorage)"
 
 // prepared is a recovery key that was made and whose secret is on screen: it is not an owner key
 // until the person has said they saved the secret and confirmed.
@@ -54,7 +46,7 @@ type prepared struct {
 // encUI is the encryption state of the page.
 type encUI struct {
 	store   *encstore.Store
-	browser *docstore.BrowserAdapter
+	browser docstore.Adapter // where the store lives: this browser's storage or a server (see encscope.go)
 	pending *components.Pending
 	render  func()
 
@@ -92,6 +84,13 @@ type encUI struct {
 	peopleKey       *prepared // the recovery key being added from the People tab
 
 	dir dirUI
+
+	keyListDraft string // a key list pasted from another device, not yet used
+
+	// deviceUses are the records of when each key last unlocked a store kept on a server, from all the
+	// devices that share it; usesLoaded says they were asked for since the store was unlocked.
+	deviceUses map[string]encrypt.DeviceUse
+	usesLoaded bool
 
 	// swap makes the saver use the store's adapter as it stands now (set by the page): called after
 	// every change, so a change that left the store interrupted, or one that finished, is followed.
@@ -149,20 +148,23 @@ func encSealedHint() bool {
 	return !v.IsNull() && !v.IsUndefined() && v.String() == "1"
 }
 
-func newEncStore(browser *docstore.BrowserAdapter, cfg encstore.Config) (*encstore.Store, error) {
-	st, err := encstore.New(browser, "browser", cfg)
+func newEncStore(browser docstore.Adapter, cfg encstore.Config) (*encstore.Store, error) {
+	st, err := encstore.New(browser, encTarget, cfg)
 	if err != nil {
 		return nil, err
 	}
 	// Capacity is counted in the characters localStorage keeps (some browsers count 2 bytes each):
 	// 5 Mi characters is the least any of them gives.
-	st.Persist, st.Reload, st.Capacity = writeEncConfig, reloadEncConfig, 5<<20
+	st.Persist, st.Reload = writeEncConfig, reloadEncConfig
+	if encTarget == "browser" {
+		st.Capacity = 5 << 20 // a server has no such limit
+	}
 	return st, nil
 }
 
 // newEncOff is the page with encryption off after the key list could not be read: why is the
 // notice the Save tab shows. (Kept for a configuration that parses but cannot be used.)
-func newEncOff(browser *docstore.BrowserAdapter, render func(), why error) (*encUI, error) {
+func newEncOff(browser docstore.Adapter, render func(), why error) (*encUI, error) {
 	st, err := newEncStore(browser, encstore.Config{})
 	if err != nil {
 		return nil, err
@@ -174,7 +176,7 @@ func newEncOff(browser *docstore.BrowserAdapter, render func(), why error) (*enc
 	return e, nil
 }
 
-func newEnc(browser *docstore.BrowserAdapter, render func()) (*encUI, error) {
+func newEnc(browser docstore.Adapter, render func()) (*encUI, error) {
 	cfg, rerr := readEncConfig()
 	why := encstore.Inspect(context.Background(), browser, cfg, rerr)
 	if why == nil && len(cfg.Owners) == 0 && cfg.Pending == nil && encSealedHint() {
@@ -197,12 +199,12 @@ func newEnc(browser *docstore.BrowserAdapter, render func()) (*encUI, error) {
 // target is the browser target as it stands: the encrypted adapter when encryption is on.
 func (e *encUI) target() saver.Target {
 	if e.broken != nil {
-		return saver.Target{Name: "browser", Label: T("enc.browserLabelBroken", "This browser (read-only: key configuration lost)"), Adapter: encstore.ReadOnly(e.browser, e.broken), Capacity: 5 << 20}
+		return saver.Target{Name: encTarget, Label: encLabel(T("enc.browserLabelBroken", "This browser (read-only: key configuration lost)"), "%s (read-only: key configuration lost)"), Adapter: encstore.ReadOnly(e.browser, e.broken), Capacity: encCapacity()}
 	}
 	if e.store.Enabled() {
-		return saver.Target{Name: "browser", Label: T("enc.browserLabel", "This browser (encrypted)"), Adapter: e.store.Adapter(), Capacity: 5 << 20}
+		return saver.Target{Name: encTarget, Label: encLabel(T("enc.browserLabel", "This browser (encrypted)"), "%s (encrypted)"), Adapter: e.store.Adapter(), Capacity: encCapacity()}
 	}
-	return saver.Target{Name: "browser", Label: browserLabel, Adapter: e.browser, Capacity: 5 << 20}
+	return saver.Target{Name: encTarget, Label: encLabel(browserLabel, "%s"), Adapter: e.browser, Capacity: encCapacity()}
 }
 
 // state is what #state says about it, for the e2e test.
@@ -395,6 +397,7 @@ func (u *ui) encBrokenPanel() xango.Node {
 	kids := []xango.Node{
 		para("enc-broken", title, true),
 		para("enc-broken-text", T("enc.brokenText", "The documents in this browser's store are encrypted, but the list of their keys is gone or damaged, so this page does not know the store's keys. The store is read-only: nothing new is saved here (saving plain text next to the ciphertext would be wrong). If you hold one of the store's keys, restore from the files: that key opens them and becomes the store's only key (add the others again afterwards; files whose lists were signed by another key than the one you restore with may not restore, and then only Erase is left). Otherwise erase the store."), false)}
+	kids = append(kids, u.keyListImportNodes()...)
 	if client.Supported() && client.LocalCredential(encSlot) != "" {
 		kids = append(kids, btn("enc-restore-passkey", T("enc.restorePasskey", "Restore with my passkey"), func() {
 			u.encRestore(func(ctx context.Context) (encstore.NewKey, error) {
@@ -673,12 +676,6 @@ func (u *ui) encCheckRecovery() {
 	}
 	u.rerender()
 }
-
-// recoveryCheckedKey is where the time of the last successful check is kept in this browser.
-const recoveryCheckedKey = "showcase-enc:recovery-checked"
-
-// recoverySnoozeKey is where "remind me in a week" is kept in this browser.
-const recoverySnoozeKey = "showcase-enc:recovery-snooze"
 
 // recoveryCheckDue says whether to remind the person to check their recovery key, and whether they
 // never have in this browser.
