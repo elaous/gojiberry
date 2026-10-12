@@ -306,6 +306,46 @@ func TestCheckPanelFixButtonsAndTheExportGate(t *testing.T) {
 	}
 }
 
+// An operator's minimum gate: the choices below it are disabled and cannot be pressed, a note says who
+// set it, and under "block" the override is not offered at all.
+func TestCheckPanelGateFloorCannotBeLowered(t *testing.T) {
+	var gate []string
+	overrides := 0
+	props := func(gate_, floor string) CheckPanelProps {
+		return CheckPanelProps{Checked: true, Gate: gate_, GateFloor: floor, OnOverride: func() { overrides++ },
+			OnGate: func(m string) { gate = append(gate, m) }}
+	}
+	html := render(t, CheckPanel(props("block", "block")))
+	for _, want := range []string{`data-gate="" aria-pressed="false" disabled="disabled"`, `data-gate="warn" aria-pressed="false" disabled="disabled"`, `id="gj-check-floor"`, "cannot be allowed anyway"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in\n%s", want, html)
+		}
+	}
+	if strings.Contains(html, `data-gate="block" aria-pressed="true" disabled`) || strings.Contains(html, "gj-check-override") {
+		t.Errorf("the strictest gate is pressable and has no override:\n%s", html)
+	}
+	// only the "block" button and Check respond
+	clicks := findHandlers(CheckPanel(props("block", "block")), "click")
+	if len(clicks) != 2 {
+		t.Fatalf("click handlers: %d", len(clicks))
+	}
+	ev := xango.NewEvent("click", nil, false, nil, nil)
+	clicks[1](ev)
+	if len(gate) != 1 || gate[0] != "block" || overrides != 0 {
+		t.Errorf("gate %v overrides %d", gate, overrides)
+	}
+	// a warn floor: "none" is disabled, warn and block are not, and the override stays under block
+	html = render(t, CheckPanel(props("block", "warn")))
+	if !strings.Contains(html, `data-gate="" aria-pressed="false" disabled="disabled"`) || strings.Contains(html, `data-gate="warn" aria-pressed="false" disabled`) ||
+		!strings.Contains(html, "gj-check-override") || !strings.Contains(html, "cannot be lowered here") {
+		t.Errorf("warn floor:\n%s", html)
+	}
+	// no floor: nothing is disabled and there is no note
+	if html = render(t, CheckPanel(props("", ""))); strings.Contains(html, "disabled") || strings.Contains(html, "gj-check-floor") {
+		t.Errorf("no floor:\n%s", html)
+	}
+}
+
 func TestAccessibleTextHearsSuggestedChanges(t *testing.T) {
 	html := render(t, AccessibleText(AccessibleTextProps{Blocks: []A11yBlock{{Kind: A11yParagraph, Text: "the red fox", Runs: []A11yRun{
 		{Text: "the "}, {Text: "brown", Change: "del", Author: "Ana"}, {Text: "red", Change: "ins", Author: "Ana"}, {Text: " fox", Lang: "fr"}, {Text: "!", Change: "ins"}}}}}))

@@ -35,6 +35,21 @@ type CheckPanelProps struct {
 	OnGate     func(mode string)
 	Overridden bool
 	OnOverride func()
+	// GateFloor is the least strict gate the operator allows ("" for none, "warn" or "block"). A choice
+	// below it is shown but cannot be pressed, a note says why, and with "block" there is no override
+	// either. The host must also hold Gate at or above it.
+	GateFloor string
+}
+
+// gateRank orders the gates by how strict they are.
+func gateRank(g string) int {
+	switch g {
+	case "warn":
+		return 1
+	case "block":
+		return 2
+	}
+	return 0
 }
 
 // CheckPanel lists the findings of a document accessibility check, each with its fix and a button
@@ -88,17 +103,34 @@ func CheckPanel(p CheckPanelProps) xango.Node {
 	}
 	if p.OnGate != nil {
 		var modes []xango.Node
+		floorLabel := ""
 		for _, m := range []struct{ value, label string }{
 			{"", tr("check.gate.allow", "Export without checking")},
 			{"warn", tr("check.gate.warn", "Warn about errors")},
 			{"block", tr("check.gate.block", "Block export with errors")},
 		} {
 			value := m.value
-			modes = append(modes, xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-keybindings-button gj-check-gate"), xango.A("data-gate", value),
-				xango.A("aria-pressed", boolAttr(p.Gate == value)), xango.On("click", func(xango.Event) { p.OnGate(value) })}, xango.Text(m.label)))
+			attrs := []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-keybindings-button gj-check-gate"), xango.A("data-gate", value),
+				xango.A("aria-pressed", boolAttr(p.Gate == value))}
+			if value == p.GateFloor {
+				floorLabel = m.label
+			}
+			if gateRank(value) < gateRank(p.GateFloor) {
+				attrs = append(attrs, xango.A("disabled", "disabled")) // below what the operator allows
+			} else {
+				attrs = append(attrs, xango.On("click", func(xango.Event) { p.OnGate(value) }))
+			}
+			modes = append(modes, xango.El("button", attrs, xango.Text(m.label)))
 		}
 		nodes = append(nodes, xango.El("div", []xango.Attr{xango.A("role", "group"), xango.A("aria-label", tr("check.gate", "Before exporting")), xango.A("class", "gj-check-gates"), xango.A("style", "display:flex;gap:6px;flex-wrap:wrap;margin:8px 0")}, modes...))
-		if p.Gate == "block" && p.OnOverride != nil {
+		if gateRank(p.GateFloor) > 0 {
+			note := trf("check.gate.floor", "Set by the administrator of this site: at least \"%s\". It cannot be lowered here.", floorLabel)
+			if p.GateFloor == "block" {
+				note = trf("check.gate.floorBlock", "Set by the administrator of this site: \"%s\". An export with errors cannot be allowed anyway.", floorLabel)
+			}
+			nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "gj-check-floor"), xango.A("class", "gj-doc-meta")}, xango.Text(note)))
+		}
+		if p.Gate == "block" && p.OnOverride != nil && p.GateFloor != "block" {
 			label := tr("check.override", "Allow the next export anyway")
 			if p.Overridden {
 				label = tr("check.overridden", "The next export is allowed")
