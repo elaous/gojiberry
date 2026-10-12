@@ -923,6 +923,26 @@ the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. 
     7. Docs of what is and is not supported.
     Depends on the preference menu (51) and the central config store (52); ties to the voice-over item (49).
     Priority: medium, research spike first. Where: `components`, `docs`.
+    Spike result and first slice (PR #PR1): `docs/euphonia-port.md` records the finding. Project Euphonia's app is
+    Apache-2.0 (Flutter app that records phrases and uploads them to a Firebase bucket the developer creates, a Colab
+    fine-tuning notebook, a Whisper example service); trained weights, the base model, the data set and any backend
+    are not in it, and Project Relate has no API. So a personal model cannot be produced here; what is built is the
+    flow and the training-free help, as a clean-room Go implementation. Package `speechcoach`: phrase sets (built in
+    for en, de, fr, es; a person's own list), a forgiving session (record, retake, skip, back, resume, no time limits),
+    quality hints from signal analysis on 16 kHz PCM (silent, too short, too quiet, clipping, noisy, long pause),
+    WAV and resampling, a local dataset with a manifest, zip export and a validated import (checksums, size limits,
+    no path escapes), sealing (AES-256-GCM) for storage, a vocabulary that becomes the recogniser's initial prompt,
+    a correction memory that suggests earlier fixes and lists the person's words for the autocomplete list (79), a
+    recogniser client for the voiceserver contract (bring your own endpoint), and the optional contribution to a
+    research endpoint (none by default, a confirmed exact package per sitting, no identifiers, revocable by a
+    delete request). `voice/listen` and `cmd/voiceserver` take `prompt` and `language` (whisper.cpp `--prompt`,
+    `-l`). Tests: `speechcoach/*_test.go`, `voice/listen/whisper_bias_test.go`, `voice/server/server_bias_test.go`.
+    Not possible without a trained personalised model (on-device fine-tuning needs a GPU and an ML framework;
+    no hosted Euphonia or Relate model exists): recognising an atypical voice better than the base recogniser
+    does. Options: export the dataset and fine-tune outside (the Euphonia notebook or whisper.cpp tooling), then
+    serve the result behind the voiceserver contract; or run local whisper with the vocabulary bias, which helps
+    names and rare words only. Left: the showcase Speech tab, testing with users with atypical speech (step 6),
+    steps 1 and 2 as a provider interface in the editor.
 57. **Done in part (PR #285): privacy-first telemetry with no personal data.** Kind: fixable. **Built:** package `telemetry` (closed allowlist of five names with enumerated values, strict decoder that refuses unknown fields, day-granular batches, a `Collector` that keeps nothing and sends nothing until the person opts in, a `Receiver` that only increments counters, 90-day retention, k=5 reporting), `docstore.WithTelemetry` (`POST /telemetry`, rate limited with a hashed in-memory key, totals in `/admin/usage`, `GET /admin/telemetry`), the operator kill switch `GOJIBERRY_DOCSTORE_TELEMETRY=on`, the `telemetry.refused` audit kind, [docs/telemetry.md](telemetry.md), and the showcase Privacy tab (exact-JSON preview, 'send nothing' default, Do Not Track and Global Privacy Control respected, accessible markup). Tests: allowlist, extra-field and bad-day refusals, opt-out sends zero requests (browser e2e with a request counter), exact preview equals request. **Open:** steps 5 (client sampling, exportable local debug log) and 7 (scrubbed crash reports, separately opt-in), the preference-menu entry (51/52), persistent totals, noise. Original plan: What: a minimal, aggregate-only usage and
     health signal for the operator, designed so that no personal data can be collected. Why it matters: the project
     needs to know which features and browsers matter and where it is slow, without tracking anyone. Plan:
