@@ -109,3 +109,21 @@ func NewSite(t testing.TB, extra ...string) *Site {
 	site.URL, site.srv = srv.URL, srv
 	return site
 }
+
+// NewPageSite serves the given pages (path to HTML, such as "/page.html") and nothing else, with no wasm
+// build: for testing helpers that work on any page (the screen reader in internal/screenreader).
+// Open them with OpenURL.
+func NewPageSite(t testing.TB, pages map[string]string) *Site {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, ok := pages[r.URL.Path]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return &Site{URL: srv.URL, srv: srv}
+}

@@ -863,3 +863,8 @@ func (d *Tab) OnNewDocument(script string) {
 		return err
 	}))
 }
+
+// Context is the tab's browser context, for helpers that talk to the browser themselves (the screen
+// reader in internal/screenreader uses the Accessibility domain). Calls made with it have no timeout of
+// their own: give them one (context.WithTimeout).
+func (d *Tab) Context() context.Context { return d.ctx }
