@@ -92,6 +92,7 @@ type ui struct {
 	statsSig            string // the counts the status bar and Stats tab last showed
 	shareLink           string // the link the Share tab shows
 	people              *peopleState
+	sa                  searchAll
 	enc                 *encUI // the encrypted browser store: off unless the person turns it on
 	clearEditor         func() // empties the editor and what is derived from its text (Lock uses it)
 	message             string // the Import/Export tab's last message
@@ -416,7 +417,7 @@ func main() {
 				},
 			})
 		case "find":
-			panel = findPanel(u, &state, func() *canvas.TextFlow { return flow }, func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }, redraw, renderUI)
+			panel = xango.Frag(findPanel(u, &state, func() *canvas.TextFlow { return flow }, func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }, redraw, renderUI), u.searchAllPanel(renderUI))
 		case "spell":
 			if flow != nil {
 				panel = spellPanel(u, &state, func() *canvas.TextFlow { return flow }, func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }, redraw, renderUI)
