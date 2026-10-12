@@ -850,6 +850,14 @@
   "sync.offlinePending#one": "Sin conexión: %d cambio esperando enviarse",
   "sync.offlinePending#other": "Sin conexión: %d cambios esperando enviarse",
   "sync.offline": "Sin conexión: sus cambios se compartirán cuando vuelva la conexión",
-  "enc.sheetQR": "Código QR de la clave de recuperación. La misma clave está escrita arriba; al escanearlo se pasa a otro dispositivo."
+  "enc.sheetQR": "Código QR de la clave de recuperación. La misma clave está escrita arriba; al escanearlo se pasa a otro dispositivo.",
+  "a11y.outline": "Esquema del documento",
+  "a11y.commentBy": "Comentario de %s",
+  "a11y.commentByResolved": "Comentario de %s (resuelto)",
+  "a11y.commentOn": "Sobre el texto: %s",
+  "a11y.replyBy": "Respuesta de %s: %s",
+  "a11y.commentStart": "Texto comentado: ",
+  "a11y.comments#one": "%d comentario",
+  "a11y.comments#other": "%d comentarios"
  }
 }
