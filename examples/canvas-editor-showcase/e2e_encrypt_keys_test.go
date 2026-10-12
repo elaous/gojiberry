@@ -602,3 +602,65 @@ func TestOwnerKeyFallsBackToTextWhereWebCryptoHasNoEd25519(t *testing.T) {
 	d.WaitFor("published", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
 	d.NoErrors()
 }
+
+// With "do not count a key as verified when its address has no owner key" on, the picker still lists
+// the keys of an address that never enrolled one, but without the verified mark and with a note to confirm
+// the fingerprint another way; with it off the mark is there.
+func TestRequireOwnerSettingWithholdsTheVerifiedMark(t *testing.T) {
+	site := e2etest.NewSite(t)
+	site.UseLocalhost()
+	srv, err := demoserver.New(site.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	site.Handle("/auth/", srv.Mux)
+	site.Handle("/directory/", srv.Mux)
+	site.Handle("/demo/", srv.Mux)
+	boPub, _, err := encrypt.GenerateRecoveryKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := srv.Login("bo@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("POST", "/directory/publish", strings.NewReader(`{"key":"`+boPub+`","label":"Bo's key"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rec := httptest.NewRecorder()
+	srv.Mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("publish = %d", rec.Code)
+	}
+
+	d := site.OpenURL(t, "/index.html?docstore="+url.QueryEscape(site.URL))
+	d.VirtualAuthenticator()
+	turnOn(t, d, "")
+	saveConfidential(d, "For Bo")
+	d.Click(`button[data-tab="people"]`)
+	d.WaitSelector("#dir-offer-review")
+	d.Click("#dir-offer-review")
+	confirmDialog(d)
+	d.WaitSelector(".gj-recip-dir-email")
+	find := func() {
+		d.Fill(".gj-recip-dir-email", "bo@example.com")
+		d.WaitFor("the find button", `!document.querySelector('.gj-recip-dir-find').disabled`)
+		d.Click(".gj-recip-dir-find")
+		d.WaitSelector(".gj-recip-dir-row")
+	}
+
+	find()
+	d.OK(d.Has(".gj-recip-dir-row .gj-recip-verified"), "by default the row carries the verified mark")
+
+	d.SetChecked("#dir-settings .gj-checkbox-input", true)
+	d.WaitFor("the old answer to go", `!document.querySelector('.gj-recip-dir-row')`)
+	find()
+	d.OK(!d.Has(".gj-recip-dir-row .gj-recip-verified"), "with the setting on, the server's word alone is not a verified mark")
+	d.OK(strings.Contains(d.Text(".gj-recip-dir-row"), "no owner key"), "the row says why: "+d.Text(".gj-recip-dir-row"))
+	d.OK(d.Str(`localStorage.getItem('showcase-enc:require-owner') || ''`) == "1", "the setting is kept")
+
+	d.SetChecked("#dir-settings .gj-checkbox-input", false)
+	d.WaitFor("the old answer to go", `!document.querySelector('.gj-recip-dir-row')`)
+	find()
+	d.OK(d.Has(".gj-recip-dir-row .gj-recip-verified"), "switched off, the mark is back")
+	d.NoErrors()
+}
