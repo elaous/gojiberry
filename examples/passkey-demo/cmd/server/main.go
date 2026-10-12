@@ -10,13 +10,16 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
 	"flag"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/auth/passkey"
+	"github.com/elaous/gojiberry/wasmserve"
 )
 
 func main() {
@@ -35,7 +38,9 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/auth/passkey/", svc.Handler())
 	mux.Handle("/auth/", mgr.Routes())
-	mux.Handle("/", http.FileServer(http.Dir(*dir)))
+	// wasmserve sends main.wasm as application/wasm (streaming compile) and gzipped, with an ETag so a
+	// reload is a 304; the fast gzip level keeps a rebuilt wasm from costing seconds on its first request.
+	mux.Handle("/", wasmserve.Handler(os.DirFS(*dir), wasmserve.Options{GzipLevel: gzip.BestSpeed}))
 	log.Printf("open %s/", origin)
 	log.Fatal(http.ListenAndServe(*addr, mux))
 }
