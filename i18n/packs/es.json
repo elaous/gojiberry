@@ -632,6 +632,8 @@
   "enc.oneKey": "Este almacenamiento tiene una sola clave. Si la pierde, sus documentos se pierden para siempre. Añada ahora una segunda clave (una clave de recuperación guardada sin conexión, o una clave SSH).",
   "enc.printSheet": "Imprimir una hoja",
   "enc.progress": "Cifrando de nuevo: %d de %d documentos",
+  "enc.stop": "Detener y dejarlo todo como estaba",
+  "enc.err.stopped": "Detenido. No se cambió nada: las claves están como antes.",
   "enc.reload": "Recargar la página",
   "enc.restorePasskey": "Restaurar con mi passkey",
   "enc.restoreRecovery": "Restaurar con la clave de recuperación",

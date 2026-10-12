@@ -632,6 +632,8 @@
   "enc.oneKey": "Dieser Speicher hat nur einen Schlüssel. Wenn Sie ihn verlieren, sind seine Dokumente endgültig verloren. Fügen Sie jetzt einen zweiten Schlüssel hinzu (einen offline aufbewahrten Wiederherstellungsschlüssel oder einen SSH-Schlüssel).",
   "enc.printSheet": "Blatt drucken",
   "enc.progress": "Erneut verschlüsseln: %d von %d Dokumenten",
+  "enc.stop": "Anhalten und alles zurücksetzen",
+  "enc.err.stopped": "Angehalten. Nichts wurde geändert: Die Schlüssel sind wie zuvor.",
   "enc.reload": "Seite neu laden",
   "enc.restorePasskey": "Mit meinem Passkey wiederherstellen",
   "enc.restoreRecovery": "Mit dem Wiederherstellungsschlüssel wiederherstellen",

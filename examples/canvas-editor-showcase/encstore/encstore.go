@@ -134,6 +134,10 @@ var ErrNoSuchOwner = errors.New("no such owner key")
 // either: the journal stays, and Recover (finish or undo) is how to get out.
 var ErrRollbackFailed = errors.New("the change failed and could not be undone completely: reload and finish it or undo it")
 
+// ErrStopped is returned by a change the person stopped with Stop: everything it had written was put
+// back, the keys are as they were before.
+var ErrStopped = errors.New("stopped: nothing was changed")
+
 // ErrNothingPending is returned by Recover when there is nothing to finish.
 var ErrNothingPending = errors.New("there is no unfinished change")
 
@@ -293,11 +297,13 @@ type Store struct {
 	holders []string // the owner key (Owner.Public) each of ids belongs to
 	sigs    []*encrypt.Signer
 	floor   *encrypt.MemorySeqFloor
-	ad      *encrypt.Adapter // strict: refuses a stored file that is not encrypted
-	tol     *encrypt.Adapter // reads a file that is still in the clear: for an unfinished change
-	gate    sync.RWMutex     // writes through Adapter() hold it shared; a change holds it exclusively
-	stale   bool             // the stored Config was found changed by something else: refuse everything
-	trusted map[string]bool  // digests of owner lists the person confirmed at a first use
+	ad      *encrypt.Adapter   // strict: refuses a stored file that is not encrypted
+	tol     *encrypt.Adapter   // reads a file that is still in the clear: for an unfinished change
+	gate    sync.RWMutex       // writes through Adapter() hold it shared; a change holds it exclusively
+	stale   bool               // the stored Config was found changed by something else: refuse everything
+	trusted map[string]bool    // digests of owner lists the person confirmed at a first use
+	stop    context.CancelFunc // cancels the change that is running, nil when none is
+	stopped bool               // Stop was called for the change that is running
 }
 
 // New makes the store over raw with the owner keys in cfg (none: encryption is off).

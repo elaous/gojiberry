@@ -699,3 +699,92 @@ func slicesClone[T any](s []T) []T { return append([]T(nil), s...) }
 func hexOf(b []byte) string { return fmt.Sprintf("%x", b) }
 
 func hexSig(b []byte) string { return fmt.Sprintf("%x", b) }
+
+func TestStopPutsEverythingBackAndKeepsTheStoreUsable(t *testing.T) {
+	ctx := context.Background()
+	r, rsecret, id := confidentialRig(t)
+	if err := r.st.UnlockRecovery(rsecret); err != nil {
+		t.Fatal(err)
+	}
+	before, cfgBefore := r.snapshot(t), r.saved
+	passkeyFP := ""
+	for _, o := range r.st.Recipients() {
+		if o.Type == "passkey-prf" {
+			passkeyFP = o.Fingerprint
+		}
+	}
+	if r.st.Stop() {
+		t.Error("Stop claims there was a change to stop")
+	}
+	stopped := false
+	r.st.Progress = func(done, total int) {
+		if !stopped {
+			stopped = true
+			if !r.st.Stop() {
+				t.Error("Stop found no running change")
+			}
+		}
+	}
+	err := r.st.RemoveOwner(ctx, passkeyFP)
+	if !errors.Is(err, ErrStopped) {
+		t.Fatalf("RemoveOwner: %v, want ErrStopped", err)
+	}
+	if !stopped {
+		t.Fatal("the progress hook never ran")
+	}
+	sameSnapshot(t, "storage", r.snapshot(t), before)
+	if !reflect.DeepEqual(r.saved, cfgBefore) || r.st.Interrupted() {
+		t.Errorf("the key list changed: %+v vs %+v", r.saved, cfgBefore)
+	}
+	if !r.st.Unlocked() {
+		t.Error("locked by the stop")
+	}
+	// The same change goes through afterwards: the stop left nothing behind.
+	r.st.Progress = nil
+	if err := r.st.RemoveOwner(ctx, passkeyFP); err != nil {
+		t.Fatalf("RemoveOwner after a stop: %v", err)
+	}
+	if _, _, err := r.saver.LoadChecked(ctx, target, id); err != nil {
+		t.Errorf("document unreadable after the second try: %v", err)
+	}
+}
+
+func TestDeviceUseSurvivesAKeyChangeAndNamesOnlyCurrentKeys(t *testing.T) {
+	ctx := context.Background()
+	r, rsecret, _ := confidentialRig(t)
+	if err := r.st.UnlockRecovery(rsecret); err != nil {
+		t.Fatal(err)
+	}
+	var recovery, passkey Owner
+	for _, o := range r.st.Owners() {
+		switch o.Kind {
+		case KindRecovery:
+			recovery = o
+		case KindPasskey:
+			passkey = o
+		}
+	}
+	now := time.Date(2030, 6, 1, 8, 0, 0, 0, time.UTC)
+	if err := r.st.RecordUse(ctx, recovery, "kitchen tablet", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.st.RecordUse(ctx, passkey, "phone", now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := r.st.DeviceUses(ctx)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("uses: %v, %v", got, err)
+	}
+	// Removing the passkey re-encrypts the store, records included, and its record goes from the list.
+	if err := r.st.RemoveOwner(ctx, passkey.Fingerprint()); err != nil {
+		t.Fatalf("RemoveOwner with a record present: %v", err)
+	}
+	got, err = r.st.DeviceUses(ctx)
+	if err != nil || len(got) != 1 || got[0].Device != "kitchen tablet" || !got[0].At.Equal(now) {
+		t.Fatalf("after the removal: %v, %v", got, err)
+	}
+	locked, _ := New(r.raw, target, r.saved)
+	if _, err := locked.DeviceUses(ctx); !errors.Is(err, ErrLocked) {
+		t.Errorf("a locked store reads the records: %v", err)
+	}
+}
