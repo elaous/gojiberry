@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -431,5 +432,98 @@ func TestRequireOwnerReturnsTheRowsWithErrUnenrolled(t *testing.T) {
 	// An address nobody published for has no keys, so there is nothing to refuse.
 	if keys, err := strict.Lookup(ctx, "nobody@example.com"); err != nil || len(keys) != 0 {
 		t.Fatalf("unknown address: %+v %v", keys, err)
+	}
+}
+
+// Watching names a reset of the owner key as its own kind of alert: the request while it waits, and
+// the reset when it is done, each with its log entry number; the person's own reset is not one.
+func TestWatchNamesAResetOfTheOwnerKey(t *testing.T) {
+	ctx := context.Background()
+	var srv *demoserver.Server
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { srv.Mux.ServeHTTP(w, r) }))
+	ts.Start()
+	defer ts.Close()
+	var err error
+	srv, err = demoserver.New(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	srv.Dir.Now = func() time.Time { return now }
+	session := func(email string) *Client {
+		tok, err := srv.Login(email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &Client{Base: ts.URL, Token: func(context.Context) (string, error) { return tok, nil }, Now: func() time.Time { return now }}
+	}
+	const addr = "fay@example.com"
+	me, other := session(addr), session(addr) // two sessions of the same account
+	keys, err := me.ServerLogKeys(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := me.SetLogKeys(keys); err != nil {
+		t.Fatal(err)
+	}
+	k1, _ := GenerateOwnerKey()
+	k2, _ := GenerateOwnerKey()
+	k3, _ := GenerateOwnerKey()
+	if err := me.Enroll(ctx, addr, k1); err != nil {
+		t.Fatal(err)
+	}
+	if rep, err := me.Watch(ctx, addr, k1); err != nil || len(rep.Alerts) != 0 {
+		t.Fatalf("my own enrollment: %+v %v", rep, err)
+	}
+
+	// Somebody with a session of the account asks for a reset.
+	if _, err := other.RequestReset(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := me.Watch(ctx, addr, k1)
+	if err != nil || len(rep.Alerts) != 1 {
+		t.Fatalf("after the request: %+v %v", rep, err)
+	}
+	req := rep.Alerts[0]
+	if req.Kind != AlertResetRequest || req.Seq == 0 || !strings.Contains(req.Text, "reset") || !strings.Contains(req.Text, "log entry "+strconv.FormatInt(req.Seq, 10)) {
+		t.Errorf("the request alert = %+v", req)
+	}
+
+	// The wait passes and the reset is completed with a key the owner never had.
+	now = now.Add(25 * time.Hour)
+	if err := other.CompleteReset(ctx, addr, k2); err != nil {
+		t.Fatal(err)
+	}
+	rep, err = me.Watch(ctx, addr, k1)
+	if err != nil || len(rep.Alerts) != 1 {
+		t.Fatalf("after the reset: %+v %v", rep, err)
+	}
+	done := rep.Alerts[0]
+	if done.Kind != AlertReset || done.Seq <= req.Seq || !strings.Contains(done.Text, "was reset") {
+		t.Errorf("the reset alert = %+v (the request was entry %d)", done, req.Seq)
+	}
+
+	// A reset the person asks for and completes themselves is theirs: no alert.
+	if _, err := me.RequestReset(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(25 * time.Hour)
+	if err := me.CompleteReset(ctx, addr, k3); err != nil {
+		t.Fatal(err)
+	}
+	rep, err = me.Watch(ctx, addr, k3)
+	if err != nil || len(rep.Alerts) != 0 {
+		t.Fatalf("my own reset: %+v %v", rep, err)
+	}
+
+	// Another kind of foreign entry stays a plain entry.
+	pub, secret, _ := encrypt.GenerateRecoveryKey()
+	id, _ := encrypt.ParseAgeIdentity(secret)
+	if _, err := other.Publish(ctx, PublishRequest{Email: addr, Key: pub, Identity: id, Owner: k3}); err != nil {
+		t.Fatal(err)
+	}
+	rep, err = me.Watch(ctx, addr, nil)
+	if err != nil || len(rep.Alerts) != 1 || rep.Alerts[0].Kind != AlertEntry {
+		t.Fatalf("a publication: %+v %v", rep, err)
 	}
 }

@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (#280: tagged PDF links, nested lists and run languages, roadmap 63; #279: replies and resolved threads announced in a shared session, roadmap 66; #278: search and replace across documents in the showcase, roadmap 73; #277: the "require an owner key" setting in the showcase, roadmap 45; full run on main c50e886 (#275), with GOJIBERRY_REQUIRE_BROWSER=1 and Chromium 141 from /opt/pw-browsers: generate, generate-check, docs, docs-check, fmt-check, vet, wasm-vet, lint, wasm-lint, lint-modules, modules, wasm-size, grammar tests and `make test` all passed, and the showcase package run with -v had 0 skipped tests (95 passed); the first wasm-vet and lint runs failed only because the disk was full (go build cache cleaned, rerun passed); coverage score 89.4% (was 89.1%), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+5 of 10 since the last full run (#PR: watch names a reset of the owner key, roadmap 87; #280: tagged PDF links, nested lists and run languages, roadmap 63; #279: replies and resolved threads announced in a shared session, roadmap 66; #278: search and replace across documents in the showcase, roadmap 73; #277: the "require an owner key" setting in the showcase, roadmap 45; full run on main c50e886 (#275), with GOJIBERRY_REQUIRE_BROWSER=1 and Chromium 141 from /opt/pw-browsers: generate, generate-check, docs, docs-check, fmt-check, vet, wasm-vet, lint, wasm-lint, lint-modules, modules, wasm-size, grammar tests and `make test` all passed, and the showcase package run with -v had 0 skipped tests (95 passed); the first wasm-vet and lint runs failed only because the disk was full (go build cache cleaned, rerun passed); coverage score 89.4% (was 89.1%), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1312,9 +1312,16 @@ unless stated.
     works once the directory's 24 hours are over (before, the directory's refusal is shown); **Cancel the reset** with
     the held key, and **Give up the reset here** to drop the new key. A waiting reset is stated in the address's
     state line. Tests: native (`TestRotateAndResetTheOwnerKey`: wrong current key, early completion, cancel, old key
-    refused afterwards) and a browser test (`TestRotateAndResetTheOwnerKeyFromThePage`). Left: "Watch my address"
-    does not yet name a reset as its own kind of alert (it lists the log entry); the demo server's clock is moved in
-    the test, not by the page.
+    refused afterwards) and a browser test (`TestRotateAndResetTheOwnerKeyFromThePage`). Then (#PR): "Watch my address"
+    names a reset as its own kind of alert: `dirclient.WatchResult.Alerts` are `Alert{Kind, Seq, Text}` (`AlertReset` for
+    a completed reset that somebody else made, `AlertResetRequest` for a request while it waits, `AlertViolation`, else
+    `AlertEntry`), and the panel words the first two for what they mean and what to do (`dir.alert.reset`,
+    `dir.alert.resetRequest`, translated in de, fr and es) and marks each list entry with `data-kind`; kept alerts carry
+    their kind, and ones kept as bare text by an older version still load. Tests: `TestWatchNamesAResetOfTheOwnerKey`
+    (native, the demo server's clock moved: request, reset after 25 hours, the person's own reset is no alert, a
+    publication stays a plain entry) and `TestWatchNamesAResetOfTheOwnerKeyOnThePage` (browser, kinds and wording, kept
+    over a reload). Left: the demo server's clock is moved in the tests, not by the page; a cancelled reset and a
+    rotation by somebody else are still plain entries.
 88. **Done (this PR): the API dumps under `docs/*.txt` are regenerated, and `make check` fails when they go stale.**
     Was: `make docs` (`go doc -all`) had not been run for a long time (about 2,200 lines of difference across eight
     dumps, the `components` dump alone about 1,900), so the dumps did not show the real public API. Now they are

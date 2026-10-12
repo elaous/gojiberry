@@ -541,6 +541,8 @@
   "dir.log.pinThese": "Diese Schlüssel festlegen",
   "dir.log.pinned": "Die Protokollschlüssel sind festgelegt: Spätere Prüfungen des Protokolls werden dagegen geprüft.",
   "dir.log.pinnedState": "Festgelegte Protokollschlüssel: %s.",
+  "dir.alert.reset": "Der Eigentümerschlüssel Ihrer Adresse wurde zurückgesetzt (Protokolleintrag %d). Der Schlüssel, den Sie vorher hatten, signiert dafür nicht mehr. Wenn Sie das nicht getan haben, hat jemand eine angemeldete Sitzung Ihres Kontos benutzt: Prüfen Sie, welche Schlüssel veröffentlicht sind, und richten Sie einen neuen Eigentümerschlüssel ein.",
+  "dir.alert.resetRequest": "Jemand hat darum gebeten, den Eigentümerschlüssel Ihrer Adresse zurückzusetzen (Protokolleintrag %d). Das gilt erst nach der Wartezeit. Wenn Sie es nicht waren, brechen Sie das Zurücksetzen vorher mit Ihrem Eigentümerschlüssel ab.",
   "dir.log.rewritten": "Das Protokoll des Verzeichnisses wurde seit der letzten Ansicht gekürzt oder neu geschrieben. Vertrauen Sie diesem Verzeichnis nicht, bis Sie wissen, warum.",
   "dir.log.title": "Wer hat meinen Eintrag geändert",
   "dir.log.unconfirmed": "Noch kein Eintrag von Ihnen bestätigt den Protokollnamen Ihrer Adresse: Veröffentlichen Sie einen Schlüssel und beobachten Sie dann erneut.",
