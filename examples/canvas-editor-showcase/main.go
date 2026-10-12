@@ -40,15 +40,16 @@ import (
 
 // ui is the DOM side's state.
 type ui struct {
-	folder      folderState // the folder on this computer, a save target
-	title       string
-	menu        int    // open menu, or -1
-	tab         string // sidebar tab: format, symbols, keys
-	check       checkState
-	collab      components.CollabAnnouncer
-	collabTimer bool
-	docLang     string             // the document's language (a BCP 47 tag), "" for none
-	layout      docfile.PageLayout // the header, footer and table of contents of the print layout
+	folder                       folderState // the folder on this computer, a save target
+	title                        string
+	menu                         int    // open menu, or -1
+	tab                          string // sidebar tab: format, symbols, keys
+	check                        checkState
+	collab                       components.CollabAnnouncer
+	collabTimer                  bool
+	collabMerged, collabRejected int                // the session's counts already announced (merged after offline, refused)
+	docLang                      string             // the document's language (a BCP 47 tag), "" for none
+	layout                       docfile.PageLayout // the header, footer and table of contents of the print layout
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
 	imageMsg     string
 	sugg         suggestState
@@ -585,7 +586,7 @@ func main() {
 		}
 		topRow := roleRow
 		if u.live != nil {
-			topRow = livePresence(u)
+			topRow = livePresence(u, func() *canvas.TextFlow { return flow }, renderUI)
 		}
 		side := xango.Frag(topRow, panel,
 			xango.El("div", []xango.Attr{xango.A("id", "link-preview"), xango.A("style", "margin-top:1em")},

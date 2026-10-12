@@ -61,6 +61,7 @@ type Conn struct {
 	mu        sync.Mutex
 	queue     []client.Event
 	pending   []crdt.Op
+	offline   int // ops made while the connection was not up, until the next Hello
 	status    client.Status
 	presence  *wire.Presence
 	lastPres  time.Time
@@ -85,6 +86,7 @@ func Dial(opts client.Options) *Conn {
 		wake: make(chan struct{}, 1), kick: make(chan struct{}, 1), pkick: make(chan struct{}, 1)}
 	if opts.Queue != nil {
 		c.pending = append(c.pending, opts.Queue.Load()...)
+		c.offline = len(c.pending)
 		if len(c.pending) > 0 {
 			c.kick <- struct{}{}
 		}
@@ -112,6 +114,15 @@ func (c *Conn) persistLocked() {
 	}
 }
 
+// takeOffline returns how many ops were made while the connection was not up, and starts counting again.
+func (c *Conn) takeOffline() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	n := c.offline
+	c.offline = 0
+	return n
+}
+
 // Pending implements collab.Conn.
 func (c *Conn) Pending() int {
 	c.mu.Lock()
@@ -126,6 +137,9 @@ func (c *Conn) Send(ops []crdt.Op) {
 	}
 	c.mu.Lock()
 	c.pending = append(c.pending, ops...)
+	if c.status != client.Online {
+		c.offline += len(ops)
+	}
 	c.persistLocked()
 	c.mu.Unlock()
 	signal(c.kick)
@@ -401,7 +415,7 @@ func (c *Conn) session() (retErr error) {
 				var h struct{ Role wire.Role }
 				if json.Unmarshal(f.Data, &h) == nil {
 					c.setStatus(client.Online)
-					c.emit(client.Event{Kind: client.Hello, Role: h.Role})
+					c.emit(client.Event{Kind: client.Hello, Role: h.Role, Waiting: c.takeOffline()})
 					if err := trySend(); err != nil { // what waited while offline goes now
 						return err
 					}
