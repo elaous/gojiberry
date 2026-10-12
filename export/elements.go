@@ -184,7 +184,7 @@ func cleanCodeLang(lang string) string {
 		return ""
 	}
 	for _, r := range lang {
-		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '+' || r == '-' || r == '#') {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '+' && r != '-' && r != '#' {
 			return ""
 		}
 	}
