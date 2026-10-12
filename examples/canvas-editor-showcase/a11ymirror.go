@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"syscall/js"
+	"time"
 	"unicode/utf16"
 
 	"github.com/elaous/gojiberry/canvas"
@@ -131,7 +132,9 @@ func mirrorPosition(node js.Value, offset int) (int, bool) {
 func (u *ui) watchMirrorSelection(flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, redraw, renderUI func()) {
 	js.Global().Get("document").Call("addEventListener", "selectionchange", js.FuncOf(func(js.Value, []js.Value) any {
 		fl := flow()
-		if fl == nil || u.mirrorWriting {
+		// selectionchange is queued: it arrives after followCaret has returned, so the flag alone does not
+		// catch the change the page made itself. Ignore what comes right after the page wrote the selection.
+		if fl == nil || u.mirrorWriting || time.Since(u.mirrorWroteAt) < 150*time.Millisecond {
 			return nil
 		}
 		sel := js.Global().Call("getSelection")
@@ -188,6 +191,7 @@ func (u *ui) followCaret(fl *canvas.TextFlow, blocks []components.A11yBlock) {
 	}
 	u.mirrorWriting = true
 	defer func() { u.mirrorWriting = false }()
+	u.mirrorWroteAt = time.Now()
 	js.Global().Call("getSelection").Call("setBaseAndExtent", anode, aoff, node, off)
 }
 

@@ -48,7 +48,7 @@ vet:
 # per-package limit is too close (a full run that shared the machine with other work hit it).
 .PHONY: test
 test:
-	go test -timeout 20m ./...
+	go test -timeout 30m ./...  # the showcase browser tests alone take ~14 minutes
 
 # a11y-test is the accessibility gate: axe-core over the page in every state a person meets it (the
 # document, each tab, each menu, the find bar, the key directory), and the keyboard and reading-copy
@@ -153,7 +153,7 @@ lint-modules:
 # itself should ever need for a package with nothing to cover anyway.
 .PHONY: coverage
 coverage:
-	go test -timeout 20m -coverprofile=coverage.out $$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...)
+	go test -timeout 30m -coverprofile=coverage.out $$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...)
 	go tool cover -func=coverage.out
 
 # coverage-html turns the same profile into a browsable, per-line

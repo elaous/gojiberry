@@ -36,6 +36,7 @@ import (
 	"slices"
 	"strings"
 	"syscall/js"
+	"time"
 )
 
 // ui is the DOM side's state.
@@ -93,8 +94,9 @@ type ui struct {
 	find                findState
 	a11ySig             string
 	a11yCache           []components.A11yBlock
-	mirrorWriting       bool   // the copy is being given a selection by the page (not by a reader)
-	mirrorSig, mirrorAt string // where the caret was in the copy when last drawn, and the key of the caret last followed
+	mirrorWriting       bool      // the copy is being given a selection by the page (not by a reader)
+	mirrorWroteAt       time.Time // when the page last wrote the copy's selection (its selectionchange comes later)
+	mirrorSig, mirrorAt string    // where the caret was in the copy when last drawn, and the key of the caret last followed
 	announcement        string
 	spell               spellState
 	lang                langState

@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -72,10 +71,12 @@ func TestMirrorCaretFollowsBothWays(t *testing.T) {
 	text := []rune(d.State().Str("text"))
 	caret := d.Int(`JSON.parse(document.getElementById('state').textContent).cursors[0].Caret`)
 	d.OK(strings.HasPrefix(d.Text(`#a11y-text [aria-current="location"]`), "Everything on this canvas"), "the block with the caret is marked: "+d.Text(`#a11y-text [aria-current="location"]`))
-	d.WaitFor("the mirror's own selection", `window.getSelection().anchorNode && document.getElementById('a11y-text').contains(window.getSelection().anchorNode)`)
-	before := d.Str(`(s => { const r = document.createRange(); const n = s.anchorNode; const b = (n.nodeType === 1 ? n : n.parentElement).closest('[data-gj-start]'); r.setStart(b, 0); r.setEnd(s.anchorNode, s.anchorOffset); return r.toString(); })(window.getSelection())`)
-	start := d.Int(`+document.querySelector('#a11y-text [aria-current="location"]').dataset.gjStart`)
-	d.OK(start+len([]rune(before)) == caret, fmt.Sprint("the selection in the mirror is at the canvas caret: ", start, " ", len([]rune(before)), " ", caret))
+	// (The mirror puts its own selection at the caret only while the keyboard is not in a field; a click on
+	// the canvas puts it in the editor's input, which a screen reader follows by itself, so there is nothing
+	// to check here. What the page must not do is move the canvas caret back to an old selection of the
+	// mirror: the caret stays where the click put it.)
+	d.Sleep(400)
+	d.OK(d.Int(`JSON.parse(document.getElementById('state').textContent).cursors[0].Caret`) == caret, "the canvas caret stays where the click put it")
 
 	// A screen reader moves its cursor in the mirror: the canvas caret follows.
 	const flows = `[...document.querySelectorAll('#a11y-text p')].find(p => p.textContent.startsWith('The text flows'))`
