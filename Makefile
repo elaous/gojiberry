@@ -272,3 +272,11 @@ docs:
 	GOOS=js GOARCH=wasm go doc -all ./domrt/svg > docs/domrt-svg.txt
 	GOOS=js GOARCH=wasm go doc -all ./domrt/sw > docs/domrt-sw.txt
 	GOOS=js GOARCH=wasm go doc -all ./domrt/worker > docs/domrt-worker.txt
+
+# Runs the whole stack (docker-compose.yml). .env.local, when it exists, supplies values the shell does not
+# set; the shell wins over the file. See docs/configuration.md.
+.PHONY: stack-up stack-down
+stack-up:
+	docker compose $(if $(wildcard .env.local),--env-file .env.local) up --build
+stack-down:
+	docker compose down

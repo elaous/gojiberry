@@ -58,3 +58,18 @@ simply off. `s.Send(ctx, mail.Message{To: ..., Subject: ..., Text: ..., HTML: ..
 to at most 10 plain addresses (no names, lists or line breaks, so nothing a person typed becomes a
 header), with a text part and an optional HTML part. `Send` returns when the provider has accepted
 the message, which is not the same as delivery.
+
+## Running everything: `docker-compose.yml`
+
+`make stack-up` starts PostgreSQL, the docstore server (on Postgres), the collaboration hub, the sync, font and
+translation servers, Mailpit (a mail catcher, web UI on http://localhost:8025) and the canvas editor showcase
+(http://localhost:8000). `make stack-down` stops it.
+
+Values come from three places, strongest first: the **shell environment**, then **`.env.local`** (copy
+`.env.local.example`; git-ignored), then the **development default** in the compose file. So `.env.local`
+fills what the shell leaves unset, and the shell wins over the file. How it works: the make target passes
+`--env-file .env.local` (when the file exists) so `${VAR:-default}` in the compose file reads it, each
+service lists the variables it reads by name under `environment:` (a name alone passes the shell's value
+through, and defines nothing if the shell has none), and `env_file:` with `required: false` hands the rest of
+the file to the containers (needs Compose 2.24 or newer). For secrets as files, put them under `./secrets`
+(git-ignored, mounted read-only at `/run/secrets`) and set the `…_FILE` variable.

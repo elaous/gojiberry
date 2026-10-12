@@ -62,3 +62,7 @@ examples/gin-ssr-demo/gin-ssr-demo
 /translateserver
 /docstore-bin
 local-ci-report.txt
+
+# local stack settings and secrets (docker-compose.yml)
+.env.local
+secrets/

@@ -1,0 +1,130 @@
+# Runs the whole stack: PostgreSQL, the docstore server, the collaboration hub, the sync, font and
+# translation servers, a mail catcher (Mailpit) and the canvas editor showcase.
+#
+#   cp .env.local.example .env.local      # then edit; optional, every value has a development default
+#   make stack-up                         # same as: docker compose --env-file .env.local up --build
+#
+# Where a value comes from, strongest first:
+#   1. the shell environment of the machine that runs `docker compose` (for a CI job or a one-off
+#      override: `GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN=... make stack-up`);
+#   2. .env.local (secrets and local choices; git-ignored; used when the file exists);
+#   3. the development default written below.
+# Both are read: .env.local fills what the shell does not set, and the shell wins over the file. Every
+# variable the containers read is passed through by name in `environment:` (the shell's value, if there
+# is one), and the whole of .env.local is also handed to the containers through `env_file:` (optional,
+# so the stack starts without it).
+#
+# Secrets can also be files: set GOJIBERRY_MAIL_SMTP_PASSWORD_FILE and friends to a path under
+# ./secrets (mounted read-only at /run/secrets). See docs/configuration.md.
+
+x-local-env: &local-env
+  - path: .env.local
+    required: false # Compose 2.24 or newer; without the file the defaults below apply
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gojiberry
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gojiberry-dev}
+      POSTGRES_DB: gojiberry
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gojiberry -d gojiberry"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  docstore:
+    build: { context: ., dockerfile: cmd/docstore/Dockerfile }
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    env_file: *local-env
+    environment:
+      - GOJIBERRY_DOCSTORE_ADDR=:8090
+      - GOJIBERRY_DOCSTORE_BACKEND=postgres
+      - GOJIBERRY_DOCSTORE_BACKEND_CONFIG={"dsn":"postgres://gojiberry:${POSTGRES_PASSWORD:-gojiberry-dev}@postgres:5432/gojiberry?sslmode=disable"}
+      - GOJIBERRY_DOCSTORE_ALLOW_ORIGINS=${GOJIBERRY_DOCSTORE_ALLOW_ORIGINS:-http://localhost:8000}
+      # Passed through from the shell when set there (they override .env.local); unset ones are
+      # not defined in the container, so .env.local (or the server's own default) applies.
+      - GOJIBERRY_DOCSTORE_TOKEN
+      - GOJIBERRY_DOCSTORE_DIRECTORY_KEY
+      - GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV
+      - GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN
+      - GOJIBERRY_DOCSTORE_AUTH_PROVIDERS
+      - GOJIBERRY_DOCSTORE_AUTH_BASE_URL
+      - GOJIBERRY_DOCSTORE_AUTH_RETURN_ORIGINS
+      - GOJIBERRY_DOCSTORE_PASSKEY_RPID
+      - GOJIBERRY_DOCSTORE_PASSKEY_ORIGINS
+      - GOJIBERRY_DOCSTORE_PUBLIC
+      - GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN
+      - GOJIBERRY_DOCSTORE_REQUIRE_ACL
+      - GOJIBERRY_MAIL_PROVIDER
+      - GOJIBERRY_MAIL_FROM
+      - GOJIBERRY_MAIL_SMTP_HOST
+      - GOJIBERRY_MAIL_SMTP_PORT
+      - GOJIBERRY_MAIL_SMTP_TLS
+      - GOJIBERRY_MAIL_SMTP_USERNAME
+      - GOJIBERRY_MAIL_SMTP_PASSWORD
+      - GOJIBERRY_MAIL_SMTP_PASSWORD_FILE
+      - GOJIBERRY_MAIL_RESEND_API_KEY
+      - GOJIBERRY_MAIL_RESEND_API_KEY_FILE
+    volumes:
+      - ./secrets:/run/secrets:ro
+    ports: ["8090:8090"]
+
+  collabhub:
+    build: { context: ., dockerfile: cmd/collabhub/Dockerfile }
+    restart: unless-stopped
+    depends_on: [docstore]
+    env_file: *local-env
+    environment:
+      - GOJIBERRY_COLLAB_ADDR=:8081
+      - GOJIBERRY_COLLAB_ALLOW_ORIGINS=${GOJIBERRY_COLLAB_ALLOW_ORIGINS:-http://localhost:8000}
+      - GOJIBERRY_COLLAB_TOKEN
+      - GOJIBERRY_COLLAB_RENEW_TOKEN
+    ports: ["8081:8081"]
+
+  syncserver:
+    build: { context: ., dockerfile: cmd/syncserver/Dockerfile }
+    restart: unless-stopped
+    env_file: *local-env
+    environment:
+      - GOJIBERRY_SYNC_ADDR=:8080
+    ports: ["8080:8080"]
+
+  fontserver:
+    build: { context: ., dockerfile: cmd/fontserver/Dockerfile }
+    restart: unless-stopped
+    env_file: *local-env
+    environment:
+      - GOJIBERRY_FONTSERVER_GOOGLE_KEY
+    ports: ["8082:8082"]
+
+  translateserver:
+    build: { context: ., dockerfile: cmd/translateserver/Dockerfile }
+    restart: unless-stopped
+    env_file: *local-env
+    environment:
+      - GOJIBERRY_TRANSLATESERVER_DEEPL_KEY
+    ports: ["8083:8083"]
+
+  # Catches every e-mail the stack sends: web UI on http://localhost:8025, SMTP on 1025. Point the
+  # mail variables at it to try address verification:
+  #   GOJIBERRY_MAIL_PROVIDER=smtp  GOJIBERRY_MAIL_SMTP_HOST=mailpit  GOJIBERRY_MAIL_SMTP_PORT=1025
+  #   GOJIBERRY_MAIL_SMTP_TLS=none  (none is refused for non-loopback hosts; see docs/configuration.md)
+  mailpit:
+    image: axllent/mailpit:v1.31.5
+    restart: unless-stopped
+    ports: ["8025:8025", "1025:1025"]
+
+  showcase:
+    build: { context: ., dockerfile: examples/canvas-editor-showcase/Dockerfile }
+    restart: unless-stopped
+    ports: ["8000:80"]
+
+volumes:
+  db-data:
