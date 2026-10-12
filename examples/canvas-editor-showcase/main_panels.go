@@ -102,6 +102,7 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(c
 		},
 		OnResolve: func(id string) {
 			set.Update(id, func(c *canvas.Comment) { c.Resolved = !c.Resolved })
+			u.sealComments()
 			touch()
 			redraw()
 			renderUI()
@@ -121,6 +122,7 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(c
 				c.Replies = append(c.Replies, canvas.Reply{Author: state.Author, Text: text, Created: time.Now()})
 			})
 			delete(u.drafts, id)
+			u.sealComments()
 			touch()
 			renderUI()
 		},

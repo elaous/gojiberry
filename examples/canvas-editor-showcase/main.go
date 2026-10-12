@@ -51,9 +51,9 @@ type ui struct {
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
 	imageMsg     string
 	sugg         suggestState
-	stateRef     *State // the document state, for what the announcer needs of it
-	commentCount int
-	commentsSeen map[string]bool // ids of the comments already known, to find those others add
+	stateRef     *State                 // the document state, for what the announcer needs of it
+	commentSig   string                 // how many comments, replies and resolved threads there were when last looked at
+	commentsSeen map[string]commentSeen // the comments already known (their replies and whether resolved), to find what others do
 	imageFocus   bool
 	format       canvas.Format
 	catalog      []fonts.Font
@@ -702,8 +702,8 @@ func main() {
 		}
 		if u.live != nil && state.Comments != nil {
 			// comments others add arrive with the document, not with the session's state
-			if n := state.Comments.Len(); n != u.commentCount {
-				u.commentCount = n
+			if sig := commentSignature(state.Comments); sig != u.commentSig {
+				u.commentSig = sig
 				u.noteCollab(renderUI)
 				renderUI()
 			}

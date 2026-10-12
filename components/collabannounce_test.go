@@ -88,3 +88,33 @@ func TestCollabAnnouncerSaysOthersComments(t *testing.T) {
 		t.Fatal("not said below the all level")
 	}
 }
+
+func TestCollabAnnouncerSaysRepliesAndResolvedThreads(t *testing.T) {
+	a := CollabAnnouncer{Every: time.Second}
+	t0 := time.Unix(1000, 0)
+	a.Update(t0, true, []string{"Ana"}, "")
+	a.NoteReply("Bo")
+	if got := a.Update(t0.Add(2*time.Second), true, []string{"Ana"}, ""); got != "Bo replied." {
+		t.Fatalf("one reply: %q", got)
+	}
+	a.NoteReply("Bo")
+	a.NoteReply("Cy")
+	a.NoteResolved()
+	if !a.Pending() {
+		t.Fatal("held replies are pending")
+	}
+	if got := a.Update(t0.Add(5*time.Second), true, []string{"Ana"}, ""); got != "2 new replies. 1 comment thread was resolved." {
+		t.Fatalf("replies and a resolved thread: %q", got)
+	}
+	a.NoteResolved()
+	a.NoteResolved()
+	if got := a.Update(t0.Add(9*time.Second), true, []string{"Ana"}, ""); got != "2 comment threads were resolved." {
+		t.Fatalf("two threads: %q", got)
+	}
+	a.Level = CollabImportant
+	a.NoteReply("Bo")
+	a.NoteResolved()
+	if a.Pending() {
+		t.Fatal("not said below the all level")
+	}
+}
