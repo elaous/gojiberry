@@ -33,6 +33,9 @@ const (
 type Format struct {
 	Bold, Italic, Underline, Strikethrough, Superscript, Subscript bool
 	Href                                                           string
+	// NoteRef is the number of the footnote this run is the mark of (0 for none): the exports that can
+	// link the mark to its note, and the note back to the mark, do so.
+	NoteRef int
 	// Lang is the run's language tag, "" for the document's own.
 	Lang string
 	// Change says the run is a suggested change not yet accepted or rejected (see FromDocumentTracked): text
@@ -126,7 +129,15 @@ type Block struct {
 	TableBackground string
 	TableAlign      int
 	NumberedIndex   int
-	Segments        []Segment
+	// Note is the number of the footnote a list item is the text of (0 for none).
+	Note int
+	// CodeLang is the programming language of a Code block as a short lower-case name ("go", "python"),
+	// "" when unknown.
+	CodeLang string
+	// Equation is a formula in a linear notation (see MathML), on a Paragraph block whose Segments are
+	// its text alternative: every format shows that text, the HTML export also writes MathML from the formula.
+	Equation string
+	Segments []Segment
 }
 
 // Snapshot is a complete, self-contained, point-in-time view of one
