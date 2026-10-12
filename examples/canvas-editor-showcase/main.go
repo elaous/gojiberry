@@ -47,6 +47,10 @@ type ui struct {
 	check       checkState
 	collab      components.CollabAnnouncer
 	collabTimer bool
+	typing      components.TypingAnnouncer // what is said of typing and of the caret (preferences), see typing.go
+	typingMsg   string
+	typingN     int
+	typingTimer bool
 	docLang     string             // the document's language (a BCP 47 tag), "" for none
 	layout      docfile.PageLayout // the header, footer and table of contents of the print layout
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
@@ -607,7 +611,8 @@ func main() {
 				xango.El("div", []xango.Attr{xango.A("id", "canvas-host")}),
 				u.suggestionsNode(renderUI),
 				components.AccessibleText(components.AccessibleTextProps{Blocks: append(u.a11yBlocks(flow, u.title), a11yObjects(root)...), Selection: selectedText(flow), Lang: u.docLang}),
-				components.Announcer(u.announcement)),
+				components.Announcer(u.announcement),
+				components.TypingLive(u.typingMsg, u.typingN)),
 			Sidebar: &side, StatusBar: &bar,
 		})
 		labelCanvas(canvasEl.Element, inputEl.Element)
@@ -622,6 +627,7 @@ func main() {
 	}
 
 	stage.OnDraw = func() {
+		u.noteTyping(func() *canvas.TextFlow { return flow }, renderUI)
 		// What the canvas shows of the selection feeds the style editor.
 		if flow != nil && flow.Editing() && flow.HasSelection() {
 			if f := flow.CommonFormat(); f != u.format {

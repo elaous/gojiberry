@@ -25,6 +25,9 @@ type prefs struct {
 	Targets  string `json:"targets,omitempty"`  // "large"
 	Suggest  string `json:"suggest,omitempty"`  // word suggestions: "auto" opens the list while typing
 	Speed    string `json:"speed,omitempty"`    // reading aloud: "slow", "fast"
+	Typing   string `json:"typing,omitempty"`   // what is said of typed text: "words", "characters"; "" nothing
+	TypeFmt  string `json:"typefmt,omitempty"`  // "on": formatting changes at the caret are said
+	TypeRead string `json:"typeread,omitempty"` // "on": the line is read when the caret moves
 	Collab   string `json:"collab,omitempty"`   // what is announced of a shared session: "" everything, "important", "off"
 }
 
@@ -60,6 +63,15 @@ func loadPrefs() prefs {
 	}
 	if p.Speed != "slow" && p.Speed != "fast" {
 		p.Speed = ""
+	}
+	if p.Typing != components.TypingWords && p.Typing != components.TypingCharacters {
+		p.Typing = ""
+	}
+	if p.TypeFmt != "on" {
+		p.TypeFmt = ""
+	}
+	if p.TypeRead != "on" {
+		p.TypeRead = ""
 	}
 	if p.Collab != components.CollabImportant && p.Collab != components.CollabOff {
 		p.Collab = ""
@@ -110,6 +122,10 @@ func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
 		return components.MenuItem{Label: label, Checked: curPrefs.Collab == level,
 			OnSelect: change(label, func(p *prefs) { p.Collab = level })}
 	}
+	typing := func(label, level string) components.MenuItem {
+		return components.MenuItem{Label: label, Checked: curPrefs.Typing == level,
+			OnSelect: change(label, func(p *prefs) { p.Typing = level })}
+	}
 	toggle := func(label string, on bool, set func(*prefs, bool)) components.MenuItem {
 		return components.MenuItem{Label: label, Checked: on, OnSelect: func() {
 			state := T("a11y.off", "off")
@@ -132,6 +148,12 @@ func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
 		collab(T("prefs.collabAll", "Shared editing: announce everything"), components.CollabAll),
 		collab(T("prefs.collabImportant", "Shared editing: announce only the connection"), components.CollabImportant),
 		collab(T("prefs.collabOff", "Shared editing: announce nothing"), components.CollabOff),
+		{Separator: true},
+		typing(T("prefs.typingOff", "Typing: say nothing"), components.TypingOff),
+		typing(T("prefs.typingWords", "Typing: say each word"), components.TypingWords),
+		typing(T("prefs.typingChars", "Typing: say each character"), components.TypingCharacters),
+		toggle(T("prefs.typingFormat", "Say formatting changes at the caret"), curPrefs.TypeFmt == "on", func(p *prefs, on bool) { p.TypeFmt = map[bool]string{true: "on"}[on] }),
+		toggle(T("prefs.typingRead", "Read the line when the caret moves"), curPrefs.TypeRead == "on", func(p *prefs, on bool) { p.TypeRead = map[bool]string{true: "on"}[on] }),
 		{Separator: true},
 		toggle(T("prefs.suggestAuto", "Suggest words as I type"), curPrefs.Suggest == "auto", func(p *prefs, on bool) { p.Suggest = map[bool]string{true: "auto"}[on] }),
 		toggle(T("prefs.targets", "Large targets"), curPrefs.Targets == "large", func(p *prefs, on bool) { p.Targets = map[bool]string{true: "large"}[on] }),
