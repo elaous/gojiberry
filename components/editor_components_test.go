@@ -674,8 +674,8 @@ func TestAccessibleTextKeepsTheDocumentsStructure(t *testing.T) {
 		{Kind: A11yQuote, Text: "quoted"}, {Kind: A11yCode, Text: "x := 1"},
 		{Kind: A11yTableRow, Cells: []string{"A", "B"}}, {Kind: A11yTableRow, Cells: []string{"1", "2"}},
 	}, Selection: "Some"}))
-	for _, want := range []string{`class="gj-sr-only"`, `role="document"`, `aria-label="Document text"`, `id="a11y-text"`, "<h1>Title</h1>", "<p>Some text.</p>",
-		"<ol><li", ">two</li></ol>", "<ul><li", `aria-level="2"`, "<blockquote>", "<pre><code>x := 1</code></pre>", "<th>A</th>", "<td>2</td>", "Selected: Some"} {
+	for _, want := range []string{`class="gj-sr-only"`, `role="document"`, `aria-label="Document text"`, `id="a11y-text"`, `>Title</h1>`, "<p>Some text.</p>",
+		"<ol><li", ">two</li></ol>", "<ul><li", `aria-level="2"`, "<blockquote>", "<pre><code>x := 1</code></pre>", `<th scope="col">A</th>`, "<td>2</td>", "Selected: Some"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("missing %q in\n%s", want, html)
 		}
@@ -692,7 +692,7 @@ func TestAccessibleTextMarksTheLanguageOfRuns(t *testing.T) {
 		{Kind: A11yParagraph, Text: "He said bonjour twice.", Runs: []A11yRun{{Text: "He said "}, {Text: "bonjour", Lang: "fr"}, {Text: " twice."}}},
 		{Kind: A11yHeading, Level: 2, Text: "Plain", Runs: nil},
 	}}))
-	for _, want := range []string{`<p>He said <span lang="fr">bonjour</span> twice.</p>`, "<h2>Plain</h2>"} {
+	for _, want := range []string{`<p>He said <span lang="fr">bonjour</span> twice.</p>`, `>Plain</h2>`} {
 		if !strings.Contains(html, want) {
 			t.Errorf("missing %q in\n%s", want, html)
 		}
