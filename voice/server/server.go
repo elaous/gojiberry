@@ -86,6 +86,9 @@ type Server struct {
 	// interface document.
 	speak      func(binary, model, text string) ([]byte, error)
 	transcribe func(binary, model string, wav []byte) (string, error)
+	// transcribeBias is used when the request carries a prompt or a language (the listener's own
+	// words, to bias the recogniser; nothing is trained).
+	transcribeBias func(binary, model string, wav []byte, o listen.Options) (string, error)
 
 	// speakSlots and transcribeSlots bound the processes of each kind.
 	speakSlots, transcribeSlots chan struct{}
@@ -98,7 +101,7 @@ type Server struct {
 // handleGoogleFonts take with no key configured, rather than refusing
 // to start at all.
 func NewServer(cfg Config) *Server {
-	return &Server{cfg: cfg, speak: speak.Piper, transcribe: listen.Whisper, speakSlots: make(chan struct{}, 2), transcribeSlots: make(chan struct{}, 2)}
+	return &Server{cfg: cfg, speak: speak.Piper, transcribe: listen.Whisper, transcribeBias: listen.WhisperWith, speakSlots: make(chan struct{}, 2), transcribeSlots: make(chan struct{}, 2)}
 }
 
 // Handler returns the HTTP routes:
@@ -106,7 +109,9 @@ func NewServer(cfg Config) *Server {
 //	GET  /health       -- confirms the server is up
 //	POST /speak        -- {"text"} -> audio/wav bytes
 //	POST /transcribe   -- multipart form, field "audio" holding a WAV
-//	                       file -> {"text"}
+//	                       file -> {"text"}; the optional fields "prompt" (words the
+//	                       speaker is likely to say, up to listen.MaxPrompt bytes) and
+//	                       "language" (a code such as "de") bias the recogniser
 //
 // Every response carries permissive CORS headers, the same reasoning
 // as syncserver/fontserver/translate/server's own Handler: this
@@ -197,7 +202,12 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release(s.transcribeSlots)
-	text, err := s.transcribe(s.cfg.WhisperBinary, s.cfg.WhisperModel, wav)
+	var text string
+	if prompt, lang := listen.CleanPrompt(r.FormValue("prompt")), listen.CleanLanguage(r.FormValue("language")); prompt != "" || lang != "" {
+		text, err = s.transcribeBias(s.cfg.WhisperBinary, s.cfg.WhisperModel, wav, listen.Options{Prompt: prompt, Language: lang})
+	} else {
+		text, err = s.transcribe(s.cfg.WhisperBinary, s.cfg.WhisperModel, wav)
+	}
 	if err != nil {
 		log.Printf("voiceserver: transcribe: %v", err)
 		http.Error(w, "transcription failed", http.StatusBadGateway)
