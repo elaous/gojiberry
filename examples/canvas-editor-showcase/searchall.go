@@ -1,0 +1,257 @@
+//go:build js && wasm
+
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strconv"
+
+	"github.com/elaous/gojiberry/canvas"
+	"github.com/elaous/gojiberry/components"
+	"github.com/elaous/gojiberry/docsearch"
+	"github.com/elaous/gojiberry/docstore"
+	"github.com/elaous/gojiberry/xango"
+)
+
+// searchAll is the state of "Search all documents": a local index of the documents of the place the
+// page saves to (read through that place's own adapter, so an encrypted store is searched after it is
+// unlocked, on this device), and the replace across documents with its preview and undo.
+type searchAll struct {
+	index    docsearch.Index
+	query    string
+	repl     string
+	opts     canvas.FindOptions
+	hits     []docsearch.Hit
+	keyToID  map[string]string // the store key of a document to its ID, for Open
+	searched bool
+	plan     *docsearch.Plan
+	applied  *docsearch.Applied
+	picked   map[string]bool // the documents the person left ticked in the preview
+	message  string
+	errText  string
+	view     docstore.Adapter // the documents' own keys in the current place
+	target   string
+}
+
+// adapterFor is the adapter of the saver target by name.
+func (u *ui) adapterFor(target string) docstore.Adapter {
+	for _, t := range u.saver.Saver.TargetList() {
+		if t.Name == target {
+			return t.Adapter
+		}
+	}
+	return nil
+}
+
+// sync reads the list of documents of the current place and brings the index up to date with it. The
+// documents it sees are only the live ones' own files (not old versions, the catalog or the trash).
+func (u *ui) syncSearchAll(ctx context.Context) error {
+	sa := &u.sa
+	target, _ := u.saver.Where()
+	base := u.adapterFor(target)
+	if base == nil {
+		return errors.New(T("search.noPlace", "There is no place to search."))
+	}
+	entries, err := u.saver.Saver.List(ctx, target)
+	if err != nil {
+		return err
+	}
+	keys := make([]string, 0, len(entries))
+	sa.keyToID = map[string]string{}
+	for _, e := range entries {
+		keys = append(keys, e.Key)
+		sa.keyToID[e.Key] = e.ID
+	}
+	if sa.target != target { // another place: nothing of the old index applies
+		sa.index = docsearch.Index{}
+		sa.target = target
+	}
+	sa.view = docsearch.Subset(base, keys)
+	res, err := docsearch.Refresh(ctx, &sa.index, sa.view, docsearch.FromDocfile)
+	if err != nil {
+		return err
+	}
+	if len(res.Skipped) > 0 {
+		sa.message = T("search.skipped", "%d documents could not be read here (is the store locked?) and were left out.", len(res.Skipped))
+	}
+	return nil
+}
+
+// runSearch searches the index for the query.
+func (u *ui) runSearchAll(renderUI func()) {
+	sa := &u.sa
+	sa.errText, sa.message, sa.plan = "", "", nil // a finished replacement stays undoable while the person searches on
+	if sa.query == "" {
+		return
+	}
+	u.saver.Pending.Run(func(ctx context.Context) error {
+		if err := u.syncSearchAll(ctx); err != nil {
+			sa.errText = err.Error()
+			return nil
+		}
+		sa.hits, sa.searched = sa.index.Search(sa.query, 50), true
+		if len(sa.hits) == 0 {
+			u.announce(T("a11y.noMatches", "No matches"))
+		} else {
+			u.announce(T("search.docMatches", "%d documents match", len(sa.hits)))
+		}
+		return nil
+	})
+}
+
+// previewReplace works out the replacement across the other documents and shows it; nothing is written.
+// The document open in the editor is left out: the editor's own Replace all is for that one.
+func (u *ui) previewReplaceAll() {
+	sa := &u.sa
+	sa.errText, sa.message, sa.applied = "", "", nil
+	u.saver.Pending.Run(func(ctx context.Context) error {
+		if err := u.syncSearchAll(ctx); err != nil {
+			sa.errText = err.Error()
+			return nil
+		}
+		sa.opts = canvas.FindOptions{Query: sa.query, MatchCase: u.find.opts.MatchCase, WholeWord: u.find.opts.WholeWord, Regex: u.find.opts.Regex}
+		plan, err := docsearch.PlanReplace(ctx, sa.view, sa.opts, sa.repl)
+		if err != nil {
+			sa.errText, sa.plan = err.Error(), nil
+			return nil
+		}
+		open := u.saver.ID()
+		kept := plan.Changes[:0]
+		for _, c := range plan.Changes {
+			if sa.keyToID[c.ID] != open {
+				kept = append(kept, c)
+			}
+		}
+		plan.Changes = kept
+		sa.plan, sa.picked = plan, map[string]bool{}
+		for _, c := range plan.Changes {
+			sa.picked[c.ID] = true
+		}
+		if len(plan.Changes) == 0 {
+			sa.message = T("search.nothingToReplace", "Nothing to replace in the other documents.")
+		}
+		return nil
+	})
+}
+
+// applyReplaceAll writes the previewed replacement to the ticked documents.
+func (u *ui) applyReplaceAll() {
+	sa := &u.sa
+	if sa.plan == nil {
+		return
+	}
+	var only []string
+	for _, c := range sa.plan.Changes {
+		if sa.picked[c.ID] {
+			only = append(only, c.ID)
+		}
+	}
+	if len(only) == 0 {
+		return
+	}
+	plan := sa.plan
+	u.saver.Pending.Run(func(ctx context.Context) error {
+		a, err := plan.Apply(ctx, only...)
+		if err != nil {
+			sa.errText = err.Error()
+			return nil
+		}
+		sa.applied, sa.plan = a, nil
+		sa.message = T("search.replaced", "Replaced in %d documents. Undo puts the old text back where a document was not saved since.", len(only))
+		u.announce(sa.message)
+		sa.hits, sa.searched = nil, false
+		return nil
+	})
+}
+
+// undoReplaceAll puts the old text back.
+func (u *ui) undoReplaceAll() {
+	sa := &u.sa
+	if sa.applied == nil {
+		return
+	}
+	a := sa.applied
+	u.saver.Pending.Run(func(ctx context.Context) error {
+		restored, kept, err := a.Undo(ctx)
+		if err != nil {
+			sa.errText = err.Error()
+			return nil
+		}
+		sa.applied = nil
+		sa.message = T("search.undone", "Put back in %d documents.", len(restored))
+		if len(kept) > 0 {
+			sa.message += " " + T("search.undoKept", "%d were saved again since and were left as they are.", len(kept))
+		}
+		u.announce(sa.message)
+		return nil
+	})
+}
+
+// searchAllPanel is the "Search all documents" section of the Find tab.
+func (u *ui) searchAllPanel(renderUI func()) xango.Node {
+	sa := &u.sa
+	busy := u.saver.Pending.Busy()
+	field := func(id, label, value, ph string, on func(string)) xango.Node {
+		return xango.El("input", []xango.Attr{xango.A("type", "text"), xango.A("id", id), xango.A("value", value), xango.A("aria-label", label),
+			xango.A("placeholder", ph), xango.A("autocomplete", "off"), xango.A("style", "width:100%;box-sizing:border-box;margin:2px 0"),
+			xango.On("input", func(ev xango.Event) { on(xango.EventValue[string](ev)) })})
+	}
+	nodes := []xango.Node{
+		xango.El("h3", []xango.Attr{xango.A("style", "font-size:14px;margin:12px 0 4px")}, xango.Text(T("search.title", "Search all documents"))),
+		field("sa-query", T("search.query", "Search all documents"), sa.query, T("search.queryHint", "Words to find in every document"), func(v string) { sa.query = v; renderUI() }),
+		xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px;flex-wrap:wrap")},
+			btn("sa-search", T("search.go", "Search"), func() { u.runSearchAll(renderUI) }, busy || sa.query == "")),
+	}
+	if sa.errText != "" {
+		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "sa-error"), xango.A("role", "alert"), xango.A("style", "color:#b91c1c")}, xango.Text(sa.errText)))
+	}
+	if sa.message != "" {
+		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "sa-message"), xango.A("role", "status")}, xango.Text(sa.message)))
+	}
+	if sa.searched {
+		if len(sa.hits) == 0 {
+			nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "sa-none")}, xango.Text(T("a11y.noMatches", "No matches"))))
+		}
+		var items []xango.Node
+		for _, h := range sa.hits {
+			h := h
+			id := sa.keyToID[h.ID]
+			items = append(items, xango.El("li", []xango.Attr{xango.A("class", "sa-hit"), xango.A("data-id", id)},
+				xango.El("strong", nil, xango.Text(h.Title)), xango.Text(" "),
+				xango.El("span", []xango.Attr{xango.A("class", "sa-snippet")}, xango.Text(h.Snippet)), xango.Text(" "),
+				btn("sa-open-"+id, T("search.open", "Open"), func() { u.saver.Pending.Run(func(ctx context.Context) error { return u.saver.Open(ctx, id) }) }, busy)))
+		}
+		if len(items) > 0 {
+			nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("id", "sa-hits"), xango.A("style", "padding-left:18px")}, items...))
+		}
+	}
+	// Replace across the other documents.
+	nodes = append(nodes,
+		xango.El("h3", []xango.Attr{xango.A("style", "font-size:14px;margin:12px 0 4px")}, xango.Text(T("search.replaceTitle", "Replace in the other documents"))),
+		xango.El("p", []xango.Attr{xango.A("style", "font-size:12px;margin:2px 0")}, xango.Text(T("search.replaceNote", "Uses the search above (and the options of the bar above). You see what would change first; the open document is left out: use Replace all above for it."))),
+		field("sa-repl", T("search.replacement", "Replace with"), sa.repl, T("search.replacement", "Replace with"), func(v string) { sa.repl = v }),
+		btn("sa-preview", T("search.preview", "Preview"), func() { u.previewReplaceAll() }, busy || sa.query == ""),
+	)
+	if sa.plan != nil && len(sa.plan.Changes) > 0 {
+		var rows []xango.Node
+		for _, c := range sa.plan.Changes {
+			c := c
+			rows = append(rows, xango.El("li", []xango.Attr{xango.A("class", "sa-change")},
+				components.Checkbox(components.CheckboxProps{
+					Label:    fmt.Sprintf("%s (%s)", c.Title, strconv.Itoa(c.Count)),
+					Checked:  sa.picked[c.ID],
+					OnChange: func(on bool) { sa.picked[c.ID] = on; renderUI() },
+				}),
+				xango.El("div", []xango.Attr{xango.A("class", "sa-before"), xango.A("style", "font-size:12px")}, xango.Text(c.Before)),
+				xango.El("div", []xango.Attr{xango.A("class", "sa-after"), xango.A("style", "font-size:12px;font-weight:bold")}, xango.Text(c.After))))
+		}
+		nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("id", "sa-changes"), xango.A("style", "list-style:none;padding:0")}, rows...),
+			btn("sa-apply", T("search.apply", "Replace in the ticked documents"), func() { u.applyReplaceAll() }, busy))
+	}
+	if sa.applied != nil {
+		nodes = append(nodes, btn("sa-undo", T("search.undo", "Undo the replacement"), func() { u.undoReplaceAll() }, busy))
+	}
+	return xango.El("div", []xango.Attr{xango.A("id", "search-all")}, nodes...)
+}
