@@ -43,6 +43,9 @@ func formatTable(overrides ...map[Feature]entry) map[Feature]entry {
 	return m
 }
 
+// noPages is what the formats with no pages do with the print layout.
+var noPages = map[Feature]entry{FeatPageHeader: drop(""), FeatPageTOC: drop(""), FeatPageSize: drop("")}
+
 // foldedFeatures is what every format built on the Snapshot does with these four.
 var foldedFeatures = map[Feature]entry{
 	FeatDeepHeading: simple(NoteFolded),
@@ -67,13 +70,13 @@ var exportMatrix = map[string]map[Feature]entry{
 		FeatHighlight: drop(""), FeatRunLanguage: drop(""), FeatSuggestion: drop(NoteAccepted),
 		FeatList: simple(NoteBullets), FeatImage: simple(NotePlaceholder), FeatImageAlt: drop(NotePlaceholder),
 		FeatCellShading: drop(""), FeatCellAlign: drop(""),
-		FeatDocLanguage: drop(""), FeatTitle: drop(""),
+		FeatDocLanguage: drop(""), FeatTitle: drop(""), FeatPageTOC: drop(""),
 	}),
-	"epub": formatTable(foldedFeatures, map[Feature]entry{FeatHighlight: drop("")}),
+	"epub": formatTable(foldedFeatures, noPages, map[Feature]entry{FeatHighlight: drop("")}),
 	"html": formatTable(foldedFeatures, map[Feature]entry{FeatHighlight: drop("")}),
 	// Markdown here is the editor's own: its marks for underline, highlight and raised or lowered text are
 	// not standard. Pictures, tables, footnotes and rules are not written at all.
-	"markdown": formatTable(map[Feature]entry{
+	"markdown": formatTable(noPages, map[Feature]entry{
 		FeatUnderline: simple(NoteMarks), FeatHighlight: simple(NoteMarks),
 		FeatSuperscript: simple(NoteMarks), FeatSubscript: simple(NoteMarks),
 		FeatRunLanguage: drop(""), FeatSuggestion: drop(NoteAccepted),
@@ -84,7 +87,7 @@ var exportMatrix = map[string]map[Feature]entry{
 		FeatDocLanguage: drop(""), FeatTitle: drop(""),
 	}),
 	// Plain text keeps the characters of the paragraphs and nothing else.
-	"text": formatTable(map[Feature]entry{
+	"text": formatTable(noPages, map[Feature]entry{
 		FeatBold: drop(NoteText), FeatItalic: drop(NoteText), FeatUnderline: drop(NoteText), FeatStrike: drop(NoteText),
 		FeatSuperscript: drop(NoteText), FeatSubscript: drop(NoteText), FeatLink: drop(NoteText),
 		FeatHighlight: drop(NoteText), FeatRunLanguage: drop(NoteText), FeatSuggestion: drop(NoteAccepted),

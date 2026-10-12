@@ -57,6 +57,9 @@ const (
 	FeatDocLanguage     Feature = "doc-language"
 	FeatTitle           Feature = "title"
 	FeatHistory         Feature = "history"
+	FeatPageHeader      Feature = "page-header"
+	FeatPageTOC         Feature = "page-toc"
+	FeatPageSize        Feature = "page-size"
 )
 
 // Features lists every Feature in the order a report shows them.
@@ -69,6 +72,7 @@ var Features = []Feature{
 	FeatImage, FeatImageAlt, FeatImageEffects,
 	FeatTable, FeatColSpan, FeatRowSpan, FeatCellShading, FeatCellAlign, FeatCellTextStyle,
 	FeatDocLanguage, FeatTitle, FeatHistory,
+	FeatPageHeader, FeatPageTOC, FeatPageSize,
 }
 
 // Treatment says what a format does with a feature.
@@ -205,6 +209,17 @@ func Usage(d docfile.Document) map[Feature]int {
 	}
 	if len(d.Comments) > 0 {
 		add(FeatComment)
+	}
+	if l := d.PageLayout(); !l.IsZero() {
+		if l.Header != "" || l.Footer != "" {
+			add(FeatPageHeader)
+		}
+		if l.TOC {
+			add(FeatPageTOC)
+		}
+		if l.Width > 0 || l.Margins != [4]float64{} {
+			add(FeatPageSize)
+		}
 	}
 	for _, it := range d.Content {
 		switch {

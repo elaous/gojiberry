@@ -177,6 +177,14 @@ func featurePairs() map[Feature]pair {
 	hist := docOf(plain("hello\n"))
 	hist.History = []docfile.Revision{{Saved: 1, Doc: &docfile.Document{Title: "old"}}}
 	m[FeatHistory] = pair{with: hist, without: docOf(plain("hello\n"))}
+	layout := func(l docfile.PageLayout) pair {
+		with := docOf(ch("Heading", docfile.Format{Scale: 1.6}), plain("\n"), plain("body\n"))
+		with.SetPageLayout(l)
+		return pair{with: with, without: docOf(ch("Heading", docfile.Format{Scale: 1.6}), plain("\n"), plain("body\n"))}
+	}
+	m[FeatPageHeader] = layout(docfile.PageLayout{Header: "{title}\tPage {page} of {pages}", Footer: "End"})
+	m[FeatPageTOC] = layout(docfile.PageLayout{TOC: true})
+	m[FeatPageSize] = layout(docfile.PageLayout{Width: 595, Height: 842, Margins: [4]float64{50, 50, 50, 50}})
 	return m
 }
 
@@ -186,7 +194,7 @@ func registry() *transfer.Registry {
 	return r
 }
 
-var dateRE = regexp.MustCompile(`D:\d{14}[^)]*|/CreationDate ?\([^)]*\)|/ModDate ?\([^)]*\)|/ID ?\[[^\]]*\]`)
+var dateRE = regexp.MustCompile(`<meta property="dcterms:modified">[^<]*</meta>|D:\d{14}[^)]*|/CreationDate ?\([^)]*\)|/ModDate ?\([^)]*\)|/ID ?\[[^\]]*\]`)
 
 // normalised hides what changes from one export to the next of the same document (dates and ids).
 // A zip (Word, EPUB) is reduced to its entries' names and contents: the file's own bytes carry the time it was
@@ -204,7 +212,7 @@ func normalised(b []byte) []byte {
 			out.WriteString("\x00" + f.Name + "\x00")
 			out.Write(data)
 		}
-		return out.Bytes()
+		return dateRE.ReplaceAll(out.Bytes(), nil)
 	}
 	return dateRE.ReplaceAll(b, nil)
 }

@@ -41,6 +41,7 @@ func everything() docfile.Document {
 		d.History = append(d.History, p.with.History...)
 	}
 	d.Comments = []docfile.Comment{{ID: "c1", Text: "a comment"}}
+	d.SetPageLayout(docfile.PageLayout{Header: "{title}", Footer: "{page}", TOC: true, Width: 595, Height: 842, Margins: [4]float64{50, 50, 50, 50}})
 	return d
 }
 

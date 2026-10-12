@@ -140,6 +140,13 @@ func survives(f Feature, d docfile.Document) bool {
 		return d.Title == "Fidelity"
 	case FeatHistory:
 		return len(d.History) > 0
+	case FeatPageHeader:
+		l := d.PageLayout()
+		return l.Header != "" || l.Footer != ""
+	case FeatPageTOC:
+		return d.PageLayout().TOC
+	case FeatPageSize:
+		return d.PageLayout().Width > 0
 	}
 	return false
 }
@@ -152,6 +159,16 @@ func importBack(t *testing.T, r *transfer.Registry, format string, data []byte) 
 		t.Fatalf("%s: import: %v", format, err)
 	}
 	return d
+}
+
+// notReadBack is what a format writes but its importer does not read: a loss on the way in, recorded here so a
+// new one fails the round-trip test. (ImportFidelity says so for a file that holds such things.)
+var notReadBack = map[string]map[Feature]string{
+	"docx": {
+		FeatPageHeader: "headers and footers are not read (docximport.Inspect counts them)",
+		FeatPageTOC:    "a generated table of contents is read as the text it shows, not as a setting",
+		FeatPageSize:   "the page size and margins are not read",
+	},
 }
 
 // TestRoundTripReadsBackWhatTheTableSaysIsKept exports each paired document, imports the file again and checks
@@ -171,7 +188,11 @@ func TestRoundTripReadsBackWhatTheTableSaysIsKept(t *testing.T) {
 			back := survives(f, importBack(t, r, format, data))
 			switch e.t {
 			case Kept:
-				if !back {
+				if why, known := notReadBack[format][f]; known {
+					if back {
+						t.Errorf("%s / %s: now read back (%s is out of date)", format, f, why)
+					}
+				} else if !back {
 					t.Errorf("%s / %s: written, but not read back by the importer: a loss on the way in that the table does not know (fix the importer, or record it)", format, f)
 				}
 			case Dropped:

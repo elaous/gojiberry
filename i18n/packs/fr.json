@@ -963,6 +963,9 @@
   "fidelity.f.equation": "Équations",
   "fidelity.f.endnote": "Notes de fin",
   "fidelity.f.field": "Champs (numéros de page, renvois)",
-  "fidelity.f.layout": "Polices, styles, images, tableaux et structure"
+  "fidelity.f.layout": "Polices, styles, images, tableaux et structure",
+  "fidelity.f.pageHeader": "En-têtes, pieds de page et numéros de page courants",
+  "fidelity.f.pageToc": "Table des matières au début",
+  "fidelity.f.pageSize": "Taille de page et marges"
  }
 }

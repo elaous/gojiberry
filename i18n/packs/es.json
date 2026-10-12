@@ -963,6 +963,9 @@
   "fidelity.f.equation": "Ecuaciones",
   "fidelity.f.endnote": "Notas finales",
   "fidelity.f.field": "Campos (números de página, referencias cruzadas)",
-  "fidelity.f.layout": "Fuentes, estilos, imágenes, tablas y estructura"
+  "fidelity.f.layout": "Fuentes, estilos, imágenes, tablas y estructura",
+  "fidelity.f.pageHeader": "Encabezados, pies de página y números de página",
+  "fidelity.f.pageToc": "Tabla de contenido al principio",
+  "fidelity.f.pageSize": "Tamaño de página y márgenes"
  }
 }

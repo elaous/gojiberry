@@ -963,6 +963,9 @@
   "fidelity.f.equation": "Formeln",
   "fidelity.f.endnote": "Endnoten",
   "fidelity.f.field": "Felder (Seitenzahlen, Querverweise)",
-  "fidelity.f.layout": "Schriften, Formate, Bilder, Tabellen und Struktur"
+  "fidelity.f.layout": "Schriften, Formate, Bilder, Tabellen und Struktur",
+  "fidelity.f.pageHeader": "Kopf- und Fußzeilen und Seitenzahlen",
+  "fidelity.f.pageToc": "Inhaltsverzeichnis am Anfang",
+  "fidelity.f.pageSize": "Seitengröße und Ränder"
  }
 }
