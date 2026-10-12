@@ -28,8 +28,8 @@ type Service struct {
 	// Who names the person making the request (docstore.Server.UserKey).
 	Who    func(*http.Request) (user string, ok bool)
 	Prefix string
-	// MaxItem and MaxTotal are passed to the Store (zero: the defaults).
-	MaxItem, MaxTotal int
+	// The limits are passed to the Store (zero: the defaults).
+	MaxItem, MaxTotal, MaxFont, MaxFonts int
 }
 
 func (v *Service) prefix() string {
@@ -47,7 +47,7 @@ func (v *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "sign in first", http.StatusUnauthorized)
 		return
 	}
-	st := &Store{A: v.A, User: user, MaxItem: v.MaxItem, MaxTotal: v.MaxTotal}
+	st := &Store{A: v.A, User: user, MaxItem: v.MaxItem, MaxTotal: v.MaxTotal, MaxFont: v.MaxFont, MaxFonts: v.MaxFonts}
 	name := strings.Trim(strings.TrimPrefix(r.URL.Path, v.prefix()), "/")
 	if name == "" {
 		v.list(w, r, st)
@@ -68,7 +68,8 @@ func (v *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		limit := int64(st.MaxItemOrDefault()) + 1
+		item, _ := st.limitsFor(name)
+		limit := int64(item) + 1
 		data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 		if err != nil {
 			http.Error(w, "too large", http.StatusRequestEntityTooLarge)
@@ -140,6 +141,8 @@ func (v *Service) fail(w http.ResponseWriter, err error) bool {
 		return false
 	case errors.Is(err, ErrNotFound):
 		http.Error(w, "no such item", http.StatusNotFound)
+	case errors.Is(err, ErrNoLicense), errors.Is(err, ErrNotAFont):
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 	case errors.Is(err, ErrBadName):
 		http.Error(w, "a name is 1 to 64 of a-z, 0-9, '.', '_' and '-'", http.StatusBadRequest)
 	case errors.Is(err, ErrConflict):
@@ -161,10 +164,4 @@ func ifMatch(w http.ResponseWriter, r *http.Request) (int, bool) {
 		return 0, false
 	}
 	return n, true
-}
-
-// MaxItemOrDefault is the item limit in force.
-func (s *Store) MaxItemOrDefault() int {
-	item, _ := s.limits()
-	return item
 }

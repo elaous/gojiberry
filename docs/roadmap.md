@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-9 of 10 since the last full run (#238: the settings client with offline queue and merge (roadmap 52); #237: `/me/config` tested with real signed-in sessions; #236: the `/me/config` HTTP route for per-person settings; #235: `userconfig`, the per-user config store (roadmap 52); #234: HTML export with a design-token theme; #233: `tokens`, design tokens with contrast validation (roadmap 77); #232: `wasmserve`, a static handler with wasm type, compression and caching (roadmap 82); #231: `docstore backup` and `restore` commands with audit lines; #230: wasm size budget (roadmap 82); full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+10 of 10 since the last full run (#239: fonts as assets with a licence note and their own limits (roadmap 52); the full run on main, with the coverage score and the badge, is due next; #238: the settings client with offline queue and merge (roadmap 52); #237: `/me/config` tested with real signed-in sessions; #236: the `/me/config` HTTP route for per-person settings; #235: `userconfig`, the per-user config store (roadmap 52); #234: HTML export with a design-token theme; #233: `tokens`, design tokens with contrast validation (roadmap 77); #232: `wasmserve`, a static handler with wasm type, compression and caching (roadmap 82); #231: `docstore backup` and `restore` commands with audit lines; #230: wasm size budget (roadmap 82); full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -843,8 +843,12 @@ New entries:
     `Sync` pushes the queue with `If-Match` and then pulls what other devices wrote: on a 412 it fetches the server's
     copy and calls the app's `Merge` (default: the local change wins), a 401 gives `ErrSignedOut` and a network or 5xx
     failure `ErrOffline`, both leaving the queue intact. It uses `net/http` only, so it runs in the browser's wasm; the
-    tests run it against the real `Service`. Left: wiring it to the showcase's preferences, fonts as assets, sharing
-    templates and styles.
+    tests run it against the real `Service`. Also done (#239): fonts as assets. Items named `font.<name>` hold a container of the font file and its
+    licence note (`EncodeFont`, `DecodeFont`, `Store.PutFont`/`GetFont`): a font without a licence note, or a file that is not
+    a TrueType, OpenType or WOFF font by its signature, is refused (422 over HTTP), and the generic `Put` cannot store an
+    unchecked blob under a font name. Fonts have their own limits, 4 MiB each and 16 MiB in all by default, that neither
+    use up nor are used up by the room for settings. Left: wiring the client to the showcase's preferences and loading a
+    stored font into the editor, sharing templates and styles.
 
 Suggested order of the accessibility group: 48, 51, 49, 50, 52.
 

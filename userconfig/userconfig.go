@@ -55,8 +55,10 @@ type Store struct {
 	A    docstore.Adapter
 	User string // any stable id of the user; only its hash reaches the keys
 	// MaxItem and MaxTotal are the size limits in bytes of one item and of all of the user's items;
-	// zero means the defaults.
+	// zero means the defaults. Fonts (names starting "font.", see fonts.go) have their own: MaxFont
+	// for one and MaxFonts for all of them, and do not count against the other two.
 	MaxItem, MaxTotal int
+	MaxFont, MaxFonts int
 }
 
 // envelope is what is stored: the revision travels inside the (encrypted) bytes.
@@ -85,6 +87,21 @@ func (s *Store) limits() (item, total int) {
 	}
 	if total <= 0 {
 		total = DefaultMaxTotal
+	}
+	return item, total
+}
+
+// limitsFor are the limits that apply to the item called name: the font ones or the ordinary ones.
+func (s *Store) limitsFor(name string) (item, total int) {
+	if !isFont(name) {
+		return s.limits()
+	}
+	item, total = s.MaxFont, s.MaxFonts
+	if item <= 0 {
+		item = DefaultMaxFont
+	}
+	if total <= 0 {
+		total = DefaultMaxFonts
 	}
 	return item, total
 }
@@ -123,9 +140,14 @@ func (s *Store) Put(ctx context.Context, name string, data []byte, base int) (It
 	if err != nil {
 		return Item{}, err
 	}
-	maxItem, maxTotal := s.limits()
+	maxItem, maxTotal := s.limitsFor(name)
 	if len(data) > maxItem {
 		return Item{}, ErrQuota
+	}
+	if isFont(name) {
+		if _, err := DecodeFont(data); err != nil {
+			return Item{}, err
+		}
 	}
 	cur, raw, err := s.read(ctx, name)
 	switch {
@@ -137,7 +159,7 @@ func (s *Store) Put(ctx context.Context, name string, data []byte, base int) (It
 	if cur.Rev != base {
 		return cur, ErrConflict
 	}
-	used, err := s.used(ctx, k)
+	used, err := s.used(ctx, k, isFont(name))
 	if err != nil {
 		return Item{}, err
 	}
@@ -174,15 +196,16 @@ func (s *Store) Put(ctx context.Context, name string, data []byte, base int) (It
 	return next, nil
 }
 
-// used is the bytes the user's other items take (the one being written is replaced, not added).
-func (s *Store) used(ctx context.Context, except string) (int, error) {
+// used is the bytes the user's other items of the same class (fonts or not) take; the one being
+// written is replaced, not added.
+func (s *Store) used(ctx context.Context, except string, fonts bool) (int, error) {
 	metas, err := docstore.ListPrefix(ctx, s.A, s.prefix())
 	if err != nil {
 		return 0, err
 	}
 	n := 0
 	for _, m := range metas {
-		if m.ID != except {
+		if m.ID != except && isFont(strings.TrimPrefix(m.ID, s.prefix())) == fonts {
 			n += m.Size
 		}
 	}
