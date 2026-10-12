@@ -84,6 +84,8 @@ func fidelityFeature(id string) string {
 		"page-header":      tr("fidelity.f.pageHeader", "Running headers, footers and page numbers"),
 		"page-toc":         tr("fidelity.f.pageToc", "Table of contents at the start"),
 		"page-size":        tr("fidelity.f.pageSize", "Page size and margins"),
+		"media":            tr("fidelity.f.media", "Audio and video"),
+		"media-captions":   tr("fidelity.f.mediaCaptions", "Caption tracks"),
 		"header-footer":    tr("fidelity.f.headerFooter", "Headers and footers"),
 		"text-box":         tr("fidelity.f.textBox", "Text boxes"),
 		"drawing":          tr("fidelity.f.drawing", "Shapes, charts and diagrams"),
@@ -121,6 +123,10 @@ func fidelityNote(id string) string {
 		return tr("fidelity.n.notes", "Written as numbers, with the notes in a list at the end.")
 	case "bullets":
 		return tr("fidelity.n.bullets", "List markers are written as characters, not as a real list.")
+	case "media-text":
+		return tr("fidelity.n.mediaText", "Written as a link to the clip with its transcript as text; the clip is not embedded.")
+	case "caption-words":
+		return tr("fidelity.n.captionWords", "The caption track is not written; its words are written as the transcript.")
 	}
 	return ""
 }

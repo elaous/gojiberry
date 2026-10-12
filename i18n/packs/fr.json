@@ -1008,6 +1008,10 @@
   "fidelity.f.layout": "Polices, styles, images, tableaux et structure",
   "fidelity.f.pageHeader": "En-têtes, pieds de page et numéros de page courants",
   "fidelity.f.pageToc": "Table des matières au début",
-  "fidelity.f.pageSize": "Taille de page et marges"
+  "fidelity.f.pageSize": "Taille de page et marges",
+  "fidelity.f.media": "Audio et vidéo",
+  "fidelity.f.mediaCaptions": "Pistes de sous-titres",
+  "fidelity.n.mediaText": "Écrit comme un lien vers le clip avec sa transcription en texte ; le clip n'est pas intégré.",
+  "fidelity.n.captionWords": "La piste de sous-titres n'est pas écrite ; ses mots sont écrits comme transcription."
  }
 }

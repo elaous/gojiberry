@@ -65,6 +65,9 @@ type Item struct {
 	Table *TableItem `json:"table,omitempty" pb:"9"`
 	// Image is an inline image: where it came from and how it is shown.
 	Image *ImageItem `json:"image,omitempty" pb:"10"`
+	// Media is an embedded audio or video clip with its captions and transcript (roadmap 68). The editor
+	// has no player: it opens a clip as text (MediaText) and the exports write it so.
+	Media *MediaItem `json:"media,omitempty" pb:"11"`
 }
 
 // ImageItem is an inline image. URL is what to fetch it from (a data: URL
@@ -456,6 +459,13 @@ func ToItems(items []Item) []canvas.Item {
 			out = append(out, canvas.Inline{Object: canvas.NewTableObject(table), Block: true})
 		case it.Image != nil:
 			out = append(out, canvas.Inline{Object: imageObject(*it.Image)})
+		case it.Media != nil:
+			// the editor has no player: the clip is opened as the text that stands for it, so nothing is lost
+			// from view (its captions track is the one thing the text does not carry)
+			if c, ok := lastChars(out); ok && c.Text != "" && !strings.HasSuffix(c.Text, "\n") {
+				out = append(out, canvas.Chars{Text: "\n"}) // the clip's line starts a paragraph of its own
+			}
+			out = append(out, ToItems(MediaText(*it.Media))...)
 		}
 	}
 	return out

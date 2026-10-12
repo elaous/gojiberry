@@ -75,6 +75,7 @@ func acceptedView(d docfile.Document) docfile.Document {
 }
 
 func fromDocument(d docfile.Document) Snapshot {
+	d = d.MediaAsText() // no format plays a clip: it is written as a link with its transcript as text
 	snap := Snapshot{
 		Title:     d.Title,
 		PageWidth: defaultPageWidth, PageHeight: defaultPageHeight,
