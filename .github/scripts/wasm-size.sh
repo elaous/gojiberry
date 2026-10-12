@@ -13,7 +13,8 @@ budget="${2:?usage: wasm-size.sh <package dir> <budget file>}"
 out="$(mktemp -d)"
 trap 'rm -rf "$out"' EXIT
 
-(cd "$pkg" && GOOS=js GOARCH=wasm go build -o "$out/main.wasm" .)
+# -s -w: what is shipped has no symbol table or DWARF (about 2% of the file); measure that.
+(cd "$pkg" && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o "$out/main.wasm" .)
 raw=$(wc -c <"$out/main.wasm" | tr -d ' ')
 gz=$(gzip -9 -c "$out/main.wasm" | wc -c | tr -d ' ')
 
