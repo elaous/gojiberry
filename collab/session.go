@@ -31,6 +31,11 @@ type Session struct {
 	NoRepair bool
 	// Repairs counts how many times the session has been rebuilt.
 	Repairs int
+	// Merged counts the changes that were made while offline (or kept from an earlier visit) and met the
+	// server's copy when the connection came back: each time, the number of changes that waited. Rejected
+	// counts the changes the server refused (a viewer's edit, a batch that was too large), which a repair
+	// then drops. Both only grow, and survive Repair; a host announces the difference since it last looked.
+	Merged, Rejected int
 	// Name and Color are shown to others with your cursor.
 	Name, Color string
 
@@ -41,6 +46,7 @@ type Session struct {
 	sharing   Sharing
 
 	snapshots int
+	waiting   int // changes that waited when the last connection was made, until its snapshot is applied
 }
 
 // Connect joins the document opts.Doc with flow. If the server has no
@@ -153,9 +159,14 @@ func (s *Session) handle(e client.Event) bool {
 	switch e.Kind {
 	case client.Hello:
 		s.Role = e.Role
+		s.waiting = e.Waiting
 		return true
 	case client.Snapshot:
 		s.snapshots++
+		if s.waiting > 0 && s.Role.CanEdit() {
+			s.Merged += s.waiting
+		}
+		s.waiting = 0
 		if len(e.Ops) == 0 && !s.Bridge.Ready() {
 			if s.Role.CanEdit() {
 				s.Bridge.Seed()
@@ -190,6 +201,7 @@ func (s *Session) handle(e client.Event) bool {
 		s.Status = e.Status
 		return true
 	case client.Rejected:
+		s.Rejected += len(e.Ops)
 		s.Err = e.Err
 		s.needFix = !s.NoRepair
 		return true

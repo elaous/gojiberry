@@ -72,6 +72,10 @@ type Event struct {
 	Presence wire.Presence
 	Status   Status
 	Err      error
+	// Waiting, on Hello, is how many ops were made since the last connection was up: while offline, or
+	// kept from an earlier visit by Options.Queue. They meet the server's copy now, whether or not they
+	// have already been posted.
+	Waiting int
 }
 
 // Options configures Dial.
@@ -125,6 +129,7 @@ type Conn struct {
 	queue   []Event       // events not yet taken from the channel, in order
 	wake    chan struct{} // wakes the pump
 	pending []crdt.Op
+	offline int // ops made while the connection was not up, until the next Hello
 	status  Status
 	kick    chan struct{} // wakes the sender
 	done    sync.WaitGroup
@@ -153,6 +158,7 @@ func Dial(opts Options) *Conn {
 	c := &Conn{opts: opts, client: cl, events: make(chan Event), ctx: ctx, cancel: cancel, kick: make(chan struct{}, 1), wake: make(chan struct{}, 1)}
 	if opts.Queue != nil {
 		c.pending = append(c.pending, opts.Queue.Load()...)
+		c.offline = len(c.pending)
 		if len(c.pending) > 0 {
 			c.kick <- struct{}{}
 		}
@@ -173,6 +179,15 @@ func (c *Conn) Status() Status {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.status
+}
+
+// takeOffline returns how many ops were made while the connection was not up, and starts counting again.
+func (c *Conn) takeOffline() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	n := c.offline
+	c.offline = 0
+	return n
 }
 
 // Pending returns how many ops wait to be delivered.
@@ -274,6 +289,9 @@ func (c *Conn) Send(ops []crdt.Op) {
 	}
 	c.mu.Lock()
 	c.pending = append(c.pending, ops...)
+	if c.status != Online {
+		c.offline += len(ops)
+	}
 	c.persistLocked()
 	c.mu.Unlock()
 	select {
@@ -511,7 +529,7 @@ func (c *Conn) dispatch(name, data string) {
 		var h struct{ Role wire.Role }
 		if json.Unmarshal([]byte(data), &h) == nil {
 			c.setStatus(Online)
-			c.emit(Event{Kind: Hello, Role: h.Role})
+			c.emit(Event{Kind: Hello, Role: h.Role, Waiting: c.takeOffline()})
 			// Ops queued while offline go now.
 			select {
 			case c.kick <- struct{}{}:

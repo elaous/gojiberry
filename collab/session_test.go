@@ -338,6 +338,7 @@ func TestOverWebSockets(t *testing.T) {
 		"persist and reload":   TestDocumentsPersistAndReload,
 		"reconnect and resend": TestReconnectResyncsAndSendsWhatWaited,
 		"hub restart resend":   TestClientResendsWhatARestartedHubLost,
+		"merged and rejected":  TestSessionCountsMergedAndRejectedChanges,
 	} {
 		t.Run(name, fn)
 	}

@@ -105,16 +105,22 @@ func resetBinding(stage *canvas.Stage, defaults canvas.Keymap, cmd canvas.Comman
 }
 
 // livePresence shows who is at a shared document and the connection.
-func livePresence(u *ui) xango.Node {
+func livePresence(u *ui, flow func() *canvas.TextFlow, renderUI func()) xango.Node {
 	s := u.live
 	var peers []components.PresencePeer
 	for _, p := range s.Peers {
 		peers = append(peers, components.PresencePeer{Name: p.Name, Color: p.Color, User: p.User, Role: string(p.Role)})
 	}
 	slices.SortFunc(peers, func(a, b components.PresencePeer) int { return strings.Compare(a.Name, b.Name) })
+	// "Where is <name>?" buttons are a per-person setting (View > Display preferences): off, the cursors are
+	// never spoken; on, the position is given only when asked.
+	var where func(components.PresencePeer)
+	if curPrefs.Where == "on" {
+		where = func(p components.PresencePeer) { u.sayWhere(flow(), p); renderUI() }
+	}
 	return xango.El("div", []xango.Attr{xango.A("id", "presence"), xango.A("style", "margin-bottom:0.8em")}, components.Presence(components.PresenceProps{
 		Self: components.PresencePeer{Name: u.liveName, Color: u.liveColor, Role: string(s.Role)}, Peers: peers,
-		Status: s.Status.String(), Pending: s.Pending, Role: string(s.Role),
+		Status: s.Status.String(), Pending: s.Pending, Role: string(s.Role), OnWhere: where,
 	}))
 }
 
