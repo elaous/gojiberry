@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-8 of 10 since the last full run (#237: `/me/config` tested with real signed-in sessions; #236: the `/me/config` HTTP route for per-person settings; #235: `userconfig`, the per-user config store (roadmap 52); #234: HTML export with a design-token theme; #233: `tokens`, design tokens with contrast validation (roadmap 77); #232: `wasmserve`, a static handler with wasm type, compression and caching (roadmap 82); #231: `docstore backup` and `restore` commands with audit lines; #230: wasm size budget (roadmap 82); full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+9 of 10 since the last full run (#238: the settings client with offline queue and merge (roadmap 52); #237: `/me/config` tested with real signed-in sessions; #236: the `/me/config` HTTP route for per-person settings; #235: `userconfig`, the per-user config store (roadmap 52); #234: HTML export with a design-token theme; #233: `tokens`, design tokens with contrast validation (roadmap 77); #232: `wasmserve`, a static handler with wasm type, compression and caching (roadmap 82); #231: `docstore backup` and `restore` commands with audit lines; #230: wasm size budget (roadmap 82); full run on main c18b82a after #228, the 10th merge since cc020a5: the first try stopped at `fmt-check` (an unformatted e2e test, fixed in #228), the second passed everything; coverage score 89.0% (it was 89.1%: the new packages `audit` and `docsearch` and the backup code are not fully exercised yet), README badge updated). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -838,7 +838,12 @@ New entries:
     cross-origin needs a CORS preflight), a stale one gets 412 with the current `ETag` to merge from, over the limit gets
     413, nobody signed in gets 401, answers are `no-store` and carry no stored value or store detail. The server keeps
     the bytes it is sent, so a client that wants them hidden from the operator encrypts them with the owner's keys
-    first. Left: a client for it in the showcase with the local offline fallback and queue, fonts as assets, sharing
+    first. Also done (#238): `userconfig/client`, the device side. It keeps a local copy of every item in a
+    `Cache` (so settings work offline and survive a restart), applies `Set` and `Delete` at once and queues them, and
+    `Sync` pushes the queue with `If-Match` and then pulls what other devices wrote: on a 412 it fetches the server's
+    copy and calls the app's `Merge` (default: the local change wins), a 401 gives `ErrSignedOut` and a network or 5xx
+    failure `ErrOffline`, both leaving the queue intact. It uses `net/http` only, so it runs in the browser's wasm; the
+    tests run it against the real `Service`. Left: wiring it to the showcase's preferences, fonts as assets, sharing
     templates and styles.
 
 Suggested order of the accessibility group: 48, 51, 49, 50, 52.

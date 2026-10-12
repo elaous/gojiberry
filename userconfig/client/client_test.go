@@ -84,7 +84,9 @@ func TestTwoDevicesMergeInsteadOfOverwriting(t *testing.T) {
 	ctx := context.Background()
 	s := newServer(t)
 	phone, laptop := device(s, "ana", nil), device(s, "ana", nil)
-	merge := func(name string, local, remote []byte) []byte { return append(append([]byte(nil), remote...), local...) }
+	merge := func(name string, local, remote []byte) []byte {
+		return append(append([]byte(nil), remote...), local...)
+	}
 	phone.Merge, laptop.Merge = merge, merge
 
 	phone.Set("tags", []byte("a"))
