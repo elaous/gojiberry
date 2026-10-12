@@ -24,6 +24,7 @@ func printRecoverySheet(label, secret string) {
 		Keep:     T("enc.sheetKeep", "Keep this sheet offline, somewhere only you can reach. Anyone who reads it can open your documents."),
 		Lost:     T("enc.sheetLost", "If you lose this and every other key, nobody can open the documents, including us. There is no way back."),
 		Print:    T("enc.sheetPrint", "Print"),
+		QRAlt:    T("enc.sheetQR", "QR code of the recovery key. The same key is written above; scanning it moves the key to another device."),
 		Date:     time.Now().Format("2006-01-02"),
 	}, label, secret, fp)
 	arr := js.Global().Get("Uint8Array").New(len(page))

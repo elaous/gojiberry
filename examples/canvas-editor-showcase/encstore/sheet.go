@@ -30,6 +30,9 @@ type SheetText struct {
 	KeyLabel, Finger  string
 	Keep, Lost, Print string
 	Date              string
+	// QRAlt, when not empty, adds a QR code of the key under the text, with this as its text
+	// alternative ("QR code of the recovery key; the same key is written above"). Empty: no code.
+	QRAlt string
 }
 
 // RecoverySheet is a self-contained, printable HTML page holding a recovery key: large plain text,
@@ -56,7 +59,13 @@ func RecoverySheet(t SheetText, label, secret, fingerprint string) []byte {
 	}
 	b.WriteString("</strong></p><code>")
 	b.WriteString(e(secret))
-	b.WriteString("</code><p>")
+	b.WriteString("</code>")
+	if t.QRAlt != "" {
+		if svg, err := RecoveryQR(secret, t.QRAlt); err == nil {
+			b.WriteString("<p>" + svg + "</p>")
+		}
+	}
+	b.WriteString("<p>")
 	b.WriteString(e(t.Finger))
 	b.WriteString(": <strong>")
 	b.WriteString(e(fingerprint))
