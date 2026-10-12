@@ -558,9 +558,15 @@ func withSessions(ctx context.Context, adapter docstore.Adapter, m *auth.Manager
 	return nil
 }
 
-// Main runs the server configured from the environment and does not return.
+// Main runs the server configured from the environment. It returns only after a graceful stop (a signal, when operator observability is on); a failure ends the process.
 func Main() {
 	cfg := docstore.ConfigFromEnv()
+	// Operator observability is off unless GOJIBERRY_OBS=on (docs/observability.md). It is set up
+	// first so that the sweeps and the limiters report to it from their start.
+	obs, err := setupObserver(context.Background(), os.Getenv)
+	if err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
 	adapter, err := docstore.BuildAdapter(context.Background(), cfg)
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
@@ -581,11 +587,11 @@ func Main() {
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
-	srv := docstore.NewServer(adapter, cfg.Backend).WithGuard(cfg.Guard).WithRequireACL(cfg.RequireACL)
+	srv := docstore.NewServer(adapter, cfg.Backend).WithGuard(cfg.Guard).WithRequireACL(cfg.RequireACL).WithObserver(obs)
 	// Rate limits (the directory's and the passkey routes'): per process by default, or kept in
 	// the store so replicas share them (GOJIBERRY_DOCSTORE_LIMITER=store). Stale budget records
 	// are deleted in the background.
-	limiters := docstore.LimiterFactoryFor(cfg.Limiter, adapter)
+	limiters := docstore.ObserveLimiters(docstore.LimiterFactoryFor(cfg.Limiter, adapter), obs)
 	if cfg.Limiter == "store" {
 		go docstore.RunRateLimitSweep(context.Background(), adapter, 10*time.Minute)
 		log.Print("docstore: rate limits are shared through the store")
@@ -627,5 +633,7 @@ func Main() {
 	if gate != a11ycheck.GateAllow {
 		log.Printf("docstore: export gate %q: GET /docs/{id}?for=export checks the document's accessibility first", string(gate))
 	}
-	log.Fatal(newHTTPServer(cfg.Addr, exportgate.Wrap(srv.Handler(), gate)).ListenAndServe())
+	if err := serve(newHTTPServer(cfg.Addr, exportgate.Wrap(srv.Handler(), gate)), obs); err != nil {
+		log.Fatal(err)
+	}
 }
