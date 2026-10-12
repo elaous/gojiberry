@@ -22,6 +22,7 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/docstore/encrypt"
 	"github.com/elaous/gojiberry/docstore/public"
+	"github.com/elaous/gojiberry/telemetry"
 	"github.com/elaous/gojiberry/userconfig"
 )
 
@@ -105,6 +106,18 @@ const (
 )
 
 // newHTTPServer is the server Main runs.
+// withTelemetry mounts the anonymous usage receiver (package telemetry, docs/telemetry.md) when the
+// operator set GOJIBERRY_DOCSTORE_TELEMETRY=on. It is off, and the route does not exist, otherwise: that
+// is the operator's kill switch. It reports whether it is on.
+func withTelemetry(srv *docstore.Server, value string) bool {
+	if strings.ToLower(strings.TrimSpace(value)) != "on" {
+		return false
+	}
+	srv.WithTelemetry(telemetry.NewCounters())
+	log.Print("docstore: anonymous usage counts are accepted at /telemetry (see docs/telemetry.md)")
+	return true
+}
+
 func newHTTPServer(addr string, h http.Handler) *http.Server {
 	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: readHeaderTimeout, ReadTimeout: readTimeout, IdleTimeout: idleTimeout}
 }
@@ -580,6 +593,7 @@ func Main() {
 	if err := withDirectory(context.Background(), srv, adapter, limiters); err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
+	withTelemetry(srv, os.Getenv("GOJIBERRY_DOCSTORE_TELEMETRY"))
 	publicSvc, err := withPublic(srv, adapter, cfg.ExpiryTTL, limiters)
 	if err != nil {
 		log.Fatalf("docstore: %v", err)
