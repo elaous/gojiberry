@@ -13,6 +13,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.4
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/hashicorp/hcl/v2 v2.24.0
+	github.com/resend/resend-go/v4 v4.8.2
 	github.com/signintech/gopdf v0.37.0
 	github.com/speedata/hyphenation v1.0.2
 	golang.org/x/crypto v0.57.0
