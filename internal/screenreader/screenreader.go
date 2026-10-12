@@ -192,7 +192,7 @@ func (r *Reader) walk(n *node, muted bool) {
 		muted = true // its text is somebody's name; a field inside it is still read
 	}
 	if !n.ignored {
-		if it, ok := r.item(n); ok && !(muted && it.Role == "StaticText") {
+		if it, ok := r.item(n); ok && (!muted || it.Role != "StaticText") {
 			r.items = append(r.items, it)
 			if namesFromContent[n.role] && n.name != "" || n.role == "textbox" || n.role == "searchbox" || n.role == "combobox" {
 				return // what is inside is already said
