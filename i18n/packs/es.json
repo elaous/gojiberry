@@ -545,6 +545,8 @@
   "dir.log.pinThese": "Fijar estas claves",
   "dir.log.pinned": "Las claves de registro están fijadas: las consultas posteriores del registro se comprueban con ellas.",
   "dir.log.pinnedState": "Claves de registro fijadas: %s.",
+  "dir.alert.reset": "La clave de propietario de su dirección se restableció (entrada %d del registro). La clave que tenía antes ya no firma por ella. Si usted no lo hizo, alguien usó una sesión abierta de su cuenta: compruebe qué claves están publicadas y registre una nueva clave de propietario.",
+  "dir.alert.resetRequest": "Alguien pidió restablecer la clave de propietario de su dirección (entrada %d del registro). Solo surte efecto tras el periodo de espera. Si no fue usted, cancele el restablecimiento con su clave de propietario antes.",
   "dir.log.rewritten": "El registro del directorio se recortó o se reescribió desde la última consulta. No confíe en este directorio hasta saber por qué.",
   "dir.log.title": "Quién cambió mi entrada",
   "dir.log.unconfirmed": "Ninguna entrada suya confirma aún el nombre de registro de su dirección: publique una clave y vuelva a vigilar.",

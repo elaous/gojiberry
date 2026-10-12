@@ -43,6 +43,37 @@ type ownerRecord struct {
 	Key   string `json:"key"`
 }
 
+// ownerAlert is one thing watching found, kept until dismissed: its kind (a dirclient.AlertKind, empty
+// for the page's own alerts) and the text shown. Alerts kept by an older version are bare strings.
+type ownerAlert struct {
+	Kind string `json:"kind,omitempty"`
+	Seq  int64  `json:"seq,omitempty"`
+	Text string `json:"text"`
+}
+
+// UnmarshalJSON reads an alert, or the bare string an older version kept.
+func (a *ownerAlert) UnmarshalJSON(b []byte) error {
+	if len(b) > 0 && b[0] == '"' {
+		*a = ownerAlert{}
+		return json.Unmarshal(b, &a.Text)
+	}
+	type plain ownerAlert
+	return json.Unmarshal(b, (*plain)(a))
+}
+
+// alertFor words what watching found. A reset of the owner key, or a request for one, gets a text of
+// its own that says what it means and what to do; the rest is the directory client's English text.
+func alertFor(a dirclient.Alert) ownerAlert {
+	text := a.Text
+	switch a.Kind {
+	case dirclient.AlertReset:
+		text = T("dir.alert.reset", "The owner key of your address was reset (log entry %d). The key you had before no longer signs for it. If you did not do this, somebody used a signed-in session of your account: check which keys are published and enroll a new owner key.", a.Seq)
+	case dirclient.AlertResetRequest:
+		text = T("dir.alert.resetRequest", "Someone asked to reset the owner key of your address (log entry %d). It takes effect after the waiting period. If it was not you, cancel the reset with your owner key before then.", a.Seq)
+	}
+	return ownerAlert{Kind: string(a.Kind), Seq: a.Seq, Text: text}
+}
+
 // ownerUI is the state of the owner key panel.
 type ownerUI struct {
 	key   dirclient.OwnerSigner // held in this browser, nil if none: a webKey, or an OwnerKey kept as text
@@ -71,7 +102,7 @@ type ownerUI struct {
 	logKeys   map[string]string // the pinned log keys (key ID to base64), none until pinned
 	candidate map[string]string // the keys the server states, shown to be compared before they are pinned
 	expected  string            // a fingerprint the person got from the operator, to hold the candidate to
-	alerts    []string          // what watching found, until dismissed
+	alerts    []ownerAlert      // what watching found, until dismissed
 	watchMsg  string
 }
 
@@ -178,7 +209,7 @@ func (d *dirUI) watchMine(ctx context.Context) error {
 		d.say(T("dir.log.needKeys", "Pin the server's log keys first."), true)
 		return nil
 	case errors.Is(err, dirclient.ErrLogRewritten):
-		d.owner.alerts = append(d.owner.alerts, T("dir.log.rewritten", "The directory's log was cut back or rewritten since the last look. Do not trust this directory until you know why."))
+		d.owner.alerts = append(d.owner.alerts, ownerAlert{Text: T("dir.log.rewritten", "The directory's log was cut back or rewritten since the last look. Do not trust this directory until you know why.")})
 		d.keepAlerts()
 		d.say("", false)
 		return nil
@@ -186,7 +217,9 @@ func (d *dirUI) watchMine(ctx context.Context) error {
 		d.say(dirErr(err).Error(), true)
 		return nil
 	}
-	d.owner.alerts = append(d.owner.alerts, rep.Alerts...)
+	for _, a := range rep.Alerts {
+		d.owner.alerts = append(d.owner.alerts, alertFor(a))
+	}
 	d.keepAlerts()
 	msg := T("dir.log.checked", "The log was checked up to entry %d: %d new for your address, %d of them not yours.", rep.HeadSeq, rep.New, len(rep.Alerts))
 	if rep.AddressUnconfirmed {
@@ -603,7 +636,11 @@ func (d *dirUI) watchPanel(e *encUI) []xango.Node {
 	if len(d.owner.alerts) > 0 {
 		var items []xango.Node
 		for _, a := range d.owner.alerts {
-			items = append(items, xango.El("li", nil, xango.Text(a)))
+			attrs := []xango.Attr{}
+			if a.Kind != "" {
+				attrs = append(attrs, xango.A("data-kind", a.Kind))
+			}
+			items = append(items, xango.El("li", attrs, xango.Text(a.Text)))
 		}
 		nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("id", "dir-log-alerts"), xango.A("role", "alert"), xango.A("class", "gj-doc-error"), xango.A("style", "font-size:13px")}, items...))
 	}

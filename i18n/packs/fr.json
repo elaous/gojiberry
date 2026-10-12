@@ -545,6 +545,8 @@
   "dir.log.pinThese": "Épingler ces clés",
   "dir.log.pinned": "Les clés de journal sont épinglées : les consultations ultérieures du journal sont vérifiées par rapport à elles.",
   "dir.log.pinnedState": "Clés de journal épinglées : %s.",
+  "dir.alert.reset": "La clé de propriétaire de votre adresse a été réinitialisée (entrée %d du journal). La clé que vous aviez avant ne signe plus pour elle. Si ce n'est pas vous, quelqu'un a utilisé une session ouverte de votre compte : vérifiez quelles clés sont publiées et enregistrez une nouvelle clé de propriétaire.",
+  "dir.alert.resetRequest": "Quelqu'un a demandé de réinitialiser la clé de propriétaire de votre adresse (entrée %d du journal). Cela ne prend effet qu'après le délai d'attente. Si ce n'est pas vous, annulez la réinitialisation avec votre clé de propriétaire avant.",
   "dir.log.rewritten": "Le journal de l'annuaire a été tronqué ou réécrit depuis la dernière consultation. Ne faites pas confiance à cet annuaire tant que vous ne savez pas pourquoi.",
   "dir.log.title": "Qui a modifié mon entrée",
   "dir.log.unconfirmed": "Aucune de vos entrées ne confirme encore le nom de journal de votre adresse : publiez une clé, puis surveillez à nouveau.",
