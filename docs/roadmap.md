@@ -5,7 +5,7 @@ What is planned beyond the [opendocs port plan](opendocs-port-plan.md) and the
 
 ## Merges since the last full test run
 
-0 of 10 since the last full run (full run on main f5ed7d2 (#263): generate, docs, fmt, vet, wasm-vet, lint, wasm-lint, modules, lint-modules, wasm-size, grammar tests and `make test` passed; fixed a staticcheck QF1001 in `internal/screenreader` and gave `make coverage` the same 20 minute test limit as `make test` (it timed out at 10); coverage score 89.1% (unchanged), README badge unchanged). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+0 of 10 since the last full run (full run on main f5ed7d2 (#263): generate, docs, fmt, vet, wasm-vet, lint, wasm-lint, modules, lint-modules, wasm-size, grammar tests and `make test` passed; `lint` found a QF1001 in `internal/screenreader` (since fixed on main); gave `make coverage` the same 20 minute test limit as `make test` (it timed out at 10); coverage score 89.1% (unchanged), README badge unchanged). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
