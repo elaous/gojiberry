@@ -3,6 +3,10 @@
 <head>
   <meta charset="utf-8">
   <title>gojiberry editor showcase</title>
+  <!-- Operator setting: the least strict gate before exporting a document with accessibility errors that a
+       person may choose in the Check tab. Set content to "warn" or "block" (with "block" an export with
+       errors cannot be allowed anyway); empty leaves the choice to the person. See docs/accessibility-testing.md. -->
+  <meta name="gojiberry-min-export-gate" content="">
   <script>
     // The page may be served at .../d/{doc}: assets are relative to the app, not to that path.
     document.write('<base href="' + location.pathname.replace(/(^|\/)[df]\/[^\/]*\/?$/, '$1') .replace(/[^\/]*$/, '') + '">');

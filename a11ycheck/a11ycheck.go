@@ -39,6 +39,12 @@ const (
 	RuleHeadingSkip  = "heading-skip"
 	RuleHeadingEmpty = "heading-empty"
 	RuleContrast     = "contrast"
+	// RuleTableHeaderMissing: the first row of a table (its header row, in every export) has no text.
+	RuleTableHeaderMissing = "table-header-missing"
+	// RuleTableHeaderEmpty: some header cell has no text while others do.
+	RuleTableHeaderEmpty = "table-header-empty"
+	// RuleFakeList: paragraphs that start with a typed bullet or number instead of being a list.
+	RuleFakeList = "list-fake"
 )
 
 // Finding is one problem.
@@ -56,7 +62,7 @@ type Finding struct {
 	// Action names what a host can do for the person in one click ("" for nothing that is safe to do
 	// for them): ActionHeadingLevel (set the paragraph at Offset to heading level Arg), ActionDefaultColour
 	// (return the Length runes at Offset to the default text colour), ActionDescribe (go and write the
-	// description; nothing is invented).
+	// description; nothing is invented), ActionToParagraph (make the empty heading a plain paragraph).
 	Action      string
 	Arg, Length int
 }
@@ -66,6 +72,9 @@ const (
 	ActionHeadingLevel  = "heading-level"
 	ActionDefaultColour = "default-colour"
 	ActionDescribe      = "describe"
+	// ActionToParagraph turns the empty heading at Offset into a plain paragraph: its paragraph style is
+	// cleared and the Length runes of blank text it holds lose any heading size.
+	ActionToParagraph = "to-paragraph"
 )
 
 // GateMode says what an export does about the errors a document has.
@@ -87,6 +96,44 @@ func (m GateMode) Decide(findings []Finding, override bool) (allow bool, errors 
 	}
 	return m != GateBlock || errors == 0 || override, errors
 }
+
+// ParseGateMode reads a gate from a setting: "" or "allow" (none), "warn", "block". ok is false for any
+// other word, so a caller can tell a typo from a choice.
+func ParseGateMode(s string) (m GateMode, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "allow", "none":
+		return GateAllow, true
+	case "warn":
+		return GateWarn, true
+	case "block":
+		return GateBlock, true
+	}
+	return GateAllow, false
+}
+
+func (m GateMode) rank() int {
+	switch m {
+	case GateWarn:
+		return 1
+	case GateBlock:
+		return 2
+	}
+	return 0
+}
+
+// AtLeast is the stricter of m and the operator's minimum: the person's choice of gate can raise what the
+// operator set but never lower it.
+func (m GateMode) AtLeast(operator GateMode) GateMode {
+	if operator.rank() > m.rank() {
+		return operator
+	}
+	return m
+}
+
+// OverrideAllowed says whether the person may allow one export past a blocking gate. An operator who
+// sets the minimum to "block" has decided that errors stop an export, so there is no override then;
+// under a lower minimum the person's own "block" keeps its explicit override.
+func OverrideAllowed(operator GateMode) bool { return operator != GateBlock }
 
 // Options tune the checks.
 type Options struct {
@@ -111,22 +158,27 @@ func checkStructure(doc docfile.Document) []Finding {
 	paraItem := 0  // the item it begins at
 	var runs []docfile.Chars
 	var style string
+	var listKind int
+	fake := fakeListRun{}
 	prev := 0 // the level of the last heading
 	endPara := func() {
-		defer func() { runs, style = nil, "" }()
-		level := export.HeadingLevel(runs, style)
-		if level == 0 {
-			return
-		}
+		defer func() { runs, style, listKind = nil, "", 0 }()
 		var text strings.Builder
 		for _, r := range runs {
 			text.WriteString(r.Text)
 		}
+		level := export.HeadingLevel(runs, style)
+		if level == 0 {
+			out = fake.add(out, text.String(), listKind, paraStart, paraItem)
+			return
+		}
+		out = fake.flush(out)
 		switch {
 		case strings.TrimSpace(text.String()) == "":
 			out = append(out, Finding{Rule: RuleHeadingEmpty, Severity: Error, Offset: paraStart, Item: paraItem,
 				Message: fmt.Sprintf("A level %d heading has no text; a reader moving by headings lands on nothing.", level),
-				Fix:     "Write the heading, or turn it into a plain paragraph."})
+				Fix:     "Write the heading, or turn it into a plain paragraph.",
+				Action:  ActionToParagraph, Length: len([]rune(text.String()))})
 		default:
 			if prev > 0 && level > prev+1 {
 				out = append(out, Finding{Rule: RuleHeadingSkip, Severity: Warning, Offset: paraStart, Item: paraItem, Text: excerpt(text.String()),
@@ -156,8 +208,9 @@ func checkStructure(doc docfile.Document) []Finding {
 				}
 			}
 		case it.Para != nil:
-			style = it.Para.Style
+			style, listKind = it.Para.Style, it.Para.List.Kind
 		case it.Image != nil:
+			out = fake.flush(out)
 			if it.Image.Alt == "" && !it.Image.Decorative {
 				out = append(out, Finding{Rule: RuleImageAlt, Severity: Error, Offset: offset, Item: i, Text: it.Image.URL,
 					Message: "An image has no description, so a reader who cannot see it misses it.",
@@ -165,11 +218,17 @@ func checkStructure(doc docfile.Document) []Finding {
 					Action:  ActionDescribe})
 			}
 			offset++
-		case it.Footnote != nil, it.TOC != nil, it.Index != nil, it.Rule != nil, it.Table != nil:
+		case it.Table != nil:
+			out = fake.flush(out)
+			out = append(out, checkTable(it.Table, offset, i)...)
+			offset++
+		case it.Footnote != nil, it.TOC != nil, it.Index != nil, it.Rule != nil:
+			out = fake.flush(out)
 			offset++ // one object in the text stream
 		}
 	}
 	endPara()
+	out = fake.flush(out)
 	return out
 }
 
