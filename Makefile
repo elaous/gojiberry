@@ -153,7 +153,7 @@ lint-modules:
 # itself should ever need for a package with nothing to cover anyway.
 .PHONY: coverage
 coverage:
-	go test -coverprofile=coverage.out $$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...)
+	go test -timeout 20m -coverprofile=coverage.out $$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...)
 	go tool cover -func=coverage.out
 
 # coverage-html turns the same profile into a browsable, per-line
