@@ -156,6 +156,14 @@ type Snapshot struct {
 	Lang   string
 	Blocks []Block
 
+	// Header and Footer are the running header and footer of the paged formats (PDF, Word, RTF, and the
+	// HTML print stylesheet), with the fields {page}, {pages} and {title}; a tab separates left, centre
+	// and right parts (see docfile.PageLayout). TOC puts a table of contents from the headings first,
+	// under TOCTitle ("Contents" when empty).
+	Header, Footer string
+	TOC            bool
+	TOCTitle       string
+
 	PageWidth, PageHeight                            float64
 	MarginLeft, MarginTop, MarginRight, MarginBottom float64
 }

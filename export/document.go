@@ -80,6 +80,15 @@ func fromDocument(d docfile.Document) Snapshot {
 		MarginLeft: defaultMargin, MarginTop: defaultMargin, MarginRight: defaultMargin, MarginBottom: defaultMargin,
 	}
 	snap.Lang = d.Language()
+	if l := d.PageLayout(); !l.IsZero() {
+		snap.Header, snap.Footer, snap.TOC, snap.TOCTitle = l.Header, l.Footer, l.TOC, l.TOCTitle
+		if l.Width > 0 {
+			snap.PageWidth, snap.PageHeight = l.Width/0.75, l.Height/0.75 // points to CSS pixels
+		}
+		if l.Margins != ([4]float64{}) {
+			snap.MarginTop, snap.MarginRight, snap.MarginBottom, snap.MarginLeft = l.Margins[0]/0.75, l.Margins[1]/0.75, l.Margins[2]/0.75, l.Margins[3]/0.75
+		}
+	}
 	sum := sha1.Sum([]byte(d.Title))
 	snap.ID = hex.EncodeToString(sum[:8])
 

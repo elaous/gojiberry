@@ -105,6 +105,17 @@ func (p *Plan) Total() int {
 	return n
 }
 
+// Bytes returns document id's stored bytes as the plan read them and the bytes the replacement would
+// write, for a host that writes through its own layer (a catalog with checksums and versions) instead of
+// Apply. ok is false for a document the plan does not change. The slices are copies.
+func (p *Plan) Bytes(id string) (old, replacement []byte, ok bool) {
+	o, found := p.old[id]
+	if !found {
+		return nil, nil, false
+	}
+	return bytes.Clone(o), bytes.Clone(p.new[id]), true
+}
+
 // Applied is the outcome of Apply, and what Undo needs.
 type Applied struct {
 	// Done are the documents written; Conflicts are those left alone because they changed since

@@ -129,3 +129,34 @@ func TestPlanRegexOptionsAndErrors(t *testing.T) {
 	}
 	_ = docfile.JSON
 }
+
+// A host that writes through its own layer gets the old and the new bytes of a changed document, and
+// nothing for one the plan leaves alone; changing the copies changes nothing in the plan.
+func TestPlanBytesGivesTheOldAndTheReplacement(t *testing.T) {
+	ctx := context.Background()
+	st := docstore.NewMemoryAdapter()
+	put(t, st, "a", "Budget", "Acme pays")
+	put(t, st, "b", "Notes", "Nothing here")
+	p, err := PlanReplace(ctx, st, canvas.FindOptions{Query: "acme"}, "Globex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, repl, ok := p.Bytes("a")
+	if !ok {
+		t.Fatal("no bytes for a changed document")
+	}
+	if _, body, _ := FromDocfile(old); !strings.Contains(body, "Acme") {
+		t.Errorf("the old bytes hold %q", body)
+	}
+	if _, body, _ := FromDocfile(repl); !strings.Contains(body, "Globex") || strings.Contains(body, "Acme") {
+		t.Errorf("the replacement holds %q", body)
+	}
+	if _, _, ok := p.Bytes("b"); ok {
+		t.Error("bytes for a document without a match")
+	}
+	old[0] ^= 0xff
+	again, _, _ := p.Bytes("a")
+	if again[0] == old[0] {
+		t.Error("Bytes returned the plan's own slice")
+	}
+}
