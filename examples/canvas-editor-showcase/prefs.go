@@ -29,6 +29,7 @@ type prefs struct {
 	TypeFmt  string `json:"typefmt,omitempty"`  // "on": formatting changes at the caret are said
 	TypeRead string `json:"typeread,omitempty"` // "on": the line is read when the caret moves
 	Collab   string `json:"collab,omitempty"`   // what is announced of a shared session: "" everything, "important", "off"
+	Where    string `json:"where,omitempty"`    // "on": the presence list has a "Where is <name>?" button for each collaborator
 }
 
 // attrs are the values the root element carries.
@@ -75,6 +76,9 @@ func loadPrefs() prefs {
 	}
 	if p.Collab != components.CollabImportant && p.Collab != components.CollabOff {
 		p.Collab = ""
+	}
+	if p.Where != "on" {
+		p.Where = ""
 	}
 	return p
 }
@@ -148,6 +152,7 @@ func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
 		collab(T("prefs.collabAll", "Shared editing: announce everything"), components.CollabAll),
 		collab(T("prefs.collabImportant", "Shared editing: announce only the connection"), components.CollabImportant),
 		collab(T("prefs.collabOff", "Shared editing: announce nothing"), components.CollabOff),
+		toggle(T("prefs.collabWhere", "Shared editing: a \"Where is\" button for each person"), curPrefs.Where == "on", func(p *prefs, on bool) { p.Where = map[bool]string{true: "on"}[on] }),
 		{Separator: true},
 		typing(T("prefs.typingOff", "Typing: say nothing"), components.TypingOff),
 		typing(T("prefs.typingWords", "Typing: say each word"), components.TypingWords),
