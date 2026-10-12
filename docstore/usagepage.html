@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Store usage over time</title>
+<style>
+:root { color-scheme: light dark; --bg: #fff; --fg: #1a1a1a; --line: #c8c8c8; --head: #eef1f5; }
+@media (prefers-color-scheme: dark) { :root { --bg: #16181c; --fg: #e8e8e8; --line: #444; --head: #23272e; } }
+body { background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 70rem; padding: 1rem; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; margin: 0 0 2rem; }
+caption { text-align: left; font-weight: 600; padding: .5rem 0; }
+th, td { border: 1px solid var(--line); padding: .35rem .6rem; text-align: right; }
+th { background: var(--head); }
+th[scope=row] { text-align: left; font-weight: 400; }
+a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+<h1>Store usage over time</h1>
+<p>Counts and sizes of the whole store, sampled once an hour. They name no document and no person. The last
+{{.Retention.Hours}} hours are kept by the hour and the last {{.Retention.Days}} days by the day, in memory only: a restart
+starts the series again, and a missing row means no sample was taken then. Each row is the last sample of its period.
+The same numbers as JSON: <a href="history">history</a>.</p>
+
+<h2 id="hourly">By the hour</h2>
+{{if .Hourly}}
+<div class="scroll" role="region" aria-labelledby="hourly" tabindex="0">
+<table>
+<caption>Latest hour first</caption>
+<thead><tr><th scope="col">Hour</th><th scope="col">Documents</th><th scope="col">Records</th><th scope="col">Total size</th><th scope="col">Largest document</th><th scope="col">Quota in use</th><th scope="col">Usage batches taken</th><th scope="col">Usage batches refused</th></tr></thead>
+<tbody>
+{{range rev .Hourly}}<tr><th scope="row"><time datetime="{{iso .Time}}">{{hour .Time}}</time></th><td>{{.Documents}}</td><td>{{.Records}}</td><td>{{size .Bytes}}</td><td>{{isize .Largest}}</td><td>{{size .QuotaUsed}}</td><td>{{.Accepted}}</td><td>{{.Refused}}</td></tr>
+{{end}}</tbody>
+</table>
+</div>
+{{else}}<p>No sample yet.</p>{{end}}
+
+<h2 id="daily">By the day</h2>
+{{if .Daily}}
+<div class="scroll" role="region" aria-labelledby="daily" tabindex="0">
+<table>
+<caption>Latest day first</caption>
+<thead><tr><th scope="col">Day</th><th scope="col">Documents</th><th scope="col">Records</th><th scope="col">Total size</th><th scope="col">Largest document</th><th scope="col">Quota in use</th><th scope="col">Usage batches taken</th><th scope="col">Usage batches refused</th></tr></thead>
+<tbody>
+{{range rev .Daily}}<tr><th scope="row"><time datetime="{{day .Time}}">{{day .Time}}</time></th><td>{{.Documents}}</td><td>{{.Records}}</td><td>{{size .Bytes}}</td><td>{{isize .Largest}}</td><td>{{size .QuotaUsed}}</td><td>{{.Accepted}}</td><td>{{.Refused}}</td></tr>
+{{end}}</tbody>
+</table>
+</div>
+{{else}}<p>No sample yet.</p>{{end}}
+</main>
+</body>
+</html>
