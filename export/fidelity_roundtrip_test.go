@@ -140,6 +140,8 @@ func survives(f Feature, d docfile.Document) bool {
 		return d.Title == "Fidelity"
 	case FeatHistory:
 		return len(d.History) > 0
+	case FeatMedia, FeatMediaCaptions:
+		return hasItem(d, func(it docfile.Item) bool { return it.Media != nil })
 	case FeatPageHeader:
 		l := d.PageLayout()
 		return l.Header != "" || l.Footer != ""

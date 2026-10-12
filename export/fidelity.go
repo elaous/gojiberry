@@ -60,6 +60,8 @@ const (
 	FeatPageHeader      Feature = "page-header"
 	FeatPageTOC         Feature = "page-toc"
 	FeatPageSize        Feature = "page-size"
+	FeatMedia           Feature = "media"
+	FeatMediaCaptions   Feature = "media-captions"
 )
 
 // Features lists every Feature in the order a report shows them.
@@ -73,6 +75,7 @@ var Features = []Feature{
 	FeatTable, FeatColSpan, FeatRowSpan, FeatCellShading, FeatCellAlign, FeatCellTextStyle,
 	FeatDocLanguage, FeatTitle, FeatHistory,
 	FeatPageHeader, FeatPageTOC, FeatPageSize,
+	FeatMedia, FeatMediaCaptions,
 }
 
 // Treatment says what a format does with a feature.
@@ -110,17 +113,19 @@ type Loss struct {
 
 // Notes say how a feature is written when it is not written as it is.
 const (
-	NoteText        = "text"        // the format keeps the characters and nothing else
-	NotePlaceholder = "placeholder" // an "[Image]" marker stands in
-	NoteAccepted    = "accepted"    // suggestions are written as if accepted; struck text is left out
-	NoteInlineHTML  = "inline-html" // Markdown writes the HTML tag it has no syntax for
-	NoteBlankCells  = "blank-cells" // the cells a merge covers are left empty
-	NoteGrid        = "grid"        // a table is drawn as a text grid
-	NoteFolded      = "folded"      // heading levels 4 to 6 are written as level 3
-	NoteGlyph       = "glyph"       // a check box is written as a character
-	NoteRuleLine    = "rule-line"   // a rule is a line of dash characters
-	NoteNotes       = "notes"       // footnotes become numbers with a Notes list at the end
-	NoteBullets     = "bullets"     // list markers are written as characters, not as a real list
+	NoteText         = "text"          // the format keeps the characters and nothing else
+	NotePlaceholder  = "placeholder"   // an "[Image]" marker stands in
+	NoteAccepted     = "accepted"      // suggestions are written as if accepted; struck text is left out
+	NoteInlineHTML   = "inline-html"   // Markdown writes the HTML tag it has no syntax for
+	NoteBlankCells   = "blank-cells"   // the cells a merge covers are left empty
+	NoteGrid         = "grid"          // a table is drawn as a text grid
+	NoteFolded       = "folded"        // heading levels 4 to 6 are written as level 3
+	NoteGlyph        = "glyph"         // a check box is written as a character
+	NoteRuleLine     = "rule-line"     // a rule is a line of dash characters
+	NoteNotes        = "notes"         // footnotes become numbers with a Notes list at the end
+	NoteBullets      = "bullets"       // list markers are written as characters, not as a real list
+	NoteMediaText    = "media-text"    // a clip is written as a link with its transcript as text, not embedded
+	NoteCaptionWords = "caption-words" // the caption track is not written; its words are the transcript
 )
 
 type entry struct {
@@ -237,6 +242,11 @@ func Usage(d docfile.Document) map[Feature]int {
 			add(FeatContents)
 		case it.Rule != nil:
 			add(FeatRule)
+		case it.Media != nil:
+			add(FeatMedia)
+			if it.Media.HasCaptions() {
+				add(FeatMediaCaptions)
+			}
 		case it.Image != nil:
 			add(FeatImage)
 			if it.Image.Alt != "" || it.Image.Decorative {

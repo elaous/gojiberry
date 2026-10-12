@@ -45,6 +45,13 @@ const (
 	RuleTableHeaderEmpty = "table-header-empty"
 	// RuleFakeList: paragraphs that start with a typed bullet or number instead of being a list.
 	RuleFakeList = "list-fake"
+	// RuleMediaCaptions: a video with no caption track, so a deaf reader gets none of what is said.
+	RuleMediaCaptions = "media-captions"
+	// RuleMediaTranscript: a clip with no transcript text (audio: an error, it is all of the content; video:
+	// a warning, the captions are the speech but a transcript also covers what is shown).
+	RuleMediaTranscript = "media-transcript"
+	// RuleMediaTitle: a clip with no title, so a reader hears only "video" or an address as its name.
+	RuleMediaTitle = "media-title"
 )
 
 // Finding is one problem.
@@ -75,6 +82,8 @@ const (
 	// ActionToParagraph turns the empty heading at Offset into a plain paragraph: its paragraph style is
 	// cleared and the Length runes of blank text it holds lose any heading size.
 	ActionToParagraph = "to-paragraph"
+	// ActionWriteMediaText: go to the clip and write its captions or transcript; nothing is invented.
+	ActionWriteMediaText = "write-media-text"
 )
 
 // GateMode says what an export does about the errors a document has.
@@ -222,6 +231,10 @@ func checkStructure(doc docfile.Document) []Finding {
 			out = fake.flush(out)
 			out = append(out, checkTable(it.Table, offset, i)...)
 			offset++
+		case it.Media != nil:
+			out = fake.flush(out)
+			out = append(out, MediaFindings(*it.Media, offset, i)...)
+			offset++
 		case it.Footnote != nil, it.TOC != nil, it.Index != nil, it.Rule != nil:
 			out = fake.flush(out)
 			offset++ // one object in the text stream
@@ -251,7 +264,7 @@ func itemOffsets(doc docfile.Document) []int {
 		switch {
 		case it.Chars != nil:
 			n += len([]rune(it.Chars.Text))
-		case it.Footnote != nil, it.TOC != nil, it.Index != nil, it.Rule != nil, it.Table != nil, it.Image != nil:
+		case it.Footnote != nil, it.TOC != nil, it.Index != nil, it.Rule != nil, it.Table != nil, it.Image != nil, it.Media != nil:
 			n++
 		}
 	}

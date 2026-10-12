@@ -177,6 +177,17 @@ func featurePairs() map[Feature]pair {
 	hist := docOf(plain("hello\n"))
 	hist.History = []docfile.Revision{{Saved: 1, Doc: &docfile.Document{Title: "old"}}}
 	m[FeatHistory] = pair{with: hist, without: docOf(plain("hello\n"))}
+	talk := docfile.MediaItem{URL: "https://example.com/talk.mp4", Title: "The talk", Transcript: "Spoken words."}
+	captioned := talk
+	captioned.Captions = "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nSpoken words.\n"
+	m[FeatMedia] = pair{
+		with:    docOf(plain("one\n"), docfile.Item{Media: &talk}, plain("two\n")),
+		without: docOf(plain("one\n"), plain("two\n")),
+	}
+	m[FeatMediaCaptions] = pair{
+		with:    docOf(plain("one\n"), docfile.Item{Media: &captioned}, plain("two\n")),
+		without: docOf(plain("one\n"), docfile.Item{Media: &talk}, plain("two\n")),
+	}
 	layout := func(l docfile.PageLayout) pair {
 		with := docOf(ch("Heading", docfile.Format{Scale: 1.6}), plain("\n"), plain("body\n"))
 		with.SetPageLayout(l)
