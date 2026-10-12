@@ -60,6 +60,7 @@ message Para {
   string quote_bar = 9;
   string style = 10;
   int64 drop_cap = 11;
+  string code_lang = 12;
 }
 
 message FootnoteMark {
@@ -113,6 +114,7 @@ message ImageItem {
   double clip_bottom = 8;
   string alt = 9;
   bool decorative = 10;
+  string long_desc = 11;
 }
 
 message MediaItem {
@@ -124,6 +126,11 @@ message MediaItem {
   string transcript = 6;
   double width = 7;
   double height = 8;
+}
+
+message EquationItem {
+  string formula = 1;
+  string alt = 2;
 }
 
 message Item {
@@ -138,6 +145,7 @@ message Item {
   TableItem table = 9;
   ImageItem image = 10;
   MediaItem media = 11;
+  EquationItem equation = 12;
 }
 
 message StyleDef {

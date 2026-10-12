@@ -147,7 +147,9 @@ type Block struct {
 	// Equation is a formula in a linear notation (see MathML), on a Paragraph block whose Segments are
 	// its text alternative: every format shows that text, the HTML export also writes MathML from the formula.
 	Equation string
-	Segments []Segment
+	// DescribesImage says a Paragraph block is the long description of the Image block before it.
+	DescribesImage bool
+	Segments       []Segment
 }
 
 // Snapshot is a complete, self-contained, point-in-time view of one

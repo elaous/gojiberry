@@ -45,7 +45,7 @@ func (pdfImporter) Import(b []byte) (docfile.Document, error) { return pdftext.I
 type acceptedExporter struct{ transfer.Exporter }
 
 func (a acceptedExporter) Export(d docfile.Document) ([]byte, error) {
-	return a.Exporter.Export(acceptedView(d).MediaAsText())
+	return a.Exporter.Export(acceptedView(d).MediaAsText().EquationsAsText())
 }
 
 // Register adds the formats this package handles to r. It writes HTML, RTF,

@@ -62,6 +62,11 @@ const (
 	FeatPageSize        Feature = "page-size"
 	FeatMedia           Feature = "media"
 	FeatMediaCaptions   Feature = "media-captions"
+	// FeatEquation is a formula with its text alternative (also what a Word import leaves out, see fidelity_import.go);
+	// FeatCodeLanguage the language of a code block; FeatImageLongDesc the long description of a diagram.
+	FeatEquation      Feature = "equation"
+	FeatCodeLanguage  Feature = "code-language"
+	FeatImageLongDesc Feature = "image-long-desc"
 )
 
 // Features lists every Feature in the order a report shows them.
@@ -76,6 +81,7 @@ var Features = []Feature{
 	FeatDocLanguage, FeatTitle, FeatHistory,
 	FeatPageHeader, FeatPageTOC, FeatPageSize,
 	FeatMedia, FeatMediaCaptions,
+	FeatEquation, FeatCodeLanguage, FeatImageLongDesc,
 }
 
 // Treatment says what a format does with a feature.
@@ -113,19 +119,21 @@ type Loss struct {
 
 // Notes say how a feature is written when it is not written as it is.
 const (
-	NoteText         = "text"          // the format keeps the characters and nothing else
-	NotePlaceholder  = "placeholder"   // an "[Image]" marker stands in
-	NoteAccepted     = "accepted"      // suggestions are written as if accepted; struck text is left out
-	NoteInlineHTML   = "inline-html"   // Markdown writes the HTML tag it has no syntax for
-	NoteBlankCells   = "blank-cells"   // the cells a merge covers are left empty
-	NoteGrid         = "grid"          // a table is drawn as a text grid
-	NoteFolded       = "folded"        // heading levels 4 to 6 are written as level 3
-	NoteGlyph        = "glyph"         // a check box is written as a character
-	NoteRuleLine     = "rule-line"     // a rule is a line of dash characters
-	NoteNotes        = "notes"         // footnotes become numbers with a Notes list at the end
-	NoteBullets      = "bullets"       // list markers are written as characters, not as a real list
-	NoteMediaText    = "media-text"    // a clip is written as a link with its transcript as text, not embedded
-	NoteCaptionWords = "caption-words" // the caption track is not written; its words are the transcript
+	NoteText         = "text"           // the format keeps the characters and nothing else
+	NotePlaceholder  = "placeholder"    // an "[Image]" marker stands in
+	NoteAccepted     = "accepted"       // suggestions are written as if accepted; struck text is left out
+	NoteInlineHTML   = "inline-html"    // Markdown writes the HTML tag it has no syntax for
+	NoteBlankCells   = "blank-cells"    // the cells a merge covers are left empty
+	NoteGrid         = "grid"           // a table is drawn as a text grid
+	NoteFolded       = "folded"         // heading levels 4 to 6 are written as level 3
+	NoteGlyph        = "glyph"          // a check box is written as a character
+	NoteRuleLine     = "rule-line"      // a rule is a line of dash characters
+	NoteNotes        = "notes"          // footnotes become numbers with a Notes list at the end
+	NoteBullets      = "bullets"        // list markers are written as characters, not as a real list
+	NoteMediaText    = "media-text"     // a clip is written as a link with its transcript as text, not embedded
+	NoteCaptionWords = "caption-words"  // the caption track is not written; its words are the transcript
+	NoteAltText      = "alt-text"       // an equation is written as its text alternative, not typeset
+	NoteLongDescText = "long-desc-text" // a long description is text after the picture, not linked to it
 )
 
 type entry struct {
@@ -184,7 +192,7 @@ func Fidelity(format string, d docfile.Document) Report {
 // listed again.
 var partOf = map[Feature]Feature{
 	FeatColSpan: FeatTable, FeatRowSpan: FeatTable, FeatCellShading: FeatTable, FeatCellAlign: FeatTable, FeatCellTextStyle: FeatTable,
-	FeatImageAlt: FeatImage, FeatImageEffects: FeatImage,
+	FeatImageAlt: FeatImage, FeatImageEffects: FeatImage, FeatImageLongDesc: FeatImage, FeatCodeLanguage: FeatCode,
 }
 
 // Reported says whether a report for the format lists the feature when it is lost: false for a feature that
@@ -242,6 +250,8 @@ func Usage(d docfile.Document) map[Feature]int {
 			add(FeatContents)
 		case it.Rule != nil:
 			add(FeatRule)
+		case it.Equation != nil:
+			add(FeatEquation)
 		case it.Media != nil:
 			add(FeatMedia)
 			if it.Media.HasCaptions() {
@@ -251,6 +261,9 @@ func Usage(d docfile.Document) map[Feature]int {
 			add(FeatImage)
 			if it.Image.Alt != "" || it.Image.Decorative {
 				add(FeatImageAlt)
+			}
+			if strings.TrimSpace(it.Image.LongDesc) != "" {
+				add(FeatImageLongDesc)
 			}
 			if it.Image.Alpha != 0 || it.Image.ClipLeft != 0 || it.Image.ClipTop != 0 || it.Image.ClipRight != 0 || it.Image.ClipBottom != 0 {
 				add(FeatImageEffects)
@@ -360,9 +373,14 @@ func usageOfPara(p docfile.Para, add func(Feature)) {
 	if p.IndentLeft != 0 || p.IndentRight != 0 || p.FirstLine != 0 || p.SpaceBefore != 0 || p.SpaceAfter != 0 || p.LineSpacing != 0 || p.DropCap != 0 {
 		add(FeatParagraphLayout)
 	}
+	if p.CodeLang != "" {
+		add(FeatCodeLanguage)
+	}
 	style := strings.ToLower(p.Style)
 	switch {
 	case style == "":
+	case style == "code":
+		add(FeatCode) // a code block: a paragraph of the Code style
 	case style == "title":
 		add(FeatHeading)
 	case strings.HasPrefix(style, "heading "):

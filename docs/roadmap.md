@@ -1252,11 +1252,35 @@ unless stated.
     the output is well formed for any input. A diagram is an image with its description, which the image-alt rule of
     the accessibility checker (62) already requires. Tests: `TestMathMLFromTheLinearNotation`,
     `TestMathMLIsWellFormedWhateverTheFormula`, `TestEquationHasATextAlternativeInEveryExport`,
-    `TestFootnotesLinkBothWaysInHTML`, `TestCodeBlockLanguage`. Left: nothing in the editor, the canvas or `docfile`
-    produces an equation, a code language or a diagram long description yet (no model element, so no mirror output (60),
-    no checker rule for an equation without alternative (step 4), and a saved document cannot hold them); footnotes link
-    both ways only in HTML (Word, PDF and Markdown keep the numbered list at the end, with no links); equations are
-    not MathML in Word (OMML), and long descriptions of diagrams beyond the alt text are not modelled.
+    `TestFootnotesLinkBothWaysInHTML`, `TestCodeBlockLanguage`.
+    Done in part (PR #%s), the saved document and the editor: `docfile` holds an equation (`Item.Equation`: formula and
+    text alternative), a diagram's long description (`ImageItem.LongDesc`, and `canvas.Image.LongDesc`) and a code
+    block's language (`Para.CodeLang`, and `canvas.ParaFormat.CodeLang`, on a paragraph of the Code style), in the JSON,
+    protobuf text and protobuf binary encodings (the golden files `docfile/testdata/rich.pb`, `rich.pbtxt` and
+    `schema.proto` were regenerated with the protobuf library, as for `MediaItem`); `canvas.EquationObject` shows an
+    equation in the canvas as a block (its formula as typed: the editor has no typesetter). The exports read them:
+    the snapshot has the equation as `export.EquationBlock`, the lines of a Code-style paragraph form one code block
+    with its language, and a long description is a paragraph after the picture (`Block.DescribesImage`) that the HTML
+    and EPUB export link with `aria-describedby`. The Pictures tab of the showcase inserts an equation (it is refused
+    until it has a text alternative, with the focus sent to that field), lists and edits the equations, has a long
+    description field for each picture and sets the language of the code block at the caret; the reading copy says
+    "Equation: ..." in words; `a11ycheck` has the rule `equation-alt` (an error without an alternative, a warning
+    when the alternative is the formula typed again), also used by the insert button (`a11ycheck.EquationFindings`);
+    the search index has the words of an equation. Footnotes now link both ways outside HTML where the format has
+    links: Word (a bookmark on the mark and on the note with internal links each way) and the Markdown export
+    (`[^1]` and `[^1]: text`); the fidelity report knows the three new features (equation, code language, long
+    description) and Word now keeps footnotes. Tests: `TestElementsSurviveEveryEncoding`,
+    `TestElementsSurviveTheEditorsFlow`, `TestEquationWordsAndText`, `TestBinaryMatchesProtobufLibrary`,
+    `TestEquationFindingsRequireAWordedAlternative`, `TestCheckFindsAnEquationWithoutAnAlternativeWhereItIs`,
+    `TestSavedEquationIsMathMLInHTMLAndWordsEverywhereElse`, `TestCodeParagraphsAreOneBlockWithTheirLanguage`,
+    `TestDiagramLongDescriptionFollowsThePictureAndIsLinkedInHTML`, `TestFootnotesLinkBothWaysInWordAndMarkdown`,
+    `TestFidelityMatrixMatchesTheExporters` (three new features), and the browser test
+    `TestInsertAnEquationRequireItsAlternativeAndExportIt`. Left: footnotes do not link in the PDF (needs internal
+    destinations in the PDF writer) or in RTF, and the Markdown and plain text of `transfer.Default` still write
+    them as the numbered list (they have no footnote syntax of their own; see 72); equations are not MathML in Word
+    (OMML), only their text alternative; the long description of a diagram is a paragraph in Word, PDF and RTF, not
+    linked to the picture; the editor shows a formula as typed, not typeset; a code block's language is not written
+    outside HTML and EPUB (Markdown of `transfer.Default` writes code as inline marks, which carry no language).
 79. **Autocomplete word picker list.** Kind: fixable. What: keep Tab accepting the inline suggestion and its ghost
     text for the top candidate; add a suggestion popup at the caret with the top N candidates (default 5), opened after
     a short delay or on demand (Ctrl+Space), and closed on Esc, click-away or the caret leaving the word. Keys: Up and
