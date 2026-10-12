@@ -219,9 +219,9 @@ func TestRemovedElsewhereAndConflictsThatNeverSettle(t *testing.T) {
 func TestBadServerAnswersAreErrorsNotPanics(t *testing.T) {
 	ctx := context.Background()
 	for name, h := range map[string]http.HandlerFunc{
-		"500":            func(w http.ResponseWriter, r *http.Request) { http.Error(w, "x", 500) },
-		"429":            func(w http.ResponseWriter, r *http.Request) { http.Error(w, "x", 429) },
-		"teapot":         func(w http.ResponseWriter, r *http.Request) { http.Error(w, "x", 418) },
+		"500":            func(w http.ResponseWriter, r *http.Request) { http.Error(w, "x", http.StatusInternalServerError) },
+		"429":            func(w http.ResponseWriter, r *http.Request) { http.Error(w, "x", http.StatusTooManyRequests) },
+		"teapot":         func(w http.ResponseWriter, r *http.Request) { http.Error(w, "x", http.StatusTeapot) },
 		"junk listing":   func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("not json")) },
 		"listing is 404": func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) },
 	} {
