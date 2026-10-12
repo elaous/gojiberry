@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/docfile"
@@ -27,6 +28,8 @@ type line struct {
 	// after are the blocks of non-text content (an image, a table cell) this
 	// line stands for; such a line has no text of its own.
 	after []Block
+	// start is where the line begins in the text stream (see Block.Start).
+	start int
 }
 
 // FromDocument turns a saved document into the format-agnostic Snapshot the
@@ -98,9 +101,10 @@ func fromDocument(d docfile.Document) Snapshot {
 
 	var lines []line
 	cur := line{}
+	pos := 0 // where the next rune of the content falls in the text stream
 	flush := func() {
 		lines = append(lines, cur)
-		cur = line{}
+		cur = line{start: pos}
 	}
 	// pending ends the paragraph being read before a block that is not text, if
 	// it has anything in it (an empty one is only the start of the next line).
@@ -117,26 +121,34 @@ func fromDocument(d docfile.Document) Snapshot {
 			parts := strings.Split(it.Chars.Text, "\n")
 			for i, p := range parts {
 				if i > 0 {
+					pos++ // the paragraph break
 					flush()
 				}
 				if p != "" {
 					cur.runs = append(cur.runs, docfile.Chars{Text: p, Format: it.Chars.Format})
+					pos += utf8.RuneCountInString(p)
 				}
 			}
 		case it.Footnote != nil:
 			noteOrder = append(noteOrder, it.Footnote.ID)
 			n := len(noteOrder)
 			cur.runs = append(cur.runs, docfile.Chars{Text: itoa(n), Format: docfile.Format{Superscript: true, Style: noteRefStyle + itoa(n)}})
+			pos++ // an inline object: one rune of the stream
 		case it.Rule != nil:
 			pending()
 			cur.runs = []docfile.Chars{{Text: strings.Repeat("─", 24)}}
+			pos++
 			flush()
 		case it.Image != nil:
 			pending()
-			lines = append(lines, line{after: []Block{{Kind: Image, ImageSrc: it.Image.URL, ImageW: it.Image.Width, ImageH: it.Image.Height, ImageAlt: it.Image.Alt, ImageDecorative: it.Image.Decorative}}})
+			lines = append(lines, line{start: pos, after: []Block{{Start: pos, Kind: Image, ImageSrc: it.Image.URL, ImageW: it.Image.Width, ImageH: it.Image.Height, ImageAlt: it.Image.Alt, ImageDecorative: it.Image.Decorative}}})
+			pos++
+			cur.start = pos
 		case it.Table != nil:
 			pending()
-			lines = append(lines, tableLines(it.Table)...)
+			lines = append(lines, tableLines(it.Table, pos)...)
+			pos++
+			cur.start = pos
 		}
 	}
 	lines = append(lines, cur)
@@ -147,9 +159,9 @@ func fromDocument(d docfile.Document) Snapshot {
 
 	snap.Blocks = blocksFrom(lines)
 	if len(noteOrder) > 0 {
-		snap.Blocks = append(snap.Blocks, Block{Kind: Heading2, Level: 2, Segments: []Segment{{Text: "Notes"}}})
+		snap.Blocks = append(snap.Blocks, Block{Start: -1, Kind: Heading2, Level: 2, Segments: []Segment{{Text: "Notes"}}})
 		for i, id := range noteOrder {
-			snap.Blocks = append(snap.Blocks, Block{Kind: NumberedItem, NumberedIndex: i + 1, Note: i + 1, Segments: []Segment{{Text: notes[id]}}})
+			snap.Blocks = append(snap.Blocks, Block{Start: -1, Kind: NumberedItem, NumberedIndex: i + 1, Note: i + 1, Segments: []Segment{{Text: notes[id]}}})
 		}
 	}
 	return snap
@@ -158,7 +170,7 @@ func fromDocument(d docfile.Document) Snapshot {
 // tableLines gives a table's cells as marker lines blocksFrom turns into
 // table-cell blocks, with their merges (spans, and the cells they cover) and
 // bold.
-func tableLines(t *docfile.TableItem) []line {
+func tableLines(t *docfile.TableItem, start int) []line {
 	rows := len(t.Rows)
 	cols := 0
 	for _, r := range t.Rows {
@@ -199,8 +211,9 @@ func tableLines(t *docfile.TableItem) []line {
 			}
 			runs := []docfile.Chars{{Text: text, Format: f}}
 			out = append(out, line{
-				runs: runs,
-				after: []Block{{Kind: TableCell, TableRow: r, TableCol: c, TableRows: rows, TableCols: cols, TableColSpan: cs, TableRowSpan: rs, TableCovered: covered, TableBackground: st.Background, TableAlign: st.Align,
+				runs:  runs,
+				start: start,
+				after: []Block{{Start: start, Kind: TableCell, TableRow: r, TableCol: c, TableRows: rows, TableCols: cols, TableColSpan: cs, TableRowSpan: rs, TableCovered: covered, TableBackground: st.Background, TableAlign: st.Align,
 					Segments: segmentsOf(runs)}},
 			})
 		}
@@ -210,14 +223,14 @@ func tableLines(t *docfile.TableItem) []line {
 
 func blocksFrom(lines []line) []Block {
 	var out []Block
-	number, prevOrdered := 0, false
+	var counts []int // the position within each level of the numbered list being read
 	for _, ln := range lines {
 		if len(ln.after) > 0 { // a table cell
 			out = append(out, ln.after...)
-			prevOrdered = false
+			counts = counts[:0]
 			continue
 		}
-		b := Block{Segments: segmentsOf(ln.runs)}
+		b := Block{Segments: segmentsOf(ln.runs), Start: ln.start}
 		level := headingLevel(ln.runs, ln.para.Style)
 		switch {
 		case level > 0:
@@ -234,6 +247,7 @@ func blocksFrom(lines []line) []Block {
 				box = "☑ "
 			}
 			b.Segments = append([]Segment{{Text: box}}, b.Segments...)
+			b.Lead = len([]rune(box))
 		case ln.para.List.Kind == 2: // ordered
 			b.Kind = NumberedItem
 		case ln.para.QuoteBar != "":
@@ -248,14 +262,24 @@ func blocksFrom(lines []line) []Block {
 		default:
 			b.Kind = Paragraph
 		}
-		if b.Kind == NumberedItem {
-			if !prevOrdered {
-				number = 0
+		lvl := min(max(ln.para.List.Level, 0), 8)
+		switch b.Kind {
+		case NumberedItem:
+			b.Level = lvl
+			for len(counts) <= lvl {
+				counts = append(counts, 0)
 			}
-			number++
-			b.NumberedIndex = number
+			counts = counts[:lvl+1] // a shallower item ends the deeper numbering
+			counts[lvl]++
+			b.NumberedIndex = counts[lvl]
+		case BulletItem:
+			b.Level = lvl
+			if lvl == 0 {
+				counts = counts[:0]
+			}
+		default:
+			counts = counts[:0]
 		}
-		prevOrdered = b.Kind == NumberedItem
 		out = append(out, b)
 	}
 	return out
@@ -313,7 +337,7 @@ func segmentsOf(runs []docfile.Chars) []Segment {
 		f := Format{
 			Bold: r.Format.FontWeight >= 600, Italic: r.Format.FontStyle == "italic" || r.Format.FontStyle == "oblique",
 			Underline: r.Format.Underline, Strikethrough: r.Format.Strike,
-			Superscript: r.Format.Superscript, Subscript: r.Format.Subscript, Href: r.Format.Link, Lang: r.Format.Lang,
+			Superscript: r.Format.Superscript, Subscript: r.Format.Subscript, Href: r.Format.Link, Lang: r.Format.Lang, Comment: r.Format.Comment,
 		}
 		if n, ok := strings.CutPrefix(r.Format.Style, noteRefStyle); ok {
 			f.NoteRef, _ = strconv.Atoi(n)

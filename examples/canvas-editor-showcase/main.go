@@ -45,6 +45,7 @@ type ui struct {
 	menu        int    // open menu, or -1
 	tab         string // sidebar tab: format, symbols, keys
 	check       checkState
+	fidelity    fidelityState // the Import/Export tab's report of what a format loses
 	collab      components.CollabAnnouncer
 	collabTimer bool
 	typing      components.TypingAnnouncer // what is said of typing and of the caret (preferences), see typing.go
@@ -91,6 +92,8 @@ type ui struct {
 	find                findState
 	a11ySig             string
 	a11yCache           []components.A11yBlock
+	mirrorWriting       bool   // the copy is being given a selection by the page (not by a reader)
+	mirrorSig, mirrorAt string // where the caret was in the copy when last drawn, and the key of the caret last followed
 	announcement        string
 	spell               spellState
 	lang                langState
@@ -480,16 +483,26 @@ func main() {
 			for _, e := range u.transfer.Exporters() {
 				exports = append(exports, components.SaverChoice{Name: e.Format().Name, Label: e.Format().Label})
 			}
+			// What the chosen format loses is shown above the buttons, before anything is exported.
+			fidelity := components.FidelityPanel(u.fidelity.props(currentDoc(), exports, func(name string) {
+				u.fidelity.format = name
+				renderUI()
+			}))
 			panel = xango.Frag(
+				fidelity,
 				components.Transfer(components.TransferProps{
 					Imports: imports, Exports: exports,
 					OnExport: func(name string) {
+						u.fidelity.format = name
 						file, data, mime, err := u.gatedExport(name, currentDoc())
 						if err != nil {
 							u.message = err.Error()
 						} else {
 							transfer.Download(file, mime, data)
 							u.message = fmt.Sprintf("Exported %s (%d bytes)", file, len(data))
+							if n := len(export.Fidelity(name, currentDoc()).Losses); n > 0 {
+								u.message += ". " + Tn("fidelity.exported", "%d thing was left out or simplified in this format; the list is above.", "%d things were left out or simplified in this format; the list is above.", n)
+							}
 						}
 						renderUI()
 					},
@@ -505,6 +518,7 @@ func main() {
 								return
 							}
 							u.message = "Imported " + file
+							u.fidelity.noteImport(name, file, data)
 							u.saver.Detach() // what was imported is not the saved document that was open
 							openDoc(d)
 						})
@@ -610,7 +624,10 @@ func main() {
 				readBar(u, renderUI),
 				xango.El("div", []xango.Attr{xango.A("id", "canvas-host")}),
 				u.suggestionsNode(renderUI),
-				components.AccessibleText(components.AccessibleTextProps{Blocks: append(u.a11yBlocks(flow, u.title), a11yObjects(root)...), Selection: selectedText(flow), Lang: u.docLang}),
+				components.AccessibleText(components.AccessibleTextProps{
+					Blocks: u.mirrorBlocks(flow, root), Comments: mirrorComments(flow), Selection: selectedText(flow), Lang: u.docLang,
+					OnGoto: goToHeading(func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw),
+				}),
 				components.Announcer(u.announcement),
 				components.TypingLive(u.typingMsg, u.typingN)),
 			Sidebar: &side, StatusBar: &bar,
@@ -736,6 +753,16 @@ func main() {
 				renderUI()
 			}
 		}
+		if sig := u.mirrorSignature(flow); sig != u.mirrorSig {
+			u.mirrorSig = sig // the caret is in another block, or the selection or the comments changed
+			renderUI()
+		}
+		if flow != nil {
+			if cs := flow.Cursors()[0]; fmt.Sprint(cs.Anchor, cs.Caret) != u.mirrorAt {
+				u.mirrorAt = fmt.Sprint(cs.Anchor, cs.Caret)
+				u.followCaret(flow, u.a11yCache)
+			}
+		}
 		var stats canvas.FlowStats
 		columnCount := 0
 		columnCfg := map[string]any{}
@@ -815,6 +842,7 @@ func main() {
 		},
 	}
 	u.sugg.reopen = func(quiet bool) { u.openSuggestions(flow, stage, canvasEl.Element, quiet, renderUI) }
+	u.watchMirrorSelection(func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
 	u.watchSuggestionKeys(inputEl.Element, func() *canvas.TextFlow { return flow }, redraw, renderUI)
 	state.Live = liveProps(u, &state, origin, renderCanvas, renderUI)
 	renderCanvas()

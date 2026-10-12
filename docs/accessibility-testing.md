@@ -58,6 +58,14 @@ issue for each failure. A failure of a step marked ★ stops the release.
 | 11 | Export (HTML) and open the result with the reader. | Headings, lists, tables and image descriptions are in the exported file. |
 | 12 | Turn on the display preferences (larger text, wide spacing, more contrast, reduce motion), and the operating system's high contrast. | Nothing is cut off or lost; the focus ring stays visible; no animation with reduced motion. |
 | 13 | Zoom the browser to 200 % and 400 %. | The page reflows or scrolls without hiding a control. |
+| 14 ★ | In View mode, open the landmark list and go to "Document outline"; activate an entry. | The outline is a navigation landmark; activating an entry puts the reader (and the canvas caret) on that heading and the heading is read. |
+| 15 | In View mode, read the first paragraph with the reader's own cursor (arrow keys by line and word), then click another place on the canvas. | The reader's cursor and the canvas caret stay together in both directions (it does not jump back), and the block with the caret is marked as the current location. |
+| 16 | Move to a link, to commented text and to a suggested change. | The link is a link and opens in a new tab; commented text is introduced ("Commented text:") and its comment (author, text, replies, resolved) is in the comments region; a suggested change says "Suggested addition by ..." or "removal". |
+| 17 | Select text with Shift+arrows in the reader's own cursor in View mode. | The canvas shows the same selection and "Selected: ..." is announced. |
+| 18 ★ | Choose View > Display preferences > "Typing: say each word". In Edit mode type a sentence at normal speed. | Each word is spoken once, shortly after it is finished; nothing is spoken twice, and nothing is lost when typing fast. If the reader also echoes the typed characters or words by itself, note that the two voices overlap. |
+| 19 | Choose "Typing: say each character", type "ab cd". | Each letter is spoken, the space as "space". Delete one with Backspace: "Deleted ..." is spoken. |
+| 20 | Turn on "Read the line when the caret moves"; move with the Up and Down arrows over wrapped lines and paragraphs, then Ctrl+Left and Ctrl+Right. | The line the caret goes to is spoken, an empty line as "blank"; the words passed over by Ctrl+arrow are spoken. Judge whether the reading is too chatty and say which preference would fix it. |
+| 21 | Turn on "Say formatting changes at the caret"; press Ctrl+B, type, press Ctrl+B; move the caret into a heading. | "Bold on" and "Bold off" are spoken, and the heading's style when the caret enters it. Record, for each reader, whether the polite live region waits for the speech in progress or cuts it. |
 
 ### Results
 

@@ -10,11 +10,15 @@
 //     colour, highlight, size and font
 //   - hyperlinks, tabs, line breaks and page breaks
 //   - tables (the text of each cell)
-//   - pictures (embedded, as data: URLs, with their size)
-//   - footnotes
+//   - pictures (embedded, as data: URLs, with their size and alternative text)
+//   - footnotes, tracked changes (as suggestions), the document language and
+//     the language of a run
 //
-// Not read: comments, tracked changes, headers and footers, text boxes, and
-// styles' own formatting (only their names and list/heading roles).
+// Not read: comments, headers and footers, text boxes, charts and shapes,
+// equations, endnotes, fields, bookmarks, columns, paragraph indents and
+// spacing, and styles' own formatting (only their names and list/heading
+// roles). Inspect counts these in a file, so a person can be told what an
+// import will leave out.
 package docximport
 
 import (
@@ -153,6 +157,7 @@ type reader struct {
 	styles  map[string]string       // style id -> lower-case style name
 	numbers map[string]map[int]bool // numId -> level -> ordered?
 	notes   map[string]string       // footnote id -> text
+	defLang string                  // the language of the default run properties
 
 	doc    docfile.Document
 	images int
@@ -249,6 +254,18 @@ func (r *reader) loadStyles() {
 	for _, s := range st.children("style") {
 		if name := s.child("name"); name != nil {
 			r.styles[s.attr("styleId")] = strings.ToLower(name.attr("val"))
+		}
+	}
+	// The language the document's text is in unless a run says otherwise (w:lang in the default run
+	// properties): the document's language.
+	if dd := st.child("docDefaults"); dd != nil {
+		if rp := dd.child("rPrDefault"); rp != nil {
+			if rpr := rp.child("rPr"); rpr != nil {
+				if l := rpr.child("lang"); l != nil && l.attr("val") != "" {
+					r.defLang = l.attr("val")
+					r.doc.SetLanguage(r.defLang)
+				}
+			}
 		}
 	}
 }
@@ -703,6 +720,12 @@ func (r *reader) runFormat(rpr *node, inherit docfile.Format, info paraInfo) doc
 			f.FontSize = float64(half) / 2 * 96 / 72
 		}
 	}
+	if l := rpr.child("lang"); l != nil {
+		// A run in a language of its own (not the document's), so a screen reader can switch voice.
+		if v := l.attr("val"); v != "" && v != r.defLang && canvas.ValidLang(v) {
+			f.Lang = v
+		}
+	}
 	if fonts := rpr.child("rFonts"); fonts != nil {
 		name := fonts.attr("ascii")
 		switch strings.ToLower(name) {
@@ -779,6 +802,9 @@ func (r *reader) picture(d *node) {
 		r.pics[target] = url
 	}
 	img := &docfile.ImageItem{URL: url}
+	if dp := d.find("docPr"); dp != nil { // the picture's description: its alternative text
+		img.Alt = strings.TrimSpace(dp.attr("descr"))
+	}
 	if ext := d.find("extent"); ext != nil {
 		cx, _ := strconv.ParseFloat(ext.attr("cx"), 64)
 		cy, _ := strconv.ParseFloat(ext.attr("cy"), 64)
