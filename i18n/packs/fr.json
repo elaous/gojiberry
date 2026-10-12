@@ -850,6 +850,11 @@
   "sync.offlinePending#one": "Hors ligne : %d modification en attente d’envoi",
   "sync.offlinePending#other": "Hors ligne : %d modifications en attente d’envoi",
   "sync.offline": "Hors ligne : vos modifications seront partagées au retour de la connexion",
-  "enc.sheetQR": "Code QR de la clé de récupération. La même clé est écrite ci-dessus ; le scanner la transfère sur un autre appareil."
+  "enc.sheetQR": "Code QR de la clé de récupération. La même clé est écrite ci-dessus ; le scanner la transfère sur un autre appareil.",
+  "print.title": "Mise en page pour l'impression",
+  "print.header": "En-tête",
+  "print.footer": "Pied de page",
+  "print.help": "Champs : {page}, {pages} et {title}. Une tabulation sépare les parties gauche, centrale et droite.",
+  "print.toc": "Commencer par une table des matières"
  }
 }

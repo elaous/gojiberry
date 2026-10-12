@@ -850,6 +850,11 @@
   "sync.offlinePending#one": "Sin conexión: %d cambio esperando enviarse",
   "sync.offlinePending#other": "Sin conexión: %d cambios esperando enviarse",
   "sync.offline": "Sin conexión: sus cambios se compartirán cuando vuelva la conexión",
-  "enc.sheetQR": "Código QR de la clave de recuperación. La misma clave está escrita arriba; al escanearlo se pasa a otro dispositivo."
+  "enc.sheetQR": "Código QR de la clave de recuperación. La misma clave está escrita arriba; al escanearlo se pasa a otro dispositivo.",
+  "print.title": "Diseño de impresión",
+  "print.header": "Encabezado",
+  "print.footer": "Pie de página",
+  "print.help": "Campos: {page}, {pages} y {title}. Un tabulador separa las partes izquierda, central y derecha.",
+  "print.toc": "Empezar con una tabla de contenido"
  }
 }
