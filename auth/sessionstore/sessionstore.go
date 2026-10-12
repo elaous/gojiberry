@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/elaous/gojiberry/observe"
 	"log"
 	"strconv"
 	"strings"
@@ -543,6 +544,8 @@ func (s *Store) Sweep(ctx context.Context) (int, error) {
 // sweep is Sweep, listing the sessions only if sessions is true. It reports whether the sessions
 // were listed without an error.
 func (s *Store) sweep(ctx context.Context, sessions bool) (total int, sessionsListed bool, err error) {
+	done := observe.Default().Sweep("sessions")
+	defer func() { done(total, err) }()
 	s.sweeping.Lock()
 	defer s.sweeping.Unlock()
 	now := s.clock()
