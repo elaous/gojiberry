@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/elaous/gojiberry/auth"
+	"github.com/elaous/gojiberry/observe"
 	"github.com/elaous/gojiberry/telemetry"
 )
 
@@ -327,6 +328,8 @@ type Server struct {
 	aclMu sync.Mutex
 	// telemetry holds the totals of the usage receiver (WithTelemetry).
 	telemetry *telemetry.Counters
+	// obs is operator observability (WithObserver); nil is off.
+	obs *observe.Observer
 	// usage is the bounded series of the usage counters (usageseries.go); usageClock replaces
 	// time.Now in tests.
 	usage      usageSeries
@@ -511,6 +514,7 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("/admin/usage", s.handleUsage)
 		mux.HandleFunc("/admin/usage/history", s.handleUsageHistory)
 		mux.HandleFunc("/admin/usage/page", s.handleUsagePage)
+		mux.HandleFunc("/admin/observe", s.handleObserve)
 		if s.telemetry != nil {
 			mux.HandleFunc("/admin/telemetry", s.handleTelemetryReport)
 		}
@@ -536,7 +540,7 @@ func (s *Server) Handler() http.Handler {
 	for _, e := range s.extra {
 		mux.Handle(e.pattern, e.h)
 	}
-	return guard.Or(s.guard).Wrap(exposeHeaders(mux))
+	return observe.Middleware(s.obs, guard.Or(s.guard).Wrap(exposeHeaders(mux)))
 }
 
 // ExposedHeaders is the Access-Control-Expose-Headers value of the document routes: the response
@@ -579,6 +583,7 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.adapter.List(ctx); err != nil {
 		log.Printf("docstore: not ready: %v", err)
 		ready = false
+		s.obs.Error("not_ready")
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -667,7 +672,9 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	done := s.opStart(r.Context(), "list")
 	metas, err := s.adapter.List(r.Context())
+	done(err, len(metas))
 	if err != nil {
 		serverError(w, err)
 		return
@@ -759,9 +766,13 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "unsupported precondition", http.StatusBadRequest)
 				return
 			}
+			done := s.opStart(r.Context(), "save_if")
 			saveErr = cond.SaveIf(r.Context(), id, data, prev)
+			done(saveErr, -1)
 		} else {
+			done := s.opStart(r.Context(), "save")
 			saveErr = s.adapter.Save(r.Context(), id, data)
+			done(saveErr, -1)
 		}
 		if errors.Is(saveErr, ErrConflict) {
 			http.Error(w, "the document changed", http.StatusPreconditionFailed)
@@ -782,7 +793,9 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			writePermissionError(w, status)
 			return
 		}
+		done := s.opStart(r.Context(), "load")
 		doc, err := s.adapter.Load(r.Context(), id)
+		done(err, -1)
 		if errors.Is(err, ErrNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
@@ -799,7 +812,9 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			writePermissionError(w, status)
 			return
 		}
+		done := s.opStart(r.Context(), "delete")
 		err := s.adapter.Delete(r.Context(), id)
+		done(err, -1)
 		if errors.Is(err, ErrNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
@@ -851,7 +866,10 @@ func (s *Server) handleRenew(w http.ResponseWriter, r *http.Request, id string) 
 		http.Error(w, "this store does not expire documents", http.StatusNotImplemented)
 		return
 	}
-	switch err := rn.Renew(r.Context(), id); {
+	done := s.opStart(r.Context(), "renew")
+	err := rn.Renew(r.Context(), id)
+	done(err, -1)
+	switch {
 	case errors.Is(err, ErrNotFound):
 		// The marker tells a real "document gone" from any other 404 (a proxy, a wrong route,
 		// an older server): HTTPAdapter.Renew returns ErrNotFound only for this.

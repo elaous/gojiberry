@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/docstore"
+	"github.com/elaous/gojiberry/observe"
 	"log"
 	"strings"
 	"time"
@@ -234,6 +235,13 @@ func (d *AdapterDirectory) Revoke(ctx context.Context, user auth.User, fingerpri
 // longer be answered, which is what makes a replay refused) and revoked-key tombstones past
 // RevokeWindow. It returns how many it deleted. Run it now and then (RunSweep).
 func (d *AdapterDirectory) Sweep(ctx context.Context) (int, error) {
+	done := observe.Default().Sweep("directory")
+	n, err := d.sweepRecords(ctx)
+	done(n, err)
+	return n, err
+}
+
+func (d *AdapterDirectory) sweepRecords(ctx context.Context) (int, error) {
 	if d.Signer == nil {
 		return 0, ErrDirectoryOff
 	}
