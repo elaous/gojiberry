@@ -19,7 +19,10 @@ import (
 // page saves to (read through that place's own adapter, so an encrypted store is searched after it is
 // unlocked, on this device), and the replace across documents with its preview and undo.
 type searchAll struct {
-	index    docsearch.Index
+	cache    indexCache // the index, loaded from its sealed copy at the first search of a visit
+	read     int        // documents the last sync read (the others were as the index had them)
+	loaded   bool       // the last sync started from the sealed copy kept on this device
+	synced   bool
 	query    string
 	repl     string
 	opts     canvas.FindOptions
@@ -27,7 +30,7 @@ type searchAll struct {
 	keyToID  map[string]string // the store key of a document to its ID, for Open
 	searched bool
 	plan     *docsearch.Plan
-	applied  *docsearch.Applied
+	applied  []replacedDoc   // what the last replacement wrote, for Undo
 	picked   map[string]bool // the documents the person left ticked in the preview
 	message  string
 	errText  string
@@ -43,6 +46,36 @@ func (u *ui) adapterFor(target string) docstore.Adapter {
 		}
 	}
 	return nil
+}
+
+// searchKeyFor is the key the sealed index of target is kept under, with where it is kept; nil when the
+// index may not be kept (it then lives in memory only). The encrypted store's index is sealed only under a
+// key derived from the unlocked owner key, so it is neither read nor written while the store is locked
+// (or its key list could not be trusted), and never kept under a key the storage can read; any other place
+// uses the per-device key the browser keeps non-extractable (searchvault_js.go).
+func (u *ui) searchKeyFor(target string) ([]byte, sealedVault) {
+	var secret []byte
+	if e := u.enc; e != nil && target == encTarget && (e.broken != nil || e.store.Enabled()) {
+		if e.broken != nil {
+			return nil, nil
+		}
+		s, ok := e.store.SearchSecret()
+		if !ok {
+			return nil, nil
+		}
+		secret = s
+	} else {
+		s, err := deviceSecret()
+		if err != nil {
+			return nil, nil
+		}
+		secret = s
+	}
+	key, err := searchKey(secret, target)
+	if err != nil {
+		return nil, nil
+	}
+	return key, idbVault{}
 }
 
 // sync reads the list of documents of the current place and brings the index up to date with it. The
@@ -64,15 +97,13 @@ func (u *ui) syncSearchAll(ctx context.Context) error {
 		keys = append(keys, e.Key)
 		sa.keyToID[e.Key] = e.ID
 	}
-	if sa.target != target { // another place: nothing of the old index applies
-		sa.index = docsearch.Index{}
-		sa.target = target
-	}
 	sa.view = docsearch.Subset(base, keys)
-	res, err := docsearch.Refresh(ctx, &sa.index, sa.view, docsearch.FromDocfile)
+	key, vault := u.searchKeyFor(target)
+	res, loaded, err := sa.cache.refresh(ctx, vault, target, key, sa.view)
 	if err != nil {
 		return err
 	}
+	sa.target, sa.loaded, sa.read, sa.synced = target, loaded, res.Added+res.Updated, true
 	if len(res.Skipped) > 0 {
 		sa.message = T("search.skipped", "%d documents could not be read here (is the store locked?) and were left out.", len(res.Skipped))
 	}
@@ -91,7 +122,7 @@ func (u *ui) runSearchAll(renderUI func()) {
 			sa.errText = err.Error()
 			return nil
 		}
-		sa.hits, sa.searched = sa.index.Search(sa.query, 50), true
+		sa.hits, sa.searched = sa.cache.ix.Search(sa.query, 50), true
 		if len(sa.hits) == 0 {
 			u.announce(T("a11y.noMatches", "No matches"))
 		} else {
@@ -151,15 +182,23 @@ func (u *ui) applyReplaceAll() {
 	if len(only) == 0 {
 		return
 	}
-	plan := sa.plan
+	plan, keyToID := sa.plan, sa.keyToID
+	target, _ := u.saver.Where()
 	u.saver.Pending.Run(func(ctx context.Context) error {
-		a, err := plan.Apply(ctx, only...)
+		done, conflicts, err := applyReplace(ctx, u.saver.Saver, target, u.saver.Author,
+			T("search.versionName", "Before replace in all documents"), plan, keyToID, only)
 		if err != nil {
 			sa.errText = err.Error()
+			if len(done) > 0 { // some were written before the failure: keep them undoable
+				sa.applied, sa.plan = done, nil
+			}
 			return nil
 		}
-		sa.applied, sa.plan = a, nil
-		sa.message = T("search.replaced", "Replaced in %d documents. Undo puts the old text back where a document was not saved since.", len(only))
+		sa.applied, sa.plan = done, nil
+		sa.message = T("search.replaced", "Replaced in %d documents. Undo puts the old text back where a document was not saved since.", len(done))
+		if len(conflicts) > 0 {
+			sa.message += " " + T("search.replaceSkipped", "%d were saved since the preview and were left as they are.", len(conflicts))
+		}
 		u.announce(sa.message)
 		sa.hits, sa.searched = nil, false
 		return nil
@@ -169,20 +208,21 @@ func (u *ui) applyReplaceAll() {
 // undoReplaceAll puts the old text back.
 func (u *ui) undoReplaceAll() {
 	sa := &u.sa
-	if sa.applied == nil {
+	if len(sa.applied) == 0 {
 		return
 	}
-	a := sa.applied
+	done := sa.applied
+	target, _ := u.saver.Where()
 	u.saver.Pending.Run(func(ctx context.Context) error {
-		restored, kept, err := a.Undo(ctx)
+		restored, kept, err := undoReplace(ctx, u.saver.Saver, target, done)
 		if err != nil {
 			sa.errText = err.Error()
 			return nil
 		}
 		sa.applied = nil
-		sa.message = T("search.undone", "Put back in %d documents.", len(restored))
-		if len(kept) > 0 {
-			sa.message += " " + T("search.undoKept", "%d were saved again since and were left as they are.", len(kept))
+		sa.message = T("search.undone", "Put back in %d documents.", restored)
+		if kept > 0 {
+			sa.message += " " + T("search.undoKept", "%d were saved again since and were left as they are.", kept)
 		}
 		u.announce(sa.message)
 		return nil
@@ -209,6 +249,11 @@ func (u *ui) searchAllPanel(renderUI func()) xango.Node {
 	}
 	if sa.message != "" {
 		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "sa-message"), xango.A("role", "status")}, xango.Text(sa.message)))
+	}
+	if sa.synced {
+		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "sa-index"), xango.A("style", "font-size:12px;margin:2px 0"),
+			xango.A("data-indexed", strconv.Itoa(sa.cache.ix.Len())), xango.A("data-read", strconv.Itoa(sa.read)), xango.A("data-kept", strconv.FormatBool(sa.loaded))},
+			xango.Text(T("search.indexStatus", "%d documents are indexed on this device; %d were read this time.", sa.cache.ix.Len(), sa.read))))
 	}
 	if sa.searched {
 		if len(sa.hits) == 0 {
@@ -250,7 +295,7 @@ func (u *ui) searchAllPanel(renderUI func()) xango.Node {
 		nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("id", "sa-changes"), xango.A("style", "list-style:none;padding:0")}, rows...),
 			btn("sa-apply", T("search.apply", "Replace in the ticked documents"), func() { u.applyReplaceAll() }, busy))
 	}
-	if sa.applied != nil {
+	if len(sa.applied) > 0 {
 		nodes = append(nodes, btn("sa-undo", T("search.undo", "Undo the replacement"), func() { u.undoReplaceAll() }, busy))
 	}
 	return xango.El("div", []xango.Attr{xango.A("id", "search-all")}, nodes...)
