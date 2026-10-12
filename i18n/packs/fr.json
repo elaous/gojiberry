@@ -633,6 +633,8 @@
   "enc.printSheet": "Imprimer une feuille",
   "enc.progress": "Nouveau chiffrement : %d documents sur %d",
   "enc.stop": "Arrêter et tout remettre",
+  "server.label": "Serveur %s (le serveur peut lire ces documents)",
+  "dir.serverStore": "Les documents peuvent aussi être enregistrés sur ce serveur (onglet Enregistrer, Enregistrer sur). Le serveur peut les lire.",
   "enc.err.stopped": "Arrêté. Rien n'a été modifié : les clés sont comme avant.",
   "enc.reload": "Recharger la page",
   "enc.restorePasskey": "Restaurer avec ma clé d'accès",

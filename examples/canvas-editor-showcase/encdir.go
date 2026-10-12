@@ -50,6 +50,8 @@ type dirUI struct {
 	ask func(label, message string, do func())
 	// render draws the page again (set by the page); the owner key is loaded in the background.
 	render func()
+	// changed, if set, is called after the server address was confirmed or forgotten (the server store follows it).
+	changed func()
 
 	email    string
 	rows     []components.DirRow
@@ -127,6 +129,12 @@ func newDirUI() dirUI {
 	return d
 }
 
+func (d *dirUI) notifyChanged() {
+	if d.changed != nil {
+		d.changed()
+	}
+}
+
 // host is the host of the confirmed directory, which every verified mark names.
 func (d *dirUI) host() string {
 	if _, h, err := checkDirURL(d.url); err == nil {
@@ -166,6 +174,7 @@ func (d *dirUI) use(clean, token string) {
 		lsSet(dirTokenURLKey, "")
 	}
 	d.connect()
+	d.notifyChanged()
 }
 
 // clear forgets the directory and its token.
@@ -178,6 +187,7 @@ func (d *dirUI) clear() {
 		lsSet(k, "")
 	}
 	d.connect()
+	d.notifyChanged()
 }
 
 // confirm asks about an address before it is used: the dialog names the host, and says what the
@@ -350,6 +360,9 @@ func (d *dirUI) settingsPanel(e *encUI) []xango.Node {
 			xango.On("input", func(ev xango.Event) { on(xango.EventValue[string](ev)) })})
 	}
 	nodes := []xango.Node{para("dir-status", status, false)}
+	if d.dir != nil {
+		nodes = append(nodes, para("dir-server-store", T("dir.serverStore", "Documents can also be saved to this server (Save tab, Save to). The server can read them."), false))
+	}
 	if d.refused != "" {
 		nodes = append(nodes, para("dir-refused", d.refused, true))
 	}

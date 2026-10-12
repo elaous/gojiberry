@@ -633,6 +633,8 @@
   "enc.printSheet": "Imprimir una hoja",
   "enc.progress": "Cifrando de nuevo: %d de %d documentos",
   "enc.stop": "Detener y dejarlo todo como estaba",
+  "server.label": "Servidor %s (el servidor puede leer estos documentos)",
+  "dir.serverStore": "Los documentos también se pueden guardar en este servidor (pestaña Guardar, Guardar en). El servidor puede leerlos.",
   "enc.err.stopped": "Detenido. No se cambió nada: las claves están como antes.",
   "enc.reload": "Recargar la página",
   "enc.restorePasskey": "Restaurar con mi passkey",
