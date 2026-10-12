@@ -60,6 +60,12 @@ test:
 a11y-test:
 	GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -run 'Axe|Accessib|ScreenReader|ReadingCopy|Keyboard|ArrowKeys|DialogFocus|DisplayPreferences' ./examples/canvas-editor-showcase/
 
+# ci-local runs the CI job's make steps on this machine (no hosted runner needed); see
+# .github/scripts/local-ci.sh. `make ci-local STEPS=a11y-test` runs only that step.
+.PHONY: ci-local
+ci-local:
+	.github/scripts/local-ci.sh $(STEPS)
+
 .PHONY: wasm-vet
 wasm-vet:
 	GOOS=js GOARCH=wasm go build ./...
