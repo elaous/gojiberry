@@ -200,11 +200,11 @@ func tableLines(t *docfile.TableItem) []line {
 
 func blocksFrom(lines []line) []Block {
 	var out []Block
-	number, prevOrdered := 0, false
+	var counts []int // the position within each level of the numbered list being read
 	for _, ln := range lines {
 		if len(ln.after) > 0 { // a table cell
 			out = append(out, ln.after...)
-			prevOrdered = false
+			counts = counts[:0]
 			continue
 		}
 		b := Block{Segments: segmentsOf(ln.runs)}
@@ -238,14 +238,24 @@ func blocksFrom(lines []line) []Block {
 		default:
 			b.Kind = Paragraph
 		}
-		if b.Kind == NumberedItem {
-			if !prevOrdered {
-				number = 0
+		lvl := min(max(ln.para.List.Level, 0), 8)
+		switch b.Kind {
+		case NumberedItem:
+			b.Level = lvl
+			for len(counts) <= lvl {
+				counts = append(counts, 0)
 			}
-			number++
-			b.NumberedIndex = number
+			counts = counts[:lvl+1] // a shallower item ends the deeper numbering
+			counts[lvl]++
+			b.NumberedIndex = counts[lvl]
+		case BulletItem:
+			b.Level = lvl
+			if lvl == 0 {
+				counts = counts[:0]
+			}
+		default:
+			counts = counts[:0]
 		}
-		prevOrdered = b.Kind == NumberedItem
 		out = append(out, b)
 	}
 	return out

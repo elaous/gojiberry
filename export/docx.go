@@ -258,6 +258,9 @@ func (b *docxBuilder) inline(segs []Segment) string {
 		case f.Subscript:
 			rpr.WriteString(`<w:vertAlign w:val="subscript"/>`)
 		}
+		if f.Lang != "" { // after vertAlign in the schema's order
+			rpr.WriteString(`<w:lang w:val="` + esc(f.Lang) + `"/>`)
+		}
 		run := `<w:r>`
 		if rpr.Len() > 0 {
 			run += `<w:rPr>` + rpr.String() + `</w:rPr>`
@@ -393,8 +396,12 @@ func (b *docxBuilder) picture(blk Block) string {
 	b.media[name] = raw
 	id := b.rel("image", "media/"+name, false)
 	b.docPr++
-	return fmt.Sprintf(`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="Picture %d"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="%d" name="%s"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
-		cx, cy, b.docPr, b.docPr, b.docPr, name, id, cx, cy)
+	descr := "" // the alternative text, which Word reads out and shows as the picture's description
+	if blk.ImageAlt != "" {
+		descr = ` descr="` + esc(blk.ImageAlt) + `"`
+	}
+	return fmt.Sprintf(`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="Picture %d"%s/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="%d" name="%s"%s/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
+		cx, cy, b.docPr, b.docPr, descr, b.docPr, name, descr, id, cx, cy)
 }
 
 // hexFill reads "#rrggbb" as the six hex digits Word wants.
