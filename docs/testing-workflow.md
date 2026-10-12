@@ -21,10 +21,16 @@ remote check is wanted. The checks run here instead.
 
 ## Running the CI steps locally
 
-No hosted runner (or no minutes) is needed: `make ci-local` runs the `make` steps of the workflow's
-first job on this machine, in the workflow's own order (`generate`, `fmt-check`, `vet`, `test`,
-`wasm-vet`, `lint`, `wasm-lint`, `lint-modules`, `modules`, `wasm-size`, `a11y-test`). It reads them from
-`.github/workflows/ci.yml` (`.github/scripts/local-ci.sh`), so a step added there runs here too.
+No hosted runner (or no minutes) is needed: `make ci-local` runs the `make` steps of the workflow on this
+machine, in the workflow's own order (`generate`, `fmt-check`, `vet`, `test`, `wasm-vet`, `lint`,
+`wasm-lint`, `lint-modules`, `modules`, `wasm-size`, `a11y-test`, `grammar-test-setup`, `grammar-test`,
+`mail-test`; each once). It reads them from every job of `.github/workflows/ci.yml`
+(`.github/scripts/local-ci.sh`), so a step added there runs here too. The jobs that need a database
+service (PostgreSQL, MongoDB) are not `make` steps and are not run locally.
+
+The hosted workflow is manual ("Run workflow" on the Actions tab) and asks **what to run**: `all`,
+`fast-checks`, `a11y` (the accessibility gate in the runner's Chrome), `mailpit` (the SMTP sender against
+the `axllent/mailpit` Docker image), `grammar`, `postgres` or `mongodb`.
 
 - `make ci-local` stops at the first failure; `.github/scripts/local-ci.sh -k` keeps going and lists
   every failure at the end.
