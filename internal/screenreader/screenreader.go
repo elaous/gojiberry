@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 // Package screenreader is a screen reader for tests. It reads the page the way a screen reader does,
 // from the browser's own accessibility tree (the Accessibility domain of the DevTools protocol, the
 // tree Chrome gives NVDA, JAWS and VoiceOver through the platform APIs), keeps a cursor that moves
