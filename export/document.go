@@ -3,6 +3,7 @@ package export
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -131,7 +132,7 @@ func fromDocument(d docfile.Document) Snapshot {
 		case it.Footnote != nil:
 			noteOrder = append(noteOrder, it.Footnote.ID)
 			n := len(noteOrder)
-			cur.runs = append(cur.runs, docfile.Chars{Text: itoa(n), Format: docfile.Format{Superscript: true}})
+			cur.runs = append(cur.runs, docfile.Chars{Text: itoa(n), Format: docfile.Format{Superscript: true, Style: noteRefStyle + itoa(n)}})
 			pos++ // an inline object: one rune of the stream
 		case it.Rule != nil:
 			pending()
@@ -160,7 +161,7 @@ func fromDocument(d docfile.Document) Snapshot {
 	if len(noteOrder) > 0 {
 		snap.Blocks = append(snap.Blocks, Block{Start: -1, Kind: Heading2, Level: 2, Segments: []Segment{{Text: "Notes"}}})
 		for i, id := range noteOrder {
-			snap.Blocks = append(snap.Blocks, Block{Start: -1, Kind: NumberedItem, NumberedIndex: i + 1, Segments: []Segment{{Text: notes[id]}}})
+			snap.Blocks = append(snap.Blocks, Block{Start: -1, Kind: NumberedItem, NumberedIndex: i + 1, Note: i + 1, Segments: []Segment{{Text: notes[id]}}})
 		}
 	}
 	return snap
@@ -328,6 +329,9 @@ func segmentsOf(runs []docfile.Chars) []Segment {
 			Underline: r.Format.Underline, Strikethrough: r.Format.Strike,
 			Superscript: r.Format.Superscript, Subscript: r.Format.Subscript, Href: r.Format.Link, Lang: r.Format.Lang, Comment: r.Format.Comment,
 		}
+		if n, ok := strings.CutPrefix(r.Format.Style, noteRefStyle); ok {
+			f.NoteRef, _ = strconv.Atoi(n)
+		}
 		if m, ok := canvas.ParseProposalMark(r.Format.Proposal); ok {
 			f.Change, f.Author, f.Time = Inserted, m.Author, m.Time.Unix()
 			if m.Kind == canvas.ProposalDelete {
@@ -346,6 +350,10 @@ func segmentsOf(runs []docfile.Chars) []Segment {
 	}
 	return out
 }
+
+// noteRefStyle marks the run of a footnote's number while a document is turned into a snapshot (no
+// stored style name starts with a NUL).
+const noteRefStyle = "\x00note:"
 
 func itoa(n int) string {
 	if n == 0 {

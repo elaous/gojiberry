@@ -117,7 +117,11 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 				// stray "<" must not become a tag), the same
 				// "verbatim" treatment Markdown's own fenced block
 				// takes.
-				body.WriteString("<pre><code>" + escapeHTMLText(rawCodeText(b.Segments)) + "</code></pre>\n")
+				class := ""
+				if lang := cleanCodeLang(b.CodeLang); lang != "" {
+					class = ` class="language-` + lang + `"`
+				}
+				body.WriteString("<pre><code" + class + ">" + escapeHTMLText(rawCodeText(b.Segments)) + "</code></pre>\n")
 			case Image:
 				// A caption becomes both the <img>'s own alt text (screen
 				// readers, and the browser's own broken-image fallback)
@@ -189,6 +193,10 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 					body.WriteString("</table>\n")
 				}
 			default:
+				if b.Equation != "" {
+					body.WriteString("<p class=\"equation\">" + MathML(b.Equation, plainTextInline(b.Segments)) + "</p>\n")
+					break
+				}
 				body.WriteString("<p>" + htmlInline(b.Segments, br) + "</p>\n")
 			}
 			continue
@@ -220,6 +228,12 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 				closeList()
 				openList(b.Kind)
 			}
+		}
+		if b.Note > 0 {
+			// A footnote: the mark in the text links here, and this links back to the mark.
+			n := strconv.Itoa(b.Note)
+			body.WriteString("<li id=\"fn-" + n + "\">" + htmlInline(b.Segments, br) + " <a href=\"#fnref-" + n + "\" aria-label=\"Back to the text of footnote " + n + "\">\u21a9</a>")
+			continue
 		}
 		body.WriteString("<li>" + htmlInline(b.Segments, br))
 	}
@@ -282,6 +296,10 @@ func wrapHTMLRun(text string, f Format) string {
 		}
 		inner := wrapHTMLRun(text, Format{Bold: f.Bold, Italic: f.Italic, Underline: f.Underline, Strikethrough: f.Strikethrough, Superscript: f.Superscript, Subscript: f.Subscript, Href: f.Href, Lang: f.Lang})
 		return "<" + tag + attrs + ">" + inner + "</" + tag + ">"
+	}
+	if f.NoteRef > 0 {
+		n := strconv.Itoa(f.NoteRef)
+		return "<sup id=\"fnref-" + n + "\"><a href=\"#fn-" + n + "\" aria-label=\"Footnote " + n + "\">" + text + "</a></sup>"
 	}
 	if f.Lang != "" {
 		text = "<span lang=\"" + escapeHTMLAttr(f.Lang) + "\">" + text + "</span>"

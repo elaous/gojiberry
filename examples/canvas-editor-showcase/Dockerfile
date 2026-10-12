@@ -7,7 +7,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN cd examples/canvas-editor-showcase \
- && GOOS=js GOARCH=wasm go build -o /site/main.wasm . \
+ && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o /site/main.wasm . \
  && cp index.html /site/index.html \
  && cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" /site/wasm_exec.js
 # A .gz beside each text-like file: nginx's gzip_static sends it as it is (about 6.9 MB for the wasm)
