@@ -1980,6 +1980,11 @@ not on pull-request builds or feature-branch pushes, since only
 shown here can't silently drift from what `make coverage` itself would
 print.
 
+`make showcase-dist` builds the editor showcase into `dist/showcase` with a
+precompressed `.gz` (and `.br`) beside each file, ready to upload to any static
+host or to serve with `wasmserve`; [docs/deploy.md](docs/deploy.md) has the
+recipe and the cache and compression settings (no credentials needed).
+
 `make bench` runs every Go benchmark in the module: `buffer`'s own
 `GapBuffer`-vs-naive-slice benchmarks (fast, native) and
 `examples/domrt-bench`'s own patch/patchChildren benchmarks (drives a

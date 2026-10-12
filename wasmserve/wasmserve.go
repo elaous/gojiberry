@@ -18,6 +18,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +33,10 @@ type Options struct {
 	// Immutable says which files may be cached forever (names with a content hash in them). The
 	// default marks nothing: every file is revalidated with its ETag.
 	Immutable func(name string) bool
+	// GzipLevel is the compress/gzip level for what the handler compresses itself (a file with no
+	// precompressed sibling). 0 means gzip.BestCompression, right for a server that compresses a file
+	// once and keeps it; a development server that rebuilds the wasm often wants gzip.BestSpeed.
+	GzipLevel int
 }
 
 type variant struct {
@@ -97,6 +102,11 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hd.Set("Vary", "Accept-Encoding")
 	if v.encoding != "" {
 		hd.Set("Content-Encoding", v.encoding)
+		if r.Header.Get("Range") == "" {
+			// ServeContent leaves the length out of an encoded response; a progress bar for a
+			// 7 MB wasm needs it. (A ranged answer gets its own length from ServeContent.)
+			hd.Set("Content-Length", strconv.Itoa(len(v.body)))
+		}
 	}
 	if h.opt.Immutable != nil && h.opt.Immutable(name) {
 		hd.Set("Cache-Control", "public, max-age=31536000, immutable")
@@ -117,12 +127,14 @@ func (h *handler) pick(name string, mod time.Time, accept string) (*variant, err
 		if !accepts(accept, c.enc) {
 			continue
 		}
-		if st, err := fs.Stat(h.fsys, name+c.ext); err == nil && !st.IsDir() {
+		// A sibling older than its file is left over from an earlier build (a rebuilt main.wasm beside
+		// the previous main.wasm.gz): sending it would serve the old program, so it is skipped.
+		if st, err := fs.Stat(h.fsys, name+c.ext); err == nil && !st.IsDir() && !st.ModTime().Before(mod) {
 			return h.load(name+c.ext, c.enc, ctype, st.ModTime(), nil)
 		}
 	}
 	if accepts(accept, "gzip") && compressible(ctype) {
-		return h.load(name, "gzip", ctype, mod, gzipBytes)
+		return h.load(name, "gzip", ctype, mod, func(b []byte) ([]byte, error) { return gzipLevelBytes(b, h.opt.gzipLevel()) })
 	}
 	return h.load(name, "", ctype, mod, nil)
 }
@@ -160,9 +172,11 @@ func (h *handler) load(name, enc, ctype string, mod time.Time, compress func([]b
 	return v, nil
 }
 
-func gzipBytes(b []byte) ([]byte, error) {
+func gzipBytes(b []byte) ([]byte, error) { return gzipLevelBytes(b, gzip.BestCompression) }
+
+func gzipLevelBytes(b []byte, level int) ([]byte, error) {
 	var out bytes.Buffer
-	zw, err := gzip.NewWriterLevel(&out, gzip.BestCompression)
+	zw, err := gzip.NewWriterLevel(&out, level)
 	if err != nil {
 		return nil, err
 	}
