@@ -141,7 +141,7 @@ func TestFidelityReportNamedExamples(t *testing.T) {
 		{"markdown", FeatTable, Dropped, NoteContentLost},
 		{"rtf", FeatImage, Simplified, NotePlaceholder},
 		{"docx", FeatCheckList, Simplified, NoteGlyph},
-		{"html", FeatFootnote, Simplified, NoteNotes},
+		{"docx", FeatFootnote, Simplified, NoteNotes},
 		{"epub", FeatColour, Dropped, ""},
 	} {
 		l, ok := find(c.format, c.f)

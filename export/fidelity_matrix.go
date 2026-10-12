@@ -72,8 +72,9 @@ var exportMatrix = map[string]map[Feature]entry{
 		FeatCellShading: drop(""), FeatCellAlign: drop(""),
 		FeatDocLanguage: drop(""), FeatTitle: drop(""), FeatPageTOC: drop(""),
 	}),
-	"epub": formatTable(foldedFeatures, noPages, map[Feature]entry{FeatHighlight: drop("")}),
-	"html": formatTable(foldedFeatures, map[Feature]entry{FeatHighlight: drop("")}),
+	// HTML and EPUB link a footnote's mark to its note and back, so they keep footnotes.
+	"epub": formatTable(foldedFeatures, noPages, map[Feature]entry{FeatHighlight: drop(""), FeatFootnote: kept()}),
+	"html": formatTable(foldedFeatures, map[Feature]entry{FeatHighlight: drop(""), FeatFootnote: kept()}),
 	// Markdown here is the editor's own: its marks for underline, highlight and raised or lowered text are
 	// not standard. Pictures, tables, footnotes and rules are not written at all.
 	"markdown": formatTable(noPages, map[Feature]entry{

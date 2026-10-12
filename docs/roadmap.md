@@ -1106,7 +1106,7 @@ unless stated.
     per format (`exportMatrix`) that must name every feature (an init check panics otherwise). The table is locked to
     the exporters: `TestFidelityMatrixMatchesTheExporters` exports a document with and without each feature in every
     format, and a feature marked Dropped must leave the file unchanged, one marked Kept or Simplified must change it,
-    one folded into another construct (deep headings, check boxes, rules, footnotes) must be written exactly as that
+    one folded into another construct (deep headings, check boxes, rules, and footnotes outside HTML and EPUB) must be written exactly as that
     construct, so an exporter that starts or stops losing something fails until the table (and the report) is
     updated. Examples it states: superscript, subscript, row spans, shading and cell alignment are not in a PDF;
     comments, colour, font size, columns and page breaks are in no format; plain text keeps characters only;
