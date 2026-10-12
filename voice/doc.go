@@ -3,6 +3,8 @@
 //   - voice/speak: text to speech with a local Piper install.
 //   - voice/listen: speech to text with a local whisper.cpp install.
 //   - voice/server: the HTTP proxy in front of both (cmd/voiceserver).
+//   - speechcoach: recording sessions, a personal dataset, a vocabulary prompt and a correction memory for
+//     people whose speech standard recognisers handle badly (roadmap 56); voice/server takes its prompt.
 //   - voice/read: what to say when a document is read aloud (the sentences, in the order and
 //     language of the accessible copy); the speaking itself is the browser's.
 //
