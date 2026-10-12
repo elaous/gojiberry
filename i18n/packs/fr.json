@@ -632,6 +632,8 @@
   "enc.oneKey": "Ce stockage n'a qu'une seule clé. Si vous la perdez, ses documents sont perdus pour de bon. Ajoutez dès maintenant une seconde clé (une clé de récupération gardée hors ligne, ou une clé SSH).",
   "enc.printSheet": "Imprimer une feuille",
   "enc.progress": "Nouveau chiffrement : %d documents sur %d",
+  "enc.stop": "Arrêter et tout remettre",
+  "enc.err.stopped": "Arrêté. Rien n'a été modifié : les clés sont comme avant.",
   "enc.reload": "Recharger la page",
   "enc.restorePasskey": "Restaurer avec ma clé d'accès",
   "enc.restoreRecovery": "Restaurer avec la clé de récupération",

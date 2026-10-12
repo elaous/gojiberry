@@ -28,6 +28,12 @@ const RateLimitPrefix = "ratelimit/"
 // adapter's skip list, so it is encrypted with the owner's keys like any document.
 const ConfigPrefix = "config/"
 
+// DeviceUsePrefix is the keyspace of the records an encrypted store keeps of when each of its keys last
+// unlocked it, and from which device (docstore/encrypt DeviceUse): one file per key, encrypted to the
+// store's own keys like a document, so the server holds only that a key was used and when it was
+// written. It is not a document (it never expires and is not listed as one).
+const DeviceUsePrefix = "deviceuse/"
+
 // Limiter decides whether a caller may do something now (start a ceremony, publish a key, look
 // one up). key names the caller ("<route group>|<client>", "u:<user id>"); Allow returns
 // ok=false and how long to wait when the caller is over its budget. Implementations are safe

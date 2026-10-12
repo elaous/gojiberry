@@ -372,8 +372,12 @@ func (e *encUI) rekeyProgress() []xango.Node {
 	if e.rekeyTotal == 0 {
 		return nil
 	}
-	return []xango.Node{xango.El("p", []xango.Attr{xango.A("id", "enc-progress"), xango.A("role", "status")},
-		xango.Text(T("enc.progress", "Encrypting again: %d of %d documents", e.rekeyDone, e.rekeyTotal)))}
+	return []xango.Node{
+		xango.El("p", []xango.Attr{xango.A("id", "enc-progress"), xango.A("role", "status")},
+			xango.Text(T("enc.progress", "Encrypting again: %d of %d documents", e.rekeyDone, e.rekeyTotal))),
+		// Stop puts everything back and leaves the keys as they were; it is on while the change runs.
+		btn("enc-stop", T("enc.stop", "Stop and put everything back"), func() { e.store.Stop() }, false),
+	}
 }
 
 // forgetStoreMemory drops what this browser remembers about a store that is gone: the key lists the

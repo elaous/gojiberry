@@ -499,12 +499,26 @@ func frameSigner(to []Owner, sigs []*encrypt.Signer) *encrypt.Signer {
 }
 
 // run does the transaction c. The caller has checked what can be checked without the lock.
-func (s *Store) run(ctx context.Context, c change) error {
+func (s *Store) run(ctx context.Context, c change) (err error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	unlock, err := s.lockAll(ctx)
 	if err != nil {
 		return err
 	}
 	defer unlock()
+	s.mu.Lock()
+	s.stop, s.stopped = cancel, false
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		stopped := s.stopped
+		s.stop, s.stopped = nil, false
+		s.mu.Unlock()
+		if stopped && err != nil && !errors.Is(err, ErrRollbackFailed) {
+			err = ErrStopped // what was written is back; the cancelled calls were only the way it stopped
+		}
+	}()
 	old := s.Config()
 	ids, sigs, holders := s.unlockedNow()
 	// The keys being added sign and verify too, while they are in hand.
@@ -542,6 +556,7 @@ func (s *Store) run(ctx context.Context, c change) error {
 	}
 	view := newRecorder(bare{s.Raw})
 	fail := func(cause error) error {
+		ctx := context.WithoutCancel(ctx) // putting back must not be stopped by the stop that asked for it
 		if rerr := view.restore(ctx); rerr != nil {
 			_ = s.install(jr)
 			return errors.Join(ErrRollbackFailed, cause, rerr)
@@ -602,4 +617,19 @@ func (s *Store) afterCommit(added []NewKey, to []Owner, ids []age.Identity, sigs
 	if s.ConfirmFirstUse {
 		s.TrustList(digest) // made or changed on this device by the person: the list is their own
 	}
+}
+
+// Stop asks the change that is running (a re-encryption after adding, removing or replacing a key) to
+// stop after the document it is on. What it had written is put back and the change ends with
+// ErrStopped, so the keys are as they were before it started; Stop says whether there was a change
+// to stop. A change that has already made its last write is not stopped.
+func (s *Store) Stop() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stop == nil {
+		return false
+	}
+	s.stopped = true
+	s.stop()
+	return true
 }
