@@ -223,16 +223,26 @@ func main() {
 	// orphaned file next time). The memory target, a local directory, SQLite and the HTTP
 	// store do write conditionally (docstore.ConditionalAdapter).
 	browserStore := docstore.NewBrowserAdapter("showcase:")
-	u.enc, err = newEnc(browserStore, func() { renderUI(); u.publishEncState() })
+	// The encrypted store lives in this browser, or, when the person chose that and confirmed the
+	// server, on the server (encscope.go); the browser's own storage is then a plain target.
+	var encRaw docstore.Adapter = browserStore
+	if _, srv, ok := chosenServerStore(); ok {
+		encRaw = srv
+	}
+	u.enc, err = newEnc(encRaw, func() { renderUI(); u.publishEncState() })
 	if err != nil {
 		// A key list that cannot be read is not guessed at: the page starts with encryption off
 		// and says why in the Save tab.
-		u.enc, _ = newEncOff(browserStore, func() { renderUI(); u.publishEncState() }, err)
+		u.enc, _ = newEncOff(encRaw, func() { renderUI(); u.publishEncState() }, err)
 	}
-	u.saver = saver.NewSession(&saver.Saver{Targets: []saver.Target{
+	targets := []saver.Target{
 		u.enc.target(),
 		{Name: "memory", Label: "Memory", Adapter: store, Capacity: 16 << 20},
-	}}, currentDoc, openDoc)
+	}
+	if encTarget != "browser" {
+		targets = append(targets, saver.Target{Name: "browser", Label: browserLabel, Adapter: browserStore, Capacity: 5 << 20})
+	}
+	u.saver = saver.NewSession(&saver.Saver{Targets: targets}, currentDoc, openDoc)
 	// Encryption is the page's own: the saver asks it before a document is made confidential and
 	// to re-key a document's files when its level changes, and it seals confidential documents
 	// into packs for the owner's keys while unlocked.
@@ -246,7 +256,7 @@ func main() {
 	u.applyServerTarget() // a server confirmed on an earlier visit is a target from the start
 	u.enc.dir.loadOwner() // now that the page can be drawn again, the owner key kept out of reach can be loaded
 	u.watchEncConfig()
-	u.saver.ProtectionAvailable = func(target string) bool { return target == "browser" && u.enc.store.Enabled() }
+	u.saver.ProtectionAvailable = func(target string) bool { return target == encTarget && u.enc.store.Enabled() }
 	u.saver.OnChange = func() {
 		t, _ := u.saver.Where()
 		rememberTarget(t)

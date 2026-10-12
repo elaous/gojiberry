@@ -788,3 +788,65 @@ func TestDeviceUseSurvivesAKeyChangeAndNamesOnlyCurrentKeys(t *testing.T) {
 		t.Errorf("a locked store reads the records: %v", err)
 	}
 }
+
+func TestKeyListMovesToAnotherDevice(t *testing.T) {
+	ctx := context.Background()
+	r, rsecret, id := confidentialRig(t)
+	text, code, err := r.st.ExportKeyList()
+	if err != nil || code == "" {
+		t.Fatalf("export: %q %q %v", text, code, err)
+	}
+	if strings.Contains(text, "AGE-SECRET-KEY") {
+		t.Fatal("the key list holds a secret")
+	}
+	cfg, code2, err := ParseKeyList(text)
+	if err != nil || code2 != code || len(cfg.Owners) != len(r.st.Owners()) {
+		t.Fatalf("parse: %+v %q %v", cfg, code2, err)
+	}
+	// A second device with the same files and nothing else: the list is all it needs besides a key.
+	second, err := New(r.raw, target, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := second.UnlockRecovery(rsecret); err != nil {
+		t.Fatalf("unlock on the second device: %v", err)
+	}
+	if _, err := second.Adapter().Load(ctx, id); err != nil && !errors.Is(err, docstore.ErrNotFound) {
+		t.Errorf("the second device cannot read: %v", err)
+	}
+	if got := second.Owners(); len(got) != len(cfg.Owners) {
+		t.Errorf("owners on the second device: %d", len(got))
+	}
+}
+
+func TestParseKeyListRefusesWhatIsNotOne(t *testing.T) {
+	r, _, _ := confidentialRig(t)
+	good, _, _ := r.st.ExportKeyList()
+	bad := map[string]string{
+		"empty":      "",
+		"not json":   "owners: [ana]",
+		"wrong kind": strings.Replace(good, keyListKind, "something-else", 1),
+		"no owners":  `{"kind":"` + keyListKind + `","config":{"v":1,"owners":[]}}`,
+		"bad owner":  `{"kind":"` + keyListKind + `","config":{"v":1,"owners":[{"kind":"recovery","type":"age-x25519","public":"nope","signer":"00"}]}}`,
+		"too large":  strings.Repeat("x", maxKeyListBytes+1),
+	}
+	for name, text := range bad {
+		if _, _, err := ParseKeyList(text); !errors.Is(err, ErrNotAKeyList) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// A journal on the other device is not carried over.
+	cfg := r.st.Config()
+	cfg.Pending = &Pending{Op: OpAdd}
+	b, _ := json.Marshal(keyListEnvelope{Kind: keyListKind, Config: cfg})
+	if got, _, err := ParseKeyList(string(b)); err != nil || got.Pending != nil {
+		t.Errorf("pending kept: %+v %v", got.Pending, err)
+	}
+}
+
+func TestExportKeyListNeedsKeysAndNoUnfinishedChange(t *testing.T) {
+	off := newRig(t)
+	if _, _, err := off.st.ExportKeyList(); err == nil {
+		t.Error("exported a key list with encryption off")
+	}
+}
