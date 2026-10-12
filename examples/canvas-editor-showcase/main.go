@@ -88,6 +88,8 @@ type ui struct {
 	find                findState
 	a11ySig             string
 	a11yCache           []components.A11yBlock
+	mirrorWriting       bool   // the copy is being given a selection by the page (not by a reader)
+	mirrorSig, mirrorAt string // where the caret was in the copy when last drawn, and the key of the caret last followed
 	announcement        string
 	spell               spellState
 	lang                langState
@@ -618,7 +620,10 @@ func main() {
 				readBar(u, renderUI),
 				xango.El("div", []xango.Attr{xango.A("id", "canvas-host")}),
 				u.suggestionsNode(renderUI),
-				components.AccessibleText(components.AccessibleTextProps{Blocks: append(u.a11yBlocks(flow, u.title), a11yObjects(root)...), Selection: selectedText(flow), Lang: u.docLang}),
+				components.AccessibleText(components.AccessibleTextProps{
+					Blocks: u.mirrorBlocks(flow, root), Comments: mirrorComments(flow), Selection: selectedText(flow), Lang: u.docLang,
+					OnGoto: goToHeading(func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw),
+				}),
 				components.Announcer(u.announcement)),
 			Sidebar: &side, StatusBar: &bar,
 		})
@@ -742,6 +747,16 @@ func main() {
 				renderUI()
 			}
 		}
+		if sig := u.mirrorSignature(flow); sig != u.mirrorSig {
+			u.mirrorSig = sig // the caret is in another block, or the selection or the comments changed
+			renderUI()
+		}
+		if flow != nil {
+			if cs := flow.Cursors()[0]; fmt.Sprint(cs.Anchor, cs.Caret) != u.mirrorAt {
+				u.mirrorAt = fmt.Sprint(cs.Anchor, cs.Caret)
+				u.followCaret(flow, u.a11yCache)
+			}
+		}
 		var stats canvas.FlowStats
 		columnCount := 0
 		columnCfg := map[string]any{}
@@ -757,7 +772,7 @@ func main() {
 		}
 		b, _ := json.Marshal(map[string]any{
 			"hyphenate": state.Hyphenate, "columns": columnCount, "columnConfig": columnCfg, "language": map[string]any{"translate": u.lang.translator != nil, "grammar": u.lang.grammar != nil, "issues": len(u.lang.issues), "translated": u.lang.translated, "error": u.lang.err, "busy": u.lang.busy},
-			"stats": statsState(stats), "share": u.shareLink, "drafts": len(u.drafts), "people": u.people.list(), "usage": u.usage.state(), "encryption": u.enc.state(), "spell": map[string]any{"enabled": u.spell.enabled, "checked": u.spell.text != "", "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
+			"stats": statsState(stats), "share": u.shareLink, "drafts": len(u.drafts), "people": u.people.list(), "links": u.people.links.state(), "usage": u.usage.state(), "encryption": u.enc.state(), "spell": map[string]any{"enabled": u.spell.enabled, "checked": u.spell.text != "", "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "persisted": u.persisted, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
@@ -821,6 +836,7 @@ func main() {
 		},
 	}
 	u.sugg.reopen = func(quiet bool) { u.openSuggestions(flow, stage, canvasEl.Element, quiet, renderUI) }
+	u.watchMirrorSelection(func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
 	u.watchSuggestionKeys(inputEl.Element, func() *canvas.TextFlow { return flow }, redraw, renderUI)
 	state.Live = liveProps(u, &state, origin, renderCanvas, renderUI)
 	renderCanvas()

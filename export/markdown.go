@@ -64,7 +64,7 @@ func (Markdown) Export(snap Snapshot) ([]byte, error) {
 		case Code:
 			// No inline-formatting or escaping inside a fenced code
 			// block -- its content is verbatim by definition.
-			sb.WriteString("```\n" + b.Segments[0].Text + "\n```\n\n")
+			sb.WriteString("```" + cleanCodeLang(b.CodeLang) + "\n" + b.Segments[0].Text + "\n```\n\n")
 			continue
 		}
 

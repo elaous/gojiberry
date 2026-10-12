@@ -39,6 +39,8 @@ const (
 type ACL struct {
 	Owner  string          `json:"owner"`
 	Grants map[string]Role `json:"grants,omitempty"`
+	// Links are the share links of the document by the hash of their token (sharelinks.go).
+	Links map[string]Link `json:"links,omitempty"`
 }
 
 // RoleOf returns the role name email has on this document: "owner",
@@ -176,12 +178,19 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 	if signedIn {
 		who = personOf(me)
 	}
+	// A share link adds access for whoever holds it while it has not expired or been revoked: it can
+	// read (viewer or editor link) or write (editor link), and it cannot delete.
+	link := acl.LinkRole(r.Header.Get(ShareHeader), s.clock())
 	switch method {
 	case http.MethodGet:
-		if acl.canRead(who) {
+		if acl.canRead(who) || link != "" {
 			return true, 0
 		}
-	case http.MethodPut, http.MethodDelete, methodRenew:
+	case http.MethodPut, methodRenew:
+		if acl.canWrite(who) || link == RoleEditor {
+			return true, 0
+		}
+	case http.MethodDelete:
 		if acl.canWrite(who) {
 			return true, 0
 		}
@@ -243,6 +252,8 @@ func (s *Server) handleACL(w http.ResponseWriter, r *http.Request, id string) {
 			http.Error(w, "sign in required", http.StatusUnauthorized)
 			return
 		}
+		s.aclMu.Lock()
+		defer s.aclMu.Unlock()
 		var body ACL
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -263,6 +274,10 @@ func (s *Server) handleACL(w http.ResponseWriter, r *http.Request, id string) {
 			body.Owner = existing.Owner // the owner stays the owner
 		}
 		body.Grants = normalizedGrants(body.Grants)
+		body.Links = nil // links are made and revoked by POST and DELETE; replacing the list keeps the ones it has
+		if err == nil {
+			body.Links = existing.Links
+		}
 		data, err := json.Marshal(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -273,6 +288,10 @@ func (s *Server) handleACL(w http.ResponseWriter, r *http.Request, id string) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	case http.MethodPost:
+		s.handleCreateLink(w, r, id, me, signedIn)
+	case http.MethodDelete:
+		s.handleRevokeLink(w, r, id, me, signedIn)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
