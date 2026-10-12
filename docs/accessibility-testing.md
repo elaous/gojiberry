@@ -78,3 +78,46 @@ what gets focus, and watch live regions. Each stop is a phrase such as `Name, ed
 It also reports unlabelled controls and skipped heading levels. It finds missing names, wrong roles and
 bad reading order early; it does not replace the manual run in section 2, since real screen readers
 differ in what they say.
+
+## 4. The document accessibility checker (`a11ycheck`)
+
+This is not a test of the editor but a check *of the person's document*, in the showcase's Check tab
+(roadmap items 61 and 62). `a11ycheck.Check(doc, Options{})` reads the saved document model and needs no
+browser. Its rules:
+
+| Rule | Severity | Finds | One-click fix |
+| --- | --- | --- | --- |
+| `image-alt` | error | a picture with no description that is not marked decorative | go and describe it (nothing is invented) |
+| `heading-skip` | warning | a heading level that jumps (level 3 straight after level 1) | make it the next level |
+| `heading-empty` | error | a heading with no text (also blank text at heading size) | make it a plain paragraph |
+| `contrast` | warning | text under 4.5:1 (3:1 for large text) against its background or the page | return to the default colour |
+| `table-header-missing` | error | a table of two rows or more whose first row has no text | none (write the column names) |
+| `table-header-empty` | warning | some cells of the first row are empty (cells covered by a merge are not counted) | none |
+| `list-fake` | warning | two or more paragraphs in a row that start with a typed bullet (`•`, `-`, `*`) or number (`1.`, `2)`) and are not list items | none (use the list button, then delete the markers) |
+
+Limits, stated so nobody reads a pass as a proof. The model has no per-table header flag: the first row *is*
+the header in every export (a `<th>` row in HTML, a header row in Word and PDF), so a header that is "not
+marked" cannot occur and the rule looks for a header row with no text. The model has no text boxes or
+floating objects, so reading order here means the heading outline, tables and lists; the order of floating
+objects will need a rule when they exist. A single typed dash is left alone (it is often just punctuation).
+The messages of the findings are English; the interface around them is translated.
+
+### The export gate and the operator's minimum
+
+The Check tab sets what exporting does about errors: nothing, warn, or block (with an explicit "allow the
+next export anyway"). The person's choice is kept in the browser. The **operator** (whoever serves the page)
+can set a minimum that the person cannot lower, in the served `index.html`:
+
+```html
+<meta name="gojiberry-min-export-gate" content="block">  <!-- or "warn"; empty or absent: no minimum -->
+```
+
+The gate in force is the stricter of the two (`GateMode.AtLeast`). Below the minimum the choices are
+disabled and a note says an administrator set it. With `block` the override is gone as well
+(`a11ycheck.OverrideAllowed`): an export with errors is refused until the errors are fixed. A value that is
+not a gate (a typo) is read as `block`, so a mistake cannot open the gate. The setting is read from the page
+the host delivers and deliberately not from the query string or local storage, which a link or the person
+can set. It governs the page's own export paths; someone who edits the page in their own browser can still
+change it, so a host that must enforce the rule against that needs to run `a11ycheck.Check` and
+`GateMode.Decide` where the document is stored or sent. Tests: `TestOperatorMinimumOfTheGate`,
+`TestCheckPanelGateFloorCannotBeLowered`, `TestOperatorMinimumExportGate` (block, warn, a typo).
