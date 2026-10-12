@@ -847,8 +847,14 @@ New entries:
     licence note (`EncodeFont`, `DecodeFont`, `Store.PutFont`/`GetFont`): a font without a licence note, or a file that is not
     a TrueType, OpenType or WOFF font by its signature, is refused (422 over HTTP), and the generic `Put` cannot store an
     unchecked blob under a font name. Fonts have their own limits, 4 MiB each and 16 MiB in all by default, that neither
-    use up nor are used up by the room for settings. Left: wiring the client to the showcase's preferences and loading a
-    stored font into the editor, sharing templates and styles.
+    use up nor are used up by the room for settings. Also done (#240): sharing. Items named `template.*`, `style.*` and `tokens.*` can be exported as a
+    bundle (`Store.Export`: one JSON file with a kind, name, note and the data under a SHA-256, carrying no identity) and
+    imported by another person (`Inspect` shows what it holds and checks it, writing nothing; `Store.Import` writes it
+    into the importer's own store, never replacing an item: a taken name gets `-2`, `-3`, and the importer's limits
+    apply). A changed, foreign, too large or unreadable file is refused with a reason that does not repeat it, and a
+    theme is imported only if it passes the `tokens` checks (readable contrast). Nothing is readable across people on the
+    server. Fonts and ordinary settings are not shared: a font's licence decides whether it may be passed on. Left:
+    wiring the client to the showcase's preferences and a share dialog, and loading a stored font into the editor.
 
 Suggested order of the accessibility group: 48, 51, 49, 50, 52.
 
