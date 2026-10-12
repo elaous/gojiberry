@@ -7,9 +7,11 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/elaous/gojiberry/lang"
 	"github.com/signintech/gopdf"
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/gobolditalic"
@@ -137,7 +139,7 @@ func (PDF) Export(snap Snapshot) ([]byte, error) {
 					if err != nil {
 						return nil, err
 					}
-					if err := drawPDFWrappedBlock(&pdf, wrapped, pxToPt(snap.MarginLeft), pdfBaseFontSize, false, false, true, "", 0, pdfTag{kind: tagP, id: i}); err != nil {
+					if err := drawPDFWrappedBlock(&pdf, nil, wrapped, pxToPt(snap.MarginLeft), pdfBaseFontSize, false, false, true, "", 0, pdfTag{kind: tagP, id: i}); err != nil {
 						return nil, err
 					}
 				}
@@ -341,12 +343,12 @@ func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWi
 		indent = pdfListIndentPerLevel * float64(b.Level+1)
 		hang = pdfListIndentPerLevel
 		prefix = "•"
-		tag.kind = tagLBody
+		tag.kind, tag.b = tagLBody, b.Level
 	case NumberedItem:
 		indent = pdfListIndentPerLevel * float64(b.Level+1)
 		hang = pdfListIndentPerLevel
 		prefix = strconv.Itoa(b.NumberedIndex) + "."
-		tag.kind, tag.a = tagLBody, 1
+		tag.kind, tag.a, tag.b = tagLBody, 1, b.Level
 	case Code:
 		mono = true
 	}
@@ -356,7 +358,7 @@ func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWi
 	if err != nil {
 		return err
 	}
-	return drawPDFWrappedBlock(pdf, wrapped, pxToPt(snap.MarginLeft)+indent, fontSize, mono, forceBold, forceItalic, prefix, hang, tag)
+	return drawPDFWrappedBlock(pdf, pdfRunLangs(snap), wrapped, pxToPt(snap.MarginLeft)+indent, fontSize, mono, forceBold, forceItalic, prefix, hang, tag)
 }
 
 // drawPDFWrappedBlock draws tokenLines starting at x0 (the block's own
@@ -367,7 +369,7 @@ func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWi
 // own "current x,y is upper-left corner" semantics (unlike Text's
 // baseline-relative ones) let each token's own y stay the line's plain
 // top coordinate, no font-ascent estimate needed.
-func drawPDFWrappedBlock(pdf *gopdf.GoPdf, tokenLines [][]pdfToken, x0, fontSize float64, mono, forceBold, forceItalic bool, prefix string, hang float64, tag pdfTag) error {
+func drawPDFWrappedBlock(pdf *gopdf.GoPdf, langs []string, tokenLines [][]pdfToken, x0, fontSize float64, mono, forceBold, forceItalic bool, prefix string, hang float64, tag pdfTag) error {
 	lineHeight := fontSize * pdfLineHeightMult
 	for li, tokens := range tokenLines {
 		pdf.SetNewY(pdf.GetY(), lineHeight)
@@ -382,7 +384,7 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, tokenLines [][]pdfToken, x0, fontSize
 				return err
 			}
 			pdf.SetXY(x0-hang, y)
-			pdfMarkBegin(pdf, pdfTag{kind: tagLbl, id: tag.id, a: tag.a})
+			pdfMarkBegin(pdf, pdfTag{kind: tagLbl, id: tag.id, a: tag.a, b: tag.b})
 			if err := pdf.Cell(&gopdf.Rect{W: pw, H: lineHeight}, prefix); err != nil {
 				return err
 			}
@@ -390,8 +392,12 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, tokenLines [][]pdfToken, x0, fontSize
 		}
 		pdfMarkBegin(pdf, tag)
 
+		// What is open in the content stream: the block's own piece, a language span (it stays open
+		// over the tokens that share the language) or a link (one token); see pdfRun.
+		run := pdfRun{pdf: pdf, tag: tag, langs: langs, mono: mono}
 		x := x0
 		for _, tok := range tokens {
+			run.enter(tok.format)
 			if err := setPDFTokenFont(pdf, tok.format, mono, forceBold, forceItalic, fontSize); err != nil {
 				return err
 			}
@@ -422,10 +428,11 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, tokenLines [][]pdfToken, x0, fontSize
 			}
 			if !mono && isLink {
 				pdf.AddExternalLink(tok.format.Href, x, y, w, lineHeight)
+				run.leave()
 			}
 			x += w
 		}
-		pdfMarkEnd(pdf)
+		run.finish()
 		pdf.SetY(y + lineHeight)
 	}
 	return nil
@@ -563,7 +570,7 @@ func renderPDFImage(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWi
 		if werr != nil {
 			return werr
 		}
-		return drawPDFWrappedBlock(pdf, wrapped, pxToPt(snap.MarginLeft), pdfBaseFontSize, false, false, true, "", 0, pdfTag{kind: tagP, id: idx})
+		return drawPDFWrappedBlock(pdf, pdfRunLangs(snap), wrapped, pxToPt(snap.MarginLeft), pdfBaseFontSize, false, false, true, "", 0, pdfTag{kind: tagP, id: idx})
 	}
 
 	w, h := pxToPt(b.ImageW), pxToPt(b.ImageH)
@@ -594,7 +601,7 @@ func renderPDFImage(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWi
 		if werr != nil {
 			return werr
 		}
-		if err := drawPDFWrappedBlock(pdf, wrapped, pxToPt(snap.MarginLeft), pdfBaseFontSize, false, false, true, "", 0, pdfTag{kind: tagCaption, id: idx}); err != nil {
+		if err := drawPDFWrappedBlock(pdf, pdfRunLangs(snap), wrapped, pxToPt(snap.MarginLeft), pdfBaseFontSize, false, false, true, "", 0, pdfTag{kind: tagCaption, id: idx}); err != nil {
 			return err
 		}
 	}
@@ -616,4 +623,86 @@ func decodeDataURLImage(dataURL string) (image.Image, error) {
 	}
 	img, _, err := image.Decode(bytes.NewReader(raw))
 	return img, err
+}
+
+// pdfRunLangs lists the distinct run languages of the snapshot, in a fixed order: a marker names a
+// language by its position here plus one (0 means none), and tagPDF finds the tag again from the
+// same list.
+func pdfRunLangs(snap Snapshot) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, b := range snap.Blocks {
+		for _, s := range b.Segments {
+			if l := s.Format.Lang; l != "" && !seen[l] && lang.ValidTag(l) {
+				seen[l] = true
+				out = append(out, l)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// pdfRun keeps the marked content of one line in step with the tokens drawn: tokens in the language of
+// the document stay in the block's own piece; a stretch in another language becomes a Span element
+// with /Lang, and each link token a Link element (with /Lang too when its run has one), so a reader
+// can switch voice and a link annotation has a place in the tree. A closed piece is reopened only
+// when more of the block's own text follows, so no empty piece is written at the end of a line.
+type pdfRun struct {
+	pdf   *gopdf.GoPdf
+	tag   pdfTag
+	langs []string
+	mono  bool
+	state int // 0 the block's own piece, 1 a language span, 2 a link, 3 nothing open
+	lang  string
+}
+
+func (r *pdfRun) langIndex(l string) int {
+	for i, x := range r.langs {
+		if x == l {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// enter opens the piece the next token belongs in.
+func (r *pdfRun) enter(f Format) {
+	link := !r.mono && f.Href != ""
+	span := !link && r.langIndex(f.Lang) > 0
+	switch {
+	case link:
+		r.reopen(pdfTag{kind: tagLink, a: r.langIndex(f.Lang)}, 2, f.Lang)
+	case span:
+		if r.state == 1 && r.lang == f.Lang {
+			return
+		}
+		r.reopen(pdfTag{kind: tagSpan, a: r.langIndex(f.Lang)}, 1, f.Lang)
+	default:
+		if r.state != 0 {
+			r.reopen(r.tag, 0, "")
+		}
+	}
+}
+
+func (r *pdfRun) reopen(t pdfTag, state int, lang string) {
+	if r.state != 3 {
+		pdfMarkEnd(r.pdf)
+	}
+	pdfMarkBegin(r.pdf, t)
+	r.state, r.lang = state, lang
+}
+
+// leave closes a link after its token.
+func (r *pdfRun) leave() {
+	pdfMarkEnd(r.pdf)
+	r.state = 3
+}
+
+// finish closes whatever is open at the end of the line.
+func (r *pdfRun) finish() {
+	if r.state != 3 {
+		pdfMarkEnd(r.pdf)
+		r.state = 3
+	}
 }
