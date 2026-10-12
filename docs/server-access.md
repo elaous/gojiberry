@@ -33,3 +33,17 @@ A browser page that talks to a token-guarded server has to hold the token, so it
 ## Documents nobody owns
 
 By default a document with no ACL is open to everyone (for docstore, when sign-in is on; for the collab hub with `ACLRoles`). To close them: docstore `GOJIBERRY_DOCSTORE_REQUIRE_ACL=true` (`Server.WithRequireACL`) makes an unowned document inaccessible except to the first signed-in writer, who becomes its owner; the collab hub's `GOJIBERRY_COLLAB_NO_ACL_ROLE=none` (`hub.ACLRolesWith`) does the same, or gives everyone `viewer` or `editor` instead.
+
+## The export gate on the server
+
+The page's accessibility gate (warn or block, roadmap 62) can be raised by the operator in the served page, but a page can be edited in the person's own browser. Where documents are stored or sent, the server can hold the line itself: `GOJIBERRY_DOCSTORE_EXPORT_GATE=warn|block` (default none; any other value stops the server).
+
+It covers one route: `GET /docs/{id}?for=export`, or the same request with the header `X-Gojiberry-Purpose: export`. This is the route a host's own export, mail or publish job should use to fetch a document. The server runs `a11ycheck.Check` and `GateMode.Decide` on it after sign-in and the access list have allowed the read, so a refusal is seen only by someone who could read the document anyway. `block` answers 422 when the document has errors, with `X-Gojiberry-Export-Gate: blocked` and `X-Gojiberry-Export-Errors: N` (no document content); there is no override, because an operator who sets `block` has decided there is none. `warn` serves the document and sets `X-Gojiberry-Export-Gate: warned` and the error count. An answer that is not the document (404, 401, 403) is passed on untouched.
+
+What it does not cover, on purpose: the editor's ordinary load and save (`GET`/`PUT /docs/{id}` without the purpose), or nobody could open a document to fix it; and a reader who may read a document and fetches it without saying why gets the stored bytes, as before. The gate is a floor for the host's own export and send paths, not a copy-protection. A document the server cannot read as a document (the ciphertext of an end-to-end encrypted store) cannot be checked: `block` refuses it, `warn` serves it with `X-Gojiberry-Export-Gate: unchecked`. With an encrypted store keep the gate in the client and in the host's decrypting job.
+
+A host that runs its own server calls the library instead: `exportgate.Decide(storedBytes, mode)` judges one stored document, and `exportgate.Wrap(handler, mode)` puts the route's gate in front of `docstore.Server.Handler()`:
+
+```go
+http.ListenAndServe(addr, exportgate.Wrap(srv.Handler(), a11ycheck.GateBlock))
+```

@@ -52,6 +52,9 @@ const (
 	RuleMediaTranscript = "media-transcript"
 	// RuleMediaTitle: a clip with no title, so a reader hears only "video" or an address as its name.
 	RuleMediaTitle = "media-title"
+	// RuleEquationAlt: an equation with no text alternative (an error: a screen reader meets symbols it cannot read), or
+	// whose alternative is only the formula typed again (a warning).
+	RuleEquationAlt = "equation-alt"
 )
 
 // Finding is one problem.
@@ -227,6 +230,10 @@ func checkStructure(doc docfile.Document) []Finding {
 					Action:  ActionDescribe})
 			}
 			offset++
+		case it.Equation != nil:
+			out = fake.flush(out)
+			out = append(out, EquationFindings(*it.Equation, offset, i)...)
+			offset++
 		case it.Table != nil:
 			out = fake.flush(out)
 			out = append(out, checkTable(it.Table, offset, i)...)
@@ -264,7 +271,7 @@ func itemOffsets(doc docfile.Document) []int {
 		switch {
 		case it.Chars != nil:
 			n += len([]rune(it.Chars.Text))
-		case it.Footnote != nil, it.TOC != nil, it.Index != nil, it.Rule != nil, it.Table != nil, it.Image != nil, it.Media != nil:
+		case it.Footnote != nil, it.TOC != nil, it.Index != nil, it.Rule != nil, it.Table != nil, it.Image != nil, it.Media != nil, it.Equation != nil:
 			n++
 		}
 	}

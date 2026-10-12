@@ -16,11 +16,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/elaous/gojiberry/a11ycheck"
 	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/auth/passkey"
 	"github.com/elaous/gojiberry/auth/sessionstore"
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/docstore/encrypt"
+	"github.com/elaous/gojiberry/docstore/exportgate"
 	"github.com/elaous/gojiberry/docstore/public"
 	"github.com/elaous/gojiberry/telemetry"
 	"github.com/elaous/gojiberry/userconfig"
@@ -116,6 +118,18 @@ func withTelemetry(srv *docstore.Server, value string) bool {
 	srv.WithTelemetry(telemetry.NewCounters())
 	log.Print("docstore: anonymous usage counts are accepted at /telemetry (see docs/telemetry.md)")
 	return true
+}
+
+// exportGate reads GOJIBERRY_DOCSTORE_EXPORT_GATE: "" or "allow" (no gate), "warn" or "block". With a gate
+// set, GET /docs/{id}?for=export (or the header X-Gojiberry-Purpose: export) runs the accessibility
+// checker on the document first; see package exportgate for what it does and does not cover. Any other
+// value stops the server rather than silently running without the gate the operator meant.
+func exportGate(value string) (a11ycheck.GateMode, error) {
+	m, ok := a11ycheck.ParseGateMode(value)
+	if !ok {
+		return a11ycheck.GateAllow, fmt.Errorf("parsing GOJIBERRY_DOCSTORE_EXPORT_GATE %q: want \"allow\", \"warn\" or \"block\"", value)
+	}
+	return m, nil
 }
 
 func newHTTPServer(addr string, h http.Handler) *http.Server {
@@ -612,7 +626,14 @@ func Main() {
 		log.Printf("docstore: sign-in enabled (%d provider(s))", len(cfg.Auth.Providers))
 	}
 	log.Printf("docstore: listening on %s (backend=%s)", cfg.Addr, cfg.Backend)
-	if err := serve(newHTTPServer(cfg.Addr, srv.Handler()), obs); err != nil {
+	gate, err := exportGate(os.Getenv("GOJIBERRY_DOCSTORE_EXPORT_GATE"))
+	if err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
+	if gate != a11ycheck.GateAllow {
+		log.Printf("docstore: export gate %q: GET /docs/{id}?for=export checks the document's accessibility first", string(gate))
+	}
+	if err := serve(newHTTPServer(cfg.Addr, exportgate.Wrap(srv.Handler(), gate)), obs); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -90,6 +90,8 @@ func fidelityFeature(id string) string {
 		"text-box":         tr("fidelity.f.textBox", "Text boxes"),
 		"drawing":          tr("fidelity.f.drawing", "Shapes, charts and diagrams"),
 		"equation":         tr("fidelity.f.equation", "Equations"),
+		"code-language":    tr("fidelity.f.codeLanguage", "Language of code blocks"),
+		"image-long-desc":  tr("fidelity.f.imageLongDesc", "Long descriptions of diagrams"),
 		"endnote":          tr("fidelity.f.endnote", "Endnotes"),
 		"field":            tr("fidelity.f.field", "Fields (page numbers, cross references)"),
 		"layout":           tr("fidelity.f.layout", "Fonts, styles, pictures, tables and structure"),
@@ -125,6 +127,10 @@ func fidelityNote(id string) string {
 		return tr("fidelity.n.bullets", "List markers are written as characters, not as a real list.")
 	case "media-text":
 		return tr("fidelity.n.mediaText", "Written as a link to the clip with its transcript as text; the clip is not embedded.")
+	case "alt-text":
+		return tr("fidelity.n.altText", "Written as its text alternative; the formula is not typeset.")
+	case "long-desc-text":
+		return tr("fidelity.n.longDescText", "Written as a paragraph of text after the picture, not linked to it.")
 	case "caption-words":
 		return tr("fidelity.n.captionWords", "The caption track is not written; its words are written as the transcript.")
 	}

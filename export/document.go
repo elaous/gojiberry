@@ -142,7 +142,19 @@ func fromDocument(d docfile.Document) Snapshot {
 			flush()
 		case it.Image != nil:
 			pending()
-			lines = append(lines, line{start: pos, after: []Block{{Start: pos, Kind: Image, ImageSrc: it.Image.URL, ImageW: it.Image.Width, ImageH: it.Image.Height, ImageAlt: it.Image.Alt, ImageDecorative: it.Image.Decorative}}})
+			after := []Block{{Start: pos, Kind: Image, ImageSrc: it.Image.URL, ImageW: it.Image.Width, ImageH: it.Image.Height, ImageAlt: it.Image.Alt, ImageDecorative: it.Image.Decorative}}
+			if d := strings.TrimSpace(it.Image.LongDesc); d != "" {
+				// the long description is text after the picture, so that every format carries it
+				after = append(after, Block{Start: -1, Kind: Paragraph, DescribesImage: true, Segments: []Segment{{Text: d}}})
+			}
+			lines = append(lines, line{start: pos, after: after})
+			pos++
+			cur.start = pos
+		case it.Equation != nil:
+			pending()
+			eq := EquationBlock(it.Equation.Formula, it.Equation.Alt)
+			eq.Start = pos
+			lines = append(lines, line{start: pos, after: []Block{eq}})
 			pos++
 			cur.start = pos
 		case it.Table != nil:
@@ -253,8 +265,9 @@ func blocksFrom(lines []line) []Block {
 			b.Kind = NumberedItem
 		case ln.para.QuoteBar != "":
 			b.Kind = Quote
-		case allMonospace(ln.runs):
+		case allMonospace(ln.runs) || strings.EqualFold(ln.para.Style, "code"):
 			b.Kind = Code
+			b.CodeLang = ln.para.CodeLang
 			var sb strings.Builder
 			for _, r := range ln.runs {
 				sb.WriteString(r.Text)
@@ -280,6 +293,11 @@ func blocksFrom(lines []line) []Block {
 			}
 		default:
 			counts = counts[:0]
+		}
+		if n := len(out); b.Kind == Code && n > 0 && out[n-1].Kind == Code && out[n-1].CodeLang == b.CodeLang && len(out[n-1].Segments) == 1 {
+			// the lines of one code block are paragraphs of their own in the editor: one block in the file
+			out[n-1].Segments = []Segment{{Text: out[n-1].Segments[0].Text + "\n" + b.Segments[0].Text}}
+			continue
 		}
 		out = append(out, b)
 	}
