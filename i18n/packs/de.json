@@ -635,6 +635,8 @@
   "enc.stop": "Anhalten und alles zurücksetzen",
   "server.label": "Server %s (der Server kann diese Dokumente lesen)",
   "dir.serverStore": "Dokumente können auch auf diesem Server gespeichert werden (Speichern, Speichern unter). Der Server kann sie lesen.",
+  "dir.requireOwner": "Einen Schlüssel nicht als verifiziert zählen, wenn seine Adresse keinen Owner-Schlüssel hat (dann den Fingerabdruck auf anderem Weg bestätigen)",
+  "dir.unenrolledNote": "Diese Adresse hat keinen Owner-Schlüssel, also verbindet nur das Wort des Servers diesen Schlüssel mit ihr. Bestätige den Fingerabdruck auf anderem Weg (persönlich oder per Anruf), bevor du ihn hinzufügst.",
   "enc.err.stopped": "Angehalten. Nichts wurde geändert: Die Schlüssel sind wie zuvor.",
   "enc.reload": "Seite neu laden",
   "enc.restorePasskey": "Mit meinem Passkey wiederherstellen",

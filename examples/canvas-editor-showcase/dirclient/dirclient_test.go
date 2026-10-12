@@ -390,3 +390,46 @@ func TestRotateAndResetTheOwnerKey(t *testing.T) {
 		t.Fatal("the key before the reset still signs")
 	}
 }
+
+func TestRequireOwnerReturnsTheRowsWithErrUnenrolled(t *testing.T) {
+	ctx := context.Background()
+	var srv *demoserver.Server
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { srv.Mux.ServeHTTP(w, r) }))
+	ts.Start()
+	defer ts.Close()
+	var err error
+	srv, err = demoserver.New(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tokenFor := func(email string) func(context.Context) (string, error) {
+		tok, err := srv.Login(email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return func(context.Context) (string, error) { return tok, nil }
+	}
+	pub, _, err := encrypt.GenerateRecoveryKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (&Client{Base: ts.URL, Token: tokenFor("bo@example.com")}).Publish(ctx, PublishRequest{Key: pub, Label: "Bo's key"}); err != nil {
+		t.Fatal(err)
+	}
+	// Bo never enrolled an owner key. By default the lookup says nothing about that.
+	plain := &Client{Base: ts.URL, Token: tokenFor("ana@example.com")}
+	if keys, err := plain.Lookup(ctx, "bo@example.com"); err != nil || len(keys) != 1 || !keys[0].Verified {
+		t.Fatalf("default lookup: %+v %v", keys, err)
+	}
+	// With RequireOwner the keys still come back, together with ErrUnenrolled, and none is marked as
+	// enrolled: the page decides how to show them.
+	strict := &Client{Base: ts.URL, Token: tokenFor("ana@example.com"), RequireOwner: true}
+	keys, err := strict.Lookup(ctx, "bo@example.com")
+	if !errors.Is(err, ErrUnenrolled) || len(keys) != 1 || keys[0].OwnerEnrolled {
+		t.Fatalf("strict lookup: %+v %v", keys, err)
+	}
+	// An address nobody published for has no keys, so there is nothing to refuse.
+	if keys, err := strict.Lookup(ctx, "nobody@example.com"); err != nil || len(keys) != 0 {
+		t.Fatalf("unknown address: %+v %v", keys, err)
+	}
+}

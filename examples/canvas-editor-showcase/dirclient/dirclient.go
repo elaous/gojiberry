@@ -239,6 +239,9 @@ var (
 	// ErrNoDirectory: the server has no key directory (the routes are absent, or it is not a
 	// docstore server).
 	ErrNoDirectory = errors.New("this server has no key directory")
+	// ErrUnenrolled is returned by Lookup, together with the keys, when RequireOwner is set and the address
+	// has no owner key: only the server's word ties them to it.
+	ErrUnenrolled = directoryclient.ErrUnenrolled
 	// ErrSignInRequired: the server wants a signed-in provider account (a session token).
 	ErrSignInRequired = errors.New("the key directory needs a signed-in account: set a session token")
 	// ErrNotAllowed: the account may not do this (a passkey account cannot look up or publish; an
@@ -274,6 +277,9 @@ type Client struct {
 	// Now is the clock the owner signatures are dated by (time.Now when nil); a test moves it with the
 	// server's.
 	Now func() time.Time
+	// RequireOwner makes Lookup report ErrUnenrolled, with the rows, for an address that has no owner
+	// key (set before the first call).
+	RequireOwner bool
 
 	// OnState is called with the new State text after anything that changes it, so the page can
 	// keep it.
@@ -302,7 +308,7 @@ func (c *Client) client(ctx context.Context) (*directoryclient.Client, error) {
 	defer c.mu.Unlock()
 	c.tok = tok
 	if c.dc == nil {
-		c.dc = &directoryclient.Client{BaseURL: c.Base, HTTP: c.HTTP, Now: c.Now, Pins: c.pinsLocked(), State: &c.state, LogKeys: c.logKeys, Token: func() string {
+		c.dc = &directoryclient.Client{BaseURL: c.Base, HTTP: c.HTTP, RequireOwner: c.RequireOwner, Now: c.Now, Pins: c.pinsLocked(), State: &c.state, LogKeys: c.logKeys, Token: func() string {
 			c.mu.Lock()
 			defer c.mu.Unlock()
 			return c.tok
@@ -667,7 +673,8 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 	}
 	rows, err := dc.Lookup(ctx, email)
 	defer c.saved()
-	if err != nil {
+	unenrolled := errors.Is(err, directoryclient.ErrUnenrolled) // RequireOwner: the rows come with the error
+	if err != nil && !unenrolled {
 		return nil, failure(err)
 	}
 	out := make([]Key, 0, len(rows))
@@ -690,6 +697,9 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 			k.Owner = OwnerDowngraded
 		}
 		out = append(out, k)
+	}
+	if unenrolled {
+		return out, ErrUnenrolled
 	}
 	return out, nil
 }

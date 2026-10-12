@@ -635,6 +635,8 @@
   "enc.stop": "Detener y dejarlo todo como estaba",
   "server.label": "Servidor %s (el servidor puede leer estos documentos)",
   "dir.serverStore": "Los documentos también se pueden guardar en este servidor (pestaña Guardar, Guardar en). El servidor puede leerlos.",
+  "dir.requireOwner": "No contar una clave como verificada cuando su dirección no tiene clave propietaria (confirmar entonces su huella de otra manera)",
+  "dir.unenrolledNote": "Esta dirección no tiene clave propietaria, así que solo la palabra del servidor une esta clave con ella. Confirma la huella de otra manera (en persona o por llamada) antes de añadirla.",
   "enc.err.stopped": "Detenido. No se cambió nada: las claves están como antes.",
   "enc.reload": "Recargar la página",
   "enc.restorePasskey": "Restaurar con mi passkey",

@@ -35,13 +35,17 @@ const (
 	dirOKKey       = "showcase-enc:docstore-ok"   // the address the person confirmed
 	dirTokenKey    = "showcase-enc:docstoken"     // the session token
 	dirTokenURLKey = "showcase-enc:docstoken-for" // the address the token was given for
+	dirRequireKey  = "showcase-enc:require-owner" // "1": do not rely on a key of an address with no owner key
 )
 
 type dirUI struct {
 	url, token string // the confirmed directory and its token: the only address anything is sent to
 	urlDraft   string
-	tokenDraft string
-	dir        dirclient.Directory
+	// requireOwner is the person's setting: a key of an address that has not enrolled an owner key is shown
+	// without the verified mark and with a note to confirm its fingerprint another way.
+	requireOwner bool
+	tokenDraft   string
+	dir          dirclient.Directory
 	// offer is an address that was put forward (by a link, or found in storage without the
 	// person's confirmation) and waits for the person to confirm it; refused says why one was not
 	// even offered.
@@ -106,6 +110,7 @@ func newDirUI() dirUI {
 		}
 	}
 	// The token belongs to the address it was given for.
+	d.requireOwner = lsGet(dirRequireKey) == "1"
 	d.token = lsGet(dirTokenKey)
 	if d.token != "" && (d.url == "" || lsGet(dirTokenURLKey) != d.url) {
 		d.token = ""
@@ -127,6 +132,19 @@ func newDirUI() dirUI {
 	d.urlDraft = d.url
 	d.connect()
 	return d
+}
+
+// setRequireOwner keeps the setting and builds the client again with it.
+func (d *dirUI) setRequireOwner(on bool, e *encUI) {
+	d.requireOwner = on
+	if on {
+		lsSet(dirRequireKey, "1")
+	} else {
+		lsSet(dirRequireKey, "")
+	}
+	d.rows, d.searched = nil, false // the last answer was read under the other setting
+	d.connect()
+	e.render()
 }
 
 func (d *dirUI) notifyChanged() {
@@ -206,7 +224,7 @@ func (d *dirUI) confirm(clean, token string, e *encUI) {
 func (d *dirUI) connect() {
 	d.dir = nil
 	if _, _, err := checkDirURL(d.url); err == nil {
-		c := &dirclient.Client{Base: d.url, Token: d.sessionToken}
+		c := &dirclient.Client{Base: d.url, Token: d.sessionToken, RequireOwner: d.requireOwner}
 		c.OnState = func(st string) { lsSet(watchStateKey+d.url, st) }
 		d.dir = c
 	}
@@ -299,11 +317,29 @@ func (d *dirUI) wire(props *components.RecipientsProps, e *encUI) {
 	}
 	props.Directory = func(ctx context.Context, email string) ([]components.DirRow, error) {
 		keys, err := d.dir.Lookup(ctx, email)
-		if err != nil {
+		unenrolled := errors.Is(err, dirclient.ErrUnenrolled)
+		if err != nil && !unenrolled {
 			return nil, dirErr(err)
 		}
+		if unenrolled {
+			// The rows are shown, but the server's word alone is not a verification: no verified mark, and the
+			// person is told to confirm the fingerprint another way before adding the key.
+			for i := range keys {
+				if !keys[i].OwnerEnrolled {
+					keys[i].Verified = false
+				}
+			}
+		}
 		d.keys, d.keysEmail = keys, email
-		return d.dirRows(keys), nil
+		rows := d.dirRows(keys)
+		if unenrolled {
+			for i := range rows {
+				if rows[i].Note == "" {
+					rows[i].Note = T("dir.unenrolledNote", "This address has no owner key, so only the server's word ties this key to it. Confirm the fingerprint another way (in person, or by a call) before adding it.")
+				}
+			}
+		}
+		return rows, nil
 	}
 	props.DirEmail = d.email
 	props.OnDirEmail = func(v string) { d.email = v; e.render() }
@@ -360,6 +396,11 @@ func (d *dirUI) settingsPanel(e *encUI) []xango.Node {
 			xango.On("input", func(ev xango.Event) { on(xango.EventValue[string](ev)) })})
 	}
 	nodes := []xango.Node{para("dir-status", status, false)}
+	nodes = append(nodes, components.Checkbox(components.CheckboxProps{
+		Label:    T("dir.requireOwner", "Do not count a key as verified when its address has no owner key (then confirm its fingerprint another way)"),
+		Checked:  d.requireOwner,
+		OnChange: func(on bool) { d.setRequireOwner(on, e) },
+	}))
 	if d.dir != nil {
 		nodes = append(nodes, para("dir-server-store", T("dir.serverStore", "Documents can also be saved to this server (Save tab, Save to). The server can read them."), false))
 	}

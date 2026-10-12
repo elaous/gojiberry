@@ -635,6 +635,8 @@
   "enc.stop": "Arrêter et tout remettre",
   "server.label": "Serveur %s (le serveur peut lire ces documents)",
   "dir.serverStore": "Les documents peuvent aussi être enregistrés sur ce serveur (onglet Enregistrer, Enregistrer sur). Le serveur peut les lire.",
+  "dir.requireOwner": "Ne pas compter une clé comme vérifiée quand son adresse n'a pas de clé propriétaire (confirmer alors son empreinte autrement)",
+  "dir.unenrolledNote": "Cette adresse n'a pas de clé propriétaire : seule la parole du serveur relie cette clé à elle. Confirmez l'empreinte autrement (en personne ou par téléphone) avant de l'ajouter.",
   "enc.err.stopped": "Arrêté. Rien n'a été modifié : les clés sont comme avant.",
   "enc.reload": "Recharger la page",
   "enc.restorePasskey": "Restaurer avec ma clé d'accès",
