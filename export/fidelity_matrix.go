@@ -27,7 +27,7 @@ func formatTable(overrides ...map[Feature]entry) map[Feature]entry {
 	// What no format writes: the editor keeps it, the files do not.
 	for _, f := range []Feature{FeatColour, FeatFontSize, FeatFontFamily, FeatTextCase, FeatComment, FeatBookmark,
 		FeatAlignment, FeatParagraphLayout, FeatParagraphStyle, FeatColumns, FeatPageBreak, FeatContents,
-		FeatImageEffects, FeatCellTextStyle, FeatHistory} {
+		FeatImageEffects, FeatCellTextStyle, FeatHistory, FeatCodeLanguage} {
 		m[f] = drop("")
 	}
 	// No format plays a clip: it is written as a link with its transcript, and its caption track is not written.
@@ -57,31 +57,39 @@ var foldedFeatures = map[Feature]entry{
 	FeatFootnote:    simple(NoteNotes),
 }
 
+// textEquation and longDescText are what the formats without MathML do with an equation (its text alternative
+// stands for it) and with a diagram's long description (a paragraph after the picture, not linked to it).
+var (
+	textEquation = map[Feature]entry{FeatEquation: simple(NoteAltText)}
+	longDescText = map[Feature]entry{FeatImageLongDesc: simple(NoteLongDescText)}
+)
+
 var exportMatrix = map[string]map[Feature]entry{
 	// Word keeps the most; it has no colour, size or font, and highlights are not written.
-	"docx": formatTable(foldedFeatures, map[Feature]entry{
-		FeatHighlight: drop(""),
+	"docx": formatTable(foldedFeatures, textEquation, longDescText, map[Feature]entry{
+		FeatHighlight: drop(""), FeatFootnote: kept(), // a footnote's mark and note link both ways (bookmarks and internal links)
 	}),
 	// The PDF is drawn: text, links, tags and tables, without raised or lowered text, shading or row spans.
-	"pdf": formatTable(foldedFeatures, map[Feature]entry{
+	"pdf": formatTable(foldedFeatures, textEquation, longDescText, map[Feature]entry{
 		FeatSuperscript: drop(""), FeatSubscript: drop(""), FeatHighlight: drop(""),
 		FeatSuggestion: drop(NoteAccepted),
 		FeatRowSpan:    drop(""), FeatCellShading: drop(""), FeatCellAlign: drop(""),
 	}),
 	// Rich Text Format: no embedded pictures, shading, alignment, language or title.
-	"rtf": formatTable(foldedFeatures, map[Feature]entry{
+	"rtf": formatTable(foldedFeatures, textEquation, longDescText, map[Feature]entry{
 		FeatHighlight: drop(""), FeatRunLanguage: drop(""), FeatSuggestion: drop(NoteAccepted),
 		FeatList: simple(NoteBullets), FeatImage: simple(NotePlaceholder), FeatImageAlt: drop(NotePlaceholder),
 		FeatCellShading: drop(""), FeatCellAlign: drop(""),
 		FeatDocLanguage: drop(""), FeatTitle: drop(""), FeatPageTOC: drop(""),
 	}),
 	// HTML and EPUB link a footnote's mark to its note and back, so they keep footnotes.
-	"epub": formatTable(foldedFeatures, noPages, map[Feature]entry{FeatHighlight: drop(""), FeatFootnote: kept()}),
-	"html": formatTable(foldedFeatures, map[Feature]entry{FeatHighlight: drop(""), FeatFootnote: kept()}),
+	"epub": formatTable(foldedFeatures, noPages, map[Feature]entry{FeatHighlight: drop(""), FeatFootnote: kept(), FeatCodeLanguage: kept()}),
+	"html": formatTable(foldedFeatures, map[Feature]entry{FeatHighlight: drop(""), FeatFootnote: kept(), FeatCodeLanguage: kept()}),
 	// Markdown here is the editor's own: its marks for underline, highlight and raised or lowered text are
 	// not standard. Pictures, tables, footnotes and rules are not written at all.
-	"markdown": formatTable(noPages, map[Feature]entry{
-		FeatUnderline: simple(NoteMarks), FeatHighlight: simple(NoteMarks),
+	"markdown": formatTable(noPages, textEquation, map[Feature]entry{
+		FeatImageLongDesc: drop(NoteContentLost),
+		FeatUnderline:     simple(NoteMarks), FeatHighlight: simple(NoteMarks),
 		FeatSuperscript: simple(NoteMarks), FeatSubscript: simple(NoteMarks),
 		FeatRunLanguage: drop(""), FeatSuggestion: drop(NoteAccepted),
 		FeatRule: drop(""), FeatFootnote: drop(NoteContentLost),
@@ -91,8 +99,9 @@ var exportMatrix = map[string]map[Feature]entry{
 		FeatDocLanguage: drop(""), FeatTitle: drop(""),
 	}),
 	// Plain text keeps the characters of the paragraphs and nothing else.
-	"text": formatTable(noPages, map[Feature]entry{
-		FeatBold: drop(NoteText), FeatItalic: drop(NoteText), FeatUnderline: drop(NoteText), FeatStrike: drop(NoteText),
+	"text": formatTable(noPages, textEquation, map[Feature]entry{
+		FeatImageLongDesc: drop(NoteContentLost),
+		FeatBold:          drop(NoteText), FeatItalic: drop(NoteText), FeatUnderline: drop(NoteText), FeatStrike: drop(NoteText),
 		FeatSuperscript: drop(NoteText), FeatSubscript: drop(NoteText), FeatLink: drop(NoteText),
 		FeatHighlight: drop(NoteText), FeatRunLanguage: drop(NoteText), FeatSuggestion: drop(NoteAccepted),
 		FeatHeading: drop(NoteText), FeatDeepHeading: drop(NoteText), FeatList: drop(NoteText), FeatNestedList: drop(NoteText),
