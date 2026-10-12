@@ -79,7 +79,6 @@ type piece struct{ page, mcid int }
 type elem struct {
 	tag    pdfTag
 	pieces []piece
-	obj    int // the object number, set when the tree is written
 }
 
 type node struct {
