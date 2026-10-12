@@ -9,11 +9,14 @@
 package main
 
 import (
+	"compress/gzip"
 	"flag"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/elaous/gojiberry/examples/people-keys-demo/demoserver"
+	"github.com/elaous/gojiberry/wasmserve"
 )
 
 func main() {
@@ -24,7 +27,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.Mux.Handle("/", http.FileServer(http.Dir(*dir)))
+	// wasmserve sends main.wasm as application/wasm (streaming compile) and gzipped, with an ETag so a
+	// reload is a 304; the fast gzip level keeps a rebuilt wasm from costing seconds on its first request.
+	s.Mux.Handle("/", wasmserve.Handler(os.DirFS(*dir), wasmserve.Options{GzipLevel: gzip.BestSpeed}))
 	log.Printf("open http://%s/", *addr)
 	log.Fatal(http.ListenAndServe(*addr, s.Mux))
 }
