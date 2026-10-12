@@ -214,6 +214,7 @@ func withDirectory(ctx context.Context, srv *docstore.Server, adapter docstore.A
 			return errors.New("GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN must be at least 16 characters")
 		}
 		srv.WithDirectoryAdmin(adminToken(tok))
+		go srv.RunUsageSampling(ctx, time.Hour) // the usage history (GET /admin/usage/history, /admin/usage/page)
 	}
 	// Behind a reverse proxy the per-client budgets (lookups per address, wrong admin tokens) need
 	// the proxy's addresses, so that X-Forwarded-For is believed from it and from nobody else;
