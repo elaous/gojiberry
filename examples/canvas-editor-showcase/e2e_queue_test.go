@@ -16,7 +16,8 @@ import (
 )
 
 // TestChangesWaitingSurviveAReload cuts the hub, types, reloads the page with the changes still
-// waiting (they are kept in the browser), brings the hub back and checks that another browser gets them.
+// waiting (they are kept in the browser), brings the hub back and checks that another browser gets them
+// and that the person is told the changes were merged.
 func TestChangesWaitingSurviveAReload(t *testing.T) {
 	h := hub.New(hub.Config{KeepAlive: 300 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
 		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
@@ -55,6 +56,8 @@ func TestChangesWaitingSurviveAReload(t *testing.T) {
 	a.Reload() // as if the tab had been closed with changes waiting
 	a.Wait("s.live.status === 'online'")
 	a.WaitFor("the stored changes are sent", `!Object.keys(localStorage).some(k => k.startsWith('showcase-queue:queue1:Ana'))`)
+	// The changes made offline met the shared document: Ana is told, with a number she can check.
+	a.WaitForTimeout("the merge is announced", `/\d+ changes? (was|were) merged\./.test((document.querySelector('.gj-announcer') || {textContent: ''}).textContent)`, 20*time.Second)
 
 	b := site.Open(t, q("Bo", "editor"))
 	b.Wait("s.live.status === 'online' && s.live.role === 'editor'")

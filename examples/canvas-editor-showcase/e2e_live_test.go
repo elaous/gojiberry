@@ -141,5 +141,23 @@ func liveEndToEnd(t *testing.T, hubURL, transport, flow string) {
 	c.Close()
 	a.WaitForTimeout("Vee to leave", `(s => !s.live.peers.includes('Vee'))(JSON.parse(document.getElementById('state').textContent))`, 40*time.Second)
 	a.OK(true, "a closed browser leaves the presence list")
-	a.OK(len(a.Errors()) == 0 && len(b.Errors()) == 0, "no page errors: "+strings.Join(append(a.Errors(), b.Errors()...), "; "))
+
+	// Where the others are is said only on request, and only for a person who asked for the buttons.
+	a.OK(a.Count("#presence .gj-presence-where") == 0, "no 'Where is' button until the person turns it on")
+	a.Eval(`localStorage.setItem('showcase:a11y', JSON.stringify({where: 'on'}))`, nil)
+	a.Reload()
+	a.Wait("s.live.status === 'online'")
+	b.Focus("#input")
+	b.Press("Home")
+	b.Press("End") // Bo's cursor moves, so the newcomer is told where it is
+	a.Wait("s.live.peers.includes('Bo') && s.live.remote >= 1")
+	a.WaitSelector(`#presence .gj-presence-where[data-name="Bo"]`)
+	a.OK(a.Text("#presence .gj-presence-where") == "Where is Bo?", "the button names the person: "+a.Text("#presence .gj-presence-where"))
+	a.OK(!strings.Contains(a.Text(".gj-announcer"), "paragraph"), "the cursor moves are not announced: "+a.Text(".gj-announcer"))
+	a.Click(`#presence .gj-presence-where[data-name="Bo"]`)
+	a.WaitFor("the position is said", `(document.querySelector('.gj-announcer') || {textContent: ''}).textContent.includes('Bo is in paragraph')`)
+	a.OK(a.Bool(`/Bo is in paragraph \d+ of \d+, after "[^"]+"\./.test(document.querySelector('.gj-announcer').textContent)`), "it quotes the words before Bo's caret: "+a.Text(".gj-announcer"))
+	b.Close()
+	a.WaitForTimeout("Bo to leave", `(s => !s.live.peers.includes('Bo'))(JSON.parse(document.getElementById('state').textContent))`, 40*time.Second)
+	a.OK(len(a.Errors()) == 0, "no page errors: "+strings.Join(a.Errors(), "; "))
 }

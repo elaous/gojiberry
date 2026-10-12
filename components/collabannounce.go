@@ -26,6 +26,7 @@ type CollabAnnouncer struct {
 	comments           []string // authors of comments others added, not yet said
 	replies            []string // authors of replies others added, not yet said
 	resolved           int      // threads others resolved, not yet said
+	merged, rejected   int      // changes merged after being offline / refused by the server, not yet said
 	cause              string   // a held connection sentence: "online", "offline" or ""
 	problemSaid        string
 	last               time.Time
@@ -59,6 +60,23 @@ func (a *CollabAnnouncer) NoteReply(author string) {
 func (a *CollabAnnouncer) NoteResolved() {
 	if a.Level == CollabAll {
 		a.resolved++
+	}
+}
+
+// NoteMerged records that n changes made while offline met the shared document when the connection came
+// back ("3 changes were merged."). It is said at the levels CollabImportant and CollabAll: it says that
+// work was kept, which the person needs to know whoever else is there.
+func (a *CollabAnnouncer) NoteMerged(n int) {
+	if a.Level != CollabOff && n > 0 {
+		a.merged += n
+	}
+}
+
+// NoteRejected records that n of the person's changes could not be applied (the server refused them: "A
+// change could not be applied."). Said at CollabImportant and CollabAll.
+func (a *CollabAnnouncer) NoteRejected(n int) {
+	if a.Level != CollabOff && n > 0 {
+		a.rejected += n
 	}
 }
 
@@ -100,7 +118,7 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 		a.problem = problem
 	}
 	if a.Level == CollabOff {
-		a.joined, a.left, a.cause, a.comments, a.replies, a.resolved = nil, nil, "", nil, nil, 0
+		a.joined, a.left, a.cause, a.comments, a.replies, a.resolved, a.merged, a.rejected = nil, nil, "", nil, nil, 0, 0, 0
 		a.problemSaid = problem
 		return ""
 	}
@@ -134,6 +152,14 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 		}
 		a.problemSaid = a.problem
 	}
+	if a.merged > 0 {
+		parts = append(parts, trn("collab.merged", "%d change was merged.", "%d changes were merged.", a.merged))
+	}
+	if a.rejected == 1 {
+		parts = append(parts, tr("collab.rejectedOne", "A change could not be applied."))
+	} else if a.rejected > 1 {
+		parts = append(parts, trf("collab.rejectedMany", "%d changes could not be applied.", a.rejected))
+	}
 	if a.Level == CollabAll {
 		if len(a.joined) > 0 {
 			parts = append(parts, peopleSentence(a.joined, "collab.joined", "%s joined.", "collab.joinedMany", "%d people joined: %s."))
@@ -159,7 +185,7 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 	if a.Level == CollabAll && a.resolved > 0 {
 		parts = append(parts, trn("collab.resolved", "%d comment thread was resolved.", "%d comment threads were resolved.", a.resolved))
 	}
-	a.joined, a.left, a.cause, a.comments, a.replies, a.resolved = nil, nil, "", nil, nil, 0
+	a.joined, a.left, a.cause, a.comments, a.replies, a.resolved, a.merged, a.rejected = nil, nil, "", nil, nil, 0, 0, 0
 	if len(parts) == 0 {
 		return ""
 	}
@@ -170,7 +196,7 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 // Pending reports whether something has changed that has not been said yet (held by the spacing), so a
 // host can call Update again a little later.
 func (a *CollabAnnouncer) Pending() bool {
-	return a.Level != CollabOff && (a.cause != "" || a.problem != a.problemSaid || (a.Level == CollabAll && len(a.joined)+len(a.left)+len(a.comments)+len(a.replies)+a.resolved > 0))
+	return a.Level != CollabOff && (a.cause != "" || a.merged+a.rejected > 0 || a.problem != a.problemSaid || (a.Level == CollabAll && len(a.joined)+len(a.left)+len(a.comments)+len(a.replies)+a.resolved > 0))
 }
 
 // peopleSentence names up to three people, and counts more.

@@ -711,6 +711,15 @@ func (u *ui) noteCollab(renderUI func()) {
 		problem = s.Err.Error()
 	}
 	u.noteComments()
+	// Changes made offline that met the document, and changes the server refused: counted by the session,
+	// announced once each (a count that went down is a new session).
+	if s.Merged >= u.collabMerged {
+		u.collab.NoteMerged(s.Merged - u.collabMerged)
+	}
+	if s.Rejected >= u.collabRejected {
+		u.collab.NoteRejected(s.Rejected - u.collabRejected)
+	}
+	u.collabMerged, u.collabRejected = s.Merged, s.Rejected
 	if msg := u.collab.Update(time.Now(), s.Status == client.Online, names, problem); msg != "" {
 		u.announce(msg)
 	}
@@ -722,6 +731,35 @@ func (u *ui) noteCollab(renderUI func()) {
 			renderUI()
 		})
 	}
+}
+
+// sayWhere answers "Where is <name>?" in the presence list: the paragraph and the words before the caret
+// of that person's cursor, said once through the live region. The cursors are never announced as they
+// move; this is the only way the position is spoken.
+func (u *ui) sayWhere(flow *canvas.TextFlow, p components.PresencePeer) {
+	name := p.Name
+	if name == "" {
+		name = p.User
+	}
+	if name == "" {
+		name = T("collab.someone", "Someone")
+	}
+	var text string
+	var cur *canvas.RemoteCursor
+	if flow != nil {
+		text = flow.EditText()
+		for i := range flow.RemoteCursors {
+			if rc := &flow.RemoteCursors[i]; rc.Name == name {
+				cur = rc
+				break
+			}
+		}
+	}
+	if cur == nil {
+		u.announce(components.WhereSentence(name, text, 0, 0, false))
+		return
+	}
+	u.announce(components.WhereSentence(name, text, cur.Anchor, cur.Caret, true))
 }
 
 // noteComments tells the announcer about comments that appeared in the shared document and are not
