@@ -1049,6 +1049,34 @@ unless stated.
     without text excludes deaf readers. Plan: (1) decide whether media embedding is in scope; (2) if so, require a
     caption or transcript link on insert; (3) add the checker rule to 62. Where: the model, `components`. Priority:
     low. Dependencies: 61, 62.
+    Done in part (#PR68), step 1 decided as "the text model, not a player": the editor has no audio or video (nothing in
+    `canvas`, `components` or the showcase embeds a clip; the only audio in the code is voice dictation), so this
+    adds what makes sense without it. `docfile.MediaItem` (`Item.Media`, protobuf field 11; the goldens `rich.pb`,
+    `rich.pbtxt` and `schema.proto` were regenerated with the protobuf library and the codecs match them byte for
+    byte) is a clip by reference: URL, kind (audio or video), title, a WebVTT caption track (`Captions`) or its
+    address (`CaptionsURL`), a transcript, and size. `CueText` reads the words out of a WebVTT file (no header, notes,
+    numbers, timings or cue markup) and `MediaItem.Words` is the transcript, else the captions' words. Step 3, the
+    checker (`a11ycheck.MediaFindings`, run by `Check` for every clip, counting a clip as one object in the text
+    stream): a video with no captions is an error (`media-captions`), audio with no words is an error and a video
+    with no words a warning (`media-transcript`), a clip with no title is a warning (`media-title`), each with what to
+    do; so the block gate refuses a video with no captions. Step 2, "require on insert", is the same function: a host
+    that inserts a clip calls `MediaFindings` on it first and refuses while it returns an error. The exports carry
+    the text: every format (HTML, EPUB, Word, PDF, RTF, Markdown, plain text, braille) writes a clip as a line naming
+    it as a link and, under "Transcript", its words (`docfile.MediaText`, used by `export.FromDocument` and the
+    Markdown and text exporters), and the fidelity report of 72 says the clip is not embedded (`media`, simplified)
+    and the caption track is not written (`media-captions`, dropped, its words are the transcript). The editor opens
+    a clip as that text (`ToItems`), so nothing is lost from view. Tests: `TestCueTextIsTheWordsOfACaptionFile`,
+    `TestMediaTextNamesTheClipAndCarriesItsWords`, `TestMediaOpensAsTextAndDocumentsKeepTheirClips`,
+    `TestMediaItemIsSavedByEveryCodec` and the golden tests in `docfile`; `TestMediaFindingsRequireCaptionsAndTranscripts`,
+    `TestCheckFindsMediaInTheDocument`, `TestACheckedClipHasItsWordsInTheExportAndAnUncheckedOneIsRefused` in
+    `a11ycheck`; `TestEveryExportCarriesTheTranscriptOfAClip` and `TestFidelityReportSaysAClipIsNotEmbedded` in
+    `export`. Left: there is no way to insert a clip in the showcase or the canvas (no player, no element, so the
+    Check tab never shows these rules for a document made there; they run for documents made by a host or an
+    importer), a caption track editor (the component of the plan), the caption track itself in the exports (a
+    `<video>` with a `<track>` in HTML, a media part in Word), importers that read clips (Word and EPUB files with
+    embedded media are still dropped, counted as drawings in the import report), audio description of what a video
+    shows (only a transcript field to put it in), and the words "Video", "Audio" and "Transcript" in the written text
+    are English only.
 69. **Accessibility testing as a release gate.** Kind: fixable. What: axe-style checks in the browser e2e tests plus a
     manual NVDA, JAWS and VoiceOver script run before each release. Why it matters: accessibility regresses silently
     unless a test fails. Plan: (1) add axe-core to the e2e for the editor, dialogs and the mirror; (2) fail the build
