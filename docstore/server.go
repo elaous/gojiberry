@@ -327,6 +327,10 @@ type Server struct {
 	aclMu sync.Mutex
 	// telemetry holds the totals of the usage receiver (WithTelemetry).
 	telemetry *telemetry.Counters
+	// usage is the bounded series of the usage counters (usageseries.go); usageClock replaces
+	// time.Now in tests.
+	usage      usageSeries
+	usageClock func() time.Time
 	// docsClosed answers 404 to the generic API (see CloseDocs).
 	docsClosed bool
 	// directory is the key directory behind /directory/* (WithDirectory); its routes are limited
@@ -505,6 +509,8 @@ func (s *Server) Handler() http.Handler {
 	}
 	if s.dirAdmin != nil {
 		mux.HandleFunc("/admin/usage", s.handleUsage)
+		mux.HandleFunc("/admin/usage/history", s.handleUsageHistory)
+		mux.HandleFunc("/admin/usage/page", s.handleUsagePage)
 		if s.telemetry != nil {
 			mux.HandleFunc("/admin/telemetry", s.handleTelemetryReport)
 		}
@@ -611,29 +617,10 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	metas, err := s.adapter.List(r.Context())
+	out, err := s.measureUsage(r.Context())
 	if err != nil {
 		serverError(w, err)
 		return
-	}
-	var out usageResponse
-	for _, m := range metas {
-		if isReservedDocID(m.ID) {
-			out.Records++
-		} else {
-			out.Documents++
-		}
-		out.Bytes += int64(m.Size)
-		out.Largest = max(out.Largest, m.Size)
-	}
-	if s.telemetry != nil {
-		t := s.telemetry.Totals()
-		out.Telemetry = &t
-	}
-	if reporter, ok := s.adapter.(QuotaReporter); ok {
-		if q, err := reporter.Usage(r.Context()); err == nil {
-			out.Quota = quotaResponse{Available: true, Used: q.Used, Total: q.Total}
-		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
