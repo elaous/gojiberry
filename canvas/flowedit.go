@@ -279,6 +279,14 @@ func (f *TextFlow) typeFormat(d *flowData, o int) Format {
 	return fm
 }
 
+// CaretFormat is the format text typed at the first caret would take: the pending format (Ctrl+B with
+// nothing selected), else that of the character before the caret. A screen reader host uses it to say
+// "Bold on" when the formatting at the caret changes.
+func (f *TextFlow) CaretFormat() Format {
+	f.Layout()
+	return f.typeFormat(f.data, f.Cursors()[0].Caret)
+}
+
 func (f *TextFlow) typeFormatRaw(d *flowData, o int) Format {
 	if !f.pending.IsZero() {
 		return f.pending
