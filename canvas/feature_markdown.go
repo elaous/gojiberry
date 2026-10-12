@@ -199,11 +199,16 @@ func MarkdownFromItems(items []Item) string {
 	for _, ln := range lines {
 		runs := ln.runs
 		prefix := ""
-		if level := headingLevel(runs); level > 0 {
-			prefix = strings.Repeat("#", level) + " "
+		level := headingLevel(runs)
+		if level > 0 {
 			for i := range runs {
 				runs[i].Format.Scale = 0
 			}
+		} else {
+			level = styleHeadingLevel(ln.pf.Style)
+		}
+		if level > 0 {
+			prefix = strings.Repeat("#", level) + " "
 		}
 		n := nums.next(ln.pf.List)
 		switch ln.pf.List.Kind {
@@ -256,6 +261,18 @@ func headingLevel(runs []Chars) int {
 		if all {
 			return lvl + 1
 		}
+	}
+	return 0
+}
+
+// styleHeadingLevel is the level (1 to 6) of a paragraph style named "Title" or "Heading N", else 0: the
+// editor's heading commands set the style, not a size on every run.
+func styleHeadingLevel(style string) int {
+	if strings.EqualFold(style, "title") {
+		return 1
+	}
+	if rest, ok := strings.CutPrefix(strings.ToLower(style), "heading "); ok && len(rest) == 1 && rest[0] >= '1' && rest[0] <= '6' {
+		return int(rest[0] - '0')
 	}
 	return 0
 }
