@@ -36,6 +36,29 @@ first job on this machine, in the workflow's own order (`generate`, `fmt-check`,
 - `a11y-test` needs a Chromium; set `CHROMIUM` if it is not on the PATH. The manual screen-reader run
   of [accessibility-testing.md](accessibility-testing.md) is still done by a person.
 
+## Mailpit-backed tests (SMTP)
+
+The SMTP sender in `mail` is tested against real [Mailpit](https://mailpit.axllent.org) servers: the
+tests send through the sender and read the result back through Mailpit's HTTP API (subject with accents,
+recipients, a long line, a line that is only a dot, the HTML alternative, wrong and missing passwords,
+no downgrade). They skip without `GOJIBERRY_TEST_MAILPIT_SMTP` and `GOJIBERRY_TEST_MAILPIT_API`, so a plain
+`go test ./...` does not need Mailpit.
+
+`make mail-test` starts two Mailpits and runs the tests against each: STARTTLS with a self-signed
+certificate and a required sign-in, and plain on loopback. It uses the image `axllent/mailpit` when a
+Docker daemon is running, otherwise a `mailpit` binary on the PATH, otherwise builds
+`github.com/axllent/mailpit` with `go install` (`MAILPIT=docker|binary` forces one). It fails if a test
+is skipped. To try by hand:
+
+```
+docker run -d --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit
+GOJIBERRY_TEST_MAILPIT_SMTP=127.0.0.1:1025 GOJIBERRY_TEST_MAILPIT_API=http://127.0.0.1:8025 go test -run Mailpit -v ./mail
+```
+
+and open http://127.0.0.1:8025 to see the messages. (The `mail-mailpit` job of the CI workflow runs
+`make mail-test`.) The optional variables `GOJIBERRY_TEST_MAILPIT_CA`, `…_USER` and `…_PASS` are the
+server's certificate file and sign-in when it has them.
+
 ## Postgres-backed tests
 
 `examples/canvas-app/cmd/devserver` has two tests that run against a real PostgreSQL (`TestDevserverEndToEnd`

@@ -66,6 +66,13 @@ a11y-test:
 ci-local:
 	.github/scripts/local-ci.sh $(STEPS)
 
+# mail-test runs the mail package's SMTP tests against real Mailpit servers (STARTTLS with sign-in, and
+# plain on loopback), from the axllent/mailpit image when Docker is running, else the mailpit binary,
+# else a build of it; see .github/scripts/mailpit-test.sh. It fails on a skipped test.
+.PHONY: mail-test
+mail-test:
+	.github/scripts/mailpit-test.sh
+
 .PHONY: wasm-vet
 wasm-vet:
 	GOOS=js GOARCH=wasm go build ./...

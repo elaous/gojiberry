@@ -127,6 +127,23 @@ jobs:
       - name: make grammar-test
         run: make grammar-test
 
+  # The SMTP sender is tested against real Mailpit servers (the axllent/mailpit image, started by the
+  # script on the runner's Docker); the script fails on a skipped test.
+  mail-mailpit:
+    name: mail tests against Mailpit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: make mail-test
+        run: make mail-test
+
   # The canvas-app dev server tests need a real PostgreSQL and skip without one (a skip prints "ok" and
   # hid a stale assertion once). A service container is cheap, so run them here and fail on any skip.
   canvas-app-postgres:
