@@ -41,6 +41,13 @@ const (
 )
     Sync states of a shared document, as SyncStatus names them.
 
+const (
+	TypingOff        = ""
+	TypingWords      = "words"
+	TypingCharacters = "characters"
+)
+    The levels of TypingAnnouncer.Level.
+
 const CapacityFullAt = 95
     CapacityFullAt is the percentage from which a store counts as full or
     nearly: the advice is the urgent one, and the warning is an alert.
@@ -91,9 +98,19 @@ var TranslatePlural = func(id, one, other string, n int) string {
 
 FUNCTIONS
 
+func A11yBlockAt(blocks []A11yBlock, offset int) int
+    A11yBlockAt returns the index of the mapped block that holds the stream
+    offset (the caret), -1 if none does (the offset is on a paragraph break that
+    belongs to no block, or the blocks are not mapped). The end of a block's
+    text is still in it.
+
 func AccessibleText(p AccessibleTextProps) xango.Node
     AccessibleText is the document's text for assistive technology: one element
     per block, in order, with real heading, list, quote and table markup.
+    The links are real links, the first row of a table holds column headers
+    (th scope="col"), the headings are listed in a navigation landmark (the
+    outline), commented text and suggested changes are marked, and the comments
+    follow in a region of their own.
 
 func Accordion(props AccordionProps) xango.Node
     Accordion renders a vertical stack of collapsible sections.
@@ -292,6 +309,14 @@ func ErrorView(id string, err error) xango.Node
     says it at once) and, under a native Details disclosure, the technical text
     with a Copy button when CopyText is set. The id is the element that holds
     both.
+
+func FidelityPanel(p FidelityPanelProps) xango.Node
+    FidelityPanel shows what a file format changes in the document before it
+    is exported, and what the last file imported left out: each feature the
+    document uses that the format drops or simplifies, with how it is written.
+    The summary is a live status, so a reader hears it when the format is
+    chosen. Nothing here blocks an export; it tells the person what the file
+    will not hold.
 
 func FileUploader(props FileUploaderProps) xango.Node
     FileUploader renders a dropzone that's also a native file-input label
@@ -692,6 +717,13 @@ func Trash(p TrashProps) xango.Node
     and Empty trash to delete them all; Children (the live list) come first.
     With nothing in the trash only the Children are drawn.
 
+func TypingLive(message string, n int) xango.Node
+    TypingLive is the live region TypingAnnouncer's sentences go to: polite,
+    so it waits for what the reader is saying, and separate from Announcer,
+    whose messages (the mode, the number of matches) must not be replaced by
+    a typed word. n counts the sentences said: a sentence said twice in a row
+    ("a", "a") is still a change of the region, so the reader says it again.
+
 func VersionDiff(p VersionDiffProps) xango.Node
     VersionDiff shows the difference between two versions of a document
     as a list, one item per changed block. It is not coloured text alone:
@@ -703,6 +735,12 @@ func VersionDiff(p VersionDiffProps) xango.Node
 func Versions(p VersionsProps) xango.Node
     Versions lists a document's snapshots, newest first, to open or delete,
     with a button to save a new one.
+
+func WhereSentence(name, text string, anchor, caret int, has bool) string
+    WhereSentence says where name's cursor is in text: the paragraph (the lines
+    of text, counted from 1, empty ones too), and the few words before the
+    caret, or that text is selected. has is false when the person has no cursor
+    in the document (a viewer who has not clicked, someone who left the page).
 
 func Wizard(props WizardProps) xango.Node
     Wizard renders a multi-step form flow: a step header strip, the active
@@ -723,8 +761,52 @@ type A11yBlock struct {
 	// Cells are a table row's cells (Kind A11yTableRow); a table is the
 	// consecutive rows, the first of them the header.
 	Cells []string
+	// Mapped says Start is known: where the block's first rune falls in the editor's text stream. A
+	// mapped block carries it as data-gj-start, so the page can turn a position in the copy into a caret
+	// in the editor and back (Lead is a prefix of the text that is not in the stream, such as the box of
+	// a check-list item). Object is true for a block that stands for one inline object (a picture, a
+	// table): the whole of it is that one rune.
+	Mapped bool
+	Start  int
+	Lead   int
+	Object bool
+	// Caret says the editor's caret is in this block: it is marked aria-current="location".
+	Caret bool
 }
     A11yBlock is one block of the document, as text.
+
+func MarkCaret(blocks []A11yBlock, offset int) []A11yBlock
+    MarkCaret returns the blocks with Caret set on the one that holds the stream
+    offset and on no other (the argument is not changed).
+
+func (b A11yBlock) OffsetInBlock(offset int) int
+    OffsetInBlock is the reverse of StreamOffset: how many runes of the block's
+    text in the copy come before the stream offset (what a host needs to put the
+    reader's cursor where the caret is).
+
+func (b A11yBlock) StreamLen() int
+    StreamLen is how many runes the block takes in the editor's text stream:
+    its text, whatever pieces it is made of (a suggested removal is still in
+    the stream), less the Lead that is only in the copy; an object (a picture,
+    a table) is one rune.
+
+func (b A11yBlock) StreamOffset(before string) int
+    StreamOffset is the stream offset of the position in a mapped block after
+    `before` (the text of the block that comes before the position, as the copy
+    has it, without the words only a reader hears). Inside an object it is the
+    object itself.
+
+type A11yComment struct {
+	ID       string
+	Author   string
+	Excerpt  string
+	Text     string
+	Resolved bool
+	Replies  []A11yReply
+}
+    A11yComment is a comment of the document, written out for a reader:
+    who wrote it, the text it is on, what it says, the replies, and whether it
+    is resolved.
 
 type A11yKind int
     A11yKind is what kind of block an A11yBlock is.
@@ -737,6 +819,9 @@ const (
 	A11yCode
 	A11yTableRow // Cells
 )
+type A11yReply struct{ Author, Text string }
+    A11yReply is a reply to an A11yComment.
+
 type A11yRun struct {
 	Text string
 	Lang string
@@ -745,6 +830,11 @@ type A11yRun struct {
 	// words "Suggested addition by Ana:" / "Suggested removal by Ana:" before.
 	Change string
 	Author string
+	// Href, when it is a safe address, makes the piece a link (a real <a>, opening in a new tab).
+	Href string
+	// Comments are the IDs (comma separated) of the comments on this piece: the piece is marked and
+	// points (aria-details) to the comment's own entry in the list of comments.
+	Comments string
 }
     A11yRun is a piece of a block's text; Lang is its language tag, "" for the
     document's own.
@@ -761,6 +851,14 @@ type AccessibleTextProps struct {
 	// Selection is the selected text, "" for none, announced as part of the
 	// region so a reader finds what is selected.
 	Selection string
+	// Comments are the document's comments, listed after the text as a region of their own; the text
+	// they are on points to them.
+	Comments []A11yComment
+	// OnGoto, when set, is called when an entry of the outline is activated, with the heading's element id
+	// and, if the block is mapped, its stream position, and the link's own jump is not made (a page with a
+	// <base> element would take "#id" for another address). The host focuses the heading (it can take
+	// focus) and moves the editor's caret there.
+	OnGoto func(headingID string, start int, mapped bool)
 }
     AccessibleTextProps configures AccessibleText.
 
@@ -964,6 +1062,10 @@ type CheckPanelProps struct {
 	OnGate     func(mode string)
 	Overridden bool
 	OnOverride func()
+	// GateFloor is the least strict gate the operator allows ("" for none, "warn" or "block"). A choice
+	// below it is shown but cannot be pressed, a note says why, and with "block" there is no override
+	// either. The host must also hold Gate at or above it.
+	GateFloor string
 }
     CheckPanelProps configures CheckPanel.
 
@@ -1016,6 +1118,26 @@ type CollabAnnouncer struct {
 func (a *CollabAnnouncer) NoteComment(author string)
     NoteComment records that someone else added a comment; it is said, with the
     next sentence, at level CollabAll ("Bo commented." or "3 new comments.").
+
+func (a *CollabAnnouncer) NoteMerged(n int)
+    NoteMerged records that n changes made while offline met the shared document
+    when the connection came back ("3 changes were merged."). It is said at the
+    levels CollabImportant and CollabAll: it says that work was kept, which the
+    person needs to know whoever else is there.
+
+func (a *CollabAnnouncer) NoteRejected(n int)
+    NoteRejected records that n of the person's changes could not be applied
+    (the server refused them: "A change could not be applied."). Said at
+    CollabImportant and CollabAll.
+
+func (a *CollabAnnouncer) NoteReply(author string)
+    NoteReply records that someone else replied to a comment; it is said at
+    level CollabAll ("Bo replied." or "3 new replies.").
+
+func (a *CollabAnnouncer) NoteResolved()
+    NoteResolved records that someone else resolved a comment thread ("A comment
+    thread was resolved." or "3 comment threads were resolved."), said at level
+    CollabAll.
 
 func (a *CollabAnnouncer) Pending() bool
     Pending reports whether something has changed that has not been said yet
@@ -1624,6 +1746,35 @@ const (
 	ErrKindUnknown ErrorKind = "unknown"
 )
     The groups ExplainError sorts errors into.
+
+type FidelityLoss struct {
+	Feature, Treatment, Note string
+	Count                    int
+}
+    FidelityLoss is one line of a fidelity report: a feature of the document,
+    what the format does with it ("dropped" or "simplified"), a note on how,
+    and in how many places the document uses it (0 when it is not a count).
+
+type FidelityPanelProps struct {
+	// Formats are the formats to export as, Format the one chosen; OnFormat chooses another.
+	Formats  []SaverChoice
+	Format   string
+	OnFormat func(name string)
+	// Export is what exporting the document as Format loses.
+	Export FidelityReport
+	// Import, if ImportName is set, is what the last file imported left out.
+	Import     FidelityReport
+	ImportName string
+}
+    FidelityPanelProps configures FidelityPanel.
+
+type FidelityReport struct {
+	Losses []FidelityLoss
+	// Known says the host knows what the format writes (or reads); false makes the panel say so instead
+	// of "nothing is lost".
+	Known bool
+}
+    FidelityReport is what a format loses of a document.
 
 type FileUploaderProps struct {
 	DropzoneID string // id on the dropzone, for a caller to attach html.Element.OnDrop
@@ -2283,6 +2434,10 @@ type PresenceProps struct {
 	Pending int
 	// Role is your own role, shown as a badge ("View only" for a viewer).
 	Role string
+	// OnWhere, if set, adds a "Where is <name>?" button for each of the other people; it is called with
+	// that person, and the host says where they are (WhereSentence) in the live region. The cursors are
+	// never announced as they move: the position is given only on request.
+	OnWhere func(PresencePeer)
 }
     PresenceProps configures Presence.
 
@@ -2848,6 +3003,68 @@ type TrashProps struct {
 
 func (p TrashProps) Use(b TrashBackend) TrashProps
     Use makes p's Restore and Delete the backend's.
+
+type TypingAnnouncer struct {
+	// Level is what is said of typed text: TypingOff nothing (the default), TypingWords each word when it
+	// is finished (and a word left unfinished for Pause), TypingCharacters each character as it is typed.
+	Level string
+	// Formatting says changes of the formatting at the caret: "Bold on", "Bold off", and the paragraph
+	// style ("Heading 2") when the caret goes into another.
+	Formatting bool
+	// Lines is reading as the caret moves: the line it goes to when it changes line (the arrow keys up and
+	// down, a click). Within a line, TypingCharacters says the character passed over, and either level
+	// the text passed over by a move of more than one character (Ctrl+Left or Ctrl+Right).
+	Lines bool
+	// Every is the least time between two sentences (500 ms if 0). What comes sooner is held and said
+	// together at the next Update after it.
+	Every time.Duration
+	// Pause is how long a word being typed may stand unfinished before it is said (1.5 s if 0).
+	Pause time.Duration
+
+	// Has unexported fields.
+}
+    A canvas gives a screen reader nothing to say when a person types, or moves
+    the caret: the keys go to a hidden input whose text is not the document.
+    TypingAnnouncer turns what changed in the document into short sentences
+    for a live region (TypingLive): the words as they are finished, or each
+    character; the line the caret has gone to; a formatting change at the caret
+    ("Bold on"). It is a pure state machine: the host gives it the document as
+    it is after each change (Update) and says what it returns. What it says is
+    spaced (at most one sentence per Every, the rest held and said together)
+    and bounded, so quick typing is not read as a queue that runs on after the
+    person has stopped.
+
+    Preferences: Level (off, words, characters), Formatting and Lines, each
+    on its own, because what a person wants differs, and a screen reader may
+    already echo what the hidden input receives.
+
+func (a *TypingAnnouncer) Pending() bool
+    Pending reports whether something is held (or a word is unfinished),
+    to be said by a later Update: the host calls Update again after Every.
+
+func (a *TypingAnnouncer) Reset()
+    Reset forgets the document and what is held: the next Update only remembers
+    (use it when the editing stops, or the document is replaced, so the whole
+    text is not taken for a paste).
+
+func (a *TypingAnnouncer) Update(now time.Time, cur TypingState) string
+    Update takes the document as it is now and returns the sentence to say now,
+    or "".
+
+type TypingState struct {
+	// Text is the editor's text and Caret the offset of the (first) caret in it, in runes.
+	Text  string
+	Caret int
+	// Line is the text of the line the caret is on (as drawn, so a wrapped line is the part on screen) and
+	// LineStart its offset in Text; two lines with the same text are told apart by the offset.
+	Line      string
+	LineStart int
+	// Marks are the names of the formatting at the caret ("Bold", "Italic") and Block the name of the
+	// paragraph style ("Heading 2"; "" for plain text).
+	Marks []string
+	Block string
+}
+    TypingState is the document as the announcer needs it, after a change.
 
 type UserMessager interface{ UserMessage() string }
     UserMessager is implemented by an error whose text is already the words to
