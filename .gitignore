@@ -61,3 +61,4 @@ examples/gin-ssr-demo/gin-ssr-demo
 # built binaries at the repo root
 /translateserver
 /docstore-bin
+local-ci-report.txt

@@ -19,6 +19,23 @@ remote check is wanted. The checks run here instead.
 4. The merge count since the last full run is kept at the top of
    [roadmap.md](roadmap.md#merges-since-the-last-full-test-run), updated with each merge.
 
+## Running the CI steps locally
+
+No hosted runner (or no minutes) is needed: `make ci-local` runs the `make` steps of the workflow's
+first job on this machine, in the workflow's own order (`generate`, `fmt-check`, `vet`, `test`,
+`wasm-vet`, `lint`, `wasm-lint`, `lint-modules`, `modules`, `wasm-size`, `a11y-test`). It reads them from
+`.github/workflows/ci.yml` (`.github/scripts/local-ci.sh`), so a step added there runs here too.
+
+- `make ci-local` stops at the first failure; `.github/scripts/local-ci.sh -k` keeps going and lists
+  every failure at the end.
+- `make ci-local STEPS="wasm-size a11y-test"` runs only those steps.
+- `LOCAL_CI_SKIP` is the steps to leave out; the default is `coverage-badge` (CI commits the badge, and
+  it runs the whole test suite a second time; run `make coverage-badge` yourself at a full run).
+  `LOCAL_CI_LIST=1` prints the steps and stops.
+- `local-ci-report.txt` (ignored by git) has the commit, and each step with its time and result.
+- `a11y-test` needs a Chromium; set `CHROMIUM` if it is not on the PATH. The manual screen-reader run
+  of [accessibility-testing.md](accessibility-testing.md) is still done by a person.
+
 ## Postgres-backed tests
 
 `examples/canvas-app/cmd/devserver` has two tests that run against a real PostgreSQL (`TestDevserverEndToEnd`

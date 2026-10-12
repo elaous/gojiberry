@@ -6,8 +6,10 @@ a screen reader, a keyboard, a magnifier).
 
 ## 1. The automated gate: `make a11y-test`
 
-Runs in CI on every push and pull request (and by hand). It needs a Chromium or Chrome and **fails
-without one** (`GOJIBERRY_REQUIRE_BROWSER`), so it cannot pass by skipping.
+Run it on this machine with `make a11y-test` (or `make ci-local STEPS=a11y-test`, which also writes a short
+report to `local-ci-report.txt`; see [testing-workflow.md](testing-workflow.md#running-the-ci-steps-locally)). The hosted
+workflow is manual and not needed for it. It needs a Chromium or Chrome and **fails without one**
+(`GOJIBERRY_REQUIRE_BROWSER`), so it cannot pass by skipping.
 
 What it checks, in the canvas editor showcase (`examples/canvas-editor-showcase`):
 
