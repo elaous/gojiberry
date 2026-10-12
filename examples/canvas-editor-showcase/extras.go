@@ -491,12 +491,42 @@ type checkState struct {
 // exportGateKey is where the person's choice of what exporting does about errors is kept.
 const exportGateKey = "showcase:export-gate"
 
+// exportGateMetaName is the page's operator setting: <meta name="gojiberry-min-export-gate" content="warn">
+// (or "block") in the index.html the host serves. It is the least strict gate the person may choose, and
+// part of the page the operator delivers, not of a link or of this browser's storage, so a person cannot
+// lower it from the page (a query parameter is deliberately not read for it). With "block" an export with
+// errors cannot be allowed anyway. A value that is not a gate is read as "block": a typo must not leave
+// the gate open. It stops the page's own export paths; a host that must hold the line against someone
+// who edits the page needs to run package a11ycheck where the document is stored or sent.
+const exportGateMetaName = "gojiberry-min-export-gate"
+
+// operatorGateFloor reads the operator's minimum gate from the page.
+func operatorGateFloor() a11ycheck.GateMode {
+	defer func() { _ = recover() }()
+	m := js.Global().Get("document").Call("querySelector", `meta[name="`+exportGateMetaName+`"]`)
+	if m.IsNull() || m.IsUndefined() {
+		return a11ycheck.GateAllow
+	}
+	raw := m.Call("getAttribute", "content")
+	if raw.IsNull() || raw.IsUndefined() {
+		return a11ycheck.GateAllow
+	}
+	mode, ok := a11ycheck.ParseGateMode(raw.String())
+	if !ok {
+		js.Global().Get("console").Call("warn", exportGateMetaName+": "+raw.String()+" is not a gate (use warn or block); read as block")
+		return a11ycheck.GateBlock
+	}
+	return mode
+}
+
+// exportGate is the gate in force: the person's choice, raised to the operator's minimum.
 func exportGate() a11ycheck.GateMode {
+	person := a11ycheck.GateAllow
 	switch m := a11ycheck.GateMode(lsGet(exportGateKey)); m {
 	case a11ycheck.GateWarn, a11ycheck.GateBlock:
-		return m
+		person = m
 	}
-	return a11ycheck.GateAllow
+	return person.AtLeast(operatorGateFloor())
 }
 
 // gatedExport is the export of the page: the document is checked first when the gate asks for it, an
@@ -505,8 +535,12 @@ func (u *ui) gatedExport(format string, doc docfile.Document) (string, []byte, s
 	mode := exportGate()
 	if mode != a11ycheck.GateAllow {
 		findings := a11ycheck.Check(doc, a11ycheck.Options{})
-		allow, errs := mode.Decide(findings, u.check.override)
+		floor := operatorGateFloor()
+		allow, errs := mode.Decide(findings, u.check.override && a11ycheck.OverrideAllowed(floor))
 		if !allow {
+			if floor == a11ycheck.GateBlock {
+				return "", nil, "", errors.New(T("check.blockedByOperator", "Not exported: the document has %d accessibility errors, and this site does not allow exporting a document with them. Fix them in the Check tab.", errs))
+			}
 			return "", nil, "", errors.New(T("check.blocked", "Not exported: the document has %d accessibility errors. Fix them in the Check tab, or allow this export there.", errs))
 		}
 		u.check.override = false
@@ -526,7 +560,15 @@ func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func
 			Rule: f.Rule, Severity: f.Severity.String(), Message: f.Message, Fix: f.Fix, Text: f.Text, FixLabel: fixLabel(f)})
 	}
 	props.Gate, props.Overridden = string(exportGate()), u.check.override
-	props.OnGate = func(mode string) { lsSet(exportGateKey, mode); u.check.override = false; renderUI() }
+	props.GateFloor = string(operatorGateFloor())
+	props.OnGate = func(mode string) {
+		if m := a11ycheck.GateMode(mode); m.AtLeast(operatorGateFloor()) != m {
+			return // below the operator's minimum
+		}
+		lsSet(exportGateKey, mode)
+		u.check.override = false
+		renderUI()
+	}
 	props.OnOverride = func() { u.check.override = !u.check.override; renderUI() }
 	run := func() {
 		fl := flow()
@@ -554,6 +596,13 @@ func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func
 		case a11ycheck.ActionHeadingLevel:
 			fl.SetCursors([]canvas.Cursor{canvas.At(f.Offset)})
 			fl.ApplyParagraph(func(p *canvas.ParaFormat) { p.Style = fmt.Sprintf("Heading %d", f.Arg) })
+		case a11ycheck.ActionToParagraph:
+			if f.Length > 0 { // blank text at a heading's size goes back to the body size
+				fl.SetCursors([]canvas.Cursor{{Anchor: f.Offset, Caret: f.Offset + f.Length}})
+				fl.ApplyFormat(func(c *canvas.Format) { c.Scale = 0 })
+			}
+			fl.SetCursors([]canvas.Cursor{canvas.At(f.Offset)})
+			fl.ApplyParagraph(func(p *canvas.ParaFormat) { p.Style = "" })
 		case a11ycheck.ActionDefaultColour:
 			fl.SetCursors([]canvas.Cursor{{Anchor: f.Offset, Caret: f.Offset + f.Length}})
 			fl.SetTextColor("")
@@ -586,6 +635,8 @@ func fixLabel(f a11ycheck.Finding) string {
 	switch f.Action {
 	case a11ycheck.ActionHeadingLevel:
 		return T("check.fixHeading", "Make it a level %d heading", f.Arg)
+	case a11ycheck.ActionToParagraph:
+		return T("check.fixParagraph", "Make it a plain paragraph")
 	case a11ycheck.ActionDefaultColour:
 		return T("check.fixColour", "Use the default text colour")
 	case a11ycheck.ActionDescribe:
