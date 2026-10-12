@@ -30,6 +30,9 @@ func formatTable(overrides ...map[Feature]entry) map[Feature]entry {
 		FeatImageEffects, FeatCellTextStyle, FeatHistory} {
 		m[f] = drop("")
 	}
+	// No format plays a clip: it is written as a link with its transcript, and its caption track is not written.
+	m[FeatMedia] = simple(NoteMediaText)
+	m[FeatMediaCaptions] = drop(NoteCaptionWords)
 	for _, o := range overrides {
 		for f, e := range o {
 			m[f] = e

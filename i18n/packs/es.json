@@ -1008,6 +1008,10 @@
   "fidelity.f.layout": "Fuentes, estilos, imágenes, tablas y estructura",
   "fidelity.f.pageHeader": "Encabezados, pies de página y números de página",
   "fidelity.f.pageToc": "Tabla de contenido al principio",
-  "fidelity.f.pageSize": "Tamaño de página y márgenes"
+  "fidelity.f.pageSize": "Tamaño de página y márgenes",
+  "fidelity.f.media": "Audio y vídeo",
+  "fidelity.f.mediaCaptions": "Pistas de subtítulos",
+  "fidelity.n.mediaText": "Se escribe como un enlace al clip con su transcripción como texto; el clip no está incrustado.",
+  "fidelity.n.captionWords": "La pista de subtítulos no se escribe; sus palabras se escriben como transcripción."
  }
 }

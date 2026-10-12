@@ -1008,6 +1008,10 @@
   "fidelity.f.layout": "Schriften, Formate, Bilder, Tabellen und Struktur",
   "fidelity.f.pageHeader": "Kopf- und Fußzeilen und Seitenzahlen",
   "fidelity.f.pageToc": "Inhaltsverzeichnis am Anfang",
-  "fidelity.f.pageSize": "Seitengröße und Ränder"
+  "fidelity.f.pageSize": "Seitengröße und Ränder",
+  "fidelity.f.media": "Audio und Video",
+  "fidelity.f.mediaCaptions": "Untertitelspuren",
+  "fidelity.n.mediaText": "Als Link auf den Clip mit seinem Transkript als Text geschrieben; der Clip ist nicht eingebettet.",
+  "fidelity.n.captionWords": "Die Untertitelspur wird nicht geschrieben; ihre Wörter stehen als Transkript."
  }
 }
