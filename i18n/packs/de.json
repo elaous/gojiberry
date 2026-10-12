@@ -633,6 +633,8 @@
   "enc.printSheet": "Blatt drucken",
   "enc.progress": "Erneut verschlüsseln: %d von %d Dokumenten",
   "enc.stop": "Anhalten und alles zurücksetzen",
+  "server.label": "Server %s (der Server kann diese Dokumente lesen)",
+  "dir.serverStore": "Dokumente können auch auf diesem Server gespeichert werden (Speichern, Speichern unter). Der Server kann sie lesen.",
   "enc.err.stopped": "Angehalten. Nichts wurde geändert: Die Schlüssel sind wie zuvor.",
   "enc.reload": "Seite neu laden",
   "enc.restorePasskey": "Mit meinem Passkey wiederherstellen",
