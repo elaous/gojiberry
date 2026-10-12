@@ -36,6 +36,8 @@ const (
 	BackupMade      Kind = "backup.made"
 	BackupRestored  Kind = "backup.restored"
 	ConfigChanged   Kind = "config.changed"
+	// TelemetryRefused is a usage report refused for being outside the allowlist (package telemetry).
+	TelemetryRefused Kind = "telemetry.refused"
 )
 
 // Outcome is how it ended.
@@ -97,7 +99,7 @@ var ErrNotAllowed = errors.New("audit: the event has a value that is not on the 
 
 var (
 	kinds = set(KeyEnrolled, KeyRevoked, KeyRotated, OwnerReset, DocumentCreated, DocumentDeleted, DocumentExpired,
-		AccessGranted, AccessRevoked, SignInFailed, RateLimited, BackupMade, BackupRestored, ConfigChanged)
+		AccessGranted, AccessRevoked, SignInFailed, RateLimited, BackupMade, BackupRestored, ConfigChanged, TelemetryRefused)
 	outcomes = set(OK, Denied, Failed)
 	actors   = set(Owner, Editor, Viewer, Anonymous, Operator, System)
 	reasons  = set(NoReason, BadSignature, Expired, OverQuota, OverRate, NotAllowed, Conflict, Unavailable)

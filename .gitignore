@@ -21,6 +21,9 @@ examples/collab-editor-app/static/*.css
 examples/gio-counter-demo/dist/
 examples/gio-counter-demo/*.syso
 
+# make showcase-dist output (docs/deploy.md)
+/dist/
+
 # Test binary, built with `go test -c`
 *.test
 
