@@ -24,6 +24,8 @@ type CollabAnnouncer struct {
 	problem            string
 	joined, left       []string
 	comments           []string // authors of comments others added, not yet said
+	replies            []string // authors of replies others added, not yet said
+	resolved           int      // threads others resolved, not yet said
 	cause              string   // a held connection sentence: "online", "offline" or ""
 	problemSaid        string
 	last               time.Time
@@ -41,6 +43,22 @@ const (
 func (a *CollabAnnouncer) NoteComment(author string) {
 	if a.Level == CollabAll {
 		a.comments = append(a.comments, author)
+	}
+}
+
+// NoteReply records that someone else replied to a comment; it is said at level CollabAll ("Bo replied."
+// or "3 new replies.").
+func (a *CollabAnnouncer) NoteReply(author string) {
+	if a.Level == CollabAll {
+		a.replies = append(a.replies, author)
+	}
+}
+
+// NoteResolved records that someone else resolved a comment thread ("A comment thread was resolved." or
+// "3 comment threads were resolved."), said at level CollabAll.
+func (a *CollabAnnouncer) NoteResolved() {
+	if a.Level == CollabAll {
+		a.resolved++
 	}
 }
 
@@ -82,7 +100,7 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 		a.problem = problem
 	}
 	if a.Level == CollabOff {
-		a.joined, a.left, a.cause, a.comments = nil, nil, "", nil
+		a.joined, a.left, a.cause, a.comments, a.replies, a.resolved = nil, nil, "", nil, nil, 0
 		a.problemSaid = problem
 		return ""
 	}
@@ -131,7 +149,17 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 			parts = append(parts, trn("collab.newComments", "%d new comment.", "%d new comments.", len(a.comments)))
 		}
 	}
-	a.joined, a.left, a.cause, a.comments = nil, nil, "", nil
+	if a.Level == CollabAll && len(a.replies) > 0 {
+		if len(a.replies) == 1 {
+			parts = append(parts, trf("collab.replied", "%s replied.", a.replies[0]))
+		} else {
+			parts = append(parts, trn("collab.newReplies", "%d new reply.", "%d new replies.", len(a.replies)))
+		}
+	}
+	if a.Level == CollabAll && a.resolved > 0 {
+		parts = append(parts, trn("collab.resolved", "%d comment thread was resolved.", "%d comment threads were resolved.", a.resolved))
+	}
+	a.joined, a.left, a.cause, a.comments, a.replies, a.resolved = nil, nil, "", nil, nil, 0
 	if len(parts) == 0 {
 		return ""
 	}
@@ -142,7 +170,7 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 // Pending reports whether something has changed that has not been said yet (held by the spacing), so a
 // host can call Update again a little later.
 func (a *CollabAnnouncer) Pending() bool {
-	return a.Level != CollabOff && (a.cause != "" || a.problem != a.problemSaid || (a.Level == CollabAll && len(a.joined)+len(a.left)+len(a.comments) > 0))
+	return a.Level != CollabOff && (a.cause != "" || a.problem != a.problemSaid || (a.Level == CollabAll && len(a.joined)+len(a.left)+len(a.comments)+len(a.replies)+a.resolved > 0))
 }
 
 // peopleSentence names up to three people, and counts more.

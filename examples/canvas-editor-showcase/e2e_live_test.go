@@ -128,6 +128,15 @@ func liveEndToEnd(t *testing.T, hubURL, transport, flow string) {
 	a.OK(a.Text(".gj-comment .gj-markdown") == "A viewer's comment", "Ana sees it in her comments list")
 	c.OK(c.Count(".gj-comment-reply-row") == 1 && c.Count(".gj-comment-actions") == 0, "the viewer can reply but not resolve or delete")
 
+	// A reply and a resolved thread are announced to the others, and not to the person who made them.
+	c.Fill(".gj-comment-reply-row input", "Thanks, Ana")
+	c.Click(".gj-comment-send")
+	a.WaitFor("the reply announced", `document.querySelector('.gj-announcer').textContent.includes('replied')`)
+	c.OK(!strings.Contains(c.Text(".gj-announcer"), "replied"), "the person who replied is not told about their own reply")
+	a.Click(".gj-comment-resolve")
+	c.WaitFor("the resolved thread announced", `document.querySelector('.gj-announcer').textContent.includes('resolved')`)
+	a.OK(!strings.Contains(a.Text(".gj-announcer"), "resolved"), "the person who resolved it is not told")
+
 	// Closing a tab removes its cursor for the others.
 	c.Close()
 	a.WaitForTimeout("Vee to leave", `(s => !s.live.peers.includes('Vee'))(JSON.parse(document.getElementById('state').textContent))`, 40*time.Second)

@@ -654,20 +654,56 @@ func (u *ui) noteComments() {
 	if u.stateRef == nil || u.stateRef.Comments == nil {
 		return
 	}
-	seen := map[string]bool{}
+	seen := map[string]commentSeen{}
 	prefix := u.stateRef.Comments.IDPrefix // a shared session gives each copy of the document its own
 	for _, c := range u.stateRef.Comments.List() {
-		seen[c.ID] = true
-		mine := prefix != "" && strings.HasPrefix(c.ID, prefix)
-		if u.commentsSeen != nil && !u.commentsSeen[c.ID] && !mine {
-			who := c.Author
-			if who == "" {
-				who = T("collab.someone", "Someone")
+		seen[c.ID] = commentSeen{replies: len(c.Replies), resolved: c.Resolved}
+		if u.commentsSeen == nil {
+			continue // the first look only remembers
+		}
+		was, known := u.commentsSeen[c.ID]
+		if !known {
+			if prefix == "" || !strings.HasPrefix(c.ID, prefix) { // a new comment that is not the local person's
+				u.collab.NoteComment(authorOrSomeone(c.Author))
 			}
-			u.collab.NoteComment(who)
+			continue
+		}
+		// The local person's own replies and resolving update the snapshot as they are made
+		// (sealComments), so what differs here was done by someone else.
+		for i := was.replies; i < len(c.Replies); i++ {
+			u.collab.NoteReply(authorOrSomeone(c.Replies[i].Author))
+		}
+		if c.Resolved && !was.resolved {
+			u.collab.NoteResolved()
 		}
 	}
 	u.commentsSeen = seen
+}
+
+// commentSeen is what the page knew of a comment the last time it looked.
+type commentSeen struct {
+	replies  int
+	resolved bool
+}
+
+func authorOrSomeone(a string) string {
+	if a == "" {
+		return T("collab.someone", "Someone")
+	}
+	return a
+}
+
+// sealComments makes what is in the comment set now the known state without announcing it: the local
+// person's own reply or resolving is not news to them.
+func (u *ui) sealComments() {
+	if u.stateRef == nil || u.stateRef.Comments == nil || u.commentsSeen == nil {
+		return
+	}
+	for _, c := range u.stateRef.Comments.List() {
+		if _, known := u.commentsSeen[c.ID]; known {
+			u.commentsSeen[c.ID] = commentSeen{replies: len(c.Replies), resolved: c.Resolved}
+		}
+	}
 }
 
 // syncItem is the status bar item of a shared document (nil for one that is not shared).
@@ -682,4 +718,18 @@ func (u *ui) syncItem() *components.StatusItem {
 	}
 	it := components.SyncStatus(s.Status == client.Online, s.Status == client.Connecting, s.Pending, problem)
 	return &it
+}
+
+// commentSignature changes when a comment is added, a reply is added or a thread is resolved or opened
+// again, whoever did it.
+func commentSignature(set *canvas.CommentSet) string {
+	replies, resolved := 0, 0
+	list := set.List()
+	for _, c := range list {
+		replies += len(c.Replies)
+		if c.Resolved {
+			resolved++
+		}
+	}
+	return fmt.Sprintf("%d/%d/%d", len(list), replies, resolved)
 }
