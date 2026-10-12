@@ -127,7 +127,7 @@ func (PDF) Export(snap Snapshot) ([]byte, error) {
 			if b.TableRow == 0 && b.TableCol == 0 {
 				n := b.TableRows * b.TableCols
 				if n > 0 && i+n <= len(snap.Blocks) {
-					if err := renderPDFTable(&pdf, snap.Blocks[i:i+n], contentWidth, pxToPt(snap.MarginLeft)); err != nil {
+					if err := renderPDFTable(&pdf, snap.Blocks[i:i+n], i, contentWidth, pxToPt(snap.MarginLeft)); err != nil {
 						return nil, err
 					}
 					i += n - 1
@@ -137,14 +137,14 @@ func (PDF) Export(snap Snapshot) ([]byte, error) {
 					if err != nil {
 						return nil, err
 					}
-					if err := drawPDFWrappedBlock(&pdf, wrapped, pxToPt(snap.MarginLeft), pdfBaseFontSize, false, false, true, "", 0); err != nil {
+					if err := drawPDFWrappedBlock(&pdf, wrapped, pxToPt(snap.MarginLeft), pdfBaseFontSize, false, false, true, "", 0, pdfTag{kind: tagP, id: i}); err != nil {
 						return nil, err
 					}
 				}
 			}
 			continue
 		}
-		if err := renderPDFBlock(&pdf, snap, b, contentWidth); err != nil {
+		if err := renderPDFBlock(&pdf, snap, b, i, contentWidth); err != nil {
 			return nil, err
 		}
 	}
@@ -153,7 +153,7 @@ func (PDF) Export(snap Snapshot) ([]byte, error) {
 	if _, err := pdf.WriteTo(&buf); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	return tagPDF(buf.Bytes(), snap)
 }
 
 // registerPDFFonts loads the Go font family's four style variants
@@ -317,33 +317,36 @@ func trimTrailingSpaceToken(line []pdfToken) []pdfToken {
 // renderPDFImage. Never called with a TableCell block -- PDF.Export
 // intercepts every one of those itself (renderPDFTable), the only
 // Kind this function doesn't handle.
-func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, contentWidth float64) error {
+func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWidth float64) error {
 	if b.Kind == Image {
-		return renderPDFImage(pdf, snap, b, contentWidth)
+		return renderPDFImage(pdf, snap, b, idx, contentWidth)
 	}
 
 	fontSize := pdfBaseFontSize
 	var forceBold, forceItalic, mono bool
 	var indent, hang float64
 	var prefix string
+	tag := pdfTag{kind: tagP, id: idx}
 
 	switch b.Kind {
 	case Heading1:
-		fontSize, forceBold = pdfHeading1Size, true
+		fontSize, forceBold, tag.kind = pdfHeading1Size, true, tagH1
 	case Heading2:
-		fontSize, forceBold = pdfHeading2Size, true
+		fontSize, forceBold, tag.kind = pdfHeading2Size, true, tagH2
 	case Heading3:
-		fontSize, forceBold = pdfHeading3Size, true
+		fontSize, forceBold, tag.kind = pdfHeading3Size, true, tagH3
 	case Quote:
-		forceItalic, indent = true, pdfQuoteIndent
+		forceItalic, indent, tag.kind = true, pdfQuoteIndent, tagQuote
 	case BulletItem:
 		indent = pdfListIndentPerLevel * float64(b.Level+1)
 		hang = pdfListIndentPerLevel
 		prefix = "•"
+		tag.kind = tagLBody
 	case NumberedItem:
 		indent = pdfListIndentPerLevel * float64(b.Level+1)
 		hang = pdfListIndentPerLevel
 		prefix = strconv.Itoa(b.NumberedIndex) + "."
+		tag.kind, tag.a = tagLBody, 1
 	case Code:
 		mono = true
 	}
@@ -353,7 +356,7 @@ func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, contentWidth float
 	if err != nil {
 		return err
 	}
-	return drawPDFWrappedBlock(pdf, wrapped, pxToPt(snap.MarginLeft)+indent, fontSize, mono, forceBold, forceItalic, prefix, hang)
+	return drawPDFWrappedBlock(pdf, wrapped, pxToPt(snap.MarginLeft)+indent, fontSize, mono, forceBold, forceItalic, prefix, hang, tag)
 }
 
 // drawPDFWrappedBlock draws tokenLines starting at x0 (the block's own
@@ -364,7 +367,7 @@ func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, contentWidth float
 // own "current x,y is upper-left corner" semantics (unlike Text's
 // baseline-relative ones) let each token's own y stay the line's plain
 // top coordinate, no font-ascent estimate needed.
-func drawPDFWrappedBlock(pdf *gopdf.GoPdf, tokenLines [][]pdfToken, x0, fontSize float64, mono, forceBold, forceItalic bool, prefix string, hang float64) error {
+func drawPDFWrappedBlock(pdf *gopdf.GoPdf, tokenLines [][]pdfToken, x0, fontSize float64, mono, forceBold, forceItalic bool, prefix string, hang float64, tag pdfTag) error {
 	lineHeight := fontSize * pdfLineHeightMult
 	for li, tokens := range tokenLines {
 		pdf.SetNewY(pdf.GetY(), lineHeight)
@@ -379,10 +382,13 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, tokenLines [][]pdfToken, x0, fontSize
 				return err
 			}
 			pdf.SetXY(x0-hang, y)
+			pdfMarkBegin(pdf, pdfTag{kind: tagLbl, id: tag.id, a: tag.a})
 			if err := pdf.Cell(&gopdf.Rect{W: pw, H: lineHeight}, prefix); err != nil {
 				return err
 			}
+			pdfMarkEnd(pdf)
 		}
+		pdfMarkBegin(pdf, tag)
 
 		x := x0
 		for _, tok := range tokens {
@@ -419,6 +425,7 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, tokenLines [][]pdfToken, x0, fontSize
 			}
 			x += w
 		}
+		pdfMarkEnd(pdf)
 		pdf.SetY(y + lineHeight)
 	}
 	return nil
@@ -454,7 +461,7 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, tokenLines [][]pdfToken, x0, fontSize
 // to learn the row's own shared height (the tallest cell's own
 // wrapped line count) *before* deciding whether the row fits on the
 // current page, then draw every box/text using that now-known height.
-func renderPDFTable(pdf *gopdf.GoPdf, cells []Block, contentWidth, x0 float64) error {
+func renderPDFTable(pdf *gopdf.GoPdf, cells []Block, base int, contentWidth, x0 float64) error {
 	rows, cols := cells[0].TableRows, cells[0].TableCols
 	owners := tableMergeGrid(cells)
 	colWidth := contentWidth / float64(cols)
@@ -503,7 +510,14 @@ func renderPDFTable(pdf *gopdf.GoPdf, cells []Block, contentWidth, x0 float64) e
 			if d.w <= 0 {
 				continue
 			}
+			pdfMarkArtifact(pdf)
 			pdf.RectFromUpperLeftWithStyle(d.x, y, d.w, rowHeight, "D")
+			pdfMarkEnd(pdf)
+			kind := tagTD
+			if r == 0 {
+				kind = tagTH
+			}
+			pdfMarkBegin(pdf, pdfTag{kind: kind, id: base + r*cols + c, a: base, b: r<<16 | c})
 			ty := y + pdfTableCellPadding
 			for _, line := range d.wrapped {
 				tx := d.x + pdfTableCellPadding
@@ -523,6 +537,7 @@ func renderPDFTable(pdf *gopdf.GoPdf, cells []Block, contentWidth, x0 float64) e
 				}
 				ty += lineHeight
 			}
+			pdfMarkEnd(pdf)
 		}
 		pdf.SetY(y + rowHeight)
 	}
@@ -537,7 +552,7 @@ func renderPDFTable(pdf *gopdf.GoPdf, cells []Block, contentWidth, x0 float64) e
 // An undecodable image (a format image.Decode doesn't recognize, e.g.
 // an SVG) falls back to the same "[Image]" placeholder PlainText/RTF
 // already use rather than failing the whole export over one image.
-func renderPDFImage(pdf *gopdf.GoPdf, snap Snapshot, b Block, contentWidth float64) error {
+func renderPDFImage(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWidth float64) error {
 	img, err := decodeDataURLImage(b.ImageSrc)
 	if err != nil {
 		text := "[Image]"
@@ -548,7 +563,7 @@ func renderPDFImage(pdf *gopdf.GoPdf, snap Snapshot, b Block, contentWidth float
 		if werr != nil {
 			return werr
 		}
-		return drawPDFWrappedBlock(pdf, wrapped, pxToPt(snap.MarginLeft), pdfBaseFontSize, false, false, true, "", 0)
+		return drawPDFWrappedBlock(pdf, wrapped, pxToPt(snap.MarginLeft), pdfBaseFontSize, false, false, true, "", 0, pdfTag{kind: tagP, id: idx})
 	}
 
 	w, h := pxToPt(b.ImageW), pxToPt(b.ImageH)
@@ -563,9 +578,15 @@ func renderPDFImage(pdf *gopdf.GoPdf, snap Snapshot, b Block, contentWidth float
 
 	pdf.SetNewY(pdf.GetY(), h)
 	y := pdf.GetY()
+	if b.ImageDecorative {
+		pdfMarkArtifact(pdf)
+	} else {
+		pdfMarkBegin(pdf, pdfTag{kind: tagFigure, id: idx})
+	}
 	if err := pdf.ImageFrom(img, pxToPt(snap.MarginLeft), y, &gopdf.Rect{W: w, H: h}); err != nil {
 		return err
 	}
+	pdfMarkEnd(pdf)
 	pdf.SetY(y + h + pdfBaseFontSize*pdfLineHeightMult*0.3)
 
 	if b.ImageCaption != "" {
@@ -573,7 +594,7 @@ func renderPDFImage(pdf *gopdf.GoPdf, snap Snapshot, b Block, contentWidth float
 		if werr != nil {
 			return werr
 		}
-		if err := drawPDFWrappedBlock(pdf, wrapped, pxToPt(snap.MarginLeft), pdfBaseFontSize, false, false, true, "", 0); err != nil {
+		if err := drawPDFWrappedBlock(pdf, wrapped, pxToPt(snap.MarginLeft), pdfBaseFontSize, false, false, true, "", 0, pdfTag{kind: tagCaption, id: idx}); err != nil {
 			return err
 		}
 	}
