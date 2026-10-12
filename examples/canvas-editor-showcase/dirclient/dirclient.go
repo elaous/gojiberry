@@ -58,13 +58,39 @@ type WatchResult struct {
 	// the address it read.
 	HeadSeq int64
 	New     int
-	// Alerts are, in words, what the person did not do: entries made by somebody else, entries that
-	// break the owner rules, and entries dated ahead of this device's clock.
-	Alerts []string
+	// Alerts are what the person did not do: entries made by somebody else, entries that break the
+	// owner rules, and entries dated ahead of this device's clock. Each has a kind, so the page can
+	// word the ones that matter most (a reset of the owner key) in its own way, and a text in English.
+	Alerts []Alert
 	// Filtered: the server showed only the entries about the address (enroll an owner key to read
 	// the whole log). AddressUnconfirmed: no entry of this device confirms the log name of the
 	// address yet; publish or enroll, then watch again.
 	Filtered, AddressUnconfirmed bool
+}
+
+// AlertKind says what sort of thing an Alert reports.
+type AlertKind string
+
+const (
+	// AlertEntry is an entry about the address that the person did not make (a published or revoked key,
+	// an enrollment, a rotation).
+	AlertEntry AlertKind = "entry"
+	// AlertReset is a completed reset of the owner key: the key before it no longer signs.
+	AlertReset AlertKind = "reset"
+	// AlertResetRequest is a request to reset the owner key, which takes effect after the waiting
+	// period unless the owner cancels it.
+	AlertResetRequest AlertKind = "reset-request"
+	// AlertViolation is an entry that breaks the owner rules of an enrolled address.
+	AlertViolation AlertKind = "violation"
+)
+
+// Alert is one thing watching found.
+type Alert struct {
+	Kind AlertKind
+	// Seq is the number of the log entry.
+	Seq int64
+	// Text says it in English, with the entry number.
+	Text string
 }
 
 // ErrBadState: the saved watch state could not be read and was dropped.
@@ -441,10 +467,17 @@ func (c *Client) Watch(ctx context.Context, email string, owner OwnerSigner) (Wa
 	}
 	out := WatchResult{HeadSeq: rep.Head.Seq, New: len(rep.Entries), Filtered: rep.Filtered, AddressUnconfirmed: rep.AddressUnconfirmed}
 	for _, f := range rep.Foreign {
-		out.Alerts = append(out.Alerts, fmt.Sprintf("%s (log entry %d)", f.Message, f.Entry.Seq))
+		kind := AlertEntry
+		switch f.Entry.Op {
+		case encrypt.OpReset:
+			kind = AlertReset
+		case encrypt.OpResetRequest:
+			kind = AlertResetRequest
+		}
+		out.Alerts = append(out.Alerts, Alert{Kind: kind, Seq: f.Entry.Seq, Text: fmt.Sprintf("%s (log entry %d)", f.Message, f.Entry.Seq)})
 	}
 	for _, v := range rep.Violations {
-		out.Alerts = append(out.Alerts, fmt.Sprintf("log entry %d breaks the owner rules: %s", v.Seq, v.Why))
+		out.Alerts = append(out.Alerts, Alert{Kind: AlertViolation, Seq: v.Seq, Text: fmt.Sprintf("log entry %d breaks the owner rules: %s", v.Seq, v.Why)})
 	}
 	return out, nil
 }

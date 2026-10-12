@@ -512,3 +512,78 @@ func TestFirstSSHUnlockOnANewBrowserAsksForTheListFingerprint(t *testing.T) {
 	d.WaitFor("unlocked without a question", `(document.getElementById('enc-status') || {}).textContent === 'Unlocked'`)
 	d.NoErrors()
 }
+
+// Watching names a reset of the owner key as its own kind of alert: somebody else with a session of the
+// address asks for a reset and completes it after the directory's wait, and the page lists the request
+// and the reset, each marked with its kind and worded for what it means, and keeps them across a reload.
+func TestWatchNamesAResetOfTheOwnerKeyOnThePage(t *testing.T) {
+	site := e2etest.NewSite(t)
+	site.UseLocalhost()
+	srv, err := demoserver.New(site.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	site.Handle("/auth/", srv.Mux)
+	site.Handle("/directory/", srv.Mux)
+	site.Handle("/demo/", srv.Mux)
+
+	d := site.OpenURL(t, "/index.html?docstore="+url.QueryEscape(site.URL))
+	d.VirtualAuthenticator()
+	turnOn(t, d, "")
+	d.Click(`button[data-tab="people"]`)
+	d.WaitSelector("#dir-offer")
+	d.Click("#dir-offer-review")
+	confirmDialog(d)
+	d.WaitSelector("#dir-log-pin")
+	d.Click("#dir-log-pin")
+	d.WaitSelector("#dir-log-candidates li")
+	fp := strings.SplitN(d.Text("#dir-log-candidates li"), ": ", 2)[1]
+	d.Fill("#dir-log-expected", fp)
+	d.Click("#dir-log-pin-confirm")
+	d.WaitSelector("#dir-log-watch")
+	// my own entry confirms the log name of my address
+	d.Click(".gj-recip-publish")
+	d.WaitFor("published", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
+	d.Click("#dir-log-watch")
+	d.WaitFor("checked", `(document.querySelector('#dir-log-msg') || {textContent: ''}).textContent.includes('checked up to entry')`)
+	d.OK(!d.Has("#dir-log-alerts"), "nothing yet")
+
+	// Another session of the same address enrolls an owner key, asks for a reset and, once the wait is
+	// over, completes it with a key the page never had.
+	now := time.Now()
+	srv.Dir.Now = func() time.Time { return now }
+	tok, err := srv.Login("ana@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := &dirclient.Client{Base: site.URL, Token: func(context.Context) (string, error) { return tok, nil }, Now: func() time.Time { return now }}
+	ctx := context.Background()
+	first, _ := dirclient.GenerateOwnerKey()
+	second, _ := dirclient.GenerateOwnerKey()
+	if err := other.Enroll(ctx, "ana@example.com", first); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := other.RequestReset(ctx); err != nil {
+		t.Fatal(err)
+	}
+	d.Click("#dir-log-watch")
+	d.WaitFor("the request", `document.querySelectorAll('#dir-log-alerts li[data-kind="reset-request"]').length === 1`)
+	d.OK(d.Count(`#dir-log-alerts li[data-kind="reset"]`) == 0, "no reset yet")
+	now = now.Add(25 * time.Hour)
+	if err := other.CompleteReset(ctx, "ana@example.com", second); err != nil {
+		t.Fatal(err)
+	}
+	d.Click("#dir-log-watch")
+	d.WaitFor("the reset", `document.querySelectorAll('#dir-log-alerts li[data-kind="reset"]').length === 1`)
+	reset := d.Text(`#dir-log-alerts li[data-kind="reset"]`)
+	d.OK(strings.Contains(reset, "was reset") && strings.Contains(reset, "no longer signs"), "the reset is worded for what it means: "+reset)
+	d.OK(strings.Contains(d.Text(`#dir-log-alerts li[data-kind="reset-request"]`), "cancel the reset"), "the request says what to do: "+d.Text(`#dir-log-alerts li[data-kind="reset-request"]`))
+	d.OK(d.Count(`#dir-log-alerts li[data-kind="entry"]`) == 1, "the enrollment is a plain entry: "+d.Text("#dir-log-alerts"))
+
+	// the kinds are kept across a reload
+	d.Reload()
+	d.Click(`button[data-tab="people"]`)
+	d.WaitSelector("#dir-log-alerts")
+	d.OK(d.Count(`#dir-log-alerts li[data-kind="reset"]`) == 1 && d.Count(`#dir-log-alerts li[data-kind="reset-request"]`) == 1, "kinds survive a reload: "+d.Text("#dir-log-alerts"))
+	d.NoErrors()
+}
