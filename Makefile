@@ -184,6 +184,20 @@ coverage-badge: coverage
 wasm-size:
 	.github/scripts/wasm-size.sh examples/canvas-editor-showcase docs/wasm-budget.txt
 
+# showcase-dist builds the showcase for deployment into dist/showcase (override with SHOWCASE_DIST=...):
+# main.wasm, index.html and wasm_exec.js, plus a precompressed .gz of each (and a .br when the brotli
+# tool is installed) written by cmd/wasmdist (roadmap 82). Upload that directory; docs/deploy.md has the
+# server settings (types, gzip_static or precompressed, cache headers). It needs no credentials.
+SHOWCASE_DIST ?= dist/showcase
+.PHONY: showcase-dist
+showcase-dist:
+	rm -rf $(SHOWCASE_DIST)
+	mkdir -p $(SHOWCASE_DIST)
+	cd examples/canvas-editor-showcase && GOOS=js GOARCH=wasm go build -o $(abspath $(SHOWCASE_DIST))/main.wasm .
+	cp examples/canvas-editor-showcase/index.html $(SHOWCASE_DIST)/index.html
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" $(SHOWCASE_DIST)/wasm_exec.js
+	go run ./cmd/wasmdist $(SHOWCASE_DIST)
+
 # bench runs every Go benchmark in the module: buffer's own
 # GapBuffer-vs-naive-slice benchmarks (fast, native, no extra setup)
 # and examples/domrt-bench's own patch/patchChildren benchmarks (drives
