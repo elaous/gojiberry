@@ -92,5 +92,20 @@ func TestMirrorCaretFollowsBothWays(t *testing.T) {
 	// ...and it stays: the mirror putting its own selection back must not collapse it.
 	d.Sleep(400)
 	d.OK(d.Int(`JSON.parse(document.getElementById('state').textContent).cursors[0].Anchor`) == at-5 && d.Int(`JSON.parse(document.getElementById('state').textContent).cursors[0].Caret`) == at, "the canvas selection stays")
+
+	d.NoErrors()
+}
+
+// With the keyboard out of every field (here the input cannot take focus, as when a screen reader's browse
+// mode holds it), the mirror puts its own selection at the canvas caret and follows it to other blocks.
+func TestMirrorSelectionFollowsCaretOutsideFields(t *testing.T) {
+	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.Eval(`(() => { const i = document.getElementById('input'); i.blur(); i.focus = () => {}; })()`, nil)
+	d.CanvasClick(240, 164)
+	d.WaitFor("the mirror selection at the canvas caret", `(() => { const s = getSelection(); const m = document.getElementById('a11y-text'); return s.rangeCount > 0 && s.isCollapsed && m.contains(s.anchorNode); })()`)
+	first := d.Str(`(() => { let n = getSelection().anchorNode; n = n.nodeType === 1 ? n : n.parentElement; const b = n.closest('[data-gj-start]'); return b ? b.dataset.gjStart : ''; })()`)
+	d.CanvasClick(240, 420)
+	d.WaitFor("the mirror selection moved with the caret", `(() => { let n = getSelection().anchorNode; n = n.nodeType === 1 ? n : n.parentElement; const b = n.closest('[data-gj-start]'); return b ? b.dataset.gjStart : ''; })() !== `+e2etest.J(first))
 	d.NoErrors()
 }
