@@ -20,6 +20,8 @@ type FidelityReport struct {
 	// Known says the host knows what the format writes (or reads); false makes the panel say so instead
 	// of "nothing is lost".
 	Known bool
+	// Pending says the report is still being worked out (the host does it elsewhere); the panel says so.
+	Pending bool
 }
 
 // FidelityPanelProps configures FidelityPanel.
@@ -182,6 +184,8 @@ func FidelityPanel(p FidelityPanelProps) xango.Node {
 	}
 	var summary string
 	switch {
+	case p.Export.Pending:
+		summary = trf("fidelity.checking", "%s: checking what this format keeps…", label)
 	case !p.Export.Known:
 		summary = trf("fidelity.unknown", "%s: what this format keeps is not known for this document.", label)
 	case len(p.Export.Losses) == 0:

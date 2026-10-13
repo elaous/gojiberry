@@ -141,7 +141,7 @@ func downloadChoices(exporters []transfer.Exporter) []components.SaverChoice {
 		title string
 		names []string
 	}{
-		{T("download.group.documents", "Documents"), []string{"docx", "pdf", "rtf", "epub"}},
+		{T("download.group.documents", "Documents"), []string{"docx", "odt", "pdf", "rtf", "epub"}},
 		{T("download.group.web", "Web and text"), []string{"html", "markdown", "text"}},
 		{T("download.group.data", "Data"), []string{"json", "proto-text", "proto"}},
 		{T("download.group.opendocs", "opendocs"), []string{"open"}},

@@ -1,6 +1,6 @@
 // Package migrate moves documents from other platforms into a Saver: a Source
 // lists and fetches Word files (Google Docs exports them, OneDrive keeps them),
-// Run walks the folders chosen, converts each file with docximport and hands the
+// Run walks the folders chosen, converts each file with a Word importer (Options.Import) and hands the
 // document to a Sink, and Session is the state behind components.Migrate.
 //
 // Signing in is not here: a source is made with an access token the host got
@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/elaous/gojiberry/docfile"
-	"github.com/elaous/gojiberry/docximport"
 )
 
 // Item is a folder or a document at a source.
@@ -56,9 +55,17 @@ const (
 	MaxFileBytes = 64 << 20
 )
 
+// DefaultImport converts a Word file when Options.Import is nil. It is not set here, so that a program that
+// reads Word files elsewhere (in another wasm, as the showcase does) does not link the reader; a program that
+// wants it in the same binary sets it to docximport.Import.
+var DefaultImport func([]byte) (docfile.Document, error)
+
+// ErrNoImporter is returned by Run when neither Options.Import nor DefaultImport is set.
+var ErrNoImporter = errors.New("migrate: no Word importer is set (Options.Import)")
+
 // Options configures Run.
 type Options struct {
-	// Import converts a Word file; nil is docximport.Import.
+	// Import converts a Word file; nil is DefaultImport.
 	Import func([]byte) (docfile.Document, error)
 	// Tag is put on every document made ("google-docs").
 	Tag string
@@ -135,7 +142,10 @@ func Run(ctx context.Context, src Source, items []Item, sink Sink, o Options) (R
 	}
 	imp := o.Import
 	if imp == nil {
-		imp = docximport.Import
+		imp = DefaultImport
+	}
+	if imp == nil {
+		return rep, ErrNoImporter
 	}
 	for i, f := range files {
 		if err := ctx.Err(); err != nil {

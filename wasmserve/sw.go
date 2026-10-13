@@ -10,8 +10,13 @@ import (
 	"strings"
 )
 
-// DefaultShell is what the service worker keeps: the page, the Go runtime script and the program.
-var DefaultShell = []string{"index.html", "wasm_exec.js", "main.wasm"}
+// DefaultShell is what the service worker keeps from the first visit: the page, the Go runtime script and the
+// program. DefaultLazy is what it keeps once it has been used (a second program in a web worker, for the formats
+// of files): kept when first fetched, not fetched ahead, so a visitor who never needs it never downloads it.
+var (
+	DefaultShell = []string{"index.html", "wasm_exec.js", "main.wasm"}
+	DefaultLazy  = []string{"files-worker.js", "files.wasm"}
+)
 
 // ServiceWorker returns the script of a service worker that keeps the app shell (the files of
 // shell, or DefaultShell when it is empty, that exist in fsys) in a cache named for the version of
@@ -28,33 +33,41 @@ var DefaultShell = []string{"index.html", "wasm_exec.js", "main.wasm"}
 // with Options.ServiceWorker; cmd/wasmdist writes the file), and register it from the page:
 //
 //	navigator.serviceWorker.register("sw.js")
-func ServiceWorker(fsys fs.FS, shell []string) ([]byte, error) {
+func ServiceWorker(fsys fs.FS, shell []string, lazy ...string) ([]byte, error) {
 	if len(shell) == 0 {
 		shell = DefaultShell
+		if len(lazy) == 0 {
+			lazy = DefaultLazy
+		}
 	}
 	h := sha256.New()
-	var files []string
-	for _, name := range shell {
-		b, err := fs.ReadFile(fsys, name)
-		if err != nil {
-			continue
+	existing := func(names []string) []string {
+		files := []string{}
+		for _, name := range names {
+			b, err := fs.ReadFile(fsys, name)
+			if err != nil {
+				continue
+			}
+			files = append(files, name)
+			h.Write([]byte(name + "\x00"))
+			h.Write(b)
+			h.Write([]byte{0})
 		}
-		files = append(files, name)
-		h.Write([]byte(name + "\x00"))
-		h.Write(b)
-		h.Write([]byte{0})
+		return files
 	}
+	files, later := existing(shell), existing(lazy)
 	if len(files) == 0 {
 		return nil, errors.New("wasmserve: none of the shell files exist")
 	}
 	list, _ := json.Marshal(files)
+	lazyList, _ := json.Marshal(later)
 	version := hex.EncodeToString(h.Sum(nil))[:16]
-	return []byte(strings.NewReplacer("__VERSION__", version, "__FILES__", string(list)).Replace(swTemplate)), nil
+	return []byte(strings.NewReplacer("__VERSION__", version, "__FILES__", string(list), "__LAZY__", string(lazyList)).Replace(swTemplate)), nil
 }
 
 // ServeServiceWorker answers a request for sw.js with the script for fsys.
-func ServeServiceWorker(w http.ResponseWriter, r *http.Request, fsys fs.FS, shell []string) {
-	script, err := ServiceWorker(fsys, shell)
+func ServeServiceWorker(w http.ResponseWriter, r *http.Request, fsys fs.FS, shell []string, lazy ...string) {
+	script, err := ServiceWorker(fsys, shell, lazy...)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -69,6 +82,7 @@ const VERSION = "__VERSION__";
 const PREFIX = "gojiberry-app-";
 const CACHE = PREFIX + VERSION;
 const SHELL = __FILES__;
+const LAZY = __LAZY__; // kept when first fetched, not before
 
 // keep fetches a file (cache: "reload", so the copy kept is the server's, not an older one in the browser's
 // own HTTP cache) and stores it whole. It is read into memory first rather than streamed into the cache, and
@@ -106,6 +120,16 @@ self.addEventListener("fetch", (event) => {
   if (SHELL.includes(rel)) {
     // The shell is read from the cache first; a miss goes to the network.
     event.respondWith(caches.open(CACHE).then((c) => c.match(scope + rel).then((hit) => hit || fetch(req))));
+    return;
+  }
+  if (LAZY.includes(rel)) {
+    // Read whole, then kept (a stream of this size into the cache can be cut off), and handed on.
+    event.respondWith(caches.open(CACHE).then((c) => c.match(scope + rel).then((hit) => hit || fetch(req).then(async (res) => {
+      if (!res.ok) return res;
+      const body = await res.arrayBuffer();
+      await c.put(new Request(scope + rel), new Response(body, { status: 200, headers: res.headers }));
+      return new Response(body, { status: 200, headers: res.headers });
+    }))));
     return;
   }
   if (req.mode === "navigate") {

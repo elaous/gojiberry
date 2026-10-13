@@ -64,15 +64,22 @@ func (a acceptedExporter) Export(d docfile.Document) ([]byte, error) {
 	return a.Exporter.Export(acceptedView(d).MediaAsText().EquationsAsText())
 }
 
-// Register adds the formats this package handles to r. It writes HTML, RTF,
-// EPUB, PDF, OpenDocument and Word (.docx), and reads Word, OpenDocument, HTML and PDF text. (Markdown and plain
-// text are in transfer.Default; for braille see package braille.)
-func Register(r *transfer.Registry) {
+// RegisterAccepted makes the Markdown and plain-text exporters of transfer.Default write the document as it
+// would be with every suggestion accepted (Register does it too). It pulls in none of the heavy formats, for a
+// program that does those elsewhere (package export/remote).
+func RegisterAccepted(r *transfer.Registry) {
 	for _, e := range r.Exporters() { // Markdown and plain text of transfer.Default read the text as it is
 		if n := e.Format().Name; n == "markdown" || n == "text" {
 			r.AddExporter(acceptedExporter{e})
 		}
 	}
+}
+
+// Register adds the formats this package handles to r. It writes HTML, RTF,
+// EPUB, PDF, OpenDocument and Word (.docx), and reads Word, OpenDocument, HTML and PDF text. (Markdown and plain
+// text are in transfer.Default; for braille see package braille.)
+func Register(r *transfer.Registry) {
+	RegisterAccepted(r)
 	for _, f := range []formatExporter{
 		{transfer.Format{Name: "html", Label: "Web page (HTML)", Exts: []string{".html"}, MIME: "text/html"}, HTML{}, true},
 		{transfer.Format{Name: "rtf", Label: "Rich Text Format", Exts: []string{".rtf"}, MIME: "application/rtf"}, RTF{}, false},

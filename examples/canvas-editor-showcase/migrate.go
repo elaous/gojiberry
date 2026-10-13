@@ -8,6 +8,7 @@ import (
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/export/remote"
 	"github.com/elaous/gojiberry/migrate"
 	"github.com/elaous/gojiberry/transfer"
 )
@@ -37,6 +38,7 @@ func newMigrate(u *ui, renderUI func()) *migrate.Session {
 	s.OnChange = func() { renderUI() }
 	s.OnDone = func(migrate.Report) { u.saver.Pending.Run(u.saver.Refresh) }
 	s.Deliver = transfer.Download
+	s.Import = remote.WordImport(callFiles) // the Word reader is in the file worker
 	return s
 }
 
