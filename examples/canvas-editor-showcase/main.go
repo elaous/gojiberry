@@ -106,6 +106,7 @@ type ui struct {
 	shareLink           string // the link the Share tab shows
 	people              *peopleState
 	shareToken          string     // a share link the person chose to use (#share=); sent with every request to the server
+	speech              *speechUI  // the Speech tab: phrases to record, and dictation through a recogniser the person names
 	usage               *privacyUI // the Privacy tab: anonymous usage counts, off unless the person opts in
 	sa                  searchAll
 	enc                 *encUI // the encrypted browser store: off unless the person turns it on
@@ -303,6 +304,7 @@ func main() {
 	if tok := takeFragment(); tok != "" { // a share link in the address is offered in the People tab, never applied by itself
 		u.people.links.incoming, u.tab = tok, "people"
 	}
+	u.speech = newSpeech(func() { renderUI() })
 	u.usage = newPrivacy(u.tab, &u.enc.dir)
 	u.usage.render = func() { renderUI(); redraw() } // redraw refreshes #state
 	go u.usage.run()
@@ -392,7 +394,7 @@ func main() {
 				tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "review", "Review", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI), tabButton(u, "images", "Pictures", renderUI),
 				tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
-				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "privacy", "Privacy", renderUI)),
+				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "speech", "Speech", renderUI), tabButton(u, "privacy", "Privacy", renderUI)),
 		)
 
 		roleButtons := []xango.Node{xango.El("span", []xango.Attr{xango.A("style", "font-size:12px;color:#6b7280")}, xango.Text("Role:"))}
@@ -477,6 +479,14 @@ func main() {
 			}
 		case "people":
 			panel = xango.Frag(u.people.panel(u.saver.Asker.Ask), u.encPeopleOrNone(), u.saver.Asker.Dialog())
+		case "speech":
+			panel = u.speech.panel(func(text string) bool {
+				if flow != nil && flow.InsertText(text) {
+					redraw()
+					return true
+				}
+				return false
+			})
 		case "privacy":
 			panel = u.usage.panel(u)
 		case "share":
