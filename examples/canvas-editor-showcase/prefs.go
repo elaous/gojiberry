@@ -31,7 +31,7 @@ type prefs struct {
 	TypeFmt  string `json:"typefmt,omitempty"`  // "on": formatting changes at the caret are said
 	TypeRead string `json:"typeread,omitempty"` // "on": the line is read when the caret moves
 	Collab   string `json:"collab,omitempty"`   // what is announced of a shared session: "" everything, "important", "off"
-	Memory   string `json:"memory,omitempty"`   // "low": fewer undo steps kept; "normal": the person turned it off; "" automatic (low on a device that reports 2 GB or less)
+	Memory   string `json:"memory,omitempty"`   // "low": fewer undo steps kept; "high": many; "normal": the person turned it off; "" automatic (low on a device that reports 2 GB or less)
 	Where    string `json:"where,omitempty"`    // "on": the presence list has a "Where is <name>?" button for each collaborator
 }
 
@@ -86,7 +86,7 @@ func loadPrefs() prefs {
 	if p.Where != "on" {
 		p.Where = ""
 	}
-	if p.Memory != "low" && p.Memory != "normal" {
+	if p.Memory != "low" && p.Memory != "normal" && p.Memory != "high" {
 		p.Memory = ""
 	}
 	return p
@@ -98,24 +98,35 @@ func lowMemory(p prefs) bool {
 	switch p.Memory {
 	case "low":
 		return true
-	case "normal":
+	case "normal", "high":
 		return false
 	}
 	dm := js.Global().Get("navigator").Get("deviceMemory")
 	return dm.Type() == js.TypeNumber && dm.Float() > 0 && dm.Float() <= 2
 }
 
-// lowMemorySteps is how many undo steps are kept in low-memory mode.
-const lowMemorySteps = 20
+// lowMemorySteps is how many undo steps are kept in low-memory mode, and manySteps for a person who asked
+// for a long history.
+const (
+	lowMemorySteps = 20
+	manySteps      = 1000
+)
+
+// historySteps is how many undo steps the preferences ask for.
+func historySteps(p prefs) int {
+	switch {
+	case p.Memory == "high":
+		return manySteps
+	case lowMemory(p):
+		return lowMemorySteps
+	}
+	return canvas.DefaultHistoryLimit
+}
 
 // applyPrefs sets the preferences on the root element (an empty one removes its attribute) and the
 // length of the undo history.
 func applyPrefs(p prefs) {
-	if lowMemory(p) {
-		canvas.SetHistoryLimit(lowMemorySteps)
-	} else {
-		canvas.SetHistoryLimit(canvas.DefaultHistoryLimit)
-	}
+	canvas.SetHistoryLimit(historySteps(p))
 	root := js.Global().Get("document").Get("documentElement")
 	for k, v := range p.attrs() {
 		if v == "" {
@@ -195,6 +206,7 @@ func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
 		toggle(T("prefs.ghost", "Show a suggestion after the caret (Tab accepts)"), curPrefs.Ghost == "on", func(p *prefs, on bool) { p.Ghost = map[bool]string{true: "on"}[on] }),
 		toggle(T("prefs.targets", "Large targets"), curPrefs.Targets == "large", func(p *prefs, on bool) { p.Targets = map[bool]string{true: "large"}[on] }),
 		toggle(T("prefs.memory", "Save memory (keep fewer undo steps)"), lowMemory(curPrefs), func(p *prefs, on bool) { p.Memory = map[bool]string{true: "low", false: "normal"}[on] }),
+		toggle(T("prefs.undoMany", "Keep many undo steps (1000)"), curPrefs.Memory == "high", func(p *prefs, on bool) { p.Memory = map[bool]string{true: "high", false: "normal"}[on] }),
 		toggle(T("prefs.focus", "Distraction-free mode"), curPrefs.Focus == "on", func(p *prefs, on bool) { p.Focus = map[bool]string{true: "on"}[on] }),
 		{Separator: true},
 		{Label: T("prefs.privacy", "Privacy settings…"), OnSelect: func() { u.tab = "privacy"; renderUI() }},
