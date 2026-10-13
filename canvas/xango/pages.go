@@ -68,8 +68,8 @@ func textOf(p string, children []xango.Node) string {
 	return strings.TrimSpace(sb.String())
 }
 
-func hfOf(text string, style *canvas.TextStyle, al canvas.Align, off float64) *canvas.HeaderFooter {
-	hf := &canvas.HeaderFooter{Text: text, Align: al, Offset: off}
+func hfOf(text string, style *canvas.TextStyle, al canvas.Align, off float64, parts [3]string) *canvas.HeaderFooter {
+	hf := &canvas.HeaderFooter{Text: text, Align: al, Offset: off, Parts: parts}
 	if style != nil {
 		hf.Style = *style
 	}
@@ -135,8 +135,8 @@ func buildPages(p TextFlowProps) []canvas.Page {
 
 		var wantH *canvas.HeaderFooter
 		if f.header != nil && !f.header.None {
-			wantH = hfOf(textOf(f.header.Text, f.header.Children), f.header.Style, f.header.Align, f.header.Offset)
-			if wantH.Text == "" {
+			wantH = hfOf(textOf(f.header.Text, f.header.Children), f.header.Style, f.header.Align, f.header.Offset, f.header.Parts)
+			if wantH.Text == "" && !wantH.HasParts() {
 				wantH = nil
 			}
 		}
@@ -144,8 +144,8 @@ func buildPages(p TextFlowProps) []canvas.Page {
 
 		var wantF *canvas.HeaderFooter
 		if f.footer != nil && !f.footer.None {
-			wantF = hfOf(textOf(f.footer.Text, nil), f.footer.Style, f.footer.Align, f.footer.Offset)
-			if wantF.Text == "" {
+			wantF = hfOf(textOf(f.footer.Text, nil), f.footer.Style, f.footer.Align, f.footer.Offset, f.footer.Parts)
+			if wantF.Text == "" && !wantF.HasParts() {
 				wantF = nil
 			}
 		}

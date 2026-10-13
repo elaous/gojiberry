@@ -13,6 +13,10 @@ type State struct {
 	Pages int
 	// Setup is the paper, orientation and margins of every sheet.
 	Setup components.PageSetup
+	// RunHeader and RunFooter are the running header and footer of the print layout (fields {page}, {pages}
+	// and {title}, a tab between the left, centre and right parts); empty is the sample's own header and
+	// page number. DocTitle fills {title}.
+	RunHeader, RunFooter, DocTitle string
 	// Spread shows the sheets two to a row, as facing pages.
 	Spread bool
 	// Source is the document's starting Markdown; once the text is edited

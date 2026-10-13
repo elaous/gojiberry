@@ -61,7 +61,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 77 | Templates, styles, design tokens | feature | partial | named styles, tokens, themed HTML export | storing sets in the central store; applying them to the canvas and other exports; a theme editor |
 | 78 | Equations, diagrams, code, footnotes | feature | partial | MathML with text alternative, code language, diagram descriptions, footnote links both ways in HTML, Word and Markdown | footnote links in PDF and RTF; equations as OMML in Word |
 | 79 | Autocomplete word picker | feature | partial | ranked suggestion list as an ARIA listbox, ghost text, de/fr/es word lists | ghost text drawn on the canvas (it is a DOM element), run font, mid-line; larger lists; reader run (blocked) |
-| 80 | Print layout | feature | partial | page model, headers and footers, page numbers, contents, widow control in the exports | on-screen pagination with running header; contents page numbers in Word and RTF; table-row widow control; sheet size restore |
+| 80 | Print layout | feature | partial | page model, headers and footers, page numbers, contents, widow control in the exports; the same running header and footer on the screen sheets | odd and even headers; contents page on the screen; contents page numbers in Word and RTF; table-row widow control; sheet size restore |
 | 81 | Admin side | feature | partial | audit event schema, readiness route, backup and restore, `/admin/usage` and history page, observability core and PostHog sink | hub and sync/font/translation servers instrumented; persistent builtin totals; usage series across restarts |
 | 82 | Performance and size | enhancement | partial | wasm size budget (30.0 MB raw, 7.7 MB gzip) checked in CI, stripped build, precompressed wasm, `wasmdist`, deploy recipe | splitting the wasm; service-worker caching with versioned keys; low-memory mode; recipes untested on nginx/Caddy (blocked) |
 | 83 | i18n depth | enhancement | partial | de, fr, es packs, a test that every message id is in a pack, plurals and dates | stale-id check, time zones, languages beyond four, RTL packs, ids built at run time |
@@ -127,7 +127,6 @@ security table: the review findings are done; still open are the per-account sig
 
 1. 81: metrics for the other servers' own work; persistent builtin totals.
 2. 56: keep recordings between visits and learn from corrections.
-3. 80: on-screen pagination with the running header.
 4. 68: an insert-clip UI and caption track editor.
 5. 82 steps (the wasm keeps growing: 30 MB now) 3 to 5: split the wasm, service-worker caching, low-memory mode.
 6. Then the small leftovers of 59, 61, 64, 65, 50 and 51.
