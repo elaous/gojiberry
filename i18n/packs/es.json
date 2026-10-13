@@ -1036,6 +1036,8 @@
   "fidelity.f.mediaCaptions": "Pistas de subtítulos",
   "fidelity.n.mediaText": "Se escribe como un enlace al clip con su transcripción como texto; el clip no está incrustado.",
   "fidelity.n.captionWords": "La pista de subtítulos no se escribe; sus palabras se escriben como transcripción.",
+  "prefs.ghost": "Mostrar una sugerencia tras el cursor (Tab la acepta)",
+  "ghost.offer": "Sugerencia: %s. Pulse Tab para aceptarla.",
   "fidelity.f.codeLanguage": "Lenguaje de los bloques de código",
   "fidelity.f.imageLongDesc": "Descripciones largas de diagramas",
   "fidelity.n.altText": "Se escribe como su alternativa de texto; la fórmula no se compone.",

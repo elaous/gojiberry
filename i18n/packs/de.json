@@ -1036,6 +1036,8 @@
   "fidelity.f.mediaCaptions": "Untertitelspuren",
   "fidelity.n.mediaText": "Als Link auf den Clip mit seinem Transkript als Text geschrieben; der Clip ist nicht eingebettet.",
   "fidelity.n.captionWords": "Die Untertitelspur wird nicht geschrieben; ihre Wörter stehen als Transkript.",
+  "prefs.ghost": "Vorschlag hinter dem Cursor zeigen (Tab übernimmt ihn)",
+  "ghost.offer": "Vorschlag: %s. Mit Tab übernehmen.",
   "fidelity.f.codeLanguage": "Sprache von Codeblöcken",
   "fidelity.f.imageLongDesc": "Ausführliche Beschreibungen von Diagrammen",
   "fidelity.n.altText": "Als Textalternative geschrieben; die Formel wird nicht gesetzt.",

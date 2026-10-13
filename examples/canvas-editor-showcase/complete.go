@@ -9,6 +9,7 @@ import (
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/complete"
+	"github.com/elaous/gojiberry/complete/wordlist"
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/xango"
 )
@@ -67,25 +68,36 @@ func (u *ui) refreshSuggestions(flow *canvas.TextFlow) bool {
 	text := []rune(flow.EditText())
 	caret := flow.Cursors()[0].Caret
 	prefix, from := complete.PrefixAt(text, caret)
-	var ix complete.Index
-	ix.AddVocabulary(suggestVocabulary, 1)
-	ix.AddText(string(text[:from]))
-	ix.AddText(string(text[complete.WordEnd(text, caret):])) // the words around the one being typed
-	if c := u.spell.checker; c != nil && u.spell.enabled {
-		// With the spelling dictionary on, its words (and the person's own) fill the list after the words
-		// of the document; nothing else is loaded for this.
-		ix.AddVocabulary(c.CompleteMany(prefix, 20), 1)
-	}
-	var words []string
-	for _, s := range ix.Suggest(prefix, complete.Options{Max: 7}) {
-		words = append(words, s.Word)
-	}
+	words := u.completions(text, caret, prefix, 7)
 	u.sugg.from = from
 	u.sugg.list.Show(words)
 	if !u.sugg.list.Open {
 		syncComboboxAttrs(false, u.sugg.list)
 	}
 	return u.sugg.list.Open
+}
+
+// completions are the words that continue prefix (the word before the caret in text): the document's
+// own words, then the vocabulary of the document's language (German, French and Spanish have a small
+// list of common words, package wordlist), then the spelling dictionary's and the person's own when
+// spell check is on. Nothing leaves the page.
+func (u *ui) completions(text []rune, caret int, prefix string, max int) []string {
+	_, from := complete.PrefixAt(text, caret)
+	var ix complete.Index
+	ix.AddVocabulary(suggestVocabulary, 1)
+	if ws := wordlist.For(u.docLang); ws != nil {
+		ix.AddVocabulary(ws, 1)
+	}
+	ix.AddText(string(text[:from]))
+	ix.AddText(string(text[complete.WordEnd(text, caret):])) // the words around the one being typed
+	if c := u.spell.checker; c != nil && u.spell.enabled {
+		ix.AddVocabulary(c.CompleteMany(prefix, 20), 1)
+	}
+	var words []string
+	for _, s := range ix.Suggest(prefix, complete.Options{Max: max}) {
+		words = append(words, s.Word)
+	}
+	return words
 }
 
 // acceptSuggestion puts the highlighted word in place of the word being typed.
@@ -141,6 +153,9 @@ func (u *ui) watchSuggestionKeys(in js.Value, flow func() *canvas.TextFlow, redr
 	u.sugg.flow = flow
 	in.Call("addEventListener", "keydown", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		e := args[0]
+		if u.ghostKey(e, flow(), renderUI, redraw) {
+			return nil
+		}
 		if !u.sugg.list.Open || e.Get("isComposing").Truthy() || e.Get("ctrlKey").Truthy() || e.Get("metaKey").Truthy() || e.Get("altKey").Truthy() {
 			return nil
 		}
@@ -172,6 +187,9 @@ func (u *ui) watchSuggestionKeys(in js.Value, flow func() *canvas.TextFlow, redr
 	// the "suggest as I type" preference the list opens by itself after a short pause in typing.
 	in.Call("addEventListener", "keyup", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if !u.sugg.list.Open {
+			if k := args[0].Get("key").String(); ghostOn() && u.ghost.refresh != nil && !args[0].Get("isComposing").Truthy() && (len(k) == 1 || k == "Backspace" || k == "Delete") {
+				u.ghost.refresh()
+			}
 			if curPrefs.Suggest == "auto" && u.sugg.reopen != nil && !u.sugg.timer && len(args[0].Get("key").String()) == 1 && !args[0].Get("isComposing").Truthy() {
 				u.sugg.timer = true
 				time.AfterFunc(600*time.Millisecond, func() {

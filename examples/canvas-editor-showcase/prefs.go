@@ -24,6 +24,7 @@ type prefs struct {
 	Focus    string `json:"focus,omitempty"`    // "on": distraction-free
 	Targets  string `json:"targets,omitempty"`  // "large"
 	Suggest  string `json:"suggest,omitempty"`  // word suggestions: "auto" opens the list while typing
+	Ghost    string `json:"ghost,omitempty"`    // "on": the best word is shown faintly after the caret, Tab accepts it
 	Speed    string `json:"speed,omitempty"`    // reading aloud: "slow", "fast"
 	Typing   string `json:"typing,omitempty"`   // what is said of typed text: "words", "characters"; "" nothing
 	TypeFmt  string `json:"typefmt,omitempty"`  // "on": formatting changes at the caret are said
@@ -61,6 +62,9 @@ func loadPrefs() prefs {
 	}
 	if p.Suggest != "auto" {
 		p.Suggest = ""
+	}
+	if p.Ghost != "on" {
+		p.Ghost = ""
 	}
 	if p.Speed != "slow" && p.Speed != "fast" {
 		p.Speed = ""
@@ -161,6 +165,7 @@ func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
 		toggle(T("prefs.typingRead", "Read the line when the caret moves"), curPrefs.TypeRead == "on", func(p *prefs, on bool) { p.TypeRead = map[bool]string{true: "on"}[on] }),
 		{Separator: true},
 		toggle(T("prefs.suggestAuto", "Suggest words as I type"), curPrefs.Suggest == "auto", func(p *prefs, on bool) { p.Suggest = map[bool]string{true: "auto"}[on] }),
+		toggle(T("prefs.ghost", "Show a suggestion after the caret (Tab accepts)"), curPrefs.Ghost == "on", func(p *prefs, on bool) { p.Ghost = map[bool]string{true: "on"}[on] }),
 		toggle(T("prefs.targets", "Large targets"), curPrefs.Targets == "large", func(p *prefs, on bool) { p.Targets = map[bool]string{true: "large"}[on] }),
 		toggle(T("prefs.focus", "Distraction-free mode"), curPrefs.Focus == "on", func(p *prefs, on bool) { p.Focus = map[bool]string{true: "on"}[on] }),
 		{Separator: true},
