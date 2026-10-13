@@ -88,7 +88,7 @@ func statsPanel(st canvas.FlowStats, sheets int) xango.Node {
 		return xango.El("tr", nil, xango.El("td", nil, xango.Text(label)), xango.El("td", []xango.Attr{xango.A("style", "text-align:right")}, xango.Text(fmt.Sprint(whole))), selCell)
 	}
 	return xango.El("table", []xango.Attr{xango.A("id", "stats"), xango.A("style", "width:100%;border-collapse:collapse")},
-		xango.El("tr", nil, xango.El("th", []xango.Attr{xango.A("style", "text-align:left")}, xango.Text("")), xango.El("th", nil, xango.Text("Document")), xango.El("th", nil, xango.Text("Selection"))),
+		xango.El("tr", nil, xango.El("th", []xango.Attr{xango.A("style", "text-align:left")}, xango.El("span", []xango.Attr{xango.A("class", "gj-sr-only")}, xango.Text("Measure"))), xango.El("th", nil, xango.Text("Document")), xango.El("th", nil, xango.Text("Selection"))),
 		row("Words", st.Text.Words, st.Selection.Words),
 		row("Characters", st.Text.Characters, st.Selection.Characters),
 		row("Characters (no spaces)", st.Text.CharactersNoSpaces, st.Selection.CharactersNoSpaces),

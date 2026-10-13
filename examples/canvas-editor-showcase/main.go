@@ -645,7 +645,14 @@ func main() {
 		if u.live != nil {
 			topRow = livePresence(u, func() *canvas.TextFlow { return flow }, renderUI)
 		}
-		side := xango.Frag(topRow, panel,
+		// The side panel's own heading, so that the titles inside it (levels 3 and 4) follow the page's
+		// level 2 without a skip.
+		tabID := u.tab
+		if tabID == "" {
+			tabID = "format"
+		}
+		panelHead := xango.El("h3", []xango.Attr{xango.A("class", "gj-sr-only")}, xango.Text(components.Translate("tab."+tabID, strings.ToUpper(tabID[:1])+tabID[1:])))
+		side := xango.Frag(topRow, panelHead, panel,
 			xango.El("div", []xango.Attr{xango.A("id", "link-preview"), xango.A("style", "margin-top:1em")},
 				components.LinkPreview(components.LinkPreviewProps{
 					URL: u.hoverLink, Title: "Gojiberry", Description: "Go components that render to HTML, the DOM, Gio and a canvas.",

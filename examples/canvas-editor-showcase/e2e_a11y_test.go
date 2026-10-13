@@ -216,7 +216,8 @@ func TestCheckTabListsFindingsAndGoesToThem(t *testing.T) {
 	d.OK(strings.Contains(d.Text("#gj-check-summary"), "1 findings: 0 errors, 1 warnings"), d.Text("#gj-check-summary"))
 	d.OK(strings.Contains(d.Text(".gj-check-item"), "warning: ") && strings.Contains(d.Text(".gj-check-item"), "Deep heading") && strings.Contains(d.Text(".gj-check-fix"), "level 2"), "it says what and how to fix: "+d.Text(".gj-check-item"))
 	d.OK(d.Text(".gj-announcer") == "Accessibility check: 1 findings", "announced: "+d.Text(".gj-announcer"))
-	for _, v := range d.Axe("", axeDisabled...) {
+	// (The document itself has a heading level that skips, which is what the finding is about: axe sees it too.)
+	for _, v := range d.Axe("", append([]string{"heading-order"}, axeDisabled...)...) {
 		t.Errorf("the Check tab with a finding: %s", v)
 	}
 	d.OK(d.Has(".gj-check-fix-button") && strings.Contains(d.Text(".gj-check-fix-button"), "level 2"), "the heading has a one-click fix: "+d.Text(".gj-check-fix-button"))

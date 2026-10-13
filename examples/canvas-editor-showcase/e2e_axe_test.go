@@ -12,11 +12,7 @@ import (
 
 // axeDisabled lists the rules the showcase does not enforce yet, each with why. A rule is added here
 // only with a roadmap entry that tracks fixing it.
-var axeDisabled = []string{
-	// The panels' titles are h4 (the components' own level) under a page whose headings are in the
-	// screen-reader copy of the document; the levels skip. Roadmap item 48, "heading levels".
-	"heading-order",
-}
+var axeDisabled = []string{}
 
 // TestNoAccessibilityViolationsAxe runs axe-core over the page in the states a person meets: the
 // document, every tab of the side panel, every menu open, and the find bar. A new violation fails
@@ -31,7 +27,7 @@ func TestNoAccessibilityViolationsAxe(t *testing.T) {
 		}
 	}
 	check("the document")
-	for _, tab := range []string{"find", "save", "people", "language", "check", "images", "review"} {
+	for _, tab := range []string{"find", "save", "people", "language", "check", "images", "review", "format", "styles", "outline", "stats", "page", "privacy", "speech", "transfer", "migrate", "share", "comments", "spell", "keys", "symbols"} {
 		if d.Has(`button[data-tab="` + tab + `"]`) {
 			d.Click(`button[data-tab="` + tab + `"]`)
 			check("the " + tab + " tab")
