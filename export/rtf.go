@@ -28,6 +28,7 @@ type RTF struct{}
 func (RTF) Export(snap Snapshot) ([]byte, error) {
 	contentWidthTwips := rtfPxToTwips(snap.PageWidth - snap.MarginLeft - snap.MarginRight)
 	var body strings.Builder
+	marks := rtfContents(&body, snap, contentWidthTwips)
 	for i, b := range snap.Blocks {
 		switch b.Kind {
 		case Image:
@@ -81,6 +82,10 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 		default:
 			pre = `{\pard `
 		}
+		if name, ok := marks[i]; ok {
+			body.WriteString(pre + `{\*\bkmkstart ` + name + `}` + rtfInline(b.Segments) + `{\*\bkmkend ` + name + `}\par}` + "\n")
+			continue
+		}
 		body.WriteString(pre + rtfInline(b.Segments) + `\par}` + "\n")
 	}
 	// The sheet and margins, and the running header and footer (the page number a PAGE field and the
@@ -98,6 +103,34 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 	}
 	return []byte(`{\rtf1\ansi\deff0{\fonttbl{\f0 Helvetica;}{\f1 Courier New;}}\fs24` + "\n" +
 		layout + body.String() + "}\n"), nil
+}
+
+// rtfContents writes the table of contents that starts the document (when the snapshot asks for one and has
+// headings): the title, then an entry for each heading, linked to a bookmark on it, with a PAGEREF field for
+// its page. Word fills the page numbers in when it opens the file (the fields are marked dirty); the cached
+// number is a dash. It returns the bookmark name of each heading by block index.
+func rtfContents(body *strings.Builder, snap Snapshot, width int) map[int]string {
+	if !snap.TOC {
+		return nil
+	}
+	entries := snap.Outline()
+	if len(entries) == 0 {
+		return nil
+	}
+	if width <= 0 {
+		width = 9000
+	}
+	marks := map[int]string{}
+	body.WriteString(`{\pard\sa240\keepn\b\fs40 ` + escapeRTFText(snap.tocTitle()) + `\par}` + "\n")
+	for _, e := range entries {
+		name := "_Toc" + strconv.Itoa(100000+e.Block)
+		marks[e.Block] = name
+		fmt.Fprintf(body, `{\pard\sa60\li%d\tqr\tldot\tx%d `, (e.Level-1)*360, width)
+		body.WriteString(`{\field\flddirty{\*\fldinst HYPERLINK \\l ` + name + `}{\fldrslt ` + escapeRTFText(e.Text) + `}}\tab `)
+		body.WriteString(`{\field\flddirty{\*\fldinst PAGEREF ` + name + ` \\h}{\fldrslt \endash}}\par}` + "\n")
+	}
+	body.WriteString(`{\pard\page\par}` + "\n")
+	return marks
 }
 
 // rtfDecor is a header or footer group ("header" or "footer") for a header text with fields: the left,
