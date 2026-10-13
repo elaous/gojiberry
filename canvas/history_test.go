@@ -156,17 +156,40 @@ func TestUndoInAFloatingText(t *testing.T) {
 	}
 }
 
+func TestHistoryLimitCanBeLowered(t *testing.T) {
+	defer SetHistoryLimit(DefaultHistoryLimit)
+	if HistoryLimit() != DefaultHistoryLimit {
+		t.Fatalf("limit %d", HistoryLimit())
+	}
+	SetHistoryLimit(1) // below the least: kept at the least
+	if HistoryLimit() != MinHistoryLimit {
+		t.Errorf("limit %d, want the least %d", HistoryLimit(), MinHistoryLimit)
+	}
+	SetHistoryLimit(20)
+	_, st := editFlow(t, 0, Chars{Text: ""})
+	for range 50 {
+		st.InsertText("\n")
+	}
+	n := 0
+	for st.HandleChord("Mod+Z") {
+		n++
+	}
+	if n != 20 {
+		t.Errorf("undid %d steps, want 20", n)
+	}
+}
+
 func TestHistoryLimitsAndReset(t *testing.T) {
 	f, st := editFlow(t, 0, Chars{Text: ""})
-	for range maxHistory + 20 {
+	for range DefaultHistoryLimit + 20 {
 		st.InsertText("\n") // each Enter is its own step (not a run)
 	}
 	n := 0
 	for st.HandleChord("Mod+Z") {
 		n++
 	}
-	if n != maxHistory {
-		t.Errorf("history keeps %d steps, undid %d", maxHistory, n)
+	if n != DefaultHistoryLimit {
+		t.Errorf("history keeps %d steps, undid %d", DefaultHistoryLimit, n)
 	}
 	f.ResetContent()
 	if f.Undo() || f.Redo() {

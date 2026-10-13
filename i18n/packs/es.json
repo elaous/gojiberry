@@ -1129,6 +1129,7 @@
   "speech.deleted": "Se borraron todas las grabaciones.",
   "speech.count#one": "%d grabación, %s segundos.",
   "speech.count#other": "%d grabaciones, %s segundos.",
-  "speech.notInserted": "Se oyó: %s. Cambie al modo de edición y ponga el cursor donde deba ir, y dicte otra vez."
+  "speech.notInserted": "Se oyó: %s. Cambie al modo de edición y ponga el cursor donde deba ir, y dicte otra vez.",
+  "prefs.memory": "Ahorrar memoria (conservar menos pasos de deshacer)"
  }
 }
