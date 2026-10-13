@@ -8,7 +8,6 @@ const (
 	FeatHeaderFooter Feature = "header-footer"
 	FeatTextBox      Feature = "text-box"
 	FeatDrawing      Feature = "drawing"
-	FeatEquation     Feature = "equation"
 	FeatEndnote      Feature = "endnote"
 	FeatField        Feature = "field"
 	// FeatLayout is everything but the text of a file that holds only drawn text (a PDF): fonts, styles,

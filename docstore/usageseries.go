@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"github.com/elaous/gojiberry/observe"
 	"html/template"
 	"net/http"
 	"sync"
@@ -147,6 +148,7 @@ func (s *Server) sampleUsage(u usageResponse) {
 		now = s.usageClock
 	}
 	s.usage.record(now(), p)
+	s.observeUsage(u)
 }
 
 // RunUsageSampling takes a sample of the counters now and then every interval (an hour is right for
@@ -156,9 +158,12 @@ func (s *Server) RunUsageSampling(ctx context.Context, interval time.Duration) {
 		interval = time.Hour
 	}
 	take := func() {
-		if u, err := s.measureUsage(ctx); err == nil {
+		done := observe.Default().Sweep("usage_sampling")
+		u, err := s.measureUsage(ctx)
+		if err == nil {
 			s.sampleUsage(u)
 		}
+		done(0, err)
 	}
 	take()
 	t := time.NewTicker(interval)

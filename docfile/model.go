@@ -68,6 +68,8 @@ type Item struct {
 	// Media is an embedded audio or video clip with its captions and transcript (roadmap 68). The editor
 	// has no player: it opens a clip as text (MediaText) and the exports write it so.
 	Media *MediaItem `json:"media,omitempty" pb:"11"`
+	// Equation is a formula with its text alternative (roadmap 78).
+	Equation *EquationItem `json:"equation,omitempty" pb:"12"`
 }
 
 // ImageItem is an inline image. URL is what to fetch it from (a data: URL
@@ -85,6 +87,17 @@ type ImageItem struct {
 	// Alt describes the image; Decorative says it needs no description.
 	Alt        string `json:"alt,omitempty" pb:"9"`
 	Decorative bool   `json:"decorative,omitempty" pb:"10"`
+	// LongDesc is a longer description of a diagram or chart than Alt can hold (roadmap 78).
+	LongDesc string `json:"longDesc,omitempty" pb:"11"`
+}
+
+// EquationItem is a formula in the linear notation of package export (x^2, frac{a}{b}, sqrt{x}) and its text
+// alternative, what a person would read aloud. The alternative is required: a document with an equation
+// that has none is a finding of package a11ycheck, and every export writes the alternative as the text of
+// the equation (the HTML export also writes MathML).
+type EquationItem struct {
+	Formula string `json:"formula" pb:"1"`
+	Alt     string `json:"alt,omitempty" pb:"2"`
 }
 
 // RuleItem mirrors canvas.Rule.
@@ -209,6 +222,8 @@ type Para struct {
 	QuoteBar    string  `json:"quoteBar,omitempty" pb:"9"`
 	Style       string  `json:"style,omitempty" pb:"10"`
 	DropCap     int     `json:"dropCap,omitempty" pb:"11"`
+	// CodeLang is the language of a code block (a paragraph of the Code style), a short lower-case name.
+	CodeLang string `json:"codeLang,omitempty" pb:"12"`
 }
 
 // StyleDef mirrors canvas.StyleDef.
@@ -369,8 +384,10 @@ func FromItems(items []canvas.Item) []Item {
 				if src, ok := o.Src.(canvas.URLSource); ok && src.URL() != "" {
 					out = append(out, Item{Image: &ImageItem{URL: src.URL(), Width: o.W, Height: o.H, Alpha: o.Alpha,
 						ClipLeft: o.Clip.Left, ClipTop: o.Clip.Top, ClipRight: o.Clip.Right, ClipBottom: o.Clip.Bottom,
-						Alt: o.Alt, Decorative: o.Decorative}})
+						Alt: o.Alt, Decorative: o.Decorative, LongDesc: o.LongDesc}})
 				}
+			case *canvas.EquationObject:
+				out = append(out, Item{Equation: &EquationItem{Formula: o.Formula, Alt: o.Alt}})
 			case *ImagePlaceholder:
 				c := o.Item
 				out = append(out, Item{Image: &c})
@@ -459,6 +476,8 @@ func ToItems(items []Item) []canvas.Item {
 			out = append(out, canvas.Inline{Object: canvas.NewTableObject(table), Block: true})
 		case it.Image != nil:
 			out = append(out, canvas.Inline{Object: imageObject(*it.Image)})
+		case it.Equation != nil:
+			out = append(out, canvas.Inline{Object: &canvas.EquationObject{Formula: it.Equation.Formula, Alt: it.Equation.Alt}, Block: true})
 		case it.Media != nil:
 			// the editor has no player: the clip is opened as the text that stands for it, so nothing is lost
 			// from view (its captions track is the one thing the text does not carry)
@@ -612,7 +631,7 @@ func imageObject(it ImageItem) canvas.InlineObject {
 				img.Alpha = it.Alpha
 			}
 			img.Clip = canvas.Insets{Left: it.ClipLeft, Top: it.ClipTop, Right: it.ClipRight, Bottom: it.ClipBottom}
-			img.Alt, img.Decorative = it.Alt, it.Decorative
+			img.Alt, img.Decorative, img.LongDesc = it.Alt, it.Decorative, it.LongDesc
 			return img
 		}
 	}

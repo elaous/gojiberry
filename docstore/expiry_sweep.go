@@ -3,6 +3,7 @@ package docstore
 import (
 	"context"
 	"errors"
+	"github.com/elaous/gojiberry/observe"
 	"log"
 	"strings"
 	"time"
@@ -76,6 +77,8 @@ func (e *ExpiringAdapter) adopt(ctx context.Context) error {
 // how many documents it deleted. A failure on one document does not stop the others: Sweep
 // returns the first error after trying them all, and what was left is retried by the next one.
 func (e *ExpiringAdapter) Sweep(ctx context.Context) (deleted int, err error) {
+	done := observe.Default().Sweep("expiry")
+	defer func() { done(deleted, err) }()
 	if err := e.adopt(ctx); err != nil {
 		return 0, err
 	}

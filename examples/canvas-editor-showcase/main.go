@@ -58,6 +58,7 @@ type ui struct {
 	layout                       docfile.PageLayout // the header, footer and table of contents of the print layout
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
 	imageMsg     string
+	elements     elementsForm // the equation being typed and the last message of the equation and code parts of the tab
 	sugg         suggestState
 	stateRef     *State                 // the document state, for what the announcer needs of it
 	commentSig   string                 // how many comments, replies and resolved threads there were when last looked at

@@ -65,7 +65,8 @@ func (s *Server) WithTelemetry(c *telemetry.Counters) *Server {
 			log.Printf("docstore: usage totals could not be loaded from the store (%v); counting from zero and saving over them", err)
 		}
 	}
-	rec := telemetry.NewReceiver(c).WithLimit(func(r *http.Request) (bool, time.Duration) {
+	s.syncUsageAllowlist()
+	rec := telemetry.NewReceiver(c).WithBatchHook(s.routeUsage).WithLimit(func(r *http.Request) (bool, time.Duration) {
 		sum := sha256.Sum256([]byte(s.clientAddr(r)))
 		return s.limits().telemetry.Allow(r.Context(), "tm:"+hex.EncodeToString(sum[:8]))
 	})

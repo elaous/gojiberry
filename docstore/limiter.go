@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/elaous/gojiberry/observe"
 	"log"
 	"math"
 	"sort"
@@ -555,7 +556,9 @@ func RunRateLimitSweep(ctx context.Context, store Adapter, interval time.Duratio
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			done := observe.Default().Sweep("ratelimit")
 			st, err := SweepRateLimitsStats(ctx, store, time.Now(), MaxRateLimitRecords)
+			done(st.Deleted, err)
 			if err != nil && ctx.Err() == nil {
 				log.Printf("docstore: sweeping rate limit records: %v", err)
 			}

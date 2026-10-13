@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/elaous/gojiberry/observe"
 	"log"
 	"strconv"
 	"strings"
@@ -357,6 +358,13 @@ func (s *StoreChallenges) dec() {
 // name is foreign and left alone. It returns how many it deleted. Several sweeps at once (replicas)
 // are harmless; in one process they run one at a time.
 func (s *StoreChallenges) Sweep(ctx context.Context) (int, error) {
+	done := observe.Default().Sweep("passkey_challenges")
+	n, err := s.sweepChallenges(ctx)
+	done(n, err)
+	return n, err
+}
+
+func (s *StoreChallenges) sweepChallenges(ctx context.Context) (int, error) {
 	s.sweeping.Lock()
 	defer s.sweeping.Unlock()
 	now := s.clock()

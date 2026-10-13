@@ -59,6 +59,21 @@ to at most 10 plain addresses (no names, lists or line breaks, so nothing a pers
 header), with a text part and an optional HTML part. `Send` returns when the provider has accepted
 the message, which is not the same as delivery.
 
+## Operator observability (`observe`)
+
+Metrics and traces about the server's own behaviour, for the operator; never about people. **Off unless
+`GOJIBERRY_OBS=on`.** Full table, what is and is not sent, and an example per sink: [observability.md](observability.md).
+
+| Variable | Meaning |
+|---|---|
+| `GOJIBERRY_OBS` | `on` or `off`. Default off; unset is off (the kill switch). |
+| `GOJIBERRY_OBS_SINKS` | Where operator metrics and traces go: `builtin`, `otlp`, `posthog` (comma separated; default `builtin`). |
+| `GOJIBERRY_OBS_USAGE_SINKS` | Where the browsers' opt-in usage counts ([telemetry.md](telemetry.md)) are also sent: `otlp`, `posthog` (default none). |
+| `GOJIBERRY_OBS_TRACE_SAMPLE` | Share of requests that get a trace, `0` to `1` (default `0.1`). |
+
+Errors name the variable and never repeat the value. `GET /admin/observe` (the admin guard of `/admin/usage`) shows the
+allowlist and the sinks, also while it is off.
+
 ## Running everything: `docker-compose.yml`
 
 `make stack-up` starts PostgreSQL, the docstore server (on Postgres), the collaboration hub, the sync, font and

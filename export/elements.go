@@ -176,6 +176,10 @@ func (p *mathParser) identifiers(letters []rune) string {
 	return sb.String()
 }
 
+// CodeLang is lang as a code block's language name, or "" when it cannot be one (lower-case letters, digits
+// and the characters + - #, at most 20 of them): what an editor stores and the exports write.
+func CodeLang(lang string) string { return cleanCodeLang(lang) }
+
 // cleanCodeLang makes a language name safe for a class name or a code fence: lower-case letters, digits
 // and the characters + - #, at most 20 of them; anything else makes it empty.
 func cleanCodeLang(lang string) string {

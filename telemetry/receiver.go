@@ -132,6 +132,7 @@ type Receiver struct {
 	now      func() time.Time
 	allow    func(*http.Request) (bool, time.Duration)
 	log      *audit.Logger
+	hook     func(Batch)
 }
 
 // NewReceiver takes batches into counters.
@@ -149,6 +150,11 @@ func (r *Receiver) WithLimit(allow func(*http.Request) (bool, time.Duration)) *R
 
 // WithAudit logs a refused request as an audit event (no content, no address).
 func (r *Receiver) WithAudit(l *audit.Logger) *Receiver { r.log = l; return r }
+
+// WithBatchHook calls hook with every accepted batch after its counts are added (for example to route
+// them to the sinks of package observe). The batch has been validated against the allowlist; the
+// hook gets nothing of the request, only the batch.
+func (r *Receiver) WithBatchHook(hook func(Batch)) *Receiver { r.hook = hook; return r }
 
 // Counters are the totals this receiver increments.
 func (r *Receiver) Counters() *Counters { return r.counters }
@@ -182,6 +188,9 @@ func (r *Receiver) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	r.counters.Add(b, r.now())
+	if r.hook != nil {
+		r.hook(b)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -68,6 +68,9 @@ func (Markdown) Export(snap Snapshot) ([]byte, error) {
 			continue
 		}
 
+		if b.Kind == Heading2 && b.Start < 0 && i+1 < len(snap.Blocks) && snap.Blocks[i+1].Note > 0 {
+			continue // the heading above the notes: Markdown footnotes are collected by the renderer
+		}
 		var prefix string
 		switch b.Kind {
 		case Heading1:
@@ -82,6 +85,9 @@ func (Markdown) Export(snap Snapshot) ([]byte, error) {
 			prefix = strings.Repeat("  ", b.Level) + strconv.Itoa(b.NumberedIndex) + ". "
 		case Quote:
 			prefix = "> "
+		}
+		if b.Note > 0 {
+			prefix = "[^" + strconv.Itoa(b.Note) + "]: " // a footnote definition; the renderer links it both ways
 		}
 
 		content := markdownInline(b.Segments)
@@ -189,6 +195,9 @@ func markdownInline(segs []Segment) string {
 func wrapMarkdownRun(text string, f Format) string {
 	if text == "" {
 		return text
+	}
+	if f.NoteRef > 0 {
+		return "[^" + strconv.Itoa(f.NoteRef) + "]" // a footnote mark: the note below has the same label
 	}
 	if f.Href != "" && safeHref(f.Href) {
 		text = "[" + text + "](" + f.Href + ")"

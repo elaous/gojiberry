@@ -36,6 +36,15 @@ name, a value and how many times. Nothing else is accepted.
 
 A test keeps this table in step with the allowlist in `telemetry/telemetry.go`.
 
+## Sinks: sharing the layer with operator observability
+
+The usage counts are one of two producers that write to the same `Sink` abstraction (package `observe`); the other is
+the operator's own metrics and traces about the server ([observability.md](observability.md)). They are separate: this
+one comes from the browser with the person's opt-in, that one from the server with the operator's. The receiver keeps
+its totals and the admin pages above exactly as they were (the *builtin* sink), and, only if the operator turned on
+observability and named a sink in `GOJIBERRY_OBS_USAGE_SINKS`, also hands each batch it accepted to that sink as
+aggregate counts (`usage_events_total{fact,choice}`). The browser may send exactly what it could before.
+
 ## For the operator
 
 - `POST /telemetry` takes a batch (at most 8 KiB, rate limited per client with a hashed key that is not kept in

@@ -57,6 +57,10 @@ type ParaFormat struct {
 	// DropCap makes the first letter this many lines tall, with the
 	// text wrapping around it; zero for none.
 	DropCap int
+	// CodeLang is the programming language of a code block (a paragraph of the "Code" style) as a short
+	// lower-case name ("go", "python"); empty when unknown. The exports use it to mark the block (class
+	// language-go in HTML, the info string of a fence in Markdown).
+	CodeLang string
 }
 
 func (ParaFormat) flowItem() {}
