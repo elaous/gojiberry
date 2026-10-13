@@ -70,6 +70,10 @@ Metrics and traces about the server's own behaviour, for the operator; never abo
 | `GOJIBERRY_OBS_SINKS` | Where operator metrics and traces go: `builtin`, `otlp`, `posthog` (comma separated; default `builtin`). |
 | `GOJIBERRY_OBS_USAGE_SINKS` | Where the browsers' opt-in usage counts ([telemetry.md](telemetry.md)) are also sent: `otlp`, `posthog` (default none). |
 | `GOJIBERRY_OBS_TRACE_SAMPLE` | Share of requests that get a trace, `0` to `1` (default `0.1`). |
+| `GOJIBERRY_OBS_POSTHOG_HOST` | With the `posthog` sink: `us` (default), `eu`, or the https base URL of a self-hosted PostHog. |
+| `GOJIBERRY_OBS_POSTHOG_KEY` / `_KEY_FILE` | The PostHog project API key, or the path of the file that holds it (preferred). Required with the `posthog` sink. |
+| `GOJIBERRY_OBS_POSTHOG_ID` | The fixed `distinct_id` of every event (default `gojiberry-docstore`). |
+| `GOJIBERRY_OBS_POSTHOG_INTERVAL` | How often aggregates are sent, `10s` to `1h` (default `1m`). |
 
 Errors name the variable and never repeat the value. `GET /admin/observe` (the admin guard of `/admin/usage`) shows the
 allowlist and the sinks, also while it is off.

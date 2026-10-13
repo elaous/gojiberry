@@ -122,22 +122,75 @@ variable and never repeats the value.
 
 A sink the build does not contain (for example `otlp` in the dependency-free `cmd/docstore`) is a start-up error.
 
+### PostHog (`posthog`)
+
+A sink for **aggregate events**, in plain `net/http` against PostHog's capture API (`POST <host>/batch/`), no SDK. Spans
+are not sent to PostHog (traces go to OpenTelemetry).
+
+| Variable | Meaning |
+| --- | --- |
+| `GOJIBERRY_OBS_POSTHOG_HOST` | `us` (default, `https://us.i.posthog.com`), `eu` (`https://eu.i.posthog.com`) or the base URL of a self-hosted PostHog. A URL must be `https` (`http` only for `localhost`, `127.0.0.1`, `::1`) and carry no credentials, query or fragment. |
+| `GOJIBERRY_OBS_POSTHOG_KEY` / `GOJIBERRY_OBS_POSTHOG_KEY_FILE` | The project API key (`phc_...`), or the path of the file that holds it (preferred: see [configuration.md](configuration.md)). Required with the `posthog` sink; both is an error. |
+| `GOJIBERRY_OBS_POSTHOG_ID` | The one fixed `distinct_id` of every event (1 to 64 letters, digits, `.`, `-`, `_`). Default `gojiberry-docstore`. The operator sees it in `GET /admin/observe` and resets it by changing the variable. |
+| `GOJIBERRY_OBS_POSTHOG_INTERVAL` | How often aggregates are sent, `10s` to `1h`. Default `1m`. |
+
+What a request looks like (the same shape `GET /admin/observe` shows, with the key redacted):
+
+```json
+{"api_key": "phc_...", "batch": [{
+  "event": "gojiberry.http_requests_total",
+  "distinct_id": "gojiberry-docstore",
+  "timestamp": "2030-01-01T00:00:00Z",
+  "properties": {
+    "route": "/docs/{id}", "method": "GET", "status_class": "2xx",
+    "source": "operator", "kind": "counter", "value": 42, "interval_seconds": 60,
+    "$process_person_profile": false, "$geoip_disable": true, "$lib": "gojiberry-observe"}}]}
+```
+
+- One event per metric series per interval, named `gojiberry.<metric>`; the labels are properties. A counter carries
+  `value` (the sum for the interval), a histogram `count`, `sum`, `min` and `max`, a gauge `value` (the last). `source`
+  is `operator`, or `usage` for the browsers' usage counts.
+- Every event has `$process_person_profile: false` (PostHog makes no person) and `$geoip_disable: true`. There is no
+  `$ip`, no cookie, no header of any request: the only header sent is a fixed `User-Agent: gojiberry-observe/1`.
+  PostHog does see the address of **your server** (it is the sender); enable "Discard client IP data" in the project
+  settings if you do not want it stored.
+- Memory and requests are bounded: at most 2048 series are held (the allowlist allows fewer), at most 100 events go in a
+  request. A send that fails for a reason that can pass (network, 429, 5xx) is kept and added to the next interval's
+  counts; one that cannot pass (another 4xx, a wrong key) is dropped. The error (`sink_failed` in `errors_total`, and a
+  log line) never contains the key.
+- Redirects are not followed (the key travels in the request body).
+
 ## Looking before enabling: `GET /admin/observe`
 
 With the admin guard of `/admin/usage` (`GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN`, header `X-Gojiberry-Admin-Token`),
 `GET /admin/observe` answers with the whole allowlist (metrics with their label values, spans, attributes), the list of
-what is never sent, whether observability is on, which sinks it is routed to, how many points the allowlist dropped, and
+what is never sent, the shape of a PostHog request (`example_posthog_payload`), whether observability is on, which sinks it is routed to, how many points the allowlist dropped, and
 for each sink its own status (for the builtin sink, its current totals). **It answers while observability is off**, so
 the operator can read exactly what would be sent before turning anything on.
 
-## Example: builtin only
+## Examples
+
+**Builtin only.** Nothing leaves the server; `GET /admin/observe` shows the totals in memory (a restart starts them again).
 
 ```
 GOJIBERRY_OBS=on
 GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN=...   # the admin guard
 ```
 
-Nothing leaves the server. `GET /admin/observe` shows the totals in memory (a restart starts them again).
+**PostHog only** (US cloud; `GOJIBERRY_OBS_POSTHOG_HOST=eu` for the EU cloud, or a URL for self-hosting).
+
+```
+GOJIBERRY_OBS=on
+GOJIBERRY_OBS_SINKS=posthog
+GOJIBERRY_OBS_POSTHOG_KEY_FILE=/run/secrets/posthog-key
+```
+
+**Also send the browsers' usage counts** (only what a person opted in to, and only with the receiver on):
+
+```
+GOJIBERRY_DOCSTORE_TELEMETRY=on
+GOJIBERRY_OBS_USAGE_SINKS=posthog
+```
 
 ## Shutdown
 
@@ -146,4 +199,4 @@ up to ten seconds, then flushes and closes every sink, so the last counts are se
 
 ## Not done yet
 
-The PostHog and OpenTelemetry adapters are the next steps (roadmap 57 and 81). Persistent builtin totals, and instrumenting the collaboration hub and sync servers are not built.
+The OpenTelemetry adapter is the next step (roadmap 57 and 81). Persistent builtin totals, and instrumenting the collaboration hub and sync servers are not built.

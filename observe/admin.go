@@ -33,6 +33,8 @@ type Description struct {
 	Dropped     map[string]int64    `json:"dropped"`
 	SinkStatus  map[string]any      `json:"sink_status,omitempty"`
 	Usage       map[string][]string `json:"usage_allowlist,omitempty"`
+	// Example is the shape of a PostHog request, with made-up numbers, shown whether or not that sink is on.
+	Example map[string]any `json:"example_posthog_payload"`
 }
 
 // Describe reports the configuration and allowlist. It works on a nil Observer (observability off),
@@ -44,6 +46,7 @@ func (o *Observer) Describe() Description {
 		Spans:     Spans(), Attributes: Attributes(),
 		NeverSent: NeverSent,
 		Dropped:   o.Dropped(),
+		Example:   ExamplePostHogPayload(),
 		Sinks:     []string{}, UsageSinks: []string{},
 	}
 	var usage map[string][]string

@@ -441,3 +441,24 @@ func TestAllowlistDataIsConsistent(t *testing.T) {
 		t.Error("attrNames and attrDefs differ")
 	}
 }
+
+func TestAMetricMayNarrowTheValuesOfALabel(t *testing.T) {
+	o, r := newObs()
+	o.Add(LimiterResults, 1, "limiter", "passkey", "outcome", "ok") // a sign-in outcome, not a limiter decision
+	o.Add(SweepRuns, 1, "sweep", "expiry", "result", "not_found")   // a store result, not a sweep result
+	o.Add(AuthOutcomes, 1, "flow", "passkey", "outcome", "allowed") // a limiter decision
+	if got := o.Dropped()["bad_label_value"]; got != 3 {
+		t.Fatalf("dropped = %d, want 3", got)
+	}
+	o.Add(LimiterResults, 1, "limiter", "passkey", "outcome", "limited")
+	o.Add(SweepRuns, 1, "sweep", "expiry", "result", "error")
+	o.Add(AuthOutcomes, 1, "flow", "passkey", "outcome", "denied")
+	if r.count(LimiterResults) != 1 || r.count(SweepRuns) != 1 || r.count(AuthOutcomes) != 1 {
+		t.Fatal("the allowed values were refused")
+	}
+	for _, m := range Metrics(nil) {
+		if m.Name == SweepRuns && len(m.Labels["result"]) != 2 {
+			t.Fatalf("the allowlist data does not show the narrowed values: %v", m.Labels)
+		}
+	}
+}

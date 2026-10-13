@@ -132,6 +132,14 @@ var labelValues = map[string][]string{
 	"reason":       {"unknown_metric", "wrong_kind", "unknown_label", "bad_label_value", "bad_value", "unknown_span", "unknown_attribute", "bad_attribute_value"},
 }
 
+// metricValues narrows a label to fewer values for one metric (a sweep ends ok or error, never
+// not_found); a label not listed here takes every value of labelValues.
+var metricValues = map[Metric]map[string][]string{
+	AuthOutcomes:   {"outcome": {"ok", "denied", "limited", "rejected", "error"}},
+	LimiterResults: {"outcome": {"allowed", "limited"}},
+	SweepRuns:      {"result": {"ok", "error"}},
+}
+
 // usageLabels are the labels whose values the usage producer fills in (from the telemetry
 // allowlist, set with SetUsageAllowlist).
 var usageLabels = map[string]bool{"fact": true, "choice": true}
@@ -378,7 +386,7 @@ func (o *Observer) validate(m Metric, kind Kind, v float64, kv []string) (Point,
 				continue
 			}
 			found = true
-			if !o.labelOK(name, kv[j+1]) {
+			if !o.labelOK(m, name, kv[j+1]) {
 				o.drop("bad_label_value")
 				return Point{}, false
 			}
@@ -393,9 +401,17 @@ func (o *Observer) validate(m Metric, kind Kind, v float64, kv []string) (Point,
 	return Point{Metric: m, Kind: kind, Value: v, Labels: labels, Source: Operator}, true
 }
 
-func (o *Observer) labelOK(name, value string) bool {
+func (o *Observer) labelOK(m Metric, name, value string) bool {
 	if usageLabels[name] {
 		return o.usageLabelOK(name, value)
+	}
+	if narrow, ok := metricValues[m][name]; ok {
+		for _, v := range narrow {
+			if v == value {
+				return true
+			}
+		}
+		return false
 	}
 	return labelAllowed[name][value]
 }
@@ -741,7 +757,11 @@ func Metrics(usage map[string][]string) []MetricInfo {
 				sort.Strings(cs)
 				mi.Labels[l] = cs
 			default:
-				mi.Labels[l] = append([]string(nil), labelValues[l]...)
+				if narrow, ok := metricValues[d.Name][l]; ok {
+					mi.Labels[l] = append([]string(nil), narrow...)
+				} else {
+					mi.Labels[l] = append([]string(nil), labelValues[l]...)
+				}
 			}
 		}
 		out = append(out, mi)

@@ -36,7 +36,7 @@ func TestDocsListEverythingTheAllowlistAllows(t *testing.T) {
 			need("attribute", a)
 		}
 	}
-	for _, v := range []string{envSwitch, envSinks, envUsageSinks, envTraceSample} {
+	for _, v := range []string{envSwitch, envSinks, envUsageSinks, envTraceSample, envPostHogHost, envPostHogKey, envPostHogID, envPostHogInterval} {
 		need("variable", v)
 	}
 	for _, n := range NeverSent {
@@ -52,7 +52,7 @@ func TestConfigurationDocNamesTheVariables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, v := range []string{envSwitch, envSinks, envUsageSinks, envTraceSample} {
+	for _, v := range []string{envSwitch, envSinks, envUsageSinks, envTraceSample, envPostHogHost, envPostHogKey, envPostHogID, envPostHogInterval} {
 		if !strings.Contains(string(b), v) {
 			t.Errorf("docs/configuration.md does not mention %s", v)
 		}
