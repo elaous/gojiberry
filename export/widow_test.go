@@ -68,3 +68,52 @@ func TestPDFNeverLeavesAWidowOrAnOrphanLine(t *testing.T) {
 		t.Error("no paragraph was split over a page: the test does not exercise the rule")
 	}
 }
+
+// TestPDFTableNeverLeavesALoneRowAtAPageEdge slides a table down the page, a line at a time, and checks every
+// page that holds part of it holds at least two of its rows (the header counts as one): the header is not
+// alone at the foot of a page and the last row is not alone at the head of one.
+func TestPDFTableNeverLeavesALoneRowAtAPageEdge(t *testing.T) {
+	const rows = 9
+	rowRe := regexp.MustCompile(`hdr|row\d\d`)
+	split := 0
+	for filler := 0; filler < 40; filler++ {
+		var blocks []Block
+		for i := 0; i < filler; i++ {
+			blocks = append(blocks, Block{Kind: Paragraph, Segments: []Segment{{Text: "filler"}}})
+		}
+		for r := 0; r < rows; r++ {
+			text := fmt.Sprintf("row%02d", r)
+			if r == 0 {
+				text = "hdr"
+			}
+			blocks = append(blocks, Block{Kind: TableCell, TableRow: r, TableRows: rows, TableCols: 1, TableColSpan: 1, TableRowSpan: 1, Segments: []Segment{{Text: text}}})
+		}
+		snap := Snapshot{Title: "T", Lang: "en", Blocks: blocks, PageWidth: 600, PageHeight: 700, MarginLeft: 60, MarginTop: 70, MarginRight: 60, MarginBottom: 70}
+		data, err := PDF{}.Export(snap)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pages, err := pdftext.ExtractPagesBytes(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var counts []int
+		for _, txt := range pages {
+			if n := len(rowRe.FindAllString(txt, -1)); n > 0 {
+				counts = append(counts, n)
+			}
+		}
+		if len(counts) > 1 {
+			split++
+		}
+		for _, n := range counts {
+			if n < 2 {
+				t.Errorf("%d filler lines: rows per page %v: a page holds one row of the table", filler, counts)
+				break
+			}
+		}
+	}
+	if split == 0 {
+		t.Error("the table was never split over a page: the test does not exercise the rule")
+	}
+}
