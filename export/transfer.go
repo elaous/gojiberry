@@ -3,6 +3,7 @@ package export
 import (
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docximport"
+	"github.com/elaous/gojiberry/htmlimport"
 	"github.com/elaous/gojiberry/pdftext"
 	"github.com/elaous/gojiberry/transfer"
 )
@@ -33,6 +34,13 @@ func (docxImporter) Format() transfer.Format {
 }
 func (docxImporter) Import(b []byte) (docfile.Document, error) { return docximport.Import(b) }
 
+type htmlImporter struct{}
+
+func (htmlImporter) Format() transfer.Format {
+	return transfer.Format{Name: "html", Label: "Web page (HTML)", Exts: []string{".html", ".htm"}, MIME: "text/html"}
+}
+func (htmlImporter) Import(b []byte) (docfile.Document, error) { return htmlimport.Import(b) }
+
 type pdfImporter struct{}
 
 func (pdfImporter) Format() transfer.Format {
@@ -49,7 +57,7 @@ func (a acceptedExporter) Export(d docfile.Document) ([]byte, error) {
 }
 
 // Register adds the formats this package handles to r. It writes HTML, RTF,
-// EPUB, PDF and Word (.docx), and reads Word and PDF text. (Markdown and plain
+// EPUB, PDF and Word (.docx), and reads Word, HTML and PDF text. (Markdown and plain
 // text are in transfer.Default; for braille see package braille.)
 func Register(r *transfer.Registry) {
 	for _, e := range r.Exporters() { // Markdown and plain text of transfer.Default read the text as it is
@@ -67,5 +75,6 @@ func Register(r *transfer.Registry) {
 		r.AddExporter(f)
 	}
 	r.AddImporter(docxImporter{})
+	r.AddImporter(htmlImporter{})
 	r.AddImporter(pdfImporter{})
 }
