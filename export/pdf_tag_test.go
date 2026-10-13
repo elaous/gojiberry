@@ -265,7 +265,8 @@ func TestNestedListsNestInTheStructureTree(t *testing.T) {
 		t.Fatalf("pdfua: %v, %v", got, err)
 	}
 	li := "LI(Lbl LBody)"
-	want := "Document(L(LI(Lbl LBody L(LI(Lbl LBody L(" + li + ")) " + li + ")) " + li + ") P L(" + li + ") L(" + li + "))"
+	// A nested list is inside the body of the item before it (ISO 14289-1 7.6).
+	want := "Document(L(LI(Lbl LBody(L(LI(Lbl LBody(L(" + li + "))) " + li + "))) " + li + ") P L(" + li + ") L(" + li + "))"
 	if got := structureShape(t, data); got != want {
 		t.Errorf("structure =\n%s\nwant\n%s", got, want)
 	}

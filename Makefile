@@ -60,6 +60,14 @@ test:
 a11y-test:
 	GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -run 'Axe|Accessib|ScreenReader|ReadingCopy|Keyboard|ArrowKeys|DialogFocus|DisplayPreferences' ./examples/canvas-editor-showcase/
 
+# pdfa11y-test checks the tagged PDF the exporter writes with pdfa11y (github.com/speedata/pdfa11y, a Go
+# checker for the machine-checkable part of PDF/UA). It installs the tool into .pdfa11y/ (ignored by git) and
+# makes the test fail, not skip, if it is missing. veraPDF remains the reference validator (roadmap 63).
+.PHONY: pdfa11y-test
+pdfa11y-test:
+	GOBIN=$(CURDIR)/.pdfa11y go install github.com/speedata/pdfa11y/cmd/pdfa11y@v0.0.15
+	PATH="$(CURDIR)/.pdfa11y:$$PATH" GOJIBERRY_REQUIRE_PDFA11Y=1 go test -count=1 -run Pdfa11y ./export
+
 # ci-local runs the CI job's make steps on this machine (no hosted runner needed); see
 # .github/scripts/local-ci.sh. `make ci-local STEPS=a11y-test` runs only that step.
 .PHONY: ci-local
