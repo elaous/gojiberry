@@ -46,7 +46,11 @@ func TestDisplayPreferencesMenu(t *testing.T) {
 	choose := func(item string) {
 		d.Click(`button.gj-menubar-button:has-text("View")`)
 		d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Display preferences")`)
-		d.Click(`.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("` + item + `")`)
+		entry := `.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("` + item + `")`
+		d.WaitSelector(entry)
+		// The submenu is long and scrolls when the window is short: bring the entry into view, as a person would.
+		d.Eval(`(() => { const e = Array.from(document.querySelectorAll('.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub)')).find((x) => x.textContent.includes(`+"`"+item+"`"+`)); if (e) e.scrollIntoView({ block: 'nearest' }); return true; })()`, nil)
+		d.Click(entry)
 	}
 	root := func(attr string) string {
 		return d.Str(`document.documentElement.getAttribute('` + attr + `') || ''`)
@@ -165,7 +169,11 @@ func TestLowMemoryModeKeepsFewerUndoSteps(t *testing.T) {
 	choose := func(item string) {
 		d.Click(`button.gj-menubar-button:has-text("View")`)
 		d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Display preferences")`)
-		d.Click(`.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("` + item + `")`)
+		entry := `.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("` + item + `")`
+		d.WaitSelector(entry)
+		// The submenu is long and scrolls when the window is short: bring the entry into view, as a person would.
+		d.Eval(`(() => { const e = Array.from(document.querySelectorAll('.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub)')).find((x) => x.textContent.includes(`+"`"+item+"`"+`)); if (e) e.scrollIntoView({ block: 'nearest' }); return true; })()`, nil)
+		d.Click(entry)
 	}
 	d.OK(limit() == 200, "the default keeps 200 steps")
 	choose("Save memory")
