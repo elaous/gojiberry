@@ -82,11 +82,17 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 		default:
 			pre = `{\pard `
 		}
-		if name, ok := marks[i]; ok {
-			body.WriteString(pre + `{\*\bkmkstart ` + name + `}` + rtfInline(b.Segments) + `{\*\bkmkend ` + name + `}\par}` + "\n")
-			continue
+		inner := rtfInline(b.Segments)
+		if b.Note > 0 {
+			// a footnote: the mark in the text links here (bookmark _fnN), and a link at its end goes back to the mark
+			n := strconv.Itoa(b.Note)
+			inner = `{\*\bkmkstart _fn` + n + `}` + inner + `{\*\bkmkend _fn` + n + `} ` +
+				`{\field{\*\fldinst HYPERLINK \\l _fnref` + n + `}{\fldrslt \u8617?}}`
 		}
-		body.WriteString(pre + rtfInline(b.Segments) + `\par}` + "\n")
+		if name, ok := marks[i]; ok {
+			inner = `{\*\bkmkstart ` + name + `}` + inner + `{\*\bkmkend ` + name + `}`
+		}
+		body.WriteString(pre + inner + `\par}` + "\n")
 	}
 	// The sheet and margins, and the running header and footer (the page number a PAGE field and the
 	// page count a NUMPAGES field).
@@ -264,6 +270,11 @@ func wrapRTFRun(text string, f Format) string {
 		return text
 	}
 	formatted := wrapRTFRunFormatting(text, f)
+	if f.NoteRef > 0 {
+		// the mark of a footnote: a link to the note (bookmark _fnN), itself the target of the note's way back
+		n := strconv.Itoa(f.NoteRef)
+		return `{\*\bkmkstart _fnref` + n + `}{\field{\*\fldinst HYPERLINK \\l _fn` + n + `}{\fldrslt ` + formatted + `}}{\*\bkmkend _fnref` + n + `}`
+	}
 	if f.Href != "" && safeHref(f.Href) {
 		return `{\field{\*\fldinst HYPERLINK "` + escapeRTFText(f.Href) + `"}{\fldrslt ` + formatted + `}}`
 	}
