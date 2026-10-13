@@ -193,7 +193,7 @@ wasm-size:
 	.github/scripts/wasm-size.sh examples/canvas-editor-showcase docs/wasm-budget.txt
 
 # showcase-dist builds the showcase for deployment into dist/showcase (override with SHOWCASE_DIST=...):
-# main.wasm, index.html and wasm_exec.js, plus a precompressed .gz of each (and a .br when the brotli
+# main.wasm, files.wasm (the file formats, loaded when first used), files-worker.js, index.html and wasm_exec.js, plus a precompressed .gz of each (and a .br when the brotli
 # tool is installed) written by cmd/wasmdist (roadmap 82). Upload that directory; docs/deploy.md has the
 # server settings (types, gzip_static or precompressed, cache headers). It needs no credentials.
 SHOWCASE_DIST ?= dist/showcase
@@ -202,7 +202,8 @@ showcase-dist:
 	rm -rf $(SHOWCASE_DIST)
 	mkdir -p $(SHOWCASE_DIST)
 	cd examples/canvas-editor-showcase && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o $(abspath $(SHOWCASE_DIST))/main.wasm .
-	cp examples/canvas-editor-showcase/index.html $(SHOWCASE_DIST)/index.html
+	cd examples/canvas-editor-showcase && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o $(abspath $(SHOWCASE_DIST))/files.wasm ./files
+	cp examples/canvas-editor-showcase/index.html examples/canvas-editor-showcase/files-worker.js $(SHOWCASE_DIST)/
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" $(SHOWCASE_DIST)/wasm_exec.js
 	go run ./cmd/wasmdist $(SHOWCASE_DIST)
 

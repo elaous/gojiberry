@@ -149,7 +149,16 @@ func (u *ui) watchMirrorSelection(flow func() *canvas.TextFlow, scroller func() 
 		if !ok {
 			caret = anchor
 		}
-		if cs := fl.Cursors()[0]; cs.Anchor == anchor && cs.Caret == caret {
+		cs := fl.Cursors()[0]
+		if cs.Anchor == anchor && cs.Caret == caret {
+			return nil
+		}
+		// The copy is drawn again when the caret moves to another block, and a selection in the nodes that were
+		// replaced collapses to where they were: that arrives a moment after the page wrote it, as if the
+		// reader's cursor had moved to the start. A collapse onto an end of the selection the page wrote a
+		// moment ago is that, not a move: the selection is put back.
+		if cs.Anchor != cs.Caret && anchor == caret && (anchor == cs.Anchor || anchor == cs.Caret) && time.Since(u.mirrorWroteAt) < 3*time.Second {
+			u.followCaret(fl, u.a11yCache)
 			return nil
 		}
 		u.mirrorAt = fmt.Sprint(anchor, caret) // the copy already has this selection: do not put it there again

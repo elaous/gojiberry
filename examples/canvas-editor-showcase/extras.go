@@ -20,6 +20,7 @@ import (
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/export"
+	"github.com/elaous/gojiberry/export/remote"
 	"github.com/elaous/gojiberry/i18n"
 	"github.com/elaous/gojiberry/lang"
 	"github.com/elaous/gojiberry/share"
@@ -576,7 +577,8 @@ func (u *ui) gatedExport(format string, doc docfile.Document) (string, []byte, s
 	file, data, mime, err := u.transfer.Export(format, doc)
 	if err == nil {
 		// Whatever the way to export, the person hears what the format left out (the Files tab lists it).
-		if n := len(export.Fidelity(format, doc).Losses); n > 0 && !gateSaid {
+		rep, _ := remote.Fidelity(callFiles, format, doc)
+		if n := len(rep.Losses); n > 0 && !gateSaid {
 			u.announce(Tn("fidelity.announce", "Exported: %d thing left out or simplified in the %s file. The Files tab lists them.", "Exported: %d things left out or simplified in the %s file. The Files tab lists them.", n, format))
 		}
 	}

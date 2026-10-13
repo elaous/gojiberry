@@ -5,6 +5,8 @@
 #
 # Usage: wasm-size.sh <package dir> <budget file>
 # The budget file has two lines: "raw=<bytes>" and "gzip=<bytes>". A number over its budget fails.
+# A package with a ./files directory has a second program (the file formats, run in a web worker when first
+# needed); the budget file then also has "files_raw=" and "files_gzip=", checked the same way.
 set -euo pipefail
 
 pkg="${1:?usage: wasm-size.sh <package dir> <budget file>}"
@@ -17,6 +19,13 @@ trap 'rm -rf "$out"' EXIT
 (cd "$pkg" && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o "$out/main.wasm" .)
 raw=$(wc -c <"$out/main.wasm" | tr -d ' ')
 gz=$(gzip -9 -c "$out/main.wasm" | wc -c | tr -d ' ')
+
+files_raw="" files_gz=""
+if [ -d "$pkg/files" ]; then
+	(cd "$pkg" && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o "$out/files.wasm" ./files)
+	files_raw=$(wc -c <"$out/files.wasm" | tr -d ' ')
+	files_gz=$(gzip -9 -c "$out/files.wasm" | wc -c | tr -d ' ')
+fi
 
 want() { sed -n "s/^$1=//p" "$budget" | head -1; }
 max_raw=$(want raw)
@@ -34,4 +43,11 @@ report() { # name size max
 }
 report raw "$raw" "$max_raw"
 report gzip "$gz" "$max_gz"
+if [ -n "$files_raw" ]; then
+	max_fraw=$(want files_raw)
+	max_fgz=$(want files_gzip)
+	[ -n "$max_fraw" ] && [ -n "$max_fgz" ] || { echo "wasm-size: $budget needs files_raw= and files_gzip= lines (the package has a files program)" >&2; exit 2; }
+	report files-raw "$files_raw" "$max_fraw"
+	report files-gzip "$files_gz" "$max_fgz"
+fi
 exit $status

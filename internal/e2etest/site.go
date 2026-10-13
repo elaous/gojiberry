@@ -57,6 +57,19 @@ func NewSite(t testing.TB, extra ...string) *Site {
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("building main.wasm: %v\n%s", err, out)
 	}
+	// A second program for the web worker some pages start (./files, with files-worker.js beside the page).
+	if st, err := os.Stat("files"); err == nil && st.IsDir() {
+		build := exec.Command("go", "build", "-o", filepath.Join(dir, "files.wasm"), "./files")
+		build.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
+		if out, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("building files.wasm: %v\n%s", err, out)
+		}
+		if js, err := os.ReadFile("files-worker.js"); err == nil {
+			if err := os.WriteFile(filepath.Join(dir, "files-worker.js"), js, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 	goroot, err := exec.Command("go", "env", "GOROOT").Output()
 	if err != nil {
 		t.Fatal(err)

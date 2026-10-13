@@ -1,17 +1,31 @@
 package main
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
+	"sync"
+
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/export"
+	"github.com/elaous/gojiberry/export/remote"
 )
 
 // fidelityState is the Import/Export tab's fidelity panel: the format whose report is shown, and what the last
 // imported file left out.
+//
+// The reports are worked out by the file worker (files.wasm), so they arrive a moment after they are asked for:
+// the panel says it is checking, and render draws it again when the answer is in.
 type fidelityState struct {
 	format     string
 	importName string
 	imported   components.FidelityReport
+	render     func()
+	call       remote.Caller // the file worker (callFiles when nil)
+
+	mu     sync.Mutex
+	cache  map[string]components.FidelityReport
+	asking map[string]bool
 }
 
 // fidelityReport is an export.Report as the panel shows it.
@@ -42,14 +56,73 @@ func (s *fidelityState) props(doc docfile.Document, exports []components.SaverCh
 	format := s.choose(exports)
 	return components.FidelityPanelProps{
 		Formats: exports, Format: format, OnFormat: onFormat,
-		Export:     fidelityReport(export.Fidelity(format, doc)),
+		Export:     s.exportReport(format, doc),
 		Import:     s.imported,
 		ImportName: s.importName,
 	}
 }
 
-// noteImport keeps what a file left out when it was imported (the data is the file's bytes).
+// exportReport is what exporting doc as format loses: from the cache, or "pending" while the worker works it
+// out (the panel is drawn again then).
+func (s *fidelityState) exportReport(format string, doc docfile.Document) components.FidelityReport {
+	b, err := docfile.JSON.Marshal(doc)
+	if err != nil {
+		return components.FidelityReport{}
+	}
+	sum := sha1.Sum(b)
+	key := format + "|" + hex.EncodeToString(sum[:])
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if r, ok := s.cache[key]; ok {
+		return r
+	}
+	if s.asking == nil {
+		s.asking, s.cache = map[string]bool{}, map[string]components.FidelityReport{}
+	}
+	if !s.asking[key] {
+		s.asking[key] = true
+		go func() {
+			rep, err := remote.Fidelity(s.caller(), format, doc)
+			r := components.FidelityReport{}
+			if err == nil {
+				r = fidelityReport(rep)
+			}
+			s.mu.Lock()
+			if len(s.cache) >= 16 {
+				s.cache = map[string]components.FidelityReport{}
+			}
+			s.cache[key] = r
+			delete(s.asking, key)
+			s.mu.Unlock()
+			if s.render != nil {
+				s.render()
+			}
+		}()
+	}
+	return components.FidelityReport{Pending: true}
+}
+
+// noteImport asks the worker what a file left out when it was imported (the data is the file's bytes), and
+// shows it when the answer comes.
 func (s *fidelityState) noteImport(format, file string, data []byte) {
-	s.importName = file
-	s.imported = fidelityReport(export.ImportFidelity(format, data))
+	go func() {
+		rep, err := remote.ImportFidelity(s.caller(), format, data)
+		r := components.FidelityReport{}
+		if err == nil {
+			r = fidelityReport(rep)
+		}
+		s.mu.Lock()
+		s.importName, s.imported = file, r
+		s.mu.Unlock()
+		if s.render != nil {
+			s.render()
+		}
+	}()
+}
+
+func (s *fidelityState) caller() remote.Caller {
+	if s.call != nil {
+		return s.call
+	}
+	return callFiles
 }

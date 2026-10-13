@@ -22,6 +22,11 @@ func TestServiceWorkerKeepsTheAppForRepeatVisits(t *testing.T) {
 	site.Handle("/sw.js", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		wasmserve.ServeServiceWorker(w, r, os.DirFS(site.Dir()), nil)
 	}))
+	var filesHits atomic.Int32
+	site.Handle("/files.wasm", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		filesHits.Add(1)
+		http.FileServer(http.Dir(site.Dir())).ServeHTTP(w, r)
+	}))
 	site.Handle("/main.wasm", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		wasmHits.Add(1)
 		files.ServeHTTP(w, r)
@@ -50,5 +55,23 @@ func TestServiceWorkerKeepsTheAppForRepeatVisits(t *testing.T) {
 	// The worker keeps one cache, named for the version, and nothing of the API.
 	d.OK(d.Int(`(async () => (await caches.keys()).filter(k => k.startsWith('gojiberry-app-')).length)()`) == 1, "one cache")
 	d.OK(d.Int(`(async () => (await (await caches.open((await caches.keys())[0])).keys()).length)()`) == 3, "the cache holds the three files of the shell")
+
+	// The second program (the file formats) is not fetched ahead: the first export fetches it, the worker
+	// keeps it, and a later visit finds it in the cache.
+	d.OK(filesHits.Load() == 0, "nothing of the file formats is downloaded before they are needed")
+	export := func() {
+		d.Click(`button[data-tab="transfer"]`)
+		d.Download(func() { d.Click(`.gj-transfer-button[data-kind="export"][data-format="docx"]`) })
+	}
+	export()
+	d.OK(filesHits.Load() >= 1, "the first export fetched the file worker")
+	for i := 0; i < 50 && d.Int(`(async () => (await (await caches.open((await caches.keys())[0])).keys()).length)()`) < 5; i++ {
+		d.Sleep(200)
+	}
+	d.OK(d.Int(`(async () => (await (await caches.open((await caches.keys())[0])).keys()).length)()`) == 5, "and the worker kept it (five files now)")
+	hits := filesHits.Load()
+	d.Reload()
+	export()
+	d.OK(filesHits.Load() == hits, "a repeat visit does not fetch the file worker again")
 	d.NoErrors()
 }
