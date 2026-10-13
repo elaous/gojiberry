@@ -38,12 +38,8 @@ jobs:
     if: ${{ inputs.run == 'all' || inputs.run == 'fast-checks' }}
     name: Build, vet, gofmt, test, lint (native + wasm)
     runs-on: ubuntu-latest
-    # contents: write only matters for the "Update coverage badge" step
-    # below (git commit + push to main) -- every other step here only
-    # ever reads the checkout, the same read-only default this job used
-    # before that step existed.
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -84,30 +80,13 @@ jobs:
       - name: make wasm-size
         run: make wasm-size
 
-      # Rewrites README.md's own coverage badge line (a static
-      # img.shields.io URL, not a self-hosted SVG -- see
-      # gen-coverage-badge.sh's own doc comment for why) from this
-      # exact run's `make test` coverage profile and commits it back --
-      # gated to pushes on main specifically (not PRs, not feature
-      # branches) since main's own README is the only copy anyone
-      # actually sees; a PR/branch build still proves the generator
-      # itself works (make coverage-badge runs, just isn't committed)
-      # via the exit code of this step.
+      # Computes the coverage profile and rewrites README.md's coverage badge line in this checkout
+      # (a static img.shields.io URL, see gen-coverage-badge.sh). The run is manual, so nothing is
+      # committed from here: the badge in README.md is updated by hand at each full run
+      # (`make coverage-badge`, then commit README.md; docs/testing-workflow.md). This step still
+      # proves that the generator works.
       - name: make coverage-badge
         run: make coverage-badge
-
-      - name: Commit updated coverage badge
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          if git diff --quiet -- README.md; then
-            echo "coverage badge unchanged, nothing to commit"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git commit -m "ci: update coverage badge [skip ci]"
-          git push
 
   # The accessibility gate: axe-core over the page in every state, and the keyboard and reading-copy
   # tests, in the runner's Chrome (ubuntu-latest has google-chrome). It fails, rather than skips, if no
