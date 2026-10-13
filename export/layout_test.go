@@ -399,3 +399,28 @@ func TestRTFHeaderFooterAndSheet(t *testing.T) {
 		}
 	}
 }
+
+func TestRTFContentsListHeadingsWithPageReferences(t *testing.T) {
+	snap := longSnapshot(1)
+	snap.TOC = true
+	snap.TOCTitle = "Inhalt"
+	out, err := RTF{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	for _, want := range []string{`Inhalt`, `\tldot`, `\fldinst PAGEREF _Toc`, `\fldinst HYPERLINK \\l _Toc`, `\flddirty`, `{\*\bkmkstart _Toc`, `{\*\bkmkend _Toc`, `\page`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("RTF contents lack %q:\n%s", want, s[:min(len(s), 1200)])
+		}
+	}
+	// Each entry's bookmark is on a heading.
+	if strings.Count(s, `\bkmkstart`) != strings.Count(s, `PAGEREF`) {
+		t.Errorf("%d bookmarks for %d page references", strings.Count(s, `\bkmkstart`), strings.Count(s, `PAGEREF`))
+	}
+	snap.TOC = false
+	off, _ := RTF{}.Export(snap)
+	if strings.Contains(string(off), "PAGEREF") {
+		t.Error("contents written although not asked for")
+	}
+}
