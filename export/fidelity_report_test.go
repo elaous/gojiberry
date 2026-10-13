@@ -141,7 +141,7 @@ func TestFidelityReportNamedExamples(t *testing.T) {
 		{"markdown", FeatTable, Dropped, NoteContentLost},
 		{"rtf", FeatImage, Simplified, NotePlaceholder},
 		{"docx", FeatCheckList, Simplified, NoteGlyph},
-		{"docx", FeatFootnote, Simplified, NoteNotes},
+		{"pdf", FeatFootnote, Simplified, NoteNotes},
 		{"epub", FeatColour, Dropped, ""},
 	} {
 		l, ok := find(c.format, c.f)
@@ -153,7 +153,7 @@ func TestFidelityReportNamedExamples(t *testing.T) {
 	for _, c := range []struct {
 		format string
 		f      Feature
-	}{{"docx", FeatSuperscript}, {"html", FeatRowSpan}, {"docx", FeatImageAlt}, {"pdf", FeatImageAlt}, {"markdown", FeatHeading}} {
+	}{{"docx", FeatSuperscript}, {"html", FeatRowSpan}, {"docx", FeatImageAlt}, {"docx", FeatFootnote}, {"pdf", FeatImageAlt}, {"markdown", FeatHeading}} {
 		if _, ok := find(c.format, c.f); ok {
 			t.Errorf("%s / %s is kept but listed as lost", c.format, c.f)
 		}

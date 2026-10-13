@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/docstore"
@@ -40,7 +41,7 @@ func ACLRolesWith(store docstore.Adapter, who func(*http.Request) string, noACL 
 		if who != nil {
 			email = who(r)
 		}
-		return Role(acl.RoleOf(email))
+		return Role(acl.Active(time.Now()).RoleOf(email))
 	}
 }
 

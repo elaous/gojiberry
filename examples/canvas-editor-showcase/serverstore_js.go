@@ -23,11 +23,47 @@ func (u *ui) serverStore() (saver.Target, bool) {
 		return saver.Target{}, false
 	}
 	client := &http.Client{Transport: bearerTransport{token: d.sessionToken}}
+	adapter := docstore.NewHTTPAdapter(d.url, client)
+	adapter.UseShareLink(u.shareToken) // "" removes it
 	return saver.Target{
 		Name:    serverTarget,
 		Label:   T("server.label", "Server %s (the server can read these documents)", d.host()),
-		Adapter: docstore.NewHTTPAdapter(d.url, client),
+		Adapter: adapter,
 	}, true
+}
+
+// useShareLink applies a share link the person chose to use: the server target sends it with every request
+// (docstore.HTTPAdapter.UseShareLink), the saver switches to the server and, when the address names a
+// document (/d/{doc}), opens it. It answers in words. The server decides what the link allows.
+func (u *ui) useShareLink(token string) string {
+	if encTarget == "server" {
+		return T("links.incoming.encrypted", "A link cannot be used while the encrypted store lives on the server. Switch the store to this browser first.")
+	}
+	if _, ok := u.serverStore(); !ok {
+		return T("links.incoming.noServer", "There is no server to use it with. Confirm a server below, then open the address again.")
+	}
+	u.shareToken = token
+	u.applyServerTarget()
+	u.people.links.inUse = true
+	u.saver.Pending.Run(func(ctx context.Context) error {
+		if err := u.saver.SetTarget(ctx, serverTarget); err != nil {
+			return err
+		}
+		if doc := pageDoc(); doc != "" {
+			return u.saver.Open(ctx, doc)
+		}
+		return nil
+	})
+	return T("links.incoming.started", "The link is in use. Documents it allows are in the Save tab.")
+}
+
+// stopShareLink forgets the link: the server target goes back to sending only the person's own sign-in.
+func (u *ui) stopShareLink() {
+	u.shareToken = ""
+	u.applyServerTarget()
+	u.people.links.inUse = false
+	u.people.links.incomingNote = ""
+	u.people.rerender()
 }
 
 // applyServerTarget makes the server a save target while a server is confirmed, and removes it when the

@@ -288,7 +288,7 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 	add := func(blk components.A11yBlock) {
 		if cur.Start >= 0 {
 			blk.Mapped, blk.Start, blk.Lead = true, cur.Start, cur.Lead
-			blk.Object = cur.Kind == export.Image || cur.Kind == export.TableCell
+			blk.Object = cur.Kind == export.Image || cur.Kind == export.TableCell || cur.Equation != ""
 		}
 		out = append(out, blk)
 	}
@@ -316,6 +316,13 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 			add(components.A11yBlock{Kind: components.A11yQuote, Text: text, Runs: runs})
 		case export.Code:
 			add(components.A11yBlock{Kind: components.A11yCode, Text: text})
+		case export.Paragraph:
+			switch {
+			case b.Equation != "":
+				add(components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.equation", "Equation: %s", text)})
+			case text != "":
+				add(components.A11yBlock{Kind: components.A11yParagraph, Text: text, Runs: runs})
+			}
 		case export.Image:
 			switch {
 			case b.ImageDecorative && b.ImageAlt == "":

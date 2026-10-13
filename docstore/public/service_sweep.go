@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/elaous/gojiberry/docstore"
+	"github.com/elaous/gojiberry/observe"
 	"log"
 	"strings"
 	"time"
@@ -71,6 +72,8 @@ const recordGrace = time.Minute
 // prefix listing every listing is the whole store, so the listing part runs at most every
 // Config.FullSweepInterval there; the other calls only reap sessions.
 func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
+	done := observe.Default().Sweep("public")
+	defer func() { done(removed, err) }()
 	var first error
 	defer func() {
 		s.healthMu.Lock()

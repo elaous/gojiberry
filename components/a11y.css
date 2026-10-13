@@ -100,3 +100,6 @@
 .gj-proposal { display: flex; flex-wrap: wrap; gap: 0.3em 0.6em; align-items: center; padding: 0.3em 0; border-bottom: 1px solid var(--gj-border); }
 .gj-proposal-text { flex: 1 1 14em; border-left: 4px solid currentColor; padding-left: 0.5em; }
 .gj-proposals-bulk { display: flex; gap: 0.5em; margin: 0.3em 0; }
+
+/* Ghost text: the suggested rest of the word, faint, after the caret (a picture; Tab puts it in). */
+.gj-ghost { position: fixed; z-index: 35; pointer-events: none; white-space: pre; color: var(--gj-muted); font-family: inherit; user-select: none; }

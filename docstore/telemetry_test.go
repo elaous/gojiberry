@@ -30,7 +30,7 @@ func sendTelemetry(h http.Handler, body, addr string) *httptest.ResponseRecorder
 
 func today() string { return time.Now().UTC().Format(telemetry.DayFormat) }
 
-func TestTelemetryRouteCountsAndNeverTouchesTheStore(t *testing.T) {
+func TestTelemetryRouteCountsAndWritesNoRecordPerRequest(t *testing.T) {
 	h, mem, c := telemetryServer(t)
 	before, _ := mem.List(context.Background())
 	good := `{"day":"` + today() + `","counts":[{"name":"feature","value":"find","n":7}]}`
