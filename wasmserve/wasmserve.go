@@ -37,6 +37,10 @@ type Options struct {
 	// precompressed sibling). 0 means gzip.BestCompression, right for a server that compresses a file
 	// once and keeps it; a development server that rebuilds the wasm often wants gzip.BestSpeed.
 	GzipLevel int
+	// ServiceWorker answers /sw.js with the service worker of the app shell (see ServiceWorker), made from
+	// the files of the handler. Off by default: a service worker keeps copies, which a development server
+	// does not want.
+	ServiceWorker bool
 }
 
 type variant struct {
@@ -74,6 +78,10 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 	if name == "" {
 		name = "index.html"
+	}
+	if h.opt.ServiceWorker && name == "sw.js" {
+		ServeServiceWorker(w, r, h.fsys, nil)
+		return
 	}
 	info, err := fs.Stat(h.fsys, name)
 	if err == nil && info.IsDir() {

@@ -37,6 +37,9 @@ func (s *Site) Handle(prefix string, h http.Handler) {
 	s.handlers = append(s.handlers, siteHandler{prefix, h})
 }
 
+// Dir is the directory the site serves its files from.
+func (s *Site) Dir() string { return s.dir }
+
 // UseLocalhost makes the site's URL http://localhost:PORT instead of the loopback address: a page
 // that uses WebAuthn needs a domain name (an IP address is not a valid relying party ID), and
 // localhost is a secure context.

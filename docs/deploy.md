@@ -108,6 +108,18 @@ http.Handle("/", wasmserve.Handler(os.DirFS("dist/showcase"), wasmserve.Options{
 development server that rebuilds the wasm often, `Options{GzipLevel: gzip.BestSpeed}` keeps the first
 request after a rebuild from waiting on the strongest compression.
 
+### The service worker (repeat visits and no connection)
+
+`wasmdist` also writes `sw.js` next to `index.html` (`-sw=false` leaves it out), and the showcase page registers
+it. It keeps `index.html`, `wasm_exec.js` and `main.wasm` in a cache named for a hash of their contents, so a
+repeat visit starts with no request for the 30 MB program, and the app opens without a connection (its documents
+are in the browser). A new build is a new `sw.js` (the version is in its text), the browser installs it, and the
+old cache is deleted when it takes over. It touches nothing else: requests to the API, sign-in and other origins
+go to the network as before, and a page for an app path comes from the network too (the cached start page only
+when there is none). Serve `sw.js` with `Cache-Control: no-cache` (the nginx file does, as it does for every
+`.js`); a Go server gets it from `wasmserve.Options{ServiceWorker: true}`. `?nosw` in the address leaves the
+worker out for that visit. To remove a worker from a browser, unregister it in the browser's application panel.
+
 ## 4. After deploying
 
 - `curl -sI -H 'Accept-Encoding: gzip, br' https://your.host/main.wasm` shows the type, the encoding
@@ -119,8 +131,6 @@ request after a rebuild from waiting on the strongest compression.
 
 ## What is not done
 
-Roadmap 82 plan steps 3 to 5 are still open: splitting rarely used parts out of the wasm (Go's wasm
-has no dynamic loading, so this means separate binaries or a worker), service-worker caching with
-versioned keys (the hashed names above are the same idea without a service worker), and a low-memory
-mode. The recipe above is step 2 (streaming compile, correct headers, compression) in a form anyone
-can deploy.
+Roadmap 82 plan steps 3 and 5 are still open: splitting rarely used parts out of the wasm (Go's wasm
+has no dynamic loading, so this means separate binaries or a worker), and a low-memory mode. The recipe
+above is step 2 (streaming compile, correct headers, compression) and the service worker is step 4.

@@ -44,7 +44,7 @@ func TestSheetsShowTheRunningHeaderAndFooter(t *testing.T) {
 	d.Dispatch(".gj-print-header", "change")
 	d.Fill(".gj-print-footer", "Draft\t\tPage {page} of {pages}")
 	d.Dispatch(".gj-print-footer", "change")
-d.WaitFor("the header of the first sheet", `JSON.parse(document.getElementById('state').textContent).headers[0] === "Report\t\tQuarterly report"`)
+	d.WaitFor("the header of the first sheet", `JSON.parse(document.getElementById('state').textContent).headers[0] === "Report\t\tQuarterly report"`)
 	// (two parts are the left and the right one; {title} is the document's title)
 	d.WaitFor("the footers carry each sheet's number", `(() => { const s = JSON.parse(document.getElementById('state').textContent); return s.pages >= 2 && s.footers[0] === "Draft\t\tPage 1 of " + s.pages && s.footers[1] === "Draft\t\tPage 2 of " + s.pages; })()`)
 	d.NoErrors()
