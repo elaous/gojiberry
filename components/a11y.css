@@ -11,6 +11,11 @@
   white-space: nowrap;
 }
 
+/* Skip links: out of sight until the keyboard reaches them, then at the top left of the page. */
+.gj-skip-link { position: absolute; left: -10000px; top: 0; z-index: 2000; }
+.gj-skip-link:focus { left: 0.5em; top: 0.5em; padding: 0.5em 0.9em; background: var(--gj-bg); color: var(--gj-text);
+  border: 2px solid var(--gj-accent); border-radius: var(--gj-radius); }
+
 /* Keyboard focus is always visible. */
 .gj-keybindings-button:focus-visible, .gj-menubar-button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   outline: 2px solid var(--gj-accent);
