@@ -39,15 +39,27 @@ func DocumentView(props DocumentViewProps) xango.Node {
 			xango.On("change", func(e xango.Event) { props.OnTitle(xango.EventValue[string](e)) }),
 		})
 	}
-	main := []xango.Node{xango.El("div", []xango.Attr{xango.A("class", "gj-docview-desk")}, props.Canvas)}
+	main := []xango.Node{xango.El("div", []xango.Attr{xango.A("class", "gj-docview-desk"), xango.A("tabindex", "-1")}, props.Canvas)}
+	// Skip links, the first things a keyboard reaches: past the title, menus and toolbar to the document, and
+	// to the side panel. Each moves the focus (a link to "#id" would not work under a <base href>).
+	skip := func(class, label string) xango.Node {
+		return xango.El("a", []xango.Attr{xango.A("href", "#"), xango.A("class", "gj-skip-link"),
+			xango.On("click", func(e xango.Event) {
+				e.PreventDefault()
+				e.MoveFocus(".gj-docview", ":scope ."+class, xango.FocusFirst)
+			})}, xango.Text(label))
+	}
+	links := []xango.Node{skip("gj-docview-desk", tr("docview.skipDoc", "Skip to the document"))}
 	if props.Sidebar != nil {
-		main = append(main, xango.El("aside", []xango.Attr{xango.A("class", "gj-docview-sidebar")}, *props.Sidebar))
+		main = append(main, xango.El("aside", []xango.Attr{xango.A("class", "gj-docview-sidebar"), xango.A("tabindex", "-1")}, *props.Sidebar))
+		links = append(links, skip("gj-docview-sidebar", tr("docview.skipSide", "Skip to the side panel")))
 	}
 	status := xango.Node(xango.Text(props.Status))
 	if props.StatusBar != nil {
 		status = *props.StatusBar
 	}
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-docview")},
+		xango.El("nav", []xango.Attr{xango.A("class", "gj-skip"), xango.A("aria-label", tr("docview.skip", "Skip links"))}, links...),
 		xango.El("header", []xango.Attr{xango.A("class", "gj-docview-top")}, title,
 			xango.El("div", []xango.Attr{xango.A("class", "gj-docview-menubar")}, props.MenuBar)),
 		// a labelled region, so the toolbar is inside a landmark like the rest of the page
