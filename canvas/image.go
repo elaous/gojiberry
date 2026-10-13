@@ -117,6 +117,10 @@ type Image struct {
 	// An image with neither is a gap in the document (see package a11ycheck).
 	Alt        string
 	Decorative bool
+	// LongDesc is a longer description for an image that needs more than a sentence (a diagram, a
+	// chart): what a person who cannot see it needs to follow the text around it. The exports write it
+	// as text after the image, linked to it in HTML.
+	LongDesc string
 
 	// OnChange is called after any change made by dragging or the toolbar.
 	OnChange func(*Image)

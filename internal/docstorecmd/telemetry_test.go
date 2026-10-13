@@ -32,3 +32,18 @@ func TestTelemetryIsOffUnlessTheOperatorSetsIt(t *testing.T) {
 		t.Fatalf("with it on an empty report is refused: %d", c)
 	}
 }
+
+func TestTelemetryNoiseSettingIsParsedAndATypoStopsTheServer(t *testing.T) {
+	srv := docstore.NewServer(docstore.NewMemoryAdapter(), "memory")
+	withTelemetry(srv, "on")
+	for _, v := range []string{"", "off", "5", "1000"} {
+		if err := withTelemetryNoise(srv, v); err != nil {
+			t.Errorf("%q: %v", v, err)
+		}
+	}
+	for _, v := range []string{"1", "five", "-2", "100000", "on"} {
+		if err := withTelemetryNoise(srv, v); err == nil {
+			t.Errorf("%q was accepted", v)
+		}
+	}
+}

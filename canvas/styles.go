@@ -132,6 +132,9 @@ func mergePara(under, over ParaFormat) ParaFormat {
 	if over.DropCap != 0 {
 		out.DropCap = over.DropCap
 	}
+	if over.CodeLang != "" {
+		out.CodeLang = over.CodeLang
+	}
 	out.Style = over.Style
 	return out
 }

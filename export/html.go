@@ -135,7 +135,11 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 				} else if b.ImageDecorative && b.ImageCaption == "" {
 					alt = ""
 				}
-				img := "<img src=\"" + escapeHTMLAttr(b.ImageSrc) + "\" alt=\"" + alt + "\"" + imgSelfClose + "\n"
+				described := ""
+				if bi+1 < len(snap.Blocks) && snap.Blocks[bi+1].DescribesImage {
+					described = " aria-describedby=\"longdesc-" + strconv.Itoa(bi+1) + "\"" // the long description follows
+				}
+				img := "<img src=\"" + escapeHTMLAttr(b.ImageSrc) + "\" alt=\"" + alt + "\"" + described + imgSelfClose + "\n"
 				if b.ImageCaption == "" {
 					body.WriteString(img)
 				} else {
@@ -195,6 +199,10 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 			default:
 				if b.Equation != "" {
 					body.WriteString("<p class=\"equation\">" + MathML(b.Equation, plainTextInline(b.Segments)) + "</p>\n")
+					break
+				}
+				if b.DescribesImage {
+					body.WriteString("<p class=\"longdesc\" id=\"longdesc-" + strconv.Itoa(bi) + "\">" + htmlInline(b.Segments, br) + "</p>\n")
 					break
 				}
 				body.WriteString("<p>" + htmlInline(b.Segments, br) + "</p>\n")

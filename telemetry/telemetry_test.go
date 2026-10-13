@@ -300,3 +300,21 @@ func TestDocsListEveryAllowlistedValue(t *testing.T) {
 		}
 	}
 }
+
+func TestBatchHookSeesOnlyAcceptedBatches(t *testing.T) {
+	r, _ := receiver()
+	var seen []Batch
+	r.WithBatchHook(func(b Batch) { seen = append(seen, b) })
+	good := `{"day":"2030-05-01","counts":[{"name":"feature","value":"find","n":2}]}`
+	if rec := post(r, good); rec.Code != http.StatusNoContent {
+		t.Fatalf("%d", rec.Code)
+	}
+	for _, bad := range []string{`{`, `{"day":"2030-05-01","counts":[{"name":"feature","value":"x@y.z","n":1}]}`, `{"day":"2030-05-01","user":"a","counts":[{"name":"feature","value":"find","n":1}]}`} {
+		if rec := post(r, bad); rec.Code == http.StatusNoContent {
+			t.Fatalf("%q was accepted", bad)
+		}
+	}
+	if len(seen) != 1 || seen[0].Counts[0].N != 2 {
+		t.Fatalf("hook saw %v", seen)
+	}
+}

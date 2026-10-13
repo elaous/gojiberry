@@ -299,6 +299,12 @@ const docxStyles = `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordpro
 <w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr></w:style>
 </w:styles>`
 
+// The ids of the bookmarks of footnotes start here, clear of those of the table of contents (a block's index).
+const (
+	noteBookmarkBase = 1 << 20
+	noteRefBookmarks = 1 << 19
+)
+
 func (b *docxBuilder) block(blk Block) {
 	w := &b.body
 	switch blk.Kind {
@@ -340,6 +346,12 @@ func (b *docxBuilder) block(blk Block) {
 		w.WriteString(`<w:pPr>` + ppr + `</w:pPr>`)
 	}
 	inner := b.inline(blk.Segments)
+	if blk.Note > 0 {
+		// a footnote: the mark in the text links here (bookmark _fnN), and a link at its end goes back to the mark
+		n := strconv.Itoa(blk.Note)
+		inner = `<w:bookmarkStart w:id="` + strconv.Itoa(noteBookmarkBase+blk.Note) + `" w:name="_fn` + n + `"/>` + inner + `<w:bookmarkEnd w:id="` + strconv.Itoa(noteBookmarkBase+blk.Note) + `"/>` +
+			`<w:r><w:t xml:space="preserve"> </w:t></w:r><w:hyperlink w:anchor="_fnref` + n + `" w:history="1"><w:r><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr><w:t>` + "\u21a9" + `</w:t></w:r></w:hyperlink>`
+	}
 	if name, ok := b.marks[b.cur]; ok {
 		inner = `<w:bookmarkStart w:id="` + strconv.Itoa(b.cur) + `" w:name="` + name + `"/>` + inner + `<w:bookmarkEnd w:id="` + strconv.Itoa(b.cur) + `"/>`
 	}
@@ -402,6 +414,12 @@ func (b *docxBuilder) inline(segs []Segment) string {
 			}
 			b.revs++
 			run = `<` + tag + ` w:id="` + strconv.Itoa(b.revs) + `" w:author="` + esc(author) + `" w:date="` + time.Unix(f.Time, 0).UTC().Format("2006-01-02T15:04:05Z") + `">` + run + `</` + tag + `>`
+		}
+		if f.NoteRef > 0 {
+			// the mark of a footnote: a link to the note (bookmark _fnN), itself the target of the note's way back
+			n := strconv.Itoa(f.NoteRef)
+			run = `<w:bookmarkStart w:id="` + strconv.Itoa(noteBookmarkBase+noteRefBookmarks+f.NoteRef) + `" w:name="_fnref` + n + `"/>` +
+				`<w:hyperlink w:anchor="_fn` + n + `" w:history="1">` + run + `</w:hyperlink><w:bookmarkEnd w:id="` + strconv.Itoa(noteBookmarkBase+noteRefBookmarks+f.NoteRef) + `"/>`
 		}
 		if f.Href != "" {
 			id, ok := b.links[f.Href]

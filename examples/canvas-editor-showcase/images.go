@@ -143,6 +143,15 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 		if r.img.Alt == "" && !r.img.Decorative {
 			kids = append(kids, para(fmt.Sprintf("img-missing-%d", i), T("img.missing", "No description yet."), true))
 		}
+		if !r.img.Decorative {
+			// a diagram or chart needs more than a sentence: the long description is written as text after it
+			kids = append(kids, textarea(fmt.Sprintf("img-long-%d", i), T("img.longLabel", "Long description of picture %d (for a diagram or chart)", i+1), r.img.LongDesc,
+				T("img.longHint", "Everything a person who cannot see it needs to follow the text around it"), "4", func(v string) {
+					r.img.LongDesc = v
+					fl.Touch()
+					redraw()
+				}))
+		}
 		items = append(items, xango.El("li", []xango.Attr{xango.A("class", "gj-doc-item")}, kids...))
 	}
 	if len(items) > 0 {
@@ -164,5 +173,6 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 			}
 		}
 	}
+	nodes = append(nodes, elementsSections(u, state, flow, redraw, renderUI)...)
 	return xango.El("div", []xango.Attr{xango.A("id", "img-panel")}, nodes...)
 }
