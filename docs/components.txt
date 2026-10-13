@@ -2334,6 +2334,12 @@ type PageSetup struct {
 func DefaultPageSetup() PageSetup
     DefaultPageSetup is A4, portrait, with one inch all round.
 
+func PageSetupOf(w, h float64, margins [4]float64) (PageSetup, bool)
+    PageSetupOf is the setup whose sheet is w by h points (in either
+    orientation, to within two points) with the given margins, as a saved
+    document records them. It is false when the sheet is none of the Papers,
+    which a PageSetup cannot describe.
+
 func (p PageSetup) Label() string
     Label is the setup in a few words for a status bar: "A4 / portrait".
 
