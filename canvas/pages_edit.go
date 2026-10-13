@@ -12,6 +12,7 @@ type textBox struct {
 	align       Align
 	left, right float64
 	top         float64 // top of the first line
+	parts       [3]string
 }
 
 func (b *textBox) lineH() float64 { return b.style.Leading() }
@@ -21,7 +22,7 @@ type pageBoxes struct{ header, footer, number *textBox }
 func (ps *PageSet) mkBox(hf *HeaderFooter, text string, left, right, top float64) *textBox {
 	return &textBox{
 		lines: strings.Split(text, "\n"), orig: hf.Style, style: footerStyle(hf.Style),
-		align: hf.Align, left: left, right: right, top: top,
+		align: hf.Align, left: left, right: right, top: top, parts: hf.Parts,
 	}
 }
 
@@ -89,6 +90,13 @@ func (ps *PageSet) drawBox(b *textBox) {
 	p.SetTextBaseline("middle")
 	p.SetTextAlign("left")
 	lh := b.lineH()
+	if b.parts != [3]string{} {
+		w := func(t string) float64 { return p.MeasureTextWidth(t) }
+		p.FillText(b.parts[0], b.left, b.top+lh/2)
+		p.FillText(b.parts[1], (b.left+b.right)/2-w(b.parts[1])/2, b.top+lh/2)
+		p.FillText(b.parts[2], b.right-w(b.parts[2]), b.top+lh/2)
+		return
+	}
 	for k, line := range b.lines {
 		p.FillText(line, ps.lineX(b, line), b.top+float64(k)*lh+lh/2)
 	}

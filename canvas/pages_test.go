@@ -1,6 +1,9 @@
 package canvas
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func twoPages() *PageSet {
 	ps := NewPageSet(
@@ -151,5 +154,31 @@ func TestPageSetDrawViewVersusEdit(t *testing.T) {
 	ps.Draw()
 	if !p.has("strokeStyle #b9a9ff") {
 		t.Fatal("edit mode draws margin guides")
+	}
+}
+
+func TestHeaderPartsAreDrawnLeftCentreAndRight(t *testing.T) {
+	p := &fakePainter{}
+	ps := NewPageSet(Page{Width: 200, Height: 100, Margin: Insets{20, 10, 20, 10}, Header: &HeaderFooter{Parts: [3]string{"L", "CC", "RRR"}}})
+	ps.SetPainter(p)
+	ps.Draw()
+	// The text area is x 44 to 204 (page at 24, side margins 20); every rune is 8 px wide.
+	var got []string
+	for _, c := range p.calls {
+		if strings.HasPrefix(c, "fillText") {
+			got = append(got, c)
+		}
+	}
+	want := []string{`fillText "L" 44 `, `fillText "CC" 116 `, `fillText "RRR" 180 `}
+	if len(got) != 3 {
+		t.Fatalf("texts: %v", got)
+	}
+	for i, w := range want {
+		if !strings.HasPrefix(got[i], w) {
+			t.Errorf("part %d = %s, want it to start %s", i, got[i], w)
+		}
+	}
+	if !(&HeaderFooter{Parts: [3]string{"", "x", ""}}).HasParts() || (&HeaderFooter{Text: "t"}).HasParts() {
+		t.Error("HasParts")
 	}
 }

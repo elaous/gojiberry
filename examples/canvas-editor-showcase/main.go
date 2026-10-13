@@ -177,6 +177,7 @@ func main() {
 		OnHoverComment: func(id string) { u.hoverComment = id },
 	}
 	renderCanvas := func() {
+		state.RunHeader, state.RunFooter, state.DocTitle = u.layout.Header, u.layout.Footer, u.title
 		if err := root.Render(Doc(state, cb)); err != nil {
 			doc.GetElementByID("state").SetTextContent(`{"error":"` + err.Error() + `"}`)
 			return
@@ -472,7 +473,7 @@ func main() {
 				state.Setup = p
 				renderCanvas()
 				renderUI()
-			}}), printPanel(u, renderUI))
+			}}), printPanel(u, func() { renderCanvas(); renderUI() }))
 		case "stats":
 			if flow != nil {
 				panel = statsPanel(flow.Stats(), state.Pages)
@@ -638,7 +639,13 @@ func main() {
 		}
 		bar := components.StatusBar(statusBar(flow, stats, state.Pages, state.Mode, state.Setup, u.saver.SaveState(), u.syncItem()))
 		node := components.DocumentView(components.DocumentViewProps{
-			Title: u.title, OnTitle: func(t string) { u.title = t; renderUI() },
+			Title: u.title, OnTitle: func(t string) {
+				u.title = t
+				if strings.Contains(u.layout.Header+u.layout.Footer, "{title}") {
+					renderCanvas()
+				}
+				renderUI()
+			},
 			MenuBar: menubar, Toolbar: toolbar,
 			Canvas: xango.Frag(
 				readBar(u, renderUI),
@@ -701,7 +708,7 @@ func main() {
 		outline, bookmarks := []string{}, []string{}
 		footnotes, indexTerms := []string{}, []string{}
 		tocRows := -1
-		headers, watermarks := []string{}, []string{}
+		headers, footers, watermarks := []string{}, []string{}, []string{}
 		spread := false
 		if ps, ok := root.Find(cxango.TagPage, 0).(*canvas.PageSet); ok {
 			spread = ps.Spread
@@ -709,7 +716,15 @@ func main() {
 				h, w := "", ""
 				if hf := ps.ResolvedHeader(i); hf != nil {
 					h = hf.Text
+					if hf.HasParts() {
+						h = strings.Join(hf.Parts[:], "\t")
+					}
 				}
+				f := ""
+				if hf := ps.ResolvedFooter(i); hf != nil && hf.HasParts() {
+					f = strings.Join(hf.Parts[:], "\t")
+				}
+				footers = append(footers, f)
 				if wm := ps.ResolvedWatermark(i); wm != nil {
 					w = wm.Text
 				}
@@ -802,7 +817,7 @@ func main() {
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "persisted": u.persisted, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
-			"link": link, "headers": headers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "live": liveState(u, flow), "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
+			"link": link, "headers": headers, "footers": footers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "live": liveState(u, flow), "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))

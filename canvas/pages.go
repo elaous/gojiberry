@@ -36,7 +36,14 @@ type HeaderFooter struct {
 	// Offset is the distance from the page edge to the text; zero
 	// centres the text in the margin.
 	Offset float64
+	// Parts, when any is set, are the left, centre and right parts of a single line, drawn across
+	// the width of the text area (a running header or footer such as "Report <tab> Draft <tab>
+	// Page 3"); Text and Align are then not used.
+	Parts [3]string
 }
+
+// HasParts says the header or footer is made of Parts.
+func (h *HeaderFooter) HasParts() bool { return h.Parts != [3]string{} }
 
 // PageNumberConfig turns on and formats page numbers, drawn in the
 // footer area. A Page that sets one starts (or restarts) numbering with
@@ -276,7 +283,7 @@ func (ps *PageSet) PageAt(y float64) int {
 func (ps *PageSet) ResolvedHeader(i int) *HeaderFooter {
 	for j := i; j >= 0; j-- {
 		if h := ps.Pages[j].Header; h != nil {
-			if h.Text == "" {
+			if h.Text == "" && !h.HasParts() {
 				return nil
 			}
 			return h
@@ -289,7 +296,7 @@ func (ps *PageSet) ResolvedHeader(i int) *HeaderFooter {
 func (ps *PageSet) ResolvedFooter(i int) *HeaderFooter {
 	for j := i; j >= 0; j-- {
 		if f := ps.Pages[j].Footer; f != nil {
-			if f.Text == "" {
+			if f.Text == "" && !f.HasParts() {
 				return nil
 			}
 			return f
