@@ -106,8 +106,16 @@ func TestInvalidSettingsNameTheVariableNotTheValue(t *testing.T) {
 
 func TestASinkThatThisBuildLacksIsAnErrorAtStart(t *testing.T) {
 	regMu.Lock()
+	old, had := factories["otlp"]
 	delete(factories, "otlp")
 	regMu.Unlock()
+	t.Cleanup(func() {
+		regMu.Lock()
+		defer regMu.Unlock()
+		if had {
+			factories["otlp"] = old
+		}
+	})
 	_, _, err := FromEnv(context.Background(), env("GOJIBERRY_OBS", "on", "GOJIBERRY_OBS_SINKS", "otlp"))
 	if err == nil || !strings.Contains(err.Error(), "otlp") || !strings.Contains(err.Error(), "GOJIBERRY_OBS_SINKS") {
 		t.Fatalf("err = %v", err)

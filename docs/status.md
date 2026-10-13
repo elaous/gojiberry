@@ -62,7 +62,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 78 | Equations, diagrams, code, footnotes | feature | partial | MathML with text alternative, code language, diagram descriptions, footnote links both ways in HTML, Word and Markdown | footnote links in PDF and RTF; equations as OMML in Word |
 | 79 | Autocomplete word picker | feature | partial | ranked suggestion list as an ARIA listbox, ghost text, de/fr/es word lists | ghost text drawn on the canvas (it is a DOM element), run font, mid-line; larger lists; reader run (blocked) |
 | 80 | Print layout | feature | partial | page model, headers and footers, page numbers, contents, widow control in the exports | on-screen pagination with running header; contents page numbers in Word and RTF; table-row widow control; sheet size restore |
-| 81 | Admin side | feature | partial | audit event schema, readiness route, backup and restore, `/admin/usage` and history page, observability core and PostHog sink | OpenTelemetry (OTLP) adapter; hub and sync/font/translation servers instrumented; persistent builtin totals; usage series across restarts |
+| 81 | Admin side | feature | partial | audit event schema, readiness route, backup and restore, `/admin/usage` and history page, observability core and PostHog sink | hub and sync/font/translation servers instrumented; persistent builtin totals; usage series across restarts |
 | 82 | Performance and size | enhancement | partial | wasm size budget (29.0 MB raw, 7.4 MB gzip) checked in CI, stripped build, precompressed wasm, `wasmdist`, deploy recipe | splitting the wasm; service-worker caching with versioned keys; low-memory mode; recipes untested on nginx/Caddy (blocked) |
 | 83 | i18n depth | enhancement | partial | de, fr, es packs, a test that every message id is in a pack, plurals and dates | stale-id check, time zones, languages beyond four, RTL packs, ids built at run time |
 | 84 | Lint the examples | chore | done | no path exclusions in `.golangci.yml` | none |
@@ -72,7 +72,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | Part | Type | Status | Present | Missing |
 | --- | --- | --- | --- | --- |
 | 57 Usage counts from browsers (no personal data) | feature | partial | `telemetry` package, opt-in, allowlist, sampling, local log, persistent totals, noise, Privacy menu, [telemetry.md](telemetry.md) | step 7: scrubbed crash reports (separate opt-in); one counting process per store |
-| 81 Operator metrics and traces (`observe`) | feature | partial | off by default; closed allowlists; builtin sink and `GET /admin/observe`; **PostHog** sink; [observability.md](observability.md) | **OpenTelemetry (OTLP) sink** in a nested module; more servers instrumented |
+| 81 Operator metrics and traces (`observe`) | feature | partial | off by default; closed allowlists; builtin sink and `GET /admin/observe`; **PostHog** and **OpenTelemetry (OTLP/HTTP JSON)** sinks; [observability.md](observability.md) | the hub and the sync, font and translation servers not instrumented; persistent builtin totals |
 
 ## Server, keys and security
 
@@ -125,7 +125,7 @@ security table: the review findings are done; still open are the per-account sig
 
 ## Suggested order for the next work
 
-1. 81: the OpenTelemetry sink (the one adapter left), then instrument the hub and the sync, font and translation servers.
+1. 81: instrument the hub and the sync, font and translation servers (both adapters are in).
 2. 56: the showcase Speech tab (the package is in).
 3. 72: ODT and an HTML importer.
 4. 80: on-screen pagination with the running header.
