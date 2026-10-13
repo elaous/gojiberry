@@ -83,14 +83,14 @@ func TestImportReadsLibreOfficeStyleMarkup(t *testing.T) {
 	}
 	find := func(sub string) *struct {
 		bold, ital, under bool
-		link, lang      string
+		link, lang        string
 	} {
 		for _, it := range d.Content {
 			if it.Chars != nil && strings.Contains(it.Chars.Text, sub) {
 				f := it.Chars.Format
 				return &struct {
 					bold, ital, under bool
-					link, lang      string
+					link, lang        string
 				}{f.FontWeight == 700, f.FontStyle == "italic", f.Underline, f.Link, f.Lang}
 			}
 		}
