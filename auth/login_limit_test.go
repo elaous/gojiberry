@@ -140,3 +140,27 @@ func TestLoginLimiterFallsBackToTheRemoteAddressWhenClientIPAnswersNothing(t *te
 		t.Fatalf("keys %v: clients with no forwarded address share one budget", lim.keys)
 	}
 }
+
+// Addresses inside one IPv6 /64 share a login budget (a subscriber holds a whole /64, so rotating through its
+// addresses buys nothing); another /64 and an IPv4 address have their own.
+func TestLoginLimiterGroupsAnIPv6SubscriberByItsSlash64(t *testing.T) {
+	f := newFakeOIDCProvider(t)
+	m := newTestManager(t, f.srv.URL)
+	lim := &budgetLimiter{n: 2}
+	m.SetLoginLimiter(lim, nil)
+	h := m.Routes()
+	for i, remote := range []string{"[2001:db8:1:2::1]:1", "[2001:db8:1:2:aaaa::9]:2"} {
+		if w := loginFrom(h, remote, nil); w.Code != http.StatusFound {
+			t.Fatalf("login %d from %s: status %d, want 302", i, remote, w.Code)
+		}
+	}
+	if w := loginFrom(h, "[2001:db8:1:2:ffff::7]:3", nil); w.Code != http.StatusTooManyRequests {
+		t.Errorf("a third address of the same /64: status %d, want 429", w.Code)
+	}
+	if w := loginFrom(h, "[2001:db8:1:3::1]:4", nil); w.Code != http.StatusFound {
+		t.Errorf("another /64 shares the budget: status %d, want 302", w.Code)
+	}
+	if got := lim.keys[0]; got != "login|2001:db8:1:2::/64" {
+		t.Errorf("key %q, want the /64", got)
+	}
+}

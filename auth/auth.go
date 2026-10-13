@@ -36,6 +36,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/elaous/gojiberry/internal/clientkey"
 	"github.com/elaous/gojiberry/user"
 	"math"
 	"net"
@@ -256,7 +257,7 @@ func (m *Manager) missBlockedNow(ip string) bool {
 // countMiss spends one miss from the client's budget; over it, the client is blocked until the limiter
 // says it may go on.
 func (m *Manager) countMiss(ctx context.Context, ip string) {
-	ok, wait := m.missLimiter.Allow(ctx, "miss|"+ip)
+	ok, wait := m.missLimiter.Allow(ctx, "miss|"+clientkey.Of(ip))
 	if ok {
 		return
 	}
@@ -286,7 +287,7 @@ func (m *Manager) allowLogin(r *http.Request) (bool, int) {
 			ip = v
 		}
 	}
-	ok, wait := m.loginLimiter.Allow(r.Context(), "login|"+ip)
+	ok, wait := m.loginLimiter.Allow(r.Context(), "login|"+clientkey.Of(ip))
 	if ok {
 		return true, 0
 	}

@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (full run on main 927845d (#320) with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full (its first run stopped at `fmt-check` on an unformatted test file of the ODT importer, merged without the check; formatted here) and the coverage run had no failure; coverage score 89.7% (was 89.8%), lowest packages: resource-imports-demo 50.0%, http-server-demo 63.6%, ssr-demo 64.3%, generic-list-demo 66.7%, canvas-editor-showcase 72.9% (its wasm part is covered by the browser tests, not counted), wasmdist 73.1%, collabhub 79.1%, fontserver 80.6%, passkey/client 80.8%, user 80.8%; the share-link test that failed about half the time on main was fixed in #320; README badge updated by hand). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
+3 of 10 since the last full run (full run on main 927845d (#320) with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full (its first run stopped at `fmt-check` on an unformatted test file of the ODT importer, merged without the check; formatted here) and the coverage run had no failure; coverage score 89.7% (was 89.8%), lowest packages: resource-imports-demo 50.0%, http-server-demo 63.6%, ssr-demo 64.3%, generic-list-demo 66.7%, canvas-editor-showcase 72.9% (its wasm part is covered by the browser tests, not counted), wasmdist 73.1%, collabhub 79.1%, fontserver 80.6%, passkey/client 80.8%, user 80.8%; the share-link test that failed about half the time on main was fixed in #320; README badge updated by hand). The full suite runs on main after the Standing request from the owner: the next full run on main also calculates the coverage score (`go test -coverprofile=... ./...` then `go tool cover -func`, total and the lowest packages) and reports it with the result.
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -984,9 +984,9 @@ the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. 
     a known, bounded one on `approx`; (5) a login `clientIP` that answers "" falls back to the connection's address
     instead of putting every client in one budget; (6) the unused login limiter of a passkeys-only manager is
     noted in `withSessions`. Tests: `TestStartChallengeSweepRetriesOnlyAFailedListing`,
-    `TestLoginLimiterFallsBackToTheRemoteAddressWhenClientIPAnswersNothing`. **Open:** (7) per-/64 IPv6 budgets for the
-    login routes (each address is its own key, as on the passkey routes): reuse the /64 grouping if the public store
-    has one. Priority: low. Where: `auth`, `auth/passkey`, `internal/docstorecmd`.
+    `TestLoginLimiterFallsBackToTheRemoteAddressWhenClientIPAnswersNothing`. (7) done: the login, miss and passkey
+    limiters key an IPv6 client by its /64 (`internal/clientkey`, the same rule as `public.ClientKey`, which now calls it); test
+    `TestLoginLimiterGroupsAnIPv6SubscriberByItsSlash64`. Nothing open.
 
 ## Backlog: accessibility, documents and operations (59 to 84)
 
