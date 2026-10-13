@@ -34,7 +34,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 
 | # | Item | Type | Status | Present | Missing |
 | --- | --- | --- | --- | --- | --- |
-| 48 | ARIA across the canvas editor and components | enhancement | partial | roles, names, live regions, axe-core in the browser tests, fixes from four slices | one arrow-key model for every picker; heading levels in the panels (`heading-order` is disabled in the test) |
+| 48 | ARIA across the canvas editor and components | enhancement | partial | roles, names, live regions, axe-core in the browser tests over 21 tabs with every rule on, heading levels in the panels, fixes from four slices | one arrow-key model for every picker |
 | 49 | Speech while typing | feature | partial | polite live region for words, characters, line and formatting; off by default | judgement of pace and double echo by real readers (blocked) |
 | 50 | Accessibility configs | enhancement | partial | reduced motion, high contrast, font size and line spacing | dyslexia-friendly font (needs a font asset), caret and selection visibility on the canvas, key remapping, colour-blind palettes, canvas following the text size |
 | 51 | Preference menu | feature | partial | one menu for the accessibility options; Privacy entry | language, theme and editor behaviour in the same schema; search; import and export; a panel instead of a menu |
