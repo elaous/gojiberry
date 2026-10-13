@@ -13,8 +13,14 @@ import (
 func RouteOf(path string) string {
 	p := strings.ToLower(path)
 	switch {
-	case p == "/health":
+	case p == "/health" || p == "/healthz":
 		return "/health"
+	case p == "/ops" || p == "/presence" || p == "/translate" || p == "/speak" || p == "/transcribe":
+		return p
+	case strings.HasPrefix(p, "/local/"):
+		return "/local/*"
+	case strings.HasPrefix(p, "/google/"):
+		return "/google/*"
 	case p == "/ready":
 		return "/ready"
 	case p == "/quota":
@@ -29,6 +35,18 @@ func RouteOf(path string) string {
 			return "/docs/{id}/acl"
 		case strings.HasSuffix(p, "/renew"):
 			return "/docs/{id}/renew"
+		case strings.HasSuffix(p, "/events"):
+			return "/docs/{id}/events"
+		case strings.HasSuffix(p, "/snapshot"):
+			return "/docs/{id}/snapshot"
+		case strings.HasSuffix(p, "/ws"):
+			return "/docs/{id}/ws"
+		case strings.HasSuffix(p, "/ops"):
+			return "/docs/{id}/ops"
+		case strings.HasSuffix(p, "/presence"):
+			return "/docs/{id}/presence"
+		case strings.HasSuffix(p, "/role"):
+			return "/docs/{id}/role"
 		}
 		return "/docs/{id}"
 	case p == "/me/config" || strings.HasPrefix(p, "/me/config/"):
