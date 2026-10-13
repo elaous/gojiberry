@@ -139,7 +139,25 @@ person, address or place is involved, because none reaches a sink. A failed send
 without bound (the span buffer holds at most 1000); the key is never logged, never in an error and never in
 `GET /admin/observe`.
 
-A sink the build does not contain (for example `otlp` in the dependency-free `cmd/docstore`) is a start-up error.
+### OpenTelemetry (OTLP)
+
+The `otlp` sink is in every build too. It speaks **OTLP over HTTP with JSON**, which an OpenTelemetry Collector and most
+observability backends accept, so it needs no SDK and no extra module. (If you need gRPC or protobuf, run a Collector next
+to the server and point this at it.) It uses the standard variables.
+
+| Variable | Meaning |
+| --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | The base URL of the collector or backend. Metrics go to `<base>/v1/metrics` and traces to `<base>/v1/traces`. It must be `https` (`http` only for `localhost`) and carry no credentials, query or fragment. |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Full URLs that replace the two above, if the backend uses other paths. |
+| `OTEL_EXPORTER_OTLP_HEADERS` | `name=value` pairs, comma separated, sent on every request (the place for an API key). Never logged, never in an error; `GET /admin/observe` shows only the names. |
+| `GOJIBERRY_OBS_OTLP_INTERVAL` | How often aggregates are sent, at least `1s`. Default `30s`. |
+
+Metrics are named `gojiberry.<metric>`, with the allowlisted label values as attributes and `gojiberry.source` set to
+`operator` or `usage`: counters as delta sums, histograms as count, sum, min and max (no buckets), gauges as the last
+value. Spans carry only their allowlisted attributes; a span with `result=error` has status error. The only resource
+attribute is `service.name`. A failed send is counted and dropped; the span buffer holds at most 1000.
+
+A sink the build does not contain is a start-up error.
 
 ## Looking before enabling: `GET /admin/observe`
 
@@ -165,4 +183,4 @@ up to ten seconds, then flushes and closes every sink, so the last counts are se
 
 ## Not done yet
 
-The OpenTelemetry (OTLP) adapter is the next step (roadmap 57 and 81). Persistent builtin totals, and instrumenting the collaboration hub and sync servers are not built.
+Persistent builtin totals, and instrumenting the collaboration hub and sync servers are not built.

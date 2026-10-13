@@ -148,7 +148,7 @@ func fromEnv(ctx context.Context, getenv func(string) string, readFile func(stri
 		f, ok := factory(n)
 		if !ok {
 			closeBuilt()
-			return nil, c, fmt.Errorf("observe: this build does not include the %s sink named in %s or %s (the OpenTelemetry adapter is in the all-backends server, docstore/backends/cmd/docstore)", n, envSinks, envUsageSinks)
+			return nil, c, fmt.Errorf("observe: this build does not include the %s sink named in %s or %s", n, envSinks, envUsageSinks)
 		}
 		s, err := f(ctx, env)
 		if err != nil {
