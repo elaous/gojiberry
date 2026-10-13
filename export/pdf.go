@@ -718,6 +718,8 @@ func renderPDFTable(pdf *gopdf.GoPdf, cells []Block, base int, contentWidth, x0 
 		wrapped [][]pdfToken // nil means "no box at all" (skipCell)
 	}
 
+	allDraws := make([][]cellDraw, rows)
+	heights := make([]float64, rows)
 	for r := 0; r < rows; r++ {
 		draws := make([]cellDraw, cols)
 		rowHeight := lineHeight + 2*pdfTableCellPadding
@@ -745,6 +747,17 @@ func renderPDFTable(pdf *gopdf.GoPdf, cells []Block, base int, contentWidth, x0 
 				rowHeight = h
 			}
 			draws[c] = cellDraw{x: x0 + float64(c)*colWidth, w: w, wrapped: wrapped}
+		}
+
+		allDraws[r], heights[r] = draws, rowHeight
+	}
+
+	for r := 0; r < rows; r++ {
+		draws, rowHeight := allDraws[r], heights[r]
+		// Widow and orphan control for rows: the header row is never alone at the foot of a page, and the
+		// last row is never alone at the head of one (the row before it goes along).
+		if r < rows-1 && (r == 0 || r == rows-2) {
+			pdfKeepTogether(pdf, rowHeight+heights[r+1])
 		}
 
 		pdf.SetNewY(pdf.GetY(), rowHeight)
@@ -961,6 +974,20 @@ func pdfPageHeight(pdf *gopdf.GoPdf) float64 {
 		return v.(*pdfFlowState).pageH
 	}
 	return 0
+}
+
+// pdfKeepTogether starts a new page when h points do not fit on the rest of this one (and this one is not
+// still empty), so that what follows is drawn together.
+func pdfKeepTogether(pdf *gopdf.GoPdf, h float64) {
+	v, ok := pdfFlows.Load(pdf)
+	if !ok {
+		return
+	}
+	room := v.(*pdfFlowState).pageH - pdf.MarginBottom() - pdf.GetY()
+	if room >= h || pdf.GetY() <= pdf.MarginTop()+0.5 {
+		return
+	}
+	pdf.AddPage()
 }
 
 // pdfWidowBreak says before which line of a paragraph of n lines the page must end so that neither
