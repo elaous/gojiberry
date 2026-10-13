@@ -53,7 +53,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 69 | Accessibility as a release gate | chore | partial | axe checks in the browser tests, test screen reader on the accessibility tree, manual script | other examples under the gate; first manual run (blocked) |
 | 70 | Version history UI | feature | partial | timeline, names, diff, restore | different author per person in a live session; permission and encryption checks |
 | 71 | Comments, suggestions, tracked changes | feature | partial | threads, resolve and reopen, suggestions with accept and reject, in the mirror | mentions that do not leak addresses; tracked changes in DOCX; two people proposing in one place |
-| 72 | Import and export fidelity | feature | partial | DOCX, Markdown, RTF, EPUB, HTML and PDF exporters; DOCX importer; fidelity report per format shown in the Files tab | ODT (neither direction); HTML importer; a corpus of real documents; the report kept with the document |
+| 72 | Import and export fidelity | feature | partial | DOCX, Markdown, RTF, EPUB, HTML and PDF exporters; DOCX and HTML importers; fidelity report per format shown in the Files tab | ODT (neither direction); a corpus of real documents; the report kept with the document |
 | 73 | Search and replace | feature | partial | `docsearch` (sealed index), `PlanReplace`, search across documents in the showcase | sealed index is rewritten whole, not incrementally |
 | 74 | Offline-first with conflict visibility | feature | partial | sync state, queued changes kept (`client.Options.Queue`) | pre-merge view; same for a document saved to a store; e2e with a real network cut |
 | 75 | Sharing UX | feature | partial | share links with role, expiry, revoke, who-can-see list, per-person expiry, open from the address, plain wording | a dialog that reaches a real server for the access list; comment-only role |
@@ -63,7 +63,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 79 | Autocomplete word picker | feature | partial | ranked suggestion list as an ARIA listbox, ghost text, de/fr/es word lists | ghost text drawn on the canvas (it is a DOM element), run font, mid-line; larger lists; reader run (blocked) |
 | 80 | Print layout | feature | partial | page model, headers and footers, page numbers, contents, widow control in the exports | on-screen pagination with running header; contents page numbers in Word and RTF; table-row widow control; sheet size restore |
 | 81 | Admin side | feature | partial | audit event schema, readiness route, backup and restore, `/admin/usage` and history page, observability core and PostHog sink | hub and sync/font/translation servers instrumented; persistent builtin totals; usage series across restarts |
-| 82 | Performance and size | enhancement | partial | wasm size budget (29.0 MB raw, 7.4 MB gzip) checked in CI, stripped build, precompressed wasm, `wasmdist`, deploy recipe | splitting the wasm; service-worker caching with versioned keys; low-memory mode; recipes untested on nginx/Caddy (blocked) |
+| 82 | Performance and size | enhancement | partial | wasm size budget (29.5 MB raw, 7.5 MB gzip) checked in CI, stripped build, precompressed wasm, `wasmdist`, deploy recipe | splitting the wasm; service-worker caching with versioned keys; low-memory mode; recipes untested on nginx/Caddy (blocked) |
 | 83 | i18n depth | enhancement | partial | de, fr, es packs, a test that every message id is in a pack, plurals and dates | stale-id check, time zones, languages beyond four, RTL packs, ids built at run time |
 | 84 | Lint the examples | chore | done | no path exclusions in `.golangci.yml` | none |
 
@@ -127,7 +127,7 @@ security table: the review findings are done; still open are the per-account sig
 
 1. 81: metrics for the other servers' own work; persistent builtin totals.
 2. 56: the showcase Speech tab (the package is in).
-3. 72: ODT and an HTML importer.
+3. 72: ODT.
 4. 80: on-screen pagination with the running header.
 5. 68: an insert-clip UI and caption track editor.
 6. 82 steps 3 to 5: split the wasm, service-worker caching, low-memory mode.
