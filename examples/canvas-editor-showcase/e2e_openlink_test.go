@@ -86,6 +86,7 @@ func TestOpenAShareLinkFromTheAddress(t *testing.T) {
 	d.OK(log.count(token) > 0, "the server target sends the link once it is used")
 	d.Click("#incoming-stop")
 	d.WaitFor("the notice to go", `!document.getElementById('incoming-stop')`)
+	d.Sleep(700) // a request already on its way when the link was stopped has finished
 	log.reset()
 	d.Click(`button[data-tab="save"]`)
 	d.Sleep(500)

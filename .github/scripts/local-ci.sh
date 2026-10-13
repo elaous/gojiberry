@@ -9,7 +9,7 @@
 #   .github/scripts/local-ci.sh a11y-test    only the named targets, in the workflow's order
 #
 # LOCAL_CI_SKIP is a space-separated list of targets to leave out (default: coverage-badge, which
-# CI commits to the repo and needs the whole test suite a second time). A short report goes to
+# needs the whole test suite a second time; the badge is updated by hand at a full run). A short report goes to
 # local-ci-report.txt (ignored by git): when, which commit, each step with its time and result.
 # LOCAL_CI_LIST=1 prints the steps it would run and stops. It needs what the steps need: Go, and for a11y-test a Chromium (set CHROMIUM if it is not on PATH).
 set -uo pipefail

@@ -15,7 +15,8 @@ remote check is wanted. The checks run here instead.
 3. **Every tenth merge in a row**, after squashing and merging the tenth PR, run the **full** suite on
    `main` (`make check`, or `go build ./... && go vet ./... && GOOS=js GOARCH=wasm go vet ./... &&
    go test ./...` plus `make lint`, `make wasm-lint`, `make modules` and `make lint-modules`), and fix what it finds on a branch of its
-   own before anything else is merged. Then the count starts again from zero.
+   own before anything else is merged. Then run `make coverage-badge` and commit the README.md it rewrites (the badge is updated by hand: the
+   hosted workflow is manual and no longer commits it), report the coverage score, and the count starts again from zero.
 4. The merge count since the last full run is kept at the top of
    [roadmap.md](roadmap.md#merges-since-the-last-full-test-run), updated with each merge.
 
@@ -35,8 +36,8 @@ the `axllent/mailpit` Docker image), `grammar`, `postgres` or `mongodb`.
 - `make ci-local` stops at the first failure; `.github/scripts/local-ci.sh -k` keeps going and lists
   every failure at the end.
 - `make ci-local STEPS="wasm-size a11y-test"` runs only those steps.
-- `LOCAL_CI_SKIP` is the steps to leave out; the default is `coverage-badge` (CI commits the badge, and
-  it runs the whole test suite a second time; run `make coverage-badge` yourself at a full run).
+- `LOCAL_CI_SKIP` is the steps to leave out; the default is `coverage-badge` (it runs the whole test suite a second time, and the
+  badge is updated by hand; run `make coverage-badge` yourself at a full run and commit README.md).
   `LOCAL_CI_LIST=1` prints the steps and stops.
 - `local-ci-report.txt` (ignored by git) has the commit, and each step with its time and result.
 - `a11y-test` needs a Chromium; set `CHROMIUM` if it is not on the PATH. The manual screen-reader run
