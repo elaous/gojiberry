@@ -69,6 +69,11 @@ var exportMatrix = map[string]map[Feature]entry{
 	"docx": formatTable(foldedFeatures, textEquation, longDescText, map[Feature]entry{
 		FeatHighlight: drop(""), FeatFootnote: kept(), // a footnote's mark and note link both ways (bookmarks and internal links)
 	}),
+	// OpenDocument text: like Word it has no colour, size or font here and writes no highlights; the footnotes
+	// are real notes. The contents page is not written.
+	"odt": formatTable(foldedFeatures, textEquation, longDescText, map[Feature]entry{
+		FeatHighlight: drop(""), FeatFootnote: kept(), FeatPageTOC: drop(""), FeatSuggestion: drop(NoteAccepted),
+	}),
 	// The PDF is drawn: text, links, tags and tables, without raised or lowered text, shading or row spans.
 	"pdf": formatTable(foldedFeatures, textEquation, longDescText, map[Feature]entry{
 		FeatSuperscript: drop(""), FeatSubscript: drop(""), FeatHighlight: drop(""),

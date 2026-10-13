@@ -4,6 +4,7 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docximport"
 	"github.com/elaous/gojiberry/htmlimport"
+	"github.com/elaous/gojiberry/odtimport"
 	"github.com/elaous/gojiberry/pdftext"
 	"github.com/elaous/gojiberry/transfer"
 )
@@ -41,6 +42,13 @@ func (htmlImporter) Format() transfer.Format {
 }
 func (htmlImporter) Import(b []byte) (docfile.Document, error) { return htmlimport.Import(b) }
 
+type odtImporter struct{}
+
+func (odtImporter) Format() transfer.Format {
+	return transfer.Format{Name: "odt", Label: "OpenDocument text (.odt)", Exts: []string{".odt"}, MIME: "application/vnd.oasis.opendocument.text"}
+}
+func (odtImporter) Import(b []byte) (docfile.Document, error) { return odtimport.Import(b) }
+
 type pdfImporter struct{}
 
 func (pdfImporter) Format() transfer.Format {
@@ -57,7 +65,7 @@ func (a acceptedExporter) Export(d docfile.Document) ([]byte, error) {
 }
 
 // Register adds the formats this package handles to r. It writes HTML, RTF,
-// EPUB, PDF and Word (.docx), and reads Word, HTML and PDF text. (Markdown and plain
+// EPUB, PDF, OpenDocument and Word (.docx), and reads Word, OpenDocument, HTML and PDF text. (Markdown and plain
 // text are in transfer.Default; for braille see package braille.)
 func Register(r *transfer.Registry) {
 	for _, e := range r.Exporters() { // Markdown and plain text of transfer.Default read the text as it is
@@ -70,11 +78,13 @@ func Register(r *transfer.Registry) {
 		{transfer.Format{Name: "rtf", Label: "Rich Text Format", Exts: []string{".rtf"}, MIME: "application/rtf"}, RTF{}, false},
 		{transfer.Format{Name: "epub", Label: "E-book (EPUB)", Exts: []string{".epub"}, MIME: "application/epub+zip"}, EPUB{}, true},
 		{transfer.Format{Name: "pdf", Label: "PDF", Exts: []string{".pdf"}, MIME: "application/pdf"}, PDF{}, false},
+		{transfer.Format{Name: "odt", Label: "OpenDocument text (.odt)", Exts: []string{".odt"}, MIME: "application/vnd.oasis.opendocument.text"}, ODT{}, false},
 		{transfer.Format{Name: "docx", Label: "Word (.docx)", Exts: []string{".docx"}, MIME: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}, DOCX{}, true},
 	} {
 		r.AddExporter(f)
 	}
 	r.AddImporter(docxImporter{})
 	r.AddImporter(htmlImporter{})
+	r.AddImporter(odtImporter{})
 	r.AddImporter(pdfImporter{})
 }
