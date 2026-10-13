@@ -122,7 +122,7 @@ func TestEveryMessageInTheSourcesIsInThePacks(t *testing.T) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "node_modules", "testdata", "vendor":
+			case ".git", ".claude", "node_modules", "testdata", "vendor":
 				return filepath.SkipDir
 			}
 			return nil
@@ -197,7 +197,7 @@ func TestNoStaleMessagesInThePacks(t *testing.T) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "node_modules", "testdata", "vendor":
+			case ".git", ".claude", "node_modules", "testdata", "vendor":
 				return filepath.SkipDir
 			}
 			return nil
