@@ -69,3 +69,5 @@ local-ci-report.txt
 # local stack settings and secrets (docker-compose.yml)
 .env.local
 secrets/
+
+/.pdfa11y/

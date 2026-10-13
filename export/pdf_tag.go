@@ -3,6 +3,7 @@ package export
 import (
 	"bytes"
 	"compress/zlib"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"regexp"
@@ -113,6 +114,7 @@ type node struct {
 	children []*node
 	obj      int
 	parent   *node
+	numbered bool // a list: its items are numbered
 }
 
 // object is the text of one PDF object in the file.
@@ -304,7 +306,7 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 		if !bytes.HasSuffix(pageTrim, []byte(">>")) {
 			return nil, fmt.Errorf("export: tagging the PDF: page object %d has an unexpected shape", pn)
 		}
-		page := append(append([]byte{}, pageTrim[:len(pageTrim)-2]...), []byte(fmt.Sprintf("  /StructParents %d\n>>", pi))...)
+		page := append(append([]byte{}, pageTrim[:len(pageTrim)-2]...), []byte(fmt.Sprintf("  /StructParents %d /Tabs /S\n>>", pi))...)
 		updates = append(updates, update{pn, page})
 
 		// The link annotations gopdf added to this page, in the order the links were drawn.
@@ -383,9 +385,16 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 				if n := len(lists); n == 0 || lists[n-1].level < t.b {
 					parent := doc
 					if n > 0 {
+						// A nested list is inside the body of the item before it, not beside it.
 						parent = lists[n-1].item
+						for i := len(parent.children) - 1; i >= 0; i-- {
+							if parent.children[i].typ == "LBody" {
+								parent = parent.children[i]
+								break
+							}
+						}
 					}
-					l := &node{typ: "L", parent: parent}
+					l := &node{typ: "L", parent: parent, numbered: t.a == 1}
 					parent.children = append(parent.children, l)
 					lists = append(lists, &openList{l: l, level: t.b, numbered: t.a})
 				}
@@ -462,6 +471,11 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 					fmt.Fprintf(&b, " << /Type /MCR /Pg %d 0 R /MCID %d >>", pageObjs[k.p.page], k.p.mcid)
 				}
 			}
+			for _, c := range n.children {
+				if c.elem == nil { // a list nested in this item's body
+					fmt.Fprintf(&b, " %d 0 R", c.obj)
+				}
+			}
 			if n.elem.annot != 0 {
 				fmt.Fprintf(&b, " << /Type /OBJR /Obj %d 0 R /Pg %d 0 R >>", n.elem.annot, pageObjs[n.elem.pieces[0].page])
 			}
@@ -478,6 +492,16 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 		}
 		if n.elem != nil && n.elem.tag.kind == tagFigure && n.elem.tag.id < len(snap.Blocks) {
 			fmt.Fprintf(&b, " /Alt %s", pdfTextString(snap.Blocks[n.elem.tag.id].ImageAlt))
+		}
+		switch n.typ {
+		case "TH": // every header cell is in the first row, so it heads a column
+			b.WriteString(" /A << /O /Table /Scope /Column >>")
+		case "L":
+			if n.numbered {
+				b.WriteString(" /A << /O /List /ListNumbering /Decimal >>")
+			} else {
+				b.WriteString(" /A << /O /List /ListNumbering /Disc >>")
+			}
 		}
 		b.WriteString(" >>")
 		updates = append(updates, update{n.obj, b.Bytes()})
@@ -501,6 +525,12 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 	fmt.Fprintf(&root, " ] >> /ParentTreeNextKey %d >>", nextKey)
 	updates = append(updates, update{rootObj, root.Bytes()})
 
+	// The XMP metadata that says the file follows PDF/UA-1 and what it is called.
+	xmp := xmpPacket(snap)
+	metaObj := next
+	next++
+	updates = append(updates, update{metaObj, []byte(fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len(xmp), xmp))})
+
 	// The catalog says the file is tagged.
 	cat, ok := objectText(raw, 1)
 	if !ok {
@@ -512,7 +542,7 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 	}
 	var nc bytes.Buffer
 	nc.Write(catTrim[:len(catTrim)-2])
-	fmt.Fprintf(&nc, "  /MarkInfo << /Marked true >>\n  /StructTreeRoot %d 0 R\n  /ViewerPreferences << /DisplayDocTitle true >>\n", rootObj)
+	fmt.Fprintf(&nc, "  /MarkInfo << /Marked true >>\n  /StructTreeRoot %d 0 R\n  /ViewerPreferences << /DisplayDocTitle true >>\n  /Metadata %d 0 R\n", rootObj, metaObj)
 	if snap.Lang != "" && lang.ValidTag(snap.Lang) {
 		fmt.Fprintf(&nc, "  /Lang %s\n", pdfTextString(snap.Lang))
 	}
@@ -552,4 +582,29 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 	newTrailer = newTrailer[:k] + "/Prev " + string(prev[1]) + "\n>>"
 	fmt.Fprintf(&out, "trailer%s\nstartxref\n%d\n%%%%EOF\n", newTrailer, xrefAt)
 	return out.Bytes(), nil
+}
+
+// xmpPacket is the XMP metadata of the file: the PDF/UA-1 identifier (ISO 14289-1), the title and the
+// language of the document.
+func xmpPacket(snap Snapshot) string {
+	esc := func(s string) string {
+		var b strings.Builder
+		_ = xml.EscapeText(&b, []byte(s))
+		return b.String()
+	}
+	title := snap.Title
+	if title == "" {
+		title = "Untitled"
+	}
+	var b strings.Builder
+	b.WriteString("<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n")
+	b.WriteString("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n")
+	b.WriteString("<rdf:Description rdf:about=\"\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:pdfuaid=\"http://www.aiim.org/pdfua/ns/id/\">\n")
+	b.WriteString("<pdfuaid:part>1</pdfuaid:part>\n")
+	b.WriteString("<dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">" + esc(title) + "</rdf:li></rdf:Alt></dc:title>\n")
+	if snap.Lang != "" && lang.ValidTag(snap.Lang) {
+		b.WriteString("<dc:language><rdf:Bag><rdf:li>" + esc(snap.Lang) + "</rdf:li></rdf:Bag></dc:language>\n")
+	}
+	b.WriteString("</rdf:Description></rdf:RDF></x:xmpmeta>\n<?xpacket end=\"w\"?>")
+	return b.String()
 }

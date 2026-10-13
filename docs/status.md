@@ -24,7 +24,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | --- | --- | --- |
 | Run the manual screen-reader script on NVDA, JAWS and VoiceOver (steps 14 to 21 of [accessibility-testing.md](accessibility-testing.md)) | A person with those readers | 49, 60, 69, 79 |
 | E-mail verification through a real provider (SMTP or an API) | The operator picks the provider and gives credentials | 41 |
-| Full PDF/UA audit with veraPDF or PAC | The tools (not installed here) | 63 |
+| A veraPDF or PAC run on the PDFs (pdfa11y, a Go checker, now passes in `make pdfa11y-test`) | veraPDF is Java; PAC is Windows | 63 |
 | Test the Redis-style shared stores, S3-compatible services that ignore `If-Match` on delete, nginx and Caddy recipes | Live endpoints and daemons | 3, 9, 82, 89 |
 | Test atypical-speech support with people who have atypical speech | Volunteers and consent | 56 |
 | An outside security audit before anyone relies on the keys for secrets | A reviewer | 89 |
@@ -44,7 +44,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 60 | Accessible text mirror of the canvas | feature | partial | mirror with links, outline landmark, comments, tables, lists, caret mapping both ways (browser-tested) | block-level diff of its own; caret mapping counts runes; manual reader run (blocked) |
 | 61 | Alt text and structure checks | feature | partial | prompt on insert, description editor, checker rules, reading order of typed lists and tables | on-device suggestions; reading order of floating objects; heading levels beyond 3; more colour names |
 | 62 | Accessibility checker panel | feature | partial | panel with jump, one-click fixes, export gate (page side) and `docstore/exportgate` server floor | server floor for an encrypted store needs the host's decrypting job; floating objects; no fix for `list-fake` and table-header rules |
-| 63 | Accessible exports | feature | partial | tagged PDF (structure tree, `/Lang`, links, nested lists, run languages), semantic HTML, DOCX metadata, fidelity report | table-cell language spans and links in PDF, code links; veraPDF / PAC audit (blocked); HTML table headers and landmarks check in CI |
+| 63 | Accessible exports | feature | partial | tagged PDF (structure tree, `/Lang`, links, nested lists, run languages), semantic HTML, DOCX metadata, fidelity report | table-cell language spans and links in PDF, code links; a veraPDF / PAC run (pdfa11y passes; see `make pdfa11y-test`); HTML table headers and landmarks check in CI |
 | 64 | Language and direction | feature | partial | per-run language, RTL and direction handling | document default language, set language from detection, bidi/vertical layout checks, IME composition |
 | 65 | Cognitive and motor options | feature | partial | distraction-free mode, forgiving targets, larger size step | size scale beyond one step, switch scanning and dwell click, plain-language label set, longer undo history |
 | 66 | Collaboration accessibility | feature | partial | joins, leaves, merged and refused changes, remote comments announced; "Where is X" | per-person setting for remote cursors; true conflict wording; browser test of refused count |
