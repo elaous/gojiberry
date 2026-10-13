@@ -1,6 +1,6 @@
 # Status of the roadmap
 
-A one-page view of [roadmap.md](roadmap.md), read against `main` on 2026-10-13. The roadmap keeps the long
+A one-page view of [roadmap.md](roadmap.md), read against `main` on 2026-10-13 (after #331). The roadmap keeps the long
 history of each item (what was built, tests, decisions); this page says only **what is present**, **what is
 missing**, and where the item stands. The item numbers are the roadmap's. When the two disagree, the roadmap's
 entry for the item is the detail and this page is the summary: update both in the same change.
@@ -61,7 +61,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 77 | Templates, styles, design tokens | feature | partial | named styles, tokens, themed HTML export | storing sets in the central store; applying them to the canvas and other exports; a theme editor |
 | 78 | Equations, diagrams, code, footnotes | feature | partial | MathML with text alternative, code language, diagram descriptions, footnote links both ways in HTML, Word, RTF and Markdown | footnote links in PDF; equations as OMML in Word |
 | 79 | Autocomplete word picker | feature | partial | ranked suggestion list as an ARIA listbox, ghost text, de/fr/es word lists | ghost text drawn on the canvas (it is a DOM element), run font, mid-line; larger lists; reader run (blocked) |
-| 80 | Print layout | feature | partial | page model, headers and footers, page numbers, contents, widow control in the exports (table rows too in PDF), contents with page references in PDF, Word and RTF; the same running header and footer on the screen sheets | odd and even headers; contents page on the screen; sheets that are none of the six papers |
+| 80 | Print layout | feature | partial | page model, headers and footers, page numbers, contents, widow control in the exports (table rows too in PDF), contents with page references in PDF, Word and RTF; the same running header and footer on the screen sheets | odd and even headers; contents page on the screen (needs a decision: a real contents object in the document would add a second list next to the one the exports write; a display-only sheet would not); sheets that are none of the six papers |
 | 81 | Admin side | feature | partial | audit event schema, readiness route, backup and restore, `/admin/usage` and history page, observability core and PostHog sink | hub and sync/font/translation servers instrumented; persistent builtin totals; usage series across restarts |
 | 82 | Performance and size | enhancement | done (with leftovers) | wasm size budgets per program (main 26.8 MB raw, 6.6 MB gzip; files 9.8 MB, 2.8 MB) checked in CI, stripped build, precompressed wasm, `wasmdist`, deploy recipe, service worker that keeps the app for repeat visits and offline start, low-memory mode (fewer undo steps), the file formats in a second wasm loaded on first use (main 26.1 MB, was 29.4) | memory saving of the low-memory mode not measured on a real small device; splitting the worker by format: `net/http` is out of it now (9.5 MB, was 11.0), the rest of the floor is to be measured before judging the split (roadmap 82); recipes untested on nginx/Caddy (blocked) |
 | 83 | i18n depth | enhancement | partial | de, fr, es packs, a test that every message id is in a pack, plurals and dates | time zones, languages beyond four, RTL packs, ids built at run time |
@@ -128,4 +128,9 @@ security table: the review findings are done; still open are the per-account sig
 1. 81: metrics for the other servers' own work; persistent builtin totals.
 2. 56: keep recordings between visits and learn from corrections.
 3. 68: an insert-clip UI and caption track editor.
-4. Then the small leftovers of 59, 61, 64, 65, 50 and 51.
+4. Then the small leftovers of 59, 64, 65, 50 and 51, and 80's odd and even headers.
+5. 82: measure what the file worker's remaining ~7 MB holds before judging a split by format.
+
+Closed since the previous version of this page: 58 (IPv6 /64 budgets), the table-row widow control, the sheet size
+restore, contents in RTF, footnote links in RTF, the long undo history, heading levels in the panels, all CSS
+colour names, and the file worker without `net/http` (11.0 to 9.5 MB).
