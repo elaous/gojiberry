@@ -1903,6 +1903,57 @@ type FootnoteListProps struct {
 }
     FootnoteListProps configures FootnoteList.
 
+type GhostAction int
+    GhostAction is what a key did to the ghost text.
+
+const (
+	GhostNone    GhostAction = iota // the key is not for the ghost text; let it through
+	GhostAccept                     // insert Suffix at the caret
+	GhostDismiss                    // hide it
+)
+type GhostState struct {
+	// Word is the whole suggested word, Suffix the part the person has not typed yet.
+	Word, Suffix string
+	// Prefix is what had been typed when the suggestion was made.
+	Prefix string
+	// Caret is the caret offset (in runes) the suggestion belongs to; accepting at another caret is refused.
+	Caret int
+
+	// Has unexported fields.
+}
+    GhostState is the suggestion being shown, if any.
+
+func (g *GhostState) Accept(caret int) string
+    Accept returns the text to insert at the caret, "" when there is none or the
+    caret has moved.
+
+func (g *GhostState) Announcement() string
+    Announcement is the polite message for the suggestion now shown, "" when it
+    was announced already (typing another letter of the same word says nothing
+    again) or nothing is shown.
+
+func (g *GhostState) Clear()
+    Clear hides the suggestion (the dismissal is kept).
+
+func (g *GhostState) Key(key string) GhostAction
+    Key applies a key (as KeyboardEvent.key, with no modifier held) and says
+    what it did: only Tab accepts and only Escape dismisses; every other key,
+    Enter and the arrows included, leaves the suggestion unaccepted.
+
+func (g *GhostState) Show(prefix, word string, caret int) bool
+    Show offers word for prefix at caret; it returns whether it is shown.
+    A word that does not continue the prefix, that is no longer than it, or that
+    was dismissed for this prefix is not shown.
+
+func (g *GhostState) Typed(prefix string)
+    Typed forgets a dismissal once the prefix is not the one it was made for.
+
+func (g *GhostState) Visible() bool
+    Visible says whether there is a suggestion to show.
+
+func (g *GhostState) Width() int
+    Width is the number of characters of the suggestion, for sizing.
+
 type GrammarIssue struct {
 	// Text is the words concerned, Message what is wrong, Suggestion what to
 	// write instead ("" when the model offered none).
