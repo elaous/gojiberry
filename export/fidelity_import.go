@@ -3,6 +3,7 @@ package export
 import (
 	"github.com/elaous/gojiberry/docximport"
 	"github.com/elaous/gojiberry/htmlimport"
+	"github.com/elaous/gojiberry/odtimport"
 )
 
 // Features that only an import can lose: what a file written by another program holds and the editor has no
@@ -25,7 +26,7 @@ const (
 )
 
 // ImportFormats are the formats ImportFidelity can report on.
-var ImportFormats = []string{"docx", "html", "pdf"}
+var ImportFormats = []string{"docx", "html", "odt", "pdf"}
 
 // ImportFidelity reports what importing a file of this format would leave out of the document, from the file
 // itself: for a Word file the elements Import has no place for (counted by docximport.Inspect), for a PDF
@@ -53,6 +54,29 @@ func ImportFidelity(format string, data []byte) Report {
 			{Feature: FeatRemoteImage, Count: s.Images, Note: "pictures on a server are not fetched"},
 			{Feature: FeatLink, Count: s.Links, Note: NoteText},
 			{Feature: FeatLayout, Count: s.Layout},
+		} {
+			if l.Count > 0 {
+				l.Treatment = Dropped
+				r.Losses = append(r.Losses, l)
+			}
+		}
+	case "odt":
+		s, err := odtimport.Inspect(data)
+		if err != nil {
+			return r
+		}
+		r.Known = true
+		for _, l := range []Loss{
+			{Feature: FeatComment, Count: s.Comments},
+			{Feature: FeatHeaderFooter, Count: s.HeaderFoots},
+			{Feature: FeatTextBox, Count: s.TextBoxes},
+			{Feature: FeatDrawing, Count: s.Drawings},
+			{Feature: FeatSuggestion, Count: s.TrackedChanges, Note: NoteAccepted},
+			{Feature: FeatEndnote, Count: s.Endnotes},
+			{Feature: FeatField, Count: s.Fields, Note: NoteText},
+			{Feature: FeatBookmark, Count: s.Bookmarks},
+			{Feature: FeatLink, Count: s.Links, Note: NoteText},
+			{Feature: FeatColumns, Count: s.Columns},
 		} {
 			if l.Count > 0 {
 				l.Treatment = Dropped
