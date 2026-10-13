@@ -159,6 +159,9 @@ type HeaderProps struct {
 	Style  *canvas.TextStyle
 	Align  canvas.Align
 	Offset float64
+	// Parts are the left, centre and right parts of one line; when any is set they are used instead of
+	// Text.
+	Parts [3]string
 	// None removes the header from this page on.
 	None     bool
 	Children []xango.Node
@@ -170,10 +173,13 @@ func Header(p HeaderProps) xango.Node { return xango.Host(TagHeader, p, p.Childr
 // FooterProps is a page footer: text (or text children) and, usually, a
 // PageNumber child.
 type FooterProps struct {
-	Text     string
-	Style    *canvas.TextStyle
-	Align    canvas.Align
-	Offset   float64
+	Text   string
+	Style  *canvas.TextStyle
+	Align  canvas.Align
+	Offset float64
+	// Parts are the left, centre and right parts of one line; when any is set they are used instead of
+	// Text.
+	Parts    [3]string
 	None     bool
 	Children []xango.Node
 }

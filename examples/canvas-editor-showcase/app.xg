@@ -44,12 +44,10 @@ func Doc(state State, cb Callbacks) xango.Node {
 				onHoverComment={cb.OnHoverComment}
 				pages={func(page xango.Node, n int) xango.Node {
 					return <>
-						<canvas.Header text="Gojiberry editor" />
+						{runningHeader(state, n)}
 						{page}
 						{watermark(n)}
-						<canvas.Footer>
-							<canvas.PageNumber format="Page {n} of {total}" align={cv.AlignRight} />
-						</canvas.Footer>
+						{runningFooter(state, n)}
 					</>
 				}}
 			/>

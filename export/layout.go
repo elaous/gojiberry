@@ -31,6 +31,13 @@ func FillFields(text string, page, pages int, title string) string {
 	return strings.NewReplacer(fieldPage, strconv.Itoa(page), fieldPages, strconv.Itoa(pages), fieldTitle, title).Replace(text)
 }
 
+// RunningParts is a header or footer text for one page as its left, centre and right parts, with the
+// fields filled in. A screen that draws the sheets uses it so the page shows what the exports print.
+func RunningParts(text string, page, pages int, title string) [3]string {
+	l, c, r := decorParts(text)
+	return [3]string{FillFields(l, page, pages, title), FillFields(c, page, pages, title), FillFields(r, page, pages, title)}
+}
+
 // decorParts splits a header or footer text at its tabs into the left, centre and right parts: one part
 // is the centre, two are left and right, three (or more, the rest joined to the third) are all three.
 func decorParts(text string) (left, centre, right string) {
