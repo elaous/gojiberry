@@ -1,2 +1,4 @@
-raw=30000000
-gzip=7700000
+raw=26800000
+gzip=6600000
+files_raw=11400000
+files_gzip=3300000

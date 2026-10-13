@@ -31,6 +31,14 @@ func TestServiceWorkerIsVersionedByTheContentsOfTheShell(t *testing.T) {
 	if strings.Contains(s, "other.txt") || strings.Contains(s, "__") {
 		t.Error("only the shell is listed and every placeholder is filled in")
 	}
+	// A file for later is listed apart, and is part of the version.
+	lazy := fstest.MapFS{"index.html": {Data: []byte("x")}, "files.wasm": {Data: []byte("a")}, "files-worker.js": {Data: []byte("w")}}
+	l1, _ := ServiceWorker(lazy, nil)
+	lazy["files.wasm"] = &fstest.MapFile{Data: []byte("b")}
+	l2, _ := ServiceWorker(lazy, nil)
+	if !strings.Contains(string(l1), `const LAZY = ["files-worker.js","files.wasm"]`) || strings.Contains(string(l1), `const SHELL = ["index.html","files`) || string(l1) == string(l2) {
+		t.Errorf("lazy files: %s", l1)
+	}
 	// A missing file is left out; no file at all is an error.
 	only, err := ServiceWorker(fstest.MapFS{"index.html": {Data: []byte("x")}}, nil)
 	if err != nil || !strings.Contains(string(only), `const SHELL = ["index.html"]`) {

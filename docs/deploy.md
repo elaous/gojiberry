@@ -108,12 +108,21 @@ http.Handle("/", wasmserve.Handler(os.DirFS("dist/showcase"), wasmserve.Options{
 development server that rebuilds the wasm often, `Options{GzipLevel: gzip.BestSpeed}` keeps the first
 request after a rebuild from waiting on the strongest compression.
 
+### The second program (the file formats)
+
+The showcase is two programs: `main.wasm` (about 26 MB, 6.4 MB gzipped), which every visitor downloads, and
+`files.wasm` (about 11 MB, 3.1 MB gzipped) with `files-worker.js`, which a web worker loads the first time a file
+is imported or exported (Word, OpenDocument, PDF, RTF, EPUB, HTML). Both are built by `make showcase-dist` and the
+Dockerfile, both are precompressed by `wasmdist`, and nothing else is needed on the server: the page asks for
+`files-worker.js` and `files.wasm` next to `index.html`. `make wasm-size` checks each program against its own
+budget in [wasm-budget.txt](wasm-budget.txt).
+
 ### The service worker (repeat visits and no connection)
 
 `wasmdist` also writes `sw.js` next to `index.html` (`-sw=false` leaves it out), and the showcase page registers
 it. It keeps `index.html`, `wasm_exec.js` and `main.wasm` in a cache named for a hash of their contents, so a
 repeat visit starts with no request for the 30 MB program, and the app opens without a connection (its documents
-are in the browser). A new build is a new `sw.js` (the version is in its text), the browser installs it, and the
+are in the browser; the file formats too once they have been used). A new build is a new `sw.js` (the version is in its text), the browser installs it, and the
 old cache is deleted when it takes over. It touches nothing else: requests to the API, sign-in and other origins
 go to the network as before, and a page for an app path comes from the network too (the cached start page only
 when there is none). Serve `sw.js` with `Cache-Control: no-cache` (the nginx file does, as it does for every
@@ -131,6 +140,5 @@ worker out for that visit. To remove a worker from a browser, unregister it in t
 
 ## What is not done
 
-Roadmap 82 plan steps 3 and 5 are still open: splitting rarely used parts out of the wasm (Go's wasm
-has no dynamic loading, so this means separate binaries or a worker), and a low-memory mode. The recipe
-above is step 2 (streaming compile, correct headers, compression) and the service worker is step 4.
+Roadmap 82's five steps are all in. What is not done: the memory saved by low-memory mode has not been measured on
+a real small device, and the nginx and Caddy settings above were not run here.

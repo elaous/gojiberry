@@ -40,7 +40,9 @@ type Session struct {
 	OnChange func()
 	// OnDone is called after a migration with its report (refresh the document
 	// list there).
-	OnDone  func(Report)
+	OnDone func(Report)
+	// Import converts a Word file; nil is DefaultImport.
+	Import  func([]byte) (docfile.Document, error)
 	Pending *components.Pending
 
 	mu       sync.Mutex
@@ -241,7 +243,7 @@ func (s *Session) run(ctx context.Context, src Source, items []Item, tag string)
 	if err != nil {
 		return err
 	}
-	rep, err := Run(ctx, src, items, sink, Options{Tag: tag, OnProgress: func(done, total int, name string) {
+	rep, err := Run(ctx, src, items, sink, Options{Import: s.Import, Tag: tag, OnProgress: func(done, total int, name string) {
 		s.set(func() { s.done, s.total, s.current = done, total, name })
 	}})
 	if finish != nil {

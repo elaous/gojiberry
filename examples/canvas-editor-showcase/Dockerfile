@@ -8,7 +8,8 @@ RUN go mod download
 COPY . .
 RUN cd examples/canvas-editor-showcase \
  && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o /site/main.wasm . \
- && cp index.html /site/index.html \
+ && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o /site/files.wasm ./files \
+ && cp index.html files-worker.js /site/ \
  && cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" /site/wasm_exec.js
 # A .gz beside each text-like file: nginx's gzip_static sends it as it is (about 6.9 MB for the wasm)
 # instead of compressing 27 MB again on every request. For .br files as well, install the brotli tool

@@ -26,7 +26,7 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/domrt"
 	"github.com/elaous/gojiberry/domrt/browser"
-	"github.com/elaous/gojiberry/export"
+	"github.com/elaous/gojiberry/export/remote"
 	"github.com/elaous/gojiberry/fonts"
 	"github.com/elaous/gojiberry/migrate"
 	"github.com/elaous/gojiberry/saver"
@@ -134,7 +134,7 @@ func main() {
 	store := docstore.NewMemoryAdapter()
 	lib := &fonts.Library{Blobs: saver.Blobs(store)}
 	u.transfer = transfer.Default()
-	export.Register(u.transfer) // HTML, RTF, EPUB, PDF, Word out; Word and PDF in
+	remote.Register(u.transfer, callFiles) // HTML, RTF, EPUB, PDF, OpenDocument, Word out; Word, HTML, OpenDocument and PDF in: done by the file worker
 
 	stage := canvas.NewStage(nil, 0, 0)
 	canvasEl, inputEl := doc.GetElementByID("stage"), doc.GetElementByID("input")
@@ -308,6 +308,7 @@ func main() {
 	u.speech = newSpeech(func() { renderUI() })
 	u.usage = newPrivacy(u.tab, &u.enc.dir)
 	u.usage.render = func() { renderUI(); redraw() } // redraw refreshes #state
+	u.fidelity.render = func() { renderUI() }
 	go u.usage.run()
 
 	setMode := func(m canvas.Mode) {
@@ -513,35 +514,45 @@ func main() {
 				fidelity,
 				components.Transfer(components.TransferProps{
 					Imports: imports, Exports: exports,
+					// The formats are done by the file worker, which a request waits for: both run in a goroutine
+					// of their own, never in the handler JavaScript called.
 					OnExport: func(name string) {
 						u.fidelity.format = name
-						file, data, mime, err := u.gatedExport(name, currentDoc())
-						if err != nil {
-							u.message = err.Error()
-						} else {
-							transfer.Download(file, mime, data)
-							u.message = fmt.Sprintf("Exported %s (%d bytes)", file, len(data))
-							if n := len(export.Fidelity(name, currentDoc()).Losses); n > 0 {
-								u.message += ". " + Tn("fidelity.exported", "%d thing was left out or simplified in this format; the list is above.", "%d things were left out or simplified in this format; the list is above.", n)
+						doc := currentDoc()
+						u.message = T("files.working", "Working…")
+						go func() {
+							file, data, mime, err := u.gatedExport(name, doc)
+							if err != nil {
+								u.message = err.Error()
+							} else {
+								transfer.Download(file, mime, data)
+								u.message = fmt.Sprintf("Exported %s (%d bytes)", file, len(data))
+								rep, _ := remote.Fidelity(callFiles, name, doc)
+								if n := len(rep.Losses); n > 0 {
+									u.message += ". " + Tn("fidelity.exported", "%d thing was left out or simplified in this format; the list is above.", "%d things were left out or simplified in this format; the list is above.", n)
+								}
 							}
-						}
+							renderUI()
+						}()
 						renderUI()
 					},
 					OnImport: func(name string) {
 						transfer.PickFile(u.transfer.Accept(), func(file string, data []byte, err error) {
-							var d docfile.Document
-							if err == nil {
-								d, err = u.transfer.Import(name, file, data)
-							}
-							if err != nil {
-								u.message = err.Error()
-								renderUI()
-								return
-							}
-							u.message = "Imported " + file
-							u.fidelity.noteImport(name, file, data)
-							u.saver.Detach() // what was imported is not the saved document that was open
-							openDoc(d)
+							go func() {
+								var d docfile.Document
+								if err == nil {
+									d, err = u.transfer.Import(name, file, data)
+								}
+								if err != nil {
+									u.message = err.Error()
+									renderUI()
+									return
+								}
+								u.message = "Imported " + file
+								u.fidelity.noteImport(name, file, data)
+								u.saver.Detach() // what was imported is not the saved document that was open
+								openDoc(d)
+							}()
 						})
 					},
 				}),

@@ -1130,6 +1130,8 @@
   "speech.count#one": "%d Aufnahme, %s Sekunden.",
   "speech.count#other": "%d Aufnahmen, %s Sekunden.",
   "speech.notInserted": "Gehört: %s. Wechseln Sie in den Bearbeitungsmodus und setzen Sie den Cursor an die gewünschte Stelle, dann diktieren Sie noch einmal.",
-  "prefs.memory": "Speicher sparen (weniger Rückgängig-Schritte behalten)"
+  "prefs.memory": "Speicher sparen (weniger Rückgängig-Schritte behalten)",
+  "fidelity.checking": "%s: es wird geprüft, was dieses Format behält …",
+  "files.working": "Wird bearbeitet …"
  }
 }
