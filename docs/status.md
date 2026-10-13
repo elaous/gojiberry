@@ -127,6 +127,6 @@ security table: the review findings are done; still open are the per-account sig
 
 1. 81: metrics for the other servers' own work; persistent builtin totals.
 2. 56: keep recordings between visits and learn from corrections.
-4. 68: an insert-clip UI and caption track editor.
-5. 82 steps (the wasm keeps growing: 30 MB now) 3 to 5: split the wasm, service-worker caching, low-memory mode.
-6. Then the small leftovers of 59, 61, 64, 65, 50 and 51.
+3. 68: an insert-clip UI and caption track editor.
+4. 82 steps (the wasm keeps growing: 30 MB now) 3 to 5: split the wasm, service-worker caching, low-memory mode.
+5. Then the small leftovers of 59, 61, 64, 65, 50 and 51.
