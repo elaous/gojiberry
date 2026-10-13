@@ -25,6 +25,12 @@ type Counters struct {
 	days     map[string]map[Event]int
 	accepted int
 	refused  int
+	// seed keys the noise of Report; noise is its rounding step (0: none). onChange and saveErr belong
+	// to Persist (persist.go).
+	seed     []byte
+	noise    int
+	onChange func()
+	saveErr  error
 }
 
 // NewCounters is an empty set of totals.
@@ -43,6 +49,9 @@ func (c *Counters) Add(b Batch, now time.Time) {
 		m[Event{k.Name, k.Value}] += k.N
 	}
 	c.accepted++
+	if c.onChange != nil {
+		c.onChange()
+	}
 	cutoff := now.UTC().AddDate(0, 0, -RetentionDays).Format(DayFormat)
 	for d := range c.days {
 		if d < cutoff {
@@ -65,7 +74,14 @@ func (c *Counters) Totals() Totals {
 	return Totals{c.accepted, c.refused}
 }
 
-func (c *Counters) refuse() { c.mu.Lock(); c.refused++; c.mu.Unlock() }
+func (c *Counters) refuse() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.refused++
+	if c.onChange != nil {
+		c.onChange()
+	}
+}
 
 // Reported is one reported total.
 type Reported struct {
@@ -76,7 +92,9 @@ type Reported struct {
 }
 
 // Report lists the totals per day with a count of at least k (DefaultK if k < 1). A smaller total
-// is left out, so a rare value cannot point at a single visitor; the list is in day order.
+// is left out, so a rare value cannot point at a single visitor; the list is in day order. With noise
+// on (SetNoise) each total is first rounded at random to a multiple of the step and k is applied to
+// the rounded number, so the figures are coarse and a total just under k is not told apart from one just over.
 func (c *Counters) Report(k int) []Reported {
 	if k < 1 {
 		k = DefaultK
@@ -86,6 +104,7 @@ func (c *Counters) Report(k int) []Reported {
 	var out []Reported
 	for d, m := range c.days {
 		for e, n := range m {
+			n = c.noisyLocked(d, e, n)
 			if n >= k {
 				out = append(out, Reported{d, e.Name, e.Value, n})
 			}

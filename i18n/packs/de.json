@@ -1079,6 +1079,20 @@
   "links.incoming.stop": "Nicht mehr nutzen",
   "links.incoming.noServer": "Es gibt keinen Server dafür. Bestätigen Sie unten einen Server und öffnen Sie die Adresse dann erneut.",
   "links.incoming.encrypted": "Ein Link lässt sich nicht nutzen, solange der verschlüsselte Speicher auf dem Server liegt. Stellen Sie den Speicher zuerst auf diesen Browser um.",
-  "links.incoming.started": "Der Link ist in Gebrauch. Die erlaubten Dokumente stehen im Tab Speichern."
+  "links.incoming.started": "Der Link ist in Gebrauch. Die erlaubten Dokumente stehen im Tab Speichern.",
+  "privacy.sample1": "Jeder Besuch",
+  "privacy.sample10": "Etwa 1 Besuch von 10",
+  "privacy.sample100": "Etwa 1 Besuch von 100",
+  "privacy.sampleLabel": "Senden von",
+  "privacy.sampleSet": "Senden von: %s",
+  "privacy.sampleHeading": "Wie oft",
+  "privacy.notSampled": "Dieser Besuch gehört nicht zur Stichprobe, daher wird von ihm nichts gesendet.",
+  "privacy.logLabel": "Ein Protokoll führen, was gesendet würde, nur auf dieser Seite",
+  "privacy.logHeading": "Lokales Protokoll",
+  "privacy.logIntro": "Das Protokoll ist für Sie. Es wird nie gesendet. Es ist weg, wenn Sie diese Seite schließen oder nichts senden wählen.",
+  "privacy.logEntries#one": "Das Protokoll hat %d Eintrag.",
+  "privacy.logEntries#other": "Das Protokoll hat %d Einträge.",
+  "privacy.logDownload": "Protokoll herunterladen",
+  "prefs.privacy": "Datenschutz-Einstellungen…"
  }
 }
