@@ -1132,6 +1132,9 @@
   "speech.notInserted": "Gehört: %s. Wechseln Sie in den Bearbeitungsmodus und setzen Sie den Cursor an die gewünschte Stelle, dann diktieren Sie noch einmal.",
   "prefs.memory": "Speicher sparen (weniger Rückgängig-Schritte behalten)",
   "prefs.undoMany": "Viele Rückgängig-Schritte behalten (1000)",
+  "docview.skipDoc": "Zum Dokument springen",
+  "docview.skipSide": "Zum Seitenbereich springen",
+  "docview.skip": "Sprunglinks",
   "fidelity.checking": "%s: es wird geprüft, was dieses Format behält …",
   "files.working": "Wird bearbeitet …"
  }
