@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/elaous/gojiberry/internal/clientkey"
 	"log"
 	"net/http"
 	"slices"
@@ -480,7 +481,7 @@ func (s *Service) Handler() http.Handler {
 // 429 with Retry-After.
 func (s *Service) limited(group string, h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if ok, wait := s.limiter.Allow(r.Context(), group+"|"+s.clientIP(r)); !ok {
+		if ok, wait := s.limiter.Allow(r.Context(), group+"|"+clientkey.Of(s.clientIP(r))); !ok {
 			secs := int(wait/time.Second) + 1
 			w.Header().Set("Retry-After", strconv.Itoa(secs))
 			jsonOut(w, http.StatusTooManyRequests, map[string]string{"error": ErrRateLimited.Error()})
