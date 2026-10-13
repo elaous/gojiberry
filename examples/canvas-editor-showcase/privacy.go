@@ -6,12 +6,15 @@ import (
 	"bytes"
 	"context"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 	"syscall/js"
 	"time"
 
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/telemetry"
+	"github.com/elaous/gojiberry/transfer"
 	"github.com/elaous/gojiberry/xango"
 )
 
@@ -20,12 +23,26 @@ import (
 // The Privacy tab shows what would be sent as the exact JSON before it is, and what could ever be sent.
 
 const (
-	telemetryKey = "showcase:telemetry" // "on" once the person opted in
-	flushEvery   = 60 * time.Second     // an opted-in page sends its counts at most this often
-	sendTimeout  = 15 * time.Second     // a send that takes longer is given up (the counts are kept)
+	telemetryKey = "showcase:telemetry"        // "on" once the person opted in
+	flushEvery   = 60 * time.Second            // an opted-in page sends its counts at most this often
+	sendTimeout  = 15 * time.Second            // a send that takes longer is given up (the counts are kept)
+	sampleKey    = "showcase:telemetry-sample" // "1", "10" or "100": send from one visit in so many
 	telemetryOn  = "on"
 	telemetryOff = "off"
 )
+
+// sampleRates are the choices of how many visits send (one in n); the first is every visit.
+var sampleRates = []int{1, 10, 100}
+
+func sampleLabel(n int) string {
+	switch n {
+	case 10:
+		return T("privacy.sample10", "About 1 visit in 10")
+	case 100:
+		return T("privacy.sample100", "About 1 visit in 100")
+	}
+	return T("privacy.sample1", "Every visit")
+}
 
 // privacyUI is the state of the Privacy tab and the collector behind it.
 type privacyUI struct {
@@ -49,6 +66,9 @@ func newPrivacy(tab string, dir *dirUI) *privacyUI {
 		return strings.TrimRight(dir.url, "/") + "/telemetry"
 	}
 	p.host = dir.host
+	if n, err := strconv.Atoi(lsGet(sampleKey)); err == nil && slices.Contains(sampleRates, n) {
+		p.col.SetSampling(n, nil)
+	}
 	nav := js.Global().Get("navigator")
 	p.col.BrowserSignals(dntOn(nav.Get("doNotTrack").String()), nav.Get("globalPrivacyControl").Truthy())
 	if lsGet(telemetryKey) == telemetryOn && !p.col.Blocked() {
@@ -146,7 +166,14 @@ func (e *sendError) Error() string { return "the server answered " + http.Status
 
 // flush sends what is pending, when the person opted in and a server is confirmed.
 func (p *privacyUI) flush(ctx context.Context) {
-	if !p.col.Consent() || p.endpoint() == "" {
+	if !p.col.Consent() {
+		return
+	}
+	if p.endpoint() == "" {
+		if p.col.LogOn() { // with the local log on, say what would have been sent
+			p.col.Withhold(telemetry.OutcomeNoServer)
+			p.render()
+		}
 		return
 	}
 	n, err := p.col.Flush(ctx, p.send)
@@ -241,6 +268,7 @@ func (p *privacyUI) panel(u *ui) xango.Node {
 	}
 	nodes = append(nodes, xango.El("pre", []xango.Attr{xango.A("id", "privacy-preview"), xango.A("tabindex", "0"),
 		xango.A("aria-labelledby", "privacy-preview-heading"), xango.A("style", "white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:#f4f4f6;padding:8px")}, xango.Text(preview)))
+	nodes = append(nodes, p.samplingAndLog(u)...)
 	nodes = append(nodes, btn("privacy-send", T("privacy.sendNow", "Send now"), func() { go p.flush(context.Background()) },
 		!consent || p.endpoint() == "" || p.col.Body() == nil))
 	nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "privacy-message"), xango.A("role", "status"), xango.A("aria-live", "polite"), xango.A("style", "font-size:13px")}, xango.Text(p.message)))
@@ -259,9 +287,61 @@ func (p *privacyUI) panel(u *ui) xango.Node {
 	return xango.El("section", []xango.Attr{xango.A("id", "privacy"), xango.A("aria-labelledby", "privacy-heading")}, nodes...)
 }
 
+// samplingAndLog is the part of the tab that makes sending rarer or shows it: how many visits send, and
+// the local log of what would be sent (kept in this page only, downloadable, gone when the page closes).
+func (p *privacyUI) samplingAndLog(u *ui) []xango.Node {
+	consent := p.col.Consent()
+	var rates [][2]string
+	for _, n := range sampleRates {
+		rates = append(rates, [2]string{strconv.Itoa(n), sampleLabel(n)})
+	}
+	sample := selectOf("telemetry-sample", T("privacy.sampleLabel", "Send from"), strconv.Itoa(p.col.SampleOneIn()), rates, func(v string) {
+		n, _ := strconv.Atoi(v)
+		p.col.SetSampling(n, nil)
+		lsSet(sampleKey, v)
+		u.announce(T("privacy.sampleSet", "Sending from: %s", sampleLabel(n)))
+		p.render()
+	})
+	logBox := xango.El("label", []xango.Attr{xango.A("style", "display:block;margin:4px 0;font-size:13px")},
+		xango.El("input", func() []xango.Attr {
+			a := []xango.Attr{xango.A("type", "checkbox"), xango.A("id", "telemetry-log"), xango.On("change", func(e xango.Event) {
+				p.col.SetLog(e.Checked)
+				p.render()
+			})}
+			if p.col.LogOn() {
+				a = append(a, xango.A("checked", "checked"))
+			}
+			if !consent {
+				a = append(a, xango.A("disabled", "disabled"))
+			}
+			return a
+		}()),
+		xango.Text(" "+T("privacy.logLabel", "Keep a log of what would be sent, in this page only")))
+	nodes := []xango.Node{
+		xango.El("h4", []xango.Attr{xango.A("id", "privacy-sample-heading")}, xango.Text(T("privacy.sampleHeading", "How often"))),
+		sample,
+	}
+	if consent && !p.col.Sampled() {
+		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "privacy-notsampled"), xango.A("style", "font-size:13px")},
+			xango.Text(T("privacy.notSampled", "This visit is not in the sample, so nothing will be sent from it."))))
+	}
+	nodes = append(nodes,
+		xango.El("h4", []xango.Attr{xango.A("id", "privacy-log-heading")}, xango.Text(T("privacy.logHeading", "Local log"))),
+		xango.El("p", []xango.Attr{xango.A("style", "font-size:13px")}, xango.Text(T("privacy.logIntro", "The log is for you. It is never sent. It is gone when you close this page or choose to send nothing."))),
+		logBox,
+		xango.El("p", []xango.Attr{xango.A("id", "privacy-log-count"), xango.A("role", "status"), xango.A("style", "font-size:13px")},
+			xango.Text(Tn("privacy.logEntries", "The log has %d entry.", "The log has %d entries.", len(p.col.Log())))),
+		btn("privacy-log-download", T("privacy.logDownload", "Download the log"), func() {
+			transfer.Download("gojiberry-usage-log.json", "application/json", p.col.LogJSON())
+		}, len(p.col.Log()) == 0),
+	)
+	return nodes
+}
+
 // state is what #state shows of the Privacy tab, for the tests.
 func (p *privacyUI) state() map[string]any {
-	return map[string]any{"consent": p.col.Consent(), "blocked": p.col.Blocked(), "pending": p.col.Body() != nil, "sent": p.col.Sent(), "endpoint": p.endpoint()}
+	return map[string]any{"consent": p.col.Consent(), "blocked": p.col.Blocked(), "pending": p.col.Body() != nil, "sent": p.col.Sent(), "endpoint": p.endpoint(),
+		"sampled": p.col.Sampled(), "oneIn": p.col.SampleOneIn(), "log": len(p.col.Log()), "logOn": p.col.LogOn()}
 }
 
 // dntOn reports whether a navigator.doNotTrack value says "do not track" ("1" or the older "yes").

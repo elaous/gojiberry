@@ -132,6 +132,24 @@ func exportGate(value string) (a11ycheck.GateMode, error) {
 	return m, nil
 }
 
+// withTelemetryNoise reads GOJIBERRY_DOCSTORE_TELEMETRY_NOISE: off (the default) or a rounding step from 2
+// to 1000. With a step, /admin/telemetry reports each total rounded at random to a multiple of it before
+// the k threshold (telemetry.Counters.SetNoise). A value that is not one stops the server.
+func withTelemetryNoise(srv *docstore.Server, value string) error {
+	n, err := telemetry.ParseNoise(value)
+	if err != nil {
+		return fmt.Errorf("GOJIBERRY_DOCSTORE_TELEMETRY_NOISE %q: %w", value, err)
+	}
+	if n == 0 {
+		return nil
+	}
+	if err := srv.WithTelemetryNoise(n); err != nil {
+		return err
+	}
+	log.Printf("docstore: usage totals are reported rounded to multiples of %d", n)
+	return nil
+}
+
 func newHTTPServer(addr string, h http.Handler) *http.Server {
 	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: readHeaderTimeout, ReadTimeout: readTimeout, IdleTimeout: idleTimeout}
 }
@@ -609,6 +627,9 @@ func Main() {
 		log.Fatalf("docstore: %v", err)
 	}
 	withTelemetry(srv, os.Getenv("GOJIBERRY_DOCSTORE_TELEMETRY"))
+	if err := withTelemetryNoise(srv, os.Getenv("GOJIBERRY_DOCSTORE_TELEMETRY_NOISE")); err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
 	publicSvc, err := withPublic(srv, adapter, cfg.ExpiryTTL, limiters)
 	if err != nil {
 		log.Fatalf("docstore: %v", err)

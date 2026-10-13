@@ -1052,6 +1052,20 @@
   "links.incoming.stop": "Dejar de usarlo",
   "links.incoming.noServer": "No hay un servidor con el que usarlo. Confirme un servidor abajo y abra la dirección otra vez.",
   "links.incoming.encrypted": "Un enlace no se puede usar mientras el almacén cifrado esté en el servidor. Pase antes el almacén a este navegador.",
-  "links.incoming.started": "El enlace está en uso. Los documentos permitidos están en la pestaña Guardar."
+  "links.incoming.started": "El enlace está en uso. Los documentos permitidos están en la pestaña Guardar.",
+  "privacy.sample1": "Cada visita",
+  "privacy.sample10": "Aproximadamente 1 visita de cada 10",
+  "privacy.sample100": "Aproximadamente 1 visita de cada 100",
+  "privacy.sampleLabel": "Enviar desde",
+  "privacy.sampleSet": "Enviando desde: %s",
+  "privacy.sampleHeading": "Con qué frecuencia",
+  "privacy.notSampled": "Esta visita no está en la muestra, así que no se enviará nada de ella.",
+  "privacy.logLabel": "Guardar un registro de lo que se enviaría, solo en esta página",
+  "privacy.logHeading": "Registro local",
+  "privacy.logIntro": "El registro es para usted. Nunca se envía. Desaparece al cerrar esta página o al elegir no enviar nada.",
+  "privacy.logEntries#one": "El registro tiene %d entrada.",
+  "privacy.logEntries#other": "El registro tiene %d entradas.",
+  "privacy.logDownload": "Descargar el registro",
+  "prefs.privacy": "Ajustes de privacidad…"
  }
 }

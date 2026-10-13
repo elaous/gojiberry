@@ -356,6 +356,9 @@ func writeACLJSON(w http.ResponseWriter, acl ACL) {
 	_ = json.NewEncoder(w).Encode(acl) // a write failure here means the client disconnected -- nothing actionable to do about it
 }
 
+// telemetryKeyspace is the reserved keyspace of the usage totals.
+const telemetryKeyspace = "telemetry:"
+
 // isReservedDocID reports whether id falls inside the ACL keyspace
 // this package reserves for its own bookkeeping (aclKeyPrefix) --
 // checked by handleDoc so a client can never PUT/GET/DELETE a real
@@ -369,11 +372,12 @@ func isReservedDocID(id string) bool {
 	// "directory-enroll/" (owner enrollments) and "ratelimit/" (shared rate limit budgets), "auth/session/" and "auth/state/" (shared
 	// sign-in sessions: a writer could forge a session) are likewise written only by the server itself.
 	// "public/" and "report/" are the public offer's records and abuse reports (docstore/public).
+	// "telemetry:" holds the usage totals (TelemetryKey), written only by the server's own receiver.
 	// "config/" is the per-user configuration (package userconfig), reached through that package only.
 	// Every reserved prefix is compared without case, since a backend that folds case would
 	// alias "DIRECTORY-ENROLL/x" with the real record, as IsDocumentKey does for expiry.
 	lower := strings.ToLower(id)
-	for _, p := range []string{aclKeyPrefix, "collab:", DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, ConfigPrefix, SessionPrefix, LoginStatePrefix, ExpiryPrefix, ExpiryCreatedPrefix, PublicPrefix, ReportPrefix} {
+	for _, p := range []string{aclKeyPrefix, "collab:", DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, ConfigPrefix, SessionPrefix, LoginStatePrefix, ExpiryPrefix, ExpiryCreatedPrefix, PublicPrefix, ReportPrefix, telemetryKeyspace} {
 		if strings.HasPrefix(lower, p) {
 			return true
 		}

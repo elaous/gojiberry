@@ -1052,6 +1052,20 @@
   "links.incoming.stop": "Ne plus l'utiliser",
   "links.incoming.noServer": "Il n'y a pas de serveur pour l'utiliser. Confirmez un serveur ci-dessous, puis rouvrez l'adresse.",
   "links.incoming.encrypted": "Un lien ne peut pas être utilisé tant que le stockage chiffré est sur le serveur. Placez d'abord le stockage dans ce navigateur.",
-  "links.incoming.started": "Le lien est utilisé. Les documents autorisés sont dans l'onglet Enregistrer."
+  "links.incoming.started": "Le lien est utilisé. Les documents autorisés sont dans l'onglet Enregistrer.",
+  "privacy.sample1": "Chaque visite",
+  "privacy.sample10": "Environ 1 visite sur 10",
+  "privacy.sample100": "Environ 1 visite sur 100",
+  "privacy.sampleLabel": "Envoyer depuis",
+  "privacy.sampleSet": "Envoi depuis : %s",
+  "privacy.sampleHeading": "À quelle fréquence",
+  "privacy.notSampled": "Cette visite ne fait pas partie de l'échantillon : rien n'en sera envoyé.",
+  "privacy.logLabel": "Garder un journal de ce qui serait envoyé, sur cette page seulement",
+  "privacy.logHeading": "Journal local",
+  "privacy.logIntro": "Le journal est pour vous. Il n'est jamais envoyé. Il disparaît quand vous fermez cette page ou choisissez de ne rien envoyer.",
+  "privacy.logEntries#one": "Le journal a %d entrée.",
+  "privacy.logEntries#other": "Le journal a %d entrées.",
+  "privacy.logDownload": "Télécharger le journal",
+  "prefs.privacy": "Réglages de confidentialité…"
  }
 }
