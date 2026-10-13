@@ -85,7 +85,7 @@ var exportMatrix = map[string]map[Feature]entry{
 		FeatHighlight: drop(""), FeatRunLanguage: drop(""), FeatSuggestion: drop(NoteAccepted),
 		FeatList: simple(NoteBullets), FeatImage: simple(NotePlaceholder), FeatImageAlt: drop(NotePlaceholder),
 		FeatCellShading: drop(""), FeatCellAlign: drop(""),
-		FeatDocLanguage: drop(""), FeatTitle: drop(""), FeatPageTOC: drop(""),
+		FeatDocLanguage: drop(""), FeatTitle: drop(""),
 	}),
 	// HTML and EPUB link a footnote's mark to its note and back, so they keep footnotes.
 	"epub": formatTable(foldedFeatures, noPages, map[Feature]entry{FeatHighlight: drop(""), FeatFootnote: kept(), FeatCodeLanguage: kept()}),
