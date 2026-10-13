@@ -63,6 +63,22 @@ func (p PageSetup) Size() (w, h float64) {
 	return pp.Width, pp.Height
 }
 
+// PageSetupOf is the setup whose sheet is w by h points (in either orientation, to within two points) with
+// the given margins, as a saved document records them. It is false when the sheet is none of the Papers,
+// which a PageSetup cannot describe.
+func PageSetupOf(w, h float64, margins [4]float64) (PageSetup, bool) {
+	near := func(a, b float64) bool { return math.Abs(a-b) <= 2 }
+	for _, pp := range Papers {
+		switch {
+		case near(w, pp.Width) && near(h, pp.Height):
+			return PageSetup{Paper: pp.Name, Margins: margins}.Normalized(), true
+		case near(w, pp.Height) && near(h, pp.Width):
+			return PageSetup{Paper: pp.Name, Landscape: true, Margins: margins}.Normalized(), true
+		}
+	}
+	return PageSetup{}, false
+}
+
 // Normalized fixes what cannot be laid out: the paper is a known one, a margin
 // is not negative, and the margins leave at least a quarter of each side for text.
 func (p PageSetup) Normalized() PageSetup {
