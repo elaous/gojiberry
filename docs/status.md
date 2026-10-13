@@ -64,7 +64,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 80 | Print layout | feature | partial | page model, headers and footers, page numbers, contents, widow control in the exports; the same running header and footer on the screen sheets | odd and even headers; contents page on the screen; contents page numbers in Word and RTF; table-row widow control; sheet size restore |
 | 81 | Admin side | feature | partial | audit event schema, readiness route, backup and restore, `/admin/usage` and history page, observability core and PostHog sink | hub and sync/font/translation servers instrumented; persistent builtin totals; usage series across restarts |
 | 82 | Performance and size | enhancement | done (with leftovers) | wasm size budgets per program (main 26.8 MB raw, 6.6 MB gzip; files 9.8 MB, 2.8 MB) checked in CI, stripped build, precompressed wasm, `wasmdist`, deploy recipe, service worker that keeps the app for repeat visits and offline start, low-memory mode (fewer undo steps), the file formats in a second wasm loaded on first use (main 26.1 MB, was 29.4) | memory saving of the low-memory mode not measured on a real small device; splitting the worker by format: `net/http` is out of it now (9.5 MB, was 11.0), the rest of the floor is to be measured before judging the split (roadmap 82); recipes untested on nginx/Caddy (blocked) |
-| 83 | i18n depth | enhancement | partial | de, fr, es packs, a test that every message id is in a pack, plurals and dates | stale-id check, time zones, languages beyond four, RTL packs, ids built at run time |
+| 83 | i18n depth | enhancement | partial | de, fr, es packs, a test that every message id is in a pack, plurals and dates | time zones, languages beyond four, RTL packs, ids built at run time |
 | 84 | Lint the examples | chore | done | no path exclusions in `.golangci.yml` | none |
 
 ## Telemetry and operator observability (57, 81)
@@ -95,7 +95,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 53 | Session store read per request | security | inherent | miss cache, miss budget, optional bounded cache | a positive cache is deliberately not default |
 | 54 | Login routes without rate limit | fix | done | limiter | none |
 | 55 | Public offer sessions shared through the store | enhancement | partial | sessions and counts shared | see 86 |
-| 58 | Leftovers of the #99 and #100 reviews | chore | partial | six of seven | per-/64 IPv6 budgets for login routes |
+| 58 | Leftovers of the #99 and #100 reviews | chore | done | seven of seven, the last being per-/64 IPv6 budgets for the login and passkey routes | none |
 | 85 | Findings of the outside review (#90 to #123) | fix | done | all fixed | none |
 | 86 | Public offer report counters per process | enhancement | partial | priority allowance shared (`store`, `store-required`) | the other caps |
 | 87 | Owner key rotate and reset in the showcase | feature | done | rotate, reset, watch names a reset | clock moved by the page, not the tests |
