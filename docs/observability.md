@@ -120,6 +120,25 @@ variable and never repeats the value.
 | `GOJIBERRY_OBS_USAGE_SINKS` | Where the browsers' usage counts are also sent, besides the admin pages that always have them: `otlp`, `posthog` (`builtin` is accepted and changes nothing). Default none. |
 | `GOJIBERRY_OBS_TRACE_SAMPLE` | Share of requests that get a trace, from `0` to `1`. Default `0.1`. |
 
+### PostHog
+
+The `posthog` sink is in every build (standard library only; it speaks PostHog's `/batch/` capture API). It is for
+PostHog Cloud first, and a self-hosted instance is the operator's choice: only the host changes.
+
+| Variable | Meaning |
+| --- | --- |
+| `GOJIBERRY_OBS_POSTHOG_KEY` | The project API key (`phc_...`). Prefer the file form below. |
+| `GOJIBERRY_OBS_POSTHOG_KEY_FILE` | A file holding the key (a mounted secret). Only one of the two may be set. |
+| `GOJIBERRY_OBS_POSTHOG_HOST` | `us` (default, `https://us.i.posthog.com`), `eu` (`https://eu.i.posthog.com`) or the base URL of a self-hosted instance. It must be `https`; `http` is accepted only for `localhost`. |
+| `GOJIBERRY_OBS_POSTHOG_INTERVAL` | How often aggregates are sent, at least `1s`. Default `30s`. |
+
+It sends two kinds of event: `gojiberry_metric` (one per series per interval: label values, `count`, `sum`, `min`, `max`,
+`last`) and `gojiberry_span` (one per sampled span: name, `duration_ms`, attributes, the random trace and span ids). Every
+event has `$process_person_profile: false` and `$geoip_disable: true`, and one fixed distinct id, the service name. No
+person, address or place is involved, because none reaches a sink. A failed send is counted and dropped, never kept
+without bound (the span buffer holds at most 1000); the key is never logged, never in an error and never in
+`GET /admin/observe`.
+
 A sink the build does not contain (for example `otlp` in the dependency-free `cmd/docstore`) is a start-up error.
 
 ## Looking before enabling: `GET /admin/observe`
@@ -146,4 +165,4 @@ up to ten seconds, then flushes and closes every sink, so the last counts are se
 
 ## Not done yet
 
-The PostHog and OpenTelemetry adapters are the next steps (roadmap 57 and 81). Persistent builtin totals, and instrumenting the collaboration hub and sync servers are not built.
+The OpenTelemetry (OTLP) adapter is the next step (roadmap 57 and 81). Persistent builtin totals, and instrumenting the collaboration hub and sync servers are not built.
