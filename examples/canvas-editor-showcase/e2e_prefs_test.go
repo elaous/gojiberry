@@ -178,5 +178,11 @@ func TestLowMemoryModeKeepsFewerUndoSteps(t *testing.T) {
 	d.Reload()
 	d.WaitSelector("canvas")
 	d.OK(limit() == 200, "turned off, the default again")
+	// A long history can be asked for too.
+	choose("Keep many undo steps")
+	d.WaitFor("the choice is kept", `JSON.parse(localStorage.getItem('showcase:a11y')).memory === 'high'`)
+	d.Reload()
+	d.WaitSelector("canvas")
+	d.OK(limit() == 1000, "many steps are kept for the next visit")
 	d.NoErrors()
 }

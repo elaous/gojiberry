@@ -1131,6 +1131,7 @@
   "speech.count#other": "%d grabaciones, %s segundos.",
   "speech.notInserted": "Se oyó: %s. Cambie al modo de edición y ponga el cursor donde deba ir, y dicte otra vez.",
   "prefs.memory": "Ahorrar memoria (conservar menos pasos de deshacer)",
+  "prefs.undoMany": "Conservar muchos pasos de deshacer (1000)",
   "fidelity.checking": "%s: comprobando qué conserva este formato…",
   "files.working": "Trabajando…"
  }
