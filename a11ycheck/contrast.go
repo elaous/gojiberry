@@ -2,6 +2,7 @@ package a11ycheck
 
 import (
 	"fmt"
+	"golang.org/x/image/colornames"
 	"math"
 	"strconv"
 	"strings"
@@ -83,18 +84,12 @@ func contrast(a, b rgb) float64 {
 	return (la + 0.05) / (lb + 0.05)
 }
 
-var namedColors = map[string]rgb{
-	"black": {0, 0, 0}, "white": {255, 255, 255}, "red": {255, 0, 0}, "green": {0, 128, 0}, "blue": {0, 0, 255},
-	"yellow": {255, 255, 0}, "gray": {128, 128, 128}, "grey": {128, 128, 128}, "silver": {192, 192, 192},
-	"orange": {255, 165, 0}, "purple": {128, 0, 128}, "navy": {0, 0, 128}, "maroon": {128, 0, 0},
-}
-
-// parseColor reads "#rgb", "#rrggbb", "rgb(r, g, b)" and a few names; anything else (a transparent
+// parseColor reads "#rgb", "#rrggbb", "rgb(r, g, b)" and the CSS colour names; anything else (a transparent
 // colour, a variable, a name not listed) is not understood, and the caller skips the check.
 func parseColor(s string) (rgb, bool) {
 	s = strings.ToLower(strings.TrimSpace(s))
-	if c, ok := namedColors[s]; ok {
-		return c, true
+	if c, ok := colornames.Map[s]; ok {
+		return rgb{c.R, c.G, c.B}, true
 	}
 	if h, ok := strings.CutPrefix(s, "#"); ok {
 		if len(h) == 3 {

@@ -81,7 +81,7 @@ func TestLowContrastIsFoundAgainstTheBackgroundOrThePage(t *testing.T) {
 }
 
 func TestParseColor(t *testing.T) {
-	for in, want := range map[string]rgb{"#fff": {255, 255, 255}, "#0a0b0c": {10, 11, 12}, "rgb(1, 2, 3)": {1, 2, 3}, "Black": {0, 0, 0}} {
+	for in, want := range map[string]rgb{"#fff": {255, 255, 255}, "#0a0b0c": {10, 11, 12}, "rgb(1, 2, 3)": {1, 2, 3}, "Black": {0, 0, 0}, "LightGoldenRodYellow": {250, 250, 210}, "darkslategrey": {47, 79, 79}} {
 		if got, ok := parseColor(in); !ok || got != want {
 			t.Errorf("%q = %v %v", in, got, ok)
 		}
