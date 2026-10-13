@@ -63,7 +63,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 79 | Autocomplete word picker | feature | partial | ranked suggestion list as an ARIA listbox, ghost text, de/fr/es word lists | ghost text drawn on the canvas (it is a DOM element), run font, mid-line; larger lists; reader run (blocked) |
 | 80 | Print layout | feature | partial | page model, headers and footers, page numbers, contents, widow control in the exports; the same running header and footer on the screen sheets | odd and even headers; contents page on the screen; contents page numbers in Word and RTF; table-row widow control; sheet size restore |
 | 81 | Admin side | feature | partial | audit event schema, readiness route, backup and restore, `/admin/usage` and history page, observability core and PostHog sink | hub and sync/font/translation servers instrumented; persistent builtin totals; usage series across restarts |
-| 82 | Performance and size | enhancement | partial | wasm size budget (30.0 MB raw, 7.7 MB gzip) checked in CI, stripped build, precompressed wasm, `wasmdist`, deploy recipe, service worker that keeps the app for repeat visits and offline start | splitting the wasm; low-memory mode; recipes untested on nginx/Caddy (blocked) |
+| 82 | Performance and size | enhancement | partial | wasm size budget (30.0 MB raw, 7.7 MB gzip) checked in CI, stripped build, precompressed wasm, `wasmdist`, deploy recipe, service worker that keeps the app for repeat visits and offline start, low-memory mode (fewer undo steps) | splitting the wasm (Go wasm has no dynamic loading: a second binary or a worker); memory saving not measured on a real small device; recipes untested on nginx/Caddy (blocked) |
 | 83 | i18n depth | enhancement | partial | de, fr, es packs, a test that every message id is in a pack, plurals and dates | stale-id check, time zones, languages beyond four, RTL packs, ids built at run time |
 | 84 | Lint the examples | chore | done | no path exclusions in `.golangci.yml` | none |
 
@@ -128,5 +128,5 @@ security table: the review findings are done; still open are the per-account sig
 1. 81: metrics for the other servers' own work; persistent builtin totals.
 2. 56: keep recordings between visits and learn from corrections.
 3. 68: an insert-clip UI and caption track editor.
-4. 82 steps 3 and 5: a low-memory mode, and splitting the wasm (30 MB now).
+4. 82 step 3: split the wasm (30 MB now; importers and exporters into a worker).
 5. Then the small leftovers of 59, 61, 64, 65, 50 and 51.

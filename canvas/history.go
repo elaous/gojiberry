@@ -3,6 +3,7 @@ package canvas
 import (
 	"reflect"
 	"slices"
+	"sync/atomic"
 )
 
 // Undo and redo for editable text. Every change a TextFlow or a
@@ -13,8 +14,23 @@ import (
 // caret or clicking ends the run. Each undo step restores the text, its
 // formatting, and the cursors.
 
-// maxHistory is how many undo steps are kept.
-const maxHistory = 200
+// DefaultHistoryLimit is how many undo steps are kept unless SetHistoryLimit says otherwise.
+const DefaultHistoryLimit = 200
+
+// MinHistoryLimit is the fewest undo steps SetHistoryLimit allows.
+const MinHistoryLimit = 5
+
+var historyLimit atomic.Int64
+
+func init() { historyLimit.Store(DefaultHistoryLimit) }
+
+// SetHistoryLimit sets how many undo steps each text keeps (at least MinHistoryLimit). Every step is a
+// snapshot of the whole text and its formatting, so on a large document or a device with little memory a lower
+// number saves a good deal; an undo stack already longer is cut at its next change.
+func SetHistoryLimit(n int) { historyLimit.Store(int64(max(n, MinHistoryLimit))) }
+
+// HistoryLimit is the number of undo steps kept.
+func HistoryLimit() int { return int(historyLimit.Load()) }
 
 // Historian is implemented by targets with undo and redo.
 type Historian interface {
@@ -58,8 +74,8 @@ func (h *snapshotHistory[S]) commit(cur S, kind string) {
 	}
 	if kind == "" || kind != h.kind {
 		h.undo = append(h.undo, h.last)
-		if len(h.undo) > maxHistory {
-			h.undo = slices.Delete(h.undo, 0, 1)
+		if over := len(h.undo) - HistoryLimit(); over > 0 {
+			h.undo = slices.Delete(h.undo, 0, over)
 		}
 	}
 	h.redo = nil

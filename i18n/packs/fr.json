@@ -1129,6 +1129,7 @@
   "speech.deleted": "Tous les enregistrements ont été supprimés.",
   "speech.count#one": "%d enregistrement, %s secondes.",
   "speech.count#other": "%d enregistrements, %s secondes.",
-  "speech.notInserted": "Entendu : %s. Passez en mode édition et placez le curseur à l'endroit voulu, puis dictez de nouveau."
+  "speech.notInserted": "Entendu : %s. Passez en mode édition et placez le curseur à l'endroit voulu, puis dictez de nouveau.",
+  "prefs.memory": "Économiser la mémoire (garder moins d'étapes d'annulation)"
  }
 }

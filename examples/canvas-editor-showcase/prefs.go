@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"syscall/js"
 
+	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/components"
 )
 
@@ -30,6 +31,7 @@ type prefs struct {
 	TypeFmt  string `json:"typefmt,omitempty"`  // "on": formatting changes at the caret are said
 	TypeRead string `json:"typeread,omitempty"` // "on": the line is read when the caret moves
 	Collab   string `json:"collab,omitempty"`   // what is announced of a shared session: "" everything, "important", "off"
+	Memory   string `json:"memory,omitempty"`   // "low": fewer undo steps kept; "normal": the person turned it off; "" automatic (low on a device that reports 2 GB or less)
 	Where    string `json:"where,omitempty"`    // "on": the presence list has a "Where is <name>?" button for each collaborator
 }
 
@@ -84,11 +86,36 @@ func loadPrefs() prefs {
 	if p.Where != "on" {
 		p.Where = ""
 	}
+	if p.Memory != "low" && p.Memory != "normal" {
+		p.Memory = ""
+	}
 	return p
 }
 
-// applyPrefs sets the preferences on the root element (an empty one removes its attribute).
+// lowMemory says whether undo history is kept short: the person asked for it, or has not chosen and the
+// browser reports a device with 2 GB of memory or less (navigator.deviceMemory, where it exists).
+func lowMemory(p prefs) bool {
+	switch p.Memory {
+	case "low":
+		return true
+	case "normal":
+		return false
+	}
+	dm := js.Global().Get("navigator").Get("deviceMemory")
+	return dm.Type() == js.TypeNumber && dm.Float() > 0 && dm.Float() <= 2
+}
+
+// lowMemorySteps is how many undo steps are kept in low-memory mode.
+const lowMemorySteps = 20
+
+// applyPrefs sets the preferences on the root element (an empty one removes its attribute) and the
+// length of the undo history.
 func applyPrefs(p prefs) {
+	if lowMemory(p) {
+		canvas.SetHistoryLimit(lowMemorySteps)
+	} else {
+		canvas.SetHistoryLimit(canvas.DefaultHistoryLimit)
+	}
 	root := js.Global().Get("document").Get("documentElement")
 	for k, v := range p.attrs() {
 		if v == "" {
@@ -167,6 +194,7 @@ func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
 		toggle(T("prefs.suggestAuto", "Suggest words as I type"), curPrefs.Suggest == "auto", func(p *prefs, on bool) { p.Suggest = map[bool]string{true: "auto"}[on] }),
 		toggle(T("prefs.ghost", "Show a suggestion after the caret (Tab accepts)"), curPrefs.Ghost == "on", func(p *prefs, on bool) { p.Ghost = map[bool]string{true: "on"}[on] }),
 		toggle(T("prefs.targets", "Large targets"), curPrefs.Targets == "large", func(p *prefs, on bool) { p.Targets = map[bool]string{true: "large"}[on] }),
+		toggle(T("prefs.memory", "Save memory (keep fewer undo steps)"), lowMemory(curPrefs), func(p *prefs, on bool) { p.Memory = map[bool]string{true: "low", false: "normal"}[on] }),
 		toggle(T("prefs.focus", "Distraction-free mode"), curPrefs.Focus == "on", func(p *prefs, on bool) { p.Focus = map[bool]string{true: "on"}[on] }),
 		{Separator: true},
 		{Label: T("prefs.privacy", "Privacy settings…"), OnSelect: func() { u.tab = "privacy"; renderUI() }},
