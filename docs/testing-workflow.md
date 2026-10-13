@@ -136,3 +136,7 @@ None of these change behaviour; they only skip. Run each with `-v` and check tha
 Other `t.Skip` calls in the repo depend on the platform or a rare condition (`docstore/localfs_test.go` on
 non-Linux, `internal/transpile/experimental` on Windows, `saver/pack_test.go`, `console/console_test.go`,
 `devreload/devreload_test.go`), not on a service.
+
+## PDF/UA check
+
+`make pdfa11y-test` installs pdfa11y (a Go PDF/UA checker, pinned) into `.pdfa11y/` and runs it on the PDFs the exporter writes; the test fails if the tool is missing. Without the make target the test is skipped with "SKIPPED, NOT TESTED" in its log. Run it when `export/pdf*.go` changes.

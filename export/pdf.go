@@ -218,7 +218,7 @@ func drawPDFContents(pdf *gopdf.GoPdf, snap Snapshot, outline []OutlineEntry, pa
 	right := x0 + contentWidth
 	const titleSize = 18.0
 	id := len(snap.Blocks) + 1
-	if err := pdf.SetFont(pdfFontFamily, "B", titleSize); err != nil {
+	if err := setPDFFont(pdf, "B", titleSize); err != nil {
 		return err
 	}
 	lh := titleSize * pdfLineHeightMult
@@ -243,7 +243,7 @@ func drawPDFContents(pdf *gopdf.GoPdf, snap Snapshot, outline []OutlineEntry, pa
 		if e.Level == 1 {
 			style = "B"
 		}
-		if err := pdf.SetFont(pdfFontFamily, style, pdfBaseFontSize); err != nil {
+		if err := setPDFFont(pdf, style, pdfBaseFontSize); err != nil {
 			return err
 		}
 		nw, err := pdf.MeasureTextWidth(num)
@@ -269,7 +269,7 @@ func drawPDFContents(pdf *gopdf.GoPdf, snap Snapshot, outline []OutlineEntry, pa
 		}
 		// The leader: dots from the end of the text to the page number, drawn from the right so they
 		// line up from one entry to the next.
-		if err := pdf.SetFont(pdfFontFamily, "", pdfBaseFontSize); err != nil {
+		if err := setPDFFont(pdf, "", pdfBaseFontSize); err != nil {
 			return err
 		}
 		dw, err := pdf.MeasureTextWidth(". ")
@@ -343,7 +343,7 @@ func drawPDFHeadersAndFooters(pdf *gopdf.GoPdf, snap Snapshot) error {
 				continue
 			}
 			l, c, r := decorParts(side.text)
-			if err := pdf.SetFont(pdfFontFamily, "", size); err != nil {
+			if err := setPDFFont(pdf, "", size); err != nil {
 				return err
 			}
 			pdfMarkArtifact(pdf)
@@ -380,17 +380,20 @@ func drawPDFHeadersAndFooters(pdf *gopdf.GoPdf, snap Snapshot) error {
 // one family name gopdf.SetFont switches between via its own style
 // string, plus a separate monospace family for code blocks.
 func registerPDFFonts(pdf *gopdf.GoPdf) error {
+	// Each variant is a family of its own, so each embedded font has its own name in the file: with one
+	// name for four different fonts, a checker (or a reader) that finds a font by its name cannot tell
+	// which one a piece of text is set in.
 	variants := []struct {
-		data  []byte
-		style int
+		family string
+		data   []byte
 	}{
-		{goregular.TTF, gopdf.Regular},
-		{gobold.TTF, gopdf.Bold},
-		{goitalic.TTF, gopdf.Italic},
-		{gobolditalic.TTF, gopdf.Bold | gopdf.Italic},
+		{pdfFontFamily, goregular.TTF},
+		{pdfFontFamily + "-bold", gobold.TTF},
+		{pdfFontFamily + "-italic", goitalic.TTF},
+		{pdfFontFamily + "-bolditalic", gobolditalic.TTF},
 	}
 	for _, v := range variants {
-		if err := pdf.AddTTFFontDataWithOption(pdfFontFamily, v.data, gopdf.TtfOption{Style: v.style}); err != nil {
+		if err := pdf.AddTTFFontData(v.family, v.data); err != nil {
 			return err
 		}
 	}
@@ -469,7 +472,22 @@ func setPDFTokenFont(pdf *gopdf.GoPdf, f Format, mono, forceBold, forceItalic bo
 	if forceItalic || f.Italic {
 		style += "I"
 	}
-	return pdf.SetFont(pdfFontFamily, style, size)
+	return setPDFFont(pdf, style, size)
+}
+
+// setPDFFont selects the Go font variant for a style made of "B" and "I".
+func setPDFFont(pdf *gopdf.GoPdf, style string, size float64) error {
+	family := pdfFontFamily
+	bold, italic := strings.Contains(style, "B"), strings.Contains(style, "I")
+	switch {
+	case bold && italic:
+		family += "-bolditalic"
+	case bold:
+		family += "-bold"
+	case italic:
+		family += "-italic"
+	}
+	return pdf.SetFont(family, "", size)
 }
 
 // wrapPDFTokens greedily packs tokens into lines no wider than width,
