@@ -160,3 +160,23 @@ func TestFootnotesLinkBothWaysInWordAndMarkdown(t *testing.T) {
 		t.Errorf("Markdown = %q, want %q", md, want)
 	}
 }
+
+func TestFootnotesLinkBothWaysInRTF(t *testing.T) {
+	rtf := string(exportOne(t, registry(), "rtf", notesDoc()))
+	for _, want := range []string{
+		`{\*\bkmkstart _fnref1}`, `HYPERLINK \\l _fn1`, // the mark is a link to the note
+		`{\*\bkmkstart _fn1}`, `HYPERLINK \\l _fnref1`, // the note has a link back
+		`{\*\bkmkstart _fnref2}`, `HYPERLINK \\l _fn2`, `{\*\bkmkstart _fn2}`, `HYPERLINK \\l _fnref2`,
+	} {
+		if !strings.Contains(rtf, want) {
+			t.Errorf("RTF: %s is missing:\n%s", want, rtf)
+		}
+	}
+	// every link names a bookmark that exists
+	for _, part := range strings.Split(rtf, `HYPERLINK \\l `)[1:] {
+		name := part[:strings.Index(part, "}")]
+		if !strings.Contains(rtf, `{\*\bkmkstart `+name+`}`) {
+			t.Errorf("a link to %q, which is not a bookmark", name)
+		}
+	}
+}
