@@ -333,6 +333,7 @@ type Server struct {
 	// usage is the bounded series of the usage counters (usageseries.go); usageClock replaces
 	// time.Now in tests.
 	usage      usageSeries
+	usageOnce  sync.Once // the stored series is read into usage on first use
 	usageClock func() time.Time
 	// docsClosed answers 404 to the generic API (see CloseDocs).
 	docsClosed bool

@@ -1,12 +1,15 @@
 package docstore
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/elaous/gojiberry/observe"
 	"html/template"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -24,9 +27,13 @@ import (
 //     points, each with the same seven numbers; an older point is dropped as a newer one comes. The
 //     series can never grow with the number of documents or people;
 //   - retention: 48 hours at hour resolution, 90 days at day resolution. Nothing older is kept;
-//   - in memory only: it is not written to the store or to a log, and a restart starts it again (the
-//     gap shows as missing points, never as made-up ones). A point is the last sample taken in its hour
-//     (or day), so the totals read at the end of the period.
+//   - kept across restarts: the series is one small record in the store (UsageSeriesKey, written through the
+//     same Adapter as the documents, at most once every ten minutes and whenever a new hour begins). It
+//     holds exactly the points above and nothing else, is read strictly (a field, time or number outside
+//     the rules refuses the whole record and the series starts again, the gap showing as missing points,
+//     never as made-up ones), and is never written to a log. A point is the last sample taken in its hour
+//     (or day), so the totals read at the end of the period. Several server processes on one store each
+//     write their own series and the last write wins.
 //
 // Samples are taken when the operator reads the usage history routes and, with RunUsageSampling, every hour.
 
@@ -35,6 +42,16 @@ const (
 	UsageHourlyPoints = 48 // two days of hours
 	UsageDailyPoints  = 90 // about three months of days
 )
+
+// UsageSeriesKey is where the series is kept: a reserved key ("usage:" is not reachable through /docs and is
+// not a document, so it never expires by itself).
+const UsageSeriesKey = "usage:series"
+
+// usageKeyspace is the reserved keyspace of the persisted series.
+const usageKeyspace = "usage:"
+
+// usageSaveEvery is the longest a changed point waits to be written, unless a new hour begins (then at once).
+const usageSaveEvery = 10 * time.Minute
 
 // UsagePoint is one sample of the counters, at the start (UTC) of its hour or day.
 type UsagePoint struct {
@@ -53,23 +70,101 @@ type UsagePoint struct {
 
 // usageSeries is the bounded history. The zero value is ready to use.
 type usageSeries struct {
-	mu     sync.Mutex
-	hourly []UsagePoint // oldest first, at most UsageHourlyPoints
-	daily  []UsagePoint // oldest first, at most UsageDailyPoints
+	mu        sync.Mutex
+	hourly    []UsagePoint // oldest first, at most UsageHourlyPoints
+	daily     []UsagePoint // oldest first, at most UsageDailyPoints
+	lastSaved time.Time
+}
+
+// persisted is the record in the store: the two lists and a version.
+type persistedUsage struct {
+	Version int          `json:"v"`
+	Hourly  []UsagePoint `json:"hourly"`
+	Daily   []UsagePoint `json:"daily"`
+}
+
+// encode is the series as the record to store.
+func (u *usageSeries) encode() []byte {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	out, _ := json.Marshal(persistedUsage{Version: 1, Hourly: u.hourly, Daily: u.daily})
+	return out
+}
+
+// decodeUsage reads a stored series strictly. It refuses the whole record for an unknown field, a list longer
+// than the retention, a time that is not the start of its hour (day), points out of order or more than a day
+// ahead of now, or a negative number.
+func decodeUsage(data []byte, now time.Time) (persistedUsage, error) {
+	var p persistedUsage
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&p); err != nil || dec.More() {
+		return p, errors.New("docstore: the usage series is not a series")
+	}
+	if p.Version != 1 || len(p.Hourly) > UsageHourlyPoints || len(p.Daily) > UsageDailyPoints {
+		return p, errors.New("docstore: the usage series is of another shape")
+	}
+	limit := now.UTC().Add(24 * time.Hour)
+	check := func(list []UsagePoint, step func(time.Time) time.Time) error {
+		var prev time.Time
+		for _, pt := range list {
+			t := pt.Time
+			if !t.Equal(step(t.UTC())) || (!prev.IsZero() && !t.After(prev)) || t.After(limit) {
+				return errors.New("docstore: a usage point is out of order or not on its hour or day")
+			}
+			if pt.Documents < 0 || pt.Records < 0 || pt.Bytes < 0 || pt.Largest < 0 || pt.QuotaUsed < 0 || pt.Accepted < 0 || pt.Refused < 0 {
+				return errors.New("docstore: a usage point has a negative number")
+			}
+			prev = t
+		}
+		return nil
+	}
+	if err := check(p.Hourly, func(t time.Time) time.Time { return t.Truncate(time.Hour) }); err != nil {
+		return p, err
+	}
+	if err := check(p.Daily, func(t time.Time) time.Time { return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC) }); err != nil {
+		return p, err
+	}
+	return p, nil
+}
+
+// loadUsageSeries reads the stored series into s.usage, once. A record that is missing, unreadable or not
+// valid leaves the series empty (it is replaced at the next save); nothing is made up.
+func (s *Server) loadUsageSeries(ctx context.Context, now time.Time) {
+	s.usageOnce.Do(func() {
+		doc, err := s.adapter.Load(ctx, UsageSeriesKey)
+		if err != nil {
+			if !errors.Is(err, ErrNotFound) {
+				log.Printf("docstore: the usage history could not be read from the store (%v); starting it again", err)
+			}
+			return
+		}
+		p, err := decodeUsage(doc.Data, now)
+		if err != nil {
+			log.Printf("docstore: the stored usage history was refused (%v); starting it again", err)
+			return
+		}
+		s.usage.mu.Lock()
+		s.usage.hourly, s.usage.daily, s.usage.lastSaved = p.Hourly, p.Daily, now
+		s.usage.mu.Unlock()
+	})
 }
 
 // record stores p taken at now: it replaces the point of the same hour (day) or appends a new one, and
 // drops what is past the retention.
-func (u *usageSeries) record(now time.Time, p UsagePoint) {
+// It reports whether the point opens a new hour (the moment worth saving at once).
+func (u *usageSeries) record(now time.Time, p UsagePoint) (newHour bool) {
 	now = now.UTC()
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	h := p
 	h.Time = now.Truncate(time.Hour)
+	newHour = len(u.hourly) == 0 || h.Time.After(u.hourly[len(u.hourly)-1].Time)
 	u.hourly = putPoint(u.hourly, h, UsageHourlyPoints)
 	d := p
 	d.Time = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	u.daily = putPoint(u.daily, d, UsageDailyPoints)
+	return newHour
 }
 
 func putPoint(s []UsagePoint, p UsagePoint, limit int) []UsagePoint {
@@ -117,6 +212,9 @@ func (s *Server) measureUsage(ctx context.Context) (usageResponse, error) {
 		return out, err
 	}
 	for _, m := range metas {
+		if m.ID == UsageSeriesKey || m.ID == TelemetryKey {
+			continue // the monitor's own records are not what it measures
+		}
 		if isReservedDocID(m.ID) {
 			out.Records++
 		} else {
@@ -147,8 +245,27 @@ func (s *Server) sampleUsage(u usageResponse) {
 	if s.usageClock != nil {
 		now = s.usageClock
 	}
-	s.usage.record(now(), p)
+	t := now()
+	s.loadUsageSeries(context.Background(), t)
+	newHour := s.usage.record(t, p)
+	s.saveUsageSeries(t, newHour)
 	s.observeUsage(u)
+}
+
+// saveUsageSeries writes the series when a new hour began or the last write is older than usageSaveEvery.
+func (s *Server) saveUsageSeries(now time.Time, newHour bool) {
+	s.usage.mu.Lock()
+	due := newHour || now.Sub(s.usage.lastSaved) >= usageSaveEvery
+	if due {
+		s.usage.lastSaved = now
+	}
+	s.usage.mu.Unlock()
+	if !due {
+		return
+	}
+	if err := s.adapter.Save(context.Background(), UsageSeriesKey, s.usage.encode()); err != nil {
+		log.Printf("docstore: the usage history could not be saved (%v)", err)
+	}
 }
 
 // RunUsageSampling takes a sample of the counters now and then every interval (an hour is right for
