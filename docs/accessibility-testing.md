@@ -20,6 +20,7 @@ What it checks, in the canvas editor showcase (`examples/canvas-editor-showcase`
 | `TestAccessibilityAndTranslation`, `TestScreenReaderCopyFollowsStructure`, `TestImageDescriptionIsInTheReadingCopy`, `TestSelectionLanguageReachesTheReadingCopy` | the screen-reader copy of the canvas: headings, lists, tables, images with their description, the language of a run, the live region |
 | `TestMenuEntryChosenWithTheKeyboard`, `TestMenusAreOperatedWithTheArrowKeys`, `TestSidePanelTabsAreOperatedWithTheArrowKeys`, `TestDialogFocusIsTrappedAndReturned`, `TestFontSelectorKeyboard` | operating menus, tabs, dialogs and option lists with the keyboard alone, focus trapped in a dialog and returned |
 | `TestDisplayPreferencesAreApplied`, `TestDisplayPreferencesMenu` | text size, spacing, contrast and motion preferences |
+| `TestWordSuggestions`, `TestGhostTextIsAcceptedByTabAlone`, `TestGhostTextIsAnnouncedPolitely`, `TestGhostTextEscapeAndEnter`, `TestGhostTextNeverCoversText`, `TestGhostTextIsOffByDefault` | the word list as an ARIA combobox and listbox, and the ghost-text suggestion: off by default, hidden from the accessibility tree, announced once and politely, inserted by Tab alone (checked with `internal/screenreader`) |
 
 ### The baseline
 
@@ -66,6 +67,9 @@ issue for each failure. A failure of a step marked ★ stops the release.
 | 19 | Choose "Typing: say each character", type "ab cd". | Each letter is spoken, the space as "space". Delete one with Backspace: "Deleted ..." is spoken. |
 | 20 | Turn on "Read the line when the caret moves"; move with the Up and Down arrows over wrapped lines and paragraphs, then Ctrl+Left and Ctrl+Right. | The line the caret goes to is spoken, an empty line as "blank"; the words passed over by Ctrl+arrow are spoken. Judge whether the reading is too chatty and say which preference would fix it. |
 | 21 | Turn on "Say formatting changes at the caret"; press Ctrl+B, type, press Ctrl+B; move the caret into a heading. | "Bold on" and "Bold off" are spoken, and the heading's style when the caret enters it. Record, for each reader, whether the polite live region waits for the speech in progress or cuts it. |
+| 22 | Choose View > Display preferences > "Show a suggestion after the caret (Tab accepts)". In Edit mode, on an empty line, type the start of a word that is in the document ("ze" after "zebra zebra"). Wait a second without typing. | A polite message says "Suggestion: zebra. Press Tab to accept." once (not for every letter, and not while typing quickly). The faint rest of the word is not read by the reader's cursor. |
+| 23 | Press the Arrow keys, Enter and Space with the suggestion showing. Then press Tab. Then type another start and press Escape. | Only Tab puts the word in ("Inserted zebra" is spoken; no tab is typed and the focus stays in the text); the other keys do what they always do and never insert it; Escape hides it until the next letter. With the preference off nothing is announced and Tab behaves as before. |
+| 24 | Press Ctrl+Space inside a word. Move with Up and Down, accept with Tab or Enter, close with Escape. Set the document language to Deutsch (Format > Language of the document) and open the list for "Doku". | The reader says it is a combobox with a list, how many suggestions there are and which one is highlighted, and speaks each new highlight; the focus never leaves the text; the German word "Dokument" is offered. Note whether the highlight is spoken twice by the reader. |
 
 ### Results
 

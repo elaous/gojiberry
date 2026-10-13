@@ -88,3 +88,34 @@ func TestWordSuggestionsUseTheDictionary(t *testing.T) {
 	d.OK(strings.Contains(got, "xylophone"), "a word the document does not have comes from the dictionary: "+got)
 	d.NoErrors()
 }
+
+// With a document language that has a word list (German, French, Spanish), its common words fill the list
+// after the document's own, and with no language set they do not.
+func TestWordSuggestionsUseTheLanguageWordList(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Focus("#input")
+	d.Press("Home")
+	d.Type("Doku ")
+	d.Press("ArrowLeft")
+	d.Press("Control+Space")
+	d.Sleep(300)
+	d.OK(d.Count(`#suggestions [role="option"]`) == 0, "without a document language there is no German word: "+strings.Join(d.Texts(`#suggestions [role="option"]`), ","))
+	d.Click(`button.gj-menubar-button:has-text("Format")`)
+	d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Language of the document")`)
+	d.Click(`.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("Deutsch")`)
+	d.WaitFor("the language", `document.getElementById('a11y-text').getAttribute('lang') === 'de'`)
+	d.CanvasClick(240, 164)
+	d.Focus("#input")
+	d.Press("Home")
+	d.Press("ArrowRight")
+	d.Press("ArrowRight")
+	d.Press("ArrowRight")
+	d.Press("ArrowRight")
+	d.Press("Control+Space")
+	d.WaitSelector(`#suggestions [role="option"]`)
+	got := strings.Join(d.Texts(`#suggestions [role="option"]`), ",")
+	d.OK(strings.Contains(got, "Dokument"), "the German list offers its word, with the typed capital: "+got)
+	d.NoErrors()
+}

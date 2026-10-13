@@ -1035,6 +1035,8 @@
   "fidelity.f.media": "Audio y vídeo",
   "fidelity.f.mediaCaptions": "Pistas de subtítulos",
   "fidelity.n.mediaText": "Se escribe como un enlace al clip con su transcripción como texto; el clip no está incrustado.",
-  "fidelity.n.captionWords": "La pista de subtítulos no se escribe; sus palabras se escriben como transcripción."
+  "fidelity.n.captionWords": "La pista de subtítulos no se escribe; sus palabras se escriben como transcripción.",
+  "prefs.ghost": "Mostrar una sugerencia tras el cursor (Tab la acepta)",
+  "ghost.offer": "Sugerencia: %s. Pulse Tab para aceptarla."
  }
 }

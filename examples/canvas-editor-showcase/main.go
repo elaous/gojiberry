@@ -59,6 +59,7 @@ type ui struct {
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
 	imageMsg     string
 	sugg         suggestState
+	ghost        ghostUI
 	stateRef     *State                 // the document state, for what the announcer needs of it
 	commentSig   string                 // how many comments, replies and resolved threads there were when last looked at
 	commentsSeen map[string]commentSeen // the comments already known (their replies and whether resolved), to find what others do
@@ -846,6 +847,8 @@ func main() {
 	}
 	u.sugg.reopen = func(quiet bool) { u.openSuggestions(flow, stage, canvasEl.Element, quiet, renderUI) }
 	u.watchMirrorSelection(func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
+	u.ghost.refresh = func() { u.refreshGhost(flow, stage, canvasEl.Element, renderUI) }
+	u.watchGhostPointer()
 	u.watchSuggestionKeys(inputEl.Element, func() *canvas.TextFlow { return flow }, redraw, renderUI)
 	state.Live = liveProps(u, &state, origin, renderCanvas, renderUI)
 	renderCanvas()

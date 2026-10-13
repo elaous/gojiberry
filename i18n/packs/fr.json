@@ -1035,6 +1035,8 @@
   "fidelity.f.media": "Audio et vidéo",
   "fidelity.f.mediaCaptions": "Pistes de sous-titres",
   "fidelity.n.mediaText": "Écrit comme un lien vers le clip avec sa transcription en texte ; le clip n'est pas intégré.",
-  "fidelity.n.captionWords": "La piste de sous-titres n'est pas écrite ; ses mots sont écrits comme transcription."
+  "fidelity.n.captionWords": "La piste de sous-titres n'est pas écrite ; ses mots sont écrits comme transcription.",
+  "prefs.ghost": "Afficher une suggestion après le curseur (Tab l'accepte)",
+  "ghost.offer": "Suggestion : %s. Appuyez sur Tab pour l'accepter."
  }
 }
