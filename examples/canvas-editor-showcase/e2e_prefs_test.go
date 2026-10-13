@@ -3,6 +3,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/elaous/gojiberry/internal/e2etest"
@@ -192,5 +193,45 @@ func TestLowMemoryModeKeepsFewerUndoSteps(t *testing.T) {
 	d.Reload()
 	d.WaitSelector("canvas")
 	d.OK(limit() == 1000, "many steps are kept for the next visit")
+	d.NoErrors()
+}
+
+// The display preferences go out to a file and come back from one, and a file brings in only the values the
+// page knows.
+func TestPreferencesExportAndImport(t *testing.T) {
+	site := e2etest.NewSite(t)
+	d := site.OpenURL(t, "/index.html")
+	d.WaitSelector("canvas")
+	open := func(item string) {
+		d.Click(`button.gj-menubar-button:has-text("View")`)
+		d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Display preferences")`)
+		entry := `.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("` + item + `")`
+		d.WaitSelector(entry)
+		d.Eval(`(() => { const e = Array.from(document.querySelectorAll('.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub)')).find((x) => x.textContent.includes(`+"`"+item+"`"+`)); if (e) e.scrollIntoView({ block: 'nearest' }); return true; })()`, nil)
+	}
+	root := func(attr string) string {
+		return d.Str(`document.documentElement.getAttribute('` + attr + `') || ''`)
+	}
+	file := []byte(`{"text":"larger","contrast":"more","motion":"sideways","unknown":true}`)
+	open("Import preferences")
+	d.ChooseFile(func() {
+		d.Click(`.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("Import preferences")`)
+	}, "prefs.json", file)
+	d.WaitFor("the text size is applied", `document.documentElement.getAttribute('data-gj-text') === 'larger'`)
+	d.OK(root("data-gj-contrast") == "more", "the contrast is applied")
+	d.OK(root("data-gj-motion") == "", "a value the page does not know is not applied: "+root("data-gj-motion"))
+
+	open("Export these preferences")
+	name, data := d.Download(func() {
+		d.Click(`.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("Export these preferences")`)
+	})
+	d.OK(name == "display-preferences.json" && strings.Contains(string(data), `"text": "larger"`) && strings.Contains(string(data), `"contrast": "more"`), "the file has the settings: "+name+" "+string(data))
+
+	open("Import preferences")
+	d.ChooseFile(func() {
+		d.Click(`.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("Import preferences")`)
+	}, "bad.json", []byte("not json"))
+	d.WaitFor("the refusal is said", `(document.querySelector('.gj-announcer') || {}).textContent === 'That file is not a preferences file'`)
+	d.OK(root("data-gj-text") == "larger", "a bad file changes nothing")
 	d.NoErrors()
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/components"
+	"github.com/elaous/gojiberry/transfer"
 )
 
 // Display preferences. They are kept in this browser (localStorage) and set as data-gj-* attributes
@@ -16,25 +17,6 @@ import (
 
 const prefsKey = "showcase:a11y"
 
-// prefs are the display settings; an empty field means "as the system has it".
-type prefs struct {
-	Motion   string `json:"motion,omitempty"`   // "reduce"
-	Contrast string `json:"contrast,omitempty"` // "more"
-	Text     string `json:"text,omitempty"`     // "large", "larger", "largest"
-	Spacing  string `json:"spacing,omitempty"`  // "wide"
-	Focus    string `json:"focus,omitempty"`    // "on": distraction-free
-	Targets  string `json:"targets,omitempty"`  // "large"
-	Suggest  string `json:"suggest,omitempty"`  // word suggestions: "auto" opens the list while typing
-	Ghost    string `json:"ghost,omitempty"`    // "on": the best word is shown faintly after the caret, Tab accepts it
-	Speed    string `json:"speed,omitempty"`    // reading aloud: "slow", "fast"
-	Typing   string `json:"typing,omitempty"`   // what is said of typed text: "words", "characters"; "" nothing
-	TypeFmt  string `json:"typefmt,omitempty"`  // "on": formatting changes at the caret are said
-	TypeRead string `json:"typeread,omitempty"` // "on": the line is read when the caret moves
-	Collab   string `json:"collab,omitempty"`   // what is announced of a shared session: "" everything, "important", "off"
-	Memory   string `json:"memory,omitempty"`   // "low": fewer undo steps kept; "high": many; "normal": the person turned it off; "" automatic (low on a device that reports 2 GB or less)
-	Where    string `json:"where,omitempty"`    // "on": the presence list has a "Where is <name>?" button for each collaborator
-}
-
 // attrs are the values the root element carries.
 func (p prefs) attrs() map[string]string {
 	return map[string]string{"data-gj-motion": p.Motion, "data-gj-contrast": p.Contrast, "data-gj-text": p.Text, "data-gj-spacing": p.Spacing, "data-gj-focus": p.Focus, "data-gj-targets": p.Targets}
@@ -42,53 +24,7 @@ func (p prefs) attrs() map[string]string {
 
 // loadPrefs reads the kept preferences; unknown or unreadable ones are as if unset.
 func loadPrefs() prefs {
-	var p prefs
-	_ = json.Unmarshal([]byte(lsGet(prefsKey)), &p)
-	if p.Motion != "reduce" {
-		p.Motion = ""
-	}
-	if p.Contrast != "more" {
-		p.Contrast = ""
-	}
-	if p.Text != "large" && p.Text != "larger" && p.Text != "largest" {
-		p.Text = ""
-	}
-	if p.Spacing != "wide" {
-		p.Spacing = ""
-	}
-	if p.Focus != "on" {
-		p.Focus = ""
-	}
-	if p.Targets != "large" {
-		p.Targets = ""
-	}
-	if p.Suggest != "auto" {
-		p.Suggest = ""
-	}
-	if p.Ghost != "on" {
-		p.Ghost = ""
-	}
-	if p.Speed != "slow" && p.Speed != "fast" {
-		p.Speed = ""
-	}
-	if p.Typing != components.TypingWords && p.Typing != components.TypingCharacters {
-		p.Typing = ""
-	}
-	if p.TypeFmt != "on" {
-		p.TypeFmt = ""
-	}
-	if p.TypeRead != "on" {
-		p.TypeRead = ""
-	}
-	if p.Collab != components.CollabImportant && p.Collab != components.CollabOff {
-		p.Collab = ""
-	}
-	if p.Where != "on" {
-		p.Where = ""
-	}
-	if p.Memory != "low" && p.Memory != "normal" && p.Memory != "high" {
-		p.Memory = ""
-	}
+	p, _ := parsePrefs([]byte(lsGet(prefsKey)))
 	return p
 }
 
@@ -135,6 +71,35 @@ func applyPrefs(p prefs) {
 			root.Call("setAttribute", k, v)
 		}
 	}
+}
+
+// pickPrefsFile opens the browser's file chooser and hands the chosen file's bytes to done.
+func pickPrefsFile(done func([]byte)) {
+	doc := js.Global().Get("document")
+	in := doc.Call("createElement", "input")
+	in.Set("type", "file")
+	in.Set("accept", "application/json,.json")
+	in.Get("style").Set("display", "none")
+	var onChange js.Func
+	onChange = js.FuncOf(func(js.Value, []js.Value) any {
+		files := in.Get("files")
+		if files.Length() == 0 {
+			return nil
+		}
+		var onText js.Func
+		onText = js.FuncOf(func(_ js.Value, args []js.Value) any {
+			done([]byte(args[0].String()))
+			onText.Release()
+			return nil
+		})
+		files.Index(0).Call("text").Call("then", onText)
+		in.Call("remove")
+		onChange.Release()
+		return nil
+	})
+	in.Call("addEventListener", "change", onChange)
+	doc.Get("body").Call("appendChild", in)
+	in.Call("click")
 }
 
 // curPrefs are the preferences in force.
@@ -208,6 +173,24 @@ func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
 		toggle(T("prefs.memory", "Save memory (keep fewer undo steps)"), lowMemory(curPrefs), func(p *prefs, on bool) { p.Memory = map[bool]string{true: "low", false: "normal"}[on] }),
 		toggle(T("prefs.undoMany", "Keep many undo steps (1000)"), curPrefs.Memory == "high", func(p *prefs, on bool) { p.Memory = map[bool]string{true: "high", false: "normal"}[on] }),
 		toggle(T("prefs.focus", "Distraction-free mode"), curPrefs.Focus == "on", func(p *prefs, on bool) { p.Focus = map[bool]string{true: "on"}[on] }),
+		{Separator: true},
+		{Label: T("prefs.export", "Export these preferences…"), OnSelect: func() {
+			transfer.Download("display-preferences.json", "application/json", encodePrefs(curPrefs))
+			u.announce(T("a11y.prefsExported", "Preferences saved to a file"))
+		}},
+		{Label: T("prefs.import", "Import preferences from a file…"), OnSelect: func() {
+			pickPrefsFile(func(data []byte) {
+				p, err := parsePrefs(data)
+				if err != nil {
+					u.announce(T("a11y.prefsBad", "That file is not a preferences file"))
+					renderUI()
+					return
+				}
+				setPrefs(p)
+				u.announce(T("a11y.prefsImported", "Preferences imported"))
+				renderUI()
+			})
+		}},
 		{Separator: true},
 		{Label: T("prefs.privacy", "Privacy settings…"), OnSelect: func() { u.tab = "privacy"; renderUI() }},
 		{Separator: true},
