@@ -142,7 +142,7 @@ type entry struct {
 }
 
 // Formats are the names of the export formats a Report can be made for, in the order a host lists them.
-var Formats = []string{"docx", "pdf", "rtf", "epub", "html", "markdown", "text"}
+var Formats = []string{"docx", "odt", "pdf", "rtf", "epub", "html", "markdown", "text"}
 
 // Report is what exporting a document as one format loses.
 type Report struct {
