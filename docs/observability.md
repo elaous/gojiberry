@@ -78,7 +78,7 @@ Label values:
 
 | Label | Values |
 | --- | --- |
-| `route` | `/health`, `/ready`, `/quota`, `/docs`, `/docs/{id}`, `/docs/{id}/acl`, `/docs/{id}/renew`, `/auth/{provider}/login`, `/auth/{provider}/callback`, `/auth/me`, `/auth/logout`, `/auth/passkey/*`, `/auth/other`, `/directory/*`, `/admin/*`, `/telemetry`, `/me/config`, `/public/*`, `other` |
+| `route` | `/health`, `/ready`, `/quota`, `/docs`, `/docs/{id}`, `/docs/{id}/acl`, `/docs/{id}/renew`, `/auth/{provider}/login`, `/auth/{provider}/callback`, `/auth/me`, `/auth/logout`, `/auth/passkey/*`, `/auth/other`, `/directory/*`, `/admin/*`, `/telemetry`, `/me/config`, `/public/*`, `/docs/{id}/events`, `/docs/{id}/snapshot`, `/docs/{id}/ws`, `/docs/{id}/ops`, `/docs/{id}/presence`, `/docs/{id}/role`, `/ops`, `/presence`, `/local/*`, `/google/*`, `/translate`, `/speak`, `/transcribe`, `other` |
 | `method` | `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `OPTIONS`, `other` |
 | `status_class` | `1xx`, `2xx`, `3xx`, `4xx`, `5xx`, `other` |
 | `flow` | `signin`, `passkey`, `directory`, `public`, `admin` |
@@ -176,6 +176,17 @@ GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN=...   # the admin guard
 
 Nothing leaves the server. `GET /admin/observe` shows the totals in memory (a restart starts them again).
 
+## The other servers
+
+The same switches, sinks and allowlists apply to the collaboration hub (`cmd/collabhub`), the sync relay
+(`cmd/syncserver`), the font server (`cmd/fontserver`) and the translation, speech and braille services
+(`cmd/translateserver`, `cmd/voiceserver`, `cmd/brailleserver`). Each reports itself to the sinks as
+`gojiberry-<name>` (the docstore server as `gojiberry-docstore`), counts requests per route template, method and status
+class, and flushes on a stop signal. The route templates for these servers are in the `route` list above: a document id
+in the hub's paths, a font file name or a text to translate never appears in them. These servers have no
+`/admin/observe` page, so with only the `builtin` sink the totals cannot be read (the server logs a warning): name `otlp`
+or `posthog` in `GOJIBERRY_OBS_SINKS`. The hub's WebSocket upgrade passes through the middleware unchanged.
+
 ## Shutdown
 
 On `SIGTERM` or `SIGINT` (with observability on) the server stops accepting requests, lets the running ones finish for
@@ -183,4 +194,4 @@ up to ten seconds, then flushes and closes every sink, so the last counts are se
 
 ## Not done yet
 
-Persistent builtin totals, and instrumenting the collaboration hub and sync servers are not built.
+Persistent builtin totals are not built. The servers other than the docstore count requests only; their own work (hub rooms, sync merges, font scans, translation calls) has no metrics yet.

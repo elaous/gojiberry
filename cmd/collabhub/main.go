@@ -37,6 +37,7 @@ import (
 	"github.com/elaous/gojiberry/collab/hub"
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/guard"
+	"github.com/elaous/gojiberry/observe"
 )
 
 func main() {
@@ -142,6 +143,10 @@ func run(ctx context.Context, onListen func(net.Addr)) error {
 	if err != nil {
 		return err
 	}
+	obs, err := observe.Setup(ctx, os.Getenv, "gojiberry-collabhub")
+	if err != nil {
+		return err
+	}
 	addr := os.Getenv("GOJIBERRY_COLLAB_ADDR")
 	if addr == "" {
 		addr = ":8081"
@@ -153,7 +158,7 @@ func run(ctx context.Context, onListen func(net.Addr)) error {
 	if onListen != nil {
 		onListen(ln.Addr())
 	}
-	srv := &http.Server{Handler: h.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: observe.Middleware(obs, h.Handler()), ReadHeaderTimeout: 10 * time.Second}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -174,6 +179,13 @@ func run(ctx context.Context, onListen func(net.Addr)) error {
 		return err
 	}
 	<-done // the final save has finished
+	if obs != nil {
+		cctx, cancel := context.WithTimeout(context.Background(), observe.ShutdownGrace)
+		defer cancel()
+		if err := obs.Close(cctx); err != nil {
+			log.Printf("collabhub: closing the observability sinks: %v", err)
+		}
+	}
 	return nil
 }
 

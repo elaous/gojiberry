@@ -45,7 +45,7 @@ func TestOffByDefaultBuildsNothingAndReadsNothing(t *testing.T) {
 		// a bad value cannot stop a server that has the switch off
 		env("GOJIBERRY_OBS_SINKS", "not-a-sink", "GOJIBERRY_OBS_TRACE_SAMPLE", "lots"),
 	} {
-		o, cfg, err := fromEnv(context.Background(), e, func(string) ([]byte, error) { read = true; return nil, nil })
+		o, cfg, err := fromEnv(context.Background(), e, func(string) ([]byte, error) { read = true; return nil, nil }, ServiceName)
 		if err != nil || o != nil || cfg.Enabled {
 			t.Fatalf("o=%v cfg=%+v err=%v: want nothing", o, cfg, err)
 		}

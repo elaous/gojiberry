@@ -122,15 +122,21 @@ func ParseEnv(getenv func(string) string) (Config, error) {
 // deployment fails at start. The caller closes the Observer at shutdown (Observer.Close flushes).
 // getenv is os.Getenv in production.
 func FromEnv(ctx context.Context, getenv func(string) string) (*Observer, Config, error) {
-	return fromEnv(ctx, getenv, os.ReadFile)
+	return fromEnv(ctx, getenv, os.ReadFile, ServiceName)
 }
 
-func fromEnv(ctx context.Context, getenv func(string) string, readFile func(string) ([]byte, error)) (*Observer, Config, error) {
+// FromEnvFor is FromEnv for another server of the project: service is the name the sinks report it as
+// (for example "gojiberry-fontserver").
+func FromEnvFor(ctx context.Context, getenv func(string) string, service string) (*Observer, Config, error) {
+	return fromEnv(ctx, getenv, os.ReadFile, service)
+}
+
+func fromEnv(ctx context.Context, getenv func(string) string, readFile func(string) ([]byte, error), service string) (*Observer, Config, error) {
 	c, err := ParseEnv(getenv)
 	if err != nil || !c.Enabled {
 		return nil, c, err
 	}
-	env := SinkEnv{Getenv: getenv, ReadFile: readFile, Service: ServiceName}
+	env := SinkEnv{Getenv: getenv, ReadFile: readFile, Service: service}
 	built := map[string]Sink{}
 	closeBuilt := func() {
 		for _, s := range built {

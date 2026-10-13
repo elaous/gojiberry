@@ -118,7 +118,10 @@ var defs = []Def{
 var labelValues = map[string][]string{
 	"route": {"/health", "/ready", "/quota", "/docs", "/docs/{id}", "/docs/{id}/acl", "/docs/{id}/renew",
 		"/auth/{provider}/login", "/auth/{provider}/callback", "/auth/me", "/auth/logout", "/auth/passkey/*", "/auth/other",
-		"/directory/*", "/admin/*", "/telemetry", "/me/config", "/public/*", "other"},
+		"/directory/*", "/admin/*", "/telemetry", "/me/config", "/public/*",
+		// the other servers (collaboration hub, sync relay, font, translation, speech and braille services)
+		"/docs/{id}/events", "/docs/{id}/snapshot", "/docs/{id}/ws", "/docs/{id}/ops", "/docs/{id}/presence", "/docs/{id}/role",
+		"/ops", "/presence", "/local/*", "/google/*", "/translate", "/speak", "/transcribe", "other"},
 	"method":       {"GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS", "other"},
 	"status_class": {"1xx", "2xx", "3xx", "4xx", "5xx", "other"},
 	"flow":         {"signin", "passkey", "directory", "public", "admin"},
