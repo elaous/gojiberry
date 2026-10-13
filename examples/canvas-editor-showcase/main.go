@@ -212,6 +212,14 @@ func main() {
 		}
 		u.docLang = d.Language()
 		u.layout = d.PageLayout()
+		// The sheet the document was saved with comes back with it (a size that is none of the papers on
+		// offer, or one that was never set, leaves the sheet as it is).
+		if ps, ok := components.PageSetupOf(u.layout.Width, u.layout.Height, u.layout.Margins); ok {
+			if u.layout.Margins == ([4]float64{}) {
+				ps.Margins = state.Setup.Margins
+			}
+			state.Setup = ps
+		}
 		u.layout.Width, u.layout.Height, u.layout.Margins = 0, 0, [4]float64{}
 		stage.ForgetFonts() // the opened text may use fonts the library has
 		renderCanvas()

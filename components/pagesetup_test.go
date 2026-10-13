@@ -79,3 +79,19 @@ func TestPageSetupIgnoresNonNumbers(t *testing.T) {
 		t.Error(n.Margins)
 	}
 }
+
+func TestPageSetupOfFindsThePaperOfASavedSheet(t *testing.T) {
+	m := [4]float64{36, 36, 36, 36}
+	if p, ok := PageSetupOf(612, 792, m); !ok || p.Paper != "letter" || p.Landscape || p.Margins != m {
+		t.Errorf("Letter: %+v %v", p, ok)
+	}
+	if p, ok := PageSetupOf(842, 595, m); !ok || p.Paper != "a4" || !p.Landscape {
+		t.Errorf("A4 turned: %+v %v", p, ok)
+	}
+	if _, ok := PageSetupOf(500, 500, m); ok {
+		t.Error("a square sheet is none of the papers")
+	}
+	if _, ok := PageSetupOf(0, 0, m); ok {
+		t.Error("no sheet saved is not a paper")
+	}
+}

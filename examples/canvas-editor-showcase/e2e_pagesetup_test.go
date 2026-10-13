@@ -47,6 +47,16 @@ func TestPageSetupAndStatusBar(t *testing.T) {
 	d.Select(".gj-pagesetup-paper", "a4")
 	d.Wait("s.pageSetup.width === 842") // landscape A4: the rebuild has happened
 	d.OK(item("save") == "Saved", "a page setup change is not an edit: "+item("save"))
+
+	// Opening the saved document brings its sheet back: Letter, landscape, the margins it was saved with.
+	d.Select(".gj-pagesetup-orientation", "portrait")
+	d.Wait("s.pageSetup.width === 595")
+	d.Click(`button[data-tab="save"]`)
+	d.WaitFor("the document in the list", "document.querySelector('.gj-doclist-open')")
+	d.Click(".gj-doclist-open")
+	d.Wait("s.pageSetup.width === 792 && s.pageSetup.height === 612 && s.pageSetup.margins[0] === 100 && s.pageSetup.margins[1] === 36")
+	d.OK(item("setup") == "Letter / landscape", "the opened document's sheet is back: "+item("setup"))
+
 	d.ToggleMode()
 	d.CanvasClick(200, 260)
 	d.Type("x")
