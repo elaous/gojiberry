@@ -52,7 +52,21 @@ aggregate counts (`usage_events_total{fact,choice}`). The browser may send exact
 - `GET /admin/telemetry` (the admin guard of `/admin/usage`) lists the totals of at least 5 per day.
   `GET /admin/usage` shows how many batches were taken and how many requests were refused.
 - A refused request is written to the audit log as `telemetry.refused`, with no content.
-- Totals are kept in memory: a restart starts them again. That is a choice of this first version, not a promise.
+- The totals are kept in the server's store, under the reserved key `telemetry:totals` (not reachable through
+  `/docs`, never expires by itself), written a few seconds after a change so a burst is one write. A restart
+  starts from them. The record holds only what the counters hold: a number per day, name and value from the
+  allowlist, the two request totals and the random seed of the noise below. It is bounded (90 days times the
+  allowlist, 1 MiB at most) and read strictly: a record with a field, name, value or day outside the schema is
+  refused whole, the server counts from zero and the next write replaces it. Several server processes on one
+  store each write their own totals and the last write wins; run one counting process.
+- `GOJIBERRY_DOCSTORE_TELEMETRY_NOISE=<step>` (off by default; a whole number from 2 to 1000, anything else
+  stops the server) rounds every total in `GET /admin/telemetry` at random to a multiple of the step before the
+  k threshold is applied: a total n becomes the multiple just below or just above it, above with probability
+  (n mod step)/step, so it is right on average and a small total is a coarse figure. The draw comes from a keyed
+  hash of day, event and total with a secret seed that is stored with the totals, so asking again gives the
+  same answer and asking often does not average the noise away. This is differential-privacy-style rounding, not
+  a proven (epsilon, delta) guarantee, and it does not change the exact totals in the store, which only the
+  operator can reach. The request totals in `/admin/usage` are not rounded.
 
 ## Legal notes (not legal advice)
 
@@ -61,7 +75,19 @@ still treats the sending as something the person chooses: the lawful basis is co
 given by choosing "Send anonymous counts", withdrawn by choosing "Send nothing" at any time. The consent text is the
 text of the Privacy tab. A deployer should review it against their own jurisdiction.
 
+## On the client
+
+- **Sampling.** The Privacy tab has "Send from": every visit (default), about 1 visit in 10, or 1 in 100. A visit
+  is in the sample or not, drawn when the person opts in and when they change the rate, so a visit sends all of
+  its counts or none. A visit outside the sample keeps and shows nothing and sends nothing, and the tab says so.
+  The rate is kept in this browser.
+- **Local debug log.** Off by default, and only available to someone who opted in. When on, the page keeps (in
+  memory, at most 100 entries) a line for each batch that would be or was sent: the minute, an outcome (`sent`,
+  `failed`, `not-sampled`, `no-server`), the day and the allowlisted counts, so it can say no more than the
+  request would have. It is never sent anywhere, it goes when the page closes or the person chooses to send
+  nothing, and "Download the log" saves it as `gojiberry-usage-log.json` to look at or attach to a report.
+- The settings are reached from View > Display preferences > Privacy settings, as well as the tab.
+
 ## Not done yet
 
-Sampling on the client, a local debug log to export, and a separate opt-in for scrubbed crash reports (roadmap 57,
-steps 5 and 7) are not built.
+A separate opt-in for scrubbed crash reports (roadmap 57, step 7) is not built.
