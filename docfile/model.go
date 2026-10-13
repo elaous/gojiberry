@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/fonts"
+	"github.com/elaous/gojiberry/fonts/fontdata"
 )
 
 // Document is one saved document.
@@ -567,7 +567,7 @@ func (d Document) String() string {
 
 // FromFonts converts a font library's fonts (fonts.Library.Added) to the
 // references a document keeps.
-func FromFonts(list []fonts.Font) []FontRef {
+func FromFonts(list []fontdata.Font) []FontRef {
 	var out []FontRef
 	for _, f := range list {
 		r := FontRef{Family: f.Family, Source: f.Source, Category: f.Category}
@@ -581,12 +581,12 @@ func FromFonts(list []fonts.Font) []FontRef {
 
 // ToFonts converts saved font references back to fonts, to Add to a
 // fonts.Library when the document is opened.
-func ToFonts(refs []FontRef) []fonts.Font {
-	var out []fonts.Font
+func ToFonts(refs []FontRef) []fontdata.Font {
+	var out []fontdata.Font
 	for _, r := range refs {
-		f := fonts.Font{Family: r.Family, Source: r.Source, Category: r.Category}
+		f := fontdata.Font{Family: r.Family, Source: r.Source, Category: r.Category}
 		for _, v := range r.Variants {
-			f.Variants = append(f.Variants, fonts.Variant{Weight: v.Weight, Italic: v.Italic, Style: v.Style, URL: v.URL, Key: v.Key})
+			f.Variants = append(f.Variants, fontdata.Variant{Weight: v.Weight, Italic: v.Italic, Style: v.Style, URL: v.URL, Key: v.Key})
 		}
 		out = append(out, f)
 	}

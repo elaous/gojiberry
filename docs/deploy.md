@@ -111,7 +111,7 @@ request after a rebuild from waiting on the strongest compression.
 ### The second program (the file formats)
 
 The showcase is two programs: `main.wasm` (about 26 MB, 6.4 MB gzipped), which every visitor downloads, and
-`files.wasm` (about 11 MB, 3.1 MB gzipped) with `files-worker.js`, which a web worker loads the first time a file
+`files.wasm` (about 9.5 MB, 2.7 MB gzipped) with `files-worker.js`, which a web worker loads the first time a file
 is imported or exported (Word, OpenDocument, PDF, RTF, EPUB, HTML). Both are built by `make showcase-dist` and the
 Dockerfile, both are precompressed by `wasmdist`, and nothing else is needed on the server: the page asks for
 `files-worker.js` and `files.wasm` next to `index.html`. `make wasm-size` checks each program against its own
