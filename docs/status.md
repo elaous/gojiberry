@@ -39,7 +39,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 50 | Accessibility configs | enhancement | partial | reduced motion, high contrast, font size and line spacing | dyslexia-friendly font (needs a font asset), caret and selection visibility on the canvas, key remapping, colour-blind palettes, canvas following the text size |
 | 51 | Preference menu | feature | partial | one menu for the accessibility options; Privacy entry | language, theme and editor behaviour in the same schema; search; import and export; a panel instead of a menu |
 | 52 | Central config store (preferences, styles, templates, fonts) | feature | partial | `userconfig` store and client (local copy, offline queue, merge), fonts as assets with limits, shareable bundles | wiring the client to the showcase's preferences and a share dialog; loading a stored font into the editor |
-| 56 | Atypical speech (Project Euphonia style) | feature | partial | [euphonia-port.md](euphonia-port.md); `speechcoach` package; prompt and language bias in `cmd/voiceserver`; `speechmodel` (model/adapter contract, digest-pinned loader, federated averaging with clip and noise, stub and http backends; [speech-model.md](speech-model.md)) | an ONNX backend and the model repository; showcase Speech tab; trials with users (blocked) |
+| 56 | Atypical speech (Project Euphonia style) | feature | partial | [euphonia-port.md](euphonia-port.md); `speechcoach` package; prompt and language bias in `cmd/voiceserver`; showcase Speech tab (record phrases, download, delete, dictate through a recogniser address); `speechmodel` (model/adapter contract, digest-pinned loader, federated averaging with clip and noise, stub and http backends; [speech-model.md](speech-model.md)) | keeping recordings between visits; learning from corrections and the contribution flow in the page; an ONNX backend and the model repository; trials with users (blocked) |
 | 59 | Keyboard-only completeness | enhancement | partial | dropdowns, colour picker and pickers operable; no focus traps found | inventory of every action; skip links; shortcut cheat sheet and remapping; pointer-free end-to-end run |
 | 60 | Accessible text mirror of the canvas | feature | partial | mirror with links, outline landmark, comments, tables, lists, caret mapping both ways (browser-tested) | block-level diff of its own; caret mapping counts runes; manual reader run (blocked) |
 | 61 | Alt text and structure checks | feature | partial | prompt on insert, description editor, checker rules, reading order of typed lists and tables | on-device suggestions; reading order of floating objects; heading levels beyond 3; more colour names |
@@ -126,7 +126,7 @@ security table: the review findings are done; still open are the per-account sig
 ## Suggested order for the next work
 
 1. 81: metrics for the other servers' own work; persistent builtin totals.
-2. 56: the showcase Speech tab (the package is in).
+2. 56: keep recordings between visits and learn from corrections.
 3. 72: ODT.
 4. 80: on-screen pagination with the running header.
 5. 68: an insert-clip UI and caption track editor.

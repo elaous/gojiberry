@@ -32,11 +32,11 @@ func builtinCommands() []canvas.CommandInfo {
 var tabIcons = map[string]string{
 	"format": "tune", "styles": "style", "symbols": "functions", "keys": "keyboard", "comments": "comment", "review": "rate_review", "outline": "toc", "check": "task_alt", "images": "image",
 	"find": "search", "spell": "spellcheck", "language": "language", "stats": "numbers", "share": "ios_share", "people": "account_circle",
-	"migrate": "upload_file", "page": "margin", "save": "description", "transfer": "input", "privacy": "lock",
+	"migrate": "upload_file", "page": "margin", "save": "description", "transfer": "input", "privacy": "lock", "speech": "mic",
 }
 
 // sideTabs is the order of the side panel's tabs, which the arrow keys follow.
-var sideTabs = []string{"format", "styles", "symbols", "keys", "comments", "review", "outline", "check", "images", "find", "spell", "language", "stats", "share", "people", "migrate", "page", "save", "transfer", "privacy"}
+var sideTabs = []string{"format", "styles", "symbols", "keys", "comments", "review", "outline", "check", "images", "find", "spell", "language", "stats", "share", "people", "migrate", "page", "save", "transfer", "speech", "privacy"}
 
 func tabButton(u *ui, tab, label string, rerender func()) xango.Node {
 	class := "gj-keybindings-button"

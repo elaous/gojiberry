@@ -141,6 +141,8 @@ func (s *Site) launch(t testing.TB, o Options) *Tab {
 			append(chromedp.DefaultExecAllocatorOptions[:],
 				chromedp.ExecPath(exe), chromedp.NoSandbox, chromedp.Flag("headless", true),
 				chromedp.Flag("disable-gpu", true), chromedp.WindowSize(o.Width, o.Height),
+				// a microphone made of test tones, with no permission prompt (the Speech tab)
+				chromedp.Flag("use-fake-device-for-media-stream", true), chromedp.Flag("use-fake-ui-for-media-stream", true),
 				chromedp.WSURLReadTimeout(60*time.Second))...)
 		ctx, cancel := chromedp.NewContext(alloc)
 		tab = &Tab{t: t, ctx: ctx, site: s, chooser: make(chan struct{}, 8), dlName: make(chan string, 64)}
