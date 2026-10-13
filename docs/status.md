@@ -72,7 +72,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | Part | Type | Status | Present | Missing |
 | --- | --- | --- | --- | --- |
 | 57 Usage counts from browsers (no personal data) | feature | partial | `telemetry` package, opt-in, allowlist, sampling, local log, persistent totals, noise, Privacy menu, [telemetry.md](telemetry.md) | step 7: scrubbed crash reports (separate opt-in); one counting process per store |
-| 81 Operator metrics and traces (`observe`) | feature | partial | off by default; closed allowlists; builtin sink and `GET /admin/observe`; **PostHog** and **OpenTelemetry (OTLP/HTTP JSON)** sinks; [observability.md](observability.md) | the hub and the sync, font and translation servers not instrumented; persistent builtin totals |
+| 81 Operator metrics and traces (`observe`) | feature | partial | off by default; closed allowlists; builtin sink and `GET /admin/observe`; **PostHog** and **OpenTelemetry (OTLP/HTTP JSON)** sinks; [observability.md](observability.md) | the other servers count requests only (no metrics for their own work); persistent builtin totals |
 
 ## Server, keys and security
 
@@ -125,7 +125,7 @@ security table: the review findings are done; still open are the per-account sig
 
 ## Suggested order for the next work
 
-1. 81: instrument the hub and the sync, font and translation servers (both adapters are in).
+1. 81: metrics for the other servers' own work; persistent builtin totals.
 2. 56: the showcase Speech tab (the package is in).
 3. 72: ODT and an HTML importer.
 4. 80: on-screen pagination with the running header.
