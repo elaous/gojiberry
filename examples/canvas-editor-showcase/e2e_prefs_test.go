@@ -151,3 +151,32 @@ func TestReadAloud(t *testing.T) {
 	d.WaitFor("fast speech", `window.__spoken[window.__spoken.length - 1].rate === 1.5`)
 	d.NoErrors()
 }
+
+// Low-memory mode keeps fewer undo steps: asked for in the View menu, kept for the next visit, and it
+// can be turned off again; with no choice the page stays at the default on this machine.
+func TestLowMemoryModeKeepsFewerUndoSteps(t *testing.T) {
+	site := e2etest.NewSite(t)
+	d := site.OpenURL(t, "/index.html")
+	d.WaitSelector("canvas")
+	limit := func() int {
+		d.WaitFor("the state", `document.getElementById('state').textContent !== '(pending)'`)
+		return d.Int(`JSON.parse(document.getElementById('state').textContent).historyLimit`)
+	}
+	choose := func(item string) {
+		d.Click(`button.gj-menubar-button:has-text("View")`)
+		d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Display preferences")`)
+		d.Click(`.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("` + item + `")`)
+	}
+	d.OK(limit() == 200, "the default keeps 200 steps")
+	choose("Save memory")
+	d.WaitFor("the choice is kept", `JSON.parse(localStorage.getItem('showcase:a11y')).memory === 'low'`)
+	d.Reload()
+	d.WaitSelector("canvas")
+	d.OK(limit() == 20, "the choice is kept for the next visit")
+	choose("Save memory")
+	d.WaitFor("turned off", `JSON.parse(localStorage.getItem('showcase:a11y')).memory === 'normal'`)
+	d.Reload()
+	d.WaitSelector("canvas")
+	d.OK(limit() == 200, "turned off, the default again")
+	d.NoErrors()
+}
