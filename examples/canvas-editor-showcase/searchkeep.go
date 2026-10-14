@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strconv"
 
 	"github.com/elaous/gojiberry/docsearch"
 	"github.com/elaous/gojiberry/docstore"
@@ -53,46 +54,115 @@ func keyTag(key []byte) string {
 	return hex.EncodeToString(h[:8])
 }
 
-// openKept reads the index kept for target and opens it with key. opened is false when there was none, or
-// it could not be opened: it is then removed (so a wrong index is not tried again) and an empty index is
-// returned, to be built from the documents.
-func openKept(v sealedVault, target string, key []byte) (ix *docsearch.Index, opened bool) {
+// deltaName is where the seq-th change after the base of target is kept.
+func deltaName(target string, seq int) string { return keptName(target) + "/d/" + strconv.Itoa(seq) }
+
+const (
+	// maxDeltas is how many changes are kept after the base before the index is sealed whole again.
+	maxDeltas = 32
+)
+
+// kept is the sealed index of a place as it is in the vault: the base and how many changes follow it.
+type kept struct {
+	base       []byte // the base as stored (a delta is bound to it)
+	seq        int    // changes stored after it
+	deltaBytes int    // their size
+}
+
+// openKept reads the index kept for target (the base, then the changes after it in order) and opens it with
+// key. opened is false when there was none, or the base could not be opened: it is then removed (so a wrong
+// index is not tried again) and an empty index is returned, to be built from the documents. A change that
+// cannot be applied (lost, altered) ends the chain there and the later ones are removed: the refresh reads
+// again what they would have said.
+func openKept(v sealedVault, target string, key []byte) (ix *docsearch.Index, k kept, opened bool) {
 	if v == nil || key == nil {
-		return &docsearch.Index{}, false
+		return &docsearch.Index{}, kept{}, false
 	}
 	sealed, err := v.Get(keptName(target))
 	if err != nil || sealed == nil {
-		return &docsearch.Index{}, false
+		return &docsearch.Index{}, kept{}, false
 	}
 	ix, err = docsearch.Open(key, sealed)
 	if err != nil {
 		_ = v.Delete(keptName(target))
-		return &docsearch.Index{}, false
+		dropDeltas(v, target, 1)
+		return &docsearch.Index{}, kept{}, false
 	}
-	return ix, true
+	k = kept{base: sealed}
+	for {
+		d, err := v.Get(deltaName(target, k.seq+1))
+		if err != nil || d == nil {
+			break
+		}
+		if ix.ApplyDelta(key, sealed, k.seq+1, d) != nil {
+			dropDeltas(v, target, k.seq+1)
+			break
+		}
+		k.seq++
+		k.deltaBytes += len(d)
+	}
+	return ix, k, true
 }
 
-// keepIndex seals ix under key and keeps it for target.
-func keepIndex(v sealedVault, target string, key []byte, ix *docsearch.Index) error {
+// dropDeltas removes the changes of target from the one numbered from on.
+func dropDeltas(v sealedVault, target string, from int) {
+	for seq := from; ; seq++ {
+		d, err := v.Get(deltaName(target, seq))
+		if err != nil || d == nil {
+			return
+		}
+		_ = v.Delete(deltaName(target, seq))
+	}
+}
+
+// keepIndex seals ix whole under key and keeps it for target as the new base, dropping the changes of the old one.
+func keepIndex(v sealedVault, target string, key []byte, ix *docsearch.Index, old kept) (kept, error) {
 	if v == nil || key == nil {
-		return nil
+		return kept{}, nil
 	}
 	sealed, err := ix.Seal(key)
 	if err != nil {
-		return err
+		return old, err
 	}
-	return v.Put(keptName(target), sealed)
+	// the changes of the old base go first: a base must never be followed by changes bound to another
+	dropDeltas(v, target, 1)
+	if err := v.Put(keptName(target), sealed); err != nil {
+		return kept{}, err
+	}
+	return kept{base: sealed}, nil
+}
+
+// keepChange keeps what one refresh changed as the next change after the base; when there is no base yet, the
+// changes have grown to half the base or there are many of them, the whole index is sealed as a new base instead.
+func keepChange(v sealedVault, target string, key []byte, ix *docsearch.Index, k kept, res docsearch.Result) (kept, error) {
+	if v == nil || key == nil {
+		return kept{}, nil
+	}
+	if k.base == nil || k.seq >= maxDeltas || k.deltaBytes > len(k.base)/2 {
+		return keepIndex(v, target, key, ix, k)
+	}
+	sealed, err := docsearch.SealDelta(key, k.base, k.seq+1, ix.DeltaFor(res))
+	if err != nil {
+		return k, err
+	}
+	if err := v.Put(deltaName(target, k.seq+1), sealed); err != nil {
+		return k, err
+	}
+	k.seq++
+	k.deltaBytes += len(sealed)
+	return k, nil
 }
 
 // indexCache is the index of the page, with what it belongs to: the place it indexes and the key it is
-// sealed under. It is loaded from the sealed copy at the first search of a visit, and the sealed copy
-// is written again after a refresh changed something.
+// sealed under. It is loaded from the sealed copy (the base and its changes) at the first search of a visit,
+// and each refresh that changed something keeps only that change.
 type indexCache struct {
 	ix     docsearch.Index
 	target string
 	tag    string // keyTag of the key the index was loaded under ("" when there is none)
 	set    bool
-	stored bool // the sealed copy kept is the index as it is now
+	stored bool // what is kept is the index as it is now
+	k      kept
 }
 
 // refresh brings the index up to date with view, the documents of target, loading the sealed copy first
@@ -105,9 +175,9 @@ func (c *indexCache) refresh(ctx context.Context, v sealedVault, target string, 
 		tag = keyTag(key)
 	}
 	if !c.set || c.target != target || c.tag != tag {
-		c.ix, c.target, c.tag, c.set, c.stored = docsearch.Index{}, target, tag, true, false
-		if p, ok := openKept(v, target, key); ok {
-			c.ix, c.stored, loaded = *p, true, true
+		c.ix, c.target, c.tag, c.set, c.stored, c.k = docsearch.Index{}, target, tag, true, false, kept{}
+		if p, k, ok := openKept(v, target, key); ok {
+			c.ix, c.k, c.stored, loaded = *p, k, true, true
 		}
 	}
 	res, err = docsearch.Refresh(ctx, &c.ix, view, docsearch.FromDocfile)
@@ -117,8 +187,10 @@ func (c *indexCache) refresh(ctx context.Context, v sealedVault, target string, 
 	if res.Added+res.Updated+res.Removed > 0 {
 		c.stored = false
 	}
-	if key != nil && !c.stored && keepIndex(v, target, key, &c.ix) == nil {
-		c.stored = true
+	if key != nil && !c.stored {
+		if nk, kerr := keepChange(v, target, key, &c.ix, c.k, res); kerr == nil {
+			c.k, c.stored = nk, true
+		}
 	}
 	return res, loaded, nil
 }
