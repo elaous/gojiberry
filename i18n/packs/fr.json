@@ -779,6 +779,7 @@
   "collab.merged#other": "%d modifications ont été fusionnées.",
   "collab.rejectedOne": "Une modification n’a pas pu être appliquée.",
   "collab.rejectedMany": "%d modifications n’ont pas pu être appliquées.",
+  "saver.savedOverNewer": "%s enregistré. Il a remplacé une copie plus récente enregistrée ailleurs ; cette copie est conservée comme version et comparée à la vôtre dans Versions",
   "collab.someone": "Quelqu’un",
   "collab.conflictOne": "%s a modifié le paragraphe que vous éditiez. Les deux modifications ont été conservées.",
   "collab.conflictSome": "%d personnes ont modifié le paragraphe que vous éditiez. Toutes les modifications ont été conservées.",
