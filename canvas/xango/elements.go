@@ -86,6 +86,8 @@ type TextFlowProps struct {
 	// code-editor set); Complete, Completer or Vocabulary turn on the
 	// word-completion popup.
 	AutoClose map[rune]rune
+	// TextScale multiplies the size of all the text (see canvas.TextFlow.TextScale); 0 or 1 is as it is.
+	TextScale float64
 	// Comments are the comments Format.Comment refers to (share the set
 	// with the DOM side to list them); Author is who new ones are by.
 	Comments *canvas.CommentSet

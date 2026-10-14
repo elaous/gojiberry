@@ -15,6 +15,8 @@ type State struct {
 	Setup components.PageSetup
 	// NoAutoClose turns off the closing bracket or quote that typing an opener adds (a preference).
 	NoAutoClose bool
+	// TextScale is the person's text-size setting applied to the text on the sheets (1 is as written).
+	TextScale float64
 	// RunHeader and RunFooter are the running header and footer of the print layout (fields {page}, {pages}
 	// and {title}, a tab between the left, centre and right parts); empty is the sample's own header and
 	// page number. DocTitle fills {title}.

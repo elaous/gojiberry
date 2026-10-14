@@ -73,3 +73,44 @@ func TestAutoClosePreference(t *testing.T) {
 	d.OK(d.Is("!s.text.includes('[]')"), "turned off, no closing bracket is added")
 	d.NoErrors()
 }
+
+// The text size setting makes the text on the sheets larger too, not only the page around the canvas.
+func TestTextSizeSettingReachesTheTextOnTheSheets(t *testing.T) {
+	site := e2etest.NewSite(t)
+	d := site.OpenURL(t, "/index.html")
+	d.WaitSelector("canvas")
+	line := func() float64 {
+		d.WaitFor("the state", `document.getElementById('state').textContent !== '(pending)'`)
+		var h float64
+		d.Eval(`JSON.parse(document.getElementById('state').textContent).lineHeights[0]`, &h)
+		return h
+	}
+	before := line()
+	d.Click(`button[data-tab="prefs"]`)
+	d.WaitSelector(".gj-prefs-text")
+	d.Select(".gj-prefs-text", "largest")
+	d.WaitFor("the lines are taller", `JSON.parse(document.getElementById('state').textContent).lineHeights[0] > `+e2etest.J(before)+` * 1.9`)
+	d.Select(".gj-prefs-text", "")
+	d.WaitFor("and back", `Math.abs(JSON.parse(document.getElementById('state').textContent).lineHeights[0] - `+e2etest.J(before)+`) < 0.5`)
+	d.NoErrors()
+}
+
+// A shortcut the person changes in the Keys tab is still changed on the next visit.
+func TestChangedShortcutsAreKept(t *testing.T) {
+	site := e2etest.NewSite(t)
+	d := site.OpenURL(t, "/index.html")
+	d.WaitSelector("canvas")
+	d.Click(`button[data-tab="keys"]`)
+	d.Click(`[data-action="change:underline"]`)
+	d.WaitSelector(`[data-capture="underline"]`)
+	d.Focus(`[data-capture="underline"]`)
+	d.Press("Control+Shift+u")
+	d.WaitFor("kept", `(localStorage.getItem('showcase:keys') || '').includes('"underline"')`)
+	d.Reload()
+	d.WaitSelector("canvas")
+	d.Click(`button[data-tab="keys"]`)
+	d.WaitFor("the new shortcut is listed after the visit", `Array.from(document.querySelectorAll('.gj-keybindings-keys')).some((e) => /Shift/.test(e.textContent) && e.closest('tr, li, div').textContent.includes('Underline'))`)
+	d.Click(`[data-action="reset:underline"]`)
+	d.WaitFor("back to the default", `!/Shift\+U":"underline"/.test(localStorage.getItem('showcase:keys') || '')`)
+	d.NoErrors()
+}
