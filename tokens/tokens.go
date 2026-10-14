@@ -8,6 +8,7 @@ package tokens
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/elaous/gojiberry/a11ycheck"
@@ -175,4 +176,67 @@ func slicesContains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// FromCSS reads back what CSS wrote: one :root block of --gj-color-<name>, --gj-font-<n> and --gj-space-<n>
+// properties. It is for a theme kept with a document; the set is not checked here (Validate says what is
+// wrong with it). ok is false when the text is not such a block or holds nothing of ours.
+func FromCSS(css string) (s Set, ok bool) {
+	body, found := strings.CutPrefix(strings.TrimSpace(css), ":root{")
+	if !found {
+		return Set{}, false
+	}
+	body, found = strings.CutSuffix(body, "}")
+	if !found {
+		return Set{}, false
+	}
+	s = Set{Name: "document", Colors: map[string]string{}}
+	var fonts, spaces = map[int]float64{}, map[int]float64{}
+	for _, decl := range strings.Split(body, ";") {
+		name, val, found := strings.Cut(decl, ":")
+		if !found {
+			continue
+		}
+		name, val = strings.TrimSpace(name), strings.TrimSpace(val)
+		switch {
+		case strings.HasPrefix(name, "--gj-color-"):
+			s.Colors[strings.TrimPrefix(name, "--gj-color-")] = val
+		case strings.HasPrefix(name, "--gj-font-"):
+			if i, n, ok := step(strings.TrimPrefix(name, "--gj-font-"), val); ok {
+				fonts[i] = n
+			}
+		case strings.HasPrefix(name, "--gj-space-"):
+			if i, n, ok := step(strings.TrimPrefix(name, "--gj-space-"), val); ok {
+				spaces[i] = n
+			}
+		}
+	}
+	if len(s.Colors) == 0 && len(fonts) == 0 && len(spaces) == 0 {
+		return Set{}, false
+	}
+	s.TypeScale, s.Spacing = ordered(fonts), ordered(spaces)
+	return s, true
+}
+
+// step reads "3" and "18px" as step 3, 18.
+func step(idx, val string) (int, float64, bool) {
+	i, err := strconv.Atoi(idx)
+	if err != nil || i < 1 {
+		return 0, 0, false
+	}
+	n, err := strconv.ParseFloat(strings.TrimSuffix(val, "px"), 64)
+	return i, n, err == nil
+}
+
+func ordered(m map[int]float64) []float64 {
+	keys := make([]int, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+	out := make([]float64, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, m[k])
+	}
+	return out
 }

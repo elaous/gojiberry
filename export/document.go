@@ -88,6 +88,7 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 		MarginLeft: defaultMargin, MarginTop: defaultMargin, MarginRight: defaultMargin, MarginBottom: defaultMargin,
 	}
 	snap.Lang = d.Language()
+	snap.Theme = d.Theme()
 	if l := d.PageLayout(); !l.IsZero() {
 		snap.Header, snap.Footer, snap.TOC, snap.TOCTitle = l.Header, l.Footer, l.TOC, l.TOCTitle
 		if l.Width > 0 {

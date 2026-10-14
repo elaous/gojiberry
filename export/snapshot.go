@@ -174,6 +174,10 @@ type Snapshot struct {
 	Lang   string
 	Blocks []Block
 
+	// Theme is the document's design-token CSS (see docfile.ThemeKey), "" when it has none. The HTML export
+	// writes it when it is a plain :root block and no theme was set on the exporter; anything else is left out.
+	Theme string
+
 	// Header and Footer are the running header and footer of the paged formats (PDF, Word, RTF, and the
 	// HTML print stylesheet), with the fields {page}, {pages} and {title}; a tab separates left, centre
 	// and right parts (see docfile.PageLayout). TOC puts a table of contents from the headings first,

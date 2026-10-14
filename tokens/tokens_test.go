@@ -112,3 +112,26 @@ func TestNamesAndValuesCannotBreakOutOfTheDeclaration(t *testing.T) {
 		t.Fatal("and writes no CSS")
 	}
 }
+
+func TestFromCSSReadsWhatCSSWrote(t *testing.T) {
+	want := Default()
+	css, err := want.CSS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := FromCSS(css)
+	if !ok {
+		t.Fatal("not read")
+	}
+	if len(got.Validate()) != 0 {
+		t.Errorf("a set that was valid is not after the round trip: %v", got.Validate())
+	}
+	if again, _ := got.CSS(); again != css {
+		t.Errorf("round trip changed it:\n%s\n%s", css, again)
+	}
+	for _, bad := range []string{"", "body{}", ":root{color:red;}", ":root{"} {
+		if _, ok := FromCSS(bad); ok {
+			t.Errorf("%q should not read as a theme", bad)
+		}
+	}
+}

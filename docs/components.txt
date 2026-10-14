@@ -707,6 +707,15 @@ func Theme(props ThemeProps) xango.Node
     wrapper instead of body, so it composes: a Theme nested inside another Theme
     re-scopes from that point down.
 
+func ThemeEditor(p ThemeEditorProps) xango.Node
+    ThemeEditor edits a design-token set (package tokens): the colours as text
+    fields with a swatch, the type scale and the spacing as lists of numbers.
+    It checks the set as it is typed: what is wrong is listed under the
+    fields in plain words (a text colour under the contrast of 4.5:1, a body
+    size under 16px), the field that has the problem says so (aria-invalid,
+    described by the list), and a sample shows how the colours read together.
+    Nothing is applied here; the caller applies a set that has no problems.
+
 func Toast(props ToastProps) xango.Node
     Toast renders a single transient notification -- unlike Modal/Dialog,
     it has no backdrop and doesn't block interaction with the rest of the page.
@@ -2984,6 +2993,18 @@ type TextareaProps struct {
 	OnChange    func(value string)
 }
     TextareaProps configures Textarea.
+
+type ThemeEditorProps struct {
+	// Set is the theme being edited. The editor does not keep it: it shows Set, and calls OnChange with
+	// the edited copy (a copy, so the caller's own map is never changed under it).
+	Set tokens.Set
+	// OnChange is called as the person types, with the set whether or not it is valid; Problems of the
+	// set are shown at once, and the caller decides what to apply (only a set without problems).
+	OnChange func(tokens.Set)
+	// OnReset puts the default theme back; the button is left out when nil.
+	OnReset func()
+}
+    ThemeEditorProps configures ThemeEditor.
 
 type ThemeMode string
     ThemeMode selects one of Theme's own built-in --gj-* palettes.

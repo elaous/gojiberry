@@ -30,7 +30,11 @@ func (h HTML) Export(snap Snapshot) ([]byte, error) {
 	if h.Theme != "" && !safeThemeCSS(h.Theme) {
 		return nil, errors.New("export: the HTML theme is not a plain :root block of custom properties")
 	}
-	return []byte(renderHTMLDocument(snap, false, h.Theme)), nil
+	theme := h.Theme
+	if theme == "" && safeThemeCSS(snap.Theme) {
+		theme = snap.Theme // the document's own, when it is safe; a stored file cannot make the export fail with it
+	}
+	return []byte(renderHTMLDocument(snap, false, theme)), nil
 }
 
 // themeRules use the tokens with a fallback each, so a theme that leaves one out still renders.

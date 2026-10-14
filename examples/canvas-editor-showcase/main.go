@@ -51,6 +51,7 @@ type ui struct {
 	collabTimer                  bool
 	current                      func() docfile.Document // the document as it is being edited now
 	away                         awayState
+	theme                        themeState
 	collabMerged, collabRejected int                        // the session's counts already announced (merged after offline, refused)
 	typing                       components.TypingAnnouncer // what is said of typing and of the caret (preferences), see typing.go
 	typingMsg                    string
@@ -216,6 +217,7 @@ func main() {
 			u.title = d.Title
 		}
 		u.docLang = d.Language()
+		u.loadTheme(d)
 		u.layout = d.PageLayout()
 		// The sheet the document was saved with comes back with it (a size that is none of the papers on
 		// offer, or one that was never set, leaves the sheet as it is).
@@ -248,6 +250,7 @@ func main() {
 		d := docfile.FromFlow(u.title, flow)
 		d.Fonts = docfile.FromFonts(lib.Added())
 		d.SetLanguage(u.docLang)
+		u.themeInto(&d)
 		u.applyLayout(&d, state.PageWidth(), state.PageHeight(), state.Setup.Margins)
 		return d
 	}
@@ -471,6 +474,7 @@ func main() {
 					renderUI()
 				},
 			})
+			panel = xango.Frag(panel, themePanel(u, renderUI))
 		case "find":
 			panel = xango.Frag(findPanel(u, &state, func() *canvas.TextFlow { return flow }, func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }, redraw, renderUI), u.searchAllPanel(renderUI))
 		case "spell":
