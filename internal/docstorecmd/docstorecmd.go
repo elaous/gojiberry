@@ -9,6 +9,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/elaous/gojiberry/a11ycheck"
+	"github.com/elaous/gojiberry/audit"
 	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/auth/passkey"
 	"github.com/elaous/gojiberry/auth/sessionstore"
@@ -24,6 +26,7 @@ import (
 	"github.com/elaous/gojiberry/docstore/encrypt"
 	"github.com/elaous/gojiberry/docstore/exportgate"
 	"github.com/elaous/gojiberry/docstore/public"
+	"github.com/elaous/gojiberry/observe"
 	"github.com/elaous/gojiberry/telemetry"
 	"github.com/elaous/gojiberry/userconfig"
 )
@@ -606,10 +609,14 @@ func Main() {
 		log.Fatalf("docstore: %v", err)
 	}
 	srv := docstore.NewServer(adapter, cfg.Backend).WithGuard(cfg.Guard).WithRequireACL(cfg.RequireACL).WithObserver(obs)
+	auditLog, err := withAudit(srv, os.Getenv, os.ReadFile, os.Stderr)
+	if err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
 	// Rate limits (the directory's and the passkey routes'): per process by default, or kept in
 	// the store so replicas share them (GOJIBERRY_DOCSTORE_LIMITER=store). Stale budget records
 	// are deleted in the background.
-	limiters := docstore.ObserveLimiters(docstore.LimiterFactoryFor(cfg.Limiter, adapter), obs)
+	limiters := docstore.AuditLimiters(docstore.ObserveLimiters(docstore.LimiterFactoryFor(cfg.Limiter, adapter), obs), auditLog)
 	if cfg.Limiter == "store" {
 		go docstore.RunRateLimitSweep(context.Background(), adapter, 10*time.Minute)
 		log.Print("docstore: rate limits are shared through the store")
@@ -657,4 +664,34 @@ func Main() {
 	if err := serve(newHTTPServer(cfg.Addr, exportgate.Wrap(srv.Handler(), gate)), obs); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// withAudit reads GOJIBERRY_DOCSTORE_AUDIT: "on" writes the operator's audit log (package audit, docs/audit.md)
+// to w, one JSON line per event, with no name, address, document id or content in any line. Off (the default)
+// there is no log and nothing is built. GOJIBERRY_DOCSTORE_AUDIT_KEY (or _FILE, a path) is the secret that keys
+// the Refs, the pseudonyms that follow one document or account through the log; without it the lines carry no
+// Ref. Any other value stops the server rather than running without the log the operator meant.
+func withAudit(srv *docstore.Server, getenv func(string) string, readFile func(string) ([]byte, error), w io.Writer) (*audit.Logger, error) {
+	switch strings.ToLower(strings.TrimSpace(getenv("GOJIBERRY_DOCSTORE_AUDIT"))) {
+	case "", "off":
+		return nil, nil
+	case "on":
+	default:
+		return nil, errors.New("GOJIBERRY_DOCSTORE_AUDIT must be \"on\" or \"off\"")
+	}
+	key, err := observe.ReadSecret(observe.SinkEnv{Getenv: getenv, ReadFile: readFile}, "GOJIBERRY_DOCSTORE_AUDIT_KEY")
+	if err != nil {
+		return nil, err
+	}
+	if key != "" && len(key) < 16 {
+		return nil, errors.New("GOJIBERRY_DOCSTORE_AUDIT_KEY must be at least 16 characters")
+	}
+	l := audit.NewLogger(w)
+	srv.WithAudit(l, []byte(key))
+	if key == "" {
+		log.Print("docstore: the audit log is on without GOJIBERRY_DOCSTORE_AUDIT_KEY: its lines carry no Ref")
+	} else {
+		log.Print("docstore: the audit log is on (docs/audit.md)")
+	}
+	return l, nil
 }

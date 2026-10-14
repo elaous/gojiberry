@@ -1,6 +1,7 @@
 package docstore
 
 import (
+	"github.com/elaous/gojiberry/audit"
 	"net/http"
 	"strings"
 )
@@ -79,9 +80,11 @@ func (s *Server) handleEnroll(w http.ResponseWriter, r *http.Request) {
 	}
 	e, err := s.directory.Enroll(r.Context(), u, body)
 	if err != nil {
+		s.audit(audit.KeyEnrolled, audit.Failed, audit.Owner, audit.NotAllowed, 0, u.ID)
 		directoryError(w, err)
 		return
 	}
+	s.audit(audit.KeyEnrolled, audit.OK, audit.Owner, audit.NoReason, 0, u.ID)
 	writeJSONStatus(w, http.StatusOK, e)
 }
 
@@ -101,9 +104,11 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 	}
 	e, err := s.directory.RequestReset(r.Context(), u)
 	if err != nil {
+		s.audit(audit.OwnerReset, audit.Failed, audit.Owner, audit.NotAllowed, 0, u.ID)
 		directoryError(w, err)
 		return
 	}
+	s.audit(audit.OwnerReset, audit.OK, audit.Owner, audit.NoReason, 0, u.ID)
 	writeJSONStatus(w, http.StatusOK, e)
 }
 

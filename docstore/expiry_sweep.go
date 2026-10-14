@@ -78,7 +78,12 @@ func (e *ExpiringAdapter) adopt(ctx context.Context) error {
 // returns the first error after trying them all, and what was left is retried by the next one.
 func (e *ExpiringAdapter) Sweep(ctx context.Context) (deleted int, err error) {
 	done := observe.Default().Sweep("expiry")
-	defer func() { done(deleted, err) }()
+	defer func() {
+		done(deleted, err)
+		if deleted > 0 && e.OnExpired != nil {
+			e.OnExpired(deleted)
+		}
+	}()
 	if err := e.adopt(ctx); err != nil {
 		return 0, err
 	}
