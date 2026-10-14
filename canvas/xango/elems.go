@@ -75,7 +75,7 @@ func (f *flowElem) Update(_ *Context, props any, _ []xango.Node) (bool, error) {
 		changed = true
 	}
 	fl.AutoClose, fl.Complete, fl.Completer = p.AutoClose, p.Complete, p.Completer
-	fl.TextScale = p.TextScale
+	fl.TextScale, fl.PeerPalette, fl.StrongCaret = p.TextScale, p.PeerPalette, p.StrongCaret
 	fl.Comments, fl.Author, fl.OnHoverComment = p.Comments, p.Author, p.OnHoverComment
 	if p.Footnotes != fl.Footnotes || p.FootnoteBand != fl.FootnoteBand {
 		fl.Footnotes, fl.FootnoteBand = p.Footnotes, p.FootnoteBand

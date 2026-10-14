@@ -20,6 +20,29 @@ func peerColor(c RemoteCursor) string {
 	return c.Color
 }
 
+// ColourBlindPalette is a set of colours people with the common kinds of colour blindness can tell apart
+// (Paul Tol's "bright" qualitative scheme, without its two palest colours, which a white name label cannot be
+// read on). Set TextFlow.PeerPalette to it.
+var ColourBlindPalette = []string{"#4477AA", "#EE6677", "#228833", "#AA3377", "#BB5500", "#006D77"}
+
+// peerColour is the colour a remote cursor is drawn in: its own, or, when the flow has a PeerPalette, the
+// palette's colour for the cursor's place among the names of the people on show (so each person keeps one colour
+// while the same people are there, and no two of them share one until the palette runs out).
+func (f *TextFlow) peerColour(c RemoteCursor) string {
+	if len(f.PeerPalette) == 0 {
+		return peerColor(c)
+	}
+	rank := 0
+	seen := map[string]bool{}
+	for _, o := range f.RemoteCursors {
+		if o.Name < c.Name && !seen[o.Name] {
+			seen[o.Name] = true
+			rank++
+		}
+	}
+	return f.PeerPalette[rank%len(f.PeerPalette)]
+}
+
 func (f *TextFlow) drawPeerSelections(lay Layout) {
 	p := f.Painter
 	alpha, _ := p.(interface{ SetGlobalAlpha(float64) })
@@ -33,7 +56,7 @@ func (f *TextFlow) drawPeerSelections(lay Layout) {
 		if from == to {
 			continue
 		}
-		p.SetFillStyle(peerColor(c))
+		p.SetFillStyle(f.peerColour(c))
 		setAlpha(0.25)
 		for _, ln := range lay.Lines {
 			s, e := max(from, ln.Start), min(to, ln.End)
@@ -58,7 +81,7 @@ func (f *TextFlow) drawPeerCarets() {
 		if !ok {
 			continue
 		}
-		col := peerColor(c)
+		col := f.peerColour(c)
 		p.SetFillStyle(col)
 		p.FillRect(x, y+1, 2, h-2)
 		if c.Name == "" {

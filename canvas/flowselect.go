@@ -149,6 +149,9 @@ func (f *TextFlow) DoubleClick(x, y float64) bool {
 func (f *TextFlow) drawSelection(lay Layout) {
 	p := f.Painter
 	p.SetFillStyle(f.ChromeStyle.SelectColor)
+	if f.StrongCaret {
+		p.SetFillStyle(StrongSelectColor)
+	}
 	for _, c := range f.Cursors() {
 		from, to := c.Range()
 		if from == to {
