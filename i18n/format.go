@@ -161,3 +161,27 @@ func two(n int) string {
 	}
 	return strconv.Itoa(n)
 }
+
+// Zone names the offset from UTC of t's own zone: "UTC", "UTC+2", "UTC-5", "UTC+5:30". It is the offset
+// at t, so a summer time and a winter time of one place read differently, as they should.
+func Zone(t time.Time) string {
+	_, off := t.Zone()
+	if off == 0 {
+		return "UTC"
+	}
+	sign := "+"
+	if off < 0 {
+		sign, off = "-", -off
+	}
+	h, m := off/3600, off%3600/60
+	if m == 0 {
+		return "UTC" + sign + strconv.Itoa(h)
+	}
+	return "UTC" + sign + strconv.Itoa(h) + ":" + two(m)
+}
+
+// DateTime is the day and the time of t in lang, with the zone t is in: "Oct 14, 2026, 2:05 PM (UTC+2)",
+// "14. Okt. 2026, 14:05 (UTC+2)". Put t into the zone to show (t.In, t.Local) first.
+func DateTime(lang string, t time.Time) string {
+	return Date(lang, t, DateMedium) + ", " + Time(lang, t) + " (" + Zone(t) + ")"
+}

@@ -223,6 +223,7 @@ var languageNames = map[string]string{"en": "English", "es": "Español", "fr": "
 func setLocale(code string) {
 	locale = code
 	components.Translate = func(id, def string) string { return catalog.Text(locale, id, def) }
+	components.FormatTime = func(t time.Time, _ bool) string { return i18n.DateTime(locale, t.Local()) }
 	components.TranslatePlural = func(id, one, other string, n int) string { return catalog.Plural(locale, id, one, other, n) }
 	root := js.Global().Get("document").Get("documentElement")
 	root.Call("setAttribute", "lang", code)

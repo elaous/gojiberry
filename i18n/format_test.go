@@ -72,3 +72,21 @@ func TestAgo(t *testing.T) {
 		}
 	}
 }
+
+func TestZoneAndDateTime(t *testing.T) {
+	at := time.Date(2026, 10, 14, 14, 5, 0, 0, time.UTC)
+	for _, c := range []struct {
+		loc  *time.Location
+		lang string
+		want string
+	}{
+		{time.UTC, "en", "Oct 14, 2026, 2:05 PM (UTC)"},
+		{time.FixedZone("x", 2*3600), "de", "14. Okt. 2026, 16:05 (UTC+2)"},
+		{time.FixedZone("x", -5*3600), "en-GB", "14 Oct 2026, 09:05 (UTC-5)"},
+		{time.FixedZone("x", 5*3600+1800), "fr", "14 oct. 2026, 19:35 (UTC+5:30)"},
+	} {
+		if got := DateTime(c.lang, at.In(c.loc)); got != c.want {
+			t.Errorf("DateTime(%q, %v) = %q, want %q", c.lang, c.loc, got, c.want)
+		}
+	}
+}

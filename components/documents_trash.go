@@ -134,7 +134,7 @@ func Versions(p VersionsProps) xango.Node {
 	children := []xango.Node{xango.El("div", []xango.Attr{xango.A("class", "gj-doc-head")}, head...)}
 	var rows []xango.Node
 	for _, v := range p.Versions {
-		when := v.Time.Format("2006-01-02 15:04:05")
+		when := FormatTime(v.Time, true)
 		title := when
 		if v.Name != "" {
 			title = v.Name + " (" + when + ")"
@@ -170,7 +170,7 @@ func Versions(p VersionsProps) xango.Node {
 			row = append(row, xango.El("label", []xango.Attr{xango.A("class", "gj-versions-keep")}, xango.El("input", cb), xango.Text(tr("docs.versionKeepLabel", "Keep"))))
 		}
 		if p.Compare != nil {
-			row = append(row, docButtonAs("gj-versions-compare", tr("docs.compare", "Compare"), trf("docs.compareWith", "Compare %s with the current document", v.Time.Format("2006-01-02 15:04:05")), busy, actOne(p.Pending, p.Compare, v.Key)))
+			row = append(row, docButtonAs("gj-versions-compare", tr("docs.compare", "Compare"), trf("docs.compareWith", "Compare %s with the current document", FormatTime(v.Time, true)), busy, actOne(p.Pending, p.Compare, v.Key)))
 		}
 		if p.Restore != nil {
 			row = append(row, docButtonAs("gj-versions-restore", tr("docs.restore", "Restore"), trf("docs.restoreVersion", "Restore the version of %s (what you have now is kept as a version first)", when), busy, actOne(p.Pending, p.Restore, v.Key)))

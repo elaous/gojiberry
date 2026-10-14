@@ -234,7 +234,7 @@ func docMeta(d Doc) string {
 		when = d.Trashed
 	}
 	if !when.IsZero() {
-		parts = append(parts, when.Format("2006-01-02 15:04"))
+		parts = append(parts, FormatTime(when, false))
 	}
 	return strings.Join(parts, " · ")
 }

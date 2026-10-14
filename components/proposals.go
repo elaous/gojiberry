@@ -53,7 +53,7 @@ func ProposalPanel(p ProposalPanelProps) xango.Node {
 		sentence := ProposalSentence(pr)
 		row := []xango.Node{
 			xango.El("span", []xango.Attr{xango.A("class", "gj-proposal-text"), xango.A("style", "border-left-color:"+canvas.ProposalColor(pr.Author))}, xango.Text(sentence)),
-			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta")}, xango.Text(pr.Time.Format("2006-01-02 15:04"))),
+			xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta")}, xango.Text(FormatTime(pr.Time, false))),
 		}
 		if p.OnAccept != nil {
 			row = append(row, xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-proposal-accept"),
