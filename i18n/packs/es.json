@@ -779,6 +779,7 @@
   "collab.merged#other": "Se fusionaron %d cambios.",
   "collab.rejectedOne": "No se pudo aplicar un cambio.",
   "collab.rejectedMany": "No se pudieron aplicar %d cambios.",
+  "saver.savedOverNewer": "%s guardado. Reemplazó una copia más reciente guardada en otro lugar; esa copia se conserva como versión y se compara con la tuya en Versiones",
   "collab.someone": "Alguien",
   "collab.conflictOne": "%s cambió el párrafo que estabas editando. Se conservaron ambos cambios.",
   "collab.conflictSome": "%d personas cambiaron el párrafo que estabas editando. Se conservaron todos los cambios.",
