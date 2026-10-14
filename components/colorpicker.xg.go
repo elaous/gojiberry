@@ -8,6 +8,8 @@ import "github.com/elaous/gojiberry/xango"
 type ColorPickerProps struct {
 	Value    string // "#rrggbb"
 	Disabled bool
+	// Label is the accessible name of the input (what a screen reader says; a visible <label> may do instead).
+	Label    string
 	OnChange func(value string)
 }
 
@@ -18,6 +20,9 @@ func ColorPicker(props ColorPickerProps) xango.Node {
 		xango.A("type", "color"),
 		xango.A("class", "gj-colorpicker"),
 		xango.A("value", props.Value),
+	}
+	if props.Label != "" {
+		attrs = append(attrs, xango.A("aria-label", props.Label))
 	}
 	if props.Disabled {
 		attrs = append(attrs, xango.A("disabled", "disabled"))

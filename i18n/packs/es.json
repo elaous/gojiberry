@@ -1132,6 +1132,8 @@
   "speech.notInserted": "Se oyó: %s. Cambie al modo de edición y ponga el cursor donde deba ir, y dicte otra vez.",
   "prefs.memory": "Ahorrar memoria (conservar menos pasos de deshacer)",
   "prefs.undoMany": "Conservar muchos pasos de deshacer (1000)",
+  "fontselector.list": "Fuentes",
+  "fileuploader.progress": "Progreso de la subida",
   "check.fixList": "Convertir en lista",
   "prefs.safeColours": "Colores aptos para daltonismo en los cursores de otras personas",
   "lang.useDetected": "Usar como idioma del documento",

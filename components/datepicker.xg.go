@@ -9,6 +9,8 @@ type DatePickerProps struct {
 	Value    string // "YYYY-MM-DD"
 	Min, Max string // optional bounds, same format; "" for no bound
 	Disabled bool
+	// Label is the accessible name of the input (what a screen reader says; a visible <label> may do instead).
+	Label    string
 	OnChange func(value string)
 }
 
@@ -19,6 +21,9 @@ func DatePicker(props DatePickerProps) xango.Node {
 		xango.A("type", "date"),
 		xango.A("class", "gj-datepicker"),
 		xango.A("value", props.Value),
+	}
+	if props.Label != "" {
+		attrs = append(attrs, xango.A("aria-label", props.Label))
 	}
 	if props.Min != "" {
 		attrs = append(attrs, xango.A("min", props.Min))

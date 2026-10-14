@@ -13,7 +13,9 @@ type SliderProps struct {
 	Min, Max, Value float64
 	Step            float64 // 0 leaves the browser's default step (1)
 	Disabled        bool
-	OnChange        func(value float64) // called continuously while dragging
+	// Label is the accessible name of the slider (what a screen reader says; a visible <label> may do instead).
+	Label    string
+	OnChange func(value float64) // called continuously while dragging
 }
 
 func formatFloat(f float64) string { return strconv.FormatFloat(f, 'g', -1, 64) }
@@ -26,6 +28,9 @@ func Slider(props SliderProps) xango.Node {
 		xango.A("min", formatFloat(props.Min)),
 		xango.A("max", formatFloat(props.Max)),
 		xango.A("value", formatFloat(props.Value)),
+	}
+	if props.Label != "" {
+		attrs = append(attrs, xango.A("aria-label", props.Label))
 	}
 	if props.Step != 0 {
 		attrs = append(attrs, xango.A("step", formatFloat(props.Step)))

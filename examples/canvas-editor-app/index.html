@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <title>gojiberry canvas document editor</title>
@@ -14,6 +14,7 @@
   </style>
 </head>
 <body>
+<main>
   <h1>Canvas-rendered document editor</h1>
   <p>Click into the canvas to place the cursor, type to insert text,
   drag to select, then Bold/Italic the selection. Everything below the
@@ -25,10 +26,11 @@
     <button id="toolbar-italic"><i>Italic</i></button>
   </div>
 
-  <canvas id="editor-canvas" width="700" height="500"></canvas>
-  <input id="editor-hidden-input" class="hidden-input" type="text" autocomplete="off">
+  <canvas id="editor-canvas" width="700" height="500" role="textbox" aria-label="Document" aria-readonly="true" aria-multiline="true"></canvas>
+  <input id="editor-hidden-input" class="hidden-input" type="text" autocomplete="off" aria-label="Document editor" aria-multiline="true">
 
   <span id="doc-state">(pending)</span>
+</main>
 
   <script>
     const go = new Go();
