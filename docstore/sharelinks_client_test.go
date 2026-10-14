@@ -51,3 +51,36 @@ func TestHTTPAdapterMakesOpensAndRevokesALink(t *testing.T) {
 		t.Fatal("UseShareLink with an empty token kept the token")
 	}
 }
+
+func TestHTTPAdapterSavesTheAccessList(t *testing.T) {
+	f := newLinkFixture(t)
+	ts := httptest.NewServer(f.h)
+	t.Cleanup(ts.Close)
+	ctx := context.Background()
+	owner := NewHTTPAdapter(ts.URL, nil)
+	owner.Header.Set("Authorization", "Bearer "+f.owner)
+	tok, _, _, err := owner.CreateLink(ctx, "doc1", RoleViewer, time.Hour)
+	if err != nil || tok == "" {
+		t.Fatal(err)
+	}
+	acl, err := owner.LoadACL(ctx, "doc1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := acl.Grant("friend@example.com", RoleEditor); err != nil {
+		t.Fatal(err)
+	}
+	if err := owner.SaveACL(ctx, "doc1", acl); err != nil {
+		t.Fatal(err)
+	}
+	again, err := owner.LoadACL(ctx, "doc1")
+	if err != nil || again.RoleOf("friend@example.com") != "editor" || again.RoleOf("viewer@example.com") != "viewer" || len(again.Links) != 1 {
+		t.Fatalf("%v %+v", err, again)
+	}
+	// someone who does not own the document cannot change the list
+	stranger := NewHTTPAdapter(ts.URL, nil)
+	stranger.Header.Set("Authorization", "Bearer "+f.stranger)
+	if err := stranger.SaveACL(ctx, "doc1", acl); err == nil {
+		t.Fatal("a stranger changed the access list")
+	}
+}
