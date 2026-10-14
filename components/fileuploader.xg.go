@@ -79,7 +79,7 @@ func fileUploaderProgress(progress float64, indeterminate bool) xango.Node {
 	if indeterminate {
 		class += " gj-file-uploader-progress-indeterminate"
 	}
-	attrs := []xango.Attr{xango.A("class", class), xango.A("role", "progressbar")}
+	attrs := []xango.Attr{xango.A("class", class), xango.A("role", "progressbar"), xango.A("aria-label", tr("fileuploader.progress", "Upload progress"))}
 	if indeterminate {
 		return xango.El("div", attrs, xango.El("div", []xango.Attr{xango.A("class", "gj-file-uploader-progress-bar")}))
 	}

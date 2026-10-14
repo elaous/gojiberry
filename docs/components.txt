@@ -1195,6 +1195,8 @@ const (
 type ColorPickerProps struct {
 	Value    string // "#rrggbb"
 	Disabled bool
+	// Label is the accessible name of the input (what a screen reader says; a visible <label> may do instead).
+	Label    string
 	OnChange func(value string)
 }
     ColorPickerProps configures ColorPicker.
@@ -1464,6 +1466,8 @@ type DatePickerProps struct {
 	Value    string // "YYYY-MM-DD"
 	Min, Max string // optional bounds, same format; "" for no bound
 	Disabled bool
+	// Label is the accessible name of the input (what a screen reader says; a visible <label> may do instead).
+	Label    string
 	OnChange func(value string)
 }
     DatePickerProps configures DatePicker.
@@ -2751,7 +2755,9 @@ type SliderProps struct {
 	Min, Max, Value float64
 	Step            float64 // 0 leaves the browser's default step (1)
 	Disabled        bool
-	OnChange        func(value float64) // called continuously while dragging
+	// Label is the accessible name of the slider (what a screen reader says; a visible <label> may do instead).
+	Label    string
+	OnChange func(value float64) // called continuously while dragging
 }
     SliderProps configures Slider.
 

@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <title>gojiberry style editor</title>
@@ -10,10 +10,12 @@
   </style>
 </head>
 <body>
+  <main>
   <h1>Style editor</h1>
   <p>Pick a font, size, weight and decorations; the preview and the <code>canvas.Format</code> below follow.</p>
   <div id="app"></div>
   <p id="state">(pending)</p>
+  </main>
   <script>
     const go = new Go();
     WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((r) => go.run(r.instance));
