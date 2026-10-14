@@ -13,7 +13,10 @@ import (
 // on the root element, which components/a11y.css turns into styles. A person who sets none gets the
 // operating system's own settings (reduced motion, more contrast) through the media queries there.
 
-const prefsKey = "showcase:a11y"
+const (
+	prefsKey  = "showcase:a11y"
+	keymapKey = "showcase:keys" // the person's own key bindings (see keymapkeep.go)
+)
 
 // attrs are the values the root element carries.
 func (p prefs) attrs() map[string]string {
