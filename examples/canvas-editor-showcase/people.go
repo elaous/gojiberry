@@ -20,6 +20,12 @@ type peopleState struct {
 	pending     *components.Pending
 	rerender    func()
 	links       *linksUI // share links (links.go)
+
+	// remote, when set, gives the server's adapter and the id of the document open there (ok false: the
+	// document is not on a server). Then the list below is the server's: read from it, and every change is sent.
+	remote    func() (a *docstore.HTTPAdapter, id string, ok bool)
+	syncedFor string // the document whose list was asked for
+	note      string // how the server answered, in words
 }
 
 func newPeople(owner string, rerender func()) *peopleState {
@@ -29,7 +35,8 @@ func newPeople(owner string, rerender func()) *peopleState {
 }
 
 func (p *peopleState) panel(confirm func(string, func())) xango.Node {
-	return xango.Frag(p.peoplePanel(confirm), p.links.panel())
+	p.sync()
+	return xango.Frag(p.serverNote(), p.peoplePanel(confirm), p.links.panel())
 }
 
 func (p *peopleState) peoplePanel(confirm func(string, func())) xango.Node {
@@ -38,15 +45,25 @@ func (p *peopleState) peoplePanel(confirm func(string, func())) xango.Node {
 		People:  p.list(), Self: p.acl.Owner, Pending: p.pending,
 		Draft: p.draft, DraftRole: p.role,
 		OnDraft: func(id, role string) { p.draft, p.role = id, role; p.rerender() },
-		Invite: func(_ context.Context, id, role string) error {
+		Invite: func(ctx context.Context, id, role string) error {
 			if err := p.acl.GrantFor(id, docstore.Role(role), p.links.now(), p.links.personDuration()); err != nil {
 				return err
 			}
 			p.draft = ""
-			return nil
+			return p.send(ctx)
 		},
-		SetRole: func(_ context.Context, id, role string) error { return p.acl.Grant(id, docstore.Role(role)) },
-		Remove:  func(_ context.Context, id string) error { return p.acl.Revoke(id) },
+		SetRole: func(ctx context.Context, id, role string) error {
+			if err := p.acl.Grant(id, docstore.Role(role)); err != nil {
+				return err
+			}
+			return p.send(ctx)
+		},
+		Remove: func(ctx context.Context, id string) error {
+			if err := p.acl.Revoke(id); err != nil {
+				return err
+			}
+			return p.send(ctx)
+		},
 	})
 }
 

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"syscall/js"
 	"time"
@@ -163,6 +164,22 @@ func lifeLabel(key string) string {
 func when(t time.Time) string { return t.Local().Format("2 Jan 2006 15:04") }
 
 func (l *linksUI) create() {
+	if a, id, ok := l.people.server(); ok {
+		go func() { // the server makes the link and keeps only its hash
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			token, _, _, err := a.CreateLink(ctx, id, l.role, l.lifetime())
+			if err != nil {
+				l.err = err.Error()
+				l.people.rerender()
+				return
+			}
+			l.err = ""
+			l.created = pageBase() + "#share=" + token
+			l.people.load(a, id)
+		}()
+		return
+	}
 	token, err := docstore.NewShareToken()
 	if err != nil {
 		l.err = err.Error()
@@ -272,8 +289,19 @@ func (l *linksUI) panel() xango.Node {
 			text = T("links.item", "Link ending %s: %s", when(v.Expires), roleLabel(v.Role))
 			id := v.ID
 			extra = append(extra, btn("revoke-"+id[:12], T("links.revoke", "Revoke"), func() {
-				l.people.acl.RevokeLink(id)
 				l.result = ""
+				if a, doc, ok := l.people.server(); ok {
+					go func() {
+						ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+						defer cancel()
+						if err := a.RevokeLink(ctx, doc, id); err != nil {
+							l.err = err.Error()
+						}
+						l.people.load(a, doc)
+					}()
+					return
+				}
+				l.people.acl.RevokeLink(id)
 				l.people.rerender()
 			}, false))
 		case "owner":

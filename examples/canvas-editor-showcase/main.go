@@ -322,6 +322,17 @@ func main() {
 	u.migrate = newMigrate(u, func() { renderUI() })
 	u.people = newPeople("you@example.com", func() { renderUI() })
 	u.people.links.use, u.people.links.stop = u.useShareLink, u.stopShareLink
+	u.people.remote = func() (*docstore.HTTPAdapter, string, bool) {
+		if encTarget == "server" || u.saver.Target() != serverTarget || u.saver.ID() == "" {
+			return nil, "", false
+		}
+		t, ok := u.serverStore()
+		if !ok {
+			return nil, "", false
+		}
+		a, ok := t.Adapter.(*docstore.HTTPAdapter)
+		return a, u.saver.ID(), ok
+	}
 	if tok := takeFragment(); tok != "" { // a share link in the address is offered in the People tab, never applied by itself
 		u.people.links.incoming, u.tab = tok, "people"
 	}

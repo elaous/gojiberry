@@ -143,6 +143,9 @@ func (s *Session) ui(f func()) {
 	f()
 }
 
+// Target is the name of the target the session saves to now.
+func (s *Session) Target() string { return s.targetName() }
+
 func (s *Session) targetName() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()

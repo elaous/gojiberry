@@ -66,3 +66,23 @@ func (a *HTTPAdapter) LoadACL(ctx context.Context, id string) (ACL, error) {
 	err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&acl)
 	return acl, err
 }
+
+// SaveACL replaces the people on the access list of document id (who has what role, and until when) with
+// acl's Grants and Until; the first save by a signed-in person makes them the owner. The owner is never changed
+// and the share links are left as they are (they are made and revoked by CreateLink and RevokeLink). The
+// caller must own the document, or it must have no list yet.
+func (a *HTTPAdapter) SaveACL(ctx context.Context, id string, acl ACL) error {
+	body, err := json.Marshal(ACL{Grants: acl.Grants, Until: acl.Until})
+	if err != nil {
+		return err
+	}
+	resp, err := a.do(ctx, http.MethodPut, docPath(id)+"/acl", body)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNoContent {
+		return httpError(resp)
+	}
+	return nil
+}
