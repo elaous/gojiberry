@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-9 of 10 since the last full run (full run on main 8a90a42 (#355) with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on the first try, and so did the coverage run; coverage score 89.7% (was 89.8%), README badge updated).
+0 of 10 since the last full run (full run on the branch of the 10th merge, on main 31a804a plus the usage series change, with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full, after one lint fix in the new test; coverage score 89.7% (unchanged), README badge unchanged).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
