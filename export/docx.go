@@ -105,14 +105,18 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 		return err
 	}
 	const header = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` + "\n"
-	var hfRels [2]string // the header's and the footer's relationship ids
+	var hfRels [4]string // the relationship ids of the header, the footer, and those of the first page
 	var hfTypes string
 	var hfParts []struct{ name, content string }
-	for i, hf := range []struct{ kind, text string }{{"header", snap.Header}, {"footer", snap.Footer}} {
+	hfList := []struct{ kind, text, num string }{{"header", snap.Header, "1"}, {"footer", snap.Footer, "1"}}
+	if snap.FirstDiffers {
+		hfList = append(hfList, struct{ kind, text, num string }{"header", snap.FirstHeader, "2"}, struct{ kind, text, num string }{"footer", snap.FirstFooter, "2"})
+	}
+	for i, hf := range hfList {
 		if hf.text == "" {
 			continue
 		}
-		part := hf.kind + "1.xml"
+		part := hf.kind + hf.num + ".xml"
 		hfRels[i] = b.rel(hf.kind, part, false)
 		hfTypes += `<Override PartName="/word/` + part + `" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.` + hf.kind + `+xml"/>`
 		hfParts = append(hfParts, struct{ name, content string }{"word/" + part, header + docxHeaderFooter(snap, hf.kind, hf.text)})
@@ -178,7 +182,7 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 
 // docxSection is the section properties; hf holds the relationship ids of the header and the footer part
 // ("" for none), which the section names first.
-func docxSection(snap Snapshot, hf [2]string) string {
+func docxSection(snap Snapshot, hf [4]string) string {
 	px := func(v float64) int { return int(v * 15) } // twips
 	refs := ""
 	if hf[0] != "" {
@@ -187,8 +191,22 @@ func docxSection(snap Snapshot, hf [2]string) string {
 	if hf[1] != "" {
 		refs += `<w:footerReference w:type="default" r:id="` + hf[1] + `"/>`
 	}
-	return fmt.Sprintf(`<w:sectPr>%s<w:pgSz w:w="%d" w:h="%d"/><w:pgMar w:top="%d" w:right="%d" w:bottom="%d" w:left="%d" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>`,
-		refs, px(snap.PageWidth), px(snap.PageHeight), px(snap.MarginTop), px(snap.MarginRight), px(snap.MarginBottom), px(snap.MarginLeft))
+	// With a page of its own, the first page shows only the first header and footer: Word leaves it bare
+	// when there is no reference of type "first".
+	if snap.FirstDiffers {
+		if hf[2] != "" {
+			refs += `<w:headerReference w:type="first" r:id="` + hf[2] + `"/>`
+		}
+		if hf[3] != "" {
+			refs += `<w:footerReference w:type="first" r:id="` + hf[3] + `"/>`
+		}
+	}
+	title := ""
+	if snap.FirstDiffers {
+		title = `<w:titlePg/>`
+	}
+	return fmt.Sprintf(`<w:sectPr>%s<w:pgSz w:w="%d" w:h="%d"/><w:pgMar w:top="%d" w:right="%d" w:bottom="%d" w:left="%d" w:header="720" w:footer="720" w:gutter="0"/>%s</w:sectPr>`,
+		refs, px(snap.PageWidth), px(snap.PageHeight), px(snap.MarginTop), px(snap.MarginRight), px(snap.MarginBottom), px(snap.MarginLeft), title)
 }
 
 // docxField is a Word field (PAGE, NUMPAGES) as a complex field with a cached value, which Word replaces

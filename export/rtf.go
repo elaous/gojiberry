@@ -107,6 +107,16 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 	if snap.Footer != "" {
 		layout += rtfDecor("footer", snap.Footer, snap.Title, contentWidthTwips) + "\n"
 	}
+	if snap.FirstDiffers {
+		// \titlepg gives the first page its own header and footer (\headerf, \footerf): bare when empty.
+		layout += `\titlepg` + "\n"
+		if snap.FirstHeader != "" {
+			layout += strings.Replace(rtfDecor("header", snap.FirstHeader, snap.Title, contentWidthTwips), `{\header`, `{\headerf`, 1) + "\n"
+		}
+		if snap.FirstFooter != "" {
+			layout += strings.Replace(rtfDecor("footer", snap.FirstFooter, snap.Title, contentWidthTwips), `{\footer`, `{\footerf`, 1) + "\n"
+		}
+	}
 	th := themeOf(snap)
 	head, start := rtfThemeHead(th)
 	return []byte(`{\rtf1\ansi\deff0{\fonttbl{\f0 Helvetica;}{\f1 Courier New;}}` + head + `\fs` + rtfBodySize(th) + start + "\n" +
