@@ -35,3 +35,24 @@ func TestEncodedPrefsReadBackTheSame(t *testing.T) {
 		t.Errorf("round trip: %+v %v, want %+v", got, err, want)
 	}
 }
+
+func TestParsePrefsLanguageThemeAndAutoClose(t *testing.T) {
+	p, err := parsePrefs([]byte(`{"lang":"pt-BR","theme":"dark","close":"off"}`))
+	if err != nil || p.Lang != "pt-BR" || p.Theme != "dark" || p.Close != "off" {
+		t.Errorf("%+v %v", p, err)
+	}
+	p, _ = parsePrefs([]byte(`{"lang":"../etc","theme":"purple","close":"maybe"}`))
+	if p.Lang != "" || p.Theme != "" || p.Close != "" {
+		t.Errorf("odd values kept: %+v", p)
+	}
+	for _, ok := range []string{"en", "de", "pt-BR", "zh-Hant-TW"} {
+		if !validLang(ok) {
+			t.Errorf("%q refused", ok)
+		}
+	}
+	for _, bad := range []string{"", "-en", "en-", "e n", "1en", "averyveryverylongtag"} {
+		if validLang(bad) {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

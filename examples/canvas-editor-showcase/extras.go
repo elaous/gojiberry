@@ -242,6 +242,9 @@ func initLocale() {
 			prefs = append(prefs, langs.Index(i).String())
 		}
 	}
+	if curPrefs.Lang != "" && !q.Call("has", "lang").Bool() {
+		prefs = append([]string{curPrefs.Lang}, prefs...) // no ?lang=: the language the person chose, then the browser's
+	}
 	setLocale(i18n.Match(prefs, avail, "en"))
 }
 
@@ -255,7 +258,9 @@ func languageMenu(u *ui, renderUI func()) []components.MenuItem {
 			name = c
 		}
 		items = append(items, components.MenuItem{Label: name, Checked: c == locale, OnSelect: func() {
-			setLocale(c)
+			p := curPrefs
+			p.Lang = c
+			setPrefs(p) // kept, and the interface language changes
 			u.announce(T("a11y.language", "Interface language: %s", languageNames[c]))
 			renderUI()
 		}})
