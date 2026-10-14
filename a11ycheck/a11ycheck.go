@@ -75,6 +75,8 @@ type Finding struct {
 	// description; nothing is invented), ActionToParagraph (make the empty heading a plain paragraph).
 	Action      string
 	Arg, Length int
+	// Spans, for ActionToList, are the typed markers to remove (offset and length in runes), in text order.
+	Spans [][2]int
 }
 
 // The one-click actions of a Finding.
@@ -87,6 +89,9 @@ const (
 	ActionToParagraph = "to-paragraph"
 	// ActionWriteMediaText: go to the clip and write its captions or transcript; nothing is invented.
 	ActionWriteMediaText = "write-media-text"
+	// ActionToList turns the Length runes of paragraphs at Offset into a list (bullets for Arg 0, numbers for
+	// Arg 1) and removes the typed markers listed in Spans.
+	ActionToList = "to-list"
 )
 
 // GateMode says what an export does about the errors a document has.

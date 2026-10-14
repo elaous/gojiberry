@@ -67,6 +67,8 @@ type fakeListRun struct {
 	n           int
 	start, item int
 	text        string
+	end         int      // where the last paragraph of the run ends
+	spans       [][2]int // the typed marker of each paragraph: its offset and length in runes
 }
 
 // add takes a finished paragraph that is not a heading and returns the findings so far.
@@ -88,6 +90,8 @@ func (r *fakeListRun) add(out []Finding, text string, listKind, start, item int)
 		r.family, r.start, r.item, r.text = family, start, item, text
 	}
 	r.n++
+	r.end = start + len([]rune(text))
+	r.spans = append(r.spans, [2]int{start, markerLength(text)})
 	return out
 }
 
@@ -100,9 +104,14 @@ func (r *fakeListRun) flush(out []Finding) []Finding {
 	if r.family == "number" {
 		kind = "numbers"
 	}
+	arg := 0
+	if r.family == "number" {
+		arg = 1
+	}
 	return append(out, Finding{Rule: RuleFakeList, Severity: Warning, Offset: r.start, Item: r.item, Text: excerpt(r.text),
 		Message: fmt.Sprintf("%d paragraphs start with typed %s instead of being a list, so a screen reader does not announce them as one.", r.n, kind),
-		Fix:     "Select them and use the bullet or numbered list button, then delete the typed markers."})
+		Fix:     "Select them and use the bullet or numbered list button, then delete the typed markers.",
+		Action:  ActionToList, Arg: arg, Length: r.end - r.start, Spans: r.spans})
 }
 
 // markerFamily says whether text starts with a typed list marker: a bullet character or a dash or
@@ -127,4 +136,32 @@ func markerFamily(text string) string {
 		return "number"
 	}
 	return ""
+}
+
+// markerLength is how many runes of text the typed list marker takes, with the spaces before and after it:
+// what a fix has to remove once the paragraph is a real list item. It is 0 for text with no marker.
+func markerLength(text string) int {
+	if markerFamily(text) == "" {
+		return 0
+	}
+	rs := []rune(text)
+	i := 0
+	for i < len(rs) && unicode.IsSpace(rs[i]) {
+		i++
+	}
+	if rs[i] == '(' {
+		i++
+	}
+	if strings.ContainsRune("-*•◦▪‣–·", rs[i]) {
+		i++
+	} else {
+		for i < len(rs) && rs[i] >= '0' && rs[i] <= '9' {
+			i++
+		}
+		i++ // the point or bracket
+	}
+	for i < len(rs) && unicode.IsSpace(rs[i]) && rs[i] != '\n' {
+		i++
+	}
+	return i
 }
