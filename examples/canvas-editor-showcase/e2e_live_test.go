@@ -152,7 +152,8 @@ func liveEndToEnd(t *testing.T, hubURL, transport, flow string) {
 	b.Press("End") // Bo's cursor moves, so the newcomer is told where it is
 	a.Wait("s.live.peers.includes('Bo') && s.live.remote >= 1")
 	a.WaitSelector(`#presence .gj-presence-where[data-name="Bo"]`)
-	a.OK(a.Text("#presence .gj-presence-where") == "Where is Bo?", "the button names the person: "+a.Text("#presence .gj-presence-where"))
+	// (by name: the page before the reload may still be listed for a moment as another Ana)
+	a.OK(a.Text(`#presence .gj-presence-where[data-name="Bo"]`) == "Where is Bo?", "the button names the person: "+a.Text(`#presence .gj-presence-where[data-name="Bo"]`))
 	a.OK(!strings.Contains(a.Text(".gj-announcer"), "paragraph"), "the cursor moves are not announced: "+a.Text(".gj-announcer"))
 	a.Click(`#presence .gj-presence-where[data-name="Bo"]`)
 	a.WaitFor("the position is said", `(document.querySelector('.gj-announcer') || {textContent: ''}).textContent.includes('Bo is in paragraph')`)

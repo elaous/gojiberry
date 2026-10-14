@@ -864,10 +864,11 @@ func main() {
 
 	initLocale()
 	applyPrefs(curPrefs)
-	state.NoAutoClose, state.TextScale = curPrefs.Close == "off", curPrefs.textScale()
+	state.NoAutoClose, state.TextScale, state.PeerPalette, state.StrongCaret = curPrefs.Close == "off", curPrefs.textScale(), curPrefs.peerPalette(), curPrefs.Contrast == "more"
 	onPrefs = func() {
-		if nc, ts := curPrefs.Close == "off", curPrefs.textScale(); nc != state.NoAutoClose || ts != state.TextScale {
-			state.NoAutoClose, state.TextScale = nc, ts
+		nc, ts, pp, sc := curPrefs.Close == "off", curPrefs.textScale(), curPrefs.peerPalette(), curPrefs.Contrast == "more"
+		if nc != state.NoAutoClose || ts != state.TextScale || len(pp) != len(state.PeerPalette) || sc != state.StrongCaret {
+			state.NoAutoClose, state.TextScale, state.PeerPalette, state.StrongCaret = nc, ts, pp, sc
 			renderCanvas()
 		}
 	}

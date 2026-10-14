@@ -56,3 +56,14 @@ func TestParsePrefsLanguageThemeAndAutoClose(t *testing.T) {
 		}
 	}
 }
+
+func TestParsePrefsColourBlindSafeColours(t *testing.T) {
+	p, _ := parsePrefs([]byte(`{"colours":"safe"}`))
+	if len(p.peerPalette()) < 4 {
+		t.Errorf("no palette for the safe setting: %v", p.peerPalette())
+	}
+	p, _ = parsePrefs([]byte(`{"colours":"rainbow"}`))
+	if p.Colours != "" || p.peerPalette() != nil {
+		t.Errorf("an unknown value was kept: %+v", p)
+	}
+}

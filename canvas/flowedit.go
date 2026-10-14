@@ -564,6 +564,14 @@ func (f *TextFlow) drawCarets() {
 	}
 	for _, c := range f.Cursors() {
 		if x, y, h, ok := f.caretRect(c); ok {
+			if f.StrongCaret {
+				// a bar that stands out against any text colour: dark, with a light edge, and thicker
+				f.Painter.SetFillStyle(StrongCaretEdge)
+				f.Painter.FillRect(x-1.5, y+1, 5, h-2)
+				f.Painter.SetFillStyle(StrongCaretColor)
+				f.Painter.FillRect(x-0.5, y+2, 3, h-4)
+				continue
+			}
 			f.Painter.SetFillStyle(f.ChromeStyle.GripColor)
 			f.Painter.FillRect(x, y+2, 1.5, h-4)
 		}
