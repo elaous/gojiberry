@@ -125,3 +125,16 @@ func encodePrefs(p prefs) []byte {
 	b, _ := json.MarshalIndent(p.sanitize(), "", "  ")
 	return append(b, '\n')
 }
+
+// textScale is how much larger the text on the sheets is drawn for the text-size setting.
+func (p prefs) textScale() float64 {
+	switch p.Text {
+	case "large":
+		return 1.25
+	case "larger":
+		return 1.5
+	case "largest":
+		return 2
+	}
+	return 1
+}

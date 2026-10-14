@@ -147,6 +147,8 @@ func main() {
 	root := cxango.NewRoot(stage)
 	root.Redraw = redraw
 	defaults := stage.EffectiveKeymap()
+	stage.Keymap = decodeKeymap(lsGet(keymapKey)) // the person's own bindings from an earlier visit
+	keepKeymap := func() { lsSet(keymapKey, encodeKeymap(stage.Keymap)) }
 
 	var flow *canvas.TextFlow
 	var renderUI func()
@@ -597,19 +599,27 @@ func main() {
 					if prev != "" && prev != c {
 						u.kbMessage += fmt.Sprintf("; it was %s's", titleOf(cmds, prev))
 					}
+					keepKeymap()
 					renderUI()
 				},
 				OnClear: func(c canvas.Command) {
 					stage.Rebind(c, "")
 					u.kbMessage = titleOf(cmds, c) + " has no shortcut now"
+					keepKeymap()
 					renderUI()
 				},
 				OnReset: func(c canvas.Command) {
 					resetBinding(stage, defaults, c)
 					u.kbMessage = titleOf(cmds, c) + " is back to its default"
+					keepKeymap()
 					renderUI()
 				},
-				OnResetAll: func() { stage.ResetKeymap(); u.kbMessage = "All shortcuts are back to their defaults"; renderUI() },
+				OnResetAll: func() {
+					stage.ResetKeymap()
+					u.kbMessage = "All shortcuts are back to their defaults"
+					keepKeymap()
+					renderUI()
+				},
 			})
 		default:
 			panel = components.StyleEditor(components.StyleEditorProps{
@@ -854,10 +864,10 @@ func main() {
 
 	initLocale()
 	applyPrefs(curPrefs)
-	state.NoAutoClose = curPrefs.Close == "off"
+	state.NoAutoClose, state.TextScale = curPrefs.Close == "off", curPrefs.textScale()
 	onPrefs = func() {
-		if nc := curPrefs.Close == "off"; nc != state.NoAutoClose {
-			state.NoAutoClose = nc
+		if nc, ts := curPrefs.Close == "off", curPrefs.textScale(); nc != state.NoAutoClose || ts != state.TextScale {
+			state.NoAutoClose, state.TextScale = nc, ts
 			renderCanvas()
 		}
 	}
