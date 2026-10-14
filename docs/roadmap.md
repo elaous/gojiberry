@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-0 of 10 since the last full run (full run on the branch of the 10th merge, on main 405bd7e plus the contents-position change and the suggest-as-I-type fix, with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on the second try (the first run failed in `TestWordSuggestionsOpenByThemselves`, which found a real bug, fixed in this PR); coverage score 89.6% (was 89.7%), README badge updated).
+1 of 10 since the last full run (full run on the branch of the 10th merge, on main 405bd7e plus the contents-position change and the suggest-as-I-type fix, with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on the second try (the first run failed in `TestWordSuggestionsOpenByThemselves`, which found a real bug, fixed in this PR); coverage score 89.6% (was 89.7%), README badge updated).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
