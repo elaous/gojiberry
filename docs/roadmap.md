@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-10 of 10 since the last full run (full run on main e50b8a4 (#332) with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on its third try. The first stopped at `docs-check` (the components API dump was stale after #326, fixed in #332); the second ran out of disk (the Go build cache had grown to 17 GB: link steps failed with "no space left on device" and two showcase browser tests timed out with it), so the cache was cleared (`go clean -cache`) and the run repeated. The coverage run had no failure; coverage score 89.7% (unchanged), lowest packages: resource-imports-demo 50.0%, http-server-demo 63.6%, ssr-demo 64.3%, generic-list-demo 66.7%, canvas-editor-showcase 72.9%, wasmdist 73.1%, collabhub 79.1%, fontserver 80.6%, passkey/client 80.8%, user 80.8%).
+0 of 10 since the last full run (full run on main c10c427 (#344) with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on its second try; the first, on 59c2029, stopped at `make lint` (two constants and functions only the browser code uses read as unused in the native build, and a De Morgan finding in a test), fixed in #344. The coverage run had no failure; coverage score 89.8% (was 89.7%), README badge updated, lowest packages: resource-imports-demo 50.0%, http-server-demo 63.6%, ssr-demo 64.3%, generic-list-demo 66.7%, wasmdist 73.1%, collabhub 79.1%, canvas-editor-showcase 79.5% (was 72.9%), fontserver 80.6%, passkey/client 80.8%, user 80.8%).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
