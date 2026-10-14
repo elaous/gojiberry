@@ -260,7 +260,7 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 	}
 	return "<!doctype html>\n<html" + langAttrs(snap.Lang, false) + ">\n<head>\n<meta charset=\"utf-8\">\n<title>" +
 		escapeHTMLText(snap.Title) + "</title>\n" + themeStyle(theme) + htmlPrintStyle(snap) + "</head>\n<body>\n" +
-		htmlTOC(snap) + body.String() + "</body>\n</html>\n"
+		htmlTOC(snap) + "<main>\n" + body.String() + "</main>\n</body>\n</html>\n"
 }
 
 // themeStyle is the <style> element of a theme, or nothing.
