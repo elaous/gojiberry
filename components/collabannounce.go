@@ -23,11 +23,12 @@ type CollabAnnouncer struct {
 	online             bool
 	problem            string
 	joined, left       []string
-	comments           []string // authors of comments others added, not yet said
-	replies            []string // authors of replies others added, not yet said
-	resolved           int      // threads others resolved, not yet said
-	merged, rejected   int      // changes merged after being offline / refused by the server, not yet said
-	cause              string   // a held connection sentence: "online", "offline" or ""
+	comments           []string   // authors of comments others added, not yet said
+	replies            []string   // authors of replies others added, not yet said
+	resolved           int        // threads others resolved, not yet said
+	merged, rejected   int        // changes merged after being offline / refused by the server, not yet said
+	conflicts          [][]string // paragraphs others changed while they were edited here (who), not yet said
+	cause              string     // a held connection sentence: "online", "offline" or ""
 	problemSaid        string
 	last               time.Time
 }
@@ -80,6 +81,15 @@ func (a *CollabAnnouncer) NoteRejected(n int) {
 	}
 }
 
+// NoteConflict records that other people changed a paragraph the person was editing (their names; "" for
+// someone not known). Both changes were kept, and the sentence says so: "Bo changed the paragraph you were
+// editing. Both changes were kept." It is said at CollabImportant and CollabAll.
+func (a *CollabAnnouncer) NoteConflict(names []string) {
+	if a.Level != CollabOff {
+		a.conflicts = append(a.conflicts, names)
+	}
+}
+
 // Update takes the session as it is now (online or not, the names of the other people, the problem if
 // sharing is not working) and returns the sentence to say now, or "". The first call only remembers the state.
 func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, problem string) string {
@@ -118,7 +128,7 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 		a.problem = problem
 	}
 	if a.Level == CollabOff {
-		a.joined, a.left, a.cause, a.comments, a.replies, a.resolved, a.merged, a.rejected = nil, nil, "", nil, nil, 0, 0, 0
+		a.joined, a.left, a.cause, a.comments, a.replies, a.resolved, a.merged, a.rejected, a.conflicts = nil, nil, "", nil, nil, 0, 0, 0, nil
 		a.problemSaid = problem
 		return ""
 	}
@@ -160,6 +170,9 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 	} else if a.rejected > 1 {
 		parts = append(parts, trf("collab.rejectedMany", "%d changes could not be applied.", a.rejected))
 	}
+	if n := len(a.conflicts); n > 0 {
+		parts = append(parts, conflictSentence(a.conflicts))
+	}
 	if a.Level == CollabAll {
 		if len(a.joined) > 0 {
 			parts = append(parts, peopleSentence(a.joined, "collab.joined", "%s joined.", "collab.joinedMany", "%d people joined: %s."))
@@ -185,7 +198,7 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 	if a.Level == CollabAll && a.resolved > 0 {
 		parts = append(parts, trn("collab.resolved", "%d comment thread was resolved.", "%d comment threads were resolved.", a.resolved))
 	}
-	a.joined, a.left, a.cause, a.comments, a.replies, a.resolved, a.merged, a.rejected = nil, nil, "", nil, nil, 0, 0, 0
+	a.joined, a.left, a.cause, a.comments, a.replies, a.resolved, a.merged, a.rejected, a.conflicts = nil, nil, "", nil, nil, 0, 0, 0, nil
 	if len(parts) == 0 {
 		return ""
 	}
@@ -196,7 +209,29 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 // Pending reports whether something has changed that has not been said yet (held by the spacing), so a
 // host can call Update again a little later.
 func (a *CollabAnnouncer) Pending() bool {
-	return a.Level != CollabOff && (a.cause != "" || a.merged+a.rejected > 0 || a.problem != a.problemSaid || (a.Level == CollabAll && len(a.joined)+len(a.left)+len(a.comments)+len(a.replies)+a.resolved > 0))
+	return a.Level != CollabOff && (a.cause != "" || a.merged+a.rejected+len(a.conflicts) > 0 || a.problem != a.problemSaid || (a.Level == CollabAll && len(a.joined)+len(a.left)+len(a.comments)+len(a.replies)+a.resolved > 0))
+}
+
+// conflictSentence says who changed what the person was editing; several at once are counted.
+func conflictSentence(all [][]string) string {
+	var names []string
+	for _, ns := range all {
+		for _, n := range ns {
+			if n == "" {
+				n = tr("collab.someone", "Someone")
+			}
+			if !slices.Contains(names, n) {
+				names = append(names, n)
+			}
+		}
+	}
+	if len(all) > 1 {
+		return trf("collab.conflictMany", "Others changed paragraphs you were editing, %d times. All changes were kept.", len(all))
+	}
+	if len(names) == 1 {
+		return trf("collab.conflictOne", "%s changed the paragraph you were editing. Both changes were kept.", names[0])
+	}
+	return trf("collab.conflictSome", "%d people changed the paragraph you were editing. All changes were kept.", max(len(names), 2))
 }
 
 // peopleSentence names up to three people, and counts more.

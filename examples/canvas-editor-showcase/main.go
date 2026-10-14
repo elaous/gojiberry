@@ -52,6 +52,7 @@ type ui struct {
 	current                      func() docfile.Document // the document as it is being edited now
 	away                         awayState
 	theme                        themeState
+	collabConflicts              int
 	collabMerged, collabRejected int                        // the session's counts already announced (merged after offline, refused)
 	typing                       components.TypingAnnouncer // what is said of typing and of the caret (preferences), see typing.go
 	typingMsg                    string

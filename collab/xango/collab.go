@@ -90,6 +90,10 @@ type State struct {
 	// Merged counts the changes made while offline that have met the shared document since the session
 	// began; Rejected the changes the server refused (see collab.Session). Both only grow.
 	Merged, Rejected int
+	// Conflicts counts the times others changed a paragraph being edited here, ConflictWith names them for the
+	// latest (see collab.Session). Only grows.
+	Conflicts    int
+	ConflictWith []string
 	// Err is why sharing is not working: the flow is not supported, or has
 	// content that cannot be shared, or the server refused something and
 	// the session has not yet repaired itself.

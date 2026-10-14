@@ -95,3 +95,28 @@ func TestPresenceWhereButtonsAreOptIn(t *testing.T) {
 		t.Fatalf("each button asks about its own person: %+v", asked)
 	}
 }
+
+func TestCollabAnnouncerSaysWhoChangedTheParagraph(t *testing.T) {
+	a := &CollabAnnouncer{}
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	a.Update(now, true, []string{"Bo"}, "")
+	a.NoteConflict([]string{"Bo"})
+	got := a.Update(now.Add(3*time.Second), true, []string{"Bo"}, "")
+	if got != "Bo changed the paragraph you were editing. Both changes were kept." {
+		t.Errorf("one person: %q", got)
+	}
+	a.NoteConflict([]string{""})
+	if got := a.Update(now.Add(6*time.Second), true, []string{"Bo"}, ""); got != "Someone changed the paragraph you were editing. Both changes were kept." {
+		t.Errorf("not known: %q", got)
+	}
+	a.NoteConflict([]string{"Bo"})
+	a.NoteConflict([]string{"Cy"})
+	if got := a.Update(now.Add(9*time.Second), true, []string{"Bo"}, ""); got != "Others changed paragraphs you were editing, 2 times. All changes were kept." {
+		t.Errorf("several: %q", got)
+	}
+	q := &CollabAnnouncer{Level: CollabOff}
+	q.NoteConflict([]string{"Bo"})
+	if q.Pending() {
+		t.Error("nothing is said at level off")
+	}
+}

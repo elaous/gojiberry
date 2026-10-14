@@ -1141,6 +1141,12 @@ func (a *CollabAnnouncer) NoteComment(author string)
     NoteComment records that someone else added a comment; it is said, with the
     next sentence, at level CollabAll ("Bo commented." or "3 new comments.").
 
+func (a *CollabAnnouncer) NoteConflict(names []string)
+    NoteConflict records that other people changed a paragraph the person was
+    editing (their names; "" for someone not known). Both changes were kept,
+    and the sentence says so: "Bo changed the paragraph you were editing.
+    Both changes were kept." It is said at CollabImportant and CollabAll.
+
 func (a *CollabAnnouncer) NoteMerged(n int)
     NoteMerged records that n changes made while offline met the shared document
     when the connection came back ("3 changes were merged."). It is said at the

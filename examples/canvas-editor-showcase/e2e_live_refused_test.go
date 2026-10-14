@@ -71,3 +71,42 @@ func TestLiveVersionAuthorIsThePerson(t *testing.T) {
 		t.Errorf("the version's author = %q, want it to name Ana", got)
 	}
 }
+
+// TestChangedUnderYouIsSaid: two people type in one paragraph a moment apart; the one whose paragraph was
+// changed by the other hears who did it and that both changes were kept.
+func TestChangedUnderYouIsSaid(t *testing.T) {
+	h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
+		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	}})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	defer func() {
+		if err := h.Close(); err != nil {
+			t.Errorf("closing the hub: %v", err)
+		}
+	}()
+	site := e2etest.NewSite(t)
+	q := func(name, token string) string {
+		return "/d/live4?lang=en&hub=" + url.QueryEscape(srv.URL) + "&token=" + token + "&transport=http&name=" + name
+	}
+	a := site.Open(t, q("Ana", "owner"))
+	a.Wait("s.live.status === 'online' && s.live.role === 'owner'")
+	a.Sleep(400)
+	b := site.Open(t, q("Bo", "editor"))
+	b.Wait("s.live.status === 'online' && s.live.role === 'editor'")
+	b.Wait("s.text.length > 100")
+	a.ToggleMode()
+	b.ToggleMode()
+	a.CanvasClick(240, 164)
+	a.Focus("#input")
+	a.Press("End")
+	a.Type(" ANA")
+	b.Wait("s.text.includes(' ANA')")
+	b.CanvasClick(240, 164)
+	b.Focus("#input")
+	b.Press("End")
+	b.Type(" BO")
+	a.WaitForTimeout("Ana hears that Bo changed her paragraph",
+		`(document.querySelector('.gj-announcer') || {textContent: ''}).textContent.includes('Bo changed the paragraph you were editing. Both changes were kept.')`, 20*time.Second)
+	a.Wait("s.text.includes(' ANA') && s.text.includes(' BO')")
+}

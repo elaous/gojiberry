@@ -36,6 +36,11 @@ type Session struct {
 	// counts the changes the server refused (a viewer's edit, a batch that was too large), which a repair
 	// then drops. Both only grow, and survive Repair; a host announces the difference since it last looked.
 	Merged, Rejected int
+	// Conflicts counts the times other people changed a paragraph that was being edited here (the merge keeps
+	// both changes); ConflictWith names them (from the presence list; empty when a replica is not known)
+	// for the latest one. Both survive Repair.
+	Conflicts    int
+	ConflictWith []string
 	// Name and Color are shown to others with your cursor.
 	Name, Color string
 
@@ -76,7 +81,9 @@ func ConnectShared(t Transport, replica string, flow *canvas.TextFlow, sh Sharin
 	opts.Replica = replica
 	conn := t.Dial(opts)
 	b.Outgoing = conn.Send
-	return &Session{Bridge: b, Conn: conn, Peers: map[string]wire.Presence{}, replica: replica, opts: opts, transport: t, sharing: sh}, nil
+	s := &Session{Bridge: b, Conn: conn, Peers: map[string]wire.Presence{}, replica: replica, opts: opts, transport: t, sharing: sh}
+	b.OnConflict = s.noteConflict
+	return s, nil
 }
 
 // Repair rebuilds the session after the server refused something: the local
@@ -101,9 +108,24 @@ func (s *Session) Repair() error {
 	conn := s.transport.Dial(opts)
 	b.Outgoing = conn.Send
 	s.Bridge, s.Conn, s.Err, s.needFix = b, conn, nil, false
+	b.OnConflict = s.noteConflict
 	s.Peers = map[string]wire.Presence{}
 	s.snapshots = 0
 	return nil
+}
+
+// noteConflict counts a paragraph that others changed under the person and names who, as far as the
+// presence list knows them.
+func (s *Session) noteConflict(c Conflict) {
+	s.Conflicts++
+	s.ConflictWith = s.ConflictWith[:0:0]
+	for _, r := range c.Replicas {
+		name := ""
+		if p, ok := s.Peers[r]; ok {
+			name = p.Name
+		}
+		s.ConflictWith = append(s.ConflictWith, name)
+	}
 }
 
 // Close ends the connection.
