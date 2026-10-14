@@ -155,6 +155,11 @@ type TextFlow struct {
 	// text-size setting applied to the whole text, whatever sizes its runs have. The layout is worked out again
 	// when it changes.
 	TextScale float64
+	// Ghost is a suggestion drawn faintly at the primary caret while editing: the rest of the word being typed
+	// ("" none). It is a picture only, in the font and size of the text it continues. At the end of a line it
+	// continues the line; in the middle of one it is a small tag under the caret, so that it never hides the
+	// words after it. Putting it in is the host's job (see the showcase's Tab).
+	Ghost string
 	// LinkColor is the colour of linked text whose format names none ("" the default, LinkColor). A document
 	// theme sets it (see FlowTheme).
 	LinkColor string

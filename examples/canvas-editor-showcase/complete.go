@@ -68,7 +68,7 @@ func (u *ui) refreshSuggestions(flow *canvas.TextFlow) bool {
 	text := []rune(flow.EditText())
 	caret := flow.Cursors()[0].Caret
 	prefix, from := complete.PrefixAt(text, caret)
-	words := u.completions(text, caret, prefix, 7)
+	words := u.completions(text, caret, prefix, 7, u.langAt(flow, caret))
 	u.sugg.from = from
 	u.sugg.list.Show(words)
 	if !u.sugg.list.Open {
@@ -81,11 +81,11 @@ func (u *ui) refreshSuggestions(flow *canvas.TextFlow) bool {
 // own words, then the vocabulary of the document's language (German, French and Spanish have a small
 // list of common words, package wordlist), then the spelling dictionary's and the person's own when
 // spell check is on. Nothing leaves the page.
-func (u *ui) completions(text []rune, caret int, prefix string, max int) []string {
+func (u *ui) completions(text []rune, caret int, prefix string, max int, lang string) []string {
 	_, from := complete.PrefixAt(text, caret)
 	var ix complete.Index
 	ix.AddVocabulary(suggestVocabulary, 1)
-	if ws := wordlist.For(u.docLang); ws != nil {
+	if ws := wordlist.For(lang); ws != nil {
 		ix.AddVocabulary(ws, 1)
 	}
 	ix.AddText(string(text[:from]))
