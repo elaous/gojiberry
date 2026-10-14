@@ -1096,7 +1096,7 @@
     "img.longLabel": "Descrição longa da imagem %d (para um diagrama ou gráfico)",
     "img.longHint": "Tudo o que uma pessoa que não a pode ver precisa de saber para acompanhar o texto à volta",
     "a11y.equation": "Equação: %s",
-    "links.commentNote": "Não existe uma função só de comentários. Os comentários são guardados dentro do documento, por isso um servidor não distingue um comentário de uma edição. «Pode ver» permite a este editor comentar, mas o servidor só deixa um leitor ler.",
+    "links.commentNote": "Pode ver e comentar: num documento partilhado em direto isto é imposto pelo hub: quem vê pode acrescentar comentários e respostas com o seu próprio nome e não pode alterar mais nada. Num documento que está apenas guardado num servidor, o servidor não distingue um comentário de uma edição (os comentários estão dentro do documento): aí Pode ver permite ler e o servidor recusa qualquer escrita.",
     "links.encHeading": "O que a encriptação protege",
     "links.encProtects": "No armazenamento encriptado o servidor guarda texto baralhado. Não consegue ler os seus documentos. Uma ligação ou uma concessão, por si só, não dá uma chave.",
     "links.encNot": "A encriptação não esconde um documento de quem deixou entrar. Essa pessoa pode lê-lo, copiá-lo e passá-lo a outros. Não esconde que o documento existe, nem quando mudou, nem o seu tamanho. Uma ligação funciona para quem a tiver.",

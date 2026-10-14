@@ -1112,7 +1112,7 @@
   "img.longLabel": "Descripción larga de la imagen %d (para un diagrama o gráfico)",
   "img.longHint": "Todo lo que necesita quien no puede verla para seguir el texto que la rodea",
   "a11y.equation": "Ecuación: %s",
-  "links.commentNote": "No hay un rol solo para comentar. Los comentarios se guardan dentro del documento, así que un servidor no puede distinguirlos de una edición. Puede ver permite comentar en este editor, pero el servidor solo deja leer a quien ve.",
+  "links.commentNote": "Puede ver y comentar: en un documento compartido en vivo lo hace cumplir el hub: quien ve puede añadir comentarios y respuestas con su propio nombre y no puede cambiar nada más. En un documento que solo está guardado en un servidor, el servidor no distingue un comentario de una edición (los comentarios están dentro del documento): allí Puede ver permite leer y el servidor rechaza cualquier escritura.",
   "links.encHeading": "Qué protege el cifrado",
   "links.encProtects": "En el almacén cifrado, el servidor guarda solo texto ilegible. No puede leer sus documentos. Un enlace o un permiso por sí solo no da una clave.",
   "links.encNot": "El cifrado no oculta un documento a quien usted deja entrar. Esas personas pueden leerlo, copiarlo y pasarlo a otros. Tampoco oculta que el documento existe, cuándo cambió ni cuánto pesa. Un enlace sirve a cualquiera que lo tenga.",
