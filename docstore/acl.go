@@ -161,6 +161,15 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 		return s.checkCatalog(r, id)
 	}
 	acl, err := s.loadACL(r.Context(), id)
+	if docID, isVersion := versionDocID(id); isVersion && errors.Is(err, ErrNotFound) {
+		// the history of a document follows the document's access list (versionacl.go)
+		var found bool
+		if acl, found, err = s.versionACL(r.Context(), docID); found {
+			err = nil
+		} else if err == nil {
+			err = ErrNotFound
+		}
+	}
 	if errors.Is(err, ErrNotFound) {
 		if !s.requireACL {
 			return true, 0 // never shared this way: open
