@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Session is the state behind the document components: the chosen target and
@@ -95,8 +96,9 @@ type Session struct {
 	openDlg              *openDialog             // the .open download being asked about
 	checked              map[string]bool         // targets already checked for leftovers of a crash
 	status               string
-	saveState            string // see SaveState
-	edits                int    // MarkEdited calls, to tell whether the document changed during a save
+	saveState            string    // see SaveState
+	edits                int       // MarkEdited calls, to tell whether the document changed during a save
+	base                 time.Time // when the document being edited was last saved or opened, as the store dates it
 }
 
 // revealedMeta is what a confidential document's catalog entry hides, known here because the
@@ -222,7 +224,7 @@ func (s *Session) ID() string {
 // document with a new ID instead of replacing the one that was open. Call it when
 // the editor's content is replaced by something that is not a saved document (an
 // import, a template).
-func (s *Session) Detach() { s.set(func() { s.id = "" }) }
+func (s *Session) Detach() { s.set(func() { s.id, s.base = "", time.Time{} }) }
 
 // Refresh lists the documents saved in the current target, those in the trash and
 // the versions of the document being edited.
@@ -459,6 +461,9 @@ func (s *Session) save(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	// A copy saved by someone else (or another tab) since this one was opened would be replaced
+	// without a word: keep it as a version first, and show how it differs from what is saved now.
+	elsewhere, keptKey := s.keepElsewhere(ctx, target, c, doc)
 	e, err := s.Saver.Save(ctx, target, c, doc)
 	if err != nil {
 		return storageFull(err)
@@ -466,7 +471,7 @@ func (s *Session) save(ctx context.Context) (err error) {
 	stored = true
 	s.set(func() {
 		if s.target == target { // not if the user has moved on to another target meanwhile
-			s.id = e.ID
+			s.id, s.base = e.ID, e.Updated
 		}
 	})
 	name := e.Name
@@ -477,7 +482,45 @@ func (s *Session) save(ctx context.Context) (err error) {
 		_, tags, _ := s.Saver.Reveal(ctx, target, e.ID)
 		s.remember(e.ID, name, tags)
 	}
+	if keptKey != "" {
+		s.set(func() { s.diff, s.diffKey = elsewhere, keptKey })
+		return s.after(ctx, msg("saver.savedOverNewer", "%s saved. It replaced a newer copy saved elsewhere; that copy is kept as a version and compared with yours in Versions", name))
+	}
 	return s.after(ctx, msg("saver.saved", "%s saved", name))
+}
+
+// elsewhereVersion names the version that keeps a copy found newer than the one opened.
+const elsewhereVersion = "Saved elsewhere, before your save"
+
+// keepElsewhere checks whether the stored copy of doc is newer than the one this session opened or last
+// saved. If it is and it differs from doc, it is saved as a named version (nothing is lost by the save
+// that follows) and the differences from doc to it are returned with the version's key; otherwise key is "".
+func (s *Session) keepElsewhere(ctx context.Context, target string, c docfile.Codec, doc docfile.Document) (changes []docdiff.Change, key string) {
+	id := doc.ID()
+	s.mu.Lock()
+	base := s.base
+	s.mu.Unlock()
+	if id == "" || base.IsZero() {
+		return nil, ""
+	}
+	cur, err := s.Saver.Get(ctx, target, id)
+	if err != nil || !cur.Updated.After(base) {
+		return nil, ""
+	}
+	theirs, _, err := s.Saver.LoadChecked(ctx, target, id)
+	if err != nil {
+		return nil, ""
+	}
+	changes = docdiff.Compare(theirs, doc)
+	if !docdiff.Summarize(changes).Changed() {
+		return nil, ""
+	}
+	v, err := s.Saver.SaveVersionBy(ctx, target, c, theirs, "")
+	if err != nil {
+		return nil, ""
+	}
+	_ = s.Saver.RenameVersion(ctx, target, v.Key, elsewhereVersion)
+	return changes, v.Key
 }
 
 // SaveAsNew saves the current document as a new document, with a new ID, leaving
@@ -511,7 +554,7 @@ func (s *Session) Open(ctx context.Context, id string) error {
 		s.remember(id, name, doc.Tags())
 	}
 	s.set(func() {
-		s.id, s.name, s.folder = id, name, e.Folder // show where it is
+		s.id, s.name, s.folder, s.base = id, name, e.Folder, e.Updated // show where it is
 		if e.Format != nil {
 			s.format = e.Format.Name()
 		}

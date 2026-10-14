@@ -779,6 +779,7 @@
   "collab.merged#other": "%d Änderungen wurden zusammengeführt.",
   "collab.rejectedOne": "Eine Änderung konnte nicht übernommen werden.",
   "collab.rejectedMany": "%d Änderungen konnten nicht übernommen werden.",
+  "saver.savedOverNewer": "%s gespeichert. Es hat eine neuere, anderswo gespeicherte Kopie ersetzt; diese Kopie bleibt als Version erhalten und wird unter Versionen mit Ihrer verglichen",
   "collab.someone": "Jemand",
   "collab.conflictOne": "%s hat den Absatz geändert, den Sie bearbeitet haben. Beide Änderungen wurden behalten.",
   "collab.conflictSome": "%d Personen haben den Absatz geändert, den Sie bearbeitet haben. Alle Änderungen wurden behalten.",
