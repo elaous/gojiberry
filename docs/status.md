@@ -54,7 +54,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 67 | Read aloud | feature | partial | selection or document aloud with pause, speed, highlighted sentence in the bar | sentence highlight on the canvas, word-level highlight, choosing a network voice on purpose |
 | 68 | Captions and transcripts | feature | partial | media model, caption/transcript fields, checker rules, exports (HTML embeds the clip with a caption track and the transcript; the other formats write the link and the transcript) | insert-clip UI in the showcase and a caption track editor (the canvas has no media object, so a clip opens as text) |
 | 69 | Accessibility as a release gate | chore | blocked | axe checks in the browser tests, test screen reader on the accessibility tree, manual script, five more examples under the gate (style editor, components gallery, editor app, passkey, people keys) | first manual run (blocked) |
-| 70 | Version history UI | feature | partial | timeline, names, diff, restore | permission and encryption checks |
+| 70 | Version history UI | feature | done | timeline, names, diff, restore, access follows the document's list, snapshots as sealed as the document | none (names and authors in `meta.json` are plain metadata, as the document's own name is) |
 | 71 | Comments, suggestions, tracked changes | feature | partial | threads, resolve and reopen, suggestions with accept and reject, in the mirror, tracked changes in DOCX (export and import), two people proposing converge in the model | mentions that do not leak addresses; two people proposing, driven through two real browsers |
 | 72 | Import and export fidelity | feature | partial | DOCX, Markdown, RTF, EPUB, HTML and PDF exporters; DOCX, HTML and ODT importers; ODT exporter (with its contents index); fidelity report per format shown in the Files tab | a corpus of real documents; the report kept with the document; the ODT files opened in LibreOffice |
 | 73 | Search and replace | feature | done | `docsearch` (sealed index, kept incrementally as sealed changes after a base), `PlanReplace`, search across documents in the showcase | none |
@@ -122,7 +122,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 
 ## Counts
 
-Product table (items 48 to 84, 32 rows): 13 done, 15 partial, 4 blocked (49, 50, 69, 83: all that is left is a person's work) ("done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent). None is untouched. The server and
+Product table (items 48 to 84, 32 rows): 14 done, 14 partial, 4 blocked (49, 50, 69, 83: all that is left is a person's work) ("done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent). None is untouched. The server and
 security table: the review findings are done; still open are the per-account sign-in budget and the shared lock
 (passkey backlog 4 and 5) and log witnesses (limits 12); 41 is blocked on a provider.
 
