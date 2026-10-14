@@ -1,0 +1,14 @@
+/* ThemeEditor stylesheet for github.com/elaous/gojiberry/components.
+   Requires base.css for shared tokens (--gj-*). */
+
+.gj-theme { display: flex; flex-direction: column; gap: 0.5em; }
+.gj-theme-colour { display: flex; align-items: flex-end; gap: 0.5em; }
+.gj-theme-colour .gj-theme-row { flex: 1; }
+.gj-theme-row { display: flex; flex-direction: column; gap: 0.2em; font-size: 0.85em; }
+.gj-theme-input { padding: 0.3em 0.5em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); font: inherit; font-family: monospace; }
+.gj-theme-input[aria-invalid="true"] { border-color: var(--gj-danger, #b3261e); border-width: 2px; }
+.gj-theme-swatch { flex: none; width: 1.8em; height: 1.8em; margin-bottom: 0.1em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); }
+.gj-theme-problems { color: var(--gj-danger, #b3261e); font-size: 0.85em; }
+.gj-theme-problems p, .gj-theme-problems ul { margin: 0.2em 0; }
+.gj-theme-ok { margin: 0.2em 0; font-size: 0.85em; color: var(--gj-muted); }
+.gj-theme-sample { border: 1px solid var(--gj-border); border-radius: var(--gj-radius); }
