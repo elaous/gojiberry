@@ -45,7 +45,7 @@ func TestTotalsSurviveARestart(t *testing.T) {
 	if err := second.KeepIn(path); err != nil {
 		t.Fatalf("second start: %v", err)
 	}
-	defer second.Close(context.Background())
+	defer func() { _ = second.Close(context.Background()) }()
 	if got := errorsCount(second); got != 2 {
 		t.Fatalf("the count after a restart is %d, want 2", got)
 	}
@@ -87,7 +87,7 @@ func TestADamagedStateFileStartsTheTotalsAgain(t *testing.T) {
 	}
 	b := NewBuiltin()
 	err := b.KeepIn(path)
-	defer b.Close(context.Background())
+	defer func() { _ = b.Close(context.Background()) }()
 	if err == nil || errorsCount(b) != 0 {
 		t.Fatalf("err=%v count=%d", err, errorsCount(b))
 	}
