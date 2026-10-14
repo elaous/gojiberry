@@ -15,6 +15,9 @@ type Extract func(data []byte) (title, text string, err error)
 // Result says what Refresh did.
 type Result struct {
 	Added, Updated, Removed, Unchanged int
+	// Changed are the ids of the documents that were added or updated, Gone those dropped (removed from the
+	// store, or no longer readable): what Index.DeltaFor turns into a small sealed record of the change.
+	Changed, Gone []string
 	// Skipped are the ids that could not be read or understood; they are not in the index.
 	Skipped []string
 }
@@ -53,12 +56,16 @@ func Refresh(ctx context.Context, ix *Index, store docstore.Adapter, extract Ext
 		}
 		title, text, err := extract(d.Data)
 		if err != nil {
+			if _, had := ix.docs[m.ID]; had {
+				r.Gone = append(r.Gone, m.ID)
+			}
 			delete(ix.docs, m.ID) // never keep stale text for a document that no longer reads
 			r.Skipped = append(r.Skipped, m.ID)
 			continue
 		}
 		ix.Add(m.ID, title, text)
 		ix.docs[m.ID].Updated = stamp
+		r.Changed = append(r.Changed, m.ID)
 		if known {
 			r.Updated++
 		} else {
@@ -69,6 +76,7 @@ func Refresh(ctx context.Context, ix *Index, store docstore.Adapter, extract Ext
 		if !live[id] {
 			delete(ix.docs, id)
 			r.Removed++
+			r.Gone = append(r.Gone, id)
 		}
 	}
 	return r, nil
