@@ -54,7 +54,7 @@ func hexColour(v string) string {
 			h = string([]byte{h[0], h[0], h[1], h[1], h[2], h[2]})
 		}
 		for _, c := range h {
-			if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 				return ""
 			}
 		}
