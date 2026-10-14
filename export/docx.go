@@ -21,7 +21,7 @@ import (
 type DOCX struct{}
 
 const (
-	docxNS      = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"`
+	docxNS      = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"`
 	docxEMU     = 9525
 	docxMaxEMU  = 6 * 914400 // six inches: a picture is scaled to fit the text width
 	docxHeading = "Heading"
@@ -382,6 +382,15 @@ func (b *docxBuilder) block(blk Block) {
 			w.WriteString(`<w:p><w:r><w:rPr><w:i/></w:rPr><w:t>[Image]</w:t></w:r></w:p>`)
 		}
 		return
+	case Paragraph:
+		if blk.Equation != "" {
+			// Word and LibreOffice typeset it as an equation and read it out themselves. Office Math has no field
+			// for the words that stand for it, so they follow as hidden text (every format carries them, and
+			// docximport reads them back as the equation's alternative).
+			w.WriteString(`<w:p><m:oMathPara>` + OMML(blk.Equation) + `</m:oMathPara>` +
+				`<w:r><w:rPr><w:vanish/></w:rPr><w:t xml:space="preserve">` + esc(plainTextInline(blk.Segments)) + `</w:t></w:r></w:p>`)
+			return
+		}
 	case Code:
 		var sb strings.Builder
 		for i, line := range strings.Split(rawCodeText(blk.Segments), "\n") {

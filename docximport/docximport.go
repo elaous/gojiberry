@@ -610,6 +610,9 @@ func (r *reader) paragraph(p *node) {
 		r.add(docfile.Item{Para: &para})
 	}
 	r.runs(p.kids, docfile.Format{}, info)
+	if c := r.doc.Content; len(c) > 0 && c[len(c)-1].Equation != nil {
+		return // an equation is a line of its own: no empty line after it
+	}
 	r.text("\n", docfile.Format{})
 }
 
@@ -648,6 +651,15 @@ func (r *reader) runs(kids []*node, inherit docfile.Format, info paraInfo) {
 			}
 			continue
 		case "r":
+			// Hidden text right after an equation is the words that stand for it (what the exporter writes).
+			if rpr := k.child("rPr"); rpr != nil && rpr.child("vanish") != nil {
+				if c := r.doc.Content; len(c) > 0 && c[len(c)-1].Equation != nil {
+					if alt := strings.TrimSpace(plainText(k)); alt != c[len(c)-1].Equation.Formula {
+						c[len(c)-1].Equation.Alt = alt
+					}
+					continue
+				}
+			}
 			r.run(k, inherit, info)
 		case "hyperlink":
 			f := inherit
@@ -659,8 +671,25 @@ func (r *reader) runs(kids []*node, inherit docfile.Format, info paraInfo) {
 			r.runs(k.kids, f, info)
 		case "smartTag", "sdt", "sdtContent", "fldSimple":
 			r.runs(k.kids, inherit, info)
+		case "oMathPara", "oMath":
+			r.equation(k)
 		}
 	}
+}
+
+// equation reads an Office Math equation into an equation item of its own line: the formula in the linear
+// notation (with no alternative text of its own: the formula stands for it).
+func (r *reader) equation(m *node) {
+	formula := linearFormula(m)
+	if formula == "" {
+		return
+	}
+	if c := r.doc.Content; len(c) > 0 {
+		if last := c[len(c)-1].Chars; last != nil && last.Text != "" && !strings.HasSuffix(last.Text, "\n") {
+			r.text("\n", docfile.Format{}) // the equation starts a line of its own
+		}
+	}
+	r.add(docfile.Item{Equation: &docfile.EquationItem{Formula: formula}})
 }
 
 func on(n *node) bool {

@@ -17,7 +17,6 @@ type Skipped struct {
 	HeaderFoots int // headers and footers that hold text
 	TextBoxes   int // text boxes: their text is not read
 	Drawings    int // shapes, charts and diagrams that are not pictures
-	Equations   int // Office Math equations (their text is not read)
 	Endnotes    int // endnote references (only footnotes are read)
 	Fields      int // fields (page number, cross reference, contents): their last shown text stays, the field is gone
 	Bookmarks   int // bookmarks (links to one are kept as "#name", the place they point at is not)
@@ -27,7 +26,7 @@ type Skipped struct {
 
 // Total is the number of skipped elements.
 func (s Skipped) Total() int {
-	return s.Comments + s.HeaderFoots + s.TextBoxes + s.Drawings + s.Equations + s.Endnotes + s.Fields + s.Bookmarks + s.Columns + s.Layout
+	return s.Comments + s.HeaderFoots + s.TextBoxes + s.Drawings + s.Endnotes + s.Fields + s.Bookmarks + s.Columns + s.Layout
 }
 
 // Inspect counts what Import would leave out of a .docx file. It reads the same parts under the same limits, and
@@ -74,8 +73,7 @@ func (s *Skipped) scan(n *node) {
 			}
 			continue // what is inside a shape is not the document's text
 		case "oMath", "oMathPara":
-			s.Equations++
-			continue
+			continue // read as an equation (omml.go), so not counted as left out
 		case "endnoteReference":
 			s.Endnotes++
 		case "fldSimple":

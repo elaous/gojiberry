@@ -330,7 +330,7 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 				if !bytes.HasSuffix(atTrim, []byte(">>")) {
 					return nil, fmt.Errorf("export: tagging the PDF: annotation %d has an unexpected shape", annots[i])
 				}
-				l.annot, l.key, l.href = annots[i], nextKey, "()"
+				l.annot, l.key, l.href = annots[i], nextKey, "(Footnote)" // an internal link has no /URI: it goes to a footnote or back
 				nextKey++
 				if um := uriRE.FindStringSubmatch(at); um != nil {
 					l.href = um[1]

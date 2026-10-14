@@ -39,6 +39,9 @@ type Format struct {
 	// NoteRef is the number of the footnote this run is the mark of (0 for none): the exports that can
 	// link the mark to its note, and the note back to the mark, do so.
 	NoteRef int
+	// NoteBack is the number of the footnote a run at the end of its note links back to (0 for none): the PDF
+	// draws it as a small link to the mark. FromDocument sets it; the other formats link back their own way.
+	NoteBack int
 	// Lang is the run's language tag, "" for the document's own.
 	Lang string
 	// Change says the run is a suggested change not yet accepted or rejected (see FromDocumentTracked): text
