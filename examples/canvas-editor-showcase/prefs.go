@@ -114,7 +114,7 @@ func setPrefs(p prefs) {
 	curPrefs = p
 	applyPrefs(p)
 	if p.Lang != "" {
-		setLocale(matchLocale(p.Lang))
+		useLocale(p.Lang)
 	}
 	if onPrefs != nil {
 		onPrefs()
