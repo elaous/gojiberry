@@ -151,6 +151,10 @@ type TextFlow struct {
 	Text  string
 	Items []Item
 	Style TextStyle
+	// TextScale multiplies the size and line height of every run (1 or 0 leave them as they are): a person's
+	// text-size setting applied to the whole text, whatever sizes its runs have. The layout is worked out again
+	// when it changes.
+	TextScale float64
 
 	// Transform, if set, turns Source into the content (Items and Text
 	// are then ignored): see Transform and Markdown. The result is

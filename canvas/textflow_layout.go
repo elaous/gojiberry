@@ -80,6 +80,13 @@ func (f *TextFlow) flatten() *flowData {
 				}
 				st.FontSize *= 0.8
 			}
+			if k := f.TextScale; k > 0 && k != 1 {
+				if st.FontSize <= 0 {
+					st.FontSize = 16
+				}
+				st.FontSize *= k
+				st.LineHeight *= k
+			}
 			d.styles = append(d.styles, st)
 			d.formats = append(d.formats, fm)
 		}
