@@ -1,7 +1,9 @@
 package export
 
 import (
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -145,6 +147,8 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 				} else {
 					body.WriteString("<figure>\n" + img + "<figcaption>" + escapeHTMLText(b.ImageCaption) + "</figcaption>\n</figure>\n")
 				}
+			case MediaClip:
+				body.WriteString(htmlMedia(b, snap.Lang))
 			case TableCell:
 				// A real <table>, unlike Markdown/PlainText's own
 				// placeholder-turned-pipe-table/ASCII-grid: HTML natively
@@ -379,4 +383,55 @@ func langAttrs(lang string, xhtml bool) string {
 		a += ` xml:lang="` + escapeHTMLAttr(lang) + `"`
 	}
 	return a
+}
+
+// htmlMedia is an audio or video clip: the player with its caption track, the title as a caption, and the
+// transcript under it for a reader who cannot (or would rather not) play it. An address that is not safe to
+// link to leaves the player without a source, but the title and the transcript stay.
+func htmlMedia(b Block, lang string) string {
+	tag := "video"
+	if b.MediaKind == "audio" {
+		tag = "audio"
+	}
+	var sb strings.Builder
+	sb.WriteString("<figure class=\"media\">\n<" + tag + " controls")
+	if b.MediaURL != "" && safeHref(b.MediaURL) {
+		sb.WriteString(" src=\"" + escapeHTMLAttr(b.MediaURL) + "\"")
+	}
+	if tag == "video" && b.MediaW > 0 && b.MediaH > 0 {
+		sb.WriteString(fmt.Sprintf(" width=\"%d\" height=\"%d\"", int(b.MediaW), int(b.MediaH)))
+	}
+	if b.MediaTitle != "" {
+		sb.WriteString(" aria-label=\"" + escapeHTMLAttr(b.MediaTitle) + "\"")
+	}
+	sb.WriteString(">\n")
+	track := ""
+	switch {
+	case strings.TrimSpace(b.MediaCaptions) != "":
+		track = "data:text/vtt;charset=utf-8;base64," + base64.StdEncoding.EncodeToString([]byte(b.MediaCaptions))
+	case b.MediaCaptionsURL != "" && safeHref(b.MediaCaptionsURL):
+		track = b.MediaCaptionsURL
+	}
+	if track != "" {
+		sb.WriteString("<track kind=\"captions\" label=\"Captions\"")
+		if lang != "" {
+			sb.WriteString(" srclang=\"" + escapeHTMLAttr(lang) + "\"")
+		}
+		sb.WriteString(" src=\"" + escapeHTMLAttr(track) + "\" default>\n")
+	}
+	sb.WriteString("</" + tag + ">\n")
+	if b.MediaTitle != "" {
+		sb.WriteString("<figcaption>" + escapeHTMLText(b.MediaTitle) + "</figcaption>\n")
+	}
+	if t := strings.TrimSpace(b.MediaTranscript); t != "" {
+		sb.WriteString("<details>\n<summary>Transcript</summary>\n")
+		for _, para := range strings.Split(t, "\n") {
+			if para = strings.TrimSpace(para); para != "" {
+				sb.WriteString("<p>" + escapeHTMLText(para) + "</p>\n")
+			}
+		}
+		sb.WriteString("</details>\n")
+	}
+	sb.WriteString("</figure>\n")
+	return sb.String()
 }

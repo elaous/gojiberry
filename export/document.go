@@ -35,14 +35,18 @@ type line struct {
 // FromDocument turns a saved document into the format-agnostic Snapshot the
 // exporters read: one Block per paragraph (heading, list item, quote, code),
 // table cell or image, with character formatting as Segments.
-func FromDocument(d docfile.Document) Snapshot { return fromDocument(acceptedView(d)) }
+func FromDocument(d docfile.Document) Snapshot { return fromDocument(acceptedView(d), false) }
 
 // FromDocumentTracked is FromDocument that keeps the suggested changes: a run proposed to be added has
 // Format.Change Inserted and one proposed to be removed has Deleted (with who and when), for a format that
 // can show them (HTML, EPUB and Word write them as insertions and deletions). FromDocument shows the
 // document as it would be with every suggestion accepted, which is what a format that cannot show
 // them (plain text, Markdown, PDF, RTF) writes, so struck text never reaches a file that cannot strike it.
-func FromDocumentTracked(d docfile.Document) Snapshot { return fromDocument(d) }
+func FromDocumentTracked(d docfile.Document) Snapshot { return fromDocument(d, false) }
+
+// FromDocumentWithMedia is FromDocumentTracked for a format that can embed audio and video (HTML): clips stay
+// clips (MediaClip blocks) instead of becoming a link with the transcript as text.
+func FromDocumentWithMedia(d docfile.Document) Snapshot { return fromDocument(d, true) }
 
 // acceptedView is the document with every suggestion accepted: text proposed to be removed is gone and text
 // proposed to be added is ordinary text.
@@ -74,8 +78,10 @@ func acceptedView(d docfile.Document) docfile.Document {
 	return out
 }
 
-func fromDocument(d docfile.Document) Snapshot {
-	d = d.MediaAsText() // no format plays a clip: it is written as a link with its transcript as text
+func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
+	if !keepMedia {
+		d = d.MediaAsText() // a format that cannot embed a clip writes it as a link with its transcript as text
+	}
 	snap := Snapshot{
 		Title:     d.Title,
 		PageWidth: defaultPageWidth, PageHeight: defaultPageHeight,
@@ -148,6 +154,13 @@ func fromDocument(d docfile.Document) Snapshot {
 				after = append(after, Block{Start: -1, Kind: Paragraph, DescribesImage: true, Segments: []Segment{{Text: d}}})
 			}
 			lines = append(lines, line{start: pos, after: after})
+			pos++
+			cur.start = pos
+		case it.Media != nil:
+			pending()
+			m := it.Media
+			lines = append(lines, line{start: pos, after: []Block{{Start: pos, Kind: MediaClip, MediaURL: m.URL, MediaKind: m.KindName(),
+				MediaTitle: m.Title, MediaCaptions: m.Captions, MediaCaptionsURL: m.CaptionsURL, MediaTranscript: m.Words(), MediaW: m.Width, MediaH: m.Height}}})
 			pos++
 			cur.start = pos
 		case it.Equation != nil:

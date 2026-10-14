@@ -18,6 +18,7 @@ const (
 	Code
 	Image
 	TableCell
+	MediaClip // an audio or video clip, written only by the formats that can embed one (HTML)
 )
 
 // Format is one character run's own formatting -- editor's own
@@ -110,6 +111,10 @@ type Block struct {
 	// (written as an empty alt, left out of the reading copy).
 	ImageAlt        string
 	ImageDecorative bool
+	// For a MediaClip: where the clip is, its kind ("audio" or "video"), its title, a caption track as WebVTT text
+	// or its address, its transcript and the size of a video.
+	MediaURL, MediaKind, MediaTitle, MediaCaptions, MediaCaptionsURL, MediaTranscript string
+	MediaW, MediaH                                                                    float64
 	// TableRow/TableCol are this cell's own zero-based grid position;
 	// TableRows/TableCols are the whole table's own shape, carried on
 	// every cell (mirroring model.BlockMeta's own reasoning, see that

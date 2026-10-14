@@ -17,10 +17,15 @@ type formatExporter struct {
 	// tracked says the format can show suggested changes (as insertions and deletions); the others
 	// write the document as it would be with every suggestion accepted.
 	tracked bool
+	// media says the format embeds audio and video (HTML); the others write a clip as text.
+	media bool
 }
 
 func (f formatExporter) Format() transfer.Format { return f.format }
 func (f formatExporter) Export(d docfile.Document) ([]byte, error) {
+	if f.media {
+		return f.e.Export(FromDocumentWithMedia(d))
+	}
 	if f.tracked {
 		return f.e.Export(FromDocumentTracked(d))
 	}
@@ -81,12 +86,12 @@ func RegisterAccepted(r *transfer.Registry) {
 func Register(r *transfer.Registry) {
 	RegisterAccepted(r)
 	for _, f := range []formatExporter{
-		{transfer.Format{Name: "html", Label: "Web page (HTML)", Exts: []string{".html"}, MIME: "text/html"}, HTML{}, true},
-		{transfer.Format{Name: "rtf", Label: "Rich Text Format", Exts: []string{".rtf"}, MIME: "application/rtf"}, RTF{}, false},
-		{transfer.Format{Name: "epub", Label: "E-book (EPUB)", Exts: []string{".epub"}, MIME: "application/epub+zip"}, EPUB{}, true},
-		{transfer.Format{Name: "pdf", Label: "PDF", Exts: []string{".pdf"}, MIME: "application/pdf"}, PDF{}, false},
-		{transfer.Format{Name: "odt", Label: "OpenDocument text (.odt)", Exts: []string{".odt"}, MIME: "application/vnd.oasis.opendocument.text"}, ODT{}, false},
-		{transfer.Format{Name: "docx", Label: "Word (.docx)", Exts: []string{".docx"}, MIME: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}, DOCX{}, true},
+		{transfer.Format{Name: "html", Label: "Web page (HTML)", Exts: []string{".html"}, MIME: "text/html"}, HTML{}, true, true},
+		{transfer.Format{Name: "rtf", Label: "Rich Text Format", Exts: []string{".rtf"}, MIME: "application/rtf"}, RTF{}, false, false},
+		{transfer.Format{Name: "epub", Label: "E-book (EPUB)", Exts: []string{".epub"}, MIME: "application/epub+zip"}, EPUB{}, true, false},
+		{transfer.Format{Name: "pdf", Label: "PDF", Exts: []string{".pdf"}, MIME: "application/pdf"}, PDF{}, false, false},
+		{transfer.Format{Name: "odt", Label: "OpenDocument text (.odt)", Exts: []string{".odt"}, MIME: "application/vnd.oasis.opendocument.text"}, ODT{}, false, false},
+		{transfer.Format{Name: "docx", Label: "Word (.docx)", Exts: []string{".docx"}, MIME: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}, DOCX{}, true, false},
 	} {
 		r.AddExporter(f)
 	}
