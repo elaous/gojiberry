@@ -204,6 +204,7 @@ showcase-dist:
 	cd examples/canvas-editor-showcase && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o $(abspath $(SHOWCASE_DIST))/main.wasm .
 	cd examples/canvas-editor-showcase && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o $(abspath $(SHOWCASE_DIST))/files.wasm ./files
 	cp examples/canvas-editor-showcase/index.html examples/canvas-editor-showcase/files-worker.js $(SHOWCASE_DIST)/
+	cp examples/canvas-editor-showcase/static/* $(SHOWCASE_DIST)/
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" $(SHOWCASE_DIST)/wasm_exec.js
 	go run ./cmd/wasmdist $(SHOWCASE_DIST)
 
