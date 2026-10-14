@@ -118,6 +118,7 @@ variable and never repeats the value.
 | `GOJIBERRY_OBS` | `on` or `off`. **Default off; unset is off, and unsetting it is the kill switch.** While off, no sink is built, no secret file is read and nothing is sent; the other `GOJIBERRY_OBS_*` variables are ignored (the server says so in its log). |
 | `GOJIBERRY_OBS_SINKS` | Where the operator metrics and traces go, comma separated: `builtin`, `otlp`, `posthog`. Default `builtin`. |
 | `GOJIBERRY_OBS_USAGE_SINKS` | Where the browsers' usage counts are also sent, besides the admin pages that always have them: `otlp`, `posthog` (`builtin` is accepted and changes nothing). Default none. |
+| `GOJIBERRY_OBS_STATE` | A file the `builtin` totals are kept in across restarts (see below). Default none. |
 | `GOJIBERRY_OBS_TRACE_SAMPLE` | Share of requests that get a trace, from `0` to `1`. Default `0.1`. |
 
 ### PostHog
@@ -174,7 +175,7 @@ GOJIBERRY_OBS=on
 GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN=...   # the admin guard
 ```
 
-Nothing leaves the server. `GET /admin/observe` shows the totals in memory (a restart starts them again).
+Nothing leaves the server. `GET /admin/observe` shows the totals in memory. With `GOJIBERRY_OBS_STATE` naming a file, the `builtin` sink keeps them there as well: it reads the file at start, writes it every five minutes and when the server stops (beside its name, then renamed, mode 0600), so a crash loses at most five minutes. The file holds what the page shows and nothing more (series of closed names and label values, and span counts and times); at start it is checked against the allowlist again, and a file that is damaged, has an unknown field, a metric or label value off the list or a bad number is refused whole, the server says so and the totals start again. Without the variable they start from zero at every start, as before.
 
 ## The other servers
 
@@ -194,4 +195,4 @@ up to ten seconds, then flushes and closes every sink, so the last counts are se
 
 ## Not done yet
 
-Persistent builtin totals are not built. The servers other than the docstore count requests only; their own work (hub rooms, sync merges, font scans, translation calls) has no metrics yet.
+The servers other than the docstore count requests only; their own work (hub rooms, sync merges, font scans, translation calls) has no metrics yet.
