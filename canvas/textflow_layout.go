@@ -71,6 +71,9 @@ func (f *TextFlow) flatten() *flowData {
 			id = len(d.styles)
 			styleID[k] = id
 			st := f.expand(paraBase, fm).resolve(f.Style)
+			if fm.Link != "" && f.LinkColor != "" && f.expand(paraBase, fm).Color == "" {
+				st.Color = f.LinkColor
+			}
 			if fm.Proposal != "" {
 				proposalStyle(&st, fm.Proposal)
 			}

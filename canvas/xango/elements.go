@@ -92,6 +92,8 @@ type TextFlowProps struct {
 	StrongCaret bool
 	// PeerPalette recolours the remote cursors (see canvas.TextFlow.PeerPalette).
 	PeerPalette []string
+	// Theme is the document theme the canvas draws (nil: the canvas's own colours).
+	Theme *canvas.FlowTheme
 	// Comments are the comments Format.Comment refers to (share the set
 	// with the DOM side to list them); Author is who new ones are by.
 	Comments *canvas.CommentSet

@@ -155,6 +155,9 @@ type TextFlow struct {
 	// text-size setting applied to the whole text, whatever sizes its runs have. The layout is worked out again
 	// when it changes.
 	TextScale float64
+	// LinkColor is the colour of linked text whose format names none ("" the default, LinkColor). A document
+	// theme sets it (see FlowTheme).
+	LinkColor string
 	// StrongCaret draws the caret thicker, dark with a light edge, and the selection in a stronger tint: for
 	// people who lose sight of the thin default caret (the high-contrast setting turns it on).
 	StrongCaret bool

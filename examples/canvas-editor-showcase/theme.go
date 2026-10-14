@@ -3,6 +3,7 @@
 package main
 
 import (
+	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/tokens"
@@ -36,6 +37,16 @@ func (u *ui) themeInto(d *docfile.Document) {
 	}
 }
 
+// canvasTheme is what the sheets are drawn in: the theme when there is one that can be read comfortably, else
+// nothing (the canvas's own colours).
+func (u *ui) canvasTheme() *canvas.FlowTheme {
+	if !u.theme.on || len(u.theme.set.Validate()) > 0 {
+		return nil
+	}
+	c := u.theme.set.Colors
+	return &canvas.FlowTheme{Text: c[tokens.Text], Background: c[tokens.Background], Link: c[tokens.Link]}
+}
+
 // loadTheme takes the theme of an opened document (none: the default, switched off).
 func (u *ui) loadTheme(d docfile.Document) {
 	u.theme = themeState{}
@@ -47,16 +58,24 @@ func (u *ui) loadTheme(d docfile.Document) {
 }
 
 // themePanel is the theme editor of the Styles tab.
-func themePanel(u *ui, renderUI func()) xango.Node {
-	return components.ThemeEditor(components.ThemeEditorProps{
+func themePanel(u *ui, state *State, renderCanvas, renderUI func()) xango.Node {
+	apply := func() {
+		state.Theme = u.canvasTheme()
+		renderCanvas()
+		renderUI()
+	}
+	return xango.Frag(components.ThemeEditor(components.ThemeEditorProps{
 		Set: u.theme.current(),
 		OnChange: func(s tokens.Set) {
 			u.theme.set, u.theme.on = s, true
-			renderUI()
+			apply()
 		},
 		OnReset: func() {
 			u.theme = themeState{}
-			renderUI()
+			apply()
 		},
-	})
+	}), u.themeLibrary(func(s tokens.Set) {
+		u.theme.set, u.theme.on = s, true
+		apply()
+	}, renderUI))
 }
