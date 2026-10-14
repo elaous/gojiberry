@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/elaous/gojiberry/auth"
@@ -338,7 +339,8 @@ type Server struct {
 	// usage is the bounded series of the usage counters (usageseries.go); usageClock replaces
 	// time.Now in tests.
 	usage      usageSeries
-	usageOnce  sync.Once // the stored series is read into usage on first use
+	usageOnce  sync.Once   // the stored series is read into usage on first use
+	sampling   atomic.Bool // RunUsageSampling is running (a second call returns at once)
 	usageClock func() time.Time
 	// docsClosed answers 404 to the generic API (see CloseDocs).
 	docsClosed bool

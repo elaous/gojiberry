@@ -639,6 +639,11 @@ func Main() {
 	if err := withDirectory(context.Background(), srv, adapter, limiters); err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
+	if obs.Enabled() {
+		// The store-size gauges (documents, records, bytes) and the usage history are sampled hourly whenever operator
+		// observability is on, not only when the admin token that reads the history is set.
+		go srv.RunUsageSampling(context.Background(), time.Hour)
+	}
 	withTelemetry(srv, os.Getenv("GOJIBERRY_DOCSTORE_TELEMETRY"))
 	if err := withTelemetryNoise(srv, os.Getenv("GOJIBERRY_DOCSTORE_TELEMETRY_NOISE")); err != nil {
 		log.Fatalf("docstore: %v", err)
