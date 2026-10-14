@@ -32,7 +32,7 @@ type suggestState struct {
 	flow func() *canvas.TextFlow
 	// reopen opens the list at the caret (set in main); quiet says nothing when there is nothing to offer.
 	reopen func(quiet bool)
-	timer  bool // a delayed automatic open is waiting
+	gen    int // bumped by every key: a delayed automatic open is for the key it was asked after, and only that one
 }
 
 func (u *ui) suggestionsNode(renderUI func()) xango.Node {
@@ -190,11 +190,12 @@ func (u *ui) watchSuggestionKeys(in js.Value, flow func() *canvas.TextFlow, redr
 			if k := args[0].Get("key").String(); ghostOn() && u.ghost.refresh != nil && !args[0].Get("isComposing").Truthy() && (len(k) == 1 || k == "Backspace" || k == "Delete") {
 				u.ghost.refresh()
 			}
-			if curPrefs.Suggest == "auto" && u.sugg.reopen != nil && !u.sugg.timer && len(args[0].Get("key").String()) == 1 && !args[0].Get("isComposing").Truthy() {
-				u.sugg.timer = true
+			// "After a pause in typing": every key restarts the wait, and a key that is not a letter (an arrow, say)
+			// cancels it, so the list never opens for a word the caret has left.
+			u.sugg.gen++
+			if gen := u.sugg.gen; curPrefs.Suggest == "auto" && u.sugg.reopen != nil && len(args[0].Get("key").String()) == 1 && !args[0].Get("isComposing").Truthy() {
 				time.AfterFunc(600*time.Millisecond, func() {
-					u.sugg.timer = false
-					if !u.sugg.list.Open && curPrefs.Suggest == "auto" {
+					if u.sugg.gen == gen && !u.sugg.list.Open && curPrefs.Suggest == "auto" {
 						u.sugg.reopen(true)
 					}
 				})

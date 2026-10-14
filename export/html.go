@@ -110,6 +110,11 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 	}
 
 	for bi, b := range snap.Blocks {
+		if bi > 0 && snap.tocHere(bi) && !xhtml {
+			// contents in the middle of the document (at the start they come before <main>)
+			closeAllLists()
+			body.WriteString(htmlTOC(snap))
+		}
 		id := ""
 		if snap.TOC && !xhtml {
 			id = " id=\"" + tocAnchor(bi) + "\""
@@ -262,6 +267,9 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 		body.WriteString("<li>" + htmlInline(b.Segments, br))
 	}
 	closeAllLists()
+	if len(snap.Blocks) > 0 && snap.tocEnd() && !xhtml {
+		body.WriteString(htmlTOC(snap))
+	}
 
 	if xhtml {
 		return `<?xml version="1.0" encoding="UTF-8"?>` + "\n" +
@@ -272,7 +280,7 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 	}
 	return "<!doctype html>\n<html" + langAttrs(snap.Lang, false) + ">\n<head>\n<meta charset=\"utf-8\">\n<title>" +
 		escapeHTMLText(snap.Title) + "</title>\n" + themeStyle(theme) + htmlPrintStyle(snap) + "</head>\n<body>\n" +
-		htmlTOC(snap) + "<main>\n" + body.String() + "</main>\n</body>\n</html>\n"
+		htmlTOCAtStart(snap) + "<main>\n" + body.String() + "</main>\n</body>\n</html>\n"
 }
 
 // xhtmlThemeStyle is themeStyle for an XHTML page: the text of the style element must be well formed, so an

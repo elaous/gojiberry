@@ -214,7 +214,7 @@ func (b *odtBuilder) contents(snap Snapshot) {
 	if len(entries) == 0 {
 		return
 	}
-	b.marks = map[int]string{}
+	b.closeLists(0) // contents in the middle of a list end it
 	title := esc(snap.tocTitle())
 	var sb strings.Builder
 	depth, leaderChar := 3, "."
@@ -231,8 +231,7 @@ func (b *odtBuilder) contents(snap Snapshot) {
 	}
 	sb.WriteString(`</text:table-of-content-source><text:index-body><text:index-title text:name="Table_20_of_20_Contents1_Head"><text:p text:style-name="Contents_20_Heading">` + title + `</text:p></text:index-title>`)
 	for _, e := range entries {
-		name := "__Toc_" + strconv.Itoa(e.Block)
-		b.marks[e.Block] = name
+		name := b.marks[e.Block]
 		sb.WriteString(`<text:p text:style-name="Contents_20_` + strconv.Itoa(e.Level) + `"><text:a xlink:type="simple" xlink:href="#` + name + `">` + esc(e.Text) + `<text:tab/>–</text:a></text:p>`)
 	}
 	sb.WriteString(`</text:index-body></text:table-of-content>`)
@@ -360,9 +359,12 @@ func (ODT) Export(snap Snapshot) ([]byte, error) {
 			b.notes[blk.Note] = strings.TrimSpace(sb.String())
 		}
 	}
-	b.contents(snap)
+	b.marks = tocMarks(snap, func(block int) string { return "__Toc_" + strconv.Itoa(block) })
 	tables := 0
 	for i := 0; i < len(snap.Blocks); i++ {
+		if snap.tocHere(i) {
+			b.contents(snap)
+		}
 		blk := snap.Blocks[i]
 		b.cur = i
 		if blk.Note > 0 {
@@ -383,6 +385,9 @@ func (ODT) Export(snap Snapshot) ([]byte, error) {
 		b.block(blk)
 	}
 	b.closeLists(0)
+	if snap.tocEnd() {
+		b.contents(snap)
+	}
 	if b.body.Len() == 0 {
 		b.body.WriteString(`<text:p text:style-name="Standard"/>`)
 	}
