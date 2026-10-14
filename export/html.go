@@ -31,10 +31,18 @@ func (h HTML) Export(snap Snapshot) ([]byte, error) {
 		return nil, errors.New("export: the HTML theme is not a plain :root block of custom properties")
 	}
 	theme := h.Theme
-	if theme == "" && safeThemeCSS(snap.Theme) {
-		theme = snap.Theme // the document's own, when it is safe; a stored file cannot make the export fail with it
+	if theme == "" {
+		theme = safeSnapTheme(snap) // the document's own, when it is safe; a stored file cannot make the export fail with it
 	}
 	return []byte(renderHTMLDocument(snap, false, theme)), nil
+}
+
+// safeSnapTheme is the snapshot's theme when it is a plain :root block, else "".
+func safeSnapTheme(snap Snapshot) string {
+	if snap.Theme != "" && safeThemeCSS(snap.Theme) {
+		return snap.Theme
+	}
+	return ""
 }
 
 // themeRules use the tokens with a fallback each, so a theme that leaves one out still renders.
@@ -259,12 +267,18 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 		return `<?xml version="1.0" encoding="UTF-8"?>` + "\n" +
 			`<!DOCTYPE html>` + "\n" +
 			`<html xmlns="http://www.w3.org/1999/xhtml"` + langAttrs(snap.Lang, true) + `>` + "\n" +
-			"<head><meta charset=\"utf-8\"/><title>" + escapeHTMLText(snap.Title) + "</title></head>\n<body>\n" +
+			"<head><meta charset=\"utf-8\"/><title>" + escapeHTMLText(snap.Title) + "</title>\n" + xhtmlThemeStyle(theme) + "</head>\n<body>\n" +
 			body.String() + "</body>\n</html>\n"
 	}
 	return "<!doctype html>\n<html" + langAttrs(snap.Lang, false) + ">\n<head>\n<meta charset=\"utf-8\">\n<title>" +
 		escapeHTMLText(snap.Title) + "</title>\n" + themeStyle(theme) + htmlPrintStyle(snap) + "</head>\n<body>\n" +
 		htmlTOC(snap) + "<main>\n" + body.String() + "</main>\n</body>\n</html>\n"
+}
+
+// xhtmlThemeStyle is themeStyle for an XHTML page: the text of the style element must be well formed, so an
+// ampersand is written as an entity.
+func xhtmlThemeStyle(theme string) string {
+	return strings.ReplaceAll(themeStyle(theme), "&", "&amp;")
 }
 
 // themeStyle is the <style> element of a theme, or nothing.

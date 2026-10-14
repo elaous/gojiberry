@@ -107,7 +107,9 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 	if snap.Footer != "" {
 		layout += rtfDecor("footer", snap.Footer, snap.Title, contentWidthTwips) + "\n"
 	}
-	return []byte(`{\rtf1\ansi\deff0{\fonttbl{\f0 Helvetica;}{\f1 Courier New;}}\fs24` + "\n" +
+	th := themeOf(snap)
+	head, start := rtfThemeHead(th)
+	return []byte(`{\rtf1\ansi\deff0{\fonttbl{\f0 Helvetica;}{\f1 Courier New;}}` + head + `\fs` + rtfBodySize(th) + start + "\n" +
 		layout + body.String() + "}\n"), nil
 }
 
@@ -276,7 +278,7 @@ func wrapRTFRun(text string, f Format) string {
 		return `{\*\bkmkstart _fnref` + n + `}{\field{\*\fldinst HYPERLINK \\l _fn` + n + `}{\fldrslt ` + formatted + `}}{\*\bkmkend _fnref` + n + `}`
 	}
 	if f.Href != "" && safeHref(f.Href) {
-		return `{\field{\*\fldinst HYPERLINK "` + escapeRTFText(f.Href) + `"}{\fldrslt ` + formatted + `}}`
+		return `{\field{\*\fldinst HYPERLINK "` + escapeRTFText(f.Href) + `"}{\fldrslt \cf2 ` + formatted + `}}`
 	}
 	return formatted
 }
@@ -339,4 +341,34 @@ func escapeRTFText(s string) string {
 		}
 	}
 	return sb.String()
+}
+
+// rtfBodySize is the default font size in half-points: 24 (12pt), or the theme's body size.
+func rtfBodySize(th docTheme) string {
+	if th.bodyPt > 0 {
+		return strconv.Itoa(int(th.bodyPt*2 + 0.5))
+	}
+	return "24"
+}
+
+// rtfThemeHead is the colour table (text is colour 1, links colour 2: black and the usual blue unless the
+// theme names them) and the control word that starts the text in colour 1, which only a theme with a text
+// colour writes. Link results are set in colour 2.
+func rtfThemeHead(th docTheme) (table, start string) {
+	text, link := th.text, th.link
+	if text == "" {
+		text = "000000"
+	}
+	if link == "" {
+		link = "0563C1"
+	}
+	cw := func(hex string) string {
+		r, g, b := rgb(hex)
+		return fmt.Sprintf(`\red%d\green%d\blue%d;`, r, g, b)
+	}
+	table = `{\colortbl;` + cw(text) + cw(link) + `}`
+	if th.text != "" {
+		start = `\cf1`
+	}
+	return table, start
 }

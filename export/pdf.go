@@ -143,6 +143,7 @@ func renderPDF(snap Snapshot, outline []OutlineEntry, tocPages map[int]int) ([]b
 	pdfFlows.Store(&pdf, flow)
 	defer pdfFlows.Delete(&pdf)
 	pdf.SetMargins(pxToPt(snap.MarginLeft), pxToPt(snap.MarginTop), pxToPt(snap.MarginRight), pxToPt(snap.MarginBottom))
+	pdfApplyTheme(&pdf, themeOf(snap), pxToPt(w), pxToPt(h))
 	pdf.AddPage()
 
 	contentWidth := pxToPt(w) - pxToPt(snap.MarginLeft) - pxToPt(snap.MarginRight)
@@ -1018,4 +1019,21 @@ func pdfWidowBreak(pdf *gopdf.GoPdf, n int, lineHeight float64) int {
 		return -1 // already at the top of a page: nothing to gain by moving
 	}
 	return brk
+}
+
+// pdfApplyTheme sets the document's theme in the PDF: the text colour for everything drawn, and the page
+// colour as a filled rectangle that every page (the first, the contents page, those a long text overflows
+// onto) starts with. (Links are not coloured in the PDF: it draws no colour of its own anywhere else.)
+func pdfApplyTheme(pdf *gopdf.GoPdf, th docTheme, pageW, pageH float64) {
+	if th.background != "" {
+		r, g, b := rgb(th.background)
+		pdf.AddHeader(func() {
+			pdf.SetFillColor(r, g, b)
+			pdf.RectFromUpperLeftWithStyle(0, 0, pageW, pageH, "F")
+		})
+	}
+	if th.text != "" {
+		r, g, b := rgb(th.text)
+		pdf.SetTextColor(r, g, b)
+	}
 }
