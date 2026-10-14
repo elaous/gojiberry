@@ -192,16 +192,49 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return nil
 	}))
 
+	// Composition (an input method editor: Chinese, Japanese, Korean, accents by dead keys): while the person
+	// is composing, the input holds the preedit text and must be left alone; clearing it would end the
+	// composition. The text is inserted once, when the composition ends. Browsers differ in the order of the
+	// last "input" and "compositionend", so the text is taken from the input (or the event) at the end and
+	// the input is emptied, which leaves a later "input" with nothing to insert.
+	composing := false
+	insert := func(t string) {
+		if t != "" && s.InsertText(t) {
+			redraw()
+		}
+	}
+	input.AddEventListener("compositionstart", js.FuncOf(func(js.Value, []js.Value) any {
+		composing = true
+		return nil
+	}))
+	input.AddEventListener("compositionend", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		composing = false
+		t := input.GetValue()
+		if t == "" && len(args) > 0 {
+			if d := args[0].Get("data"); d.Type() == js.TypeString {
+				t = d.String()
+			}
+		}
+		input.SetValue("")
+		insert(t)
+		return nil
+	}))
 	input.AddEventListener("input", js.FuncOf(func(js.Value, []js.Value) any {
+		if composing {
+			return nil
+		}
 		if t := input.GetValue(); t != "" {
 			input.SetValue("")
-			if s.InsertText(t) {
-				redraw()
-			}
+			insert(t)
 		}
 		return nil
 	}))
 	input.OnKeyDown(func(e html.KeyEvent) {
+		// While an input method is composing, its keys (Enter to choose a candidate, the arrows, Backspace in
+		// the preedit) are the method's, not the editor's. keyCode 229 is what browsers send for them.
+		if composing || e.Value.Get("isComposing").Bool() || e.Value.Get("keyCode").Int() == 229 {
+			return
+		}
 		if e.CtrlKey || e.MetaKey || e.AltKey {
 			key := e.Key
 			// Alt changes the character on some layouts; the physical key
