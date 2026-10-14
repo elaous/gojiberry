@@ -179,3 +179,36 @@ func (c *countingAdapter) Save(ctx context.Context, key string, data []byte) err
 }
 
 func (c *countingAdapter) saves(key string) int { c.mu.Lock(); defer c.mu.Unlock(); return c.n[key] }
+
+// A second request to sample (the history and the observability gauges both ask) returns at once and does not start a
+// second sampler; after the first stops, sampling can be started again.
+func TestUsageSamplingRunsOnlyOnce(t *testing.T) {
+	srv := NewServer(NewMemoryAdapter(), "memory")
+	ctx, cancel := context.WithCancel(context.Background())
+	first := make(chan struct{})
+	go func() { srv.RunUsageSampling(ctx, time.Hour); close(first) }()
+	deadline := time.Now().Add(2 * time.Second)
+	for !srv.sampling.Load() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if !srv.sampling.Load() {
+		t.Fatal("the first sampler did not start")
+	}
+	second := make(chan struct{})
+	go func() { srv.RunUsageSampling(ctx, time.Hour); close(second) }()
+	select {
+	case <-second:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a second sampler stayed running")
+	}
+	select {
+	case <-first:
+		t.Fatal("the first sampler stopped")
+	default:
+	}
+	cancel()
+	<-first
+	if srv.sampling.Load() {
+		t.Error("the flag stays set after the sampler stopped")
+	}
+}
