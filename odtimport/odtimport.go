@@ -398,7 +398,10 @@ func (r *reader) blocks(kids []*node, inherit props, depth int) {
 			r.list(k, 0, "", depth+1)
 		case "table":
 			r.table(k)
-		case "section", "index-body", "table-of-content", "index-title", "alphabetical-index":
+		case "table-of-content":
+			// A table of contents is made from the headings (and its page numbers are the producer's): its entries are
+			// not text of the document, and reading them would write every heading twice.
+		case "section", "index-body", "index-title", "alphabetical-index":
 			r.blocks(k.kids, inherit, depth+1)
 		}
 	}
