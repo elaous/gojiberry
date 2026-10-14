@@ -45,3 +45,29 @@ func TestRefusedChangeIsAnnounced(t *testing.T) {
 	d.Type(" X")
 	d.WaitFor("the refusal is said", `(document.querySelector('.gj-announcer') || {textContent: ''}).textContent.includes('could not be applied')`)
 }
+
+// In a shared session a saved version is by the person who saved it, not by the page's placeholder address.
+func TestLiveVersionAuthorIsThePerson(t *testing.T) {
+	h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
+		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	}})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	defer func() {
+		if err := h.Close(); err != nil {
+			t.Errorf("closing the hub: %v", err)
+		}
+	}()
+	d := e2etest.NewSite(t).Open(t, "/d/live3?lang=en&hub="+url.QueryEscape(srv.URL)+"&token=owner&transport=http&name=Ana&color="+url.QueryEscape("#e11d48"))
+	d.Wait("s.live.status === 'online' && s.live.role === 'owner'")
+	d.Click(`button[data-tab="save"]`)
+	d.Select(`.gj-saver-select[data-field="Save to"]`, "memory")
+	d.Fill(".gj-saver-name", "plan")
+	d.Click(".gj-saver-save")
+	d.WaitSelector(".gj-doclist-item")
+	d.Click(".gj-versions-save")
+	d.WaitSelector(".gj-versions-item")
+	if got := d.Text(".gj-versions-author"); !strings.Contains(got, "by Ana") {
+		t.Errorf("the version's author = %q, want it to name Ana", got)
+	}
+}
