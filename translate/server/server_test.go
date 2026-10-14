@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/elaous/gojiberry/observe"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -162,5 +163,23 @@ func TestNewServerNoAPIKeyLeavesTranslatorNil(t *testing.T) {
 	}
 	if srv.translator != nil {
 		t.Fatalf("translator = %v, want nil with no API key configured", srv.translator)
+	}
+}
+
+func TestTranslationsAreReported(t *testing.T) {
+	b := observe.NewBuiltin()
+	old := observe.Default()
+	observe.SetDefault(observe.New(observe.Options{Operator: b}))
+	defer observe.SetDefault(old)
+	srv := newTestServer(&fakeTranslator{result: []Translation{{Text: "Bonjour"}}})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/translate", strings.NewReader(`{"text":"Hello","targetLang":"FR"}`)))
+	if got := b.Count(observe.WorkRuns, "work", "translate", "result", "ok"); got != 1 {
+		t.Errorf("translate ok = %d, want 1", got)
+	}
+	// A request refused before any translation is not work done.
+	srv.Handler().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/translate", strings.NewReader(`{}`)))
+	if got := b.Count(observe.WorkRuns, "work", "translate"); got != 1 {
+		t.Errorf("translate runs = %d, want 1", got)
 	}
 }

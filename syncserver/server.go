@@ -11,6 +11,7 @@ package syncserver
 import (
 	"encoding/json"
 	"github.com/elaous/gojiberry/guard"
+	"github.com/elaous/gojiberry/observe"
 	"net/http"
 	"os"
 	"sync"
@@ -159,9 +160,11 @@ const (
 // applyOps merges ops into the shared document; the deferred unlock keeps a
 // panic in Apply from leaving the server locked for good.
 func (s *Server) applyOps(ops []crdt.Op) {
+	done := observe.Default().Work("sync_merge")
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.doc.Apply(ops...)
+	done("ok")
 }
 
 func (s *Server) handleOps(w http.ResponseWriter, r *http.Request) {

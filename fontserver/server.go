@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/elaous/gojiberry/guard"
+	"github.com/elaous/gojiberry/observe"
 	"io"
 	"log"
 	"net/http"
@@ -162,10 +163,13 @@ func (s *Server) handleLocalRescan(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	done := observe.Default().Work("font_rescan")
 	if err := s.repo.Scan(); err != nil {
+		done("error")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	done("ok")
 	writeJSON(w, http.StatusOK, map[string]any{"families": s.repo.Families()})
 }
 

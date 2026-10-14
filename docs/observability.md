@@ -71,6 +71,9 @@ fails if a marker, or any label that is not an allowed value, reaches a sink.
 | `sweep_duration_seconds` | histogram | `sweep` | how long each sweep takes |
 | `store_documents`, `store_records`, `store_bytes` | gauge | none | the size of the store (counts, no identifier), sampled hourly while `GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN` is set |
 | `queue_size` | gauge | `queue` | whether a buffer is filling up |
+| `work_runs_total` | counter | `work`, `result` | what the other servers do (hub operations and joins, sync merges, font rescans, translations, speech, braille) and how it ends |
+| `work_duration_seconds` | histogram | `work` | how long that work takes |
+| `work_open` | gauge | `work` | how much is open now (`hub_rooms`: the rooms the collaboration hub holds) |
 | `usage_events_total` | counter | `fact`, `choice` | the **usage producer**: the facts and values of the telemetry allowlist, after opt-in |
 | `obs_dropped_total` | counter | `reason` | what the allowlist refused, so a wrong call is visible |
 
@@ -86,7 +89,8 @@ Label values:
 | `limiter` | `directory`, `passkey`, `login`, `auth_miss`, `telemetry`, `admin`, `other` |
 | `code` | `server_error`, `panic`, `store_failed`, `sweep_failed`, `sink_failed`, `not_ready` |
 | `op` | `load`, `save`, `save_if`, `delete`, `list`, `renew` |
-| `result` | `ok`, `not_found`, `conflict`, `canceled`, `error` |
+| `result` | `ok`, `not_found`, `conflict`, `canceled`, `error`, `rejected` (a rule refused it: the hub's authorisation) |
+| `work` | `hub_ops` (a batch of operations sent to the hub), `hub_join` (a subscriber joined a room), `hub_rooms` (open rooms, a gauge), `sync_merge`, `font_rescan`, `translate`, `speak`, `transcribe`, `braille` |
 | `sweep` | `expiry`, `ratelimit`, `directory`, `sessions`, `passkey_challenges`, `public`, `usage_sampling` |
 | `queue` | `posthog_buffer` |
 | `reason` | `unknown_metric`, `wrong_kind`, `unknown_label`, `bad_label_value`, `bad_value`, `unknown_span`, `unknown_attribute`, `bad_attribute_value` |
@@ -195,4 +199,4 @@ up to ten seconds, then flushes and closes every sink, so the last counts are se
 
 ## Not done yet
 
-The servers other than the docstore count requests only; their own work (hub rooms, sync merges, font scans, translation calls) has no metrics yet.
+The other servers now report their own work as `work_runs_total`, `work_duration_seconds` and `work_open` (above): the hub's operations, joins and open rooms, the sync relay's merges, the font server's rescans, and translations, speech synthesis, transcription and braille. Still without metrics: the font server's file and symbol downloads and the Google font proxy, and the hub's presence updates (they are counted as requests only).

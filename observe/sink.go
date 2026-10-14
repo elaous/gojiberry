@@ -357,3 +357,25 @@ func Registered() []string {
 	sort.Strings(out[1:])
 	return out
 }
+
+// Count is the count of the series of metric m whose labels include every name and value pair in kv (none: all
+// its series). A test, or a caller that wants one number, uses it instead of reading the whole Snapshot.
+func (b *Builtin) Count(m Metric, kv ...string) int64 {
+	series, _, _ := b.Snapshot()
+	var n int64
+	for _, s := range series {
+		if s.Metric != m {
+			continue
+		}
+		ok := true
+		for i := 0; i+1 < len(kv); i += 2 {
+			if s.Labels[kv[i]] != kv[i+1] {
+				ok = false
+			}
+		}
+		if ok {
+			n += s.Count
+		}
+	}
+	return n
+}
