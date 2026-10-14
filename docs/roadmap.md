@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (full run on main c10c427 (#344) with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on its second try; the first, on 59c2029, stopped at `make lint` (two constants and functions only the browser code uses read as unused in the native build, and a De Morgan finding in a test), fixed in #344. The coverage run had no failure; coverage score 89.8% (was 89.7%), README badge updated, lowest packages: resource-imports-demo 50.0%, http-server-demo 63.6%, ssr-demo 64.3%, generic-list-demo 66.7%, wasmdist 73.1%, collabhub 79.1%, canvas-editor-showcase 79.5% (was 72.9%), fontserver 80.6%, passkey/client 80.8%, user 80.8%).
+5 of 10 since the last full run (full run on main c10c427 (#344) with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on its second try; the first, on 59c2029, stopped at `make lint` (two constants and functions only the browser code uses read as unused in the native build, and a De Morgan finding in a test), fixed in #344. The coverage run had no failure; coverage score 89.8% (was 89.7%), README badge updated, lowest packages: resource-imports-demo 50.0%, http-server-demo 63.6%, ssr-demo 64.3%, generic-list-demo 66.7%, wasmdist 73.1%, collabhub 79.1%, canvas-editor-showcase 79.5% (was 72.9%), fontserver 80.6%, passkey/client 80.8%, user 80.8%).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1138,8 +1138,7 @@ unless stated.
     `versions/<id>/meta.json`, so the snapshots are as saved and go with the document when it is purged); a kept version is
     not dropped when older ones are, does not count toward `MaxVersions`, and cannot be deleted until let go (`ErrPinned`);
     the Save tab's version list shows the author, a name field and a Keep box. Two people changing notes at the same
-    moment can lose one change (last write wins). Also done (#208), step 4: Restore on a snapshot saves what is being edited as a new version named "Before restoring ..." and then opens the snapshot, so nothing is lost and the restore can be undone by restoring that version (`Session.RestoreVersion`). Left: a different author per person in a
-    live session (the showcase records its placeholder address), and the permission and encryption checks (steps 4, 5).
+    moment can lose one change (last write wins). Also done (#208), step 4: Restore on a snapshot saves what is being edited as a new version named "Before restoring ..." and then opens the snapshot, so nothing is lost and the restore can be undone by restoring that version (`Session.RestoreVersion`). Also done: in a shared session the showcase records each person by their name (versions, comments and replies), `TestLiveVersionAuthorIsThePerson`. Left: the permission and encryption checks (steps 4, 5).
 71. **Comments, suggestions and tracked changes.** Kind: fixable. What: comment threads, mentions, resolve and reopen,
     suggestion mode and tracked changes with accept and reject. Why it matters: review is the core of shared writing.
     Plan: (1) model for ranges, threads and changes that survive concurrent edits; (2) UI with keyboard paths; (3)
