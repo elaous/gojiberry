@@ -216,7 +216,7 @@ func Tn(id, one, other string, n int, args ...any) string {
 }
 
 // languageNames are the interface languages on offer, by their own names.
-var languageNames = map[string]string{"en": "English", "es": "Español", "fr": "Français", "de": "Deutsch", "pt": "Português", "ar": "العربية", "he": "עברית"}
+var languageNames = map[string]string{"en": "English", "es": "Español", "fr": "Français", "de": "Deutsch", "pt": "Português", "ar": "العربية", "he": "עברית", "en-x-plain": "English, plain words"}
 
 // setLocale changes the interface language: the components, the page's lang and
 // reading direction.

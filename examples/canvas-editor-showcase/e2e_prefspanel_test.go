@@ -17,7 +17,7 @@ func TestPreferencesTab(t *testing.T) {
 	d.Click(`button[data-tab="prefs"]`)
 	d.WaitSelector(".gj-prefs-search")
 	all := d.Count(".gj-prefs-group")
-	d.OK(all == 5, "five groups: "+d.Text(".gj-prefs-count"))
+	d.OK(all == 6, "six groups: "+d.Text(".gj-prefs-count"))
 
 	// the search narrows the list to what answers it
 	d.Fill(".gj-prefs-search", "contrast")

@@ -28,6 +28,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | Test the Redis-style shared stores, S3-compatible services that ignore `If-Match` on delete, nginx and Caddy recipes | Live endpoints and daemons | 3, 9, 82, 89 |
 | Test atypical-speech support with people who have atypical speech | Volunteers and consent | 56 |
 | An outside security audit before anyone relies on the keys for secrets | A reviewer | 89 |
+| Review "English, plain words" with the readers it is for, and extend it to the rest of the page | A plain-language editor or readers who need it | 65 |
 | Delete the old remote branches `ccr-f005be71-wip-*`, `-w57-telemetry`, `-w75-sharing` | The repository owner | chore |
 
 ## Product: documents and accessibility (items 48 to 84)
@@ -46,7 +47,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 62 | Accessibility checker panel | feature | partial | panel with jump, one-click fixes (including typed bullets and numbers to a list), export gate (page side) and `docstore/exportgate` server floor | server floor for an encrypted store needs the host's decrypting job; floating objects; no fix for the table-header rules (only the person can name a column) |
 | 63 | Accessible exports | feature | partial | tagged PDF (structure tree, `/Lang`, links, nested lists, run languages), semantic HTML with a main landmark, checked with axe in the browser tests, DOCX metadata, fidelity report | table-cell language spans and links in PDF, code links; a veraPDF / PAC run (pdfa11y passes; see `make pdfa11y-test`) |
 | 64 | Language and direction | feature | partial | per-run language, document language (set by hand or from detection), RTL and direction handling, IME composition inserted once at its end | bidi/vertical layout checks; the preedit drawn at the caret and the candidate window placed there; a manual run with real IMEs (blocked) |
-| 65 | Cognitive and motor options | feature | partial | distraction-free mode, forgiving targets, larger size step, a longer undo history (1000 steps) in the preferences | size scale beyond one step, switch scanning and dwell click, plain-language label set |
+| 65 | Cognitive and motor options | feature | done | distraction-free mode, forgiving targets, text size up to 200 %, a longer undo history (1000 steps), dwell click and single-switch scanning (one flat scan), "English, plain words" for the hardest messages (sign-in, keys, encryption, share links) | none (the plain-language wording is the model's draft: a review and the rest of the page need a person, see above) |
 | 66 | Collaboration accessibility | feature | done | joins, leaves, merged and refused changes, remote comments announced; "Where is X" as a per-person setting; colour-blind safe cursor colours, refused changes announced (browser test), changed-under-you sentence naming who | none (screen-reader run is item 69) |
 | 67 | Read aloud | feature | partial | selection or document aloud with pause, speed, highlighted sentence in the bar | sentence highlight on the canvas, word-level highlight, choosing a network voice on purpose |
 | 68 | Captions and transcripts | feature | partial | media model, caption/transcript fields, checker rules, exports (HTML embeds the clip with a caption track and the transcript; the other formats write the link and the transcript) | insert-clip UI in the showcase and a caption track editor (the canvas has no media object, so a clip opens as text) |
@@ -119,7 +120,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 
 ## Counts
 
-Product table (items 48 to 84, 32 rows): 9 done, 23 partial ("done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent). None is untouched. The server and
+Product table (items 48 to 84, 32 rows): 10 done, 22 partial ("done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent). None is untouched. The server and
 security table: the review findings are done; still open are the per-account sign-in budget and the shared lock
 (passkey backlog 4 and 5) and log witnesses (limits 12); 41 is blocked on a provider.
 

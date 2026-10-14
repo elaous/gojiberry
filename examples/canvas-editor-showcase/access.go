@@ -134,7 +134,7 @@ func (a *accessUI) start() {
 		if a.scanPaused {
 			if k == "Escape" {
 				a.scanPaused = false
-				a.step()
+				a.step() // publishes
 			}
 			return nil
 		}
@@ -197,6 +197,7 @@ func (a *accessUI) stopScan() {
 	a.unlight()
 	a.label = ""
 	a.scanPaused = false
+	a.publish()
 }
 
 func (a *accessUI) unlight() {
@@ -224,12 +225,14 @@ func (a *accessUI) step() {
 		if !ed.IsNull() {
 			ed.Get("classList").Call("add", "gj-scan-on")
 		}
+		a.publish()
 		return
 	}
 	el := a.scanList[a.scanAt]
 	el.Get("classList").Call("add", "gj-scan-on")
 	el.Call("scrollIntoView", map[string]any{"block": "nearest", "inline": "nearest"})
 	a.label = scanName(el)
+	a.publish()
 }
 
 // scanName is what the lit control is called in the page's state: its tab name, id or text.
@@ -258,6 +261,7 @@ func (a *accessUI) choose() {
 			in.Call("focus")
 		}
 		a.label = "document (Escape returns to the scan)"
+		a.publish()
 		return
 	}
 	el := a.scanList[a.scanAt]
@@ -266,7 +270,19 @@ func (a *accessUI) choose() {
 	a.step()
 }
 
-// accessState is what the state element shows for the tests.
-func accessState() map[string]any {
-	return map[string]any{"scan": access.label, "scanPaused": access.scanPaused, "dwelling": !access.dwellOn.IsUndefined() && !access.dwellOn.IsNull()}
+// publish puts what is lit on the root element (data-gj-scan, and data-gj-scan-paused while the document has the
+// keyboard), where a style or a test can read it. (The page's state element is written when the canvas is drawn,
+// which a scan step does not do.)
+func (a *accessUI) publish() {
+	root := a.doc().Get("documentElement")
+	if a.label == "" {
+		root.Call("removeAttribute", "data-gj-scan")
+	} else {
+		root.Call("setAttribute", "data-gj-scan", a.label)
+	}
+	if a.scanPaused {
+		root.Call("setAttribute", "data-gj-scan-paused", "")
+	} else {
+		root.Call("removeAttribute", "data-gj-scan-paused")
+	}
 }

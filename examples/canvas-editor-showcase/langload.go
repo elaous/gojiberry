@@ -14,7 +14,7 @@ import (
 // lazyLanguages are the interface languages that are not in the program: their packs are files next to the
 // page (lang-<code>.json), fetched the first time one is chosen, so a language costs nothing to a visitor who
 // does not use it. They are drafts that need a native speaker's review (docs/translating.md).
-var lazyLanguages = map[string]string{"pt": "Português", "ar": "العربية", "he": "עברית"}
+var lazyLanguages = map[string]string{"pt": "Português", "ar": "العربية", "he": "עברית", "en-x-plain": "English, plain words"}
 
 // onLocale, when set, is called after a language that had to be fetched has been put in force, for what has to be drawn again.
 var onLocale func()
