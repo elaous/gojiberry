@@ -878,7 +878,7 @@ func main() {
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "persisted": u.persisted, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
 			"link": link, "headers": headers, "footers": footers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "historyLimit": canvas.HistoryLimit(), "live": liveState(u, flow), "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
-			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib),
+			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib), "ghost": u.ghostSuffix(),
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))
 	}
@@ -947,7 +947,8 @@ func main() {
 	}
 	u.sugg.reopen = func(quiet bool) { u.openSuggestions(flow, stage, canvasEl.Element, quiet, renderUI) }
 	u.watchMirrorSelection(func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
-	u.ghost.refresh = func() { u.refreshGhost(flow, stage, canvasEl.Element, renderUI) }
+	u.ghost.flow, u.ghost.redraw = func() *canvas.TextFlow { return flow }, redraw
+	u.ghost.refresh = func() { u.refreshGhost(flow, redraw, renderUI) }
 	u.watchGhostPointer()
 	u.watchSuggestionKeys(inputEl.Element, func() *canvas.TextFlow { return flow }, redraw, renderUI)
 	state.Live = liveProps(u, &state, origin, renderCanvas, renderUI)

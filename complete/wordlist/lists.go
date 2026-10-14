@@ -17,7 +17,7 @@ Sprache sprechen Stadt stehen Stelle Stunde suchen Tag Text Thema Tisch Tür üb
 Vater verstehen viel vielleicht vier von vor wahrscheinlich Wasser Weg weil weiß weit welche Welt wenig wenn werden
 wichtig wieder wir wirklich wissen wo Woche wohnen wollen Wort wünschen zehn Zeit zeigen Zimmer zurück zusammen zwei
 zwischen Absatz Dokument Datei Absender Adresse Ausgabe Bearbeiten Einstellung Ergebnis Format Gruppe Kommentar
-Kapitel Liste Nachricht Programm Schrift Seite Speichern Tabelle Überschrift Vorschlag Wörterbuch`
+Kapitel Liste Nachricht Programm Schrift Seite Speichern Tabelle Überschrift Vorschlag Wörterbuch Antrag Arbeitsplatz Aufgabe Ausnahme Beispiel Beruf Beschreibung besonders Betrieb Bewegung Bildung Dank Daten Ebene Einladung Entwicklung Erlaubnis Ersatz Fall Firma Folge Freiheit Frühling Gebiet Gefühl Gesellschaft Gesetz Gespräch Grund Hilfe Kosten Kunde Lösung Material Mitarbeiter Möglichkeit Nutzer Ort Person Preis Projekt Qualität Regel Ressource Sicherheit Sommer Termin Unterschied Verbindung Vergleich Verfügung Versuch Vertrag Verwaltung Voraussetzung Wahl Wirtschaft Zahl Ziel Zugang Zukunft Zusammenhang`
 
 const fr = `à abord accord acheter afin ailleurs aimer ainsi aller alors ami an année appeler après arriver assez attendre
 aucun aussi autre avant avec avoir beaucoup besoin bien bientôt blanc bon bonjour bureau cause cela celui cent
@@ -33,7 +33,7 @@ programme question quand quelque quelqu'un rendre rentrer répondre rester retou
 selon semaine sentir seulement si sortir souvent suivre sujet tant temps tenir terre tête tous tout toujours tourner
 travail travailler très trois trop trouver tu vendre venir ville vite voir voiture voix vouloir vrai vraiment
 adresse chapitre colonne commentaire document dictionnaire fichier format groupe liste message page paragraphe
-phrase police suggestion tableau titre texte enregistrer`
+phrase police suggestion tableau titre texte enregistrer affaire ancien animal appareil argent article avenir bureau cadre capacité carte centre changement chemin choix classe clef client compte condition confiance connexion corps côté courant décision demande développement direction disponible document droit effet équipe espace état étude événement exercice expérience façon fonction fond groupe histoire image impossible information intérêt jardin journée lieu limite marque matin médecin membre méthode milieu mission modèle musique niveau objet occasion ordre papier partie période plan point possible pouvoir prix processus produit projet qualité raison région règle réponse résultat sécurité service situation société soir solution sujet système table total utilisateur valeur version`
 
 const es = `a abajo abrir acabar acuerdo además agua ahí ahora algo alguien algún allí alto amigo ante antes año aparecer
 aquel aquí así aunque ayer bajo bastante bien blanco buen buscar cabeza cada calle cambiar camino casa casi causa
@@ -49,4 +49,4 @@ que quedar querer quien quizá razón recibir recordar respuesta rojo saber saca
 sentir señor ser si siempre siete sin sobre solo tan tanto tarde tener tiempo todavía todo trabajar tres tu último
 un uno usar valer varios vender venir ver vez vida viejo vivir volver voz ya
 carta columna comentario diccionario documento dirección ejemplo encabezado fichero formato grupo lista mensaje
-página párrafo programa sugerencia tabla texto título frase guardar`
+página párrafo programa sugerencia tabla texto título frase guardar acción actividad algunos amor análisis aplicación área base camino campo capacidad caso centro cambio color comunidad conjunto control cuerpo cuestión datos decisión derecho desarrollo dirección ejemplo empresa equipo error espacio estado estudio evento experiencia fecha función futuro grupo historia imagen importancia información interés jardín lugar manera material medio método mismo modelo nivel norte número objeto opción orden país parte periodo plan posible precio proceso producto proyecto punto región regla relación resultado seguridad servicio sistema situación sociedad solución tema tipo usuario valor versión`

@@ -256,6 +256,7 @@ func (f *TextFlow) Draw() {
 	f.drawPeerSelections(lay)
 	defer f.drawSquiggles(lay)
 	defer f.drawCarets()
+	defer f.drawGhost(lay)
 	defer f.drawPeerCarets()
 	defer f.drawFootnotes(lay)
 	p.SetTextAlign("left")
