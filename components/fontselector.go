@@ -192,6 +192,6 @@ func fontSelectorPanel(props FontSelectorProps) xango.Node {
 	if len(matches) == 0 {
 		items = append(items, xango.El("div", []xango.Attr{xango.A("class", "gj-fontselector-empty")}, xango.Text("No fonts match")))
 	}
-	panel = append(panel, xango.El("div", []xango.Attr{xango.A("class", "gj-fontselector-list"), xango.A("role", "listbox")}, items...))
+	panel = append(panel, xango.El("div", []xango.Attr{xango.A("class", "gj-fontselector-list"), xango.A("role", "listbox"), xango.A("tabindex", "0"), xango.A("aria-label", tr("fontselector.list", "Fonts"))}, items...))
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-fontselector-panel")}, panel...)
 }
