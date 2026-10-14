@@ -19,6 +19,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/elaous/gojiberry/observe"
 	"io"
 	"log"
 	"net/http"
@@ -146,16 +147,20 @@ func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	done := observe.Default().Work("translate")
 	results, err := s.translator.Translate(r.Context(), []string{req.Text}, req.TargetLang, req.SourceLang)
 	if err != nil {
+		done("error")
 		log.Printf("translateserver: %v", err)
 		http.Error(w, "the translation service failed", http.StatusBadGateway)
 		return
 	}
 	if len(results) == 0 {
+		done("error")
 		http.Error(w, "translation returned no results", http.StatusBadGateway)
 		return
 	}
+	done("ok")
 
 	writeJSON(w, http.StatusOK, translateResponse{
 		TranslatedText:         results[0].Text,

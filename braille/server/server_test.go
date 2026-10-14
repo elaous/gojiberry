@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/elaous/gojiberry/observe"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -168,5 +169,18 @@ func TestExecLouTranslateRunsTheBinary(t *testing.T) {
 	}
 	if _, err := execLouTranslate(filepath.Join(dir, "absent"), "x", "hi"); err == nil {
 		t.Fatal("a missing binary is an error")
+	}
+}
+
+func TestBrailleIsReported(t *testing.T) {
+	b := observe.NewBuiltin()
+	old := observe.Default()
+	observe.SetDefault(observe.New(observe.Options{Operator: b}))
+	defer observe.SetDefault(old)
+	s := newTestServer(func(string, string, string) (string, error) { return ",hello", nil })
+	body, _ := json.Marshal(translateRequest{Text: "hello"})
+	s.Handler().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/translate", bytes.NewReader(body)))
+	if got := b.Count(observe.WorkRuns, "work", "braille", "result", "ok"); got != 1 {
+		t.Errorf("braille ok = %d, want 1", got)
 	}
 }

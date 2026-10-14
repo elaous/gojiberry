@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/elaous/gojiberry/guard"
+	"github.com/elaous/gojiberry/observe"
 	"io"
 	"log"
 	"net/http"
@@ -177,12 +178,15 @@ func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	done := observe.Default().Work("braille")
 	braille, err := s.translate(s.cfg.LouTranslateBinary, table, req.Text)
 	if err != nil {
+		done("error")
 		log.Printf("brailleserver: %v", err)
 		http.Error(w, "translation failed", http.StatusBadGateway)
 		return
 	}
+	done("ok")
 	writeJSON(w, http.StatusOK, translateResponse{Braille: braille})
 }
 

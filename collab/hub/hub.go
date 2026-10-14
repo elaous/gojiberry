@@ -27,6 +27,7 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/guard"
+	"github.com/elaous/gojiberry/observe"
 	"log"
 	"net/http"
 	"sync"
@@ -335,6 +336,7 @@ func (h *Hub) openRoom(r *http.Request, id string, role Role) (*room, error) {
 		}
 		rm = &room{id: id, doc: crdt.NewDocWithStrategy("hub", crdt.MergeCharCRDT), subs: map[*sub]bool{}, pres: map[string]presenceEntry{}, loaded: make(chan struct{})}
 		h.rooms[id] = rm
+		observe.Default().SetOpen("hub_rooms", len(h.rooms))
 	}
 	h.mu.Unlock()
 	if !ok {
@@ -346,6 +348,7 @@ func (h *Hub) openRoom(r *http.Request, id string, role Role) (*room, error) {
 		if rm.loadErr != nil {
 			h.mu.Lock()
 			delete(h.rooms, id) // the next request tries again
+			observe.Default().SetOpen("hub_rooms", len(h.rooms))
 			h.mu.Unlock()
 		}
 		close(rm.loaded)
