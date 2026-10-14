@@ -277,7 +277,7 @@ func drawPDFContents(pdf *gopdf.GoPdf, snap Snapshot, outline []OutlineEntry, pa
 		if err != nil {
 			return err
 		}
-		if n := int((right - nw - 6 - (x0 + indent + tw + 6)) / dw); n > 0 {
+		if n := int((right - nw - 6 - (x0 + indent + tw + 6)) / dw); n > 0 && snap.TOCStyle != "plain" {
 			pdf.SetXY(right-nw-6-float64(n)*dw, y)
 			if err := pdf.Cell(&gopdf.Rect{W: float64(n) * dw, H: lh}, strings.Repeat(". ", n)); err != nil {
 				return err
@@ -321,7 +321,7 @@ func fitPDFText(pdf *gopdf.GoPdf, s string, width float64) (string, error) {
 // the left edge, the middle and the right edge of the text area, and the fields {page}, {pages} and
 // {title} are filled in for each page.
 func drawPDFHeadersAndFooters(pdf *gopdf.GoPdf, snap Snapshot) error {
-	if snap.Header == "" && snap.Footer == "" && snap.FirstHeader == "" && snap.FirstFooter == "" {
+	if snap.Header == "" && snap.Footer == "" && snap.FirstHeader == "" && snap.FirstFooter == "" && snap.EvenHeader == "" && snap.EvenFooter == "" {
 		return nil
 	}
 	const size = 9.0
@@ -334,8 +334,11 @@ func drawPDFHeadersAndFooters(pdf *gopdf.GoPdf, snap Snapshot) error {
 			return err
 		}
 		head, foot := snap.Header, snap.Footer
-		if p == 1 && snap.FirstDiffers {
+		switch {
+		case p == 1 && snap.FirstDiffers:
 			head, foot = snap.FirstHeader, snap.FirstFooter
+		case p%2 == 0 && snap.EvenDiffers:
+			head, foot = snap.EvenHeader, snap.EvenFooter
 		}
 		for _, side := range []struct {
 			text string

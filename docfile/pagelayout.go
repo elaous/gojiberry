@@ -17,6 +17,9 @@ const (
 	PageFirstKey   = "page.first"     // "1": the first page has a header and footer of its own
 	PageFirstHead  = "page.firsthead" // the first page's header
 	PageFirstFoot  = "page.firstfoot" // the first page's footer
+	PageEvenKey    = "page.even"      // "1": the even pages have a header and footer of their own
+	PageEvenHead   = "page.evenhead"  // the even pages' header
+	PageEvenFoot   = "page.evenfoot"  // the even pages' footer
 	PageSizeKey    = "page.size"      // "595x842": the sheet in points
 	PageMarginsKey = "page.margins"   // "72,72,72,72": top, right, bottom, left in points
 )
@@ -37,10 +40,14 @@ type PageLayout struct {
 	// fields); empty means none, as on a title page.
 	FirstDiffers             bool
 	FirstHeader, FirstFooter string
-	TOC                      bool
-	TOCTitle                 string // the table of contents' heading; empty means "Contents"
-	Width, Height            float64
-	Margins                  [4]float64
+	// EvenDiffers gives the even pages (2, 4, ...) a header and footer of their own (EvenHeader, EvenFooter); Header
+	// and Footer then belong to the odd pages. The first page, when it has its own, is neither.
+	EvenDiffers            bool
+	EvenHeader, EvenFooter string
+	TOC                    bool
+	TOCTitle               string // the table of contents' heading; empty means "Contents"
+	Width, Height          float64
+	Margins                [4]float64
 }
 
 // IsZero says nothing is set.
@@ -54,6 +61,10 @@ func (l PageLayout) Normalized() PageLayout {
 	l.FirstHeader, l.FirstFooter = cleanDecor(l.FirstHeader), cleanDecor(l.FirstFooter)
 	if !l.FirstDiffers {
 		l.FirstHeader, l.FirstFooter = "", ""
+	}
+	l.EvenHeader, l.EvenFooter = cleanDecor(l.EvenHeader), cleanDecor(l.EvenFooter)
+	if !l.EvenDiffers {
+		l.EvenHeader, l.EvenFooter = "", ""
 	}
 	l.TOCTitle = strings.TrimSpace(strings.ReplaceAll(cleanDecor(l.TOCTitle), "\t", " "))
 	ok := func(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 100 && v <= 5000 }
@@ -94,6 +105,11 @@ func (d Document) PageLayout() PageLayout {
 		l.TOC = true
 	}
 	l.TOCTitle, _ = d.Get(PageTOCTitle)
+	if v, _ := d.Get(PageEvenKey); v == "1" {
+		l.EvenDiffers = true
+		l.EvenHeader, _ = d.Get(PageEvenHead)
+		l.EvenFooter, _ = d.Get(PageEvenFoot)
+	}
 	if v, _ := d.Get(PageFirstKey); v == "1" {
 		l.FirstDiffers = true
 		l.FirstHeader, _ = d.Get(PageFirstHead)
@@ -135,6 +151,13 @@ func (d *Document) SetPageLayout(l PageLayout) {
 	if l.FirstDiffers {
 		first = "1"
 	}
+	even := ""
+	if l.EvenDiffers {
+		even = "1"
+	}
+	put(PageEvenKey, even)
+	put(PageEvenHead, l.EvenHeader)
+	put(PageEvenFoot, l.EvenFooter)
 	put(PageFirstKey, first)
 	put(PageFirstHead, l.FirstHeader)
 	put(PageFirstFoot, l.FirstFooter)

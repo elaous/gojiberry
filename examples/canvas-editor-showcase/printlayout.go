@@ -30,6 +30,12 @@ func printPanel(u *ui, renderUI func()) xango.Node {
 			OnChange: func(on bool) { u.layout.FirstDiffers = on; u.layout = u.layout.Normalized(); renderUI() },
 		}),
 		firstFields(u, field, renderUI),
+		components.Checkbox(components.CheckboxProps{
+			Label:    T("print.even", "Different odd and even pages"),
+			Checked:  u.layout.EvenDiffers,
+			OnChange: func(on bool) { u.layout.EvenDiffers = on; u.layout = u.layout.Normalized(); renderUI() },
+		}),
+		evenFields(u, field, renderUI),
 		xango.El("p", []xango.Attr{xango.A("class", "gj-print-help"), xango.A("style", "font-size:12px;margin:0.4em 0")},
 			xango.Text(T("print.help", "Fields: {page}, {pages} and {title}. A tab separates the left, centre and right parts."))),
 		components.Checkbox(components.CheckboxProps{
@@ -52,6 +58,21 @@ func firstFields(u *ui, field func(id, label, value string, set func(string)) xa
 	return box(
 		field("firstheader", T("print.firstHeader", "First page header"), u.layout.FirstHeader, func(v string) { u.layout.FirstHeader = v; u.layout = u.layout.Normalized(); renderUI() }),
 		field("firstfooter", T("print.firstFooter", "First page footer"), u.layout.FirstFooter, func(v string) { u.layout.FirstFooter = v; u.layout = u.layout.Normalized(); renderUI() }),
+	)
+}
+
+// evenFields are the header and footer of the even pages, shown while "Different odd and even pages" is on (the
+// header and footer above are then the odd pages').
+func evenFields(u *ui, field func(id, label, value string, set func(string)) xango.Node, renderUI func()) xango.Node {
+	box := func(children ...xango.Node) xango.Node {
+		return xango.El("div", []xango.Attr{xango.A("class", "gj-print-even")}, children...)
+	}
+	if !u.layout.EvenDiffers {
+		return box()
+	}
+	return box(
+		field("evenheader", T("print.evenHeader", "Even pages header"), u.layout.EvenHeader, func(v string) { u.layout.EvenHeader = v; u.layout = u.layout.Normalized(); renderUI() }),
+		field("evenfooter", T("print.evenFooter", "Even pages footer"), u.layout.EvenFooter, func(v string) { u.layout.EvenFooter = v; u.layout = u.layout.Normalized(); renderUI() }),
 	)
 }
 

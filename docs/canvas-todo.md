@@ -102,7 +102,7 @@ in the selector is downloaded into the store the first time the text uses it
 Asked for, not started:
 
 - Footnotes sit in a fixed band per page rather than pushing text to the next
-  page; the table of contents and index are not clickable; a footnote cannot
+  page; the index is not clickable (the table of contents is: a click on a row goes to the heading); a footnote cannot
   be edited on the page itself (use the list or `footnote.edit`).
 - Outline: no collapsing of sections or drag-to-reorder; bookmarks are not
   drawn on the canvas (only listed).

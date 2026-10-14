@@ -187,8 +187,15 @@ type Snapshot struct {
 	// means none there).
 	FirstDiffers             bool
 	FirstHeader, FirstFooter string
-	TOC                      bool
-	TOCTitle                 string
+	// EvenDiffers gives the even pages EvenHeader and EvenFooter; Header and Footer are then the odd pages'.
+	EvenDiffers            bool
+	EvenHeader, EvenFooter string
+	TOC                    bool
+	TOCTitle               string
+	// TOCStyle is "" (a dotted leader from each entry to its page number) or "plain" (no leader), and TOCDepth the
+	// deepest heading level listed (0: all three); a table of contents the document holds sets them.
+	TOCStyle string
+	TOCDepth int
 
 	PageWidth, PageHeight                            float64
 	MarginLeft, MarginTop, MarginRight, MarginBottom float64

@@ -187,6 +187,7 @@ func main() {
 	renderCanvas := func() {
 		state.RunHeader, state.RunFooter, state.DocTitle = u.layout.Header, u.layout.Footer, u.title
 		state.FirstDiffers, state.FirstHeader, state.FirstFooter = u.layout.FirstDiffers, u.layout.FirstHeader, u.layout.FirstFooter
+		state.EvenDiffers, state.EvenHeader, state.EvenFooter = u.layout.EvenDiffers, u.layout.EvenHeader, u.layout.EvenFooter
 		if err := root.Render(Doc(state, cb)); err != nil {
 			doc.GetElementByID("state").SetTextContent(`{"error":"` + err.Error() + `"}`)
 			return

@@ -56,6 +56,9 @@ const CapacityWarnAt = 80
     CapacityWarnAt is the percentage of a store from which Capacity warns,
     and the Session's status line adds a note after a save.
 
+const CustomPaper = "custom"
+    CustomPaper is the name of the paper whose size the person gives.
+
 
 VARIABLES
 
@@ -2359,9 +2362,12 @@ type OutlineProps struct {
     OutlineProps configures Outline.
 
 type PageSetup struct {
-	Paper     string // a Papers name; "" or unknown is A4
+	Paper     string // a Papers name, or "custom" (CustomWidth by CustomHeight); "" or unknown is A4
 	Landscape bool
 	Margins   [4]float64
+	// CustomWidth and CustomHeight are the sheet of the "custom" paper in points, portrait; sizes outside 100 to
+	// 5000 points make it A4.
+	CustomWidth, CustomHeight float64
 }
     PageSetup is how the sheets of a document are laid out: the paper,
     its orientation and the margins in points, in CSS order (top, right, bottom,
@@ -2373,8 +2379,9 @@ func DefaultPageSetup() PageSetup
 func PageSetupOf(w, h float64, margins [4]float64) (PageSetup, bool)
     PageSetupOf is the setup whose sheet is w by h points (in either
     orientation, to within two points) with the given margins, as a saved
-    document records them. It is false when the sheet is none of the Papers,
-    which a PageSetup cannot describe.
+    document records them. A sheet that is none of the Papers is a custom paper,
+    unless it is outside 100 to 5000 points, which a PageSetup cannot describe
+    (false).
 
 func (p PageSetup) Label() string
     Label is the setup in a few words for a status bar: "A4 / portrait".

@@ -285,6 +285,17 @@ func TestEndToEnd(t *testing.T) {
 	d.Click(`.gj-menubar-panel li:has-text("Table of contents")`)
 	d.Wait("s.tocRows >= 2")
 	ok(S().Int("tocRows") >= 2, fmt.Sprint("a table of contents lists the headings: ", S().Get("tocRows")))
+	// Its look is the person's to choose: how many heading levels it lists, and a leader or none.
+	rows := S().Int("tocRows")
+	d.WaitSelector("#toc-depth")
+	d.Select("#toc-depth", "1")
+	d.Wait("s.tocRows < " + fmt.Sprint(rows))
+	ok(S().Int("tocRows") < rows, "depth 1 lists fewer headings")
+	d.Select("#toc-depth", "0")
+	d.Wait("s.tocRows === " + fmt.Sprint(rows))
+	d.Select("#toc-style", "plain")
+	d.Wait("document.querySelector('#toc-style').value === 'plain'")
+	ok(true, "the style can be changed")
 	d.Focus("#input")
 	for range 5 {
 		d.Focus("#input")

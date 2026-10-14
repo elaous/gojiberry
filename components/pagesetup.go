@@ -26,10 +26,16 @@ var Papers = []Paper{
 // PageSetup is how the sheets of a document are laid out: the paper, its
 // orientation and the margins in points, in CSS order (top, right, bottom, left).
 type PageSetup struct {
-	Paper     string // a Papers name; "" or unknown is A4
+	Paper     string // a Papers name, or "custom" (CustomWidth by CustomHeight); "" or unknown is A4
 	Landscape bool
 	Margins   [4]float64
+	// CustomWidth and CustomHeight are the sheet of the "custom" paper in points, portrait; sizes outside 100 to
+	// 5000 points make it A4.
+	CustomWidth, CustomHeight float64
 }
+
+// CustomPaper is the name of the paper whose size the person gives.
+const CustomPaper = "custom"
 
 // DefaultPageSetup is A4, portrait, with one inch all round.
 func DefaultPageSetup() PageSetup { return PageSetup{Paper: "a4", Margins: [4]float64{72, 72, 72, 72}} }
@@ -46,6 +52,12 @@ var marginPresets = []struct {
 
 // paper finds the paper of the setup, A4 when unknown.
 func (p PageSetup) paper() Paper {
+	if p.Paper == CustomPaper {
+		ok := func(v float64) bool { return !math.IsNaN(v) && v >= 100 && v <= 5000 }
+		if ok(p.CustomWidth) && ok(p.CustomHeight) {
+			return Paper{CustomPaper, "Custom", math.Round(p.CustomWidth), math.Round(p.CustomHeight)}
+		}
+	}
 	for _, pp := range Papers {
 		if pp.Name == p.Paper {
 			return pp
@@ -64,8 +76,8 @@ func (p PageSetup) Size() (w, h float64) {
 }
 
 // PageSetupOf is the setup whose sheet is w by h points (in either orientation, to within two points) with
-// the given margins, as a saved document records them. It is false when the sheet is none of the Papers,
-// which a PageSetup cannot describe.
+// the given margins, as a saved document records them. A sheet that is none of the Papers is a custom paper,
+// unless it is outside 100 to 5000 points, which a PageSetup cannot describe (false).
 func PageSetupOf(w, h float64, margins [4]float64) (PageSetup, bool) {
 	near := func(a, b float64) bool { return math.Abs(a-b) <= 2 }
 	for _, pp := range Papers {
@@ -76,6 +88,10 @@ func PageSetupOf(w, h float64, margins [4]float64) (PageSetup, bool) {
 			return PageSetup{Paper: pp.Name, Landscape: true, Margins: margins}.Normalized(), true
 		}
 	}
+	if w >= 100 && w <= 5000 && h >= 100 && h <= 5000 {
+		ps := PageSetup{Paper: CustomPaper, CustomWidth: math.Min(w, h), CustomHeight: math.Max(w, h), Landscape: w > h, Margins: margins}.Normalized()
+		return ps, ps.Paper == CustomPaper
+	}
 	return PageSetup{}, false
 }
 
@@ -83,6 +99,11 @@ func PageSetupOf(w, h float64, margins [4]float64) (PageSetup, bool) {
 // is not negative, and the margins leave at least a quarter of each side for text.
 func (p PageSetup) Normalized() PageSetup {
 	p.Paper = p.paper().Name
+	if p.Paper != CustomPaper {
+		p.CustomWidth, p.CustomHeight = 0, 0
+	} else {
+		p.CustomWidth, p.CustomHeight = math.Round(p.CustomWidth), math.Round(p.CustomHeight)
+	}
 	w, h := p.Size()
 	for i, m := range p.Margins {
 		if math.IsNaN(m) || math.IsInf(m, 0) {
@@ -148,6 +169,7 @@ func PageSetupPanel(props PageSetupProps) xango.Node {
 		w, h := p.Width, p.Height
 		papers = append(papers, opt(p.Name, p.Label+" ("+mm(w)+" × "+mm(h)+" mm)", p.Name == set.Paper))
 	}
+	papers = append(papers, opt(CustomPaper, tr("page.paperCustom", "Custom size"), set.Paper == CustomPaper))
 	orient := []xango.Node{
 		opt("portrait", tr("page.portrait", "portrait"), !set.Landscape),
 		opt("landscape", tr("page.landscape", "landscape"), set.Landscape),
@@ -158,7 +180,16 @@ func PageSetupPanel(props PageSetupProps) xango.Node {
 	}
 	kids := []xango.Node{
 		xango.El("h4", []xango.Attr{xango.A("class", "gj-pagesetup-title")}, xango.Text(tr("page.setup", "Page setup"))),
-		sel("gj-pagesetup-paper", tr("page.paper", "Paper"), papers, func(v string) { change(func(p *PageSetup) { p.Paper = v }) }),
+		sel("gj-pagesetup-paper", tr("page.paper", "Paper"), papers, func(v string) {
+			change(func(p *PageSetup) {
+				if v == CustomPaper && p.Paper != CustomPaper {
+					// start from the sheet that was there
+					p.CustomWidth, p.CustomHeight = p.paper().Width, p.paper().Height
+				}
+				p.Paper = v
+			})
+		}),
+		customSize(set, change),
 		sel("gj-pagesetup-orientation", tr("page.orientation", "Orientation"), orient, func(v string) { change(func(p *PageSetup) { p.Landscape = v == "landscape" }) }),
 		sel("gj-pagesetup-preset", tr("page.marginPreset", "Margins"), presets, func(v string) {
 			for _, m := range marginPresets {
@@ -187,3 +218,31 @@ func PageSetupPanel(props PageSetupProps) xango.Node {
 
 // mm is a size in points as millimetres.
 func mm(pt float64) string { return strconv.Itoa(int(math.Round(pt * 25.4 / 72))) }
+
+// customSize is the width and height of a custom paper, in millimetres; nothing for the other papers.
+func customSize(set PageSetup, change func(func(*PageSetup))) xango.Node {
+	// One element always, so the panel keeps its order as the fields come and go.
+	box := func(children ...xango.Node) xango.Node {
+		return xango.El("div", []xango.Attr{xango.A("class", "gj-pagesetup-custom")}, children...)
+	}
+	if set.Paper != CustomPaper {
+		return box()
+	}
+	field := func(class, label string, pt float64, set func(*PageSetup, float64)) xango.Node {
+		return xango.El("label", []xango.Attr{xango.A("class", "gj-pagesetup-field")},
+			xango.El("span", nil, xango.Text(label)),
+			xango.El("input", []xango.Attr{xango.A("type", "number"), xango.A("min", "35"), xango.A("class", class),
+				xango.A("value", mm(pt)),
+				xango.On("change", func(e xango.Event) {
+					v, err := strconv.ParseFloat(xango.EventValue[string](e), 64)
+					if err != nil {
+						return
+					}
+					change(func(p *PageSetup) { set(p, v*72/25.4) })
+				})}))
+	}
+	return box(
+		field("gj-pagesetup-width", tr("page.customWidth", "Width (mm)"), set.CustomWidth, func(p *PageSetup, v float64) { p.CustomWidth = v }),
+		field("gj-pagesetup-height", tr("page.customHeight", "Height (mm)"), set.CustomHeight, func(p *PageSetup, v float64) { p.CustomHeight = v }),
+	)
+}

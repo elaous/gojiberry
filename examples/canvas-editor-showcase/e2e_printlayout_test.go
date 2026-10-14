@@ -69,3 +69,22 @@ func TestFirstSheetCanHaveItsOwnHeaderAndFooter(t *testing.T) {
 	d.OK(strings.Contains(string(html), "@page :first{"), "the print stylesheet has a rule for the first page")
 	d.NoErrors()
 }
+
+// "Different odd and even pages" gives the even sheets a header of their own, and the odd ones keep the running one.
+func TestEvenSheetsCanHaveTheirOwnHeader(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.Click(`button[data-tab="page"]`)
+	d.Fill(".gj-print-header", "Odd")
+	d.Dispatch(".gj-print-header", "change")
+	d.WaitFor("the header is kept", `document.querySelector('.gj-print-header').value === 'Odd'`)
+	d.OK(!d.Has(".gj-print-evenheader"), "the even pages' fields appear only when asked for")
+	d.Click(`label.gj-checkbox:has-text("Different odd and even pages") input`)
+	d.WaitSelector(".gj-print-evenheader")
+	d.Fill(".gj-print-evenheader", "Even")
+	d.Dispatch(".gj-print-evenheader", "change")
+	d.WaitFor("the headers alternate", `(() => { const s = JSON.parse(document.getElementById('state').textContent); return s.pages >= 3 && s.headers[0] === "\tOdd\t" && s.headers[1] === "\tEven\t" && s.headers[2] === "\tOdd\t"; })()`)
+	d.Click(`button[data-tab="transfer"]`)
+	_, html := d.Download(func() { d.Click(`.gj-transfer-button[data-kind="export"][data-format="html"]`) })
+	d.OK(strings.Contains(string(html), "@page :left{"), "the print stylesheet has a rule for the even pages")
+	d.NoErrors()
+}

@@ -88,8 +88,20 @@ func TestPageSetupOfFindsThePaperOfASavedSheet(t *testing.T) {
 	if p, ok := PageSetupOf(842, 595, m); !ok || p.Paper != "a4" || !p.Landscape {
 		t.Errorf("A4 turned: %+v %v", p, ok)
 	}
-	if _, ok := PageSetupOf(500, 500, m); ok {
-		t.Error("a square sheet is none of the papers")
+	// A sheet that is none of the papers is a custom paper of that size, in either orientation.
+	if p, ok := PageSetupOf(500, 300, m); !ok || p.Paper != CustomPaper || !p.Landscape {
+		t.Errorf("custom, wide: %+v %v", p, ok)
+	} else if w, h := p.Size(); w != 500 || h != 300 {
+		t.Errorf("the custom sheet keeps its size: %v x %v", w, h)
+	}
+	if p, ok := PageSetupOf(300, 500, m); !ok || p.Paper != CustomPaper || p.Landscape {
+		t.Errorf("custom, tall: %+v %v", p, ok)
+	}
+	if _, ok := PageSetupOf(50, 50, m); ok {
+		t.Error("a sheet smaller than 100 points cannot be laid out")
+	}
+	if p := (PageSetup{Paper: CustomPaper, CustomWidth: 10, CustomHeight: 10}).Normalized(); p.Paper != "a4" {
+		t.Errorf("a custom paper with no usable size is A4: %+v", p)
 	}
 	if _, ok := PageSetupOf(0, 0, m); ok {
 		t.Error("no sheet saved is not a paper")
