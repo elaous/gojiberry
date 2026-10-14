@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/elaous/gojiberry/docstore"
+	"github.com/elaous/gojiberry/observe"
 	"log"
 	"net/http"
 	"time"
@@ -260,6 +261,7 @@ func (h *Hub) closeDead(rm *room) {
 	h.mu.Lock()
 	if h.rooms[rm.id] == rm {
 		delete(h.rooms, rm.id)
+		observe.Default().SetOpen("hub_rooms", len(h.rooms))
 	}
 	if len(h.gone) >= maxGone {
 		now := h.now()

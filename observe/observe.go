@@ -76,6 +76,9 @@ const (
 	StoreRecords   Metric = "store_records"
 	StoreBytes     Metric = "store_bytes"
 	QueueSize      Metric = "queue_size"
+	WorkRuns       Metric = "work_runs_total"
+	WorkDuration   Metric = "work_duration_seconds"
+	WorkOpen       Metric = "work_open"
 	// UsageEvents is the user-usage producer (package telemetry) routed through the same sinks:
 	// counts of allowlisted facts, only ever fed after a person opted in at the browser.
 	UsageEvents Metric = "usage_events_total"
@@ -109,6 +112,9 @@ var defs = []Def{
 	{StoreRecords, Gauge, "records", nil, "how many bookkeeping records the store holds"},
 	{StoreBytes, Gauge, "bytes", nil, "how much the store holds in total"},
 	{QueueSize, Gauge, "items", []string{"queue"}, "whether a buffer is filling up"},
+	{WorkRuns, Counter, "runs", []string{"work", "result"}, "what the other servers do (hub ops and joins, sync merges, font rescans, translations, speech, braille) and how it ends"},
+	{WorkDuration, Histogram, "seconds", []string{"work"}, "how long that work takes"},
+	{WorkOpen, Gauge, "items", []string{"work"}, "how much of it is open now (hub rooms)"},
 	{UsageEvents, Counter, "events", []string{"fact", "choice"}, "user usage counts (package telemetry), after the person opted in"},
 	{DroppedPoints, Counter, "points", []string{"reason"}, "what the allowlist refused, so a wrong call is visible"},
 }
@@ -129,7 +135,8 @@ var labelValues = map[string][]string{
 	"limiter":      {"directory", "passkey", "login", "auth_miss", "telemetry", "admin", "other"},
 	"code":         {"server_error", "panic", "store_failed", "sweep_failed", "sink_failed", "not_ready"},
 	"op":           {"load", "save", "save_if", "delete", "list", "renew"},
-	"result":       {"ok", "not_found", "conflict", "canceled", "error"},
+	"result":       {"ok", "not_found", "conflict", "canceled", "error", "rejected"},
+	"work":         {"hub_ops", "hub_join", "hub_rooms", "sync_merge", "font_rescan", "translate", "speak", "transcribe", "braille"},
 	"sweep":        {"expiry", "ratelimit", "directory", "sessions", "passkey_challenges", "public", "usage_sampling"},
 	"queue":        {"posthog_buffer"},
 	"reason":       {"unknown_metric", "wrong_kind", "unknown_label", "bad_label_value", "bad_value", "unknown_span", "unknown_attribute", "bad_attribute_value"},
@@ -630,6 +637,23 @@ func (o *Observer) Sweep(name string) func(removed int, err error) {
 		sp.End()
 	}
 }
+
+// Work times one piece of a server's own work (a name of the "work" list) and counts how it ended. Call it
+// when the work starts and the returned function when it ends with its result: ok, rejected (refused
+// by a rule), canceled or error.
+func (o *Observer) Work(name string) func(result string) {
+	if o == nil || o.operator == nil {
+		return func(string) {}
+	}
+	start := o.now()
+	return func(result string) {
+		o.Add(WorkRuns, 1, "work", name, "result", result)
+		o.Observe(WorkDuration, o.now().Sub(start).Seconds(), "work", name)
+	}
+}
+
+// SetOpen sets how much of a kind of work is open now (the gauge of the "work" list, for example hub_rooms).
+func (o *Observer) SetOpen(name string, n int) { o.Set(WorkOpen, float64(n), "work", name) }
 
 // StoreOp times one store operation under the span in ctx. Call the returned function when it ends
 // with its result (one of the "result" values: ok, not_found, conflict, canceled, error) and, for a

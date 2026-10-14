@@ -20,6 +20,7 @@ package server
 
 import (
 	"encoding/json"
+	"github.com/elaous/gojiberry/observe"
 	"io"
 	"log"
 	"net/http"
@@ -164,12 +165,15 @@ func (s *Server) handleSpeak(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release(s.speakSlots)
+	done := observe.Default().Work("speak")
 	audio, err := s.speak(s.cfg.PiperBinary, s.cfg.PiperModel, req.Text)
 	if err != nil {
+		done("error")
 		log.Printf("voiceserver: speak: %v", err)
 		http.Error(w, "speech synthesis failed", http.StatusBadGateway)
 		return
 	}
+	done("ok")
 	w.Header().Set("Content-Type", "audio/wav")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(audio)
@@ -202,6 +206,7 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release(s.transcribeSlots)
+	done := observe.Default().Work("transcribe")
 	var text string
 	if prompt, lang := listen.CleanPrompt(r.FormValue("prompt")), listen.CleanLanguage(r.FormValue("language")); prompt != "" || lang != "" {
 		text, err = s.transcribeBias(s.cfg.WhisperBinary, s.cfg.WhisperModel, wav, listen.Options{Prompt: prompt, Language: lang})
@@ -209,10 +214,12 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 		text, err = s.transcribe(s.cfg.WhisperBinary, s.cfg.WhisperModel, wav)
 	}
 	if err != nil {
+		done("error")
 		log.Printf("voiceserver: transcribe: %v", err)
 		http.Error(w, "transcription failed", http.StatusBadGateway)
 		return
 	}
+	done("ok")
 	writeJSON(w, http.StatusOK, map[string]string{"text": text})
 }
 

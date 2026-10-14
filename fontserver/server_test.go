@@ -3,6 +3,7 @@ package fontserver
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/elaous/gojiberry/observe"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -265,5 +266,18 @@ func TestGoogleFontsFetchFailureDegradesGracefully(t *testing.T) {
 	}
 	if len(body.Families) != 0 {
 		t.Fatalf("families = %+v, want empty on fetch failure with no prior cache", body.Families)
+	}
+}
+
+func TestRescanIsReported(t *testing.T) {
+	b := observe.NewBuiltin()
+	old := observe.Default()
+	observe.SetDefault(observe.New(observe.Options{Operator: b}))
+	defer observe.SetDefault(old)
+	srv := newTestServer(t, Config{FontsDir: t.TempDir()})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/local/rescan", nil))
+	if got := b.Count(observe.WorkRuns, "work", "font_rescan", "result", "ok"); got != 1 {
+		t.Errorf("font_rescan ok = %d, want 1", got)
 	}
 }

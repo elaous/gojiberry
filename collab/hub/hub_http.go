@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/elaous/gojiberry/crdt"
 	"github.com/elaous/gojiberry/guard"
+	"github.com/elaous/gojiberry/observe"
 	"io"
 	"log"
 	"net/http"
@@ -177,7 +178,16 @@ func (h *Hub) handleOps(w http.ResponseWriter, r *http.Request) {
 // An accepted batch from an owner or editor renews the document's expiry (see
 // Config.Renewer); nothing else does.
 func (h *Hub) acceptOps(rm *room, role Role, r *http.Request, replica string, ops []crdt.Op) (int, string) {
+	done := observe.Default().Work("hub_ops")
 	status, msg, renew := h.applyOps(rm, role, r, replica, ops)
+	switch status {
+	case http.StatusNoContent:
+		done("ok")
+	case http.StatusForbidden:
+		done("rejected")
+	default:
+		done("error")
+	}
 	if renew {
 		h.renew(rm, r)
 	}
@@ -391,6 +401,7 @@ func (h *Hub) join(rm *room, role Role, r *http.Request, replica string) (s *sub
 	if !h.bindReplica(rm, replica, r) {
 		return nil, nil, nil, false
 	}
+	observe.Default().Work("hub_join")("ok")
 	s = &sub{replica: replica, role: role, ch: make(chan event, 256)}
 	snapshot = rm.doc.Snapshot()
 	h.prunePresence(rm)

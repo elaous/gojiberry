@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/elaous/gojiberry/observe"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -221,4 +222,17 @@ func TestAcquireAnswers429WhenFull(t *testing.T) {
 		t.Fatal("a released slot is free again")
 	}
 	release(nil) // no limit: nothing to release
+}
+
+func TestSpeechIsReported(t *testing.T) {
+	b := observe.NewBuiltin()
+	old := observe.Default()
+	observe.SetDefault(observe.New(observe.Options{Operator: b}))
+	defer observe.SetDefault(old)
+	s := newTestServer(func(string, string, string) ([]byte, error) { return []byte("RIFF"), nil }, nil)
+	body, _ := json.Marshal(speakRequest{Text: "hello"})
+	s.Handler().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/speak", bytes.NewReader(body)))
+	if got := b.Count(observe.WorkRuns, "work", "speak", "result", "ok"); got != 1 {
+		t.Errorf("speak ok = %d, want 1", got)
+	}
 }

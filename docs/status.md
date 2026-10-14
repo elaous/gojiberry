@@ -62,7 +62,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 78 | Equations, diagrams, code, footnotes | feature | partial | MathML with text alternative, code language, diagram descriptions, footnote links both ways in HTML, Word, RTF and Markdown | footnote links in PDF; equations as OMML in Word |
 | 79 | Autocomplete word picker | feature | partial | ranked suggestion list as an ARIA listbox, ghost text, de/fr/es word lists | lists only common words, no pt/ar/he; reader run (blocked) |
 | 80 | Print layout | feature | done | page model, headers and footers, page numbers, different first page and odd/even pages, any sheet size (custom paper), a real clickable table of contents (page numbers, two looks, depth) that the exports write, the outline as the navigation panel, widow control and kept table rows in every paged format, the same running header and footer on the screen sheets | small: exports write the contents at the start, not at its place in the text; the even-page rule assumes left-to-right page order |
-| 81 | Admin side | feature | partial | audit event schema, readiness route, backup and restore, `/admin/usage` and history page (series kept across restarts), observability core and PostHog sink | hub and sync/font/translation servers instrumented |
+| 81 | Admin side | feature | partial | audit event schema, readiness route, backup and restore, `/admin/usage` and history page (series kept across restarts), observability core and PostHog sink | the hub, sync, font, translation, speech and braille servers report their own work (`work_runs_total`) |
 | 82 | Performance and size | enhancement | done (with leftovers) | wasm size budgets per program (main 26.8 MB raw, 6.6 MB gzip; files 9.8 MB, 2.8 MB) checked in CI, stripped build, precompressed wasm, `wasmdist`, deploy recipe, service worker that keeps the app for repeat visits and offline start, low-memory mode (fewer undo steps), the file formats in a second wasm loaded on first use (main 26.1 MB, was 29.4) | memory saving of the low-memory mode not measured on a real small device; splitting the worker by format: `net/http` is out of it now (9.5 MB, was 11.0), the rest of the floor is to be measured before judging the split (roadmap 82); recipes untested on nginx/Caddy (blocked) |
 | 83 | i18n depth | enhancement | partial | de, fr, es packs, a test that every message id is in a pack, plurals, dates, time zones as offsets, pt/ar/he packs fetched on demand (model-drafted), page turned around for RTL | a native review of the pt, ar and he packs; ids built at run time |
 | 84 | Lint the examples | chore | done | no path exclusions in `.golangci.yml` | none |
@@ -72,7 +72,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | Part | Type | Status | Present | Missing |
 | --- | --- | --- | --- | --- |
 | 57 Usage counts from browsers (no personal data) | feature | partial | `telemetry` package, opt-in, allowlist, sampling, local log, persistent totals, noise, Privacy menu, [telemetry.md](telemetry.md) | step 7: scrubbed crash reports (separate opt-in); one counting process per store |
-| 81 Operator metrics and traces (`observe`) | feature | partial | off by default; closed allowlists; builtin sink and `GET /admin/observe`; **PostHog** and **OpenTelemetry (OTLP/HTTP JSON)** sinks; builtin totals kept across restarts with `GOJIBERRY_OBS_STATE`; [observability.md](observability.md) | the other servers count requests only (no metrics for their own work) |
+| 81 Operator metrics and traces (`observe`) | feature | partial | off by default; closed allowlists; builtin sink and `GET /admin/observe`; **PostHog** and **OpenTelemetry (OTLP/HTTP JSON)** sinks; builtin totals kept across restarts with `GOJIBERRY_OBS_STATE`; [observability.md](observability.md) | font downloads, the Google font proxy and hub presence have request counts only |
 
 ## Server, keys and security
 
@@ -125,7 +125,6 @@ security table: the review findings are done; still open are the per-account sig
 
 ## Suggested order for the next work
 
-1. 81: metrics for the other servers' own work.
 2. 56: keep recordings between visits and learn from corrections.
 3. 68: an insert-clip UI and caption track editor.
 4. Then the small leftovers of 59, 64, 65, 50 and 51, and 80's odd and even headers.
