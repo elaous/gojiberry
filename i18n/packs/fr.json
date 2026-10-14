@@ -1112,7 +1112,7 @@
   "img.longLabel": "Description détaillée de l'image %d (pour un schéma ou un graphique)",
   "img.longHint": "Tout ce dont une personne qui ne peut pas la voir a besoin pour suivre le texte autour",
   "a11y.equation": "Formule : %s",
-  "links.commentNote": "Il n'existe pas de rôle réservé aux commentaires. Les commentaires sont stockés dans le document : un serveur ne peut donc pas les distinguer d'une modification. « Peut consulter » permet de commenter dans cet éditeur, mais le serveur laisse un lecteur seulement lire.",
+  "links.commentNote": "Peut voir et commenter : sur un document partagé en direct, le hub le fait respecter : un lecteur peut ajouter des commentaires et des réponses sous son propre nom et ne peut rien changer d’autre. Sur un document seulement enregistré sur un serveur, le serveur ne distingue pas un commentaire d’une modification (les commentaires sont dans le document) : là, Peut voir permet de lire, et le serveur refuse toute écriture.",
   "links.encHeading": "Ce que le chiffrement protège",
   "links.encProtects": "Dans le stockage chiffré, le serveur ne garde que du texte brouillé. Il ne peut pas lire vos documents. Un lien ou un partage ne donne pas de clé à lui seul.",
   "links.encNot": "Le chiffrement ne cache pas un document aux personnes que vous laissez entrer. Elles peuvent le lire, le copier et le transmettre. Il ne cache pas non plus que le document existe, quand il a changé ni sa taille. Un lien fonctionne pour quiconque le possède.",
