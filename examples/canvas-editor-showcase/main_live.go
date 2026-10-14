@@ -46,6 +46,12 @@ func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()
 		transport = ws.WebSockets()
 	}
 	u.liveName, u.liveColor = name, get("color", "#7c5cff")
+	// In a shared session each person is who they say they are: their comments, suggestions and saved
+	// versions carry that name, not the page's placeholder address.
+	state.Author = name
+	if u.saver != nil {
+		u.saver.Author = name
+	}
 	return &collabxango.CollabProps{
 		Transport: transport,
 		Flow:      collabxango.Flow(get("flow", "")),
