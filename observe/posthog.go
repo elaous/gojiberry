@@ -208,8 +208,17 @@ func (p *PostHog) props(extra map[string]any) map[string]any {
 	return m
 }
 
+// held is what one flush takes: the aggregates and spans, and the events made from them (the series first, in
+// key order, then the spans), so that what a failed request did not carry can be put back.
+type held struct {
+	keys   []string
+	series map[string]*agg
+	spans  []SpanData
+	events []phEvent
+}
+
 // events takes what is held and turns it into capture events.
-func (p *PostHog) events(now time.Time) []phEvent {
+func (p *PostHog) events(now time.Time) held {
 	p.mu.Lock()
 	series, spans := p.series, p.spans
 	p.series, p.spans = map[string]*agg{}, nil
@@ -243,17 +252,66 @@ func (p *PostHog) events(now time.Time) []phEvent {
 		}
 		out = append(out, phEvent{Event: "gojiberry_span", DistinctID: p.cfg.Service, Timestamp: s.End.UTC().Format(time.RFC3339Nano), Properties: p.props(pr)})
 	}
-	return out
+	return held{keys: keys, series: series, spans: spans, events: out}
 }
 
-// Flush implements Sink: it sends what is held now, in batches. What cannot be sent is dropped (and
-// counted), not kept without bound.
+// putBack returns what a request did not carry to the sink, to be sent with the next interval: the aggregates are
+// added to the ones that have grown since (counts and sums add, the newer "last" stays), the spans go before the
+// newer ones, and both stay inside the bounds (maxSeries, posthogMaxSpans; what does not fit is counted as lost).
+func (p *PostHog) putBack(h held, from int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i, k := range h.keys {
+		if i < from {
+			continue
+		}
+		old := h.series[k]
+		if cur := p.series[k]; cur != nil {
+			cur.count += old.count
+			cur.sum += old.sum
+			cur.min, cur.max = min(cur.min, old.min), max(cur.max, old.max)
+			continue
+		}
+		if len(p.series) >= maxSeries {
+			p.lost++
+			continue
+		}
+		p.series[k] = old
+	}
+	if sp := max(from-len(h.keys), 0); sp < len(h.spans) {
+		all := append(append([]SpanData(nil), h.spans[sp:]...), p.spans...)
+		if over := len(all) - posthogMaxSpans; over > 0 {
+			all = all[over:]
+			p.lost += int64(over)
+		}
+		p.spans = all
+	}
+}
+
+// phStatusError is an answer that was not a success; a 429 or a 5xx is worth trying again at the next interval, any
+// other client error (a wrong key, a refused payload) is not.
+type phStatusError struct{ code int }
+
+func (e phStatusError) Error() string { return fmt.Sprintf("observe: posthog: answered %d", e.code) }
+func (e phStatusError) transient() bool {
+	return e.code == http.StatusTooManyRequests || e.code >= 500
+}
+
+// phNetError is a request that did not get an answer; trying again later may work.
+type phNetError struct{ msg string }
+
+func (e phNetError) Error() string { return e.msg }
+
+// Flush implements Sink: it sends what is held now, in batches. A request that fails for a reason that may pass (no
+// answer, 429, 5xx) stops the flush and what was not sent is kept for the next interval, inside the bounds; one the
+// server refused for good (any other 4xx: a wrong key, a payload it will not take) drops that batch and the rest,
+// counted, so a wrong key cannot fill the memory.
 func (p *PostHog) Flush(ctx context.Context) error {
-	evs := p.events(time.Now())
+	h := p.events(time.Now())
 	var errs []error
-	for len(evs) > 0 {
-		n := min(len(evs), posthogBatchSize)
-		err := p.post(ctx, evs[:n])
+	for off := 0; off < len(h.events); {
+		n := min(len(h.events)-off, posthogBatchSize)
+		err := p.post(ctx, h.events[off:off+n])
 		p.mu.Lock()
 		if err != nil {
 			p.failed += int64(n)
@@ -262,10 +320,21 @@ func (p *PostHog) Flush(ctx context.Context) error {
 			p.last = time.Now()
 		}
 		p.mu.Unlock()
-		if err != nil {
-			errs = append(errs, err)
+		if err == nil {
+			off += n
+			continue
 		}
-		evs = evs[n:]
+		errs = append(errs, err)
+		var se phStatusError
+		permanent := errors.As(err, &se) && !se.transient()
+		if permanent {
+			p.mu.Lock()
+			p.lost += int64(len(h.events) - off - n) // the rest is not sent either
+			p.mu.Unlock()
+		} else {
+			p.putBack(h, off) // this batch and the rest: the next interval carries them
+		}
+		break
 	}
 	return errors.Join(errs...)
 }
@@ -283,12 +352,12 @@ func (p *PostHog) post(ctx context.Context, evs []phEvent) error {
 	resp, err := p.cfg.Client.Do(req)
 	if err != nil {
 		// The error of net/http repeats the URL, which holds no secret (the key is in the body), but name only the cause.
-		return errors.New("observe: posthog: the request failed")
+		return phNetError{"observe: posthog: the request failed"}
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("observe: posthog: answered %d", resp.StatusCode)
+		return phStatusError{resp.StatusCode}
 	}
 	return nil
 }

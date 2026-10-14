@@ -148,13 +148,12 @@ func renderPDF(snap Snapshot, outline []OutlineEntry, tocPages map[int]int) ([]b
 
 	contentWidth := pxToPt(w) - pxToPt(snap.MarginLeft) - pxToPt(snap.MarginRight)
 
-	if len(outline) > 0 {
-		if err := drawPDFContents(&pdf, snap, outline, tocPages, contentWidth); err != nil {
-			return nil, nil, err
-		}
-	}
-
 	for i := 0; i < len(snap.Blocks); i++ {
+		if len(outline) > 0 && snap.tocHere(i) {
+			if err := drawPDFContents(&pdf, snap, outline, tocPages, contentWidth, true); err != nil {
+				return nil, nil, err
+			}
+		}
 		b := snap.Blocks[i]
 		if b.Kind >= Heading1 && b.Kind <= Heading3 {
 			// The heading's page is the one its first line lands on, which may be the next page.
@@ -199,6 +198,12 @@ func renderPDF(snap Snapshot, outline []OutlineEntry, tocPages map[int]int) ([]b
 		}
 	}
 
+	if len(outline) > 0 && snap.tocEnd() {
+		if err := drawPDFContents(&pdf, snap, outline, tocPages, contentWidth, false); err != nil {
+			return nil, nil, err
+		}
+	}
+
 	if err := drawPDFHeadersAndFooters(&pdf, snap); err != nil {
 		return nil, nil, err
 	}
@@ -212,9 +217,13 @@ func renderPDF(snap Snapshot, outline []OutlineEntry, tocPages map[int]int) ([]b
 }
 
 // drawPDFContents draws the table of contents: its title, then one line per heading with a dotted leader
-// to the page number, indented by level, and a page break after it. The entries are tagged as paragraphs
+// to the page number, indented by level, on a page of its own: it starts a new page unless it is at the top of one
+// (when it is not the first thing in the document), and the text after it starts another (unless nothing follows). The entries are tagged as paragraphs
 // (their ids come after those of the blocks). An entry too long for its line is cut with an ellipsis.
-func drawPDFContents(pdf *gopdf.GoPdf, snap Snapshot, outline []OutlineEntry, pages map[int]int, contentWidth float64) error {
+func drawPDFContents(pdf *gopdf.GoPdf, snap Snapshot, outline []OutlineEntry, pages map[int]int, contentWidth float64, followed bool) error {
+	if pdf.GetY() > pxToPt(snap.MarginTop)+1 {
+		pdf.AddPage()
+	}
 	x0 := pxToPt(snap.MarginLeft)
 	right := x0 + contentWidth
 	const titleSize = 18.0
@@ -290,8 +299,10 @@ func drawPDFContents(pdf *gopdf.GoPdf, snap Snapshot, outline []OutlineEntry, pa
 		pdfMarkEnd(pdf)
 		pdf.SetY(y + lh)
 	}
-	// The document starts on a page of its own after the contents.
-	pdf.AddPage()
+	// The text after the contents starts on a page of its own.
+	if followed {
+		pdf.AddPage()
+	}
 	return nil
 }
 

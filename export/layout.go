@@ -93,3 +93,20 @@ func (s Snapshot) Outline() []OutlineEntry {
 func keepRowWithNext(r, rows int) bool {
 	return rows > 1 && (r == 0 || r == rows-2)
 }
+
+// tocHere says the contents go before block i; tocEnd that they go after the last block (when TOCAt is past it).
+func (s Snapshot) tocHere(i int) bool { return s.TOC && s.TOCAt == i }
+func (s Snapshot) tocEnd() bool       { return s.TOC && s.TOCAt >= len(s.Blocks) }
+
+// tocMarks names the bookmark of each heading the contents list, by block index (prefix + number): the headings
+// are written before or after the contents, so their names cannot wait for the contents to be written.
+func tocMarks(snap Snapshot, name func(block int) string) map[int]string {
+	marks := map[int]string{}
+	if !snap.TOC {
+		return marks
+	}
+	for _, e := range snap.Outline() {
+		marks[e.Block] = name(e.Block)
+	}
+	return marks
+}

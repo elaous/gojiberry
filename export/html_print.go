@@ -150,3 +150,12 @@ func clearBoxes() string {
 	}
 	return sb.String()
 }
+
+// htmlTOCAtStart is the contents when they come first (before the main landmark): a table of contents at the start of the
+// document, or one in a document with no text. In the middle or at the end they are written where they belong.
+func htmlTOCAtStart(snap Snapshot) string {
+	if snap.TOCAt > 0 && len(snap.Blocks) > 0 {
+		return ""
+	}
+	return htmlTOC(snap)
+}

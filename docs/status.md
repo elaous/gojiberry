@@ -1,6 +1,6 @@
 # Status of the roadmap
 
-A one-page view of [roadmap.md](roadmap.md), read against `main` on 2026-10-13 (after #331). The roadmap keeps the long
+A one-page view of [roadmap.md](roadmap.md), read against `main` on 2026-10-14 (after #375). The roadmap keeps the long
 history of each item (what was built, tests, decisions); this page says only **what is present**, **what is
 missing**, and where the item stands. The item numbers are the roadmap's. When the two disagree, the roadmap's
 entry for the item is the detail and this page is the summary: update both in the same change.
@@ -60,8 +60,8 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 76 | Key and recovery UX | feature | done | recovery sheet, test-my-recovery-key, one-key nudge, device list with last use, guided re-key, plain limit wording | none named; the limit itself is inherent |
 | 77 | Templates, styles, design tokens | feature | done | named styles, tokens, themed HTML export, a theme editor with live contrast checks (the theme goes with the document, into HTML, EPUB, Word, OpenDocument, RTF and PDF) | none |
 | 78 | Equations, diagrams, code, footnotes | feature | partial | MathML with text alternative, code language, diagram descriptions, footnote links both ways in HTML, Word, RTF and Markdown | footnote links in PDF; equations as OMML in Word |
-| 79 | Autocomplete word picker | feature | partial | ranked suggestion list as an ARIA listbox, ghost text, de/fr/es word lists | lists hold common words only (no inflected forms); reader run (blocked) |
-| 80 | Print layout | feature | done | page model, headers and footers, page numbers, different first page and odd/even pages, any sheet size (custom paper), a real clickable table of contents (page numbers, two looks, depth) that the exports write, the outline as the navigation panel, widow control and kept table rows in every paged format, the same running header and footer on the screen sheets | small: exports write the contents at the start, not at its place in the text; the even-page rule assumes left-to-right page order |
+| 79 | Autocomplete word picker | feature | partial | ranked suggestion list as an ARIA listbox, ghost text drawn by the canvas in the run's font and language (a tag under the caret mid-line), de/fr/es/pt/ar/he word lists | lists hold common words only (no inflected forms); reader run (blocked) |
+| 80 | Print layout | feature | done | page model, headers and footers, page numbers, different first page and odd/even pages, any sheet size (custom paper), a real clickable table of contents (page numbers, two looks, depth) that the exports write where it is, the outline as the navigation panel, widow control and kept table rows in every paged format, the same running header and footer on the screen sheets | small: the even-page rule assumes left-to-right page order |
 | 81 | Admin side | feature | partial | audit log written by the server (documents, access, keys, rate limits), readiness route, backup and restore with dated backups and rotation, `/admin/usage` and history page (series kept across restarts), observability core with PostHog and OTLP sinks, the other servers' own work, builtin totals kept across restarts | the other servers have no audit log; `key.rotated` and `config.changed` are not written |
 | 82 | Performance and size | enhancement | partial | wasm size budgets per program (main 26.8 MB raw, 6.6 MB gzip; files 9.8 MB, 2.8 MB) checked in CI, stripped build, precompressed wasm, `wasmdist`, deploy recipe, service worker that keeps the app for repeat visits and offline start, low-memory mode (fewer undo steps), the file formats in a second wasm loaded on first use (main 26.1 MB, was 29.4) | memory saving of the low-memory mode not measured on a real small device; splitting the worker by format: `net/http` is out of it now (9.5 MB, was 11.0), the rest of the floor is to be measured before judging the split (roadmap 82); recipes untested on nginx/Caddy (blocked) |
 | 83 | i18n depth | enhancement | partial | de, fr, es packs, a test that every message id is in a pack, plurals, dates, time zones as offsets, pt/ar/he packs fetched on demand (model-drafted), page turned around for RTL | a native review of the pt, ar and he packs; ids built at run time |
@@ -127,9 +127,9 @@ security table: the review findings are done; still open are the per-account sig
 
 2. 56: keep recordings between visits and learn from corrections.
 3. 68: an insert-clip UI and caption track editor.
-4. Then the small leftovers of 59, 64, 65, 50 and 51, and 80's odd and even headers.
+4. Then the small leftovers of 59, 64, 65, 50 and 51.
 5. 82: measure what the file worker's remaining ~7 MB holds before judging a split by format.
 
-Closed since the previous version of this page: 58 (IPv6 /64 budgets), the table-row widow control, the sheet size
+Closed since the previous version of this page: 80 (print layout: odd/even pages, a different first page, any sheet size, a clickable table of contents written where it is, kept table rows), 74, 75, 77, 73 and 66 (their gaps), the audit log written by the server with scheduled backups (81), the builtin observability totals kept across restarts and the other servers' own work reported (81), pt/ar/he completion lists (79), 58 (IPv6 /64 budgets), the table-row widow control, the sheet size
 restore, contents in RTF, footnote links in RTF, the long undo history, heading levels in the panels, all CSS
 colour names, and the file worker without `net/http` (11.0 to 9.5 MB).
