@@ -76,6 +76,23 @@ func (f *flowElem) Update(_ *Context, props any, _ []xango.Node) (bool, error) {
 	}
 	fl.AutoClose, fl.Complete, fl.Completer = p.AutoClose, p.Complete, p.Completer
 	fl.TextScale, fl.PeerPalette, fl.StrongCaret = p.TextScale, p.PeerPalette, p.StrongCaret
+	if themeChanged(old.Theme, p.Theme) || first {
+		var th canvas.FlowTheme
+		if p.Theme != nil {
+			th = *p.Theme
+		}
+		sheet := canvas.DefaultPageStyle().Sheet
+		if th.Background != "" {
+			sheet = th.Background
+		}
+		f.ps.Style.Sheet = sheet
+		if th.Text != "" || (old.Theme != nil && old.Theme.Text != "") { // not over a colour the page's own Style chose
+			fl.Style.Color = th.Text
+		}
+		fl.LinkColor = th.Link
+		fl.InvalidateTransform()
+		changed = true
+	}
 	fl.Comments, fl.Author, fl.OnHoverComment = p.Comments, p.Author, p.OnHoverComment
 	if p.Footnotes != fl.Footnotes || p.FootnoteBand != fl.FootnoteBand {
 		fl.Footnotes, fl.FootnoteBand = p.Footnotes, p.FootnoteBand
@@ -456,4 +473,15 @@ func newTable(p TableProps) *canvas.Table {
 		t.SetCellStyle(pos.Row, pos.Col, st)
 	}
 	return t
+}
+
+// themeChanged says whether two themes differ (nil is the canvas's own colours).
+func themeChanged(a, b *canvas.FlowTheme) bool {
+	switch {
+	case a == nil && b == nil:
+		return false
+	case a == nil || b == nil:
+		return true
+	}
+	return *a != *b
 }

@@ -224,3 +224,27 @@ func TestLinkMarkdown(t *testing.T) {
 		t.Errorf("round trip: %+v", back)
 	}
 }
+
+// A theme's link colour replaces the default for links that name none; a link that names its own keeps it.
+func TestThemeLinkColour(t *testing.T) {
+	f, _, _ := linkFlow(t)
+	f.SetMode(ModeView)
+	f.LinkColor = "#0a6e2d"
+	f.InvalidateTransform()
+	linkRun := func() Run {
+		for _, r := range f.Layout().Lines[0].Runs {
+			if r.Link != "" {
+				return r
+			}
+		}
+		return Run{}
+	}
+	if got := linkRun().Color; got != "#0a6e2d" {
+		t.Errorf("link colour = %q, want the theme's", got)
+	}
+	f.LinkColor = ""
+	f.InvalidateTransform()
+	if got := linkRun().Color; got != LinkColor {
+		t.Errorf("link colour = %q, want the default", got)
+	}
+}
