@@ -69,6 +69,7 @@ Metrics and traces about the server's own behaviour, for the operator; never abo
 | `GOJIBERRY_OBS` | `on` or `off`. Default off; unset is off (the kill switch). |
 | `GOJIBERRY_OBS_SINKS` | Where operator metrics and traces go: `builtin`, `otlp`, `posthog` (comma separated; default `builtin`). |
 | `GOJIBERRY_OBS_USAGE_SINKS` | Where the browsers' opt-in usage counts ([telemetry.md](telemetry.md)) are also sent: `otlp`, `posthog` (default none). |
+| `GOJIBERRY_OBS_STATE` | A file the `builtin` sink keeps its totals in, so `/admin/observe` does not start from zero after a restart (default none). |
 | `GOJIBERRY_OBS_TRACE_SAMPLE` | Share of requests that get a trace, `0` to `1` (default `0.1`). |
 
 Errors name the variable and never repeat the value. `GET /admin/observe` (the admin guard of `/admin/usage`) shows the

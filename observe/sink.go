@@ -216,6 +216,10 @@ type Builtin struct {
 	series   map[string]*agg
 	spans    map[SpanName]*SpanStat
 	overflow int64
+
+	// path, stop and done are the file the totals are kept in and its writer (KeepIn).
+	path       string
+	stop, done chan struct{}
 }
 
 // NewBuiltin is an empty built-in sink.
@@ -268,11 +272,11 @@ func (b *Builtin) Span(s SpanData) {
 	}
 }
 
-// Flush implements Sink (the totals stay in memory).
-func (*Builtin) Flush(context.Context) error { return nil }
+// Flush implements Sink (the totals stay in memory; with KeepIn they are written to the file).
+func (b *Builtin) Flush(context.Context) error { return b.save() }
 
 // Close implements Sink.
-func (*Builtin) Close(context.Context) error { return nil }
+func (b *Builtin) Close(ctx context.Context) error { return b.closeState(ctx) }
 
 // Snapshot is the totals so far, in a stable order.
 func (b *Builtin) Snapshot() (series []Series, spans []SpanStat, overflow int64) {
