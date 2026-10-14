@@ -37,6 +37,14 @@ type Bridge struct {
 	// produced (see Drain); wire it to client.Conn.Send.
 	Outgoing func([]crdt.Op)
 
+	// OnConflict, if set, is called when other people's changes land on a paragraph this replica edited a
+	// moment ago (see conflictWindow): the paragraph as it was here and the replicas that changed it. The
+	// merge has already kept both changes; this is for telling the person.
+	OnConflict func(Conflict)
+
+	replica string
+	recent  []recentParagraph // paragraphs edited here lately, newest last
+
 	surfaces []Surface
 	noText   bool // the flow's text and side data are not shared (see Sharing)
 	seen     string
@@ -65,7 +73,7 @@ func attach(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	}
 	prefix := strings.NewReplacer(",", "_", ":", "_").Replace(replica) + "-"
 	f.Comments.IDPrefix, f.Footnotes.IDPrefix = prefix, prefix
-	b := &Bridge{Doc: crdt.NewDocWithStrategy(replica, crdt.MergeCharCRDT), Flow: f}
+	b := &Bridge{Doc: crdt.NewDocWithStrategy(replica, crdt.MergeCharCRDT), Flow: f, replica: replica}
 	f.Subscribe(func(*canvas.TextFlow) { b.pushLocal() })
 	f.UndoHook = b.UndoStep
 	return b, nil
@@ -364,6 +372,9 @@ func (b *Bridge) pushLocal() {
 			}
 		}
 	}
+	if len(edits) > 0 {
+		b.noteRecent(curRunes, atomPos(cur, b.Flow.Cursors()[0].Caret))
+	}
 	b.pushFormats(b.read(), cur, &rec)
 	b.pushSide()
 	b.record(rec)
@@ -479,6 +490,7 @@ func (b *Bridge) Apply(ops ...crdt.Op) {
 	b.Doc.Apply(ops...)
 	b.ready = true
 	atoms := b.read()
+	b.checkConflict(oldAtoms, atoms, ops)
 	items := itemsFromAtoms(atoms)
 	moved := make([]canvas.Cursor, len(cursors))
 	for i, c := range cursors {
