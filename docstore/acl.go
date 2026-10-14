@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/elaous/gojiberry/audit"
 	"net/http"
 	"sort"
 	"strings"
@@ -177,6 +178,7 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 		if merr != nil || s.adapter.Save(r.Context(), aclKey(id), data) != nil {
 			return false, http.StatusServiceUnavailable
 		}
+		s.audit(audit.DocumentCreated, audit.OK, audit.Owner, audit.NoReason, 0, id)
 		return true, 0
 	}
 	if err != nil {
@@ -299,6 +301,7 @@ func (s *Server) handleACL(w http.ResponseWriter, r *http.Request, id string) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		s.auditGrants(r, id, existing.Grants, body.Grants)
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodPost:
 		s.handleCreateLink(w, r, id, me, signedIn)

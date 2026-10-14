@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (full run on the branch of the 10th merge, on main 31a804a plus the usage series change, with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full, after one lint fix in the new test; coverage score 89.7% (unchanged), README badge unchanged).
+5 of 10 since the last full run (full run on the branch of the 10th merge, on main 31a804a plus the usage series change, with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full, after one lint fix in the new test; coverage score 89.7% (unchanged), README badge unchanged).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1390,8 +1390,8 @@ unless stated.
     the archive holds only ciphertext, needs no key, and the owner reads the restored documents. Also done (#231): the commands
     `docstore backup <file>` and `docstore restore [-force] <file>` (the file is written beside its final name and
     renamed, mode 0600; a store that already has documents is restored into only with -force), each writing one `audit`
-    event (`BackupMade`, `BackupRestored`) to stderr, without any id. Left: scheduling and rotation of backups, and
-    calling `audit` from the other places that change a store.
+    event (`BackupMade`, `BackupRestored`) to stderr, without any id. Left: scheduling and rotation of backups. (The audit calls from the other places that change a store are made now, see below.) Was:
+    calling `audit` from the other places that change a store. Also done (this PR): the audit log is written by the server (`GOJIBERRY_DOCSTORE_AUDIT=on`, keyed Refs with `GOJIBERRY_DOCSTORE_AUDIT_KEY`; docs/audit.md): `document.created`, `document.deleted`, `document.expired` (a count per sweep), `access.granted` and `access.revoked` (counts of grants changed), `key.enrolled`, `key.revoked`, `owner.reset`, and `ratelimit.hit` (`AuditLimiters`), each with the class of the one who did it and no name, address, id or content (tests: `TestAuditLogFollowsADocumentWithoutNamingIt`, `TestAuditLogIsOffUnlessAsked`, `TestAuditLogCountsExpiredDocumentsAndRefusedRequests`, `TestAuditLogRecordsOwnerKeyEvents`, `TestWithAuditReadsItsSwitchAndKey`). Left: `signin.failed` (package `auth` has no hook for it), backup scheduling and rotation, and the other servers have no audit log.
     Also done (#227), step 3 in part: `GET /admin/usage` (only when the operator guard `WithDirectoryAdmin` is set;
     a failed guard is rate limited like the other admin routes) reports `documents`, `records` (the access-list
     bookkeeping), total and largest `bytes`, and the backend quota, computed from the listing's sizes alone: it reads no

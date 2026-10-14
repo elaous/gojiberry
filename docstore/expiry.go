@@ -213,6 +213,8 @@ type ExpiringAdapter struct {
 	Related func(id string) (exact, prefixes []string)
 	// OnError receives the errors of Run's sweeps (the log when nil).
 	OnError func(error)
+	// OnExpired, when set, is told how many documents a sweep deleted (when it deleted any); the audit log uses it.
+	OnExpired func(deleted int)
 	// AdoptUpdatedAt makes the first sweep give a document that has no deadline record
 	// UpdatedAt + TTL, so old ones are deleted at once. The default is now + TTL: a full grace
 	// period, which is what you want when expiry is switched on over documents people still use.
