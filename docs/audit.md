@@ -39,7 +39,7 @@ can compute it for a given id (to ask "what happened to this document?"), and it
 | `key.revoked` | a directory key was revoked | `owner` | |
 | `owner.reset` | an owner reset was requested (by the account) or done (by the operator) | `owner`, `operator` | |
 | `ratelimit.hit` | a rate limit refused a request (`denied`, `over_rate`): no client, key or route | `anonymous` | 1 |
-| `backup.made`, `backup.restored` | the `docstore backup` and `restore` commands | `operator` | documents |
+| `backup.made`, `backup.restored` | the `docstore backup` and `restore` commands | `operator`; `system` for scheduled backups | documents |
 | `telemetry.refused` | a usage report was refused | `anonymous` | |
 
 Not logged: reads, ordinary saves of an existing document, `signin.failed` (sign-in lives in package `auth`, which has
@@ -47,3 +47,18 @@ no hook for it yet), `key.rotated` (a rotation is an enrollment) and `config.cha
 
 The same facts are available as counts, with no per-event detail, in [observability.md](observability.md) and at
 `GET /admin/usage`.
+
+## Backups
+
+`docstore backup <file>` writes one backup of the store (what the store holds, so the ciphertext of an encrypted store;
+no key is read) and `docstore restore [-force] <file>` puts one back. To keep dated backups and prune the old ones:
+
+```
+docstore backup -dir /var/backups/gojiberry -keep 14 -every 24h
+```
+
+It writes `gojiberry-backup-YYYYMMDDTHHMMSSZ.tar` (mode 0600, written beside its name and renamed) into the directory, then
+deletes all but the newest `-keep` files of exactly that name (7 by default; nothing else in the directory is ever
+touched, and nothing is deleted when the new backup failed). With `-every` it keeps running and repeats, a failed round
+is reported and tried again at the next; without it, it backs up once and exits (for a cron job or a systemd timer), 1
+when it failed. Each round writes one `backup.made` event.
