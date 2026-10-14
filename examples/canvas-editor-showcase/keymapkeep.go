@@ -9,8 +9,6 @@ import (
 // The person's own key bindings (Keys tab) are kept in this browser: only what differs from the defaults is
 // in the stage's Keymap, so that is what is stored.
 
-const keymapKey = "showcase:keys"
-
 const (
 	maxKeymapEntries = 500
 	maxChordLen      = 48

@@ -67,3 +67,12 @@ func TestParsePrefsColourBlindSafeColours(t *testing.T) {
 		t.Errorf("an unknown value was kept: %+v", p)
 	}
 }
+
+func TestTextScaleFollowsTheTextSizeSetting(t *testing.T) {
+	for in, want := range map[string]float64{"": 1, "large": 1.25, "larger": 1.5, "largest": 2, "huge": 1} {
+		p, _ := parsePrefs([]byte(`{"text":"` + in + `"}`))
+		if got := p.textScale(); got != want {
+			t.Errorf("text %q: scale %g, want %g", in, got, want)
+		}
+	}
+}
