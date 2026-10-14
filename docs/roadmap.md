@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (full run on the branch of the 10th merge, on main 405bd7e plus the contents-position change and the suggest-as-I-type fix, with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on the second try (the first run failed in `TestWordSuggestionsOpenByThemselves`, which found a real bug, fixed in this PR); coverage score 89.6% (was 89.7%), README badge updated).
+5 of 10 since the last full run (full run on the branch of the 10th merge, on main 405bd7e plus the contents-position change and the suggest-as-I-type fix, with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on the second try (the first run failed in `TestWordSuggestionsOpenByThemselves`, which found a real bug, fixed in this PR); coverage score 89.6% (was 89.7%), README badge updated).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1139,7 +1139,7 @@ unless stated.
     `versions/<id>/meta.json`, so the snapshots are as saved and go with the document when it is purged); a kept version is
     not dropped when older ones are, does not count toward `MaxVersions`, and cannot be deleted until let go (`ErrPinned`);
     the Save tab's version list shows the author, a name field and a Keep box. Two people changing notes at the same
-    moment can lose one change (last write wins). Also done (#208), step 4: Restore on a snapshot saves what is being edited as a new version named "Before restoring ..." and then opens the snapshot, so nothing is lost and the restore can be undone by restoring that version (`Session.RestoreVersion`). Also done: in a shared session the showcase records each person by their name (versions, comments and replies), `TestLiveVersionAuthorIsThePerson`. Left: the permission and encryption checks (steps 4, 5).
+    moment can lose one change (last write wins). Also done (#208), step 4: Restore on a snapshot saves what is being edited as a new version named "Before restoring ..." and then opens the snapshot, so nothing is lost and the restore can be undone by restoring that version (`Session.RestoreVersion`). Also done: in a shared session the showcase records each person by their name (versions, comments and replies), `TestLiveVersionAuthorIsThePerson`. Also done, step 5: a request for `versions/<id>/<name>` is authorized by the access list of the document it belongs to (a viewer reads, an editor or owner writes and deletes, a stranger is refused, link roles work as for the document; histories of documents with no list are unchanged), `TestVersionHistoryFollowsTheDocumentsAccessList`. A snapshot is stored exactly as the document was saved, so a confidential document's snapshots are as sealed as the document; the names and authors in `meta.json` are plain metadata, like the document's own name and list (a limit, not a gap). Item 70 is done.
 71. **Comments, suggestions and tracked changes.** Kind: fixable. What: comment threads, mentions, resolve and reopen,
     suggestion mode and tracked changes with accept and reject. Why it matters: review is the core of shared writing.
     Plan: (1) model for ranges, threads and changes that survive concurrent edits; (2) UI with keyboard paths; (3)
