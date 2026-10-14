@@ -1112,7 +1112,7 @@
   "img.longLabel": "Ausführliche Beschreibung von Bild %d (für ein Diagramm)",
   "img.longHint": "Alles, was jemand, der es nicht sehen kann, braucht, um dem Text darum zu folgen",
   "a11y.equation": "Formel: %s",
-  "links.commentNote": "Eine Rolle nur zum Kommentieren gibt es nicht. Kommentare liegen im Dokument selbst, ein Server kann sie also nicht von einer Änderung unterscheiden. Kann ansehen erlaubt dem Editor das Kommentieren, der Server lässt einen Betrachter aber nur lesen.",
+  "links.commentNote": "Kann ansehen und kommentieren: Bei einem live geteilten Dokument setzt der Hub das durch: Ein Betrachter kann Kommentare und Antworten unter seinem eigenen Namen hinzufügen und sonst nichts ändern. Bei einem Dokument, das nur auf einem Server gespeichert ist, kann der Server einen Kommentar nicht von einer Änderung unterscheiden (Kommentare liegen im Dokument selbst); dort darf Kann ansehen nur lesen, und der Server verweigert jedes Schreiben.",
   "links.encHeading": "Was Verschlüsselung schützt",
   "links.encProtects": "Im verschlüsselten Speicher liegt auf dem Server nur unlesbarer Text. Er kann Ihre Dokumente nicht lesen. Ein Link oder eine Freigabe allein gibt keinen Schlüssel.",
   "links.encNot": "Verschlüsselung verbirgt ein Dokument nicht vor Menschen, die Sie hereinlassen. Sie können es lesen, kopieren und weitergeben. Sie verbirgt auch nicht, dass es das Dokument gibt, wann es sich geändert hat und wie groß es ist. Ein Link funktioniert für jeden, der ihn hat.",
