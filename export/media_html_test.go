@@ -58,3 +58,19 @@ func TestOtherFormatsStillWriteAClipAsText(t *testing.T) {
 		}
 	}
 }
+
+// The page content sits in one <main> landmark (after the contents navigation, if there is one), so a screen
+// reader can jump to it and no text is outside a landmark.
+func TestHTMLPutsTheContentInOneMainLandmark(t *testing.T) {
+	snap := longSnapshot(1)
+	snap.TOC = true
+	out, err := HTML{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	nav, main, end := strings.Index(s, "<nav class=\"toc\""), strings.Index(s, "<main>"), strings.Index(s, "</main>")
+	if strings.Count(s, "<main>") != 1 || nav < 0 || !(nav < main && main < end) || !strings.Contains(s[main:end], "<h1") {
+		t.Errorf("landmarks: nav %d main %d end %d", nav, main, end)
+	}
+}
