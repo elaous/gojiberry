@@ -31,7 +31,7 @@ func TestPreferencesTab(t *testing.T) {
 	d.WaitFor("nothing matches", `document.querySelector('.gj-prefs-count').textContent === 'No preference matches.'`)
 	d.Fill(".gj-prefs-search", "")
 	d.Dispatch(".gj-prefs-search", "input")
-	d.WaitFor("all again", `document.querySelectorAll('.gj-prefs-group').length === 5`)
+	d.WaitFor("all again", `document.querySelectorAll('.gj-prefs-group').length === 6`)
 
 	// the theme
 	d.Select(".gj-prefs-theme", "dark")
