@@ -26,9 +26,21 @@ func runOperatorCommand(ctx context.Context, adapter docstore.Adapter, args []st
 	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	force := fs.Bool("force", false, "restore into a store that already has documents (documents with the same id are replaced)")
-	if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 1 || (*force && args[0] == "backup") {
-		_, _ = fmt.Fprintf(stderr, "usage: docstore backup <file>\n       docstore restore [-force] <file>\n")
+	dir := fs.String("dir", "", "backup: write dated backups into this directory instead of one file, and keep only the newest -keep of them")
+	keep := fs.Int("keep", defaultKeep, "backup -dir: how many backups to keep")
+	every := fs.Duration("every", 0, "backup -dir: keep running and back up this often (for example 24h); 0 backs up once")
+	if err := fs.Parse(args[1:]); err != nil || (*force && args[0] == "backup") ||
+		(args[0] == "restore" && (*dir != "" || *every != 0)) ||
+		(*dir == "" && (fs.NArg() != 1 || *every != 0)) || (*dir != "" && fs.NArg() != 0) {
+		_, _ = fmt.Fprintf(stderr, "usage: docstore backup <file>\n       docstore backup -dir <directory> [-keep N] [-every 24h]\n       docstore restore [-force] <file>\n")
 		return true, 2
+	}
+	if *dir != "" {
+		if *keep < 1 || *every < 0 {
+			_, _ = fmt.Fprintf(stderr, "docstore: -keep must be at least 1 and -every not negative\n")
+			return true, 2
+		}
+		return true, runScheduledBackups(ctx, adapter, *dir, *keep, *every, stdout, stderr, log)
 	}
 	file := fs.Arg(0)
 	switch args[0] {
