@@ -136,3 +136,55 @@ func TestFromDocfileReadsTablesAndEveryFormat(t *testing.T) {
 		}
 	}
 }
+
+func TestDeltaCarriesOneRefreshAndIsBound(t *testing.T) {
+	key, _ := DeriveKey([]byte("secret"), "t")
+	var ix Index
+	ix.Add("a", "A", "alpha text")
+	ix.docs["a"].Updated = 1
+	ix.Add("b", "B", "bravo text")
+	base, err := ix.Seal(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a refresh that updated a, added c and dropped b
+	after := Index{docs: map[string]*doc{}}
+	for id, d := range ix.docs {
+		nd := *d
+		after.docs[id] = &nd
+	}
+	after.Add("a", "A", "alpha changed")
+	after.docs["a"].Updated = 2
+	after.Add("c", "C", "charlie")
+	delete(after.docs, "b")
+	d := after.DeltaFor(Result{Changed: []string{"a", "c"}, Gone: []string{"b"}})
+	sealed, err := SealDelta(key, base, 1, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := Open(key, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := opened.ApplyDelta(key, base, 1, sealed); err != nil {
+		t.Fatal(err)
+	}
+	if opened.Len() != 2 || len(opened.Search("changed", 5)) != 1 || len(opened.Search("bravo", 5)) != 0 || len(opened.Search("charlie", 5)) != 1 {
+		t.Errorf("the delta was not applied: %d docs", opened.Len())
+	}
+	// not another place in the sequence, another base, another key, or changed bytes
+	other, _ := ix.Seal(key)
+	wrong, _ := DeriveKey([]byte("other"), "t")
+	bad := append([]byte(nil), sealed...)
+	bad[len(bad)-1] ^= 1
+	for name, fn := range map[string]func() error{
+		"seq":  func() error { return (&Index{}).ApplyDelta(key, base, 2, sealed) },
+		"base": func() error { return (&Index{}).ApplyDelta(key, other, 1, sealed) },
+		"key":  func() error { return (&Index{}).ApplyDelta(wrong, base, 1, sealed) },
+		"data": func() error { return (&Index{}).ApplyDelta(key, base, 1, bad) },
+	} {
+		if err := fn(); err == nil {
+			t.Errorf("a delta with the wrong %s was accepted", name)
+		}
+	}
+}

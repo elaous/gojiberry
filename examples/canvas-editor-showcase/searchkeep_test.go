@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -399,5 +400,78 @@ func TestReplaceAndUndoNeverOverwriteALaterSave(t *testing.T) {
 	}
 	if got := r.text(b.ID); got != "Globex two, then typed on" {
 		t.Fatalf("undo threw away a later save: %q", got)
+	}
+}
+
+// A refresh that changed one document keeps that change, not the whole index again: the base stays as it
+// was, a small record follows it, and a new visit sees both.
+func TestOneChangeKeepsOnlyThatChange(t *testing.T) {
+	r := newSearchRig(t)
+	vault, key := newVault(), testKey(3)
+	for i := 0; i < 12; i++ {
+		r.save("doc"+strconv.Itoa(i), strings.Repeat("a long paragraph about nothing in particular ", 40)+strconv.Itoa(i))
+	}
+	var first indexCache
+	refresh(t, &first, vault, key, r)
+	base := append([]byte(nil), vault.data[keptName(r.target)]...)
+
+	r.save("late", "one more document about sphinxes")
+	var second indexCache
+	if res, _ := refresh(t, &second, vault, key, r); res.Added != 1 {
+		t.Fatalf("%+v", res)
+	}
+	if !bytes.Equal(vault.data[keptName(r.target)], base) {
+		t.Error("the base was sealed again for one change")
+	}
+	d := vault.data[deltaName(r.target, 1)]
+	if d == nil || len(d) > len(base)/4 {
+		t.Fatalf("the change is not kept small: %d bytes against a base of %d", len(d), len(base))
+	}
+	if bytes.Contains(d, []byte("sphinxes")) {
+		t.Error("the change holds readable text")
+	}
+
+	// A new visit: the base and the change give the index, and nothing is read.
+	r.mem.loads = 0
+	var third indexCache
+	res, loaded := refresh(t, &third, vault, key, r)
+	if !loaded || res.Added+res.Updated+res.Removed != 0 || r.mem.loads != 0 || len(third.ix.Search("sphinxes", 5)) != 1 {
+		t.Fatalf("third visit: loaded %v, %+v, %d read", loaded, res, r.mem.loads)
+	}
+
+	// A change that was altered is refused with the ones after it; the documents are read again.
+	r.save("later", "yet another about quartz")
+	var fourth indexCache
+	refresh(t, &fourth, vault, key, r)
+	vault.data[deltaName(r.target, 1)][len(d)-1] ^= 1
+	r.mem.loads = 0
+	var fifth indexCache
+	res, loaded = refresh(t, &fifth, vault, key, r)
+	if !loaded || res.Added != 2 || r.mem.loads != 2 || len(fifth.ix.Search("quartz", 5)) != 1 || len(fifth.ix.Search("sphinxes", 5)) != 1 {
+		t.Fatalf("after an altered change: loaded %v, %+v, %d read", loaded, res, r.mem.loads)
+	}
+}
+
+// After many changes the index is sealed whole again and the old changes go.
+func TestManyChangesAreFoldedIntoANewBase(t *testing.T) {
+	r := newSearchRig(t)
+	vault, key := newVault(), testKey(4)
+	r.save("first", strings.Repeat("filler words to make the base big enough ", 200))
+	var c indexCache
+	refresh(t, &c, vault, key, r)
+	first := append([]byte(nil), vault.data[keptName(r.target)]...)
+	for i := 0; i <= maxDeltas; i++ {
+		r.save("n"+strconv.Itoa(i), "small "+strconv.Itoa(i))
+		refresh(t, &c, vault, key, r)
+	}
+	if bytes.Equal(vault.data[keptName(r.target)], first) {
+		t.Error("the base was never sealed again")
+	}
+	if len(vault.data) > maxDeltas+2 {
+		t.Errorf("%d entries kept after folding", len(vault.data))
+	}
+	var again indexCache
+	if res, loaded := refresh(t, &again, vault, key, r); !loaded || res.Added+res.Updated+res.Removed != 0 {
+		t.Fatalf("the folded index was not kept: %v %+v", loaded, res)
 	}
 }
