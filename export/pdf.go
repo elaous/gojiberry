@@ -606,7 +606,15 @@ func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWi
 		mono = true
 	}
 
-	tokens := pdfTokenize(b.Segments)
+	segs := b.Segments
+	if b.Note > 0 {
+		// A footnote is where its mark links to, and ends with a link back to the mark.
+		if v, ok := pdfFlows.Load(pdf); ok {
+			v.(*pdfFlowState).anchor = "fn" + strconv.Itoa(b.Note)
+		}
+		segs = append(append([]Segment(nil), segs...), Segment{Text: " "}, Segment{Text: "\u2191", Format: Format{NoteBack: b.Note}})
+	}
+	tokens := pdfTokenize(segs)
 	wrapped, err := wrapPDFTokens(pdf, tokens, contentWidth-indent, mono, forceBold, forceItalic, fontSize)
 	if err != nil {
 		return err
@@ -632,6 +640,13 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, langs []string, tokenLines [][]pdfTok
 		}
 		pdf.SetNewY(pdf.GetY(), lineHeight)
 		y := pdf.GetY()
+		if li == 0 {
+			if v, ok := pdfFlows.Load(pdf); ok && v.(*pdfFlowState).anchor != "" {
+				pdf.SetXY(x0, y)
+				pdf.SetAnchor(v.(*pdfFlowState).anchor)
+				v.(*pdfFlowState).anchor = ""
+			}
+		}
 
 		if li == 0 && prefix != "" {
 			if err := setPDFTokenFont(pdf, Format{}, mono, forceBold, forceItalic, fontSize); err != nil {
@@ -686,6 +701,16 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, langs []string, tokenLines [][]pdfTok
 			}
 			if !mono && isLink {
 				pdf.AddExternalLink(tok.format.Href, x, y, w, lineHeight)
+				run.leave()
+			}
+			if !mono && tok.format.NoteRef > 0 {
+				// the mark of a footnote: the place its note links back to, and a link to the note
+				pdf.SetAnchor("fnref" + strconv.Itoa(tok.format.NoteRef))
+				pdf.AddInternalLink("fn"+strconv.Itoa(tok.format.NoteRef), x, y, w, lineHeight)
+				run.leave()
+			}
+			if !mono && tok.format.NoteBack > 0 {
+				pdf.AddInternalLink("fnref"+strconv.Itoa(tok.format.NoteBack), x, y, w, lineHeight)
 				run.leave()
 			}
 			x += w
@@ -939,7 +964,7 @@ func (r *pdfRun) langIndex(l string) int {
 
 // enter opens the piece the next token belongs in.
 func (r *pdfRun) enter(f Format) {
-	link := !r.mono && f.Href != ""
+	link := !r.mono && (f.Href != "" || f.NoteRef > 0 || f.NoteBack > 0)
 	span := !link && r.langIndex(f.Lang) > 0
 	switch {
 	case link:
@@ -983,6 +1008,7 @@ func (r *pdfRun) finish() {
 type pdfFlowState struct {
 	pageH   float64
 	noWidow bool
+	anchor  string // an anchor to set at the top of the next block's first line (the footnote it is)
 }
 
 // pdfFlows maps the document being drawn to its state; renderPDF adds and removes its entry.

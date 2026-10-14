@@ -94,7 +94,6 @@ func ImportFidelity(format string, data []byte) Report {
 			{Feature: FeatHeaderFooter, Count: s.HeaderFoots},
 			{Feature: FeatTextBox, Count: s.TextBoxes},
 			{Feature: FeatDrawing, Count: s.Drawings},
-			{Feature: FeatEquation, Count: s.Equations},
 			{Feature: FeatEndnote, Count: s.Endnotes},
 			{Feature: FeatField, Count: s.Fields, Note: NoteText},
 			{Feature: FeatBookmark, Count: s.Bookmarks},

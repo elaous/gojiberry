@@ -66,7 +66,8 @@ var (
 
 var exportMatrix = map[string]map[Feature]entry{
 	// Word keeps the most; it has no colour, size or font, and highlights are not written.
-	"docx": formatTable(foldedFeatures, textEquation, longDescText, map[Feature]entry{
+	"docx": formatTable(foldedFeatures, longDescText, map[Feature]entry{
+		FeatEquation:  kept(),                         // Office Math, with the words that stand for it as hidden text
 		FeatHighlight: drop(""), FeatFootnote: kept(), // a footnote's mark and note link both ways (bookmarks and internal links)
 	}),
 	// OpenDocument text: like Word it has no colour, size or font here and writes no highlights; the footnotes
@@ -77,8 +78,8 @@ var exportMatrix = map[string]map[Feature]entry{
 	// The PDF is drawn: text, links, tags and tables, without raised or lowered text, shading or row spans.
 	"pdf": formatTable(foldedFeatures, textEquation, longDescText, map[Feature]entry{
 		FeatSuperscript: drop(""), FeatSubscript: drop(""), FeatHighlight: drop(""),
-		FeatSuggestion: drop(NoteAccepted),
-		FeatRowSpan:    drop(""), FeatCellShading: drop(""), FeatCellAlign: drop(""),
+		FeatSuggestion: drop(NoteAccepted), FeatFootnote: kept(), // the mark links to the note and the note back
+		FeatRowSpan: drop(""), FeatCellShading: drop(""), FeatCellAlign: drop(""),
 	}),
 	// Rich Text Format: no embedded pictures, shading, alignment, language or title.
 	"rtf": formatTable(foldedFeatures, textEquation, longDescText, map[Feature]entry{

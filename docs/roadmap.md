@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-3 of 10 since the last full run (full run on the branch of the 10th merge, on main 405bd7e plus the contents-position change and the suggest-as-I-type fix, with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on the second try (the first run failed in `TestWordSuggestionsOpenByThemselves`, which found a real bug, fixed in this PR); coverage score 89.6% (was 89.7%), README badge updated).
+4 of 10 since the last full run (full run on the branch of the 10th merge, on main 405bd7e plus the contents-position change and the suggest-as-I-type fix, with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on the second try (the first run failed in `TestWordSuggestionsOpenByThemselves`, which found a real bug, fixed in this PR); coverage score 89.6% (was 89.7%), README badge updated).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1322,6 +1322,7 @@ unless stated.
     linked to the picture; the editor shows a formula as typed, not typeset; a code block's language is not written
     outside HTML and EPUB (Markdown of `transfer.Default` writes code as inline marks, which carry no language).
     Also done: footnote links in RTF. The mark is a link to its note (bookmark `_fnN`) and the note ends with a link back to the mark (`_fnrefN`), the same names the Word export uses; `TestFootnotesLinkBothWaysInRTF`, and the fidelity matrix lists footnotes as kept for RTF. Still open: footnote links in PDF, equations as OMML in Word.
+    Also done (this PR), closing 78: (1) **Equations in Word as Office Math.** The Word export writes an equation as `<m:oMathPara>` (`export.OMML`, converted from the MathML of the same notation: fractions, roots, scripts, symbols, function names upright), which Word and LibreOffice typeset and read out themselves, with the words that stand for it as hidden text right after (Office Math has no field for them, and every format carries them). The Word import reads it back (`docximport/omml.go`): fractions, roots, scripts, delimiters, sums and integrals and plain runs become the same notation again, the hidden text becomes the alternative, and an equation of Word's that the notation cannot express (a matrix, an accent) keeps its text without its layout. Word equations are no longer counted as left out of an import. (2) **Footnote links in PDF.** A footnote mark is a link to its note and the note ends with an arrow link back (internal links with named destinations, tagged as Link elements with a /Contents; `pdfua` still passes); the matrix lists the PDF footnote as kept. Tests: `TestOMMLHasTheOfficeMathFormOfEachPart`, `TestEquationRoundTripsThroughWord`, `TestPDFFootnotesLinkBothWays`.
 79. **Autocomplete word picker list.** Kind: fixable. What: keep Tab accepting the inline suggestion and its ghost
     text for the top candidate; add a suggestion popup at the caret with the top N candidates (default 5), opened after
     a short delay or on demand (Ctrl+Space), and closed on Esc, click-away or the caret leaving the word. Keys: Up and
