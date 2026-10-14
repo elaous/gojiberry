@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -17,6 +18,8 @@ import (
 //	GOJIBERRY_OBS_USAGE_SINKS          where the browsers' usage counts (package telemetry) are also
 //	                                   sent, besides the admin pages that always have them: otlp, posthog
 //	                                   (default none)
+//	GOJIBERRY_OBS_STATE                a file the builtin totals are kept in across restarts (default none:
+//	                                   they start from zero)
 //	GOJIBERRY_OBS_TRACE_SAMPLE         share of requests that get a trace, 0 to 1 (default 0.1)
 //	GOJIBERRY_OBS_POSTHOG_*            see PostHogConfig
 //	OTEL_EXPORTER_OTLP_*               the standard OpenTelemetry variables, read by the otlp adapter
@@ -26,6 +29,8 @@ const (
 	envUsageSinks  = "GOJIBERRY_OBS_USAGE_SINKS"
 	envTraceSample = "GOJIBERRY_OBS_TRACE_SAMPLE"
 )
+
+// (envState, the file of the built-in totals, is in persist.go.)
 
 // DefaultTraceSample is the share of requests that get a trace when GOJIBERRY_OBS_TRACE_SAMPLE is unset.
 const DefaultTraceSample = 0.1
@@ -44,6 +49,8 @@ type Config struct {
 	// (the built-in admin pages always have those, listed or not).
 	Sinks, UsageSinks []string
 	TraceSample       float64
+	// StatePath is GOJIBERRY_OBS_STATE: the file the built-in totals are kept in ("" none).
+	StatePath string
 	// Notes are things the operator should hear at start (an ignored variable).
 	Notes []string
 }
@@ -92,7 +99,7 @@ func ParseEnv(getenv func(string) string) (Config, error) {
 	}
 	if !c.Enabled {
 		// The kill switch: nothing else is read, so a bad value cannot stop a server that has it off.
-		for _, v := range []string{envSinks, envUsageSinks, envTraceSample, "GOJIBERRY_OBS_POSTHOG_KEY", "GOJIBERRY_OBS_POSTHOG_KEY_FILE", "GOJIBERRY_OBS_POSTHOG_HOST"} {
+		for _, v := range []string{envSinks, envUsageSinks, envTraceSample, envState, "GOJIBERRY_OBS_POSTHOG_KEY", "GOJIBERRY_OBS_POSTHOG_KEY_FILE", "GOJIBERRY_OBS_POSTHOG_HOST"} {
 			if get(v) != "" {
 				c.Notes = append(c.Notes, v+" is ignored: "+envSwitch+" is not on")
 			}
@@ -105,6 +112,13 @@ func ParseEnv(getenv func(string) string) (Config, error) {
 	}
 	if c.UsageSinks, err = parseSinks(envUsageSinks, getenv(envUsageSinks), nil); err != nil {
 		return c, err
+	}
+	if p := strings.TrimSpace(getenv(envState)); p != "" {
+		if slices.Contains(c.Sinks, "builtin") {
+			c.StatePath = p
+		} else {
+			c.Notes = append(c.Notes, envState+" is ignored: the builtin sink is not named in "+envSinks)
+		}
 	}
 	c.TraceSample = DefaultTraceSample
 	if v := get(envTraceSample); v != "" {
@@ -148,7 +162,13 @@ func fromEnv(ctx context.Context, getenv func(string) string, readFile func(stri
 			continue
 		}
 		if n == "builtin" {
-			built[n] = NewBuiltin()
+			b := NewBuiltin()
+			if c.StatePath != "" {
+				if err := b.KeepIn(c.StatePath); err != nil {
+					c.Notes = append(c.Notes, err.Error()+" (the totals start again)")
+				}
+			}
+			built[n] = b
 			continue
 		}
 		f, ok := factory(n)

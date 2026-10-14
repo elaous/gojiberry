@@ -5,6 +5,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
@@ -60,8 +61,16 @@ func TestWordSuggestionsOpenByThemselves(t *testing.T) {
 	d.Focus("#input")
 	d.Press("Home")
 	d.Type("zebra zebra zeppelin ze ")
+	typed := time.Now()
 	d.Press("ArrowLeft")
-	d.OK(d.Count("#suggestions") == 0, "the list is not open before the pause")
+	closed := d.Count("#suggestions") == 0
+	// The list opens 0.6 s after typing stops. On a loaded machine the two steps above can take longer than that, and
+	// then "not open yet" says nothing about the product, so it is checked only when it was asked inside the pause.
+	if time.Since(typed) < 450*time.Millisecond {
+		d.OK(closed, "the list is not open before the pause")
+	} else {
+		t.Logf("skipped: the pause was over before the check (%v)", time.Since(typed))
+	}
 	d.Type("p")
 	d.WaitSelector(`#suggestions[role="listbox"]`)
 	d.OK(d.Count(`#suggestions [role="option"]`) == 1, "it opens by itself, narrowed to 'zep'")
