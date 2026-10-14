@@ -35,6 +35,7 @@ func Doc(state State, cb Callbacks) xango.Node {
 				styles={state.Styles}
 				autoClose={state.AutoClose()}
 				textScale={state.TextScale}
+				theme={state.Theme}
 				peerPalette={state.PeerPalette}
 				strongCaret={state.StrongCaret}
 				hyphenator={state.Hyphenator()}

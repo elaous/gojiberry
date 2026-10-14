@@ -1203,6 +1203,21 @@
     "docview.skipSide": "Saltar para o painel lateral",
     "docview.skip": "Ligações de salto",
     "fidelity.checking": "%s: a verificar o que este formato mantém…",
-    "files.working": "A processar…"
+    "files.working": "A processar…",
+    "theme.savedTitle": "Temas guardados",
+    "theme.name": "Nome deste tema",
+    "theme.save": "Guardar este tema",
+    "theme.needName": "Dê primeiro um nome ao tema.",
+    "theme.notSaved": "Corrija primeiro o que está indicado acima antes de guardar o tema.",
+    "theme.saved": "Tema guardado neste dispositivo.",
+    "theme.noneSaved": "Ainda não há temas guardados.",
+    "theme.use": "Usar",
+    "theme.delete": "Eliminar",
+    "theme.cannotUse": "Esse tema não se lê com conforto; corrija primeiro as suas cores.",
+    "theme.synced": "Os temas guardados estão sincronizados com o servidor.",
+    "theme.signedOut": "Inicie sessão no servidor para guardar lá os temas; continuam neste dispositivo.",
+    "theme.offline": "Não foi possível contactar o servidor; os temas guardados ficam neste dispositivo e são enviados mais tarde.",
+    "theme.pending#one": "%d alteração espera para ser enviada ao servidor.",
+    "theme.pending#other": "%d alterações esperam para ser enviadas ao servidor."
   }
 }

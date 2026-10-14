@@ -17,6 +17,8 @@ type State struct {
 	NoAutoClose bool
 	// TextScale is the person's text-size setting applied to the text on the sheets (1 is as written).
 	TextScale float64
+	// Theme is the document theme the sheets are drawn in (nil: the canvas's own colours).
+	Theme *canvas.FlowTheme
 	// PeerPalette recolours other people's cursors (a preference); nil leaves the colours they chose.
 	PeerPalette []string
 	// StrongCaret is the high-contrast setting for the canvas: a thicker caret and a stronger selection.
