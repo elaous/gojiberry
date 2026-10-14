@@ -41,7 +41,7 @@ func TestForReadsTagsAndKnowsOnlyItsLanguages(t *testing.T) {
 	if len(For("de-AT")) == 0 || len(For("FR_ca")) == 0 || len(For("es")) == 0 {
 		t.Error("a regional tag finds the list of its language")
 	}
-	for _, tag := range []string{"", "en", "en-US", "ja", "pt"} {
+	for _, tag := range []string{"", "en", "en-US", "ja", "it"} {
 		if For(tag) != nil {
 			t.Errorf("%q has no list", tag)
 		}
@@ -53,8 +53,8 @@ func TestForReadsTagsAndKnowsOnlyItsLanguages(t *testing.T) {
 
 // The lists feed completion: a prefix finds the words and keeps the typed capital.
 func TestListsFeedCompletion(t *testing.T) {
-	prefix := map[string]string{"de": "Doku", "fr": "enreg", "es": "doc"}
-	want := map[string]string{"de": "Dokument", "fr": "enregistrer", "es": "documento"}
+	prefix := map[string]string{"de": "Doku", "fr": "enreg", "es": "doc", "pt": "docum", "ar": "وثي", "he": "מסמ"}
+	want := map[string]string{"de": "Dokument", "fr": "enregistrer", "es": "documento", "pt": "documento", "ar": "وثيقة", "he": "מסמך"}
 	for c, p := range prefix {
 		var ix complete.Index
 		ix.AddVocabulary(For(c), 1)

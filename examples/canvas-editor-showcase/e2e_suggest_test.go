@@ -128,3 +128,23 @@ func TestWordSuggestionsUseTheLanguageWordList(t *testing.T) {
 	d.OK(strings.Contains(got, "Dokument"), "the German list offers its word, with the typed capital: "+got)
 	d.NoErrors()
 }
+
+// Portuguese has a list too: with it as the document language, a prefix finds its word.
+func TestWordSuggestionsUseThePortugueseList(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.ToggleMode()
+	d.Click(`button.gj-menubar-button:has-text("Format")`)
+	d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Language of the document")`)
+	d.Click(`.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("Português")`)
+	d.WaitFor("the language", `document.getElementById('a11y-text').getAttribute('lang') === 'pt'`)
+	d.CanvasClick(240, 164)
+	d.Focus("#input")
+	d.Press("Home")
+	d.Type("docum ")
+	d.Press("ArrowLeft")
+	d.Press("Control+Space")
+	d.WaitSelector(`#suggestions [role="option"]`)
+	got := strings.Join(d.Texts(`#suggestions [role="option"]`), ",")
+	d.OK(strings.Contains(got, "documento"), "the Portuguese list offers its word: "+got)
+	d.NoErrors()
+}
