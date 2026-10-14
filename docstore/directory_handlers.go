@@ -3,6 +3,7 @@ package docstore
 import (
 	"encoding/json"
 	"errors"
+	"github.com/elaous/gojiberry/audit"
 	"github.com/elaous/gojiberry/auth"
 	"hash/fnv"
 	"io"
@@ -191,9 +192,11 @@ func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	}
 	k, err := s.directory.Revoke(r.Context(), u, fp, body.Owner)
 	if err != nil {
+		s.audit(audit.KeyRevoked, audit.Failed, audit.Owner, audit.NotAllowed, 0, u.ID)
 		directoryError(w, err)
 		return
 	}
+	s.audit(audit.KeyRevoked, audit.OK, audit.Owner, audit.NoReason, 0, u.ID)
 	writeJSONStatus(w, http.StatusOK, k)
 }
 
@@ -427,9 +430,11 @@ func (s *Server) handleOperatorReset(w http.ResponseWriter, r *http.Request) {
 	}
 	e, err := op.OperatorResetEnrollment(r.Context(), pseudonym)
 	if err != nil {
+		s.audit(audit.OwnerReset, audit.Failed, audit.Operator, audit.NotAllowed, 0, pseudonym)
 		directoryError(w, err)
 		return
 	}
+	s.audit(audit.OwnerReset, audit.OK, audit.Operator, audit.NoReason, 0, pseudonym)
 	writeJSONStatus(w, http.StatusOK, e)
 }
 

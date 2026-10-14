@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/elaous/gojiberry/audit"
 	"github.com/elaous/gojiberry/guard"
 	"io"
 	"log"
@@ -330,6 +331,10 @@ type Server struct {
 	telemetry *telemetry.Counters
 	// obs is operator observability (WithObserver); nil is off.
 	obs *observe.Observer
+
+	// auditLog and auditKey are the operator's audit log and the key of its Refs (WithAudit).
+	auditLog *audit.Logger
+	auditKey []byte
 	// usage is the bounded series of the usage counters (usageseries.go); usageClock replaces
 	// time.Now in tests.
 	usage      usageSeries
@@ -788,6 +793,10 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.setExpires(w, r, id)
+		if strings.TrimSpace(r.Header.Get("If-None-Match")) == "*" {
+			// saved only if there was none: a new document
+			s.audit(audit.DocumentCreated, audit.OK, s.auditActor(r, id), audit.NoReason, 0, id)
+		}
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodGet:
 		if allowed, status := s.checkPermission(r, id, http.MethodGet); !allowed {
@@ -813,6 +822,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			writePermissionError(w, status)
 			return
 		}
+		actor := s.auditActor(r, id) // before the delete takes the access list with it
 		done := s.opStart(r.Context(), "delete")
 		err := s.adapter.Delete(r.Context(), id)
 		done(err, -1)
@@ -821,9 +831,11 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err != nil {
+			s.audit(audit.DocumentDeleted, audit.Failed, actor, audit.Unavailable, 0, id)
 			serverError(w, err)
 			return
 		}
+		s.audit(audit.DocumentDeleted, audit.OK, actor, audit.NoReason, 0, id)
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
