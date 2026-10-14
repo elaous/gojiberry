@@ -42,6 +42,7 @@ func prefGroups() [][2]string {
 		{"interface", T("prefs.g.interface", "Language and theme")},
 		{"shared", T("prefs.g.shared", "Shared editing")},
 		{"typing", T("prefs.g.typing", "Typing and reading aloud")},
+		{"access", T("prefs.g.access", "Pointer and switch access")},
 		{"editor", T("prefs.g.editor", "Editor")},
 	}
 }
@@ -57,6 +58,8 @@ func prefSettings() []setting {
 	collabCur, collabSet := str(func(p *prefs) *string { return &p.Collab })
 	typingCur, typingSet := str(func(p *prefs) *string { return &p.Typing })
 	themeCur, themeSet := str(func(p *prefs) *string { return &p.Theme })
+	dwellCur, dwellSet := str(func(p *prefs) *string { return &p.Dwell })
+	scanCur, scanSet := str(func(p *prefs) *string { return &p.Scan })
 	var langs []choice
 	langs = append(langs, choice{value: "", label: T("prefs.langAuto", "As the browser has it")})
 	for _, c := range langCodes() {
@@ -102,6 +105,17 @@ func prefSettings() []setting {
 			{components.TypingCharacters, T("prefs.o.typingChars", "Each character"), T("prefs.typingChars", "Typing: say each character")}}, cur: typingCur, set: typingSet},
 		toggle("typing", "typefmt", T("prefs.typingFormat", "Say formatting changes at the caret"), func(p prefs) bool { return p.TypeFmt == "on" }, func(p *prefs, on bool) { p.TypeFmt = onOff(on, "on") }),
 		toggle("typing", "typeread", T("prefs.typingRead", "Read the line when the caret moves"), func(p prefs) bool { return p.TypeRead == "on" }, func(p *prefs, on bool) { p.TypeRead = onOff(on, "on") }),
+
+		{group: "access", id: "dwell", label: T("prefs.l.dwell", "Click by resting the pointer"), choices: []choice{
+			{"", T("prefs.o.accessOff", "Off"), T("prefs.dwellOff", "Dwell click: off")},
+			{"fast", T("prefs.o.dwellFast", "After 0.7 seconds"), T("prefs.dwellFast", "Dwell click: after 0.7 seconds")},
+			{"medium", T("prefs.o.dwellMedium", "After 1.2 seconds"), T("prefs.dwellMedium", "Dwell click: after 1.2 seconds")},
+			{"slow", T("prefs.o.dwellSlow", "After 2 seconds"), T("prefs.dwellSlow", "Dwell click: after 2 seconds")}}, cur: dwellCur, set: dwellSet},
+		{group: "access", id: "scan", label: T("prefs.l.scan", "Switch scanning (Space or Enter chooses)"), choices: []choice{
+			{"", T("prefs.o.accessOff", "Off"), T("prefs.scanOff", "Switch scanning: off")},
+			{"fast", T("prefs.o.scanFast", "One step per second"), T("prefs.scanFast", "Switch scanning: one step per second")},
+			{"medium", T("prefs.o.scanMedium", "One step per 1.5 seconds"), T("prefs.scanMedium", "Switch scanning: one step per 1.5 seconds")},
+			{"slow", T("prefs.o.scanSlow", "One step per 2.5 seconds"), T("prefs.scanSlow", "Switch scanning: one step per 2.5 seconds")}}, cur: scanCur, set: scanSet},
 
 		toggle("editor", "suggest", T("prefs.suggestAuto", "Suggest words as I type"), func(p prefs) bool { return p.Suggest == "auto" }, func(p *prefs, on bool) { p.Suggest = onOff(on, "auto") }),
 		toggle("editor", "ghost", T("prefs.ghost", "Show a suggestion after the caret (Tab accepts)"), func(p prefs) bool { return p.Ghost == "on" }, func(p *prefs, on bool) { p.Ghost = onOff(on, "on") }),

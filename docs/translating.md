@@ -56,6 +56,16 @@ and `TestRightToLeftInterfacePassesAxe` check that the page follows and that axe
 reader of those languages would still look at by eye: the canvas editor's own layout of mixed-direction text
 (item 64), and wide German-like strings do not apply but long Arabic ones can wrap differently in the narrow side panel.
 
+## Plain words (`en-x-plain`)
+
+"English, plain words" (`static/lang-en-x-plain.json`, chosen in the language menu or the preferences) is a variant of
+English for people who find the usual wording hard (roadmap 65): short sentences, everyday words, and the same
+meaning and the same warnings. It rewrites only the messages that are hard to read, those about signing in, keys,
+encryption and share links, and everything else falls back to English; `TestLazyPacksAreComplete` therefore only
+requires that each message it holds exists and keeps its verbs. The page language is `en-x-plain` (a valid private-use
+tag), so a screen reader keeps reading it as English. **It was written by the model that wrote this code, not by a plain
+language editor or by readers who need it:** have it reviewed (and extended to the rest of the page) before it is relied on.
+
 ## What is not done
 
 Plural rules for fractions are in

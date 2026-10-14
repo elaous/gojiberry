@@ -64,6 +64,7 @@ func historySteps(p prefs) int {
 // length of the undo history.
 func applyPrefs(p prefs) {
 	canvas.SetHistoryLimit(historySteps(p))
+	setAccess(p)
 	root := js.Global().Get("document").Get("documentElement")
 	for k, v := range p.attrs() {
 		if v == "" {

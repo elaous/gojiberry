@@ -76,3 +76,14 @@ func TestTextScaleFollowsTheTextSizeSetting(t *testing.T) {
 		}
 	}
 }
+
+func TestDwellAndScanSettingsKeepOnlyTheirKnownSteps(t *testing.T) {
+	p, err := parsePrefs([]byte(`{"dwell":"medium","scan":"slow"}`))
+	if err != nil || p.Dwell != "medium" || p.Scan != "slow" {
+		t.Fatalf("%+v %v", p, err)
+	}
+	p, _ = parsePrefs([]byte(`{"dwell":"instant","scan":"0"}`))
+	if p.Dwell != "" || p.Scan != "" {
+		t.Errorf("unknown steps are dropped: %+v", p)
+	}
+}

@@ -17,7 +17,7 @@ func TestPreferencesTab(t *testing.T) {
 	d.Click(`button[data-tab="prefs"]`)
 	d.WaitSelector(".gj-prefs-search")
 	all := d.Count(".gj-prefs-group")
-	d.OK(all == 5, "five groups: "+d.Text(".gj-prefs-count"))
+	d.OK(all == 6, "six groups: "+d.Text(".gj-prefs-count"))
 
 	// the search narrows the list to what answers it
 	d.Fill(".gj-prefs-search", "contrast")
@@ -31,7 +31,7 @@ func TestPreferencesTab(t *testing.T) {
 	d.WaitFor("nothing matches", `document.querySelector('.gj-prefs-count').textContent === 'No preference matches.'`)
 	d.Fill(".gj-prefs-search", "")
 	d.Dispatch(".gj-prefs-search", "input")
-	d.WaitFor("all again", `document.querySelectorAll('.gj-prefs-group').length === 5`)
+	d.WaitFor("all again", `document.querySelectorAll('.gj-prefs-group').length === 6`)
 
 	// the theme
 	d.Select(".gj-prefs-theme", "dark")
