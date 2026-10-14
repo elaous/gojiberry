@@ -124,7 +124,7 @@ func (b *odtBuilder) inline(segs []Segment) string {
 			run = `<text:span text:style-name="` + name + `">` + run + `</text:span>`
 		}
 		if f.Href != "" {
-			run = `<text:a xlink:type="simple" xlink:href="` + esc(f.Href) + `">` + run + `</text:a>`
+			run = `<text:a xlink:type="simple" xlink:href="` + esc(f.Href) + `" text:style-name="Internet_20_link" text:visited-style-name="Internet_20_link">` + run + `</text:a>`
 		}
 		if f.NoteRef > 0 {
 			if text, ok := b.notes[f.NoteRef]; ok {
@@ -466,6 +466,7 @@ func (b *odtBuilder) automaticStyles() string {
 // odtStyles is styles.xml: the named styles, the page and its running header and footer.
 func odtStyles(snap Snapshot) string {
 	in := func(px float64) string { return fmt.Sprintf("%.3fin", px/96) }
+	th := themeOf(snap)
 	lang := ""
 	if l, c, _ := strings.Cut(snap.Lang, "-"); l != "" {
 		lang = ` fo:language="` + esc(l) + `"`
@@ -482,7 +483,7 @@ func odtStyles(snap Snapshot) string {
 		l, c, r := decorParts(p.text)
 		hf.WriteString(`<style:` + p.tag + `><text:p text:style-name="HeaderFooter">` + odtDecor(l, snap.Title) + `<text:tab/>` + odtDecor(c, snap.Title) + `<text:tab/>` + odtDecor(r, snap.Title) + `</text:p></style:` + p.tag + `>`)
 	}
-	pm := fmt.Sprintf(`<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="%s" fo:page-height="%s" fo:margin-top="%s" fo:margin-bottom="%s" fo:margin-left="%s" fo:margin-right="%s" style:print-orientation="portrait"/>`,
+	pm := fmt.Sprintf(`<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="%s" fo:page-height="%s" fo:margin-top="%s" fo:margin-bottom="%s" fo:margin-left="%s" fo:margin-right="%s" style:print-orientation="portrait"`+odtPageColour(th)+`/>`,
 		in(snap.PageWidth), in(snap.PageHeight), in(snap.MarginTop), in(snap.MarginBottom), in(snap.MarginLeft), in(snap.MarginRight))
 	if snap.Header != "" {
 		pm += `<style:header-style/>`
@@ -492,7 +493,7 @@ func odtStyles(snap Snapshot) string {
 	}
 	pm += `</style:page-layout>`
 	return `<office:document-styles ` + odfNS + ` office:version="1.2"><office:styles>` +
-		`<style:default-style style:family="paragraph"><style:paragraph-properties fo:margin-bottom="0.08in" fo:line-height="115%"/><style:text-properties fo:font-size="11pt"` + lang + `/></style:default-style>` +
+		`<style:default-style style:family="paragraph"><style:paragraph-properties fo:margin-bottom="0.08in" fo:line-height="115%"/><style:text-properties fo:font-size="` + odtBodySize(th) + `"` + odtTextColour(th) + lang + `/></style:default-style>` + odtLinkStyle(th) +
 		`<style:style style:name="Standard" style:family="paragraph" style:class="text"/>` +
 		`<style:style style:name="Heading" style:family="paragraph" style:class="text"><style:paragraph-properties fo:margin-top="0.17in" fo:margin-bottom="0.08in" fo:keep-with-next="always"/></style:style>` +
 		`<style:style style:name="Heading_20_1" style:display-name="Heading 1" style:family="paragraph" style:parent-style-name="Heading" style:default-outline-level="1"><style:text-properties fo:font-size="20pt" fo:font-weight="bold"/></style:style>` +
@@ -558,4 +559,37 @@ func contentsStyles(snap Snapshot) string {
 			l, l, float64(l-1)*0.25, width-float64(l-1)*0.25)
 	}
 	return sb.String()
+}
+
+// odtBodySize is the default font size: 11pt, or the theme's body size.
+func odtBodySize(th docTheme) string {
+	if th.bodyPt > 0 {
+		return strconv.FormatFloat(th.bodyPt, 'f', -1, 64) + "pt"
+	}
+	return "11pt"
+}
+
+// odtTextColour is the fo:color attribute of the default text, or nothing.
+func odtTextColour(th docTheme) string {
+	if th.text == "" {
+		return ""
+	}
+	return ` fo:color="#` + strings.ToLower(th.text) + `"`
+}
+
+// odtPageColour is the page background attribute of the page layout, or nothing.
+func odtPageColour(th docTheme) string {
+	if th.background == "" {
+		return ""
+	}
+	return ` fo:background-color="#` + strings.ToLower(th.background) + `"`
+}
+
+// odtLinkStyle is the character style links use ("Internet_20_link"), in the theme's link colour or the usual blue.
+func odtLinkStyle(th docTheme) string {
+	link := "0563c1" // the usual blue
+	if th.link != "" {
+		link = strings.ToLower(th.link)
+	}
+	return `<style:style style:name="Internet_20_link" style:display-name="Internet link" style:family="text"><style:text-properties fo:color="#` + link + `" style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"/></style:style>`
 }

@@ -36,9 +36,11 @@ type docxBuilder struct {
 	nextNum int // numbering instances for numbered lists (each list restarts)
 	nums    []int
 	links   map[string]string
-	imgs    int
-	docPr   int
-	revs    int // tracked changes written so far (their ids)
+	// linkColour is the colour of hyperlink text, six hex digits (Word blue unless the theme names one).
+	linkColour string
+	imgs       int
+	docPr      int
+	revs       int // tracked changes written so far (their ids)
 	// cur is the index of the block being written; marks names the bookmark of each heading the table
 	// of contents points to (by block index).
 	cur   int
@@ -63,7 +65,11 @@ func esc(s string) string {
 }
 
 func (DOCX) Export(snap Snapshot) ([]byte, error) {
-	b := &docxBuilder{media: map[string][]byte{}, links: map[string]string{}, marks: map[int]string{}}
+	th := themeOf(snap)
+	b := &docxBuilder{media: map[string][]byte{}, links: map[string]string{}, marks: map[int]string{}, linkColour: "0563C1"}
+	if th.link != "" {
+		b.linkColour = th.link
+	}
 	b.tableOfContents(snap)
 	for i := 0; i < len(snap.Blocks); i++ {
 		blk := snap.Blocks[i]
@@ -126,12 +132,22 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
 </Relationships>`},
 		{"docProps/core.xml", header + `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>` + esc(snap.Title) + `</dc:title>` + docxCoreLanguage(snap.Lang) + `</cp:coreProperties>`},
-		{"word/document.xml", header + `<w:document ` + docxNS + `><w:body>` + b.body.String() + docxSection(snap, hfRels) + `</w:body></w:document>`},
-		{"word/styles.xml", header + docxStylesFor(snap.Lang)},
+		{"word/document.xml", header + `<w:document ` + docxNS + `>` + docxBackground(th) + `<w:body>` + b.body.String() + docxSection(snap, hfRels) + `</w:body></w:document>`},
+		{"word/styles.xml", header + docxStylesFor(snap.Lang, th)},
 		{"word/numbering.xml", header + b.numbering()},
 		{"word/_rels/document.xml.rels", header + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>` + strings.Join(b.rels, "") + `</Relationships>`},
+	}
+	if th.background != "" {
+		// Word draws a page colour only when the document asks for the background to be shown.
+		files = append(files, struct{ name, content string }{"word/settings.xml", header + `<w:settings ` + docxNS + `><w:displayBackgroundShape/></w:settings>`})
+		files[0].content = strings.Replace(files[0].content, `</Types>`, `<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/></Types>`, 1)
+		for i := range files {
+			if files[i].name == "word/_rels/document.xml.rels" {
+				files[i].content = strings.Replace(files[i].content, `</Relationships>`, `<Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/></Relationships>`, 1)
+			}
+		}
 	}
 	files = append(files, hfParts...)
 	for _, f := range files {
@@ -350,7 +366,7 @@ func (b *docxBuilder) block(blk Block) {
 		// a footnote: the mark in the text links here (bookmark _fnN), and a link at its end goes back to the mark
 		n := strconv.Itoa(blk.Note)
 		inner = `<w:bookmarkStart w:id="` + strconv.Itoa(noteBookmarkBase+blk.Note) + `" w:name="_fn` + n + `"/>` + inner + `<w:bookmarkEnd w:id="` + strconv.Itoa(noteBookmarkBase+blk.Note) + `"/>` +
-			`<w:r><w:t xml:space="preserve"> </w:t></w:r><w:hyperlink w:anchor="_fnref` + n + `" w:history="1"><w:r><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr><w:t>` + "\u21a9" + `</w:t></w:r></w:hyperlink>`
+			`<w:r><w:t xml:space="preserve"> </w:t></w:r><w:hyperlink w:anchor="_fnref` + n + `" w:history="1"><w:r><w:rPr><w:color w:val="` + b.linkColour + `"/><w:u w:val="single"/></w:rPr><w:t>` + "\u21a9" + `</w:t></w:r></w:hyperlink>`
 	}
 	if name, ok := b.marks[b.cur]; ok {
 		inner = `<w:bookmarkStart w:id="` + strconv.Itoa(b.cur) + `" w:name="` + name + `"/>` + inner + `<w:bookmarkEnd w:id="` + strconv.Itoa(b.cur) + `"/>`
@@ -379,7 +395,7 @@ func (b *docxBuilder) inline(segs []Segment) string {
 			rpr.WriteString(`<w:strike/>`)
 		}
 		if f.Href != "" {
-			rpr.WriteString(`<w:color w:val="0563C1"/>`)
+			rpr.WriteString(`<w:color w:val="` + b.linkColour + `"/>`)
 		}
 		if f.Href != "" || f.Underline {
 			rpr.WriteString(`<w:u w:val="single"/>`)
@@ -566,9 +582,30 @@ func docxCoreLanguage(lang string) string {
 
 // docxStylesFor is docxStyles with the document's language as the default of every run (w:lang), so
 // Word's proofing and a screen reader use it for text that names no other.
-func docxStylesFor(lang string) string {
-	if lang == "" {
-		return docxStyles
+func docxStylesFor(lang string, th docTheme) string {
+	out := docxStyles
+	if th.text != "" || th.bodyPt > 0 {
+		def := ""
+		if th.text != "" {
+			def += `<w:color w:val="` + th.text + `"/>`
+		}
+		size := `<w:sz w:val="22"/>`
+		if th.bodyPt > 0 {
+			size = `<w:sz w:val="` + strconv.Itoa(int(th.bodyPt*2+0.5)) + `"/>`
+		}
+		out = strings.Replace(out, `<w:sz w:val="22"/></w:rPr></w:rPrDefault>`, def+size+`</w:rPr></w:rPrDefault>`, 1)
 	}
-	return strings.Replace(docxStyles, `<w:sz w:val="22"/></w:rPr></w:rPrDefault>`, `<w:sz w:val="22"/><w:lang w:val="`+esc(lang)+`"/></w:rPr></w:rPrDefault>`, 1)
+	if lang != "" {
+		out = strings.Replace(out, `</w:rPr></w:rPrDefault>`, `<w:lang w:val="`+esc(lang)+`"/></w:rPr></w:rPrDefault>`, 1)
+	}
+	return out
+}
+
+// docxBackground is the page colour of the theme (w:background); Word shows it only with the display setting
+// in settings.xml, which docxSettings writes.
+func docxBackground(th docTheme) string {
+	if th.background == "" {
+		return ""
+	}
+	return `<w:background w:color="` + th.background + `"/>`
 }
