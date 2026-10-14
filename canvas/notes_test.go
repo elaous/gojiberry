@@ -228,3 +228,76 @@ func TestAlphabeticalIndex(t *testing.T) {
 		t.Fatal(p.calls)
 	}
 }
+
+func tocFlow(t *testing.T) (*TextFlow, *TOCObject, *fakePainter) {
+	t.Helper()
+	f, st := editFlow(t, 0,
+		Chars{Text: "Intro", Format: Format{Scale: 2, FontWeight: 700}}, Chars{Text: "\nbody text\n"},
+		Chars{Text: "Part two", Format: Format{Scale: 1.6, FontWeight: 700}}, Chars{Text: "\nmore\n"})
+	f.SetCursors([]Cursor{At(0)})
+	if !runCmd(f, st, CmdTOCInsert, "") {
+		t.Fatal("insert")
+	}
+	return f, f.items()[0].(Inline).Object.(*TOCObject), st.Painter.(*fakePainter)
+}
+
+// A table of contents has two looks (dotted leaders or none) and a depth.
+func TestTableOfContentsStyleAndDepth(t *testing.T) {
+	f, obj, p := tocFlow(t)
+	f.lastLay = Layout{Lines: []Line{{Start: 0, End: 40, Page: 0}}}
+	p.calls = nil
+	f.Draw()
+	if !p.has(`fillText "." `) {
+		t.Errorf("dotted by default:\n%v", p.calls)
+	}
+	obj.Style = TOCPlain
+	p.calls = nil
+	f.Draw()
+	if p.has(`fillText "." `) || !p.has(`fillText "Intro"`) {
+		t.Errorf("plain has no leader:\n%v", p.calls)
+	}
+	obj.Depth = 1
+	if got := obj.Entries(); len(got) != 1 || got[0].Text != "Intro" {
+		t.Errorf("depth 1 lists the top level only: %+v", got)
+	}
+	obj.Depth = 0
+	if len(obj.Entries()) != 2 {
+		t.Error("depth 0 lists them all")
+	}
+}
+
+// A click on a row of the table goes to the heading it lists; the title and the empty space go nowhere.
+func TestClickOnATableOfContentsGoesToTheHeading(t *testing.T) {
+	f, obj, _ := tocFlow(t)
+	f.Draw()
+	var ox, oy float64
+	found := false
+	for _, ln := range f.Layout().Lines {
+		for _, po := range ln.Objects {
+			if po.Object == obj {
+				ox, oy, found = po.X, po.Y, true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("the table was not laid out")
+	}
+	entries := obj.Entries()
+	if _, ok := obj.EntryAt(ox+5, oy+5, ox, oy); ok {
+		t.Error("the title is not a link")
+	}
+	for i, e := range entries {
+		if off, ok := obj.EntryAt(ox+5, oy+tocLineH*float64(i+1)+5, ox, oy); !ok || off != e.Start {
+			t.Errorf("row %d: %d, %v (want %d)", i, off, ok, e.Start)
+		}
+	}
+	if !f.MouseDown(ox+5, oy+tocLineH*2+5) {
+		t.Fatal("the click was not taken")
+	}
+	if got := f.Cursors()[0].Caret; got != entries[1].Start {
+		t.Errorf("the caret is at %d, want %d", got, entries[1].Start)
+	}
+	if _, _, _, ok := f.TakeReveal(); !ok {
+		t.Error("the view is asked to scroll to the heading")
+	}
+}

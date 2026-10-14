@@ -176,7 +176,7 @@ func (b *odtBuilder) item(level int, numbered bool) {
 	b.body.WriteString(`<text:list-item>`)
 }
 
-func (b *odtBuilder) cellStyle(fill string, align int) (cell, para string) {
+func (b *odtBuilder) cellStyle(fill string, align int, keep bool) (cell, para string) {
 	if f, ok := hexFill(fill); ok {
 		key := "c|" + f
 		if _, ok := b.cells[key]; !ok {
@@ -185,8 +185,14 @@ func (b *odtBuilder) cellStyle(fill string, align int) (cell, para string) {
 		}
 		cell = b.cells[key]
 	}
-	if align == 1 || align == 2 {
+	if align == 1 || align == 2 || keep {
+		if align != 1 && align != 2 {
+			align = 0
+		}
 		key := "p|" + strconv.Itoa(align)
+		if keep {
+			key += "|keep"
+		}
 		if _, ok := b.cells[key]; !ok {
 			b.cells[key] = "P" + strconv.Itoa(len(b.cells)+1)
 			b.corder = append(b.corder, key)
@@ -211,10 +217,17 @@ func (b *odtBuilder) contents(snap Snapshot) {
 	b.marks = map[int]string{}
 	title := esc(snap.tocTitle())
 	var sb strings.Builder
-	sb.WriteString(`<text:table-of-content text:protected="false" text:name="Table_20_of_20_Contents1"><text:table-of-content-source text:outline-level="3"><text:index-title-template text:style-name="Contents_20_Heading">` + title + `</text:index-title-template>`)
-	for l := 1; l <= 3; l++ {
+	depth, leaderChar := 3, "."
+	if snap.TOCDepth > 0 {
+		depth = min(snap.TOCDepth, 3)
+	}
+	if snap.TOCStyle == "plain" {
+		leaderChar = " "
+	}
+	sb.WriteString(`<text:table-of-content text:protected="false" text:name="Table_20_of_20_Contents1"><text:table-of-content-source text:outline-level="` + strconv.Itoa(depth) + `"><text:index-title-template text:style-name="Contents_20_Heading">` + title + `</text:index-title-template>`)
+	for l := 1; l <= depth; l++ {
 		n := strconv.Itoa(l)
-		sb.WriteString(`<text:table-of-content-entry-template text:outline-level="` + n + `" text:style-name="Contents_20_` + n + `"><text:index-entry-link-start/><text:index-entry-text/><text:index-entry-tab-stop style:type="right" style:leader-char="."/><text:index-entry-page-number/><text:index-entry-link-end/></text:table-of-content-entry-template>`)
+		sb.WriteString(`<text:table-of-content-entry-template text:outline-level="` + n + `" text:style-name="Contents_20_` + n + `"><text:index-entry-link-start/><text:index-entry-text/><text:index-entry-tab-stop style:type="right" style:leader-char="` + leaderChar + `"/><text:index-entry-page-number/><text:index-entry-link-end/></text:table-of-content-entry-template>`)
 	}
 	sb.WriteString(`</text:table-of-content-source><text:index-body><text:index-title text:name="Table_20_of_20_Contents1_Head"><text:p text:style-name="Contents_20_Heading">` + title + `</text:p></text:index-title>`)
 	for _, e := range entries {
@@ -265,14 +278,14 @@ func (b *odtBuilder) table(cells []Block, id int) {
 	n := strconv.Itoa(id)
 	w.WriteString(`<table:table table:name="Table` + n + `" table:style-name="Table"><table:table-column table:style-name="TableCol" table:number-columns-repeated="` + strconv.Itoa(cols) + `"/>`)
 	for r := 0; r < rows; r++ {
-		w.WriteString(`<table:table-row>`)
+		w.WriteString(`<table:table-row table:style-name="TableRow">`)
 		for c := 0; c < cols; c++ {
 			cell := cells[r*cols+c]
 			if cell.TableCovered {
 				w.WriteString(`<table:covered-table-cell/>`)
 				continue
 			}
-			cs, ps := b.cellStyle(cell.TableBackground, cell.TableAlign)
+			cs, ps := b.cellStyle(cell.TableBackground, cell.TableAlign, keepRowWithNext(r, rows))
 			style := "TableCell"
 			if cs != "" {
 				style = cs
@@ -443,12 +456,20 @@ func (b *odtBuilder) automaticStyles() string {
 		if kind == "c" {
 			sb.WriteString(`<style:style style:name="` + name + `" style:family="table-cell"><style:table-cell-properties fo:background-color="#` + val + `" fo:padding="0.04in" fo:border="0.5pt solid #000000"/></style:style>`)
 		} else {
-			align := map[string]string{"1": "center", "2": "end"}[val]
-			sb.WriteString(`<style:style style:name="` + name + `" style:family="paragraph" style:parent-style-name="Table_20_Contents"><style:paragraph-properties fo:text-align="` + align + `"/></style:style>`)
+			al, keep, _ := strings.Cut(val, "|")
+			props := ""
+			if align := map[string]string{"1": "center", "2": "end"}[al]; align != "" {
+				props += ` fo:text-align="` + align + `"`
+			}
+			if keep == "keep" {
+				props += ` fo:keep-with-next="always"`
+			}
+			sb.WriteString(`<style:style style:name="` + name + `" style:family="paragraph" style:parent-style-name="Table_20_Contents"><style:paragraph-properties` + props + `/></style:style>`)
 		}
 	}
 	sb.WriteString(`<style:style style:name="Table" style:family="table"><style:table-properties style:width="6.5in" table:align="margins"/></style:style>`)
 	sb.WriteString(`<style:style style:name="TableCol" style:family="table-column"/>`)
+	sb.WriteString(`<style:style style:name="TableRow" style:family="table-row"><style:table-row-properties fo:keep-together="always"/></style:style>`)
 	sb.WriteString(`<style:style style:name="TableCell" style:family="table-cell"><style:table-cell-properties fo:padding="0.04in" fo:border="0.5pt solid #000000"/></style:style>`)
 	sb.WriteString(`<style:style style:name="Placeholder" style:family="text"><style:text-properties fo:font-style="italic"/></style:style>`)
 	sb.WriteString(`<text:list-style style:name="LB">`)

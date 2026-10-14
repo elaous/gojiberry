@@ -95,22 +95,24 @@ func htmlPrintStyle(snap Snapshot) string {
 	}
 	sb.WriteString(boxes(snap.Header, snap.Footer))
 	sb.WriteString("}\n")
+	if snap.EvenDiffers {
+		// Even pages are the left-hand ones when the first page is on the right (left-to-right text).
+		fmt.Fprintf(&sb, "@page :left{%s%s}\n", clearBoxes(), boxes(snap.EvenHeader, snap.EvenFooter))
+	}
 	if snap.FirstDiffers {
 		// The first page names every box again: the ones it does not use are emptied, so none of the running text carries over.
-		var clear strings.Builder
-		for _, n := range []string{"top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"} {
-			fmt.Fprintf(&clear, "@%s{content:none}", n)
-		}
-		fmt.Fprintf(&sb, "@page :first{%s%s}\n", clear.String(), boxes(snap.FirstHeader, snap.FirstFooter))
+		fmt.Fprintf(&sb, "@page :first{%s%s}\n", clearBoxes(), boxes(snap.FirstHeader, snap.FirstFooter))
 	}
 	sb.WriteString("@media print{" +
 		"h1,h2,h3{break-after:avoid}" +
 		"p,li,blockquote{orphans:3;widows:3}" +
 		"pre,figure,img,tr{break-inside:avoid}" +
-		"thead{display:table-header-group}" +
+		"thead{display:table-header-group;break-after:avoid}" +
+		"tbody tr:last-child{break-before:avoid}" +
 		"nav.toc{break-after:page}" +
 		"nav.toc a{color:inherit;text-decoration:none}" +
 		"nav.toc a::after{content:leader('.') target-counter(attr(href),page)}" +
+		"nav.toc-plain a::after{content:leader(' ') target-counter(attr(href),page)}" +
 		"}\n")
 	sb.WriteString("nav.toc ol{list-style:none;padding-left:0}nav.toc .toc-l2{margin-left:1.5em}nav.toc .toc-l3{margin-left:3em}\n")
 	sb.WriteString("</style>\n")
@@ -128,10 +130,23 @@ func htmlTOC(snap Snapshot) string {
 	}
 	var sb strings.Builder
 	title := escapeHTMLText(snap.tocTitle())
-	sb.WriteString(`<nav class="toc" aria-label="` + escapeHTMLAttr(snap.tocTitle()) + `">` + "\n<h2>" + title + "</h2>\n<ol>\n")
+	class := "toc"
+	if snap.TOCStyle == "plain" {
+		class = "toc toc-plain"
+	}
+	sb.WriteString(`<nav class="` + class + `" aria-label="` + escapeHTMLAttr(snap.tocTitle()) + `">` + "\n<h2>" + title + "</h2>\n<ol>\n")
 	for _, e := range entries {
 		fmt.Fprintf(&sb, "<li class=\"toc-l%d\"><a href=\"#%s\">%s</a></li>\n", e.Level, tocAnchor(e.Block), escapeHTMLText(e.Text))
 	}
 	sb.WriteString("</ol>\n</nav>\n")
+	return sb.String()
+}
+
+// clearBoxes empties the six margin boxes of a page rule, so the running text of the other pages does not carry over.
+func clearBoxes() string {
+	var sb strings.Builder
+	for _, n := range []string{"top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"} {
+		fmt.Fprintf(&sb, "@%s{content:none}", n)
+	}
 	return sb.String()
 }

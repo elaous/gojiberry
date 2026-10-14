@@ -101,11 +101,23 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 		layout = fmt.Sprintf(`\paperw%d\paperh%d\margl%d\margr%d\margt%d\margb%d`+"\n",
 			rtfPxToTwips(snap.PageWidth), rtfPxToTwips(snap.PageHeight), rtfPxToTwips(snap.MarginLeft), rtfPxToTwips(snap.MarginRight), rtfPxToTwips(snap.MarginTop), rtfPxToTwips(snap.MarginBottom))
 	}
+	// With facing pages, \headerr and \footerr are the odd pages' and \headerl and \footerl the even pages'.
+	oddH, oddF := "header", "footer"
+	if snap.EvenDiffers {
+		layout += `\facingp` + "\n"
+		oddH, oddF = "headerr", "footerr"
+		if snap.EvenHeader != "" {
+			layout += rtfDecor("headerl", snap.EvenHeader, snap.Title, contentWidthTwips) + "\n"
+		}
+		if snap.EvenFooter != "" {
+			layout += rtfDecor("footerl", snap.EvenFooter, snap.Title, contentWidthTwips) + "\n"
+		}
+	}
 	if snap.Header != "" {
-		layout += rtfDecor("header", snap.Header, snap.Title, contentWidthTwips) + "\n"
+		layout += rtfDecor(oddH, snap.Header, snap.Title, contentWidthTwips) + "\n"
 	}
 	if snap.Footer != "" {
-		layout += rtfDecor("footer", snap.Footer, snap.Title, contentWidthTwips) + "\n"
+		layout += rtfDecor(oddF, snap.Footer, snap.Title, contentWidthTwips) + "\n"
 	}
 	if snap.FirstDiffers {
 		// \titlepg gives the first page its own header and footer (\headerf, \footerf): bare when empty.
@@ -143,7 +155,11 @@ func rtfContents(body *strings.Builder, snap Snapshot, width int) map[int]string
 	for _, e := range entries {
 		name := "_Toc" + strconv.Itoa(100000+e.Block)
 		marks[e.Block] = name
-		fmt.Fprintf(body, `{\pard\sa60\li%d\tqr\tldot\tx%d `, (e.Level-1)*360, width)
+		leader := `\tldot`
+		if snap.TOCStyle == "plain" {
+			leader = ""
+		}
+		fmt.Fprintf(body, `{\pard\sa60\li%d\tqr%s\tx%d `, (e.Level-1)*360, leader, width)
 		body.WriteString(`{\field\flddirty{\*\fldinst HYPERLINK \\l ` + name + `}{\fldrslt ` + escapeRTFText(e.Text) + `}}\tab `)
 		body.WriteString(`{\field\flddirty{\*\fldinst PAGEREF ` + name + ` \\h}{\fldrslt \endash}}\par}` + "\n")
 	}
@@ -218,7 +234,11 @@ func renderRTFTable(cells []Block, contentWidthTwips int) string {
 
 	var sb strings.Builder
 	for r := 0; r < rows; r++ {
-		sb.WriteString(`\trowd\trgaph108\trleft0`)
+		sb.WriteString(`\trowd\trgaph108\trleft0\trkeep`) // \trkeep: the row is not split across pages
+		keep := ""
+		if keepRowWithNext(r, rows) {
+			keep = `\keepn` // the paragraphs of the row stay with the next row
+		}
 		x := 0
 		for c := 0; c < cols; c++ {
 			m := info[r*cols+c]
@@ -243,9 +263,9 @@ func renderRTFTable(cells []Block, contentWidthTwips int) string {
 		for c := 0; c < cols; c++ {
 			cell := cells[r*cols+c]
 			if cell.TableCovered {
-				sb.WriteString(`\pard\intbl\cell` + "\n")
+				sb.WriteString(`\pard\intbl` + keep + `\cell` + "\n")
 			} else {
-				sb.WriteString(`\pard\intbl ` + rtfInline(cell.Segments) + `\cell` + "\n")
+				sb.WriteString(`\pard\intbl` + keep + ` ` + rtfInline(cell.Segments) + `\cell` + "\n")
 			}
 		}
 		sb.WriteString(`\row` + "\n")

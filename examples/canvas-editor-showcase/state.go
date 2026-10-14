@@ -30,6 +30,9 @@ type State struct {
 	// FirstDiffers gives the first sheet FirstHeader and FirstFooter instead (empty: none).
 	FirstDiffers             bool
 	FirstHeader, FirstFooter string
+	// EvenDiffers gives the even sheets EvenHeader and EvenFooter; RunHeader and RunFooter are then the odd sheets'.
+	EvenDiffers            bool
+	EvenHeader, EvenFooter string
 	// Spread shows the sheets two to a row, as facing pages.
 	Spread bool
 	// Source is the document's starting Markdown; once the text is edited
