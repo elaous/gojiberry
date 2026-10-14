@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/crdt"
@@ -41,9 +42,11 @@ type Bridge struct {
 	// moment ago (see conflictWindow): the paragraph as it was here and the replicas that changed it. The
 	// merge has already kept both changes; this is for telling the person.
 	OnConflict func(Conflict)
+	// ConflictWindow is how long a paragraph counts as being edited here (DefaultConflictWindow when zero).
+	ConflictWindow time.Duration
 
 	replica string
-	recent  []recentParagraph // paragraphs edited here lately, newest last
+	recent  []recentEdit // changes made here lately, newest last
 
 	surfaces []Surface
 	noText   bool // the flow's text and side data are not shared (see Sharing)
@@ -373,7 +376,13 @@ func (b *Bridge) pushLocal() {
 		}
 	}
 	if len(edits) > 0 {
-		b.noteRecent(curRunes, atomPos(cur, b.Flow.Cursors()[0].Caret))
+		ids := slices.Clone(rec.inserted)
+		for _, d := range rec.deleted {
+			if d.after != (crdt.Timestamp{}) {
+				ids = append(ids, d.after)
+			}
+		}
+		b.noteRecent(ids)
 	}
 	b.pushFormats(b.read(), cur, &rec)
 	b.pushSide()
@@ -490,7 +499,7 @@ func (b *Bridge) Apply(ops ...crdt.Op) {
 	b.Doc.Apply(ops...)
 	b.ready = true
 	atoms := b.read()
-	b.checkConflict(oldAtoms, atoms, ops)
+	b.checkConflict(oldAtoms, oldIDs, ops)
 	items := itemsFromAtoms(atoms)
 	moved := make([]canvas.Cursor, len(cursors))
 	for i, c := range cursors {
