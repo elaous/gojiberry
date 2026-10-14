@@ -3,6 +3,7 @@ package components
 import (
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/xango"
@@ -171,14 +172,11 @@ type CommentCardProps struct {
 	OnReply      func(id, text string)
 }
 
-func timeLabel(t interface {
-	IsZero() bool
-	Format(string) string
-}) string {
+func timeLabel(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.Format("2006-01-02 15:04")
+	return FormatTime(t, false)
 }
 
 // CommentCard renders one comment: author and time, the commented text,

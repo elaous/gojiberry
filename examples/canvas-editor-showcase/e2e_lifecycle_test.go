@@ -160,6 +160,7 @@ func TestNameAndKeepAVersion(t *testing.T) {
 	d.Click(".gj-versions-save")
 	d.WaitSelector(".gj-versions-item")
 	d.OK(strings.Contains(d.Text(".gj-versions-author"), "by you@example.com"), "who saved it: "+d.Text(".gj-versions-item"))
+	d.OK(strings.Contains(d.Text(".gj-versions-item"), "(UTC"), "the time is in the viewer's zone, and says which: "+d.Text(".gj-versions-item"))
 
 	d.Fill(".gj-versions-name", "Sent to the printer")
 	d.Dispatch(".gj-versions-name", "change")
