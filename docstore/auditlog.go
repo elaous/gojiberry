@@ -113,7 +113,7 @@ func (s *Server) auditSignIns(next http.Handler) http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		route := observe.RouteOf(r.URL.Path)
-		if route != "/auth/{provider}/callback" && !(route == "/auth/passkey/*" && r.Method == http.MethodPost) {
+		if route != "/auth/{provider}/callback" && (route != "/auth/passkey/*" || r.Method != http.MethodPost) {
 			next.ServeHTTP(w, r)
 			return
 		}
