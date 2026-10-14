@@ -50,3 +50,47 @@ sentir señor ser si siempre siete sin sobre solo tan tanto tarde tener tiempo t
 un uno usar valer varios vender venir ver vez vida viejo vivir volver voz ya
 carta columna comentario diccionario documento dirección ejemplo encabezado fichero formato grupo lista mensaje
 página párrafo programa sugerencia tabla texto título frase guardar acción actividad algunos amor análisis aplicación área base camino campo capacidad caso centro cambio color comunidad conjunto control cuerpo cuestión datos decisión derecho desarrollo dirección ejemplo empresa equipo error espacio estado estudio evento experiencia fecha función futuro grupo historia imagen importancia información interés jardín lugar manera material medio método mismo modelo nivel norte número objeto opción orden país parte periodo plan posible precio proceso producto proyecto punto región regla relación resultado seguridad servicio sistema situación sociedad solución tema tipo usuario valor versión`
+
+const pt = `abrir acabar aceitar acima acordo adeus agora agradecer água ainda ajudar algo alguém algum alto amanhã amigo
+amor andar ano antes antigo aparecer aprender aqui assim atenção atrás através bairro baixo banco bastante bem
+beber bom branco brincar buscar cabeça cada cair caminho campo cansado carro casa causa cedo centro certo
+chamar chegar cheio cidade cinco claro coisa começar comer como comprar compreender conhecer conseguir conta
+continuar corpo correr cortar costume criança cuidado dar decidir deixar dentro depois desculpa desde destino
+dever dia diferente difícil dinheiro direito dizer dois dormir dúvida durante embora empresa encontrar ensinar
+entender entrar entre escola escolher escrever escutar espaço esperar estado estar estudar exemplo explicar
+fácil falar família fazer feliz fechar fim final forma forte frente futuro ganhar gente gostar grande grupo
+guerra história hoje homem hora idade ideia igual importante informação interesse ir jamais janela jogo jovem
+junto lado lei lembrar lento ler levar liberdade lição ligar lindo língua livro lugar lutar luz mãe mais maior
+manhã mão mar mesa mesmo meio melhor menos mês metade mexer minuto modo momento morar morrer mostrar mudar
+muito mulher mundo música nada namorar nascer necessário negócio noite nome normal nota nova número obra olhar
+ouvir outro pagar país palavra papel para parar parecer parte passar pedir pensar perder perguntar perto
+pessoa pode poder pobre ponto porta porque pouco praça precisar preço primeiro problema procurar produto
+programa pronto próximo quando quanto quarto quatro quem quente querer rápido razão receber recordar rede
+resposta resultado rico rua saber sair sala saúde segundo seguir semana sempre sentir ser serviço sete
+sociedade sol sozinho tarde tempo terra trabalhar trabalho trazer três último um usar valor vários velho
+vender venda ver verdade vez viagem vida vir visita viver voltar vontade voz documento arquivo frase parágrafo
+título tabela coluna linha página capítulo comentário sugestão dicionário idioma mensagem endereço formato
+gravar salvar imprimir texto lista resumo`
+
+const ar = `أبدا أبيض أخ أخبار أخذ أخرى أخضر أخيرا أرض أريد أسبوع أسرة أصبح أعرف أعمل أفضل أكثر ألف أم أمام أمس أمل أن أنا
+أنت إلى إذا اثنان احد اسم استطاع استمر اسود اشتري اعطى افكر البيت الحياة الدرس الذي الشمس العالم العمل القلب
+الليل المدرسة المدينة الوقت اليوم امرأة امر انتظر انتهى اين بحث بداية بعد بعض بيت بين تاريخ تحت تعلم تكلم تمام
+توقف ثلاثة ثم جاء جدا جديد جميل جميع جنب جواب حاول حتى حديث حرب حركة حرف حسن حقيقة حلم حول حياة خارج خبر خير
+داخل دائما درس دقيقة دولة دين ذلك ذهب رأس رجل رسالة رقم زمن زوج سؤال ساعة سبب سريع سلام سنة سوف سهل شارع شباب
+شخص شرق شعب شمس شيء صباح صحيح صديق صغير صورة ضد طفل طريق طويل ظهر عام عائلة عالم عبر عدد عربي عرف عشرة عقل علم
+على عمر عند عن عين غرفة غير فتح فجأة فكرة فوق قال قبل قدم قرأ قريب قصة قليل قوي كاف كان كبير كتاب كثير كلمة كل
+كم كيف لا لأن لذلك لعب لغة لقاء لكن لماذا لم ليس ما ماذا مثل مجرد مدرسة مرة مساء مع معنى مفتاح مكان ملك من منذ
+موضوع ميزان نحن نص نظام نعم نفس نهاية نور هذا هذه هل هناك هنا هو هي واحد وجه وحيد ودي وقت وقف ولد يد يمكن يوم
+وثيقة ملف فقرة عنوان جدول عمود سطر صفحة فصل تعليق اقتراح قاموس برنامج تنسيق حفظ طباعة قائمة مجموعة ملخص`
+
+const he = `אבא אבל אדם אוהב אוכל אולי אור אות אותו אחד אחרי אחרון אחר איזה איך אין איפה אישה אכן אל אלה אמא אמר אנחנו אני
+אנשים אסור אף אפשר אפילו ארבע ארוך ארץ אתה אתמול בא בבית בגלל בדיוק בהחלט בזמן בחוץ בטוח בית בין בכל בלי במקום
+בסדר בעיה בעצם בקשה בשביל בקרוב בוקר בן בעל ברור גדול גם גר דבר דרך דקה הבית הוא היא היה היום הכל הלילה הם
+המון הנה הרבה הרי השנה הזמן זה זאת זמן זכר חדש חזרה חיים חייב חכם חלק חם חשוב חשבון טוב טעם יד ידוע יום יותר
+יחד יכול ילד ילדים יפה ים ישן ישראל כאן כבר כדי כולם כותב כל כמה כמו כן כסף כתב לא לאט לאן לב לבד לבן לדעת
+להיות לחם לחשוב ללכת למה למדוד לעבוד לפני לפעמים לקחת לקרוא לראות מאד מאוד מבין מה מהר מוכן מחר מחשב מי מיד
+מילה מים מכאן מלא מעט מעל מקום מקבל מרוצה משפחה משהו מתי נגד נדמה נוסף נושא נכון נעים נראה נשים סביב ספר סוף
+סיפור עבודה עד עוד עולם עושה עין על עם עצמו עשר עכשיו עיר ערב פה פעם פתאום פתח צריך צעיר קודם קטן קל קרוב קשה
+ראש ראשון רגע רוצה רחוק רק שאלה שבוע שבת שוב שולחן שום שחור שיר של שלום שלוש שם שמח שנה שני שעה שקט תמיד תמונה
+תוך תודה תורה תחת תן תשובה מסמך קובץ פסקה כותרת טבלה עמודה שורה עמוד פרק הערה הצעה מילון שפה הודעה תוכנית
+כתובת עיצוב שמירה פתיחה הדפסה טקסט רשימה קבוצה סיכום`
