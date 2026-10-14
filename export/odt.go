@@ -31,6 +31,10 @@ type odtBuilder struct {
 	notes  map[int]string // footnote text by number
 	// open lists, outermost first: true is a numbered list
 	open []bool
+	// cur is the index of the block being written; marks names the bookmark of each heading the table of
+	// contents links to.
+	cur   int
+	marks map[int]string
 }
 
 func (b *odtBuilder) textStyle(f Format) string {
@@ -192,6 +196,37 @@ func (b *odtBuilder) cellStyle(fill string, align int) (cell, para string) {
 	return
 }
 
+// contents writes the table of contents that starts the document (when the snapshot asks for one and has
+// headings) as a real ODF index: an entry per heading linked to a bookmark on it, with the tab and page number
+// the entries have in LibreOffice. The page numbers are placeholders until the person updates the index
+// (Tools > Update > All Indexes), which makes LibreOffice work them out; only it knows its pages.
+func (b *odtBuilder) contents(snap Snapshot) {
+	if !snap.TOC {
+		return
+	}
+	entries := snap.Outline()
+	if len(entries) == 0 {
+		return
+	}
+	b.marks = map[int]string{}
+	title := esc(snap.tocTitle())
+	var sb strings.Builder
+	sb.WriteString(`<text:table-of-content text:protected="false" text:name="Table_20_of_20_Contents1"><text:table-of-content-source text:outline-level="3"><text:index-title-template text:style-name="Contents_20_Heading">` + title + `</text:index-title-template>`)
+	for l := 1; l <= 3; l++ {
+		n := strconv.Itoa(l)
+		sb.WriteString(`<text:table-of-content-entry-template text:outline-level="` + n + `" text:style-name="Contents_20_` + n + `"><text:index-entry-link-start/><text:index-entry-text/><text:index-entry-tab-stop style:type="right" style:leader-char="."/><text:index-entry-page-number/><text:index-entry-link-end/></text:table-of-content-entry-template>`)
+	}
+	sb.WriteString(`</text:table-of-content-source><text:index-body><text:index-title text:name="Table_20_of_20_Contents1_Head"><text:p text:style-name="Contents_20_Heading">` + title + `</text:p></text:index-title>`)
+	for _, e := range entries {
+		name := "__Toc_" + strconv.Itoa(e.Block)
+		b.marks[e.Block] = name
+		sb.WriteString(`<text:p text:style-name="Contents_20_` + strconv.Itoa(e.Level) + `"><text:a xlink:type="simple" xlink:href="#` + name + `">` + esc(e.Text) + `<text:tab/>–</text:a></text:p>`)
+	}
+	sb.WriteString(`</text:index-body></text:table-of-content>`)
+	b.body.WriteString(sb.String())
+	b.body.WriteString(`<text:p text:style-name="Page_20_Break"/>`)
+}
+
 func (b *odtBuilder) block(blk Block) {
 	if blk.Kind != BulletItem && blk.Kind != NumberedItem {
 		b.closeLists(0)
@@ -208,7 +243,11 @@ func (b *odtBuilder) block(blk Block) {
 		w.WriteString(`<text:p text:style-name="Preformatted_20_Text">` + odtText(rawCodeText(blk.Segments)) + `</text:p>`)
 	case Heading1, Heading2, Heading3:
 		n := strconv.Itoa(int(blk.Kind-Heading1) + 1)
-		w.WriteString(`<text:h text:style-name="Heading_20_` + n + `" text:outline-level="` + n + `">` + b.inline(blk.Segments) + `</text:h>`)
+		inner := b.inline(blk.Segments)
+		if name, ok := b.marks[b.cur]; ok {
+			inner = `<text:bookmark-start text:name="` + name + `"/>` + inner + `<text:bookmark-end text:name="` + name + `"/>`
+		}
+		w.WriteString(`<text:h text:style-name="Heading_20_` + n + `" text:outline-level="` + n + `">` + inner + `</text:h>`)
 	case Quote:
 		w.WriteString(`<text:p text:style-name="Quotations">` + b.inline(blk.Segments) + `</text:p>`)
 	case BulletItem, NumberedItem:
@@ -308,9 +347,11 @@ func (ODT) Export(snap Snapshot) ([]byte, error) {
 			b.notes[blk.Note] = strings.TrimSpace(sb.String())
 		}
 	}
+	b.contents(snap)
 	tables := 0
 	for i := 0; i < len(snap.Blocks); i++ {
 		blk := snap.Blocks[i]
+		b.cur = i
 		if blk.Note > 0 {
 			continue // written as a footnote where its mark is
 		}
@@ -457,6 +498,9 @@ func odtStyles(snap Snapshot) string {
 		`<style:style style:name="Heading_20_1" style:display-name="Heading 1" style:family="paragraph" style:parent-style-name="Heading" style:default-outline-level="1"><style:text-properties fo:font-size="20pt" fo:font-weight="bold"/></style:style>` +
 		`<style:style style:name="Heading_20_2" style:display-name="Heading 2" style:family="paragraph" style:parent-style-name="Heading" style:default-outline-level="2"><style:text-properties fo:font-size="16pt" fo:font-weight="bold"/></style:style>` +
 		`<style:style style:name="Heading_20_3" style:display-name="Heading 3" style:family="paragraph" style:parent-style-name="Heading" style:default-outline-level="3"><style:text-properties fo:font-size="13pt" fo:font-weight="bold"/></style:style>` +
+		`<style:style style:name="Contents_20_Heading" style:display-name="Contents Heading" style:family="paragraph" style:parent-style-name="Heading"><style:text-properties fo:font-size="20pt" fo:font-weight="bold"/></style:style>` +
+		contentsStyles(snap) +
+		`<style:style style:name="Page_20_Break" style:display-name="Page Break" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:break-after="page"/></style:style>` +
 		`<style:style style:name="Quotations" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:margin-left="0.4in" fo:border-left="2pt solid #9ca3af" fo:padding-left="0.1in"/><style:text-properties fo:font-style="italic"/></style:style>` +
 		`<style:style style:name="Preformatted_20_Text" style:display-name="Preformatted Text" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:background-color="#f3f4f6" fo:margin-bottom="0in"/><style:text-properties fo:font-family="monospace" fo:font-size="10pt"/></style:style>` +
 		`<style:style style:name="List_20_Paragraph" style:display-name="List Paragraph" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:margin-bottom="0.02in"/></style:style>` +
@@ -497,6 +541,21 @@ func odtDecor(text, title string) string {
 			lit("{")
 			rest = rest[1:]
 		}
+	}
+	return sb.String()
+}
+
+// contentsStyles are the paragraph styles of the table of contents entries: indented by level, with a right tab
+// stop at the edge of the text that has dots in front of it.
+func contentsStyles(snap Snapshot) string {
+	width := (snap.PageWidth - snap.MarginLeft - snap.MarginRight) / 96
+	if width <= 0 {
+		width = 6.5
+	}
+	var sb strings.Builder
+	for l := 1; l <= 3; l++ {
+		fmt.Fprintf(&sb, `<style:style style:name="Contents_20_%d" style:display-name="Contents %d" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:margin-left="%.2fin" fo:margin-bottom="0.03in"><style:tab-stops><style:tab-stop style:position="%.3fin" style:type="right" style:leader-style="dotted" style:leader-text="."/></style:tab-stops></style:paragraph-properties></style:style>`,
+			l, l, float64(l-1)*0.25, width-float64(l-1)*0.25)
 	}
 	return sb.String()
 }

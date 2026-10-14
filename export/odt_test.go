@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -17,6 +18,7 @@ func odtSnapshot(t *testing.T) Snapshot {
 	snap := taggedSnapshot(t)
 	snap.Header, snap.Footer = "Left\tMid {title}\tPage {page} of {pages}", "{page}"
 	snap.Lang = "en"
+	snap.TOC, snap.TOCTitle = true, "Inhalt"
 	snap.Blocks = append([]Block{
 		{Kind: Paragraph, Segments: []Segment{{Text: "bold ", Format: Format{Bold: true}}, {Text: "link", Format: Format{Href: "https://example.org"}}, {Text: " note", Format: Format{NoteRef: 1}}, {Text: " bonjour", Format: Format{Lang: "fr"}}, {SoftBreak: true}, {Text: "x2", Format: Format{Superscript: true}}}},
 		{Kind: BulletItem, Segments: []Segment{{Text: "outer"}}},
@@ -161,5 +163,71 @@ func TestODTWeWriteIsReadBack(t *testing.T) {
 	}
 	if _, err := r.Import("odt", "a.odt", []byte("not a zip")); err == nil {
 		t.Error("garbage is refused")
+	}
+}
+
+// A table of contents is a real ODF index: a title, an entry for each heading linked to a bookmark on it, and
+// a page break after it.
+func TestODTHasATableOfContentsOfItsHeadings(t *testing.T) {
+	snap := odtSnapshot(t)
+	data, err := ODT{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(unzipAll(t, data)["content.xml"])
+	if !strings.Contains(content, `<text:table-of-content `) || !strings.Contains(content, `<text:index-title-template text:style-name="Contents_20_Heading">Inhalt<`) || !strings.Contains(content, `<text:p text:style-name="Page_20_Break"/>`) {
+		t.Fatalf("no index in the document:\n%.800s", content)
+	}
+	entries := snap.Outline()
+	if len(entries) == 0 {
+		t.Fatal("the sample has no headings")
+	}
+	for _, e := range entries {
+		name := "__Toc_" + strconv.Itoa(e.Block)
+		if !strings.Contains(content, `xlink:href="#`+name+`">`) || !strings.Contains(content, `<text:bookmark-start text:name="`+name+`"/>`) || !strings.Contains(content, `<text:bookmark-end text:name="`+name+`"/>`) {
+			t.Errorf("the entry %q is not linked to a bookmark %s", e.Text, name)
+		}
+	}
+	if !strings.Contains(content, `text:style-name="Contents_20_1"`) || !strings.Contains(string(unzipAll(t, data)["styles.xml"]), `style:name="Contents_20_1"`) {
+		t.Errorf("the entry style is used but not defined")
+	}
+	// the index comes first, before the first heading
+	if strings.Index(content, "<text:table-of-content ") > strings.Index(content, "<text:h ") {
+		t.Errorf("the contents are not at the start")
+	}
+	snap.TOC = false
+	off, _ := ODT{}.Export(snap)
+	if strings.Contains(string(unzipAll(t, off)["content.xml"]), "table-of-content") {
+		t.Error("contents written although not asked for")
+	}
+}
+
+// The contents index is made from the headings, so reading the file back does not turn its entries into text:
+// every heading is in the document once.
+func TestODTContentsAreNotReadBackAsText(t *testing.T) {
+	snap := odtSnapshot(t)
+	data, err := ODT{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := transfer.Default()
+	Register(r)
+	doc, err := r.Import("odt", "a.odt", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var txt strings.Builder
+	for _, it := range doc.Content {
+		if it.Chars != nil {
+			txt.WriteString(it.Chars.Text + "\n")
+		}
+	}
+	for _, e := range snap.Outline() {
+		if n := strings.Count(txt.String(), e.Text); n != 1 {
+			t.Errorf("heading %q is in the document %d times after the round trip", e.Text, n)
+		}
+	}
+	if strings.Contains(txt.String(), "Inhalt") {
+		t.Errorf("the contents title was read back as text")
 	}
 }
