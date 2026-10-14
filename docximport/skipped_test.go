@@ -43,12 +43,12 @@ func TestInspectCountsWhatImportLeavesOut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Skipped{Comments: 2, HeaderFoots: 1, TextBoxes: 1, Drawings: 1, Equations: 1, Endnotes: 1, Fields: 2, Bookmarks: 1, Columns: 1, Layout: 1}
+	want := Skipped{Comments: 2, HeaderFoots: 1, TextBoxes: 1, Drawings: 1, Endnotes: 1, Fields: 2, Bookmarks: 1, Columns: 1, Layout: 1}
 	if got != want {
 		t.Errorf("Inspect = %+v, want %+v", got, want)
 	}
-	if got.Total() != 12 {
-		t.Errorf("Total = %d, want 12", got.Total())
+	if got.Total() != 11 {
+		t.Errorf("Total = %d, want 11", got.Total())
 	}
 	// The same file imports, and what is in the body is read.
 	doc, err := Import(data)

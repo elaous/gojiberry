@@ -62,7 +62,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 75 | Sharing UX | feature | done | share links with role, expiry, revoke, who-can-see list, per-person expiry, open from the address, plain wording, the People tab on the real server (list, people, links) | none (comment-only is enforced on live shared documents; a stored one cannot tell a comment from an edit, and the tab says so) |
 | 76 | Key and recovery UX | feature | done | recovery sheet, test-my-recovery-key, one-key nudge, device list with last use, guided re-key, plain limit wording | none named; the limit itself is inherent |
 | 77 | Templates, styles, design tokens | feature | done | named styles, tokens, themed HTML export, a theme editor with live contrast checks (the theme goes with the document, into HTML, EPUB, Word, OpenDocument, RTF and PDF) | none |
-| 78 | Equations, diagrams, code, footnotes | feature | partial | MathML with text alternative, code language, diagram descriptions, footnote links both ways in HTML, Word, RTF and Markdown | footnote links in PDF; equations as OMML in Word |
+| 78 | Equations, diagrams, code, footnotes | feature | done | MathML with text alternative (and Office Math in Word, read back by the import), code language, diagram descriptions, footnote links both ways in HTML, Word, RTF, Markdown and PDF | none |
 | 79 | Autocomplete word picker | feature | done | ranked suggestion list as an ARIA listbox, ghost text drawn by the canvas in the run's font and language (a tag under the caret mid-line), de/fr/es/pt/ar/he word lists | none (the lists hold common words only, by design; the screen-reader run is item 69) |
 | 80 | Print layout | feature | done | page model, headers and footers, page numbers, different first page and odd/even pages, any sheet size (custom paper), a real clickable table of contents (page numbers, two looks, depth) that the exports write where it is, the outline as the navigation panel, widow control and kept table rows in every paged format, the same running header and footer on the screen sheets | small: the even-page rule assumes left-to-right page order |
 | 81 | Admin side | feature | done | audit log written by the server (documents, access, keys, rate limits), readiness route, backup and restore with dated backups and rotation, `/admin/usage` and history page (series kept across restarts), observability core with PostHog and OTLP sinks, the other servers' own work, builtin totals kept across restarts | none (nothing else changes a store: the other servers keep no documents; a key rotation is logged as an enrollment, and `config.changed` has no source yet) |
@@ -122,7 +122,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 
 ## Counts
 
-Product table (items 48 to 84, 32 rows): 12 done, 16 partial, 4 blocked (49, 50, 69, 83: all that is left is a person's work) ("done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent). None is untouched. The server and
+Product table (items 48 to 84, 32 rows): 13 done, 15 partial, 4 blocked (49, 50, 69, 83: all that is left is a person's work) ("done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent). None is untouched. The server and
 security table: the review findings are done; still open are the per-account sign-in budget and the shared lock
 (passkey backlog 4 and 5) and log witnesses (limits 12); 41 is blocked on a provider.
 
