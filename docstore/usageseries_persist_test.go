@@ -57,11 +57,11 @@ func TestUsageHistorySurvivesARestart(t *testing.T) {
 func TestUsageSeriesIsWrittenAtANewHourAndNotOnEveryRead(t *testing.T) {
 	ctx := context.Background()
 	clock := time.Date(2026, 3, 1, 9, 5, 0, 0, time.UTC)
-	_, h, mem := historyServer(t, &clock)
+	_, _, mem := historyServer(t, &clock)
 	counting := &countingAdapter{Adapter: mem}
 	srv := NewServer(counting, "memory").WithDirectoryAdmin(func(r *http.Request) bool { return true })
 	srv.usageClock = func() time.Time { return clock }
-	h = srv.Handler()
+	h := srv.Handler()
 	adminGet(h, "/admin/usage/history", true) // first sample: written
 	if counting.saves(UsageSeriesKey) != 1 {
 		t.Fatalf("first read wrote %d times", counting.saves(UsageSeriesKey))
