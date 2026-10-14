@@ -183,8 +183,12 @@ type Snapshot struct {
 	// and right parts (see docfile.PageLayout). TOC puts a table of contents from the headings first,
 	// under TOCTitle ("Contents" when empty).
 	Header, Footer string
-	TOC            bool
-	TOCTitle       string
+	// FirstDiffers gives the first page the header and footer FirstHeader and FirstFooter instead (empty
+	// means none there).
+	FirstDiffers             bool
+	FirstHeader, FirstFooter string
+	TOC                      bool
+	TOCTitle                 string
 
 	PageWidth, PageHeight                            float64
 	MarginLeft, MarginTop, MarginRight, MarginBottom float64
