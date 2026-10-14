@@ -25,6 +25,7 @@ import (
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/input"
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/webauthn"
@@ -878,3 +879,17 @@ func (d *Tab) OnNewDocument(script string) {
 // reader in internal/screenreader uses the Accessibility domain). Calls made with it have no timeout of
 // their own: give them one (context.WithTimeout).
 func (d *Tab) Context() context.Context { return d.ctx }
+
+// Offline makes the browser behave as if the network were gone (true) or back (false): new requests
+// fail at once, the way they do on a plane, with the page itself left running. (The command is sent
+// by name: the browser in use has the older Network.emulateNetworkConditions, which cdproto dropped.)
+func (d *Tab) Offline(off bool) {
+	d.t.Helper()
+	d.must(chromedp.ActionFunc(func(ctx context.Context) error {
+		if err := network.Enable().Do(ctx); err != nil {
+			return err
+		}
+		return chromedp.FromContext(ctx).Target.Execute(ctx, "Network.emulateNetworkConditions",
+			map[string]any{"offline": off, "latency": 0, "downloadThroughput": -1, "uploadThroughput": -1}, nil)
+	}))
+}
