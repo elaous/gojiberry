@@ -40,7 +40,7 @@ func (EPUB) Export(snap Snapshot) ([]byte, error) {
 		{"META-INF/container.xml", epubContainerXML},
 		{"OEBPS/content.opf", epubContentOPF(snap)},
 		{"OEBPS/nav.xhtml", epubNavXHTML(snap.Title, snap.Lang)},
-		{"OEBPS/content.xhtml", renderHTMLDocument(snap, true, "")},
+		{"OEBPS/content.xhtml", renderHTMLDocument(snap, true, safeSnapTheme(snap))},
 	}
 	for _, f := range files {
 		w, err := zw.Create(f.name)

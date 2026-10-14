@@ -87,20 +87,25 @@ func TestODTValidatesAgainstTheOpenDocumentSchema(t *testing.T) {
 		t.Log("SKIPPED, NOT TESTED: set ODF_SCHEMA to the ODF 1.2 RelaxNG schema and install xmllint")
 		return
 	}
-	data, err := ODT{}.Export(odtSnapshot(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for name, b := range unzipAll(t, data) {
-		if name != "content.xml" && name != "styles.xml" && name != "meta.xml" {
-			continue
-		}
-		f := filepath.Join(t.TempDir(), name)
-		if err := os.WriteFile(f, b, 0o600); err != nil {
+	plain := odtSnapshot(t)
+	themed := odtSnapshot(t)
+	themed.Theme = testTheme
+	for label, snap := range map[string]Snapshot{"plain": plain, "themed": themed} {
+		data, err := ODT{}.Export(snap)
+		if err != nil {
 			t.Fatal(err)
 		}
-		if out, err := exec.Command(lint, "--noout", "--relaxng", schema, f).CombinedOutput(); err != nil {
-			t.Errorf("%s: %v\n%s", name, err, out)
+		for name, b := range unzipAll(t, data) {
+			if name != "content.xml" && name != "styles.xml" && name != "meta.xml" {
+				continue
+			}
+			f := filepath.Join(t.TempDir(), name)
+			if err := os.WriteFile(f, b, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if out, err := exec.Command(lint, "--noout", "--relaxng", schema, f).CombinedOutput(); err != nil {
+				t.Errorf("%s %s: %v\n%s", label, name, err, out)
+			}
 		}
 	}
 }
