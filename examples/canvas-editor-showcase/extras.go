@@ -216,7 +216,7 @@ func Tn(id, one, other string, n int, args ...any) string {
 }
 
 // languageNames are the interface languages on offer, by their own names.
-var languageNames = map[string]string{"en": "English", "es": "Español", "fr": "Français", "de": "Deutsch"}
+var languageNames = map[string]string{"en": "English", "es": "Español", "fr": "Français", "de": "Deutsch", "pt": "Português", "ar": "العربية", "he": "עברית"}
 
 // setLocale changes the interface language: the components, the page's lang and
 // reading direction.
@@ -232,7 +232,6 @@ func setLocale(code string) {
 
 // initLocale picks the language from ?lang=, else the browser's preferences.
 func initLocale() {
-	avail := append([]string{"en"}, catalog.Languages()...)
 	var prefs []string
 	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 	if q.Call("has", "lang").Bool() {
@@ -246,12 +245,12 @@ func initLocale() {
 	if curPrefs.Lang != "" && !q.Call("has", "lang").Bool() {
 		prefs = append([]string{curPrefs.Lang}, prefs...) // no ?lang=: the language the person chose, then the browser's
 	}
-	setLocale(i18n.Match(prefs, avail, "en"))
+	useLocale(i18n.Match(prefs, langCodes(), "en"))
 }
 
 // languageMenu lists the interface languages, the current one ticked.
 func languageMenu(u *ui, renderUI func()) []components.MenuItem {
-	codes := append([]string{"en"}, catalog.Languages()...)
+	codes := langCodes()
 	var items []components.MenuItem
 	for _, c := range codes {
 		name := languageNames[c]

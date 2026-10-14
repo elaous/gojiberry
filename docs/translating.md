@@ -38,7 +38,25 @@ such as `%[2]s`). Add the language's own name to `languageNames` in the showcase
 language needs `i18n.Direction` to know it (it does for Arabic, Hebrew, Persian, Urdu and a few more) and a
 check of the page in that direction.
 
+## Languages that are fetched when chosen
+
+Portuguese, Arabic and Hebrew are not in the program. Their packs are files next to the page,
+`examples/canvas-editor-showcase/static/lang-<code>.json` (the same shape as the embedded packs: one
+top-level key, the language), copied beside `index.html` by `make showcase-dist` and by the e2e harness, and fetched
+the first time the language is asked for (`?lang=ar`, the Language menu, the preferences). A visitor who never
+chooses them downloads nothing, and the wasm does not grow with each language. `TestLazyPacksAreComplete` holds them to
+the same standard as the shipped packs (every message, the same verbs in the same order, a text for every plural
+category the language uses: Arabic has six, Hebrew three).
+
+To add one: write `static/lang-<code>.json`, add the language's own name to `languageNames` and `lazyLanguages`
+in the showcase (`extras.go`, `langload.go`). **These three were drafted by the model that wrote this code and have
+not been read by a native speaker:** ask one to review them before they are relied on (Portuguese is written
+in the European form). Right-to-left languages turn the page around (`dir="rtl"`); `TestLazyLanguagesAndRightToLeft`
+and `TestRightToLeftInterfacePassesAxe` check that the page follows and that axe finds nothing in Arabic. What a
+reader of those languages would still look at by eye: the canvas editor's own layout of mixed-direction text
+(item 64), and wide German-like strings do not apply but long Arabic ones can wrap differently in the narrow side panel.
+
 ## What is not done
 
-Time zones and plural rules for fractions are in
+Plural rules for fractions are in
 [roadmap item 83](roadmap.md). The messages written before plural forms existed still use neutral wording.

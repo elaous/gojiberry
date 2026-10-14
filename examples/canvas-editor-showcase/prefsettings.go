@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/elaous/gojiberry/components"
-	"github.com/elaous/gojiberry/i18n"
 	"github.com/elaous/gojiberry/transfer"
 	"github.com/elaous/gojiberry/xango"
 )
@@ -60,7 +59,7 @@ func prefSettings() []setting {
 	themeCur, themeSet := str(func(p *prefs) *string { return &p.Theme })
 	var langs []choice
 	langs = append(langs, choice{value: "", label: T("prefs.langAuto", "As the browser has it")})
-	for _, c := range append([]string{"en"}, catalog.Languages()...) {
+	for _, c := range langCodes() {
 		name := languageNames[c]
 		if name == "" {
 			name = c
@@ -281,9 +280,4 @@ func prefRow(u *ui, renderUI func(), s setting) xango.Node {
 			}
 			changePrefs(u, renderUI, s.label+": "+label, func(p *prefs) { s.set(p, v) })
 		})}, opts...))
-}
-
-// matchLocale is the interface language the catalog has for a code.
-func matchLocale(code string) string {
-	return i18n.Match([]string{code}, append([]string{"en"}, catalog.Languages()...), "en")
 }

@@ -87,6 +87,22 @@ func NewSite(t testing.TB, extra ...string) *Site {
 			t.Fatal(err)
 		}
 	}
+	// A static/ directory beside the example holds files the page fetches by name (language packs):
+	// copied next to index.html.
+	if ents, err := os.ReadDir("static"); err == nil {
+		for _, e := range ents {
+			if e.IsDir() {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join("static", e.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, e.Name()), data, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 	// Extra files (globs) the page needs, copied next to index.html.
 	for _, pattern := range extra {
 		matches, err := filepath.Glob(pattern)
