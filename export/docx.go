@@ -70,8 +70,11 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 	if th.link != "" {
 		b.linkColour = th.link
 	}
-	b.tableOfContents(snap)
+	b.marks = tocMarks(snap, func(block int) string { return "_Toc" + strconv.Itoa(100000+block) })
 	for i := 0; i < len(snap.Blocks); i++ {
+		if snap.tocHere(i) {
+			b.tableOfContents(snap)
+		}
 		blk := snap.Blocks[i]
 		b.cur = i
 		if blk.Kind == TableCell {
@@ -89,6 +92,9 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 			continue
 		}
 		b.block(blk)
+	}
+	if snap.tocEnd() {
+		b.tableOfContents(snap)
 	}
 	if b.body.Len() == 0 {
 		b.body.WriteString(`<w:p/>`)
@@ -309,8 +315,7 @@ func (b *docxBuilder) tableOfContents(snap Snapshot) {
 	w := &b.body
 	w.WriteString(`<w:p><w:pPr><w:keepNext/><w:spacing w:before="0" w:after="240"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="40"/></w:rPr><w:t>` + esc(snap.tocTitle()) + `</w:t></w:r></w:p>`)
 	for i, e := range entries {
-		name := "_Toc" + strconv.Itoa(100000+e.Block)
-		b.marks[e.Block] = name
+		name := b.marks[e.Block]
 		w.WriteString(`<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="` + leader + `" w:pos="` + strconv.Itoa(width) + `"/></w:tabs><w:spacing w:after="60"/><w:ind w:left="` + strconv.Itoa((e.Level-1)*360) + `"/></w:pPr>`)
 		if i == 0 {
 			w.WriteString(`<w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \o "1-` + strconv.Itoa(depth) + `" \h \z \u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`)

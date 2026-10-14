@@ -75,3 +75,83 @@ func TestExportsWriteTheContentsTheDocumentHolds(t *testing.T) {
 		t.Errorf("PDF contents (plain: no dots): %q %v", txt, err)
 	}
 }
+
+// midContentsDoc has a paragraph before its table of contents, the chapters after it, and (optionally) a last paragraph.
+func midContentsDoc(atEnd bool) docfile.Document {
+	items := []canvas.Item{canvas.Chars{Text: "Intro text\n"}}
+	chapters := []canvas.Item{
+		canvas.Chars{Text: "Chapter one", Format: canvas.Format{Scale: 2, FontWeight: 700}}, canvas.Chars{Text: "\nbody\n"},
+		canvas.Chars{Text: "A section", Format: canvas.Format{Scale: 1.6, FontWeight: 700}}, canvas.Chars{Text: "\nmore\n"},
+	}
+	toc := canvas.Inline{Object: &canvas.TOCObject{Title: "Inhalt"}, Block: true}
+	if atEnd {
+		items = append(items, chapters...)
+		items = append(items, toc)
+	} else {
+		items = append(items, toc, canvas.Chars{Text: "\n"})
+		items = append(items, chapters...)
+	}
+	return docfile.FromFlow("Report", &canvas.TextFlow{Items: items})
+}
+
+// The contents are written where the document has them: after the text before them, before the chapters after them.
+func TestContentsAreWrittenWhereTheDocumentHasThem(t *testing.T) {
+	snap := FromDocument(midContentsDoc(false))
+	if !snap.TOC || snap.TOCAt <= 0 || snap.TOCAt >= len(snap.Blocks) {
+		t.Fatalf("TOCAt = %d of %d blocks", snap.TOCAt, len(snap.Blocks))
+	}
+	if snap.Blocks[snap.TOCAt-1].Segments[0].Text != "Intro text" {
+		t.Errorf("the block before the contents is %q", snap.Blocks[snap.TOCAt-1].Segments[0].Text)
+	}
+	order := func(name, s string, marks ...string) {
+		t.Helper()
+		last := -1
+		for _, m := range marks {
+			i := strings.Index(s, m)
+			if i < 0 || i < last {
+				t.Errorf("%s: %q is missing or out of order (at %d, after %d)", name, m, i, last)
+			}
+			last = i
+		}
+	}
+	html, _ := HTML{}.Export(snap)
+	order("HTML", string(html), "Intro text", `<nav class="toc"`, `<h1 id=`)
+	docx, _ := DOCX{}.Export(snap)
+	d := docxParts(t, docx)["word/document.xml"]
+	order("Word", d, "Intro text", `TOC \o`, `<w:bookmarkStart`)
+	if strings.Count(d, `<w:bookmarkStart`) != 2 {
+		t.Errorf("Word: every heading has its bookmark, got %d", strings.Count(d, `<w:bookmarkStart`))
+	}
+	rtf, _ := RTF{}.Export(snap)
+	order("RTF", string(rtf), "Intro text", `\fldinst HYPERLINK`, `\bkmkstart`)
+	odt, _ := ODT{}.Export(snap)
+	order("ODT", docxParts(t, odt)["content.xml"], "Intro text", "<text:table-of-content ", "<text:bookmark-start")
+	pdf, err := PDF{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pages, _ := pdftext.ExtractPagesBytes(pdf)
+	all := strings.Join(pages, "\n")
+	order("PDF", all, "Intro text", "Inhalt", "Chapter one")
+
+	// A table of contents at the end of the document is written there.
+	end := FromDocument(midContentsDoc(true))
+	if end.TOCAt != len(end.Blocks) {
+		t.Fatalf("at the end: TOCAt = %d of %d", end.TOCAt, len(end.Blocks))
+	}
+	html, _ = HTML{}.Export(end)
+	order("HTML end", string(html), "A section", `<nav class="toc"`)
+	docx, _ = DOCX{}.Export(end)
+	order("Word end", docxParts(t, docx)["word/document.xml"], "A section", `TOC \o`)
+	rtf, _ = RTF{}.Export(end)
+	order("RTF end", string(rtf), "A section", `\fldinst HYPERLINK`)
+	pdf, _ = PDF{}.Export(end)
+	pages, _ = pdftext.ExtractPagesBytes(pdf)
+	order("PDF end", strings.Join(pages, "\n"), "Chapter one", "Inhalt")
+
+	// At the start (the usual case, and the Page tab's switch) nothing moves.
+	start := FromDocument(heldContentsDoc(docfile.Block{}))
+	if start.TOCAt != 0 {
+		t.Errorf("at the start: TOCAt = %d", start.TOCAt)
+	}
+}

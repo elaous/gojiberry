@@ -28,8 +28,11 @@ type RTF struct{}
 func (RTF) Export(snap Snapshot) ([]byte, error) {
 	contentWidthTwips := rtfPxToTwips(snap.PageWidth - snap.MarginLeft - snap.MarginRight)
 	var body strings.Builder
-	marks := rtfContents(&body, snap, contentWidthTwips)
+	marks := tocMarks(snap, func(block int) string { return "_Toc" + strconv.Itoa(100000+block) })
 	for i, b := range snap.Blocks {
+		if snap.tocHere(i) {
+			rtfContents(&body, snap, contentWidthTwips, marks)
+		}
 		switch b.Kind {
 		case Image:
 			caption := ""
@@ -94,6 +97,9 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 		}
 		body.WriteString(pre + inner + `\par}` + "\n")
 	}
+	if snap.tocEnd() {
+		rtfContents(&body, snap, contentWidthTwips, marks)
+	}
 	// The sheet and margins, and the running header and footer (the page number a PAGE field and the
 	// page count a NUMPAGES field).
 	layout := ""
@@ -138,23 +144,21 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 // rtfContents writes the table of contents that starts the document (when the snapshot asks for one and has
 // headings): the title, then an entry for each heading, linked to a bookmark on it, with a PAGEREF field for
 // its page. Word fills the page numbers in when it opens the file (the fields are marked dirty); the cached
-// number is a dash. It returns the bookmark name of each heading by block index.
-func rtfContents(body *strings.Builder, snap Snapshot, width int) map[int]string {
+// number is a dash. The bookmark name of each heading (by block index) is in marks, made beforehand (tocMarks).
+func rtfContents(body *strings.Builder, snap Snapshot, width int, marks map[int]string) {
 	if !snap.TOC {
-		return nil
+		return
 	}
 	entries := snap.Outline()
 	if len(entries) == 0 {
-		return nil
+		return
 	}
 	if width <= 0 {
 		width = 9000
 	}
-	marks := map[int]string{}
 	body.WriteString(`{\pard\sa240\keepn\b\fs40 ` + escapeRTFText(snap.tocTitle()) + `\par}` + "\n")
 	for _, e := range entries {
-		name := "_Toc" + strconv.Itoa(100000+e.Block)
-		marks[e.Block] = name
+		name := marks[e.Block]
 		leader := `\tldot`
 		if snap.TOCStyle == "plain" {
 			leader = ""
@@ -164,7 +168,6 @@ func rtfContents(body *strings.Builder, snap Snapshot, width int) map[int]string
 		body.WriteString(`{\field\flddirty{\*\fldinst PAGEREF ` + name + ` \\h}{\fldrslt \endash}}\par}` + "\n")
 	}
 	body.WriteString(`{\pard\page\par}` + "\n")
-	return marks
 }
 
 // rtfDecor is a header or footer group ("header" or "footer") for a header text with fields: the left,
