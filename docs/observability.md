@@ -140,8 +140,10 @@ PostHog Cloud first, and a self-hosted instance is the operator's choice: only t
 It sends two kinds of event: `gojiberry_metric` (one per series per interval: label values, `count`, `sum`, `min`, `max`,
 `last`) and `gojiberry_span` (one per sampled span: name, `duration_ms`, attributes, the random trace and span ids). Every
 event has `$process_person_profile: false` and `$geoip_disable: true`, and one fixed distinct id, the service name. No
-person, address or place is involved, because none reaches a sink. A failed send is counted and dropped, never kept
-without bound (the span buffer holds at most 1000); the key is never logged, never in an error and never in
+person, address or place is involved, because none reaches a sink. A send that fails for a reason that may pass (no answer, 429, 5xx) is counted and
+the aggregates and spans it did not carry are kept for the next interval, added to what has grown meanwhile; a send the
+server refuses for good (any other 4xx, a wrong key) is counted and dropped with the rest of that flush. Memory stays
+bounded either way (2048 series, 1000 spans, what does not fit counted as dropped); the key is never logged, never in an error and never in
 `GET /admin/observe`.
 
 ### OpenTelemetry (OTLP)

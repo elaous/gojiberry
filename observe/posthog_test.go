@@ -76,21 +76,127 @@ func TestPostHogSendsAggregatesWithoutPersons(t *testing.T) {
 	}
 }
 
-func TestPostHogFailureIsCountedAndDropped(t *testing.T) {
+func TestPostHogKeepsWhatFailedForRetryAndDropsWhatCannotPass(t *testing.T) {
 	c := &capture{code: 500}
 	srv := httptest.NewServer(c)
 	defer srv.Close()
 	p, _ := NewPostHog(PostHogConfig{APIKey: "phc_k", Host: srv.URL, Interval: -1})
-	p.Metric(Point{Metric: "requests_total", Kind: Counter, Value: 1, Source: Operator})
+	count := func(v float64) {
+		p.Metric(Point{Metric: "requests_total", Kind: Counter, Value: v, Source: Operator, Labels: []Label{{"route", "/x"}}})
+	}
+	count(1)
+	count(2)
 	err := p.Flush(context.Background())
 	if err == nil || strings.Contains(err.Error(), "phc_k") {
 		t.Fatalf("a failure is reported without the key: %v", err)
 	}
-	if len(p.series) != 0 {
-		t.Error("what failed is dropped, not kept without bound")
+	// A server that is down for a moment loses nothing: the aggregate waits for the next interval and grows meanwhile.
+	if len(p.series) != 1 {
+		t.Fatalf("the failed aggregate is kept: %d series", len(p.series))
 	}
-	if p.Describe().(map[string]any)["events_failed"] != int64(1) {
-		t.Error("failure counted")
+	count(4)
+	c.mu.Lock()
+	c.code, c.body = 0, nil
+	c.mu.Unlock()
+	if err := p.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Batch []phEvent `json:"batch"`
+	}
+	if len(c.body) != 1 {
+		t.Fatalf("one request: %v", c.body)
+	}
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(c.body[0], "/batch/ ")), &got); err != nil || len(got.Batch) != 1 {
+		t.Fatalf("batch: %v %v", got, err)
+	}
+	if m := got.Batch[0].Properties; m["count"] != float64(3) || m["sum"] != float64(7) {
+		t.Errorf("the retried aggregate is merged with the new one: %v", m)
+	}
+	if len(p.series) != 0 {
+		t.Error("what was sent is gone")
+	}
+
+	// A refusal for good (a wrong key) drops the batch and the rest, counted, and keeps nothing.
+	c.mu.Lock()
+	c.code = 401
+	c.mu.Unlock()
+	count(1)
+	if err := p.Flush(context.Background()); err == nil {
+		t.Fatal("a 401 is an error")
+	}
+	if len(p.series) != 0 {
+		t.Error("what the server refused for good is dropped, not kept")
+	}
+	if d := p.Describe().(map[string]any); d["events_failed"].(int64) < 2 {
+		t.Errorf("failures counted: %v", d)
+	}
+}
+
+func TestPostHogMemoryStaysBoundedUnderRepeatedFailures(t *testing.T) {
+	c := &capture{code: 503}
+	srv := httptest.NewServer(c)
+	defer srv.Close()
+	p, _ := NewPostHog(PostHogConfig{APIKey: "phc_k", Host: srv.URL, Interval: -1})
+	for round := 0; round < 3; round++ {
+		for i := 0; i < posthogMaxSpans/2+10; i++ {
+			p.Span(SpanData{Name: "request", Start: time.Unix(0, 0), End: time.Unix(1, 0)})
+		}
+		for i := 0; i < maxSeries/2+10; i++ {
+			p.Metric(Point{Metric: "requests_total", Kind: Counter, Value: 1, Source: Operator, Labels: []Label{{"route", "/r" + strings.Repeat("x", i%7) + string(rune('a'+i%26))}}})
+		}
+		_ = p.Flush(context.Background())
+	}
+	if len(p.series) > maxSeries || len(p.spans) > posthogMaxSpans {
+		t.Errorf("held %d series and %d spans after repeated failures", len(p.series), len(p.spans))
+	}
+}
+
+func TestPostHogFlushesOnTheIntervalAndOnClose(t *testing.T) {
+	c := &capture{}
+	srv := httptest.NewServer(c)
+	defer srv.Close()
+	p, _ := NewPostHog(PostHogConfig{APIKey: "phc_k", Host: srv.URL, Interval: 20 * time.Millisecond})
+	p.Metric(Point{Metric: "requests_total", Kind: Counter, Value: 1, Source: Operator})
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		c.mu.Lock()
+		n := len(c.body)
+		c.mu.Unlock()
+		if n > 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	c.mu.Lock()
+	n := len(c.body)
+	c.mu.Unlock()
+	if n == 0 {
+		t.Fatal("nothing was sent on the interval")
+	}
+	p.Metric(Point{Metric: "requests_total", Kind: Counter, Value: 1, Source: Operator})
+	if err := p.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	c.mu.Lock()
+	after := len(c.body)
+	c.mu.Unlock()
+	if after <= n {
+		t.Error("closing sends what is left")
+	}
+}
+
+func TestFanoutWithAFailingPostHogStillFeedsTheBuiltinSink(t *testing.T) {
+	srv := httptest.NewServer(&capture{code: 500})
+	defer srv.Close()
+	ph, _ := NewPostHog(PostHogConfig{APIKey: "phc_k", Host: srv.URL, Interval: -1})
+	b := NewBuiltin()
+	o := New(Options{Operator: Fanout(ph, b)})
+	o.Add(Errors, 1, "code", "panic")
+	_ = ph.Flush(context.Background())
+	o.Add(Errors, 1, "code", "panic")
+	if got := b.Count(Errors); got != 2 {
+		t.Errorf("the built-in sink has %d, want 2 whatever PostHog does", got)
 	}
 }
 
