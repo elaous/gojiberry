@@ -39,7 +39,7 @@ func TestEveryExportCarriesTheTranscriptOfAClip(t *testing.T) {
 	}
 	// The name is a link to the clip where the format has links; a clip with no words writes its line alone.
 	d := docOf(docfile.Item{Media: &docfile.MediaItem{URL: "https://example.com/talk.mp4", Title: "The talk"}})
-	if out := string(exportOne(t, r, "html", d)); !strings.Contains(out, `<a href="https://example.com/talk.mp4">The talk</a>`) || strings.Contains(out, "Transcript") {
+	if out := string(exportOne(t, r, "html", d)); !strings.Contains(out, `<video controls src="https://example.com/talk.mp4"`) || !strings.Contains(out, "<figcaption>The talk</figcaption>") || strings.Contains(out, "Transcript") {
 		t.Errorf("html of a clip with no words: %s", out)
 	}
 	if out := string(exportOne(t, r, "markdown", d)); !strings.Contains(out, "Video: [The talk](https://example.com/talk.mp4)") {
@@ -47,12 +47,21 @@ func TestEveryExportCarriesTheTranscriptOfAClip(t *testing.T) {
 	}
 }
 
-func TestFidelityReportSaysAClipIsNotEmbedded(t *testing.T) {
+func TestFidelityReportSaysWhereAClipIsNotEmbedded(t *testing.T) {
 	d := docOf(docfile.Item{Media: &docfile.MediaItem{URL: "a.mp4", Title: "Clip", Captions: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHi.\n"}})
 	for _, format := range Formats {
 		got := map[Feature]Loss{}
 		for _, l := range Fidelity(format, d).Losses {
 			got[l.Feature] = l
+		}
+		if format == "html" { // HTML embeds the clip with its caption track: nothing is lost
+			if _, ok := got[FeatMedia]; ok {
+				t.Errorf("html: media is reported as a loss: %+v", got[FeatMedia])
+			}
+			if _, ok := got[FeatMediaCaptions]; ok {
+				t.Errorf("html: captions are reported as a loss: %+v", got[FeatMediaCaptions])
+			}
+			continue
 		}
 		if l := got[FeatMedia]; l.Treatment != Simplified || l.Note != NoteMediaText {
 			t.Errorf("%s: media %+v", format, l)
