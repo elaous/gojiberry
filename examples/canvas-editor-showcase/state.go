@@ -13,6 +13,8 @@ type State struct {
 	Pages int
 	// Setup is the paper, orientation and margins of every sheet.
 	Setup components.PageSetup
+	// NoAutoClose turns off the closing bracket or quote that typing an opener adds (a preference).
+	NoAutoClose bool
 	// RunHeader and RunFooter are the running header and footer of the print layout (fields {page}, {pages}
 	// and {title}, a tab between the left, centre and right parts); empty is the sample's own header and
 	// page number. DocTitle fills {title}.
@@ -71,6 +73,14 @@ func (s State) Hyphenator() canvas.Hyphenator {
 		return hyphen.English()
 	}
 	return nil
+}
+
+// AutoClose is what typing an opening bracket or quote adds: its closer, unless the person turned that off.
+func (s State) AutoClose() map[rune]rune {
+	if s.NoAutoClose {
+		return nil
+	}
+	return canvas.DefaultAutoClose()
 }
 
 // PageWidth and PageHeight are the sheet's size in points, from Setup.
