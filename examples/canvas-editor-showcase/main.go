@@ -49,6 +49,8 @@ type ui struct {
 	fidelity                     fidelityState // the Import/Export tab's report of what a format loses
 	collab                       components.CollabAnnouncer
 	collabTimer                  bool
+	current                      func() docfile.Document // the document as it is being edited now
+	away                         awayState
 	collabMerged, collabRejected int                        // the session's counts already announced (merged after offline, refused)
 	typing                       components.TypingAnnouncer // what is said of typing and of the caret (preferences), see typing.go
 	typingMsg                    string
@@ -273,6 +275,7 @@ func main() {
 	if encTarget != "browser" {
 		targets = append(targets, saver.Target{Name: "browser", Label: browserLabel, Adapter: browserStore, Capacity: 5 << 20})
 	}
+	u.current = currentDoc
 	u.saver = saver.NewSession(&saver.Saver{Targets: targets}, currentDoc, openDoc)
 	// Encryption is the page's own: the saver asks it before a document is made confidential and
 	// to re-key a document's files when its level changes, and it seals confidential documents
