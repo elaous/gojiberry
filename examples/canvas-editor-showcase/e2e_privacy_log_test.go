@@ -114,6 +114,7 @@ func TestPrivacySettingsAreInThePreferencesMenu(t *testing.T) {
 	d := openWithServer(t, ts)
 	d.Click(`button.gj-menubar-button:has-text("View")`)
 	d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Display preferences")`)
+	d.Reveal(`.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("Privacy settings")`)
 	d.Click(`.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("Privacy settings")`)
 	d.WaitSelector("#privacy-heading")
 	d.NoErrors()

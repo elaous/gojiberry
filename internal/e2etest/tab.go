@@ -526,6 +526,14 @@ func (d *Tab) Hover(selector string) {
 	d.MouseMove(x, y)
 }
 
+// Reveal scrolls the first element matching the selector into view, as a person scrolls a menu that is longer
+// than the window, so that Click can reach it.
+func (d *Tab) Reveal(selector string) {
+	d.t.Helper()
+	d.WaitFor("an element "+selector, `!!window.__e2e.first(`+sel(selector)+`)`)
+	d.Eval(`(() => { const e = window.__e2e.first(`+sel(selector)+`); if (e) e.scrollIntoView({ block: 'nearest' }); return true; })()`, nil)
+}
+
 func (d *Tab) centre(selector string) (x, y float64) {
 	d.t.Helper()
 	d.WaitFor("a visible "+selector, `window.__e2e.centre(`+sel(selector)+`)`)
