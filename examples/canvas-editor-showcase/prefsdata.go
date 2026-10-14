@@ -28,6 +28,8 @@ type prefs struct {
 	Theme    string `json:"theme,omitempty"`    // "dark": the page's chrome in the dark palette ("" the light one)
 	Close    string `json:"close,omitempty"`    // "off": typing an opening bracket or quote does not add the closing one
 	Colours  string `json:"colours,omitempty"`  // "safe": other people's cursors in colours the common kinds of colour blindness tell apart
+	Dwell    string `json:"dwell,omitempty"`    // click by resting the pointer: "fast", "medium", "slow" (the pause)
+	Scan     string `json:"scan,omitempty"`     // single-switch scanning: "fast", "medium", "slow" (the step)
 	Where    string `json:"where,omitempty"`    // "on": the presence list has a "Where is <name>?" button for each collaborator
 }
 
@@ -83,6 +85,12 @@ func (p prefs) sanitize() prefs {
 	}
 	if !validLang(p.Lang) {
 		p.Lang = ""
+	}
+	if p.Dwell != "fast" && p.Dwell != "medium" && p.Dwell != "slow" {
+		p.Dwell = ""
+	}
+	if p.Scan != "fast" && p.Scan != "medium" && p.Scan != "slow" {
+		p.Scan = ""
 	}
 	if p.Where != "on" {
 		p.Where = ""
