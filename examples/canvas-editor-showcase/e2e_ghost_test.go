@@ -11,9 +11,7 @@ import (
 )
 
 // ghostText is what the faint suggestion shows, "" when it is hidden.
-func ghostText(d *e2etest.Tab) string {
-	return d.Str(`(() => { const g = document.getElementById('ghost'); return g && g.style.display !== 'none' ? g.textContent : '' })()`)
-}
+func ghostText(d *e2etest.Tab) string { return d.State().Str("ghost") }
 
 // openGhost opens the editor with the given preferences in Edit mode, the caret on an empty line of its
 // own (the ghost text shows only at the end of a line), with a screen reader watching the live regions.
@@ -38,9 +36,9 @@ func TestGhostTextIsOffByDefault(t *testing.T) {
 // accessibility tree does not contain; only Tab puts it in, the other keys never do.
 func TestGhostTextIsAcceptedByTabAlone(t *testing.T) {
 	d, sr := openGhost(t, `{ghost:'on'}`)
-	d.WaitFor("the ghost text", `document.getElementById('ghost') && document.getElementById('ghost').style.display !== 'none'`)
+	d.Wait("s.ghost !== ''")
 	d.OK(ghostText(d) == "bra", "the rest of the most used word: "+ghostText(d))
-	d.OK(d.Attr("#ghost", "aria-hidden") == "true", "the picture is hidden from assistive technology")
+	d.OK(!d.Has("#ghost"), "it is drawn by the canvas, not as an element a reader could find")
 	seen := false
 	for _, it := range sr.Items() {
 		seen = seen || it.Name == "bra" || it.Phrase == "bra"
@@ -57,7 +55,7 @@ func TestGhostTextIsAcceptedByTabAlone(t *testing.T) {
 
 	d.Press("Backspace") // "ze" becomes "z": the ghost follows the word
 	d.Type("e")
-	d.WaitFor("the ghost text again", `document.getElementById('ghost').style.display !== 'none'`)
+	d.Wait("s.ghost !== ''")
 	d.OK(ghostText(d) == "bra", "back at ze: "+ghostText(d))
 
 	d.Press("Tab")
@@ -71,13 +69,13 @@ func TestGhostTextIsAcceptedByTabAlone(t *testing.T) {
 // Escape hides the suggestion until the next letter; Enter does not insert it.
 func TestGhostTextEscapeAndEnter(t *testing.T) {
 	d, _ := openGhost(t, `{ghost:'on'}`)
-	d.WaitFor("the ghost text", `document.getElementById('ghost') && document.getElementById('ghost').style.display !== 'none'`)
+	d.Wait("s.ghost !== ''")
 	d.Press("Escape")
-	d.WaitFor("it hiding", `document.getElementById('ghost').style.display === 'none'`)
+	d.Wait("s.ghost === ''")
 	d.Sleep(700)
 	d.OK(ghostText(d) == "", "dismissed stays dismissed")
 	d.Type("p")
-	d.WaitFor("the next word's ghost text", `document.getElementById('ghost').style.display !== 'none'`)
+	d.Wait("s.ghost !== ''")
 	d.OK(ghostText(d) == "pelin", "after another letter it comes back: "+ghostText(d))
 	d.Press("Enter")
 	d.Sleep(300)
@@ -102,19 +100,18 @@ func TestGhostTextIsAnnouncedPolitely(t *testing.T) {
 	d.NoErrors()
 }
 
-// It does not show while the caret is inside text (it would cover it), and the preference is in the menu.
-func TestGhostTextNeverCoversText(t *testing.T) {
+// In the middle of a line it is a tag under the caret, not text over the words that follow; the canvas draws it.
+func TestGhostTextInTheMiddleOfALine(t *testing.T) {
 	d, _ := openGhost(t, `{ghost:'on'}`)
-	d.WaitFor("the ghost text", `document.getElementById('ghost') && document.getElementById('ghost').style.display !== 'none'`)
+	d.Wait("s.ghost !== ''")
 	d.Type(" more")
-	d.Press("ArrowLeft")
-	d.Press("ArrowLeft")
-	d.Press("ArrowLeft")
-	d.Press("ArrowLeft")
-	d.Press("ArrowLeft")
-	d.Press("ArrowLeft")
-	d.Type("zeb")
+	for i := 0; i < 5; i++ { // back to just after "ze", before " more"
+		d.Press("ArrowLeft")
+	}
+	d.Type("b")
 	d.Sleep(300)
-	d.OK(ghostText(d) == "", "no ghost text in the middle of a line: "+ghostText(d))
+	d.Wait("s.ghost !== ''")
+	d.OK(ghostText(d) != "", "a suggestion mid-line: "+ghostText(d))
+	d.OK(!d.Has("#ghost"), "and still no element")
 	d.NoErrors()
 }
