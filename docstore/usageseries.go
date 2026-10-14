@@ -271,6 +271,10 @@ func (s *Server) saveUsageSeries(now time.Time, newHour bool) {
 // RunUsageSampling takes a sample of the counters now and then every interval (an hour is right for
 // the hourly series) until ctx ends. A failing store skips that sample.
 func (s *Server) RunUsageSampling(ctx context.Context, interval time.Duration) {
+	if !s.sampling.CompareAndSwap(false, true) {
+		return // already running: the history and the observability gauges both ask for it
+	}
+	defer s.sampling.Store(false)
 	if interval <= 0 {
 		interval = time.Hour
 	}
