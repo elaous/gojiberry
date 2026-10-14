@@ -164,3 +164,34 @@ func TestAuditLogRecordsOwnerKeyEvents(t *testing.T) {
 		t.Errorf("the same account, the same Ref, no address: %s", buf.String())
 	}
 }
+
+// A sign-in that fails is logged as a refusal with no provider, account or address; one that works is not.
+func TestAuditLogRecordsFailedSignIns(t *testing.T) {
+	provider := newFakeOIDCProvider(t)
+	srv := newTestServerWithAuth(t, provider.srv.URL)
+	var buf bytes.Buffer
+	srv.WithAudit(audit.NewLogger(&buf), []byte("an operator's audit key"))
+	handler := srv.Handler()
+	_ = sessionTokenFor(t, handler, provider, "ana@example.com", "ana-sub") // works: nothing logged
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Fatalf("a good sign-in was logged: %s", got)
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/auth/test/callback?code=x&state=forged-by-ana@example.com", nil))
+	if rec.Code < 400 || rec.Code >= 500 {
+		t.Fatalf("a forged state should be a client error, got %d", rec.Code)
+	}
+	es := auditLines(t, &buf)
+	if len(es) != 1 || es[0].Kind != audit.SignInFailed || es[0].Outcome != audit.Denied || es[0].Actor != audit.Anonymous || es[0].Ref != "" {
+		t.Fatalf("events = %+v", es)
+	}
+	if strings.Contains(buf.String(), "ana") || strings.Contains(buf.String(), "forged") || strings.Contains(buf.String(), "test") {
+		t.Errorf("the line carries something of the request: %s", buf.String())
+	}
+	// Other routes' errors are not sign-in failures.
+	buf.Reset()
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/docs/missing", nil))
+	if strings.TrimSpace(buf.String()) != "" {
+		t.Errorf("logged: %s", buf.String())
+	}
+}
