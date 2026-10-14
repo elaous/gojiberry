@@ -546,7 +546,7 @@ func (s *Server) Handler() http.Handler {
 	for _, e := range s.extra {
 		mux.Handle(e.pattern, e.h)
 	}
-	return observe.Middleware(s.obs, guard.Or(s.guard).Wrap(exposeHeaders(mux)))
+	return observe.Middleware(s.obs, guard.Or(s.guard).Wrap(s.auditSignIns(exposeHeaders(mux))))
 }
 
 // ExposedHeaders is the Access-Control-Expose-Headers value of the document routes: the response
