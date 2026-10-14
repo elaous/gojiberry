@@ -196,6 +196,9 @@ type Snapshot struct {
 	// deepest heading level listed (0: all three); a table of contents the document holds sets them.
 	TOCStyle string
 	TOCDepth int
+	// TOCAt is the index of the block the contents are written before (0: at the start, and a number past the last
+	// block: at the end); a table of contents the document holds sets it to where the document has it.
+	TOCAt int
 
 	PageWidth, PageHeight                            float64
 	MarginLeft, MarginTop, MarginRight, MarginBottom float64

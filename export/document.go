@@ -102,8 +102,10 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 	}
 	// A table of contents the document holds stands for the contents the exports write at the start (once, never
 	// two lists): its title, look and depth are the ones used.
+	tocHeld := false
 	for _, it := range d.Content {
 		if it.TOC != nil {
+			tocHeld = true
 			snap.TOC = true
 			if it.TOC.Title != "" {
 				snap.TOCTitle = it.TOC.Title
@@ -135,8 +137,13 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 			flush()
 		}
 	}
+	tocPos := -1 // where the held table of contents is in the stream
 	for _, it := range d.Content {
 		switch {
+		case it.TOC != nil:
+			if tocPos < 0 {
+				tocPos = pos
+			}
 		case it.Para != nil:
 			cur.para = *it.Para
 		case it.Chars != nil:
@@ -199,6 +206,9 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 	}
 
 	snap.Blocks = blocksFrom(lines)
+	if tocHeld && tocPos >= 0 {
+		snap.TOCAt = tocBlock(snap.Blocks, tocPos)
+	}
 	if len(noteOrder) > 0 {
 		snap.Blocks = append(snap.Blocks, Block{Start: -1, Kind: Heading2, Level: 2, Segments: []Segment{{Text: "Notes"}}})
 		for i, id := range noteOrder {
@@ -421,4 +431,20 @@ func itoa(n int) string {
 		b = append([]byte{byte('0' + n%10)}, b...)
 	}
 	return string(b)
+}
+
+// tocBlock is the index of the block a table of contents at stream offset pos comes before: the first block that
+// starts at or after it, moved back to the first cell of a table it would fall inside; past the last block when
+// the contents are at the end.
+func tocBlock(blocks []Block, pos int) int {
+	for i, b := range blocks {
+		if b.Start < 0 || b.Start < pos {
+			continue
+		}
+		if b.Kind == TableCell {
+			i -= b.TableRow*b.TableCols + b.TableCol
+		}
+		return max(i, 0)
+	}
+	return len(blocks)
 }
