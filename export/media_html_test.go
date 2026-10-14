@@ -70,7 +70,7 @@ func TestHTMLPutsTheContentInOneMainLandmark(t *testing.T) {
 	}
 	s := string(out)
 	nav, main, end := strings.Index(s, "<nav class=\"toc\""), strings.Index(s, "<main>"), strings.Index(s, "</main>")
-	if strings.Count(s, "<main>") != 1 || nav < 0 || !(nav < main && main < end) || !strings.Contains(s[main:end], "<h1") {
+	if strings.Count(s, "<main>") != 1 || nav < 0 || nav >= main || main >= end || !strings.Contains(s[main:end], "<h1") {
 		t.Errorf("landmarks: nav %d main %d end %d", nav, main, end)
 	}
 }
