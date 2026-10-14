@@ -2056,6 +2056,10 @@ type LanguagePanelProps struct {
 	// Detected is the name of the language the text seems to be in ("" if
 	// unknown).
 	Detected string
+	// OnUseDetected, when set, adds a button that makes the detected language the language of the document
+	// (UseDetectedDone says it already is, and the button is then off).
+	OnUseDetected   func()
+	UseDetectedDone bool
 
 	// Targets are the languages offered for translation; empty means no
 	// translation backend is set up, which is said instead of offering it.

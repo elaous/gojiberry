@@ -23,6 +23,10 @@ type LanguagePanelProps struct {
 	// Detected is the name of the language the text seems to be in ("" if
 	// unknown).
 	Detected string
+	// OnUseDetected, when set, adds a button that makes the detected language the language of the document
+	// (UseDetectedDone says it already is, and the button is then off).
+	OnUseDetected   func()
+	UseDetectedDone bool
 
 	// Targets are the languages offered for translation; empty means no
 	// translation backend is set up, which is said instead of offering it.
@@ -76,6 +80,9 @@ func LanguagePanel(p LanguagePanelProps) xango.Node {
 		detected = trf("lang.detected", "Language: %s", p.Detected)
 	}
 	kids := []xango.Node{xango.El("p", []xango.Attr{xango.A("class", "gj-lang-detected")}, xango.Text(detected))}
+	if p.Detected != "" && p.OnUseDetected != nil {
+		kids = append(kids, btn("gj-lang-docuse", tr("lang.useDetected", "Use as the language of the document"), p.UseDetectedDone, p.OnUseDetected))
+	}
 	if p.Busy {
 		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-busy"), xango.A("role", "status")}, xango.Text(tr("lang.working", "Working…"))))
 	}

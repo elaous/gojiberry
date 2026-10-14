@@ -57,17 +57,25 @@ func (u *ui) setupLanguage(param func(string) string) {
 func langPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(), redraw, renderUI func()) xango.Node {
 	l := &u.lang
 	fl := flow()
-	detected := ""
+	detected, detectedCode := "", ""
 	if fl != nil {
 		if code, ok := lang.Detect(fl.EditText()); ok {
-			detected = lang.Names[code]
+			detected, detectedCode = lang.Names[code], code
 		}
 	}
 	props := components.LanguagePanelProps{
 		Detected: detected, Target: l.target, Translation: l.translated, Busy: l.busy, Error: l.err, Checked: l.checked,
-		GrammarEnabled: l.grammar != nil,
-		ReadOnly:       !state.Role.CanEdit() || state.Mode == canvas.ModeView,
-		OnTarget:       func(code string) { l.target = code },
+		GrammarEnabled:  l.grammar != nil,
+		ReadOnly:        !state.Role.CanEdit() || state.Mode == canvas.ModeView,
+		OnTarget:        func(code string) { l.target = code },
+		UseDetectedDone: u.docLang == detectedCode,
+		OnUseDetected: func() {
+			if state.Role.CanEdit() && detectedCode != "" {
+				u.docLang = detectedCode
+				u.announce(T("a11y.docLang", "Language of the document: %s", detected))
+				renderUI()
+			}
+		},
 	}
 	if l.translator != nil {
 		props.Targets = translateTargets

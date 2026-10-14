@@ -1132,6 +1132,7 @@
   "speech.notInserted": "Se oyó: %s. Cambie al modo de edición y ponga el cursor donde deba ir, y dicte otra vez.",
   "prefs.memory": "Ahorrar memoria (conservar menos pasos de deshacer)",
   "prefs.undoMany": "Conservar muchos pasos de deshacer (1000)",
+  "lang.useDetected": "Usar como idioma del documento",
   "prefs.g.text": "Texto y pantalla",
   "prefs.g.interface": "Idioma y tema",
   "prefs.g.shared": "Edición compartida",
