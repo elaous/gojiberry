@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-10 of 10 since the last full run (full run on main c10c427 (#344) with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on its second try; the first, on 59c2029, stopped at `make lint` (two constants and functions only the browser code uses read as unused in the native build, and a De Morgan finding in a test), fixed in #344. The coverage run had no failure; coverage score 89.8% (was 89.7%), README badge updated, lowest packages: resource-imports-demo 50.0%, http-server-demo 63.6%, ssr-demo 64.3%, generic-list-demo 66.7%, wasmdist 73.1%, collabhub 79.1%, canvas-editor-showcase 79.5% (was 72.9%), fontserver 80.6%, passkey/client 80.8%, user 80.8%).
+0 of 10 since the last full run (full run on main 8a90a42 (#355) with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on the first try, and so did the coverage run; coverage score 89.7% (was 89.8%), README badge updated).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
