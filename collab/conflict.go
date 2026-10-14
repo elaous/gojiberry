@@ -8,8 +8,9 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// conflictWindow is how long a paragraph counts as "being edited here" after the last local change in it.
-const conflictWindow = 10 * time.Second
+// DefaultConflictWindow is how long a paragraph counts as "being edited here" after the last local change in it
+// (Bridge.ConflictWindow).
+const DefaultConflictWindow = 10 * time.Second
 
 // Conflict is a paragraph that another person changed while it was being edited here. The merge keeps both
 // changes (characters are merged one by one), so nothing is lost; it is worth saying because the text the
@@ -21,39 +22,47 @@ type Conflict struct {
 	Replicas []string
 }
 
-type recentParagraph struct {
-	text string
-	at   time.Time
+// recentEdit is a local change, by the ids of the characters it put in or took out beside (a deletion is
+// remembered by the character before it), and when it was made.
+type recentEdit struct {
+	ids []crdt.Timestamp
+	at  time.Time
 }
 
 // now is replaced by tests.
 var now = time.Now
 
-// noteRecent remembers the paragraph around caret (an offset into runes) as just edited here.
-func (b *Bridge) noteRecent(runes []rune, caret int) {
-	p := paragraphAt(runes, caret)
-	if strings.TrimSpace(p) == "" {
+func (b *Bridge) conflictWindow() time.Duration {
+	if b.ConflictWindow > 0 {
+		return b.ConflictWindow
+	}
+	return DefaultConflictWindow
+}
+
+// noteRecent remembers that the characters with these ids were just edited here.
+func (b *Bridge) noteRecent(ids []crdt.Timestamp) {
+	if len(ids) == 0 {
 		return
 	}
 	t := now()
-	b.recent = slices.DeleteFunc(b.recent, func(r recentParagraph) bool { return t.Sub(r.at) > conflictWindow })
-	// the same paragraph, typed on, replaces its earlier form
-	if n := len(b.recent); n > 0 && (strings.HasPrefix(p, b.recent[n-1].text) || strings.HasPrefix(b.recent[n-1].text, p)) {
-		b.recent = b.recent[:n-1]
-	}
-	b.recent = append(b.recent, recentParagraph{p, t})
-	if len(b.recent) > 8 {
-		b.recent = b.recent[len(b.recent)-8:]
+	w := b.conflictWindow()
+	b.recent = slices.DeleteFunc(b.recent, func(r recentEdit) bool { return t.Sub(r.at) > w })
+	b.recent = append(b.recent, recentEdit{slices.Clone(ids), t})
+	if len(b.recent) > 64 {
+		b.recent = b.recent[len(b.recent)-64:]
 	}
 }
 
-// checkConflict compares the text before and after other people's operations were merged: a paragraph that
-// was edited here lately and is no longer there as it was has been changed by them.
-func (b *Bridge) checkConflict(before, after []atom, ops []crdt.Op) {
-	if b.OnConflict == nil || len(b.recent) == 0 {
+// checkConflict looks at the operations other people sent, against the text as it was here before they were
+// merged (before, and the id of each of its characters): an insert placed after a character of a paragraph
+// that was edited here lately, or a deletion of one, is a change to that paragraph. Paragraphs are found by the
+// ids of their characters, so two paragraphs with the same words are not mixed up.
+func (b *Bridge) checkConflict(before []atom, beforeIDs []crdt.Timestamp, ops []crdt.Op) {
+	if b.OnConflict == nil || len(b.recent) == 0 || len(before) != len(beforeIDs) {
 		return
 	}
 	t := now()
+	w := b.conflictWindow()
 	var replicas []string
 	add := func(r string) {
 		if r != "" && r != b.replica && !slices.Contains(replicas, r) {
@@ -61,7 +70,6 @@ func (b *Bridge) checkConflict(before, after []atom, ops []crdt.Op) {
 		}
 	}
 	for _, op := range ops {
-		add(op.TS.Replica)
 		for _, c := range op.CharOps {
 			add(c.ID.Replica)
 		}
@@ -69,46 +77,74 @@ func (b *Bridge) checkConflict(before, after []atom, ops []crdt.Op) {
 	if len(replicas) == 0 {
 		return
 	}
-	have := map[string]int{}
-	for _, p := range paragraphsOf(after) {
-		have[p]++
+	index := make(map[crdt.Timestamp]int, len(beforeIDs))
+	for i, id := range beforeIDs {
+		index[id] = i
 	}
+	// the paragraphs (index ranges) edited here lately
+	type span struct{ start, end int }
+	var spans []span
 	for _, r := range b.recent {
-		if t.Sub(r.at) > conflictWindow {
+		if t.Sub(r.at) > w {
 			continue
 		}
-		// the paragraph as it was here is still in the document: untouched by the others
-		if have[r.text] > 0 {
-			have[r.text]--
-			continue
+		for _, id := range r.ids {
+			i, ok := index[id]
+			if !ok {
+				continue
+			}
+			s, e := i, i
+			for s > 0 && before[s-1].r != '\n' {
+				s--
+			}
+			for e < len(before) && before[e].r != '\n' {
+				e++
+			}
+			sp := span{s, e}
+			if !slices.Contains(spans, sp) {
+				spans = append(spans, sp)
+			}
 		}
-		// it was here before they arrived (not already gone for another reason)
-		if !slices.Contains(paragraphsOf(before), r.text) {
-			continue
-		}
-		b.OnConflict(Conflict{Paragraph: r.text, Replicas: replicas})
-		b.recent = nil
+	}
+	if len(spans) == 0 {
 		return
 	}
+	for _, op := range ops {
+		for _, c := range op.CharOps {
+			if c.ID.Replica == b.replica {
+				continue
+			}
+			var at int
+			var ok bool
+			switch c.Kind {
+			case crdt.CharInsert:
+				at, ok = index[c.Origin] // placed after this character
+				if ok && before[at].r == '\n' {
+					at++ // after a line break: the start of the next paragraph
+				}
+			case crdt.CharDelete:
+				at, ok = index[c.ID]
+			}
+			if !ok {
+				continue
+			}
+			for _, sp := range spans {
+				// an insert at the very end of the paragraph (after its last character) or the start of the next
+				// (after the break) is at e / e+1: only e belongs to this one.
+				if at >= sp.start && at <= sp.end {
+					b.OnConflict(Conflict{Paragraph: paragraphText(before, sp.start, sp.end), Replicas: replicas})
+					b.recent = nil
+					return
+				}
+			}
+		}
+	}
 }
 
-func paragraphsOf(atoms []atom) []string {
-	rs := make([]rune, 0, len(atoms))
-	for _, a := range atoms {
-		rs = append(rs, a.r)
+func paragraphText(atoms []atom, start, end int) string {
+	var sb strings.Builder
+	for _, a := range atoms[start:min(end, len(atoms))] {
+		sb.WriteRune(a.r)
 	}
-	return strings.Split(string(rs), "\n")
-}
-
-// paragraphAt is the paragraph of runes around offset pos.
-func paragraphAt(runes []rune, pos int) string {
-	pos = max(0, min(pos, len(runes)))
-	start, end := pos, pos
-	for start > 0 && runes[start-1] != '\n' {
-		start--
-	}
-	for end < len(runes) && runes[end] != '\n' {
-		end++
-	}
-	return string(runes[start:end])
+	return sb.String()
 }

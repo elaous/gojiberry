@@ -45,6 +45,7 @@ type Session struct {
 	Name, Color string
 
 	replica   string
+	names     map[string]string // the name each replica gave, kept after it leaves, for saying who did something
 	opts      client.Options
 	transport Transport
 	needFix   bool
@@ -120,8 +121,8 @@ func (s *Session) noteConflict(c Conflict) {
 	s.Conflicts++
 	s.ConflictWith = s.ConflictWith[:0:0]
 	for _, r := range c.Replicas {
-		name := ""
-		if p, ok := s.Peers[r]; ok {
+		name := s.names[r]
+		if p, ok := s.Peers[r]; ok && p.Name != "" {
 			name = p.Name
 		}
 		s.ConflictWith = append(s.ConflictWith, name)
@@ -213,6 +214,12 @@ func (s *Session) handle(e client.Event) bool {
 		s.Bridge.Apply(e.Ops...)
 		return true
 	case client.PresenceEvent:
+		if e.Presence.Name != "" {
+			if s.names == nil {
+				s.names = map[string]string{}
+			}
+			s.names[e.Presence.Replica] = e.Presence.Name
+		}
 		if e.Presence.Gone {
 			delete(s.Peers, e.Presence.Replica)
 		} else {
