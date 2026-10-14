@@ -97,3 +97,46 @@ func TestGoingOfflineInTheBrowser(t *testing.T) {
 	b.Wait("s.live.status === 'online' && s.live.role === 'editor'")
 	b.Wait("s.text.includes(' OFFLINE')")
 }
+
+// TestWhatOthersChangedWhileOffline: Ana loses her connection, Bo changes the document meanwhile, and
+// when Ana is back she is shown what Bo changed.
+func TestWhatOthersChangedWhileOffline(t *testing.T) {
+	h := hub.New(hub.Config{KeepAlive: 300 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
+		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	}})
+	srv := httptest.NewServer(h.Handler())
+	defer func() { go srv.Close(); _ = h.Close() }()
+	site := e2etest.NewSite(t)
+	q := func(name, token string) string {
+		return "/d/queue3?lang=en&hub=" + url.QueryEscape(srv.URL) + "&token=" + token + "&name=" + name
+	}
+	a := site.Open(t, q("Ana", "owner"))
+	a.Wait("s.live.status === 'online' && s.live.role === 'owner'")
+	a.Sleep(400)
+	b := site.Open(t, q("Bo", "editor"))
+	b.Wait("s.live.status === 'online' && s.live.role === 'editor'")
+	b.Wait("s.text.length > 100")
+
+	a.Offline(true)
+	srv.CloseClientConnections()
+	a.Wait("s.live.status === 'offline' || s.live.status === 'connecting'")
+	b.Wait("s.live.status === 'online'")
+	b.ToggleMode()
+	b.CanvasClick(240, 164)
+	b.Focus("#input")
+	b.Press("End")
+	b.Type(" FROMBO")
+	b.Sleep(600)
+
+	a.Offline(false)
+	a.Wait("s.live.status === 'online' && s.text.includes(' FROMBO')")
+	a.WaitForTimeout("the changes made meanwhile are listed", `!!document.querySelector('#away-diff .gj-diff-item')`, 20*time.Second)
+	if got := a.Text("#away-diff"); !strings.Contains(got, "FROMBO") {
+		t.Errorf("the list does not show Bo's change: %q", got)
+	}
+	a.Click("#away .gj-button, #away button")
+	a.Wait("true")
+	if a.Has("#away") {
+		t.Error("the list stays after Dismiss")
+	}
+}

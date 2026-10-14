@@ -750,6 +750,7 @@ func (u *ui) noteCollab(renderUI func()) {
 		u.collab.NoteRejected(s.Rejected - u.collabRejected)
 	}
 	u.collabMerged, u.collabRejected = s.Merged, s.Rejected
+	u.noteAway(s.Status, renderUI)
 	if msg := u.collab.Update(time.Now(), s.Status == client.Online, names, problem); msg != "" {
 		u.announce(msg)
 	}

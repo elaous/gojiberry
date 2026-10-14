@@ -124,10 +124,14 @@ func livePresence(u *ui, flow func() *canvas.TextFlow, renderUI func()) xango.No
 	if curPrefs.Where == "on" {
 		where = func(p components.PresencePeer) { u.sayWhere(flow(), p); renderUI() }
 	}
-	return xango.El("div", []xango.Attr{xango.A("id", "presence"), xango.A("style", "margin-bottom:0.8em")}, components.Presence(components.PresenceProps{
+	pres := xango.El("div", []xango.Attr{xango.A("id", "presence"), xango.A("style", "margin-bottom:0.8em")}, components.Presence(components.PresenceProps{
 		Self: components.PresencePeer{Name: u.liveName, Color: u.liveColor, Role: string(s.Role)}, Peers: peers,
 		Status: s.Status.String(), Pending: s.Pending, Role: string(s.Role), OnWhere: where,
 	}))
+	if away, ok := u.awayPanel(renderUI); ok {
+		return xango.El("div", nil, pres, away)
+	}
+	return pres
 }
 
 // hubURL is the collaboration hub's address: the page's own /collab unless ?hub= names
