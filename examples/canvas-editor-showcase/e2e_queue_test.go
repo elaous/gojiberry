@@ -63,3 +63,37 @@ func TestChangesWaitingSurviveAReload(t *testing.T) {
 	b.Wait("s.live.status === 'online' && s.live.role === 'editor'")
 	b.Wait("s.text.includes(' KEPT')")
 }
+
+// TestGoingOfflineInTheBrowser cuts the browser's network (the hub keeps running), types, and brings
+// the network back: the page says it is offline, keeps the change, and sends it when it can.
+func TestGoingOfflineInTheBrowser(t *testing.T) {
+	h := hub.New(hub.Config{KeepAlive: 300 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
+		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	}})
+	srv := httptest.NewServer(h.Handler())
+	defer func() { go srv.Close(); _ = h.Close() }()
+	site := e2etest.NewSite(t)
+	q := func(name, token string) string {
+		return "/d/queue2?hub=" + url.QueryEscape(srv.URL) + "&token=" + token + "&name=" + name
+	}
+	a := site.Open(t, q("Ana", "owner"))
+	a.Wait("s.live.status === 'online' && s.live.role === 'owner'")
+	a.Sleep(400)
+	a.ToggleMode()
+	a.CanvasClick(240, 164)
+	a.Focus("#input")
+	a.Press("End")
+
+	// The browser's network goes, and the connection that was open breaks with it (emulating offline
+	// stops new requests only; an open stream is cut from the server's side).
+	a.Offline(true)
+	srv.CloseClientConnections()
+	a.Type(" OFFLINE")
+	a.Wait("s.live.status === 'offline' || s.live.status === 'connecting'")
+	a.Offline(false)
+	a.Wait("s.live.status === 'online'")
+
+	b := site.Open(t, q("Bo", "editor"))
+	b.Wait("s.live.status === 'online' && s.live.role === 'editor'")
+	b.Wait("s.text.includes(' OFFLINE')")
+}
