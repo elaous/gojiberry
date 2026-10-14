@@ -105,12 +105,16 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 		return err
 	}
 	const header = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` + "\n"
-	var hfRels [4]string // the relationship ids of the header, the footer, and those of the first page
+	var hfRels [6]string // the relationship ids of the header, the footer, and those of the first page and the even pages
 	var hfTypes string
 	var hfParts []struct{ name, content string }
-	hfList := []struct{ kind, text, num string }{{"header", snap.Header, "1"}, {"footer", snap.Footer, "1"}}
+	hfList := []struct{ kind, text, num string }{{"header", snap.Header, "1"}, {"footer", snap.Footer, "1"},
+		{"header", "", "2"}, {"footer", "", "2"}, {"header", "", "3"}, {"footer", "", "3"}}
 	if snap.FirstDiffers {
-		hfList = append(hfList, struct{ kind, text, num string }{"header", snap.FirstHeader, "2"}, struct{ kind, text, num string }{"footer", snap.FirstFooter, "2"})
+		hfList[2].text, hfList[3].text = snap.FirstHeader, snap.FirstFooter
+	}
+	if snap.EvenDiffers {
+		hfList[4].text, hfList[5].text = snap.EvenHeader, snap.EvenFooter
 	}
 	for i, hf := range hfList {
 		if hf.text == "" {
@@ -143,9 +147,17 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>` + strings.Join(b.rels, "") + `</Relationships>`},
 	}
-	if th.background != "" {
-		// Word draws a page colour only when the document asks for the background to be shown.
-		files = append(files, struct{ name, content string }{"word/settings.xml", header + `<w:settings ` + docxNS + `><w:displayBackgroundShape/></w:settings>`})
+	if th.background != "" || snap.EvenDiffers {
+		// Word draws a page colour only when the document asks for the background to be shown, and gives the
+		// even pages their own header and footer only when the document asks for that.
+		var settings string
+		if th.background != "" {
+			settings += `<w:displayBackgroundShape/>`
+		}
+		if snap.EvenDiffers {
+			settings += `<w:evenAndOddHeaders/>`
+		}
+		files = append(files, struct{ name, content string }{"word/settings.xml", header + `<w:settings ` + docxNS + `>` + settings + `</w:settings>`})
 		files[0].content = strings.Replace(files[0].content, `</Types>`, `<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/></Types>`, 1)
 		for i := range files {
 			if files[i].name == "word/_rels/document.xml.rels" {
@@ -182,7 +194,7 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 
 // docxSection is the section properties; hf holds the relationship ids of the header and the footer part
 // ("" for none), which the section names first.
-func docxSection(snap Snapshot, hf [4]string) string {
+func docxSection(snap Snapshot, hf [6]string) string {
 	px := func(v float64) int { return int(v * 15) } // twips
 	refs := ""
 	if hf[0] != "" {
@@ -199,6 +211,15 @@ func docxSection(snap Snapshot, hf [4]string) string {
 		}
 		if hf[3] != "" {
 			refs += `<w:footerReference w:type="first" r:id="` + hf[3] + `"/>`
+		}
+	}
+	// Likewise the even pages (the default ones are then the odd pages'; the switch itself is in settings.xml).
+	if snap.EvenDiffers {
+		if hf[4] != "" {
+			refs += `<w:headerReference w:type="even" r:id="` + hf[4] + `"/>`
+		}
+		if hf[5] != "" {
+			refs += `<w:footerReference w:type="even" r:id="` + hf[5] + `"/>`
 		}
 	}
 	title := ""
@@ -278,14 +299,21 @@ func (b *docxBuilder) tableOfContents(snap Snapshot) {
 		return
 	}
 	width := int((snap.PageWidth - snap.MarginLeft - snap.MarginRight) * 15)
+	leader, depth := "dot", 3
+	if snap.TOCStyle == "plain" {
+		leader = "none"
+	}
+	if snap.TOCDepth > 0 {
+		depth = min(snap.TOCDepth, 3)
+	}
 	w := &b.body
 	w.WriteString(`<w:p><w:pPr><w:keepNext/><w:spacing w:before="0" w:after="240"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="40"/></w:rPr><w:t>` + esc(snap.tocTitle()) + `</w:t></w:r></w:p>`)
 	for i, e := range entries {
 		name := "_Toc" + strconv.Itoa(100000+e.Block)
 		b.marks[e.Block] = name
-		w.WriteString(`<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="` + strconv.Itoa(width) + `"/></w:tabs><w:spacing w:after="60"/><w:ind w:left="` + strconv.Itoa((e.Level-1)*360) + `"/></w:pPr>`)
+		w.WriteString(`<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="` + leader + `" w:pos="` + strconv.Itoa(width) + `"/></w:tabs><w:spacing w:after="60"/><w:ind w:left="` + strconv.Itoa((e.Level-1)*360) + `"/></w:pPr>`)
 		if i == 0 {
-			w.WriteString(`<w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \o "1-3" \h \z \u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`)
+			w.WriteString(`<w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \o "1-` + strconv.Itoa(depth) + `" \h \z \u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`)
 		}
 		w.WriteString(`<w:hyperlink w:anchor="` + name + `" w:history="1"><w:r><w:t xml:space="preserve">` + esc(e.Text) + `</w:t></w:r><w:r><w:tab/></w:r>` +
 			docxField(`PAGEREF `+name+` \h`, "–") + `</w:hyperlink>`)
@@ -479,7 +507,11 @@ func (b *docxBuilder) table(cells []Block) {
 	// A cell a merge covers from above continues its vertical merge; one it
 	// covers from the left is not written at all (the owner's gridSpan holds it).
 	for r := 0; r < rows; r++ {
-		w.WriteString(`<w:tr>`)
+		w.WriteString(`<w:tr><w:trPr><w:cantSplit/></w:trPr>`)
+		keep := ""
+		if keepRowWithNext(r, rows) {
+			keep = `<w:keepNext/>`
+		}
 		for c := 0; c < cols; c++ {
 			cell := cells[r*cols+c]
 			if cell.TableCovered {
@@ -502,8 +534,11 @@ func (b *docxBuilder) table(cells []Block) {
 				props += `<w:shd w:val="clear" w:color="auto" w:fill="` + fill + `"/>`
 			}
 			para := `<w:p>`
+			if keep != "" {
+				para = `<w:p><w:pPr>` + keep + `</w:pPr>`
+			}
 			if jc := map[int]string{1: "center", 2: "right"}[cell.TableAlign]; jc != "" {
-				para = `<w:p><w:pPr><w:jc w:val="` + jc + `"/></w:pPr>`
+				para = `<w:p><w:pPr>` + keep + `<w:jc w:val="` + jc + `"/></w:pPr>`
 			}
 			w.WriteString(`<w:tc><w:tcPr>` + props + `</w:tcPr>` + para + b.inline(cell.Segments) + `</w:p></w:tc>`)
 		}

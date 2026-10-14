@@ -1,6 +1,7 @@
 package canvas
 
 import (
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,10 +33,21 @@ func (f *TextFlow) pageOfOffset(o int) int {
 	return 0
 }
 
+// The looks of a table of contents (TOCObject.Style): a dotted leader from each heading to its page number, or the
+// heading and the number alone.
+const (
+	TOCDots  = ""
+	TOCPlain = "plain"
+)
+
 // TOCObject is a table of contents.
 type TOCObject struct {
 	// Title is the heading of the table ("Contents" if empty).
 	Title string
+	// Style is TOCDots (the default) or TOCPlain.
+	Style string
+	// Depth is the deepest heading level listed (1 to 3); 0 lists them all.
+	Depth int
 	flow  *TextFlow
 	w     float64
 }
@@ -47,7 +59,45 @@ func (o *TOCObject) Entries() []OutlineEntry {
 	if o.flow == nil {
 		return nil
 	}
-	return o.flow.Outline()
+	all := o.flow.Outline()
+	if o.Depth <= 0 {
+		return all
+	}
+	var out []OutlineEntry
+	for _, e := range all {
+		if e.Level <= o.Depth {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// EntryAt reports the heading whose row of the table, drawn with its top-left corner at (ox, oy), holds the point
+// (x, y): the stream offset to go to. The row of the title and the space around the rows give none.
+func (o *TOCObject) EntryAt(x, y, ox, oy float64) (int, bool) {
+	if x < ox || x > ox+o.w || y < oy {
+		return 0, false
+	}
+	row := int((y-oy)/tocLineH) - 1 // row 0 is the title
+	entries := o.Entries()
+	if row < 0 || row >= len(entries) {
+		return 0, false
+	}
+	return entries[row].Start, true
+}
+
+// tocTargetAt is where a click at (x, y) on a table of contents goes: the heading it lists there.
+func (f *TextFlow) tocTargetAt(x, y float64) (int, bool) {
+	for _, ln := range f.Layout().Lines {
+		for _, po := range ln.Objects {
+			if toc, ok := po.Object.(*TOCObject); ok {
+				if off, ok := toc.EntryAt(x, y, po.X, po.Y); ok {
+					return off, true
+				}
+			}
+		}
+	}
+	return 0, false
 }
 
 // Measure implements InlineObject.
@@ -79,11 +129,25 @@ func (o *TOCObject) DrawAt(p Painter, x, y float64) {
 		ty += tocLineH
 		p.SetFillStyle("#2e3338")
 		text := ellipsizeTo(p, e.Text, o.w-60-float64(e.Level-1)*16)
-		p.FillText(text, x+float64(e.Level-1)*16, ty)
+		tx := x + float64(e.Level-1)*16
+		p.FillText(text, tx, ty)
 		if pg := o.flow.pageOfOffset(e.Start); pg > 0 {
 			label := strconv.Itoa(pg)
+			lw := p.MeasureTextWidth(label)
 			p.SetFillStyle("#6b7280")
-			p.FillText(label, x+o.w-p.MeasureTextWidth(label), ty)
+			if o.Style == TOCDots {
+				// dots from the end of the heading to the number, on a regular grid so they line up from row to row
+				const step = 6.0
+				dot := p.MeasureTextWidth(".")
+				for dx := tx + p.MeasureTextWidth(text) + 6; dx+dot < x+o.w-lw-6; dx += step {
+					g := x + math.Ceil((dx-x)/step)*step
+					if g+dot >= x+o.w-lw-6 {
+						break
+					}
+					p.FillText(".", g, ty)
+				}
+			}
+			p.FillText(label, x+o.w-lw, ty)
 		}
 	}
 }

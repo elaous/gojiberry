@@ -124,6 +124,11 @@ func (f *TextFlow) Dragging() bool { return f.drag != nil }
 
 // MouseDown starts dragging a gap if (x, y) is on its grip (edit mode).
 func (f *TextFlow) MouseDown(x, y float64) bool {
+	// A click on a row of a table of contents goes to the heading it lists.
+	if off, ok := f.tocTargetAt(x, y); ok && !f.suggestionsOpen() {
+		f.GotoOffset(off)
+		return true
+	}
 	if f.suggestionsOpen() {
 		if f.sugg.MouseDown(x, y) {
 			return true

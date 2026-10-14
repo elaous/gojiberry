@@ -150,6 +150,10 @@ type FootnoteMark struct {
 // heading, empty for the default.
 type Block struct {
 	Title string `json:"title,omitempty" pb:"1"`
+	// Style and Depth are the look of a table of contents (canvas.TOCObject): "" dotted, "plain"; the deepest
+	// heading level listed, 0 for all.
+	Style string `json:"style,omitempty" pb:"2"`
+	Depth int    `json:"depth,omitempty" pb:"3"`
 }
 
 // Footnote is a note's text.
@@ -375,7 +379,7 @@ func FromItems(items []canvas.Item) []Item {
 			case *canvas.FootnoteRef:
 				out = append(out, Item{Footnote: &FootnoteMark{ID: o.ID}})
 			case *canvas.TOCObject:
-				out = append(out, Item{TOC: &Block{Title: o.Title}})
+				out = append(out, Item{TOC: &Block{Title: o.Title, Style: o.Style, Depth: o.Depth}})
 			case *canvas.IndexObject:
 				out = append(out, Item{Index: &Block{Title: o.Title}})
 			case *canvas.Rule:
@@ -441,7 +445,7 @@ func ToItems(items []Item) []canvas.Item {
 		case it.Footnote != nil:
 			out = append(out, canvas.Inline{Object: &canvas.FootnoteRef{ID: it.Footnote.ID}})
 		case it.TOC != nil:
-			out = append(out, canvas.Inline{Object: &canvas.TOCObject{Title: it.TOC.Title}, Block: true})
+			out = append(out, canvas.Inline{Object: &canvas.TOCObject{Title: it.TOC.Title, Style: it.TOC.Style, Depth: it.TOC.Depth}, Block: true})
 		case it.Index != nil:
 			out = append(out, canvas.Inline{Object: &canvas.IndexObject{Title: it.Index.Title}, Block: true})
 		case it.Rule != nil:

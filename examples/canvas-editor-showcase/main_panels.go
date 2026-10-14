@@ -8,6 +8,7 @@ import (
 	"github.com/elaous/gojiberry/fonts"
 	"github.com/elaous/gojiberry/xango"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall/js"
 	"time"
@@ -149,6 +150,7 @@ func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *c
 		excerpts[b.Name] = string(runes[b.Start:min(b.End, len(runes))])
 	}
 	return xango.Frag(
+		tocControls(fl, redraw, renderUI),
 		components.Outline(components.OutlineProps{
 			Entries: fl.Outline(), Current: fl.OutlineIndexAt(caret),
 			OnSelect: func(_ int, e canvas.OutlineEntry) { goTo(e.Start) },
@@ -184,5 +186,40 @@ func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *c
 				renderUI()
 			},
 		})),
+	)
+}
+
+// tocControls is the look of the table of contents in the document, when it has one: a dotted leader or none, and how
+// many heading levels it lists. Nothing shows while the document has no table of contents.
+func tocControls(fl *canvas.TextFlow, redraw, renderUI func()) xango.Node {
+	var toc *canvas.TOCObject
+	for _, it := range fl.ContentItems() {
+		if in, ok := it.(canvas.Inline); ok {
+			if t, ok := in.Object.(*canvas.TOCObject); ok {
+				toc = t
+				break
+			}
+		}
+	}
+	// One element always, so the panel keeps its order as the table comes and goes.
+	box := func(children ...xango.Node) xango.Node {
+		return xango.El("div", []xango.Attr{xango.A("class", "gj-toc-controls")}, children...)
+	}
+	if toc == nil {
+		return box()
+	}
+	changed := func() { fl.Touch(); redraw(); renderUI() }
+	depth := strconv.Itoa(toc.Depth)
+	return box(
+		xango.El("h4", nil, xango.Text(T("outline.contents", "Table of contents"))),
+		selectOf("toc-style", T("outline.contentsStyle", "Style"), toc.Style, [][2]string{
+			{canvas.TOCDots, T("outline.styleDots", "Dotted leaders")},
+			{canvas.TOCPlain, T("outline.stylePlain", "Plain")},
+		}, func(v string) { toc.Style = v; changed() }),
+		selectOf("toc-depth", T("outline.contentsDepth", "Levels"), depth, [][2]string{
+			{"0", T("outline.depthAll", "All levels")},
+			{"1", T("outline.depth1", "Heading 1 only")},
+			{"2", T("outline.depth2", "Headings 1 and 2")},
+		}, func(v string) { n, _ := strconv.Atoi(v); toc.Depth = n; changed() }),
 	)
 }

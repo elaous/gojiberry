@@ -78,9 +78,18 @@ func (s Snapshot) Outline() []OutlineEntry {
 			}
 			sb.WriteString(seg.Text)
 		}
+		if s.TOCDepth > 0 && int(b.Kind-Heading1)+1 > s.TOCDepth {
+			continue
+		}
 		if text := strings.Join(strings.Fields(sb.String()), " "); text != "" {
 			out = append(out, OutlineEntry{Level: int(b.Kind-Heading1) + 1, Text: text, Block: i})
 		}
 	}
 	return out
+}
+
+// keepRowWithNext says whether table row r (of rows) is kept on the page of the row after it: the header row never
+// stands alone at the foot of a page, and the last row never alone at the head of one (the row before it goes with it).
+func keepRowWithNext(r, rows int) bool {
+	return rows > 1 && (r == 0 || r == rows-2)
 }

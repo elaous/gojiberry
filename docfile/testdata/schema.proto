@@ -69,6 +69,8 @@ message FootnoteMark {
 
 message Block {
   string title = 1;
+  string style = 2;
+  int64 depth = 3;
 }
 
 message RuleItem {

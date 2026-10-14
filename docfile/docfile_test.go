@@ -205,7 +205,7 @@ func TestProposalMarksRoundTrip(t *testing.T) {
 
 func TestNotesRoundTrip(t *testing.T) {
 	f := &canvas.TextFlow{Items: []canvas.Item{
-		canvas.Inline{Object: &canvas.TOCObject{Title: "Contents"}, Block: true}, canvas.Chars{Text: "\n"},
+		canvas.Inline{Object: &canvas.TOCObject{Title: "Contents", Style: canvas.TOCPlain, Depth: 2}, Block: true}, canvas.Chars{Text: "\n"},
 		canvas.Chars{Text: "text", Format: canvas.Format{Index: "term", Bookmark: "b"}},
 		canvas.Inline{Object: &canvas.FootnoteRef{ID: "n1"}},
 		canvas.Inline{Object: &canvas.IndexObject{}, Block: true},
@@ -227,7 +227,7 @@ func TestNotesRoundTrip(t *testing.T) {
 		if len(items) != 5 {
 			t.Fatalf("%s: %d items: %#v", c.Name(), len(items), items)
 		}
-		if toc, ok := items[0].(canvas.Inline); !ok || !toc.Block || toc.Object.(*canvas.TOCObject).Title != "Contents" {
+		if toc, ok := items[0].(canvas.Inline); !ok || !toc.Block || toc.Object.(*canvas.TOCObject).Title != "Contents" || toc.Object.(*canvas.TOCObject).Style != canvas.TOCPlain || toc.Object.(*canvas.TOCObject).Depth != 2 {
 			t.Fatalf("%s: toc %#v", c.Name(), items[0])
 		}
 		if ch := items[2].(canvas.Chars); ch.Format.Index != "term" || ch.Format.Bookmark != "b" {

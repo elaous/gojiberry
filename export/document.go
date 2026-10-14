@@ -92,11 +92,24 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 	if l := d.PageLayout(); !l.IsZero() {
 		snap.Header, snap.Footer, snap.TOC, snap.TOCTitle = l.Header, l.Footer, l.TOC, l.TOCTitle
 		snap.FirstDiffers, snap.FirstHeader, snap.FirstFooter = l.FirstDiffers, l.FirstHeader, l.FirstFooter
+		snap.EvenDiffers, snap.EvenHeader, snap.EvenFooter = l.EvenDiffers, l.EvenHeader, l.EvenFooter
 		if l.Width > 0 {
 			snap.PageWidth, snap.PageHeight = l.Width/0.75, l.Height/0.75 // points to CSS pixels
 		}
 		if l.Margins != ([4]float64{}) {
 			snap.MarginTop, snap.MarginRight, snap.MarginBottom, snap.MarginLeft = l.Margins[0]/0.75, l.Margins[1]/0.75, l.Margins[2]/0.75, l.Margins[3]/0.75
+		}
+	}
+	// A table of contents the document holds stands for the contents the exports write at the start (once, never
+	// two lists): its title, look and depth are the ones used.
+	for _, it := range d.Content {
+		if it.TOC != nil {
+			snap.TOC = true
+			if it.TOC.Title != "" {
+				snap.TOCTitle = it.TOC.Title
+			}
+			snap.TOCStyle, snap.TOCDepth = it.TOC.Style, it.TOC.Depth
+			break
 		}
 	}
 	sum := sha1.Sum([]byte(d.Title))

@@ -30,6 +30,17 @@ func TestPageSetupAndStatusBar(t *testing.T) {
 	d.Dispatch(`.gj-pagesetup-margin[data-side="top"]`, "change")
 	d.Wait("s.pageSetup.margins[0] === 100 && s.pageSetup.margins[1] === 36")
 
+	// A sheet that is none of the papers: the person gives its size in millimetres.
+	d.OK(!d.Has(".gj-pagesetup-width"), "the size fields appear only for a custom paper")
+	d.Select(".gj-pagesetup-paper", "custom")
+	d.WaitSelector(".gj-pagesetup-width")
+	d.Fill(".gj-pagesetup-width", "100")
+	d.Dispatch(".gj-pagesetup-width", "change")
+	d.Wait("Math.abs(s.pageSetup.width - 100 * 72 / 25.4) < 2 || Math.abs(s.pageSetup.height - 100 * 72 / 25.4) < 2")
+	d.OK(item("setup") == "Custom / landscape", "the status bar says so: "+item("setup"))
+	d.Select(".gj-pagesetup-paper", "letter")
+	d.Wait("s.pageSetup.width === 792")
+
 	// The File menu opens the same tab.
 	d.Click(`button[data-tab="stats"]`)
 	d.Click(`button.gj-menubar-button:has-text("File")`)
