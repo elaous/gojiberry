@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/elaous/gojiberry/audit"
+	"github.com/elaous/gojiberry/observe"
 )
 
 // WithAudit turns on the operator's audit log (package audit, docs/audit.md): one line for each document
@@ -101,3 +102,58 @@ func (a auditedLimiter) Allow(ctx context.Context, key string) (bool, time.Durat
 	}
 	return ok, wait
 }
+
+// auditSignIns logs a failed sign-in: a provider callback or a passkey request that ended in a client error other than
+// "too many requests" (those are ratelimit.hit). The event says that it was refused and the class of the reason (a
+// refusal, or a signature or state that did not check), and nothing else: not the provider, the account, the
+// address or anything the person typed. It reads the status of the answer and the route template, never the request.
+func (s *Server) auditSignIns(next http.Handler) http.Handler {
+	if s.auditLog == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		route := observe.RouteOf(r.URL.Path)
+		if route != "/auth/{provider}/callback" && !(route == "/auth/passkey/*" && r.Method == http.MethodPost) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		rec := &codeWriter{ResponseWriter: w}
+		next.ServeHTTP(rec, r)
+		switch c := rec.code; {
+		case c == http.StatusTooManyRequests || c < 400 || c >= 500:
+		case c == http.StatusUnauthorized || c == http.StatusForbidden:
+			s.audit(audit.SignInFailed, audit.Denied, audit.Anonymous, audit.NotAllowed, 0, "")
+		default:
+			s.audit(audit.SignInFailed, audit.Denied, audit.Anonymous, audit.BadSignature, 0, "")
+		}
+	})
+}
+
+// codeWriter remembers the status an answer was given.
+type codeWriter struct {
+	http.ResponseWriter
+	code int
+}
+
+func (c *codeWriter) WriteHeader(code int) {
+	if c.code == 0 {
+		c.code = code
+	}
+	c.ResponseWriter.WriteHeader(code)
+}
+
+func (c *codeWriter) Write(b []byte) (int, error) {
+	if c.code == 0 {
+		c.code = http.StatusOK
+	}
+	return c.ResponseWriter.Write(b)
+}
+
+// Flush and Unwrap keep streaming and http.ResponseController working through the wrapper.
+func (c *codeWriter) Flush() {
+	if f, ok := c.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (c *codeWriter) Unwrap() http.ResponseWriter { return c.ResponseWriter }

@@ -38,12 +38,13 @@ can compute it for a given id (to ask "what happened to this document?"), and it
 | `key.enrolled` | an owner key was enrolled in the directory | `owner` | |
 | `key.revoked` | a directory key was revoked | `owner` | |
 | `owner.reset` | an owner reset was requested (by the account) or done (by the operator) | `owner`, `operator` | |
+| `signin.failed` | a provider callback or a passkey request was refused (`denied`; reason `not_allowed` for 401 and 403, `bad_signature` for another client error such as a state or signature that did not check; "too many requests" is `ratelimit.hit`): no provider, account or address | `anonymous` | |
 | `ratelimit.hit` | a rate limit refused a request (`denied`, `over_rate`): no client, key or route | `anonymous` | 1 |
 | `backup.made`, `backup.restored` | the `docstore backup` and `restore` commands | `operator`; `system` for scheduled backups | documents |
 | `telemetry.refused` | a usage report was refused | `anonymous` | |
 
-Not logged: reads, ordinary saves of an existing document, `signin.failed` (sign-in lives in package `auth`, which has
-no hook for it yet), `key.rotated` (a rotation is an enrollment) and `config.changed`.
+Not logged: reads, ordinary saves of an existing document, `key.rotated` (a rotation is an enrollment) and
+`config.changed`.
 
 The same facts are available as counts, with no per-event detail, in [observability.md](observability.md) and at
 `GET /admin/usage`.
