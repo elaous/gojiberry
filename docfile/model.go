@@ -833,6 +833,26 @@ func (d Document) Language() string {
 	return ""
 }
 
+// ThemeKey is the Meta key a document's theme is kept under: design-token CSS (package tokens), which the
+// HTML export writes into the page so the file looks like the editor's theme.
+const ThemeKey = "theme"
+
+// Theme is the document's theme as design-token CSS, "" when it has none.
+func (d Document) Theme() string {
+	v, _ := d.Get(ThemeKey)
+	return v
+}
+
+// SetTheme sets the document's theme; "" removes it. The text is not checked here: the HTML export
+// refuses anything that is not a plain :root block of custom properties, and package tokens makes it.
+func (d *Document) SetTheme(css string) {
+	if css == "" {
+		d.Meta = slices.DeleteFunc(slices.Clone(d.Meta), func(m MetaEntry) bool { return m.Key == ThemeKey })
+		return
+	}
+	d.Set(ThemeKey, css)
+}
+
 // SetLanguage sets the document's language; "" removes it. A tag that is not valid is ignored.
 func (d *Document) SetLanguage(tag string) {
 	if !canvas.ValidLang(tag) {

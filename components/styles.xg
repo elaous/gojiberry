@@ -55,6 +55,7 @@ import (
 	_ "github.com/elaous/gojiberry/components/slider.css"
 	_ "github.com/elaous/gojiberry/components/styleeditor.css"
 	_ "github.com/elaous/gojiberry/components/stylepicker.css"
+	_ "github.com/elaous/gojiberry/components/themeeditor.css"
 	_ "github.com/elaous/gojiberry/components/switch.css"
 	_ "github.com/elaous/gojiberry/components/symbols.css"
 	_ "github.com/elaous/gojiberry/components/tabs.css"
