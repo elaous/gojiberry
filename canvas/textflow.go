@@ -155,6 +155,12 @@ type TextFlow struct {
 	// text-size setting applied to the whole text, whatever sizes its runs have. The layout is worked out again
 	// when it changes.
 	TextScale float64
+	// StrongCaret draws the caret thicker, dark with a light edge, and the selection in a stronger tint: for
+	// people who lose sight of the thin default caret (the high-contrast setting turns it on).
+	StrongCaret bool
+	// PeerPalette, when set, gives the remote cursors and selections the palette's colours instead of the ones
+	// their owners chose (see ColourBlindPalette).
+	PeerPalette []string
 
 	// Transform, if set, turns Source into the content (Items and Text
 	// are then ignored): see Transform and Markdown. The result is
@@ -386,3 +392,10 @@ func (f *TextFlow) setConfigWidths(idx int, widths []float64) {
 	}
 	f.Columns = widths
 }
+
+// The colours of the strong caret and selection (TextFlow.StrongCaret).
+const (
+	StrongCaretColor  = "#000000"
+	StrongCaretEdge   = "#ffffff"
+	StrongSelectColor = "rgba(0, 80, 200, 0.45)"
+)

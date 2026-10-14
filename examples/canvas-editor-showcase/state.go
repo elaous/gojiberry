@@ -17,6 +17,10 @@ type State struct {
 	NoAutoClose bool
 	// TextScale is the person's text-size setting applied to the text on the sheets (1 is as written).
 	TextScale float64
+	// PeerPalette recolours other people's cursors (a preference); nil leaves the colours they chose.
+	PeerPalette []string
+	// StrongCaret is the high-contrast setting for the canvas: a thicker caret and a stronger selection.
+	StrongCaret bool
 	// RunHeader and RunFooter are the running header and footer of the print layout (fields {page}, {pages}
 	// and {title}, a tab between the left, centre and right parts); empty is the sample's own header and
 	// page number. DocTitle fills {title}.

@@ -94,6 +94,7 @@ func prefSettings() []setting {
 			{components.CollabAll, T("prefs.o.collabAll", "Everything"), T("prefs.collabAll", "Shared editing: announce everything")},
 			{components.CollabImportant, T("prefs.o.collabImportant", "Only the connection"), T("prefs.collabImportant", "Shared editing: announce only the connection")},
 			{components.CollabOff, T("prefs.o.collabOff", "Nothing"), T("prefs.collabOff", "Shared editing: announce nothing")}}, cur: collabCur, set: collabSet},
+		toggle("shared", "colours", T("prefs.safeColours", "Colour-blind safe colours for other people's cursors"), func(p prefs) bool { return p.Colours == "safe" }, func(p *prefs, on bool) { p.Colours = onOff(on, "safe") }),
 		toggle("shared", "where", T("prefs.collabWhere", "Shared editing: a \"Where is\" button for each person"), func(p prefs) bool { return p.Where == "on" }, func(p *prefs, on bool) { p.Where = onOff(on, "on") }),
 
 		{group: "typing", id: "typing", label: T("prefs.l.typing", "While typing, say"), choices: []choice{

@@ -1132,6 +1132,7 @@
   "speech.notInserted": "Entendu : %s. Passez en mode édition et placez le curseur à l'endroit voulu, puis dictez de nouveau.",
   "prefs.memory": "Économiser la mémoire (garder moins d'étapes d'annulation)",
   "prefs.undoMany": "Garder beaucoup d'étapes d'annulation (1000)",
+  "prefs.safeColours": "Couleurs adaptées au daltonisme pour les curseurs des autres personnes",
   "lang.useDetected": "Utiliser comme langue du document",
   "prefs.g.text": "Texte et affichage",
   "prefs.g.interface": "Langue et thème",

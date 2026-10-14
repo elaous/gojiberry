@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/components"
 )
 
@@ -26,6 +27,7 @@ type prefs struct {
 	Lang     string `json:"lang,omitempty"`     // the interface language chosen by the person ("" the browser's)
 	Theme    string `json:"theme,omitempty"`    // "dark": the page's chrome in the dark palette ("" the light one)
 	Close    string `json:"close,omitempty"`    // "off": typing an opening bracket or quote does not add the closing one
+	Colours  string `json:"colours,omitempty"`  // "safe": other people's cursors in colours the common kinds of colour blindness tell apart
 	Where    string `json:"where,omitempty"`    // "on": the presence list has a "Where is <name>?" button for each collaborator
 }
 
@@ -72,6 +74,9 @@ func (p prefs) sanitize() prefs {
 	}
 	if p.Theme != "dark" {
 		p.Theme = ""
+	}
+	if p.Colours != "safe" {
+		p.Colours = ""
 	}
 	if p.Close != "off" {
 		p.Close = ""
@@ -137,4 +142,12 @@ func (p prefs) textScale() float64 {
 		return 2
 	}
 	return 1
+}
+
+// peerPalette is the palette other people's cursors are drawn in (nil: the colours they chose themselves).
+func (p prefs) peerPalette() []string {
+	if p.Colours == "safe" {
+		return canvas.ColourBlindPalette
+	}
+	return nil
 }

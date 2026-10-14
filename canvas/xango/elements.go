@@ -88,6 +88,10 @@ type TextFlowProps struct {
 	AutoClose map[rune]rune
 	// TextScale multiplies the size of all the text (see canvas.TextFlow.TextScale); 0 or 1 is as it is.
 	TextScale float64
+	// StrongCaret draws a thicker caret and a stronger selection (see canvas.TextFlow.StrongCaret).
+	StrongCaret bool
+	// PeerPalette recolours the remote cursors (see canvas.TextFlow.PeerPalette).
+	PeerPalette []string
 	// Comments are the comments Format.Comment refers to (share the set
 	// with the DOM side to list them); Author is who new ones are by.
 	Comments *canvas.CommentSet
