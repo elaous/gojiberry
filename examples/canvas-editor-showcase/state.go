@@ -27,6 +27,9 @@ type State struct {
 	// and {title}, a tab between the left, centre and right parts); empty is the sample's own header and
 	// page number. DocTitle fills {title}.
 	RunHeader, RunFooter, DocTitle string
+	// FirstDiffers gives the first sheet FirstHeader and FirstFooter instead (empty: none).
+	FirstDiffers             bool
+	FirstHeader, FirstFooter string
 	// Spread shows the sheets two to a row, as facing pages.
 	Spread bool
 	// Source is the document's starting Markdown; once the text is edited

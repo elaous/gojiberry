@@ -321,7 +321,7 @@ func fitPDFText(pdf *gopdf.GoPdf, s string, width float64) (string, error) {
 // the left edge, the middle and the right edge of the text area, and the fields {page}, {pages} and
 // {title} are filled in for each page.
 func drawPDFHeadersAndFooters(pdf *gopdf.GoPdf, snap Snapshot) error {
-	if snap.Header == "" && snap.Footer == "" {
+	if snap.Header == "" && snap.Footer == "" && snap.FirstHeader == "" && snap.FirstFooter == "" {
 		return nil
 	}
 	const size = 9.0
@@ -333,12 +333,16 @@ func drawPDFHeadersAndFooters(pdf *gopdf.GoPdf, snap Snapshot) error {
 		if err := pdf.SetPage(p); err != nil {
 			return err
 		}
+		head, foot := snap.Header, snap.Footer
+		if p == 1 && snap.FirstDiffers {
+			head, foot = snap.FirstHeader, snap.FirstFooter
+		}
 		for _, side := range []struct {
 			text string
 			y    float64
 		}{
-			{snap.Header, math.Max(4, (pxToPt(snap.MarginTop)-lh)/2)},
-			{snap.Footer, math.Min(pageH-lh-4, pageH-pxToPt(snap.MarginBottom)+(pxToPt(snap.MarginBottom)-lh)/2)},
+			{head, math.Max(4, (pxToPt(snap.MarginTop)-lh)/2)},
+			{foot, math.Min(pageH-lh-4, pageH-pxToPt(snap.MarginBottom)+(pxToPt(snap.MarginBottom)-lh)/2)},
 		} {
 			if side.text == "" {
 				continue

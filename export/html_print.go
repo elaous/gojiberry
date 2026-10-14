@@ -81,15 +81,28 @@ func htmlPrintStyle(snap Snapshot) string {
 	var sb strings.Builder
 	sb.WriteString("<style>\n")
 	sb.WriteString(fmt.Sprintf("@page{size:%gpx %gpx;margin:%gpx %gpx %gpx %gpx;", snap.PageWidth, snap.PageHeight, snap.MarginTop, snap.MarginRight, snap.MarginBottom, snap.MarginLeft))
-	for _, side := range []struct{ name, text string }{{"top", snap.Header}, {"bottom", snap.Footer}} {
-		l, c, r := decorParts(side.text)
-		for _, box := range []struct{ pos, text string }{{"left", l}, {"center", c}, {"right", r}} {
-			if content := cssContent(box.text, snap.Title); content != "" {
-				fmt.Fprintf(&sb, "@%s-%s{content:%s;font-size:9pt;color:#555}", side.name, box.pos, content)
+	boxes := func(head, foot string) string {
+		var sb strings.Builder
+		for _, side := range []struct{ name, text string }{{"top", head}, {"bottom", foot}} {
+			l, c, r := decorParts(side.text)
+			for _, box := range []struct{ pos, text string }{{"left", l}, {"center", c}, {"right", r}} {
+				if content := cssContent(box.text, snap.Title); content != "" {
+					fmt.Fprintf(&sb, "@%s-%s{content:%s;font-size:9pt;color:#555}", side.name, box.pos, content)
+				}
 			}
 		}
+		return sb.String()
 	}
+	sb.WriteString(boxes(snap.Header, snap.Footer))
 	sb.WriteString("}\n")
+	if snap.FirstDiffers {
+		// The first page names every box again: the ones it does not use are emptied, so none of the running text carries over.
+		var clear strings.Builder
+		for _, n := range []string{"top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"} {
+			fmt.Fprintf(&clear, "@%s{content:none}", n)
+		}
+		fmt.Fprintf(&sb, "@page :first{%s%s}\n", clear.String(), boxes(snap.FirstHeader, snap.FirstFooter))
+	}
 	sb.WriteString("@media print{" +
 		"h1,h2,h3{break-after:avoid}" +
 		"p,li,blockquote{orphans:3;widows:3}" +

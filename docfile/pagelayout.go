@@ -14,8 +14,11 @@ const (
 	PageFooterKey  = "page.footer"
 	PageTOCKey     = "page.toc"
 	PageTOCTitle   = "page.toctitle"
-	PageSizeKey    = "page.size"    // "595x842": the sheet in points
-	PageMarginsKey = "page.margins" // "72,72,72,72": top, right, bottom, left in points
+	PageFirstKey   = "page.first"     // "1": the first page has a header and footer of its own
+	PageFirstHead  = "page.firsthead" // the first page's header
+	PageFirstFoot  = "page.firstfoot" // the first page's footer
+	PageSizeKey    = "page.size"      // "595x842": the sheet in points
+	PageMarginsKey = "page.margins"   // "72,72,72,72": top, right, bottom, left in points
 )
 
 // PageLayout is how a document is laid out on paper when it is exported to a paged format (PDF, Word,
@@ -30,10 +33,14 @@ const (
 // means its default margins.
 type PageLayout struct {
 	Header, Footer string
-	TOC            bool
-	TOCTitle       string // the table of contents' heading; empty means "Contents"
-	Width, Height  float64
-	Margins        [4]float64
+	// FirstDiffers gives the first page a header and footer of its own (FirstHeader, FirstFooter, same
+	// fields); empty means none, as on a title page.
+	FirstDiffers             bool
+	FirstHeader, FirstFooter string
+	TOC                      bool
+	TOCTitle                 string // the table of contents' heading; empty means "Contents"
+	Width, Height            float64
+	Margins                  [4]float64
 }
 
 // IsZero says nothing is set.
@@ -44,6 +51,10 @@ func (l PageLayout) IsZero() bool { return l == PageLayout{} }
 // footer.
 func (l PageLayout) Normalized() PageLayout {
 	l.Header, l.Footer = cleanDecor(l.Header), cleanDecor(l.Footer)
+	l.FirstHeader, l.FirstFooter = cleanDecor(l.FirstHeader), cleanDecor(l.FirstFooter)
+	if !l.FirstDiffers {
+		l.FirstHeader, l.FirstFooter = "", ""
+	}
 	l.TOCTitle = strings.TrimSpace(strings.ReplaceAll(cleanDecor(l.TOCTitle), "\t", " "))
 	ok := func(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 100 && v <= 5000 }
 	if !ok(l.Width) || !ok(l.Height) {
@@ -83,6 +94,11 @@ func (d Document) PageLayout() PageLayout {
 		l.TOC = true
 	}
 	l.TOCTitle, _ = d.Get(PageTOCTitle)
+	if v, _ := d.Get(PageFirstKey); v == "1" {
+		l.FirstDiffers = true
+		l.FirstHeader, _ = d.Get(PageFirstHead)
+		l.FirstFooter, _ = d.Get(PageFirstFoot)
+	}
 	if v, _ := d.Get(PageSizeKey); v != "" {
 		if w, h, ok := strings.Cut(v, "x"); ok {
 			l.Width, _ = strconv.ParseFloat(w, 64)
@@ -115,6 +131,13 @@ func (d *Document) SetPageLayout(l PageLayout) {
 	if l.TOC {
 		toc = "1"
 	}
+	first := ""
+	if l.FirstDiffers {
+		first = "1"
+	}
+	put(PageFirstKey, first)
+	put(PageFirstHead, l.FirstHeader)
+	put(PageFirstFoot, l.FirstFooter)
 	put(PageTOCKey, toc)
 	put(PageTOCTitle, l.TOCTitle)
 	size := ""
