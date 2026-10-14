@@ -31,7 +31,7 @@
    .gj-theme-light nested inside a .gj-theme-dark still re-lights
    correctly, the same composable nesting a plain body.dark toggle
    can't offer since there's only ever one body. */
-.gj-theme-dark {
+.gj-theme-dark, :root[data-gj-theme="dark"] {
   --gj-accent: #3b82f6;
   --gj-accent-contrast: #0b1220;
   --gj-danger: #f87171;

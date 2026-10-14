@@ -33,7 +33,7 @@ func Doc(state State, cb Callbacks) xango.Node {
 				pageWidth={state.PageWidth()} pageHeight={state.PageHeight()}
 				spread={state.Spread}
 				styles={state.Styles}
-				autoClose={cv.DefaultAutoClose()}
+				autoClose={state.AutoClose()}
 				hyphenator={state.Hyphenator()}
 				margins={state.Setup.MarginList()}
 				onChange={cb.OnFlow}

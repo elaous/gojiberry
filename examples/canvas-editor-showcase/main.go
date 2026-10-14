@@ -93,6 +93,7 @@ type ui struct {
 	persisted           bool     // the browser promised to keep this origin's storage
 	fontLog             []string // what the font library did, newest last
 	navSig              string   // outline/bookmarks the Outline tab last showed
+	prefsQuery          string   // what is typed in the Preferences tab's search box
 	find                findState
 	a11ySig             string
 	a11yCache           []components.A11yBlock
@@ -404,7 +405,7 @@ func main() {
 				tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "review", "Review", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI), tabButton(u, "images", "Pictures", renderUI),
 				tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
-				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "speech", "Speech", renderUI), tabButton(u, "privacy", "Privacy", renderUI)),
+				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "speech", "Speech", renderUI), tabButton(u, "privacy", "Privacy", renderUI), tabButton(u, "prefs", "Preferences", renderUI)),
 		)
 
 		roleButtons := []xango.Node{xango.El("span", []xango.Attr{xango.A("style", "font-size:12px;color:#6b7280")}, xango.Text("Role:"))}
@@ -499,6 +500,8 @@ func main() {
 			})
 		case "privacy":
 			panel = u.usage.panel(u)
+		case "prefs":
+			panel = prefsPanel(u, renderUI)
 		case "share":
 			if flow != nil {
 				panel = sharePanel(u, flow, origin, renderUI)
@@ -851,6 +854,13 @@ func main() {
 
 	initLocale()
 	applyPrefs(curPrefs)
+	state.NoAutoClose = curPrefs.Close == "off"
+	onPrefs = func() {
+		if nc := curPrefs.Close == "off"; nc != state.NoAutoClose {
+			state.NoAutoClose = nc
+			renderCanvas()
+		}
+	}
 	u.setupLanguage(func(k string) string {
 		q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 		if q.Call("has", k).Bool() {

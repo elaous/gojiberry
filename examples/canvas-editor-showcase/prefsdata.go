@@ -23,6 +23,9 @@ type prefs struct {
 	TypeRead string `json:"typeread,omitempty"` // "on": the line is read when the caret moves
 	Collab   string `json:"collab,omitempty"`   // what is announced of a shared session: "" everything, "important", "off"
 	Memory   string `json:"memory,omitempty"`   // "low": fewer undo steps kept; "high": many; "normal": the person turned it off; "" automatic (low on a device that reports 2 GB or less)
+	Lang     string `json:"lang,omitempty"`     // the interface language chosen by the person ("" the browser's)
+	Theme    string `json:"theme,omitempty"`    // "dark": the page's chrome in the dark palette ("" the light one)
+	Close    string `json:"close,omitempty"`    // "off": typing an opening bracket or quote does not add the closing one
 	Where    string `json:"where,omitempty"`    // "on": the presence list has a "Where is <name>?" button for each collaborator
 }
 
@@ -67,6 +70,15 @@ func (p prefs) sanitize() prefs {
 	if p.Collab != components.CollabImportant && p.Collab != components.CollabOff {
 		p.Collab = ""
 	}
+	if p.Theme != "dark" {
+		p.Theme = ""
+	}
+	if p.Close != "off" {
+		p.Close = ""
+	}
+	if !validLang(p.Lang) {
+		p.Lang = ""
+	}
 	if p.Where != "on" {
 		p.Where = ""
 	}
@@ -74,6 +86,22 @@ func (p prefs) sanitize() prefs {
 		p.Memory = ""
 	}
 	return p
+}
+
+// validLang says s looks like a language tag ("en", "pt-BR"): short, letters and digits, dashes between.
+func validLang(s string) bool {
+	if s == "" || len(s) > 12 {
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9' && i > 0, r == '-' && i > 0 && i < len(s)-1:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // maxPrefsFile is the largest preferences file that is read.
