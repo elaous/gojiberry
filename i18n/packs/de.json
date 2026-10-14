@@ -1132,6 +1132,7 @@
   "speech.notInserted": "Gehört: %s. Wechseln Sie in den Bearbeitungsmodus und setzen Sie den Cursor an die gewünschte Stelle, dann diktieren Sie noch einmal.",
   "prefs.memory": "Speicher sparen (weniger Rückgängig-Schritte behalten)",
   "prefs.undoMany": "Viele Rückgängig-Schritte behalten (1000)",
+  "check.fixList": "Zur Liste machen",
   "prefs.safeColours": "Farbenblind-taugliche Farben für die Cursor anderer Personen",
   "lang.useDetected": "Als Sprache des Dokuments verwenden",
   "prefs.g.text": "Text und Anzeige",

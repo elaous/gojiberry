@@ -645,6 +645,20 @@ func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func
 		case a11ycheck.ActionDefaultColour:
 			fl.SetCursors([]canvas.Cursor{{Anchor: f.Offset, Caret: f.Offset + f.Length}})
 			fl.SetTextColor("")
+		case a11ycheck.ActionToList:
+			// the paragraphs become a list, then the typed markers go, last first so the offsets before them hold
+			kind := canvas.ListBullet
+			if f.Arg == 1 {
+				kind = canvas.ListOrdered
+			}
+			fl.SetCursors([]canvas.Cursor{{Anchor: f.Offset, Caret: f.Offset + f.Length}})
+			fl.ApplyParagraph(func(p *canvas.ParaFormat) { p.List.Kind = kind })
+			for j := len(f.Spans) - 1; j >= 0; j-- {
+				if sp := f.Spans[j]; sp[1] > 0 {
+					fl.ReplaceRange(sp[0], sp[0]+sp[1], "")
+				}
+			}
+			fl.SetCursors([]canvas.Cursor{canvas.At(f.Offset)})
 		case a11ycheck.ActionDescribe:
 			u.tab = "images"
 			fl.GotoOffset(f.Offset)
@@ -680,6 +694,8 @@ func fixLabel(f a11ycheck.Finding) string {
 		return T("check.fixColour", "Use the default text colour")
 	case a11ycheck.ActionDescribe:
 		return T("check.fixDescribe", "Describe it")
+	case a11ycheck.ActionToList:
+		return T("check.fixList", "Make them a list")
 	}
 	return ""
 }

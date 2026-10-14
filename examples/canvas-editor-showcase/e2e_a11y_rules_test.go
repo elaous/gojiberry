@@ -33,12 +33,18 @@ func TestCheckTabFindsTableHeadersAndTypedLists(t *testing.T) {
 	d.OK(d.Count(".gj-check-table-header-empty") == 1 && strings.Contains(d.Text(".gj-check-table-header-empty"), "column 2"), "the empty header cell is named: "+d.Text(".gj-check-list"))
 	d.OK(d.Count(".gj-check-list-fake") == 1 && strings.Contains(d.Text(".gj-check-list-fake"), "2 paragraphs start with typed bullets"), "the typed bullets are found: "+d.Text(".gj-check-list-fake"))
 	d.OK(strings.Contains(d.Text("#gj-check-summary"), "2 findings: 0 errors, 2 warnings"), d.Text("#gj-check-summary"))
-	d.OK(!d.Has(".gj-check-fix-button"), "nothing is changed for the person where it is not safe")
+	d.OK(d.Count(".gj-check-fix-button") == 1 && d.Count(".gj-check-list-fake .gj-check-fix-button") == 1, "only the typed bullets have a one-click fix; naming a column is the person's to do")
 	for _, v := range d.Axe(".gj-check", axeDisabled...) {
 		t.Errorf("the Check tab with these findings: %s", v)
 	}
 	d.Click(".gj-check-list-fake .gj-check-go")
 	d.WaitFor("the caret at the first typed bullet", `(() => { const s = JSON.parse(document.getElementById('state').textContent); return s.cursors && s.cursors[0].Caret === s.text.indexOf('• milk') })()`)
+
+	// The fix makes the paragraphs a list and takes the typed bullets away.
+	d.Click(".gj-check-list-fake .gj-check-fix-button")
+	d.WaitFor("the typed bullets are gone", `(() => { const s = JSON.parse(document.getElementById('state').textContent); return s.text.includes('milk') && !s.text.includes('•') })()`)
+	d.WaitFor("only the header finding is left", `document.querySelectorAll('.gj-check-item').length === 1 && document.querySelectorAll('.gj-check-list-fake').length === 0`)
+	d.OK(strings.Contains(d.Str(`document.getElementById('a11y-text').innerHTML`), "<li"), "and they are a list for a screen reader")
 
 	// Naming the empty column clears its finding.
 	importMarkdown(d, "Intro words here.\n\n| Name | Age |\n|---|---|\n| Ana | 31 |\n\n• milk\n\nEnd words.", "End words")
