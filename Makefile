@@ -48,7 +48,7 @@ vet:
 # per-package limit is too close (a full run that shared the machine with other work hit it).
 .PHONY: test
 test:
-	go test -timeout 30m ./...  # the showcase browser tests alone take ~14 minutes
+	go test -timeout 75m ./...  # the showcase browser tests alone take about 35 minutes
 
 # a11y-test is the accessibility gate: axe-core over the page in every state a person meets it (the
 # document, each tab, each menu, the find bar, the key directory), and the keyboard and reading-copy
