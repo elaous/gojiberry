@@ -33,11 +33,44 @@ type speechUI struct {
 	recogniz string // the address of the recogniser ("" = dictation off)
 	confirm  bool   // "delete all" was pressed once
 	render   func()
-	insert   func(string) bool
+	host     speechHost
+
+	// kept between visits (speechkeep.go): only when the person asked, and sealed
+	key    func() (key []byte, v sealedVault, why string)
+	keep   bool
+	kept   map[string]bool // the recordings the vault is known to hold
+	loaded bool            // the kept recordings were read this visit
+
+	// what was learned from the person's corrections, and the last dictation they can be learned from
+	corr *speechcoach.Corrections
+	last lastDictation
+
+	research researchState // the optional contribution (speechresearch.go)
 }
 
+// speechHost is what the Speech tab needs of the document: put text at the caret, read the selection and a
+// stretch of text, replace a stretch.
+type speechHost struct {
+	Caret    func() int
+	Insert   func(text string) bool
+	Selected func() string
+	Slice    func(from, to int) string
+	Replace  func(from, to int, text string)
+}
+
+// lastDictation is the text the last dictation put in the document and where (a caret offset), so that earlier
+// corrections can be offered on it and the person's correction of it can be learned.
+type lastDictation struct {
+	text     string
+	from     int
+	inserted bool
+}
+
+const speechKeepKey = "showcase:speech.keep"
+
 func newSpeech(render func()) *speechUI {
-	return &speechUI{session: speechcoach.NewSession(speechcoach.SetFor(locale)), render: render}
+	return &speechUI{session: speechcoach.NewSession(speechcoach.SetFor(locale)), render: render,
+		keep: lsGet(speechKeepKey) == "on", kept: map[string]bool{}, corr: &speechcoach.Corrections{}}
 }
 
 // recorder captures the microphone as float samples until stop.
@@ -150,6 +183,7 @@ func (s *speechUI) keepTake(pcm []int16) {
 		return
 	}
 	s.data.Add(speechcoach.NewEntry(s.session.Set().Lang, s.session.Phrase(), s.session.Phrase(), speechcoach.Prompted, t.PCM, t.Hints, now))
+	s.persist()
 	s.message = T("speech.kept", "Saved this take. You can record it again, or go on.")
 	if len(t.Hints) > 0 {
 		s.message += " " + strings.Join(t.Hints, " ")
@@ -163,19 +197,26 @@ func (s *speechUI) dictate(pcm []int16) {
 		return
 	}
 	s.message = T("speech.sending", "Sending this one recording to your recogniser…")
+	prompt := (&speechcoach.Vocabulary{}).Prompt(s.corr, 500) // the words the person has meant before, as a hint
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-		text, err := (&speechcoach.Recogniser{URL: addr}).Transcribe(ctx, pcm, "", s.session.Set().Lang)
+		text, err := (&speechcoach.Recogniser{URL: addr}).Transcribe(ctx, pcm, prompt, s.session.Set().Lang)
 		switch {
 		case err != nil:
 			s.message = T("speech.failed", "The recogniser did not answer. Nothing was added.")
 		case text == "":
 			s.message = T("speech.nothingHeard", "The recogniser heard nothing.")
 		default:
-			if s.insert != nil && s.insert(text) {
+			from := 0
+			if s.host.Caret != nil {
+				from = s.host.Caret()
+			}
+			if s.host.Insert != nil && s.host.Insert(text) {
+				s.last = lastDictation{text: text, from: from, inserted: true}
 				s.message = T("speech.inserted", "Added to the document.")
 			} else {
+				s.last = lastDictation{}
 				s.message = T("speech.notInserted", "Heard: %s. Switch to editing mode and put the caret where it should go, then dictate again.", text)
 			}
 		}
@@ -192,8 +233,9 @@ func (s *speechUI) export() {
 	transfer.Download("my-speech.zip", "application/zip", b.Bytes())
 }
 
-func (s *speechUI) panel(insert func(string) bool) xango.Node {
-	s.insert = insert
+func (s *speechUI) panel(host speechHost) xango.Node {
+	s.host = host
+	s.loadKept()
 	set := s.session.Set()
 	prog := s.session.Progress()
 	rec := s.rec != nil
@@ -238,6 +280,7 @@ func (s *speechUI) panel(insert func(string) bool) xango.Node {
 				xango.A("style", "width:100%;box-sizing:border-box"),
 				xango.On("input", func(ev xango.Event) { s.recogniz = xango.EventValue[string](ev); s.render() })})),
 		row(btn("speech-dictate", dictLabel, func() { s.toggle("dictate") }, phraseBusy || (!other && strings.TrimSpace(s.recogniz) == ""))),
+		s.dictationAftermath(),
 		xango.El("h4", nil, xango.Text(T("speech.mine", "My recordings"))),
 		p("speech-count", Tn("speech.count", "%d recording, %s seconds.", "%d recordings, %s seconds.", s.data.Len(), strconv.FormatFloat(s.seconds(), 'f', 1, 64))),
 		row(
@@ -247,11 +290,14 @@ func (s *speechUI) panel(insert func(string) bool) xango.Node {
 					s.confirm = true
 				} else {
 					s.data.Clear()
+					s.persist()
 					s.confirm, s.message = false, T("speech.deleted", "All recordings were deleted.")
 				}
 				s.render()
 			}, s.data.Len() == 0),
 		),
+		s.keepNode(),
+		s.researchNode(),
 		xango.El("p", []xango.Attr{xango.A("id", "speech-message"), xango.A("role", "status"), xango.A("aria-live", "polite"), xango.A("style", "font-size:13px")}, xango.Text(s.message)),
 	)
 }
