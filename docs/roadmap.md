@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (full run on the branch of the 10th merge, on main b0d43da plus the vertical-text change, with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on the first try; coverage score 89.6% (was 89.6%), README badge unchanged).
+6 of 10 since the last full run (full run on the branch of the 10th merge, on main b0d43da plus the vertical-text change, with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on the first try; coverage score 89.6% (was 89.6%), README badge unchanged).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -862,8 +862,26 @@ New entries:
     into the importer's own store, never replacing an item: a taken name gets `-2`, `-3`, and the importer's limits
     apply). A changed, foreign, too large or unreadable file is refused with a reason that does not repeat it, and a
     theme is imported only if it passes the `tokens` checks (readable contrast). Nothing is readable across people on the
-    server. Fonts and ordinary settings are not shared: a font's licence decides whether it may be passed on. Left:
-    wiring the client to the showcase's preferences and a share dialog, and loading a stored font into the editor.
+    server. Fonts and ordinary settings are not shared: a font's licence decides whether it may be passed on.
+    Closed (this PR): the showcase uses all of it. (1) Preferences: a choice in the Preferences tab, off by default
+    and worded as sensitive ("your settings can show that you have a disability"), keeps the display preferences in
+    the item `prefs.display` of the settings store; with a server confirmed in the People tab they are sent when they
+    change, and a device that turns the choice on (or starts with it on) takes the server's copy when it has one, so
+    the preferences follow the person; turning it off deletes the item. (2) Sharing: each saved theme has a Share
+    button that writes the share file (`userconfig.Bundle`, the same file `Store.Export` makes, for a client that keeps
+    its items on the device; `userconfig.OpenBundle` reads one with every check `Inspect` makes), with an optional
+    note; "Import a shared theme" reads a file, shows the theme's name and note, and adds it only when the person says
+    so, under a free name (`-2`, `-3`), refusing a changed or unreadable file in words and a file that holds
+    something other than a theme. The showcase has no saved templates or style sets, so the dialog covers themes;
+    `template.*` and `style.*` bundles are for hosts that have them. (3) Fonts: "My fonts" in the Styles tab adds a
+    font file with a required licence note (refused in words when there is no note, the file is no font, or the
+    limits of 4 MiB each and 16 MiB in all would be passed), keeps it as a `font.<name>` item, hands it to the browser
+    (`fonts.LoadFace`), lists it under My fonts in the font list so it can be picked, lists each stored font with its
+    licence and a Delete, and syncs it to other devices; it is never put in a document or shared (a document names
+    its family only, so a reader without the font sees the fallback). The settings are synced once when a server is
+    confirmed and after each change. Tests: `TestPreferencesFollowThePersonWhenAsked`, `TestShareAThemeAsAFile`,
+    `TestAFontOfMyOwnIsKeptAndUsable` (e2e, two browsers where the point is another device) and
+    `TestBundleAndOpenBundleRoundTripWithoutAStore`. Nothing is left for this item that code can do.
 
 Suggested order of the accessibility group: 48, 51, 49, 50, 52.
 

@@ -73,7 +73,7 @@ func kindOf(name string) (string, bool) {
 // Export wraps one of the user's templates, styles or themes in a bundle. note is a line for the
 // person who imports it (who made it, what it is for).
 func (s *Store) Export(ctx context.Context, name, note string) ([]byte, error) {
-	kind, ok := kindOf(name)
+	_, ok := kindOf(name)
 	if !ok {
 		return nil, ErrNotShareable
 	}
@@ -81,11 +81,31 @@ func (s *Store) Export(ctx context.Context, name, note string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return Bundle(name, it.Data, note)
+}
+
+// Bundle wraps data, the content of an item called name, in a share bundle: the same file Export makes, for
+// a caller that keeps its items somewhere other than a Store (the client's local copy on a device).
+func Bundle(name string, data []byte, note string) ([]byte, error) {
+	kind, ok := kindOf(name)
+	if !ok {
+		return nil, ErrNotShareable
+	}
 	if len([]rune(note)) > maxNote {
 		note = string([]rune(note)[:maxNote])
 	}
-	sum := sha256.Sum256(it.Data)
-	return json.Marshal(bundle{Tag: bundleTag, Version: bundleVersion, Kind: kind, Name: name, Note: note, SHA256: hex.EncodeToString(sum[:]), Data: it.Data})
+	sum := sha256.Sum256(data)
+	return json.Marshal(bundle{Tag: bundleTag, Version: bundleVersion, Kind: kind, Name: name, Note: note, SHA256: hex.EncodeToString(sum[:]), Data: data})
+}
+
+// OpenBundle reads a bundle with every check Inspect makes and returns what it holds besides: the item's name
+// and content, for a caller that stores them itself.
+func OpenBundle(b []byte) (Info, []byte, error) {
+	bu, info, err := parseBundle(b)
+	if err != nil {
+		return Info{}, nil, err
+	}
+	return info, bu.Data, nil
 }
 
 // Inspect reads a bundle and checks everything an import would check, writing nothing.

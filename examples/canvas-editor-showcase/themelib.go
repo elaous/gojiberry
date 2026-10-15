@@ -70,7 +70,8 @@ func (u *ui) config() *cclient.Client {
 	if l.c == nil || l.url != want {
 		l.url = want
 		l.c = cclient.New(want, themeCache{})
-		if tok := u.enc.dir.token; want != "" && tok != "" {
+		if want != "" && u.enc != nil && u.enc.dir.token != "" {
+			tok := u.enc.dir.token
 			l.c.Header = func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+tok) }
 		}
 	}
@@ -89,6 +90,7 @@ func (u *ui) syncThemes(renderUI func()) {
 		switch err := c.Sync(ctx); err {
 		case nil:
 			u.themeLib.status = T("theme.synced", "Saved themes are in step with the server.")
+			u.afterSync(renderUI)
 		case cclient.ErrSignedOut:
 			u.themeLib.status = T("theme.signedOut", "Sign in to the server to keep saved themes there; they stay on this device.")
 		default:
@@ -153,6 +155,9 @@ func (u *ui) themeLibrary(use func(tokens.Set), renderUI func()) xango.Node {
 				}
 				use(st.set)
 			}}),
+			components.Button(components.ButtonProps{Content: []xango.Node{xango.Text(T("theme.share", "Share")), xango.El("span", []xango.Attr{xango.A("class", "gj-sr-only")}, xango.Text(" "+st.set.Name))}, Variant: components.ButtonSecondary, OnClick: func(xango.Event) {
+				u.shareTheme(st.item, renderUI)
+			}}),
 			components.Button(components.ButtonProps{Content: []xango.Node{xango.Text(T("theme.delete", "Delete")), xango.El("span", []xango.Attr{xango.A("class", "gj-sr-only")}, xango.Text(" "+st.set.Name))}, Variant: components.ButtonSecondary, OnClick: func(xango.Event) {
 				u.config().Delete(st.item)
 				u.syncThemes(renderUI)
@@ -189,6 +194,7 @@ func (u *ui) themeLibrary(use func(tokens.Set), renderUI func()) xango.Node {
 	} else {
 		children = append(children, xango.El("ul", []xango.Attr{xango.A("class", "gj-theme-saved-list"), xango.A("aria-label", T("theme.savedTitle", "Saved themes"))}, rows...))
 	}
+	children = append(children, u.shareNodes(renderUI)...)
 	if l.status != "" {
 		children = append(children, xango.El("p", []xango.Attr{xango.A("class", "gj-doc-meta"), xango.A("role", "status")}, xango.Text(l.status)))
 	}
