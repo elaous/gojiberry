@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-1 of 10 since the last full run (full run on the branch of the 10th merge, on main ada0cd3 plus the formatting toolbar, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy installed: `make check` passed in full on the third try. The first two runs found real faults, all fixed in that branch: an unformatted file, a click that started editing the main text and broke header editing in the document demos (keyboard-focus editing from item 59 now ignores focus the page gives for a click), a stale end-to-end check, and a flaky wait; the test and coverage timeouts were raised to 75 minutes because the showcase suite takes about 35. Coverage score 89.4% (was 89.6%), README badge updated).
+2 of 10 since the last full run (full run on the branch of the 10th merge, on main ada0cd3 plus the formatting toolbar, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy installed: `make check` passed in full on the third try. The first two runs found real faults, all fixed in that branch: an unformatted file, a click that started editing the main text and broke header editing in the document demos (keyboard-focus editing from item 59 now ignores focus the page gives for a click), a stale end-to-end check, and a flaky wait; the test and coverage timeouts were raised to 75 minutes because the showcase suite takes about 35. Coverage score 89.4% (was 89.6%), README badge updated).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -300,16 +300,26 @@ single-process default of each. To build when a deployment needs it:
    `GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES=store`, atomic `Take` by `DeleteIf` or a conditional used marker). Left:
    Redis behind the same interface, for a deployment that has one (no client ships). The bearer sessions of
    `auth.Manager` are shared too now (`GOJIBERRY_DOCSTORE_SESSIONS=store`, backlog item 7 follow-up). Default: memory.
-3. **Account stores with a conditional write.** `AdapterStore` already does compare-and-set
-   (`Updater`, `Creator`) over any `docstore.ConditionalAdapter`; the S3, Mongo and Postgres
-   adapters get it from #55. To check once #55 merges: run the passkey tests against each
-   backend (a live Postgres and Mongo in CI), and add a store that is not a docstore (SQL
-   tables) behind the same two interfaces.
-4. **Per-account limits** (not only per address): a failed-sign-in budget per account, through
-   the same `Limiter` with a different key.
-5. **The same pattern for the rest of the encryption stack**: `Sharing` and `Adapter` take the
-   store and signer as interfaces already; a shared lock (`docstore.Locker`) for stores without
-   conditional writes is the open piece.
+3. **Account stores with a conditional write: done.** `AdapterStore` does compare-and-set (`Updater`,
+   `Creator`) over any `docstore.ConditionalAdapter` (S3, Mongo, Postgres from #55), and `passkey.SQLStore` keeps
+   accounts in a SQL table of its own behind the same two interfaces: one row per account (ID, unique handle,
+   version, JSON), `Update` an optimistic compare-and-set on the version, `Create` the primary key, `?` or `$n`
+   placeholders by `Dialect`, any `database/sql` driver. The whole service runs on it in the tests (SQLite, five
+   writers losing nothing). Not run against a live Postgres: that needs one in CI (it is a statement of plain
+   SQL with `ON CONFLICT`, which Postgres and SQLite share).
+4. **Per-account limits: done** (`Config.AccountLimiter`, `GOJIBERRY_DOCSTORE_LIMITER=store` shares it). Once a
+   sign-in names an account (by the handle the authenticator returned) each attempt spends a token of that
+   account's budget (10 at once, 20 an hour), whatever the address, and over budget the answer is 429 with
+   Retry-After and the credential's counter is not touched. It counts attempts, not only failures, because the
+   `Limiter` interface has no refund; the numbers leave a person room. A handle is a random secret, so only
+   someone who has it can spend an account's budget.
+5. **A shared lock for stores without conditional writes: done** (`docstore.KeyLocker`, `docstore.LockedAdapter`).
+   Give it a plain `Adapter` and a named lock the deployment already has (a Redis lock, a database advisory lock;
+   no client ships, `MemoryKeyLocker` is the one-process kind) and it is a `ConditionalAdapter`,
+   `ConditionalDeleter` and `Locker`: `SaveIf` and `DeleteIf` read under the lock, compare the digest and write
+   before giving it back, so the limiters, the passkey stores, the telemetry totals and the saver's catalog work
+   on it. Holds only if every writer goes through a `LockedAdapter` on the same locker, and the locker must
+   expire a lock a dead process held. Tested with six writers over a store that sleeps between read and write.
 
 ## Backlog from the limits review
 

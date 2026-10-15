@@ -327,7 +327,8 @@ func withPasskeys(ctx context.Context, srv *docstore.Server, adapter docstore.Ad
 	// The routes' rate limit lives where GOJIBERRY_DOCSTORE_LIMITER says (a budget per process, or
 	// one shared through the store).
 	cfg := passkey.Config{RPID: rp, RPName: os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_NAME"), Origins: origins,
-		Limiter: limiters("passkey", passkey.DefaultPerMinute, passkey.DefaultBurst)}
+		Limiter:        limiters("passkey", passkey.DefaultPerMinute, passkey.DefaultBurst),
+		AccountLimiter: limiters("passkey-account", passkey.DefaultAccountPerMinute, passkey.DefaultAccountBurst)}
 	// Behind a reverse proxy the per-client rate limit needs the proxy's addresses, so that
 	// X-Forwarded-For is believed from it and from nobody else.
 	if px := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES")); px != "" {
