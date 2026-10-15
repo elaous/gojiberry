@@ -100,14 +100,27 @@ func (f *TextFlow) flatten() *flowData {
 	for idx, it := range f.items() {
 		switch it := it.(type) {
 		case Chars:
+			// The style of a run is the same for all its letters (a small capital has the one other), so it is looked
+			// up once per run and per paragraph, not for every letter: hashing a Format for each of a long text's
+			// letters was most of the time of working a layout out.
+			var ids [2]int
+			var have [2]bool
 			for _, r := range it.Text {
 				shown, small := displayRune(it.Format.Case, r, prevLetter)
 				prevLetter = unicode.IsLetter(r) || unicode.IsDigit(r) || (prevLetter && r == '\'')
 				d.runes = append(d.runes, r)
 				d.disp = append(d.disp, shown)
-				d.rs = append(d.rs, styleFor(it.Format, small))
+				k := 0
+				if small {
+					k = 1
+				}
+				if !have[k] {
+					ids[k], have[k] = styleFor(it.Format, small), true
+				}
+				d.rs = append(d.rs, ids[k])
 				if r == '\n' {
 					paraBase = Format{} // the next paragraph starts clean, until its own style item
+					have = [2]bool{}
 				}
 			}
 		case Inline:

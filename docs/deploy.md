@@ -73,10 +73,14 @@ docker build -f examples/canvas-editor-showcase/Dockerfile -t showcase .
 docker run --rm -p 8080:80 showcase
 ```
 
-(The Dockerfile, `nginx.conf` and the Caddy block below were not run in the environment this page
-was written in, which has no Docker daemon, nginx or Caddy. `make showcase-dist`, `wasmdist` and
-`wasmserve` were: the tests serve a compressed directory and check the type, the encoding, the 304,
-the fallback and the 404.)
+(`nginx.conf` and the Caddy block below are run by tests against the real servers, with a directory that
+`wasmdist` compressed: `TestShowcaseNginxRecipe` and `TestShowcaseCaddyRecipe` in `cmd/wasmdist` check the wasm
+type, the precompressed file sent as it is (and, for Caddy, the `.br` file first when the browser takes it), the file
+itself otherwise, `Cache-Control`, the 304 for a repeat visit, the 404 for a script that is not there and the start page
+for an app path. They skip when the server is not installed, unless `GOJIBERRY_REQUIRE_NGINX` or
+`GOJIBERRY_REQUIRE_CADDY` is set, which the CI workflow does; `GOJIBERRY_CADDY` names a Caddy that is not on the
+path. nginx's `brotli_static` needs the ngx_brotli module, which was not installed, so the `.br` path of nginx is not
+run. The Dockerfile itself was not built: there is no Docker daemon here.)
 
 ### Caddy
 
@@ -84,15 +88,25 @@ the fallback and the 404.)
 example.com {
 	root * /srv/showcase
 	encode zstd gzip       # for files that have no precompressed sibling
-	file_server {
-		precompressed br gzip
+	@scripts path_regexp ^.+\.(js|css|wasm|json|png|svg|ico)$
+	handle @scripts {
+		file_server {
+			precompressed br gzip
+		}
+	}
+	handle {
+		try_files {path} /index.html
+		file_server
 	}
 	header Cache-Control "no-cache"
-	try_files {path} /index.html
 }
 ```
 
-Caddy knows `.wasm`. `precompressed br gzip` sends `main.wasm.br` or `.gz` as they are.
+The first `handle` is for files with an extension: they are sent with their `.br` or `.gz` sibling when the browser takes
+one, and a file that is not there is a 404. That matters: a plain `try_files {path} /index.html` would answer a missing
+script (a wrong `main.wasm` path, a `sw.js` that was not deployed) with the start page and a 200, and the browser would
+then fail on HTML where it expects a program. The second `handle` is for app paths such as `/d/report`, which get the
+start page. Caddy knows `.wasm`. `precompressed br gzip` sends `main.wasm.br` or `.gz` as they are.
 
 ### A Go server
 

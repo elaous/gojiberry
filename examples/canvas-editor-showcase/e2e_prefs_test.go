@@ -3,8 +3,10 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
@@ -233,5 +235,74 @@ func TestPreferencesExportAndImport(t *testing.T) {
 	}, "bad.json", []byte("not json"))
 	d.WaitFor("the refusal is said", `(document.querySelector('.gj-announcer') || {}).textContent === 'That file is not a preferences file'`)
 	d.OK(root("data-gj-text") == "larger", "a bad file changes nothing")
+	d.NoErrors()
+}
+
+// The saving of the low-memory mode, measured: the same long document, the same two hundred steps of editing,
+// once with the default history and once with "Save memory". The Go heap in use (after a collection) is read
+// from the page. It is a measure in this browser, not on a small phone; the test only asks that the mode
+// saves a real part of what the history costs.
+func TestLowMemoryModeSavesMemoryOnALongDocument(t *testing.T) {
+	var md strings.Builder
+	for i := 0; i < 150; i++ {
+		fmt.Fprintf(&md, "Paragraph %d of a long document with some words in it, to give each undo step something to copy.\n\n", i)
+	}
+	measure := func(mem string) (heapMB float64, steps int) {
+		d := e2etest.NewSite(t).Open(t, "?lang=en")
+		d.Eval(`localStorage.setItem('showcase:a11y', JSON.stringify({memory: `+e2etest.J(mem)+`}))`, nil)
+		d.ReloadPage()
+		d.WaitSelector("canvas")
+		d.Click(`button[data-tab="transfer"]`)
+		d.ChooseFile(func() { d.Click(`.gj-transfer-button[data-kind="import"][data-format="markdown"]`) }, "long.md", []byte(md.String()))
+		d.WaitForTimeout("the long document", "JSON.parse(document.getElementById('state').textContent).text.includes('Paragraph 149')", 120e9)
+		d.ToggleMode()
+		d.CanvasClick(240, 164)
+		d.Focus("#input")
+		d.Press("Control+Home")
+		for i := 0; i < 250; i++ { // each Enter is a step of its own, with the whole text behind it
+			d.Press("Enter")
+		}
+		d.Sleep(500)
+		heap := d.Float(`window.gjHeap()`)
+		steps = d.Int(`JSON.parse(document.getElementById('state').textContent).historyLimit`)
+		return heap / (1 << 20), steps
+	}
+	normal, nSteps := measure("normal")
+	low, lSteps := measure("low")
+	t.Logf("history %d steps: heap %.1f MB; history %d steps: heap %.1f MB", nSteps, normal, lSteps, low)
+	if nSteps != 200 || lSteps != 20 {
+		t.Fatalf("the histories were %d and %d steps, want 200 and 20", nSteps, lSteps)
+	}
+	if low >= normal*0.7 {
+		t.Errorf("the low-memory mode saved too little: %.1f MB against %.1f MB", low, normal)
+	}
+}
+
+// Typing in a long document stays quick. The whole layout used to be worked out again for every paragraph of the
+// reading copy on every key (the copy asks where each paragraph is), and the style of every letter was looked up
+// by hashing its whole format: 150 paragraphs took 11 seconds a key. They take a third of a second now; the bound
+// here is loose (a slow machine is not a failure) but far under what the quadratic cost gave.
+func TestTypingStaysQuickInALongDocument(t *testing.T) {
+	var md strings.Builder
+	for i := 0; i < 150; i++ {
+		fmt.Fprintf(&md, "Paragraph %d of a long document with some words in it, to give each key something to lay out.\n\n", i)
+	}
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.Click(`button[data-tab="transfer"]`)
+	d.ChooseFile(func() { d.Click(`.gj-transfer-button[data-kind="import"][data-format="markdown"]`) }, "long.md", []byte(md.String()))
+	d.WaitForTimeout("the long document", "JSON.parse(document.getElementById('state').textContent).text.includes('Paragraph 149')", 120e9)
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Focus("#input")
+	d.Press("Control+Home")
+	start := time.Now()
+	for i := 0; i < 20; i++ {
+		d.Press("a")
+	}
+	per := time.Since(start) / 20
+	t.Logf("%v a letter in a document of 150 paragraphs", per)
+	if per > 3*time.Second {
+		t.Errorf("a letter took %v in a document of 150 paragraphs; it should take well under a second", per)
+	}
 	d.NoErrors()
 }
