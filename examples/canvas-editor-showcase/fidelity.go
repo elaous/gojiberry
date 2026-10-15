@@ -120,6 +120,36 @@ func (s *fidelityState) noteImport(format, file string, data []byte) {
 	}()
 }
 
+// kept is the import report to save with the document: nil when the document was not imported (or the
+// report is still being worked out).
+func (s *fidelityState) kept() *docfile.ImportReport {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.importName == "" {
+		return nil
+	}
+	r := &docfile.ImportReport{Name: s.importName, Known: s.imported.Known}
+	for _, l := range s.imported.Losses {
+		r.Losses = append(r.Losses, docfile.ImportLoss{Feature: l.Feature, Treatment: l.Treatment, Note: l.Note, Count: l.Count})
+	}
+	return r
+}
+
+// restore shows the report a document was saved with (or none, for a document that was not imported).
+func (s *fidelityState) restore(d docfile.Document) {
+	r, ok := d.ImportReport()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !ok {
+		s.importName, s.imported = "", components.FidelityReport{}
+		return
+	}
+	s.importName, s.imported = r.Name, components.FidelityReport{Known: r.Known}
+	for _, l := range r.Losses {
+		s.imported.Losses = append(s.imported.Losses, components.FidelityLoss{Feature: l.Feature, Treatment: l.Treatment, Note: l.Note, Count: l.Count})
+	}
+}
+
 func (s *fidelityState) caller() remote.Caller {
 	if s.call != nil {
 		return s.call

@@ -56,3 +56,27 @@ func TestFidelityStateChoosesAFormatOnOfferAndReportsIt(t *testing.T) {
 		t.Errorf("what a Markdown import leaves out is not known, and must not read as nothing")
 	}
 }
+
+// What an import left out is saved with the document and shown again when it is opened; a document that was
+// not imported shows none.
+func TestImportReportIsKeptWithTheDocument(t *testing.T) {
+	done := make(chan struct{}, 2)
+	s := fidelityState{call: serve.Handle, render: func() { done <- struct{}{} }}
+	if s.kept() != nil {
+		t.Fatal("nothing was imported yet")
+	}
+	s.noteImport("pdf", "scan.pdf", nil)
+	<-done
+	var saved docfile.Document
+	saved.SetImportReport(s.kept())
+
+	var reopened fidelityState
+	reopened.restore(saved)
+	if reopened.importName != "scan.pdf" || !reopened.imported.Known || len(reopened.imported.Losses) != 1 || reopened.imported.Losses[0].Feature != "layout" {
+		t.Errorf("after reopening: %q %+v", reopened.importName, reopened.imported)
+	}
+	reopened.restore(docfile.Document{})
+	if reopened.importName != "" || reopened.kept() != nil {
+		t.Errorf("another document keeps the old report: %q", reopened.importName)
+	}
+}

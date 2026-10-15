@@ -395,11 +395,7 @@ func (ODT) Export(snap Snapshot) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	// The mimetype comes first and is stored, so a reader can tell the type from the first bytes.
-	mw, err := zw.CreateHeader(&zip.FileHeader{Name: "mimetype", Method: zip.Store})
-	if err != nil {
-		return nil, err
-	}
-	if _, err := mw.Write([]byte("application/vnd.oasis.opendocument.text")); err != nil {
+	if err := zipMimetype(zw, "application/vnd.oasis.opendocument.text"); err != nil {
 		return nil, err
 	}
 	const header = `<?xml version="1.0" encoding="UTF-8"?>` + "\n"
@@ -426,7 +422,7 @@ func (ODT) Export(snap Snapshot) ([]byte, error) {
 		{"content.xml", header + `<office:document-content ` + odfNS + ` office:version="1.2">` + b.automaticStyles() + `<office:body><office:text>` + b.body.String() + `</office:text></office:body></office:document-content>`},
 	}
 	for _, f := range files {
-		w, err := zw.Create(f.name)
+		w, err := zipEntry(zw, f.name, zip.Deflate)
 		if err != nil {
 			return nil, err
 		}
@@ -435,7 +431,7 @@ func (ODT) Export(snap Snapshot) ([]byte, error) {
 		}
 	}
 	for _, n := range names {
-		w, err := zw.Create(n)
+		w, err := zipEntry(zw, n, zip.Deflate)
 		if err != nil {
 			return nil, err
 		}
