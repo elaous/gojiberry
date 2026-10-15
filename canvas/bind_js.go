@@ -51,6 +51,42 @@ func (i *HTMLImage) Size() (w, h float64) {
 	return i.v.Get("naturalWidth").Float(), i.v.Get("naturalHeight").Float()
 }
 
+// Pixels is a small RGBA copy of the picture (at most maxSide pixels on the longer side, 4 bytes a pixel, row by
+// row), read in the page: for a description made on the device, which never sends the picture anywhere. ok is false
+// if the browser will not give the pixels.
+func (i *HTMLImage) Pixels(maxSide int) (rgba []byte, w, h int, ok bool) {
+	nw, nh := i.Size()
+	if nw <= 0 || nh <= 0 || maxSide <= 0 {
+		return nil, 0, 0, false
+	}
+	k := float64(maxSide) / max(nw, nh)
+	if k > 1 {
+		k = 1
+	}
+	w, h = max(int(nw*k), 1), max(int(nh*k), 1)
+	doc := js.Global().Get("document")
+	cv := doc.Call("createElement", "canvas")
+	cv.Set("width", w)
+	cv.Set("height", h)
+	ctx := cv.Call("getContext", "2d")
+	if !ctx.Truthy() {
+		return nil, 0, 0, false
+	}
+	ok = true
+	func() {
+		defer func() {
+			if recover() != nil {
+				ok = false
+			}
+		}()
+		ctx.Call("drawImage", i.v, 0, 0, w, h)
+		data := ctx.Call("getImageData", 0, 0, w, h).Get("data")
+		rgba = make([]byte, w*h*4)
+		js.CopyBytesToGo(rgba, data)
+	}()
+	return rgba, w, h, ok
+}
+
 // LoadImage starts loading url (a normal or data: URL) and calls
 // onLoad, on the browser's event loop, once it has decoded. onError is
 // optional.

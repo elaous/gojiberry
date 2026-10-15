@@ -49,9 +49,9 @@ func formatTable(overrides ...map[Feature]entry) map[Feature]entry {
 // noPages is what the formats with no pages do with the print layout.
 var noPages = map[Feature]entry{FeatPageHeader: drop(""), FeatPageTOC: drop(""), FeatPageSize: drop(""), FeatVertical: drop("")}
 
-// foldedFeatures is what every format built on the Snapshot does with these four.
+// foldedFeatures is what every format built on the Snapshot does with these three (a heading of level 4 to 6 is
+// kept: it has its own level, tag or style in each format that has headings).
 var foldedFeatures = map[Feature]entry{
-	FeatDeepHeading: simple(NoteFolded),
 	FeatCheckList:   simple(NoteGlyph),
 	FeatRule:        simple(NoteRuleLine),
 	FeatFootnote:    simple(NoteNotes),

@@ -282,3 +282,40 @@ func itemOffsets(doc docfile.Document) []int {
 	}
 	return out
 }
+
+// Object is a floating picture or table of the page: it is not in the document's text flow, so Check does not see
+// it, but a reader of the page meets it all the same. Kind is "image" or "table"; Where says which one in words
+// ("Picture 1"); Alt and Decorative are a picture's description; Rows are a table's cells.
+type Object struct {
+	Kind, Where string
+	Alt         string
+	Decorative  bool
+	Rows        [][]string
+}
+
+// CheckObjects applies the picture and table rules to floating objects. A finding has no place in the text
+// (Offset -1, Item -1): the host says where it is by Where, which is in the message.
+func CheckObjects(objs []Object) []Finding {
+	var out []Finding
+	for _, o := range objs {
+		switch o.Kind {
+		case "image":
+			if o.Alt == "" && !o.Decorative {
+				out = append(out, Finding{Rule: RuleImageAlt, Severity: Error, Offset: -1, Item: -1, Text: o.Where,
+					Message: o.Where + " (floating) has no description, so a reader who cannot see it misses it.",
+					Fix:     "Describe the picture, or mark it decorative if it carries nothing."})
+			}
+		case "table":
+			rows := make([]docfile.TableRow, len(o.Rows))
+			for i, r := range o.Rows {
+				rows[i] = docfile.TableRow{Cells: r}
+			}
+			for _, f := range checkTable(&docfile.TableItem{Rows: rows}, -1, -1) {
+				f.Text = o.Where
+				f.Message = o.Where + " (floating): " + f.Message
+				out = append(out, f)
+			}
+		}
+	}
+	return out
+}

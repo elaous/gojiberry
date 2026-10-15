@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/elaous/gojiberry/a11ycheck"
 	"github.com/elaous/gojiberry/canvas"
 	cxango "github.com/elaous/gojiberry/canvas/xango"
 	collabxango "github.com/elaous/gojiberry/collab/xango"
@@ -70,6 +71,8 @@ type ui struct {
 	commentSig   string                 // how many comments, replies and resolved threads there were when last looked at
 	commentsSeen map[string]commentSeen // the comments already known (their replies and whether resolved), to find what others do
 	imageFocus   bool
+	floating     func() []a11ycheck.Object // the floating pictures and tables of the page, for the Check tab
+	imageDraft   map[int]string            // the draft descriptions made on this device, by picture (imagehint)
 	format       canvas.Format
 	catalog      []fonts.Font
 	open         bool
@@ -150,6 +153,7 @@ func main() {
 		return
 	}
 	root := cxango.NewRoot(stage)
+	u.floating = func() []a11ycheck.Object { return floatingObjects(root) }
 	root.Redraw = redraw
 	defaults := stage.EffectiveKeymap()
 	stage.Keymap = decodeKeymap(lsGet(keymapKey)) // the person's own bindings from an earlier visit

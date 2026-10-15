@@ -209,3 +209,20 @@ type Snapshot struct {
 	PageWidth, PageHeight                            float64
 	MarginLeft, MarginTop, MarginRight, MarginBottom float64
 }
+
+// HeadingLevel is the level, 1 to 6, of a heading block (Heading1 to Heading3, and Heading3 with a Level of 4 to
+// 6 for the deeper ones); 0 for a block that is not a heading.
+func (b Block) HeadingLevel() int {
+	switch b.Kind {
+	case Heading1:
+		return 1
+	case Heading2:
+		return 2
+	case Heading3:
+		if b.Level >= 4 && b.Level <= 6 {
+			return b.Level
+		}
+		return 3
+	}
+	return 0
+}

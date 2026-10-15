@@ -86,11 +86,14 @@ const (
 	tagTD
 	tagLink // a = the run's language (index+1 in pdfRunLangs, 0 for none)
 	tagSpan // a = the same
+	tagH4
+	tagH5
+	tagH6
 )
 
 var tagNames = map[int]string{
 	tagP: "P", tagH1: "H1", tagH2: "H2", tagH3: "H3", tagQuote: "BlockQuote", tagLbl: "Lbl", tagLBody: "LBody",
-	tagFigure: "Figure", tagCaption: "Caption", tagTH: "TH", tagTD: "TD", tagLink: "Link", tagSpan: "Span",
+	tagFigure: "Figure", tagCaption: "Caption", tagTH: "TH", tagTD: "TD", tagLink: "Link", tagSpan: "Span", tagH4: "H4", tagH5: "H5", tagH6: "H6",
 }
 
 // pdfTag says what the next marked piece of content is. id names the structure element (all the pieces

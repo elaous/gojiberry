@@ -127,7 +127,8 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 			case Heading2:
 				body.WriteString("<h2" + id + ">" + htmlInline(b.Segments, br) + "</h2>\n")
 			case Heading3:
-				body.WriteString("<h3" + id + ">" + htmlInline(b.Segments, br) + "</h3>\n")
+				h := "h" + strconv.Itoa(b.HeadingLevel())
+				body.WriteString("<" + h + id + ">" + htmlInline(b.Segments, br) + "</" + h + ">\n")
 			case Quote:
 				body.WriteString("<blockquote><p>" + htmlInline(b.Segments, br) + "</p></blockquote>\n")
 			case Code:

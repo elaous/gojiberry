@@ -8,6 +8,7 @@ package docdiff
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/elaous/gojiberry/docfile"
@@ -378,6 +379,9 @@ func kindName(k export.BlockKind, level int) string {
 	case export.Heading2:
 		return "heading 2"
 	case export.Heading3:
+		if level >= 4 && level <= 6 {
+			return "heading " + strconv.Itoa(level)
+		}
 		return "heading 3"
 	case export.BulletItem:
 		return "bullet item"
