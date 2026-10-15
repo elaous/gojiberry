@@ -5,6 +5,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/domrt"
@@ -81,6 +82,26 @@ func (idbVault) Delete(name string) (err error) {
 	}
 	defer db.Close()
 	return db.Transaction([]string{searchSealedName}, "readwrite").ObjectStore(searchSealedName).Delete(name)
+}
+
+// Names lists what is kept whose name starts with prefix.
+func (idbVault) Names(prefix string) (names []string) {
+	defer recoverTo(new(error))
+	db, err := openSearchDB()
+	if err != nil {
+		return nil
+	}
+	defer db.Close()
+	all, err := db.Transaction([]string{searchSealedName}, "readonly").ObjectStore(searchSealedName).GetAll()
+	if err != nil || all.IsUndefined() || all.IsNull() {
+		return nil
+	}
+	for i := 0; i < all.Length(); i++ {
+		if id := all.Index(i).Get("id").String(); strings.HasPrefix(id, prefix) {
+			names = append(names, id)
+		}
+	}
+	return names
 }
 
 func recoverTo(err *error) {

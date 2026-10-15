@@ -93,6 +93,9 @@ func (u *ui) completions(text []rune, caret int, prefix string, max int, lang st
 	if c := u.spell.checker; c != nil && u.spell.enabled {
 		ix.AddVocabulary(c.CompleteMany(prefix, 20), 1)
 	}
+	if u.speech != nil && u.speech.corr != nil { // the words the person meant when they corrected dictation
+		ix.AddVocabulary(u.speech.corr.Words(), 1)
+	}
 	var words []string
 	for _, s := range ix.Suggest(prefix, complete.Options{Max: max}) {
 		words = append(words, s.Word)
