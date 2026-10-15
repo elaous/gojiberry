@@ -966,6 +966,23 @@ func main() {
 	}
 	u.sugg.reopen = func(quiet bool) { u.openSuggestions(flow, stage, canvasEl.Element, quiet, renderUI) }
 	u.watchMirrorSelection(func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
+	reading.mark = func(sf, st, wf, wt int, reveal bool) { // the sentence and word being read aloud, on the canvas
+		if flow == nil {
+			return
+		}
+		if sf < 0 {
+			flow.ClearReadMarks()
+		} else {
+			flow.SetReadMarks(sf, st, wf, wt)
+			if reveal {
+				flow.Reveal(sf)
+				if sv, ok := root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView); ok {
+					sv.RevealPending()
+				}
+			}
+		}
+		redraw()
+	}
 	u.ghost.flow, u.ghost.redraw = func() *canvas.TextFlow { return flow }, redraw
 	u.ghost.refresh = func() { u.refreshGhost(flow, redraw, renderUI) }
 	u.watchGhostPointer()
