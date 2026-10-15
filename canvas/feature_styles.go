@@ -31,6 +31,9 @@ const (
 	CmdStyleHeading1   Command = "style.heading-1"
 	CmdStyleHeading2   Command = "style.heading-2"
 	CmdStyleHeading3   Command = "style.heading-3"
+	CmdStyleHeading4   Command = "style.heading-4"
+	CmdStyleHeading5   Command = "style.heading-5"
+	CmdStyleHeading6   Command = "style.heading-6"
 	CmdStyleTitle      Command = "style.title"
 	CmdStyleSubtitle   Command = "style.subtitle"
 	CmdStyleQuote      Command = "style.quote"
@@ -85,6 +88,9 @@ func (Styles) Install(r *Registry) {
 	para(CmdStyleHeading1, "Heading 1", "Mod+Alt+1", "Heading 1")
 	para(CmdStyleHeading2, "Heading 2", "Mod+Alt+2", "Heading 2")
 	para(CmdStyleHeading3, "Heading 3", "Mod+Alt+3", "Heading 3")
+	para(CmdStyleHeading4, "Heading 4", "Mod+Alt+4", "Heading 4")
+	para(CmdStyleHeading5, "Heading 5", "Mod+Alt+5", "Heading 5")
+	para(CmdStyleHeading6, "Heading 6", "Mod+Alt+6", "Heading 6")
 	para(CmdStyleTitle, "Title", "", "Title")
 	para(CmdStyleSubtitle, "Subtitle", "", "Subtitle")
 	para(CmdStyleQuote, "Quote", "", "Quote")

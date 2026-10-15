@@ -26,7 +26,17 @@ func (u *ui) mirrorBlocks(flow *canvas.TextFlow, root *cxango.Root) []components
 	if flow != nil {
 		blocks = components.MarkCaret(blocks, flow.Cursors()[0].Caret)
 	}
-	return append(append([]components.A11yBlock(nil), blocks...), a11yObjects(root)...)
+	// where the text blocks are, to put the floating objects among them in the order they are met on the sheets
+	ys := make([]float64, len(blocks))
+	for i, b := range blocks {
+		ys[i] = -1
+		if b.Mapped && !b.Object && flow != nil && !flow.Vertical { // (in vertical text the objects stay at the end)
+			if _, y, _, ok := flow.CaretRect(b.Start); ok {
+				ys[i] = y
+			}
+		}
+	}
+	return orderByPosition(blocks, ys, a11yObjects(root))
 }
 
 // mirrorComments are the document's comments as the copy lists them.

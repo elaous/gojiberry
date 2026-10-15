@@ -392,16 +392,17 @@ func labelCanvas(canvasEl, inputEl js.Value) {
 }
 
 // a11yObjects is the floating text, tables and pictures of the page, which are
-// not in the text flow, as blocks for the screen reader's copy.
-func a11yObjects(root *cxango.Root) []components.A11yBlock {
-	var out []components.A11yBlock
+// not in the text flow, as blocks for the screen reader's copy, with where each is (readingorder.go puts them
+// among the text).
+func a11yObjects(root *cxango.Root) []placedBlock {
+	var out []placedBlock
 	for n := 0; ; n++ {
 		ft, ok := root.Find(cxango.TagFloatingText, n).(*canvas.FloatingText)
 		if !ok {
 			break
 		}
 		if t := ft.Text(); t != "" {
-			out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.note", "Note: %s", t)})
+			out = append(out, placedBlock{block: components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.note", "Note: %s", t)}, x: ft.X, y: ft.Y})
 		}
 	}
 	for n := 0; ; n++ {
@@ -410,20 +411,40 @@ func a11yObjects(root *cxango.Root) []components.A11yBlock {
 			break
 		}
 		for _, row := range tv.Table.Cells {
-			out = append(out, components.A11yBlock{Kind: components.A11yTableRow, Cells: append([]string(nil), row...)})
+			out = append(out, placedBlock{block: components.A11yBlock{Kind: components.A11yTableRow, Cells: append([]string(nil), row...)}, x: tv.X, y: tv.Y})
 		}
 	}
 	for n := 0; root.Find(cxango.TagImage, n) != nil; n++ {
+		var x, y float64
 		if im, ok := root.Find(cxango.TagImage, n).(*canvas.Image); ok {
+			x, y = im.X, im.Y
 			switch {
 			case im.Decorative && im.Alt == "":
 				continue // nothing a reader needs
 			case im.Alt != "":
-				out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.imageAlt", "Image: %s", im.Alt)})
+				out = append(out, placedBlock{block: components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.imageAlt", "Image: %s", im.Alt)}, x: x, y: y})
 				continue
 			}
 		}
-		out = append(out, components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.image", "Image")})
+		out = append(out, placedBlock{block: components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.image", "Image")}, x: x, y: y})
+	}
+	return out
+}
+
+// floatingObjects are the floating pictures and tables of the page as the checker takes them.
+func floatingObjects(root *cxango.Root) []a11ycheck.Object {
+	var out []a11ycheck.Object
+	for n := 0; root.Find(cxango.TagImage, n) != nil; n++ {
+		if im, ok := root.Find(cxango.TagImage, n).(*canvas.Image); ok && im.Placement != canvas.PlaceInline {
+			out = append(out, a11ycheck.Object{Kind: "image", Where: fmt.Sprintf("Picture %d", n+1), Alt: im.Alt, Decorative: im.Decorative})
+		}
+	}
+	for n := 0; ; n++ {
+		tv, ok := root.Find(cxango.TagTable, n).(*canvas.TableView)
+		if !ok {
+			break
+		}
+		out = append(out, a11ycheck.Object{Kind: "table", Where: fmt.Sprintf("Table %d", n+1), Rows: tv.Table.Cells})
 	}
 	return out
 }
@@ -621,6 +642,9 @@ func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func
 			return
 		}
 		u.check.findings = a11ycheck.Check(docfile.FromFlow(u.title, fl), a11ycheck.Options{})
+		if u.floating != nil { // the page's floating pictures and tables follow the text's findings
+			u.check.findings = append(u.check.findings, a11ycheck.CheckObjects(u.floating())...)
+		}
 		u.check.ran = true
 		switch n := len(u.check.findings); n {
 		case 0:
@@ -679,6 +703,10 @@ func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func
 	props.OnGo = func(i int) {
 		fl := flow()
 		if fl == nil || i < 0 || i >= len(u.check.findings) {
+			return
+		}
+		if u.check.findings[i].Offset < 0 { // a floating object has no place in the text: it is named in the message
+			u.announce(u.check.findings[i].Text)
 			return
 		}
 		fl.GotoOffset(u.check.findings[i].Offset)

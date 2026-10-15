@@ -23,7 +23,8 @@
 // A document the server cannot read as a document (the ciphertext of an end-to-end encrypted store, or a
 // file that is not one) cannot be checked. Under block it is refused, since the gate cannot say it is
 // fine; under warn it is served with the header X-Gojiberry-Export-Gate: unchecked. An operator whose
-// store is end-to-end encrypted should keep the gate in the client and in the host's decrypting job.
+// store is end-to-end encrypted should keep the gate in the client and in the host's decrypting job, which
+// can make the same judgement on what it has decrypted with DecideSealed.
 package exportgate
 
 import (
@@ -77,6 +78,22 @@ func Decide(data []byte, mode a11ycheck.GateMode) Result {
 		r.State = "warned"
 	}
 	return r
+}
+
+// DecideSealed is Decide for a host that holds the keys of an end-to-end encrypted store: open turns the stored
+// bytes into the document's own bytes (the host's decrypting job: its key, its envelope format), and the same
+// judgement is then made on them. If open fails, the bytes cannot be judged and the result is what Decide gives
+// for bytes that are not a document (refused under block, flagged under warn). The server alone cannot do this:
+// it never holds the keys, so for such a store the gate belongs here, in the job that does.
+func DecideSealed(data []byte, open func([]byte) ([]byte, error), mode a11ycheck.GateMode) Result {
+	if mode == a11ycheck.GateAllow {
+		return Result{Allow: true, State: "unchecked"}
+	}
+	plain, err := open(data)
+	if err != nil {
+		return Result{Allow: mode != a11ycheck.GateBlock, State: "unchecked"}
+	}
+	return Decide(plain, mode)
 }
 
 // read decodes a stored document in whichever format it was saved. Detect guesses a format from the first

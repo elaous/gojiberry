@@ -74,7 +74,16 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 		case Heading2:
 			pre = `{\pard\sa200\b\fs32 `
 		case Heading3:
-			pre = `{\pard\sa200\b\fs28 `
+			switch b.HeadingLevel() {
+			case 4:
+				pre = `{\pard\sa200\b\fs26 `
+			case 5:
+				pre = `{\pard\sa200\b\fs24 `
+			case 6:
+				pre = `{\pard\sa200\b\i\fs24 `
+			default:
+				pre = `{\pard\sa200\b\fs28 `
+			}
 		case BulletItem:
 			pre = `{\pard\fi-240\li` + strconv.Itoa(360*(b.Level+1)) + `\bullet\tab `
 		case NumberedItem:

@@ -136,6 +136,7 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 				fl.Touch()
 				renderUI()
 			}),
+			hintControls(u, i, r.img, canEdit, fl, renderUI),
 			xango.El("div", []xango.Attr{xango.A("id", fmt.Sprintf("img-decorative-%d", i))}, components.Checkbox(components.CheckboxProps{
 				Label: T("img.decorative", "Decorative: it carries nothing a description would add"), Checked: r.img.Decorative && r.img.Alt == "", Disabled: r.img.Alt != "" || !canEdit,
 				OnChange: func(on bool) { r.img.Decorative = on; fl.Touch(); redraw(); renderUI() }})),
@@ -175,4 +176,27 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 	}
 	nodes = append(nodes, elementsSections(u, state, flow, redraw, renderUI)...)
 	return xango.El("div", []xango.Attr{xango.A("id", "img-panel")}, nodes...)
+}
+
+// hintControls is the offer of a draft description under the field, when the person has turned it on: a button
+// that makes the draft, and the draft with a button to use it. Nothing goes into the document until it is used.
+func hintControls(u *ui, i int, im *canvas.Image, canEdit bool, fl *canvas.TextFlow, renderUI func()) xango.Node {
+	if !hintOn() || !canEdit || im.Decorative {
+		return xango.Frag()
+	}
+	nodes := []xango.Node{
+		btn(fmt.Sprintf("img-hint-%d", i), T("img.hint.make", "Draft a description from the picture"), func() { u.draftFor(i, im); renderUI() }, false),
+	}
+	if d := u.imageDraft[i]; d != "" {
+		nodes = append(nodes,
+			xango.El("p", []xango.Attr{xango.A("id", fmt.Sprintf("img-draft-%d", i)), xango.A("role", "status")},
+				xango.Text(T("img.hint.draft", "A rough draft from the colours and shape, made on this device. Read it and change it: ")+d)),
+			btn(fmt.Sprintf("img-usedraft-%d", i), T("img.hint.use", "Use the draft as the description"), func() {
+				im.Alt, im.Decorative = d, false
+				delete(u.imageDraft, i)
+				fl.Touch()
+				renderUI()
+			}, false))
+	}
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-img-hint")}, nodes...)
 }

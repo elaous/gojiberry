@@ -53,7 +53,7 @@ func TestParagraphAndCharacterStylesLayOut(t *testing.T) {
 		t.Errorf("redefined heading: %g", h)
 	}
 	f.DefineStyle(StyleDef{Name: "Custom", Format: Format{Color: "#f00"}})
-	if _, ok := f.StyleByName("Custom"); !ok || len(f.Styles) != 11 {
+	if _, ok := f.StyleByName("Custom"); !ok || len(f.Styles) != 14 {
 		t.Errorf("DefineStyle adds: %d", len(f.Styles))
 	}
 	if got := f.styleNames(false); len(got) != 3 {

@@ -590,6 +590,14 @@ func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWi
 		fontSize, forceBold, tag.kind = pdfHeading2Size, true, tagH2
 	case Heading3:
 		fontSize, forceBold, tag.kind = pdfHeading3Size, true, tagH3
+		switch b.HeadingLevel() { // levels 4 to 6: the same bold line, with their own tag
+		case 4:
+			tag.kind = tagH4
+		case 5:
+			tag.kind = tagH5
+		case 6:
+			tag.kind = tagH6
+		}
 	case Quote:
 		forceItalic, indent, tag.kind = true, pdfQuoteIndent, tagQuote
 	case BulletItem:

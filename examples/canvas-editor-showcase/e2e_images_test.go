@@ -79,3 +79,36 @@ func TestInsertAPictureAndDescribeIt(t *testing.T) {
 	}
 	d.NoErrors()
 }
+
+// A draft description is offered only when the person turned it on; it is made on the device from the picture's
+// colours and shape; and it goes into the description only when the author uses it.
+func TestDraftDescriptionIsOffOnRequestAndNeverAutomatic(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Click(`button[data-tab="images"]`)
+	d.WaitSelector("#img-insert")
+	d.ChooseFile(func() { d.Click("#img-insert") }, "bar.png", pngBytes(t))
+	d.WaitSelector("#img-alt-0")
+	d.OK(!d.Has("#img-hint-0"), "no draft is offered until it is turned on")
+
+	d.Eval(`localStorage.setItem('showcase:a11y', JSON.stringify({hint: 'on'}))`, nil)
+	d.Reload()
+	d.WaitSelector("canvas")
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Click(`button[data-tab="images"]`)
+	d.WaitSelector("#img-insert")
+	d.ChooseFile(func() { d.Click("#img-insert") }, "bar.png", pngBytes(t))
+	d.WaitSelector("#img-hint-0")
+	d.OK(d.Str(`document.getElementById('img-alt-0').value`) == "", "nothing is put in the description by itself")
+	d.Click("#img-hint-0")
+	d.WaitSelector("#img-draft-0")
+	draft := d.Text("#img-draft-0")
+	d.OK(strings.Contains(draft, "Wide picture") && strings.Contains(draft, "rough draft"), "the draft says what it is: "+draft)
+	d.OK(d.Str(`document.getElementById('img-alt-0').value`) == "", "still nothing in the description")
+	d.Click("#img-usedraft-0")
+	d.WaitFor("the description has the draft", `document.getElementById('img-alt-0').value.startsWith('Wide picture')`)
+	d.OK(!d.Has("#img-missing-0"), "the picture has a description now")
+	d.NoErrors()
+}

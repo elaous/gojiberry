@@ -171,3 +171,19 @@ func TestMirrorUpdatesOnlyTheBlocksThatChanged(t *testing.T) {
 	d.OK(d.Bool(body+`.__kept > 0`), "the paragraph that was edited is updated in place")
 	d.NoErrors()
 }
+
+// A floating note is in the reading copy where a sighted reader meets it: after the text above it on the sheet
+// and before the text below it, not after everything.
+func TestFloatingNoteIsReadWhereItIsOnTheSheet(t *testing.T) {
+	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.WaitSelector("#a11y-text")
+	order := d.Str(`[...document.querySelectorAll('#a11y-text > *:not(nav):not(aside)')].map(e => e.textContent.slice(0, 20)).join('|')`)
+	note := strings.Index(order, "Note: Floating note")
+	above := strings.Index(order, "Everything on this")
+	below := strings.Index(order, "Second thoughts")
+	if note < 0 || above < 0 || below < 0 || above >= note || note >= below {
+		t.Errorf("the note is in the wrong place: %s", order)
+	}
+	d.NoErrors()
+}

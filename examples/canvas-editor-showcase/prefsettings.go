@@ -118,6 +118,7 @@ func prefSettings() []setting {
 			{"slow", T("prefs.o.scanSlow", "One step per 2.5 seconds"), T("prefs.scanSlow", "Switch scanning: one step per 2.5 seconds")}}, cur: scanCur, set: scanSet},
 
 		toggle("editor", "suggest", T("prefs.suggestAuto", "Suggest words as I type"), func(p prefs) bool { return p.Suggest == "auto" }, func(p *prefs, on bool) { p.Suggest = onOff(on, "auto") }),
+		toggle("editor", "hint", T("prefs.hint", "Offer a draft description for a picture (made on this device)"), func(p prefs) bool { return p.Hint == "on" }, func(p *prefs, on bool) { p.Hint = onOff(on, "on") }),
 		toggle("editor", "ghost", T("prefs.ghost", "Show a suggestion after the caret (Tab accepts)"), func(p prefs) bool { return p.Ghost == "on" }, func(p *prefs, on bool) { p.Ghost = onOff(on, "on") }),
 		toggle("editor", "close", T("prefs.autoClose", "Add the closing bracket or quote when I type an opening one"), func(p prefs) bool { return p.Close != "off" }, func(p *prefs, on bool) { p.Close = onOff(!on, "off") }),
 		toggle("editor", "memory", T("prefs.memory", "Save memory (keep fewer undo steps)"), lowMemory, func(p *prefs, on bool) { p.Memory = map[bool]string{true: "low", false: "normal"}[on] }),

@@ -254,7 +254,7 @@ func (b *odtBuilder) block(blk Block) {
 	case Code:
 		w.WriteString(`<text:p text:style-name="Preformatted_20_Text">` + odtText(rawCodeText(blk.Segments)) + `</text:p>`)
 	case Heading1, Heading2, Heading3:
-		n := strconv.Itoa(int(blk.Kind-Heading1) + 1)
+		n := strconv.Itoa(blk.HeadingLevel())
 		inner := b.inline(blk.Segments)
 		if name, ok := b.marks[b.cur]; ok {
 			inner = `<text:bookmark-start text:name="` + name + `"/>` + inner + `<text:bookmark-end text:name="` + name + `"/>`
@@ -521,6 +521,9 @@ func odtStyles(snap Snapshot) string {
 		`<style:style style:name="Heading_20_1" style:display-name="Heading 1" style:family="paragraph" style:parent-style-name="Heading" style:default-outline-level="1"><style:text-properties fo:font-size="20pt" fo:font-weight="bold"/></style:style>` +
 		`<style:style style:name="Heading_20_2" style:display-name="Heading 2" style:family="paragraph" style:parent-style-name="Heading" style:default-outline-level="2"><style:text-properties fo:font-size="16pt" fo:font-weight="bold"/></style:style>` +
 		`<style:style style:name="Heading_20_3" style:display-name="Heading 3" style:family="paragraph" style:parent-style-name="Heading" style:default-outline-level="3"><style:text-properties fo:font-size="13pt" fo:font-weight="bold"/></style:style>` +
+		`<style:style style:name="Heading_20_4" style:display-name="Heading 4" style:family="paragraph" style:parent-style-name="Heading" style:default-outline-level="4"><style:text-properties fo:font-size="12pt" fo:font-weight="bold"/></style:style>` +
+		`<style:style style:name="Heading_20_5" style:display-name="Heading 5" style:family="paragraph" style:parent-style-name="Heading" style:default-outline-level="5"><style:text-properties fo:font-size="11pt" fo:font-weight="bold"/></style:style>` +
+		`<style:style style:name="Heading_20_6" style:display-name="Heading 6" style:family="paragraph" style:parent-style-name="Heading" style:default-outline-level="6"><style:text-properties fo:font-size="11pt" fo:font-weight="bold" fo:font-style="italic"/></style:style>` +
 		`<style:style style:name="Contents_20_Heading" style:display-name="Contents Heading" style:family="paragraph" style:parent-style-name="Heading"><style:text-properties fo:font-size="20pt" fo:font-weight="bold"/></style:style>` +
 		contentsStyles(snap) +
 		`<style:style style:name="Page_20_Break" style:display-name="Page Break" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:break-after="page"/></style:style>` +

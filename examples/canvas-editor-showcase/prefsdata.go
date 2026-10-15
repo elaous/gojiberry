@@ -30,6 +30,7 @@ type prefs struct {
 	Colours  string `json:"colours,omitempty"`  // "safe": other people's cursors in colours the common kinds of colour blindness tell apart
 	Dwell    string `json:"dwell,omitempty"`    // click by resting the pointer: "fast", "medium", "slow" (the pause)
 	Scan     string `json:"scan,omitempty"`     // single-switch scanning: "fast", "medium", "slow" (the step)
+	Hint     string `json:"hint,omitempty"`     // "on": the Pictures tab can draft a description from the picture, on this device
 	Where    string `json:"where,omitempty"`    // "on": the presence list has a "Where is <name>?" button for each collaborator
 }
 
@@ -58,6 +59,9 @@ func (p prefs) sanitize() prefs {
 	}
 	if p.Ghost != "on" {
 		p.Ghost = ""
+	}
+	if p.Hint != "on" {
+		p.Hint = ""
 	}
 	if p.Speed != "slow" && p.Speed != "fast" {
 		p.Speed = ""

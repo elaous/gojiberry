@@ -78,11 +78,11 @@ func (s Snapshot) Outline() []OutlineEntry {
 			}
 			sb.WriteString(seg.Text)
 		}
-		if s.TOCDepth > 0 && int(b.Kind-Heading1)+1 > s.TOCDepth {
+		if s.TOCDepth > 0 && b.HeadingLevel() > s.TOCDepth {
 			continue
 		}
 		if text := strings.Join(strings.Fields(sb.String()), " "); text != "" {
-			out = append(out, OutlineEntry{Level: int(b.Kind-Heading1) + 1, Text: text, Block: i})
+			out = append(out, OutlineEntry{Level: b.HeadingLevel(), Text: text, Block: i})
 		}
 	}
 	return out

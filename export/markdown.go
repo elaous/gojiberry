@@ -78,7 +78,7 @@ func (Markdown) Export(snap Snapshot) ([]byte, error) {
 		case Heading2:
 			prefix = "## "
 		case Heading3:
-			prefix = "### "
+			prefix = strings.Repeat("#", b.HeadingLevel()) + " "
 		case BulletItem:
 			prefix = strings.Repeat("  ", b.Level) + "- "
 		case NumberedItem:
