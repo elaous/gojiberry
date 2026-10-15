@@ -303,6 +303,29 @@ func TestRunLanguagesAreTaggedAsSpans(t *testing.T) {
 	}
 }
 
+func TestTableCellsCarryLanguageSpansAndLinks(t *testing.T) {
+	cell := func(r, c int, segs ...Segment) Block {
+		return Block{Kind: TableCell, Segments: segs, TableRow: r, TableCol: c, TableRows: 2, TableCols: 2, TableColSpan: 1, TableRowSpan: 1}
+	}
+	fr := Format{Lang: "fr"}
+	snap := textSnapshot(
+		cell(0, 0, Segment{Text: "Name"}), cell(0, 1, Segment{Text: "Greeting"}),
+		cell(1, 0, Segment{Text: "say "}, Segment{Text: "bonjour", Format: fr}),
+		cell(1, 1, Segment{Text: "see "}, Segment{Text: "here", Format: Format{Href: "https://example.org", Lang: "fr"}}),
+	)
+	data, err := PDF{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := pdfua.Check(data); err != nil || len(got) != 0 {
+		t.Fatalf("pdfua: %v, %v", got, err)
+	}
+	want := "Document(Table(TR(TH TH) TR(TD(Span[fr]) TD(Link[fr](OBJR)))))"
+	if got := structureShape(t, data); got != want {
+		t.Errorf("structure = %s, want %s", got, want)
+	}
+}
+
 func TestPopplerReadsTheTaggedFile(t *testing.T) {
 	info, err1 := exec.LookPath("pdfinfo")
 	totext, err2 := exec.LookPath("pdftotext")
@@ -331,5 +354,52 @@ func TestPopplerReadsTheTaggedFile(t *testing.T) {
 	txt, err := exec.Command(totext, f, "-").CombinedOutput()
 	if err != nil || strings.Contains(string(txt), "Error") || !strings.Contains(string(txt), "visit here bonjour") {
 		t.Errorf("pdftotext: %v\n%s", err, txt)
+	}
+}
+
+// veraPDF (the PDF/UA-1 reference validator) is run when it is installed (on the PATH or named by
+// GOJIBERRY_VERAPDF); GOJIBERRY_REQUIRE_VERAPDF=1 makes its absence a failure.
+func TestVeraPDFAcceptsTheTaggedFiles(t *testing.T) {
+	bin := os.Getenv("GOJIBERRY_VERAPDF")
+	if bin == "" {
+		bin, _ = exec.LookPath("verapdf")
+	}
+	if bin == "" {
+		if os.Getenv("GOJIBERRY_REQUIRE_VERAPDF") == "1" {
+			t.Fatal("verapdf is required and not installed")
+		}
+		t.Skip("verapdf is not installed")
+	}
+	run := func(s, lang string) Segment { return Segment{Text: s, Format: Format{Lang: lang}} }
+	cell := func(r, c int, segs ...Segment) Block {
+		return Block{Kind: TableCell, Segments: segs, TableRow: r, TableCol: c, TableRows: 2, TableCols: 2, TableColSpan: 1, TableRowSpan: 1}
+	}
+	docs := map[string]Snapshot{
+		"tagged": taggedSnapshot(t),
+		"languages": textSnapshot(
+			Block{Kind: Paragraph, Segments: []Segment{{Text: "He said "}, run("bonjour", "fr"), {Text: " then "}, run("Tag", "de-CH")}},
+			Block{Kind: Paragraph, Segments: []Segment{{Text: "see "}, {Text: "ici", Format: Format{Href: "https://example.org", Lang: "fr"}}}},
+		),
+		"table": textSnapshot(
+			cell(0, 0, Segment{Text: "Name"}), cell(0, 1, Segment{Text: "Greeting"}),
+			cell(1, 0, Segment{Text: "say "}, run("bonjour", "fr")),
+			cell(1, 1, Segment{Text: "see "}, Segment{Text: "here", Format: Format{Href: "https://example.org", Lang: "fr"}}),
+		),
+	}
+	for name, snap := range docs {
+		data, err := PDF{}.Export(snap)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f := filepath.Join(t.TempDir(), name+".pdf")
+		if err := os.WriteFile(f, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(bin, "--flavour", "ua1", "--format", "text", f)
+		cmd.Env = append(os.Environ(), "JAVA_TOOL_OPTIONS=")
+		out, err := cmd.CombinedOutput()
+		if err != nil || !strings.Contains("\n"+string(out), "\nPASS ") {
+			t.Errorf("%s: veraPDF: %v\n%s", name, err, out)
+		}
 	}
 }

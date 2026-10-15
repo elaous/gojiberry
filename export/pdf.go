@@ -172,7 +172,7 @@ func renderPDF(snap Snapshot, outline []OutlineEntry, tocPages map[int]int) ([]b
 			if b.TableRow == 0 && b.TableCol == 0 {
 				n := b.TableRows * b.TableCols
 				if n > 0 && i+n <= len(snap.Blocks) {
-					if err := renderPDFTable(&pdf, snap.Blocks[i:i+n], i, contentWidth, pxToPt(snap.MarginLeft)); err != nil {
+					if err := renderPDFTable(&pdf, pdfRunLangs(snap), snap.Blocks[i:i+n], i, contentWidth, pxToPt(snap.MarginLeft)); err != nil {
 						return nil, nil, err
 					}
 					i += n - 1
@@ -751,7 +751,7 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, langs []string, tokenLines [][]pdfTok
 // to learn the row's own shared height (the tallest cell's own
 // wrapped line count) *before* deciding whether the row fits on the
 // current page, then draw every box/text using that now-known height.
-func renderPDFTable(pdf *gopdf.GoPdf, cells []Block, base int, contentWidth, x0 float64) error {
+func renderPDFTable(pdf *gopdf.GoPdf, langs []string, cells []Block, base int, contentWidth, x0 float64) error {
 	rows, cols := cells[0].TableRows, cells[0].TableCols
 	owners := tableMergeGrid(cells)
 	colWidth := contentWidth / float64(cols)
@@ -820,11 +820,16 @@ func renderPDFTable(pdf *gopdf.GoPdf, cells []Block, base int, contentWidth, x0 
 			if r == 0 {
 				kind = tagTH
 			}
-			pdfMarkBegin(pdf, pdfTag{kind: kind, id: base + r*cols + c, a: base, b: r<<16 | c})
+			ctag := pdfTag{kind: kind, id: base + r*cols + c, a: base, b: r<<16 | c}
 			ty := y + pdfTableCellPadding
 			for _, line := range d.wrapped {
+				// each line is a piece of the cell; a stretch in another language is a Span with /Lang and a
+				// link a Link, as in a paragraph (pdfRun)
+				pdfMarkBegin(pdf, ctag)
+				run := pdfRun{pdf: pdf, tag: ctag, langs: langs}
 				tx := d.x + pdfTableCellPadding
 				for _, tok := range line {
+					run.enter(tok.format)
 					if err := setPDFTokenFont(pdf, tok.format, false, r == 0, false, pdfBaseFontSize); err != nil {
 						return err
 					}
@@ -836,11 +841,17 @@ func renderPDFTable(pdf *gopdf.GoPdf, cells []Block, base int, contentWidth, x0 
 					if err := pdf.Cell(&gopdf.Rect{W: tw, H: lineHeight}, tok.text); err != nil {
 						return err
 					}
+					if tok.format.Href != "" {
+						pdf.SetLineWidth(pdfLineStrokeWidth)
+						pdf.Line(tx, ty+pdfBaseFontSize*pdfUnderlineOffset, tx+tw, ty+pdfBaseFontSize*pdfUnderlineOffset)
+						pdf.AddExternalLink(tok.format.Href, tx, ty, tw, lineHeight)
+						run.leave()
+					}
 					tx += tw
 				}
+				run.finish()
 				ty += lineHeight
 			}
-			pdfMarkEnd(pdf)
 		}
 		pdf.SetY(y + rowHeight)
 	}

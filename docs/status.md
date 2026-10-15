@@ -24,7 +24,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | --- | --- | --- |
 | Run the manual screen-reader script on NVDA, JAWS and VoiceOver (steps 14 to 21 of [accessibility-testing.md](accessibility-testing.md)) | A person with those readers | 49, 60, 69, 79 |
 | E-mail verification through a real provider (SMTP or an API) | The operator picks the provider and gives credentials | 41 |
-| A veraPDF or PAC run on the PDFs (pdfa11y, a Go checker, now passes in `make pdfa11y-test`) | veraPDF is Java; PAC is Windows | 63 |
+| A PAC run on the PDFs (veraPDF, the PDF/UA-1 reference validator, passes: `TestVeraPDFAcceptsTheTaggedFiles`; pdfa11y passes in `make pdfa11y-test`) | PAC is a Windows program | 63 |
 | Test the Redis-style shared stores, S3-compatible services that ignore `If-Match` on delete, nginx and Caddy recipes | Live endpoints and daemons | 3, 9, 82, 89 |
 | Test atypical-speech support with people who have atypical speech | Volunteers and consent | 56 |
 | An outside security audit before anyone relies on the keys for secrets | A reviewer | 89 |
@@ -47,7 +47,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 60 | Accessible text mirror of the canvas | feature | partial | mirror with links, outline landmark, comments, tables, lists, caret mapping both ways (browser-tested) | block-level diff of its own; caret mapping counts runes; manual reader run (blocked) |
 | 61 | Alt text and structure checks | feature | partial | prompt on insert, description editor, checker rules, reading order of typed lists and tables | on-device suggestions; reading order of floating objects; heading levels beyond 3 |
 | 62 | Accessibility checker panel | feature | partial | panel with jump, one-click fixes (including typed bullets and numbers to a list), export gate (page side) and `docstore/exportgate` server floor | server floor for an encrypted store needs the host's decrypting job; floating objects; no fix for the table-header rules (only the person can name a column) |
-| 63 | Accessible exports | feature | partial | tagged PDF (structure tree, `/Lang`, links, nested lists, run languages), semantic HTML with a main landmark, checked with axe in the browser tests, DOCX metadata, fidelity report | table-cell language spans and links in PDF, code links; a veraPDF / PAC run (pdfa11y passes; see `make pdfa11y-test`) |
+| 63 | Accessible exports | feature | done | tagged PDF (structure tree, `/Lang`, links, nested lists, run languages), semantic HTML with a main landmark, checked with axe in the browser tests, DOCX metadata, fidelity report | table-cell language spans and links in PDF, veraPDF PDF/UA-1 passes on the test documents | none (code blocks are drawn without links on purpose; a PAC run needs Windows and a person) |
 | 64 | Language and direction | feature | partial | per-run language, document language (set by hand or from detection), RTL and direction handling, IME composition inserted once at its end | bidi/vertical layout checks; the preedit drawn at the caret and the candidate window placed there; a manual run with real IMEs (blocked) |
 | 65 | Cognitive and motor options | feature | done | distraction-free mode, forgiving targets, text size up to 200 %, a longer undo history (1000 steps), dwell click and single-switch scanning (one flat scan), "English, plain words" for the hardest messages (sign-in, keys, encryption, share links) | none (the plain-language wording is the model's draft: a review and the rest of the page need a person, see above) |
 | 66 | Collaboration accessibility | feature | done | joins, leaves, merged and refused changes, remote comments announced; "Where is X" as a per-person setting; colour-blind safe cursor colours, refused changes announced (browser test), changed-under-you sentence naming who | none (screen-reader run is item 69) |
@@ -122,7 +122,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 
 ## Counts
 
-Product table (items 48 to 84, 32 rows): 14 done, 14 partial, 4 blocked (49, 50, 69, 83: all that is left is a person's work) ("done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent). None is untouched. The server and
+Product table (items 48 to 84, 32 rows): 15 done, 13 partial, 4 blocked (49, 50, 69, 83: all that is left is a person's work) ("done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent). None is untouched. The server and
 security table: the review findings are done; still open are the per-account sign-in budget and the shared lock
 (passkey backlog 4 and 5) and log witnesses (limits 12); 41 is blocked on a provider.
 
