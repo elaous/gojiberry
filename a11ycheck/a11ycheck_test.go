@@ -174,3 +174,33 @@ func TestFindingsNameTheirOneClickAction(t *testing.T) {
 		t.Errorf("image: %+v", f)
 	}
 }
+
+func TestFloatingObjectsGetTheSameRules(t *testing.T) {
+	fs := CheckObjects([]Object{
+		{Kind: "image", Where: "Picture 1"},
+		{Kind: "image", Where: "Picture 2", Alt: "A red door"},
+		{Kind: "image", Where: "Picture 3", Decorative: true},
+		{Kind: "table", Where: "Table 1", Rows: [][]string{{"", ""}, {"a", "b"}}},
+		{Kind: "table", Where: "Table 2", Rows: [][]string{{"Name", "Amount"}, {"a", "1"}}},
+		{Kind: "table", Where: "Table 3", Rows: [][]string{{"Name", ""}, {"a", "1"}}},
+	})
+	got := map[string]string{}
+	for _, f := range fs {
+		got[f.Text] = f.Rule
+		if f.Offset != -1 || f.Item != -1 || f.Fix == "" {
+			t.Errorf("a floating object has no place in the text: %+v", f)
+		}
+		if !strings.Contains(f.Message, f.Text) {
+			t.Errorf("the message names the object: %q", f.Message)
+		}
+	}
+	want := map[string]string{"Picture 1": RuleImageAlt, "Table 1": RuleTableHeaderMissing, "Table 3": RuleTableHeaderEmpty}
+	if len(got) != len(want) {
+		t.Fatalf("findings %v", got)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s: %q, want %q", k, got[k], v)
+		}
+	}
+}

@@ -5,14 +5,14 @@ import (
 )
 
 // The outline is the document's headings as a list: paragraphs in a
-// "Heading 1".."Heading 3" or "Title" style, or text that is big and bold
+// "Heading 1".."Heading 6" or "Title" style, or text that is big and bold
 // the way Markdown headings come out (Scale and weight 700). It is derived
 // from the content, so it follows edits; a DOM component (components.Outline)
 // shows it and GotoOffset takes the reader there.
 
 // OutlineEntry is one heading.
 type OutlineEntry struct {
-	// Level is 1 for the biggest heading, then 2, 3 and 4.
+	// Level is 1 for the biggest heading, then 2 to 6.
 	Level int
 	// Text is the heading's text.
 	Text string
@@ -34,6 +34,12 @@ func styleLevel(style string) int {
 		return 2
 	case "Heading 3":
 		return 3
+	case "Heading 4":
+		return 4
+	case "Heading 5":
+		return 5
+	case "Heading 6":
+		return 6
 	}
 	return 0
 }

@@ -2,6 +2,7 @@ package exportgate
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -169,5 +170,37 @@ func TestOnlyGetOfOneDocumentIsExportBound(t *testing.T) {
 		if ExportBound(httptest.NewRequest(m, "/docs/a?for=export", nil)) {
 			t.Errorf("%s is export bound", m)
 		}
+	}
+}
+
+// A host with the keys judges the document it decrypts; with the wrong key, or none, it is refused under block.
+func TestDecideSealedJudgesWhatTheHostDecrypts(t *testing.T) {
+	bad := docfile.Document{Content: []docfile.Item{{Image: &docfile.ImageItem{URL: "a.png"}}}}
+	plain, err := docfile.JSON.Marshal(bad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seal := func(b []byte) []byte { out := []byte("sealed:"); return append(out, b...) }
+	open := func(b []byte) ([]byte, error) {
+		rest, ok := strings.CutPrefix(string(b), "sealed:")
+		if !ok {
+			return nil, errors.New("not sealed for this key")
+		}
+		return []byte(rest), nil
+	}
+	if r := DecideSealed(seal(plain), open, a11ycheck.GateBlock); r.Allow || !r.Checked || r.Errors == 0 {
+		t.Errorf("a document with an error is refused under block: %+v", r)
+	}
+	if r := DecideSealed(seal(plain), open, a11ycheck.GateWarn); !r.Allow || r.State != "warned" {
+		t.Errorf("under warn it goes with a warning: %+v", r)
+	}
+	if r := DecideSealed([]byte("garbage"), open, a11ycheck.GateBlock); r.Allow || r.Checked {
+		t.Errorf("what cannot be opened is refused under block: %+v", r)
+	}
+	if r := DecideSealed([]byte("garbage"), open, a11ycheck.GateWarn); !r.Allow || r.State != "unchecked" {
+		t.Errorf("and flagged under warn: %+v", r)
+	}
+	if r := DecideSealed([]byte("garbage"), open, a11ycheck.GateAllow); !r.Allow {
+		t.Error("no gate, no check")
 	}
 }

@@ -288,7 +288,7 @@ func blocksFrom(lines []line) []Block {
 		case level > 0:
 			b.Kind, b.Level = Heading1+BlockKind(level-1), level
 			if level > 3 {
-				b.Kind, b.Level = Heading3, 3
+				b.Kind, b.Level = Heading3, level // levels 4 to 6 are a Heading3 block that says its level
 			}
 		case ln.para.List.Kind == 1: // bullet
 			b.Kind = BulletItem
@@ -347,7 +347,7 @@ func blocksFrom(lines []line) []Block {
 // "Title" or "Heading n", or every run has a heading's scale.
 // HeadingLevel is the level (1 to 6) of a paragraph made of these runs with this paragraph style, or 0
 // if it is not a heading: the style "Title" or "Heading N", else every run at a heading's scale. It is
-// what FromDocument uses (which folds the levels above 3 into Heading3), for a caller that needs the real level.
+// what FromDocument uses (which gives a heading of level 4 to 6 the kind Heading3 and its real level in Block.Level).
 func HeadingLevel(runs []docfile.Chars, style string) int { return headingLevel(runs, style) }
 
 func headingLevel(runs []docfile.Chars, style string) int {

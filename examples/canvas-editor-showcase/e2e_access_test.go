@@ -4,6 +4,7 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
@@ -63,7 +64,9 @@ func TestSwitchScanningLightsControlsAndSpaceChoosesOne(t *testing.T) {
 // The last stop is the document: choosing it hands the keyboard to the editor, and Escape gives it back.
 func TestSwitchScanningHandsTheKeyboardToTheDocumentAndBack(t *testing.T) {
 	d := openWithPrefs(t, `{scan:'fast'}`)
-	d.WaitFor("the document is lit", `document.documentElement.getAttribute('data-gj-scan') === 'document'`)
+	// The document is the last stop of the scan, so it is lit after one step per control on the page (a second
+	// each at "fast"; the number of controls is whatever the page has drawn when the scan starts).
+	d.WaitForTimeout("the document is lit", `document.documentElement.getAttribute('data-gj-scan') === 'document'`, 90*time.Second)
 	d.Press(" ")
 	d.WaitFor("scanning waits", `document.documentElement.hasAttribute('data-gj-scan-paused')`)
 	d.Press("Escape")

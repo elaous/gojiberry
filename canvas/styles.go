@@ -27,7 +27,7 @@ type StyleDef struct {
 }
 
 // DefaultStyles is a small starter set: Normal, Title, Subtitle, Heading
-// 1-3, Quote and Code (paragraph styles), Emphasis and Strong (character
+// 1-6, Quote and Code (paragraph styles), Emphasis and Strong (character
 // styles).
 func DefaultStyles() []StyleDef {
 	return []StyleDef{
@@ -37,6 +37,9 @@ func DefaultStyles() []StyleDef {
 		{Name: "Heading 1", Paragraph: true, Format: Format{Scale: 2, FontWeight: 700}, Para: ParaFormat{SpaceBefore: 12, SpaceAfter: 4}},
 		{Name: "Heading 2", Paragraph: true, Format: Format{Scale: 1.6, FontWeight: 700}, Para: ParaFormat{SpaceBefore: 10, SpaceAfter: 4}},
 		{Name: "Heading 3", Paragraph: true, Format: Format{Scale: 1.3, FontWeight: 700}, Para: ParaFormat{SpaceBefore: 8, SpaceAfter: 2}},
+		{Name: "Heading 4", Paragraph: true, Format: Format{Scale: 1.15, FontWeight: 700}, Para: ParaFormat{SpaceBefore: 6, SpaceAfter: 2}},
+		{Name: "Heading 5", Paragraph: true, Format: Format{Scale: 1.05, FontWeight: 700}, Para: ParaFormat{SpaceBefore: 6, SpaceAfter: 2}},
+		{Name: "Heading 6", Paragraph: true, Format: Format{FontWeight: 700, FontStyle: StyleItalic}, Para: ParaFormat{SpaceBefore: 6, SpaceAfter: 2}},
 		{Name: "Quote", Paragraph: true, Format: Format{FontStyle: StyleItalic, Color: "#5b616b"}, Para: ParaFormat{IndentLeft: 16, QuoteBar: "#c4c7cd"}},
 		{Name: "Code", Paragraph: true, Format: Format{FontFamily: "monospace", Background: "#eceef1"}},
 		{Name: "Emphasis", Format: Format{FontStyle: StyleItalic}},
