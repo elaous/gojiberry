@@ -193,3 +193,22 @@ func TestTrackedChangesRoundTrip(t *testing.T) {
 		t.Errorf("accepted: %q", got)
 	}
 }
+
+// A vertical section comes back as vertical text.
+func TestDocxVerticalTextRoundTrip(t *testing.T) {
+	snap := export.Snapshot{Title: "T", Vertical: true, PageWidth: 794, PageHeight: 1123, MarginLeft: 96, MarginTop: 96, MarginRight: 96, MarginBottom: 96,
+		Blocks: []export.Block{{Kind: export.Paragraph, Segments: []export.Segment{{Text: "日本語"}}}}}
+	data, err := export.DOCX{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := docximport.Import(data)
+	if err != nil || !d.PageLayout().Vertical {
+		t.Errorf("vertical after import: %v, %v", d.PageLayout().Vertical, err)
+	}
+	snap.Vertical = false
+	data, _ = export.DOCX{}.Export(snap)
+	if d, _ := docximport.Import(data); d.PageLayout().Vertical {
+		t.Error("horizontal text came back vertical")
+	}
+}

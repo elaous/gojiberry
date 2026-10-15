@@ -42,6 +42,7 @@ func (f *TextFlow) CaretRect(offset int) (x, y, h float64, ok bool) {
 // caret from a click. With columns it picks the line whose column the
 // point is in, so a click in the second column doesn't land in the first.
 func (f *TextFlow) OffsetAt(x, y float64) int {
+	x, y = f.vpt(x, y)
 	o, _ := f.offsetAt(x, y)
 	return o
 }
@@ -127,6 +128,12 @@ func (f *TextFlow) Dragging() bool { return f.drag != nil }
 
 // MouseDown starts dragging a gap if (x, y) is on its grip (edit mode).
 func (f *TextFlow) MouseDown(x, y float64) bool {
+	x, y = f.vpt(x, y)
+	return f.mouseDown(x, y)
+}
+
+// mouseDown is MouseDown for a point in the plane the text is laid out in.
+func (f *TextFlow) mouseDown(x, y float64) bool {
 	// A click on a row of a table of contents goes to the heading it lists.
 	if off, ok := f.tocTargetAt(x, y); ok && !f.suggestionsOpen() {
 		f.GotoOffset(off)
@@ -144,12 +151,12 @@ func (f *TextFlow) MouseDown(x, y float64) bool {
 		}
 		return f.beginSelect(x, y)
 	}
-	if f.ToggleCheckAt(x, y) {
+	if f.toggleCheckAt(x, y) {
 		return true
 	}
 	bands := f.Layout().Bands
 	g := f.gripAt(bands, x, y)
-	if g == noGrip {
+	if g == noGrip || f.Vertical {
 		return f.beginSelect(x, y)
 	}
 	f.ClearSelection()
@@ -164,6 +171,7 @@ func (f *TextFlow) MouseDown(x, y float64) bool {
 // MouseMove drags the gap (keeping the two neighbours' combined width)
 // or updates which grip is hovered.
 func (f *TextFlow) MouseMove(x, y float64) bool {
+	x, y = f.vpt(x, y)
 	hover := false
 	if f.sel.dragging {
 		f.hoverLink = ""
@@ -176,7 +184,7 @@ func (f *TextFlow) MouseMove(x, y float64) bool {
 
 func (f *TextFlow) mouseMove(x, y float64) bool {
 	if f.sel.dragging {
-		o := f.OffsetAt(x, y)
+		o, _ := f.offsetAt(x, y)
 		changed := o != f.sel.caret
 		f.sel.caret, f.sel.after = o, false
 		return changed
@@ -259,6 +267,16 @@ func (f *TextFlow) Draw() {
 
 	lay := f.Layout()
 	f.lastLay = lay
+	if f.Vertical {
+		f.drawVertical(lay)
+		return
+	}
+	f.drawBody(lay)
+}
+
+// drawBody draws the text of a layout, its marks, and in edit mode the column grips.
+func (f *TextFlow) drawBody(lay Layout) {
+	p, cs := f.Painter, f.ChromeStyle
 	f.drawSearch(lay)
 	f.drawSelection(lay)
 	f.drawPeerSelections(lay)
@@ -267,7 +285,9 @@ func (f *TextFlow) Draw() {
 	defer f.drawGhost(lay)
 	defer f.drawPreedit(lay)
 	defer f.drawPeerCarets()
-	defer f.drawFootnotes(lay)
+	if !f.Vertical {
+		defer f.drawFootnotes(lay)
+	}
 	p.SetTextAlign("left")
 	p.SetTextBaseline("alphabetic")
 	for _, ln := range lay.Lines {
@@ -300,7 +320,7 @@ func (f *TextFlow) Draw() {
 			if dp != nil && r.Level%2 == 1 {
 				dp.SetDirection("rtl")
 			}
-			p.FillText(r.Text, x, y)
+			f.fillRun(r, ln, x, y)
 			if dp != nil && r.Level%2 == 1 {
 				dp.SetDirection("ltr")
 			}
@@ -318,7 +338,7 @@ func (f *TextFlow) Draw() {
 			p.FillText("-", ln.X+r.X+r.W, ln.Baseline+r.DY)
 		}
 		for _, o := range ln.Objects {
-			o.Object.DrawAt(p, o.X, o.Y)
+			f.drawObject(o)
 		}
 	}
 

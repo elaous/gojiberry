@@ -14,7 +14,9 @@ func (f *TextFlow) CaretBox() (x, y, h float64, ok bool) {
 	if f.mode != ModeEdit || !f.WantsFocus() {
 		return 0, 0, 0, false
 	}
-	return f.caretRect(f.Cursors()[0])
+	c := f.Cursors()[0]
+	x, y, h, ok = f.caretRect(c)
+	return f.physicalCaret(x, y, h, ok, c.Caret)
 }
 
 // CaretBox implements CaretBoxer.

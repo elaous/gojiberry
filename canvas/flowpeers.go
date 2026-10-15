@@ -74,6 +74,9 @@ func (f *TextFlow) drawPeerCarets() {
 	}
 	p := f.Painter
 	for _, c := range f.RemoteCursors {
+		if f.skipCaretOnOtherPage(c.Caret) {
+			continue
+		}
 		x, y, h, ok := f.CaretRect(c.Caret)
 		if !ok {
 			continue

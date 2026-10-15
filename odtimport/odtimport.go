@@ -216,6 +216,14 @@ func ImportReport(data []byte) (docfile.Document, Skipped, error) {
 	}
 	if styles != nil {
 		r.loadStyles(styles)
+		styles.walk(func(n *node) bool { // vertical text: the page's writing mode runs top to bottom, right to left
+			if n.name == "page-layout-properties" && strings.HasPrefix(n.attr("writing-mode"), "tb") {
+				l := r.doc.PageLayout()
+				l.Vertical = true
+				r.doc.SetPageLayout(l)
+			}
+			return true
+		})
 	}
 	r.loadStyles(content)
 	if meta := r.xml("meta.xml"); meta != nil {

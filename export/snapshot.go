@@ -203,6 +203,9 @@ type Snapshot struct {
 	// block: at the end); a table of contents the document holds sets it to where the document has it.
 	TOCAt int
 
+	// Vertical sets the text in vertical lines, top to bottom, from right to left (vertical-rl).
+	Vertical bool
+
 	PageWidth, PageHeight                            float64
 	MarginLeft, MarginTop, MarginRight, MarginBottom float64
 }

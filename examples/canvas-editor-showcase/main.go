@@ -225,6 +225,9 @@ func main() {
 		u.loadTheme(d)
 		state.Theme = u.canvasTheme()
 		u.layout = d.PageLayout()
+		if flow != nil {
+			flow.Vertical = u.layout.Vertical
+		}
 		// The sheet the document was saved with comes back with it (a size that is none of the papers on
 		// offer, or one that was never set, leaves the sheet as it is).
 		if ps, ok := components.PageSetupOf(u.layout.Width, u.layout.Height, u.layout.Margins); ok {
@@ -412,6 +415,14 @@ func main() {
 				{Label: "Underline", Shortcut: components.FormatChord("Mod+U", mac), OnSelect: func() { run(canvas.CmdUnderline) }},
 				{Label: T("menu.docLangSet", "Language of the document"), Items: documentLanguageMenu(u, renderUI)},
 				{Label: T("menu.selLang", "Language of the selection"), Items: selectionLanguageMenu(u, func() *canvas.TextFlow { return flow }, redraw, refocus, renderUI)},
+				{Label: T("menu.vertical", "Vertical text"), Checked: u.layout.Vertical, OnSelect: func() {
+					u.layout.Vertical = !u.layout.Vertical
+					if flow != nil {
+						flow.Vertical = u.layout.Vertical
+					}
+					redraw()
+					renderUI()
+				}},
 				{Separator: true},
 				{Label: "Style editor", OnSelect: func() { u.tab = "format"; renderUI() }},
 			}},

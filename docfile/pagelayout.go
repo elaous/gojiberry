@@ -10,18 +10,19 @@ import (
 
 // The Meta keys the print layout of a document is kept under.
 const (
-	PageHeaderKey  = "page.header"
-	PageFooterKey  = "page.footer"
-	PageTOCKey     = "page.toc"
-	PageTOCTitle   = "page.toctitle"
-	PageFirstKey   = "page.first"     // "1": the first page has a header and footer of its own
-	PageFirstHead  = "page.firsthead" // the first page's header
-	PageFirstFoot  = "page.firstfoot" // the first page's footer
-	PageEvenKey    = "page.even"      // "1": the even pages have a header and footer of their own
-	PageEvenHead   = "page.evenhead"  // the even pages' header
-	PageEvenFoot   = "page.evenfoot"  // the even pages' footer
-	PageSizeKey    = "page.size"      // "595x842": the sheet in points
-	PageMarginsKey = "page.margins"   // "72,72,72,72": top, right, bottom, left in points
+	PageHeaderKey   = "page.header"
+	PageFooterKey   = "page.footer"
+	PageTOCKey      = "page.toc"
+	PageTOCTitle    = "page.toctitle"
+	PageFirstKey    = "page.first"     // "1": the first page has a header and footer of its own
+	PageFirstHead   = "page.firsthead" // the first page's header
+	PageFirstFoot   = "page.firstfoot" // the first page's footer
+	PageEvenKey     = "page.even"      // "1": the even pages have a header and footer of their own
+	PageEvenHead    = "page.evenhead"  // the even pages' header
+	PageEvenFoot    = "page.evenfoot"  // the even pages' footer
+	PageSizeKey     = "page.size"      // "595x842": the sheet in points
+	PageMarginsKey  = "page.margins"   // "72,72,72,72": top, right, bottom, left in points
+	PageVerticalKey = "page.vertical"  // "1": vertical text, the lines top to bottom and from right to left
 )
 
 // PageLayout is how a document is laid out on paper when it is exported to a paged format (PDF, Word,
@@ -44,10 +45,13 @@ type PageLayout struct {
 	// and Footer then belong to the odd pages. The first page, when it has its own, is neither.
 	EvenDiffers            bool
 	EvenHeader, EvenFooter string
-	TOC                    bool
-	TOCTitle               string // the table of contents' heading; empty means "Contents"
-	Width, Height          float64
-	Margins                [4]float64
+	// Vertical sets the text in vertical lines, top to bottom, the lines following one another from right to
+	// left (vertical-rl, as in Chinese, Japanese and Korean books).
+	Vertical      bool
+	TOC           bool
+	TOCTitle      string // the table of contents' heading; empty means "Contents"
+	Width, Height float64
+	Margins       [4]float64
 }
 
 // IsZero says nothing is set.
@@ -105,6 +109,9 @@ func (d Document) PageLayout() PageLayout {
 		l.TOC = true
 	}
 	l.TOCTitle, _ = d.Get(PageTOCTitle)
+	if v, _ := d.Get(PageVerticalKey); v == "1" {
+		l.Vertical = true
+	}
 	if v, _ := d.Get(PageEvenKey); v == "1" {
 		l.EvenDiffers = true
 		l.EvenHeader, _ = d.Get(PageEvenHead)
@@ -162,6 +169,11 @@ func (d *Document) SetPageLayout(l PageLayout) {
 	put(PageFirstHead, l.FirstHeader)
 	put(PageFirstFoot, l.FirstFooter)
 	put(PageTOCKey, toc)
+	vertical := ""
+	if l.Vertical {
+		vertical = "1"
+	}
+	put(PageVerticalKey, vertical)
 	put(PageTOCTitle, l.TOCTitle)
 	size := ""
 	if l.Width > 0 {

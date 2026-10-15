@@ -86,6 +86,7 @@ func fidelityFeature(id string) string {
 		"page-header":      tr("fidelity.f.pageHeader", "Running headers, footers and page numbers"),
 		"page-toc":         tr("fidelity.f.pageToc", "Table of contents at the start"),
 		"page-size":        tr("fidelity.f.pageSize", "Page size and margins"),
+		"vertical-text":    tr("fidelity.f.verticalText", "Vertical text"),
 		"media":            tr("fidelity.f.media", "Audio and video"),
 		"media-captions":   tr("fidelity.f.mediaCaptions", "Caption tracks"),
 		"header-footer":    tr("fidelity.f.headerFooter", "Headers and footers"),

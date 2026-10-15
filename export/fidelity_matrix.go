@@ -47,7 +47,7 @@ func formatTable(overrides ...map[Feature]entry) map[Feature]entry {
 }
 
 // noPages is what the formats with no pages do with the print layout.
-var noPages = map[Feature]entry{FeatPageHeader: drop(""), FeatPageTOC: drop(""), FeatPageSize: drop("")}
+var noPages = map[Feature]entry{FeatPageHeader: drop(""), FeatPageTOC: drop(""), FeatPageSize: drop(""), FeatVertical: drop("")}
 
 // foldedFeatures is what every format built on the Snapshot does with these four.
 var foldedFeatures = map[Feature]entry{
@@ -80,16 +80,17 @@ var exportMatrix = map[string]map[Feature]entry{
 		FeatSuperscript: drop(""), FeatSubscript: drop(""), FeatHighlight: drop(""),
 		FeatSuggestion: drop(NoteAccepted), FeatFootnote: kept(), // the mark links to the note and the note back
 		FeatRowSpan: drop(""), FeatCellShading: drop(""), FeatCellAlign: drop(""),
+		FeatVertical: drop(""), // the drawn pages are horizontal
 	}),
 	// Rich Text Format: no embedded pictures, shading, alignment, language or title.
 	"rtf": formatTable(foldedFeatures, textEquation, longDescText, map[Feature]entry{
 		FeatHighlight: drop(""), FeatRunLanguage: drop(""), FeatSuggestion: drop(NoteAccepted),
 		FeatList: simple(NoteBullets), FeatImage: simple(NotePlaceholder), FeatImageAlt: drop(NotePlaceholder),
 		FeatCellShading: drop(""), FeatCellAlign: drop(""),
-		FeatDocLanguage: drop(""), FeatTitle: drop(""), FeatFootnote: kept(),
+		FeatDocLanguage: drop(""), FeatTitle: drop(""), FeatFootnote: kept(), FeatVertical: drop(""),
 	}),
 	// HTML and EPUB link a footnote's mark to its note and back, so they keep footnotes.
-	"epub": formatTable(foldedFeatures, noPages, map[Feature]entry{FeatHighlight: drop(""), FeatFootnote: kept(), FeatCodeLanguage: kept()}),
+	"epub": formatTable(foldedFeatures, noPages, map[Feature]entry{FeatHighlight: drop(""), FeatFootnote: kept(), FeatCodeLanguage: kept(), FeatVertical: kept()}),
 	// HTML embeds a clip (a player with its caption track and the transcript under it).
 	"html": formatTable(foldedFeatures, map[Feature]entry{FeatHighlight: drop(""), FeatFootnote: kept(), FeatCodeLanguage: kept(), FeatMedia: kept(), FeatMediaCaptions: kept()}),
 	// Markdown here is the editor's own: its marks for underline, highlight and raised or lowered text are

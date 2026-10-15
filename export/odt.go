@@ -505,7 +505,7 @@ func odtStyles(snap Snapshot) string {
 		l, c, r := decorParts(p.text)
 		hf.WriteString(`<style:` + p.tag + `><text:p text:style-name="HeaderFooter">` + odtDecor(l, snap.Title) + `<text:tab/>` + odtDecor(c, snap.Title) + `<text:tab/>` + odtDecor(r, snap.Title) + `</text:p></style:` + p.tag + `>`)
 	}
-	pm := fmt.Sprintf(`<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="%s" fo:page-height="%s" fo:margin-top="%s" fo:margin-bottom="%s" fo:margin-left="%s" fo:margin-right="%s" style:print-orientation="portrait"`+odtPageColour(th)+`/>`,
+	pm := fmt.Sprintf(`<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="%s" fo:page-height="%s" fo:margin-top="%s" fo:margin-bottom="%s" fo:margin-left="%s" fo:margin-right="%s" style:print-orientation="portrait"`+odtWriting(snap)+odtPageColour(th)+`/>`,
 		in(snap.PageWidth), in(snap.PageHeight), in(snap.MarginTop), in(snap.MarginBottom), in(snap.MarginLeft), in(snap.MarginRight))
 	if snap.Header != "" {
 		pm += `<style:header-style/>`
@@ -600,6 +600,14 @@ func odtTextColour(th docTheme) string {
 }
 
 // odtPageColour is the page background attribute of the page layout, or nothing.
+// odtWriting is the writing mode of the page: vertical lines from right to left for vertical text.
+func odtWriting(snap Snapshot) string {
+	if !snap.Vertical {
+		return ""
+	}
+	return ` style:writing-mode="tb-rl"`
+}
+
 func odtPageColour(th docTheme) string {
 	if th.background == "" {
 		return ""

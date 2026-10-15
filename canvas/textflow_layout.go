@@ -152,7 +152,11 @@ func (d *flowData) objDims(i int) (w, h float64) {
 	if v, ok := d.dims[k]; ok {
 		return v[0], v[1]
 	}
-	w, h = d.objs[i].Object.Measure(d.f.Painter, d.maxW, d.maxH)
+	if d.f.Vertical { // measured upright, laid out turned: the room and the size the other way round
+		h, w = d.objs[i].Object.Measure(d.f.Painter, d.maxH, d.maxW)
+	} else {
+		w, h = d.objs[i].Object.Measure(d.f.Painter, d.maxW, d.maxH)
+	}
 	d.dims[k] = [2]float64{w, h}
 	return w, h
 }
@@ -555,7 +559,7 @@ func (l *layouter) beginParagraph(ps, pe int) {
 	pf, _ := l.f.expandPara(l.d.paraIn(ps, pe))
 	start := ps == 0 || l.d.runes[ps-1] == '\n'
 	l.para = paraCtx{pf: pf, first: start, left: pf.leftIndent(), ps: ps}
-	if pe > ps {
+	if pe > ps && !l.f.Vertical {
 		l.para.rtl = IsRTLText(l.d.disp[ps:pe])
 		l.para.levels = bidiLevels(l.d.disp[ps:pe], l.para.rtl)
 	}
@@ -590,6 +594,9 @@ func (f *TextFlow) freeSpan(c0, c1, y0, y1 float64) (float64, float64) {
 	type iv struct{ a, b float64 }
 	var cut []iv
 	for _, o := range f.obstacles {
+		if f.Vertical {
+			break
+		}
 		if a, b, ok := o.Exclusion(y0, y1); ok {
 			cut = append(cut, iv{a, b})
 		}
