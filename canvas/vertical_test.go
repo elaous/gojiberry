@@ -139,3 +139,27 @@ func TestHorizontalFlowIsUnchangedByTheVerticalCode(t *testing.T) {
 		t.Errorf("caret box %v %v", x, y)
 	}
 }
+
+// The keyboard arriving in the editor starts editing in edit mode, with no click; in view mode it does not.
+func TestFocusInStartsEditing(t *testing.T) {
+	f, p := verticalFlow("abc")
+	f.Vertical = false
+	s := NewStage(p, 400, 400, f)
+	if s.FocusIn() || f.Editing() {
+		t.Fatal("view mode started editing")
+	}
+	f.SetMode(ModeEdit)
+	if f.Editing() {
+		t.Fatal("edit mode alone is not editing")
+	}
+	if !s.FocusIn() || !f.Editing() {
+		t.Fatal("the keyboard arriving did not start editing")
+	}
+	f.InsertText("x")
+	if got := flowText(f); !strings.HasPrefix(got, "x") {
+		t.Errorf("typing did not reach the text: %q", got)
+	}
+	if s.FocusIn() {
+		t.Error("already editing: nothing changed")
+	}
+}

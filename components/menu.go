@@ -66,8 +66,11 @@ func menuItemKey(e xango.Event, choose func()) {
 	if !ok || k.Ctrl || k.Alt || k.Meta {
 		return
 	}
+	// A key handled here must not go on to the entry that holds this one's submenu: its handler would move the
+	// focus again, from the same target, and a submenu would be walked two entries at a time.
 	move := func(step xango.FocusStep) {
 		e.PreventDefault()
+		e.StopPropagation()
 		e.MoveFocus(".gj-menu", menuEntries, step)
 	}
 	switch k.Key {
@@ -83,14 +86,18 @@ func menuItemKey(e xango.Event, choose func()) {
 		// into the submenu of the focused entry, if it has one
 		if e.MoveFocus(".gj-menu-item-sub", ":scope > .gj-menu > li.gj-menu-item[tabindex]", xango.FocusFirst) {
 			e.PreventDefault()
+			e.StopPropagation()
 		}
 	case "ArrowLeft":
 		// out of a submenu, to the entry that opened it
-		e.PreventDefault()
-		e.MoveFocus(".gj-menu-item-sub", ":scope", xango.FocusFirst)
+		if e.MoveFocus(".gj-menu-item-sub", ":scope", xango.FocusFirst) {
+			e.PreventDefault()
+			e.StopPropagation()
+		}
 	case "Enter", " ":
 		if choose != nil {
 			e.PreventDefault()
+			e.StopPropagation()
 			choose()
 		}
 	}

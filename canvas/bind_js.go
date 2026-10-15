@@ -222,6 +222,13 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 			redraw()
 		}
 	}
+	// The keyboard arriving in the editor starts editing: without a pointer there is no click to do it.
+	input.AddEventListener("focus", js.FuncOf(func(js.Value, []js.Value) any {
+		if s.FocusIn() {
+			redraw()
+		}
+		return nil
+	}))
 	input.AddEventListener("compositionstart", js.FuncOf(func(js.Value, []js.Value) any {
 		composing = true
 		showPreedit(input.GetValue())
