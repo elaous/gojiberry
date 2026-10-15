@@ -48,17 +48,19 @@ type Tab struct {
 	ctx  context.Context
 	site *Site
 
-	mu       sync.Mutex
-	errs     []string
-	dialog   *string // the answer to give the next dialog (one shot)
-	files    []string
-	chooser  chan struct{}
-	dlName   chan string
-	routes   []*route
-	mx, my   float64
-	mods     input.Modifier // keys held down with KeyDown
-	box      [4]float64     // #stage, in page coordinates
-	closeFns []func()
+	mu         sync.Mutex
+	errs       []string
+	dialog     *string  // the answer to give the next dialog (one shot)
+	dialogQ    []string // answers for the dialogs after it
+	dialogSeen []string // the messages of the dialogs that opened
+	files      []string
+	chooser    chan struct{}
+	dlName     chan string
+	routes     []*route
+	mx, my     float64
+	mods       input.Modifier // keys held down with KeyDown
+	box        [4]float64     // #stage, in page coordinates
+	closeFns   []func()
 }
 
 type route struct {
@@ -231,6 +233,10 @@ func (d *Tab) onEvent(o Options) func(any) {
 			d.mu.Lock()
 			ans := d.dialog
 			d.dialog = nil
+			if ans == nil && len(d.dialogQ) > 0 { // answers lined up for a page that asks again
+				ans, d.dialogQ = &d.dialogQ[0], d.dialogQ[1:]
+			}
+			d.dialogSeen = append(d.dialogSeen, e.Message)
 			d.mu.Unlock()
 			go func() {
 				text := ""
@@ -698,6 +704,21 @@ func (d *Tab) Type(text string) {
 
 // AnswerDialog accepts the next prompt or confirm with text.
 func (d *Tab) AnswerDialog(text string) { d.mu.Lock(); d.dialog = &text; d.mu.Unlock() }
+
+// AnswerDialogs lines up answers for the next prompts, one each, for a page that asks again.
+func (d *Tab) AnswerDialogs(texts ...string) {
+	d.mu.Lock()
+	d.dialogQ = append(d.dialogQ[:0:0], texts...)
+	d.dialogSeen = nil
+	d.mu.Unlock()
+}
+
+// DialogsSeen lists the messages of the dialogs that opened since AnswerDialogs.
+func (d *Tab) DialogsSeen() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([]string(nil), d.dialogSeen...)
+}
 
 // Download runs action, which starts a download, and returns the file's
 // suggested name and bytes.

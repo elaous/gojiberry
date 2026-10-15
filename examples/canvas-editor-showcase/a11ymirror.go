@@ -46,7 +46,7 @@ func mirrorComments(flow *canvas.TextFlow) []components.A11yComment {
 	}
 	excerpts := flow.CommentExcerpts()
 	var out []components.A11yComment
-	for _, c := range flow.Comments.List() {
+	for _, c := range flow.Comments.Visible() {
 		ac := components.A11yComment{ID: c.ID, Author: c.Author, Text: canvas.CommentSummary(c.Text, 1000), Resolved: c.Resolved}
 		if ex := excerpts[c.ID]; ex != "" {
 			ac.Excerpt = canvas.CommentSummary(ex, 200)

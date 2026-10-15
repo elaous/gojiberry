@@ -94,6 +94,7 @@ type ui struct {
 	selComment    string
 	commentFilter string
 	drafts        map[string]string
+	replyNotes    map[string]string // comment id -> why its reply draft cannot be saved
 
 	saver               *saver.Session
 	live                *collabxango.State // when the page was opened on a shared document (/d/{doc})
@@ -129,7 +130,7 @@ func main() {
 	doc := browser.Document()
 	state := State{Mode: canvas.ModeView, Pages: 3, Setup: components.DefaultPageSetup(), Source: sample, Note: "Floating note: click to edit, try (brackets and \"quotes\".", Styles: canvas.DefaultStyles(),
 		Comments: canvas.NewCommentSet(), Author: "you@example.com", Footnotes: canvas.NewFootnoteSet()}
-	u := &ui{title: "Quarterly report", menu: -1, tab: "format", drafts: map[string]string{}}
+	u := &ui{title: "Quarterly report", menu: -1, tab: "format", drafts: map[string]string{}, replyNotes: map[string]string{}}
 	// The catalog has a font that is fetched from this site: picking it
 	// only adds it to the library; the file is downloaded (into the font
 	// store) the first time the text uses it.
@@ -338,6 +339,7 @@ func main() {
 	components.CopyText = u.saver.Copy // the "Copy details" button of an error
 	u.migrate = newMigrate(u, func() { renderUI() })
 	u.people = newPeople("you@example.com", func() { renderUI() })
+	state.Comments.Roster = u.people // comments name people by handle, never by an address that is not theirs to show
 	u.people.links.use, u.people.links.stop = u.useShareLink, u.stopShareLink
 	u.people.remote = func() (*docstore.HTTPAdapter, string, bool) {
 		if encTarget == "server" || u.saver.Target() != serverTarget || u.saver.ID() == "" {

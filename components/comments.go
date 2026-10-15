@@ -164,6 +164,8 @@ type CommentCardProps struct {
 	CanReply bool
 	// ReplyDraft is the text in the reply box.
 	ReplyDraft string
+	// ReplyNote is a line under the reply box, for what is wrong with the draft (a mention that cannot be saved).
+	ReplyNote string
 
 	OnSelect     func(id string)
 	OnResolve    func(id string)
@@ -242,6 +244,9 @@ func CommentCard(props CommentCardProps) xango.Node {
 			in = append(in, xango.On("input", func(e xango.Event) { props.OnReplyDraft(c.ID, xango.EventValue[string](e)) }))
 		}
 		kids = append(kids, xango.El("div", []xango.Attr{xango.A("class", "gj-comment-reply-row")}, xango.El("input", in), btn("gj-comment-send", "Reply", onReply)))
+		if props.ReplyNote != "" {
+			kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-comment-note"), xango.A("role", "alert")}, xango.Text(props.ReplyNote)))
+		}
 	}
 	if props.CanEdit {
 		resolve := "Resolve"
@@ -278,6 +283,8 @@ type CommentListProps struct {
 	CanEdit  bool
 	CanReply bool
 	Drafts   map[string]string
+	// ReplyNotes maps a comment ID to the line shown under its reply box.
+	ReplyNotes map[string]string
 
 	OnSelect     func(id string)
 	OnResolve    func(id string)
@@ -313,8 +320,8 @@ func CommentList(props CommentListProps) xango.Node {
 	for _, c := range list {
 		cards = append(cards, CommentCard(CommentCardProps{
 			Comment: c, Excerpt: props.Excerpts[c.ID], Selected: c.ID == props.Selected, CanEdit: props.CanEdit, CanReply: props.CanReply,
-			ReplyDraft: props.Drafts[c.ID],
-			OnSelect:   props.OnSelect, OnResolve: props.OnResolve, OnDelete: props.OnDelete,
+			ReplyDraft: props.Drafts[c.ID], ReplyNote: props.ReplyNotes[c.ID],
+			OnSelect: props.OnSelect, OnResolve: props.OnResolve, OnDelete: props.OnDelete,
 			OnReplyDraft: props.OnReplyDraft, OnReply: props.OnReply,
 		}))
 	}
