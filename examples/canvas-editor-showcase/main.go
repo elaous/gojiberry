@@ -64,6 +64,7 @@ type ui struct {
 	layout                       docfile.PageLayout // the header, footer and table of contents of the print layout
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
 	imageMsg     string
+	media        mediaForm    // the clip being typed in the Pictures tab and the caption drafts
 	elements     elementsForm // the equation being typed and the last message of the equation and code parts of the tab
 	sugg         suggestState
 	ghost        ghostUI

@@ -174,6 +174,7 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 			}
 		}
 	}
+	nodes = append(nodes, mediaSections(u, state, flow, scroller, redraw, renderUI)...)
 	nodes = append(nodes, elementsSections(u, state, flow, redraw, renderUI)...)
 	return xango.El("div", []xango.Attr{xango.A("id", "img-panel")}, nodes...)
 }

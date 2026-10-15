@@ -204,3 +204,19 @@ Sources: [encryption-and-passkeys.md](encryption-and-passkeys.md) (called "the d
        [testing-workflow.md](testing-workflow.md) and the merge counter in
        [roadmap.md](roadmap.md#merges-since-the-last-full-test-run).
     4. *Who:* the maintainers run the checks locally and re-run or work around a failed hosted run.
+
+## Audio and video
+
+16. **A clip is a card in the editor, and Word, ODT and PDF do not embed it.**
+    1. *What:* the canvas has no player: a clip is a card (kind, title, a mark when it still needs text) and its
+       captions are edited as text. The HTML export writes the real `<video>`/`<audio>` with its `<track>` and
+       the transcript; the other formats write the clip's link and its transcript. Word and EPUB files that hold
+       embedded media are read without it (counted in the import report).
+    2. *Why inherent:* a player needs the browser's media element and a fetch of the clip, which a canvas editor
+       and a file format that stores no standard caption track cannot supply; Word's embedded video has no
+       caption track a reader can rely on.
+    3. *Shipped:* `docfile.MediaItem` with captions (WebVTT) and a transcript, the caption editor
+       (`components.CaptionEditor`), the insert gate (`a11ycheck.MediaFindings`), the Check tab rules, the HTML
+       export and import of the clip, labels in seven languages. See roadmap item 68.
+    4. *Who:* the host that wants playback shows the clip in its own player from the card's address; the person
+       sends HTML when the clip itself must play.

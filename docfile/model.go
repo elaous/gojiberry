@@ -392,6 +392,9 @@ func FromItems(items []canvas.Item) []Item {
 				}
 			case *canvas.EquationObject:
 				out = append(out, Item{Equation: &EquationItem{Formula: o.Formula, Alt: o.Alt}})
+			case *canvas.MediaObject:
+				out = append(out, Item{Media: &MediaItem{URL: o.URL, Kind: o.Kind, Title: o.Title, Captions: o.Captions, CaptionsURL: o.CaptionsURL,
+					Transcript: o.Transcript, Width: o.Width, Height: o.Height}})
 			case *ImagePlaceholder:
 				c := o.Item
 				out = append(out, Item{Image: &c})
@@ -483,12 +486,11 @@ func ToItems(items []Item) []canvas.Item {
 		case it.Equation != nil:
 			out = append(out, canvas.Inline{Object: &canvas.EquationObject{Formula: it.Equation.Formula, Alt: it.Equation.Alt}, Block: true})
 		case it.Media != nil:
-			// the editor has no player: the clip is opened as the text that stands for it, so nothing is lost
-			// from view (its captions track is the one thing the text does not carry)
-			if c, ok := lastChars(out); ok && c.Text != "" && !strings.HasSuffix(c.Text, "\n") {
-				out = append(out, canvas.Chars{Text: "\n"}) // the clip's line starts a paragraph of its own
-			}
-			out = append(out, ToItems(MediaText(*it.Media))...)
+			// the editor has no player: a clip is a card with its kind and title (canvas.MediaObject), and the
+			// text that stands for it is edited in the Pictures tab
+			m := it.Media
+			out = append(out, canvas.Inline{Object: &canvas.MediaObject{URL: m.URL, Kind: m.Kind, Title: m.Title, Captions: m.Captions,
+				CaptionsURL: m.CaptionsURL, Transcript: m.Transcript, Width: m.Width, Height: m.Height}, Block: true})
 		}
 	}
 	return out

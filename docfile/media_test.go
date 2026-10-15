@@ -75,19 +75,33 @@ func TestMediaTextNamesTheClipAndCarriesItsWords(t *testing.T) {
 	}
 }
 
-// A document with clips opens in the editor with their text in place (it has no player), and a clip after
-// text that has no line end starts a paragraph of its own.
-func TestMediaOpensAsTextAndDocumentsKeepTheirClips(t *testing.T) {
-	m := &MediaItem{URL: "a.mp4", Title: "Clip", Transcript: "Spoken words."}
+// A document with clips opens in the editor with each clip as a card (it has no player), and saving it again gives
+// the clip back with every field; the plain formats flatten it to the text that stands for it.
+func TestMediaOpensAsACardAndDocumentsKeepTheirClips(t *testing.T) {
+	m := &MediaItem{URL: "a.mp4", Title: "Clip", Transcript: "Spoken words.", Captions: "WEBVTT\n", CaptionsURL: "a.vtt", Width: 320, Height: 180}
 	d := Document{Content: []Item{{Chars: &Chars{Text: "Before"}}, {Media: m}, {Chars: &Chars{Text: "After"}}}}
+	var card *canvas.MediaObject
 	var text strings.Builder
 	for _, it := range ToItems(d.Content) {
-		if c, ok := it.(canvas.Chars); ok {
-			text.WriteString(c.Text)
+		switch it := it.(type) {
+		case canvas.Chars:
+			text.WriteString(it.Text)
+		case canvas.Inline:
+			card, _ = it.Object.(*canvas.MediaObject)
 		}
 	}
-	if want := "Before\nVideo: Clip\nTranscript\nSpoken words.\nAfter"; text.String() != want {
-		t.Errorf("opened as %q, want %q", text.String(), want)
+	if text.String() != "BeforeAfter" || card == nil || card.Title != "Clip" || card.URL != "a.mp4" || card.Transcript != "Spoken words." {
+		t.Fatalf("opened as %q with the card %+v", text.String(), card)
+	}
+	back := FromItems(ToItems(d.Content))
+	var got *MediaItem
+	for _, it := range back {
+		if it.Media != nil {
+			got = it.Media
+		}
+	}
+	if got == nil || *got != *m {
+		t.Errorf("the clip after opening and saving: %+v, want %+v", got, m)
 	}
 	flat := d.MediaAsText()
 	if got, want := chars(flat.Content), "Before\nVideo: Clip\nTranscript\nSpoken words.\nAfter"; got != want {
