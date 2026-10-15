@@ -127,7 +127,8 @@ func (f *TextFlow) TakeReveal() (x, y, h float64, ok bool) {
 		return 0, 0, 0, false
 	}
 	f.revealPending = false
-	return f.CaretRect(f.revealAt)
+	x, y, h, ok = f.CaretRect(f.revealAt)
+	return f.physicalCaret(x, y, h, ok, f.revealAt)
 }
 
 // Revealer is implemented by components that can ask for a position to be

@@ -232,6 +232,9 @@ func docxSection(snap Snapshot, hf [6]string) string {
 	if snap.FirstDiffers {
 		title = `<w:titlePg/>`
 	}
+	if snap.Vertical {
+		title += `<w:textDirection w:val="tbRl"/>`
+	}
 	return fmt.Sprintf(`<w:sectPr>%s<w:pgSz w:w="%d" w:h="%d"/><w:pgMar w:top="%d" w:right="%d" w:bottom="%d" w:left="%d" w:header="720" w:footer="720" w:gutter="0"/>%s</w:sectPr>`,
 		refs, px(snap.PageWidth), px(snap.PageHeight), px(snap.MarginTop), px(snap.MarginRight), px(snap.MarginBottom), px(snap.MarginLeft), title)
 }

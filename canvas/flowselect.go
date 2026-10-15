@@ -78,6 +78,9 @@ func (f *TextFlow) CommonFormat() Format {
 
 // obstructed reports whether (x, y) is on something laid over the text.
 func (f *TextFlow) obstructed(x, y float64) bool {
+	if f.Vertical { // floating objects are not laid around vertical text
+		return false
+	}
 	for _, o := range f.obstacles {
 		if h, ok := o.(Hitter); ok && h.ContainsPoint(x, y) {
 			return true
@@ -120,10 +123,11 @@ func (f *TextFlow) beginSelect(x, y float64) bool {
 
 // DoubleClick selects the word at (x, y).
 func (f *TextFlow) DoubleClick(x, y float64) bool {
+	x, y = f.vpt(x, y)
 	if f.Painter == nil || f.obstructed(x, y) || !f.inText(x, y) {
 		return false
 	}
-	o := f.OffsetAt(x, y)
+	o, _ := f.offsetAt(x, y)
 	f.Layout()
 	r := f.data.runes
 	if len(r) == 0 {

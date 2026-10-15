@@ -428,6 +428,7 @@ func (f *TextFlow) lineAt(o int) (Line, bool) {
 }
 
 func (f *TextFlow) editKey(key string, shift bool) bool {
+	key = f.verticalKey(key)
 	if endsRun(key) {
 		f.hist.breakRun() // moving, Enter, Tab... end a run of typing or deleting
 	}
@@ -465,9 +466,11 @@ func (f *TextFlow) editKey(key string, shift bool) bool {
 				return c.Caret
 			}
 			if key == "ArrowUp" {
-				return f.OffsetAt(x, y-1)
+				o, _ := f.offsetAt(x, y-1)
+				return o
 			}
-			return f.OffsetAt(x, y+h+1)
+			o, _ := f.offsetAt(x, y+h+1)
+			return o
 		})
 	case "Home":
 		move(func(c Cursor) int {
@@ -546,6 +549,7 @@ func (f *TextFlow) WantsFocus() bool { return f.HasSelection() || f.Editing() }
 // MouseDownMods implements ModMouseDowner: Ctrl/Cmd+click in the text
 // adds a cursor.
 func (f *TextFlow) MouseDownMods(x, y float64, m Mods) bool {
+	x, y = f.vpt(x, y)
 	if (m.Ctrl || m.Meta) && f.mode == ModeEdit && f.openLinkAt(x, y) {
 		return true
 	}
@@ -554,7 +558,7 @@ func (f *TextFlow) MouseDownMods(x, y float64, m Mods) bool {
 		f.SetCursors(normalize(append(f.Cursors(), Cursor{Anchor: o, Caret: o, After: after})))
 		return true
 	}
-	return f.MouseDown(x, y)
+	return f.mouseDown(x, y)
 }
 
 // drawCarets draws a caret at every cursor (while editing).
@@ -563,6 +567,9 @@ func (f *TextFlow) drawCarets() {
 		return
 	}
 	for _, c := range f.Cursors() {
+		if f.skipCaretOnOtherPage(c.Caret) {
+			continue
+		}
 		if x, y, h, ok := f.caretRect(c); ok {
 			if f.StrongCaret {
 				// a bar that stands out against any text colour: dark, with a light edge, and thicker

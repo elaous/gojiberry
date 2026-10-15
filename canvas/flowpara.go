@@ -131,6 +131,12 @@ func (f *TextFlow) ApplyParagraph(fn func(*ParaFormat)) bool {
 // ToggleCheckAt ticks or unticks the check box at (x, y), if there is
 // one.
 func (f *TextFlow) ToggleCheckAt(x, y float64) bool {
+	x, y = f.vpt(x, y)
+	return f.toggleCheckAt(x, y)
+}
+
+// toggleCheckAt is ToggleCheckAt for a point in the plane the text is laid out in.
+func (f *TextFlow) toggleCheckAt(x, y float64) bool {
 	for _, ln := range f.Layout().Lines {
 		m := ln.Marker
 		if m == nil || !m.Check || x < m.X || x > m.X+m.W || y < ln.Y || y > ln.Y+ln.H {

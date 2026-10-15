@@ -207,6 +207,7 @@ func featurePairs() map[Feature]pair {
 	}
 	m[FeatPageHeader] = layout(docfile.PageLayout{Header: "{title}\tPage {page} of {pages}", Footer: "End"})
 	m[FeatPageTOC] = layout(docfile.PageLayout{TOC: true})
+	m[FeatVertical] = layout(docfile.PageLayout{Vertical: true})
 	m[FeatPageSize] = layout(docfile.PageLayout{Width: 595, Height: 842, Margins: [4]float64{50, 50, 50, 50}})
 	return m
 }

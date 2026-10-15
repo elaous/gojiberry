@@ -225,6 +225,14 @@ func Import(data []byte) (docfile.Document, error) {
 	}
 	if b := body.child("body"); b != nil {
 		r.blocks(b.kids)
+		// vertical text: the section's text direction runs top to bottom (tbRl, or tbRlV with the Latin text upright)
+		if sp := b.child("sectPr"); sp != nil {
+			if td := sp.child("textDirection"); td != nil && strings.HasPrefix(td.attr("val"), "tbRl") {
+				l := r.doc.PageLayout()
+				l.Vertical = true
+				r.doc.SetPageLayout(l)
+			}
+		}
 	}
 	r.trimEnd()
 	return r.doc, nil

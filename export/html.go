@@ -274,13 +274,21 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 	if xhtml {
 		return `<?xml version="1.0" encoding="UTF-8"?>` + "\n" +
 			`<!DOCTYPE html>` + "\n" +
-			`<html xmlns="http://www.w3.org/1999/xhtml"` + langAttrs(snap.Lang, true) + `>` + "\n" +
+			`<html xmlns="http://www.w3.org/1999/xhtml"` + langAttrs(snap.Lang, true) + writingAttr(snap) + `>` + "\n" +
 			"<head><meta charset=\"utf-8\"/><title>" + escapeHTMLText(snap.Title) + "</title>\n" + xhtmlThemeStyle(theme) + "</head>\n<body>\n" +
 			body.String() + "</body>\n</html>\n"
 	}
-	return "<!doctype html>\n<html" + langAttrs(snap.Lang, false) + ">\n<head>\n<meta charset=\"utf-8\">\n<title>" +
+	return "<!doctype html>\n<html" + langAttrs(snap.Lang, false) + writingAttr(snap) + ">\n<head>\n<meta charset=\"utf-8\">\n<title>" +
 		escapeHTMLText(snap.Title) + "</title>\n" + themeStyle(theme) + htmlPrintStyle(snap) + "</head>\n<body>\n" +
 		htmlTOCAtStart(snap) + "<main>\n" + body.String() + "</main>\n</body>\n</html>\n"
+}
+
+// writingAttr is the attribute that sets vertical text on the page: the lines top to bottom, from right to left.
+func writingAttr(snap Snapshot) string {
+	if !snap.Vertical {
+		return ""
+	}
+	return ` style="writing-mode:vertical-rl"`
 }
 
 // xhtmlThemeStyle is themeStyle for an XHTML page: the text of the style element must be well formed, so an
