@@ -758,7 +758,7 @@ New entries:
     clear on decode error, `examples/people-keys-demo/main.go`), 24 (`ErrFilteredEnrolled` and the audited
     state), 25 (protobuf as an indirect dependency).
 
-48. **ARIA attributes across the canvas editor and components. Slices 1 to 4 done; the rest open.** Kind:
+48. **ARIA attributes across the canvas editor and components. Done.** Kind:
     fixable. What: roles, accessible names and labels, live regions, a sensible focus order, and keyboard operation
     of every control (toolbar, menus, dialogs, pickers, the canvas itself). Why it matters: people who use assistive
     technology cannot use controls that have no role, name or keyboard path, and it is a legal requirement in many
@@ -795,6 +795,7 @@ New entries:
     colour picker, a table cell menu); (4) the canvas itself with a screen reader (item 49). Priority: high (first of
     the accessibility group). Where: `components`, `examples/canvas-editor-showcase`, the browser e2e.
     Also done: heading levels in the panels. The side panel now starts with a hidden level 3 heading (the tab's name), so the titles inside it (level 3 and 4) follow the page's level 2 without a skip; the axe test no longer disables `heading-order`, and runs over 21 tabs instead of 7 (the wider run found an empty table header in the statistics table, now a hidden "Measure" label). A long submenu (the display preferences grew past a short window with the 1000-step entry) now scrolls instead of running off the screen (`menu.css`). The one place the rule is still off is the Check tab test with a deliberately skipped heading in the document.
+    Also done (this PR), the arrow-key model for every picker. The keyboard model of each kind of widget is now one thing, not several: a button that opens a list (dropdown, font selector) opens it with Down or Up and the options move with Up, Down, Home and End (`listboxkeys.go`); menus and the tab list have their own arrow keys (menu bar, `tablist.go`); the suggestion list is a combobox that keeps the focus in the input (`suggestions.go`); and a grid, row or column of choices (the symbol picker with its category chips, the style gallery) is one tab stop with the arrow keys moving by what is seen: left and right to the neighbour in the row, up and down to the choice above or below (`MoveFocus` got `FocusUp` and `FocusDown`, found by the choices' places on the screen, not wrapping), Home and End to the first and last, Tab leaving the set (`gridkeys.go`; before it, a hundred symbols took a hundred Tab presses). The chips are a toolbar with a name. The colour and date pickers are the browser's own inputs with the browser's own keys, labelled by their `Label`. Tests: `TestSymbolPickerHasOneTabStop`, `TestStylePickerEntersAtTheCurrentStyle`, `TestMoveFocusIsAHookTheBrowserFills`, and in the browser `TestSymbolPickerArrowKeys`; the axe run over the 21 tabs passes with the symbols tab's new roles. Item 48 is done.
 49. **Screen-reader output while typing (voice-over).** Kind: fixable in part (the canvas is not DOM text). What: an
     accessible text mirror of the canvas (a hidden DOM or an ARIA live region) that announces typed characters, caret
     moves, selection and formatting changes. Why it matters: a canvas gives a screen reader nothing to read, so a blind
