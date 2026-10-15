@@ -448,7 +448,7 @@ func pageEndpoint(raw string) string {
 func a11yRuns(segs []export.Segment) []components.A11yRun {
 	tagged := false
 	for _, s := range segs {
-		tagged = tagged || s.Format.Lang != "" || s.Format.Change != export.NoChange || s.Format.Href != "" || s.Format.Comment != ""
+		tagged = tagged || s.Format.Lang != "" || s.Format.Change != export.NoChange || s.Format.Href != "" || s.Format.Comment != "" || s.Format.NoteRef > 0
 	}
 	if !tagged {
 		return nil
@@ -456,6 +456,9 @@ func a11yRuns(segs []export.Segment) []components.A11yRun {
 	var out []components.A11yRun
 	for _, s := range segs {
 		r := components.A11yRun{Text: s.Text, Lang: s.Format.Lang, Href: s.Format.Href, Comments: s.Format.Comment}
+		if s.Format.NoteRef > 0 {
+			r.Stream = 1 // the mark of a footnote is one rune of the stream, "12" in the copy
+		}
 		switch s.Format.Change {
 		case export.Inserted:
 			r.Change, r.Author = "ins", s.Format.Author
@@ -480,6 +483,9 @@ func a11yRuns(segs []export.Segment) []components.A11yRun {
 
 // sameRunKind reports whether two pieces are alike in everything but their text.
 func sameRunKind(a, b components.A11yRun) bool {
+	if a.Stream > 0 || b.Stream > 0 {
+		return false
+	}
 	a.Text, b.Text = "", ""
 	return a == b
 }

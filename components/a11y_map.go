@@ -17,7 +17,11 @@ func (b A11yBlock) StreamLen() int {
 	n := 0
 	if len(b.Runs) > 0 {
 		for _, r := range b.Runs {
-			n += utf8.RuneCountInString(r.Text)
+			if r.Stream > 0 {
+				n += r.Stream
+			} else {
+				n += utf8.RuneCountInString(r.Text)
+			}
 		}
 	} else {
 		n = utf8.RuneCountInString(b.Text)
@@ -29,11 +33,16 @@ func (b A11yBlock) StreamLen() int {
 // block that comes before the position, as the copy has it, without the words only a reader hears).
 // Inside an object it is the object itself.
 func (b A11yBlock) StreamOffset(before string) int {
+	return b.StreamOffsetRunes(utf8.RuneCountInString(before))
+}
+
+// StreamOffsetRunes is StreamOffset for a host that has counted the stream runes before the position itself
+// (the pieces with a Stream count as that many, not as their text), the Lead included.
+func (b A11yBlock) StreamOffsetRunes(before int) int {
 	if b.Object {
 		return b.Start
 	}
-	n := utf8.RuneCountInString(before) - b.Lead
-	return b.Start + min(max(n, 0), b.StreamLen())
+	return b.Start + min(max(before-b.Lead, 0), b.StreamLen())
 }
 
 // A11yBlockAt returns the index of the mapped block that holds the stream offset (the caret), -1 if none

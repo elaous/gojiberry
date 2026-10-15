@@ -67,6 +67,10 @@ type A11yRun struct {
 	// Comments are the IDs (comma separated) of the comments on this piece: the piece is marked and
 	// points (aria-details) to the comment's own entry in the list of comments.
 	Comments string
+	// Stream, when it is above 0, is how many runes the piece takes in the editor's text stream, whatever
+	// its text is: the mark of a footnote is one rune there and "12" in the copy. The piece is written with
+	// a data-gj-stream attribute so that a host mapping a position in the copy to the stream counts it so.
+	Stream int
 }
 
 // A11yComment is a comment of the document, written out for a reader: who wrote it, the text it is on,
@@ -322,6 +326,9 @@ func a11yInline(b A11yBlock, id string, known map[string]bool) []xango.Node {
 	var out []xango.Node
 	for _, r := range b.Runs {
 		n := xango.Text(r.Text)
+		if r.Stream > 0 {
+			n = xango.El("sup", []xango.Attr{xango.A("data-gj-stream", strconv.Itoa(r.Stream))}, xango.Text(r.Text))
+		}
 		if r.Lang != "" {
 			n = xango.El("span", []xango.Attr{xango.A("lang", r.Lang)}, xango.Text(r.Text))
 		}
