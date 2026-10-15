@@ -2,8 +2,10 @@ package docstore
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -132,5 +134,45 @@ func TestTheReportCanBeRoundedByTheOperator(t *testing.T) {
 	}
 	if tot := c.Totals(); tot.Accepted != 1 { // request totals are counts of requests, not rounded
 		t.Errorf("totals %+v", tot)
+	}
+}
+
+// Two servers on one conditional store add their counts: the admin report of either shows the sum.
+func TestTwoServersOnOneStoreCountTogether(t *testing.T) {
+	fastSave(t)
+	store := NewMemoryAdapter()
+	mk := func() (http.Handler, *telemetry.Counters) {
+		c := telemetry.NewCounters()
+		srv := NewServer(store, "memory").WithDirectoryAdmin(func(r *http.Request) bool { return r.Header.Get("X-Admin") == "yes" }).WithTelemetry(c)
+		return srv.Handler(), c
+	}
+	a, ca := mk()
+	b, cb := mk()
+	if !ca.Shared() || !cb.Shared() {
+		t.Fatal("the counters are not shared on a store with conditional writes")
+	}
+	body := func(n int) string {
+		return `{"day":"` + today() + `","counts":[{"name":"feature","value":"find","n":` + strconv.Itoa(n) + `}]}`
+	}
+	sendTelemetry(a, body(6), "203.0.113.5:1")
+	sendTelemetry(b, body(7), "203.0.113.6:1")
+	read := func(h http.Handler) int {
+		req := httptest.NewRequest(http.MethodGet, "/admin/telemetry", nil)
+		req.Header.Set("X-Admin", "yes")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var out struct{ Totals []telemetry.Reported }
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		for _, tt := range out.Totals {
+			if tt.Name == "feature" && tt.Value == "find" {
+				return tt.N
+			}
+		}
+		return 0
+	}
+	read(a) // each report first adds its own counts to the store, then reads the sum
+	read(b)
+	if x, y := read(a), read(b); x != 13 || y != 13 {
+		t.Errorf("the two reports say %d and %d, want 13 on both", x, y)
 	}
 }

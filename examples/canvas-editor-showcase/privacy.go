@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"slices"
 	"strconv"
@@ -27,6 +28,8 @@ const (
 	flushEvery   = 60 * time.Second            // an opted-in page sends its counts at most this often
 	sendTimeout  = 15 * time.Second            // a send that takes longer is given up (the counts are kept)
 	sampleKey    = "showcase:telemetry-sample" // "1", "10" or "100": send from one visit in so many
+	crashKey     = "showcase:crash"            // "on" once the person agreed to send crash codes (a choice apart from the counts)
+	crashPending = "showcase:crash-pending"    // codes of crashes since the last visit, written by the page's own handler (index.html) only while crashKey is on
 	telemetryOn  = "on"
 	telemetryOff = "off"
 )
@@ -75,7 +78,47 @@ func newPrivacy(tab string, dir *dirUI) *privacyUI {
 		_ = p.col.SetConsent(true)
 		p.recordSession()
 	}
+	if lsGet(crashKey) == telemetryOn && !p.col.Blocked() {
+		_ = p.col.SetCrashConsent(true)
+	}
+	p.drainCrashes()
 	return p
+}
+
+// drainCrashes takes the crash codes the page's handler kept (a crash that ended the program cannot send them
+// itself), counts those on the allowlist if the person agreed, and clears them either way.
+func (p *privacyUI) drainCrashes() {
+	raw := lsGet(crashPending)
+	if raw == "" {
+		return
+	}
+	lsSet(crashPending, "")
+	var codes []string
+	if json.Unmarshal([]byte(raw), &codes) != nil {
+		return
+	}
+	for _, c := range codes {
+		_ = p.col.Record(telemetry.Crash, c) // a code outside the allowlist, or with no agreement, is dropped
+	}
+}
+
+// chooseCrash applies the person's choice about crash codes, apart from the usage counts.
+func (p *privacyUI) chooseCrash(on bool, u *ui) {
+	if on {
+		if err := p.col.SetCrashConsent(true); err != nil {
+			u.announce(T("privacy.blocked", "Your browser asks not to be tracked, so nothing can be sent."))
+			p.render()
+			return
+		}
+		lsSet(crashKey, telemetryOn)
+		u.announce(T("privacy.crashOn", "A code will be sent when the page crashes."))
+	} else {
+		_ = p.col.SetCrashConsent(false)
+		lsSet(crashKey, "")
+		lsSet(crashPending, "")
+		u.announce(T("privacy.crashOff", "No crash codes will be sent."))
+	}
+	p.render()
 }
 
 // recordSession counts the facts of this visit: browser family, interface language, start-up time.
@@ -166,7 +209,8 @@ func (e *sendError) Error() string { return "the server answered " + http.Status
 
 // flush sends what is pending, when the person opted in and a server is confirmed.
 func (p *privacyUI) flush(ctx context.Context) {
-	if !p.col.Consent() {
+	p.drainCrashes()
+	if !p.col.Consent() && !p.col.CrashConsent() {
 		return
 	}
 	if p.endpoint() == "" {
@@ -246,6 +290,10 @@ func (p *privacyUI) panel(u *ui) xango.Node {
 				},
 				OnChange: func(v string) { p.choose(v, u) },
 			})),
+		xango.El("div", []xango.Attr{xango.A("id", "privacy-crash")},
+			components.Checkbox(components.CheckboxProps{Label: T("privacy.crashLabel", "Also send a code when the page crashes"), Checked: p.col.CrashConsent(), Disabled: p.col.Blocked(),
+				OnChange: func(v bool) { p.chooseCrash(v, u) }}),
+			text("privacy-crash-hint", T("privacy.crashHint", "Apart from the counts: you can agree to one, both or neither. A crash code is two words, the part of the page and the kind of crash. It never holds a message, a page address or anything from a document."))),
 	}
 	switch {
 	case p.col.Blocked():
@@ -260,7 +308,7 @@ func (p *privacyUI) panel(u *ui) xango.Node {
 	nodes = append(nodes, xango.El("h4", []xango.Attr{xango.A("id", "privacy-preview-heading")}, xango.Text(T("privacy.previewHeading", "Exactly what would be sent"))))
 	preview := string(p.col.Preview())
 	if preview == "" {
-		if consent {
+		if consent || p.col.CrashConsent() {
 			preview = T("privacy.previewEmpty", "Nothing yet. Counts appear here as you use the editor, before they are sent.")
 		} else {
 			preview = T("privacy.previewOff", "Nothing: you chose to send nothing, so no count is kept and no request is made.")
@@ -270,7 +318,7 @@ func (p *privacyUI) panel(u *ui) xango.Node {
 		xango.A("aria-labelledby", "privacy-preview-heading"), xango.A("style", "white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:#f4f4f6;padding:8px")}, xango.Text(preview)))
 	nodes = append(nodes, p.samplingAndLog(u)...)
 	nodes = append(nodes, btn("privacy-send", T("privacy.sendNow", "Send now"), func() { go p.flush(context.Background()) },
-		!consent || p.endpoint() == "" || p.col.Body() == nil))
+		(!consent && !p.col.CrashConsent()) || p.endpoint() == "" || p.col.Body() == nil))
 	nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "privacy-message"), xango.A("role", "status"), xango.A("aria-live", "polite"), xango.A("style", "font-size:13px")}, xango.Text(p.message)))
 
 	// Everything that could ever be sent, from the allowlist the code enforces.
