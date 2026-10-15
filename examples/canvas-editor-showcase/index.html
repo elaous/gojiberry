@@ -29,8 +29,31 @@
   <input id="input" class="hidden-input" type="text" autocomplete="off">
   <p id="state">(pending)</p>
   <script>
+    // Crash codes (roadmap 57, step 7): only if the person agreed to them in the Privacy tab, a crash is kept as
+    // two fixed words (the part of the page, the kind) for the page to count at the next visit; a crash that ends
+    // the program cannot count itself. No message, stack, file name or address is read into it.
+    function gjCrash(part, kind) {
+      try {
+        if (localStorage.getItem("showcase:crash") !== "on") return;
+        const k = "showcase:crash-pending";
+        const v = JSON.parse(localStorage.getItem(k) || "[]");
+        if (v.length < 20) v.push(part + "_" + kind);
+        localStorage.setItem(k, JSON.stringify(v));
+      } catch (e) {}
+    }
+    function gjPart(src) {
+      src = String(src || "");
+      if (/files(-worker)?\.(wasm|js)/.test(src)) return "files";
+      if (/sw\.js/.test(src)) return "worker";
+      if (/main\.wasm|wasm_exec/.test(src)) return "editor";
+      return "page";
+    }
+    addEventListener("error", (e) => gjCrash(gjPart(e.filename), e.error && e.error.name === "RuntimeError" ? "trap" : "error"));
+    addEventListener("unhandledrejection", (e) => gjCrash("page", e.reason && e.reason.name === "RuntimeError" ? "trap" : "rejection"));
     const go = new Go();
-    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((r) => go.run(r.instance));
+    const goExit = go.exit; // a Go panic ends the program with a code other than 0
+    go.exit = (code) => { if (code !== 0) gjCrash("editor", "panic"); goExit(code); };
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((r) => go.run(r.instance)).catch((err) => gjCrash("editor", err && err.name === "RuntimeError" ? "trap" : "error"));
     // Repeat visits start from the browser's copy of the app (sw.js is written by cmd/wasmdist, which a
     // plain development server does not have: the registration then fails and nothing changes).
     // ?nosw leaves it out.

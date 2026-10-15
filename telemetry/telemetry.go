@@ -37,7 +37,27 @@ const (
 	Locale Name = "locale"
 	// Error counts failures by a fixed code, never by message.
 	Error Name = "error"
+	// Crash counts crashes by the part of the page they happened in and their kind: two fixed words, never a
+	// message, a stack, a file name or a line. It has its own consent (Collector.SetCrashConsent): a person can
+	// send crash codes and no usage counts, or the other way round.
+	Crash Name = "crash"
 )
+
+// The parts of the page a crash is placed in, and the kinds of crash. A crash code is "<part>_<kind>".
+var (
+	crashParts = []string{"editor", "files", "save", "collab", "speech", "worker", "page"}
+	crashKinds = []string{"panic", "trap", "error", "rejection"}
+)
+
+func crashValues() []string {
+	var out []string
+	for _, p := range crashParts {
+		for _, k := range crashKinds {
+			out = append(out, p+"_"+k)
+		}
+	}
+	return out
+}
 
 // allowed maps each name to its allowed values and the reason it is collected. It is the whole schema.
 var allowed = map[Name]struct {
@@ -51,6 +71,7 @@ var allowed = map[Name]struct {
 	Browser: {"which browsers to test on", []string{"chromium", "firefox", "safari", "other"}},
 	Locale:  {"which translations matter", []string{"en", "de", "fr", "es", "other"}},
 	Error:   {"which failures are common, by fixed code only", []string{"load_failed", "save_failed", "send_failed", "unlock_failed"}},
+	Crash:   {"which part of the page crashes and how, by two fixed words (separate opt-in)", crashValues()},
 }
 
 var (

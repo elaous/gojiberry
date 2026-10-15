@@ -74,7 +74,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 
 | Part | Type | Status | Present | Missing |
 | --- | --- | --- | --- | --- |
-| 57 Usage counts from browsers (no personal data) | feature | partial | `telemetry` package, opt-in, allowlist, sampling, local log, persistent totals, noise, Privacy menu, [telemetry.md](telemetry.md) | step 7: scrubbed crash reports (separate opt-in); one counting process per store |
+| 57 Usage counts from browsers (no personal data) | feature | done | `telemetry` package, opt-in, allowlist, sampling, local log, persistent totals, noise, Privacy menu, [telemetry.md](telemetry.md); crash codes as a separate opt-in (two fixed words, kept in the browser until the next visit); several server processes on one store add their counts (conditional writes) | none |
 | 81 Operator metrics and traces (`observe`) | feature | done | off by default; closed allowlists; builtin sink and `GET /admin/observe`; **PostHog** and **OpenTelemetry (OTLP/HTTP JSON)** sinks; builtin totals kept across restarts with `GOJIBERRY_OBS_STATE`; [observability.md](observability.md) | none (font downloads, the Google font proxy and hub presence have request counts only) |
 
 ## Server, keys and security

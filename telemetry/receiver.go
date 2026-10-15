@@ -31,6 +31,10 @@ type Counters struct {
 	noise    int
 	onChange func()
 	saveErr  error
+	// shared and base belong to PersistShared (shared.go): the store several processes count into, and the
+	// totals as they were when this process last read or wrote it.
+	shared SharedStore
+	base   *decoded
 }
 
 // NewCounters is an empty set of totals.

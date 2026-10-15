@@ -41,6 +41,29 @@ func (t telemetryStore) Save(ctx context.Context, data []byte) error {
 	return t.a.Save(ctx, TelemetryKey, data)
 }
 
+// telemetryShared is telemetryStore on an adapter with conditional writes: several server processes on one store
+// then add their counts to each other's (telemetry.Counters.PersistShared) instead of overwriting them.
+type telemetryShared struct {
+	telemetryStore
+	c ConditionalAdapter
+}
+
+func (t telemetryShared) LoadVersion(ctx context.Context) ([]byte, string, bool, error) {
+	data, found, err := t.Load(ctx)
+	if err != nil || !found {
+		return nil, "", false, err
+	}
+	return data, Digest(data), true, nil
+}
+
+func (t telemetryShared) SaveIf(ctx context.Context, data []byte, version string) error {
+	err := t.c.SaveIf(ctx, TelemetryKey, data, version)
+	if errors.Is(err, ErrConflict) {
+		return telemetry.ErrConflict
+	}
+	return err
+}
+
 // telemetryPerMinute is how many batches one client may send a minute (a page sends one every
 // minute at most).
 const telemetryPerMinute = 6
@@ -59,9 +82,18 @@ func (s *Server) WithTelemetry(c *telemetry.Counters) *Server {
 	// The totals live in the store, so a restart does not start the counts again. They hold only what the
 	// counters hold (a number per day, name and value; see telemetry.Counters.Snapshot), are bounded by the
 	// allowlist and the 90 day retention, and a record that cannot be read is replaced, not trusted.
-	// Several server processes on one store each write their own totals (the last write wins).
+	// Several server processes on one store add their counts to each other's when the store has conditional
+	// writes (see telemetry.Counters.PersistShared); without them each overwrites the record with its own totals
+	// (the last write wins), and the server says so.
 	if s.adapter != nil {
-		if err := c.Persist(context.Background(), telemetryStore{s.adapter}, telemetrySaveDelay, s.clock); err != nil {
+		var err error
+		if ca, ok := s.adapter.(ConditionalAdapter); ok {
+			err = c.PersistShared(context.Background(), telemetryShared{telemetryStore{s.adapter}, ca}, telemetrySaveDelay, s.clock)
+		} else {
+			log.Printf("docstore: the store has no conditional writes, so usage totals are kept by one process only: run one counting process or use a store that has them")
+			err = c.Persist(context.Background(), telemetryStore{s.adapter}, telemetrySaveDelay, s.clock)
+		}
+		if err != nil {
 			log.Printf("docstore: usage totals could not be loaded from the store (%v); counting from zero and saving over them", err)
 		}
 	}
@@ -93,6 +125,9 @@ func (s *Server) handleTelemetryReport(w http.ResponseWriter, r *http.Request) {
 	k := telemetry.DefaultK
 	if v, err := strconv.Atoi(r.URL.Query().Get("k")); err == nil && v > k {
 		k = v // a larger threshold is allowed, a smaller one is not
+	}
+	if s.telemetry.Shared() { // the other processes' counts too
+		_ = s.telemetry.Sync(r.Context(), s.clock)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")

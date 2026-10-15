@@ -14,6 +14,7 @@ import (
 type Collector struct {
 	mu      sync.Mutex
 	on      bool
+	crashOn bool // crash codes are sent: a consent of their own
 	blocked bool
 	counts  map[Event]int
 	now     func() time.Time
@@ -68,7 +69,7 @@ func (c *Collector) BrowserSignals(doNotTrack, globalPrivacyControl bool) {
 	defer c.mu.Unlock()
 	c.blocked = doNotTrack || globalPrivacyControl
 	if c.blocked {
-		c.on = false
+		c.on, c.crashOn = false, false
 		clear(c.counts)
 	}
 }
@@ -89,11 +90,45 @@ func (c *Collector) SetConsent(on bool) error {
 	}
 	c.on = on
 	if !on {
-		clear(c.counts)
-		c.log = nil // nothing is kept about a person who chose to send nothing
+		c.dropLocked(false) // the crash codes stay if they were agreed to on their own
 	}
 	return nil
 }
+
+// dropLocked forgets the counts held: those of crashes too when crashes is true. With neither consent left, the
+// log goes as well.
+func (c *Collector) dropLocked(crashes bool) {
+	for e := range c.counts {
+		if crashes || e.Name != Crash {
+			delete(c.counts, e)
+		}
+	}
+	if !c.on && !c.crashOn {
+		c.log = nil // nothing is kept about a person who chose to send nothing
+	}
+}
+
+// SetCrashConsent turns the sending of crash codes on or off, apart from the usage counts: the two are chosen
+// separately. Turning it off drops the crash codes not yet sent. It returns ErrNoConsent when the browser asks
+// not to be tracked.
+func (c *Collector) SetCrashConsent(on bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if on && c.blocked {
+		return ErrNoConsent
+	}
+	if on && !c.crashOn && !c.on {
+		c.drawLocked()
+	}
+	c.crashOn = on
+	if !on {
+		c.dropLocked(true)
+	}
+	return nil
+}
+
+// CrashConsent reports whether the person agreed to send crash codes.
+func (c *Collector) CrashConsent() bool { c.mu.Lock(); defer c.mu.Unlock(); return c.crashOn }
 
 // Consent reports whether the person opted in.
 func (c *Collector) Consent() bool { c.mu.Lock(); defer c.mu.Unlock(); return c.on }
@@ -108,7 +143,7 @@ func (c *Collector) Record(name Name, value string) error {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.on || (!c.sampled && !c.logOn) {
+	if (!c.on || e.Name == Crash) && (!c.crashOn || e.Name != Crash) || (!c.sampled && !c.logOn) {
 		return nil
 	}
 	if c.counts[e] < MaxCount {
@@ -129,7 +164,7 @@ func (c *Collector) Batch() (b Batch, ok bool) {
 
 // pendingLocked is the batch of the counts held, whether or not this visit is in the sample.
 func (c *Collector) pendingLocked() (b Batch, ok bool) {
-	if !c.on || len(c.counts) == 0 {
+	if (!c.on && !c.crashOn) || len(c.counts) == 0 {
 		return Batch{}, false
 	}
 	b.Day = c.now().UTC().Format(DayFormat)

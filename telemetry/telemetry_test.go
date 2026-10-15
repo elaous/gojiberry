@@ -318,3 +318,52 @@ func TestBatchHookSeesOnlyAcceptedBatches(t *testing.T) {
 		t.Fatalf("hook saw %v", seen)
 	}
 }
+
+// Crash codes have a consent of their own: with only it on, crash codes are kept and sent and a usage count is not;
+// with only the usage consent on, a crash code is dropped; turning one off leaves the other alone; Do Not Track
+// turns both off. Nothing outside the part and kind words is accepted.
+func TestCrashCodesHaveTheirOwnConsent(t *testing.T) {
+	c := NewCollector(func() time.Time { return time.Date(2030, 5, 1, 12, 0, 0, 0, time.UTC) })
+	_ = c.Record(Crash, "editor_trap")
+	if _, ok := c.Batch(); ok {
+		t.Fatal("a crash code was kept with no consent")
+	}
+	if err := c.SetCrashConsent(true); err != nil {
+		t.Fatal(err)
+	}
+	_ = c.Record(Crash, "editor_trap")
+	_ = c.Record(Feature, "find")
+	b, ok := c.Batch()
+	if !ok || len(b.Counts) != 1 || b.Counts[0].Name != Crash || b.Counts[0].Value != "editor_trap" {
+		t.Fatalf("with crash consent only the batch is %+v", b)
+	}
+	if err := c.SetConsent(true); err != nil {
+		t.Fatal(err)
+	}
+	_ = c.Record(Feature, "find")
+	if b, _ := c.Batch(); len(b.Counts) != 2 {
+		t.Fatalf("both on: %+v", b)
+	}
+	_ = c.SetConsent(false) // the usage counts go, the crash code stays
+	b, ok = c.Batch()
+	if !ok || len(b.Counts) != 1 || b.Counts[0].Name != Crash {
+		t.Fatalf("usage off, crash on: %+v", b)
+	}
+	_ = c.SetCrashConsent(false)
+	if _, ok := c.Batch(); ok {
+		t.Error("something is left after both were turned off")
+	}
+	_ = c.SetCrashConsent(true)
+	c.BrowserSignals(true, false)
+	if c.CrashConsent() || c.SetCrashConsent(true) != ErrNoConsent {
+		t.Error("Do Not Track did not turn the crash consent off")
+	}
+	for _, bad := range []string{"editor", "editor_stack", "other_trap", "editor_trap: boom", ""} {
+		if (Event{Crash, bad}).Valid() {
+			t.Errorf("crash value %q is accepted", bad)
+		}
+	}
+	if !(Event{Crash, "worker_rejection"}).Valid() {
+		t.Error("a code of the allowlist is refused")
+	}
+}
