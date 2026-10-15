@@ -68,6 +68,14 @@ type Client struct {
 	// TrustServerKeys lets WatchLog take the keys the server states for itself. That checks the
 	// chain and that it is consistent, not that the server is the one you meant: pin LogKeys.
 	TrustServerKeys bool
+	// Witnesses are the public keys of the witnesses this client trusts to cosign the log, by
+	// name, pinned out of band; with WitnessQuorum they let WatchLog tell a split view (the
+	// server showing different people different logs) from the one log everybody is shown.
+	Witnesses map[string]ed25519.PublicKey
+	// WitnessQuorum is how many of Witnesses must have cosigned the newest cosigned entry for
+	// WatchLog to accept the log (0: witnesses are not asked). WatchLog then also refuses a log
+	// that ends before the cosigned entry or has another entry there (ErrSplitView).
+	WitnessQuorum int
 	// Pins holds the owner keys somebody confirmed for an address (the host, the user out of band,
 	// or this client by enrolling a key itself): Lookup marks a row signed by one OwnerPinned. It
 	// never learns a key from a lookup (trust on first use is kept in State.Seen and marks

@@ -32,6 +32,9 @@ var (
 	// ErrDirectoryRefused: the user may not publish (no verified e-mail, a passkey session, too
 	// many keys for the address). Answered 403.
 	ErrDirectoryRefused = errors.New("docstore: the directory refuses this publisher")
+	// ErrDirectoryBadCosignature: a witness the directory does not know, a signature that does not
+	// verify, or an entry that is not the log's own. Answered 403.
+	ErrDirectoryBadCosignature = errors.New("docstore: the cosignature is not valid")
 	// ErrDirectoryBadKey: the key text is not a public key. Answered 400.
 	ErrDirectoryBadKey = errors.New("docstore: not a public key")
 	// ErrDirectoryProofRequired: the directory wants proof of possession and the request has
@@ -241,6 +244,48 @@ type DirectoryHead struct {
 	At   int64  `json:"at"`
 	Kid  string `json:"kid"`
 	Sig  string `json:"sig"`
+}
+
+// DirectoryCosignature is a witness's statement that it saw entry Seq of the log, with this Hash,
+// signed by the log's key Kid, and that the log it read was consistent with every head it
+// cosigned before (see encrypt.CosignEntry). Sig is the witness's signature (base64) of those
+// four things, by the key it is known by (Witness).
+type DirectoryCosignature struct {
+	Witness string `json:"witness"`
+	Kid     string `json:"kid"`
+	Seq     int64  `json:"seq"`
+	Hash    string `json:"hash"`
+	Sig     string `json:"sig"`
+}
+
+// DirectoryWitnessSig is one witness's signature on a cosigned entry.
+type DirectoryWitnessSig struct {
+	Witness string `json:"witness"`
+	Sig     string `json:"sig"`
+}
+
+// DirectoryCosigned is an entry of the log (Seq, Hash, under the log key Kid) with the
+// signatures of the witnesses that cosigned it. A client that pins the witnesses' keys and
+// requires some number of them (a quorum) knows that many independent parties saw the same entry
+// it is shown, so a server cannot show it a log that differs from theirs at that entry.
+type DirectoryCosigned struct {
+	Kid       string                `json:"kid"`
+	Seq       int64                 `json:"seq"`
+	Hash      string                `json:"hash"`
+	Witnesses []DirectoryWitnessSig `json:"witnesses"`
+}
+
+// DirectoryWitnessing is implemented by a DirectoryService that takes cosignatures from witnesses
+// and shows them (AddCosignature checks the witness is known, the signature, and that the entry is
+// the log's own). Server mounts POST /directory/log/witness and GET /directory/log/cosigned when
+// its directory has it.
+type DirectoryWitnessing interface {
+	// AddCosignature records a witness's cosignature (a newer one of the same witness replaces
+	// its older one).
+	AddCosignature(ctx context.Context, c DirectoryCosignature) error
+	// Cosigned lists the cosigned entries, the highest number first: one per distinct (Seq, Hash)
+	// that a known witness has cosigned last.
+	Cosigned(ctx context.Context) ([]DirectoryCosigned, error)
 }
 
 // DirectoryHealth is what the directory reports about itself at start-up, shown by /health.

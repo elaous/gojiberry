@@ -703,8 +703,8 @@ cannot be opened.
      saw (`WatchState`) detects a log cut back or rewritten from that point on
      (`encrypt.VerifyLogHead`, `CheckHead`, `GET /directory/log/head`, signed); a client that never saw
      the log before cannot.
-   - **Show different people different logs** (a split view), because the log has no witnesses or gossip:
-     two auditors must compare the heads they saw.
+   - **Show different people different logs** (a split view), unless a quorum of independent witnesses cosigned the log (roadmap, backlog item 12):
+     a client that pins the witnesses refuses another log at the cosigned entry; without witnesses two auditors must compare the heads they saw.
    - **Enroll first.** The first owner key for an address is accepted on the provider session plus a
      signature by the new key over a server challenge, nothing more: **trust on first use**. Whoever is signed in as the
      address first (the provider, or the server with a provider session of its own) can enroll first; the
@@ -887,7 +887,7 @@ cannot be opened.
      owner's signature, which the server alone cannot make. *What it is not:* it does not stop a
      publication, it does not cover lookups, and the server's key signs it, so a server can start a new
      history (the auditor sees the break only if it kept the old head), or show different histories to
-     different clients (a split view; there are no witnesses or gossip). A record written straight into
+     different clients (a split view; witnesses, when the host runs them and the client requires a quorum, catch it from the cosigned entry back). A record written straight into
      the store has no entry; a lookup does not trust one for an enrolled address or a retired key.
    - **The server rule.** The `directory/`, `directory-log/`, `directory-enroll/` and `ratelimit/`
      prefixes are reserved in `docstore.Server` like `acl:` and `collab:`, **compared without case** (a
@@ -1028,7 +1028,7 @@ cannot be opened.
       detection then relies on the owner watching the log, `Seq`, and the fingerprint check. Enrol early.
    2. **A server can withhold, show an old state and show different people different logs.** Truncation
       and rewriting are detected only by a client that remembered an earlier head; a first look at the log
-      has nothing to compare with, and the log has no witnesses.
+      has nothing to compare with; witnesses (a quorum of independent parties' cosignatures that a client requires) close this for the entries they cosigned.
    3. **Owner keys are the owner's to keep.** A lost owner key means a reset (a day's wait, in the log);
       a leaked one is the owner's own key leaking: rotate it. Records that predate the enrollment stay
       `Verified` but not `OwnerSigned` (and say so) until republished. An auditor needs the address to check

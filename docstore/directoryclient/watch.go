@@ -191,6 +191,12 @@ type WatchReport struct {
 	// have pointed the watcher at an address with nothing in it. Make an entry (publish a key,
 	// enroll) and run again.
 	AddressUnconfirmed bool
+	// Witnessed is the newest entry a quorum of the pinned witnesses cosigned (nil: witnesses were
+	// not asked, Client.WitnessQuorum is 0). WitnessChecked says this run saw that entry in the
+	// log and it was the cosigned one; false when the server showed this caller a filtered log
+	// that does not include it (the cosigned head is then compared only when it is the head).
+	Witnessed      *docstore.DirectoryCosigned
+	WitnessChecked bool
 	// Filtered says the server showed only the entries about the address, so the chain between
 	// them was not checked (each entry's hash and signature were, and the head's); a gap, an
 	// entry the server left out, cannot be told from here. Enroll an owner key to read the whole
@@ -467,6 +473,15 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 		if chained && st.Seq > 0 && len(entries) > 0 {
 			fresh = entries[1:] // the first is the one seen
 		}
+	}
+
+	// Witnesses: the log must be the one a quorum of them cosigned (reaches that entry, same hash).
+	if c.WitnessQuorum > 0 {
+		w, checked, err := c.checkWitnessed(ctx, head, entries, keys)
+		if err != nil {
+			return rep, err
+		}
+		rep.Witnessed, rep.WitnessChecked = &w, checked
 	}
 
 	// The pseudonym: the server's word, confirmed by the client's own entries.
