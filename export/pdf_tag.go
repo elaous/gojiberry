@@ -35,11 +35,35 @@ import (
 //     the page's /Annots in the same order, gets a /StructParent key and a /Contents, and the Link
 //     element holds the text and an /OBJR to the annotation, so the annotation is in the tree.
 //   - A run whose Format.Lang differs from the document's is a Span element (a Link element for a link)
-//     with its own /Lang; the document's language stays on the catalog. Table cells do not yet split
-//     their text into language spans.
+//     with its own /Lang; the document's language stays on the catalog. Table cells do the same: their text
+//     is split into Span and Link elements inside the TH or TD.
 //   - A list item at a deeper Block.Level puts its L inside the LI of the item before it.
 //
 // pdfua.Check shows what is there; a full audit with veraPDF or PAC has not been run.
+
+var objHeadRE = regexp.MustCompile(`\n(\d+) 0 obj\n`)
+
+// cidFontObjects returns the number and the dictionary of every font object of subtype CIDFontType2.
+func cidFontObjects(raw []byte) (nums []int, bodies [][]byte) {
+	at := 0
+	for {
+		i := bytes.Index(raw[at:], []byte("/Subtype /CIDFontType2"))
+		if i < 0 {
+			return
+		}
+		i += at
+		at = i + 1
+		start := bytes.LastIndex(raw[:i], []byte("\nendobj"))
+		head := objHeadRE.FindSubmatchIndex(raw[max(start, 0) : i+1])
+		end := bytes.Index(raw[i:], []byte("endobj"))
+		if head == nil || end < 0 {
+			continue
+		}
+		num, _ := strconv.Atoi(string(raw[max(start, 0)+head[2] : max(start, 0)+head[3]]))
+		nums = append(nums, num)
+		bodies = append(bodies, raw[max(start, 0)+head[1]:i+end])
+	}
+}
 
 const (
 	markBegin    = 7777
@@ -530,6 +554,18 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 	metaObj := next
 	next++
 	updates = append(updates, update{metaObj, []byte(fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len(xmp), xmp))})
+
+	// A CIDFontType2 says how its CIDs map to glyphs (PDF/UA, ISO 14289-1 7.21.3.2). The writer leaves the
+	// entry out, which means Identity; say so, with the font object otherwise as it is.
+	cidNums, cidBodies := cidFontObjects(raw)
+	for k, num := range cidNums {
+		body := bytes.TrimRight(cidBodies[k], " \n\t")
+		if bytes.Contains(body, []byte("/CIDToGIDMap")) || !bytes.HasSuffix(body, []byte(">>")) {
+			continue
+		}
+		fixed := append(append([]byte{}, body[:len(body)-2]...), []byte("/CIDToGIDMap /Identity\n>>")...)
+		updates = append(updates, update{num, fixed})
+	}
 
 	// The catalog says the file is tagged.
 	cat, ok := objectText(raw, 1)

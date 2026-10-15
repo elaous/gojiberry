@@ -139,4 +139,4 @@ non-Linux, `internal/transpile/experimental` on Windows, `saver/pack_test.go`, `
 
 ## PDF/UA check
 
-`make pdfa11y-test` installs pdfa11y (a Go PDF/UA checker, pinned) into `.pdfa11y/` and runs it on the PDFs the exporter writes; the test fails if the tool is missing. Without the make target the test is skipped with "SKIPPED, NOT TESTED" in its log. Run it when `export/pdf*.go` changes.
+`TestVeraPDFAcceptsTheTaggedFiles` runs veraPDF (PDF/UA-1) on three exported PDFs when `verapdf` is installed (Java; `GOJIBERRY_VERAPDF=/path/to/verapdf`); `GOJIBERRY_REQUIRE_VERAPDF=1` fails it when it is missing, otherwise it is skipped. `make pdfa11y-test` installs pdfa11y (a Go PDF/UA checker, pinned) into `.pdfa11y/` and runs it on the PDFs the exporter writes; the test fails if the tool is missing. Without the make target the test is skipped with "SKIPPED, NOT TESTED" in its log. Run it when `export/pdf*.go` changes.
