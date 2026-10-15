@@ -20,9 +20,11 @@ package htmlimport
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -52,7 +54,6 @@ type Skipped struct {
 	Forms    int // forms and their controls
 	Frames   int // iframes, objects and embeds
 	Graphics int // svg and canvas
-	Media    int // audio and video
 	Images   int // pictures that are not data: URLs (not fetched)
 	Links    int // links whose address is not http, https, mailto or in-page
 	Layout   int // elements with a position, float, column or margin of their own
@@ -60,7 +61,7 @@ type Skipped struct {
 
 // Total is the number of skipped elements.
 func (s Skipped) Total() int {
-	return s.Scripts + s.Styles + s.Forms + s.Frames + s.Graphics + s.Media + s.Images + s.Links + s.Layout
+	return s.Scripts + s.Styles + s.Forms + s.Frames + s.Graphics + s.Images + s.Links + s.Layout
 }
 
 type reader struct {
@@ -263,8 +264,13 @@ func (r *reader) element(n *html.Node, f docfile.Format, depth, level int) {
 		r.skipped.Graphics++
 		return
 	case atom.Audio, atom.Video:
-		r.skipped.Media++
+		r.media(n, nil)
 		return
+	case atom.Figure:
+		if p := mediaIn(n); p != nil && strings.Contains(" "+attr(n, "class")+" ", " media ") {
+			r.media(p, n)
+			return
+		}
 	case atom.Br:
 		r.endLine()
 		return
@@ -386,6 +392,110 @@ func (r *reader) styled(n *html.Node, f docfile.Format) docfile.Format {
 		r.skipped.Layout++
 	}
 	return f
+}
+
+// mediaURL allows the addresses a clip may point at: a web address or one on the same site (no scheme).
+func mediaURL(h string) bool {
+	u, err := url.Parse(strings.TrimSpace(h))
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https", "":
+		return true
+	}
+	return false
+}
+
+// dimension reads a whole number of pixels, or 0.
+func dimension(s string) float64 {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || n < 0 || n > 20000 {
+		return 0
+	}
+	return float64(n)
+}
+
+// mediaIn is the audio or video element directly inside a figure, or nil.
+func mediaIn(fig *html.Node) *html.Node {
+	for c := fig.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode && (c.DataAtom == atom.Audio || c.DataAtom == atom.Video) {
+			return c
+		}
+	}
+	return nil
+}
+
+// media reads a clip: the player's address and size, its caption track (an inline WebVTT data: URL is kept as
+// the text of the track, a web address as the address), and, from the figure around it when there is one, the
+// title (figcaption) and the transcript (the details element). A clip with no usable address is still kept, so
+// its title and transcript are not lost.
+func (r *reader) media(n, fig *html.Node) {
+	m := &docfile.MediaItem{Kind: docfile.MediaVideo, Title: strings.TrimSpace(attr(n, "aria-label"))}
+	if n.DataAtom == atom.Audio {
+		m.Kind = docfile.MediaAudio
+	}
+	m.URL = strings.TrimSpace(attr(n, "src"))
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode {
+			continue
+		}
+		switch c.DataAtom {
+		case atom.Source:
+			if m.URL == "" {
+				m.URL = strings.TrimSpace(attr(c, "src"))
+			}
+		case atom.Track:
+			k := strings.ToLower(attr(c, "kind"))
+			if k != "" && k != "captions" && k != "subtitles" || m.Captions != "" || m.CaptionsURL != "" {
+				continue
+			}
+			src := strings.TrimSpace(attr(c, "src"))
+			if rest, ok := strings.CutPrefix(src, "data:text/vtt"); ok {
+				if _, b64, ok := strings.Cut(rest, ";base64,"); ok {
+					if raw, err := base64.StdEncoding.DecodeString(b64); err == nil {
+						m.Captions = string(raw)
+					}
+				}
+			} else {
+				m.CaptionsURL = src
+			}
+		}
+	}
+	if !mediaURL(m.URL) {
+		m.URL = ""
+	}
+	if !mediaURL(m.CaptionsURL) {
+		m.CaptionsURL = ""
+	}
+	if m.Kind == docfile.MediaVideo {
+		m.Width, m.Height = dimension(attr(n, "width")), dimension(attr(n, "height"))
+	}
+	if fig != nil {
+		for c := fig.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type != html.ElementNode {
+				continue
+			}
+			switch c.DataAtom {
+			case atom.Figcaption:
+				if t := strings.TrimSpace(collapse(text(c))); t != "" {
+					m.Title = t
+				}
+			case atom.Details:
+				var paras []string
+				for d := c.FirstChild; d != nil; d = d.NextSibling {
+					if d.Type == html.ElementNode && d.DataAtom == atom.P {
+						if t := strings.TrimSpace(collapse(text(d))); t != "" {
+							paras = append(paras, t)
+						}
+					}
+				}
+				m.Transcript = strings.Join(paras, "\n")
+			}
+		}
+	}
+	r.endLine()
+	r.add(docfile.Item{Media: m})
 }
 
 func (r *reader) image(n *html.Node) {

@@ -50,7 +50,6 @@ func ImportFidelity(format string, data []byte) Report {
 			{Feature: FeatForm, Count: s.Forms},
 			{Feature: FeatFrame, Count: s.Frames},
 			{Feature: FeatDrawing, Count: s.Graphics},
-			{Feature: FeatMedia, Count: s.Media},
 			{Feature: FeatRemoteImage, Count: s.Images, Note: "pictures on a server are not fetched"},
 			{Feature: FeatLink, Count: s.Links, Note: NoteText},
 			{Feature: FeatLayout, Count: s.Layout},

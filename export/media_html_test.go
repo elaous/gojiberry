@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/htmlimport"
 )
 
 const vtt = "WEBVTT\n\n1\n00:00:00.000 --> 00:00:02.000\nGood morning.\n"
@@ -72,5 +73,28 @@ func TestHTMLPutsTheContentInOneMainLandmark(t *testing.T) {
 	nav, main, end := strings.Index(s, "<nav class=\"toc\""), strings.Index(s, "<main>"), strings.Index(s, "</main>")
 	if strings.Count(s, "<main>") != 1 || nav < 0 || nav >= main || main >= end || !strings.Contains(s[main:end], "<h1") {
 		t.Errorf("landmarks: nav %d main %d end %d", nav, main, end)
+	}
+}
+
+// A clip written to HTML and read back is the same clip: address, kind, title, size, caption text and transcript.
+func TestHTMLClipComesBackWhole(t *testing.T) {
+	for _, want := range []docfile.MediaItem{
+		{URL: "https://example.org/talk.mp4", Kind: "video", Title: "The mayor's talk", Captions: vtt, Transcript: "Good morning.\nThanks for coming.", Width: 640, Height: 360},
+		{URL: "talk.mp3", Kind: "audio", Title: "Radio", CaptionsURL: "https://example.org/talk.vtt", Transcript: "Everything said."},
+	} {
+		out := exportOne(t, registry(), "html", mediaDoc(want))
+		d, err := htmlimport.Import(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got *docfile.MediaItem
+		for _, it := range d.Content {
+			if it.Media != nil {
+				got = it.Media
+			}
+		}
+		if got == nil || *got != want {
+			t.Errorf("clip %q came back as %+v, want %+v", want.Title, got, want)
+		}
 	}
 }
