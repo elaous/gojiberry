@@ -278,6 +278,7 @@ func (f *TextFlow) Draw() {
 func (f *TextFlow) drawBody(lay Layout) {
 	p, cs := f.Painter, f.ChromeStyle
 	f.drawSearch(lay)
+	f.drawReadMarks(lay)
 	f.drawSelection(lay)
 	f.drawPeerSelections(lay)
 	defer f.drawSquiggles(lay)

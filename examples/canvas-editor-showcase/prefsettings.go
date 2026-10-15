@@ -103,6 +103,7 @@ func prefSettings() []setting {
 			{components.TypingOff, T("prefs.o.typingOff", "Nothing"), T("prefs.typingOff", "Typing: say nothing")},
 			{components.TypingWords, T("prefs.o.typingWords", "Each word"), T("prefs.typingWords", "Typing: say each word")},
 			{components.TypingCharacters, T("prefs.o.typingChars", "Each character"), T("prefs.typingChars", "Typing: say each character")}}, cur: typingCur, set: typingSet},
+		toggle("typing", "voices", T("prefs.voices", "Reading aloud may use voices that use the internet (the browser may send the text to a speech service)"), func(p prefs) bool { return p.Voices == "net" }, func(p *prefs, on bool) { p.Voices = onOff(on, "net") }),
 		toggle("typing", "typefmt", T("prefs.typingFormat", "Say formatting changes at the caret"), func(p prefs) bool { return p.TypeFmt == "on" }, func(p *prefs, on bool) { p.TypeFmt = onOff(on, "on") }),
 		toggle("typing", "typeread", T("prefs.typingRead", "Read the line when the caret moves"), func(p prefs) bool { return p.TypeRead == "on" }, func(p *prefs, on bool) { p.TypeRead = onOff(on, "on") }),
 
