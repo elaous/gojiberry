@@ -34,6 +34,7 @@ import (
 	"github.com/elaous/gojiberry/share"
 	"github.com/elaous/gojiberry/transfer"
 	"github.com/elaous/gojiberry/xango"
+	"runtime"
 	"slices"
 	"strings"
 	"syscall/js"
@@ -127,6 +128,13 @@ type ui struct {
 }
 
 func main() {
+	// gjHeap is the Go heap in use after a collection, in bytes: for the tests that measure what a setting saves.
+	js.Global().Set("gjHeap", js.FuncOf(func(js.Value, []js.Value) any {
+		runtime.GC()
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		return float64(m.HeapAlloc)
+	}))
 	doc := browser.Document()
 	state := State{Mode: canvas.ModeView, Pages: 3, Setup: components.DefaultPageSetup(), Source: sample, Note: "Floating note: click to edit, try (brackets and \"quotes\".", Styles: canvas.DefaultStyles(),
 		Comments: canvas.NewCommentSet(), Author: "you@example.com", Footnotes: canvas.NewFootnoteSet()}

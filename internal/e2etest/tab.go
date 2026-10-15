@@ -325,6 +325,7 @@ func (d *Tab) Str(js string) (s string)    { d.t.Helper(); d.Eval(js, &s); retur
 func (d *Tab) Int(js string) (n int)       { d.t.Helper(); d.Eval(js, &n); return }
 func (d *Tab) Bool(js string) (b bool)     { d.t.Helper(); d.Eval(js, &b); return }
 func (d *Tab) Strs(js string) (s []string) { d.t.Helper(); d.Eval(js, &s); return }
+func (d *Tab) Float(js string) (f float64) { d.t.Helper(); d.Eval(js, &f); return }
 
 const stateJS = `JSON.parse(document.getElementById('state').textContent)`
 
