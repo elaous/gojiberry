@@ -176,6 +176,15 @@ builds elements without the SVG namespace, so an inline `<svg>` would not draw. 
 `sh components/material_update.sh` regenerates the file from the
 `@material-symbols/svg-400` package when more are needed.
 
+`components.IconToolbar` is a toolbar of icon buttons in the WAI-ARIA toolbar pattern: one stop in the tab order, then
+the arrow keys, Home and End between the buttons (a disabled one is skipped), Tab leaves; each button has its name as
+an `aria-label`, a tooltip that adds the shortcut (`aria-keyshortcuts`), and a toggle (bold, italic) says whether it
+is on with `aria-pressed` and a filled look, not by colour alone. `CommandToolbarItems` makes the items from editing
+commands in groups, taking the name, icon and shortcut from the same registry, translation ids and keymap the Edit
+menu uses (`CommandMenu`), so a button, a menu entry and a key cannot disagree; a command the registry lacks is left
+out. The showcase's formatting toolbar (undo, redo, bold, italic, underline, strikethrough, lists, alignment, link,
+comment) is built that way and follows the caret.
+
 ## One Person
 
 `user.Person` (`ID`, `Name`, `Role`; `user.Normalize` for addresses) is shared by

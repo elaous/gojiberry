@@ -110,7 +110,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | Item | Type | Status | Present | Missing |
 | --- | --- | --- | --- | --- |
 | Migrate | feature | partial | from other editors | skipping what an earlier run brought; Google Docs comments and history |
-| Button icons | enhancement | partial | `components.Material` | a toolbar of icon buttons |
+| Button icons | enhancement | done | `components.Material`; `components.IconToolbar` (toolbar pattern: one tab stop, arrow keys, toggles with `aria-pressed`, tooltips with the shortcut) and `CommandToolbarItems` (name, icon and shortcut from the registry the Edit menu uses); the showcase's formatting toolbar follows the caret | none |
 | Download submenu | enhancement | done | grouped, `.open` | none |
 | `.opendoc` packs | feature | done | `docfile/pack`, `cmd/opendoc` | none |
 | Encryption and passkeys | feature | partial | SSH keys, passkeys, envelope encryption, directory, sharing, recovery | see the security table |
@@ -128,11 +128,12 @@ security table: the review findings are done; still open are the per-account sig
 
 ## Suggested order for the next work
 
-2. 56: keep recordings between visits and learn from corrections.
-3. 68: an insert-clip UI and caption track editor.
-4. Then the small leftovers of 59, 64, 65, 50 and 51.
-5. 82: measure what the file worker's remaining ~7 MB holds before judging a split by format.
+1. 57: scrubbed crash reports (a separate opt-in) and one counting process per store.
+2. Passkey backlog 3 (a SQL-table account store), 55 and 86 (the other caps shared through the store).
+3. Migrate: skipping what an earlier run brought, Google Docs comments and history.
+4. Console mode: the editor panel.
+5. 42, 45, 89 and Encryption and passkeys: what is left is mostly an outside review or a person's work; the code parts first.
 
 Closed since the previous version of this page: 80 (print layout: odd/even pages, a different first page, any sheet size, a clickable table of contents written where it is, kept table rows), 74, 75, 77, 73 and 66 (their gaps), the audit log written by the server with scheduled backups (81), the builtin observability totals kept across restarts and the other servers' own work reported (81), pt/ar/he completion lists (79), 58 (IPv6 /64 budgets), the table-row widow control, the sheet size
 restore, contents in RTF, footnote links in RTF, the long undo history, heading levels in the panels, all CSS
-colour names, and the file worker without `net/http` (11.0 to 9.5 MB).
+colour names, and the file worker without `net/http` (11.0 to 9.5 MB), typing in long documents (34 times faster), the formatting toolbar of icon buttons.

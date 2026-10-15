@@ -77,6 +77,7 @@ type ui struct {
 	floating     func() []a11ycheck.Object // the floating pictures and tables of the page, for the Check tab
 	imageDraft   map[int]string            // the draft descriptions made on this device, by picture (imagehint)
 	format       canvas.Format
+	caretFmt     canvas.Format // the format at the caret, for the toolbar buttons that are on or off
 	catalog      []fonts.Font
 	open         bool
 	query        string
@@ -458,6 +459,7 @@ func main() {
 		menubar := components.MenuBar(components.MenuBarProps{Entries: menus, Open: u.menu, OnOpen: func(i int) { u.menu = i; renderUI() }})
 
 		toolbar := xango.Frag(
+			formatToolbar(&state, u.caretFmt, cmds, keymap, mac, run),
 			xango.El("button", []xango.Attr{xango.A("id", "mode"), xango.A("type", "button"), xango.A("class", "gj-keybindings-button"),
 				xango.On("click", func(xango.Event) { toggleMode() })}, xango.Text("Mode: "+state.Mode.String()+" (click to switch)")),
 			// the tabs of the side panel: one row for the keyboard (Tab enters it once, the arrow keys move
@@ -805,6 +807,16 @@ func main() {
 	stage.OnDraw = func() {
 		u.noteTyping(func() *canvas.TextFlow { return flow }, renderUI)
 		// What the canvas shows of the selection feeds the style editor.
+		if flow != nil && flow.Editing() { // the toolbar's bold, italic and the like follow the caret
+			cf := flow.CaretFormatLast()
+			if flow.HasSelection() { // over a selection, what all of it has in common
+				cf = flow.CommonFormat()
+			}
+			if cf != u.caretFmt {
+				u.caretFmt = cf
+				renderUI()
+			}
+		}
 		if flow != nil && flow.Editing() && flow.HasSelection() {
 			if f := flow.CommonFormat(); f != u.format {
 				u.format = f

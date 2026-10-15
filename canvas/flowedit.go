@@ -287,6 +287,15 @@ func (f *TextFlow) CaretFormat() Format {
 	return f.typeFormat(f.data, f.Cursors()[0].Caret)
 }
 
+// CaretFormatLast is CaretFormat from the layout of the latest draw, without working one out again: for a host
+// that wants the state of a formatting button after every draw. It is the empty format before the first draw.
+func (f *TextFlow) CaretFormatLast() Format {
+	if f.data == nil {
+		return Format{}
+	}
+	return f.typeFormat(f.data, f.Cursors()[0].Caret)
+}
+
 func (f *TextFlow) typeFormatRaw(d *flowData, o int) Format {
 	if !f.pending.IsZero() {
 		return f.pending

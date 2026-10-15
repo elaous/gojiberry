@@ -10,6 +10,9 @@ type FocusEnterer interface {
 
 // FocusIn tells the components that the keyboard is in the editor.
 func (s *Stage) FocusIn() bool {
+	if s.EditTarget() != nil {
+		return false // something is being edited already (the text, or a header or footer): the keys go there
+	}
 	changed := false
 	for _, c := range s.Components {
 		if f, ok := c.(FocusEnterer); ok && f.FocusIn() {

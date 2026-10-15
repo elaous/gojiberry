@@ -173,6 +173,15 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return e.X - r.Left, e.Y - r.Top
 	}
 
+	// focusByPointer is true while the page itself gives the input the focus because of a click: that focus is
+	// not the keyboard arriving, and must not start editing the text (a click may be going to edit a header, or
+	// to select something that is not text).
+	focusByPointer := false
+	focusInput := func() {
+		focusByPointer = true
+		input.Call("focus", map[string]any{"preventScroll": true})
+		focusByPointer = false
+	}
 	canvasEl.OnMouseDown(func(e html.MouseEvent) {
 		if e.Button != 0 {
 			return
@@ -190,7 +199,7 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		if s.WantsFocus() {
 			// preventScroll: focusing the (offscreen) input must not make the
 			// page jump.
-			input.Call("focus", map[string]any{"preventScroll": true})
+			focusInput()
 		}
 		redraw()
 	})
@@ -209,7 +218,7 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		if s.MouseUp(ev.Get("clientX").Float()-r.Left, ev.Get("clientY").Float()-r.Top) {
 			// A drag-selection only has something selected once it ends.
 			if s.WantsFocus() {
-				input.Call("focus", map[string]any{"preventScroll": true})
+				focusInput()
 			}
 			redraw()
 		}
@@ -260,7 +269,7 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 	}
 	// The keyboard arriving in the editor starts editing: without a pointer there is no click to do it.
 	input.AddEventListener("focus", js.FuncOf(func(js.Value, []js.Value) any {
-		if s.FocusIn() {
+		if !focusByPointer && s.FocusIn() {
 			redraw()
 		}
 		return nil

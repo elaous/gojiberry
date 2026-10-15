@@ -326,7 +326,7 @@ func TestEndToEnd(t *testing.T) {
 	ok(len([]rune(d.Text(".gj-comment-excerpt"))) == 7, "the comment card shows the commented text")
 	ok(d.Text(".gj-comment .gj-markdown strong") == "this", "the body is rendered as Markdown")
 	ok(d.Count(`.gj-comment .gj-mention[data-mention="bob"]`) == 1, "an @username is highlighted")
-	ok(d.Count(`.gj-comment .gj-mention[data-mention="you"]`) == 1 && !strings.Contains(d.Text(".gj-comment"), "you@example.com"), "an address of a person with access is written as their handle, not as an address")
+	ok(d.Count(`.gj-comment .gj-mention[data-mention="you"]`) == 1 && !strings.Contains(d.Text(".gj-comment .gj-markdown"), "you@example.com"), "an address of a person with access is written as their handle, not as an address")
 	ok(d.Text(".gj-comment-author") == "you@example.com", "the author is the current user")
 	s = S()
 	d.CanvasMove(s.Num("comment.x"), s.Num("comment.y"))
