@@ -107,6 +107,10 @@ func pickPrefsFile(done func([]byte)) {
 // onPrefs, when set, is called after the preferences change, for what has to be drawn again (the canvas).
 var onPrefs func()
 
+// onPrefsSaved, when set, is called with the preferences after they were kept, for what keeps them elsewhere
+// (the settings store, when the person asked for that).
+var onPrefsSaved func(prefs)
+
 // curPrefs are the preferences in force.
 var curPrefs = loadPrefs()
 
@@ -122,4 +126,7 @@ func setPrefs(p prefs) {
 	}
 	b, _ := json.Marshal(p)
 	lsSet(prefsKey, string(b))
+	if onPrefsSaved != nil {
+		onPrefsSaved(p)
+	}
 }

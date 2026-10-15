@@ -249,7 +249,11 @@ func prefsPanel(u *ui, renderUI func()) xango.Node {
 	if shown > 0 {
 		status = Tn("prefs.count", "%d preference", "%d preferences", shown)
 	}
-	kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-prefs-count"), xango.A("role", "status")}, xango.Text(status)),
+	kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-prefs-count"), xango.A("role", "status")}, xango.Text(status)))
+	if u.prefsQuery == "" { // a search narrows the settings; the choice to keep them on the server is not one of them
+		kids = append(kids, prefsSyncNode(u, renderUI))
+	}
+	kids = append(kids,
 		xango.El("div", []xango.Attr{xango.A("class", "gj-prefs-actions"), xango.A("style", "display:flex;gap:6px;flex-wrap:wrap")},
 			prefsButton("gj-prefs-export", T("prefs.exportShort", "Export to a file"), func() { exportPrefs(u) }),
 			prefsButton("gj-prefs-import", T("prefs.importShort", "Import from a file"), func() { importPrefs(u, renderUI) }),

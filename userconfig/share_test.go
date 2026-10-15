@@ -178,3 +178,27 @@ func TestImportGivesUpAfterManyCopies(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// Bundle and OpenBundle are Export and Import without a Store: what one makes the other reads, and a changed
+// file is refused.
+func TestBundleAndOpenBundleRoundTripWithoutAStore(t *testing.T) {
+	data := []byte(`{"title":"Quarterly","content":[]}`)
+	b, err := Bundle("template.report", data, "from Ana")
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, got, err := OpenBundle(b)
+	if err != nil || info.Name != "template.report" || info.Kind != KindTemplate || info.Note != "from Ana" || string(got) != string(data) {
+		t.Fatalf("OpenBundle = %+v %q %v", info, got, err)
+	}
+	if _, err := Bundle("font.x", data, ""); err != ErrNotShareable {
+		t.Errorf("a font is shared: %v", err)
+	}
+	var raw map[string]any
+	_ = json.Unmarshal(b, &raw)
+	raw["data"] = []byte(`{"title":"Changed","content":[]}`)
+	changed, _ := json.Marshal(raw)
+	if _, _, err := OpenBundle(changed); err == nil || !errors.Is(err, ErrBadBundle) {
+		t.Errorf("a changed bundle was read: %v", err)
+	}
+}
