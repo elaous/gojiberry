@@ -52,9 +52,9 @@ var noPages = map[Feature]entry{FeatPageHeader: drop(""), FeatPageTOC: drop(""),
 // foldedFeatures is what every format built on the Snapshot does with these three (a heading of level 4 to 6 is
 // kept: it has its own level, tag or style in each format that has headings).
 var foldedFeatures = map[Feature]entry{
-	FeatCheckList:   simple(NoteGlyph),
-	FeatRule:        simple(NoteRuleLine),
-	FeatFootnote:    simple(NoteNotes),
+	FeatCheckList: simple(NoteGlyph),
+	FeatRule:      simple(NoteRuleLine),
+	FeatFootnote:  simple(NoteNotes),
 }
 
 // textEquation and longDescText are what the formats without MathML do with an equation (its text alternative
