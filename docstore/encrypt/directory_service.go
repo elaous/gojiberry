@@ -146,3 +146,14 @@ func (s dirService) DirectoryHealth() docstore.DirectoryHealth { return s.d.Heal
 // passkey key) or an "ssh-ed25519 ..."/"ssh-rsa ..." line. It is how a client gets the type and
 // the fingerprint a publish names.
 func ParsePublicKey(text string) (Recipient, error) { return parsePublic(text) }
+
+// AddCosignature implements docstore.DirectoryWitnessing.
+func (s dirService) AddCosignature(ctx context.Context, c docstore.DirectoryCosignature) error {
+	return refusal(s.d.AddCosignature(ctx, c))
+}
+
+// Cosigned implements docstore.DirectoryWitnessing.
+func (s dirService) Cosigned(ctx context.Context) ([]docstore.DirectoryCosigned, error) {
+	c, err := s.d.Cosigned(ctx)
+	return c, refusal(err)
+}

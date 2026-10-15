@@ -86,7 +86,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | Passkey backlog 4 | Per-account sign-in budget | enhancement | done | `Config.AccountLimiter`, shared through the store | |
 | Passkey backlog 5 | Shared lock for stores without conditional writes | enhancement | done | `KeyLocker` and `LockedAdapter` make a plain store conditional | |
 | Limits 1 to 11, 13 to 19, 22 to 26 | Review findings (WatchLog anchoring, RepairAll, signer tooling, SSH tags, challenge store, double first passkey, S3 `DeleteIf`, expiry on digest, Mongo CI, pseudonyms, tombstones, byte budgets, history rewrite) | fix | done | see roadmap entries | none |
-| Limits 12 | Log witnesses (co-signed heads) | feature | open | auditors compare heads by hand | witness protocol |
+| Limits 12 | Log witnesses (co-signed heads) | feature | done | witness run (`Client.Witness`), cosignature routes, quorum check in `WatchLog` (`ErrSplitView`) | none in code; independent parties to run witnesses are the operator's to find |
 | Limits 20 | Showcase originals on disk | chore | closed | in memory | not worth a second copy of localStorage |
 | Limits 21 | Directory publish and pick UI in the showcase | feature | done | four slices merged | none |
 | 27 to 40 | Lint, clock note, sweep order, RepairAll, blob backend named, log read budgets, accept rotated owner key, encrypt errors in words, unmapped addresses, store-mode wording | fix | done | each in the roadmap | none |

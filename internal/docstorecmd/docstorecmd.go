@@ -5,8 +5,10 @@ package docstorecmd
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -174,6 +176,10 @@ func newHTTPServer(addr string, h http.Handler) *http.Server {
 //   - GOJIBERRY_DOCSTORE_DIRECTORY_REQUIRE_ENROLLMENT=true: a key can be published only for an
 //     address that has enrolled an owner key (enrolling itself stays open on the provider
 //     session), so every publication carries the owner's signature;
+//   - GOJIBERRY_DOCSTORE_DIRECTORY_WITNESSES=name:hexkey,name:hexkey: the public keys (ed25519, 32
+//     bytes in hex) of the parties allowed to cosign the log's entries; the directory then takes
+//     their cosignatures (POST /directory/log/witness) and shows them (GET /directory/log/cosigned),
+//     which clients that pin the same keys use to tell a split view from one log;
 //   - GOJIBERRY_DOCSTORE_DIRECTORY_LOOKUP=domain: a user can look up only addresses of their own
 //     verified e-mail domain (default "any");
 //   - GOJIBERRY_DOCSTORE_DIRECTORY_REVOKE_WINDOW=48h: how long a revoked key is remembered
@@ -200,6 +206,11 @@ func withDirectory(ctx context.Context, srv *docstore.Server, adapter docstore.A
 	}
 	dir := &encrypt.AdapterDirectory{Store: adapter, Signer: signer}
 	dir.RequireProof = os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_REQUIRE_POP") == "true"
+	if v := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_WITNESSES")); v != "" {
+		if dir.Witnesses, err = parseWitnesses(v); err != nil {
+			return err
+		}
+	}
 	dir.RequireEnrollment = os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_REQUIRE_ENROLLMENT") == "true"
 	if v := strings.TrimSpace(os.Getenv("GOJIBERRY_DOCSTORE_DIRECTORY_REVOKE_WINDOW")); v != "" {
 		w, err := time.ParseDuration(v)
@@ -700,4 +711,21 @@ func withAudit(srv *docstore.Server, getenv func(string) string, readFile func(s
 		log.Print("docstore: the audit log is on (docs/audit.md)")
 	}
 	return l, nil
+}
+
+// parseWitnesses reads "name:hexkey,name:hexkey" into the keys of the log's witnesses.
+func parseWitnesses(v string) (map[string]ed25519.PublicKey, error) {
+	out := map[string]ed25519.PublicKey{}
+	for _, part := range strings.Split(v, ",") {
+		name, key, ok := strings.Cut(strings.TrimSpace(part), ":")
+		raw, err := hex.DecodeString(key)
+		if !ok || name == "" || err != nil || len(raw) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("GOJIBERRY_DOCSTORE_DIRECTORY_WITNESSES: want name:hexkey (a 32-byte ed25519 public key in hex), got %q", part)
+		}
+		if _, dup := out[name]; dup {
+			return nil, fmt.Errorf("GOJIBERRY_DOCSTORE_DIRECTORY_WITNESSES: %q is named twice", name)
+		}
+		out[name] = ed25519.PublicKey(raw)
+	}
+	return out, nil
 }

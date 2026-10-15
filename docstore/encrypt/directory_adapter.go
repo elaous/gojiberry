@@ -2,6 +2,7 @@ package encrypt
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -95,6 +96,10 @@ type AdapterDirectory struct {
 	// UnmappedCap is how many unmapped addresses UnmappedAddresses lists (DefaultUnmappedCap when
 	// not positive); the count is always whole.
 	UnmappedCap int
+	// Witnesses are the public keys of the parties allowed to cosign the log's entries, by the
+	// name each is known by (AddCosignature, Cosigned; see directory_witness.go). Empty: the
+	// directory takes no cosignatures.
+	Witnesses map[string]ed25519.PublicKey
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
 

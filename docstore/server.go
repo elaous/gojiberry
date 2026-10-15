@@ -538,6 +538,10 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("/directory/log", s.handleLog)
 		mux.HandleFunc("/directory/log/head", s.handleLogHead)
 		mux.HandleFunc("/directory/log/address", s.handleLogAddress)
+		if _, ok := s.directory.(DirectoryWitnessing); ok {
+			mux.HandleFunc("/directory/log/witness", s.handleWitness)
+			mux.HandleFunc("/directory/log/cosigned", s.handleCosigned)
+		}
 		mux.HandleFunc("/directory/enroll", s.handleEnrollRoot)
 		mux.HandleFunc("/directory/enroll/", s.handleEnrollSub)
 		if s.dirAdmin != nil {

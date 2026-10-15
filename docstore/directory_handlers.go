@@ -41,6 +41,8 @@ func directoryError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrDirectoryRefused):
 		http.Error(w, "the directory refuses this publisher", http.StatusForbidden)
+	case errors.Is(err, ErrDirectoryBadCosignature):
+		http.Error(w, "the cosignature is not valid", http.StatusForbidden)
 	case errors.Is(err, ErrDirectoryBadKey):
 		http.Error(w, "not a public key", http.StatusBadRequest)
 	case errors.Is(err, ErrDirectoryBadAddress):
@@ -485,6 +487,59 @@ func (s *Server) handleLogHead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSONStatus(w, http.StatusOK, h)
+}
+
+// handleWitness serves POST /directory/log/witness: a witness's cosignature of a log entry. No
+// sign-in: the witness is known by its signature, which the directory checks against the keys it
+// was given. Rate limited per client address.
+func (s *Server) handleWitness(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	wd, ok := s.directory.(DirectoryWitnessing)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if ok, wait := s.limits().logIP.Allow(r.Context(), "w:"+s.clientAddr(r)); !ok {
+		tooMany(w, wait)
+		return
+	}
+	var c DirectoryCosignature
+	if !readDirectoryBody(w, r, &c) {
+		return
+	}
+	if err := wd.AddCosignature(r.Context(), c); err != nil {
+		directoryError(w, err)
+		return
+	}
+	writeJSONStatus(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleCosigned serves GET /directory/log/cosigned: the entries witnesses cosigned, newest first.
+func (s *Server) handleCosigned(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	wd, ok := s.directory.(DirectoryWitnessing)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if _, ok := s.logReader(w, r); !ok {
+		return
+	}
+	c, err := wd.Cosigned(r.Context())
+	if err != nil {
+		directoryError(w, err)
+		return
+	}
+	if c == nil {
+		c = []DirectoryCosigned{}
+	}
+	writeJSONStatus(w, http.StatusOK, c)
 }
 
 // handleLogAddress serves GET /directory/log/address: the signed-in owner's pseudonym in the log.

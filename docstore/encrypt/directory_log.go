@@ -40,7 +40,7 @@ import (
 // rules depend on (the 24 hours of a reset) are measured by chain order and cannot be shortened by
 // back-dating. It cannot detect a rewrite from a point the auditor never saw; a server that signs
 // a whole new chain (it holds the key) shows a different history to different people unless
-// auditors compare notes (the log has no witnesses); and a record written without an entry (by
+// auditors compare notes (witnesses narrow that: see directory_witness.go); and a record written without an entry (by
 // someone with write access to the store) is not in it. What a lookup demands of the log: a
 // record's Seq names its entry, and a lookup requires that entry (same address, key and
 // operation, signed by a directory key) only where it matters: for a record signed by a retired
