@@ -821,6 +821,11 @@ func (b A11yBlock) StreamOffset(before string) int
     has it, without the words only a reader hears). Inside an object it is the
     object itself.
 
+func (b A11yBlock) StreamOffsetRunes(before int) int
+    StreamOffsetRunes is StreamOffset for a host that has counted the stream
+    runes before the position itself (the pieces with a Stream count as that
+    many, not as their text), the Lead included.
+
 type A11yComment struct {
 	ID       string
 	Author   string
@@ -860,6 +865,10 @@ type A11yRun struct {
 	// Comments are the IDs (comma separated) of the comments on this piece: the piece is marked and
 	// points (aria-details) to the comment's own entry in the list of comments.
 	Comments string
+	// Stream, when it is above 0, is how many runes the piece takes in the editor's text stream, whatever
+	// its text is: the mark of a footnote is one rune there and "12" in the copy. The piece is written with
+	// a data-gj-stream attribute so that a host mapping a position in the copy to the stream counts it so.
+	Stream int
 }
     A11yRun is a piece of a block's text; Lang is its language tag, "" for the
     document's own.

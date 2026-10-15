@@ -143,6 +143,9 @@ func (c *Context2D) SetTextBaseline(baseline string) {
 	c.Context.Set("textBaseline", baseline)
 }
 
+// SetDirection sets the text direction used to draw text: "ltr", "rtl" or "inherit" (the canvas element's).
+func (c *Context2D) SetDirection(dir string) { c.Context.Set("direction", dir) }
+
 // GlobalAlpha returns the alpha (0-1) applied to all subsequent drawing.
 func (c *Context2D) GlobalAlpha() float64 { return c.Context.Get("globalAlpha").Float() }
 

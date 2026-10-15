@@ -43,6 +43,9 @@ func (l *layouter) line(p, pe int) (int, bool) {
 			left += l.para.dropW
 		}
 		ax0, ax1 := x0+max(left, 0), x1-right
+		if l.para.rtl {
+			ax0, ax1 = x0+max(right, 0), x1-left // the indents are at the start and the end of the line
+		}
 		if ax1-ax0 < min(60, x1-x0) {
 			ax0, ax1 = x0, x1
 		}
@@ -54,7 +57,11 @@ func (l *layouter) line(p, pe int) (int, bool) {
 			textEnd, next = l.breakLine(textStart, pe, ax1-ax0)
 		}
 		hyph, hyphW := l.hyph, l.hyphW
-		lp := d.partsOf(textStart, textEnd)
+		base := uint8(0)
+		if l.para.rtl {
+			base = 1
+		}
+		lp := d.partsOfLv(textStart, textEnd, l.para.levels, l.para.ps, base)
 		if hyph {
 			lp.width += hyphW
 		}
@@ -82,7 +89,16 @@ func (l *layouter) line(p, pe int) (int, bool) {
 			baselineOff = (h-size)/2 + size*0.8
 		}
 		x := ax0
-		switch room := ax1 - ax0 - lp.width; pf.Align {
+		align := pf.Align
+		if l.para.rtl { // left and right mean the start and the end of the line in a right-to-left paragraph
+			switch align {
+			case AlignLeft:
+				align = AlignRight
+			case AlignRight:
+				align = AlignLeft
+			}
+		}
+		switch room := ax1 - ax0 - lp.width; align {
 		case AlignCenter:
 			x += max(room, 0) / 2
 		case AlignRight:
@@ -91,7 +107,10 @@ func (l *layouter) line(p, pe int) (int, bool) {
 		line := Line{
 			Text: string(d.runes[textStart:textEnd]), X: x, W: lp.width, H: h, Start: textStart, End: textEnd, Runs: lp.runs,
 			Baseline: st.y + baselineOff, QuoteBar: pf.QuoteBar, BarX: x0 + pf.IndentLeft - 8,
-			Hyphen: hyph, HyphenW: hyphW,
+			Hyphen: hyph, HyphenW: hyphW, RTL: l.para.rtl, Bidi: l.para.levels != nil,
+		}
+		if l.para.rtl {
+			line.BarX = x1 - pf.IndentLeft + 5
 		}
 		for _, o := range lp.objs {
 			o.X += x
@@ -104,6 +123,9 @@ func (l *layouter) line(p, pe int) (int, bool) {
 		}
 		if l.para.first && l.para.marker != "" {
 			line.Marker = l.marker(p, ax0)
+			if l.para.rtl {
+				line.Marker.X = ax1 + 6
+			}
 		}
 		if capText != "" {
 			line.DropCap = &DropCapMark{

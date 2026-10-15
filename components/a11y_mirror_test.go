@@ -107,3 +107,21 @@ func TestAccessibleTextCarriesTheMappingToTheEditor(t *testing.T) {
 		t.Errorf("only the block with the caret is marked:\n%s", html)
 	}
 }
+
+// A block with a right-to-left letter in it says dir=auto, so the copy is read and selected in the direction
+// the canvas lays it out in; a block without one is left as it was.
+func TestAccessibleTextMarksRightToLeftBlocks(t *testing.T) {
+	html := render(t, AccessibleText(AccessibleTextProps{Blocks: []A11yBlock{
+		{Kind: A11yParagraph, Text: "Plain"},
+		{Kind: A11yParagraph, Text: "שלום עולם"},
+		{Kind: A11yParagraph, Runs: []A11yRun{{Text: "mixed "}, {Text: "مرحبا", Lang: "ar"}}},
+	}}))
+	for _, want := range []string{`<p>Plain</p>`, `<p dir="auto">שלום עולם</p>`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in\n%s", want, html)
+		}
+	}
+	if strings.Count(html, `dir="auto"`) != 2 {
+		t.Errorf("two blocks are right to left:\n%s", html)
+	}
+}

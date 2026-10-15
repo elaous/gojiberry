@@ -25,6 +25,13 @@ type Painter interface {
 	MeasureTextWidth(text string) float64
 }
 
+// DirectionPainter is a Painter that can draw text in a given direction ("ltr" or "rtl"): the direction of a
+// string decides where its leading and trailing spaces and punctuation go. A painter without it draws right-to-left
+// runs as the browser's default direction would.
+type DirectionPainter interface {
+	SetDirection(dir string)
+}
+
 // ImageSource is a decoded bitmap a component can draw. In a browser
 // it is an HTMLImageElement (see LoadImage); tests use a fake.
 type ImageSource interface {
