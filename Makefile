@@ -304,3 +304,22 @@ stack-up:
 	docker compose $(if $(wildcard .env.local),--env-file .env.local) up --build
 stack-down:
 	docker compose down
+
+# Ollama for the grammar check (package grammar talks to an Ollama-compatible server; the showcase's Language tab takes
+# its address and model). None of this is part of `make check`: the install runs the script ollama.com publishes, as
+# root where the script needs it, so it is a target you run on purpose.
+#   make ollama-install           install Ollama (https://ollama.com/install.sh)
+#   make ollama-pull              download the model OLLAMA_MODEL (default below)
+#   make ollama-serve             start the server on OLLAMA_HOST (default 127.0.0.1:11434) in the foreground
+#   make ollama-check             ask the running server one grammar question through package grammar
+OLLAMA_MODEL ?= llama3.2:3b
+OLLAMA_HOST ?= 127.0.0.1:11434
+.PHONY: ollama-install ollama-pull ollama-serve ollama-check
+ollama-install:
+	curl -fsSL https://ollama.com/install.sh | sh
+ollama-pull:
+	OLLAMA_HOST=$(OLLAMA_HOST) ollama pull $(OLLAMA_MODEL)
+ollama-serve:
+	OLLAMA_HOST=$(OLLAMA_HOST) ollama serve
+ollama-check:
+	GOJIBERRY_OLLAMA_URL=http://$(OLLAMA_HOST) GOJIBERRY_OLLAMA_MODEL=$(OLLAMA_MODEL) go test -count=1 -run TestOllamaLive -v ./grammar

@@ -1002,6 +1002,19 @@ the older items 9 to 14 and 18, then 38 to 47 and the older minors in 15 to 25. 
        opt-in text); a consent UI accessible to screen readers (ties to ARIA item 48).
     Depends on the preference menu (51) and the config store (52). Priority: medium, policy doc and allowlist before
     any code. Where: `docs`, `docstore`, `components`.
+    Closed (this PR): step 7 and the one-process limit. **Crash codes** (`telemetry.Crash`, a name of the allowlist with
+    28 values, "<part>_<kind>": the part of the page `editor`, `files`, `save`, `collab`, `speech`, `worker`, `page`, and
+    `panic`, `trap`, `error` or `rejection`) have a consent of their own (`Collector.SetCrashConsent`): a person can send
+    crash codes and no usage counts or the other way round, Do Not Track turns both off, and the Privacy tab has the
+    choice apart from the counts, off by default. The page's own handler (index.html) keeps a crash as two fixed words in
+    the browser, only while the person agreed, because a program that has crashed cannot send; the next visit counts
+    them, shows them in the exact-JSON preview, and clears them. No message, stack, file name or address is read into it.
+    **Several processes on one store**: `Counters.PersistShared` and `Sync` add what a process counted since it last
+    looked to the record in the store and write the sum with a conditional write (`SharedStore`; the docstore server
+    uses it on any `ConditionalAdapter`), retrying on a conflict; `GET /admin/telemetry` syncs first; a store without
+    conditional writes keeps the old behaviour and the server says so. Tests: `TestCrashCodesHaveTheirOwnConsent`,
+    `TestProcessesOnOneStoreAddUp`, `TestSharedWriteRetriesAfterAConflict`, `TestCountsDuringASyncAreKept`,
+    `TestTwoServersOnOneStoreCountTogether`, `TestCrashCodesAreSeparateAndScrubbed` (browser). Nothing is left for this item.
 58. **Done in part (this PR): small leftovers from the PR #99 and #100 reviews; only the last remains.** (1) the retry
     limit of `StartChallengeSweep` is a named constant (`startSweepAttempts`); (2) the `NewStoreChallenges` and sweep
     docs point to `StartChallengeSweep` (`RunChallengeSweep` stays exported, documented as the variant that blocks and

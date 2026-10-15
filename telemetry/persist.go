@@ -70,31 +70,37 @@ func (c *Counters) Snapshot() []byte {
 	return out
 }
 
-// Restore replaces the totals by a snapshot. It reads strictly: an unknown field, a name or value outside
-// the allowlist, a day that is not a date, a day older than the retention or a total out of range makes
-// it refuse the whole snapshot and change nothing, so what is in the store can never put anything into
-// the counters that a request could not.
-func (c *Counters) Restore(data []byte, now time.Time) error {
+// decoded is a snapshot read and checked: the totals, the request totals and the seed.
+type decoded struct {
+	days     map[string]map[Event]int
+	accepted int
+	refused  int
+	seed     []byte
+}
+
+// decodeSnapshot reads a snapshot strictly: an unknown field, a name or value outside the allowlist, a day that
+// is not a date, a day older than the retention (dropped) or a total out of range refuses the whole snapshot.
+func decodeSnapshot(data []byte, now time.Time) (*decoded, error) {
 	if len(data) > MaxSnapshot {
-		return errors.New("telemetry: the snapshot is too large")
+		return nil, errors.New("telemetry: the snapshot is too large")
 	}
 	var s snapshot
 	dec := json.NewDecoder(strings.NewReader(string(data)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&s); err != nil || dec.More() {
-		return errors.New("telemetry: not a snapshot")
+		return nil, errors.New("telemetry: not a snapshot")
 	}
 	if s.Version != snapshotVersion {
-		return errors.New("telemetry: a snapshot of another version")
+		return nil, errors.New("telemetry: a snapshot of another version")
 	}
 	if s.Accepted < 0 || s.Refused < 0 || s.Accepted > MaxTotal || s.Refused > MaxTotal {
-		return errors.New("telemetry: a request total is out of range")
+		return nil, errors.New("telemetry: a request total is out of range")
 	}
 	var seed []byte
 	if s.Seed != "" {
 		b, err := hex.DecodeString(s.Seed)
 		if err != nil || len(b) != seedLen {
-			return errors.New("telemetry: the seed is not one")
+			return nil, errors.New("telemetry: the seed is not one")
 		}
 		seed = b
 	}
@@ -102,19 +108,19 @@ func (c *Counters) Restore(data []byte, now time.Time) error {
 	days := map[string]map[Event]int{}
 	for d, list := range s.Days {
 		if t, err := time.Parse(DayFormat, d); err != nil || t.Format(DayFormat) != d {
-			return errors.New("telemetry: a day is not a date")
+			return nil, errors.New("telemetry: a day is not a date")
 		}
 		if len(list) > maxEntries() {
-			return errors.New("telemetry: too many totals for a day")
+			return nil, errors.New("telemetry: too many totals for a day")
 		}
 		m := map[Event]int{}
 		for _, t := range list {
 			e := Event{t.Name, t.Value}
 			if !e.Valid() {
-				return ErrNotAllowed
+				return nil, ErrNotAllowed
 			}
 			if _, dup := m[e]; dup || t.N < 1 || t.N > MaxTotal {
-				return errors.New("telemetry: a total is listed twice or out of range")
+				return nil, errors.New("telemetry: a total is listed twice or out of range")
 			}
 			m[e] = t.N
 		}
@@ -122,11 +128,22 @@ func (c *Counters) Restore(data []byte, now time.Time) error {
 			days[d] = m
 		}
 	}
+	return &decoded{days: days, accepted: s.Accepted, refused: s.Refused, seed: seed}, nil
+}
+
+// Restore replaces the totals by a snapshot. It reads strictly (see decodeSnapshot): a snapshot with anything
+// outside the schema is refused whole and changes nothing, so what is in the store can never put anything into
+// the counters that a request could not.
+func (c *Counters) Restore(data []byte, now time.Time) error {
+	d, err := decodeSnapshot(data, now)
+	if err != nil {
+		return err
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.days, c.accepted, c.refused = days, s.Accepted, s.Refused
-	if seed != nil {
-		c.seed = seed
+	c.days, c.accepted, c.refused = d.days, d.accepted, d.refused
+	if d.seed != nil {
+		c.seed = d.seed
 	}
 	return nil
 }

@@ -29,6 +29,7 @@ name, a value and how many times. Nothing else is accepted.
 | Name | Values | Why |
 | --- | --- | --- |
 | `browser` | `chromium`, `firefox`, `safari`, `other` | which browsers to test on (family only, no version) |
+| `crash` | `editor_panic`, `editor_trap`, `editor_error`, `editor_rejection`, `files_panic`, `files_trap`, `files_error`, `files_rejection`, `save_panic`, `save_trap`, `save_error`, `save_rejection`, `collab_panic`, `collab_trap`, `collab_error`, `collab_rejection`, `speech_panic`, `speech_trap`, `speech_error`, `speech_rejection`, `worker_panic`, `worker_trap`, `worker_error`, `worker_rejection`, `page_panic`, `page_trap`, `page_error`, `page_rejection` | which part of the page crashes and how, by two fixed words; a separate opt-in (see "Crash codes") |
 | `error` | `load_failed`, `save_failed`, `send_failed`, `unlock_failed` | which failures are common, by fixed code only |
 | `feature` | `format`, `styles`, `symbols`, `keys`, `comments`, `review`, `outline`, `check`, `images`, `find`, `spell`, `language`, `stats`, `share`, `people`, `migrate`, `page`, `save`, `transfer`, `privacy` | which parts of the editor matter, counted when a side panel is opened |
 | `load` | `under_1s`, `1_to_3s`, `3_to_10s`, `over_10s` | where the app is slow to start |
@@ -68,6 +69,18 @@ aggregate counts (`usage_events_total{fact,choice}`). The browser may send exact
   a proven (epsilon, delta) guarantee, and it does not change the exact totals in the store, which only the
   operator can reach. The request totals in `/admin/usage` are not rounded.
 
+## Crash codes
+
+A crash is counted as two fixed words, the part of the page it happened in (`editor`, `files`, `save`, `collab`,
+`speech`, `worker`, `page`) and its kind (`panic` of the Go program, `trap` of the wasm, `error`, `rejection`): never
+the message, the stack, a file name, a line, a URL or a document. They are chosen apart from the usage counts, in the
+same Privacy tab: "Send nothing" is the default; "Send a code when the page crashes" turns on only these, and each
+choice can be on while the other is off (`Collector.SetCrashConsent`). With neither, nothing is recorded; Do Not
+Track and Global Privacy Control turn both off. A crash code travels in the same batch, to the same confirmed server,
+under the same limits as a usage count, and shows in the same preview before it is sent. The page keeps the codes
+of a crash that ended the program in the browser until the next visit (a program that has crashed cannot send), only
+if the person agreed, and clears them whether they were sent or not.
+
 ## Legal notes (not legal advice)
 
 The data is aggregated counts without an identifier, so it is not personal data in itself, but this project
@@ -88,6 +101,3 @@ text of the Privacy tab. A deployer should review it against their own jurisdict
   nothing, and "Download the log" saves it as `gojiberry-usage-log.json` to look at or attach to a report.
 - The settings are reached from View > Display preferences > Privacy settings, as well as the tab.
 
-## Not done yet
-
-A separate opt-in for scrubbed crash reports (roadmap 57, step 7) is not built.

@@ -140,3 +140,19 @@ non-Linux, `internal/transpile/experimental` on Windows, `saver/pack_test.go`, `
 ## PDF/UA check
 
 `internal/officecheck` converts a small corpus (HTML sources in `testdata/corpus`) with LibreOffice and reads the DOCX and ODT back with the importers, and opens the DOCX, ODT and RTF the exporters write in LibreOffice (needs `soffice` with Writer; `GOJIBERRY_SOFFICE`, `GOJIBERRY_REQUIRE_SOFFICE=1`; skipped otherwise). `TestVeraPDFAcceptsTheTaggedFiles` runs veraPDF (PDF/UA-1) on three exported PDFs when `verapdf` is installed (Java; `GOJIBERRY_VERAPDF=/path/to/verapdf`); `GOJIBERRY_REQUIRE_VERAPDF=1` fails it when it is missing, otherwise it is skipped. `make pdfa11y-test` installs pdfa11y (a Go PDF/UA checker, pinned) into `.pdfa11y/` and runs it on the PDFs the exporter writes; the test fails if the tool is missing. Without the make target the test is skipped with "SKIPPED, NOT TESTED" in its log. Run it when `export/pdf*.go` changes.
+
+## Grammar check with a local model (Ollama)
+
+The grammar check (package `grammar`, the Language tab of the showcase) needs an Ollama-compatible server; nothing in the
+repository starts one. The Makefile has targets to set one up on a development machine, none of them part of `make check`:
+
+```
+make ollama-install    # runs the install script ollama.com publishes (curl -fsSL https://ollama.com/install.sh | sh)
+make ollama-pull       # downloads OLLAMA_MODEL (default llama3.2:3b)
+make ollama-serve      # serves on OLLAMA_HOST (default 127.0.0.1:11434), in the foreground
+make ollama-check      # TestOllamaLive: one real grammar question through package grammar
+```
+
+Then type `http://127.0.0.1:11434` and the model name in the Language tab. `TestOllamaLive` is skipped unless
+`GOJIBERRY_OLLAMA_URL` is set, so CI does not need a model; the rest of `grammar` is tested against a stand-in server.
+The install script runs as root where it needs to: read it before running it on a machine you care about.
