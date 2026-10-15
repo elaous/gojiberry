@@ -176,7 +176,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 ## Next
 
 1. **Migrate: done** (see [document-components.md](document-components.md)); left: skipping what an earlier run already brought (needs the source ID kept on the document), Google Docs comments and revision history.
-2. **Button icons: done** (`components.Material`, see [document-components.md](document-components.md)); left: a toolbar of icon buttons for the formatting commands.
+2. **Button icons: done** (`components.Material`, and `components.IconToolbar` with `CommandToolbarItems` for a toolbar of icon buttons for the formatting commands, which the showcase uses; see [document-components.md](document-components.md)).
 3. **Download submenu: done** (grouped "Download as", and `.open` with the version history; see [document-components.md](document-components.md)).
 
 ## Later
