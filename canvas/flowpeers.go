@@ -60,12 +60,9 @@ func (f *TextFlow) drawPeerSelections(lay Layout) {
 		setAlpha(0.25)
 		for _, ln := range lay.Lines {
 			s, e := max(from, ln.Start), min(to, ln.End)
-			if s >= e {
-				continue
+			for _, r := range f.lineRects(ln, s, e) {
+				p.FillRect(r[0], ln.Y, r[1]-r[0], ln.H)
 			}
-			x0 := ln.X + f.data.measure(ln.Start, s)
-			x1 := ln.X + f.data.measure(ln.Start, e)
-			p.FillRect(x0, ln.Y, x1-x0, ln.H)
 		}
 		setAlpha(1)
 	}

@@ -256,6 +256,10 @@ func (c *Context2D) Save()
 func (c *Context2D) Scale(x, y float64)
     Scale scales the canvas coordinate system by (x, y).
 
+func (c *Context2D) SetDirection(dir string)
+    SetDirection sets the text direction used to draw text: "ltr", "rtl" or
+    "inherit" (the canvas element's).
+
 func (c *Context2D) SetFillStyle(style string)
     SetFillStyle sets the style used by Fill/FillRect/FillText.
 

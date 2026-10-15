@@ -35,7 +35,7 @@ func (f *TextFlow) CaretRect(offset int) (x, y, h float64, ok bool) {
 	}
 	ln := lay.Lines[idx]
 	offset = min(max(offset, ln.Start), ln.End)
-	return ln.X + f.data.measure(ln.Start, offset), ln.Y, ln.H, true
+	return f.lineX(ln, offset), ln.Y, ln.H, true
 }
 
 // OffsetAt returns the text-stream offset nearest (x, y), for placing a
@@ -78,6 +78,9 @@ func (f *TextFlow) offsetAt(x, y float64) (offset int, afterBreak bool) {
 		}
 	}
 	ln := lay.Lines[best]
+	if ln.Bidi {
+		return f.lineOffsetAt(ln, x), false
+	}
 	if x <= ln.X {
 		return ln.Start, ln.Start > 0 && f.data.hasOpAt(ln.Start)
 	}
@@ -262,6 +265,7 @@ func (f *TextFlow) Draw() {
 	defer f.drawSquiggles(lay)
 	defer f.drawCarets()
 	defer f.drawGhost(lay)
+	defer f.drawPreedit(lay)
 	defer f.drawPeerCarets()
 	defer f.drawFootnotes(lay)
 	p.SetTextAlign("left")
@@ -292,7 +296,14 @@ func (f *TextFlow) Draw() {
 			}
 			p.SetFont(r.Font)
 			p.SetFillStyle(r.Color)
+			dp, _ := p.(DirectionPainter)
+			if dp != nil && r.Level%2 == 1 {
+				dp.SetDirection("rtl")
+			}
 			p.FillText(r.Text, x, y)
+			if dp != nil && r.Level%2 == 1 {
+				dp.SetDirection("ltr")
+			}
 			if r.Underline {
 				p.FillRect(x, y+1.5, r.W, 1)
 			}

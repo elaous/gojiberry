@@ -818,7 +818,6 @@ func (ft *FloatingText) drawSelection() {
 	p := ft.Painter
 	p.SetFillStyle(ft.ChromeStyle.SelectColor)
 	lay := ft.inner.Layout()
-	data := ft.inner.data
 	for _, c := range ft.Cursors() {
 		from, to := c.Range()
 		if from == to {
@@ -826,12 +825,9 @@ func (ft *FloatingText) drawSelection() {
 		}
 		for _, ln := range lay.Lines {
 			s, e := max(from, ln.Start), min(to, ln.End)
-			if s >= e {
-				continue
+			for _, r := range ft.inner.lineRects(ln, s, e) {
+				p.FillRect(r[0], ln.Y, r[1]-r[0], ln.H)
 			}
-			x0 := ln.X + data.measure(ln.Start, s)
-			x1 := ln.X + data.measure(ln.Start, e)
-			p.FillRect(x0, ln.Y, x1-x0, ln.H)
 		}
 	}
 }

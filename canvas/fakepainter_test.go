@@ -58,3 +58,5 @@ func (f *fakePainter) Translate(x, y float64)      { f.rec("translate %g %g", x,
 func (f *fakePainter) ClipRect(x, y, w, h float64) { f.rec("clipRect %g %g %g %g", x, y, w, h) }
 
 func (f *fakePainter) Rotate(a float64) { f.rec("rotate %.3f", a) }
+
+func (f *fakePainter) SetDirection(d string) { f.rec("direction %s", d) }

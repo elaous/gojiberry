@@ -4,6 +4,7 @@ package canvas
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"syscall/js"
 
@@ -203,12 +204,41 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 			redraw()
 		}
 	}
+	// The preedit is drawn on the canvas at the caret, and the input (which the method puts its candidate
+	// window next to) is moved there for as long as the composition lasts.
+	place := func() {
+		x, y, h, ok := s.CompositionAnchor()
+		if !ok {
+			return
+		}
+		r := canvasEl.BoundingRect()
+		st := input.Get("style")
+		st.Set("left", strconv.FormatFloat(r.Left+x, 'f', 1, 64)+"px")
+		st.Set("top", strconv.FormatFloat(r.Top+y+h, 'f', 1, 64)+"px")
+	}
+	showPreedit := func(t string) {
+		if s.SetComposition(t) {
+			place()
+			redraw()
+		}
+	}
 	input.AddEventListener("compositionstart", js.FuncOf(func(js.Value, []js.Value) any {
 		composing = true
+		showPreedit(input.GetValue())
+		return nil
+	}))
+	input.AddEventListener("compositionupdate", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if d := args[0].Get("data"); d.Type() == js.TypeString {
+			showPreedit(d.String())
+		}
 		return nil
 	}))
 	input.AddEventListener("compositionend", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		composing = false
+		s.SetComposition("")
+		st := input.Get("style")
+		st.Call("removeProperty", "left")
+		st.Call("removeProperty", "top")
 		t := input.GetValue()
 		if t == "" && len(args) > 0 {
 			if d := args[0].Get("data"); d.Type() == js.TypeString {

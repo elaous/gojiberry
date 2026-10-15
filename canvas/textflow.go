@@ -58,6 +58,9 @@ type Run struct {
 	Link string
 	// Comment is the ID of the comment on the run, if any.
 	Comment string
+	// Level is the bidirectional embedding level: odd for right-to-left text, which is drawn in the browser as
+	// a string of its own and measured from the right edge of the run.
+	Level uint8
 }
 
 // Line is one laid-out line of text. Start/End are rune offsets into
@@ -83,6 +86,10 @@ type Line struct {
 	BarX     float64
 	// DropCap is the large initial of a paragraph, on its first line.
 	DropCap *DropCapMark
+	// RTL is true when the paragraph's direction is right-to-left: the line is aligned to the right by default
+	// and its marker is on the right. Bidi is true when the line has text in more than one direction, so its
+	// runs are not in the order of the text: positions are found through the runs (lineCaretX, lineRects).
+	RTL, Bidi bool
 }
 
 // DropCapMark is a paragraph's large first letter. The line's Start is
@@ -160,6 +167,8 @@ type TextFlow struct {
 	// continues the line; in the middle of one it is a small tag under the caret, so that it never hides the
 	// words after it. Putting it in is the host's job (see the showcase's Tab).
 	Ghost string
+	// preedit is the text an input method is composing, drawn at the caret (see Composer).
+	preedit string
 	// LinkColor is the colour of linked text whose format names none ("" the default, LinkColor). A document
 	// theme sets it (see FlowTheme).
 	LinkColor string
