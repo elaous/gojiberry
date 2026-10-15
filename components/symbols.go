@@ -86,10 +86,13 @@ func SymbolPicker(props SymbolPickerProps) xango.Node {
 	if cols <= 0 {
 		cols = 10
 	}
+	nsym := 0
 	btn := func(s Symbol) xango.Node {
 		attrs := []xango.Attr{
 			xango.A("class", "gj-symbol"), xango.A("type", "button"), xango.A("title", s.Name), xango.A("data-char", s.Char),
+			rovingTab(nsym, 0), // the first symbol is the way in; the arrow keys move among the rest (gridkeys.go)
 		}
+		nsym++
 		if props.OnPick != nil {
 			char := s.Char
 			attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnPick(char) }))
@@ -103,12 +106,19 @@ func SymbolPicker(props SymbolPickerProps) xango.Node {
 	if props.OnQuery != nil {
 		search = append(search, xango.On("input", func(e xango.Event) { props.OnQuery(xango.EventValue[string](e)) }))
 	}
+	nchip := 0
 	chip := func(label, cat string) xango.Node {
 		class := "gj-symbolpicker-chip"
-		if props.Category == cat {
+		on := props.Category == cat
+		if on {
 			class += " gj-symbolpicker-chip-on"
 		}
-		attrs := []xango.Attr{xango.A("class", class), xango.A("type", "button"), xango.A("data-category", cat)}
+		tab := "-1"
+		if on {
+			tab = "0"
+		}
+		nchip++
+		attrs := []xango.Attr{xango.A("class", class), xango.A("type", "button"), xango.A("data-category", cat), xango.A("tabindex", tab)}
 		if props.OnCategory != nil {
 			attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnCategory(cat) }))
 		}
@@ -141,8 +151,9 @@ func SymbolPicker(props SymbolPickerProps) xango.Node {
 	}
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-symbolpicker")},
 		xango.El("input", search),
-		xango.El("div", []xango.Attr{xango.A("class", "gj-symbolpicker-chips")}, chips...),
-		xango.El("div", []xango.Attr{xango.A("class", "gj-symbolpicker-body")}, body...),
+		xango.El("div", []xango.Attr{xango.A("class", "gj-symbolpicker-chips"), xango.A("role", "toolbar"), xango.A("aria-label", tr("symbols.categories", "Symbol categories")),
+			gridKeys(".gj-symbolpicker-chips", ".gj-symbolpicker-chip")}, chips...),
+		xango.El("div", []xango.Attr{xango.A("class", "gj-symbolpicker-body"), gridKeys(".gj-symbolpicker-body", ".gj-symbol")}, body...),
 	)
 }
 

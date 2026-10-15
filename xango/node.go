@@ -65,6 +65,11 @@ const (
 	FocusPrev
 	FocusFirst
 	FocusLast
+	// FocusUp and FocusDown go to the candidate nearest above or below the focused one on the screen (the same
+	// column in a grid) and do not wrap: at the edge they stay where they are. With nothing focused yet, down
+	// goes to the first and up to the last.
+	FocusUp
+	FocusDown
 )
 
 // MoveFocus moves the keyboard focus within a widget while the event is being handled: root is
