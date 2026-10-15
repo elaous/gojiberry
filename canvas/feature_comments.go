@@ -54,6 +54,26 @@ func (Comments) Name() string { return "comments" }
 
 const commentPrompt = "Comment (Markdown; @name or an e-mail address mentions someone)"
 
+// askComment asks for a comment's text. When the set has a Roster, an e-mail address of a person with access is
+// kept as their handle, and one of a person without access sends the author back to the question with the reason
+// (a few times; then the comment is not made).
+func askComment(c *CommandContext, set *CommentSet, initial string) (string, bool) {
+	prompt := commentPrompt
+	for range 5 {
+		text, ok := c.Prompt(prompt, initial)
+		if !ok || text == "" {
+			return "", false
+		}
+		clean, problems := set.CheckMentions(text)
+		p, blocked := BlockingMention(problems)
+		if !blocked {
+			return clean, true
+		}
+		prompt, initial = p.Message()+" "+commentPrompt, text
+	}
+	return "", false
+}
+
 // Install implements Feature.
 func (Comments) Install(r *Registry) {
 	r.AddCommand(CmdCommentAdd, "Add comment", "Mod+Alt+N", func(c *CommandContext) bool {
@@ -62,8 +82,8 @@ func (Comments) Install(r *Registry) {
 		if !ok || c.Prompt == nil || cur.Empty() {
 			return false
 		}
-		text, ok := c.Prompt(commentPrompt, "")
-		if !ok || text == "" {
+		text, ok := askComment(c, h.CommentSet(), "")
+		if !ok {
 			return false
 		}
 		from, to := cur.Range()
@@ -88,8 +108,8 @@ func (Comments) Install(r *Registry) {
 			return false
 		}
 		cm, _ := h.CommentSet().Get(id)
-		text, ok := c.Prompt(commentPrompt, cm.Text)
-		if !ok || text == "" {
+		text, ok := askComment(c, h.CommentSet(), cm.Text)
+		if !ok {
 			return false
 		}
 		ok = h.CommentSet().Update(id, func(cm *Comment) { cm.Text = text })

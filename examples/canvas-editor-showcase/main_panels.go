@@ -91,7 +91,7 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(c
 		}
 	}
 	return xango.Frag(add, xango.El("div", []xango.Attr{xango.A("style", "margin-top:0.8em")}, components.CommentList(components.CommentListProps{
-		Comments: set.List(), Excerpts: excerpts, Filter: u.commentFilter, Selected: u.selComment,
+		Comments: set.Visible(), Excerpts: excerpts, ReplyNotes: u.replyNotes, Filter: u.commentFilter, Selected: u.selComment,
 		CanEdit: state.Role.CanEdit(), CanReply: state.Role.CanComment(), Drafts: u.drafts,
 		OnSelect: func(id string) {
 			u.selComment = id
@@ -119,8 +119,16 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(c
 		},
 		OnReplyDraft: func(id, text string) { u.drafts[id] = text; renderUI() },
 		OnReply: func(id, text string) {
+			clean, problems := set.CheckMentions(text)
+			if p, blocked := canvas.BlockingMention(problems); blocked {
+				u.replyNotes[id] = p.Message() // the draft stays, to be changed
+				u.announce(u.replyNotes[id])
+				renderUI()
+				return
+			}
+			delete(u.replyNotes, id)
 			set.Update(id, func(c *canvas.Comment) {
-				c.Replies = append(c.Replies, canvas.Reply{Author: state.Author, Text: text, Created: time.Now()})
+				c.Replies = append(c.Replies, canvas.Reply{Author: state.Author, Text: clean, Created: time.Now()})
 			})
 			delete(u.drafts, id)
 			u.sealComments()
