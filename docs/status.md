@@ -82,9 +82,9 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | # | Item | Type | Status | Present | Missing |
 | --- | --- | --- | --- | --- | --- |
 | Passkey backlog 1, 2 | Shared rate limiter and challenge store | enhancement | done | through the store; sessions shared too | Redis behind the same interfaces (decided not to build a client) |
-| Passkey backlog 3 | Account stores with a conditional write | enhancement | partial | `AdapterStore` over S3, Mongo and Postgres | a SQL-table store behind the same interfaces |
-| Passkey backlog 4 | Per-account failed-sign-in budget | enhancement | open | per-address budgets | key by account |
-| Passkey backlog 5 | Shared lock for stores without conditional writes | enhancement | open | conditional-write stores covered | `docstore.Locker` |
+| Passkey backlog 3 | Account stores with a conditional write | enhancement | done | `AdapterStore` over S3, Mongo and Postgres; `SQLStore` (a SQL table, any `database/sql` driver) | |
+| Passkey backlog 4 | Per-account sign-in budget | enhancement | done | `Config.AccountLimiter`, shared through the store | |
+| Passkey backlog 5 | Shared lock for stores without conditional writes | enhancement | done | `KeyLocker` and `LockedAdapter` make a plain store conditional | |
 | Limits 1 to 11, 13 to 19, 22 to 26 | Review findings (WatchLog anchoring, RepairAll, signer tooling, SSH tags, challenge store, double first passkey, S3 `DeleteIf`, expiry on digest, Mongo CI, pseudonyms, tombstones, byte budgets, history rewrite) | fix | done | see roadmap entries | none |
 | Limits 12 | Log witnesses (co-signed heads) | feature | open | auditors compare heads by hand | witness protocol |
 | Limits 20 | Showcase originals on disk | chore | closed | in memory | not worth a second copy of localStorage |

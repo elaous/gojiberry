@@ -40,6 +40,13 @@ const (
 	DefaultBurst     = defaultBurst
 )
 
+// Defaults of the per-account sign-in budget (Config.AccountLimiter): 10 attempts at once and 20
+// an hour on average.
+const (
+	DefaultAccountPerMinute = 20.0 / 60
+	DefaultAccountBurst     = 10
+)
+
 // ClientIP is the address of the client of r: the connection's remote address.
 func ClientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)

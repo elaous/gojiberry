@@ -45,6 +45,12 @@ type Config struct {
 	// process (NewRateLimiter, 20 at once, 30 a minute). Inject your own (a shared budget, a
 	// gateway's decision) or Unlimited{} to turn it off (see Limiter).
 	Limiter Limiter
+	// AccountLimiter limits sign-in attempts per account (not only per address): once a sign-in
+	// names an account (by the user handle the authenticator returned), each attempt spends one
+	// token of that account's budget, so many addresses together cannot keep an account's
+	// credentials under load. nil means a per-account token bucket in this process (10 at once,
+	// 20 an hour); Unlimited{} turns it off. Over budget the sign-in answers 429 with Retry-After.
+	AccountLimiter Limiter
 	// ClientIP names the client of a request for the Limiter; nil means its remote address.
 	// Behind a reverse proxy use TrustedProxies("10.0.0.0/8") so X-Forwarded-For is believed
 	// only from your proxy.
@@ -78,6 +84,13 @@ var (
 	ErrBusy = errors.New("passkey: too many sign-ins in progress; try again shortly")
 )
 
+// accountLimited is the error of a sign-in over its account's budget; it is ErrRateLimited and
+// says how long to wait.
+type accountLimited struct{ wait time.Duration }
+
+func (e *accountLimited) Error() string { return ErrRateLimited.Error() }
+func (e *accountLimited) Unwrap() error { return ErrRateLimited }
+
 // Service runs the passkey ceremonies for a Store and gives the people who pass them a session of
 // the auth.Manager.
 type Service struct {
@@ -89,6 +102,7 @@ type Service struct {
 
 	challenges ChallengeStore
 	limiter    Limiter
+	acctLim    Limiter
 	clientIP   func(*http.Request) string
 
 	// acctMu serializes read-modify-write of an account's credentials within this process when
@@ -136,11 +150,15 @@ func New(cfg Config, store Store, sessions *auth.Manager) (*Service, error) {
 	if lim == nil {
 		lim = NewRateLimiter(defaultPerMinute, defaultBurst)
 	}
+	alim := cfg.AccountLimiter
+	if alim == nil {
+		alim = NewRateLimiter(DefaultAccountPerMinute, DefaultAccountBurst)
+	}
 	ip := cfg.ClientIP
 	if ip == nil {
 		ip = ClientIP
 	}
-	return &Service{wa: wa, store: store, sessions: sessions, ttl: ttl, uv: uv, challenges: ch, limiter: lim, clientIP: ip}, nil
+	return &Service{wa: wa, store: store, sessions: sessions, ttl: ttl, uv: uv, challenges: ch, limiter: lim, acctLim: alim, clientIP: ip}, nil
 }
 
 func (s *Service) put(ctx context.Context, p pending) (string, error) {
@@ -340,14 +358,22 @@ func (s *Service) LoginFinish(ctx context.Context, token string, body []byte) (*
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "/", bytes.NewReader(body))
 	var found *Account
+	var limited *accountLimited
 	user, cred, err := s.wa.FinishPasskeyLogin(func(_, handle []byte) (webauthn.User, error) {
 		a, err := s.store.ByHandle(ctx, handle)
 		if err != nil {
 			return nil, err
 		}
 		found = a
+		if ok, wait := s.acctLim.Allow(ctx, "account|"+a.ID); !ok {
+			limited = &accountLimited{wait: wait}
+			return nil, ErrRateLimited
+		}
 		return a, nil
 	}, p.Session, req)
+	if limited != nil {
+		return nil, limited
+	}
 	if err != nil {
 		return nil, fmt.Errorf("passkey: %w", err)
 	}
@@ -607,6 +633,12 @@ func (s *Service) handleLoginFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	acct, err := s.LoginFinish(r.Context(), r.URL.Query().Get("token"), body)
 	if err != nil {
+		var al *accountLimited
+		if errors.As(err, &al) {
+			w.Header().Set("Retry-After", strconv.Itoa(int(al.wait/time.Second)+1))
+			jsonOut(w, http.StatusTooManyRequests, map[string]string{"error": ErrRateLimited.Error()})
+			return
+		}
 		// One answer for every failed sign-in: what went wrong is not for the caller.
 		if errors.Is(err, ErrBadChallenge) {
 			fail(w, err)
