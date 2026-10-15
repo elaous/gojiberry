@@ -240,12 +240,9 @@ func (f *TextFlow) drawSearch(lay Layout) {
 		p.SetFillStyle(color)
 		for _, ln := range lay.Lines {
 			s, e := max(m.From, ln.Start), min(m.To, ln.End)
-			if s >= e {
-				continue
+			for _, r := range f.lineRects(ln, s, e) {
+				p.FillRect(r[0], ln.Y, r[1]-r[0], ln.H)
 			}
-			x0 := ln.X + f.data.measure(ln.Start, s)
-			x1 := ln.X + f.data.measure(ln.Start, e)
-			p.FillRect(x0, ln.Y, x1-x0, ln.H)
 		}
 	}
 }

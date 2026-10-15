@@ -193,13 +193,29 @@ type lineParts struct {
 	block         bool    // the line is a block object alone
 }
 
-func (d *flowData) partsOf(a, b int) lineParts {
+// partsOfLv is runes[a:b] laid out as one line; the text may be bidirectional: lv holds the level of each rune of the paragraph
+// (lv[i-off] is the level of rune i; nil when every rune is at level 0), base is the paragraph's level, which
+// an inline object takes. A run ends where the level changes, and the pieces are put in visual order.
+func (d *flowData) partsOfLv(a, b int, lv []uint8, off int, base uint8) lineParts {
 	p := d.f.Painter
 	var lp lineParts
+	type item struct {
+		run, obj int // the index in lp.runs or lp.objs, the other -1
+		w        float64
+		level    uint8
+	}
+	var items []item
+	levelAt := func(i int) uint8 {
+		if lv == nil || i-off < 0 || i-off >= len(lv) {
+			return 0
+		}
+		return lv[i-off]
+	}
 	for a < b {
 		if in, ok := d.objs[a]; ok {
 			w, h := d.objDims(a)
 			lp.objs = append(lp.objs, PlacedObject{Object: in.Object, X: lp.width, W: w, H: h, Offset: a})
+			items = append(items, item{run: -1, obj: len(lp.objs) - 1, w: w, level: base})
 			lp.width += w
 			lp.objH = max(lp.objH, h)
 			lp.block = lp.block || in.Block
@@ -207,7 +223,8 @@ func (d *flowData) partsOf(a, b int) lineParts {
 			continue
 		}
 		id, e := d.rs[a], a+1
-		for e < b && d.rs[e] == id && !d.isObj(e) {
+		lvl := levelAt(a)
+		for e < b && d.rs[e] == id && !d.isObj(e) && levelAt(e) == lvl {
 			e++
 		}
 		st := d.styles[id]
@@ -218,11 +235,29 @@ func (d *flowData) partsOf(a, b int) lineParts {
 			Text: text, X: lp.width, W: w, Font: st.Font(), Color: st.Color, Start: a, End: e,
 			Underline: st.Underline, Strike: st.Strike, Background: st.Background,
 			DY: st.baselineShift(), Size: st.drawSize(), Link: d.formats[id].Link, Comment: d.formats[id].Comment,
+			Level: lvl,
 		})
+		items = append(items, item{run: len(lp.runs) - 1, obj: -1, w: w, level: lvl})
 		lp.width += w
 		lp.height = max(lp.height, st.Leading())
 		lp.size = max(lp.size, st.FontSize)
 		a = e
+	}
+	if lv != nil {
+		levels := make([]uint8, len(items))
+		for i, it := range items {
+			levels[i] = it.level
+		}
+		x := 0.0
+		for _, i := range visualOrder(levels) {
+			it := items[i]
+			if it.run >= 0 {
+				lp.runs[it.run].X = x
+			} else {
+				lp.objs[it.obj].X = x
+			}
+			x += it.w
+		}
 	}
 	return lp
 }
@@ -263,7 +298,10 @@ type layouter struct {
 // paraCtx is the paragraph being laid out.
 type paraCtx struct {
 	pf     ParaFormat
-	first  bool   // the next line is the paragraph's first (not a continuation after a break)
+	first  bool    // the next line is the paragraph's first (not a continuation after a break)
+	rtl    bool    // the paragraph is laid out right to left
+	levels []uint8 // the bidirectional level of each rune from ps (nil: all at level 0)
+	ps     int
 	marker string // the list marker to put on that line, if any
 	left   float64
 
@@ -516,7 +554,11 @@ func (l *layouter) segment(s, e int, last bool) {
 func (l *layouter) beginParagraph(ps, pe int) {
 	pf, _ := l.f.expandPara(l.d.paraIn(ps, pe))
 	start := ps == 0 || l.d.runes[ps-1] == '\n'
-	l.para = paraCtx{pf: pf, first: start, left: pf.leftIndent()}
+	l.para = paraCtx{pf: pf, first: start, left: pf.leftIndent(), ps: ps}
+	if pe > ps {
+		l.para.rtl = IsRTLText(l.d.disp[ps:pe])
+		l.para.levels = bidiLevels(l.d.disp[ps:pe], l.para.rtl)
+	}
 	if !start {
 		return
 	}

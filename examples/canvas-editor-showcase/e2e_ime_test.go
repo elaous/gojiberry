@@ -58,3 +58,25 @@ func TestDetectedLanguageCanBecomeTheDocumentLanguage(t *testing.T) {
 	d.WaitFor("the button is off", `document.querySelector('.gj-lang-docuse').disabled`)
 	d.NoErrors()
 }
+
+// While a composition lasts the input (which the input method puts its candidate window next to) is moved to
+// the caret, and put back when the composition ends.
+func TestInputMethodCandidateWindowFollowsTheCaret(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Focus("#input")
+	d.Press("End")
+	fire := func(js string) {
+		d.Eval(`(() => { const i = document.getElementById('input'); `+js+`; return true; })()`, nil)
+	}
+	d.OK(d.Str(`document.getElementById('input').style.left`) == "", "the input is where the page put it")
+	fire(`i.dispatchEvent(new CompositionEvent('compositionstart', { data: '' })); i.value = 'ni'; i.dispatchEvent(new CompositionEvent('compositionupdate', { data: 'ni' }))`)
+	d.WaitFor("the input at the caret", `document.getElementById('input').style.left !== '' && document.getElementById('input').style.top !== ''`)
+	left := float64(d.Int(`Math.round(parseFloat(document.getElementById("input").style.left))`))
+	rect := float64(d.Int(`Math.round(document.getElementById("stage").getBoundingClientRect().left)`))
+	d.OK(left > rect+10, "the input is at the caret, not at the corner of the page")
+	fire(`i.value = '你'; i.dispatchEvent(new CompositionEvent('compositionend', { data: '你' }))`)
+	d.WaitFor("the input back", `document.getElementById('input').style.left === ''`)
+	d.NoErrors()
+}

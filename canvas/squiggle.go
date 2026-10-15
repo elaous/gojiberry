@@ -58,25 +58,23 @@ func (f *TextFlow) drawSquiggleSet(lay Layout, set squiggleSet) {
 	for _, m := range set.spans {
 		for _, ln := range lay.Lines {
 			s, e := max(m.From, ln.Start), min(m.To, ln.End)
-			if s >= e {
-				continue
-			}
-			x0 := ln.X + f.data.measure(ln.Start, s)
-			x1 := ln.X + f.data.measure(ln.Start, e)
-			y := ln.Baseline + 2
-			p.BeginPath()
-			p.MoveTo(x0, y)
-			up := true
-			for x := x0 + 2; x < x1; x += 2 {
-				if up {
-					p.LineTo(x, y-1.5)
-				} else {
-					p.LineTo(x, y+1)
+			for _, r := range f.lineRects(ln, s, e) {
+				x0, x1 := r[0], r[1]
+				y := ln.Baseline + 2
+				p.BeginPath()
+				p.MoveTo(x0, y)
+				up := true
+				for x := x0 + 2; x < x1; x += 2 {
+					if up {
+						p.LineTo(x, y-1.5)
+					} else {
+						p.LineTo(x, y+1)
+					}
+					up = !up
 				}
-				up = !up
+				p.LineTo(x1, y)
+				p.Stroke()
 			}
-			p.LineTo(x1, y)
-			p.Stroke()
 		}
 	}
 }

@@ -67,6 +67,7 @@ type Mods struct{ Ctrl, Shift, Alt, Meta bool }
 // routes pointer and keyboard events to them (topmost first). Only
 // the browser glue -- Bind -- is js/wasm-only.
 type Stage struct {
+	composer      Composer // the component showing an input method's preedit, if any
 	Painter       ImagePainter
 	Width, Height float64 // canvas size, cleared on every Draw
 	Components    []Drawer

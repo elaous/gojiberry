@@ -224,6 +224,10 @@ type a11yHeadingRef struct {
 // and the mark of the caret being in it.
 func a11yBlockAttrs(b A11yBlock, extra ...xango.Attr) []xango.Attr {
 	attrs := append([]xango.Attr(nil), extra...)
+	if hasRTL(b.Text) || hasRTLRuns(b.Runs) {
+		// dir=auto: the browser takes the direction of the block from its first strong letter, as the canvas does
+		attrs = append(attrs, xango.A("dir", "auto"))
+	}
 	if b.Mapped {
 		attrs = append(attrs, xango.A("data-gj-start", strconv.Itoa(b.Start)))
 		if b.Lead > 0 {
@@ -375,6 +379,25 @@ func a11ySafeHref(u string) bool {
 	switch strings.ToLower(u[:i]) {
 	case "http", "https", "mailto", "tel":
 		return true
+	}
+	return false
+}
+
+// hasRTL reports whether the text has a letter of a right-to-left script (Hebrew, Arabic, Syriac, Thaana ...).
+func hasRTL(s string) bool {
+	for _, r := range s {
+		if r >= 0x0590 && r <= 0x08FF || r >= 0xFB1D && r <= 0xFDFF || r >= 0xFE70 && r <= 0xFEFF || r == 0x200F {
+			return true
+		}
+	}
+	return false
+}
+
+func hasRTLRuns(runs []A11yRun) bool {
+	for _, r := range runs {
+		if hasRTL(r.Text) {
+			return true
+		}
 	}
 	return false
 }

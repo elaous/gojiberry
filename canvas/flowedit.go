@@ -449,14 +449,14 @@ func (f *TextFlow) editKey(key string, shift bool) bool {
 			if from, _ := c.Range(); !c.Empty() && !shift {
 				return from
 			}
-			return c.Caret - 1
+			return f.visualStep(c.Caret, false)
 		})
 	case "ArrowRight":
 		move(func(c Cursor) int {
 			if _, to := c.Range(); !c.Empty() && !shift {
 				return to
 			}
-			return c.Caret + 1
+			return f.visualStep(c.Caret, true)
 		})
 	case "ArrowUp", "ArrowDown":
 		move(func(c Cursor) int {
