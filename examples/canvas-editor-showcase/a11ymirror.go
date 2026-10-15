@@ -8,6 +8,7 @@ import (
 	"syscall/js"
 	"time"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/elaous/gojiberry/canvas"
 	cxango "github.com/elaous/gojiberry/canvas/xango"
@@ -82,16 +83,6 @@ func goToHeading(flow func() *canvas.TextFlow, scroller func() *canvas.ScrollVie
 
 func mirrorRoot() js.Value { return js.Global().Get("document").Call("getElementById", "a11y-text") }
 
-// textWithoutHints is the text of an element or a fragment as it is in the document, without the words that
-// are there only for a reader ("Suggested addition by Ana:").
-func textWithoutHints(n js.Value) string {
-	hints := n.Call("querySelectorAll", ".gj-sr-only")
-	for i := hints.Length() - 1; i >= 0; i-- {
-		hints.Index(i).Call("remove")
-	}
-	return n.Get("textContent").String()
-}
-
 // mirrorPosition turns a position in the copy (a DOM node and the offset in it) into an offset of the
 // editor's text stream; ok is false if the position is not in a mapped block.
 func mirrorPosition(node js.Value, offset int) (int, bool) {
@@ -122,9 +113,31 @@ func mirrorPosition(node js.Value, offset int) (int, bool) {
 	r := doc.Call("createRange")
 	r.Call("setStart", block, 0)
 	r.Call("setEnd", node, offset)
-	before := textWithoutHints(r.Call("cloneContents"))
-	b.Text = textWithoutHints(block.Call("cloneNode", true))
-	return b.StreamOffset(before), true
+	before := streamRunes(r.Call("cloneContents"))
+	b.Runs = []components.A11yRun{{Stream: streamRunes(block.Call("cloneNode", true))}}
+	return b.StreamOffsetRunes(before), true
+}
+
+// streamRunes is how many runes of the editor's stream the text of an element or a fragment takes: its text
+// as it is in the document (not the words only for a reader), except that a piece marked data-gj-stream (the
+// mark of a footnote) counts as that many however long its text is. (The fragment is changed: the words for
+// a reader are taken out.)
+func streamRunes(n js.Value) int {
+	hints := n.Call("querySelectorAll", ".gj-sr-only")
+	for i := hints.Length() - 1; i >= 0; i-- {
+		hints.Index(i).Call("remove")
+	}
+	marks := n.Call("querySelectorAll", "[data-gj-stream]")
+	width := 0
+	for i := marks.Length() - 1; i >= 0; i-- {
+		m := marks.Index(i)
+		if m.Get("textContent").String() != "" { // a mark the range ends before is not counted
+			w, _ := strconv.Atoi(m.Call("getAttribute", "data-gj-stream").String())
+			width += w
+		}
+		m.Call("remove")
+	}
+	return utf8.RuneCountInString(n.Get("textContent").String()) + width
 }
 
 // watchMirrorSelection makes a selection made in the copy (the way a screen reader's cursor moves through
@@ -238,6 +251,16 @@ func domPosition(el js.Value, n int) (js.Value, int) {
 			continue
 		}
 		rs := []rune(t.Get("nodeValue").String())
+		if mark := t.Get("parentElement").Call("closest", "[data-gj-stream]"); !mark.IsNull() && el.Call("contains", mark).Bool() {
+			// a piece that takes a fixed number of runes of the stream: the position is before it or after it
+			w, _ := strconv.Atoi(mark.Call("getAttribute", "data-gj-stream").String())
+			if n < w {
+				return t, 0
+			}
+			n -= w
+			last, lastLen = t, len(utf16.Encode(rs))
+			continue
+		}
 		if n <= len(rs) {
 			return t, len(utf16.Encode(rs[:n]))
 		}

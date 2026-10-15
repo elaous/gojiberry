@@ -70,3 +70,17 @@ func TestCaretMapsToTheBlockThatHoldsItAndBack(t *testing.T) {
 		}
 	}
 }
+
+// A piece with a Stream takes that many positions of the stream, whatever its text is.
+func TestStreamPieceCountsAsItsStream(t *testing.T) {
+	b := A11yBlock{Mapped: true, Start: 10, Runs: []A11yRun{{Text: "ab"}, {Text: "12", Stream: 1}, {Text: "cd"}}}
+	if got := b.StreamLen(); got != 5 {
+		t.Errorf("StreamLen = %d, want 5", got)
+	}
+	if got := b.StreamOffsetRunes(3); got != 13 { // after "ab" and the mark's one position
+		t.Errorf("after the mark: %d", got)
+	}
+	if got := b.StreamOffsetRunes(99); got != 15 {
+		t.Errorf("past the end is the end: %d", got)
+	}
+}
