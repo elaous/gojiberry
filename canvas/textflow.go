@@ -169,6 +169,11 @@ type TextFlow struct {
 	Ghost string
 	// preedit is the text an input method is composing, drawn at the caret (see Composer).
 	preedit string
+	// Vertical lays the text out in vertical lines (see vertical.go): top to bottom, the lines following one
+	// another from right to left.
+	Vertical bool
+	vpage    int  // the page being drawn, in a vertical flow
+	vdrawing bool // a vertical flow is drawing one page
 	// LinkColor is the colour of linked text whose format names none ("" the default, LinkColor). A document
 	// theme sets it (see FlowTheme).
 	LinkColor string
@@ -377,14 +382,16 @@ func (f *TextFlow) pageCount() int {
 	return 1
 }
 
-// pageRect is the rectangle text flows into on a page.
+// pageRect is the rectangle text flows into on a page, in the plane the text is laid out in: the page's own
+// rectangle, or for vertical text its turned image (vertical.go).
 func (f *TextFlow) pageRect(page int) (x, y, w, h float64) {
-	if f.Pages != nil {
-		x, y, w, h = f.Pages.ContentRect(page)
-	} else {
-		x, y, w, h = f.X, f.Y, f.Width, f.Height
+	px, py, pw, ph := f.physRect(page)
+	if !f.Vertical {
+		return px, py, pw, ph
 	}
-	return x, y, w, max(h-f.footnoteBand(), 0)
+	vx, vy := f.virtualOrigin(page)
+	_ = py
+	return vx, vy, ph, pw
 }
 
 // config returns column config idx (-1: the base Columns and Gap).

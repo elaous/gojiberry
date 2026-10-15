@@ -141,3 +141,20 @@ func TestBrokenMarkupAndLimits(t *testing.T) {
 		t.Errorf("empty: %v %v", d, err)
 	}
 }
+
+func TestVerticalWritingModeIsRead(t *testing.T) {
+	for _, c := range []struct {
+		html string
+		want bool
+	}{
+		{`<html style="writing-mode:vertical-rl"><body><p>x</p></body></html>`, true},
+		{`<body style="color:red; Writing-Mode: vertical-lr"><p>x</p></body>`, true},
+		{`<body style="writing-mode: horizontal-tb"><p>x</p></body>`, false},
+		{`<body><p>x</p></body>`, false},
+	} {
+		d, err := Import([]byte(c.html))
+		if err != nil || d.PageLayout().Vertical != c.want {
+			t.Errorf("%s: vertical %v, want %v (%v)", c.html, d.PageLayout().Vertical, c.want, err)
+		}
+	}
+}

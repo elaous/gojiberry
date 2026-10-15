@@ -14,6 +14,9 @@ func (f *TextFlow) drawGhost(lay Layout) {
 		return
 	}
 	c := f.Cursors()[0]
+	if f.skipCaretOnOtherPage(c.Caret) {
+		return
+	}
 	x, y, h, ok := f.caretRect(c)
 	if !ok {
 		return

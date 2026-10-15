@@ -102,9 +102,31 @@ func ImportReport(data []byte) (docfile.Document, Skipped, error) {
 	if body == nil {
 		body = root
 	}
+	// vertical text: the page (the html or the body element) is set in a vertical writing mode
+	for _, n := range []*html.Node{find(root, atom.Html), body} {
+		if n != nil && verticalStyle(attr(n, "style")) {
+			l := r.doc.PageLayout()
+			l.Vertical = true
+			r.doc.SetPageLayout(l)
+			break
+		}
+	}
 	r.blocks(body, docfile.Format{}, 0, 0)
 	r.trimEnd()
 	return r.doc, r.skipped, nil
+}
+
+// verticalStyle says whether an inline style sets a vertical writing mode (vertical-rl, vertical-lr, or the old
+// tb-rl and tb-lr).
+func verticalStyle(style string) bool {
+	for _, decl := range strings.Split(style, ";") {
+		k, v, ok := strings.Cut(decl, ":")
+		if ok && strings.EqualFold(strings.TrimSpace(k), "writing-mode") {
+			v = strings.ToLower(strings.TrimSpace(v))
+			return strings.HasPrefix(v, "vertical") || strings.HasPrefix(v, "tb-")
+		}
+	}
+	return false
 }
 
 func find(n *html.Node, a atom.Atom) *html.Node {

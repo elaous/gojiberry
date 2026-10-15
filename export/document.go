@@ -93,6 +93,7 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 		snap.Header, snap.Footer, snap.TOC, snap.TOCTitle = l.Header, l.Footer, l.TOC, l.TOCTitle
 		snap.FirstDiffers, snap.FirstHeader, snap.FirstFooter = l.FirstDiffers, l.FirstHeader, l.FirstFooter
 		snap.EvenDiffers, snap.EvenHeader, snap.EvenFooter = l.EvenDiffers, l.EvenHeader, l.EvenFooter
+		snap.Vertical = l.Vertical
 		if l.Width > 0 {
 			snap.PageWidth, snap.PageHeight = l.Width/0.75, l.Height/0.75 // points to CSS pixels
 		}

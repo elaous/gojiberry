@@ -60,6 +60,7 @@ const (
 	FeatPageHeader      Feature = "page-header"
 	FeatPageTOC         Feature = "page-toc"
 	FeatPageSize        Feature = "page-size"
+	FeatVertical        Feature = "vertical-text"
 	FeatMedia           Feature = "media"
 	FeatMediaCaptions   Feature = "media-captions"
 	// FeatEquation is a formula with its text alternative (also what a Word import leaves out, see fidelity_import.go);
@@ -79,7 +80,7 @@ var Features = []Feature{
 	FeatImage, FeatImageAlt, FeatImageEffects,
 	FeatTable, FeatColSpan, FeatRowSpan, FeatCellShading, FeatCellAlign, FeatCellTextStyle,
 	FeatDocLanguage, FeatTitle, FeatHistory,
-	FeatPageHeader, FeatPageTOC, FeatPageSize,
+	FeatPageHeader, FeatPageTOC, FeatPageSize, FeatVertical,
 	FeatMedia, FeatMediaCaptions,
 	FeatEquation, FeatCodeLanguage, FeatImageLongDesc,
 }
@@ -232,6 +233,9 @@ func Usage(d docfile.Document) map[Feature]int {
 		}
 		if l.Width > 0 || l.Margins != [4]float64{} {
 			add(FeatPageSize)
+		}
+		if l.Vertical {
+			add(FeatVertical)
 		}
 	}
 	for _, it := range d.Content {

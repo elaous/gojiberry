@@ -193,7 +193,7 @@ func (f *TextFlow) drawFootnotes(lay Layout) {
 	}
 	p := f.Painter
 	for pg, notes := range byPage {
-		x, y, w, h := f.pageRect(pg)
+		x, y, w, h := f.physRect(pg)
 		y0 := y + h + 4
 		p.SetFillStyle("#c4c7cd")
 		p.FillRect(x, y0, min(w, 80), 1)

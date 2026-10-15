@@ -155,6 +155,8 @@ func survives(f Feature, d docfile.Document) bool {
 		return d.PageLayout().TOC
 	case FeatPageSize:
 		return d.PageLayout().Width > 0
+	case FeatVertical:
+		return d.PageLayout().Vertical
 	}
 	return false
 }

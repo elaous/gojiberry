@@ -30,3 +30,26 @@ func TestImportReportStaysWithTheDocument(t *testing.T) {
 		t.Error("the report is removed")
 	}
 }
+
+func TestVerticalTextIsPartOfThePageLayout(t *testing.T) {
+	var d Document
+	if d.PageLayout().Vertical {
+		t.Fatal("new documents are horizontal")
+	}
+	d.SetPageLayout(PageLayout{Vertical: true})
+	b, err := JSON.Marshal(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := JSON.Unmarshal(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !back.PageLayout().Vertical {
+		t.Error("vertical text did not survive saving")
+	}
+	back.SetPageLayout(PageLayout{})
+	if back.PageLayout().Vertical {
+		t.Error("horizontal again")
+	}
+}
