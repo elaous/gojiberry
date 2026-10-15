@@ -724,6 +724,7 @@
   "tab.list": "Panneau latéral",
   "menu.sameLang": "Comme le document",
   "menu.docLangSet": "Langue du document",
+  "symbols.categories": "Catégories de symboles",
   "menu.vertical": "Texte vertical",
   "menu.noLang": "Non définie",
   "a11y.docLang": "Langue du document : %s",

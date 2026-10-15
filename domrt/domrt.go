@@ -409,6 +409,19 @@ func moveFocus(ev js.Value, root, items string, step xango.FocusStep) bool {
 	}
 	var next int
 	switch step {
+	case xango.FocusUp, xango.FocusDown:
+		if cur < 0 {
+			if step == xango.FocusDown {
+				next = 0
+			} else {
+				next = len(cands) - 1
+			}
+			break
+		}
+		next = nearestInDirection(cands, cur, step == xango.FocusDown)
+		if next == cur {
+			return true // at the edge: stay
+		}
 	case xango.FocusFirst:
 		next = 0
 	case xango.FocusLast:
@@ -423,6 +436,41 @@ func moveFocus(ev js.Value, root, items string, step xango.FocusStep) bool {
 	}
 	cands[next].Call("focus")
 	return true
+}
+
+// nearestInDirection is the index of the candidate nearest below (or above) cands[cur] on the screen: among those
+// whose top is below its bottom (above its top), the one with the least vertical gap and then the least
+// horizontal distance between the centres; cur itself when there is none.
+func nearestInDirection(cands []js.Value, cur int, down bool) int {
+	rect := func(el js.Value) (top, bottom, cx float64) {
+		r := el.Call("getBoundingClientRect")
+		return r.Get("top").Float(), r.Get("bottom").Float(), (r.Get("left").Float() + r.Get("right").Float()) / 2
+	}
+	ct, cb, cx := rect(cands[cur])
+	best, bestGap, bestDX := cur, 1e18, 1e18
+	for i, el := range cands {
+		if i == cur {
+			continue
+		}
+		t, b, x := rect(el)
+		var gap float64
+		switch {
+		case down && t >= cb-1:
+			gap = t - cb
+		case !down && b <= ct+1:
+			gap = ct - b
+		default:
+			continue
+		}
+		dx := x - cx
+		if dx < 0 {
+			dx = -dx
+		}
+		if gap < bestGap-1 || (gap < bestGap+1 && dx < bestDX) {
+			best, bestGap, bestDX = i, gap, dx
+		}
+	}
+	return best
 }
 
 // patch diffs newNode against the tree rooted at old (whose last
