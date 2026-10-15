@@ -38,6 +38,36 @@ func (f *TextFlow) CaretRect(offset int) (x, y, h float64, ok bool) {
 	return f.lineX(ln, offset), ln.Y, ln.H, true
 }
 
+// CaretPlace is where the caret would be drawn at an offset (see CaretRects).
+type CaretPlace struct {
+	X, Y, H float64
+	OK      bool
+}
+
+// CaretRects is CaretRect for many offsets from one layout. CaretRect works the whole layout out each time it is
+// called, so a caller that wants the place of every paragraph of a long text asks here: the cost is one layout,
+// not one per offset.
+func (f *TextFlow) CaretRects(offsets []int) []CaretPlace {
+	out := make([]CaretPlace, len(offsets))
+	lay := f.Layout()
+	if len(lay.Lines) == 0 {
+		return out
+	}
+	for k, offset := range offsets {
+		idx := len(lay.Lines) - 1
+		for i, ln := range lay.Lines {
+			if offset <= ln.End {
+				idx = i
+				break
+			}
+		}
+		ln := lay.Lines[idx]
+		offset = min(max(offset, ln.Start), ln.End)
+		out[k] = CaretPlace{X: f.lineX(ln, offset), Y: ln.Y, H: ln.H, OK: true}
+	}
+	return out
+}
+
 // OffsetAt returns the text-stream offset nearest (x, y), for placing a
 // caret from a click. With columns it picks the line whose column the
 // point is in, so a click in the second column doesn't land in the first.

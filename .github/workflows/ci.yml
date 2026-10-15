@@ -58,8 +58,21 @@ jobs:
       - name: make vet
         run: make vet
 
+      # The deploy recipes of docs/deploy.md are run against the real servers (cmd/wasmdist nginx_test.go and
+      # caddy_test.go): they fail, rather than skip, when the server is missing.
+      - name: Install nginx, brotli and Caddy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nginx brotli
+          sudo systemctl stop nginx || true
+          go install github.com/caddyserver/caddy/v2/cmd/caddy@v2.8.4
+          echo "GOJIBERRY_CADDY=$(go env GOPATH)/bin/caddy" >> "$GITHUB_ENV"
+
       - name: make test
         run: make test
+        env:
+          GOJIBERRY_REQUIRE_NGINX: "1"
+          GOJIBERRY_REQUIRE_CADDY: "1"
 
       - name: make wasm-vet
         run: make wasm-vet

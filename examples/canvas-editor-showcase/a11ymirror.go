@@ -28,11 +28,19 @@ func (u *ui) mirrorBlocks(flow *canvas.TextFlow, root *cxango.Root) []components
 	}
 	// where the text blocks are, to put the floating objects among them in the order they are met on the sheets
 	ys := make([]float64, len(blocks))
+	var starts []int
+	var which []int
 	for i, b := range blocks {
 		ys[i] = -1
 		if b.Mapped && !b.Object && flow != nil && !flow.Vertical { // (in vertical text the objects stay at the end)
-			if _, y, _, ok := flow.CaretRect(b.Start); ok {
-				ys[i] = y
+			starts, which = append(starts, b.Start), append(which, i)
+		}
+	}
+	if len(starts) > 0 {
+		// one layout for all the blocks: asking each in turn works the whole layout out again every time
+		for k, p := range flow.CaretRects(starts) {
+			if p.OK {
+				ys[which[k]] = p.Y
 			}
 		}
 	}
