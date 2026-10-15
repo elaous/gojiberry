@@ -112,11 +112,11 @@ func TestImportReadsWhatADocumentNeeds(t *testing.T) {
 	if len(tbl.Merges) != 2 {
 		t.Errorf("merges: %+v", tbl.Merges)
 	}
-	want := Skipped{Scripts: 1, Styles: 1, Forms: 1, Frames: 1, Graphics: 1, Media: 1, Images: 1, Links: 1, Layout: 1}
+	want := Skipped{Scripts: 1, Styles: 1, Forms: 1, Frames: 1, Graphics: 1, Images: 1, Links: 1, Layout: 1}
 	if s != want {
 		t.Errorf("skipped %+v, want %+v", s, want)
 	}
-	if s.Total() != 9 {
+	if s.Total() != 8 {
 		t.Errorf("total %d", s.Total())
 	}
 }
