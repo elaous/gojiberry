@@ -1,6 +1,7 @@
 package passkey
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -255,5 +256,57 @@ func TestStoreLimiterCanBeInjectedAsTheServiceLimiter(t *testing.T) {
 	}
 	if DefaultBurst != 20 || DefaultPerMinute != 30 {
 		t.Error("the exported defaults are the documented ones")
+	}
+}
+
+func TestAnAccountHasItsOwnSignInBudgetWhateverTheAddress(t *testing.T) {
+	r := newRig(t, NewMemoryStore())
+	r.register("ana@opendocs.io", "")
+	al := &countLimiter{}
+	r.svc.acctLim = al
+	r.svc.limiter = Unlimited{} // the per-address budget is out of the way
+	r.svc.clientIP = func(*http.Request) string { return "addr-1" }
+	code, out := r.login()
+	if code != 200 {
+		t.Fatalf("%d %v", code, out)
+	}
+	id := out["user"].(map[string]any)["ID"].(string)
+	if len(al.keys) != 1 || al.keys[0] != "account|"+id {
+		t.Fatalf("the key is account|ID: %v", al.keys)
+	}
+	// Another address, the same account: the account's budget refuses.
+	r.svc.clientIP = func(*http.Request) string { return "addr-2" }
+	al.deny = true
+	_, begin := r.do("POST", "/auth/passkey/login/begin", "", nil)
+	answer, _ := r.user.Get(asJSON(t, map[string]any{"publicKey": begin["options"].(map[string]any)["publicKey"]}), origin)
+	req, _ := http.NewRequest("POST", r.srv.URL+"/auth/passkey/login/finish?token="+begin["token"].(string), bytes.NewReader(answer))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests || resp.Header.Get("Retry-After") != "8" {
+		t.Errorf("%d %q", resp.StatusCode, resp.Header.Get("Retry-After"))
+	}
+	// The counter was not raised by the refused attempt.
+	cs, _ := r.svc.Credentials(context.Background(), id)
+	if cs[0].Cred.Authenticator.SignCount != 1 {
+		t.Errorf("a refused sign-in changes nothing: %+v", cs[0].Cred.Authenticator)
+	}
+}
+
+func TestTheDefaultAccountBudgetStopsARunOfAttemptsOnOneAccount(t *testing.T) {
+	r := newRig(t, NewMemoryStore())
+	r.register("ana@opendocs.io", "")
+	r.svc.limiter = Unlimited{}
+	var refused bool
+	for range DefaultAccountBurst + 3 {
+		if code, _ := r.login(); code == http.StatusTooManyRequests {
+			refused = true
+			break
+		}
+	}
+	if !refused {
+		t.Error("the default account budget refuses a run past its burst")
 	}
 }
