@@ -3,7 +3,7 @@
 # gojiberry / Xangô
 
 [![CI](https://github.com/elaous/gojiberry/actions/workflows/ci.yml/badge.svg)](https://github.com/elaous/gojiberry/actions/workflows/ci.yml)
-![coverage](https://img.shields.io/badge/coverage-89.6%25-97CA00)
+![coverage](https://img.shields.io/badge/coverage-89.4%25-97CA00)
 
 A JSX-for-Go: write `<div>...</div>` tags directly in Go source as an
 expression, anywhere a Go expression is legal, compiling down to plain

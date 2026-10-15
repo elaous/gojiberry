@@ -38,6 +38,7 @@ func TestEndToEnd(t *testing.T) {
 	d.OK(d.State().Str("mode") == "edit", "mode prop switches the components to edit")
 	d.CanvasDblClick(450, 24+30)
 	d.Type("!!")
+	d.Wait("s.headers[0].endsWith('!!')") // the keys are handled in the page's own time, slower when the machine is busy
 	d.OK(d.Is("s.headers[0].endsWith('!!')"), fmt.Sprint("header edited on the canvas: ", d.State().Get("headers")))
 	d.Fill("#source", "# Changed\n\nShort text.")
 	d.OK(d.Is("s.headers[0].endsWith('!!')"), "edited header survives a re-render with new text")

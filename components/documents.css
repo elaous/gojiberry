@@ -82,3 +82,12 @@
 .gj-recip-dir-email { font: inherit; padding: 0.3em 0.5em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); flex: 1; min-width: 12em; }
 .gj-recip-recovery-warning { margin: 0; font-weight: 600; }
 .gj-recip-secret { align-self: stretch; }
+
+/* IconToolbar: a row of icon buttons (the formatting commands), grouped by gaps. A button that is on is filled, not only
+   coloured; the focus ring is the page-wide one (a11y.css). */
+.gj-icontoolbar { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.15em; }
+.gj-icontoolbar-button { display: inline-flex; align-items: center; justify-content: center; min-width: 2em; min-height: 2em; padding: 0.2em; border: 1px solid transparent; border-radius: var(--gj-radius); background: transparent; color: inherit; cursor: pointer; }
+.gj-icontoolbar-button:hover:not(:disabled) { background: var(--gj-bg-muted); border-color: var(--gj-border); }
+.gj-icontoolbar-button:disabled { opacity: 0.4; cursor: default; }
+.gj-icontoolbar-on { background: var(--gj-accent); color: #fff; border-color: var(--gj-accent); }
+.gj-icontoolbar-gap { width: 1px; align-self: stretch; margin: 0.15em 0.3em; background: var(--gj-border); }
