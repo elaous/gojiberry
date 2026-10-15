@@ -37,7 +37,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 
 | # | Item | Type | Status | Present | Missing |
 | --- | --- | --- | --- | --- | --- |
-| 48 | ARIA across the canvas editor and components | enhancement | partial | roles, names, live regions, axe-core in the browser tests over 21 tabs with every rule on, heading levels in the panels, fixes from four slices | one arrow-key model for every picker |
+| 48 | ARIA across the canvas editor and components | enhancement | done | roles, names, live regions, axe-core in the browser tests over 21 tabs with every rule on, heading levels in the panels, fixes from four slices; one keyboard model per kind of widget (list, grid, menu, tabs, combobox; the colour and date pickers are the browser's) | none |
 | 49 | Speech while typing | feature | blocked | polite live region for words, characters, line and formatting; off by default | judgement of pace and double echo by real readers (blocked) |
 | 50 | Accessibility configs | enhancement | blocked | reduced motion, high contrast (with a strong caret and selection on the canvas), font size and line spacing, the canvas text following the text size, key remapping kept between visits, colour-blind safe colours for other people\'s cursors | dyslexia-friendly font (needs a font asset: blocked on choosing and licensing one) |
 | 51 | Preference menu | feature | done | one list of settings drives both the Display preferences menu and a Preferences tab with search and groups; language, theme and an editor behaviour in the same schema; import and export as a file; Privacy entry | none (a theme that also dresses the document sheets would be new work) |
@@ -122,7 +122,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 
 ## Counts
 
-Product table (items 48 to 84, 32 rows): 16 done, 10 partial, 6 blocked (49, 50, 60, 64, 69, 83: all that is left is a person's work) ("done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent). None is untouched. The server and
+Product table (items 48 to 84, 32 rows): 17 done, 9 partial, 6 blocked (49, 50, 60, 64, 69, 83: all that is left is a person's work) ("done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent). None is untouched. The server and
 security table: the review findings are done; still open are the per-account sign-in budget and the shared lock
 (passkey backlog 4 and 5) and log witnesses (limits 12); 41 is blocked on a provider.
 

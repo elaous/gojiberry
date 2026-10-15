@@ -33,6 +33,23 @@ func StylePicker(props StylePickerProps) xango.Node {
 	if base.FontFamily == "" {
 		base.FontFamily = "sans-serif"
 	}
+	// the way in (the one choice Tab reaches) is the current style, or the first one shown: the paragraph
+	// styles come first
+	entry := ""
+	for _, s := range props.Styles {
+		if s.Name == props.Current {
+			entry = s.Name
+		}
+	}
+	if entry == "" {
+		for _, para := range []bool{true, false} {
+			for _, s := range props.Styles {
+				if entry == "" && s.Paragraph == para {
+					entry = s.Name
+				}
+			}
+		}
+	}
 	section := func(title string, paragraph bool) xango.Node {
 		var items []xango.Node
 		for _, s := range props.Styles {
@@ -50,6 +67,11 @@ func StylePicker(props StylePickerProps) xango.Node {
 				xango.A("class", class), xango.A("type", "button"), xango.A("data-style", s.Name),
 				xango.A("style", ts.CSS()),
 			}
+			if s.Name == entry {
+				attrs = append(attrs, xango.A("tabindex", "0"))
+			} else {
+				attrs = append(attrs, xango.A("tabindex", "-1"))
+			}
 			if props.OnPick != nil {
 				attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnPick(s.Name, s.Paragraph) }))
 			}
@@ -62,6 +84,6 @@ func StylePicker(props StylePickerProps) xango.Node {
 			xango.El("h4", []xango.Attr{xango.A("class", "gj-stylepicker-title")}, xango.Text(title)),
 			xango.El("div", []xango.Attr{xango.A("class", "gj-stylepicker-list")}, items...))
 	}
-	return xango.El("div", []xango.Attr{xango.A("class", "gj-stylepicker")},
+	return xango.El("div", []xango.Attr{xango.A("class", "gj-stylepicker"), gridKeys(".gj-stylepicker", ".gj-stylepicker-item")},
 		section("Paragraph styles", true), section("Character styles", false))
 }

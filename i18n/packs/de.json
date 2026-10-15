@@ -724,6 +724,7 @@
   "tab.list": "Seitenleiste",
   "menu.sameLang": "Wie das Dokument",
   "menu.docLangSet": "Sprache des Dokuments",
+  "symbols.categories": "Symbolkategorien",
   "menu.vertical": "Vertikaler Text",
   "menu.noLang": "Nicht festgelegt",
   "a11y.docLang": "Sprache des Dokuments: %s",
