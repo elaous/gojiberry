@@ -55,7 +55,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 68 | Captions and transcripts | feature | done | media model, caption cues (parse, build, edit), clip card in the editor, insert form that requires the text, caption editor, checker rules, HTML export and import of the clip, text in seven languages | none named; no player in the canvas and no media part in Word, ODT or PDF are inherent ([limits register](limits-register.md) 16) |
 | 69 | Accessibility as a release gate | chore | blocked | axe checks in the browser tests, test screen reader on the accessibility tree, manual script, five more examples under the gate (style editor, components gallery, editor app, passkey, people keys) | first manual run (blocked) |
 | 70 | Version history UI | feature | done | timeline, names, diff, restore, access follows the document's list, snapshots as sealed as the document | none (names and authors in `meta.json` are plain metadata, as the document's own name is) |
-| 71 | Comments, suggestions, tracked changes | feature | partial | threads, resolve and reopen, suggestions with accept and reject, in the mirror, tracked changes in DOCX (export and import), two people proposing converge in the model | mentions that do not leak addresses; two people proposing, driven through two real browsers |
+| 71 | Comments, suggestions, tracked changes | feature | done | threads, resolve and reopen, suggestions with accept and reject, in the mirror, tracked changes in DOCX (export and import), two people proposing converge in the model and in two real browsers, mentions by handle that never write down an address of someone without access | none named |
 | 72 | Import and export fidelity | feature | done | DOCX, Markdown, RTF, EPUB, HTML, ODT and PDF exporters; DOCX, HTML and ODT importers; fidelity report per format in the Files tab, and the import report kept with the document; a corpus written by LibreOffice read back; DOCX, ODT and RTF opened in LibreOffice | none |
 | 73 | Search and replace | feature | done | `docsearch` (sealed index, kept incrementally as sealed changes after a base), `PlanReplace`, search across documents in the showcase | none |
 | 74 | Offline-first with conflict visibility | feature | done | sync state, queued changes kept (`client.Options.Queue`), e2e with the browser offline, "While you were offline" list of what others changed, a store copy saved elsewhere is kept as a version and compared | none |
@@ -122,7 +122,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 
 ## Counts
 
-Product table (items 48 to 84, 32 rows): 23 done, 3 partial, 6 blocked (49, 50, 60, 64, 69, 83: all that is left is a person's work) ("done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent). None is untouched. The server and
+Product table (items 48 to 84, 32 rows): 24 done, 2 partial, 6 blocked (49, 50, 60, 64, 69, 83: all that is left is a person's work) ("done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent). None is untouched. The server and
 security table: the review findings are done; still open are the per-account sign-in budget and the shared lock
 (passkey backlog 4 and 5) and log witnesses (limits 12); 41 is blocked on a provider.
 

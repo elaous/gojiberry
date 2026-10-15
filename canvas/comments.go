@@ -41,6 +41,8 @@ type CommentSet struct {
 	// shared document each use their own, so two people commenting at once
 	// never mint the same ID.
 	IDPrefix string
+	// Roster, when set, keeps e-mail addresses out of comments (see Roster).
+	Roster Roster
 
 	list []Comment
 	next int

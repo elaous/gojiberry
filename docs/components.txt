@@ -1291,6 +1291,8 @@ type CommentCardProps struct {
 	CanReply bool
 	// ReplyDraft is the text in the reply box.
 	ReplyDraft string
+	// ReplyNote is a line under the reply box, for what is wrong with the draft (a mention that cannot be saved).
+	ReplyNote string
 
 	OnSelect     func(id string)
 	OnResolve    func(id string)
@@ -1310,6 +1312,8 @@ type CommentListProps struct {
 	CanEdit  bool
 	CanReply bool
 	Drafts   map[string]string
+	// ReplyNotes maps a comment ID to the line shown under its reply box.
+	ReplyNotes map[string]string
 
 	OnSelect     func(id string)
 	OnResolve    func(id string)
