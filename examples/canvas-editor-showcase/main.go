@@ -54,6 +54,7 @@ type ui struct {
 	away                         awayState
 	theme                        themeState
 	themeLib                     themeLibState
+	cfgx                         configExtra
 	collabConflicts              int
 	collabMerged, collabRejected int                        // the session's counts already announced (merged after offline, refused)
 	typing                       components.TypingAnnouncer // what is said of typing and of the caret (preferences), see typing.go
@@ -166,7 +167,11 @@ func main() {
 	// Lazy font download: a font picked in the selector is only Added;
 	// the stage tells us the first time the document really uses a cut,
 	// and only then is the file fetched into the store and loaded.
-	stage.OnFontUse = func(use canvas.FontUse) { lib.UseAsync(use.Family, use.Weight, use.Italic) }
+	stage.OnFontUse = func(use canvas.FontUse) {
+		if !u.isStoredFont(use.Family) { // the person's own fonts are in the browser already
+			lib.UseAsync(use.Family, use.Weight, use.Italic)
+		}
+	}
 	logFont := func(s string) { u.fontLog = append(u.fontLog, s); renderUI() }
 	lib.OnReady = func(r fonts.Ready) {
 		how := "loaded from the store"
@@ -367,7 +372,10 @@ func main() {
 	}
 
 	var domRoot *domrt.Root
+	u.cfgx.afterFont = func() { stage.ForgetFonts(); redraw(); renderUI() }
+	onPrefsSaved = func(p prefs) { u.pushPrefs(p, renderUI) }
 	renderUI = func() {
+		u.configTick(renderUI)
 		u.usage.noteTab(u.tab)
 		u.saver.DownloadFormats = downloadChoices(u.transfer.Exporters()) // the headings follow the language
 		mac := false
@@ -680,7 +688,9 @@ func main() {
 					OnQuery:      func(q string) { u.query = q; renderUI() },
 					OnSource:     func(s string) { u.source = s; renderUI() },
 					OnSelect: func(f fonts.Font) {
-						lib.Add(f) // downloaded only when the text uses it
+						if f.Source != myFonts {
+							lib.Add(f) // downloaded only when the text uses it
+						}
 						u.open = false
 						u.recent = append([]string{f.Family}, slices.DeleteFunc(slices.Clone(u.recent), func(s string) bool { return s == f.Family })...)
 						renderUI()

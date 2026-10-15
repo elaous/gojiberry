@@ -77,5 +77,5 @@ func themePanel(u *ui, state *State, renderCanvas, renderUI func()) xango.Node {
 	}), u.themeLibrary(func(s tokens.Set) {
 		u.theme.set, u.theme.on = s, true
 		apply()
-	}, renderUI))
+	}, renderUI), u.fontSections(renderUI))
 }
