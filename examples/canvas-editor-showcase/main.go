@@ -356,6 +356,7 @@ func main() {
 		u.people.links.incoming, u.tab = tok, "people"
 	}
 	u.speech = newSpeech(func() { renderUI() })
+	u.speech.key = u.speechKeyFor
 	u.usage = newPrivacy(u.tab, &u.enc.dir)
 	u.usage.render = func() { renderUI(); redraw() } // redraw refreshes #state
 	u.fidelity.render = func() { renderUI() }
@@ -544,12 +545,43 @@ func main() {
 		case "people":
 			panel = xango.Frag(u.people.panel(u.saver.Asker.Ask), u.encPeopleOrNone(), u.saver.Asker.Dialog())
 		case "speech":
-			panel = u.speech.panel(func(text string) bool {
-				if flow != nil && flow.InsertText(text) {
-					redraw()
-					return true
-				}
-				return false
+			panel = u.speech.panel(speechHost{
+				Caret: func() int {
+					if flow == nil {
+						return 0
+					}
+					return flow.Cursors()[0].Caret
+				},
+				Insert: func(text string) bool {
+					if flow != nil && flow.InsertText(text) {
+						redraw()
+						return true
+					}
+					return false
+				},
+				Selected: func() string {
+					if flow == nil {
+						return ""
+					}
+					from, to := flow.Selection()
+					return string([]rune(flow.EditText())[from:to])
+				},
+				Slice: func(from, to int) string {
+					if flow == nil {
+						return ""
+					}
+					rs := []rune(flow.EditText())
+					if from < 0 || to > len(rs) || from > to {
+						return ""
+					}
+					return string(rs[from:to])
+				},
+				Replace: func(from, to int, text string) {
+					if flow != nil {
+						flow.ReplaceRange(from, to, text)
+						redraw()
+					}
+				},
 			})
 		case "privacy":
 			panel = u.usage.panel(u)
