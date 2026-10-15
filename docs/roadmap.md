@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-3 of 10 since the last full run (full run on the branch of the 10th merge, on main b0d43da plus the vertical-text change, with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on the first try; coverage score 89.6% (was 89.6%), README badge unchanged).
+4 of 10 since the last full run (full run on the branch of the 10th merge, on main b0d43da plus the vertical-text change, with GOJIBERRY_REQUIRE_BROWSER=1: `make check` passed in full on the first try; coverage score 89.6% (was 89.6%), README badge unchanged).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1084,9 +1084,9 @@ unless stated.
     sentence being spoken with previous, pause or resume, next and stop (keyboard reachable), and the speed (slow,
     normal, fast) is a kept preference. Only voices that run on the device (`localService`) are picked, and the menu
     says so; with none for a language the browser's default voice for it is used, which is the browser's own choice
-    and may use a network service. Open: choosing a network voice on purpose, highlighting the sentence in the
-    canvas (not only in the bar), and word-level highlighting from the boundary events. Priority: low.
+    and may use a network service. Priority: low.
     Where: `components`. Priority: low. Dependencies: 60, 64.
+    Also done (this PR), the three open parts. (1) **The sentence on the canvas**: each piece to speak knows where it is in the editor's text stream (`read.Chunk.Offsets`, `Span`; a struck run is in the stream but not spoken, a footnote mark counts once), and the flow marks the sentence being read faintly under the text (`TextFlow.SetReadMarks`, `Reveal`: it scrolls to the sentence without moving the caret); the sentence is also published as `data-gj-read-sentence` on the root element. (2) **The word**: the engine's boundary events give the character the voice is at, which becomes a word of the sentence (`Chunk.WordAt`; with or without the length the browser sends, in UTF-16 units, converted to runes) and is marked strongly (`data-gj-read-word`); a browser that sends no boundary events leaves the sentence marked. (3) **A network voice on purpose**: voices that may send the text to a speech service are not chosen unless the person allows them (Read aloud > Allow voices that use the internet, or Preferences > Typing and reading aloud; kept in this browser); a voice on the device is preferred to one on the network for the same language even then; and the reading bar says what is speaking ("Voice on this device", "Voice that uses the internet", "The browser's own voice" when it chose for itself). Tests: `TestChunksKnowTheirPlaceInTheStream`, `TestChunkPlacesSkipSuggestedRemovalsAndCountMarksOnce`, `TestReadMarksAreDrawnUnderTheText`, and in the browser `TestReadingAloudMarksTheSentenceAndTheWord`, `TestNetworkVoicesAreChosenOnlyOnPurpose`. Translations (de, fr, es, pt, he, ar). Item 67 is done.
 68. **Captions and transcripts.** Kind: fixable, only if media embedding exists or is planned. What: captions and a
     transcript field for embedded audio and video, a caption track editor, and a checker rule. Why it matters: media
     without text excludes deaf readers. Plan: (1) decide whether media embedding is in scope; (2) if so, require a

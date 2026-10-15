@@ -169,6 +169,8 @@ type TextFlow struct {
 	Ghost string
 	// preedit is the text an input method is composing, drawn at the caret (see Composer).
 	preedit string
+	// reading is the sentence and the word being read aloud (readmarks.go).
+	reading readMarks
 	// Vertical lays the text out in vertical lines (see vertical.go): top to bottom, the lines following one
 	// another from right to left.
 	Vertical bool

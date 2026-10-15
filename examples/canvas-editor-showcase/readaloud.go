@@ -3,6 +3,7 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 	"syscall/js"
 
@@ -18,6 +19,10 @@ import (
 // menu says so).
 
 type readState struct {
+	// mark shows the sentence and the word being read in the document (nil: nowhere to show it); reveal says to
+	// scroll to the sentence (when a new one starts).
+	mark    func(sentFrom, sentTo, wordFrom, wordTo int, reveal bool)
+	voice   string // what is speaking: "device", "network" or "" (the browser's own choice)
 	chunks  []read.Chunk
 	pos     int
 	playing bool
@@ -49,8 +54,12 @@ func speechRate() float64 {
 	return 1
 }
 
-// pickVoice is a voice for lang, one running on the device first; undefined when there is none
-// (the browser's default voice for the language is then used).
+// networkVoices says whether the person allowed voices that may send the text to a speech service on the
+// internet (Preferences > Typing and reading aloud). It is off unless chosen.
+func networkVoices() bool { return curPrefs.Voices == "net" }
+
+// pickVoice is a voice for lang, one running on the device first, a network voice only when the person allowed
+// them; undefined when there is none (the browser's default voice for the language is then used).
 func pickVoice(lang string) js.Value {
 	api := speechAPI()
 	if lang == "" {
@@ -72,8 +81,17 @@ func pickVoice(lang string) js.Value {
 		case strings.SplitN(vl, "-", 2)[0] == base:
 			score = 2
 		}
-		if score == 0 || !v.Get("localService").Truthy() {
-			continue // a voice that is not on the device is not picked
+		if score == 0 {
+			continue
+		}
+		if !v.Get("localService").Truthy() {
+			if !networkVoices() {
+				continue // a voice that is not on the device is not picked unless the person allowed it
+			}
+			score-- // and a voice on the device is preferred to it for the same language
+			if score == 0 {
+				continue
+			}
 		}
 		if score > bestScore {
 			best, bestScore = v, score
@@ -91,6 +109,38 @@ func stopReading() {
 	reading.cbs = nil
 	if api := speechAPI(); !api.IsUndefined() {
 		api.Call("cancel")
+	}
+	reading.voice = ""
+	publishRead(-1, 0, -1, 0)
+	if reading.mark != nil {
+		reading.mark(-1, 0, -1, 0, false)
+	}
+}
+
+// publishRead puts the sentence and the word being read on the root element (data-gj-read-sentence and
+// data-gj-read-word, "from-to" in stream offsets), for the page's own tests and for tools that watch it.
+func publishRead(sf, st, wf, wt int) {
+	root := js.Global().Get("document").Get("documentElement")
+	set := func(name string, from, to int) {
+		if from < 0 {
+			root.Call("removeAttribute", name)
+			return
+		}
+		root.Call("setAttribute", name, strconv.Itoa(from)+"-"+strconv.Itoa(to))
+	}
+	set("data-gj-read-sentence", sf, st)
+	set("data-gj-read-word", wf, wt)
+}
+
+// showRead marks the chunk being read (and the word of it, when wordFrom is not negative).
+func showRead(c read.Chunk, wordFrom, wordTo int, reveal bool) {
+	sf, st, ok := c.Span()
+	if !ok {
+		sf, st, wordFrom, wordTo = -1, 0, -1, 0
+	}
+	publishRead(sf, st, wordFrom, wordTo)
+	if reading.mark != nil {
+		reading.mark(sf, st, wordFrom, wordTo, reveal)
 	}
 }
 
@@ -117,9 +167,38 @@ func speakCurrent(renderUI func()) {
 	if c.Lang != "" {
 		utt.Set("lang", c.Lang)
 	}
+	reading.voice = ""
 	if v := pickVoice(c.Lang); !v.IsUndefined() {
 		utt.Set("voice", v)
+		reading.voice = "network"
+		if v.Get("localService").Truthy() {
+			reading.voice = "device"
+		}
 	}
+	showRead(c, -1, 0, true)
+	// the engine says where it is in the text: the word being said is marked in the document (browsers that do
+	// not send boundary events leave the sentence marked)
+	units := utf16Index(c.Text)
+	boundary := js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if gen != reading.gen || !reading.playing || len(args) == 0 || args[0].Get("name").String() != "word" {
+			return nil
+		}
+		ci := args[0].Get("charIndex").Int()
+		length := 0
+		if l := args[0].Get("charLength"); l.Type() == js.TypeNumber {
+			length = l.Int()
+		}
+		i := runeIndexAt(units, ci)
+		if length > 0 {
+			length = runeIndexAt(units, ci+length) - i
+		}
+		if from, to, ok := c.WordAt(i, length); ok {
+			showRead(c, from, to, false)
+		}
+		return nil
+	})
+	reading.cbs = append(reading.cbs, boundary)
+	utt.Set("onboundary", boundary)
 	next := js.FuncOf(func(js.Value, []js.Value) any {
 		if gen == reading.gen && reading.playing {
 			reading.pos++
@@ -178,7 +257,8 @@ func readMenu(u *ui, flow *canvas.TextFlow, renderUI func()) []components.MenuIt
 	}
 	return []components.MenuItem{
 		{Label: T("read.selection", "Read the selection aloud"), Disabled: flow == nil || !flow.HasSelection(), OnSelect: func() {
-			chunks := read.OfText(flow.SelectedText(), u.docLang)
+			from, _ := flow.Cursors()[0].Range()
+			chunks := read.OfText(flow.SelectedText(), u.docLang, from)
 			u.announce(T("read.started", "Reading aloud"))
 			startReading(chunks, renderUI)
 		}},
@@ -197,7 +277,18 @@ func readMenu(u *ui, flow *canvas.TextFlow, renderUI func()) []components.MenuIt
 		speed(T("read.normal", "Reading speed: normal"), ""),
 		speed(T("read.fast", "Reading speed: fast"), "fast"),
 		{Separator: true},
-		{Label: T("read.note", "Only voices that run on this device are chosen"), Disabled: true},
+		{Label: T("read.network", "Allow voices that use the internet"), Checked: networkVoices(), OnSelect: func() {
+			p := curPrefs
+			p.Voices = onOff(!networkVoices(), "net")
+			setPrefs(p)
+			if networkVoices() {
+				u.announce(T("read.networkOn", "Voices that use the internet are allowed: the browser may send the text it reads to a speech service"))
+			} else {
+				u.announce(T("read.networkOff", "Only voices that run on this device are chosen"))
+			}
+			renderUI()
+		}},
+		{Label: voiceNote(), Disabled: true},
 	}
 }
 
@@ -219,5 +310,50 @@ func readBar(u *ui, renderUI func()) xango.Node {
 		btn(T("read.next", "Next sentence"), func() { skipReading(1, renderUI) }),
 		btn(T("read.stop", "Stop reading"), func() { stopReading(); u.announce(T("read.stopped", "Stopped reading")); renderUI() }),
 		xango.El("mark", []xango.Attr{xango.A("class", "gj-readbar-now"), xango.A("id", "read-now")}, xango.Text(reading.chunks[reading.pos].Text)),
+		xango.El("span", []xango.Attr{xango.A("class", "gj-readbar-voice"), xango.A("id", "read-voice")}, xango.Text(voiceWords(reading.voice))),
 	)
+}
+
+// utf16Index lists, for each rune of s, the index of its first UTF-16 unit: the engine counts characters that way.
+func utf16Index(s string) []int {
+	var at []int
+	n := 0
+	for _, r := range s {
+		at = append(at, n)
+		if r >= 0x10000 {
+			n += 2
+		} else {
+			n++
+		}
+	}
+	return at
+}
+
+// runeIndexAt is the index of the rune that holds UTF-16 unit u (the last rune if u is past the text).
+func runeIndexAt(units []int, u int) int {
+	for i := len(units) - 1; i >= 0; i-- {
+		if units[i] <= u {
+			return i
+		}
+	}
+	return 0
+}
+
+// voiceNote says which voices are chosen, in words.
+func voiceNote() string {
+	if networkVoices() {
+		return T("read.noteNetwork", "Voices on this device first; others may send the text to a speech service")
+	}
+	return T("read.note", "Only voices that run on this device are chosen")
+}
+
+// voiceWords says what is speaking.
+func voiceWords(kind string) string {
+	switch kind {
+	case "device":
+		return T("read.voiceDevice", "Voice on this device")
+	case "network":
+		return T("read.voiceNetwork", "Voice that uses the internet")
+	}
+	return T("read.voiceDefault", "The browser's own voice")
 }

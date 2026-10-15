@@ -63,3 +63,39 @@ func TestNoPreeditWhenNotEditing(t *testing.T) {
 		t.Error("a text in view mode took a preedit")
 	}
 }
+
+// The sentence being read aloud is marked faintly and its word strongly, and the marks do not move the caret.
+func TestReadMarksAreDrawnUnderTheText(t *testing.T) {
+	f, p := newFlow("one two three", 400, 100)
+	if sf, _, wf, _ := f.ReadMarks(); sf >= 0 || wf >= 0 {
+		t.Fatal("marks before any were set")
+	}
+	f.SetReadMarks(0, 13, 4, 7)
+	f.Draw()
+	var sent, word bool
+	for _, c := range p.calls {
+		sent = sent || c == "fillStyle "+ReadSentenceColor
+		word = word || c == "fillStyle "+ReadWordColor
+	}
+	if !sent || !word {
+		t.Errorf("sentence %v word %v in %v", sent, word, p.calls)
+	}
+	if !p.has("fillRect 50 ") && !p.has("fillRect 42 ") { // "two" starts after "one " (4 letters of 8px from x 10)
+		t.Errorf("no rectangle at the word: %v", p.calls)
+	}
+	if c := f.Cursors()[0]; c.Caret != 0 {
+		t.Errorf("the marks moved the caret: %+v", c)
+	}
+	f.ClearReadMarks()
+	p.calls = nil
+	f.Draw()
+	for _, c := range p.calls {
+		if c == "fillStyle "+ReadWordColor {
+			t.Error("the marks stayed after they were cleared")
+		}
+	}
+	f.Reveal(8)
+	if x, y, h, ok := f.TakeReveal(); !ok || h <= 0 || x < 0 || y < 0 {
+		t.Errorf("reveal: %v %v %v %v", x, y, h, ok)
+	}
+}
