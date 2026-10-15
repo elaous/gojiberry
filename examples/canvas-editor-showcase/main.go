@@ -221,6 +221,7 @@ func main() {
 			u.title = d.Title
 		}
 		u.docLang = d.Language()
+		u.fidelity.restore(d)
 		u.loadTheme(d)
 		state.Theme = u.canvasTheme()
 		u.layout = d.PageLayout()
@@ -255,6 +256,7 @@ func main() {
 		d := docfile.FromFlow(u.title, flow)
 		d.Fonts = docfile.FromFonts(lib.Added())
 		d.SetLanguage(u.docLang)
+		d.SetImportReport(u.fidelity.kept())
 		u.themeInto(&d)
 		u.applyLayout(&d, state.PageWidth(), state.PageHeight(), state.Setup.Margins)
 		return d
@@ -585,9 +587,9 @@ func main() {
 									return
 								}
 								u.message = "Imported " + file
-								u.fidelity.noteImport(name, file, data)
 								u.saver.Detach() // what was imported is not the saved document that was open
 								openDoc(d)
+								u.fidelity.noteImport(name, file, data) // after openDoc, which shows the report the document came with
 							}()
 						})
 					},

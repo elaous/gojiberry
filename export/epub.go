@@ -28,11 +28,7 @@ func (EPUB) Export(snap Snapshot) ([]byte, error) {
 	// these exact bytes at a fixed offset, before parsing anything
 	// else as XML, so this can't just be Create()'d like the other
 	// entries (which zip.Writer would otherwise deflate by default).
-	mimetypeWriter, err := zw.CreateHeader(&zip.FileHeader{Name: "mimetype", Method: zip.Store})
-	if err != nil {
-		return nil, err
-	}
-	if _, err := mimetypeWriter.Write([]byte("application/epub+zip")); err != nil {
+	if err := zipMimetype(zw, "application/epub+zip"); err != nil {
 		return nil, err
 	}
 
@@ -43,7 +39,7 @@ func (EPUB) Export(snap Snapshot) ([]byte, error) {
 		{"OEBPS/content.xhtml", renderHTMLDocument(snap, true, safeSnapTheme(snap))},
 	}
 	for _, f := range files {
-		w, err := zw.Create(f.name)
+		w, err := zipEntry(zw, f.name, zip.Deflate)
 		if err != nil {
 			return nil, err
 		}

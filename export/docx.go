@@ -103,7 +103,7 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	add := func(name, content string) error {
-		w, err := zw.Create(name)
+		w, err := zipEntry(zw, name, zip.Deflate)
 		if err != nil {
 			return err
 		}
@@ -184,7 +184,7 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 	sort.Strings(names) // the same document gives the same bytes
 	for _, name := range names {
 		data := b.media[name]
-		w, err := zw.Create("word/media/" + name)
+		w, err := zipEntry(zw, "word/media/"+name, zip.Deflate)
 		if err != nil {
 			return nil, err
 		}
