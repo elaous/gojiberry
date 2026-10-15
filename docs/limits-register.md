@@ -77,7 +77,7 @@ Sources: [encryption-and-passkeys.md](encryption-and-passkeys.md) (called "the d
 
 7. **The directory server can withhold, show an old state, split views, and is trust-on-first-use.**
    1. *What:* (a) answer as if a key were absent, serve yesterday's rows or a log that stops short;
-      (b) show different people different logs (no witnesses); (c) the first owner key for an address
+      (b) show different people different logs (witnesses narrow this: a client that requires a quorum of them refuses a log that is not the one they cosigned, but only from the cosigned entry back, and only if the witnesses are independent of the operator); (c) the first owner key for an address
       is accepted on the provider session plus the new key's signature (trust on first use), so
       whoever is signed in as the address first can enroll first; (d) on an **unenrolled** address a
       server that holds the directory key can publish a key it holds, and can answer a client with the
@@ -91,8 +91,9 @@ Sources: [encryption-and-passkeys.md](encryption-and-passkeys.md) (called "the d
       that watchers are told about. See step 4b, "What the server can still do" and "Limits that
       remain" items 0 to 2.
    4. *Who:* the user enrolls early and watches the address; the operator keeps the directory key and
-      the store separate from provider sessions it should not use; the host may add witnesses
-      (backlog item 12).
+      the store separate from provider sessions it should not use; the host runs witnesses
+      and pins their keys in the clients (backlog item 12: built; finding independent parties to run
+      them is not code).
 
 8. **Attestation exists only for ed25519 SSH keys.**
    1. *What:* only those keys can sign a binding to an address; age and passkey-derived keys get

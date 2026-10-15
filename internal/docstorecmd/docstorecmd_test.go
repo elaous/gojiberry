@@ -710,3 +710,16 @@ func TestAdminToken(t *testing.T) {
 		}
 	}
 }
+
+func TestParseWitnesses(t *testing.T) {
+	k := strings.Repeat("ab", 32)
+	got, err := parseWitnesses("one:" + k + ", two:" + k)
+	if err != nil || len(got) != 2 || len(got["one"]) != 32 {
+		t.Fatalf("%v %v", got, err)
+	}
+	for _, bad := range []string{"one", "one:zz", "one:" + k[:10], ":" + k, "a:" + k + ",a:" + k} {
+		if _, err := parseWitnesses(bad); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

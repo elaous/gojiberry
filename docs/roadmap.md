@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (full run on the branch of the 10th merge, on main ada0cd3 plus the formatting toolbar, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy installed: `make check` passed in full on the third try. The first two runs found real faults, all fixed in that branch: an unformatted file, a click that started editing the main text and broke header editing in the document demos (keyboard-focus editing from item 59 now ignores focus the page gives for a click), a stale end-to-end check, and a flaky wait; the test and coverage timeouts were raised to 75 minutes because the showcase suite takes about 35. Coverage score 89.4% (was 89.6%), README badge updated).
+3 of 10 since the last full run (full run on the branch of the 10th merge, on main ada0cd3 plus the formatting toolbar, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy installed: `make check` passed in full on the third try. The first two runs found real faults, all fixed in that branch: an unformatted file, a click that started editing the main text and broke header editing in the document demos (keyboard-focus editing from item 59 now ignores focus the page gives for a click), a stale end-to-end check, and a flaky wait; the test and coverage timeouts were raised to 75 minutes because the showcase suite takes about 35. Coverage score 89.4% (was 89.6%), README badge updated).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -448,8 +448,21 @@ a way to avoid hitting the limit meanwhile.
     job, which fails on a skip), skip loudly with `SKIPPED, NOT TESTED`, and `docs/testing-workflow.md` has a Docker and a
     no-Docker recipe. They passed against MongoDB 7.0.14 under `-race`; the first real run exposed a test setup bug (the
     conformance factory did not empty its collection between subtests), fixed here. The adapter itself passed.
-12. **Log witnesses (directory).** Plan: a witness protocol where independent parties co-sign heads. Avoid:
-    compare heads between two auditors by hand.
+12. **Log witnesses (directory): done (this PR).** A witness is an independent party that reads the whole log, checks it
+    still contains the entry it cosigned last (`VerifyLogHead`, `VerifyLog`) and signs "entry N of this log (key K) has
+    hash H" with its own ed25519 key. `Client.Witness` is one run of that (head signature checked against the pinned
+    log keys, chain from the last cosigned entry, the log must reach the head; a cut log is refused and the witness's
+    state does not move) and posts it to `POST /directory/log/witness`; the directory
+    (`AdapterDirectory.Witnesses`, `GOJIBERRY_DOCSTORE_DIRECTORY_WITNESSES=name:hexkey,...`) takes only signatures of
+    known witnesses on entries that are its own (same hash and log key), keeps the newest of each, and
+    `GET /directory/log/cosigned` lists the cosigned entries, newest first. A client that sets `Client.Witnesses` and
+    `Client.WitnessQuorum` makes `WatchLog` require a quorum on the newest cosigned entry, and refuses a log that ends
+    before it or has another entry there (`ErrSplitView`; `WatchReport.Witnessed`). Tests: a quorum of one, two and
+    three; the log moving past the cosigned entry; the same operator key showing a witness-checked log and a different
+    one (split view caught), and a shorter one; forged, unknown-witness, wrong-entry and wrong-key cosignatures;
+    a witness refusing a cut log. What it does not do: it protects only from the cosigned entry back, a quorum of
+    colluding witnesses (or none running) protects no one, and a witness needs the whole log (the operator's or an
+    enrolled owner's view). Who runs the witnesses is not code: that needs outside parties.
 13. **Done (this PR): older log pseudonyms survive removing the retired directory key.** Was: a log entry names its
     address by a pseudonym keyed by the directory key that made it, so once the retired key left
     `..._DIRECTORY_KEY_PREV` the directory could no longer compute the old pseudonym of an address: the older entries
