@@ -139,6 +139,10 @@ the row into a table above. Nothing here is partly built except where "Present" 
 | canvas-todo.md | xango `Table` cell render prop and `CanvasView` | feature | open | `Table`, `Canvas` | a render prop per cell; a DOM component that mounts a `canvas/xango` tree (with a hidden text fallback for screen readers and no-wasm pages, [xango-canvas.md](xango-canvas.md)) |
 | canvas-todo.md | Spread view | enhancement | open | facing sheets, images across the gutter | gutter shadow, page-turn UI |
 | [opendocs-missing-features.md](opendocs-missing-features.md), [opendocs-port-plan.md](opendocs-port-plan.md) | Linked text frames, form fields, table formulas, scripting plug-ins | feature | open | none in Go code (checked by search) | all four; frames are the largest layout gap and need a design first. The two docs are older than the code: their other rows (margins, snippets, mentions, tags, signed documents, dictation) need a row-by-row re-check before anyone trusts "Missing" there |
+| [repo-split.md](repo-split.md) | Split the repository | chore | open | the import graph read; tiers and an order proposed | the licence decision, then modules in place (`xango` + `domrt`, `observe`, `crdt`, the language tools), then the repositories; needs the owner's answer on opendocs' editor model |
+| opendocs `docs/ROADMAP.md` | Scripting over the command registry | feature | open | `canvas.Command` names and `Stage.RunCommand`; opendocs has a Worker-isolated plugin system with six hand-kept methods | a sandboxed worker that is handed the registry, so a new command is reachable the moment it is registered |
+| opendocs `docs/ROADMAP.md` | Typewriter scrolling | enhancement | open | none (opendocs never designed it) | an optional mode where the page moves and the caret stays; its interaction with multi-cursor and page edges |
+| opendocs `docs/ROADMAP.md` | Frame reshaping to a polygon | feature | open | opendocs: rectangular frames, explode, per-page overrides, polygon paused | with linked frames above |
 | [multiuser-design.md](multiuser-design.md) | Sharing more surfaces | enhancement | open | headers, footers, floats, tables, images by position and size | adding and removing objects at run time, character formatting inside floating text, an image's picture |
 | [opendoc-format.md](opendoc-format.md) | Pack format, open points | enhancement | open | draft 1: hashes, signature, encrypted records, tools | hiding what the index shows about an encrypted record; large attachments as their own record kind; several signers; keys in the pack UI (the MIME type and the `file(1)` and shared-mime-info entries are done) (it leaves confidential documents out and says so) |
 | [known-limits-plan.md](known-limits-plan.md) | Browser tests in CI | chore | partial | the accessibility gate runs in Chrome in CI | the whole e2e suite there, once stable (it runs here, 24 minutes) |
@@ -152,7 +156,7 @@ Server and security table: every code item is done (passkey backlog 1 to 5, limi
 
 Earlier plan: nothing is partial; Encryption and passkeys is blocked on the audit and the witnesses.
 
-Found in the other docs: 12 rows, 9 open, 1 partial (browser tests in CI), 2 inherent (secure aggregation, case in Markdown).
+Found in the other docs: 16 rows, 13 open, 1 partial (browser tests in CI), 2 inherent (secure aggregation, case in Markdown).
 
 ## Suggested order for the next work
 
