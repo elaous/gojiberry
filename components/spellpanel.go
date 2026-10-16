@@ -32,6 +32,16 @@ type SpellPanelProps struct {
 	// OnIgnore leaves the word alone for now; OnAdd adds it to the user's own
 	// dictionary; OnGoto selects its first occurrence.
 	OnIgnore, OnAdd, OnGoto func(word string)
+
+	// Dictionaries are the dictionaries to choose from (the English one built in, and those a server offers),
+	// Dictionary the one in use and OnDictionary the choice; fewer than two leave the choice out.
+	// DictionaryNote says what is going on ("Loading the German dictionary…") or why a load failed
+	// (DictionaryFailed), as a status line.
+	Dictionaries     []DocChoice
+	Dictionary       string
+	OnDictionary     func(name string)
+	DictionaryNote   string
+	DictionaryFailed bool
 }
 
 // SpellPanel lists the misspelled words with their suggestions, and an
@@ -54,6 +64,25 @@ func SpellPanel(p SpellPanelProps) xango.Node {
 			info += trf("spell.looksLike", " · the text looks like %s", p.Detected)
 		}
 		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-spell-info")}, xango.Text(info)))
+		if len(p.Dictionaries) > 1 && p.OnDictionary != nil {
+			var opts []xango.Node
+			for _, d := range p.Dictionaries {
+				a := []xango.Attr{xango.A("value", d.Name)}
+				if d.Name == p.Dictionary {
+					a = append(a, xango.A("selected", "selected"))
+				}
+				opts = append(opts, xango.El("option", a, xango.Text(d.Label)))
+			}
+			kids = append(kids, xango.El("label", []xango.Attr{xango.A("class", "gj-spell-dictrow")}, xango.Text(tr("spell.chooseDictionary", "Use the dictionary")+" "),
+				xango.El("select", []xango.Attr{xango.A("class", "gj-spell-dict"), xango.On("change", func(e xango.Event) { p.OnDictionary(xango.EventValue[string](e)) })}, opts...)))
+		}
+		if p.DictionaryNote != "" {
+			attrs := []xango.Attr{xango.A("class", "gj-spell-dictnote"), xango.A("role", "status")}
+			if p.DictionaryFailed {
+				attrs = []xango.Attr{xango.A("class", "gj-spell-dictnote gj-doc-error"), xango.A("role", "alert")}
+			}
+			kids = append(kids, xango.El("p", attrs, xango.Text(p.DictionaryNote)))
+		}
 		if len(p.Items) == 0 {
 			kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-spell-none"), xango.A("role", "status")}, xango.Text(tr("spell.none", "No misspelled words"))))
 		}

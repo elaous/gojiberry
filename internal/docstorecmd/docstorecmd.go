@@ -29,6 +29,7 @@ import (
 	"github.com/elaous/gojiberry/docstore/exportgate"
 	"github.com/elaous/gojiberry/docstore/public"
 	"github.com/elaous/gojiberry/observe"
+	"github.com/elaous/gojiberry/spell/dictserver"
 	"github.com/elaous/gojiberry/telemetry"
 	"github.com/elaous/gojiberry/userconfig"
 )
@@ -123,6 +124,26 @@ func withTelemetry(srv *docstore.Server, value string) bool {
 	srv.WithTelemetry(telemetry.NewCounters())
 	log.Print("docstore: anonymous usage counts are accepted at /telemetry (see docs/telemetry.md)")
 	return true
+}
+
+// withDictionaries mounts the Hunspell dictionaries of a directory at /dict/ (spell/dictserver) when the operator
+// set GOJIBERRY_DOCSTORE_DICTIONARIES to it: the editor loads the one for a document's language from there on
+// demand, so only English is carried in the page. Unset, the route does not exist. A directory that cannot be
+// read stops the server rather than serving nothing. It reports whether the route is on.
+func withDictionaries(srv *docstore.Server, dir string) (bool, error) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return false, nil
+	}
+	fsys := os.DirFS(dir)
+	d := &dictserver.Server{FS: fsys}
+	langs, err := d.Languages()
+	if err != nil {
+		return false, fmt.Errorf("reading GOJIBERRY_DOCSTORE_DICTIONARIES %q: %w", dir, err)
+	}
+	srv.WithRoutes("/dict/", http.StripPrefix("/dict", d))
+	log.Printf("docstore: %d spelling dictionaries are served at /dict/ from %s", len(langs), dir)
+	return true, nil
 }
 
 // exportGate reads GOJIBERRY_DOCSTORE_EXPORT_GATE: "" or "allow" (no gate), "warn" or "block". With a gate
@@ -659,6 +680,9 @@ func Main() {
 	}
 	withTelemetry(srv, os.Getenv("GOJIBERRY_DOCSTORE_TELEMETRY"))
 	if err := withTelemetryNoise(srv, os.Getenv("GOJIBERRY_DOCSTORE_TELEMETRY_NOISE")); err != nil {
+		log.Fatalf("docstore: %v", err)
+	}
+	if _, err := withDictionaries(srv, os.Getenv("GOJIBERRY_DOCSTORE_DICTIONARIES")); err != nil {
 		log.Fatalf("docstore: %v", err)
 	}
 	publicSvc, err := withPublic(srv, adapter, cfg.ExpiryTTL, limiters)
