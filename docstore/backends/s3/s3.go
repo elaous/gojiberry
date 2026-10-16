@@ -5,11 +5,15 @@ package s3
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/elaous/gojiberry/docstore"
 	"io"
+	"log"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -121,6 +125,9 @@ type Adapter struct {
 	client s3API
 	bucket string
 	prefix string
+
+	probeMu  sync.Mutex
+	deleteIf int // 0: not probed, 1: the service honours If-Match on DeleteObject, 2: it does not
 }
 
 // New wraps an already-configured *s3.Client. Building the
@@ -188,11 +195,21 @@ func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest
 // DeleteIf implements docstore.ConditionalDeleter with S3's conditional delete: the object is read,
 // found to be what prevDigest says, and deleted with If-Match: the ETag of the bytes just read, so the
 // delete only lands if nothing replaced the object in between (412 PreconditionFailed is
-// docstore.ErrConflict). An object that is not there is docstore.ErrNotFound. A store that ignores
-// If-Match on DeleteObject would delete whatever is there: the S3 service and MinIO honor it, and
-// an S3-compatible service that does not should not be used for a document expiry that must keep a
-// changed document.
+// docstore.ErrConflict). An object that is not there is docstore.ErrNotFound.
+//
+// A service that ignores If-Match on DeleteObject would delete whatever is there, so the first
+// DeleteIf asks the service once (probeDeleteIf: an object it makes, a delete with a wrong ETag,
+// and whether the object survived). A service that deleted it is one this cannot be trusted on:
+// DeleteIf then answers docstore.ErrConditionalUnsupported for good and says so in the log, and the
+// callers do what they do for a store with no conditional delete (the challenge and session stores
+// claim by a conditional save; document expiry deletes what it read, as it does on any such store).
 func (a *Adapter) DeleteIf(ctx context.Context, id string, prevDigest string) error {
+	switch ok, err := a.honoursDeleteIf(ctx); {
+	case err != nil:
+		return err
+	case !ok:
+		return docstore.ErrConditionalUnsupported
+	}
 	out, err := a.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(a.bucket), Key: aws.String(a.key(id))})
 	if isS3NotFound(err) {
 		return docstore.ErrNotFound
@@ -218,6 +235,60 @@ func (a *Adapter) DeleteIf(ctx context.Context, id string, prevDigest string) er
 		return err
 	}
 	return nil
+}
+
+// honoursDeleteIf says whether the service refuses a DeleteObject whose If-Match does not match,
+// asking it once and remembering the answer. An error (the probe could not run: no permission to
+// write, the service is down) is returned and not remembered.
+func (a *Adapter) honoursDeleteIf(ctx context.Context) (bool, error) {
+	a.probeMu.Lock()
+	defer a.probeMu.Unlock()
+	if a.deleteIf != 0 {
+		return a.deleteIf == 1, nil
+	}
+	ok, err := a.probeDeleteIf(ctx)
+	if err != nil {
+		return false, err
+	}
+	a.deleteIf = 2
+	if ok {
+		a.deleteIf = 1
+	} else {
+		log.Printf("docstore: the S3-compatible service at bucket %q ignores If-Match on DeleteObject: conditional deletes are off for it (a delete cannot be tied to the version that was read); use a service that honours it for the best protection of a document renewed while it is being expired", a.bucket)
+	}
+	return ok, nil
+}
+
+// probeDeleteIf makes an object, asks the service to delete it with an If-Match that cannot match, and
+// reports whether the object is still there (the service refused). It removes the object either way.
+func (a *Adapter) probeDeleteIf(ctx context.Context) (bool, error) {
+	var raw [8]byte
+	_, _ = rand.Read(raw[:])
+	key := a.key(docstore.DirectoryLogPrefix + "probe/delete-if-" + hex.EncodeToString(raw[:]))
+	if _, err := a.client.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(a.bucket), Key: aws.String(key), Body: bytes.NewReader([]byte("probe"))}); err != nil {
+		return false, fmt.Errorf("s3: probing conditional delete: %w", err)
+	}
+	defer func() {
+		_, _ = a.client.DeleteObject(context.WithoutCancel(ctx), &s3.DeleteObjectInput{Bucket: aws.String(a.bucket), Key: aws.String(key)})
+	}()
+	_, err := a.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(a.bucket), Key: aws.String(key), IfMatch: aws.String(`"gojiberry-no-such-etag"`)})
+	if err != nil && !isS3Conflict(err) && !isS3NotFound(err) {
+		// An error that is not a refusal of the condition says nothing about the condition.
+		var api smithy.APIError
+		if errors.As(err, &api) && api.ErrorCode() == "NotImplemented" {
+			return false, nil // the service does not know the header at all
+		}
+		return false, fmt.Errorf("s3: probing conditional delete: %w", err)
+	}
+	_, gerr := a.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(a.bucket), Key: aws.String(key)})
+	switch {
+	case gerr == nil:
+		return true, nil // still there: the condition was honoured
+	case isS3NotFound(gerr):
+		return false, nil // gone: the condition was ignored
+	default:
+		return false, fmt.Errorf("s3: probing conditional delete: %w", gerr)
+	}
 }
 
 func isS3Conflict(err error) bool {

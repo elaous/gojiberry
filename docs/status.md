@@ -103,7 +103,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 86 | Public offer report counters per process | enhancement | done | priority allowance, burst watch (`SharedBurstWatch`) and the global report count (recounted from the store at each sweep) shared | none |
 | 87 | Owner key rotate and reset in the showcase | feature | done | rotate, reset, watch names a reset | clock moved by the page, not the tests |
 | 88 | API dumps regenerated; `make check` fails when stale | chore | done | yes | none |
-| 89 | Security review of keys and directory | security | partial | challenge-oracle fixed; owner key non-extractable in IndexedDB; fingerprints for log keys | outside audit (blocked); S3-compatible `If-Match` on delete untested; PRF/age/SSH/frame format unreviewed by others |
+| 89 | Security review of keys and directory | security | blocked | challenge-oracle fixed; owner key non-extractable in IndexedDB; fingerprints for log keys; S3-compatible `If-Match` on delete probed at the first use | an outside audit and independent review of the PRF, age, SSH and frame formats: a person has to commission them; a save with identical bytes in the expiry race is inherent |
 
 ## Earlier plan ("Next" and "Later" in the roadmap)
 

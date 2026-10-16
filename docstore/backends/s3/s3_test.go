@@ -11,6 +11,7 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 	"io"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -194,7 +195,7 @@ type racingDelete struct {
 }
 
 func (r *racingDelete) DeleteObject(ctx context.Context, in *s3.DeleteObjectInput, o ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
-	if in.IfMatch != nil && r.before != nil {
+	if in.IfMatch != nil && r.before != nil && !strings.Contains(*in.Key, "/probe/") {
 		r.before()
 		r.before = nil
 	}
@@ -335,4 +336,69 @@ func TestS3LoadHeadSendsARange(t *testing.T) {
 	if len(fake.ranges) != 1 || fake.ranges[0] != "bytes=0-99" {
 		t.Errorf("ranges sent: %q", fake.ranges)
 	}
+}
+
+// ignoresIfMatch is a service that does not know If-Match on DeleteObject: it deletes whatever is there.
+type ignoresIfMatch struct{ *fakeS3 }
+
+func (r *ignoresIfMatch) DeleteObject(ctx context.Context, in *s3.DeleteObjectInput, o ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
+	c := *in
+	c.IfMatch = nil
+	return r.fakeS3.DeleteObject(ctx, &c, o...)
+}
+
+// A service that ignores If-Match on delete is found out by the first DeleteIf, which then declines for
+// good (ErrConditionalUnsupported) and deletes nothing; the probe object does not stay.
+func TestS3DeleteIfDeclinesOnAServiceThatIgnoresIfMatch(t *testing.T) {
+	fake := newFakeS3()
+	a := newAdapter(&ignoresIfMatch{fake}, "b", "p/")
+	ctx := context.Background()
+	_ = a.Save(ctx, "x", []byte("one"))
+	for range 2 {
+		if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); !errors.Is(err, docstore.ErrConditionalUnsupported) {
+			t.Fatalf("%v", err)
+		}
+	}
+	if _, err := a.Load(ctx, "x"); err != nil {
+		t.Fatalf("DeleteIf deleted on a service it cannot trust: %v", err)
+	}
+	if metas, _ := a.List(ctx); len(metas) != 1 {
+		t.Errorf("the probe object stayed: %v", metas)
+	}
+}
+
+// A probe that cannot run (no permission to write) is an error, not an answer: it is asked again next time.
+func TestS3DeleteIfProbeFailureIsNotRemembered(t *testing.T) {
+	fake := newFakeS3()
+	failing := &failPut{fakeS3: fake, fail: true}
+	a := newAdapter(failing, "b", "p/")
+	ctx := context.Background()
+	_ = fake.putDirect("p/x", []byte("one"))
+	if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); err == nil || errors.Is(err, docstore.ErrConditionalUnsupported) {
+		t.Fatalf("%v", err)
+	}
+	failing.fail = false
+	if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); err != nil {
+		t.Fatalf("the probe was not asked again: %v", err)
+	}
+}
+
+type failPut struct {
+	*fakeS3
+	fail bool
+}
+
+func (f *failPut) PutObject(ctx context.Context, in *s3.PutObjectInput, o ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+	if f.fail {
+		return nil, apiErr{"AccessDenied"}
+	}
+	return f.fakeS3.PutObject(ctx, in, o...)
+}
+
+func (f *fakeS3) putDirect(key string, data []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.objects[key] = data
+	f.etags[key] = `"` + docstore.Digest(data)[:16] + `"`
+	return nil
 }
