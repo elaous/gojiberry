@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-9 of 10 since the last full run (full run on the branch of the 10th merge, on main ada0cd3 plus the formatting toolbar, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy installed: `make check` passed in full on the third try. The first two runs found real faults, all fixed in that branch: an unformatted file, a click that started editing the main text and broke header editing in the document demos (keyboard-focus editing from item 59 now ignores focus the page gives for a click), a stale end-to-end check, and a flaky wait; the test and coverage timeouts were raised to 75 minutes because the showcase suite takes about 35. Coverage score 89.4% (was 89.6%), README badge updated).
+10 of 10 since the last full run (full run on the branch of the 10th merge, on main ada0cd3 plus the formatting toolbar, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy installed: `make check` passed in full on the third try. The first two runs found real faults, all fixed in that branch: an unformatted file, a click that started editing the main text and broke header editing in the document demos (keyboard-focus editing from item 59 now ignores focus the page gives for a click), a stale end-to-end check, and a flaky wait; the test and coverage timeouts were raised to 75 minutes because the showcase suite takes about 35. Coverage score 89.4% (was 89.6%), README badge updated).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -280,8 +280,13 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 4. **Console mode: done** (`console`, `cmd/docsh`, [console.md](console.md)); **Closed (this PR):** the editor panel. `console.Session` and `components.ConsolePanel` are the showcase's Console tab (File menu): a live log, a command line with history, the prompt following `cd`, Yes and No for `purge` and `rebuild`, files for `import` and `unpack` added with a button (`console.PageFiles`, patterns work) and what `export` and `pack` make downloaded; `Shell.Files` and `Shell.Confirm` are the two hooks it needed, and the writers of the other file formats are the page's own registry (the file worker). Tests: `console/session_test.go` and the browser test `TestConsoleTabRunsCommandsOnTheDocuments` (commands, add and import, Up key, download, purge with No and Yes, the Save tab's list), plus axe over the tab. The wasm budget was raised for it and the pieces before it (raw 28.3 MB, gzip 7.0 MB).
 5. **Terminal app demo: done** (`examples/terminal-demo`: a file manager and a line editor over `saver.Session`, with the console grammar).
 6. **Store backends with conditional saves: done** for PostgreSQL, MongoDB and S3/MinIO (`SaveIf` in `docstore/backends`; the PostgreSQL one is tested with sqlmock, S3 against a fake that enforces `If-Match`/`If-None-Match`, and MongoDB, which has no fake, runs when `TEST_MONGO_URI` is set, so it has not run against a live server yet).
-7. The rest of the [known limits plan](known-limits-plan.md): i18n breadth,
-   accessibility depth, right-to-left, Hunspell dictionaries on demand.
+7. **The [known limits plan](known-limits-plan.md): done.** i18n breadth, accessibility depth and right-to-left were
+   done under items 48 to 69 and 83; **Hunspell dictionaries on demand is closed (this PR)**: `spell.LoadHunspell`
+   (character sets, cross products, `FLAG num`, compounding, `NEEDAFFIX`, `FORBIDDENWORD`, `TRY`, `REP`, `KEY`),
+   `spell.Remote` and `spell/dictserver` (`GOJIBERRY_DOCSTORE_DICTIONARIES`), and a dictionary choice in the
+   showcase's Spelling tab. Tests: `spell/hunspell_ext_test.go`, `spell/remote_test.go`, `TestWithDictionariesServesTheDirectory`
+   and the browser test `TestSpellingLoadsAnotherLanguagesDictionaryOnDemand` (a German compound is a word once the
+   dictionary is chosen). What is not done is listed in the plan (B7); no real LibreOffice dictionary was run here.
 
 - **Done:** TypeScript in the browser from Go. tsgo builds to wasm and transpiles; sizes and conclusions in [typescript-in-wasm.md](typescript-in-wasm.md).
 

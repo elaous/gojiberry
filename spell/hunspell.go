@@ -28,6 +28,8 @@ const (
 	// hunspellFlagLong ("FLAG long"): each flag is exactly two ASCII
 	// characters.
 	hunspellFlagLong
+	// hunspellFlagNum ("FLAG num"): flags are decimal numbers separated by commas.
+	hunspellFlagNum
 )
 
 // hunspellCondMatcher matches one rune position of a Hunspell affix
@@ -66,6 +68,30 @@ type hunspellAffixFile struct {
 	Mode               hunspellFlagMode
 	Classes            map[string]*hunspellAffixClass
 	OnlyInCompoundFlag string // "" if the .aff file never declares one
+
+	// The rest is what a language other than English needs (see hunspell_ext.go).
+	Set                string // SET: the file's character encoding ("" is UTF-8)
+	Try                string // TRY: the letters of the language, most common first (suggestions)
+	Rep                []hunspellRep
+	Key                [][]rune // KEY: keyboard rows ("qwertyuiop|asdfghjkl|zxcvbnm"), neighbours are the typos
+	CompoundFlag       string   // COMPOUNDFLAG: a word with it may be a part of a compound anywhere
+	CompoundBegin      string
+	CompoundMiddle     string
+	CompoundEnd        string
+	CompoundMin        int // COMPOUNDMIN: the shortest part of a compound (3 if not said)
+	CompoundRules      [][]compoundElem
+	NeedAffix          string // NEEDAFFIX: a stem with it is not a word by itself, only with an affix
+	ForbiddenWord      string // FORBIDDENWORD: a word with it is never right, whatever the rules make of it
+	CompoundPermitFlag string // COMPOUNDPERMITFLAG: an affix with it may be used inside a compound
+}
+
+// hunspellRep is one REP line: a common mistake and what it should be ("ph" "f"; "^a" and "a$" anchor it).
+type hunspellRep struct{ From, To string }
+
+// compoundElem is one element of a COMPOUNDRULE: a flag and how often it may repeat ('*', '?' or 0 for once).
+type compoundElem struct {
+	Flag string
+	Mod  byte
 }
 
 // hunspellDicEntry is one .dic line: a stem plus its own raw,
@@ -100,20 +126,73 @@ func parseHunspellAffix(data string) *hunspellAffixFile {
 			switch fields[1] {
 			case "UTF-8":
 				aff.Mode = hunspellFlagUTF8
+			case "num":
+				aff.Mode = hunspellFlagNum
 			case "long":
 				aff.Mode = hunspellFlagLong
-			// "num" (comma-separated decimal flags) isn't supported --
-			// left at hunspellFlagDefault, which will simply fail to
-			// find matching affix classes for a "num"-mode dictionary's
-			// own multi-digit flags (a single byte/rune won't match a
-			// class keyed by a whole number), degrading to "only bare
-			// stems recognized, no inflected forms" for that
-			// dictionary rather than misparsing it.
+
 			default:
 			}
 		case "ONLYINCOMPOUND":
 			if len(fields) >= 2 {
 				aff.OnlyInCompoundFlag = fields[1]
+			}
+		case "SET":
+			if len(fields) >= 2 {
+				aff.Set = fields[1]
+			}
+		case "TRY":
+			if len(fields) >= 2 {
+				aff.Try = fields[1]
+			}
+		case "REP":
+			if len(fields) >= 3 {
+				aff.Rep = append(aff.Rep, hunspellRep{From: fields[1], To: strings.ReplaceAll(fields[2], "_", " ")})
+			}
+		case "KEY":
+			if len(fields) >= 2 {
+				for _, row := range strings.Split(fields[1], "|") {
+					aff.Key = append(aff.Key, []rune(row))
+				}
+			}
+		case "COMPOUNDFLAG":
+			if len(fields) >= 2 {
+				aff.CompoundFlag = fields[1]
+			}
+		case "COMPOUNDBEGIN":
+			if len(fields) >= 2 {
+				aff.CompoundBegin = fields[1]
+			}
+		case "COMPOUNDMIDDLE":
+			if len(fields) >= 2 {
+				aff.CompoundMiddle = fields[1]
+			}
+		case "COMPOUNDEND":
+			if len(fields) >= 2 {
+				aff.CompoundEnd = fields[1]
+			}
+		case "COMPOUNDMIN":
+			if len(fields) >= 2 {
+				aff.CompoundMin = atoiOr(fields[1], 0)
+			}
+		case "COMPOUNDPERMITFLAG":
+			if len(fields) >= 2 {
+				aff.CompoundPermitFlag = fields[1]
+			}
+		case "NEEDAFFIX", "PSEUDOROOT":
+			if len(fields) >= 2 {
+				aff.NeedAffix = fields[1]
+			}
+		case "FORBIDDENWORD":
+			if len(fields) >= 2 {
+				aff.ForbiddenWord = fields[1]
+			}
+		case "COMPOUNDRULE":
+			// the count line ("COMPOUNDRULE 2") has a number; each rule line has a pattern
+			if len(fields) >= 2 && atoiOr(fields[1], -1) < 0 {
+				if rule := parseCompoundRule(fields[1], aff.Mode); len(rule) > 0 {
+					aff.CompoundRules = append(aff.CompoundRules, rule)
+				}
 			}
 		case "PFX", "SFX":
 			if len(fields) < 4 {
@@ -330,6 +409,8 @@ func splitHunspellFlags(raw string, mode hunspellFlagMode) []string {
 			out[i] = string(r)
 		}
 		return out
+	case hunspellFlagNum:
+		return strings.Split(raw, ",")
 	case hunspellFlagLong:
 		var out []string
 		for i := 0; i+1 < len(raw); i += 2 {

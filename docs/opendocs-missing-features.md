@@ -11,7 +11,7 @@ two engines differ and what moves cleanly.
 | Feature (opendocs) | Here |
 |---|---|
 | Find and replace (panel, case, whole word, regex) | Have (`canvas` find/replace, `components.FindReplace`) |
-| Spell check with suggestions, Tab autocomplete, Hunspell dictionaries (English embedded, others downloaded), custom words | Partial (squiggles, suggestions and custom words; English only embedded, no download of other dictionaries) |
+| Spell check with suggestions, Tab autocomplete, Hunspell dictionaries (English embedded, others downloaded), custom words | Done (squiggles, suggestions and custom words; English embedded; other languages' Hunspell dictionaries load on demand from a dictionary server, with compounds, cross-product forms, TRY, REP and KEY: [known-limits-plan.md](known-limits-plan.md) B7) |
 | Grammar check (LLM backend), language detection, translation through a backend | Have (`grammar`, `lang`, `translate` clients; a language panel) |
 | Hyphenation (soft, on request, pattern based) | Have (`hyphen`, a layouter hook, a View toggle) |
 | Special-characters picker | Have (`components` symbol picker) |

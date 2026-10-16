@@ -118,7 +118,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | Console mode | feature | done | `console`, `cmd/docsh`; the showcase's Console tab (`console.Session`, `components.ConsolePanel`) | none |
 | Terminal demo | feature | done | `examples/terminal-demo` | none |
 | Backends with conditional saves | feature | done | PostgreSQL, MongoDB, S3 | blob backend cannot, by design |
-| Known limits plan tail | enhancement | open | partly in 64 and 83 | RTL, Hunspell dictionaries on demand |
+| Known limits plan tail | enhancement | done | i18n breadth, RTL and accessibility depth (64, 83, 48 to 69); Hunspell dictionaries on demand (`spell.LoadHunspell`, `spell.Remote`, `spell/dictserver`, a dictionary choice in the Spelling tab) | none named: `ICONV`/`OCONV`, `BREAK` and the rarer compound checks are not read, and no real LibreOffice dictionary was run here |
 
 ## Counts
 
