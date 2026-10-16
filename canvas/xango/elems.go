@@ -60,6 +60,7 @@ func (f *flowElem) Update(_ *Context, props any, _ []xango.Node) (bool, error) {
 	fl := f.flow
 	fl.Pages = f.ps
 	fl.OnChange = p.OnChange
+	fl.OnFootnote = p.OnFootnote
 	fl.OnLink, fl.OnHoverLink = p.OnLink, p.OnHoverLink
 	if !sameValue(p.Hyphenator, old.Hyphenator) {
 		fl.Hyphenator = p.Hyphenator

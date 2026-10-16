@@ -6,8 +6,10 @@ import "strconv"
 // deletes with the text) marks the place, drawn as a small raised number;
 // the note's text is in a FootnoteSet under the ref's ID. The flow numbers
 // the refs in text order, and draws each page's notes in a band reserved at
-// the bottom of that page (FootnoteBand), under a short rule. A note too
-// long for the band is cut with an ellipsis.
+// the bottom of that page, under a short rule. A page gives its notes exactly the room they need (the text above
+// gives way, so a mark and its note stay on the same page), up to a cap (FootnoteBand, by default 40 % of the
+// page); a note that does not fit in the cap goes on at the foot of the next page. A page always holds at least the
+// start of the notes of its marks. Nothing is cut: no note ends in an ellipsis.
 
 // Footnote is a note's text.
 type Footnote struct {
@@ -36,6 +38,9 @@ func NewFootnoteSet(notes ...Footnote) *FootnoteSet {
 // Add stores n, giving it an ID ("n1", "n2", ...) if it has none, and
 // returns it. An existing ID replaces that note.
 func (s *FootnoteSet) Add(n Footnote) Footnote {
+	if rs := []rune(n.Text); len(rs) > MaxFootnoteRunes {
+		n.Text = string(rs[:MaxFootnoteRunes])
+	}
 	if n.ID == "" {
 		for {
 			s.next++
@@ -126,21 +131,21 @@ const (
 	footnoteMarkFont = "bold 10px sans-serif"
 	footnoteFont     = "11px sans-serif"
 	footnoteLineH    = 14.0
-	// DefaultFootnoteBand is the room at the bottom of each page kept for
-	// its notes when TextFlow.FootnoteBand is not set.
-	DefaultFootnoteBand = 64.0
+	// footnotePad is the room above a page's notes (the rule) and below them.
+	footnotePad = 8.0
+	// footnoteCapShare is the share of a page's text area its notes may take when FootnoteBand is not set.
+	footnoteCapShare = 0.4
+	// MaxFootnoteRunes is the longest a note can be (FootnoteSet.Add keeps the first MaxFootnoteRunes characters).
+	MaxFootnoteRunes = 1000
 )
 
-// footnoteBand is the height reserved at the bottom of every page: none
-// when there are no notes.
-func (f *TextFlow) footnoteBand() float64 {
-	if f.Footnotes.Len() == 0 {
+// footnoteBandOf is the height kept at the bottom of page for its notes: none when it has none. It is set by the
+// layout (see Layout), which places the notes of each page and gives the text above only what is left.
+func (f *TextFlow) footnoteBandOf(page int) float64 {
+	if f.Footnotes.Len() == 0 || page < 0 || page >= len(f.fnBands) {
 		return 0
 	}
-	if f.FootnoteBand > 0 {
-		return f.FootnoteBand
-	}
-	return DefaultFootnoteBand
+	return f.fnBands[page]
 }
 
 // FootnoteEntry is a note that is referenced from the text.
@@ -172,27 +177,16 @@ func (f *TextFlow) FootnoteList() []FootnoteEntry {
 	return out
 }
 
-// drawFootnotes draws each page's notes in its reserved band.
+// drawFootnotes draws each page's notes in the band the layout gave them.
 func (f *TextFlow) drawFootnotes(lay Layout) {
-	band := f.footnoteBand()
-	if band == 0 || f.Painter == nil {
+	if f.Painter == nil || len(f.fnLines) == 0 {
 		return
 	}
-	byPage := map[int][]FootnoteEntry{}
-	list := f.FootnoteList()
-	pageOf := map[int]int{}
-	for _, ln := range lay.Lines {
-		for _, o := range ln.Objects {
-			pageOf[o.Offset] = ln.Page
-		}
-	}
-	for _, e := range list {
-		if pg, ok := pageOf[e.Offset]; ok {
-			byPage[pg] = append(byPage[pg], e)
-		}
-	}
 	p := f.Painter
-	for pg, notes := range byPage {
+	for pg, lines := range f.fnLines {
+		if len(lines) == 0 {
+			continue
+		}
 		x, y, w, h := f.physRect(pg)
 		y0 := y + h + 4
 		p.SetFillStyle("#c4c7cd")
@@ -201,24 +195,95 @@ func (f *TextFlow) drawFootnotes(lay Layout) {
 		p.SetFillStyle("#4b5563")
 		p.SetTextAlign("left")
 		p.SetTextBaseline("alphabetic")
-		maxLines := int((band - 8) / footnoteLineH)
 		ty := y0 + 4 + 10
-		lines := 0
-		for _, n := range notes {
-			text := strconv.Itoa(n.N) + " " + CommentSummary(n.Text, 0)
-			for _, l := range wrapToWidth(p, text, w) {
-				if lines >= maxLines {
-					break
-				}
-				if lines == maxLines-1 && l != "" {
-					l = ellipsize(p, l, w)
-				}
-				p.FillText(l, x, ty)
-				ty += footnoteLineH
-				lines++
-			}
+		for _, l := range lines {
+			p.FillText(l.text, x, ty)
+			ty += footnoteLineH
 		}
 	}
+}
+
+// fnLine is one line of a page's notes and the note it belongs to.
+type fnLine struct{ text, id string }
+
+// footnoteAt is the note whose line on a page's band holds the point (x, y), if any: a click there edits the note
+// on the page itself.
+func (f *TextFlow) footnoteAt(x, y float64) (string, bool) {
+	for pg, lines := range f.fnLines {
+		if len(lines) == 0 {
+			continue
+		}
+		px, py, pw, ph := f.physRect(pg)
+		ty := py + ph + 4 + 4 // the first line's top, below the rule
+		if x < px || x > px+pw || y < ty || y >= ty+footnoteLineH*float64(len(lines)) {
+			continue
+		}
+		return lines[int((y-ty)/footnoteLineH)].id, true
+	}
+	return "", false
+}
+
+// footnotePlan works out, for the layout lay, which lines of notes each page shows and how tall its band is. The
+// notes of the marks on a page come after what the pages before could not hold; a page shows as many lines as its
+// cap allows (at least two) and passes the rest on; the last page shows everything up to four fifths of itself.
+func (f *TextFlow) footnotePlan(lay Layout) (bands []float64, lines [][]fnLine) {
+	n := f.pageCount()
+	bands, lines = make([]float64, n), make([][]fnLine, n)
+	pageOf := map[int]int{}
+	for _, ln := range lay.Lines {
+		for _, o := range ln.Objects {
+			pageOf[o.Offset] = ln.Page
+		}
+	}
+	byPage := map[int][]FootnoteEntry{}
+	for _, e := range f.FootnoteList() {
+		if pg, ok := pageOf[e.Offset]; ok {
+			byPage[pg] = append(byPage[pg], e)
+		}
+	}
+	p := f.Painter
+	if p != nil {
+		p.SetFont(footnoteFont)
+	}
+	var carry []fnLine
+	for pg := range n {
+		_, _, w, h := f.pageContent(pg)
+		queue := carry
+		carry = nil
+		for _, e := range byPage[pg] {
+			text := strconv.Itoa(e.N) + " " + CommentSummary(e.Text, 0)
+			if p == nil {
+				queue = append(queue, fnLine{text, e.ID})
+				continue
+			}
+			for _, l := range wrapToWidth(p, text, w) {
+				queue = append(queue, fnLine{l, e.ID})
+			}
+		}
+		if len(queue) == 0 {
+			continue
+		}
+		capH := f.FootnoteBand
+		if capH <= 0 {
+			capH = footnoteCapShare * h
+		}
+		if pg == n-1 {
+			capH = max(capH, 0.8*h)
+		}
+		most := max(int((capH-footnotePad)/footnoteLineH), 2)
+		take := min(len(queue), most)
+		lines[pg], carry = queue[:take], queue[take:]
+		bands[pg] = footnotePad + float64(take)*footnoteLineH
+	}
+	return bands, lines
+}
+
+// pageContent is the rectangle of page's text area before the notes take their share.
+func (f *TextFlow) pageContent(page int) (x, y, w, h float64) {
+	if f.Pages != nil {
+		return f.Pages.ContentRect(page)
+	}
+	return f.X, f.Y, f.Width, f.Height
 }
 
 // wrapToWidth breaks text into lines no wider than w (in the painter's

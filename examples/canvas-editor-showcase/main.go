@@ -49,7 +49,8 @@ type ui struct {
 	menu                         int    // open menu, or -1
 	tab                          string // sidebar tab: format, symbols, keys
 	check                        checkState
-	fidelity                     fidelityState // the Import/Export tab's report of what a format loses
+	noteEd                       *components.NoteEditor // the dialog a footnote is typed in
+	fidelity                     fidelityState          // the Import/Export tab's report of what a format loses
 	collab                       components.CollabAnnouncer
 	collabTimer                  bool
 	current                      func() docfile.Document // the document as it is being edited now
@@ -204,6 +205,14 @@ func main() {
 	lib.OnError = func(family string, err error) { logFont(family + ": " + err.Error()) }
 	refocus := func() { inputEl.Call("focus", map[string]any{"preventScroll": true}) }
 
+	u.noteEd = components.NewNoteEditor(func() { renderUI() })
+	stage.EditNote = func(title, initial string, max int, done func(string, bool)) {
+		u.noteEd.Edit(title, initial, max, func(text string, ok bool) {
+			done(text, ok)
+			renderUI()
+			refocus()
+		})
+	}
 	cb := Callbacks{
 		OnFlow: func(*canvas.TextFlow) {
 			u.saver.MarkEdited()
@@ -818,7 +827,8 @@ func main() {
 					OnGoto: goToHeading(func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw),
 				}),
 				components.Announcer(u.announcement),
-				components.TypingLive(u.typingMsg, u.typingN)),
+				components.TypingLive(u.typingMsg, u.typingN),
+				u.noteEd.Dialog()),
 			Sidebar: &side, StatusBar: &bar,
 		})
 		labelCanvas(canvasEl.Element, inputEl.Element)

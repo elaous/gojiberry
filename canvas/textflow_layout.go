@@ -1,6 +1,7 @@
 package canvas
 
 import (
+	"slices"
 	"sort"
 	"unicode"
 )
@@ -329,8 +330,35 @@ type paraCtx struct {
 	dropLH    float64
 }
 
-// Layout flows the content and returns where every line goes.
+// Layout flows the content and returns where every line goes. With footnotes it settles twice over: the notes a
+// page keeps room for depend on which marks land on it, and which marks land on it depends on the room left; the
+// layout is repeated until the two agree (after a few rounds the bands only grow, which ends it).
 func (f *TextFlow) Layout() Layout {
+	lay := f.layoutOnce()
+	if f.Footnotes.Len() == 0 {
+		f.fnBands, f.fnLines = nil, nil
+		return lay
+	}
+	for pass := range 8 {
+		bands, lines := f.footnotePlan(lay)
+		if pass >= 3 {
+			for i := range bands {
+				if i < len(f.fnBands) {
+					bands[i] = max(bands[i], f.fnBands[i])
+				}
+			}
+		}
+		same := slices.Equal(bands, f.fnBands)
+		f.fnBands, f.fnLines = bands, lines
+		if same {
+			return lay
+		}
+		lay = f.layoutOnce()
+	}
+	return lay
+}
+
+func (f *TextFlow) layoutOnce() Layout {
 	d := f.flatten()
 	f.data = d
 	if f.pageCount() == 0 { // a PageSet with no pages: nowhere to put anything
