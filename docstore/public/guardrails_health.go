@@ -1,6 +1,7 @@
 package public
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/elaous/gojiberry/docstore"
@@ -64,7 +65,7 @@ func (s *Service) Health() Health {
 	if every <= 0 {
 		every = DefaultSweepInterval
 	}
-	h := Health{LastSweep: last.UTC(), StorageMax: s.cfg.MaxTotalBytes, PriorityBursts: s.prio.bursts(now, s.cfg.PriorityBurstDocs)}
+	h := Health{LastSweep: last.UTC(), StorageMax: s.cfg.MaxTotalBytes, PriorityBursts: s.priorityBursts(now)}
 	h.StorageBytes, _ = s.bytes.get()
 	if s.expiryDisabled() {
 		h.Problems = append(h.Problems, ProblemExpiryDisabled)
@@ -127,4 +128,17 @@ var errNoDeadline = errors.New("a public document got no expiry; check the expir
 func (s *Service) alarmNoDeadline() {
 	s.noDeadline.Store(true)
 	log.Print("public docstore: ALARM: a public document was stored without a deadline and was removed: the store's expiry policy does not cover " + fmt.Sprintf("%q", docKeyPrefix) + " keys, so the 24 hour promise is not kept; see /public/health")
+}
+
+// priorityBursts is how many networks are over the burst limit now: from the store when the burst watch is
+// shared, else this process's own count (also the answer when the store cannot be read).
+func (s *Service) priorityBursts(now time.Time) int {
+	if s.burst != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if n, err := s.burst.bursts(ctx, now, s.cfg.PriorityBurstDocs); err == nil {
+			return n
+		}
+	}
+	return s.prio.bursts(now, s.cfg.PriorityBurstDocs)
 }

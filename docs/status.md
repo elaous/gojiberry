@@ -97,10 +97,10 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | 45 | Unenrolled-address numbering by the directory key holder | security | inherent | `RequireOwner`, notice, `RequireEnrollment`, WatchLog reports, changed-number flag | none in code: enrolling an owner key closes it, and an unenrolled address has nothing to compare with |
 | 53 | Session store read per request | security | inherent | miss cache, miss budget, optional bounded cache | a positive cache is deliberately not default |
 | 54 | Login routes without rate limit | fix | done | limiter | none |
-| 55 | Public offer sessions shared through the store | enhancement | partial | sessions and counts shared | see 86 |
+| 55 | Public offer sessions shared through the store | enhancement | inherent | sessions and counts shared (`StoreSessions`) | the in-flight byte count protects each process's own memory, so it is per process by what it is for; the store modes off is a choice with a warning |
 | 58 | Leftovers of the #99 and #100 reviews | chore | done | seven of seven, the last being per-/64 IPv6 budgets for the login and passkey routes | none |
 | 85 | Findings of the outside review (#90 to #123) | fix | done | all fixed | none |
-| 86 | Public offer report counters per process | enhancement | partial | priority allowance shared (`store`, `store-required`) | the other caps |
+| 86 | Public offer report counters per process | enhancement | done | priority allowance, burst watch (`SharedBurstWatch`) and the global report count (recounted from the store at each sweep) shared | none |
 | 87 | Owner key rotate and reset in the showcase | feature | done | rotate, reset, watch names a reset | clock moved by the page, not the tests |
 | 88 | API dumps regenerated; `make check` fails when stale | chore | done | yes | none |
 | 89 | Security review of keys and directory | security | partial | challenge-oracle fixed; owner key non-extractable in IndexedDB; fingerprints for log keys | outside audit (blocked); S3-compatible `If-Match` on delete untested; PRF/age/SSH/frame format unreviewed by others |

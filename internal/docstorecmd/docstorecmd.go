@@ -78,7 +78,7 @@ func withPublic(srv *docstore.Server, adapter docstore.Adapter, expiryTTL time.D
 	if err != nil {
 		return nil, err
 	}
-	svc, err := public.New(public.Options{Store: adapter, Config: cfg, LimiterFactory: limiters, Quota: quota, Sessions: sessions, PriorityQuota: prio})
+	svc, err := public.New(public.Options{Store: adapter, Config: cfg, LimiterFactory: limiters, Quota: quota, Sessions: sessions, PriorityQuota: prio, SharedBurstWatch: prio != nil})
 	if err != nil {
 		return nil, err
 	}
@@ -455,8 +455,9 @@ func publicSessions(ctx context.Context, adapter docstore.Adapter, max int, raw 
 
 // publicPriorityQuota is the allowance of priority abuse reports per reporter GOJIBERRY_DOCSTORE_PUBLIC_REPORT_COUNTERS
 // asks for: nil (counted in each process) for "" or "memory", or a public.StoreQuota for "store" and
-// "store-required", so replicas on one store share the day's allowance of each reporter. The total number of
-// reports and the burst watch stay per process.
+// "store-required", so replicas on one store share the day's allowance of each reporter; the same mode shares the burst watch (the
+// networks that name many different documents in an hour; Options.SharedBurstWatch). The total number of reports
+// is recounted from the store at every sweep by every replica.
 func publicPriorityQuota(ctx context.Context, adapter docstore.Adapter, limit int, raw string) (public.Quota, error) {
 	mode := strings.ToLower(strings.TrimSpace(raw))
 	switch mode {
@@ -480,7 +481,7 @@ func publicPriorityQuota(ctx context.Context, adapter docstore.Adapter, limit in
 	if err != nil {
 		return nil, err
 	}
-	log.Print("docstore: the public offer's priority-report allowance per reporter is shared through the store (fixed calendar days, UTC)")
+	log.Print("docstore: the public offer's priority-report allowance per reporter and its burst watch are shared through the store (fixed calendar days, UTC; burst records under public/burst/ hold a keyed hash of the network, never its address)")
 	return q, nil
 }
 

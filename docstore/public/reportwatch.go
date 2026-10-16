@@ -1,6 +1,7 @@
 package public
 
 import (
+	"context"
 	"log"
 	"sync"
 	"time"
@@ -177,8 +178,21 @@ func (p *prioTracker) prune(now time.Time) {
 
 // noteBurst feeds the burst watch for a priority-category report and logs the first time a network
 // goes over the limit in an hour.
-func (s *Service) noteBurst(net, doc string) {
-	over, first := s.prio.note(net, doc, s.now(), s.cfg.PriorityBurstDocs)
+func (s *Service) noteBurst(ctx context.Context, net, doc string) {
+	var over, first bool
+	if s.burst != nil {
+		var err error
+		if h, herr := s.reporterHash(ctx, net); herr == nil {
+			if over, first, err = s.burst.note(ctx, h, doc, s.now(), s.cfg.PriorityBurstDocs); err == nil {
+				if over && first {
+					log.Printf("public docstore: ALARM: priority reports for more than %d different documents within an hour from one network (%s): a wave of abuse, or the priority path being flooded; see priorityBursts in /admin/health", s.cfg.PriorityBurstDocs, net)
+				}
+				return
+			}
+		}
+		// The shared watch could not be reached: this process keeps count meanwhile.
+	}
+	over, first = s.prio.note(net, doc, s.now(), s.cfg.PriorityBurstDocs)
 	if over && first {
 		log.Printf("public docstore: ALARM: priority reports for more than %d different documents within an hour from one network (%s): a wave of abuse, or the priority path being flooded; see priorityBursts in /admin/health", s.cfg.PriorityBurstDocs, net)
 	}

@@ -17,7 +17,7 @@ import (
 
 // RevokedSignerPrefix is the keyspace of the manifests RevokeSigner writes (one record per removed key,
 // "revoked-signer/<fingerprint>"), in the clear and signed by the key that stays. DefaultSkip leaves it alone.
-const RevokedSignerPrefix = "revoked-signer/"
+const RevokedSignerPrefix = docstore.RevokedSignerPrefix
 
 // signerManifest is what the removed key had written when the removal began: the frames it signed, by file and
 // content hash. It is signed by the key that stays, so the removed key cannot replace it with its own.
