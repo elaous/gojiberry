@@ -28,8 +28,8 @@ func TestTableStylesPickerDefineAndFollowRows(t *testing.T) {
 	d.OK(!d.Has("#tstyle-hint"), "the caret is below the table, so the table is the one in hand")
 
 	// a built-in style
-	d.Click(`#tstyle-panel button[data-style="Blue header, banded"]`)
-	d.WaitFor("it is marked", `document.querySelector('#tstyle-panel button[data-style="Blue header, banded"]').getAttribute('aria-pressed') === 'true'`)
+	d.Click(`#tstyle-panel button[data-style="Blue header"]`)
+	d.WaitFor("it is marked", `document.querySelector('#tstyle-panel button[data-style="Blue header"]').getAttribute('aria-pressed') === 'true'`)
 
 	// a style of the person's own: needs a name and real colours, then it is offered
 	d.Fill("#tstyle-name", "Sunrise")
