@@ -28,8 +28,8 @@ func TestTypewriterScrolling(t *testing.T) {
 	d.WaitSelector(".gj-prefs-search")
 	d.Fill(".gj-prefs-search", "typewriter")
 	d.Dispatch(".gj-prefs-search", "input")
-	d.WaitFor("one preference", `document.querySelector('.gj-prefs-count').textContent === '1 preference'`)
-	d.Click(`.gj-prefs .gj-checkbox-input`)
+	d.WaitFor("two preferences (scrolling and carriage)", `document.querySelector('.gj-prefs-count').textContent === '2 preferences'`)
+	d.Click(`.gj-prefs .gj-checkbox-input`) // the first is the scrolling
 	d.WaitFor("kept", `JSON.parse(localStorage.getItem('showcase:a11y')).typewriter === 'on'`)
 
 	d.Focus("#input")
