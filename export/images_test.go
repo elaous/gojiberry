@@ -195,3 +195,25 @@ func TestTableFormulasAreWrittenAsTheirValues(t *testing.T) {
 		t.Fatalf("%s", got)
 	}
 }
+
+// A picture found in an image repository keeps its credit in the picture's properties: Word's title, ODT's description.
+func TestImageCreditTravelsInWordAndODTProperties(t *testing.T) {
+	doc := docfile.Document{Content: []docfile.Item{{Image: &docfile.ImageItem{
+		URL: tinyPNG, Alt: "A dot", Credit: "Dot by Ann, CC BY 4.0, via Openverse", SourceURL: "https://example.org/dot"}}}}
+	snap := FromDocument(doc)
+	want := "Dot by Ann, CC BY 4.0, via Openverse - https://example.org/dot"
+	docx, err := DOCX{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if x := string(unzipEntry(t, docx, "word/document.xml")); !strings.Contains(x, `title="`+want+`"`) {
+		t.Errorf("docx lacks the credit:\n%s", x)
+	}
+	odt, err := ODT{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if x := string(unzipEntry(t, odt, "content.xml")); !strings.Contains(x, "<svg:desc>"+want+"</svg:desc>") {
+		t.Errorf("odt lacks the credit:\n%s", x)
+	}
+}

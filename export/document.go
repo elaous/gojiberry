@@ -171,7 +171,7 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 			flush()
 		case it.Image != nil:
 			pending()
-			after := []Block{{Start: pos, Kind: Image, ImageSrc: it.Image.URL, ImageW: it.Image.Width, ImageH: it.Image.Height, ImageAlt: it.Image.Alt, ImageDecorative: it.Image.Decorative}}
+			after := []Block{{Start: pos, Kind: Image, ImageSrc: it.Image.URL, ImageW: it.Image.Width, ImageH: it.Image.Height, ImageAlt: it.Image.Alt, ImageDecorative: it.Image.Decorative, ImageCredit: it.Image.Credit, ImageSourceURL: it.Image.SourceURL}}
 			if d := strings.TrimSpace(it.Image.LongDesc); d != "" {
 				// the long description is text after the picture, so that every format carries it
 				after = append(after, Block{Start: -1, Kind: Paragraph, DescribesImage: true, Segments: []Segment{{Text: d}}})
@@ -465,4 +465,15 @@ func tocBlock(blocks []Block, pos int) int {
 		return max(i, 0)
 	}
 	return len(blocks)
+}
+
+// imageCredit is the line kept with a picture found in an image repository: its credit and the page it came from.
+func imageCredit(b Block) string {
+	switch {
+	case b.ImageCredit != "" && b.ImageSourceURL != "":
+		return b.ImageCredit + " - " + b.ImageSourceURL
+	case b.ImageCredit != "":
+		return b.ImageCredit
+	}
+	return b.ImageSourceURL
 }
