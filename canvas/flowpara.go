@@ -1,6 +1,9 @@
 package canvas
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 // Paragraph formatting in a TextFlow: see ParaFormat. The format of a
 // paragraph is an item of the content stream sitting at its start;
@@ -159,6 +162,9 @@ func (f *TextFlow) enter() bool {
 	if len(f.extra) > 0 || f.HasSelection() {
 		return f.InsertText("\n")
 	}
+	if f.markdownTableOnEnter() {
+		return true
+	}
 	rs := f.flatten().runes
 	ps, pe := paraBounds(rs, f.sel.caret)
 	pf := f.flatten().paraIn(ps, pe)
@@ -196,4 +202,45 @@ func (f *TextFlow) indentList(delta int) bool {
 		}
 	})
 	return true
+}
+
+// markdownTableOnEnter turns three lines typed as a Markdown table into a table when Enter ends the third:
+//
+//	| A | B |
+//	|---|---|
+//	| a | b |
+//
+// A header row, the row of dashes under it and one row of cells, all with the same number of columns, is the least that
+// makes a table. The lines are replaced by the table and the caret goes to the paragraph after it. Cells keep their
+// text, so a cell that starts with = is a formula. It reports whether it made a table; otherwise Enter is untouched.
+func (f *TextFlow) markdownTableOnEnter() bool {
+	rs := f.flatten().runes
+	c := f.sel.caret
+	ps3, pe3 := paraBounds(rs, c)
+	if c != pe3 || ps3 < 4 || rs[ps3-1] != '\n' {
+		return false
+	}
+	ps2 := lineStart(rs, ps3-1)
+	if ps2 < 2 || rs[ps2-1] != '\n' {
+		return false
+	}
+	ps1 := lineStart(rs, ps2-1)
+	lines := [3]string{string(rs[ps1 : ps2-1]), string(rs[ps2 : ps3-1]), string(rs[ps3:pe3])}
+	var cells [3][]string
+	for i, l := range lines {
+		if !strings.Contains(l, "|") || strings.ContainsRune(l, objectRune) {
+			return false
+		}
+		cells[i] = splitPipes(l)
+	}
+	if len(cells[0]) == 0 || len(cells[0]) != len(cells[1]) || len(cells[0]) != len(cells[2]) {
+		return false
+	}
+	t, ok := TableFromMarkdown(strings.Join(lines[:], "\n"))
+	if !ok {
+		return false
+	}
+	f.Replace([]Edit{{From: ps1, To: pe3, Items: []Item{Inline{Object: NewTableObject(t), Block: true}}}})
+	f.SetCursors([]Cursor{At(ps1 + 1)})
+	return f.InsertText("\n")
 }

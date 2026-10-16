@@ -6,13 +6,14 @@ import "strings"
 type HitKind int
 
 const (
-	HitNone         HitKind = iota
-	HitCell                 // a table cell; Hit.Row/Col say which
-	HitAddColumn            // the "+" bar on the right edge
-	HitAddRow               // the "+" bar along the bottom edge
-	HitColumnHandle         // the grip above a column; Hit.Col says which
-	HitRowHandle            // the grip left of a row; Hit.Row says which
-	HitTableHandle          // the 2x2-boxes icon at the top-left corner
+	HitNone          HitKind = iota
+	HitCell                  // a table cell; Hit.Row/Col say which
+	HitAddColumn             // the "+" bar on the right edge
+	HitAddRow                // the "+" bar along the bottom edge
+	HitColumnHandle          // the grip above a column; Hit.Col says which
+	HitRowHandle             // the grip left of a row; Hit.Row says which
+	HitTableHandle           // the 2x2-boxes icon at the top-left corner
+	HitFormulaSwitch         // the eye / f(x) switch at the top-right corner
 )
 
 // SelKind is what a Selection covers.
@@ -136,7 +137,7 @@ func (v *TableView) CSSCursor() string {
 		return ""
 	}
 	switch v.hover.Kind {
-	case HitAddColumn, HitAddRow, HitColumnHandle, HitRowHandle, HitTableHandle:
+	case HitAddColumn, HitAddRow, HitColumnHandle, HitRowHandle, HitTableHandle, HitFormulaSwitch:
 		return "pointer"
 	case HitCell:
 		return "text"
@@ -315,6 +316,8 @@ func (v *TableView) HitTest(x, y float64) Hit {
 		return Hit{Kind: HitAddRow}
 	case inRect(x, y, [4]float64{v.X - gap - hs, v.Y - gap - hs, hs, hs}):
 		return Hit{Kind: HitTableHandle}
+	case inRect(x, y, [4]float64{g.right() + gap, v.Y - gap - hs, hs, hs}):
+		return Hit{Kind: HitFormulaSwitch}
 	case inRect(x, y, [4]float64{v.X, v.Y - gap - hs, g.right() - v.X, hs}):
 		return Hit{Kind: HitColumnHandle, Col: indexAt(g.colX, x)}
 	case inRect(x, y, [4]float64{v.X - gap - hs, v.Y, hs, g.bottom() - v.Y}):
@@ -383,6 +386,12 @@ func (v *TableView) MouseDown(x, y float64) bool {
 		return true
 	case HitColumnHandle, HitRowHandle:
 		v.selectHandle(h)
+		return true
+	case HitFormulaSwitch:
+		v.editing = false
+		v.sel = Selection{}
+		v.ShowFormulas = !v.ShowFormulas
+		v.changed()
 		return true
 	}
 	v.sel = Selection{}
