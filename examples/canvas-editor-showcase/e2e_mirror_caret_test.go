@@ -122,8 +122,7 @@ func TestMirrorMapsEmojiAndFootnoteMarks(t *testing.T) {
 	d.Press("Home")
 	d.Type("😀é")
 	for range 10 {
-		d.AnswerDialog("note")
-		d.Press("Control+Alt+f")
+		addFootnote(d, "note")
 	}
 	d.Wait("s.footnotes.length === 10")
 	d.Type("zz")

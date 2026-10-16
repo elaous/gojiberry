@@ -23,12 +23,8 @@ const verticalGap = 24
 
 // physRect is the rectangle the text of a page flows into, on the screen.
 func (f *TextFlow) physRect(page int) (x, y, w, h float64) {
-	if f.Pages != nil {
-		x, y, w, h = f.Pages.ContentRect(page)
-	} else {
-		x, y, w, h = f.X, f.Y, f.Width, f.Height
-	}
-	return x, y, w, max(h-f.footnoteBand(), 0)
+	x, y, w, h = f.pageContent(page)
+	return x, y, w, max(h-f.footnoteBandOf(page), 0)
 }
 
 // virtualOrigin is where page's text area starts in the virtual plane.

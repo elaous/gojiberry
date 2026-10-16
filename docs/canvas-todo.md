@@ -99,6 +99,12 @@ in the selector is downloaded into the store the first time the text uses it
 
 ## Done since this list was written
 
+- **Footnotes**: a page gives its notes the room they need (up to 40 % of the page, `TextFlow.FootnoteBand` to change it) and the text
+  above gives way, so a mark and the start of its note stay on one page; a note that does not fit goes on at the foot of the next page;
+  nothing is cut with an ellipsis. A note is at most `MaxFootnoteRunes` (1000) characters; the dialog it is typed in
+  (`components.NoteEditor`, `Stage.EditNote`) shows a read-only counter only while the note is being typed. Pressing a note's text on the
+  page edits it (`TextFlow.OnFootnote`). A click on a row of the index goes to the term's first mark, as one on the table of contents does.
+- **Columns**: `Reset column widths` (Edit > Columns) gives the columns of a region equal widths again after a grip was dragged.
 - **Outline**: sections fold (`components.Outline` `Collapsed`/`OnToggle`) and move (`TextFlow.SectionRange`, `TextFlow.MoveSection`; move
   buttons and drag and drop in the panel, `components.OutlineUp`/`OutlineDown` for the keyboard path); bookmarks are marked on the
   canvas while editing (`BookmarkMarkColor`, never exported).
@@ -131,9 +137,6 @@ These were "asked for, not started" and are built. The current state of the edit
 
 Asked for, not started:
 
-- Footnotes sit in a fixed band per page rather than pushing text to the next page; the index is not clickable (the
-  table of contents is: a click on a row goes to the heading); a footnote cannot be edited on the page itself (use the
-  list or `footnote.edit`).
 - **Map object** (OpenStreetMap tiles) and **flowcharts** as canvas objects.
 - Comments: notifications for mentions.
 - Markdown: case and small caps have no Markdown form (the format has no syntax for them; a limit of Markdown).

@@ -89,6 +89,9 @@ type Stage struct {
 	// Prompt asks the user for a line of text; Bind sets it to the
 	// browser's prompt. Commands that need it decline without it.
 	Prompt func(message, initial string) (string, bool)
+	// EditNote, when set, is how footnotes are typed: a dialog with a counter of the characters left (see
+	// CommandContext.EditNote).
+	EditNote func(title, initial string, max int, done func(text string, ok bool))
 	// OpenLink opens a clicked link's URL; Bind sets it to open a new
 	// browser tab.
 	OpenLink func(url string)
@@ -294,7 +297,7 @@ func (s *Stage) RunCommand(cmd Command) bool {
 			t = s.commentTarget() // commenting needs no edit mode
 		}
 		if t != nil || s.Features.global[cmd] {
-			ctx := &CommandContext{Target: t, Clipboard: &s.Clipboard, Formats: s.Formats, Redraw: s.Redraw, Prompt: s.Prompt, OpenLink: s.OpenLink}
+			ctx := &CommandContext{Target: t, Clipboard: &s.Clipboard, Formats: s.Formats, Redraw: s.Redraw, Prompt: s.Prompt, EditNote: s.EditNote, OpenLink: s.OpenLink}
 			if s.Features.Run(cmd, ctx) {
 				return true
 			}

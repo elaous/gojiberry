@@ -32,8 +32,7 @@ func TestCommentsAndFootnotesSurviveSaveAndOpen(t *testing.T) {
 	body()
 	d.Focus("#input")
 	d.Press("End")
-	d.AnswerDialog("A note")
-	d.Press("Control+Alt+f")
+	addFootnote(d, "A note")
 	d.Wait("s.footnotes.length === 1")
 
 	d.Click(`button[data-tab="save"]`)
@@ -61,4 +60,14 @@ func TestCommentsAndFootnotesSurviveSaveAndOpen(t *testing.T) {
 	d.Wait("s.comments === 1 && s.footnotes.length === 1")
 	open("plain")
 	d.Wait("s.comments === 0 && s.footnotes.length === 0")
+}
+
+// addFootnote types a footnote at the caret in the dialog that Add footnote opens, and saves it.
+func addFootnote(d *e2etest.Tab, text string) {
+	d.Press("Control+Alt+f")
+	d.WaitSelector(".gj-note-text")
+	d.Fill(".gj-note-text", text)
+	d.Click(`.gj-dialog-actions button:has-text("Save")`)
+	d.Wait("!document.querySelector('.gj-note-text')")
+	d.Focus("#input")
 }

@@ -164,6 +164,10 @@ func (f *TextFlow) MouseDown(x, y float64) bool {
 
 // mouseDown is MouseDown for a point in the plane the text is laid out in.
 func (f *TextFlow) mouseDown(x, y float64) bool {
+	if id, ok := f.footnoteAt(x, y); ok && f.OnFootnote != nil && f.mode == ModeEdit {
+		f.OnFootnote(id)
+		return true
+	}
 	// A click on a row of a table of contents goes to the heading it lists.
 	if off, ok := f.tocTargetAt(x, y); ok && !f.suggestionsOpen() {
 		f.GotoOffset(off)

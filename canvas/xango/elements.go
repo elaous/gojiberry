@@ -103,9 +103,11 @@ type TextFlowProps struct {
 	FootnoteBand   float64
 	Author         string
 	OnHoverComment func(id string)
-	Complete       bool
-	Completer      canvas.Completer
-	Vocabulary     []string
+	// OnFootnote is called with the ID of a note whose text on the page was pressed.
+	OnFootnote func(id string)
+	Complete   bool
+	Completer  canvas.Completer
+	Vocabulary []string
 
 	Columns []float64
 	Gap     float64

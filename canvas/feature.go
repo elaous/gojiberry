@@ -96,6 +96,10 @@ type CommandContext struct {
 	// Prompt asks the user for a line of text (a link address); ok is
 	// false if they cancelled. Nil when the host cannot ask.
 	Prompt func(message, initial string) (text string, ok bool)
+	// EditNote asks for a longer text in a dialog of the host's, one that can show how much of the limit max is used
+	// while the person types; done is called with the text (ok false: cancelled), possibly after the command returned.
+	// Nil when the host has no such dialog: the command then uses Prompt.
+	EditNote func(title, initial string, max int, done func(text string, ok bool))
 	// OpenLink opens a URL.
 	OpenLink func(url string)
 }

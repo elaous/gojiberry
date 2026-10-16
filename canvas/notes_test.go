@@ -2,6 +2,7 @@ package canvas
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -73,15 +74,11 @@ func TestFootnotesReserveABandAndDrawPerPage(t *testing.T) {
 	_, _, _, h0 := f.pageRect(0)
 	f.SetCursors([]Cursor{At(6)})
 	runCmd(f, st, CmdFootnoteAdd, "**Bold** note text")
+	f.Layout() // the layout settles the room the notes take
 	_, _, _, h1 := f.pageRect(0)
-	if h0-h1 != DefaultFootnoteBand {
-		t.Fatalf("the band is kept at the bottom of the page: %v -> %v", h0, h1)
+	if want := footnotePad + footnoteLineH; h0-h1 != want {
+		t.Fatalf("a one-line note takes one line and its padding from the bottom of the page: %v -> %v", h0, h1)
 	}
-	f.FootnoteBand = 40
-	if _, _, _, h2 := f.pageRect(0); h0-h2 != 40 {
-		t.Fatalf("custom band: %v", h0-h2)
-	}
-	f.FootnoteBand = 0
 	p := st.Painter.(*fakePainter)
 	p.calls = nil
 	f.Draw()
@@ -91,22 +88,101 @@ func TestFootnotesReserveABandAndDrawPerPage(t *testing.T) {
 	if !p.has(`fillText "1" `) {
 		t.Fatal("the mark is drawn in the text")
 	}
-	// A very long note is cut to the band.
-	f.Footnotes.Add(Footnote{ID: f.Footnotes.List()[0].ID, Text: strings.Repeat("long note words ", 60)})
+	// A long note takes more room, is not cut, and the cap holds it.
+	long := strings.Repeat("long note words ", 40)
+	f.Footnotes.Add(Footnote{ID: f.Footnotes.List()[0].ID, Text: long})
 	p.calls = nil
 	f.Draw()
-	cut := false
+	f.Layout()
 	for _, c := range p.calls {
 		if strings.HasPrefix(c, "fillText") && strings.Contains(c, "…") {
-			cut = true
+			t.Fatalf("a note is never cut with an ellipsis: %s", c)
 		}
 	}
-	if !cut {
-		t.Fatal("a note too long for the band ends with an ellipsis")
+	_, _, _, h3 := f.pageRect(0)
+	if h3 >= h1 {
+		t.Fatalf("a longer note takes more room: %v then %v", h1, h3)
 	}
-	_, _, _, h3 := NewTextFlow("", 0, 0, 100, 100).pageRect(0)
-	if h3 != 100 {
+	if h3 < 0.2*h0-1 {
+		t.Fatalf("the last page gives its notes at most four fifths of itself: %v of %v", h3, h0)
+	}
+	f.FootnoteBand = 0
+	_, _, _, h4 := NewTextFlow("", 0, 0, 100, 100).pageRect(0)
+	if h4 != 100 {
 		t.Fatal("no notes, no band")
+	}
+}
+
+// The notes of a page are kept in a band that shrinks the text above; a note that does not fit goes on at the foot
+// of the next page; every page that has a mark shows the start of its note.
+func TestFootnotesPushTheTextAndContinueOnTheNextPage(t *testing.T) {
+	f := pagedFlow(Chars{Text: "aaaa\nbbbb\ncccc\ndddd\neeee"})
+	f.Footnotes = NewFootnoteSet()
+	before := linesOnPage(f.Layout(), 0)
+	if len(before) != 3 {
+		t.Fatalf("three lines fit: %q", before)
+	}
+	// A mark in the first line, with a note of 3 lines (the line width is 180px, 22 fake runes).
+	f.Items = []Item{Chars{Text: "aa"}, Inline{Object: &FootnoteRef{ID: "x"}}, Chars{Text: "aa\nbbbb\ncccc\ndddd\neeee"}}
+	f.Footnotes.Add(Footnote{ID: "x", Text: "one two three four five six seven eight nine ten eleven twelve thirteen fourteen"})
+	lay := f.Layout()
+	if got := len(linesOnPage(lay, 0)); got >= 3 {
+		t.Fatalf("the note pushes text off the page: %d lines still on it", got)
+	}
+	if len(f.fnLines[0]) == 0 {
+		t.Fatal("the page holds the start of its note")
+	}
+	if f.fnBands[0] <= 0 || f.fnBands[0] > footnoteCapShare*80+footnoteLineH {
+		t.Fatalf("band %v", f.fnBands[0])
+	}
+	// No line is cut.
+	for pg, ls := range f.fnLines {
+		for _, l := range ls {
+			if strings.Contains(l.text, "…") {
+				t.Fatalf("page %d: %q", pg, l)
+			}
+		}
+	}
+	// All words of the note are shown somewhere, in order, across the pages.
+	var all []string
+	for _, ls := range f.fnLines {
+		for _, l := range ls {
+			all = append(all, l.text)
+		}
+	}
+	joined := strings.Join(all, " ")
+	for _, w := range []string{"1", "one", "seven", "fourteen"} {
+		if !strings.Contains(joined, w) {
+			t.Fatalf("%q is missing from the notes shown: %q", w, joined)
+		}
+	}
+}
+
+func TestFootnotesAreLimitedInSize(t *testing.T) {
+	s := NewFootnoteSet()
+	n := s.Add(Footnote{Text: strings.Repeat("é", MaxFootnoteRunes+50)})
+	if got := len([]rune(n.Text)); got != MaxFootnoteRunes {
+		t.Fatalf("kept %d characters, want %d", got, MaxFootnoteRunes)
+	}
+	exact := s.Add(Footnote{Text: strings.Repeat("a", MaxFootnoteRunes)})
+	if len([]rune(exact.Text)) != MaxFootnoteRunes {
+		t.Fatal("exactly the limit is kept whole")
+	}
+	short := s.Add(Footnote{Text: "short"})
+	if short.Text != "short" {
+		t.Fatal("a short note is untouched")
+	}
+	// A note at the limit still lays out and is shown in full across the pages without cutting.
+	f := pagedFlow(Chars{Text: "x"}, Inline{Object: &FootnoteRef{ID: "big"}}, Chars{Text: "y\nbbbb\ncccc\ndddd"})
+	f.Footnotes = NewFootnoteSet()
+	f.Footnotes.Add(Footnote{ID: "big", Text: strings.Repeat("word ", 400)})
+	f.Layout()
+	total := 0
+	for _, ls := range f.fnLines {
+		total += len(ls)
+	}
+	if total == 0 || len(f.fnLines[0]) < 2 {
+		t.Fatalf("lines shown: %v", f.fnLines)
 	}
 }
 
@@ -174,7 +250,7 @@ func TestAlphabeticalIndex(t *testing.T) {
 	}
 	f.lastLay = Layout{Lines: []Line{{Start: 0, End: 22, Page: 0}}}
 	got := f.IndexEntries()
-	want := []IndexEntry{{Term: "alpha", Pages: []int{1}}, {Term: "Alpha entry", Pages: []int{1}}, {Term: "Beta", Pages: []int{1}}}
+	want := []IndexEntry{{Term: "alpha", Pages: []int{1}, Start: 5}, {Term: "Alpha entry", Pages: []int{1}, Start: 17}, {Term: "Beta", Pages: []int{1}, Start: 0}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("alphabetical, ignoring case:\n got %+v\nwant %+v", got, want)
 	}
@@ -300,4 +376,133 @@ func TestClickOnATableOfContentsGoesToTheHeading(t *testing.T) {
 	if _, _, _, ok := f.TakeReveal(); !ok {
 		t.Error("the view is asked to scroll to the heading")
 	}
+}
+
+// However many notes and however long, the layout settles and every page that has a mark shows the start of a note.
+func TestFootnoteLayoutAlwaysSettles(t *testing.T) {
+	for marks := 1; marks <= 6; marks++ {
+		for _, words := range []int{1, 8, 40, 200} {
+			items := []Item{}
+			f := pagedFlow()
+			f.Footnotes = NewFootnoteSet()
+			for i := range marks {
+				id := "n" + strconv.Itoa(i)
+				items = append(items, Chars{Text: "line text\n"}, Inline{Object: &FootnoteRef{ID: id}})
+				f.Footnotes.Add(Footnote{ID: id, Text: strings.Repeat("w ", words)})
+			}
+			f.Items = items
+			lay := f.Layout()
+			marked := map[int]bool{}
+			for _, ln := range lay.Lines {
+				if len(ln.Objects) > 0 {
+					marked[ln.Page] = true
+				}
+			}
+			for pg := range marked {
+				if pg < len(f.fnLines) && len(f.fnLines[pg]) == 0 {
+					t.Errorf("%d marks, %d words: page %d has a mark and shows no note", marks, words, pg)
+				}
+			}
+		}
+	}
+}
+
+func TestFootnoteCommandsUseTheNoteEditorWhenThereIsOne(t *testing.T) {
+	f, st := editFlow(t, 0, Chars{Text: "text with a note"})
+	f.SetCursors([]Cursor{At(6)})
+	var asked []string
+	var finish func(string, bool)
+	st.EditNote = func(title, initial string, max int, done func(string, bool)) {
+		asked = append(asked, title+"|"+initial+"|"+strconv.Itoa(max))
+		finish = done
+	}
+	if !st.RunCommand(CmdFootnoteAdd) || len(asked) != 1 || asked[0] != "Footnote||"+strconv.Itoa(MaxFootnoteRunes) {
+		t.Fatalf("asked %v", asked)
+	}
+	if f.Footnotes.Len() != 0 {
+		t.Fatal("nothing is added until the dialog is answered")
+	}
+	finish("a note", true)
+	if f.Footnotes.Len() != 1 || len(f.FootnoteList()) != 1 || f.FootnoteList()[0].Text != "a note" {
+		t.Fatalf("after answering: %+v", f.FootnoteList())
+	}
+	// Cancelled: nothing changes.
+	f.SetCursors([]Cursor{At(2)})
+	st.RunCommand(CmdFootnoteAdd)
+	finish("", false)
+	if f.Footnotes.Len() != 1 {
+		t.Fatal("cancel adds nothing")
+	}
+	// Edit starts from the note's own text.
+	f.SetCursors([]Cursor{At(f.FootnoteList()[0].Offset + 1)})
+	st.RunCommand(CmdFootnoteEdit)
+	if len(asked) < 3 || !strings.Contains(asked[len(asked)-1], "|a note|") {
+		t.Fatalf("edit asked %v", asked)
+	}
+	finish("changed", true)
+	if f.FootnoteList()[0].Text != "changed" {
+		t.Fatal("edit answered")
+	}
+}
+
+// A click on a row of the index goes to the first mark of the term; the title goes nowhere.
+func TestClickOnAnIndexRowGoesToTheFirstMark(t *testing.T) {
+	f, st := editFlow(t, 0, Chars{Text: "alpha beta alpha gamma\n"})
+	f.SetCursors([]Cursor{{Anchor: 11, Caret: 16}}) // the second "alpha"
+	if !runCmd(f, st, CmdIndexMark, "alpha") {
+		t.Fatal("mark")
+	}
+	f.SetCursors([]Cursor{{Anchor: 0, Caret: 5}}) // the first
+	runCmd(f, st, CmdIndexMark, "alpha")
+	f.SetCursors([]Cursor{{Anchor: 17, Caret: 22}}) // gamma
+	runCmd(f, st, CmdIndexMark, "gamma")
+	f.SetCursors([]Cursor{At(f.Layout().End)})
+	if !st.RunCommand(CmdIndexInsert) {
+		t.Fatal("insert the index")
+	}
+	var obj *IndexObject
+	var ox, oy float64
+	for _, ln := range f.Layout().Lines {
+		for _, po := range ln.Objects {
+			if o, ok := po.Object.(*IndexObject); ok {
+				obj, ox, oy = o, po.X, po.Y
+			}
+		}
+	}
+	if obj == nil {
+		t.Fatal("the index was not laid out")
+	}
+	es := obj.Entries()
+	if len(es) != 2 || es[0].Term != "alpha" || es[0].Start != 0 || es[1].Term != "gamma" || es[1].Start != 17 {
+		t.Fatalf("entries %+v", es)
+	}
+	if _, ok := obj.EntryAt(ox+5, oy+5, ox, oy); ok {
+		t.Error("the title is not a link")
+	}
+	if !f.MouseDown(ox+5, oy+tocLineH*2+5) {
+		t.Fatal("the click was not taken")
+	}
+	if got := f.Cursors()[0].Caret; got != 17 {
+		t.Errorf("the second row goes to gamma: caret %d", got)
+	}
+}
+
+// Pressing the text of a note on the page asks the host to edit it.
+func TestPressingANoteOnThePageEditsIt(t *testing.T) {
+	f, st := editFlow(t, 0, Chars{Text: "text with a note"})
+	f.SetCursors([]Cursor{At(6)})
+	runCmd(f, st, CmdFootnoteAdd, "the note")
+	f.Draw()
+	var got []string
+	f.OnFootnote = func(id string) { got = append(got, id) }
+	px, py, pw, ph := f.physRect(0)
+	y := py + ph + 4 + 4 + footnoteLineH/2
+	if !f.MouseDown(px+5, y) || len(got) != 1 || got[0] != f.FootnoteList()[0].ID {
+		t.Fatalf("pressed the note: %v", got)
+	}
+	if f.MouseDown(px+pw+50, y); len(got) != 1 {
+		t.Fatal("outside the page is not the note")
+	}
+	f.OnFootnote = nil
+	f.MouseDown(px+5, y) // nothing is called, the press is a plain one
 }

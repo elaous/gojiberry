@@ -1495,6 +1495,9 @@
   "docview.skipSide": "Saltar al panel lateral",
   "docview.skip": "Enlaces de salto",
   "fidelity.checking": "%s: comprobando qué conserva este formato…",
-  "files.working": "Trabajando…"
+  "files.working": "Trabajando…",
+  "note.counter": "%d de %d caracteres",
+  "note.save": "Guardar",
+  "note.title": "Nota al pie"
  }
 }

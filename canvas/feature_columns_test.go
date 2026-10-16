@@ -84,3 +84,25 @@ func TestUndoRemovesTheColumns(t *testing.T) {
 		t.Error("undo should take the columns away")
 	}
 }
+
+func TestResetColumnWidthsMakesThemEqualAgain(t *testing.T) {
+	f, st := columnsFlow("first paragraph\nsecond paragraph here")
+	f.SetCursors([]Cursor{At(20)})
+	st.RunCommand(CmdColumns21) // wide then narrow
+	st.RunCommand(CmdGapWide)
+	if got := f.ColumnsAt(16); len(got.Widths) != 2 || got.Gap != 48 {
+		t.Fatalf("before: %+v", got)
+	}
+	if !st.RunCommand(CmdColumnsReset) {
+		t.Fatal("the command did not run")
+	}
+	if got := f.ColumnsAt(16); len(got.Widths) != 0 || got.Count != 2 || got.Gap != 48 {
+		t.Fatalf("after: equal columns, same count and space: %+v", got)
+	}
+	// One column: nothing to reset.
+	st.RunCommand(CmdColumns1)
+	st.RunCommand(CmdColumnsReset)
+	if got := f.ColumnsAt(16); got.Count > 1 {
+		t.Fatalf("one column stays one: %+v", got)
+	}
+}

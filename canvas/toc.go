@@ -86,12 +86,18 @@ func (o *TOCObject) EntryAt(x, y, ox, oy float64) (int, bool) {
 	return entries[row].Start, true
 }
 
-// tocTargetAt is where a click at (x, y) on a table of contents goes: the heading it lists there.
+// tocTargetAt is where a click at (x, y) on a table of contents or an index goes: the heading or the first mark of
+// the term it lists there.
 func (f *TextFlow) tocTargetAt(x, y float64) (int, bool) {
 	for _, ln := range f.Layout().Lines {
 		for _, po := range ln.Objects {
-			if toc, ok := po.Object.(*TOCObject); ok {
-				if off, ok := toc.EntryAt(x, y, po.X, po.Y); ok {
+			switch o := po.Object.(type) {
+			case *TOCObject:
+				if off, ok := o.EntryAt(x, y, po.X, po.Y); ok {
+					return off, true
+				}
+			case *IndexObject:
+				if off, ok := o.EntryAt(x, y, po.X, po.Y); ok {
 					return off, true
 				}
 			}
@@ -164,6 +170,8 @@ func ellipsizeTo(p Painter, s string, w float64) string {
 type IndexEntry struct {
 	Term  string
 	Pages []int
+	// Start is the stream offset of the term's first mark: where a click on its row goes.
+	Start int
 }
 
 // IndexObject is an alphabetical index of the terms marked with
@@ -197,6 +205,7 @@ func charIndexTerms(items []Item) []string {
 // each with the pages it is on (empty before the first draw).
 func (f *TextFlow) IndexEntries() []IndexEntry {
 	byTerm := map[string]map[int]bool{}
+	first := map[string]int{}
 	var terms []string
 	prev := ""
 	for i, t := range charIndexTerms(f.items()) {
@@ -206,6 +215,7 @@ func (f *TextFlow) IndexEntries() []IndexEntry {
 		}
 		if byTerm[t] == nil {
 			byTerm[t] = map[int]bool{}
+			first[t] = i
 			terms = append(terms, t)
 		}
 		if t != prev { // one mark per stretch
@@ -224,7 +234,7 @@ func (f *TextFlow) IndexEntries() []IndexEntry {
 	})
 	out := make([]IndexEntry, len(terms))
 	for i, t := range terms {
-		out[i].Term = t
+		out[i].Term, out[i].Start = t, first[t]
 		for pg := range byTerm[t] {
 			out[i].Pages = append(out[i].Pages, pg)
 		}
@@ -239,6 +249,20 @@ func (o *IndexObject) Entries() []IndexEntry {
 		return nil
 	}
 	return o.flow.IndexEntries()
+}
+
+// EntryAt reports the term whose row, drawn with its top-left corner at (ox, oy), holds the point (x, y): the stream
+// offset of its first mark. The row of the title and the space around the rows give none.
+func (o *IndexObject) EntryAt(x, y, ox, oy float64) (int, bool) {
+	if x < ox || x > ox+o.w || y < oy {
+		return 0, false
+	}
+	row := int((y-oy)/tocLineH) - 1 // row 0 is the title
+	entries := o.Entries()
+	if row < 0 || row >= len(entries) {
+		return 0, false
+	}
+	return entries[row].Start, true
 }
 
 // Measure implements InlineObject.
