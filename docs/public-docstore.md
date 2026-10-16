@@ -266,9 +266,8 @@ a tombstone, a content `Blocklist` hook and a `Challenger` hook. Still to do bef
 5. **Shared infrastructure for replicas**: `SessionStore` and `Quota` have memory defaults
    only (the request limiters can live in the store, `Options.LimiterFactory`). Behind several
    replicas, plug in shared ones (the extension table below), or the caps are per replica. Two replicas also race at the instant of expiry (section 4.1).
-6. The client side: the editor's session handling, the edit and view links, the countdown, "Keep
-   this document", the report link on a shared view, `noindex` on the pages that serve it (the
-   routes themselves send `X-Robots-Tag: noindex` and `Cache-Control: no-store`).
+6. ~~The client side~~ **built** (section 8): the session handling, the edit and view links, the countdown,
+   "Keep this document", the report link on a shared view, `noindex` on the page that shows a shared document.
 7. Reports are bounded per document (20), deduplicated per (document, reporter, category), rate-limited
    per address, bounded as a whole (`_MAX_REPORTS`, `_MAX_REPORT_BYTES`), with slots reserved for new
    reporters and a priority list of report *categories* (`csam`, `illegal`) that is evicted last, with its own caps (section 7.2, items 12 and 17).
@@ -297,7 +296,7 @@ is tested, including a whole-flow test with a fake clock (`docstore/public/publi
 | `POST /public/session` | a session: `{token, userId: "anon:<random>", expires, limits}`; `expires` is the short idle deadline until the first write; 429 per address or per network (issue rate, or too many live sessions), 503 at the global cap or inside its reserve (item 6) |
 | `POST /public/doc` | create the session's one document (409 if it has a live one; 403 if its document was taken down; 410 if it was taken down while being created); returns `{id, viewId, expires, versions}`; 413 over the size cap, 408 for a body that arrives too slowly, 429 over the rate or the byte budget, 503 when the global storage budget or the in-flight cap is used up (item 19) or while the counters are unknown after a failed start (item 8) |
 | `PUT /public/doc` | an edit; renews the deadline (`X-Gojiberry-Expires`); same refusals as a create, plus 403 past the save cap; an expired document is 404, never revived |
-| `GET /public/doc` | the owner's download; never renews; 404 after expiry, 410 after takedown |
+| `GET /public/doc` | the owner's download (header `X-Gojiberry-View-Id` names its view link, for a browser that only has the edit link); never renews; 404 after expiry, 410 after takedown |
 | `DELETE /public/doc` | discard it; the session may then start another |
 | `GET /public/view/<viewId>` | read-only; never renews; 410 once taken down |
 | `POST /public/report` | `{"id": "<view id or doc id>", "reason": "...", "category": "csam\|illegal\|spam\|other"}` -> 202; stored as `report/<id>` unless it is a duplicate or finds no slot (the answer is 202 either way; item 17); an unknown or missing category is `other`; 503 while the reporter salt cannot be read or created (item 17) |
@@ -748,3 +747,38 @@ State plainly, before launch:
    - **The first reconcile** still fails closed for 15 seconds when the store really cannot be
      listed; only a departing client no longer causes that.
    - **`MemoryQuota`** forgets the least recently used client when 100,000 are tracked (item 16).
+
+
+## 8. The client side as built
+
+`docstore/public/client` is the Go client of the routes in 7.1 (it builds for the browser too): `NewSession`,
+`Create`, `Save` (an edit; returns the new deadline), `Download` (the owner's copy, with the view ID the server
+names in `X-Gojiberry-View-Id`, so a browser that has only the edit link can show both links), `Discard`, `View`
+and `Report`; every refusal is an `*Error` with the status and the wait the server asked for, and matches a sentinel
+with `errors.Is` (`ErrTooLarge`, `ErrRateLimited`, `ErrBusy`, `ErrGone`, `ErrNotFound`, `ErrExists`, `ErrForbidden`,
+`ErrRefused`). It keeps the terms link the server sends. `EditLink` and `ParseLink` build and read the two links, with
+the capability in the URL fragment (`#edit=<session token>`, `#view=<view ID>`), which a browser never sends to a
+server; `Remaining`, `Countdown` and `Warn` give the countdown and the warning of the last hour.
+
+The showcase's **Public link** tab (File menu, "Share with a public link…") uses it, with the offer at the page's
+own origin or at `?publicapi=` when that is this origin or a loopback host:
+
+1. **Publish a copy** makes a session (its token is kept in `localStorage`, so a restart continues the same
+   document) and the one document; **Update the copy now** saves it again; while a copy is linked, every edit in the
+   page updates it a few seconds later (an edit is what renews the 24 hours; reading never does).
+2. The **edit link** and the **view link** are shown with Copy buttons, and the countdown ("Deleted in 3 h 12 min
+   unless edited."), which becomes an alert with the advice to download or keep in the last hour.
+3. **Download in another format…** goes to the Files tab, **Keep this document** saves it in the store chosen in the
+   Save tab (a store the person controls: that is the way out of the 24 hours), **Delete the public copy now**
+   discards it.
+4. A page opened on a **view link** shows the document read only, with a banner, the countdown, and **Report this
+   document** (a category and optional details, sent to `POST /public/report`); a page opened on an **edit link**
+   takes the session over and carries on editing. Either way the page adds `<meta name="robots" content="noindex,
+   nofollow, noarchive">` and removes the secret from the address bar.
+5. Refusals are said in words (too large, too many requests with the wait, busy, taken down, expired).
+
+Tests: `docstore/public/client` against the real service (the whole visit, refusals with the wait, expiry and
+takedown, reports, links and the countdown) and `TestPublicLinkPublishesAndTheLinksOpen` in the browser (publish,
+the two links, a second browser on the view link read only with noindex and a report that reaches the store, a third
+on the edit link whose edit renews the copy, delete). Not decided here: the terms text itself and who answers reports
+(section 5, items 1 and 2).

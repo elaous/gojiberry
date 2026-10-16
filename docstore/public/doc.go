@@ -42,7 +42,7 @@
 //	POST   /public/session        a new anonymous session: {token, userId "anon:<random>", expires, limits}
 //	POST   /public/doc            create the session's one document (409 if it has a live one)
 //	PUT    /public/doc            save an edit (renews the deadline)
-//	GET    /public/doc            download it (never renews)
+//	GET    /public/doc            download it (never renews); X-Gojiberry-View-Id names its read-only link
 //	DELETE /public/doc            discard it, freeing the session
 //	GET    /public/view/<viewId>  the document, read-only; never renews; 410 once taken down
 //	GET    /public/health         {"ok":true} (200) or {"ok":false} (503): nothing more
