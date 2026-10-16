@@ -114,3 +114,31 @@ func TestMarkdownImportTitleImagesAndFormulas(t *testing.T) {
 		t.Fatal("not UTF-8")
 	}
 }
+
+func TestMarkdownFootnotesBecomeFootnotes(t *testing.T) {
+	md := "# Notes\n\nFirst claim[^a] and a second[^long], then the first again[^a], and an unknown[^zz].\n\n[^a]: The first note.\n[^long]: A longer note\n    that goes on.\n\n```\n[^a]: not a definition in code\n```\n"
+	d, err := markdown{}.Import([]byte(md))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Footnotes) != 2 || d.Footnotes[0].Text != "The first note." || d.Footnotes[1].Text != "A longer note that goes on." {
+		t.Fatalf("notes: %+v", d.Footnotes)
+	}
+	var marks []string
+	text := ""
+	for _, it := range d.Content {
+		switch {
+		case it.Footnote != nil:
+			marks = append(marks, it.Footnote.ID)
+			text += "<" + it.Footnote.ID + ">"
+		case it.Chars != nil:
+			text += it.Chars.Text
+		}
+	}
+	if strings.Join(marks, ",") != "n1,n2,n1" {
+		t.Fatalf("marks %v in %q", marks, text)
+	}
+	if !strings.Contains(text, "unknown[^zz]") || !strings.Contains(text, "[^a]: not a definition in code") || strings.Contains(text, "The first note.") {
+		t.Fatalf("an unknown reference stays text, code is not read, definitions are not in the text: %q", text)
+	}
+}
