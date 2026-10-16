@@ -280,6 +280,9 @@ type TableProps struct {
 	Anchor   *canvas.Anchor
 	Wrap     bool
 	OnChange func(*canvas.Table)
+	// RenderCell draws the content of a cell when it returns true (see canvas.TableView.RenderCell): a progress
+	// bar, an icon, a badge, a number in its own format. False lets the table write the text.
+	RenderCell func(p canvas.Painter, row, col int, text string, x, y, w, h float64) bool
 }
 
 // Table is an editable table.
