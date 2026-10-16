@@ -1,6 +1,6 @@
 # Status of the roadmap
 
-A one-page view of [roadmap.md](roadmap.md), read against `main` on 2026-10-14 (after #375). The roadmap keeps the long
+A one-page view of [roadmap.md](roadmap.md), read against `main` on 2026-10-16 (after #406). The roadmap keeps the long
 history of each item (what was built, tests, decisions); this page says only **what is present**, **what is
 missing**, and where the item stands. The item numbers are the roadmap's. When the two disagree, the roadmap's
 entry for the item is the detail and this page is the summary: update both in the same change.
@@ -25,7 +25,10 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | Run the manual screen-reader script on NVDA, JAWS and VoiceOver (steps 14 to 21 of [accessibility-testing.md](accessibility-testing.md)) | A person with those readers | 49, 60, 69, 79 |
 | E-mail verification through a real provider (SMTP or an API) | The operator picks the provider and gives credentials | 41 |
 | A PAC run on the PDFs (veraPDF, the PDF/UA-1 reference validator, passes: `TestVeraPDFAcceptsTheTaggedFiles`; pdfa11y passes in `make pdfa11y-test`) | PAC is a Windows program | 63 |
-| Test the Redis-style shared stores, S3-compatible services that ignore `If-Match` on delete, nginx and Caddy recipes | Live endpoints and daemons | 3, 9, 82, 89 |
+| Test the Redis-style shared stores and an S3-compatible service that ignores `If-Match` on delete (the probe and the fallback are built and tested against fakes; no real service was available) | Live endpoints | 3, 9, 89 |
+| Run the migration against a real Google Drive and the Hunspell loader against real LibreOffice dictionaries (both are tested with fixtures) | A Google account with documents; the dictionary files | Migrate, known limits plan |
+| Write the terms text and decide who answers abuse reports for the public offer | The operator | public docstore |
+| Run independent log witnesses (the code, cosignatures and the quorum check, is done) | Parties other than the operator | limits 12 |
 | Test atypical-speech support with people who have atypical speech | Volunteers and consent | 56 |
 | An outside security audit before anyone relies on the keys for secrets | A reviewer | 89 |
 | Read the pt, ar and he interface packs (model-drafted) as a native speaker | A native speaker of each | 83 |
@@ -113,7 +116,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | Button icons | enhancement | done | `components.Material`; `components.IconToolbar` (toolbar pattern: one tab stop, arrow keys, toggles with `aria-pressed`, tooltips with the shortcut) and `CommandToolbarItems` (name, icon and shortcut from the registry the Edit menu uses); the showcase's formatting toolbar follows the caret | none |
 | Download submenu | enhancement | done | grouped, `.open` | none |
 | `.opendoc` packs | feature | done | `docfile/pack`, `cmd/opendoc` | none |
-| Encryption and passkeys | feature | partial | SSH keys, passkeys, envelope encryption, directory, sharing, recovery | see the security table |
+| Encryption and passkeys | feature | blocked | SSH keys, passkeys, envelope encryption, directory, sharing, recovery, log witnesses, revoker manifests, shared stores; the design is split into [encryption-and-passkeys.md](encryption-and-passkeys.md) and its parts | the outside audit (item 89) and independent witnesses: people, not code |
 | Public docstore | feature | done | anonymous offer with expiry and abuse controls (server); the client (`docstore/public/client`) and the showcase's Public link tab: session, edit and view links, countdown, keep, report, noindex | the terms text and who answers reports are a person's work (see public-docstore.md section 5) |
 | Console mode | feature | done | `console`, `cmd/docsh`; the showcase's Console tab (`console.Session`, `components.ConsolePanel`) | none |
 | Terminal demo | feature | done | `examples/terminal-demo` | none |
@@ -122,17 +125,15 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 
 ## Counts
 
-Product table (items 48 to 84, 32 rows): 24 done, 0 partial, 8 blocked (49, 50, 56, 60, 64, 69, 82, 83: all that is left is a person's work) ("done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent). None is untouched. The server and
-security table: the review findings are done; still open are the per-account sign-in budget and the shared lock
-(passkey backlog 4 and 5) and log witnesses (limits 12); 41 is blocked on a provider.
+Product table (items 48 to 84, 32 rows): 24 done, 0 partial, 8 blocked (49, 50, 56, 60, 64, 69, 82, 83: all that is left is a person's work). "Done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent. None is untouched.
+
+Server and security table: every code item is done (passkey backlog 1 to 5, limits 12 and 21, 55, 86, 58, 85, 87, 88). Inherent: 42, 43, 44, 45, 53, 55. Blocked on a person: 41 (a mail provider) and 89 (an outside audit).
+
+Earlier plan: nothing is partial; Encryption and passkeys is blocked on the audit and the witnesses.
 
 ## Suggested order for the next work
 
-1. 57: scrubbed crash reports (a separate opt-in) and one counting process per store.
-2. Passkey backlog 3 (a SQL-table account store), 55 and 86 (the other caps shared through the store).
-3. Migrate: skipping what an earlier run brought, Google Docs comments and history.
-4. Console mode: the editor panel.
-5. 42, 45, 89 and Encryption and passkeys: what is left is mostly an outside review or a person's work; the code parts first.
+Nothing in the code is left that this project can finish alone. What remains is in "What is blocked on a person": the screen-reader and IME runs, the native review of the pt, ar and he packs, the outside audit, a mail provider, the terms text, real-service runs (Drive, S3-compatible, LibreOffice dictionaries) and independent witnesses.
 
 Closed since the previous version of this page: 80 (print layout: odd/even pages, a different first page, any sheet size, a clickable table of contents written where it is, kept table rows), 74, 75, 77, 73 and 66 (their gaps), the audit log written by the server with scheduled backups (81), the builtin observability totals kept across restarts and the other servers' own work reported (81), pt/ar/he completion lists (79), 58 (IPv6 /64 budgets), the table-row widow control, the sheet size
 restore, contents in RTF, footnote links in RTF, the long undo history, heading levels in the panels, all CSS
