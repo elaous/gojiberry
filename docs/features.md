@@ -82,7 +82,7 @@ Write @name in a comment or a reply and that person is told: the screen reader a
 
 ## Table formulas
 
-A table cell that starts with `=` is a formula: `=B2*C2`, `=SUM(B2:B9)`, `=ROUND(AVERAGE(C1:C4), 1)`, `=IF(D2>=10, "ok", "low")`. The table shows the value, the cell keeps the formula (it shows when you edit the cell), and the exports and the reading copy carry the value. A formula that cannot be computed shows an error such as #DIV/0! or #CYCLE! instead of stopping anything.
+A table cell that starts with `=` is a formula: `=B2*C2`, `=SUM(B2:B9)`, `=ROUND(AVERAGE(C1:C4), 1)`, `=IF(D2>=10, "ok", "low")`. The table shows the value, the cell keeps the formula (it shows when you edit the cell), and the exports and the reading copy carry the value. A formula that cannot be computed shows an error such as #DIV/0! or #CYCLE! instead of stopping anything. Start a cell with `\=` to write a cell that begins with = without making it a formula. The table menu has **Show formulas** to see the text of the formulas instead of their values. The column grips are lettered (A, B, ...) and the row grips numbered (1, 2, ...), the names a formula uses. Markdown keeps the formula as typed, so `| =A1*B2 |` is a formula wherever the Markdown is read as a table by this editor.
 
 ## References
 

@@ -279,7 +279,7 @@ func inlineMarkdown(in Inline) (md string, block bool) {
 		if o.View == nil || o.View.Table == nil || len(o.View.Table.Cells) == 0 {
 			return "", false
 		}
-		cells := o.View.Table.Values()
+		cells := o.View.Table.Cells // the source: a formula is written as typed and works again where Markdown is read back
 		row := func(r []string) string {
 			parts := make([]string, len(r))
 			for i, c := range r {
