@@ -12,6 +12,7 @@ func (s *Service) AdminHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/admin/takedown/", s.handleTakedown)
 	mux.HandleFunc("/admin/health", s.handleAdminHealth)
+	mux.HandleFunc("/admin/reports", s.handleAdminReports)
 	return s.headers(mux)
 }
 
@@ -151,6 +152,7 @@ func (s *Service) handleTakedown(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	s.learnHash(ctx, docID, reason)
 	if err := s.deleteKey(ctx, docKey(docID)); err != nil {
 		s.fail(w, err)
 		return

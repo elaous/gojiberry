@@ -6,6 +6,7 @@ package docstorecmd
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -79,7 +80,22 @@ func withPublic(srv *docstore.Server, adapter docstore.Adapter, expiryTTL time.D
 	if err != nil {
 		return nil, err
 	}
-	svc, err := public.New(public.Options{Store: adapter, Config: cfg, LimiterFactory: limiters, Quota: quota, Sessions: sessions, PriorityQuota: prio, SharedBurstWatch: prio != nil})
+	var notify func(public.Report)
+	if hook := os.Getenv("GOJIBERRY_DOCSTORE_PUBLIC_REPORT_WEBHOOK"); hook != "" {
+		if notify, err = public.WebhookNotify(hook); err != nil {
+			return nil, err
+		}
+	}
+	var blocklist public.Blocklist
+	if os.Getenv("GOJIBERRY_DOCSTORE_PUBLIC_ONLY_DOCUMENTS") == "true" {
+		blocklist = public.DocumentsOnly{}
+	}
+	var svc *public.Service
+	challenger, err := publicChallenger(func() bool { return svc != nil && svc.Busy() })
+	if err != nil {
+		return nil, err
+	}
+	svc, err = public.New(public.Options{Blocklist: blocklist, Challenger: challenger, Notify: notify, Store: adapter, Config: cfg, LimiterFactory: limiters, Quota: quota, Sessions: sessions, PriorityQuota: prio, SharedBurstWatch: prio != nil})
 	if err != nil {
 		return nil, err
 	}
@@ -753,4 +769,38 @@ func parseWitnesses(v string) (map[string]ed25519.PublicKey, error) {
 		out[name] = ed25519.PublicKey(raw)
 	}
 	return out, nil
+}
+
+// publicChallenger reads GOJIBERRY_DOCSTORE_PUBLIC_POW_BITS (0 or unset: no challenge), _POW_WHEN ("busy", the
+// default, or "always") and _POW_SECRET (at least 16 characters; replicas must share it, or a challenge from one is
+// not valid at another; unset: a random one for this process).
+func publicChallenger(busy func() bool) (public.Challenger, error) {
+	text := os.Getenv("GOJIBERRY_DOCSTORE_PUBLIC_POW_BITS")
+	if text == "" || text == "0" {
+		return nil, nil
+	}
+	bits, err := strconv.Atoi(text)
+	if err != nil || bits < 1 || bits > 26 {
+		return nil, fmt.Errorf("docstore: GOJIBERRY_DOCSTORE_PUBLIC_POW_BITS must be a number from 1 to 26, got %q", text)
+	}
+	secret := []byte(os.Getenv("GOJIBERRY_DOCSTORE_PUBLIC_POW_SECRET"))
+	switch {
+	case len(secret) == 0:
+		secret = make([]byte, 32)
+		if _, err := rand.Read(secret); err != nil {
+			return nil, err
+		}
+		log.Print("docstore: public offer: the proof-of-work secret is random for this process (set GOJIBERRY_DOCSTORE_PUBLIC_POW_SECRET to share it between replicas)")
+	case len(secret) < 16:
+		return nil, errors.New("docstore: GOJIBERRY_DOCSTORE_PUBLIC_POW_SECRET needs at least 16 characters")
+	}
+	p := &public.ProofOfWork{Secret: secret, Difficulty: bits}
+	switch when := os.Getenv("GOJIBERRY_DOCSTORE_PUBLIC_POW_WHEN"); when {
+	case "", "busy":
+		p.Busy = busy
+	case "always":
+	default:
+		return nil, fmt.Errorf("docstore: GOJIBERRY_DOCSTORE_PUBLIC_POW_WHEN must be busy or always, got %q", when)
+	}
+	return p, nil
 }

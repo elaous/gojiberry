@@ -144,7 +144,7 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.challenge.Verify(r); err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		s.refuseChallenge(w, err)
 		return
 	}
 	if !s.writeAllowed(w, r, sess) {

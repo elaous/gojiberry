@@ -128,6 +128,8 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.ensureCounters(ctx) // the report counters are only for eviction: a report is taken even if they are unknown
+	var rep Report
+	notify := false
 	needEvict, stored, err := func() (bool, string, error) {
 		unlock := s.lock(docID)
 		defer unlock()
@@ -135,9 +137,17 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 		if found, err := s.getJSON(ctx, docRecordPrefix+docID, &meta); err != nil || !found {
 			return false, "", err
 		}
-		id, _, over, err := s.storeReport(ctx, &meta, Report{ID: reportID, ViewID: view, DocID: docID, Reason: reason, Category: category, At: s.now().UTC(), Reporter: reporter})
+		rep = Report{ID: reportID, ViewID: view, DocID: docID, Reason: reason, Category: category, At: s.now().UTC(), Reporter: reporter}
+		id, kept, over, err := s.storeReport(ctx, &meta, rep)
+		rep.Priority = s.isPriority(category)
+		if kept {
+			notify = true
+		}
 		return over, id, err
 	}()
+	if notify && s.notify != nil {
+		go s.tell(rep)
+	}
 	if err != nil {
 		s.fail(w, err)
 		return
