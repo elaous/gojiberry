@@ -1496,6 +1496,7 @@
   "docview.skip": "Sprunglinks",
   "fidelity.checking": "%s: es wird geprüft, was dieses Format behält …",
   "files.working": "Wird bearbeitet …",
+  "prefs.typewriter": "Schreibmaschinen-Scrollen: die Zeile, die ich tippe, bleibt in der Mitte der Ansicht, die Seite bewegt sich",
   "read.voice": "Stimme des Vorlesers",
   "read.voiceAuto": "Vorlesestimme: die Wahl des Browsers",
   "read.voiceAutomatic": "Automatisch",

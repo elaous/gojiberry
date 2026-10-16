@@ -61,6 +61,12 @@ func (sv *ScrollView) RevealCaret() bool {
 	}
 	nx, ny := sv.ScrollX, sv.ScrollY
 	switch {
+	case sv.Typewriter:
+		at := sv.TypewriterAt
+		if at <= 0 || at >= 1 {
+			at = 0.5
+		}
+		ny = y + h/2 - sv.Height*at
 	case y < ny+scrollMargin:
 		ny = y - scrollMargin
 	case y+h > ny+sv.Height-scrollMargin:

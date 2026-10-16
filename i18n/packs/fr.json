@@ -1496,6 +1496,7 @@
   "docview.skip": "Liens d'évitement",
   "fidelity.checking": "%s : vérification de ce que ce format conserve…",
   "files.working": "En cours…",
+  "prefs.typewriter": "Défilement machine à écrire : la ligne que je tape reste au milieu de la vue et la page se déplace",
   "read.voice": "Voix de lecture",
   "read.voiceAuto": "Voix de lecture : le choix du navigateur",
   "read.voiceAutomatic": "Automatique",
