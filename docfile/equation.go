@@ -31,6 +31,12 @@ func (d Document) EquationsAsText() Document {
 			out.Content = append(out.Content, it)
 			continue
 		}
+		if it.Equation.Inline { // stays in its line, as the words
+			if w := it.Equation.Words(); w != "" {
+				out.Content = append(out.Content, Item{Chars: &Chars{Text: w}})
+			}
+			continue
+		}
 		if n := len(out.Content); n > 0 {
 			// the equation's paragraph starts a line of its own
 			if last := out.Content[n-1].Chars; last != nil && last.Text != "" && !strings.HasSuffix(last.Text, "\n") {

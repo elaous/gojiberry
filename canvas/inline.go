@@ -15,6 +15,14 @@ type InlineObject interface {
 	DrawAt(p Painter, x, y float64)
 }
 
+// DescentObject is an InlineObject with a baseline of its own inside its box: Descent is how far the baseline is above
+// the bottom of the box (after Measure). A non-block object sits on the line's baseline; with Descent the object's
+// baseline is on it instead, so a formula with a subscript or a fraction lines up with the words round it.
+type DescentObject interface {
+	InlineObject
+	Descent() float64
+}
+
 // Inline is a TextFlow item that places an InlineObject in the text.
 // It takes one position in the text stream (so offsets and carets
 // still line up). Block objects get a line to themselves (a table, a
@@ -36,6 +44,8 @@ type PlacedObject struct {
 	X, Y   float64 // absolute top-left
 	W, H   float64
 	Offset int // text-stream offset
+	// Descent is how far the object's own baseline is above its bottom (a DescentObject); zero for the others.
+	Descent float64
 }
 
 // Rule is a horizontal rule, a block InlineObject spanning the column.

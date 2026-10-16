@@ -208,6 +208,8 @@ type lineParts struct {
 	width, height float64
 	size          float64 // largest font size on the line
 	objH          float64 // tallest object
+	objAbove      float64 // the most any object reaches above the baseline (its height less its descent)
+	objBelow      float64 // the most any object reaches below it
 	block         bool    // the line is a block object alone
 }
 
@@ -232,10 +234,16 @@ func (d *flowData) partsOfLv(a, b int, lv []uint8, off int, base uint8) linePart
 	for a < b {
 		if in, ok := d.objs[a]; ok {
 			w, h := d.objDims(a)
-			lp.objs = append(lp.objs, PlacedObject{Object: in.Object, X: lp.width, W: w, H: h, Offset: a})
+			desc := 0.0
+			if do, ok := in.Object.(DescentObject); ok && !in.Block {
+				desc = min(max(do.Descent(), 0), h)
+			}
+			lp.objs = append(lp.objs, PlacedObject{Object: in.Object, X: lp.width, W: w, H: h, Offset: a, Descent: desc})
 			items = append(items, item{run: -1, obj: len(lp.objs) - 1, w: w, level: base})
 			lp.width += w
 			lp.objH = max(lp.objH, h)
+			lp.objAbove = max(lp.objAbove, h-desc)
+			lp.objBelow = max(lp.objBelow, desc)
 			lp.block = lp.block || in.Block
 			a++
 			continue

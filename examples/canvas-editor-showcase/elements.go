@@ -10,6 +10,7 @@ import (
 
 	"github.com/elaous/gojiberry/a11ycheck"
 	"github.com/elaous/gojiberry/canvas"
+	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/export"
 	"github.com/elaous/gojiberry/xango"
@@ -22,6 +23,7 @@ import (
 // elementsForm is the equation being typed in the tab, and the last message of its equation and code parts.
 type elementsForm struct {
 	formula, alt string
+	inline       bool // the new equation goes in the line of text
 	msg          string
 	codeMsg      string
 	focusAlt     bool
@@ -74,9 +76,9 @@ func (u *ui) insertEquation(fl *canvas.TextFlow, redraw, renderUI func()) {
 		}
 		if !refused {
 			pos := fl.Cursors()[0].Caret
-			fl.Replace([]canvas.Edit{{From: pos, To: pos, Items: []canvas.Item{canvas.Inline{Object: &canvas.EquationObject{Formula: item.Formula, Alt: item.Alt}, Block: true}}}})
+			fl.Replace([]canvas.Edit{{From: pos, To: pos, Items: []canvas.Item{canvas.Inline{Object: &canvas.EquationObject{Formula: item.Formula, Alt: item.Alt, Inline: f.inline}, Block: !f.inline}}}})
 			fl.SetCursors([]canvas.Cursor{canvas.At(pos + 1)})
-			f.formula, f.alt, f.focusAlt = "", "", false
+			f.formula, f.alt, f.focusAlt, f.inline = "", "", false, false
 			f.msg = T("eq.inserted", "Equation inserted.")
 			u.announce(f.msg)
 			redraw()
@@ -101,6 +103,9 @@ func elementsSections(u *ui, state *State, flow func() *canvas.TextFlow, redraw,
 		xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("eq.title", "Equations"))),
 		textarea("eq-formula", T("eq.formulaLabel", "Formula"), f.formula, T("eq.formulaHint", "For example: x^2 + y^2 = z^2, frac{a}{b}, sqrt{x}"), "2", func(v string) { f.formula = v }),
 		textarea("eq-alt", T("eq.altLabel", "Text alternative of the new equation"), f.alt, T("eq.altHint", "The equation in words, as you would read it aloud"), "2", func(v string) { f.alt = v }),
+		xango.El("div", []xango.Attr{xango.A("id", "eq-inline")}, components.Checkbox(components.CheckboxProps{
+			Label: T("eq.inline", "In the line of text, not on a line of its own"), Checked: f.inline, Disabled: !canEdit,
+			OnChange: func(on bool) { f.inline = on; renderUI() }})),
 		btn("eq-insert", T("eq.insert", "Insert the equation"), func() { u.insertEquation(fl, redraw, renderUI) }, !canEdit),
 	}
 	if f.msg != "" {

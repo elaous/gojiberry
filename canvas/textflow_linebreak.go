@@ -71,8 +71,9 @@ func (l *layouter) line(p, pe int) (int, bool) {
 			h = lp.objH
 		case len(lp.objs) > 0:
 			// Objects sit on the baseline; leave room under it for descenders.
-			h = max(lp.height, lp.objH+0.25*lp.size)
-			baselineOff = h - 0.2*lp.size
+			below := max(lp.objBelow, 0.2*lp.size)
+			h = max(lp.height, lp.objAbove+0.05*lp.size+below)
+			baselineOff = h - below
 		}
 		if h > lh+1e-9 && try < 3 {
 			lh = h // taller than the band we tried: look again with the real height
@@ -117,7 +118,7 @@ func (l *layouter) line(p, pe int) (int, bool) {
 			if lp.block {
 				o.Y = st.y
 			} else {
-				o.Y = st.y + baselineOff - o.H
+				o.Y = st.y + baselineOff - o.H + o.Descent
 			}
 			line.Objects = append(line.Objects, o)
 		}

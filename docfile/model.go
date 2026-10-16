@@ -103,6 +103,8 @@ type ImageItem struct {
 type EquationItem struct {
 	Formula string `json:"formula" pb:"1"`
 	Alt     string `json:"alt,omitempty" pb:"2"`
+	// Inline puts the formula in its line of text instead of on a line of its own.
+	Inline bool `json:"inline,omitempty" pb:"3"`
 }
 
 // RuleItem mirrors canvas.Rule.
@@ -396,7 +398,7 @@ func FromItems(items []canvas.Item) []Item {
 						Alt: o.Alt, Decorative: o.Decorative, LongDesc: o.LongDesc, Legend: o.Legend, Credit: o.Credit, SourceURL: o.SourceURL}})
 				}
 			case *canvas.EquationObject:
-				out = append(out, Item{Equation: &EquationItem{Formula: o.Formula, Alt: o.Alt}})
+				out = append(out, Item{Equation: &EquationItem{Formula: o.Formula, Alt: o.Alt, Inline: o.Inline}})
 			case *canvas.MediaObject:
 				out = append(out, Item{Media: &MediaItem{URL: o.URL, Kind: o.Kind, Title: o.Title, Captions: o.Captions, CaptionsURL: o.CaptionsURL,
 					Transcript: o.Transcript, Width: o.Width, Height: o.Height}})
@@ -489,7 +491,7 @@ func ToItems(items []Item) []canvas.Item {
 		case it.Image != nil:
 			out = append(out, canvas.Inline{Object: imageObject(*it.Image)})
 		case it.Equation != nil:
-			out = append(out, canvas.Inline{Object: &canvas.EquationObject{Formula: it.Equation.Formula, Alt: it.Equation.Alt}, Block: true})
+			out = append(out, canvas.Inline{Object: &canvas.EquationObject{Formula: it.Equation.Formula, Alt: it.Equation.Alt, Inline: it.Equation.Inline}, Block: !it.Equation.Inline})
 		case it.Media != nil:
 			// the editor has no player: a clip is a card with its kind and title (canvas.MediaObject), and the
 			// text that stands for it is edited in the Pictures tab

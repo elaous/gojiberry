@@ -136,6 +136,7 @@ message MediaItem {
 message EquationItem {
   string formula = 1;
   string alt = 2;
+  bool inline = 3;
 }
 
 message Item {
