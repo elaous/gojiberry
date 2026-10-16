@@ -109,7 +109,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 
 | Item | Type | Status | Present | Missing |
 | --- | --- | --- | --- | --- |
-| Migrate | feature | partial | from other editors | skipping what an earlier run brought; Google Docs comments and history |
+| Migrate | feature | done | from other editors; files an earlier run brought are left unless changed (origin tags); Word and Google Docs comments with ranges, replies and resolved state; Google Docs revision history (opt-in) | none (OneDrive's versions are not read; not run against the real Drive) |
 | Button icons | enhancement | done | `components.Material`; `components.IconToolbar` (toolbar pattern: one tab stop, arrow keys, toggles with `aria-pressed`, tooltips with the shortcut) and `CommandToolbarItems` (name, icon and shortcut from the registry the Edit menu uses); the showcase's formatting toolbar follows the caret | none |
 | Download submenu | enhancement | done | grouped, `.open` | none |
 | `.opendoc` packs | feature | done | `docfile/pack`, `cmd/opendoc` | none |

@@ -293,8 +293,8 @@ func TestImportFidelityOfWordFiles(t *testing.T) {
 			t.Errorf("%s: treatment %v", l.Feature, l.Treatment)
 		}
 	}
-	if len(got) != 2 || got[FeatComment] != 1 || got[FeatHeaderFooter] != 1 {
-		t.Errorf("import report = %v, want one comment and one header", got)
+	if len(got) != 1 || got[FeatHeaderFooter] != 1 {
+		t.Errorf("import report = %v, want only the header: comments are read now", got)
 	}
 	if rep := ImportFidelity("docx", []byte("not a zip")); rep.Known || len(rep.Losses) != 0 {
 		t.Errorf("a file that is not a Word document is not reported on: %+v", rep)

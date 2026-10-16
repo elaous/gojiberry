@@ -13,7 +13,6 @@ import (
 // Where the content of an element is text that Import does read in another way (a field's shown result, the
 // text of a text box's neighbours) only the element's own job is counted, not the text.
 type Skipped struct {
-	Comments    int // comments in word/comments.xml (their text and authors are not read)
 	HeaderFoots int // headers and footers that hold text
 	TextBoxes   int // text boxes: their text is not read
 	Drawings    int // shapes, charts and diagrams that are not pictures
@@ -26,7 +25,7 @@ type Skipped struct {
 
 // Total is the number of skipped elements.
 func (s Skipped) Total() int {
-	return s.Comments + s.HeaderFoots + s.TextBoxes + s.Drawings + s.Endnotes + s.Fields + s.Bookmarks + s.Columns + s.Layout
+	return s.HeaderFoots + s.TextBoxes + s.Drawings + s.Endnotes + s.Fields + s.Bookmarks + s.Columns + s.Layout
 }
 
 // Inspect counts what Import would leave out of a .docx file. It reads the same parts under the same limits, and
@@ -45,9 +44,6 @@ func Inspect(data []byte) (Skipped, error) {
 		return Skipped{}, ErrNotDocx
 	}
 	var s Skipped
-	if c := r.xml("word/comments.xml"); c != nil {
-		s.Comments = len(c.children("comment"))
-	}
 	for name := range r.files {
 		if !strings.HasPrefix(name, "word/header") && !strings.HasPrefix(name, "word/footer") || !strings.HasSuffix(name, ".xml") {
 			continue

@@ -2351,6 +2351,16 @@ type MigrateProps struct {
 	OnSelectAll  func()
 	OnStart      func()
 
+	// OnAgain turns on bringing again what an earlier run already brought (Again says it is on); a
+	// file that is there and has not changed at the platform is left alone otherwise. nil leaves the
+	// choice out. OnHistory and History are the same for the version history of each document (the
+	// platform has one; HistoryMax is how many versions).
+	OnAgain    func(on bool)
+	Again      bool
+	OnHistory  func(on bool)
+	History    bool
+	HistoryMax int
+
 	// OnPickFiles opens the chooser for Word files on this computer, which are
 	// migrated at once.
 	OnPickFiles func()
@@ -2363,8 +2373,10 @@ type MigrateProps struct {
 	Current     string
 	Reported    bool
 	Imported    int
-	Failed      []MigrateFailure
-	Truncated   bool
+	// Skipped were brought by an earlier run and had not changed; Versions came with their documents.
+	Skipped, Versions int
+	Failed            []MigrateFailure
+	Truncated         bool
 	// Partial says the run was a pack that failed or was cancelled, so no pack was handed over.
 	Partial        bool
 	Error          string

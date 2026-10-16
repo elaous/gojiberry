@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -125,8 +126,8 @@ func TestMigrateFromGoogleDocsKeepsFoldersAndReportsFailures(t *testing.T) {
 		if e.Name == "Budget" != inWork || e.Name != "Budget" && e.Name != "Plan" {
 			t.Errorf("%+v", e)
 		}
-		if len(e.Tags) != 1 || e.Tags[0] != "google-docs" {
-			t.Errorf("tags %v", e.Tags)
+		if len(e.Tags) != 2 || !slices.Contains(e.Tags, "google-docs") || !slices.ContainsFunc(e.Tags, func(t string) bool { return strings.HasPrefix(t, "from:google-docs:d") }) {
+			t.Errorf("tags %v: the tag of the platform and where the document came from", e.Tags)
 		}
 		d, _ := s.Load(ctx, "mem", e.ID)
 		if !strings.Contains(docText(d), "text of") {
@@ -290,7 +291,7 @@ func TestSessionBrowsesSelectsAndMigrates(t *testing.T) {
 		t.Fatalf("%+v", p)
 	}
 	live, _, _, _ := saverUnder.Overview(context.Background(), "mem")
-	if len(live) != 1 || live[0].Name != "Plan" || live[0].Tags[0] != "google-docs" {
+	if len(live) != 1 || live[0].Name != "Plan" || !slices.Contains(live[0].Tags, "google-docs") {
 		t.Errorf("%+v", live)
 	}
 	// Converted to .open unless another format is chosen.
