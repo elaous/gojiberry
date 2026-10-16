@@ -19,11 +19,17 @@ func decodeJSON(r io.Reader, into any) error { return json.NewDecoder(r).Decode(
 // fetched through Openverse's own thumbnail endpoint, which allows cross-origin reads from a page.
 type Openverse struct {
 	Base   string // default https://api.openverse.org
+	Label  string // the name shown; default "Openverse"
 	Client *http.Client
 }
 
 // Name implements Repository.
-func (Openverse) Name() string { return "Openverse" }
+func (o Openverse) Name() string {
+	if o.Label != "" {
+		return o.Label
+	}
+	return "Openverse"
+}
 
 // Search implements Repository.
 func (o Openverse) Search(ctx context.Context, q string, page int) ([]Result, error) {
@@ -80,12 +86,18 @@ func licenseName(code, version string) string {
 
 // Commons searches Wikimedia Commons for pictures whose licence is public domain, CC0 or Creative Commons.
 type Commons struct {
-	Base   string // default https://commons.wikimedia.org
+	Base   string // default https://commons.wikimedia.org; any MediaWiki site with the same file search works
+	Label  string // the name shown; default "Wikimedia Commons"
 	Client *http.Client
 }
 
 // Name implements Repository.
-func (Commons) Name() string { return "Wikimedia Commons" }
+func (c Commons) Name() string {
+	if c.Label != "" {
+		return c.Label
+	}
+	return "Wikimedia Commons"
+}
 
 var tagRe = regexp.MustCompile(`<[^>]*>`)
 

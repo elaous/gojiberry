@@ -74,7 +74,7 @@ A picture can carry a visible **legend** (Insert picture > Pictures tab, "Add a 
 
 ## Find a picture online
 
-In the Pictures tab, **Find a picture online** searches repositories of public-domain and Creative Commons pictures (Openverse and Wikimedia Commons to start). A repository is asked nothing until you turn it on and search. Each result shows its author and licence before you insert it; the picture goes in with that credit as its legend, and the author, licence and page are saved with it. Only licences that allow reuse with credit are listed, and pictures are limited in size and type.
+In the Pictures tab, **Find a picture online** searches repositories of public-domain and Creative Commons pictures (Openverse and Wikimedia Commons to start). A repository is asked nothing until you turn it on and search. Each result shows its author and licence before you insert it; the picture goes in with that credit as its legend, and the author, licence and page are saved with it. Only licences that allow reuse with credit are listed, and pictures are limited in size and type. "More results" reads the next page. An operator can add repositories of their own (mirrors of Openverse or a MediaWiki site) in `image-repos.json` next to the page; they start off like the others.
 
 ## Two-page spread
 
