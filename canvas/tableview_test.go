@@ -642,3 +642,20 @@ func TestRenderCellDrawsTheContentOfACell(t *testing.T) {
 		t.Error("the other cells keep their text")
 	}
 }
+
+func TestFormulaCellsShowTheirValue(t *testing.T) {
+	p := &fakePainter{}
+	v := NewTableView(NewTableFrom([][]string{{"2", "3", "=A1+B1"}}), p)
+	var asked []string
+	v.RenderCell = func(pp Painter, r, c int, text string, x, y, w, h float64) bool {
+		asked = append(asked, text)
+		return false
+	}
+	v.Draw()
+	if len(asked) != 3 || asked[2] != "5" {
+		t.Fatalf("the value is what is drawn: %q", asked)
+	}
+	if v.Table.Cell(0, 2) != "=A1+B1" {
+		t.Fatal("the formula stays in the cell")
+	}
+}
