@@ -370,7 +370,18 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 }
 
 // acceptPresence validates and records a cursor update from any transport.
-func (h *Hub) acceptPresence(rm *room, role Role, r *http.Request, p Presence) (int, string) {
+func (h *Hub) acceptPresence(rm *room, role Role, r *http.Request, p Presence) (status int, msg string) {
+	done := observe.Default().Work("hub_presence")
+	defer func() {
+		switch {
+		case status == http.StatusNoContent:
+			done("ok")
+		case status >= 500:
+			done("error")
+		default:
+			done("rejected")
+		}
+	}()
 	if p.Replica == "" || len(p.Replica) > 128 || len(p.Name) > 256 || len(p.Color) > 64 {
 		return http.StatusBadRequest, "replica is required (at most 128 characters)"
 	}

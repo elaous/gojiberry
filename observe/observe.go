@@ -136,7 +136,7 @@ var labelValues = map[string][]string{
 	"code":         {"server_error", "panic", "store_failed", "sweep_failed", "sink_failed", "not_ready"},
 	"op":           {"load", "save", "save_if", "delete", "list", "renew"},
 	"result":       {"ok", "not_found", "conflict", "canceled", "error", "rejected"},
-	"work":         {"hub_ops", "hub_join", "hub_rooms", "sync_merge", "font_rescan", "translate", "speak", "transcribe", "braille"},
+	"work":         {"hub_ops", "hub_join", "hub_rooms", "sync_merge", "font_rescan", "font_file", "font_symbols", "font_download", "google_fonts", "hub_presence", "translate", "speak", "transcribe", "braille"},
 	"sweep":        {"expiry", "ratelimit", "directory", "sessions", "passkey_challenges", "public", "usage_sampling"},
 	"queue":        {"posthog_buffer"},
 	"reason":       {"unknown_metric", "wrong_kind", "unknown_label", "bad_label_value", "bad_value", "unknown_span", "unknown_attribute", "bad_attribute_value"},

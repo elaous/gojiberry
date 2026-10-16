@@ -99,6 +99,11 @@ in the selector is downloaded into the store the first time the text uses it
 
 ## Done since this list was written
 
+- **Multi-cursor at a break**: two cursors at one offset of a page or column break keep their own side of it (typing
+  goes in front of the break at one and behind it at the other).
+- **Markdown write-back**: tables (pipe tables), rules and pictures that know their address are written by
+  `MarkdownFromItems` and by the Markdown export.
+
 These were "asked for, not started" and are built. The current state of the editor is the
 [roadmap](roadmap.md) and [status.md](status.md); this page lists the canvas core.
 
@@ -126,8 +131,6 @@ Asked for, not started:
 - Outline: no collapsing of sections or drag-to-reorder; bookmarks are not drawn on the canvas (only listed).
 - **Map object** (OpenStreetMap tiles) and **flowcharts** as canvas objects.
 - Comments: notifications for mentions.
-- `TextFlow` multi-cursor keeps one `Cursor.After` per cursor; typing at a break offset goes in front of the break unless
-  the caret is "after".
-- Markdown: links round-trip, but tables and images are not written back; case and small caps have no Markdown form.
+- Markdown: case and small caps have no Markdown form (the format has no syntax for them; a limit of Markdown).
 - Table cell render prop for the xango `Table`, and `CanvasView` (a DOM component that mounts a `canvas/xango` tree).
 - Spread view: no gutter shadow or page-turn UI.

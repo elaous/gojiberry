@@ -516,3 +516,7 @@ func checkName(s string) error {
 	}
 	return nil
 }
+
+// MIME is the media type of a pack. `mime/opendoc.magic` (file(1)) and `mime/opendoc.xml` (shared-mime-info)
+// let a system recognise one by its first eight bytes.
+const MIME = "application/vnd.opendocs.pack"

@@ -139,11 +139,39 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/local/fonts", s.handleLocalFonts)
 	mux.HandleFunc("/local/rescan", s.handleLocalRescan)
-	mux.HandleFunc("/local/files/", s.handleLocalFile)
-	mux.HandleFunc("/local/symbols", s.handleLocalSymbols)
-	mux.HandleFunc("/google/fonts", s.handleGoogleFonts)
-	mux.HandleFunc("/local/download", s.handleLocalDownload)
+	mux.HandleFunc("/local/files/", worked("font_file", s.handleLocalFile))
+	mux.HandleFunc("/local/symbols", worked("font_symbols", s.handleLocalSymbols))
+	mux.HandleFunc("/google/fonts", worked("google_fonts", s.handleGoogleFonts))
+	mux.HandleFunc("/local/download", worked("font_download", s.handleLocalDownload))
 	return guard.Or(s.cfg.Guard).Wrap(mux)
+}
+
+// worked reports a handler's runs to observe under name: a 2xx or 3xx answer is ok, another 4xx rejected, a 5xx an error.
+// No path, family or file name is ever a label.
+func worked(name string, h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		done := observe.Default().Work(name)
+		sw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		h(sw, r)
+		switch {
+		case sw.status >= 500:
+			done("error")
+		case sw.status >= 400:
+			done("rejected")
+		default:
+			done("ok")
+		}
+	}
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusRecorder) WriteHeader(code int) {
+	s.status = code
+	s.ResponseWriter.WriteHeader(code)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

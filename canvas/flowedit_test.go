@@ -400,3 +400,27 @@ func TestFlowOnChangeAndSelectionDraw(t *testing.T) {
 		t.Errorf("both selections tinted: %v", p.calls)
 	}
 }
+
+// Two cursors at the same offset of a page break: one in front, one behind. Typing keeps each on its own side.
+func TestMultiCursorKeepsItsSideOfABreak(t *testing.T) {
+	f, st := editFlow(t, 0, Chars{Text: "ab"}, Break{Kind: BreakPage}, Chars{Text: "cd"})
+	f.SetCursors([]Cursor{At(2), {Anchor: 2, Caret: 2, After: true}, At(0)})
+	st.InsertText("X")
+	got := f.Items
+	want := []Item{Chars{Text: "XabX"}, Break{Kind: BreakPage}, Chars{Text: "Xcd"}}
+	if len(got) != len(want) {
+		t.Fatalf("items %v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("item %d: %v, want %v", i, got[i], want[i])
+		}
+	}
+	st.InsertText("Y")
+	if c, ok := f.Items[0].(Chars); !ok || c.Text != "XYabXY" {
+		t.Fatalf("second key: %v", f.Items)
+	}
+	if c, ok := f.Items[2].(Chars); !ok || c.Text != "XYcd" {
+		t.Fatalf("second key after the break: %v", f.Items)
+	}
+}

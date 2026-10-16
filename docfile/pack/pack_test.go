@@ -559,3 +559,23 @@ func TestRecoverDedupesAndHonoursTheIndex(t *testing.T) {
 		t.Errorf("%v %+v", err, rec.Docs)
 	}
 }
+
+// The magic files name the first eight bytes of a pack and its media type.
+func TestMagicFilesMatchThePack(t *testing.T) {
+	vec, err := os.ReadFile("testdata/vector.opendoc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(vec, []byte(magic)) {
+		t.Fatalf("the vector starts %q", vec[:8])
+	}
+	for name, want := range map[string]string{"mime/opendoc.magic": MIME, "mime/opendoc.xml": MIME} {
+		b, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(b), want) || !strings.Contains(string(b), "OPENDOC") {
+			t.Errorf("%s does not name %s and the magic", name, want)
+		}
+	}
+}

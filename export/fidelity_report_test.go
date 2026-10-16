@@ -138,7 +138,7 @@ func TestFidelityReportNamedExamples(t *testing.T) {
 		{"pdf", FeatRowSpan, Dropped, ""},
 		{"text", FeatComment, Dropped, ""},
 		{"text", FeatLink, Dropped, NoteText},
-		{"markdown", FeatTable, Dropped, NoteContentLost},
+		{"markdown", FeatColSpan, Dropped, NoteContentLost},
 		{"rtf", FeatImage, Simplified, NotePlaceholder},
 		{"docx", FeatCheckList, Simplified, NoteGlyph},
 		{"epub", FeatColour, Dropped, ""},

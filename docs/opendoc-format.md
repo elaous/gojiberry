@@ -210,7 +210,7 @@ Open:
    trash flag stay readable, like a store's catalog).
 2. Moving large attachments out of documents into their own record kind.
 3. Whether the signature should allow several signers.
-4. A MIME type (`application/vnd.opendocs.pack`) and a magic entry for `file(1)`.
+4. ~~A MIME type and a magic entry~~ **done**: `pack.MIME` (`application/vnd.opendocs.pack`), `docfile/pack/mime/opendoc.magic` for `file(1)` and `opendoc.xml` for shared-mime-info.
 
 ## 7. Plan
 

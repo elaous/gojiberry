@@ -90,7 +90,7 @@ Label values:
 | `code` | `server_error`, `panic`, `store_failed`, `sweep_failed`, `sink_failed`, `not_ready` |
 | `op` | `load`, `save`, `save_if`, `delete`, `list`, `renew` |
 | `result` | `ok`, `not_found`, `conflict`, `canceled`, `error`, `rejected` (a rule refused it: the hub's authorisation) |
-| `work` | `hub_ops` (a batch of operations sent to the hub), `hub_join` (a subscriber joined a room), `hub_rooms` (open rooms, a gauge), `sync_merge`, `font_rescan`, `translate`, `speak`, `transcribe`, `braille` |
+| `work` | `hub_ops` (a batch of operations sent to the hub), `hub_join` (a subscriber joined a room), `hub_rooms` (open rooms, a gauge), `sync_merge`, `font_rescan`, `font_file` (a font file served), `font_symbols` (a family's characters read), `font_download` (a Google family fetched), `google_fonts` (the Google catalog), `hub_presence` (a cursor update), `translate`, `speak`, `transcribe`, `braille` |
 | `sweep` | `expiry`, `ratelimit`, `directory`, `sessions`, `passkey_challenges`, `public`, `usage_sampling` |
 | `queue` | `posthog_buffer` |
 | `reason` | `unknown_metric`, `wrong_kind`, `unknown_label`, `bad_label_value`, `bad_value`, `unknown_span`, `unknown_attribute`, `bad_attribute_value` |
@@ -201,4 +201,4 @@ up to ten seconds, then flushes and closes every sink, so the last counts are se
 
 ## Not done yet
 
-The other servers now report their own work as `work_runs_total`, `work_duration_seconds` and `work_open` (above): the hub's operations, joins and open rooms, the sync relay's merges, the font server's rescans, and translations, speech synthesis, transcription and braille. Still without metrics: the font server's file and symbol downloads and the Google font proxy, and the hub's presence updates (they are counted as requests only).
+Nothing named. Every server reports its own work as `work_runs_total`, `work_duration_seconds` and `work_open` (above): the hub's operations, joins, presence updates and open rooms, the sync relay's merges, the font server's rescans, file and symbol reads, downloads and the Google catalog, and translations, speech synthesis, transcription and braille.
