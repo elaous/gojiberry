@@ -1,6 +1,6 @@
 # Deploying a wasm app: size, compression and caching
 
-A Go wasm app is one large file. The editor showcase's `main.wasm` is about 27 MB raw and 6.9 MB as gzip
+A Go wasm app is one large file. The editor showcase's `main.wasm` is about 28 MB raw and 6.9 MB as gzip
 (the budget is in [wasm-budget.txt](wasm-budget.txt); `make wasm-size` checks it). On a slow link or a
 weak device the first load is the whole cost, so how the file is served matters as much as how it is
 built. This page is the recipe for the showcase; it applies to any app built the same way. Roadmap item
@@ -154,5 +154,12 @@ worker out for that visit. To remove a worker from a browser, unregister it in t
 
 ## What is not done
 
-Roadmap 82's five steps are all in. What is not done: the memory saved by low-memory mode has not been measured on
-a real small device, and the nginx and Caddy settings above were not run here.
+Roadmap 82's five steps are all in, and the nginx and Caddy settings above are run by tests against the real servers
+(`cmd/wasmdist`). What is not done, because it needs something this repository cannot supply:
+
+- The memory that low-memory mode saves was measured in the test browser, not on a real small phone: that needs the
+  device and a person to run it.
+- nginx's `brotli_static` (the `.br` files) needs the ngx_brotli module, which the nginx used for the tests does not
+  have, so that one path is documented and not run.
+- Whether a particular host (a CDN, a managed static host) sends the precompressed files as they are is for that host
+  to answer: the checks in step 1 (`curl -sI -H 'Accept-Encoding: gzip' .../main.wasm`) tell you in a minute.
