@@ -128,3 +128,21 @@ func TestReusable(t *testing.T) {
 		}
 	}
 }
+
+func TestOperatorListRegistersMirrorsUnderTheirOwnNames(t *testing.T) {
+	rs, err := ParseConfig([]byte(`[{"name":"Our Commons","kind":"mediawiki","base":"https://wiki.example.org"},{"name":"Mirror","kind":"openverse","base":"http://localhost:9"}]`))
+	if err != nil || len(rs) != 2 || rs[0].Name() != "Our Commons" || rs[1].Name() != "Mirror" {
+		t.Fatalf("%v %v", rs, err)
+	}
+	l := New()
+	l.RegisterAll(rs)
+	if l.Enabled("Mirror") || len(l.Names()) != 2 {
+		t.Fatal("registered repositories start off")
+	}
+	for _, bad := range []string{`[{"name":"","kind":"openverse","base":"https://a"}]`, `[{"name":"a","kind":"x","base":"https://a"}]`,
+		`[{"name":"a","kind":"openverse","base":"http://a.example"}]`, `[{"name":"a","kind":"openverse","base":"https://a"},{"name":"a","kind":"openverse","base":"https://b"}]`, `nope`} {
+		if _, err := ParseConfig([]byte(bad)); err == nil {
+			t.Errorf("accepted %s", bad)
+		}
+	}
+}

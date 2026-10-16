@@ -1496,6 +1496,8 @@
     "imgfind.fetching": "Obtendo a imagem…",
     "imgfind.fetchFailed": "Não foi possível obter a imagem (grande demais, não é uma imagem ou o repositório não respondeu).",
     "imgfind.insert": "Inserir com o crédito",
+    "imgfind.more": "Mais resultados",
+    "imgfind.listError": "Não foi possível ler a lista de repositórios do operador: ",
     "img.legendStart": "Figura %d:",
     "prefs.typewriter": "Rolagem de máquina de escrever: a linha que escrevo fica no meio da vista e a página se move",
     "read.voice": "Voz do leitor",
