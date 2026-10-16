@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/fonts"
@@ -90,7 +91,7 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(c
 			fl.Touch() // tell a shared document about it
 		}
 	}
-	return xango.Frag(add, xango.El("div", []xango.Attr{xango.A("style", "margin-top:0.8em")}, components.CommentList(components.CommentListProps{
+	return xango.Frag(mentionsSection(u, state, renderUI), add, xango.El("div", []xango.Attr{xango.A("style", "margin-top:0.8em")}, components.CommentList(components.CommentListProps{
 		Comments: set.Visible(), Excerpts: excerpts, ReplyNotes: u.replyNotes, Filter: u.commentFilter, Selected: u.selComment,
 		CanEdit: state.Role.CanEdit(), CanReply: state.Role.CanComment(), Drafts: u.drafts,
 		OnSelect: func(id string) {
@@ -257,4 +258,37 @@ func outlineMover(state *State, fl *canvas.TextFlow, redraw, renderUI func()) fu
 			renderUI()
 		}
 	}
+}
+
+// mentionsSection lists the comments and replies by others that mention the local person and are not yet marked
+// as read, each with a way to go to it and to mark it read.
+func mentionsSection(u *ui, state *State, renderUI func()) xango.Node {
+	h := u.myHandle()
+	if h == "" {
+		return xango.Frag()
+	}
+	if u.mentionsRead == nil {
+		u.mentionsRead = map[string]bool{}
+	}
+	list := state.Comments.NewMentions(h, u.mentionsRead)
+	if len(list) == 0 {
+		return xango.Frag()
+	}
+	var items []xango.Node
+	for i, n := range list {
+		i, n := i, n
+		items = append(items, xango.El("li", []xango.Attr{xango.A("class", "gj-doc-item"), xango.A("id", fmt.Sprintf("mention-%d", i))},
+			xango.El("span", nil, xango.Text(authorOrSomeone(n.Author)+": "+canvas.StripMarkdown(n.Text))),
+			btn(fmt.Sprintf("mention-go-%d", i), T("mention.go", "Go to it"), func() { u.selComment = n.CommentID; renderUI() }, false),
+			btn(fmt.Sprintf("mention-read-%d", i), T("mention.read", "Mark as read"), func() { u.mentionsRead[n.Key()] = true; renderUI() }, false)))
+	}
+	return xango.El("div", []xango.Attr{xango.A("id", "mentions"), xango.A("role", "region"), xango.A("aria-label", T("mention.title", "Mentions of you"))},
+		xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("mention.title", "Mentions of you")+fmt.Sprintf(" (%d)", len(list)))),
+		xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list")}, items...),
+		btn("mention-read-all", T("mention.readAll", "Mark all as read"), func() {
+			for _, n := range list {
+				u.mentionsRead[n.Key()] = true
+			}
+			renderUI()
+		}, false))
 }

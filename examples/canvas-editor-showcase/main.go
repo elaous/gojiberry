@@ -76,6 +76,8 @@ type ui struct {
 	ghost        ghostUI
 	stateRef     *State                 // the document state, for what the announcer needs of it
 	commentSig   string                 // how many comments, replies and resolved threads there were when last looked at
+	mentionsRead map[string]bool        // mentions of the local person marked as read (canvas.MentionNotice.Key)
+	mentionsTold map[string]bool        // mentions already announced
 	commentsSeen map[string]commentSeen // the comments already known (their replies and whether resolved), to find what others do
 	imageFocus   bool
 	floating     func() []a11ycheck.Object // the floating pictures and tables of the page, for the Check tab
