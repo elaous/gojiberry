@@ -118,6 +118,8 @@ message ImageItem {
   bool decorative = 10;
   string long_desc = 11;
   string legend = 12;
+  string credit = 13;
+  string source_u_r_l = 14;
 }
 
 message MediaItem {

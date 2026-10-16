@@ -8,7 +8,10 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/elaous/gojiberry/internal/e2etest"
@@ -153,3 +156,43 @@ func TestAPictureWithALegendAndAWebPPicture(t *testing.T) {
 
 // webpBytes is a 1x1 WebP picture.
 var webpBytes = []byte{0x52, 0x49, 0x46, 0x46, 0x1a, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x4c, 0x0d, 0x00, 0x00, 0x00, 0x2f, 0x00, 0x00, 0x00, 0x10, 0x07, 0x10, 0x11, 0x11, 0x88, 0x88, 0xfe, 0x07, 0x00}
+
+// A picture is found in an image repository: nothing is asked of it until it is turned on, the author and licence
+// are shown before the picture goes in, and the credit becomes the legend and is written by the exports.
+func TestFindAPictureInARepositoryAndInsertItWithItsCredit(t *testing.T) {
+	var hits atomic.Int32
+	png := pngBytes(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/images/", func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if strings.HasSuffix(r.URL.Path, "/thumb/") {
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(png)
+			return
+		}
+		_, _ = w.Write([]byte(`{"results":[{"id":"a1","title":"Harbour","creator":"Ana","license":"by","license_version":"4.0","foreign_landing_url":"https://example.org/a1","width":40,"height":20}]}`))
+	})
+	fake := httptest.NewServer(mux)
+	defer fake.Close()
+
+	d := e2etest.NewSite(t).Open(t, "?lang=en&imagerepo="+fake.URL)
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Click(`button[data-tab="images"]`)
+	d.WaitSelector("#imgfind-query")
+	d.OK(d.Bool(`document.getElementById('imgfind-go').disabled`), "search is off until a repository is turned on")
+	d.OK(hits.Load() == 0, "nothing has been asked of a repository")
+	d.SetChecked("#imgfind-repo-0 input", true) // Openverse sorts first
+	d.Fill("#imgfind-query", "harbour")
+	d.Click("#imgfind-go")
+	d.WaitSelector("#imgfind-result-0")
+	d.OK(strings.Contains(d.Text("#imgfind-credit-0"), "Harbour by Ana, CC BY 4.0, via Openverse"), "author and licence are shown: "+d.Text("#imgfind-credit-0"))
+	d.Click("#imgfind-insert-0")
+	d.WaitSelector("#img-legend-0")
+	d.WaitFor("the credit is the legend", `document.getElementById('img-legend-0').value === 'Harbour by Ana, CC BY 4.0, via Openverse'`)
+	d.Click(`button[data-tab="transfer"]`)
+	_, html := d.Download(func() { d.Click(`.gj-transfer-button[data-kind="export"][data-format="html"]`) })
+	d.OK(strings.Contains(string(html), "Harbour by Ana, CC BY 4.0, via Openverse"), "the HTML export writes the credit")
+	d.NoErrors()
+}

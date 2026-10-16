@@ -126,6 +126,9 @@ type Image struct {
 	// the picture's width. Unlike Alt and LongDesc, which are for people who cannot see the picture, everybody reads it;
 	// the exports write it under the picture.
 	Legend string
+	// Credit and SourceURL say where a picture found through an image repository came from: the author, the licence
+	// and the page it lives on. They are kept with the picture in the saved file; the legend is where a reader sees them.
+	Credit, SourceURL string
 
 	// OnChange is called after any change made by dragging or the toolbar.
 	OnChange func(*Image)
