@@ -111,6 +111,9 @@ type TableView struct {
 	// locked says the active cell holds a formula that was opened in the calculated view: it can be moved through but
 	// not changed until the formulas are shown (a cell that became a formula while it was typed stays editable).
 	locked bool
+	// editedAt orders the tables by when a cell of each was last entered (0: never), so a host can tell which table the
+	// person was working in after the focus has moved to a panel.
+	editedAt uint64
 	// tip is the formula cell the pointer is over in the calculated view, for the tooltip showing its formula.
 	tip      Hit
 	tipSet   bool
@@ -449,6 +452,8 @@ func (v *TableView) edit(row, col int) {
 	row, col = v.Table.Owner(row, col)
 	v.editing, v.row, v.col, v.everActive = true, row, col, true
 	v.locked = !v.ShowFormulas && isFormula(v.Table.Cell(row, col))
+	editSeq++
+	v.editedAt = editSeq
 	v.rng = cellRange{}
 	v.cursor = len([]rune(v.Table.Cell(row, col)))
 	v.caretOn = true
@@ -862,3 +867,15 @@ func (v *TableView) PasteText(text string) bool {
 }
 
 var _ Paster = (*TableView)(nil)
+
+// Dress dresses the whole table in a style (see Table.ApplyScheme), as the table menu does, and tells the host.
+func (v *TableView) Dress(s TableScheme) {
+	v.Table.ApplyScheme(s)
+	v.changed()
+}
+
+var editSeq uint64
+
+// EditedAt says how recently a cell of the table was entered: a larger number is later, 0 means never. Of several tables
+// the one with the largest is the one the person was last working in.
+func (v *TableView) EditedAt() uint64 { return v.editedAt }

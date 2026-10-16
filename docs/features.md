@@ -66,7 +66,7 @@ Text can run in up to four columns from any paragraph on, with the space between
 
 ![Table styles](features/img/table-styles.webp)
 
-Tables have cell formatting (background, colour, bold, alignment, merged cells) and, from the table's handle menu, **named table styles**: plain, bold header, blue or green header with banded rows, grey banded, banded with a bold first column. A style is applied in one step as cell formatting, so it is saved with the table, written by the exports that write cell shading, and can still be changed cell by cell; the menu marks the style the table is dressed in now.
+Tables have cell formatting (background, colour, bold, alignment, merged cells) and, from the table's handle menu or the Styles tab, **named table styles**: plain, bold header, blue or green header with banded rows, grey banded, banded with a bold first column. A style is applied in one step as cell formatting, so it is saved with the table, written by the exports that write cell shading, and can still be changed cell by cell; the menu marks the style the table is dressed in now. A table dressed in a style stays dressed in it when rows are added, removed, moved or sorted. In the Styles tab you can also define styles of your own (a header colour, a text colour, banded rows, bold header, bold first column); they are listed with the built-in ones and saved with the document.
 
 ## Image legend and picture formats
 

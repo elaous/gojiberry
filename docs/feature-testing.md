@@ -90,7 +90,9 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **You should see.** What the picture in [features.md](features.md#table-styles) shows.
 
-**Automated.** `TestTableStylesDressAWholeTableAndAreRecognised` and `TestTableMenuOffersTheStylesAndChecksTheCurrentOne` (canvas), `TestEndToEnd` in examples/canvas-table-demo
+**Also try.** Type three lines of a Markdown table and press Enter, open the Styles tab, choose a style, then define one of your own (a name and colours like `#c2410c`) and choose it; export as JSON and look for `table.schemes`. Add a row to a dressed table in the table demo: the bands follow.
+
+**Automated.** `TestADressedTableStaysDressedWhenRowsAndColumnsChange`, `TestStylesThePersonDefinesJoinTheBuiltInOnes` (canvas), `TestTableStylesAreKeptWithTheDocument` (docfile), `TestTableStylesPickerDefineAndFollowRows` (showcase), `TestTableStylesDressAWholeTableAndAreRecognised` and `TestTableMenuOffersTheStylesAndChecksTheCurrentOne` (canvas), `TestEndToEnd` in examples/canvas-table-demo
 
 ## Image legend and picture formats
 
