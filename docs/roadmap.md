@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-10 of 10 since the last full run (full run on the branch of the 10th merge, on main ada0cd3 plus the formatting toolbar, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy installed: `make check` passed in full on the third try. The first two runs found real faults, all fixed in that branch: an unformatted file, a click that started editing the main text and broke header editing in the document demos (keyboard-focus editing from item 59 now ignores focus the page gives for a click), a stale end-to-end check, and a flaky wait; the test and coverage timeouts were raised to 75 minutes because the showcase suite takes about 35. Coverage score 89.4% (was 89.6%), README badge updated).
+0 of 10 since the last full run (full run on the branch of the 10th merge, on main plus the Hunspell dictionaries, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy installed: `make check` passed in full after one test was updated (the fidelity panel no longer reports imported comments as lost); coverage score 89.1%).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
