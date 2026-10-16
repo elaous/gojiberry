@@ -23,6 +23,9 @@ type TableStyle struct {
 	HandleSize      float64 // thickness of the column/row/table handles
 	SelectColor     string  // translucent fill over a selected column/row/table
 	HandleIconColor string
+
+	FormulaColor string // the text of a formula (shown when the formulas are), red
+	ValueColor   string // the value a formula computed, blue
 }
 
 // DefaultTableStyle is a light, Obsidian-like look.
@@ -49,6 +52,9 @@ func DefaultTableStyle() TableStyle {
 		HandleSize:      16,
 		SelectColor:     "rgba(124, 92, 255, 0.14)",
 		HandleIconColor: "#7b818b",
+
+		FormulaColor: "#c01c28",
+		ValueColor:   "#1c5fb4",
 	}
 }
 
@@ -59,5 +65,6 @@ func DarkTableStyle() TableStyle {
 	s.TextColor, s.HeaderBG, s.CellBG, s.GridColor = "#dcddde", "#2b2b2b", "#1e1e1e", "#3a3a3a"
 	s.BarColor, s.BarHoverColor, s.BarTextColor = "#2f2f2f", "#3d3d3d", "#a8a8a8"
 	s.SelectColor, s.HandleIconColor = "rgba(124, 92, 255, 0.25)", "#8a8a8a"
+	s.FormulaColor, s.ValueColor = "#ff8a80", "#8ab4f8"
 	return s
 }

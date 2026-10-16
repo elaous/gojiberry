@@ -691,3 +691,74 @@ func TestFormulaSwitchInTheTopRightCorner(t *testing.T) {
 		t.Fatal("pressing it again shows the values")
 	}
 }
+
+func formulaView() (*TableView, *fakePainter) {
+	p := &fakePainter{}
+	v := NewTableView(NewTableFrom([][]string{{"2", "=A1*5"}, {"", ""}}), p)
+	v.SetMode(ModeEdit)
+	return v, p
+}
+
+func TestFormulaViewOpensOnCalculatedAndFormulaCellsAreReadOnlyThere(t *testing.T) {
+	v, _ := formulaView()
+	if v.ShowFormulas {
+		t.Fatal("a table opens on the calculated view")
+	}
+	g := v.layout()
+	cx, cy, cw, ch := g.cellRect(v.Table, 0, 1)
+	v.MouseDown(cx+cw/2, cy+ch/2)
+	v.InsertText("9")
+	v.HandleKey("Backspace", false)
+	v.HandleKey("Delete", false)
+	if v.Table.Cell(0, 1) != "=A1*5" {
+		t.Fatalf("the formula cell cannot be changed in the calculated view: %q", v.Table.Cell(0, 1))
+	}
+	v.HandleKey("Tab", false) // but it can be moved through
+	if r, c, _ := v.Active(); r != 1 || c != 0 {
+		t.Fatalf("Tab moves on: %d %d", r, c)
+	}
+	// a plain cell stays editable, and a cell that becomes a formula while it is typed stays editable until it is left
+	v.InsertText("=A1")
+	v.InsertText("+1")
+	if v.Table.Cell(1, 0) != "=A1+1" {
+		t.Fatalf("typing a new formula: %q", v.Table.Cell(1, 0))
+	}
+	// the formula view makes the formula cells editable
+	v.SetShowFormulas(true)
+	v.MouseDown(cx+cw/2, cy+ch/2)
+	v.InsertText("0")
+	if v.Table.Cell(0, 1) == "=A1*5" {
+		t.Fatalf("in the formula view the cell changes: %q", v.Table.Cell(0, 1))
+	}
+}
+
+func TestFormulaTooltipAndColours(t *testing.T) {
+	v, p := formulaView()
+	v.SetMode(ModeView) // a document that is only read still shows the formula on hover
+	g := v.layout()
+	cx, cy, cw, ch := g.cellRect(v.Table, 0, 1)
+	v.MouseMove(cx+cw/2, cy+ch/2)
+	p.calls = nil
+	v.Draw()
+	if !p.has(`fillText "=A1*5"`) {
+		t.Fatalf("the tooltip shows the formula: %v", p.calls)
+	}
+	if !p.has("fillStyle " + DefaultTableStyle().ValueColor) {
+		t.Fatal("the calculated value is blue")
+	}
+	v.MouseMove(5, 5000)
+	p.calls = nil
+	v.Draw()
+	if p.has(`fillText "=A1*5"`) {
+		t.Fatal("no tooltip away from the cell")
+	}
+	v.SetShowFormulas(true)
+	p.calls = nil
+	v.Draw()
+	if !p.has("fillStyle "+DefaultTableStyle().FormulaColor) || !p.has(`fillText "=A1*5"`) {
+		t.Fatal("the formula is red in the formula view")
+	}
+	if DarkTableStyle().ValueColor == DefaultTableStyle().ValueColor {
+		t.Fatal("the dark style has its own colours")
+	}
+}
