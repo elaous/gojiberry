@@ -4,7 +4,7 @@ import "testing"
 
 func TestDescribeSaysAccentAndGender(t *testing.T) {
 	for _, c := range []struct {
-		v                       Voice
+		v                        Voice
 		language, accent, gender string
 	}{
 		{Voice{Name: "Samantha", Lang: "en-US"}, "English", "American", Female},
