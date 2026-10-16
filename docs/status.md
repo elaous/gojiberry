@@ -155,7 +155,7 @@ Server and security table: every code item is done (passkey backlog 1 to 5, limi
 
 Earlier plan: nothing is partial; Encryption and passkeys is blocked on the audit and the witnesses.
 
-Found in the other docs: 14 rows, 12 open, 1 partial (browser tests in CI), 1 inherent (secure aggregation).
+Found in the other docs: 15 rows, 13 open, 1 partial (browser tests in CI), 1 inherent (secure aggregation).
 
 ## Suggested order for the next work
 
