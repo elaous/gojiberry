@@ -76,6 +76,10 @@ A picture can carry a visible **legend** (Insert picture > Pictures tab, "Add a 
 
 In the Pictures tab, **Find a picture online** searches repositories of public-domain and Creative Commons pictures (Openverse and Wikimedia Commons to start). A repository is asked nothing until you turn it on and search. Each result shows its author and licence before you insert it; the picture goes in with that credit as its legend, and the author, licence and page are saved with it. Only licences that allow reuse with credit are listed, and pictures are limited in size and type. "More results" reads the next page. An operator can add repositories of their own (mirrors of Openverse or a MediaWiki site) in `image-repos.json` next to the page; they start off like the others.
 
+## Mentions
+
+Write @name in a comment or a reply and that person is told: the screen reader announcer says who mentioned them, and the Comments tab shows **Mentions of you** with a way to go to the comment and to mark it as read. Comments name people by handle, never by an address. A host can deliver the same notices by its own channel.
+
 ## Two-page spread
 
 ![Two-page spread](features/img/spread.webp)

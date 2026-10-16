@@ -860,7 +860,46 @@ func (u *ui) noteComments() {
 			u.collab.NoteResolved()
 		}
 	}
+	first := u.commentsSeen == nil
 	u.commentsSeen = seen
+	u.noteMentions(first)
+}
+
+// myHandle is the handle the local person is mentioned by: their handle in the people list, else their name when it can
+// be written as one ("" when neither).
+func (u *ui) myHandle() string {
+	if u.stateRef == nil || strings.TrimSpace(u.stateRef.Author) == "" {
+		return ""
+	}
+	who := strings.TrimSpace(u.stateRef.Author)
+	if u.people != nil {
+		if h, ok := u.people.HandleOf(who); ok {
+			return h
+		}
+	}
+	if strings.ContainsAny(who, " @") { // not usable as a handle
+		return ""
+	}
+	return who
+}
+
+// noteMentions tells the local person about comments and replies by others that mention them (@handle): the
+// announcer says it once for each, and the Comments tab lists them until they are marked as read. The first look
+// only remembers, so opening a document does not announce the old ones one by one (the tab still lists them).
+func (u *ui) noteMentions(first bool) {
+	h := u.myHandle()
+	if h == "" || u.stateRef == nil || u.stateRef.Comments == nil {
+		return
+	}
+	if u.mentionsTold == nil {
+		u.mentionsTold = map[string]bool{}
+	}
+	for _, n := range u.stateRef.Comments.NewMentions(h, u.mentionsTold) {
+		u.mentionsTold[n.Key()] = true
+		if !first {
+			u.announce(T("mention.told", "%s mentioned you in a comment.", authorOrSomeone(n.Author)))
+		}
+	}
 }
 
 // commentSeen is what the page knew of a comment the last time it looked.

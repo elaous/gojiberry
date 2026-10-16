@@ -149,5 +149,5 @@ These were "asked for, not started" and are built. The current state of the edit
 Asked for, not started:
 
 - **Map object** (OpenStreetMap tiles) and **flowcharts** as canvas objects.
-- Comments: notifications for mentions.
+- Comments: delivery of mention notices outside the page (mail or push); the page lists and announces them (`MentionNotice`).
 - Markdown: case and small caps have no Markdown form (the format has no syntax for them; a limit of Markdown).

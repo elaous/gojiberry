@@ -129,3 +129,52 @@ func TestSuggestionsFromTwoBrowsersConverge(t *testing.T) {
 	a.NoErrors()
 	b.NoErrors()
 }
+
+// Bo is told when Ana mentions him in a comment: the announcer says so, the Comments tab lists it until he marks it
+// as read, and Ana, who wrote it, has nothing to be told.
+func TestAMentionedPersonIsToldAndCanMarkItRead(t *testing.T) {
+	h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
+		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	}})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	defer func() {
+		if err := h.Close(); err != nil {
+			t.Errorf("closing the hub: %v", err)
+		}
+	}()
+	site := e2etest.NewSite(t)
+	q := func(name, token, color string) string {
+		return "/d/mention1?hub=" + url.QueryEscape(srv.URL) + "&token=" + token + "&transport=ws&flow=" + url.QueryEscape("*") + "&name=" + name + "&color=" + url.QueryEscape(color)
+	}
+	a := site.Open(t, q("Ana", "owner", "#e11d48"))
+	a.Wait("s.live.status === 'online' && s.live.role === 'owner'")
+	a.Sleep(400)
+	b := site.Open(t, q("Bo", "editor", "#2563eb"))
+	b.Wait("s.live.status === 'online' && s.live.role === 'editor'")
+	b.Wait("s.text.length > 100")
+
+	a.ToggleMode()
+	a.CanvasClick(240, 164)
+	a.Focus("#input")
+	a.Press("End")
+	for range 7 {
+		a.Focus("#input")
+		a.Press("Shift+ArrowLeft")
+	}
+	a.Focus("#input")
+	a.AnswerDialogs("@Bo can you check this?")
+	a.Press("Control+Alt+n")
+	a.Wait("s.comments === 1")
+
+	b.Click(`button[data-tab="comments"]`)
+	b.WaitSelector("#mentions")
+	b.OK(strings.Contains(b.Text("#mention-0"), "Ana") && strings.Contains(b.Text("#mention-0"), "can you check this?"), "the mention is listed: "+b.Text("#mention-0"))
+	b.WaitFor("the announcer says it", `document.querySelector('.gj-announcer').textContent.includes('Ana mentioned you')`)
+	a.Click(`button[data-tab="comments"]`)
+	a.OK(!a.Has("#mentions"), "the author has nothing to be told")
+	b.Click("#mention-read-0")
+	b.WaitFor("it is gone once read", `!document.getElementById('mentions')`)
+	a.NoErrors()
+	b.NoErrors()
+}
