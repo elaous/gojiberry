@@ -84,6 +84,10 @@ Write @name in a comment or a reply and that person is told: the screen reader a
 
 A table cell that starts with `=` is a formula: `=B2*C2`, `=SUM(B2:B9)`, `=ROUND(AVERAGE(C1:C4), 1)`, `=IF(D2>=10, "ok", "low")`. The table shows the value, the cell keeps the formula (it shows when you edit the cell), and the exports and the reading copy carry the value. A formula that cannot be computed shows an error such as #DIV/0! or #CYCLE! instead of stopping anything.
 
+## References
+
+The References tab keeps the sources a document cites (books, articles, web pages, reports) and writes them in the style of a publication: APA, MLA, Chicago, IEEE, Harvard, Vancouver or ABNT. **Cite it here** puts the in-text mark at the caret, for example (Silva & Costa, 2020) or [3]; **Insert the list of references** writes the list at the end, in order, with titles in italics. Change the style and the same sources are written the new way. The sources are saved with the document.
+
 ## Two-page spread
 
 ![Two-page spread](features/img/spread.webp)
