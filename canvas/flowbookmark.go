@@ -79,3 +79,23 @@ func (f *TextFlow) RemoveBookmark(name string) bool {
 	})
 	return found
 }
+
+// BookmarkMarkColor is the colour of the mark drawn in the text where a bookmark starts (edit mode only).
+const BookmarkMarkColor = "#b8860b"
+
+// drawBookmarks marks where each bookmark starts, so a place that only had a name can be seen: a ribbon in the margin
+// edge of the line. It is drawn while editing and never exported.
+func (f *TextFlow) drawBookmarks() {
+	if f.mode != ModeEdit || f.Painter == nil {
+		return
+	}
+	for _, b := range f.Bookmarks() {
+		x, y, h, ok := f.CaretRect(b.Start)
+		if !ok {
+			continue
+		}
+		f.Painter.SetFillStyle(BookmarkMarkColor)
+		f.Painter.FillRect(x-2, y, 2, h)   // the bar at the start of the place
+		f.Painter.FillRect(x-2, y-1, 7, 3) // and its top, like the ribbon of a book
+	}
+}
