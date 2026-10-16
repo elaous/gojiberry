@@ -3,11 +3,13 @@ package export
 import (
 	"bytes"
 	"encoding/xml"
+	"html"
 	"io"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/docfile"
 )
 
@@ -167,5 +169,23 @@ func TestCodeBlockLanguage(t *testing.T) {
 	md, _ := Markdown{}.Export(snap)
 	if !strings.Contains(string(md), "```go\nfmt.Println(1 < 2)\n```") || !strings.Contains(string(md), "```\nevil\n```") {
 		t.Errorf("Markdown fences: %s", md)
+	}
+}
+
+// The editor's typesetter (canvas.MathSymbols) and the MathML export read the notation the same way.
+func TestTypesetterAndMathMLReadTheSameSymbols(t *testing.T) {
+	re := regexp.MustCompile(`<(mi|mn|mo)>(.*?)</(?:mi|mn|mo)>`)
+	for _, f := range []string{
+		"x^2 + y_1", "frac{a}{b}", "sqrt{x+1}", "sum_{i=1}^{n} i", "int_0^1 f(x) dx", "ab^2", "sin x + cos y", "pi r^2",
+		"a < b > c", "2.5 * 3 = 7.5", "alpha_beta", "{a+b}^2", "x^", "sqrt", "frac{a", "}} x {{", "(a|b)[c];d:e,f",
+	} {
+		var want []string
+		for _, m := range re.FindAllStringSubmatch(MathML(f, "alt"), -1) {
+			want = append(want, html.UnescapeString(m[2]))
+		}
+		got := canvas.MathSymbols(f)
+		if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+			t.Errorf("%q:\n typesetter %q\n MathML     %q", f, got, want)
+		}
 	}
 }

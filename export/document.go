@@ -191,6 +191,13 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 				MediaTitle: m.Title, MediaCaptions: m.Captions, MediaCaptionsURL: m.CaptionsURL, MediaTranscript: m.Words(), MediaW: m.Width, MediaH: m.Height}}})
 			pos++
 			cur.start = pos
+		case it.Equation != nil && it.Equation.Inline:
+			// a formula in the line is written as the words that stand for it (the text alternative), so that every
+			// format keeps it in its sentence
+			if w := it.Equation.Words(); w != "" {
+				cur.runs = append(cur.runs, docfile.Chars{Text: w})
+			}
+			pos++
 		case it.Equation != nil:
 			pending()
 			eq := EquationBlock(it.Equation.Formula, it.Equation.Alt)

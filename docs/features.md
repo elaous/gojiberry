@@ -84,6 +84,12 @@ Write @name in a comment or a reply and that person is told: the screen reader a
 
 A table cell that starts with `=` is a formula: `=B2*C2`, `=SUM(B2:B9)`, `=ROUND(AVERAGE(C1:C4), 1)`, `=IF(D2>=10, "ok", "low")`. The table shows the value, the cell keeps the formula (it shows when you edit the cell), and the exports and the reading copy carry the value. A formula that cannot be computed shows an error such as #DIV/0! or #CYCLE! instead of stopping anything. Start a cell with `\=` to write a cell that begins with = without making it a formula. A table always opens on the calculated view: values of formulas are blue, a formula cell cannot be changed there, and holding the pointer over it shows its formula. The switch at the table's top right (an eye, or f(x) in the formula view) or **Show formulas** in the table menu shows the formulas in red and lets you edit them. The column grips are lettered (A, B, ...) and the row grips numbered (1, 2, ...), the names a formula uses. Markdown keeps the formula as typed, so `| =A1*B2 |` is a formula wherever the Markdown is read as a table by this editor.
 
+## Equations
+
+![Equations](features/img/math.webp)
+
+Formulas are written in a small notation (`x^2 + y_1`, `frac{a}{b}`, `sqrt{x}`, `sum_{i=1}^{n}`, Greek names like `pi`) and drawn the way mathematics is written: fractions over a rule, roots under a radical sign, raised and lowered scripts. A formula can be on a line of its own or in the middle of a sentence, on the baseline of the words round it. Every formula carries a text alternative, which is what the exports write for it (the HTML export also writes MathML for a formula on its own line).
+
 ## Markdown tables
 
 Type a header row, the row of dashes under it and one row of cells with the same number of columns, then press Enter, and the three lines become a table:
