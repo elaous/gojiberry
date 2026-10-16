@@ -108,9 +108,15 @@ type TableView struct {
 	// active is true once a cell has been edited or selected, so cell 0,0 is not
 	// "active" just because row and col start at zero.
 	everActive bool
-	hover      Hit
-	inRegion   bool // pointer is over the table or its "+" bars (or their gap)
-	caretOn    bool
+	// locked says the active cell holds a formula that was opened in the calculated view: it can be moved through but
+	// not changed until the formulas are shown (a cell that became a formula while it was typed stays editable).
+	locked bool
+	// tip is the formula cell the pointer is over in the calculated view, for the tooltip showing its formula.
+	tip      Hit
+	tipSet   bool
+	hover    Hit
+	inRegion bool // pointer is over the table or its "+" bars (or their gap)
+	caretOn  bool
 }
 
 // NewTableView returns a view of t drawn with DefaultTableStyle, in
@@ -340,8 +346,9 @@ func indexAt(edges []float64, pos float64) int {
 
 // MouseMove updates hover state; it returns true if a redraw is needed.
 func (v *TableView) MouseMove(x, y float64) bool {
+	tipChanged := v.trackTip(x, y)
 	if v.mode != ModeEdit {
-		return false
+		return tipChanged
 	}
 	if v.press != nil {
 		return v.dragTable(x, y)
@@ -351,7 +358,7 @@ func (v *TableView) MouseMove(x, y float64) bool {
 	s := v.Style
 	h := v.HitTest(x, y)
 	region := x >= v.X-s.BarGap-s.HandleSize && y >= v.Y-s.BarGap-s.HandleSize && x < g.right()+s.BarGap+s.BarSize && y < g.bottom()+s.BarGap+s.BarSize
-	changed := h != v.hover || region != v.inRegion || menuChanged
+	changed := h != v.hover || region != v.inRegion || menuChanged || tipChanged
 	v.hover, v.inRegion = h, region
 	return changed
 }
@@ -359,7 +366,8 @@ func (v *TableView) MouseMove(x, y float64) bool {
 // MouseLeave clears hover state, hiding the "+" bars (unless a cell is
 // being edited). Returns true if a redraw is needed.
 func (v *TableView) MouseLeave() bool {
-	changed := v.hover != (Hit{}) || v.inRegion
+	changed := v.hover != (Hit{}) || v.inRegion || v.tipSet
+	v.tipSet = false
 	v.hover, v.inRegion = Hit{}, false
 	return changed
 }
@@ -390,8 +398,7 @@ func (v *TableView) MouseDown(x, y float64) bool {
 	case HitFormulaSwitch:
 		v.editing = false
 		v.sel = Selection{}
-		v.ShowFormulas = !v.ShowFormulas
-		v.changed()
+		v.SetShowFormulas(!v.ShowFormulas)
 		return true
 	}
 	v.sel = Selection{}
@@ -441,6 +448,7 @@ func (v *TableView) cursorAt(x float64, row, col int) int {
 func (v *TableView) edit(row, col int) {
 	row, col = v.Table.Owner(row, col)
 	v.editing, v.row, v.col, v.everActive = true, row, col, true
+	v.locked = !v.ShowFormulas && isFormula(v.Table.Cell(row, col))
 	v.rng = cellRange{}
 	v.cursor = len([]rune(v.Table.Cell(row, col)))
 	v.caretOn = true
@@ -456,7 +464,7 @@ func (v *TableView) changed() {
 // dropped (cells are single-line). No-op if no cell is being edited.
 func (v *TableView) InsertText(s string) bool {
 	s = strings.NewReplacer("\r", "", "\n", "").Replace(s)
-	if v.mode != ModeEdit || !v.editing || s == "" {
+	if v.mode != ModeEdit || !v.editing || s == "" || v.locked {
 		return false
 	}
 	runes := []rune(v.Table.Cell(v.row, v.col))
@@ -554,7 +562,7 @@ func (v *TableView) HandleKey(key string, shift bool) bool {
 	case "End":
 		v.cursor = len([]rune(t.Cell(v.row, v.col)))
 	case "Backspace":
-		if v.cursor > 0 {
+		if v.cursor > 0 && !v.locked {
 			runes := []rune(t.Cell(v.row, v.col))
 			t.SetCell(v.row, v.col, string(append(runes[:v.cursor-1], runes[v.cursor:]...)))
 			v.cursor--
@@ -562,7 +570,7 @@ func (v *TableView) HandleKey(key string, shift bool) bool {
 		}
 	case "Delete":
 		runes := []rune(t.Cell(v.row, v.col))
-		if v.cursor < len(runes) {
+		if v.cursor < len(runes) && !v.locked {
 			t.SetCell(v.row, v.col, string(append(runes[:v.cursor], runes[v.cursor+1:]...)))
 			v.changed()
 		}
@@ -663,9 +671,16 @@ func (v *TableView) Draw() {
 			p.SetStrokeStyle(s.GridColor)
 			p.StrokeRect(x+0.5, y+0.5, w-1, h-1)
 			p.SetFont(v.cellFont(r, st))
-			p.SetFillStyle(orStr(st.Color, s.TextColor))
+			ink := orStr(st.Color, s.TextColor)
+			if isFormula(t.Cells[r][c]) && st.Color == "" { // a formula in red, what it computed in blue
+				ink = orStr(s.ValueColor, "#1c5fb4")
+				if v.ShowFormulas || (v.mode == ModeEdit && v.editing && !v.locked && v.row == r && v.col == c) {
+					ink = orStr(s.FormulaColor, "#c01c28")
+				}
+			}
+			p.SetFillStyle(ink)
 			text := shown[r][c]
-			if v.mode == ModeEdit && v.editing && v.row == r && v.col == c {
+			if v.mode == ModeEdit && v.editing && !v.locked && v.row == r && v.col == c {
 				text = t.Cells[r][c]
 			}
 			if v.RenderCell != nil && (v.mode != ModeEdit || !v.editing || v.row != r || v.col != c) && v.RenderCell(p, r, c, text, x, y, w, h) {
@@ -697,7 +712,7 @@ func (v *TableView) Draw() {
 		p.SetStrokeStyle(s.ActiveColor)
 		p.SetLineWidth(2)
 		p.StrokeRect(x+1, y+1, w-2, h-2)
-		if v.caretOn {
+		if v.caretOn && !v.locked {
 			st := t.StyleAt(v.row, v.col)
 			p.SetFont(v.cellFont(v.row, st))
 			runes := []rune(t.Cell(v.row, v.col))
@@ -722,6 +737,7 @@ func (v *TableView) Draw() {
 		v.drawBar(rowBar, v.hover.Kind == HitAddRow)
 		v.drawHandles(g)
 	}
+	v.drawFormulaTip(g)
 	v.menu.Draw()
 }
 
@@ -738,4 +754,69 @@ func (v *TableView) drawBar(r [4]float64, hovered bool) {
 	p.SetFillStyle(s.BarTextColor)
 	p.FillText("+", r[0]+r[2]/2, r[1]+r[3]/2)
 	p.SetTextAlign("left")
+}
+
+// SetShowFormulas switches the table between the calculated view (the default: a document always opens on it, and the
+// formula cells cannot be changed there) and the formula view. It is a view setting and is not saved.
+func (v *TableView) SetShowFormulas(on bool) {
+	v.ShowFormulas = on
+	v.locked = v.editing && !on && isFormula(v.Table.Cell(v.row, v.col))
+	v.tipSet = false
+	v.changed()
+}
+
+// tipText is the formula to show in the tooltip of a calculated cell: the one under the pointer, or the active one.
+func (v *TableView) tipText() (row, col int, text string, ok bool) {
+	if v.ShowFormulas {
+		return 0, 0, "", false
+	}
+	switch {
+	case v.tipSet:
+		row, col = v.tip.Row, v.tip.Col
+	case v.editing && v.locked:
+		row, col = v.row, v.col
+	default:
+		return 0, 0, "", false
+	}
+	t := strings.TrimSpace(v.Table.Cell(row, col))
+	if !isFormula(t) {
+		return 0, 0, "", false
+	}
+	return row, col, t, true
+}
+
+// drawFormulaTip paints the tooltip of a calculated cell: its formula, above the cell (below it at the top edge).
+func (v *TableView) drawFormulaTip(g geometry) {
+	row, col, text, ok := v.tipText()
+	if !ok || !v.Table.InRange(row, col) || v.Painter == nil {
+		return
+	}
+	p := v.Painter
+	x, y, w, ch := g.cellRect(v.Table, row, col)
+	p.SetFont("12px monospace")
+	tw := p.MeasureTextWidth(text) + 16
+	h := 24.0
+	ty := y - h - 4
+	if ty < 0 {
+		ty = y + ch + 4
+	}
+	tx := min(x, max(x+w-tw, x)) // start at the cell's left edge
+	p.SetFillStyle("#1f2328")
+	p.FillRect(tx, ty, tw, h)
+	p.SetFillStyle("#ffffff")
+	p.SetTextAlign("left")
+	p.SetTextBaseline("middle")
+	p.FillText(text, tx+8, ty+h/2)
+}
+
+// trackTip notes the formula cell under the pointer (calculated view only) and reports whether that changed.
+func (v *TableView) trackTip(x, y float64) bool {
+	was, wasAt := v.tipSet, v.tip
+	v.tipSet = false
+	if !v.ShowFormulas && v.Painter != nil {
+		if h := v.HitTest(x, y); h.Kind == HitCell && isFormula(v.Table.Cell(h.Row, h.Col)) {
+			v.tipSet, v.tip = true, h
+		}
+	}
+	return v.tipSet != was || (v.tipSet && v.tip != wasAt)
 }

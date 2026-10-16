@@ -83,7 +83,7 @@ func (v *TableView) tableMenu() []MenuItem {
 		{Separator: true},
 		{Label: "Clear contents", Action: v.apply(func(t *Table) { t.Clear() })},
 		{Separator: true},
-		{Label: check(v.ShowFormulas, "Show formulas"), Action: func() { v.ShowFormulas = !v.ShowFormulas; v.sel = Selection{}; v.changed() }},
+		{Label: check(v.ShowFormulas, "Show formulas"), Action: func() { v.sel = Selection{}; v.SetShowFormulas(!v.ShowFormulas) }},
 		{Label: check(v.Wrap, "Wrap text around"), Disabled: v.flow == nil, Action: func() { v.Wrap = !v.Wrap; v.sel = Selection{}; v.changed() }},
 	}
 	items = append(items, MenuItem{Separator: true})
