@@ -13,7 +13,7 @@ func richElements() Document {
 	return Document{Title: "Elements", Content: []Item{
 		{Chars: &Chars{Text: "Before\n"}},
 		{Equation: &EquationItem{Formula: "x^2 + y^2 = z^2", Alt: "x squared plus y squared equals z squared"}},
-		{Image: &ImageItem{URL: "data:image/png;base64,AAAA", Width: 40, Height: 30, Alt: "Flow chart", LongDesc: "Three boxes: input, process, output.", Legend: "Figure 1: the flow"}},
+		{Image: &ImageItem{URL: "data:image/png;base64,AAAA", Width: 40, Height: 30, Alt: "Flow chart", LongDesc: "Three boxes: input, process, output.", Legend: "Figure 1: the flow", Credit: "Flow by Ana, CC BY 4.0, via Openverse", SourceURL: "https://example.org/a1"}},
 		{Para: &Para{Style: "Code", CodeLang: "go"}},
 		{Chars: &Chars{Text: "x := 1\n"}},
 	}}

@@ -72,6 +72,10 @@ Tables have cell formatting (background, colour, bold, alignment, merged cells) 
 
 A picture can carry a visible **legend** (Insert picture > Pictures tab, "Add a legend"): it is drawn under the picture, saved with it and written by every export (an italic line under the picture; the title in Markdown). PNG, JPEG, GIF and WebP files can be inserted; WebP is converted to PNG on insert so Word, ODT, EPUB and PDF carry it. Animated GIF and WebP show their first frame.
 
+## Find a picture online
+
+In the Pictures tab, **Find a picture online** searches repositories of public-domain and Creative Commons pictures (Openverse and Wikimedia Commons to start). A repository is asked nothing until you turn it on and search. Each result shows its author and licence before you insert it; the picture goes in with that credit as its legend, and the author, licence and page are saved with it. Only licences that allow reuse with credit are listed, and pictures are limited in size and type.
+
 ## Two-page spread
 
 ![Two-page spread](features/img/spread.webp)

@@ -91,6 +91,9 @@ type ImageItem struct {
 	LongDesc string `json:"longDesc,omitempty" pb:"11"`
 	// Legend is the visible caption under the picture (canvas.Image.Legend).
 	Legend string `json:"legend,omitempty" pb:"12"`
+	// Credit and SourceURL are the author, licence and page of a picture found in an image repository (canvas.Image).
+	Credit    string `json:"credit,omitempty" pb:"13"`
+	SourceURL string `json:"sourceUrl,omitempty" pb:"14"`
 }
 
 // EquationItem is a formula in the linear notation of package export (x^2, frac{a}{b}, sqrt{x}) and its text
@@ -390,7 +393,7 @@ func FromItems(items []canvas.Item) []Item {
 				if src, ok := o.Src.(canvas.URLSource); ok && src.URL() != "" {
 					out = append(out, Item{Image: &ImageItem{URL: src.URL(), Width: o.W, Height: o.H, Alpha: o.Alpha,
 						ClipLeft: o.Clip.Left, ClipTop: o.Clip.Top, ClipRight: o.Clip.Right, ClipBottom: o.Clip.Bottom,
-						Alt: o.Alt, Decorative: o.Decorative, LongDesc: o.LongDesc, Legend: o.Legend}})
+						Alt: o.Alt, Decorative: o.Decorative, LongDesc: o.LongDesc, Legend: o.Legend, Credit: o.Credit, SourceURL: o.SourceURL}})
 				}
 			case *canvas.EquationObject:
 				out = append(out, Item{Equation: &EquationItem{Formula: o.Formula, Alt: o.Alt}})
@@ -640,6 +643,7 @@ func imageObject(it ImageItem) canvas.InlineObject {
 			}
 			img.Clip = canvas.Insets{Left: it.ClipLeft, Top: it.ClipTop, Right: it.ClipRight, Bottom: it.ClipBottom}
 			img.Alt, img.Decorative, img.LongDesc, img.Legend = it.Alt, it.Decorative, it.LongDesc, it.Legend
+			img.Credit, img.SourceURL = it.Credit, it.SourceURL
 			return img
 		}
 	}

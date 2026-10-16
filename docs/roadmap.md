@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (full run on the branch of the 10th merge, on main plus the reader voice choice, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy required: `make check` passed in full on the fifth try. The earlier tries found real faults, all fixed in that branch: a stale API dump (`NoteEditor`), an unformatted test file, and a Pictures-tab focus that was given one 50 ms attempt and was lost on a loaded machine (reproduced under CPU load, now retried until the field has it); coverage score 89.0%).
+5 of 10 since the last full run (full run on the branch of the 10th merge, on main plus the reader voice choice, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy required: `make check` passed in full on the fifth try. The earlier tries found real faults, all fixed in that branch: a stale API dump (`NoteEditor`), an unformatted test file, and a Pictures-tab focus that was given one 50 ms attempt and was lost on a loaded machine (reproduced under CPU load, now retried until the field has it); coverage score 89.0%).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
