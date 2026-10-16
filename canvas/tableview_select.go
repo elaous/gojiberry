@@ -136,6 +136,39 @@ func (v *TableView) drawHandles(g geometry) {
 			v.hover == Hit{Kind: HitRowHandle, Row: r}, v.sel == Selection{SelRow, r}, strconv.Itoa(r+1))
 	}
 
+	// Formula switch, top right: an eye while the values are shown, f(x) while the formulas are.
+	{
+		p := v.Painter
+		x, y := g.right()+gap, v.Y-gap-hs
+		px, py, pw, ph := x+2, y+2, hs-4, hs-4
+		on := v.hover.Kind == HitFormulaSwitch
+		v.fillPill(px, py, pw, ph, on, false)
+		p.SetFillStyle(v.iconColor(false))
+		p.SetStrokeStyle(v.iconColor(false))
+		cx, cy := px+pw/2, py+ph/2
+		if v.ShowFormulas {
+			p.SetFont("italic 600 10px serif")
+			p.SetTextAlign("center")
+			p.SetTextBaseline("middle")
+			p.FillText("f(x)", cx, cy)
+			p.SetTextAlign("left")
+		} else {
+			p.SetLineWidth(1.2)
+			p.BeginPath() // the outline of an eye
+			p.MoveTo(cx-6, cy)
+			p.LineTo(cx-3.5, cy-2.5)
+			p.LineTo(cx, cy-3.8)
+			p.LineTo(cx+3.5, cy-2.5)
+			p.LineTo(cx+6, cy)
+			p.LineTo(cx+3.5, cy+2.5)
+			p.LineTo(cx, cy+3.8)
+			p.LineTo(cx-3.5, cy+2.5)
+			p.LineTo(cx-6, cy)
+			p.Stroke()
+			p.FillRect(cx-1.5, cy-1.5, 3, 3) // the pupil
+		}
+	}
+
 	// Table handle: a pill with the 2x2 boxes.
 	p := v.Painter
 	x, y := v.X-gap-hs, v.Y-gap-hs

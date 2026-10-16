@@ -424,3 +424,46 @@ func TestMultiCursorKeepsItsSideOfABreak(t *testing.T) {
 		t.Fatalf("second key after the break: %v", f.Items)
 	}
 }
+
+func TestEnterAfterThreeMarkdownTableLinesMakesATable(t *testing.T) {
+	typed := func(lines ...string) (*TextFlow, *Stage) {
+		f, st := editFlow(t, 0, Chars{Text: ""})
+		for i, l := range lines {
+			st.InsertText(l)
+			if i < len(lines)-1 {
+				st.InsertText("\n") // typed line breaks, so Enter itself is only pressed at the end
+			}
+		}
+		return f, st
+	}
+	f, st := typed("| A | B |", "|---|---|", "| a | =B1 |")
+	st.HandleKey("Enter", false)
+	var tab *TableObject
+	for _, it := range f.Items {
+		if in, ok := it.(Inline); ok {
+			tab, _ = in.Object.(*TableObject)
+		}
+	}
+	if tab == nil || tab.View.Table.Rows() != 2 || tab.View.Table.Cols() != 2 || tab.View.Table.Cell(0, 0) != "A" || tab.View.Table.Cell(1, 1) != "=B1" {
+		t.Fatalf("a table of the minimal Markdown: %q", flowText(f))
+	}
+	if got := flowText(f); got != "#\n" {
+		t.Fatalf("the lines are replaced and the caret is below the table: %q", got)
+	}
+
+	// not a table: the columns do not match, no separator row, a bar-less line
+	for _, lines := range [][]string{
+		{"| A | B |", "|---|---|", "| a |"},
+		{"| A | B |", "| x | y |", "| a | b |"},
+		{"A B", "---", "a b"},
+		{"| A | B |", "|---|---|"},
+	} {
+		f, st := typed(lines...)
+		st.HandleKey("Enter", false)
+		for _, it := range f.Items {
+			if _, ok := it.(Inline); ok {
+				t.Fatalf("%q must stay text", lines)
+			}
+		}
+	}
+}

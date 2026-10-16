@@ -130,6 +130,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** `TestEscapedEqualsIsPlainText`, `TestColumnNames`, `TestShowFormulasSwitchesWhatIsDrawn`, `TestTableFromMarkdownKeepsFormulasAndAlignment`, `TestMarkdownExportKeepsTheFormulaSoItWorksWhenReadBack` (canvas), `TestTableFormulas`, `TestFormulaCycleAndEditing`, `TestFormulaCellsShowTheirValue` (canvas), `TestTableFormulasAreWrittenAsTheirValues` (export), `TestEndToEnd` in examples/canvas-table-demo
 
+## Markdown tables
+
+**Try it.** In edit mode type `| Qty | Total |`, Enter, `|---|---|`, Enter, `| 3 | =A2*2 |`, Enter. Then press the corner switch at the table's top right.
+
+**You should see.** A table with the header and 6 in the last cell; the switch shows f(x) and the cell shows `=A2*2`; pressing it again shows the eye and 6. A row with fewer cells, or no row of dashes, stays text.
+
+**Automated.** `TestEnterAfterThreeMarkdownTableLinesMakesATable`, `TestFormulaSwitchInTheTopRightCorner` (canvas), `TestMarkdownImportTitleImagesAndFormulas` (transfer), `TestTypingAMarkdownTableMakesATable` (examples/canvas-editor-showcase)
+
 ## References
 
 **Try it.** Edit mode, References tab: type two authors (one per line, `Silva, Ana Maria` and `Costa, Bruno`), a title, a publisher and a year; Add the source; press **Cite it here**; change the style to MLA; press **Insert the list of references**.

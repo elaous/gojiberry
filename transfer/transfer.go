@@ -10,10 +10,17 @@
 package transfer
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"path"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/docfile"
@@ -165,9 +172,72 @@ func (markdown) Format() Format {
 	return Format{Name: "markdown", Label: "Markdown", Exts: []string{".md", ".markdown"}, MIME: "text/markdown"}
 }
 
+// MaxMarkdownBytes is the largest Markdown file read.
+const MaxMarkdownBytes = 16 << 20
+
+// Import reads Markdown as the editor's own Markdown does (see canvas.Markdown): headings, emphasis, lists, quotes,
+// code, rules, links and pipe tables, where a table cell that starts with = stays a formula. The title is the first
+// heading. A picture whose address is a data: URL is kept with its alternative text; one on a server is not fetched
+// (an importer makes no request for the author of a file), so it stays as its alternative text in brackets.
 func (markdown) Import(b []byte) (docfile.Document, error) {
-	return docfile.Document{Content: docfile.FromItems(canvas.Markdown{}.Transform(string(b)))}, nil
+	if len(b) > MaxMarkdownBytes {
+		return docfile.Document{}, errors.New("transfer: the Markdown file is too large")
+	}
+	if !utf8.Valid(b) {
+		return docfile.Document{}, errors.New("transfer: the Markdown file is not UTF-8 text")
+	}
+	src := strings.TrimPrefix(string(b), "\ufeff")
+	md := canvas.Markdown{Images: dataImage}
+	return docfile.Document{Title: firstHeading(src), Content: docfile.FromItems(md.Transform(src))}, nil
 }
+
+// firstHeading is the text of the first "# " heading outside a code fence.
+func firstHeading(src string) string {
+	fenced := false
+	for _, line := range strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n") {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
+			fenced = !fenced
+			continue
+		}
+		if !fenced && strings.HasPrefix(line, "# ") {
+			return canvas.StripMarkdown(strings.TrimSpace(strings.TrimRight(strings.TrimPrefix(line, "# "), "# ")))
+		}
+	}
+	return ""
+}
+
+// dataImage makes an image of a data: URL of a picture the editor shows; any other address gives nil.
+func dataImage(url, alt string) canvas.InlineObject {
+	if !strings.HasPrefix(url, "data:image/png;base64,") && !strings.HasPrefix(url, "data:image/jpeg;base64,") &&
+		!strings.HasPrefix(url, "data:image/gif;base64,") && !strings.HasPrefix(url, "data:image/webp;base64,") {
+		return nil
+	}
+	w, h := 280.0, 210.0
+	if _, payload, ok := strings.Cut(url, ","); ok {
+		if raw, err := base64.StdEncoding.DecodeString(payload); err == nil {
+			if cfg, _, err := image.DecodeConfig(bytes.NewReader(raw)); err == nil && cfg.Width > 0 && cfg.Height > 0 {
+				w, h = float64(cfg.Width), float64(cfg.Height)
+				if m := max(w, h); m > 280 {
+					w, h = w*280/m, h*280/m
+				}
+			}
+		}
+	}
+	im := canvas.NewImage(dataSource{url, w, h}, 0, 0)
+	im.Placement = canvas.PlaceInline
+	im.W, im.H, im.Alt = w, h, alt
+	return im
+}
+
+// dataSource is a picture known only by its data: URL.
+type dataSource struct {
+	url  string
+	w, h float64
+}
+
+func (d dataSource) Size() (float64, float64) { return d.w, d.h }
+func (d dataSource) URL() string              { return d.url }
 
 func (markdown) Export(d docfile.Document) ([]byte, error) {
 	return []byte(canvas.MarkdownFromItems(docfile.ToItems(d.Content))), nil

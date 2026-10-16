@@ -84,6 +84,18 @@ Write @name in a comment or a reply and that person is told: the screen reader a
 
 A table cell that starts with `=` is a formula: `=B2*C2`, `=SUM(B2:B9)`, `=ROUND(AVERAGE(C1:C4), 1)`, `=IF(D2>=10, "ok", "low")`. The table shows the value, the cell keeps the formula (it shows when you edit the cell), and the exports and the reading copy carry the value. A formula that cannot be computed shows an error such as #DIV/0! or #CYCLE! instead of stopping anything. Start a cell with `\=` to write a cell that begins with = without making it a formula. The table menu has **Show formulas** to see the text of the formulas instead of their values. The column grips are lettered (A, B, ...) and the row grips numbered (1, 2, ...), the names a formula uses. Markdown keeps the formula as typed, so `| =A1*B2 |` is a formula wherever the Markdown is read as a table by this editor.
 
+## Markdown tables
+
+Type a header row, the row of dashes under it and one row of cells with the same number of columns, then press Enter, and the three lines become a table:
+
+```
+| A | B |
+|---|---|
+| a | b |
+```
+
+Cells keep what you typed, so `| 3 | =A1*2 |` is a formula. A table has a switch at its top right corner, an eye while values are shown and f(x) while formulas are, and its column and row grips carry the letters and numbers formulas use. Whole Markdown files can be imported from the Files tab.
+
 ## References
 
 The References tab keeps the sources a document cites (books, articles, web pages, reports) and writes them in the style of a publication: APA, MLA, Chicago, IEEE, Harvard, Vancouver or ABNT. **Cite it here** puts the in-text mark at the caret, for example (Silva & Costa, 2020) or [3]; **Insert the list of references** writes the list at the end, in order, with titles in italics. Change the style and the same sources are written the new way. The sources are saved with the document.
