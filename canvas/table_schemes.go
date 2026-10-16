@@ -50,10 +50,9 @@ func (t *Table) ApplyScheme(s TableScheme) {
 			}
 			st := t.StyleAt(r, c)
 			st.Background, st.Color, st.Bold = "", "", false
-			switch {
-			case r == 0:
+			if r == 0 {
 				st.Background, st.Color, st.Bold = s.HeaderBG, s.HeaderColor, s.HeaderBold
-			default:
+			} else {
 				if s.BandBG != "" && r%2 == 0 {
 					st.Background = s.BandBG
 				}
