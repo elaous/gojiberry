@@ -752,7 +752,7 @@
   "enc.sheetPrint": "Imprimer",
   "enc.sheetTitle": "Clé de récupération",
   "enc.stale": "Les clés de ce stockage ont été modifiées dans un autre onglet ou une autre fenêtre depuis le chargement de cette page. Cet onglet est verrouillé pour ne pas écraser cette modification : rechargez la page.",
-  "img.badFile": "Ce n'est pas un fichier image (png, jpeg, gif ou webp).",
+  "img.badFile": "Ce n'est pas un fichier image (png, jpeg, gif, webp, avif ou svg).",
   "img.decorative": "Décorative : une description n'apporterait rien",
   "img.descHint": "Ce qu'une personne qui ne peut pas la voir a besoin de savoir",
   "img.descLabel": "Description de l'image %d",

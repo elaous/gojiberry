@@ -70,7 +70,7 @@ Tables have cell formatting (background, colour, bold, alignment, merged cells) 
 
 ## Image legend and picture formats
 
-A picture can carry a visible **legend** (Insert picture > Pictures tab, "Add a legend"): it is drawn under the picture, saved with it and written by every export (an italic line under the picture; the title in Markdown). PNG, JPEG, GIF and WebP files can be inserted; WebP is converted to PNG on insert so Word, ODT, EPUB and PDF carry it. Animated GIF and WebP show their first frame.
+A picture can carry a visible **legend** (Insert picture > Pictures tab, "Add a legend"): it is drawn under the picture, saved with it and written by every export (an italic line under the picture; the title in Markdown). PNG, JPEG, GIF, WebP, AVIF and SVG files can be inserted. WebP, AVIF and SVG are converted to PNG on insert (an SVG at least 1024 pixels on its long side, drawn as a picture only: its scripts never run), so Word, ODT, EPUB and PDF carry them and a shared document never holds an SVG. Animated GIF and WebP show their first frame. AVIF needs a browser that can decode it.
 
 ## Find a picture online
 

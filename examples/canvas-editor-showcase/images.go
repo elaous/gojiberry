@@ -58,6 +58,10 @@ func imageMime(name string) string {
 		return "image/gif"
 	case ".webp":
 		return "image/webp"
+	case ".avif":
+		return "image/avif"
+	case ".svg":
+		return "image/svg+xml"
 	}
 	return ""
 }
@@ -67,11 +71,11 @@ const maxInsertedSide = 280
 
 // insertImage picks a picture file and puts it at the caret as an inline picture with no description yet.
 func (u *ui) insertImage(fl func() *canvas.TextFlow, redraw, renderUI func()) {
-	transfer.PickFile(".png,.jpg,.jpeg,.gif,.webp", func(name string, data []byte, err error) {
+	transfer.PickFile(".png,.jpg,.jpeg,.gif,.webp,.avif,.svg", func(name string, data []byte, err error) {
 		f := fl()
 		mime := imageMime(name)
 		if err != nil || f == nil || mime == "" {
-			u.imageMsg = T("img.badFile", "That is not a picture file (png, jpeg, gif or webp).")
+			u.imageMsg = T("img.badFile", "That is not a picture file (png, jpeg, gif, webp, avif or svg).")
 			renderUI()
 			return
 		}
@@ -79,12 +83,17 @@ func (u *ui) insertImage(fl func() *canvas.TextFlow, redraw, renderUI func()) {
 	})
 }
 
-// insertBytes puts a picture's bytes at the caret. WebP is stored as PNG: Word, OpenDocument and PDF cannot carry WebP,
-// so the exports then keep the picture. after, when given, adjusts the new picture before it goes in.
+// insertBytes puts a picture's bytes at the caret. WebP, AVIF and SVG are stored as PNG: Word, OpenDocument and PDF
+// cannot carry them, so the exports then keep the picture. An SVG is drawn by the browser as a picture only (its scripts
+// never run) and is made at least 1024 pixels on its long side so that it stays sharp. after, when given, adjusts the new picture before it goes in.
 func (u *ui) insertBytes(f *canvas.TextFlow, mime string, data []byte, redraw, renderUI func(), after ...func(*canvas.Image)) {
 	url := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
-	if mime == "image/webp" {
-		convertToPNG(url, func(png string, ok bool) {
+	if mime == "image/webp" || mime == "image/avif" || mime == "image/svg+xml" {
+		minSide := 0
+		if mime == "image/svg+xml" {
+			minSide = 1024
+		}
+		convertToPNG(url, minSide, func(png string, ok bool) {
 			if ok {
 				u.placeImage(f, png, redraw, renderUI, after...)
 				return
@@ -98,7 +107,7 @@ func (u *ui) insertBytes(f *canvas.TextFlow, mime string, data []byte, redraw, r
 
 // convertToPNG draws a picture the browser can show onto a canvas and reads it back as a PNG data URL; ok is false when
 // the browser cannot (the picture is then kept as it is).
-func convertToPNG(dataURL string, done func(png string, ok bool)) {
+func convertToPNG(dataURL string, minSide int, done func(png string, ok bool)) {
 	doc := js.Global().Get("document")
 	img := doc.Call("createElement", "img")
 	var onload, onerror js.Func
@@ -107,13 +116,20 @@ func convertToPNG(dataURL string, done func(png string, ok bool)) {
 		defer release()
 		w, h := img.Get("naturalWidth").Int(), img.Get("naturalHeight").Int()
 		if w <= 0 || h <= 0 {
-			done("", false)
-			return nil
+			if minSide <= 0 { // an SVG with no size of its own is drawn square
+				done("", false)
+				return nil
+			}
+			w, h = minSide, minSide
+		}
+		if minSide > 0 && max(w, h) < minSide { // scale a small vector picture up
+			k := float64(minSide) / float64(max(w, h))
+			w, h = int(float64(w)*k), int(float64(h)*k)
 		}
 		cv := doc.Call("createElement", "canvas")
 		cv.Set("width", w)
 		cv.Set("height", h)
-		cv.Call("getContext", "2d").Call("drawImage", img, 0, 0)
+		cv.Call("getContext", "2d").Call("drawImage", img, 0, 0, w, h)
 		out := cv.Call("toDataURL", "image/png")
 		if !out.Truthy() || !strings.HasPrefix(out.String(), "data:image/png") {
 			done("", false)
@@ -162,7 +178,7 @@ func (u *ui) placeImage(f *canvas.TextFlow, url string, redraw, renderUI func(),
 		redraw()
 		renderUI()
 	}, func() {
-		u.imageMsg = T("img.badFile", "That is not a picture file (png, jpeg, gif or webp).")
+		u.imageMsg = T("img.badFile", "That is not a picture file (png, jpeg, gif, webp, avif or svg).")
 		renderUI()
 	})
 }

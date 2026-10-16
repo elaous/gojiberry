@@ -752,7 +752,7 @@
     "enc.sheetPrint": "Imprimir",
     "enc.sheetTitle": "Chave de recuperação",
     "enc.stale": "As chaves deste armazenamento foram alteradas noutro separador ou janela desde que esta página carregou. Este separador está bloqueado para não substituir essa alteração: recarregue a página.",
-    "img.badFile": "Isso não é um ficheiro de imagem (png, jpeg, gif ou webp).",
+    "img.badFile": "Isso não é um ficheiro de imagem (png, jpeg, gif, webp, avif ou svg).",
     "img.decorative": "Decorativa: não transmite nada que uma descrição acrescentasse",
     "img.descHint": "O que uma pessoa que não a pode ver precisa de saber",
     "img.descLabel": "Descrição da imagem %d",

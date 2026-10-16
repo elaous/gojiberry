@@ -752,7 +752,7 @@
   "enc.sheetPrint": "Drucken",
   "enc.sheetTitle": "Wiederherstellungsschlüssel",
   "enc.stale": "Die Schlüssel dieses Speichers wurden seit dem Laden dieser Seite in einem anderen Tab oder Fenster geändert. Dieser Tab ist gesperrt, damit er diese Änderung nicht überschreibt: Laden Sie die Seite neu.",
-  "img.badFile": "Das ist keine Bilddatei (png, jpeg, gif oder webp).",
+  "img.badFile": "Das ist keine Bilddatei (png, jpeg, gif, webp, avif oder svg).",
   "img.decorative": "Dekorativ: Eine Beschreibung würde nichts hinzufügen",
   "img.descHint": "Was jemand wissen muss, der es nicht sehen kann",
   "img.descLabel": "Beschreibung von Bild %d",
