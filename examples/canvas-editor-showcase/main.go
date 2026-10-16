@@ -583,7 +583,7 @@ func main() {
 					renderUI()
 				},
 			})
-			panel = xango.Frag(panel, tableStylesPanel(u, func() *cxango.Root { return root }, redraw, renderUI), themePanel(u, &state, renderCanvas, renderUI))
+			panel = xango.Frag(panel, tableStylesPanel(u, func() *cxango.Root { return root }, func() *canvas.TextFlow { return flow }, redraw, renderUI), themePanel(u, &state, renderCanvas, renderUI))
 		case "find":
 			panel = xango.Frag(findPanel(u, &state, func() *canvas.TextFlow { return flow }, func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }, redraw, renderUI), u.searchAllPanel(renderUI))
 		case "spell":
@@ -1020,7 +1020,7 @@ func main() {
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "persisted": u.persisted, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
-			"link": link, "headers": headers, "footers": footers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "historyLimit": canvas.HistoryLimit(), "live": liveState(u, flow), "scrollY": scrollY, "scrollX": scrollX, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
+			"link": link, "headers": headers, "footers": footers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "historyLimit": canvas.HistoryLimit(), "live": liveState(u, flow), "scrollY": scrollY, "scrollX": scrollX, "tableInHand": tableInHand(root, flow) != nil, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib), "ghost": u.ghostSuffix(),
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))

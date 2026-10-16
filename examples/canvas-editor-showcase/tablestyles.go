@@ -19,25 +19,37 @@ type tableStyleForm struct {
 }
 
 // tableInHand is the table the person was last working in (a cell of it entered), or nil: the focus may have moved to
-// the panel since.
-func tableInHand(root *cxango.Root) *canvas.TableView {
+// the panel since. The tables are the ones in the text (typed, imported, pasted) and the ones placed on the page.
+func tableInHand(root *cxango.Root, flow *canvas.TextFlow) *canvas.TableView {
 	var best *canvas.TableView
+	consider := func(tv *canvas.TableView) {
+		if tv != nil && tv.EditedAt() > 0 && (best == nil || tv.EditedAt() > best.EditedAt()) {
+			best = tv
+		}
+	}
+	if flow != nil {
+		for _, it := range flow.Items {
+			if in, ok := it.(canvas.Inline); ok {
+				if t, ok := in.Object.(*canvas.TableObject); ok && t != nil {
+					consider(t.View)
+				}
+			}
+		}
+	}
 	for n := 0; ; n++ {
 		tv, ok := root.Find(cxango.TagTable, n).(*canvas.TableView)
 		if !ok {
 			return best
 		}
-		if tv.EditedAt() > 0 && (best == nil || tv.EditedAt() > best.EditedAt()) {
-			best = tv
-		}
+		consider(tv)
 	}
 }
 
 // tableStylesPanel is the "Table styles" part of the Styles tab: the styles on offer (the built-in ones and the ones
 // the person defined), the one the table in hand is dressed in marked, a way to define one, and to forget one.
-func tableStylesPanel(u *ui, root func() *cxango.Root, redraw, renderUI func()) xango.Node {
+func tableStylesPanel(u *ui, root func() *cxango.Root, flow func() *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 	f := &u.tableStyle
-	tv := tableInHand(root())
+	tv := tableInHand(root(), flow())
 	nodes := []xango.Node{xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("tstyle.title", "Table styles")))}
 	if tv == nil {
 		nodes = append(nodes, para("tstyle-hint", T("tstyle.hint", "Click in a table, then choose a style for it."), false))
