@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/elaous/gojiberry/canvas"
 	cxango "github.com/elaous/gojiberry/canvas/xango"
@@ -18,30 +19,45 @@ type tableStyleForm struct {
 	msg                            string
 }
 
-// tableInHand is the table the person was last working in (a cell of it entered), or nil: the focus may have moved to
-// the panel since. The tables are the ones in the text (typed, imported, pasted) and the ones placed on the page.
-func tableInHand(root *cxango.Root, flow *canvas.TextFlow) *canvas.TableView {
-	var best *canvas.TableView
-	consider := func(tv *canvas.TableView) {
-		if tv != nil && tv.EditedAt() > 0 && (best == nil || tv.EditedAt() > best.EditedAt()) {
-			best = tv
-		}
-	}
+// tableTarget is the table a style is for: of the tables in the text (typed, imported or pasted: read-only objects) the
+// one the caret is below (else the first one after it); with none in the text, the table placed on the page that the
+// person last worked in, since the focus may have moved to the panel.
+func tableTarget(root *cxango.Root, flow *canvas.TextFlow) *canvas.TableView {
 	if flow != nil {
-		for _, it := range flow.Items {
-			if in, ok := it.(canvas.Inline); ok {
-				if t, ok := in.Object.(*canvas.TableObject); ok && t != nil {
-					consider(t.View)
+		caret := flow.Cursors()[0].Caret
+		var before, after *canvas.TableView
+		offset := 0
+		for _, it := range flow.Slice(0, utf8.RuneCountInString(flow.EditText())) {
+			switch it := it.(type) {
+			case canvas.Chars:
+				offset += utf8.RuneCountInString(it.Text)
+			case canvas.Inline:
+				if t, ok := it.Object.(*canvas.TableObject); ok && t != nil {
+					if offset < caret {
+						before = t.View
+					} else if after == nil {
+						after = t.View
+					}
 				}
+				offset++
 			}
 		}
+		if before != nil {
+			return before
+		}
+		if after != nil {
+			return after
+		}
 	}
+	var best *canvas.TableView
 	for n := 0; ; n++ {
 		tv, ok := root.Find(cxango.TagTable, n).(*canvas.TableView)
 		if !ok {
 			return best
 		}
-		consider(tv)
+		if tv.EditedAt() > 0 && (best == nil || tv.EditedAt() > best.EditedAt()) {
+			best = tv
+		}
 	}
 }
 
@@ -49,10 +65,10 @@ func tableInHand(root *cxango.Root, flow *canvas.TextFlow) *canvas.TableView {
 // the person defined), the one the table in hand is dressed in marked, a way to define one, and to forget one.
 func tableStylesPanel(u *ui, root func() *cxango.Root, flow func() *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 	f := &u.tableStyle
-	tv := tableInHand(root(), flow())
+	tv := tableTarget(root(), flow())
 	nodes := []xango.Node{xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("tstyle.title", "Table styles")))}
 	if tv == nil {
-		nodes = append(nodes, para("tstyle-hint", T("tstyle.hint", "Click in a table, then choose a style for it."), false))
+		nodes = append(nodes, para("tstyle-hint", T("tstyle.hint", "Put the caret after a table (or click in a table on the page), then choose a style for it."), false))
 	}
 	current := ""
 	if tv != nil {

@@ -23,16 +23,9 @@ func TestTableStylesPickerDefineAndFollowRows(t *testing.T) {
 		d.Press("Enter")
 	}
 	d.Press("Enter")
-	// find a cell of the table by clicking down the first column
-	found := false
-	for y := 10; y < 140 && !found; y += 6 {
-		d.CanvasClick(100, float64(y))
-		d.Sleep(60)
-		found = d.Bool(`JSON.parse(document.getElementById('state').textContent).tableInHand === true`)
-	}
-	d.OK(found, "a cell of the table was entered")
 	d.Click(`button[data-tab="styles"]`)
 	d.WaitSelector("#tstyle-panel")
+	d.OK(!d.Has("#tstyle-hint"), "the caret is below the table, so the table is the one in hand")
 
 	// a built-in style
 	d.Click(`#tstyle-panel button[data-style="Blue header, banded"]`)
