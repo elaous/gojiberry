@@ -222,9 +222,11 @@ Read the whole document or the selection aloud, a sentence at a time, with the s
 
 ## Typewriter scrolling
 
-![Preferences, where typewriter scrolling is switched on](features/img/tab-prefs.webp)
+![The page slid left as the line grew](features/img/typewriter-typing.webp)
 
-An optional mode (Preferences, off by default) in which the line you are typing stays in the middle of the view and the page moves under it, the way paper moves on a typewriter. It follows typing, the arrow keys and commands; clicking in the text never moves the page.
+![After the carriage return the page has slid back right and up a line](features/img/typewriter-return.webp)
+
+An optional mode (Preferences, off by default) in which the line you are typing stays in the middle of the view and the page moves under it, the way paper moves on a typewriter. It follows typing, the arrow keys and commands; clicking in the text never moves the page. With **Typewriter carriage** also on, the letter being typed stays in one place across the view too: the page slides left as each character goes in (first picture) and, on Enter, slides back right and up a line so the start of the new line is at that place (second picture), past the page's own edge, as the paper of a typewriter runs past the carriage.
 
 ## Menus and commands
 

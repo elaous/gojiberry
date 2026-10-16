@@ -1554,6 +1554,7 @@
   "imgfind.listError": "Die Liste der Verzeichnisse des Betreibers konnte nicht gelesen werden: ",
   "img.legendStart": "Abbildung %d:",
   "prefs.typewriter": "Schreibmaschinen-Scrollen: die Zeile, die ich tippe, bleibt in der Mitte der Ansicht, die Seite bewegt sich",
+  "prefs.typewriterX": "Schreibmaschinenwagen: die Seite auch seitlich bewegen, sodass der Buchstabe, den ich tippe, an einer Stelle bleibt (braucht das Schreibmaschinen-Scrollen)",
   "read.voice": "Stimme des Vorlesers",
   "read.voiceAuto": "Vorlesestimme: die Wahl des Browsers",
   "read.voiceAutomatic": "Automatisch",

@@ -1554,6 +1554,7 @@
   "imgfind.listError": "No se pudo leer la lista de repositorios del operador: ",
   "img.legendStart": "Figura %d:",
   "prefs.typewriter": "Desplazamiento de máquina de escribir: la línea que escribo se queda en el centro de la vista y la página se mueve",
+  "prefs.typewriterX": "Carro de máquina de escribir: deslizar también la página de lado, para que la letra que escribo quede en un mismo lugar (necesita el desplazamiento de máquina de escribir)",
   "read.voice": "Voz del lector",
   "read.voiceAuto": "Voz del lector: la elección del navegador",
   "read.voiceAutomatic": "Automática",
