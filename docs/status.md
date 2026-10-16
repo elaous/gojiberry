@@ -160,8 +160,8 @@ Written down on 2026-10-17 so they are not lost. Each one needs a design before 
 
 | What | Type | Status | Present | Missing |
 | --- | --- | --- | --- | --- |
-| A **testing guide for each feature**: how to try it by hand (steps and what you should see) and which automated test covers it | chore | open | [testing-workflow.md](testing-workflow.md), [accessibility-testing.md](accessibility-testing.md), the end-to-end tests | one entry per feature, in a form a person can follow; the feature list is the product table above plus the editor features of [canvas-todo.md](canvas-todo.md) |
-| A **features document with a screenshot of each document feature**, one or two short paragraphs per feature | chore | open | the showcase; the browser test harness can take pictures | a small tool that opens the showcase in the headless browser and saves a picture per feature (so the pictures are made again when the editor changes), and the paragraphs |
+| A **testing guide for each feature**: how to try it by hand (steps and what you should see) and which automated test covers it | chore | done (first version) | [feature-testing.md](feature-testing.md): 31 features, each with the steps and the tests; [testing-workflow.md](testing-workflow.md), [accessibility-testing.md](accessibility-testing.md) | the guide covers the showcase's tabs, menus and editor features; the library-only features (stores, keys, servers) have their tests listed in the roadmap items but not yet a by-hand entry |
+| A **features document with a screenshot of each document feature**, one or two short paragraphs per feature | chore | done (first version) | [features.md](features.md): 31 pictures (`docs/features/img`, WebP, 700 KB in all) made by `make feature-shots` (`TestFeatureShots`) | pictures of states that need set-up (a comment thread, a suggestion, the key dialogs, the Check tab with findings) |
 
 ## Counts
 
