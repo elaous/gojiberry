@@ -114,7 +114,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | Download submenu | enhancement | done | grouped, `.open` | none |
 | `.opendoc` packs | feature | done | `docfile/pack`, `cmd/opendoc` | none |
 | Encryption and passkeys | feature | partial | SSH keys, passkeys, envelope encryption, directory, sharing, recovery | see the security table |
-| Public docstore | feature | done (server) | anonymous offer with expiry and abuse controls | see 55, 86 |
+| Public docstore | feature | done | anonymous offer with expiry and abuse controls (server); the client (`docstore/public/client`) and the showcase's Public link tab: session, edit and view links, countdown, keep, report, noindex | the terms text and who answers reports are a person's work (see public-docstore.md section 5) |
 | Console mode | feature | done | `console`, `cmd/docsh`; the showcase's Console tab (`console.Session`, `components.ConsolePanel`) | none |
 | Terminal demo | feature | done | `examples/terminal-demo` | none |
 | Backends with conditional saves | feature | done | PostgreSQL, MongoDB, S3 | blob backend cannot, by design |

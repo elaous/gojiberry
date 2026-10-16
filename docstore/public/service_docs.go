@@ -414,6 +414,12 @@ func (s *Service) downloadDoc(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="document"`)
 	s.setExpires(ctx, w, docID)
+	// Whoever holds the edit link may be a different browser from the one that made the document: the view
+	// link is theirs to give too.
+	var meta docMeta
+	if found, err := s.getJSON(ctx, docRecordPrefix+docID, &meta); err == nil && found && meta.ViewID != "" {
+		w.Header().Set("X-Gojiberry-View-Id", meta.ViewID)
+	}
 	_, _ = w.Write(doc.Data)
 }
 
