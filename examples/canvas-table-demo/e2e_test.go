@@ -106,5 +106,12 @@ func TestEndToEnd(t *testing.T) {
 	// Back to view mode hides the editing UI.
 	d.ToggleMode()
 	d.OK(d.Is("s.mode === 'view' && s.selection.kind === 'none' && !s.menuOpen"), "view mode drops selection and menu")
+	d.ToggleMode() // back to editing
+	// Paste: a Markdown table from the clipboard fills the cells from the active one and grows the table.
+	d.CanvasClick(50, mid(nums("rowEdges"), 0))
+	d.Eval(`(() => { const dt = new DataTransfer(); dt.setData('text/plain', '| P | Q |\n|---|---|\n| 7 | =A2*6 |');
+		document.getElementById('input').dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true})) })()`, nil)
+	d.OK(d.Is("s.cells[0][0] === 'P' && s.cells[1][0] === '7' && s.cells[1][1] === '=A2*6' && s.shown[1][1] === '42'"), "a pasted Markdown table fills the cells and its formula works")
+
 	d.NoErrors()
 }

@@ -57,3 +57,21 @@ func TestImportFidelityOfAPage(t *testing.T) {
 		t.Errorf("losses: %+v", rep.Losses)
 	}
 }
+
+func TestMarkdownImportFidelityNamesWhatIsLeftOut(t *testing.T) {
+	md := "# T\n\n![far](https://example.org/a.png) and <b>bold</b>.\n\n| A | **B** |\n|---|---|\n| `c` | [d](https://x.org) |\n\n```\n![in code](https://example.org/b.png)\n```\n"
+	r := ImportFidelity("markdown", []byte(md))
+	if !r.Known {
+		t.Fatal("known for Markdown")
+	}
+	got := map[Feature]int{}
+	for _, l := range r.Losses {
+		got[l.Feature] = l.Count
+	}
+	if got[FeatRemoteImage] != 1 || got[FeatCellFormat] != 3 || got[FeatRawHTML] != 1 {
+		t.Fatalf("one remote picture (the one in code is not read), three cells with marks, one line of HTML: %v", got)
+	}
+	if r := ImportFidelity("markdown", []byte("# Plain\n\nJust words.\n")); !r.Known || len(r.Losses) != 0 {
+		t.Fatalf("a plain file loses nothing: %+v", r)
+	}
+}

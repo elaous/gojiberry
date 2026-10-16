@@ -80,3 +80,16 @@ func TestFidelityPanelSaysWhatAnImportLeftOut(t *testing.T) {
 	}
 	d.NoErrors()
 }
+
+// A Markdown file with a picture on a server and a table cell in bold says, after it is imported, what was left
+// out; its footnote is brought in as a footnote.
+func TestMarkdownImportSaysWhatItLeftOutAndKeepsItsFootnotes(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	importMarkdown(d, "# Report\n\nA claim[^1] and ![far](https://example.org/a.png).\n\n| A | **B** |\n|---|---|\n| x | y |\n\n[^1]: The note text.\n\nEnd words.", "End words")
+	d.Click(`button[data-tab="transfer"]`)
+	d.WaitSelector("#gj-fidelity-import")
+	d.WaitFor("the report", `document.querySelectorAll('#gj-fidelity-import-list .gj-fidelity-item').length === 2`)
+	d.OK(d.Has(`#gj-fidelity-import-list .gj-fidelity-item[data-feature="remote-image"]`) && d.Has(`#gj-fidelity-import-list .gj-fidelity-item[data-feature="cell-format"]`), d.Text(".gj-fidelity"))
+	d.OK(d.Bool(`JSON.parse(document.getElementById('state').textContent).footnotes.length === 1`), "the note came in as a footnote")
+	d.NoErrors()
+}

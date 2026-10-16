@@ -820,3 +820,45 @@ func (v *TableView) trackTip(x, y float64) bool {
 	}
 	return v.tipSet != was || (v.tipSet && v.tip != wasAt)
 }
+
+// PasteText (a Paster) pastes clipboard text into the table. A Markdown pipe table or cells separated by tabs (what a
+// spreadsheet copies) fill the cells from the active one, to the right and down, adding the rows and columns the text
+// needs; a cell that starts with = is a formula. Any other text goes into the active cell at the caret, on one line.
+// It does nothing when no cell is being edited or the active cell is a formula held in the calculated view.
+func (v *TableView) PasteText(text string) bool {
+	if v.mode != ModeEdit || !v.editing || v.locked || text == "" {
+		return false
+	}
+	var rows [][]string
+	if t, ok := TableFromMarkdown(text); ok {
+		rows = t.Cells
+	} else if strings.Contains(text, "\t") {
+		for _, line := range strings.Split(strings.TrimRight(strings.ReplaceAll(text, "\r\n", "\n"), "\n"), "\n") {
+			rows = append(rows, strings.Split(line, "\t"))
+		}
+	}
+	if len(rows) == 0 {
+		return v.InsertText(text)
+	}
+	t := v.Table
+	for r, row := range rows {
+		for t.Rows() <= v.row+r {
+			t.AddRow()
+		}
+		for c, cell := range row {
+			for t.Cols() <= v.col+c {
+				t.AddColumn()
+			}
+			if t.Covered(v.row+r, v.col+c) {
+				continue // a cell covered by a merge holds nothing
+			}
+			t.SetCell(v.row+r, v.col+c, strings.NewReplacer("\r", "", "\n", " ").Replace(strings.TrimSpace(cell)))
+		}
+	}
+	v.cursor = len([]rune(t.Cell(v.row, v.col)))
+	v.caretOn = true
+	v.changed()
+	return true
+}
+
+var _ Paster = (*TableView)(nil)
