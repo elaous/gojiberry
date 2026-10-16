@@ -135,15 +135,13 @@ the row into a table above. Nothing here is partly built except where "Present" 
 | canvas-todo.md | Outline: collapse and reorder | feature | open | outline with jump | collapsing sections, drag to reorder; bookmarks drawn on the canvas (they are only listed) |
 | canvas-todo.md | Map object and flowcharts | feature | open | none | both as canvas objects |
 | canvas-todo.md | Mention notifications | feature | open | mentions in comments | telling the person mentioned (needs a delivery channel the host chooses) |
-| canvas-todo.md | Multi-cursor at a break offset | fix | open | one `Cursor.After` per cursor | typing at a break offset goes in front of the break unless the caret is "after" |
-| canvas-todo.md | Markdown write-back | enhancement | open | links round-trip | tables and images written back; a form for case and small caps |
+| canvas-todo.md | Markdown form for case and small caps | enhancement | inherent | tables, rules and pictures with an address are written back | Markdown has no syntax for case or small caps |
 | canvas-todo.md | xango `Table` cell render prop and `CanvasView` | feature | open | `Table`, `Canvas` | a render prop per cell; a DOM component that mounts a `canvas/xango` tree (with a hidden text fallback for screen readers and no-wasm pages, [xango-canvas.md](xango-canvas.md)) |
 | canvas-todo.md | Spread view | enhancement | open | facing sheets, images across the gutter | gutter shadow, page-turn UI |
 | [opendocs-missing-features.md](opendocs-missing-features.md), [opendocs-port-plan.md](opendocs-port-plan.md) | Linked text frames, form fields, table formulas, scripting plug-ins | feature | open | none in Go code (checked by search) | all four; frames are the largest layout gap and need a design first. The two docs are older than the code: their other rows (margins, snippets, mentions, tags, signed documents, dictation) need a row-by-row re-check before anyone trusts "Missing" there |
 | [multiuser-design.md](multiuser-design.md) | Sharing more surfaces | enhancement | open | headers, footers, floats, tables, images by position and size | adding and removing objects at run time, character formatting inside floating text, an image's picture |
-| [opendoc-format.md](opendoc-format.md) | Pack format, open points | enhancement | open | draft 1: hashes, signature, encrypted records, tools | hiding what the index shows about an encrypted record; large attachments as their own record kind; several signers; a MIME type (`application/vnd.opendocs.pack`) and a `file(1)` magic entry; keys in the pack UI (it leaves confidential documents out and says so) |
+| [opendoc-format.md](opendoc-format.md) | Pack format, open points | enhancement | open | draft 1: hashes, signature, encrypted records, tools | hiding what the index shows about an encrypted record; large attachments as their own record kind; several signers; keys in the pack UI (the MIME type and the `file(1)` and shared-mime-info entries are done) (it leaves confidential documents out and says so) |
 | [public-docstore.md](public-docstore.md) | Public offer operations | feature | open | takedown by ID, report route, `Challenger` and `Blocklist` hooks | a tool to list reports; notification of who answers; a hash list fed by takedowns; a shipped challenge when busy; a check that a body is one of the editor's formats (the terms text and jurisdiction are a person's, see above) |
-| [observability.md](observability.md) | Metrics for the last paths | chore | open | the other servers report their own work | font file and symbol downloads, the Google font proxy, hub presence updates (request counts only) |
 | [known-limits-plan.md](known-limits-plan.md) | Browser tests in CI | chore | partial | the accessibility gate runs in Chrome in CI | the whole e2e suite there, once stable (it runs here, 24 minutes) |
 | [speech-model.md](speech-model.md) | Secure aggregation | security | inherent | clipping, noise, digest-pinned loader | the aggregator sees each clipped, noised update; secure aggregation is not built |
 
@@ -155,11 +153,11 @@ Server and security table: every code item is done (passkey backlog 1 to 5, limi
 
 Earlier plan: nothing is partial; Encryption and passkeys is blocked on the audit and the witnesses.
 
-Found in the other docs: 15 rows, 13 open, 1 partial (browser tests in CI), 1 inherent (secure aggregation).
+Found in the other docs: 13 rows, 10 open, 1 partial (browser tests in CI), 2 inherent (secure aggregation, case in Markdown).
 
 ## Suggested order for the next work
 
-1. The rows under "Found in the other docs": the small ones first (the fix for multi-cursor at a break offset, metrics for the last paths, the MIME type and magic entry, the Markdown write-back, the public offer's report tool), then footnotes that push text, outline collapse, the surfaces the hub does not share yet.
+1. The rows under "Found in the other docs": the small ones first (the public offer's report tool), then footnotes that push text, outline collapse, the surfaces the hub does not share yet.
 2. The large ones need a design first: linked text frames, form fields, table formulas, the map and flowchart objects, scripting plug-ins.
 3. Everything in "What is blocked on a person" waits for people: the screen-reader and IME runs, the native review of the pt, ar and he packs, the outside audit, a mail provider, the terms text, real-service runs and independent witnesses.
 

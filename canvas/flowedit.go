@@ -149,7 +149,15 @@ func (f *TextFlow) Slice(from, to int) []Item {
 func (f *TextFlow) Replace(edits []Edit) {
 	f.materialize()
 	es := slices.Clone(edits)
-	slices.SortFunc(es, func(a, b Edit) int { return b.From - a.From }) // last first
+	slices.SortStableFunc(es, func(a, b Edit) int { // last first; at one offset the side behind the breaks is later
+		if a.From == b.From && a.AfterOps != b.AfterOps {
+			if a.AfterOps {
+				return -1
+			}
+			return 1
+		}
+		return b.From - a.From
+	})
 	for _, e := range es {
 		f.replaceRange(e.From, e.To, e.Items, e.AfterOps)
 	}

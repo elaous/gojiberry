@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/docfile/pack"
 	"github.com/elaous/gojiberry/docstore"
 	"strings"
 )
@@ -115,7 +116,7 @@ func (s *Session) DownloadPack(ctx context.Context, folder string) error {
 	if err != nil {
 		return storageFull(err)
 	}
-	s.Deliver(safeName(name)+".opendoc", "application/vnd.opendocs.pack", buf.Bytes())
+	s.Deliver(safeName(name)+".opendoc", pack.MIME, buf.Bytes())
 	line := msg("saver.packDownloaded", "%s downloaded as a pack of %d documents", name, n)
 	if left > 0 {
 		line += " " + msg("saver.packLeftOut", "(%d confidential documents left out: they need a key)", left)

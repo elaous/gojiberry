@@ -1,0 +1,6 @@
+# file(1) magic for the .opendoc pack (docs/opendoc-format.md): put it in /etc/magic or compile it with
+# `file -C -m opendoc.magic`.
+0	string	OPENDOC\000	OpenDocs pack
+!:mime	application/vnd.opendocs.pack
+!:ext	opendoc
+>8	lelong	x	\b, version %d
