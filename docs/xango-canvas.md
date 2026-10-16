@@ -181,7 +181,7 @@ the canvas is just another element in the DOM tree:
 </div>
 ```
 
-`CanvasView` renders a `<canvas>` (plus the hidden input the canvas needs for
+`CanvasView` (built as `canvas/xango.View`: `NewView`, `Render`) renders a `<canvas>` (plus the hidden input the canvas needs for
 the keyboard) and mounts its child tree with `canvas/xango`. Both trees re-render
 from the same state, so choosing a font in the DOM selector re-renders the
 canvas, and typing on the canvas updates the DOM controls.

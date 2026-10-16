@@ -354,6 +354,7 @@ func (e *tableElem) Update(c *Context, props any, _ []xango.Node) (bool, error) 
 	e.last = p
 	v := e.v
 	v.OnChange = p.OnChange
+	v.RenderCell = p.RenderCell
 	if !first && (!reflect.DeepEqual(p.Cells, old.Cells) || !reflect.DeepEqual(p.Merges, old.Merges) || !reflect.DeepEqual(p.Styles, old.Styles)) {
 		v.Table = newTable(p)
 		changed = true

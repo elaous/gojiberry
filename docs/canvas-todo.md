@@ -99,6 +99,10 @@ in the selector is downloaded into the store the first time the text uses it
 
 ## Done since this list was written
 
+- **Table cell render prop and `CanvasView`**: `TableView.RenderCell` / xango `Table` `RenderCell` draw the content of a cell (a bar, an icon);
+  `canvas/xango.View` (`NewView`, `Render`, `Find`) puts a canvas with a canvas/xango tree inside an ordinary page, with a visually hidden text
+  copy beside it for screen readers and for a page read without the canvas (`examples/canvas-view-demo`).
+
 - **Footnotes**: a page gives its notes the room they need (up to 40 % of the page, `TextFlow.FootnoteBand` to change it) and the text
   above gives way, so a mark and the start of its note stay on one page; a note that does not fit goes on at the foot of the next page;
   nothing is cut with an ellipsis. A note is at most `MaxFootnoteRunes` (1000) characters; the dialog it is typed in
@@ -140,4 +144,3 @@ Asked for, not started:
 - **Map object** (OpenStreetMap tiles) and **flowcharts** as canvas objects.
 - Comments: notifications for mentions.
 - Markdown: case and small caps have no Markdown form (the format has no syntax for them; a limit of Markdown).
-- Table cell render prop for the xango `Table`, and `CanvasView` (a DOM component that mounts a `canvas/xango` tree).

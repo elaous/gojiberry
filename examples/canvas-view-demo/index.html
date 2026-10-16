@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Canvas view in a page</title>
+  <script src="wasm_exec.js"></script>
+</head>
+<body>
+  <h1>A canvas inside a page</h1>
+  <p>The table below is drawn on a canvas by a canvas/xango tree; its "Done" column is drawn by a cell render prop. A text copy of it follows for readers that cannot see the canvas.</p>
+  <div id="host"></div>
+  <p id="state">(pending)</p>
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((r) => go.run(r.instance));
+  </script>
+</body>
+</html>

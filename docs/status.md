@@ -134,7 +134,6 @@ the row into a table above. Nothing here is partly built except where "Present" 
 | canvas-todo.md | Map object and flowcharts | feature | open | none | both as canvas objects |
 | canvas-todo.md | Mention notifications | feature | open | mentions in comments | telling the person mentioned (needs a delivery channel the host chooses) |
 | canvas-todo.md | Markdown form for case and small caps | enhancement | inherent | tables, rules and pictures with an address are written back | Markdown has no syntax for case or small caps |
-| canvas-todo.md | xango `Table` cell render prop and `CanvasView` | feature | open | `Table`, `Canvas` | a render prop per cell; a DOM component that mounts a `canvas/xango` tree (with a hidden text fallback for screen readers and no-wasm pages, [xango-canvas.md](xango-canvas.md)) |
 | [opendocs-missing-features.md](opendocs-missing-features.md), [opendocs-port-plan.md](opendocs-port-plan.md) | Form fields, table formulas, scripting plug-ins | feature | open | none in Go code (checked by search) | all three. The two docs are older than the code: their other rows (margins, snippets, mentions, tags, signed documents, dictation) need a row-by-row re-check before anyone trusts "Missing" there |
 | opendocs port plan | Linked text frames | feature | closed | columns of any widths (`ColumnConfig`), grips to drag a column's width, equal widths by default, floating text boxes (`FloatingText`) | decided against: what linked frames were for (unequal columns the person can change) is the column grips plus `Reset column widths` (Edit > Columns); a frame the text flows through from one box to another is not needed for documents of this kind. Reopen only for page-layout work (magazine pages) |
 | [repo-split.md](repo-split.md) | Split the repository | chore | open | the import graph read; tiers and an order proposed | the licence decision, then modules in place (`xango` + `domrt`, `observe`, `crdt`, the language tools), then the repositories; needs the owner's answer on opendocs' editor model |
@@ -165,7 +164,7 @@ Server and security table: every code item is done (passkey backlog 1 to 5, limi
 
 Earlier plan: nothing is partial; Encryption and passkeys is blocked on the audit and the witnesses.
 
-Found in the other docs: 14 rows, 10 open, 2 inherent, 1 closed, 1 partial.
+Found in the other docs: 13 rows, 9 open, 2 inherent, 1 closed, 1 partial.
 
 ## Suggested order for the next work
 

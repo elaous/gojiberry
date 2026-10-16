@@ -60,6 +60,12 @@ type TableView struct {
 	// contents or shape (typing, adding a row or column).
 	OnChange func(*Table)
 
+	// RenderCell, if set, is asked to draw the content of each cell: its row and column, its text and the cell's
+	// rectangle (the background and the grid are already drawn, and the font and colour are those of the cell).
+	// Returning true says it drew the content; false lets the table write the text as usual. A cell being edited is
+	// always drawn by the table.
+	RenderCell func(p Painter, row, col int, text string, x, y, w, h float64) bool
+
 	// OnDeleteTable, if set, adds a "Delete table" item to the table
 	// handle's menu and is called when it's chosen. The view can't
 	// delete itself, so removing it from the page is up to the caller.
@@ -642,6 +648,10 @@ func (v *TableView) Draw() {
 			p.SetFont(v.cellFont(r, st))
 			p.SetFillStyle(orStr(st.Color, s.TextColor))
 			text := t.Cells[r][c]
+			if v.RenderCell != nil && (v.mode != ModeEdit || !v.editing || v.row != r || v.col != c) && v.RenderCell(p, r, c, text, x, y, w, h) {
+				p.SetTextAlign("left")
+				continue
+			}
 			switch st.Align {
 			case AlignCenter:
 				p.SetTextAlign("center")
