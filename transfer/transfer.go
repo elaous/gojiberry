@@ -18,7 +18,9 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"path"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -187,8 +189,119 @@ func (markdown) Import(b []byte) (docfile.Document, error) {
 		return docfile.Document{}, errors.New("transfer: the Markdown file is not UTF-8 text")
 	}
 	src := strings.TrimPrefix(string(b), "\ufeff")
+	src, notes := takeFootnotes(src)
 	md := canvas.Markdown{Images: dataImage}
-	return docfile.Document{Title: firstHeading(src), Content: docfile.FromItems(md.Transform(src))}, nil
+	d := docfile.Document{Title: firstHeading(src), Content: markFootnotes(docfile.FromItems(md.Transform(src)), notes)}
+	for _, n := range notes.list {
+		d.Footnotes = append(d.Footnotes, docfile.Footnote{ID: n.id, Text: n.text})
+	}
+	return d, nil
+}
+
+// Footnotes in Markdown: a reference [^label] in the text and a definition "[^label]: the note" on a line of its own
+// (indented lines after it continue the note). Each reference with a definition becomes a footnote mark, numbered by
+// the order of the references; a reference with no definition stays as the text it was.
+const (
+	noteOpen  = "\ue000"
+	noteClose = "\ue001"
+)
+
+var (
+	reNoteDef = regexp.MustCompile(`^\[\^([^\]\s]+)\]:[ \t]*(.*)$`)
+	reNoteRef = regexp.MustCompile(`\[\^([^\]\s]+)\]`)
+)
+
+type mdNote struct{ id, text string }
+
+type mdNotes struct {
+	defs map[string]string
+	list []mdNote // in the order the references come
+}
+
+// takeFootnotes removes the definitions from the source and returns it with the references marked.
+func takeFootnotes(src string) (string, *mdNotes) {
+	n := &mdNotes{defs: map[string]string{}}
+	lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
+	var kept []string
+	fenced := false
+	for i := 0; i < len(lines); i++ {
+		l := lines[i]
+		if t := strings.TrimSpace(l); strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
+			fenced = !fenced
+		}
+		if m := reNoteDef.FindStringSubmatch(l); m != nil && !fenced {
+			text := strings.TrimSpace(m[2])
+			for i+1 < len(lines) && (strings.HasPrefix(lines[i+1], "    ") || strings.HasPrefix(lines[i+1], "\t")) {
+				i++
+				text += " " + strings.TrimSpace(lines[i])
+			}
+			n.defs[m[1]] = strings.TrimSpace(text)
+			continue
+		}
+		kept = append(kept, l)
+	}
+	if len(n.defs) == 0 {
+		return src, n
+	}
+	seen := map[string]string{} // the label's footnote id in the document: n1, n2, ... by order of reference
+	fenced = false
+	for i, l := range kept {
+		if t := strings.TrimSpace(l); strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
+			fenced = !fenced
+			continue
+		}
+		if fenced {
+			continue // code is not read for notes
+		}
+		kept[i] = reNoteRef.ReplaceAllStringFunc(l, func(ref string) string {
+			id := reNoteRef.FindStringSubmatch(ref)[1]
+			text, ok := n.defs[id]
+			if !ok {
+				return ref
+			}
+			if _, ok := seen[id]; !ok { // a note referred to twice is one note
+				seen[id] = "n" + strconv.Itoa(len(n.list)+1)
+				n.list = append(n.list, mdNote{seen[id], text})
+			}
+			return noteOpen + seen[id] + noteClose
+		})
+	}
+	out := strings.Join(kept, "\n")
+	return out, n
+}
+
+// markFootnotes turns the markers left in the text into footnote marks.
+func markFootnotes(items []docfile.Item, n *mdNotes) []docfile.Item {
+	if len(n.list) == 0 {
+		return items
+	}
+	var out []docfile.Item
+	for _, it := range items {
+		if it.Chars == nil || !strings.Contains(it.Chars.Text, noteOpen) {
+			out = append(out, it)
+			continue
+		}
+		rest := it.Chars.Text
+		for {
+			i := strings.Index(rest, noteOpen)
+			if i < 0 {
+				break
+			}
+			j := strings.Index(rest[i:], noteClose)
+			if j < 0 {
+				break
+			}
+			if i > 0 {
+				out = append(out, docfile.Item{Chars: &docfile.Chars{Text: rest[:i], Format: it.Chars.Format}})
+			}
+			out = append(out, docfile.Item{Footnote: &docfile.FootnoteMark{ID: rest[i+len(noteOpen) : i+j]}})
+			rest = rest[i+j+len(noteClose):]
+		}
+		if rest != "" {
+			out = append(out, docfile.Item{Chars: &docfile.Chars{Text: rest, Format: it.Chars.Format}})
+		}
+	}
+	return out
 }
 
 // firstHeading is the text of the first "# " heading outside a code fence.
@@ -261,4 +374,48 @@ func (text) Export(d docfile.Document) ([]byte, error) {
 		}
 	}
 	return []byte(sb.String()), nil
+}
+
+// MarkdownSkipped counts what a Markdown file holds that Import leaves out or only keeps as text.
+type MarkdownSkipped struct {
+	RemoteImages int // pictures given by an address that is not a data: URL (not fetched; their alternative text stays)
+	CellMarks    int // table cells whose emphasis, code or links are shown as plain text (a cell holds text only)
+	HTML         int // lines with HTML tags, which are shown as the text they are
+}
+
+var (
+	reMDImage = regexp.MustCompile(`!\[[^\]]*\]\(([^)\s]+)`)
+	reMDHTML  = regexp.MustCompile(`</?[A-Za-z][A-Za-z0-9]*(\s[^>]*)?/?>`)
+)
+
+// InspectMarkdown counts what Import leaves out of a Markdown file (code blocks are not read).
+func InspectMarkdown(data []byte) MarkdownSkipped {
+	var s MarkdownSkipped
+	fenced := false
+	for _, line := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
+		if t := strings.TrimSpace(line); strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
+			fenced = !fenced
+			continue
+		}
+		if fenced {
+			continue
+		}
+		for _, m := range reMDImage.FindAllStringSubmatch(line, -1) {
+			if !strings.HasPrefix(m[1], "data:image/") {
+				s.RemoteImages++
+			}
+		}
+		if reMDHTML.MatchString(line) {
+			s.HTML++
+		}
+		if t := strings.TrimSpace(line); strings.HasPrefix(t, "|") {
+			// a table row: the cells that have marks
+			for _, c := range strings.Split(strings.Trim(t, "|"), "|") {
+				if c = strings.TrimSpace(c); strings.TrimLeft(c, ":-") != "" && canvas.StripMarkdown(c) != c {
+					s.CellMarks++
+				}
+			}
+		}
+	}
+	return s
 }

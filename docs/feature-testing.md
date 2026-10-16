@@ -144,7 +144,9 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **You should see.** A table with the header and 6 in the last cell; the switch shows f(x) and the cell shows `=A2*2`; pressing it again shows the eye and 6. A row with fewer cells, or no row of dashes, stays text.
 
-**Automated.** `TestEnterAfterThreeMarkdownTableLinesMakesATable`, `TestFormulaSwitchInTheTopRightCorner` (canvas), `TestMarkdownImportTitleImagesAndFormulas` (transfer), `TestTypingAMarkdownTableMakesATable` (examples/canvas-editor-showcase)
+**Also try.** Import a `.md` file with `A claim[^1]` and `[^1]: The note.` (it comes in as a footnote) and a picture at an `https://` address (the Files tab says it was left out). In a table, put the caret in a cell and paste a Markdown table or cells copied from a spreadsheet.
+
+**Automated.** `TestMarkdownFootnotesBecomeFootnotes` (transfer), `TestMarkdownImportFidelityNamesWhatIsLeftOut` (export), `TestPasteIntoATableFillsCellsFromTheActiveOne` (canvas), `TestMarkdownImportSaysWhatItLeftOutAndKeepsItsFootnotes` (showcase), `TestEnterAfterThreeMarkdownTableLinesMakesATable`, `TestFormulaSwitchInTheTopRightCorner` (canvas), `TestMarkdownImportTitleImagesAndFormulas` (transfer), `TestTypingAMarkdownTableMakesATable` (examples/canvas-editor-showcase)
 
 ## References
 

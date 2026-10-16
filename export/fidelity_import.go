@@ -4,6 +4,7 @@ import (
 	"github.com/elaous/gojiberry/docximport"
 	"github.com/elaous/gojiberry/htmlimport"
 	"github.com/elaous/gojiberry/odtimport"
+	"github.com/elaous/gojiberry/transfer"
 )
 
 // Features that only an import can lose: what a file written by another program holds and the editor has no
@@ -23,10 +24,13 @@ const (
 	FeatForm        Feature = "form"
 	FeatFrame       Feature = "frame"
 	FeatRemoteImage Feature = "remote-image"
+	// What Markdown holds that a document has no place for.
+	FeatCellFormat Feature = "cell-format"
+	FeatRawHTML    Feature = "raw-html"
 )
 
 // ImportFormats are the formats ImportFidelity can report on.
-var ImportFormats = []string{"docx", "html", "odt", "pdf"}
+var ImportFormats = []string{"docx", "html", "odt", "pdf", "markdown"}
 
 // ImportFidelity reports what importing a file of this format would leave out of the document, from the file
 // itself: for a Word file the elements Import has no place for (counted by docximport.Inspect), for a PDF
@@ -38,6 +42,19 @@ func ImportFidelity(format string, data []byte) Report {
 	case "pdf":
 		r.Known = true
 		r.Losses = []Loss{{Feature: FeatLayout, Treatment: Dropped, Note: NoteText}}
+	case "markdown":
+		s := transfer.InspectMarkdown(data)
+		r.Known = true
+		for _, l := range []Loss{
+			{Feature: FeatRemoteImage, Count: s.RemoteImages, Note: "pictures on a server are not fetched"},
+			{Feature: FeatCellFormat, Count: s.CellMarks, Note: NoteText},
+			{Feature: FeatRawHTML, Count: s.HTML, Note: NoteText},
+		} {
+			if l.Count > 0 {
+				l.Treatment = Dropped
+				r.Losses = append(r.Losses, l)
+			}
+		}
 	case "html":
 		s, err := htmlimport.Inspect(data)
 		if err != nil {

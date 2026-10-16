@@ -100,7 +100,7 @@ Type a header row, the row of dashes under it and one row of cells with the same
 | a | b |
 ```
 
-Cells keep what you typed, so `| 3 | =A1*2 |` is a formula. A table has a switch at its top right corner, an eye while values are shown and f(x) while formulas are, and its column and row grips carry the letters and numbers formulas use. Whole Markdown files can be imported from the Files tab.
+Cells keep what you typed, so `| 3 | =A1*2 |` is a formula. A table has a switch at its top right corner, an eye while values are shown and f(x) while formulas are, and its column and row grips carry the letters and numbers formulas use. Whole Markdown files can be imported from the Files tab, with their footnotes (`[^1]` and `[^1]: the note`) and pictures given as data addresses; the import says what it left out (pictures on a server are never fetched, formatting inside table cells is shown as text). Pasting a Markdown table, or cells copied from a spreadsheet, into a table fills the cells from the one you are in and adds the rows and columns it needs.
 
 ## References
 

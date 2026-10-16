@@ -762,3 +762,41 @@ func TestFormulaTooltipAndColours(t *testing.T) {
 		t.Fatal("the dark style has its own colours")
 	}
 }
+
+func TestPasteIntoATableFillsCellsFromTheActiveOne(t *testing.T) {
+	p := &fakePainter{}
+	v := NewTableView(NewTableFrom([][]string{{"A", "B"}, {"c", "d"}}), p)
+	v.SetMode(ModeEdit)
+	g := v.layout()
+	cx, cy, cw, ch := g.cellRect(v.Table, 1, 0)
+	v.MouseDown(cx+cw/2, cy+ch/2) // the cell of the second row, first column
+	if !v.PasteText("| Qty | Total |\n|---|--:|\n| 3 | =A3*2 |") {
+		t.Fatal("pasted")
+	}
+	tb := v.Table
+	if tb.Rows() != 3 || tb.Cols() != 2 || tb.Cell(1, 0) != "Qty" || tb.Cell(2, 0) != "3" || tb.Cell(2, 1) != "=A3*2" {
+		t.Fatalf("a Markdown table from the active cell, growing the rows: %q", tb.Cells)
+	}
+	if tb.Cell(0, 0) != "A" {
+		t.Fatal("cells above the active one are kept")
+	}
+	// cells from a spreadsheet, growing a column too
+	if !v.PasteText("x\ty\tz\n1\t2\t3\n") {
+		t.Fatal("pasted tab-separated")
+	}
+	if tb.Cols() != 3 || tb.Cell(1, 2) != "z" || tb.Cell(2, 0) != "1" {
+		t.Fatalf("tabs: %q", tb.Cells)
+	}
+	// plain text goes in as typing, on one line
+	v.HandleKey("End", false)
+	if !v.PasteText("end\nof it") || !strings.HasSuffix(tb.Cell(1, 0), "endof it") {
+		t.Fatalf("one line: %q", tb.Cell(1, 0))
+	}
+	// a formula cell held in the calculated view is not pasted over
+	tb.SetCell(0, 0, "=1+1")
+	v.editing = false
+	v.edit(0, 0)
+	if v.PasteText("zzz") || tb.Cell(0, 0) != "=1+1" {
+		t.Fatalf("the locked cell stays: %q", tb.Cell(0, 0))
+	}
+}
