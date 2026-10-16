@@ -340,6 +340,9 @@ func (b *odtBuilder) picture(blk Block) string {
 	if blk.ImageAlt != "" {
 		title = `<svg:title>` + esc(blk.ImageAlt) + `</svg:title>`
 	}
+	if c := imageCredit(blk); c != "" {
+		title += `<svg:desc>` + esc(c) + `</svg:desc>`
+	}
 	return fmt.Sprintf(`<draw:frame draw:name="Image%d" text:anchor-type="as-char" svg:width="%.3fin" svg:height="%.3fin"><draw:image xlink:href="%s" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/>%s</draw:frame>`,
 		b.imgs, win, hin, name, title)
 }
