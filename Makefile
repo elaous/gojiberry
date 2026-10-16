@@ -215,6 +215,7 @@ showcase-dist:
 feature-shots:
 	rm -rf docs/features/img
 	GOJIBERRY_FEATURE_SHOTS=$(abspath docs/features/img) GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -run TestFeatureShots ./examples/canvas-editor-showcase
+	GOJIBERRY_FEATURE_SHOTS=$(abspath docs/features/img) GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -run TestEndToEnd ./examples/canvas-table-demo
 
 # bench runs every Go benchmark in the module: buffer's own
 # GapBuffer-vs-naive-slice benchmarks (fast, native, no extra setup)

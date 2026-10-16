@@ -62,6 +62,12 @@ A footnote is typed in a small dialog with a counter of the characters left (lim
 
 Text can run in up to four columns from any paragraph on, with the space between them set (narrow, standard, wide). Drag the grip above a gap to change widths; **Reset column widths** (Edit > Columns) makes them equal again. A column break moves text to the next column.
 
+## Table styles
+
+![Table styles](features/img/table-styles.webp)
+
+Tables have cell formatting (background, colour, bold, alignment, merged cells) and, from the table's handle menu, **named table styles**: plain, bold header, blue or green header with banded rows, grey banded, banded with a bold first column. A style is applied in one step as cell formatting, so it is saved with the table, written by the exports that write cell shading, and can still be changed cell by cell; the menu marks the style the table is dressed in now.
+
 ## Two-page spread
 
 ![Two-page spread](features/img/spread.webp)

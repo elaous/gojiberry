@@ -83,6 +83,13 @@ func (v *TableView) tableMenu() []MenuItem {
 		{Label: check(v.Wrap, "Wrap text around"), Disabled: v.flow == nil, Action: func() { v.Wrap = !v.Wrap; v.sel = Selection{}; v.changed() }},
 	}
 	items = append(items, MenuItem{Separator: true})
+	cur := v.Table.SchemeOf()
+	for _, sc := range TableSchemes() {
+		sc := sc
+		items = append(items, MenuItem{Label: check(cur == sc.Name, "Table style: "+sc.Name), Swatch: sc.HeaderBG,
+			Action: v.apply(func(t *Table) { t.ApplyScheme(sc); v.sel = Selection{} })})
+	}
+	items = append(items, MenuItem{Separator: true})
 	items = append(items, v.cellMenu()...)
 	if v.OnDeleteTable != nil {
 		items = append(items,

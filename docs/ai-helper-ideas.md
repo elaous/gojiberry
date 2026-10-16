@@ -20,6 +20,7 @@ a few skills:
 | **Editor** | consistency of names, dates, numbers and terms; repeated words; long sentences; checks against a glossary |
 | **Translator** | translate with a glossary and keep the layout; explain a phrase |
 | **Tutor** | explain a passage; make questions about a text; check understanding |
+| **Designer** | format the text of a document or a selection (headings, lists, emphasis, spacing) the way the person describes it; pick fonts and pairings for the document's purpose; create and edit named styles and theme colours; dress a table in a table style. Every change is made through the same commands the menus run, as a suggestion the person accepts, and can be undone in one step |
 | **Accessibility** | draft alt text and long descriptions (today: a draft made on the device, never automatic), reading-order and plain-language checks |
 | **Planner** | break a long document into sections and a schedule; track the writing goals the person sets (from the writing metrics, once they exist) |
 
