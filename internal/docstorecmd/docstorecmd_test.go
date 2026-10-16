@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -721,5 +722,40 @@ func TestParseWitnesses(t *testing.T) {
 		if _, err := parseWitnesses(bad); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
+	}
+}
+
+func TestWithDictionariesServesTheDirectory(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "fr_FR"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"fr_FR.aff": "SET UTF-8\n", "fr_FR.dic": "1\nbonjour\n"} {
+		if err := os.WriteFile(filepath.Join(dir, "fr_FR", name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	srv := docstore.NewServer(docstore.NewMemoryAdapter(), "memory")
+	if on, err := withDictionaries(srv, ""); on || err != nil {
+		t.Fatalf("off when unset: %v %v", on, err)
+	}
+	if on, err := withDictionaries(srv, dir); !on || err != nil {
+		t.Fatalf("%v %v", on, err)
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	for path, want := range map[string]string{"/dict/index.json": `"lang":"fr_FR"`, "/dict/fr_FR.dic": "bonjour"} {
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != 200 || !strings.Contains(string(b), want) {
+			t.Errorf("%s: %d %s", path, resp.StatusCode, b)
+		}
+	}
+	if _, err := withDictionaries(srv, filepath.Join(dir, "nope")); err == nil {
+		t.Error("a directory that cannot be read is an error")
 	}
 }

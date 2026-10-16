@@ -46,6 +46,13 @@ type Dictionary struct {
 	words  map[string]struct{}
 	once   sync.Once
 	sorted []string // the words in order, built when first needed for completion
+
+	// What a dictionary read with LoadHunspell adds (see hunspell_ext.go); all nil for the others.
+	compound  *compoundData
+	forbidden map[string]struct{}
+	try       []rune // the language's letters, for suggestions
+	rep       []hunspellRep
+	keys      [][]rune // keyboard rows
 }
 
 // New returns a dictionary of words (lower-cased).
@@ -72,7 +79,8 @@ func FromWordList(text string) *Dictionary {
 
 // FromHunspell reads a Hunspell dictionary: dic is the .dic file's text and
 // aff the .aff's. Single-level prefix and suffix rules are expanded; compounding
-// and cross-product prefix+suffix forms are not.
+// and cross-product prefix+suffix forms are not (the embedded English dictionary is read this way, which keeps its
+// memory down). LoadHunspell reads the rest of the format, for the dictionary of another language.
 func FromHunspell(dic, aff string) *Dictionary {
 	return &Dictionary{words: ExpandHunspellDictionary(dic, aff)}
 }
@@ -115,8 +123,15 @@ func (d *Dictionary) Len() int { return len(d.words) }
 
 // Has reports whether the lower-case word is in the dictionary.
 func (d *Dictionary) Has(lower string) bool {
-	_, ok := d.words[lower]
-	return ok
+	if d.forbidden != nil {
+		if _, no := d.forbidden[lower]; no {
+			return false
+		}
+	}
+	if _, ok := d.words[lower]; ok {
+		return true
+	}
+	return d.compound != nil && d.compound.isCompound(lower)
 }
 
 // WithPrefix returns up to max known words that start with the lower-case prefix and are longer than it,
@@ -250,16 +265,34 @@ func (c *Checker) Suggest(word string, max int) []string {
 	}
 	found := map[string]int{}
 	score := func(e string, kind int) int { return kind*100 + commonPrefix(lower, e) + commonSuffix(lower, e) }
-	for _, e := range edits1(lower) {
+	letters := c.letters()
+	for _, e := range edits1With(lower, letters) {
 		if c.Known(e.s) {
 			if sc := score(e.s, e.kind); sc > found[e.s] {
 				found[e.s] = sc
 			}
 		}
 	}
+	// What the language's own dictionary knows about typos: its common mistakes (REP) and its keyboard (KEY).
+	if c.Dict != nil {
+		for _, s := range c.Dict.repCandidates(lower) {
+			if c.Known(s) {
+				if sc := score(s, editRep); sc > found[s] {
+					found[s] = sc
+				}
+			}
+		}
+		for _, s := range c.Dict.keyCandidates(lower) {
+			if c.Known(s) {
+				if sc := score(s, editKey); sc > found[s] {
+					found[s] = sc
+				}
+			}
+		}
+	}
 	if len(found) == 0 {
-		for _, e1 := range edits1(lower) {
-			for _, e2 := range edits1(e1.s) {
+		for _, e1 := range edits1With(lower, letters) {
+			for _, e2 := range edits1With(e1.s, letters) {
 				if c.Known(e2.s) {
 					found[e2.s] = score(e2.s, 0)
 				}
@@ -338,12 +371,86 @@ const (
 	editInsert        // the word lacks a letter
 	editSub           // the word has a wrong letter
 	editSwap          // two neighbouring letters are swapped
+	editKey           // a letter next to the right one on the keyboard (KEY)
+	editRep           // a common mistake of the language (REP)
 )
 
 // edits1 is every string one deletion, swap of neighbours, substitution or
 // insertion away from word (Peter Norvig's spelling corrector).
-func edits1(word string) []edit {
-	const letters = "abcdefghijklmnopqrstuvwxyz'"
+const latinLetters = "abcdefghijklmnopqrstuvwxyz'"
+
+// letters is the alphabet suggestions are made from: the dictionary's own (TRY) with the apostrophe, else Latin.
+func (c *Checker) letters() string {
+	if c.Dict != nil && len(c.Dict.try) > 0 {
+		s := string(c.Dict.try)
+		if !strings.ContainsRune(s, '\'') {
+			s += "'"
+		}
+		return s
+	}
+	return latinLetters
+}
+
+// repCandidates are the words a REP line makes of word: the mistake replaced, once, wherever it is (^ and $
+// pin it to the start or the end).
+func (d *Dictionary) repCandidates(word string) []string {
+	var out []string
+	for _, r := range d.rep {
+		from, to := strings.ToLower(r.From), strings.ToLower(r.To)
+		switch {
+		case strings.HasPrefix(from, "^") && strings.HasSuffix(from, "$"):
+			if word == from[1:len(from)-1] {
+				out = append(out, to)
+			}
+		case strings.HasPrefix(from, "^"):
+			if f := from[1:]; strings.HasPrefix(word, f) {
+				out = append(out, to+word[len(f):])
+			}
+		case strings.HasSuffix(from, "$"):
+			if f := from[:len(from)-1]; strings.HasSuffix(word, f) {
+				out = append(out, word[:len(word)-len(f)]+to)
+			}
+		default:
+			for i := 0; ; {
+				j := strings.Index(word[i:], from)
+				if j < 0 {
+					break
+				}
+				out = append(out, word[:i+j]+to+word[i+j+len(from):])
+				i += j + len(from)
+			}
+		}
+	}
+	return out
+}
+
+// keyCandidates are the words with one letter replaced by a neighbour on the same keyboard row (KEY).
+func (d *Dictionary) keyCandidates(word string) []string {
+	if len(d.keys) == 0 {
+		return nil
+	}
+	rs := []rune(word)
+	var out []string
+	for i, r := range rs {
+		for _, row := range d.keys {
+			for k, kr := range row {
+				if kr != r {
+					continue
+				}
+				for _, n := range []int{k - 1, k + 1} {
+					if n >= 0 && n < len(row) {
+						c := append([]rune(nil), rs...)
+						c[i] = row[n]
+						out = append(out, string(c))
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+func edits1With(word, letters string) []edit {
 	rs := []rune(word)
 	n := len(rs)
 	out := make([]edit, 0, 54*n+26)

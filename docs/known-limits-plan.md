@@ -21,19 +21,30 @@ order it should land in.
    align through the cell menu; undo; collaboration of a styled table between
    two clients. Lives with the other e2e tests (see C).
 3. **Columns e2e (S). Done:** every column command, the caret put back in the text between menu uses.
-4. **i18n breadth (M).** Move the remaining hard-coded strings (canvas context
+4. **i18n breadth (M). Done** (roadmap 83: packs for de, fr, es, pt, he, ar and a test that every `T()` id is in the packs). Move the remaining hard-coded strings (canvas context
    menus, collab/presence, saver errors, spell/language panels) into the
    catalog; add a test that fails on any `T()` id missing from `en`/`es`/`fr`/`de`.
-5. **Right-to-left (L).** Bidi text shaping already exists per run; add
+5. **Right-to-left (L). Done** (roadmap 64 and 83: paragraph direction, mirrored alignment and caret movement, mirrored UI, the Arabic and Hebrew packs, the browser tests that type RTL text). Bidi text shaping already exists per run; add
    paragraph direction, mirrored alignment and caret movement, mirrored UI
    (`dir=rtl` already set on `<html>`; audit CSS for `left/right`). Needs an
    Arabic/Hebrew pack and an e2e that types RTL text.
-6. **Accessibility depth (M).** Roving focus in menus and toolbars, focus
+6. **Accessibility depth (M). Done** (roadmap 48, 50, 51, 59, 65, 66, 69: one keyboard model per widget, focus return, live regions for collaboration, high-contrast and reduced-motion settings, keys-only run of the whole editor, axe-core as a release gate). Roving focus in menus and toolbars, focus
    return after dialogs, `aria-live` for collab join/leave, high-contrast and
    reduced-motion CSS, a keyboard path for every pointer-only action.
-7. **Hunspell breadth (M).** Dictionaries beyond embedded en_US: load `.aff`/
-   `.dic` on demand (fontserver-style), with morphology flags beyond the
-   supported subset (compound rules, `REP`, `KEY`).
+7. **Hunspell breadth (M). Done.** Dictionaries beyond embedded en_US load on demand, with the morphology flags
+   beyond the single-level subset. `spell.LoadHunspell` reads the whole of what another language needs: the character
+   set the `.aff` names (`SET`: UTF-8 and the usual ISO 8859, KOI8 and Windows ones), cross-product prefix+suffix
+   forms, `FLAG num`, compounding (`COMPOUNDFLAG`, `COMPOUNDBEGIN/MIDDLE/END`, `COMPOUNDMIN`, `COMPOUNDRULE` with `*`
+   and `?`), `NEEDAFFIX`, `FORBIDDENWORD`, and for suggestions the language's letters (`TRY`), its common mistakes
+   (`REP`, with `^` and `$` anchors) and its keyboard (`KEY`); a word limit stops a hostile dictionary. `spell.Remote`
+   lists, resolves ("de-AT" to `de_AT`, else the first `de_*`) and loads a dictionary once from a server;
+   `spell/dictserver` is that server over a directory of the dictionaries the operator hosts
+   (`GOJIBERRY_DOCSTORE_DICTIONARIES=dir` mounts it at `/dict/`; ETag, a day's cache, files kept as `.gz` sent
+   compressed). The showcase's Spelling tab offers the dictionaries the server has (`?dictapi=` or `/dict/` on its own
+   origin) and loads the one chosen. The embedded English stays single-level (it keeps the browser's memory down).
+   Not done: `ICONV`/`OCONV`, `BREAK`, `COMPOUNDSYLLABLE` and the other compound checks (`CHECKCOMPOUNDDUP`, ...),
+   affixes on compound parts, `KEEPCASE`; and no dictionaries are shipped, because their licences are their own
+   (LibreOffice's dictionaries are GPL, LGPL, MPL and others by language): the operator chooses what to host.
 8. **WS role edge cases (S). Done:** read limit four times `MaxBody`, at most 1 MiB over it, `Config.TrustForwardedHost` for proxies.
 
 9. **Review leftovers.** Done: catalog updates are conditional (`docstore.ConditionalAdapter`, `SaveIf` with a content digest; two processes on a SQLite, file, memory or HTTP store lose nothing, others write as before), the WebSocket read limit, the proxy `Host`,

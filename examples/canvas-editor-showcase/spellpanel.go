@@ -3,10 +3,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"slices"
 	"strings"
 	"syscall/js"
+	"time"
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/components"
@@ -25,6 +27,89 @@ type spellState struct {
 	spans   []canvas.Match
 	text    string // the text the spans were found in
 	words   []components.SpellItem
+
+	// Dictionaries beyond English come from a server on demand (spell.Remote, spell/dictserver).
+	remote  *spell.Remote
+	offered []spell.Language // what the server has; nil until asked, empty if it has none
+	asked   bool
+	dict    string // the dictionary in use: "en" or a name from offered
+	note    string
+	failed  bool
+}
+
+// dictionaryServer is the address of the dictionary server: ?dictapi= when it is this origin or a loopback host,
+// else /dict/ on the page's own origin.
+func dictionaryServer() string {
+	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
+	if q.Call("has", "dictapi").Bool() {
+		if b := pageEndpoint(strings.TrimSpace(q.Call("get", "dictapi").String())); b != "" {
+			return strings.TrimSuffix(b, "/")
+		}
+	}
+	return js.Global().Get("location").Get("origin").String() + "/dict"
+}
+
+// askDictionaries finds out which dictionaries the server has (once); nothing is shown if it has none.
+func (u *ui) askDictionaries(renderUI func()) {
+	s := &u.spell
+	if s.asked {
+		return
+	}
+	s.asked = true
+	s.remote = &spell.Remote{BaseURL: dictionaryServer()}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		langs, err := s.remote.Languages(ctx)
+		if err != nil || len(langs) == 0 {
+			s.offered = []spell.Language{}
+		} else {
+			s.offered = langs
+		}
+		renderUI()
+	}()
+}
+
+// dictionaryName is how a dictionary is shown to people.
+func (s *spellState) dictionaryName(name string) string {
+	if name == "" || name == "en" {
+		return lang.Names["en"]
+	}
+	for _, l := range s.offered {
+		if l.Lang == name && l.Name != "" {
+			return l.Name
+		}
+	}
+	return name
+}
+
+// chooseDictionary switches the checker to the English dictionary or loads one from the server.
+func (u *ui) chooseDictionary(name string, again, renderUI func()) {
+	s := &u.spell
+	if s.checker == nil {
+		return
+	}
+	s.failed = false
+	if name == "en" {
+		s.checker.Dict, s.dict, s.note = spell.English(), "en", ""
+		again()
+		return
+	}
+	s.note = T("spell.loadingDict", "Loading the dictionary %s…", s.dictionaryName(name))
+	renderUI()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		d, err := s.remote.Load(ctx, name)
+		if err != nil {
+			s.failed = true
+			s.note = T("spell.dictFailed", "The dictionary %s could not be loaded: %s", s.dictionaryName(name), err.Error())
+			renderUI()
+			return
+		}
+		s.checker.Dict, s.dict, s.note = d, name, ""
+		again()
+	}()
 }
 
 func loadCustomWords() []string {
@@ -119,8 +204,25 @@ func spellPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func()
 			detected = lang.Names[code]
 		}
 	}
+	if s.enabled {
+		u.askDictionaries(renderUI)
+	}
+	dicts := []components.DocChoice{{Name: "en", Label: lang.Names["en"]}}
+	for _, l := range s.offered {
+		label := l.Name
+		if label == "" {
+			label = l.Lang
+		}
+		dicts = append(dicts, components.DocChoice{Name: l.Lang, Label: label})
+	}
+	current := s.dict
+	if current == "" {
+		current = "en"
+	}
 	return components.SpellPanel(components.SpellPanelProps{
-		Enabled: s.enabled, Language: lang.Names["en"], Detected: detected, Items: s.words,
+		Dictionaries: dicts, Dictionary: current, DictionaryNote: s.note, DictionaryFailed: s.failed,
+		OnDictionary: func(name string) { u.chooseDictionary(name, again, renderUI) },
+		Enabled:      s.enabled, Language: s.dictionaryName(current), Detected: detected, Items: s.words,
 		ReadOnly: !state.Role.CanEdit() || state.Mode == canvas.ModeView,
 		OnToggle: func(on bool) {
 			if on {

@@ -2940,6 +2940,16 @@ type SpellPanelProps struct {
 	// OnIgnore leaves the word alone for now; OnAdd adds it to the user's own
 	// dictionary; OnGoto selects its first occurrence.
 	OnIgnore, OnAdd, OnGoto func(word string)
+
+	// Dictionaries are the dictionaries to choose from (the English one built in, and those a server offers),
+	// Dictionary the one in use and OnDictionary the choice; fewer than two leave the choice out.
+	// DictionaryNote says what is going on ("Loading the German dictionary…") or why a load failed
+	// (DictionaryFailed), as a status line.
+	Dictionaries     []DocChoice
+	Dictionary       string
+	OnDictionary     func(name string)
+	DictionaryNote   string
+	DictionaryFailed bool
 }
     SpellPanelProps configures SpellPanel. It is controlled: the caller checks
     the text (package spell) and feeds the result back.

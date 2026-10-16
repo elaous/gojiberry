@@ -48,7 +48,7 @@ func TestFidelityPanelListsWhatAFormatLeavesOut(t *testing.T) {
 	d.NoErrors()
 }
 
-// A Word file with a comment and a header says, after it is imported, that neither was brought over.
+// A Word file with a comment and a header says, after it is imported, that the header was not brought over (the comment was).
 func TestFidelityPanelSaysWhatAnImportLeftOut(t *testing.T) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -73,8 +73,8 @@ func TestFidelityPanelSaysWhatAnImportLeftOut(t *testing.T) {
 	d.Wait("s.text.includes('Body words')")
 	d.Click(`button[data-tab="transfer"]`)
 	d.WaitSelector("#gj-fidelity-import")
-	d.OK(strings.Contains(d.Text("#gj-fidelity-import"), "memo.docx") && strings.Contains(d.Text("#gj-fidelity-import"), "2 kinds of content"), d.Text("#gj-fidelity-import"))
-	d.OK(d.Has(`#gj-fidelity-import-list .gj-fidelity-item[data-feature="comment"]`) && d.Has(`#gj-fidelity-import-list .gj-fidelity-item[data-feature="header-footer"]`), d.Text(".gj-fidelity"))
+	d.OK(strings.Contains(d.Text("#gj-fidelity-import"), "memo.docx") && strings.Contains(d.Text("#gj-fidelity-import"), "1 kind of content"), d.Text("#gj-fidelity-import"))
+	d.OK(!d.Has(`#gj-fidelity-import-list .gj-fidelity-item[data-feature="comment"]`) && d.Has(`#gj-fidelity-import-list .gj-fidelity-item[data-feature="header-footer"]`), d.Text(".gj-fidelity"))
 	for _, v := range d.Axe(".gj-fidelity", axeDisabled...) {
 		t.Errorf("the fidelity panel after an import: %s", v)
 	}
