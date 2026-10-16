@@ -1496,6 +1496,11 @@
   "docview.skip": "Sprunglinks",
   "fidelity.checking": "%s: es wird geprüft, was dieses Format behält …",
   "files.working": "Wird bearbeitet …",
+  "read.voice": "Stimme des Vorlesers",
+  "read.voiceAuto": "Vorlesestimme: die Wahl des Browsers",
+  "read.voiceAutomatic": "Automatisch",
+  "read.voiceChosen": "Vorlesestimme: %s",
+  "read.voiceNone": "Keine weitere Stimme für diese Sprache auf diesem Gerät",
   "note.counter": "%d von %d Zeichen",
   "note.save": "Speichern",
   "note.title": "Fußnote"

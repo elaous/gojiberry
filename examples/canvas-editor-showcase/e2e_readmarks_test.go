@@ -90,3 +90,28 @@ func TestNetworkVoicesAreChosenOnlyOnPurpose(t *testing.T) {
 	d.OK(d.Text("#read-voice") == "Voice on this device", "the bar says so: "+d.Text("#read-voice"))
 	d.NoErrors()
 }
+
+// The reader's voice is chosen from the voices offered for the document's language, described by accent and gender;
+// the chosen one is the one that speaks, and the choice is kept.
+func TestTheReaderVoiceIsChosenByAccentAndGender(t *testing.T) {
+	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
+	d := e2etest.NewSite(t).OpenURL(t, "/index.html")
+	d.WaitSelector("canvas")
+	d.Eval(speechStub, nil)
+	d.Eval(`window.__voices = [{name: 'Samantha', lang: 'en-US', localService: true}, {name: 'Daniel', lang: 'en-GB', localService: true}, {name: 'Anna', lang: 'de-DE', localService: true}]`, nil)
+	open := func() {
+		d.Click(`button.gj-menubar-button:has-text("Read aloud")`)
+		d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Reader voice")`)
+	}
+	open()
+	d.OK(d.Has(`.gj-menubar-panel .gj-menu-label:text-is("Samantha (American, female)")`), "an American woman's voice is offered")
+	d.OK(d.Has(`.gj-menubar-panel .gj-menu-label:text-is("Daniel (British, male)")`), "a British man's voice is offered")
+	d.OK(!d.Has(`.gj-menubar-panel .gj-menu-label:has-text("Anna")`), "a voice of another language is not")
+	d.Click(`.gj-menubar-panel .gj-menu-label:text-is("Daniel (British, male)")`)
+	d.WaitFor("the choice is kept", `JSON.parse(localStorage.getItem('showcase:a11y')).voice === 'Daniel'`)
+	d.Click(`button.gj-menubar-button:has-text("Read aloud")`)
+	d.Click(`.gj-menubar-panel li.gj-menu-item:has-text("Read the document aloud")`)
+	d.WaitFor("speech", `window.__utts.length === 1`)
+	d.OK(d.Bool(`window.__utts[0].voice && window.__utts[0].voice.name === 'Daniel'`), "the chosen voice speaks")
+	d.NoErrors()
+}
