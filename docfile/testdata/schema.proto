@@ -117,6 +117,7 @@ message ImageItem {
   string alt = 9;
   bool decorative = 10;
   string long_desc = 11;
+  string legend = 12;
 }
 
 message MediaItem {

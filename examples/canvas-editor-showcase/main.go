@@ -49,6 +49,7 @@ type ui struct {
 	menu                         int    // open menu, or -1
 	tab                          string // sidebar tab: format, symbols, keys
 	check                        checkState
+	imageLegend                  bool                   // a numbered legend is started on each picture inserted
 	noteEd                       *components.NoteEditor // the dialog a footnote is typed in
 	fidelity                     fidelityState          // the Import/Export tab's report of what a format loses
 	collab                       components.CollabAnnouncer

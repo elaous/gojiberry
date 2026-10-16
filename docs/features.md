@@ -68,6 +68,10 @@ Text can run in up to four columns from any paragraph on, with the space between
 
 Tables have cell formatting (background, colour, bold, alignment, merged cells) and, from the table's handle menu, **named table styles**: plain, bold header, blue or green header with banded rows, grey banded, banded with a bold first column. A style is applied in one step as cell formatting, so it is saved with the table, written by the exports that write cell shading, and can still be changed cell by cell; the menu marks the style the table is dressed in now.
 
+## Image legend and picture formats
+
+A picture can carry a visible **legend** (Insert picture > Pictures tab, "Add a legend"): it is drawn under the picture, saved with it and written by every export (an italic line under the picture; the title in Markdown). PNG, JPEG, GIF and WebP files can be inserted; WebP is converted to PNG on insert so Word, ODT, EPUB and PDF carry it. Animated GIF and WebP show their first frame.
+
 ## Two-page spread
 
 ![Two-page spread](features/img/spread.webp)

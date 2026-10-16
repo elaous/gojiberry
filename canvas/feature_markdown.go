@@ -308,7 +308,11 @@ func inlineMarkdown(in Inline) (md string, block bool) {
 			alt = ""
 		}
 		alt = strings.NewReplacer("[", "(", "]", ")").Replace(alt)
-		return "![" + alt + "](" + u.URL() + ")", false
+		md := "![" + alt + "](" + u.URL() + ")"
+		if lg := strings.TrimSpace(strings.ReplaceAll(o.Legend, "\n", " ")); lg != "" {
+			md += "  \n*" + escapeMarkdownLegend(lg) + "*" // the legend under the picture, in italics
+		}
+		return md, false
 	}
 	return "", false
 }
@@ -414,3 +418,8 @@ func escapeInline(s string) string {
 }
 
 func itoa(n int) string { return strconv.Itoa(max(n, 1)) }
+
+// escapeMarkdownLegend keeps a legend's own asterisks and underscores from ending the italics around it.
+func escapeMarkdownLegend(s string) string {
+	return strings.NewReplacer("*", `\*`, "_", `\_`).Replace(s)
+}
