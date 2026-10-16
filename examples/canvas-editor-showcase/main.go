@@ -1027,11 +1027,12 @@ func main() {
 	applyPrefs(curPrefs)
 	state.NoAutoClose, state.TextScale, state.PeerPalette, state.StrongCaret = curPrefs.Close == "off", curPrefs.textScale(), curPrefs.peerPalette(), curPrefs.Contrast == "more"
 	state.Typewriter = curPrefs.Typewriter == "on"
+	state.TypewriterX = curPrefs.TypewriterX == "on"
 	onLocale = renderUI
 	onPrefs = func() {
-		nc, ts, pp, sc, tw := curPrefs.Close == "off", curPrefs.textScale(), curPrefs.peerPalette(), curPrefs.Contrast == "more", curPrefs.Typewriter == "on"
-		if nc != state.NoAutoClose || ts != state.TextScale || len(pp) != len(state.PeerPalette) || sc != state.StrongCaret || tw != state.Typewriter {
-			state.NoAutoClose, state.TextScale, state.PeerPalette, state.StrongCaret, state.Typewriter = nc, ts, pp, sc, tw
+		nc, ts, pp, sc, tw, twx := curPrefs.Close == "off", curPrefs.textScale(), curPrefs.peerPalette(), curPrefs.Contrast == "more", curPrefs.Typewriter == "on", curPrefs.TypewriterX == "on"
+		if nc != state.NoAutoClose || ts != state.TextScale || len(pp) != len(state.PeerPalette) || sc != state.StrongCaret || tw != state.Typewriter || twx != state.TypewriterX {
+			state.NoAutoClose, state.TextScale, state.PeerPalette, state.StrongCaret, state.Typewriter, state.TypewriterX = nc, ts, pp, sc, tw, twx
 			renderCanvas()
 		}
 	}

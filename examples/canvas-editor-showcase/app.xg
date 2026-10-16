@@ -24,7 +24,7 @@ type Callbacks struct {
 // remove one.
 func Doc(state State, cb Callbacks) xango.Node {
 	return <canvas.Canvas width={920} height={640} mode={state.Mode} role={state.Role} features={state.Features()}>
-		{shared(state, <canvas.ScrollView x={10} y={10} width={900} height={620} lockH={!state.Spread} typewriter={state.Typewriter}>
+		{shared(state, <canvas.ScrollView x={10} y={10} width={900} height={620} lockH={!state.Spread} typewriter={state.Typewriter} typewriterX={state.TypewriterX}>
 			<canvas.TextFlow
 				x={0} y={0} width={880}
 				source={state.Source}
