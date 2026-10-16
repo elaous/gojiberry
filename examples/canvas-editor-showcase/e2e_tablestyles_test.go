@@ -25,8 +25,9 @@ func TestTableStylesPickerDefineAndFollowRows(t *testing.T) {
 	d.Press("Enter")
 	// find a cell of the table by clicking down the first column
 	found := false
-	for y := 130; y < 420 && !found; y += 8 {
-		d.CanvasClick(110, float64(y))
+	for y := 10; y < 140 && !found; y += 6 {
+		d.CanvasClick(100, float64(y))
+		d.Sleep(60)
 		found = strings.Contains(d.Str(`JSON.parse(document.getElementById('state').textContent).target`), "TableView")
 	}
 	d.OK(found, "a cell of the table was entered")
