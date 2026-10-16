@@ -108,11 +108,11 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Try it.** Pictures tab > Find a picture online: the Search button is off; turn on Openverse, search "harbour", read the credit under a result, press **Insert with its credit**.
 
-**You should see.** The picture at the caret with a legend like "Harbour by Ana, CC BY 4.0, via Openverse", also in the HTML export.
+**You should see.** The picture at the caret with a legend like "Harbour by Ana, CC BY 4.0, via Openverse", also in the HTML export; in Word the picture's Alt Text title holds the credit.
 
 **Also try.** Search, then press **More results**; put an `image-repos.json` next to the page and check the repository is listed, off.
 
-**Automated.** `TestOperatorListOfRepositoriesAndMoreResults`, `TestFindAPictureInARepositoryAndInsertItWithItsCredit` (examples/canvas-editor-showcase), package `imagerepo` tests
+**Automated.** `TestImageCreditTravelsInWordAndODTProperties` (export), `TestOperatorListOfRepositoriesAndMoreResults`, `TestFindAPictureInARepositoryAndInsertItWithItsCredit` (examples/canvas-editor-showcase), package `imagerepo` tests
 
 ## Mentions
 

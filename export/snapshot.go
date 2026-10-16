@@ -114,6 +114,9 @@ type Block struct {
 	// (written as an empty alt, left out of the reading copy).
 	ImageAlt        string
 	ImageDecorative bool
+	// ImageCredit and ImageSourceURL name the author, licence and page of a picture found in an image repository;
+	// they travel in the document properties of Word and OpenDocument files.
+	ImageCredit, ImageSourceURL string
 	// For a MediaClip: where the clip is, its kind ("audio" or "video"), its title, a caption track as WebVTT text
 	// or its address, its transcript and the size of a video.
 	MediaURL, MediaKind, MediaTitle, MediaCaptions, MediaCaptionsURL, MediaTranscript string
