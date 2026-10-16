@@ -12,3 +12,7 @@
 .gj-spell-word { border: none !important; background: none !important; padding: 0 !important; }
 .gj-spell-suggestion { background: var(--gj-bg-muted) !important; }
 .gj-spell-nosuggestion { font-size: 0.8em; color: var(--gj-muted); }
+
+.gj-spell-dictrow { display: block; margin: 0.4em 0; font-size: 0.9em; }
+.gj-spell-dict { max-width: 100%; }
+.gj-spell-dictnote { margin: 0.3em 0; font-size: 0.85em; }
