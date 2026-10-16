@@ -69,10 +69,11 @@ type ui struct {
 	layout                       docfile.PageLayout // the header, footer and table of contents of the print layout
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
 	imageMsg     string
-	refs         refsState    // the sources the document cites (References tab)
-	imgFind      imageFind    // the "find a picture online" form of the Pictures tab
-	media        mediaForm    // the clip being typed in the Pictures tab and the caption drafts
-	elements     elementsForm // the equation being typed and the last message of the equation and code parts of the tab
+	tableStyle   tableStyleForm // the table style being defined (Styles tab)
+	refs         refsState      // the sources the document cites (References tab)
+	imgFind      imageFind      // the "find a picture online" form of the Pictures tab
+	media        mediaForm      // the clip being typed in the Pictures tab and the caption drafts
+	elements     elementsForm   // the equation being typed and the last message of the equation and code parts of the tab
 	sugg         suggestState
 	ghost        ghostUI
 	stateRef     *State                 // the document state, for what the announcer needs of it
@@ -277,6 +278,7 @@ func main() {
 		u.fidelity.restore(d)
 		u.loadTheme(d)
 		u.loadSources(d)
+		canvas.SetCustomTableSchemes(d.TableSchemes())
 		state.Theme = u.canvasTheme()
 		u.layout = d.PageLayout()
 		if flow != nil {
@@ -317,6 +319,7 @@ func main() {
 		u.themeInto(&d)
 		u.applyLayout(&d, state.PageWidth(), state.PageHeight(), state.Setup.Margins)
 		u.keepSources(&d)
+		d.SetTableSchemes(canvas.CustomTableSchemes())
 		return d
 	}
 	// The browser target (localStorage) cannot write the catalog conditionally, so two
@@ -580,7 +583,7 @@ func main() {
 					renderUI()
 				},
 			})
-			panel = xango.Frag(panel, themePanel(u, &state, renderCanvas, renderUI))
+			panel = xango.Frag(panel, tableStylesPanel(u, func() *cxango.Root { return root }, redraw, renderUI), themePanel(u, &state, renderCanvas, renderUI))
 		case "find":
 			panel = xango.Frag(findPanel(u, &state, func() *canvas.TextFlow { return flow }, func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }, redraw, renderUI), u.searchAllPanel(renderUI))
 		case "spell":

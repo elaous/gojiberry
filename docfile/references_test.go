@@ -3,6 +3,7 @@ package docfile
 import (
 	"testing"
 
+	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/reference"
 )
 
@@ -32,6 +33,29 @@ func TestSourcesAreKeptWithTheDocument(t *testing.T) {
 	}
 	back.SetSources(reference.MLA, nil)
 	if back.Sources() != nil {
+		t.Fatal("removed")
+	}
+}
+
+func TestTableStylesAreKeptWithTheDocument(t *testing.T) {
+	var d Document
+	d.SetTableSchemes([]canvas.TableScheme{{Name: "Sunrise", HeaderBG: "#c2410c", BandBG: "#ffedd5"}, {Name: "", HeaderBG: "#000"}, {Name: "Bad", HeaderBG: "red"}})
+	for _, f := range Formats() {
+		b, err := f.Marshal(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		back, err := f.Unmarshal(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := back.TableSchemes()
+		if len(got) != 1 || got[0].Name != "Sunrise" || got[0].BandBG != "#ffedd5" {
+			t.Fatalf("%s: %+v (the invalid ones are left out)", f.Name(), got)
+		}
+	}
+	d.SetTableSchemes(nil)
+	if d.TableSchemes() != nil {
 		t.Fatal("removed")
 	}
 }

@@ -82,7 +82,7 @@ func (t *Table) AddColumn() { t.InsertColumn(t.Cols()) }
 
 // InsertRow inserts an empty row so it becomes row index at (clamped to
 // [0, Rows()]).
-func (t *Table) InsertRow(at int) {
+func (t *Table) insertRow(at int) {
 	at = min(max(at, 0), t.Rows())
 	t.Cells = append(t.Cells, nil)
 	copy(t.Cells[at+1:], t.Cells[at:])
@@ -92,7 +92,7 @@ func (t *Table) InsertRow(at int) {
 
 // InsertColumn inserts an empty column so it becomes column index at
 // (clamped to [0, Cols()]).
-func (t *Table) InsertColumn(at int) {
+func (t *Table) insertColumn(at int) {
 	at = min(max(at, 0), t.Cols())
 	for r, row := range t.Cells {
 		row = append(row, "")
@@ -105,7 +105,7 @@ func (t *Table) InsertColumn(at int) {
 
 // DeleteRow removes row index at. The last remaining row is never
 // removed (it is cleared instead), keeping the table non-empty.
-func (t *Table) DeleteRow(at int) {
+func (t *Table) deleteRow(at int) {
 	if at < 0 || at >= t.Rows() {
 		return
 	}
@@ -121,7 +121,7 @@ func (t *Table) DeleteRow(at int) {
 
 // DeleteColumn removes column index at. The last remaining column is
 // never removed (it is cleared instead).
-func (t *Table) DeleteColumn(at int) {
+func (t *Table) deleteColumn(at int) {
 	if at < 0 || at >= t.Cols() {
 		return
 	}
@@ -141,7 +141,7 @@ func (t *Table) DeleteColumn(at int) {
 
 // MoveRow moves row from so it ends up at index to (both must be in
 // range; otherwise it's a no-op).
-func (t *Table) MoveRow(from, to int) {
+func (t *Table) moveRow(from, to int) {
 	if from < 0 || from >= t.Rows() || to < 0 || to >= t.Rows() || from == to {
 		return
 	}
@@ -156,7 +156,7 @@ func (t *Table) MoveRow(from, to int) {
 
 // MoveColumn moves column from so it ends up at index to (both must be
 // in range; otherwise it's a no-op).
-func (t *Table) MoveColumn(from, to int) {
+func (t *Table) moveColumn(from, to int) {
 	if from < 0 || from >= t.Cols() || to < 0 || to >= t.Cols() || from == to {
 		return
 	}
@@ -173,11 +173,11 @@ func (t *Table) MoveColumn(from, to int) {
 }
 
 // DuplicateRow inserts a copy of row at directly below it.
-func (t *Table) DuplicateRow(at int) {
+func (t *Table) duplicateRow(at int) {
 	if at < 0 || at >= t.Rows() {
 		return
 	}
-	t.InsertRow(at + 1)
+	t.insertRow(at + 1)
 	copy(t.Cells[at+1], t.Cells[at])
 	for c := 0; c < t.Cols(); c++ { // the copy looks like the original
 		if st, ok := t.Styles[CellPos{at, c}]; ok {
@@ -189,7 +189,7 @@ func (t *Table) DuplicateRow(at int) {
 // SortByColumn stably sorts the body rows (every row but the header)
 // by column col. Cells that both parse as numbers compare numerically;
 // anything else compares case-insensitively as text.
-func (t *Table) SortByColumn(col int, desc bool) {
+func (t *Table) sortByColumn(col int, desc bool) {
 	if col < 0 || col >= t.Cols() {
 		return
 	}
@@ -249,3 +249,35 @@ func moved(i, from, to int) int {
 	}
 	return i
 }
+
+// InsertRow changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
+// (see keepScheme).
+func (t *Table) InsertRow(at int) { t.keepScheme(func() { t.insertRow(at) }) }
+
+// InsertColumn changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
+// (see keepScheme).
+func (t *Table) InsertColumn(at int) { t.keepScheme(func() { t.insertColumn(at) }) }
+
+// DeleteRow changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
+// (see keepScheme).
+func (t *Table) DeleteRow(at int) { t.keepScheme(func() { t.deleteRow(at) }) }
+
+// DeleteColumn changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
+// (see keepScheme).
+func (t *Table) DeleteColumn(at int) { t.keepScheme(func() { t.deleteColumn(at) }) }
+
+// MoveRow changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
+// (see keepScheme).
+func (t *Table) MoveRow(from, to int) { t.keepScheme(func() { t.moveRow(from, to) }) }
+
+// MoveColumn changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
+// (see keepScheme).
+func (t *Table) MoveColumn(from, to int) { t.keepScheme(func() { t.moveColumn(from, to) }) }
+
+// DuplicateRow changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
+// (see keepScheme).
+func (t *Table) DuplicateRow(at int) { t.keepScheme(func() { t.duplicateRow(at) }) }
+
+// SortByColumn changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
+// (see keepScheme).
+func (t *Table) SortByColumn(col int, desc bool) { t.keepScheme(func() { t.sortByColumn(col, desc) }) }
