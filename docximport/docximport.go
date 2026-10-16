@@ -162,11 +162,13 @@ type reader struct {
 	doc    docfile.Document
 	images int
 
-	bytesRead  int64 // bytes read so far
-	imageBytes int
-	cells      int
-	seenNotes  map[string]bool
-	pics       map[string]string // picture target -> data URL
+	bytesRead    int64 // bytes read so far
+	imageBytes   int
+	cells        int
+	comments     map[string]bool // imported comment IDs
+	openComments []string        // the comment ranges open at this point of the body, outermost first
+	seenNotes    map[string]bool
+	pics         map[string]string // picture target -> data URL
 }
 
 func (r *reader) read(name string) ([]byte, error) {
@@ -218,6 +220,7 @@ func Import(data []byte) (docfile.Document, error) {
 	r.loadStyles()
 	r.loadNumbering()
 	r.loadNotes()
+	r.loadComments()
 	if core := r.xml("docProps/core.xml"); core != nil {
 		if t := core.find("title"); t != nil {
 			r.doc.Title = strings.TrimSpace(t.text)
@@ -356,6 +359,10 @@ func (r *reader) blocks(kids []*node) {
 			r.paragraph(k)
 		case "tbl":
 			r.table(k)
+		case "commentRangeStart":
+			r.openComment(k.attr("id"))
+		case "commentRangeEnd":
+			r.closeComment(k.attr("id"))
 		case "sdt": // a content control: its content is what counts
 			if c := k.child("sdtContent"); c != nil {
 				r.blocks(c.kids)
@@ -677,6 +684,10 @@ func (r *reader) runs(kids []*node, inherit docfile.Format, info paraInfo) {
 				f.Link = "#" + a
 			}
 			r.runs(k.kids, f, info)
+		case "commentRangeStart":
+			r.openComment(k.attr("id"))
+		case "commentRangeEnd":
+			r.closeComment(k.attr("id"))
 		case "smartTag", "sdt", "sdtContent", "fldSimple":
 			r.runs(k.kids, inherit, info)
 		case "oMathPara", "oMath":
@@ -780,6 +791,9 @@ var highlights = map[string]string{
 
 func (r *reader) run(run *node, inherit docfile.Format, info paraInfo) {
 	f := r.runFormat(run.child("rPr"), inherit, info)
+	if id := r.currentComment(); id != "" {
+		f.Comment = id
+	}
 	var sb strings.Builder
 	flush := func() {
 		r.text(sb.String(), f)

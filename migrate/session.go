@@ -41,6 +41,13 @@ type Session struct {
 	// OnDone is called after a migration with its report (refresh the document
 	// list there).
 	OnDone func(Report)
+	// Known says what earlier runs brought (NewSaverLedger over the target documents go to), read when a
+	// run starts; with it a file that is there and has not changed at the source is left alone, unless the
+	// person asked to bring everything again (SetAgain). nil: everything is brought.
+	Known func(ctx context.Context) (Ledger, error)
+	// HistoryMax is how many earlier versions of a document are brought when the person chose to
+	// (SetHistory), for a source that has them (Versioned); 20 if not positive.
+	HistoryMax int
 	// Import converts a Word file; nil is DefaultImport.
 	Import  func([]byte) (docfile.Document, error)
 	Pending *components.Pending
@@ -58,6 +65,8 @@ type Session struct {
 	total    int
 	current  string
 	report   *Report
+	again    bool // bring again what an earlier run brought
+	history  bool // bring the version history too
 	partial  bool // a pack run failed or was cancelled, and the pack was not delivered
 }
 
@@ -105,6 +114,19 @@ func (s *Session) codec() docfile.Codec {
 		}
 	}
 	return docfile.JSON
+}
+
+// SetAgain says whether to bring again what an earlier run already brought.
+func (s *Session) SetAgain(on bool) { s.set(func() { s.again = on }) }
+
+// SetHistory says whether to bring the version history of each document along, where the platform has one.
+func (s *Session) SetHistory(on bool) { s.set(func() { s.history = on }) }
+
+func (s *Session) historyMax() int {
+	if s.HistoryMax > 0 {
+		return s.HistoryMax
+	}
+	return 20
 }
 
 // SetToken keeps the access token typed.
@@ -243,9 +265,22 @@ func (s *Session) run(ctx context.Context, src Source, items []Item, tag string)
 	if err != nil {
 		return err
 	}
-	rep, err := Run(ctx, src, items, sink, Options{Import: s.Import, Tag: tag, OnProgress: func(done, total int, name string) {
+	s.mu.Lock()
+	opt := Options{Import: s.Import, Tag: tag, Again: s.again}
+	if _, ok := src.(Versioned); ok && s.history {
+		opt.History = s.historyMax()
+	}
+	s.mu.Unlock()
+	opt.OnProgress = func(done, total int, name string) {
 		s.set(func() { s.done, s.total, s.current = done, total, name })
-	}})
+	}
+	if s.Known != nil && finish == nil {
+		// Only a run that saves to the store has anything to compare with; a pack is saved nowhere.
+		if opt.Ledger, err = s.Known(ctx); err != nil {
+			return err
+		}
+	}
+	rep, err := Run(ctx, src, items, sink, opt)
 	if finish != nil {
 		// A run that failed or was cancelled is not delivered: a partial pack handed over
 		// as if it were the whole migration is worse than none. The report still says how
@@ -310,7 +345,11 @@ func (s *Session) Props(pickFiles func()) components.MigrateProps {
 		OnStart:     run(s.Start),
 		OnPickFiles: pickFiles,
 		Busy:        s.Pending.Busy() || s.running,
-		Done:        s.done, Total: s.total, Current: s.current,
+		OnAgain:     s.SetAgain, Again: s.again,
+		Done: s.done, Total: s.total, Current: s.current,
+	}
+	if _, ok := s.src.(Versioned); ok {
+		p.OnHistory, p.History, p.HistoryMax = s.SetHistory, s.history, s.historyMax()
 	}
 	for _, c := range s.Formats {
 		p.Formats = append(p.Formats, components.DocChoice{Name: c.Name(), Label: c.Label()})
@@ -336,6 +375,7 @@ func (s *Session) Props(pickFiles func()) components.MigrateProps {
 	}
 	if r := s.report; r != nil {
 		p.Reported, p.Imported, p.Truncated, p.Partial = true, r.Imported, r.Truncated, s.partial
+		p.Skipped, p.Versions = r.Skipped, r.Versions
 		for _, f := range r.Failed {
 			p.Failed = append(p.Failed, components.MigrateFailure{Name: f.Name, Err: f.Err.Error()})
 		}

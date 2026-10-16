@@ -36,6 +36,18 @@ type Source interface {
 	Fetch(ctx context.Context, item Item) ([]byte, error)
 }
 
+// Version is an earlier version of a document at a source, as a Word file.
+type Version struct {
+	Saved time.Time
+	Data  []byte
+}
+
+// Versioned is a Source that can give earlier versions of a document (Google Docs keeps a revision
+// history). Versions returns up to max of them, oldest first, not counting the current one.
+type Versioned interface {
+	Versions(ctx context.Context, item Item, max int) ([]Version, error)
+}
+
 // Sink is where migrated documents go.
 type Sink interface {
 	// Save stores doc as a new document called name inside the folders of path
@@ -69,6 +81,15 @@ type Options struct {
 	Import func([]byte) (docfile.Document, error)
 	// Tag is put on every document made ("google-docs").
 	Tag string
+	// Ledger says what an earlier run already brought; with it Run skips a file that is there and has
+	// not changed at the source since (Item.Modified is not later than when it was brought). nil
+	// brings everything.
+	Ledger Ledger
+	// Again brings files the Ledger knows too (the person asked to bring them again).
+	Again bool
+	// History is how many earlier versions of each document to bring along, for a Source that is
+	// Versioned (0: none). They become the document's History, oldest first.
+	History int
 	// OnProgress is told before each file is handled: how many are done, how many
 	// there are and the name of the one starting.
 	OnProgress func(done, total int, name string)
@@ -83,7 +104,12 @@ type Failure struct {
 // Report says how a migration went.
 type Report struct {
 	Imported int
-	Failed   []Failure
+	// Skipped is how many files an earlier run had brought already (Options.Ledger) and were left.
+	Skipped int
+	// Versions is how many earlier versions came along (Options.History), over all documents; a
+	// version that could not be read is left out and counted in VersionsFailed.
+	Versions, VersionsFailed int
+	Failed                   []Failure
 	// Truncated is set when the limit on files stopped the walk.
 	Truncated bool
 }
@@ -147,6 +173,17 @@ func Run(ctx context.Context, src Source, items []Item, sink Sink, o Options) (R
 	if imp == nil {
 		return rep, ErrNoImporter
 	}
+	if o.Ledger != nil && !o.Again && stable(src) {
+		kept := files[:0]
+		for _, f := range files {
+			if at, ok := o.Ledger.Brought(OriginKey(src, f.item)); ok && !f.item.Modified.After(at) {
+				rep.Skipped++
+				continue
+			}
+			kept = append(kept, f)
+		}
+		files = kept
+	}
 	for i, f := range files {
 		if err := ctx.Err(); err != nil {
 			return rep, err
@@ -154,7 +191,7 @@ func Run(ctx context.Context, src Source, items []Item, sink Sink, o Options) (R
 		if o.OnProgress != nil {
 			o.OnProgress(i, len(files), f.item.Name)
 		}
-		if err := one(ctx, src, f, sink, imp, o.Tag); err != nil {
+		if err := one(ctx, src, f, sink, imp, o, &rep); err != nil {
 			rep.Failed = append(rep.Failed, Failure{f.item.Name, err})
 			continue
 		}
@@ -166,7 +203,7 @@ func Run(ctx context.Context, src Source, items []Item, sink Sink, o Options) (R
 	return rep, nil
 }
 
-func one(ctx context.Context, src Source, f file, sink Sink, imp func([]byte) (docfile.Document, error), tag string) error {
+func one(ctx context.Context, src Source, f file, sink Sink, imp func([]byte) (docfile.Document, error), o Options, rep *Report) error {
 	data, err := src.Fetch(ctx, f.item)
 	if err != nil {
 		return err
@@ -175,7 +212,27 @@ func one(ctx context.Context, src Source, f file, sink Sink, imp func([]byte) (d
 	if err != nil {
 		return fmt.Errorf("migrate: not a readable Word file: %w", err)
 	}
-	return sink.Save(ctx, f.path, DocName(f.item.Name), tag, doc)
+	if v, ok := src.(Versioned); ok && o.History > 0 {
+		// A document is not failed for its history: what could not be read is counted and left out.
+		versions, err := v.Versions(ctx, f.item, o.History)
+		if err != nil {
+			rep.VersionsFailed++
+		}
+		for _, ver := range versions {
+			old, err := imp(ver.Data)
+			if err != nil {
+				rep.VersionsFailed++
+				continue
+			}
+			doc.History = append(doc.History, docfile.Revision{Saved: ver.Saved.UnixNano(), Doc: &old})
+			rep.Versions++
+		}
+	}
+	// The document keeps where it came from, so that a later run knows (SaverLedger reads it back).
+	if stable(src) {
+		doc.SetTags(append(doc.Tags(), OriginTag(src, f.item)))
+	}
+	return sink.Save(ctx, f.path, DocName(f.item.Name), o.Tag, doc)
 }
 
 // DocName is a file name as a document name: the .docx or .doc extension goes.
@@ -206,6 +263,10 @@ type File struct {
 // Label implements Source.
 func (Files) Label() string { return "Word files" }
 
+// Stable says the IDs are positions in this list: they name no file from one run to the next, so Files
+// carry no origin tag and are never skipped as already brought.
+func (Files) Stable() bool { return false }
+
 // List implements Source: the files, all at the top.
 func (f Files) List(_ context.Context, folder string) ([]Item, error) {
 	if folder != "" {
@@ -225,4 +286,65 @@ func (f Files) Fetch(_ context.Context, item Item) ([]byte, error) {
 		return nil, errors.New("migrate: no such file")
 	}
 	return f[i].Data, nil
+}
+
+// stable says a source's item IDs name the same file from one run to the next. A source whose IDs are only
+// positions in a list (Files) says no with Stable() bool, and its files carry no origin and are never skipped.
+func stable(src Source) bool {
+	s, ok := src.(interface{ Stable() bool })
+	return !ok || s.Stable()
+}
+
+// OriginPrefix starts the tag a migrated document carries to say where it came from.
+const OriginPrefix = "from:"
+
+// OriginKey names a file at a source: the source's label and the file's ID there.
+func OriginKey(src Source, item Item) string { return tagOf(src.Label()) + ":" + item.ID }
+
+// OriginTag is the tag put on a migrated document: "from:<source>:<ID at the source>:<modified, unix
+// seconds>". A later run reads it (SaverLedger) to leave the file alone while it has not changed.
+func OriginTag(src Source, item Item) string {
+	var at int64
+	if !item.Modified.IsZero() {
+		at = item.Modified.Unix()
+	}
+	return fmt.Sprintf("%s%s:%d", OriginPrefix, OriginKey(src, item), at)
+}
+
+// Ledger says what earlier runs brought.
+type Ledger interface {
+	// Brought reports whether the file with this key (OriginKey) was brought before, and the time the
+	// source said it was modified then.
+	Brought(key string) (modified time.Time, ok bool)
+}
+
+// MapLedger is a Ledger in memory (and what ParseOrigins returns).
+type MapLedger map[string]time.Time
+
+// Brought implements Ledger.
+func (m MapLedger) Brought(key string) (time.Time, bool) { t, ok := m[key]; return t, ok }
+
+// ParseOrigins reads origin tags (OriginTag) from any tags into a ledger; other tags are ignored. Of
+// several tags for one file the latest time counts.
+func ParseOrigins(tags []string) MapLedger {
+	out := MapLedger{}
+	for _, t := range tags {
+		rest, ok := strings.CutPrefix(t, OriginPrefix)
+		if !ok {
+			continue
+		}
+		i := strings.LastIndex(rest, ":")
+		if i < 0 {
+			continue
+		}
+		var secs int64
+		if _, err := fmt.Sscan(rest[i+1:], &secs); err != nil {
+			continue
+		}
+		key, at := rest[:i], time.Unix(secs, 0)
+		if old, had := out[key]; !had || at.After(old) {
+			out[key] = at
+		}
+	}
+	return out
 }

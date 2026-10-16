@@ -76,6 +76,79 @@ func (g *GoogleDocs) Fetch(ctx context.Context, item Item) ([]byte, error) {
 	return getBytes(ctx, g.Client, g.Token, u)
 }
 
+// Versions implements Versioned: the revisions Google Docs keeps, each exported as a Word file through the
+// export link the revision lists. Up to max are taken, the newest ones, oldest first; the last revision is
+// the current document, so it is left out.
+func (g *GoogleDocs) Versions(ctx context.Context, item Item, max int) ([]Version, error) {
+	type rev struct {
+		ID           string            `json:"id"`
+		ModifiedTime string            `json:"modifiedTime"`
+		ExportLinks  map[string]string `json:"exportLinks"`
+	}
+	var all []rev
+	for page := ""; len(all) < 2000; {
+		v := url.Values{"fields": {"nextPageToken,revisions(id,modifiedTime,exportLinks)"}, "pageSize": {"200"}}
+		if page != "" {
+			v.Set("pageToken", page)
+		}
+		var out struct {
+			NextPageToken string `json:"nextPageToken"`
+			Revisions     []rev  `json:"revisions"`
+		}
+		if err := getJSON(ctx, g.Client, g.Token, g.base()+"/drive/v3/files/"+url.PathEscape(item.ID)+"/revisions?"+v.Encode(), &out); err != nil {
+			return nil, err
+		}
+		all = append(all, out.Revisions...)
+		if out.NextPageToken == "" {
+			break
+		}
+		page = out.NextPageToken
+	}
+	if len(all) > 0 {
+		all = all[:len(all)-1] // the newest is the document as it is
+	}
+	if len(all) > max {
+		all = all[len(all)-max:]
+	}
+	var out []Version
+	for _, r := range all {
+		link := r.ExportLinks[docxMIME]
+		if link == "" {
+			continue
+		}
+		if !g.trusts(link) {
+			continue // the token goes only where the API itself lives
+		}
+		data, err := getBytes(ctx, g.Client, g.Token, link)
+		if err != nil {
+			return out, err
+		}
+		t, _ := time.Parse(time.RFC3339, r.ModifiedTime)
+		out = append(out, Version{Saved: t, Data: data})
+	}
+	return out, nil
+}
+
+// trusts says the token may be sent to link: the API's own host, or (with the default API address) Google's
+// export host and its googleapis.com hosts, over https.
+func (g *GoogleDocs) trusts(link string) bool {
+	u, err := url.Parse(link)
+	if err != nil {
+		return false
+	}
+	b, err := url.Parse(g.base())
+	if err != nil {
+		return false
+	}
+	if u.Scheme == b.Scheme && u.Host == b.Host {
+		return true
+	}
+	if g.BaseURL != "" {
+		return false
+	}
+	return u.Scheme == "https" && (u.Host == "docs.google.com" || strings.HasSuffix(u.Host, ".googleapis.com") || u.Host == "www.googleapis.com")
+}
+
 // escapeQuery escapes a value for a Drive query string literal.
 func escapeQuery(s string) string {
 	return strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s)

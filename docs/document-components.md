@@ -161,8 +161,16 @@ panel and `migrate.Session` its state (like `saver.Session` for the document lis
    is listed in the report; the rest go on. A "Convert to" menu picks the format the
    documents are stored in: `.open` by default (`docfile.Open`, opendocs' own format:
    protobuf wire format, byte for byte what `docfile.ProtoBinary` writes, so the two
-   cannot be told apart by content, only by extension), or any other format. Migrating twice makes the documents
-   twice (they get new IDs).
+   cannot be told apart by content, only by extension), or any other format.
+4. **A second run.** Each migrated document also carries the tag `from:<platform>:<ID at the platform>:<modified>`.
+   A run reads those tags from the target (`migrate.NewSaverLedger`; the Session's `Known`) and leaves a file that is
+   already there and has not changed at the platform since; the report says how many it left. "Bring again what an
+   earlier run already brought" turns that off, and then the documents are made twice (they get new IDs). Word files
+   picked from the computer have no stable ID, so they carry no origin and are always brought.
+5. **Comments and history.** Comments in a Word file, and in the Word export of a Google Doc, come in with their
+   author, time, text, the words they are on, replies and resolved state. A platform that keeps earlier versions
+   (`migrate.Versioned`; Google Docs does) can bring the last 20 of them as the document's version history: a choice
+   in the panel, off by default, because each version is one more download.
 
 ## Icons
 

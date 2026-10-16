@@ -89,7 +89,6 @@ func ImportFidelity(format string, data []byte) Report {
 		}
 		r.Known = true
 		for _, l := range []Loss{
-			{Feature: FeatComment, Count: s.Comments},
 			{Feature: FeatHeaderFooter, Count: s.HeaderFoots},
 			{Feature: FeatTextBox, Count: s.TextBoxes},
 			{Feature: FeatDrawing, Count: s.Drawings},

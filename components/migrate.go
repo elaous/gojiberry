@@ -53,6 +53,16 @@ type MigrateProps struct {
 	OnSelectAll  func()
 	OnStart      func()
 
+	// OnAgain turns on bringing again what an earlier run already brought (Again says it is on); a
+	// file that is there and has not changed at the platform is left alone otherwise. nil leaves the
+	// choice out. OnHistory and History are the same for the version history of each document (the
+	// platform has one; HistoryMax is how many versions).
+	OnAgain    func(on bool)
+	Again      bool
+	OnHistory  func(on bool)
+	History    bool
+	HistoryMax int
+
 	// OnPickFiles opens the chooser for Word files on this computer, which are
 	// migrated at once.
 	OnPickFiles func()
@@ -65,8 +75,10 @@ type MigrateProps struct {
 	Current     string
 	Reported    bool
 	Imported    int
-	Failed      []MigrateFailure
-	Truncated   bool
+	// Skipped were brought by an earlier run and had not changed; Versions came with their documents.
+	Skipped, Versions int
+	Failed            []MigrateFailure
+	Truncated         bool
 	// Partial says the run was a pack that failed or was cancelled, so no pack was handed over.
 	Partial        bool
 	Error          string
@@ -189,6 +201,12 @@ func Migrate(p MigrateProps) xango.Node {
 		if p.OnStart != nil {
 			actions = append(actions, docButton("gj-migrate-start", tr("migrate.start", "Migrate"), p.Busy || len(p.Items) == 0, p.OnStart))
 		}
+		if p.OnAgain != nil {
+			kids = append(kids, Checkbox(CheckboxProps{Label: tr("migrate.again", "Bring again what an earlier run already brought"), Checked: p.Again, Disabled: p.Busy, OnChange: p.OnAgain}))
+		}
+		if p.OnHistory != nil {
+			kids = append(kids, Checkbox(CheckboxProps{Label: trf("migrate.history", "Also bring the version history (the last %d versions of each)", p.HistoryMax), Checked: p.History, Disabled: p.Busy, OnChange: p.OnHistory}))
+		}
 		if len(actions) > 0 {
 			kids = append(kids, xango.El("div", []xango.Attr{xango.A("class", "gj-migrate-actions")}, actions...))
 		}
@@ -210,6 +228,14 @@ func Migrate(p MigrateProps) xango.Node {
 	if p.Reported && !p.Busy {
 		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-migrate-report"), xango.A("role", "status")},
 			xango.Text(trf("migrate.imported", "%d documents migrated", p.Imported))))
+		if p.Skipped > 0 {
+			kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-migrate-skipped"), xango.A("role", "status")},
+				xango.Text(trf("migrate.skipped", "%d already brought by an earlier run and not changed since, so left as they are", p.Skipped))))
+		}
+		if p.Versions > 0 {
+			kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-migrate-versions"), xango.A("role", "status")},
+				xango.Text(trf("migrate.versions", "%d earlier versions came with their documents", p.Versions))))
+		}
 		if p.Partial {
 			kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-doc-error")}, xango.Text(tr("migrate.partial", "The migration did not finish, so the pack is partial and was not downloaded."))))
 		}
