@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"syscall/js"
@@ -69,6 +70,15 @@ func pickVoice(lang string) js.Value {
 		return js.Undefined()
 	}
 	voices := api.Call("getVoices")
+	if name := curPrefs.Voice; name != "" {
+		if v, ok := read.Find(engineVoices(), lang, name, networkVoices()); ok {
+			for i := 0; i < voices.Length(); i++ {
+				if e := voices.Index(i); e.Get("name").String() == v.Name && e.Get("lang").String() == v.Lang {
+					return e
+				}
+			}
+		}
+	}
 	base := strings.ToLower(strings.SplitN(lang, "-", 2)[0])
 	best, bestScore := js.Undefined(), 0
 	for i := 0; i < voices.Length(); i++ {
@@ -98,6 +108,52 @@ func pickVoice(lang string) js.Value {
 		}
 	}
 	return best
+}
+
+// engineVoices lists the voices the browser offers.
+func engineVoices() []read.Voice {
+	api := speechAPI()
+	if api.IsUndefined() {
+		return nil
+	}
+	list := api.Call("getVoices")
+	out := make([]read.Voice, 0, list.Length())
+	for i := 0; i < list.Length(); i++ {
+		v := list.Index(i)
+		out = append(out, read.Voice{Name: v.Get("name").String(), Lang: v.Get("lang").String(), Local: v.Get("localService").Truthy()})
+	}
+	return out
+}
+
+// voiceMenu is the choice of reader: the browser's own pick, or one of the voices offered for the document's language,
+// each described by its accent and gender (American, British; female, male).
+func voiceMenu(u *ui, renderUI func()) components.MenuItem {
+	choose := func(name string) func() {
+		return func() {
+			p := curPrefs
+			p.Voice = name
+			setPrefs(p)
+			if name == "" {
+				u.announce(T("read.voiceAuto", "Reader voice: the browser's choice"))
+			} else {
+				u.announce(fmt.Sprintf(T("read.voiceChosen", "Reader voice: %s"), name))
+			}
+			renderUI()
+		}
+	}
+	lang := u.docLang
+	if lang == "" {
+		lang = js.Global().Get("document").Get("documentElement").Get("lang").String()
+	}
+	items := []components.MenuItem{{Label: T("read.voiceAutomatic", "Automatic"), Checked: curPrefs.Voice == "", OnSelect: choose("")}}
+	list := read.ForLanguage(engineVoices(), lang, networkVoices())
+	for _, v := range list {
+		items = append(items, components.MenuItem{Label: read.Label(v), Checked: curPrefs.Voice == v.Name, OnSelect: choose(v.Name)})
+	}
+	if len(list) == 0 {
+		items = append(items, components.MenuItem{Label: T("read.voiceNone", "No other voice for this language on this device"), Disabled: true})
+	}
+	return components.MenuItem{Label: T("read.voice", "Reader voice"), Items: items}
 }
 
 func stopReading() {
@@ -273,6 +329,7 @@ func readMenu(u *ui, flow *canvas.TextFlow, renderUI func()) []components.MenuIt
 			renderUI()
 		}},
 		{Separator: true},
+		voiceMenu(u, renderUI),
 		speed(T("read.slow", "Reading speed: slow"), "slow"),
 		speed(T("read.normal", "Reading speed: normal"), ""),
 		speed(T("read.fast", "Reading speed: fast"), "fast"),

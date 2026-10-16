@@ -1496,6 +1496,11 @@
   "docview.skip": "Enlaces de salto",
   "fidelity.checking": "%s: comprobando qué conserva este formato…",
   "files.working": "Trabajando…",
+  "read.voice": "Voz del lector",
+  "read.voiceAuto": "Voz del lector: la elección del navegador",
+  "read.voiceAutomatic": "Automática",
+  "read.voiceChosen": "Voz del lector: %s",
+  "read.voiceNone": "No hay otra voz para este idioma en este dispositivo",
   "note.counter": "%d de %d caracteres",
   "note.save": "Guardar",
   "note.title": "Nota al pie"
