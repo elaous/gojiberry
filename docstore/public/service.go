@@ -65,11 +65,17 @@ type Options struct {
 	// NewStoreQuota(store, int64(Config.MaxPriorityReportsPerReporter), 24*time.Hour). It is charged one unit
 	// per priority report, under the key "prio|<reporter>", with the fixed calendar days of a StoreQuota.
 	PriorityQuota Quota
-	Admin         AdminGuard                 // TokenAdmin(Config.AdminToken)
-	Blocklist     Blocklist                  // NoBlocklist
-	Challenger    Challenger                 // NoChallenge
-	ClientIP      func(*http.Request) string // passkey.TrustedProxies(Config.TrustedProxies...), else the remote address
-	Now           func() time.Time           // time.Now; use the clock of the ExpiringAdapter in tests
+	// SharedBurstWatch keeps the burst watch of the priority reports (networks that name many different
+	// documents within an hour, which alarms the operator and shows in /admin/health) in the store, one
+	// record per network under BurstKeyPrefix named by a keyed hash, so replicas count together and the
+	// alarm is logged once an hour, not once per replica. It needs a store with conditional writes
+	// (New refuses it otherwise).
+	SharedBurstWatch bool
+	Admin            AdminGuard                 // TokenAdmin(Config.AdminToken)
+	Blocklist        Blocklist                  // NoBlocklist
+	Challenger       Challenger                 // NoChallenge
+	ClientIP         func(*http.Request) string // passkey.TrustedProxies(Config.TrustedProxies...), else the remote address
+	Now              func() time.Time           // time.Now; use the clock of the ExpiringAdapter in tests
 }
 
 // Service is the public (anonymous) offer: session, document, view link, report and takedown
@@ -81,7 +87,8 @@ type Service struct {
 	sessions  SessionStore
 	lim       Limiters
 	quota     Quota
-	prioQuota Quota // shared allowance of priority reports, or nil: the per-process count (prio)
+	prioQuota Quota       // shared allowance of priority reports, or nil: the per-process count (prio)
+	burst     *burstStore // the shared burst watch, or nil: the per-process one (prio)
 	admin     AdminGuard
 	blocklist Blocklist
 	challenge Challenger
@@ -169,6 +176,13 @@ func New(o Options) (*Service, error) {
 		store: o.Store, cfg: cfg,
 		sessions: o.Sessions, lim: o.Limiters, quota: o.Quota, prioQuota: o.PriorityQuota, admin: o.Admin,
 		blocklist: o.Blocklist, challenge: o.Challenger, clientIP: o.ClientIP, now: o.Now,
+	}
+	if o.SharedBurstWatch {
+		ca, ok := o.Store.(docstore.ConditionalAdapter)
+		if !ok {
+			return nil, errors.New("public: SharedBurstWatch needs a store with conditional writes")
+		}
+		s.burst = &burstStore{store: ca}
 	}
 	s.flight.max, s.flight.perClient, s.flight.perNet = cfg.MaxInflightBytes, cfg.MaxInflightPerClient, cfg.MaxInflightPerNet
 	s.recSem = make(chan struct{}, 1)

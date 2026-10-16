@@ -120,7 +120,7 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.isPriority(category) {
-		s.noteBurst(NetKey(addr), docID)
+		s.noteBurst(ctx, NetKey(addr), docID)
 	}
 	reportID, err := randomString(16)
 	if err != nil {

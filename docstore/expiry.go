@@ -76,7 +76,11 @@ const (
 
 // systemPrefixes are the keyspaces that are not documents: they never expire by themselves (the
 // ones that belong to a document go with it, see DefaultRelated).
-var systemPrefixes = []string{ExpiryPrefix, ExpiryCreatedPrefix, aclKeyPrefix, collabPrefix, collabGonePrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, ConfigPrefix, DeviceUsePrefix, SessionPrefix, LoginStatePrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix, PublicPrefix, ReportPrefix}
+// RevokedSignerPrefix is where docstore/encrypt keeps the manifest of a removed owner signer's frames
+// ("revoked-signer/<fingerprint>"), written by RevokeSigner in the clear and signed by the key that stays.
+const RevokedSignerPrefix = "revoked-signer/"
+
+var systemPrefixes = []string{ExpiryPrefix, ExpiryCreatedPrefix, aclKeyPrefix, collabPrefix, collabGonePrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, ConfigPrefix, DeviceUsePrefix, SessionPrefix, LoginStatePrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix, PublicPrefix, ReportPrefix, RevokedSignerPrefix}
 
 // IsDocumentKey reports whether key is a plain document: what the saver writes ("<id>~<gen><ext>"
 // generation keys) or a client PUTs under a plain id. It is an allowlist of the document
