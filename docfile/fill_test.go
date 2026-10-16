@@ -1,8 +1,12 @@
 package docfile
 
 import (
+	"flag"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
+	"testing"
 )
 
 // fillDoc returns a Document with every field set to a non-zero value, two elements in
@@ -51,5 +55,28 @@ func fill(v reflect.Value, n *int, depth int) {
 				fill(v.Field(i), n, depth+1)
 			}
 		}
+	}
+}
+
+// TestDumpGolden writes what tools/pbgolden needs to regenerate the golden files (see that command): it does nothing
+// unless -dump names a directory.
+var dumpDir = flag.String("dump", "", "directory to write rich.txt and schema.proto to, for tools/pbgolden")
+
+func TestDumpGolden(t *testing.T) {
+	if *dumpDir == "" {
+		t.Skip("set -dump to regenerate the golden files")
+	}
+	b, err := ProtoText.Marshal(fillDoc())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(*dumpDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(*dumpDir, "rich.txt"), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(*dumpDir, "schema.proto"), []byte(Schema()), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

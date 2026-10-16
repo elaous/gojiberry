@@ -92,6 +92,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** `TestTableStylesDressAWholeTableAndAreRecognised` and `TestTableMenuOffersTheStylesAndChecksTheCurrentOne` (canvas), `TestEndToEnd` in examples/canvas-table-demo
 
+## Image legend and picture formats
+
+**Try it.** Insert > Picture, pick a WebP or PNG file, tick **Add a legend**, type a text, insert; export to Word and Markdown.
+
+**You should see.** The legend in italics under the picture, in the exports too.
+
+**Automated.** `TestAPictureWithALegendAndAWebPPicture` (examples/canvas-editor-showcase), `export/images_test.go`, `canvas/image_test.go`
+
 ## Two-page spread
 
 **Try it.** View > Two-page spread; press the folded corner at the bottom right of the right-hand page.

@@ -176,6 +176,11 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 				// the long description is text after the picture, so that every format carries it
 				after = append(after, Block{Start: -1, Kind: Paragraph, DescribesImage: true, Segments: []Segment{{Text: d}}})
 			}
+			if lg := strings.TrimSpace(it.Image.Legend); lg != "" {
+				// the legend is a paragraph in italics under the picture, so that every format carries it
+				legend := Block{Start: -1, Kind: Paragraph, Segments: []Segment{{Text: lg, Format: Format{Italic: true}}}}
+				after = append([]Block{after[0], legend}, after[1:]...)
+			}
 			lines = append(lines, line{start: pos, after: after})
 			pos++
 			cur.start = pos

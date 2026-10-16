@@ -142,6 +142,7 @@ These were "asked for, not started" and are built. The current state of the edit
 - **Spread view**: images run across the gutter by anchor; `PageSet.Gutter` is the space between facing sheets; the inner edges
   of a facing pair are shaded toward the fold (`PageStyle.GutterShade`) and, with `PageSet.OnTurn` set, each outer bottom corner
   has a folded tab that asks the host to show the neighbouring pair (the showcase scrolls there).
+- **Image legend** (`Image.Legend`): drawn under the picture, saved in `docfile`, written by the exports and Markdown; WebP is converted to PNG on insert.
 
 ## To do
 
