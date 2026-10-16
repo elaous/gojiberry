@@ -113,3 +113,48 @@ func TestTypewriterKeepsTheLineAtOneHeight(t *testing.T) {
 		t.Fatalf("off, the page moves only as far as it must (the caret at the foot of the view): y=%v view=%v", y, sv.ScrollY)
 	}
 }
+
+// A typewriter carriage: the letter being typed stays at one place across the view, so the page slides left as the
+// line grows and, on a carriage return, slides back right and a line up; the page may run past its edges.
+func TestTypewriterCarriageKeepsTheLetterInOnePlace(t *testing.T) {
+	f, p := selFlow(Chars{Text: "start"})
+	f.SetMode(ModeEdit)
+	f.X, f.Y, f.Width, f.Height = 0, 0, 2000, 400
+	sv := NewScrollView(0, 0, 200, 200)
+	sv.Add(f, 2000, 400)
+	NewStage(p, 200, 200, sv)
+	sv.Typewriter, sv.TypewriterX = true, true
+	f.MouseDown(5, 10)
+	f.MouseUp(0, 0)
+	sv.HandleKey("End", false)
+	atCaret := func() float64 { x, _, _, _ := sv.CaretBox(); return x }
+	if x := atCaret(); x < 99 || x > 101 {
+		t.Fatalf("the caret is in the middle across the view: %v", x)
+	}
+	sx := sv.ScrollX
+	for i := 0; i < 10; i++ {
+		sv.InsertText("m")
+		if x := atCaret(); x < 99 || x > 101 {
+			t.Fatalf("after %d letters the caret is still in its place: %v", i+1, x)
+		}
+	}
+	if sv.ScrollX <= sx {
+		t.Fatalf("the page slid left under the carriage: %v -> %v", sx, sv.ScrollX)
+	}
+	sv.HandleKey("Enter", false)
+	if x := atCaret(); x < 99 || x > 101 {
+		t.Fatalf("after the return the start of the new line is in the place: %v", x)
+	}
+	if sv.ScrollX >= sx {
+		t.Fatalf("the page slid back right, past its left edge: %v", sv.ScrollX)
+	}
+	if sv.ScrollX >= 0 {
+		t.Fatalf("at the start of a line the page is past its left edge: %v", sv.ScrollX)
+	}
+	// without the carriage the page stays put for a short line
+	sv.TypewriterX = false
+	sv.ScrollTo(0, 0)
+	if sv.ScrollX != 0 {
+		t.Fatalf("a normal view does not run past its edge: %v", sv.ScrollX)
+	}
+}

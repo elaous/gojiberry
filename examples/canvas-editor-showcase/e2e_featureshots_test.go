@@ -103,6 +103,31 @@ func TestFeatureShots(t *testing.T) {
 	d.Sleep(500)
 	of(".gj-docview-desk", "math")
 
+	// the typewriter carriage: the page slides left as the line grows, and back right and up on Enter
+	tab("prefs")
+	d.WaitSelector(".gj-prefs-search")
+	d.Fill(".gj-prefs-search", "typewriter")
+	d.Dispatch(".gj-prefs-search", "input")
+	d.WaitFor("two preferences", `document.querySelector('.gj-prefs-count').textContent === '2 preferences'`)
+	d.Eval(`document.querySelectorAll('.gj-prefs .gj-checkbox-input').forEach(i => i.click())`, nil)
+	d.WaitFor("kept", `JSON.parse(localStorage.getItem('showcase:a11y')).typewriterx === 'on'`)
+	tab("format")
+	d.CanvasClick(240, 164)
+	d.Focus("#input")
+	d.Press("Control+a")
+	d.Press("Delete")
+	for range 3 {
+		d.Type("A line of typed text, then the next. ")
+		d.Press("Enter")
+	}
+	d.Type("The line being typed now and some more words")
+	d.Eval(`window.scrollTo(0, 0)`, nil)
+	d.Sleep(300)
+	of(".gj-docview-desk", "typewriter-typing")
+	d.Press("Enter")
+	d.Sleep(300)
+	of(".gj-docview-desk", "typewriter-return")
+
 	d.Click(`button.gj-menubar-button:has-text("Read aloud")`)
 	shot("menu-read-aloud")
 	d.NoErrors()

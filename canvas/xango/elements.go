@@ -300,7 +300,9 @@ type ScrollViewProps struct {
 	// the page instead (see canvas.ScrollView.Typewriter).
 	Typewriter   bool
 	TypewriterAt float64
-	Children     []xango.Node
+	// TypewriterX makes the typewriter a carriage that also slides the page sideways (see canvas.ScrollView.TypewriterX).
+	TypewriterX bool
+	Children    []xango.Node
 }
 
 // ScrollView is a scroll container.

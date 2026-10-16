@@ -25,6 +25,8 @@ type State struct {
 	StrongCaret bool
 	// Typewriter keeps the line being typed in the middle of the view and moves the page (a preference).
 	Typewriter bool
+	// TypewriterX makes it a carriage: the page also slides sideways, so the letter being typed stays in one place.
+	TypewriterX bool
 	// RunHeader and RunFooter are the running header and footer of the print layout (fields {page}, {pages}
 	// and {title}, a tab between the left, centre and right parts); empty is the sample's own header and
 	// page number. DocTitle fills {title}.
