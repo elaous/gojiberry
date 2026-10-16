@@ -164,12 +164,27 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 		for i, r := range imgs {
 			if r.img.Alt == "" && !r.img.Decorative {
 				id := fmt.Sprintf("img-alt-%d", i)
-				js.Global().Call("setTimeout", js.FuncOf(func(js.Value, []js.Value) any {
-					if el := js.Global().Get("document").Call("getElementById", id); el.Truthy() {
+				// The field may not be in the page yet when the timer fires (a slow machine, a render still
+				// going): look again every 50 ms for up to two seconds, until it has the focus.
+				var try js.Func
+				tries := 0
+				try = js.FuncOf(func(js.Value, []js.Value) any {
+					doc := js.Global().Get("document")
+					if el := doc.Call("getElementById", id); el.Truthy() {
 						el.Call("focus")
+						if ae := doc.Get("activeElement"); ae.Truthy() && ae.Get("id").String() == id {
+							try.Release()
+							return nil
+						}
 					}
+					if tries++; tries >= 40 {
+						try.Release()
+						return nil
+					}
+					js.Global().Call("setTimeout", try, 50)
 					return nil
-				}), 50)
+				})
+				js.Global().Call("setTimeout", try, 50)
 				break
 			}
 		}
