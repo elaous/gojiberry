@@ -38,6 +38,12 @@ func newMigrate(u *ui, renderUI func()) *migrate.Session {
 	s.OnChange = func() { renderUI() }
 	s.OnDone = func(migrate.Report) { u.saver.Pending.Run(u.saver.Refresh) }
 	s.Deliver = transfer.Download
+	// What an earlier run brought is read from the origin tags of the documents in the target they go to, so a
+	// second run leaves the files that have not changed at the platform.
+	s.Known = func(ctx context.Context) (migrate.Ledger, error) {
+		target, _ := u.saver.Where()
+		return migrate.NewSaverLedger(ctx, u.saver.Saver, target)
+	}
 	s.Import = remote.WordImport(callFiles) // the Word reader is in the file worker
 	return s
 }
