@@ -37,7 +37,7 @@ type Repository interface {
 }
 
 // Accepted media types: the ones the editor can show and the exports carry.
-var accepted = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
+var accepted = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true, "image/avif": true, "image/svg+xml": true}
 
 // DefaultMaxBytes is the largest picture Fetch reads.
 const DefaultMaxBytes = 8 << 20
@@ -48,7 +48,7 @@ var ErrNotEnabled = errors.New("imagerepo: repository is not enabled")
 // ErrTooLarge and ErrBadType are the limits Fetch enforces.
 var (
 	ErrTooLarge = errors.New("imagerepo: picture is too large")
-	ErrBadType  = errors.New("imagerepo: not a png, jpeg, gif or webp picture")
+	ErrBadType  = errors.New("imagerepo: not a png, jpeg, gif, webp, avif or svg picture")
 )
 
 // Library holds the registered repositories and which of them the person has enabled.

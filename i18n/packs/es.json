@@ -752,7 +752,7 @@
   "enc.sheetPrint": "Imprimir",
   "enc.sheetTitle": "Clave de recuperación",
   "enc.stale": "Las claves de este almacenamiento se cambiaron en otra pestaña o ventana desde que se cargó esta página. Esta pestaña está bloqueada para no sobrescribir ese cambio: recargue la página.",
-  "img.badFile": "Eso no es un archivo de imagen (png, jpeg, gif o webp).",
+  "img.badFile": "Eso no es un archivo de imagen (png, jpeg, gif, webp, avif o svg).",
   "img.decorative": "Decorativa: una descripción no aportaría nada",
   "img.descHint": "Lo que necesita saber una persona que no puede verla",
   "img.descLabel": "Descripción de la imagen %d",
