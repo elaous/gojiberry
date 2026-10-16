@@ -253,7 +253,7 @@ func typesetRow(p Painter, n *mnode, size float64) mbox {
 		x += pad
 		parts = append(parts, placed{b, x})
 		x += b.w + pad
-		prevOperand = !(k.kind == mOp && k.text != ")" && k.text != "]" && k.text != "|")
+		prevOperand = k.kind != mOp || k.text == ")" || k.text == "]" || k.text == "|"
 	}
 	out := mbox{w: x}
 	for _, pl := range parts {
