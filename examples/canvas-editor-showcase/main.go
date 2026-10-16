@@ -220,7 +220,16 @@ func main() {
 				u.pub.edited()
 			}
 		},
-		OnHoverLink:    func(url string) { u.hoverLink = url; renderUI() },
+		OnHoverLink: func(url string) { u.hoverLink = url; renderUI() },
+		OnTurn: func(page int) {
+			ps, ok := root.Find(cxango.TagPage, 0).(*canvas.PageSet)
+			if !ok || page < 0 || page >= len(ps.Pages) {
+				return
+			}
+			_, y, _, _ := ps.PageRect(page)
+			root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).ScrollTo(0, y-ps.Style.Pad)
+			redraw()
+		},
 		OnHoverComment: func(id string) { u.hoverComment = id },
 	}
 	renderCanvas := func() {

@@ -117,6 +117,9 @@ type TextFlowProps struct {
 	// between facing sheets.
 	Spread, SpreadBook bool
 	Gutter             float64
+	// OnTurn, when set, gives a spread folded corner tabs; pressing one calls it with the first sheet of the pair it
+	// leads to.
+	OnTurn func(page int)
 
 	// PageCount is how many sheets there are (default 1); PageWidth and
 	// PageHeight their size (default 595 x 842, A4 in points).

@@ -11,6 +11,7 @@ import (
 type Callbacks struct {
 	OnFlow      func(*cv.TextFlow)
 	OnHoverLink func(url string)
+	OnTurn      func(page int) // a corner tab of the spread view was pressed: show this page
 	OnHoverComment func(id string)
 	OnNote  func(*cv.FloatingText)
 	OnTable func(*cv.Table)
@@ -42,6 +43,7 @@ func Doc(state State, cb Callbacks) xango.Node {
 				margins={state.Setup.MarginList()}
 				onChange={cb.OnFlow}
 				onHoverLink={cb.OnHoverLink}
+				onTurn={cb.OnTurn}
 				comments={state.Comments}
 				footnotes={state.Footnotes}
 				author={state.Author}

@@ -105,6 +105,9 @@ in the selector is downloaded into the store the first time the text uses it
   (`components.NoteEditor`, `Stage.EditNote`) shows a read-only counter only while the note is being typed. Pressing a note's text on the
   page edits it (`TextFlow.OnFootnote`). A click on a row of the index goes to the term's first mark, as one on the table of contents does.
 - **Columns**: `Reset column widths` (Edit > Columns) gives the columns of a region equal widths again after a grip was dragged.
+- **Outline**: sections fold (`components.Outline` `Collapsed`/`OnToggle`) and move (`TextFlow.SectionRange`, `TextFlow.MoveSection`; move
+  buttons and drag and drop in the panel, `components.OutlineUp`/`OutlineDown` for the keyboard path); bookmarks are marked on the
+  canvas while editing (`BookmarkMarkColor`, never exported).
 
 - **Multi-cursor at a break**: two cursors at one offset of a page or column break keep their own side of it (typing
   goes in front of the break at one and behind it at the other).
@@ -126,15 +129,15 @@ These were "asked for, not started" and are built. The current state of the edit
   `docximport`, `odtimport`, `htmlimport`, `pdftext`), with a fidelity report of what each drops; saving pages,
   floating objects and images.
 - **`PageSet` as an xango element** (`TagPage` in `canvas/xango`).
-- **Spread view**: images run across the gutter by anchor; `PageSet.Gutter` is the space between facing sheets.
+- **Spread view**: images run across the gutter by anchor; `PageSet.Gutter` is the space between facing sheets; the inner edges
+  of a facing pair are shaded toward the fold (`PageStyle.GutterShade`) and, with `PageSet.OnTurn` set, each outer bottom corner
+  has a folded tab that asks the host to show the neighbouring pair (the showcase scrolls there).
 
 ## To do
 
 Asked for, not started:
 
-- Outline: no collapsing of sections or drag-to-reorder; bookmarks are not drawn on the canvas (only listed).
 - **Map object** (OpenStreetMap tiles) and **flowcharts** as canvas objects.
 - Comments: notifications for mentions.
 - Markdown: case and small caps have no Markdown form (the format has no syntax for them; a limit of Markdown).
 - Table cell render prop for the xango `Table`, and `CanvasView` (a DOM component that mounts a `canvas/xango` tree).
-- Spread view: no gutter shadow or page-turn UI.
