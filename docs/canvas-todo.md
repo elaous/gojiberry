@@ -97,34 +97,37 @@ in the selector is downloaded into the store the first time the text uses it
 
 `examples/canvas-editor-showcase` puts all of it in one window.
 
+## Done since this list was written
+
+These were "asked for, not started" and are built. The current state of the editor is the
+[roadmap](roadmap.md) and [status.md](status.md); this page lists the canvas core.
+
+- **Multi-cursor**: select all occurrences (`Mod+Shift+L`), add a cursor above or below (`Mod+Alt+Up`, `Mod+Alt+Down`),
+  cursors at line ends (`Alt+Shift+I`), next match (`Mod+D`): `canvas/feature_multicursor.go`.
+- **Multi-user editing**: built, with per-user undo, remote carets, presence, comment-only viewers, roles and a hub that
+  renews expiring documents ([multiuser-design.md](multiuser-design.md), roadmap).
+- **Comments**: the author list for `@username` completion is `canvas.Roster` (the handle of a person, never an address
+  that is not theirs to show), and mentions are replies in the comment list.
+- **Formulas**: an equation item (`docfile.EquationItem`), read from Word's Office Math (`docximport`), drawn and
+  exported (`docfile/equation.go`).
+- **Importers and exporters** beyond Markdown and text: Word, PDF, HTML, RTF, EPUB and OpenDocument (`export`,
+  `docximport`, `odtimport`, `htmlimport`, `pdftext`), with a fidelity report of what each drops; saving pages,
+  floating objects and images.
+- **`PageSet` as an xango element** (`TagPage` in `canvas/xango`).
+- **Spread view**: images run across the gutter by anchor; `PageSet.Gutter` is the space between facing sheets.
+
 ## To do
 
 Asked for, not started:
 
-- Footnotes sit in a fixed band per page rather than pushing text to the next
-  page; the index is not clickable (the table of contents is: a click on a row goes to the heading); a footnote cannot
-  be edited on the page itself (use the list or `footnote.edit`).
-- Outline: no collapsing of sections or drag-to-reorder; bookmarks are not
-  drawn on the canvas (only listed).
-- **Select all occurrences**: Ctrl/Cmd+Shift+L puts a cursor on every occurrence
-  of the selected word (multi-cursor; today only Mod+D adds the next match).
-- **Add cursor above / below**: Ctrl/Cmd+Alt+ArrowUp / ArrowDown adds a cursor
-  on the line above or below, at the same column (multi-cursor).
+- Footnotes sit in a fixed band per page rather than pushing text to the next page; the index is not clickable (the
+  table of contents is: a click on a row goes to the heading); a footnote cannot be edited on the page itself (use the
+  list or `footnote.edit`).
+- Outline: no collapsing of sections or drag-to-reorder; bookmarks are not drawn on the canvas (only listed).
 - **Map object** (OpenStreetMap tiles) and **flowcharts** as canvas objects.
-- **Multi-user editing**: designed in [multiuser-design.md](multiuser-design.md)
-  (one attributed character sequence, a bridge to the `TextFlow`, SSE + POST,
-  server-side roles); built, with per-user undo, remote carets, presence and
-  comment-only viewers. Left: see "Not yet" in the design doc.
-- Comments: an author list for
-  `@username` completion; notifications for mentions.
-
-- **Formula** editor and formula text element.
-- `TextFlow` multi-cursor keeps one `Cursor.After` per cursor; typing at a
-  break offset goes in front of the break unless the caret is "after".
-- Markdown: links round-trip, but tables and images are not written back;
-  case and small caps have no Markdown form.
-- Importers/exporters beyond Markdown and text (Word, PDF, HTML); saving pages, floating objects and images.
-- Table cell render prop for the xango `Table`, `PageSet` as its own xango
-  element, `CanvasView` (a DOM component that mounts a `canvas/xango` tree).
-- Spread view: images can run across the gutter by anchor, but there is
-  no gutter shadow or page-turn UI.
+- Comments: notifications for mentions.
+- `TextFlow` multi-cursor keeps one `Cursor.After` per cursor; typing at a break offset goes in front of the break unless
+  the caret is "after".
+- Markdown: links round-trip, but tables and images are not written back; case and small caps have no Markdown form.
+- Table cell render prop for the xango `Table`, and `CanvasView` (a DOM component that mounts a `canvas/xango` tree).
+- Spread view: no gutter shadow or page-turn UI.
