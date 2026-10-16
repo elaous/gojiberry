@@ -56,3 +56,29 @@ func TestHubReportsItsOperationsAndRooms(t *testing.T) {
 		t.Error("a request refused before any work is not counted as work")
 	}
 }
+
+func TestPresenceUpdatesAreReported(t *testing.T) {
+	b := capture(t)
+	srv := httptest.NewServer(New(Config{}).Handler())
+	defer srv.Close()
+	post := func(body string) int {
+		resp, err := http.Post(srv.URL+"/docs/one/presence", "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+	if post(`{"replica":"r1","name":"Ana"}`) != http.StatusNoContent {
+		t.Fatal("a presence update is accepted")
+	}
+	if post(`{"name":"no replica"}`) != http.StatusBadRequest {
+		t.Fatal("a presence update with no replica is refused")
+	}
+	if got := b.Count(observe.WorkRuns, "work", "hub_presence", "result", "ok"); got != 1 {
+		t.Errorf("hub_presence ok = %d, want 1", got)
+	}
+	if got := b.Count(observe.WorkRuns, "work", "hub_presence", "result", "rejected"); got != 1 {
+		t.Errorf("hub_presence rejected = %d, want 1", got)
+	}
+}

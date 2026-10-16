@@ -328,3 +328,30 @@ func TestMarkdownCRLFAndEmpty(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+func TestMarkdownWriteBackTablesRulesAndImages(t *testing.T) {
+	src := "| Name | Note \\| pipe |\n| --- | --- |\n| apple | 3 |\n\n---\nafter"
+	items := Markdown{}.Transform(src)
+	got := MarkdownFromItems(items)
+	back := MarkdownFromItems(Markdown{}.Transform(got))
+	if back != got {
+		t.Fatalf("not stable:\n%s\n--\n%s", got, back)
+	}
+	for _, want := range []string{"| Name | Note \\| pipe |", "| --- | --- |", "| apple | 3 |", "---\nafter"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in\n%s", want, got)
+		}
+	}
+	img := &Image{Src: urlFake{}, Alt: "a [cat]"}
+	md := MarkdownFromItems([]Item{Chars{Text: "see "}, Inline{Object: img}, Chars{Text: " here"}})
+	if md != "see ![a (cat)](http://x/y.png) here" {
+		t.Errorf("image: %q", md)
+	}
+	if md := MarkdownFromItems([]Item{Inline{Object: &Image{Src: fakeImage{}}}}); md != "" {
+		t.Errorf("a picture with no address has no form: %q", md)
+	}
+}
+
+type urlFake struct{ fakeImage }
+
+func (urlFake) URL() string { return "http://x/y.png" }

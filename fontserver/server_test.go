@@ -281,3 +281,22 @@ func TestRescanIsReported(t *testing.T) {
 		t.Errorf("font_rescan ok = %d, want 1", got)
 	}
 }
+
+func TestFileSymbolsGoogleAndDownloadAreReported(t *testing.T) {
+	b := observe.NewBuiltin()
+	old := observe.Default()
+	observe.SetDefault(observe.New(observe.Options{Operator: b}))
+	defer observe.SetDefault(old)
+	srv := newTestServer(t, Config{FontsDir: t.TempDir()})
+	for _, c := range []struct{ method, path, work, result string }{
+		{http.MethodGet, "/local/files/nope.ttf", "font_file", "rejected"},
+		{http.MethodGet, "/local/symbols?family=Nope", "font_symbols", "rejected"},
+		{http.MethodGet, "/google/fonts", "google_fonts", "ok"},
+		{http.MethodPost, "/local/download", "font_download", "rejected"},
+	} {
+		srv.Handler().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(c.method, c.path, nil))
+		if got := b.Count(observe.WorkRuns, "work", c.work, "result", c.result); got != 1 {
+			t.Errorf("%s %s = %d, want 1", c.work, c.result, got)
+		}
+	}
+}

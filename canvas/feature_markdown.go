@@ -172,6 +172,7 @@ func MarkdownFromItems(items []Item) string {
 	type mdLine struct {
 		runs []Chars
 		pf   ParaFormat
+		raw  string // a block written as it is (a table, a rule)
 	}
 	var lines []mdLine
 	cur := mdLine{runs: []Chars{}}
@@ -179,6 +180,18 @@ func MarkdownFromItems(items []Item) string {
 		switch v := it.(type) {
 		case ParaFormat:
 			cur.pf = v
+		case Inline:
+			if md, block := inlineMarkdown(v); md != "" {
+				if block {
+					if len(cur.runs) > 0 || cur.raw != "" {
+						lines = append(lines, cur)
+						cur = mdLine{runs: []Chars{}}
+					}
+					cur.raw = md
+				} else {
+					cur.runs = append(cur.runs, Chars{Text: rawRun + md})
+				}
+			}
 		case Chars:
 			parts := strings.Split(v.Text, "\n")
 			for i, p := range parts {
@@ -197,6 +210,10 @@ func MarkdownFromItems(items []Item) string {
 	var out []string
 	var nums listNumbers
 	for _, ln := range lines {
+		if ln.raw != "" {
+			out = append(out, ln.raw)
+			continue
+		}
 		runs := ln.runs
 		prefix := ""
 		level := headingLevel(runs)
@@ -233,6 +250,10 @@ func MarkdownFromItems(items []Item) string {
 		var b strings.Builder
 		b.WriteString(prefix)
 		for _, r := range runs {
+			if raw, ok := strings.CutPrefix(r.Text, rawRun); ok {
+				b.WriteString(raw)
+				continue
+			}
 			b.WriteString(markRun(r))
 		}
 		line := b.String()
@@ -242,6 +263,54 @@ func MarkdownFromItems(items []Item) string {
 		out = append(out, line)
 	}
 	return strings.Join(out, "\n")
+}
+
+// rawRun marks a run of MarkdownFromItems that is already Markdown (an image) and must not be marked again.
+const rawRun = "\x00"
+
+// inlineMarkdown writes an inline object the Markdown has a form for: a rule (---), a table (a pipe table, the
+// first row as the header) or a picture that knows its address (![alt](url)). block says it takes lines of
+// its own. Other objects have no Markdown form and are left out.
+func inlineMarkdown(in Inline) (md string, block bool) {
+	switch o := in.Object.(type) {
+	case *Rule:
+		return "---", true
+	case *TableObject:
+		if o.View == nil || o.View.Table == nil || len(o.View.Table.Cells) == 0 {
+			return "", false
+		}
+		cells := o.View.Table.Cells
+		row := func(r []string) string {
+			parts := make([]string, len(r))
+			for i, c := range r {
+				c = strings.ReplaceAll(c, "|", "\\|")
+				parts[i] = strings.ReplaceAll(c, "\n", " ")
+			}
+			return "| " + strings.Join(parts, " | ") + " |"
+		}
+		lines := []string{row(cells[0])}
+		sep := make([]string, len(cells[0]))
+		for i := range sep {
+			sep[i] = "---"
+		}
+		lines = append(lines, "| "+strings.Join(sep, " | ")+" |")
+		for _, r := range cells[1:] {
+			lines = append(lines, row(r))
+		}
+		return strings.Join(lines, "\n"), true
+	case *Image:
+		u, ok := o.Src.(URLSource)
+		if !ok {
+			return "", false
+		}
+		alt := o.Alt
+		if o.Decorative {
+			alt = ""
+		}
+		alt = strings.NewReplacer("[", "(", "]", ")").Replace(alt)
+		return "![" + alt + "](" + u.URL() + ")", false
+	}
+	return "", false
 }
 
 // headingLevel returns 1-5 if every run of the line has the Scale of

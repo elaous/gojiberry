@@ -94,15 +94,15 @@ var exportMatrix = map[string]map[Feature]entry{
 	// HTML embeds a clip (a player with its caption track and the transcript under it).
 	"html": formatTable(foldedFeatures, map[Feature]entry{FeatHighlight: drop(""), FeatFootnote: kept(), FeatCodeLanguage: kept(), FeatMedia: kept(), FeatMediaCaptions: kept()}),
 	// Markdown here is the editor's own: its marks for underline, highlight and raised or lowered text are
-	// not standard. Pictures, tables, footnotes and rules are not written at all.
+	// not standard. Tables are written as pipe tables (cell text only: spans, shading and alignment are not) and rules as ---; pictures and footnotes are not written.
 	"markdown": formatTable(noPages, textEquation, map[Feature]entry{
 		FeatImageLongDesc: drop(NoteContentLost),
 		FeatUnderline:     simple(NoteMarks), FeatHighlight: simple(NoteMarks),
 		FeatSuperscript: simple(NoteMarks), FeatSubscript: simple(NoteMarks),
 		FeatRunLanguage: drop(""), FeatSuggestion: drop(NoteAccepted),
-		FeatRule: drop(""), FeatFootnote: drop(NoteContentLost),
-		FeatImage: drop(NoteContentLost), FeatImageAlt: drop(NoteContentLost),
-		FeatTable: drop(NoteContentLost), FeatColSpan: drop(NoteContentLost), FeatRowSpan: drop(NoteContentLost),
+		FeatFootnote: drop(NoteContentLost),
+		FeatImage:    drop(NoteContentLost), FeatImageAlt: drop(NoteContentLost),
+		FeatColSpan: drop(NoteContentLost), FeatRowSpan: drop(NoteContentLost),
 		FeatCellShading: drop(NoteContentLost), FeatCellAlign: drop(NoteContentLost),
 		FeatDocLanguage: drop(""), FeatTitle: drop(""),
 	}),

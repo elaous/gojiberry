@@ -217,6 +217,12 @@ func normalize(cs []Cursor) []Cursor {
 	slices.SortStableFunc(out, func(a, b Cursor) int {
 		af, _ := a.Range()
 		bf, _ := b.Range()
+		if af == bf && a.Empty() && b.Empty() && a.After != b.After {
+			if !a.After {
+				return -1
+			}
+			return 1
+		}
 		return af - bf
 	})
 	var merged []Cursor
@@ -224,7 +230,9 @@ func normalize(cs []Cursor) []Cursor {
 		if n := len(merged); n > 0 {
 			pf, pt := merged[n-1].Range()
 			cf, ct := c.Range()
-			if cf < pt || (cf == pt && (cf == pf || c.Empty() || merged[n-1].Empty())) {
+			// Two empty cursors at one offset stay two when they sit on different sides of a break there.
+			sides := cf == pt && cf == pf && c.Empty() && merged[n-1].Empty() && c.After != merged[n-1].After
+			if !sides && (cf < pt || (cf == pt && (cf == pf || c.Empty() || merged[n-1].Empty()))) {
 				merged[n-1] = Cursor{Anchor: pf, Caret: max(pt, ct)}
 				continue
 			}

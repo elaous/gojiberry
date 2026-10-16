@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- shared-mime-info entry for the .opendoc pack: copy to /usr/share/mime/packages/ and run update-mime-database. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/vnd.opendocs.pack">
+    <comment>OpenDocs pack</comment>
+    <glob pattern="*.opendoc"/>
+    <magic priority="60">
+      <match type="string" value="OPENDOC\0" offset="0"/>
+    </magic>
+  </mime-type>
+</mime-info>
