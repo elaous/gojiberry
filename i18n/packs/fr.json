@@ -1512,6 +1512,8 @@
   "imgfind.fetching": "Récupération de l'image…",
   "imgfind.fetchFailed": "L'image n'a pas pu être récupérée (trop grande, ce n'est pas une image, ou le dépôt n'a pas répondu).",
   "imgfind.insert": "Insérer avec son crédit",
+  "imgfind.more": "Plus de résultats",
+  "imgfind.listError": "La liste de dépôts de l'opérateur n'a pas pu être lue : ",
   "img.legendStart": "Figure %d :",
   "prefs.typewriter": "Défilement machine à écrire : la ligne que je tape reste au milieu de la vue et la page se déplace",
   "read.voice": "Voix de lecture",

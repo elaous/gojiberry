@@ -1512,6 +1512,8 @@
   "imgfind.fetching": "Bild wird geholt …",
   "imgfind.fetchFailed": "Das Bild konnte nicht geholt werden (zu groß, kein Bild oder das Verzeichnis hat nicht geantwortet).",
   "imgfind.insert": "Mit Quellenangabe einfügen",
+  "imgfind.more": "Weitere Ergebnisse",
+  "imgfind.listError": "Die Liste der Verzeichnisse des Betreibers konnte nicht gelesen werden: ",
   "img.legendStart": "Abbildung %d:",
   "prefs.typewriter": "Schreibmaschinen-Scrollen: die Zeile, die ich tippe, bleibt in der Mitte der Ansicht, die Seite bewegt sich",
   "read.voice": "Stimme des Vorlesers",

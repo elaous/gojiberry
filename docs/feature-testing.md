@@ -108,7 +108,9 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **You should see.** The picture at the caret with a legend like "Harbour by Ana, CC BY 4.0, via Openverse", also in the HTML export.
 
-**Automated.** `TestFindAPictureInARepositoryAndInsertItWithItsCredit` (examples/canvas-editor-showcase), package `imagerepo` tests
+**Also try.** Search, then press **More results**; put an `image-repos.json` next to the page and check the repository is listed, off.
+
+**Automated.** `TestOperatorListOfRepositoriesAndMoreResults`, `TestFindAPictureInARepositoryAndInsertItWithItsCredit` (examples/canvas-editor-showcase), package `imagerepo` tests
 
 ## Two-page spread
 
