@@ -4,9 +4,78 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"time"
+
+	"github.com/elaous/gojiberry/docstore"
 )
+
+// RevokedSignerPrefix is the keyspace of the manifests RevokeSigner writes (one record per removed key,
+// "revoked-signer/<fingerprint>"), in the clear and signed by the key that stays. DefaultSkip leaves it alone.
+const RevokedSignerPrefix = "revoked-signer/"
+
+// signerManifest is what the removed key had written when the removal began: the frames it signed, by file and
+// content hash. It is signed by the key that stays, so the removed key cannot replace it with its own.
+type signerManifest struct {
+	Key    string      `json:"key"` // SignerFingerprint of the removed key
+	At     int64       `json:"at"`
+	Frames []FrameMark `json:"frames"`
+	Signer []byte      `json:"signer"` // the public key that signed
+	Sig    string      `json:"sig"`
+}
+
+func (m signerManifest) message() []byte {
+	h := sha256.New()
+	h.Write([]byte("gojiberry-revoked-signer-manifest-v1|" + m.Key + "|"))
+	_ = json.NewEncoder(h).Encode(struct {
+		At     int64       `json:"at"`
+		Frames []FrameMark `json:"frames"`
+	}{m.At, m.Frames})
+	return h.Sum(nil)
+}
+
+// loadSignerManifest reads the manifest of a key if one is stored and verifies under the signer that stays.
+func (s *Sharing) loadSignerManifest(ctx context.Context, fp string) (*signerManifest, error) {
+	d, err := s.Adapter.Inner.Load(ctx, RevokedSignerPrefix+fp)
+	if errors.Is(err, docstore.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var m signerManifest
+	if json.Unmarshal(d.Data, &m) != nil || m.Key != fp || !bytes.Equal(m.Signer, s.Signer.Public()) {
+		return nil, nil // not ours: made afresh (a removed key can delete a manifest, never forge one)
+	}
+	if sig, err := base64.StdEncoding.DecodeString(m.Sig); err != nil || !VerifySigned(m.Signer, m.message(), sig) {
+		return nil, nil
+	}
+	return &m, nil
+}
+
+func (s *Sharing) saveSignerManifest(ctx context.Context, fp string, frames []FrameMark) (*signerManifest, error) {
+	sort.Slice(frames, func(i, j int) bool {
+		if frames[i].File != frames[j].File {
+			return frames[i].File < frames[j].File
+		}
+		return frames[i].Hash < frames[j].Hash
+	})
+	m := signerManifest{Key: fp, At: time.Now().Unix(), Frames: frames, Signer: s.Signer.Public()}
+	m.Sig = base64.StdEncoding.EncodeToString(s.Signer.Sign(m.message()))
+	data, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Adapter.Inner.Save(ctx, RevokedSignerPrefix+fp, data); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
 
 // Errors of RevokeSigner. The key is not removed in any of these cases.
 var (
@@ -45,6 +114,14 @@ type RevokeSignerReport struct {
 	// key while the removal was happening. They are refused as forged from now on (the reader says so), and the
 	// owner decides what to do with each (Repair with AcceptUnsigned for a file that is theirs, else restore it).
 	Late []string
+	// Manifest is how many frames the removed key had signed when the removal began (the manifest kept in the
+	// store as RevokedSignerPrefix + the key's fingerprint, signed by the key that stays; a run that is finished
+	// by running it again keeps the first manifest).
+	Manifest int
+	// During are the files in which the removed key wrote a frame after the removal began: a frame that is not in
+	// the manifest (another file, or the same file with other content). RevokeSigner signed them again like the
+	// rest, so they verify; look at each before trusting it. Frames the key writes after the last scan are in Late.
+	During []string
 	// Skipped are the documents that could not be signed again, with the reason (when ErrRevokeCannotResign).
 	Skipped []RepairSkip
 }
@@ -61,8 +138,7 @@ type RevokeSignerReport struct {
 //
 // It is restartable: every step is idempotent, so a run that is cut short (context, crash, a failed Remove) is
 // finished by running it again. Nothing is removed unless every document could be signed again.
-func (s *Sharing) RevokeSigner(ctx context.Context, key ed25519.PublicKey, o RevokeSignerOptions) (RevokeSignerReport, error) {
-	var rep RevokeSignerReport
+func (s *Sharing) RevokeSigner(ctx context.Context, key ed25519.PublicKey, o RevokeSignerOptions) (rep RevokeSignerReport, _ error) {
 	if s.Adapter == nil || s.Signer == nil || s.Adapter.Signer == nil || o.Remove == nil {
 		return rep, ErrRevokeNeedsSigner
 	}
@@ -73,21 +149,59 @@ func (s *Sharing) RevokeSigner(ctx context.Context, key ed25519.PublicKey, o Rev
 	if maxPasses <= 0 {
 		maxPasses = 5
 	}
+	// What the key had written when the removal began, signed by the key that stays. A manifest left by a run
+	// that was cut short is kept: the first one is the one that counts.
+	fp := SignerFingerprint(key)
+	man, err := s.loadSignerManifest(ctx, fp)
+	if err != nil {
+		return rep, err
+	}
+	if man == nil {
+		first, err := s.RepairAll(ctx, RepairAllOptions{DryRun: true, FramesOf: key})
+		if err != nil {
+			return rep, err
+		}
+		if man, err = s.saveSignerManifest(ctx, fp, first.Frames); err != nil {
+			return rep, err
+		}
+	}
+	rep.Manifest = len(man.Frames)
+	known := make(map[FrameMark]bool, len(man.Frames))
+	for _, f := range man.Frames {
+		known[f] = true
+	}
+	during := map[string]bool{}
+	note := func(r RepairAllReport) {
+		for _, f := range r.Frames {
+			if !known[f] {
+				during[f.File] = true
+			}
+		}
+	}
+	defer func() {
+		rep.During = rep.During[:0]
+		for f := range during {
+			rep.During = append(rep.During, f)
+		}
+		sort.Strings(rep.During)
+	}()
 	for {
 		if err := ctx.Err(); err != nil {
 			return rep, err
 		}
-		pass, err := s.RepairAll(ctx, RepairAllOptions{Resign: true, Progress: o.Progress})
+		pass, err := s.RepairAll(ctx, RepairAllOptions{Resign: true, Progress: o.Progress, FramesOf: key})
 		if err != nil {
 			return rep, err
 		}
+		note(pass)
 		rep.Passes++
 		rep.Resigned += pass.Resigned
 		// anything the key still signed (it wrote while the pass ran), or that could not be moved?
-		check, err := s.RepairAll(ctx, RepairAllOptions{Resign: true, DryRun: true})
+		check, err := s.RepairAll(ctx, RepairAllOptions{Resign: true, DryRun: true, FramesOf: key})
 		if err != nil {
 			return rep, err
 		}
+		note(check)
 		if len(check.Skipped) > 0 {
 			rep.Skipped = check.Skipped
 			return rep, fmt.Errorf("%w: %d documents", ErrRevokeCannotResign, len(check.Skipped))

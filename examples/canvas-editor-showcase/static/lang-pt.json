@@ -482,6 +482,7 @@
     "recipients.removeOwner": "Remover esta chave",
     "recipients.removeOwnerOf": "Remover a chave %s",
     "recipients.confirmRemoveOwner": "Remover %s como chave deste armazenamento? Tudo o que está guardado aqui é encriptado de novo sem ela, pelo que deixa de poder abrir o que for guardado a partir de agora. Quem a tinha mantém o que já leu ou copiou, e qualquer cópia de dados antigos que tenha: isso não pode ser desfeito.",
+    "recipients.removeOwnerWindow": "Até a remoção terminar, quem tiver essa chave e puder escrever neste armazenamento ainda pode salvar arquivos com aparência genuína; depois, esses arquivos são recusados.",
     "recipients.recoveryAck": "Guardei esta chave de recuperação num local seguro",
     "recipients.recoveryCommit": "Adicionar esta chave de recuperação",
     "recipients.recoveryCancel": "Cancelar: não a adicionar",
