@@ -614,3 +614,31 @@ func TestHandlesAreGripPills(t *testing.T) {
 	v.MouseDown(40, -2)
 	v.Draw()
 }
+
+func TestRenderCellDrawsTheContentOfACell(t *testing.T) {
+	p := &fakePainter{}
+	v := NewTableView(NewTableFrom([][]string{{"Name", "Done"}, {"task", "70"}}), p)
+	var asked []string
+	v.RenderCell = func(pp Painter, r, c int, text string, x, y, w, h float64) bool {
+		asked = append(asked, text)
+		if c == 1 && r == 1 { // a bar, not the number
+			pp.SetFillStyle("#00aa00")
+			pp.FillRect(x, y, w*0.7, h)
+			return true
+		}
+		return false
+	}
+	v.Draw()
+	if len(asked) != 4 {
+		t.Fatalf("every cell is offered: %v", asked)
+	}
+	if !p.has("fillStyle #00aa00") {
+		t.Error("the bar is drawn")
+	}
+	if p.has(`fillText "70"`) {
+		t.Error("the text of a cell that was rendered is not written as well")
+	}
+	if !p.has(`fillText "task"`) || !p.has(`fillText "Name"`) {
+		t.Error("the other cells keep their text")
+	}
+}
