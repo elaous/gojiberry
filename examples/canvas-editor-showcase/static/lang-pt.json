@@ -1538,6 +1538,7 @@
     "imgfind.listError": "Não foi possível ler a lista de repositórios do operador: ",
     "img.legendStart": "Figura %d:",
     "prefs.typewriter": "Rolagem de máquina de escrever: a linha que escrevo fica no meio da vista e a página se move",
+    "prefs.typewriterX": "Carro de máquina de escrever: deslizar também a página para o lado, para que a letra que escrevo fique no mesmo lugar (precisa da rolagem de máquina de escrever)",
     "read.voice": "Voz do leitor",
     "read.voiceAuto": "Voz do leitor: a escolha do navegador",
     "read.voiceAutomatic": "Automática",

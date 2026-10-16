@@ -49,6 +49,11 @@ type ScrollView struct {
 	// applies to typing, the keys and commands, never to a click, which leaves the page where it is. Off by default.
 	Typewriter   bool
 	TypewriterAt float64
+	// TypewriterX, with Typewriter, makes it a carriage: the letter being typed also stays at one place across the view
+	// (the middle), so the page slides left under it as each character goes in and, at a new line, slides back to the
+	// right to bring the start of the line to that place. The page may then be scrolled past its edges, as the paper
+	// of a typewriter runs past the carriage; the moves are made by typing, the keys and commands, never by a click.
+	TypewriterX bool
 
 	content *Stage
 	cw, ch  float64
@@ -122,11 +127,18 @@ func (sv *ScrollView) maxScroll() (mx, my float64) {
 func (sv *ScrollView) ScrollTo(x, y float64) bool {
 	mx, my := sv.maxScroll()
 	nx, ny := sv.ScrollX, sv.ScrollY
-	if !sv.LockH {
-		nx = min(max(x, 0), mx)
+	loX, hiX, loY, hiY := 0.0, mx, 0.0, my
+	lockH, lockV := sv.LockH, sv.LockV
+	if sv.carriage() { // the page runs past its edges so the caret can stay in its place; both axes are free
+		loX, hiX = -sv.Width*sv.typewriterAt(), mx+sv.Width*(1-sv.typewriterAt())
+		loY, hiY = -sv.Height*sv.typewriterAt(), my+sv.Height*(1-sv.typewriterAt())
+		lockH, lockV = false, false
 	}
-	if !sv.LockV {
-		ny = min(max(y, 0), my)
+	if !lockH {
+		nx = min(max(x, loX), hiX)
+	}
+	if !lockV {
+		ny = min(max(y, loY), hiY)
 	}
 	if nx == sv.ScrollX && ny == sv.ScrollY {
 		return false
@@ -440,4 +452,15 @@ func (sv *ScrollView) Draw() {
 		}
 		p.FillRect(thumb[0]+2, thumb[1]+2, thumb[2]-4, thumb[3]-4)
 	}
+}
+
+// carriage says the view works as a typewriter carriage (Typewriter with TypewriterX).
+func (sv *ScrollView) carriage() bool { return sv.Typewriter && sv.TypewriterX }
+
+// typewriterAt is where in the view (0 to 1, from the top and from the left) the typewriter keeps the caret.
+func (sv *ScrollView) typewriterAt() float64 {
+	if sv.TypewriterAt <= 0 || sv.TypewriterAt >= 1 {
+		return 0.5
+	}
+	return sv.TypewriterAt
 }

@@ -310,9 +310,11 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Try it.** Preferences tab: search "typewriter" and tick it. Click in the text, press the down arrow twenty times and check the caret stays in the middle of the view while the page moves; type on a line and check the page stays; click in another place and check the page does not jump.
 
-**You should see.** The preference in the picture in [features.md](features.md#typewriter-scrolling).
+**You should see.** What the two pictures in [features.md](features.md#typewriter-scrolling) show.
 
-**Automated.** `TestTypewriterScrolling` (examples/canvas-editor-showcase), `TestTypewriterKeepsTheLineAtOneHeight` (canvas)
+**Also try.** Tick **Typewriter carriage** too, type a long line (the page slides left under the caret), then press Enter (the page slides back right, past its left edge, and up a line).
+
+**Automated.** `TestTypewriterScrolling`, `TestTypewriterCarriageSlidesThePageSideways` (examples/canvas-editor-showcase), `TestTypewriterKeepsTheLineAtOneHeight`, `TestTypewriterCarriageKeepsTheLetterInOnePlace` (canvas)
 
 ## Menus and commands
 

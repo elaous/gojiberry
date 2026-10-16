@@ -903,7 +903,7 @@ func main() {
 		markers, dropCaps := []string{}, 0
 		lineHeights := []float64{}
 		var link, comment map[string]any
-		scrollY := 0.0
+		scrollY, scrollX := 0.0, 0.0
 		current := -1
 		outline, bookmarks := []string{}, []string{}
 		footnotes, indexTerms := []string{}, []string{}
@@ -935,7 +935,7 @@ func main() {
 			cursors, editing = flow.Cursors(), flow.Editing()
 			text = flow.EditText()
 			sv := root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView)
-			scrollY = sv.ScrollY
+			scrollY, scrollX = sv.ScrollY, sv.ScrollX
 			current = flow.OutlineIndexAt(flow.Cursors()[0].Caret)
 			for _, e := range flow.Outline() {
 				outline = append(outline, fmt.Sprintf("%d:%s", e.Level, e.Text))
@@ -1017,7 +1017,7 @@ func main() {
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,
 			"pages": state.Pages, "pageSetup": map[string]any{"label": state.Setup.Label(), "width": state.PageWidth(), "height": state.PageHeight(), "margins": state.Setup.Margins}, "saveState": u.saver.SaveState(), "persisted": u.persisted, "format": u.format, "markers": markers, "dropCaps": dropCaps, "lineHeights": lineHeights,
-			"link": link, "headers": headers, "footers": footers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "historyLimit": canvas.HistoryLimit(), "live": liveState(u, flow), "scrollY": scrollY, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
+			"link": link, "headers": headers, "footers": footers, "watermarks": watermarks, "spread": spread, "hoverLink": u.hoverLink, "role": state.Role.String(), "comments": state.Comments.Len(), "hoverComment": u.hoverComment, "historyLimit": canvas.HistoryLimit(), "live": liveState(u, flow), "scrollY": scrollY, "scrollX": scrollX, "outline": outline, "bookmarks": bookmarks, "footnotes": footnotes, "tocRows": tocRows, "indexTerms": indexTerms, "target": fmt.Sprintf("%T", stage.EditTarget()), "canPrompt": stage.Prompt != nil, "hasComment": stage.Features.Has(canvas.CmdCommentAdd), "comment": comment, "tab": u.tab, "menu": u.menu, "title": u.title,
 			"fontLog": u.fontLog, "fontsAdded": fontKeys(lib), "ghost": u.ghostSuffix(),
 		})
 		doc.GetElementByID("state").SetTextContent(string(b))
@@ -1027,11 +1027,12 @@ func main() {
 	applyPrefs(curPrefs)
 	state.NoAutoClose, state.TextScale, state.PeerPalette, state.StrongCaret = curPrefs.Close == "off", curPrefs.textScale(), curPrefs.peerPalette(), curPrefs.Contrast == "more"
 	state.Typewriter = curPrefs.Typewriter == "on"
+	state.TypewriterX = curPrefs.TypewriterX == "on"
 	onLocale = renderUI
 	onPrefs = func() {
-		nc, ts, pp, sc, tw := curPrefs.Close == "off", curPrefs.textScale(), curPrefs.peerPalette(), curPrefs.Contrast == "more", curPrefs.Typewriter == "on"
-		if nc != state.NoAutoClose || ts != state.TextScale || len(pp) != len(state.PeerPalette) || sc != state.StrongCaret || tw != state.Typewriter {
-			state.NoAutoClose, state.TextScale, state.PeerPalette, state.StrongCaret, state.Typewriter = nc, ts, pp, sc, tw
+		nc, ts, pp, sc, tw, twx := curPrefs.Close == "off", curPrefs.textScale(), curPrefs.peerPalette(), curPrefs.Contrast == "more", curPrefs.Typewriter == "on", curPrefs.TypewriterX == "on"
+		if nc != state.NoAutoClose || ts != state.TextScale || len(pp) != len(state.PeerPalette) || sc != state.StrongCaret || tw != state.Typewriter || twx != state.TypewriterX {
+			state.NoAutoClose, state.TextScale, state.PeerPalette, state.StrongCaret, state.Typewriter, state.TypewriterX = nc, ts, pp, sc, tw, twx
 			renderCanvas()
 		}
 	}
