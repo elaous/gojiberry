@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-0 of 10 since the last full run (full run on the branch of the 10th merge, on main plus the Hunspell dictionaries, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy installed: `make check` passed in full after one test was updated (the fidelity panel no longer reports imported comments as lost); coverage score 89.1%).
+1 of 10 since the last full run (full run on the branch of the 10th merge, on main plus the Hunspell dictionaries, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy installed: `make check` passed in full after one test was updated (the fidelity panel no longer reports imported comments as lost); coverage score 89.1%).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
