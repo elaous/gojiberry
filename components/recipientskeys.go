@@ -233,7 +233,8 @@ func ownerControls(p RecipientsProps, r RecipientRow, busy bool) []xango.Node {
 	}
 	if p.RemoveOwner != nil {
 		out = append(out, docButtonAs("gj-recip-remove-owner", tr("recipients.removeOwner", "Remove this key"), trf("recipients.removeOwnerOf", "Remove the key %s", name), busy || !r.CanRemove,
-			confirmed(p.Ask, trf("recipients.confirmRemoveOwner", "Remove %s as a key of this store? Everything saved here is encrypted again without it, so it can no longer open anything saved from now on. Whoever held it keeps what they already read or copied, and any copy of old data they hold: that cannot be taken back.", name),
+			confirmed(p.Ask, trf("recipients.confirmRemoveOwner", "Remove %s as a key of this store? Everything saved here is encrypted again without it, so it can no longer open anything saved from now on. Whoever held it keeps what they already read or copied, and any copy of old data they hold: that cannot be taken back.", name)+" "+
+				tr("recipients.removeOwnerWindow", "Until the removal has finished, someone who holds that key and can write to this store can still save files that look genuine; afterwards such files are refused."),
 				func() { p.Pending.Run(func(ctx context.Context) error { return p.RemoveOwner(ctx, fp) }) })))
 		if !r.CanRemove && r.RemoveBlocked != "" {
 			out = append(out, xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-remove-blocked")}, xango.Text(r.RemoveBlocked)))

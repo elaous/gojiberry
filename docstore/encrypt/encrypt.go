@@ -135,7 +135,7 @@ func DefaultSkip(id string) bool {
 
 // defaultSkipPrefixes are DefaultSkip's keyspaces, lower-cased.
 var defaultSkipPrefixes = []string{"catalog:", "acl:", "fonts/", strings.ToLower(KeysPrefix), strings.ToLower(directoryPrefix),
-	strings.ToLower(docstore.DirectoryLogPrefix), strings.ToLower(docstore.DirectoryEnrollPrefix), strings.ToLower(docstore.RateLimitPrefix)}
+	strings.ToLower(docstore.DirectoryLogPrefix), strings.ToLower(docstore.DirectoryEnrollPrefix), strings.ToLower(docstore.RateLimitPrefix), strings.ToLower(RevokedSignerPrefix)}
 
 // Adapter is a docstore.Adapter that encrypts what it saves in Inner.
 type Adapter struct {

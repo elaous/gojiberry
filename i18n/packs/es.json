@@ -482,6 +482,7 @@
   "recipients.removeOwner": "Quitar esta clave",
   "recipients.removeOwnerOf": "Quitar la clave %s",
   "recipients.confirmRemoveOwner": "¿Quitar %s como clave de este almacén? Todo lo guardado aquí se cifra de nuevo sin ella, así que ya no puede abrir nada de lo que se guarde desde ahora. Quien la tuviera conserva lo que ya leyó o copió, y cualquier copia de datos antiguos que tenga: eso no se puede deshacer.",
+  "recipients.removeOwnerWindow": "Hasta que termine la eliminación, quien tenga esa clave y pueda escribir en este almacén aún puede guardar archivos que parecen auténticos; después, esos archivos se rechazan.",
   "recipients.recoveryAck": "He guardado esta clave de recuperación en un lugar seguro",
   "recipients.recoveryCommit": "Añadir esta clave de recuperación",
   "recipients.recoveryCancel": "Cancelar: no añadirla",

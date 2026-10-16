@@ -482,6 +482,7 @@
   "recipients.removeOwner": "Diesen Schlüssel entfernen",
   "recipients.removeOwnerOf": "Schlüssel %s entfernen",
   "recipients.confirmRemoveOwner": "%s als Schlüssel dieses Speichers entfernen? Alles hier Gespeicherte wird ohne ihn neu verschlüsselt, er kann also nichts mehr öffnen, was ab jetzt gespeichert wird. Wer ihn hatte, behält, was er bereits gelesen oder kopiert hat, und jede Kopie alter Daten, die er besitzt: Das lässt sich nicht rückgängig machen.",
+  "recipients.removeOwnerWindow": "Bis die Entfernung abgeschlossen ist, kann jemand, der diesen Schlüssel besitzt und in diesen Speicher schreiben kann, noch Dateien speichern, die echt aussehen; danach werden solche Dateien abgelehnt.",
   "recipients.recoveryAck": "Ich habe diesen Wiederherstellungsschlüssel sicher aufbewahrt",
   "recipients.recoveryCommit": "Diesen Wiederherstellungsschlüssel hinzufügen",
   "recipients.recoveryCancel": "Abbrechen: nicht hinzufügen",

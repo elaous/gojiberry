@@ -482,6 +482,7 @@
   "recipients.removeOwner": "Retirer cette clé",
   "recipients.removeOwnerOf": "Retirer la clé %s",
   "recipients.confirmRemoveOwner": "Retirer %s des clés de ce stockage ? Tout ce qui est enregistré ici est rechiffré sans elle : elle ne peut plus rien ouvrir de ce qui est enregistré désormais. Celui qui la détenait garde ce qu'il a déjà lu ou copié, et toute copie d'anciennes données qu'il possède : cela ne peut pas être annulé.",
+  "recipients.removeOwnerWindow": "Tant que le retrait n'est pas terminé, une personne qui détient cette clé et peut écrire dans ce stockage peut encore enregistrer des fichiers d'apparence authentique ; ensuite, ces fichiers sont refusés.",
   "recipients.recoveryAck": "J'ai conservé cette clé de récupération en lieu sûr",
   "recipients.recoveryCommit": "Ajouter cette clé de récupération",
   "recipients.recoveryCancel": "Annuler : ne pas l'ajouter",
