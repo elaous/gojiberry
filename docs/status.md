@@ -27,7 +27,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | A PAC run on the PDFs (veraPDF, the PDF/UA-1 reference validator, passes: `TestVeraPDFAcceptsTheTaggedFiles`; pdfa11y passes in `make pdfa11y-test`) | PAC is a Windows program | 63 |
 | Test the Redis-style shared stores and an S3-compatible service that ignores `If-Match` on delete (the probe and the fallback are built and tested against fakes; no real service was available) | Live endpoints | 3, 9, 89 |
 | Run the migration against a real Google Drive and the Hunspell loader against real LibreOffice dictionaries (both are tested with fixtures) | A Google account with documents; the dictionary files | Migrate, known limits plan |
-| Write the terms text and decide who answers abuse reports for the public offer | The operator | public docstore |
+| Write the terms text, decide who is told of a report (the webhook is built) and what is kept for authorities, and choose a captcha provider if proof of work is not enough | The operator | public docstore |
 | Run independent log witnesses (the code, cosignatures and the quorum check, is done) | Parties other than the operator | limits 12 |
 | Test atypical-speech support with people who have atypical speech | Volunteers and consent | 56 |
 | An outside security audit before anyone relies on the keys for secrets | A reviewer | 89 |
@@ -141,7 +141,6 @@ the row into a table above. Nothing here is partly built except where "Present" 
 | [opendocs-missing-features.md](opendocs-missing-features.md), [opendocs-port-plan.md](opendocs-port-plan.md) | Linked text frames, form fields, table formulas, scripting plug-ins | feature | open | none in Go code (checked by search) | all four; frames are the largest layout gap and need a design first. The two docs are older than the code: their other rows (margins, snippets, mentions, tags, signed documents, dictation) need a row-by-row re-check before anyone trusts "Missing" there |
 | [multiuser-design.md](multiuser-design.md) | Sharing more surfaces | enhancement | open | headers, footers, floats, tables, images by position and size | adding and removing objects at run time, character formatting inside floating text, an image's picture |
 | [opendoc-format.md](opendoc-format.md) | Pack format, open points | enhancement | open | draft 1: hashes, signature, encrypted records, tools | hiding what the index shows about an encrypted record; large attachments as their own record kind; several signers; keys in the pack UI (the MIME type and the `file(1)` and shared-mime-info entries are done) (it leaves confidential documents out and says so) |
-| [public-docstore.md](public-docstore.md) | Public offer operations | feature | open | takedown by ID, report route, `Challenger` and `Blocklist` hooks | a tool to list reports; notification of who answers; a hash list fed by takedowns; a shipped challenge when busy; a check that a body is one of the editor's formats (the terms text and jurisdiction are a person's, see above) |
 | [known-limits-plan.md](known-limits-plan.md) | Browser tests in CI | chore | partial | the accessibility gate runs in Chrome in CI | the whole e2e suite there, once stable (it runs here, 24 minutes) |
 | [speech-model.md](speech-model.md) | Secure aggregation | security | inherent | clipping, noise, digest-pinned loader | the aggregator sees each clipped, noised update; secure aggregation is not built |
 
@@ -153,11 +152,11 @@ Server and security table: every code item is done (passkey backlog 1 to 5, limi
 
 Earlier plan: nothing is partial; Encryption and passkeys is blocked on the audit and the witnesses.
 
-Found in the other docs: 13 rows, 10 open, 1 partial (browser tests in CI), 2 inherent (secure aggregation, case in Markdown).
+Found in the other docs: 12 rows, 9 open, 1 partial (browser tests in CI), 2 inherent (secure aggregation, case in Markdown).
 
 ## Suggested order for the next work
 
-1. The rows under "Found in the other docs": the small ones first (the public offer's report tool), then footnotes that push text, outline collapse, the surfaces the hub does not share yet.
+1. The rows under "Found in the other docs": the small ones first (done: the public offer's report tool, notifier, digest list, proof of work and documents-only check), then footnotes that push text, outline collapse, the surfaces the hub does not share yet.
 2. The large ones need a design first: linked text frames, form fields, table formulas, the map and flowchart objects, scripting plug-ins.
 3. Everything in "What is blocked on a person" waits for people: the screen-reader and IME runs, the native review of the pt, ar and he packs, the outside audit, a mail provider, the terms text, real-service runs and independent witnesses.
 

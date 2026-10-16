@@ -252,17 +252,24 @@ a tombstone, a content `Blocklist` hook and a `Challenger` hook. Still to do bef
 1. **The legal read of the terms** and the terms text itself (the server only sends the link,
    `GOJIBERRY_DOCSTORE_PUBLIC_TERMS_URL`, as `Link: <url>; rel="terms"`); which jurisdiction; the
    documented response time to a report.
-2. **Real abuse operations**: who reads `report/` and how they are told (a notifier, a queue, a
-   page), a tool to list reports and take down by ID (today: read the `report/` records and call
-   `DELETE /admin/takedown/<id>`), evidence handling (a takedown deletes the content; reports keep
-   no copy, so what is preserved for authorities, if anything, is a legal decision), repeat
-   offenders by address (the takedown bans the session, not the address), and a hash list fed by
-   takedowns.
-3. **A challenge when busy**: `public.Challenger` is the hook (before a session and before a
-   document are created); no captcha or proof of work ships.
-4. **"Only documents"**: the content check is the `Blocklist` hook and the size cap; checking that a
-   body is one of the editor's own formats (and has no executable content) is a codec question and
-   is not done here.
+2. **Real abuse operations**: built. `GET /admin/reports?limit=&category=` lists the kept reports behind the admin guard
+   (priority ones first, then newest; the view ID in each is what `DELETE /admin/takedown/<id>` takes); `Options.Notify`
+   (and `GOJIBERRY_DOCSTORE_PUBLIC_REPORT_WEBHOOK`, https, which gets id, view ID, category, priority and time but not the
+   reason or the reporter) tells somebody when a report is kept; a takedown keeps the SHA-256 of the content it deleted
+   (`public/blocked/<digest>`, never the content, never expiring) and refuses the same bytes when any session sends them
+   again, after a restart too. What stays a person's decision: who is told, what is preserved for authorities (a takedown
+   deletes the content; the digest is all that is kept), and repeat offenders by address (the takedown bans the session,
+   not the address).
+3. **A challenge when busy**: built. `public.ProofOfWork` (`GOJIBERRY_DOCSTORE_PUBLIC_POW_BITS`, `_POW_WHEN=busy|always`,
+   `_POW_SECRET`): the refusal carries `X-Gojiberry-Challenge: <challenge> <bits>`; the client (`client.Client`) finds a nonce
+   with that many leading zero bits of SHA-256 and retries once with `X-Gojiberry-Challenge-Answer`; each answer is taken
+   once; "busy" is `Service.Busy` (live bytes past 70 % of the budget). It slows one machine making many sessions; it does not
+   stop an attacker with many, and a slow phone pays too: the difficulty (20 bits is about a second on a laptop) is the
+   operator's. A captcha is a different hook (`Challenger`) for a provider the operator chooses.
+4. **"Only documents"**: built as a choice. `public.DocumentsOnly` (`GOJIBERRY_DOCSTORE_PUBLIC_ONLY_DOCUMENTS=true`) accepts
+   only a body that decodes as the editor's own document and has no address that reaches out: links may be http, https,
+   mailto or `#`; pictures, clips, caption tracks and fonts must be inline `data:` URLs of image (not SVG), audio, video, font or
+   WebVTT type. It cannot judge what the text says.
 5. **Shared infrastructure for replicas**: `SessionStore` and `Quota` have memory defaults
    only (the request limiters can live in the store, `Options.LimiterFactory`). Behind several
    replicas, plug in shared ones (the extension table below), or the caps are per replica. Two replicas also race at the instant of expiry (section 4.1).

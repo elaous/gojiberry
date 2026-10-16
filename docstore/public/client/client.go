@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/elaous/gojiberry/docstore/public/pow"
 	"io"
 	"net/http"
 	"net/url"
@@ -111,6 +112,20 @@ func (c *Client) do(ctx context.Context, method, path string, auth bool, body []
 	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, nil, err
+	}
+	// A busy server may ask for a small computation before it takes a session or a document: solve it and try once more.
+	if ch := resp.Header.Get(pow.Header); ch != "" && resp.StatusCode == http.StatusForbidden && req.Header.Get(pow.AnswerHeader) == "" {
+		if answer, ok := pow.Answer(ch); ok {
+			_ = resp.Body.Close()
+			retry := req.Clone(ctx)
+			if body != nil {
+				retry.Body = io.NopCloser(bytes.NewReader(body))
+			}
+			retry.Header.Set(pow.AnswerHeader, answer)
+			if resp, err = hc.Do(retry); err != nil {
+				return nil, nil, err
+			}
+		}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 128<<20))

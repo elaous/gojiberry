@@ -470,6 +470,9 @@ func (c Config) Warnings() []string {
 //	GOJIBERRY_DOCSTORE_PUBLIC_SESSIONS_PER_HOUR, _WRITES_PER_MINUTE, _ADDRESS_WRITES_PER_MINUTE, _VIEWS_PER_MINUTE, _REPORTS_PER_MINUTE
 //	GOJIBERRY_DOCSTORE_PUBLIC_REPORT_TTL, _TOMBSTONE_TTL
 //	GOJIBERRY_DOCSTORE_PUBLIC_TERMS_URL          the Link rel="terms" target
+//	GOJIBERRY_DOCSTORE_PUBLIC_ONLY_DOCUMENTS     true refuses a body that is not an editor document, or points outside itself (DocumentsOnly)
+//	GOJIBERRY_DOCSTORE_PUBLIC_POW_BITS, _POW_WHEN, _POW_SECRET  proof of work before a session or a document (ProofOfWork); busy or always
+//	GOJIBERRY_DOCSTORE_PUBLIC_REPORT_WEBHOOK     https address that gets each kept report (id, view id, category, time; not the text)
 //	GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN        secret of DELETE /admin/takedown/<id> (at least 16 characters)
 //	GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_SHORT_ADMIN_TOKEN  true starts the server with a shorter token (loud warning)
 //	GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_FAILURES_PER_MINUTE, _ADMIN_FAILURES_PER_NET_PER_MINUTE, _ADMIN_FAILURES_GLOBAL_PER_MINUTE  budgets of failed admin attempts

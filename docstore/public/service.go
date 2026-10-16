@@ -71,11 +71,15 @@ type Options struct {
 	// alarm is logged once an hour, not once per replica. It needs a store with conditional writes
 	// (New refuses it otherwise).
 	SharedBurstWatch bool
-	Admin            AdminGuard                 // TokenAdmin(Config.AdminToken)
-	Blocklist        Blocklist                  // NoBlocklist
-	Challenger       Challenger                 // NoChallenge
-	ClientIP         func(*http.Request) string // passkey.TrustedProxies(Config.TrustedProxies...), else the remote address
-	Now              func() time.Time           // time.Now; use the clock of the ExpiringAdapter in tests
+	Admin            AdminGuard // TokenAdmin(Config.AdminToken)
+	Blocklist        Blocklist  // NoBlocklist
+	// Notify is told of every report that was kept, so somebody reads it: a mail, a chat message, a queue. It
+	// gets the report itself (its reason is the reporter's free text: treat it as untrusted), runs on its own
+	// goroutine, and a panic in it is caught; its failure never refuses a report.
+	Notify     func(Report)
+	Challenger Challenger                 // NoChallenge
+	ClientIP   func(*http.Request) string // passkey.TrustedProxies(Config.TrustedProxies...), else the remote address
+	Now        func() time.Time           // time.Now; use the clock of the ExpiringAdapter in tests
 }
 
 // Service is the public (anonymous) offer: session, document, view link, report and takedown
@@ -91,6 +95,8 @@ type Service struct {
 	burst     *burstStore // the shared burst watch, or nil: the per-process one (prio)
 	admin     AdminGuard
 	blocklist Blocklist
+	notify    func(Report)
+	taken     *HashBlocklist // contents of the documents taken down (public/blocked/): they are refused when sent again
 	challenge Challenger
 	clientIP  func(*http.Request) string
 	now       func() time.Time
@@ -175,7 +181,7 @@ func New(o Options) (*Service, error) {
 	s := &Service{
 		store: o.Store, cfg: cfg,
 		sessions: o.Sessions, lim: o.Limiters, quota: o.Quota, prioQuota: o.PriorityQuota, admin: o.Admin,
-		blocklist: o.Blocklist, challenge: o.Challenger, clientIP: o.ClientIP, now: o.Now,
+		blocklist: o.Blocklist, notify: o.Notify, challenge: o.Challenger, clientIP: o.ClientIP, now: o.Now,
 	}
 	if o.SharedBurstWatch {
 		ca, ok := o.Store.(docstore.ConditionalAdapter)
@@ -241,6 +247,11 @@ func New(o Options) (*Service, error) {
 	if s.blocklist == nil {
 		s.blocklist = NoBlocklist{}
 	}
+	s.taken = NewHashBlocklist()
+	if err := s.loadTaken(context.Background()); err != nil {
+		return nil, fmt.Errorf("public: reading the hashes of the documents taken down: %w", err)
+	}
+	s.blocklist = chainBlocklist{s.blocklist, s.taken}
 	if s.challenge == nil {
 		s.challenge = NoChallenge{}
 	}
@@ -315,6 +326,7 @@ func (s *Service) Mount(srv *docstore.Server) *docstore.Server {
 	if t, isToken := s.admin.(TokenAdmin); !isToken || t != "" {
 		srv.WithRoutes("/admin/takedown/", s.AdminHandler())
 		srv.WithRoutes("/admin/health", s.AdminHandler())
+		srv.WithRoutes("/admin/reports", s.AdminHandler())
 	}
 	return srv
 }
@@ -579,7 +591,7 @@ func (s *Service) handleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.challenge.Verify(r); err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		s.refuseChallenge(w, err)
 		return
 	}
 	if !s.allow(w, r, s.lim.Session, "session", "") {
