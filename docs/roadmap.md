@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (full run on the branch of the 10th merge, on main ada0cd3 plus the formatting toolbar, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy installed: `make check` passed in full on the third try. The first two runs found real faults, all fixed in that branch: an unformatted file, a click that started editing the main text and broke header editing in the document demos (keyboard-focus editing from item 59 now ignores focus the page gives for a click), a stale end-to-end check, and a flaky wait; the test and coverage timeouts were raised to 75 minutes because the showcase suite takes about 35. Coverage score 89.4% (was 89.6%), README badge updated).
+6 of 10 since the last full run (full run on the branch of the 10th merge, on main ada0cd3 plus the formatting toolbar, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy installed: `make check` passed in full on the third try. The first two runs found real faults, all fixed in that branch: an unformatted file, a click that started editing the main text and broke header editing in the document demos (keyboard-focus editing from item 59 now ignores focus the page gives for a click), a stale end-to-end check, and a flaky wait; the test and coverage timeouts were raised to 75 minutes because the showcase suite takes about 35. Coverage score 89.4% (was 89.6%), README badge updated).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
@@ -1587,8 +1587,16 @@ unless stated.
     for as long as a hostile script runs in the page; (2) ~~the log keys are pinned on first use~~ **improved (this PR)**: the keys are shown with
     fingerprints, and a fingerprint typed from another source (the operator's page, a call) must match one of them or
     nothing is pinned; without one it is still trust on first use, and the panel says so; (3) the
-    expiry race is closed to the content, not to a save with identical bytes; (4) an S3-compatible service that
-    ignores `If-Match` on delete would delete a changed document (the doc says so; there is no live endpoint here
-    to test the real services); (5) the passkey PRF path, the age and SSH usage and the signed-frame format have
+    expiry race is closed to the content, not to a save with identical bytes; (4) ~~an S3-compatible service that
+    ignores `If-Match` on delete would delete a changed document~~ **fixed (this PR)**: the first `DeleteIf` on the S3
+    adapter asks the service once (it makes a probe object, deletes it with an `If-Match` that cannot match and
+    looks whether it survived); a service that deleted it, or does not know the header, gets
+    `docstore.ErrConditionalUnsupported` from then on and a log line, so the challenge and session stores claim by a
+    conditional save instead and document expiry deletes as it does on any store without `DeleteIf` (it now treats
+    that answer that way instead of failing the sweep); a probe that cannot run (no permission to write) is an error
+    and is asked again. Tests: `TestS3DeleteIfDeclinesOnAServiceThatIgnoresIfMatch`,
+    `TestS3DeleteIfProbeFailureIsNotRemembered`, `TestSweepWhenTheStoreDeclinesConditionalDeleteStillDeletes`; the real
+    services were not reachable from here, so what is now guaranteed is the probe, not that any particular service
+    passes it; (5) the passkey PRF path, the age and SSH usage and the signed-frame format have
     tests but no independent review. Priority: (1) medium, the rest low. Where: `examples/canvas-editor-showcase`
     (`encowner.go`, `encdir.go`), `docstore/directoryclient`, `docs/encryption-and-passkeys.md`.
