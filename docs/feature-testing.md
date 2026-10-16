@@ -112,6 +112,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** `TestOperatorListOfRepositoriesAndMoreResults`, `TestFindAPictureInARepositoryAndInsertItWithItsCredit` (examples/canvas-editor-showcase), package `imagerepo` tests
 
+## Mentions
+
+**Try it.** Open the same shared document as two people (for example `?name=Ana` and `?name=Bo`); as Ana comment with "@Bo can you check this?"; look at Bo's Comments tab.
+
+**You should see.** "Mentions of you" with Ana's comment, announced once; Ana sees none; "Mark as read" removes it.
+
+**Automated.** `TestAMentionedPersonIsToldAndCanMarkItRead` (examples/canvas-editor-showcase), `TestMentionsOfListsWhatOthersWroteAboutThePerson` (canvas)
+
 ## Two-page spread
 
 **Try it.** View > Two-page spread; press the folded corner at the bottom right of the right-hand page.
