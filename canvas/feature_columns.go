@@ -18,6 +18,9 @@ const (
 	CmdGapNarrow   Command = "columns.gap-narrow"
 	CmdGapStandard Command = "columns.gap-standard"
 	CmdGapWide     Command = "columns.gap-wide"
+	// CmdColumnsReset gives the columns back equal widths (what dragging a grip changed is undone); the number of
+	// columns and the space between them stay.
+	CmdColumnsReset Command = "columns.reset-widths"
 )
 
 // ColumnsHost is what the column commands need of their target: TextFlow.
@@ -85,6 +88,16 @@ func (Columns) Install(r *Registry) {
 	r.AddCommand(CmdColumns4, "Four columns", "", set(equal(4)))
 	r.AddCommand(CmdColumns21, "Two columns, wide then narrow", "", set(ratio(2, 1)))
 	r.AddCommand(CmdColumns12, "Two columns, narrow then wide", "", set(ratio(1, 2)))
+	r.AddCommand(CmdColumnsReset, "Reset column widths", "", set(func(old ColumnConfig) ColumnConfig {
+		n := old.Count
+		if len(old.Widths) > 0 {
+			n = len(old.Widths)
+		}
+		if n < 2 {
+			return old
+		}
+		return ColumnConfig{Count: n, Gap: gapOf(old)}
+	}))
 	r.AddCommand(CmdGapNarrow, "Column spacing: narrow", "", set(gap(12)))
 	r.AddCommand(CmdGapStandard, "Column spacing: standard", "", set(gap(DefaultColumnGap)))
 	r.AddCommand(CmdGapWide, "Column spacing: wide", "", set(gap(48)))

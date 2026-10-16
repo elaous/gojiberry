@@ -245,10 +245,15 @@ type TextFlow struct {
 	// your own changes while others edit too.
 	UndoHook func(redo bool) bool
 	// Footnotes holds the notes FootnoteRef marks in the text refer to;
-	// FootnoteBand is the height kept at the bottom of every page for them
-	// (DefaultFootnoteBand if zero) while there are any.
+	// FootnoteBand is the most a page gives its notes (zero: 40 % of the page's text area); a page gives them
+	// what they need up to that, and the rest of a long note goes on at the foot of the next page.
 	Footnotes    *FootnoteSet
 	FootnoteBand float64
+	fnBands      []float64  // the room each page keeps for its notes, from the last layout
+	fnLines      [][]fnLine // the lines of notes each page shows
+	// OnFootnote is called with the ID of a note whose text on the page was pressed; the host opens its editor (see
+	// components.NoteEditor). Nil: pressing a note does nothing.
+	OnFootnote func(id string)
 	// Author is who new comments are by (a name or e-mail address).
 	Author string
 	// OnHoverComment is called with the ID of the comment the pointer

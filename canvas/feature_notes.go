@@ -90,8 +90,23 @@ func insertObject(t EditTarget, in Inline) {
 func (Notes) Install(r *Registry) {
 	r.AddCommand(CmdFootnoteAdd, "Add footnote", "Mod+Alt+F", func(c *CommandContext) bool {
 		h, ok := c.Target.(FootnoteHost)
-		if !ok || c.Prompt == nil {
+		if !ok || (c.Prompt == nil && c.EditNote == nil) {
 			return false
+		}
+		if c.EditNote != nil {
+			target, at := c.Target, c.Target.Cursors()[0]
+			c.EditNote("Footnote", "", MaxFootnoteRunes, func(text string, ok bool) {
+				if !ok || strings.TrimSpace(text) == "" {
+					return
+				}
+				target.SetCursors([]Cursor{at})
+				n := h.FootnoteSet().Add(Footnote{Text: text})
+				insertObject(target, Inline{Object: &FootnoteRef{ID: n.ID}})
+				if c.Redraw != nil {
+					c.Redraw()
+				}
+			})
+			return true
 		}
 		text, ok := c.Prompt("Footnote", "")
 		if !ok || strings.TrimSpace(text) == "" {
@@ -103,10 +118,24 @@ func (Notes) Install(r *Registry) {
 	})
 	r.AddCommand(CmdFootnoteEdit, "Edit footnote", "Mod+Alt+Shift+F", func(c *CommandContext) bool {
 		h, ref, _ := footnoteAtCursor(c.Target)
-		if h == nil || c.Prompt == nil {
+		if h == nil || (c.Prompt == nil && c.EditNote == nil) {
 			return false
 		}
 		n, _ := h.FootnoteSet().Get(ref.ID)
+		if c.EditNote != nil {
+			target, id := c.Target, ref.ID
+			c.EditNote("Footnote", n.Text, MaxFootnoteRunes, func(text string, ok bool) {
+				if !ok || strings.TrimSpace(text) == "" {
+					return
+				}
+				h.FootnoteSet().Add(Footnote{ID: id, Text: text})
+				touch(target)
+				if c.Redraw != nil {
+					c.Redraw()
+				}
+			})
+			return true
+		}
 		text, ok := c.Prompt("Footnote", n.Text)
 		if !ok || strings.TrimSpace(text) == "" {
 			return false

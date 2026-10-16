@@ -1495,6 +1495,9 @@
   "docview.skipSide": "Aller au panneau latéral",
   "docview.skip": "Liens d'évitement",
   "fidelity.checking": "%s : vérification de ce que ce format conserve…",
-  "files.working": "En cours…"
+  "files.working": "En cours…",
+  "note.counter": "%d sur %d caractères",
+  "note.save": "Enregistrer",
+  "note.title": "Note de bas de page"
  }
 }

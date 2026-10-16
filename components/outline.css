@@ -27,3 +27,6 @@
 .gj-outline-toggle, .gj-outline-move { border: 0; background: none; color: var(--gj-muted); cursor: pointer; font: inherit; padding: 0.1em 0.35em; border-radius: var(--gj-radius); }
 .gj-outline-toggle:hover, .gj-outline-move:hover { background: var(--gj-hover, rgba(127,127,127,.15)); color: var(--gj-text); }
 .gj-outline-toggle:focus-visible, .gj-outline-move:focus-visible { outline: 2px solid var(--gj-focus, currentColor); outline-offset: 1px; }
+.gj-note-text { width: 100%; box-sizing: border-box; }
+.gj-note-counter { display: block; margin-top: 0.4em; font-size: 0.8em; color: var(--gj-muted); }
+.gj-note-counter-full { color: var(--gj-danger, #b3261e); font-weight: 600; }

@@ -1495,6 +1495,9 @@
   "docview.skipSide": "Zum Seitenbereich springen",
   "docview.skip": "Sprunglinks",
   "fidelity.checking": "%s: es wird geprüft, was dieses Format behält …",
-  "files.working": "Wird bearbeitet …"
+  "files.working": "Wird bearbeitet …",
+  "note.counter": "%d von %d Zeichen",
+  "note.save": "Speichern",
+  "note.title": "Fußnote"
  }
 }
