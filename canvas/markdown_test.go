@@ -355,3 +355,11 @@ func TestMarkdownWriteBackTablesRulesAndImages(t *testing.T) {
 type urlFake struct{ fakeImage }
 
 func (urlFake) URL() string { return "http://x/y.png" }
+
+func TestMarkdownWritesAPicturesLegendUnderIt(t *testing.T) {
+	img := &Image{Src: urlFake{}, Alt: "a cat", Legend: "Figure 1: a *grey* cat"}
+	md := MarkdownFromItems([]Item{Chars{Text: "see "}, Inline{Object: img}})
+	if md != "see ![a cat](http://x/y.png)  \n*Figure 1: a \\*grey\\* cat*" {
+		t.Errorf("legend: %q", md)
+	}
+}

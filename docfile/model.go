@@ -89,6 +89,8 @@ type ImageItem struct {
 	Decorative bool   `json:"decorative,omitempty" pb:"10"`
 	// LongDesc is a longer description of a diagram or chart than Alt can hold (roadmap 78).
 	LongDesc string `json:"longDesc,omitempty" pb:"11"`
+	// Legend is the visible caption under the picture (canvas.Image.Legend).
+	Legend string `json:"legend,omitempty" pb:"12"`
 }
 
 // EquationItem is a formula in the linear notation of package export (x^2, frac{a}{b}, sqrt{x}) and its text
@@ -388,7 +390,7 @@ func FromItems(items []canvas.Item) []Item {
 				if src, ok := o.Src.(canvas.URLSource); ok && src.URL() != "" {
 					out = append(out, Item{Image: &ImageItem{URL: src.URL(), Width: o.W, Height: o.H, Alpha: o.Alpha,
 						ClipLeft: o.Clip.Left, ClipTop: o.Clip.Top, ClipRight: o.Clip.Right, ClipBottom: o.Clip.Bottom,
-						Alt: o.Alt, Decorative: o.Decorative, LongDesc: o.LongDesc}})
+						Alt: o.Alt, Decorative: o.Decorative, LongDesc: o.LongDesc, Legend: o.Legend}})
 				}
 			case *canvas.EquationObject:
 				out = append(out, Item{Equation: &EquationItem{Formula: o.Formula, Alt: o.Alt}})
@@ -637,7 +639,7 @@ func imageObject(it ImageItem) canvas.InlineObject {
 				img.Alpha = it.Alpha
 			}
 			img.Clip = canvas.Insets{Left: it.ClipLeft, Top: it.ClipTop, Right: it.ClipRight, Bottom: it.ClipBottom}
-			img.Alt, img.Decorative, img.LongDesc = it.Alt, it.Decorative, it.LongDesc
+			img.Alt, img.Decorative, img.LongDesc, img.Legend = it.Alt, it.Decorative, it.LongDesc, it.Legend
 			return img
 		}
 	}

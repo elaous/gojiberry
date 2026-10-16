@@ -3,6 +3,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"image"
 	"image/color"
@@ -112,3 +113,43 @@ func TestDraftDescriptionIsOffOnRequestAndNeverAutomatic(t *testing.T) {
 	d.OK(!d.Has("#img-missing-0"), "the picture has a description now")
 	d.NoErrors()
 }
+
+// A picture inserted with the legend option starts a numbered legend, the legend is typed under the picture, and the
+// exports write it under the picture; a WebP picture is stored as PNG so that Word and PDF can carry it.
+func TestAPictureWithALegendAndAWebPPicture(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Click(`button[data-tab="images"]`)
+	d.WaitSelector("#img-insert")
+	d.SetChecked("#img-legend-on input", true)
+	d.ChooseFile(func() { d.Click("#img-insert") }, "bar.png", pngBytes(t))
+	d.WaitSelector("#img-legend-0")
+	d.OK(d.Value("#img-legend-0") == "Figure 1:", "the legend is started: "+d.Value("#img-legend-0"))
+	d.Fill("#img-legend-0", "Figure 1: sales by quarter")
+	d.Click(`button[data-tab="transfer"]`)
+	_, html := d.Download(func() { d.Click(`.gj-transfer-button[data-kind="export"][data-format="html"]`) })
+	d.OK(strings.Contains(string(html), "Figure 1: sales by quarter"), "the HTML export writes the legend")
+
+	// a WebP picture: the browser converts it, so the saved picture is a PNG
+	d.Click(`button[data-tab="images"]`)
+	d.ChooseFile(func() { d.Click("#img-insert") }, "tiny.webp", webpBytes)
+	d.WaitFor("two pictures", `document.querySelectorAll('[id^="img-alt-"]').length >= 2`)
+	d.Click(`button[data-tab="transfer"]`)
+	_, docx := d.Download(func() { d.Click(`.gj-transfer-button[data-kind="export"][data-format="docx"]`) })
+	zr, err := zip.NewReader(bytes.NewReader(docx), int64(len(docx)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pngs := 0
+	for _, f := range zr.File {
+		if strings.HasPrefix(f.Name, "word/media/") && strings.HasSuffix(f.Name, ".png") {
+			pngs++
+		}
+	}
+	d.OK(pngs >= 2, "both pictures, the WebP one converted, are in the Word file as PNG: "+strings.Repeat("x", pngs))
+	d.NoErrors()
+}
+
+// webpBytes is a 1x1 WebP picture.
+var webpBytes = []byte{0x52, 0x49, 0x46, 0x46, 0x1a, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x4c, 0x0d, 0x00, 0x00, 0x00, 0x2f, 0x00, 0x00, 0x00, 0x10, 0x07, 0x10, 0x11, 0x11, 0x88, 0x88, 0xfe, 0x07, 0x00}

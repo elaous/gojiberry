@@ -123,3 +123,55 @@ func TestOwnerOfAndHeadingLevelAndRawCode(t *testing.T) {
 		t.Errorf("rawCodeText %q", got)
 	}
 }
+
+// A picture's legend is written under the picture in every format, as a paragraph in italics.
+func TestALegendIsWrittenUnderThePictureInEveryFormat(t *testing.T) {
+	d := docfile.Document{Content: []docfile.Item{
+		{Chars: &docfile.Chars{Text: "Before\n"}},
+		{Image: &docfile.ImageItem{URL: pngDataURL(t, 4, 3), Width: 40, Height: 30, Alt: "A gradient", Legend: "Figure 1: the gradient"}},
+		{Chars: &docfile.Chars{Text: "\nAfter\n"}},
+	}}
+	snap := FromDocument(d)
+	img, leg := -1, -1
+	for i, b := range snap.Blocks {
+		if b.Kind == Image {
+			img = i
+		}
+		if len(b.Segments) == 1 && b.Segments[0].Text == "Figure 1: the gradient" {
+			leg = i
+			if !b.Segments[0].Format.Italic {
+				t.Error("the legend is in italics")
+			}
+		}
+	}
+	if img < 0 || leg != img+1 {
+		t.Fatalf("the legend follows the picture: image block %d, legend block %d", img, leg)
+	}
+	for _, format := range []string{"html", "rtf"} {
+		if out := string(rawOne(t, registry(), format, d)); !strings.Contains(out, "Figure 1: the gradient") {
+			t.Errorf("%s does not carry the legend:\n%.300s", format, out)
+		}
+	}
+	// Word and OpenDocument keep their text in a zip: read the part that holds it.
+	for format, part := range map[string]string{"docx": "word/document.xml", "odt": "content.xml"} {
+		raw := rawOne(t, registry(), format, d)
+		zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, f := range zr.File {
+			if f.Name != part {
+				continue
+			}
+			rc, _ := f.Open()
+			var buf bytes.Buffer
+			_, _ = buf.ReadFrom(rc)
+			rc.Close()
+			found = strings.Contains(buf.String(), "Figure 1: the gradient")
+		}
+		if !found {
+			t.Errorf("%s does not carry the legend in %s", format, part)
+		}
+	}
+}

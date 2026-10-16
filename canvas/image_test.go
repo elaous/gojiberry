@@ -408,3 +408,46 @@ func TestSetWrap(t *testing.T) {
 		t.Fatal("SetWrap(false)")
 	}
 }
+
+func TestImageLegendIsDrawnUnderThePictureAndTakesRoom(t *testing.T) {
+	p := &fakePainter{}
+	im := NewImage(fakeImage{w: 200, h: 100}, 10, 10)
+	im.Placement = PlaceInline
+	w0, h0 := im.Measure(p, 400, 400)
+	if w0 != 200 || h0 != 100 {
+		t.Fatalf("no legend, no extra room: %g x %g", w0, h0)
+	}
+	im.Legend = "Figure 1: the harbour at dawn, seen from the north pier with the first boats leaving"
+	w1, h1 := im.Measure(p, 400, 400)
+	if w1 != 200 || h1 <= h0 {
+		t.Fatalf("the legend adds height and no width: %g x %g", w1, h1)
+	}
+	lines := im.legendLines(p, 200)
+	if len(lines) < 2 {
+		t.Fatalf("a long legend wraps to the picture's width: %q", lines)
+	}
+	if want := legendGap + float64(len(lines))*legendLineH; h1-h0 != want {
+		t.Fatalf("height %g, want %g", h1-h0, want)
+	}
+	p.calls = nil
+	im.DrawAt(p, 20, 30)
+	if !p.has(`fillText "Figure 1:`) {
+		t.Fatalf("the legend is written:\n%v", p.calls)
+	}
+	im.Legend = "   "
+	if _, h := im.Measure(p, 400, 400); h != h0 {
+		t.Fatal("a blank legend is none")
+	}
+	// A floating picture's legend is drawn under it and text keeps away from it.
+	fl := NewImage(fakeImage{w: 100, h: 50}, 0, 0)
+	fl.Painter = p
+	fl.Wrap = true
+	fl.Legend = "Fig. 2"
+	if _, _, ok := fl.Exclusion(52, 60); !ok { // below the picture, inside the legend's room
+		t.Fatal("text keeps away from the legend too")
+	}
+	fl.Legend = ""
+	if _, _, ok := fl.Exclusion(60, 70); ok {
+		t.Fatal("with no legend the room under the picture is free")
+	}
+}

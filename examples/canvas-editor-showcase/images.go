@@ -76,25 +76,86 @@ func (u *ui) insertImage(fl func() *canvas.TextFlow, redraw, renderUI func()) {
 			return
 		}
 		url := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
-		canvas.LoadImage(url, func(src *canvas.HTMLImage) {
-			im := canvas.NewImage(src, 0, 0)
-			im.Placement = canvas.PlaceInline
-			if w, h := im.W, im.H; w > 0 && h > 0 && max(w, h) > maxInsertedSide {
-				k := maxInsertedSide / max(w, h)
-				im.W, im.H = w*k, h*k
+		if mime == "image/webp" {
+			// Word, OpenDocument and PDF cannot carry WebP, so a WebP picture is stored as PNG: the exports then keep it.
+			convertToPNG(url, func(png string, ok bool) {
+				if ok {
+					u.placeImage(f, png, redraw, renderUI)
+					return
+				}
+				u.placeImage(f, url, redraw, renderUI)
+			})
+			return
+		}
+		u.placeImage(f, url, redraw, renderUI)
+	})
+}
+
+// convertToPNG draws a picture the browser can show onto a canvas and reads it back as a PNG data URL; ok is false when
+// the browser cannot (the picture is then kept as it is).
+func convertToPNG(dataURL string, done func(png string, ok bool)) {
+	doc := js.Global().Get("document")
+	img := doc.Call("createElement", "img")
+	var onload, onerror js.Func
+	release := func() { onload.Release(); onerror.Release() }
+	onload = js.FuncOf(func(js.Value, []js.Value) any {
+		defer release()
+		w, h := img.Get("naturalWidth").Int(), img.Get("naturalHeight").Int()
+		if w <= 0 || h <= 0 {
+			done("", false)
+			return nil
+		}
+		cv := doc.Call("createElement", "canvas")
+		cv.Set("width", w)
+		cv.Set("height", h)
+		cv.Call("getContext", "2d").Call("drawImage", img, 0, 0)
+		out := cv.Call("toDataURL", "image/png")
+		if !out.Truthy() || !strings.HasPrefix(out.String(), "data:image/png") {
+			done("", false)
+			return nil
+		}
+		done(out.String(), true)
+		return nil
+	})
+	onerror = js.FuncOf(func(js.Value, []js.Value) any {
+		defer release()
+		done("", false)
+		return nil
+	})
+	img.Set("onload", onload)
+	img.Set("onerror", onerror)
+	img.Set("src", dataURL)
+}
+
+// placeImage puts a picture, given as a data URL, at the caret as an inline picture with no description yet.
+func (u *ui) placeImage(f *canvas.TextFlow, url string, redraw, renderUI func()) {
+	canvas.LoadImage(url, func(src *canvas.HTMLImage) {
+		im := canvas.NewImage(src, 0, 0)
+		im.Placement = canvas.PlaceInline
+		if w, h := im.W, im.H; w > 0 && h > 0 && max(w, h) > maxInsertedSide {
+			k := maxInsertedSide / max(w, h)
+			im.W, im.H = w*k, h*k
+		}
+		if u.imageLegend { // a numbered legend to finish: "Figure 3: "
+			n := 1
+			for _, r := range documentImages(f) {
+				if strings.TrimSpace(r.img.Legend) != "" {
+					n++
+				}
 			}
-			pos := f.Cursors()[0].Caret
-			f.Replace([]canvas.Edit{{From: pos, To: pos, Items: []canvas.Item{canvas.Inline{Object: im}}}})
-			f.SetCursors([]canvas.Cursor{canvas.At(pos + 1)})
-			u.imageMsg = T("img.inserted", "Picture inserted. Describe it for people who cannot see it, or say it is decorative.")
-			u.imageFocus = true
-			u.tab = "images"
-			redraw()
-			renderUI()
-		}, func() {
-			u.imageMsg = T("img.badFile", "That is not a picture file (png, jpeg, gif or webp).")
-			renderUI()
-		})
+			im.Legend = fmt.Sprintf(T("img.legendStart", "Figure %d:"), n)
+		}
+		pos := f.Cursors()[0].Caret
+		f.Replace([]canvas.Edit{{From: pos, To: pos, Items: []canvas.Item{canvas.Inline{Object: im}}}})
+		f.SetCursors([]canvas.Cursor{canvas.At(pos + 1)})
+		u.imageMsg = T("img.inserted", "Picture inserted. Describe it for people who cannot see it, or say it is decorative.")
+		u.imageFocus = true
+		u.tab = "images"
+		redraw()
+		renderUI()
+	}, func() {
+		u.imageMsg = T("img.badFile", "That is not a picture file (png, jpeg, gif or webp).")
+		renderUI()
 	})
 }
 
@@ -105,6 +166,9 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 	nodes := []xango.Node{
 		xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("img.title", "Pictures"))),
 		btn("img-insert", T("img.insert", "Insert a picture…"), func() { u.insertImage(flow, redraw, renderUI) }, !canEdit),
+		xango.El("div", []xango.Attr{xango.A("id", "img-legend-on")}, components.Checkbox(components.CheckboxProps{
+			Label: T("img.legendOn", "Start a numbered legend (Figure N: ) when I insert a picture"), Checked: u.imageLegend, Disabled: !canEdit,
+			OnChange: func(on bool) { u.imageLegend = on; renderUI() }})),
 	}
 	if !canEdit {
 		nodes = append(nodes, para("img-readonly", T("img.editMode", "Switch to edit mode to insert or describe pictures."), false))
@@ -135,6 +199,11 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 				}
 				fl.Touch()
 				renderUI()
+			}),
+			textarea(fmt.Sprintf("img-legend-%d", i), T("img.legendLabel", "Legend of picture %d (shown under it)", i+1), r.img.Legend, T("img.legendHint", "Everybody reads it, for example: Figure 1: the harbour at dawn"), "1", func(v string) {
+				r.img.Legend = v
+				fl.Touch()
+				redraw()
 			}),
 			hintControls(u, i, r.img, canEdit, fl, renderUI),
 			xango.El("div", []xango.Attr{xango.A("id", fmt.Sprintf("img-decorative-%d", i))}, components.Checkbox(components.CheckboxProps{

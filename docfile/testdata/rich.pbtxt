@@ -118,627 +118,629 @@ content: {
     alt: "s121 \"q\" \\ \n\t\x01 é世"
     decorative: true
     long_desc: "s123 \"q\" \\ \n\t\x01 é世"
+    legend: "s124 \"q\" \\ \n\t\x01 é世"
   }
   media: {
-    u_r_l: "s126 \"q\" \\ \n\t\x01 é世"
-    kind: "s127 \"q\" \\ \n\t\x01 é世"
-    title: "s128 \"q\" \\ \n\t\x01 é世"
-    captions: "s129 \"q\" \\ \n\t\x01 é世"
-    captions_u_r_l: "s130 \"q\" \\ \n\t\x01 é世"
-    transcript: "s131 \"q\" \\ \n\t\x01 é世"
-    width: 132.25
-    height: 133.25
+    u_r_l: "s127 \"q\" \\ \n\t\x01 é世"
+    kind: "s128 \"q\" \\ \n\t\x01 é世"
+    title: "s129 \"q\" \\ \n\t\x01 é世"
+    captions: "s130 \"q\" \\ \n\t\x01 é世"
+    captions_u_r_l: "s131 \"q\" \\ \n\t\x01 é世"
+    transcript: "s132 \"q\" \\ \n\t\x01 é世"
+    width: 133.25
+    height: 134.25
   }
   equation: {
-    formula: "s136 \"q\" \\ \n\t\x01 é世"
-    alt: "s137 \"q\" \\ \n\t\x01 é世"
+    formula: "s137 \"q\" \\ \n\t\x01 é世"
+    alt: "s138 \"q\" \\ \n\t\x01 é世"
   }
 }
 content: {
   chars: {
-    text: "s141 \"q\" \\ \n\t\x01 é世"
+    text: "s142 \"q\" \\ \n\t\x01 é世"
     format: {
-      font_family: "s143 \"q\" \\ \n\t\x01 é世"
-      font_size: 144.25
-      scale: 145.25
-      font_weight: 1022
-      font_style: "s147 \"q\" \\ \n\t\x01 é世"
-      color: "s148 \"q\" \\ \n\t\x01 é世"
+      font_family: "s144 \"q\" \\ \n\t\x01 é世"
+      font_size: 145.25
+      scale: 146.25
+      font_weight: -147000441
+      font_style: "s148 \"q\" \\ \n\t\x01 é世"
+      color: "s149 \"q\" \\ \n\t\x01 é世"
       underline: true
       strike: true
       superscript: true
       subscript: true
-      background: "s153 \"q\" \\ \n\t\x01 é世"
-      case: 1078
-      style: "s155 \"q\" \\ \n\t\x01 é世"
-      link: "s156 \"q\" \\ \n\t\x01 é世"
-      comment: "s157 \"q\" \\ \n\t\x01 é世"
-      bookmark: "s158 \"q\" \\ \n\t\x01 é世"
-      index: "s159 \"q\" \\ \n\t\x01 é世"
-      lang: "s160 \"q\" \\ \n\t\x01 é世"
-      proposal: "s161 \"q\" \\ \n\t\x01 é世"
+      background: "s154 \"q\" \\ \n\t\x01 é世"
+      case: 1085
+      style: "s156 \"q\" \\ \n\t\x01 é世"
+      link: "s157 \"q\" \\ \n\t\x01 é世"
+      comment: "s158 \"q\" \\ \n\t\x01 é世"
+      bookmark: "s159 \"q\" \\ \n\t\x01 é世"
+      index: "s160 \"q\" \\ \n\t\x01 é世"
+      lang: "s161 \"q\" \\ \n\t\x01 é世"
+      proposal: "s162 \"q\" \\ \n\t\x01 é世"
     }
   }
   columns: {
-    widths: 165.25
     widths: 166.25
-    count: 1169
-    gap: 168.25
+    widths: 167.25
+    count: -168000504
+    gap: 169.25
   }
   break: {
-    kind: -171000513
+    kind: 1204
   }
   para: {
-    align: -174000522
-    indent_left: 175.25
-    indent_right: 176.25
-    first_line: 177.25
-    space_before: 178.25
-    space_after: 179.25
-    line_spacing: 180.25
+    align: 1225
+    indent_left: 176.25
+    indent_right: 177.25
+    first_line: 178.25
+    space_before: 179.25
+    space_after: 180.25
+    line_spacing: 181.25
     list: {
-      kind: 1274
-      level: -183000549
-      marker: "s184 \"q\" \\ \n\t\x01 é世"
-      number: 1295
-      start: -186000558
+      kind: -183000549
+      level: 1288
+      marker: "s185 \"q\" \\ \n\t\x01 é世"
+      number: -186000558
+      start: 1309
       checked: true
     }
-    quote_bar: "s188 \"q\" \\ \n\t\x01 é世"
-    style: "s189 \"q\" \\ \n\t\x01 é世"
-    drop_cap: 1330
-    code_lang: "s191 \"q\" \\ \n\t\x01 é世"
+    quote_bar: "s189 \"q\" \\ \n\t\x01 é世"
+    style: "s190 \"q\" \\ \n\t\x01 é世"
+    drop_cap: 1337
+    code_lang: "s192 \"q\" \\ \n\t\x01 é世"
   }
   footnote: {
-    i_d: "s194 \"q\" \\ \n\t\x01 é世"
+    i_d: "s195 \"q\" \\ \n\t\x01 é世"
   }
   t_o_c: {
-    title: "s197 \"q\" \\ \n\t\x01 é世"
-    style: "s198 \"q\" \\ \n\t\x01 é世"
-    depth: 1393
+    title: "s198 \"q\" \\ \n\t\x01 é世"
+    style: "s199 \"q\" \\ \n\t\x01 é世"
+    depth: 1400
   }
   index: {
-    title: "s202 \"q\" \\ \n\t\x01 é世"
-    style: "s203 \"q\" \\ \n\t\x01 é世"
-    depth: -204000612
+    title: "s203 \"q\" \\ \n\t\x01 é世"
+    style: "s204 \"q\" \\ \n\t\x01 é世"
+    depth: 1435
   }
   rule: {
-    color: "s207 \"q\" \\ \n\t\x01 é世"
-    thickness: 208.25
+    color: "s208 \"q\" \\ \n\t\x01 é世"
+    thickness: 209.25
   }
   table: {
     rows: {}
     rows: {}
     merges: {
-      row: 1526
-      col: -219000657
-      rows: 1540
-      cols: 1547
+      row: -219000657
+      col: 1540
+      rows: 1547
+      cols: -222000666
     }
     merges: {
-      row: 1561
-      col: 1568
-      rows: -225000675
-      cols: 1582
+      row: 1568
+      col: -225000675
+      rows: 1582
+      cols: 1589
     }
     styles: {
-      row: 1603
-      col: 1610
-      background: "s231 \"q\" \\ \n\t\x01 é世"
-      color: "s232 \"q\" \\ \n\t\x01 é世"
+      row: 1610
+      col: -231000693
+      background: "s232 \"q\" \\ \n\t\x01 é世"
+      color: "s233 \"q\" \\ \n\t\x01 é世"
       bold: true
       italic: true
-      align: 1645
+      align: 1652
     }
     styles: {
-      row: -237000711
-      col: 1666
-      background: "s239 \"q\" \\ \n\t\x01 é世"
-      color: "s240 \"q\" \\ \n\t\x01 é世"
+      row: 1666
+      col: 1673
+      background: "s240 \"q\" \\ \n\t\x01 é世"
+      color: "s241 \"q\" \\ \n\t\x01 é世"
       bold: true
       italic: true
-      align: -243000729
+      align: 1708
     }
   }
   image: {
-    u_r_l: "s246 \"q\" \\ \n\t\x01 é世"
-    width: 247.25
-    height: 248.25
-    alpha: 249.25
-    clip_left: 250.25
-    clip_top: 251.25
-    clip_right: 252.25
-    clip_bottom: 253.25
-    alt: "s254 \"q\" \\ \n\t\x01 é世"
+    u_r_l: "s247 \"q\" \\ \n\t\x01 é世"
+    width: 248.25
+    height: 249.25
+    alpha: 250.25
+    clip_left: 251.25
+    clip_top: 252.25
+    clip_right: 253.25
+    clip_bottom: 254.25
+    alt: "s255 \"q\" \\ \n\t\x01 é世"
     decorative: true
-    long_desc: "s256 \"q\" \\ \n\t\x01 é世"
+    long_desc: "s257 \"q\" \\ \n\t\x01 é世"
+    legend: "s258 \"q\" \\ \n\t\x01 é世"
   }
   media: {
-    u_r_l: "s259 \"q\" \\ \n\t\x01 é世"
-    kind: "s260 \"q\" \\ \n\t\x01 é世"
-    title: "s261 \"q\" \\ \n\t\x01 é世"
-    captions: "s262 \"q\" \\ \n\t\x01 é世"
-    captions_u_r_l: "s263 \"q\" \\ \n\t\x01 é世"
-    transcript: "s264 \"q\" \\ \n\t\x01 é世"
-    width: 265.25
-    height: 266.25
+    u_r_l: "s261 \"q\" \\ \n\t\x01 é世"
+    kind: "s262 \"q\" \\ \n\t\x01 é世"
+    title: "s263 \"q\" \\ \n\t\x01 é世"
+    captions: "s264 \"q\" \\ \n\t\x01 é世"
+    captions_u_r_l: "s265 \"q\" \\ \n\t\x01 é世"
+    transcript: "s266 \"q\" \\ \n\t\x01 é世"
+    width: 267.25
+    height: 268.25
   }
   equation: {
-    formula: "s269 \"q\" \\ \n\t\x01 é世"
-    alt: "s270 \"q\" \\ \n\t\x01 é世"
+    formula: "s271 \"q\" \\ \n\t\x01 é世"
+    alt: "s272 \"q\" \\ \n\t\x01 é世"
   }
 }
 styles: {
-  name: "s273 \"q\" \\ \n\t\x01 é世"
+  name: "s275 \"q\" \\ \n\t\x01 é世"
   format: {
-    font_family: "s275 \"q\" \\ \n\t\x01 é世"
-    font_size: 276.25
-    scale: 277.25
-    font_weight: 1946
-    font_style: "s279 \"q\" \\ \n\t\x01 é世"
-    color: "s280 \"q\" \\ \n\t\x01 é世"
+    font_family: "s277 \"q\" \\ \n\t\x01 é世"
+    font_size: 278.25
+    scale: 279.25
+    font_weight: 1960
+    font_style: "s281 \"q\" \\ \n\t\x01 é世"
+    color: "s282 \"q\" \\ \n\t\x01 é世"
     underline: true
     strike: true
     superscript: true
     subscript: true
-    background: "s285 \"q\" \\ \n\t\x01 é世"
-    case: 2002
-    style: "s287 \"q\" \\ \n\t\x01 é世"
-    link: "s288 \"q\" \\ \n\t\x01 é世"
-    comment: "s289 \"q\" \\ \n\t\x01 é世"
-    bookmark: "s290 \"q\" \\ \n\t\x01 é世"
-    index: "s291 \"q\" \\ \n\t\x01 é世"
-    lang: "s292 \"q\" \\ \n\t\x01 é世"
-    proposal: "s293 \"q\" \\ \n\t\x01 é世"
+    background: "s287 \"q\" \\ \n\t\x01 é世"
+    case: -288000864
+    style: "s289 \"q\" \\ \n\t\x01 é世"
+    link: "s290 \"q\" \\ \n\t\x01 é世"
+    comment: "s291 \"q\" \\ \n\t\x01 é世"
+    bookmark: "s292 \"q\" \\ \n\t\x01 é世"
+    index: "s293 \"q\" \\ \n\t\x01 é世"
+    lang: "s294 \"q\" \\ \n\t\x01 é世"
+    proposal: "s295 \"q\" \\ \n\t\x01 é世"
   }
   para: {
-    align: 2065
-    indent_left: 296.25
-    indent_right: 297.25
-    first_line: 298.25
-    space_before: 299.25
-    space_after: 300.25
-    line_spacing: 301.25
+    align: -297000891
+    indent_left: 298.25
+    indent_right: 299.25
+    first_line: 300.25
+    space_before: 301.25
+    space_after: 302.25
+    line_spacing: 303.25
     list: {
-      kind: -303000909
-      level: 2128
-      marker: "s305 \"q\" \\ \n\t\x01 é世"
-      number: -306000918
-      start: 2149
+      kind: 2135
+      level: -306000918
+      marker: "s307 \"q\" \\ \n\t\x01 é世"
+      number: 2156
+      start: -309000927
       checked: true
     }
-    quote_bar: "s309 \"q\" \\ \n\t\x01 é世"
-    style: "s310 \"q\" \\ \n\t\x01 é世"
-    drop_cap: 2177
-    code_lang: "s312 \"q\" \\ \n\t\x01 é世"
+    quote_bar: "s311 \"q\" \\ \n\t\x01 é世"
+    style: "s312 \"q\" \\ \n\t\x01 é世"
+    drop_cap: 2191
+    code_lang: "s314 \"q\" \\ \n\t\x01 é世"
   }
   paragraph: true
 }
 styles: {
-  name: "s315 \"q\" \\ \n\t\x01 é世"
+  name: "s317 \"q\" \\ \n\t\x01 é世"
   format: {
-    font_family: "s317 \"q\" \\ \n\t\x01 é世"
-    font_size: 318.25
-    scale: 319.25
-    font_weight: 2240
-    font_style: "s321 \"q\" \\ \n\t\x01 é世"
-    color: "s322 \"q\" \\ \n\t\x01 é世"
+    font_family: "s319 \"q\" \\ \n\t\x01 é世"
+    font_size: 320.25
+    scale: 321.25
+    font_weight: 2254
+    font_style: "s323 \"q\" \\ \n\t\x01 é世"
+    color: "s324 \"q\" \\ \n\t\x01 é世"
     underline: true
     strike: true
     superscript: true
     subscript: true
-    background: "s327 \"q\" \\ \n\t\x01 é世"
-    case: 2296
-    style: "s329 \"q\" \\ \n\t\x01 é世"
-    link: "s330 \"q\" \\ \n\t\x01 é世"
-    comment: "s331 \"q\" \\ \n\t\x01 é世"
-    bookmark: "s332 \"q\" \\ \n\t\x01 é世"
-    index: "s333 \"q\" \\ \n\t\x01 é世"
-    lang: "s334 \"q\" \\ \n\t\x01 é世"
-    proposal: "s335 \"q\" \\ \n\t\x01 é世"
+    background: "s329 \"q\" \\ \n\t\x01 é世"
+    case: -330000990
+    style: "s331 \"q\" \\ \n\t\x01 é世"
+    link: "s332 \"q\" \\ \n\t\x01 é世"
+    comment: "s333 \"q\" \\ \n\t\x01 é世"
+    bookmark: "s334 \"q\" \\ \n\t\x01 é世"
+    index: "s335 \"q\" \\ \n\t\x01 é世"
+    lang: "s336 \"q\" \\ \n\t\x01 é世"
+    proposal: "s337 \"q\" \\ \n\t\x01 é世"
   }
   para: {
-    align: 2359
-    indent_left: 338.25
-    indent_right: 339.25
-    first_line: 340.25
-    space_before: 341.25
-    space_after: 342.25
-    line_spacing: 343.25
+    align: -339001017
+    indent_left: 340.25
+    indent_right: 341.25
+    first_line: 342.25
+    space_before: 343.25
+    space_after: 344.25
+    line_spacing: 345.25
     list: {
-      kind: -345001035
-      level: 2422
-      marker: "s347 \"q\" \\ \n\t\x01 é世"
-      number: -348001044
-      start: 2443
+      kind: 2429
+      level: -348001044
+      marker: "s349 \"q\" \\ \n\t\x01 é世"
+      number: 2450
+      start: -351001053
       checked: true
     }
-    quote_bar: "s351 \"q\" \\ \n\t\x01 é世"
-    style: "s352 \"q\" \\ \n\t\x01 é世"
-    drop_cap: 2471
-    code_lang: "s354 \"q\" \\ \n\t\x01 é世"
+    quote_bar: "s353 \"q\" \\ \n\t\x01 é世"
+    style: "s354 \"q\" \\ \n\t\x01 é世"
+    drop_cap: 2485
+    code_lang: "s356 \"q\" \\ \n\t\x01 é世"
   }
   paragraph: true
 }
 fonts: {
-  family: "s358 \"q\" \\ \n\t\x01 é世"
-  source: "s359 \"q\" \\ \n\t\x01 é世"
-  category: "s360 \"q\" \\ \n\t\x01 é世"
+  family: "s360 \"q\" \\ \n\t\x01 é世"
+  source: "s361 \"q\" \\ \n\t\x01 é世"
+  category: "s362 \"q\" \\ \n\t\x01 é世"
   variants: {
-    weight: -363001089
+    weight: 2555
     italic: true
-    style: "s365 \"q\" \\ \n\t\x01 é世"
-    u_r_l: "s366 \"q\" \\ \n\t\x01 é世"
-    key: "s367 \"q\" \\ \n\t\x01 é世"
+    style: "s367 \"q\" \\ \n\t\x01 é世"
+    u_r_l: "s368 \"q\" \\ \n\t\x01 é世"
+    key: "s369 \"q\" \\ \n\t\x01 é世"
   }
   variants: {
-    weight: -369001107
+    weight: 2597
     italic: true
-    style: "s371 \"q\" \\ \n\t\x01 é世"
-    u_r_l: "s372 \"q\" \\ \n\t\x01 é世"
-    key: "s373 \"q\" \\ \n\t\x01 é世"
+    style: "s373 \"q\" \\ \n\t\x01 é世"
+    u_r_l: "s374 \"q\" \\ \n\t\x01 é世"
+    key: "s375 \"q\" \\ \n\t\x01 é世"
   }
 }
 fonts: {
-  family: "s375 \"q\" \\ \n\t\x01 é世"
-  source: "s376 \"q\" \\ \n\t\x01 é世"
-  category: "s377 \"q\" \\ \n\t\x01 é世"
+  family: "s377 \"q\" \\ \n\t\x01 é世"
+  source: "s378 \"q\" \\ \n\t\x01 é世"
+  category: "s379 \"q\" \\ \n\t\x01 é世"
   variants: {
-    weight: 2660
+    weight: 2674
     italic: true
-    style: "s382 \"q\" \\ \n\t\x01 é世"
-    u_r_l: "s383 \"q\" \\ \n\t\x01 é世"
-    key: "s384 \"q\" \\ \n\t\x01 é世"
+    style: "s384 \"q\" \\ \n\t\x01 é世"
+    u_r_l: "s385 \"q\" \\ \n\t\x01 é世"
+    key: "s386 \"q\" \\ \n\t\x01 é世"
   }
   variants: {
-    weight: 2702
+    weight: 2716
     italic: true
-    style: "s388 \"q\" \\ \n\t\x01 é世"
-    u_r_l: "s389 \"q\" \\ \n\t\x01 é世"
-    key: "s390 \"q\" \\ \n\t\x01 é世"
+    style: "s390 \"q\" \\ \n\t\x01 é世"
+    u_r_l: "s391 \"q\" \\ \n\t\x01 é世"
+    key: "s392 \"q\" \\ \n\t\x01 é世"
   }
 }
 meta: {
-  key: "s393 \"q\" \\ \n\t\x01 é世"
-  value: "s394 \"q\" \\ \n\t\x01 é世"
+  key: "s395 \"q\" \\ \n\t\x01 é世"
+  value: "s396 \"q\" \\ \n\t\x01 é世"
 }
 meta: {
-  key: "s396 \"q\" \\ \n\t\x01 é世"
-  value: "s397 \"q\" \\ \n\t\x01 é世"
+  key: "s398 \"q\" \\ \n\t\x01 é世"
+  value: "s399 \"q\" \\ \n\t\x01 é世"
 }
 comments: {
-  i_d: "s400 \"q\" \\ \n\t\x01 é世"
-  author: "s401 \"q\" \\ \n\t\x01 é世"
-  text: "s402 \"q\" \\ \n\t\x01 é世"
-  created: 2821
+  i_d: "s402 \"q\" \\ \n\t\x01 é世"
+  author: "s403 \"q\" \\ \n\t\x01 é世"
+  text: "s404 \"q\" \\ \n\t\x01 é世"
+  created: -405001215
   resolved: true
   replies: {
-    author: "s407 \"q\" \\ \n\t\x01 é世"
-    text: "s408 \"q\" \\ \n\t\x01 é世"
-    created: 2863
+    author: "s409 \"q\" \\ \n\t\x01 é世"
+    text: "s410 \"q\" \\ \n\t\x01 é世"
+    created: -411001233
   }
   replies: {
-    author: "s411 \"q\" \\ \n\t\x01 é世"
-    text: "s412 \"q\" \\ \n\t\x01 é世"
-    created: 2891
+    author: "s413 \"q\" \\ \n\t\x01 é世"
+    text: "s414 \"q\" \\ \n\t\x01 é世"
+    created: 2905
   }
 }
 comments: {
-  i_d: "s415 \"q\" \\ \n\t\x01 é世"
-  author: "s416 \"q\" \\ \n\t\x01 é世"
-  text: "s417 \"q\" \\ \n\t\x01 é世"
-  created: 2926
+  i_d: "s417 \"q\" \\ \n\t\x01 é世"
+  author: "s418 \"q\" \\ \n\t\x01 é世"
+  text: "s419 \"q\" \\ \n\t\x01 é世"
+  created: -420001260
   resolved: true
   replies: {
-    author: "s422 \"q\" \\ \n\t\x01 é世"
-    text: "s423 \"q\" \\ \n\t\x01 é世"
-    created: 2968
+    author: "s424 \"q\" \\ \n\t\x01 é世"
+    text: "s425 \"q\" \\ \n\t\x01 é世"
+    created: -426001278
   }
   replies: {
-    author: "s426 \"q\" \\ \n\t\x01 é世"
-    text: "s427 \"q\" \\ \n\t\x01 é世"
-    created: 2996
+    author: "s428 \"q\" \\ \n\t\x01 é世"
+    text: "s429 \"q\" \\ \n\t\x01 é世"
+    created: 3010
   }
 }
 footnotes: {
-  i_d: "s431 \"q\" \\ \n\t\x01 é世"
-  text: "s432 \"q\" \\ \n\t\x01 é世"
+  i_d: "s433 \"q\" \\ \n\t\x01 é世"
+  text: "s434 \"q\" \\ \n\t\x01 é世"
 }
 footnotes: {
-  i_d: "s434 \"q\" \\ \n\t\x01 é世"
-  text: "s435 \"q\" \\ \n\t\x01 é世"
+  i_d: "s436 \"q\" \\ \n\t\x01 é世"
+  text: "s437 \"q\" \\ \n\t\x01 é世"
 }
 history: {
-  saved: -438001314
+  saved: 3080
   doc: {
-    title: "s441 \"q\" \\ \n\t\x01 é世"
-    updated: 3094
+    title: "s443 \"q\" \\ \n\t\x01 é世"
+    updated: -444001332
     content: {}
     content: {}
     styles: {
-      name: "s472 \"q\" \\ \n\t\x01 é世"
+      name: "s474 \"q\" \\ \n\t\x01 é世"
       format: {
-        font_family: "s474 \"q\" \\ \n\t\x01 é世"
-        font_size: 475.25
-        scale: 476.25
-        font_weight: -477001431
-        font_style: "s478 \"q\" \\ \n\t\x01 é世"
-        color: "s479 \"q\" \\ \n\t\x01 é世"
+        font_family: "s476 \"q\" \\ \n\t\x01 é世"
+        font_size: 477.25
+        scale: 478.25
+        font_weight: 3353
+        font_style: "s480 \"q\" \\ \n\t\x01 é世"
+        color: "s481 \"q\" \\ \n\t\x01 é世"
         underline: true
         strike: true
         superscript: true
         subscript: true
-        background: "s484 \"q\" \\ \n\t\x01 é世"
-        case: 3395
-        style: "s486 \"q\" \\ \n\t\x01 é世"
-        link: "s487 \"q\" \\ \n\t\x01 é世"
-        comment: "s488 \"q\" \\ \n\t\x01 é世"
-        bookmark: "s489 \"q\" \\ \n\t\x01 é世"
-        index: "s490 \"q\" \\ \n\t\x01 é世"
-        lang: "s491 \"q\" \\ \n\t\x01 é世"
-        proposal: "s492 \"q\" \\ \n\t\x01 é世"
+        background: "s486 \"q\" \\ \n\t\x01 é世"
+        case: 3409
+        style: "s488 \"q\" \\ \n\t\x01 é世"
+        link: "s489 \"q\" \\ \n\t\x01 é世"
+        comment: "s490 \"q\" \\ \n\t\x01 é世"
+        bookmark: "s491 \"q\" \\ \n\t\x01 é世"
+        index: "s492 \"q\" \\ \n\t\x01 é世"
+        lang: "s493 \"q\" \\ \n\t\x01 é世"
+        proposal: "s494 \"q\" \\ \n\t\x01 é世"
       }
       para: {
-        align: 3458
-        indent_left: 495.25
-        indent_right: 496.25
-        first_line: 497.25
-        space_before: 498.25
-        space_after: 499.25
-        line_spacing: 500.25
+        align: 3472
+        indent_left: 497.25
+        indent_right: 498.25
+        first_line: 499.25
+        space_before: 500.25
+        space_after: 501.25
+        line_spacing: 502.25
         list: {
-          kind: 3514
-          level: 3521
-          marker: "s504 \"q\" \\ \n\t\x01 é世"
-          number: 3535
-          start: 3542
+          kind: -504001512
+          level: 3535
+          marker: "s506 \"q\" \\ \n\t\x01 é世"
+          number: -507001521
+          start: 3556
           checked: true
         }
-        quote_bar: "s508 \"q\" \\ \n\t\x01 é世"
-        style: "s509 \"q\" \\ \n\t\x01 é世"
-        drop_cap: -510001530
-        code_lang: "s511 \"q\" \\ \n\t\x01 é世"
+        quote_bar: "s510 \"q\" \\ \n\t\x01 é世"
+        style: "s511 \"q\" \\ \n\t\x01 é世"
+        drop_cap: 3584
+        code_lang: "s513 \"q\" \\ \n\t\x01 é世"
       }
       paragraph: true
     }
     styles: {
-      name: "s514 \"q\" \\ \n\t\x01 é世"
+      name: "s516 \"q\" \\ \n\t\x01 é世"
       format: {
-        font_family: "s516 \"q\" \\ \n\t\x01 é世"
-        font_size: 517.25
-        scale: 518.25
-        font_weight: -519001557
-        font_style: "s520 \"q\" \\ \n\t\x01 é世"
-        color: "s521 \"q\" \\ \n\t\x01 é世"
+        font_family: "s518 \"q\" \\ \n\t\x01 é世"
+        font_size: 519.25
+        scale: 520.25
+        font_weight: 3647
+        font_style: "s522 \"q\" \\ \n\t\x01 é世"
+        color: "s523 \"q\" \\ \n\t\x01 é世"
         underline: true
         strike: true
         superscript: true
         subscript: true
-        background: "s526 \"q\" \\ \n\t\x01 é世"
-        case: 3689
-        style: "s528 \"q\" \\ \n\t\x01 é世"
-        link: "s529 \"q\" \\ \n\t\x01 é世"
-        comment: "s530 \"q\" \\ \n\t\x01 é世"
-        bookmark: "s531 \"q\" \\ \n\t\x01 é世"
-        index: "s532 \"q\" \\ \n\t\x01 é世"
-        lang: "s533 \"q\" \\ \n\t\x01 é世"
-        proposal: "s534 \"q\" \\ \n\t\x01 é世"
+        background: "s528 \"q\" \\ \n\t\x01 é世"
+        case: 3703
+        style: "s530 \"q\" \\ \n\t\x01 é世"
+        link: "s531 \"q\" \\ \n\t\x01 é世"
+        comment: "s532 \"q\" \\ \n\t\x01 é世"
+        bookmark: "s533 \"q\" \\ \n\t\x01 é世"
+        index: "s534 \"q\" \\ \n\t\x01 é世"
+        lang: "s535 \"q\" \\ \n\t\x01 é世"
+        proposal: "s536 \"q\" \\ \n\t\x01 é世"
       }
       para: {
-        align: 3752
-        indent_left: 537.25
-        indent_right: 538.25
-        first_line: 539.25
-        space_before: 540.25
-        space_after: 541.25
-        line_spacing: 542.25
+        align: 3766
+        indent_left: 539.25
+        indent_right: 540.25
+        first_line: 541.25
+        space_before: 542.25
+        space_after: 543.25
+        line_spacing: 544.25
         list: {
-          kind: 3808
-          level: 3815
-          marker: "s546 \"q\" \\ \n\t\x01 é世"
-          number: 3829
-          start: 3836
+          kind: -546001638
+          level: 3829
+          marker: "s548 \"q\" \\ \n\t\x01 é世"
+          number: -549001647
+          start: 3850
           checked: true
         }
-        quote_bar: "s550 \"q\" \\ \n\t\x01 é世"
-        style: "s551 \"q\" \\ \n\t\x01 é世"
-        drop_cap: -552001656
-        code_lang: "s553 \"q\" \\ \n\t\x01 é世"
+        quote_bar: "s552 \"q\" \\ \n\t\x01 é世"
+        style: "s553 \"q\" \\ \n\t\x01 é世"
+        drop_cap: 3878
+        code_lang: "s555 \"q\" \\ \n\t\x01 é世"
       }
       paragraph: true
     }
     fonts: {
-      family: "s557 \"q\" \\ \n\t\x01 é世"
-      source: "s558 \"q\" \\ \n\t\x01 é世"
-      category: "s559 \"q\" \\ \n\t\x01 é世"
+      family: "s559 \"q\" \\ \n\t\x01 é世"
+      source: "s560 \"q\" \\ \n\t\x01 é世"
+      category: "s561 \"q\" \\ \n\t\x01 é世"
     }
     fonts: {
-      family: "s562 \"q\" \\ \n\t\x01 é世"
-      source: "s563 \"q\" \\ \n\t\x01 é世"
-      category: "s564 \"q\" \\ \n\t\x01 é世"
+      family: "s564 \"q\" \\ \n\t\x01 é世"
+      source: "s565 \"q\" \\ \n\t\x01 é世"
+      category: "s566 \"q\" \\ \n\t\x01 é世"
     }
     meta: {
-      key: "s568 \"q\" \\ \n\t\x01 é世"
-      value: "s569 \"q\" \\ \n\t\x01 é世"
+      key: "s570 \"q\" \\ \n\t\x01 é世"
+      value: "s571 \"q\" \\ \n\t\x01 é世"
     }
     meta: {
-      key: "s571 \"q\" \\ \n\t\x01 é世"
-      value: "s572 \"q\" \\ \n\t\x01 é世"
+      key: "s573 \"q\" \\ \n\t\x01 é世"
+      value: "s574 \"q\" \\ \n\t\x01 é世"
     }
     comments: {
-      i_d: "s575 \"q\" \\ \n\t\x01 é世"
-      author: "s576 \"q\" \\ \n\t\x01 é世"
-      text: "s577 \"q\" \\ \n\t\x01 é世"
-      created: 4046
+      i_d: "s577 \"q\" \\ \n\t\x01 é世"
+      author: "s578 \"q\" \\ \n\t\x01 é世"
+      text: "s579 \"q\" \\ \n\t\x01 é世"
+      created: 4060
       resolved: true
     }
     comments: {
-      i_d: "s582 \"q\" \\ \n\t\x01 é世"
-      author: "s583 \"q\" \\ \n\t\x01 é世"
-      text: "s584 \"q\" \\ \n\t\x01 é世"
-      created: -585001755
+      i_d: "s584 \"q\" \\ \n\t\x01 é世"
+      author: "s585 \"q\" \\ \n\t\x01 é世"
+      text: "s586 \"q\" \\ \n\t\x01 é世"
+      created: 4109
       resolved: true
     }
     footnotes: {
-      i_d: "s590 \"q\" \\ \n\t\x01 é世"
-      text: "s591 \"q\" \\ \n\t\x01 é世"
+      i_d: "s592 \"q\" \\ \n\t\x01 é世"
+      text: "s593 \"q\" \\ \n\t\x01 é世"
     }
     footnotes: {
-      i_d: "s593 \"q\" \\ \n\t\x01 é世"
-      text: "s594 \"q\" \\ \n\t\x01 é世"
+      i_d: "s595 \"q\" \\ \n\t\x01 é世"
+      text: "s596 \"q\" \\ \n\t\x01 é世"
     }
     history: {
-      saved: -597001791
+      saved: 4193
     }
     history: {
-      saved: -600001800
+      saved: 4214
     }
   }
 }
 history: {
-  saved: -603001809
+  saved: 4235
   doc: {
-    title: "s606 \"q\" \\ \n\t\x01 é世"
-    updated: 4249
+    title: "s608 \"q\" \\ \n\t\x01 é世"
+    updated: -609001827
     content: {}
     content: {}
     styles: {
-      name: "s637 \"q\" \\ \n\t\x01 é世"
+      name: "s639 \"q\" \\ \n\t\x01 é世"
       format: {
-        font_family: "s639 \"q\" \\ \n\t\x01 é世"
-        font_size: 640.25
-        scale: 641.25
-        font_weight: -642001926
-        font_style: "s643 \"q\" \\ \n\t\x01 é世"
-        color: "s644 \"q\" \\ \n\t\x01 é世"
+        font_family: "s641 \"q\" \\ \n\t\x01 é世"
+        font_size: 642.25
+        scale: 643.25
+        font_weight: 4508
+        font_style: "s645 \"q\" \\ \n\t\x01 é世"
+        color: "s646 \"q\" \\ \n\t\x01 é世"
         underline: true
         strike: true
         superscript: true
         subscript: true
-        background: "s649 \"q\" \\ \n\t\x01 é世"
-        case: 4550
-        style: "s651 \"q\" \\ \n\t\x01 é世"
-        link: "s652 \"q\" \\ \n\t\x01 é世"
-        comment: "s653 \"q\" \\ \n\t\x01 é世"
-        bookmark: "s654 \"q\" \\ \n\t\x01 é世"
-        index: "s655 \"q\" \\ \n\t\x01 é世"
-        lang: "s656 \"q\" \\ \n\t\x01 é世"
-        proposal: "s657 \"q\" \\ \n\t\x01 é世"
+        background: "s651 \"q\" \\ \n\t\x01 é世"
+        case: 4564
+        style: "s653 \"q\" \\ \n\t\x01 é世"
+        link: "s654 \"q\" \\ \n\t\x01 é世"
+        comment: "s655 \"q\" \\ \n\t\x01 é世"
+        bookmark: "s656 \"q\" \\ \n\t\x01 é世"
+        index: "s657 \"q\" \\ \n\t\x01 é世"
+        lang: "s658 \"q\" \\ \n\t\x01 é世"
+        proposal: "s659 \"q\" \\ \n\t\x01 é世"
       }
       para: {
-        align: 4613
-        indent_left: 660.25
-        indent_right: 661.25
-        first_line: 662.25
-        space_before: 663.25
-        space_after: 664.25
-        line_spacing: 665.25
+        align: 4627
+        indent_left: 662.25
+        indent_right: 663.25
+        first_line: 664.25
+        space_before: 665.25
+        space_after: 666.25
+        line_spacing: 667.25
         list: {
-          kind: 4669
-          level: 4676
-          marker: "s669 \"q\" \\ \n\t\x01 é世"
-          number: 4690
-          start: 4697
+          kind: -669002007
+          level: 4690
+          marker: "s671 \"q\" \\ \n\t\x01 é世"
+          number: -672002016
+          start: 4711
           checked: true
         }
-        quote_bar: "s673 \"q\" \\ \n\t\x01 é世"
-        style: "s674 \"q\" \\ \n\t\x01 é世"
-        drop_cap: -675002025
-        code_lang: "s676 \"q\" \\ \n\t\x01 é世"
+        quote_bar: "s675 \"q\" \\ \n\t\x01 é世"
+        style: "s676 \"q\" \\ \n\t\x01 é世"
+        drop_cap: 4739
+        code_lang: "s678 \"q\" \\ \n\t\x01 é世"
       }
       paragraph: true
     }
     styles: {
-      name: "s679 \"q\" \\ \n\t\x01 é世"
+      name: "s681 \"q\" \\ \n\t\x01 é世"
       format: {
-        font_family: "s681 \"q\" \\ \n\t\x01 é世"
-        font_size: 682.25
-        scale: 683.25
-        font_weight: -684002052
-        font_style: "s685 \"q\" \\ \n\t\x01 é世"
-        color: "s686 \"q\" \\ \n\t\x01 é世"
+        font_family: "s683 \"q\" \\ \n\t\x01 é世"
+        font_size: 684.25
+        scale: 685.25
+        font_weight: 4802
+        font_style: "s687 \"q\" \\ \n\t\x01 é世"
+        color: "s688 \"q\" \\ \n\t\x01 é世"
         underline: true
         strike: true
         superscript: true
         subscript: true
-        background: "s691 \"q\" \\ \n\t\x01 é世"
-        case: 4844
-        style: "s693 \"q\" \\ \n\t\x01 é世"
-        link: "s694 \"q\" \\ \n\t\x01 é世"
-        comment: "s695 \"q\" \\ \n\t\x01 é世"
-        bookmark: "s696 \"q\" \\ \n\t\x01 é世"
-        index: "s697 \"q\" \\ \n\t\x01 é世"
-        lang: "s698 \"q\" \\ \n\t\x01 é世"
-        proposal: "s699 \"q\" \\ \n\t\x01 é世"
+        background: "s693 \"q\" \\ \n\t\x01 é世"
+        case: 4858
+        style: "s695 \"q\" \\ \n\t\x01 é世"
+        link: "s696 \"q\" \\ \n\t\x01 é世"
+        comment: "s697 \"q\" \\ \n\t\x01 é世"
+        bookmark: "s698 \"q\" \\ \n\t\x01 é世"
+        index: "s699 \"q\" \\ \n\t\x01 é世"
+        lang: "s700 \"q\" \\ \n\t\x01 é世"
+        proposal: "s701 \"q\" \\ \n\t\x01 é世"
       }
       para: {
-        align: 4907
-        indent_left: 702.25
-        indent_right: 703.25
-        first_line: 704.25
-        space_before: 705.25
-        space_after: 706.25
-        line_spacing: 707.25
+        align: 4921
+        indent_left: 704.25
+        indent_right: 705.25
+        first_line: 706.25
+        space_before: 707.25
+        space_after: 708.25
+        line_spacing: 709.25
         list: {
-          kind: 4963
-          level: 4970
-          marker: "s711 \"q\" \\ \n\t\x01 é世"
-          number: 4984
-          start: 4991
+          kind: -711002133
+          level: 4984
+          marker: "s713 \"q\" \\ \n\t\x01 é世"
+          number: -714002142
+          start: 5005
           checked: true
         }
-        quote_bar: "s715 \"q\" \\ \n\t\x01 é世"
-        style: "s716 \"q\" \\ \n\t\x01 é世"
-        drop_cap: -717002151
-        code_lang: "s718 \"q\" \\ \n\t\x01 é世"
+        quote_bar: "s717 \"q\" \\ \n\t\x01 é世"
+        style: "s718 \"q\" \\ \n\t\x01 é世"
+        drop_cap: 5033
+        code_lang: "s720 \"q\" \\ \n\t\x01 é世"
       }
       paragraph: true
     }
     fonts: {
-      family: "s722 \"q\" \\ \n\t\x01 é世"
-      source: "s723 \"q\" \\ \n\t\x01 é世"
-      category: "s724 \"q\" \\ \n\t\x01 é世"
+      family: "s724 \"q\" \\ \n\t\x01 é世"
+      source: "s725 \"q\" \\ \n\t\x01 é世"
+      category: "s726 \"q\" \\ \n\t\x01 é世"
     }
     fonts: {
-      family: "s727 \"q\" \\ \n\t\x01 é世"
-      source: "s728 \"q\" \\ \n\t\x01 é世"
-      category: "s729 \"q\" \\ \n\t\x01 é世"
+      family: "s729 \"q\" \\ \n\t\x01 é世"
+      source: "s730 \"q\" \\ \n\t\x01 é世"
+      category: "s731 \"q\" \\ \n\t\x01 é世"
     }
     meta: {
-      key: "s733 \"q\" \\ \n\t\x01 é世"
-      value: "s734 \"q\" \\ \n\t\x01 é世"
+      key: "s735 \"q\" \\ \n\t\x01 é世"
+      value: "s736 \"q\" \\ \n\t\x01 é世"
     }
     meta: {
-      key: "s736 \"q\" \\ \n\t\x01 é世"
-      value: "s737 \"q\" \\ \n\t\x01 é世"
+      key: "s738 \"q\" \\ \n\t\x01 é世"
+      value: "s739 \"q\" \\ \n\t\x01 é世"
     }
     comments: {
-      i_d: "s740 \"q\" \\ \n\t\x01 é世"
-      author: "s741 \"q\" \\ \n\t\x01 é世"
-      text: "s742 \"q\" \\ \n\t\x01 é世"
-      created: 5201
+      i_d: "s742 \"q\" \\ \n\t\x01 é世"
+      author: "s743 \"q\" \\ \n\t\x01 é世"
+      text: "s744 \"q\" \\ \n\t\x01 é世"
+      created: 5215
       resolved: true
     }
     comments: {
-      i_d: "s747 \"q\" \\ \n\t\x01 é世"
-      author: "s748 \"q\" \\ \n\t\x01 é世"
-      text: "s749 \"q\" \\ \n\t\x01 é世"
-      created: -750002250
+      i_d: "s749 \"q\" \\ \n\t\x01 é世"
+      author: "s750 \"q\" \\ \n\t\x01 é世"
+      text: "s751 \"q\" \\ \n\t\x01 é世"
+      created: 5264
       resolved: true
     }
     footnotes: {
-      i_d: "s755 \"q\" \\ \n\t\x01 é世"
-      text: "s756 \"q\" \\ \n\t\x01 é世"
+      i_d: "s757 \"q\" \\ \n\t\x01 é世"
+      text: "s758 \"q\" \\ \n\t\x01 é世"
     }
     footnotes: {
-      i_d: "s758 \"q\" \\ \n\t\x01 é世"
-      text: "s759 \"q\" \\ \n\t\x01 é世"
+      i_d: "s760 \"q\" \\ \n\t\x01 é世"
+      text: "s761 \"q\" \\ \n\t\x01 é世"
     }
     history: {
-      saved: -762002286
+      saved: 5348
     }
     history: {
-      saved: -765002295
+      saved: 5369
     }
   }
 }

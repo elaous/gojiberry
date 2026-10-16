@@ -3,6 +3,7 @@ package canvas
 import (
 	"math"
 	"strconv"
+	"strings"
 )
 
 // ImageTool is what dragging does to an Image in edit mode.
@@ -121,6 +122,10 @@ type Image struct {
 	// chart): what a person who cannot see it needs to follow the text around it. The exports write it
 	// as text after the image, linked to it in HTML.
 	LongDesc string
+	// Legend is the visible caption under the picture ("Figure 1: ..."), drawn in small italic type, centred and wrapped to
+	// the picture's width. Unlike Alt and LongDesc, which are for people who cannot see the picture, everybody reads it;
+	// the exports write it under the picture.
+	Legend string
 
 	// OnChange is called after any change made by dragging or the toolbar.
 	OnChange func(*Image)
@@ -253,13 +258,13 @@ func (im *Image) syncAnchor() {
 
 // Measure implements InlineObject: the image's visible part, scaled
 // down (never up) to fit maxW x maxH, keeping its aspect ratio.
-func (im *Image) Measure(_ Painter, maxW, maxH float64) (float64, float64) {
+func (im *Image) Measure(p Painter, maxW, maxH float64) (float64, float64) {
 	vw, vh := im.W-im.Clip.Left-im.Clip.Right, im.H-im.Clip.Top-im.Clip.Bottom
 	if vw <= 0 || vh <= 0 {
 		return 0, 0
 	}
 	im.scale = min(1, maxW/vw, maxH/vh)
-	return vw * im.scale, vh * im.scale
+	return vw * im.scale, vh*im.scale + im.legendHeight(p, vw*im.scale)
 }
 
 // DrawAt implements InlineObject: it draws the visible part with its
@@ -277,6 +282,49 @@ func (im *Image) DrawAt(p Painter, x, y float64) {
 	ip.SetGlobalAlpha(im.Alpha)
 	ip.DrawImage(im.Src, im.Clip.Left*sx, im.Clip.Top*sy, vw*sx, vh*sy, x, y, vw*sc, vh*sc)
 	ip.SetGlobalAlpha(1)
+	im.drawLegend(p, x, y+vh*sc, vw*sc)
+}
+
+const (
+	legendFont  = "italic 12px sans-serif"
+	legendColor = "#4b5563"
+	legendLineH = 15.0
+	legendGap   = 4.0
+	legendMinW  = 100.0
+)
+
+// legendLines wraps the legend to the picture's width (never narrower than legendMinW).
+func (im *Image) legendLines(p Painter, w float64) []string {
+	if strings.TrimSpace(im.Legend) == "" || p == nil {
+		return nil
+	}
+	p.SetFont(legendFont)
+	return wrapToWidth(p, im.Legend, max(w, legendMinW))
+}
+
+// legendHeight is the room under the picture the legend takes: its lines and the gap above them; 0 with no legend.
+func (im *Image) legendHeight(p Painter, w float64) float64 {
+	n := len(im.legendLines(p, w))
+	if n == 0 {
+		return 0
+	}
+	return legendGap + float64(n)*legendLineH
+}
+
+// drawLegend writes the legend under a picture whose bottom edge is at y and which is w wide, centred on it.
+func (im *Image) drawLegend(p Painter, x, y, w float64) {
+	lines := im.legendLines(p, w)
+	if len(lines) == 0 {
+		return
+	}
+	p.SetFont(legendFont)
+	p.SetFillStyle(legendColor)
+	p.SetTextAlign("center")
+	p.SetTextBaseline("alphabetic")
+	for i, l := range lines {
+		p.FillText(l, x+w/2, y+legendGap+float64(i+1)*legendLineH-3)
+	}
+	p.SetTextAlign("left")
 }
 
 // Exclusion implements Obstacle: while Wrap is on, the visible
@@ -286,6 +334,9 @@ func (im *Image) Exclusion(y0, y1 float64) (x0, x1 float64, ok bool) {
 		return 0, 0, false
 	}
 	vx, vy, vw, vh := im.Visible()
+	if im.Painter != nil {
+		vh += im.legendHeight(im.Painter, vw) // the legend is part of what text keeps away from
+	}
 	m := im.WrapMargin
 	if vw <= 0 || vh <= 0 || y1 <= vy-m || y0 >= vy+vh+m {
 		return 0, 0, false
@@ -530,6 +581,7 @@ func (im *Image) Draw() {
 		p.SetGlobalAlpha(im.Alpha)
 		p.DrawImage(im.Src, im.Clip.Left*sx, im.Clip.Top*sy, vw/sc*sx, vh/sc*sy, vx, vy, vw, vh)
 		p.SetGlobalAlpha(1)
+		im.drawLegend(p, vx, vy+vh, vw)
 	}
 	p.SetGlobalAlpha(1)
 
