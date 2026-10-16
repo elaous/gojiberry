@@ -457,3 +457,55 @@ func TestFloatingTextOpacityAndFadeButton(t *testing.T) {
 		t.Errorf("the Fade button cycles opacity: %g", ft.Opacity)
 	}
 }
+
+func TestSpreadDrawsTheFoldShadeAndTurnTabs(t *testing.T) {
+	ps := sheets(5)
+	ps.Spread, ps.Gutter = true, 4
+	fp := &fakePainter{}
+	ps.Painter = fp
+	ps.Draw()
+	if !fp.has("fillStyle rgba(0, 0, 0, 0.220)") {
+		t.Errorf("the fold is shaded strongest at the spine: %v", fp.calls)
+	}
+	// Not a spread: no shade.
+	ps.Spread = false
+	fp2 := &fakePainter{}
+	ps.Painter = fp2
+	ps.Draw()
+	if fp2.has("fillStyle rgba(0, 0, 0, 0.220)") {
+		t.Error("a single column has no fold")
+	}
+
+	ps.Spread = true
+	var got []int
+	ps.OnTurn = func(page int) { got = append(got, page) }
+	// Rows: [0 1] [2 3] [4]. Sheet 1 is the right of the first pair: its tab turns forward to sheet 2.
+	x, y, left, ok := ps.turnTab(1)
+	if !ok || left {
+		t.Fatalf("right sheet tab: %v %v", left, ok)
+	}
+	if !ps.MouseDown(x+3, y+3) || len(got) != 1 || got[0] != 2 {
+		t.Fatalf("turning forward: %v", got)
+	}
+	// Sheet 2 is the left of the second pair: back to sheet 0.
+	x, y, left, ok = ps.turnTab(2)
+	if !ok || !left {
+		t.Fatalf("left sheet tab: %v %v", left, ok)
+	}
+	ps.MouseDown(x+3, y+3)
+	if len(got) != 2 || got[1] != 0 {
+		t.Fatalf("turning back: %v", got)
+	}
+	// The first pair has nothing before it; the last sheet nothing after.
+	if _, _, _, ok := ps.turnTab(0); ok {
+		t.Error("nothing before the first pair")
+	}
+	if _, can := ps.TurnTarget(4, false); can {
+		t.Error("nothing after the last")
+	}
+	// Without a host there are no tabs.
+	ps.OnTurn = nil
+	if _, _, _, ok := ps.turnTab(1); ok {
+		t.Error("no OnTurn, no tabs")
+	}
+}
