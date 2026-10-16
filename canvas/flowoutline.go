@@ -147,3 +147,61 @@ type Revealer interface {
 // structure (a table of contents): the flow hands itself over each time
 // it reads its content.
 type flowBinder interface{ bindFlow(f *TextFlow) }
+
+// SectionRange returns the stream range of the section that heading i of Outline opens: from the heading to the next
+// heading of the same level or a higher one (a lower level number), or to the end of the text. Its subsections are
+// inside it.
+func (f *TextFlow) SectionRange(i int) (from, to int, ok bool) {
+	es := f.Outline()
+	if i < 0 || i >= len(es) {
+		return 0, 0, false
+	}
+	to = len(f.flatten().runes)
+	for _, e := range es[i+1:] {
+		if e.Level <= es[i].Level {
+			to = e.Start
+			break
+		}
+	}
+	return es[i].Start, to, true
+}
+
+// MoveSection moves the section that heading i opens (with its subsections) in front of heading before of Outline;
+// before == len(Outline) moves it to the end. Moving a section into itself does nothing and reports false. The caret
+// goes to the moved heading. It is the editing under the outline panel's move buttons and its drag and drop.
+func (f *TextFlow) MoveSection(i, before int) bool {
+	es := f.Outline()
+	from, to, ok := f.SectionRange(i)
+	if !ok || before < 0 || before > len(es) {
+		return false
+	}
+	runes := []rune(f.EditText())
+	n := len(runes)
+	dest := n
+	if before < len(es) {
+		dest = es[before].Start
+	}
+	if dest >= from && dest <= to {
+		return false
+	}
+	moved := f.Slice(from, to)
+	delFrom := from
+	if to == n && (n == 0 || runes[n-1] != '\n') && from > 0 {
+		// The last section has no paragraph end of its own: it takes the one before it along.
+		moved = append(moved, Chars{Text: "\n"})
+		delFrom = from - 1
+	}
+	if dest == n && (n == 0 || runes[n-1] != '\n') {
+		moved = append([]Item{Chars{Text: "\n"}}, moved...)
+	}
+	f.Replace([]Edit{{From: delFrom, To: to}, {From: dest, To: dest, Items: moved}})
+	start := dest
+	if dest > to {
+		start = dest - (to - delFrom)
+		if delFrom < from {
+			start++ // the leading newline carried along is not part of the heading
+		}
+	}
+	f.GotoOffset(max(start, 0))
+	return true
+}

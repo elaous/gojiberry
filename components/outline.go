@@ -13,6 +13,60 @@ type OutlineProps struct {
 	Current int
 	// OnSelect is called with the index of the clicked heading.
 	OnSelect func(index int, entry canvas.OutlineEntry)
+	// Collapsed lists the indexes of headings whose subsections are hidden; OnToggle is called with the index of a
+	// heading whose toggle was pressed (the caller adds it to or removes it from Collapsed). A heading with nothing
+	// under it has no toggle. With OnToggle nil there are no toggles and everything shows.
+	Collapsed []int
+	OnToggle  func(index int)
+	// OnMove, when set, lets a section be moved: each heading gets "Move section up" and "Move section down"
+	// buttons, and can be dragged onto another heading. It is called with the heading and the heading to put it in
+	// front of (len(Entries) for the end); pass them to TextFlow.MoveSection.
+	OnMove func(from, before int)
+}
+
+// outlineHidden says which entries sit under a collapsed heading.
+func outlineHidden(es []canvas.OutlineEntry, collapsed []int) []bool {
+	hidden := make([]bool, len(es))
+	for _, c := range collapsed {
+		if c < 0 || c >= len(es) {
+			continue
+		}
+		for j := c + 1; j < len(es) && es[j].Level > es[c].Level; j++ {
+			hidden[j] = true
+		}
+	}
+	return hidden
+}
+
+// OutlineUp is the heading to put section i in front of to move it up one place among its siblings, or -1 when it
+// is the first of them.
+func OutlineUp(es []canvas.OutlineEntry, i int) int {
+	for j := i - 1; j >= 0; j-- {
+		if es[j].Level < es[i].Level {
+			return -1
+		}
+		if es[j].Level == es[i].Level {
+			return j
+		}
+	}
+	return -1
+}
+
+// OutlineDown is the heading to put section i in front of to move it down one place among its siblings
+// (len(es) for the end), or -1 when it is the last of them.
+func OutlineDown(es []canvas.OutlineEntry, i int) int {
+	j := i + 1
+	for j < len(es) && es[j].Level > es[i].Level {
+		j++
+	}
+	if j >= len(es) || es[j].Level < es[i].Level {
+		return -1
+	}
+	k := j + 1
+	for k < len(es) && es[k].Level > es[j].Level {
+		k++
+	}
+	return k
 }
 
 // Outline renders the document's headings as an indented list, the
@@ -20,8 +74,17 @@ type OutlineProps struct {
 // TextFlow.GotoOffset and ScrollView.RevealPending). It is controlled.
 func Outline(props OutlineProps) xango.Node {
 	var items []xango.Node
+	hidden := outlineHidden(props.Entries, props.Collapsed)
+	collapsed := map[int]bool{}
+	for _, c := range props.Collapsed {
+		collapsed[c] = true
+	}
+	dragging := -1
 	for i, e := range props.Entries {
 		i, e := i, e
+		if hidden[i] && props.OnToggle != nil {
+			continue
+		}
 		class := "gj-outline-item"
 		if i == props.Current {
 			class += " gj-outline-item-on"
@@ -34,7 +97,40 @@ func Outline(props OutlineProps) xango.Node {
 		if props.OnSelect != nil {
 			attrs = append(attrs, xango.On("click", func(xango.Event) { props.OnSelect(i, e) }))
 		}
-		items = append(items, xango.El("li", nil, xango.El("button", attrs, xango.Text(e.Text))))
+		var row []xango.Node
+		hasKids := i+1 < len(props.Entries) && props.Entries[i+1].Level > e.Level
+		if props.OnToggle != nil && hasKids {
+			label, mark := "Collapse "+e.Text, "▾"
+			if collapsed[i] {
+				label, mark = "Expand "+e.Text, "▸"
+			}
+			row = append(row, xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-outline-toggle"),
+				xango.A("aria-expanded", boolString(!collapsed[i])), xango.A("aria-label", label),
+				xango.On("click", func(xango.Event) { props.OnToggle(i) })}, xango.Text(mark)))
+		}
+		row = append(row, xango.El("button", attrs, xango.Text(e.Text)))
+		liAttrs := []xango.Attr(nil)
+		if props.OnMove != nil {
+			if up := OutlineUp(props.Entries, i); up >= 0 {
+				row = append(row, xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-outline-move"),
+					xango.A("aria-label", "Move section up: "+e.Text), xango.On("click", func(xango.Event) { props.OnMove(i, up) })}, xango.Text("↑")))
+			}
+			if down := OutlineDown(props.Entries, i); down >= 0 {
+				row = append(row, xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("class", "gj-outline-move"),
+					xango.A("aria-label", "Move section down: "+e.Text), xango.On("click", func(xango.Event) { props.OnMove(i, down) })}, xango.Text("↓")))
+			}
+			liAttrs = []xango.Attr{xango.A("draggable", "true"),
+				xango.On("dragstart", func(xango.Event) { dragging = i }),
+				xango.On("dragover", func(ev xango.Event) { ev.PreventDefault() }),
+				xango.On("drop", func(ev xango.Event) {
+					ev.PreventDefault()
+					if from := dragging; from >= 0 && from != i {
+						dragging = -1
+						props.OnMove(from, i)
+					}
+				})}
+		}
+		items = append(items, xango.El("li", liAttrs, row...))
 	}
 	body := xango.El("ul", []xango.Attr{xango.A("class", "gj-outline-list")}, items...)
 	if len(items) == 0 {

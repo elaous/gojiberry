@@ -312,6 +312,7 @@ func (f *TextFlow) drawBody(lay Layout) {
 	f.drawSelection(lay)
 	f.drawPeerSelections(lay)
 	defer f.drawSquiggles(lay)
+	defer f.drawBookmarks()
 	defer f.drawCarets()
 	defer f.drawGhost(lay)
 	defer f.drawPreedit(lay)

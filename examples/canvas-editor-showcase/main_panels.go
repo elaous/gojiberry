@@ -161,7 +161,17 @@ func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *c
 		tocControls(fl, redraw, renderUI),
 		components.Outline(components.OutlineProps{
 			Entries: fl.Outline(), Current: fl.OutlineIndexAt(caret),
-			OnSelect: func(_ int, e canvas.OutlineEntry) { goTo(e.Start) },
+			OnSelect:  func(_ int, e canvas.OutlineEntry) { goTo(e.Start) },
+			Collapsed: state.OutlineCollapsed,
+			OnToggle: func(i int) {
+				if k := slices.Index(state.OutlineCollapsed, i); k >= 0 {
+					state.OutlineCollapsed = slices.Delete(state.OutlineCollapsed, k, k+1)
+				} else {
+					state.OutlineCollapsed = append(state.OutlineCollapsed, i)
+				}
+				renderUI()
+			},
+			OnMove: outlineMover(state, fl, redraw, renderUI),
 		}),
 		xango.El("div", []xango.Attr{xango.A("style", "margin-top:1em")}, components.FootnoteList(components.FootnoteListProps{
 			Entries: fl.FootnoteList(), CanEdit: state.Role.CanEdit(),
@@ -230,4 +240,21 @@ func tocControls(fl *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 			{"2", T("outline.depth2", "Headings 1 and 2")},
 		}, func(v string) { n, _ := strconv.Atoi(v); toc.Depth = n; changed() }),
 	)
+}
+
+// outlineMover is the outline panel's move: nil for a reader (the buttons and the drag are then not offered),
+// otherwise it moves the section, tells a shared document, and forgets which headings were collapsed (the numbers
+// have changed).
+func outlineMover(state *State, fl *canvas.TextFlow, redraw, renderUI func()) func(from, before int) {
+	if !state.Role.CanEdit() {
+		return nil
+	}
+	return func(from, before int) {
+		if fl.MoveSection(from, before) {
+			state.OutlineCollapsed = nil
+			fl.Touch()
+			redraw()
+			renderUI()
+		}
+	}
 }
