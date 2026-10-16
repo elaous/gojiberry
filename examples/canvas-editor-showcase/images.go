@@ -165,7 +165,7 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 			if r.img.Alt == "" && !r.img.Decorative {
 				id := fmt.Sprintf("img-alt-%d", i)
 				// The field may not be in the page yet when the timer fires (a slow machine, a render still
-				// going): look again every 50 ms for up to two seconds, until it has the focus.
+				// going): look again every 50 ms for up to fifteen seconds, until it has the focus.
 				var try js.Func
 				tries := 0
 				try = js.FuncOf(func(js.Value, []js.Value) any {
@@ -177,7 +177,7 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 							return nil
 						}
 					}
-					if tries++; tries >= 40 {
+					if tries++; tries >= 300 {
 						try.Release()
 						return nil
 					}
