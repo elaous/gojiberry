@@ -128,6 +128,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** `TestTableFormulas`, `TestFormulaCycleAndEditing`, `TestFormulaCellsShowTheirValue` (canvas), `TestTableFormulasAreWrittenAsTheirValues` (export), `TestEndToEnd` in examples/canvas-table-demo
 
+## References
+
+**Try it.** Edit mode, References tab: type two authors (one per line, `Silva, Ana Maria` and `Costa, Bruno`), a title, a publisher and a year; Add the source; press **Cite it here**; change the style to MLA; press **Insert the list of references**.
+
+**You should see.** `(Silva & Costa, 2020)` in the text, the entry rewritten in MLA, and the list at the caret with the title in italics.
+
+**Automated.** `TestCiteASourceAndInsertTheListOfReferences` (examples/canvas-editor-showcase), package `reference` tests, `TestSourcesAreKeptWithTheDocument` (docfile)
+
 ## Two-page spread
 
 **Try it.** View > Two-page spread; press the folded corner at the bottom right of the right-hand page.
