@@ -131,6 +131,7 @@ the row into a table above. Nothing here is partly built except where "Present" 
 
 | Source | Item | Type | Status | Present | Missing |
 | --- | --- | --- | --- | --- | --- |
+| canvas-todo.md | Table styles | feature | partial | named table styles applied from the table menu as cell formatting (`TableSchemes`, `Table.ApplyScheme`, the current one marked); saved and exported through cell formatting | styles you define yourself and save with the document, a style that follows when rows are added (banding is set when a style is applied), and a style picker in the showcase's Format tab; the AI helper's designer (see below) would use the same commands |
 | canvas-todo.md | Map object and flowcharts | feature | open | none | both as canvas objects |
 | canvas-todo.md | Mention notifications | feature | open | mentions in comments | telling the person mentioned (needs a delivery channel the host chooses) |
 | canvas-todo.md | Markdown form for case and small caps | enhancement | inherent | tables, rules and pictures with an address are written back | Markdown has no syntax for case or small caps |
@@ -151,7 +152,7 @@ Written down on 2026-10-17 so they are not lost. Each one needs a design before 
 
 | Idea | Type | Status | Present | To settle first |
 | --- | --- | --- | --- | --- |
-| **AI helper hub (phase 2)**: a hub of agents for different jobs, with skills (summarize, criticize, writer styles, "write a ..." for many kinds of document); a mentor and helper, not a ghost-writer. See [ai-helper-ideas.md](ai-helper-ideas.md) | feature | open, needs design | the grammar client for an Ollama-compatible server, the language tools, the command registry | what the hub is (one server, a protocol, a list of agents); where a model runs and whose data goes where; what an agent may read (the open document, selected documents, links) and write (never without the person accepting); the privacy rules for end-to-end encrypted documents (the server cannot see them, so the page would have to) |
+| **AI helper hub (phase 2)**: a hub of agents for different jobs, with skills (summarize, criticize, writer styles, "write a ..." for many kinds of document, and a designer that formats text, picks fonts, creates styles and table styles); a mentor and helper, not a ghost-writer. See [ai-helper-ideas.md](ai-helper-ideas.md) | feature | open, needs design | the grammar client for an Ollama-compatible server, the language tools, the command registry | what the hub is (one server, a protocol, a list of agents); where a model runs and whose data goes where; what an agent may read (the open document, selected documents, links) and write (never without the person accepting); the privacy rules for end-to-end encrypted documents (the server cannot see them, so the page would have to) |
 | **Writing metrics in the document list**: time spent writing, words added, sessions, revisions, and other figures, shown where documents are listed; later a source for the AI helper | feature | open, needs design | the privacy-first counters of [telemetry.md](telemetry.md) (counts, no content), the version history, `saver` document list | opt-in and per person; kept with the document or in the person's own config store; what "time writing" means (focus plus keystrokes, idle cut-off); whether it is sealed with the document for confidential ones; never sent to the operator's metrics |
 | **Insert > Reference**: a citation in the style of a publication, for papers and professional work | feature | open | footnotes, the index, bookmarks; opendocs has snippets for quotes, references and bibliography entries | the styles to start with (APA, MLA, Chicago, IEEE, Harvard, Vancouver, ABNT); a source form (book, article, web page, report) and a bibliography built from the sources in the document; where sources live (per document, or a library in the config store); how a reference is exported (Word fields, plain text) |
 | **Reader voices hub**: beyond the voices on the device, a list of hosted readers by language (accent, gender, quality) that the operator allows. Done: the Read aloud menu reads from the beginning or the selection with a playback bar, and offers a **Reader voice** choice among the device voices for the document's language, described by accent and gender (American, British, female, male; `voice/read` `Describe`, `ForLanguage`) | feature | partial | item 67, `voice/read/voices.go` | where hosted voices come from and their licences, how the operator lists them, and how a hosted voice is fetched without sending text anywhere the person did not agree to |
@@ -160,8 +161,8 @@ Written down on 2026-10-17 so they are not lost. Each one needs a design before 
 
 | What | Type | Status | Present | Missing |
 | --- | --- | --- | --- | --- |
-| A **testing guide for each feature**: how to try it by hand (steps and what you should see) and which automated test covers it | chore | done (first version) | [feature-testing.md](feature-testing.md): 31 features, each with the steps and the tests; [testing-workflow.md](testing-workflow.md), [accessibility-testing.md](accessibility-testing.md) | the guide covers the showcase's tabs, menus and editor features; the library-only features (stores, keys, servers) have their tests listed in the roadmap items but not yet a by-hand entry |
-| A **features document with a screenshot of each document feature**, one or two short paragraphs per feature | chore | done (first version) | [features.md](features.md): 31 pictures (`docs/features/img`, WebP, 700 KB in all) made by `make feature-shots` (`TestFeatureShots`) | pictures of states that need set-up (a comment thread, a suggestion, the key dialogs, the Check tab with findings) |
+| A **testing guide for each feature**: how to try it by hand (steps and what you should see) and which automated test covers it | chore | done (first version) | [feature-testing.md](feature-testing.md): 32 features, each with the steps and the tests; [testing-workflow.md](testing-workflow.md), [accessibility-testing.md](accessibility-testing.md) | the guide covers the showcase's tabs, menus and editor features; the library-only features (stores, keys, servers) have their tests listed in the roadmap items but not yet a by-hand entry |
+| A **features document with a screenshot of each document feature**, one or two short paragraphs per feature | chore | done (first version) | [features.md](features.md): 32 pictures (`docs/features/img`, WebP, about 600 KB in all) made by `make feature-shots` (`TestFeatureShots`) | pictures of states that need set-up (a comment thread, a suggestion, the key dialogs, the Check tab with findings) |
 
 ## Counts
 
@@ -171,7 +172,7 @@ Server and security table: every code item is done (passkey backlog 1 to 5, limi
 
 Earlier plan: nothing is partial; Encryption and passkeys is blocked on the audit and the witnesses.
 
-Found in the other docs: 13 rows, 9 open, 2 inherent, 1 closed, 1 partial.
+Found in the other docs: 14 rows, 2 partial, 8 open, 2 inherent, 1 closed, 1 open, approved.
 
 ## Suggested order for the next work
 

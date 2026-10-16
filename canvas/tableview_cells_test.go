@@ -144,3 +144,81 @@ func TestTableMenuOffersMergeSplitAndStyles(t *testing.T) {
 		t.Errorf("after merging: %+v", v.Table.Merges)
 	}
 }
+
+func TestTableStylesDressAWholeTableAndAreRecognised(t *testing.T) {
+	tb := NewTableFrom([][]string{{"Name", "Qty"}, {"a", "1"}, {"b", "2"}, {"c", "3"}})
+	tb.SetCellStyle(1, 1, CellStyle{Align: AlignRight, Italic: true, Background: "#ff0000"})
+	if tb.SchemeOf() != "" {
+		t.Fatalf("a table dressed by hand matches no style: %q", tb.SchemeOf())
+	}
+	s, ok := SchemeByName("Blue header, banded")
+	if !ok {
+		t.Fatal("the style exists")
+	}
+	tb.ApplyScheme(s)
+	if h := tb.StyleAt(0, 0); h.Background != "#2563eb" || h.Color != "#ffffff" || !h.Bold {
+		t.Fatalf("header: %+v", h)
+	}
+	if b := tb.StyleAt(2, 0); b.Background != "#e8f0fe" { // the second body row is banded
+		t.Fatalf("band: %+v", b)
+	}
+	if p := tb.StyleAt(1, 0); p.Background != "" || p.Bold {
+		t.Fatalf("the first body row is plain: %+v", p)
+	}
+	if k := tb.StyleAt(1, 1); k.Align != AlignRight || !k.Italic || k.Background != "" {
+		t.Fatalf("alignment and italics stay, the old background goes: %+v", k)
+	}
+	if tb.SchemeOf() != "Blue header, banded" {
+		t.Fatalf("recognised as %q", tb.SchemeOf())
+	}
+	tb.SetCellStyle(3, 0, CellStyle{Background: "#ffff00"})
+	if tb.SchemeOf() != "" {
+		t.Fatal("a hand change leaves the style")
+	}
+	plain, _ := SchemeByName("Plain")
+	tb.ApplyScheme(plain)
+	if len(tb.Styles) != 1 { // only the alignment and italics of one cell remain
+		t.Fatalf("plain takes the looks off: %+v", tb.Styles)
+	}
+	fc, _ := SchemeByName("Banded, first column bold")
+	tb.ApplyScheme(fc)
+	if !tb.StyleAt(2, 0).Bold || tb.StyleAt(2, 1).Bold {
+		t.Fatal("first column bold in the body only")
+	}
+	// A merged block is dressed through its owner, never its covered cells.
+	m := NewTableFrom([][]string{{"H1", "H2"}, {"x", ""}, {"y", "z"}})
+	m.MergeRange(1, 0, 1, 1)
+	m.ApplyScheme(s)
+	if _, covered := m.Styles[CellPos{1, 1}]; covered {
+		t.Fatal("a covered cell has no style of its own")
+	}
+}
+
+func TestTableMenuOffersTheStylesAndChecksTheCurrentOne(t *testing.T) {
+	v, _ := newView()
+	v.Table.ApplyScheme(TableSchemes()[2])
+	var labels []string
+	for _, it := range v.tableMenu() {
+		labels = append(labels, it.Label)
+	}
+	found := false
+	for _, l := range labels {
+		if l == "✓ Table style: Blue header" {
+			found = true
+		}
+		if l == "✓ Table style: Plain" {
+			t.Fatal("only the current style is checked")
+		}
+	}
+	if !found {
+		t.Fatalf("the menu does not mark the current style: %v", labels)
+	}
+	for _, it := range v.tableMenu() {
+		if it.Label == "   Table style: Grey banded" {
+			it.Action()
+		}
+	}
+	if v.Table.SchemeOf() != "Grey banded" {
+		t.Fatalf("choosing a style applies it: %q", v.Table.SchemeOf())
+	}
+}

@@ -84,6 +84,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** e2e_columns_test.go
 
+## Table styles
+
+**Try it.** In the table demo (`examples/canvas-table-demo`) or a table in the editor, switch to edit mode, press the table's corner handle and choose **Table style: Blue header, banded**; open the menu again and check the style is marked, then change one cell's background by hand and check the mark goes.
+
+**You should see.** What the picture in [features.md](features.md#table-styles) shows.
+
+**Automated.** `TestTableStylesDressAWholeTableAndAreRecognised` and `TestTableMenuOffersTheStylesAndChecksTheCurrentOne` (canvas), `TestEndToEnd` in examples/canvas-table-demo
+
 ## Two-page spread
 
 **Try it.** View > Two-page spread; press the folded corner at the bottom right of the right-hand page.

@@ -3,6 +3,9 @@
 package main
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/elaous/gojiberry/internal/e2etest"
@@ -69,6 +72,20 @@ func TestEndToEnd(t *testing.T) {
 	colEdges = nums("colEdges")
 	d.CanvasClick(colEdges[1]+20, 32+28*6+9*3+14)
 	d.OK(d.Is("s.cells[0].length === 4 && s.cells[0][1] === 'Role'"), "menu: delete column")
+
+	// Table handle -> a table style: the menu lists the styles after "Wrap text around" (28 px an item, 9 for a
+	// divider); "Blue header, banded" is the fourth, and dresses the first row in blue.
+	d.CanvasClick(24, 24)
+	d.OK(d.Is("s.selection.kind === 'table' && s.menuOpen"), "the table handle opens the menu with the styles in it")
+	d.CanvasClick(40, 32+28*4+9*3+28*3+14)
+	d.OK(!d.State().Bool("menuOpen"), "choosing a style closes the menu")
+	head := d.Pixel(60, 44)
+	d.OK(head[0] == 0x25 && head[1] == 0x63 && head[2] == 0xeb, fmt.Sprintf("the header row is blue after the style: %#x", head))
+	if dir := os.Getenv("GOJIBERRY_FEATURE_SHOTS"); dir != "" { // the picture of docs/features.md (make feature-shots)
+		d.CanvasClick(24, 24)
+		d.ScreenshotOf("#stage", filepath.Join(dir, "table-styles.webp"))
+		d.Press("Escape")
+	}
 
 	// Table handle -> Clear contents.
 	d.CanvasClick(24, 24)
