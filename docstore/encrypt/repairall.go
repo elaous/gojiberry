@@ -110,6 +110,9 @@ type RepairAllReport struct {
 	// by Fingerprint. A frame whose signer the Adapter does not list is not here (it is
 	// ErrForgedFrame, SkipForged); an unsigned one is Repaired's business, not a signer's.
 	BySigner []SignerFrames
+	// Frames are the frames signed by RepairAllOptions.FramesOf, in document order, as each
+	// document's scan found them; empty when it was not set.
+	Frames []FrameMark
 	// OtherSigner lists, in id order, the documents (and items) that had a frame or a record signed
 	// by a key other than the Adapter's Signer and were left so, because Resign was not set. In a
 	// DryRun they are in Todo only when Resign is set; with Resign false they are in Signed and
@@ -208,6 +211,10 @@ type RepairAllOptions struct {
 	// Skip is the control that keeps an id out of it. Anything that does not start with the age header counts as clear, a damaged or
 	// foreign non-age file too. Run it with DryRun first and read Todo.
 	EncryptPlaintext bool
+	// FramesOf, when set, makes the report list (Frames) the v3 frames signed by this key as the
+	// scan found them, before the run wrote anything to that document. RevokeSigner uses it to know
+	// what the key had written when the removal began.
+	FramesOf ed25519.PublicKey
 }
 
 // RepairAll moves a whole store off the unsigned v1/v2 frames: it lists the store once, groups
@@ -326,6 +333,13 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 		var other bool
 		if sc.err == nil && ctx.Err() == nil {
 			other = tally(&rep, sc, recKey, s.Adapter.Signer, signs)
+		}
+		if o.FramesOf != nil {
+			for _, m := range sc.marks {
+				if bytes.Equal(m.signer, o.FramesOf) {
+					rep.Frames = append(rep.Frames, FrameMark{File: m.file, Hash: hex.EncodeToString(m.hash[:])})
+				}
+			}
 		}
 		resign := o.Resign && other
 		switch {
@@ -519,11 +533,26 @@ func classifyRepairErr(err error) (RepairSkipReason, []string) {
 	return SkipError, nil
 }
 
+// frameMark is a v3 frame as the scan saw it: the file, its signer and the content hash it names.
+type frameMark struct {
+	file   string
+	signer ed25519.PublicKey
+	hash   [sha256.Size]byte
+}
+
+// FrameMark names a frame: the stored file and the content hash (hex) its header carries. A frame
+// rewritten with other content has another mark; the same content signed again has the same.
+type FrameMark struct {
+	File string `json:"f"`
+	Hash string `json:"h"`
+}
+
 // frameScan is what scanFrames found in one document's files.
 type frameScan struct {
 	unsigned []string            // v1, v2 frames
 	plain    []string            // files stored in the clear (only with encryptPlain)
 	signers  []ed25519.PublicKey // the key of each v3 frame, one per file
+	marks    []frameMark         // the same frames with their file and content hash
 	files    []string            // the files behind err
 	reason   RepairSkipReason
 	err      error // set when the document cannot be judged
@@ -589,6 +618,7 @@ func (a *Adapter) scanFrames(ctx context.Context, ids []string, encryptPlain boo
 				sc.unsigned = append(sc.unsigned, id)
 			} else if k := a.frameSigner(id, fi); k != nil {
 				sc.signers = append(sc.signers, k)
+				sc.marks = append(sc.marks, frameMark{file: id, signer: k, hash: fi.b.Hash})
 			}
 		case errors.Is(err, ErrNoKey):
 			fail(id, SkipNoKey, err)

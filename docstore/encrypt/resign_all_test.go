@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -569,6 +570,17 @@ func TestRevokeSignerReplacesTheKeyAndReportsWhatItWroteInTheWindow(t *testing.T
 	if len(rep.Late) != 1 || rep.Late[0] != b {
 		t.Errorf("late: %v, want the document the old key wrote last: %s", rep.Late, b)
 	}
+	// The manifest: what the old key had signed when the removal began (the two documents' files), and the
+	// file it wrote after that, during the first pass, is named although it was signed again like the rest.
+	if rep.Manifest < 2 {
+		t.Errorf("the manifest holds %d frames", rep.Manifest)
+	}
+	if len(rep.During) != 1 {
+		t.Errorf("written during the run: %v", rep.During)
+	}
+	if m, err := r.sharing.loadSignerManifest(ctx, SignerFingerprint(oldKey)); err != nil || m == nil || len(m.Frames) != rep.Manifest {
+		t.Errorf("the manifest is kept, signed by the key that stays: %v %+v", err, m)
+	}
 	// document a is the new key's, record and files
 	onlyNew := signerRotation{w: w, newKey: r.newKey, ad: r.sharing.Adapter, sharing: r.sharing}
 	onlyNew.allBy(t, a, SignerFingerprint(r.newKey.Public()))
@@ -645,4 +657,54 @@ func TestRevokeSignerIsRestartable(t *testing.T) {
 		t.Fatalf("second run: %v %+v", err, rep)
 	}
 	signerRotation{w: w, newKey: r.newKey, ad: r.sharing.Adapter, sharing: r.sharing}.allBy(t, doc, SignerFingerprint(r.newKey.Public()))
+}
+
+// A manifest the removed key wrote itself (signed by it) is not believed: a fresh one is made from the store.
+// A manifest from an earlier, cut-short run is kept, so the frames written between the runs are still named.
+func TestRevokeSignerManifestIsSignedByTheKeyThatStaysAndTheFirstOneIsKept(t *testing.T) {
+	ctx := context.Background()
+	w := newWorld(t)
+	doc := w.e2eeDoc(t)
+	r := w.rotate(t)
+	oldKey := w.signer.Public()
+	fp := SignerFingerprint(oldKey)
+	// the old key's own manifest claiming it had written nothing
+	forged := signerManifest{Key: fp, At: 1, Frames: nil, Signer: oldKey}
+	forged.Sig = base64.StdEncoding.EncodeToString(w.signer.Sign(forged.message()))
+	data, _ := json.Marshal(forged)
+	if err := w.inner.Save(ctx, RevokedSignerPrefix+fp, data); err != nil {
+		t.Fatal(err)
+	}
+	failing := true
+	remove := func(context.Context) error {
+		if failing {
+			return errors.New("the config could not be written")
+		}
+		r.sharing.Adapter = r.onlyNew()
+		r.sharing.OwnerSigners = []ed25519.PublicKey{r.newKey.Public()}
+		return nil
+	}
+	rep, err := r.sharing.RevokeSigner(ctx, oldKey, RevokeSignerOptions{Remove: remove})
+	if err == nil || rep.Manifest < 1 {
+		t.Fatalf("the forged manifest was believed or none was made: %v %+v", err, rep)
+	}
+	first, _ := r.sharing.loadSignerManifest(ctx, fp)
+	if first == nil || !bytes.Equal(first.Signer, r.newKey.Public()) {
+		t.Fatalf("%+v", first)
+	}
+	// the old key writes between the runs; the second run keeps the first manifest and names the file
+	oldWriter := New(w.inner, Static{To: w.ring.People.Owners, Keys: w.ring.People.Keys})
+	oldWriter.Signer = w.signer
+	if err := oldWriter.Save(ctx, w.mainFile(t, doc), []byte("between the runs")); err != nil {
+		t.Fatal(err)
+	}
+	failing = false
+	rep, err = r.sharing.RevokeSigner(ctx, oldKey, RevokeSignerOptions{Remove: remove})
+	if err != nil || !rep.Removed || len(rep.During) != 1 {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	again, _ := r.sharing.loadSignerManifest(ctx, fp)
+	if again == nil || again.At != first.At {
+		t.Errorf("the first manifest is kept: %+v vs %+v", again, first)
+	}
 }

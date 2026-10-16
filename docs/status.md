@@ -91,10 +91,10 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | Limits 21 | Directory publish and pick UI in the showcase | feature | done | four slices merged | none |
 | 27 to 40 | Lint, clock note, sweep order, RepairAll, blob backend named, log read budgets, accept rotated owner key, encrypt errors in words, unmapped addresses, store-mode wording | fix | done | each in the roadmap | none |
 | 41 | Same-e-mail passkey registration makes two accounts | security | blocked | never merge on a label (rule and test) | verification flow and notice need a provider and credentials |
-| 42 | Revoked signer keeps writing | security | partial | frame v4, `Sharing.RevokeSigner`, design doc | manifest of the old key's frames; removal-dialog wording |
+| 42 | Revoked signer keeps writing | security | inherent | `Sharing.RevokeSigner`, signed manifest of the old key's frames (`RevokeSignerReport.During`), removal-dialog wording in six languages, design doc | a store cannot refuse bytes; the removed key's holder can delete the manifest |
 | 43 | Link replay past the 32-link window | security | inherent | documented | none |
 | 44 | SSH-only store with no signed file undetected | security | inherent | first-unlock owner-list fingerprint | digest in the key log or a second store |
-| 45 | Unenrolled-address numbering by the directory key holder | security | partial | `RequireOwner`, notice, WatchLog reports | none beyond enrolling |
+| 45 | Unenrolled-address numbering by the directory key holder | security | inherent | `RequireOwner`, notice, `RequireEnrollment`, WatchLog reports, changed-number flag | none in code: enrolling an owner key closes it, and an unenrolled address has nothing to compare with |
 | 53 | Session store read per request | security | inherent | miss cache, miss budget, optional bounded cache | a positive cache is deliberately not default |
 | 54 | Login routes without rate limit | fix | done | limiter | none |
 | 55 | Public offer sessions shared through the store | enhancement | partial | sessions and counts shared | see 86 |
