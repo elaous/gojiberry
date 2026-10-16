@@ -119,7 +119,9 @@ These were "asked for, not started" and are built. The current state of the edit
   `docximport`, `odtimport`, `htmlimport`, `pdftext`), with a fidelity report of what each drops; saving pages,
   floating objects and images.
 - **`PageSet` as an xango element** (`TagPage` in `canvas/xango`).
-- **Spread view**: images run across the gutter by anchor; `PageSet.Gutter` is the space between facing sheets.
+- **Spread view**: images run across the gutter by anchor; `PageSet.Gutter` is the space between facing sheets; the inner edges
+  of a facing pair are shaded toward the fold (`PageStyle.GutterShade`) and, with `PageSet.OnTurn` set, each outer bottom corner
+  has a folded tab that asks the host to show the neighbouring pair (the showcase scrolls there).
 
 ## To do
 
@@ -133,4 +135,3 @@ Asked for, not started:
 - Comments: notifications for mentions.
 - Markdown: case and small caps have no Markdown form (the format has no syntax for them; a limit of Markdown).
 - Table cell render prop for the xango `Table`, and `CanvasView` (a DOM component that mounts a `canvas/xango` tree).
-- Spread view: no gutter shadow or page-turn UI.

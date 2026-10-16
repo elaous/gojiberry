@@ -50,6 +50,8 @@ func (f *flowElem) Update(_ *Context, props any, _ []xango.Node) (bool, error) {
 		changed = true
 	}
 
+	f.ps.OnTurn = p.OnTurn
+
 	pages := buildPages(p)
 	if !reflect.DeepEqual(pages, f.pages) {
 		f.pages = pages

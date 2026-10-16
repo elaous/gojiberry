@@ -89,14 +89,18 @@ type PageStyle struct {
 	GuideColor  string  // margin guides, edit mode only
 	TextColor   string  // header/footer text
 	ShadowDelta float64 // shadow offset
-	Pad         float64 // space around the sheets inside the container
+	// GutterShade is how dark (0 to 1, the opacity of black) the inner edge of each sheet of a facing pair is at the
+	// fold, fading to nothing across GutterShadeWidth; 0 draws none. Only in a spread.
+	GutterShade      float64
+	GutterShadeWidth float64
+	Pad              float64 // space around the sheets inside the container
 }
 
 // DefaultPageStyle is a light, Google Docs-like look.
 func DefaultPageStyle() PageStyle {
 	return PageStyle{
 		Desk: "#e8eaed", Sheet: "#ffffff", Border: "#c4c7cd", Shadow: "rgba(0, 0, 0, 0.18)",
-		GuideColor: "#b9a9ff", TextColor: "#5b616b", ShadowDelta: 3, Pad: 24,
+		GuideColor: "#b9a9ff", TextColor: "#5b616b", ShadowDelta: 3, Pad: 24, GutterShade: 0.22, GutterShadeWidth: 18,
 	}
 }
 
@@ -122,6 +126,9 @@ type PageSet struct {
 	// can run across the gutter onto its neighbour.
 	Spread, SpreadBook bool
 	Gutter             float64
+	// OnTurn, when set, makes a spread draw a folded corner on each outer bottom corner; pressing it calls
+	// OnTurn with the first sheet of the pair it leads to (the host scrolls there).
+	OnTurn func(page int)
 
 	Style   PageStyle
 	Painter Painter
@@ -465,6 +472,8 @@ func (ps *PageSet) Draw() {
 			p.StrokeRect(cx+0.5, cy+0.5, cw-1, ch-1)
 		}
 	}
+	ps.drawGutterShade()
+	ps.drawTurnTabs()
 }
 
 func (ps *PageSet) drawHeaderFooter(i int) {

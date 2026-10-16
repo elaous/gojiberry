@@ -593,6 +593,9 @@ func (ps *PageSet) selectNumber(i int, r [4]float64) {
 // MouseDown handles the page-number menu, the edit badge, caret
 // placement in a header/footer being edited, and selecting a page number.
 func (ps *PageSet) MouseDown(x, y float64) bool {
+	if ps.turnAt(x, y) {
+		return true
+	}
 	if ps.mode != ModeEdit {
 		return false
 	}
