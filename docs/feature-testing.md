@@ -126,7 +126,9 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **You should see.** 42, the sum, #CYCLE! in both of the circular cells, and the values (not the formulas) in the Word file.
 
-**Automated.** `TestTableFormulas`, `TestFormulaCycleAndEditing`, `TestFormulaCellsShowTheirValue` (canvas), `TestTableFormulasAreWrittenAsTheirValues` (export), `TestEndToEnd` in examples/canvas-table-demo
+**Also try.** Type `\=1+1` in a cell (it shows `=1+1`); open the table menu and choose **Show formulas** (the formulas show, choose it again for the values); look at the grips: A, B, C above and 1, 2, 3 beside.
+
+**Automated.** `TestEscapedEqualsIsPlainText`, `TestColumnNames`, `TestShowFormulasSwitchesWhatIsDrawn`, `TestTableFromMarkdownKeepsFormulasAndAlignment`, `TestMarkdownExportKeepsTheFormulaSoItWorksWhenReadBack` (canvas), `TestTableFormulas`, `TestFormulaCycleAndEditing`, `TestFormulaCellsShowTheirValue` (canvas), `TestTableFormulasAreWrittenAsTheirValues` (export), `TestEndToEnd` in examples/canvas-table-demo
 
 ## References
 

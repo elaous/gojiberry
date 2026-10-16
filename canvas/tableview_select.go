@@ -1,6 +1,9 @@
 package canvas
 
-import "math"
+import (
+	"math"
+	"strconv"
+)
 
 // selectHandle selects what the clicked handle stands for and opens its
 // context menu just below/right of the handle.
@@ -80,6 +83,7 @@ func (v *TableView) tableMenu() []MenuItem {
 		{Separator: true},
 		{Label: "Clear contents", Action: v.apply(func(t *Table) { t.Clear() })},
 		{Separator: true},
+		{Label: check(v.ShowFormulas, "Show formulas"), Action: func() { v.ShowFormulas = !v.ShowFormulas; v.sel = Selection{}; v.changed() }},
 		{Label: check(v.Wrap, "Wrap text around"), Disabled: v.flow == nil, Action: func() { v.Wrap = !v.Wrap; v.sel = Selection{}; v.changed() }},
 	}
 	items = append(items, MenuItem{Separator: true})
@@ -125,11 +129,11 @@ func (v *TableView) drawHandles(g geometry) {
 	hs, gap := s.HandleSize, s.BarGap
 	for c := range v.Table.Cols() {
 		v.drawHandle(g.colX[c], v.Y-gap-hs, g.colX[c+1]-g.colX[c], hs,
-			v.hover == Hit{Kind: HitColumnHandle, Col: c}, v.sel == Selection{SelColumn, c})
+			v.hover == Hit{Kind: HitColumnHandle, Col: c}, v.sel == Selection{SelColumn, c}, ColumnName(c))
 	}
 	for r := range v.Table.Rows() {
 		v.drawHandle(v.X-gap-hs, g.rowY[r], hs, g.rowY[r+1]-g.rowY[r],
-			v.hover == Hit{Kind: HitRowHandle, Row: r}, v.sel == Selection{SelRow, r})
+			v.hover == Hit{Kind: HitRowHandle, Row: r}, v.sel == Selection{SelRow, r}, strconv.Itoa(r+1))
 	}
 
 	// Table handle: a pill with the 2x2 boxes.
@@ -179,8 +183,8 @@ func (v *TableView) fillPill(x, y, w, h float64, hovered, selected bool) {
 }
 
 // drawHandle paints one column or row handle: a small pill centered on
-// the edge, with six grip dots (three across for a column, two for a row).
-func (v *TableView) drawHandle(x, y, w, h float64, hovered, selected bool) {
+// the edge, with the name a formula uses for the column (A, B, ...) or the row (1, 2, ...).
+func (v *TableView) drawHandle(x, y, w, h float64, hovered, selected bool, label string) {
 	column := w > h
 	pw, ph := 26.0, h-4
 	if !column {
@@ -189,17 +193,11 @@ func (v *TableView) drawHandle(x, y, w, h float64, hovered, selected bool) {
 	pw, ph = min(pw, w-4), min(ph, h-4)
 	px, py := x+(w-pw)/2, y+(h-ph)/2
 	v.fillPill(px, py, pw, ph, hovered, selected)
-	v.Painter.SetFillStyle(v.iconColor(selected))
-	const dot, gap = 2.0, 3.0
-	across, down := 3, 2
-	if !column {
-		across, down = 2, 3
-	}
-	gw, gh := float64(across)*dot+float64(across-1)*gap, float64(down)*dot+float64(down-1)*gap
-	gx, gy := px+(pw-gw)/2, py+(ph-gh)/2
-	for i := range across {
-		for j := range down {
-			v.Painter.FillRect(gx+float64(i)*(dot+gap), gy+float64(j)*(dot+gap), dot, dot)
-		}
-	}
+	p := v.Painter
+	p.SetFillStyle(v.iconColor(selected))
+	p.SetFont("600 10px sans-serif")
+	p.SetTextAlign("center")
+	p.SetTextBaseline("middle")
+	p.FillText(label, px+pw/2, py+ph/2)
+	p.SetTextAlign("left")
 }

@@ -44,3 +44,28 @@ func TestFormulaCycleAndEditing(t *testing.T) {
 		t.Fatal("follows the cell")
 	}
 }
+
+func TestEscapedEqualsIsPlainText(t *testing.T) {
+	tb := NewTableFrom([][]string{{`\=A2+1`, "5", `=B1*2`, `=A1`}})
+	v := tb.Values()[0]
+	if v[0] != "=A2+1" || v[3] != "#VALUE!" {
+		t.Fatalf("the backslash is not shown, the text is not computed: %q", v)
+	}
+	if tb.Display(0, 0) != "=A2+1" || tb.Cell(0, 0) != `\=A2+1` {
+		t.Fatal("the text stays as typed")
+	}
+	if v[2] != "10" {
+		t.Fatal(v)
+	}
+}
+
+func TestColumnNames(t *testing.T) {
+	for i, want := range map[int]string{0: "A", 1: "B", 25: "Z", 26: "AA", 27: "AB", 51: "AZ", 52: "BA", 701: "ZZ", 702: "AAA"} {
+		if got := ColumnName(i); got != want {
+			t.Errorf("%d: %q want %q", i, got, want)
+		}
+		if r, c, ok := cellName(want + "1"); i < 703 && (!ok || c != i || r != 0) {
+			t.Errorf("%s does not read back: %d %d %v", want, r, c, ok)
+		}
+	}
+}
