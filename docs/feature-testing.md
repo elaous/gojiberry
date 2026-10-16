@@ -120,6 +120,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** `TestAMentionedPersonIsToldAndCanMarkItRead` (examples/canvas-editor-showcase), `TestMentionsOfListsWhatOthersWroteAboutThePerson` (canvas)
 
+## Table formulas
+
+**Try it.** In the table demo or a table in the editor, edit a cell and type `=6*7`; type `=SUM(B2:B3)` in another; make two cells refer to each other; export to Word.
+
+**You should see.** 42, the sum, #CYCLE! in both of the circular cells, and the values (not the formulas) in the Word file.
+
+**Automated.** `TestTableFormulas`, `TestFormulaCycleAndEditing`, `TestFormulaCellsShowTheirValue` (canvas), `TestTableFormulasAreWrittenAsTheirValues` (export), `TestEndToEnd` in examples/canvas-table-demo
+
 ## Two-page spread
 
 **Try it.** View > Two-page spread; press the folded corner at the bottom right of the right-hand page.
