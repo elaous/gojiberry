@@ -27,7 +27,7 @@ func Values(cells [][]string) [][]string {
 			if isFormula(text) {
 				out[r][c] = ev.cell(r, c).show()
 			} else {
-				out[r][c] = text
+				out[r][c] = plainText(text)
 			}
 		}
 	}
@@ -41,13 +41,32 @@ func (t *Table) Values() [][]string { return Values(t.Cells) }
 func (t *Table) Display(row, col int) string {
 	text := t.Cell(row, col)
 	if !isFormula(text) {
-		return text
+		return plainText(text)
 	}
 	ev := &formulaEval{cells: t.Cells, done: map[[2]int]fval{}, busy: map[[2]int]bool{}}
 	return ev.cell(row, col).show()
 }
 
 func isFormula(s string) bool { return strings.HasPrefix(strings.TrimSpace(s), "=") }
+
+// plainText is a cell that is not a formula as a reader sees it: a leading \= is the way to write a cell that starts with
+// = without making it a formula, and the backslash is not shown.
+func plainText(s string) string {
+	t := strings.TrimLeftFunc(s, unicode.IsSpace)
+	if strings.HasPrefix(t, "\\=") {
+		return s[:len(s)-len(t)] + t[1:]
+	}
+	return s
+}
+
+// ColumnName is the letter a formula uses for a column: A, B, ... Z, AA, ... (0-based index).
+func ColumnName(col int) string {
+	name := ""
+	for n := col + 1; n > 0; n = (n - 1) / 26 {
+		name = string(rune('A'+(n-1)%26)) + name
+	}
+	return name
+}
 
 type fval struct {
 	n   float64
@@ -101,7 +120,7 @@ func (e *formulaEval) cell(r, c int) fval {
 	}
 	text := e.cells[r][c]
 	if !isFormula(text) {
-		return fstr(text)
+		return fstr(plainText(text))
 	}
 	if e.busy[key] {
 		return ferr("#CYCLE!")

@@ -64,6 +64,10 @@ type TableView struct {
 	// rectangle (the background and the grid are already drawn, and the font and colour are those of the cell).
 	// Returning true says it drew the content; false lets the table write the text as usual. A cell being edited is
 	// always drawn by the table.
+	// ShowFormulas shows the text of formula cells (=A1*B2) instead of their values; a view setting, like the
+	// edit mode. See formula.go.
+	ShowFormulas bool
+
 	RenderCell func(p Painter, row, col int, text string, x, y, w, h float64) bool
 
 	// OnDeleteTable, if set, adds a "Delete table" item to the table
@@ -628,6 +632,9 @@ func (v *TableView) Draw() {
 	p.SetTextBaseline("middle")
 	p.SetLineWidth(1)
 	shown := t.Values() // formulas as their values; the cell being edited shows its own text
+	if v.ShowFormulas {
+		shown = t.Cells
+	}
 	for r := range t.Cells {
 		for c := range t.Cells[r] {
 			if t.Covered(r, c) {

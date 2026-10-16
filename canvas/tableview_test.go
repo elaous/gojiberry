@@ -555,16 +555,16 @@ func TestViewModeClearsSelectionAndMenu(t *testing.T) {
 func TestHandlesVisibleOnHover(t *testing.T) {
 	v, p := newView()
 	v.Draw()
-	if p.has("fillRect 44 -5.5 2 2") {
+	if p.has(`fillText "A" 50 -2`) {
 		t.Fatal("handles must be hidden when not hovered")
 	}
 	v.MouseMove(3, 3) // over the table handle counts as hovering the table
 	p.calls = nil
 	v.Draw()
-	// Column 0's grip: a pill with six dots (three across), centered in the
-	// 80px-wide strip at x=10.
-	if !p.has("fillRect 44 -5.5 2 2") || !p.has("fillRect 54 -0.5 2 2") {
-		t.Fatalf("column grip not drawn: %v", p.calls)
+	// Column 0's grip: a pill carrying the column's name, centered in the 80px-wide strip at x=10; the row grips
+	// carry the row numbers.
+	if !p.has(`fillText "A" 50 -2`) || !p.has(`fillText "B" 130 -2`) || !p.has(`fillText "2" -2 58`) {
+		t.Fatalf("grips not drawn with their names: %v", p.calls)
 	}
 }
 
@@ -590,18 +590,18 @@ func TestHandlesAreGripPills(t *testing.T) {
 	v.MouseMove(3, 3) // hovering the table shows its handles
 	p.calls = nil
 	v.Draw()
-	var dots, pillRows int
+	var names, pillRows int
 	for _, c := range p.calls {
-		if strings.HasPrefix(c, "fillRect") && strings.HasSuffix(c, " 2 2") {
-			dots++
+		if strings.HasPrefix(c, "fillText") && strings.Contains(c, "-2") {
+			names++ // the grips sit outside the table, at negative coordinates in this view
 		}
 		if strings.HasPrefix(c, "fillRect") && strings.HasSuffix(c, " 1") {
 			pillRows++
 		}
 	}
-	// Six dots on each of the two column handles and two row handles.
-	if dots != 6*4 {
-		t.Fatalf("grip dots drawn: %d", dots)
+	// A name on each of the two column handles and two row handles.
+	if names != 4 {
+		t.Fatalf("grip names drawn: %d", names)
 	}
 	if pillRows < 8*4 {
 		t.Fatalf("the handles are rounded pills: %d rows", pillRows)
