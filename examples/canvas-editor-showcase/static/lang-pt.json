@@ -1480,6 +1480,7 @@
     "docview.skip": "Ligações de salto",
     "fidelity.checking": "%s: a verificar o que este formato mantém…",
     "files.working": "A processar…",
+    "prefs.typewriter": "Rolagem de máquina de escrever: a linha que escrevo fica no meio da vista e a página se move",
     "read.voice": "Voz do leitor",
     "read.voiceAuto": "Voz do leitor: a escolha do navegador",
     "read.voiceAutomatic": "Automática",

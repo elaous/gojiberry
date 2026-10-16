@@ -56,3 +56,60 @@ func TestCaretBoxNotEditing(t *testing.T) {
 		t.Fatal("nothing to reveal")
 	}
 }
+
+// In typewriter mode the line being typed stays at one height and the page moves; a click does not move the page.
+func TestTypewriterKeepsTheLineAtOneHeight(t *testing.T) {
+	f, p := selFlow(Chars{Text: strings.Repeat("line\n", 60)})
+	f.SetMode(ModeEdit)
+	f.X, f.Y, f.Width, f.Height = 0, 0, 200, 1400
+	sv := NewScrollView(0, 0, 200, 200)
+	sv.Add(f, 200, 1400)
+	NewStage(p, 200, 200, sv)
+	sv.Typewriter = true
+	f.MouseDown(5, 10)
+	f.MouseUp(0, 0)
+	if sv.ScrollY != 0 {
+		t.Fatalf("a click leaves the page where it is: %v", sv.ScrollY)
+	}
+	var heights []float64
+	for i := 0; i < 30; i++ {
+		sv.HandleKey("ArrowDown", false)
+		_, y, h, _ := sv.CaretBox()
+		if i >= 12 { // past the first screen, where the page can follow
+			heights = append(heights, y+h/2)
+		}
+	}
+	for _, c := range heights {
+		if c < 99 || c > 101 {
+			t.Fatalf("the caret stays in the middle of a 200 px view: %v", heights)
+		}
+	}
+	// Typing on the same line does not move the page.
+	before := sv.ScrollY
+	sv.InsertText("abc")
+	if sv.ScrollY != before {
+		t.Fatalf("typing on a line keeps the page: %v -> %v", before, sv.ScrollY)
+	}
+	// Near the top the page cannot move further than its start.
+	for i := 0; i < 60; i++ {
+		sv.HandleKey("ArrowUp", false)
+	}
+	if sv.ScrollY != 0 {
+		t.Fatalf("at the top the page is at its start: %v", sv.ScrollY)
+	}
+	// Another height.
+	sv.TypewriterAt = 0.25
+	for i := 0; i < 30; i++ {
+		sv.HandleKey("ArrowDown", false)
+	}
+	if _, y, h, _ := sv.CaretBox(); y+h/2 < 49 || y+h/2 > 51 {
+		t.Fatalf("a quarter down the view: %v", y+h/2)
+	}
+	// Off: back to the smallest move.
+	sv.Typewriter = false
+	sv.ScrollTo(0, 0)
+	sv.HandleKey("ArrowUp", false)
+	if _, y, h, _ := f.CaretBox(); y+h > sv.ScrollY+sv.Height || y < sv.ScrollY || y-sv.ScrollY < 150 {
+		t.Fatalf("off, the page moves only as far as it must (the caret at the foot of the view): y=%v view=%v", y, sv.ScrollY)
+	}
+}

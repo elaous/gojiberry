@@ -44,6 +44,11 @@ type ScrollView struct {
 	Style               ScrollStyle
 	// OnScroll is called after the scroll position changes.
 	OnScroll func(*ScrollView)
+	// Typewriter keeps the line being typed at one height of the view (TypewriterAt of it from the top, the middle
+	// when zero) and moves the page instead: the way a typewriter keeps the paper moving under a fixed place. It
+	// applies to typing, the keys and commands, never to a click, which leaves the page where it is. Off by default.
+	Typewriter   bool
+	TypewriterAt float64
 
 	content *Stage
 	cw, ch  float64

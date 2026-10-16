@@ -10,30 +10,31 @@ import (
 
 // prefs are the display settings; an empty field means "as the system has it".
 type prefs struct {
-	Motion   string `json:"motion,omitempty"`   // "reduce"
-	Contrast string `json:"contrast,omitempty"` // "more"
-	Text     string `json:"text,omitempty"`     // "large", "larger", "largest"
-	Spacing  string `json:"spacing,omitempty"`  // "wide"
-	Focus    string `json:"focus,omitempty"`    // "on": distraction-free
-	Targets  string `json:"targets,omitempty"`  // "large"
-	Suggest  string `json:"suggest,omitempty"`  // word suggestions: "auto" opens the list while typing
-	Ghost    string `json:"ghost,omitempty"`    // "on": the best word is shown faintly after the caret, Tab accepts it
-	Speed    string `json:"speed,omitempty"`    // reading aloud: "slow", "fast"
-	Typing   string `json:"typing,omitempty"`   // what is said of typed text: "words", "characters"; "" nothing
-	TypeFmt  string `json:"typefmt,omitempty"`  // "on": formatting changes at the caret are said
-	TypeRead string `json:"typeread,omitempty"` // "on": the line is read when the caret moves
-	Collab   string `json:"collab,omitempty"`   // what is announced of a shared session: "" everything, "important", "off"
-	Memory   string `json:"memory,omitempty"`   // "low": fewer undo steps kept; "high": many; "normal": the person turned it off; "" automatic (low on a device that reports 2 GB or less)
-	Lang     string `json:"lang,omitempty"`     // the interface language chosen by the person ("" the browser's)
-	Theme    string `json:"theme,omitempty"`    // "dark": the page's chrome in the dark palette ("" the light one)
-	Close    string `json:"close,omitempty"`    // "off": typing an opening bracket or quote does not add the closing one
-	Colours  string `json:"colours,omitempty"`  // "safe": other people's cursors in colours the common kinds of colour blindness tell apart
-	Dwell    string `json:"dwell,omitempty"`    // click by resting the pointer: "fast", "medium", "slow" (the pause)
-	Scan     string `json:"scan,omitempty"`     // single-switch scanning: "fast", "medium", "slow" (the step)
-	Hint     string `json:"hint,omitempty"`     // "on": the Pictures tab can draft a description from the picture, on this device
-	Voice    string `json:"voice,omitempty"`    // the name of the voice reading aloud uses for the document's language ("" the browser's choice)
-	Voices   string `json:"voices,omitempty"`   // "net": reading aloud may use voices that send the text to a speech service
-	Where    string `json:"where,omitempty"`    // "on": the presence list has a "Where is <name>?" button for each collaborator
+	Motion     string `json:"motion,omitempty"`     // "reduce"
+	Contrast   string `json:"contrast,omitempty"`   // "more"
+	Text       string `json:"text,omitempty"`       // "large", "larger", "largest"
+	Spacing    string `json:"spacing,omitempty"`    // "wide"
+	Focus      string `json:"focus,omitempty"`      // "on": distraction-free
+	Targets    string `json:"targets,omitempty"`    // "large"
+	Suggest    string `json:"suggest,omitempty"`    // word suggestions: "auto" opens the list while typing
+	Ghost      string `json:"ghost,omitempty"`      // "on": the best word is shown faintly after the caret, Tab accepts it
+	Speed      string `json:"speed,omitempty"`      // reading aloud: "slow", "fast"
+	Typing     string `json:"typing,omitempty"`     // what is said of typed text: "words", "characters"; "" nothing
+	TypeFmt    string `json:"typefmt,omitempty"`    // "on": formatting changes at the caret are said
+	TypeRead   string `json:"typeread,omitempty"`   // "on": the line is read when the caret moves
+	Collab     string `json:"collab,omitempty"`     // what is announced of a shared session: "" everything, "important", "off"
+	Memory     string `json:"memory,omitempty"`     // "low": fewer undo steps kept; "high": many; "normal": the person turned it off; "" automatic (low on a device that reports 2 GB or less)
+	Lang       string `json:"lang,omitempty"`       // the interface language chosen by the person ("" the browser's)
+	Theme      string `json:"theme,omitempty"`      // "dark": the page's chrome in the dark palette ("" the light one)
+	Typewriter string `json:"typewriter,omitempty"` // "on": the line being typed stays in the middle of the view and the page moves
+	Close      string `json:"close,omitempty"`      // "off": typing an opening bracket or quote does not add the closing one
+	Colours    string `json:"colours,omitempty"`    // "safe": other people's cursors in colours the common kinds of colour blindness tell apart
+	Dwell      string `json:"dwell,omitempty"`      // click by resting the pointer: "fast", "medium", "slow" (the pause)
+	Scan       string `json:"scan,omitempty"`       // single-switch scanning: "fast", "medium", "slow" (the step)
+	Hint       string `json:"hint,omitempty"`       // "on": the Pictures tab can draft a description from the picture, on this device
+	Voice      string `json:"voice,omitempty"`      // the name of the voice reading aloud uses for the document's language ("" the browser's choice)
+	Voices     string `json:"voices,omitempty"`     // "net": reading aloud may use voices that send the text to a speech service
+	Where      string `json:"where,omitempty"`      // "on": the presence list has a "Where is <name>?" button for each collaborator
 }
 
 // sanitize drops every value that is not one the page knows: unknown or unreadable ones are as if unset.
@@ -49,6 +50,9 @@ func (p prefs) sanitize() prefs {
 	}
 	if p.Spacing != "wide" {
 		p.Spacing = ""
+	}
+	if p.Typewriter != "on" {
+		p.Typewriter = ""
 	}
 	if p.Focus != "on" {
 		p.Focus = ""

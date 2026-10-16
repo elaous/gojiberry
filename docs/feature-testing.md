@@ -244,6 +244,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** e2e_readmarks_test.go
 
+## Typewriter scrolling
+
+**Try it.** Preferences tab: search "typewriter" and tick it. Click in the text, press the down arrow twenty times and check the caret stays in the middle of the view while the page moves; type on a line and check the page stays; click in another place and check the page does not jump.
+
+**You should see.** The preference in the picture in [features.md](features.md#typewriter-scrolling).
+
+**Automated.** `TestTypewriterScrolling` (examples/canvas-editor-showcase), `TestTypewriterKeepsTheLineAtOneHeight` (canvas)
+
 ## Menus and commands
 
 **Try it.** Open Edit with the keyboard (Alt, then arrows) and run a command with Enter.
