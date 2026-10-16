@@ -535,6 +535,10 @@ func ModalKeys(onClose func()) xango.Attr
     Escape calls onClose, if there is one (the same as a click on the backdrop).
     Keys with Ctrl, Alt or Meta are left alone.
 
+func NoteCounter(used, max int) string
+    NoteCounter is the words of the counter: how many characters are used of the
+    limit.
+
 func OTPInput(props OTPInputProps) xango.Node
     OTPInput renders Length single-character text boxes for entering a
     one-time-passcode/verification code.
@@ -548,6 +552,15 @@ func Outline(props OutlineProps) xango.Node
     Outline renders the document's headings as an indented list, the current
     one marked; clicking one reports it (go there with TextFlow.GotoOffset and
     ScrollView.RevealPending). It is controlled.
+
+func OutlineDown(es []canvas.OutlineEntry, i int) int
+    OutlineDown is the heading to put section i in front of to move it down one
+    place among its siblings (len(es) for the end), or -1 when it is the last of
+    them.
+
+func OutlineUp(es []canvas.OutlineEntry, i int) int
+    OutlineUp is the heading to put section i in front of to move it up one
+    place among its siblings, or -1 when it is the first of them.
 
 func PageSetupPanel(props PageSetupProps) xango.Node
     PageSetupPanel edits a PageSetup: paper, orientation, margin presets and
@@ -2437,6 +2450,40 @@ type ModalProps struct {
 }
     ModalProps configures Modal.
 
+type NoteEditor struct {
+
+	// SaveLabel and CancelLabel are the buttons' words (translated defaults "Save" and "Cancel").
+	SaveLabel, CancelLabel string
+	// Has unexported fields.
+}
+    NoteEditor is the dialog a footnote is typed in: a text box and, under it,
+    a read-only counter of how much of the limit is used ("120 of 1000
+    characters"). The counter exists only while the dialog is open, that is only
+    while a note is being typed. The host puts Dialog in its tree once and gives
+    the canvas Stage.EditNote = ed.Edit.
+
+        ed := components.NewNoteEditor(rerender)
+        stage.EditNote = ed.Edit
+        // and somewhere in the page: ed.Dialog()
+
+func NewNoteEditor(onChange func()) *NoteEditor
+    NewNoteEditor makes a NoteEditor that calls onChange whenever it opens,
+    closes or its text changes.
+
+func (n *NoteEditor) Dialog() xango.Node
+    Dialog is the editor for the open note, closed when there is none.
+
+func (n *NoteEditor) Draft() string
+    Draft is the text typed so far.
+
+func (n *NoteEditor) Edit(title, initial string, max int, done func(text string, ok bool))
+    Edit opens the dialog on initial. done is called once, with the text and
+    true when it is saved, or false when the person cancels. A dialog already
+    open is cancelled first. max is the limit of characters (0: none shown).
+
+func (n *NoteEditor) Open() bool
+    Open reports whether the dialog is open.
+
 type OTPInputProps struct {
 	// ID is a base id; each box gets fmt.Sprintf("%s-%d", ID, i). Like
 	// FileUploaderProps.InputID, this exists so a caller can reach a
@@ -2478,6 +2525,15 @@ type OutlineProps struct {
 	Current int
 	// OnSelect is called with the index of the clicked heading.
 	OnSelect func(index int, entry canvas.OutlineEntry)
+	// Collapsed lists the indexes of headings whose subsections are hidden; OnToggle is called with the index of a
+	// heading whose toggle was pressed (the caller adds it to or removes it from Collapsed). A heading with nothing
+	// under it has no toggle. With OnToggle nil there are no toggles and everything shows.
+	Collapsed []int
+	OnToggle  func(index int)
+	// OnMove, when set, lets a section be moved: each heading gets "Move section up" and "Move section down"
+	// buttons, and can be dragged onto another heading. It is called with the heading and the heading to put it in
+	// front of (len(Entries) for the end); pass them to TextFlow.MoveSection.
+	OnMove func(from, before int)
 }
     OutlineProps configures Outline.
 
