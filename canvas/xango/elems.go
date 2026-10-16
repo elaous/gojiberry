@@ -418,6 +418,7 @@ func (e *scrollElem) Update(c *Context, props any, children []xango.Node) (bool,
 		sv.LockH, sv.LockV = p.LockH, p.LockV
 		changed = true
 	}
+	sv.Typewriter, sv.TypewriterAt = p.Typewriter, p.TypewriterAt
 	ds, ch, created, err := e.kids.update(c, children)
 	if err != nil {
 		return false, err

@@ -1488,6 +1488,7 @@
     "docview.skip": "קישורי דילוג",
     "fidelity.checking": "%s: בודק מה פורמט זה שומר…",
     "files.working": "עובד…",
+    "prefs.typewriter": "גלילת מכונת כתיבה: השורה שאני מקליד נשארת באמצע התצוגה והדף זז",
     "read.voice": "קול הקריין",
     "read.voiceAuto": "קול הקריין: בחירת הדפדפן",
     "read.voiceAutomatic": "אוטומטי",

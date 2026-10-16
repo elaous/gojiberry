@@ -99,6 +99,9 @@ in the selector is downloaded into the store the first time the text uses it
 
 ## Done since this list was written
 
+- **Typewriter scrolling**: `ScrollView.Typewriter` and `TypewriterAt` keep the line being typed at one height of the view (the middle by default) and move
+  the page instead; typing, keys and commands only, never a click. A preference in the showcase (Preferences > Editor), off by default.
+
 - **Table styles**: named looks for a whole table (`TableSchemes`, `Table.ApplyScheme`, `Table.SchemeOf`) from the table's handle menu, applied as cell
   formatting so they are saved and exported with the table.
 

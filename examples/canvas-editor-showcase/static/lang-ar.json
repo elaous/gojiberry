@@ -1496,6 +1496,7 @@
     "docview.skip": "روابط التخطي",
     "fidelity.checking": "%s: جارٍ فحص ما يحتفظ به هذا التنسيق…",
     "files.working": "جارٍ العمل…",
+    "prefs.typewriter": "تمرير الآلة الكاتبة: يبقى السطر الذي أكتبه في منتصف العرض وتتحرك الصفحة",
     "read.voice": "صوت القارئ",
     "read.voiceAuto": "صوت القارئ: اختيار المتصفح",
     "read.voiceAutomatic": "تلقائي",

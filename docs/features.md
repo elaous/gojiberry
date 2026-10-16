@@ -182,6 +182,12 @@ Reduced motion, high contrast, text size, wide spacing, larger targets, distract
 
 Read the whole document or the selection aloud, a sentence at a time, with the sentence and the word marked as they are spoken. A bar offers previous, pause, next and stop; speed is slow, normal or fast; and the **Reader voice** menu lists the voices for the document's language with their accent and gender (American or British, female or male).
 
+## Typewriter scrolling
+
+![Preferences, where typewriter scrolling is switched on](features/img/tab-prefs.webp)
+
+An optional mode (Preferences, off by default) in which the line you are typing stays in the middle of the view and the page moves under it, the way paper moves on a typewriter. It follows typing, the arrow keys and commands; clicking in the text never moves the page.
+
 ## Menus and commands
 
 ![Menus and commands](features/img/menu-columns.webp)

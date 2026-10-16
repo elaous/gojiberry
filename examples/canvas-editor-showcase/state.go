@@ -23,6 +23,8 @@ type State struct {
 	PeerPalette []string
 	// StrongCaret is the high-contrast setting for the canvas: a thicker caret and a stronger selection.
 	StrongCaret bool
+	// Typewriter keeps the line being typed in the middle of the view and moves the page (a preference).
+	Typewriter bool
 	// RunHeader and RunFooter are the running header and footer of the print layout (fields {page}, {pages}
 	// and {title}, a tab between the left, centre and right parts); empty is the sample's own header and
 	// page number. DocTitle fills {title}.

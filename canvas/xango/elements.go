@@ -296,7 +296,11 @@ type ScrollViewProps struct {
 	// takes it from the children (a TextFlow's pages, a table).
 	ContentWidth, ContentHeight float64
 	LockH, LockV                bool
-	Children                    []xango.Node
+	// Typewriter keeps the line being typed at TypewriterAt of the view's height (the middle when zero) and moves
+	// the page instead (see canvas.ScrollView.Typewriter).
+	Typewriter   bool
+	TypewriterAt float64
+	Children     []xango.Node
 }
 
 // ScrollView is a scroll container.
