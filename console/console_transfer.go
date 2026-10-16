@@ -1,13 +1,13 @@
 package console
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/saver"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -44,12 +44,9 @@ func (sh *Shell) importFiles(ctx context.Context, args []string) error {
 		c = docfile.JSON
 	}
 	for _, f := range files {
-		matches, _ := filepath.Glob(f)
-		if len(matches) == 0 {
-			matches = []string{f}
-		}
+		matches, _ := sh.files().Glob(f)
 		for _, m := range matches {
-			data, err := os.ReadFile(m)
+			data, err := sh.files().ReadFile(m)
 			if err != nil {
 				return err
 			}
@@ -124,10 +121,10 @@ func (sh *Shell) exportDocs(ctx context.Context, args []string) error {
 				return err
 			}
 			file = uniqueFile(file, th.doc.ID, used)
-			if err := os.MkdirAll(out, 0o755); err != nil {
+			if err := sh.files().MkdirAll(out); err != nil {
 				return err
 			}
-			return writeFile(filepath.Join(out, file), force, func(w io.Writer) error {
+			return sh.files().Write(filepath.Join(out, file), force, func(w io.Writer) error {
 				_, err := w.Write(data)
 				return err
 			})
@@ -155,36 +152,6 @@ func uniqueFile(name, id string, used map[string]bool) string {
 	return try
 }
 
-// writeFile writes name through a temporary file next to it, so a failure leaves no partial
-// output (and no damaged older file); an existing file is replaced only with force.
-func writeFile(name string, force bool, write func(io.Writer) error) (err error) {
-	if !force {
-		if _, serr := os.Stat(name); serr == nil {
-			return fmt.Errorf("%s exists (use --force to replace it)", name)
-		}
-	}
-	f, err := os.CreateTemp(filepath.Dir(name), ".docsh-*")
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err != nil {
-			_ = os.Remove(f.Name())
-		}
-	}()
-	if err = write(f); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	if err = os.Chmod(f.Name(), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), name)
-}
-
 func (sh *Shell) pack(ctx context.Context, args []string) error {
 	force := false
 	var rest []string
@@ -199,7 +166,7 @@ func (sh *Shell) pack(ctx context.Context, args []string) error {
 	if len(args) < 1 || len(args) > 2 {
 		return errors.New("usage: pack [--force] out.opendoc [folder]")
 	}
-	if _, err := os.Stat(args[0]); err == nil && !force {
+	if sh.files().Exists(args[0]) && !force {
 		return fmt.Errorf("%s exists (use --force to replace it)", args[0])
 	}
 	t, err := sh.tree(ctx)
@@ -214,7 +181,7 @@ func (sh *Shell) pack(ctx context.Context, args []string) error {
 	}
 	return sh.act("pack "+sh.pathOf(folder)+" into "+args[0], func() error {
 		var n int
-		err := writeFile(args[0], force, func(w io.Writer) (err error) {
+		err := sh.files().Write(args[0], force, func(w io.Writer) (err error) {
 			n, err = sh.Saver.ExportPack(ctx, sh.Target, folder, w, saver.PackOptions{History: true})
 			return err
 		})
@@ -241,12 +208,7 @@ func (sh *Shell) unpack(ctx context.Context, args []string) error {
 		}
 	}
 	return sh.act("import pack "+args[0]+" into "+sh.pathOf(into), func() error {
-		f, err := os.Open(args[0])
-		if err != nil {
-			return err
-		}
-		defer func() { _ = f.Close() }()
-		st, err := f.Stat()
+		data, err := sh.files().ReadFile(args[0])
 		if err != nil {
 			return err
 		}
@@ -254,7 +216,7 @@ func (sh *Shell) unpack(ctx context.Context, args []string) error {
 		if c == nil {
 			c = docfile.JSON
 		}
-		rep, err := sh.Saver.ImportPack(ctx, sh.Target, f, st.Size(), saver.ImportOptions{Into: into, Format: c})
+		rep, err := sh.Saver.ImportPack(ctx, sh.Target, bytes.NewReader(data), int64(len(data)), saver.ImportOptions{Into: into, Format: c})
 		if err != nil {
 			return err
 		}
