@@ -39,6 +39,7 @@ func main() {
 		st := map[string]any{
 			"mode":      view.Mode().String(),
 			"cells":     table.Cells,
+			"shown":     table.Values(),
 			"selection": sel{kind, view.Selection().Index},
 			"menuOpen":  view.Menu().IsOpen(),
 			"colEdges":  view.ColumnEdges(),

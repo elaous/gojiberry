@@ -45,6 +45,16 @@ func TestEndToEnd(t *testing.T) {
 	d.OK(d.Is("s.active.join() === '0,1'"), "Tab moves to the next cell")
 	d.Press("Escape")
 
+	// A formula: the cell keeps its text and the table shows the value.
+	d.CanvasClick(50, mid(nums("rowEdges"), 1))
+	d.Press("Home")
+	for range 3 {
+		d.Press("Delete")
+	}
+	d.Type("=6*7")
+	d.Press("Escape")
+	d.OK(d.Is("s.cells[1][0] === '=6*7' && s.shown[1][0] === '42' && s.shown[1][1] === 'Engineer'"), "a formula cell shows its value and keeps its text")
+
 	// "+" bars.
 	size := nums("size")
 	w := size[0]

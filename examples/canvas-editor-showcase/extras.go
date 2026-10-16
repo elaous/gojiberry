@@ -410,7 +410,7 @@ func a11yObjects(root *cxango.Root) []placedBlock {
 		if !ok {
 			break
 		}
-		for _, row := range tv.Table.Cells {
+		for _, row := range tv.Table.Values() {
 			out = append(out, placedBlock{block: components.A11yBlock{Kind: components.A11yTableRow, Cells: append([]string(nil), row...)}, x: tv.X, y: tv.Y})
 		}
 	}
@@ -444,7 +444,7 @@ func floatingObjects(root *cxango.Root) []a11ycheck.Object {
 		if !ok {
 			break
 		}
-		out = append(out, a11ycheck.Object{Kind: "table", Where: fmt.Sprintf("Table %d", n+1), Rows: tv.Table.Cells})
+		out = append(out, a11ycheck.Object{Kind: "table", Where: fmt.Sprintf("Table %d", n+1), Rows: tv.Table.Values()})
 	}
 	return out
 }

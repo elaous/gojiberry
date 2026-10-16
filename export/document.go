@@ -253,12 +253,17 @@ func tableLines(t *docfile.TableItem, start int) []line {
 		}
 		return docfile.TableCellStyle{}
 	}
+	raw := make([][]string, len(t.Rows))
+	for i, r := range t.Rows {
+		raw[i] = r.Cells
+	}
+	values := canvas.Values(raw) // a formula is written as its value
 	var out []line
 	for r, row := range t.Rows {
 		for c := 0; c < cols; c++ {
 			text := ""
 			if c < len(row.Cells) {
-				text = row.Cells[c]
+				text = values[r][c]
 			}
 			rs, cs, covered := span(r, c)
 			f := docfile.Format{}

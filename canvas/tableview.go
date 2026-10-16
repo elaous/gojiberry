@@ -627,6 +627,7 @@ func (v *TableView) Draw() {
 	p.SetTextAlign("left")
 	p.SetTextBaseline("middle")
 	p.SetLineWidth(1)
+	shown := t.Values() // formulas as their values; the cell being edited shows its own text
 	for r := range t.Cells {
 		for c := range t.Cells[r] {
 			if t.Covered(r, c) {
@@ -647,7 +648,10 @@ func (v *TableView) Draw() {
 			p.StrokeRect(x+0.5, y+0.5, w-1, h-1)
 			p.SetFont(v.cellFont(r, st))
 			p.SetFillStyle(orStr(st.Color, s.TextColor))
-			text := t.Cells[r][c]
+			text := shown[r][c]
+			if v.mode == ModeEdit && v.editing && v.row == r && v.col == c {
+				text = t.Cells[r][c]
+			}
 			if v.RenderCell != nil && (v.mode != ModeEdit || !v.editing || v.row != r || v.col != c) && v.RenderCell(p, r, c, text, x, y, w, h) {
 				p.SetTextAlign("left")
 				continue

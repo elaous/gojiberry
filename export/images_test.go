@@ -175,3 +175,23 @@ func TestALegendIsWrittenUnderThePictureInEveryFormat(t *testing.T) {
 		}
 	}
 }
+
+func TestTableFormulasAreWrittenAsTheirValues(t *testing.T) {
+	d := docfile.Document{Content: []docfile.Item{{Table: &docfile.TableItem{Rows: []docfile.TableRow{
+		{Cells: []string{"Qty", "Price", "Total"}},
+		{Cells: []string{"3", "1.5", "=A2*B2"}},
+		{Cells: []string{"", "", "=C2/0"}},
+	}}}}}
+	var found []string
+	for _, b := range FromDocument(d).Blocks {
+		if b.Kind == TableCell {
+			for _, s := range b.Segments {
+				found = append(found, s.Text)
+			}
+		}
+	}
+	got := strings.Join(found, "|")
+	if !strings.Contains(got, "4.5") || !strings.Contains(got, "#DIV/0!") || strings.Contains(got, "=") {
+		t.Fatalf("%s", got)
+	}
+}

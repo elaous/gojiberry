@@ -80,6 +80,10 @@ In the Pictures tab, **Find a picture online** searches repositories of public-d
 
 Write @name in a comment or a reply and that person is told: the screen reader announcer says who mentioned them, and the Comments tab shows **Mentions of you** with a way to go to the comment and to mark it as read. Comments name people by handle, never by an address. A host can deliver the same notices by its own channel.
 
+## Table formulas
+
+A table cell that starts with `=` is a formula: `=B2*C2`, `=SUM(B2:B9)`, `=ROUND(AVERAGE(C1:C4), 1)`, `=IF(D2>=10, "ok", "low")`. The table shows the value, the cell keeps the formula (it shows when you edit the cell), and the exports and the reading copy carry the value. A formula that cannot be computed shows an error such as #DIV/0! or #CYCLE! instead of stopping anything.
+
 ## Two-page spread
 
 ![Two-page spread](features/img/spread.webp)
