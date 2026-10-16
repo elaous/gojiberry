@@ -46,6 +46,20 @@ once (`purge a 'a*'` counts it once). A pattern that matches nothing is an error
 no-op. An exact name of a document and a folder
 that are called the same matches both.
 
+## In the editor
+
+The showcase has a **Console** tab (File menu, "Console…") that runs these commands on the documents the Save tab
+shows: `console.Session` is its state and `components.ConsolePanel` its panel, like `migrate.Session` and `components.Migrate`.
+It keeps a log (a live region, so a screen reader announces each answer), a line to type on (Enter runs it, the Up and
+Down keys walk the commands already run, `clear` empties the log), and the folder you `cd` into as the prompt. Commands
+run one at a time in the background; `purge` and `rebuild` ask in the panel with Yes and No buttons instead of `[y/N]`.
+A page has no disk, so files go through `console.PageFiles`: "Add files to import…" fills an inbox that `import` and
+`unpack` read by name (patterns work: `import *.md`), and what `export` and `pack` make is downloaded (a second file of
+the same name needs `--force`, as on a disk). The document list refreshes after each command. The editor's file formats
+that need the file worker (Word, PDF, OpenDocument) are used through it, as in the Files tab. The same `Shell` runs
+under `docsh`; `Shell.Files` and `Shell.Confirm` are the two hooks a page needs. The
+[terminal demo](../examples/terminal-demo/README.md) reuses the grammar.
+
 ## Safe by default
 
 1. **Dry run.** With `-n` every command that would change something prints `would ...` and
@@ -62,6 +76,5 @@ that are called the same matches both.
 
 ## What is left
 
-The same engine can drive a panel in the editor (not built yet); the
-[terminal demo](../examples/terminal-demo/README.md) reuses the grammar. There is no `find` by content, no regular expressions in patterns,
+Nothing planned. There is no `find` by content, no regular expressions in patterns,
 and `mv` of many things to many names is not a command (rename one at a time, or script it).

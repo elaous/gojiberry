@@ -91,3 +91,16 @@
 .gj-icontoolbar-button:disabled { opacity: 0.4; cursor: default; }
 .gj-icontoolbar-on { background: var(--gj-accent); color: #fff; border-color: var(--gj-accent); }
 .gj-icontoolbar-gap { width: 1px; align-self: stretch; margin: 0.15em 0.3em; background: var(--gj-border); }
+
+/* The console panel: a log of what was typed and what came back, and a line to type on. */
+.gj-console { display: flex; flex-direction: column; gap: 0.5em; }
+.gj-console-log { height: 18em; overflow: auto; margin: 0; padding: 0.5em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); font: 0.85em/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.gj-console-line { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.gj-console-cmd { color: var(--gj-muted); }
+.gj-console-err { color: var(--gj-danger, #b42318); }
+.gj-console-row { display: flex; gap: 0.4em; align-items: center; }
+.gj-console-prompt { white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; color: var(--gj-muted); }
+.gj-console-input { flex: 1; min-width: 0; padding: 0.3em 0.5em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); font: 0.9em ui-monospace, SFMono-Regular, Menlo, monospace; }
+.gj-console-question { display: flex; gap: 0.4em; align-items: center; flex-wrap: wrap; }
+.gj-console-inbox { margin: 0; font-size: 0.85em; color: var(--gj-muted); }
+.gj-console button { display: inline-flex; align-items: center; gap: 0.3em; }

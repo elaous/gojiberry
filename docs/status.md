@@ -115,7 +115,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | `.opendoc` packs | feature | done | `docfile/pack`, `cmd/opendoc` | none |
 | Encryption and passkeys | feature | partial | SSH keys, passkeys, envelope encryption, directory, sharing, recovery | see the security table |
 | Public docstore | feature | done (server) | anonymous offer with expiry and abuse controls | see 55, 86 |
-| Console mode | feature | partial | `console`, `cmd/docsh` | the editor panel |
+| Console mode | feature | done | `console`, `cmd/docsh`; the showcase's Console tab (`console.Session`, `components.ConsolePanel`) | none |
 | Terminal demo | feature | done | `examples/terminal-demo` | none |
 | Backends with conditional saves | feature | done | PostgreSQL, MongoDB, S3 | blob backend cannot, by design |
 | Known limits plan tail | enhancement | open | partly in 64 and 83 | RTL, Hunspell dictionaries on demand |
