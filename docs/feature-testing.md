@@ -100,6 +100,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** `TestAPictureWithALegendAndAWebPPicture` (examples/canvas-editor-showcase), `export/images_test.go`, `canvas/image_test.go`
 
+## Find a picture online
+
+**Try it.** Pictures tab > Find a picture online: the Search button is off; turn on Openverse, search "harbour", read the credit under a result, press **Insert with its credit**.
+
+**You should see.** The picture at the caret with a legend like "Harbour by Ana, CC BY 4.0, via Openverse", also in the HTML export.
+
+**Automated.** `TestFindAPictureInARepositoryAndInsertItWithItsCredit` (examples/canvas-editor-showcase), package `imagerepo` tests
+
 ## Two-page spread
 
 **Try it.** View > Two-page spread; press the folded corner at the bottom right of the right-hand page.

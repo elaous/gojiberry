@@ -75,20 +75,25 @@ func (u *ui) insertImage(fl func() *canvas.TextFlow, redraw, renderUI func()) {
 			renderUI()
 			return
 		}
-		url := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
-		if mime == "image/webp" {
-			// Word, OpenDocument and PDF cannot carry WebP, so a WebP picture is stored as PNG: the exports then keep it.
-			convertToPNG(url, func(png string, ok bool) {
-				if ok {
-					u.placeImage(f, png, redraw, renderUI)
-					return
-				}
-				u.placeImage(f, url, redraw, renderUI)
-			})
-			return
-		}
-		u.placeImage(f, url, redraw, renderUI)
+		u.insertBytes(f, mime, data, redraw, renderUI)
 	})
+}
+
+// insertBytes puts a picture's bytes at the caret. WebP is stored as PNG: Word, OpenDocument and PDF cannot carry WebP,
+// so the exports then keep the picture. after, when given, adjusts the new picture before it goes in.
+func (u *ui) insertBytes(f *canvas.TextFlow, mime string, data []byte, redraw, renderUI func(), after ...func(*canvas.Image)) {
+	url := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
+	if mime == "image/webp" {
+		convertToPNG(url, func(png string, ok bool) {
+			if ok {
+				u.placeImage(f, png, redraw, renderUI, after...)
+				return
+			}
+			u.placeImage(f, url, redraw, renderUI, after...)
+		})
+		return
+	}
+	u.placeImage(f, url, redraw, renderUI, after...)
 }
 
 // convertToPNG draws a picture the browser can show onto a canvas and reads it back as a PNG data URL; ok is false when
@@ -128,7 +133,7 @@ func convertToPNG(dataURL string, done func(png string, ok bool)) {
 }
 
 // placeImage puts a picture, given as a data URL, at the caret as an inline picture with no description yet.
-func (u *ui) placeImage(f *canvas.TextFlow, url string, redraw, renderUI func()) {
+func (u *ui) placeImage(f *canvas.TextFlow, url string, redraw, renderUI func(), after ...func(*canvas.Image)) {
 	canvas.LoadImage(url, func(src *canvas.HTMLImage) {
 		im := canvas.NewImage(src, 0, 0)
 		im.Placement = canvas.PlaceInline
@@ -144,6 +149,9 @@ func (u *ui) placeImage(f *canvas.TextFlow, url string, redraw, renderUI func())
 				}
 			}
 			im.Legend = fmt.Sprintf(T("img.legendStart", "Figure %d:"), n)
+		}
+		for _, a := range after {
+			a(im)
 		}
 		pos := f.Cursors()[0].Caret
 		f.Replace([]canvas.Edit{{From: pos, To: pos, Items: []canvas.Item{canvas.Inline{Object: im}}}})
@@ -258,6 +266,7 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 			}
 		}
 	}
+	nodes = append(nodes, imageSearchSection(u, state, flow, redraw, renderUI)...)
 	nodes = append(nodes, mediaSections(u, state, flow, scroller, redraw, renderUI)...)
 	nodes = append(nodes, elementsSections(u, state, flow, redraw, renderUI)...)
 	return xango.El("div", []xango.Attr{xango.A("id", "img-panel")}, nodes...)
