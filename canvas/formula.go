@@ -392,7 +392,7 @@ func (p *formulaParser) call(name string) fval {
 					if v.isErr() {
 						return v
 					}
-					if f := v.number(); !f.isErr() && !(v.str && strings.TrimSpace(v.s) == "") {
+					if f := v.number(); !f.isErr() && (!v.str || strings.TrimSpace(v.s) != "") {
 						nums = append(nums, f.n)
 					} // text and empty cells in a range are left out
 				}
