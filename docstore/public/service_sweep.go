@@ -220,6 +220,11 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 		removed += s.evictReports(ctx, kept.metas, kept.info)
 	}
 	s.prio.prune(now)
+	if s.burst != nil {
+		if _, err := s.burst.sweep(ctx, now); err != nil {
+			note(err)
+		}
+	}
 	if err := s.recountReportsIn(ctx, repWin); err != nil {
 		note(err)
 	}
