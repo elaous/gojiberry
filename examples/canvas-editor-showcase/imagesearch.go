@@ -123,7 +123,7 @@ func imageSearchSection(u *ui, state *State, flow func() *canvas.TextFlow, redra
 		i, r := i, r
 		items = append(items, xango.El("li", []xango.Attr{xango.A("class", "gj-doc-item"), xango.A("id", fmt.Sprintf("imgfind-result-%d", i))},
 			xango.El("img", []xango.Attr{xango.A("src", r.Thumb), xango.A("alt", r.Title), xango.A("style", "max-width:120px;max-height:90px;display:block"),
-				xango.A("referrerpolicy", "no-referrer")}),
+				xango.A("referrerpolicy", "no-referrer"), xango.A("loading", "lazy"), xango.A("decoding", "async")}),
 			xango.El("span", []xango.Attr{xango.A("id", fmt.Sprintf("imgfind-credit-%d", i))}, xango.Text(r.Credit())),
 			btn(fmt.Sprintf("imgfind-insert-%d", i), T("imgfind.insert", "Insert with its credit"), func() { u.insertFound(flow, r, redraw, renderUI) }, !canEdit)))
 	}
