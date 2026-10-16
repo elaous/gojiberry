@@ -99,6 +99,9 @@ in the selector is downloaded into the store the first time the text uses it
 
 ## Done since this list was written
 
+- **Table styles**: named looks for a whole table (`TableSchemes`, `Table.ApplyScheme`, `Table.SchemeOf`) from the table's handle menu, applied as cell
+  formatting so they are saved and exported with the table.
+
 - **Table cell render prop and `CanvasView`**: `TableView.RenderCell` / xango `Table` `RenderCell` draw the content of a cell (a bar, an icon);
   `canvas/xango.View` (`NewView`, `Render`, `Find`) puts a canvas with a canvas/xango tree inside an ordinary page, with a visually hidden text
   copy beside it for screen readers and for a page read without the canvas (`examples/canvas-view-demo`).
