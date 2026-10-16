@@ -119,3 +119,26 @@ func (p plainStore) Load(ctx context.Context, id string) (Document, error) {
 }
 func (p plainStore) List(ctx context.Context) ([]Meta, error)    { return p.m.List(ctx) }
 func (p plainStore) Delete(ctx context.Context, id string) error { return p.m.Delete(ctx, id) }
+
+// A store that has DeleteIf but declines it (an S3-compatible service that ignores If-Match on delete)
+// expires as a store without it does: the document goes, the sweep does not fail for ever.
+func TestSweepWhenTheStoreDeclinesConditionalDeleteStillDeletes(t *testing.T) {
+	ctx := context.Background()
+	ea, clk := newExpiring(decliningDeleter{plainStore{NewMemoryAdapter()}})
+	if err := ea.Save(ctx, "doc", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	clk.Add(day + 1)
+	if n, err := ea.Sweep(ctx); err != nil || n != 1 {
+		t.Fatalf("%d, %v", n, err)
+	}
+	if _, err := ea.Load(ctx, "doc"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("still there: %v", err)
+	}
+}
+
+type decliningDeleter struct{ plainStore }
+
+func (decliningDeleter) DeleteIf(context.Context, string, string) error {
+	return ErrConditionalUnsupported
+}

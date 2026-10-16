@@ -392,6 +392,15 @@ func (e *ExpiringAdapter) deleteExpired(ctx context.Context, id string) (found b
 		return false, nil
 	case errors.Is(err, ErrConflict):
 		return false, errRenewed
+	case errors.Is(err, ErrConditionalUnsupported):
+		// The store has the method but not the guarantee (an S3-compatible service that ignores
+		// If-Match on delete): delete as on a store without it.
+		if err := e.Inner.Delete(ctx, id); errors.Is(err, ErrNotFound) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
+		return true, nil
 	default:
 		return false, err
 	}
