@@ -1,6 +1,6 @@
 # Status of the roadmap
 
-A one-page view of [roadmap.md](roadmap.md), read against `main` on 2026-10-16 (after #406). The roadmap keeps the long
+A one-page view of [roadmap.md](roadmap.md), read against `main` on 2026-10-16 (after #407). The roadmap keeps the long
 history of each item (what was built, tests, decisions); this page says only **what is present**, **what is
 missing**, and where the item stands. The item numbers are the roadmap's. When the two disagree, the roadmap's
 entry for the item is the detail and this page is the summary: update both in the same change.
@@ -42,7 +42,7 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | --- | --- | --- | --- | --- | --- |
 | 48 | ARIA across the canvas editor and components | enhancement | done | roles, names, live regions, axe-core in the browser tests over 21 tabs with every rule on, heading levels in the panels, fixes from four slices; one keyboard model per kind of widget (list, grid, menu, tabs, combobox; the colour and date pickers are the browser's) | none |
 | 49 | Speech while typing | feature | blocked | polite live region for words, characters, line and formatting; off by default | judgement of pace and double echo by real readers (blocked) |
-| 50 | Accessibility configs | enhancement | blocked | reduced motion, high contrast (with a strong caret and selection on the canvas), font size and line spacing, the canvas text following the text size, key remapping kept between visits, colour-blind safe colours for other people\'s cursors | dyslexia-friendly font (needs a font asset: blocked on choosing and licensing one) |
+| 50 | Accessibility configs | enhancement | blocked | reduced motion, high contrast (with a strong caret and selection on the canvas), font size and line spacing, the canvas text following the text size, key remapping kept between visits, colour-blind safe colours for other people's cursors | dyslexia-friendly font (needs a font asset: blocked on choosing and licensing one) |
 | 51 | Preference menu | feature | done | one list of settings drives both the Display preferences menu and a Preferences tab with search and groups; language, theme and an editor behaviour in the same schema; import and export as a file; Privacy entry | none (a theme that also dresses the document sheets would be new work) |
 | 52 | Central config store (preferences, styles, templates, fonts) | feature | done | `userconfig` store and client (local copy, offline queue, merge), fonts as assets with limits, shareable bundles; in the showcase: preferences that follow the person (opt-in), a share dialog for themes, My fonts (licence note, font list, sync) | none named; the showcase has no templates or style sets to share (bundles for them are for hosts) |
 | 56 | Atypical speech (Project Euphonia style) | feature | blocked | [euphonia-port.md](euphonia-port.md); `speechcoach` package; prompt and language bias in `cmd/voiceserver`; showcase Speech tab (record phrases, download, delete, dictate through a recogniser address; recordings and corrections kept sealed between visits when asked; learning from corrections with fixes offered on the next dictation; the optional research contribution shown, confirmed and withdrawable); `speechmodel` (contract, digest-pinned loader, federated averaging, stub and http backends; [speech-model.md](speech-model.md)) | an ONNX backend and a trained model to run in it (nothing to build or test against here); trials with people who have atypical speech |
@@ -123,6 +123,30 @@ chore (housekeeping, tooling, tests), security (keys, ceremonies, abuse limits).
 | Backends with conditional saves | feature | done | PostgreSQL, MongoDB, S3 | blob backend cannot, by design |
 | Known limits plan tail | enhancement | done | i18n breadth, RTL and accessibility depth (64, 83, 48 to 69); Hunspell dictionaries on demand (`spell.LoadHunspell`, `spell.Remote`, `spell/dictserver`, a dictionary choice in the Spelling tab) | none named: `ICONV`/`OCONV`, `BREAK` and the rarer compound checks are not read, and no real LibreOffice dictionary was run here |
 
+## Found in the other docs (open, not started)
+
+Collected from a read of every `docs/*.md` on 2026-10-16. Each row is work this project can do alone unless the last
+column says otherwise. The roadmap has no item number for them yet; if one is started, give it a number there and move
+the row into a table above. Nothing here is partly built except where "Present" says so.
+
+| Source | Item | Type | Status | Present | Missing |
+| --- | --- | --- | --- | --- | --- |
+| [canvas-todo.md](canvas-todo.md) | Footnotes that push text to the next page | enhancement | open | footnotes in a fixed band per page, cut with an ellipsis when too long | text flowing around a growing note; editing a footnote on the page; a clickable index (the table of contents is clickable) |
+| canvas-todo.md | Outline: collapse and reorder | feature | open | outline with jump | collapsing sections, drag to reorder; bookmarks drawn on the canvas (they are only listed) |
+| canvas-todo.md | Map object and flowcharts | feature | open | none | both as canvas objects |
+| canvas-todo.md | Mention notifications | feature | open | mentions in comments | telling the person mentioned (needs a delivery channel the host chooses) |
+| canvas-todo.md | Multi-cursor at a break offset | fix | open | one `Cursor.After` per cursor | typing at a break offset goes in front of the break unless the caret is "after" |
+| canvas-todo.md | Markdown write-back | enhancement | open | links round-trip | tables and images written back; a form for case and small caps |
+| canvas-todo.md | xango `Table` cell render prop and `CanvasView` | feature | open | `Table`, `Canvas` | a render prop per cell; a DOM component that mounts a `canvas/xango` tree (with a hidden text fallback for screen readers and no-wasm pages, [xango-canvas.md](xango-canvas.md)) |
+| canvas-todo.md | Spread view | enhancement | open | facing sheets, images across the gutter | gutter shadow, page-turn UI |
+| [opendocs-missing-features.md](opendocs-missing-features.md), [opendocs-port-plan.md](opendocs-port-plan.md) | Linked text frames, form fields, table formulas, scripting plug-ins | feature | open | none in Go code (checked by search) | all four; frames are the largest layout gap and need a design first. The two docs are older than the code: their other rows (margins, snippets, mentions, tags, signed documents, dictation) need a row-by-row re-check before anyone trusts "Missing" there |
+| [multiuser-design.md](multiuser-design.md) | Sharing more surfaces | enhancement | open | headers, footers, floats, tables, images by position and size | adding and removing objects at run time, character formatting inside floating text, an image's picture |
+| [opendoc-format.md](opendoc-format.md) | Pack format, open points | enhancement | open | draft 1: hashes, signature, encrypted records, tools | hiding what the index shows about an encrypted record; large attachments as their own record kind; several signers; a MIME type (`application/vnd.opendocs.pack`) and a `file(1)` magic entry; keys in the pack UI (it leaves confidential documents out and says so) |
+| [public-docstore.md](public-docstore.md) | Public offer operations | feature | open | takedown by ID, report route, `Challenger` and `Blocklist` hooks | a tool to list reports; notification of who answers; a hash list fed by takedowns; a shipped challenge when busy; a check that a body is one of the editor's formats (the terms text and jurisdiction are a person's, see above) |
+| [observability.md](observability.md) | Metrics for the last paths | chore | open | the other servers report their own work | font file and symbol downloads, the Google font proxy, hub presence updates (request counts only) |
+| [known-limits-plan.md](known-limits-plan.md) | Browser tests in CI | chore | partial | the accessibility gate runs in Chrome in CI | the whole e2e suite there, once stable (it runs here, 24 minutes) |
+| [speech-model.md](speech-model.md) | Secure aggregation | security | inherent | clipping, noise, digest-pinned loader | the aggregator sees each clipped, noised update; secure aggregation is not built |
+
 ## Counts
 
 Product table (items 48 to 84, 32 rows): 24 done, 0 partial, 8 blocked (49, 50, 56, 60, 64, 69, 82, 83: all that is left is a person's work). "Done with leftovers" is not a status: a part that is left makes an item partial, and a limit that cannot be removed makes it inherent. None is untouched.
@@ -131,9 +155,13 @@ Server and security table: every code item is done (passkey backlog 1 to 5, limi
 
 Earlier plan: nothing is partial; Encryption and passkeys is blocked on the audit and the witnesses.
 
+Found in the other docs: 14 rows, 12 open, 1 partial (browser tests in CI), 1 inherent (secure aggregation).
+
 ## Suggested order for the next work
 
-Nothing in the code is left that this project can finish alone. What remains is in "What is blocked on a person": the screen-reader and IME runs, the native review of the pt, ar and he packs, the outside audit, a mail provider, the terms text, real-service runs (Drive, S3-compatible, LibreOffice dictionaries) and independent witnesses.
+1. The rows under "Found in the other docs": the small ones first (the fix for multi-cursor at a break offset, metrics for the last paths, the MIME type and magic entry, the Markdown write-back, the public offer's report tool), then footnotes that push text, outline collapse, the surfaces the hub does not share yet.
+2. The large ones need a design first: linked text frames, form fields, table formulas, the map and flowchart objects, scripting plug-ins.
+3. Everything in "What is blocked on a person" waits for people: the screen-reader and IME runs, the native review of the pt, ar and he packs, the outside audit, a mail provider, the terms text, real-service runs and independent witnesses.
 
 Closed since the previous version of this page: 80 (print layout: odd/even pages, a different first page, any sheet size, a clickable table of contents written where it is, kept table rows), 74, 75, 77, 73 and 66 (their gaps), the audit log written by the server with scheduled backups (81), the builtin observability totals kept across restarts and the other servers' own work reported (81), pt/ar/he completion lists (79), 58 (IPv6 /64 budgets), the table-row widow control, the sheet size
 restore, contents in RTF, footnote links in RTF, the long undo history, heading levels in the panels, all CSS
