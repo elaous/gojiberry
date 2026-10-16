@@ -105,10 +105,13 @@ type ui struct {
 	transfer            *transfer.Registry
 	migrate             *migrate.Session
 	console             *console.Session
-	persisted           bool     // the browser promised to keep this origin's storage
-	fontLog             []string // what the font library did, newest last
-	navSig              string   // outline/bookmarks the Outline tab last showed
-	prefsQuery          string   // what is typed in the Preferences tab's search box
+	pub                 *publicUI              // the Public link tab
+	load                func(docfile.Document) // opens a document in the editor
+	setRole             func(canvas.Role)      // makes the editor read only, or editable again
+	persisted           bool                   // the browser promised to keep this origin's storage
+	fontLog             []string               // what the font library did, newest last
+	navSig              string                 // outline/bookmarks the Outline tab last showed
+	prefsQuery          string                 // what is typed in the Preferences tab's search box
 	find                findState
 	a11ySig             string
 	a11yCache           []components.A11yBlock
@@ -202,7 +205,12 @@ func main() {
 	refocus := func() { inputEl.Call("focus", map[string]any{"preventScroll": true}) }
 
 	cb := Callbacks{
-		OnFlow:         func(*canvas.TextFlow) { u.saver.MarkEdited() },
+		OnFlow: func(*canvas.TextFlow) {
+			u.saver.MarkEdited()
+			if u.pub != nil {
+				u.pub.edited()
+			}
+		},
 		OnHoverLink:    func(url string) { u.hoverLink = url; renderUI() },
 		OnHoverComment: func(id string) { u.hoverComment = id },
 	}
@@ -311,6 +319,16 @@ func main() {
 		targets = append(targets, saver.Target{Name: "browser", Label: browserLabel, Adapter: browserStore, Capacity: 5 << 20})
 	}
 	u.current = currentDoc
+	u.load = openDoc
+	u.setRole = func(r canvas.Role) {
+		state.Role = r
+		stage.SetRole(r)
+		if !r.CanEdit() {
+			state.Mode = canvas.ModeView
+		}
+		renderCanvas()
+		renderUI()
+	}
 	u.saver = saver.NewSession(&saver.Saver{Targets: targets}, currentDoc, openDoc)
 	// Encryption is the page's own: the saver asks it before a document is made confidential and
 	// to re-key a document's files when its level changes, and it seals confidential documents
@@ -350,6 +368,7 @@ func main() {
 	components.CopyText = u.saver.Copy // the "Copy details" button of an error
 	u.migrate = newMigrate(u, func() { renderUI() })
 	u.console = newConsole(u, func() { renderUI() })
+	u.pub = newPublic(u, func() { renderUI() })
 	u.people = newPeople("you@example.com", func() { renderUI() })
 	state.Comments.Roster = u.people // comments name people by handle, never by an address that is not theirs to show
 	u.people.links.use, u.people.links.stop = u.useShareLink, u.stopShareLink
@@ -419,6 +438,7 @@ func main() {
 				{Label: "Import / Export…", OnSelect: func() { u.tab = "transfer"; renderUI() }},
 				{Label: T("menu.migrate", "Migrate…"), OnSelect: func() { u.tab = "migrate"; renderUI() }},
 				{Label: T("menu.console", "Console…"), OnSelect: func() { u.tab = "console"; renderUI() }},
+				{Label: T("menu.public", "Share with a public link…"), OnSelect: func() { u.tab = "public"; renderUI() }},
 			}},
 			{Label: T("menu.edit", "Edit"), Items: components.CommandMenu(stage.Features.Commands(), keymap, mac, run)},
 			{Label: T("menu.insert", "Insert"), Items: []components.MenuItem{
@@ -472,7 +492,7 @@ func main() {
 				tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "review", "Review", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI), tabButton(u, "images", "Pictures", renderUI),
 				tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
-				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "console", "Console", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "speech", "Speech", renderUI), tabButton(u, "privacy", "Privacy", renderUI), tabButton(u, "prefs", "Preferences", renderUI)),
+				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "console", "Console", renderUI), tabButton(u, "public", "Public link", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "speech", "Speech", renderUI), tabButton(u, "privacy", "Privacy", renderUI), tabButton(u, "prefs", "Preferences", renderUI)),
 		)
 
 		roleButtons := []xango.Node{xango.El("span", []xango.Attr{xango.A("style", "font-size:12px;color:#6b7280")}, xango.Text("Role:"))}
@@ -548,6 +568,8 @@ func main() {
 			panel = components.Migrate(u.migrate.Props(func() { pickWordFiles(u) }))
 		case "console":
 			panel = components.ConsolePanel(u.console.Props())
+		case "public":
+			panel = publicPanel(u.pub)
 		case "page":
 			panel = xango.Frag(components.PageSetupPanel(components.PageSetupProps{Setup: state.Setup, OnChange: func(p components.PageSetup) {
 				state.Setup = p
@@ -1061,6 +1083,7 @@ func main() {
 	state.Live = liveProps(u, &state, origin, renderCanvas, renderUI)
 	renderCanvas()
 	renderUI()
+	go u.pub.openLink(func() bool { return flow != nil })
 	go openSharedSelection(u, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
 	go func() {
 		// Ask the browser to keep what is saved in it (it may delete a site's storage when

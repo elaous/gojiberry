@@ -559,7 +559,7 @@ func (s *Server) Handler() http.Handler {
 // headers a script on another origin needs (the deadline of an expiring document, how long to wait
 // after a 429 or 503, and the terms link of a public offer), which a browser hides unless they are
 // listed.
-const ExposedHeaders = "X-Gojiberry-Expires, Retry-After, Link"
+const ExposedHeaders = "X-Gojiberry-Expires, Retry-After, Link, X-Gojiberry-View-Id"
 
 func exposeHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
