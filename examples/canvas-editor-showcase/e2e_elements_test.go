@@ -91,3 +91,29 @@ func TestInsertAnEquationRequireItsAlternativeAndExportIt(t *testing.T) {
 	}
 	d.NoErrors()
 }
+
+// A formula can stand in its line of text: it is typeset there, and every export writes the words that stand for it
+// in the sentence.
+func TestAnInlineEquationStandsInItsSentence(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Focus("#input")
+	d.Press("Control+a")
+	d.Press("Delete")
+	d.Type("Let ")
+	d.Click(`button[data-tab="images"]`)
+	d.WaitSelector("#eq-insert")
+	d.SetChecked("#eq-inline input", true)
+	d.Fill("#eq-formula", "x_1^2")
+	d.Fill("#eq-alt", "x sub 1 squared")
+	d.Click("#eq-insert")
+	d.WaitSelector("#eq-alt-0")
+	d.Focus("#input")
+	d.Type(" be given.")
+	d.WaitFor("the reading copy has the sentence", `document.getElementById('a11y-text').textContent.includes('Let ') && document.getElementById('a11y-text').textContent.includes('be given.')`)
+	d.Click(`button[data-tab="transfer"]`)
+	_, html := d.Download(func() { d.Click(`.gj-transfer-button[data-kind="export"][data-format="html"]`) })
+	d.OK(strings.Contains(string(html), "Let x sub 1 squared be given."), "the words are in the sentence of the export")
+	d.NoErrors()
+}

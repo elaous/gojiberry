@@ -2,6 +2,7 @@ package docfile
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/elaous/gojiberry/canvas"
@@ -16,6 +17,9 @@ func richElements() Document {
 		{Image: &ImageItem{URL: "data:image/png;base64,AAAA", Width: 40, Height: 30, Alt: "Flow chart", LongDesc: "Three boxes: input, process, output.", Legend: "Figure 1: the flow", Credit: "Flow by Ana, CC BY 4.0, via Openverse", SourceURL: "https://example.org/a1"}},
 		{Para: &Para{Style: "Code", CodeLang: "go"}},
 		{Chars: &Chars{Text: "x := 1\n"}},
+		{Chars: &Chars{Text: "Let "}},
+		{Equation: &EquationItem{Formula: "x_1", Alt: "x sub 1", Inline: true}},
+		{Chars: &Chars{Text: " be given.\n"}},
 	}}
 }
 
@@ -43,10 +47,12 @@ func TestElementsSurviveTheEditorsFlow(t *testing.T) {
 		switch v := it.(type) {
 		case canvas.Inline:
 			if e, ok := v.Object.(*canvas.EquationObject); ok {
-				eq = e
-			}
-			if !v.Block && reflect.TypeOf(v.Object) == reflect.TypeOf(&canvas.EquationObject{}) {
-				t.Error("an equation is a block object: it has a line of its own")
+				if eq == nil {
+					eq = e
+				}
+				if v.Block == e.Inline {
+					t.Error("a block equation has a line of its own and an inline one is in its line")
+				}
 			}
 		case canvas.ParaFormat:
 			code = v
@@ -88,5 +94,35 @@ func TestEquationWordsAndText(t *testing.T) {
 	plain := Document{Content: []Item{{Chars: &Chars{Text: "x\n"}}}}
 	if !reflect.DeepEqual(plain.EquationsAsText(), plain) {
 		t.Error("a document with no equation is returned as it is")
+	}
+}
+
+func TestAnInlineEquationStaysInItsLineAsText(t *testing.T) {
+	d := richElements().EquationsAsText()
+	var text string
+	for _, it := range d.Content {
+		if it.Chars != nil {
+			text += it.Chars.Text
+		}
+	}
+	if !strings.Contains(text, "Let x sub 1 be given.\n") {
+		t.Fatalf("the inline words stay in the sentence: %q", text)
+	}
+	back := ToItems(richElements().Content)
+	var inline, block int
+	for _, it := range back {
+		if in, ok := it.(canvas.Inline); ok {
+			if eq, ok := in.Object.(*canvas.EquationObject); ok {
+				if eq.Inline && !in.Block {
+					inline++
+				}
+				if !eq.Inline && in.Block {
+					block++
+				}
+			}
+		}
+	}
+	if inline != 1 || block != 1 {
+		t.Fatalf("one inline and one block equation: %d %d", inline, block)
 	}
 }

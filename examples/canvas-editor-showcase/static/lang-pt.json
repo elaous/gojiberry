@@ -1347,6 +1347,7 @@
     "eq.needFormula": "Escreva primeiro a fórmula.",
     "eq.needAlt": "Uma equação precisa de uma alternativa em texto: escreva-a por palavras, como a leria em voz alta.",
     "eq.inserted": "Equação inserida.",
+    "eq.inline": "Na linha de texto, não numa linha própria",
     "eq.title": "Equações",
     "eq.formulaLabel": "Fórmula",
     "eq.formulaHint": "Por exemplo: x^2 + y^2 = z^2, frac{a}{b}, sqrt{x}",

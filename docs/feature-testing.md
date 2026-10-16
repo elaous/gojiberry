@@ -130,6 +130,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** `TestFormulaViewOpensOnCalculatedAndFormulaCellsAreReadOnlyThere`, `TestFormulaTooltipAndColours`, `TestEscapedEqualsIsPlainText`, `TestColumnNames`, `TestShowFormulasSwitchesWhatIsDrawn`, `TestTableFromMarkdownKeepsFormulasAndAlignment`, `TestMarkdownExportKeepsTheFormulaSoItWorksWhenReadBack` (canvas), `TestTableFormulas`, `TestFormulaCycleAndEditing`, `TestFormulaCellsShowTheirValue` (canvas), `TestTableFormulasAreWrittenAsTheirValues` (export), `TestEndToEnd` in examples/canvas-table-demo
 
+## Equations
+
+**Try it.** Pictures tab > Equations: write `x = frac{-b + sqrt{b^2 - 4ac}}{2a}`, a text alternative in words, tick **In the line of text**, and insert it in the middle of a sentence.
+
+**You should see.** What the picture in [features.md](features.md#equations) shows; the Word, HTML and text exports have the words of the alternative in the sentence.
+
+**Automated.** `TestTypesetFractionHasARuleAndPutsTheNumeratorAbove`, `TestTypesetScriptsAndRoots`, `TestInlineEquationSitsOnTheBaselineOfItsLine`, `TestBlockEquationIsTypesetNotTyped` (canvas), `TestTypesetterAndMathMLReadTheSameSymbols` (export), `TestAnInlineEquationStaysInItsLineAsText` (docfile), `TestAnInlineEquationStandsInItsSentence` (examples/canvas-editor-showcase)
+
 ## Markdown tables
 
 **Try it.** In edit mode type `| Qty | Total |`, Enter, `|---|---|`, Enter, `| 3 | =A2*2 |`, Enter. Then press the corner switch at the table's top right.

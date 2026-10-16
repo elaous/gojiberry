@@ -1363,6 +1363,7 @@
   "eq.needFormula": "Écrivez d'abord la formule.",
   "eq.needAlt": "Une formule a besoin d'un équivalent textuel : écrivez-la en mots, comme on la lirait à voix haute.",
   "eq.inserted": "Formule insérée.",
+  "eq.inline": "Dans la ligne de texte, pas sur une ligne à part",
   "eq.title": "Formules",
   "eq.formulaLabel": "Formule",
   "eq.formulaHint": "Par exemple : x^2 + y^2 = z^2, frac{a}{b}, sqrt{x}",
