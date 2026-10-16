@@ -98,7 +98,9 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **You should see.** The legend in italics under the picture, in the exports too.
 
-**Automated.** `TestAPictureWithALegendAndAWebPPicture` (examples/canvas-editor-showcase), `export/images_test.go`, `canvas/image_test.go`
+**Also try.** Insert an `.svg` and an `.avif` file; export to Word and check both are there as pictures.
+
+**Automated.** `TestAPictureWithALegendAndAWebPPicture`, `TestSVGAndAVIFPicturesAreStoredAsPNG` (examples/canvas-editor-showcase), `export/images_test.go`, `canvas/image_test.go`
 
 ## Find a picture online
 
