@@ -264,7 +264,7 @@ func TestDrawPaintsCellsHeaderAndCaret(t *testing.T) {
 	p.calls = nil
 	v.SetCaretVisible(false)
 	v.Draw()
-	if p.has("moveTo") {
+	if p.has("moveTo 28.5 16") { // (the eye of the formula switch is a path too)
 		t.Error("caret should be hidden in its off blink phase")
 	}
 }
@@ -657,5 +657,37 @@ func TestFormulaCellsShowTheirValue(t *testing.T) {
 	}
 	if v.Table.Cell(0, 2) != "=A1+B1" {
 		t.Fatal("the formula stays in the cell")
+	}
+}
+
+func TestFormulaSwitchInTheTopRightCorner(t *testing.T) {
+	v, p := newView()
+	v.MouseMove(3, 3)
+	g := v.layout()
+	hs, gap := v.Style.HandleSize, v.Style.BarGap
+	x, y := g.right()+gap+hs/2, v.Y-gap-hs/2
+	if h := v.HitTest(x, y); h.Kind != HitFormulaSwitch {
+		t.Fatalf("the corner is the switch: %+v", h)
+	}
+	p.calls = nil
+	v.Draw()
+	if p.has(`fillText "f(x)"`) {
+		t.Fatal("an eye while the values are shown")
+	}
+	v.MouseDown(x, y)
+	v.MouseUp(x, y)
+	if !v.ShowFormulas {
+		t.Fatal("pressing it shows the formulas")
+	}
+	p.calls = nil
+	v.MouseMove(3, 3)
+	v.Draw()
+	if !p.has(`fillText "f(x)"`) {
+		t.Fatal("f(x) while the formulas are shown")
+	}
+	v.MouseDown(x, y)
+	v.MouseUp(x, y)
+	if v.ShowFormulas {
+		t.Fatal("pressing it again shows the values")
 	}
 }

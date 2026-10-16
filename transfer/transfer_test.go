@@ -80,3 +80,37 @@ func TestRegistry(t *testing.T) {
 		t.Fatal("exporter error passes through")
 	}
 }
+
+func TestMarkdownImportTitleImagesAndFormulas(t *testing.T) {
+	png := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAD0lEQVR4nGP4z8Dwn4EBAA0GAf+hVvJzAAAAAElFTkSuQmCC"
+	md := "\ufeff# The Report\n\nIntro ![chart](" + png + ") and ![far](https://example.org/x.png).\n\n| Qty | Total |\n|---|---|\n| 3 | =A2*2 |\n"
+	imp, err := Default().ImporterFor("report.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := imp.Import([]byte(md))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Title != "The Report" {
+		t.Fatalf("title %q", d.Title)
+	}
+	var img, table bool
+	text := ""
+	for _, it := range d.Content {
+		switch {
+		case it.Image != nil:
+			img = it.Image.Alt == "chart" && strings.HasPrefix(it.Image.URL, "data:image/png")
+		case it.Table != nil:
+			table = it.Table.Rows[1].Cells[1] == "=A2*2"
+		case it.Chars != nil:
+			text += it.Chars.Text
+		}
+	}
+	if !img || !table || !strings.Contains(text, "[far]") || strings.Contains(text, "example.org") {
+		t.Fatalf("image %v table %v text %q", img, table, text)
+	}
+	if _, err := imp.Import([]byte{0xff, 0xfe, 0x00}); err == nil {
+		t.Fatal("not UTF-8")
+	}
+}
