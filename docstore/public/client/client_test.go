@@ -215,3 +215,18 @@ func TestLinksRoundTripAndTheCountdownSpeaks(t *testing.T) {
 		t.Error("never negative")
 	}
 }
+
+func TestABusyServerAsksForProofOfWorkAndTheClientAnswers(t *testing.T) {
+	c, _, _ := offer(t, func(o *public.Options) {
+		o.Challenger = &public.ProofOfWork{Secret: []byte("0123456789abcdef"), Difficulty: 8}
+	})
+	if err := c.NewSession(context.Background()); err != nil {
+		t.Fatalf("the client solves the challenge and retries: %v", err)
+	}
+	if c.Token == "" {
+		t.Fatal("a session was issued")
+	}
+	if _, err := c.Create(context.Background(), []byte("x")); err != nil {
+		t.Fatalf("a create is challenged too: %v", err)
+	}
+}
