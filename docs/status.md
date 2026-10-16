@@ -132,7 +132,6 @@ the row into a table above. Nothing here is partly built except where "Present" 
 | Source | Item | Type | Status | Present | Missing |
 | --- | --- | --- | --- | --- | --- |
 | [canvas-todo.md](canvas-todo.md) | Footnotes that push text to the next page | enhancement | open | footnotes in a fixed band per page, cut with an ellipsis when too long | text flowing around a growing note; editing a footnote on the page; a clickable index (the table of contents is clickable) |
-| canvas-todo.md | Outline: collapse and reorder | feature | open | outline with jump | collapsing sections, drag to reorder; bookmarks drawn on the canvas (they are only listed) |
 | canvas-todo.md | Map object and flowcharts | feature | open | none | both as canvas objects |
 | canvas-todo.md | Mention notifications | feature | open | mentions in comments | telling the person mentioned (needs a delivery channel the host chooses) |
 | canvas-todo.md | Markdown form for case and small caps | enhancement | inherent | tables, rules and pictures with an address are written back | Markdown has no syntax for case or small caps |

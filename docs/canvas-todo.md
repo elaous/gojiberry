@@ -99,6 +99,10 @@ in the selector is downloaded into the store the first time the text uses it
 
 ## Done since this list was written
 
+- **Outline**: sections fold (`components.Outline` `Collapsed`/`OnToggle`) and move (`TextFlow.SectionRange`, `TextFlow.MoveSection`; move
+  buttons and drag and drop in the panel, `components.OutlineUp`/`OutlineDown` for the keyboard path); bookmarks are marked on the
+  canvas while editing (`BookmarkMarkColor`, never exported).
+
 - **Multi-cursor at a break**: two cursors at one offset of a page or column break keep their own side of it (typing
   goes in front of the break at one and behind it at the other).
 - **Markdown write-back**: tables (pipe tables), rules and pictures that know their address are written by
@@ -130,7 +134,6 @@ Asked for, not started:
 - Footnotes sit in a fixed band per page rather than pushing text to the next page; the index is not clickable (the
   table of contents is: a click on a row goes to the heading); a footnote cannot be edited on the page itself (use the
   list or `footnote.edit`).
-- Outline: no collapsing of sections or drag-to-reorder; bookmarks are not drawn on the canvas (only listed).
 - **Map object** (OpenStreetMap tiles) and **flowcharts** as canvas objects.
 - Comments: notifications for mentions.
 - Markdown: case and small caps have no Markdown form (the format has no syntax for them; a limit of Markdown).

@@ -150,3 +150,94 @@ func TestRemoveBookmark(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func sectionFlow() *TextFlow {
+	f, _ := selFlow(
+		ParaFormat{Style: "Heading 1"}, Chars{Text: "One\n"},
+		ParaFormat{}, Chars{Text: "one text\n"},
+		ParaFormat{Style: "Heading 2"}, Chars{Text: "One.a\n"},
+		ParaFormat{}, Chars{Text: "sub text\n"},
+		ParaFormat{Style: "Heading 1"}, Chars{Text: "Two\n"},
+		ParaFormat{}, Chars{Text: "two text\n"},
+		ParaFormat{Style: "Heading 1"}, Chars{Text: "Three\n"},
+		ParaFormat{}, Chars{Text: "three text"}, // no paragraph end
+	)
+	f.Styles = DefaultStyles()
+	return f
+}
+
+func headings(f *TextFlow) []string {
+	var out []string
+	for _, e := range f.Outline() {
+		out = append(out, e.Text)
+	}
+	return out
+}
+
+func TestSectionRangeIncludesSubsections(t *testing.T) {
+	f := sectionFlow()
+	from, to, ok := f.SectionRange(0)
+	text := []rune(f.EditText())
+	if !ok || string(text[from:to]) != "One\none text\nOne.a\nsub text\n" {
+		t.Fatalf("section one: %q", string(text[from:to]))
+	}
+	from, to, _ = f.SectionRange(1)
+	if string(text[from:to]) != "One.a\nsub text\n" {
+		t.Fatalf("subsection: %q", string(text[from:to]))
+	}
+	if _, _, ok := f.SectionRange(9); ok {
+		t.Error("no such heading")
+	}
+}
+
+func TestMoveSectionCarriesItsSubsectionsAndTheLastOneWithoutAnEnd(t *testing.T) {
+	f := sectionFlow()
+	if !f.MoveSection(2, 0) { // Two before One
+		t.Fatal("move refused")
+	}
+	if got := f.EditText(); got != "Two\ntwo text\nOne\none text\nOne.a\nsub text\nThree\nthree text" {
+		t.Fatalf("after moving Two up: %q", got)
+	}
+	if want := []string{"Two", "One", "One.a", "Three"}; !reflect.DeepEqual(headings(f), want) {
+		t.Fatalf("outline %q", headings(f))
+	}
+
+	f = sectionFlow()
+	if !f.MoveSection(3, 0) { // Three (last, no paragraph end) to the front
+		t.Fatal("move refused")
+	}
+	if got := f.EditText(); got != "Three\nthree text\nOne\none text\nOne.a\nsub text\nTwo\ntwo text" { // the text still ends without a paragraph end
+		t.Fatalf("after moving the last up: %q", got)
+	}
+
+	f = sectionFlow()
+	if !f.MoveSection(0, 4) { // One (with One.a) to the end
+		t.Fatal("move refused")
+	}
+	if got := f.EditText(); got != "Two\ntwo text\nThree\nthree text\nOne\none text\nOne.a\nsub text\n" {
+		t.Fatalf("after moving One to the end: %q", got)
+	}
+
+	f = sectionFlow()
+	if f.MoveSection(0, 1) || f.MoveSection(0, 0) || f.MoveSection(0, 2) {
+		t.Error("a section cannot move into itself or stay where it is")
+	}
+	if f.MoveSection(7, 0) || f.MoveSection(0, 9) {
+		t.Error("out of range")
+	}
+}
+
+func TestBookmarksAreMarkedWhileEditing(t *testing.T) {
+	f, p := selFlow(Chars{Text: "see "}, Chars{Text: "here", Format: Format{Bookmark: "spot"}}, Chars{Text: " now"})
+	f.SetMode(ModeEdit)
+	f.Draw()
+	if !p.has("fillStyle " + BookmarkMarkColor) {
+		t.Error("edit mode marks where a bookmark starts")
+	}
+	f.SetMode(ModeView)
+	p.calls = nil
+	f.Draw()
+	if p.has("fillStyle " + BookmarkMarkColor) {
+		t.Error("view mode draws no bookmark mark")
+	}
+}

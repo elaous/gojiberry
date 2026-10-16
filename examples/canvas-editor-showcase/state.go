@@ -33,6 +33,8 @@ type State struct {
 	// EvenDiffers gives the even sheets EvenHeader and EvenFooter; RunHeader and RunFooter are then the odd sheets'.
 	EvenDiffers            bool
 	EvenHeader, EvenFooter string
+	// OutlineCollapsed lists the indexes of the headings the Outline tab shows folded.
+	OutlineCollapsed []int
 	// Spread shows the sheets two to a row, as facing pages.
 	Spread bool
 	// Source is the document's starting Markdown; once the text is edited

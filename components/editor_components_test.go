@@ -715,3 +715,65 @@ func TestTranslateHookChangesTheComponentsWords(t *testing.T) {
 		t.Errorf("translated:\n%s", html)
 	}
 }
+
+func TestOutlineCollapsesAndMovesSections(t *testing.T) {
+	es := []canvas.OutlineEntry{{Level: 1, Text: "One"}, {Level: 2, Text: "One.a"}, {Level: 3, Text: "One.a.i"}, {Level: 1, Text: "Two"}, {Level: 1, Text: "Three"}}
+	var toggled []int
+	var moves [][2]int
+	n := Outline(OutlineProps{Entries: es, Current: -1, Collapsed: []int{0}, OnToggle: func(i int) { toggled = append(toggled, i) },
+		OnMove: func(from, before int) { moves = append(moves, [2]int{from, before}) }})
+	html := render(t, n)
+	mustContain(t, html, `aria-expanded="false"`, `aria-label="Expand One"`, "Two", "Three")
+	mustNotContain(t, html, "One.a")
+	// Two sits after One and One.a is hidden; Two can move up (before One) and down (before the end past Three).
+	mustContain(t, html, `aria-label="Move section up: Two"`, `aria-label="Move section down: Two"`)
+	mustNotContain(t, html, `Move section up: One"`)     // the first of its siblings
+	mustNotContain(t, html, `Move section down: Three"`) // the last
+
+	html = render(t, Outline(OutlineProps{Entries: es, Current: -1, OnToggle: func(int) {}}))
+	mustContain(t, html, "One.a.i", `aria-expanded="true"`, `aria-label="Collapse One"`, `aria-label="Collapse One.a"`)
+	mustNotContain(t, html, `Collapse One.a.i`) // nothing under it
+	// Without OnToggle everything shows and there are no toggles.
+	html = render(t, Outline(OutlineProps{Entries: es, Current: -1, Collapsed: []int{0}}))
+	mustContain(t, html, "One.a.i")
+	mustNotContain(t, html, "aria-expanded")
+
+	for _, h := range findHandlers(n, "click") {
+		h(xango.Event{})
+	}
+	if len(toggled) != 1 || toggled[0] != 0 {
+		t.Fatalf("toggled %v", toggled)
+	}
+	got := map[[2]int]bool{}
+	for _, m := range moves {
+		got[m] = true
+	}
+	// Two (3) up: before One (0). Two down: before the end of Three's section (5). Three (4) up: before Two (3).
+	for _, want := range [][2]int{{3, 0}, {3, 5}, {4, 3}} {
+		if !got[want] {
+			t.Errorf("missing move %v in %v", want, moves)
+		}
+	}
+	// A drop onto another heading moves the dragged one in front of it.
+	moves = nil
+	lis := findHandlers(n, "dragstart")
+	drops := findHandlers(n, "drop")
+	if len(lis) < 2 || len(drops) < 2 {
+		t.Fatalf("dragstart %d drop %d", len(lis), len(drops))
+	}
+	lis[1](xango.Event{}) // visible rows: One(0), Two(3), Three(4) -> index 1 is Two
+	drops[0](xango.NewEvent("drop", nil, false, func() {}, nil))
+	if len(moves) != 1 || moves[0] != [2]int{3, 0} {
+		t.Fatalf("drag Two onto One: %v", moves)
+	}
+}
+
+func TestOutlineUpAndDown(t *testing.T) {
+	es := []canvas.OutlineEntry{{Level: 1}, {Level: 2}, {Level: 2}, {Level: 3}, {Level: 1}}
+	if OutlineUp(es, 2) != 1 || OutlineUp(es, 1) != -1 || OutlineUp(es, 4) != 0 || OutlineUp(es, 0) != -1 {
+		t.Errorf("up: %d %d %d %d", OutlineUp(es, 2), OutlineUp(es, 1), OutlineUp(es, 4), OutlineUp(es, 0))
+	}
+	if OutlineDown(es, 1) != 4 || OutlineDown(es, 2) != -1 || OutlineDown(es, 0) != 5 || OutlineDown(es, 4) != -1 {
+		t.Errorf("down: %d %d %d %d", OutlineDown(es, 1), OutlineDown(es, 2), OutlineDown(es, 0), OutlineDown(es, 4))
+	}
+}

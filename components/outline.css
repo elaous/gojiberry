@@ -22,3 +22,8 @@
 .gj-footnote-text { flex: 1; min-width: 0; font-size: 0.9em; }
 .gj-footnote-edit, .gj-footnote-delete { padding: 0.2em 0.6em; border: 1px solid var(--gj-border); border-radius: var(--gj-radius); background: var(--gj-bg); color: var(--gj-text); cursor: pointer; font: inherit; font-size: 0.8em; }
 .gj-footnote-edit:disabled, .gj-footnote-delete:disabled { opacity: 0.5; cursor: default; }
+.gj-outline-list li { display: flex; align-items: center; gap: 2px; }
+.gj-outline-list li .gj-outline-item { flex: 1; min-width: 0; }
+.gj-outline-toggle, .gj-outline-move { border: 0; background: none; color: var(--gj-muted); cursor: pointer; font: inherit; padding: 0.1em 0.35em; border-radius: var(--gj-radius); }
+.gj-outline-toggle:hover, .gj-outline-move:hover { background: var(--gj-hover, rgba(127,127,127,.15)); color: var(--gj-text); }
+.gj-outline-toggle:focus-visible, .gj-outline-move:focus-visible { outline: 2px solid var(--gj-focus, currentColor); outline-offset: 1px; }
