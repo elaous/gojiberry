@@ -1,0 +1,245 @@
+# Testing guide: each feature, by hand and by test
+
+For every feature: the steps to try it, what you should see, and the automated test that covers it (all in `examples/canvas-editor-showcase` unless a path is given; run one with `GOJIBERRY_REQUIRE_BROWSER=1 go test ./examples/canvas-editor-showcase -run <TestName>`). Build the showcase with `make showcase-dist` and serve `dist/showcase` with any static file server (for example `python3 -m http.server -d dist/showcase`), then open it in a browser (see [testing-workflow.md](testing-workflow.md) for the whole workflow and [accessibility-testing.md](accessibility-testing.md) for the screen-reader script). A picture of each feature is in [features.md](features.md).
+
+Every feature also has these checks: it works with the keyboard alone, nothing is announced twice, the page shows no error in the console, and the Check tab and axe find nothing new.
+
+## Editing on the canvas
+
+**Try it.** Click **Mode** to edit, click in the text and type. Press Ctrl+D on a word twice, type, and check both places change. Press Ctrl+Z.
+
+**You should see.** What the picture in [features.md](features.md#editing-on-the-canvas) shows.
+
+**Automated.** e2e_test.go (`TestEndToEnd`), e2e_typing_test.go, e2e_mirror_test.go
+
+## Format
+
+**Try it.** Select a word, press **B**, then change its colour. Press Enter in a bullet list and check it continues.
+
+**You should see.** What the picture in [features.md](features.md#format) shows.
+
+**Automated.** e2e_test.go, e2e_toolbar_test.go, e2e_icons_test.go
+
+## Styles
+
+**Try it.** Make a style from a selection, apply it to two paragraphs, then edit the style and watch both change.
+
+**You should see.** What the picture in [features.md](features.md#styles) shows.
+
+**Automated.** e2e_theme_test.go, e2e_configsync_test.go
+
+## Symbols
+
+**Try it.** Open the tab, search for "arrow" and press Enter on one.
+
+**You should see.** What the picture in [features.md](features.md#symbols) shows.
+
+**Automated.** e2e_gridkeys_test.go, e2e_keyboard_test.go
+
+## Keys
+
+**Try it.** Rebind a command to a free key, reload the page and use it.
+
+**You should see.** What the picture in [features.md](features.md#keys) shows.
+
+**Automated.** e2e_keyboard_test.go, e2e_prefs_test.go
+
+## Comments
+
+**Try it.** Select a word, press Ctrl+Alt+N, type a note, then reply and resolve it from the list.
+
+**You should see.** What the picture in [features.md](features.md#comments) shows.
+
+**Automated.** e2e_mentions_test.go, e2e_roundtrip_test.go
+
+## Review (suggestions)
+
+**Try it.** Tick **Suggest changes**, delete a word, type another, then accept one and reject the other.
+
+**You should see.** What the picture in [features.md](features.md#review-suggestions) shows.
+
+**Automated.** e2e_review_test.go, e2e_live_test.go
+
+## Outline
+
+**Try it.** Fold a heading with the arrow, then press **Move section down** on another and read the document order.
+
+**You should see.** What the picture in [features.md](features.md#outline) shows.
+
+**Automated.** e2e_test.go (`TestEndToEnd`)
+
+## Footnotes
+
+**Try it.** Press Ctrl+Alt+F, type a note, save, scroll to the foot of the page. Add a very long note and see it continue on the next page.
+
+**You should see.** What the picture in [features.md](features.md#footnotes) shows.
+
+**Automated.** e2e_test.go, e2e_roundtrip_test.go, e2e_mirror_caret_test.go
+
+## Columns
+
+**Try it.** Edit > Columns > Two columns, drag the grip, then choose Reset column widths.
+
+**You should see.** What the picture in [features.md](features.md#columns) shows.
+
+**Automated.** e2e_columns_test.go
+
+## Two-page spread
+
+**Try it.** View > Two-page spread; press the folded corner at the bottom right of the right-hand page.
+
+**You should see.** What the picture in [features.md](features.md#two-page-spread) shows.
+
+**Automated.** e2e_pagesetup_test.go, canvas unit tests (`TestSpreadDrawsTheFoldShadeAndTurnTabs`)
+
+## Page and print layout
+
+**Try it.** Choose Letter, landscape, type a header with `{title}` and check it on every page.
+
+**You should see.** What the picture in [features.md](features.md#page-and-print-layout) shows.
+
+**Automated.** e2e_pagesetup_test.go, e2e_printlayout_test.go
+
+## Pictures
+
+**Try it.** Insert a picture, leave the description empty and open the Check tab; then describe it and check again.
+
+**You should see.** What the picture in [features.md](features.md#pictures) shows.
+
+**Automated.** e2e_images_test.go, e2e_elements_test.go
+
+## Find and replace
+
+**Try it.** Search for a word that appears twice, press Enter to step, then Replace all.
+
+**You should see.** What the picture in [features.md](features.md#find-and-replace) shows.
+
+**Automated.** e2e_find_test.go, e2e_searchall_test.go
+
+## Spelling
+
+**Try it.** Type `teh`, right-click or use the list to correct it; choose another dictionary language.
+
+**You should see.** What the picture in [features.md](features.md#spelling) shows.
+
+**Automated.** e2e_spell_test.go, e2e_dictionary_test.go
+
+## Language
+
+**Try it.** Select a sentence, set its language to Arabic, and check the paragraph direction and the reading copy.
+
+**You should see.** What the picture in [features.md](features.md#language) shows.
+
+**Automated.** e2e_lang_test.go, e2e_bidi_test.go, e2e_ime_test.go
+
+## Stats
+
+**Try it.** Select a paragraph and compare the Selection column to the Document column.
+
+**You should see.** What the picture in [features.md](features.md#stats) shows.
+
+**Automated.** e2e_test.go (`TestEndToEnd`)
+
+## Share
+
+**Try it.** Select a sentence, copy the link, open it in another tab.
+
+**You should see.** What the picture in [features.md](features.md#share) shows.
+
+**Automated.** e2e_share_test.go, e2e_links_test.go
+
+## People
+
+**Try it.** Add a person as a viewer and check they cannot edit; remove them.
+
+**You should see.** What the picture in [features.md](features.md#people) shows.
+
+**Automated.** e2e_people_test.go, e2e_peopleserver_test.go, e2e_encrypt_keys_test.go
+
+## Accessibility check
+
+**Try it.** Insert a table with an empty header row and press **Check this document**.
+
+**You should see.** What the picture in [features.md](features.md#accessibility-check) shows.
+
+**Automated.** e2e_a11y_test.go, e2e_a11y_rules_test.go, e2e_axe_test.go
+
+## Files: import and export
+
+**Try it.** Choose PDF and read what is left out; export it and open the file.
+
+**You should see.** What the picture in [features.md](features.md#files-import-and-export) shows.
+
+**Automated.** e2e_fidelity_test.go, e2e_exporthtml_test.go, e2e_pack_test.go
+
+## Save
+
+**Try it.** Save, edit, save again, then open the older version from the list.
+
+**You should see.** What the picture in [features.md](features.md#save) shows.
+
+**Automated.** e2e_lifecycle_test.go, e2e_folders_test.go, e2e_encrypt_test.go
+
+## Migrate
+
+**Try it.** Bring a Word file with a comment and open it.
+
+**You should see.** What the picture in [features.md](features.md#migrate) shows.
+
+**Automated.** e2e_migrate_test.go
+
+## Console
+
+**Try it.** Type `ls`, then `cat` a document's name.
+
+**You should see.** What the picture in [features.md](features.md#console) shows.
+
+**Automated.** e2e_console_test.go
+
+## Public link
+
+**Try it.** Publish a copy, open the read-only link, and watch the countdown.
+
+**You should see.** What the picture in [features.md](features.md#public-link) shows.
+
+**Automated.** e2e_public_test.go
+
+## Speech
+
+**Try it.** Record one phrase, then throw the take away.
+
+**You should see.** What the picture in [features.md](features.md#speech) shows.
+
+**Automated.** e2e_speech_test.go, e2e_speechkeep_test.go
+
+## Privacy
+
+**Try it.** Turn the counts on, use the editor, and read the local log.
+
+**You should see.** What the picture in [features.md](features.md#privacy) shows.
+
+**Automated.** e2e_privacy_test.go, e2e_privacy_log_test.go, e2e_crash_test.go
+
+## Preferences
+
+**Try it.** Choose **Larger text** and **High contrast**, reload, and check they stay.
+
+**You should see.** What the picture in [features.md](features.md#preferences) shows.
+
+**Automated.** e2e_prefs_test.go, e2e_prefspanel_test.go, e2e_plainlang_test.go, e2e_access_test.go
+
+## Read aloud
+
+**Try it.** Read aloud > Read the document aloud, pause it, then choose a British voice and read again.
+
+**You should see.** What the picture in [features.md](features.md#read-aloud) shows.
+
+**Automated.** e2e_readmarks_test.go
+
+## Menus and commands
+
+**Try it.** Open Edit with the keyboard (Alt, then arrows) and run a command with Enter.
+
+**You should see.** What the picture in [features.md](features.md#menus-and-commands) shows.
+
+**Automated.** e2e_keyboard_test.go, e2e_test.go

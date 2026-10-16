@@ -852,6 +852,42 @@ func (d *Tab) Screenshot(path string) {
 	}
 }
 
+// ScreenshotView saves what is on the screen (the viewport, not the whole page) as a WebP picture of quality 55, small
+// enough to keep in the repository (about 40 KB for a page of the showcase).
+func (d *Tab) ScreenshotView(path string) {
+	d.t.Helper()
+	var buf []byte
+	d.must(chromedp.ActionFunc(func(ctx context.Context) error {
+		var err error
+		buf, err = page.CaptureScreenshot().WithFormat(page.CaptureScreenshotFormatWebp).WithQuality(55).Do(ctx)
+		return err
+	}))
+	if err := os.WriteFile(path, buf, 0o644); err != nil {
+		d.t.Fatal(err)
+	}
+}
+
+// ScreenshotOf saves the element that matches selector as a WebP picture (as ScreenshotView).
+func (d *Tab) ScreenshotOf(selector, path string) {
+	d.t.Helper()
+	var buf []byte
+	d.must(chromedp.ActionFunc(func(ctx context.Context) error {
+		var r struct{ X, Y, W, H float64 }
+		if err := chromedp.Evaluate(`(() => { const r = document.querySelector(`+jsString(selector)+`).getBoundingClientRect(); return {X: r.x + window.scrollX, Y: r.y + window.scrollY, W: r.width, H: r.height}; })()`, &r).Do(ctx); err != nil {
+			return err
+		}
+		var err error
+		buf, err = page.CaptureScreenshot().WithFormat(page.CaptureScreenshotFormatWebp).WithQuality(55).
+			WithClip(&page.Viewport{X: r.X, Y: r.Y, Width: r.W, Height: r.H, Scale: 1}).Do(ctx)
+		return err
+	}))
+	if err := os.WriteFile(path, buf, 0o644); err != nil {
+		d.t.Fatal(err)
+	}
+}
+
+func jsString(s string) string { b, _ := json.Marshal(s); return string(b) }
+
 func b64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
 
 // VirtualAuthenticator adds a software authenticator to the browser (Chrome's WebAuthn

@@ -208,6 +208,14 @@ showcase-dist:
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" $(SHOWCASE_DIST)/wasm_exec.js
 	go run ./cmd/wasmdist $(SHOWCASE_DIST)
 
+# feature-shots makes the pictures of docs/features.md (one screenshot of the showcase per feature, WebP, about
+# 700 KB in all) in docs/features/img, by driving the showcase in headless Chromium. Run it when the editor looks
+# different and commit the pictures that changed; it is not part of `make check`.
+.PHONY: feature-shots
+feature-shots:
+	rm -rf docs/features/img
+	GOJIBERRY_FEATURE_SHOTS=$(abspath docs/features/img) GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -run TestFeatureShots ./examples/canvas-editor-showcase
+
 # bench runs every Go benchmark in the module: buffer's own
 # GapBuffer-vs-naive-slice benchmarks (fast, native, no extra setup)
 # and examples/domrt-bench's own patch/patchChildren benchmarks (drives
