@@ -27,7 +27,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/elaous/gojiberry/docfile"
-	"github.com/elaous/gojiberry/export"
 	"github.com/elaous/gojiberry/saver"
 	"github.com/elaous/gojiberry/transfer"
 	"io"
@@ -35,6 +34,9 @@ import (
 	"strings"
 	"unicode"
 )
+
+// registerExport adds the writers of the other file formats to the default Registry; native builds set it.
+var registerExport func(*transfer.Registry)
 
 // Shell runs console commands on one target of a Saver.
 type Shell struct {
@@ -52,6 +54,13 @@ type Shell struct {
 	// Registry reads and writes the files import and export handle; nil is the default set
 	// (JSON, protobuf, Markdown, text, .docx, .pdf, HTML, ...).
 	Registry *transfer.Registry
+	// Files is where import, export, pack and unpack read and write files; nil is the disk
+	// (OSFiles). A page gives PageFiles.
+	Files Files
+	// Confirm, when set, answers the questions of purge and rebuild instead of reading In: a
+	// host that has no terminal asks its person and returns the answer. Script and Yes still
+	// decide first.
+	Confirm func(question string) bool
 	// Format is how imported documents are stored; nil is JSON.
 	Format docfile.Codec
 
@@ -74,7 +83,9 @@ func (sh *Shell) SetCwd(id string) { sh.cwd = id }
 func (sh *Shell) registry() *transfer.Registry {
 	if sh.Registry == nil {
 		r := transfer.Default()
-		export.Register(r)
+		if registerExport != nil {
+			registerExport(r)
+		}
 		sh.Registry = r
 	}
 	return sh.Registry
@@ -256,6 +267,9 @@ func (sh *Shell) ask(question string) bool {
 		// The next script line is a command, not an answer: never read it.
 		sh.printf("%s\nnot confirmed: a script needs -y to answer yes\n", question)
 		return false
+	}
+	if sh.Confirm != nil {
+		return sh.Confirm(question)
 	}
 	sh.printf("%s [y/N] ", question)
 	line, _ := sh.reader().ReadString('\n')

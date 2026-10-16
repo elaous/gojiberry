@@ -23,6 +23,7 @@ import (
 	collabxango "github.com/elaous/gojiberry/collab/xango"
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/components/encerr"
+	"github.com/elaous/gojiberry/console"
 	"github.com/elaous/gojiberry/docfile"
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/domrt"
@@ -103,6 +104,7 @@ type ui struct {
 	liveName, liveColor string
 	transfer            *transfer.Registry
 	migrate             *migrate.Session
+	console             *console.Session
 	persisted           bool     // the browser promised to keep this origin's storage
 	fontLog             []string // what the font library did, newest last
 	navSig              string   // outline/bookmarks the Outline tab last showed
@@ -347,6 +349,7 @@ func main() {
 	encerr.Install()                   // encrypt errors in words
 	components.CopyText = u.saver.Copy // the "Copy details" button of an error
 	u.migrate = newMigrate(u, func() { renderUI() })
+	u.console = newConsole(u, func() { renderUI() })
 	u.people = newPeople("you@example.com", func() { renderUI() })
 	state.Comments.Roster = u.people // comments name people by handle, never by an address that is not theirs to show
 	u.people.links.use, u.people.links.stop = u.useShareLink, u.stopShareLink
@@ -415,6 +418,7 @@ func main() {
 				{Label: T("menu.pageSetup", "Page setup…"), OnSelect: func() { u.tab = "page"; renderUI() }},
 				{Label: "Import / Export…", OnSelect: func() { u.tab = "transfer"; renderUI() }},
 				{Label: T("menu.migrate", "Migrate…"), OnSelect: func() { u.tab = "migrate"; renderUI() }},
+				{Label: T("menu.console", "Console…"), OnSelect: func() { u.tab = "console"; renderUI() }},
 			}},
 			{Label: T("menu.edit", "Edit"), Items: components.CommandMenu(stage.Features.Commands(), keymap, mac, run)},
 			{Label: T("menu.insert", "Insert"), Items: []components.MenuItem{
@@ -468,7 +472,7 @@ func main() {
 				tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "review", "Review", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI), tabButton(u, "images", "Pictures", renderUI),
 				tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
-				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "speech", "Speech", renderUI), tabButton(u, "privacy", "Privacy", renderUI), tabButton(u, "prefs", "Preferences", renderUI)),
+				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "console", "Console", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "speech", "Speech", renderUI), tabButton(u, "privacy", "Privacy", renderUI), tabButton(u, "prefs", "Preferences", renderUI)),
 		)
 
 		roleButtons := []xango.Node{xango.El("span", []xango.Attr{xango.A("style", "font-size:12px;color:#6b7280")}, xango.Text("Role:"))}
@@ -542,6 +546,8 @@ func main() {
 			}
 		case "migrate":
 			panel = components.Migrate(u.migrate.Props(func() { pickWordFiles(u) }))
+		case "console":
+			panel = components.ConsolePanel(u.console.Props())
 		case "page":
 			panel = xango.Frag(components.PageSetupPanel(components.PageSetupProps{Setup: state.Setup, OnChange: func(p components.PageSetup) {
 				state.Setup = p
