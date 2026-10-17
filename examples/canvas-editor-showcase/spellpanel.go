@@ -32,7 +32,7 @@ type spellState struct {
 	remote  *spell.Remote
 	offered []spell.Language // what the server has; nil until asked, empty if it has none
 	asked   bool
-	dict    string // the dictionary in use: "en" or a name from offered
+	dict    string // the dictionary in use: "en", a name from offered, or "addon:" and the id of one the spell add-on keeps
 	note    string
 	failed  bool
 }
@@ -75,6 +75,14 @@ func (s *spellState) dictionaryName(name string) string {
 	if name == "" || name == "en" {
 		return lang.Names["en"]
 	}
+	if id, ok := strings.CutPrefix(name, spellAddonPrefix); ok {
+		for _, m := range addonsState.models["spell"] {
+			if m.ID == id {
+				return m.Label
+			}
+		}
+		return id
+	}
 	for _, l := range s.offered {
 		if l.Lang == name && l.Name != "" {
 			return l.Name
@@ -97,6 +105,22 @@ func (u *ui) chooseDictionary(name string, again, renderUI func()) {
 	}
 	s.note = T("spell.loadingDict", "Loading the dictionary %s…", s.dictionaryName(name))
 	renderUI()
+	if id, ok := strings.CutPrefix(name, spellAddonPrefix); ok {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			d, err := loadAddonDictionary(ctx, id)
+			if err != nil {
+				s.failed = true
+				s.note = T("spell.dictFailed", "The dictionary %s could not be loaded: %s", s.dictionaryName(name), err.Error())
+				renderUI()
+				return
+			}
+			s.checker.Dict, s.dict, s.note = d, name, ""
+			again()
+		}()
+		return
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
@@ -206,6 +230,7 @@ func spellPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func()
 	}
 	if s.enabled {
 		u.askDictionaries(renderUI)
+		askSpellAddon(renderUI)
 	}
 	dicts := []components.DocChoice{{Name: "en", Label: lang.Names["en"]}}
 	for _, l := range s.offered {
@@ -214,6 +239,11 @@ func spellPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func()
 			label = l.Lang
 		}
 		dicts = append(dicts, components.DocChoice{Name: l.Lang, Label: label})
+	}
+	for _, m := range addonsState.models["spell"] { // the dictionaries the add-on keeps on this device
+		if m.Installed {
+			dicts = append(dicts, components.DocChoice{Name: spellAddonPrefix + m.ID, Label: m.Label})
+		}
 	}
 	current := s.dict
 	if current == "" {

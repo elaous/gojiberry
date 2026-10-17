@@ -3,6 +3,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -185,5 +186,34 @@ func TestLanguageTabWithTheLlmAddon(t *testing.T) {
 	d.Click("#help-replace")
 	d.Wait("s.text !== " + e2etest.J(before))
 	d.OK(strings.Contains(d.State().Str("text"), "A short version."), "Replace puts the answer in place of the selection")
+	d.NoErrors()
+}
+
+// With the spell add-on, the dictionaries it keeps are offered in the Spelling tab next to the built-in one; choosing one
+// reads the files the add-on hands over, and the words that are not in it are flagged.
+func TestSpellingWithTheSpellAddonsDictionary(t *testing.T) {
+	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
+	d.WaitSelector("canvas")
+	d.Eval(`(() => {
+		const enc = s => new TextEncoder().encode(s);
+		window.addons = window.addons || {};
+		window.addons.spell = {
+			models() { return Promise.resolve([{id: 'tiny', label: 'Tiny test language', lang: 'xx', size: 100, installed: true}, {id: 'big', label: 'Not installed', installed: false}]); },
+			load(id) { window.__loaded = id; return Promise.resolve({aff: enc('SET UTF-8\n'), dic: enc('2\nhaus\nfenster\n')}); },
+		};
+	})()`, nil)
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Focus("#input")
+	d.Type(" haus fenster xyzzq ")
+	d.Click(`button[data-tab="spell"]`)
+	d.Click(".gj-spell-enable")
+	d.WaitSelector(".gj-spell-dict")
+	d.WaitFor("the add-on's dictionary is offered", `Array.from(document.querySelectorAll('.gj-spell-dict option')).some(o => o.value === 'addon:tiny')`)
+	d.OK(!d.Bool(`Array.from(document.querySelectorAll('.gj-spell-dict option')).some(o => o.value === 'addon:big')`), "a dictionary that is not installed is not offered")
+	d.Select(".gj-spell-dict", "addon:tiny")
+	d.WaitFor("the dictionary is in use", `window.__loaded === 'tiny' && !document.querySelector('.gj-spell-dictnote')`)
+	words := d.Texts(".gj-spell-word")
+	d.OK(slices.Contains(words, "xyzzq") && !slices.Contains(words, "haus") && !slices.Contains(words, "fenster"), "words in the add-on's dictionary pass, the nonsense is flagged: "+strings.Join(words, " "))
 	d.NoErrors()
 }
