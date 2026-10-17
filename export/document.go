@@ -3,6 +3,7 @@ package export
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -194,7 +195,11 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 		case it.Form != nil:
 			// a form field is written as its label and what is in it, in the line it stands in
 			if w := it.Form.Words(); w != "" {
-				cur.runs = append(cur.runs, docfile.Chars{Text: w})
+				style := ""
+				if b, err := json.Marshal(it.Form); err == nil {
+					style = formFieldStyle + string(b)
+				}
+				cur.runs = append(cur.runs, docfile.Chars{Text: w, Format: docfile.Format{Style: style}})
 			}
 			pos++
 		case it.Equation != nil && it.Equation.Inline:
@@ -420,6 +425,14 @@ func segmentsOf(runs []docfile.Chars) []Segment {
 			Underline: r.Format.Underline, Strikethrough: r.Format.Strike,
 			Superscript: r.Format.Superscript, Subscript: r.Format.Subscript, Href: r.Format.Link, Lang: r.Format.Lang, Comment: r.Format.Comment,
 		}
+		if js, ok := strings.CutPrefix(r.Format.Style, formFieldStyle); ok {
+			var ff docfile.FormFieldItem
+			if json.Unmarshal([]byte(js), &ff) == nil {
+				f.Field = &ff
+				out = append(out, Segment{Text: r.Text, Format: f}) // whole: the words of a field are not split
+				continue
+			}
+		}
 		if fm, ok := strings.CutPrefix(r.Format.Style, formulaStyle); ok {
 			f.Formula = fm
 			out = append(out, Segment{Text: r.Text, Format: f}) // whole: the words of a formula are not split
@@ -450,6 +463,9 @@ func segmentsOf(runs []docfile.Chars) []Segment {
 // noteRefStyle marks the run of a footnote's number while a document is turned into a snapshot (no
 // stored style name starts with a NUL).
 const noteRefStyle = "\x00note:"
+
+// formFieldStyle likewise marks the run of a form field, followed by the field as JSON.
+const formFieldStyle = "\x00formfield:"
 
 // formulaStyle likewise marks the run of an inline formula, followed by the formula's notation.
 const formulaStyle = "\x00formula:"
