@@ -1687,6 +1687,13 @@
   "speech.failedLocal": "Das Add-on konnte die Aufnahme nicht in Text umwandeln. Es wurde nichts hinzugefügt.",
   "speech.useLocal": "Auf diesem Gerät diktieren (das Add-on whisper), statt die Aufnahme an die obige Adresse zu senden",
   "img.hint.working": "Das Bild wird auf diesem Gerät beschrieben…",
-  "img.hint.draftAddon": "Ein Entwurf nach dem, was das Bild zeigt, auf diesem Gerät vom Add-on describe erstellt. Er kann falsch sein: Lesen und ändern Sie ihn: "
+  "img.hint.draftAddon": "Ein Entwurf nach dem, was das Bild zeigt, auf diesem Gerät vom Add-on describe erstellt. Er kann falsch sein: Lesen und ändern Sie ihn: ",
+  "ocr.none": "Aus diesem Bild konnte kein Text gelesen werden.",
+  "ocr.read": "Den Text im Bild lesen",
+  "ocr.working": "Das Bild wird auf diesem Gerät gelesen…",
+  "ocr.textLabel": "Aus Bild %d gelesener Text (mit dem Bild vergleichen)",
+  "ocr.insert": "Den Text hinter das Bild setzen",
+  "ocr.inserted": "Der Text steht im Dokument, hinter dem Bild.",
+  "ocr.asLong": "Den Text als lange Beschreibung verwenden"
  }
 }

@@ -1687,6 +1687,13 @@
   "speech.failedLocal": "Le module n’a pas pu transformer l’enregistrement en texte. Rien n’a été ajouté.",
   "speech.useLocal": "Dicter sur cet appareil (le module whisper) au lieu d’envoyer l’enregistrement à l’adresse ci-dessus",
   "img.hint.working": "Description de l’image sur cet appareil…",
-  "img.hint.draftAddon": "Un brouillon de ce que montre l’image, fait sur cet appareil par le module describe. Il peut être faux : lisez-le et modifiez-le : "
+  "img.hint.draftAddon": "Un brouillon de ce que montre l’image, fait sur cet appareil par le module describe. Il peut être faux : lisez-le et modifiez-le : ",
+  "ocr.none": "Aucun texte n’a pu être lu dans cette image.",
+  "ocr.read": "Lire le texte de l’image",
+  "ocr.working": "Lecture de l’image sur cet appareil…",
+  "ocr.textLabel": "Texte lu dans l’image %d (à vérifier avec l’image)",
+  "ocr.insert": "Mettre le texte après l’image",
+  "ocr.inserted": "Le texte est dans le document, après l’image.",
+  "ocr.asLong": "Utiliser le texte comme description longue"
  }
 }
