@@ -20,7 +20,7 @@ import (
 // ?translate=… and ?grammar=…&model=… parameters) and what they last said.
 type langState struct {
 	translator translate.Translator // the server at ?translate=…, else the translate add-on, else nil
-	grammar    *grammar.Client
+	grammar    grammar.Checker      // the model server at ?grammar=…, else the llm add-on, else nil
 	target     string
 	translated string
 	selFrom    int // the selection that was translated
@@ -60,6 +60,7 @@ func langPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(),
 	l := &u.lang
 	fl := flow()
 	tr := u.translator()
+	gc := u.grammarChecker()
 	detected, detectedCode := "", ""
 	if fl != nil {
 		if code, ok := lang.Detect(fl.EditText()); ok {
@@ -68,7 +69,7 @@ func langPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(),
 	}
 	props := components.LanguagePanelProps{
 		Detected: detected, Target: l.target, Translation: l.translated, Busy: l.busy, Error: l.err, Checked: l.checked,
-		GrammarEnabled:  l.grammar != nil,
+		GrammarEnabled:  gc != nil,
 		ReadOnly:        !state.Role.CanEdit() || state.Mode == canvas.ModeView,
 		OnTarget:        func(code string) { l.target = code },
 		UseDetectedDone: u.docLang == detectedCode,
@@ -131,16 +132,20 @@ func langPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(),
 		renderUI()
 	}
 	props.OnCheckGrammar = func() {
-		if fl == nil || l.grammar == nil || l.busy {
+		if fl == nil || gc == nil || l.busy {
 			return
 		}
 		text := fl.EditText()
 		l.busy, l.err = true, ""
 		renderUI()
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+			timeout := 90 * time.Second
+			if l.grammar == nil {
+				timeout = 10 * time.Minute // a model on this device takes its time
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
-			issues, err := l.grammar.Check(ctx, text)
+			issues, err := gc.Check(ctx, text)
 			l.busy = false
 			if err != nil {
 				l.err = err.Error()

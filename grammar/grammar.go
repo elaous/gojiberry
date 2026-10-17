@@ -28,6 +28,26 @@ type Issue struct {
 	Suggestion string
 }
 
+// Checker finds grammar issues in a text. The Client (an Ollama-compatible server) is one; the page has another over the
+// llm add-on, which runs a model on the device.
+type Checker interface {
+	Check(ctx context.Context, text string) ([]Issue, error)
+}
+
+var _ Checker = Client{}
+
+// Prompt is what a model is asked to check text for; the answer is read with ParseIssues. Text longer than MaxText is cut
+// by the caller (see Cut).
+func Prompt(text string) string { return fmt.Sprintf(prompt, text) }
+
+// Cut limits text to MaxText runes, the most one call checks.
+func Cut(text string) string {
+	if rs := []rune(text); len(rs) > MaxText {
+		return string(rs[:MaxText])
+	}
+	return text
+}
+
 // Client asks a model.
 type Client struct {
 	// BaseURL is the Ollama server ("http://localhost:11434").
@@ -51,11 +71,7 @@ const MaxText = 8000
 
 // Check asks the model for the grammar issues in text.
 func (c Client) Check(ctx context.Context, text string) ([]Issue, error) {
-	rs := []rune(text)
-	if len(rs) > MaxText {
-		rs = rs[:MaxText]
-		text = string(rs)
-	}
+	text = Cut(text)
 	if strings.TrimSpace(text) == "" {
 		return nil, nil
 	}
