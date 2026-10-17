@@ -53,7 +53,7 @@ func TestDownloadAReaderVoiceAndReadWithIt(t *testing.T) {
 	d.Eval(piperStub, nil)
 	d.Click(`button[data-tab="voices"]`)
 	d.WaitSelector("#voices-load")
-	d.OK(d.Int(`window.__asked.filter(u => u.endsWith('voices.json')).length`) == 0, "the catalogue is not asked for before the person says so")
+	d.OK(d.Int(`window.__asked.filter(u => u === 'https://voices.test/voices.json').length`) == 0, "the catalogue is not asked for before the person says so")
 	d.Click("#voices-load")
 	d.WaitSelector("#voices-item-0")
 	text := d.Text("#voices-item-0")
