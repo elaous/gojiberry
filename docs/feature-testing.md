@@ -302,6 +302,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** `TestFormFieldsAddFillLockAndClear` (examples/canvas-editor-showcase), `TestFormFieldProblems`, `TestFormFieldEyePenAndCheckboxPresses`, `TestClearFormFieldsAndWords` (canvas), `TestFormFieldRoundTripsThroughTheFlow` (docfile), the form-field pair of `TestFidelityMatrixMatchesTheExporters` (export)
 
+## Add-ons
+
+**Try it.** On a page with a whisper add-on: Add-ons tab > Show the models > Download; Speech tab > tick "Dictate on this device", then Dictate, say something and press stop; remove the model again. Without an add-on the tab says "Not on this page".
+
+**You should see.** The model with its size and a link to its terms; progress while it downloads; the text in the document, with nothing sent to any address.
+
+**Automated.** `TestAddonsTabAndDictationOnTheDevice` (examples/canvas-editor-showcase, with a stand-in add-on), package `addons` (`ParseModels`).
+
 ## Preferences
 
 **Try it.** Choose **Larger text** and **High contrast**, reload, and check they stay.

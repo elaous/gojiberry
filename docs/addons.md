@@ -7,7 +7,19 @@ window.addons = window.addons || {};
 window.addons.piper = { synthesize(model, config, text, lengthScale) { /* ... */ } };
 ```
 
-The rules every add-on follows:
+## Models
+
+An add-on that keeps models (a speech model, a dictionary, a language pair) offers three more methods, and the Add-ons tab lists, downloads and removes them without knowing what they are:
+
+```js
+models()                     // -> Promise<[{id, label, lang?, size?, licence?, installed}]>
+install(id, onProgress)      // -> Promise; onProgress(bytesDone, bytesTotal) as it goes
+remove(id)                   // -> Promise
+```
+
+`id` is letters, digits and `._:-`; `size` is the download in bytes; `licence` is an https address (shown as a link) or a short name (shown as text). The page asks for `models()` only when the person presses "Show the models", and for `install` only when they press Download, with the size shown on the button.
+
+## The rules every add-on follows
 
 - **Optional.** The page asks for an add-on by name and does without it. No feature stops working because an add-on is missing; the page says what it lacks.
 - **Nothing before a request.** An add-on's script is added to the page by the operator (or named in the page's own configuration file); its models and data are downloaded only when a person asks, with the size and the licence shown first.
@@ -18,7 +30,7 @@ The rules every add-on follows:
 | Name | What it offers | Used by | State |
 |---|---|---|---|
 | `piper` | `synthesize(model, config, text, lengthScale)` and optionally `cancel()`: text to sound with a downloaded voice | Reader voices ([reader-voices.md](reader-voices.md)) | built |
-| `whisper` | speech to text on the device | dictation (today it goes through the voice server) | idea |
+| `whisper` | `transcribe({samples, sampleRate, language, prompt, model})` -> `Promise<{text}>`: `samples` is a `Float32Array`, 16 kHz mono; `model` is the model the person downloaded for the language, or "" for the add-on's own pick | dictation in the Speech tab ("Dictate on this device"); the recogniser at an address stays as the other way | built |
 | `describe` | a description drafted from what a picture shows | the picture description hint (today only shape and colours, `imagehint`) | idea |
 | `ocr` | text from scanned pages and images | importing scans (today `pdftext` reads text PDFs only) | idea |
 | `translate` | translation of the selection or the document | none yet | idea |
