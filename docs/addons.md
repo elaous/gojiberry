@@ -36,6 +36,6 @@ remove(id)                   // -> Promise
 | `translate` | `translate({text, from, to, model})` -> `Promise<{text, detected?}>`: `from` and `to` are plain language tags (`from` may be ""), `model` is the installed model for the pair or "". A model for a pair has `lang` "from>to" (for example "en>de") | the Language tab's "Translate the selection" when the page address names no translation server (a server still takes precedence) | built |
 | `llm` | `generate({prompt, format, maxTokens, model})` -> `Promise<{text}>`: `format` is "json" when the page needs a JSON answer, "" for text | the Language tab: the grammar check (when the page address names no model server) and **Writing help** (summarise, plainer words, shorter, more formal, friendlier, explain: package `helper`) | built |
 | `diagram` | render a flowchart or a map | the flowchart and map objects (not built) | idea |
-| `spell` | dictionaries that work offline | the spelling panel (today it fetches `/dict` from the server) | idea |
+| `spell` | `load(id)` -> `Promise<{dic: Uint8Array, aff: Uint8Array}>`: the bytes of an installed dictionary's Hunspell `.dic` and `.aff` files; it checks nothing itself, the page reads them (`spell.LoadHunspell`). Plus the usual `models`, `install`, `remove` | the Spelling tab's list of dictionaries, next to the built-in English one and those a dictionary server offers | built |
 
 "Idea" means the name and the purpose are noted here, not that anything is built: the contract of each is written when its feature is.
