@@ -18,7 +18,9 @@ func TestScriptsRunInASandboxAndAskForWhatTheyMayHave(t *testing.T) {
 	d.Click(`button[data-tab="scripts"]`)
 	d.WaitSelector("#scripts-source")
 
-	log := func() string { return d.Str(`Array.from(document.querySelectorAll('#scripts-log li')).map(l => l.textContent).join('|')`) }
+	log := func() string {
+		return d.Str(`Array.from(document.querySelectorAll('#scripts-log li')).map(l => l.textContent).join('|')`)
+	}
 	run := func(src string) {
 		d.Fill("#scripts-source", src)
 		d.Click("#scripts-run")
@@ -37,6 +39,17 @@ func TestScriptsRunInASandboxAndAskForWhatTheyMayHave(t *testing.T) {
 	d.WaitSelector("#scripts-read-warning")
 	run(`const t = await editor.text(); editor.log("length " + (t.length > 0));`)
 	d.OK(log() == "length true", "and given when allowed: "+log())
+
+	// writing is refused until allowed too, then goes in at the caret (edit mode, caret in the text)
+	run(`try { await editor.insert("X"); } catch (e) { editor.log("refused: " + e.message); }`)
+	d.OK(strings.Contains(log(), "refused: not allowed"), "writing is refused: "+log())
+	d.Click("#scripts-allow-write input")
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	run(`editor.log(String(await editor.insert("ZZ")));`)
+	d.OK(log() == "true", "the text went in: "+log())
+	run(`editor.log(String((await editor.text()).includes("ZZ")));`)
+	d.OK(log() == "true", "and is in the document: "+log())
 
 	// a command outside the registry is refused, and the page's own world is not there
 	run(`try { await editor.run("not-a-command"); } catch (e) { editor.log(e.message); }
