@@ -60,6 +60,13 @@ test:
 a11y-test:
 	GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -run 'Axe|Accessib|ScreenReader|ReadingCopy|Keyboard|ArrowKeys|DialogFocus|DisplayPreferences' ./examples/canvas-editor-showcase/
 
+# e2e-test is the whole browser suite of the showcase (every end-to-end test, about 25 minutes). It needs Chrome or
+# Chromium and fails, rather than skips, without one. Run it at the full run every ten merges, or from the hosted
+# workflow ("e2e"). It is not part of `make test`'s default time budget on purpose.
+.PHONY: e2e-test
+e2e-test:
+	GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -timeout 75m ./examples/canvas-editor-showcase/
+
 # pdfa11y-test checks the tagged PDF the exporter writes with pdfa11y (github.com/speedata/pdfa11y, a Go
 # checker for the machine-checkable part of PDF/UA). It installs the tool into .pdfa11y/ (ignored by git) and
 # makes the test fail, not skip, if it is missing. veraPDF remains the reference validator (roadmap 63).

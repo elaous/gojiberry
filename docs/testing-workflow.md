@@ -24,19 +24,19 @@ remote check is wanted. The checks run here instead.
 
 No hosted runner (or no minutes) is needed: `make ci-local` runs the `make` steps of the workflow on this
 machine, in the workflow's own order (`generate`, `fmt-check`, `vet`, `test`, `wasm-vet`, `lint`,
-`wasm-lint`, `lint-modules`, `modules`, `wasm-size`, `a11y-test`, `grammar-test-setup`, `grammar-test`,
+`wasm-lint`, `lint-modules`, `modules`, `wasm-size`, `a11y-test`, `e2e-test`, `grammar-test-setup`, `grammar-test`,
 `mail-test`; each once). It reads them from every job of `.github/workflows/ci.yml`
 (`.github/scripts/local-ci.sh`), so a step added there runs here too. The jobs that need a database
 service (PostgreSQL, MongoDB) are not `make` steps and are not run locally.
 
 The hosted workflow is manual ("Run workflow" on the Actions tab) and asks **what to run**: `all`,
-`fast-checks`, `a11y` (the accessibility gate in the runner's Chrome), `mailpit` (the SMTP sender against
+`fast-checks`, `a11y` (the accessibility gate in the runner's Chrome), `e2e` (the whole browser suite of the showcase, about 25 minutes; `make e2e-test` runs the same thing here), `mailpit` (the SMTP sender against
 the `axllent/mailpit` Docker image), `grammar`, `postgres` or `mongodb`.
 
 - `make ci-local` stops at the first failure; `.github/scripts/local-ci.sh -k` keeps going and lists
   every failure at the end.
 - `make ci-local STEPS="wasm-size a11y-test"` runs only those steps.
-- `LOCAL_CI_SKIP` is the steps to leave out; the default is `coverage-badge` (it runs the whole test suite a second time, and the
+- `LOCAL_CI_SKIP` is the steps to leave out; the default is `coverage-badge e2e-test` (the whole browser suite, about 25 minutes: `make e2e-test`, or `make ci-local STEPS=e2e-test`) and `coverage-badge` (it runs the whole test suite a second time, and the
   badge is updated by hand; run `make coverage-badge` yourself at a full run and commit README.md).
   `LOCAL_CI_LIST=1` prints the steps and stops.
 - `local-ci-report.txt` (ignored by git) has the commit, and each step with its time and result.
