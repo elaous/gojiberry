@@ -3,8 +3,8 @@ package docximport
 import "strings"
 
 // Office Math (<m:oMath>) is read back into the editor's linear notation (frac{a}{b}, sqrt{x}, x^2, x_i, pi, sum, ...):
-// the fraction, root, scripts, delimiters, n-ary operators (sum and integral), functions and plain runs. Anything
-// else (matrices, accents, bars, limits above and below) keeps the text it has, without its layout.
+// the fraction, root, scripts, delimiters, n-ary operators (sum and integral), matrices and aligned equations, functions and plain runs. Anything
+// else (accents, bars, limits above and below) keeps the text it has, without its layout.
 
 var ommlSymbols = map[rune]string{
 	'π': "pi", 'α': "alpha", 'β': "beta", 'γ': "gamma", 'δ': "delta", 'θ': "theta", 'λ': "lambda", 'μ': "mu",
@@ -28,6 +28,19 @@ func linearFormula(n *node) string {
 		var sb strings.Builder
 		walk(n, &sb)
 		return "{" + sb.String() + "}"
+	}
+	rows := func(rs []*node, cells func(*node) []*node, sep string) string {
+		var lines []string
+		for _, r := range rs {
+			var cs []string
+			for _, c := range cells(r) {
+				var sb strings.Builder
+				walk(c, &sb)
+				cs = append(cs, strings.Join(strings.Fields(sb.String()), " "))
+			}
+			lines = append(lines, strings.Join(cs, sep))
+		}
+		return strings.Join(lines, ` \\ `)
 	}
 	walk = func(n *node, out *strings.Builder) {
 		if n == nil {
@@ -66,7 +79,24 @@ func linearFormula(n *node) string {
 		case "rad":
 			out.WriteString("sqrt" + braced(n.child("e")))
 			return
+		case "m":
+			out.WriteString("matrix{" + rows(n.children("mr"), func(mr *node) []*node { return mr.children("e") }, " & ") + "}")
+			return
+		case "eqArr":
+			// aligned equations: a line each, the & of its runs marking where they line up
+			var lines []string
+			for _, e := range n.children("e") {
+				var sb strings.Builder
+				walk(e, &sb)
+				lines = append(lines, strings.Join(strings.Fields(strings.ReplaceAll(sb.String(), "&", " & ")), " "))
+			}
+			out.WriteString("aligned{" + strings.Join(lines, ` \\ `) + "}")
+			return
 		case "d":
+			if es := n.children("e"); len(es) == 1 && es[0].child("m") != nil && len(es[0].kids) == 1 {
+				walk(es[0], out) // a matrix between its brackets: the notation's matrix has its own
+				return
+			}
 			out.WriteString("(")
 			for i, e := range n.children("e") {
 				if i > 0 {
@@ -92,7 +122,7 @@ func linearFormula(n *node) string {
 			}
 			walk(n.child("e"), out)
 			return
-		case "oMathPara", "oMath", "e", "num", "den", "sub", "sup", "deg", "fName", "func", "r", "lim", "limLow", "limUpp", "acc", "bar", "box", "groupChr", "phant", "m", "mr", "eqArr", "sPre", "sSupPr":
+		case "oMathPara", "oMath", "e", "num", "den", "sub", "sup", "deg", "fName", "func", "r", "lim", "limLow", "limUpp", "acc", "bar", "box", "groupChr", "phant", "mr", "sPre", "sSupPr":
 		}
 		for _, k := range n.kids {
 			switch k.name {
