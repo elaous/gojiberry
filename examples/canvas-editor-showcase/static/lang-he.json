@@ -1818,6 +1818,11 @@
     "forms.restoreText": "טקסט הגיבוי",
     "forms.restoreGo": "שחזור",
     "forms.restoreBad": "זה לא גיבוי של מפתח.",
-    "forms.restored": "המפתח שוחזר."
+    "forms.restored": "המפתח שוחזר.",
+    "diagram.editing": "שנו את התיאור וציירו את התרשים מחדש; הוא יחליף את התמונה.",
+    "diagram.replaced": "התרשים במסמך צויר מחדש.",
+    "diagram.replace": "החלפת התרשים במסמך",
+    "diagram.cancelEdit": "להשאיר את התמונה כמות שהיא",
+    "diagram.edit": "שינוי התרשים"
   }
 }

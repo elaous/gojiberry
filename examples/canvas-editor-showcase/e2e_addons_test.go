@@ -244,5 +244,16 @@ func TestDrawADiagramWithTheDiagramAddon(t *testing.T) {
 	d.WaitSelector("#img-alt-0")
 	d.OK(d.Value("#img-alt-0") == "Three boxes in a row, A leads to B and B to C.", "the description is the picture's alt text")
 	d.OK(d.Value("#img-long-0") == "A --> B --> C", "and the source is its long description: "+d.Value("#img-long-0"))
+
+	// the picture can be changed: its description goes back into the form and the new drawing takes its place
+	d.Click("#img-diagram-0")
+	d.WaitFor("the form has the description", `document.getElementById('diagram-source').value === 'A --> B --> C' && document.getElementById('diagram-kind').value === 'map'`)
+	d.Fill("#diagram-source", "A --> B --> C --> D")
+	d.Click("#diagram-draw")
+	d.WaitSelector("#diagram-preview")
+	d.OK(d.Value("#diagram-alt") == "Three boxes in a row, A leads to B and B to C.", "the words for the drawing are kept: "+d.Value("#diagram-alt"))
+	d.Click("#diagram-insert")
+	d.WaitFor("it was drawn again", `document.getElementById('diagram-msg') && document.getElementById('diagram-msg').textContent.includes('drawn again') && document.getElementById('img-long-0') && document.getElementById('img-long-0').value === 'A --> B --> C --> D'`)
+	d.OK(!d.Has("#img-alt-1"), "in place of the picture, not next to it")
 	d.NoErrors()
 }

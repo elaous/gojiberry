@@ -131,6 +131,8 @@ type ImageItem struct {
 	// Credit and SourceURL are the author, licence and page of a picture found in an image repository (canvas.Image).
 	Credit    string `json:"credit,omitempty" pb:"13"`
 	SourceURL string `json:"sourceUrl,omitempty" pb:"14"`
+	// Diagram is the kind of a picture drawn by the diagram add-on from the description in LongDesc ("" for another picture).
+	Diagram string `json:"diagram,omitempty" pb:"15"`
 }
 
 // EquationItem is a formula in the linear notation of package export (x^2, frac{a}{b}, sqrt{x}) and its text
@@ -432,7 +434,7 @@ func FromItems(items []canvas.Item) []Item {
 				if src, ok := o.Src.(canvas.URLSource); ok && src.URL() != "" {
 					out = append(out, Item{Image: &ImageItem{URL: src.URL(), Width: o.W, Height: o.H, Alpha: o.Alpha,
 						ClipLeft: o.Clip.Left, ClipTop: o.Clip.Top, ClipRight: o.Clip.Right, ClipBottom: o.Clip.Bottom,
-						Alt: o.Alt, Decorative: o.Decorative, LongDesc: o.LongDesc, Legend: o.Legend, Credit: o.Credit, SourceURL: o.SourceURL}})
+						Alt: o.Alt, Decorative: o.Decorative, LongDesc: o.LongDesc, Legend: o.Legend, Credit: o.Credit, SourceURL: o.SourceURL, Diagram: o.Diagram}})
 				}
 			case *canvas.FormFieldObject:
 				out = append(out, Item{Form: &FormFieldItem{Kind: string(o.Kind), Name: o.Name, Label: o.Label, Placeholder: o.Placeholder,
@@ -689,7 +691,7 @@ func imageObject(it ImageItem) canvas.InlineObject {
 			}
 			img.Clip = canvas.Insets{Left: it.ClipLeft, Top: it.ClipTop, Right: it.ClipRight, Bottom: it.ClipBottom}
 			img.Alt, img.Decorative, img.LongDesc, img.Legend = it.Alt, it.Decorative, it.LongDesc, it.Legend
-			img.Credit, img.SourceURL = it.Credit, it.SourceURL
+			img.Credit, img.SourceURL, img.Diagram = it.Credit, it.SourceURL, it.Diagram
 			return img
 		}
 	}

@@ -122,6 +122,9 @@ type Image struct {
 	// chart): what a person who cannot see it needs to follow the text around it. The exports write it
 	// as text after the image, linked to it in HTML.
 	LongDesc string
+	// Diagram is the kind ("flowchart", "map") of a picture drawn by the diagram add-on from a description; the
+	// description is kept in LongDesc, so the picture can be drawn again from it. "" for any other picture.
+	Diagram string
 	// Legend is the visible caption under the picture ("Figure 1: ..."), drawn in small italic type, centred and wrapped to
 	// the picture's width. Unlike Alt and LongDesc, which are for people who cannot see the picture, everybody reads it;
 	// the exports write it under the picture.
