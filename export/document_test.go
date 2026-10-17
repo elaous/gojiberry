@@ -303,3 +303,41 @@ func TestInlineFormulaIsInlineMathMLInHTML(t *testing.T) {
 		t.Errorf("text:\n%s", txt)
 	}
 }
+
+// A form field is an HTML control in the HTML export, with its label, its value and its checks, and the words
+// "label: value" in the formats that have no controls.
+func TestFormFieldsAreHTMLControlsAndWordsElsewhere(t *testing.T) {
+	doc := docfile.Document{Content: []docfile.Item{
+		{Chars: &docfile.Chars{Text: "Order "}},
+		{Form: &docfile.FormFieldItem{Kind: "text", Name: "order", Label: `Order "no."`, Placeholder: "AB123", Pattern: `[A-Z]{2}\d{3}`, Required: true, Value: `AB123<b>`}},
+		{Chars: &docfile.Chars{Text: " "}},
+		{Form: &docfile.FormFieldItem{Kind: "checkbox", Name: "ok", Label: "I agree", Value: "true"}},
+		{Chars: &docfile.Chars{Text: " "}},
+		{Form: &docfile.FormFieldItem{Kind: "select", Name: "size", Label: "Size", Options: []string{"S", "M<"}, Value: "M<"}},
+		{Chars: &docfile.Chars{Text: " "}},
+		{Form: &docfile.FormFieldItem{Kind: "textarea", Label: "Note", Value: "two\nlines"}},
+	}}
+	snap := FromDocument(doc)
+	html, err := HTML{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(html)
+	for _, want := range []string{
+		`<label>Order "no." <input type="text" name="order" required placeholder="AB123" pattern="[A-Z]{2}\d{3}" value="AB123&lt;b&gt;"></label>`,
+		`<label><input type="checkbox" name="ok" checked> I agree</label>`,
+		`<option value="M&lt;" selected>M&lt;</option>`,
+		`<textarea>two`,
+	} {
+		if !strings.Contains(strings.ReplaceAll(s, "&quot;", "&#34;"), want) {
+			t.Errorf("html lacks %s:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "<b>") {
+		t.Error("a value is escaped, never markup")
+	}
+	txt, _ := PlainText{}.Export(snap)
+	if !strings.Contains(string(txt), `Order "no.": AB123<b> [x] I agree`) {
+		t.Errorf("text:\n%s", txt)
+	}
+}

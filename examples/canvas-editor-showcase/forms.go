@@ -10,6 +10,8 @@ import (
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/components"
+	"github.com/elaous/gojiberry/formdata"
+	"github.com/elaous/gojiberry/transfer"
 	"github.com/elaous/gojiberry/xango"
 )
 
@@ -169,7 +171,11 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 	nodes = append(nodes,
 		xango.El("div", []xango.Attr{xango.A("id", "forms-bar"), xango.A("role", "toolbar"), xango.A("aria-label", T("forms.bar", "Field types")),
 			xango.A("style", "display:flex;flex-wrap:wrap;gap:4px;margin-bottom:0.6em")}, bar...),
-		btn("forms-clear", T("forms.clear", "Clear form fields"), func() { u.clearFormFields(fl, redraw, renderUI) }, fl == nil),
+		xango.El("div", []xango.Attr{xango.A("style", "display:flex;flex-wrap:wrap;gap:6px")},
+			btn("forms-clear", T("forms.clear", "Clear form fields"), func() { u.clearFormFields(fl, redraw, renderUI) }, fl == nil),
+			btn("forms-answers-json", T("forms.answersJSON", "Download the answers (JSON)"), func() { u.downloadAnswers(fl, "json", renderUI) }, fl == nil || len(fl.FormFields()) == 0),
+			btn("forms-answers-csv", T("forms.answersCSV", "Download the answers (CSV)"), func() { u.downloadAnswers(fl, "csv", renderUI) }, fl == nil || len(fl.FormFields()) == 0),
+		),
 	)
 	if !canEdit {
 		nodes = append(nodes, para("forms-readonly", T("forms.needEdit", "Switch to edit mode to add or change form fields."), false))
@@ -386,4 +392,41 @@ func formPropsEditor(u *ui, fl *canvas.TextFlow, t *canvas.FormFieldObject, redr
 	}
 	kids = append(kids, btn("forms-edit-done", T("forms.done", "Done"), func() { u.forms.target = nil; renderUI() }, false))
 	return xango.El("section", []xango.Attr{xango.A("id", "forms-editor"), xango.A("class", "gj-doc-item")}, kids...)
+}
+
+// downloadAnswers saves the answers written in the fields as a JSON object or a CSV row. Fields with a problem are
+// saved as they are, and the message says so.
+func (u *ui) downloadAnswers(fl *canvas.TextFlow, format string, renderUI func()) {
+	if fl == nil {
+		return
+	}
+	var fields []formdata.Field
+	problems := 0
+	for _, ff := range fl.FormFields() {
+		fields = append(fields, formdata.Field{Kind: string(ff.Kind), Name: ff.Name, Label: ff.Label, Value: ff.Value})
+		if ff.Problem() != "" {
+			problems++
+		}
+	}
+	var data []byte
+	var err error
+	name, mime := "answers.json", "application/json"
+	if format == "csv" {
+		data, err = formdata.CSV(fields)
+		name, mime = "answers.csv", "text/csv"
+	} else {
+		data, err = formdata.JSON(fields)
+	}
+	if err != nil {
+		u.forms.msg = err.Error()
+		renderUI()
+		return
+	}
+	transfer.Download(name, mime, data)
+	u.forms.msg = T("forms.answersSaved", "The answers were saved.")
+	if problems > 0 {
+		u.forms.msg = T("forms.answersProblems", "Some fields have a problem; the answers were saved as they are.")
+	}
+	u.announce(u.forms.msg)
+	renderUI()
 }

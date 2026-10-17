@@ -49,6 +49,10 @@ func TestFormFieldsAddFillLockAndClear(t *testing.T) {
 
 	d.Click(`button[data-tab="forms"]`)
 	d.WaitSelector("#forms-lock-0")
+	_, js := d.Download(func() { d.Click("#forms-answers-json") })
+	d.OK(strings.Contains(string(js), `"field1": "AB123"`) && strings.Contains(string(js), `"field2": false`), "the answers as JSON: "+string(js))
+	_, csv := d.Download(func() { d.Click("#forms-answers-csv") })
+	d.OK(strings.HasPrefix(string(csv), "field1,field2\nAB123,false"), "and as CSV: "+string(csv))
 	d.Click("#forms-lock-0")
 	d.WaitFor("a locked field has no pen", `document.getElementById('forms-locked-0') && !document.getElementById('forms-edit-0')`)
 	d.Click("#forms-lock-0")

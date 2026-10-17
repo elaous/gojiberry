@@ -1732,6 +1732,10 @@
     "diagram.stale": "A descrição mudou desde que foi desenhado: desenhe de novo.",
     "diagram.insert": "Pôr o diagrama no documento",
     "diagram.needAlt": "Um diagrama precisa de uma descrição em palavras: escreva o que mostra.",
-    "diagram.inserted": "O diagrama está no documento. A sua descrição fica guardada como descrição longa da imagem."
+    "diagram.inserted": "O diagrama está no documento. A sua descrição fica guardada como descrição longa da imagem.",
+    "forms.answersJSON": "Transferir as respostas (JSON)",
+    "forms.answersCSV": "Transferir as respostas (CSV)",
+    "forms.answersSaved": "As respostas foram guardadas.",
+    "forms.answersProblems": "Alguns campos têm um problema; as respostas foram guardadas tal como estão."
   }
 }

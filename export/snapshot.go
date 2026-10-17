@@ -1,5 +1,7 @@
 package export
 
+import "github.com/elaous/gojiberry/docfile"
+
 // BlockKind mirrors editor's own document.BlockMeta.Kind, translated
 // to this package's own type by document.exportSnapshot -- kept as a
 // separate type (not editor's own BlockKind) so this package has no
@@ -47,6 +49,9 @@ type Format struct {
 	// Formula is the notation of a formula that stands in this run's line of text (the run's text is its words);
 	// the HTML export writes it as inline MathML, the other formats keep the words.
 	Formula string
+	// Field is a form field that stands in this run's line (the run's text is its label and value); the HTML export
+	// writes a control, the other formats keep the words.
+	Field *docfile.FormFieldItem
 	// Change says the run is a suggested change not yet accepted or rejected (see FromDocumentTracked): text
 	// proposed to be added or proposed to be removed, by Author at Time (unix seconds). A Snapshot
 	// from FromDocument never has it: it shows the document as it would be if every suggestion were accepted.

@@ -138,6 +138,7 @@ const (
 	NoteAltText      = "alt-text"       // an equation is written as its text alternative, not typeset
 	NoteLongDescText = "long-desc-text" // a long description is text after the picture, not linked to it
 	NoteFormText     = "form-text"      // a form field is written as its label and what is in it, not as a field
+	NoteFormControl  = "form-control"   // a form field is an HTML control; read back it is its label and value as text
 )
 
 type entry struct {

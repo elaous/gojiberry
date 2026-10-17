@@ -1732,6 +1732,10 @@
   "diagram.stale": "La description a changé depuis le dessin : dessinez-le à nouveau.",
   "diagram.insert": "Mettre le diagramme dans le document",
   "diagram.needAlt": "Un diagramme demande une description en mots : écrivez ce qu’il montre.",
-  "diagram.inserted": "Le diagramme est dans le document. Sa description est gardée comme description longue de l’image."
+  "diagram.inserted": "Le diagramme est dans le document. Sa description est gardée comme description longue de l’image.",
+  "forms.answersJSON": "Télécharger les réponses (JSON)",
+  "forms.answersCSV": "Télécharger les réponses (CSV)",
+  "forms.answersSaved": "Les réponses ont été enregistrées.",
+  "forms.answersProblems": "Certains champs ont un problème ; les réponses ont été enregistrées telles quelles."
  }
 }
