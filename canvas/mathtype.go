@@ -25,12 +25,16 @@ const (
 	mSqrt                // kids[0] under a radical
 	mFrac                // kids[0] over kids[1]
 	mScript              // kids[0] with kids[1] below and kids[2] above (either may be nil)
+	mTable               // rows of cells: kids are rows (mRow), a row's kids are cells (mRow); text is "matrix" or "aligned"
 )
 
 type mnode struct {
 	kind mkind
 	text string
 	kids []*mnode
+	// limits puts the scripts of a sum (or lim) above and below it instead of beside it, as a formula on a line of
+	// its own is written; set by markLimits.
+	limits bool
 }
 
 var mathGreek = map[string]string{
@@ -52,6 +56,52 @@ func parseMath(formula string) *mnode {
 }
 
 func (p *mparser) more() bool { return p.pos < len(p.src) }
+
+// nextIs says the next rune, after spaces, is r.
+func (p *mparser) nextIs(r rune) bool {
+	i := p.pos
+	for i < len(p.src) && unicode.IsSpace(p.src[i]) {
+		i++
+	}
+	if i < len(p.src) && p.src[i] == r {
+		p.pos = i
+		return true
+	}
+	return false
+}
+
+// table reads the inside of matrix{a & b \\ c & d} (the opening brace is read): cells are separated by & and rows
+// by two backslashes.
+func (p *mparser) table(kind string) *mnode {
+	t := &mnode{kind: mTable, text: kind}
+	row, cell := &mnode{kind: mRow}, &mnode{kind: mRow}
+	endCell := func() { row.kids = append(row.kids, cell); cell = &mnode{kind: mRow} }
+	endRow := func() { endCell(); t.kids = append(t.kids, row); row = &mnode{kind: mRow} }
+	for p.more() {
+		if unicode.IsSpace(p.src[p.pos]) {
+			p.pos++
+			continue
+		}
+		switch c := p.src[p.pos]; {
+		case c == '}':
+			p.pos++
+			endRow()
+			return t
+		case c == '&':
+			p.pos++
+			endCell()
+		case c == '\\' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '\\':
+			p.pos += 2
+			endRow()
+		default:
+			if a := p.script(p.atom()); a != nil {
+				cell.kids = append(cell.kids, a)
+			}
+		}
+	}
+	endRow()
+	return t
+}
 
 func (p *mparser) row(inGroup bool) *mnode {
 	r := &mnode{kind: mRow}
@@ -141,6 +191,9 @@ func (p *mparser) atom() *mnode {
 		case word == "frac":
 			num := p.operand()
 			return &mnode{kind: mFrac, kids: []*mnode{num, p.operand()}}
+		case (word == "matrix" || word == "aligned") && p.nextIs('{'):
+			p.pos++
+			return p.table(word)
 		case word == "sum":
 			return &mnode{kind: mBig, text: "∑"}
 		case word == "int":
@@ -210,6 +263,8 @@ func typeset(p Painter, n *mnode, size float64) mbox {
 		return typesetFrac(p, n, size)
 	case mSqrt:
 		return typesetSqrt(p, n, size)
+	case mTable:
+		return typesetTable(p, n, size)
 	}
 	return typesetRow(p, n, size)
 }
@@ -244,8 +299,13 @@ func typesetRow(p Painter, n *mnode, size float64) mbox {
 	var parts []placed
 	x := 0.0
 	prevOperand := false // something that can be the left side of a binary operator came before
-	for _, k := range n.kids {
-		b := typeset(p, k, size)
+	boxes := make([]mbox, len(n.kids))
+	for i, k := range n.kids {
+		boxes[i] = typeset(p, k, size)
+	}
+	growBrackets(n.kids, boxes, size)
+	for ki, k := range n.kids {
+		b := boxes[ki]
 		pad := 0.0
 		if k.kind == mOp && binary(k.text) && prevOperand {
 			pad = 0.22 * size
@@ -270,6 +330,9 @@ func typesetRow(p Painter, n *mnode, size float64) mbox {
 func typesetScript(p Painter, n *mnode, size float64) mbox {
 	base := typeset(p, n.kids[0], size)
 	small := size * 0.7
+	if n.limits {
+		return typesetLimits(p, n, base, small)
+	}
 	var sub, sup *mbox
 	if n.kids[1] != nil {
 		b := typeset(p, n.kids[1], small)
@@ -355,10 +418,220 @@ func MathSymbols(formula string) []string {
 		case mIdent, mNum, mOp, mFunc, mBig:
 			out = append(out, n.text)
 		}
+		matrix := n.kind == mTable && n.text == "matrix"
+		if matrix {
+			out = append(out, "(")
+		}
 		for _, k := range n.kids {
 			walk(k)
+		}
+		if matrix {
+			out = append(out, ")")
 		}
 	}
 	walk(parseMath(formula))
 	return out
+}
+
+// markLimits sets the scripts of every sum and lim to be drawn above and below it: how a formula on a line of its own
+// is written (in a line of text they stay beside, to keep the line even).
+func markLimits(n *mnode) {
+	if n == nil {
+		return
+	}
+	if n.kind == mScript && n.kids[0] != nil && (n.kids[0].kind == mBig && n.kids[0].text == "∑" || n.kids[0].kind == mFunc && n.kids[0].text == "lim") {
+		n.limits = true
+	}
+	for _, k := range n.kids {
+		markLimits(k)
+	}
+}
+
+// typesetLimits draws the base with the lower script centred under it and the upper one over it.
+func typesetLimits(p Painter, n *mnode, base mbox, small float64) mbox {
+	var sub, sup *mbox
+	if n.kids[1] != nil {
+		b := typeset(p, n.kids[1], small)
+		sub = &b
+	}
+	if n.kids[2] != nil {
+		b := typeset(p, n.kids[2], small)
+		sup = &b
+	}
+	gap := 0.12 * small
+	w := base.w
+	out := mbox{asc: base.asc, desc: base.desc}
+	if sup != nil {
+		w = max(w, sup.w)
+		out.asc += gap + sup.asc + sup.desc
+	}
+	if sub != nil {
+		w = max(w, sub.w)
+		out.desc += gap + sub.asc + sub.desc
+	}
+	out.w = w
+	supY, subY := -(base.asc + gap + 0.5*small), base.desc+gap+0.75*small
+	if sup != nil {
+		supY = -(base.asc + gap + sup.desc)
+	}
+	if sub != nil {
+		subY = base.desc + gap + sub.asc
+	}
+	out.draw = func(p Painter, x, y float64) {
+		base.draw(p, x+(w-base.w)/2, y)
+		if sup != nil {
+			sup.draw(p, x+(w-sup.w)/2, y+supY)
+		}
+		if sub != nil {
+			sub.draw(p, x+(w-sub.w)/2, y+subY)
+		}
+	}
+	return out
+}
+
+// typesetTable lays out a matrix (cells centred in columns, a bracket on each side that grows with it) or aligned
+// equations (the first column to the right, the second to the left, so the signs meet).
+func typesetTable(p Painter, n *mnode, size float64) mbox {
+	cols := 0
+	for _, r := range n.kids {
+		cols = max(cols, len(r.kids))
+	}
+	cells := make([][]mbox, len(n.kids))
+	colW := make([]float64, cols)
+	rowAsc := make([]float64, len(n.kids))
+	rowDesc := make([]float64, len(n.kids))
+	for i, r := range n.kids {
+		for j, c := range r.kids {
+			b := typeset(p, c, size)
+			cells[i] = append(cells[i], b)
+			colW[j] = max(colW[j], b.w)
+			rowAsc[i], rowDesc[i] = max(rowAsc[i], b.asc), max(rowDesc[i], b.desc)
+		}
+	}
+	colGap, rowGap := 0.9*size, 0.25*size
+	if n.text == "aligned" {
+		colGap = 0.1 * size
+	}
+	w := 0.0
+	colX := make([]float64, cols)
+	for j := range colW {
+		colX[j] = w
+		w += colW[j] + colGap
+	}
+	w = max(w-colGap, 0)
+	rowY := make([]float64, len(n.kids)) // each row's baseline from the table's top
+	h := 0.0
+	for i := range n.kids {
+		h += rowAsc[i]
+		rowY[i] = h
+		h += rowDesc[i] + rowGap
+	}
+	h = max(h-rowGap, 0)
+	axis := 0.28 * size
+	asc := h/2 + axis // the table is centred on the math axis
+	desc := h - asc
+	brackets := n.text == "matrix"
+	pad := 0.0
+	if brackets {
+		pad = 0.45 * size
+	}
+	out := mbox{w: w + 2*pad, asc: asc, desc: desc}
+	out.draw = func(p Painter, x, y float64) {
+		top := y - asc
+		for i, r := range cells {
+			for j, b := range r {
+				cx := x + pad + colX[j] + (colW[j]-b.w)/2
+				switch {
+				case n.text == "aligned" && j%2 == 0:
+					cx = x + pad + colX[j] + colW[j] - b.w
+				case n.text == "aligned":
+					cx = x + pad + colX[j]
+				}
+				b.draw(p, cx, top+rowY[i])
+			}
+		}
+		if brackets {
+			drawBracket(p, "(", x, top, h, size)
+			drawBracket(p, ")", x+out.w, top, h, size)
+		}
+	}
+	return out
+}
+
+// drawBracket strokes a bracket of height h with its outer edge at x (left bracket: its left edge; right bracket: its
+// right edge).
+func drawBracket(p Painter, kind string, x, top, h, size float64) {
+	d := 0.28 * size
+	dir := 1.0
+	if kind == ")" || kind == "]" {
+		dir = -1
+	}
+	p.SetLineWidth(1.2)
+	p.BeginPath()
+	switch kind {
+	case "[", "]":
+		p.MoveTo(x+dir*d, top)
+		p.LineTo(x, top)
+		p.LineTo(x, top+h)
+		p.LineTo(x+dir*d, top+h)
+	case "|":
+		p.MoveTo(x, top)
+		p.LineTo(x, top+h)
+	default: // ( and ): a bowed line of segments, farthest out in the middle
+		const steps = 12
+		for i := 0; i <= steps; i++ {
+			t := float64(i)/steps*2 - 1
+			px, py := x+dir*d*t*t, top+float64(i)/steps*h
+			if i == 0 {
+				p.MoveTo(px, py)
+			} else {
+				p.LineTo(px, py)
+			}
+		}
+	}
+	p.Stroke()
+}
+
+// growBrackets replaces a matching ( ) or [ ] that holds something tall (a fraction, a stack of scripts) by a bracket
+// as tall as what it holds.
+func growBrackets(kids []*mnode, boxes []mbox, size float64) {
+	var open []int
+	for i, k := range kids {
+		if k.kind != mOp {
+			continue
+		}
+		switch k.text {
+		case "(", "[":
+			open = append(open, i)
+		case ")", "]":
+			if len(open) == 0 {
+				continue
+			}
+			o := open[len(open)-1]
+			open = open[:len(open)-1]
+			if (kids[o].text == "(") != (k.text == ")") {
+				continue
+			}
+			var asc, desc float64
+			for _, b := range boxes[o+1 : i] {
+				asc, desc = max(asc, b.asc), max(desc, b.desc)
+			}
+			if asc+desc <= 1.5*size {
+				continue
+			}
+			h := asc + desc + 0.1*size
+			for _, at := range [2]int{o, i} {
+				kind := kids[at].text
+				w := 0.4 * size
+				left := at == o
+				boxes[at] = mbox{w: w, asc: asc + 0.05*size, desc: desc + 0.05*size, draw: func(p Painter, x, y float64) {
+					edge := x + 0.05*size
+					if !left {
+						edge = x + w - 0.05*size
+					}
+					drawBracket(p, kind, edge, y-asc-0.05*size, h, size)
+				}}
+			}
+		}
+	}
 }

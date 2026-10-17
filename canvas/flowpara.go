@@ -3,6 +3,7 @@ package canvas
 import (
 	"slices"
 	"strings"
+	"unicode"
 )
 
 // Paragraph formatting in a TextFlow: see ParaFormat. The format of a
@@ -243,4 +244,37 @@ func (f *TextFlow) markdownTableOnEnter() bool {
 	f.Replace([]Edit{{From: ps1, To: pe3, Items: []Item{Inline{Object: NewTableObject(t), Block: true}}}})
 	f.SetCursors([]Cursor{At(ps1 + 1)})
 	return f.InsertText("\n")
+}
+
+// dollarMathOnType turns text typed as $formula$ into an inline formula when the closing $ is typed: the text between
+// two dollar signs of the same paragraph, not empty, without a space next to either sign (so a price like "$5 and $6"
+// stays text) and without an object in it. The formula has no text alternative yet; the accessibility check asks for
+// words. It reports whether it made a formula.
+func (f *TextFlow) dollarMathOnType() bool {
+	rs := f.flatten().runes
+	c := f.sel.caret
+	if c < 3 || c > len(rs) || rs[c-1] != '$' {
+		return false
+	}
+	ps, _ := paraBounds(rs, c)
+	open := -1
+	for i := c - 2; i >= ps; i-- {
+		if rs[i] == '$' {
+			open = i
+			break
+		}
+		if rs[i] == objectRune {
+			return false
+		}
+	}
+	if open < 0 || c-1-open < 2 {
+		return false
+	}
+	inner := rs[open+1 : c-1]
+	if unicode.IsSpace(inner[0]) || unicode.IsSpace(inner[len(inner)-1]) {
+		return false
+	}
+	f.Replace([]Edit{{From: open, To: c, Items: []Item{Inline{Object: &EquationObject{Formula: string(inner), Inline: true}}}}})
+	f.SetCursors([]Cursor{At(open + 1)})
+	return true
 }

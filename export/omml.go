@@ -25,6 +25,8 @@ type mmlNode struct {
 	name string
 	kids []*mmlNode
 	text string
+	// aligned says a table has columnalign set (aligned equations rather than a matrix).
+	aligned bool
 }
 
 // parseMathML reads the well-formed MathML MathML() writes into a tree.
@@ -40,6 +42,11 @@ func parseMathML(s string) *mmlNode {
 		switch t := tok.(type) {
 		case xml.StartElement:
 			n := &mmlNode{name: t.Name.Local}
+			for _, a := range t.Attr {
+				if a.Name.Local == "columnalign" {
+					n.aligned = true
+				}
+			}
 			top := stack[len(stack)-1]
 			top.kids = append(top.kids, n)
 			stack = append(stack, n)
@@ -112,7 +119,37 @@ func ommlOf(n *mmlNode) string {
 	case "mn", "mo":
 		return ommlRun(n.text, n.name == "mn")
 	case "mrow":
+		if len(n.kids) == 3 && n.kids[1].name == "mtable" && n.kids[0].name == "mo" && n.kids[2].name == "mo" {
+			return `<m:d><m:e>` + ommlOf(n.kids[1]) + `</m:e></m:d>` // a matrix between its brackets
+		}
 		return ommlRow(n)
+	case "mtable":
+		var sb strings.Builder
+		if n.aligned { // aligned equations: one line each, the & marking where they line up
+			sb.WriteString(`<m:eqArr>`)
+			for _, r := range n.kids {
+				sb.WriteString(`<m:e>`)
+				for i, c := range r.kids {
+					if i > 0 {
+						sb.WriteString(ommlRun("&", false))
+					}
+					sb.WriteString(ommlRow(mmlKid(c, 0)))
+				}
+				sb.WriteString(`</m:e>`)
+			}
+			sb.WriteString(`</m:eqArr>`)
+			return sb.String()
+		}
+		sb.WriteString(`<m:m>`)
+		for _, r := range n.kids {
+			sb.WriteString(`<m:mr>`)
+			for _, c := range r.kids {
+				sb.WriteString(`<m:e>` + ommlRow(mmlKid(c, 0)) + `</m:e>`)
+			}
+			sb.WriteString(`</m:mr>`)
+		}
+		sb.WriteString(`</m:m>`)
+		return sb.String()
 	case "msup":
 		return `<m:sSup><m:e>` + ommlRow(mmlKid(n, 0)) + `</m:e><m:sup>` + ommlRow(mmlKid(n, 1)) + `</m:sup></m:sSup>`
 	case "msub":

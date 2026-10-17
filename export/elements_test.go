@@ -178,6 +178,7 @@ func TestTypesetterAndMathMLReadTheSameSymbols(t *testing.T) {
 	for _, f := range []string{
 		"x^2 + y_1", "frac{a}{b}", "sqrt{x+1}", "sum_{i=1}^{n} i", "int_0^1 f(x) dx", "ab^2", "sin x + cos y", "pi r^2",
 		"a < b > c", "2.5 * 3 = 7.5", "alpha_beta", "{a+b}^2", "x^", "sqrt", "frac{a", "}} x {{", "(a|b)[c];d:e,f",
+		`matrix{a & b \\ c & d}`, `aligned{x &= 1 \\ y &= 2}`, "matrix{1 & 2", "matrix x",
 	} {
 		var want []string
 		for _, m := range re.FindAllStringSubmatch(MathML(f, "alt"), -1) {
@@ -187,5 +188,29 @@ func TestTypesetterAndMathMLReadTheSameSymbols(t *testing.T) {
 		if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 			t.Errorf("%q:\n typesetter %q\n MathML     %q", f, got, want)
 		}
+	}
+}
+
+// A matrix is an <mtable> between brackets, aligned equations an <mtable> with columns aligned right and left, and
+// Office Math gets m:m (in a delimiter) and m:eqArr.
+func TestMatrixAndAlignedEquationsInMathMLAndOfficeMath(t *testing.T) {
+	ml := MathML(`matrix{a & b \\ c & d}`, "alt")
+	for _, want := range []string{"<mo>(</mo><mtable><mtr><mtd><mrow><mi>a</mi></mrow></mtd><mtd><mrow><mi>b</mi></mrow></mtd></mtr>", "</mtable><mo>)</mo>"} {
+		if !strings.Contains(ml, want) {
+			t.Errorf("matrix MathML lacks %s:\n%s", want, ml)
+		}
+	}
+	if !strings.Contains(MathML(`aligned{x &= 1 \\ y &= 2}`, ""), `<mtable columnalign="right left"`) {
+		t.Error("aligned columns")
+	}
+	om := OMML(`matrix{a & b \\ c & d}`)
+	if !strings.Contains(om, "<m:d><m:e><m:m><m:mr><m:e>") || strings.Count(om, "<m:mr>") != 2 {
+		t.Errorf("OMML matrix: %s", om)
+	}
+	if !strings.Contains(OMML(`aligned{x &= 1 \\ y &= 2}`), "<m:eqArr><m:e>") {
+		t.Error("OMML aligned")
+	}
+	if got := MathML("matrix x", ""); strings.Contains(got, "mtable") {
+		t.Errorf("matrix without braces is letters: %s", got)
 	}
 }

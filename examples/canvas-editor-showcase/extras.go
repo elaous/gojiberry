@@ -790,8 +790,10 @@ func (u *ui) noteCollab(renderUI func()) {
 	u.collabMerged, u.collabRejected = s.Merged, s.Rejected
 	u.noteAway(s.Status, renderUI)
 	if msg := u.collab.Update(time.Now(), s.Status == client.Online, names, problem); msg != "" {
-		u.announce(msg)
+		// the announcer holds one message: what it was told of a mention in this same pass is not lost under it
+		u.announce(strings.TrimSpace(u.mentionSaid + " " + msg))
 	}
+	u.mentionSaid = ""
 	if u.collab.Pending() && !u.collabTimer {
 		u.collabTimer = true
 		time.AfterFunc(2100*time.Millisecond, func() {
@@ -897,7 +899,8 @@ func (u *ui) noteMentions(first bool) {
 	for _, n := range u.stateRef.Comments.NewMentions(h, u.mentionsTold) {
 		u.mentionsTold[n.Key()] = true
 		if !first {
-			u.announce(T("mention.told", "%s mentioned you in a comment.", authorOrSomeone(n.Author)))
+			u.mentionSaid = strings.TrimSpace(u.mentionSaid + " " + T("mention.told", "%s mentioned you in a comment.", authorOrSomeone(n.Author)))
+			u.announce(u.mentionSaid)
 		}
 	}
 }
