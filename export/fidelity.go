@@ -65,7 +65,7 @@ const (
 	FeatMediaCaptions   Feature = "media-captions"
 	// FeatEquation is a formula with its text alternative (also what a Word import leaves out, see fidelity_import.go);
 	// FeatCodeLanguage the language of a code block; FeatImageLongDesc the long description of a diagram.
-	FeatEquation      Feature = "equation"
+	FeatEquation Feature = "equation"
 	// FeatFormField is a form field (every format writes its label and what was written in it as text).
 	FeatFormField     Feature = "form-field"
 	FeatCodeLanguage  Feature = "code-language"
