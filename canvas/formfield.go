@@ -69,6 +69,9 @@ type FormFieldObject struct {
 	Value string
 	// Locked keeps the properties as they are: no pen, and the host refuses to change them.
 	Locked bool
+	// LockKey and LockSig are the seal of the lock (package formseal): the public key that locked it and its signature
+	// over the properties, both base64. The canvas only keeps them; the host makes and checks them.
+	LockKey, LockSig string
 
 	// OnFill and OnEdit are called when the eye or the pen is pressed.
 	OnFill func(*FormFieldObject)

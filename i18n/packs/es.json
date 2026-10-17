@@ -1760,6 +1760,24 @@
   "scripts.stopped": "Se detuvo el script.",
   "scripts.timeout": "El script tardó demasiado y se detuvo.",
   "scripts.tooMany": "El script hizo demasiadas peticiones y se detuvo.",
-  "scripts.allowWrite": "Puede escribir texto en el documento, en el cursor"
+  "scripts.allowWrite": "Puede escribir texto en el documento, en el cursor",
+  "forms.needKey": "Bloquear necesita una clave: demuestra que el bloqueo es suyo, y solo ella lo quita. Cree una abajo con «Crear una clave».",
+  "forms.keyMade": "Se creó una clave. Los bloqueos que haga ahora se sellan con ella. Guarde la copia de seguridad: sin la clave no se puede quitar un bloqueo aquí.",
+  "forms.wrongKey": "Este campo se bloqueó con otra clave (%s). Solo esa clave quita el bloqueo.",
+  "forms.sealBroken": "El sello no coincide: este campo se cambió después de bloquearlo con la clave %s.",
+  "forms.sealed": "Bloqueado con la clave %s; el campo está como se bloqueó.",
+  "forms.keyBrowser": "la clave de este navegador",
+  "forms.keyOwner": "su clave de propietario",
+  "forms.keyIs": "Los bloqueos se hacen con %s (%s).",
+  "forms.keyBackup": "Copia de seguridad de la clave. Se muestra una sola vez; guárdela donde solo usted pueda leerla.",
+  "forms.keyBackupLabel": "Copia de seguridad de la clave",
+  "forms.keyHide": "Ya la he guardado",
+  "forms.noKey": "Bloquear un campo necesita una clave: demuestra que el bloqueo es suyo, y solo ella lo quita.",
+  "forms.makeKey": "Crear una clave",
+  "forms.restoreKey": "Restaurar una clave desde su copia de seguridad",
+  "forms.restoreText": "El texto de la copia de seguridad",
+  "forms.restoreGo": "Restaurar",
+  "forms.restoreBad": "Eso no es la copia de seguridad de una clave.",
+  "forms.restored": "Se restauró la clave."
  }
 }

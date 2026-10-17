@@ -1760,6 +1760,24 @@
     "scripts.stopped": "O script foi parado.",
     "scripts.timeout": "O script demorou demasiado e foi parado.",
     "scripts.tooMany": "O script fez demasiados pedidos e foi parado.",
-    "scripts.allowWrite": "Pode escrever texto no documento, no cursor"
+    "scripts.allowWrite": "Pode escrever texto no documento, no cursor",
+    "forms.needKey": "Bloquear precisa de uma chave: prova que o bloqueio é seu, e só ela o retira. Crie uma abaixo com «Criar uma chave».",
+    "forms.keyMade": "Foi criada uma chave. Os bloqueios que fizer agora ficam selados com ela. Guarde a cópia de segurança: sem a chave não se pode retirar um bloqueio aqui.",
+    "forms.wrongKey": "Este campo foi bloqueado com outra chave (%s). Só essa chave retira o bloqueio.",
+    "forms.sealBroken": "O selo não corresponde: este campo foi alterado depois de bloqueado com a chave %s.",
+    "forms.sealed": "Bloqueado com a chave %s; o campo está como foi bloqueado.",
+    "forms.keyBrowser": "a chave deste navegador",
+    "forms.keyOwner": "a sua chave de proprietário",
+    "forms.keyIs": "Os bloqueios são feitos com %s (%s).",
+    "forms.keyBackup": "Cópia de segurança da chave. É mostrada uma só vez; guarde-a onde só você a possa ler.",
+    "forms.keyBackupLabel": "Cópia de segurança da chave",
+    "forms.keyHide": "Já a guardei",
+    "forms.noKey": "Bloquear um campo precisa de uma chave: prova que o bloqueio é seu, e só ela o retira.",
+    "forms.makeKey": "Criar uma chave",
+    "forms.restoreKey": "Restaurar uma chave a partir da cópia de segurança",
+    "forms.restoreText": "O texto da cópia de segurança",
+    "forms.restoreGo": "Restaurar",
+    "forms.restoreBad": "Isso não é a cópia de segurança de uma chave.",
+    "forms.restored": "A chave foi restaurada."
   }
 }
