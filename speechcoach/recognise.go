@@ -22,6 +22,14 @@ type Recogniser struct {
 	Doer  Doer   // nil: http.DefaultClient
 }
 
+// Transcriber turns a take into text. The Recogniser (a server at an address the person typed) is one; the page has
+// another over the whisper add-on, which runs on the device.
+type Transcriber interface {
+	Transcribe(ctx context.Context, pcm []int16, prompt, lang string) (string, error)
+}
+
+var _ Transcriber = (*Recogniser)(nil)
+
 // MaxReply limits what is read back.
 const MaxReply = 1 << 20
 

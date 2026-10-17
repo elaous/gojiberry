@@ -31,6 +31,7 @@ type speechUI struct {
 	mode     string // "", "phrase" or "dictate": what the recording in progress is for
 	message  string
 	recogniz string // the address of the recogniser ("" = dictation off)
+	local    bool   // dictate with the whisper add-on, on this device, instead of a recogniser at an address
 	confirm  bool   // "delete all" was pressed once
 	render   func()
 	host     speechHost
@@ -190,21 +191,46 @@ func (s *speechUI) keepTake(pcm []int16) {
 	}
 }
 
-func (s *speechUI) dictate(pcm []int16) {
+// transcriber is what dictation is sent to: the whisper add-on on this device when the person chose it and a model is
+// installed, else the recogniser at the address they typed. why says what is missing when there is none.
+func (s *speechUI) transcriber() (speechcoach.Transcriber, string, bool) {
+	if s.local && whisperAvailable() {
+		// the model the person downloaded for the language, when the Add-ons tab has listed them; otherwise the add-on
+		// picks its own and says if it has none
+		return localWhisper{model: installedModel("whisper", s.session.Set().Lang)}, T("speech.transcribing", "Turning this recording into text on this device…"), true
+	}
 	addr, err := speechcoach.CheckEndpoint(s.recogniz)
-	if err != nil || len(pcm) == 0 {
-		s.message = T("speech.noAddress", "Dictation needs the address of a recogniser. Type it above.")
+	if err != nil {
+		return nil, T("speech.noAddress", "Dictation needs the address of a recogniser. Type it above."), false
+	}
+	return &speechcoach.Recogniser{URL: addr}, T("speech.sending", "Sending this one recording to your recogniser…"), true
+}
+
+func (s *speechUI) dictate(pcm []int16) {
+	tr, say, ok := s.transcriber()
+	if !ok || len(pcm) == 0 {
+		if say == "" {
+			say = T("speech.noAddress", "Dictation needs the address of a recogniser. Type it above.")
+		}
+		s.message = say
 		return
 	}
-	s.message = T("speech.sending", "Sending this one recording to your recogniser…")
+	s.message = say
 	prompt := (&speechcoach.Vocabulary{}).Prompt(s.corr, 500) // the words the person has meant before, as a hint
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		timeout := 60 * time.Second
+		if s.local {
+			timeout = 5 * time.Minute // a model on a slow device takes its time
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		text, err := (&speechcoach.Recogniser{URL: addr}).Transcribe(ctx, pcm, prompt, s.session.Set().Lang)
+		text, err := tr.Transcribe(ctx, pcm, prompt, s.session.Set().Lang)
 		switch {
 		case err != nil:
 			s.message = T("speech.failed", "The recogniser did not answer. Nothing was added.")
+			if s.local {
+				s.message = T("speech.failedLocal", "The add-on could not turn the recording into text. Nothing was added.")
+			}
 		case text == "":
 			s.message = T("speech.nothingHeard", "The recogniser heard nothing.")
 		default:
@@ -279,7 +305,8 @@ func (s *speechUI) panel(host speechHost) xango.Node {
 			xango.El("input", []xango.Attr{xango.A("id", "speech-address"), xango.A("type", "url"), xango.A("value", s.recogniz), xango.A("placeholder", "https://…/transcribe"),
 				xango.A("style", "width:100%;box-sizing:border-box"),
 				xango.On("input", func(ev xango.Event) { s.recogniz = xango.EventValue[string](ev); s.render() })})),
-		row(btn("speech-dictate", dictLabel, func() { s.toggle("dictate") }, phraseBusy || (!other && strings.TrimSpace(s.recogniz) == ""))),
+		s.localChoice(),
+		row(btn("speech-dictate", dictLabel, func() { s.toggle("dictate") }, phraseBusy || (!other && !s.local && strings.TrimSpace(s.recogniz) == ""))),
 		s.dictationAftermath(),
 		xango.El("h4", nil, xango.Text(T("speech.mine", "My recordings"))),
 		p("speech-count", Tn("speech.count", "%d recording, %s seconds.", "%d recordings, %s seconds.", s.data.Len(), strconv.FormatFloat(s.seconds(), 'f', 1, 64))),
