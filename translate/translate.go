@@ -31,6 +31,14 @@ type Result struct {
 	Detected string
 }
 
+// Translator turns text into another language. The Client (a server holding an API key) is one; the page has another
+// over the translate add-on, which runs on the device.
+type Translator interface {
+	Translate(ctx context.Context, text, target, source string) (Result, error)
+}
+
+var _ Translator = Client{}
+
 // Translate translates text into target (a DeepL language code such as "DE",
 // "FR" or "EN-GB"); source "" lets the server detect it.
 func (c Client) Translate(ctx context.Context, text, target, source string) (Result, error) {

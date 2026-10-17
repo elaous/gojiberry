@@ -19,7 +19,7 @@ import (
 // langState is the Language tab: which backends are set up (from the page's
 // ?translate=… and ?grammar=…&model=… parameters) and what they last said.
 type langState struct {
-	translator *translate.Client
+	translator translate.Translator // the server at ?translate=…, else the translate add-on, else nil
 	grammar    *grammar.Client
 	target     string
 	translated string
@@ -43,6 +43,8 @@ func (u *ui) setupLanguage(param func(string) string) {
 	if url := pageEndpoint(param("translate")); url != "" {
 		u.lang.translator = &translate.Client{BaseURL: url}
 	}
+	// without a server, the translate add-on (window.addons.translate) is the translator when the page has one: it is asked
+	// each time, because the script may arrive after the page
 	if url := pageEndpoint(param("grammar")); url != "" {
 		model := param("model")
 		if model == "" {
@@ -57,6 +59,7 @@ func (u *ui) setupLanguage(param func(string) string) {
 func langPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(), redraw, renderUI func()) xango.Node {
 	l := &u.lang
 	fl := flow()
+	tr := u.translator()
 	detected, detectedCode := "", ""
 	if fl != nil {
 		if code, ok := lang.Detect(fl.EditText()); ok {
@@ -77,7 +80,7 @@ func langPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(),
 			}
 		},
 	}
-	if l.translator != nil {
+	if tr != nil {
 		props.Targets = translateTargets
 	}
 	if fl != nil {
@@ -88,7 +91,7 @@ func langPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(),
 		props.Issues = append(props.Issues, components.GrammarIssue{Text: u.issueText(is), Message: is.Message, Suggestion: is.Suggestion})
 	}
 	props.OnTranslate = func() {
-		if fl == nil || l.translator == nil || l.busy {
+		if fl == nil || tr == nil || l.busy {
 			return
 		}
 		text := fl.SelectedText()
@@ -97,9 +100,13 @@ func langPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(),
 		l.busy, l.err = true, ""
 		renderUI()
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			timeout := 30 * time.Second
+			if l.translator == nil {
+				timeout = 5 * time.Minute // a model on this device takes its time
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
-			r, err := l.translator.Translate(ctx, text, l.target, "")
+			r, err := tr.Translate(ctx, text, l.target, "")
 			l.busy = false
 			if err != nil {
 				l.err = err.Error()
