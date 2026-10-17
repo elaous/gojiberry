@@ -1714,6 +1714,24 @@
   "help.noText": "No hay texto con el que trabajar.",
   "help.failed": "El modelo no pudo responder: %s",
   "help.empty": "El modelo no dio respuesta.",
-  "help.changed": "El texto cambió desde que preguntó: selecciónelo y pregunte de nuevo."
+  "help.changed": "El texto cambió desde que preguntó: selecciónelo y pregunte de nuevo.",
+  "diagram.kindMap": "Mapa",
+  "diagram.kindFlow": "Diagrama de flujo",
+  "diagram.needSource": "Describa primero el diagrama.",
+  "diagram.failed": "No se pudo dibujar el diagrama: %s",
+  "diagram.badSVG": "El complemento no dio un dibujo.",
+  "diagram.title": "Diagramas",
+  "diagram.kind": "Tipo",
+  "diagram.source": "Descripción del diagrama",
+  "diagram.hint": "En la notación del complemento, por ejemplo: A --> B --> C",
+  "diagram.draw": "Dibujarlo",
+  "diagram.working": "Dibujándolo en este dispositivo…",
+  "diagram.previewAlt": "El diagrama dibujado",
+  "diagram.altLabel": "Descripción del dibujo, con palabras, para quien no puede verlo",
+  "diagram.altHint": "Qué muestra el diagrama y cómo se conectan sus partes",
+  "diagram.stale": "La descripción cambió desde que se dibujó: dibújelo de nuevo.",
+  "diagram.insert": "Poner el diagrama en el documento",
+  "diagram.needAlt": "Un diagrama necesita una descripción con palabras: escriba qué muestra.",
+  "diagram.inserted": "El diagrama está en el documento. Su descripción se guarda como la descripción larga de la imagen."
  }
 }

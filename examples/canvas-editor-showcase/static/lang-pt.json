@@ -1714,6 +1714,24 @@
     "help.noText": "Não há texto para trabalhar.",
     "help.failed": "O modelo não conseguiu responder: %s",
     "help.empty": "O modelo não deu resposta.",
-    "help.changed": "O texto mudou desde que perguntou: selecione-o e pergunte de novo."
+    "help.changed": "O texto mudou desde que perguntou: selecione-o e pergunte de novo.",
+    "diagram.kindMap": "Mapa",
+    "diagram.kindFlow": "Fluxograma",
+    "diagram.needSource": "Descreva primeiro o diagrama.",
+    "diagram.failed": "Não foi possível desenhar o diagrama: %s",
+    "diagram.badSVG": "O suplemento não deu um desenho.",
+    "diagram.title": "Diagramas",
+    "diagram.kind": "Tipo",
+    "diagram.source": "Descrição do diagrama",
+    "diagram.hint": "Na notação do suplemento, por exemplo: A --> B --> C",
+    "diagram.draw": "Desenhar",
+    "diagram.working": "A desenhar neste dispositivo…",
+    "diagram.previewAlt": "O diagrama desenhado",
+    "diagram.altLabel": "Descrição do desenho, em palavras, para quem não o pode ver",
+    "diagram.altHint": "O que o diagrama mostra e como as suas partes se ligam",
+    "diagram.stale": "A descrição mudou desde que foi desenhado: desenhe de novo.",
+    "diagram.insert": "Pôr o diagrama no documento",
+    "diagram.needAlt": "Um diagrama precisa de uma descrição em palavras: escreva o que mostra.",
+    "diagram.inserted": "O diagrama está no documento. A sua descrição fica guardada como descrição longa da imagem."
   }
 }
