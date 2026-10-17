@@ -1778,6 +1778,11 @@
   "forms.restoreText": "Le texte de la sauvegarde",
   "forms.restoreGo": "Restaurer",
   "forms.restoreBad": "Ce n’est pas la sauvegarde d’une clé.",
-  "forms.restored": "La clé a été restaurée."
+  "forms.restored": "La clé a été restaurée.",
+  "diagram.editing": "Modifiez la description et redessinez le diagramme ; il prendra la place de l’image.",
+  "diagram.replaced": "Le diagramme du document a été redessiné.",
+  "diagram.replace": "Remplacer le diagramme dans le document",
+  "diagram.cancelEdit": "Laisser l’image telle quelle",
+  "diagram.edit": "Modifier le diagramme"
  }
 }

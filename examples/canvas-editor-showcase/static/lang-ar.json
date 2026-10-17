@@ -1918,6 +1918,11 @@
     "forms.restoreText": "نص النسخة الاحتياطية",
     "forms.restoreGo": "استعادة",
     "forms.restoreBad": "هذه ليست نسخة احتياطية لمفتاح.",
-    "forms.restored": "استُعيد المفتاح."
+    "forms.restored": "استُعيد المفتاح.",
+    "diagram.editing": "غيّر الوصف وارسم المخطط من جديد؛ سيحل محل الصورة.",
+    "diagram.replaced": "رُسم المخطط في المستند من جديد.",
+    "diagram.replace": "استبدال المخطط في المستند",
+    "diagram.cancelEdit": "ترك الصورة كما هي",
+    "diagram.edit": "تغيير المخطط"
   }
 }
