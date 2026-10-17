@@ -138,7 +138,7 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **You should see.** What the picture in [features.md](features.md#equations) shows; the Word, HTML and text exports have the words of the alternative in the sentence.
 
-**Automated.** `TestTypesetFractionHasARuleAndPutsTheNumeratorAbove`, `TestTypesetScriptsAndRoots`, `TestInlineEquationSitsOnTheBaselineOfItsLine`, `TestBlockEquationIsTypesetNotTyped` (canvas), `TestTypesetLimitsOfASumGoAboveAndBelowInABlock`, `TestTypesetBracketsGrowWithAFraction`, `TestTypesetMatrixAndAlignedEquations`, `TestTypingDollarsMakesAnInlineFormula` (canvas), `TestTypesetterAndMathMLReadTheSameSymbols`, `TestMatrixAndAlignedEquationsInMathMLAndOfficeMath`, `TestInlineFormulaIsInlineMathMLInHTML`, `TestInlineFormulaIsOfficeMathInTheLineInWord` (export), `TestAnInlineEquationStaysInItsLineAsText` (docfile), `TestAnInlineEquationStandsInItsSentence` (examples/canvas-editor-showcase)
+**Automated.** `TestTypesetFractionHasARuleAndPutsTheNumeratorAbove`, `TestTypesetScriptsAndRoots`, `TestInlineEquationSitsOnTheBaselineOfItsLine`, `TestBlockEquationIsTypesetNotTyped` (canvas), `TestTypesetLimitsOfASumGoAboveAndBelowInABlock`, `TestTypesetBracketsGrowWithAFraction`, `TestTypesetMatrixAndAlignedEquations`, `TestTypingDollarsMakesAnInlineFormula` (canvas), `TestTypesetterAndMathMLReadTheSameSymbols`, `TestMatrixAndAlignedEquationsInMathMLAndOfficeMath`, `TestInlineFormulaIsInlineMathMLInHTML`, `TestInlineFormulaIsOfficeMathInTheLineInWord`, `TestOfficeMathMatricesAndAlignedEquationsReadBack` (export), `TestAnInlineEquationStaysInItsLineAsText` (docfile), `TestAnInlineEquationStandsInItsSentence` (examples/canvas-editor-showcase)
 
 ## Markdown tables
 

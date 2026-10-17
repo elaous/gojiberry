@@ -11,6 +11,7 @@ import (
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/docximport"
 )
 
 func wellFormed(t *testing.T, s string) {
@@ -212,5 +213,33 @@ func TestMatrixAndAlignedEquationsInMathMLAndOfficeMath(t *testing.T) {
 	}
 	if got := MathML("matrix x", ""); strings.Contains(got, "mtable") {
 		t.Errorf("matrix without braces is letters: %s", got)
+	}
+}
+
+// The Office Math the export writes for a matrix and for aligned equations reads back as the same notation (the
+// brackets of a matrix are the matrix's own, not extra parentheses).
+func TestOfficeMathMatricesAndAlignedEquationsReadBack(t *testing.T) {
+	for _, formula := range []string{`matrix{a & b \\ c & d}`, `aligned{x &= 1 \\ y &= 2}`, `matrix{1 & 0 \\ 0 & 1}`} {
+		doc := docfile.Document{Content: []docfile.Item{{Equation: &docfile.EquationItem{Formula: formula, Alt: "alt"}}}}
+		data, err := DOCX{}.Export(FromDocument(doc))
+		if err != nil {
+			t.Fatal(err)
+		}
+		back, err := docximport.Import(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got string
+		for _, it := range back.Content {
+			if it.Equation != nil {
+				got = it.Equation.Formula
+			}
+		}
+		if got != formula && !strings.HasPrefix(formula, "aligned") { // aligned: spacing round the & may differ
+			t.Errorf("%s read back as %q", formula, got)
+		}
+		if MathML(got, "") != MathML(formula, "") {
+			t.Errorf("%s: the MathML of what was read back differs", formula)
+		}
 	}
 }
