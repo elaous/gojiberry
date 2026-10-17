@@ -35,7 +35,7 @@ const page = `<!doctype html><html lang="en"><head><title> My  page </title><sty
   b</pre><hr>
 <img src="https://tracker.example/p.png" alt="remote"><img src="data:image/png;base64,iVBORw0KGgo=" alt="a square">
 <table><tr><th colspan="2">Head</th></tr><tr><td>a</td><td rowspan="2">b</td></tr><tr><td>c</td></tr></table>
-<form><input name=q></form><iframe src="x"></iframe><svg></svg><video></video>
+<form><input type=password name=q></form><iframe src="x"></iframe><svg></svg><video></video>
 <div style="position:absolute">layout</div></body></html>`
 
 func TestImportReadsWhatADocumentNeeds(t *testing.T) {

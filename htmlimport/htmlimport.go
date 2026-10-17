@@ -254,7 +254,20 @@ func (r *reader) element(n *html.Node, f docfile.Format, depth, level int) {
 		return
 	case atom.Title, atom.Meta, atom.Template:
 		return
-	case atom.Form, atom.Input, atom.Button, atom.Select, atom.Textarea:
+	case atom.Form, atom.Fieldset:
+		r.endLine()
+		r.blocks(n, f, depth, level) // the form itself is not kept: its fields are
+		r.endLine()
+		return
+	case atom.Label:
+		if c := control(n); c != nil {
+			r.formField(c, ownText(n, c))
+			return
+		}
+	case atom.Input, atom.Select, atom.Textarea:
+		r.formField(n, "")
+		return
+	case atom.Button:
 		r.skipped.Forms++
 		return
 	case atom.Iframe, atom.Object, atom.Embed, atom.Frame, atom.Frameset:
@@ -652,4 +665,115 @@ func (r *reader) trimEnd() {
 		break
 	}
 	r.doc.Content = c
+}
+
+// control is the input, select or textarea inside a label, nil when there is none.
+func control(n *html.Node) *html.Node {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode {
+			continue
+		}
+		switch c.DataAtom {
+		case atom.Input, atom.Select, atom.Textarea:
+			return c
+		}
+		if d := control(c); d != nil {
+			return d
+		}
+	}
+	return nil
+}
+
+// ownText is the text of a label without that of its control (the options of a list are not its name).
+func ownText(n, skip *html.Node) string {
+	var sb strings.Builder
+	var walk func(*html.Node)
+	walk = func(m *html.Node) {
+		if m == skip {
+			return
+		}
+		if m.Type == html.TextNode {
+			sb.WriteString(m.Data)
+		}
+		for c := m.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(n)
+	return strings.TrimSpace(collapse(sb.String()))
+}
+
+// Limits of what a page can put into a field.
+const (
+	maxFieldText    = 10_000
+	maxFieldOptions = 200
+)
+
+func clip(s string) string {
+	if r := []rune(s); len(r) > maxFieldText {
+		return string(r[:maxFieldText])
+	}
+	return s
+}
+
+// formField reads an input, select or textarea as a form field of the document, with what is written in it. Passwords,
+// hidden values, files and the other kinds a document has no field for are left out and counted.
+func (r *reader) formField(c *html.Node, label string) {
+	ff := docfile.FormFieldItem{
+		Name:        clip(attr(c, "name")),
+		Label:       clip(label),
+		Placeholder: clip(attr(c, "placeholder")),
+		Required:    hasAttr(c, "required"),
+	}
+	if ff.Label == "" {
+		ff.Label = clip(strings.TrimSpace(attr(c, "aria-label")))
+	}
+	switch c.DataAtom {
+	case atom.Textarea:
+		ff.Kind, ff.Value = "textarea", clip(strings.TrimPrefix(text(c), "\n"))
+	case atom.Select:
+		ff.Kind = "select"
+		for o := c.FirstChild; o != nil && len(ff.Options) < maxFieldOptions; o = o.NextSibling {
+			if o.Type != html.ElementNode || o.DataAtom != atom.Option {
+				continue
+			}
+			v := attr(o, "value")
+			if !hasAttr(o, "value") {
+				v = strings.TrimSpace(collapse(text(o)))
+			}
+			ff.Options = append(ff.Options, clip(v))
+			if hasAttr(o, "selected") {
+				ff.Value = clip(v)
+			}
+		}
+	default:
+		typ := strings.ToLower(strings.TrimSpace(attr(c, "type")))
+		kind := map[string]string{"": "text", "text": "text", "email": "email", "number": "number", "tel": "phone", "url": "url", "date": "date", "checkbox": "checkbox"}[typ]
+		if kind == "" {
+			r.skipped.Forms++
+			return
+		}
+		ff.Kind = kind
+		if kind == "checkbox" {
+			if hasAttr(c, "checked") {
+				ff.Value = "true"
+			}
+		} else {
+			ff.Value = clip(attr(c, "value"))
+			ff.Pattern = clip(attr(c, "pattern"))
+		}
+	}
+	if ff.Kind == "checkbox" || ff.Kind == "select" {
+		ff.Placeholder = ""
+	}
+	r.add(docfile.Item{Form: &ff})
+}
+
+func hasAttr(n *html.Node, k string) bool {
+	for _, a := range n.Attr {
+		if a.Key == k {
+			return true
+		}
+	}
+	return false
 }
