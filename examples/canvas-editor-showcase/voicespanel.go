@@ -175,7 +175,7 @@ func downloadedVoices(u *ui, e interface {
 					if err != nil {
 						piperUI.msg = fmt.Sprintf(T("voices.failed", "The voice could not be downloaded: %s"), err.Error())
 					} else {
-						piperUI.msg = fmt.Sprintf(T("voices.done", "%s is downloaded and can be used."), c.Voice.Name)
+						piperUI.msg = fmt.Sprintf(T("voices.done", "%s is downloaded and can be used."), c.Name)
 						u.announce(piperUI.msg)
 					}
 					renderUI()
