@@ -32,7 +32,7 @@ remove(id)                   // -> Promise
 | `piper` | `synthesize(model, config, text, lengthScale)` and optionally `cancel()`: text to sound with a downloaded voice | Reader voices ([reader-voices.md](reader-voices.md)) | built |
 | `whisper` | `transcribe({samples, sampleRate, language, prompt, model})` -> `Promise<{text}>`: `samples` is a `Float32Array`, 16 kHz mono; `model` is the model the person downloaded for the language, or "" for the add-on's own pick | dictation in the Speech tab ("Dictate on this device"); the recogniser at an address stays as the other way | built |
 | `describe` | `describe({image, mime, language, model})` -> `Promise<{text}>`: `image` is a `Uint8Array` of PNG bytes (longer side at most 768 pixels), `mime` is `image/png`; the model is the one downloaded for the language | the "Draft a description" button under a picture's description, when Preferences > Editor has it on; without the add-on the draft is still made from shape and colours (`imagehint`) | built |
-| `ocr` | text from scanned pages and images | importing scans (today `pdftext` reads text PDFs only) | idea |
+| `ocr` | `recognize({image, mime, language, model})` -> `Promise<{text}>`: `image` is a `Uint8Array` of PNG bytes (longer side at most 2048 pixels) | "Read the text in the picture" under each picture in the Pictures tab: the text is shown to be corrected, then put after the picture or used as its long description | built |
 | `translate` | translation of the selection or the document | none yet | idea |
 | `llm` | rewrite, summarise, explain | the AI helper hub (needs its own design first) | idea |
 | `diagram` | render a flowchart or a map | the flowchart and map objects (not built) | idea |

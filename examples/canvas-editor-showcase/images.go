@@ -230,6 +230,7 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 				redraw()
 			}),
 			hintControls(u, i, r.img, canEdit, fl, renderUI),
+			ocrControls(i, r, canEdit, fl, redraw, renderUI),
 			xango.El("div", []xango.Attr{xango.A("id", fmt.Sprintf("img-decorative-%d", i))}, components.Checkbox(components.CheckboxProps{
 				Label: T("img.decorative", "Decorative: it carries nothing a description would add"), Checked: r.img.Decorative && r.img.Alt == "", Disabled: r.img.Alt != "" || !canEdit,
 				OnChange: func(on bool) { r.img.Decorative = on; fl.Touch(); redraw(); renderUI() }})),
