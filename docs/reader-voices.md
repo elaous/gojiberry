@@ -21,10 +21,11 @@ The port is small: `Available`, `Voices`, `Speak(utterance, handler)` returning 
 
 ## What the operator adds
 
-Running a model needs an ONNX runtime and a phonemizer (Piper turns text into phonemes first). They are scripts and binaries of their own, so they are **not** part of this repository; the page expects one script to offer them as `window.gjPiper`:
+Running a model needs an ONNX runtime and a phonemizer (Piper turns text into phonemes first). They are scripts and binaries of their own, so they are **not** part of this repository; the page expects one script to offer them as `window.addons.piper` (`window.addons` is the one object the page looks in for optional add-ons, so a script adds its entry and leaves the others alone):
 
 ```js
-window.gjPiper = {
+window.addons = window.addons || {};
+window.addons.piper = {
   // model: Uint8Array of the voice's .onnx; config: the text of its .onnx.json; lengthScale: 1 / speed
   async synthesize(model, config, text, lengthScale) {
     return { samples: Float32Array /* mono, -1..1 */, sampleRate: 22050 };
@@ -39,8 +40,8 @@ A script of that shape can be built on `onnxruntime-web` and a phonemizer such a
 { "catalogue": "https://voices.example/piper/voices.json", "base": "https://voices.example/piper/", "runtime": "piper-runtime.js" }
 ```
 
-`catalogue` is the address of `voices.json`, `base` the address the paths in it are below (the catalogue's folder when left out), `runtime` the script to load when the page has no `gjPiper` yet. Without a runtime the Reader voices tab says so and offers nothing to download.
+`catalogue` is the address of `voices.json`, `base` the address the paths in it are below (the catalogue's folder when left out), `runtime` the script to load when the page has no `addons.piper` yet. Without a runtime the Reader voices tab says so and offers nothing to download.
 
 ## What has been checked
 
-The port, the player and the adapter are tested with fakes (`voice/read`, `voice/read/piper`), and the page's flow (list, download, read with the voice, remove) with a stand-in for the network, the runtime and Web Audio (`TestDownloadAReaderVoiceAndReadWithIt`). **A real Piper runtime has not been run against it**: whether a particular `gjPiper` script and a particular voice sound right is for the operator to try. The Cache Storage keeps a voice until the browser clears site data.
+See also [addons.md](addons.md) for the registry this script is added to. The port, the player and the adapter are tested with fakes (`voice/read`, `voice/read/piper`), and the page's flow (list, download, read with the voice, remove) with a stand-in for the network, the runtime and Web Audio (`TestDownloadAReaderVoiceAndReadWithIt`). **A real Piper runtime has not been run against it**: whether a particular `addons.piper` script and a particular voice sound right is for the operator to try. The Cache Storage keeps a voice until the browser clears site data.

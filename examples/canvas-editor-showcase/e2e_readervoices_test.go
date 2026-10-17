@@ -28,10 +28,10 @@ const piperStub = `(() => {
 		return realFetch(u, o);
 	};
 	window.__synth = [];
-	window.gjPiper = { synthesize(model, config, text, lengthScale) {
+	window.addons = { piper: { synthesize(model, config, text, lengthScale) {
 		window.__synth.push({model: new TextDecoder().decode(model), text, lengthScale});
 		return Promise.resolve({samples: new Float32Array(2205), sampleRate: 22050});
-	}};
+	}}};
 	window.__srcs = [];
 	let now = 0;
 	window.AudioContext = function () {
