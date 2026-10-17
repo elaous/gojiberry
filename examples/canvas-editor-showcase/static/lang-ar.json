@@ -1876,6 +1876,11 @@
     "forms.answersJSON": "تنزيل الإجابات (JSON)",
     "forms.answersCSV": "تنزيل الإجابات (CSV)",
     "forms.answersSaved": "حُفظت الإجابات.",
-    "forms.answersProblems": "في بعض الحقول مشكلة؛ حُفظت الإجابات كما هي."
+    "forms.answersProblems": "في بعض الحقول مشكلة؛ حُفظت الإجابات كما هي.",
+    "forms.submitTo": "عنوان إجابات نموذج الويب (https أو mailto)",
+    "forms.webForm": "تنزيل كنموذج ويب",
+    "forms.send": "إرسال",
+    "forms.webFormBad": "يجب أن يبدأ العنوان بـ https:// أو mailto: وألا يحتوي على مسافات.",
+    "forms.webFormSaved": "حُفظ نموذج الويب."
   }
 }

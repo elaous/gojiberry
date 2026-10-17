@@ -1736,6 +1736,11 @@
     "forms.answersJSON": "Transferir as respostas (JSON)",
     "forms.answersCSV": "Transferir as respostas (CSV)",
     "forms.answersSaved": "As respostas foram guardadas.",
-    "forms.answersProblems": "Alguns campos têm um problema; as respostas foram guardadas tal como estão."
+    "forms.answersProblems": "Alguns campos têm um problema; as respostas foram guardadas tal como estão.",
+    "forms.submitTo": "Endereço para as respostas de um formulário web (https ou mailto)",
+    "forms.webForm": "Transferir como formulário web",
+    "forms.send": "Enviar",
+    "forms.webFormBad": "O endereço tem de começar por https:// ou mailto: e não ter espaços.",
+    "forms.webFormSaved": "O formulário web foi guardado."
   }
 }

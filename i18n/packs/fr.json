@@ -1736,6 +1736,11 @@
   "forms.answersJSON": "Télécharger les réponses (JSON)",
   "forms.answersCSV": "Télécharger les réponses (CSV)",
   "forms.answersSaved": "Les réponses ont été enregistrées.",
-  "forms.answersProblems": "Certains champs ont un problème ; les réponses ont été enregistrées telles quelles."
+  "forms.answersProblems": "Certains champs ont un problème ; les réponses ont été enregistrées telles quelles.",
+  "forms.submitTo": "Adresse pour les réponses d’un formulaire web (https ou mailto)",
+  "forms.webForm": "Télécharger comme formulaire web",
+  "forms.send": "Envoyer",
+  "forms.webFormBad": "L’adresse doit commencer par https:// ou mailto: et ne pas contenir d’espaces.",
+  "forms.webFormSaved": "Le formulaire web a été enregistré."
  }
 }
