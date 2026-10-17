@@ -399,10 +399,6 @@ func (f *TextFlow) ClearFormFields() int {
 	return n
 }
 
-// FormFieldChanged tells the flow a form field's value or properties were changed by the host, so that the document is
-// saved and the others hear of it.
-func (f *TextFlow) FormFieldChanged() { f.changed() }
-
 // objectClickAt gives a press to the inline object under (x, y) that takes presses.
 func (f *TextFlow) objectClickAt(x, y float64) bool {
 	for _, ln := range f.Layout().Lines {
