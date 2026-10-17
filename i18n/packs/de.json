@@ -1744,6 +1744,21 @@
   "forms.webFormSaved": "Das Webformular wurde gespeichert.",
   "read.readerHosted": "Stimmen auf einem Server",
   "read.readerHostedSaid": "Vorleser: Stimmen auf einem Server. Der Text wird beim Vorlesen an den Server gesendet",
-  "voices.hostedNote": "Stimmen auf einem Server senden den Text beim Vorlesen an den Server. Erlauben Sie sie unter Vorlesen > Stimmen zulassen, die das Internet nutzen."
+  "voices.hostedNote": "Stimmen auf einem Server senden den Text beim Vorlesen an den Server. Erlauben Sie sie unter Vorlesen > Stimmen zulassen, die das Internet nutzen.",
+  "tab.scripts": "Skripte",
+  "scripts.title": "Skripte",
+  "scripts.about": "Ein Skript läuft in einer Sandbox, die nichts von dieser Seite hat: kein Netz, keinen Speicher, kein Dokument. Es kann nur die Befehle des Editors beim Namen aufrufen und, wenn Sie es erlauben, den Text des Dokuments erfragen. Führen Sie nur Skripte aus, die Sie selbst geschrieben haben oder denen Sie vertrauen.",
+  "scripts.source": "Skript",
+  "scripts.allowRun": "Darf die Befehle des Editors ausführen",
+  "scripts.allowRead": "Darf den Text des Dokuments lesen",
+  "scripts.readWarning": "Ein Skript, das den Text lesen darf, kann ihn dem zeigen, der das Skript geschrieben hat, etwa in einer Zeile, die Sie kopieren sollen. Erlauben Sie das nur für ein Skript, dem Sie vertrauen.",
+  "scripts.needEdit": "Wechseln Sie in den Bearbeitungsmodus: Befehle, die das Dokument ändern, tun sonst nichts.",
+  "scripts.run": "Skript ausführen",
+  "scripts.stop": "Anhalten",
+  "scripts.log": "Was das Skript gesagt hat",
+  "scripts.finished": "Das Skript ist fertig.",
+  "scripts.stopped": "Das Skript wurde angehalten.",
+  "scripts.timeout": "Das Skript brauchte zu lange und wurde angehalten.",
+  "scripts.tooMany": "Das Skript hat zu viele Anfragen gestellt und wurde angehalten."
  }
 }

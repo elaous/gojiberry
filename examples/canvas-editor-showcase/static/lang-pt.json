@@ -1744,6 +1744,21 @@
     "forms.webFormSaved": "O formulário web foi guardado.",
     "read.readerHosted": "Vozes num servidor",
     "read.readerHostedSaid": "Leitor: vozes num servidor. O texto é enviado ao servidor enquanto é lido",
-    "voices.hostedNote": "As vozes num servidor enviam o texto ao servidor enquanto lê. Permita-as em Ler em voz alta > Permitir vozes que usam a internet."
+    "voices.hostedNote": "As vozes num servidor enviam o texto ao servidor enquanto lê. Permita-as em Ler em voz alta > Permitir vozes que usam a internet.",
+    "tab.scripts": "Scripts",
+    "scripts.title": "Scripts",
+    "scripts.about": "Um script corre num ambiente isolado que não tem nada desta página: nem rede, nem armazenamento, nem documento. Só pode pedir os comandos do editor pelo nome e, se o permitir, o texto do documento. Execute apenas scripts que escreveu ou em que confia.",
+    "scripts.source": "Script",
+    "scripts.allowRun": "Pode executar os comandos do editor",
+    "scripts.allowRead": "Pode ler o texto do documento",
+    "scripts.readWarning": "Um script que pode ler o texto pode mostrá-lo a quem o escreveu, por exemplo numa linha que lhe pede para copiar. Permita-o apenas para um script de confiança.",
+    "scripts.needEdit": "Mude para o modo de edição: os comandos que alteram o documento não fazem nada de outro modo.",
+    "scripts.run": "Executar o script",
+    "scripts.stop": "Parar",
+    "scripts.log": "O que o script disse",
+    "scripts.finished": "O script terminou.",
+    "scripts.stopped": "O script foi parado.",
+    "scripts.timeout": "O script demorou demasiado e foi parado.",
+    "scripts.tooMany": "O script fez demasiados pedidos e foi parado."
   }
 }

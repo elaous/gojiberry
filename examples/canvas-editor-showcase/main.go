@@ -523,7 +523,7 @@ func main() {
 			// along it), laid out as before (display:contents)
 			xango.El("div", []xango.Attr{xango.A("role", "tablist"), xango.A("aria-label", components.Translate("tab.list", "Side panel")), xango.A("style", "display:contents")},
 				tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
-				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "review", "Review", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI), tabButton(u, "images", "Pictures", renderUI), tabButton(u, "refs", "References", renderUI), tabButton(u, "forms", "Forms", renderUI), tabButton(u, "voices", "Reader voices", renderUI), tabButton(u, "addons", "Add-ons", renderUI),
+				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "review", "Review", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI), tabButton(u, "images", "Pictures", renderUI), tabButton(u, "refs", "References", renderUI), tabButton(u, "forms", "Forms", renderUI), tabButton(u, "voices", "Reader voices", renderUI), tabButton(u, "addons", "Add-ons", renderUI), tabButton(u, "scripts", "Scripts", renderUI),
 				tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
 				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "console", "Console", renderUI), tabButton(u, "public", "Public link", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "speech", "Speech", renderUI), tabButton(u, "privacy", "Privacy", renderUI), tabButton(u, "prefs", "Preferences", renderUI)),
 		)
@@ -556,6 +556,8 @@ func main() {
 			panel = voicesPanel(u, renderUI)
 		case "addons":
 			panel = addonsPanel(u, renderUI)
+		case "scripts":
+			panel = scriptsPanel(&state, func() []canvas.CommandInfo { return append(stage.Features.Commands(), builtinCommands()...) }, run, func() string { return flow.EditText() }, renderUI)
 		case "forms":
 			panel = formsPanel(u, &state, func() *canvas.TextFlow { return flow }, redraw, renderUI)
 		case "refs":
