@@ -28,6 +28,7 @@ on:
           - all
           - fast-checks
           - a11y
+          - e2e
           - mailpit
           - grammar
           - postgres
@@ -127,6 +128,31 @@ jobs:
 
       - name: make a11y-test
         run: make a11y-test
+
+  e2e:
+    if: ${{ inputs.run == 'all' || inputs.run == 'e2e' }}
+    name: The whole browser suite of the showcase (Chrome)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Which browser
+        run: |
+          for b in chromium chromium-browser google-chrome google-chrome-stable; do
+            if command -v "$b" >/dev/null; then echo "using $b"; "$b" --version; exit 0; fi
+          done
+          echo "no Chrome or Chromium on this runner"
+          exit 1
+
+      - name: make e2e-test
+        run: make e2e-test
 
   grammar-test:
     name: vscode-xango grammar suite
