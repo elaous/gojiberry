@@ -317,6 +317,10 @@ func htmlInline(segs []Segment, br string) string {
 			sb.WriteString(br)
 			continue
 		}
+		if seg.Format.Formula != "" {
+			sb.WriteString(MathMLInline(seg.Format.Formula, seg.Text))
+			continue
+		}
 		sb.WriteString(wrapHTMLRun(escapeHTMLText(seg.Text), seg.Format))
 	}
 	return sb.String()

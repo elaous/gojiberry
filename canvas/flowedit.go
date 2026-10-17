@@ -339,6 +339,9 @@ func (f *TextFlow) InsertText(s string) bool {
 	}
 	f.histKind = ""
 	f.pending, f.caretOff = Format{}, false
+	if s == "$" && len(f.extra) == 0 && !f.proposalsOn() {
+		f.dollarMathOnType()
+	}
 	if len([]rune(s)) == 1 && s != "\n" {
 		f.updateSuggestions()
 	} else {

@@ -281,3 +281,25 @@ func TestExportsCarryTheDocumentLanguageAndTitle(t *testing.T) {
 		t.Errorf("not cleared: %q", doc.Language())
 	}
 }
+
+// A formula in the middle of a sentence is inline MathML in the HTML export and the words that stand for it
+// everywhere else.
+func TestInlineFormulaIsInlineMathMLInHTML(t *testing.T) {
+	doc := docfile.Document{Content: []docfile.Item{
+		{Chars: &docfile.Chars{Text: "Area is "}},
+		{Equation: &docfile.EquationItem{Formula: "pi r^2", Alt: "pi r squared", Inline: true}},
+		{Chars: &docfile.Chars{Text: " here."}},
+	}}
+	snap := FromDocument(doc)
+	html, err := HTML{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(html), `display="inline"`) || !strings.Contains(string(html), "<p>Area is <math") {
+		t.Errorf("html:\n%s", html)
+	}
+	txt, _ := PlainText{}.Export(snap)
+	if !strings.Contains(string(txt), "Area is pi r squared here.") {
+		t.Errorf("text:\n%s", txt)
+	}
+}

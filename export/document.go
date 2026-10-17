@@ -195,7 +195,7 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 			// a formula in the line is written as the words that stand for it (the text alternative), so that every
 			// format keeps it in its sentence
 			if w := it.Equation.Words(); w != "" {
-				cur.runs = append(cur.runs, docfile.Chars{Text: w})
+				cur.runs = append(cur.runs, docfile.Chars{Text: w, Format: docfile.Format{Style: formulaStyle + it.Equation.Formula}})
 			}
 			pos++
 		case it.Equation != nil:
@@ -414,6 +414,11 @@ func segmentsOf(runs []docfile.Chars) []Segment {
 			Underline: r.Format.Underline, Strikethrough: r.Format.Strike,
 			Superscript: r.Format.Superscript, Subscript: r.Format.Subscript, Href: r.Format.Link, Lang: r.Format.Lang, Comment: r.Format.Comment,
 		}
+		if fm, ok := strings.CutPrefix(r.Format.Style, formulaStyle); ok {
+			f.Formula = fm
+			out = append(out, Segment{Text: r.Text, Format: f}) // whole: the words of a formula are not split
+			continue
+		}
 		if n, ok := strings.CutPrefix(r.Format.Style, noteRefStyle); ok {
 			f.NoteRef, _ = strconv.Atoi(n)
 		}
@@ -439,6 +444,9 @@ func segmentsOf(runs []docfile.Chars) []Segment {
 // noteRefStyle marks the run of a footnote's number while a document is turned into a snapshot (no
 // stored style name starts with a NUL).
 const noteRefStyle = "\x00note:"
+
+// formulaStyle likewise marks the run of an inline formula, followed by the formula's notation.
+const formulaStyle = "\x00formula:"
 
 func itoa(n int) string {
 	if n == 0 {

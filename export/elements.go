@@ -37,7 +37,12 @@ func EquationBlock(formula, alt string) Block {
 
 // MathML writes the formula as MathML (a <math> element in the MathML namespace). Text in the formula is
 // escaped; a formula with unbalanced braces is closed leniently, so the result is always well formed.
-func MathML(formula, alt string) string {
+func MathML(formula, alt string) string { return mathML(formula, alt, "block") }
+
+// MathMLInline is MathML for a formula in the middle of a line of text (display="inline").
+func MathMLInline(formula, alt string) string { return mathML(formula, alt, "inline") }
+
+func mathML(formula, alt, display string) string {
 	alt = strings.Map(func(r rune) rune {
 		if xmlChar(r) {
 			return r
@@ -47,7 +52,7 @@ func MathML(formula, alt string) string {
 	p := &mathParser{src: []rune(formula)}
 	body := p.row(false)
 	var sb strings.Builder
-	sb.WriteString(`<math xmlns="http://www.w3.org/1998/Math/MathML" display="block" alttext="` + escapeHTMLAttr(alt) + `"><semantics><mrow>`)
+	sb.WriteString(`<math xmlns="http://www.w3.org/1998/Math/MathML" display="` + display + `" alttext="` + escapeHTMLAttr(alt) + `"><semantics><mrow>`)
 	sb.WriteString(body)
 	sb.WriteString(`</mrow><annotation encoding="text/plain">` + escapeHTMLText(alt) + `</annotation></semantics></math>`)
 	return sb.String()
@@ -59,6 +64,58 @@ type mathParser struct {
 }
 
 func (p *mathParser) more() bool { return p.pos < len(p.src) }
+
+// nextIs says the next rune, after spaces, is r.
+func (p *mathParser) nextIs(r rune) bool {
+	i := p.pos
+	for i < len(p.src) && unicode.IsSpace(p.src[i]) {
+		i++
+	}
+	if i < len(p.src) && p.src[i] == r {
+		p.pos = i
+		return true
+	}
+	return false
+}
+
+// table reads the inside of matrix{a & b \\ c & d} or aligned{x &= 1 \\ y &= 2} (the opening brace is read) into
+// an <mtable>: cells are separated by & and rows by two backslashes. A matrix has a bracket on each side.
+func (p *mathParser) table(kind string) string {
+	var rows, cells strings.Builder
+	var cell strings.Builder
+	endCell := func() { cells.WriteString("<mtd><mrow>" + cell.String() + "</mrow></mtd>"); cell.Reset() }
+	endRow := func() { endCell(); rows.WriteString("<mtr>" + cells.String() + "</mtr>"); cells.Reset() }
+	finish := func() string {
+		attr := ""
+		if kind == "aligned" {
+			attr = ` columnalign="right left" columnspacing="0"`
+			return "<mtable" + attr + ">" + rows.String() + "</mtable>"
+		}
+		return "<mrow><mo>(</mo><mtable>" + rows.String() + "</mtable><mo>)</mo></mrow>"
+	}
+	for p.more() {
+		if unicode.IsSpace(p.src[p.pos]) {
+			p.pos++
+			continue
+		}
+		switch c := p.src[p.pos]; {
+		case c == '}':
+			p.pos++
+			endRow()
+			return finish()
+		case c == '&':
+			p.pos++
+			endCell()
+		case c == '\\' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '\\':
+			p.pos += 2
+			endRow()
+		default:
+			cell.WriteString(p.script(p.atom()))
+		}
+	}
+	endRow()
+	return finish()
+}
 
 // row reads atoms up to the end, or up to the closing brace when inGroup.
 func (p *mathParser) row(inGroup bool) string {
@@ -143,6 +200,9 @@ func (p *mathParser) atom() string {
 		}
 		word := string(p.src[start:p.pos])
 		switch {
+		case (word == "matrix" || word == "aligned") && p.nextIs('{'):
+			p.pos++
+			return p.table(word)
 		case word == "sqrt":
 			return "<msqrt>" + p.operand() + "</msqrt>"
 		case word == "frac":

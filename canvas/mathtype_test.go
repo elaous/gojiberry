@@ -125,3 +125,47 @@ func TestBlockEquationIsTypesetNotTyped(t *testing.T) {
 		t.Fatal("an empty equation says so")
 	}
 }
+
+func TestTypesetLimitsOfASumGoAboveAndBelowInABlock(t *testing.T) {
+	size := 20.0
+	beside := parseMath("sum_{i=1}^{n} i")
+	above := parseMath("sum_{i=1}^{n} i")
+	markLimits(above)
+	pa, pb := &fakePainter{}, &fakePainter{}
+	a, b := typeset(pa, beside, size), typeset(pb, above, size)
+	if !(b.w < a.w) || !(b.asc > a.asc || b.desc > a.desc) {
+		t.Fatalf("limits stack over the sum: beside %+v, above %+v", a, b)
+	}
+}
+
+func TestTypesetBracketsGrowWithAFraction(t *testing.T) {
+	p, tall := drawn("(frac{a}{b})", 20)
+	_, small := drawn("(x)", 20)
+	if tall.asc <= small.asc || !p.has("lineTo") || p.has(`fillText "("`) {
+		t.Fatalf("a bracket round a fraction is drawn tall, not typed: %v %+v", p.calls, tall)
+	}
+	q, plain := drawn("(x)", 20)
+	if !q.has(`fillText "("`) || plain.asc != small.asc {
+		t.Fatalf("a bracket round a letter stays a character: %v", q.calls)
+	}
+}
+
+func TestTypesetMatrixAndAlignedEquations(t *testing.T) {
+	p, m := drawn(`matrix{a & b \\ c & d}`, 20)
+	for _, w := range []string{`fillText "a"`, `fillText "b"`, `fillText "c"`, `fillText "d"`, "lineTo"} {
+		if !p.has(w) {
+			t.Fatalf("matrix lacks %s: %v", w, p.calls)
+		}
+	}
+	_, one := drawn("a", 20)
+	if m.asc+m.desc < 2*(one.asc+one.desc) {
+		t.Fatalf("two rows: %+v", m)
+	}
+	if got := strings.Join(MathSymbols(`matrix{a & b \\ c & d}`), " "); got != "( a b c d )" {
+		t.Fatalf("symbols %q", got)
+	}
+	q, _ := drawn(`aligned{x &= 1 \\ y &= 2}`, 20)
+	if !q.has(`fillText "x"`) || !q.has(`fillText "="`) || q.has("lineTo") {
+		t.Fatalf("aligned has no brackets: %v", q.calls)
+	}
+}

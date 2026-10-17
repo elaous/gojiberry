@@ -44,6 +44,9 @@ type Format struct {
 	NoteBack int
 	// Lang is the run's language tag, "" for the document's own.
 	Lang string
+	// Formula is the notation of a formula that stands in this run's line of text (the run's text is its words);
+	// the HTML export writes it as inline MathML, the other formats keep the words.
+	Formula string
 	// Change says the run is a suggested change not yet accepted or rejected (see FromDocumentTracked): text
 	// proposed to be added or proposed to be removed, by Author at Time (unix seconds). A Snapshot
 	// from FromDocument never has it: it shows the document as it would be if every suggestion were accepted.
