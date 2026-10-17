@@ -229,6 +229,7 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 				fl.Touch()
 				redraw()
 			}),
+			diagramEditControl(i, r.img, canEdit, renderUI),
 			hintControls(u, i, r.img, canEdit, fl, renderUI),
 			ocrControls(i, r, canEdit, fl, redraw, renderUI),
 			xango.El("div", []xango.Attr{xango.A("id", fmt.Sprintf("img-decorative-%d", i))}, components.Checkbox(components.CheckboxProps{

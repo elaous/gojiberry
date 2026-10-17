@@ -36,6 +36,16 @@ var diagramState struct {
 	msg     string
 	focus   bool
 	drawnBy string // the source and kind the preview was made from: a changed source needs drawing again
+	// editing is the picture in the document being drawn again; the new drawing then takes its place.
+	editing *canvas.Image
+}
+
+// editDiagram loads the description of a diagram picture of the document into the form, to be changed and drawn again.
+func editDiagram(im *canvas.Image, renderUI func()) {
+	d := &diagramState
+	d.editing, d.kind, d.source, d.alt, d.svg, d.drawnBy = im, im.Diagram, im.LongDesc, im.Alt, "", ""
+	d.msg = T("diagram.editing", "Change the description and draw the diagram again; it then takes the place of the picture.")
+	renderUI()
 }
 
 func diagramAddon() bool { return hasAddon("diagram", "render") }
@@ -127,6 +137,9 @@ func diagramSection(u *ui, state *State, flow func() *canvas.TextFlow, redraw, r
 		textarea("diagram-source", T("diagram.source", "Description of the diagram"), d.source, T("diagram.hint", "In the notation of the add-on, for example: A --> B --> C"), "5", func(v string) { d.source = v }),
 		btn("diagram-draw", T("diagram.draw", "Draw it"), func() { drawDiagram(renderUI) }, d.busy),
 	}
+	if d.editing != nil {
+		nodes = append(nodes, btn("diagram-cancel-edit", T("diagram.cancelEdit", "Leave the picture as it is"), func() { d.editing, d.svg, d.msg = nil, "", ""; renderUI() }, false))
+	}
 	if d.busy {
 		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "diagram-working"), xango.A("role", "status")}, xango.Text(T("diagram.working", "Drawing it on this device…"))))
 	}
@@ -142,7 +155,11 @@ func diagramSection(u *ui, state *State, flow func() *canvas.TextFlow, redraw, r
 		if stale {
 			nodes = append(nodes, para("diagram-stale", T("diagram.stale", "The description changed since it was drawn: draw it again."), false))
 		}
-		nodes = append(nodes, btn("diagram-insert", T("diagram.insert", "Put the diagram in the document"), func() {
+		insertLabel := T("diagram.insert", "Put the diagram in the document")
+		if d.editing != nil {
+			insertLabel = T("diagram.replace", "Replace the diagram in the document")
+		}
+		nodes = append(nodes, btn("diagram-insert", insertLabel, func() {
 			fl := flow()
 			if fl == nil {
 				return
@@ -152,12 +169,47 @@ func diagramSection(u *ui, state *State, flow func() *canvas.TextFlow, redraw, r
 				renderUI()
 				return
 			}
-			alt, source := strings.TrimSpace(d.alt), d.source
+			alt, source, kind := strings.TrimSpace(d.alt), d.source, d.kind
+			if target := d.editing; target != nil {
+				replaceDiagram(target, []byte(d.svg), alt, source, kind, fl, redraw, renderUI)
+				d.svg, d.alt, d.editing, d.msg = "", "", nil, T("diagram.replaced", "The diagram in the document was drawn again.")
+				return
+			}
 			u.insertBytes(fl, "image/svg+xml", []byte(d.svg), redraw, renderUI, func(im *canvas.Image) {
-				im.Alt, im.LongDesc = alt, source
+				im.Alt, im.LongDesc, im.Diagram = alt, source, kind
 			})
 			d.svg, d.alt, d.msg = "", "", T("diagram.inserted", "The diagram is in the document. Its description is kept as the picture's long description.")
 		}, !canEdit || stale))
 	}
 	return nodes
+}
+
+// replaceDiagram swaps the drawing of a diagram picture of the document for a new one, keeping its place, width and legend.
+func replaceDiagram(im *canvas.Image, svg []byte, alt, source, kind string, fl *canvas.TextFlow, redraw, renderUI func()) {
+	url := "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString(svg)
+	convertToPNG(url, 1024, func(png string, ok bool) {
+		if ok {
+			url = png
+		}
+		canvas.LoadImage(url, func(src *canvas.HTMLImage) {
+			if w, h := src.Size(); w > 0 && h > 0 && im.W > 0 {
+				im.H = im.W * h / w // the new drawing may have another shape: the width stays, the height follows
+			}
+			im.Src, im.Alt, im.LongDesc, im.Diagram = src, alt, source, kind
+			fl.Touch()
+			redraw()
+			renderUI()
+		}, func() {
+			diagramState.msg = T("diagram.badSVG", "The add-on did not give a drawing.")
+			renderUI()
+		})
+	})
+}
+
+// diagramEditControl is the button on a diagram picture that loads its description back into the diagram form.
+func diagramEditControl(i int, im *canvas.Image, canEdit bool, renderUI func()) xango.Node {
+	if im.Diagram == "" || !diagramAddon() {
+		return xango.Frag()
+	}
+	return btn(fmt.Sprintf("img-diagram-%d", i), T("diagram.edit", "Change the diagram"), func() { editDiagram(im, renderUI) }, !canEdit)
 }

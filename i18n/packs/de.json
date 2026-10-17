@@ -1778,6 +1778,11 @@
   "forms.restoreText": "Der Sicherungstext",
   "forms.restoreGo": "Wiederherstellen",
   "forms.restoreBad": "Das ist keine Sicherung eines Schlüssels.",
-  "forms.restored": "Der Schlüssel wurde wiederhergestellt."
+  "forms.restored": "Der Schlüssel wurde wiederhergestellt.",
+  "diagram.editing": "Ändern Sie die Beschreibung und zeichnen Sie das Diagramm neu; es tritt dann an die Stelle des Bildes.",
+  "diagram.replaced": "Das Diagramm im Dokument wurde neu gezeichnet.",
+  "diagram.replace": "Diagramm im Dokument ersetzen",
+  "diagram.cancelEdit": "Das Bild lassen, wie es ist",
+  "diagram.edit": "Diagramm ändern"
  }
 }

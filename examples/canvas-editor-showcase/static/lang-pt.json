@@ -1778,6 +1778,11 @@
     "forms.restoreText": "O texto da cópia de segurança",
     "forms.restoreGo": "Restaurar",
     "forms.restoreBad": "Isso não é a cópia de segurança de uma chave.",
-    "forms.restored": "A chave foi restaurada."
+    "forms.restored": "A chave foi restaurada.",
+    "diagram.editing": "Altere a descrição e desenhe o diagrama de novo; ele ocupará o lugar da imagem.",
+    "diagram.replaced": "O diagrama do documento foi desenhado de novo.",
+    "diagram.replace": "Substituir o diagrama no documento",
+    "diagram.cancelEdit": "Deixar a imagem como está",
+    "diagram.edit": "Alterar o diagrama"
   }
 }
