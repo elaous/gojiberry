@@ -18,13 +18,13 @@ import (
 )
 
 // The page's side of the Piper adapter (voice/read/piper): the pieces of the browser the adapter's ports stand for.
-// Fetcher is fetch(), Store is the Cache Storage, Output is Web Audio, and Runtime is window.gjPiper, a script the
+// Fetcher is fetch(), Store is the Cache Storage, Output is Web Audio, and Runtime is window.addons.piper (the page keeps its optional add-ons in one object, window.addons), a script the
 // operator adds (reader-voices.json names it, or the page carries it): it has to offer
 //
-//	gjPiper.synthesize(model: Uint8Array, config: string, text: string, lengthScale: number)
+//	addons.piper.synthesize(model: Uint8Array, config: string, text: string, lengthScale: number)
 //	    -> Promise<{samples: Float32Array, sampleRate: number}>
 //
-// and may offer gjPiper.cancel(). It runs the voice's ONNX model and turns the text into phonemes; this page does
+// and may offer addons.piper.cancel(). It runs the voice's ONNX model and turns the text into phonemes; this page does
 // neither. docs/reader-voices.md says more.
 
 var (
@@ -264,15 +264,12 @@ func (cacheStore) Keys(done func([]string)) {
 	}()
 }
 
-// jsRuntime is piper.Runtime over window.gjPiper.
+// jsRuntime is piper.Runtime over window.addons.piper.
 type jsRuntime struct{}
 
-func (jsRuntime) gj() js.Value { return js.Global().Get("gjPiper") }
+func (jsRuntime) gj() js.Value { return addon("piper") }
 
-func (r jsRuntime) Available() bool {
-	g := r.gj()
-	return g.Truthy() && g.Get("synthesize").Type() == js.TypeFunction
-}
+func (r jsRuntime) Available() bool { return hasAddon("piper", "synthesize") }
 
 func (r jsRuntime) Synthesize(model, config []byte, text string, rate float64, done func(piper.Audio, error)) func() {
 	cancelled := false

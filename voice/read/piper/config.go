@@ -13,7 +13,7 @@ import (
 type Config struct {
 	// Catalogue is the address of voices.json, Base the address the paths in it are below.
 	Catalogue, Base string
-	// Runtime is the address of the script that offers the Piper runtime to the page (window.gjPiper); "" for a page
+	// Runtime is the address of the script that offers the Piper runtime to the page (window.addons.piper); "" for a page
 	// that carries it already, or has none.
 	Runtime string
 }
