@@ -32,8 +32,8 @@ func TestDescribeSaysAccentAndGender(t *testing.T) {
 
 func TestForLanguageOffersOnlyWhatMatchesAndIsAllowed(t *testing.T) {
 	all := []Voice{
-		{"Samantha", "en-US", true}, {"Daniel", "en-GB", true}, {"Net English", "en-US", false}, {"Anna", "de-DE", true},
-		{"Karen", "en-AU", true}, {"Amelie", "fr-CA", true},
+		{Name: "Samantha", Lang: "en-US", Local: true}, {Name: "Daniel", Lang: "en-GB", Local: true}, {Name: "Net English", Lang: "en-US", Local: false}, {Name: "Anna", Lang: "de-DE", Local: true},
+		{Name: "Karen", Lang: "en-AU", Local: true}, {Name: "Amelie", Lang: "fr-CA", Local: true},
 	}
 	got := ForLanguage(all, "en-GB", false)
 	if len(got) != 3 || got[0].Name != "Daniel" {

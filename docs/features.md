@@ -222,7 +222,7 @@ Reduced motion, high contrast, text size, wide spacing, larger targets, distract
 
 ![Read aloud](features/img/menu-read-aloud.webp)
 
-Read the whole document or the selection aloud, a sentence at a time, with the sentence and the word marked as they are spoken. A bar offers previous, pause, next and stop; speed is slow, normal or fast; and the **Reader voice** menu lists the voices for the document's language with their accent and gender (American or British, female or male).
+Read the whole document or the selection aloud, a sentence at a time, with the sentence and the word marked as they are spoken. A bar offers previous, pause, next and stop; speed is slow, normal or fast; and the **Reader voice** menu lists the voices for the document's language with their accent and gender (American or British, female or male). **Reader** chooses what reads: the voices the browser offers, or **downloaded voices (Piper)**, which run in the page so that the text never leaves the device. The Reader voices tab lists the voices for the document's language with their size and a link to whose voice it is and under what terms, downloads one on request (nothing is fetched before), and removes it again. Downloaded voices need a Piper runtime script that the person who runs the page supplies (docs/reader-voices.md).
 
 ## Typewriter scrolling
 

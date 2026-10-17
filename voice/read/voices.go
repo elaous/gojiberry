@@ -18,6 +18,8 @@ type Voice struct {
 	Lang string
 	// Local says it runs on the device; a voice that does not may send the text to a service.
 	Local bool
+	// ID is what an engine is told to pick the voice by; empty means the Name is the ID.
+	ID string
 }
 
 // Gender values of Info.
@@ -145,4 +147,12 @@ func Find(all []Voice, lang, name string, allowNet bool) (Voice, bool) {
 		}
 	}
 	return Voice{}, false
+}
+
+// Key is the ID the voice is picked by: its ID, else its Name.
+func (v Voice) Key() string {
+	if v.ID != "" {
+		return v.ID
+	}
+	return v.Name
 }
