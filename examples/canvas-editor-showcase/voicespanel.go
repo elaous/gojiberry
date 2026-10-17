@@ -149,7 +149,7 @@ func downloadedVoices(u *ui, e interface {
 		switch {
 		case c.Installed:
 			kids = append(kids, para(fmt.Sprintf("voices-has-%d", i), T("voices.installed", "Downloaded."), false))
-		case piperUI.busy == c.Voice.Key():
+		case piperUI.busy == c.Key():
 			pct := 0
 			if piperUI.total > 0 {
 				pct = int(piperUI.done * 100 / piperUI.total)
@@ -164,9 +164,9 @@ func downloadedVoices(u *ui, e interface {
 		default:
 			kids = append(kids, btn(fmt.Sprintf("voices-download-%d", i), fmt.Sprintf(T("voices.download", "Download (%s)"), megabytes(c.Size)), func() {
 				ctx, cancel := context.WithCancel(context.Background())
-				piperUI.busy, piperUI.done, piperUI.total, piperUI.cancel, piperUI.msg = c.Voice.Key(), 0, c.Size, cancel, ""
+				piperUI.busy, piperUI.done, piperUI.total, piperUI.cancel, piperUI.msg = c.Key(), 0, c.Size, cancel, ""
 				renderUI()
-				e.Install(ctx, c.Voice.Key(), func(done, total int64) {
+				e.Install(ctx, c.Key(), func(done, total int64) {
 					piperUI.done, piperUI.total = done, total
 					renderUI()
 				}, func(err error) {
