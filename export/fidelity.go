@@ -66,6 +66,8 @@ const (
 	// FeatEquation is a formula with its text alternative (also what a Word import leaves out, see fidelity_import.go);
 	// FeatCodeLanguage the language of a code block; FeatImageLongDesc the long description of a diagram.
 	FeatEquation      Feature = "equation"
+	// FeatFormField is a form field (every format writes its label and what was written in it as text).
+	FeatFormField     Feature = "form-field"
 	FeatCodeLanguage  Feature = "code-language"
 	FeatImageLongDesc Feature = "image-long-desc"
 )
@@ -82,7 +84,7 @@ var Features = []Feature{
 	FeatDocLanguage, FeatTitle, FeatHistory,
 	FeatPageHeader, FeatPageTOC, FeatPageSize, FeatVertical,
 	FeatMedia, FeatMediaCaptions,
-	FeatEquation, FeatCodeLanguage, FeatImageLongDesc,
+	FeatEquation, FeatCodeLanguage, FeatImageLongDesc, FeatFormField,
 }
 
 // Treatment says what a format does with a feature.
@@ -135,6 +137,7 @@ const (
 	NoteCaptionWords = "caption-words"  // the caption track is not written; its words are the transcript
 	NoteAltText      = "alt-text"       // an equation is written as its text alternative, not typeset
 	NoteLongDescText = "long-desc-text" // a long description is text after the picture, not linked to it
+	NoteFormText     = "form-text"      // a form field is written as its label and what is in it, not as a field
 )
 
 type entry struct {
@@ -256,6 +259,8 @@ func Usage(d docfile.Document) map[Feature]int {
 			add(FeatRule)
 		case it.Equation != nil:
 			add(FeatEquation)
+		case it.Form != nil:
+			add(FeatFormField)
 		case it.Media != nil:
 			add(FeatMedia)
 			if it.Media.HasCaptions() {

@@ -97,6 +97,9 @@ func FromDocfile(data []byte) (title, text string, err error) {
 			if it.Chars != nil {
 				b.WriteString(it.Chars.Text)
 			}
+			if it.Form != nil {
+				b.WriteString(" " + it.Form.Words() + " ")
+			}
 			if it.Equation != nil {
 				b.WriteString(" " + it.Equation.Alt + " ") // the words of the formula, what a person searches for
 			}

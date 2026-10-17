@@ -179,6 +179,9 @@ func (f *TextFlow) mouseDown(x, y float64) bool {
 		}
 		f.closeSuggestions()
 	}
+	if f.objectClickAt(x, y) {
+		return true // a form field's icon or box
+	}
 	if f.mode != ModeEdit {
 		if f.openLinkAt(x, y) {
 			return true

@@ -70,6 +70,39 @@ type Item struct {
 	Media *MediaItem `json:"media,omitempty" pb:"11"`
 	// Equation is a formula with its text alternative (roadmap 78).
 	Equation *EquationItem `json:"equation,omitempty" pb:"12"`
+	// Form is a form field: its properties and what was written in it.
+	Form *FormFieldItem `json:"form,omitempty" pb:"13"`
+}
+
+// Words is what the exports and the search write for the field: its label and what is in it.
+func (f FormFieldItem) Words() string {
+	label := strings.TrimSpace(f.Label)
+	if f.Kind == "checkbox" {
+		box := "[ ]"
+		if f.Value == "true" {
+			box = "[x]"
+		}
+		return strings.TrimSpace(box + " " + label)
+	}
+	if label == "" {
+		return f.Value
+	}
+	return label + ": " + f.Value
+}
+
+// FormFieldItem mirrors canvas.FormFieldObject: a field of a form, what it takes (Kind: text, textarea, email, number,
+// phone, url, date, checkbox or select), how it is shown and checked, and the Value written in it. Locked keeps its
+// properties from being changed.
+type FormFieldItem struct {
+	Kind        string   `json:"kind" pb:"1"`
+	Name        string   `json:"name,omitempty" pb:"2"`
+	Label       string   `json:"label,omitempty" pb:"3"`
+	Placeholder string   `json:"placeholder,omitempty" pb:"4"`
+	Pattern     string   `json:"pattern,omitempty" pb:"5"`
+	Required    bool     `json:"required,omitempty" pb:"6"`
+	Options     []string `json:"options,omitempty" pb:"7"`
+	Value       string   `json:"value,omitempty" pb:"8"`
+	Locked      bool     `json:"locked,omitempty" pb:"9"`
 }
 
 // ImageItem is an inline image. URL is what to fetch it from (a data: URL
@@ -397,6 +430,9 @@ func FromItems(items []canvas.Item) []Item {
 						ClipLeft: o.Clip.Left, ClipTop: o.Clip.Top, ClipRight: o.Clip.Right, ClipBottom: o.Clip.Bottom,
 						Alt: o.Alt, Decorative: o.Decorative, LongDesc: o.LongDesc, Legend: o.Legend, Credit: o.Credit, SourceURL: o.SourceURL}})
 				}
+			case *canvas.FormFieldObject:
+				out = append(out, Item{Form: &FormFieldItem{Kind: string(o.Kind), Name: o.Name, Label: o.Label, Placeholder: o.Placeholder,
+					Pattern: o.Pattern, Required: o.Required, Options: slices.Clone(o.Options), Value: o.Value, Locked: o.Locked}})
 			case *canvas.EquationObject:
 				out = append(out, Item{Equation: &EquationItem{Formula: o.Formula, Alt: o.Alt, Inline: o.Inline}})
 			case *canvas.MediaObject:
@@ -490,6 +526,10 @@ func ToItems(items []Item) []canvas.Item {
 			out = append(out, canvas.Inline{Object: canvas.NewTableObject(table), Block: true})
 		case it.Image != nil:
 			out = append(out, canvas.Inline{Object: imageObject(*it.Image)})
+		case it.Form != nil:
+			ff := it.Form
+			out = append(out, canvas.Inline{Object: &canvas.FormFieldObject{Kind: canvas.FormKind(ff.Kind), Name: ff.Name, Label: ff.Label,
+				Placeholder: ff.Placeholder, Pattern: ff.Pattern, Required: ff.Required, Options: slices.Clone(ff.Options), Value: ff.Value, Locked: ff.Locked}})
 		case it.Equation != nil:
 			out = append(out, canvas.Inline{Object: &canvas.EquationObject{Formula: it.Equation.Formula, Alt: it.Equation.Alt, Inline: it.Equation.Inline}, Block: !it.Equation.Inline})
 		case it.Media != nil:

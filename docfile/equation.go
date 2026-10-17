@@ -49,3 +49,32 @@ func (d Document) EquationsAsText() Document {
 	}
 	return out
 }
+
+// FormFieldsAsText is d with each form field replaced by the text that stands for it (Words), for the formats that
+// write the text of a document item by item (plain text, Markdown): a reader of the file gets the label and what was
+// written in the field.
+func (d Document) FormFieldsAsText() Document {
+	has := false
+	for _, it := range d.Content {
+		if it.Form != nil {
+			has = true
+			break
+		}
+	}
+	if !has {
+		return d
+	}
+	out := d
+	out.Content = make([]Item, 0, len(d.Content))
+	for _, it := range d.Content {
+		switch {
+		case it.Form == nil:
+			out.Content = append(out.Content, it)
+		default:
+			if w := it.Form.Words(); w != "" {
+				out.Content = append(out.Content, Item{Chars: &Chars{Text: w}})
+			}
+		}
+	}
+	return out
+}
