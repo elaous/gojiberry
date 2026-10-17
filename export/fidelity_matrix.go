@@ -93,7 +93,7 @@ var exportMatrix = map[string]map[Feature]entry{
 	// HTML and EPUB link a footnote's mark to its note and back, so they keep footnotes.
 	"epub": formatTable(foldedFeatures, noPages, textForm, map[Feature]entry{FeatHighlight: drop(""), FeatFootnote: kept(), FeatCodeLanguage: kept(), FeatVertical: kept()}),
 	// HTML embeds a clip (a player with its caption track and the transcript under it).
-	"html": formatTable(foldedFeatures, textForm, map[Feature]entry{FeatHighlight: drop(""), FeatFootnote: kept(), FeatCodeLanguage: kept(), FeatMedia: kept(), FeatMediaCaptions: kept()}),
+	"html": formatTable(foldedFeatures, textForm, map[Feature]entry{FeatFormField: simple(NoteFormControl), FeatHighlight: drop(""), FeatFootnote: kept(), FeatCodeLanguage: kept(), FeatMedia: kept(), FeatMediaCaptions: kept()}),
 	// Markdown here is the editor's own: its marks for underline, highlight and raised or lowered text are
 	// not standard. Tables are written as pipe tables (cell text only: spans, shading and alignment are not) and rules as ---; pictures and footnotes are not written.
 	"markdown": formatTable(noPages, textForm, textEquation, map[Feature]entry{

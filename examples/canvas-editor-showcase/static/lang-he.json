@@ -1772,6 +1772,10 @@
     "diagram.stale": "התיאור השתנה מאז הציור: צירו שוב.",
     "diagram.insert": "הצבת התרשים במסמך",
     "diagram.needAlt": "תרשים צריך תיאור במילים: כתבו מה הוא מראה.",
-    "diagram.inserted": "התרשים במסמך. תיאורו נשמר כתיאור הארוך של התמונה."
+    "diagram.inserted": "התרשים במסמך. תיאורו נשמר כתיאור הארוך של התמונה.",
+    "forms.answersJSON": "הורדת התשובות (JSON)",
+    "forms.answersCSV": "הורדת התשובות (CSV)",
+    "forms.answersSaved": "התשובות נשמרו.",
+    "forms.answersProblems": "בחלק מהשדות יש בעיה; התשובות נשמרו כמות שהן."
   }
 }

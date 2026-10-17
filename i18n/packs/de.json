@@ -1732,6 +1732,10 @@
   "diagram.stale": "Die Beschreibung hat sich seit dem Zeichnen geändert: Zeichnen Sie erneut.",
   "diagram.insert": "Das Diagramm ins Dokument setzen",
   "diagram.needAlt": "Ein Diagramm braucht eine Beschreibung in Worten: Schreiben Sie, was es zeigt.",
-  "diagram.inserted": "Das Diagramm steht im Dokument. Seine Beschreibung ist als lange Bildbeschreibung gespeichert."
+  "diagram.inserted": "Das Diagramm steht im Dokument. Seine Beschreibung ist als lange Bildbeschreibung gespeichert.",
+  "forms.answersJSON": "Antworten herunterladen (JSON)",
+  "forms.answersCSV": "Antworten herunterladen (CSV)",
+  "forms.answersSaved": "Die Antworten wurden gespeichert.",
+  "forms.answersProblems": "Bei einigen Feldern gibt es ein Problem; die Antworten wurden so gespeichert, wie sie sind."
  }
 }
