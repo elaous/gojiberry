@@ -294,6 +294,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** e2e_privacy_test.go, e2e_privacy_log_test.go, e2e_crash_test.go
 
+## Form fields
+
+**Try it.** Edit mode, Forms tab: press **Text**, give it the label "Order number" and the pattern `[A-Z]{2}\d{3}`, press Done; press **Fill in** and type `AB1234` (the problem is said), then `AB123`; add a **Checkbox** and press its box in the text; press the eye and the pen on a field in the text; press **Lock** (the pen goes), **Unlock**, and **Clear form fields**. Insert > Form fields has the same kinds.
+
+**You should see.** The fields drawn in the text with their label and value; a red outline while the value is wrong; the values in the Markdown export as `Order number: AB123`.
+
+**Automated.** `TestFormFieldsAddFillLockAndClear` (examples/canvas-editor-showcase), `TestFormFieldProblems`, `TestFormFieldEyePenAndCheckboxPresses`, `TestClearFormFieldsAndWords` (canvas), `TestFormFieldRoundTripsThroughTheFlow` (docfile), the form-field pair of `TestFidelityMatrixMatchesTheExporters` (export)
+
 ## Preferences
 
 **Try it.** Choose **Larger text** and **High contrast**, reload, and check they stay.
