@@ -1854,6 +1854,24 @@
     "help.noText": "لا يوجد نص للعمل عليه.",
     "help.failed": "تعذّر على النموذج الإجابة: %s",
     "help.empty": "لم يعطِ النموذج إجابة.",
-    "help.changed": "تغيّر النص منذ سؤالك: حدّده واسأل من جديد."
+    "help.changed": "تغيّر النص منذ سؤالك: حدّده واسأل من جديد.",
+    "diagram.kindMap": "خريطة",
+    "diagram.kindFlow": "مخطط انسيابي",
+    "diagram.needSource": "صِف المخطط أولًا.",
+    "diagram.failed": "تعذّر رسم المخطط: %s",
+    "diagram.badSVG": "لم تعطِ الإضافة رسمًا.",
+    "diagram.title": "المخططات",
+    "diagram.kind": "النوع",
+    "diagram.source": "وصف المخطط",
+    "diagram.hint": "بصيغة الإضافة، مثلًا: A --> B --> C",
+    "diagram.draw": "ارسمه",
+    "diagram.working": "جارٍ الرسم على هذا الجهاز…",
+    "diagram.previewAlt": "المخطط المرسوم",
+    "diagram.altLabel": "وصف الرسم بالكلمات لمن لا يستطيع رؤيته",
+    "diagram.altHint": "ما يُظهره المخطط وكيف ترتبط أجزاؤه",
+    "diagram.stale": "تغيّر الوصف منذ الرسم: ارسمه من جديد.",
+    "diagram.insert": "وضع المخطط في المستند",
+    "diagram.needAlt": "يحتاج المخطط إلى وصف بالكلمات: اكتب ما يُظهره.",
+    "diagram.inserted": "المخطط في المستند. يُحفظ وصفه وصفًا طويلًا للصورة."
   }
 }

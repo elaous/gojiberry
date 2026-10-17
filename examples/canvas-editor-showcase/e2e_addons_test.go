@@ -217,3 +217,32 @@ func TestSpellingWithTheSpellAddonsDictionary(t *testing.T) {
 	d.OK(slices.Contains(words, "xyzzq") && !slices.Contains(words, "haus") && !slices.Contains(words, "fenster"), "words in the add-on's dictionary pass, the nonsense is flagged: "+strings.Join(words, " "))
 	d.NoErrors()
 }
+
+// With the diagram add-on, the Pictures tab draws a diagram from a description; it is put in the document as a picture
+// only with a description in words, and its source becomes the picture's long description.
+func TestDrawADiagramWithTheDiagramAddon(t *testing.T) {
+	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
+	d.WaitSelector("canvas")
+	d.Eval(`window.addons = window.addons || {}; window.addons.diagram = { render(o) {
+		window.__dg = {kind: o.kind, source: o.source, language: o.language};
+		return Promise.resolve({svg: '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="#2563eb"/></svg>'}); } }`, nil)
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Click(`button[data-tab="images"]`)
+	d.WaitSelector("#diagram-source")
+	d.Fill("#diagram-source", "A --> B --> C")
+	d.Select("#diagram-kind", "map")
+	d.Click("#diagram-draw")
+	d.WaitSelector("#diagram-preview")
+	d.OK(d.Str(`window.__dg.kind`) == "map" && d.Str(`window.__dg.source`) == "A --> B --> C" && d.Str(`window.__dg.language`) == "en", "the add-on was given the kind, the source and the language")
+	d.OK(d.Str(`String(document.getElementById('diagram-insert').disabled)`) == "false", "inserting is possible")
+	d.Click("#diagram-insert")
+	d.WaitFor("a description is asked for", `document.getElementById('diagram-msg') && document.getElementById('diagram-msg').textContent.includes('needs a description')`)
+	d.OK(!d.Has("#img-alt-0"), "nothing was put in the document")
+	d.Fill("#diagram-alt", "Three boxes in a row, A leads to B and B to C.")
+	d.Click("#diagram-insert")
+	d.WaitSelector("#img-alt-0")
+	d.OK(d.Value("#img-alt-0") == "Three boxes in a row, A leads to B and B to C.", "the description is the picture's alt text")
+	d.OK(d.Value("#img-long-0") == "A --> B --> C", "and the source is its long description: "+d.Value("#img-long-0"))
+	d.NoErrors()
+}
