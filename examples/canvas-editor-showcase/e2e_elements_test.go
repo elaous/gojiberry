@@ -114,6 +114,6 @@ func TestAnInlineEquationStandsInItsSentence(t *testing.T) {
 	d.WaitFor("the reading copy has the sentence", `document.getElementById('a11y-text').textContent.includes('Let ') && document.getElementById('a11y-text').textContent.includes('be given.')`)
 	d.Click(`button[data-tab="transfer"]`)
 	_, html := d.Download(func() { d.Click(`.gj-transfer-button[data-kind="export"][data-format="html"]`) })
-	d.OK(strings.Contains(string(html), "Let x sub 1 squared be given."), "the words are in the sentence of the export")
+	d.OK(strings.Contains(string(html), `display="inline" alttext="x sub 1 squared"`) && strings.Contains(string(html), "<p>Let <math") && strings.Contains(string(html), "</math> be given.</p>"), "the formula is inline MathML in the sentence of the export")
 	d.NoErrors()
 }

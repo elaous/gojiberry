@@ -485,7 +485,7 @@ func TestEndToEnd(t *testing.T) {
 		}},
 	} {
 		name, data := d.Download(func() { d.Click(fmt.Sprintf(`.gj-transfer-button[data-kind="export"][data-format="%s"]`, f.format)) })
-		ok(name == "Quarterly report"+f.ext, f.format+" export is named after the title: "+name)
+		ok(name == "Imported"+f.ext, f.format+" export is named after the title the Markdown import took from its first heading: "+name)
 		ok(f.check(data), f.format+" export is a real "+f.format+" file")
 		if f.format == "docx" {
 			docxBytes = data
