@@ -175,6 +175,11 @@ func TestAMentionedPersonIsToldAndCanMarkItRead(t *testing.T) {
 	a.OK(!a.Has("#mentions"), "the author has nothing to be told")
 	b.Click("#mention-read-0")
 	b.WaitFor("it is gone once read", `!document.getElementById('mentions')`)
+	b.ReloadPage()
+	b.Wait("s.live.status === 'online' && s.live.role === 'editor' && s.comments === 1")
+	b.Click(`button[data-tab="comments"]`)
+	b.Sleep(500)
+	b.OK(!b.Has("#mentions"), "and it stays read when the page is opened again")
 	a.NoErrors()
 	b.NoErrors()
 }
