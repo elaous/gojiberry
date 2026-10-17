@@ -603,7 +603,8 @@ func main() {
 			}
 		case "language":
 			if flow != nil {
-				panel = langPanel(u, &state, func() *canvas.TextFlow { return flow }, func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }, redraw, renderUI)
+				panel = xango.Frag(langPanel(u, &state, func() *canvas.TextFlow { return flow }, func() { root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView).RevealPending() }, redraw, renderUI),
+					writingHelp(u, &state, func() *canvas.TextFlow { return flow }, redraw, renderUI))
 			}
 		case "migrate":
 			panel = components.Migrate(u.migrate.Props(func() { pickWordFiles(u) }))
@@ -1026,7 +1027,7 @@ func main() {
 			renderUI()
 		}
 		b, _ := json.Marshal(map[string]any{
-			"hyphenate": state.Hyphenate, "columns": columnCount, "columnConfig": columnCfg, "language": map[string]any{"translate": u.translator() != nil, "grammar": u.lang.grammar != nil, "issues": len(u.lang.issues), "translated": u.lang.translated, "error": u.lang.err, "busy": u.lang.busy},
+			"hyphenate": state.Hyphenate, "columns": columnCount, "columnConfig": columnCfg, "language": map[string]any{"translate": u.translator() != nil, "grammar": u.grammarChecker() != nil, "issues": len(u.lang.issues), "translated": u.lang.translated, "error": u.lang.err, "busy": u.lang.busy},
 			"stats": statsState(stats), "share": u.shareLink, "drafts": len(u.drafts), "people": u.people.list(), "links": u.people.links.state(), "usage": u.usage.state(), "encryption": u.enc.state(), "spell": map[string]any{"enabled": u.spell.enabled, "checked": u.spell.text != "", "words": len(u.spell.words), "spans": len(u.spell.spans)}, "find": map[string]any{"open": u.find.open, "count": len(u.find.matches), "current": u.find.cur, "error": u.find.err, "query": u.find.opts.Query},
 			"mode": state.Mode.String(), "features": names, "commands": len(stage.Features.Commands()),
 			"elements": cxango.Elements(), "editing": editing, "cursors": cursors, "text": text,

@@ -145,3 +145,45 @@ func TestTranslateTheSelectionWithTheTranslateAddon(t *testing.T) {
 	d.OK(strings.Contains(d.State().Str("text"), "[fr] "), "Replace the selection puts the translation in the text")
 	d.NoErrors()
 }
+
+// With the llm add-on, the Language tab checks grammar on the device (the model is asked for issues and its answer is
+// checked against the text), and "Writing help" asks for the selection to be rewritten: the answer is shown, marked as
+// machine-made, and goes into the document only when the author presses a button.
+func TestLanguageTabWithTheLlmAddon(t *testing.T) {
+	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
+	d.WaitSelector("canvas")
+	d.Eval(`window.__asks = []; window.addons = window.addons || {}; window.addons.llm = { generate(o) {
+		window.__asks.push({format: o.format, prompt: o.prompt});
+		if (o.format === 'json') {
+			const text = o.prompt.split('Text:\n').pop();
+			const i = text.indexOf('canvas');
+			return Promise.resolve({text: JSON.stringify([{offset: i, length: 6, message: 'plural', suggestion: 'canvases'}])});
+		}
+		return Promise.resolve({text: 'Here is the result:\n"A short version."'});
+	} }`, nil)
+	d.ToggleMode()
+	d.Click(`button[data-tab="language"]`)
+	d.WaitSelector(".gj-lang-check")
+
+	// grammar through the add-on
+	d.Click(".gj-lang-check")
+	d.WaitFor("an issue", "document.querySelector('.gj-lang-issue')")
+	d.OK(d.State().Int("language.issues") == 1, "an issue is found by the model on the device")
+	d.OK(strings.Contains(d.Text(".gj-lang-apply"), "canvases"), "with the fix on offer: "+d.Text(".gj-lang-apply"))
+
+	// writing help on a selection
+	d.OK(d.Disabled("#help-shorter"), "asking waits for a selection")
+	d.CanvasDblClick(240, 164)
+	d.Click(`button[data-tab="stats"]`)
+	d.Click(`button[data-tab="language"]`)
+	d.Click("#help-shorter")
+	d.WaitSelector("#help-result")
+	d.OK(d.Value("#help-result") == "A short version.", "the answer is tidied: "+d.Value("#help-result"))
+	d.OK(d.Bool(`window.__asks[window.__asks.length - 1].prompt.includes('shorter')`), "and the model was asked for a shorter version")
+	before := d.State().Str("text")
+	d.OK(d.State().Str("text") == before && !strings.Contains(before, "A short version."), "nothing is in the document yet")
+	d.Click("#help-replace")
+	d.Wait("s.text !== " + e2etest.J(before))
+	d.OK(strings.Contains(d.State().Str("text"), "A short version."), "Replace puts the answer in place of the selection")
+	d.NoErrors()
+}

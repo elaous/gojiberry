@@ -1694,6 +1694,26 @@
   "ocr.textLabel": "Aus Bild %d gelesener Text (mit dem Bild vergleichen)",
   "ocr.insert": "Den Text hinter das Bild setzen",
   "ocr.inserted": "Der Text steht im Dokument, hinter dem Bild.",
-  "ocr.asLong": "Den Text als lange Beschreibung verwenden"
+  "ocr.asLong": "Den Text als lange Beschreibung verwenden",
+  "help.summarise": "Zusammenfassen",
+  "help.plainer": "In einfacheren Worten sagen",
+  "help.shorter": "Kürzer fassen",
+  "help.formal": "Förmlicher machen",
+  "help.friendly": "Freundlicher machen",
+  "help.explain": "Erklären",
+  "help.title": "Schreibhilfe",
+  "help.about": "Markieren Sie Text und fragen Sie. Ein Modell auf diesem Gerät schreibt eine Antwort; sie kann falsch sein, lesen Sie sie also, bevor Sie sie verwenden. Es kommt nichts ins Dokument, solange Sie keine Schaltfläche drücken.",
+  "help.bar": "Anfragen",
+  "help.needSelection": "Markieren Sie zuerst Text im Dokument.",
+  "help.working": "Wird auf diesem Gerät bearbeitet…",
+  "help.resultLabel": "Antwort: %s (maschinell erzeugt, bitte prüfen)",
+  "help.replace": "Die Markierung damit ersetzen",
+  "help.after": "Hinter die Markierung setzen",
+  "help.discard": "Verwerfen",
+  "help.tooLong": "Das ist zu viel Text für eine Anfrage. Markieren Sie einen kürzeren Teil.",
+  "help.noText": "Es gibt keinen Text zu bearbeiten.",
+  "help.failed": "Das Modell konnte nicht antworten: %s",
+  "help.empty": "Das Modell hat nicht geantwortet.",
+  "help.changed": "Der Text hat sich seit Ihrer Anfrage geändert: Markieren Sie ihn und fragen Sie erneut."
  }
 }
