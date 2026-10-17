@@ -64,3 +64,32 @@ func TestAddonsTabAndDictationOnTheDevice(t *testing.T) {
 	d.WaitSelector("#addons-whisper-0-install")
 	d.NoErrors()
 }
+
+// With the describe add-on, the draft description comes from what the picture shows: the add-on is given the picture as
+// PNG bytes, the draft says it came from the add-on and can be wrong, and nothing goes into the description until the
+// author uses it.
+func TestDraftDescriptionFromTheDescribeAddon(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.Eval(`localStorage.setItem('showcase:a11y', JSON.stringify({hint: 'on'}))`, nil)
+	d.Reload()
+	d.WaitSelector("canvas")
+	d.Eval(`window.addons = window.addons || {}; window.addons.describe = { describe(o) {
+		window.__desc = {mime: o.mime, magic: Array.from(o.image.slice(0, 4)).join(','), lang: o.language, kind: o.image.constructor.name};
+		return Promise.resolve({text: 'A bar chart with two blue bars.'}); } }`, nil)
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Click(`button[data-tab="images"]`)
+	d.WaitSelector("#img-insert")
+	d.ChooseFile(func() { d.Click("#img-insert") }, "bar.png", pngBytes(t))
+	d.WaitSelector("#img-hint-0")
+	d.Click("#img-hint-0")
+	d.WaitSelector("#img-draft-0")
+	draft := d.Text("#img-draft-0")
+	d.OK(strings.Contains(draft, "A bar chart with two blue bars.") && strings.Contains(draft, "describe add-on") && strings.Contains(draft, "can be wrong"), "the draft says where it is from: "+draft)
+	d.OK(d.Str(`window.__desc.magic`) == "137,80,78,71" && d.Str(`window.__desc.mime`) == "image/png" && d.Str(`window.__desc.kind`) == "Uint8Array" && d.Str(`window.__desc.lang`) == "en",
+		"the add-on was given PNG bytes and the language")
+	d.OK(d.Str(`document.getElementById('img-alt-0').value`) == "", "nothing is in the description yet")
+	d.Click("#img-usedraft-0")
+	d.WaitFor("the description has the draft", `document.getElementById('img-alt-0').value === 'A bar chart with two blue bars.'`)
+	d.NoErrors()
+}

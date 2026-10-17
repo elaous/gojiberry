@@ -3,6 +3,7 @@
 package canvas
 
 import (
+	"encoding/base64"
 	"errors"
 	"strconv"
 	"strings"
@@ -85,6 +86,40 @@ func (i *HTMLImage) Pixels(maxSide int) (rgba []byte, w, h int, ok bool) {
 		js.CopyBytesToGo(rgba, data)
 	}()
 	return rgba, w, h, ok
+}
+
+// PNG is the picture as PNG bytes, scaled down so that the longer side is at most maxSide pixels (never up), read in
+// the page: for an add-on that describes or reads the picture on the device. ok is false if the browser will not give it.
+func (i *HTMLImage) PNG(maxSide int) (png []byte, ok bool) {
+	nw, nh := i.Size()
+	if nw <= 0 || nh <= 0 || maxSide <= 0 {
+		return nil, false
+	}
+	k := min(float64(maxSide)/max(nw, nh), 1)
+	w, h := max(int(nw*k), 1), max(int(nh*k), 1)
+	cv := js.Global().Get("document").Call("createElement", "canvas")
+	cv.Set("width", w)
+	cv.Set("height", h)
+	ctx := cv.Call("getContext", "2d")
+	if !ctx.Truthy() {
+		return nil, false
+	}
+	defer func() {
+		if recover() != nil {
+			png, ok = nil, false
+		}
+	}()
+	ctx.Call("drawImage", i.v, 0, 0, w, h)
+	url := cv.Call("toDataURL", "image/png").String()
+	_, b64, found := strings.Cut(url, ",")
+	if !found {
+		return nil, false
+	}
+	data, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil, false
+	}
+	return data, true
 }
 
 // LoadImage starts loading url (a normal or data: URL) and calls
