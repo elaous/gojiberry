@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-1 of 10 since the last full run (full run on the branch of the 10th merge, on main plus inline math (MathML in sentences, `$...$`, limits, brackets, matrices), with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy required: `make check` passed in full on the second try, after fixing four tests the earlier merges had left stale or racing (the mention announcement was overwritten by a collaboration message; the Markdown import fidelity test; the export name after a Markdown import; the inline formula export); coverage score 89.1%).
+2 of 10 since the last full run (full run on the branch of the 10th merge, on main plus inline math (MathML in sentences, `$...$`, limits, brackets, matrices), with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy required: `make check` passed in full on the second try, after fixing four tests the earlier merges had left stale or racing (the mention announcement was overwritten by a collaboration message; the Markdown import fidelity test; the export name after a Markdown import; the inline formula export); coverage score 89.1%).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
