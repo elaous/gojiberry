@@ -67,13 +67,12 @@ func (d Document) FormFieldsAsText() Document {
 	out := d
 	out.Content = make([]Item, 0, len(d.Content))
 	for _, it := range d.Content {
-		switch {
-		case it.Form == nil:
+		if it.Form == nil {
 			out.Content = append(out.Content, it)
-		default:
-			if w := it.Form.Words(); w != "" {
-				out.Content = append(out.Content, Item{Chars: &Chars{Text: w}})
-			}
+			continue
+		}
+		if w := it.Form.Words(); w != "" {
+			out.Content = append(out.Content, Item{Chars: &Chars{Text: w}})
 		}
 	}
 	return out

@@ -140,7 +140,7 @@ func (f *FormFieldObject) Problem() string {
 			return FormProblemPhone
 		}
 	case FormURL:
-		if low := strings.ToLower(v); !(strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://")) || !SafeLinkURL(v) || len(v) < 9 {
+		if low := strings.ToLower(v); (!strings.HasPrefix(low, "http://") && !strings.HasPrefix(low, "https://")) || !SafeLinkURL(v) || len(v) < 9 {
 			return FormProblemURL
 		}
 	case FormDate:
