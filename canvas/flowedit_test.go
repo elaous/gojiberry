@@ -467,3 +467,34 @@ func TestEnterAfterThreeMarkdownTableLinesMakesATable(t *testing.T) {
 		}
 	}
 }
+
+// Typing $x^2$ makes an inline formula when the closing $ is typed; prices and spaced dollars stay text.
+func TestTypingDollarsMakesAnInlineFormula(t *testing.T) {
+	typeAll := func(s string) *TextFlow {
+		f, st := editFlow(t, 0, Chars{Text: ""})
+		for _, r := range s {
+			st.InsertText(string(r))
+		}
+		return f
+	}
+	f := typeAll("Area $pi r^2$ here")
+	var eq *EquationObject
+	for _, it := range f.Items {
+		if in, ok := it.(Inline); ok {
+			eq, _ = in.Object.(*EquationObject)
+		}
+	}
+	if eq == nil || !eq.Inline || eq.Formula != "pi r^2" {
+		t.Fatalf("an inline formula: %q", flowText(f))
+	}
+	for _, s := range []string{"costs $5 and $ 6", "a $ b$", "empty $$", "one $x"} {
+		g := typeAll(s)
+		for _, it := range g.Items {
+			if in, ok := it.(Inline); ok {
+				if _, is := in.Object.(*EquationObject); is {
+					t.Errorf("%q should stay text", s)
+				}
+			}
+		}
+	}
+}

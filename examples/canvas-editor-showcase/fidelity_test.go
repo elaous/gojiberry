@@ -50,10 +50,10 @@ func TestFidelityStateChoosesAFormatOnOfferAndReportsIt(t *testing.T) {
 	if p := s.props(doc, exports, nil); p.ImportName != "scan.pdf" || !p.Import.Known || len(p.Import.Losses) != 1 || p.Import.Losses[0].Feature != "layout" {
 		t.Errorf("import of a PDF: %+v %q", p.Import, p.ImportName)
 	}
-	s.noteImport("markdown", "a.md", nil)
+	s.noteImport("markdown", "a.md", []byte("![x](https://example.com/a.png)\n"))
 	<-done
-	if s.imported.Known {
-		t.Errorf("what a Markdown import leaves out is not known, and must not read as nothing")
+	if !s.imported.Known || len(s.imported.Losses) == 0 {
+		t.Errorf("a Markdown import is read for what it leaves out (here a picture kept as an address): %+v", s.imported)
 	}
 }
 

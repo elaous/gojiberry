@@ -39,7 +39,11 @@ func (e *EquationObject) Measure(p Painter, maxW, _ float64) (float64, float64) 
 	f := strings.TrimSpace(e.Formula)
 	var b mbox
 	if f != "" {
-		b = typeset(p, parseMath(f), e.size())
+		tree := parseMath(f)
+		if !e.Inline {
+			markLimits(tree)
+		}
+		b = typeset(p, tree, e.size())
 	} else {
 		p.SetFont("italic " + itoa(int(e.size())) + "px serif")
 		b = mbox{w: p.MeasureTextWidth(e.label()), asc: 0.72 * e.size(), desc: 0.22 * e.size()}

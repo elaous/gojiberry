@@ -126,6 +126,7 @@ type ui struct {
 	mirrorWroteAt       time.Time // when the page last wrote the copy's selection (its selectionchange comes later)
 	mirrorSig, mirrorAt string    // where the caret was in the copy when last drawn, and the key of the caret last followed
 	announcement        string
+	mentionSaid         string // the mention announced in the current pass of noteCollab, kept so a message after it joins it
 	spell               spellState
 	lang                langState
 	statsSig            string // the counts the status bar and Stats tab last showed

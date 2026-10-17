@@ -134,11 +134,11 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 ## Equations
 
-**Try it.** Pictures tab > Equations: write `x = frac{-b + sqrt{b^2 - 4ac}}{2a}`, a text alternative in words, tick **In the line of text**, and insert it in the middle of a sentence.
+**Try it.** Pictures tab > Equations: write `x = frac{-b + sqrt{b^2 - 4ac}}{2a}`, a text alternative in words, tick **In the line of text**, and insert it in the middle of a sentence. Also try `sum_{i=1}^{n} i` and `matrix{a & b \\ c & d}` as blocks, and type `$x^2$` in the text.
 
 **You should see.** What the picture in [features.md](features.md#equations) shows; the Word, HTML and text exports have the words of the alternative in the sentence.
 
-**Automated.** `TestTypesetFractionHasARuleAndPutsTheNumeratorAbove`, `TestTypesetScriptsAndRoots`, `TestInlineEquationSitsOnTheBaselineOfItsLine`, `TestBlockEquationIsTypesetNotTyped` (canvas), `TestTypesetterAndMathMLReadTheSameSymbols` (export), `TestAnInlineEquationStaysInItsLineAsText` (docfile), `TestAnInlineEquationStandsInItsSentence` (examples/canvas-editor-showcase)
+**Automated.** `TestTypesetFractionHasARuleAndPutsTheNumeratorAbove`, `TestTypesetScriptsAndRoots`, `TestInlineEquationSitsOnTheBaselineOfItsLine`, `TestBlockEquationIsTypesetNotTyped` (canvas), `TestTypesetLimitsOfASumGoAboveAndBelowInABlock`, `TestTypesetBracketsGrowWithAFraction`, `TestTypesetMatrixAndAlignedEquations`, `TestTypingDollarsMakesAnInlineFormula` (canvas), `TestTypesetterAndMathMLReadTheSameSymbols`, `TestMatrixAndAlignedEquationsInMathMLAndOfficeMath`, `TestInlineFormulaIsInlineMathMLInHTML` (export), `TestAnInlineEquationStaysInItsLineAsText` (docfile), `TestAnInlineEquationStandsInItsSentence` (examples/canvas-editor-showcase)
 
 ## Markdown tables
 
