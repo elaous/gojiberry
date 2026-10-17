@@ -690,17 +690,41 @@ func (r *reader) runs(kids []*node, inherit docfile.Format, info paraInfo) {
 			r.closeComment(k.attr("id"))
 		case "smartTag", "sdt", "sdtContent", "fldSimple":
 			r.runs(k.kids, inherit, info)
-		case "oMathPara", "oMath":
-			r.equation(k)
+		case "oMathPara":
+			r.equation(k, false)
+		case "oMath":
+			// next to text in its paragraph it stands in the line (Word's inline equation); alone it is a line of its own
+			r.equation(k, textAround(kids, k))
 		}
 	}
 }
 
-// equation reads an Office Math equation into an equation item of its own line: the formula in the linear
+// textAround says the paragraph's children hold visible text besides the node (hidden text, which the exporter writes
+// for the words of an equation, does not count).
+func textAround(kids []*node, except *node) bool {
+	for _, k := range kids {
+		if k == except || k.name != "r" {
+			continue
+		}
+		if rpr := k.child("rPr"); rpr != nil && rpr.child("vanish") != nil {
+			continue
+		}
+		if strings.TrimSpace(plainText(k)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// equation reads an Office Math equation into an equation item (of its own line, or in the line when inline): the formula in the linear
 // notation (with no alternative text of its own: the formula stands for it).
-func (r *reader) equation(m *node) {
+func (r *reader) equation(m *node, inline bool) {
 	formula := linearFormula(m)
 	if formula == "" {
+		return
+	}
+	if inline {
+		r.add(docfile.Item{Equation: &docfile.EquationItem{Formula: formula, Inline: true}})
 		return
 	}
 	if c := r.doc.Content; len(c) > 0 {

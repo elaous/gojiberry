@@ -449,6 +449,12 @@ func (b *docxBuilder) inline(segs []Segment) string {
 			continue
 		}
 		f := s.Format
+		if f.Formula != "" && f.Change == NoChange && f.Href == "" && f.NoteRef == 0 {
+			// a formula in the sentence: Office Math in the line, with the words that stand for it as hidden text
+			// (docximport reads them back as the equation's alternative)
+			sb.WriteString(OMML(f.Formula) + `<w:r><w:rPr><w:vanish/></w:rPr><w:t xml:space="preserve">` + esc(s.Text) + `</w:t></w:r>`)
+			continue
+		}
 		// Children in the order the schema lists them (Word is strict about it).
 		var rpr strings.Builder
 		if f.Bold {
