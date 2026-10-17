@@ -144,6 +144,8 @@ func survives(f Feature, d docfile.Document) bool {
 		return hasItem(d, func(it docfile.Item) bool { return it.Media != nil })
 	case FeatEquation:
 		return hasItem(d, func(it docfile.Item) bool { return it.Equation != nil })
+	case FeatFormField:
+		return hasItem(d, func(it docfile.Item) bool { return it.Form != nil })
 	case FeatCodeLanguage:
 		return hasPara(d, func(p docfile.Para) bool { return p.CodeLang != "" })
 	case FeatImageLongDesc:

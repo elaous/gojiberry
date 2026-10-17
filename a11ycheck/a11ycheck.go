@@ -55,6 +55,8 @@ const (
 	// RuleEquationAlt: an equation with no text alternative (an error: a screen reader meets symbols it cannot read), or
 	// whose alternative is only the formula typed again (a warning).
 	RuleEquationAlt = "equation-alt"
+	// RuleFormLabel: a form field with no label, so a screen reader says "edit text" and nothing about what to write.
+	RuleFormLabel = "form-label"
 )
 
 // Finding is one problem.
@@ -239,6 +241,15 @@ func checkStructure(doc docfile.Document) []Finding {
 			out = fake.flush(out)
 			out = append(out, EquationFindings(*it.Equation, offset, i)...)
 			offset++
+		case it.Form != nil:
+			out = fake.flush(out)
+			if strings.TrimSpace(it.Form.Label) == "" {
+				out = append(out, Finding{Rule: RuleFormLabel, Severity: Error, Offset: offset, Item: i, Text: excerpt(it.Form.Name),
+					Message: "A form field has no label, so a reader who cannot see it does not know what to write in it.",
+					Fix:     "Give the field a label that says what it asks for.",
+					Action:  ActionDescribe})
+			}
+			offset++
 		case it.Table != nil:
 			out = fake.flush(out)
 			out = append(out, checkTable(it.Table, offset, i)...)
@@ -276,7 +287,7 @@ func itemOffsets(doc docfile.Document) []int {
 		switch {
 		case it.Chars != nil:
 			n += len([]rune(it.Chars.Text))
-		case it.Footnote != nil, it.TOC != nil, it.Index != nil, it.Rule != nil, it.Table != nil, it.Image != nil, it.Media != nil, it.Equation != nil:
+		case it.Footnote != nil, it.TOC != nil, it.Index != nil, it.Rule != nil, it.Table != nil, it.Image != nil, it.Media != nil, it.Equation != nil, it.Form != nil:
 			n++
 		}
 	}

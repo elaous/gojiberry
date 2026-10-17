@@ -106,6 +106,10 @@ Cells keep what you typed, so `| 3 | =A1*2 |` is a formula. A table has a switch
 
 The References tab keeps the sources a document cites (books, articles, web pages, reports) and writes them in the style of a publication: APA, MLA, Chicago, IEEE, Harvard, Vancouver or ABNT. **Cite it here** puts the in-text mark at the caret, for example (Silva & Costa, 2020) or [3]; **Insert the list of references** writes the list at the end, in order, with titles in italics. Change the style and the same sources are written the new way. The sources are saved with the document.
 
+## Form fields
+
+Insert > Form fields, or the bar of kinds in the Forms tab, puts a field in the text: one line, several lines, e-mail, number, phone, web address, date, a checkbox or a choice list. A field has a label, a placeholder, a pattern (a regular expression the whole value must match), a required mark and, for a choice list, its choices; what the person writes in it is saved with the document. Each field shows a small **eye** (fill it in) and a small **pen** (change what the field is); the problem with a value (not an e-mail address, does not match the pattern, required and empty) is said as it is typed and the field is outlined in red. The owner can **lock** a field: it keeps its properties, so it has no pen, and only its value can be filled in. **Clear form fields** empties them all. Every export writes the label and the value as text, the Check tab asks for a label on each field, and Find searches them.
+
 ## Two-page spread
 
 ![Two-page spread](features/img/spread.webp)

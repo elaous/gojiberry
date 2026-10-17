@@ -192,6 +192,10 @@ func featurePairs() map[Feature]pair {
 		with:    docOf(plain("one\n"), docfile.Item{Equation: &docfile.EquationItem{Formula: "x^2+y^2=z^2", Alt: "x squared plus y squared equals z squared"}}, plain("two\n")),
 		without: docOf(plain("one\n"), plain("two\n")),
 	}
+	m[FeatFormField] = pair{
+		with:    docOf(plain("one\n"), docfile.Item{Form: &docfile.FormFieldItem{Kind: "text", Label: "Name", Value: "Ana"}}, plain("two\n")),
+		without: docOf(plain("one\n"), plain("two\n")),
+	}
 	codeBlock := func(lang string) docfile.Document {
 		return docOf(paraItem(docfile.Para{Style: "Code", CodeLang: lang}), plain("x := 1\n"), plain("body\n"))
 	}

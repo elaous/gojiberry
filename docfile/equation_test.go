@@ -126,3 +126,35 @@ func TestAnInlineEquationStaysInItsLineAsText(t *testing.T) {
 		t.Fatalf("one inline and one block equation: %d %d", inline, block)
 	}
 }
+
+// A form field keeps its properties and what was written in it through the editor and back.
+func TestFormFieldRoundTripsThroughTheFlow(t *testing.T) {
+	d := Document{Title: "Form", Content: []Item{
+		{Chars: &Chars{Text: "Name "}},
+		{Form: &FormFieldItem{Kind: "email", Name: "mail", Label: "E-mail", Placeholder: "you@example.com", Pattern: `.+@.+`, Required: true,
+			Options: []string{"a", "b"}, Value: "ana@example.com", Locked: true}},
+		{Chars: &Chars{Text: "\n"}},
+	}}
+	f := &canvas.TextFlow{}
+	d.Apply(f)
+	var got *canvas.FormFieldObject
+	for _, it := range f.Items {
+		if in, ok := it.(canvas.Inline); ok {
+			got, _ = in.Object.(*canvas.FormFieldObject)
+		}
+	}
+	if got == nil || got.Kind != canvas.FormEmail || got.Value != "ana@example.com" || !got.Locked || !got.Required || len(got.Options) != 2 {
+		t.Fatalf("flow: %+v", got)
+	}
+	got.Value = "bo@example.com"
+	back := FromFlow("Form", f).Content
+	var item *FormFieldItem
+	for _, it := range back {
+		if it.Form != nil {
+			item = it.Form
+		}
+	}
+	if item == nil || item.Value != "bo@example.com" || item.Label != "E-mail" || !item.Locked || item.Pattern != ".+@.+" {
+		t.Fatalf("back: %+v", item)
+	}
+}

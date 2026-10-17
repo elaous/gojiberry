@@ -73,6 +73,7 @@ type ui struct {
 	refs         refsState      // the sources the document cites (References tab)
 	imgFind      imageFind      // the "find a picture online" form of the Pictures tab
 	media        mediaForm      // the clip being typed in the Pictures tab and the caption drafts
+	forms        formsState     // the Forms tab: the field being filled in or changed
 	elements     elementsForm   // the equation being typed and the last message of the equation and code parts of the tab
 	sugg         suggestState
 	ghost        ghostUI
@@ -248,6 +249,7 @@ func main() {
 			return
 		}
 		flow = root.Find(cxango.TagTextFlow, 0).(*canvas.TextFlow)
+		u.wireForms(flow, redraw, renderUI)
 		stage.Draw()
 	}
 
@@ -483,6 +485,7 @@ func main() {
 				{Label: "Index", OnSelect: func() { run(canvas.CmdIndexInsert) }},
 				{Label: "Link…", Shortcut: components.FormatChord("Mod+K", mac), OnSelect: func() { run(canvas.CmdEditLink) }},
 				{Label: T("menu.picture", "Picture…"), OnSelect: func() { u.tab = "images"; renderUI() }},
+				{Label: T("menu.forms", "Form fields"), Items: formsMenu(u, func() *canvas.TextFlow { return flow }, redraw, renderUI)},
 				{Separator: true},
 				{Label: "Page break", Shortcut: components.FormatChord("Mod+Enter", mac), OnSelect: func() { run(canvas.CmdPageBreak) }},
 				{Label: "Column break", Shortcut: components.FormatChord("Mod+Shift+Enter", mac), OnSelect: func() { run(canvas.CmdColumnBreak) }},
@@ -519,7 +522,7 @@ func main() {
 			// along it), laid out as before (display:contents)
 			xango.El("div", []xango.Attr{xango.A("role", "tablist"), xango.A("aria-label", components.Translate("tab.list", "Side panel")), xango.A("style", "display:contents")},
 				tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
-				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "review", "Review", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI), tabButton(u, "images", "Pictures", renderUI), tabButton(u, "refs", "References", renderUI),
+				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "review", "Review", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI), tabButton(u, "images", "Pictures", renderUI), tabButton(u, "refs", "References", renderUI), tabButton(u, "forms", "Forms", renderUI),
 				tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
 				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "console", "Console", renderUI), tabButton(u, "public", "Public link", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "speech", "Speech", renderUI), tabButton(u, "privacy", "Privacy", renderUI), tabButton(u, "prefs", "Preferences", renderUI)),
 		)
@@ -548,6 +551,8 @@ func main() {
 		switch u.tab {
 		case "outline":
 			panel = outlinePanel(&state, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, run, redraw, refocus, renderUI)
+		case "forms":
+			panel = formsPanel(u, &state, func() *canvas.TextFlow { return flow }, redraw, renderUI)
 		case "refs":
 			panel = refsPanel(u, &state, func() *canvas.TextFlow { return flow }, redraw, renderUI)
 		case "images":
