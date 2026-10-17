@@ -1799,6 +1799,7 @@
     "scripts.finished": "הסקריפט הסתיים.",
     "scripts.stopped": "הסקריפט נעצר.",
     "scripts.timeout": "הסקריפט לקח יותר מדי זמן ונעצר.",
-    "scripts.tooMany": "הסקריפט שלח יותר מדי בקשות ונעצר."
+    "scripts.tooMany": "הסקריפט שלח יותר מדי בקשות ונעצר.",
+    "scripts.allowWrite": "רשאי לכתוב טקסט במסמך, בסמן"
   }
 }

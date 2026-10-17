@@ -1759,6 +1759,7 @@
   "scripts.finished": "El script terminó.",
   "scripts.stopped": "Se detuvo el script.",
   "scripts.timeout": "El script tardó demasiado y se detuvo.",
-  "scripts.tooMany": "El script hizo demasiadas peticiones y se detuvo."
+  "scripts.tooMany": "El script hizo demasiadas peticiones y se detuvo.",
+  "scripts.allowWrite": "Puede escribir texto en el documento, en el cursor"
  }
 }

@@ -11,9 +11,10 @@ type host struct {
 	text string
 }
 
-func (h *host) Commands() []Command { return []Command{{"bold", "Bold"}, {"italic", "Italic"}} }
-func (h *host) Run(n string) bool   { h.ran = append(h.ran, n); return true }
-func (h *host) Text() string        { return h.text }
+func (h *host) Commands() []Command  { return []Command{{"bold", "Bold"}, {"italic", "Italic"}} }
+func (h *host) Run(n string) bool    { h.ran = append(h.ran, n); return true }
+func (h *host) Text() string         { return h.text }
+func (h *host) Insert(t string) bool { h.text += t; return true }
 
 func ask(t *testing.T, s *Session, req string) Response {
 	t.Helper()
@@ -44,13 +45,20 @@ func TestAScriptReachesOnlyWhatItWasAllowed(t *testing.T) {
 	if len(lines) != 1 || lines[0] != "two words" {
 		t.Errorf("log: %q", lines)
 	}
+	if r := ask(t, s, `{"id":8,"op":"insert","text":"x"}`); r.OK || h.text != "secret words" {
+		t.Errorf("insert without Insert: %+v %q", r, h.text)
+	}
+	s3 := &Session{Host: h, Allow: map[Permission]bool{Insert: true}}
+	if r := ask(t, s3, `{"id":8,"op":"insert","text":"!"}`); !r.OK || h.text != "secret words!" {
+		t.Errorf("insert: %+v %q", r, h.text)
+	}
 	finished := false
 	s.Done = func() { finished = true }
 	if r := ask(t, s, `{"id":9,"op":"done"}`); !r.OK || !finished {
 		t.Errorf("done: %+v", r)
 	}
 	s2 := &Session{Host: h, Allow: map[Permission]bool{Read: true}}
-	if r := ask(t, s2, `{"id":6,"op":"text"}`); !r.OK || r.Value != "secret words" {
+	if r := ask(t, s2, `{"id":6,"op":"text"}`); !r.OK || r.Value != "secret words!" {
 		t.Errorf("text with Read: %+v", r)
 	}
 	if r := ask(t, s2, `{"id":7,"op":"run","name":"bold"}`); r.OK || len(h.ran) != 1 {

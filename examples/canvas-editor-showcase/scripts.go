@@ -26,25 +26,27 @@ await editor.run("bold");
 `
 
 var scriptsUI struct {
-	source    string
-	started   bool // source was set
-	noRun     bool // the person turned "run commands" off
-	allowRead bool
-	running   bool
-	log       []string
-	msg       string
-	frame     js.Value
-	sess      *script.Session
-	listener  js.Func
-	listening bool
-	timer     js.Value
-	renderUI  func()
+	source     string
+	started    bool // source was set
+	noRun      bool // the person turned "run commands" off
+	allowRead  bool
+	allowWrite bool
+	running    bool
+	log        []string
+	msg        string
+	frame      js.Value
+	sess       *script.Session
+	listener   js.Func
+	listening  bool
+	timer      js.Value
+	renderUI   func()
 }
 
 type scriptHost struct {
 	commands func() []canvas.CommandInfo
 	run      func(canvas.Command)
 	text     func() string
+	insert   func(string) bool
 }
 
 func (h scriptHost) Commands() []script.Command {
@@ -56,6 +58,7 @@ func (h scriptHost) Commands() []script.Command {
 }
 func (h scriptHost) Run(name string) bool { h.run(canvas.Command(name)); return true }
 func (h scriptHost) Text() string         { return h.text() }
+func (h scriptHost) Insert(t string) bool { return h.insert(t) }
 
 // sandboxPage is the page of the iframe: a policy that allows nothing but its own inline script, the editor object, and
 // the person's script after it. The connections a script could make (fetch, sockets, workers, storage, peer
@@ -68,7 +71,7 @@ func sandboxPage(source string) string {
 const send=o=>new Promise((res,rej)=>{const id=++n;pending.set(id,{res,rej});parent.postMessage(JSON.stringify(Object.assign({id},o)),"*")});
 addEventListener("message",e=>{if(e.source!==parent)return;let r;try{r=JSON.parse(e.data)}catch(x){return}const p=pending.get(r.id);if(!p)return;pending.delete(r.id);r.ok?p.res(r.value):p.rej(new Error(r.error))});
 for(const k of ["fetch","XMLHttpRequest","WebSocket","EventSource","Worker","SharedWorker","RTCPeerConnection","webkitRTCPeerConnection","indexedDB","caches","localStorage","sessionStorage","navigator"]){try{Object.defineProperty(window,k,{value:undefined})}catch(x){}}
-window.editor=Object.freeze({commands:()=>send({op:"commands"}),run:name=>send({op:"run",name}),text:()=>send({op:"text"}),log:(...a)=>send({op:"log",message:a.join(" ")})});
+window.editor=Object.freeze({commands:()=>send({op:"commands"}),run:name=>send({op:"run",name}),text:()=>send({op:"text"}),insert:text=>send({op:"insert",text:String(text)}),log:(...a)=>send({op:"log",message:a.join(" ")})});
 window.__done=()=>send({op:"done"});
 window.addEventListener("error",e=>{send({op:"log",message:"Error: "+e.message}).then(window.__done)});
 })()</script>` +
@@ -95,13 +98,13 @@ func stopScript(reason string) {
 }
 
 // runScript starts the script in a new sandbox.
-func runScript(commands func() []canvas.CommandInfo, run func(canvas.Command), text func() string, renderUI func()) {
+func runScript(commands func() []canvas.CommandInfo, run func(canvas.Command), text func() string, insert func(string) bool, renderUI func()) {
 	stopScript("")
 	scriptsUI.renderUI = renderUI
 	scriptsUI.log, scriptsUI.msg, scriptsUI.running = nil, "", true
 	scriptsUI.sess = &script.Session{
-		Host:  scriptHost{commands, run, text},
-		Allow: map[script.Permission]bool{script.Run: !scriptsUI.noRun, script.Read: scriptsUI.allowRead},
+		Host:  scriptHost{commands, run, text, insert},
+		Allow: map[script.Permission]bool{script.Run: !scriptsUI.noRun, script.Read: scriptsUI.allowRead, script.Insert: scriptsUI.allowWrite},
 		Log:   func(l string) { scriptsUI.log = append(scriptsUI.log, l); renderUI() },
 		Done:  func() { go stopScript(T("scripts.finished", "The script finished.")) },
 	}
@@ -138,7 +141,7 @@ func runScript(commands func() []canvas.CommandInfo, run func(canvas.Command), t
 }
 
 // scriptsPanel is the Scripts tab.
-func scriptsPanel(state *State, commands func() []canvas.CommandInfo, run func(canvas.Command), text func() string, renderUI func()) xango.Node {
+func scriptsPanel(state *State, commands func() []canvas.CommandInfo, run func(canvas.Command), text func() string, insert func(string) bool, renderUI func()) xango.Node {
 	if !scriptsUI.started {
 		scriptsUI.started, scriptsUI.source = true, scriptSample
 	}
@@ -151,6 +154,8 @@ func scriptsPanel(state *State, commands func() []canvas.CommandInfo, run func(c
 			OnChange: func(on bool) { scriptsUI.noRun = !on; renderUI() }})),
 		xango.El("div", []xango.Attr{xango.A("id", "scripts-allow-read")}, components.Checkbox(components.CheckboxProps{Label: T("scripts.allowRead", "May read the text of the document"), Checked: scriptsUI.allowRead,
 			OnChange: func(on bool) { scriptsUI.allowRead = on; renderUI() }})),
+		xango.El("div", []xango.Attr{xango.A("id", "scripts-allow-write")}, components.Checkbox(components.CheckboxProps{Label: T("scripts.allowWrite", "May write text into the document, at the caret"), Checked: scriptsUI.allowWrite,
+			OnChange: func(on bool) { scriptsUI.allowWrite = on; renderUI() }})),
 	}
 	if scriptsUI.allowRead {
 		nodes = append(nodes, para("scripts-read-warning", T("scripts.readWarning", "A script that may read the text can show it to whoever wrote the script, for example in a line it asks you to copy. Allow it only for a script you trust."), true))
@@ -159,7 +164,7 @@ func scriptsPanel(state *State, commands func() []canvas.CommandInfo, run func(c
 		nodes = append(nodes, para("scripts-needs-edit", T("scripts.needEdit", "Switch to edit mode: commands that change the document do nothing otherwise."), false))
 	}
 	nodes = append(nodes, xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px;flex-wrap:wrap")},
-		btn("scripts-run", T("scripts.run", "Run the script"), func() { runScript(commands, run, text, renderUI) }, scriptsUI.running || strings.TrimSpace(scriptsUI.source) == ""),
+		btn("scripts-run", T("scripts.run", "Run the script"), func() { runScript(commands, run, text, insert, renderUI) }, scriptsUI.running || strings.TrimSpace(scriptsUI.source) == ""),
 		btn("scripts-stop", T("scripts.stop", "Stop"), func() { stopScript(T("scripts.stopped", "The script was stopped.")) }, !scriptsUI.running),
 	))
 	if scriptsUI.msg != "" {
@@ -172,4 +177,22 @@ func scriptsPanel(state *State, commands func() []canvas.CommandInfo, run func(c
 	nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("id", "scripts-log"), xango.A("role", "log"), xango.A("aria-label", T("scripts.log", "What the script said")),
 		xango.A("style", "font-family:monospace;font-size:12px;padding-left:1.2em")}, lines...))
 	return xango.El("div", []xango.Attr{xango.A("id", "scripts-panel")}, nodes...)
+}
+
+// insertAtCaret puts text where the caret is, replacing the selection, as one change the undo history has.
+func insertAtCaret(stage *canvas.Stage, text string, redraw func()) bool {
+	t := stage.EditTarget()
+	if t == nil || text == "" {
+		return false
+	}
+	cs := t.Cursors()
+	if len(cs) == 0 {
+		return false
+	}
+	from, to := cs[0].Range()
+	t.Replace([]canvas.Edit{{From: from, To: to, Items: []canvas.Item{canvas.Chars{Text: text}}}})
+	end := from + len([]rune(text))
+	t.SetCursors([]canvas.Cursor{{Anchor: end, Caret: end}})
+	redraw()
+	return true
 }

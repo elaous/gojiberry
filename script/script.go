@@ -9,6 +9,7 @@
 //	{"id":1,"op":"commands"}              the registry: name and title of each command (always allowed)
 //	{"id":2,"op":"run","name":"bold"}     run a command on the document (needs Run)
 //	{"id":3,"op":"text"}                  the text of the document (needs Read)
+//	{"id":6,"op":"insert","text":"..."}   put text at the caret, replacing the selection (needs Insert)
 //	{"id":4,"op":"log","message":"..."}   a line for the person to read (always allowed)
 //	{"id":5,"op":"done"}                  the script has finished (always allowed)
 //
@@ -32,6 +33,8 @@ const (
 	Read Permission = "read"
 	// Run lets the script run the editor's commands.
 	Run Permission = "run"
+	// Insert lets the script write text into the document, at the caret.
+	Insert Permission = "insert"
 )
 
 // Command is a command of the registry as a script sees it.
@@ -48,6 +51,8 @@ type Host interface {
 	Run(name string) bool
 	// Text is the text of the document.
 	Text() string
+	// Insert puts text at the caret (replacing the selection), reporting whether there was somewhere to put it.
+	Insert(text string) bool
 }
 
 // Limits of one run.
@@ -74,6 +79,7 @@ type Request struct {
 	Op      string `json:"op"`
 	Name    string `json:"name,omitempty"`
 	Message string `json:"message,omitempty"`
+	Text    string `json:"text,omitempty"`
 }
 
 // Response is the answer to one.
@@ -144,6 +150,11 @@ func (s *Session) Handle(raw []byte) []byte {
 			}
 		}
 		return fail(ErrNoSuch)
+	case "insert":
+		if !s.Allow[Insert] {
+			return fail(ErrDenied)
+		}
+		return ok(s.Host.Insert(req.Text))
 	case "text":
 		if !s.Allow[Read] {
 			return fail(ErrDenied)
