@@ -24,9 +24,35 @@ type HTML struct {
 	// editor's theme. It is checked for anything that could end the style element or open a rule
 	// of its own, and the export fails rather than write it.
 	Theme string
+	// SubmitTo is where a reader's answers go: an https address (posted as a form) or a mailto address (opens the
+	// reader's mail with the answers). When it is set and the document has form fields, they sit in a form with a
+	// button; otherwise the fields only hold what is written in them. Anything else fails the export.
+	SubmitTo string
+	// SubmitLabel is the button's text ("Send" when empty).
+	SubmitLabel string
+}
+
+// safeSubmitTo says whether an address is one an exported form may send to: https or mailto, with nothing that could
+// leave the attribute or be read as markup.
+func safeSubmitTo(a string) bool {
+	if !strings.HasPrefix(a, "https://") && !strings.HasPrefix(a, "mailto:") {
+		return false
+	}
+	for _, r := range a {
+		if r <= ' ' || r == '"' || r == '\'' || r == '<' || r == '>' || r == '`' || r == 0x7f {
+			return false
+		}
+	}
+	return len(a) > len("mailto:")
 }
 
 func (h HTML) Export(snap Snapshot) ([]byte, error) {
+	if h.SubmitTo != "" {
+		if !safeSubmitTo(h.SubmitTo) {
+			return nil, errors.New("export: the form address is not an https or mailto address")
+		}
+		snap.FormAction, snap.FormButton = h.SubmitTo, h.SubmitLabel
+	}
 	if h.Theme != "" && !safeThemeCSS(h.Theme) {
 		return nil, errors.New("export: the HTML theme is not a plain :root block of custom properties")
 	}
@@ -281,7 +307,7 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 	}
 	return "<!doctype html>\n<html" + langAttrs(snap.Lang, false) + writingAttr(snap) + ">\n<head>\n<meta charset=\"utf-8\">\n<title>" +
 		escapeHTMLText(snap.Title) + "</title>\n" + themeStyle(theme) + htmlPrintStyle(snap) + "</head>\n<body>\n" +
-		htmlTOCAtStart(snap) + "<main>\n" + body.String() + "</main>\n</body>\n</html>\n"
+		htmlTOCAtStart(snap) + "<main>\n" + htmlFormWrap(snap, body.String()) + "</main>\n</body>\n</html>\n"
 }
 
 // writingAttr is the attribute that sets vertical text on the page: the lines top to bottom, from right to left.

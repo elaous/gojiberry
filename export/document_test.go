@@ -341,3 +341,47 @@ func TestFormFieldsAreHTMLControlsAndWordsElsewhere(t *testing.T) {
 		t.Errorf("text:\n%s", txt)
 	}
 }
+
+// With an address for the answers the form fields sit in a form with a send button; only https and mailto addresses
+// are accepted, and a document without form fields gets no form.
+func TestHTMLSubmitToWrapsFormFieldsInAForm(t *testing.T) {
+	doc := docfile.Document{Content: []docfile.Item{
+		{Form: &docfile.FormFieldItem{Kind: "text", Name: "a", Label: "A"}},
+	}}
+	snap := FromDocument(doc)
+	out, err := HTML{SubmitTo: "https://example.org/in?x=1&y=2", SubmitLabel: "Go <now>"}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	for _, want := range []string{`<form action="https://example.org/in?x=1&amp;y=2" method="post">`, `<button type="submit">Go &lt;now&gt;</button>`, "</form>"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("html lacks %s:\n%s", want, s)
+		}
+	}
+	out, _ = HTML{SubmitTo: "mailto:a@example.org"}.Export(snap)
+	if !strings.Contains(string(out), `enctype="text/plain"`) || !strings.Contains(string(out), ">Send</button>") {
+		t.Errorf("mailto form:\n%s", out)
+	}
+	for _, bad := range []string{"http://example.org", "javascript:alert(1)", `https://x"onfocus="y`, "https://a b", "mailto:"} {
+		if _, err := (HTML{SubmitTo: bad}).Export(snap); err == nil {
+			t.Errorf("%q was accepted", bad)
+		}
+	}
+	plain, _ := HTML{SubmitTo: "https://example.org/in"}.Export(FromDocument(docfile.Document{Content: []docfile.Item{{Chars: &docfile.Chars{Text: "Hello"}}}}))
+	if strings.Contains(string(plain), "<form") {
+		t.Error("no form without form fields")
+	}
+	if strings.Contains(s, "<form") == false || strings.Contains(string(mustHTML(t, snap)), "<form") {
+		t.Error("the form appears only when an address is set")
+	}
+}
+
+func mustHTML(t *testing.T, snap Snapshot) []byte {
+	t.Helper()
+	b, err := HTML{}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
