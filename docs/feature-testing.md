@@ -120,7 +120,7 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **You should see.** "Mentions of you" with Ana's comment, announced once; Ana sees none; "Mark as read" removes it.
 
-**Automated.** `TestAMentionedPersonIsToldAndCanMarkItRead` (examples/canvas-editor-showcase), `TestMentionsOfListsWhatOthersWroteAboutThePerson` (canvas)
+**Automated.** `TestAMentionedPersonIsToldAndCanMarkItRead` (examples/canvas-editor-showcase), `TestMentionsOfListsWhatOthersWroteAboutThePerson` (canvas), package `mentionmail` (mail once, retry a failure, cap a mail)
 
 ## Table formulas
 
