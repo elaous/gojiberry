@@ -328,6 +328,8 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Try it (downloaded voices).** Reader voices tab: press "Show the voices to download" (the page says which host it asks), read the size and the link to the terms, press Download, then Reader > Downloaded voices (Piper) and Read the document aloud; remove the voice again. This needs a page with a Piper runtime (docs/reader-voices.md).
 
+**Try it (voices on a server).** Needs a `reader-voices.json` with `"server"` and a running `cmd/voiceserver`: allow voices that use the internet (Read aloud menu), choose Reader > Voices on a server, read the document; the bar says the voice uses the internet. **Automated.** `TestReadWithVoicesOnAServer` (a stand-in for the server), packages `voice/read/hosted` and `voice/server`.
+
 **You should see.** The progress while it downloads; the bar saying "Downloaded voice, running in this page"; the sentence and the word marked while it reads.
 
 **Automated.** `TestDownloadAReaderVoiceAndReadWithIt` (examples/canvas-editor-showcase, with a stand-in network, runtime and Web Audio), packages `voice/read` (`Player`) and `voice/read/piper` (catalogue, config, install with checksum, speaking, cancel). A real runtime has not been run against it.

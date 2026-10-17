@@ -260,27 +260,7 @@ func (e *Engine) Speak(u read.Utterance, h read.Handler) read.Speech {
 					fail(err)
 					return
 				}
-				if h.OnStart != nil {
-					h.OnStart(read.KindDownloaded)
-				}
-				marks := wordStarts(u.Text)
-				next := 0
-				dur := a.Duration()
-				onTime := func(pos time.Duration) {
-					if s.cancelled || h.OnWord == nil || dur <= 0 {
-						return
-					}
-					frac := float64(pos) / float64(dur)
-					for next < len(marks) && float64(marks[next].at) <= frac*float64(marks.total()) {
-						h.OnWord(marks[next].index, marks[next].length)
-						next++
-					}
-				}
-				s.playback = e.Output.Play(a, onTime, func() {
-					if !s.cancelled && h.OnEnd != nil {
-						h.OnEnd()
-					}
-				})
+				s.playback = Say(e.Output, a, u.Text, read.KindDownloaded, s.guard(h))
 			})
 		})
 	})
@@ -368,4 +348,54 @@ func wordStarts(text string) wordMarks {
 		}
 	}
 	return out
+}
+
+// Say plays the sound of an utterance and reports to h as it goes: OnStart with kind, OnWord as the sound reaches each
+// word (the engines that make the sound whole do not say where they are, so a word is reached when the share of the
+// sound played equals the share of the text before it) and OnEnd. It is the part of reading aloud that every engine
+// that hands over sound shares.
+func Say(out Output, a Audio, text, kind string, h read.Handler) Playback {
+	if h.OnStart != nil {
+		h.OnStart(kind)
+	}
+	marks := wordStarts(text)
+	next := 0
+	dur := a.Duration()
+	onTime := func(pos time.Duration) {
+		if h.OnWord == nil || dur <= 0 {
+			return
+		}
+		frac := float64(pos) / float64(dur)
+		for next < len(marks) && float64(marks[next].at) <= frac*float64(marks.total()) {
+			h.OnWord(marks[next].index, marks[next].length)
+			next++
+		}
+	}
+	return out.Play(a, onTime, func() {
+		if h.OnEnd != nil {
+			h.OnEnd()
+		}
+	})
+}
+
+// guard is h without the calls that come after the speech was cancelled.
+func (s *speech) guard(h read.Handler) read.Handler {
+	return read.Handler{
+		OnStart: func(k string) {
+			if !s.cancelled && h.OnStart != nil {
+				h.OnStart(k)
+			}
+		},
+		OnWord: func(i, n int) {
+			if !s.cancelled && h.OnWord != nil {
+				h.OnWord(i, n)
+			}
+		},
+		OnEnd: func() {
+			if !s.cancelled && h.OnEnd != nil {
+				h.OnEnd()
+			}
+		},
+		OnError: h.OnError,
+	}
 }

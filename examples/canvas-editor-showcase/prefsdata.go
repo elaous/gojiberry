@@ -34,7 +34,8 @@ type prefs struct {
 	Scan        string `json:"scan,omitempty"`        // single-switch scanning: "fast", "medium", "slow" (the step)
 	Hint        string `json:"hint,omitempty"`        // "on": the Pictures tab can draft a description from the picture, on this device
 	Voice       string `json:"voice,omitempty"`       // the name of the voice reading aloud uses for the document's language ("" the browser's choice)
-	Reader      string `json:"reader,omitempty"`      // "piper": reading aloud uses the downloaded voices instead of the ones the browser offers
+	Reader      string `json:"reader,omitempty"`      // "piper": reading aloud uses the downloaded voices ("hosted": the voices of a voice server) instead of the ones the browser offers
+	HVoice      string `json:"hvoice,omitempty"`      // the ID of the voice on the voice server reading aloud uses ("" the server's pick for the language)
 	PVoice      string `json:"pvoice,omitempty"`      // the ID of the downloaded voice reading aloud uses for the document's language ("" the first for the language)
 	Voices      string `json:"voices,omitempty"`      // "net": reading aloud may use voices that send the text to a speech service
 	Where       string `json:"where,omitempty"`       // "on": the presence list has a "Where is <name>?" button for each collaborator
@@ -78,8 +79,11 @@ func (p prefs) sanitize() prefs {
 	if p.Hint != "on" {
 		p.Hint = ""
 	}
-	if p.Reader != "piper" {
+	if p.Reader != "piper" && p.Reader != "hosted" {
 		p.Reader = ""
+	}
+	if len(p.HVoice) > 120 {
+		p.HVoice = ""
 	}
 	if len(p.PVoice) > 120 {
 		p.PVoice = ""

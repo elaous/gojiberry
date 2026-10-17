@@ -1741,6 +1741,9 @@
   "forms.webForm": "Als Webformular herunterladen",
   "forms.send": "Senden",
   "forms.webFormBad": "Die Adresse muss mit https:// oder mailto: beginnen und darf keine Leerzeichen enthalten.",
-  "forms.webFormSaved": "Das Webformular wurde gespeichert."
+  "forms.webFormSaved": "Das Webformular wurde gespeichert.",
+  "read.readerHosted": "Stimmen auf einem Server",
+  "read.readerHostedSaid": "Vorleser: Stimmen auf einem Server. Der Text wird beim Vorlesen an den Server gesendet",
+  "voices.hostedNote": "Stimmen auf einem Server senden den Text beim Vorlesen an den Server. Erlauben Sie sie unter Vorlesen > Stimmen zulassen, die das Internet nutzen."
  }
 }
