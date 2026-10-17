@@ -63,6 +63,9 @@ func (r *readerSet) engine() read.Engine {
 	if curPrefs.Reader == "piper" && piperUI.engine != nil && piperUI.engine.Available() {
 		return piperUI.engine
 	}
+	if curPrefs.Reader == "hosted" && hostedAvailable() && hostedUI.engine != nil && hostedUI.engine.Available() {
+		return hostedUI.engine
+	}
 	return r.device
 }
 
@@ -70,6 +73,9 @@ func (r *readerSet) engine() read.Engine {
 func (r *readerSet) voiceFor(string) string {
 	if r.engine() == read.Engine(r.device) {
 		return curPrefs.Voice
+	}
+	if hostedUI.engine != nil && r.engine() == read.Engine(hostedUI.engine) {
+		return curPrefs.HVoice
 	}
 	return curPrefs.PVoice
 }
@@ -270,7 +276,9 @@ func voiceMenu(u *ui, renderUI func()) components.MenuItem {
 	choose := func(name string) func() {
 		return func() {
 			p := curPrefs
-			if piperOn {
+			if piperOn && hostedUI.engine != nil && reader.engine() == read.Engine(hostedUI.engine) {
+				p.HVoice = name
+			} else if piperOn {
 				p.PVoice = name
 			} else {
 				p.Voice = name
@@ -291,6 +299,9 @@ func voiceMenu(u *ui, renderUI func()) components.MenuItem {
 	chosen, voices, allowNet := curPrefs.Voice, reader.device.Voices(), networkVoices()
 	if piperOn {
 		chosen, voices, allowNet = curPrefs.PVoice, reader.engine().Voices(), true
+		if hostedUI.engine != nil && reader.engine() == read.Engine(hostedUI.engine) {
+			chosen = curPrefs.HVoice
+		}
 	}
 	items := []components.MenuItem{{Label: T("read.voiceAutomatic", "Automatic"), Checked: chosen == "", OnSelect: choose("")}}
 	list := read.ForLanguage(voices, lang, allowNet)
@@ -330,6 +341,10 @@ func readerMenu(u *ui, renderUI func()) components.MenuItem {
 			if value == "piper" {
 				ensurePiper(renderUI)
 			}
+			if value == "hosted" {
+				ensurePiper(renderUI) // reads reader-voices.json, which names the server
+				ensureHosted(renderUI)
+			}
 			renderUI()
 		}
 	}
@@ -337,6 +352,8 @@ func readerMenu(u *ui, renderUI func()) components.MenuItem {
 	return components.MenuItem{Label: T("read.reader", "Reader"), Items: []components.MenuItem{
 		{Label: T("read.readerDevice", "Voices on this device"), Checked: curPrefs.Reader != "piper", OnSelect: pick("", T("read.readerDeviceSaid", "Reader: voices on this device"))},
 		{Label: T("read.readerPiper", "Downloaded voices (Piper)"), Checked: curPrefs.Reader == "piper", OnSelect: pick("piper", T("read.readerPiperSaid", "Reader: downloaded voices")), Disabled: piperUI.checked && !piperOK},
+		{Label: T("read.readerHosted", "Voices on a server"), Checked: curPrefs.Reader == "hosted", OnSelect: pick("hosted", T("read.readerHostedSaid", "Reader: voices on a server. The text is sent to the server while it is read")),
+			Disabled: piperUI.checked && !hostedAvailable()},
 		{Separator: true},
 		{Label: T("read.voicesTab", "Reader voices…"), OnSelect: func() { u.tab = "voices"; ensurePiper(renderUI); renderUI() }},
 	}}

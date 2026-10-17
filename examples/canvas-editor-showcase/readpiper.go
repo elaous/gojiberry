@@ -75,6 +75,9 @@ func ensurePiper(renderUI func()) {
 		piperUI.engine = piper.New(cfg, jsFetcher{}, cacheStore{}, jsRuntime{}, &webAudio{})
 		piperUI.engine.Refresh(func() {
 			piperUI.checked = true
+			if curPrefs.Reader == "hosted" && hostedAvailable() {
+				ensureHosted(renderUI)
+			}
 			renderUI()
 		})
 	}()

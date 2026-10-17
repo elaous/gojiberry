@@ -36,12 +36,26 @@ func voicesPanel(u *ui, renderUI func()) xango.Node {
 		p.Reader = value
 		setPrefs(p)
 		stopReading()
+		if value == "hosted" {
+			ensureHosted(renderUI)
+		}
 		renderUI()
 	}
-	nodes = append(nodes, xango.El("div", []xango.Attr{xango.A("role", "group"), xango.A("aria-label", T("voices.engine", "Voices to read with")), xango.A("style", "display:flex;gap:6px;flex-wrap:wrap;margin-bottom:0.6em")},
-		components.Button(components.ButtonProps{Label: T("read.readerDevice", "Voices on this device"), Variant: variantOf(curPrefs.Reader != "piper"), OnClick: func(xango.Event) { pickEngine("") }}),
+	engines := []xango.Node{
+		components.Button(components.ButtonProps{Label: T("read.readerDevice", "Voices on this device"), Variant: variantOf(curPrefs.Reader == ""), OnClick: func(xango.Event) { pickEngine("") }}),
 		components.Button(components.ButtonProps{Label: T("read.readerPiper", "Downloaded voices (Piper)"), Variant: variantOf(curPrefs.Reader == "piper"), OnClick: func(xango.Event) { pickEngine("piper") }}),
-	))
+	}
+	if piperUI.cfg.Server != "" {
+		engines = append(engines, components.Button(components.ButtonProps{Label: T("read.readerHosted", "Voices on a server"), Variant: variantOf(curPrefs.Reader == "hosted"), OnClick: func(xango.Event) { pickEngine("hosted") }}))
+	}
+	nodes = append(nodes, xango.El("div", []xango.Attr{xango.A("role", "group"), xango.A("aria-label", T("voices.engine", "Voices to read with")), xango.A("style", "display:flex;gap:6px;flex-wrap:wrap;margin-bottom:0.6em")}, engines...))
+	if piperUI.cfg.Server != "" {
+		note := T("voices.hostedNote", "Voices on a server send the text to the server while it reads. Allow them with Read aloud > Allow voices that use the internet.")
+		if hostedUI.msg != "" {
+			note += " " + hostedUI.msg
+		}
+		nodes = append(nodes, para("voices-hosted-note", note, false))
+	}
 
 	switch {
 	case e == nil || !piperUI.checked:

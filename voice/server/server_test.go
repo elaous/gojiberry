@@ -236,3 +236,43 @@ func TestSpeechIsReported(t *testing.T) {
 		t.Errorf("speak ok = %d, want 1", got)
 	}
 }
+
+func TestVoicesListsWhatTheServerOffersWithoutItsModelPaths(t *testing.T) {
+	s := NewServer(Config{PiperBinary: "piper", Voices: []Voice{{ID: "a", Name: "Ada", Lang: "en-GB", Licence: "https://example.org/terms", Model: "/secret/a.onnx"}}})
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/voices", nil))
+	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "secret") || !strings.Contains(w.Body.String(), `"lang":"en-GB"`) {
+		t.Errorf("voices: %d %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	NewServer(Config{}).Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/voices", nil))
+	if strings.TrimSpace(w.Body.String()) != "[]" {
+		t.Errorf("no voices: %q", w.Body.String())
+	}
+}
+
+func TestSpeakPicksTheVoiceAndRate(t *testing.T) {
+	var gotModel string
+	var gotRate float64
+	s := NewServer(Config{PiperBinary: "piper", PiperModel: "default.onnx", Voices: []Voice{{ID: "a", Model: "a.onnx"}}})
+	s.speak = func(_, model, _ string) ([]byte, error) { gotModel, gotRate = model, 1; return []byte("w"), nil }
+	s.speakAt = func(_, model, _ string, rate float64) ([]byte, error) {
+		gotModel, gotRate = model, rate
+		return []byte("w"), nil
+	}
+	post := func(r speakRequest) int {
+		b, _ := json.Marshal(r)
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/speak", bytes.NewReader(b)))
+		return w.Code
+	}
+	if c := post(speakRequest{Text: "x", Voice: "a", Rate: 1.5}); c != 200 || gotModel != "a.onnx" || gotRate != 1.5 {
+		t.Errorf("voice a: %d %q %v", c, gotModel, gotRate)
+	}
+	if c := post(speakRequest{Text: "x"}); c != 200 || gotModel != "default.onnx" || gotRate != 1 {
+		t.Errorf("default: %d %q %v", c, gotModel, gotRate)
+	}
+	if c := post(speakRequest{Text: "x", Voice: "../../etc/passwd"}); c != 400 {
+		t.Errorf("an unknown voice must be refused, got %d", c)
+	}
+}

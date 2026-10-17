@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -18,7 +19,11 @@ const Timeout = time.Minute
 
 // Piper synthesises text with the piper binary and the voice model (model may be empty when the binary
 // has a default), and returns the WAV.
-func Piper(binary, model, text string) ([]byte, error) {
+func Piper(binary, model, text string) ([]byte, error) { return PiperAt(binary, model, text, 1) }
+
+// PiperAt is Piper at a speed: 1 is the voice's own, 1.5 faster, 0.75 slower (rate is passed to Piper as its length
+// scale, the inverse). A rate outside 0.5 to 2 is taken as 1.
+func PiperAt(binary, model, text string, rate float64) ([]byte, error) {
 	out, err := os.CreateTemp("", "voiceserver-speak-*.wav")
 	if err != nil {
 		return nil, err
@@ -30,6 +35,9 @@ func Piper(binary, model, text string) ([]byte, error) {
 	args := []string{"--output_file", outPath}
 	if model != "" {
 		args = append(args, "--model", model)
+	}
+	if rate >= 0.5 && rate <= 2 && rate != 1 {
+		args = append(args, "--length_scale", strconv.FormatFloat(1/rate, 'f', 3, 64))
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
