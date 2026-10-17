@@ -186,6 +186,8 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 			lineInput("forms-submit-to", T("forms.submitTo", "Address for the answers of a web form (https or mailto)"), u.forms.submitTo, "https://", func(v string) { u.forms.submitTo = strings.TrimSpace(v) })),
 		btn("forms-webform", T("forms.webForm", "Download as a web form"), func() { u.downloadWebForm(fl, renderUI) }, fl == nil || len(fl.FormFields()) == 0),
 	)
+	loadFormKey(renderUI)
+	nodes = append(nodes, u.formKeyPanel(renderUI)...)
 	if !canEdit {
 		nodes = append(nodes, para("forms-readonly", T("forms.needEdit", "Switch to edit mode to add or change form fields."), false))
 	}
@@ -236,6 +238,9 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 		}
 		if ff.Locked {
 			kids = append(kids, para(fmt.Sprintf("forms-locked-%d", i), T("forms.locked", "Locked: its properties cannot be changed."), false))
+			if note, broken := sealNote(ff); note != "" {
+				kids = append(kids, para(fmt.Sprintf("forms-seal-%d", i), note, broken))
+			}
 		}
 		kids = append(kids,
 			btn(fmt.Sprintf("forms-fill-%d", i), T("forms.fill", "Fill in"), func() { u.forms = formsState{target: ff, focus: true}; renderUI() }, false))
@@ -255,13 +260,11 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 				renderUI()
 				return
 			}
-			ff.Locked = !ff.Locked
-			if ff.Locked && u.forms.target == ff && u.forms.edit {
-				u.forms.edit = false
+			if ff.Locked {
+				u.unlockField(fl, ff, redraw, renderUI)
+			} else {
+				u.lockField(fl, ff, redraw, renderUI)
 			}
-			fl.Touch()
-			redraw()
-			renderUI()
 		}, !canEdit))
 		pos := formFieldOffset(fl, ff)
 		kids = append(kids, btn(fmt.Sprintf("forms-go-%d", i), T("forms.go", "Go to it"), func() { fl.GotoOffset(pos); redraw(); renderUI() }, false))

@@ -1760,6 +1760,24 @@
   "scripts.stopped": "Le script a été arrêté.",
   "scripts.timeout": "Le script a pris trop de temps et a été arrêté.",
   "scripts.tooMany": "Le script a fait trop de requêtes et a été arrêté.",
-  "scripts.allowWrite": "Peut écrire du texte dans le document, au curseur"
+  "scripts.allowWrite": "Peut écrire du texte dans le document, au curseur",
+  "forms.needKey": "Verrouiller demande une clé : elle prouve que le verrou est le vôtre, et elle seule l’enlève. Créez-en une ci-dessous avec « Créer une clé ».",
+  "forms.keyMade": "Une clé a été créée. Les verrous que vous posez maintenant sont scellés avec elle. Gardez la sauvegarde : sans la clé, un verrou ne peut pas être enlevé ici.",
+  "forms.wrongKey": "Ce champ a été verrouillé avec une autre clé (%s). Seule cette clé enlève le verrou.",
+  "forms.sealBroken": "Le sceau ne correspond pas : ce champ a été modifié après son verrouillage avec la clé %s.",
+  "forms.sealed": "Verrouillé avec la clé %s ; le champ est tel qu’il a été verrouillé.",
+  "forms.keyBrowser": "la clé de ce navigateur",
+  "forms.keyOwner": "votre clé de propriétaire",
+  "forms.keyIs": "Les verrous sont posés avec %s (%s).",
+  "forms.keyBackup": "Sauvegarde de la clé. Elle n’est montrée qu’une fois ; gardez-la là où vous seul pouvez la lire.",
+  "forms.keyBackupLabel": "Sauvegarde de la clé",
+  "forms.keyHide": "Je l’ai enregistrée",
+  "forms.noKey": "Verrouiller un champ demande une clé : elle prouve que le verrou est le vôtre, et elle seule l’enlève.",
+  "forms.makeKey": "Créer une clé",
+  "forms.restoreKey": "Restaurer une clé depuis sa sauvegarde",
+  "forms.restoreText": "Le texte de la sauvegarde",
+  "forms.restoreGo": "Restaurer",
+  "forms.restoreBad": "Ce n’est pas la sauvegarde d’une clé.",
+  "forms.restored": "La clé a été restaurée."
  }
 }

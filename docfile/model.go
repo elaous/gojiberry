@@ -103,6 +103,10 @@ type FormFieldItem struct {
 	Options     []string `json:"options,omitempty" pb:"7"`
 	Value       string   `json:"value,omitempty" pb:"8"`
 	Locked      bool     `json:"locked,omitempty" pb:"9"`
+	// LockKey and LockSig are the seal of a lock (package formseal): the public key that locked the field and its
+	// signature over the properties, both base64; empty for a lock without a key.
+	LockKey string `json:"lockKey,omitempty" pb:"10"`
+	LockSig string `json:"lockSig,omitempty" pb:"11"`
 }
 
 // ImageItem is an inline image. URL is what to fetch it from (a data: URL
@@ -432,7 +436,7 @@ func FromItems(items []canvas.Item) []Item {
 				}
 			case *canvas.FormFieldObject:
 				out = append(out, Item{Form: &FormFieldItem{Kind: string(o.Kind), Name: o.Name, Label: o.Label, Placeholder: o.Placeholder,
-					Pattern: o.Pattern, Required: o.Required, Options: slices.Clone(o.Options), Value: o.Value, Locked: o.Locked}})
+					Pattern: o.Pattern, Required: o.Required, Options: slices.Clone(o.Options), Value: o.Value, Locked: o.Locked, LockKey: o.LockKey, LockSig: o.LockSig}})
 			case *canvas.EquationObject:
 				out = append(out, Item{Equation: &EquationItem{Formula: o.Formula, Alt: o.Alt, Inline: o.Inline}})
 			case *canvas.MediaObject:
@@ -529,7 +533,7 @@ func ToItems(items []Item) []canvas.Item {
 		case it.Form != nil:
 			ff := it.Form
 			out = append(out, canvas.Inline{Object: &canvas.FormFieldObject{Kind: canvas.FormKind(ff.Kind), Name: ff.Name, Label: ff.Label,
-				Placeholder: ff.Placeholder, Pattern: ff.Pattern, Required: ff.Required, Options: slices.Clone(ff.Options), Value: ff.Value, Locked: ff.Locked}})
+				Placeholder: ff.Placeholder, Pattern: ff.Pattern, Required: ff.Required, Options: slices.Clone(ff.Options), Value: ff.Value, Locked: ff.Locked, LockKey: ff.LockKey, LockSig: ff.LockSig}})
 		case it.Equation != nil:
 			out = append(out, canvas.Inline{Object: &canvas.EquationObject{Formula: it.Equation.Formula, Alt: it.Equation.Alt, Inline: it.Equation.Inline}, Block: !it.Equation.Inline})
 		case it.Media != nil:

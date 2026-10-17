@@ -296,11 +296,11 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 ## Form fields
 
-**Try it.** Edit mode, Forms tab: press **Text**, give it the label "Order number" and the pattern `[A-Z]{2}\d{3}`, press Done; press **Fill in** and type `AB1234` (the problem is said), then `AB123`; add a **Checkbox** and press its box in the text; press the eye and the pen on a field in the text; press **Lock** (the pen goes), **Unlock**, and **Clear form fields**. Insert > Form fields has the same kinds.
+**Try it.** Edit mode, Forms tab: press **Text**, give it the label "Order number" and the pattern `[A-Z]{2}\d{3}`, press Done; press **Fill in** and type `AB1234` (the problem is said), then `AB123`; add a **Checkbox** and press its box in the text; press the eye and the pen on a field in the text; press **Lock** (the page says a key is needed: press **Make a key**, then Lock again: the pen goes and the field says which key locked it), **Unlock**, and **Clear form fields**. Insert > Form fields has the same kinds.
 
 **You should see.** The fields drawn in the text with their label and value; a red outline while the value is wrong; the values in the Markdown export as `Order number: AB123`.
 
-**Automated.** `TestFormFieldsAddFillLockAndClear` (it also downloads the answers; examples/canvas-editor-showcase), `TestFormFieldsAreHTMLControlsAndWordsElsewhere` and `TestHTMLSubmitToWrapsFormFieldsInAForm` (export; the web form also downloaded in the e2e), `TestHTMLFormFieldsReadBackFromTheirPage` (export and htmlimport), package `formdata`, `TestFormFieldProblems`, `TestFormFieldEyePenAndCheckboxPresses`, `TestClearFormFieldsAndWords` (canvas), `TestFormFieldRoundTripsThroughTheFlow` (docfile), the form-field pair of `TestFidelityMatrixMatchesTheExporters` (export)
+**Automated.** `TestFormFieldsAddFillLockAndClear` (it also downloads the answers; examples/canvas-editor-showcase), `TestFormFieldsAreHTMLControlsAndWordsElsewhere` and `TestHTMLSubmitToWrapsFormFieldsInAForm` (export; the web form also downloaded in the e2e), `TestHTMLFormFieldsReadBackFromTheirPage` (export and htmlimport), package `formdata`, package `formseal`, `TestFormFieldProblems`, `TestFormFieldEyePenAndCheckboxPresses`, `TestClearFormFieldsAndWords` (canvas), `TestFormFieldRoundTripsThroughTheFlow` (docfile), the form-field pair of `TestFidelityMatrixMatchesTheExporters` (export)
 
 ## Add-ons
 
