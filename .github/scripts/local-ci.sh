@@ -8,7 +8,7 @@
 #   .github/scripts/local-ci.sh -k           keep going and list every failure at the end
 #   .github/scripts/local-ci.sh a11y-test    only the named targets, in the workflow's order
 #
-# LOCAL_CI_SKIP is a space-separated list of targets to leave out (default: coverage-badge, which
+# LOCAL_CI_SKIP is a space-separated list of targets to leave out (default: coverage-badge and e2e-test, the second of which takes about 25 minutes; `make ci-local STEPS=e2e-test` runs it; coverage-badge
 # needs the whole test suite a second time; the badge is updated by hand at a full run). A short report goes to
 # local-ci-report.txt (ignored by git): when, which commit, each step with its time and result.
 # LOCAL_CI_LIST=1 prints the steps it would run and stops. It needs what the steps need: Go, and for a11y-test a Chromium (set CHROMIUM if it is not on PATH).
@@ -19,7 +19,7 @@ workflow=.github/workflows/ci.yml
 keep_going=0
 if [ "${1:-}" = "-k" ]; then keep_going=1; shift; fi
 only=("$@")
-skip=" ${LOCAL_CI_SKIP-coverage-badge} "
+skip=" ${LOCAL_CI_SKIP-coverage-badge e2e-test} "
 
 # every `run: make <target>` line of every job, in file order, each target once (generate runs in two jobs)
 mapfile -t targets < <(awk '
