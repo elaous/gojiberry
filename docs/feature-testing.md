@@ -318,6 +318,12 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** e2e_readmarks_test.go
 
+**Try it (downloaded voices).** Reader voices tab: press "Show the voices to download" (the page says which host it asks), read the size and the link to the terms, press Download, then Reader > Downloaded voices (Piper) and Read the document aloud; remove the voice again. This needs a page with a Piper runtime (docs/reader-voices.md).
+
+**You should see.** The progress while it downloads; the bar saying "Downloaded voice, running in this page"; the sentence and the word marked while it reads.
+
+**Automated.** `TestDownloadAReaderVoiceAndReadWithIt` (examples/canvas-editor-showcase, with a stand-in network, runtime and Web Audio), packages `voice/read` (`Player`) and `voice/read/piper` (catalogue, config, install with checksum, speaking, cancel). A real runtime has not been run against it.
+
 ## Typewriter scrolling
 
 **Try it.** Preferences tab: search "typewriter" and tick it. Click in the text, press the down arrow twenty times and check the caret stays in the middle of the view while the page moves; type on a line and check the page stays; click in another place and check the page does not jump.
