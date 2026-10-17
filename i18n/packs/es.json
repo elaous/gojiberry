@@ -1744,6 +1744,21 @@
   "forms.webFormSaved": "Se guardó el formulario web.",
   "read.readerHosted": "Voces en un servidor",
   "read.readerHostedSaid": "Lector: voces en un servidor. El texto se envía al servidor mientras se lee",
-  "voices.hostedNote": "Las voces en un servidor envían el texto al servidor mientras lee. Permítalas en Leer en voz alta > Permitir voces que usan Internet."
+  "voices.hostedNote": "Las voces en un servidor envían el texto al servidor mientras lee. Permítalas en Leer en voz alta > Permitir voces que usan Internet.",
+  "tab.scripts": "Scripts",
+  "scripts.title": "Scripts",
+  "scripts.about": "Un script se ejecuta en un entorno aislado que no tiene nada de esta página: ni red, ni almacenamiento, ni documento. Solo puede pedir los comandos del editor por su nombre y, si lo permite, el texto del documento. Ejecute solo scripts que haya escrito o en los que confíe.",
+  "scripts.source": "Script",
+  "scripts.allowRun": "Puede ejecutar los comandos del editor",
+  "scripts.allowRead": "Puede leer el texto del documento",
+  "scripts.readWarning": "Un script que puede leer el texto puede mostrárselo a quien lo escribió, por ejemplo en una línea que le pide copiar. Permítalo solo para un script de confianza.",
+  "scripts.needEdit": "Pase al modo de edición: los comandos que cambian el documento no hacen nada de otro modo.",
+  "scripts.run": "Ejecutar el script",
+  "scripts.stop": "Detener",
+  "scripts.log": "Lo que dijo el script",
+  "scripts.finished": "El script terminó.",
+  "scripts.stopped": "Se detuvo el script.",
+  "scripts.timeout": "El script tardó demasiado y se detuvo.",
+  "scripts.tooMany": "El script hizo demasiadas peticiones y se detuvo."
  }
 }

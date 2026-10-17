@@ -1744,6 +1744,21 @@
   "forms.webFormSaved": "Le formulaire web a été enregistré.",
   "read.readerHosted": "Voix sur un serveur",
   "read.readerHostedSaid": "Lecteur : voix sur un serveur. Le texte est envoyé au serveur pendant la lecture",
-  "voices.hostedNote": "Les voix sur un serveur envoient le texte au serveur pendant la lecture. Autorisez-les avec Lecture à voix haute > Autoriser les voix qui utilisent Internet."
+  "voices.hostedNote": "Les voix sur un serveur envoient le texte au serveur pendant la lecture. Autorisez-les avec Lecture à voix haute > Autoriser les voix qui utilisent Internet.",
+  "tab.scripts": "Scripts",
+  "scripts.title": "Scripts",
+  "scripts.about": "Un script s’exécute dans un bac à sable qui n’a rien de cette page : ni réseau, ni stockage, ni document. Il peut seulement demander les commandes de l’éditeur par leur nom et, si vous l’autorisez, le texte du document. N’exécutez que des scripts que vous avez écrits ou auxquels vous faites confiance.",
+  "scripts.source": "Script",
+  "scripts.allowRun": "Peut exécuter les commandes de l’éditeur",
+  "scripts.allowRead": "Peut lire le texte du document",
+  "scripts.readWarning": "Un script qui peut lire le texte peut le montrer à celui qui l’a écrit, par exemple dans une ligne qu’il vous demande de copier. Ne l’autorisez que pour un script de confiance.",
+  "scripts.needEdit": "Passez en mode édition : les commandes qui modifient le document ne font rien sinon.",
+  "scripts.run": "Exécuter le script",
+  "scripts.stop": "Arrêter",
+  "scripts.log": "Ce que le script a dit",
+  "scripts.finished": "Le script est terminé.",
+  "scripts.stopped": "Le script a été arrêté.",
+  "scripts.timeout": "Le script a pris trop de temps et a été arrêté.",
+  "scripts.tooMany": "Le script a fait trop de requêtes et a été arrêté."
  }
 }

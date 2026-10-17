@@ -236,6 +236,10 @@ Read the whole document or the selection aloud, a sentence at a time, with the s
 
 An optional mode (Preferences, off by default) in which the line you are typing stays in the middle of the view and the page moves under it, the way paper moves on a typewriter. It follows typing, the arrow keys and commands; clicking in the text never moves the page. With **Typewriter carriage** also on, the letter being typed stays in one place across the view too: the page slides left as each character goes in (first picture) and, on Enter, slides back right and up a line so the start of the new line is at that place (second picture), past the page's own edge, as the paper of a typewriter runs past the carriage.
 
+## Scripts
+
+The Scripts tab runs a small script in a sandbox that has nothing of the page: no network, no storage, no document. The script can list the editor's commands, run any of them by name (so a command added later is reachable at once), say something in a log, and, if you allow it, read the text of the document. It is stopped after ten seconds or on request. Run only scripts you wrote or trust: a script that may read the text could show it to its author (docs/scripting.md).
+
 ## Menus and commands
 
 ![Menus and commands](features/img/menu-columns.webp)
