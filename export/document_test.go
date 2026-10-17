@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/docximport"
 	"github.com/elaous/gojiberry/htmlimport"
 	"github.com/elaous/gojiberry/transfer"
 )
@@ -420,5 +421,52 @@ func TestHTMLFormFieldsReadBackFromTheirPage(t *testing.T) {
 	}
 	if _, s, _ := htmlimport.ImportReport(page); s.Forms != 1 { // the send button
 		t.Errorf("skipped %+v", s)
+	}
+}
+
+// A formula in a sentence is Office Math in the line in Word, with its words as hidden text, and reads back as an
+// equation in the line (not on a line of its own) with those words as its alternative.
+func TestInlineFormulaIsOfficeMathInTheLineInWord(t *testing.T) {
+	doc := docfile.Document{Content: []docfile.Item{
+		{Chars: &docfile.Chars{Text: "The area is "}},
+		{Equation: &docfile.EquationItem{Formula: "pi r^2", Alt: "pi r squared", Inline: true}},
+		{Chars: &docfile.Chars{Text: " here."}},
+	}}
+	data, err := DOCX{}.Export(FromDocument(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var xml string
+	for _, f := range zr.File {
+		if f.Name == "word/document.xml" {
+			rc, _ := f.Open()
+			b, _ := io.ReadAll(rc)
+			_ = rc.Close()
+			xml = string(b)
+		}
+	}
+	if !strings.Contains(xml, "<m:oMath>") || strings.Contains(xml, "<m:oMathPara>") || !strings.Contains(xml, "<w:vanish/>") {
+		t.Errorf("document.xml:\n%s", xml)
+	}
+	back, err := docximport.Import(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var eq *docfile.EquationItem
+	var text strings.Builder
+	for _, it := range back.Content {
+		if it.Equation != nil {
+			eq = it.Equation
+		}
+		if it.Chars != nil {
+			text.WriteString(it.Chars.Text)
+		}
+	}
+	if eq == nil || !eq.Inline || eq.Alt != "pi r squared" || strings.Contains(text.String(), "\n") || !strings.Contains(text.String(), "The area is") {
+		t.Errorf("read back: %+v, text %q", eq, text.String())
 	}
 }
