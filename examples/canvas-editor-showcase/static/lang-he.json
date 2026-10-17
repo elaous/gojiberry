@@ -1781,6 +1781,9 @@
     "forms.webForm": "הורדה כטופס אינטרנט",
     "forms.send": "שליחה",
     "forms.webFormBad": "הכתובת חייבת להתחיל ב-https:// או ב-mailto: וללא רווחים.",
-    "forms.webFormSaved": "טופס האינטרנט נשמר."
+    "forms.webFormSaved": "טופס האינטרנט נשמר.",
+    "read.readerHosted": "קולות בשרת",
+    "read.readerHostedSaid": "הקורא: קולות בשרת. הטקסט נשלח לשרת בזמן הקריאה",
+    "voices.hostedNote": "קולות בשרת שולחים את הטקסט לשרת בזמן הקריאה. אפשרו אותם דרך קריאה בקול > לאפשר קולות שמשתמשים באינטרנט."
   }
 }

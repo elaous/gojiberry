@@ -1741,6 +1741,9 @@
   "forms.webForm": "Descargar como formulario web",
   "forms.send": "Enviar",
   "forms.webFormBad": "La dirección debe empezar por https:// o mailto: y no tener espacios.",
-  "forms.webFormSaved": "Se guardó el formulario web."
+  "forms.webFormSaved": "Se guardó el formulario web.",
+  "read.readerHosted": "Voces en un servidor",
+  "read.readerHostedSaid": "Lector: voces en un servidor. El texto se envía al servidor mientras se lee",
+  "voices.hostedNote": "Las voces en un servidor envían el texto al servidor mientras lee. Permítalas en Leer en voz alta > Permitir voces que usan Internet."
  }
 }

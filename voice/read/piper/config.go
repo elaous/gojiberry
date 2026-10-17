@@ -16,6 +16,9 @@ type Config struct {
 	// Runtime is the address of the script that offers the Piper runtime to the page (window.addons.piper); "" for a page
 	// that carries it already, or has none.
 	Runtime string
+	// Server is the address of a voice server (cmd/voiceserver) whose voices can be chosen as a third reader; "" for
+	// none. Its voices send the text to it, so they are offered only to a person who allowed voices that use the internet.
+	Server string
 }
 
 // DefaultConfig points at the published voices and names no runtime.
@@ -28,6 +31,7 @@ func ParseConfig(data []byte) (Config, error) {
 		Catalogue string `json:"catalogue"`
 		Base      string `json:"base"`
 		Runtime   string `json:"runtime"`
+		Server    string `json:"server"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return Config{}, err
@@ -43,7 +47,7 @@ func ParseConfig(data []byte) (Config, error) {
 		}
 		return nil
 	}
-	for _, e := range [][2]string{{"catalogue", raw.Catalogue}, {"base", raw.Base}, {"runtime", raw.Runtime}} {
+	for _, e := range [][2]string{{"catalogue", raw.Catalogue}, {"base", raw.Base}, {"runtime", raw.Runtime}, {"server", raw.Server}} {
 		if err := check(e[0], e[1]); err != nil {
 			return Config{}, err
 		}
@@ -61,5 +65,6 @@ func ParseConfig(data []byte) (Config, error) {
 		}
 	}
 	c.Runtime = raw.Runtime
+	c.Server = strings.TrimSuffix(raw.Server, "/")
 	return c, nil
 }

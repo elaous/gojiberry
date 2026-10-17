@@ -50,6 +50,53 @@ type Config struct {
 	// WhisperBinary/WhisperModel gate /transcribe the same way.
 	WhisperBinary string // e.g. "whisper-cli", or a full path
 	WhisperModel  string // path to a whisper.cpp .bin/.gguf model
+
+	// Voices are the voices /speak can read with, for a page that lets a person pick a hosted voice. Each names the
+	// model file it uses; with none, /speak uses PiperModel alone. ConfigFromEnv reads them from the JSON file named
+	// by GOJIBERRY_VOICESERVER_VOICES.
+	Voices []Voice
+}
+
+// Voice is one voice the server offers. Model stays on the server; the page is told the rest.
+type Voice struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Lang is the BCP 47 tag ("en-GB").
+	Lang string `json:"lang"`
+	// Licence is the address of the terms of the voice, shown to the person before they choose it.
+	Licence string `json:"licence,omitempty"`
+	Model   string `json:"-"`
+}
+
+// loadVoices reads a voices file: [{"id","name","lang","licence","model"}].
+func loadVoices(path string) ([]Voice, error) {
+	if path == "" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var raw []struct {
+		Voice
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	var out []Voice
+	for _, r := range raw {
+		v := r.Voice
+		v.Model = r.Model
+		if v.ID == "" || v.Model == "" {
+			continue
+		}
+		if v.Name == "" {
+			v.Name = v.ID
+		}
+		out = append(out, v)
+	}
+	return out, nil
 }
 
 // ConfigFromEnv reads GOJIBERRY_VOICESERVER_ADDR (default ":8084"),
@@ -58,7 +105,12 @@ type Config struct {
 // default -- see NewServer's own doc comment for what an unset pair
 // means for each route).
 func ConfigFromEnv() Config {
+	voices, err := loadVoices(os.Getenv("GOJIBERRY_VOICESERVER_VOICES"))
+	if err != nil {
+		log.Printf("voiceserver: the voices file could not be read: %v", err)
+	}
 	return Config{
+		Voices:        voices,
 		Guard:         guard.FromEnv("GOJIBERRY_VOICESERVER", "/health"),
 		Addr:          envOr("GOJIBERRY_VOICESERVER_ADDR", ":8084"),
 		PiperBinary:   os.Getenv("GOJIBERRY_VOICESERVER_PIPER_BINARY"),
@@ -86,6 +138,7 @@ type Server struct {
 	// fetchGoogleFonts field and translate/server's own translator
 	// interface document.
 	speak      func(binary, model, text string) ([]byte, error)
+	speakAt    func(binary, model, text string, rate float64) ([]byte, error)
 	transcribe func(binary, model string, wav []byte) (string, error)
 	// transcribeBias is used when the request carries a prompt or a language (the listener's own
 	// words, to bias the recogniser; nothing is trained).
@@ -102,13 +155,14 @@ type Server struct {
 // handleGoogleFonts take with no key configured, rather than refusing
 // to start at all.
 func NewServer(cfg Config) *Server {
-	return &Server{cfg: cfg, speak: speak.Piper, transcribe: listen.Whisper, transcribeBias: listen.WhisperWith, speakSlots: make(chan struct{}, 2), transcribeSlots: make(chan struct{}, 2)}
+	return &Server{cfg: cfg, speak: speak.Piper, speakAt: speak.PiperAt, transcribe: listen.Whisper, transcribeBias: listen.WhisperWith, speakSlots: make(chan struct{}, 2), transcribeSlots: make(chan struct{}, 2)}
 }
 
 // Handler returns the HTTP routes:
 //
 //	GET  /health       -- confirms the server is up
-//	POST /speak        -- {"text"} -> audio/wav bytes
+//	GET  /voices       -- the voices /speak can use: [{"id","name","lang","licence"}]
+//	POST /speak        -- {"text", "voice", "rate"} -> audio/wav bytes (voice and rate are optional)
 //	POST /transcribe   -- multipart form, field "audio" holding a WAV
 //	                       file -> {"text"}; the optional fields "prompt" (words the
 //	                       speaker is likely to say, up to listen.MaxPrompt bytes) and
@@ -121,6 +175,7 @@ func NewServer(cfg Config) *Server {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/voices", s.handleVoices)
 	mux.HandleFunc("/speak", s.handleSpeak)
 	mux.HandleFunc("/transcribe", s.handleTranscribe)
 	return guard.Or(s.cfg.Guard).Wrap(mux)
@@ -132,6 +187,22 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 type speakRequest struct {
 	Text string `json:"text"`
+	// Voice is the ID of one of the server's voices, "" for the default model.
+	Voice string `json:"voice,omitempty"`
+	// Rate is the speed (1 normal), 0 for normal.
+	Rate float64 `json:"rate,omitempty"`
+}
+
+func (s *Server) handleVoices(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	out := s.cfg.Voices
+	if out == nil {
+		out = []Voice{}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // maxSpeakBody/maxTranscribeBody cap request bodies at a generous but
@@ -166,7 +237,27 @@ func (s *Server) handleSpeak(w http.ResponseWriter, r *http.Request) {
 	}
 	defer release(s.speakSlots)
 	done := observe.Default().Work("speak")
-	audio, err := s.speak(s.cfg.PiperBinary, s.cfg.PiperModel, req.Text)
+	model := s.cfg.PiperModel
+	if req.Voice != "" {
+		model = ""
+		for _, v := range s.cfg.Voices {
+			if v.ID == req.Voice {
+				model = v.Model
+			}
+		}
+		if model == "" {
+			done("error")
+			http.Error(w, "no such voice", http.StatusBadRequest)
+			return
+		}
+	}
+	var audio []byte
+	var err error
+	if req.Rate > 0 && req.Rate != 1 {
+		audio, err = s.speakAt(s.cfg.PiperBinary, model, req.Text, req.Rate)
+	} else {
+		audio, err = s.speak(s.cfg.PiperBinary, model, req.Text)
+	}
 	if err != nil {
 		done("error")
 		log.Printf("voiceserver: speak: %v", err)
