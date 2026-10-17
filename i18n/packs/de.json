@@ -1760,6 +1760,24 @@
   "scripts.stopped": "Das Skript wurde angehalten.",
   "scripts.timeout": "Das Skript brauchte zu lange und wurde angehalten.",
   "scripts.tooMany": "Das Skript hat zu viele Anfragen gestellt und wurde angehalten.",
-  "scripts.allowWrite": "Darf Text am Cursor in das Dokument schreiben"
+  "scripts.allowWrite": "Darf Text am Cursor in das Dokument schreiben",
+  "forms.needKey": "Zum Sperren braucht es einen Schlüssel: Er beweist, dass die Sperre von Ihnen ist, und nur er hebt sie wieder auf. Erzeugen Sie unten einen mit „Schlüssel erzeugen“.",
+  "forms.keyMade": "Ein Schlüssel wurde erzeugt. Sperren, die Sie jetzt setzen, werden damit besiegelt. Bewahren Sie die Sicherung auf: Ohne den Schlüssel lässt sich eine Sperre hier nicht aufheben.",
+  "forms.wrongKey": "Dieses Feld wurde mit einem anderen Schlüssel gesperrt (%s). Nur dieser Schlüssel hebt die Sperre auf.",
+  "forms.sealBroken": "Das Siegel passt nicht: Dieses Feld wurde nach dem Sperren mit dem Schlüssel %s geändert.",
+  "forms.sealed": "Mit dem Schlüssel %s gesperrt; das Feld ist so, wie es gesperrt wurde.",
+  "forms.keyBrowser": "der Schlüssel dieses Browsers",
+  "forms.keyOwner": "Ihr Besitzerschlüssel",
+  "forms.keyIs": "Sperren werden mit %s (%s) gesetzt.",
+  "forms.keyBackup": "Sicherung des Schlüssels. Sie wird nur einmal angezeigt; bewahren Sie sie dort auf, wo nur Sie sie lesen können.",
+  "forms.keyBackupLabel": "Sicherung des Schlüssels",
+  "forms.keyHide": "Ich habe sie gespeichert",
+  "forms.noKey": "Zum Sperren eines Feldes braucht es einen Schlüssel: Er beweist, dass die Sperre von Ihnen ist, und nur er hebt sie wieder auf.",
+  "forms.makeKey": "Schlüssel erzeugen",
+  "forms.restoreKey": "Schlüssel aus seiner Sicherung wiederherstellen",
+  "forms.restoreText": "Der Sicherungstext",
+  "forms.restoreGo": "Wiederherstellen",
+  "forms.restoreBad": "Das ist keine Sicherung eines Schlüssels.",
+  "forms.restored": "Der Schlüssel wurde wiederhergestellt."
  }
 }

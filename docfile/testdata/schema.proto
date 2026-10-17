@@ -149,6 +149,8 @@ message FormFieldItem {
   repeated string options = 7;
   string value = 8;
   bool locked = 9;
+  string lock_key = 10;
+  string lock_sig = 11;
 }
 
 message Item {
