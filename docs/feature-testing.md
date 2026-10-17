@@ -308,7 +308,7 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **You should see.** The model with its size and a link to its terms; progress while it downloads; the text in the document, with nothing sent to any address.
 
-**Automated.** `TestAddonsTabAndDictationOnTheDevice`, `TestDraftDescriptionFromTheDescribeAddon`, `TestReadTheTextInAPictureWithTheOcrAddon`, `TestTranslateTheSelectionWithTheTranslateAddon` (examples/canvas-editor-showcase, with stand-in add-ons), package `addons` (`ParseModels`).
+**Automated.** `TestAddonsTabAndDictationOnTheDevice`, `TestDraftDescriptionFromTheDescribeAddon`, `TestReadTheTextInAPictureWithTheOcrAddon`, `TestTranslateTheSelectionWithTheTranslateAddon`, `TestLanguageTabWithTheLlmAddon` (examples/canvas-editor-showcase, with stand-in add-ons), packages `addons` (`ParseModels`) and `helper` (prompts, cleaning an answer).
 
 ## Preferences
 

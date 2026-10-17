@@ -1694,6 +1694,26 @@
     "ocr.textLabel": "Texto lido da imagem %d (confira-o com a imagem)",
     "ocr.insert": "Pôr o texto depois da imagem",
     "ocr.inserted": "O texto está no documento, depois da imagem.",
-    "ocr.asLong": "Usar o texto como descrição longa"
+    "ocr.asLong": "Usar o texto como descrição longa",
+    "help.summarise": "Resumir",
+    "help.plainer": "Dizer com palavras mais simples",
+    "help.shorter": "Encurtar",
+    "help.formal": "Tornar mais formal",
+    "help.friendly": "Tornar mais amigável",
+    "help.explain": "Explicar",
+    "help.title": "Ajuda para escrever",
+    "help.about": "Selecione um texto e pergunte. Um modelo neste dispositivo escreve uma resposta; pode estar errada, por isso leia-a antes de a usar. Nada é posto no documento sem que carregue num botão.",
+    "help.bar": "Pedir",
+    "help.needSelection": "Selecione primeiro um texto do documento.",
+    "help.working": "A trabalhar nisso neste dispositivo…",
+    "help.resultLabel": "Resposta: %s (feita por uma máquina, confira-a)",
+    "help.replace": "Substituir a seleção por ela",
+    "help.after": "Pô-la depois da seleção",
+    "help.discard": "Deitá-la fora",
+    "help.tooLong": "É demasiado texto para um pedido. Selecione uma parte mais curta.",
+    "help.noText": "Não há texto para trabalhar.",
+    "help.failed": "O modelo não conseguiu responder: %s",
+    "help.empty": "O modelo não deu resposta.",
+    "help.changed": "O texto mudou desde que perguntou: selecione-o e pergunte de novo."
   }
 }

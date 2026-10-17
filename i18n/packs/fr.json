@@ -1694,6 +1694,26 @@
   "ocr.textLabel": "Texte lu dans l’image %d (à vérifier avec l’image)",
   "ocr.insert": "Mettre le texte après l’image",
   "ocr.inserted": "Le texte est dans le document, après l’image.",
-  "ocr.asLong": "Utiliser le texte comme description longue"
+  "ocr.asLong": "Utiliser le texte comme description longue",
+  "help.summarise": "Résumer",
+  "help.plainer": "Le dire avec des mots plus simples",
+  "help.shorter": "Le raccourcir",
+  "help.formal": "Le rendre plus formel",
+  "help.friendly": "Le rendre plus chaleureux",
+  "help.explain": "L’expliquer",
+  "help.title": "Aide à l’écriture",
+  "help.about": "Sélectionnez du texte et demandez. Un modèle de cet appareil écrit une réponse ; elle peut être fausse, lisez-la donc avant de l’utiliser. Rien n’entre dans le document sans que vous appuyiez sur un bouton.",
+  "help.bar": "Demander",
+  "help.needSelection": "Sélectionnez d’abord du texte dans le document.",
+  "help.working": "Travail en cours sur cet appareil…",
+  "help.resultLabel": "Réponse : %s (produite par une machine, à vérifier)",
+  "help.replace": "Remplacer la sélection par elle",
+  "help.after": "La mettre après la sélection",
+  "help.discard": "La jeter",
+  "help.tooLong": "C’est trop de texte pour une demande. Sélectionnez une partie plus courte.",
+  "help.noText": "Il n’y a pas de texte à traiter.",
+  "help.failed": "Le modèle n’a pas pu répondre : %s",
+  "help.empty": "Le modèle n’a rien répondu.",
+  "help.changed": "Le texte a changé depuis votre demande : sélectionnez-le et demandez à nouveau."
  }
 }
