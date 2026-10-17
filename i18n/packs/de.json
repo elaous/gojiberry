@@ -1714,6 +1714,24 @@
   "help.noText": "Es gibt keinen Text zu bearbeiten.",
   "help.failed": "Das Modell konnte nicht antworten: %s",
   "help.empty": "Das Modell hat nicht geantwortet.",
-  "help.changed": "Der Text hat sich seit Ihrer Anfrage geändert: Markieren Sie ihn und fragen Sie erneut."
+  "help.changed": "Der Text hat sich seit Ihrer Anfrage geändert: Markieren Sie ihn und fragen Sie erneut.",
+  "diagram.kindMap": "Karte",
+  "diagram.kindFlow": "Ablaufdiagramm",
+  "diagram.needSource": "Beschreiben Sie zuerst das Diagramm.",
+  "diagram.failed": "Das Diagramm konnte nicht gezeichnet werden: %s",
+  "diagram.badSVG": "Das Add-on hat keine Zeichnung geliefert.",
+  "diagram.title": "Diagramme",
+  "diagram.kind": "Art",
+  "diagram.source": "Beschreibung des Diagramms",
+  "diagram.hint": "In der Schreibweise des Add-ons, zum Beispiel: A --> B --> C",
+  "diagram.draw": "Zeichnen",
+  "diagram.working": "Wird auf diesem Gerät gezeichnet…",
+  "diagram.previewAlt": "Das gezeichnete Diagramm",
+  "diagram.altLabel": "Beschreibung der Zeichnung in Worten, für Menschen, die sie nicht sehen können",
+  "diagram.altHint": "Was das Diagramm zeigt und wie seine Teile zusammenhängen",
+  "diagram.stale": "Die Beschreibung hat sich seit dem Zeichnen geändert: Zeichnen Sie erneut.",
+  "diagram.insert": "Das Diagramm ins Dokument setzen",
+  "diagram.needAlt": "Ein Diagramm braucht eine Beschreibung in Worten: Schreiben Sie, was es zeigt.",
+  "diagram.inserted": "Das Diagramm steht im Dokument. Seine Beschreibung ist als lange Bildbeschreibung gespeichert."
  }
 }

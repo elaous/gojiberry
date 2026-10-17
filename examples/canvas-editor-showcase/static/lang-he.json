@@ -1754,6 +1754,24 @@
     "help.noText": "אין טקסט לעבוד עליו.",
     "help.failed": "המודל לא הצליח לענות: %s",
     "help.empty": "המודל לא נתן תשובה.",
-    "help.changed": "הטקסט השתנה מאז ששאלתם: סמנו אותו ושאלו שוב."
+    "help.changed": "הטקסט השתנה מאז ששאלתם: סמנו אותו ושאלו שוב.",
+    "diagram.kindMap": "מפה",
+    "diagram.kindFlow": "תרשים זרימה",
+    "diagram.needSource": "תארו קודם את התרשים.",
+    "diagram.failed": "לא ניתן היה לצייר את התרשים: %s",
+    "diagram.badSVG": "התוסף לא נתן ציור.",
+    "diagram.title": "תרשימים",
+    "diagram.kind": "סוג",
+    "diagram.source": "תיאור התרשים",
+    "diagram.hint": "בסימון של התוסף, למשל: A --> B --> C",
+    "diagram.draw": "ציור",
+    "diagram.working": "מצייר במכשיר הזה…",
+    "diagram.previewAlt": "התרשים המצויר",
+    "diagram.altLabel": "תיאור הציור במילים, למי שאינו יכול לראות אותו",
+    "diagram.altHint": "מה התרשים מראה וכיצד חלקיו מתחברים",
+    "diagram.stale": "התיאור השתנה מאז הציור: צירו שוב.",
+    "diagram.insert": "הצבת התרשים במסמך",
+    "diagram.needAlt": "תרשים צריך תיאור במילים: כתבו מה הוא מראה.",
+    "diagram.inserted": "התרשים במסמך. תיאורו נשמר כתיאור הארוך של התמונה."
   }
 }

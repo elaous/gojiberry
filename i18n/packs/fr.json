@@ -1714,6 +1714,24 @@
   "help.noText": "Il n’y a pas de texte à traiter.",
   "help.failed": "Le modèle n’a pas pu répondre : %s",
   "help.empty": "Le modèle n’a rien répondu.",
-  "help.changed": "Le texte a changé depuis votre demande : sélectionnez-le et demandez à nouveau."
+  "help.changed": "Le texte a changé depuis votre demande : sélectionnez-le et demandez à nouveau.",
+  "diagram.kindMap": "Carte",
+  "diagram.kindFlow": "Organigramme",
+  "diagram.needSource": "Décrivez d’abord le diagramme.",
+  "diagram.failed": "Le diagramme n’a pas pu être dessiné : %s",
+  "diagram.badSVG": "Le module n’a pas donné de dessin.",
+  "diagram.title": "Diagrammes",
+  "diagram.kind": "Type",
+  "diagram.source": "Description du diagramme",
+  "diagram.hint": "Dans la notation du module, par exemple : A --> B --> C",
+  "diagram.draw": "Le dessiner",
+  "diagram.working": "Dessin en cours sur cet appareil…",
+  "diagram.previewAlt": "Le diagramme dessiné",
+  "diagram.altLabel": "Description du dessin, en mots, pour les personnes qui ne peuvent pas le voir",
+  "diagram.altHint": "Ce que montre le diagramme et comment ses parties se relient",
+  "diagram.stale": "La description a changé depuis le dessin : dessinez-le à nouveau.",
+  "diagram.insert": "Mettre le diagramme dans le document",
+  "diagram.needAlt": "Un diagramme demande une description en mots : écrivez ce qu’il montre.",
+  "diagram.inserted": "Le diagramme est dans le document. Sa description est gardée comme description longue de l’image."
  }
 }

@@ -101,7 +101,7 @@ func TestTheReaderVoiceIsChosenByAccentAndGender(t *testing.T) {
 	d.Eval(`window.__voices = [{name: 'Samantha', lang: 'en-US', localService: true}, {name: 'Daniel', lang: 'en-GB', localService: true}, {name: 'Anna', lang: 'de-DE', localService: true}]`, nil)
 	open := func() {
 		d.Click(`button.gj-menubar-button:has-text("Read aloud")`)
-		d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Reader voice")`)
+		d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has(> .gj-menu-label:text-is("Reader voice"))`)
 	}
 	open()
 	d.OK(d.Has(`.gj-menubar-panel .gj-menu-label:text-is("Samantha (American, female)")`), "an American woman's voice is offered")
