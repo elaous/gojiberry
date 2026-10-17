@@ -112,7 +112,7 @@ Insert > Form fields, or the bar of kinds in the Forms tab, puts a field in the 
 
 ## Add-ons
 
-The Add-ons tab lists the optional scripts this page has (the person who runs the page adds them) for things that need a large program or model: reader voices, dictation, and later pictures, scans, translation. For those that keep models it shows them, with size and terms, only when you ask, and downloads or removes one on request. With the **whisper** add-on, the Speech tab can dictate on this device instead of sending the recording to a recogniser at an address. With the **describe** add-on, "Draft a description from the picture" (Preferences > Editor) says what the picture shows, as a draft marked as possibly wrong that goes into the description only when the author uses it. See [addons.md](addons.md).
+The Add-ons tab lists the optional scripts this page has (the person who runs the page adds them) for things that need a large program or model: reader voices, dictation, and later pictures, scans, translation. For those that keep models it shows them, with size and terms, only when you ask, and downloads or removes one on request. With the **whisper** add-on, the Speech tab can dictate on this device instead of sending the recording to a recogniser at an address. With the **describe** add-on, "Draft a description from the picture" (Preferences > Editor) says what the picture shows, as a draft marked as possibly wrong that goes into the description only when the author uses it. With the **ocr** add-on, "Read the text in the picture" (a scan, a photographed page) shows the text to correct and puts it after the picture, or uses it as the long description, when the author says so. See [addons.md](addons.md).
 
 ## Two-page spread
 

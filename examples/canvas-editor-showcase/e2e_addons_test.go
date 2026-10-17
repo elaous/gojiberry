@@ -93,3 +93,27 @@ func TestDraftDescriptionFromTheDescribeAddon(t *testing.T) {
 	d.WaitFor("the description has the draft", `document.getElementById('img-alt-0').value === 'A bar chart with two blue bars.'`)
 	d.NoErrors()
 }
+
+// With the ocr add-on, a picture offers "Read the text in the picture": the add-on is given PNG bytes, the text is shown
+// to be checked, and goes into the document, after the picture, only when the author says so.
+func TestReadTheTextInAPictureWithTheOcrAddon(t *testing.T) {
+	d := e2etest.NewSite(t).Open(t, "?lang=en")
+	d.Eval(`window.addons = window.addons || {}; window.addons.ocr = { recognize(o) {
+		window.__ocr = {mime: o.mime, magic: Array.from(o.image.slice(0, 4)).join(','), lang: o.language};
+		return Promise.resolve({text: 'Invoice 42, due in May'}); } }`, nil)
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Click(`button[data-tab="images"]`)
+	d.WaitSelector("#img-insert")
+	d.ChooseFile(func() { d.Click("#img-insert") }, "scan.png", pngBytes(t))
+	d.WaitSelector("#img-ocr-0")
+	d.Click("#img-ocr-0")
+	d.WaitSelector("#img-ocr-text-0")
+	d.OK(d.Value("#img-ocr-text-0") == "Invoice 42, due in May", "the text is shown: "+d.Value("#img-ocr-text-0"))
+	d.OK(d.Str(`window.__ocr.magic`) == "137,80,78,71" && d.Str(`window.__ocr.lang`) == "en", "the add-on was given PNG bytes")
+	d.OK(!strings.Contains(d.Text("#a11y-text"), "Invoice 42"), "nothing is in the document yet")
+	d.Fill("#img-ocr-text-0", "Invoice 42, due in June")
+	d.Click("#img-ocr-insert-0")
+	d.WaitFor("the corrected text is in the document", `document.getElementById('a11y-text').textContent.includes('Invoice 42, due in June')`)
+	d.NoErrors()
+}

@@ -1687,6 +1687,13 @@
     "speech.failedLocal": "O suplemento não conseguiu converter a gravação em texto. Não foi acrescentado nada.",
     "speech.useLocal": "Ditar neste dispositivo (o suplemento whisper) em vez de enviar a gravação para o endereço acima",
     "img.hint.working": "A descrever a imagem neste dispositivo…",
-    "img.hint.draftAddon": "Um rascunho do que a imagem mostra, feito neste dispositivo pelo suplemento describe. Pode estar errado: leia-o e altere-o: "
+    "img.hint.draftAddon": "Um rascunho do que a imagem mostra, feito neste dispositivo pelo suplemento describe. Pode estar errado: leia-o e altere-o: ",
+    "ocr.none": "Não foi possível ler texto desta imagem.",
+    "ocr.read": "Ler o texto da imagem",
+    "ocr.working": "A ler a imagem neste dispositivo…",
+    "ocr.textLabel": "Texto lido da imagem %d (confira-o com a imagem)",
+    "ocr.insert": "Pôr o texto depois da imagem",
+    "ocr.inserted": "O texto está no documento, depois da imagem.",
+    "ocr.asLong": "Usar o texto como descrição longa"
   }
 }
