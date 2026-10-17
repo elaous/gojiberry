@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-4 of 10 since the last full run (full run on the branch of the 10th merge, on main plus the diagram add-on and the last of the add-ons (whisper, describe, ocr, translate, llm, spell, diagram), with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy required: `make check` passed in full on the second try, after a reader-voice menu test needed an exact label now that the Reader submenu has "Reader voices…" in it; coverage score 89.0%).
+5 of 10 since the last full run (full run on the branch of the 10th merge, on main plus the diagram add-on and the last of the add-ons (whisper, describe, ocr, translate, llm, spell, diagram), with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy required: `make check` passed in full on the second try, after a reader-voice menu test needed an exact label now that the Reader submenu has "Reader voices…" in it; coverage score 89.0%).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders

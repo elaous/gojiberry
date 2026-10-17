@@ -78,7 +78,7 @@ In the Pictures tab, **Find a picture online** searches repositories of public-d
 
 ## Mentions
 
-Write @name in a comment or a reply and that person is told: the screen reader announcer says who mentioned them, and the Comments tab shows **Mentions of you** with a way to go to the comment and to mark it as read. Comments name people by handle, never by an address. A host can deliver the same notices by its own channel.
+Write @name in a comment or a reply and that person is told: the screen reader announcer says who mentioned them, and the Comments tab shows **Mentions of you** with a way to go to the comment and to mark it as read. Comments name people by handle, never by an address. A host can deliver the same notices by its own channel; package `mentionmail` mails each person what is new (one mail per person, never twice, no addresses of others in it) when the host calls it on a changed document.
 
 ## Table formulas
 
