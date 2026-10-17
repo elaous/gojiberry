@@ -11,6 +11,7 @@ A person can write (or paste) a small script and run it from the **Scripts** tab
 | `await editor.commands()` | the registry: `{name, title}` of every command (the same list the menus and the key chords are made from) | nothing |
 | `await editor.run(name)` | runs a command on the document, as a menu or a chord would | **May run the editor's commands** (on by default) |
 | `await editor.text()` | the text of the document | **May read the text of the document** (off by default) |
+| `await editor.insert(text)` | puts text at the caret, replacing the selection, as one change the undo history has | **May write text into the document** (off by default) |
 | `editor.log(...)` | a line shown under the script | nothing |
 
 A refused call rejects with a message the script can read. A script that makes more than 2000 requests, or runs longer than 10 seconds, is stopped; so is one the person stops. A script is not kept: it is a text box, and the page does not store it or run it again by itself.
@@ -27,4 +28,4 @@ Package `script` is the host side: `Session.Handle` takes one request as JSON an
 
 ## What is not here
 
-The older plug-in API of opendocs (a Worker that registers its own commands and calls `toggleFormat`, `transformCase` and others) is not ported; scripts here can run the commands and cannot add new ones. Saving scripts, sharing them, running one on a schedule or on an event, and giving a script a way to insert text of its own are not built.
+The older plug-in API of opendocs (a Worker that registers its own commands and calls `toggleFormat`, `transformCase` and others) is not ported; scripts here can run the commands and cannot add new ones. Saving scripts, sharing them, running one on a schedule or on an event, and a script adding commands of its own are not built.

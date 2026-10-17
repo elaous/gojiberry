@@ -238,7 +238,7 @@ An optional mode (Preferences, off by default) in which the line you are typing 
 
 ## Scripts
 
-The Scripts tab runs a small script in a sandbox that has nothing of the page: no network, no storage, no document. The script can list the editor's commands, run any of them by name (so a command added later is reachable at once), say something in a log, and, if you allow it, read the text of the document. It is stopped after ten seconds or on request. Run only scripts you wrote or trust: a script that may read the text could show it to its author (docs/scripting.md).
+The Scripts tab runs a small script in a sandbox that has nothing of the page: no network, no storage, no document. The script can list the editor's commands, run any of them by name (so a command added later is reachable at once), say something in a log, and, if you allow it, read the text of the document or write text at the caret. It is stopped after ten seconds or on request. Run only scripts you wrote or trust: a script that may read the text could show it to its author (docs/scripting.md).
 
 ## Menus and commands
 

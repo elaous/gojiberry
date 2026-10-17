@@ -1759,6 +1759,7 @@
     "scripts.finished": "O script terminou.",
     "scripts.stopped": "O script foi parado.",
     "scripts.timeout": "O script demorou demasiado e foi parado.",
-    "scripts.tooMany": "O script fez demasiados pedidos e foi parado."
+    "scripts.tooMany": "O script fez demasiados pedidos e foi parado.",
+    "scripts.allowWrite": "Pode escrever texto no documento, no cursor"
   }
 }

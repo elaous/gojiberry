@@ -1759,6 +1759,7 @@
   "scripts.finished": "Das Skript ist fertig.",
   "scripts.stopped": "Das Skript wurde angehalten.",
   "scripts.timeout": "Das Skript brauchte zu lange und wurde angehalten.",
-  "scripts.tooMany": "Das Skript hat zu viele Anfragen gestellt und wurde angehalten."
+  "scripts.tooMany": "Das Skript hat zu viele Anfragen gestellt und wurde angehalten.",
+  "scripts.allowWrite": "Darf Text am Cursor in das Dokument schreiben"
  }
 }

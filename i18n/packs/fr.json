@@ -1759,6 +1759,7 @@
   "scripts.finished": "Le script est terminé.",
   "scripts.stopped": "Le script a été arrêté.",
   "scripts.timeout": "Le script a pris trop de temps et a été arrêté.",
-  "scripts.tooMany": "Le script a fait trop de requêtes et a été arrêté."
+  "scripts.tooMany": "Le script a fait trop de requêtes et a été arrêté.",
+  "scripts.allowWrite": "Peut écrire du texte dans le document, au curseur"
  }
 }
