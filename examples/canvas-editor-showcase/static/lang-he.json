@@ -1776,6 +1776,11 @@
     "forms.answersJSON": "הורדת התשובות (JSON)",
     "forms.answersCSV": "הורדת התשובות (CSV)",
     "forms.answersSaved": "התשובות נשמרו.",
-    "forms.answersProblems": "בחלק מהשדות יש בעיה; התשובות נשמרו כמות שהן."
+    "forms.answersProblems": "בחלק מהשדות יש בעיה; התשובות נשמרו כמות שהן.",
+    "forms.submitTo": "כתובת לתשובות של טופס אינטרנט (https או mailto)",
+    "forms.webForm": "הורדה כטופס אינטרנט",
+    "forms.send": "שליחה",
+    "forms.webFormBad": "הכתובת חייבת להתחיל ב-https:// או ב-mailto: וללא רווחים.",
+    "forms.webFormSaved": "טופס האינטרנט נשמר."
   }
 }

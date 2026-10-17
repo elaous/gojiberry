@@ -1736,6 +1736,11 @@
   "forms.answersJSON": "Descargar las respuestas (JSON)",
   "forms.answersCSV": "Descargar las respuestas (CSV)",
   "forms.answersSaved": "Se guardaron las respuestas.",
-  "forms.answersProblems": "Algunos campos tienen un problema; las respuestas se guardaron tal como están."
+  "forms.answersProblems": "Algunos campos tienen un problema; las respuestas se guardaron tal como están.",
+  "forms.submitTo": "Dirección para las respuestas de un formulario web (https o mailto)",
+  "forms.webForm": "Descargar como formulario web",
+  "forms.send": "Enviar",
+  "forms.webFormBad": "La dirección debe empezar por https:// o mailto: y no tener espacios.",
+  "forms.webFormSaved": "Se guardó el formulario web."
  }
 }

@@ -1736,6 +1736,11 @@
   "forms.answersJSON": "Antworten herunterladen (JSON)",
   "forms.answersCSV": "Antworten herunterladen (CSV)",
   "forms.answersSaved": "Die Antworten wurden gespeichert.",
-  "forms.answersProblems": "Bei einigen Feldern gibt es ein Problem; die Antworten wurden so gespeichert, wie sie sind."
+  "forms.answersProblems": "Bei einigen Feldern gibt es ein Problem; die Antworten wurden so gespeichert, wie sie sind.",
+  "forms.submitTo": "Adresse für die Antworten eines Webformulars (https oder mailto)",
+  "forms.webForm": "Als Webformular herunterladen",
+  "forms.send": "Senden",
+  "forms.webFormBad": "Die Adresse muss mit https:// oder mailto: beginnen und darf keine Leerzeichen enthalten.",
+  "forms.webFormSaved": "Das Webformular wurde gespeichert."
  }
 }

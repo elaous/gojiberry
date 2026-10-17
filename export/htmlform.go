@@ -55,3 +55,32 @@ func htmlFormControl(f docfile.FormFieldItem) string {
 	}
 	return "<label>" + label + " " + control + "</label>"
 }
+
+// htmlFormWrap puts the body in a form with a send button when the snapshot has an address for the answers and a form
+// field in its text.
+func htmlFormWrap(snap Snapshot, body string) string {
+	if snap.FormAction == "" || !strings.Contains(body, "<label>") || !hasFormField(snap) {
+		return body
+	}
+	button := snap.FormButton
+	if strings.TrimSpace(button) == "" {
+		button = "Send"
+	}
+	attrs := ` method="post"`
+	if strings.HasPrefix(snap.FormAction, "mailto:") {
+		attrs += ` enctype="text/plain"`
+	}
+	return `<form action="` + escapeHTMLAttr(snap.FormAction) + `"` + attrs + ">\n" + body +
+		`<p><button type="submit">` + escapeHTMLText(button) + "</button></p>\n</form>\n"
+}
+
+func hasFormField(snap Snapshot) bool {
+	for _, b := range snap.Blocks {
+		for _, sg := range b.Segments {
+			if sg.Format.Field != nil {
+				return true
+			}
+		}
+	}
+	return false
+}

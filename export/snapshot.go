@@ -214,6 +214,10 @@ type Snapshot struct {
 	// block: at the end); a table of contents the document holds sets it to where the document has it.
 	TOCAt int
 
+	// FormAction is the address the HTML export sends the answers of the form fields to (set by HTML.SubmitTo, checked
+	// there); FormButton is the text of the button.
+	FormAction, FormButton string
+
 	// Vertical sets the text in vertical lines, top to bottom, from right to left (vertical-rl).
 	Vertical bool
 
