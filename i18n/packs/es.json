@@ -1685,6 +1685,8 @@
   "addons.spell": "Ortografía sin conexión (spell)",
   "speech.transcribing": "Convirtiendo esta grabación en texto en este dispositivo…",
   "speech.failedLocal": "El complemento no pudo convertir la grabación en texto. No se añadió nada.",
-  "speech.useLocal": "Dictar en este dispositivo (el complemento whisper) en vez de enviar la grabación a la dirección de arriba"
+  "speech.useLocal": "Dictar en este dispositivo (el complemento whisper) en vez de enviar la grabación a la dirección de arriba",
+  "img.hint.working": "Describiendo la imagen en este dispositivo…",
+  "img.hint.draftAddon": "Un borrador de lo que muestra la imagen, hecho en este dispositivo por el complemento describe. Puede ser erróneo: léalo y cámbielo: "
  }
 }

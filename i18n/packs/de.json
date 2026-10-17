@@ -1685,6 +1685,8 @@
   "addons.spell": "Rechtschreibung offline (spell)",
   "speech.transcribing": "Die Aufnahme wird auf diesem Gerät in Text umgewandelt…",
   "speech.failedLocal": "Das Add-on konnte die Aufnahme nicht in Text umwandeln. Es wurde nichts hinzugefügt.",
-  "speech.useLocal": "Auf diesem Gerät diktieren (das Add-on whisper), statt die Aufnahme an die obige Adresse zu senden"
+  "speech.useLocal": "Auf diesem Gerät diktieren (das Add-on whisper), statt die Aufnahme an die obige Adresse zu senden",
+  "img.hint.working": "Das Bild wird auf diesem Gerät beschrieben…",
+  "img.hint.draftAddon": "Ein Entwurf nach dem, was das Bild zeigt, auf diesem Gerät vom Add-on describe erstellt. Er kann falsch sein: Lesen und ändern Sie ihn: "
  }
 }
