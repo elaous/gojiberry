@@ -84,6 +84,7 @@ type ui struct {
 	commentsSeen map[string]commentSeen // the comments already known (their replies and whether resolved), to find what others do
 	imageFocus   bool
 	floating     func() []a11ycheck.Object // the floating pictures and tables of the page, for the Check tab
+	imageDraftBy map[int]string            // who made a draft: "describe" for the add-on, absent for the colours and shape
 	imageDraft   map[int]string            // the draft descriptions made on this device, by picture (imagehint)
 	format       canvas.Format
 	caretFmt     canvas.Format // the format at the caret, for the toolbar buttons that are on or off

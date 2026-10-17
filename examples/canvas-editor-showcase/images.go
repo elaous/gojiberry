@@ -295,15 +295,16 @@ func hintControls(u *ui, i int, im *canvas.Image, canEdit bool, fl *canvas.TextF
 		return xango.Frag()
 	}
 	nodes := []xango.Node{
-		btn(fmt.Sprintf("img-hint-%d", i), T("img.hint.make", "Draft a description from the picture"), func() { u.draftFor(i, im); renderUI() }, false),
+		btn(fmt.Sprintf("img-hint-%d", i), T("img.hint.make", "Draft a description from the picture"), func() { u.draftFor(i, im, renderUI); renderUI() }, false),
 	}
 	if d := u.imageDraft[i]; d != "" {
 		nodes = append(nodes,
 			xango.El("p", []xango.Attr{xango.A("id", fmt.Sprintf("img-draft-%d", i)), xango.A("role", "status")},
-				xango.Text(T("img.hint.draft", "A rough draft from the colours and shape, made on this device. Read it and change it: ")+d)),
+				xango.Text(draftNote(u.imageDraftBy[i])+d)),
 			btn(fmt.Sprintf("img-usedraft-%d", i), T("img.hint.use", "Use the draft as the description"), func() {
 				im.Alt, im.Decorative = d, false
 				delete(u.imageDraft, i)
+				delete(u.imageDraftBy, i)
 				fl.Touch()
 				renderUI()
 			}, false))

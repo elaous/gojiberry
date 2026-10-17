@@ -1685,6 +1685,8 @@
     "addons.spell": "Ortografia offline (spell)",
     "speech.transcribing": "A converter esta gravação em texto neste dispositivo…",
     "speech.failedLocal": "O suplemento não conseguiu converter a gravação em texto. Não foi acrescentado nada.",
-    "speech.useLocal": "Ditar neste dispositivo (o suplemento whisper) em vez de enviar a gravação para o endereço acima"
+    "speech.useLocal": "Ditar neste dispositivo (o suplemento whisper) em vez de enviar a gravação para o endereço acima",
+    "img.hint.working": "A descrever a imagem neste dispositivo…",
+    "img.hint.draftAddon": "Um rascunho do que a imagem mostra, feito neste dispositivo pelo suplemento describe. Pode estar errado: leia-o e altere-o: "
   }
 }

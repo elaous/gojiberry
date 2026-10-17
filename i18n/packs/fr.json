@@ -1685,6 +1685,8 @@
   "addons.spell": "Orthographe hors ligne (spell)",
   "speech.transcribing": "Transformation de cet enregistrement en texte sur cet appareil…",
   "speech.failedLocal": "Le module n’a pas pu transformer l’enregistrement en texte. Rien n’a été ajouté.",
-  "speech.useLocal": "Dicter sur cet appareil (le module whisper) au lieu d’envoyer l’enregistrement à l’adresse ci-dessus"
+  "speech.useLocal": "Dicter sur cet appareil (le module whisper) au lieu d’envoyer l’enregistrement à l’adresse ci-dessus",
+  "img.hint.working": "Description de l’image sur cet appareil…",
+  "img.hint.draftAddon": "Un brouillon de ce que montre l’image, fait sur cet appareil par le module describe. Il peut être faux : lisez-le et modifiez-le : "
  }
 }

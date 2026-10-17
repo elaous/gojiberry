@@ -4,8 +4,10 @@ package main
 
 import (
 	"strings"
+	"syscall/js"
 
 	"github.com/elaous/gojiberry/canvas"
+	"github.com/elaous/gojiberry/domrt"
 	"github.com/elaous/gojiberry/imagehint"
 )
 
@@ -69,13 +71,56 @@ func hintPhrase(h imagehint.Hint) string {
 	return out + "."
 }
 
-// draftFor drafts the description of the picture at index i of the document, in the page's language.
-func (u *ui) draftFor(i int, im *canvas.Image) {
+// describeAddon says the page has the describe add-on (window.addons.describe), which drafts a description from what
+// the picture shows, on this device:
+//
+//	describe({image: Uint8Array /* PNG, longer side at most 768 */, mime: "image/png", language, model}) -> Promise<{text}>
+func describeAddon() bool { return hasAddon("describe", "describe") }
+
+// draftWithAddon asks the add-on for a draft of the picture at index i; the draft appears when it comes.
+func (u *ui) draftWithAddon(i int, src *canvas.HTMLImage, renderUI func()) {
+	png, ok := src.PNG(768)
+	if !ok {
+		u.imageMsg = T("img.hint.none", "No draft could be made for this picture.")
+		return
+	}
+	u.imageMsg = T("img.hint.working", "Describing the picture on this device…")
+	model := installedModel("describe", locale)
+	go func() {
+		v, err := domrt.Await(addon("describe").Call("describe", map[string]any{"image": u8(png), "mime": "image/png", "language": locale, "model": model}))
+		text := ""
+		if err == nil && v.Get("text").Type() == js.TypeString {
+			text = strings.TrimSpace(v.Get("text").String())
+		}
+		if text == "" {
+			u.imageMsg = T("img.hint.none", "No draft could be made for this picture.")
+		} else {
+			if u.imageDraft == nil {
+				u.imageDraft = map[int]string{}
+			}
+			if u.imageDraftBy == nil {
+				u.imageDraftBy = map[int]string{}
+			}
+			u.imageDraft[i], u.imageDraftBy[i] = text, "describe"
+			u.imageMsg = ""
+		}
+		renderUI()
+	}()
+}
+
+// draftFor drafts the description of the picture at index i of the document, in the page's language: from what the
+// picture shows when the describe add-on is there, else from its shape and colours.
+func (u *ui) draftFor(i int, im *canvas.Image, renderUI func()) {
 	src, ok := im.Src.(*canvas.HTMLImage)
 	if !ok {
 		u.imageMsg = T("img.hint.none", "No draft could be made for this picture.")
 		return
 	}
+	if describeAddon() {
+		u.draftWithAddon(i, src, renderUI)
+		return
+	}
+	delete(u.imageDraftBy, i)
 	rgba, w, h, ok := src.Pixels(48)
 	if !ok {
 		u.imageMsg = T("img.hint.none", "No draft could be made for this picture.")
@@ -92,4 +137,12 @@ func (u *ui) draftFor(i int, im *canvas.Image) {
 	}
 	u.imageDraft[i] = hintPhrase(hint)
 	u.imageMsg = ""
+}
+
+// draftNote says where a draft came from, so that the author knows how far to trust it.
+func draftNote(by string) string {
+	if by == "describe" {
+		return T("img.hint.draftAddon", "A draft from what the picture shows, made on this device by the describe add-on. It can be wrong: read it and change it: ")
+	}
+	return T("img.hint.draft", "A rough draft from the colours and shape, made on this device. Read it and change it: ")
 }
