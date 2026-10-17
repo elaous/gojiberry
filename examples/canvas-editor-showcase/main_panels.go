@@ -267,9 +267,7 @@ func mentionsSection(u *ui, state *State, renderUI func()) xango.Node {
 	if h == "" {
 		return xango.Frag()
 	}
-	if u.mentionsRead == nil {
-		u.mentionsRead = map[string]bool{}
-	}
+	u.syncMentionsRead()
 	list := state.Comments.NewMentions(h, u.mentionsRead)
 	if len(list) == 0 {
 		return xango.Frag()
@@ -280,14 +278,14 @@ func mentionsSection(u *ui, state *State, renderUI func()) xango.Node {
 		items = append(items, xango.El("li", []xango.Attr{xango.A("class", "gj-doc-item"), xango.A("id", fmt.Sprintf("mention-%d", i))},
 			xango.El("span", nil, xango.Text(authorOrSomeone(n.Author)+": "+canvas.StripMarkdown(n.Text))),
 			btn(fmt.Sprintf("mention-go-%d", i), T("mention.go", "Go to it"), func() { u.selComment = n.CommentID; renderUI() }, false),
-			btn(fmt.Sprintf("mention-read-%d", i), T("mention.read", "Mark as read"), func() { u.mentionsRead[n.Key()] = true; renderUI() }, false)))
+			btn(fmt.Sprintf("mention-read-%d", i), T("mention.read", "Mark as read"), func() { u.markMentionRead(n.Key()); renderUI() }, false)))
 	}
 	return xango.El("div", []xango.Attr{xango.A("id", "mentions"), xango.A("role", "region"), xango.A("aria-label", T("mention.title", "Mentions of you"))},
 		xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("mention.title", "Mentions of you")+fmt.Sprintf(" (%d)", len(list)))),
 		xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list")}, items...),
 		btn("mention-read-all", T("mention.readAll", "Mark all as read"), func() {
 			for _, n := range list {
-				u.mentionsRead[n.Key()] = true
+				u.markMentionRead(n.Key())
 			}
 			renderUI()
 		}, false))

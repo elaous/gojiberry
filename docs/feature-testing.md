@@ -118,7 +118,7 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Try it.** Open the same shared document as two people (for example `?name=Ana` and `?name=Bo`); as Ana comment with "@Bo can you check this?"; look at Bo's Comments tab.
 
-**You should see.** "Mentions of you" with Ana's comment, announced once; Ana sees none; "Mark as read" removes it.
+**You should see.** "Mentions of you" with Ana's comment, announced once; Ana sees none; "Mark as read" removes it, and it stays gone after the page is reloaded.
 
 **Automated.** `TestAMentionedPersonIsToldAndCanMarkItRead` (examples/canvas-editor-showcase), `TestMentionsOfListsWhatOthersWroteAboutThePerson` (canvas), package `mentionmail` (mail once, retry a failure, cap a mail)
 

@@ -68,31 +68,32 @@ type ui struct {
 	docLang                      string             // the document's language (a BCP 47 tag), "" for none
 	layout                       docfile.PageLayout // the header, footer and table of contents of the print layout
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
-	imageMsg     string
-	tableStyle   tableStyleForm // the table style being defined (Styles tab)
-	refs         refsState      // the sources the document cites (References tab)
-	imgFind      imageFind      // the "find a picture online" form of the Pictures tab
-	media        mediaForm      // the clip being typed in the Pictures tab and the caption drafts
-	forms        formsState     // the Forms tab: the field being filled in or changed
-	elements     elementsForm   // the equation being typed and the last message of the equation and code parts of the tab
-	sugg         suggestState
-	ghost        ghostUI
-	stateRef     *State                 // the document state, for what the announcer needs of it
-	commentSig   string                 // how many comments, replies and resolved threads there were when last looked at
-	mentionsRead map[string]bool        // mentions of the local person marked as read (canvas.MentionNotice.Key)
-	mentionsTold map[string]bool        // mentions already announced
-	commentsSeen map[string]commentSeen // the comments already known (their replies and whether resolved), to find what others do
-	imageFocus   bool
-	floating     func() []a11ycheck.Object // the floating pictures and tables of the page, for the Check tab
-	imageDraftBy map[int]string            // who made a draft: "describe" for the add-on, absent for the colours and shape
-	imageDraft   map[int]string            // the draft descriptions made on this device, by picture (imagehint)
-	format       canvas.Format
-	caretFmt     canvas.Format // the format at the caret, for the toolbar buttons that are on or off
-	catalog      []fonts.Font
-	open         bool
-	query        string
-	source       string
-	recent       []string
+	imageMsg        string
+	tableStyle      tableStyleForm // the table style being defined (Styles tab)
+	refs            refsState      // the sources the document cites (References tab)
+	imgFind         imageFind      // the "find a picture online" form of the Pictures tab
+	media           mediaForm      // the clip being typed in the Pictures tab and the caption drafts
+	forms           formsState     // the Forms tab: the field being filled in or changed
+	elements        elementsForm   // the equation being typed and the last message of the equation and code parts of the tab
+	sugg            suggestState
+	ghost           ghostUI
+	stateRef        *State                 // the document state, for what the announcer needs of it
+	commentSig      string                 // how many comments, replies and resolved threads there were when last looked at
+	mentionsRead    map[string]bool        // mentions of the local person marked as read (canvas.MentionNotice.Key), kept in the browser (mentionread.go)
+	mentionsReadFor string                 // the title of the document mentionsRead was loaded for
+	mentionsTold    map[string]bool        // mentions already announced
+	commentsSeen    map[string]commentSeen // the comments already known (their replies and whether resolved), to find what others do
+	imageFocus      bool
+	floating        func() []a11ycheck.Object // the floating pictures and tables of the page, for the Check tab
+	imageDraftBy    map[int]string            // who made a draft: "describe" for the add-on, absent for the colours and shape
+	imageDraft      map[int]string            // the draft descriptions made on this device, by picture (imagehint)
+	format          canvas.Format
+	caretFmt        canvas.Format // the format at the caret, for the toolbar buttons that are on or off
+	catalog         []fonts.Font
+	open            bool
+	query           string
+	source          string
+	recent          []string
 
 	symQuery, symCat string
 	symRecent        []string
