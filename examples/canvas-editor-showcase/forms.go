@@ -155,7 +155,7 @@ func formsMenu(u *ui, fl func() *canvas.TextFlow, redraw, renderUI func()) []com
 func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 	fl := flow()
 	canEdit := state.Role.CanEdit() && state.Mode == canvas.ModeEdit
-	isOwner := state.Role == canvas.RoleOwner
+	isOwner := state.Role == canvas.RoleOwner || state.Role == "" // no role set: the one person who has the document
 	nodes := []xango.Node{xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("forms.title", "Form fields")))}
 
 	// the bar of the kinds
