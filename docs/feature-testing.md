@@ -300,7 +300,7 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **You should see.** The fields drawn in the text with their label and value; a red outline while the value is wrong; the values in the Markdown export as `Order number: AB123`.
 
-**Automated.** `TestFormFieldsAddFillLockAndClear` (it also downloads the answers; examples/canvas-editor-showcase), `TestFormFieldsAreHTMLControlsAndWordsElsewhere` and `TestHTMLSubmitToWrapsFormFieldsInAForm` (export; the web form also downloaded in the e2e), package `formdata`, `TestFormFieldProblems`, `TestFormFieldEyePenAndCheckboxPresses`, `TestClearFormFieldsAndWords` (canvas), `TestFormFieldRoundTripsThroughTheFlow` (docfile), the form-field pair of `TestFidelityMatrixMatchesTheExporters` (export)
+**Automated.** `TestFormFieldsAddFillLockAndClear` (it also downloads the answers; examples/canvas-editor-showcase), `TestFormFieldsAreHTMLControlsAndWordsElsewhere` and `TestHTMLSubmitToWrapsFormFieldsInAForm` (export; the web form also downloaded in the e2e), `TestHTMLFormFieldsReadBackFromTheirPage` (export and htmlimport), package `formdata`, `TestFormFieldProblems`, `TestFormFieldEyePenAndCheckboxPresses`, `TestClearFormFieldsAndWords` (canvas), `TestFormFieldRoundTripsThroughTheFlow` (docfile), the form-field pair of `TestFidelityMatrixMatchesTheExporters` (export)
 
 ## Add-ons
 

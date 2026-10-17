@@ -4,10 +4,12 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/elaous/gojiberry/docfile"
+	"github.com/elaous/gojiberry/htmlimport"
 	"github.com/elaous/gojiberry/transfer"
 )
 
@@ -384,4 +386,39 @@ func mustHTML(t *testing.T, snap Snapshot) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// A form page written by the HTML export reads back as the same fields, with what was filled in.
+func TestHTMLFormFieldsReadBackFromTheirPage(t *testing.T) {
+	want := []docfile.FormFieldItem{
+		{Kind: "text", Name: "order", Label: "Order no.", Placeholder: "AB123", Pattern: `[A-Z]{2}\d{3}`, Required: true, Value: `AB123<b>`},
+		{Kind: "email", Name: "mail", Label: "Mail", Value: "a@example.org"},
+		{Kind: "checkbox", Name: "ok", Label: "I agree", Value: "true"},
+		{Kind: "select", Name: "size", Label: "Size", Options: []string{"S", "M<"}, Value: "M<"},
+		{Kind: "textarea", Name: "note", Label: "Note", Value: "two\nlines"},
+	}
+	var items []docfile.Item
+	for i := range want {
+		items = append(items, docfile.Item{Form: &want[i]}, docfile.Item{Chars: &docfile.Chars{Text: " "}})
+	}
+	page, err := HTML{SubmitTo: "https://example.org/in"}.Export(FromDocument(docfile.Document{Content: items}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := htmlimport.Import(page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []docfile.FormFieldItem
+	for _, it := range doc.Content {
+		if it.Form != nil {
+			got = append(got, *it.Form)
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("read back:\n got %+v\nwant %+v", got, want)
+	}
+	if _, s, _ := htmlimport.ImportReport(page); s.Forms != 1 { // the send button
+		t.Errorf("skipped %+v", s)
+	}
 }
