@@ -117,3 +117,31 @@ func TestReadTheTextInAPictureWithTheOcrAddon(t *testing.T) {
 	d.WaitFor("the corrected text is in the document", `document.getElementById('a11y-text').textContent.includes('Invoice 42, due in June')`)
 	d.NoErrors()
 }
+
+// With the translate add-on (and no translation server named in the address), the Language tab translates the
+// selection on the device: the add-on gets the plain language tag and the text, and the translation replaces the
+// selection only when asked.
+func TestTranslateTheSelectionWithTheTranslateAddon(t *testing.T) {
+	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
+	d.WaitSelector("canvas")
+	d.Eval(`window.addons = window.addons || {}; window.addons.translate = { translate(o) {
+		window.__tl = {text: o.text, to: o.to, from: o.from};
+		return Promise.resolve({text: '[' + o.to + '] ' + o.text, detected: 'en'}); } }`, nil)
+	d.ToggleMode()
+	d.Click(`button[data-tab="language"]`)
+	d.WaitSelector(".gj-lang-target")
+	d.CanvasDblClick(240, 164)
+	d.Click(`button[data-tab="stats"]`)
+	d.Click(`button[data-tab="language"]`)
+	d.Select(".gj-lang-target", "FR")
+	d.Click(".gj-lang-translate")
+	d.WaitSelector(".gj-lang-translation")
+	translated := d.Text(".gj-lang-translation")
+	d.OK(strings.Contains(translated, "[fr] "), "the add-on translated it: "+translated)
+	d.OK(d.Str(`window.__tl.to`) == "fr" && d.Str(`window.__tl.text`) != "", "with the plain language tag and the selected text")
+	before := d.State().Str("text")
+	d.Click(".gj-lang-use")
+	d.Wait("s.text !== " + e2etest.J(before))
+	d.OK(strings.Contains(d.State().Str("text"), "[fr] "), "Replace the selection puts the translation in the text")
+	d.NoErrors()
+}
