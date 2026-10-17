@@ -44,4 +44,4 @@ A script of that shape can be built on `onnxruntime-web` and a phonemizer such a
 
 ## What has been checked
 
-The port, the player and the adapter are tested with fakes (`voice/read`, `voice/read/piper`), and the page's flow (list, download, read with the voice, remove) with a stand-in for the network, the runtime and Web Audio (`TestDownloadAReaderVoiceAndReadWithIt`). **A real Piper runtime has not been run against it**: whether a particular `addons.piper` script and a particular voice sound right is for the operator to try. The Cache Storage keeps a voice until the browser clears site data.
+See also [addons.md](addons.md) for the registry this script is added to. The port, the player and the adapter are tested with fakes (`voice/read`, `voice/read/piper`), and the page's flow (list, download, read with the voice, remove) with a stand-in for the network, the runtime and Web Audio (`TestDownloadAReaderVoiceAndReadWithIt`). **A real Piper runtime has not been run against it**: whether a particular `addons.piper` script and a particular voice sound right is for the operator to try. The Cache Storage keeps a voice until the browser clears site data.

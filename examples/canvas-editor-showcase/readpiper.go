@@ -267,18 +267,9 @@ func (cacheStore) Keys(done func([]string)) {
 // jsRuntime is piper.Runtime over window.addons.piper.
 type jsRuntime struct{}
 
-func (jsRuntime) gj() js.Value {
-	addons := js.Global().Get("addons")
-	if !addons.Truthy() {
-		return js.Undefined()
-	}
-	return addons.Get("piper")
-}
+func (jsRuntime) gj() js.Value { return addon("piper") }
 
-func (r jsRuntime) Available() bool {
-	g := r.gj()
-	return g.Truthy() && g.Get("synthesize").Type() == js.TypeFunction
-}
+func (r jsRuntime) Available() bool { return hasAddon("piper", "synthesize") }
 
 func (r jsRuntime) Synthesize(model, config []byte, text string, rate float64, done func(piper.Audio, error)) func() {
 	cancelled := false
