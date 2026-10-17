@@ -14,6 +14,10 @@ func TestDescribeSaysAccentAndGender(t *testing.T) {
 		{Voice{Name: "Microsoft Zira Desktop", Lang: "en-US"}, "English", "American", Female},
 		{Voice{Name: "Karen", Lang: "en-AU"}, "English", "Australian", Female},
 		{Voice{Name: "Luciana", Lang: "pt-BR"}, "Portuguese", "Brazilian", Female},
+		{Voice{Name: "Lessac", Lang: "en-US"}, "English", "American", Female},
+		{Voice{Name: "Alan", Lang: "en-GB"}, "English", "British", Male},
+		{Voice{Name: "Thorsten", Lang: "de-DE"}, "German", "German", Male},
+		{Voice{Name: "Southern_english_female", Lang: "en-GB"}, "English", "British", Female},
 		{Voice{Name: "Default", Lang: "en"}, "English", "", ""},
 		{Voice{Name: "Something", Lang: "xx-YY"}, "", "YY", ""},
 	} {
