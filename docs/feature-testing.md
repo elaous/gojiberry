@@ -398,6 +398,10 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **Automated.** `TestScriptsRunInASandboxAndAskForWhatTheyMayHave` (examples/canvas-editor-showcase), package `script`.
 
+## About and licence
+
+**Try it.** Open Help > About Gojiberry. *You should see:* the licence and credit text, and four links (source, licence, notice, commercial licence) that open the repository in a new tab. **Automated.** `TestAboutTabShowsTheCreditAndTheSourceLink` (examples/canvas-editor-showcase).
+
 ## Packs
 
 **Try it.** Put a large picture (100 KB or more) in two documents, download the folder "As .opendoc", and run `opendoc verify` on the file: it says `2 documents checked, 1 attachments`; the file is much smaller than with the picture twice. Import it into an empty store: both documents have their picture. With a confidential document and an unlocked store, `opendoc list` shows the placeholder name and a time on a midnight (UTC).

@@ -19,6 +19,13 @@ func Greeting(props GreetingProps) xango.Node {
 }
 ```
 
+## Licence
+
+Free software under the **GNU Affero General Public License, version 3** ([LICENSE](LICENSE)). If you run a changed version for
+other people over a network, the AGPL asks you to offer them its source. The project asks for credit ([NOTICE](NOTICE)), and
+a **commercial licence** is available for use the AGPL does not fit ([COMMERCIAL.md](COMMERCIAL.md)). Contributions are
+accepted on the terms in [CONTRIBUTING.md](CONTRIBUTING.md); [docs/licence.md](docs/licence.md) says what is and is not settled.
+
 ## The name
 
 Xangô (shan-GOH) is the Yoruba orisha of thunder, lightning and justice

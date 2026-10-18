@@ -264,6 +264,10 @@ An optional mode (Preferences, off by default) in which the line you are typing 
 
 The Scripts tab runs a small script in a sandbox that has nothing of the page: no network, no storage, no document. The script can list the editor's commands, run any of them by name (so a command added later is reachable at once), say something in a log, and, if you allow it, read the text of the document or write text at the caret. It is stopped after ten seconds or on request. Run only scripts you wrote or trust: a script that may read the text could show it to its author (docs/scripting.md).
 
+## About and licence
+
+**Help > About Gojiberry** (and the About tab) shows what the program is, that it is free software under the GNU Affero General Public License version 3, the credit to keep ("Made with the Gojiberry project, github.com/elaous/gojiberry"), and links to the source code, the licence, the notice and the commercial licence. If you run a changed version for other people over a network, the AGPL asks you to offer them its source; a commercial licence is available for use the AGPL does not fit. See [licence.md](licence.md).
+
 ## Packs
 
 An **.opendoc pack** is one file with many documents, their folders, tags, trash flags and history: a backup, or something to hand to somebody. **As .opendoc** on a folder downloads it; **Import .opendoc** brings one in. Confidential documents are sealed into the pack with the keys of the unlocked store (a locked store leaves them out and says how many). The list of documents in a pack is not secret, but for a sealed document it shows only a placeholder name, the day it changed, and a size rounded up to 1 KiB, 2 KiB, 4 KiB and so on, so the size says little. A picture of 64 KiB or more in an ordinary document is kept once in the pack and the documents refer to it, so the same picture used twice, or in the history, does not make the file bigger; such a pack is "version 2" and an older reader refuses it instead of showing documents without their pictures. A pack without such pictures stays version 1. Encrypting the list too is planned ([phase-2.md](phase-2.md), P2-14).
