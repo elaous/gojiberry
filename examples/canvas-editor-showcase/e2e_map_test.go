@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/elaous/gojiberry/internal/e2etest"
+	"github.com/elaous/gojiberry/osmmap"
 )
 
 // A map is made from a Plus Code (nobody is asked who is there), then from an address (looked up); the picture has its
@@ -44,6 +45,19 @@ func TestInsertAMapFromAPlusCodeAndFromAnAddress(t *testing.T) {
 	d.WaitFor("the address map", `document.body.textContent.includes('Map of Eiffel Tower, Paris')`)
 	if searches.Load() != 1 {
 		t.Fatalf("one search for the address: %d", searches.Load())
+	}
+	// A short Plus Code with the place it is near: the place is read from the answer already kept (no second search), and
+	// the code is completed nearest to it.
+	full := osmmap.EncodePlusCode(48.8584, 2.2945, 10)
+	tilesBefore := tiles.Load()
+	d.Fill("#map-query", full[4:]+" Eiffel Tower, Paris")
+	d.Click("#map-go")
+	d.WaitFor("the short code map", `document.body.textContent.includes('Map of `+full+`')`)
+	if searches.Load() != 1 {
+		t.Fatalf("the place named with the short code was answered from the page's memory: %d searches", searches.Load())
+	}
+	if tiles.Load() != tilesBefore {
+		t.Errorf("the same tiles were asked for again: %d, then %d", tilesBefore, tiles.Load())
 	}
 	d.Click(`button[data-tab="transfer"]`)
 	_, js := d.Download(func() { d.Click(`.gj-transfer-button[data-kind="export"][data-format="json"]`) })

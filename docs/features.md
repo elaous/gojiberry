@@ -92,7 +92,7 @@ Formulas are written in a small notation (`x^2 + y_1`, `frac{a}{b}`, `sqrt{x}`, 
 
 ## Maps
 
-Built with the tag `exp_map` (or `experimental`; see [phase-2.md](phase-2.md)), the Pictures tab has **Insert a map**: type an address, coordinates (`48.8584, 2.2945`, or in degrees, minutes and seconds with the hemisphere letters, `48°51'30"N 2°17'40"E`) or a Plus Code (`8FVC9G8F+6W`), choose how close, and a picture of the OpenStreetMap tiles around the place goes in at the caret, with a marker, the alt text *Map of ...* and the credit *Map data © OpenStreetMap contributors (ODbL)* as its legend. Coordinates and Plus Codes ask nobody; an address is looked up on OpenStreetMap's Nominatim, and the tiles come from OpenStreetMap's tile server (or the servers an operator names in `map.json`). The public servers are for light use.
+Built with the tag `exp_map` (or `experimental`; see [phase-2.md](phase-2.md)), the Pictures tab has **Insert a map**: type an address, coordinates (`48.8584, 2.2945`, or in degrees, minutes and seconds with the hemisphere letters, `48°51'30"N 2°17'40"E`) or a Plus Code (`8FVC9G8F+6W`, or a short one with the place it is near, `9G8F+6W Mountain View`), choose how close, and a picture of the OpenStreetMap tiles around the place goes in at the caret, with a marker, the alt text *Map of ...* and the credit *Map data © OpenStreetMap contributors (ODbL)* as its legend. Coordinates and Plus Codes ask nobody; an address is looked up on OpenStreetMap's Nominatim, and the tiles come from OpenStreetMap's tile server (or the servers an operator names in `map.json`). The public servers are for light use.
 
 ## Text formats as they are
 

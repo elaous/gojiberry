@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-7 of 10 since the last full run (full run on the branch of the 10th merge, 2026-10-18, on main plus the pack options (blur, format version 2), the licence and About tab, and typed-text colours, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy required: `make check` passed the first time, including the showcase browser tests (1963 s); `make coverage-badge` left the badge at 88.9%).
+8 of 10 since the last full run (full run on the branch of the 10th merge, 2026-10-18, on main plus the pack options (blur, format version 2), the licence and About tab, and typed-text colours, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy required: `make check` passed the first time, including the showcase browser tests (1963 s); `make coverage-badge` left the badge at 88.9%).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
