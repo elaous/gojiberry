@@ -56,10 +56,18 @@ func TestCoordinatesAndLocate(t *testing.T) {
 	for in, want := range map[string][2]float64{
 		"48.8584, 2.2945": {48.8584, 2.2945}, "48.8584 2.2945": {48.8584, 2.2945}, "48.8584 N, 2.2945 E": {48.8584, 2.2945},
 		"33.8568 S 151.2153 E": {-33.8568, 151.2153}, "-33.8568,151.2153": {-33.8568, 151.2153}, "40.7 N 74.0 W": {40.7, -74.0}, "48.8584°N 2.2945°E": {48.8584, 2.2945},
+		`48°51'30.2"N 2°17'40.1"E`: {48.858389, 2.294472}, `48° 51' 30" N, 2° 17' 40" E`: {48.858333, 2.294444},
+		"33 51 25 S 151 12 55 E": {-33.856944, 151.215278}, "48°51.503'N 2°17.668'E": {48.858383, 2.294467},
+		"40°42'51\"N 74°0'21\"W": {40.714167, -74.005833},
 	} {
 		lat, lng, err := ParseCoordinates(in)
-		if err != nil || !near(lat, want[0], 1e-9) || !near(lng, want[1], 1e-9) {
+		if err != nil || !near(lat, want[0], 1e-5) || !near(lng, want[1], 1e-5) {
 			t.Errorf("%q: %v %v %v", in, lat, lng, err)
+		}
+	}
+	for _, bad := range []string{`48°61'30"N 2°17'40"E`, `48°51'75"N 2°17'40"E`, `95°0'0"N 2°17'40"E`} {
+		if _, _, err := ParseCoordinates(bad); err == nil {
+			t.Errorf("%q accepted", bad)
 		}
 	}
 	if _, _, err := ParseCoordinates("91, 2"); err == nil {
