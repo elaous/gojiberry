@@ -1,4 +1,4 @@
-//go:build js && wasm
+//go:build js && wasm && (experimental || exp_forms)
 
 package main
 
@@ -10,12 +10,21 @@ import (
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/components"
-	"github.com/elaous/gojiberry/docfile"
-	"github.com/elaous/gojiberry/export"
 	"github.com/elaous/gojiberry/formdata"
 	"github.com/elaous/gojiberry/transfer"
 	"github.com/elaous/gojiberry/xango"
 )
+
+// formsHolder is embedded in ui: the Forms tab's state (the field being filled in or changed, and the last message).
+type formsHolder struct{ forms formsState }
+
+func formsTab(u *ui, label string, renderUI func()) xango.Node {
+	return tabButton(u, "forms", label, renderUI)
+}
+
+func formsMenuItem(u *ui, fl func() *canvas.TextFlow, redraw, renderUI func()) components.MenuItem {
+	return components.MenuItem{Label: T("menu.forms", "Form fields"), Items: formsMenu(u, fl, redraw, renderUI)}
+}
 
 // The Forms tab: a bar of the field types to add at the caret, the fields of the document with what is in them, and the
 // two things the eye and the pen on a field ask for: filling it in (a box fit for its kind, with the problem with the
@@ -181,11 +190,7 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 			btn("forms-answers-csv", T("forms.answersCSV", "Download the answers (CSV)"), func() { u.downloadAnswers(fl, "csv", renderUI) }, fl == nil || len(fl.FormFields()) == 0),
 		),
 	)
-	nodes = append(nodes,
-		xango.El("label", nil, xango.Text(T("forms.submitTo", "Address for the answers of a web form (https or mailto)")),
-			lineInput("forms-submit-to", T("forms.submitTo", "Address for the answers of a web form (https or mailto)"), u.forms.submitTo, "https://", func(v string) { u.forms.submitTo = strings.TrimSpace(v) })),
-		btn("forms-webform", T("forms.webForm", "Download as a web form"), func() { u.downloadWebForm(fl, renderUI) }, fl == nil || len(fl.FormFields()) == 0),
-	)
+	nodes = append(nodes, submitNodes(u, fl, renderUI)...)
 	loadFormKey(renderUI)
 	nodes = append(nodes, u.formKeyPanel(renderUI)...)
 	if !canEdit {
@@ -438,22 +443,6 @@ func (u *ui) downloadAnswers(fl *canvas.TextFlow, format string, renderUI func()
 	u.forms.msg = T("forms.answersSaved", "The answers were saved.")
 	if problems > 0 {
 		u.forms.msg = T("forms.answersProblems", "Some fields have a problem; the answers were saved as they are.")
-	}
-	u.announce(u.forms.msg)
-	renderUI()
-}
-
-// downloadWebForm saves the document as a web page whose form fields send their answers to the address given.
-func (u *ui) downloadWebForm(fl *canvas.TextFlow, renderUI func()) {
-	if fl == nil {
-		return
-	}
-	data, err := export.HTML{SubmitTo: u.forms.submitTo, SubmitLabel: T("forms.send", "Send")}.Export(export.FromDocument(docfile.FromFlow(u.title, fl)))
-	if err != nil {
-		u.forms.msg = T("forms.webFormBad", "The address must start with https:// or mailto: and have no spaces.")
-	} else {
-		transfer.Download("form.html", "text/html", data)
-		u.forms.msg = T("forms.webFormSaved", "The web form was saved.")
 	}
 	u.announce(u.forms.msg)
 	renderUI()

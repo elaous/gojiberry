@@ -21,7 +21,7 @@ Every experimental feature is behind a Go build tag and is off by default: a bui
 - `experimental` switches on every experimental feature (for trying them all: `-tags experimental`);
 - one tag per feature, named `exp_<feature>` (`exp_forms`, `exp_forms_submit`), so a build can take only what it wants; `experimental` implies each of them.
 
-Form fields are the first feature moved behind a flag: `exp_forms` for the fields, the Forms tab and Insert > Form fields; `exp_forms_submit` for anything that sends an answer anywhere (the web form with an address in the HTML export, `HTML.SubmitTo`). A form is for filling in, printing, sharing or sending filled; submitting is not part of the default product. The test suite runs once without the tags and once with `-tags experimental`; a feature that leaves the experiment loses its tag and its row says so.
+Form fields are the first feature moved behind a flag (done, 2026-10-18; what the tag takes out is the showcase's surface: the Forms tab, Insert > Form fields, the key panel, and the code that draws and fills a field; the library packages (`canvas.FormFieldObject`, `docfile.FormFieldItem`, `formseal`, `formdata`, the exports) stay in every build, so a document that holds fields is kept intact when a default build opens and saves it): `exp_forms` for the fields, the Forms tab and Insert > Form fields; `exp_forms_submit` for anything that sends an answer anywhere (the web form with an address in the HTML export, `HTML.SubmitTo`). A form is for filling in, printing, sharing or sending filled; submitting is not part of the default product. The test suite runs once without the tags and once with `-tags experimental` (`make e2e-test` runs the experimental tests in a second pass, `make e2e-test-experimental` alone; `make wasm-lint` lints both; try a build with `GOFLAGS=-tags=experimental`, `-tags exp_forms` or `-tags exp_forms,exp_forms_submit`; `exp_forms_submit` needs `exp_forms`); a feature that leaves the experiment loses its tag and its row says so.
 
 ## Sharing: locks and colours (decided, ready)
 
@@ -144,3 +144,7 @@ The map from OpenStreetMap is a build now ([status.md](status.md)). Later: offli
 ### P2-11 Voice sources, more — design
 
 Beyond the four voices to begin with: a signed catalogue format for third-party repositories (so a repository can prove who published a voice and under what licence), per-voice licence acceptance kept with the person, voices for other languages with their phonemizers, a way to share a voice list between a team.
+
+### P2-12 Age checking and the data a deployment keeps — blocked (needs legal advice)
+
+The code collects no age or birthdate. Two optional server features keep something about a person: web push (handle, the browser's push endpoint and keys; [web-push.md](web-push.md)) and mention mail (an address the host already holds). Whether a deployment must check ages depends on where it runs and who uses it, which is for a lawyer to say before launch. What the code can do meanwhile is keep less: a "forget this person" call on the push store (to honour a deletion request), and no new personal data without a row in [status.md](status.md) that says why.

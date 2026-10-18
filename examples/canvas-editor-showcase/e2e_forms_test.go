@@ -1,4 +1,4 @@
-//go:build !(js && wasm)
+//go:build !(js && wasm) && (experimental || exp_forms)
 
 package main
 
@@ -53,12 +53,7 @@ func TestFormFieldsAddFillLockAndClear(t *testing.T) {
 	d.OK(strings.Contains(string(js), `"field1": "AB123"`) && strings.Contains(string(js), `"field2": false`), "the answers as JSON: "+string(js))
 	_, csv := d.Download(func() { d.Click("#forms-answers-csv") })
 	d.OK(strings.HasPrefix(string(csv), "field1,field2\nAB123,false"), "and as CSV: "+string(csv))
-	d.Fill("#forms-submit-to", "http://example.org")
-	d.Click("#forms-webform")
-	d.WaitFor("a wrong address is refused", `document.getElementById('forms-message').textContent.includes('https://')`)
-	d.Fill("#forms-submit-to", "https://example.org/in")
-	_, page := d.Download(func() { d.Click("#forms-webform") })
-	d.OK(strings.Contains(string(page), `<form action="https://example.org/in" method="post">`) && strings.Contains(string(page), `<button type="submit">Send</button>`), "the web form: "+string(page))
+	submitSteps(d)
 	d.Click("#forms-lock-0")
 	d.WaitFor("locking without a key says a key is needed", `(document.getElementById('forms-message')||{}).textContent.includes('Locking needs a key')`)
 	d.OK(!d.Has("#forms-locked-0") && d.Has("#forms-create-key"), "and offers to make one")
