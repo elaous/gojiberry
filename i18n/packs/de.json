@@ -1823,6 +1823,27 @@
   "lock.someone": "jemand",
   "lock.picture": "Bild",
   "lock.equation": "Formel",
-  "lock.field": "Formularfeld"
+  "lock.field": "Formularfeld",
+  "tgrip.title": "Tabelle: %s",
+  "tgrip.column": "Spalte %s",
+  "tgrip.row": "Zeile %d",
+  "tgrip.table": "Die ganze Tabelle",
+  "tgrip.colBefore": "Spalte davor einfügen",
+  "tgrip.colAfter": "Spalte danach einfügen",
+  "tgrip.colLeft": "Nach links",
+  "tgrip.colRight": "Nach rechts",
+  "tgrip.sortAsc": "Zeilen nach dieser Spalte sortieren, A bis Z",
+  "tgrip.sortDesc": "Zeilen nach dieser Spalte sortieren, Z bis A",
+  "tgrip.resetWidth": "Breite zurücksetzen",
+  "tgrip.colDelete": "Spalte löschen",
+  "tgrip.rowAbove": "Zeile darüber einfügen",
+  "tgrip.rowBelow": "Zeile darunter einfügen",
+  "tgrip.rowUp": "Nach oben",
+  "tgrip.rowDown": "Nach unten",
+  "tgrip.rowDuplicate": "Zeile duplizieren",
+  "tgrip.resetHeight": "Höhe zurücksetzen",
+  "tgrip.rowDelete": "Zeile löschen",
+  "tgrip.resetSizes": "Alle Spaltenbreiten und Zeilenhöhen zurücksetzen",
+  "tgrip.done": "Fertig"
  }
 }

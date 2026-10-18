@@ -100,7 +100,7 @@ Built with the tag `exp_textformats` (or `experimental`; see [phase-2.md](phase-
 
 ## Table grips and sizes
 
-Every table in the text has the grips of an editable table around it: column letters above, row numbers at the left (the names formulas use), and the table icon. In edit mode, drag the edge of a column grip to make that column wider or narrower, or the edge of a row grip to change that row's height (at least 24 x 18 pixels). The sizes are saved with the document. The exports lay tables out on their own and do not carry them yet.
+Every table in the text has the grips of an editable table around it: column letters above, row numbers at the left (the names formulas use), and the table icon. In edit mode, drag the edge of a column grip to make that column wider or narrower, or the edge of a row grip to change that row's height (at least 24 x 18 pixels). The sizes are saved with the document and carried by the HTML, Word, OpenDocument, RTF and PDF exports. Double-press the edge of a grip to give the size back to the table. Press a column letter, a row number or the icon in the corner to select it: the Styles tab then offers what can be done (insert a column or row before or after, move, sort the rows by a column, duplicate or delete a row, reset a width or height).
 
 ## Markdown tables
 

@@ -462,6 +462,9 @@ func (f *TextFlow) objectClickAt(x, y float64) bool {
 			if changed {
 				f.changed()
 			}
+			if t, ok := o.Object.(*TableObject); ok && used && f.OnTableSelect != nil && t.Selected().Kind != SelNone {
+				f.OnTableSelect(t, t.Selected())
+			}
 			if used {
 				return true
 			}

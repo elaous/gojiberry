@@ -50,3 +50,38 @@ func tableMergeGrid(cells []Block) []tableCellOwner {
 	}
 	return owners
 }
+
+// tableColumnWidths gives the width of each column of the table in a total width (in the unit of total; pxToUnit turns
+// a width in CSS pixels into it): a column a person sized keeps its size and the others share what is left equally; when
+// the sized ones leave the others less than a quarter of an even share, they are all scaled down to make room.
+func tableColumnWidths(cells []Block, total, pxToUnit float64) []float64 {
+	cols := cells[0].TableCols
+	out := make([]float64, cols)
+	set, sizedCols := 0.0, 0
+	for c := 0; c < cols; c++ {
+		if w := cells[c].TableColW * pxToUnit; w > 0 { // row 0 carries the column's width
+			out[c] = w
+			set += w
+			sizedCols++
+		}
+	}
+	auto := cols - sizedCols
+	even := total / float64(cols)
+	if auto > 0 {
+		left := total - set
+		if left < float64(auto)*even/4 { // the sized columns take too much: scale them
+			k := (total - float64(auto)*even/4) / set
+			for c := range out {
+				out[c] *= k
+			}
+			set *= k
+			left = total - set
+		}
+		for c := range out {
+			if out[c] == 0 {
+				out[c] = left / float64(auto)
+			}
+		}
+	}
+	return out
+}

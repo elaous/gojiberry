@@ -242,6 +242,8 @@ type TextFlow struct {
 	RemoteCursors []RemoteCursor
 	// ObjectBusy marks inline objects somebody is changing (see Busy); the host keeps it up to date.
 	ObjectBusy map[InlineObject]Busy
+	// OnTableSelect, if set, is called when a press on a grip of a table in the text selects a column, a row or the table.
+	OnTableSelect func(*TableObject, Selection)
 	// UndoHook, if set, handles Undo and Redo (redo says which) instead of
 	// the flow's own snapshot history: the collab bridge uses it to undo only
 	// your own changes while others edit too.

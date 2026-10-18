@@ -146,7 +146,9 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **You should see.** The column and the row grow as you drag, and stay that way after the document is saved and opened again. Outside edit mode nothing is resized.
 
-**Automated.** `TestDraggingATableGripResizesAColumnAndARow` (examples/canvas-editor-showcase), canvas `table_sizes_test.go`, `TestTableSizesRoundTrip` (docfile)
+Then press the letter of a column, or the number of a row: it is highlighted and the Styles tab shows its actions; insert a column after, duplicate a row. Export as Word, OpenDocument or HTML and open it: the column and row keep the sizes you dragged. Press the same edge twice quickly: the size goes back to the table's own.
+
+**Automated.** `TestDraggingATableGripResizesAColumnAndARow`, `TestTableGripsSelectAndTheStylesTabActsOnThem` (examples/canvas-editor-showcase), canvas `table_sizes_test.go`, `TestTableSizesRoundTrip` (docfile), `tablesizes_test.go` (export)
 
 ## Table formulas
 

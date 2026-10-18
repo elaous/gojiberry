@@ -1963,6 +1963,27 @@
     "lock.someone": "شخص ما",
     "lock.picture": "صورة",
     "lock.equation": "معادلة",
-    "lock.field": "حقل نموذج"
+    "lock.field": "حقل نموذج",
+    "tgrip.title": "الجدول: %s",
+    "tgrip.column": "العمود %s",
+    "tgrip.row": "الصف %d",
+    "tgrip.table": "الجدول كله",
+    "tgrip.colBefore": "إدراج عمود قبله",
+    "tgrip.colAfter": "إدراج عمود بعده",
+    "tgrip.colLeft": "نقل إلى اليسار",
+    "tgrip.colRight": "نقل إلى اليمين",
+    "tgrip.sortAsc": "ترتيب الصفوف حسب هذا العمود، من A إلى Z",
+    "tgrip.sortDesc": "ترتيب الصفوف حسب هذا العمود، من Z إلى A",
+    "tgrip.resetWidth": "إعادة العرض",
+    "tgrip.colDelete": "حذف العمود",
+    "tgrip.rowAbove": "إدراج صف فوقه",
+    "tgrip.rowBelow": "إدراج صف تحته",
+    "tgrip.rowUp": "نقل لأعلى",
+    "tgrip.rowDown": "نقل لأسفل",
+    "tgrip.rowDuplicate": "تكرار الصف",
+    "tgrip.resetHeight": "إعادة الارتفاع",
+    "tgrip.rowDelete": "حذف الصف",
+    "tgrip.resetSizes": "إعادة كل عروض الأعمدة وارتفاعات الصفوف",
+    "tgrip.done": "تم"
   }
 }

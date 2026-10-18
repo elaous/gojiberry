@@ -233,6 +233,12 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 					if a := map[int]string{1: "center", 2: "right"}[b.TableAlign]; a != "" {
 						css += "text-align:" + a + ";"
 					}
+					if b.TableRow == 0 && b.TableColW > 0 {
+						css += "width:" + strconv.FormatFloat(b.TableColW, 'f', 0, 64) + "px;"
+					}
+					if b.TableRowH > 0 {
+						css += "height:" + strconv.FormatFloat(b.TableRowH, 'f', 0, 64) + "px;"
+					}
 					if css != "" {
 						attrs += ` style="` + css + `"`
 					}

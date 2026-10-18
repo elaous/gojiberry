@@ -92,3 +92,42 @@ func TestDraggingAGripResizesTheColumnOrRowInTheText(t *testing.T) {
 		t.Fatalf("resized outside edit mode: %v", tb.ColumnWidth(0))
 	}
 }
+
+func TestPressingAnEdgeTwiceGivesTheSizeBack(t *testing.T) {
+	tb := NewTableFrom([][]string{{"a", "b"}, {"c", "d"}})
+	o := NewTableObject(tb)
+	o.Measure(&fakePainter{}, 1000, 1000)
+	tb.SetColumnWidth(0, 150)
+	edgeX := o.pad + 150 // the edge between the columns, on the column grips
+	if !o.DragStart(edgeX, 3) {
+		t.Fatal("first press begins a resize")
+	}
+	o.DragEnd()
+	if !o.DragStart(edgeX, 3) || tb.ColumnWidth(0) != 0 {
+		t.Fatalf("second press resets: %v", tb.ColumnWidth(0))
+	}
+}
+
+func TestPressingAGripSelectsAColumnARowOrTheTable(t *testing.T) {
+	tb := NewTableFrom([][]string{{"a", "b"}, {"c", "d"}})
+	o := NewTableObject(tb)
+	o.Measure(&fakePainter{}, 1000, 1000)
+	pad := o.pad
+	if used, changed := o.ClickAt(pad+120, 3); !used || changed || o.Selected() != (Selection{SelColumn, 1}) {
+		t.Fatalf("column grip: %v %v %+v", used, changed, o.Selected())
+	}
+	if used, _ := o.ClickAt(3, pad+45); !used || o.Selected() != (Selection{SelRow, 1}) {
+		t.Fatalf("row grip: %+v", o.Selected())
+	}
+	if used, _ := o.ClickAt(3, 3); !used || o.Selected().Kind != SelTable {
+		t.Fatalf("table icon: %+v", o.Selected())
+	}
+	o.ClickAt(pad+40, pad+10) // a cell
+	if o.Selected().Kind != SelNone {
+		t.Fatalf("a press in the cells ends the selection: %+v", o.Selected())
+	}
+	o.Select(Selection{SelColumn, 9})
+	if o.Selected().Kind != SelNone {
+		t.Fatal("a column that is not there is not selected")
+	}
+}
