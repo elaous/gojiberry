@@ -91,7 +91,7 @@ e2e-test:
 	fi
 
 # The experimental features (build tags, docs/phase-2.md) are off in the run above; their tests run with -tags experimental.
-E2E_EXPERIMENTAL_RUN ?= TestFormFields|TestAFormFieldInATableCell|TestInsertAMap
+E2E_EXPERIMENTAL_RUN ?= TestFormFields|TestAFormFieldInATableCell|TestInsertAMap|TestATextFileOpensForReading
 .PHONY: e2e-test-experimental
 e2e-test-experimental:
 	GOJIBERRY_REQUIRE_BROWSER=1 GOFLAGS=-tags=experimental go test -count=1 -timeout 30m -run '$(E2E_EXPERIMENTAL_RUN)' ./examples/canvas-editor-showcase/

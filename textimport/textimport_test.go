@@ -123,3 +123,12 @@ func TestEncodings(t *testing.T) {
 		t.Fatalf("line ends: %q", plain(d))
 	}
 }
+
+func TestImportSaysWhatItIsACopyOf(t *testing.T) {
+	for kind, src := range map[string]string{CSV: "a,b\n1,2\n", YAML: "a: 1\n", JSON: `{"a":1}`} {
+		d, err := Import(kind, []byte(src))
+		if err != nil || d.SourceFormat() != kind {
+			t.Errorf("%s: %q %v", kind, d.SourceFormat(), err)
+		}
+	}
+}

@@ -1925,6 +1925,7 @@
     "about.source": "קוד מקור",
     "about.licenceText": "רישיון (AGPL-3.0)",
     "about.notice": "הודעה וקרדיט",
-    "about.commercial": "רישיון מסחרי"
+    "about.commercial": "רישיון מסחרי",
+    "textfmt.readonly": "נפתח לקריאה: זהו עותק של קובץ %s. החלף מצב כדי לשנות את העותק; הוא אינו נשמר בחזרה לקובץ."
   }
 }

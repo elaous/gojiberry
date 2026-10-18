@@ -292,6 +292,11 @@ func main() {
 		u.fidelity.restore(d)
 		u.loadTheme(d)
 		u.loadSources(d)
+		if f := d.SourceFormat(); f != "" {
+			// A text file opened as it is: a copy to read; the mode can be switched to change the copy.
+			state.Mode = canvas.ModeView
+			u.announce(T("textfmt.readonly", "Opened to read: this is a copy of a %s file. Switch the mode to change the copy; it is not saved back to the file.", f))
+		}
 		canvas.SetCustomTableSchemes(d.TableSchemes())
 		state.Theme = u.canvasTheme()
 		u.layout = d.PageLayout()

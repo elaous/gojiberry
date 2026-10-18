@@ -810,6 +810,14 @@ func (d Document) HasTag(tag string) bool {
 	return false
 }
 
+// SourceFormatKey is the Meta key of a document that is a copy of a file in another format, to be read (a text format opened
+// as it is: "json", "csv", "yaml"...). The editor opens such a document for reading and says it is a copy; saving it
+// is saving the copy, and the key is not kept.
+const SourceFormatKey = "source.format"
+
+// SourceFormat returns the format the document is a reading copy of, or "".
+func (d Document) SourceFormat() string { v, _ := d.Get(SourceFormatKey); return v }
+
 // IDKey and NameKey are the Meta keys a document's identity is kept under: its
 // ID, a UUID that never changes (two documents may share a name, never an ID),
 // and its Name in a document list.
