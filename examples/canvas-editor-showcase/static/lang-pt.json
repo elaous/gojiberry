@@ -1887,6 +1887,7 @@
     "about.notice": "Aviso e crédito",
     "about.commercial": "Licença comercial",
     "textfmt.readonly": "Aberto para leitura: esta é uma cópia de um ficheiro %s. Mude o modo para alterar a cópia; não é guardada de volta no ficheiro.",
-    "lock.table": "tabela"
+    "lock.table": "tabela",
+    "push.lost": "As notificações de menções pararam: o navegador não as conseguiu renovar. Volte a ativá-las."
   }
 }

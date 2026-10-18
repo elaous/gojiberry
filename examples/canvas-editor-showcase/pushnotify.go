@@ -32,6 +32,7 @@ var pushUI struct {
 	server     string
 	subscribed bool
 	checked    bool // the browser was asked whether there is a subscription
+	synced     bool // the server was given the browser's current subscription since the page opened (or since it changed)
 	busy       bool
 	msg        string
 }
@@ -49,6 +50,27 @@ func ensurePush(renderUI func()) {
 		return
 	}
 	pushUI.started = true
+	// The worker tells the page when the browser replaced the subscription (see sw.go): the page gives the new one to
+	// the server under the person's handle, or says the notifications stopped when it could not be made again.
+	sw := js.Global().Get("navigator").Get("serviceWorker")
+	if sw.Get("addEventListener").Truthy() {
+		sw.Call("addEventListener", "message", js.FuncOf(func(_ js.Value, args []js.Value) any {
+			if len(args) == 0 {
+				return nil
+			}
+			d := args[0].Get("data")
+			if !d.Truthy() || d.Get("type").String() != "gj-push-changed" {
+				return nil
+			}
+			if d.Get("subscription").IsNull() {
+				pushUI.subscribed, pushUI.msg = false, T("push.lost", "Notifications for mentions stopped: the browser could not renew them. Turn them on again.")
+			} else {
+				pushUI.synced = false
+			}
+			renderUI()
+			return nil
+		}))
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -202,12 +224,35 @@ func turnOffPush(handle string, renderUI func()) {
 	}()
 }
 
+// pushResync gives the server the browser's current subscription under the person's handle: it may be a new one (the
+// browser replaced it while the page was closed), and the server keeps a subscription once per endpoint, so repeating a
+// known one changes nothing.
+func pushResync(handle string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	sub, err := pushSubscription(ctx)
+	if err != nil || !sub.Truthy() {
+		return
+	}
+	var subscription json.RawMessage
+	if json.Unmarshal([]byte(js.Global().Get("JSON").Call("stringify", sub).String()), &subscription) != nil {
+		return
+	}
+	if err := pushPost("/subscribe", map[string]any{"handle": handle, "subscription": subscription}); err != nil {
+		pushUI.synced = false // tried again the next time the box is drawn
+	}
+}
+
 // pushSection is the box in the Comments tab; nothing when the operator did not name a server or the browser cannot.
 func pushSection(u *ui, renderUI func()) xango.Node {
 	ensurePush(renderUI)
 	h := u.myHandle()
 	if !pushUI.configured || !pushUI.checked || h == "" {
 		return xango.Frag()
+	}
+	if pushUI.subscribed && !pushUI.synced && !pushUI.busy {
+		pushUI.synced = true
+		go pushResync(h)
 	}
 	nodes := []xango.Node{
 		xango.El("div", []xango.Attr{xango.A("id", "push-toggle")}, components.Checkbox(components.CheckboxProps{

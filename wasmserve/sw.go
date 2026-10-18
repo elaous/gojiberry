@@ -154,6 +154,23 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(text(m.title, 120) || "New activity", options));
 });
 
+// The browser or its push service replaced the subscription (it expired, or the keys were rotated). The worker subscribes
+// again with the same options, which includes the server's key, and tells the open pages, which give the new one to the
+// server under the person's handle (a worker does not know it). With none open, the page does it the next time it opens
+// and finds the subscription is not the one it gave. A subscription that cannot be made again (permission taken back) is
+// reported as none.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil((async () => {
+    let sub = null;
+    try {
+      const old = event.oldSubscription;
+      sub = event.newSubscription || (old && old.options ? await self.registration.pushManager.subscribe(old.options) : null);
+    } catch (e) { sub = null; }
+    const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const c of list) c.postMessage({ type: "gj-push-changed", subscription: sub && sub.toJSON ? sub.toJSON() : null });
+  })());
+});
+
 // A click opens the page, or goes to the window that has it open. Only an address of the app's own origin is followed.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
