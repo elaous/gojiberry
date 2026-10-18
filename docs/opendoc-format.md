@@ -214,6 +214,14 @@ Open:
 3. ~~Whether the signature should allow several signers~~ **done**: `Signature.More` (field 4), `Writer.CloseSigned`, `Cosign`, `Reader.Signers`, `opendoc cosign`.
 4. ~~A MIME type and a magic entry~~ **done**: `pack.MIME` (`application/vnd.opendocs.pack`), `docfile/pack/mime/opendoc.magic` for `file(1)` and `opendoc.xml` for shared-mime-info.
 
+### Open points explained
+
+A pack is one file with many documents in it: a backup, an export, something to hand to somebody. It has an *index* (a list of every document with its name, folder, size, time and trash flag) and each document is a *record*. Two things are left open.
+
+**1. What the index shows about an encrypted record.** An encrypted document's content is unreadable without its key, but the index entry beside it is plain: someone holding the file can see "a record of 3.2 MB in the folder *Medical*, changed on Tuesday, in the trash". That is the same as a store's catalogue, and it is there on purpose: the pack can be listed, verified and recovered **without any key** (`opendoc verify` checks every hash and the signature with no key). The choices: (a) leave it, say so (what is done now); (b) round the sizes up to buckets and blur the times, which hides a little and costs a little space; (c) encrypt the index too, which hides the structure but means nothing can be listed, verified or repaired without the key, and loses the keyless check. *Recommendation:* (a) for now, and (b) as an option when a pack is exported with confidential documents; (c) only if somebody needs it, since a pack you cannot verify without a key cannot be checked by whoever stores it for you.
+
+**2. Large attachments as their own record kind.** Today a picture is inside the document that uses it (a `data:` address). A document with one large picture is large, and the same picture in two documents, or in the document's history, is stored again each time; appending to a pack that holds such a document rewrites nothing, but verifying and reading it moves all that data. A record kind for attachments would store each picture once (by its hash), and the documents would refer to it. The cost: a format change. A reader that does not know the new kind skips it (the format says unknown kinds are skipped) but then cannot show the pictures, so it needs version 2 of the format and a note that version 1 readers will see documents without their large pictures. *Recommendation:* yes, as version 2, written only when a pack has attachments over a size (so small packs stay readable by every reader); not urgent.
+
 ## 7. Plan
 
 1. **Done:** `docfile/pack` (`Writer`, `Appender`, `Reader` over `io.ReaderAt`, `Verify`,
