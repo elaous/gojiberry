@@ -3,6 +3,7 @@ package pack
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"sort"
@@ -16,11 +17,13 @@ type Reader struct {
 	r         io.ReaderAt
 	size      int64
 	meta      Meta
+	version   uint32
 	header    []byte
 	headerEnd int64
 	foot      footer
 	index     Index
 	byID      map[string]int
+	byHash    map[[32]byte]int
 	sig       *Signature
 }
 
@@ -51,51 +54,51 @@ func readFrame(r io.ReaderAt, off, end int64) (kind, flags byte, data []byte, er
 	return head[8], head[9], data, nil
 }
 
-// readHeader reads the header of a pack: its meta and where it ends.
-func readHeader(r io.ReaderAt, size int64) (Meta, []byte, error) {
+// readHeaderV reads the header of a pack: its meta, the header bytes and the version.
+func readHeaderV(r io.ReaderAt, size int64) (Meta, []byte, uint32, error) {
 	if size < headerFixed+footerSize {
-		return Meta{}, nil, fmt.Errorf("%w: too short", ErrFormat)
+		return Meta{}, nil, 0, fmt.Errorf("%w: too short", ErrFormat)
 	}
 	fixed := make([]byte, headerFixed)
 	if _, err := r.ReadAt(fixed, 0); err != nil {
-		return Meta{}, nil, fmt.Errorf("%w: %v", ErrFormat, err)
+		return Meta{}, nil, 0, fmt.Errorf("%w: %v", ErrFormat, err)
 	}
 	if string(fixed[:8]) != magic {
-		return Meta{}, nil, fmt.Errorf("%w: wrong magic", ErrFormat)
+		return Meta{}, nil, 0, fmt.Errorf("%w: wrong magic", ErrFormat)
 	}
-	if v := binary.LittleEndian.Uint32(fixed[8:]); v != version {
-		return Meta{}, nil, fmt.Errorf("%w: version %d", ErrFormat, v)
+	if v := binary.LittleEndian.Uint32(fixed[8:]); v != version && v != version2 {
+		return Meta{}, nil, 0, fmt.Errorf("%w: version %d", ErrFormat, v)
 	}
 	if f := binary.LittleEndian.Uint32(fixed[12:]); f != 0 {
-		return Meta{}, nil, fmt.Errorf("%w: flags %#x are not understood", ErrFormat, f)
+		return Meta{}, nil, 0, fmt.Errorf("%w: flags %#x are not understood", ErrFormat, f)
 	}
 	n := int64(binary.LittleEndian.Uint32(fixed[16:]))
 	if n > maxMeta || headerFixed+n > size {
-		return Meta{}, nil, fmt.Errorf("%w: a meta message of %d bytes", ErrFormat, n)
+		return Meta{}, nil, 0, fmt.Errorf("%w: a meta message of %d bytes", ErrFormat, n)
 	}
 	hdr := make([]byte, headerFixed+n+pad8(headerFixed+n))
 	if int64(len(hdr))+footerSize > size {
-		return Meta{}, nil, fmt.Errorf("%w: too short", ErrFormat)
+		return Meta{}, nil, 0, fmt.Errorf("%w: too short", ErrFormat)
 	}
 	if _, err := r.ReadAt(hdr, 0); err != nil {
-		return Meta{}, nil, fmt.Errorf("%w: %v", ErrFormat, err)
+		return Meta{}, nil, 0, fmt.Errorf("%w: %v", ErrFormat, err)
 	}
 	for _, b := range hdr[headerFixed+n:] {
 		if b != 0 {
-			return Meta{}, nil, fmt.Errorf("%w: padding that is not zero", ErrFormat)
+			return Meta{}, nil, 0, fmt.Errorf("%w: padding that is not zero", ErrFormat)
 		}
 	}
 	m, err := unmarshalMeta(hdr[headerFixed : headerFixed+n])
-	return m, hdr, err
+	return m, hdr, binary.LittleEndian.Uint32(fixed[8:]), err
 }
 
 // Open opens the pack of the given size: the footer and index are read and checked.
 func Open(r io.ReaderAt, size int64) (*Reader, error) {
-	meta, hdr, err := readHeader(r, size)
+	meta, hdr, ver, err := readHeaderV(r, size)
 	if err != nil {
 		return nil, err
 	}
-	rd := &Reader{r: r, size: size, meta: meta, header: hdr, headerEnd: int64(len(hdr))}
+	rd := &Reader{r: r, size: size, meta: meta, version: ver, header: hdr, headerEnd: int64(len(hdr))}
 	fb := make([]byte, footerSize)
 	if _, err := r.ReadAt(fb, size-footerSize); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrFormat, err)
@@ -120,8 +123,15 @@ func Open(r io.ReaderAt, size int64) (*Reader, error) {
 	if rd.index, err = unmarshalIndex(data); err != nil {
 		return nil, err
 	}
+	if len(rd.index.Attachments) > 0 && ver < version2 {
+		return nil, fmt.Errorf("%w: attachments in a version %d pack", ErrFormat, ver)
+	}
 	if err := rd.index.validate(rd.headerEnd, int64(f.indexOffset)); err != nil {
 		return nil, err
+	}
+	rd.byHash = make(map[[32]byte]int, len(rd.index.Attachments))
+	for i, a := range rd.index.Attachments {
+		rd.byHash[a.SHA256] = i
 	}
 	rd.byID = make(map[string]int, len(rd.index.Entries))
 	for i, e := range rd.index.Entries {
@@ -169,14 +179,27 @@ func (x Index) validate(lo, hi int64) error {
 		}
 	}
 	// No two records overlap: sorted by offset, each ends before the next begins.
-	byOffset := make([]*Entry, len(x.Entries))
-	for i := range x.Entries {
-		byOffset[i] = &x.Entries[i]
+	type span struct {
+		off, length uint64
+		name        string
 	}
-	sort.Slice(byOffset, func(i, j int) bool { return byOffset[i].Offset < byOffset[j].Offset })
-	for i := 1; i < len(byOffset); i++ {
-		if byOffset[i].Offset < byOffset[i-1].Offset+recordSize(byOffset[i-1].Length) {
-			return fmt.Errorf("%w: entry %q overlaps another record", ErrFormat, byOffset[i].ID)
+	spans := make([]span, 0, len(x.Entries)+len(x.Attachments))
+	for _, e := range x.Entries {
+		spans = append(spans, span{e.Offset, e.Length, fmt.Sprintf("entry %q", e.ID)})
+	}
+	seen := make(map[[32]byte]bool, len(x.Attachments))
+	for _, a := range x.Attachments {
+		if seen[a.SHA256] || len(a.MIME) > MaxName || a.Length > MaxRecord || a.Offset%8 != 0 ||
+			a.Offset > uint64(hi) || int64(a.Offset) < lo || int64(a.Offset)+int64(recordSize(a.Length)) > hi {
+			return fmt.Errorf("%w: a repeated attachment, or one that points outside the records", ErrFormat)
+		}
+		seen[a.SHA256] = true
+		spans = append(spans, span{a.Offset, a.Length, "an attachment"})
+	}
+	sort.Slice(spans, func(i, j int) bool { return spans[i].off < spans[j].off })
+	for i := 1; i < len(spans); i++ {
+		if spans[i].off < spans[i-1].off+recordSize(spans[i-1].length) {
+			return fmt.Errorf("%w: %s overlaps another record", ErrFormat, spans[i].name)
 		}
 	}
 	folders := make(map[string]Folder, len(x.Folders))
@@ -206,6 +229,30 @@ func (x Index) validate(lo, hi int64) error {
 		}
 	}
 	return nil
+}
+
+// Version is the pack's format version: 1, or 2 for a pack that may hold attachments.
+func (r *Reader) Version() int { return int(r.version) }
+
+// Attachment returns the bytes with the given SHA-256 and their MIME type, checked against the record's checksums and the
+// hash; ErrNotFound if the pack has no such attachment.
+func (r *Reader) Attachment(sum [32]byte) ([]byte, string, error) {
+	i, ok := r.byHash[sum]
+	if !ok {
+		return nil, "", ErrNotFound
+	}
+	a := r.index.Attachments[i]
+	kind, flags, data, err := readFrame(r.r, int64(a.Offset), int64(r.foot.indexOffset))
+	if err != nil {
+		return nil, "", err
+	}
+	if kind != kindAttachment || flags != 0 || uint64(len(data)) != a.Length {
+		return nil, "", fmt.Errorf("%w: the record of an attachment is not what the index says", ErrFormat)
+	}
+	if sha256.Sum256(data) != sum {
+		return nil, "", fmt.Errorf("%w: an attachment does not match its hash", ErrChecksum)
+	}
+	return data, a.MIME, nil
 }
 
 // Meta is the pack's own description.
@@ -349,6 +396,12 @@ func (r *Reader) Verify() Report {
 	for _, e := range r.index.Entries {
 		indexed[e.Offset] = true
 	}
+	for _, a := range r.index.Attachments {
+		indexed[a.Offset] = true
+		if _, _, err := r.Attachment(a.SHA256); err != nil {
+			rep.Bad = append(rep.Bad, Problem{ID: hex.EncodeToString(a.SHA256[:]), Name: "attachment", Err: err})
+		}
+	}
 	off := r.headerEnd
 	for off < int64(r.foot.indexOffset) {
 		kind, _, data, err := readFrame(r.r, off, int64(r.foot.indexOffset))
@@ -356,7 +409,7 @@ func (r *Reader) Verify() Report {
 			rep.Gap = true
 			break
 		}
-		if kind == kindDocument && !indexed[uint64(off)] {
+		if (kind == kindDocument || kind == kindAttachment) && !indexed[uint64(off)] {
 			rep.Unindexed++
 		}
 		off += int64(recordSize(uint64(len(data))))

@@ -398,6 +398,14 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **Automated.** `TestScriptsRunInASandboxAndAskForWhatTheyMayHave` (examples/canvas-editor-showcase), package `script`.
 
+## Packs
+
+**Try it.** Put a large picture (100 KB or more) in two documents, download the folder "As .opendoc", and run `opendoc verify` on the file: it says `2 documents checked, 1 attachments`; the file is much smaller than with the picture twice. Import it into an empty store: both documents have their picture. With a confidential document and an unlocked store, `opendoc list` shows the placeholder name and a time on a midnight (UTC).
+
+**You should see.** The pack imports with no warning; a pack cut or changed in a picture fails `verify`.
+
+**Automated.** package `docfile/pack` (`attachments_test.go`: stored once, signed and checked, appended, compacted, recovered), `saver/pack_blur_test.go` (`TestBlurPlainPadsToABucketAndStaysReadable`, `TestExportPackBlursTheSealedRecords`, `TestExportPackKeepsLargeImagesApartAndImportRestoresThem`, `TestAPackWithNoLargeImageStaysVersionOne`), package `docfile` (`MapImages`)
+
 ## Menus and commands
 
 **Try it.** Open Edit with the keyboard (Alt, then arrows) and run a command with Enter.

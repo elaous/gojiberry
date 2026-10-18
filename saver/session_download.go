@@ -106,7 +106,7 @@ func (s *Session) DownloadPack(ctx context.Context, folder string) error {
 	}
 	s.mu.Unlock()
 	left, leftFolders := 0, 0
-	n, err := s.Saver.ExportPack(ctx, s.targetName(), folder, &buf, PackOptions{Name: name, History: true, Seal: seal, Warn: func(i PackIssue) {
+	n, err := s.Saver.ExportPack(ctx, s.targetName(), folder, &buf, PackOptions{Name: name, History: true, Seal: seal, Blur: true, Attachments: DefaultAttachmentSize, Warn: func(i PackIssue) {
 		if folderIDs[i.ID] {
 			leftFolders++
 		} else {
