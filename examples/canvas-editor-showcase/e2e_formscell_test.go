@@ -43,7 +43,7 @@ func TestAFormFieldInATableCell(t *testing.T) {
 	d.Click("#forms-fill-done")
 
 	// the pen at the top right of the table: formulas and fields as they are defined, and a press changes the field
-	d.CanvasClick(384, 38) // the pen/eye at the table's top right (the table is wider once filled in)
+	d.CanvasClick(412, 38) // the grip of the eye/pen beside the top right corner of the table (wider once filled in)
 	d.CanvasClick(340, 75)
 	d.WaitSelector("#forms-editor")
 	d.Click("#forms-edit-done")

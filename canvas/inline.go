@@ -81,6 +81,9 @@ func (r *Rule) DrawAt(p Painter, x, y float64) {
 type TableObject struct {
 	View *TableView
 	w, h float64
+	// tableW is the width of the table itself; a table with a formula or a field has the grip of the eye/pen beside its top right corner,
+	// in a gutter that makes the object wider than the table (w).
+	tableW float64
 }
 
 // NewTableObject wraps t for placing in a flow with Inline{Block: true}.
@@ -93,7 +96,11 @@ func (o *TableObject) Measure(p Painter, maxW, maxH float64) (float64, float64) 
 	o.View.Painter = p
 	o.View.X, o.View.Y = 0, 0
 	edges, rows := o.View.ColumnEdges(), o.View.RowEdges()
-	o.w = min(edges[len(edges)-1], maxW)
+	o.tableW = min(edges[len(edges)-1], maxW)
+	o.w = o.tableW
+	if o.View.Table.HasFormulaOrField() {
+		o.w = min(edges[len(edges)-1]+o.View.Style.BarGap+o.View.Style.HandleSize, maxW)
+	}
 	o.h = min(rows[len(rows)-1]+6, maxH) // a little air below the table
 	return o.w, o.h
 }
