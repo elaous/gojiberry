@@ -160,7 +160,10 @@ type Block struct {
 	// TableColW and TableRowH are the width of this cell's column and the height of its row, in CSS pixels, when a
 	// person set them by dragging a grip (0: the format's own layout).
 	TableColW, TableRowH float64
-	NumberedIndex        int
+	// TableField is the form field in this table cell, if it has one: the cell's text is the field's words, and the HTML export
+	// writes the control.
+	TableField    *docfile.FormFieldItem
+	NumberedIndex int
 	// Note is the number of the footnote a list item is the text of (0 for none).
 	Note int
 	// CodeLang is the programming language of a Code block as a short lower-case name ("go", "python"),

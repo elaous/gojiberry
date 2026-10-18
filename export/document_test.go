@@ -470,3 +470,33 @@ func TestInlineFormulaIsOfficeMathInTheLineInWord(t *testing.T) {
 		t.Errorf("read back: %+v, text %q", eq, text.String())
 	}
 }
+
+// A form field in a table cell is a control in the HTML export, like one in the text, and takes part in the form.
+func TestFormFieldInATableCellIsAnHTMLControl(t *testing.T) {
+	f := docfile.FormFieldItem{Kind: "text", Name: "qty", Label: "Qty", Value: "3"}
+	doc := docfile.Document{Content: []docfile.Item{{Table: &docfile.TableItem{
+		Rows:   []docfile.TableRow{{Cells: []string{"Item", "Count"}}, {Cells: []string{"Pens", "Qty: 3"}}},
+		Fields: []docfile.TableCellField{{Row: 1, Col: 1, Field: &f}},
+	}}}}
+	snap := FromDocument(doc)
+	out, err := HTML{SubmitTo: "https://example.org/in"}.Export(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	for _, want := range []string{`<td><label>Qty <input type="text" name="qty" value="3"></label></td>`, `<form action="https://example.org/in"`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("html lacks %s:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "Qty: 3") {
+		t.Error("the cell shows the control, not its words as well")
+	}
+	txt, _ := PlainText{}.Export(snap)
+	if !strings.Contains(string(txt), "Qty: 3") {
+		t.Errorf("elsewhere the words stay:\n%s", txt)
+	}
+	if f.Value != "3" || snap.Blocks[len(snap.Blocks)-1].TableField == nil {
+		t.Error("the field reaches the snapshot")
+	}
+}
