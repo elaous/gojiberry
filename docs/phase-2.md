@@ -50,6 +50,7 @@ Generic figures that help an operator see latency, throttling and scaling proble
 
 - *Runtime:* latency histograms per route, throttling (requests refused by a limiter) and error counts, queue depths: partly there.
 - *Storage:* total bytes allocated; the **distribution** of document sizes (bucketed by powers of two: how many documents are under 1 KB, 1 to 4 KB, and so on) and its mean; the **growth** (total bytes now against a day, a week and a month before); and the **distribution of use against quota** as a few buckets (under 50%, 50 to 80%, 80 to 95%, 95 to 100%, over), counts of users in each, no ids. From growth and the free space an instance can say "full in N days" and alert before it is.
+- *What to report (decided 2026-10-18): the general distribution, not the individual.* For every figure: count, mean, **standard deviation** and the **p50, p90, p95 and p99** (from fixed buckets, so the percentile is an estimate within a bucket), for request latency per route, document size, storage per user and use against quota. A user alone in the upper tail would be singled out by a percentile of one: a bucket or a percentile over fewer than 5 users is not reported.
 - *Rules:* no user id, no document id, no name in a label; counts and sums only; buckets, not values, wherever one value could single a person out (a bucket with fewer than, say, 5 users is reported as "fewer than 5"). Not added to the telemetry the page sends: these are the server's own figures, read by its operator.
 
 ### P2-3 Quota authority — design
@@ -71,7 +72,7 @@ A hub of agents (summarize, criticize, writer styles, "write a ..." for many kin
 
 A sign-in that holds no information about the person. Proposal, built from what exists (passkeys, the key directory, the recovery sheet, the CRDT and hash-chain code):
 
-- **Identity is a root key.** An Ed25519 key made on the first device; the **account id** is the hash of its public key. No name, no e-mail, no device id leaves the device.
+- **Identity is a root key.** An Ed25519 key made on the first device; the **account id** is the hash of its public key. No name, no e-mail, no device id leaves the device. *Where the id lives:* the id is **public, not a secret** (it is a hash of a public key), and it is stored in both places: the person's devices keep the chain, and the operator keeps the id, the certificate log (opaque to it) and the access lists that name it, because a server cannot share a document with someone it cannot name. What the operator never has is the root's private key or a name. To stop two operators linking the same person, the id an operator sees is **derived for that operator** (a hash of the root public key and the operator's domain), so the same person has a different id with each.
 - **Each device has its own key**, certified by a device that is already trusted: a *certificate* `{device key, added by, time}` signed by the adding device. Two devices meet by **QR code** (the new one shows its key; the trusted one scans and signs; the certificate comes back). The certificates form a small **signed, hash-linked log**, which the devices merge when they meet; the server may keep a copy as an opaque blob (it can verify the signatures, it learns no one). A revocation is another entry in the log (this device key no longer counts), and the server drops the passkey of that device.
 - **Passkeys stay the sign-in** of each device (WebAuthn); the chain says which devices are one person. A document's access list stores the **account id** (the chain id), not a passkey, so adding or losing a device changes nothing in any document.
 - **A wiped device.** Three ways back, in this order: (1) any other trusted device adds the new one (QR); (2) before wiping, the person can make a **transfer code** (a one-time code, short-lived, that lets the next device join without another device); (3) the **recovery sheet** (item 76), which is the printed backup of the root key, restores the identity and the person certifies a new device. Without any of the three the identity is lost; the page says so when the account is made.
@@ -118,13 +119,20 @@ Phase 1 (now): a sandbox with the commands of the registry, `text()` and `insert
 | scheduled scripts, scripts across documents | L | needs a runner that outlives the page |
 | macro recording | M | record the commands run, replay them |
 
-### P2-8 Pack format, version 2 — design
+### P2-8 Pack format, version 2 — partial (decided)
 
-The two open points ([opendoc-format.md](opendoc-format.md), "Open points explained"): the index of encrypted records, and large attachments as their own record kind. Both explained there, with a recommendation.
+Decided 2026-10-18: **blur** the index of encrypted records now (an export option: sizes rounded to buckets, times blurred) and **encrypt the index as an option in phase 2** (this ticket, status design: nothing can be listed or verified without the key, so it is an option and not the default); **large attachments as their own record kind: yes, version 2**, written only when a pack has attachments over a size. The blur and version 2 are rows in [status.md](status.md) (open). Explained in [opendoc-format.md](opendoc-format.md), "Open points explained".
 
 ### P2-9 Licence and credits — blocked (after the actionable items)
 
-Decided: a licence that is **not commercial**, has a **clause for commercial use**, and **requires credit** to this project and repository. To be applied once every actionable item is done.
+Decided: a licence that is **not commercial**, has a **clause for commercial use**, and **requires credit** to this project and repository; the owner prefers "open source non commercial, with a commercial licence". To be applied once every actionable item is done.
+
+*A point to settle first: the two words do not go together.* The Open Source Definition (the Open Source Initiative's) forbids restricting a field of use, so a licence that is **non-commercial** is **source-available**, not open source, and calling it open source would be wrong (and a reason for some people and some package hosts to refuse it). There are two honest routes:
+
+- **A. Non-commercial, source-available:** PolyForm Noncommercial 1.0.0 plus a commercial licence by agreement (below). Commercial use needs your permission, in every case.
+- **B. Truly open source with a commercial licence beside it (dual licence):** the GNU AGPL-3.0 for everyone, which lets anyone use the code, commercially too, **if they publish their own source** under the same terms, including for a service they run over a network; a company that does not want to publish pays for the commercial licence. The AGPL's section 7 lets the project require that its credit notices stay. This keeps the project open source and still gives a reason to buy a commercial licence, but it does not stop a company from using it commercially under the AGPL.
+
+Route A matches "non commercial"; route B matches "open source". The proposal below is route A; choose before it is applied.
 
 - *Proposal:* the PolyForm Noncommercial License 1.0.0 (a standard text, with a "Required Notice" line that has to be kept, which is where the credit goes: the name, the repository address), plus a separate **commercial licence by agreement** (a `COMMERCIAL.md` saying how to ask, what it covers), plus a `NOTICE` file and a credits entry in the page's About, and in the exports' metadata only if the owner wants it.
 - *Things to settle:* this is *source-available*, not open source as the Open Source Initiative defines it, and the repository and docs should not call it open source; every dependency's licence must allow the combination (the project has avoided GPL code on purpose); to relicense contributions for commercial use, contributors need to agree to it (a contributor agreement), which matters the day somebody else sends a change; and the text should be read by a lawyer before it is published. Alternatives, if the proposal does not fit: the Business Source License (not non-commercial: it allows use and turns open after a date), the Elastic License 2.0 (restricts hosting as a service, allows commercial use otherwise).
