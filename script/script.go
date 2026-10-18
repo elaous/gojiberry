@@ -11,6 +11,10 @@
 //	{"id":3,"op":"text"}                  the text of the document (needs Read)
 //	{"id":6,"op":"insert","text":"..."}   put text at the caret, replacing the selection (needs Insert)
 //	{"id":4,"op":"log","message":"..."}   a line for the person to read (always allowed)
+//
+// A host that is also a Document answers the get/set requests too (getset.go): markdown, selection, format, styles,
+// images and meta need Read, and their setters need Write.
+//
 //	{"id":5,"op":"done"}                  the script has finished (always allowed)
 //
 // The sandbox itself (an iframe with an opaque origin and a policy that allows no connection) belongs to the page; this
@@ -35,6 +39,10 @@ const (
 	Run Permission = "run"
 	// Insert lets the script write text into the document, at the caret.
 	Insert Permission = "insert"
+	// Write lets the script change the document in the other ways of the get/set requests: replace the document with
+	// Markdown, change the formatting, the style, a picture's description or the document's title and language. It
+	// is the broadest, so the page asks for it separately and says so.
+	Write Permission = "write"
 )
 
 // Command is a command of the registry as a script sees it.
@@ -80,6 +88,9 @@ type Request struct {
 	Name    string `json:"name,omitempty"`
 	Message string `json:"message,omitempty"`
 	Text    string `json:"text,omitempty"`
+	// Index and Data are the arguments of the get/set requests (see getset.go).
+	Index *int            `json:"index,omitempty"`
+	Data  json.RawMessage `json:"data,omitempty"`
 }
 
 // Response is the answer to one.
@@ -164,6 +175,11 @@ func (s *Session) Handle(raw []byte) []byte {
 			return fail(ErrTooLarge)
 		}
 		return ok(t)
+	}
+	if d, ok := s.Host.(Document); ok {
+		if out, handled := s.handleDocument(d, req); handled {
+			return out
+		}
 	}
 	return fail(ErrUnknown)
 }

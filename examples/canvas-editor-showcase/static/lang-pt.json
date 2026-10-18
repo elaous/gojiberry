@@ -1816,6 +1816,7 @@
     "map.notFound": "Esse lugar não foi encontrado. Tente outra morada, coordenadas ou um Plus Code.",
     "map.lookupFailed": "Não foi possível procurar a morada (o serviço não respondeu).",
     "map.renderFailed": "Não foi possível desenhar o mapa (o servidor de mosaicos não respondeu).",
-    "map.alt": "Mapa de %s"
+    "map.alt": "Mapa de %s",
+    "scripts.allowChange": "Pode alterar o documento: formatação, estilos, descrições de imagens, título, idioma, ou tudo a partir de Markdown"
   }
 }
