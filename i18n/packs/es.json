@@ -1799,6 +1799,8 @@
   "forms.inCell": "Poner el siguiente campo en una celda de tabla",
   "forms.cellTable": "Tabla",
   "forms.cellRow": "Fila",
-  "forms.cellColumn": "Columna"
+  "forms.cellColumn": "Columna",
+  "forms.seeAll": "Ver todo (valores de las tablas)",
+  "forms.editAll": "Editar todo (fórmulas y campos de las tablas)"
  }
 }

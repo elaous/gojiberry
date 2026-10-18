@@ -1839,6 +1839,8 @@
     "forms.inCell": "שים את השדה הבא בתא טבלה",
     "forms.cellTable": "טבלה",
     "forms.cellRow": "שורה",
-    "forms.cellColumn": "עמודה"
+    "forms.cellColumn": "עמודה",
+    "forms.seeAll": "הצג הכול (ערכי הטבלאות)",
+    "forms.editAll": "ערוך הכול (נוסחאות ושדות של הטבלאות)"
   }
 }

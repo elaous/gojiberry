@@ -237,7 +237,7 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 			btn("forms-answers-csv", T("forms.answersCSV", "Download the answers (CSV)"), func() { u.downloadAnswers(fl, "csv", renderUI) }, fl == nil || len(fl.FormFields()) == 0),
 		),
 	)
-	nodes = append(nodes, u.cellTargetNodes(fl, renderUI)...)
+	nodes = append(nodes, u.cellTargetNodes(fl, redraw, renderUI)...)
 	nodes = append(nodes, submitNodes(u, fl, renderUI)...)
 	loadFormKey(renderUI)
 	nodes = append(nodes, u.formKeyPanel(renderUI)...)
@@ -525,7 +525,7 @@ func (u *ui) downloadAnswers(fl *canvas.TextFlow, format string, renderUI func()
 }
 
 // cellTargetNodes is the choice to put the next field in a table cell instead of at the caret: which table, row and column.
-func (u *ui) cellTargetNodes(fl *canvas.TextFlow, renderUI func()) []xango.Node {
+func (u *ui) cellTargetNodes(fl *canvas.TextFlow, redraw, renderUI func()) []xango.Node {
 	if fl == nil || len(fl.Tables()) == 0 {
 		return nil
 	}
@@ -538,6 +538,10 @@ func (u *ui) cellTargetNodes(fl *canvas.TextFlow, renderUI func()) []xango.Node 
 		}))
 	}
 	nodes := []xango.Node{
+		// the same as the eye and the pen at the top right of each table, for every table at once, and for the keyboard
+		xango.El("div", []xango.Attr{xango.A("style", "display:flex;flex-wrap:wrap;gap:6px")},
+			btn("forms-see-all", T("forms.seeAll", "See all (values of the tables)"), func() { fl.ShowTableFormulas(false); redraw(); renderUI() }, false),
+			btn("forms-edit-all", T("forms.editAll", "Edit all (formulas and fields of the tables)"), func() { fl.ShowTableFormulas(true); redraw(); renderUI() }, false)),
 		xango.El("div", []xango.Attr{xango.A("id", "forms-in-cell")}, components.Checkbox(components.CheckboxProps{
 			Label: T("forms.inCell", "Put the next field in a table cell"), Checked: c.on,
 			OnChange: func(on bool) {
