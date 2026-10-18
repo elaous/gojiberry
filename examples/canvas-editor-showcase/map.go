@@ -66,6 +66,32 @@ func mapConfig() (string, string) {
 	return mapSettings.nominatim, mapSettings.tiles
 }
 
+// mapSources are the page's geocoder and tile source, kept for as long as the page is open so that the same address or
+// tile is not asked for twice, and, for the public OpenStreetMap servers, with a gap between requests (their policy is
+// light use: Nominatim one a second). A server the operator names in map.json gets the cache and no gap.
+var mapSources struct {
+	nom, tileURL string
+	geo          *osmmap.PoliteGeocoder
+	tiles        *osmmap.PoliteTiles
+}
+
+func mapClients(nom, tileURL string) (*osmmap.PoliteGeocoder, *osmmap.PoliteTiles) {
+	s := &mapSources
+	if s.geo == nil || s.nom != nom || s.tileURL != tileURL {
+		var geoGap, tileGap time.Duration
+		if nom == "" {
+			geoGap = time.Second
+		}
+		if tileURL == "" {
+			tileGap = 150 * time.Millisecond
+		}
+		s.nom, s.tileURL = nom, tileURL
+		s.geo = &osmmap.PoliteGeocoder{Source: osmmap.Nominatim{Base: nom, UserAgent: "gojiberry-showcase"}, Gap: geoGap}
+		s.tiles = &osmmap.PoliteTiles{Source: osmmap.Tiles{URL: tileURL, UserAgent: "gojiberry-showcase"}, Gap: tileGap}
+	}
+	return s.geo, s.tiles
+}
+
 // mapAddressOK: empty (the public server), https, or an address relative to the page; a tile address needs {z}, {x} and {y}.
 func mapAddressOK(a string, tiles bool) bool {
 	if a == "" {
@@ -136,8 +162,20 @@ func (u *ui) insertMap(flow func() *canvas.TextFlow, redraw, renderUI func()) {
 			renderUI()
 			return
 		}
+		geo, tileSource := mapClients(nom, tiles)
+		if !ok { // a short Plus Code with the name of a place near it ("9G8F+6W Mountain View")
+			var short bool
+			if place, short, err = osmmap.LocateShort(ctx, geo, query); short {
+				if err != nil {
+					f.busy, f.msg = false, T("map.notFound", "No such place was found. Try another address, coordinates or a Plus Code.")
+					renderUI()
+					return
+				}
+				ok = true
+			}
+		}
 		if !ok {
-			places, err := osmmap.Nominatim{Base: nom, UserAgent: "gojiberry-showcase"}.Search(ctx, query)
+			places, err := geo.Search(ctx, query)
 			if err != nil || len(places) == 0 {
 				f.busy = false
 				f.msg = T("map.notFound", "No such place was found. Try another address, coordinates or a Plus Code.")
@@ -149,7 +187,7 @@ func (u *ui) insertMap(flow func() *canvas.TextFlow, redraw, renderUI func()) {
 			}
 			place = places[0]
 		}
-		data, err := osmmap.Render(ctx, osmmap.Tiles{URL: tiles, UserAgent: "gojiberry-showcase"}, place.Lat, place.Lng, zoom, 640, 400)
+		data, err := osmmap.Render(ctx, tileSource, place.Lat, place.Lng, zoom, 640, 400)
 		if err != nil {
 			f.busy, f.msg = false, T("map.renderFailed", "The map could not be drawn (the tile server did not answer).")
 			renderUI()
