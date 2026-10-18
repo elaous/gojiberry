@@ -217,6 +217,9 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 				renderUI()
 			}, false),
 			textarea(id, T("img.descLabel", "Description of picture %d", i+1), r.img.Alt, T("img.descHint", "What a person who cannot see it needs to know"), "2", func(v string) {
+				if !u.claim(imageKey(i), T("lock.picture", "picture"), renderUI) {
+					return
+				}
 				r.img.Alt = v
 				if v != "" {
 					r.img.Decorative = false
@@ -225,6 +228,9 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 				renderUI()
 			}),
 			textarea(fmt.Sprintf("img-legend-%d", i), T("img.legendLabel", "Legend of picture %d (shown under it)", i+1), r.img.Legend, T("img.legendHint", "Everybody reads it, for example: Figure 1: the harbour at dawn"), "1", func(v string) {
+				if !u.claim(imageKey(i), T("lock.picture", "picture"), renderUI) {
+					return
+				}
 				r.img.Legend = v
 				fl.Touch()
 				redraw()

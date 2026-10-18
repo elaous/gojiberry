@@ -623,3 +623,58 @@ func TestPresenceThrottleCanBeSwitchedOff(t *testing.T) {
 		t.Fatalf("a negative interval sends every update: %d", len(w.ch))
 	}
 }
+
+func TestPresenceCarriesTheObjectBeingHeldAndDropsAnOverlongName(t *testing.T) {
+	h := New(Config{PresenceInterval: -1, KeepAlive: time.Second})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL+"/docs/d/events?replica=watcher", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	got := make(chan Presence, 4)
+	go func() {
+		sc := bufio.NewScanner(resp.Body)
+		for sc.Scan() {
+			if line, ok := strings.CutPrefix(sc.Text(), "data: "); ok && strings.Contains(line, `"replica":"holder"`) {
+				var p Presence
+				if json.Unmarshal([]byte(line), &p) == nil {
+					got <- p
+				}
+			}
+		}
+	}()
+	post := func(holding string) {
+		body, _ := json.Marshal(Presence{Replica: "holder", Name: "Ana", Holding: holding})
+		r, err := http.Post(srv.URL+"/docs/d/presence", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Body.Close()
+	}
+	next := func() Presence {
+		select {
+		case p := <-got:
+			return p
+		case <-time.After(3 * time.Second):
+			t.Fatal("no presence arrived")
+			return Presence{}
+		}
+	}
+	post("image:2")
+	if p := next(); p.Holding != "image:2" {
+		t.Fatalf("holding %q", p.Holding)
+	}
+	post(strings.Repeat("x", MaxHolding+1))
+	if p := next(); p.Holding != "" {
+		t.Fatalf("an overlong name is dropped: %q", p.Holding)
+	}
+	post("")
+	if p := next(); p.Holding != "" {
+		t.Fatalf("let go: %q", p.Holding)
+	}
+}

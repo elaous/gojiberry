@@ -1817,6 +1817,12 @@
   "map.lookupFailed": "L'adresse n'a pas pu être cherchée (le service n'a pas répondu).",
   "map.renderFailed": "La carte n'a pas pu être dessinée (le serveur de tuiles n'a pas répondu).",
   "map.alt": "Carte de %s",
-  "scripts.allowChange": "Peut modifier le document : mise en forme, styles, descriptions d'images, titre, langue, ou tout à partir de Markdown"
+  "scripts.allowChange": "Peut modifier le document : mise en forme, styles, descriptions d'images, titre, langue, ou tout à partir de Markdown",
+  "lock.busy": "Occupé : %s modifie cet élément (%s).",
+  "lock.lost": "Occupé : %s est arrivé le premier.",
+  "lock.someone": "quelqu'un",
+  "lock.picture": "image",
+  "lock.equation": "équation",
+  "lock.field": "champ de formulaire"
  }
 }

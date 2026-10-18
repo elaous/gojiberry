@@ -317,6 +317,9 @@ func (h *Hub) prunePresence(rm *room) {
 // inside the interval is held, and one send of the latest value goes out when
 // it ends (rm.mu held).
 func (h *Hub) setPresence(rm *room, p Presence) {
+	if len(p.Holding) > MaxHolding { // a name of an object, not a message
+		p.Holding = ""
+	}
 	now := h.now()
 	e := rm.pres[p.Replica]
 	e.p, e.seen = p, now
@@ -501,3 +504,6 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+// MaxHolding is the longest Presence.Holding the hub passes on.
+const MaxHolding = 80

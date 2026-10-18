@@ -1817,6 +1817,12 @@
   "map.lookupFailed": "Die Adresse konnte nicht gesucht werden (der Dienst hat nicht geantwortet).",
   "map.renderFailed": "Die Karte konnte nicht gezeichnet werden (der Kachelserver hat nicht geantwortet).",
   "map.alt": "Karte von %s",
-  "scripts.allowChange": "Darf das Dokument ändern: Formatierung, Formatvorlagen, Bildbeschreibungen, Titel, Sprache oder alles über Markdown"
+  "scripts.allowChange": "Darf das Dokument ändern: Formatierung, Formatvorlagen, Bildbeschreibungen, Titel, Sprache oder alles über Markdown",
+  "lock.busy": "Belegt: %s ändert dieses Element (%s).",
+  "lock.lost": "Belegt: %s war zuerst da.",
+  "lock.someone": "jemand",
+  "lock.picture": "Bild",
+  "lock.equation": "Formel",
+  "lock.field": "Formularfeld"
  }
 }

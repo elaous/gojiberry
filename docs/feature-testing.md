@@ -240,6 +240,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** e2e_test.go (`TestEndToEnd`)
 
+## Several people at one object
+
+**Try it.** Open the same shared document as two people (`/d/name?hub=...&name=Ana&color=%23e11d48` and `...&name=Bo`), both in edit mode and the Pictures tab; as Ana insert an equation and type in its formula box; as Bo try the same equation's formula.
+
+**You should see.** On Bo's page the equation has a red outline with a *busy* badge in Ana's colour, and the announcer says "Busy: Ana is changing this equation."; Bo's text is put back. After about eight seconds without a change from Ana, Bo can change it.
+
+**Automated.** `TestAnObjectOnePersonIsChangingIsBusyForTheOther` (examples/canvas-editor-showcase), `TestPresenceCarriesTheObjectBeingHeldAndDropsAnOverlongName` (collab/hub), `TestABusyObjectHasAnOutlineAndABadge` (canvas)
+
 ## Share
 
 **Try it.** Select a sentence, copy the link, open it in another tab.

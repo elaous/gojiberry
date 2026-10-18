@@ -122,11 +122,17 @@ func elementsSections(u *ui, state *State, flow func() *canvas.TextFlow, redraw,
 			xango.El("strong", nil, xango.Text(T("eq.n", "Equation %d", i+1))),
 			btn(fmt.Sprintf("eq-go-%d", i), T("eq.go", "Go to it"), func() { fl.GotoOffset(r.offset); redraw(); renderUI() }, false),
 			textarea(fmt.Sprintf("eq-formula-%d", i), T("eq.formulaLabelN", "Formula of equation %d", i+1), r.eq.Formula, "", "2", func(v string) {
+				if !u.claim(equationKey(i), T("lock.equation", "equation"), renderUI) {
+					return
+				}
 				r.eq.Formula = v
 				fl.Touch()
 				redraw()
 			}),
 			textarea(fmt.Sprintf("eq-alt-%d", i), T("eq.altLabelN", "Text alternative of equation %d", i+1), r.eq.Alt, T("eq.altHint", "The equation in words, as you would read it aloud"), "2", func(v string) {
+				if !u.claim(equationKey(i), T("lock.equation", "equation"), renderUI) {
+					return
+				}
 				r.eq.Alt = v
 				fl.Touch()
 				renderUI()

@@ -43,6 +43,10 @@ type Presence struct {
 	Has     bool           `json:"has,omitempty"`
 	Anchor  crdt.Timestamp `json:"anchor"`
 	Caret   crdt.Timestamp `json:"caret"`
+	// Holding names the object (a picture, a form field, an equation) this replica is changing, "" for none: the others
+	// see it as busy until it is let go, and, since presence expires, until a few seconds after the last sign of life.
+	// It is advice for the interface and not a lock the server keeps (the text merges whatever it says).
+	Holding string `json:"holding,omitempty"`
 	// Gone is set on the event sent when a replica leaves.
 	Gone bool `json:"gone,omitempty"`
 }

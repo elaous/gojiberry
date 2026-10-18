@@ -23,7 +23,9 @@ Every experimental feature is behind a Go build tag and is off by default: a bui
 
 Form fields are the first feature moved behind a flag (done, 2026-10-18; what the tag takes out is the showcase's surface: the Forms tab, Insert > Form fields, the key panel, and the code that draws and fills a field; the library packages (`canvas.FormFieldObject`, `docfile.FormFieldItem`, `formseal`, `formdata`, the exports) stay in every build, so a document that holds fields is kept intact when a default build opens and saves it): `exp_forms` for the fields, the Forms tab and Insert > Form fields; `exp_forms_submit` for anything that sends an answer anywhere (the web form with an address in the HTML export, `HTML.SubmitTo`). A form is for filling in, printing, sharing or sending filled; submitting is not part of the default product. The test suite runs once without the tags and once with `-tags experimental` (`make e2e-test` runs the experimental tests in a second pass, `make e2e-test-experimental` alone; `make test-experimental`, part of `make check`, runs the unit tests of the packages with tagged code; `make wasm-lint` lints both; try a build with `GOFLAGS=-tags=experimental`, `-tags exp_forms` or `-tags exp_forms,exp_forms_submit`; `exp_forms_submit` needs `exp_forms`); a feature that leaves the experiment loses its tag and its row says so.
 
-## Sharing: locks and colours (decided, ready)
+## Sharing: locks and colours (objects built; text colours left)
+
+Built (2026-10-18): the object part, see the row "Sharing more surfaces" in [status.md](status.md). What follows is the design, of which the colour of typed text is left.
 
 For several people in one document (the hub; [multiuser-design.md](multiuser-design.md)):
 
