@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"syscall/js"
 	"unicode/utf8"
@@ -16,7 +17,14 @@ import (
 )
 
 // formsHolder is embedded in ui: the Forms tab's state (the field being filled in or changed, and the last message).
-type formsHolder struct{ forms formsState }
+type formsHolder struct {
+	forms formsState
+	// cell is the table cell the next field is put in, when on (numbers count from 1, as the formulas' letters and numbers do).
+	cell struct {
+		on                 bool
+		table, row, column int
+	}
+}
 
 func formsTab(u *ui, label string, renderUI func()) xango.Node {
 	return tabButton(u, "forms", label, renderUI)
@@ -93,6 +101,21 @@ func (u *ui) wireForms(fl *canvas.TextFlow, redraw, renderUI func()) {
 	if fl == nil {
 		return
 	}
+	for _, o := range fl.Tables() { // a field in a table cell: the press that lands on the cell
+		o.View.OnFieldFill = func(_, _ int, ff *canvas.FormFieldObject) {
+			u.forms = formsState{target: ff, focus: true}
+			u.tab = "forms"
+			renderUI()
+		}
+		o.View.OnFieldEdit = func(_, _ int, ff *canvas.FormFieldObject) {
+			if !u.canEditFormProps(ff) {
+				return
+			}
+			u.forms = formsState{target: ff, edit: true, focus: true}
+			u.tab = "forms"
+			renderUI()
+		}
+	}
 	for _, ff := range fl.FormFields() {
 		ff := ff
 		ff.OnFill = func(*canvas.FormFieldObject) {
@@ -131,6 +154,30 @@ func (u *ui) addFormField(fl *canvas.TextFlow, kind canvas.FormKind, redraw, ren
 	}
 	n := len(fl.FormFields()) + 1
 	ff.Name = fmt.Sprintf("field%d", n)
+	if u.cell.on {
+		c := u.cell
+		tables := fl.Tables()
+		if c.table < 1 || c.table > len(tables) || c.row < 1 || c.column < 1 || !tables[c.table-1].View.Table.InRange(c.row-1, c.column-1) {
+			u.forms.msg = T("forms.cellOut", "There is no such table cell: the tables are counted from 1, and so are the rows and columns.")
+			u.tab = "forms"
+			renderUI()
+			return
+		}
+		tb := tables[c.table-1].View.Table
+		row, col := tb.Owner(c.row-1, c.column-1)
+		if text := strings.TrimSpace(tb.Cell(row, col)); text != "" && !strings.HasPrefix(text, "=") && tb.FieldAt(row, col) == nil {
+			ff.Label = text // what the cell said is what the field asks
+		}
+		tb.SetField(row, col, ff)
+		fl.Touch()
+		u.wireForms(fl, redraw, renderUI)
+		u.forms = formsState{target: ff, edit: true, focus: true, msg: T("forms.addedCell", "The table cell is now a form field. Give it a label that says what it asks for.")}
+		u.tab = "forms"
+		u.announce(u.forms.msg)
+		redraw()
+		renderUI()
+		return
+	}
 	pos := fl.Cursors()[0].Caret
 	fl.Replace([]canvas.Edit{{From: pos, To: pos, Items: []canvas.Item{canvas.Inline{Object: ff}}}})
 	fl.SetCursors([]canvas.Cursor{canvas.At(pos + 1)})
@@ -190,6 +237,7 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 			btn("forms-answers-csv", T("forms.answersCSV", "Download the answers (CSV)"), func() { u.downloadAnswers(fl, "csv", renderUI) }, fl == nil || len(fl.FormFields()) == 0),
 		),
 	)
+	nodes = append(nodes, u.cellTargetNodes(fl, renderUI)...)
 	nodes = append(nodes, submitNodes(u, fl, renderUI)...)
 	loadFormKey(renderUI)
 	nodes = append(nodes, u.formKeyPanel(renderUI)...)
@@ -272,6 +320,15 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 			}
 		}, !canEdit))
 		pos := formFieldOffset(fl, ff)
+		if o, row, col := tableOfField(fl, ff); o != nil {
+			kids = append(kids, btn(fmt.Sprintf("forms-uncell-%d", i), T("forms.uncell", "Make the cell plain text again"), func() {
+				o.View.Table.RemoveField(row, col)
+				fl.Touch()
+				u.forms.target = nil
+				redraw()
+				renderUI()
+			}, !canEdit || ff.Locked))
+		}
 		kids = append(kids, btn(fmt.Sprintf("forms-go-%d", i), T("forms.go", "Go to it"), func() { fl.GotoOffset(pos); redraw(); renderUI() }, false))
 		items = append(items, xango.El("li", []xango.Attr{xango.A("class", "gj-doc-item"), xango.A("id", fmt.Sprintf("forms-item-%d", i))}, kids...))
 	}
@@ -279,6 +336,18 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 		nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list"), xango.A("id", "forms-list")}, items...))
 	}
 	return xango.El("div", []xango.Attr{xango.A("id", "forms-panel")}, nodes...)
+}
+
+// tableOfField is the table and cell that hold the field, nil when it is not in a table.
+func tableOfField(fl *canvas.TextFlow, ff *canvas.FormFieldObject) (*canvas.TableObject, int, int) {
+	for _, o := range fl.Tables() {
+		for pos, f := range o.View.Table.Fields {
+			if f == ff {
+				return o, pos.Row, pos.Col
+			}
+		}
+	}
+	return nil, 0, 0
 }
 
 // formFieldOffset is where the field is in the text, as a caret position.
@@ -291,6 +360,13 @@ func formFieldOffset(fl *canvas.TextFlow, target *canvas.FormFieldObject) int {
 		case canvas.Inline:
 			if it.Object == canvas.InlineObject(target) {
 				return offset
+			}
+			if o, ok := it.Object.(*canvas.TableObject); ok && o.View != nil && o.View.Table != nil { // a field in a table: the table
+				for _, f := range o.View.Table.Fields {
+					if f == target {
+						return offset
+					}
+				}
 			}
 			offset++
 		}
@@ -446,4 +522,34 @@ func (u *ui) downloadAnswers(fl *canvas.TextFlow, format string, renderUI func()
 	}
 	u.announce(u.forms.msg)
 	renderUI()
+}
+
+// cellTargetNodes is the choice to put the next field in a table cell instead of at the caret: which table, row and column.
+func (u *ui) cellTargetNodes(fl *canvas.TextFlow, renderUI func()) []xango.Node {
+	if fl == nil || len(fl.Tables()) == 0 {
+		return nil
+	}
+	c := &u.cell
+	num := func(id, label string, v *int) xango.Node {
+		return xango.El("label", nil, xango.Text(label), lineInput(id, label, strconv.Itoa(*v), "1", func(text string) {
+			if n, err := strconv.Atoi(strings.TrimSpace(text)); err == nil {
+				*v = n
+			}
+		}))
+	}
+	nodes := []xango.Node{
+		xango.El("div", []xango.Attr{xango.A("id", "forms-in-cell")}, components.Checkbox(components.CheckboxProps{
+			Label: T("forms.inCell", "Put the next field in a table cell"), Checked: c.on,
+			OnChange: func(on bool) {
+				c.on = on
+				if c.table == 0 {
+					c.table, c.row, c.column = 1, 1, 1
+				}
+				renderUI()
+			}})),
+	}
+	if c.on {
+		nodes = append(nodes, num("forms-cell-table", T("forms.cellTable", "Table"), &c.table), num("forms-cell-row", T("forms.cellRow", "Row"), &c.row), num("forms-cell-column", T("forms.cellColumn", "Column"), &c.column))
+	}
+	return nodes
 }

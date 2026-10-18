@@ -374,13 +374,31 @@ func (f *FormFieldObject) ClickAt(x, y float64) (used, changed bool) {
 
 var _ ClickObject = (*FormFieldObject)(nil)
 
-// FormFields lists the form fields in the flow's content, in reading order.
+// FormFields lists the form fields in the flow's content, in reading order, those in table cells included.
 func (f *TextFlow) FormFields() []*FormFieldObject {
 	var out []*FormFieldObject
 	for _, it := range f.Items {
 		if in, ok := it.(Inline); ok {
-			if ff, ok := in.Object.(*FormFieldObject); ok {
-				out = append(out, ff)
+			switch o := in.Object.(type) {
+			case *FormFieldObject:
+				out = append(out, o)
+			case *TableObject:
+				if o != nil && o.View != nil && o.View.Table != nil {
+					out = append(out, o.View.Table.FieldList()...)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// Tables lists the tables in the flow's content, in reading order.
+func (f *TextFlow) Tables() []*TableObject {
+	var out []*TableObject
+	for _, it := range f.Items {
+		if in, ok := it.(Inline); ok {
+			if o, ok := in.Object.(*TableObject); ok && o != nil && o.View != nil && o.View.Table != nil {
+				out = append(out, o)
 			}
 		}
 	}
@@ -395,6 +413,9 @@ func (f *TextFlow) ClearFormFields() int {
 			ff.Clear()
 			n++
 		}
+	}
+	for _, o := range f.Tables() {
+		o.View.Table.SyncFields()
 	}
 	if n > 0 {
 		f.changed()

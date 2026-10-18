@@ -61,6 +61,11 @@ type TableView struct {
 	// contents or shape (typing, adding a row or column).
 	OnChange func(*Table)
 
+	// OnFieldFill and OnFieldEdit are called when a press lands on a cell that is a form field: in the calculated view
+	// to fill it in (a checkbox is ticked by the press itself and OnFieldFill is not called), in the formula view to
+	// change what the field is (not called for a locked field). The host changes the field, then calls Table.SyncFields.
+	OnFieldFill, OnFieldEdit func(row, col int, f *FormFieldObject)
+
 	// RenderCell, if set, is asked to draw the content of each cell: its row and column, its text and the cell's
 	// rectangle (the background and the grid are already drawn, and the font and colour are those of the cell).
 	// Returning true says it drew the content; false lets the table write the text as usual. A cell being edited is
@@ -409,6 +414,9 @@ func (v *TableView) MouseDown(x, y float64) bool {
 	case HitCell:
 		v.edit(h.Row, h.Col)
 		v.cursor = v.cursorAt(x, h.Row, h.Col)
+		if f := v.Table.FieldAt(h.Row, h.Col); f != nil {
+			v.pressField(h.Row, h.Col, f)
+		}
 	case HitAddColumn:
 		v.Table.AddColumn()
 		v.changed()
@@ -421,6 +429,45 @@ func (v *TableView) MouseDown(x, y float64) bool {
 		v.editing = false
 	}
 	return true
+}
+
+// pressField is what a press on a field cell does: tick a checkbox, ask the host to fill the field in (calculated view) or
+// to change it (formula view, unless it is locked).
+func (v *TableView) pressField(row, col int, f *FormFieldObject) {
+	switch {
+	case v.ShowFormulas:
+		if !f.Locked && v.OnFieldEdit != nil {
+			v.OnFieldEdit(row, col, f)
+		}
+	case f.Kind == FormCheckbox:
+		if f.Value == "true" {
+			f.Value = ""
+		} else {
+			f.Value = "true"
+		}
+		v.Table.SyncFields()
+		v.changed()
+	case v.OnFieldFill != nil:
+		v.OnFieldFill(row, col, f)
+	}
+}
+
+// fieldText is what a field cell shows, and whether it is shown as a problem or as the field's own definition.
+func (v *TableView) fieldText(f *FormFieldObject) (text string, ink string) {
+	if v.ShowFormulas {
+		text = "[" + string(f.Kind) + "] " + f.Label
+		if f.Locked {
+			text += " (locked)"
+		}
+		return text, orStr(v.Style.FormulaColor, "#c01c28")
+	}
+	if f.Kind != FormCheckbox && f.Empty() && f.Placeholder != "" {
+		return f.Label + ": " + f.Placeholder, "#8a8f98"
+	}
+	if f.Problem() != "" {
+		return f.Words(), "#c01c28"
+	}
+	return f.Words(), orStr(v.Style.ValueColor, "#1c5fb4")
 }
 
 // cursorAt returns the rune offset in cell (row, col) closest to x.
@@ -451,7 +498,7 @@ func (v *TableView) cursorAt(x float64, row, col int) int {
 func (v *TableView) edit(row, col int) {
 	row, col = v.Table.Owner(row, col)
 	v.editing, v.row, v.col, v.everActive = true, row, col, true
-	v.locked = !v.ShowFormulas && isFormula(v.Table.Cell(row, col))
+	v.locked = v.Table.FieldAt(row, col) != nil || (!v.ShowFormulas && isFormula(v.Table.Cell(row, col)))
 	editSeq++
 	v.editedAt = editSeq
 	v.rng = cellRange{}
@@ -648,6 +695,7 @@ func (v *TableView) stepNoGrow(delta int) {
 // onto the Painter. It does not clear the canvas first.
 func (v *TableView) Draw() {
 	p, s, t := v.Painter, v.Style, v.Table
+	t.SyncFields() // the text of a field cell is its field's words, whoever changed the field
 	g := v.layout()
 
 	p.SetTextAlign("left")
@@ -683,8 +731,11 @@ func (v *TableView) Draw() {
 					ink = orStr(s.FormulaColor, "#c01c28")
 				}
 			}
-			p.SetFillStyle(ink)
 			text := shown[r][c]
+			if f := t.Fields[CellPos{r, c}]; f != nil && st.Color == "" {
+				text, ink = v.fieldText(f)
+			}
+			p.SetFillStyle(ink)
 			if v.mode == ModeEdit && v.editing && !v.locked && v.row == r && v.col == c {
 				text = t.Cells[r][c]
 			}
@@ -765,7 +816,7 @@ func (v *TableView) drawBar(r [4]float64, hovered bool) {
 // formula cells cannot be changed there) and the formula view. It is a view setting and is not saved.
 func (v *TableView) SetShowFormulas(on bool) {
 	v.ShowFormulas = on
-	v.locked = v.editing && !on && isFormula(v.Table.Cell(v.row, v.col))
+	v.locked = v.editing && (v.Table.FieldAt(v.row, v.col) != nil || (!on && isFormula(v.Table.Cell(v.row, v.col))))
 	v.tipSet = false
 	v.changed()
 }

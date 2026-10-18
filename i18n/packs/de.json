@@ -1792,6 +1792,13 @@
   "push.noServer": "Der Benachrichtigungsserver war nicht erreichbar.",
   "push.noWorker": "Benachrichtigungen brauchen den Service Worker der Seite, der nicht läuft (er ist aus, wenn die Seite mit ?nosw geöffnet wird).",
   "push.failed": "Der Browser konnte Benachrichtigungen nicht abonnieren.",
-  "push.refused": "Der Benachrichtigungsserver hat dieses Abonnement nicht akzeptiert."
+  "push.refused": "Der Benachrichtigungsserver hat dieses Abonnement nicht akzeptiert.",
+  "forms.addedCell": "Die Tabellenzelle ist jetzt ein Formularfeld. Geben Sie ihm eine Beschriftung, die sagt, wonach es fragt.",
+  "forms.uncell": "Zelle wieder zu einfachem Text machen",
+  "forms.cellOut": "Diese Tabellenzelle gibt es nicht: Tabellen, Zeilen und Spalten werden ab 1 gezählt.",
+  "forms.inCell": "Das nächste Feld in eine Tabellenzelle setzen",
+  "forms.cellTable": "Tabelle",
+  "forms.cellRow": "Zeile",
+  "forms.cellColumn": "Spalte"
  }
 }

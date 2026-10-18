@@ -158,6 +158,16 @@ type TableItem struct {
 	// Merges are blocks of cells shown as one; Styles are per-cell formatting.
 	Merges []TableMerge     `json:"merges,omitempty" pb:"2"`
 	Styles []TableCellStyle `json:"styles,omitempty" pb:"3"`
+	// Fields are the cells that are form fields (build tag exp_forms in the showcase); the cell's row text is the
+	// field's words, so a reader that does not know fields still sees them.
+	Fields []TableCellField `json:"fields,omitempty" pb:"4"`
+}
+
+// TableCellField is the form field in the cell at (Row, Col).
+type TableCellField struct {
+	Row   int            `json:"row" pb:"1"`
+	Col   int            `json:"col" pb:"2"`
+	Field *FormFieldItem `json:"field,omitempty" pb:"3"`
 }
 
 // TableMerge is a block of cells shown as one: the cell at (Row, Col) spans
@@ -437,8 +447,7 @@ func FromItems(items []canvas.Item) []Item {
 						Alt: o.Alt, Decorative: o.Decorative, LongDesc: o.LongDesc, Legend: o.Legend, Credit: o.Credit, SourceURL: o.SourceURL, Diagram: o.Diagram}})
 				}
 			case *canvas.FormFieldObject:
-				out = append(out, Item{Form: &FormFieldItem{Kind: string(o.Kind), Name: o.Name, Label: o.Label, Placeholder: o.Placeholder,
-					Pattern: o.Pattern, Required: o.Required, Options: slices.Clone(o.Options), Value: o.Value, Locked: o.Locked, LockKey: o.LockKey, LockSig: o.LockSig}})
+				out = append(out, Item{Form: formItem(o)})
 			case *canvas.EquationObject:
 				out = append(out, Item{Equation: &EquationItem{Formula: o.Formula, Alt: o.Alt, Inline: o.Inline}})
 			case *canvas.MediaObject:
@@ -451,6 +460,7 @@ func FromItems(items []canvas.Item) []Item {
 				if o == nil || o.View == nil || o.View.Table == nil {
 					continue // nothing to save
 				}
+				o.View.Table.SyncFields()
 				t := &TableItem{}
 				for _, row := range o.View.Table.Cells {
 					t.Rows = append(t.Rows, TableRow{Cells: append([]string(nil), row...)})
@@ -468,11 +478,30 @@ func FromItems(items []canvas.Item) []Item {
 					}
 					return a.Col - b.Col
 				})
+				for pos, f := range o.View.Table.Fields {
+					t.Fields = append(t.Fields, TableCellField{Row: pos.Row, Col: pos.Col, Field: formItem(f)})
+				}
+				slices.SortFunc(t.Fields, func(a, b TableCellField) int {
+					if a.Row != b.Row {
+						return a.Row - b.Row
+					}
+					return a.Col - b.Col
+				})
 				out = append(out, Item{Table: t})
 			}
 		}
 	}
 	return out
+}
+
+func formItem(o *canvas.FormFieldObject) *FormFieldItem {
+	return &FormFieldItem{Kind: string(o.Kind), Name: o.Name, Label: o.Label, Placeholder: o.Placeholder,
+		Pattern: o.Pattern, Required: o.Required, Options: slices.Clone(o.Options), Value: o.Value, Locked: o.Locked, LockKey: o.LockKey, LockSig: o.LockSig}
+}
+
+func formObject(ff FormFieldItem) *canvas.FormFieldObject {
+	return &canvas.FormFieldObject{Kind: canvas.FormKind(ff.Kind), Name: ff.Name, Label: ff.Label,
+		Placeholder: ff.Placeholder, Pattern: ff.Pattern, Required: ff.Required, Options: slices.Clone(ff.Options), Value: ff.Value, Locked: ff.Locked, LockKey: ff.LockKey, LockSig: ff.LockSig}
 }
 
 // ToItems converts document items back to TextFlow content.
@@ -529,13 +558,16 @@ func ToItems(items []Item) []canvas.Item {
 			for _, st := range it.Table.Styles {
 				table.SetCellStyle(st.Row, st.Col, canvas.CellStyle{Background: st.Background, Color: st.Color, Bold: st.Bold, Italic: st.Italic, Align: canvas.Align(st.Align)})
 			}
+			for _, cf := range it.Table.Fields { // a field whose cell is not in the grid is dropped
+				if cf.Field != nil && table.InRange(cf.Row, cf.Col) && !table.Covered(cf.Row, cf.Col) && canvas.FormKind(cf.Field.Kind).Valid() {
+					table.SetField(cf.Row, cf.Col, formObject(*cf.Field))
+				}
+			}
 			out = append(out, canvas.Inline{Object: canvas.NewTableObject(table), Block: true})
 		case it.Image != nil:
 			out = append(out, canvas.Inline{Object: imageObject(*it.Image)})
 		case it.Form != nil:
-			ff := it.Form
-			out = append(out, canvas.Inline{Object: &canvas.FormFieldObject{Kind: canvas.FormKind(ff.Kind), Name: ff.Name, Label: ff.Label,
-				Placeholder: ff.Placeholder, Pattern: ff.Pattern, Required: ff.Required, Options: slices.Clone(ff.Options), Value: ff.Value, Locked: ff.Locked, LockKey: ff.LockKey, LockSig: ff.LockSig}})
+			out = append(out, canvas.Inline{Object: formObject(*it.Form)})
 		case it.Equation != nil:
 			out = append(out, canvas.Inline{Object: &canvas.EquationObject{Formula: it.Equation.Formula, Alt: it.Equation.Alt, Inline: it.Equation.Inline}, Block: !it.Equation.Inline})
 		case it.Media != nil:
