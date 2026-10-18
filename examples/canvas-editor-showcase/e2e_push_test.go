@@ -65,3 +65,50 @@ func TestMentionNotificationsWhenThePageIsClosed(t *testing.T) {
 	d.OK(strings.Contains(joined, `/pushapi/unsubscribe {"endpoint":"https://push.example/abc","handle":"Ana"}`) || strings.Contains(joined, `/pushapi/unsubscribe {"handle":"Ana","endpoint":"https://push.example/abc"}`), "the server was told: "+joined)
 	d.NoErrors()
 }
+
+// When the browser replaced the subscription, the page gives the server the one it has now (at once when it opens, and
+// when the worker says it changed), and says so when the notifications could not be renewed.
+func TestAReplacedPushSubscriptionIsGivenToTheServer(t *testing.T) {
+	var mu sync.Mutex
+	var calls []string
+	site := e2etest.NewSite(t)
+	site.Handle("/push.json", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, `{"server":"/pushapi"}`) }))
+	site.Handle("/pushapi/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		calls = append(calls, r.URL.Path+" "+string(body))
+		mu.Unlock()
+	}))
+	d := site.Open(t, "/d/push2?name=Ana")
+	d.OnNewDocument(`
+		window.__sub = { endpoint: "https://push.example/new", toJSON() { return { endpoint: this.endpoint, keys: { p256dh: "x", auth: "y" } }; }, unsubscribe: async () => true };
+		const reg = { pushManager: { getSubscription: async () => window.__sub } };
+		const sw = new EventTarget();
+		sw.ready = Promise.resolve(reg); sw.register = async () => reg;
+		Object.defineProperty(navigator, "serviceWorker", { value: sw, configurable: true });
+		window.PushManager = function () {};
+		window.Notification = { requestPermission: async () => "granted", permission: "granted" };`)
+	d.ReloadPage()
+	d.Wait("s.text.length > 100")
+	d.Click(`button[data-tab="comments"]`)
+	d.WaitSelector("#push-toggle")
+	count := func(s string) int {
+		mu.Lock()
+		defer mu.Unlock()
+		return strings.Count(strings.Join(calls, "\n"), s)
+	}
+	waitCount := func(what string, atLeast int) {
+		for i := 0; i < 100 && count("/pushapi/subscribe") < atLeast; i++ {
+			d.Sleep(100)
+		}
+		d.OK(count("/pushapi/subscribe") >= atLeast, what)
+	}
+	waitCount("the current subscription is given to the server when the page opens", 1)
+	d.OK(count(`/pushapi/subscribe {"handle":"Ana"`) >= 1 && count("https://push.example/new") >= 1, "the server was given the subscription the browser has")
+	before := count("/pushapi/subscribe")
+	d.Eval(`navigator.serviceWorker.dispatchEvent(Object.assign(new Event("message"), { data: { type: "gj-push-changed", subscription: { endpoint: "https://push.example/new" } } }))`, nil)
+	waitCount("the changed subscription is sent again", before+1)
+	d.Eval(`navigator.serviceWorker.dispatchEvent(Object.assign(new Event("message"), { data: { type: "gj-push-changed", subscription: null } }))`, nil)
+	d.WaitFor("it says the notifications stopped", `document.body.textContent.includes('stopped: the browser could not renew them')`)
+	d.NoErrors()
+}
