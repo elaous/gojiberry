@@ -137,6 +137,9 @@ jobs:
     name: The whole browser suite of the showcase (Chrome)
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read
+      issues: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -154,8 +157,55 @@ jobs:
           echo "no Chrome or Chromium on this runner"
           exit 1
 
+      # The suite runs to the end whatever fails (every test is its own; a panic or a timeout is reported as
+      # the tests that did not finish), the output goes to e2e.json, and the next steps turn it into an issue.
       - name: make e2e-test
+        id: e2e
+        continue-on-error: true
+        env:
+          GOJIBERRY_E2E_JSON: e2e.json
         run: make e2e-test
+
+      - name: Report
+        if: ${{ always() }}
+        id: report
+        run: |
+          status=0
+          python3 .github/scripts/e2e-report.py e2e.json "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > e2e-report.md || status=$?
+          cat e2e-report.md >> "$GITHUB_STEP_SUMMARY"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      # A failed run opens an issue (or adds to the one that is open) with every failed test; a run that passes
+      # closes it. Only the labelled issue is touched.
+      - name: Issue
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const failed = '${{ steps.report.outputs.status }}' !== '0' || '${{ steps.e2e.outcome }}' === 'failure';
+            const label = 'nightly-e2e';
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            let report = fs.existsSync('e2e-report.md') ? fs.readFileSync('e2e-report.md', 'utf8') : '';
+            if (report.length > 60000) report = report.slice(0, 60000) + '\n\n(cut: the rest is in the run)';
+            try { await github.rest.issues.createLabel({ ...context.repo, name: label, color: 'b60205' }); } catch (e) { /* it exists */ }
+            const open = await github.rest.issues.listForRepo({ ...context.repo, labels: label, state: 'open' });
+            const current = open.data.find(i => !i.pull_request);
+            if (failed) {
+              const body = report || `The browser suite failed. [The run](${run})`;
+              if (current) {
+                await github.rest.issues.createComment({ ...context.repo, issue_number: current.number, body });
+              } else {
+                await github.rest.issues.create({ ...context.repo, title: 'Nightly browser run failed', labels: [label], body });
+              }
+            } else if (current) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: current.number, body: `The browser suite passed in [this run](${run}); closing.` });
+              await github.rest.issues.update({ ...context.repo, issue_number: current.number, state: 'closed', state_reason: 'completed' });
+            }
+
+      - name: The run fails if the suite did
+        if: ${{ steps.report.outputs.status != '0' || steps.e2e.outcome == 'failure' }}
+        run: exit 1
 
   grammar-test:
     name: vscode-xango grammar suite

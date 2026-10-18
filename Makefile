@@ -68,10 +68,15 @@ a11y-test:
 
 # e2e-test is the whole browser suite of the showcase (every end-to-end test, about 25 minutes). It needs Chrome or
 # Chromium and fails, rather than skips, without one. Run it at the full run every ten merges, or from the hosted
-# workflow ("e2e"). It is not part of `make test`'s default time budget on purpose.
+# workflow ("e2e"). It is not part of `make test`'s default time budget on purpose. With GOJIBERRY_E2E_JSON=file the
+# output is `go test -json` written to that file (the nightly run reads it: .github/scripts/e2e-report.py).
 .PHONY: e2e-test
 e2e-test:
-	GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -timeout 75m ./examples/canvas-editor-showcase/
+	@if [ -n "$$GOJIBERRY_E2E_JSON" ]; then \
+		GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -timeout 75m -json ./examples/canvas-editor-showcase/ > "$$GOJIBERRY_E2E_JSON"; \
+	else \
+		GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -timeout 75m ./examples/canvas-editor-showcase/; \
+	fi
 
 # pdfa11y-test checks the tagged PDF the exporter writes with pdfa11y (github.com/speedata/pdfa11y, a Go
 # checker for the machine-checkable part of PDF/UA). It installs the tool into .pdfa11y/ (ignored by git) and
