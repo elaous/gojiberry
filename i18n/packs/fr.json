@@ -1887,6 +1887,7 @@
   "about.notice": "Mentions et crédits",
   "about.commercial": "Licence commerciale",
   "textfmt.readonly": "Ouvert en lecture : ceci est une copie d'un fichier %s. Changez de mode pour modifier la copie ; elle n'est pas enregistrée dans le fichier.",
-  "lock.table": "tableau"
+  "lock.table": "tableau",
+  "push.lost": "Les notifications de mentions se sont arrêtées : le navigateur n'a pas pu les renouveler. Réactivez-les."
  }
 }
