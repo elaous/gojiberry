@@ -5,13 +5,18 @@
 # GOARCH=wasm (domrt and friends are js/wasm-only), and run the
 # vscode-xango grammar suite against every *.xg file in the repo.
 .PHONY: check
-check: generate generate-check docs docs-check fmt-check vet test wasm-vet lint wasm-lint modules lint-modules grammar-test-setup grammar-test
+check: generate generate-check docs docs-check fmt-check vet test test-experimental wasm-vet lint wasm-lint modules lint-modules grammar-test-setup grammar-test
 
 .PHONY: piper-runtime-test
 # The reference Piper runtime (examples/piper-runtime): the parts that need no model. With PIPER_RUNTIME_MODELS and onnxruntime-web
 # installed it runs the real models too (see that folder's README). Not part of check: it needs node.
 piper-runtime-test:
 	node --test examples/piper-runtime/piper-runtime.test.js
+
+.PHONY: test-experimental
+# The packages with code behind an experimental build tag (docs/phase-2.md), run with every tag on.
+test-experimental:
+	go test -tags experimental ./transfer ./cmd/opendoc
 
 .PHONY: sw-test
 # The service worker's push and click handlers, run in node with stand-ins. Not part of check: it needs node.
