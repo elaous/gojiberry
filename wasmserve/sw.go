@@ -139,4 +139,35 @@ self.addEventListener("fetch", (event) => {
   }
   // Everything else (the API, sign-in, other origins) is not touched.
 });
+
+// Web Push (package webpush, mentionpush): a message the server sent to this browser's subscription wakes the worker,
+// which must show a notification for it (a subscription is made with userVisibleOnly). The message is JSON
+// {title, body, tag, url}; whatever else it is, a plain notification is shown anyway.
+self.addEventListener("push", (event) => {
+  let m = {};
+  try { m = event.data ? event.data.json() : {}; } catch (e) { m = {}; }
+  if (m === null || typeof m !== "object") m = {};
+  const text = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
+  const options = { body: text(m.body, 240), data: { url: text(m.url, 500) } };
+  const tag = text(m.tag, 80);
+  if (tag) options.tag = tag;
+  event.waitUntil(self.registration.showNotification(text(m.title, 120) || "New activity", options));
+});
+
+// A click opens the page, or goes to the window that has it open. Only an address of the app's own origin is followed.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const scope = self.registration.scope;
+  let target = scope;
+  try {
+    const u = new URL((event.notification.data && event.notification.data.url) || "", scope);
+    if (u.origin === new URL(scope).origin) target = u.href;
+  } catch (e) { target = scope; }
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) { if (c.url === target && "focus" in c) return c.focus(); }
+      return self.clients.openWindow(target);
+    })
+  );
+});
 `

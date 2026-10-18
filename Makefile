@@ -13,6 +13,11 @@ check: generate generate-check docs docs-check fmt-check vet test wasm-vet lint 
 piper-runtime-test:
 	node --test examples/piper-runtime/piper-runtime.test.js
 
+.PHONY: sw-test
+# The service worker's push and click handlers, run in node with stand-ins. Not part of check: it needs node.
+sw-test:
+	node --test wasmserve/sw-push.test.js
+
 .PHONY: generate
 generate:
 	go generate ./...
