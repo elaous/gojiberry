@@ -240,6 +240,8 @@ type TextFlow struct {
 	Comments *CommentSet
 	// RemoteCursors are other people's cursors, drawn with a name flag.
 	RemoteCursors []RemoteCursor
+	// TypedRanges are the stretches of text others typed a moment ago, drawn in their colour (see TypedRange).
+	TypedRanges []TypedRange
 	// ObjectBusy marks inline objects somebody is changing (see Busy); the host keeps it up to date.
 	ObjectBusy map[InlineObject]Busy
 	// OnTableSelect, if set, is called when a press on a grip of a table in the text selects a column, a row or the table.

@@ -2,6 +2,8 @@ package collab
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/collab/client"
 	"github.com/elaous/gojiberry/collab/wire"
@@ -45,6 +47,14 @@ type Session struct {
 	Name, Color string
 	// Holding is the object this person is changing, sent with the cursor (see wire.Presence.Holding); the host sets it.
 	Holding string
+	// TypedFor is how long text other people typed stays in their colour (see canvas.TypedRange); zero is
+	// DefaultTypedFor, negative turns the colours off.
+	TypedFor time.Duration
+
+	typed   []typedChar
+	maxSeen map[string]uint64
+	loaded  bool             // the document's own characters have arrived
+	now     func() time.Time // the clock, replaced in tests
 
 	replica   string
 	names     map[string]string // the name each replica gave, kept after it leaves, for saying who did something
@@ -178,6 +188,7 @@ func (s *Session) RefreshPeers() {
 		rc = append(rc, canvas.RemoteCursor{Name: name, Color: pc.Presence.Color, Anchor: pc.Anchor, Caret: pc.Caret})
 	}
 	s.Bridge.Flow.RemoteCursors = rc
+	s.Bridge.Flow.TypedRanges = s.typedRanges()
 }
 
 // Pending is how many of your changes have not reached the server yet.
@@ -202,6 +213,7 @@ func (s *Session) handle(e client.Event) bool {
 			return true
 		}
 		s.Bridge.Apply(e.Ops...)
+		s.seen(e.Ops, false)
 		if s.Role.CanEdit() {
 			s.Bridge.PushSurfaces() // what this side has and the document lacks
 		}
@@ -217,6 +229,7 @@ func (s *Session) handle(e client.Event) bool {
 		return true
 	case client.Ops:
 		s.Bridge.Apply(e.Ops...)
+		s.noteTyped(e.Ops)
 		return true
 	case client.PresenceEvent:
 		if e.Presence.Name != "" {
