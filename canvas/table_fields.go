@@ -117,27 +117,25 @@ func (t *Table) HasFormulaOrField() bool {
 	return false
 }
 
-// The switch of a table in the text sits inside its top right corner (an editable table has it outside, see
-// HitFormulaSwitch): an eye while the values and what was filled in are shown ("see all"), a pen while the formulas and
-// the definitions of the fields are ("edit all").
-const (
-	switchW, switchH, switchInset = 20.0, 16.0, 3.0
-)
-
+// The switch of a table in the text is a grip like the ones of an editable table (HitFormulaSwitch): beside its top right
+// corner, an eye while the values and what was filled in are shown ("see all"), a pen while the formulas and the
+// definitions of the fields are ("edit all"). Where the column leaves no room beside the table it overlaps the corner.
 func (o *TableObject) switchRect() [4]float64 {
-	return [4]float64{o.w - switchW - switchInset, switchInset, switchW, switchH}
+	hs := o.View.Style.HandleSize
+	return [4]float64{min(o.tableW+o.View.Style.BarGap, o.w-hs), 0, hs, hs}
 }
 
 func (o *TableObject) drawSwitch(p Painter, x, y float64) {
 	v := o.View
 	r := o.switchRect()
-	px, py := x+r[0], y+r[1]
-	v.fillPill(px, py, r[2], r[3], false, false)
+	px, py := x+r[0]+2, y+r[1]+2 // as the grips of an editable table: the pill is the grip less two pixels all round
+	pw, ph := r[2]-4, r[3]-4
+	v.fillPill(px, py, pw, ph, false, false)
 	ink := v.iconColor(false)
 	p.SetFillStyle(ink)
 	p.SetStrokeStyle(ink)
 	p.SetLineWidth(1.2)
-	cx, cy := px+r[2]/2, py+r[3]/2
+	cx, cy := px+pw/2, py+ph/2
 	p.BeginPath()
 	if v.ShowFormulas { // a pen
 		p.MoveTo(cx-5, cy+5)
