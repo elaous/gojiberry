@@ -1643,7 +1643,6 @@
   "voices.download": "Descargar (%s)",
   "voices.engine": "Voces para leer",
   "voices.failed": "No se pudo descargar la voz: %s",
-  "voices.forLang": "Voces para descargar en %s",
   "voices.have": "Voces descargadas en este dispositivo",
   "voices.installed": "Descargada.",
   "voices.licence": "De quién es la voz y con qué condiciones",
@@ -1877,6 +1876,15 @@
   "vsrc.deviceAbout": "El sistema operativo y el navegador tienen voces propias. Elija arriba «Voces de este dispositivo» para leer con ellas; añada más en los ajustes del sistema operativo. Algunas envían el texto a un servicio de voz; la página las usa solo si permite voces que usan internet.",
   "vsrc.local": "en este dispositivo",
   "vsrc.cloud": "usa internet",
-  "vsrc.deviceNone": "Este navegador no ofrece voces."
+  "vsrc.deviceNone": "Este navegador no ofrece voces.",
+  "menu.about": "Acerca de Gojiberry",
+  "about.title": "Acerca de Gojiberry",
+  "about.what": "Gojiberry es un editor de documentos que funciona en su navegador. Sus documentos permanecen en este dispositivo salvo que decida compartirlos.",
+  "about.licence": "Es software libre bajo la Licencia Pública General de Affero de GNU, versión 3. Si ejecuta una versión modificada para otras personas a través de una red, debe ofrecerles su código fuente. Hay una licencia comercial para los usos a los que la AGPL no se ajusta.",
+  "about.credit": "Hecho con el proyecto Gojiberry, github.com/elaous/gojiberry. Conserve este crédito en las copias y en las versiones modificadas.",
+  "about.source": "Código fuente",
+  "about.licenceText": "Licencia (AGPL-3.0)",
+  "about.notice": "Aviso y crédito",
+  "about.commercial": "Licencia comercial"
  }
 }

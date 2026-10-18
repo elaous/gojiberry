@@ -1,0 +1,34 @@
+Gojiberry / Xangô
+https://github.com/elaous/gojiberry
+
+Copyright (C) 2026 the Gojiberry authors (the contributors recorded in the
+repository's history).
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, version 3 of the License. It is distributed WITHOUT ANY
+WARRANTY; see the file LICENSE for the full text. A commercial licence is
+available for use the GNU AGPL does not fit: see COMMERCIAL.md.
+
+Additional terms under section 7(b) of the GNU AGPL, version 3
+----------------------------------------------------------------
+Section 7(b) lets this project require that reasonable legal notices and author
+attributions stay with the work. This project requires that, in every copy and
+every modified version, whether distributed or run as a network service:
+
+  1. this NOTICE file, and the copyright and licence notices of the source
+     files, are kept; and
+  2. the credit "Made with the Gojiberry project, github.com/elaous/gojiberry"
+     (the About tab of the showcase shows it) is kept in the places where the
+     work shows its own notices to the people who use it, and is not presented
+     as the work of someone else.
+
+Names, logos and the project's name are not licensed by this file: a modified
+version should say that it is modified and should not suggest that the
+project endorses it.
+
+Third-party material
+--------------------
+Dictionaries, fonts, voices, icons and libraries that this repository carries
+or downloads have the licences their authors chose; those are not changed by
+this file. docs/licence.md lists where they are and what is known about them.
